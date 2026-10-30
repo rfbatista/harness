@@ -110,6 +110,10 @@ export const sessionsPage = ({
     /** The Code tab is served (the server reads code), and each worktree's base branch. */
     codeEnabled: false,
     baseRefs: {},
+    /** Whether each session's terminal dock is expanded, as its dock said. */
+    personTerminalsExpanded: {},
+    /** Terminals the person runs per session, as each dock counted them, for the Files tab's badge. */
+    personTerminalCounts: {},
     /** Changed files per session, as each Code panel counted them, for the tab's badge. */
     codeCounts: {},
     /** The Code tab asked for the whole width (⇧E): the session list hides while it is in front. */
@@ -304,7 +308,11 @@ export const sessionsPage = ({
     },
     /** Focus mode is on, and there is a terminal's Exit focus to leave it by. */
     get focusActive() {
-      return this.focusMode && this.paneTools !== null;
+      return this.focusMode && (this.paneTools !== null || this.dockExpanded);
+    },
+    /** The person's terminal dock is expanded over the selected session's Files tab: a terminal that fills it, as focus mode asks. */
+    get dockExpanded() {
+      return this.showingFiles && this.personTerminalsExpanded[this.selectedId] === true;
     },
     get textSizes() {
       return TEXT_SIZES.map((s) => ({ ...s, value: String(s.px), checked: s.px === this.textSize }));
@@ -362,6 +370,42 @@ export const sessionsPage = ({
     },
     get designTabSelected() {
       return this.detailTab === "design";
+    },
+    /** The selected session has a worktree: its Files tab shows the virtual file system. */
+    get hasFiles() {
+      return this.showingSession && !!this.selected?.workspaceId;
+    },
+    get showingFiles() {
+      return this.hasFiles && this.detailTab === "files";
+    },
+    get filesTabSelected() {
+      return this.detailTab === "files";
+    },
+    /** The selected session's Files panel, kept mounted behind the other tabs so it follows the roots. */
+    get filesPanels() {
+      if (!this.hasFiles) return [];
+      const session = this.sessions.find((s) => s.id === this.selectedId);
+      return [
+        {
+          key: this.selected.id, // not its liveness: the panel follows the session ending, and keeps its tree and open file
+          projectId: this.projectId,
+          taskId: this.ticketId,
+          sessionId: this.selected.id,
+          workspaceId: session.workspaceId,
+          branch: session.branch ?? "",
+          title: this.selected.title,
+          shown: this.detailTab === "files",
+        },
+      ];
+    },
+    /** "2": the terminals the person has open on the selected session. */
+    get filesBadge() {
+      const n = this.personTerminalCounts[this.selectedId];
+      return n > 0 ? String(n) : "";
+    },
+    get filesBadgeTitle() {
+      const n = this.personTerminalCounts[this.selectedId] ?? 0;
+      return `${n} ${n === 1 ? "terminal" : "terminals"} open`;
     },
     /** The selected session has a worktree whose code the Code tab can read. */
     get hasCode() {
@@ -650,6 +694,11 @@ export const sessionsPage = ({
       this.unseenMessages = 0;
     },
 
+    showFiles() {
+      this.leaveCode();
+      this.detailTab = "files";
+    },
+
     /** The Code tab: its panel takes the address bar and the stream bar's keys. */
     showCode() {
       this.detailTab = "code";
@@ -669,6 +718,16 @@ export const sessionsPage = ({
     },
     codeExpand(event) {
       this.codeExpanded = event.detail?.expanded === true;
+    },
+    /** The person's terminal dock was expanded or restored. */
+    personTerminalsExpandedChanged(event) {
+      const { sessionId, expanded } = event.detail ?? {};
+      if (sessionId) this.personTerminalsExpanded = { ...this.personTerminalsExpanded, [sessionId]: expanded === true };
+    },
+    /** The person's terminal dock of a session counted the terminals that run, for the Files tab's badge. */
+    personTerminalsCounted(event) {
+      const { sessionId, count } = event.detail ?? {};
+      if (sessionId) this.personTerminalCounts = { ...this.personTerminalCounts, [sessionId]: count };
     },
     /** A Code panel counted its session's changed files. */
     codeCounted(event) {
@@ -749,6 +808,7 @@ export const sessionsPage = ({
       if (this.detailTab === "conversation" && this.selectedRole() === "") this.detailTab = "agent";
       if (this.detailTab === "code" && !this.hasCode) this.detailTab = "agent";
       if (this.detailTab === "design" && !this.hasTask) this.detailTab = "agent";
+      if (this.detailTab === "files" && !this.hasFiles) this.detailTab = "agent";
       this.creating = false;
       if (this.detailTab === "merge" && !this.hasMergeTab) this.detailTab = "agent";
       if (this.keptTerminalId !== id) this.keptTerminalId = null;

@@ -30,7 +30,7 @@ import (
 	"operators-mcp/internal/application/orchestration"
 	"operators-mcp/internal/application/planning"
 	"operators-mcp/internal/application/taskchannel"
-	"operators-mcp/internal/application/vshell"
+	"operators-mcp/internal/application/vfs"
 	"operators-mcp/internal/domain"
 	"operators-mcp/internal/ports"
 )
@@ -59,7 +59,7 @@ type shellE2E struct {
 	sessions ports.SessionRepository
 	channel  *taskchannel.Service
 	art      *artifacts.Service
-	shells   *vshell.Service
+	shells   *vfs.Service
 	rules    *archrules.Service
 	notes    *notifications.Service
 }

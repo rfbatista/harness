@@ -19,6 +19,7 @@ var icons = map[string]string{
 	"trash":     `<svg viewBox="0 0 16 16" width="16" height="16" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"><path d="M2.5 4.5h11M6.5 4.5V3h3v1.5M4 4.5l.7 8.6a1 1 0 0 0 1 .9h4.6a1 1 0 0 0 1-.9l.7-8.6"/></svg>`,
 	"branch":    `<svg viewBox="0 0 16 16" width="16" height="16" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"><circle cx="4.5" cy="3.5" r="1.5"/><circle cx="4.5" cy="12.5" r="1.5"/><circle cx="11.5" cy="5.5" r="1.5"/><path d="M4.5 5v6M11.5 7c0 3-7 2-7 4"/></svg>`,
 	"stop":      `<svg viewBox="0 0 16 16" width="16" height="16" aria-hidden="true" fill="currentColor"><rect x="4" y="4" width="8" height="8" rx="1.5"/></svg>`,
+	"term":      `<svg viewBox="0 0 16 16" width="16" height="16" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M2.5 3.5h11v9h-11zM5 6.5l2 1.75L5 10M8.5 10h2.5"/></svg>`,
 	"reconnect": `<svg viewBox="0 0 16 16" width="16" height="16" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M13 8a5 5 0 1 1-1.5-3.5M13 2.5v3h-3"/></svg>`,
 }
 
@@ -241,6 +242,14 @@ templ paneTabs() {
 					Code
 					<template x-if="codeBadge">
 						<span class="[ badge ]" x-text="codeBadge"></span>
+					</template>
+				</button>
+			</template>
+			<template x-if="hasFiles">
+				<button type="button" role="tab" x-bind:aria-selected="filesTabSelected" x-on:click="showFiles">
+					Files
+					<template x-if="filesBadge">
+						<span class="[ badge ]" data-tone="signal" x-bind:title="filesBadgeTitle">@icon("term")<span x-text="filesBadge"></span></span>
 					</template>
 				</button>
 			</template>

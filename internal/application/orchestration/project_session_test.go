@@ -11,7 +11,7 @@ import (
 	"github.com/rfbatista/llmkit"
 
 	"operators-mcp/internal/application/tooling"
-	"operators-mcp/internal/application/vshell"
+	"operators-mcp/internal/application/vfs"
 	"operators-mcp/internal/domain"
 	"operators-mcp/internal/ports"
 )
@@ -339,7 +339,7 @@ func TestAProductSessionWithoutATaskGetsTheProjectsShell(t *testing.T) {
 	if err := w.plan.LinkDocument(feature.ID, prd.ID); err != nil {
 		t.Fatal(err)
 	}
-	svc.Shells.(*vshell.Service).AnnounceTicket(feature, false)
+	svc.Shells.(*vfs.Service).AnnounceTicket(feature, false)
 	waitFile(t, filepath.Join(dir, "tasks", feature.ID, "docs", "prd-export.md"))
 
 	// Ended and resumed, the session gets a fresh project shell.

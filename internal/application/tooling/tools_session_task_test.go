@@ -3,6 +3,7 @@ package tooling
 import (
 	"context"
 	"errors"
+	"strings"
 	"testing"
 
 	"operators-mcp/internal/adapter/out/blobstore"
@@ -220,6 +221,17 @@ func TestSessionTaskToolsLackTheSettingsTools(t *testing.T) {
 	for _, name := range SessionTaskToolNames {
 		if name == "update_settings" || name == "get_settings" {
 			t.Errorf("SessionTaskToolNames lists %s", name)
+		}
+	}
+}
+
+// A person's terminals are in none of the agents' tools (ADR 0052): the
+// session tools name no terminal, so an agent cannot list, attach to or type
+// into one.
+func TestSessionTaskToolsReachNoPersonTerminal(t *testing.T) {
+	for _, name := range SessionTaskToolNames {
+		if strings.Contains(name, "terminal") {
+			t.Errorf("session tool %q names a terminal", name)
 		}
 	}
 }

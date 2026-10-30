@@ -102,7 +102,10 @@ type ProjectChange struct {
 	ArchitectureChanged *ArchitectureChange `json:"repository_architecture_changed,omitempty"`
 	// ArchitectureRuleEvent is a rule that failed in a session.
 	ArchitectureRuleEvent *ArchitectureRuleEventChange `json:"architecture_rule_event,omitempty"`
-	Deleted               bool                         `json:"deleted,omitempty"`
+	// SessionFilesRoot says a root of a session's virtual file system went away
+	// or came back; the Files view follows it.
+	SessionFilesRoot *SessionFilesRootChange `json:"session_files_root,omitempty"`
+	Deleted          bool                    `json:"deleted,omitempty"`
 }
 
 // ArchitectureRuleEventChange is a rule event on the project feed. ProjectID
@@ -126,6 +129,19 @@ type ArchitectureChange struct {
 // project's followers and is not on the wire.
 type GitStateChange struct {
 	*domain.GitState
+	ProjectID string `json:"-"`
+}
+
+// SessionFilesRootChange is a root of a session's virtual file system that
+// became unavailable (with its note) or available again. Type is always
+// "session_files_root". ProjectID routes it to the project's followers and is
+// not on the wire.
+type SessionFilesRootChange struct {
+	Type      string `json:"type"`
+	SessionID string `json:"session_id"`
+	Root      string `json:"root"`
+	Available bool   `json:"available"`
+	Note      string `json:"note"`
 	ProjectID string `json:"-"`
 }
 
@@ -168,6 +184,8 @@ func (c ProjectChange) ProjectID() string {
 		return c.ArchitectureChanged.ProjectID
 	case c.ArchitectureRuleEvent != nil:
 		return c.ArchitectureRuleEvent.ProjectID
+	case c.SessionFilesRoot != nil:
+		return c.SessionFilesRoot.ProjectID
 	}
 	return ""
 }
@@ -345,7 +363,13 @@ type SessionEvent struct {
 	ReviewRequest *domain.ReviewRequest    `json:"review_request,omitempty"`
 	StatusCheck   *StatusCheckEvent        `json:"status_check,omitempty"`
 	TaskStatus    *domain.TaskStatusChange `json:"task_status,omitempty"`
-	At            time.Time                `json:"at"`
+	// ID, Reason and Message are a "person_terminal_ended" event's: which
+	// terminal of the person ended, why (exited, root_gone, server_stopped)
+	// and the sentence its pane shows. It is live only, never persisted.
+	ID      string    `json:"id,omitempty"`
+	Reason  string    `json:"reason,omitempty"`
+	Message string    `json:"message,omitempty"`
+	At      time.Time `json:"at"`
 }
 
 type Usage struct {

@@ -11,7 +11,7 @@ import (
 
 	"github.com/rfbatista/harnesskit/errs"
 
-	"operators-mcp/internal/application/vshell"
+	"operators-mcp/internal/application/vfs"
 	"operators-mcp/internal/domain"
 	"operators-mcp/internal/ports"
 )
@@ -58,7 +58,7 @@ func (s *Service) SubscribeTaskUpdates(sub ports.EventSubscriber) {
 		u := taskUpdate{ticketID: r.TicketID, key: "task-update:" + r.ID, fallback: linksPath,
 			text: func(path string) string { return resourceUpdateText(r, path) }}
 		if r.IsUpload() {
-			u.kind, u.id, u.fallback = ports.ShellResource, r.ID, "task/resources/"+vshell.ResourceFileName(&r)
+			u.kind, u.id, u.fallback = ports.ShellResource, r.ID, "task/resources/"+vfs.ResourceFileName(&r)
 		}
 		s.queueUpdate(u)
 		return nil
@@ -69,7 +69,7 @@ func (s *Service) SubscribeTaskUpdates(sub ports.EventSubscriber) {
 		}
 		c := ev.Comment
 		s.queueUpdate(taskUpdate{ticketID: c.TicketID, key: "task-update:" + c.ID, kind: ports.ShellComment, id: c.ID,
-			fallback: "task/comments/" + vshell.CommentFileName(&c), text: func(path string) string { return commentUpdateText(c, path) }})
+			fallback: "task/comments/" + vfs.CommentFileName(&c), text: func(path string) string { return commentUpdateText(c, path) }})
 		return nil
 	})
 }

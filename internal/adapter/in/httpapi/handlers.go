@@ -14,7 +14,10 @@ import (
 // part of the application is not configured — pass an untyped nil, since a nil
 // pointer inside an interface is not nil.
 type Services struct {
-	Projects ports.Projects
+	// PersonTerminals are the person's own shells on a session's virtual
+	// file system; nil answers 503.
+	PersonTerminals ports.PersonTerminals
+	Projects        ports.Projects
 	// ProjectFeed follows the set of projects; nil answers 503.
 	ProjectFeed ports.ProjectCatalogFeed
 	// Discovery finds git checkouts on disk; nil answers 503.
@@ -76,6 +79,9 @@ type Services struct {
 	// WorktreeGit reads a session worktree's git state and fetches and
 	// pushes (/api/worktree_git_state and kin); nil answers 503.
 	WorktreeGit ports.WorktreeGit
+	// SessionFiles reads a session's virtual file system for the Files view
+	// (/api/sessions/:id/files); nil answers 503.
+	SessionFiles ports.SessionFiles
 	// GitCredentials keeps the credentials git remote operations use; nil
 	// answers 503 and leaves them off /api/project_events.
 	GitCredentials ports.GitCredentials
@@ -141,6 +147,7 @@ type Handler struct {
 	toolingSvc     ports.ToolRegistry
 	execSvc        ports.TaskRunner
 	orchSvc        ports.Orchestration
+	persons        ports.PersonTerminals
 	planningSvc    ports.Planning
 	workspacesSvc  ports.WorkspaceManager
 	artifactsSvc   ports.Artifacts
@@ -157,6 +164,7 @@ type Handler struct {
 	liveCalls      ports.LiveCalls
 	code           ports.CodeBrowser
 	worktreeGit    ports.WorktreeGit
+	sessionFiles   ports.SessionFiles
 	gitCredentials ports.GitCredentials
 	shells         ports.ShellEdits
 
@@ -198,6 +206,7 @@ func NewHandler(s Services) *Handler {
 		toolingSvc:     s.Tools,
 		execSvc:        s.Tasks,
 		orchSvc:        s.Sessions,
+		persons:        s.PersonTerminals,
 		planningSvc:    s.Planning,
 		workspacesSvc:  s.Workspaces,
 		artifactsSvc:   s.Artifacts,
@@ -216,6 +225,7 @@ func NewHandler(s Services) *Handler {
 		liveCalls:      s.LiveCalls,
 		code:           s.Code,
 		worktreeGit:    s.WorktreeGit,
+		sessionFiles:   s.SessionFiles,
 		gitCredentials: s.GitCredentials,
 		shells:         s.Shells,
 

@@ -86,3 +86,10 @@ type BranchMerge struct {
 	// Tip is the branch's tip commit; "" when it does not exist.
 	Tip string
 }
+
+// WorkspaceRemovalSink hears that a workspace's worktree was removed from
+// disk and its row deleted, so the sessions that ran in it have no worktree
+// root any more.
+type WorkspaceRemovalSink interface {
+	WorkspaceRemoved(ws *domain.Workspace)
+}

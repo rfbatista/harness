@@ -32,6 +32,7 @@ import (
 	"operators-mcp/internal/application/taskchannel"
 	"operators-mcp/internal/application/tooling"
 	"operators-mcp/internal/application/usage"
+	"operators-mcp/internal/application/vfs"
 	"operators-mcp/internal/application/vshell"
 	"operators-mcp/internal/application/workspaces"
 	"operators-mcp/internal/application/writinghelper"
@@ -55,7 +56,7 @@ var ServerModule = fx.Module("server",
 
 // registerHTTPServer mounts the UI and JSON API on a mux and serves it,
 // shutting down gracefully when fx stops.
-func registerHTTPServer(lc fx.Lifecycle, cfg Config, cat catalog.Catalog, appRunner *apps.Service, ts *tooling.Service, exec *execution.Service, orch *orchestration.Service, plan *planning.Service, ws *workspaces.Service, broker *approval.Broker, sessions ports.SessionRepository, art *artifacts.Service, channel *taskchannel.Service, prs *workspaces.PullRequests, merges *workspaces.Merges, branchNames *workspaces.BranchNames, code ports.CodeBrowser, worktreeGit ports.WorktreeGit, inbox optionalNotifications, creds optionalGitCredentials, shells *vshell.Service, usageSvc *usage.Service, indexes optionalRepositoryIndexes, sandboxStore *sandboxsettings.Store, managedClaude *managedclaude.Service, claudeBin ports.ManagedClaudeBin, agentCred optionalAgentCredential, helper *writinghelper.Service, rules *archrules.Service, agentCat *agentcatalog.Catalog) error {
+func registerHTTPServer(lc fx.Lifecycle, cfg Config, cat catalog.Catalog, appRunner *apps.Service, ts *tooling.Service, exec *execution.Service, orch *orchestration.Service, plan *planning.Service, ws *workspaces.Service, broker *approval.Broker, sessions ports.SessionRepository, art *artifacts.Service, channel *taskchannel.Service, prs *workspaces.PullRequests, merges *workspaces.Merges, branchNames *workspaces.BranchNames, code ports.CodeBrowser, worktreeGit ports.WorktreeGit, inbox optionalNotifications, creds optionalGitCredentials, shells *vfs.Service, fsys *vfs.FileSystem, usageSvc *usage.Service, indexes optionalRepositoryIndexes, sandboxStore *sandboxsettings.Store, managedClaude *managedclaude.Service, claudeBin ports.ManagedClaudeBin, agentCred optionalAgentCredential, helper *writinghelper.Service, rules *archrules.Service, agentCat *agentcatalog.Catalog, persons *vshell.PersonTerminals) error {
 	uiHandler, err := ui.SPAHandler(ui.Dist)
 	if err != nil {
 		return err
@@ -100,10 +101,12 @@ func registerHTTPServer(lc fx.Lifecycle, cfg Config, cat catalog.Catalog, appRun
 		Tools:        ts,
 		Tasks:        exec,
 		Sessions:     orch,
-		Planning:     plan,
-		Workspaces:   ws,
-		Artifacts:    art,
-		TaskChannel:  channel,
+		// The person's own terminals on a session's files.
+		PersonTerminals: persons,
+		Planning:        plan,
+		Workspaces:      ws,
+		Artifacts:       art,
+		TaskChannel:     channel,
 		// What a person adds to a task: files, images, audio, links, comments.
 		TaskResources:    plan,
 		TaskComments:     plan,
@@ -117,6 +120,8 @@ func registerHTTPServer(lc fx.Lifecycle, cfg Config, cat catalog.Catalog, appRun
 		LiveCalls:        usageSvc,
 		Code:             code,
 		WorktreeGit:      worktreeGit,
+		// A session's virtual file system, for the Files view.
+		SessionFiles: fsys,
 		// The git credentials every remote operation authenticates with.
 		GitCredentials: creds.port(),
 		// What sessions write in their virtual shells.
@@ -144,7 +149,7 @@ func registerHTTPServer(lc fx.Lifecycle, cfg Config, cat catalog.Catalog, appRun
 		ArchitectureRules: rules,
 		// The agent catalog folder: agents, bundles, skills, MCP servers.
 		Catalog: agentCat,
-	}), httpapi.WithToken(cfg.APIToken))
+	}), httpapi.WithToken(cfg.APIToken), httpapi.WithExposedListener(exposed(cfg.HTTPAddr)))
 	// Requests slower than the threshold are logged with their query count.
 	// An approval waits on a person, so it is never a slow request.
 	slow := func(h http.Handler) http.Handler {

@@ -221,7 +221,16 @@ func NewRouter(h *Handler, opts ...Option) *echo.Echo {
 	g.GET("/events", h.handleEvents) // a project's session changes (SSE)
 	g.GET("/sessions/:id/events", h.handleSessionEvents)
 	g.GET("/sessions/:id/terminal", h.handleSessionTerminal) // WebSocket upgrade
+	// the person's own terminals on a session's virtual file system (ADR 0051 guards each)
+	guard := personGuard(o)
+	g.POST("/sessions/:id/person-terminals", h.handleOpenPersonTerminal, guard)
+	g.GET("/sessions/:id/person-terminals", h.handleListPersonTerminals, guard)
+	g.GET("/person-terminals/:tid/terminal", h.handlePersonTerminal, guard) // WebSocket upgrade
+	g.DELETE("/person-terminals/:tid", h.handleClosePersonTerminal, guard)
 	g.GET("/sessions/:id/history", h.handleSessionHistory)
+	g.GET("/sessions/:id/files", h.handleSessionFiles)
+	g.GET("/sessions/:id/files/entries", h.handleSessionFilesEntries)
+	g.GET("/sessions/:id/files/file", h.handleSessionFilesFile)
 	g.GET("/sessions/:id/transcript", h.handleSessionTranscript)
 	g.GET("/sessions/:id/sandbox/violations", h.handleSessionSandboxViolations)
 	// merging a session's branch into its repository's default branch, in the local checkout

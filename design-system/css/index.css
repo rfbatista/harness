@@ -94,6 +94,7 @@
 @import url("./blocks/zone-tag.css");
 @import url("./blocks/code-source-bar.css");
 @import url("./blocks/file-tree.css");
+@import url("./blocks/files-pane.css");
 @import url("./blocks/diff-summary.css");
 @import url("./blocks/code-lines.css");
 @import url("./blocks/code-view.css");
@@ -106,6 +107,7 @@
 @import url("./blocks/message.css");
 @import url("./blocks/review.css");
 @import url("./blocks/notification.css");
+@import url("./blocks/person-terms.css");
 @import url("./blocks/terminal.css");
 @import url("./blocks/pane-note.css");
 @import url("./blocks/credential.css");

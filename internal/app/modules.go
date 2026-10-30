@@ -33,6 +33,9 @@ import (
 	"operators-mcp/internal/adapter/out/githubapi"
 	"operators-mcp/internal/adapter/out/keychainshim"
 	"operators-mcp/internal/adapter/out/persistence/sqlite"
+	"operators-mcp/internal/adapter/out/personshell"
+	"operators-mcp/internal/adapter/out/shell"
+	"operators-mcp/internal/adapter/out/termhost"
 	"operators-mcp/internal/app/catalog"
 	"operators-mcp/internal/application/agentcredential"
 	"operators-mcp/internal/application/apps"
@@ -45,6 +48,7 @@ import (
 	"operators-mcp/internal/application/planning"
 	"operators-mcp/internal/application/taskchannel"
 	"operators-mcp/internal/application/tooling"
+	"operators-mcp/internal/application/vfs"
 	"operators-mcp/internal/application/vshell"
 	"operators-mcp/internal/application/workspaces"
 	"operators-mcp/internal/application/writinghelper"
@@ -422,9 +426,12 @@ var AgentRuntimeModule = fx.Module("agentruntime",
 		newAppsService,
 		asPort(sqlite.NewArtifactRepository, new(ports.ArtifactRepository)),
 		newArtifactsService,
+		vfs.NewRootEvents,
 		newVirtualShells,
+		newVirtualFileSystem,
+		newPersonTerminals,
 	),
-	fx.Invoke(registerRuntimeShutdown, registerServerSessions, bindVirtualShells, bindSandboxSettings,
+	fx.Invoke(registerRuntimeShutdown, registerServerSessions, bindVirtualShells, bindWorkspaceRemovals, bindFilesRootFeed, bindSandboxSettings,
 		bindAgentReadiness, func(*archrules.Service) {}),
 )
 
@@ -494,24 +501,61 @@ func newArtifactsService(cfg Config, repo ports.ArtifactRepository, sessions por
 	return svc, nil
 }
 
-// newVirtualShells fills task sessions' virtual shells from planning's
+// newVirtualShells fills task sessions' resources roots from planning's
 // tickets, documents, comments and resources and the artifacts' designs,
 // and stores the documents and comments agents write in them through
 // planning and their designs through the artifacts.
-func newVirtualShells(plan *planning.Service, art *artifacts.Service, sessions ports.SessionRepository, cat catalog.Catalog) *vshell.Service {
-	src := vshell.Sources{Tickets: plan, Documents: plan, Comments: plan, Resources: plan, Artifacts: art, Writes: plan,
+func newVirtualShells(plan *planning.Service, art *artifacts.Service, sessions ports.SessionRepository, cat catalog.Catalog, events *vfs.RootEvents) *vfs.Service {
+	src := vfs.Sources{Tickets: plan, Documents: plan, Comments: plan, Resources: plan, Artifacts: art, Writes: plan,
 		Designs: art, Sessions: sessions, Agents: cat.Agents, Settings: cat.Settings}
 	if cat.RepositoryArchitectures != nil {
 		src.Architectures = cat.RepositoryArchitectures
 	}
-	return vshell.New(src)
+	shells := vfs.New(src)
+	shells.UseRootEvents(events)
+	return shells
 }
+
+// newPersonTerminals are the person's own shells on the virtual file systems
+// (ADR 0050). They run on a terminal host of their own, never the agents':
+// no agent, session tool or run can list or reach one.
+func newPersonTerminals(lc fx.Lifecycle, pty ports.PTY, fsys *vfs.FileSystem, sessions ports.SessionRepository, driver ports.SandboxDriver, events *vfs.RootEvents, hub *orchestration.Hub) *vshell.PersonTerminals {
+	// The platform's sandbox makes the resources root read-only for them,
+	// whether or not the agent sandbox is switched on; without one a
+	// resources-root terminal is refused.
+	deny, _ := driver.(ports.DenyWritesDriver)
+	host := termhost.New(shell.Direct{}, pty).WithLaunchers(personshell.New(pty, func() []string { return vshell.PersonEnv(os.Environ()) }, deny))
+	persons := vshell.NewPersonTerminals(vshell.PersonDeps{Host: host, Folders: fsys, Sessions: sessions, RootEvents: events, Page: hub})
+	lc.Append(fx.StopHook(func(ctx context.Context) error {
+		_ = persons.Shutdown(ctx) // tells the page, best effort, then hangs up every shell
+		return host.Shutdown(ctx)
+	}))
+	return persons
+}
+
+// newVirtualFileSystem is the virtual file system of the sessions: their
+// resources roots and the worktrees of their workspaces.
+func newVirtualFileSystem(shells *vfs.Service, sessions ports.SessionRepository, ws ports.WorkspaceRepository, files ports.WorktreeFiles, git ports.GitCode, events *vfs.RootEvents) *vfs.FileSystem {
+	fsys := vfs.NewFileSystem(shells, sessions, ws, files, events)
+	if ignore, ok := git.(ports.GitIgnore); ok {
+		fsys.UseGitIgnore(ignore)
+	}
+	return fsys
+}
+
+// bindWorkspaceRemovals tells the virtual file system when a workspace is
+// removed, so it raises the worktree root's going away.
+func bindWorkspaceRemovals(ws *workspaces.Service, fsys *vfs.FileSystem) { ws.UseRemovalSink(fsys) }
+
+// bindFilesRootFeed puts the roots of the virtual file system coming and going
+// on the project feed, for the Files view that follows them.
+func bindFilesRootFeed(fsys *vfs.FileSystem, orch *orchestration.Service) { fsys.AnnounceRoots(orch) }
 
 // bindVirtualShells gives every session with a task its virtual shell, and
 // has the shells hear every change they may have to show: documents' and
 // artifacts' on the bus, comments' and resources' as planning puts them on
 // the project feed.
-func bindVirtualShells(orch *orchestration.Service, shells *vshell.Service, plan *planning.Service, cat catalog.Catalog) {
+func bindVirtualShells(orch *orchestration.Service, shells *vfs.Service, plan *planning.Service, cat catalog.Catalog) {
 	orch.Shells, orch.ShellIndex = shells, shells
 	shells.Subscribe(cat.Bus)
 	plan.Feed = changeSinks{plan.Feed, shells}

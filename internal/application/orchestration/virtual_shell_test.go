@@ -22,7 +22,7 @@ import (
 	"operators-mcp/internal/adapter/out/shell"
 	"operators-mcp/internal/adapter/out/termhost"
 	"operators-mcp/internal/application/planning"
-	"operators-mcp/internal/application/vshell"
+	"operators-mcp/internal/application/vfs"
 	"operators-mcp/internal/domain"
 	"operators-mcp/internal/ports"
 )
@@ -143,7 +143,7 @@ func withShells(t *testing.T, svc *Service) *shellWorld {
 		},
 		bytes: map[string]string{"a-home": "<h1>home</h1>", "a-logo": "<svg/>", "a-palette": ":root{}"},
 	}
-	svc.Shells = vshell.New(vshell.Sources{Tickets: plan, Documents: plan, Comments: plan, Resources: plan, Artifacts: arts})
+	svc.Shells = vfs.New(vfs.Sources{Tickets: plan, Documents: plan, Comments: plan, Resources: plan, Artifacts: arts})
 
 	inCatalog := *w.task
 	inCatalog.ProjectID = "p1"

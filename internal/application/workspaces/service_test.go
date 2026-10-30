@@ -492,3 +492,51 @@ func TestService_ListBranches(t *testing.T) {
 		t.Fatalf("ListBranches on a missing repo = %v (code %q), want REPOSITORY_NOT_FOUND", err, code)
 	}
 }
+
+// removedSink records the workspaces the service told it were removed.
+type removedSink struct{ got []*domain.Workspace }
+
+func (r *removedSink) WorkspaceRemoved(ws *domain.Workspace) { r.got = append(r.got, ws) }
+
+func TestARemovedWorkspaceIsToldToTheRemovalSinkOnceAfterItsRowIsGone(t *testing.T) {
+	for name, remove := range map[string]func(*workspaces.Service, string) error{
+		"Delete":  (*workspaces.Service).Delete,
+		"Discard": (*workspaces.Service).Discard,
+	} {
+		t.Run(name, func(t *testing.T) {
+			svc, wsRepo, _, repo := newService(t)
+			sink := &removedSink{}
+			svc.UseRemovalSink(sink)
+			ws, err := svc.Create(repo.ID, "told", "", "")
+			if err != nil {
+				t.Fatal(err)
+			}
+			if err := remove(svc, ws.ID); err != nil {
+				t.Fatal(err)
+			}
+			if len(sink.got) != 1 || sink.got[0].ID != ws.ID || sink.got[0].Path != ws.Path {
+				t.Fatalf("told %+v", sink.got)
+			}
+			if wsRepo.Get(context.Background(), ws.ID) != nil {
+				t.Fatal("row should be deleted")
+			}
+		})
+	}
+}
+
+func TestAFailedWorkspaceRemovalTellsNobody(t *testing.T) {
+	svc, _, wt, repo := newService(t)
+	sink := &removedSink{}
+	svc.UseRemovalSink(sink)
+	ws, err := svc.Create(repo.ID, "stuck", "", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	wt.removeErr = errors.New("locked")
+	if svc.Delete(ws.ID) == nil || svc.Discard(ws.ID) == nil {
+		t.Fatal("expected errors")
+	}
+	if len(sink.got) != 0 {
+		t.Fatalf("told %+v of a removal that failed", sink.got)
+	}
+}

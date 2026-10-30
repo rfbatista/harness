@@ -1,4 +1,4 @@
-package vshell
+package vfs
 
 import (
 	"context"
@@ -22,7 +22,7 @@ func refuseNotYours(rel, author string) ports.ShellAnswer {
 
 // checkCommentAt: a new comment file may be written; an existing one only
 // when this session wrote it and its copy is the stored one.
-func (s *Service) checkCommentAt(sh *shell, rel string) ports.ShellAnswer {
+func (s *Service) checkCommentAt(sh *root, rel string) ports.ShellAnswer {
 	if row, ok := sh.files[rel]; ok && row.Kind == ports.ShellComment {
 		if c := s.comment(sh, row.ID); c != nil && !c.WrittenBy(sh.sessionID) {
 			return refuseNotYours(rel, row.Title)
@@ -38,7 +38,7 @@ func (s *Service) checkCommentAt(sh *shell, rel string) ports.ShellAnswer {
 // commitCommentWrite stores the file at rel as this session's comment: a
 // new one, or its comment's new body. The file keeps the name the agent
 // gave it.
-func (s *Service) commitCommentWrite(sh *shell, rel string) ports.ShellAnswer {
+func (s *Service) commitCommentWrite(sh *root, rel string) ports.ShellAnswer {
 	content, err := os.ReadFile(sh.abs(rel))
 	if err != nil {
 		return allow // nothing was written
@@ -70,7 +70,7 @@ func (s *Service) commitCommentWrite(sh *shell, rel string) ports.ShellAnswer {
 
 // commitCommentRemove deletes this session's comments whose files under
 // rel are gone.
-func (s *Service) commitCommentRemove(sh *shell, rel string) ports.ShellAnswer {
+func (s *Service) commitCommentRemove(sh *root, rel string) ports.ShellAnswer {
 	ctx := context.Background()
 	for _, row := range sh.under(rel, ports.ShellComment) {
 		if _, err := os.Lstat(sh.abs(row.Path)); err == nil {
@@ -87,7 +87,7 @@ func (s *Service) commitCommentRemove(sh *shell, rel string) ports.ShellAnswer {
 
 // refuseComment answers a comment write planning refused, and puts back
 // what is stored.
-func (s *Service) refuseComment(sh *shell, rel string, row ports.ShellFile, err error) ports.ShellAnswer {
+func (s *Service) refuseComment(sh *root, rel string, row ports.ShellFile, err error) ports.ShellAnswer {
 	var ans ports.ShellAnswer
 	switch {
 	case errs.HasCode(err, "COMMENT_NOT_YOURS"):
@@ -102,7 +102,7 @@ func (s *Service) refuseComment(sh *shell, rel string, row ports.ShellFile, err 
 }
 
 // comment is the task's comment id as stored, or nil.
-func (s *Service) comment(sh *shell, id string) *domain.TicketComment {
+func (s *Service) comment(sh *root, id string) *domain.TicketComment {
 	list, err := s.src.Comments.ListTicketComments(context.Background(), sh.ticketID, time.Time{})
 	if err != nil {
 		return nil
