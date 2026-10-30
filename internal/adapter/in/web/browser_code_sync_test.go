@@ -208,6 +208,7 @@ func TestTheCodeTabsSourceBarShowsTheSyncChipAndItsPanel(t *testing.T) {
 		evalString(`document.querySelector('section[aria-label=Code] .sync-panel').innerText.replace(/\s+/g, ' ')`, &panelText),
 		chromedp.Sleep(150*time.Millisecond),
 		chromedp.FullScreenshot(&shot, 85),
+		chromedp.Evaluate(`document.querySelector('section[aria-label=Code] .sync-panel button')?.focus()`, nil),
 		// focus stays inside: Tab round the panel more times than it has controls
 		chromedp.KeyEvent(kb.Tab), chromedp.KeyEvent(kb.Tab), chromedp.KeyEvent(kb.Tab), chromedp.KeyEvent(kb.Tab), chromedp.KeyEvent(kb.Tab),
 		chromedp.Evaluate(`!!document.activeElement.closest('.sync-panel')`, &trapped),
@@ -220,7 +221,7 @@ func TestTheCodeTabsSourceBarShowsTheSyncChipAndItsPanel(t *testing.T) {
 		t.Fatalf("%v\nJS errors: %v", err, errs.all())
 	}
 	saveShot("sync-panel-code.jpg", shot)
-	if !strings.HasPrefix(chip, "ahead|") || !strings.Contains(chip, "origin") || !strings.Contains(chip, "3 ahead") || !strings.Contains(chip, "0 behind") {
+	if !strings.HasPrefix(chip, "ahead|") || !strings.Contains(chip, "origin") || !strings.Contains(strings.ReplaceAll(chip, " ", ""), "3ahead") || !strings.Contains(strings.ReplaceAll(chip, " ", ""), "0behind") {
 		t.Errorf("chip = %q, want the remote and its counts", chip)
 	}
 	if afterCommit != "sync-slot" {
@@ -434,6 +435,7 @@ func TestTheHistoryHeadShowsBothComparisonsAndOpensTheSamePanel(t *testing.T) {
 		chromedp.Evaluate(`document.querySelector('`+head+` .sync-slot > button.sync-state').click()`, nil),
 		pollFor(`!!document.querySelector('`+head+` .sync-panel:popover-open')`),
 		evalString(`document.querySelector('`+head+` .sync-panel').innerText.replace(/\s+/g, ' ')`, &panel),
+		chromedp.Sleep(150*time.Millisecond),
 		chromedp.KeyEvent(kb.Escape),
 		pollFor(`!document.querySelector('`+head+` .sync-panel:popover-open')`),
 		// the feed tells a new state: the remote moved

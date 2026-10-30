@@ -92,7 +92,7 @@ func commitWideDirectory(t *testing.T, repo, worktree string) {
 	}
 	git(repo, "add", "wide")
 	git(repo, "commit", "-q", "-m", "a wide directory")
-	git(worktree, "merge", "-q", "--no-edit", "main")
+	git(worktree, "merge", "-q", "--no-edit", "--autostash", "main")
 }
 
 type longTask struct {
