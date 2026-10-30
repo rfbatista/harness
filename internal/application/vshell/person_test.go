@@ -412,3 +412,31 @@ func TestStoppingTheServerEndsEveryTerminalWithServerStopped(t *testing.T) {
 		t.Errorf("reasons = %v, want server_stopped for both", got)
 	}
 }
+
+// A closed terminal is gone from the list at once, even when its shell is slow
+// to die: a page reloaded meanwhile must not bring it back.
+func TestAClosedTerminalLeavesTheListBeforeItsShellIsGone(t *testing.T) {
+	p := newPerson(t, os.Environ())
+	pt, term := open(t, p, "worktree", "")
+	for _, r := range "trap '' TERM; sleep 30" {
+		_ = term.Key(ports.KeyEvent{Code: r, Text: string(r)})
+	}
+	_ = term.Key(ports.KeyEvent{Code: '\r'})
+	time.Sleep(300 * time.Millisecond)
+
+	closed := make(chan struct{})
+	go func() { _ = p.Close(pt.ID); close(closed) }()
+	deadline := time.Now().Add(time.Second)
+	for {
+		got, _ := p.List(context.Background(), "s1")
+		if len(got) == 0 {
+			break
+		}
+		if time.Now().After(deadline) {
+			t.Fatalf("the closed terminal is still listed: %+v", got)
+		}
+		time.Sleep(20 * time.Millisecond)
+	}
+	waitDone(t, term)
+	<-closed
+}

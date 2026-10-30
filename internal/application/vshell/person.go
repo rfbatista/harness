@@ -249,10 +249,14 @@ func (p *PersonTerminals) Attach(id string) (ports.Terminal, error) { return p.H
 
 // Close hangs up the shell; one that is already gone is not an error.
 func (p *PersonTerminals) Close(id string) error {
+	// Unlisted first: a shell slow to die must not show in the list again, to a
+	// page reloaded meanwhile, once the person closed it.
 	p.mu.Lock()
-	for _, t := range p.terms {
+	for i, t := range p.terms {
 		if t.ID == id {
 			t.silent = true
+			p.terms = append(p.terms[:i], p.terms[i+1:]...)
+			break
 		}
 	}
 	p.mu.Unlock()

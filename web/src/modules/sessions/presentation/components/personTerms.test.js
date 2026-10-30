@@ -227,11 +227,11 @@ test("dragging the top edge sets the height from the pointer, and the drag ends 
 
 test("expand fills the tab, and one click or Escape restores it, and the choice is remembered", async () => {
   const storage = memoryStorage();
-  const { instance } = await setup({ storage });
+  const { instance } = await setup({ storage, existing: [open("worktree", "")] });
   instance.toggleExpanded();
   assert.equal(instance.expanded, true);
   assert.equal(instance.expandLabel, "Restore terminals");
-  const again = await setup({ storage });
+  const again = await setup({ storage, existing: [open("worktree", "")] });
   assert.equal(again.instance.expanded, true);
 
   instance.escape({ key: "Escape" });
@@ -338,4 +338,44 @@ test("a terminal on a folder is labelled by its root and the folder; on the root
   assert.deepEqual([folder.where, folder.label], ["Worktree", "web/src"]);
   assert.deepEqual([root.where, root.label], ["", "Worktree"]);
   assert.deepEqual([res.where, res.label], ["Resources", "docs"]);
+});
+
+test("closing the last terminal of an expanded dock restores the dock: nothing stays hidden behind it", async () => {
+  const storage = memoryStorage();
+  const { instance, dispatched, prefs } = await setup({ storage, existing: [open("worktree", "")] });
+  instance.toggleExpanded();
+  assert.equal(instance.expandedAttr, "");
+  await instance.close(instance.terms[0].id);
+  assert.equal(instance.expanded, false);
+  assert.equal(instance.expandedAttr, null);
+  assert.equal(prefs.get("person-terms.expanded"), null, "the stored flag is cleared");
+  assert.deepEqual(dispatched.at(-1), { name: "person-terminals-expanded", detail: { sessionId: "s1", expanded: false } });
+});
+
+test("a terminal that ends does not collapse the dock while its tab stays", async () => {
+  const { instance, mem } = await setup({ existing: [open("worktree", "")] });
+  instance.toggleExpanded();
+  mem.end(instance.terms[0].id, "exited", "The shell exited.");
+  assert.equal(instance.expanded, true, "the ended tab is still there to show its note");
+});
+
+test("a page loaded with no terminal ignores a stored expanded flag", async () => {
+  const storage = memoryStorage();
+  const first = await setup({ storage, existing: [open("worktree", "")] });
+  first.instance.toggleExpanded();
+  const later = await setup({ storage });
+  assert.equal(later.instance.expanded, false);
+  assert.equal(later.instance.expandedAttr, null);
+  assert.equal(later.prefs.get("person-terms.expanded"), null);
+  assert.ok(!later.dispatched.some((d) => d.name === "person-terminals-expanded" && d.detail.expanded), "nothing told the page the dock is expanded");
+});
+
+test("a refusal keeps an expanded dock, since it has something to show", async () => {
+  const { instance, mem } = await setup({ existing: [open("worktree", "")] });
+  instance.toggleExpanded();
+  mem.refuseNext("TERMINAL_HOST_REFUSED", "no");
+  await instance.close(instance.terms[0].id);
+  assert.equal(instance.expanded, false);
+  await instance.open("worktree", "");
+  assert.equal(instance.expandedAttr, null);
 });
