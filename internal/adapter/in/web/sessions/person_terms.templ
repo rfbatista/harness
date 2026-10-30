@@ -30,7 +30,7 @@ templ PersonTerms(sid, ended string) {
 		x-effect={ "setSessionEnded(" + ended + ")" }
 		x-show="visible"
 		x-bind:style="dockStyle"
-		x-bind:data-expanded="expanded ? '' : null"
+		x-bind:data-expanded="expandedAttr"
 		x-on:person-terminal-open-requested.window="openRequested"
 		x-on:keydown.escape.window="escape"
 		x-on:terminal-status.stop="terminalStatus"

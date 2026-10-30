@@ -131,7 +131,7 @@
   }
 
   /* With the dock expanded the Files tab is the dock alone: the tree and the viewer hide. */
-  .files-pane:has(.person-terms[data-expanded]) {
+  .files-pane:has(.person-terms[data-expanded]:not([style*="display: none"])) {
     & .code-layout > .side,
     & .code-layout > .separator,
     & .files-strip { display: none; }

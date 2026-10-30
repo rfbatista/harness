@@ -65,9 +65,11 @@ export const personTerms = ({ persons, prefs, measure = defaultMeasure, observeR
     init() {
       this.refreshRoom();
       if (this.$root?.parentElement) stopObserving = observeResize(this.$root.parentElement, () => this.refreshRoom());
-      if (this.expanded) this.$dispatch("person-terminals-expanded", { sessionId, expanded: true });
       stopFollowing = persons.followEnded(sessionId, (e) => this.ended(e), (s) => this.feedStatus(s));
-      return this.load();
+      // A stored "expanded" holds only for a dock that has something to show.
+      return this.load().then(() => {
+        if (this.expanded && this.visible) this.$dispatch("person-terminals-expanded", { sessionId, expanded: true });
+      });
     },
 
     destroy() {
@@ -110,6 +112,10 @@ export const personTerms = ({ persons, prefs, measure = defaultMeasure, observeR
     get down() {
       const t = this.current;
       return t && !t.ended && this.states[t.id] === "offline" ? t.id : "";
+    },
+    /** data-expanded: only a dock that shows can fill the Files tab. */
+    get expandedAttr() {
+      return this.expanded && this.visible ? "" : null;
     },
     get expandLabel() {
       return this.expanded ? "Restore terminals" : "Expand terminals";
@@ -247,9 +253,10 @@ export const personTerms = ({ persons, prefs, measure = defaultMeasure, observeR
       this.refusal = null;
     },
 
-    /** Tells the Files tab how many terminals run, for its badge. */
+    /** Tells the Files tab how many terminals run, for its badge; an expanded dock with nothing left to show is restored. */
     report() {
       this.$dispatch("person-terminals-count", { sessionId, count: this.count });
+      if (this.expanded && !this.visible) this.toggleExpanded();
     },
 
     // ── the dock's size ───────────────────────────────────────────────────────

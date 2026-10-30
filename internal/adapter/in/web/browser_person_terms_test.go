@@ -495,3 +495,57 @@ func TestPersonTerminalScreenshots(t *testing.T) {
 	}
 	shot(ctx2, "person-terms-phone.png")
 }
+
+// Closing the last terminal of an expanded dock gives the Files tab back: the
+// tree and the viewer show, focus mode ends, and a stored "expanded" flag does
+// not blank a page that has no terminal.
+func TestClosingTheLastExpandedTerminalGivesTheFilesTabBack(t *testing.T) {
+	fw := newFilesWorld(t, domain.SessionRunning, 0)
+	ctx, errs := browser(t)
+	const tabShows = `(() => {
+  const vis = (q) => { const e = document.querySelector('section[aria-label=Files] ' + q); return !!e && getComputedStyle(e).display !== 'none' && e.getBoundingClientRect().height > 0 };
+  return JSON.stringify({ tree: vis('.code-layout > .side'), viewer: vis('.code-layout > .main > .code-view, .code-layout > .main > .placeholder, .code-layout > .main [aria-label=File]') || vis('.code-layout > .main'), strip: vis('.files-strip'), focus: document.querySelector('.app-shell').hasAttribute('data-focus') })
+})()`
+	var after, reloaded, stale string
+	var shot []byte
+	err := chromedp.Run(ctx,
+		fw.openFilesTab(),
+		fw.openTerminalHere("Worktree"),
+		fw.waitDockLive(),
+		chromedp.Evaluate(`document.querySelector('main#main')._x_dataStack[0].toggleFocus()`, nil),
+		chromedp.Click(dock+` .tools button[aria-label="Expand terminals"]`, chromedp.ByQuery),
+		chromedp.Poll(`document.querySelector('.app-shell').hasAttribute('data-focus')`, nil, chromedp.WithPollingTimeout(5*time.Second)),
+		chromedp.Click(dock+` .term-tab .close`, chromedp.ByQuery),
+		chromedp.Sleep(500*time.Millisecond),
+		chromedp.Evaluate(tabShows, &after),
+		chromedp.CaptureScreenshot(&shot),
+		// A reload with no terminal left.
+		chromedp.Navigate(fw.tab),
+		chromedp.Poll(`!!document.querySelector('.pane-tabs [role=tab]')`, nil, chromedp.WithPollingTimeout(10*time.Second)),
+		chromedp.Evaluate(`[...document.querySelectorAll('.pane-tabs [role=tab]')].find(b => b.textContent.trim().startsWith('Files')).click()`, nil),
+		chromedp.Poll(`document.querySelectorAll('section[aria-label=Files] .file-tree [data-kind=root]').length === 2`, nil, chromedp.WithPollingTimeout(10*time.Second)),
+		chromedp.Sleep(300*time.Millisecond),
+		chromedp.Evaluate(tabShows, &reloaded),
+		// A stored flag from an earlier page, and no terminal: the tab is not blank.
+		chromedp.Evaluate(`localStorage.setItem('harness:person-terms.expanded', '1')`, nil),
+		chromedp.Navigate(fw.tab),
+		chromedp.Poll(`!!document.querySelector('.pane-tabs [role=tab]')`, nil, chromedp.WithPollingTimeout(10*time.Second)),
+		chromedp.Evaluate(`[...document.querySelectorAll('.pane-tabs [role=tab]')].find(b => b.textContent.trim().startsWith('Files')).click()`, nil),
+		chromedp.Poll(`document.querySelectorAll('section[aria-label=Files] .file-tree [data-kind=root]').length === 2`, nil, chromedp.WithPollingTimeout(10*time.Second)),
+		chromedp.Sleep(300*time.Millisecond),
+		chromedp.Evaluate(tabShows, &stale),
+	)
+	if err != nil {
+		failFiles(t, ctx, err, errs)
+	}
+	saveShot("person-terms-closed-after-expanded.png", shot)
+	want := `{"tree":true,"viewer":true,"strip":true,"focus":false}`
+	for what, got := range map[string]string{"after closing": after, "after a reload": reloaded, "with a stale flag": stale} {
+		if got != want {
+			t.Errorf("%s the Files tab shows %s, want %s", what, got, want)
+		}
+	}
+	if e := errs.all(); len(e) > 0 {
+		t.Errorf("JS errors: %v", e)
+	}
+}
