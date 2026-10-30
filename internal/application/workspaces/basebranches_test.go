@@ -152,9 +152,33 @@ func TestAnOriginBaseIsFetchedAsOneBranch(t *testing.T) {
 	}
 }
 
+// An architect cannot fetch by hand: an origin/<name> that was never fetched is
+// tried on origin all the same.
+func TestAnOriginBaseThatWasNeverFetchedIsFetchedAllTheSame(t *testing.T) {
+	r := newBaseRig(t)
+	if err := r.prepare("origin/brand-new"); err != nil {
+		t.Fatal(err)
+	}
+	if got := r.git.fetched; len(got) != 1 || got[0] != "brand-new" {
+		t.Fatalf("fetched %v, want [brand-new]", got)
+	}
+	if r.list.reads != 1 {
+		t.Fatalf("the branch list was read %d times, want once", r.list.reads)
+	}
+
+	r.git.fetchErr = ports.ErrRemoteBranchNotFound
+	if err := r.prepare("origin/never-there"); errs.Code(err) != domain.RemoteBranchNotFound {
+		t.Fatalf("err = %v, want REMOTE_BRANCH_NOT_FOUND", err)
+	}
+	r.git.origin = ""
+	if err := r.prepare("origin/brand-new"); errs.Code(err) != domain.CodeNoRemote {
+		t.Fatalf("err = %v, want NO_REMOTE", err)
+	}
+}
+
 func TestABaseThatNamesNoListedBranchIsRefusedWithItsName(t *testing.T) {
 	r := newBaseRig(t)
-	for _, base := range []string{"mian", "origin/not-listed", "nowhere/x", "v1.0"} {
+	for _, base := range []string{"mian", "nowhere/x", "v1.0", "originx/y", "origin"} {
 		err := r.prepare(base)
 		if errs.Code(err) != domain.BaseBranchNotFound {
 			t.Fatalf("%s: err = %v, want BASE_BRANCH_NOT_FOUND", base, err)
@@ -316,6 +340,20 @@ func TestABaseOfOriginsIsFetchedOrRefusedAgainstARealRemote(t *testing.T) {
 	}
 	if got, want := run(repo, "rev-parse", "refs/remotes/origin/feature-x"), run(other, "rev-parse", "feature-x"); got != want || got == stale {
 		t.Fatalf("origin/feature-x = %s, want the colleague's tip %s (was %s)", got, want, stale)
+	}
+
+	// A branch pushed after the last fetch is not listed, and is fetched all the same.
+	run(other, "checkout", "-q", "-b", "brand-new")
+	run(other, "commit", "-q", "--allow-empty", "-m", "brand new")
+	run(other, "push", "-q", "origin", "brand-new")
+	if err := prep.PrepareBase(context.Background(), "r1", repo, "origin/brand-new"); err != nil {
+		t.Fatal(err)
+	}
+	if got, want := run(repo, "rev-parse", "refs/remotes/origin/brand-new"), run(other, "rev-parse", "brand-new"); got != want {
+		t.Fatalf("origin/brand-new = %s, want %s", got, want)
+	}
+	if _, err := gitcli.NewWorktreeManager().Add(repo, filepath.Join(t.TempDir(), "ws"), "session", "origin/brand-new"); err != nil {
+		t.Fatalf("the cut from the fetched branch: %v", err)
 	}
 
 	run(other, "push", "-q", "origin", "--delete", "feature-x")

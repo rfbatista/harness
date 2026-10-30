@@ -15,8 +15,9 @@ const originRemote = "origin"
 
 // BaseBranches readies the base a session's branch is cut from (ADR 0049). It
 // judges the base from the branch list the cut itself reads (refs/heads and
-// refs/remotes), so the classification and the listing cannot disagree, and a
-// name that is not in it never reaches git worktree add.
+// refs/remotes), so the classification and the listing cannot disagree; the
+// one name that may be absent from it is origin's, which the fetch settles. A
+// name that is neither listed nor origin's never reaches git worktree add.
 type BaseBranches struct {
 	worktrees ports.WorktreeManager
 	git       ports.BranchPublisher
@@ -47,11 +48,17 @@ func (s *BaseBranches) PrepareBase(ctx context.Context, repositoryID, repoRoot, 
 			break // a local branch is listed before the remote ones
 		}
 	}
+	// A base named origin/<name> is always tried on origin, listed or not: an
+	// architect has no fetch of its own, and a branch nobody fetched yet is
+	// exactly what it may ask for. The fetch lands it or says it is gone.
+	fromOrigin := strings.HasPrefix(base, originRemote+"/") && len(base) > len(originRemote)+1
 	switch {
-	case listed == nil:
-		return baseNotFound(base)
-	case !listed.Remote || !strings.HasPrefix(base, originRemote+"/"):
+	case listed != nil && !listed.Remote:
 		return nil
+	case !fromOrigin && listed == nil:
+		return baseNotFound(base)
+	case !fromOrigin:
+		return nil // another remote's ref: cut as it is
 	}
 	branch := strings.TrimPrefix(base, originRemote+"/")
 
