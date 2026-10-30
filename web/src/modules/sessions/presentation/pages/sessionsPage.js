@@ -404,7 +404,7 @@ export const sessionsPage = ({
       return n > 0 ? String(n) : "";
     },
     get filesBadgeTitle() {
-      const n = this.personTerminalCounts[this.selectedId];
+      const n = this.personTerminalCounts[this.selectedId] ?? 0;
       return `${n} ${n === 1 ? "terminal" : "terminals"} open`;
     },
     /** The selected session has a worktree whose code the Code tab can read. */

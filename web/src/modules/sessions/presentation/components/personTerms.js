@@ -23,6 +23,9 @@ const EXPANDED_KEY = "person-terms.expanded";
 
 const WHERE = { worktree: "Worktree", resources: "Resources" };
 
+/** The note of a resources terminal that went with its session. */
+const sessionEnded = () => endedNote({ reason: "root_gone", message: SESSION_ENDED_NOTE });
+
 /**
  * @param {{
  *   persons: import("../../domain/ports.js").PersonTerminalGateway,
@@ -129,10 +132,7 @@ export const personTerms = ({ persons, prefs, measure = defaultMeasure, observeR
 
     /** A tab the server does not list: the session's end took it, or the harness restarted. */
     lost(t) {
-      const note = this.sessionEnded && t.readonly
-        ? endedNote({ reason: "root_gone", message: SESSION_ENDED_NOTE })
-        : endedNote({ reason: "restarted", message: RESTART_NOTE });
-      return { ...t, ended: note };
+      return { ...t, ended: this.sessionEnded && t.readonly ? sessionEnded() : endedNote({ reason: "restarted", message: RESTART_NOTE }) };
     },
 
     /** @param {import("../../domain/ports.js").PersonTerminalEnded} e */
@@ -149,7 +149,7 @@ export const personTerms = ({ persons, prefs, measure = defaultMeasure, observeR
       const { id, code } = event.detail ?? {};
       this.terms = this.terms.map((t) => {
         if (t.id !== id || t.ended) return t;
-        if (this.sessionEnded && t.readonly) return { ...t, ended: endedNote({ reason: "root_gone", message: SESSION_ENDED_NOTE }) };
+        if (this.sessionEnded && t.readonly) return { ...t, ended: sessionEnded() };
         return { ...t, ended: endedNote({ reason: "exited", message: code ? `The shell exited with code ${code}.` : "The shell exited." }) };
       });
       this.report();
@@ -159,7 +159,7 @@ export const personTerms = ({ persons, prefs, measure = defaultMeasure, observeR
     setSessionEnded(ended) {
       this.sessionEnded = ended;
       if (!ended) return;
-      this.terms = this.terms.map((t) => (!t.ended && t.readonly ? { ...t, ended: endedNote({ reason: "root_gone", message: SESSION_ENDED_NOTE }) } : t));
+      this.terms = this.terms.map((t) => (!t.ended && t.readonly ? { ...t, ended: sessionEnded() } : t));
       this.report();
     },
 
@@ -309,8 +309,9 @@ export const personTerms = ({ persons, prefs, measure = defaultMeasure, observeR
       this.$dispatch("person-terminals-expanded", { sessionId, expanded: this.expanded });
     },
 
-    /** Escape restores an expanded dock. */
-    escape() {
+    /** Escape restores an expanded dock, unless a terminal has the keyboard: there it is the shell's (vi, nvim) and goes nowhere else. */
+    escape(event) {
+      if (event?.target?.closest?.(".screen")) return;
       if (this.expanded) this.toggleExpanded();
     },
   };

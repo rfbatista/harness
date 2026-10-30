@@ -317,3 +317,16 @@ test("while the tab is hidden and has no height, the person's height is kept as 
   assert.equal(hidden.instance.dockStyle, "--dock: 400px");
   assert.equal(hidden.instance.handleValue, 0);
 });
+
+test("Escape typed in a terminal is the shell's: it does not restore the dock", async () => {
+  const { instance } = await setup();
+  instance.toggleExpanded();
+  const screen = document.createElement("div");
+  screen.className = "screen";
+  const inside = document.createElement("textarea");
+  screen.append(inside);
+  instance.escape({ key: "Escape", target: inside });
+  assert.equal(instance.expanded, true);
+  instance.escape({ key: "Escape", target: document.createElement("button") });
+  assert.equal(instance.expanded, false);
+});
