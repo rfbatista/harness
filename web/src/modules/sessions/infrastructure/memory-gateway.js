@@ -35,6 +35,8 @@ export function memoryGateway({ projects = [], sessions = [], repositories = {},
   const fetches = [];
   let fetchFailure = null;
   let fetchGate = null;
+  /** The next start is refused with this error, once. */
+  let startRefusal = null;
   let nextId = 1;
   const knownProjects = new Set([...projects, ...sessions.map((s) => s.projectId)]);
   /** @type {Map<string, import("../domain/session.js").Session>} */
@@ -103,6 +105,11 @@ export function memoryGateway({ projects = [], sessions = [], repositories = {},
     },
 
     async start({ projectId, ticketId, repositoryId, agentId, prompt, mode, branchName }) {
+      if (startRefusal) {
+        const refusal = startRefusal;
+        startRefusal = null;
+        throw refusal;
+      }
       if (!knownProjects.has(projectId)) {
         throw new StructuredError(Codes.PROJECT_NOT_FOUND, `project ${projectId} not found`, 404);
       }
@@ -261,6 +268,10 @@ export function memoryGateway({ projects = [], sessions = [], repositories = {},
     /** What origin has for a repository, as the remote-tracking names a fetch brings (`origin/x`). */
     setOrigin(repositoryId, names) {
       origin[repositoryId] = names;
+    },
+    /** The next start is refused with `error`, as the server refuses a base. */
+    refuseStart(error) {
+      startRefusal = error;
     },
     /** The repositories fetched so far. */
     fetches,

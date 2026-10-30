@@ -16,6 +16,17 @@ import { Codes } from "../../../../shared/domain/errors.js";
 import { INITIAL_TERMINAL_SIZE, noTaskProblem } from "../../domain/session.js";
 import { withAgentPicker } from "./agentPicker.js";
 
+/** Start refusals about the base branch; the server's message says what to fix. */
+const BASE_CODES = new Set([
+  Codes.BASE_BRANCH_NOT_FOUND,
+  Codes.REMOTE_BRANCH_NOT_FOUND,
+  Codes.NO_REMOTE,
+  Codes.GIT_CREDENTIAL_MISSING,
+  Codes.GIT_CREDENTIAL_REJECTED,
+  Codes.GIT_CREDENTIAL_STORE_LOCKED,
+  Codes.FETCH_FAILED,
+]);
+
 /** @param {{ gateway: import("../../domain/ports.js").SessionGateway }} deps */
 export const newSession = ({ gateway, debounceMs = 300, location = globalThis.location }) => (projectId = "", ticketId = "", lockedMode = "", bringUnder = []) => withAgentPicker({
   projectId,
@@ -44,6 +55,9 @@ export const newSession = ({ gateway, debounceMs = 300, location = globalThis.lo
   fetchError: null,
   /** Said under the field when a fetch pruned the person's pick. */
   fetchNote: "",
+  /** The server's sentence for a start refused for the base, and the base it was refused for. */
+  baseRefusedText: "",
+  baseRefusedFor: "",
   /** The session branch's name; prefilled with the generated one, replaced by what the person types. */
   branchName: "",
   /** True once the person typed in the field: a new repository no longer replaces it. */
@@ -109,12 +123,17 @@ export const newSession = ({ gateway, debounceMs = 300, location = globalThis.lo
   get hasRemoteBranches() {
     return this.remoteBranches.length > 0;
   },
+  /** The base is a remote branch of origin: the server fetches it before the cut. */
+  get remoteBase() {
+    return this.baseBranch.startsWith("origin/") && this.branches.some((b) => b.remote && b.name === this.baseBranch);
+  },
   /** What the worktree will branch off, in words, under the picker. */
   get baseHint() {
     if (this.fetching) return "Fetching from origin…";
     if (this.fetchNote) return this.fetchNote;
     if (this.loadingBranches) return "Loading the repository's branches…";
     if (this.branchesFailed) return "Could not list the branches; the session branches off what the checkout has checked out.";
+    if (this.remoteBase) return `The session gets its own branch, cut from ${this.baseBranch}; it is fetched from origin when the session starts.`;
     const head = this.branches.find((b) => b.isHead);
     if (!this.baseBranch || this.baseBranch === head?.name) return "The session gets its own branch, cut from the branch checked out in the repository.";
     return `The session gets its own branch, cut from ${this.baseBranch}.`;
@@ -124,6 +143,31 @@ export const newSession = ({ gateway, debounceMs = 300, location = globalThis.lo
   get branchError() {
     if (this.fetchError) return this.fetchError;
     return this.branchesFailed ? "Could not list the branches." : null;
+  },
+  /** The sentence on the status line under the field: a refused base, or a failed fetch. */
+  get baseStatus() {
+    return this.baseRefusal || this.fetchError || "";
+  },
+  get hasBaseStatus() {
+    return this.baseStatus !== "";
+  },
+  /** The Branch off field is marked invalid: a start was refused for the base. */
+  get baseInvalid() {
+    return this.baseRefusal !== "";
+  },
+  /** The refusal stands while the field still holds the base it was refused for. */
+  get baseRefusal() {
+    return this.baseRefusedFor === this.baseBranch ? this.baseRefusedText : "";
+  },
+  clearBaseRefusal() {
+    this.baseRefusedText = "";
+  },
+  /** A start refusal about the base lands on the Branch off status line, not in the banner. */
+  baseRefused(err) {
+    if (!BASE_CODES.has(err?.code)) return false;
+    this.baseRefusedText = err.message;
+    this.baseRefusedFor = this.baseBranch;
+    return true;
   },
   /** The Branch off combobox's aria-busy: the list loads or a fetch runs. */
   get branchBusy() {
@@ -148,6 +192,7 @@ export const newSession = ({ gateway, debounceMs = 300, location = globalThis.lo
     this.fetching = true;
     this.fetchError = null;
     this.fetchNote = "";
+    this.clearBaseRefusal();
     try {
       await gateway.fetchRemote(repositoryId);
       if (superseded()) return;
@@ -368,6 +413,7 @@ export const newSession = ({ gateway, debounceMs = 300, location = globalThis.lo
     if (this.cannotSubmit) return;
     this.submitting = true;
     this.error = null;
+    this.clearBaseRefusal();
     this.agentRefusal = null;
     try {
       const session = await gateway.start({
@@ -385,7 +431,7 @@ export const newSession = ({ gateway, debounceMs = 300, location = globalThis.lo
       });
       this.$dispatch("session-created", { session });
     } catch (err) {
-      if (!this.refuseAgent(err) && !this.nameRefusal(err)) this.error = describeError(err);
+      if (!this.refuseAgent(err) && !this.nameRefusal(err) && !this.baseRefused(err)) this.error = describeError(err);
     } finally {
       this.submitting = false;
     }

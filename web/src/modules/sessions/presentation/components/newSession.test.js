@@ -540,6 +540,7 @@ test("a failed fetch says why in the error row, keeps the list, and Retry fetche
     memory.failFetch(new StructuredError(code, `sentence for ${code}`, 502));
     await instance.fetchOrigin();
     assert.equal(instance.branchError, `sentence for ${code}`);
+    assert.equal(instance.baseStatus, `sentence for ${code}`, "and on the status line, where a closed field shows it");
     assert.equal(instance.baseBranch, "feat/feed");
     assert.deepEqual(remoteNames(instance), ["origin/main"], "the stale list stays");
     assert.equal(instance.cannotSubmit, false, "starting from a local branch still works");
@@ -581,4 +582,114 @@ test("a failed fetch for a superseded repository leaves no error on the new one"
   gate.release();
   await running;
   assert.equal(instance.branchError, null);
+});
+
+// ── a remote base ────────────────────────────────────────────────────
+
+const WITH_REMOTES = {
+  r1: [
+    { name: "main", remote: false, isHead: true },
+    { name: "origin/feature-x", remote: true, isHead: false },
+    { name: "upstream/x", remote: true, isHead: false },
+  ],
+};
+
+test("a remote base is explained: cut from origin/<name>, fetched from origin when the session starts", async () => {
+  const { instance } = setup({ branches: WITH_REMOTES });
+  await flush();
+  instance.baseBranch = "origin/feature-x";
+  assert.equal(instance.baseHint, "The session gets its own branch, cut from origin/feature-x; it is fetched from origin when the session starts.");
+  assert.equal(instance.nameHint, "Becomes the worktree's branch. Cut from origin/feature-x.");
+});
+
+test("a local base, the checked-out branch and another remote's ref keep the plain hint", async () => {
+  const { instance } = setup({ branches: WITH_REMOTES });
+  await flush();
+  assert.equal(instance.baseHint, "The session gets its own branch, cut from the branch checked out in the repository.");
+  instance.baseBranch = "upstream/x";
+  assert.equal(instance.baseHint, "The session gets its own branch, cut from upstream/x.");
+});
+
+test("a remote base is sent to the server as origin/<name>", async () => {
+  const { instance, memory } = setup({ branches: WITH_REMOTES });
+  await flush();
+  const started = [];
+  const realStart = memory.gateway.start;
+  memory.gateway.start = async (req) => (started.push(req), realStart(req));
+  instance.baseBranch = "origin/feature-x";
+  await instance.submit();
+  assert.equal(started[0].baseBranch, "origin/feature-x");
+});
+
+// ── a start refused for the base ─────────────────────────────────────
+
+const BASE_CODES = [
+  Codes.BASE_BRANCH_NOT_FOUND,
+  Codes.REMOTE_BRANCH_NOT_FOUND,
+  Codes.NO_REMOTE,
+  Codes.GIT_CREDENTIAL_MISSING,
+  Codes.GIT_CREDENTIAL_REJECTED,
+  Codes.GIT_CREDENTIAL_STORE_LOCKED,
+  Codes.FETCH_FAILED,
+];
+
+test("a start refused for the base shows the server's sentence under Branch off and keeps the form as filled", async () => {
+  for (const code of BASE_CODES) {
+    const { instance, memory, dispatched } = setup({ branches: WITH_REMOTES });
+    await flush();
+    instance.prompt = "do the thing";
+    instance.agentId = "a-reviewer";
+    instance.mode = "implement";
+    instance.baseBranch = "origin/feature-x";
+    instance.branchName = "agent/mine";
+    instance.branchNameEdited = true;
+    memory.refuseStart(new StructuredError(code, `sentence for ${code}`, 404));
+    await instance.submit();
+    assert.equal(instance.baseStatus, `sentence for ${code}`, code);
+    assert.equal(instance.baseInvalid, true, code);
+    assert.equal(instance.error, null, `${code}: not in the banner`);
+    assert.equal(instance.submitting, false);
+    assert.equal(instance.cannotSubmit, false, `${code}: one fix and one click`);
+    assert.deepEqual([instance.prompt, instance.agentId, instance.mode, instance.baseBranch, instance.branchName], ["do the thing", "a-reviewer", "implement", "origin/feature-x", "agent/mine"]);
+    assert.equal(dispatched.length, 0);
+  }
+});
+
+test("the base refusal goes when the person picks another branch, and a fresh start succeeds", async () => {
+  const { instance, memory, dispatched } = setup({ branches: WITH_REMOTES });
+  await flush();
+  instance.baseBranch = "origin/feature-x";
+  memory.refuseStart(new StructuredError(Codes.REMOTE_BRANCH_NOT_FOUND, "origin/feature-x is not on origin any more. Fetch from origin to refresh the list.", 404));
+  await instance.submit();
+  assert.equal(instance.baseInvalid, true);
+  instance.baseBranch = "main";
+  assert.equal(instance.baseInvalid, false);
+  assert.equal(instance.baseStatus, "");
+  await instance.submit();
+  assert.equal(dispatched[0].name, "session-created");
+});
+
+test("the base refusal goes when the person fetches from origin", async () => {
+  const { instance, memory } = setup({ branches: WITH_REMOTES });
+  await flush();
+  instance.baseBranch = "origin/feature-x";
+  memory.refuseStart(new StructuredError(Codes.REMOTE_BRANCH_NOT_FOUND, "gone", 404));
+  await instance.submit();
+  await instance.fetchOrigin();
+  assert.equal(instance.baseInvalid, false);
+  assert.equal(instance.baseStatus, "");
+});
+
+test("refusals about the name and the agent keep their places, and any other code keeps the banner", async () => {
+  const { instance, memory } = setup({ branches: WITH_REMOTES });
+  await flush();
+  memory.refuseStart(new StructuredError(Codes.INVALID_INPUT, "bad", 400));
+  await instance.submit();
+  assert.ok(instance.error);
+  assert.equal(instance.baseInvalid, false);
+  memory.refuseStart(new StructuredError(Codes.BRANCH_EXISTS, "BRANCH_EXISTS: x already exists", 409, { name: "x", suggestion: "x-2" }));
+  await instance.submit();
+  assert.equal(instance.nameState, "taken");
+  assert.equal(instance.baseInvalid, false);
+  assert.equal(instance.error, null);
 });
