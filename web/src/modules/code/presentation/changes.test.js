@@ -217,5 +217,5 @@ test("a list can link its rows elsewhere than the diff's anchors", async () => {
 
 test("the files at the top level sit under a head named ./ and the other groups under their directory", async () => {
   const list = model(await read(setup()));
-  assert.deepEqual(list.sections[0].groups.map((g) => g.label), ["./", "internal/code/", "internal/feed/"]);
+  assert.deepEqual(list.sections[0].groups.map((g) => g.label), ["(root)", "internal/code/", "internal/feed/"]);
 });

@@ -16,6 +16,7 @@ import (
 
 	"operators-mcp/internal/adapter/in/web/code"
 	"operators-mcp/internal/adapter/in/web/components"
+	"operators-mcp/internal/adapter/in/web/gitsync"
 	"operators-mcp/internal/adapter/in/web/pullrequests"
 	"operators-mcp/internal/adapter/in/web/shell"
 	"operators-mcp/internal/domain"
@@ -92,6 +93,9 @@ type Row struct {
 	CommitCheckOff string
 	Role           string
 	Depth          int
+	// Sync is the chip of the row's worktree, from the page's seeded git
+	// state; nil when the row has none to show (see PageView.PaintSync).
+	Sync *gitsync.Chip
 }
 
 // Chip is a row's status word for the uncommon states, with its tone
@@ -337,6 +341,26 @@ type PageView struct {
 	// GitSync turns on the sync module's chips and the Git popover; the
 	// states themselves are Seed.GitStates.
 	GitSync bool
+}
+
+// PaintSync gives each row whose session has a worktree on disk its sync chip,
+// from the states the page seeds, so the first paint carries the chips the
+// browser would write. A gone worktree has none.
+func (v *PageView) PaintSync(states []domain.GitState, now time.Time) {
+	bySession := make(map[string]domain.GitState, len(states))
+	for _, s := range states {
+		if !s.Gone {
+			bySession[s.SessionID] = s
+		}
+	}
+	for g := range v.Groups {
+		for i := range v.Groups[g].Rows {
+			if s, ok := bySession[v.Groups[g].Rows[i].ID]; ok {
+				chip := gitsync.ChipOf(s, now)
+				v.Groups[g].Rows[i].Sync = &chip
+			}
+		}
+	}
 }
 
 // HasWorkspace reports whether the task has a session with a worktree: the Git

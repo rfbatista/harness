@@ -7,6 +7,7 @@ import (
 	"strconv"
 	"strings"
 
+	"operators-mcp/internal/adapter/in/web/gitsync"
 	"operators-mcp/internal/domain"
 )
 
@@ -63,6 +64,9 @@ type Bar struct {
 	BrowseHref          string
 	Refs                []string
 	Ref                 string
+	// Sync is the chip of the session's worktree, painted after the commit
+	// until the browser's own takes over; nil for any other view.
+	Sync *gitsync.Chip
 }
 
 // ZoneTag is a zone-tag: its name and its context's hue.

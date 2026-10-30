@@ -19,7 +19,7 @@ const SECTIONS = Object.freeze([
 ]);
 
 /** What the head of the files at the repository's top level is called. */
-const ROOT_LABEL = "./";
+const ROOT_LABEL = "(root)";
 
 const byPath = (a, b) => (a.path < b.path ? -1 : a.path > b.path ? 1 : 0);
 

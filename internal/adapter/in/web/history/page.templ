@@ -5,6 +5,7 @@ import (
 
 	"operators-mcp/internal/adapter/in/web/code"
 	"operators-mcp/internal/adapter/in/web/components"
+	"operators-mcp/internal/adapter/in/web/gitsync"
 	"operators-mcp/internal/adapter/in/web/pullrequests"
 	"operators-mcp/internal/adapter/in/web/shell"
 )
@@ -74,7 +75,20 @@ templ gitHead(v PageView) {
 	<div class="[ flow ] [ flow-space-3xs ] git-head" x-data="syncWatch" data-seed="history-git-seed">
 		@templ.JSONScript("history-git-seed", v.Git.seed())
 		<code class="[ text-sm ]">{ v.Git.Branch }</code>
-		<span class="[ color-ink-faint text-sm ]" x-data={ "syncPanel(" + strconv.Quote(v.Git.WorkspaceID) + ")" } x-show="!shown">{ v.Meta }</span>
+		if v.Git.State == nil {
+			<span class="[ color-ink-faint text-sm ]" x-data={ "syncPanel(" + strconv.Quote(v.Git.WorkspaceID) + ")" } x-show="!shown">{ v.Meta }</span>
+		} else {
+			<div class="[ cluster ] [ gutter-xs ] [ text-sm color-ink-muted ]" x-data={ "syncPanel(" + strconv.Quote(v.Git.WorkspaceID) + ")" } x-show="!shown">
+				<span>vs <code>{ v.Git.BaseRef }</code></span>
+				@gitsync.Base(v.Git.Base)
+				<span>vs upstream</span>
+				<span class="sync-slot">
+					@gitsync.Plain(v.Git.Upstream)
+				</span>
+				<button type="button" class="[ button ]" data-variant="ghost" data-size="sm" disabled>Fetch</button>
+				<span>{ v.Git.Fetched }</span>
+			</div>
+		}
 		<div class="[ cluster ] [ gutter-xs ] [ text-sm color-ink-muted ]" x-data={ "syncPanel(" + strconv.Quote(v.Git.WorkspaceID) + ")" } x-show="shown" style="display: none">
 			<span>vs <code x-text="baseRef"></code></span>
 			@code.SyncBaseState()

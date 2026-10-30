@@ -10,6 +10,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/chromedp/cdproto/emulation"
 	"github.com/chromedp/chromedp"
 	"github.com/chromedp/chromedp/kb"
 
@@ -24,12 +25,12 @@ import (
 // exactly as it will to the server.
 type fakeGitHost struct {
 	ports.WorktreeGit // the methods the page does not call
-	mu      sync.Mutex
-	states  map[string]map[string]any // by workspace id, wire shape
-	order   []string
-	fetches []string
-	pushes  []map[string]any
-	streams []chan string
+	mu                sync.Mutex
+	states            map[string]map[string]any // by workspace id, wire shape
+	order             []string
+	fetches           []string
+	pushes            []map[string]any
+	streams           []chan string
 }
 
 func upstreamOf(state, ref string, ahead, behind any) map[string]any {
@@ -430,5 +431,45 @@ func TestTheGitPopoverIsABottomSheetOnAPhone(t *testing.T) {
 	}
 	if e := b.jsErrors(); len(e) > 0 {
 		t.Errorf("JS errors: %v", e)
+	}
+}
+
+// The first paint carries the chips: with scripts off the session rows already
+// read "origin ↑3 ahead ↓0 behind" and "not pushed", and once the browser takes
+// over the chip is where it was, the same width, and the row's first line does
+// not truncate (story 7, no flash or layout shift at hydration).
+func TestTheSessionRowsChipIsPaintedBeforeScriptsAndStaysPutOnHydration(t *testing.T) {
+	_, url := taskGitServer(t)
+	b := newGitBrowser(t)
+	const row1 = `[data-session-id="s1"] .sync-state`
+	const row2 = `[data-session-id="s2"] .sync-state`
+	const measure = `(() => { const c = document.querySelector('` + row1 + `').getBoundingClientRect(); const who = document.querySelector('[data-session-id="s1"] .who'); const row = document.querySelector('[data-session-id="s1"]').getBoundingClientRect(); return [Math.round(c.left - who.getBoundingClientRect().left), Math.round(c.top - row.top), Math.round(c.width), Math.round(row.height), who.scrollWidth <= who.clientWidth ? 1 : 0] })()`
+
+	var ssrText1, ssrText2 string
+	var before []int
+	b.run("scripts off", emulation.SetScriptExecutionDisabled(true), chromedp.EmulateViewport(1280, 900), chromedp.Navigate(url+taskFeedPage),
+		chromedp.WaitVisible(row1, chromedp.ByQuery), chromedp.Sleep(400*time.Millisecond),
+		chromedp.Evaluate(textJS(row1), &ssrText1), chromedp.Evaluate(textJS(row2), &ssrText2), chromedp.Evaluate(measure, &before))
+	if ssrText1 != "origin ↑3 ahead ↓0 behind" || ssrText2 != "not pushed" {
+		t.Errorf("first paint chips = %q and %q", ssrText1, ssrText2)
+	}
+	var after []int
+	var liveText1 string
+	b.run("scripts on", emulation.SetScriptExecutionDisabled(false), chromedp.Navigate(url+taskFeedPage),
+		waitPoll(`document.querySelector('[data-ssr]') === null && !!document.querySelector('`+row1+`')`), chromedp.Sleep(400*time.Millisecond),
+		chromedp.Evaluate(textJS(row1), &liveText1), chromedp.Evaluate(measure, &after))
+	if liveText1 != ssrText1 {
+		t.Errorf("the browser's chip reads %q, the server's %q", liveText1, ssrText1)
+	}
+	if len(before) != 5 || len(after) != 5 {
+		t.Fatalf("measure: %v %v", before, after)
+	}
+	for i, name := range []string{"left", "top", "width", "row height"} {
+		if d := before[i] - after[i]; d < -2 || d > 2 {
+			t.Errorf("the chip moved on hydration: %s %d to %d", name, before[i], after[i])
+		}
+	}
+	if before[4] != 1 || after[4] != 1 {
+		t.Errorf("the row's first line truncates (before %d, after %d)", before[4], after[4])
 	}
 }

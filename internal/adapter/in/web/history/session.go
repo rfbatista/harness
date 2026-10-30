@@ -102,6 +102,9 @@ func (h Handler) Session(w http.ResponseWriter, r *http.Request) error {
 		Meta:    branchMeta(hist),
 		Git:     &GitHead{ProjectID: project.ID, WorkspaceID: sess.WorkspaceID, Branch: hist.Branch},
 	}
+	if !swap && !more {
+		view.Git.paint(h.gitState(ctx, sess.WorkspaceID), h.now())
+	}
 	if hist.Gone {
 		view.Notice = "This session's worktree was removed, so there is nothing uncommitted to show; its branch and commits are kept."
 	}

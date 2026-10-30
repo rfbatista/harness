@@ -5,6 +5,7 @@ import (
 
 	"operators-mcp/internal/adapter/in/web/code"
 	"operators-mcp/internal/adapter/in/web/components"
+	"operators-mcp/internal/adapter/in/web/gitsync"
 	"operators-mcp/internal/adapter/in/web/pullrequests"
 	"operators-mcp/internal/adapter/in/web/shell"
 	"operators-mcp/internal/adapter/in/web/tokensavers"
@@ -596,6 +597,9 @@ templ ssrRows(v PageView) {
 						</span>
 						if r.Chip != nil {
 							<span class="[ badge ]" { chipToneAttrs(r.Chip.Tone)... } aria-hidden="true">{ r.Chip.Word }</span>
+						}
+						if r.Sync != nil {
+							@gitsync.ChipSpan(*r.Sync)
 						}
 					</span>
 					<time class="[ when ]">{ r.When }</time>

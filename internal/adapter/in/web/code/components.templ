@@ -4,6 +4,7 @@ import (
 	"strconv"
 
 	"operators-mcp/internal/adapter/in/web/components"
+	"operators-mcp/internal/adapter/in/web/gitsync"
 )
 
 // The code views' markup, in the design system's blocks (contract "Design
@@ -714,6 +715,11 @@ templ staticSourceBar(v View) {
 				<span class="branch" title={ v.Bar.Branch }>{ v.Bar.Branch }</span>
 			}
 			<code class="commit" title={ v.Bar.CommitTitle }>{ v.Bar.Commit }</code>
+			if v.Bar.Sync != nil {
+				<span class="sync-slot">
+					@gitsync.Plain(*v.Bar.Sync)
+				</span>
+			}
 		</div>
 		if v.Bar.Word != "" {
 			<p class="state" role="status">{ v.Bar.Word }</p>

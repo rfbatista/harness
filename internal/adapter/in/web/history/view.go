@@ -1,9 +1,13 @@
 package history
 
 import (
+	"time"
+
 	"operators-mcp/internal/adapter/in/web/code"
+	"operators-mcp/internal/adapter/in/web/gitsync"
 	"operators-mcp/internal/adapter/in/web/pullrequests"
 	"operators-mcp/internal/adapter/in/web/shell"
+	"operators-mcp/internal/domain"
 )
 
 // PageView is a history page: a repository's, or one session's branch.
@@ -41,16 +45,40 @@ type PageView struct {
 // branch: the chip, the second comparison with Fetch, and the panel.
 type GitHead struct {
 	ProjectID, WorkspaceID, Branch string
+	// State is the worktree's git state when the server read it; nil leaves
+	// the head to the browser. Upstream, Base and Fetched are painted from it.
+	State            *domain.GitState
+	Upstream, Base   gitsync.Chip
+	BaseRef, Fetched string
+}
+
+// paint reads the chips and the fetch age off a state; nil or a gone worktree
+// paints nothing.
+func (g *GitHead) paint(s *domain.GitState, now time.Time) {
+	if s == nil || s.Gone {
+		return
+	}
+	g.State = s
+	g.Upstream = gitsync.ChipOf(*s, now)
+	g.Base = gitsync.BaseOf(*s)
+	g.BaseRef = s.Base.Ref
+	g.Fetched = g.Upstream.FetchedWord
 }
 
 // gitSeed is the head's seed for the sync module: the project to follow.
-// The states are read by the browser (the page paints none yet).
+// The state is the one the server read, when it did.
 type gitSeed struct {
-	ProjectID string `json:"project_id"`
-	States    []any  `json:"git_states"`
+	ProjectID string            `json:"project_id"`
+	States    []domain.GitState `json:"git_states"`
 }
 
-func (g GitHead) seed() gitSeed { return gitSeed{ProjectID: g.ProjectID, States: []any{}} }
+func (g GitHead) seed() gitSeed {
+	seed := gitSeed{ProjectID: g.ProjectID, States: []domain.GitState{}}
+	if g.State != nil {
+		seed.States = append(seed.States, *g.State)
+	}
+	return seed
+}
 
 // Crumb is one step back in the toolbar.
 type Crumb struct{ Label, Href string }

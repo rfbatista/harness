@@ -1,0 +1,49 @@
+package gitsync
+
+import "strconv"
+
+// The server's paint of the sync module's chips: the same elements and words
+// the browser's templates write (the session row's chip and code/sync.templ),
+// placed in a [data-ssr] block or a span the browser hides once it holds the
+// state. The session row writes its classes in CUBE brackets, the source bar
+// and the head line without; each paint follows its browser twin.
+
+// Body is what a chip holds: the remote's name when named, the counted arrows
+// or the word.
+templ Body(c Chip, named bool, bracketed bool) {
+	if named && c.Upstream != "" {
+		<span class={ class(bracketed, "upstream") }>{ c.Upstream }</span>
+	}
+	if c.HasCounts {
+		<span class={ class(bracketed, "counts") }>
+			<span class={ class(bracketed, "ahead") }><span aria-hidden="true">↑</span><span>{ strconv.Itoa(c.Ahead) }</span><span class={ class(bracketed, "visually-hidden") }>{ " ahead" }</span></span>
+			<span class={ class(bracketed, "behind") }><span aria-hidden="true">↓</span><span>{ strconv.Itoa(c.Behind) }</span><span class={ class(bracketed, "visually-hidden") }>{ " behind" }</span></span>
+		</span>
+	}
+	if c.Word != "" {
+		<span class={ class(bracketed, "word") }>{ c.Word }</span>
+	}
+}
+
+// ChipSpan is the upstream chip as the session row paints it: titled by its
+// sentence, old counts marked.
+templ ChipSpan(c Chip) {
+	<span class="[ sync-state ]" data-state={ c.State } { oldAttrs(c.Old)... } title={ c.Describe }>
+		@Body(c, true, true)
+	</span>
+}
+
+// Plain is the chip in a source bar or a head line: the upstream is its title
+// and the sentence its name.
+templ Plain(c Chip) {
+	<span class="sync-state" data-state={ c.State } { oldAttrs(c.Old)... } title={ c.Title } aria-label={ c.Describe }>
+		@Body(c, true, false)
+	</span>
+}
+
+// Base is the base comparison's chip, which names no remote.
+templ Base(c Chip) {
+	<span class="sync-state" data-state={ c.State }>
+		@Body(c, false, false)
+	</span>
+}
