@@ -236,3 +236,37 @@ func TestWorktreeManager_ListBranches(t *testing.T) {
 		t.Fatalf("origin/main should be a non-HEAD remote branch: %+v", branches[2])
 	}
 }
+
+// A session branch is published only under its own name, so whatever it was
+// cut from it must have no upstream, even where git would attach one.
+func TestWorktreeManager_AddCutsABranchWithNoUpstream(t *testing.T) {
+	for _, base := range []string{"", "main", "origin/main", "HEAD"} {
+		t.Run("base "+base, func(t *testing.T) {
+			repo, _, _ := publishRepo(t)
+			gitIn(t, repo, "config", "branch.autoSetupMerge", "always")
+			w := NewWorktreeManager()
+			path := filepath.Join(t.TempDir(), "ws", "session")
+			if _, err := w.Add(repo, path, "session", base); err != nil {
+				t.Fatal(err)
+			}
+			cfg := exec.Command("git", "config", "--get-regexp", `^branch\.session\.`)
+			cfg.Dir = repo
+			if out, _ := cfg.CombinedOutput(); len(out) != 0 {
+				t.Fatalf("the session branch has tracking config:\n%s", out)
+			}
+		})
+	}
+}
+
+func TestWorktreeManager_AddFromARemoteRefAnswersItsTip(t *testing.T) {
+	repo, _, _ := publishRepo(t)
+	want := strings.TrimSpace(gitOut(t, repo, "rev-parse", "refs/remotes/origin/main"))
+	w := NewWorktreeManager()
+	got, err := w.Add(repo, filepath.Join(t.TempDir(), "ws", "session"), "session", "origin/main")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got != want {
+		t.Fatalf("cut commit = %s, want origin/main's %s", got, want)
+	}
+}
