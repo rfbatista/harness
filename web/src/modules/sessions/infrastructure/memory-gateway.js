@@ -27,6 +27,14 @@ function invalidReason(name) {
  * }} [seed]
  */
 export function memoryGateway({ projects = [], sessions = [], repositories = {}, branches = {}, now = () => new Date() } = {}) {
+  // Fetching swaps a repository's list; the caller's seed stays as it was.
+  branches = { ...branches };
+  /** repository id → the remote branches origin has; unset means origin has what the checkout lists. */
+  const origin = {};
+  /** The repositories fetched, in order; a failure to throw on the next fetches; a gate to hold them. */
+  const fetches = [];
+  let fetchFailure = null;
+  let fetchGate = null;
   let nextId = 1;
   const knownProjects = new Set([...projects, ...sessions.map((s) => s.projectId)]);
   /** @type {Map<string, import("../domain/session.js").Session>} */
@@ -161,6 +169,19 @@ export function memoryGateway({ projects = [], sessions = [], repositories = {},
       return list;
     },
 
+    async fetchRemote(repositoryId) {
+      if (!branches[repositoryId] && !(repositoryId in repositories)) throw new StructuredError(Codes.REPOSITORY_NOT_FOUND, "repository not found", 404);
+      fetches.push(repositoryId);
+      await fetchGate;
+      if (fetchFailure) throw fetchFailure;
+      if (origin[repositoryId] && branches[repositoryId]) {
+        const have = branches[repositoryId].filter((b) => !b.remote);
+        const remote = [...origin[repositoryId]].sort().map((name) => ({ name, remote: true, isHead: false }));
+        branches[repositoryId] = [...have, ...remote];
+      }
+      return Object.freeze({ fetchedAt: now() });
+    },
+
     async resume(sessionId) {
       // Checked and updated in one step, so a second resume finds it running.
       const session = find(sessionId);
@@ -236,6 +257,22 @@ export function memoryGateway({ projects = [], sessions = [], repositories = {},
     /** A page feed message, as the server would send it. */
     publishCatalogEvent(data) {
       for (const f of catalogFollowers) f.onEvent(data);
+    },
+    /** What origin has for a repository, as the remote-tracking names a fetch brings (`origin/x`). */
+    setOrigin(repositoryId, names) {
+      origin[repositoryId] = names;
+    },
+    /** The repositories fetched so far. */
+    fetches,
+    /** The next fetches fail with `error`; null makes them succeed again. */
+    failFetch(error) {
+      fetchFailure = error;
+    },
+    /** Fetches wait until `release()`; returns the gate. */
+    holdFetch() {
+      let release = () => {};
+      fetchGate = new Promise((resolve) => (release = resolve));
+      return { release: () => { fetchGate = null; release(); } };
     },
     feedStatus(status) {
       for (const f of followers) f.onStatus(status);

@@ -1,4 +1,4 @@
-import { Codes } from "../../../../shared/domain/errors.js";
+import { Codes, StructuredError } from "../../../../shared/domain/errors.js";
 import { mount } from "../../../../shared/testing/alpine.js";
 import { flush } from "../../../../shared/testing/doubles.js";
 import { assert, file, test } from "../../../../shared/testing/test.js";
@@ -463,4 +463,122 @@ test("a choice taken off the list while the form is open stays visible, marked, 
 
   instance.pickAnotherAgent();
   assert.equal(instance.agentRefusal, null);
+});
+
+// ── Fetch from origin ────────────────────────────────────────────────
+
+const remoteNames = (instance) => instance.remoteBranches.map((b) => b.name);
+
+test("opening the form and changing the repository fetch nothing", async () => {
+  const { instance, memory } = setup();
+  await flush();
+  instance.repositoryId = "r2";
+  instance.repositoryChanged();
+  await flush();
+  assert.equal(memory.fetches.length, 0);
+});
+
+test("Fetch from origin fetches, then lists again: a pushed branch appears, a pruned one leaves", async () => {
+  const { instance, memory } = setup();
+  await flush();
+  memory.setOrigin("r1", ["origin/main", "origin/feature-x"]);
+  assert.deepEqual(remoteNames(instance), ["origin/main"], "the list is as stale as the checkout");
+  await instance.fetchOrigin();
+  assert.deepEqual(memory.fetches, ["r1"]);
+  assert.deepEqual(remoteNames(instance), ["origin/feature-x", "origin/main"]);
+  memory.setOrigin("r1", ["origin/main"]);
+  await instance.fetchOrigin();
+  assert.deepEqual(remoteNames(instance), ["origin/main"]);
+});
+
+test("a fetch keeps the pick when its branch still exists", async () => {
+  const { instance, memory } = setup();
+  await flush();
+  instance.baseBranch = "feat/feed";
+  memory.setOrigin("r1", ["origin/main", "origin/feature-x"]);
+  await instance.fetchOrigin();
+  await flush();
+  assert.equal(instance.baseBranch, "feat/feed");
+  assert.equal(instance.fetchNote, "");
+});
+
+test("a fetch that prunes the pick falls back to the checked-out branch and says so", async () => {
+  const { instance, memory } = setup();
+  await flush();
+  memory.setOrigin("r1", ["origin/main", "origin/feature-x"]);
+  await instance.fetchOrigin();
+  instance.baseBranch = "origin/feature-x";
+  memory.setOrigin("r1", ["origin/main"]);
+  await instance.fetchOrigin();
+  await flush();
+  assert.equal(instance.baseBranch, "main");
+  assert.equal(instance.fetchNote, "origin/feature-x is not on origin any more; the field is back on the checked-out branch.");
+  assert.equal(instance.baseHint.startsWith("origin/feature-x is not on origin any more"), true, "the hint carries the note");
+});
+
+test("while the fetch runs the form is busy and cannot start, and it is free after", async () => {
+  const { instance, memory } = setup();
+  await flush();
+  const gate = memory.holdFetch();
+  const running = instance.fetchOrigin();
+  assert.equal(instance.fetching, true);
+  assert.equal(instance.branchBusy, true, "the combobox's aria-busy");
+  assert.equal(instance.baseHint, "Fetching from origin…");
+  assert.equal(instance.cannotSubmit, true);
+  gate.release();
+  await running;
+  assert.equal(instance.fetching, false);
+  assert.equal(instance.branchBusy, false);
+  assert.equal(instance.cannotSubmit, false);
+});
+
+test("a failed fetch says why in the error row, keeps the list, and Retry fetches again", async () => {
+  const { instance, memory } = setup();
+  await flush();
+  instance.baseBranch = "feat/feed";
+  for (const code of [Codes.NO_REMOTE, Codes.GIT_CREDENTIAL_MISSING, Codes.GIT_CREDENTIAL_REJECTED, Codes.GIT_CREDENTIAL_STORE_LOCKED, Codes.FETCH_FAILED]) {
+    memory.failFetch(new StructuredError(code, `sentence for ${code}`, 502));
+    await instance.fetchOrigin();
+    assert.equal(instance.branchError, `sentence for ${code}`);
+    assert.equal(instance.baseBranch, "feat/feed");
+    assert.deepEqual(remoteNames(instance), ["origin/main"], "the stale list stays");
+    assert.equal(instance.cannotSubmit, false, "starting from a local branch still works");
+    assert.equal(instance.fetching, false);
+  }
+  memory.failFetch(null);
+  memory.setOrigin("r1", ["origin/main", "origin/feature-x"]);
+  await instance.fetchOrigin();
+  assert.equal(instance.branchError, null);
+  assert.deepEqual(remoteNames(instance), ["origin/feature-x", "origin/main"]);
+});
+
+test("a repository change during a fetch drops the fetch's result", async () => {
+  const { instance, memory } = setup();
+  await flush();
+  const gate = memory.holdFetch();
+  const running = instance.fetchOrigin();
+  instance.repositoryId = "r2";
+  instance.repositoryChanged();
+  await flush();
+  memory.setOrigin("r1", ["origin/gone"]);
+  gate.release();
+  await running;
+  await flush();
+  assert.deepEqual(instance.branches.map((b) => b.name), ["develop"], "r2's list is untouched");
+  assert.equal(instance.fetching, false);
+  assert.equal(instance.branchError, null);
+});
+
+test("a failed fetch for a superseded repository leaves no error on the new one", async () => {
+  const { instance, memory } = setup();
+  await flush();
+  const gate = memory.holdFetch();
+  memory.failFetch(new StructuredError(Codes.FETCH_FAILED, "boom", 502));
+  const running = instance.fetchOrigin();
+  instance.repositoryId = "r2";
+  instance.repositoryChanged();
+  await flush();
+  gate.release();
+  await running;
+  assert.equal(instance.branchError, null);
 });

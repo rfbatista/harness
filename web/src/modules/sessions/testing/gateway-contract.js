@@ -174,6 +174,13 @@ export function sessionGatewayContract(name, makeSubject, makeSession) {
     await assert.rejects(gateway.listBranches("ghost"), Codes.REPOSITORY_NOT_FOUND);
   });
 
+  contract("fetchRemote answers when it fetched and rejects an unknown repository", async () => {
+    const { gateway } = makeSubject({ projects: ["p1"], sessions: [], branches: { r1: [{ name: "main", remote: false, isHead: true }] } });
+    const got = await gateway.fetchRemote("r1");
+    assert.ok(got.fetchedAt instanceof Date && !Number.isNaN(got.fetchedAt.getTime()), String(got.fetchedAt));
+    await assert.rejects(gateway.fetchRemote("ghost"), Codes.REPOSITORY_NOT_FOUND);
+  });
+
   contract("checkBranchName suggests a name and says whether one is valid and free", async () => {
     const branches = { r1: [{ name: "main", remote: false, isHead: true }, { name: "feature/login", remote: false, isHead: false }, { name: "feature/login-2", remote: false, isHead: false }, { name: "origin/new", remote: true, isHead: false }] };
     const { gateway } = makeSubject({ projects: ["p1"], sessions: [], branches });

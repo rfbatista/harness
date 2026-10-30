@@ -45,6 +45,10 @@ export function stubApi(world) {
         const list = await gateway.listBranches(url.searchParams.get("repository_id") ?? "");
         return jsonResponse(200, { branches: list.map((b) => ({ name: b.name, remote: b.remote, is_head: b.isHead })) });
       }
+      if (method === "POST" && url.pathname === "/api/fetch_remote") {
+        const { fetchedAt } = await gateway.fetchRemote(body.repository_id ?? "");
+        return jsonResponse(200, { fetched_at: fetchedAt.toISOString() });
+      }
       if (method === "GET" && url.pathname === "/api/check_branch_name") {
         const q = url.searchParams;
         return jsonResponse(200, await gateway.checkBranchName({ repositoryId: q.get("repository_id") ?? "", name: q.get("name") ?? "", baseBranch: q.get("base_branch") ?? "", ticketId: q.get("ticket_id") ?? "" }));
