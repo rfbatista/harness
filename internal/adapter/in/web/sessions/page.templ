@@ -47,6 +47,9 @@ templ Page(v PageView) {
 				@templ.JSONScript("pull-requests-seed", v.PullRequests)
 				<div x-data="pullRequestWatch" data-seed="pull-requests-seed" hidden></div>
 			}
+			if v.GitSync {
+				<div x-data="syncWatch" data-seed="sessions-seed" hidden></div>
+			}
 			if v.Usage != nil {
 				@templ.JSONScript("usage-totals-seed", v.Usage)
 				<div x-data="usageTotalsWatch" data-seed="usage-totals-seed" hidden></div>
@@ -80,6 +83,7 @@ templ Page(v PageView) {
 					<div class="[ actions ]">
 						@featureButton(v)
 						@reviewsButton(v)
+						@gitButton(v)
 						<button type="button" class="[ button ]" id="task-note-button" data-variant="ghost" data-size="sm" aria-haspopup="dialog" aria-expanded="false" aria-controls="task-note" x-show="hasDescription" x-on:click="openNote" { hiddenUnless(v.TaskDescription != "")... }>Description</button>
 						if v.Documents != nil {
 							<a
@@ -241,6 +245,169 @@ templ reviewsButton(v PageView) {
 				<div class="[ pop-foot ]">
 					<span x-text="settledLine">{ " " }</span>
 					<a href={ templ.SafeURL("/projects/" + v.ProjectID + "/reviews") } data-review-requests-page>Review requests page ↗</a>
+				</div>
+			</div>
+		</span>
+	}
+}
+
+// syncChip is a session row's sync-state chip, after the pull request badge: the
+// worktree's upstream state against its remote, from the sync module's store
+// (seeded by the page, kept live by the feed's git_state). Hidden until a
+// state is held, and for a worktree that is gone. Its title holds the full
+// upstream ref and the fetch age; the arrows are aria-hidden and the words
+// visually hidden, so the state is carried by words.
+templ syncChip() {
+	<span
+		class="[ sync-state ]"
+		x-data="syncChip(row.workspaceId)"
+		x-show="shown"
+		style="display: none"
+		x-bind:data-state="state"
+		x-bind:data-loading="loadingAttr"
+		x-bind:data-old="oldAttr"
+		x-bind:title="describe"
+	>
+		<span class="[ upstream ]" x-show="hasUpstream" x-text="upstream"></span>
+		<span class="[ counts ]" x-show="hasCounts">
+			<span class="[ ahead ]"><span aria-hidden="true">↑</span><span x-text="ahead"></span><span class="[ visually-hidden ]"> ahead</span></span>
+			<span class="[ behind ]"><span aria-hidden="true">↓</span><span x-text="behind"></span><span class="[ visually-hidden ]"> behind</span></span>
+		</span>
+		<span class="[ word ]" x-show="hasWord" x-text="word"></span>
+	</span>
+}
+
+// gitButton is the task's worktrees and where each stands against its base and
+// its remote (ADR 0043's surface, ADR 0042: nothing joins the vertical stack):
+// a ghost button in the title row, after Feature and Reviews, and the Git
+// popover it opens (task-git, 36rem, a bottom sheet below 48rem). One row per
+// session worktree: agent, branch, both comparisons, the uncommitted words, a
+// Push (asked first, never forced) and a link to the session's Code tab; the
+// foot has the fetch age and one Fetch per repository. The popover is built by
+// the sync module from the sessions the page holds and the states the feed
+// keeps, so there is no server copy; the button is painted hidden unless a
+// session has a worktree, and the browser takes over from the sessions it holds.
+// The open state is never stored.
+templ gitButton(v PageView) {
+	if v.GitSync {
+		<span style="display: contents" x-data="syncPopover" x-on:dialog-close.window="popoverClosed($event)">
+			<button
+				type="button"
+				class="[ button ]"
+				id="task-git-button"
+				data-variant="ghost"
+				data-size="sm"
+				aria-haspopup="dialog"
+				aria-expanded="false"
+				aria-controls="task-git"
+				x-show="shown"
+				x-bind:aria-expanded="expandedAttr"
+				x-on:click="openPopover"
+				{ gitButtonAttrs(v.HasWorkspace())... }
+			>
+				Git
+			</button>
+			<div
+				class="[ popup ] [ git-popover ]"
+				role="dialog"
+				id="task-git"
+				popover="manual"
+				data-align="auto"
+				data-kind="git"
+				aria-labelledby="task-git-title"
+				x-data="popupDialog"
+				x-on:dialog-open.window="openFrom($event)"
+				x-on:dialog-dismiss.window="dismissFrom($event)"
+				x-bind:aria-busy="busyAttr"
+			>
+				<div class="[ pop-head ]">
+					<h3 id="task-git-title">Git · { v.TaskTitle }</h3>
+					<button type="button" class="[ button ]" data-variant="ghost" data-size="sm" data-initial-focus x-on:click="close()">Close</button>
+				</div>
+				<div class="[ pop-body ]" tabindex="0" aria-labelledby="task-git-title">
+					<template x-for="row in rows" x-bind:key="row.workspaceId">
+						<div class="[ row ]" x-bind:data-workspace-id="row.workspaceId">
+							<div class="[ who ]">
+								<span class="[ agent ]" x-text="row.agent"></span>
+								<code class="[ branch ]" x-text="row.branch" x-bind:title="row.branch"></code>
+							</div>
+							<div class="[ states ]">
+								<span class="[ text-xs color-ink-faint ]" x-show="row.hasState">base</span>
+								<span class="[ sync-state ]" x-show="row.hasState" x-bind:data-state="row.baseState" data-compare="base">
+									<span class="[ counts ]" x-show="row.baseHasCounts">
+										<span class="[ ahead ]"><span aria-hidden="true">↑</span><span x-text="row.baseAhead"></span><span class="[ visually-hidden ]"> ahead</span></span>
+										<span class="[ behind ]"><span aria-hidden="true">↓</span><span x-text="row.baseBehind"></span><span class="[ visually-hidden ]"> behind</span></span>
+									</span>
+									<span class="[ word ]" x-show="row.baseWord" x-text="row.baseWord"></span>
+								</span>
+								<span class="[ text-xs color-ink-faint ]" x-show="row.hasState">upstream</span>
+								<span class="[ sync-state ]" x-show="row.hasState" x-bind:data-state="row.upstreamState" x-bind:data-loading="row.upstreamLoadingAttr" x-bind:data-old="row.upstreamOldAttr" x-bind:title="row.upstreamTitle" data-compare="upstream">
+									<span class="[ upstream ]" x-show="row.upstreamRemote" x-text="row.upstreamRemote"></span>
+									<span class="[ counts ]" x-show="row.upstreamHasCounts">
+										<span class="[ ahead ]"><span aria-hidden="true">↑</span><span x-text="row.upstreamAhead"></span><span class="[ visually-hidden ]"> ahead</span></span>
+										<span class="[ behind ]"><span aria-hidden="true">↓</span><span x-text="row.upstreamBehind"></span><span class="[ visually-hidden ]"> behind</span></span>
+									</span>
+									<span class="[ word ]" x-show="row.upstreamWord" x-text="row.upstreamWord"></span>
+								</span>
+								<span class="[ uncommitted ]" x-show="row.hasState" x-text="row.uncommitted"></span>
+							</div>
+							<div class="[ actions ]">
+								<template x-if="row.showsPush">
+									<button type="button" class="[ button ]" data-variant="ghost" data-size="sm" data-push x-bind:disabled="row.busy" x-bind:aria-label="row.pushLabel" x-on:click="askPush(row.workspaceId)">Push</button>
+								</template>
+								<a x-bind:href="row.codeHref">Code</a>
+							</div>
+							<template x-if="row.confirming">
+								<div class="[ confirm-strip ]" data-confirm="push" role="group" x-bind:aria-label="row.question">
+									<h3 x-text="row.question"></h3>
+									<div class="[ actions ]">
+										<button type="button" class="[ button ]" data-variant="primary" data-size="sm" data-push-confirm x-on:click="confirmPush(row.workspaceId)" x-text="row.pushLabel"></button>
+										<button type="button" class="[ button ]" data-size="sm" data-push-cancel x-on:click="cancelPush">Cancel</button>
+									</div>
+								</div>
+							</template>
+							<template x-if="row.refusalStrip">
+								<div class="[ confirm-strip ]" data-tone="danger" role="alert" data-refusal="push">
+									<h3 x-text="row.refusal.lead"></h3>
+									<p x-text="row.refusal.reason"></p>
+									<p class="[ code ]" x-text="row.refusal.code"></p>
+									<div class="[ actions ]"><button type="button" class="[ button ]" data-size="sm" x-on:click="dismissPush(row.workspaceId)">Dismiss</button></div>
+								</div>
+							</template>
+							<template x-if="row.refusalBanner">
+								<div class="[ banner ]" data-tone="attention" role="alert" data-refusal="push">
+									<span x-text="row.refusal.lead"></span>
+									<a x-bind:href="row.refusal.href" x-text="row.refusal.linkText"></a>
+								</div>
+							</template>
+						</div>
+					</template>
+					<template x-for="repo in fetches" x-bind:key="repo.repositoryId">
+						<div>
+							<template x-if="repo.refusalStrip">
+								<div class="[ confirm-strip ]" data-tone="danger" role="alert" data-refusal="fetch">
+									<h3 x-text="repo.refusal.lead"></h3>
+									<p x-text="repo.refusal.reason"></p>
+									<p class="[ code ]" x-text="repo.refusal.code"></p>
+									<div class="[ actions ]"><button type="button" class="[ button ]" data-size="sm" x-on:click="dismissFetch(repo.repositoryId)">Dismiss</button></div>
+								</div>
+							</template>
+							<template x-if="repo.refusalBanner">
+								<div class="[ banner ]" data-tone="attention" role="alert" data-refusal="fetch">
+									<span x-text="repo.refusal.lead"></span>
+									<a x-bind:href="repo.refusal.href" x-text="repo.refusal.linkText"></a>
+								</div>
+							</template>
+						</div>
+					</template>
+				</div>
+				<div class="[ pop-foot ]">
+					<span class="[ fresh ]" x-bind:data-old="freshOldAttr" x-text="freshLine"></span>
+					<span class="[ fetches ]">
+						<template x-for="repo in fetches" x-bind:key="repo.repositoryId">
+							<button type="button" class="[ button ]" data-variant="ghost" data-size="sm" data-fetch x-bind:data-repository-id="repo.repositoryId" x-bind:aria-disabled="repo.busy" x-on:click="fetch(repo.repositoryId)" x-text="repo.label"></button>
+						</template>
+					</span>
 				</div>
 			</div>
 		</span>
@@ -492,6 +659,7 @@ templ liveRows() {
 							<span class="[ badge ]" x-bind:data-tone="row.chip.tone" aria-hidden="true" x-text="row.chip.word"></span>
 						</template>
 						@pullrequests.Badge("row.workspaceId")
+						@syncChip()
 					</span>
 					<time class="[ when ]" x-text="row.when"></time>
 					<template x-if="row.detail">

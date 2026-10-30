@@ -5,6 +5,7 @@ import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
+// `make test-design-system` runs this file only; the sync blocks' invariants ride along.
 
 const read = (p) => readFileSync(fileURLToPath(new URL(p, import.meta.url)), "utf8");
 const row = read("./css/blocks/row.css");
@@ -57,6 +58,14 @@ test("the detail clamps to two lines and line 1 does not truncate", () => {
   assert.ok(who && !/nowrap|ellipsis/.test(who), ".who must wrap");
   const agent = variant.match(/& \.agent \{[^}]*\}/)?.[0] ?? "";
   assert.ok(agent && !/nowrap|ellipsis/.test(agent), ".agent must wrap");
+});
+
+test("line 1 holds the chip: it wraps with the tokens and nothing in .who truncates", () => {
+  assert.match(variant, /& > \.who > \.sync-state \{[^}]*flex:\s*none/s);
+  const who = variant.match(/& > \.who \{[^}]*\}/)?.[0] ?? "";
+  assert.match(who, /flex-wrap:\s*wrap/);
+  assert.doesNotMatch(variant.replace(/\/\*[\s\S]*?\*\//g, "").replace(/-webkit-line-clamp[^;]*;/g, ""), /\.who[^{]*\{[^}]*(text-overflow:\s*ellipsis|white-space:\s*nowrap)/s);
+  assert.match(read("./specimen.html"), /pr-badge[^>]*>[^<]*<\/a><span class="sync-state"/, "the specimen shows the chip after the pull-request badge");
 });
 
 test("the detail's vertical gap is a border, so a clipped third line cannot show in padding", () => {

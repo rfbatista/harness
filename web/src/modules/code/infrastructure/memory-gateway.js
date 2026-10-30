@@ -14,7 +14,7 @@ import { toDiff, toFile, toMap, toPaths, toSeed, toTree } from "./dto.js";
  * @typedef {string | { binary: number } | { symlink: string } | { submodule: true }} FakeFile
  * @typedef {Record<string, FakeFile>} Files
  * @typedef {{ name: string, head: string, refs: Record<string, { commit: string, files: Files }> }} FakeRepository
- * @typedef {{ repositoryId: string, branch: string, base: string, head: string, committed: Files, disk: Files, untracked: string[], gone?: boolean }} FakeWorkspace
+ * @typedef {{ repositoryId: string, branch: string, base: string, head: string, committed: Files, disk: Files, untracked: string[], staged?: string[], gone?: boolean }} FakeWorkspace
  * @typedef {{ repositoryId: string, parent: string, files: Files }} FakeCommit
  * @typedef {{ contexts: { id: string, name: string, purpose: string }[], zones: { id: string, name: string, pattern: string, contextId: string }[] }} FakeArchitecture
  *
@@ -258,7 +258,9 @@ export function memoryCode(world) {
    * (contract §3, P1–P6): `limit` files after the cursor, hunks within the
    * limits of that page, totals over the whole diff.
    */
-  function compare(a, b, { untracked = [], path = "", after, limit } = {}) {
+  function compare(a, b, { untracked = [], staged = null, path = "", after, limit, hunks } = {}) {
+    if (hunks !== undefined && hunks !== "none") fail(Codes.INVALID_INPUT, `hunks=${hunks}`);
+    if (hunks === "none" && path) fail(Codes.INVALID_INPUT, "hunks=none with a path");
     const paths = sorted(new Set([...Object.keys(a), ...Object.keys(b)]));
     const stats = [];
     for (const p of paths) {
@@ -268,7 +270,8 @@ export function memoryCode(world) {
       if (JSON.stringify(x) === JSON.stringify(y)) continue;
       const status = x === undefined ? (untracked.includes(p) ? "untracked" : "added") : y === undefined ? "deleted" : "modified";
       const binary = (x !== undefined && !isText(x)) || (y !== undefined && !isText(y));
-      const fd = { path: p, old_path: null, status, binary, added: -1, deleted: -1, hunks: null, withheld: null, language: languageOf(p), zones: zonesOf(p) };
+      const section = staged ? (status === "untracked" ? "untracked" : "tracked") : null;
+      const fd = { path: p, old_path: null, status, binary, added: -1, deleted: -1, hunks: null, withheld: null, language: languageOf(p), zones: zonesOf(p), section, staged: !!staged && staged.includes(p) };
       let lines = null;
       if (binary) {
         fd.withheld = "binary";
@@ -280,19 +283,23 @@ export function memoryCode(world) {
       stats.push({ fd, lines, endsWithNewline: typeof y === "string" && y !== "" && !y.endsWith("\n") });
     }
     if (path && stats.length === 0) fail(Codes.PATH_NOT_FOUND, `${path} did not change`, 404);
+    // Scope working lists tracked files, then untracked ones, each in path order (W3).
+    if (staged) stats.sort((x, y) => (x.fd.section === y.fd.section ? 0 : x.fd.section === "tracked" ? -1 : 1));
+    const counts = Object.fromEntries(["added", "modified", "deleted", "renamed", "copied", "type_changed", "untracked"].map((st) => [st, stats.filter((s) => s.fd.status === st).length]));
+    const sections = staged ? { tracked: stats.filter((s) => s.fd.section === "tracked").length, untracked: stats.filter((s) => s.fd.section === "untracked").length, staged: stats.filter((s) => s.fd.staged).length } : null;
     const sum = (k) => stats.filter((s) => !s.fd.binary).reduce((n, s) => n + Math.max(0, s.fd[k]), 0);
     let page = stats;
     let next = null;
     if (!path) {
       const size = limit === undefined || limit === null ? DEFAULT_PAGE : Math.min(Math.max(0, limit), MAX_PAGE);
-      const rest = after ? stats.filter((s) => s.fd.path > after) : stats;
+      const rest = !after ? stats : staged ? continueWorking(stats, after) : stats.filter((s) => s.fd.path > after);
       page = rest.slice(0, size);
       next = size > 0 && rest.length > size ? page.at(-1).fd.path : null;
     }
     let budget = path ? limits.path : limits.total;
     let truncated = false;
     const files = page.map(({ fd, lines, endsWithNewline }) => {
-      if (!lines) return fd;
+      if (!lines || hunks === "none") return fd;
       const n = fd.added + fd.deleted;
       if ((!path && n > limits.perFile) || n > budget) {
         fd.withheld = "too_large";
@@ -303,7 +310,14 @@ export function memoryCode(world) {
       }
       return fd;
     });
-    return { files, added: sum("added"), deleted: sum("deleted"), truncated, next, file_count: stats.length };
+    return { files, added: sum("added"), deleted: sum("deleted"), truncated, next, file_count: stats.length, counts, sections };
+  }
+
+  /** The files after a cursor in the working order: a tracked path continues with the next tracked, then the untracked; an untracked one only with untracked paths. */
+  function continueWorking(stats, after) {
+    const known = stats.find((s) => s.fd.path === after);
+    const untrackedCursor = known ? known.fd.section === "untracked" : false;
+    return stats.filter((s) => (s.fd.section === "tracked" ? !untrackedCursor && s.fd.path > after : !untrackedCursor || s.fd.path > after));
   }
 
   function diff(q) {
@@ -316,7 +330,7 @@ export function memoryCode(world) {
       if (scope !== "working" && !base) fail(Codes.REF_NOT_FOUND, `the base ${ws.base} no longer resolves`, 404);
       const [a, b] = scope === "all" ? [base.files, ws.disk] : scope === "branch" ? [base.files, ws.committed] : [ws.committed, ws.disk];
       const untracked = scope === "branch" ? [] : ws.untracked;
-      const out = compare(a, b, { untracked, path: q.path, after: q.after, limit: q.limit });
+      const out = compare(a, b, { untracked, staged: scope === "working" ? ws.staged ?? [] : null, path: q.path, after: q.after, limit: q.limit, hunks: q.hunks });
       return {
         source: { kind: "workspace", repository_id: ws.repositoryId, workspace_id: q.workspaceId, ref: ws.branch, commit: ws.head, gone: !!ws.gone },
         base: scope === "working" ? ws.head : base.commit,
@@ -330,12 +344,12 @@ export function memoryCode(world) {
       if (!c || c.repositoryId !== q.repositoryId) fail(Codes.COMMIT_NOT_FOUND, `no commit ${q.commit}`, 404);
       const parent = c.parent ? world.commits[c.parent]?.files ?? {} : {};
       const hash = q.commit.length === 40 ? q.commit : Object.keys(world.commits).find((h) => h.startsWith(q.commit));
-      return { source: { kind: "ref", repository_id: q.repositoryId, workspace_id: null, ref: hash, commit: hash, gone: false }, base: c.parent || "", scope: "commit", ...compare(parent, c.files, { path: q.path, after: q.after, limit: q.limit }) };
+      return { source: { kind: "ref", repository_id: q.repositoryId, workspace_id: null, ref: hash, commit: hash, gone: false }, base: c.parent || "", scope: "commit", ...compare(parent, c.files, { path: q.path, after: q.after, limit: q.limit, hunks: q.hunks }) };
     }
     const base = repo.refs[q.base];
     const head = repo.refs[q.head];
     if (!base || !head) fail(Codes.REF_NOT_FOUND, "base or head does not resolve", 404);
-    return { source: { kind: "ref", repository_id: q.repositoryId, workspace_id: null, ref: q.head, commit: head.commit, gone: false }, base: base.commit, scope: "range", ...compare(base.files, head.files, { path: q.path, after: q.after, limit: q.limit }) };
+    return { source: { kind: "ref", repository_id: q.repositoryId, workspace_id: null, ref: q.head, commit: head.commit, gone: false }, base: base.commit, scope: "range", ...compare(base.files, head.files, { path: q.path, after: q.after, limit: q.limit, hunks: q.hunks }) };
   }
 
   function paths(src) {

@@ -287,6 +287,7 @@ func (h Handler) task(w http.ResponseWriter, r *http.Request, codeRoute *code.Ro
 	if h.PullRequests != nil {
 		view.PullRequests = pullrequests.NewWatchSeed(ctx, h.PullRequests, project.ID, workspaceIDs(list))
 	}
+	view.GitSync = h.WorktreeGit != nil
 	if h.Usage != nil {
 		view.Usage = h.usageTotals(ctx, project.ID, task.ID, list)
 	}

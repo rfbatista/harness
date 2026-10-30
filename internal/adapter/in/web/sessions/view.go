@@ -334,6 +334,20 @@ type PageView struct {
 	// Parent links a child task's feature task in the crumbs; nil when
 	// top-level.
 	Parent *ParentLink
+	// GitSync turns on the sync module's chips and the Git popover; the
+	// states themselves are Seed.GitStates.
+	GitSync bool
+}
+
+// HasWorkspace reports whether the task has a session with a worktree: the Git
+// button's first paint (the browser takes over from the sessions it holds).
+func (v PageView) HasWorkspace() bool {
+	for _, s := range v.Seed.Sessions {
+		if s.WorkspaceID != "" {
+			return true
+		}
+	}
+	return false
 }
 
 // FeatureView is the task page's feature section (ADR 0016): the feature

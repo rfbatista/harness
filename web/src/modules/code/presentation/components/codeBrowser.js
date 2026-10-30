@@ -12,18 +12,20 @@
 import { Codes, codeOf } from "../../../../shared/domain/errors.js";
 import { FeedStatus } from "../../../../shared/domain/feed.js";
 import { baseName, changeMark } from "../../domain/code.js";
-import { parseDiffHash, slugs, startsCollapsed } from "../../domain/diff.js";
+import { parseDiffHash, sameFileMeta, slugs, startsCollapsed } from "../../domain/diff.js";
 import { fileRows, rowOfLineIn } from "../../domain/rows.js";
 import { problemOf } from "../../domain/errors.js";
 import { clampSplit, defaultSplit, parseSplit, splitBounds, stepSplit } from "../../domain/split.js";
 import { clampRange, parseRange, parseRangeHash, rangeHash, scrollTopFor, SPLIT_UP_TO, splitLines, WRAP_UP_TO } from "../../domain/lines.js";
 import { markParts, rank, shiftRanges } from "../../domain/fuzzy.js";
-import { ANNOUNCE_CHANGED, FIXED, GONE, onChange, onEnded, onReload } from "../../domain/live.js";
+import { ANNOUNCE_CHANGED, FIXED, GONE, LIVE, STALE, STOPPED, canReload, onChange, onEnded, onReload } from "../../domain/live.js";
+import { carryWithheld, clockTime, listLimit, listSignature, noticeOf, reloadFoundNothing, staleness, updatedWord, withPage } from "../../domain/refresh.js";
 import { PERMALINK_TOAST, hrefOf, parseHref, permalink, repositoryHref } from "../../domain/routes.js";
 import { emptyTree, entryAt, loadedOpenDirs, missingAncestors, openAction, revealPath, treeKey, typeAhead, visibleRows, withBusy, withExpanded, withLevel } from "../../domain/tree.js";
 import { mapView, zoneIndex, zoneTags } from "../../domain/zones.js";
 import { clearPending, drawLines, showPending } from "../render/lines.js";
 import { intersectionProximity } from "../render/proximity.js";
+import { changesList, mergeFiles } from "../changes.js";
 import {
   crumbsView,
   diffFileView,
@@ -33,7 +35,6 @@ import {
   scopesView,
   skeletonRows,
   sourceBarView,
-  summaryRowView,
   totalsView,
   treeRowView,
   truncatedNotice,
@@ -43,6 +44,9 @@ import {
 /** One frame spends at most this long drawing rows, a slice of this many at a time. */
 export const DRAW_BUDGET_MS = 8;
 export const SLICE_ROWS = 60;
+const NO_FILTER = Object.freeze([]);
+/** The Changes list before any diff is read. */
+const EMPTY_CHANGES = Object.freeze({ head: Object.freeze({ text: "", note: "", files: "", added: "", deleted: "" }), legend: NO_FILTER, sections: NO_FILTER, empty: true });
 /** The tree puts this many more rows in the page each frame, so a directory of a thousand entries opens without a stall. */
 export const TREE_CHUNK = 50;
 
@@ -51,6 +55,8 @@ export const HIGHLIGHT_BYTES = 256 * 1024;
 export const HIGHLIGHT_LINES = 10_000;
 const TYPEAHEAD_MS = 500;
 const SEQUENCE_MS = 1_500;
+/** How long "Up to date" stays under the diff bar after a Reload that found nothing. */
+const UP_TO_DATE_MS = 4_000;
 
 /**
  * @typedef {object} BrowserDeps
@@ -66,6 +72,7 @@ const SEQUENCE_MS = 1_500;
  * @property {(text: string) => Promise<void>} [copy]
  * @property {(cb: () => void) => void} [idle]
  * @property {(fn: Function, ms: number) => any} [setTimeout]
+ * @property {() => number} [now]  the clock, in ms (the time of a read, the age of a reload)
  */
 
 /**
@@ -73,7 +80,7 @@ const SEQUENCE_MS = 1_500;
  * "repository"; the owner sets the identity fields before calling start().
  * @param {BrowserDeps} deps
  */
-export function codeBrowser({ gateway, highlighter, preparer, proximity = intersectionProximity, frame = (cb) => requestAnimationFrame(cb), budgetMs = DRAW_BUDGET_MS, prefs, history = globalThis.history, location = globalThis.location, copy = defaultCopy, idle, setTimeout = globalThis.setTimeout.bind(globalThis) }) {
+export function codeBrowser({ gateway, highlighter, preparer, proximity = intersectionProximity, frame = (cb) => requestAnimationFrame(cb), budgetMs = DRAW_BUDGET_MS, prefs, history = globalThis.history, location = globalThis.location, copy = defaultCopy, idle, setTimeout = globalThis.setTimeout.bind(globalThis), now = () => Date.now() }) {
   // Not reactive: controllers of drawn lines, in-flight requests, timers.
   const drawn = new Map();
   // Lazy file sections: a section's lines are drawn when it comes near the viewport.
@@ -88,11 +95,15 @@ export function codeBrowser({ gateway, highlighter, preparer, proximity = inters
   let pageRead = null;
   // The changed files' row views, kept while a file's data does not change: a selection redoes two.
   const rowViews = new Map();
+  let changesMemo = null;
+  // The anchors of the list read's rows, by the read.
+  let listSlugs = { readId: 0, slugs: {} };
+  let upToDateTimer = null;
+  let tickTimer = null;
   // The same for the sections: a page that comes in leaves the sections already on screen alone.
   const sectionViews = new Map();
   // And the tree's rows: the chunks that follow leave the rows already in the page alone.
   const treeViews = new Map();
-  let heldSlugs = { readId: 0, slugs: {} };
   // The rows the code worker made for each diff read, by the read's id (Alpine
   // wraps the diff in a proxy, so the object itself is no key).
   /** @type {Map<number, { split: boolean, files: Map<string, import("../../domain/ports.js").PreparedFile> }>} */
@@ -204,13 +215,30 @@ export function codeBrowser({ gateway, highlighter, preparer, proximity = inters
     freshPaths: [],
     /** @type {import("../../domain/code.js").CodeDiff|null} */
     diff: null,
-    /** A re-read diff held while the reader is in the middle of the old one. */
-    heldDiff: null,
+    /**
+     * The Changes list's own read (ADR 0048): the loaded pages again without
+     * hunks, newer than `diff`, whose hunks the reader is looking at. Null until
+     * a code_changed brings one, and again after every read of hunks.
+     * @type {import("../../domain/code.js").CodeDiff|null}
+     */
+    listing: null,
+    /** The paths of the list whose hunks on screen are older than the list read (a dot each). */
+    updatedPaths: [],
+    /** How many files differ from what the hunks on screen say: updated, new, or gone from the list. */
+    staleCount: 0,
+    /** Right after a Reload that found nothing: the notice says Up to date for a moment. */
+    upToDate: false,
+    /** When each file reloaded with different hunks was read, by path (ms). */
+    updatedAt: {},
+    /** The clock the "updated N s ago" words are read against (ms); moves while any is shown. */
+    nowMs: 0,
+    /** When the list and hunks were last read (ms): a stopped session's "as of". */
+    readAt: 0,
     diffRev: 0,
+    /** The statuses pressed in the legend, for the scope they were pressed in. */
+    legendFilter: { scope: "", statuses: [] },
     /** A file's section is drawn again when its counter moves: its content changed, or its withheld diff was loaded. */
     fileRevs: {},
-    /** The paths that changed in reads the reader has not been shown yet (a held diff). */
-    heldDirty: new Set(),
     /** The layout the open diff's rows were made for (the worker makes them; a switch waits for it). */
     rowsSplit: false,
     /** The first paint's diff page is being prepared. */
@@ -284,7 +312,28 @@ export function codeBrowser({ gateway, highlighter, preparer, proximity = inters
       return this.view === "map";
     },
     get bar() {
-      return sourceBarView({ repositoryName: this.repositoryName, ref: this.kind === "session" ? this.branch : this.route?.ref || this.branch, commit: this.commit, dirty: this.dirty, state: this.liveState, kind: this.kind });
+      return sourceBarView({ repositoryName: this.repositoryName, ref: this.kind === "session" ? this.branch : this.route?.ref || this.branch, commit: this.commit, dirty: this.dirty, state: this.liveState, kind: this.kind, count: this.staleCount });
+    },
+    /** A stopped session's source bar: when what is shown was read ("as of 12:41"). */
+    get asOfText() {
+      return this.liveState === STOPPED && this.readAt ? `as of ${clockTime(new Date(this.readAt))}` : "";
+    },
+    /** The notice under the diff bar: how many files changed since the hunks were loaded, or Up to date. */
+    get notice() {
+      return this.showingChanges && this.diff ? noticeOf({ count: this.staleCount, upToDate: this.upToDate }) : null;
+    },
+    /** The source bar's Reload button: the hunks are older than the list, or nothing follows the worktree. */
+    get showsReload() {
+      return this.isStale || this.liveState === STOPPED;
+    },
+    /** Reload (R) has something to re-read: a view that follows a worktree, running or not. */
+    get canReload() {
+      return canReload(this.liveState);
+    },
+    /** "updated 4 s ago", for a file head that a Reload changed; empty for any other. */
+    updatedLabel(path) {
+      const at = this.updatedAt[path];
+      return at ? updatedWord(this.nowMs - at) : "";
     },
     get hasState() {
       return this.liveState !== FIXED;
@@ -295,11 +344,12 @@ export function codeBrowser({ gateway, highlighter, preparer, proximity = inters
     },
     /** The changed files list ends with Show more while pages remain. */
     get moreShown() {
-      return !!this.diff?.next && !this.heldDiff;
+      return !!this.diff?.next;
     },
-    /** The files left: the whole diff's count minus the files loaded. */
+    /** The files left: the whole diff's count (the list's, when it was read since) minus the files loaded. */
     get moreCount() {
-      return this.diff ? String(Math.max(0, this.diff.fileCount - this.diff.files.length)) : "";
+      const list = this.listDiff;
+      return list ? String(Math.max(0, list.fileCount - list.files.length)) : "";
     },
     get busyAttr() {
       return this.busy ? "" : null;
@@ -314,7 +364,7 @@ export function codeBrowser({ gateway, highlighter, preparer, proximity = inters
       return this.busy ? skeletonRows("changed") : [];
     },
     get isStale() {
-      return this.liveState === "stale";
+      return this.liveState === STALE;
     },
     get isGone() {
       return this.liveState === GONE;
@@ -323,7 +373,7 @@ export function codeBrowser({ gateway, highlighter, preparer, proximity = inters
       return viewsView(this.route, { count: this.listDiff ? this.listDiff.fileCount : this.totalCount, kind: this.kind, current: this.view });
     },
     get scopes() {
-      return scopesView(this.route, { scope: this.scope, gone: this.gone, baseGone: this.baseGone, baseRef: this.baseRef });
+      return scopesView(this.route, { scope: this.scope, gone: this.gone, baseGone: this.baseGone, baseRef: this.baseRef, working: this.gone ? 0 : this.dirty });
     },
     get scope() {
       if (this.gone) return "branch";
@@ -381,27 +431,70 @@ export function codeBrowser({ gateway, highlighter, preparer, proximity = inters
     get treeBusy() {
       return this.tree.busy[""] ? "true" : null;
     },
-    /** The changed files the side lists: the re-read diff while the open one is held (UX §5). */
+    /** The changed files the side lists: the newest read of the list, which the hunks on screen may be older than (ADR 0048). */
     get listDiff() {
-      return this.heldDiff ?? this.diff;
+      return this.listing ?? this.diff;
     },
-    get summaryRows() {
+    /** The Changes list: groups, the legend with its counts, the Working scope's sections (see presentation/changes.js). */
+    get changes() {
       const list = this.listDiff;
-      if (!list) return [];
-      if (list !== this.diff && heldSlugs.readId !== list.readId) heldSlugs = { readId: list.readId, slugs: Object.fromEntries(slugs(list.files.map((f) => f.path))) };
-      const bySlug = list === this.diff ? this.diffSlugs : heldSlugs.slugs;
-      const fresh = new Set(this.freshPaths);
-      const current = this.currentFile;
-      return list.files.map((f) => {
-        const slug = bySlug[f.path];
-        const isFresh = fresh.has(f.path);
-        const isCurrent = f.path === current;
-        const hit = rowViews.get(f.path);
-        if (hit && hit.f === f && hit.slug === slug && hit.fresh === isFresh && hit.current === isCurrent) return hit.view;
-        const view = summaryRowView(f, { slug, current: isCurrent, fresh: isFresh });
-        rowViews.set(f.path, { f, slug, fresh: isFresh, current: isCurrent, view });
-        return view;
+      if (!list) return EMPTY_CHANGES;
+      // A file on screen links to its section; one only the list has, to the anchor it will have.
+      if (list !== this.diff && listSlugs.readId !== list.readId) listSlugs = { readId: list.readId, slugs: Object.fromEntries(slugs(list.files.map((f) => f.path))) };
+      const bySlug = list === this.diff ? this.diffSlugs : { ...listSlugs.slugs, ...this.diffSlugs };
+      const filter = this.legendFilter.scope === this.scope ? this.legendFilter.statuses : NO_FILTER;
+      const updated = this.updatedPaths;
+      const memo = changesMemo;
+      if (memo && memo.list === list && memo.bySlug === this.diffSlugs && memo.filter === filter && memo.current === this.currentFile && memo.updated === updated && memo.scope === this.scope) return memo.model;
+      const model = changesList({
+        files: mergeFiles([list.files]),
+        totals: list,
+        scope: this.scope,
+        filter,
+        slugMap: new Map(Object.entries(bySlug)),
+        current: this.currentFile,
+        fresh: updated,
+        href: (slug) => this.summaryHref(slug),
+        cache: rowViews,
       });
+      changesMemo = { list, bySlug: this.diffSlugs, filter, current: this.currentFile, updated, scope: this.scope, model };
+      return model;
+    },
+    /** Where a row of the list links; the History tab's list links into the Code tab instead. */
+    summaryHref(slug) {
+      return `#diff-${slug}`;
+    },
+    /** The rows of every group, flat, in list order. */
+    get summaryRows() {
+      return this.changes.sections.flatMap((s) => s.groups.flatMap((g) => g.rows));
+    },
+    /** The list's head: the whole diff's totals, and the note a pressed legend status adds. */
+    get changesHead() {
+      return this.changes.head;
+    },
+    get legend() {
+      return this.changes.legend;
+    },
+    get sections() {
+      return this.changes.sections;
+    },
+    /** The sections that carry a title (the Working scope's), each over its own groups. */
+    get titledSections() {
+      return this.sections.filter((s) => s.title);
+    },
+    /** The groups of a list with no sections, straight under the head. */
+    get plainGroups() {
+      return this.sections.filter((s) => !s.title).flatMap((s) => s.groups);
+    },
+    /** The workspace whose sync chip the source bar shows after the commit; none for a repository or a removed worktree. */
+    get syncWorkspace() {
+      return this.kind === "session" && !this.gone ? (this.source?.workspaceId ?? "") : "";
+    },
+    /** A legend status was pressed or released: the list shows the pressed statuses only. */
+    toggleLegend(status) {
+      const held = this.legendFilter.scope === this.scope ? this.legendFilter.statuses : [];
+      const statuses = held.includes(status) ? held.filter((s) => s !== status) : [...held, status];
+      this.legendFilter = { scope: this.scope, statuses };
     },
     get totals() {
       return this.listDiff ? totalsView(this.listDiff) : null;
@@ -424,6 +517,7 @@ export function codeBrowser({ gateway, highlighter, preparer, proximity = inters
       const diff = this.diff;
       const sets = rowsOf.get(diff);
       return diff.files.map((f) => {
+        const path = f.path;
         const split = !!sets?.files.get(f.path)?.split;
         const slug = this.diffSlugs[f.path];
         // The layout changes the rows: a new key draws them again.
@@ -432,12 +526,18 @@ export function codeBrowser({ gateway, highlighter, preparer, proximity = inters
         const busy = !!this.busyFiles[f.path];
         const asked = !!this.askedFiles[f.path];
         const viewHref = this.viewFileHref(f.path);
-        const hit = sectionViews.get(f.path);
-        if (hit && hit.f === f && hit.slug === slug && hit.rev === rev && hit.collapsed === collapsed && hit.busy === busy && hit.asked === asked && hit.split === split && hit.viewHref === viewHref && hit.zones === zones && hit.scope === diff.scope && hit.base === diff.base && hit.head === diff.source.commit) {
+        const updated = path in this.updatedAt;
+        let hit = sectionViews.get(f.path);
+        // A file read again with nothing different is the same section, whatever object it came as.
+        if (hit && hit.f !== f && !sets?.files.get(f.path)?.changed && sameFileMeta(hit.f, f)) {
+          hit = { ...hit, f };
+          sectionViews.set(f.path, hit);
+        }
+        if (hit && hit.f === f && hit.slug === slug && hit.rev === rev && hit.collapsed === collapsed && hit.busy === busy && hit.asked === asked && hit.split === split && hit.viewHref === viewHref && hit.updated === updated && hit.zones === zones && hit.scope === diff.scope && hit.base === diff.base && hit.head === diff.source.commit) {
           return hit.view;
         }
-        const view = diffFileView(f, { slug, rev, collapsed, busy, asked, zones, diff, viewHref, size: undefined, splitAllowed: split });
-        sectionViews.set(f.path, { f, slug, rev, collapsed, busy, asked, split, viewHref, zones, scope: diff.scope, base: diff.base, head: diff.source.commit, view });
+        const view = { ...diffFileView(f, { slug, rev, collapsed, busy, asked, zones, diff, viewHref, size: undefined, splitAllowed: split }), updated };
+        sectionViews.set(f.path, { f, slug, rev, collapsed, busy, asked, split, viewHref, updated, zones, scope: diff.scope, base: diff.base, head: diff.source.commit, view });
         return view;
       });
     },
@@ -738,6 +838,7 @@ export function codeBrowser({ gateway, highlighter, preparer, proximity = inters
       this.prepareDiff(page)
         .then((diff) => {
           this.setDiff(diff);
+          this.readAt = now();
           // A link to a file arrives with the page, before its files are known.
           this.readHash(location?.hash ?? "");
         })
@@ -756,13 +857,16 @@ export function codeBrowser({ gateway, highlighter, preparer, proximity = inters
       blocks.clear();
       sectionPath.clear();
       unfollow();
+      clearTimeout(upToDateTimer);
+      clearTimeout(tickTimer);
+      tickTimer = null;
       for (const c of drawn.values()) c.destroy();
       drawn.clear();
       for (const a of aborts.values()) a.abort();
       aborts = new Map();
     },
 
-    /** Follows the project feed for this worktree's code_changed. */
+    /** Follows the project feed for this worktree's code_changed and git_state: either one refreshes the list. */
     follow() {
       unfollow();
       if (!this.source.workspaceId) return;
@@ -777,10 +881,11 @@ export function codeBrowser({ gateway, highlighter, preparer, proximity = inters
       );
     },
 
-    /** The session ended: the code is fixed. */
+    /** The session stopped: nothing follows the worktree now; the view says as of when, and Reload reads it again. */
     ended() {
       unfollow();
       this.liveState = onEnded(this.liveState);
+      this.readAt ||= now();
     },
 
     // ── reading ──────────────────────────────────────────────────────────
@@ -800,9 +905,7 @@ export function codeBrowser({ gateway, highlighter, preparer, proximity = inters
       const { slugs: bySlug, collapsed } = diffSetup(diff);
       // The files whose content differs from what the reader has: only their sections are drawn again.
       const prior = this.diff;
-      const dirty = new Set(this.heldDirty);
-      for (const path of changedPaths(rowsOf.get(diff))) dirty.add(path);
-      this.heldDirty = new Set();
+      const dirty = new Set(changedPaths(rowsOf.get(diff)));
       if (prior) {
         const revs = { ...this.fileRevs };
         for (const f of diff.files) if (dirty.has(f.path)) revs[f.path] = (revs[f.path] ?? 0) + 1;
@@ -817,8 +920,12 @@ export function codeBrowser({ gateway, highlighter, preparer, proximity = inters
       this.collapsed = this.diff ? Object.fromEntries(diff.files.filter((f) => keep[f.path] ?? collapsed[f.path]).map((f) => [f.path, true])) : collapsed;
       this.diff = diff;
       this.diffRev += 1;
+      // The hunks were just read: the list is what they say, until the next change event.
+      this.listing = null;
+      this.updatedPaths = [];
+      this.staleCount = 0;
       this.rowsSplit = rowsOf.get(diff)?.split ?? this.wantSplit;
-      rowsOf.prune([diff, this.heldDiff]);
+      rowsOf.prune([diff]);
       if (diff.source.gone) this.markGone();
       if (!this.commit || diff.source.kind === "workspace") this.commit = diff.source.commit;
       if (!this.currentFile || !diff.files.some((f) => f.path === this.currentFile)) this.currentFile = diff.files[0]?.path ?? "";
@@ -849,7 +956,7 @@ export function codeBrowser({ gateway, highlighter, preparer, proximity = inters
         await pageRead;
         return true;
       }
-      if (!open?.next || this.heldDiff) return false;
+      if (!open?.next) return false;
       this.loadingPage = true;
       let done;
       pageRead = new Promise((resolve) => (done = resolve));
@@ -887,7 +994,7 @@ export function codeBrowser({ gateway, highlighter, preparer, proximity = inters
       const open = this.diff;
       const at = new Set(open.files.map((f) => f.path));
       const next = this.mergeDiff(open, page);
-      rowsOf.prune([next, this.heldDiff]);
+      rowsOf.prune([next]);
       const { slugs: bySlug, collapsed } = diffSetup(next);
       this.diffSlugs = Object.fromEntries(bySlug);
       this.collapsed = { ...Object.fromEntries(page.files.filter((f) => collapsed[f.path] && !(f.path in this.collapsed) && !at.has(f.path)).map((f) => [f.path, true])), ...this.collapsed };
@@ -895,6 +1002,11 @@ export function codeBrowser({ gateway, highlighter, preparer, proximity = inters
       const again = page.files.filter((f) => at.has(f.path) && rowsOf.get(page)?.files.get(f.path)?.changed);
       if (again.length) this.fileRevs = { ...this.fileRevs, ...Object.fromEntries(again.map((f) => [f.path, (this.fileRevs[f.path] ?? 0) + 1])) };
       this.diff = next;
+      // The list read since takes the page in too, and the page's hunks are judged against it.
+      if (this.listing) {
+        this.listing = withPage(this.listing, page);
+        this.judge();
+      }
       this.countFiles();
       this.syncRows();
     },
@@ -917,8 +1029,7 @@ export function codeBrowser({ gateway, highlighter, preparer, proximity = inters
       const want = this.wantSplit;
       const open = this.diff;
       const sets = open && rowsOf.get(open);
-      // A held diff is not the worker's last read; its rows stay as they are until it is applied.
-      if (!sets || this.heldDiff || sets.split === want) return;
+      if (!sets || sets.split === want) return;
       const files = new Map(sets.files);
       try {
         await preparer.relayout({ split: want }, { onFile: (f) => open.files.some((x) => x.path === f.path) && files.set(f.path, f) });
@@ -926,13 +1037,13 @@ export function codeBrowser({ gateway, highlighter, preparer, proximity = inters
         return;
       }
       if (this.diff !== open || this.wantSplit !== want) return;
-      rowsOf.set(open, { split: want, files }, [this.heldDiff]);
+      rowsOf.set(open, { split: want, files });
       this.rowsSplit = want;
     },
 
     /** The session's tab badge follows the changed files. */
     countFiles() {
-      const count = this.diff ? this.diff.fileCount : this.totalCount;
+      const count = this.diffStale && this.totalCount !== null ? this.totalCount : this.listDiff ? this.listDiff.fileCount : this.totalCount;
       if (this.kind === "session" && count !== null) this.$dispatch?.("code-files-counted", { count });
     },
 
@@ -947,7 +1058,8 @@ export function codeBrowser({ gateway, highlighter, preparer, proximity = inters
       try {
         const t = await gateway.diff({ workspaceId: this.source.workspaceId, scope: this.scope, limit: 0 }, this.request("totals"));
         this.totalCount = t.fileCount;
-        if (!this.diff) this.countFiles();
+        this.readAt = now();
+        if (!this.diff || this.diffStale) this.countFiles();
       } catch (err) {
         if (codeOf(err) === Codes.WORKSPACE_MISSING) this.markGone();
         // the count is a hint; the tab goes without it
@@ -1008,7 +1120,10 @@ export function codeBrowser({ gateway, highlighter, preparer, proximity = inters
       const diff = await this.loadDiff();
       if (diff) {
         this.setDiff(diff);
+        this.readAt = now();
         this.problem = null;
+        // The hunks are what the worktree says now: nothing on screen is out of date.
+        if (this.liveState === STALE) this.liveState = LIVE;
       }
     },
 
@@ -1092,6 +1207,9 @@ export function codeBrowser({ gateway, highlighter, preparer, proximity = inters
       if (scope === this.scope) return;
       this.go({ ...this.route, view: "changes", scope });
       this.diff = null;
+      this.listing = null;
+      this.updatedPaths = [];
+      this.staleCount = 0;
       this.showDiff();
     },
 
@@ -1300,7 +1418,7 @@ export function codeBrowser({ gateway, highlighter, preparer, proximity = inters
         if (f) {
           const sets = rowsOf.get(this.diff);
           const next = Object.freeze({ ...this.diff, readId: ++reads, files: Object.freeze(this.diff.files.map((x) => (x.path === path ? f : x))) });
-          rowsOf.set(next, { split: sets.split, files: new Map([...sets.files, ...rowsOf.get(one).files]) }, [this.heldDiff]);
+          rowsOf.set(next, { split: sets.split, files: new Map([...sets.files, ...rowsOf.get(one).files]) });
           this.diff = next;
           // Only this file's section is drawn again.
           this.fileRevs = { ...this.fileRevs, [path]: (this.fileRevs[path] ?? 0) + 1 };
@@ -1452,7 +1570,11 @@ export function codeBrowser({ gateway, highlighter, preparer, proximity = inters
       event.preventDefault();
       this.showMain = true;
       // A file only the re-read diff has: show that diff first.
-      if (this.heldDiff && !this.diff?.files.some((f) => f.path === path)) await this.reload();
+      // A file only the list has (new since the hunks were read): its hunks come in with a Reload.
+      if (!this.diff?.files.some((f) => f.path === path)) {
+        await this.reload();
+        await this.loadThrough(() => this.pathReached(path));
+      }
       if (this.collapsed[path]) this.toggleFile(path);
       this.$nextTick?.(() => this.scrollToFile(path));
       if (this.urlOwned()) history?.replaceState?.(null, "", hrefOf(this.route, `#diff-${this.diffSlugs[path]}`));
@@ -1526,7 +1648,7 @@ export function codeBrowser({ gateway, highlighter, preparer, proximity = inters
       return !this.touched && (!el || el.scrollTop === 0);
     },
 
-    /** code_changed for this worktree: the side follows; the main side holds still unless untouched. */
+    /** code_changed or git_state for this worktree: the list follows by itself; the hunks on screen hold still (ADR 0048). */
     async codeChanged() {
       if (refreshing) {
         refreshAgain = true;
@@ -1551,23 +1673,101 @@ export function codeBrowser({ gateway, highlighter, preparer, proximity = inters
         await Promise.all([this.readTotals(), this.readWorking()]);
         return;
       }
-      const decision = onChange(this.liveState, { untouched: this.untouched });
-      // The tree's marks follow too, asked at the same time as the diff.
+      // The tree's marks follow too, asked at the same time as the list.
       const trees = this.refreshTree();
-      // The changed files and their counts follow in place.
-      const diff = await this.loadLoaded({ quiet: true });
-      if (diff) {
-        const before = new Map((this.diff?.files ?? []).map((f) => [f.path, `${f.status}:${f.added}:${f.deleted}`]));
-        this.freshPaths = diff.files.filter((f) => before.get(f.path) !== `${f.status}:${f.added}:${f.deleted}`).map((f) => f.path);
-        if (!this.showingChanges || decision.apply || !this.diff) this.setDiff(diff);
-        else {
-          this.heldDirty = new Set([...this.heldDirty, ...changedPaths(rowsOf.get(diff))]);
-          this.heldDiff = diff;
-          this.countHeld(diff);
-        }
+      if (this.showingChanges) {
+        await this.refreshList();
+      } else {
+        await this.refreshElsewhere();
       }
       this.readWorking();
       await trees;
+    },
+
+    /**
+     * The Changes list, its totals, legend and counts: the loaded pages again
+     * without hunks. The hunks on screen are not touched; the rows they are
+     * older than get a dot, and the notice counts them.
+     */
+    async refreshList() {
+      const shown = this.diff;
+      const listing = await this.readListing();
+      if (!listing) return;
+      // The hunks were read again (or a page came in) meanwhile: this read is older than they are.
+      if (this.diff !== shown) return this.refreshList();
+      const previous = new Map((this.listDiff?.files ?? []).map((f) => [f.path, listSignature(f)]));
+      this.freshPaths = listing.files.filter((f) => previous.get(f.path) !== listSignature(f)).map((f) => f.path);
+      this.readAt = now();
+      // The notice comes in above the files: the reader stays where they were looking.
+      this.keepPlace(() => {
+        this.listing = listing;
+        this.countFiles();
+        this.judge();
+      });
+    },
+
+    /**
+     * Runs a change that may put something above what the reader is looking at
+     * (the notice) or take it away, then puts the reader back: the file in
+     * view keeps its place in the scroller, whatever the browser's own scroll
+     * anchoring did or did not do.
+     */
+    keepPlace(change) {
+      const main = this.showingChanges ? this.mainScroller() : null;
+      const anchor = this.anchorOf(main);
+      change();
+      if (anchor) this.$nextTick?.(() => this.restoreAnchor(main, anchor));
+    },
+    /** Where the current file's section sits in the scroller, by its anchor; null when nothing can be measured. */
+    anchorOf(main) {
+      const slug = this.diffSlugs[this.currentFile];
+      const el = slug && main?.querySelector?.(`#diff-${cssEscape(slug)}`);
+      if (!el || !main.getBoundingClientRect) return null;
+      return { slug, offset: el.getBoundingClientRect().top - main.getBoundingClientRect().top };
+    },
+    /** Scrolls so the anchored section is where it was. Returns whether it could. */
+    restoreAnchor(main, anchor) {
+      const el = main?.querySelector?.(`#diff-${cssEscape(anchor.slug)}`);
+      if (!el) return false;
+      const moved = el.getBoundingClientRect().top - main.getBoundingClientRect().top - anchor.offset;
+      if (Math.abs(moved) >= 1) main.scrollTop += moved;
+      return true;
+    },
+
+    /** The loaded pages without hunks, as many files as the reader has loaded, in the server's pages; null when it could not be read. */
+    async readListing() {
+      if (!this.source.workspaceId) return null;
+      const signal = this.request("list");
+      const limit = listLimit(Math.max(this.listing?.files.length ?? 0, this.diff?.files.length ?? 0));
+      const want = Math.max(this.listing?.files.length ?? 0, this.diff?.files.length ?? 0);
+      const q = { ...this.pageQuery(), hunks: "none", limit };
+      try {
+        let acc = await gateway.diff(q, signal);
+        while (acc.next && acc.files.length < want) acc = withPage(acc, await gateway.diff({ ...q, after: acc.next }, signal));
+        return Object.freeze({ ...acc, files: Object.freeze(carryWithheld(acc.files, this.diff?.files ?? [])), readId: ++reads });
+      } catch (err) {
+        if (codeOf(err) === Codes.WORKSPACE_MISSING) this.markGone();
+        return null;
+      }
+    },
+
+    /** Compares the hunks on screen with the list read: which rows carry a dot, how many files the notice counts, and the bar's state. */
+    judge() {
+      if (!this.listing || !this.diff) return;
+      const s = staleness(this.diff.files, this.listing.files, { shownNext: !!this.diff.next, listedNext: !!this.listing.next });
+      if (s.updated.length !== this.updatedPaths.length || s.updated.some((p, i) => p !== this.updatedPaths[i])) this.updatedPaths = s.updated;
+      if (s.count !== this.staleCount) this.staleCount = s.count;
+      if (this.liveState === LIVE && s.count > 0) {
+        this.liveState = STALE;
+        this.say(`${noticeOf({ count: s.count, upToDate: false }).text}`);
+      } else if (this.liveState === STALE && s.count === 0 && this.showingChanges) this.liveState = LIVE;
+    },
+
+    /** Files and Map: the open file does not move under its reader unless it is at the top; the diff is read when Changes comes back. */
+    async refreshElsewhere() {
+      const decision = onChange(this.liveState, { untouched: this.untouched });
+      this.diffStale = true;
+      await this.readTotals();
       if (decision.apply) {
         if (this.showingFiles && this.file) await this.loadFile(this.file.path);
         if (this.showingMap) {
@@ -1597,10 +1797,6 @@ export function codeBrowser({ gateway, highlighter, preparer, proximity = inters
       }
     },
 
-    countHeld(diff) {
-      if (this.kind === "session") this.$dispatch?.("code-files-counted", { count: diff.fileCount });
-    },
-
     /** The uncommitted count in the source bar. */
     async readWorking() {
       if (this.kind !== "session" || this.gone || !this.source.workspaceId) return;
@@ -1612,27 +1808,61 @@ export function codeBrowser({ gateway, highlighter, preparer, proximity = inters
       }
     },
 
-    /** R: re-read what is on screen, keeping the place. */
+    /**
+     * R: re-read what is on screen, keeping the place. In Changes that is the
+     * open files with hunks (only those that differ are drawn again, collapsed
+     * state and scroll stay); a Reload that finds nothing says Up to date.
+     */
     async reload() {
-      if (!this.isStale) return;
+      if (!this.canReload) return;
       const main = this.showingChanges ? this.mainScroller() : this.$refs?.scroll;
       const top = main?.scrollTop ?? 0;
-      if (this.showingChanges) {
-        if (this.heldDiff) this.setDiff(this.heldDiff);
-        else await this.showDiff();
-        this.heldDiff = null;
-      } else if (this.showingFiles && this.file) {
-        await this.loadFile(this.file.path);
-      } else if (this.showingMap) {
+      const anchor = this.showingChanges ? this.anchorOf(main) : null;
+      if (this.showingChanges) await this.reloadHunks();
+      else if (this.showingFiles && this.file) await this.loadFile(this.file.path);
+      else if (this.showingMap) {
         this.map = null;
         await this.ensureMap();
       }
       this.liveState = onReload(this.liveState);
+      this.readWorking();
+      if (this.liveState === STOPPED) this.refreshTree();
       this.$nextTick?.(() => {
-        if (main) main.scrollTop = top;
+        if (main && !(anchor && this.restoreAnchor(main, anchor))) main.scrollTop = top;
         for (const c of drawn.values()) c.refresh();
         this.touched = top > 0;
       });
+    },
+
+    /** The loaded pages again with hunks, applied in place. */
+    async reloadHunks() {
+      const before = new Set((this.diff?.files ?? []).map((f) => f.path));
+      const staleBefore = this.staleCount;
+      this.diffStale = false;
+      const diff = await this.loadLoaded({ quiet: true });
+      if (!diff) return;
+      this.setDiff(diff);
+      this.readAt = now();
+      this.problem = null;
+      const changed = changedPaths(rowsOf.get(diff));
+      // The heads that say a file was read again with other hunks (a file that was not on screen has nothing to compare).
+      this.updatedAt = Object.fromEntries(changed.filter((p) => before.has(p)).map((p) => [p, this.readAt]));
+      this.nowMs = this.readAt;
+      this.ticking();
+      clearTimeout(upToDateTimer);
+      this.upToDate = reloadFoundNothing({ staleBefore, changed });
+      if (this.upToDate) upToDateTimer = setTimeout(() => (this.upToDate = false), UP_TO_DATE_MS);
+    },
+
+    /** Keeps "updated N s ago" moving while any file head shows one. */
+    ticking() {
+      clearTimeout(tickTimer);
+      tickTimer = null;
+      if (Object.keys(this.updatedAt).length === 0) return;
+      tickTimer = setTimeout(() => {
+        this.nowMs = now();
+        this.ticking();
+      }, 1000);
     },
 
     say(text) {
@@ -1803,7 +2033,7 @@ export function codeBrowser({ gateway, highlighter, preparer, proximity = inters
         case "y":
           return run(() => this.copyPermalink());
         case "r":
-          return this.isStale && run(() => this.reload());
+          return this.canReload && run(() => this.reload());
         case "E":
           return this.kind === "session" && event.shiftKey && run(() => this.toggleExpand());
         case "F":

@@ -100,15 +100,18 @@ templ liveSourceBar() {
 				<span class="branch" x-bind:title="bar.branch" x-text="bar.branch"></span>
 			</template>
 			<code class="commit" x-bind:title="bar.commitTitle" x-text="bar.commit"></code>
+			<template x-if="syncWorkspace">
+				@SyncSlot("syncWorkspace", "projectId")
+			</template>
 			<template x-if="bar.dirty">
 				<span class="dirty" x-text="bar.dirty"></span>
 			</template>
 		</div>
 		<template x-if="hasState || busy">
-			<p class="state" role="status" x-bind:data-loading="busyAttr" x-text="stateText"></p>
+			<p class="state" role="status" x-bind:data-loading="busyAttr"><span x-text="stateText"></span><template x-if="asOfText"><span class="asof" x-text="asOfText"></span></template></p>
 		</template>
 		<div class="actions">
-			<template x-if="isStale">
+			<template x-if="showsReload">
 				<button type="button" class="[ button ]" data-size="sm" data-reload x-on:click="reload">Reload <kbd>R</kbd></button>
 			</template>
 			<button type="button" class="[ button ]" data-variant="ghost" data-size="sm" x-bind:disabled="gone" x-on:click="openFinder">Find file <kbd>T</kbd></button>
@@ -149,30 +152,86 @@ templ liveFullscreenBar() {
 	</div>
 }
 
+// LiveSummary is the Changes list on its own (head, legend, groups and
+// sections), bound to a codeBrowser or codeDiff component on an ancestor: the
+// History tab's uncommitted changes use it.
+templ LiveSummary() {
+	@liveSummary()
+}
+
 templ liveSummary() {
 	<nav class="diff-summary" aria-label="Changed files">
 		<header class="head">
 			<template x-if="totals">
-				<p class="totals"><span x-text="totals.files"></span> <span class="added" x-text="totals.added"></span> <span class="deleted" x-text="totals.deleted"></span></p>
+				<p class="totals"><span x-text="changesHead.text"></span> <template x-if="changesHead.note"><span x-text="changesHead.note"></span></template></p>
 			</template>
 			<template x-if="kind === 'session'">
 				<nav class="segmented" aria-label="Scope">
 					<template x-for="s in scopes" x-bind:key="s.key">
-						<a x-bind:href="s.href" x-bind:aria-current="s.current" x-bind:aria-disabled="s.disabled" x-bind:title="s.title" x-on:click="clickScope($event, s.key)" x-text="s.label"></a>
+						<a x-bind:href="s.href" x-bind:aria-current="s.current" x-bind:aria-disabled="s.disabled" x-bind:title="s.title" x-on:click="clickScope($event, s.key)"><span x-text="s.label"></span><template x-if="s.count"><span class="count" x-text="s.count"></span></template></a>
 					</template>
 				</nav>
 			</template>
 		</header>
+		<template x-if="legend.length">
+			<div class="legend" role="group" aria-label="Filter by status">
+				<template x-for="b in legend" x-bind:key="b.status">
+					<button type="button" x-bind:aria-pressed="b.pressed" x-bind:title="b.word" x-on:click="toggleLegend(b.status)">
+						<span class="change-mark" x-bind:data-change="b.status" x-bind:title="b.word" x-bind:aria-label="b.word" x-text="b.letter"></span>
+						<span class="count" x-text="b.count"></span>
+						<span class="visually-hidden" x-text="' ' + b.word.toLowerCase()"></span>
+					</button>
+				</template>
+			</div>
+		</template>
 		<template x-if="noChanges">
 			<p class="none" x-text="noChangesText"></p>
 		</template>
 		<ol class="changed" x-bind:aria-busy="listBusy">
-			<template x-for="row in summaryRows" x-bind:key="row.key">
-				<li x-bind:data-fresh="row.fresh">
+			<template x-for="section in titledSections" x-bind:key="section.key">
+				@liveSection()
+			</template>
+			<template x-for="group in plainGroups" x-bind:key="group.key">
+				@liveGroup("group")
+			</template>
+			<template x-for="s in listSkeleton" x-bind:key="s.key">
+				<li class="skeleton-row" aria-hidden="true"><span class="skeleton"></span></li>
+			</template>
+		</ol>
+		<template x-if="moreShown">
+			<footer class="more">
+				<button type="button" class="[ button ]" data-variant="ghost" data-size="sm" x-bind:aria-busy="listBusy" x-on:click="loadMore">Show more <span class="count" x-text="moreCount"></span></button>
+			</footer>
+		</template>
+	</nav>
+}
+
+// liveSection is a section of the list (Tracked changes, Untracked) with its groups.
+templ liveSection() {
+	<li class="section">
+		<h4 class="title"><span x-text="section.title"></span><span class="hint" x-text="section.note"></span><span class="count" x-text="section.count"></span></h4>
+		<ol>
+			<template x-for="group in section.groups" x-bind:key="group.key">
+				@liveGroup("group")
+			</template>
+		</ol>
+	</li>
+}
+
+// liveGroup is the files of one directory under a head naming it once.
+templ liveGroup(g string) {
+	<li class="group">
+		<header class="group-head"><span class="dirname"><bdi x-text={ g + ".label" }></bdi></span><span class="count" x-text={ g + ".count" }></span></header>
+		<ol>
+			<template x-for={ "row in " + g + ".rows" } x-bind:key="row.key">
+				<li x-bind:data-updated="row.fresh">
 					<a x-bind:href="row.href" x-bind:aria-current="row.current" x-bind:aria-label="row.label" x-on:click="clickSummary($event, row.path)">
 						@liveMark("row.mark")
-						<span class="path"><bdi><span class="dir" x-text="row.dir"></span><span class="name" x-text="row.name"></span></bdi></span>
+						<span class="path"><bdi><span class="name" x-text="row.name"></span></bdi></span>
 						<span class="stat">
+							<template x-if="row.flag">
+								<span class="flag" x-text="row.flag"></span>
+							</template>
 							<template x-if="row.stat">
 								<span><span class="added" x-text="row.stat.added"></span><span class="deleted" x-text="row.stat.deleted"></span></span>
 							</template>
@@ -186,16 +245,8 @@ templ liveSummary() {
 					</a>
 				</li>
 			</template>
-			<template x-for="s in listSkeleton" x-bind:key="s.key">
-				<li class="skeleton-row" aria-hidden="true"><span class="skeleton"></span></li>
-			</template>
 		</ol>
-		<template x-if="moreShown">
-			<footer class="more">
-				<button type="button" class="[ button ]" data-variant="ghost" data-size="sm" x-bind:aria-busy="listBusy" x-on:click="loadMore">Show more <span class="count" x-text="moreCount"></span></button>
-			</footer>
-		</template>
-	</nav>
+	</li>
 }
 
 // liveMark is a change-mark bound to expr (a {change, letter, word} or null).
@@ -297,6 +348,14 @@ templ liveDiff() {
 				</div>
 			</div>
 		</template>
+		<template x-if="notice">
+			<div class="notice" role="status" x-bind:data-state="notice.state">
+				<strong x-text="notice.text"></strong>
+				<template x-if="notice.reload">
+					<button type="button" class="[ button ]" data-size="sm" data-reload-hunks x-on:click="reload">Reload hunks <kbd>R</kbd></button>
+				</template>
+			</div>
+		</template>
 		<template x-for="f in diffFiles" x-bind:key="f.key">
 			<section class="file" x-bind:id="f.id" x-bind:aria-labelledby="f.nameId" x-bind:data-collapsed="f.collapsed" x-bind:aria-busy="f.busy" x-init="watchFile($el, f.path)">
 				<header class="head">
@@ -315,6 +374,9 @@ templ liveDiff() {
 					</template>
 					<template x-if="f.zoneMore">
 						<span class="[ text-xs color-ink-faint ]" x-bind:title="f.zoneMore.title" x-text="f.zoneMore.label"></span>
+					</template>
+					<template x-if="f.updated">
+						<span class="updated" x-text="updatedLabel(f.path)"></span>
 					</template>
 					<span class="stat">
 						<template x-if="f.stat">

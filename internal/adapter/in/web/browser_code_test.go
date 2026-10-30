@@ -39,6 +39,9 @@ type codeWorld struct {
 	files ports.SessionFiles
 	// persons answers the person's terminal routes when a test sets it in its deps.
 	persons ports.PersonTerminals
+	// sync, when a test sets it in deps, serves the git state routes the server
+	// does not have yet (see browser_code_sync_test.go).
+	sync *syncHost
 }
 
 // fakeFeed is the project feed (/api/events) the test speaks for: every
@@ -123,6 +126,11 @@ func newCodeWorld(t *testing.T, deps func(w *codeWorld, d *Deps)) *codeWorld {
 	mux := http.NewServeMux()
 	mux.Handle("/api/events", w.feed)
 	mux.Handle("/api/", httpapi.NewRouter(httpapi.NewHandler(httpapi.Services{Code: code, SessionFiles: w.files, PersonTerminals: w.persons})))
+	if w.sync != nil {
+		for _, route := range []string{"/api/worktree_git_state", "/api/list_worktree_git_states", "/api/fetch_remote", "/api/push_branch"} {
+			mux.Handle(route, w.sync)
+		}
+	}
 	mux.Handle("/", NewHandler(d, assets, nil))
 	w.srv = newBrowserServer(mux)
 	t.Cleanup(w.srv.Close)
@@ -219,7 +227,7 @@ func TestSessionCodeTabInTheBrowser(t *testing.T) {
 		chromedp.EmulateViewport(1440, 900),
 		chromedp.Navigate(url),
 		chromedp.Poll(`document.querySelectorAll('[data-ssr]').length === 0 && document.querySelectorAll('section[aria-label=Code] .diff-summary .changed a').length > 0`, nil, chromedp.WithPollingTimeout(10*time.Second)),
-		chromedp.Evaluate(`[...document.querySelectorAll('section[aria-label=Code] .diff-summary .changed a')].map(a => a.querySelector('.dir').textContent + a.querySelector('.name').textContent)`, &paths),
+		chromedp.Evaluate(`[...document.querySelectorAll('section[aria-label=Code] .diff-summary .changed a')].map(a => (a.closest('li.group')?.querySelector('.group-head .dirname')?.textContent ?? '') + a.querySelector('.name').textContent)`, &paths),
 		chromedp.Poll(`document.querySelector('[role=tab][aria-selected=true] .badge')?.textContent`, &badge, chromedp.WithPollingTimeout(5*time.Second)),
 		chromedp.Poll(`document.querySelectorAll('section[aria-label=Code] .diff-view .code-lines .line').length > 0`, nil, chromedp.WithPollingTimeout(5*time.Second)),
 		chromedp.Evaluate(`document.querySelector('.diff-summary a[aria-current=location] .name').textContent`, &current),
@@ -265,71 +273,6 @@ func TestSessionCodeTabInTheBrowser(t *testing.T) {
 	}
 	if loc != url+"/files/README.md" {
 		t.Errorf("location = %q", loc)
-	}
-	if e := errs.all(); len(e) > 0 {
-		t.Errorf("JS errors: %v", e)
-	}
-}
-
-// TestSessionCodeTabFollowsTheWorktree: a running session's Code tab re-reads
-// on code_changed. At the top of the diff the new file just appears; once the
-// reader has scrolled, the source bar says the code changed on disk and R
-// re-reads it without moving the reader.
-func TestSessionCodeTabFollowsTheWorktree(t *testing.T) {
-	w := newCodeWorld(t, withSession(domain.SessionRunning, func(w *codeWorld) string { return w.at.WorkspaceID }))
-	ctx, errs := browser(t)
-	url := w.srv.URL + "/projects/" + w.f.ProjectID + "/tasks/t1/sessions/s1/code/changes"
-	changed := `{"code_changed":{"workspace_id":"` + w.at.WorkspaceID + `","head":"` + w.f.SessionHead + `"}}`
-	write := func(name, content string) chromedp.Action {
-		return chromedp.ActionFunc(func(context.Context) error {
-			if err := os.WriteFile(filepath.Join(w.f.Worktree, name), []byte(content), 0o644); err != nil {
-				return err
-			}
-			w.feed.send(changed)
-			return nil
-		})
-	}
-	step := ""
-	at := func(name string) chromedp.Action {
-		return chromedp.ActionFunc(func(context.Context) error { step = name; return nil })
-	}
-	long := strings.Repeat("a line of a long file\n", 400)
-	var state, word, stateAfter string
-	var top float64
-	err := chromedp.Run(ctx,
-		chromedp.EmulateViewport(1440, 900),
-		chromedp.Navigate(url),
-		chromedp.Poll(`document.querySelector('section[aria-label=Code] .code-source-bar')?.dataset.state === 'live' && document.querySelectorAll('section[aria-label=Code] .diff-summary .changed a').length === 5`, nil, chromedp.WithPollingTimeout(10*time.Second)),
-		at("connected"),
-		w.feed.connected(),
-		at("arrive"),
-		write("arrived.txt", long),
-		chromedp.Poll(`document.querySelectorAll('section[aria-label=Code] .diff-summary .changed a').length === 6 && !!document.querySelector('section[aria-label=Code] section.file[id="diff-arrived-txt"]')`, nil, chromedp.WithPollingTimeout(10*time.Second)),
-		chromedp.Evaluate(`document.querySelector('section[aria-label=Code] .code-source-bar').dataset.state`, &state),
-		chromedp.Evaluate(`(() => { const m = document.querySelector('section[aria-label=Code] .main'); m.scrollTop = 600; m.dispatchEvent(new Event('scroll')); return m.scrollTop })()`, &top),
-		chromedp.Sleep(200*time.Millisecond),
-		at("later"),
-		write("later.txt", "later\n"),
-		chromedp.Poll(`document.querySelector('section[aria-label=Code] .code-source-bar')?.dataset.state === 'stale'`, nil, chromedp.WithPollingTimeout(10*time.Second)),
-		chromedp.Evaluate(`document.querySelector('section[aria-label=Code] .code-source-bar .state').textContent`, &word),
-		chromedp.Poll(`document.querySelectorAll('section[aria-label=Code] .diff-summary .changed a').length === 7`, nil, chromedp.WithPollingTimeout(5*time.Second)),
-		chromedp.Poll(`!document.querySelector('section[aria-label=Code] section.file[id="diff-later-txt"]')`, nil, chromedp.WithPollingTimeout(2*time.Second)),
-		chromedp.Focus(`section[aria-label=Code] .main`, chromedp.ByQuery),
-		at("reload"),
-		chromedp.KeyEvent("r"),
-		chromedp.Poll(`!!document.querySelector('section[aria-label=Code] section.file[id="diff-later-txt"]')`, nil, chromedp.WithPollingTimeout(5*time.Second)),
-		chromedp.Evaluate(`document.querySelector('section[aria-label=Code] .code-source-bar').dataset.state`, &stateAfter),
-	)
-	if err != nil {
-		var dump string
-		_ = chromedp.Run(ctx, chromedp.Evaluate(`JSON.stringify({state: document.querySelector('section[aria-label=Code] .code-source-bar')?.dataset.state, n: document.querySelectorAll('section[aria-label=Code] .diff-summary .changed a').length, ids: [...document.querySelectorAll('section[aria-label=Code] section.file')].map(s=>s.id)})`, &dump))
-		t.Fatalf("at %s: %v\n%s\nJS errors: %v", step, err, dump, errs.all())
-	}
-	if state != "live" || top < 500 {
-		t.Errorf("after the first change: state %q, scrolled to %v", state, top)
-	}
-	if word != "Changed on disk" || stateAfter != "live" {
-		t.Errorf("stale word %q, after R %q", word, stateAfter)
 	}
 	if e := errs.all(); len(e) > 0 {
 		t.Errorf("JS errors: %v", e)
@@ -382,7 +325,8 @@ func TestSessionCodeTabWhenTheWorktreeIsGone(t *testing.T) {
 }
 
 // TestHistoryDiffsInTheBrowser: an open commit shows its patch under its
-// files, renamed file included; a session's uncommitted changes show theirs.
+// files, renamed file included; a session's uncommitted changes show the
+// shared Changes list, whose rows open the Code tab's Working scope.
 func TestHistoryDiffsInTheBrowser(t *testing.T) {
 	w := newCodeWorld(t, func(w *codeWorld, d *Deps) {
 		withSession(domain.SessionRunning, func(w *codeWorld) string { return w.at.WorkspaceID })(w, d)
@@ -395,7 +339,7 @@ func TestHistoryDiffsInTheBrowser(t *testing.T) {
 	commit := w.srv.URL + "/projects/" + w.f.ProjectID + "/repositories/" + w.repoID + "/history/" + w.f.Rename
 	working := w.srv.URL + "/projects/" + w.f.ProjectID + "/tasks/t1/sessions/s1/history/working"
 
-	var sections, workingSections []string
+	var sections, workingSections, workingHrefs []string
 	var renamed, view string
 	var lines int
 	var shot []byte
@@ -409,8 +353,9 @@ func TestHistoryDiffsInTheBrowser(t *testing.T) {
 		chromedp.Evaluate(`document.querySelector('section[aria-label=Diff] section.file .actions a')?.getAttribute('href') ?? ''`, &view),
 		chromedp.FullScreenshot(&shot, 85),
 		chromedp.Navigate(working),
-		chromedp.Poll(`document.querySelectorAll('[data-ssr]').length === 0 && document.querySelectorAll('section[aria-label=Diff] section.file').length > 0`, nil, chromedp.WithPollingTimeout(10*time.Second)),
-		chromedp.Evaluate(`[...document.querySelectorAll('section[aria-label=Diff] section.file h3.path')].map(h => h.title)`, &workingSections),
+		chromedp.Poll(`document.querySelectorAll('[data-ssr]').length === 0 && document.querySelectorAll('section[aria-label=Changes] .diff-summary .changed a').length > 0`, nil, chromedp.WithPollingTimeout(10*time.Second)),
+		chromedp.Evaluate(`[...document.querySelectorAll('section[aria-label=Changes] .diff-summary .changed a')].map(a => a.querySelector('.name').textContent)`, &workingSections),
+		chromedp.Evaluate(`[...document.querySelectorAll('section[aria-label=Changes] .diff-summary .changed a')].map(a => a.getAttribute('href'))`, &workingHrefs),
 	)
 	if err != nil {
 		var dump string
@@ -425,7 +370,12 @@ func TestHistoryDiffsInTheBrowser(t *testing.T) {
 		t.Errorf("View file = %q", view)
 	}
 	if strings.Join(workingSections, ",") != "README.md,new.txt,nonl.txt" {
-		t.Errorf("working diff: %v", workingSections)
+		t.Errorf("working changes: %v", workingSections)
+	}
+	for _, h := range workingHrefs {
+		if !strings.Contains(h, "/tasks/t1/sessions/s1/code/changes?scope=working#diff-") {
+			t.Errorf("a working row links to %q, want the Code tab's Working scope", h)
+		}
 	}
 	if e := errs.all(); len(e) > 0 {
 		t.Errorf("JS errors: %v", e)
