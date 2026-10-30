@@ -11,8 +11,9 @@ import templruntime "github.com/a-h/templ/runtime"
 // Files is the session page's Files tab, bound to a filesPanel component on
 // an ancestor (filesPanel.js): the agent state strip above a code-layout of
 // the session's two-rooted tree and the Code tab's read-only viewer. Every
-// folder row and root carries an empty .actions slot, kept in the markup for
-// the person's terminal to fill.
+// folder row and root carries an .actions slot, where "Open terminal here"
+// asks the person's terminal dock (its children, the sessions package's) for a
+// terminal on that folder.
 func Files() templ.Component {
 	return templruntime.GeneratedTemplate(func(templ_7745c5c3_Input templruntime.GeneratedComponentInput) (templ_7745c5c3_Err error) {
 		templ_7745c5c3_W, ctx := templ_7745c5c3_Input.Writer, templ_7745c5c3_Input.Context
@@ -90,11 +91,15 @@ func Files() templ.Component {
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 8, "</template><span class=\"name\"><span x-text=\"row.name\"></span><template x-if=\"row.meta\"><span class=\"root-meta\" x-text=\"row.meta\"></span></template><template x-if=\"row.target\"><span class=\"target\" x-text=\"row.target\"></span></template></span><template x-if=\"row.tag\"><span class=\"ignored\" x-bind:data-tone=\"row.gone ? 'gone' : null\" x-text=\"row.tag\"></span></template><template x-if=\"row.isDir || row.isRoot\"><span class=\"actions\"></span></template></span></template></li></template></ul></aside><div class=\"separator\" role=\"separator\" aria-orientation=\"vertical\" tabindex=\"0\" aria-label=\"Resize the file tree\" x-bind:aria-valuemin=\"splitMin\" x-bind:aria-valuemax=\"splitMax\" x-bind:aria-valuenow=\"splitNow\" x-bind:data-dragging=\"splitDraggingAttr\" x-on:pointerdown=\"startSplit\" x-on:pointermove=\"moveSplit\" x-on:pointerup=\"endSplit\" x-on:pointercancel=\"endSplit\" x-on:dblclick=\"resetSplit\" x-on:keydown=\"splitKey\"></div><section class=\"main stack\" x-ref=\"main\" tabindex=\"0\" aria-label=\"File\" x-on:click=\"clickLine\"><button type=\"button\" class=\"[ button ]\" data-variant=\"ghost\" data-size=\"sm\" data-code-back x-on:click=\"back\">‹ Files</button>")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 8, "</template><span class=\"name\"><span x-text=\"row.name\"></span><template x-if=\"row.meta\"><span class=\"root-meta\" x-text=\"row.meta\"></span></template><template x-if=\"row.target\"><span class=\"target\" x-text=\"row.target\"></span></template></span><template x-if=\"row.tag\"><span class=\"ignored\" x-bind:data-tone=\"row.gone ? 'gone' : null\" x-text=\"row.tag\"></span></template><template x-if=\"row.isDir || row.isRoot\"><span class=\"actions\"><template x-if=\"!row.gone\"><button type=\"button\" class=\"[ button ]\" data-variant=\"ghost\" data-size=\"sm\" data-icon tabindex=\"-1\" x-bind:aria-label=\"row.terminalLabel\" title=\"Open terminal here\" x-on:click.stop=\"openTerminal(row.key)\"><svg aria-hidden=\"true\" viewBox=\"0 0 16 16\" width=\"16\" height=\"16\"><path d=\"M2.5 3.5h11v9h-11zM5 6.5l2 1.75L5 10M8.5 10h2.5\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.5\" stroke-linecap=\"round\" stroke-linejoin=\"round\"></path></svg></button></template></span></template></span></template></li></template></ul></aside><div class=\"separator\" role=\"separator\" aria-orientation=\"vertical\" tabindex=\"0\" aria-label=\"Resize the file tree\" x-bind:aria-valuemin=\"splitMin\" x-bind:aria-valuemax=\"splitMax\" x-bind:aria-valuenow=\"splitNow\" x-bind:data-dragging=\"splitDraggingAttr\" x-on:pointerdown=\"startSplit\" x-on:pointermove=\"moveSplit\" x-on:pointerup=\"endSplit\" x-on:pointercancel=\"endSplit\" x-on:dblclick=\"resetSplit\" x-on:keydown=\"splitKey\"></div><section class=\"main stack\" x-ref=\"main\" tabindex=\"0\" aria-label=\"File\" x-on:click=\"clickLine\"><button type=\"button\" class=\"[ button ]\" data-variant=\"ghost\" data-size=\"sm\" data-code-back x-on:click=\"back\">‹ Files</button>")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
 		templ_7745c5c3_Err = liveFileView(true).Render(ctx, templ_7745c5c3_Buffer)
+		if templ_7745c5c3_Err != nil {
+			return templ_7745c5c3_Err
+		}
+		templ_7745c5c3_Err = templ_7745c5c3_Var1.Render(ctx, templ_7745c5c3_Buffer)
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}

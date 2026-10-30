@@ -230,3 +230,26 @@ func TestEveryRepositoryCheckoutIsBoundReadOnlyWhileTheWorkspacesRootAndHiddenPa
 		t.Errorf("the checkout is bound over its writable git dir: %v", args)
 	}
 }
+
+func TestRenderDenyWritesBindsEverythingWritableAndThePathReadOnly(t *testing.T) {
+	args := RenderDenyWrites("/tmp/harness-shell-1")
+	got := strings.Join(args, " ")
+	want := "--die-with-parent --dev-bind / / --ro-bind /tmp/harness-shell-1 /tmp/harness-shell-1"
+	if got != want {
+		t.Errorf("args = %q, want %q", got, want)
+	}
+}
+
+func TestWrapDenyWritesRunsTheCommandAfterTheBinds(t *testing.T) {
+	d := &Driver{bin: "/usr/bin/bwrap"}
+	w, err := d.WrapDenyWrites("/r", ports.SandboxCommand{Path: "/bin/zsh", Args: []string{"-l"}, Dir: "/w", Env: []string{"A=1"}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if w.Path != "/usr/bin/bwrap" || w.Dir != "/w" || strings.Join(w.Args[len(w.Args)-3:], " ") != "-- /bin/zsh -l" {
+		t.Errorf("wrapped = %+v", w)
+	}
+	if _, err := d.WrapDenyWrites("relative", ports.SandboxCommand{Path: "/bin/sh"}); err == nil {
+		t.Error("a relative path was accepted")
+	}
+}

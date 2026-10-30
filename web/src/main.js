@@ -45,6 +45,7 @@ import { registerProjects } from "./modules/projects/presentation/register.js";
 import { artifactsGateway } from "./modules/sessions/infrastructure/artifacts-gateway.js";
 import { channelGateway } from "./modules/sessions/infrastructure/channel-gateway.js";
 import { sessionsGateway } from "./modules/sessions/infrastructure/sessions-gateway.js";
+import { personTerminalsGateway } from "./modules/sessions/infrastructure/person-terminals-gateway.js";
 import { terminalGateway } from "./modules/sessions/infrastructure/terminal-gateway.js";
 import { mergeGateway } from "./modules/sessions/infrastructure/merge-gateway.js";
 import { sandboxGateway as sessionSandboxGateway } from "./modules/sessions/infrastructure/sandbox-gateway.js";
@@ -105,6 +106,8 @@ registerSessions(Alpine, {
   sandbox: sessionSandboxGateway(api),
   merge: mergeGateway(api),
   runTerminals: terminalGateway({ base: "/api", path: (id) => `/runs/${encodeURIComponent(id)}/terminal` }),
+  persons: personTerminalsGateway(api, events),
+  personTerminals: terminalGateway({ base: "/api", path: (id) => `/person-terminals/${encodeURIComponent(id)}/terminal` }),
   createScreen,
   clock: systemClock,
   prefs,

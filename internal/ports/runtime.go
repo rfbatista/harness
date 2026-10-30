@@ -44,8 +44,10 @@ type AgentSpec struct {
 	Command   string `json:"command,omitempty"`
 	SessionID string `json:"session_id"`
 	// Dir is the session's worktree.
-	Dir   string `json:"dir"`
-	Model string `json:"model,omitempty"`
+	Dir string `json:"dir"`
+	// DenyWrites, when set, is a path a person's shell may not write under.
+	DenyWrites string `json:"deny_writes,omitempty"`
+	Model      string `json:"model,omitempty"`
 	// Permission is "ask" (or empty), "accept_edits" or "bypass".
 	Permission   string          `json:"permission,omitempty"`
 	AppendSystem string          `json:"append_system,omitempty"`

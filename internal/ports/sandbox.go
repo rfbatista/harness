@@ -93,3 +93,13 @@ type SandboxViolationStore interface {
 	// SandboxViolations are the session's stored violations, newest first.
 	SandboxViolations(sessionID string) ([]SandboxViolation, error)
 }
+
+// DenyWritesDriver is a SandboxDriver's second policy, which a person's
+// terminal runs under (ADR 0052): everything is allowed except writing under
+// one path. It does not depend on the agent sandbox switch. Optional next to
+// SandboxDriver: a platform without it cannot make a path read-only.
+type DenyWritesDriver interface {
+	// WrapDenyWrites answers the command that runs cmd with every write under
+	// path (and what it holds) refused, whatever process makes it.
+	WrapDenyWrites(path string, cmd SandboxCommand) (SandboxCommand, error)
+}

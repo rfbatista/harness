@@ -37,6 +37,8 @@ type codeWorld struct {
 	feed   *fakeFeed
 	// files answers the Files view's routes when a test sets it in its deps.
 	files ports.SessionFiles
+	// persons answers the person's terminal routes when a test sets it in its deps.
+	persons ports.PersonTerminals
 }
 
 // fakeFeed is the project feed (/api/events) the test speaks for: every
@@ -120,7 +122,7 @@ func newCodeWorld(t *testing.T, deps func(w *codeWorld, d *Deps)) *codeWorld {
 	w.feed = newFakeFeed()
 	mux := http.NewServeMux()
 	mux.Handle("/api/events", w.feed)
-	mux.Handle("/api/", httpapi.NewRouter(httpapi.NewHandler(httpapi.Services{Code: code, SessionFiles: w.files})))
+	mux.Handle("/api/", httpapi.NewRouter(httpapi.NewHandler(httpapi.Services{Code: code, SessionFiles: w.files, PersonTerminals: w.persons})))
 	mux.Handle("/", NewHandler(d, assets, nil))
 	w.srv = newBrowserServer(mux)
 	t.Cleanup(w.srv.Close)

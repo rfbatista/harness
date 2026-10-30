@@ -61,9 +61,17 @@ type filesWorld struct {
 	resources *vfs.Service
 	sess      *domain.Session
 	tab       string
+	persons   *switchablePersons
 }
 
 func newFilesWorld(t *testing.T, status domain.SessionStatus, bigFolder int) *filesWorld {
+	t.Helper()
+	return newFilesWorldWith(t, status, bigFolder, passthroughDeny{})
+}
+
+// newFilesWorldWith is newFilesWorld with the person's terminals behind deny, the
+// platform's way to make the resources root read-only (nil: none).
+func newFilesWorldWith(t *testing.T, status domain.SessionStatus, bigFolder int, deny ports.DenyWritesDriver) *filesWorld {
 	t.Helper()
 	fw := &filesWorld{worktree: t.TempDir()}
 	if out, err := exec.Command("git", "-C", fw.worktree, "init", "-q").CombinedOutput(); err != nil {
@@ -102,6 +110,8 @@ func newFilesWorld(t *testing.T, status domain.SessionStatus, bigFolder int) *fi
 	}
 	fw.codeWorld = newCodeWorld(t, func(w *codeWorld, d *Deps) {
 		w.files = fsys
+		fw.persons = newSwitchablePersons(t, fsys, fw.sess, events, deny)
+		w.persons = fw.persons
 		withSession(status, func(w *codeWorld) string { return w.at.WorkspaceID })(w, d)
 	})
 	fw.tab = fw.srv.URL + "/projects/" + fw.f.ProjectID + "/tasks/t1?session=s1"

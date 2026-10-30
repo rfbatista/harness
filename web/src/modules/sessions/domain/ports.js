@@ -194,6 +194,24 @@
  */
 
 /**
+ * The person's own terminals on a session's virtual file system. Implemented
+ * by infrastructure/person-terminals-gateway.js (the person-terminals routes and the
+ * session feed's `person_terminal_ended`) and infrastructure/memory-person-terminals.js.
+ * Attaching to one is a TerminalGateway at /api/person-terminals/{id}/terminal.
+ *
+ * @typedef {{ id: string, sessionId: string, root: string, dir: string, label: string, openedAt: Date }} PersonTerminal
+ * @typedef {{ id: string, sessionId: string, reason: string, message: string }} PersonTerminalEnded
+ *
+ * @typedef {object} PersonTerminalGateway
+ * @property {(sessionId: string, signal?: AbortSignal) => Promise<PersonTerminal[]>} list  the open ones, oldest first
+ * @property {(sessionId: string, at: { root: string, dir: string, cols: number, rows: number }) => Promise<PersonTerminal>} open
+ *           Rejects with the server's refusal: TERMINAL_SERVER_EXPOSED, TERMINAL_HOST_REFUSED,
+ *           TERMINAL_ORIGIN_REFUSED, TERMINAL_READ_ONLY_UNAVAILABLE, ROOT_GONE, PATH_NOT_FOUND, INVALID_INPUT.
+ * @property {(id: string) => Promise<void>} close  hangs up; one that ended is not an error
+ * @property {(sessionId: string, onEnded: (e: PersonTerminalEnded) => void, onStatus?: (s: import("../../../shared/domain/feed.js").FeedStatus) => void) => () => void} followEnded
+ */
+
+/**
  * A session's published artifacts and the stream that announces them.
  * Implemented by infrastructure/artifacts-gateway.js (GET /api/artifacts and
  * the session's SSE stream) and infrastructure/memory-artifacts.js (tests and

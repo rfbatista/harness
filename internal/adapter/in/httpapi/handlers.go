@@ -14,7 +14,10 @@ import (
 // part of the application is not configured — pass an untyped nil, since a nil
 // pointer inside an interface is not nil.
 type Services struct {
-	Projects ports.Projects
+	// PersonTerminals are the person's own shells on a session's virtual
+	// file system; nil answers 503.
+	PersonTerminals ports.PersonTerminals
+	Projects        ports.Projects
 	// ProjectFeed follows the set of projects; nil answers 503.
 	ProjectFeed ports.ProjectCatalogFeed
 	// Discovery finds git checkouts on disk; nil answers 503.
@@ -141,6 +144,7 @@ type Handler struct {
 	toolingSvc     ports.ToolRegistry
 	execSvc        ports.TaskRunner
 	orchSvc        ports.Orchestration
+	persons        ports.PersonTerminals
 	planningSvc    ports.Planning
 	workspacesSvc  ports.WorkspaceManager
 	artifactsSvc   ports.Artifacts
@@ -198,6 +202,7 @@ func NewHandler(s Services) *Handler {
 		toolingSvc:     s.Tools,
 		execSvc:        s.Tasks,
 		orchSvc:        s.Sessions,
+		persons:        s.PersonTerminals,
 		planningSvc:    s.Planning,
 		workspacesSvc:  s.Workspaces,
 		artifactsSvc:   s.Artifacts,

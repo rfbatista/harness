@@ -38,7 +38,7 @@
  * }) => Screen} CreateScreen
  *
  * What a terminal tells the page, for its tools in the tab row.
- * @typedef {{ id: string, kind: "agent" | "run", state: "connecting" | "live" | "reconnecting" | "offline" | "ended",
+ * @typedef {{ id: string, kind: "agent" | "run" | "person", state: "connecting" | "live" | "reconnecting" | "offline" | "ended",
  *   title: string, exitCode: number | null, lostAt: number | null, scrolledUp: boolean, newLines: number }} TerminalStatus
  */
 
@@ -54,7 +54,7 @@ const FIT_SETTLE_MS = 100;
  *   createScreen: CreateScreen,
  *   observeResize?: (el: HTMLElement, onResize: () => void) => () => void,
  *   timers?: { setTimeout: typeof globalThis.setTimeout, clearTimeout: typeof globalThis.clearTimeout },
- *   kind?: "agent" | "run",  whose terminal: a session's agent, or an application run from its worktree
+ *   kind?: "agent" | "run" | "person",  whose terminal: a session's agent, an application run from its worktree, or one of the person's own
  *   textSize?: () => number,  the text size this browser chose, in px
  *   now?: () => number,
  * }} deps
