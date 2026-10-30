@@ -760,6 +760,7 @@ func newOrchestrationService(
 	agentHome claudehome.Home,
 	claudeBin ports.ManagedClaudeBin,
 	branchNames *workspaces.BranchNames,
+	baseBranches *workspaces.BaseBranches,
 ) *orchestration.Service {
 	svc := orchestration.NewService(manager, broker, hub, sessions, orchestration.Catalog{
 		Projects:     cat.Projects,
@@ -770,6 +771,7 @@ func newOrchestrationService(
 		Contexts:     cat.Architecture,
 	}, tickets, ws)
 	svc.UseBranchNames(branchNames)
+	svc.UseBaseBranches(baseBranches)
 	if cat.RepositoryArchitectures != nil {
 		// Saves, deletes and exports reach open pages on the project feed.
 		cat.RepositoryArchitectures.UseFeed(svc)
@@ -1032,6 +1034,7 @@ var WorkspacesModule = fx.Module("workspaces",
 		newPullRequestsService,
 		newMergesService,
 		newBranchNamesService,
+		newBaseBranches,
 		newCodeBrowser,
 		newOriginFetcher,
 		asPort(newWorktreeGit, new(ports.WorktreeGit)),
@@ -1193,6 +1196,12 @@ func newMergesService(
 // branch, against git's rules and the repository's local branches.
 func newBranchNamesService(repos ports.RepositoryRepository, tickets ports.TicketRepository, git ports.GitBranchNames) *workspaces.BranchNames {
 	return workspaces.NewBranchNames(repos, tickets, git)
+}
+
+// newBaseBranches readies the base a session is cut from: a base of origin's
+// is fetched, one branch, under the repository's fetch lock (ADR 0049).
+func newBaseBranches(wt ports.WorktreeManager, git ports.BranchPublisher, fetcher *workspaces.OriginFetcher) *workspaces.BaseBranches {
+	return workspaces.NewBaseBranches(wt, git, fetcher)
 }
 
 // shortID is the part of a session id that names its temp dir: short enough

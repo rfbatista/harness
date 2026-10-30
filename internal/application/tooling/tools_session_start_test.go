@@ -21,10 +21,14 @@ import (
 type fakeStarter struct {
 	sessions ports.SessionRepository
 	got      []ports.InteractiveRequest
+	err      error // refuses every start
 }
 
 func (f *fakeStarter) StartInteractive(_ context.Context, req ports.InteractiveRequest) (*domain.Session, ports.AgentSpec, error) {
 	f.got = append(f.got, req)
+	if f.err != nil {
+		return nil, ports.AgentSpec{}, f.err
+	}
 	s, err := f.sessions.Create(&domain.Session{
 		ID: fmt.Sprintf("peer-%d", len(f.got)), ProjectID: req.ProjectID, TicketID: req.TicketID, RepositoryID: req.RepositoryID,
 		AgentID: req.AgentID, Status: domain.SessionRunning, Branch: "task/peer", ParentSessionID: req.ParentSessionID,
@@ -111,6 +115,48 @@ func TestStartTaskSession_StartsAPeerOnTheCallersTask(t *testing.T) {
 	if req := starter.got[1]; req.RepositoryID != "r-api" || req.AgentID != "" {
 		t.Fatalf("defaults = %+v", req)
 	}
+}
+
+func TestStartTaskSession_ARemoteBaseReachesTheStartAndItsRefusalNamesTheBase(t *testing.T) {
+	start, starter, _ := startFixture(t, false)
+	if _, err := start(map[string]any{"prompt": "x", "base_branch": " origin/feature-x "}); err != nil {
+		t.Fatal(err)
+	}
+	if got := starter.got[0].BaseBranch; got != "origin/feature-x" {
+		t.Fatalf("base_branch = %q, want origin/feature-x", got)
+	}
+
+	starter.err = &domain.StructuredError{Code: domain.RemoteBranchNotFound,
+		Message: "origin/feature-x is not on origin any more. Fetch from origin to refresh the list."}
+	_, err := start(map[string]any{"prompt": "x", "base_branch": "origin/feature-x"})
+	if err == nil || !strings.Contains(err.Error(), "origin/feature-x") || !strings.Contains(err.Error(), "not on origin any more") {
+		t.Fatalf("refusal = %v, want a message naming the base and the reason", err)
+	}
+}
+
+func TestStartTaskSession_ItsDescriptionSaysARemoteBaseIsFetchedFirst(t *testing.T) {
+	for _, tl := range SessionTaskTools(nil, nil, nil, nil, PeerStarter{}, ArtifactTooling{}, nil, NotificationTooling{}) {
+		if tl.Name != "start_task_session" {
+			continue
+		}
+		schema := strings.NewReplacer(`\u003c`, "<", `\u003e`, ">").Replace(string(mustJSON(t, tl.InputSchema)))
+		for what, text := range map[string]string{"description": tl.Description, "base_branch": schema} {
+			if !strings.Contains(text, "origin/<name>") || !strings.Contains(text, "fetched") {
+				t.Errorf("the %s does not say a remote base origin/<name> is fetched first:\n%s", what, text)
+			}
+		}
+		return
+	}
+	t.Fatal("start_task_session not built")
+}
+
+func mustJSON(t *testing.T, v any) []byte {
+	t.Helper()
+	b, err := json.Marshal(v)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return b
 }
 
 func TestStartTaskSession_PassesTheMode(t *testing.T) {
