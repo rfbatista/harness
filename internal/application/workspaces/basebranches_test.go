@@ -3,12 +3,16 @@ package workspaces_test
 import (
 	"context"
 	"errors"
+	"os/exec"
+	"path/filepath"
+	"strings"
 	"sync"
 	"testing"
 	"time"
 
 	"github.com/rfbatista/harnesskit/errs"
 
+	"operators-mcp/internal/adapter/out/gitcli"
 	"operators-mcp/internal/application/gitcredentials/gitcredentialstest"
 	"operators-mcp/internal/application/workspaces"
 	"operators-mcp/internal/domain"
@@ -272,5 +276,54 @@ func TestAStartDuringARepositoryFetchWaitsForIt(t *testing.T) {
 	}
 	if r.git.count() != 1 {
 		t.Fatalf("fetched %v", r.git.fetched)
+	}
+}
+
+// Against real git and a bare remote: a base of origin's that was deleted there
+// is refused and its stale tracking ref stays; one that moved is fetched.
+func TestABaseOfOriginsIsFetchedOrRefusedAgainstARealRemote(t *testing.T) {
+	run := func(dir string, args ...string) string {
+		t.Helper()
+		cmd := exec.Command("git", append([]string{"-c", "user.name=t", "-c", "user.email=t@t", "-c", "init.defaultBranch=main"}, args...)...)
+		cmd.Dir = dir
+		out, err := cmd.CombinedOutput()
+		if err != nil {
+			t.Fatalf("git %v: %v: %s", args, err, out)
+		}
+		return strings.TrimSpace(string(out))
+	}
+	origin := filepath.Join(t.TempDir(), "origin.git")
+	run(t.TempDir(), "init", "-q", "--bare", origin)
+	repo := t.TempDir()
+	run(repo, "init", "-q")
+	run(repo, "commit", "-q", "--allow-empty", "-m", "init")
+	run(repo, "remote", "add", "origin", origin)
+	run(repo, "checkout", "-q", "-b", "feature-x")
+	run(repo, "push", "-q", "origin", "main", "feature-x")
+	run(repo, "fetch", "-q", "origin")
+	stale := run(repo, "rev-parse", "refs/remotes/origin/feature-x")
+
+	other := filepath.Join(t.TempDir(), "other")
+	run(t.TempDir(), "clone", "-q", origin, other)
+	run(other, "checkout", "-q", "feature-x")
+	run(other, "commit", "-q", "--allow-empty", "-m", "colleague's work")
+	run(other, "push", "-q", "origin", "feature-x")
+
+	fetcher := workspaces.NewOriginFetcher(gitcli.NewBranchPublisher(), gitcredentialstest.New())
+	prep := workspaces.NewBaseBranches(gitcli.NewWorktreeManager(), gitcli.NewBranchPublisher(), fetcher)
+	if err := prep.PrepareBase(context.Background(), "r1", repo, "origin/feature-x"); err != nil {
+		t.Fatal(err)
+	}
+	if got, want := run(repo, "rev-parse", "refs/remotes/origin/feature-x"), run(other, "rev-parse", "feature-x"); got != want || got == stale {
+		t.Fatalf("origin/feature-x = %s, want the colleague's tip %s (was %s)", got, want, stale)
+	}
+
+	run(other, "push", "-q", "origin", "--delete", "feature-x")
+	err := prep.PrepareBase(context.Background(), "r1", repo, "origin/feature-x")
+	if errs.Code(err) != domain.RemoteBranchNotFound {
+		t.Fatalf("err = %v, want REMOTE_BRANCH_NOT_FOUND", err)
+	}
+	if run(repo, "rev-parse", "--verify", "refs/remotes/origin/feature-x") == "" {
+		t.Fatal("the stale tracking ref was removed")
 	}
 }
