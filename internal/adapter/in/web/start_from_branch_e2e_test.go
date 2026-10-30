@@ -204,7 +204,7 @@ func TestStartingASessionFromAColleaguesBranch_EndToEnd(t *testing.T) {
 	b.run("opening the form fetches nothing: the pushed branch is not listed yet", append(sbOpenForm(w),
 		waitUntil(sbOptions+`.includes('origin/main')`),
 		waitUntil(`!`+sbOptions+`.includes('origin/feature-x')`),
-		waitUntil(`document.querySelector('[data-fetch-origin]')?.disabled === false`),
+		waitUntil(`document.querySelector("[data-fetch-origin]") !== null`),
 		bothSchemes("start-from-branch-form-opened"),
 	)...)
 	if got := w.git(w.repo, "branch", "-r"); strings.Contains(got, "feature-x") {
@@ -215,6 +215,8 @@ func TestStartingASessionFromAColleaguesBranch_EndToEnd(t *testing.T) {
 		chromedp.Evaluate(`document.querySelector('[data-fetch-origin]').focus()`, nil),
 		chromedp.KeyEvent("\r"),
 		waitUntil(sbOptions+`.includes('origin/feature-x')`),
+		// The busy button stays focusable: a keyboard user is not dropped out of the field.
+		waitUntil(`document.activeElement === document.querySelector('[data-fetch-origin]')`),
 		sbPick("origin/feature-x"),
 		waitUntil(sbHint+` === 'The session gets its own branch, cut from origin/feature-x; it is fetched from origin when the session starts.'`),
 		bothSchemes("start-from-branch-remote-base"),
