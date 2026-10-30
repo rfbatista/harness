@@ -72,7 +72,7 @@ export function summaryRowView(f, { slug, current, fresh }) {
     name: baseName(f.path),
     stat,
     note: f.binary ? "binary" : notLoaded(f) ? "not loaded" : "",
-    old: f.oldPath ? `from ${f.oldPath}` : "",
+    old: f.oldPath ?? "",
     label: `${f.path}, ${mark?.word.toLowerCase() ?? f.status}${stat ? `, ${stat.added} ${stat.deleted}` : ""}`,
   };
 }

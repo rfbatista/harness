@@ -400,7 +400,7 @@ func (v *View) buildDiff(s Seed, zones map[string]ZoneTag) {
 			row.Dir = dir + "/"
 		}
 		if f.OldPath != nil {
-			row.Old = "from " + *f.OldPath
+			row.Old = *f.OldPath
 		}
 		df := DiffFile{
 			Path: f.Path, Slug: slug, ID: "diff-" + slug, NameID: "diff-" + slug + "-name", BodyID: "diff-" + slug + "-body",
