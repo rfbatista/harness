@@ -9,9 +9,13 @@ import (
 	"operators-mcp/internal/domain"
 )
 
-// designSystemBody is a project's design system as the API answers it.
+// designSystemBody is a design system as the API answers it.
 type designSystemBody struct {
+	DesignSystemID        string                    `json:"design_system_id"`
 	ProjectID             string                    `json:"project_id"`
+	Name                  string                    `json:"name"`
+	Slug                  string                    `json:"slug"`
+	Description           string                    `json:"description"`
 	Exists                bool                      `json:"exists"`
 	Version               int                       `json:"version"`
 	UpdatedAt             *time.Time                `json:"updated_at,omitempty"`
@@ -21,7 +25,7 @@ type designSystemBody struct {
 	RunningDesignSessions int                       `json:"running_design_sessions"`
 }
 
-// designVersionBody is one entry of a project's version list.
+// designVersionBody is one entry of a design system's version list.
 type designVersionBody struct {
 	Version    int                  `json:"version"`
 	At         time.Time            `json:"at"`
@@ -44,21 +48,122 @@ func (h *Handler) handleGetDesignSystem(c echo.Context) error {
 		return err
 	}
 	var in struct {
+		DesignSystemID string `json:"design_system_id"`
+	}
+	if err := bindJSON(c, &in); err != nil {
+		return err
+	}
+	ds, err := h.designs.GetDesignSystem(c.Request().Context(), in.DesignSystemID)
+	if err != nil {
+		return err
+	}
+	return c.JSON(http.StatusOK, toDesignSystemBody(ds))
+}
+
+func toDesignSystemBody(ds *domain.DesignSystem) designSystemBody {
+	b := designSystemBody{
+		DesignSystemID: ds.ID, ProjectID: ds.ProjectID, Name: ds.Name, Slug: ds.Slug, Description: ds.Description,
+		Exists: ds.Exists, Version: ds.Version, UpdatedBy: ds.UpdatedBy, Record: ds.Record,
+	}
+	if ds.Exists {
+		at := ds.UpdatedAt
+		b.UpdatedAt = &at
+	}
+	return b
+}
+
+// designSystemRow is one entry of a project's list.
+type designSystemRow struct {
+	DesignSystemID        string    `json:"design_system_id"`
+	Name                  string    `json:"name"`
+	Slug                  string    `json:"slug"`
+	Description           string    `json:"description"`
+	CreatedAt             time.Time `json:"created_at"`
+	Version               int       `json:"version"`
+	UpdatedAt             time.Time `json:"updated_at"`
+	Repositories          []any     `json:"repositories"` // ticket 11 fills it
+	OpenProposals         int       `json:"open_proposals"`
+	RunningDesignSessions int       `json:"running_design_sessions"`
+}
+
+func (h *Handler) handleListDesignSystems(c echo.Context) error {
+	if err := h.designSystems(); err != nil {
+		return err
+	}
+	var in struct {
 		ProjectID string `json:"project_id"`
 	}
 	if err := bindJSON(c, &in); err != nil {
 		return err
 	}
-	ds, err := h.designs.GetDesignSystem(c.Request().Context(), in.ProjectID)
+	list, err := h.designs.ListDesignSystems(c.Request().Context(), in.ProjectID)
 	if err != nil {
 		return err
 	}
-	b := designSystemBody{ProjectID: ds.ProjectID, Exists: ds.Exists, Version: ds.Version, UpdatedBy: ds.UpdatedBy, Record: ds.Record}
-	if ds.Exists {
-		at := ds.UpdatedAt
-		b.UpdatedAt = &at
+	out := make([]designSystemRow, 0, len(list))
+	for _, d := range list {
+		out = append(out, designSystemRow{
+			DesignSystemID: d.ID, Name: d.Name, Slug: d.Slug, Description: d.Description, CreatedAt: d.CreatedAt,
+			Version: d.Version, UpdatedAt: d.UpdatedAt, Repositories: []any{},
+		})
 	}
-	return c.JSON(http.StatusOK, b)
+	return c.JSON(http.StatusOK, map[string]any{"design_systems": out})
+}
+
+func (h *Handler) handleCreateDesignSystem(c echo.Context) error {
+	if err := h.designSystems(); err != nil {
+		return err
+	}
+	var in struct {
+		ProjectID   string `json:"project_id"`
+		Name        string `json:"name"`
+		Slug        string `json:"slug"`
+		Description string `json:"description"`
+	}
+	if err := bindJSON(c, &in); err != nil {
+		return err
+	}
+	id, err := h.designs.CreateDesignSystem(c.Request().Context(), in.ProjectID, in.Name, in.Slug, in.Description)
+	if err != nil {
+		return err
+	}
+	return c.JSON(http.StatusOK, map[string]string{"design_system_id": id.ID})
+}
+
+func (h *Handler) handleUpdateDesignSystem(c echo.Context) error {
+	if err := h.designSystems(); err != nil {
+		return err
+	}
+	var in struct {
+		DesignSystemID string  `json:"design_system_id"`
+		Name           *string `json:"name"`
+		Description    *string `json:"description"`
+	}
+	if err := bindJSON(c, &in); err != nil {
+		return err
+	}
+	ds, err := h.designs.UpdateDesignSystem(c.Request().Context(), in.DesignSystemID, in.Name, in.Description)
+	if err != nil {
+		return err
+	}
+	return c.JSON(http.StatusOK, map[string]any{"design_system": toDesignSystemBody(ds)})
+}
+
+func (h *Handler) handleDeleteDesignSystem(c echo.Context) error {
+	if err := h.designSystems(); err != nil {
+		return err
+	}
+	var in struct {
+		DesignSystemID string `json:"design_system_id"`
+		ConfirmName    string `json:"confirm_name"`
+	}
+	if err := bindJSON(c, &in); err != nil {
+		return err
+	}
+	if err := h.designs.DeleteDesignSystem(c.Request().Context(), in.DesignSystemID, in.ConfirmName); err != nil {
+		return err
+	}
+	return c.JSON(http.StatusOK, map[string]any{})
 }
 
 func (h *Handler) handleSaveDesignSystem(c echo.Context) error {
@@ -66,10 +171,10 @@ func (h *Handler) handleSaveDesignSystem(c echo.Context) error {
 		return err
 	}
 	var in struct {
-		ProjectID   string                    `json:"project_id"`
-		BaseVersion *int                      `json:"base_version"`
-		Record      domain.DesignSystemRecord `json:"record"`
-		Message     string                    `json:"message"`
+		DesignSystemID string                    `json:"design_system_id"`
+		BaseVersion    *int                      `json:"base_version"`
+		Record         domain.DesignSystemRecord `json:"record"`
+		Message        string                    `json:"message"`
 	}
 	if err := bindJSON(c, &in); err != nil {
 		return err
@@ -77,7 +182,7 @@ func (h *Handler) handleSaveDesignSystem(c echo.Context) error {
 	if in.BaseVersion == nil {
 		return &domain.StructuredError{Code: "INVALID_INPUT", Message: "base_version is required"}
 	}
-	v, err := h.designs.SaveDesignSystem(c.Request().Context(), in.ProjectID, *in.BaseVersion, in.Record, in.Message)
+	v, err := h.designs.SaveDesignSystem(c.Request().Context(), in.DesignSystemID, *in.BaseVersion, in.Record, in.Message)
 	if err != nil {
 		return err
 	}
@@ -89,12 +194,12 @@ func (h *Handler) handleRenameDesignToken(c echo.Context) error {
 		return err
 	}
 	var in struct {
-		ProjectID   string `json:"project_id"`
-		BaseVersion *int   `json:"base_version"`
-		Group       string `json:"group"`
-		Name        string `json:"name"`
-		NewGroup    string `json:"new_group"`
-		NewName     string `json:"new_name"`
+		DesignSystemID string `json:"design_system_id"`
+		BaseVersion    *int   `json:"base_version"`
+		Group          string `json:"group"`
+		Name           string `json:"name"`
+		NewGroup       string `json:"new_group"`
+		NewName        string `json:"new_name"`
 	}
 	if err := bindJSON(c, &in); err != nil {
 		return err
@@ -102,7 +207,7 @@ func (h *Handler) handleRenameDesignToken(c echo.Context) error {
 	if in.BaseVersion == nil {
 		return &domain.StructuredError{Code: "INVALID_INPUT", Message: "base_version is required"}
 	}
-	v, err := h.designs.RenameDesignToken(c.Request().Context(), in.ProjectID, *in.BaseVersion, in.Group, in.Name, in.NewGroup, in.NewName)
+	v, err := h.designs.RenameDesignToken(c.Request().Context(), in.DesignSystemID, *in.BaseVersion, in.Group, in.Name, in.NewGroup, in.NewName)
 	if err != nil {
 		return err
 	}
@@ -114,14 +219,14 @@ func (h *Handler) handleListDesignSystemVersions(c echo.Context) error {
 		return err
 	}
 	var in struct {
-		ProjectID string `json:"project_id"`
-		Limit     int    `json:"limit"`
-		Before    int    `json:"before"`
+		DesignSystemID string `json:"design_system_id"`
+		Limit          int    `json:"limit"`
+		Before         int    `json:"before"`
 	}
 	if err := bindJSON(c, &in); err != nil {
 		return err
 	}
-	versions, err := h.designs.ListDesignSystemVersions(c.Request().Context(), in.ProjectID, in.Limit, in.Before)
+	versions, err := h.designs.ListDesignSystemVersions(c.Request().Context(), in.DesignSystemID, in.Limit, in.Before)
 	if err != nil {
 		return err
 	}
@@ -137,13 +242,13 @@ func (h *Handler) handleGetDesignSystemVersion(c echo.Context) error {
 		return err
 	}
 	var in struct {
-		ProjectID string `json:"project_id"`
-		Version   int    `json:"version"`
+		DesignSystemID string `json:"design_system_id"`
+		Version        int    `json:"version"`
 	}
 	if err := bindJSON(c, &in); err != nil {
 		return err
 	}
-	v, err := h.designs.GetDesignSystemVersion(c.Request().Context(), in.ProjectID, in.Version)
+	v, err := h.designs.GetDesignSystemVersion(c.Request().Context(), in.DesignSystemID, in.Version)
 	if err != nil {
 		return err
 	}

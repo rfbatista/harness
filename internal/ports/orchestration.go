@@ -102,8 +102,11 @@ type ProjectChange struct {
 	ArchitectureChanged *ArchitectureChange `json:"repository_architecture_changed,omitempty"`
 	// ArchitectureRuleEvent is a rule that failed in a session.
 	ArchitectureRuleEvent *ArchitectureRuleEventChange `json:"architecture_rule_event,omitempty"`
-	// DesignSystemSaved says a project's design system got a new version.
+	// DesignSystemSaved says a design system got a new version.
 	DesignSystemSaved *DesignSystemChange `json:"design_system_saved,omitempty"`
+	// DesignSystemChanged says a project's design system was created,
+	// renamed, described or deleted; clients re-read the list.
+	DesignSystemChanged *DesignSystemIdentityChange `json:"design_system_changed,omitempty"`
 	// SessionFilesRoot says a root of a session's virtual file system went away
 	// or came back; the Files view follows it.
 	SessionFilesRoot *SessionFilesRootChange `json:"session_files_root,omitempty"`
@@ -127,12 +130,20 @@ type ArchitectureChange struct {
 	ProjectID    string `json:"-"`
 }
 
-// DesignSystemChange is a project whose design system was saved: the version
-// it has now and where it came from (manual).
+// DesignSystemChange is a design system that was saved: the version it has
+// now and where it came from (manual). ProjectID routes it.
 type DesignSystemChange struct {
-	ProjectID string `json:"project_id"`
-	Version   int    `json:"version"`
-	Source    string `json:"source"`
+	ProjectID      string `json:"project_id"`
+	DesignSystemID string `json:"design_system_id"`
+	Version        int    `json:"version"`
+	Source         string `json:"source"`
+}
+
+// DesignSystemIdentityChange is a design system whose identity was created,
+// changed or deleted. ProjectID routes it.
+type DesignSystemIdentityChange struct {
+	ProjectID      string `json:"project_id"`
+	DesignSystemID string `json:"design_system_id"`
 }
 
 // GitStateChange is a git state on the feed; ProjectID routes it to the
@@ -198,6 +209,8 @@ func (c ProjectChange) ProjectID() string {
 		return c.SessionFilesRoot.ProjectID
 	case c.DesignSystemSaved != nil:
 		return c.DesignSystemSaved.ProjectID
+	case c.DesignSystemChanged != nil:
+		return c.DesignSystemChanged.ProjectID
 	}
 	return ""
 }

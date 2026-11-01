@@ -30,24 +30,45 @@ export function designSystemGateway(api, feed) {
     };
   };
 
+  // The endpoints are keyed by design system, the page by project: until the
+  // page names a design system (ticket 13 re-keys this), it works on the
+  // project's first one, made by the first save.
+  const ids = new Map();
+  const firstOf = async (projectId) => {
+    if (ids.has(projectId)) return ids.get(projectId);
+    const body = await api.post("/list_design_systems", { project_id: projectId });
+    let first = null;
+    for (const d of list(body?.design_systems)) if (!first || String(d.created_at) < String(first.created_at)) first = d;
+    if (first) ids.set(projectId, first.design_system_id);
+    return first?.design_system_id ?? "";
+  };
+  const ensure = async (projectId) => {
+    const id = await firstOf(projectId);
+    if (id) return id;
+    const body = await api.post("/create_design_system", { project_id: projectId, name: "Design system", slug: "design-system" });
+    ids.set(projectId, body.design_system_id);
+    return body.design_system_id;
+  };
+
   return {
     /** The state the server embedded in the page. */
     fromSeed: toState,
 
     async get(projectId) {
-      return toState(await api.post("/get_design_system", { project_id: projectId }));
+      const id = await firstOf(projectId);
+      return toState(id ? await api.post("/get_design_system", { design_system_id: id }) : { record: {} });
     },
 
     /** Saves the record as the next version; DESIGN_SYSTEM_CHANGED and DESIGN_SYSTEM_INVALID arrive as errors. Answers the new version. */
     async save(projectId, baseVersion, record, message) {
-      const body = await api.post("/save_design_system", { project_id: projectId, base_version: baseVersion, record, message });
+      const body = await api.post("/save_design_system", { design_system_id: await ensure(projectId), base_version: baseVersion, record, message });
       return body.version;
     },
 
     /** Renames a saved token as its own version; answers the new version. */
     async rename(projectId, baseVersion, from, to) {
       const body = await api.post("/rename_design_token", {
-        project_id: projectId,
+        design_system_id: await ensure(projectId),
         base_version: baseVersion,
         group: from.group,
         name: from.name,
@@ -59,7 +80,8 @@ export function designSystemGateway(api, feed) {
 
     /** One page of the version list, newest first; `before` is a version number, the page holds those older than it. */
     async versions(projectId, { limit, before } = {}) {
-      const body = await api.post("/list_design_system_versions", { project_id: projectId, limit, before });
+      const id = await firstOf(projectId);
+      const body = id ? await api.post("/list_design_system_versions", { design_system_id: id, limit, before }) : {};
       return list(body?.versions).map((v) => ({
         version: v.version,
         at: v.at ?? "",
@@ -73,7 +95,9 @@ export function designSystemGateway(api, feed) {
 
     /** One version with its record, read only; VERSION_NOT_FOUND arrives as an error. */
     async version(projectId, version) {
-      const body = await api.post("/get_design_system_version", { project_id: projectId, version });
+      const id = await firstOf(projectId);
+      if (!id) throw new StructuredError("VERSION_NOT_FOUND", "The design system has no version " + version + ".");
+      const body = await api.post("/get_design_system_version", { design_system_id: id, version });
       const record = body?.record;
       if (!Number.isInteger(body?.version) || typeof record !== "object" || record === null) {
         throw new StructuredError(Codes.BAD_RESPONSE, "The version came back unreadable.");

@@ -16,7 +16,7 @@ import (
 // of a project, or the empty record when it has none.
 type fakeDesignSystems map[string]*domain.DesignSystem
 
-func (f fakeDesignSystems) GetDesignSystem(_ context.Context, projectID string) (*domain.DesignSystem, error) {
+func (f fakeDesignSystems) GetProjectDesignSystem(_ context.Context, projectID string) (*domain.DesignSystem, error) {
 	if ds, ok := f[projectID]; ok {
 		return ds, nil
 	}

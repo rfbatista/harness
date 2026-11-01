@@ -45,7 +45,8 @@ func (h *Handler) handleCreateRepository(c echo.Context) error {
 	// Asked once, only on this answer: the project's design system exists, so
 	// the person is offered to opt the new repository in.
 	if h.designs != nil {
-		if ds, err := h.designs.GetDesignSystem(c.Request().Context(), in.ProjectID); err == nil && ds.Exists {
+		// ticket 11 re-keys this: the project's first design system stands in.
+		if ds, err := h.designs.GetProjectDesignSystem(c.Request().Context(), in.ProjectID); err == nil && ds.Exists {
 			out["ask_design_system"] = true
 		}
 	}

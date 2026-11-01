@@ -33,12 +33,17 @@ type designPage struct {
 	srv     *httptest.Server
 	project string
 	url     string
+	ds      string
 }
 
 // mustPost calls POST /api/<verb> for the project and answers the JSON body.
 func (p *designPage) mustPost(verb string, body map[string]any) map[string]any {
 	p.t.Helper()
-	body["project_id"] = p.project
+	if recordVerbs[verb] {
+		body["design_system_id"] = p.designSystemID()
+	} else {
+		body["project_id"] = p.project
+	}
 	raw, _ := json.Marshal(body)
 	res, err := p.srv.Client().Post(p.srv.URL+"/api/"+verb, "application/json", bytes.NewReader(raw))
 	if err != nil {
@@ -51,6 +56,22 @@ func (p *designPage) mustPost(verb string, body map[string]any) map[string]any {
 		p.t.Fatalf("%s: %d %v", verb, res.StatusCode, out)
 	}
 	return out
+}
+
+// designSystemID is the project's design system, made on first use: the page
+// works on the project's first one.
+func (p *designPage) designSystemID() string {
+	p.t.Helper()
+	if p.ds != "" {
+		return p.ds
+	}
+	list := p.mustPost("list_design_systems", map[string]any{})["design_systems"].([]any)
+	if len(list) > 0 {
+		p.ds = list[0].(map[string]any)["design_system_id"].(string)
+		return p.ds
+	}
+	p.ds = p.mustPost("create_design_system", map[string]any{"name": "Design system", "slug": "design-system"})["design_system_id"].(string)
+	return p.ds
 }
 
 func (p *designPage) get() map[string]any { return p.mustPost("get_design_system", map[string]any{}) }

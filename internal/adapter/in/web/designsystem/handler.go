@@ -78,7 +78,8 @@ func (h Handler) Page(w http.ResponseWriter, r *http.Request) error {
 		seed.Tab = tab
 	}
 	if h.Designs != nil {
-		if ds, err := h.Designs.GetDesignSystem(ctx, project.ID); err != nil {
+		// ticket 13 re-keys this: the project's first design system stands in.
+		if ds, err := h.Designs.GetProjectDesignSystem(ctx, project.ID); err != nil {
 			slog.Warn("design system page: record not read; the browser reads it", "project", project.ID, "err", err)
 		} else {
 			seed.State = &State{Exists: ds.Exists, Version: ds.Version, UpdatedBy: ds.UpdatedBy, Record: ds.Record}

@@ -37,9 +37,29 @@ func shellDesignRecord() map[string]any {
 	}
 }
 
+// designSystemID is the project's design system, made on first use: the view
+// shows the project's first one.
+func (e *shellE2E) designSystemID() string {
+	e.t.Helper()
+	var list struct {
+		DesignSystems []struct {
+			ID string `json:"design_system_id"`
+		} `json:"design_systems"`
+	}
+	e.post("list_design_systems", map[string]any{"project_id": e.project}, &list)
+	if len(list.DesignSystems) > 0 {
+		return list.DesignSystems[0].ID
+	}
+	var created struct {
+		ID string `json:"design_system_id"`
+	}
+	e.post("create_design_system", map[string]any{"project_id": e.project, "name": "Design system", "slug": "design-system"}, &created)
+	return created.ID
+}
+
 func (e *shellE2E) saveDesignSystem(base int, record map[string]any) {
 	e.t.Helper()
-	e.post("save_design_system", map[string]any{"project_id": e.project, "base_version": base, "record": record}, nil)
+	e.post("save_design_system", map[string]any{"design_system_id": e.designSystemID(), "base_version": base, "record": record}, nil)
 }
 
 func (e *shellE2E) useDesignSystem(repo string, uses bool) {
@@ -50,7 +70,7 @@ func (e *shellE2E) useDesignSystem(repo string, uses bool) {
 // designSystemDate is the day the current version was saved, as its files say it.
 func (e *shellE2E) designSystemDate() string {
 	e.t.Helper()
-	ds, err := e.cat.DesignSystems.GetDesignSystem(e.ctx, e.project)
+	ds, err := e.cat.DesignSystems.GetProjectDesignSystem(e.ctx, e.project)
 	if err != nil {
 		e.t.Fatal(err)
 	}
@@ -313,7 +333,7 @@ func TestDesignSystemView_ASaveOrARenameRefreshesARunningSessionsView(t *testing
 		t.Errorf("row = %v", row)
 	}
 
-	e.post("rename_design_token", map[string]any{"project_id": e.project, "base_version": 2, "group": "radii", "name": "md", "new_group": "radius", "new_name": "md"}, nil)
+	e.post("rename_design_token", map[string]any{"design_system_id": e.designSystemID(), "base_version": 2, "group": "radii", "name": "md", "new_group": "radius", "new_name": "md"}, nil)
 	eventually(t, "the rename in the running view", func() error {
 		if !strings.Contains(e.designFile(a, "DESIGN.md"), "radius:") || !strings.Contains(e.designFile(a, "DESIGN.md"), "version 3 · ") {
 			return os.ErrNotExist

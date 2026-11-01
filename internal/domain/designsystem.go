@@ -98,28 +98,33 @@ type DesignSummary struct {
 	Components string `json:"components"`
 }
 
-// DesignSystemVersion is one immutable version of a project's design system.
+// DesignSystemVersion is one immutable version of a design system.
 type DesignSystemVersion struct {
-	ProjectID  string
-	Version    int
-	At         time.Time
-	By         string // "person"
-	Source     string // "manual"
-	ProposalID string
-	Message    string
-	Summary    DesignSummary
-	Record     DesignSystemRecord
+	DesignSystemID string
+	Version        int
+	At             time.Time
+	By             string // "person"
+	Source         string // "manual"
+	ProposalID     string
+	Message        string
+	Summary        DesignSummary
+	Record         DesignSystemRecord
 }
 
-// DesignSystem is a project's design system as it is now: the latest version,
-// or the empty record (Exists false, version 0) when none was ever saved.
+// DesignSystem is a design system as it is now: its identity and the latest
+// version, or the empty record (Exists false, version 0) when none was ever
+// saved.
 type DesignSystem struct {
-	ProjectID string
-	Exists    bool
-	Version   int
-	UpdatedAt time.Time
-	UpdatedBy string
-	Record    DesignSystemRecord
+	ID          string
+	ProjectID   string
+	Name        string
+	Slug        string
+	Description string
+	Exists      bool
+	Version     int
+	UpdatedAt   time.Time
+	UpdatedBy   string
+	Record      DesignSystemRecord
 }
 
 var (

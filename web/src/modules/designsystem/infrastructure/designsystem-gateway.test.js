@@ -40,3 +40,32 @@ test("an answer without a repository is unreadable", async () => {
   const { gateway } = gatewayAnswering(() => jsonResponse(200, {}));
   await assert.rejects(gateway.setRepository("r1", true, ""), "BAD_RESPONSE");
 });
+
+const row = (id, created) => ({ design_system_id: id, name: id, created_at: created });
+
+test("the record is read and saved on the project's earliest design system, by its id", async () => {
+  const { gateway, calls } = gatewayAnswering((url) => {
+    if (url.endsWith("/list_design_systems")) return jsonResponse(200, { design_systems: [row("b", "2026-02-01T00:00:00Z"), row("a", "2026-03-01T00:00:00Z"), row("c", "2026-01-01T00:00:00Z")] });
+    if (url.endsWith("/save_design_system")) return jsonResponse(200, { version: 1 });
+    return jsonResponse(200, { exists: true, version: 1, record: { tokens: [], principles: "", components: [] } });
+  });
+  assert.equal((await gateway.get("p1")).version, 1);
+  assert.equal(await gateway.save("p1", 1, { tokens: [] }, "m"), 1);
+  assert.deepEqual(calls.map((c) => c.url), ["/api/list_design_systems", "/api/get_design_system", "/api/save_design_system"]);
+  assert.deepEqual(JSON.parse(calls[1].init.body), { design_system_id: "c" });
+  assert.equal(JSON.parse(calls[2].init.body).design_system_id, "c");
+});
+
+test("a project without a design system reads as empty and the first save creates one", async () => {
+  const { gateway, calls } = gatewayAnswering((url) => {
+    if (url.endsWith("/list_design_systems")) return jsonResponse(200, { design_systems: [] });
+    if (url.endsWith("/create_design_system")) return jsonResponse(200, { design_system_id: "n1" });
+    return jsonResponse(200, { version: 1 });
+  });
+  const state = await gateway.get("p1");
+  assert.equal(state.exists, false);
+  assert.deepEqual(await gateway.versions("p1"), []);
+  await gateway.save("p1", 0, { tokens: [] }, "");
+  assert.deepEqual(calls.map((c) => c.url), ["/api/list_design_systems", "/api/list_design_systems", "/api/list_design_systems", "/api/create_design_system", "/api/save_design_system"]);
+  assert.equal(JSON.parse(calls[4].init.body).design_system_id, "n1");
+});

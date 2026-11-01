@@ -399,7 +399,8 @@ type renderedDesignSystem struct {
 // current version's, made again only when the version or the project's name
 // changed.
 func (s *Service) designSystemView(ctx context.Context, b *builder, projectID string) error {
-	ds, err := s.src.DesignSystems.GetDesignSystem(ctx, projectID)
+	// ticket 12 re-keys this: the project's first design system stands in.
+	ds, err := s.src.DesignSystems.GetProjectDesignSystem(ctx, projectID)
 	if err != nil {
 		return err
 	}

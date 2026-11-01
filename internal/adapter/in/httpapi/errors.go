@@ -54,8 +54,8 @@ func errorHandler(err error, c echo.Context) {
 			"MANAGED_CLAUDE_VERSION_NOT_FOUND", "BUNDLE_NOT_FOUND",
 			// A start from a base that is no branch, or is gone from origin (ADR 0049).
 			"BASE_BRANCH_NOT_FOUND", "REMOTE_BRANCH_NOT_FOUND",
-			// A design system version that does not exist.
-			"VERSION_NOT_FOUND":
+			// A design system, or one of its versions, that does not exist.
+			"VERSION_NOT_FOUND", "DESIGN_SYSTEM_NOT_FOUND":
 			writeCoded(c, http.StatusNotFound, err, se)
 			return
 		case "INVALID_PATTERN", "INVALID_NAME", "INVALID_ROOT", "INVALID_PATH",
@@ -96,7 +96,7 @@ func errorHandler(err error, c echo.Context) {
 			"WORKSPACE_MISSING", "SESSION_TRANSCRIPT_MISSING",
 			"ARTIFACT_IN_PROJECT", "REVIEW_NOT_PENDING",
 			"ARTIFACT_NOT_IN_PROJECT", "ARTIFACT_PROJECT_MISMATCH", "ARTIFACT_PRODUCER_TASK",
-			"ARCHITECTURE_CHANGED", "DESIGN_SYSTEM_CHANGED", "ZONE_IS_LAYER", "CHECKOUT_DIRTY", "WRONG_BRANCH", "PROJECT_NAME_TAKEN", "PROJECT_HAS_RUNNING_SESSIONS", "TICKET_HAS_CHILDREN",
+			"ARCHITECTURE_CHANGED", "DESIGN_SYSTEM_CHANGED", "SLUG_TAKEN", "ZONE_IS_LAYER", "CHECKOUT_DIRTY", "WRONG_BRANCH", "PROJECT_NAME_TAKEN", "PROJECT_HAS_RUNNING_SESSIONS", "TICKET_HAS_CHILDREN",
 			"PR_NO_COMMITS", "PR_ALREADY_EXISTS", "PUSH_REJECTED", "PUSH_STALE", "TASK_NOT_DONE", "TASK_ARCHIVED", "GIT_CREDENTIAL_NAME_TAKEN", "TOKEN_SAVER_BUSY", "TOKEN_SAVER_NOT_INSTALLED",
 			// A merge refused for what the checkout or the branch is: the
 			// request is fine, the state is in the way.

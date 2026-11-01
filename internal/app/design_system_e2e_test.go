@@ -13,6 +13,7 @@ import (
 	"slices"
 	"strings"
 	"testing"
+	"time"
 
 	"go.uber.org/fx"
 
@@ -29,6 +30,7 @@ type designServer struct {
 	cat   catalog.Catalog
 	orch  *orchestration.Service
 	store ports.DesignSystemStore
+	ds    string // the design system the record helpers act on
 }
 
 func startDesignServer(t *testing.T) *designServer {
@@ -59,14 +61,32 @@ func startDesignServer(t *testing.T) *designServer {
 	}
 	s.archE2E = &archE2E{t: t, ctx: context.Background(), srv: srv, project: p.ID}
 	s.follow()
+	s.ds = s.create("main", "Main")
 	return s
+}
+
+// create makes a design system in the project and answers its id.
+func (s *designServer) create(slug, name string) string {
+	s.t.Helper()
+	return s.mustPost("create_design_system", map[string]any{"name": name, "slug": slug})["design_system_id"].(string)
+}
+
+// recordVerbs are the endpoints keyed by design_system_id; the helpers fill it
+// with the server's design system unless the test names another.
+var recordVerbs = map[string]bool{
+	"get_design_system": true, "save_design_system": true, "rename_design_token": true,
+	"list_design_system_versions": true, "get_design_system_version": true,
+	"update_design_system": true, "delete_design_system": true,
 }
 
 // post calls POST /api/<verb>, answers the status and the JSON body.
 func (s *designServer) post(verb string, body map[string]any) (int, map[string]any) {
 	s.t.Helper()
-	if _, ok := body["project_id"]; !ok {
+	if _, ok := body["project_id"]; !ok && !recordVerbs[verb] {
 		body["project_id"] = s.project
+	}
+	if _, ok := body["design_system_id"]; !ok && recordVerbs[verb] {
+		body["design_system_id"] = s.ds
 	}
 	raw, _ := json.Marshal(body)
 	res, err := http.Post(s.srv.URL+"/api/"+verb, "application/json", bytes.NewReader(raw))
@@ -175,7 +195,7 @@ func problems(t *testing.T, body map[string]any) []string {
 func TestDesignSystem_AnEmptyOneReadsAsNotExistingAndStoresNothing(t *testing.T) {
 	s := startDesignServer(t)
 	got := s.get()
-	if got["exists"] != false || got["version"] != float64(0) || got["project_id"] != s.project {
+	if got["exists"] != false || got["version"] != float64(0) || got["project_id"] != s.project || got["design_system_id"] != s.ds {
 		t.Fatalf("%v", got)
 	}
 	rec := got["record"].(map[string]any)
@@ -194,7 +214,7 @@ func TestDesignSystem_AnEmptyOneReadsAsNotExistingAndStoresNothing(t *testing.T)
 	if v := s.mustPost("list_design_system_versions", map[string]any{})["versions"]; len(v.([]any)) != 0 {
 		t.Errorf("versions = %v", v)
 	}
-	if stored, err := s.store.Latest(context.Background(), s.project); err != nil || stored != nil {
+	if stored, err := s.store.Latest(context.Background(), s.ds); err != nil || stored != nil {
 		t.Errorf("reading stored %v, %v", stored, err)
 	}
 }
@@ -401,46 +421,54 @@ func TestDesignSystem_AVersionReadsAsItWasSavedAndUnknownOnesAreRefused(t *testi
 		t.Errorf("unknown version: %d %v", status, body)
 	}
 	for _, verb := range []string{"get_design_system", "save_design_system", "list_design_system_versions", "get_design_system_version", "rename_design_token"} {
-		status, body := s.post(verb, map[string]any{"project_id": "nope", "version": 1, "base_version": 0, "record": dsRecord()})
-		if status != http.StatusNotFound || body["code"] != "PROJECT_NOT_FOUND" {
-			t.Errorf("%s on an unknown project: %d %v", verb, status, body)
+		status, body := s.post(verb, map[string]any{"design_system_id": "nope", "version": 1, "base_version": 0, "record": dsRecord()})
+		if status != http.StatusNotFound || body["code"] != "DESIGN_SYSTEM_NOT_FOUND" {
+			t.Errorf("%s on an unknown design system: %d %v", verb, status, body)
 		}
 	}
 }
 
-func TestDesignSystem_SavesAndRenamesAreOnTheProjectFeed(t *testing.T) {
+func TestDesignSystem_SavesAndRenamesAreOnTheProjectFeedWithTheirDesignSystem(t *testing.T) {
 	s := startDesignServer(t)
 	s.mustSave(0, dsRecord())
-	s.sawOnFeed("design_system_saved", `"project_id":"`+s.project+`"`, `"version":1`, `"source":"manual"`)
+	s.sawOnFeed("design_system_saved", `"project_id":"`+s.project+`"`, `"design_system_id":"`+s.ds+`"`, `"version":1`, `"source":"manual"`)
 	if status, out := s.rename(1, "colors", "signal", "colors", "accent"); status != http.StatusOK {
 		t.Fatalf("%d %v", status, out)
 	}
-	s.sawOnFeed("design_system_saved", `"project_id":"`+s.project+`"`, `"version":2`, `"source":"manual"`)
+	s.sawOnFeed("design_system_saved", `"project_id":"`+s.project+`"`, `"design_system_id":"`+s.ds+`"`, `"version":2`, `"source":"manual"`)
 }
 
-func TestDesignSystem_DeletingTheProjectDeletesItsDesignSystemAndVersions(t *testing.T) {
+func TestDesignSystem_DeletingTheProjectDeletesItsDesignSystemsAndTheirVersions(t *testing.T) {
 	s := startDesignServer(t)
 	s.mustSave(0, dsRecord())
 	s.mustSave(1, dsRecord(buttonComponent()))
+	second := s.create("docs", "Docs")
+	s.mustPost("save_design_system", map[string]any{"design_system_id": second, "base_version": 0, "record": dsRecord()})
 	other, err := s.cat.Projects.CreateProject(s.ctx, "gadgets", t.TempDir())
 	if err != nil {
 		t.Fatal(err)
 	}
-	s.mustPost("save_design_system", map[string]any{"project_id": other.ID, "base_version": 0, "record": dsRecord()})
+	kept := s.mustPost("create_design_system", map[string]any{"project_id": other.ID, "name": "Main", "slug": "main"})["design_system_id"].(string)
+	s.mustPost("save_design_system", map[string]any{"design_system_id": kept, "base_version": 0, "record": dsRecord()})
 
 	if status, out := s.post("delete_project", map[string]any{"project_id": s.project}); status >= 300 {
 		t.Fatalf("delete_project: %d %v", status, out)
 	}
 
-	if stored, err := s.store.Latest(s.ctx, s.project); err != nil || stored != nil {
-		t.Errorf("the design system outlived its project: %v, %v", stored, err)
+	for _, id := range []string{s.ds, second} {
+		if stored, err := s.store.Latest(s.ctx, id); err != nil || stored != nil {
+			t.Errorf("a version of %s outlived its project: %v, %v", id, stored, err)
+		}
+		if status, body := s.post("get_design_system", map[string]any{"design_system_id": id}); status != http.StatusNotFound || body["code"] != "DESIGN_SYSTEM_NOT_FOUND" {
+			t.Errorf("%s outlived its project: %d %v", id, status, body)
+		}
 	}
 	for v := 1; v <= 2; v++ {
-		if got, err := s.store.Get(s.ctx, s.project, v); err != nil || got != nil {
+		if got, err := s.store.Get(s.ctx, s.ds, v); err != nil || got != nil {
 			t.Errorf("version %d outlived its project: %v, %v", v, got, err)
 		}
 	}
-	if got := s.mustPost("get_design_system", map[string]any{"project_id": other.ID}); got["version"] != float64(1) {
+	if got := s.mustPost("get_design_system", map[string]any{"design_system_id": kept}); got["version"] != float64(1) {
 		t.Errorf("another project's design system changed: %v", got)
 	}
 }
@@ -541,4 +569,271 @@ func TestDesignSystem_ARenameRewritesEveryPreviewReferenceIncludingCompositeKeys
 	if got := s.get(); got["version"] != float64(4) {
 		t.Errorf("version = %v, want one version per rename", got["version"])
 	}
+}
+
+func (s *designServer) list() []map[string]any {
+	s.t.Helper()
+	var out []map[string]any
+	for _, d := range s.mustPost("list_design_systems", map[string]any{})["design_systems"].([]any) {
+		out = append(out, d.(map[string]any))
+	}
+	return out
+}
+
+func TestDesignSystem_CreatingStoresOnlyTheIdentityAndTheListIsOrderedByName(t *testing.T) {
+	s := startDesignServer(t)
+	zed := s.mustPost("create_design_system", map[string]any{"name": "Zed", "slug": "zed", "description": "The last one."})["design_system_id"].(string)
+	acme := s.create("acme", "acme")
+
+	if zed == "" || acme == "" || zed == acme {
+		t.Fatalf("ids %q %q", zed, acme)
+	}
+	list := s.list()
+	var names []string
+	for _, d := range list {
+		names = append(names, d["name"].(string))
+	}
+	if !slices.Equal(names, []string{"acme", "Main", "Zed"}) {
+		t.Fatalf("names = %v, want ordered by name", names)
+	}
+	row := list[2]
+	if row["design_system_id"] != zed || row["slug"] != "zed" || row["description"] != "The last one." || row["version"] != float64(0) || row["updated_at"] == nil || row["updated_at"] == "" {
+		t.Errorf("%v", row)
+	}
+	if repos, ok := row["repositories"].([]any); !ok || len(repos) != 0 || row["open_proposals"] != float64(0) || row["running_design_sessions"] != float64(0) {
+		t.Errorf("%v", row)
+	}
+	if v := s.mustPost("list_design_system_versions", map[string]any{"design_system_id": zed})["versions"]; len(v.([]any)) != 0 {
+		t.Errorf("creating wrote a history entry: %v", v)
+	}
+	if stored, err := s.store.Latest(s.ctx, zed); err != nil || stored != nil {
+		t.Errorf("creating stored a version: %v, %v", stored, err)
+	}
+	got := s.mustPost("get_design_system", map[string]any{"design_system_id": zed})
+	if got["exists"] != false || got["version"] != float64(0) || got["name"] != "Zed" || got["slug"] != "zed" || got["description"] != "The last one." || got["project_id"] != s.project {
+		t.Errorf("%v", got)
+	}
+	if v := s.mustSave(0, dsRecord()); v != 1 {
+		t.Errorf("first save of %s = %d, want 1", s.ds, v)
+	}
+	if list = s.list(); list[1]["version"] != float64(1) {
+		t.Errorf("the list does not show the saved version: %v", list[1])
+	}
+}
+
+func TestDesignSystem_ADuplicateSlugOrNameIsSlugTakenNamingTheField(t *testing.T) {
+	s := startDesignServer(t)
+	for _, tc := range []struct {
+		name, slug, field string
+	}{
+		{"Another", "main", "slug"},
+		{"Main", "other", "name"},
+		{" main ", "other", "name"},
+	} {
+		status, out := s.post("create_design_system", map[string]any{"name": tc.name, "slug": tc.slug})
+		if status != http.StatusConflict || out["code"] != "SLUG_TAKEN" || out["details"].(map[string]any)["field"] != tc.field {
+			t.Errorf("%+v: %d %v", tc, status, out)
+		}
+	}
+	if n := len(s.list()); n != 1 {
+		t.Errorf("a refused create stored one: %d design systems", n)
+	}
+	// Another project may reuse the slug and the name.
+	other, err := s.cat.Projects.CreateProject(s.ctx, "gadgets", t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if status, out := s.post("create_design_system", map[string]any{"project_id": other.ID, "name": "Main", "slug": "main"}); status != http.StatusOK {
+		t.Errorf("same slug in another project: %d %v", status, out)
+	}
+}
+
+func TestDesignSystem_ABadSlugOrNameIsRefusedAsInvalid(t *testing.T) {
+	s := startDesignServer(t)
+	for _, tc := range []struct {
+		name, slug, want string
+	}{
+		{"Fine", "Bad Slug", "BAD_NAME /slug"},
+		{"Fine", "1abc", "BAD_NAME /slug"},
+		{"Fine", "", "BAD_NAME /slug"},
+		{"", "fine", "BAD_NAME /name"},
+		{"   ", "fine", "BAD_NAME /name"},
+		{strings.Repeat("n", 61), "fine", "BAD_NAME /name"},
+	} {
+		status, out := s.post("create_design_system", map[string]any{"name": tc.name, "slug": tc.slug})
+		if status != http.StatusBadRequest || out["code"] != "DESIGN_SYSTEM_INVALID" || !slices.Contains(problems(t, out), tc.want) {
+			t.Errorf("%+v: %d %v", tc, status, out)
+		}
+	}
+	if status, out := s.post("create_design_system", map[string]any{"name": strings.Repeat("n", 60), "slug": "long-name"}); status != http.StatusOK {
+		t.Errorf("a 60 character name: %d %v", status, out)
+	}
+	if status, out := s.post("create_design_system", map[string]any{"project_id": "nope", "name": "x", "slug": "x"}); status != http.StatusNotFound || out["code"] != "PROJECT_NOT_FOUND" {
+		t.Errorf("unknown project: %d %v", status, out)
+	}
+	if status, out := s.post("list_design_systems", map[string]any{"project_id": "nope"}); status != http.StatusNotFound || out["code"] != "PROJECT_NOT_FOUND" {
+		t.Errorf("list on an unknown project: %d %v", status, out)
+	}
+}
+
+func TestDesignSystem_UpdatingRenamesAndDescribesButNeverChangesTheSlug(t *testing.T) {
+	s := startDesignServer(t)
+	other := s.create("other", "Other")
+
+	out := s.mustPost("update_design_system", map[string]any{"name": "Primary", "description": "The brand.", "slug": "changed"})
+	ds := out["design_system"].(map[string]any)
+	if ds["design_system_id"] != s.ds || ds["name"] != "Primary" || ds["description"] != "The brand." || ds["slug"] != "main" {
+		t.Fatalf("%v", out)
+	}
+	got := s.get()
+	if got["name"] != "Primary" || got["description"] != "The brand." || got["slug"] != "main" {
+		t.Errorf("%v", got)
+	}
+	// Only the fields sent change.
+	ds = s.mustPost("update_design_system", map[string]any{"description": "Calmer."})["design_system"].(map[string]any)
+	if ds["name"] != "Primary" || ds["description"] != "Calmer." {
+		t.Errorf("%v", ds)
+	}
+	// Keeping its own name is no clash.
+	if status, body := s.post("update_design_system", map[string]any{"name": "primary"}); status != http.StatusOK {
+		t.Errorf("own name: %d %v", status, body)
+	}
+	status, body := s.post("update_design_system", map[string]any{"name": "Other"})
+	if status != http.StatusConflict || body["code"] != "SLUG_TAKEN" || body["details"].(map[string]any)["field"] != "name" {
+		t.Errorf("duplicate name: %d %v", status, body)
+	}
+	status, body = s.post("update_design_system", map[string]any{"name": strings.Repeat("n", 61)})
+	if status != http.StatusBadRequest || body["code"] != "DESIGN_SYSTEM_INVALID" {
+		t.Errorf("long name: %d %v", status, body)
+	}
+	if status, body = s.post("update_design_system", map[string]any{"design_system_id": "nope", "name": "x"}); status != http.StatusNotFound || body["code"] != "DESIGN_SYSTEM_NOT_FOUND" {
+		t.Errorf("unknown: %d %v", status, body)
+	}
+	if got := s.mustPost("get_design_system", map[string]any{"design_system_id": other}); got["name"] != "Other" {
+		t.Errorf("another design system changed: %v", got)
+	}
+	s.mustSave(0, dsRecord())
+	s.mustPost("update_design_system", map[string]any{"name": "Renamed"})
+	if got := s.get(); got["version"] != float64(1) {
+		t.Errorf("an identity change wrote a version: %v", got["version"])
+	}
+}
+
+func TestDesignSystem_TwoDesignSystemsOfOneProjectNeverLeakIntoEachOther(t *testing.T) {
+	s := startDesignServer(t)
+	a, b := s.ds, s.create("second", "Second")
+	withB := func(body map[string]any) map[string]any {
+		body["design_system_id"] = b
+		return body
+	}
+
+	s.mustSave(0, dsRecord(buttonComponent()))
+	s.mustSave(1, dsRecord(buttonComponent()))
+	recB := dsRecord()
+	recB["tokens"] = []any{dsToken("colors", "ink", "color", "black")}
+	recB["principles"] = "# Principles\n\n## Bold\n\nLoud.\n"
+	s.mustPost("save_design_system", withB(map[string]any{"base_version": 0, "record": recB}))
+
+	gotA, gotB := s.get(), s.mustPost("get_design_system", withB(map[string]any{}))
+	if gotA["version"] != float64(2) || gotB["version"] != float64(1) {
+		t.Fatalf("versions %v %v", gotA["version"], gotB["version"])
+	}
+	tokensB := gotB["record"].(map[string]any)["tokens"].([]any)
+	if len(tokensB) != 1 || tokensB[0].(map[string]any)["name"] != "ink" || len(gotB["record"].(map[string]any)["components"].([]any)) != 0 {
+		t.Errorf("B holds %v", gotB["record"])
+	}
+	if len(gotA["record"].(map[string]any)["tokens"].([]any)) != 4 || gotA["record"].(map[string]any)["principles"] == recB["principles"] {
+		t.Errorf("A holds %v", gotA["record"])
+	}
+	if n := len(s.mustPost("list_design_system_versions", withB(map[string]any{}))["versions"].([]any)); n != 1 {
+		t.Errorf("B lists %d versions", n)
+	}
+	if n := len(s.mustPost("list_design_system_versions", map[string]any{})["versions"].([]any)); n != 2 {
+		t.Errorf("A lists %d versions", n)
+	}
+	if status, body := s.post("get_design_system_version", withB(map[string]any{"version": 2})); status != http.StatusNotFound || body["code"] != "VERSION_NOT_FOUND" {
+		t.Errorf("B has no version 2: %d %v", status, body)
+	}
+	// B's stale base is B's own count, and a rename in B touches only B.
+	if status, body := s.post("save_design_system", withB(map[string]any{"base_version": 2, "record": recB})); status != http.StatusConflict || body["details"].(map[string]any)["current_version"] != float64(1) {
+		t.Errorf("%d %v", status, body)
+	}
+	if status, body := s.post("rename_design_token", withB(map[string]any{"base_version": 1, "group": "colors", "name": "ink", "new_group": "colors", "new_name": "dark"})); status != http.StatusOK || body["version"] != float64(2) {
+		t.Errorf("%d %v", status, body)
+	}
+	if status, body := s.rename(2, "colors", "ink", "colors", "x"); status != http.StatusBadRequest {
+		t.Errorf("A has no ink token: %d %v", status, body)
+	}
+	s.sawOnFeed("design_system_saved", `"design_system_id":"`+b+`"`, `"version":2`)
+	s.sawOnFeed("design_system_saved", `"design_system_id":"`+a+`"`, `"version":2`)
+}
+
+func (s *designServer) feedSnapshot() []map[string]json.RawMessage {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return slices.Clone(s.feed)
+}
+
+func TestDesignSystem_DeletingNeedsTheNameAndRemovesTheDesignSystemAndItsVersions(t *testing.T) {
+	s := startDesignServer(t)
+	keep := s.create("keep", "Keep")
+	s.mustPost("save_design_system", map[string]any{"design_system_id": keep, "base_version": 0, "record": dsRecord()})
+	s.mustSave(0, dsRecord())
+	s.mustSave(1, dsRecord(buttonComponent()))
+
+	for _, confirm := range []string{"", "Mai", "Main please"} {
+		status, out := s.post("delete_design_system", map[string]any{"confirm_name": confirm})
+		if status != http.StatusBadRequest || out["code"] != "INVALID_INPUT" || out["error"] == "" {
+			t.Errorf("confirm %q: %d %v", confirm, status, out)
+		}
+	}
+	if got := s.get(); got["version"] != float64(2) {
+		t.Fatalf("a refused delete removed something: %v", got)
+	}
+
+	out := s.mustPost("delete_design_system", map[string]any{"confirm_name": "Main"})
+	if len(out) != 0 {
+		t.Errorf("answer = %v, want {}", out)
+	}
+	s.sawOnFeed("design_system_changed", `"project_id":"`+s.project+`"`, `"design_system_id":"`+s.ds+`"`)
+	if status, body := s.post("get_design_system", map[string]any{}); status != http.StatusNotFound || body["code"] != "DESIGN_SYSTEM_NOT_FOUND" {
+		t.Errorf("after delete: %d %v", status, body)
+	}
+	for v := 1; v <= 2; v++ {
+		if got, err := s.store.Get(s.ctx, s.ds, v); err != nil || got != nil {
+			t.Errorf("version %d outlived its design system: %v, %v", v, got, err)
+		}
+	}
+	if status, body := s.post("delete_design_system", map[string]any{"confirm_name": "Main"}); status != http.StatusNotFound || body["code"] != "DESIGN_SYSTEM_NOT_FOUND" {
+		t.Errorf("deleting twice: %d %v", status, body)
+	}
+	list := s.list()
+	if len(list) != 1 || list[0]["design_system_id"] != keep || list[0]["version"] != float64(1) {
+		t.Errorf("the other design system changed: %v", list)
+	}
+	// The slug and the name are free again.
+	s.create("main", "Main")
+}
+
+func TestDesignSystem_CreatingUpdatingAndDeletingAreOnTheProjectFeed(t *testing.T) {
+	s := startDesignServer(t)
+	s.sawOnFeed("design_system_changed", `"project_id":"`+s.project+`"`, `"design_system_id":"`+s.ds+`"`)
+	id := s.create("feed", "Feed")
+	s.sawOnFeed("design_system_changed", `"design_system_id":"`+id+`"`)
+	s.mustPost("update_design_system", map[string]any{"design_system_id": id, "description": "x"})
+	s.mustPost("delete_design_system", map[string]any{"design_system_id": id, "confirm_name": "Feed"})
+	deadline := time.Now().Add(5 * time.Second)
+	for time.Now().Before(deadline) {
+		n := 0
+		for _, c := range s.feedSnapshot() {
+			if raw, ok := c["design_system_changed"]; ok && strings.Contains(string(raw), id) {
+				n++
+			}
+		}
+		if n == 3 {
+			return
+		}
+		time.Sleep(20 * time.Millisecond)
+	}
+	t.Fatal("create, update and delete of a design system were not each announced")
 }

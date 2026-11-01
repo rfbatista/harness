@@ -346,7 +346,11 @@ func NewRouter(h *Handler, opts ...Option) *echo.Echo {
 	g.POST("/discover_repository_architecture", h.handleDiscoverRepositoryArchitecture)
 	g.GET("/architecture.schema.json", h.handleArchitectureSchema)
 
-	// design system: one structured record per project, kept as versions
+	// design systems: a project holds many, each one structured record kept as versions
+	g.POST("/list_design_systems", h.handleListDesignSystems)
+	g.POST("/create_design_system", h.handleCreateDesignSystem)
+	g.POST("/update_design_system", h.handleUpdateDesignSystem)
+	g.POST("/delete_design_system", h.handleDeleteDesignSystem)
 	g.POST("/get_design_system", h.handleGetDesignSystem)
 	g.POST("/save_design_system", h.handleSaveDesignSystem)
 	g.POST("/rename_design_token", h.handleRenameDesignToken)
