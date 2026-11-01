@@ -41,7 +41,62 @@ func (h *Handler) handleCreateRepository(c echo.Context) error {
 	if err != nil {
 		return err
 	}
+	out := map[string]any{"repository": repo}
+	// Asked once, only on this answer: the project's design system exists, so
+	// the person is offered to opt the new repository in.
+	if h.designs != nil {
+		if ds, err := h.designs.GetDesignSystem(c.Request().Context(), in.ProjectID); err == nil && ds.Exists {
+			out["ask_design_system"] = true
+		}
+	}
+	return c.JSON(http.StatusOK, out)
+}
+
+func (h *Handler) handleSetRepositoryDesignSystem(c echo.Context) error {
+	var in struct {
+		RepositoryID     string `json:"repository_id"`
+		UsesDesignSystem bool   `json:"uses_design_system"`
+		Path             string `json:"path"`
+	}
+	if err := bindJSON(c, &in); err != nil {
+		return err
+	}
+	repo, err := h.projects.SetRepositoryDesignSystem(c.Request().Context(), in.RepositoryID, in.UsesDesignSystem, in.Path)
+	if err != nil {
+		return err
+	}
 	return c.JSON(http.StatusOK, map[string]any{"repository": repo})
+}
+
+// handleListDesignSystemRepositories lists a project's repositories with
+// their opt-in. The export state arrives with the export (null until then).
+func (h *Handler) handleListDesignSystemRepositories(c echo.Context) error {
+	var in struct {
+		ProjectID string `json:"project_id"`
+	}
+	if err := bindJSON(c, &in); err != nil {
+		return err
+	}
+	ctx := c.Request().Context()
+	if _, err := h.projects.GetProject(ctx, in.ProjectID); err != nil {
+		return err
+	}
+	repos, err := h.projects.ListRepositories(ctx, in.ProjectID)
+	if err != nil {
+		return err
+	}
+	type row struct {
+		RepositoryID     string `json:"repository_id"`
+		Name             string `json:"name"`
+		UsesDesignSystem bool   `json:"uses_design_system"`
+		Path             string `json:"path"`
+		Export           any    `json:"export"`
+	}
+	out := make([]row, 0, len(repos))
+	for _, r := range repos {
+		out = append(out, row{RepositoryID: r.ID, Name: r.DisplayName(), UsesDesignSystem: r.UsesDesignSystem, Path: r.DesignSystemPath})
+	}
+	return c.JSON(http.StatusOK, map[string]any{"repositories": out})
 }
 
 func (h *Handler) handleUpdateRepository(c echo.Context) error {

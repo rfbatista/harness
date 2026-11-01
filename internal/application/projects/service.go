@@ -626,6 +626,24 @@ func (s *Service) ImportEnvFile(ctx context.Context, repositoryID, path string) 
 	return s.SaveEnvFile(ctx, repositoryID, clean, string(b))
 }
 
+// SetRepositoryDesignSystem opts a repository in or out of the project design
+// system. An empty path keeps the one stored (the default for a repository
+// that never set one); opting out leaves it in place.
+func (s *Service) SetRepositoryDesignSystem(ctx context.Context, repositoryID string, uses bool, path string) (*domain.Repository, error) {
+	repo, err := s.GetRepository(ctx, repositoryID)
+	if err != nil {
+		return nil, err
+	}
+	if path == "" {
+		path = repo.DesignSystemPath
+	}
+	path, err = domain.CleanDesignSystemPath(path)
+	if err != nil {
+		return nil, err
+	}
+	return s.saved(ctx)(s.repositories.SetDesignSystem(repositoryID, uses, path))
+}
+
 // AddRepositoryIgnoredPath adds a path to a repository's ignored list.
 func (s *Service) AddRepositoryIgnoredPath(_ context.Context, repositoryID, path string) (*domain.Repository, error) {
 	if s.repositories == nil {

@@ -509,3 +509,7 @@ func (f *Fake) launch(s *domain.Session, resume bool) ports.AgentSpec {
 	}
 	return ports.AgentSpec{SessionID: s.ID, Conversation: ports.Conversation{ID: s.ClaudeSessionID, Resume: resume}}
 }
+
+func (f *Fake) SetRepositoryDesignSystem(context.Context, string, bool, string) (*domain.Repository, error) {
+	return nil, errReadOnly
+}

@@ -233,6 +233,10 @@ type RepositoryModel struct {
 	URL          string      `gorm:"column:url"`
 	RootDir      string      `gorm:"column:root_dir"`
 	IgnoredPaths stringSlice `gorm:"column:ignored_paths"`
+	// UsesDesignSystem and DesignSystemPath are the repository's opt-in to
+	// the project design system; an empty path reads as the default.
+	UsesDesignSystem bool   `gorm:"column:uses_design_system"`
+	DesignSystemPath string `gorm:"column:design_system_path"`
 }
 
 // TableName overrides the table name.
@@ -270,14 +274,20 @@ func (m *RepositoryModel) ToDomain() *domain.Repository {
 	if paths == nil {
 		paths = []string{}
 	}
+	dsPath := m.DesignSystemPath
+	if dsPath == "" {
+		dsPath = domain.DefaultDesignSystemPath
+	}
 	return &domain.Repository{
-		ID:           m.ID,
-		ProjectID:    m.ProjectID,
-		Name:         m.Name,
-		Description:  m.Description,
-		URL:          m.URL,
-		RootDir:      m.RootDir,
-		IgnoredPaths: paths,
+		ID:               m.ID,
+		ProjectID:        m.ProjectID,
+		Name:             m.Name,
+		Description:      m.Description,
+		URL:              m.URL,
+		RootDir:          m.RootDir,
+		IgnoredPaths:     paths,
+		UsesDesignSystem: m.UsesDesignSystem,
+		DesignSystemPath: dsPath,
 	}
 }
 

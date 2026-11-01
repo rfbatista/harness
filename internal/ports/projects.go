@@ -141,6 +141,12 @@ type RepositoryCatalog interface {
 	DeleteRepository(ctx context.Context, id string) error
 	AddRepositoryIgnoredPath(ctx context.Context, repositoryID, path string) (*domain.Repository, error)
 	RemoveRepositoryIgnoredPath(ctx context.Context, repositoryID, path string) (*domain.Repository, error)
+	// SetRepositoryDesignSystem opts a repository in or out of the project
+	// design system and sets its export path (empty: the default, or the
+	// stored one when it already has one). A path that is not relative, does
+	// not end in "/" or leaves the repository is INVALID_INPUT. It never
+	// writes to the checkout.
+	SetRepositoryDesignSystem(ctx context.Context, repositoryID string, uses bool, path string) (*domain.Repository, error)
 }
 
 // ProjectReader is what other contexts read about projects.

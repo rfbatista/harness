@@ -100,6 +100,22 @@ func (r *RepositoryRepository) Update(id, name, description, url, rootDir string
 	return m.ToDomain(), nil
 }
 
+// SetDesignSystem stores the repository's opt-in and export path.
+func (r *RepositoryRepository) SetDesignSystem(id string, uses bool, path string) (*domain.Repository, error) {
+	var m RepositoryModel
+	if err := r.db.First(&m, "id = ?", id).Error; err != nil {
+		if err == gorm.ErrRecordNotFound {
+			return nil, &domain.StructuredError{Code: "REPOSITORY_NOT_FOUND", Message: "repository not found"}
+		}
+		return nil, err
+	}
+	m.UsesDesignSystem, m.DesignSystemPath = uses, path
+	if err := r.db.Model(&m).Updates(map[string]any{"uses_design_system": uses, "design_system_path": path}).Error; err != nil {
+		return nil, err
+	}
+	return m.ToDomain(), nil
+}
+
 // DeleteByProject deletes all repositories for the given project.
 func (r *RepositoryRepository) DeleteByProject(projectID string) error {
 	return r.db.Where("project_id = ?", projectID).Delete(&RepositoryModel{}).Error

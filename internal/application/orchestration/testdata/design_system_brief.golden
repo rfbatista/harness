@@ -1,0 +1,3 @@
+## Design system
+
+This repository uses the project design system. Read `project/design-system/README.md` in your virtual shell before you build or change UI. Use its tokens as CSS custom properties or through this repository's own token build, never raw values. The files are read-only: if the design system lacks something, say so in a comment or in your spec.
