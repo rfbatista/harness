@@ -161,7 +161,7 @@ func (b *builder) documents(ctx context.Context, tickets ports.TicketReader, src
 		b.docs("task/docs/", domain.DocumentScopeTask, taskScoped(src.ListTicketDocuments(ctx, tk.ID)))
 	}
 	b.docs("project/docs/", domain.DocumentScopeProject, src.ListDocuments(projectID, domain.DocumentScopeProject))
-	others, err := tickets.ListTickets(ctx, projectID, ports.TicketFilter{})
+	others, err := tickets.ListTickets(ctx, projectID, ports.TicketFilter{ExcludeArchived: true})
 	if err != nil {
 		return err
 	}

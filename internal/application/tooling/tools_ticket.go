@@ -25,7 +25,7 @@ func TicketTools(planningSvc interface {
 				}
 				// A present parent_id filters, even when "" (the top-level
 				// tickets), as over HTTP; an absent or null one lists every ticket.
-				var filter ports.TicketFilter
+				filter := ports.TicketFilter{ExcludeArchived: true}
 				if v, ok := args["parent_id"]; ok && v != nil {
 					parentID := getString(args, "parent_id", "")
 					filter.ParentID = &parentID

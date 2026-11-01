@@ -370,7 +370,7 @@ func TestAnArchivedChildStillCountsForItsFeature(t *testing.T) {
 	if got, _ := f.svc.GetTicket(ctx, feature.ID); got.ChildrenCount != 1 {
 		t.Fatalf("feature children = %d, want the archived child counted", got.ChildrenCount)
 	}
-	list, _ := f.svc.ListTickets(ctx, f.pid, ports.TicketFilter{})
+	list, _ := f.svc.ListTickets(ctx, f.pid, ports.TicketFilter{ExcludeArchived: true})
 	if len(list) != 1 || list[0].ID != feature.ID || list[0].ChildrenCount != 1 {
 		t.Fatalf("list = %+v, want the feature alone, counting its archived child", list)
 	}

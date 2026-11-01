@@ -44,6 +44,9 @@ func (p *Planning) ListTickets(ctx context.Context, projectID string, filter por
 	if filter.ParentID != nil {
 		q.Set("parent_id", *filter.ParentID)
 	}
+	if filter.ExcludeArchived {
+		q.Set("exclude_archived", "true")
+	}
 	return out.Tickets, p.c.get(ctx, "/api/list_tickets", q, &out)
 }
 

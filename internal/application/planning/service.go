@@ -213,10 +213,24 @@ func (s *Service) GetTicket(ctx context.Context, id string) (*domain.Ticket, err
 	return tk, nil
 }
 
-// ListTickets lists a project's tickets that are not archived.
+// ListTickets lists a project's tickets that are not archived, and the
+// children archived on their own while their feature is not (see
+// ports.TicketFilter).
 func (s *Service) ListTickets(ctx context.Context, projectID string, filter ports.TicketFilter) ([]*domain.Ticket, error) {
 	tickets := s.tickets.ListByProject(ctx, projectID)
-	countChildren(append(tickets, s.tickets.ListArchivedByProject(ctx, projectID)...), tickets...)
+	archived := s.tickets.ListArchivedByProject(ctx, projectID)
+	countChildren(append(slices.Clone(tickets), archived...), tickets...)
+	if !filter.ExcludeArchived {
+		onBoard := make(map[string]bool, len(tickets))
+		for _, tk := range tickets {
+			onBoard[tk.ID] = true
+		}
+		for _, tk := range archived {
+			if tk.IsChild() && onBoard[tk.ParentID] {
+				tickets = append(tickets, tk)
+			}
+		}
+	}
 	if filter.ParentID != nil {
 		tickets = slices.DeleteFunc(tickets, func(tk *domain.Ticket) bool { return tk.ParentID != *filter.ParentID })
 	}

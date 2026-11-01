@@ -62,9 +62,13 @@ type DocumentRepository interface {
 // TicketFilter narrows ListTickets within a project. The zero value lists
 // every ticket of the project, children included. A non-nil ParentID lists
 // the children of that ticket only; pointing it at "" lists the top-level
-// tickets.
+// tickets. Besides the unarchived tickets, the list carries a child archived
+// on its own while its feature is not archived, with ArchivedAt set: the
+// feature's card on the board shows it as archived. ExcludeArchived leaves
+// those out, for a reader that wants only what is on the board.
 type TicketFilter struct {
-	ParentID *string
+	ParentID        *string
+	ExcludeArchived bool
 }
 
 // TicketReader reads a project's tickets: what a page that only shows tasks

@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"slices"
 	"strings"
 	"testing"
 )
@@ -290,5 +291,61 @@ func TestHTTP_ArchiveAllLeavesADoneChildOfAFeatureOnTheBoardAlone(t *testing.T) 
 	}
 	if ticketOf(t, h, children[0])["archived_at"] != nil {
 		t.Error("the child was archived")
+	}
+}
+
+func TestHTTP_TheTaskListKeepsAChildArchivedOnItsOwnWithItsFeature(t *testing.T) {
+	h, pid := newPlanningHandler(t)
+	feature, children := featureWithChildren(t, h, pid, "in_progress", "done", "done")
+	if code, out := postTicket(t, h, "/api/archive_ticket", map[string]any{"id": children[0]}); code != http.StatusOK {
+		t.Fatalf("archive child = %d %v", code, out)
+	}
+
+	got := listTicketIDs(t, h, pid, "")
+	if len(got) != 3 || !slices.Contains(got, feature) || !slices.Contains(got, children[0]) || !slices.Contains(got, children[1]) {
+		t.Fatalf("task list = %v, want the feature and both children", got)
+	}
+	rec := getJSON(t, h, "/list_tickets?project_id="+pid)
+	var out struct {
+		Tickets []map[string]any `json:"tickets"`
+	}
+	if err := json.Unmarshal(rec.Body.Bytes(), &out); err != nil {
+		t.Fatal(err)
+	}
+	for _, tk := range out.Tickets {
+		wantArchived := tk["id"] == children[0]
+		if (tk["archived_at"] != nil) != wantArchived {
+			t.Errorf("%v archived_at = %v", tk["id"], tk["archived_at"])
+		}
+		if tk["id"] == feature && tk["children_count"] != float64(2) {
+			t.Errorf("children_count = %v", tk["children_count"])
+		}
+	}
+	if arch := listTicketIDs(t, h, pid, "&archived=true"); len(arch) != 1 || arch[0] != children[0] {
+		t.Errorf("archived list = %v", arch)
+	}
+}
+
+func TestHTTP_TheTaskListDropsAFeatureArchivedWithItsChildren(t *testing.T) {
+	h, pid := newPlanningHandler(t)
+	feature, children := featureWithChildren(t, h, pid, "done", "done")
+	if code, out := postTicket(t, h, "/api/archive_ticket", map[string]any{"id": feature}); code != http.StatusOK {
+		t.Fatalf("archive feature = %d %v", code, out)
+	}
+	if got := listTicketIDs(t, h, pid, ""); len(got) != 0 {
+		t.Fatalf("task list = %v, want none", got)
+	}
+	arch := listTicketIDs(t, h, pid, "&archived=true")
+	if len(arch) != 2 || !slices.Contains(arch, feature) || !slices.Contains(arch, children[0]) {
+		t.Fatalf("archived list = %v, want the feature and its child", arch)
+	}
+}
+
+func TestHTTP_TheTaskListCanLeaveArchivedChildrenOut(t *testing.T) {
+	h, pid := newPlanningHandler(t)
+	_, children := featureWithChildren(t, h, pid, "in_progress", "done")
+	postTicket(t, h, "/api/archive_ticket", map[string]any{"id": children[0]})
+	if got := listTicketIDs(t, h, pid, "&exclude_archived=true"); slices.Contains(got, children[0]) {
+		t.Fatalf("task list = %v, want the archived child left out", got)
 	}
 }
