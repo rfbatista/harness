@@ -25,7 +25,7 @@ func (s *Service) instructionFiles(ctx context.Context, role domain.SessionRole,
 		return nil
 	}
 	var out []llmkit.InstructionFile
-	if summary := s.architectureSection(ctx, role, agent, projectID, repositoryID); summary != "" {
+	if summary := s.architectureSummary(ctx, role, agent, projectID, repositoryID); summary != "" {
 		out = append(out, llmkit.InstructionFile{Kind: llmkit.InstructionMemory, Path: "ARCHITECTURE.md", Content: []byte(summary)})
 	}
 	if repositoryID == "" || role == domain.RoleArchitect {
