@@ -6,7 +6,9 @@ import { designSystemOptIn } from "./optIn.js";
 
 file("designsystem/presentation/components/optIn");
 
-const dto = (id, over = {}) => ({ repository_id: id, name: id, uses_design_system: false, path: ".harness/design-system/", export: null, ...over });
+const dto = (id, over = {}) => ({ repository_id: id, name: id, design_system: null, applied_here: false, path: ".harness/design-system/", export: null, ...over });
+const here = { design_system: { design_system_id: "ds1", name: "App" }, applied_here: true };
+const other = { design_system: { design_system_id: "ds2", name: "Brand" }, applied_here: false };
 
 /** A gateway the test plays by hand: what the server holds and the calls made. */
 function fakeGateway(initial) {
@@ -17,38 +19,33 @@ function fakeGateway(initial) {
     async repositories() {
       return g.server.map(optInRow);
     },
-    async setRepository(id, uses, path) {
-      g.calls.push([id, uses, path]);
+    async setRepository(id, uses, path, projectId, confirmMove) {
+      g.calls.push(confirmMove ? [id, uses, path, "move"] : [id, uses, path]);
       if (g.refuse) throw g.refuse;
       const d = g.server.find((x) => x.repository_id === id);
-      d.uses_design_system = uses;
+      d.applied_here = uses;
+      d.design_system = uses ? here.design_system : null;
       if (path) d.path = path;
-      return { id, uses, path: d.path };
+      return { id, uses, path: d.path, designSystemId: uses ? "ds1" : "" };
     },
   };
   return g;
 }
 
-async function setup(initial, { repositoryId = "" } = {}) {
+async function setup(initial) {
   const gateway = fakeGateway(initial);
   const el = document.createElement("div");
   el.dataset.projectId = "p1";
-  if (repositoryId) el.dataset.repositoryId = repositoryId;
   const mounted = mount(designSystemOptIn({ gateway }), { el });
   await mounted.instance.init();
   return { ...mounted, gateway };
 }
 
 test("lists the project's repositories", async () => {
-  const { instance } = await setup([dto("api"), dto("web", { uses_design_system: true, path: "ui/" })]);
+  const { instance } = await setup([dto("api"), dto("web", { ...here, path: "ui/" })]);
   assert.equal(instance.loaded, true);
   assert.deepEqual(instance.rows.map((r) => [r.name, r.uses, r.path]), [["api", false, ".harness/design-system/"], ["web", true, "ui/"]]);
   assert.equal(instance.isEmpty, false);
-});
-
-test("on a repository's settings it holds only that repository", async () => {
-  const { instance } = await setup([dto("api"), dto("web")], { repositoryId: "web" });
-  assert.deepEqual(instance.rows.map((r) => r.id), ["web"]);
 });
 
 test("a project without repositories says so", async () => {
@@ -66,14 +63,14 @@ test("switching on opts in with the path as drafted, and keeps it on", async () 
 });
 
 test("switching off opts out and sends the path so it is kept", async () => {
-  const { instance, gateway } = await setup([dto("api", { uses_design_system: true, path: "ui/" })]);
+  const { instance, gateway } = await setup([dto("api", { ...here, path: "ui/" })]);
   await instance.toggle(instance.rows[0]);
   assert.deepEqual(gateway.calls, [["api", false, "ui/"]]);
   assert.equal(instance.rows[0].uses, false);
 });
 
 test("switching off does not send a half typed path", async () => {
-  const { instance, gateway } = await setup([dto("api", { uses_design_system: true, path: "ui/" })]);
+  const { instance, gateway } = await setup([dto("api", { ...here, path: "ui/" })]);
   const row = instance.rows[0];
   row.draft = "ui/tok";
   await instance.toggle(row);
@@ -92,7 +89,7 @@ test("a refused switch goes back and says why, with its code, under the row", as
 });
 
 test("the path is saved on its own once it differs, and only while the repository uses the design system", async () => {
-  const { instance, gateway } = await setup([dto("api", { uses_design_system: true })]);
+  const { instance, gateway } = await setup([dto("api", { ...here })]);
   const row = instance.rows[0];
   assert.equal(instance.cannotSavePath(row), true);
   row.draft = "ui/";
@@ -103,7 +100,7 @@ test("the path is saved on its own once it differs, and only while the repositor
 });
 
 test("a refused path stays drafted and the saved one stays", async () => {
-  const { instance, gateway } = await setup([dto("api", { uses_design_system: true })]);
+  const { instance, gateway } = await setup([dto("api", { ...here })]);
   const row = instance.rows[0];
   row.draft = "../out/";
   gateway.refuse = new StructuredError("INVALID_INPUT", "design system path must stay inside the repository", 400);
@@ -113,7 +110,7 @@ test("a refused path stays drafted and the saved one stays", async () => {
 });
 
 test("the state beside a repository that uses the design system is not exported yet", async () => {
-  const { instance } = await setup([dto("api", { uses_design_system: true }), dto("web")]);
+  const { instance } = await setup([dto("api", { ...here }), dto("web")]);
   assert.deepEqual(instance.rows.map((r) => instance.stateOf(r)), ["Not exported yet", ""]);
 });
 
@@ -128,4 +125,29 @@ test("a failed read shows the coded error and can be retried", async () => {
   await instance.init();
   assert.equal(instance.error.code, "INTERNAL");
   assert.equal(instance.loaded, false);
+});
+
+test("switching on a repository that uses another design system asks to move it, and applies nothing yet", async () => {
+  const { instance, gateway } = await setup([dto("api", other)]);
+  const row = instance.rows[0];
+  assert.equal(instance.elsewhere(row), "Uses Brand now.");
+  await instance.toggle(row);
+  assert.deepEqual([row.confirming, row.uses, gateway.calls], [true, true, []]);
+});
+
+test("confirming the move applies it here with the move confirmed", async () => {
+  const { instance, gateway } = await setup([dto("api", other)]);
+  const row = instance.rows[0];
+  await instance.toggle(row);
+  await instance.confirmMove(row);
+  assert.deepEqual(gateway.calls, [["api", true, ".harness/design-system/", "move"]]);
+  assert.deepEqual([row.confirming, row.uses, row.appliedId], [false, true, "ds1"]);
+});
+
+test("keeping the other design system closes the question and leaves the switch off", async () => {
+  const { instance, gateway } = await setup([dto("api", other)]);
+  const row = instance.rows[0];
+  await instance.toggle(row);
+  instance.keepCurrent(row);
+  assert.deepEqual([row.confirming, row.uses, gateway.calls], [false, false, []]);
 });

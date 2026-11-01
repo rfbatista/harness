@@ -32,8 +32,8 @@ func (f *fakeEnvAPI) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	f.mu.Unlock()
 	w.Header().Set("Content-Type", "application/json")
 	switch r.URL.Path {
-	case "/api/list_design_system_repositories": // the settings page's design system switch reads its own state
-		_ = json.NewEncoder(w).Encode(map[string]any{"repositories": []map[string]any{{"repository_id": "r1", "name": "api", "uses_design_system": false, "path": ".harness/design-system/", "export": nil}}})
+	case "/api/list_design_systems": // the settings page's design system select reads its own state
+		_ = json.NewEncoder(w).Encode(map[string]any{"design_systems": []map[string]any{}})
 	case "/api/import_repository_env_file":
 		_ = json.NewEncoder(w).Encode(map[string]any{"env_file": map[string]string{"path": in["path"], "content": "FROM_DISK=1\n", "updated_at": time.Now().Format(time.RFC3339)}})
 	case "/api/save_repository_env_file":
@@ -87,7 +87,7 @@ func TestEnvFilesInTheBrowser(t *testing.T) {
 		t.Errorf("imported content = %q", content)
 	}
 	want := []string{
-		`/api/list_design_system_repositories {"project_id":"p1"}`,
+		`/api/list_design_systems {"project_id":"p1"}`,
 		`/api/import_repository_env_file {"path":".env","repository_id":"r1"}`,
 		`/api/save_repository_env_file {"content":"FROM_DISK=1\nEXTRA=2\n","path":".env","repository_id":"r1"}`,
 	}

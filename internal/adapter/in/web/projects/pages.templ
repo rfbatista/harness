@@ -286,8 +286,8 @@ templ EnvFilesPage(v EnvFilesView) {
 					</form>
 					<section class="[ flow ] [ flow-space-s ]" aria-labelledby="repository-design-system">
 						<h2 id="repository-design-system">Design system</h2>
-						<p class="[ color-ink-muted ]">Whether sessions in this repository follow the project's design system.</p>
-						@designsystem.OptIn(v.ProjectID, v.Seed.RepositoryID, false)
+						<p class="[ color-ink-muted ]">The design system agents follow in this repository. It reaches every session of this repository as read-only files, with a pointer in its brief. A repository uses one design system or none.</p>
+						@designsystem.RepositorySelect(v.ProjectID, v.Seed.RepositoryID)
 					</section>
 					if v.RunCommands != nil {
 						@runCommandsSection(*v.RunCommands)

@@ -384,7 +384,9 @@ func (s *Service) usesDesignSystem(ctx context.Context, sh *root) bool {
 	if err != nil {
 		return sh.designSystem
 	}
-	return repo.UsesDesignSystem
+	// ticket 12 re-key this: it reads the repository's design system id,
+	// the view below still shows the project's first design system.
+	return repo.DesignSystemID != nil
 }
 
 // renderedDesignSystem is the files made for one project at one version and

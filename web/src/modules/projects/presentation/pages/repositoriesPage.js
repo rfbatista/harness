@@ -13,7 +13,7 @@ import { baseName, isAbsolutePath, notYetAdded, relativeTo, repositoryURL } from
  * @param {{
  *   gateway: import("../../domain/ports.js").ProjectGateway,
  *   architecture?: { has: (repositoryId: string) => Promise<boolean> },
- *   designSystem?: { setRepository: (repositoryId: string, uses: boolean, path: string) => Promise<unknown> },
+ *   designSystem?: { setRepository: (repositoryId: string, uses: boolean, path: string, projectId: string) => Promise<unknown> },
  * }} deps  architecture says whether a repository has a saved architecture, for its link's words;
  *          designSystem answers the question asked after adding a repository to a project that has one.
  */
@@ -175,7 +175,7 @@ export const repositoriesPage = ({ gateway, architecture, designSystem }) => () 
   async answerDesignSystem(id, uses) {
     this.error = null;
     try {
-      await designSystem.setRepository(id, uses, "");
+      await designSystem.setRepository(id, uses, "", this.projectId);
       this.questions = this.questions.filter((q) => q.id !== id);
     } catch (err) {
       this.error = describeError(err);

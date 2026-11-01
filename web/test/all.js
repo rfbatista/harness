@@ -67,6 +67,7 @@ import "../src/modules/designsystem/domain/repositories.test.js";
 import "../src/modules/designsystem/domain/tokens.test.js";
 import "../src/modules/designsystem/infrastructure/designsystem-gateway.test.js";
 import "../src/modules/designsystem/presentation/components/optIn.test.js";
+import "../src/modules/designsystem/presentation/components/repositoryDesignSystem.test.js";
 import "../src/modules/designsystem/presentation/pages/designSystemPage.test.js";
 import "../src/modules/models/infrastructure/models-gateway.test.js";
 import "../src/modules/models/presentation/components/modelTier.test.js";

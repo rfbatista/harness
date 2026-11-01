@@ -3,11 +3,13 @@
 package app
 
 import (
+	"context"
 	"encoding/json"
 	"net/http"
 	"os"
 	"path/filepath"
 	"testing"
+	"time"
 
 	"github.com/chromedp/chromedp"
 )
@@ -18,11 +20,6 @@ import (
 // web/src/modules/designsystem; this proves the pages and the endpoint agree.
 
 const (
-	optInRow     = `[data-design-system-optin] [data-optin-row]`
-	optInSwitch  = optInRow + ` [data-field=uses]`
-	optInPath    = optInRow + ` [data-field=path]`
-	optInSave    = optInRow + ` [data-action=save-path]`
-	optInError   = optInRow + ` [data-optin-error]`
 	dsQuestion   = `[data-design-system-question]`
 	dsRepoAddBtn = `form button[type=submit]`
 )
@@ -58,65 +55,156 @@ func (p *designPage) settingsURL(id string) string {
 	return p.srv.URL + "/projects/" + p.project + "/repositories/" + id + "/env"
 }
 
-func TestRepositorySettingsSwitchAndPathPersistInTheBrowser(t *testing.T) {
+const (
+	dsSelectBase    = `[data-repository-design-system]`
+	dsSelect        = dsSelectBase + ` [data-field=design-system]`
+	dsSelectPath    = dsSelectBase + ` [data-field=path]`
+	dsSelectSave    = dsSelectBase + ` [data-action=save-path]`
+	dsSelectError   = dsSelectBase + ` [data-ds-error]`
+	dsSelectMove    = dsSelectBase + ` [data-ds-move]`
+	dsSelectConfirm = dsSelectBase + ` [data-action=confirm-move]`
+	dsSelectKeep    = dsSelectBase + ` [data-action=keep-current]`
+	dsSelectNone    = dsSelectBase + ` [data-no-design-systems]`
+)
+
+// chooseDesignSystem picks the option with the value in the settings select, as a person's change does.
+func chooseDesignSystem(value string) chromedp.Action {
+	return designPoll(`(() => { const s = document.querySelector('` + dsSelect + `'); if (!s || s.disabled) return false; s.value = ` + jsString(value) + `; s.dispatchEvent(new Event('change', { bubbles: true })); return true; })()`)
+}
+
+func (p *designPage) createDesignSystem(slug, name string) string {
+	p.t.Helper()
+	return p.mustPost("create_design_system", map[string]any{"name": name, "slug": slug})["design_system_id"].(string)
+}
+
+// shotsDir is where the settings select's screenshots go when SELECT_SHOTS is set.
+func selectShot(name string) chromedp.Action {
+	dir := os.Getenv("SELECT_SHOTS")
+	if dir == "" {
+		return chromedp.ActionFunc(func(context.Context) error { return nil })
+	}
+	var buf []byte
+	return chromedp.Tasks{
+		chromedp.Sleep(200 * time.Millisecond),
+		chromedp.FullScreenshot(&buf, 90),
+		chromedp.ActionFunc(func(context.Context) error {
+			if err := os.MkdirAll(dir, 0o755); err != nil {
+				return err
+			}
+			return os.WriteFile(filepath.Join(dir, name+".png"), buf, 0o644)
+		}),
+	}
+}
+
+func TestRepositorySettingsSelectAppliesMovesAndRemovesADesignSystemInTheBrowser(t *testing.T) {
+	if testing.Short() {
+		t.Skip("browser test: skipped in -short mode")
+	}
+	pg := startDesignPage(t)
+	app := pg.createDesignSystem("app", "App")
+	marketing := pg.createDesignSystem("marketing", "Marketing")
+	pg.mustPost("save_design_system", map[string]any{"design_system_id": app, "base_version": 0, "record": dsRecord()})
+	id := pg.addRepository("spillway")
+	me := newPerson(t)
+	used := func() any { return pg.repository(id)["design_system_id"] }
+
+	me.run(t, "none by default, no path shown, both design systems offered",
+		chromedp.EmulateViewport(1280, 900),
+		chromedp.Navigate(pg.settingsURL(id)),
+		designPoll(`document.querySelector('`+dsSelect+`')?.value === ''`),
+		designPoll(`[...document.querySelectorAll('`+dsSelect+` option')].map((o) => o.textContent.trim()).join(',') === 'None,App,Marketing'`),
+		designPoll(`document.querySelector('`+dsSelectPath+`')?.checkVisibility() === false`),
+		designPoll(`document.querySelector('`+dsSelectNone+`')?.checkVisibility() === false`),
+	)
+
+	me.run(t, "choosing App applies it with the default path",
+		chooseDesignSystem(app),
+		designPoll(`document.querySelector('`+dsSelectPath+`')?.checkVisibility() === true && document.querySelector('`+dsSelectPath+`').value === '.harness/design-system/'`),
+		designPoll(`document.querySelector('`+dsSelect+`')?.disabled === false`),
+		selectShot("repo-settings-select"),
+	)
+	if got := used(); got != app {
+		t.Fatalf("after choosing App: %v", got)
+	}
+
+	me.run(t, "choosing Marketing asks first and changes nothing",
+		chooseDesignSystem(marketing),
+		designPoll(`document.querySelector('`+dsSelectMove+`')?.checkVisibility() === true`),
+		designPoll(`document.querySelector('`+dsSelectMove+`').textContent.includes('from App to Marketing')`),
+		selectShot("repo-settings-select-move"),
+	)
+	if got := used(); got != app {
+		t.Fatalf("the question applied something: %v", got)
+	}
+
+	me.run(t, "keeping App closes the question and the select goes back",
+		designClick(dsSelectKeep),
+		designPoll(`document.querySelector('`+dsSelectMove+`')?.checkVisibility() === false`),
+		designPoll(`document.querySelector('`+dsSelect+`').value === '`+app+`'`),
+	)
+	if got := used(); got != app {
+		t.Fatalf("after keeping: %v", got)
+	}
+
+	me.run(t, "confirming the move applies Marketing",
+		chooseDesignSystem(marketing),
+		designClick(dsSelectConfirm),
+		designPoll(`document.querySelector('`+dsSelectMove+`')?.checkVisibility() === false && document.querySelector('`+dsSelect+`').disabled === false`),
+	)
+	if got := used(); got != marketing {
+		t.Fatalf("after the move: %v", got)
+	}
+
+	me.run(t, "a custom path is saved and a refused one shows under the select",
+		chromedp.SetValue(dsSelectPath, "ui/tokens/", chromedp.ByQuery),
+		designClick(dsSelectSave),
+		designPoll(`document.querySelector('`+dsSelectSave+`')?.disabled === true`),
+	)
+	if r := pg.repository(id); r["design_system_path"] != "ui/tokens/" {
+		t.Fatalf("after saving the path: %v", r)
+	}
+	me.run(t, "a refused path",
+		chromedp.SetValue(dsSelectPath, "ui/tokens", chromedp.ByQuery),
+		designClick(dsSelectSave),
+		designPoll(`document.querySelector('`+dsSelectError+`')?.textContent.includes('must end in /')`),
+	)
+	if r := pg.repository(id); r["design_system_path"] != "ui/tokens/" || r["design_system_id"] != marketing {
+		t.Fatalf("a refused path changed the repository: %v", r)
+	}
+
+	me.run(t, "the choice and the path persist after a reload",
+		chromedp.Navigate(pg.settingsURL(id)),
+		designPoll(`document.querySelector('`+dsSelect+`')?.value === '`+marketing+`'`),
+		designPoll(`document.querySelector('`+dsSelectPath+`')?.value === 'ui/tokens/'`),
+	)
+
+	me.run(t, "None removes it at once, with no question, and keeps the path",
+		chooseDesignSystem(""),
+		designPoll(`document.querySelector('`+dsSelectPath+`')?.checkVisibility() === false`),
+		designPoll(`document.querySelector('`+dsSelect+`')?.disabled === false`),
+		chromedp.Navigate(pg.settingsURL(id)),
+		designPoll(`document.querySelector('`+dsSelect+`')?.value === ''`),
+	)
+	if r := pg.repository(id); r["design_system_id"] != nil || r["design_system_path"] != "ui/tokens/" {
+		t.Fatalf("after removing: %v", r)
+	}
+}
+
+func TestRepositorySettingsSelectIsDisabledWhenTheProjectHasNoDesignSystemInTheBrowser(t *testing.T) {
 	if testing.Short() {
 		t.Skip("browser test: skipped in -short mode")
 	}
 	pg := startDesignPage(t)
 	id := pg.addRepository("spillway")
 	me := newPerson(t)
-
-	me.run(t, "off by default, no path shown",
-		chromedp.Navigate(pg.settingsURL(id)),
-		designPoll(`document.querySelector('`+optInSwitch+`')?.checked === false`),
-		designPoll(`document.querySelector('`+optInPath+`')?.checkVisibility() === false`),
-	)
-
-	me.run(t, "switch on shows the default path",
-		designClick(optInSwitch),
-		designPoll(`document.querySelector('`+optInPath+`')?.checkVisibility() === true`),
-		designPoll(`document.querySelector('`+optInPath+`').value === '.harness/design-system/'`),
-		designPoll(`document.querySelector('`+optInRow+`').dataset.phase === 'idle'`),
-	)
-	if r := pg.repository(id); r["uses_design_system"] != true {
-		t.Fatalf("after switching on: %v", r)
-	}
-
-	me.run(t, "a custom path is saved",
-		chromedp.SetValue(optInPath, "ui/tokens/", chromedp.ByQuery),
-		designClick(optInSave),
-		designPoll(`document.querySelector('`+optInSave+`')?.disabled === true`),
+	me.run(t, "disabled, saying so, with a way to start one",
 		chromedp.EmulateViewport(1280, 900),
-		shot("repo-settings", "light"),
-	)
-	if r := pg.repository(id); r["design_system_path"] != "ui/tokens/" {
-		t.Fatalf("after saving the path: %v", r)
-	}
-
-	me.run(t, "both persist after a reload",
 		chromedp.Navigate(pg.settingsURL(id)),
-		designPoll(`document.querySelector('`+optInSwitch+`')?.checked === true`),
-		designPoll(`document.querySelector('`+optInPath+`')?.value === 'ui/tokens/'`),
+		designPoll(`document.querySelector('`+dsSelect+`')?.disabled === true`),
+		designPoll(`document.querySelector('`+dsSelectNone+`')?.textContent.includes('No design systems in this project yet')`),
+		designPoll(`document.querySelector('`+dsSelectNone+` a')?.getAttribute('href') === '/projects/`+pg.project+`/design-system'`),
+		selectShot("repo-settings-select-empty"),
 	)
-
-	me.run(t, "the server's refusal shows under the row and the saved path stays",
-		chromedp.SetValue(optInPath, "ui/tokens", chromedp.ByQuery),
-		designClick(optInSave),
-		designPoll(`document.querySelector('`+optInError+`')?.textContent.includes('must end in /')`),
-	)
-	if r := pg.repository(id); r["design_system_path"] != "ui/tokens/" {
-		t.Fatalf("a refused path changed the repository: %v", r)
-	}
-
-	me.run(t, "switch off persists and keeps the path",
-		designClick(optInSwitch),
-		designPoll(`document.querySelector('`+optInRow+`').dataset.phase === 'idle' && document.querySelector('`+optInSwitch+`').checked === false`),
-		chromedp.Navigate(pg.settingsURL(id)),
-		designPoll(`document.querySelector('`+optInSwitch+`')?.checked === false`),
-	)
-	if r := pg.repository(id); r["uses_design_system"] != false || r["design_system_path"] != "ui/tokens/" {
-		t.Fatalf("after switching off: %v", r)
-	}
 }
 
 func TestRepositoriesTabAndSettingsAgreeInTheBrowser(t *testing.T) {
@@ -125,12 +213,15 @@ func TestRepositoriesTabAndSettingsAgreeInTheBrowser(t *testing.T) {
 	}
 	pg := startDesignPage(t)
 	pg.mustSave(0, dsRecord())
+	first := pg.designSystemID()
+	other := pg.createDesignSystem("brand", "Brand")
 	api := pg.addRepository("api")
 	web := pg.addRepository("web")
 	me := newPerson(t)
 	rowOf := func(id string) string {
 		return `[data-design-system-optin] [data-optin-row][data-repository-id="` + id + `"]`
 	}
+	chosen := func(id string) any { return pg.repository(id)["design_system_id"] }
 
 	me.run(t, "the tab lists both repositories, off, with no export state",
 		chromedp.Navigate(pg.url+"?tab=repositories"),
@@ -147,22 +238,36 @@ func TestRepositoriesTabAndSettingsAgreeInTheBrowser(t *testing.T) {
 		chromedp.EmulateViewport(1280, 900),
 		shot("repositories-tab", "light"),
 	)
+	if got := chosen(web); got != first {
+		t.Fatalf("the tab applied %v, want %v", got, first)
+	}
 
-	me.run(t, "its settings show the same state, and the other repository is still off",
+	me.run(t, "its settings show the same state, and the other repository is still none",
 		chromedp.Navigate(pg.settingsURL(web)),
-		designPoll(`document.querySelector('`+optInSwitch+`')?.checked === true`),
+		designPoll(`document.querySelector('`+dsSelect+`')?.value === '`+first+`'`),
 		chromedp.Navigate(pg.settingsURL(api)),
-		designPoll(`document.querySelector('`+optInSwitch+`')?.checked === false`),
+		designPoll(`document.querySelector('`+dsSelect+`')?.value === ''`),
 	)
 
 	me.run(t, "a change in settings is seen in the tab after a reload",
-		chromedp.Navigate(pg.settingsURL(api)),
-		designPoll(`document.querySelector('`+optInSwitch+`')?.checked === false`),
-		designClick(optInSwitch),
-		designPoll(`document.querySelector('`+optInRow+`').dataset.phase === 'idle' && document.querySelector('`+optInSwitch+`').checked === true`),
+		chooseDesignSystem(first),
+		designPoll(`document.querySelector('`+dsSelectPath+`')?.checkVisibility() === true && document.querySelector('`+dsSelect+`').disabled === false`),
 		chromedp.Navigate(pg.url+"?tab=repositories"),
 		designPoll(`document.querySelector('`+rowOf(api)+` [data-field=uses]')?.checked === true`),
 	)
+
+	pg.mustPost("set_repository_design_system", map[string]any{"repository_id": api, "design_system_id": other, "confirm_move": true})
+	me.run(t, "a repository that uses another design system is moved here after confirming",
+		chromedp.Navigate(pg.url+"?tab=repositories"),
+		designPoll(`document.querySelector('`+rowOf(api)+` [data-elsewhere]')?.textContent.trim() === 'Uses Brand now.'`),
+		designClick(rowOf(api)+` [data-field=uses]`),
+		designPoll(`document.querySelector('`+rowOf(api)+` [data-optin-move]')?.checkVisibility() === true`),
+		designClick(rowOf(api)+` [data-optin-move] [data-action=move]`),
+		designPoll(`document.querySelector('`+rowOf(api)+`').dataset.phase === 'idle' && document.querySelector('`+rowOf(api)+` [data-optin-move]')?.checkVisibility() === false`),
+	)
+	if got := chosen(api); got != first {
+		t.Fatalf("after the move: %v, want %v", got, first)
+	}
 }
 
 func TestAddingARepositoryToAProjectWithADesignSystemAsksOnceInTheBrowser(t *testing.T) {
@@ -212,7 +317,7 @@ func TestAddingARepositoryToAProjectWithADesignSystemAsksOnceInTheBrowser(t *tes
 		designClick(dsQuestion+` [data-answer=yes]`),
 		designPoll(`document.querySelector('`+dsQuestion+`') === null`),
 	)
-	if r := pg.repository(idOf("api")); r["uses_design_system"] != true {
+	if r := pg.repository(idOf("api")); r["design_system_id"] == nil {
 		t.Fatalf("yes: %v", r)
 	}
 
@@ -222,7 +327,7 @@ func TestAddingARepositoryToAProjectWithADesignSystemAsksOnceInTheBrowser(t *tes
 			designClick(dsQuestion+` [data-answer=no]`),
 			designPoll(`document.querySelector('`+dsQuestion+`') === null`),
 		)...)
-	if r := pg.repository(idOf("web")); r["uses_design_system"] != false {
+	if r := pg.repository(idOf("web")); r["design_system_id"] != nil {
 		t.Fatalf("no: %v", r)
 	}
 

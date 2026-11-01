@@ -109,27 +109,48 @@ export function designSystemGateway(api, feed) {
       };
     },
 
-    /** The project's repositories with their opt-in to the design system, as rows a page edits. */
+    /**
+     * The project's repositories with the design system each uses, as rows a page edits.
+     * Until the page names a design system (ticket 15 re-keys this) it is asked about the project's first one.
+     */
     async repositories(projectId) {
-      const body = await api.post("/list_design_system_repositories", { project_id: projectId });
+      const id = await firstOf(projectId);
+      if (!id) return [];
+      const body = await api.post("/list_design_system_repositories", { design_system_id: id });
       return list(body?.repositories).map(optInRow);
     },
 
+    /** The project's design systems, by name, as the select lists them. */
+    async designSystems(projectId) {
+      const body = await api.post("/list_design_systems", { project_id: projectId });
+      return list(body?.design_systems).map((d) => ({ id: d.design_system_id, name: d.name, version: Number.isInteger(d.version) ? d.version : 0 }));
+    },
+
     /**
-     * Opts a repository in or out and sets where its export goes; an empty path leaves the server's own.
-     * An invalid path (INVALID_INPUT) or an unknown repository arrives as an error. Answers what is stored.
+     * Sets the design system a repository uses (null: none) and where its export goes; an empty path leaves the server's own.
+     * MOVE_NOT_CONFIRMED (details.current names the one in use) arrives as an error unless confirmMove; so do an invalid path
+     * (INVALID_INPUT), an unknown repository and an unknown design system. Answers what is stored.
      */
-    async setRepository(repositoryId, uses, path) {
+    async apply(repositoryId, designSystemId, path, confirmMove = false) {
       const body = await api.post("/set_repository_design_system", {
         repository_id: repositoryId,
-        uses_design_system: uses,
+        design_system_id: designSystemId,
         ...(path ? { path } : {}),
+        ...(confirmMove ? { confirm_move: true } : {}),
       });
       const repo = body?.repository;
       if (typeof repo?.id !== "string" || repo.id === "") {
         throw new StructuredError(Codes.BAD_RESPONSE, "The repository came back unreadable.");
       }
-      return { id: repo.id, uses: repo.uses_design_system === true, path: repo.design_system_path ?? "" };
+      return { id: repo.id, designSystemId: repo.design_system_id ?? "", path: repo.design_system_path ?? "" };
+    },
+
+    /** Applies the project's first design system (ticket 15 re-keys this) or removes the one in use. Answers what is stored. */
+    async setRepository(repositoryId, uses, path, projectId, confirmMove = false) {
+      const id = uses ? await firstOf(projectId) : "";
+      if (uses && !id) throw new StructuredError(Codes.BAD_RESPONSE, "The project has no design system.");
+      const stored = await this.apply(repositoryId, uses ? id : null, path, confirmMove);
+      return { ...stored, uses: stored.designSystemId !== "" };
     },
 
     /** Follows the project feed for saves of the design system. */

@@ -16,7 +16,7 @@ const designSystemPointer = "## Design system\n\n" +
 
 // designSystemSection is the pointer when repo opted in, else nothing.
 func designSystemSection(repo *domain.Repository) string {
-	if repo == nil || !repo.UsesDesignSystem {
+	if repo == nil || repo.DesignSystemID == nil { // ticket 12 re-key this
 		return ""
 	}
 	return designSystemPointer

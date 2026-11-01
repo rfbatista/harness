@@ -4,8 +4,9 @@ import { DEFAULT_PATH, EFFECT_NOTE, exportLabel, optInRow } from "./repositories
 file("designsystem/domain/repositories");
 
 test("a repository row holds the saved opt-in and a draft of its path", () => {
-  const row = optInRow({ repository_id: "r1", name: "spillway", uses_design_system: true, path: "ui/tokens/", export: null });
+  const row = optInRow({ repository_id: "r1", name: "spillway", design_system: { design_system_id: "ds1", name: "App" }, applied_here: true, path: "ui/tokens/", export: null });
   assert.deepEqual([row.id, row.name, row.uses, row.path, row.draft], ["r1", "spillway", true, "ui/tokens/", "ui/tokens/"]);
+  assert.deepEqual([row.appliedId, row.appliedName], ["ds1", "App"]);
 });
 
 test("a row with no path shows the default one", () => {

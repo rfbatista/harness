@@ -9,18 +9,18 @@ templ tabRepositories(projectID string) {
 		<div class="[ arch-head ]" data-panel-head>
 			<div class="[ flow ] [ flow-space-3xs ]">
 				<h2>Repositories</h2>
-				<p class="[ color-ink-muted text-sm ]">Choose which repositories use the design system. The same switch is in each repository's settings.</p>
+				<p class="[ color-ink-muted text-sm ]">Choose which repositories use the design system. Each repository's settings have a select with the same choice.</p>
 			</div>
 		</div>
-		@OptIn(projectID, "", true)
+		@OptIn(projectID)
 	</section>
 }
 
 // OptIn is the "Uses the design system" switch and path of a project's
-// repositories (designSystemOptIn): all of them on the Repositories tab, one
-// on a repository's settings (repositoryID). withState adds the export state.
-templ OptIn(projectID, repositoryID string, withState bool) {
-	<div x-data="designSystemOptIn" data-design-system-optin data-project-id={ projectID } class="[ flow ]" if repositoryID != "" { data-repository-id={ repositoryID } }>
+// repositories on the Repositories tab (designSystemOptIn), with the export
+// state. A repository's own settings use RepositorySelect.
+templ OptIn(projectID string) {
+	<div x-data="designSystemOptIn" data-design-system-optin data-project-id={ projectID } class="[ flow ]">
 		<template x-if="error">
 			<div class="[ banner ]" data-tone="danger" role="alert" data-optin-load-error>
 				<div class="[ flow ] [ flow-space-3xs grow ]">
@@ -37,9 +37,15 @@ templ OptIn(projectID, repositoryID string, withState bool) {
 			<template x-for="r in rows" x-bind:key="r.id">
 				<div class="[ row ]" data-optin-row x-bind:data-repository-id="r.id" x-bind:data-phase="phase(r)" style="--row-columns: minmax(0, 1fr)">
 					<div class="[ flow ] [ flow-space-xs pad-block-xs ]">
-						<span class="[ weight-medium ]" x-show="!single" x-text="r.name"></span>
+						<span class="[ weight-medium ]" x-text="r.name"></span>
 						<label class="[ cluster ] [ gutter-xs ]"><input type="checkbox" data-field="uses" x-bind:checked="r.uses" x-bind:disabled="r.saving" x-bind:aria-busy="r.saving" x-on:change="toggle(r)"/> Uses the design system</label>
 						<span class="[ hint ]" x-text="effectNote"></span>
+						<span class="[ hint ]" data-elsewhere x-show="!r.uses" x-text="elsewhere(r)"></span>
+						<div class="[ banner ]" data-tone="attention" role="group" aria-label="Move" data-optin-move x-show="r.confirming">
+							<span class="[ grow ]">Move <b x-text="r.name"></b> from <b x-text="r.appliedName"></b> to this design system? Files already exported stay where they are.</span>
+							<button type="button" class="[ button ]" data-variant="primary" data-size="sm" data-action="move" x-on:click="confirmMove(r)">Move</button>
+							<button type="button" class="[ button ]" data-size="sm" data-action="keep" x-on:click="keepCurrent(r)">Keep</button>
+						</div>
 						<div class="[ field ]" x-show="r.uses">
 							<label>Folder in the repository <input data-field="path" class="[ font-mono text-sm ]" autocomplete="off" spellcheck="false" x-model="r.draft" x-bind:aria-invalid="r.error !== null"/></label>
 							<span class="[ hint ]">Where an export will write the files; relative, ending in /. The default is <code>.harness/design-system/</code>.</span>
@@ -48,12 +54,58 @@ templ OptIn(projectID, repositoryID string, withState bool) {
 						<template x-if="r.error">
 							<span class="[ error ]" data-optin-error><span x-text="r.error.message"></span> <span class="[ code ]"><span x-text="r.error.code"></span> · <span x-text="r.error.next"></span></span></span>
 						</template>
-						if withState {
-							<span class="[ text-sm color-ink-muted ]" data-export-state x-show="r.uses" x-text="stateOf(r)"></span>
-						}
+						<span class="[ text-sm color-ink-muted ]" data-export-state x-show="r.uses" x-text="stateOf(r)"></span>
 					</div>
 				</div>
 			</template>
 		</section>
+	</div>
+}
+
+// RepositorySelect is the "Design system" select of a repository's settings
+// (repositoryDesignSystem): None or one of the project's design systems, the
+// folder an export writes to, and the move confirmation inline.
+templ RepositorySelect(projectID, repositoryID string) {
+	<div x-data="repositoryDesignSystem" data-repository-design-system data-project-id={ projectID } data-repository-id={ repositoryID } class="[ flow ]">
+		<template x-if="loadError">
+			<div class="[ banner ]" data-tone="danger" role="alert" data-ds-load-error>
+				<div class="[ flow ] [ flow-space-3xs grow ]">
+					<span x-text="loadError.message"></span>
+					<span class="[ code ]"><span x-text="loadError.code"></span> · <span x-text="loadError.next"></span></span>
+				</div>
+				<button type="button" class="[ button ]" data-variant="ghost" data-size="sm" x-on:click="load">Try again</button>
+			</div>
+		</template>
+		<div class="[ field ]" x-show="loaded">
+			<label for="repository-design-system-select">Design system</label>
+			<select id="repository-design-system-select" data-field="design-system" x-bind:disabled="selectDisabled" x-bind:aria-busy="saving" x-on:change="choose($event.target.value)">
+				<option value="" x-bind:selected="isSelected('')">None</option>
+				<template x-for="s in systems" x-bind:key="s.id">
+					<option x-bind:value="s.id" x-bind:selected="isSelected(s.id)" x-text="s.name"></option>
+				</template>
+			</select>
+		</div>
+		<p class="[ color-ink-muted ]" data-no-design-systems x-show="noSystems">
+			No design systems in this project yet.
+			<a href={ templ.URL("/projects/" + projectID + "/design-system") }>Start one</a> from Design system.
+		</p>
+		<div class="[ banner ]" data-tone="attention" role="group" aria-label="Move design system" data-ds-move x-show="moveOpen">
+			<div class="[ flow ] [ flow-space-3xs grow ]">
+				<b>Move this repository from <span x-text="moveFromName"></span> to <span x-text="moveToName"></span>?</b>
+				<span>It uses <span x-text="moveFromName"></span> now; it will use <span x-text="moveToName"></span> instead. Agents here read <span x-text="moveToName"></span> from their next session. Files already exported stay in the repository and show as edited outside the harness until you export <span x-text="moveToName"></span>.</span>
+			</div>
+			<button type="button" class="[ button ]" data-variant="primary" data-size="sm" data-action="confirm-move" x-on:click="confirmMove">Move</button>
+			<button type="button" class="[ button ]" data-size="sm" data-action="keep-current" x-on:click="keepCurrent">Keep <span x-text="moveFromName"></span></button>
+		</div>
+		<div class="[ field ]" x-show="pathVisible">
+			<label for="repository-design-system-path">Folder in this repository</label>
+			<input id="repository-design-system-path" data-field="path" class="[ font-mono text-sm ]" autocomplete="off" spellcheck="false" x-model="draft" x-bind:aria-invalid="error !== null"/>
+			<span class="[ hint ]">Where an export will write the files; relative to the repository, ending in /, staying inside it. The default is <code>.harness/design-system/</code>.</span>
+			<span class="[ cluster ]"><button type="button" class="[ button ]" data-size="sm" data-action="save-path" x-bind:disabled="cannotSavePath" x-on:click="savePath">Save path</button></span>
+		</div>
+		<template x-if="error">
+			<span class="[ error ]" data-ds-error><span x-text="error.message"></span> <span class="[ code ]"><span x-text="error.code"></span> · <span x-text="error.next"></span></span></span>
+		</template>
+		<span class="[ hint ]" x-show="loaded">Applying never writes to the repository, and removing leaves exported files in place. Exporting is a separate step on the design system's page.</span>
 	</div>
 }

@@ -145,8 +145,8 @@ func (p *Projects) RemoveRepositoryIgnoredPath(ctx context.Context, repositoryID
 	return out.Repository, err
 }
 
-func (p *Projects) SetRepositoryDesignSystem(ctx context.Context, repositoryID string, uses bool, path string) (*domain.Repository, error) {
+func (p *Projects) SetRepositoryDesignSystem(ctx context.Context, repositoryID string, designSystemID *string, path string, confirmMove bool) (*domain.Repository, error) {
 	var out repositoryOut
-	err := p.c.post(ctx, "/api/set_repository_design_system", map[string]any{"repository_id": repositoryID, "uses_design_system": uses, "path": path}, &out)
+	err := p.c.post(ctx, "/api/set_repository_design_system", map[string]any{"repository_id": repositoryID, "design_system_id": designSystemID, "path": path, "confirm_move": confirmMove}, &out)
 	return out.Repository, err
 }

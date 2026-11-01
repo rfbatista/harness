@@ -64,7 +64,11 @@ func (e *shellE2E) saveDesignSystem(base int, record map[string]any) {
 
 func (e *shellE2E) useDesignSystem(repo string, uses bool) {
 	e.t.Helper()
-	e.post("set_repository_design_system", map[string]any{"repository_id": repo, "uses_design_system": uses}, nil)
+	var id any
+	if uses {
+		id = e.designSystemID()
+	}
+	e.post("set_repository_design_system", map[string]any{"repository_id": repo, "design_system_id": id, "confirm_move": true}, nil)
 }
 
 // designSystemDate is the day the current version was saved, as its files say it.

@@ -72,18 +72,26 @@ func toDesignSystemBody(ds *domain.DesignSystem) designSystemBody {
 	return b
 }
 
+// designSystemUse is a repository that uses the design system. The export
+// state arrives with the export: never_exported until then.
+type designSystemUse struct {
+	RepositoryID string `json:"repository_id"`
+	Name         string `json:"name"`
+	ExportState  string `json:"export_state"`
+}
+
 // designSystemRow is one entry of a project's list.
 type designSystemRow struct {
-	DesignSystemID        string    `json:"design_system_id"`
-	Name                  string    `json:"name"`
-	Slug                  string    `json:"slug"`
-	Description           string    `json:"description"`
-	CreatedAt             time.Time `json:"created_at"`
-	Version               int       `json:"version"`
-	UpdatedAt             time.Time `json:"updated_at"`
-	Repositories          []any     `json:"repositories"` // ticket 11 fills it
-	OpenProposals         int       `json:"open_proposals"`
-	RunningDesignSessions int       `json:"running_design_sessions"`
+	DesignSystemID        string            `json:"design_system_id"`
+	Name                  string            `json:"name"`
+	Slug                  string            `json:"slug"`
+	Description           string            `json:"description"`
+	CreatedAt             time.Time         `json:"created_at"`
+	Version               int               `json:"version"`
+	UpdatedAt             time.Time         `json:"updated_at"`
+	Repositories          []designSystemUse `json:"repositories"`
+	OpenProposals         int               `json:"open_proposals"`
+	RunningDesignSessions int               `json:"running_design_sessions"`
 }
 
 func (h *Handler) handleListDesignSystems(c echo.Context) error {
@@ -100,11 +108,25 @@ func (h *Handler) handleListDesignSystems(c echo.Context) error {
 	if err != nil {
 		return err
 	}
+	uses := map[string][]designSystemUse{}
+	repos, err := h.projects.ListRepositories(c.Request().Context(), in.ProjectID)
+	if err != nil {
+		return err
+	}
+	for _, r := range repos {
+		if r.DesignSystemID != nil {
+			uses[*r.DesignSystemID] = append(uses[*r.DesignSystemID], designSystemUse{RepositoryID: r.ID, Name: r.DisplayName(), ExportState: "never_exported"})
+		}
+	}
 	out := make([]designSystemRow, 0, len(list))
 	for _, d := range list {
+		used := uses[d.ID]
+		if used == nil {
+			used = []designSystemUse{}
+		}
 		out = append(out, designSystemRow{
 			DesignSystemID: d.ID, Name: d.Name, Slug: d.Slug, Description: d.Description, CreatedAt: d.CreatedAt,
-			Version: d.Version, UpdatedAt: d.UpdatedAt, Repositories: []any{},
+			Version: d.Version, UpdatedAt: d.UpdatedAt, Repositories: used,
 		})
 	}
 	return c.JSON(http.StatusOK, map[string]any{"design_systems": out})

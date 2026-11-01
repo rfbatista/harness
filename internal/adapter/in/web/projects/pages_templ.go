@@ -433,11 +433,11 @@ func EnvFilesPage(v EnvFilesView) templ.Component {
 					return templ_7745c5c3_Err
 				}
 			}
-			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 30, "</span></div><div class=\"[ cluster ]\"><button type=\"submit\" class=\"[ button ]\" data-variant=\"primary\" disabled x-bind:disabled=\"cannotAdd\" x-bind:aria-busy=\"adding\">Import from checkout</button> <button type=\"button\" class=\"[ button ]\" disabled x-bind:disabled=\"cannotAdd\" x-on:click=\"addEmpty\">Start empty</button></div></form><section class=\"[ flow ] [ flow-space-s ]\" aria-labelledby=\"repository-design-system\"><h2 id=\"repository-design-system\">Design system</h2><p class=\"[ color-ink-muted ]\">Whether sessions in this repository follow the project's design system.</p>")
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 30, "</span></div><div class=\"[ cluster ]\"><button type=\"submit\" class=\"[ button ]\" data-variant=\"primary\" disabled x-bind:disabled=\"cannotAdd\" x-bind:aria-busy=\"adding\">Import from checkout</button> <button type=\"button\" class=\"[ button ]\" disabled x-bind:disabled=\"cannotAdd\" x-on:click=\"addEmpty\">Start empty</button></div></form><section class=\"[ flow ] [ flow-space-s ]\" aria-labelledby=\"repository-design-system\"><h2 id=\"repository-design-system\">Design system</h2><p class=\"[ color-ink-muted ]\">The design system agents follow in this repository. It reaches every session of this repository as read-only files, with a pointer in its brief. A repository uses one design system or none.</p>")
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
-			templ_7745c5c3_Err = designsystem.OptIn(v.ProjectID, v.Seed.RepositoryID, false).Render(ctx, templ_7745c5c3_Buffer)
+			templ_7745c5c3_Err = designsystem.RepositorySelect(v.ProjectID, v.Seed.RepositoryID).Render(ctx, templ_7745c5c3_Buffer)
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}

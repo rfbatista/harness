@@ -14,10 +14,11 @@ type Repository struct {
 	URL          string   `json:"url"`
 	RootDir      string   `json:"root_dir"`
 	IgnoredPaths []string `json:"ignored_paths,omitempty"`
-	// UsesDesignSystem opts the repository into the project design system;
-	// DesignSystemPath is where its export goes, relative to the checkout.
-	UsesDesignSystem bool   `json:"uses_design_system"`
-	DesignSystemPath string `json:"design_system_path"`
+	// DesignSystemID is the design system the repository uses, nil when none
+	// (a repository uses at most one); DesignSystemPath is where its export
+	// goes, relative to the checkout.
+	DesignSystemID   *string `json:"design_system_id"`
+	DesignSystemPath string  `json:"design_system_path"`
 }
 
 // DefaultDesignSystemPath is where a repository's design system export goes

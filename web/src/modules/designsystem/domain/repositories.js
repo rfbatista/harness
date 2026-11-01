@@ -1,5 +1,6 @@
-// A repository's opt-in to the project design system, as the page and the
-// repository settings both show it.
+// A repository's use of a design system, as the Repositories tab shows it
+// (uses: it is applied to the design system the tab is about; appliedId and
+// appliedName: whichever design system it uses, "" for none).
 
 export const DEFAULT_PATH = ".harness/design-system/";
 
@@ -9,14 +10,17 @@ export const EFFECT_NOTE =
 
 /**
  * One repository of list_design_system_repositories, as a row the page edits:
- * the saved opt-in and path, and a draft of the path.
+ * the saved use and path, and a draft of the path.
  */
 export function optInRow(dto) {
   const path = dto?.path || DEFAULT_PATH;
   return {
     id: dto?.repository_id ?? "",
     name: dto?.name ?? "",
-    uses: dto?.uses_design_system === true,
+    uses: dto?.applied_here === true,
+    appliedId: dto?.design_system?.design_system_id ?? "",
+    appliedName: dto?.design_system?.name ?? "",
+    confirming: false,
     path,
     draft: path,
     export: dto?.export ?? null,

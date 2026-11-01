@@ -77,6 +77,7 @@ var recordVerbs = map[string]bool{
 	"get_design_system": true, "save_design_system": true, "rename_design_token": true,
 	"list_design_system_versions": true, "get_design_system_version": true,
 	"update_design_system": true, "delete_design_system": true,
+	"list_design_system_repositories": true,
 }
 
 // post calls POST /api/<verb>, answers the status and the JSON body.

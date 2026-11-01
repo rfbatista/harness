@@ -100,8 +100,9 @@ func (r *RepositoryRepository) Update(id, name, description, url, rootDir string
 	return m.ToDomain(), nil
 }
 
-// SetDesignSystem stores the repository's opt-in and export path.
-func (r *RepositoryRepository) SetDesignSystem(id string, uses bool, path string) (*domain.Repository, error) {
+// SetDesignSystem stores the repository's design system (nil: none) and
+// export path.
+func (r *RepositoryRepository) SetDesignSystem(id string, designSystemID *string, path string) (*domain.Repository, error) {
 	var m RepositoryModel
 	if err := r.db.First(&m, "id = ?", id).Error; err != nil {
 		if err == gorm.ErrRecordNotFound {
@@ -109,11 +110,24 @@ func (r *RepositoryRepository) SetDesignSystem(id string, uses bool, path string
 		}
 		return nil, err
 	}
-	m.UsesDesignSystem, m.DesignSystemPath = uses, path
-	if err := r.db.Model(&m).Updates(map[string]any{"uses_design_system": uses, "design_system_path": path}).Error; err != nil {
+	m.DesignSystemID, m.DesignSystemPath = designSystemID, path
+	if err := r.db.Model(&m).Updates(map[string]any{"design_system_id": designSystemID, "design_system_path": path}).Error; err != nil {
 		return nil, err
 	}
 	return m.ToDomain(), nil
+}
+
+// ListByDesignSystem lists the repositories that use the design system.
+func (r *RepositoryRepository) ListByDesignSystem(designSystemID string) []*domain.Repository {
+	var models []RepositoryModel
+	if err := r.db.Where("design_system_id = ?", designSystemID).Order("name, id").Find(&models).Error; err != nil {
+		return nil
+	}
+	out := make([]*domain.Repository, 0, len(models))
+	for i := range models {
+		out = append(out, models[i].ToDomain())
+	}
+	return out
 }
 
 // DeleteByProject deletes all repositories for the given project.

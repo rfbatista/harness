@@ -1,6 +1,7 @@
 // The design system module's Alpine components.
 
 import { designSystemOptIn } from "./components/optIn.js";
+import { repositoryDesignSystem } from "./components/repositoryDesignSystem.js";
 import { designSystemPage } from "./pages/designSystemPage.js";
 
 /**
@@ -10,4 +11,5 @@ import { designSystemPage } from "./pages/designSystemPage.js";
 export function registerDesignSystem(Alpine, deps) {
   Alpine.data("designSystemPage", designSystemPage(deps));
   Alpine.data("designSystemOptIn", designSystemOptIn(deps));
+  Alpine.data("repositoryDesignSystem", repositoryDesignSystem(deps));
 }

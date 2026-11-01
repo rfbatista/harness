@@ -27,11 +27,13 @@ type noMCPServers struct{}
 
 func (noMCPServers) ListMCPServers() []*domain.MCPServer { return nil }
 
+var applied = "ds1"
+
 func designSystemService() *Service {
 	return &Service{catalog: Catalog{MCPServers: noMCPServers{}, Repositories: repositoriesByID{
-		"opted":  {ID: "opted", UsesDesignSystem: true, DesignSystemPath: ".harness/design-system/"},
+		"opted":  {ID: "opted", DesignSystemID: &applied, DesignSystemPath: ".harness/design-system/"},
 		"plain":  {ID: "plain"},
-		"movedn": {ID: "movedn", UsesDesignSystem: false, DesignSystemPath: "ui/"},
+		"movedn": {ID: "movedn", DesignSystemPath: "ui/"},
 	}}}
 }
 
@@ -45,7 +47,7 @@ func briefFor(s *Service, role domain.SessionRole, repository string) string {
 }
 
 func TestDesignSystemBrief_PointerIsTheContractsTextInAtMostFiveLines(t *testing.T) {
-	got := designSystemSection(&domain.Repository{UsesDesignSystem: true})
+	got := designSystemSection(&domain.Repository{DesignSystemID: &applied})
 	checkGolden(t, "design_system_brief", got)
 	if n := len(strings.Split(strings.TrimSpace(got), "\n")); n > 5 {
 		t.Errorf("%d lines, want at most 5", n)
@@ -54,7 +56,7 @@ func TestDesignSystemBrief_PointerIsTheContractsTextInAtMostFiveLines(t *testing
 
 func TestDesignSystemBrief_OptedInSessionsOfEveryRoleGetItAfterTheirBrief(t *testing.T) {
 	s := designSystemService()
-	pointer := designSystemSection(&domain.Repository{UsesDesignSystem: true})
+	pointer := designSystemSection(&domain.Repository{DesignSystemID: &applied})
 	for name, role := range map[string]domain.SessionRole{"delegate": domain.RoleDelegate, "plain": domain.RolePeer, "architect": domain.RoleArchitect} {
 		base := briefFor(s, role, "plain")
 		got := briefFor(s, role, "opted")
