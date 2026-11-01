@@ -126,6 +126,9 @@ type SandboxSession struct {
 	// OneShot marks a one-shot claude call: it sees only its temp dir (also
 	// its working directory), the agent home and Allow, never a repository.
 	OneShot bool
+	// ReadOnlyDir, on a one-shot, is the one directory it reads and starts in:
+	// the deny-writes profile of a read-only turn. It is never writable.
+	ReadOnlyDir string
 	// Login marks the sign-in's claude (`auth login`, `auth status`): like a
 	// one-shot it sees only its temp dir, the agent home and Allow, never a
 	// repository, and not even the person's git config.
@@ -184,7 +187,12 @@ func BuildSandboxPolicy(s SandboxSession) ports.SandboxPolicy {
 		for _, p := range s.Allow {
 			add(p.Path, p.Write)
 		}
-		policy := splitPolicy(all, s.TempDir)
+		workingDir := s.TempDir
+		if s.ReadOnlyDir != "" {
+			add(s.ReadOnlyDir, false)
+			workingDir = filepath.Clean(s.ReadOnlyDir)
+		}
+		policy := splitPolicy(all, workingDir)
 		policy.Hidden = hiddenPaths(s, all)
 		return policy
 	}
@@ -311,6 +319,29 @@ func (b *Sandbox) OneShotWrap(allow []ports.SandboxPath) (llmkit.WrapFunc, error
 	// A one-shot sees no project: it reads every checkout of the install when
 	// the setting is on for no project in particular (its default).
 	sess := SandboxSession{OneShot: true, TempDir: os.TempDir(), AgentHome: b.Home, UserHome: b.UserHome, ConfigHome: b.ConfigHome, Allow: allow, ReadAllRepos: b.readAllRepos("")}
+	if b.Checkouts != nil {
+		sess.Repositories = b.Checkouts()
+	}
+	if b.WorkspacesRoot != nil {
+		sess.WorkspacesRoot = b.WorkspacesRoot()
+	}
+	return sandboxWrap(b.Driver, sess), nil
+}
+
+// ReadOnlyWrap is the WrapFunc confining a read-only claude turn (the
+// architecture assistant's): the deny-writes profile. Like a one-shot's it
+// writes only its temp dir and the agent home (claude's transcript), and
+// starts in checkout, which it reads and never writes. The project's other
+// checkouts stay hidden. Nil with the sandbox off, the missing-driver refusal
+// when it is on without one.
+func (b *Sandbox) ReadOnlyWrap(checkout string, allow []ports.SandboxPath) (llmkit.WrapFunc, error) {
+	if !b.on() {
+		return nil, nil
+	}
+	if b.Driver == nil {
+		return nil, agentready.SandboxDriverMissing()
+	}
+	sess := SandboxSession{OneShot: true, ReadOnlyDir: checkout, TempDir: os.TempDir(), AgentHome: b.Home, UserHome: b.UserHome, ConfigHome: b.ConfigHome, Allow: allow}
 	if b.Checkouts != nil {
 		sess.Repositories = b.Checkouts()
 	}
