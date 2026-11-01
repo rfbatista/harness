@@ -66,7 +66,13 @@ const (
 )
 
 // Sources of a design-system version.
-const DesignSourceManual = "manual"
+const (
+	DesignSourceManual = "manual"
+	DesignSourceImport = "import"
+)
+
+// DesignByImport is who wrote a version an import made.
+const DesignByImport = "import"
 
 // DesignByPerson is who wrote a version the person saved.
 const DesignByPerson = "person"
@@ -103,12 +109,16 @@ type DesignSystemVersion struct {
 	DesignSystemID string
 	Version        int
 	At             time.Time
-	By             string // "person"
-	Source         string // "manual"
+	By             string // "person" or "import"
+	Source         string // "manual" or "import"
 	ProposalID     string
 	Message        string
 	Summary        DesignSummary
 	Record         DesignSystemRecord
+	// RepositoryID and RepositoryName say which repository an import (source
+	// "import") read; the name is kept as it was then.
+	RepositoryID   string
+	RepositoryName string
 }
 
 // DesignSystem is a design system as it is now: its identity and the latest

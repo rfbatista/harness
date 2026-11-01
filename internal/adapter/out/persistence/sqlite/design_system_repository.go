@@ -48,6 +48,8 @@ type DesignSystemVersionModel struct {
 	By             string
 	Source         string
 	ProposalID     string `gorm:"column:proposal_id"`
+	RepositoryID   string `gorm:"column:repository_id"`
+	RepositoryName string `gorm:"column:repository_name"`
 	Message        string
 	SummaryJSON    string `gorm:"column:summary_json"`
 	RecordJSON     string `gorm:"column:record_json"`
@@ -70,7 +72,7 @@ func dropProjectKeyedDesignSystemVersions(db *gorm.DB) error {
 func (m *DesignSystemVersionModel) toDomain() (*domain.DesignSystemVersion, error) {
 	v := &domain.DesignSystemVersion{
 		DesignSystemID: m.DesignSystemID, Version: m.Version, At: m.At, By: m.By, Source: m.Source,
-		ProposalID: m.ProposalID, Message: m.Message,
+		ProposalID: m.ProposalID, Message: m.Message, RepositoryID: m.RepositoryID, RepositoryName: m.RepositoryName,
 	}
 	if err := json.Unmarshal([]byte(m.SummaryJSON), &v.Summary); err != nil {
 		return nil, err
@@ -322,7 +324,7 @@ func (r *DesignSystemRepository) Append(ctx context.Context, v *domain.DesignSys
 		}
 		m := DesignSystemVersionModel{
 			DesignSystemID: v.DesignSystemID, Version: stored + 1, At: v.At, By: v.By, Source: v.Source, ProposalID: v.ProposalID,
-			Message: v.Message, SummaryJSON: string(summary), RecordJSON: string(record),
+			RepositoryID: v.RepositoryID, RepositoryName: v.RepositoryName, Message: v.Message, SummaryJSON: string(summary), RecordJSON: string(record),
 		}
 		if err := tx.Create(&m).Error; err != nil {
 			return err

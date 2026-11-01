@@ -37,6 +37,9 @@ type Service struct {
 	store    ports.DesignSystemStore
 	projects ports.ProjectReader
 	feed     ports.ProjectChangeSink // nil until the orchestration is wired
+	// git and repos are what an import reads; nil until UseImport.
+	git   ports.ArchitectureGit
+	repos ports.DesignSourceRepositories
 	// guards refuse a delete (DESIGN_SYSTEM_IN_USE).
 	guards []func(ctx context.Context, designSystemID string) error
 	lock   sync.Locker // held from the guards to the delete; nil: none

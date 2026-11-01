@@ -189,8 +189,10 @@ type Handler struct {
 	architectureAssistant ports.ArchitectureAssistant
 	catalog               ports.CatalogEditor
 
-	repoArch  ports.RepositoryArchitectures
-	designs   ports.DesignSystems
+	repoArch ports.RepositoryArchitectures
+	designs  ports.DesignSystems
+	// imports is the design systems' import, when they offer it.
+	imports   ports.DesignSystemImports
 	archRules ports.ArchitectureRules
 
 	streams streamRegistry // the browser tabs' live streams (stream.go)
@@ -227,6 +229,7 @@ func NewHandler(s Services) *Handler {
 		branchNames:    s.BranchNames,
 		repoArch:       s.RepositoryArchitectures,
 		designs:        s.DesignSystems,
+		imports:        designImports(s.DesignSystems),
 		archRules:      s.ArchitectureRules,
 		notifications:  s.Notifications,
 		usage:          s.Usage,
