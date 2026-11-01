@@ -196,6 +196,7 @@ func addToken(tokens []domain.DesignToken, skipped []skip, path string, t domain
 var (
 	colorFunc     = regexp.MustCompile(`(?i)^(oklch|oklab|rgba?|hsla?|hwb|lab|lch|color|color-mix|light-dark)\(`)
 	colorHex      = regexp.MustCompile(`^#([0-9a-fA-F]{3,4}|[0-9a-fA-F]{6}|[0-9a-fA-F]{8})$`)
+	easingExpr    = regexp.MustCompile(`(?i)^(cubic-bezier|steps|linear)\(|^(ease|ease-in|ease-out|ease-in-out|linear|step-start|step-end)$`)
 	dimensionExpr = regexp.MustCompile(`(?i)^-?[0-9]*\.?[0-9]+(px|rem|em|ch|ex|vw|vh|svw|svh|dvw|dvh|lvw|lvh|vmin|vmax|pt|cm|mm|in|%)$|^(min|max|clamp|calc)\(`)
 )
 
@@ -217,6 +218,8 @@ func inferType(group string, value any) string {
 	}
 	s = strings.TrimSpace(s)
 	switch {
+	case easingExpr.MatchString(s):
+		return domain.TokenEasing
 	case colorHex.MatchString(s) || colorFunc.MatchString(s) || s == "transparent" || strings.EqualFold(s, "currentcolor"):
 		return domain.TokenColor
 	case group == "font" || group == "fonts" || group == "typeface":

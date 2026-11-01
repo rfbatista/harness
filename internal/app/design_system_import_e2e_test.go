@@ -223,3 +223,45 @@ func TestDesignImport_ImportCreatesANewDesignSystemAtVersionOneAndNeverOverwrite
 		t.Errorf("slugs = %v", slugs)
 	}
 }
+
+func TestDesignImport_ATokenNameMayStartWithADigitAndEasingIsAType(t *testing.T) {
+	s := startDesignServer(t)
+	record := map[string]any{
+		"tokens": []any{
+			dsToken("space", "2xl", "dimension", "2rem"),
+			dsToken("ease", "out", "easing", "cubic-bezier(0.25, 1, 0.5, 1)"),
+		},
+		"principles": "", "components": []any{},
+	}
+	s.mustSave(0, record)
+
+	if status, out := s.post("save_design_system", map[string]any{"base_version": 1, "record": map[string]any{
+		"tokens": []any{dsToken("space", "-xl", "dimension", "1rem")}, "principles": "", "components": []any{},
+	}}); status != http.StatusBadRequest || out["code"] != "DESIGN_SYSTEM_INVALID" {
+		t.Errorf("a name that starts with a dash: %d %v", status, out)
+	}
+}
+
+func TestDesignImport_TheHarnessFixtureKeepsItsDigitNamesAndEasingTokens(t *testing.T) {
+	s := startDesignServer(t)
+	harness, _ := s.importFixture("harness", harnessFiles(t))
+
+	out := s.mustPost("preview_design_system_import", map[string]any{"repository_id": harness, "tokens_path": "design-system/tokens.json"})
+
+	kept := map[string]string{}
+	for _, tok := range out["record"].(map[string]any)["tokens"].([]any) {
+		m := tok.(map[string]any)
+		kept[m["group"].(string)+"."+m["name"].(string)] = m["type"].(string)
+	}
+	for key, typ := range map[string]string{"space.2xl": "dimension", "space.3xs": "dimension", "text.2xl": "dimension", "spacing.3xl": "dimension", "ease.out": "easing", "ease.out-expo": "easing"} {
+		if kept[key] != typ {
+			t.Errorf("%s = %q, want %q", key, kept[key], typ)
+		}
+	}
+	skipped := skippedPaths(out)
+	for path := range skipped {
+		if strings.HasPrefix(path, "space.") || strings.HasPrefix(path, "ease.") || strings.HasPrefix(path, "text.") {
+			t.Errorf("%s is still skipped: %s", path, skipped[path])
+		}
+	}
+}

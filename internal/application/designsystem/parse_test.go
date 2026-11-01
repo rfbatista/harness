@@ -73,7 +73,7 @@ func TestPlainTokensGetInferredTypesAndSectionsThatAreNotTokensAreSkipped(t *tes
 	for _, tok := range tokens {
 		types[tok.Key()] = tok.Type
 	}
-	want := map[string]string{"font.sans": "font", "text.md": "dimension", "z.modal": "number"}
+	want := map[string]string{"font.sans": "font", "text.md": "dimension", "text.2xl": "dimension", "z.modal": "number", "ease.out": "easing"}
 	if !reflect.DeepEqual(types, want) {
 		t.Errorf("types = %v, want %v", types, want)
 	}
@@ -81,7 +81,7 @@ func TestPlainTokensGetInferredTypesAndSectionsThatAreNotTokensAreSkipped(t *tes
 	for _, s := range skipped {
 		reasons[s.Path] = s.Reason
 	}
-	for _, path := range []string{"$comment", "text.2xl", "ease.out", "themes.dark", "utilities"} {
+	for _, path := range []string{"$comment", "themes.dark", "utilities"} {
 		if reasons[path] == "" {
 			t.Errorf("%s is not skipped with a reason: %v", path, reasons)
 		}
