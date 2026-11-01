@@ -192,11 +192,16 @@ export function designSystemGateway(api, feed) {
       return proposalViewDto(await api.post("/get_design_system_proposal", { proposal_id: proposalId }));
     },
 
-    /** Approves or rejects every item of an open proposal; answers the version it wrote (0 for none) and its state. */
+    /** Approves or rejects the same way every item named; answers the version it wrote (0 for none) and the proposal's state. */
     async decide(proposalId, itemIds, decision, confirmOverwrite = []) {
+      return this.decideItems(proposalId, itemIds.map((id) => ({ id, decision })), confirmOverwrite);
+    },
+
+    /** Decides items one by one (`decisions` are `{ id, decision: "approve" | "reject" }`); the ones left out stay pending. */
+    async decideItems(proposalId, decisions, confirmOverwrite = []) {
       const body = await api.post("/decide_design_system_proposal", {
         proposal_id: proposalId,
-        decisions: itemIds.map((id) => ({ item_id: id, decision })),
+        decisions: decisions.map((d) => ({ item_id: d.id, decision: d.decision })),
         confirm_overwrite: confirmOverwrite,
       });
       return { version: Number.isInteger(body?.version) ? body.version : 0, state: body?.state ?? "" };

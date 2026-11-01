@@ -15,8 +15,8 @@ templ proposalBanner() {
 // tabProposals is the Proposals tab's panel: the design sessions' proposals,
 // newest first, and the review of the one opened: each change with its base,
 // current and proposed values, a before and after preview of every component
-// it touches, and the whole proposal's Approve and Reject. Deciding some
-// changes only arrives with the item-by-item review.
+// it touches, and the whole proposal's Approve and Reject. Each change can also be
+// approved or rejected on its own and the marks applied together.
 templ tabProposals() {
 	<section role="tabpanel" id="design-system-panel-proposals" aria-labelledby="design-system-tab-proposals" x-show="isTab('proposals')" class="[ flow ]">
 		<template x-if="hasProposalError">
@@ -93,6 +93,7 @@ templ proposalReview() {
 						<b x-text="it.title"></b>
 						<span class="[ color-ink-faint text-sm ]" x-text="it.opText"></span>
 						<span class="[ badge ]" data-tone="attention" x-show="it.conflicting">conflicts</span>
+						<span class="[ badge ]" x-show="!it.pending" data-nav-decision x-text="it.decisionLabel"></span>
 					</div>
 				</template>
 			</nav>
@@ -100,7 +101,28 @@ templ proposalReview() {
 				<template x-for="p in proposalPanels" x-bind:key="p.id">
 					<section class="[ entry-card ]" data-proposal-panel x-bind:data-item-id="p.id">
 						<div class="[ entry-card-body flow ]">
-							<h3 x-text="p.title"></h3>
+							<div class="[ cluster ]" style="justify-content: space-between; align-items: center">
+								<h3 x-text="p.title"></h3>
+								<span class="[ cluster ]">
+									<span class="[ badge ]" data-item-decision x-bind:data-decision="p.decision" x-show="!p.canMark" x-text="p.decisionLabel"></span>
+									<template x-if="p.canMark">
+										<span class="[ cluster ]" role="group" aria-label="Decide this change">
+											<button type="button" class="[ button ]" data-size="sm" data-variant="ghost" data-action="mark-reject" x-bind:aria-pressed="p.rejectOn" x-on:click="markItem(p.id, 'reject')">Reject this change</button>
+											<button type="button" class="[ button ]" data-size="sm" data-variant="primary" data-action="mark-approve" x-bind:aria-pressed="p.approveOn" x-on:click="markItem(p.id, 'approve')">Approve</button>
+										</span>
+									</template>
+								</span>
+							</div>
+							<template x-if="p.hasFlag">
+								<div class="[ banner ]" data-tone="danger" role="alert" data-item-flag>
+									<span class="[ grow ]" x-text="p.flag"></span>
+								</div>
+							</template>
+							<template x-if="p.hasProblem">
+								<div class="[ banner ]" data-tone="danger" role="alert" data-item-invalid>
+									<span class="[ grow ]" x-text="p.problem"></span>
+								</div>
+							</template>
 							<template x-if="p.conflicting">
 								<div class="[ banner ]" data-tone="attention" data-item-conflict>
 									<span class="[ grow ]" x-text="p.conflictNote"></span>
@@ -178,6 +200,7 @@ templ proposalReview() {
 				<template x-if="!rejectingAll">
 					<span class="[ cluster ]">
 						<button type="button" class="[ button ]" data-variant="ghost" data-size="sm" data-action="reject-all" x-bind:disabled="!canRejectProposal" x-on:click="askRejectProposal">Reject all…</button>
+						<button type="button" class="[ button ]" data-size="sm" data-action="apply-decisions" x-bind:disabled="!canApplyMarks" x-bind:aria-busy="deciding" x-on:click="applyMarks">Apply my decisions</button>
 						<button type="button" class="[ button ]" data-variant="primary" data-size="sm" data-action="approve-all" x-bind:disabled="!canApproveProposal" x-bind:aria-busy="deciding" x-on:click="approveProposal">Approve all</button>
 					</span>
 				</template>

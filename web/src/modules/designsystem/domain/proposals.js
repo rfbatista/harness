@@ -89,9 +89,14 @@ const OPS = { add: "added", change: "changed", remove: "removed" };
 /** The key as it is read: a section's heading without its hashes. */
 const keyText = (it) => (it.kind === "principles_section" ? it.key.replace(/^##\s*/, "") : it.key);
 
+const DECISIONS = { pending: "Pending", approved: "Approved", rejected: "Rejected", sent_back: "Sent back" };
+
 /** One entry of the changes list. */
 export function itemView(it) {
   return {
+    decision: it.decision,
+    decisionLabel: DECISIONS[it.decision] ?? it.decision,
+    pending: it.decision === "pending",
     id: it.id,
     title: `${KINDS[it.kind] ?? it.kind} ${keyText(it)}`,
     kind: it.kind,
@@ -101,6 +106,38 @@ export function itemView(it) {
     opText: OPS[it.op] ?? it.op,
     conflicting: it.conflicting,
   };
+}
+
+/** The custom properties a component's previews use, as `--group-name…` references. */
+function propertiesUsed(component) {
+  const used = new Set();
+  for (const p of component?.previews ?? []) for (const m of String(p.css ?? "").matchAll(/var\(\s*(--[a-z0-9-]+)/g)) used.add(m[1]);
+  return used;
+}
+
+/**
+ * Why an approved component cannot be applied yet: its previews use a token
+ * the proposal adds that is not approved in the same apply (rejected, or left
+ * undecided), so the design system would not take it. Answers the line to
+ * show per item id, for the components marked approve; `marks` is the
+ * person's marks by item id ("approve" or "reject").
+ */
+export function dependencyFlags(view, marks) {
+  const approved = (it) => it.decision === "approved" || marks[it.id] === "approve";
+  const added = view.items.filter((it) => it.kind === "token" && it.op === "add" && !approved(it));
+  const flags = {};
+  for (const it of view.items) {
+    if (it.kind !== "component" || it.op === "remove" || marks[it.id] !== "approve") continue;
+    const used = propertiesUsed(it.proposed);
+    for (const t of added) {
+      const prop = `--${t.proposed.group}-${t.proposed.name}`;
+      if (![...used].some((u) => u === prop || u.startsWith(`${prop}-`))) continue;
+      const why = marks[t.id] === "reject" || t.decision === "rejected" ? "which you are rejecting" : "which you have not approved";
+      flags[it.id] = `${it.key} uses the token ${t.key}, ${why}. Approve the token in the same apply, or reject this component.`;
+      break;
+    }
+  }
+  return flags;
 }
 
 /** A token's value in one line. */
