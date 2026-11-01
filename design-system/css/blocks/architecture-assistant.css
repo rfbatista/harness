@@ -7,7 +7,8 @@
  *       <p class="activity-line">Reading internal/domain/zone.go</p><p class="working">…</p>
  *       <p class="notice" data-tone="danger|attention">…</p></div>
  *     <div class="compose"><textarea></textarea><div class="actions">…</div></div></aside></div>
- * Exceptions: data-who on .message, data-tone on .notice.
+ * .proposal: the card of a proposal, its changes grouped by tab, the layer preview and Accept / Discard.
+ * Exceptions: data-who on .message, data-tone on .notice, data-state on .proposal.
  */
 
 @layer blocks {
@@ -54,6 +55,8 @@
       overflow-y: auto;
     }
 
+    & .turn { display: flex; flex-direction: column; gap: var(--space-xs); }
+
     & .message {
       max-inline-size: 90%;
       padding: var(--space-xs) var(--space-s);
@@ -63,6 +66,24 @@
 
       &[data-who="person"] { align-self: flex-end; background: var(--color-signal-wash); }
       &[data-who="assistant"] { align-self: flex-start; background: var(--color-sunken); }
+    }
+
+    & .proposal {
+      display: flex;
+      flex-direction: column;
+      gap: var(--space-xs);
+      padding: var(--space-s);
+      border: var(--border-width) solid var(--color-line-strong);
+      border-radius: var(--radius-md);
+
+      &[data-state="discarded"] { opacity: 0.6; }
+
+      & h3 { font-size: var(--text-xs); font-weight: var(--weight-bold); color: var(--color-ink-muted); }
+      & ul { display: flex; flex-direction: column; gap: var(--space-xs); }
+      & li[data-op] { display: flex; flex-direction: column; gap: var(--space-3xs); }
+      & .preview { display: flex; flex-direction: column; gap: var(--space-3xs); padding-block-start: var(--space-xs); border-block-start: var(--border-width) solid var(--color-line); }
+      & .preview ul { flex-direction: row; flex-wrap: wrap; gap: var(--space-2xs) var(--space-s); font-size: var(--text-xs); }
+      & .actions { display: flex; justify-content: flex-end; gap: var(--space-xs); }
     }
 
     & .activity-line,

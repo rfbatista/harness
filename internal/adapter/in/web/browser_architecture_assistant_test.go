@@ -322,3 +322,144 @@ func TestAssistantFailedTurnKeepsTheConversationInTheBrowser(t *testing.T) {
 		t.Errorf("after a failure the next turn conversation_id = %v, want c1", got)
 	}
 }
+
+// proposalOf is a proposal as the contract's result event carries it.
+func proposalOf(id, summary string, changes ...map[string]any) map[string]any {
+	return map[string]any{"id": id, "summary": summary, "valid": true, "changes": changes, "errors": []any{}}
+}
+
+// change is one proposal change; base is the target's value in the draft the turn was sent with.
+func change(target map[string]any, op string, value, base any, reason string) map[string]any {
+	c := map[string]any{"target": target, "op": op, "base": base, "reason": reason}
+	if value != nil {
+		c["value"] = value
+	}
+	return c
+}
+
+// proposing is the script of a turn that answers with a proposal.
+func proposing(text string, proposal map[string]any) func(t *assistantTurn) {
+	return func(t *assistantTurn) {
+		t.Event("delta", map[string]any{"text": text})
+		t.Event("result", map[string]any{"text": text, "proposal": proposal})
+	}
+}
+
+// portsProposal adds a ports layer and sets the pattern: two changes on two tabs.
+func portsProposal(id string) map[string]any {
+	return proposalOf(id, "Add the ports layer.",
+		change(map[string]any{"kind": "layer", "name": "ports"}, "add",
+			map[string]any{"name": "ports", "match": map[string]any{"folder": "internal/ports"}, "access": map[string]any{"default": "read"}}, nil,
+			"internal/ports holds the interfaces the adapters implement."),
+		change(map[string]any{"kind": "pattern"}, "change", "hexagonal", nil, "The code follows ports and adapters."),
+	)
+}
+
+const (
+	asstCard     = `[data-assistant-proposal]`
+	cardState    = `document.querySelector('[data-assistant-proposal]')?.dataset.state`
+	layersCount  = `document.querySelector('#architecture-tab-layers [data-tab-count]').textContent.trim()`
+	barSummaryJS = `document.querySelector('[data-save-bar] .summary')?.textContent.replace(/\s+/g, ' ').trim() ?? ''`
+)
+
+// A proposal is a card with its summary, its changes grouped by tab with their reasons, and the layer
+// preview for the draft with it applied. Accepting puts it in the unsaved draft and stores nothing.
+func TestAssistantProposalCardAcceptsIntoTheDraftInTheBrowser(t *testing.T) {
+	rig, fake := newAssistantRig(t, true, "", "")
+	rig.api.seed(savedRecord())
+	fake.script(proposing("Here is a proposal.", portsProposal("p1")))
+
+	var card, bar, count string
+	var groups []string
+	rig.run(t, asstReady(rig.url(""))...)
+	rig.run(t, asstOpenPanel()...)
+	rig.run(t,
+		asstType("Add a ports layer"),
+		asstKey(asstInput, "Enter", false),
+		poll(`!!document.querySelector('[data-assistant-proposal] [data-proposal-preview]')?.textContent.includes('ports 1 file')`),
+		chromedp.Evaluate(`document.querySelector('[data-assistant-proposal]').textContent.replace(/\s+/g, ' ')`, &card),
+		chromedp.Evaluate(`[...document.querySelectorAll('[data-proposal-group]')].map(g => g.dataset.group)`, &groups),
+	)
+	for _, want := range []string{
+		"Add the ports layer.", "Layer ports", "folder internal/ports", "internal/ports holds the interfaces the adapters implement.",
+		"The code follows ports and adapters.", "Add", "Change", "domain", "adapters", "ports 1 file", "No overlaps",
+	} {
+		if !strings.Contains(card, want) {
+			t.Errorf("proposal card lacks %q: %q", want, card)
+		}
+	}
+	if strings.Join(groups, ",") != "pattern,layers" {
+		t.Errorf("groups = %v, want pattern,layers", groups)
+	}
+	// The preview was asked for the draft with the proposal applied, and nothing is in the draft yet.
+	rig.run(t, chromedp.Evaluate(layersCount, &count), chromedp.Evaluate(barVisible(), nil))
+	if count != "2" {
+		t.Fatalf("the layers tab counted %s before accept", count)
+	}
+
+	rig.run(t,
+		chromedp.Click(`[data-proposal-accept]`, chromedp.ByQuery),
+		poll(`document.querySelector('#architecture-tab-layers [data-tab-count]').textContent.trim() === '3'`),
+		poll(barVisible()),
+		chromedp.Evaluate(barSummaryJS, &bar),
+		chromedp.Evaluate(`document.querySelector('`+patternField+`').value`, &count),
+	)
+	if count != "hexagonal" {
+		t.Errorf("pattern after accept = %q", count)
+	}
+	if !strings.Contains(bar, "2 changes") {
+		t.Errorf("save bar = %q", bar)
+	}
+	var state string
+	rig.run(t, chromedp.Evaluate(cardState, &state))
+	if state != "accepted" {
+		t.Errorf("card state = %q", state)
+	}
+	for _, c := range rig.api.called() {
+		if c == "save_repository_architecture" {
+			t.Fatalf("accepting stored something: %v", rig.api.called())
+		}
+	}
+
+	// Review diff shows the accepted changes; Save stores them as usual.
+	rig.run(t,
+		clickButton(`[data-save-bar]`, "Save to database"),
+		poll(`!document.querySelector('[data-save-bar]')?.checkVisibility()`),
+	)
+	if got := len(rig.api.saved); got != 1 {
+		t.Fatalf("saves = %d, want 1", got)
+	}
+}
+
+// Discarding a proposal leaves the draft as it was.
+func TestAssistantProposalDiscardLeavesTheDraftInTheBrowser(t *testing.T) {
+	rig, fake := newAssistantRig(t, true, "", "")
+	rig.api.seed(savedRecord())
+	fake.script(proposing("Here is a proposal.", portsProposal("p1")))
+
+	var count string
+	rig.run(t, asstReady(rig.url(""))...)
+	rig.run(t, asstOpenPanel()...)
+	rig.run(t,
+		asstType("Add a ports layer"),
+		asstKey(asstInput, "Enter", false),
+		poll(`!!document.querySelector('[data-proposal-discard]')`),
+		chromedp.Click(`[data-proposal-discard]`, chromedp.ByQuery),
+		poll(cardState+` === 'discarded'`),
+		chromedp.Evaluate(layersCount, &count),
+	)
+	if count != "2" {
+		t.Errorf("layers after discard = %s", count)
+	}
+	var shown bool
+	rig.run(t,
+		chromedp.Evaluate(`!!document.querySelector('[data-proposal-accept]')`, &shown),
+	)
+	if shown {
+		t.Error("a discarded card still offers Accept")
+	}
+	rig.run(t, chromedp.Evaluate(`document.querySelector('[data-save-bar]').checkVisibility()`, &shown))
+	if shown {
+		t.Error("the save bar shows after a discard")
+	}
+}

@@ -10,7 +10,9 @@
 import { describeError } from "../../../../shared/presentation/errors.js";
 import { readSeed } from "../../../../shared/presentation/seed.js";
 import { ASSISTANT_CONVERSATION_NOT_FOUND, ASSISTANT_UNAVAILABLE, activityText, turnRequest } from "../../domain/assistant.js";
+import { applyProposal, changeRow, groupChanges, proposalFigures } from "../../domain/proposal.js";
 import { cleanRecord } from "../../domain/record.js";
+import { DRAFT_REPLACED } from "../pages/architecturePage.js";
 
 /** @param {{ gateway: ReturnType<typeof import("../../infrastructure/architecture-gateway.js").architectureGateway> }} deps */
 export const architectureAssistant = ({ gateway }) => () => ({
@@ -148,6 +150,7 @@ export const architectureAssistant = ({ gateway }) => () => ({
       );
       // The result's text is the whole answer, authoritative over the deltas.
       this.messageById(replyId).text = result.text;
+      if (result.proposal) this.propose(replyId, result.proposal);
     } catch (err) {
       this.turnEnded(replyId, err);
     } finally {
@@ -157,6 +160,51 @@ export const architectureAssistant = ({ gateway }) => () => ({
         this.activity = [];
       }
     }
+  },
+
+  /** Attaches a proposal to the answer that carried it and asks for the layer preview of the draft with it applied. */
+  propose(messageId, proposal) {
+    this.messageById(messageId).proposal = {
+      id: proposal.id,
+      summary: proposal.summary,
+      valid: proposal.valid === true,
+      errors: Array.isArray(proposal.errors) ? proposal.errors.map((e) => ({ path: e.path, message: e.message })) : [],
+      groups: groupChanges(proposal).map((g) => ({ slug: g.slug, label: g.label, rows: g.changes.map(changeRow) })),
+      raw: proposal,
+      /** "open", then "accepted" or "discarded". */
+      state: "open",
+      /** "loading", "ready" or "failed", with the figures once ready. */
+      preview: "loading",
+      figures: null,
+    };
+    if (proposal.valid === true) this.previewProposal(messageId);
+  },
+
+  /** What the layers of the draft would match with the proposal applied; a failure only leaves the card without figures. */
+  async previewProposal(messageId) {
+    const proposal = this.messageById(messageId).proposal;
+    const applied = applyProposal(this.draft, proposal.raw);
+    try {
+      const preview = await gateway.previewLayers(this.repositoryId, applied.layers, applied.unlayered);
+      proposal.figures = proposalFigures(preview);
+      proposal.preview = "ready";
+    } catch {
+      proposal.preview = "failed";
+    }
+  },
+
+  /** Puts the proposal into the page's unsaved draft, whole. Nothing is saved: Save and Review diff work on it as on any edit. */
+  accept(messageId) {
+    const proposal = this.messageById(messageId).proposal;
+    if (proposal.state !== "open" || !proposal.valid) return;
+    this.draft = applyProposal(this.draft, proposal.raw);
+    proposal.state = "accepted";
+    window.dispatchEvent(new CustomEvent(DRAFT_REPLACED));
+  },
+
+  discard(messageId) {
+    const proposal = this.messageById(messageId).proposal;
+    if (proposal.state === "open") proposal.state = "discarded";
   },
 
   /** What a turn that did not finish leaves: a stopped turn keeps its text, a failed one says why. */

@@ -5,6 +5,7 @@
 // way, so these rules follow the contract table. Pure.
 
 import { TABS, cloneRecord, sameRecord } from "./record.js";
+import { fileCountText } from "./layers.js";
 
 /**
  * @typedef {{ kind: string, [key: string]: string }} ProposalTarget
@@ -183,4 +184,58 @@ export function groupChanges(proposal) {
   const groups = [{ slug: "pattern", label: "Pattern", changes: [] }, ...TABS.map((t) => ({ slug: t.slug, label: t.label, changes: [] }))];
   proposal.changes.forEach((change, index) => groups.find((g) => g.slug === slugOf(change.target)).changes.push({ ...change, index }));
   return groups.filter((g) => g.changes.length > 0);
+}
+
+const OP_WORDS = { add: "Add", change: "Change", remove: "Remove" };
+
+const matchOf = (layer) => (layer?.match?.folder ? `folder ${layer.match.folder}` : layer?.match?.regex ? `regex ${layer.match.regex}` : "");
+
+/** What a change touches and what it makes of it, as the card words it. */
+function labelOf(change) {
+  const { target: t, op, value } = change;
+  const agent = (a) => (a === DEFAULT_AGENT ? "everyone else" : a);
+  switch (t.kind) {
+    case "pattern":
+      return { label: "Pattern", detail: op === "remove" ? "cleared" : String(value ?? "") };
+    case "layer":
+      return { label: `Layer ${t.name}`, detail: op === "remove" ? "" : matchOf(value) };
+    case "layer_access":
+      return { label: `Access · ${t.layer} · ${agent(t.agent)}`, detail: op === "remove" ? "falls back to the default" : String(value) };
+    case "unlayered_access":
+      return { label: `Unlayered access · ${agent(t.agent)}`, detail: op === "remove" ? "falls back to the default" : String(value) };
+    case "rule":
+      return { label: `Rule ${t.id}`, detail: op === "remove" ? "" : `${value?.mode} · ${value?.kind}` };
+    case "instruction":
+      return { label: `Instruction ${t.path}`, detail: op === "remove" ? "" : String(value?.kind ?? "") };
+    case "tool":
+      return { label: `Tool ${t.name}`, detail: op === "remove" ? "" : String(value?.kind ?? "") };
+    case "sandbox":
+      return { label: `Sandbox ${t.name}`, detail: "" };
+    case "routing":
+      return { label: `Route ${t.agent}`, detail: op === "remove" ? "" : String(value?.model ?? "") };
+    default:
+      return { label: `Hand-off ${t.from} → ${t.to}`, detail: op === "remove" ? "" : String(value?.when ?? "") };
+  }
+}
+
+/**
+ * A change as the card shows it: the op in words, what it touches, what it makes of it and why.
+ * @param {ProposalChange} change
+ */
+export function changeRow(change) {
+  return { op: change.op, opWord: OP_WORDS[change.op] ?? change.op, ...labelOf(change), reason: change.reason ?? "" };
+}
+
+/**
+ * The layer preview of the draft with a proposal applied, as the card says it: the files each layer
+ * matches, the files in no layer and the overlaps.
+ * @param {{ layers: { name: string, fileCount: number }[], unlayered: { fileCount: number }, overlaps: unknown[] }} preview
+ */
+export function proposalFigures(preview) {
+  const n = preview.overlaps.length;
+  return {
+    layers: preview.layers.map((l) => `${l.name} ${fileCountText(l.fileCount)}`),
+    unlayered: `${fileCountText(preview.unlayered.fileCount)} in no layer`,
+    overlaps: n === 0 ? "No overlaps" : `${n} ${n === 1 ? "overlap" : "overlaps"}`,
+  };
 }

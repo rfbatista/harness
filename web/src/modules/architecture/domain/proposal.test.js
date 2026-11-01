@@ -1,5 +1,5 @@
 import { assert, file, test } from "../../../shared/testing/test.js";
-import { applyProposal, proposalConflicts, groupChanges } from "./proposal.js";
+import { applyProposal, proposalConflicts, groupChanges, changeRow, proposalFigures } from "./proposal.js";
 
 file("architecture/domain/proposal");
 
@@ -171,4 +171,31 @@ test("changes group by the tab they touch, in the tab order, keeping their own o
   const groups = groupChanges(p);
   assert.deepEqual(groups.map((g) => g.label), ["Pattern", "Tools", "Hooks", "Layers"]);
   assert.equal(groups[3].changes.length, 2);
+});
+
+test("a change reads as an op word, what it touches, its new value and its reason", () => {
+  const row = (c) => changeRow({ ...c, reason: "because" });
+  assert.deepEqual(row(ch({ kind: "layer", name: "ports" }, "add", { name: "ports", match: { folder: "internal/ports" } })), {
+    op: "add", opWord: "Add", label: "Layer ports", detail: "folder internal/ports", reason: "because",
+  });
+  assert.deepEqual(row(ch({ kind: "layer", name: "web" }, "change", { name: "web", match: { regex: "^web/" } })).detail, "regex ^web/");
+  assert.deepEqual(row(ch({ kind: "layer_access", layer: "web", agent: "*" }, "change", "none")), {
+    op: "change", opWord: "Change", label: "Access · web · everyone else", detail: "none", reason: "because",
+  });
+  assert.equal(row(ch({ kind: "layer_access", layer: "web", agent: "devops" }, "remove")).detail, "falls back to the default");
+  assert.equal(row(ch({ kind: "unlayered_access", agent: "devops" }, "add", "change")).label, "Unlayered access · devops");
+  assert.equal(row(ch({ kind: "rule", id: "stay" }, "change", { id: "stay", kind: "edit_outside_layer", mode: "blocking" })).detail, "blocking · edit_outside_layer");
+  assert.equal(row(ch({ kind: "pattern" }, "remove")).detail, "cleared");
+  assert.equal(row(ch({ kind: "handoff", from: "a", to: "b" }, "add", { from: "a", to: "b", when: "w" })).label, "Hand-off a → b");
+  assert.equal(row(ch({ kind: "routing", agent: "go-developer" }, "change", { agent: "go-developer", model: "opus" })).detail, "opus");
+});
+
+test("the preview figures are the file count per layer, the unlayered files and the overlaps", () => {
+  const f = proposalFigures({
+    layers: [{ name: "domain", fileCount: 1 }, { name: "ports", fileCount: 12 }],
+    unlayered: { fileCount: 4 },
+    overlaps: [{ path: "x", layers: ["a", "b"], winner: "a" }],
+  });
+  assert.deepEqual(f, { layers: ["domain 1 file", "ports 12 files"], unlayered: "4 files in no layer", overlaps: "1 overlap" });
+  assert.equal(proposalFigures({ layers: [], unlayered: { fileCount: 1 }, overlaps: [] }).overlaps, "No overlaps");
 });
