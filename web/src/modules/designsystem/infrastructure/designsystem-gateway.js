@@ -4,6 +4,7 @@
 
 import { StructuredError, Codes } from "../../../shared/domain/errors.js";
 import { listRow } from "../domain/identity.js";
+import { sourceRow, previewView } from "../domain/import.js";
 import { optInRow } from "../domain/repositories.js";
 
 /**
@@ -11,6 +12,15 @@ import { optInRow } from "../domain/repositories.js";
  * @param {import("../../../shared/infrastructure/feed.js").Feed} feed
  */
 export function designSystemGateway(api, feed) {
+  /** An import's request: the paths the person left empty are the server's defaults. */
+  const importBody = (projectId, repositoryId, { designMd, tokens, components }) => ({
+    project_id: projectId,
+    repository_id: repositoryId,
+    ...(designMd ? { design_md_path: designMd } : {}),
+    ...(tokens ? { tokens_path: tokens } : {}),
+    ...(components ? { components_dir: components } : {}),
+  });
+
   const list = (xs) => (Array.isArray(xs) ? xs : []);
 
   /** The state of a get_design_system answer, or of the page's seed (the same shape). */
@@ -147,6 +157,23 @@ export function designSystemGateway(api, feed) {
     /** Creates a design system with no version; answers its id. SLUG_TAKEN (details.field) and an invalid input arrive as errors. */
     async create(projectId, { name, slug, description }) {
       const body = await api.post("/create_design_system", { project_id: projectId, name, slug, description });
+      return body.design_system_id;
+    },
+
+    /** The project's repositories whose default branch holds a DESIGN.md or a tokens.json, with the paths found. */
+    async importSources(projectId) {
+      const body = await api.post("/find_design_system_sources", { project_id: projectId });
+      return list(body?.repositories).map(sourceRow);
+    },
+
+    /** What importing would store, read from the repository's default branch; nothing is written. IMPORT_UNREADABLE arrives as an error. */
+    async previewImport(projectId, repositoryId, paths) {
+      return previewView(await api.post("/preview_design_system_import", importBody(projectId, repositoryId, paths)));
+    },
+
+    /** Creates a new design system from the repository's files; answers its id. SLUG_TAKEN and IMPORT_UNREADABLE arrive as errors. */
+    async importDesignSystem(projectId, repositoryId, paths, { name, slug, description }) {
+      const body = await api.post("/import_design_system", { ...importBody(projectId, repositoryId, paths), name, slug, description });
       return body.design_system_id;
     },
 

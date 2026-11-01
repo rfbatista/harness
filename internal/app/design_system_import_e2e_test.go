@@ -15,15 +15,26 @@ import (
 // harness's own DESIGN.md and design-system/tokens.json.
 func (s *designServer) importFixture(name string, files map[string]string) (repositoryID, checkout string) {
 	s.t.Helper()
-	checkout = filepath.Join(s.t.TempDir(), name)
-	gitInit(s.t, checkout)
+	checkout = gitFixture(s.t, name, files)
+	repo, err := s.cat.Projects.CreateRepository(s.ctx, s.project, name, "", "file://"+checkout, checkout)
+	if err != nil {
+		s.t.Fatal(err)
+	}
+	return repo.ID, checkout
+}
+
+// gitFixture is a git checkout of the given files, committed on main.
+func gitFixture(t *testing.T, name string, files map[string]string) (checkout string) {
+	t.Helper()
+	checkout = filepath.Join(t.TempDir(), name)
+	gitInit(t, checkout)
 	for path, content := range files {
 		full := filepath.Join(checkout, path)
 		if err := os.MkdirAll(filepath.Dir(full), 0o755); err != nil {
-			s.t.Fatal(err)
+			t.Fatal(err)
 		}
 		if err := os.WriteFile(full, []byte(content), 0o644); err != nil {
-			s.t.Fatal(err)
+			t.Fatal(err)
 		}
 	}
 	for _, args := range [][]string{
@@ -33,14 +44,10 @@ func (s *designServer) importFixture(name string, files map[string]string) (repo
 		cmd := exec.Command("git", args...)
 		cmd.Dir = checkout
 		if out, err := cmd.CombinedOutput(); err != nil {
-			s.t.Fatalf("git %v: %v\n%s", args, err, out)
+			t.Fatalf("git %v: %v\n%s", args, err, out)
 		}
 	}
-	repo, err := s.cat.Projects.CreateRepository(s.ctx, s.project, name, "", "file://"+checkout, checkout)
-	if err != nil {
-		s.t.Fatal(err)
-	}
-	return repo.ID, checkout
+	return checkout
 }
 
 func harnessFiles(t *testing.T) map[string]string {
