@@ -16,6 +16,7 @@ import {
   fieldMessages,
   isDirty,
   lineDiff,
+  listItems,
   mergeMetadata,
   notFoundText,
   pathAfterKindChange,
@@ -65,6 +66,10 @@ export const instructionsTab = ({ gateway }) => () => {
     newPath: "",
     prefilledKind: "memory",
     fileBusy: false,
+    /** The rename form (open, and the path in it) and the delete confirmation: both are asked in the page, never in a native dialog. */
+    renaming: false,
+    renamePath: "",
+    confirmingDelete: false,
     /** Whether the file was deleted elsewhere (its text stays). */
     fileDeleted: false,
     /** Someone saved a newer version: whether to say so, which, its text once read, and whether the diff shows. */
@@ -126,6 +131,10 @@ export const instructionsTab = ({ gateway }) => () => {
     rows() {
       return mergeMetadata(this.files, rowsAt(this.draft, ["instructions"]));
     },
+    /** What the list draws: the rows, with a skill's files under a folder header. */
+    items() {
+      return listItems(this.rows());
+    },
     /** Edit on a file the record does not describe takes it into the draft first (Cancel drops it again). */
     edit(index) {
       if (index < rowsAt(this.draft, ["instructions"]).length) {
@@ -142,7 +151,7 @@ export const instructionsTab = ({ gateway }) => () => {
       return `Open ${row.path}`;
     },
     isViewing(row) {
-      return this.file !== null && this.file.path === row.path;
+      return !!row && this.file !== null && this.file.path === row.path;
     },
     openRow(row) {
       if (!this.canLeave()) return;
@@ -174,6 +183,7 @@ export const instructionsTab = ({ gateway }) => () => {
       this.file = null;
       this.body = "";
       this.clearRefusals();
+      this.closeAsks();
       this.notFound = "";
       this.openError = "";
       this.setAddress("");
@@ -228,6 +238,27 @@ export const instructionsTab = ({ gateway }) => () => {
     },
     get cannotDiscard() {
       return !this.fileDirty || this.fileBusy;
+    },
+    /** Whether rename and delete apply: a file the harness holds, not one being made or already gone. */
+    get canChange() {
+      return this.file !== null && !this.isNewFile && !this.fileDeleted && !this.fileBusy;
+    },
+    get cannotChange() {
+      return !this.canChange;
+    },
+    get renameShown() {
+      return this.renaming && this.file !== null && !this.fileDeleted;
+    },
+    get deleteAsked() {
+      return this.confirmingDelete && this.file !== null;
+    },
+    get deleteText() {
+      const path = this.file === null ? "" : this.file.path;
+      const lost = this.fileDirty ? " Your unsaved changes to it are lost too." : "";
+      return `Delete ${path}? It leaves the harness, and agents stop getting it.${lost}`;
+    },
+    get renameDirtyText() {
+      return "You have unsaved changes. They stay in the editor on the new path; only the saved text moves.";
     },
     get hasPathError() {
       return this.pathError !== "";
@@ -290,6 +321,11 @@ export const instructionsTab = ({ gateway }) => () => {
       this.file = file;
       this.body = file.content;
       this.clearRefusals();
+      this.closeAsks();
+    },
+    closeAsks() {
+      this.renaming = false;
+      this.confirmingDelete = false;
     },
     clearRefusals() {
       this.pathError = "";
@@ -321,6 +357,26 @@ export const instructionsTab = ({ gateway }) => () => {
       this.newPath = prefillPath("memory");
       this.fileView = "text";
       this.setAddress("");
+    },
+    /** Add file to skill: a new skill file whose path starts in the skill's folder. */
+    addToSkill(item) {
+      if (!this.canLeave()) return;
+      this.addFile();
+      this.newKind = "skill";
+      this.prefilledKind = "skill";
+      this.newPath = `${item.folderPath}/`;
+    },
+    /** Add SKILL.md: the same, with the file's name filled in. */
+    addSkillMd(item) {
+      if (!this.canLeave()) return;
+      this.addToSkill(item);
+      this.newPath = `${item.folderPath}/SKILL.md`;
+    },
+    skillMdLabel(item) {
+      return `Add SKILL.md to skill ${item.name}`;
+    },
+    skillLabel(item) {
+      return `Add file to skill ${item.name}`;
     },
     kindChanged(event) {
       const kind = event.target.value;
@@ -371,6 +427,78 @@ export const instructionsTab = ({ gateway }) => () => {
         this.markDeleted();
       } else {
         this.saveError = refusalText(err?.code) || describeError(err).message;
+      }
+    },
+    /** Rename: asks for the new path in the page; the file's text moves with it, and any unsaved text stays in the editor. */
+    askRename() {
+      if (!this.canChange) return;
+      this.clearRefusals();
+      this.confirmingDelete = false;
+      this.renamePath = this.file.path;
+      this.renaming = true;
+    },
+    cancelRename() {
+      this.renaming = false;
+      this.pathError = "";
+    },
+    async renameFile() {
+      if (!this.canChange || !this.renaming) return;
+      const to = this.renamePath.trim();
+      if (to === this.file.path) {
+        this.cancelRename();
+        return;
+      }
+      const request = { path: this.file.path, newPath: to, baseVersion: this.file.version };
+      this.clearRefusals();
+      this.fileBusy = true;
+      held = [];
+      try {
+        const meta = await files.rename(this.repositoryId, request);
+        this.file = { ...this.file, path: meta.path, kind: meta.kind, version: meta.version };
+        this.renaming = false;
+        this.setAddress(meta.path);
+        this.loadFiles();
+      } catch (err) {
+        this.refused(err);
+      } finally {
+        this.fileBusy = false;
+        const later = held;
+        held = [];
+        later.forEach((change) => this.applyChange(change));
+      }
+    },
+    /** Delete: asks first, naming the file; a refusal keeps the file. */
+    askDelete() {
+      if (!this.canChange) return;
+      this.clearRefusals();
+      this.renaming = false;
+      this.confirmingDelete = true;
+    },
+    cancelDelete() {
+      this.confirmingDelete = false;
+    },
+    async deleteFile() {
+      if (!this.canChange || !this.confirmingDelete) return;
+      const { path, version } = this.file;
+      this.clearRefusals();
+      this.fileBusy = true;
+      held = [];
+      try {
+        await files.remove(this.repositoryId, { path, baseVersion: version });
+        this.file = null;
+        this.body = "";
+        this.closeAsks();
+        this.setAddress("");
+        this.loadFiles();
+        this.instructionDeleted(path);
+      } catch (err) {
+        this.confirmingDelete = false;
+        this.refused(err);
+      } finally {
+        this.fileBusy = false;
+        const later = held;
+        held = [];
+        later.forEach((change) => this.applyChange(change));
       }
     },
     /** Discard: the text goes back to what was loaded. */

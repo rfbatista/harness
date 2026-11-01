@@ -41,6 +41,26 @@ templ instructionEditor() {
 				</div>
 			</div>
 			<p class="[ error ]" data-error-for="path" x-show="hasPathError"><span aria-hidden="true">✕</span> <span x-text="pathError"></span></p>
+			<form class="[ instruction-ask ]" data-rename-form aria-label="Rename the file" x-show="renameShown" x-on:submit.prevent="renameFile">
+				<div class="[ field ]">
+					<label>
+						New path
+						<input data-rename-path class="[ text-sm font-mono ]" autocomplete="off" spellcheck="false" x-model="renamePath" x-bind:aria-invalid="pathInvalid"/>
+					</label>
+				</div>
+				<p class="[ text-sm color-ink-muted ]" role="status" data-rename-dirty x-show="fileDirty" x-text="renameDirtyText"></p>
+				<div class="[ cluster ]">
+					<button type="submit" class="[ button ]" data-variant="primary" data-size="sm" data-confirm-rename x-bind:disabled="cannotChange">Rename</button>
+					<button type="button" class="[ button ]" data-variant="ghost" data-size="sm" data-cancel-rename x-on:click="cancelRename">Cancel</button>
+				</div>
+			</form>
+			<div class="[ banner ] [ instruction-ask ]" data-tone="danger" role="alertdialog" aria-label="Delete the file" data-delete-confirm x-show="deleteAsked">
+				<p x-text="deleteText"></p>
+				<div class="[ cluster ]">
+					<button type="button" class="[ button ]" data-variant="danger" data-size="sm" data-confirm-delete x-bind:disabled="cannotChange" x-on:click="deleteFile">Delete file</button>
+					<button type="button" class="[ button ]" data-variant="ghost" data-size="sm" data-cancel-delete x-on:click="cancelDelete">Cancel</button>
+				</div>
+			</div>
 			<p class="[ banner ]" data-tone="attention" role="status" data-deleted-notice x-show="fileDeleted">This file was deleted elsewhere. Your text is kept here; Save puts the file back.</p>
 			<div class="[ banner ] [ instruction-notice ]" data-tone="attention" role="alert" data-newer-notice x-show="newerShown">
 				<p x-text="newerText"></p>
@@ -68,6 +88,8 @@ templ instructionEditor() {
 			<div class="[ cluster ]" x-show="hasFile">
 				<button type="button" class="[ button ]" data-variant="primary" data-size="sm" data-save x-bind:disabled="cannotSave" x-on:click="saveFile">Save</button>
 				<button type="button" class="[ button ]" data-variant="ghost" data-size="sm" data-discard x-bind:disabled="cannotDiscard" x-on:click="discardText">Discard</button>
+				<button type="button" class="[ button ]" data-variant="ghost" data-size="sm" data-rename x-show="!isNewFile" x-bind:disabled="cannotChange" x-on:click="askRename">Rename</button>
+				<button type="button" class="[ button ]" data-variant="danger-outline" data-size="sm" data-delete x-show="!isNewFile" x-bind:disabled="cannotChange" x-on:click="askDelete">Delete</button>
 			</div>
 		</div>
 	</section>

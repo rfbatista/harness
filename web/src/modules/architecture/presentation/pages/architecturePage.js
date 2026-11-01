@@ -258,7 +258,7 @@ export const architecturePage = ({ gateway }) => () => ({
 
   async load() {
     try {
-      this.take(await gateway.get(this.repositoryId));
+      this.adopt(await gateway.get(this.repositoryId));
       this.error = null;
       this.revealDeepLink();
     } catch (err) {
@@ -298,7 +298,7 @@ export const architecturePage = ({ gateway }) => () => ({
     this.saving = true;
     this.announced = 0;
     try {
-      this.take(await gateway.save(this.repositoryId, this.version, cleanRecord(this.draft)));
+      this.adopt(await gateway.save(this.repositoryId, this.version, cleanRecord(this.draft)));
       this.clearProblems();
     } catch (err) {
       if (err?.code === ARCHITECTURE_CHANGED) {
@@ -316,6 +316,37 @@ export const architecturePage = ({ gateway }) => () => ({
       this.announced = 0;
       // A version beyond the one we hold was saved elsewhere while ours was in flight.
       if (seen > this.version) this.followed({ version: seen });
+    }
+  },
+
+  /**
+   * A deleted instruction file takes its record entry with it (on the server).
+   * The page follows: a draft with nothing unsaved is replaced by the record as
+   * it is now; one with unsaved edits keeps them, loses only the deleted file's
+   * row, and rebases on the new version, so the next save neither brings the row
+   * back nor reads as a conflict. When the record differs in anything else, the
+   * feed's usual conflict handling decides.
+   */
+  async instructionDeleted(path) {
+    const wasDirty = this.dirty;
+    try {
+      const state = await gateway.get(this.repositoryId);
+      if (!wasDirty) {
+        this.adopt(state);
+        return;
+      }
+      const without = cloneRecord(this.saved.record);
+      without.instructions = (without.instructions ?? []).filter((e) => e.path !== path);
+      if (!sameRecord(without, state.record)) return;
+      this.draft.instructions = (this.draft.instructions ?? []).filter((e) => e.path !== path);
+      this.saved = state;
+      this.version = state.version;
+      this.exists = state.exists;
+      this.exportInfo = state.export;
+      if (this.conflict === "feed") this.clearProblems();
+      window.dispatchEvent(new CustomEvent(DRAFT_REPLACED));
+    } catch {
+      // the feed will say again; the page keeps its draft
     }
   },
 
@@ -359,8 +390,8 @@ export const architecturePage = ({ gateway }) => () => ({
     this.diffRows = [];
   },
 
-  /** Adopts a state from the server as the saved version and starts a fresh draft from it. */
-  take(state) {
+  /** Named adopt, not take: the Instructions tab nested in this page has a take of its own, and a call from it would land there. Adopts a state from the server as the saved version and starts a fresh draft from it. */
+  adopt(state) {
     this.saved = state;
     this.draft = cloneRecord(state.record);
     this.version = state.version;

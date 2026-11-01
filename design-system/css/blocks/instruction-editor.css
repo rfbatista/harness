@@ -11,6 +11,10 @@
  * the file the pane shows; its path is an .open-file button. A new file shows
  * [data-new-file] (kind and path); a newer version shows [data-newer-notice]
  * with Reload and, on request, .instruction-diff of line rows.
+ * A skill is a folder: <li data-skill-folder><div class="entry-row skill-folder">…</div></li>
+ * stands before its files, which are rows with data-in-skill (set in a step).
+ * Rename and delete ask in the pane: [data-rename-form] and [data-delete-confirm]
+ * are .instruction-ask.
  */
 
 @layer blocks {
@@ -77,4 +81,24 @@
   }
 
   .arch-entries > li[data-viewing="true"] { box-shadow: inset 3px 0 0 var(--color-signal); }
+
+  .instruction-ask {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-s);
+
+    & > p { margin-block: 0; }
+    & [data-rename-path] { inline-size: 100%; }
+    & input[aria-invalid="true"] { border-color: var(--color-danger); }
+  }
+
+  /* A skill folder header sits in the list like a row, quieter; its files step in under it. */
+  .arch-entries > li[data-skill-folder] {
+    background: var(--color-canvas);
+
+    & .skill-folder { min-block-size: 0; padding-block: var(--space-xs); }
+  }
+
+  .arch-entries > li[data-in-skill="true"] > .entry-row { padding-inline-start: calc(var(--space-m) + var(--space-l)); }
+  .arch-entries > li[data-in-skill="true"] + li[data-in-skill="true"] { border-block-start-style: dashed; }
 }

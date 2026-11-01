@@ -115,6 +115,27 @@ func (f *fakeArchitectureAPI) saveElsewhere(t *testing.T, mutate func(rec map[st
 	f.emit(map[string]any{"repository_architecture_changed": map[string]any{"repository_id": "r1", "version": v}})
 }
 
+// dropInstruction is what deleting an instruction file does to the record: its
+// entry goes, the version moves on and the feed announces it.
+func (f *fakeArchitectureAPI) dropInstruction(path string) {
+	f.mu.Lock()
+	if !f.exists {
+		f.mu.Unlock()
+		return
+	}
+	kept := []any{}
+	for _, e := range f.record["instructions"].([]any) {
+		if m, ok := e.(map[string]any); !ok || m["path"] != path {
+			kept = append(kept, e)
+		}
+	}
+	f.record["instructions"] = kept
+	f.version++
+	v := f.version
+	f.mu.Unlock()
+	f.emit(map[string]any{"repository_architecture_changed": map[string]any{"repository_id": "r1", "version": v}})
+}
+
 func (f *fakeArchitectureAPI) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	if r.URL.Path == "/api/architecture.schema.json" {
 		w.Header().Set("Content-Type", "application/json")

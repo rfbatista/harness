@@ -6,6 +6,7 @@ import {
   groupFiles,
   isDirty,
   isStale,
+  listItems,
   lineDiff,
   mergeMetadata,
   pathAfterKindChange,
@@ -176,4 +177,50 @@ test("a diff of huge texts falls back to replacing the whole text", () => {
   const d = lineDiff(big(3000), big(3000).replaceAll("line", "LINE"));
   assert.equal(d.filter((l) => l.type === "del").length, 3000);
   assert.equal(d.filter((l) => l.type === "ins").length, 3000);
+});
+
+test("the list draws a skill as a folder header before its files, keeping the rows in their order", () => {
+  const rows = [
+    { path: "CLAUDE.md", kind: "rules", file: { kind: "memory" } },
+    { path: ".claude/skills/go/notes.md", kind: "skill", file: { kind: "skill" } },
+    { path: ".claude/skills/go/SKILL.md", kind: "skill", file: { kind: "skill" } },
+    { path: "docs/orphan.md", kind: "rules", file: null },
+    { path: ".claude/skills/web/SKILL.md", kind: "skill", file: null },
+  ];
+  const items = listItems(rows);
+  assert.deepEqual(
+    items.map((i) => (i.folder ? `folder ${i.folderPath} ${i.name} ${i.count}` : `${i.index} ${i.row.path} ${i.inSkill}`)),
+    [
+      "0 CLAUDE.md false",
+      "folder .claude/skills/go go 2",
+      "2 .claude/skills/go/SKILL.md true",
+      "1 .claude/skills/go/notes.md true",
+      "3 docs/orphan.md false",
+      "folder .claude/skills/web web 1",
+      "4 .claude/skills/web/SKILL.md true",
+    ],
+  );
+  assert.equal(items[0].entry, "instruction");
+  assert.equal(items[1].entry, null);
+});
+
+test("a rename or a delete has words for each refusal", () => {
+  assert.ok(refusalText("INSTRUCTION_EXISTS").includes("already exists"));
+  assert.ok(refusalText("INSTRUCTION_CHANGED").includes("newer version"));
+});
+
+test("a skill folder with no SKILL.md the harness holds is marked as not delivered", () => {
+  const held = (path) => ({ path, kind: "skill", file: { kind: "skill", path } });
+  const items = listItems([
+    held(".claude/skills/solo/notes.md"),
+    held(".claude/skills/ok/SKILL.md"),
+    held(".claude/skills/ok/notes.md"),
+    { path: ".claude/skills/recorded/SKILL.md", kind: "skill", file: null },
+    held(".claude/skills/deep/sub/SKILL.md"),
+  ]);
+  const folders = items.filter((i) => i.folder);
+  assert.deepEqual(
+    folders.map((f) => `${f.name} ${f.needsSkillMd}`),
+    ["solo true", "ok false", "recorded true", "deep true"],
+  );
 });

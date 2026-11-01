@@ -53,6 +53,7 @@ func newArchRig(t *testing.T) *archRig {
 	files := newFakeInstructionFiles(feed)
 	mux.Handle("/api/events", feed)
 	files.register(mux)
+	files.onDeleted = api.dropInstruction
 	mux.Handle("/api/", api)
 	mux.Handle("/", pages)
 	srv := newBrowserServer(mux)

@@ -34,6 +34,8 @@ type fakeInstructionFiles struct {
 	commits []fakeCommit
 	// saveDelay holds a save's answer back after it is stored and announced.
 	saveDelay time.Duration
+	// onDeleted is told the path of each file a delete_instruction_file removed, as the server also removes the row's record entry (the contract).
+	onDeleted func(path string)
 	// clock is the number of the next version stamp, so updated_at moves on.
 	clock int
 }
@@ -347,6 +349,9 @@ func (f *fakeInstructionFiles) remove(w http.ResponseWriter, in map[string]any) 
 		return
 	}
 	delete(f.files, path)
+	if f.onDeleted != nil {
+		f.onDeleted(path)
+	}
 	f.emitLocked(path, 0)
 	w.WriteHeader(http.StatusNoContent)
 }

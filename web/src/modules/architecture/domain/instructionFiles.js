@@ -51,6 +51,33 @@ export function groupFiles(files) {
   return out;
 }
 
+/** Whether a skill folder holds no SKILL.md in the harness: the server skips such a folder when it delivers instructions, so agents never get it. @param {{ folder: string, files: { row: { file: any } }[] }} group */
+export const lacksSkillMd = (group) => !group.files.some((e) => e.row.file && e.path === `${group.folder}/SKILL.md`);
+
+/**
+ * What the list draws, top to bottom: a row of the list as `{ folder: false, row,
+ * index, inSkill, entry: "instruction" }` (`index` is the row's place in `rows`), and
+ * before the files of a skill a folder header `{ folder: true, folderPath,
+ * name, count, needsSkillMd, entry: null }`. The grouping is groupFiles'; the order is the
+ * rows' own, a skill standing where its first row stands (SKILL.md first
+ * inside it).
+ */
+export function listItems(rows) {
+  const entries = rows.map((row, index) => ({ path: row.path, kind: row.file?.kind ?? row.kind, row, index }));
+  const first = (g) => (g.type === "skill" ? Math.min(...g.files.map((f) => f.index)) : g.file.index);
+  const items = [];
+  const row = (e, inSkill) => items.push({ folder: false, row: e.row, index: e.index, inSkill, entry: "instruction" });
+  for (const g of groupFiles(entries).sort((a, b) => first(a) - first(b))) {
+    if (g.type === "file") {
+      row(g.file, false);
+      continue;
+    }
+    items.push({ folder: true, row: null, index: null, inSkill: false, folderPath: g.folder, name: g.name, count: g.files.length, needsSkillMd: lacksSkillMd(g), entry: null });
+    g.files.forEach((e) => row(e, true));
+  }
+  return items;
+}
+
 /**
  * The rows of the list: the record's entries in their order, then each file
  * with no entry, with the defaults (applies to all, loaded always). A row has
