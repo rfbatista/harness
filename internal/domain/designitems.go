@@ -21,6 +21,7 @@ const (
 	DecisionPending  = "pending"
 	DecisionApproved = "approved"
 	DecisionRejected = "rejected"
+	DecisionSentBack = "sent_back"
 )
 
 // IntroSection is the key of the principles' text before the first `## `
