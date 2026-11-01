@@ -2,9 +2,12 @@ package tooling
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
+	"slices"
 	"strings"
 	"testing"
+	"time"
 
 	"operators-mcp/internal/adapter/out/blobstore"
 	"operators-mcp/internal/adapter/out/persistence/sqlite"
@@ -96,8 +99,8 @@ func TestSessionTaskTools_GetTask(t *testing.T) {
 		t.Fatal(err)
 	}
 	m := out.(map[string]any)
-	tk := m["task"].(*domain.Ticket)
-	if tk.ID != f.ticketID || tk.Title != "Ship the thing" {
+	tk := taskJSON(t, out)
+	if tk["id"] != f.ticketID || tk["title"] != "Ship the thing" {
 		t.Fatalf("wrong task: %+v", tk)
 	}
 	// Its documents are files in the session's virtual shell.
@@ -153,7 +156,7 @@ func TestSessionTaskTools_UpdateTaskStatus(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if got.(map[string]any)["task"].(*domain.Ticket).Status != domain.TicketStatusReview {
+	if taskJSON(t, got)["status"] != string(domain.TicketStatusReview) {
 		t.Fatal("get_task does not see the new status")
 	}
 
@@ -196,7 +199,7 @@ func TestSessionTaskTools_UpdateTaskStatus_OnlyItsOwnTask(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if out.(map[string]any)["task"].(*domain.Ticket).ID != f.ticketID {
+	if taskJSON(t, out)["id"] != f.ticketID {
 		t.Fatal("moved a task other than the session's own")
 	}
 	stillThere, _ := f.plan.GetTicket(context.Background(), other.ID)
@@ -233,5 +236,103 @@ func TestSessionTaskToolsReachNoPersonTerminal(t *testing.T) {
 		if strings.Contains(name, "terminal") {
 			t.Errorf("session tool %q names a terminal", name)
 		}
+	}
+}
+
+// taskJSON is the task get_task answers, as an agent reads it over MCP.
+func taskJSON(t *testing.T, out any) map[string]any {
+	t.Helper()
+	raw, err := json.Marshal(out.(map[string]any)["task"])
+	if err != nil {
+		t.Fatal(err)
+	}
+	var task map[string]any
+	if err := json.Unmarshal(raw, &task); err != nil {
+		t.Fatal(err)
+	}
+	return task
+}
+
+func TestSessionTaskTools_GetTaskOnAPlainTaskHasNoParentAndNoChildren(t *testing.T) {
+	f := newTaskToolsFixture(t)
+	out, err := f.call(t, f.sessionID, "get_task", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	task := taskJSON(t, out)
+	if parent, ok := task["parent"]; !ok || parent != nil {
+		t.Errorf("parent = %v (present %v), want null", parent, ok)
+	}
+	if children, ok := task["children"].([]any); !ok || len(children) != 0 {
+		t.Errorf("children = %v, want []", task["children"])
+	}
+}
+
+func TestSessionTaskTools_GetTaskOnAChildNamesItsFeature(t *testing.T) {
+	f := newTaskToolsFixture(t)
+	ctx := context.Background()
+	feature, err := f.plan.CreateTicket(ctx, f.projectID, "Exports", "", domain.TicketStatusReview, "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := f.plan.PatchTicket(ctx, f.ticketID, ports.TicketPatch{ParentID: &feature.ID}); err != nil {
+		t.Fatal(err)
+	}
+
+	out, err := f.call(t, f.sessionID, "get_task", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	task := taskJSON(t, out)
+	parent, _ := task["parent"].(map[string]any)
+	if parent["id"] != feature.ID || parent["title"] != "Exports" || parent["status"] != "review" {
+		t.Errorf("parent = %v", task["parent"])
+	}
+	if children, _ := task["children"].([]any); len(children) != 0 {
+		t.Errorf("children = %v, want []", task["children"])
+	}
+}
+
+func TestSessionTaskTools_GetTaskOnAFeatureListsItsChildrenInStatusOrder(t *testing.T) {
+	f := newTaskToolsFixture(t)
+	ctx := context.Background()
+	var ids []string
+	for _, c := range []struct {
+		title  string
+		status domain.TicketStatus
+	}{
+		{"Done one", domain.TicketStatusDone}, {"Backlog one", domain.TicketStatusBacklog}, {"Review one", domain.TicketStatusReview},
+		{"Todo old", domain.TicketStatusTodo}, {"Todo new", domain.TicketStatusTodo}, {"Working", domain.TicketStatusInProgress},
+	} {
+		tk, err := f.plan.CreateTicket(ctx, f.projectID, c.title, "", c.status, f.ticketID)
+		if err != nil {
+			t.Fatal(err)
+		}
+		ids = append(ids, tk.ID)
+		time.Sleep(3 * time.Millisecond)
+	}
+	if _, err := f.plan.ArchiveTicket(ctx, ids[0]); err != nil {
+		t.Fatal(err)
+	}
+
+	out, err := f.call(t, f.sessionID, "get_task", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	task := taskJSON(t, out)
+	if parent, ok := task["parent"]; !ok || parent != nil {
+		t.Errorf("parent = %v, want null", parent)
+	}
+	var titles []string
+	for _, c := range task["children"].([]any) {
+		child := c.(map[string]any)
+		titles = append(titles, child["title"].(string))
+		if (child["title"] == "Done one") != child["archived"].(bool) {
+			t.Errorf("%v archived = %v", child["title"], child["archived"])
+		}
+	}
+	want := []string{"Review one", "Working", "Todo new", "Todo old", "Backlog one", "Done one"}
+	if !slices.Equal(titles, want) {
+		t.Errorf("children = %v, want %v", titles, want)
 	}
 }

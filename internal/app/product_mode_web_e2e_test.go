@@ -156,13 +156,16 @@ func TestProductModeWeb_EndToEnd(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	// The board shows the real feature cues, over the real ParentID and the
-	// real ticket list (no fake TicketReader in the way).
+	// The board draws the feature and its child as one feature card, over the
+	// real ParentID and the real ticket list (no fake TicketReader in the way).
 	boardAfter := getBody(t, srv.URL+"/projects/"+p.ID)
-	for _, want := range []string{`data-parent-title`, ">Exports<", "1 task"} {
+	for _, want := range []string{`data-feature`, ">Exports<", "0 of 1 done"} {
 		if !strings.Contains(boardAfter, want) {
 			t.Errorf("board after feature creation lacks %q", want)
 		}
+	}
+	if strings.Contains(boardAfter, `data-task-id="`+child.ID+`" data-status`) {
+		t.Error("the child has a card of its own on the board")
 	}
 
 	// The feature task's page: its PRD, its child, the child's brief.
@@ -178,8 +181,40 @@ func TestProductModeWeb_EndToEnd(t *testing.T) {
 
 	// The child task's page: its crumb to the feature.
 	childPage := getBody(t, srv.URL+"/projects/"+p.ID+"/tasks/"+child.ID)
-	if !strings.Contains(childPage, `data-parent-task="`+feature.ID+`"`) || !strings.Contains(childPage, "Exports /") {
+	if !strings.Contains(childPage, `data-parent-task="`+feature.ID+`"`) || !strings.Contains(childPage, `title="Exports">Exports</a>`) {
 		t.Errorf("child task page lacks the parent crumb:\n%s", childPage)
+	}
+
+	// The feature is refused while a child is open; once the child is done, it
+	// is archived on its own. The real list then carries it (archived), and no
+	// page draws it as a card, a rail row or a picker entry.
+	if _, err := plan.ArchiveTicket(ctx, feature.ID); err == nil {
+		t.Error("archiving the feature while its child is open was not refused")
+	}
+	if _, err := plan.UpdateTicket(ctx, child.ID, "CSV export", "", domain.TicketStatusDone); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := plan.ArchiveTicket(ctx, child.ID); err != nil {
+		t.Fatalf("archiving the done child: %v", err)
+	}
+	cardOf := `<article class="[ card ]" data-task-id="` + child.ID + `"`
+	rowOf := `<a href="/projects/` + p.ID + `/tasks/` + child.ID + `" data-task-id="` + child.ID + `"`
+	board2 := getBody(t, srv.URL+"/projects/"+p.ID)
+	if strings.Contains(board2, cardOf) || strings.Contains(board2, rowOf) {
+		t.Error("a child archived on its own has a card or a rail row")
+	}
+	if !strings.Contains(board2, "1 of 1 done") || !strings.Contains(board2, `data-archived`) || !strings.Contains(board2, ">CSV export</a>") {
+		t.Errorf("the feature's card does not list its archived child:\n%s", board2)
+	}
+	for name, url := range map[string]string{
+		"task page":      "/projects/" + p.ID + "/tasks/" + feature.ID,
+		"design library": "/projects/" + p.ID + "/design",
+		"reviews":        "/projects/" + p.ID + "/reviews",
+	} {
+		page := getBody(t, srv.URL+url)
+		if strings.Contains(page, rowOf) || strings.Contains(page, `"id":"`+child.ID+`","title":"CSV export"`) {
+			t.Errorf("%s picks or lists the child archived on its own", name)
+		}
 	}
 }
 

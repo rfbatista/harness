@@ -12,6 +12,7 @@
 import { describeError } from "../../../../shared/presentation/errors.js";
 import { readSeed } from "../../../../shared/presentation/seed.js";
 import { archivedSummary, toArchivedRows } from "../archivedView.js";
+import { taskHref } from "../boardView.js";
 
 const rowOf = (event) => event.target.closest?.("[data-task-id]")?.dataset.taskId ?? "";
 
@@ -114,7 +115,9 @@ export const archived = ({ gateway }) => () => {
         await send();
         this.receipts = { ...this.receipts, [id]: done };
       } catch (err) {
-        this.errors = { ...this.errors, [id]: describeError(err) };
+        // A child of an archived feature is refused with the feature, so the row can link to it.
+        const feature = err?.details?.feature;
+        this.errors = { ...this.errors, [id]: { ...describeError(err), featureHref: feature ? taskHref(this.projectId, feature.id) : "" } };
       } finally {
         const { [id]: __, ...still } = this.busy;
         this.busy = still;

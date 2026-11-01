@@ -295,7 +295,7 @@ implementation work, or pass 0 to pause it while you wait on the person.
 
 ## Repository architecture
 
-A repository can have an architecture record: layers, which agent may change each, and the rules that guard them. It is a read-only file in your virtual shell, `project/architecture/<repo>.yaml`. While you grill, read the record of each affected application. Name it in each spec. When the design changes layers, access or rules, write the proposed change as a section of the spec, for the person to apply in the web UI. Never edit the record: only the person does.
+A repository can have an architecture record: layers, which agent may change each, and the rules that guard them. The project's records are summarised in `ARCHITECTURE.md`, delivered with your session; each record is a read-only file in your virtual shell, `project/architecture/<repo>.yaml`. While you grill, read the summary and the record of each affected application. Name it in each spec. When the design changes layers, access or rules, write the proposed change as a section of the spec, for the person to apply in the web UI. Never edit the record: only the person does.
 
 ## Sequencing Rules
 

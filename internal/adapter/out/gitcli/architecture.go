@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"slices"
 	"sort"
 	"strings"
 
@@ -142,6 +143,31 @@ func (a Architecture) CommitFiles(ctx context.Context, dir string, files map[str
 	cctx, cancel := context.WithTimeout(ctx, a.d.worktree())
 	defer cancel()
 	if _, err := a.d.gitRun(cctx, dir, append([]string{"add", "--"}, paths...)...); err != nil {
+		undo()
+		return "", err
+	}
+	args := append(append([]string{}, harnessIdentity...), "commit", "-q", "--no-verify", "-m", message, "--")
+	if _, err := a.d.gitRun(cctx, dir, append(args, paths...)...); err != nil {
+		undo()
+		return "", err
+	}
+	out, err := a.d.gitOutput(ctx, dir, "rev-parse", "--verify", "HEAD")
+	return strings.TrimSpace(out), err
+}
+
+// RemoveFiles deletes tracked files and commits just the deletions.
+func (a Architecture) RemoveFiles(ctx context.Context, dir string, paths []string, message string) (head string, err error) {
+	paths = slices.Clone(paths)
+	sort.Strings(paths)
+	cctx, cancel := context.WithTimeout(ctx, a.d.worktree())
+	defer cancel()
+	undo := func() {
+		uctx, ucancel := context.WithTimeout(context.WithoutCancel(ctx), a.d.worktree())
+		defer ucancel()
+		_, _ = a.d.gitOutput(uctx, dir, append([]string{"reset", "-q", "HEAD", "--"}, paths...)...)
+		_, _ = a.d.gitOutput(uctx, dir, append([]string{"checkout", "-q", "--"}, paths...)...)
+	}
+	if _, err := a.d.gitRun(cctx, dir, append([]string{"rm", "-q", "--"}, paths...)...); err != nil {
 		undo()
 		return "", err
 	}

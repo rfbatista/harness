@@ -3,7 +3,6 @@
 package app
 
 import (
-	"encoding/json"
 	"strconv"
 	"strings"
 	"testing"
@@ -20,12 +19,6 @@ const (
 	dsHistoryRows   = `document.querySelectorAll('#design-system-panel-history [data-version-row]').length`
 	dsHistoryNewest = `document.querySelector('#design-system-panel-history [data-version-row]')`
 )
-
-// jsLiteral is s as a JavaScript string literal, newlines included.
-func jsLiteral(s string) string {
-	b, _ := json.Marshal(s)
-	return string(b)
-}
 
 func dsVersions(pg *designPage) []any {
 	return pg.mustPost("list_design_system_versions", map[string]any{})["versions"].([]any)

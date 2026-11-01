@@ -1,7 +1,7 @@
-import { assert, file, test } from "../../../shared/testing/test.js";
+import { assert, file, test } from "../testing/test.js";
 import { renderMarkdown } from "./markdown.js";
 
-file("agents/domain/markdown");
+file("shared/domain/markdown");
 
 test("headings, paragraphs, lists, emphasis and code render", () => {
   const html = renderMarkdown("# Title\n\nSome **bold**, *soft* and `code`.\n\n- one\n- two\n\n1. first\n2. second\n");

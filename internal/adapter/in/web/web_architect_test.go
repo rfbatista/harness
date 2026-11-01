@@ -129,7 +129,7 @@ func TestBoardAndRailSayWhereReviewsWaitOnThePerson(t *testing.T) {
 	card := body[strings.Index(body, `<article class="[ card ]" data-task-id="t-docs"`):]
 	card = card[:strings.Index(card, "</article>")]
 	// The reviews have their own badge; the card's dot is about sessions only.
-	if !strings.Contains(card, `<span class="[ badge reviews ]">`) || !strings.Contains(card, "2 reviews</span>") {
+	if !strings.Contains(card, `<span class="[ badge ]" data-reviews>`) || !strings.Contains(card, "2 reviews</span>") {
 		t.Errorf("the t-docs card lacks its reviews badge:\n%s", card)
 	}
 	if strings.Contains(card, `data-state="waiting"`) {

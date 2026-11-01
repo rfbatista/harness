@@ -24,7 +24,7 @@ func (h *Handler) handleListTickets(c echo.Context) error {
 	// parent_id narrows the list to one feature task's children; present but
 	// empty, to the top-level tasks; absent, every task of the project.
 	// archived=true lists only the archived tasks instead, newest first.
-	var filter ports.TicketFilter
+	filter := ports.TicketFilter{ExcludeArchived: c.QueryParam("exclude_archived") == "true"}
 	if q := c.QueryParams(); q.Has("parent_id") {
 		parentID := q.Get("parent_id")
 		filter.ParentID = &parentID
@@ -154,14 +154,15 @@ func (h *Handler) handleArchiveDoneTickets(c echo.Context) error {
 	if err := bindJSON(c, &in); err != nil {
 		return err
 	}
-	ids, err := h.archive.ArchiveDoneTickets(c.Request().Context(), in.ProjectID)
+	ids, skipped, err := h.archive.ArchiveDoneTickets(c.Request().Context(), in.ProjectID)
 	if err != nil {
 		return err
 	}
 	return c.JSON(http.StatusOK, struct {
 		Archived int      `json:"archived"`
 		IDs      []string `json:"ids"`
-	}{len(ids), ids})
+		Skipped  int      `json:"skipped"`
+	}{len(ids), ids, skipped})
 }
 
 // --- Documents ---

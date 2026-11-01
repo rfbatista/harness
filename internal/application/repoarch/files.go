@@ -9,9 +9,9 @@ import (
 
 var _ ports.ArchitectureFileReader = (*Service)(nil)
 
-// ListArchitectureFiles implements ports.ArchitectureFileReader: the YAML of
-// each of the project's repositories that has a record, in the repositories'
-// order.
+// ListArchitectureFiles implements ports.ArchitectureFileReader: for each of
+// the project's repositories that has a record or instruction files, in the
+// repositories' order, the record's YAML and the files.
 func (s *Service) ListArchitectureFiles(ctx context.Context, projectID string) ([]ports.ArchitectureFile, error) {
 	repos, err := s.repos.ListRepositories(ctx, projectID)
 	if err != nil {
@@ -26,18 +26,36 @@ func (s *Service) ListArchitectureFiles(ctx context.Context, projectID string) (
 		byRepo[st.RepositoryID] = st
 	}
 	var out []ports.ArchitectureFile
+	taken := map[string]bool{}
 	for _, r := range repos {
-		st := byRepo[r.ID]
-		if st == nil {
-			continue
-		}
-		text, err := ArchitectureYAML(st.Record)
+		files, err := s.store.ListInstructionFiles(ctx, r.ID)
 		if err != nil {
 			return nil, err
 		}
-		out = append(out, ports.ArchitectureFile{
-			RepositoryID: r.ID, Repository: r.DisplayName(), Version: st.Version, YAML: text, UpdatedAt: st.UpdatedAt,
-		})
+		st := byRepo[r.ID]
+		if st == nil && len(files) == 0 {
+			continue
+		}
+		name := domain.Slug(r.DisplayName())
+		if name == "" {
+			name = "repository"
+		}
+		if taken[name] {
+			name += "-" + shortID(r.ID)
+		}
+		taken[name] = true
+		f := ports.ArchitectureFile{RepositoryID: r.ID, Repository: r.DisplayName(), Folder: name}
+		if st != nil {
+			text, err := ArchitectureYAML(st.Record)
+			if err != nil {
+				return nil, err
+			}
+			f.HasRecord, f.Version, f.YAML, f.UpdatedAt = true, st.Version, text, st.UpdatedAt
+		}
+		for _, in := range files {
+			f.Instructions = append(f.Instructions, ports.InstructionShellFile{Path: in.Path, Version: in.Version, Content: []byte(in.Content), UpdatedAt: in.UpdatedAt})
+		}
+		out = append(out, f)
 	}
 	return out, nil
 }
@@ -77,6 +95,11 @@ func (s *Service) ListArchitectureRefs(ctx context.Context, projectID string) ([
 		out = append(out, ports.ArchitectureRef{RepositoryID: r.ID, Repository: r.DisplayName(), Path: "project/architecture/" + name + ".yaml"})
 	}
 	return out, nil
+}
+
+// InstructionFilesOf implements ports.ArchitectureBriefSource.
+func (s *Service) InstructionFilesOf(ctx context.Context, repositoryID string) ([]domain.InstructionFile, error) {
+	return s.store.ListInstructionFiles(ctx, repositoryID)
 }
 
 // SavedArchitecture implements ports.ArchitectureBriefSource.

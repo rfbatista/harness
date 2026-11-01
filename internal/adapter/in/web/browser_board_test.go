@@ -279,10 +279,10 @@ func TestBrainstormAFeatureFromTheBoard(t *testing.T) {
 	}
 }
 
-// TestFeatureCuesFollowTheFeedOnTheBoard: a task that becomes a child over
-// the feed names its parent on its card, and the parent's card counts it,
-// without a reload.
-func TestFeatureCuesFollowTheFeedOnTheBoard(t *testing.T) {
+// TestFeatureCardsFollowTheFeedOnTheBoard: a task that becomes a child over
+// the feed leaves the board as a card and joins its feature's card, and a
+// task that leaves a feature gets a card of its own, without a reload.
+func TestFeatureCardsFollowTheFeedOnTheBoard(t *testing.T) {
 	assets, err := NewAssets()
 	if err != nil {
 		t.Fatal(err)
@@ -305,38 +305,36 @@ func TestFeatureCuesFollowTheFeedOnTheBoard(t *testing.T) {
 	srv := newBrowserServer(mux)
 	defer srv.Close()
 
-	cue := func(id string) string {
-		return fmt.Sprintf(`(c => (c?.querySelector('[data-parent-title]')?.textContent ?? '-') + '|' + (c?.querySelector('[data-children]')?.textContent ?? '-'))(document.querySelector('.board .card[data-task-id=%q]'))`, id)
+	// card reads a feature card: its summary, or "-" for a plain card, or "none" for no card.
+	card := func(id string) string {
+		return fmt.Sprintf(`(c => c === null ? 'none' : (c.querySelector('.progress .sum b')?.textContent ?? '-'))(document.querySelector('.board .card[data-task-id=%q]'))`, id)
 	}
-	var painted, child, parent, arrived string
+	var painted, arrived string
 	err = chromedp.Run(ctx,
 		chromedp.EmulateViewport(1280, 800),
 		chromedp.Navigate(srv.URL+"/projects/p1"),
+		chromedp.Evaluate(card("t-feed")+" + ' / ' + "+card("t-docs"), &painted),
 		chromedp.Poll(`document.querySelector('[data-ssr]') === null`, nil, chromedp.WithPollingTimeout(10*time.Second)),
-		chromedp.Evaluate(cue("t-docs")+" + ' / ' + "+cue("t-feed"), &painted),
-		chromedp.Poll(`document.querySelector('[data-stream-status]')?.dataset.state === 'live' || true`, nil, chromedp.WithPollingTimeout(5*time.Second)),
 		chromedp.ActionFunc(func(context.Context) error {
 			for feed.followers() == 0 {
 				time.Sleep(20 * time.Millisecond)
 			}
-			// A new child of Add SSE feed, and Write docs moved under another parent that is not listed.
-			feed.pushRaw(t, map[string]any{"ticket": map[string]any{"id": "t-new", "project_id": "p1", "title": "Add the SSE docs", "status": "todo", "parent_id": "t-feed"}})
+			// A new child of Add SSE feed, and Write docs moved out of the feature.
+			feed.pushRaw(t, map[string]any{"ticket": map[string]any{"id": "t-new", "project_id": "p1", "title": "Add the SSE docs", "status": "done", "parent_id": "t-feed"}})
 			feed.pushRaw(t, map[string]any{"ticket": map[string]any{"id": "t-docs", "project_id": "p1", "title": "Write docs", "status": "todo", "parent_id": ""}})
 			return nil
 		}),
-		chromedp.Poll(`document.querySelector('.board .card[data-task-id="t-new"] [data-parent-title]') !== null`, nil, chromedp.WithPollingTimeout(10*time.Second)),
-		chromedp.Evaluate(cue("t-new"), &arrived),
-		chromedp.Evaluate(cue("t-docs"), &child),
-		chromedp.Evaluate(cue("t-feed"), &parent),
+		chromedp.Poll(`document.querySelector('.board .card[data-task-id="t-docs"]') !== null`, nil, chromedp.WithPollingTimeout(10*time.Second)),
+		chromedp.Evaluate(card("t-feed")+" + ' / ' + "+card("t-docs")+" + ' / ' + "+card("t-new"), &arrived),
 	)
 	if err != nil {
 		t.Fatalf("%v\nJS errors: %v", err, errs.all())
 	}
-	if painted != "Add SSE feed|- / -|1 task" {
-		t.Errorf("first paint cues = %q", painted)
+	if painted != "0 of 1 done / none" {
+		t.Errorf("first paint = %q: the feature is one card with its child inside", painted)
 	}
-	if arrived != "Add SSE feed|-" || child != "-|-" || parent != "-|1 task" {
-		t.Errorf("after the feed: new %q, docs %q, feed %q", arrived, child, parent)
+	if arrived != "1 of 1 done / - / none" {
+		t.Errorf("after the feed = %q: want the feature's card counting its new child, Write docs on its own, the new child without a card", arrived)
 	}
 	if e := errs.all(); len(e) > 0 {
 		t.Errorf("JavaScript errors:\n%s", strings.Join(e, "\n"))
@@ -398,6 +396,265 @@ func TestAChildArrivingOverTheFeedJoinsTheFeatureSection(t *testing.T) {
 	}
 	if fmt.Sprint(after) != "[t-docs:In progress: t-new:Backlog:]" || count != "2" {
 		t.Errorf("after the feed: rows %v, count %q", after, count)
+	}
+	if e := errs.all(); len(e) > 0 {
+		t.Errorf("JavaScript errors:\n%s", strings.Join(e, "\n"))
+	}
+}
+
+// TestAFeatureCardOpensToItsChildrenAndMovesAlone: a feature and its children
+// are one card. Its disclosure lists the children, in the order Review, In
+// progress, Todo, Backlog, Done, and is still open after a reload. Only the
+// feature moves, from its "Move to…" menu: child lines have neither a grip
+// nor a menu.
+func TestAFeatureCardOpensToItsChildrenAndMovesAlone(t *testing.T) {
+	assets, err := NewAssets()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !assets.Built() {
+		t.Skip("browser test: web client not built; run `make web`")
+	}
+	ctx, errs := browser(t)
+
+	at := time.Date(2026, 10, 19, 8, 0, 0, 0, time.UTC)
+	deps := boardDeps()
+	deps.Tasks = fakeTickets{[]*domain.Ticket{
+		{ID: "t-feed", ProjectID: "p1", Title: "Add SSE feed", Status: domain.TicketStatusInProgress, StatusSince: at.Add(5 * time.Minute)},
+		{ID: "c-done", ProjectID: "p1", Title: "Wire the feed", Status: domain.TicketStatusDone, ParentID: "t-feed", StatusSince: at},
+		{ID: "c-todo", ProjectID: "p1", Title: "Write docs", Status: domain.TicketStatusTodo, ParentID: "t-feed", StatusSince: at.Add(time.Minute)},
+		{ID: "c-review", ProjectID: "p1", Title: "Reconnect", Status: domain.TicketStatusReview, ParentID: "t-feed", StatusSince: at.Add(2 * time.Minute), PendingReviews: 1},
+	}}
+	api := &fakeTicketsAPI{tickets: map[string]map[string]string{
+		"t-feed": {"id": "t-feed", "project_id": "p1", "title": "Add SSE feed", "status": "in_progress"},
+	}}
+	mux := http.NewServeMux()
+	mux.Handle("/api/", api)
+	mux.Handle("/", NewHandler(deps, assets, nil))
+	srv := newBrowserServer(mux)
+	defer srv.Close()
+
+	const disclosure = `.board .card[data-task-id="t-feed"] .disclosure`
+	state := `(b => b.getAttribute('aria-expanded') + '|' + document.getElementById(b.getAttribute('aria-controls')).checkVisibility())(document.querySelector('` + disclosure + `'))`
+	var folded, open, reloaded, kids, controls, cards string
+	var review []string
+	err = chromedp.Run(ctx,
+		chromedp.EmulateViewport(1280, 800),
+		chromedp.Navigate(srv.URL+"/projects/p1"),
+		chromedp.Poll(`document.querySelector('[data-ssr]') === null`, nil, chromedp.WithPollingTimeout(10*time.Second)),
+		chromedp.Evaluate(state, &folded),
+		chromedp.Click(disclosure, chromedp.ByQuery),
+		chromedp.Poll(state+` === 'true|true'`, nil, chromedp.WithPollingTimeout(5*time.Second)),
+		chromedp.Evaluate(state, &open),
+		shot("board-feature-open"),
+		chromedp.Evaluate(`[...document.querySelectorAll('.board .card[data-task-id="t-feed"] .child .t')].map(a => a.textContent + '>' + a.getAttribute('href')).join(',')`, &kids),
+		chromedp.Evaluate(`document.querySelectorAll('.board .child .grip, .board .child .move-to, .board .child[draggable]').length + '|' + document.querySelectorAll('.board .card .grip').length`, &controls),
+		chromedp.Evaluate(`[...document.querySelectorAll('.board .card')].map(c => c.dataset.taskId).join(',')`, &cards),
+		chromedp.Reload(),
+		chromedp.Poll(`document.querySelector('[data-ssr]') === null`, nil, chromedp.WithPollingTimeout(10*time.Second)),
+		chromedp.Evaluate(state, &reloaded),
+		chromedp.Evaluate(`document.querySelector('.board .card[data-task-id="t-feed"] .move-to').focus()`, nil),
+		chromedp.KeyEvent(kb.ArrowDown),
+		chromedp.Poll(`document.activeElement?.getAttribute('role') === 'menuitemradio'`, nil, chromedp.WithPollingTimeout(5*time.Second)),
+		chromedp.KeyEvent("4"),
+		chromedp.Poll(cardsIn("Review")+`.includes('Add SSE feed')`, nil, chromedp.WithPollingTimeout(5*time.Second)),
+		chromedp.Evaluate(cardsIn("Review"), &review),
+	)
+	if err != nil {
+		t.Fatalf("%v\nAPI:\n%s\nJS errors: %v", err, api.log(), errs.all())
+	}
+	if folded != "false|false" {
+		t.Errorf("first paint: %q, want the card folded", folded)
+	}
+	if open != "true|true" {
+		t.Errorf("after the click: %q, want it open", open)
+	}
+	if want := "Reconnect>/projects/p1/tasks/c-review,Write docs>/projects/p1/tasks/c-todo,Wire the feed>/projects/p1/tasks/c-done"; kids != want {
+		t.Errorf("children = %q, want %q", kids, want)
+	}
+	if controls != "0|1" {
+		t.Errorf("grips and menus on child lines | grips on cards = %q, want 0|1", controls)
+	}
+	if cards != "t-feed" {
+		t.Errorf("cards on the board = %q, want only the feature", cards)
+	}
+	if reloaded != "true|true" {
+		t.Errorf("after a reload: %q, want it still open", reloaded)
+	}
+	if want := `/api/update_ticket {"status":"review","ticket_id":"t-feed"}`; api.log() != want {
+		t.Errorf("API calls:\n%s\nwant only the feature to move:\n%s", api.log(), want)
+	}
+	if e := errs.all(); len(e) > 0 {
+		t.Errorf("JavaScript errors:\n%s", strings.Join(e, "\n"))
+	}
+	_ = review
+}
+
+// TestTheRailNestsChildrenUnderTheirFeature: the rail has no group for a
+// child. It nests under its feature, in the feature's own status group,
+// folded; the child whose page is open is still there, highlighted, and the
+// twisty opens the rest.
+func TestTheRailNestsChildrenUnderTheirFeature(t *testing.T) {
+	deps := boardDeps()
+	at := time.Date(2026, 10, 19, 8, 0, 0, 0, time.UTC)
+	deps.Tasks = fakeTickets{[]*domain.Ticket{
+		{ID: "t-feed", ProjectID: "p1", Title: "Add SSE feed", Status: domain.TicketStatusInProgress, StatusSince: at},
+		{ID: "c-review", ProjectID: "p1", Title: "Reconnect", Status: domain.TicketStatusReview, ParentID: "t-feed", StatusSince: at},
+		{ID: "c-todo", ProjectID: "p1", Title: "Write docs", Status: domain.TicketStatusTodo, ParentID: "t-feed", StatusSince: at},
+		{ID: "t-ship", ProjectID: "p1", Title: "Ship it", Status: domain.TicketStatusDone},
+	}}
+	deps.Repositories = fakeRepos{[]*domain.Repository{{ID: "r1", ProjectID: "p1", Name: "harness"}}}
+	url, _ := pageServer(t, deps)
+	ctx, errs := browser(t)
+
+	const feature = `#rail li[data-feature]`
+	const twisty = feature + ` > .frow > .twisty`
+	state := `(() => { const kids = [...document.querySelectorAll('` + feature + ` > .kids > li')].map(li => li.querySelector('a').dataset.taskId + (li.checkVisibility() ? '' : ':hidden')); return document.querySelector('` + twisty + `').getAttribute('aria-expanded') + '|' + kids.join(',') })()`
+	groupOf := `(id => document.querySelector('#rail a[data-task-id="' + id + '"]').closest('section.group').dataset.key)`
+	var painted, live, opened, reloaded, groups string
+	err := chromedp.Run(ctx,
+		chromedp.EmulateViewport(1280, 800),
+		chromedp.Navigate(url+"/projects/p1/tasks/c-todo"),
+		chromedp.Evaluate(state, &painted),
+		chromedp.Poll(`document.querySelector('#rail [data-ssr]') === null`, nil, chromedp.WithPollingTimeout(10*time.Second)),
+		chromedp.Evaluate(state, &live),
+		chromedp.Evaluate(`['t-feed', 'c-review', 'c-todo'].map(`+groupOf+`).join(',')`, &groups),
+		chromedp.Click(twisty, chromedp.ByQuery),
+		chromedp.Poll(`document.querySelector('`+twisty+`').getAttribute('aria-expanded') === 'true'`, nil, chromedp.WithPollingTimeout(5*time.Second)),
+		chromedp.Evaluate(state, &opened),
+		shot("rail-open"),
+		chromedp.Reload(),
+		chromedp.Poll(`document.querySelector('#rail [data-ssr]') === null`, nil, chromedp.WithPollingTimeout(10*time.Second)),
+		chromedp.Evaluate(state, &reloaded),
+	)
+	if err != nil {
+		t.Fatalf("%v\nJS errors: %v", err, errs.all())
+	}
+	// Review first, the open child (Todo) the only one showing while the feature is folded.
+	if want := "false|c-review:hidden,c-todo"; painted != want || live != want {
+		t.Errorf("folded: first paint %q, live %q, want %q", painted, live, want)
+	}
+	if groups != "in_progress,in_progress,in_progress" {
+		t.Errorf("groups of the feature and its children = %q: children have no group of their own", groups)
+	}
+	if opened != "true|c-review,c-todo" || reloaded != opened {
+		t.Errorf("opened %q, after a reload %q, want every child shown", opened, reloaded)
+	}
+	if e := errs.all(); len(e) > 0 {
+		t.Errorf("JavaScript errors:\n%s", strings.Join(e, "\n"))
+	}
+}
+
+// TestAChildTaskPageLinksBackToItsFeature: the title row of a child reads
+// "‹ Feature / Child", and the feature's name links to the feature's page.
+// A task without a feature has no such link.
+func TestAChildTaskPageLinksBackToItsFeature(t *testing.T) {
+	deps := boardDeps()
+	deps.Tasks = fakeTickets{[]*domain.Ticket{
+		{ID: "t-feed", ProjectID: "p1", Title: "Add SSE feed", Status: domain.TicketStatusInProgress},
+		{ID: "c-docs", ProjectID: "p1", Title: "Write docs", Status: domain.TicketStatusTodo, ParentID: "t-feed"},
+		{ID: "t-ship", ProjectID: "p1", Title: "Ship it", Status: domain.TicketStatusDone},
+	}}
+	deps.Repositories = fakeRepos{[]*domain.Repository{{ID: "r1", ProjectID: "p1", Name: "harness"}}}
+	url, _ := pageServer(t, deps)
+	ctx, errs := browser(t)
+
+	const row = `.toolbar .crumbline`
+	var line, plain string
+	var path string
+	err := chromedp.Run(ctx,
+		chromedp.EmulateViewport(1280, 800),
+		chromedp.Navigate(url+"/projects/p1/tasks/c-docs"),
+		chromedp.Poll(pageReady, nil, chromedp.WithPollingTimeout(10*time.Second)),
+		shot("title-row"),
+		chromedp.Evaluate(`[...document.querySelector('`+row+`').children].map(c => c.textContent.trim()).join('|')`, &line),
+		chromedp.Evaluate(`document.querySelector('`+row+` .feat').getAttribute('href')`, &path),
+		chromedp.Navigate(url+"/projects/p1/tasks/t-ship"),
+		chromedp.Poll(pageReady, nil, chromedp.WithPollingTimeout(10*time.Second)),
+		chromedp.Evaluate(`document.querySelectorAll('.toolbar .crumbline, .toolbar [data-parent-task]').length + '|' + document.querySelector('.toolbar h1').textContent`, &plain),
+	)
+	if err != nil {
+		t.Fatalf("%v\nJS errors: %v", err, errs.all())
+	}
+	if line != "Add SSE feed|/|Write docs" {
+		t.Errorf("the title row reads %q, want the feature, a slash, then the task", line)
+	}
+	if path != "/projects/p1/tasks/t-feed" {
+		t.Errorf("the feature link goes to %q", path)
+	}
+	if plain != "0|Ship it" {
+		t.Errorf("a task without a feature: %q, want no feature link", plain)
+	}
+	if e := errs.all(); len(e) > 0 {
+		t.Errorf("JavaScript errors:\n%s", strings.Join(e, "\n"))
+	}
+}
+
+// TestArchivingAFeatureWithOpenChildrenIsRefusedOnItsCard: the server says no
+// (stubbed here, as the contract words it), and the card, still in Done,
+// opens to its children and says which are open. "Archive all" counts the
+// cards Done shows and says how many features stay.
+func TestArchivingAFeatureWithOpenChildrenIsRefusedOnItsCard(t *testing.T) {
+	assets, err := NewAssets()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !assets.Built() {
+		t.Skip("browser test: web client not built; run `make web`")
+	}
+	ctx, errs := browser(t)
+
+	deps := boardDeps()
+	deps.Tasks = fakeTickets{[]*domain.Ticket{
+		{ID: "t-feed", ProjectID: "p1", Title: "Add SSE feed", Status: domain.TicketStatusDone},
+		{ID: "c-todo", ProjectID: "p1", Title: "Write docs", Status: domain.TicketStatusTodo, ParentID: "t-feed"},
+		{ID: "c-done", ProjectID: "p1", Title: "Wire the feed", Status: domain.TicketStatusDone, ParentID: "t-feed"},
+		{ID: "t-ship", ProjectID: "p1", Title: "Ship it", Status: domain.TicketStatusDone},
+	}}
+	mux := http.NewServeMux()
+	mux.HandleFunc("/api/archive_ticket", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusConflict)
+		_ = json.NewEncoder(w).Encode(map[string]any{
+			"error": "1 task is not done: Write docs", "code": "FEATURE_HAS_OPEN_CHILDREN",
+			"open_children": []map[string]string{{"id": "c-todo", "title": "Write docs", "status": "todo"}},
+		})
+	})
+	mux.Handle("/api/", http.NotFoundHandler())
+	mux.Handle("/", NewHandler(deps, assets, nil))
+	srv := newBrowserServer(mux)
+	defer srv.Close()
+
+	card := `.board .card[data-task-id="t-feed"]`
+	var refusal, column, expanded, strip string
+	err = chromedp.Run(ctx,
+		chromedp.EmulateViewport(1280, 800),
+		chromedp.Navigate(srv.URL+"/projects/p1"),
+		chromedp.Poll(`document.querySelector('[data-ssr]') === null`, nil, chromedp.WithPollingTimeout(10*time.Second)),
+		chromedp.Evaluate(`document.querySelector('`+card+` .move-to').focus()`, nil),
+		chromedp.KeyEvent(kb.ArrowDown),
+		chromedp.Poll(`document.activeElement?.getAttribute('role') === 'menuitemradio'`, nil, chromedp.WithPollingTimeout(5*time.Second)),
+		chromedp.KeyEvent("a"),
+		chromedp.Poll(`document.querySelector('`+card+` .refusal') !== null`, nil, chromedp.WithPollingTimeout(5*time.Second)),
+		shot("board-refusal"),
+		chromedp.Evaluate(`document.querySelector('`+card+` .refusal').innerText.replace(/\s+/g, ' ').trim()`, &refusal),
+		chromedp.Evaluate(`document.querySelector('`+card+`').closest('.column').dataset.column`, &column),
+		chromedp.Evaluate(`document.querySelector('`+card+` .disclosure').getAttribute('aria-expanded') + '|' + document.querySelector('`+card+` .children').checkVisibility()`, &expanded),
+		chromedp.Evaluate(`document.querySelector('[data-archive-all]').click()`, nil),
+		chromedp.Poll(`document.querySelector('[data-confirm="archive-all"]')?.checkVisibility()`, nil, chromedp.WithPollingTimeout(5*time.Second)),
+		chromedp.Evaluate(`document.querySelector('[data-confirm="archive-all"]').innerText.replace(/\s+/g, ' ').trim()`, &strip),
+	)
+	if err != nil {
+		t.Fatalf("%v\nJS errors: %v", err, errs.all())
+	}
+	if want := "Not archived. 1 of its tasks is still open: Write docs (Todo). A feature is archived only when every task in it is done. FEATURE_HAS_OPEN_CHILDREN"; refusal != want {
+		t.Errorf("refusal = %q, want %q", refusal, want)
+	}
+	if column != "done" || expanded != "true|true" {
+		t.Errorf("the card is in %q, disclosure|list = %q: want it still in done, opened to its children", column, expanded)
+	}
+	if !strings.Contains(strip, "Archive all 1 done task?") || !strings.Contains(strip, "1 feature with open children stays on the board.") {
+		t.Errorf("Archive all asks %q: want it to count Ship it only and say one feature stays", strip)
 	}
 	if e := errs.all(); len(e) > 0 {
 		t.Errorf("JavaScript errors:\n%s", strings.Join(e, "\n"))

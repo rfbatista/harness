@@ -1,4 +1,7 @@
+import cards from "../../../../testdata/views/feature-cards.json" with { type: "json" };
 import { assert, file, test } from "../../../shared/testing/test.js";
+import { activityByTask } from "../domain/activity.js";
+import { onBoard } from "../domain/board.js";
 import { railGroups } from "../domain/rail.js";
 import { makeTask } from "../testing/fixtures.js";
 import { toGroupView, toRow } from "./railView.js";
@@ -55,4 +58,36 @@ test("Done's rest reads Show N more", () => {
   const tasks = Array.from({ length: 8 }, (_, n) => makeTask({ id: `d${n}`, status: "done", updatedAt: n }));
   const done = toGroupView(railGroups(tasks, {}).at(-1), ctx());
   assert.deepEqual([done.rows.length, done.more.length, done.hasMore, done.moreText], [5, 3, true, "Show 3 more"]);
+});
+
+test("the rail nests children under their feature as the shared fixture says (parity with the BFF)", () => {
+  const tasks = cards.tasks.map((t) =>
+    makeTask({
+      id: t.id,
+      title: t.title,
+      status: t.status,
+      parentId: t.parent_id,
+      statusSince: Date.parse("2026-10-19T08:00:00Z") + t.since * 60000,
+      pendingReviews: t.reviews ?? 0,
+      archivedAt: t.archived ? Date.parse("2026-10-01T12:00:00Z") : 0,
+      mergeState: t.merge ? { state: t.merge, merged: 1, total: 1 } : null,
+    }),
+  );
+  const byTask = activityByTask(cards.sessions.map((s) => ({ id: `s-${s.task_id}`, ticketId: s.task_id, status: s.status, pendingApprovals: 0 })));
+  const meta = (row) => (row.hasReviews ? `reviews:${row.reviewsText}` : row.isWaiting ? "waiting" : row.isLive ? `live:${row.liveText}` : row.hasMerge ? `merge:${row.mergeText}` : row.hasStatusWord ? `status:${row.statusWord}` : "");
+  for (const g of railGroups(onBoard(tasks), { byTask }).map((g) => toGroupView(g, ctx({ byTask })))) {
+    const got = g.rows.map((r) => `${r.id}=${meta(r)}[${r.kids.map((k) => `${k.id}=${meta(k)}`).join(" ")}]`);
+    const want = cards.rail[g.key].map((r) => `${r.id}=${r.meta}[${r.kids.map((k) => `${k.id}=${k.meta}`).join(" ")}]`);
+    assert.deepEqual(got, want, g.key);
+    assert.equal(g.rows.length, want.length, `${g.key}: children are not tasks of a group`);
+  }
+});
+
+test("a feature row opens to its children, and its signals cover them only while it is folded", () => {
+  const tasks = [makeTask({ id: "f", status: "todo" }), makeTask({ id: "c", status: "todo", parentId: "f", pendingReviews: 2 })];
+  const group = (open) => toGroupView(railGroups(tasks, {}).find((g) => g.key === "todo"), ctx({ open: () => open }));
+  const [folded] = group(false).rows;
+  assert.deepEqual([folded.isFeature, folded.open, folded.openText, folded.reviewsText, folded.twistyLabel, folded.kidsCount], [true, false, "false", "2 reviews", "Expand t1, 1 task".replace("t1", "Add SSE feed"), "1"]);
+  const [open] = group(true).rows;
+  assert.deepEqual([open.open, open.hasReviews, open.twistyLabel, open.kids[0].reviewsText], [true, false, "Collapse Add SSE feed, 1 task", "2 reviews"]);
 });

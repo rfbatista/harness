@@ -4,7 +4,9 @@ import { editedRows, handoffChains, isMissingPath, kindLabel, loadedLabel, noUsa
 file("architecture/domain/descriptive");
 
 test("a row's kind and loading are said in words", () => {
-  assert.equal(kindLabel("instruction", "subagent_prompt"), "Sub-agent prompt");
+  assert.equal(kindLabel("instruction", "subagent_prompt"), "Sub-agent");
+  assert.equal(kindLabel("instruction", "rules"), "Memory");
+  assert.equal(kindLabel("instruction", "skill"), "Skill");
   assert.equal(kindLabel("tool", "mcp"), "MCP server");
   assert.equal(kindLabel("tool", "weird"), "weird");
   assert.equal(loadedLabel("on_demand"), "On demand");

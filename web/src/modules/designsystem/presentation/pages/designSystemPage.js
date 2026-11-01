@@ -24,7 +24,7 @@ import {
   stateBadge,
   tabForSlug,
 } from "../../domain/record.js";
-import { renderMarkdown } from "../../../agents/domain/markdown.js";
+import { renderMarkdown } from "../../../../shared/domain/markdown.js";
 import { VERSIONS_PAGE, hasMore, mergeVersions, versionRow } from "../../domain/history.js";
 import { outlineOf } from "../../domain/principles.js";
 import {

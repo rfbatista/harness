@@ -8,7 +8,8 @@ import "strconv"
 // x-model. The panel never changes it until the person accepts a draft.
 //
 // Never put a pen on credentials, env values, saved commands or code and
-// monospace fields.
+// monospace fields. The one deliberate exception: the instruction file editor
+// (kind instruction_file), whose text is prose for agents, in a monospace area.
 templ WritingPen(p Pen) {
 	<div
 		class="[ pen-host ]"

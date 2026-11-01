@@ -81,3 +81,17 @@ export function mergeBadge(task) {
   if (!m || !MERGE_STATUSES.has(task.status) || !Object.hasOwn(MERGE_WORDS, m.state)) return null;
   return { state: m.state, ...MERGE_WORDS[m.state](m) };
 }
+
+/**
+ * The merge badge of a feature card, covering the feature and its children:
+ * the one state they share, else "partial" counting those merged. null when
+ * none of them has one.
+ * @param {import("./task.js").Task[]} tasks  the feature first, then its children
+ */
+export function rolledMergeBadge(tasks) {
+  const badges = tasks.map(mergeBadge).filter(Boolean);
+  if (badges.length === 0) return null;
+  if (new Set(badges.map((b) => b.state)).size === 1) return badges[0];
+  const merged = badges.filter((b) => b.state === "merged").length;
+  return { state: "partial", word: `${merged} of ${badges.length} merged`, rail: `${merged}/${badges.length} merged` };
+}

@@ -98,6 +98,15 @@ func SandboxProblem() problem {
 // SandboxDriverMissing is the error of a sandbox that is on with no driver.
 func SandboxDriverMissing() error { return refusal([]problem{SandboxProblem()}) }
 
+// ReadOnlySandboxMissing is the error of a read-only turn (the architecture
+// assistant's) on a platform with no sandbox driver. Such a turn never runs
+// unconfined, whatever the agent sandbox setting says (ADR 0060).
+func ReadOnlySandboxMissing() error {
+	return refusal([]problem{{CodeSandboxMissing,
+		"no sandbox driver. The architecture assistant only runs confined, and this platform has no driver. Install a driver in Agent isolation settings",
+		AnchorSandbox}})
+}
+
 func (g *Gate) claudeProblem(ctx context.Context, install bool) problem {
 	missing := problem{CodeClaudeMissing,
 		"no managed claude. Agents run a claude that the harness installs and keeps. Install it in Agent isolation settings",

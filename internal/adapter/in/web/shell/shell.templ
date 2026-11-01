@@ -330,7 +330,7 @@ templ railServerCopy(r Rail) {
 		@emptyProjectNotice()
 	} else {
 		<div class="[ head ]">
-			<h2 class="[ title ]">Tasks <span class="[ count ]">{ strconv.Itoa(len(r.Seed.Tasks)) }</span></h2>
+			<h2 class="[ title ]">Tasks <span class="[ count ]">{ strconv.Itoa(r.TaskCount()) }</span></h2>
 		</div>
 		<div class="[ filter-placeholder ]"></div>
 		<div class="[ groups ]">
@@ -346,9 +346,7 @@ templ railServerCopy(r Rail) {
 					if !g.IsEmpty() {
 						<ul role="list" id={ g.ListID() }>
 							for _, l := range g.Links {
-								<li>
-									@railLink(l)
-								</li>
+								@railItem(l)
 							}
 							if len(g.More) > 0 {
 								<li class="[ more ]">
@@ -356,9 +354,7 @@ templ railServerCopy(r Rail) {
 										<summary><span class="[ closed ]">{ g.MoreText() }<span class="[ visually-hidden ]">{ " done tasks" }</span></span><span class="[ opened ]">Show fewer</span></summary>
 										<ul role="list">
 											for _, l := range g.More {
-												<li>
-													@railLink(l)
-												</li>
+												@railItem(l)
 											}
 										</ul>
 									</details>
@@ -376,11 +372,40 @@ templ emptyProjectNotice() {
 	<p class="[ notice ]"><span><b>No tasks yet.</b> A task is what agents work on: create one, then start a session on it.</span></p>
 }
 
+// railItem is a rail list item, server-rendered: a plain task's link, or a
+// feature task's row with a twisty and its children nested under it, folded.
+templ railItem(l Link) {
+	if l.IsFeature() {
+		<li data-feature>
+			<div class="[ frow ]">
+				@railLink(l)
+				<button type="button" class="[ twisty ]" aria-expanded="false" aria-controls={ l.KidsID() } aria-label={ l.TwistyLabel() }>
+					{ strconv.Itoa(len(l.Kids)) }
+					@icon("chevron")
+				</button>
+			</div>
+			<ul class="[ kids ]" role="list" id={ l.KidsID() }>
+				for _, k := range l.Kids {
+					<li>
+						@railLink(k)
+					</li>
+				}
+			</ul>
+		</li>
+	} else {
+		<li>
+			@railLink(l)
+		</li>
+	}
+}
+
 // railLink is one task, server-rendered with its activity: the dot, the
 // title, and one meta item.
 templ railLink(l Link) {
 	<a href={ templ.SafeURL(l.Href) } data-task-id={ l.TaskID } { currentAttrs(l.Current)... } { attentionAttrs(l.Attention)... }>
-		if l.LiveState() != "" {
+		if l.StatusKey != "" {
+			<span class="[ tdot ]" data-st={ l.StatusKey } aria-hidden="true"></span>
+		} else if l.LiveState() != "" {
 			<span class="[ status ]" data-state={ l.LiveState() } data-dot-only></span>
 		}
 		<span class="[ label ]">{ l.Label }</span>
@@ -396,6 +421,8 @@ templ railLink(l Link) {
 				@mergeGlyphs()
 				{ l.MergeText }
 			</span>
+		} else if l.ShowsStatus() {
+			<span class="[ meta ]">{ l.StatusWord }</span>
 		}
 		<span class="[ visually-hidden ]">{ l.MetaTail() }</span>
 	</a>
@@ -447,18 +474,14 @@ templ railLiveCopy() {
 					</h3>
 					<ul role="list" x-bind:id="group.listId" x-show="group.hasRows">
 						<template x-for="row in group.rows" x-bind:key="row.id">
-							<li>
-								@railLiveLink()
-							</li>
+							@railLiveItem()
 						</template>
 						<li class="[ more ]" x-show="group.hasMore">
 							<details>
 								<summary><span class="[ closed ]"><span x-text="group.moreText"></span><span class="[ visually-hidden ]">{ " done tasks" }</span></span><span class="[ opened ]">Show fewer</span></summary>
 								<ul role="list">
 									<template x-for="row in group.more" x-bind:key="row.id">
-										<li>
-											@railLiveLink()
-										</li>
+										@railLiveItem()
 									</template>
 								</ul>
 							</details>
@@ -468,6 +491,50 @@ templ railLiveCopy() {
 			</template>
 		</div>
 	</div>
+}
+
+// railLiveItem is the live copy of railItem, bound to a row of railView.js:
+// a plain task's link, or a feature task's row with its twisty and its
+// children nested under it.
+templ railLiveItem() {
+	<li x-bind:data-feature="row.isFeature ? '' : null" x-bind:data-open="row.open ? '' : null">
+		<template x-if="row.isFeature">
+			<div class="[ frow ]">
+				@railLiveLink()
+				<button type="button" class="[ twisty ]" x-bind:data-feature-id="row.id" x-bind:aria-expanded="row.openText" x-bind:aria-controls="row.kidsId" x-bind:aria-label="row.twistyLabel" x-on:click="toggleFeature">
+					<span x-text="row.kidsCount"></span>
+					@icon("chevron")
+				</button>
+			</div>
+		</template>
+		<template x-if="!row.isFeature">
+			@railLiveLink()
+		</template>
+		<template x-if="row.isFeature">
+			<ul class="[ kids ]" role="list" x-bind:id="row.kidsId">
+				<template x-for="kid in row.kids" x-bind:key="kid.id">
+					<li>
+						@railLiveKidLink()
+					</li>
+				</template>
+			</ul>
+		</template>
+	</li>
+}
+
+// railLiveKidLink is a child's row: its status dot, its title, and a signal
+// or its status word.
+templ railLiveKidLink() {
+	<a x-bind:href="kid.href" x-bind:aria-current="kid.current" x-bind:data-task-id="kid.id" x-bind:data-attention="kid.attention" x-bind:data-fresh="kid.fresh" x-on:mouseenter="tip">
+		<span class="[ tdot ]" x-bind:data-st="kid.statusKey" aria-hidden="true"></span>
+		<span class="[ label ]"><span x-text="kid.before"></span><mark x-show="kid.hasMatch" x-text="kid.match"></mark><span x-text="kid.after"></span></span>
+		<span class="[ visually-hidden ]" x-text="kid.lead"></span>
+		<span class="[ badge ]" data-tone="attention" x-show="kid.hasReviews" x-text="kid.reviewsText"></span>
+		<span class="[ meta ]" data-tone="attention" x-show="kid.isWaiting">waiting</span>
+		<span class="[ meta ]" x-show="kid.isLive" x-text="kid.liveText"></span>
+		<span class="[ meta ]" x-show="kid.hasStatusWord" x-text="kid.statusWord"></span>
+		<span class="[ visually-hidden ]" x-text="kid.tail"></span>
+	</a>
 }
 
 // railLiveLink is the live copy of railLink, bound to a row of railView.js.

@@ -10,6 +10,7 @@ import { layersTab } from "./tabs/layersTab.js";
 import { accessMatrix } from "./tabs/accessMatrix.js";
 import { architectureSetup } from "./setup/architectureSetup.js";
 import { outputTab } from "./tabs/outputTab.js";
+import { architectureAssistant } from "./assistant/architectureAssistant.js";
 import { outputDiagram } from "./tabs/outputDiagram.js";
 
 /**
@@ -28,4 +29,5 @@ export function registerArchitecture(Alpine, deps) {
   Alpine.data("architectureOutputTab", outputTab(deps));
   Alpine.data("architectureOutputDiagram", outputDiagram(deps));
   Alpine.data("architectureSetup", architectureSetup(deps));
+  Alpine.data("architectureAssistant", architectureAssistant(deps));
 }

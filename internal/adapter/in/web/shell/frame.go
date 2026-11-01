@@ -230,6 +230,18 @@ type RailGroup struct {
 // IsEmpty: the group has no tasks, so its heading has nothing to fold.
 func (g RailGroup) IsEmpty() bool { return g.Total == 0 }
 
+// TaskCount counts the project's tasks that are not archived: the rail's
+// heading. A child archived on its own is in the seed, but not counted.
+func (r Rail) TaskCount() int {
+	n := 0
+	for _, t := range r.Seed.Tasks {
+		if t.ArchivedAt == nil {
+			n++
+		}
+	}
+	return n
+}
+
 // NeedsYou counts the tasks waiting on the person, for the phone's Tasks
 // trigger.
 func (r Rail) NeedsYou() int {
@@ -264,6 +276,14 @@ type Link struct {
 	// hook) and MergeText the rail's lower-case word, "1/2 merged"; both ""
 	// when there is none.
 	Merge, MergeText string
+	// Kids are a feature task's children, nested under its row (ADR 0058);
+	// none on a plain task or on a child. The feature's own signals above
+	// cover it and all of them: its row is folded in the first paint.
+	Kids []Link
+	// StatusWord is a child's status ("Review"), and StatusKey its dot
+	// (data-st): a child has no group of its own, so the row says it, unless
+	// a signal takes the slot. "" on a task that is not a child row.
+	StatusWord, StatusKey string
 }
 
 // DocumentTitle is the <title>: the page's own title, then the app.
@@ -417,6 +437,25 @@ func (l Link) Running() bool { return !l.Attention && l.Live > 0 }
 
 // Merging: nothing comes before the merge glyph and word.
 func (l Link) Merging() bool { return l.Merge != "" && !l.Attention && l.Live == 0 }
+
+// IsFeature: the row has children nested under it.
+func (l Link) IsFeature() bool { return len(l.Kids) > 0 }
+
+// ShowsStatus: a child's row says its status, when no signal takes the slot.
+func (l Link) ShowsStatus() bool { return l.StatusWord != "" && l.Reviews == 0 && !l.Attention && l.Live == 0 }
+
+// KidsID is the id of the list of children, which the twisty controls.
+func (l Link) KidsID() string { return "rail-kids-" + l.TaskID }
+
+// TwistyLabel is the twisty's name: "Expand Files tab, 5 tasks".
+func (l Link) TwistyLabel() string {
+	n := strconv.Itoa(len(l.Kids))
+	words := " tasks"
+	if len(l.Kids) == 1 {
+		words = " task"
+	}
+	return "Expand " + l.Label + ", " + n + words
+}
 
 // MetaLead and MetaTail are the hidden words around the meta item, so the
 // link reads "Redesign sidebar, running, 2 live sessions".

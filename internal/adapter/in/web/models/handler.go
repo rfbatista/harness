@@ -24,8 +24,11 @@ type Handler struct {
 	Settings ports.SettingsReader
 	// Helper says whether the writing helper can run; nil reads as it can.
 	Helper func(ctx context.Context) shell.Helper
-	Layout shell.Layout
-	Render shell.Renderer
+	// Architecture says whether the architecture assistant can run; nil reads
+	// as it can.
+	Architecture func(ctx context.Context) shell.Helper
+	Layout       shell.Layout
+	Render       shell.Renderer
 }
 
 // Page renders the page.
@@ -39,6 +42,9 @@ func (h Handler) Page(w http.ResponseWriter, r *http.Request) error {
 	view := NewView(h.Settings)
 	if h.Helper != nil {
 		view = view.WithWritingHelper(h.Helper(ctx))
+	}
+	if h.Architecture != nil {
+		view = view.WithArchitectureAssistant(h.Architecture(ctx))
 	}
 	return h.Render(w, r, http.StatusOK, Page(frame, view))
 }
@@ -118,6 +124,13 @@ func NewView(settings ports.SettingsReader) View {
 		Current:   domain.WritingHelperModel(settings.Setting(domain.SettingModelWritingHelper)),
 		BuiltIn:   domain.DefaultWritingHelperModel,
 		NoDefault: true,
+	}, {
+		Key:       domain.SettingModelArchitectureAssistant,
+		Title:     "Architecture assistant",
+		Lead:      "The chat on a repository's Architecture page. It reads the code and proposes layers, access and rules, so a stronger model pays off. Applies to every project.",
+		Current:   domain.ArchitectureAssistantModel(settings.Setting(domain.SettingModelArchitectureAssistant)),
+		BuiltIn:   domain.DefaultArchitectureAssistantModel,
+		NoDefault: true,
 	}}}
 }
 
@@ -127,6 +140,19 @@ func (v View) WithWritingHelper(a shell.Helper) View {
 	assistants := slices.Clone(v.Assistants)
 	for i := range assistants {
 		if assistants[i].Key == domain.SettingModelWritingHelper && !a.Available {
+			assistants[i].UnavailableReason, assistants[i].FixURL = a.Reason, a.FixURL
+		}
+	}
+	v.Assistants = assistants
+	return v
+}
+
+// WithArchitectureAssistant says on the architecture assistant's row why it
+// cannot run, when a is not available.
+func (v View) WithArchitectureAssistant(a shell.Helper) View {
+	assistants := slices.Clone(v.Assistants)
+	for i := range assistants {
+		if assistants[i].Key == domain.SettingModelArchitectureAssistant && !a.Available {
 			assistants[i].UnavailableReason, assistants[i].FixURL = a.Reason, a.FixURL
 		}
 	}

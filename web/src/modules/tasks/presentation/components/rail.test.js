@@ -287,3 +287,15 @@ test("a seed or a resync that carries an archived task keeps it off the store", 
   assert.deepEqual(store.tasks.map((t) => t.id), ["t1"]);
   assert.ok(nav.instance);
 });
+
+test("a restored feature brings back the children archived on their own before it, which the feed does not carry", async () => {
+  const feature = makeTask({ id: "f", title: "Files tab", status: "done" });
+  const kid = makeTask({ id: "k", title: "Notes pane", status: "done", parentId: "f", archivedAt: 3 });
+  const { memory, store } = setup({ tasks: [makeTask()] });
+  await flush();
+  // The feature was archived and left; the server lists both again once it is restored.
+  memory.replaceTasks([makeTask(), feature, kid]);
+  memory.emit({ kind: "task-upsert", task: feature });
+  await flush();
+  assert.deepEqual(store.tasks.map((t) => `${t.id}:${Boolean(t.archivedAt)}`).sort(), ["f:false", "k:true", "t1:false"]);
+});

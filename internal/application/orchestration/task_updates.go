@@ -192,6 +192,9 @@ type taskCounts struct {
 	// agentsMove is the setting "Agents move documents to project" as the
 	// session starts; the brief states it.
 	agentsMove bool
+	// structure is the task's feature and its sibling or child tasks; the
+	// zero value leaves the feature section out.
+	structure briefStructure
 }
 
 // resourcesSection is the brief's part on what the person adds to the task.

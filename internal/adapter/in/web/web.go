@@ -152,6 +152,10 @@ type Deps struct {
 	// every page and the Models page's row. It must not start anything; nil
 	// reads as unavailable.
 	WritingHelper func(ctx context.Context) shell.Helper
+	// ArchitectureAssistant reads whether the architecture assistant can run,
+	// for the Architecture page's seed and the Models page's row. It must not
+	// start anything; nil reads as unavailable.
+	ArchitectureAssistant ports.ArchitectureAssistantReadiness
 	// Now defaults to time.Now.
 	Now func() time.Time
 }
@@ -214,7 +218,7 @@ func NewHandler(deps Deps, assets *Assets, fallback http.Handler) http.Handler {
 	if deps.Workspaces != nil {
 		codePages.Branches = deps.Workspaces
 	}
-	architecturePages := architecture.Handler{Projects: deps.Projects, Repositories: deps.Repositories, Layout: s.layout, Render: render}
+	architecturePages := architecture.Handler{Projects: deps.Projects, Repositories: deps.Repositories, Assistant: deps.ArchitectureAssistant, Layout: s.layout, Render: render}
 	designSystemPage := designsystem.Handler{Projects: deps.Projects, Designs: deps.DesignSystems, Layout: s.layout, Render: render}
 	toProject := func(w http.ResponseWriter, r *http.Request) {
 		http.Redirect(w, r, "/projects/"+url.PathEscape(r.PathValue("project")), http.StatusFound)
@@ -247,7 +251,7 @@ func NewHandler(deps Deps, assets *Assets, fallback http.Handler) http.Handler {
 	mux.Handle("GET "+agents.Href, s.page(agentPages.Page))
 	mux.Handle("GET "+agents.Href+"/{path...}", s.page(agentPages.Page))
 	if deps.Settings != nil {
-		modelsPage := models.Handler{Settings: deps.Settings, Helper: s.helper, Layout: s.layout, Render: render}
+		modelsPage := models.Handler{Settings: deps.Settings, Helper: s.helper, Architecture: s.architectureAssistant, Layout: s.layout, Render: render}
 		mux.Handle("GET "+models.Href, s.page(modelsPage.Page))
 	}
 	if deps.SandboxSettings != nil {
@@ -416,6 +420,16 @@ func (s *server) helper(ctx context.Context) shell.Helper {
 		return shell.Helper{}
 	}
 	return s.deps.WritingHelper(ctx)
+}
+
+// architectureAssistant is the architecture assistant's readiness for the
+// Models page: unavailable without a reader.
+func (s *server) architectureAssistant(ctx context.Context) shell.Helper {
+	if s.deps.ArchitectureAssistant == nil {
+		return shell.Helper{Reason: "the architecture assistant is not configured on this server"}
+	}
+	a := s.deps.ArchitectureAssistant.Readiness(ctx)
+	return shell.Helper{Available: a.Available, Reason: a.Reason, FixURL: a.FixURL}
 }
 
 // bareFrame is a frame without the rail, for when the rail cannot be read.

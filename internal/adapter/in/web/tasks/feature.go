@@ -38,7 +38,8 @@ func childRank(status string) int {
 func BuildFeature(projectID string, task *domain.Ticket, tickets []*domain.Ticket, docs []*domain.Document, docsOf func(string) []*domain.Document, now time.Time) *sessions.FeatureView {
 	var children []sessions.ChildView
 	for _, tk := range tickets {
-		if tk.ParentID != task.ID || tk.ID == task.ID {
+		// A child archived on its own is listed on the board's card only.
+		if tk.ParentID != task.ID || tk.ID == task.ID || tk.ArchivedAt != nil {
 			continue
 		}
 		child := sessions.ChildView{ID: tk.ID, Title: tk.Title, Href: Href(projectID, tk.ID), Status: string(tk.Status), StatusLabel: sessions.StatusLabel(tk.Status)}

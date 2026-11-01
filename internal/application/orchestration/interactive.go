@@ -621,6 +621,9 @@ func (s *Service) agentSpec(cfg llmkit.SessionConfig, conv ports.Conversation, p
 			Args: sv.Args, Env: sv.Env, Headers: sv.Headers,
 		})
 	}
+	for _, f := range cfg.InstructionFiles {
+		spec.InstructionFiles = append(spec.InstructionFiles, ports.AgentInstructionFile{Kind: string(f.Kind), Path: f.Path, Content: f.Content})
+	}
 	if dc, ok := cfg.Driver.(claude.Config); ok {
 		spec.SkillDirs = dc.SkillDirs
 		spec.Hooks = specHooks(dc.Settings)

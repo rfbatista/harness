@@ -52,7 +52,10 @@ var (
 // not stored. Sessions and Agents name a comment's writer; either may be
 // nil.
 type Sources struct {
-	Tickets   ports.TicketReader
+	Tickets ports.TicketReader
+	// Structure tells task/task.json a task's feature and children; nil
+	// leaves them out as none.
+	Structure ports.TaskStructureReader
 	Documents ports.DocumentReader
 	Comments  ports.SessionTaskComments
 	Resources ports.TaskResourceFiles
@@ -396,7 +399,7 @@ func (s *Service) AnnounceChange(c ports.ProjectChange) {
 	case c.DesignSystemChanged != nil:
 		s.forgetDeletedDesignSystem(c.DesignSystemChanged.DesignSystemID)
 		s.changed(c.ProjectID(), "")
-	case c.ArchitectureChanged != nil, c.DesignSystemSaved != nil:
+	case c.ArchitectureChanged != nil, c.InstructionFileChanged != nil, c.DesignSystemSaved != nil:
 		s.changed(c.ProjectID(), "")
 	}
 }

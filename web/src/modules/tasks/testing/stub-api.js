@@ -6,7 +6,7 @@ import { jsonResponse } from "../../../shared/testing/doubles.js";
 import { memoryTasks } from "../infrastructure/memory-gateway.js";
 import { taskDTO } from "./fixtures.js";
 
-const STATUS = { PROJECT_NOT_FOUND: 404, TICKET_NOT_FOUND: 404, DOCUMENT_NOT_FOUND: 404, INVALID_INPUT: 400, INVALID_STATUS: 400, TASK_NOT_DONE: 409, TASK_ARCHIVED: 409, TICKET_PARENT_INVALID: 400 };
+const STATUS = { PROJECT_NOT_FOUND: 404, TICKET_NOT_FOUND: 404, DOCUMENT_NOT_FOUND: 404, INVALID_INPUT: 400, INVALID_STATUS: 400, TASK_NOT_DONE: 409, TASK_ARCHIVED: 409, FEATURE_HAS_OPEN_CHILDREN: 409, FEATURE_ARCHIVED: 409, TICKET_PARENT_INVALID: 400 };
 
 export function stubTasksApi(world) {
   const memory = memoryTasks(world);
@@ -54,7 +54,7 @@ export function stubTasksApi(world) {
           return jsonResponse(404, { error: `no route ${url.pathname}` });
       }
     } catch (err) {
-      return jsonResponse(STATUS[codeOf(err)] ?? 500, { error: err.message, code: codeOf(err) });
+      return jsonResponse(STATUS[codeOf(err)] ?? 500, { error: err.message, code: codeOf(err), ...err.details });
     }
   }
 

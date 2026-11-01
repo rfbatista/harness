@@ -152,7 +152,11 @@ func SessionTaskTools(planningSvc ports.Planning, sessions ports.SessionReposito
 				if err != nil {
 					return nil, err
 				}
-				return map[string]any{"task": scope.ticket}, nil
+				structure, err := planningSvc.TaskStructure(ctx, scope.ticket.ID)
+				if err != nil {
+					return nil, err
+				}
+				return map[string]any{"task": taskWithStructure{scope.ticket, structure}}, nil
 			},
 		},
 		{
@@ -348,6 +352,13 @@ func resolveNamedTaskScope(ctx context.Context, planningSvc ports.Planning, sess
 		return nil, &domain.StructuredError{Code: "TASK_NOT_ON_PROJECT", Message: "task " + taskID + " is in another project"}
 	}
 	return &taskScope{session: sess, ticket: tk, named: true}, nil
+}
+
+// taskWithStructure is the task get_task answers: the ticket and, beside its
+// own fields, its feature (parent) and its children.
+type taskWithStructure struct {
+	*domain.Ticket
+	*domain.TaskStructure
 }
 
 func resolveTaskScope(ctx context.Context, planningSvc ports.Planning, sessions ports.SessionRepository) (*taskScope, error) {

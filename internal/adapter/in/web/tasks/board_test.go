@@ -2,6 +2,7 @@ package tasks
 
 import (
 	"encoding/json"
+	"slices"
 	"fmt"
 	"os"
 	"strings"
@@ -112,49 +113,111 @@ func TestBoardListsEachColumnNewestStatusSinceFirst(t *testing.T) {
 	}
 }
 
-func TestBoardFeatureCuesMatchTheSharedFixture(t *testing.T) {
-	raw, err := os.ReadFile("../../../../../web/testdata/views/feature-cues.json")
+// featureFixture is web/testdata/views/feature-cards.json: the tasks and
+// sessions, and what the board and the rail are to make of them.
+type featureFixture struct {
+	Tasks []struct {
+		ID, Title, Status string
+		ParentID          string `json:"parent_id"`
+		Since             int
+		Reviews           int
+		Merge             string
+		Archived          bool
+	} `json:"tasks"`
+	Sessions []struct {
+		TaskID string `json:"task_id"`
+		Status string
+	} `json:"sessions"`
+	Columns map[string][]string `json:"columns"`
+	Cards   []struct {
+		ID, Bar, Summary, Tasks, Hint, Live, Reviews, Merge string
+		Children, Archived                                  []string
+	} `json:"cards"`
+	Rail map[string][]struct {
+		ID, Meta string
+		Kids     []struct{ ID, Meta string }
+	} `json:"rail"`
+}
+
+func loadFeatureFixture(t *testing.T) (featureFixture, []*domain.Ticket, []*domain.Session) {
+	t.Helper()
+	raw, err := os.ReadFile("../../../../../web/testdata/views/feature-cards.json")
 	if err != nil {
 		t.Fatal(err)
 	}
-	var fixture struct {
-		ChildrenWords []struct {
-			Count int    `json:"count"`
-			Word  string `json:"word"`
-		} `json:"children_words"`
-		Tasks []struct {
-			ID, Title, Status string
-			ParentID          string `json:"parent_id"`
-		} `json:"tasks"`
-		Cards []struct {
-			ID, Parent, Children string
-		} `json:"cards"`
-	}
+	var fixture featureFixture
 	if err := json.Unmarshal(raw, &fixture); err != nil {
 		t.Fatal(err)
 	}
-	for _, w := range fixture.ChildrenWords {
-		if got := ChildrenWord(w.Count); got != w.Word {
-			t.Errorf("ChildrenWord(%d) = %q, want %q", w.Count, got, w.Word)
-		}
-	}
+	origin := time.Date(2026, 10, 19, 8, 0, 0, 0, time.UTC)
 	var tasks []*domain.Ticket
 	for _, tk := range fixture.Tasks {
-		tasks = append(tasks, &domain.Ticket{ID: tk.ID, Title: tk.Title, Status: domain.TicketStatus(tk.Status), ParentID: tk.ParentID})
+		ticket := &domain.Ticket{ID: tk.ID, Title: tk.Title, Status: domain.TicketStatus(tk.Status), ParentID: tk.ParentID, StatusSince: origin.Add(time.Duration(tk.Since) * time.Minute), PendingReviews: tk.Reviews}
+		if tk.Merge != "" {
+			ticket.MergeState = &domain.MergeState{State: domain.MergeKind(tk.Merge), Merged: 1, Total: 1}
+		}
+		if tk.Archived {
+			ticket.ArchivedAt = &archivedAt
+		}
+		tasks = append(tasks, ticket)
 	}
+	var sessions []*domain.Session
+	for _, s := range fixture.Sessions {
+		sessions = append(sessions, &domain.Session{ID: "s-" + s.TaskID, TicketID: s.TaskID, Status: domain.SessionStatus(s.Status)})
+	}
+	return fixture, tasks, sessions
+}
+
+func TestBoardFeatureCardsMatchTheSharedFixture(t *testing.T) {
+	fixture, tasks, sessions := loadFeatureFixture(t)
+	board := BuildBoard("p1", tasks, sessions)
 	cards := map[string]Card{}
-	for _, c := range BuildBoard("p1", tasks, nil).Columns {
-		for _, card := range c.Cards {
+	for _, col := range board.Columns {
+		var ids []string
+		for _, card := range col.Cards {
 			cards[card.TaskID] = card
+			ids = append(ids, card.TaskID)
+		}
+		if got, want := strings.Join(ids, ","), strings.Join(fixture.Columns[col.Status], ","); got != want {
+			t.Errorf("column %s = %s, want %s", col.Status, got, want)
 		}
 	}
-	if len(cards) != len(fixture.Cards) {
-		t.Fatalf("%d cards, want %d", len(cards), len(fixture.Cards))
-	}
 	for _, want := range fixture.Cards {
-		card := cards[want.ID]
-		if card.Parent != want.Parent || ChildrenWord(card.Children) != want.Children {
-			t.Errorf("card %s: parent %q children %q, want %q / %q", want.ID, card.Parent, ChildrenWord(card.Children), want.Parent, want.Children)
+		card, ok := cards[want.ID]
+		if !ok {
+			t.Errorf("no card for %s", want.ID)
+			continue
+		}
+		if len(want.Children) == 0 {
+			if card.Feature != nil {
+				t.Errorf("card %s is a feature card, want a plain one", want.ID)
+			}
+			continue
+		}
+		f := card.Feature
+		if f == nil {
+			t.Errorf("card %s is plain, want a feature card", want.ID)
+			continue
+		}
+		var kids, archived []string
+		for _, c := range f.Children {
+			kids = append(kids, c.TaskID)
+			if c.Archived {
+				archived = append(archived, c.TaskID)
+			}
+		}
+		reviews := ""
+		if card.Reviews > 0 {
+			reviews = reviewsWord(card.Reviews)
+		}
+		merge := ""
+		if card.Merge != nil {
+			merge = card.Merge.Word
+		}
+		got := []string{f.Bar, f.Summary, f.Tasks, f.Hint, strings.Join(kids, ","), strings.Join(archived, ","), card.LiveState, reviews, merge}
+		w := []string{want.Bar, want.Summary, want.Tasks, want.Hint, strings.Join(want.Children, ","), strings.Join(want.Archived, ","), want.Live, want.Reviews, want.Merge}
+		if !slices.Equal(got, w) {
+			t.Errorf("card %s:\n got %q\nwant %q", want.ID, got, w)
 		}
 	}
 }

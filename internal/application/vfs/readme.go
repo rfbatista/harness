@@ -24,7 +24,7 @@ stored: what others change appears here, and what you write here is stored.
 
     README.md                 this map (read-only)
     .index.json               every file: path, kind, id, scope, version, title, updated_at (read-only)
-    task/task.json            the task: id, title, description, status, architect_session_id (read-only)
+    task/task.json            the task: id, title, description, status, architect_session_id, parent, children (read-only)
     task/docs/                documents linked to this task, task scope
     task/comments/            one file per comment, body only
     task/resources/           the person's uploads under their names (read-only)
@@ -36,6 +36,9 @@ stored: what others change appears here, and what you write here is stored.
     project/designs/          every project design asset, file bytes
     project/designs/urls.md   project design assets that are URLs (read-only)
     project/architecture/     <repository>.yaml: each repository's architecture, layers and rules (read-only)
+    project/architecture/<repository>/instructions/<path>
+                              the repository's instruction files (AGENTS.md, CLAUDE.md, skills, sub-agents),
+                              kept in the harness; delivered to you, read-only here
 {{DESIGN_SYSTEM}}    tasks/<task-id>/docs/     another task of the project: its documents, task scope
 
 File names are <slug of title>.<ext>, with -<short id> added only on a

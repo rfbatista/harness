@@ -140,8 +140,10 @@ export function sessionRows(list, projectId, rangeTotal) {
 
 const clockTime = (d) => [d.getHours(), d.getMinutes(), d.getSeconds()].map((x) => String(x).padStart(2, "0")).join(":");
 
-/** What the harness's own spend is called: the writing helper's has a name, the rest is the harness's. */
-const harnessSpend = (attribution) => (attribution === "harness:writing-helper" ? "Writing helper" : "Harness");
+const HARNESS_SPEND = { "harness:writing-helper": "Writing helper", "harness:architecture-assistant": "Architecture assistant" };
+
+/** What the harness's own spend is called: an assistant's has a name, the rest is the harness's. */
+const harnessSpend = (attribution) => HARNESS_SPEND[attribution] ?? "Harness";
 
 /** @param {import("../domain/usage.js").UsageRecord} r */
 export function feedRow(r, projectId) {

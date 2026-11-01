@@ -6,7 +6,7 @@ import "context"
 // stateless one-shots, and the browser holds the conversation.
 
 // WritingHelperField is the text the person is writing and what it is
-// (task_title, task_description or comment).
+// (task_title, task_description, comment or instruction_file).
 type WritingHelperField struct {
 	Kind string `json:"kind"`
 	Text string `json:"text"`
