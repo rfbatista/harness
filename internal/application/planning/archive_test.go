@@ -378,3 +378,42 @@ func TestAnArchivedChildStillCountsForItsFeature(t *testing.T) {
 		t.Fatalf("delete a feature with an archived child: want %s, got %v", domain.CodeTicketHasChildren, err)
 	}
 }
+
+// Archiving and restoring a feature put one change on the feed for the
+// feature and one for each child that moved with it.
+func TestAFeatureAndItsChildrenAreAnnouncedOncePerTask(t *testing.T) {
+	f := newArchiveFixture(t)
+	ctx := context.Background()
+	feature := f.doneTask(t, "Feature")
+	a, b := f.doneTask(t, "A"), f.doneTask(t, "B")
+	for _, c := range []*domain.Ticket{a, b} {
+		if _, err := f.svc.PatchTicket(ctx, c.ID, ports.TicketPatch{ParentID: &feature.ID}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	announced := func(from int, archived bool) {
+		t.Helper()
+		got := f.feed.all()[from:]
+		seen := map[string]bool{}
+		for _, c := range got {
+			if c.deleted || (c.ticket.ArchivedAt != nil) != archived || seen[c.ticket.ID] {
+				t.Errorf("announced %+v", c)
+			}
+			seen[c.ticket.ID] = true
+		}
+		if len(seen) != 3 || len(got) != 3 {
+			t.Errorf("announced %d changes for %d tasks, want one each for the feature and 2 children", len(got), len(seen))
+		}
+	}
+
+	before := len(f.feed.all())
+	if _, err := f.svc.ArchiveTicket(ctx, feature.ID); err != nil {
+		t.Fatal(err)
+	}
+	announced(before, true)
+	before = len(f.feed.all())
+	if _, err := f.svc.RestoreTicket(ctx, feature.ID); err != nil {
+		t.Fatal(err)
+	}
+	announced(before, false)
+}
