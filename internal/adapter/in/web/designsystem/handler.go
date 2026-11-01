@@ -33,7 +33,7 @@ func Href(projectID, slug, tab string) string {
 }
 
 // tabs are the `?tab=` values the page opens on; anything else opens the first.
-var tabs = map[string]bool{"tokens": true, "principles": true, "components": true, "repositories": true, "history": true}
+var tabs = map[string]bool{"tokens": true, "principles": true, "components": true, "proposals": true, "repositories": true, "history": true}
 
 // Handler serves GET /projects/{project}/design-systems/{slug} and the list at
 // GET /projects/{project}/design-systems.

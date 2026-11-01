@@ -17,7 +17,7 @@ templ PageView(v View) {
 				<span class="[ crumb ]" aria-current="page" x-text="name">{ v.Seed.Name }</span>
 			</header>
 			<div data-scroll class="[ arch-scroll ]">
-				<div class="[ wrapper flow ] [ region ]" style="--wrapper-max: 72rem">
+				<div class="[ wrapper flow ] [ region ]" style="--wrapper-max: 72rem" x-data="designSystemProposals" data-seed="design-system-seed">
 					<div x-data="designSystemMenu" data-seed="design-system-seed" x-on:design-system-spawn.window="openSpawn" class="[ flow ]">
 						<div class="[ arch-head ]">
 							<div class="[ flow ] [ flow-space-2xs ]">
@@ -70,6 +70,7 @@ templ PageView(v View) {
 							</div>
 						</div>
 					</template>
+					@proposalBanner()
 					<template x-if="isFirstStart">
 						@firstStart(v.ProjectID, v.Seed.DesignSystemID)
 					</template>
@@ -88,6 +89,7 @@ templ PageView(v View) {
 							@tabTokens()
 							@tabPrinciples()
 							@tabComponents()
+							@tabProposals()
 							@tabRepositories(v.ProjectID, v.Seed.DesignSystemID)
 							@tabHistory()
 						</div>

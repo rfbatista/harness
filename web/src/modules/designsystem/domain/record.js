@@ -12,6 +12,7 @@ export const TABS = Object.freeze([
   { slug: "tokens", label: "Tokens" },
   { slug: "principles", label: "Principles" },
   { slug: "components", label: "Components" },
+  { slug: "proposals", label: "Proposals" },
   { slug: "repositories", label: "Repositories" },
   { slug: "history", label: "History" },
 ]);

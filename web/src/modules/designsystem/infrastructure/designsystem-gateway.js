@@ -6,6 +6,7 @@ import { StructuredError, Codes } from "../../../shared/domain/errors.js";
 import { listRow } from "../domain/identity.js";
 import { sourceRow, previewView } from "../domain/import.js";
 import { optInRow } from "../domain/repositories.js";
+import { proposalRowDto, proposalViewDto } from "../domain/proposals.js";
 
 /**
  * @param {import("../../../shared/infrastructure/api.js").ApiClient} api
@@ -162,6 +163,49 @@ export function designSystemGateway(api, feed) {
     },
 
     /** The project's design systems as the list shows them: identity, version, the repositories using each. */
+    /** The design system's proposals, newest first, as the Proposals tab lists them. */
+    async proposals(designSystemId) {
+      const body = await api.post("/list_design_system_proposals", { design_system_id: designSystemId });
+      return list(body?.proposals).map(proposalRowDto);
+    },
+
+    /** One proposal to review, with its items and the record as it would be if every item were approved. */
+    async proposal(proposalId) {
+      return proposalViewDto(await api.post("/get_design_system_proposal", { proposal_id: proposalId }));
+    },
+
+    /** Approves or rejects every item of an open proposal; answers the version it wrote (0 for none) and its state. */
+    async decide(proposalId, itemIds, decision, confirmOverwrite = []) {
+      const body = await api.post("/decide_design_system_proposal", {
+        proposal_id: proposalId,
+        decisions: itemIds.map((id) => ({ item_id: id, decision })),
+        confirm_overwrite: confirmOverwrite,
+      });
+      return { version: Number.isInteger(body?.version) ? body.version : 0, state: body?.state ?? "" };
+    },
+
+    /** Drops a proposal whose session ended. */
+    async withdraw(proposalId) {
+      await api.post("/withdraw_design_system_proposal", { proposal_id: proposalId });
+    },
+
+    /** How many proposals of the project's design systems wait on the person. */
+    async openProposalCount(projectId) {
+      const body = await api.post("/list_design_systems", { project_id: projectId });
+      return list(body?.design_systems).reduce((n, d) => n + (Number.isInteger(d.open_proposals) ? d.open_proposals : 0), 0);
+    },
+
+    /** Follows the project feed for the proposals of this design system and its saves. */
+    followProposals(projectId, designSystemId, { onProposal, onStatus }) {
+      return feed.follow(`/events?project_id=${encodeURIComponent(projectId)}`, {
+        onMessage(dto) {
+          const p = dto?.design_system_proposal;
+          if (p && p.project_id === projectId) onProposal?.({ designSystemId: p.design_system_id, proposalId: p.proposal_id, state: p.state });
+        },
+        onStatus,
+      });
+    },
+
     async list(projectId) {
       const body = await api.post("/list_design_systems", { project_id: projectId });
       return list(body?.design_systems).map(listRow);
