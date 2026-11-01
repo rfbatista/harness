@@ -6,20 +6,28 @@ package architecture
 // the file as the published design does (path, kind, note, applies to, loaded,
 // Edit), marked edited when the draft differs from the saved version and
 // missing when discovery did not find the path; Edit opens the row in the edit
-// drawer beside the list.
+// drawer beside the list. A row whose file the harness holds opens it in the
+// editor pane beside the list (instructionEditor); the pane and the drawer share
+// the column beside the list.
 templ tabInstructions() {
 	<section role="tabpanel" id="architecture-panel-instructions" aria-labelledby="architecture-tab-instructions" x-show="isTab('instructions')" x-data="architectureInstructionsTab" x-on:architecture-draft-replaced.window="closeDrawer" class="[ flow ]">
 		@panelHead("Instructions & rule files", "The files agents read: rules, skills and sub-agent prompts, who they apply to and when they load. Only the path is stored, never the prose.") {
 			<button type="button" class="[ button ]" data-variant="primary" data-size="sm" data-add x-on:click="add">Add file</button>
 		}
-		<div class="[ arch-split ]" x-bind:data-open="drawerOpen()">
+		<p class="[ text-sm color-ink-muted ]" data-delivery-note>Agents get these files when their session starts; running sessions keep the copy they started with, so a change reaches the sessions you start after it.</p>
+		<div class="[ arch-split ]" x-bind:data-open="drawerOpen()" x-bind:data-pane="paneOpen()">
 			<ul class="[ arch-entries ]" data-entries>
 				<template x-for="(row, i) in rows()" x-bind:key="i">
-					<li data-entry="instruction" x-bind:data-open="isOpen(i)" x-bind:data-edited="isEdited(i)">
+					<li data-entry="instruction" x-bind:data-open="isOpen(i)" x-bind:data-edited="isEdited(i)" x-bind:data-viewing="isViewing(row)">
 						<div class="[ entry-row ]" data-row>
 							<div class="[ entry-main ]">
 								<div class="[ entry-title ]">
-									<code class="[ font-mono ]" data-path x-text="row.path || 'New instruction file'"></code>
+									<template x-if="row.file">
+										<button type="button" class="[ open-file ]" data-open-file x-bind:aria-label="openLabel(row)" x-on:click="openRow(row)"><code class="[ font-mono ]" data-path x-text="row.path"></code></button>
+									</template>
+									<template x-if="!row.file">
+										<code class="[ font-mono ]" data-path x-text="row.path || 'New instruction file'"></code>
+									</template>
 									<span class="[ badge ]" data-kind x-text="kindLabel(row.kind)"></span>
 									<template x-if="isMissing(row)">
 										<span class="[ badge ]" data-tone="attention" data-flag="missing">missing</span>
@@ -42,6 +50,7 @@ templ tabInstructions() {
 					</li>
 				</template>
 			</ul>
+			<div class="[ arch-side ]" x-show="sideOpen()">
 			@entryDrawer("instruction", "Edit instruction file", drawerFor("")) {
 				<div class="[ field ]">
 					<label>
@@ -93,6 +102,8 @@ templ tabInstructions() {
 					</label>
 				</div>
 			}
+			@instructionEditor()
+			</div>
 		</div>
 	</section>
 }

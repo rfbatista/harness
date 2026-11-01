@@ -4,6 +4,7 @@
 
 import { StructuredError, Codes } from "../../../shared/domain/errors.js";
 import { readPreview } from "../domain/layers.js";
+import { instructionFilesGateway } from "./instruction-files-gateway.js";
 
 /**
  * @param {import("../../../shared/infrastructure/api.js").ApiClient} api
@@ -55,6 +56,9 @@ export function architectureGateway(api, feed) {
   };
 
   const self = {
+    /** The repository's instruction files: their own endpoints and feed event. */
+    instructionFiles: instructionFilesGateway(api, feed),
+
     async get(repositoryId) {
       return toState(await api.post("/get_repository_architecture", { repository_id: repositoryId }));
     },

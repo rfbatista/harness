@@ -1,0 +1,32 @@
+package architecture
+
+// instructionEditor is the pane beside the Instructions list that shows one
+// instruction file: a monospace text area, a Markdown preview toggle, and what
+// went wrong when the file could not be opened. It is part of
+// architectureInstructionsTab's scope. The file is the harness's own copy
+// (ADR 0057); it is saved on its own and never touches the page's save bar.
+templ instructionEditor() {
+	<section class="[ entry-card ] [ instruction-editor ]" data-instruction-editor aria-label="Instruction file" x-show="paneOpen()">
+		<header>
+			<h3 class="[ grow ]"><code class="[ font-mono ]" data-editor-path x-text="paneTitle"></code></h3>
+			<template x-if="hasFile">
+				<span class="[ text-xs color-ink-faint ]" data-file-version x-text="versionText"></span>
+			</template>
+			<button type="button" class="[ button ]" data-variant="ghost" data-size="sm" data-editor-close aria-label="Close the file" x-on:click="closeFile">✕</button>
+		</header>
+		<div class="[ content flow ]">
+			<p class="[ text-sm color-ink-muted ]" role="status" data-opening x-show="isOpening">Opening…</p>
+			<p class="[ banner ]" data-tone="attention" role="alert" data-not-found x-show="hasNotFound" x-text="notFound"></p>
+			<p class="[ banner ]" data-tone="danger" role="alert" data-open-error x-show="hasOpenError" x-text="openError"></p>
+			<div class="[ md-editor ]" x-show="hasFile">
+				<div class="[ md-bar ]" role="group" aria-label="File view">
+					<button type="button" data-view="text" aria-pressed="true" x-bind:aria-pressed="textPressed" x-on:click="showText">Text</button>
+					<button type="button" data-view="preview" aria-pressed="false" x-bind:aria-pressed="previewPressed" x-on:click="showPreview">Preview</button>
+					<span class="[ text-xs color-ink-faint ]">Markdown</span>
+				</div>
+				<textarea data-file-text aria-label="Instruction file text" spellcheck="false" readonly x-bind:value="fileText" x-bind:hidden="!textShown"></textarea>
+				<div class="[ prose md-preview ]" data-file-preview x-bind:hidden="!previewShown" x-effect="paintPreview($el)" hidden></div>
+			</div>
+		</div>
+	</section>
+}

@@ -14,7 +14,9 @@ import templruntime "github.com/a-h/templ/runtime"
 // the file as the published design does (path, kind, note, applies to, loaded,
 // Edit), marked edited when the draft differs from the saved version and
 // missing when discovery did not find the path; Edit opens the row in the edit
-// drawer beside the list.
+// drawer beside the list. A row whose file the harness holds opens it in the
+// editor pane beside the list (instructionEditor); the pane and the drawer share
+// the column beside the list.
 func tabInstructions() templ.Component {
 	return templruntime.GeneratedTemplate(func(templ_7745c5c3_Input templruntime.GeneratedComponentInput) (templ_7745c5c3_Err error) {
 		templ_7745c5c3_W, ctx := templ_7745c5c3_Input.Writer, templ_7745c5c3_Input.Context
@@ -62,7 +64,7 @@ func tabInstructions() templ.Component {
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 3, "<div class=\"[ arch-split ]\" x-bind:data-open=\"drawerOpen()\"><ul class=\"[ arch-entries ]\" data-entries><template x-for=\"(row, i) in rows()\" x-bind:key=\"i\"><li data-entry=\"instruction\" x-bind:data-open=\"isOpen(i)\" x-bind:data-edited=\"isEdited(i)\"><div class=\"[ entry-row ]\" data-row><div class=\"[ entry-main ]\"><div class=\"[ entry-title ]\"><code class=\"[ font-mono ]\" data-path x-text=\"row.path || 'New instruction file'\"></code> <span class=\"[ badge ]\" data-kind x-text=\"kindLabel(row.kind)\"></span><template x-if=\"isMissing(row)\"><span class=\"[ badge ]\" data-tone=\"attention\" data-flag=\"missing\">missing</span></template><template x-if=\"isEdited(i)\"><span class=\"[ badge ]\" data-tone=\"attention\" data-flag=\"edited\">edited</span></template></div><template x-if=\"row.note\"><p class=\"[ entry-note ]\" data-note x-text=\"row.note\"></p></template><template x-if=\"isMissing(row)\"><p class=\"[ entry-note ]\" data-missing-note>Not in the repository</p></template></div><div class=\"[ entry-meta ]\" data-meta=\"applies\"><span class=\"[ entry-label ]\">Applies to</span> <span x-text=\"agentSummary(row, 'applies_to')\"></span></div><div class=\"[ entry-meta ]\" data-meta=\"loaded\"><span class=\"[ entry-label ]\">Loaded</span> <span x-text=\"loadedLabel(row.loaded)\"></span></div>")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 3, "<p class=\"[ text-sm color-ink-muted ]\" data-delivery-note>Agents get these files when their session starts; running sessions keep the copy they started with, so a change reaches the sessions you start after it.</p><div class=\"[ arch-split ]\" x-bind:data-open=\"drawerOpen()\" x-bind:data-pane=\"paneOpen()\"><ul class=\"[ arch-entries ]\" data-entries><template x-for=\"(row, i) in rows()\" x-bind:key=\"i\"><li data-entry=\"instruction\" x-bind:data-open=\"isOpen(i)\" x-bind:data-edited=\"isEdited(i)\" x-bind:data-viewing=\"isViewing(row)\"><div class=\"[ entry-row ]\" data-row><div class=\"[ entry-main ]\"><div class=\"[ entry-title ]\"><template x-if=\"row.file\"><button type=\"button\" class=\"[ open-file ]\" data-open-file x-bind:aria-label=\"openLabel(row)\" x-on:click=\"openRow(row)\"><code class=\"[ font-mono ]\" data-path x-text=\"row.path\"></code></button></template><template x-if=\"!row.file\"><code class=\"[ font-mono ]\" data-path x-text=\"row.path || 'New instruction file'\"></code></template><span class=\"[ badge ]\" data-kind x-text=\"kindLabel(row.kind)\"></span><template x-if=\"isMissing(row)\"><span class=\"[ badge ]\" data-tone=\"attention\" data-flag=\"missing\">missing</span></template><template x-if=\"isEdited(i)\"><span class=\"[ badge ]\" data-tone=\"attention\" data-flag=\"edited\">edited</span></template></div><template x-if=\"row.note\"><p class=\"[ entry-note ]\" data-note x-text=\"row.note\"></p></template><template x-if=\"isMissing(row)\"><p class=\"[ entry-note ]\" data-missing-note>Not in the repository</p></template></div><div class=\"[ entry-meta ]\" data-meta=\"applies\"><span class=\"[ entry-label ]\">Applies to</span> <span x-text=\"agentSummary(row, 'applies_to')\"></span></div><div class=\"[ entry-meta ]\" data-meta=\"loaded\"><span class=\"[ entry-label ]\">Loaded</span> <span x-text=\"loadedLabel(row.loaded)\"></span></div>")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
@@ -70,7 +72,7 @@ func tabInstructions() templ.Component {
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 4, "</div></li></template></ul>")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 4, "</div></li></template></ul><div class=\"[ arch-side ]\" x-show=\"sideOpen()\">")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
@@ -104,7 +106,11 @@ func tabInstructions() templ.Component {
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 7, "</div></section>")
+		templ_7745c5c3_Err = instructionEditor().Render(ctx, templ_7745c5c3_Buffer)
+		if templ_7745c5c3_Err != nil {
+			return templ_7745c5c3_Err
+		}
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 7, "</div></div></section>")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}

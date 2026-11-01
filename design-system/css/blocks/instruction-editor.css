@@ -1,0 +1,53 @@
+/*
+ * Instruction editor — the pane beside the Instructions & rules list that shows
+ * one instruction file: a monospace text area with a Markdown preview toggle
+ * (the .md-editor and .md-bar of the skill form). Not published as a
+ * design-system component; the design system's document editor look applies.
+ * <div class="arch-split" data-pane><ul class="arch-entries">…</ul>
+ *   <div class="arch-side"><aside class="arch-drawer">…</aside>
+ *     <section class="entry-card instruction-editor"><header>…</header><div class="content flow"><div class="md-editor">…</div></div></section></div></div>
+ * The pane and the metadata drawer share the column beside the list; the column
+ * moves below the list when the viewport is narrow. A row with data-viewing is
+ * the file the pane shows; its path is an .open-file button.
+ */
+
+@layer blocks {
+  .arch-split[data-pane="true"] {
+    @media (min-width: 75rem) { grid-template-columns: minmax(0, 1fr) minmax(28rem, 40rem); }
+  }
+
+  .arch-side {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-m);
+    min-inline-size: 0;
+    align-self: start;
+
+    & > .arch-drawer { position: static; }
+  }
+
+  .instruction-editor {
+    & .md-editor > textarea {
+      inline-size: 100%;
+      min-block-size: 22rem;
+      max-block-size: 70vh;
+      resize: vertical;
+      white-space: pre;
+      overflow: auto;
+    }
+
+    & .md-preview { min-block-size: 22rem; max-block-size: 70vh; }
+    & > header h3 { min-inline-size: 0; overflow-wrap: anywhere; font-size: var(--text-sm); }
+  }
+
+  .open-file {
+    all: unset;
+    cursor: pointer;
+    border-radius: var(--radius-xs);
+
+    &:hover code { text-decoration: underline; }
+    &:focus-visible { outline: var(--border-focus-width) solid var(--color-focus); outline-offset: 2px; }
+  }
+
+  .arch-entries > li[data-viewing="true"] { box-shadow: inset 3px 0 0 var(--color-signal); }
+}

@@ -21,7 +21,9 @@ type archRig struct {
 	errs *errorLog
 	srv  *httptest.Server
 	api  *fakeArchitectureAPI
-	feed *sseFeed
+	// files answers the instruction file endpoints (the Instructions tab's editor).
+	files *fakeInstructionFiles
+	feed  *sseFeed
 }
 
 func newArchRig(t *testing.T) *archRig {
@@ -48,7 +50,9 @@ func newArchRig(t *testing.T) *archRig {
 	feed := &sseFeed{}
 	api := newFakeArchitectureAPI(feed)
 	mux := http.NewServeMux()
+	files := newFakeInstructionFiles(feed)
 	mux.Handle("/api/events", feed)
+	files.register(mux)
 	mux.Handle("/api/", api)
 	mux.Handle("/", pages)
 	srv := newBrowserServer(mux)
@@ -56,7 +60,7 @@ func newArchRig(t *testing.T) *archRig {
 		srv.CloseClientConnections()
 		srv.Close()
 	})
-	return &archRig{ctx: ctx, errs: errs, srv: srv, api: api, feed: feed}
+	return &archRig{ctx: ctx, errs: errs, srv: srv, api: api, files: files, feed: feed}
 }
 
 func (r *archRig) url(path string) string {
