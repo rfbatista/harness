@@ -47,7 +47,12 @@ type Catalog struct {
 		ResolveAgentRelations(a *domain.Agent)
 	}
 	MCPServers interface{ ListMCPServers() []*domain.MCPServer }
-	Zones      ports.ZoneReader
+	// DesignSystems names a repository's applied design system for the
+	// brief; nil leaves the pointer out.
+	DesignSystems interface {
+		GetDesignSystem(ctx context.Context, designSystemID string) (*domain.DesignSystem, error)
+	}
+	Zones ports.ZoneReader
 	// Contexts lists a project's bounded contexts for the brief of a
 	// project-level session; nil leaves them out of it.
 	Contexts interface {

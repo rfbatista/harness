@@ -29,8 +29,18 @@ func (noMCPServers) ListMCPServers() []*domain.MCPServer { return nil }
 
 var applied = "ds1"
 
+// designSystemNames names the applied design systems by id.
+type designSystemNames map[string]string
+
+func (n designSystemNames) GetDesignSystem(_ context.Context, id string) (*domain.DesignSystem, error) {
+	if name, ok := n[id]; ok {
+		return &domain.DesignSystem{ID: id, Name: name}, nil
+	}
+	return nil, &domain.StructuredError{Code: "DESIGN_SYSTEM_NOT_FOUND", Message: "design system not found"}
+}
+
 func designSystemService() *Service {
-	return &Service{catalog: Catalog{MCPServers: noMCPServers{}, Repositories: repositoriesByID{
+	return &Service{catalog: Catalog{MCPServers: noMCPServers{}, DesignSystems: designSystemNames{"ds1": "Brand One"}, Repositories: repositoriesByID{
 		"opted":  {ID: "opted", DesignSystemID: &applied, DesignSystemPath: ".harness/design-system/"},
 		"plain":  {ID: "plain"},
 		"movedn": {ID: "movedn", DesignSystemPath: "ui/"},
@@ -47,7 +57,7 @@ func briefFor(s *Service, role domain.SessionRole, repository string) string {
 }
 
 func TestDesignSystemBrief_PointerIsTheContractsTextInAtMostFiveLines(t *testing.T) {
-	got := designSystemSection(&domain.Repository{DesignSystemID: &applied})
+	got := designSystemSection("Brand One", &domain.Repository{DesignSystemID: &applied})
 	checkGolden(t, "design_system_brief", got)
 	if n := len(strings.Split(strings.TrimSpace(got), "\n")); n > 5 {
 		t.Errorf("%d lines, want at most 5", n)
@@ -56,16 +66,23 @@ func TestDesignSystemBrief_PointerIsTheContractsTextInAtMostFiveLines(t *testing
 
 func TestDesignSystemBrief_OptedInSessionsOfEveryRoleGetItAfterTheirBrief(t *testing.T) {
 	s := designSystemService()
-	pointer := designSystemSection(&domain.Repository{DesignSystemID: &applied})
+	pointer := designSystemSection("Brand One", &domain.Repository{DesignSystemID: &applied})
 	for name, role := range map[string]domain.SessionRole{"delegate": domain.RoleDelegate, "plain": domain.RolePeer, "architect": domain.RoleArchitect} {
 		base := briefFor(s, role, "plain")
 		got := briefFor(s, role, "opted")
 		if want := appendSection(base, pointer); got != want {
 			t.Errorf("%s: brief with the pointer differs from the brief plus the section:\n%s", name, got)
 		}
-		if strings.Count(got, "This repository uses the project design system.") != 1 {
+		if strings.Count(got, `This repository uses the project design system "Brand One". `) != 1 {
 			t.Errorf("%s: pointer not exactly once", name)
 		}
+	}
+}
+
+func TestDesignSystemBrief_BriefsOfEveryRoleNameTheDesignSystem(t *testing.T) {
+	s := designSystemService()
+	for name, role := range map[string]domain.SessionRole{"delegate": domain.RoleDelegate, "plain": domain.RolePeer, "architect": domain.RoleArchitect} {
+		checkGolden(t, "design_system_brief_"+name, briefFor(s, role, "opted"))
 	}
 }
 

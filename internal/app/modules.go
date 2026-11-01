@@ -515,7 +515,7 @@ func newVirtualShells(plan *planning.Service, art *artifacts.Service, sessions p
 		src.Architectures = cat.RepositoryArchitectures
 	}
 	if cat.DesignSystems != nil {
-		src.DesignSystems, src.Projects, src.Repositories = cat.DesignSystems, cat.Projects, cat.Projects
+		src.DesignSystems, src.Repositories = cat.DesignSystems, cat.Projects
 	}
 	shells := vfs.New(src)
 	shells.UseRootEvents(events)
@@ -772,14 +772,19 @@ func newOrchestrationService(
 	branchNames *workspaces.BranchNames,
 	baseBranches *workspaces.BaseBranches,
 ) *orchestration.Service {
-	svc := orchestration.NewService(manager, broker, hub, sessions, orchestration.Catalog{
+	orchCatalog := orchestration.Catalog{
 		Projects:     cat.Projects,
 		Repositories: cat.Projects,
 		Agents:       cat.Agents,
 		MCPServers:   cat.Capabilities,
 		Zones:        cat.Architecture,
 		Contexts:     cat.Architecture,
-	}, tickets, ws)
+	}
+	if cat.DesignSystems != nil {
+		// The brief's pointer names the repository's applied design system.
+		orchCatalog.DesignSystems = cat.DesignSystems
+	}
+	svc := orchestration.NewService(manager, broker, hub, sessions, orchCatalog, tickets, ws)
 	svc.UseBranchNames(branchNames)
 	svc.UseBaseBranches(baseBranches)
 	if cat.DesignSystems != nil {

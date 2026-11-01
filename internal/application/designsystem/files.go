@@ -19,21 +19,27 @@ type File struct {
 	Content []byte
 }
 
-// Files are the files of one version of a project's design system, in a
+// Identity is what names a design system in its files: README.md says it,
+// DESIGN.md's frontmatter carries name and description.
+type Identity struct {
+	Name, Slug, Description string
+}
+
+// Files are the files of one version of a design system, in a
 // fixed order: README.md, DESIGN.md, tokens.json. It is the one generator
 // of the shell view and of the export (which leaves README.md out), so the
 // bytes are the same wherever they are written. The output depends only on
 // the arguments. A design system with nothing in it (version 0, or a record
 // with no tokens, principles or components) has only a README.md that says
-// so.
-func Files(project string, version int, date time.Time, record domain.DesignSystemRecord) []File {
+// it has no version yet.
+func Files(id Identity, version int, date time.Time, record domain.DesignSystemRecord) []File {
 	day := date.UTC().Format("2006-01-02")
 	if version == 0 || isEmpty(record) {
-		return []File{{Path: "README.md", Content: []byte(emptyReadme)}}
+		return []File{{Path: "README.md", Content: []byte(emptyReadme(id))}}
 	}
 	return []File{
-		{Path: "README.md", Content: []byte(readme(version, day))},
-		{Path: "DESIGN.md", Content: []byte(designMD(project, version, day, record))},
+		{Path: "README.md", Content: []byte(readme(id, version, day))},
+		{Path: "DESIGN.md", Content: []byte(designMD(id, version, day, record))},
 		{Path: "tokens.json", Content: tokensJSON(version, day, record)},
 	}
 }
@@ -46,7 +52,19 @@ func versionLine(version int, day string) string {
 	return fmt.Sprintf("<!-- design system version %d · %s -->", version, day)
 }
 
-const emptyReadme = "# Project design system\n\nThis project has no design system yet.\n"
+// who is README.md's lines naming the design system: its name and slug, then
+// its description when it has one.
+func who(id Identity) string {
+	out := fmt.Sprintf("This is the design system %s (slug `%s`).\n", quote(id.Name), id.Slug)
+	if d := strings.TrimSpace(id.Description); d != "" {
+		out += "\n" + d + "\n"
+	}
+	return out
+}
+
+func emptyReadme(id Identity) string {
+	return "# Project design system\n\n" + who(id) + "\nThis design system has no version yet.\n"
+}
 
 // readmeFiles are the lines of README.md's "What is here" list, one per
 // generated file; the files added later add theirs.
@@ -55,9 +73,10 @@ var readmeFiles = []string{
 	"- `DESIGN.md`: the same tokens as YAML frontmatter, then the principles: when and why to use what.",
 }
 
-func readme(version int, day string) string {
+func readme(id Identity, version int, day string) string {
 	return fmt.Sprintf(`# Project design system
 
+%s
 This folder is the look of every UI in this project, kept by the person in the harness web UI. It is version %d, saved %s.
 
 ## What is here
@@ -73,7 +92,7 @@ This folder is the look of every UI in this project, kept by the person in the h
 ## Changing it
 
 These files are read-only: a write, rm, mv or touch here is refused. The design system changes only in the harness web UI (Design system page), or through a design session the person starts there. If it lacks something, say so in a task comment or in your spec and the person decides.
-`, version, day, strings.Join(readmeFiles, "\n"))
+`, who(id), version, day, strings.Join(readmeFiles, "\n"))
 }
 
 // tokenGroup is the tokens of one group, in record order.
@@ -140,26 +159,9 @@ func scalar(v any) string {
 	return quote(fmt.Sprint(v))
 }
 
-// description is the first paragraph of the principles on one line: the
-// first run of lines that is not a heading.
-func description(principles string) string {
-	var para []string
-	for _, line := range strings.Split(principles, "\n") {
-		line = strings.TrimSpace(line)
-		switch {
-		case line == "" && len(para) > 0:
-			return strings.Join(para, " ")
-		case line == "" || strings.HasPrefix(line, "#") && len(para) == 0:
-			continue
-		}
-		para = append(para, line)
-	}
-	return strings.Join(para, " ")
-}
-
-func designMD(project string, version int, day string, r domain.DesignSystemRecord) string {
+func designMD(id Identity, version int, day string, r domain.DesignSystemRecord) string {
 	var b strings.Builder
-	b.WriteString("---\nname: " + quote(project) + "\ndescription: " + quote(description(r.Principles)) + "\n")
+	b.WriteString("---\nname: " + quote(id.Name) + "\ndescription: " + quote(id.Description) + "\n")
 	for _, g := range groups(r.Tokens) {
 		b.WriteString(yamlKey(g.name) + ":\n")
 		for _, t := range g.tokens {

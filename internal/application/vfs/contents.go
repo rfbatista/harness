@@ -23,7 +23,7 @@ import (
 func (s *Service) contents(ctx context.Context, sh *root, tk *domain.Ticket) (*builder, error) {
 	b := &builder{now: time.Now()}
 	sessionID := sh.sessionID
-	designSystem := s.usesDesignSystem(ctx, sh)
+	designSystemID, designSystem := s.appliedDesignSystem(ctx, sh)
 	sh.designSystem = designSystem
 	b.fixed(ports.ShellFile{Path: "README.md", Kind: ports.ShellReadme, Title: "README", UpdatedAt: b.now}, []byte(readmeFor(s.agentsMove(), designSystem)))
 
@@ -31,7 +31,7 @@ func (s *Service) contents(ctx context.Context, sh *root, tk *domain.Ticket) (*b
 		return nil, err
 	}
 	if designSystem {
-		if err := s.designSystemView(ctx, b, sh.projID); err != nil {
+		if err := s.designSystemView(ctx, b, designSystemID); err != nil {
 			return nil, err
 		}
 	}
@@ -372,50 +372,49 @@ func oldestFirst(list []*domain.Artifact) []*domain.Artifact {
 // only in the shells of sessions whose repository uses it.
 const designSystemDir = "project/design-system"
 
-// usesDesignSystem says the session's repository uses the project design
-// system.
-// A repository that cannot be read keeps the state the root had.
-func (s *Service) usesDesignSystem(ctx context.Context, sh *root) bool {
+// appliedDesignSystem is the id of the design system applied to the
+// session's repository, and whether it has one. A repository that cannot be
+// read keeps the state the root had, which then shows the same design system
+// (the one it showed last).
+func (s *Service) appliedDesignSystem(ctx context.Context, sh *root) (string, bool) {
 	src := s.src
-	if src.DesignSystems == nil || src.Projects == nil || src.Repositories == nil || sh.repoID == "" {
-		return false
+	if src.DesignSystems == nil || src.Repositories == nil || sh.repoID == "" {
+		return "", false
 	}
 	repo, err := src.Repositories.GetRepository(ctx, sh.repoID)
 	if err != nil {
-		return sh.designSystem
+		return sh.designSystemID, sh.designSystem
 	}
-	// ticket 12 re-key this: it reads the repository's design system id,
-	// the view below still shows the project's first design system.
-	return repo.DesignSystemID != nil
+	if repo.DesignSystemID == nil {
+		return "", false
+	}
+	sh.designSystemID = *repo.DesignSystemID
+	return *repo.DesignSystemID, true
 }
 
-// renderedDesignSystem is the files made for one project at one version and
-// project name.
+// renderedDesignSystem is the files made for one design system at one
+// version and identity.
 type renderedDesignSystem struct {
-	version int
-	name    string
-	files   []designsystem.File
+	version  int
+	identity designsystem.Identity
+	files    []designsystem.File
 }
 
-// designSystemView adds the project's design system files, read-only: the
-// current version's, made again only when the version or the project's name
-// changed.
-func (s *Service) designSystemView(ctx context.Context, b *builder, projectID string) error {
-	// ticket 12 re-keys this: the project's first design system stands in.
-	ds, err := s.src.DesignSystems.GetProjectDesignSystem(ctx, projectID)
+// designSystemView adds the applied design system's files, read-only: the
+// current version's, made again only when the version, name, slug or
+// description changed.
+func (s *Service) designSystemView(ctx context.Context, b *builder, designSystemID string) error {
+	ds, err := s.src.DesignSystems.GetDesignSystem(ctx, designSystemID)
 	if err != nil {
 		return err
 	}
-	project, err := s.src.Projects.GetProject(ctx, projectID)
-	if err != nil {
-		return err
-	}
+	identity := designsystem.Identity{Name: ds.Name, Slug: ds.Slug, Description: ds.Description}
 	s.renderMu.Lock()
-	r, ok := s.rendered[projectID]
-	if !ok || r.version != ds.Version || r.name != project.Name {
-		r = renderedDesignSystem{version: ds.Version, name: project.Name,
-			files: designsystem.Files(project.Name, ds.Version, ds.UpdatedAt, ds.Record)}
-		s.rendered[projectID] = r
+	r, ok := s.rendered[designSystemID]
+	if !ok || r.version != ds.Version || r.identity != identity {
+		r = renderedDesignSystem{version: ds.Version, identity: identity,
+			files: designsystem.Files(identity, ds.Version, ds.UpdatedAt, ds.Record)}
+		s.rendered[designSystemID] = r
 	}
 	s.renderMu.Unlock()
 	b.designSystem = true

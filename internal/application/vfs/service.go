@@ -63,11 +63,9 @@ type Sources struct {
 	// Architectures lists the repositories architecture files; nil shows
 	// none.
 	Architectures ports.ArchitectureFileReader
-	// DesignSystems, Projects and Repositories show the project design
-	// system, named after the project, to the sessions whose repository
-	// uses it; any of them nil shows it to none.
-	DesignSystems ports.DesignSystemReader
-	Projects      ports.ProjectReader
+	// DesignSystems and Repositories show the design system applied to a
+	// session's repository to that session; either nil shows it to none.
+	DesignSystems ports.DesignSystemByIDReader
 	Repositories  ports.RepositoryReader
 	// Settings holds "Agents move documents to project"; nil reads it as off.
 	Settings ports.SettingsReader
@@ -84,10 +82,10 @@ type Service struct {
 	// events says when a root comes and goes; nil: nobody listens.
 	events *RootEvents
 
-	// rendered is each project's design system files as last made, so a
-	// refresh that finds the same version and project name makes none.
+	// rendered is each design system's files as last made, so a refresh that
+	// finds the same version, name, slug and description makes none.
 	renderMu sync.Mutex
-	rendered map[string]renderedDesignSystem
+	rendered map[string]renderedDesignSystem // by design system id
 }
 
 // UseRootEvents has the service raise a RootEvent when a session's resources
@@ -108,6 +106,7 @@ type root struct {
 	realDir                     string // dir with its symlinks resolved
 	sessionID, ticketID, projID string
 	repoID                      string // the session's repository, "" for none
+	designSystemID              string // the design system last shown, "" for none
 
 	// mu guards the folder and files; a refresh holds it from reading the
 	// sources to writing the last file, so refreshes never interleave.
@@ -350,7 +349,7 @@ func (s *Service) Subscribe(sub ports.EventSubscriber) {
 		s.changed(ev.ProjectID, "")
 		return nil
 	})
-	// Opting a repository in or out of the design system adds or removes
+	// Applying, moving or removing a design system of a repository changes
 	// the folder in the roots of the project's sessions.
 	ports.On(sub, func(_ context.Context, ev domain.RepositorySaved) error {
 		s.changed(ev.ProjectID, "")
@@ -393,7 +392,7 @@ func (s *Service) AnnounceChange(c ports.ProjectChange) {
 		s.changed(c.ProjectID(), c.TicketComment.Comment.TicketID)
 	case c.TicketResource != nil && c.TicketResource.Resource != nil:
 		s.changed(c.ProjectID(), c.TicketResource.Resource.TicketID)
-	case c.ArchitectureChanged != nil, c.DesignSystemSaved != nil:
+	case c.ArchitectureChanged != nil, c.DesignSystemSaved != nil, c.DesignSystemChanged != nil:
 		s.changed(c.ProjectID(), "")
 	}
 }

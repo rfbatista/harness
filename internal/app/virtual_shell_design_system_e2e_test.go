@@ -37,44 +37,58 @@ func shellDesignRecord() map[string]any {
 	}
 }
 
-// designSystemID is the project's design system, made on first use: the view
-// shows the project's first one.
+// designSystemID is the project's default test design system, made on first
+// use: "Brand" (slug brand) with a description.
 func (e *shellE2E) designSystemID() string {
 	e.t.Helper()
-	var list struct {
-		DesignSystems []struct {
-			ID string `json:"design_system_id"`
-		} `json:"design_systems"`
+	if e.defaultDS == "" {
+		e.defaultDS = e.newDesignSystem("Brand", "brand", "The brand voice, in colour.")
 	}
-	e.post("list_design_systems", map[string]any{"project_id": e.project}, &list)
-	if len(list.DesignSystems) > 0 {
-		return list.DesignSystems[0].ID
-	}
+	return e.defaultDS
+}
+
+func (e *shellE2E) newDesignSystem(name, slug, description string) string {
+	e.t.Helper()
 	var created struct {
 		ID string `json:"design_system_id"`
 	}
-	e.post("create_design_system", map[string]any{"project_id": e.project, "name": "Design system", "slug": "design-system"}, &created)
+	e.post("create_design_system", map[string]any{"project_id": e.project, "name": name, "slug": slug, "description": description}, &created)
 	return created.ID
 }
 
 func (e *shellE2E) saveDesignSystem(base int, record map[string]any) {
 	e.t.Helper()
-	e.post("save_design_system", map[string]any{"design_system_id": e.designSystemID(), "base_version": base, "record": record}, nil)
+	e.saveTo(e.designSystemID(), base, record)
+}
+
+func (e *shellE2E) saveTo(id string, base int, record map[string]any) {
+	e.t.Helper()
+	e.post("save_design_system", map[string]any{"design_system_id": id, "base_version": base, "record": record}, nil)
+}
+
+func (e *shellE2E) applyDesignSystem(repo, id string) {
+	e.t.Helper()
+	var arg any
+	if id != "" {
+		arg = id
+	}
+	e.post("set_repository_design_system", map[string]any{"repository_id": repo, "design_system_id": arg, "confirm_move": true}, nil)
 }
 
 func (e *shellE2E) useDesignSystem(repo string, uses bool) {
 	e.t.Helper()
-	var id any
 	if uses {
-		id = e.designSystemID()
+		e.applyDesignSystem(repo, e.designSystemID())
+	} else {
+		e.applyDesignSystem(repo, "")
 	}
-	e.post("set_repository_design_system", map[string]any{"repository_id": repo, "design_system_id": id, "confirm_move": true}, nil)
 }
 
-// designSystemDate is the day the current version was saved, as its files say it.
-func (e *shellE2E) designSystemDate() string {
+// designSystemDate is the day the design system's current version was saved,
+// as its files say it.
+func (e *shellE2E) designSystemDate(id string) string {
 	e.t.Helper()
-	ds, err := e.cat.DesignSystems.GetProjectDesignSystem(e.ctx, e.project)
+	ds, err := e.cat.DesignSystems.GetDesignSystem(e.ctx, id)
 	if err != nil {
 		e.t.Fatal(err)
 	}
@@ -159,11 +173,11 @@ func TestDesignSystemView_TheFilesAreTheContractsFormatsForAFixedRecord(t *testi
 	e.saveDesignSystem(0, shellDesignRecord())
 	e.useDesignSystem(e.repo, true)
 	a := e.start(e.task("Formats"))
-	date := e.designSystemDate()
+	date := e.designSystemDate(e.designSystemID())
 
 	wantDesign := `---
-name: "harness"
-description: "Calm surfaces, one signal colour. No decoration."
+name: "Brand"
+description: "The brand voice, in colour."
 colors:
   signal: "oklch(0.5 0.095 182)"
   canvas: "#fff"
@@ -234,13 +248,14 @@ Use signal sparingly.
 	}
 	front := strings.SplitN(e.designFile(a, "DESIGN.md"), "---\n", 3)[1]
 	var parsed map[string]any
-	if err := yaml.Unmarshal([]byte(front), &parsed); err != nil || parsed["name"] != "harness" {
+	if err := yaml.Unmarshal([]byte(front), &parsed); err != nil || parsed["name"] != "Brand" || parsed["description"] != "The brand voice, in colour." {
 		t.Errorf("the frontmatter is not YAML: %v %v", err, parsed)
 	}
 
 	readme := e.designFile(a, "README.md")
 	for _, want := range []string{
 		"# Project design system\n",
+		"This is the design system \"Brand\" (slug `brand`).\n\nThe brand voice, in colour.\n",
 		"It is version 1, saved " + date + ".",
 		"- `tokens.json`: the tokens (colors, spacing, type, radii, shadows, durations) with their type and note, in the W3C Design Tokens format.\n- `DESIGN.md`: the same tokens as YAML frontmatter, then the principles: when and why to use what.\n",
 		"`--typography-headline-font-family`",
@@ -260,7 +275,7 @@ func TestDesignSystemView_AnEmptyDesignSystemHasOnlyAReadmeThatSaysSo(t *testing
 	if got := strings.Join(e.listing(a, designSystemDir), ","); got != "README.md" {
 		t.Fatalf("lists %q", got)
 	}
-	if text := e.designFile(a, "README.md"); !strings.Contains(text, "no design system yet") || strings.Contains(text, "tokens.json") {
+	if text := e.designFile(a, "README.md"); !strings.Contains(text, "no version yet") || strings.Contains(text, "tokens.json") {
 		t.Errorf("README.md = %q", text)
 	}
 }
@@ -370,4 +385,95 @@ func TestDesignSystemView_OptingInOrOutRefreshesARunningSessionsShell(t *testing
 		}
 		return nil
 	})
+}
+
+func altDesignRecord() map[string]any {
+	return map[string]any{
+		"tokens": []any{
+			map[string]any{"group": "colors", "name": "ink", "type": "color", "value": "#111", "note": ""},
+		},
+		"principles": "Loud and dense.\n",
+		"components": []any{},
+	}
+}
+
+func TestDesignSystemView_ASessionSeesOnlyItsRepositorysDesignSystemAndFollowsMovingAndRemoving(t *testing.T) {
+	e := newShellE2E(t)
+	e.agents("software-architect", "devops", "go-developer")
+	a := e.designSystemID()
+	b := e.newDesignSystem("Bold", "bold", "")
+	e.saveTo(a, 0, shellDesignRecord())
+	e.saveTo(b, 0, altDesignRecord())
+	e.applyDesignSystem(e.repo, a)
+	s := e.start(e.task("Follows"))
+
+	if d := e.designFile(s, "DESIGN.md"); !strings.Contains(d, `name: "Brand"`) || !strings.Contains(d, "signal:") || strings.Contains(d, "ink:") || strings.Contains(d, "Loud") {
+		t.Errorf("view of A:\n%s", d)
+	}
+	if r := e.designFile(s, "README.md"); strings.Contains(r, "Bold") || strings.Contains(r, "`bold`") {
+		t.Errorf("A's README names B:\n%s", r)
+	}
+
+	e.applyDesignSystem(e.repo, b)
+	eventually(t, "B's view in the running session", func() error {
+		d := e.designFile(s, "DESIGN.md")
+		if !strings.Contains(d, `name: "Bold"`) || !strings.Contains(d, "ink:") || strings.Contains(d, "signal:") || strings.Contains(d, "Calm surfaces") {
+			return os.ErrNotExist
+		}
+		return nil
+	})
+	if r := e.designFile(s, "README.md"); strings.Contains(r, "Brand") || !strings.Contains(r, "`bold`") {
+		t.Errorf("B's README:\n%s", r)
+	}
+
+	e.applyDesignSystem(e.repo, "")
+	eventually(t, "no folder after removal", func() error {
+		if e.listing(s, designSystemDir) != nil {
+			return os.ErrExist
+		}
+		return nil
+	})
+}
+
+func TestDesignSystemView_ARenameOrANewDescriptionRefreshesARunningSessionsView(t *testing.T) {
+	e := newShellE2E(t)
+	e.agents("software-architect", "devops", "go-developer")
+	e.saveDesignSystem(0, shellDesignRecord())
+	e.useDesignSystem(e.repo, true)
+	s := e.start(e.task("Renamed"))
+
+	e.post("update_design_system", map[string]any{"design_system_id": e.designSystemID(), "name": "Primary", "description": "Calmer."}, nil)
+	eventually(t, "the new name and description in the running view", func() error {
+		if !strings.Contains(e.designFile(s, "DESIGN.md"), "name: \"Primary\"\ndescription: \"Calmer.\"\n") ||
+			!strings.Contains(e.designFile(s, "README.md"), "This is the design system \"Primary\" (slug `brand`).\n\nCalmer.\n") {
+			return os.ErrNotExist
+		}
+		return nil
+	})
+}
+
+func TestDesignSystemView_ADesignSystemWithoutADescriptionHasAnEmptyDescriptionInDesignMD(t *testing.T) {
+	e := newShellE2E(t)
+	e.agents("software-architect", "devops", "go-developer")
+	id := e.newDesignSystem("Plain", "plain", "")
+	e.saveTo(id, 0, shellDesignRecord())
+	e.applyDesignSystem(e.repo, id)
+	s := e.start(e.task("No description"))
+	if d := e.designFile(s, "DESIGN.md"); !strings.HasPrefix(d, "---\nname: \"Plain\"\ndescription: \"\"\ncolors:\n") {
+		t.Errorf("DESIGN.md:\n%s", d)
+	}
+	if r := e.designFile(s, "README.md"); !strings.HasPrefix(r, "# Project design system\n\nThis is the design system \"Plain\" (slug `plain`).\n\nThis folder is the look") {
+		t.Errorf("README.md:\n%s", r)
+	}
+}
+
+func TestDesignSystemView_AVersionZeroDesignSystemGivesOnlyAReadmeThatNamesItAndSaysItHasNoVersion(t *testing.T) {
+	e := newShellE2E(t)
+	e.agents("software-architect", "devops", "go-developer")
+	e.useDesignSystem(e.repo, true)
+	s := e.start(e.task("Version zero"))
+	want := "# Project design system\n\nThis is the design system \"Brand\" (slug `brand`).\n\nThe brand voice, in colour.\n\nThis design system has no version yet.\n"
+	if got := e.designFile(s, "README.md"); got != want || strings.Join(e.listing(s, designSystemDir), ",") != "README.md" {
+		t.Errorf("README.md:\n%s", got)
+	}
 }

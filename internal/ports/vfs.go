@@ -205,8 +205,14 @@ type ArchitectureFileReader interface {
 type DesignSystemReader interface {
 	// GetProjectDesignSystem is the project's first design system by creation
 	// order, or an empty one (Exists false) when it has none.
-	// ticket 11/12/13 re-key this: consumers will name a design system.
+	// ticket 13 re-keys its last caller (the web page's first paint).
 	GetProjectDesignSystem(ctx context.Context, projectID string) (*domain.DesignSystem, error)
+}
+
+// DesignSystemByIDReader reads one design system, whole, by its id:
+// DESIGN_SYSTEM_NOT_FOUND when there is none.
+type DesignSystemByIDReader interface {
+	GetDesignSystem(ctx context.Context, designSystemID string) (*domain.DesignSystem, error)
 }
 
 // The Files view's reads of a session's virtual file system (see "Contract:
