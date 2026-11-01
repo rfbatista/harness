@@ -1,0 +1,39 @@
+package designsystem
+
+// tabPrinciples is the Principles tab's panel: the principles as Markdown, in
+// Write and Preview, beside an outline of their `##` sections. The text is
+// part of the page's draft, so the Save bar below writes it with the tokens as
+// one version. An outline entry returns to Write with the cursor at its
+// section.
+templ tabPrinciples() {
+	<section role="tabpanel" id="design-system-panel-principles" aria-labelledby="design-system-tab-principles" x-show="isTab('principles')" class="[ flow ]">
+		<div class="[ arch-head ]" data-panel-head>
+			<div class="[ flow ] [ flow-space-3xs ]">
+				<h2>Principles</h2>
+				<p class="[ color-ink-muted text-sm ]">The prose that says how the tokens are used. Saved with the tokens, as one version.</p>
+			</div>
+		</div>
+		<div class="[ with-sidebar ]" data-side="end" style="--gutter: var(--space-l); --sidebar-target: 14rem">
+			<div class="[ md-editor ]">
+				<div class="[ md-bar ]" role="group" aria-label="Principles view">
+					<button type="button" data-principles-mode="write" x-bind:aria-pressed="writePressed" x-on:click="showWrite">Write</button>
+					<button type="button" data-principles-mode="preview" x-bind:aria-pressed="previewPressed" x-on:click="showPreview">Preview</button>
+					<span class="[ text-xs color-ink-faint ]">Markdown · ## starts a section</span>
+				</div>
+				<textarea data-field="principles" aria-label="Principles" spellcheck="false" placeholder="## Colour&#10;&#10;Say when each colour is used." x-model="principles" x-bind:hidden="!writeShown"></textarea>
+				<div class="[ prose md-preview ]" data-principles-preview x-bind:hidden="!previewShown" x-effect="paintPrinciples($el)" hidden></div>
+			</div>
+			<nav class="[ flow ] [ flow-space-2xs ]" aria-label="Sections" data-outline>
+				<h3 class="[ text-sm ]">Sections</h3>
+				<template x-if="!hasOutline">
+					<p class="[ color-ink-faint text-sm ]" data-no-outline>No sections yet. A line that starts with ## makes one.</p>
+				</template>
+				<div class="[ flow ] [ flow-space-3xs ]">
+					<template x-for="s in outline" x-bind:key="s.key">
+						<button type="button" class="[ button ]" data-variant="ghost" data-size="sm" data-outline-item x-on:click="jumpTo(s)"><span x-text="s.title"></span></button>
+					</template>
+				</div>
+			</nav>
+		</div>
+	</section>
+}

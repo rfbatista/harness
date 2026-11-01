@@ -56,6 +56,34 @@ export function designSystemGateway(api, feed) {
       return Number.isInteger(body?.version) ? body.version : baseVersion + 1;
     },
 
+    /** One page of the version list, newest first; `before` is a version number, the page holds those older than it. */
+    async versions(projectId, { limit, before } = {}) {
+      const body = await api.post("/list_design_system_versions", { project_id: projectId, limit, before });
+      return list(body?.versions).map((v) => ({
+        version: v.version,
+        at: v.at ?? "",
+        by: v.by ?? "",
+        source: v.source ?? "",
+        proposalId: v.proposal_id ?? "",
+        message: v.message ?? "",
+        summary: v.summary ?? {},
+      }));
+    },
+
+    /** One version with its record, read only; VERSION_NOT_FOUND arrives as an error. */
+    async version(projectId, version) {
+      const body = await api.post("/get_design_system_version", { project_id: projectId, version });
+      const record = body?.record;
+      if (!Number.isInteger(body?.version) || typeof record !== "object" || record === null) {
+        throw new StructuredError(Codes.BAD_RESPONSE, "The version came back unreadable.");
+      }
+      return {
+        version: body.version,
+        at: body.at ?? "",
+        record: { tokens: list(record.tokens), principles: typeof record.principles === "string" ? record.principles : "", components: list(record.components) },
+      };
+    },
+
     /** Follows the project feed for saves of the design system. */
     follow(projectId, { onSaved, onStatus }) {
       return feed.follow(`/events?project_id=${encodeURIComponent(projectId)}`, {

@@ -60,6 +60,8 @@ import "../src/modules/credentials/infrastructure/gateways.test.js";
 import "../src/modules/credentials/presentation/components/gitCredentialsPage.test.js";
 import "../src/modules/credentials/presentation/components/repositoryCredential.test.js";
 import "../src/modules/credentials/presentation/view.test.js";
+import "../src/modules/designsystem/domain/history.test.js";
+import "../src/modules/designsystem/domain/principles.test.js";
 import "../src/modules/designsystem/domain/record.test.js";
 import "../src/modules/designsystem/domain/tokens.test.js";
 import "../src/modules/designsystem/presentation/pages/designSystemPage.test.js";

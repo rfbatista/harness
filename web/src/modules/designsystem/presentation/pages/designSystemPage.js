@@ -24,6 +24,9 @@ import {
   stateBadge,
   tabForSlug,
 } from "../../domain/record.js";
+import { renderMarkdown } from "../../../agents/domain/markdown.js";
+import { VERSIONS_PAGE, hasMore, mergeVersions, versionRow } from "../../domain/history.js";
+import { outlineOf } from "../../domain/principles.js";
 import {
   STANDARD_GROUPS,
   changeCounts,
@@ -43,8 +46,8 @@ const CELL_FIELDS = { group: ["group"], name: ["name", "row"], value: ["value", 
 /** Whether the browser reads a CSS value; true where it cannot tell. */
 const supports = (property, value) => globalThis.CSS?.supports?.(property, value) ?? true;
 
-/** @param {{ gateway: ReturnType<typeof import("../../infrastructure/designsystem-gateway.js").designSystemGateway>, clock: import("../../../../shared/infrastructure/clock.js").Clock, history?: History, location?: Location }} deps */
-export const designSystemPage = ({ gateway, clock, history = globalThis.history, location = globalThis.location }) => () => ({
+/** @param {{ gateway: ReturnType<typeof import("../../infrastructure/designsystem-gateway.js").designSystemGateway>, clock: import("../../../../shared/infrastructure/clock.js").Clock, clipboard?: { copyText: (text: string) => Promise<boolean> }, history?: History, location?: Location }} deps */
+export const designSystemPage = ({ gateway, clock, clipboard = { copyText: async () => false }, history = globalThis.history, location = globalThis.location }) => () => ({
   projectId: "",
   base: "",
   tab: TABS[0].slug,
@@ -83,6 +86,18 @@ export const designSystemPage = ({ gateway, clock, history = globalThis.history,
   renameGroup: "",
   renameName: "",
   renameError: null,
+  /** The Principles tab: Write or Preview. */
+  principlesMode: "write",
+  /** The History tab: the versions read (newest first), whether the first page was read, a read in flight (and one asked for meanwhile), whether older ones may exist, and what went wrong. */
+  versions: [],
+  historyLoaded: false,
+  historyBusy: false,
+  historyAgain: false,
+  moreVersions: false,
+  historyError: null,
+  /** The version open for reading (null: the list), and what copying last said. */
+  opened: null,
+  copiedNote: "",
   unfollow: null,
 
   get isFirstStart() {
@@ -183,6 +198,52 @@ export const designSystemPage = ({ gateway, clock, history = globalThis.history,
     return !this.saving && name !== "" && group !== "" && `${group}.${name}` !== this.renameFrom;
   },
 
+  get outline() {
+    return outlineOf(this.principles);
+  },
+  get hasOutline() {
+    return this.outline.length > 0;
+  },
+  get writeShown() {
+    return this.principlesMode === "write";
+  },
+  get previewShown() {
+    return this.principlesMode === "preview";
+  },
+  get writePressed() {
+    return String(this.writeShown);
+  },
+  get previewPressed() {
+    return String(this.previewShown);
+  },
+  get versionRows() {
+    const now = clock.now();
+    return this.versions.map((v) => versionRow(v, now));
+  },
+  get hasVersions() {
+    return this.versions.length > 0;
+  },
+  get hasMoreVersions() {
+    return this.moreVersions;
+  },
+  get hasHistoryError() {
+    return this.historyError !== null;
+  },
+  get viewing() {
+    return this.opened !== null;
+  },
+  get openedLabel() {
+    return `Version ${this.opened?.version}`;
+  },
+  get openedRows() {
+    return this.opened?.rows ?? [];
+  },
+  get openedHasPrinciples() {
+    return (this.opened?.principles ?? "").trim() !== "";
+  },
+  get hasCopiedNote() {
+    return this.copiedNote !== "";
+  },
   isTab(slug) {
     return this.tab === slug;
   },
@@ -200,8 +261,10 @@ export const designSystemPage = ({ gateway, clock, history = globalThis.history,
     }
     globalThis.addEventListener("popstate", () => {
       this.tab = tabForSlug(new URLSearchParams(location.search).get("tab") ?? "").slug;
+      if (this.tab === "history") this.loadVersions();
     });
     if (!this.loaded) this.load();
+    if (this.tab === "history") this.loadVersions();
     this.unfollow = gateway.follow(this.projectId, {
       onSaved: (saved) => this.followed(saved),
       onStatus: (status) => {
@@ -225,6 +288,7 @@ export const designSystemPage = ({ gateway, clock, history = globalThis.history,
 
   /** Adopts a state from the server as the saved version and starts a fresh draft from it. */
   take(state) {
+    if (this.historyLoaded && state.version > (this.versions[0]?.version ?? 0)) this.loadVersions();
     this.saved = state.record;
     this.rows = rowsFromRecord(state.record);
     this.principles = state.record.principles;
@@ -249,6 +313,7 @@ export const designSystemPage = ({ gateway, clock, history = globalThis.history,
 
   /** A save announced on the project feed: a quiet reload when nothing is edited, a notice over edits. */
   followed({ version }) {
+    if (this.historyLoaded && version > (this.versions[0]?.version ?? 0)) this.loadVersions();
     if (this.saving) {
       // Probably our own save, but possibly another one that landed after it: keep the highest and judge once it answers.
       this.announced = Math.max(this.announced, version);
@@ -447,10 +512,113 @@ export const designSystemPage = ({ gateway, clock, history = globalThis.history,
   openTab(slug) {
     if (slug === this.tab) return;
     this.tab = slug;
+    if (slug === "history") this.loadVersions();
     history.pushState(null, "", slug === TABS[0].slug ? this.base : `${this.base}?tab=${slug}`);
   },
 
   openHistory() {
     this.openTab("history");
+  },
+
+  showWrite() {
+    this.principlesMode = "write";
+  },
+
+  showPreview() {
+    this.principlesMode = "preview";
+  },
+
+  /** The principles' textarea. */
+  principlesField() {
+    return document.querySelector("#design-system-panel-principles [data-field=principles]");
+  },
+
+  /** Back in Write, puts the cursor at the start of an outline section and scrolls it to the top of the field. */
+  jumpTo(section, area = this.principlesField(), lineHeight = parseFloat(getComputedStyle(area).lineHeight) || 20) {
+    this.principlesMode = "write";
+    this.$nextTick(() => {
+      area.focus();
+      area.setSelectionRange(section.offset, section.offset);
+      area.scrollTop = section.line * lineHeight;
+    });
+  },
+
+  /** Puts the principles, as Markdown, into the preview's element; nothing while the preview is hidden. The text is escaped on the way. */
+  paintPrinciples(el) {
+    el.innerHTML = this.previewShown ? renderMarkdown(this.principles) : "";
+  },
+
+  /** Puts the opened version's principles, as Markdown, into its element. */
+  paintOpenedPrinciples(el) {
+    el.innerHTML = this.opened ? renderMarkdown(this.opened.principles) : "";
+  },
+
+  /** Reads the first page of the list and joins it to what is held: the first read, a save here or a save announced. */
+  async loadVersions() {
+    if (this.historyBusy) {
+      this.historyAgain = true;
+      return;
+    }
+    this.historyBusy = true;
+    this.historyAgain = false;
+    try {
+      const fresh = await gateway.versions(this.projectId, { limit: VERSIONS_PAGE });
+      this.versions = mergeVersions(this.versions, fresh);
+      if (!this.historyLoaded) this.moreVersions = hasMore(fresh);
+      this.historyLoaded = true;
+      this.historyError = null;
+    } catch (err) {
+      this.historyError = describeError(err);
+    } finally {
+      this.historyBusy = false;
+      if (this.historyAgain) this.loadVersions();
+    }
+  },
+
+  /** Reads the versions older than the oldest held. */
+  async loadMoreVersions() {
+    const oldest = this.versions[this.versions.length - 1]?.version;
+    if (!oldest || this.historyBusy) return;
+    this.historyBusy = true;
+    try {
+      const older = await gateway.versions(this.projectId, { limit: VERSIONS_PAGE, before: oldest });
+      this.versions = [...this.versions, ...older];
+      this.moreVersions = hasMore(older.length === 0 ? [] : older);
+      this.historyError = null;
+    } catch (err) {
+      this.historyError = describeError(err);
+    } finally {
+      this.historyBusy = false;
+    }
+  },
+
+  /** Opens a version for reading: its tokens and principles, read only. */
+  async openVersion(number) {
+    this.copiedNote = "";
+    try {
+      const v = await gateway.version(this.projectId, number);
+      this.opened = { version: v.version, at: v.at, rows: rowsFromRecord(v.record), principles: v.record.principles, components: v.record.components.length };
+      this.historyError = null;
+    } catch (err) {
+      this.historyError = describeError(err);
+    }
+  },
+
+  closeVersion() {
+    this.opened = null;
+    this.copiedNote = "";
+  },
+
+  /** The row's value on the clipboard. */
+  async copyValue(row) {
+    await this.copied(row.text, `Copied ${row.group}.${row.name}`);
+  },
+
+  async copyOpenedPrinciples() {
+    await this.copied(this.opened.principles, "Copied the principles");
+  },
+
+  async copied(text, note) {
+    this.copiedNote = (await clipboard.copyText(text)) ? note : "Could not copy: the browser refused";
   },
 });

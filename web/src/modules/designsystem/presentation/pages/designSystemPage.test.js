@@ -26,6 +26,19 @@ function fakeGateway(initial) {
     renames: [],
     refuse: null,
     afterSave: null,
+    /** The version list the server holds, newest first, and the requests made for it. */
+    list: [],
+    asked: [],
+    full: {},
+    async versions(projectId, { limit, before } = {}) {
+      g.asked.push({ limit, before });
+      return g.list.filter((v) => !before || v.version < before).slice(0, limit);
+    },
+    async version(projectId, number) {
+      const v = g.full[number];
+      if (!v) throw new StructuredError("VERSION_NOT_FOUND", "no such version", 404);
+      return structuredClone(v);
+    },
     feed: null,
     fromSeed: (s) => s,
     async get() {
@@ -52,11 +65,11 @@ function fakeGateway(initial) {
   return g;
 }
 
-function page(initial = state(), seed = {}) {
+function page(initial = state(), seed = {}, extra = {}) {
   const gateway = fakeGateway(initial);
   const el = seededElement({ project_id: "p1", base: "/projects/p1/design-system", tab: "", state: initial, ...seed });
   const pushed = [];
-  const m = mount(designSystemPage({ gateway, clock: fixedClock("2026-10-01T10:30:00Z"), history: { pushState: (_s, _t, url) => pushed.push(url) }, location: { search: "" } }), { el });
+  const m = mount(designSystemPage({ gateway, clock: fixedClock("2026-10-01T10:30:00Z"), history: { pushState: (_s, _t, url) => pushed.push(url) }, location: { search: "" }, ...extra }), { el });
   m.instance.init();
   return { ...m, gateway, pushed, p: m.instance };
 }
@@ -298,4 +311,185 @@ test("the filter and the group chips narrow the table; the counts say how many",
   assert.equal(p.groupFilter, "");
   p.filter = "zzz";
   assert.equal(p.noMatch, true);
+});
+
+const flush = async () => {
+  for (let i = 0; i < 6; i++) await Promise.resolve();
+};
+const entry = (version, over = {}) => ({
+  version,
+  at: "2026-10-01T10:00:00Z",
+  by: "person",
+  source: "manual",
+  proposalId: "",
+  message: "",
+  summary: { tokens: "+0 ~0 -0", principles: "+0 ~0 -0", components: "+0 ~0 -0" },
+  ...over,
+});
+
+test("principles are written in the page's draft: editing them alone makes the page dirty and Save writes them with the tokens", async () => {
+  const { p, gateway } = page();
+  assert.equal(p.principlesMode, "write");
+  p.principles = "# Calm\n\n## Colour\n\nOne signal.\n";
+  assert.equal(p.dirty, true);
+  assert.equal(p.changeSummary, "Unsaved: principles changed");
+  assert.equal(p.canSave, true);
+  await p.save();
+  assert.equal(gateway.saves[0].record.principles, "# Calm\n\n## Colour\n\nOne signal.\n");
+  assert.equal(gateway.saves[0].record.tokens.length, 1);
+  assert.equal(p.dirty, false);
+});
+
+test("the outline follows the text, and Preview and Write switch the view", () => {
+  const { p } = page();
+  assert.equal(p.outline.length, 0);
+  assert.equal(p.hasOutline, false);
+  p.principles = "## One\n## Two\n";
+  assert.deepEqual(p.outline.map((s) => s.title), ["One", "Two"]);
+  assert.equal(p.hasOutline, true);
+  p.showPreview();
+  assert.equal(p.previewShown, true);
+  assert.equal(p.writeShown, false);
+  p.showWrite();
+  assert.equal(p.writeShown, true);
+});
+
+test("an outline entry returns to Write and puts the cursor and the scroll at its section", () => {
+  const { p, tick } = page();
+  const calls = [];
+  const area = { focus: () => calls.push("focus"), setSelectionRange: (a, b) => calls.push(["select", a, b]), scrollTop: 0, style: {} };
+  p.principles = "intro\n\n## One\ntext\n## Two\n";
+  p.showPreview();
+  p.jumpTo(p.outline[1], area, 20);
+  assert.equal(p.principlesMode, "write");
+  tick();
+  assert.deepEqual(calls, ["focus", ["select", p.principles.indexOf("## Two"), p.principles.indexOf("## Two")]]);
+  assert.equal(area.scrollTop, 4 * 20);
+});
+
+test("the preview paints Markdown into its element and never raw HTML", () => {
+  const { p } = page();
+  const el = { innerHTML: "" };
+  p.principles = "## Calm\n\n<script>x</script>\n";
+  p.paintPrinciples(el);
+  assert.equal(el.innerHTML, "");
+  p.showPreview();
+  p.paintPrinciples(el);
+  assert.equal(el.innerHTML.includes("<h2>Calm</h2>"), true);
+  assert.equal(el.innerHTML.includes("<script>"), false);
+});
+
+test("discarding returns the principles to the saved text", () => {
+  const { p } = page();
+  p.principles = "changed";
+  p.discard();
+  assert.equal(p.principles, "# Calm\n");
+  assert.equal(p.dirty, false);
+});
+
+test("the History tab reads the versions when it opens, newest first, as rows in words", async () => {
+  const { p, gateway } = page();
+  gateway.list = [entry(3, { message: "Warmer", summary: { tokens: "+0 ~1 -0", principles: "+0 ~0 -0", components: "+0 ~0 -0" } }), entry(2), entry(1)];
+  assert.equal(gateway.asked.length, 0);
+  p.openTab("history");
+  await flush();
+  assert.deepEqual(p.versionRows.map((r) => r.version), [3, 2, 1]);
+  assert.equal(p.versionRows[0].summary, "tokens ~1");
+  assert.equal(p.versionRows[0].message, "Warmer");
+  assert.equal(p.hasMoreVersions, false);
+  assert.equal(p.historyLoaded, true);
+});
+
+test("a page that opens on History reads the versions at once", async () => {
+  const { p, gateway } = page(state(), { tab: "history" });
+  await flush();
+  assert.equal(gateway.asked.length, 1);
+  assert.equal(p.historyLoaded, true);
+});
+
+test("a long list loads older versions on demand, from the oldest one held", async () => {
+  const { p, gateway } = page();
+  gateway.list = Array.from({ length: 45 }, (_, i) => entry(45 - i));
+  p.openTab("history");
+  await flush();
+  assert.equal(p.versionRows.length, 30);
+  assert.equal(p.hasMoreVersions, true);
+  await p.loadMoreVersions();
+  assert.deepEqual(gateway.asked.at(-1), { limit: 30, before: 16 });
+  assert.equal(p.versionRows.length, 45);
+  assert.equal(p.hasMoreVersions, false);
+});
+
+test("a save announced on the feed refreshes the list, with no reload", async () => {
+  const { p, gateway } = page();
+  gateway.list = [entry(3), entry(2)];
+  p.openTab("history");
+  await flush();
+  assert.equal(p.versionRows.length, 2);
+  gateway.list = [entry(4, { message: "Elsewhere" }), ...gateway.list];
+  gateway.feed.onSaved({ version: 4, source: "manual" });
+  await flush();
+  assert.deepEqual(p.versionRows.map((r) => r.version), [4, 3, 2]);
+  assert.equal(p.versionRows[0].message, "Elsewhere");
+});
+
+test("a save made here adds its row to a list already read", async () => {
+  const { p, gateway } = page();
+  gateway.list = [entry(3), entry(2)];
+  p.openTab("history");
+  await flush();
+  p.principles = "new";
+  gateway.afterSave = () => (gateway.list = [entry(4, { message: "mine" }), ...gateway.list]);
+  p.message = "mine";
+  await p.save();
+  await flush();
+  assert.deepEqual(p.versionRows.map((r) => r.version), [4, 3, 2]);
+});
+
+test("a list that cannot be read says so and can be tried again", async () => {
+  const { p, gateway } = page();
+  const read = gateway.versions;
+  gateway.versions = async () => {
+    throw new StructuredError("INTERNAL", "down", 500);
+  };
+  p.openTab("history");
+  await flush();
+  assert.equal(p.hasHistoryError, true);
+  gateway.versions = read;
+  gateway.list = [entry(1)];
+  await p.loadVersions();
+  assert.equal(p.hasHistoryError, false);
+  assert.equal(p.versionRows.length, 1);
+});
+
+test("a version opens read-only with its tokens as rows, its principles and the copyable values; closing returns to the list", async () => {
+  const { p, gateway } = page();
+  gateway.full[2] = { version: 2, at: "2026-09-30T10:00:00Z", record: { tokens: [colour, { group: "shadows", name: "card", type: "shadow", value: { blur: "8px", offsetY: "2px" }, note: "" }], principles: "## Calm\n", components: [] } };
+  await p.openVersion(2);
+  assert.equal(p.viewing, true);
+  assert.equal(p.openedLabel, "Version 2");
+  assert.deepEqual(p.openedRows.map((r) => `${r.group}.${r.name}=${r.text}`), ["colors.signal=#0a0", "shadows.card=blur: 8px; offsetY: 2px"]);
+  assert.equal(p.openedHasPrinciples, true);
+  p.closeVersion();
+  assert.equal(p.viewing, false);
+});
+
+test("a version that is not there is told, not shown empty", async () => {
+  const { p } = page();
+  await p.openVersion(9);
+  assert.equal(p.viewing, false);
+  assert.equal(p.hasHistoryError, true);
+});
+
+test("copy puts a value or the principles on the clipboard and says it did", async () => {
+  const copied = [];
+  const { p, gateway } = page(state(), {}, { clipboard: { copyText: async (t) => (copied.push(t), true) } });
+  gateway.full[1] = { version: 1, at: "2026-09-30T10:00:00Z", record: { tokens: [colour], principles: "## Calm\n", components: [] } };
+  await p.openVersion(1);
+  await p.copyValue(p.openedRows[0]);
+  assert.deepEqual(copied, ["#0a0"]);
+  assert.equal(p.copiedNote, "Copied colors.signal");
+  await p.copyOpenedPrinciples();
+  assert.equal(copied[1], "## Calm\n");
+  assert.equal(p.copiedNote, "Copied the principles");
 });

@@ -88,7 +88,7 @@ startSwapRegions(htmx, { navigate });
 
 const architecture = architectureGateway(api, events);
 registerArchitecture(Alpine, { gateway: architecture, clipboard: { copyText } });
-registerDesignSystem(Alpine, { gateway: designSystemGateway(api, events), clock: systemClock });
+registerDesignSystem(Alpine, { gateway: designSystemGateway(api, events), clock: systemClock, clipboard: { copyText } });
 registerProjects(Alpine, { gateway: projectsGateway(api, events), architecture, navigate, clock: systemClock });
 const tokenSavers = tokenSaversGateway(api);
 registerTasks(Alpine, {

@@ -119,22 +119,10 @@ templ tabTokens() {
 	</section>
 }
 
-// The tabs that arrive with later slices: each is one panel, inert until its
-// slice fills it (07 Principles, 09 Repositories, 08 History).
-templ tabPrinciples() {
-	<section role="tabpanel" id="design-system-panel-principles" aria-labelledby="design-system-tab-principles" x-show="isTab('principles')" class="[ flow ]">
-		<p class="[ color-ink-muted ]" data-inert>The principles are kept with the design system and saved with it. Writing them here is not available yet.</p>
-	</section>
-}
-
+// The Repositories tab arrives with a later slice: its panel is inert until
+// then.
 templ tabRepositories() {
 	<section role="tabpanel" id="design-system-panel-repositories" aria-labelledby="design-system-tab-repositories" x-show="isTab('repositories')" class="[ flow ]">
 		<p class="[ color-ink-muted ]" data-inert>Choosing which repositories use the design system is not available here yet.</p>
-	</section>
-}
-
-templ tabHistory() {
-	<section role="tabpanel" id="design-system-panel-history" aria-labelledby="design-system-tab-history" x-show="isTab('history')" class="[ flow ]">
-		<p class="[ color-ink-muted ]" data-inert>The list of versions is not available yet.</p>
 	</section>
 }

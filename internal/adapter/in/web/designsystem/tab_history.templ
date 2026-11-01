@@ -1,0 +1,126 @@
+package designsystem
+
+// tabHistory is the History tab's panel: the versions newest first, each with
+// who saved it, when, from where, its message and what it changed. A version
+// opens read-only, with its values to copy. There is no restore: what a
+// version held can be copied back by hand and saved as a new version.
+templ tabHistory() {
+	<section role="tabpanel" id="design-system-panel-history" aria-labelledby="design-system-tab-history" x-show="isTab('history')" class="[ flow ]">
+		<template x-if="hasHistoryError">
+			<div class="[ banner ]" data-tone="danger" role="alert" data-history-error>
+				<div class="[ flow ] [ flow-space-3xs grow ]">
+					<span x-text="historyError.message"></span>
+					<span class="[ code ]"><span x-text="historyError.code"></span> · <span x-text="historyError.next"></span></span>
+				</div>
+				<button type="button" class="[ button ]" data-variant="ghost" data-size="sm" data-action="retry-history" x-on:click="loadVersions">Try again</button>
+			</div>
+		</template>
+		<template x-if="!viewing">
+			@versionList()
+		</template>
+		<template x-if="viewing">
+			@versionView()
+		</template>
+	</section>
+}
+
+templ versionList() {
+	<div class="[ flow ]" data-version-list>
+		<div class="[ arch-head ]" data-panel-head>
+			<div class="[ flow ] [ flow-space-3xs ]">
+				<h2>History</h2>
+				<p class="[ color-ink-muted text-sm ]">Every save is a version, newest first. Open one to read it and copy its values. There is no restore.</p>
+			</div>
+		</div>
+		<template x-if="!hasVersions">
+			<p class="[ color-ink-muted ]" data-no-versions x-text="historyLoaded ? 'No version saved yet.' : 'Reading the versions…'"></p>
+		</template>
+		<section class="[ entry-card ]" x-show="hasVersions">
+			<table class="[ entry-table ]">
+				<thead>
+					<tr>
+						<th style="inline-size: 7rem">Version</th>
+						<th style="inline-size: 10rem">Who</th>
+						<th style="inline-size: 8rem">When</th>
+						<th style="inline-size: 12rem">Source</th>
+						<th>Message</th>
+						<th style="inline-size: 20%">Changes</th>
+						<th><span class="[ visually-hidden ]">Actions</span></th>
+					</tr>
+				</thead>
+				<template x-for="r in versionRows" x-bind:key="r.version">
+					<tbody data-version-row x-bind:data-version-row="r.version">
+						<tr data-row>
+							<td><span class="[ font-mono ]" x-text="r.label"></span></td>
+							<td><span x-text="r.by"></span></td>
+							<td><span class="[ color-ink-muted ]" x-text="r.when"></span></td>
+							<td><span class="[ text-sm ]" x-text="r.source"></span></td>
+							<td><span x-text="r.message"></span><span class="[ color-ink-faint ]" x-show="!r.hasMessage">No message</span></td>
+							<td><span class="[ text-sm ]" data-version-summary x-text="r.summary"></span></td>
+							<td>
+								<button type="button" class="[ button ]" data-variant="ghost" data-size="sm" data-action="open-version" x-on:click="openVersion(r.version)">Open</button>
+							</td>
+						</tr>
+					</tbody>
+				</template>
+			</table>
+		</section>
+		<template x-if="hasMoreVersions">
+			<div class="[ cluster ]">
+				<button type="button" class="[ button ]" data-size="sm" data-action="load-more-versions" x-bind:disabled="historyBusy" x-on:click="loadMoreVersions">Load older versions</button>
+			</div>
+		</template>
+	</div>
+}
+
+templ versionView() {
+	<div class="[ flow ]" data-version-view>
+		<div class="[ arch-head ]" data-panel-head>
+			<div class="[ flow ] [ flow-space-3xs ]">
+				<h2 x-text="openedLabel"></h2>
+				<p class="[ color-ink-muted text-sm ]">Read only. Copy what you need and save it as a new version.</p>
+			</div>
+			<div class="[ cluster ]">
+				<span class="[ color-ink-muted text-sm ]" role="status" data-copied x-show="hasCopiedNote" x-text="copiedNote"></span>
+				<button type="button" class="[ button ]" data-size="sm" data-action="close-version" x-on:click="closeVersion">Back to the versions</button>
+			</div>
+		</div>
+		<section class="[ entry-card ]">
+			<table class="[ entry-table ]">
+				<thead>
+					<tr>
+						<th style="inline-size: 3rem"><span class="[ visually-hidden ]">Sample</span></th>
+						<th style="inline-size: 22%">Token</th>
+						<th style="inline-size: 9rem">Type</th>
+						<th>Value</th>
+						<th style="inline-size: 20%">Note</th>
+						<th><span class="[ visually-hidden ]">Actions</span></th>
+					</tr>
+				</thead>
+				<template x-for="row in openedRows" x-bind:key="row.id">
+					<tbody data-version-token>
+						<tr data-row>
+							<td><span data-sample x-bind:data-sample-kind="sample(row).kind" x-bind:style="sample(row).style" x-text="sample(row).glyph"></span></td>
+							<td><code class="[ font-mono text-sm ]" x-text="row.group + '.' + row.name"></code></td>
+							<td><span class="[ text-sm ]" x-text="row.type"></span></td>
+							<td><code class="[ font-mono text-sm ]" data-token-value x-text="row.text"></code></td>
+							<td><span class="[ color-ink-muted text-sm ]" x-text="row.note"></span></td>
+							<td>
+								<button type="button" class="[ button ]" data-variant="ghost" data-size="sm" data-action="copy-value" x-on:click="copyValue(row)">Copy value</button>
+							</td>
+						</tr>
+					</tbody>
+				</template>
+			</table>
+		</section>
+		<template x-if="openedHasPrinciples">
+			<section class="[ flow ] [ flow-space-2xs ]">
+				<div class="[ repel ]">
+					<h3>Principles</h3>
+					<button type="button" class="[ button ]" data-variant="ghost" data-size="sm" data-action="copy-principles" x-on:click="copyOpenedPrinciples">Copy principles</button>
+				</div>
+				<div class="[ prose md-preview ]" data-version-principles x-effect="paintOpenedPrinciples($el)"></div>
+			</section>
+		</template>
+	</div>
+}
