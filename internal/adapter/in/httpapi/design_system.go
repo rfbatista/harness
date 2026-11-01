@@ -380,3 +380,46 @@ func (h *Handler) handleGetDesignSystemProposal(c echo.Context) error {
 		"submitted_at": toProposalBody(&v.DesignProposalRow).SubmittedAt, "decided_at": toProposalBody(&v.DesignProposalRow).DecidedAt,
 	})
 }
+
+func (h *Handler) handleDecideDesignSystemProposal(c echo.Context) error {
+	if err := h.designSystems(); err != nil {
+		return err
+	}
+	var in struct {
+		ProposalID string `json:"proposal_id"`
+		Decisions  []struct {
+			ItemID   string `json:"item_id"`
+			Decision string `json:"decision"`
+		} `json:"decisions"`
+		ConfirmOverwrite []string `json:"confirm_overwrite"`
+	}
+	if err := bindJSON(c, &in); err != nil {
+		return err
+	}
+	decisions := make([]ports.ItemDecision, len(in.Decisions))
+	for i, d := range in.Decisions {
+		decisions[i] = ports.ItemDecision{ItemID: d.ItemID, Decision: d.Decision}
+	}
+	out, err := h.designs.DecideDesignProposal(c.Request().Context(), in.ProposalID, decisions, in.ConfirmOverwrite)
+	if err != nil {
+		return err
+	}
+	return c.JSON(http.StatusOK, map[string]any{"version": out.Version, "state": out.State})
+}
+
+func (h *Handler) handleWithdrawDesignSystemProposal(c echo.Context) error {
+	if err := h.designSystems(); err != nil {
+		return err
+	}
+	var in struct {
+		ProposalID string `json:"proposal_id"`
+	}
+	if err := bindJSON(c, &in); err != nil {
+		return err
+	}
+	state, err := h.designs.WithdrawDesignProposal(c.Request().Context(), in.ProposalID)
+	if err != nil {
+		return err
+	}
+	return c.JSON(http.StatusOK, map[string]string{"state": state})
+}

@@ -41,6 +41,7 @@ type Service struct {
 	proposals ports.DesignProposalStore
 	projects  ports.ProjectReader
 	notifier  ports.Notifier
+	turns     ports.TurnDelivery
 	agents    interface {
 		GetAgent(ctx context.Context, id string) (*domain.Agent, error)
 	}
@@ -321,6 +322,17 @@ func (s *Service) RenameDesignToken(ctx context.Context, designSystemID string, 
 // write validates record against the current version and appends it as the
 // next one, then announces it.
 func (s *Service) write(ctx context.Context, id *domain.DesignSystemIdentity, cur *domain.DesignSystemVersion, baseVersion int, record domain.DesignSystemRecord, message string) (*domain.DesignSystemVersion, error) {
+	return s.writeFrom(ctx, id, cur, baseVersion, record, message, origin{by: domain.DesignByPerson, source: domain.DesignSourceManual})
+}
+
+// origin says who a version is attributed to and where it came from.
+type origin struct {
+	by, source, proposalID string
+}
+
+// writeFrom is write for a version of any origin: a saved one, or one an
+// approved proposal wrote.
+func (s *Service) writeFrom(ctx context.Context, id *domain.DesignSystemIdentity, cur *domain.DesignSystemVersion, baseVersion int, record domain.DesignSystemRecord, message string, from origin) (*domain.DesignSystemVersion, error) {
 	if err := checkBase(cur, baseVersion); err != nil {
 		return nil, err
 	}
@@ -333,7 +345,7 @@ func (s *Service) write(ctx context.Context, id *domain.DesignSystemIdentity, cu
 		return nil, invalid(problems)
 	}
 	v := &domain.DesignSystemVersion{
-		DesignSystemID: id.ID, At: s.now(), By: domain.DesignByPerson, Source: domain.DesignSourceManual,
+		DesignSystemID: id.ID, At: s.now(), By: from.by, Source: from.source, ProposalID: from.proposalID,
 		Message: message, Summary: domain.SummarizeDesignChange(previous, record), Record: record,
 	}
 	if err := s.store.Append(ctx, v, baseVersion); err != nil {

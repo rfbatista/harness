@@ -798,6 +798,8 @@ func newOrchestrationService(
 		cat.DesignSystems.UseSessions(svc)
 		cat.DesignSystems.UseSessionReader(sessions)
 		cat.DesignSystems.UseAgents(cat.Agents)
+		// A decision reaches the design session that proposed.
+		cat.DesignSystems.UseTurns(svc)
 	}
 	if cat.RepositoryArchitectures != nil {
 		// Saves, deletes and exports reach open pages on the project feed.

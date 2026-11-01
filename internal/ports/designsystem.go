@@ -207,6 +207,28 @@ type DesignProposals interface {
 	// token changes touch and the record as it would be if every item were
 	// approved.
 	GetDesignProposal(ctx context.Context, proposalID string) (*DesignProposalView, error)
+	// DecideDesignProposal approves every item or rejects every item (some
+	// items only is INVALID_INPUT until per-item decisions arrive). Approving
+	// writes one version, source proposal, on top of the current one; a
+	// conflicting item needs its id in confirmOverwrite (CONFLICT_NOT_CONFIRMED,
+	// details.item_ids). PROPOSAL_NOT_OPEN when it is not open.
+	DecideDesignProposal(ctx context.Context, proposalID string, decisions []ItemDecision, confirmOverwrite []string) (*DesignDecision, error)
+	// WithdrawDesignProposal drops a proposal whose design session ended
+	// (SESSION_RUNNING while it runs) and answers its state, withdrawn.
+	WithdrawDesignProposal(ctx context.Context, proposalID string) (string, error)
+}
+
+// ItemDecision is the person's decision on one item: "approve" or "reject".
+type ItemDecision struct {
+	ItemID   string
+	Decision string
+}
+
+// DesignDecision is what a decision did: the version it wrote (nil when it
+// wrote none) and the proposal's state now.
+type DesignDecision struct {
+	Version *int
+	State   string
 }
 
 // DesignProposalRow is one line of a design system's proposal list.
