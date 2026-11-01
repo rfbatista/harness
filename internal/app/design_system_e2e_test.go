@@ -311,6 +311,13 @@ func TestDesignSystem_AnInvalidRecordIsRefusedWithEachErrorAndStoresNothing(t *t
 		{"an upper case event attribute", with(func(r map[string]any) { preview(r, 0)["html"] = `<a ONCLICK="x">hi</a>` }), "UNSAFE_PREVIEW /components/0/previews/0/html"},
 		{"an event attribute with no space", with(func(r map[string]any) { preview(r, 0)["html"] = `<b/onclick=x>hi</b>` }), "UNSAFE_PREVIEW /components/0/previews/0/html"},
 		{"a url that is no data url", with(func(r map[string]any) { preview(r, 0)["css"] = `.a{background:url("https://example.com/a.png")}` }), "UNSAFE_PREVIEW /components/0/previews/0/css"},
+		{"a </style in the css", with(func(r map[string]any) { preview(r, 0)["css"] = `.a{color:red}</STYLE><p>` }), "UNSAFE_PREVIEW /components/0/previews/0/css"},
+		{"a </section in the html", with(func(r map[string]any) { preview(r, 0)["html"] = `<p>x</p></Section>` }), "UNSAFE_PREVIEW /components/0/previews/0/html"},
+		{"a <section in the html", with(func(r map[string]any) { preview(r, 0)["html"] = `<section data-preview>x</section>` }), "UNSAFE_PREVIEW /components/0/previews/0/html"},
+		{"a </body in the html", with(func(r map[string]any) { preview(r, 0)["html"] = `</body>` }), "UNSAFE_PREVIEW /components/0/previews/0/html"},
+		{"a </html in the html", with(func(r map[string]any) { preview(r, 0)["html"] = `</HTML>` }), "UNSAFE_PREVIEW /components/0/previews/0/html"},
+		{"a component with no name", with(func(r map[string]any) { r["components"].([]any)[0].(map[string]any)["name"] = "  " }), "BAD_VALUE /components/0/name"},
+		{"a component with no preview", with(func(r map[string]any) { r["components"].([]any)[0].(map[string]any)["previews"] = []any{} }), "BAD_VALUE /components/0/previews"},
 		{"an import", with(func(r map[string]any) { preview(r, 0)["css"] = `@import "x.css";` }), "UNSAFE_PREVIEW /components/0/previews/0/css"},
 	}
 	for _, tc := range tests {

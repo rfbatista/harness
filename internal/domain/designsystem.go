@@ -258,10 +258,16 @@ func (r DesignSystemRecord) Validate(previous DesignSystemRecord) []DesignFieldE
 			add(path+"/slug", DesignDuplicateComponent, "component %q is defined more than once", c.Slug)
 		}
 		slugs[c.Slug] = true
+		if strings.TrimSpace(c.Name) == "" {
+			add(path+"/name", DesignBadValue, "a component needs a name")
+		}
+		if len(c.Previews) == 0 {
+			add(path+"/previews", DesignBadValue, "a component needs at least one preview")
+		}
 		for j, p := range c.Previews {
 			pp := fmt.Sprintf("%s/previews/%d", path, j)
 			for _, field := range []struct{ name, text string }{{"html", p.HTML}, {"css", p.CSS}} {
-				if msg := unsafePreviewProblem(field.text); msg != "" {
+				if msg := unsafePreviewProblem(field.name, field.text); msg != "" {
 					add(pp+"/"+field.name, DesignUnsafePreview, "%s %s", field.name, msg)
 				}
 			}
@@ -388,9 +394,17 @@ func hasEventAttribute(s string) bool {
 	}
 }
 
-// unsafePreviewProblem is why a preview's html or css is refused; "" when it
-// is fine.
-func unsafePreviewProblem(s string) string {
+// pageBreakout finds what would close or forge a part of the generated
+// component page: a </style in the css, a </section, </body, </html or
+// <section in the html.
+var pageBreakout = map[string]*regexp.Regexp{
+	"css":  regexp.MustCompile(`(?i)</style`),
+	"html": regexp.MustCompile(`(?i)</section|</body|</html|<section`),
+}
+
+// unsafePreviewProblem is why a preview's field ("html" or "css") is refused;
+// "" when it is fine.
+func unsafePreviewProblem(field, s string) string {
 	switch {
 	case scriptTag.MatchString(s):
 		return "holds a <script>"
@@ -398,6 +412,8 @@ func unsafePreviewProblem(s string) string {
 		return "holds an on* attribute"
 	case importRule.MatchString(s):
 		return "holds an @import"
+	case pageBreakout[field].MatchString(s):
+		return "holds markup that closes or forges a part of the component page"
 	}
 	for _, m := range urlCall.FindAllStringSubmatch(s, -1) {
 		if m[1] == "" {

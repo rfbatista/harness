@@ -19,7 +19,15 @@ test("a document built from unsaved tokens differs from the saved one only in th
 });
 
 test("a preview naming a token the unsaved tokens lack is UNKNOWN_TOKEN", () => {
-  const record = { tokens: [], components: [{ slug: "a", previews: [preview] }] };
+  const record = { tokens: [], components: [{ slug: "a", name: "A", previews: [preview] }] };
   assert.deepEqual(validateComponents(record, { tokens: [colour], components: [] }).map((e) => e.code), ["TOKEN_IN_USE"]);
   assert.deepEqual(validateComponents(record).map((e) => e.code), ["UNKNOWN_TOKEN"]);
+});
+
+test("a preview that closes or forges a part of the page, a nameless component and one with no preview are refused", () => {
+  const codes = (components) => validateComponents({ tokens: [colour], components }).map((e) => `${e.code} ${e.path}`);
+  const one = (over) => [{ slug: "a", name: "A", previews: [{ ...preview, ...over }] }];
+  assert.deepEqual(codes(one({ css: "a{}</STYLE>" })), ["UNSAFE_PREVIEW /components/0/previews/0/css"]);
+  assert.deepEqual(codes(one({ html: "<SECTION>" })), ["UNSAFE_PREVIEW /components/0/previews/0/html"]);
+  assert.deepEqual(codes([{ slug: "a", name: " ", previews: [] }]), ["BAD_VALUE /components/0/name", "BAD_VALUE /components/0/previews"]);
 });

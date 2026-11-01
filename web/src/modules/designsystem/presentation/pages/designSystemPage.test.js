@@ -7,7 +7,7 @@ import { designSystemPage } from "./designSystemPage.js";
 
 file("designsystem/presentation/pages/designSystemPage");
 
-const button = { slug: "button", name: "Button", purpose: "", do: [], dont: [], previews: [] };
+const button = { slug: "button", name: "Button", purpose: "", do: [], dont: [], previews: [{ label: "Default", variant: "default", state: "default", html: "<b>x</b>", css: ".b{color:var(--colors-signal)}" }] };
 
 const colour = { group: "colors", name: "signal", type: "color", value: "#0a0", note: "" };
 const state = (over = {}) => ({

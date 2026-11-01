@@ -19,6 +19,8 @@ const VAR_REF = /var\(\s*(--[A-Za-z0-9_-]+)/g;
 const SCRIPT_TAG = /<\s*script/i;
 const URL_CALL = /url\(\s*['"]?\s*(data:)?/gi;
 const IMPORT_RULE = /@import/i;
+// What would close or forge a part of the generated component page.
+const PAGE_BREAKOUT = { css: /<\/style/i, html: /<\/section|<\/body|<\/html|<section/i };
 
 /** `--<group>-<name>`, or `--<group>-<name>-<key>` (key in kebab case) for a member of a composite value. */
 export function tokenProperty(group, name, part) {
@@ -81,11 +83,12 @@ function hasEventAttribute(s) {
   return false;
 }
 
-/** Why a preview's html or css is refused; "" when it is fine. */
-export function unsafePreviewProblem(s) {
+/** Why a preview's field ("html" or "css") is refused; "" when it is fine. */
+export function unsafePreviewProblem(field, s) {
   if (SCRIPT_TAG.test(s)) return "holds a <script>";
   if (hasEventAttribute(s)) return "holds an on* attribute";
   if (IMPORT_RULE.test(s)) return "holds an @import";
+  if (PAGE_BREAKOUT[field].test(s)) return "holds markup that closes or forges a part of the component page";
   for (const m of s.matchAll(URL_CALL)) if (!m[1]) return "holds a url( that is not a data: url";
   return "";
 }
@@ -112,10 +115,12 @@ export function validateComponents(record, previous = { tokens: [] }) {
     if (!NAME.test(c.slug)) add(`${path}/slug`, "BAD_NAME", `slug ${JSON.stringify(c.slug)} must match ^[a-z][a-z0-9-]*$`);
     if (slugs.has(c.slug)) add(`${path}/slug`, "DUPLICATE_COMPONENT", `component ${JSON.stringify(c.slug)} is defined more than once`);
     slugs.add(c.slug);
+    if ((c.name ?? "").trim() === "") add(`${path}/name`, "BAD_VALUE", "a component needs a name");
+    if (c.previews.length === 0) add(`${path}/previews`, "BAD_VALUE", "a component needs at least one preview");
     c.previews.forEach((p, j) => {
       const pp = `${path}/previews/${j}`;
       for (const [field, text] of [["html", p.html], ["css", p.css]]) {
-        const msg = unsafePreviewProblem(text);
+        const msg = unsafePreviewProblem(field, text);
         if (msg) add(`${pp}/${field}`, "UNSAFE_PREVIEW", `${field} ${msg}`);
       }
       for (const m of p.css.matchAll(VAR_REF)) {
