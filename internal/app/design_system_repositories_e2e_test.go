@@ -190,8 +190,10 @@ func TestDesignSystem_TheRepositoryListHasEveryRepositoryOnceWithItsAppliedDesig
 		t.Fatalf("%v", list)
 	}
 	for _, r := range list {
-		if v, present := r.(map[string]any)["export"]; !present || v != nil {
-			t.Errorf("export = %v (present %v), want null", v, present)
+		v, present := r.(map[string]any)["export"]
+		exp, _ := v.(map[string]any)
+		if applied := r.(map[string]any)["applied_here"] == true; !present || applied != (exp["state"] == "never_exported") || (!applied && v != nil) {
+			t.Errorf("%v: export = %v (present %v)", r.(map[string]any)["name"], v, present)
 		}
 	}
 	r := s.repoRow(list, "spillway")

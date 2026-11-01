@@ -87,6 +87,7 @@ var PersistenceModule = fx.Module("persistence",
 		asPort(sqlite.NewArchitectureRecordRepository, new(ports.ArchitectureRecordStore)),
 		asPort(sqlite.NewArchitectureRuleEventRepository, new(ports.ArchitectureRuleEventStore)),
 		asPort(sqlite.NewDesignSystemRepository, new(ports.DesignSystemStore)),
+		asPort(sqlite.NewDesignExportRepository, new(ports.DesignExportStore)),
 	),
 )
 
@@ -250,6 +251,7 @@ type catalogParams struct {
 	ArchGit         ports.ArchitectureGit
 	ArchEvents      ports.ArchitectureRuleEventStore
 	DesignRecords   ports.DesignSystemStore
+	DesignExports   ports.DesignExportStore
 	Agents          ports.AgentRepository
 	Prompts         ports.PromptRepository
 	Skills          ports.SkillRepository
@@ -277,6 +279,7 @@ func newCatalog(p catalogParams) catalog.Catalog {
 		ArchGit:          p.ArchGit,
 		ArchEvents:       p.ArchEvents,
 		DesignRecords:    p.DesignRecords,
+		DesignExports:    p.DesignExports,
 		Agents:           p.Agents,
 		Prompts:          p.Prompts,
 		Skills:           p.Skills,

@@ -21,6 +21,20 @@ function fakeGateway(initial) {
       g.asked.push(designSystemId);
       return g.server.map(optInRow);
     },
+    exports: [],
+    refuseExport: null,
+    previewed: [],
+    async previewExport(id) {
+      g.previewed.push(id);
+      return [{ path: ".harness/design-system/tokens.json", status: "changed", diff: "-a\n+b" }, { path: ".harness/design-system/DESIGN.md", status: "unchanged", diff: "" }];
+    },
+    async exportDesignSystem(id, confirmed) {
+      g.exports.push([id, confirmed]);
+      if (g.refuseExport) throw g.refuseExport;
+      const d = g.server.find((x) => x.repository_id === id);
+      d.export = { state: "in_sync", exported_version: 3, current_version: 3, exported_commit: "abc1234def" };
+      return { commit: "abc1234def", version: 3, state: "in_sync" };
+    },
     async apply(id, designSystemId, path, confirmMove) {
       g.calls.push(confirmMove ? [id, designSystemId, path, "move"] : [id, designSystemId, path]);
       if (g.refuse) throw g.refuse;
@@ -149,4 +163,53 @@ test("keeping the other design system closes the question and applies nothing", 
   await instance.apply(row);
   instance.keepCurrent(row);
   assert.deepEqual([row.confirming, row.uses, gateway.calls.length], [false, false, 1]);
+});
+
+const withExport = (state) => ({ ...here, export: { state, exported_version: 2, current_version: 3, exported_commit: "0000000aaa" } });
+
+test("Export on a repository that is behind commits and the row goes to in sync", async () => {
+  const { instance, gateway } = await setup([dto("web", withExport("behind"))]);
+  const row = instance.rows[0];
+  assert.equal(instance.badgeOf(row).label, "Behind");
+  await instance.exportRow(row);
+  assert.deepEqual(gateway.exports, [["web", false]]);
+  assert.deepEqual([instance.badgeOf(row).label, row.exported.commit, row.exporting, row.exportError], ["In sync", "abc1234def", false, null]);
+  assert.equal(instance.shortCommit(row), "abc1234");
+});
+
+test("Export on edited outside files lists the changed ones first and writes nothing until confirmed", async () => {
+  const { instance, gateway } = await setup([dto("web", withExport("edited_outside"))]);
+  const row = instance.rows[0];
+  await instance.exportRow(row);
+  assert.deepEqual(gateway.exports, []);
+  assert.deepEqual(instance.reviewFiles(row).map((f) => f.path), [".harness/design-system/tokens.json"]);
+  assert.equal(instance.isReviewing(row), true);
+  assert.equal(instance.exportDisabled(row), true);
+  await instance.exportRow(row);
+  assert.deepEqual(gateway.exports, [["web", true]]);
+  assert.deepEqual([instance.isReviewing(row), instance.badgeOf(row).label], [false, "In sync"]);
+});
+
+test("cancelling the edited outside question writes nothing and closes it", async () => {
+  const { instance, gateway } = await setup([dto("web", withExport("edited_outside"))]);
+  const row = instance.rows[0];
+  await instance.exportRow(row);
+  instance.cancelReview(row);
+  assert.deepEqual([gateway.exports, instance.isReviewing(row), instance.badgeOf(row).label], [[], false, "Edited outside the harness"]);
+});
+
+test("a refusal stays under its row", async () => {
+  const { instance, gateway } = await setup([dto("web", withExport("never_exported"))]);
+  gateway.refuseExport = new StructuredError("WRONG_BRANCH", "on feature", 409);
+  const row = instance.rows[0];
+  await instance.exportRow(row);
+  assert.equal(row.exportError.code, "WRONG_BRANCH");
+  assert.equal(row.exported, null);
+});
+
+test("the header's Export… chooses the first repository that needs an export", async () => {
+  const { instance } = await setup([dto("api", withExport("in_sync")), dto("web", withExport("behind")), dto("docs", other)]);
+  instance.choose();
+  assert.equal(instance.chosen, "web");
+  assert.equal(instance.isChosen(instance.rows[1]), true);
 });

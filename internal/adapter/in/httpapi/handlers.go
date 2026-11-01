@@ -192,7 +192,9 @@ type Handler struct {
 	repoArch ports.RepositoryArchitectures
 	designs  ports.DesignSystems
 	// imports is the design systems' import, when they offer it.
-	imports   ports.DesignSystemImports
+	imports ports.DesignSystemImports
+	// exports is the design systems' export into repositories, when they offer it.
+	exports   ports.DesignSystemExports
 	archRules ports.ArchitectureRules
 
 	streams streamRegistry // the browser tabs' live streams (stream.go)
@@ -230,6 +232,7 @@ func NewHandler(s Services) *Handler {
 		repoArch:       s.RepositoryArchitectures,
 		designs:        s.DesignSystems,
 		imports:        designImports(s.DesignSystems),
+		exports:        designExports(s.DesignSystems),
 		archRules:      s.ArchitectureRules,
 		notifications:  s.Notifications,
 		usage:          s.Usage,

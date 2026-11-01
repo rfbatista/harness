@@ -1,9 +1,8 @@
 package designsystem
 
 // tabRepositories is the Repositories tab's panel: every repository of the
-// project with the design system it uses, and Apply here or Remove. The export
-// state arrives with the export, so until then a repository applied here
-// reads "Not exported yet".
+// project with the design system it uses, and Apply here or Remove. A
+// repository applied here also shows its export state and an Export button.
 templ tabRepositories(projectID, designSystemID string) {
 	<section role="tabpanel" id="design-system-panel-repositories" aria-labelledby="design-system-tab-repositories" x-show="isTab('repositories')" class="[ flow ]">
 		<div class="[ arch-head ]" data-panel-head>
@@ -22,7 +21,7 @@ templ tabRepositories(projectID, designSystemID string) {
 // under the first-start screen, where the tabs are not shown yet. A
 // repository's own settings use RepositorySelect.
 templ OptIn(projectID, designSystemID string) {
-	<div x-data="designSystemOptIn" data-design-system-optin data-project-id={ projectID } data-design-system-id={ designSystemID } class="[ flow ]">
+	<div x-data="designSystemOptIn" x-on:design-system-export-choose.window="choose" data-design-system-optin data-project-id={ projectID } data-design-system-id={ designSystemID } class="[ flow ]">
 		<template x-if="error">
 			<div class="[ banner ]" data-tone="danger" role="alert" data-optin-load-error>
 				<div class="[ flow ] [ flow-space-3xs grow ]">
@@ -37,11 +36,12 @@ templ OptIn(projectID, designSystemID string) {
 		</template>
 		<section class="[ pane ]" x-show="loaded">
 			<template x-for="r in rows" x-bind:key="r.id">
-				<div class="[ row ]" data-optin-row x-bind:data-repository-id="r.id" x-bind:data-phase="phase(r)" style="--row-columns: minmax(0, 1fr)">
+				<div class="[ row ]" data-optin-row x-bind:data-repository-id="r.id" x-bind:data-phase="phase(r)" x-bind:data-chosen="isChosen(r)" style="--row-columns: minmax(0, 1fr)">
 					<div class="[ flow ] [ flow-space-xs pad-block-xs ]">
 						<div class="[ cluster ] [ gutter-xs ]">
 							<span class="[ weight-medium ]" x-text="r.name"></span>
 							<span class="[ badge ]" data-chip x-bind:data-tone="chipOf(r).tone" x-text="chipOf(r).label"></span>
+							<span class="[ badge ]" data-export-badge x-show="hasBadge(r)" x-bind:data-tone="badgeOf(r).tone" x-text="badgeOf(r).label"></span>
 							<span class="[ text-sm color-ink-muted ]" data-export-state x-show="r.uses" x-text="stateOf(r)"></span>
 						</div>
 						<div class="[ banner ]" data-tone="attention" role="group" aria-label="Move" data-optin-move x-show="r.confirming">
@@ -53,6 +53,7 @@ templ OptIn(projectID, designSystemID string) {
 							<label class="[ cluster ] [ gutter-xs ] [ text-sm ]">Folder <input data-field="path" class="[ font-mono text-sm ]" autocomplete="off" spellcheck="false" aria-label="Folder in the repository" x-model="r.draft" x-bind:aria-invalid="r.error !== null"/></label>
 							<template x-if="r.uses">
 								<span class="[ cluster ] [ gutter-xs ]">
+									<button type="button" class="[ button ]" data-variant="primary" data-size="sm" data-action="export" x-bind:data-chosen="isChosen(r)" x-bind:disabled="exportDisabled(r)" x-bind:aria-busy="r.exporting" x-on:click="exportRow(r)">Export</button>
 									<button type="button" class="[ button ]" data-size="sm" data-action="save-path" x-bind:disabled="cannotSavePath(r)" x-on:click="savePath(r)">Save path</button>
 									<button type="button" class="[ button ]" data-variant="ghost" data-size="sm" data-action="remove" x-bind:disabled="r.saving" x-on:click="remove(r)">Remove</button>
 								</span>
@@ -61,6 +62,31 @@ templ OptIn(projectID, designSystemID string) {
 								<button type="button" class="[ button ]" data-size="sm" data-action="apply" x-bind:disabled="r.saving" x-bind:aria-busy="r.saving" x-on:click="apply(r)">Apply here</button>
 							</template>
 						</div>
+						<div class="[ banner ]" data-tone="attention" role="group" aria-label="Edited outside the harness" data-export-review x-show="isReviewing(r)">
+							<div class="[ flow ] [ flow-space-xs grow ]">
+								<b>Files at <code x-text="r.path"></code> were edited outside the harness.</b>
+								<span>Exporting replaces them with version <span x-text="currentVersion(r)"></span>. Those edits are lost unless an agent proposes them to the design system first.</span>
+								<template x-for="f in reviewFiles(r)" x-bind:key="f.path">
+									<div class="[ flow ] [ flow-space-3xs ]" data-export-file x-bind:data-status="f.status">
+										<span class="[ font-mono text-sm ]"><span x-text="f.path"></span> · <span x-text="f.status"></span></span>
+										<pre class="[ font-mono text-sm ]" data-export-diff x-text="f.diff"></pre>
+									</div>
+								</template>
+							</div>
+							<button type="button" class="[ button ]" data-variant="primary" data-size="sm" data-action="export-confirm" x-bind:disabled="r.exporting" x-on:click="exportRow(r)">Replace them</button>
+							<button type="button" class="[ button ]" data-size="sm" data-action="export-cancel" x-on:click="cancelReview(r)">Cancel</button>
+						</div>
+						<template x-if="r.exported">
+							<span class="[ hint ]" data-export-done>Exported version <span x-text="r.exported.version"></span>. Commit <code x-text="shortCommit(r)"></code> on the default branch. Not pushed.</span>
+						</template>
+						<template x-if="r.exportError">
+							<div class="[ banner ]" data-tone="attention" role="alert" data-export-error>
+								<div class="[ flow ] [ flow-space-3xs grow ]">
+									<b x-text="r.exportError.message"></b>
+									<span class="[ code ]"><span x-text="r.exportError.code"></span> · <span x-text="r.exportError.next"></span></span>
+								</div>
+							</div>
+						</template>
 						<template x-if="r.error">
 							<span class="[ error ]" data-optin-error><span x-text="r.error.message"></span> <span class="[ code ]"><span x-text="r.error.code"></span> · <span x-text="r.error.next"></span></span></span>
 						</template>
