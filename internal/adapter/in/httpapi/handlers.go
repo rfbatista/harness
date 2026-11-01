@@ -121,6 +121,8 @@ type Services struct {
 	// RepositoryArchitectures keeps repositories' architecture records; nil
 	// answers 503.
 	RepositoryArchitectures ports.RepositoryArchitectures
+	// DesignSystems keeps projects' design systems; nil answers 503.
+	DesignSystems ports.DesignSystems
 	// ArchitectureRules checks sessions' hooks, shims and commits against
 	// their repository's rules; nil allows everything.
 	ArchitectureRules ports.ArchitectureRules
@@ -184,6 +186,7 @@ type Handler struct {
 	catalog       ports.CatalogEditor
 
 	repoArch  ports.RepositoryArchitectures
+	designs   ports.DesignSystems
 	archRules ports.ArchitectureRules
 
 	streams streamRegistry // the browser tabs' live streams (stream.go)
@@ -219,6 +222,7 @@ func NewHandler(s Services) *Handler {
 		merges:         s.Merges,
 		branchNames:    s.BranchNames,
 		repoArch:       s.RepositoryArchitectures,
+		designs:        s.DesignSystems,
 		archRules:      s.ArchitectureRules,
 		notifications:  s.Notifications,
 		usage:          s.Usage,

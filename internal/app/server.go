@@ -145,6 +145,8 @@ func registerHTTPServer(lc fx.Lifecycle, cfg Config, cat catalog.Catalog, appRun
 		WritingHelper: helper,
 		// One structured record per repository: layers, access, rules.
 		RepositoryArchitectures: cat.RepositoryArchitectures,
+		// One structured record per project: tokens, principles, components.
+		DesignSystems: cat.DesignSystems,
 		// What the architecture hooks, shims and commit check ask.
 		ArchitectureRules: rules,
 		// The agent catalog folder: agents, bundles, skills, MCP servers.

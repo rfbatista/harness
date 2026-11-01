@@ -86,6 +86,7 @@ var PersistenceModule = fx.Module("persistence",
 		asPort(sqlite.NewPullRequestRepository, new(ports.PullRequestRepository)),
 		asPort(sqlite.NewArchitectureRecordRepository, new(ports.ArchitectureRecordStore)),
 		asPort(sqlite.NewArchitectureRuleEventRepository, new(ports.ArchitectureRuleEventStore)),
+		asPort(sqlite.NewDesignSystemRepository, new(ports.DesignSystemStore)),
 	),
 )
 
@@ -248,6 +249,7 @@ type catalogParams struct {
 	ArchRecords     ports.ArchitectureRecordStore
 	ArchGit         ports.ArchitectureGit
 	ArchEvents      ports.ArchitectureRuleEventStore
+	DesignRecords   ports.DesignSystemStore
 	Agents          ports.AgentRepository
 	Prompts         ports.PromptRepository
 	Skills          ports.SkillRepository
@@ -274,6 +276,7 @@ func newCatalog(p catalogParams) catalog.Catalog {
 		ArchRecords:      p.ArchRecords,
 		ArchGit:          p.ArchGit,
 		ArchEvents:       p.ArchEvents,
+		DesignRecords:    p.DesignRecords,
 		Agents:           p.Agents,
 		Prompts:          p.Prompts,
 		Skills:           p.Skills,
@@ -772,6 +775,10 @@ func newOrchestrationService(
 	}, tickets, ws)
 	svc.UseBranchNames(branchNames)
 	svc.UseBaseBranches(baseBranches)
+	if cat.DesignSystems != nil {
+		// Saves reach open pages on the project feed.
+		cat.DesignSystems.UseFeed(svc)
+	}
 	if cat.RepositoryArchitectures != nil {
 		// Saves, deletes and exports reach open pages on the project feed.
 		cat.RepositoryArchitectures.UseFeed(svc)
