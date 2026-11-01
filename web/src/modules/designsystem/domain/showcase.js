@@ -50,8 +50,6 @@ export function currentIndex(components, at) {
 /** The notes of a component as list rows. */
 export const notesOf = (notes) => notes.map((text, i) => ({ key: String(i), text }));
 
-const slugOf = (name) => name.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "");
-
 /** A component to start from: a valid slug no other uses, and one preview. */
 export function newComponent(components) {
   const taken = new Set(components.map((c) => c.slug));
