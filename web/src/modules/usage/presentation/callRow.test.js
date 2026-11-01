@@ -63,6 +63,11 @@ test("a writing helper call is named for it, not for the harness", () => {
   assert.equal(row.sessionHref, "");
 });
 
+test("an architecture assistant call is named for it, not for the harness", () => {
+  const row = callRow(inFlight({ session: null, task: null, kind: "architecture-assistant", project_id: "p1" }), "p1");
+  assert.equal(row.session, "Architecture assistant");
+});
+
 test("the tabs: request, response, message and usage; only the request exists while in flight", () => {
   const tabs = callTabs(inFlight());
   assert.deepEqual(tabs.map((t) => t.id), ["request", "response", "message", "usage"]);

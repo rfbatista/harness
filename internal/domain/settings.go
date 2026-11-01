@@ -42,7 +42,7 @@ func ValidateSetting(key, value string) error {
 		if err := validateModelSetting(key, value); err != nil {
 			return err
 		}
-	case SettingModelWritingHelper:
+	case SettingModelWritingHelper, SettingModelArchitectureAssistant:
 		if err := validateWritingHelperModel(key, value); err != nil {
 			return err
 		}

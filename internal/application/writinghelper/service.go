@@ -340,3 +340,14 @@ func stripFence(s string) string {
 	}
 	return s[start : end+1]
 }
+
+// Refusal says whether err is the readiness gate refusing, or the CLI missing,
+// and when it is gives the message to show and the page that fixes it. Other
+// one-shot assistants share it.
+func Refusal(err error) (message, fix string, ok bool) {
+	if !isRefusal(err) {
+		return "", "", false
+	}
+	u := unavailable(err)
+	return u.Message, fixURL(u), true
+}

@@ -67,3 +67,26 @@ func TestValidateWritingHelperModelSetting(t *testing.T) {
 		}
 	}
 }
+
+func TestValidateArchitectureAssistantModelSetting(t *testing.T) {
+	for _, v := range []string{"", "haiku", "sonnet", "opus", "fable"} {
+		if err := ValidateSetting(SettingModelArchitectureAssistant, v); err != nil {
+			t.Errorf("ValidateSetting(architecture assistant, %q) = %v; want accepted", v, err)
+		}
+	}
+	for _, v := range []string{ModelDefault, "gpt-4", "Sonnet"} {
+		err := ValidateSetting(SettingModelArchitectureAssistant, v)
+		var se *StructuredError
+		if !errors.As(err, &se) || se.Code != "INVALID_INPUT" {
+			t.Errorf("ValidateSetting(architecture assistant, %q) = %v; want INVALID_INPUT", v, err)
+		}
+	}
+}
+
+func TestTheArchitectureAssistantModelIsSonnetWhileUnset(t *testing.T) {
+	for stored, want := range map[string]string{"": "sonnet", "opus": "opus", "default": "sonnet", "gpt-4": "sonnet"} {
+		if got := ArchitectureAssistantModel(stored); got != want {
+			t.Errorf("ArchitectureAssistantModel(%q) = %q, want %q", stored, got, want)
+		}
+	}
+}
