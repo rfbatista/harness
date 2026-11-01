@@ -140,7 +140,8 @@ export function lineDiff(before, after) {
   }
   while (i < n) out.push({ mark: "-", kind: "del", text: a[i++] });
   while (j < m) out.push({ mark: "+", kind: "add", text: b[j++] });
-  return out.map((l, key) => ({ ...l, key }));
+  const tones = { add: "background: var(--color-success-wash)", del: "background: var(--color-danger-wash)", keep: "" };
+  return out.map((l, key) => ({ ...l, key, style: tones[l.kind] }));
 }
 
 /** The diff of a principles item: its section's text before and after. */
@@ -167,6 +168,8 @@ export function previewPairs(view, current) {
         key: `${slug}#${i}`,
         slug,
         title: `${after.name} / ${p.label}`,
+        beforeTitle: `Before: ${after.name} / ${p.label}`,
+        afterTitle: `After: ${after.name} / ${p.label}`,
         isNew: before === null,
         before: was === null ? "" : previewDocument(current.tokens, was),
         after: previewDocument(view.proposedRecord.tokens, p),

@@ -6,6 +6,8 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/rfbatista/llmkit"
+
 	"operators-mcp/internal/domain"
 )
 
@@ -114,5 +116,23 @@ func TestDesignSession_ReadsRepositoriesAndWritesNone(t *testing.T) {
 	}
 	if got := domain.SandboxVisibilityFor(domain.SessionModeDesignSystem); got != domain.SandboxAllReposReadOnly {
 		t.Errorf("visibility = %q", got)
+	}
+}
+
+// A design session's only output is one proposal: it can read the project and
+// speak to the person, and it cannot create a task or start a session.
+func TestDesignSession_CallsOnlyTheTaskToolsItNeeds(t *testing.T) {
+	var cfg llmkit.SessionConfig
+	applyDesignSessionContext(&cfg, designSessionBriefInput{Project: &domain.Project{ID: "p1", Name: "harness"}, DesignSystem: "Brand One"}, "http://127.0.0.1:8080/mcp/task/s1")
+	has := func(tool string) bool { return slices.Contains(cfg.AllowedTools, llmkit.MCPToolRef("task", tool)) }
+	for _, want := range []string{"submit_design_system_proposal", "list_project_repositories", "notify"} {
+		if !has(want) {
+			t.Errorf("a design session cannot call %s", want)
+		}
+	}
+	for _, not := range []string{"create_task", "start_task_session", "update_task_status", "request_user_review", "merge_session_branch", "publish_artifact"} {
+		if has(not) {
+			t.Errorf("a design session can call %s", not)
+		}
 	}
 }

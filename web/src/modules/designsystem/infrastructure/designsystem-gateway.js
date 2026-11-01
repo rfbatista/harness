@@ -189,6 +189,12 @@ export function designSystemGateway(api, feed) {
       await api.post("/withdraw_design_system_proposal", { proposal_id: proposalId });
     },
 
+    /** The record of a version the proposal started from; empty for version 0. */
+    async baseRecord(designSystemId, version) {
+      if (version === 0) return { tokens: [], principles: "", components: [] };
+      return (await this.version(designSystemId, version)).record;
+    },
+
     /** How many proposals of the project's design systems wait on the person. */
     async openProposalCount(projectId) {
       const body = await api.post("/list_design_systems", { project_id: projectId });

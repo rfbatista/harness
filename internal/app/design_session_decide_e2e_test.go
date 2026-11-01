@@ -277,3 +277,39 @@ func TestDesignProposal_AProposalWhoseSessionEndedIsWithdrawn(t *testing.T) {
 		t.Fatalf("withdrawing twice = %d %s", status, out)
 	}
 }
+
+// What is decided is the design system now: nothing in it conflicts with the
+// design system any more.
+func TestDesignProposal_ADecidedProposalShowsNoConflicts(t *testing.T) {
+	e := newShellE2E(t)
+	ds, _, id := e.openProposal()
+	if status, out := e.decide(id, "approve"); status != http.StatusOK {
+		t.Fatalf("approve = %d %v", status, out)
+	}
+	for _, it := range e.proposal(id).Items {
+		if it.Conflicting {
+			t.Errorf("a decided proposal's item conflicts: %+v", it)
+		}
+	}
+	if rows := e.proposals(ds).Proposals; rows[0].Conflicting != 0 {
+		t.Errorf("a decided proposal lists %d conflicts", rows[0].Conflicting)
+	}
+}
+
+// A design system a design session works on is not deleted.
+func TestDesignSession_ADesignSystemWithARunningDesignSessionIsNotDeleted(t *testing.T) {
+	e := newShellE2E(t)
+	ds := e.savedDesignSystem()
+	s := e.designSession(ds)
+	body := `{"design_system_id":"` + ds + `","confirm_name":"Brand"}`
+	status, text := postJSON(t, e.srv.URL+"/api/delete_design_system", body)
+	if status != http.StatusConflict || !strings.Contains(text, "DESIGN_SYSTEM_IN_USE") || !strings.Contains(text, s.id) {
+		t.Fatalf("delete while a design session runs = %d %s", status, text)
+	}
+	if _, err := e.orch.EndInteractive(e.ctx, s.id, 0, true); err != nil {
+		t.Fatal(err)
+	}
+	if status, text := postJSON(t, e.srv.URL+"/api/delete_design_system", body); status != http.StatusOK {
+		t.Fatalf("delete after it ended = %d %s", status, text)
+	}
+}

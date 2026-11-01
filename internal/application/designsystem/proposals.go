@@ -129,7 +129,15 @@ func (s *Service) items(ctx context.Context, p *domain.DesignProposal, cur *doma
 		current = cur.Record
 	}
 	current.Normalize()
-	return domain.DeriveDesignItems(base, p.Draft, current), nil
+	items := domain.DeriveDesignItems(base, p.Draft, current)
+	if p.State != domain.ProposalDrafting && p.State != domain.ProposalOpen {
+		// What is decided no longer competes with the design system: it is
+		// the design system now, so nothing in it conflicts.
+		for i := range items {
+			items[i].Conflicting = false
+		}
+	}
+	return items, nil
 }
 
 // ListDesignProposals implements ports.DesignProposals.
@@ -222,7 +230,7 @@ func decisionOf(state string) string {
 	switch state {
 	case domain.ProposalApproved:
 		return domain.DecisionApproved
-	case domain.ProposalRejected, domain.ProposalWithdrawn:
+	case domain.ProposalRejected:
 		return domain.DecisionRejected
 	}
 	return domain.DecisionPending

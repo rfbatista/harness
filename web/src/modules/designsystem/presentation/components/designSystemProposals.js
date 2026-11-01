@@ -191,10 +191,12 @@ export const designSystemProposals = ({ gateway, clock, location = globalThis.lo
 
   async loadProposalView(id) {
     try {
-      const [view, now] = await Promise.all([gateway.proposal(id), gateway.get(this.designSystemId)]);
+      const view = await gateway.proposal(id);
+      // What waits is compared with the design system as it is; what was decided, with the version it started from.
+      const record = view.state === "open" || view.state === "drafting" ? (await gateway.get(this.designSystemId)).record : await gateway.baseRecord(this.designSystemId, view.baseVersion);
       if (id !== this.proposalId) return;
       this.proposalView = view;
-      this.currentRecord = now.record;
+      this.currentRecord = record;
     } catch (err) {
       this.proposalError = describeError(err);
     }

@@ -6,6 +6,7 @@ import (
 	"log/slog"
 	"slices"
 	"strings"
+	"time"
 
 	"operators-mcp/internal/domain"
 	"operators-mcp/internal/ports"
@@ -52,16 +53,25 @@ func (s *Service) DecideDesignProposal(ctx context.Context, proposalID string, d
 		if err := confirmed(items, confirmOverwrite); err != nil {
 			return nil, err
 		}
-		v, err := s.applyApproved(ctx, id, cur, p, items)
-		if err != nil {
+		// The proposal leaves open first, so a version is never written for a
+		// proposal that still waits; a refused write puts it back.
+		p.State, p.Approved, p.DecidedAt = domain.ProposalApproved, len(items), s.now()
+		if err := s.proposals.Update(ctx, p); err != nil {
 			return nil, err
 		}
-		p.State, p.DecidedVersion, p.Approved = domain.ProposalApproved, v.Version, len(items)
+		v, err := s.applyApproved(ctx, id, cur, p, items)
+		if err != nil {
+			p.State, p.Approved, p.DecidedAt = domain.ProposalOpen, 0, time.Time{}
+			if undo := s.proposals.Update(ctx, p); undo != nil {
+				slog.Error("put a proposal back to open after a refused approval", "proposal", p.ID, "err", undo)
+			}
+			return nil, err
+		}
+		p.DecidedVersion = v.Version
 		out.Version = &v.Version
 	} else {
-		p.State, p.Rejected, rejected = domain.ProposalRejected, len(items), items
+		p.State, p.Rejected, p.DecidedAt, rejected = domain.ProposalRejected, len(items), s.now(), items
 	}
-	p.DecidedAt = s.now()
 	if err := s.proposals.Update(ctx, p); err != nil {
 		return nil, err
 	}

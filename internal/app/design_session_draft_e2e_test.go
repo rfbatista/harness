@@ -282,3 +282,18 @@ func TestDesignDraft_OtherSessionsStillSeeTheFolderReadOnlyOrNotAtAll(t *testing
 		}
 	}
 }
+
+// A design system with no tokens has no frontmatter to generate but its name
+// and description, which only the person edits: a DESIGN.md that renames it is
+// refused, not quietly dropped.
+func TestDesignDraft_ADesignMDThatRenamesTheDesignSystemIsRefused(t *testing.T) {
+	e := newShellE2E(t)
+	id := e.newDesignSystem("Fresh", "fresh", "")
+	s := e.designSession(id)
+	if a := e.draftWrite(s, "DESIGN.md", "---\nname: Renamed\n---\n\n## Calm\n\nQuiet.\n"); a.Allow {
+		t.Fatalf("a renaming DESIGN.md was accepted: %+v", a)
+	}
+	if a := e.draftWrite(s, "DESIGN.md", "## Calm\n\nQuiet.\n"); !a.Allow {
+		t.Fatalf("principles alone: %+v", a)
+	}
+}

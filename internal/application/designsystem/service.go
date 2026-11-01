@@ -73,8 +73,20 @@ func NewService(d Deps) *Service {
 func (s *Service) UseFeed(feed ports.ProjectChangeSink) { s.feed = feed }
 
 // UseSessions sets where design sessions start and are counted: the
-// orchestration.
-func (s *Service) UseSessions(h ports.DesignSessionHost) { s.sessions = h }
+// orchestration. A design system with a design session running is not deleted.
+func (s *Service) UseSessions(h ports.DesignSessionHost) {
+	s.sessions = h
+	s.GuardDelete(func(ctx context.Context, designSystemID string) error {
+		ids := h.RunningDesignSessions(ctx, designSystemID)
+		if len(ids) == 0 {
+			return nil
+		}
+		return &domain.DetailedError{
+			StructuredError: &domain.StructuredError{Code: "DESIGN_SYSTEM_IN_USE", Message: fmt.Sprintf("%d design sessions work on this design system; stop them first", len(ids))},
+			Details:         map[string]any{"sessions": ids},
+		}
+	})
+}
 
 // UseLock sets the lock a delete holds from its guards to the store's delete;
 // whoever lets something start using a design system takes the same lock.
@@ -269,7 +281,7 @@ func (s *Service) running(ctx context.Context, designSystemID string) int {
 	if s.sessions == nil {
 		return 0
 	}
-	return s.sessions.RunningDesignSessions(ctx, designSystemID)
+	return len(s.sessions.RunningDesignSessions(ctx, designSystemID))
 }
 
 // StartDesignSession implements ports.DesignSystems.
@@ -279,6 +291,15 @@ func (s *Service) StartDesignSession(ctx context.Context, designSystemID, agentI
 	}
 	if s.sessions == nil {
 		return "", &domain.StructuredError{Code: "UNAVAILABLE", Message: "design sessions are not available"}
+	}
+	// A delete holds the lock from its guards to the store's delete: a session
+	// starts either before it, and the guard sees it, or after, on nothing.
+	if s.lock != nil {
+		s.lock.Lock()
+		defer s.lock.Unlock()
+		if _, err := s.identity(ctx, designSystemID); err != nil {
+			return "", err
+		}
 	}
 	sess, err := s.sessions.StartDesignSession(ctx, designSystemID, agentID, prompt)
 	if err != nil {

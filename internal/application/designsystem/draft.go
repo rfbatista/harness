@@ -20,6 +20,7 @@ import (
 // Draft is a design session's working copy as its shell shows it.
 type Draft struct {
 	DesignSystemID string
+	ProjectID      string
 	Identity       Identity
 	// BaseVersion is the version the draft started from; At is when that
 	// version was saved.
@@ -109,7 +110,7 @@ func (s *Service) draftOf(ctx context.Context, sessionID, designSystemID string)
 	if err != nil {
 		return nil, err
 	}
-	d := &Draft{DesignSystemID: id.ID, Identity: Identity{Name: id.Name, Slug: id.Slug, Description: id.Description}}
+	d := &Draft{DesignSystemID: id.ID, ProjectID: id.ProjectID, Identity: Identity{Name: id.Name, Slug: id.Slug, Description: id.Description}}
 	p, err := s.proposals.ActiveBySession(ctx, sessionID)
 	if err != nil {
 		return nil, err
@@ -238,23 +239,35 @@ func (s *Service) editDraft(ctx context.Context, sessionID, designSystemID strin
 	}
 	if p == nil {
 		p = &domain.DesignProposal{DesignSystemID: d.DesignSystemID, SessionID: sessionID, State: domain.ProposalDrafting, BaseVersion: d.BaseVersion, Draft: rec}
-		return s.proposals.Create(ctx, p)
+		if err := s.proposals.Create(ctx, p); err != nil {
+			return err
+		}
+		s.announceProposal(d.ProjectID, p)
+		return nil
 	}
 	p.Draft = rec
-	return s.proposals.Update(ctx, p)
+	if err := s.proposals.Update(ctx, p); err != nil {
+		return err
+	}
+	s.announceProposal(d.ProjectID, p)
+	return nil
 }
 
 // writeDesignMD takes DESIGN.md's body as the principles; its frontmatter
 // must be the one generated from the draft's tokens.
 func (s *Service) writeDesignMD(d *Draft, content []byte) (domain.DesignSystemRecord, error) {
 	rec := d.Record
-	_, tokens, principles, _, err := ParseDesignMD(content)
+	named, tokens, principles, _, err := ParseDesignMD(content)
 	if err != nil {
 		return rec, refuse(domain.DesignBadValue, "DESIGN.md is not readable: "+err.Error())
 	}
 	got, _ := splitFrontmatter(string(content))
 	want, _ := splitFrontmatter(designMD(d.Identity, d.BaseVersion+1, d.At.UTC().Format("2006-01-02"), rec))
-	if strings.TrimSpace(got) != strings.TrimSpace(want) && !(len(tokens) == 0 && len(rec.Tokens) == 0) {
+	// With no tokens either side the frontmatter has nothing to generate but
+	// the name and the description, which only the person edits.
+	bare := len(tokens) == 0 && len(rec.Tokens) == 0 &&
+		(named.Name == "" || named.Name == d.Identity.Name) && (named.Description == "" || named.Description == d.Identity.Description)
+	if strings.TrimSpace(got) != strings.TrimSpace(want) && !bare {
 		return rec, refuse(domain.DesignBadValue, "edit tokens in tokens.json; DESIGN.md's frontmatter is generated")
 	}
 	rec.Principles = principles

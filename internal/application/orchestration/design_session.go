@@ -6,7 +6,6 @@ import (
 
 	"github.com/rfbatista/llmkit"
 
-	"operators-mcp/internal/application/tooling"
 	"operators-mcp/internal/domain"
 	"operators-mcp/internal/ports"
 )
@@ -56,6 +55,15 @@ type designSessionBriefInput struct {
 	AgentsMove bool
 }
 
+// designSessionTools are the task tools a design session may call: it reads
+// the project around it, tells the person what they must know and hands its
+// proposal over. It creates no task and starts no session: its only output is
+// one proposal.
+var designSessionTools = []string{
+	"list_project_repositories", "list_bounded_contexts", "list_agents", "list_project_tasks",
+	"list_notifications", "notify", "submit_design_system_proposal",
+}
+
 // applyDesignSessionContext is applyProjectContext for a design session: the
 // per-session task MCP server and its allow-list (the tools that need a task
 // answer SESSION_HAS_NO_TASK), and the design-session brief.
@@ -66,7 +74,7 @@ func applyDesignSessionContext(cfg *llmkit.SessionConfig, in designSessionBriefI
 	if taskServerURL != "" {
 		cfg.MCPServers = append(cfg.MCPServers, llmkit.MCPServerSpec{Name: taskServerName, Transport: "http", URL: taskServerURL})
 	}
-	for _, name := range tooling.SessionTaskToolNames {
+	for _, name := range designSessionTools {
 		cfg.AllowedTools = append(cfg.AllowedTools, llmkit.MCPToolRef(taskServerName, name))
 	}
 	cfg.AppendSystem = appendSection(cfg.AppendSystem, designSessionBrief(in))
@@ -164,14 +172,14 @@ func (s *Service) StartDesignSession(ctx context.Context, designSystemID, agentI
 	return sess, err
 }
 
-// RunningDesignSessions counts the design sessions bound to the design system
-// that have not ended.
-func (s *Service) RunningDesignSessions(ctx context.Context, designSystemID string) int {
-	n := 0
+// RunningDesignSessions lists the ids of the design sessions bound to the
+// design system that have not ended.
+func (s *Service) RunningDesignSessions(ctx context.Context, designSystemID string) []string {
+	var ids []string
 	for _, sess := range s.sessions.List(ctx, ports.SessionFilter{DesignSystemID: designSystemID}) {
 		if !sess.Status.IsTerminal() {
-			n++
+			ids = append(ids, sess.ID)
 		}
 	}
-	return n
+	return ids
 }

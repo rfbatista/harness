@@ -101,7 +101,7 @@ func valuesOf(r DesignSystemRecord) itemValues {
 		v.tokenKeys = append(v.tokenKeys, t.Key())
 	}
 	intro, sections := SplitPrinciples(r.Principles)
-	if intro != "" {
+	if strings.TrimSpace(intro) != "" {
 		v.sections[IntroSection] = PrincipleSection{Heading: IntroSection, Markdown: intro}
 		v.sectionKeys = append(v.sectionKeys, IntroSection)
 	}

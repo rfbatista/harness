@@ -58,7 +58,7 @@ type DesignSystems interface {
 // orchestration implements it.
 type DesignSessionHost interface {
 	StartDesignSession(ctx context.Context, designSystemID, agentID, prompt string) (*domain.Session, error)
-	RunningDesignSessions(ctx context.Context, designSystemID string) int
+	RunningDesignSessions(ctx context.Context, designSystemID string) []string
 }
 
 // DesignSystemPages is what a design system's page reads: the project's design

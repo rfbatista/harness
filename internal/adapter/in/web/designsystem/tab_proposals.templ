@@ -78,7 +78,10 @@ templ proposalReview() {
 		</template>
 		<section class="[ entry-card ]">
 			<div class="[ entry-card-body flow ]">
-				<h3 data-review-summary x-text="proposalView.summary"></h3>
+				<div class="[ cluster ]" style="justify-content: space-between; align-items: center">
+					<h3 data-review-summary x-text="proposalView.summary"></h3>
+					<button type="button" class="[ button ]" data-variant="ghost" data-size="sm" data-action="close-proposal" x-on:click="closeProposal">Close</button>
+				</div>
 				<p class="[ color-ink-faint text-sm ]">The agent had no change access to any repository. This proposal is the only thing it produced.</p>
 			</div>
 		</section>
@@ -124,7 +127,7 @@ templ proposalReview() {
 							<template x-if="p.isPrinciple">
 								<div class="[ font-mono text-sm ]" data-principles-diff>
 									<template x-for="l in p.diff" x-bind:key="l.key">
-										<div x-bind:data-diff="l.kind" x-bind:style="l.kind === 'add' ? 'background: var(--color-success-wash)' : l.kind === 'del' ? 'background: var(--color-danger-wash)' : ''"><span x-text="l.mark"></span> <span x-text="l.text"></span></div>
+										<div x-bind:data-diff="l.kind" x-bind:style="l.style"><span x-text="l.mark"></span> <span x-text="l.text"></span></div>
 									</template>
 								</div>
 							</template>
@@ -145,12 +148,12 @@ templ proposalReview() {
 									<div class="[ switcher ]" style="--switcher-threshold: 40rem">
 										<div class="[ flow ] [ flow-space-3xs ]">
 											<span class="[ color-ink-faint text-sm ]">Before</span>
-											<div data-pair-side="before" x-show="pair.before !== ''" x-effect="paintPreview($el, pair.before, 'Before: ' + pair.title)"></div>
+											<div data-pair-side="before" x-show="pair.before !== ''" x-effect="paintPreview($el, pair.before, pair.beforeTitle)"></div>
 											<span class="[ color-ink-faint text-sm ]" x-show="pair.before === ''">Not in the design system yet</span>
 										</div>
 										<div class="[ flow ] [ flow-space-3xs ]">
 											<span class="[ color-ink-faint text-sm ]">After</span>
-											<div data-pair-side="after" x-effect="paintPreview($el, pair.after, 'After: ' + pair.title)"></div>
+											<div data-pair-side="after" x-effect="paintPreview($el, pair.after, pair.afterTitle)"></div>
 										</div>
 									</div>
 								</div>
@@ -160,6 +163,7 @@ templ proposalReview() {
 				</template>
 			</div>
 		</div>
+		<template x-if="proposalDecidable">
 		<section class="[ entry-card ]" data-proposal-bar aria-label="Decide">
 			<div class="[ entry-card-body cluster ]" style="justify-content: space-between; align-items: center">
 			<span data-next-version x-text="proposalNextVersionText"></span>
@@ -180,5 +184,6 @@ templ proposalReview() {
 			</span>
 			</div>
 		</section>
+		</template>
 	</div>
 }
