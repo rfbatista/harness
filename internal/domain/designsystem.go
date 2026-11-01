@@ -136,6 +136,10 @@ type DesignSystem struct {
 	UpdatedAt   time.Time
 	UpdatedBy   string
 	Record      DesignSystemRecord
+	// OpenProposals and RunningDesignSessions are what waits on the person
+	// and what works on the design system now.
+	OpenProposals         int
+	RunningDesignSessions int
 }
 
 var (

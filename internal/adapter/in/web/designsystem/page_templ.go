@@ -108,7 +108,7 @@ func PageView(v View) templ.Component {
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
-			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 6, "</span></header><div data-scroll class=\"[ arch-scroll ]\"><div class=\"[ wrapper flow ] [ region ]\" style=\"--wrapper-max: 72rem\"><div x-data=\"designSystemMenu\" data-seed=\"design-system-seed\" class=\"[ flow ]\"><div class=\"[ arch-head ]\"><div class=\"[ flow ] [ flow-space-2xs ]\"><h1><span data-design-system-name x-text=\"name\">")
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 6, "</span></header><div data-scroll class=\"[ arch-scroll ]\"><div class=\"[ wrapper flow ] [ region ]\" style=\"--wrapper-max: 72rem\"><div x-data=\"designSystemMenu\" data-seed=\"design-system-seed\" x-on:design-system-spawn.window=\"openSpawn\" class=\"[ flow ]\"><div class=\"[ arch-head ]\"><div class=\"[ flow ] [ flow-space-2xs ]\"><h1><span data-design-system-name x-text=\"name\">")
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
@@ -147,7 +147,7 @@ func PageView(v View) templ.Component {
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
-			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 9, "</p><template x-if=\"exists\"><p class=\"[ color-ink-muted text-sm ]\" data-saved-line><span x-text=\"savedLine\"></span> · <button type=\"button\" class=\"[ button ]\" data-variant=\"ghost\" data-size=\"sm\" data-action=\"open-history\" x-on:click=\"openHistory\">History</button></p></template></div><div class=\"[ cluster ]\"><span class=\"[ badge sync ]\" data-design-state x-bind:data-tone=\"badge.tone\" x-text=\"badge.label\"></span>")
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 9, "</p><template x-if=\"exists\"><p class=\"[ color-ink-muted text-sm ]\" data-saved-line><span x-text=\"savedLine\"></span> · <button type=\"button\" class=\"[ button ]\" data-variant=\"ghost\" data-size=\"sm\" data-action=\"open-history\" x-on:click=\"openHistory\">History</button></p></template></div><div class=\"[ cluster ]\"><span class=\"[ badge sync ]\" data-design-state x-bind:data-tone=\"badge.tone\" x-text=\"badge.label\"></span> <button type=\"button\" class=\"[ button ]\" data-action=\"spawn-header\" x-show=\"!deleted\" x-on:click=\"openSpawn\">Spawn agent…</button>")
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
@@ -170,7 +170,7 @@ func PageView(v View) templ.Component {
 			var templ_7745c5c3_Var10 templ.SafeURL
 			templ_7745c5c3_Var10, templ_7745c5c3_Err = templ.JoinURLErrs(templ.SafeURL(v.IndexHref))
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `designsystem/page.templ`, Line: 42, Col: 77}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `designsystem/page.templ`, Line: 43, Col: 77}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var10))
 			if templ_7745c5c3_Err != nil {
@@ -231,8 +231,9 @@ func PageView(v View) templ.Component {
 }
 
 // firstStart is the screen of a design system with no version: three starts of
-// the same weight. Import and Spawn agent arrive with later slices and stay
-// inert until then; Start blank stores nothing until the first Save.
+// the same weight. Import arrives with a later slice and stays inert until
+// then; Spawn agent opens the header's spawn form; Start blank stores nothing
+// until the first Save.
 func firstStart(projectID, designSystemID string) templ.Component {
 	return templruntime.GeneratedTemplate(func(templ_7745c5c3_Input templruntime.GeneratedComponentInput) (templ_7745c5c3_Err error) {
 		templ_7745c5c3_W, ctx := templ_7745c5c3_Input.Writer, templ_7745c5c3_Input.Context
@@ -254,7 +255,7 @@ func firstStart(projectID, designSystemID string) templ.Component {
 			templ_7745c5c3_Var11 = templ.NopComponent
 		}
 		ctx = templ.ClearChildren(ctx)
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 16, "<div id=\"design-system-start\" class=\"[ flow ]\"><div class=\"[ switcher ]\" style=\"--switcher-threshold: 48rem\"><div><section class=\"[ entry-card ]\"><div class=\"[ entry-card-body flow ]\"><h2>Import from a repository</h2><p class=\"[ color-ink-muted text-sm ]\">Reads <code>DESIGN.md</code> and <code>tokens.json</code> from a repository of this project. You review before anything is stored.</p><p class=\"[ color-ink-faint text-sm ]\">Not available yet.</p><button type=\"button\" class=\"[ button ]\" data-variant=\"primary\" data-action=\"import\" disabled>Preview import</button></div></section></div><div><section class=\"[ entry-card ]\"><div class=\"[ entry-card-body flow ]\"><h2>Start blank</h2><p class=\"[ color-ink-muted text-sm ]\"><span x-text=\"startBlankText\">An empty record, ready for its first tokens.</span></p><p class=\"[ color-ink-faint text-sm ]\">Nothing is stored until you save.</p><button type=\"button\" class=\"[ button ]\" data-action=\"start-blank\" x-on:click=\"startBlank\">Start blank</button></div></section></div><div><section class=\"[ entry-card ]\"><div class=\"[ entry-card-body flow ]\"><h2>Ask an agent to set it up</h2><p class=\"[ color-ink-muted text-sm ]\">An agent reads your repositories and proposes tokens and principles. You approve what lands.</p><p class=\"[ color-ink-faint text-sm ]\">Not available yet.</p><button type=\"button\" class=\"[ button ]\" data-action=\"spawn\" disabled>Spawn agent</button></div></section></div></div><section class=\"[ flow ]\" aria-labelledby=\"design-system-start-repositories\"><h2 id=\"design-system-start-repositories\">Repositories</h2>")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 16, "<div id=\"design-system-start\" class=\"[ flow ]\"><div class=\"[ switcher ]\" style=\"--switcher-threshold: 48rem\"><div><section class=\"[ entry-card ]\"><div class=\"[ entry-card-body flow ]\"><h2>Import from a repository</h2><p class=\"[ color-ink-muted text-sm ]\">Reads <code>DESIGN.md</code> and <code>tokens.json</code> from a repository of this project. You review before anything is stored.</p><p class=\"[ color-ink-faint text-sm ]\">Not available yet.</p><button type=\"button\" class=\"[ button ]\" data-variant=\"primary\" data-action=\"import\" disabled>Preview import</button></div></section></div><div><section class=\"[ entry-card ]\"><div class=\"[ entry-card-body flow ]\"><h2>Start blank</h2><p class=\"[ color-ink-muted text-sm ]\"><span x-text=\"startBlankText\">An empty record, ready for its first tokens.</span></p><p class=\"[ color-ink-faint text-sm ]\">Nothing is stored until you save.</p><button type=\"button\" class=\"[ button ]\" data-action=\"start-blank\" x-on:click=\"startBlank\">Start blank</button></div></section></div><div><section class=\"[ entry-card ]\"><div class=\"[ entry-card-body flow ]\"><h2>Ask an agent to set it up</h2><p class=\"[ color-ink-muted text-sm ]\">An agent reads your repositories and proposes tokens and principles. You approve what lands.</p><button type=\"button\" class=\"[ button ]\" data-action=\"spawn\" x-on:click=\"$dispatch('design-system-spawn')\">Spawn agent</button></div></section></div></div><section class=\"[ flow ]\" aria-labelledby=\"design-system-start-repositories\"><h2 id=\"design-system-start-repositories\">Repositories</h2>")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}

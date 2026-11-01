@@ -42,8 +42,10 @@ type Handler struct {
 	// Designs finds the design system by slug and seeds its record; nil
 	// leaves every design system page not found.
 	Designs ports.DesignSystemPages
-	Layout  shell.Layout
-	Render  shell.Renderer
+	// Agents lists the agents a design session may run as; nil offers none.
+	Agents ports.AgentLister
+	Layout shell.Layout
+	Render shell.Renderer
 }
 
 // State is the design system as get_design_system answers it.
@@ -70,6 +72,34 @@ type Seed struct {
 	Tab string `json:"tab"`
 	// State is nil when it could not be read: the browser reads it then.
 	State *State `json:"state"`
+	// Agents are the project's enabled agents, for the spawn form.
+	Agents []AgentOption `json:"agents"`
+}
+
+// AgentOption is an agent the spawn form offers.
+type AgentOption struct {
+	ID   string `json:"id"`
+	Name string `json:"name"`
+}
+
+// enabledAgents lists the agents the project enables, by name.
+func (h Handler) enabledAgents(ctx context.Context, project *domain.Project) []AgentOption {
+	out := []AgentOption{}
+	if h.Agents == nil {
+		return out
+	}
+	agents, err := h.Agents.ListAgents(ctx)
+	if err != nil {
+		slog.Warn("design system page: agents not read", "err", err)
+		return out
+	}
+	for _, a := range agents {
+		if project.AgentEnabled(a.Name) {
+			out = append(out, AgentOption{ID: a.ID, Name: a.Name})
+		}
+	}
+	sort.SliceStable(out, func(i, j int) bool { return strings.ToLower(out[i].Name) < strings.ToLower(out[j].Name) })
+	return out
 }
 
 // View is what the page renders.
@@ -96,7 +126,7 @@ func (h Handler) Page(w http.ResponseWriter, r *http.Request) error {
 	}
 	seed := Seed{
 		ProjectID: project.ID, DesignSystemID: found.ID, Name: found.Name, Slug: found.Slug, Description: found.Description,
-		IndexHref: IndexHref(project.ID), Base: Href(project.ID, found.Slug, ""),
+		IndexHref: IndexHref(project.ID), Base: Href(project.ID, found.Slug, ""), Agents: h.enabledAgents(ctx, project),
 	}
 	if tab := r.URL.Query().Get("tab"); tabs[tab] {
 		seed.Tab = tab

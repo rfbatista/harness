@@ -66,6 +66,8 @@ type sessionSubject struct {
 	project *domain.Project
 	ticket  *domain.Ticket // nil for a session with no task
 	mode    domain.SessionMode
+	// designSystem is the design system a design session is bound to.
+	designSystem *domain.DesignSystem
 }
 
 // projectID is the project the session works in.
@@ -407,6 +409,8 @@ type prepareInput struct {
 	AllowedTools []string
 	AutoAccept   string
 	Mode         domain.SessionMode
+	// DesignSystem is the design system a design session is bound to.
+	DesignSystem *domain.DesignSystem
 	// Role is what the session will be on its task, for the brief; empty is a peer.
 	Role domain.SessionRole
 	// Headless is a session llmkit runs itself, wrapping its command with the
@@ -443,7 +447,7 @@ func (s *Service) prepare(ctx context.Context, in prepareInput) (*prepared, erro
 		return nil, err
 	}
 
-	subject := sessionSubject{project: proj, mode: in.Mode}
+	subject := sessionSubject{project: proj, mode: in.Mode, designSystem: in.DesignSystem}
 	if in.TicketID != "" {
 		tk, err := s.ticketIn(ctx, in.ProjectID, in.TicketID)
 		if err != nil {
@@ -859,7 +863,11 @@ func (s *Service) sessionConfig(id, dir, model string, allowedTools []string, pe
 	if s.TaskServerURL != nil {
 		taskURL = s.TaskServerURL(id)
 	}
-	if subject.projectLevel() {
+	if subject.designSystem != nil {
+		in := s.briefProject(subject.project)
+		applyDesignSessionContext(&cfg, designSessionBriefInput{Project: in.Project, DesignSystem: subject.designSystem.Name,
+			Repositories: in.Repositories, Contexts: in.Contexts, AgentsMove: s.agentsMoveDocuments()}, taskURL)
+	} else if subject.projectLevel() {
 		in := s.briefProject(subject.project)
 		in.AgentsMove = s.agentsMoveDocuments()
 		applyProjectContext(&cfg, in, taskURL)
@@ -872,7 +880,7 @@ func (s *Service) sessionConfig(id, dir, model string, allowedTools []string, pe
 	if section := s.architectureSection(context.TODO(), role, ag.agent, subject.projectID(), repositoryID); section != "" {
 		cfg.AppendSystem = appendSection(cfg.AppendSystem, section)
 	}
-	if section := s.designSystemBrief(context.TODO(), repositoryID); section != "" {
+	if section := s.designSystemBrief(context.TODO(), repositoryID); section != "" && subject.designSystem == nil {
 		cfg.AppendSystem = appendSection(cfg.AppendSystem, section)
 	}
 	cfg.InstructionFiles = s.instructionFiles(context.TODO(), role, ag.agent, subject.projectID(), repositoryID)

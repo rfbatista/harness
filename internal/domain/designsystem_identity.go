@@ -27,6 +27,9 @@ type DesignSystemIdentity struct {
 type DesignSystemSummary struct {
 	DesignSystemIdentity
 	Version int
+	// OpenProposals and RunningDesignSessions as on DesignSystem.
+	OpenProposals         int
+	RunningDesignSessions int
 }
 
 // ValidateDesignSystemName lists what is wrong with a name (already trimmed).

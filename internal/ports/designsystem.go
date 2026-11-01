@@ -46,6 +46,18 @@ type DesignSystems interface {
 	// GetDesignSystemVersion is one version with its record; VERSION_NOT_FOUND
 	// when there is none.
 	GetDesignSystemVersion(ctx context.Context, designSystemID string, version int) (*domain.DesignSystemVersion, error)
+
+	// StartDesignSession starts a design session (ADR 0055) bound to the
+	// design system, as the agent, with the person's instruction, and answers
+	// its session id. DESIGN_SYSTEM_NOT_FOUND, AGENT_NOT_FOUND.
+	StartDesignSession(ctx context.Context, designSystemID, agentID, prompt string) (string, error)
+}
+
+// DesignSessionHost starts design sessions and counts the running ones; the
+// orchestration implements it.
+type DesignSessionHost interface {
+	StartDesignSession(ctx context.Context, designSystemID, agentID, prompt string) (*domain.Session, error)
+	RunningDesignSessions(ctx context.Context, designSystemID string) int
 }
 
 // DesignSystemPages is what a design system's page reads: the project's design

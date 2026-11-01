@@ -50,6 +50,7 @@ func (r *SessionRepository) Create(s *domain.Session) (*domain.Session, error) {
 		ParentSessionID: s.ParentSessionID,
 		BroughtUnder:    s.BroughtUnder,
 		Mode:            string(s.Mode),
+		DesignSystemID:  s.DesignSystemID,
 
 		TokenSavers:             joinSavers(s.TokenSavers),
 		TokenSaversNotInstalled: joinSavers(s.TokenSaversNotInstalled),
@@ -97,6 +98,9 @@ func (r *SessionRepository) Query(ctx context.Context, filter ports.SessionFilte
 	}
 	if filter.AgentID != "" {
 		q = q.Where("agent_id = ?", filter.AgentID)
+	}
+	if filter.DesignSystemID != "" {
+		q = q.Where("design_system_id = ?", filter.DesignSystemID)
 	}
 	if filter.TicketID != "" {
 		q = q.Where("ticket_id = ?", filter.TicketID)

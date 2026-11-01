@@ -68,7 +68,7 @@ export const designSystemsPage = ({ gateway, navigate }) => () => ({
     return this.step === "start";
   },
   get submitLabel() {
-    return this.chosen === "blank" ? "Start blank" : "Continue";
+    return { blank: "Start blank", agent: "Create and ask an agent" }[this.chosen] ?? "Continue";
   },
   get canContinue() {
     return !this.saving && this.name.trim() !== "" && this.slug !== "";
@@ -200,6 +200,11 @@ export const designSystemsPage = ({ gateway, navigate }) => () => ({
     this.openForm("blank");
   },
 
+  /** Ask an agent on the empty project's cards: the identity form, then the spawn form on the new page. */
+  startAgent() {
+    this.openForm("agent");
+  },
+
   /** Import on the empty project's cards: the identity form, then the import card. */
   startImport() {
     this.openForm("import");
@@ -248,6 +253,7 @@ export const designSystemsPage = ({ gateway, navigate }) => () => ({
   submit() {
     if (!this.canContinue) return;
     if (this.chosen === "blank") return this.startBlank();
+    if (this.chosen === "agent") return this.startWithAgent();
     this.step = "start";
   },
 
@@ -309,13 +315,22 @@ export const designSystemsPage = ({ gateway, navigate }) => () => ({
 
   /** Creates the design system with nothing saved and opens its page. */
   async startBlank() {
+    return this.createAndOpen("");
+  },
+
+  /** Creates the design system at version 0 and opens its page on the spawn form. */
+  async startWithAgent() {
+    return this.createAndOpen("?spawn=1");
+  },
+
+  async createAndOpen(query) {
     if (!this.canContinue) return;
     this.saving = true;
     this.clearFault();
     const slug = this.slug;
     try {
       await gateway.create(this.projectId, { name: this.name.trim(), slug, description: this.description.trim() });
-      navigate(`${this.indexHref}/${encodeURIComponent(slug)}`);
+      navigate(`${this.indexHref}/${encodeURIComponent(slug)}${query}`);
     } catch (err) {
       const fault = faultOf(err);
       this.step = "identity";

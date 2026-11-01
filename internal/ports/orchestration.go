@@ -357,6 +357,9 @@ type InteractiveRequest struct {
 	ParentSessionID string `json:"parent_session_id,omitempty"`
 	// Mode layers a role on the agent (see domain.SessionMode); empty is none.
 	Mode string `json:"mode,omitempty"`
+	// DesignSystemID is the design system a design session (Mode
+	// "designsystem") is bound to; no other mode takes one.
+	DesignSystemID string `json:"design_system_id,omitempty"`
 	// StatusCheckMinutes is the status-check loop the task's architect wants
 	// on the session it starts: nil for the default (10 minutes), 0 for none,
 	// otherwise 2–240. Ignored when the starter is not the architect.

@@ -149,6 +149,18 @@ export function designSystemGateway(api, feed) {
       return { id: repo.id, designSystemId: repo.design_system_id ?? "", path: repo.design_system_path ?? "" };
     },
 
+    /** Starts a design session on the design system; answers its session id. */
+    async startDesignSession(designSystemId, agentId, prompt) {
+      const body = await api.post("/start_design_session", { design_system_id: designSystemId, agent_id: agentId, prompt });
+      return { sessionId: String(body.session_id ?? "") };
+    },
+
+    /** How many design sessions work on the design system now. */
+    async runningDesignSessions(designSystemId) {
+      const body = await api.post("/get_design_system", { design_system_id: designSystemId });
+      return Number.isInteger(body.running_design_sessions) ? body.running_design_sessions : 0;
+    },
+
     /** The project's design systems as the list shows them: identity, version, the repositories using each. */
     async list(projectId) {
       const body = await api.post("/list_design_systems", { project_id: projectId });

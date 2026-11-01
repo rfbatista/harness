@@ -35,6 +35,7 @@ type SessionModel struct {
 	ParentSessionID          string  `gorm:"column:parent_session_id"`
 	BroughtUnder             bool    `gorm:"column:brought_under"`
 	Mode                     string  `gorm:"column:mode"`
+	DesignSystemID           string  `gorm:"column:design_system_id;index"`
 	CreatedAt                int64   `gorm:"autoCreateTime:milli"`
 	UpdatedAt                int64   `gorm:"autoUpdateTime:milli"`
 
@@ -125,6 +126,7 @@ func (m *SessionModel) ToDomain() *domain.Session {
 		ParentSessionID:          m.ParentSessionID,
 		BroughtUnder:             m.BroughtUnder,
 		Mode:                     domain.SessionMode(m.Mode),
+		DesignSystemID:           m.DesignSystemID,
 		TokenSavers:              splitSavers(m.TokenSavers),
 		TokenSaversNotInstalled:  splitSavers(m.TokenSaversNotInstalled),
 		CavemanIntensity:         domain.CavemanIntensity(m.CavemanIntensity),

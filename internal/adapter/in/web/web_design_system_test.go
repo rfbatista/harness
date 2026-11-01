@@ -82,7 +82,7 @@ func TestDesignSystemPageRendersForADesignSystemAtVersionZero(t *testing.T) {
 	for _, want := range []string{
 		`x-data="designSystemPage"`, `data-seed="design-system-seed"`,
 		`data-design-system-name x-text="name">Brand<`, `data-design-system-slug x-text="slug">brand<`, `The brand site`, `<title>Brand · Design systems · coding_pool`,
-		`role="tablist"`, `data-action="start-blank"`, `data-action="import" disabled`, `data-action="spawn" disabled`,
+		`role="tablist"`, `data-action="start-blank"`, `data-action="import" disabled`, `data-action="spawn"`,
 	} {
 		if !strings.Contains(body, want) {
 			t.Errorf("page lacks %s", want)
@@ -215,7 +215,7 @@ func TestDesignSystemsListOfAProjectWithNoneShowsTheThreeStarts(t *testing.T) {
 	if rec.Code != http.StatusOK {
 		t.Fatalf("status %d:\n%s", rec.Code, body)
 	}
-	for _, want := range []string{`data-action="start-blank"`, `data-action="import" disabled`, `data-action="spawn" disabled`, `Import from a repository`, `Ask an agent`} {
+	for _, want := range []string{`data-action="start-blank"`, `data-action="import" disabled`, `data-action="spawn"`, `Import from a repository`, `Ask an agent`} {
 		if !strings.Contains(body, want) {
 			t.Errorf("page lacks %s", want)
 		}

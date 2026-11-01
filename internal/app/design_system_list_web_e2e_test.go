@@ -83,7 +83,7 @@ func TestDesignSystemsListCreatesAndFollowsDesignSystemsInTheBrowser(t *testing.
 		chromedp.Navigate(pg.listURL()),
 		designPoll(listLive),
 		designPoll(`!!document.querySelector('#design-system-starts [data-action=start-blank]:not([disabled])')`),
-		designPoll(`document.querySelector('#design-system-starts [data-action=import]')?.disabled === true && document.querySelector('#design-system-starts [data-action=spawn]')?.disabled === true`),
+		designPoll(`document.querySelector('#design-system-starts [data-action=import]')?.disabled === true && document.querySelector('#design-system-starts [data-action=spawn]')?.disabled === false`),
 		designPoll(`!document.querySelector('[data-action=new-design-system]')?.checkVisibility()`),
 		shot("ds-list-empty", "light"),
 	)
@@ -110,7 +110,7 @@ func TestDesignSystemsListCreatesAndFollowsDesignSystemsInTheBrowser(t *testing.
 		shot("ds-new-form", "light"),
 		designClick(newForm+` [data-action=continue]`),
 		designPoll(`!!document.querySelector('#new-design-system-starts [data-action=start-blank]')`),
-		designPoll(`document.querySelector('#new-design-system-starts [data-action=import]').disabled === true && document.querySelector('#new-design-system-starts [data-action=spawn]').disabled === true`),
+		designPoll(`document.querySelector('#new-design-system-starts [data-action=import]').disabled === true && document.querySelector('#new-design-system-starts [data-action=spawn]').disabled === false`),
 		designClick(`#new-design-system-starts [data-action=start-blank]`),
 		arrivedWhere(locationPath+` === '/projects/`+pg.project+`/design-systems/marketing' && document.querySelector('[data-design-system-description]')?.textContent.trim() === 'Public site and campaign pages'`),
 	)

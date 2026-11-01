@@ -219,7 +219,7 @@ func NewHandler(deps Deps, assets *Assets, fallback http.Handler) http.Handler {
 		codePages.Branches = deps.Workspaces
 	}
 	architecturePages := architecture.Handler{Projects: deps.Projects, Repositories: deps.Repositories, Assistant: deps.ArchitectureAssistant, Layout: s.layout, Render: render}
-	designSystemPage := designsystem.Handler{Projects: deps.Projects, Designs: deps.DesignSystems, Layout: s.layout, Render: render}
+	designSystemPage := designsystem.Handler{Projects: deps.Projects, Designs: deps.DesignSystems, Agents: deps.Agents, Layout: s.layout, Render: render}
 	toProject := func(w http.ResponseWriter, r *http.Request) {
 		http.Redirect(w, r, "/projects/"+url.PathEscape(r.PathValue("project")), http.StatusFound)
 	}

@@ -23,7 +23,33 @@ export const designSystemMenu = ({ gateway, navigate }) => () => ({
   /** The repositories (names) that refused a delete, once refused. */
   usedBy: [],
   saving: false,
+  /** The agents the project enables, as the page seeds them, and the spawn form. */
+  agents: [],
+  agentId: "",
+  prompt: "",
+  /** Design sessions already running on this design system, read when the form opens. */
+  running: 0,
+  /** The session just started, "" before. */
+  startedId: "",
 
+  get spawning() {
+    return this.panel === "spawn";
+  },
+  get noAgents() {
+    return this.agents.length === 0;
+  },
+  get hasRunning() {
+    return this.running > 0;
+  },
+  get runningText() {
+    return this.running === 1 ? "A design session is already running on this design system." : `${this.running} design sessions are already running on this design system.`;
+  },
+  get canSpawn() {
+    return !this.saving && this.agentId !== "" && this.prompt.trim() !== "";
+  },
+  get started() {
+    return this.startedId !== "";
+  },
   get renaming() {
     return this.panel === "rename";
   },
@@ -55,7 +81,49 @@ export const designSystemMenu = ({ gateway, navigate }) => () => ({
   },
 
   init() {
-    this.indexHref = readSeed(this.$el).index_href;
+    const seed = readSeed(this.$el);
+    this.indexHref = seed.index_href;
+    this.agents = Array.isArray(seed.agents) ? seed.agents : [];
+    this.agentId = this.agents[0]?.id ?? "";
+    if (new URLSearchParams(globalThis.location?.search ?? "").get("spawn") === "1") this.openSpawn();
+  },
+
+  /** Opens the spawn form, after reading how many design sessions already run here. */
+  async openSpawn() {
+    this.close();
+    this.startedId = "";
+    this.panel = "spawn";
+    try {
+      this.running = await gateway.runningDesignSessions(this.designSystemId);
+    } catch {
+      this.running = 0;
+    }
+    this.$nextTick(() => this.$el.querySelector("[data-menu-panel] textarea")?.focus());
+  },
+
+  typeAgent(event) {
+    this.agentId = event.target.value;
+  },
+
+  typePrompt(event) {
+    this.prompt = event.target.value;
+  },
+
+  /** Starts the design session; a running one is only warned about, never a refusal. */
+  async spawn() {
+    if (!this.canSpawn) return;
+    this.saving = true;
+    this.error = null;
+    try {
+      const { sessionId } = await gateway.startDesignSession(this.designSystemId, this.agentId, this.prompt.trim());
+      this.prompt = "";
+      this.startedId = sessionId;
+      this.panel = "";
+    } catch (err) {
+      this.error = describeError(err);
+    } finally {
+      this.saving = false;
+    }
   },
 
   menuSelect(event) {

@@ -40,6 +40,8 @@ type Service struct {
 	// git and repos are what an import reads; nil until UseImport.
 	git   ports.ArchitectureGit
 	repos ports.DesignSourceRepositories
+	// sessions starts and counts design sessions; nil until UseSessions.
+	sessions ports.DesignSessionHost
 	// guards refuse a delete (DESIGN_SYSTEM_IN_USE).
 	guards []func(ctx context.Context, designSystemID string) error
 	lock   sync.Locker // held from the guards to the delete; nil: none
@@ -54,6 +56,10 @@ func NewService(d Deps) *Service {
 // UseFeed sets where changes are announced: the project feed, which the
 // orchestration owns.
 func (s *Service) UseFeed(feed ports.ProjectChangeSink) { s.feed = feed }
+
+// UseSessions sets where design sessions start and are counted: the
+// orchestration.
+func (s *Service) UseSessions(h ports.DesignSessionHost) { s.sessions = h }
 
 // UseLock sets the lock a delete holds from its guards to the store's delete;
 // whoever lets something start using a design system takes the same lock.
@@ -140,7 +146,7 @@ func (s *Service) ListDesignSystems(ctx context.Context, projectID string) ([]*d
 	}
 	out := make([]*domain.DesignSystemSummary, 0, len(ids))
 	for _, id := range ids {
-		sum := &domain.DesignSystemSummary{DesignSystemIdentity: *id}
+		sum := &domain.DesignSystemSummary{DesignSystemIdentity: *id, RunningDesignSessions: s.running(ctx, id.ID)}
 		if st, ok := stamps[id.ID]; ok {
 			sum.Version = st.Version
 			if st.At.After(sum.UpdatedAt) {
@@ -237,7 +243,32 @@ func (s *Service) GetDesignSystem(ctx context.Context, designSystemID string) (*
 	if err != nil {
 		return nil, err
 	}
-	return view(id, cur), nil
+	ds := view(id, cur)
+	ds.RunningDesignSessions = s.running(ctx, designSystemID)
+	return ds, nil
+}
+
+// running is how many design sessions work on the design system now.
+func (s *Service) running(ctx context.Context, designSystemID string) int {
+	if s.sessions == nil {
+		return 0
+	}
+	return s.sessions.RunningDesignSessions(ctx, designSystemID)
+}
+
+// StartDesignSession implements ports.DesignSystems.
+func (s *Service) StartDesignSession(ctx context.Context, designSystemID, agentID, prompt string) (string, error) {
+	if _, err := s.identity(ctx, designSystemID); err != nil {
+		return "", err
+	}
+	if s.sessions == nil {
+		return "", &domain.StructuredError{Code: "UNAVAILABLE", Message: "design sessions are not available"}
+	}
+	sess, err := s.sessions.StartDesignSession(ctx, designSystemID, agentID, prompt)
+	if err != nil {
+		return "", err
+	}
+	return sess.ID, nil
 }
 
 // SaveDesignSystem implements ports.DesignSystems.

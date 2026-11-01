@@ -65,6 +65,7 @@ func toDesignSystemBody(ds *domain.DesignSystem) designSystemBody {
 	b := designSystemBody{
 		DesignSystemID: ds.ID, ProjectID: ds.ProjectID, Name: ds.Name, Slug: ds.Slug, Description: ds.Description,
 		Exists: ds.Exists, Version: ds.Version, UpdatedBy: ds.UpdatedBy, Record: ds.Record,
+		OpenProposals: ds.OpenProposals, RunningDesignSessions: ds.RunningDesignSessions,
 	}
 	if ds.Exists {
 		at := ds.UpdatedAt
@@ -128,6 +129,7 @@ func (h *Handler) handleListDesignSystems(c echo.Context) error {
 		out = append(out, designSystemRow{
 			DesignSystemID: d.ID, Name: d.Name, Slug: d.Slug, Description: d.Description, CreatedAt: d.CreatedAt,
 			Version: d.Version, UpdatedAt: d.UpdatedAt, Repositories: used,
+			OpenProposals: d.OpenProposals, RunningDesignSessions: d.RunningDesignSessions,
 		})
 	}
 	return c.JSON(http.StatusOK, map[string]any{"design_systems": out})
@@ -276,4 +278,23 @@ func (h *Handler) handleGetDesignSystemVersion(c echo.Context) error {
 		return err
 	}
 	return c.JSON(http.StatusOK, map[string]any{"version": v.Version, "at": v.At, "record": v.Record})
+}
+
+func (h *Handler) handleStartDesignSession(c echo.Context) error {
+	if err := h.designSystems(); err != nil {
+		return err
+	}
+	var in struct {
+		DesignSystemID string `json:"design_system_id"`
+		AgentID        string `json:"agent_id"`
+		Prompt         string `json:"prompt"`
+	}
+	if err := bindJSON(c, &in); err != nil {
+		return err
+	}
+	id, err := h.designs.StartDesignSession(c.Request().Context(), in.DesignSystemID, in.AgentID, in.Prompt)
+	if err != nil {
+		return err
+	}
+	return c.JSON(http.StatusOK, map[string]string{"session_id": id})
 }
