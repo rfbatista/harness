@@ -135,16 +135,24 @@ func TestInstructionFiles_InvalidPathsAndSizesAreRefusedWithFieldErrors(t *testi
 	}
 }
 
-func TestInstructionFiles_AllFilesOfARepositoryAreAtMost4MiB(t *testing.T) {
+func TestInstructionFiles_AllFilesOfARepositoryAreAtMost4MiBLess256KB(t *testing.T) {
 	s := startArchRecordServer(t)
 	chunk := strings.Repeat("a", 256*1024)
-	for i := 0; i < 16; i++ {
+	for i := 0; i < 15; i++ {
 		if status, body := s.saveFile(strings.Repeat("d", 1)+string(rune('a'+i))+"/CLAUDE.md", "memory", 0, chunk); status != http.StatusOK {
 			t.Fatalf("file %d: %d %v", i, status, body)
 		}
 	}
-	if status, body := s.saveFile("over/CLAUDE.md", "memory", 0, "a"); status != http.StatusBadRequest || body["code"] != "INSTRUCTION_INVALID" {
-		t.Errorf("over 4 MiB: %d %v", status, body)
+	// 15 files of 256 KB are 3.75 MiB, the whole allowance: one more byte is over.
+	status, body := s.saveFile("over/CLAUDE.md", "memory", 0, "a")
+	if status != http.StatusBadRequest || body["code"] != "INSTRUCTION_INVALID" {
+		t.Errorf("over the total: %d %v", status, body)
+	}
+	if got := errorPaths(body)["/content"]; got == "" {
+		t.Errorf("no field error: %v", body)
+	}
+	if msg := body["details"].(map[string]any)["errors"].([]any)[0].(map[string]any)["message"].(string); !strings.Contains(msg, "3.75 MiB") {
+		t.Errorf("the message does not name the limit: %q", msg)
 	}
 	// an edit that does not grow the total still fits
 	if status, body := s.saveFile("da/CLAUDE.md", "memory", 1, "small"); status != http.StatusOK {

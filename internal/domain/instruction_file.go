@@ -8,10 +8,12 @@ import (
 )
 
 // Limits of the instruction files of one repository: each file is at most
-// 256 KB, and all of them together at most 4 MiB, the llmkit limit.
+// 256 KB, and all of them together at most 4 MiB less 256 KB. 4 MiB is the
+// most llmkit takes for a session, and the 256 KB left is room for the
+// ARCHITECTURE.md summary delivered with them.
 const (
 	MaxInstructionFileSize  = 256 * 1024
-	MaxInstructionFilesSize = 4 << 20
+	MaxInstructionFilesSize = 4<<20 - 256*1024
 )
 
 // InstructionFile is one instruction file the harness keeps for a repository:
