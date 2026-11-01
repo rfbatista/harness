@@ -222,10 +222,7 @@ func (s *Service) ListTickets(ctx context.Context, projectID string, filter port
 	archived := s.tickets.ListArchivedByProject(ctx, projectID)
 	countChildren(append(slices.Clone(tickets), archived...), tickets...)
 	if !filter.ExcludeArchived {
-		onBoard := make(map[string]bool, len(tickets))
-		for _, tk := range tickets {
-			onBoard[tk.ID] = true
-		}
+		onBoard := idSet(tickets)
 		for _, tk := range archived {
 			if tk.IsChild() && onBoard[tk.ParentID] {
 				tickets = append(tickets, tk)
@@ -514,6 +511,16 @@ func (s *Service) archiveFamily(ctx context.Context, tk *domain.Ticket, archive 
 	return family, lastSolo, nil
 }
 
+// idSet is the ids of tickets.
+func idSet(tickets []*domain.Ticket) map[string]bool {
+	set := make(map[string]bool, len(tickets))
+	for _, tk := range tickets {
+		set[tk.ID] = true
+	}
+	return set
+}
+
+// openChildrenMessage names the children that keep a feature from archiving.
 func openChildrenMessage(titles []string) string {
 	if len(titles) == 1 {
 		return "1 task is not done: " + titles[0]
@@ -561,10 +568,7 @@ func (s *Service) ArchiveDoneTickets(ctx context.Context, projectID string) ([]s
 	ids := []string{}
 	skipped := 0
 	board := s.tickets.ListByProject(ctx, projectID)
-	onBoard := make(map[string]bool, len(board))
-	for _, tk := range board {
-		onBoard[tk.ID] = true
-	}
+	onBoard := idSet(board)
 	for _, tk := range board {
 		if tk.Status != domain.TicketStatusDone || (tk.IsChild() && onBoard[tk.ParentID]) {
 			continue
