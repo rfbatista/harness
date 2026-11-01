@@ -406,7 +406,7 @@ func (s *Service) AnnounceChange(c ports.ProjectChange) {
 	case c.DesignSystemChanged != nil:
 		s.forgetDeletedDesignSystem(c.DesignSystemChanged.DesignSystemID)
 		s.changed(c.ProjectID(), "")
-	case c.ArchitectureChanged != nil, c.InstructionFileChanged != nil, c.DesignSystemSaved != nil:
+	case c.ArchitectureChanged != nil, c.InstructionFileChanged != nil, c.DesignSystemSaved != nil, c.DesignSystemProposal != nil:
 		s.changed(c.ProjectID(), "")
 	}
 }

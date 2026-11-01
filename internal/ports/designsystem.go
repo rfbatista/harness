@@ -15,6 +15,7 @@ import (
 // An unknown project is PROJECT_NOT_FOUND; an unknown design system is
 // DESIGN_SYSTEM_NOT_FOUND.
 type DesignSystems interface {
+	DesignProposals
 	// ListDesignSystems lists the project's design systems ordered by name.
 	ListDesignSystems(ctx context.Context, projectID string) ([]*domain.DesignSystemSummary, error)
 	// CreateDesignSystem stores a design system's identity only (version 0,
@@ -193,4 +194,65 @@ type DesignProposalStore interface {
 // SessionGetter reads a session by id; nil when there is none.
 type SessionGetter interface {
 	Get(id string) *domain.Session
+}
+
+// DesignProposals is what the person does with the proposals of a design
+// system's design sessions. *designsystem.Service satisfies it. An unknown
+// proposal is PROPOSAL_NOT_FOUND; one that is not open is PROPOSAL_NOT_OPEN.
+type DesignProposals interface {
+	// ListDesignProposals lists the design system's proposals, newest first,
+	// of one state or ("" ) every one. A draft with no change is not listed.
+	ListDesignProposals(ctx context.Context, designSystemID, state string) ([]*DesignProposalRow, error)
+	// GetDesignProposal is one proposal with its items, the components its
+	// token changes touch and the record as it would be if every item were
+	// approved.
+	GetDesignProposal(ctx context.Context, proposalID string) (*DesignProposalView, error)
+}
+
+// DesignProposalRow is one line of a design system's proposal list.
+type DesignProposalRow struct {
+	ID             string
+	DesignSystemID string
+	SessionID      string
+	Agent          string
+	SessionRunning bool
+	State          string
+	BaseVersion    int
+	Summary        string
+	Items          int
+	Conflicting    int
+	SubmittedAt    time.Time
+	DecidedAt      time.Time
+}
+
+// DesignProposalView is a proposal for the person to review.
+type DesignProposalView struct {
+	DesignProposalRow
+	CurrentVersion     int
+	Items              []domain.DesignItem
+	AffectedComponents []AffectedComponent
+	ProposedRecord     domain.DesignSystemRecord
+}
+
+// AffectedComponent is a component whose previews use a token that items
+// change or remove: the pair of before and after previews the person judges.
+type AffectedComponent struct {
+	Slug    string
+	ByItems []string
+}
+
+// DesignProposalSubmitter is the session tool's side: a design session hands
+// its draft over as its proposal.
+type DesignProposalSubmitter interface {
+	// SubmitDesignProposal makes the session's draft its open proposal.
+	// NOT_A_DESIGN_SESSION, PROPOSAL_EMPTY (the draft equals its base),
+	// PROPOSAL_SUBMITTED (one is open already).
+	SubmitDesignProposal(ctx context.Context, sessionID, summary string) (*DesignSubmission, error)
+}
+
+// DesignSubmission is what a submit answers.
+type DesignSubmission struct {
+	ProposalID  string
+	Items       int
+	Conflicting int
 }

@@ -39,6 +39,7 @@ var SessionTaskToolNames = []string{
 	"merge_session_branch",
 	"list_notifications",
 	"notify",
+	"submit_design_system_proposal",
 }
 
 // MaxLiveTaskSessions caps the sessions running on one task at once, so agents
@@ -82,7 +83,7 @@ type ArtifactTooling struct {
 // the Design tab; channel connects the task's delegates to its architect and
 // makes the architect the owner of the task status (nil: no channel, every
 // session a peer); notes lets it read the person's inbox and post to it.
-func SessionTaskTools(planningSvc ports.Planning, sessions ports.SessionRepository, agents ports.AgentLister, arch ports.ArchitectureMap, start PeerStarter, artifacts ArtifactTooling, channel ports.TaskChannel, notes NotificationTooling) []domain.Tool {
+func SessionTaskTools(planningSvc ports.Planning, sessions ports.SessionRepository, agents ports.AgentLister, arch ports.ArchitectureMap, start PeerStarter, artifacts ArtifactTooling, channel ports.TaskChannel, notes NotificationTooling, opts ...Option) []domain.Tool {
 	tools := []domain.Tool{
 		{
 			Name: "start_task_session",
@@ -209,7 +210,12 @@ func SessionTaskTools(planningSvc ports.Planning, sessions ports.SessionReposito
 	tools = append(tools, sessionProjectTools(sessions, agents, arch, start.Repositories)...)
 	tools = append(tools, sessionTasksTools(planningSvc, sessions)...)
 	tools = append(tools, sessionNotificationTools(sessions, notes)...)
-	return codedTools(append(tools, sessionArtifactTools(planningSvc, sessions, artifacts)...))
+	tools = append(tools, sessionArtifactTools(planningSvc, sessions, artifacts)...)
+	var o options
+	for _, opt := range opts {
+		opt(&o)
+	}
+	return codedTools(append(tools, sessionDesignProposalTools(sessions, o.proposals)...))
 }
 
 // peerSession is another session on the same task, as list_task_sessions

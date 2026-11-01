@@ -40,6 +40,10 @@ type Service struct {
 	store     ports.DesignSystemStore
 	proposals ports.DesignProposalStore
 	projects  ports.ProjectReader
+	notifier ports.Notifier
+	agents   interface {
+		GetAgent(ctx context.Context, id string) (*domain.Agent, error)
+	}
 	// sessionStore tells a session's mode and design system.
 	sessionStore interface {
 		Get(id string) *domain.Session
@@ -156,7 +160,7 @@ func (s *Service) ListDesignSystems(ctx context.Context, projectID string) ([]*d
 	}
 	out := make([]*domain.DesignSystemSummary, 0, len(ids))
 	for _, id := range ids {
-		sum := &domain.DesignSystemSummary{DesignSystemIdentity: *id, RunningDesignSessions: s.running(ctx, id.ID)}
+		sum := &domain.DesignSystemSummary{DesignSystemIdentity: *id, RunningDesignSessions: s.running(ctx, id.ID), OpenProposals: s.openProposals(ctx, id.ID)}
 		if st, ok := stamps[id.ID]; ok {
 			sum.Version = st.Version
 			if st.At.After(sum.UpdatedAt) {
@@ -255,6 +259,7 @@ func (s *Service) GetDesignSystem(ctx context.Context, designSystemID string) (*
 	}
 	ds := view(id, cur)
 	ds.RunningDesignSessions = s.running(ctx, designSystemID)
+	ds.OpenProposals = s.openProposals(ctx, designSystemID)
 	return ds, nil
 }
 

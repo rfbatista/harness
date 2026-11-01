@@ -99,6 +99,10 @@ func newNotificationsService(p notificationsParams) (*notifications.Service, err
 	}
 	svc.Subscribe(p.Cat.Bus)
 	p.Channel.Events = p.Cat.Bus
+	if p.Cat.DesignSystems != nil {
+		// A design proposal that opens is announced in the inbox.
+		p.Cat.DesignSystems.UseNotifier(svc)
+	}
 	return svc, nil
 }
 

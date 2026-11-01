@@ -797,6 +797,7 @@ func newOrchestrationService(
 		// Design sessions start and are counted by the orchestration.
 		cat.DesignSystems.UseSessions(svc)
 		cat.DesignSystems.UseSessionReader(sessions)
+		cat.DesignSystems.UseAgents(cat.Agents)
 	}
 	if cat.RepositoryArchitectures != nil {
 		// Saves, deletes and exports reach open pages on the project feed.

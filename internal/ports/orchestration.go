@@ -110,6 +110,9 @@ type ProjectChange struct {
 	// DesignSystemChanged says a project's design system was created,
 	// renamed, described or deleted; clients re-read the list.
 	DesignSystemChanged *DesignSystemIdentityChange `json:"design_system_changed,omitempty"`
+	// DesignSystemProposal says a design session's proposal reached a state:
+	// the banner, the navigation badge and the Proposals tab follow it.
+	DesignSystemProposal *DesignSystemProposalChange `json:"design_system_proposal,omitempty"`
 	// SessionFilesRoot says a root of a session's virtual file system went away
 	// or came back; the Files view follows it.
 	SessionFilesRoot *SessionFilesRootChange `json:"session_files_root,omitempty"`
@@ -140,6 +143,15 @@ type DesignSystemChange struct {
 	DesignSystemID string `json:"design_system_id"`
 	Version        int    `json:"version"`
 	Source         string `json:"source"`
+}
+
+// DesignSystemProposalChange is a proposal that reached a state (drafting,
+// open, approved, partly_approved, rejected or withdrawn). ProjectID routes it.
+type DesignSystemProposalChange struct {
+	ProjectID      string `json:"project_id"`
+	DesignSystemID string `json:"design_system_id"`
+	ProposalID     string `json:"proposal_id"`
+	State          string `json:"state"`
 }
 
 // DesignSystemIdentityChange is a design system whose identity was created,
@@ -226,6 +238,8 @@ func (c ProjectChange) ProjectID() string {
 		return c.DesignSystemSaved.ProjectID
 	case c.DesignSystemChanged != nil:
 		return c.DesignSystemChanged.ProjectID
+	case c.DesignSystemProposal != nil:
+		return c.DesignSystemProposal.ProjectID
 	}
 	return ""
 }
