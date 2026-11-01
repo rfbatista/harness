@@ -259,7 +259,7 @@ func TestArchiveAllDoneArchivesOnlyTheDoneTasksOnTheBoard(t *testing.T) {
 	}
 	before := len(f.feed.all())
 
-	got, err := f.svc.ArchiveDoneTickets(ctx, f.pid)
+	got, _, err := f.svc.ArchiveDoneTickets(ctx, f.pid)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -293,14 +293,14 @@ func TestArchiveAllDoneOnAProjectWithNothingDone(t *testing.T) {
 		t.Fatal(err)
 	}
 	before := len(f.feed.all())
-	got, err := f.svc.ArchiveDoneTickets(ctx, f.pid)
+	got, _, err := f.svc.ArchiveDoneTickets(ctx, f.pid)
 	if err != nil || got == nil || len(got) != 0 {
 		t.Fatalf("archive all = %#v, %v; want an empty list", got, err)
 	}
 	if n := len(f.feed.all()) - before; n != 0 {
 		t.Errorf("announced %d changes, want none", n)
 	}
-	if _, err := f.svc.ArchiveDoneTickets(ctx, "nope"); code(err) != "PROJECT_NOT_FOUND" {
+	if _, _, err := f.svc.ArchiveDoneTickets(ctx, "nope"); code(err) != "PROJECT_NOT_FOUND" {
 		t.Fatalf("unknown project: %v", err)
 	}
 }
@@ -333,7 +333,7 @@ func TestTheArchivedCountFollowsArchiveAndRestore(t *testing.T) {
 	if a, o := counts(); a != 0 || o != 1 {
 		t.Fatalf("before archiving: archived %d open %d, want 0 and 1", a, o)
 	}
-	if _, err := f.svc.ArchiveDoneTickets(ctx, f.pid); err != nil {
+	if _, _, err := f.svc.ArchiveDoneTickets(ctx, f.pid); err != nil {
 		t.Fatal(err)
 	}
 	if a, o := counts(); a != 2 || o != 1 {

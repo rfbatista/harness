@@ -154,14 +154,15 @@ func (h *Handler) handleArchiveDoneTickets(c echo.Context) error {
 	if err := bindJSON(c, &in); err != nil {
 		return err
 	}
-	ids, err := h.archive.ArchiveDoneTickets(c.Request().Context(), in.ProjectID)
+	ids, skipped, err := h.archive.ArchiveDoneTickets(c.Request().Context(), in.ProjectID)
 	if err != nil {
 		return err
 	}
 	return c.JSON(http.StatusOK, struct {
 		Archived int      `json:"archived"`
 		IDs      []string `json:"ids"`
-	}{len(ids), ids})
+		Skipped  int      `json:"skipped"`
+	}{len(ids), ids, skipped})
 }
 
 // --- Documents ---

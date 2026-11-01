@@ -73,12 +73,12 @@ func TestHTTP_ArchiveDoneTickets(t *testing.T) {
 		NewRouter(h).ServeHTTP(rec, req)
 		return rec.Code, strings.TrimSpace(rec.Body.String())
 	}
-	if code, body := post(); code != http.StatusOK || body != `{"archived":0,"ids":[]}` {
+	if code, body := post(); code != http.StatusOK || body != `{"archived":0,"ids":[],"skipped":0}` {
 		t.Fatalf("archive_done_tickets with nothing done = %d %s", code, body)
 	}
 	_, out := postTicket(t, h, "/api/create_ticket", map[string]any{"project_id": pid, "title": "Shipped", "status": "done"})
 	id := ticketIn(t, out)["id"].(string)
-	if code, body := post(); code != http.StatusOK || body != `{"archived":1,"ids":["`+id+`"]}` {
+	if code, body := post(); code != http.StatusOK || body != `{"archived":1,"ids":["`+id+`"],"skipped":0}` {
 		t.Fatalf("archive_done_tickets = %d %s", code, body)
 	}
 }
@@ -233,5 +233,62 @@ func TestHTTP_RestoringAChildArchivedOnItsOwnWorksWhileItsFeatureIsOnTheBoard(t 
 	}
 	if code, out := postTicket(t, h, "/api/restore_ticket", map[string]any{"id": children[0]}); code != http.StatusOK || ticketIn(t, out)["archived_at"] != nil {
 		t.Fatalf("restore child = %d %v", code, out)
+	}
+}
+
+func archiveAll(t *testing.T, h *Handler, pid string) (archived int, ids []string, skipped int) {
+	t.Helper()
+	code, out := postTicket(t, h, "/api/archive_done_tickets", map[string]any{"project_id": pid})
+	if code != http.StatusOK {
+		t.Fatalf("archive_done_tickets = %d %v", code, out)
+	}
+	for _, id := range out["ids"].([]any) {
+		ids = append(ids, id.(string))
+	}
+	return int(out["archived"].(float64)), ids, int(out["skipped"].(float64))
+}
+
+func TestHTTP_ArchiveAllSkipsAFeatureWithOpenChildrenAndSaysSo(t *testing.T) {
+	h, pid := newPlanningHandler(t)
+	feature, children := featureWithChildren(t, h, pid, "done", "done", "in_progress")
+	_, out := postTicket(t, h, "/api/create_ticket", map[string]any{"project_id": pid, "title": "Plain", "status": "done"})
+	plain := ticketIn(t, out)["id"].(string)
+
+	archived, ids, skipped := archiveAll(t, h, pid)
+	if archived != 1 || len(ids) != 1 || ids[0] != plain || skipped != 1 {
+		t.Fatalf("archived %d %v skipped %d, want only %s and 1 skipped", archived, ids, skipped, plain)
+	}
+	for _, id := range append([]string{feature}, children...) {
+		if ticketOf(t, h, id)["archived_at"] != nil {
+			t.Errorf("%s was archived though its feature has an open child", id)
+		}
+	}
+}
+
+func TestHTTP_ArchiveAllArchivesAFeatureWithItsChildren(t *testing.T) {
+	h, pid := newPlanningHandler(t)
+	feature, children := featureWithChildren(t, h, pid, "done", "done", "done")
+
+	archived, ids, skipped := archiveAll(t, h, pid)
+	if archived != 3 || skipped != 0 || len(ids) != 3 || ids[0] != feature {
+		t.Fatalf("archived %d %v skipped %d, want the feature and its 2 children", archived, ids, skipped)
+	}
+	for _, id := range children {
+		if ticketOf(t, h, id)["archived_at"] != ticketOf(t, h, feature)["archived_at"] {
+			t.Errorf("child %s was not archived with the feature", id)
+		}
+	}
+}
+
+func TestHTTP_ArchiveAllLeavesADoneChildOfAFeatureOnTheBoardAlone(t *testing.T) {
+	h, pid := newPlanningHandler(t)
+	_, children := featureWithChildren(t, h, pid, "in_progress", "done")
+
+	archived, ids, skipped := archiveAll(t, h, pid)
+	if archived != 0 || len(ids) != 0 || skipped != 0 {
+		t.Fatalf("archived %d %v skipped %d, want nothing: the child is inside its feature's card", archived, ids, skipped)
+	}
+	if ticketOf(t, h, children[0])["archived_at"] != nil {
+		t.Error("the child was archived")
 	}
 }

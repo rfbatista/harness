@@ -143,13 +143,14 @@ type TicketPatcher interface {
 // and answer the ticket. While archived, a ticket cannot change status
 // (TASK_ARCHIVED) and leaves ListTickets; ListArchivedTickets lists the
 // project's archived tickets, newest archived first. ArchiveDoneTickets
-// archives every done ticket of the project that is not archived yet and
-// answers their ids, never nil.
+// archives the done tickets the Done column shows as cards, features with
+// their children, answers their ids (never nil) and how many features with
+// open children it skipped.
 type TicketArchiver interface {
 	ArchiveTicket(ctx context.Context, id string) (*domain.Ticket, error)
 	RestoreTicket(ctx context.Context, id string) (*domain.Ticket, error)
 	ListArchivedTickets(ctx context.Context, projectID string) ([]*domain.Ticket, error)
-	ArchiveDoneTickets(ctx context.Context, projectID string) ([]string, error)
+	ArchiveDoneTickets(ctx context.Context, projectID string) (ids []string, skipped int, err error)
 }
 
 // ArchivedTaskCounter counts a project's archived tasks, for the project

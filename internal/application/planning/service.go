@@ -13,6 +13,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/rfbatista/harnesskit/errs"
 	"github.com/rfbatista/harnesskit/tool"
 
 	"operators-mcp/internal/domain"
@@ -386,6 +387,17 @@ func (s *Service) setArchived(ctx context.Context, id string, archive bool) (*do
 	if archive && existing.Status != domain.TicketStatusDone {
 		return nil, &domain.StructuredError{Code: "TASK_NOT_DONE", Message: "only a done task can be archived"}
 	}
+	changed, err := s.moveFamily(ctx, existing, archive)
+	if err != nil {
+		return nil, err
+	}
+	return changed[0], nil
+}
+
+// moveFamily archives or restores existing with its family (see
+// archiveFamily), announces each change and answers them, existing first.
+// ticketMu is held.
+func (s *Service) moveFamily(ctx context.Context, existing *domain.Ticket, archive bool) ([]*domain.Ticket, error) {
 	family, lastSolo, err := s.archiveFamily(ctx, existing, archive)
 	if err != nil {
 		return nil, err
@@ -410,7 +422,7 @@ func (s *Service) setArchived(ctx context.Context, id string, archive bool) (*do
 	for _, tk := range changed {
 		s.announce(tk, false)
 	}
-	return changed[0], nil
+	return changed, nil
 }
 
 // archiveFamily answers the tickets that archive or restore with tk, tk
@@ -480,32 +492,44 @@ func familyIDs(family []*domain.Ticket) []string {
 	return ids
 }
 
-// ArchiveDoneTickets archives every done ticket of the project that is not
-// archived yet, announcing each, and answers their ids; none is an empty
-// list. An unknown project is PROJECT_NOT_FOUND.
-func (s *Service) ArchiveDoneTickets(ctx context.Context, projectID string) ([]string, error) {
+// ArchiveDoneTickets clears what the Done column shows: it archives every
+// done task on the board that stands as a card of its own, announcing each,
+// and answers the ids archived and how many features it skipped; none
+// archived is an empty list. Those cards are a done plain task, a done child
+// whose feature is not on the board, and a done feature with all its
+// children done, archived with them. A feature with an open child is
+// skipped. A done child whose feature is on the board is left alone: it is
+// inside its feature's card. An unknown project is PROJECT_NOT_FOUND.
+func (s *Service) ArchiveDoneTickets(ctx context.Context, projectID string) ([]string, int, error) {
 	if s.projects.Get(ctx, projectID) == nil {
-		return nil, &domain.StructuredError{Code: "PROJECT_NOT_FOUND", Message: "project not found"}
+		return nil, 0, &domain.StructuredError{Code: "PROJECT_NOT_FOUND", Message: "project not found"}
 	}
 	s.ticketMu.Lock()
 	defer s.ticketMu.Unlock()
 	// The writes go out whole even if the request ends midway.
 	ctx = context.WithoutCancel(ctx)
 	ids := []string{}
-	now := time.Now()
-	for _, tk := range s.tickets.ListByProject(ctx, projectID) {
-		if tk.Status != domain.TicketStatusDone {
+	skipped := 0
+	board := s.tickets.ListByProject(ctx, projectID)
+	onBoard := make(map[string]bool, len(board))
+	for _, tk := range board {
+		onBoard[tk.ID] = true
+	}
+	for _, tk := range board {
+		if tk.Status != domain.TicketStatusDone || (tk.IsChild() && onBoard[tk.ParentID]) {
 			continue
 		}
-		archived, err := s.tickets.SetArchived(tk.ID, &now)
-		if err != nil {
-			return ids, err
+		changed, err := s.moveFamily(ctx, tk, true)
+		if errs.Code(err) == "FEATURE_HAS_OPEN_CHILDREN" {
+			skipped++
+			continue
 		}
-		s.decorate(ctx, archived)
-		s.announce(archived, false)
-		ids = append(ids, archived.ID)
+		if err != nil {
+			return ids, skipped, err
+		}
+		ids = append(ids, familyIDs(changed)...)
 	}
-	return ids, nil
+	return ids, skipped, nil
 }
 
 // checkParent refuses a parent that child (its ID empty while it is being
