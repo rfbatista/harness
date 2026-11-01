@@ -219,4 +219,5 @@ type Planning interface {
 	TicketBoard
 	TicketPatcher
 	DocumentLibrary
+	TaskStructureReader
 }

@@ -152,11 +152,9 @@ func SessionTaskTools(planningSvc ports.Planning, sessions ports.SessionReposito
 				if err != nil {
 					return nil, err
 				}
-				structure := &domain.TaskStructure{Children: []domain.TaskChild{}}
-				if r, ok := planningSvc.(ports.TaskStructureReader); ok {
-					if structure, err = r.TaskStructure(ctx, scope.ticket.ID); err != nil {
-						return nil, err
-					}
+				structure, err := planningSvc.TaskStructure(ctx, scope.ticket.ID)
+				if err != nil {
+					return nil, err
 				}
 				return map[string]any{"task": taskWithStructure{scope.ticket, structure}}, nil
 			},
