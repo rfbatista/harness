@@ -58,7 +58,7 @@ func (s *Service) FindDesignSystemSources(ctx context.Context, projectID string)
 		if err != nil {
 			continue
 		}
-		src := ports.DesignSource{RepositoryID: r.ID, Name: r.DisplayName(), DesignMD: findFile(files, "DESIGN.md"), Tokens: findFile(files, "tokens.json")}
+		src := ports.DesignSource{RepositoryID: r.ID, Name: r.DisplayName(), DesignMD: findFile(files, defaultDesignMDPath), Tokens: findFile(files, defaultTokensPath)}
 		if src.DesignMD != "" || src.Tokens != "" {
 			out = append(out, src)
 		}
@@ -111,33 +111,40 @@ func (s *Service) read(ctx context.Context, req ports.DesignImportRequest) (*por
 
 	pv := &ports.DesignImportPreview{Skipped: []ports.DesignImportSkip{}}
 	var problems []string
+	// A file that is not there is skipped; one that is there and does not
+	// parse refuses the import, so nothing partial is stored.
+	var unparsed []string
 	note := func(file, why string) {
 		pv.Skipped = append(pv.Skipped, skip{Path: file, Reason: why})
 		problems = append(problems, fmt.Sprintf("%s: %s", file, why))
+	}
+	cannotParse := func(file string, err error) {
+		note(file, "cannot parse: "+err.Error())
+		unparsed = append(unparsed, file)
 	}
 
 	var designTokens, jsonTokens []domain.DesignToken
 	if data, ok, err := s.git.ReadFile(ctx, repo.RootDir, branch, designPath); err != nil || !ok {
 		note(designPath, notFound(branch, err))
 	} else if _, tokens, principles, skipped, err := ParseDesignMD(data); err != nil {
-		note(designPath, "cannot parse: "+err.Error())
+		cannotParse(designPath, err)
 	} else {
 		pv.FoundDesignMD, designTokens, pv.Record.Principles = true, tokens, principles
 		for _, k := range skipped {
-			k.Path = designPath + ": " + k.Path
+			k.Path = qualified(designPath, k.Path)
 			pv.Skipped = append(pv.Skipped, k)
 		}
 	}
 	if data, ok, err := s.git.ReadFile(ctx, repo.RootDir, branch, tokensPath); err != nil || !ok {
 		note(tokensPath, notFound(branch, err))
 	} else if tokens, skipped, err := ParseTokensJSON(data); err != nil {
-		note(tokensPath, "cannot parse: "+err.Error())
+		cannotParse(tokensPath, err)
 	} else {
 		pv.FoundTokens, jsonTokens = true, tokens
 		pv.Skipped = append(pv.Skipped, skipped...)
 	}
-	if !pv.FoundDesignMD && !pv.FoundTokens {
-		return nil, nil, &domain.StructuredError{Code: "IMPORT_UNREADABLE", Message: "neither file could be read: " + strings.Join(problems, "; ")}
+	if len(unparsed) > 0 || (!pv.FoundDesignMD && !pv.FoundTokens) {
+		return nil, nil, &domain.StructuredError{Code: "IMPORT_UNREADABLE", Message: "the design system files could not be read, so nothing is imported: " + strings.Join(problems, "; ")}
 	}
 
 	pv.Record.Tokens = mergeTokens(jsonTokens, designTokens, designPath, tokensPath, &pv.Skipped)
@@ -152,6 +159,9 @@ func (s *Service) read(ctx context.Context, req ports.DesignImportRequest) (*por
 	}
 	return pv, repo, nil
 }
+
+// qualified names an entry of a file in the skipped list.
+func qualified(file, key string) string { return file + ": " + key }
 
 func orDefault(v, def string) string {
 	if v = strings.TrimSpace(v); v != "" {
@@ -175,7 +185,7 @@ func mergeTokens(fromJSON, fromDesign []domain.DesignToken, designPath, tokensPa
 	index := map[string]int{}
 	for _, t := range fromJSON {
 		if _, dup := index[t.Key()]; dup {
-			*skipped = append(*skipped, skip{Path: tokensPath + ": " + t.Key(), Reason: "defined more than once; the first one stays"})
+			*skipped = append(*skipped, skip{Path: qualified(tokensPath, t.Key()), Reason: "defined more than once; the first one stays"})
 			continue
 		}
 		index[t.Key()] = len(out)
@@ -188,7 +198,7 @@ func mergeTokens(fromJSON, fromDesign []domain.DesignToken, designPath, tokensPa
 			index[t.Key()] = len(out)
 			out = append(out, t)
 		case !reflect.DeepEqual(out[i].Value, t.Value):
-			*skipped = append(*skipped, skip{Path: designPath + ": " + t.Key(), Reason: fmt.Sprintf("differs from %s, which wins", tokensPath)})
+			*skipped = append(*skipped, skip{Path: qualified(designPath, t.Key()), Reason: fmt.Sprintf("differs from %s, which wins", tokensPath)})
 		}
 	}
 	return out

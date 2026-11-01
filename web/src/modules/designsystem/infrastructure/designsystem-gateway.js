@@ -88,6 +88,7 @@ export function designSystemGateway(api, feed) {
         by: v.by ?? "",
         source: v.source ?? "",
         proposalId: v.proposal_id ?? "",
+        repository: v.repository?.name ?? "",
         message: v.message ?? "",
         summary: v.summary ?? {},
       }));

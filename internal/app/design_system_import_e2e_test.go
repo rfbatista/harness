@@ -169,6 +169,14 @@ func TestDesignImport_AFileThatCannotBeReadIsNamedAndTheImportStoresNothing(t *t
 		t.Errorf("the message does not name the files: %q", msg)
 	}
 
+	half := harnessFiles(t)
+	half["design-system/tokens.json"] = "{ nope"
+	halfBroken, _ := s.importFixture("half-broken", half)
+	status, out = s.post("import_design_system", map[string]any{"repository_id": halfBroken, "tokens_path": "design-system/tokens.json", "name": "Half", "slug": "half"})
+	if msg, _ := out["error"].(string); status != http.StatusBadRequest || out["code"] != "IMPORT_UNREADABLE" || !strings.Contains(msg, "design-system/tokens.json") {
+		t.Fatalf("one file unparseable, the other fine: %d %v", status, out)
+	}
+
 	status, out = s.post("import_design_system", map[string]any{"repository_id": broken, "name": "Broken", "slug": "broken"})
 	if status != http.StatusBadRequest || out["code"] != "IMPORT_UNREADABLE" {
 		t.Fatalf("import: %d %v", status, out)

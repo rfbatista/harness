@@ -40,7 +40,7 @@ export function versionRow(v, now) {
     label: `Version ${v.version}`,
     by: v.by === "person" ? "you" : v.by,
     when: ago === "" ? "" : ago === "now" ? "just now" : `${ago} ago`,
-    source: sourceText(v.source),
+    source: v.source === "import" && v.repository ? `Imported from ${v.repository}` : sourceText(v.source),
     message: v.message,
     hasMessage: v.message !== "",
     summary: summaryText(v.summary),
