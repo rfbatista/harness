@@ -10,7 +10,7 @@ const pad = (n) => String(n).padStart(2, "0");
 const clockTime = (d) => `${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`;
 const taskHref = (projectId, taskId) => (taskId ? `/projects/${enc(projectId)}/tasks/${enc(taskId)}` : "");
 
-const ASSISTANTS = { "document-assistant": "Document assistant", "writing-helper": "Writing helper" };
+const ASSISTANTS = { "document-assistant": "Document assistant", "writing-helper": "Writing helper", "architecture-assistant": "Architecture assistant" };
 
 /** Calls with no project are the harness's own; the row's project is the page's. */
 const sessionLabel = (e) => {

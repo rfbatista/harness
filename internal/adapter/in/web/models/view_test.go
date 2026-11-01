@@ -55,8 +55,8 @@ func TestTiersShowTheStoredModels(t *testing.T) {
 
 func TestTheAssistantsPaneHasTheWritingHelperRowAtHaikuWhileUnset(t *testing.T) {
 	v := NewView(settings{})
-	if len(v.Assistants) != 1 {
-		t.Fatalf("assistants = %+v, want one row", v.Assistants)
+	if len(v.Assistants) != 2 {
+		t.Fatalf("assistants = %+v, want two rows", v.Assistants)
 	}
 	a := v.Assistants[0]
 	if a.Key != domain.SettingModelWritingHelper || a.Title != "Writing helper" || a.Current != "haiku" || a.BuiltIn != "haiku" || !a.NoDefault {
@@ -99,5 +99,25 @@ func TestAnUnavailableHelperPutsItsReasonAndFixURLOnTheRow(t *testing.T) {
 	ok := NewView(settings{}).WithWritingHelper(shell.Helper{Available: true})
 	if ok.Assistants[0].UnavailableReason != "" {
 		t.Errorf("an available helper has no reason: %+v", ok.Assistants[0])
+	}
+}
+
+func TestTheAssistantsPaneHasTheArchitectureAssistantRowAtSonnetWhileUnset(t *testing.T) {
+	a := NewView(settings{}).Assistants[1]
+	if a.Key != domain.SettingModelArchitectureAssistant || a.Title != "Architecture assistant" || a.Current != "sonnet" || a.BuiltIn != "sonnet" || !a.NoDefault {
+		t.Errorf("row = %+v", a)
+	}
+	if a.UnavailableReason != "" || a.FixURL != "" {
+		t.Errorf("an unchecked row is available: %+v", a)
+	}
+	if got := selected(t, NewView(settings{domain.SettingModelArchitectureAssistant: "opus"}).Assistants[1]); got != "opus" {
+		t.Errorf("selects %q, want opus", got)
+	}
+	var got []string
+	for _, c := range a.Choices() {
+		got = append(got, c.Value+"|"+c.Label)
+	}
+	if strings.Join(got, ",") != "haiku|haiku,sonnet|sonnet (default),opus|opus,fable|fable" {
+		t.Errorf("choices = %v", got)
 	}
 }

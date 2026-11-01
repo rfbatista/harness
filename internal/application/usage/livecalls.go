@@ -120,6 +120,9 @@ func (s *Service) resolveCall(ctx context.Context, attribution string) callOwner
 	case attribution == writingHelperAttribution || strings.HasPrefix(attribution, writingHelperAttribution+":"):
 		o.kind = "writing-helper"
 		o.projectID = strings.TrimPrefix(strings.TrimPrefix(attribution, writingHelperAttribution), ":")
+	case attribution == architectureAssistantAttribution || strings.HasPrefix(attribution, architectureAssistantAttribution+":"):
+		o.kind = "architecture-assistant"
+		o.projectID = strings.TrimPrefix(strings.TrimPrefix(attribution, architectureAssistantAttribution), ":")
 	default:
 		if sess := s.readers.Sessions.Get(attribution); sess != nil {
 			o.session, o.projectID, o.kind = sess, sess.ProjectID, "session"
@@ -140,6 +143,11 @@ const documentAssistantAttribution = "harness:document-assistant"
 // writingHelperAttribution is what the writing helper's calls are attributed
 // to, with ":<project id>" appended. A stored record keeps the bare name.
 const writingHelperAttribution = "harness:writing-helper"
+
+// architectureAssistantAttribution is what the architecture assistant's calls
+// are attributed to, with ":<project id>" appended. A stored record keeps the
+// bare name.
+const architectureAssistantAttribution = "harness:architecture-assistant"
 
 // liveViewer is one live call viewer's queue.
 type liveViewer struct {

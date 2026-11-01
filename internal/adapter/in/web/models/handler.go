@@ -118,6 +118,13 @@ func NewView(settings ports.SettingsReader) View {
 		Current:   domain.WritingHelperModel(settings.Setting(domain.SettingModelWritingHelper)),
 		BuiltIn:   domain.DefaultWritingHelperModel,
 		NoDefault: true,
+	}, {
+		Key:       domain.SettingModelArchitectureAssistant,
+		Title:     "Architecture assistant",
+		Lead:      "The chat on a repository's Architecture page. It reads the code and proposes layers, access and rules, so a stronger model pays off. Applies to every project.",
+		Current:   domain.ArchitectureAssistantModel(settings.Setting(domain.SettingModelArchitectureAssistant)),
+		BuiltIn:   domain.DefaultArchitectureAssistantModel,
+		NoDefault: true,
 	}}}
 }
 
