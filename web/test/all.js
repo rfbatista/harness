@@ -9,7 +9,6 @@ import "../src/modules/agents/domain/enabledIn.test.js";
 import "../src/modules/agents/domain/entryPicker.test.js";
 import "../src/modules/agents/domain/library.test.js";
 import "../src/modules/agents/domain/liveRefresh.test.js";
-import "../src/modules/agents/domain/markdown.test.js";
 import "../src/modules/agents/domain/mcp.test.js";
 import "../src/modules/agents/domain/mcpForm.test.js";
 import "../src/modules/agents/domain/names.test.js";
@@ -185,6 +184,7 @@ import "../src/modules/writinghelper/presentation/components/writingPen.test.js"
 import "../src/modules/writinghelper/presentation/coordinator.test.js";
 import "../src/modules/writinghelper/presentation/field.test.js";
 import "../src/screen-theme.test.js";
+import "../src/shared/domain/markdown.test.js";
 import "../src/shared/infrastructure/api.test.js";
 import "../src/shared/infrastructure/feed.test.js";
 import "../src/shared/infrastructure/shared-feed.test.js";
