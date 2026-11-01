@@ -1,5 +1,5 @@
 import { assert, file, test } from "../../../shared/testing/test.js";
-import { DEFAULT_PATH, canExport, chip, exportBadge, exportLabel, optInRow } from "./repositories.js";
+import { DEFAULT_PATH, chip, exportBadge, exportLabel, optInRow } from "./repositories.js";
 
 file("designsystem/domain/repositories");
 
@@ -40,9 +40,4 @@ test("the export line gives versions and commit, and for edited outside the file
   assert.equal(exportLabel(exported({ state: "behind", current_version: 12 }), now), "exported version 9, current 12 · commit 3fa91c2");
   assert.equal(exportLabel(exported({ state: "edited_outside", changed_files: ["tokens.json"] }), now), "version 9 exported 30m ago · commit 3fa91c2 · tokens.json differ");
   assert.equal(exportLabel(exported({ state: "never_exported", exported_version: null }), now), "No files at .harness/design-system/ yet");
-});
-
-test("Export is offered to a repository that uses the design system, whatever its state", () => {
-  assert.equal(canExport(exported({ state: "in_sync" })), true);
-  assert.equal(canExport(optInRow({ repository_id: "r2" })), false);
 });

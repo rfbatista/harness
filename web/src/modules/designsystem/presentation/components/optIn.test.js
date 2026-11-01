@@ -209,6 +209,7 @@ test("a refusal stays under its row", async () => {
 
 test("the header's Export… chooses the first repository that needs an export", async () => {
   const { instance } = await setup([dto("api", withExport("in_sync")), dto("web", withExport("behind")), dto("docs", other)]);
-  assert.equal(instance.choose().id, "web");
+  instance.choose();
+  assert.equal(instance.chosen, "web");
   assert.equal(instance.isChosen(instance.rows[1]), true);
 });

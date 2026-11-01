@@ -103,12 +103,12 @@ func (h *Handler) handleListDesignSystemRepositories(c echo.Context) error {
 		Name           string `json:"name"`
 	}
 	type row struct {
-		RepositoryID string   `json:"repository_id"`
-		Name         string   `json:"name"`
-		DesignSystem *applied `json:"design_system"`
-		AppliedHere  bool     `json:"applied_here"`
-		Path         string   `json:"path"`
-		Export       any      `json:"export"`
+		RepositoryID string                  `json:"repository_id"`
+		Name         string                  `json:"name"`
+		DesignSystem *applied                `json:"design_system"`
+		AppliedHere  bool                    `json:"applied_here"`
+		Path         string                  `json:"path"`
+		Export       *ports.DesignExportInfo `json:"export"`
 	}
 	var exports map[string]*ports.DesignExportInfo
 	if h.exports != nil {

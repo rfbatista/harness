@@ -61,11 +61,6 @@ export function exportLabel(row, now = new Date()) {
   return version + commit + files;
 }
 
-/** Whether Export is offered: a repository that uses the design system, whatever its state (in sync only repeats the last commit). */
-export function canExport(row) {
-  return row.uses === true;
-}
-
 /** The chip beside a repository: applied to this design system, using another, or using none. */
 export function chip(row) {
   if (row.uses) return { label: "Applied here", tone: "signal" };

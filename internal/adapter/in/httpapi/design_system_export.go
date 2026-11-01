@@ -14,7 +14,7 @@ func designExports(d ports.DesignSystems) ports.DesignSystemExports {
 	return exp
 }
 
-func (h *Handler) designExports() error {
+func (h *Handler) exportsReady() error {
 	if h.exports == nil {
 		return echo.NewHTTPError(http.StatusServiceUnavailable, "design system export is not configured")
 	}
@@ -22,7 +22,7 @@ func (h *Handler) designExports() error {
 }
 
 func (h *Handler) handlePreviewDesignSystemExport(c echo.Context) error {
-	if err := h.designExports(); err != nil {
+	if err := h.exportsReady(); err != nil {
 		return err
 	}
 	var in struct {
@@ -39,7 +39,7 @@ func (h *Handler) handlePreviewDesignSystemExport(c echo.Context) error {
 }
 
 func (h *Handler) handleExportDesignSystem(c echo.Context) error {
-	if err := h.designExports(); err != nil {
+	if err := h.exportsReady(); err != nil {
 		return err
 	}
 	var in struct {

@@ -334,3 +334,23 @@ func TestDesignSystemExport_AfterAMoveTheOldFilesAreEditedOutsideAgainstTheNewDe
 		t.Errorf("the old design system's component file stayed: %v", err)
 	}
 }
+
+func TestDesignSystemExport_IsRefusedAtVersionZeroAndWritesDesignMdAndTokensForAnEmptyRecord(t *testing.T) {
+	s := startDesignServer(t)
+	r := s.addExportRepo("spillway", "")
+	if status, out := s.export(r, false); status != http.StatusConflict || out["code"] != "DESIGN_SYSTEM_EMPTY" {
+		t.Errorf("version 0: %d %v", status, out)
+	}
+	if gitE2E(t, r.checkout, "log", "--oneline") != gitE2E(t, r.checkout, "log", "--oneline", "-1") {
+		t.Error("a commit was made")
+	}
+
+	s.mustSave(0, map[string]any{"tokens": []any{}, "principles": "", "components": []any{}})
+	got := s.mustExport(r, false)
+	if got["version"] != float64(1) {
+		t.Errorf("%v", got)
+	}
+	if files := filesOfHead(t, r.checkout); files != ".harness/design-system/DESIGN.md\n.harness/design-system/tokens.json" {
+		t.Errorf("files = %q", files)
+	}
+}

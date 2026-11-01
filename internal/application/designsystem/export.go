@@ -63,7 +63,9 @@ func managed(rel string) bool {
 }
 
 // wanted are the files an export of the design system's current version
-// writes, relative to the export folder. EMPTY when there is nothing to write.
+// writes, relative to the export folder: the generator's files minus README.md.
+// A version with an empty record still has DESIGN.md and tokens.json; a design
+// system with no version has nothing to write (DESIGN_SYSTEM_EMPTY).
 func (s *Service) wanted(ctx context.Context, designSystemID string) (map[string][]byte, *domain.DesignSystemVersion, error) {
 	id, cur, err := s.current(ctx, designSystemID)
 	if err != nil {
@@ -73,19 +75,22 @@ func (s *Service) wanted(ctx context.Context, designSystemID string) (map[string
 		return nil, nil, emptyExport()
 	}
 	files := map[string][]byte{}
-	for _, f := range Files(Identity{Name: id.Name, Slug: id.Slug, Description: id.Description}, cur.Version, cur.At, cur.Record) {
+	ident := Identity{Name: id.Name, Slug: id.Slug, Description: id.Description}
+	for _, f := range Files(ident, cur.Version, cur.At, cur.Record) {
 		if f.Path != "README.md" {
 			files[f.Path] = f.Content
 		}
 	}
 	if len(files) == 0 {
-		return nil, nil, emptyExport()
+		day := cur.At.UTC().Format("2006-01-02")
+		files["DESIGN.md"] = []byte(designMD(ident, cur.Version, day, cur.Record))
+		files["tokens.json"] = tokensJSON(cur.Version, day, cur.Record)
 	}
 	return files, cur, nil
 }
 
 func emptyExport() error {
-	return &domain.StructuredError{Code: "DESIGN_SYSTEM_EMPTY", Message: "the design system has no tokens, principles or components to export yet"}
+	return &domain.StructuredError{Code: "DESIGN_SYSTEM_EMPTY", Message: "the design system has no version yet; save one before exporting"}
 }
 
 // digest is the hash of a set of files: their paths and bytes.
@@ -341,9 +346,10 @@ func (s *Service) ExportDesignSystem(ctx context.Context, repositoryID string, c
 	}
 
 	var commit string
+	at := s.now()
 	if state == ports.DesignExportInSync {
 		if rec != nil && rec.DesignSystemID == designSystemID && rec.Version == cur.Version {
-			commit = rec.Commit
+			commit, at = rec.Commit, rec.At
 		} else if commit, err = s.export.git.LastCommit(ctx, repo.RootDir, branch, repo.DesignSystemPath); err != nil {
 			return nil, err
 		}
@@ -366,7 +372,7 @@ func (s *Service) ExportDesignSystem(ctx context.Context, repositoryID string, c
 	}
 	if err := s.export.store.Set(ctx, &ports.DesignExportRecord{
 		RepositoryID: repositoryID, DesignSystemID: designSystemID, Version: cur.Version,
-		Commit: commit, At: s.now(), SHA: digest(want),
+		Commit: commit, At: at, SHA: digest(want),
 	}); err != nil {
 		return nil, err
 	}

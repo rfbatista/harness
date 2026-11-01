@@ -10,7 +10,7 @@
 // and retries confirmed. Any other refusal stays under its row.
 
 import { describeError } from "../../../../shared/presentation/errors.js";
-import { canExport, chip, exportBadge, exportLabel } from "../../domain/repositories.js";
+import { chip, exportBadge, exportLabel } from "../../domain/repositories.js";
 
 /** @param {{ gateway: ReturnType<typeof import("../../infrastructure/designsystem-gateway.js").designSystemGateway> }} deps */
 export const designSystemOptIn = ({ gateway }) => () => ({
@@ -44,12 +44,12 @@ export const designSystemOptIn = ({ gateway }) => () => ({
   },
 
   /** Reads the export states again, leaving what a row is doing (a draft path, a question, an export) alone. */
-  async refreshExports() {
+  async refreshExports(force = false) {
     try {
       const fresh = await gateway.repositories(this.designSystemId);
       for (const row of this.rows) {
         const now = fresh.find((f) => f.id === row.id);
-        if (now && !row.saving && !row.exporting) row.export = now.export;
+        if (now && !row.saving && (force || !row.exporting)) row.export = now.export;
       }
     } catch {
       // The next event, or Try again, reads them.
@@ -81,9 +81,6 @@ export const designSystemOptIn = ({ gateway }) => () => ({
   hasBadge(row) {
     return exportBadge(row) !== null;
   },
-  canExportRow(row) {
-    return canExport(row);
-  },
   exportDisabled(row) {
     return row.exporting || row.saving || row.review !== null;
   },
@@ -110,7 +107,6 @@ export const designSystemOptIn = ({ gateway }) => () => ({
     if (pick) {
       this.$nextTick(() => this.$el.querySelector(`[data-optin-row][data-repository-id="${pick.id}"] [data-action=export]`)?.focus());
     }
-    return pick;
   },
   cannotSavePath(row) {
     return row.saving || !row.uses || row.draft === row.path;
@@ -173,8 +169,7 @@ export const designSystemOptIn = ({ gateway }) => () => ({
     row.exported = null;
     try {
       if (row.export?.state === "edited_outside" && row.review === null) {
-        const files = await gateway.previewExport(row.id);
-        row.review = files.filter((f) => f.status !== "unchanged");
+        await this.openReview(row);
         return;
       }
       await this.runExport(row, row.review !== null);
@@ -189,14 +184,20 @@ export const designSystemOptIn = ({ gateway }) => () => ({
     try {
       row.exported = await gateway.exportDesignSystem(row.id, confirmed);
       row.review = null;
-      await this.refreshOne(row);
+      await this.refreshExports(true);
     } catch (err) {
       if (err?.code === "EDITED_OUTSIDE" && !confirmed) {
-        row.review = (await gateway.previewExport(row.id)).filter((f) => f.status !== "unchanged");
+        await this.openReview(row);
         return;
       }
       throw err;
     }
+  },
+
+  /** Lists the files that differ, with their lines, under the row. */
+  async openReview(row) {
+    const files = await gateway.previewExport(row.id);
+    row.review = files.filter((f) => f.status !== "unchanged");
   },
 
   /** Withdraws the edited outside question; nothing was written. */
@@ -204,8 +205,4 @@ export const designSystemOptIn = ({ gateway }) => () => ({
     row.review = null;
   },
 
-  async refreshOne(row) {
-    const fresh = (await gateway.repositories(this.designSystemId)).find((f) => f.id === row.id);
-    if (fresh) row.export = fresh.export;
-  },
 });
