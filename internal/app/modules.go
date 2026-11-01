@@ -86,6 +86,7 @@ var PersistenceModule = fx.Module("persistence",
 		asPort(sqlite.NewPullRequestRepository, new(ports.PullRequestRepository)),
 		asPort(sqlite.NewArchitectureRecordRepository, new(ports.ArchitectureRecordStore)),
 		asPort(sqlite.NewArchitectureRuleEventRepository, new(ports.ArchitectureRuleEventStore)),
+		asPort(sqlite.NewDesignSystemRepository, new(ports.DesignSystemStore)),
 	),
 )
 
@@ -248,6 +249,7 @@ type catalogParams struct {
 	ArchRecords     ports.ArchitectureRecordStore
 	ArchGit         ports.ArchitectureGit
 	ArchEvents      ports.ArchitectureRuleEventStore
+	DesignRecords   ports.DesignSystemStore
 	Agents          ports.AgentRepository
 	Prompts         ports.PromptRepository
 	Skills          ports.SkillRepository
@@ -274,6 +276,7 @@ func newCatalog(p catalogParams) catalog.Catalog {
 		ArchRecords:      p.ArchRecords,
 		ArchGit:          p.ArchGit,
 		ArchEvents:       p.ArchEvents,
+		DesignRecords:    p.DesignRecords,
 		Agents:           p.Agents,
 		Prompts:          p.Prompts,
 		Skills:           p.Skills,
@@ -511,6 +514,9 @@ func newVirtualShells(plan *planning.Service, art *artifacts.Service, sessions p
 	if cat.RepositoryArchitectures != nil {
 		src.Architectures = cat.RepositoryArchitectures
 	}
+	if cat.DesignSystems != nil {
+		src.DesignSystems, src.Repositories = cat.DesignSystems, cat.Projects
+	}
 	shells := vfs.New(src)
 	shells.UseRootEvents(events)
 	return shells
@@ -563,6 +569,10 @@ func bindVirtualShells(orch *orchestration.Service, shells *vfs.Service, plan *p
 	// A saved architecture reaches the shells as well as the project feed.
 	if cat.RepositoryArchitectures != nil {
 		cat.RepositoryArchitectures.UseFeed(changeSinks{orch, shells})
+	}
+	// A saved design system does too: the shells of opted-in sessions show it.
+	if cat.DesignSystems != nil {
+		cat.DesignSystems.UseFeed(changeSinks{orch, shells})
 	}
 }
 
@@ -762,16 +772,25 @@ func newOrchestrationService(
 	branchNames *workspaces.BranchNames,
 	baseBranches *workspaces.BaseBranches,
 ) *orchestration.Service {
-	svc := orchestration.NewService(manager, broker, hub, sessions, orchestration.Catalog{
+	orchCatalog := orchestration.Catalog{
 		Projects:     cat.Projects,
 		Repositories: cat.Projects,
 		Agents:       cat.Agents,
 		MCPServers:   cat.Capabilities,
 		Zones:        cat.Architecture,
 		Contexts:     cat.Architecture,
-	}, tickets, ws)
+	}
+	if cat.DesignSystems != nil {
+		// The brief's pointer names the repository's applied design system.
+		orchCatalog.DesignSystems = cat.DesignSystems
+	}
+	svc := orchestration.NewService(manager, broker, hub, sessions, orchCatalog, tickets, ws)
 	svc.UseBranchNames(branchNames)
 	svc.UseBaseBranches(baseBranches)
+	if cat.DesignSystems != nil {
+		// Saves reach open pages on the project feed.
+		cat.DesignSystems.UseFeed(svc)
+	}
 	if cat.RepositoryArchitectures != nil {
 		// Saves, deletes and exports reach open pages on the project feed.
 		cat.RepositoryArchitectures.UseFeed(svc)

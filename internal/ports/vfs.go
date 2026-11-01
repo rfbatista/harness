@@ -40,6 +40,8 @@ const (
 	ShellDesignURL = "urls"
 	// ShellArchitecture is a repository architecture record as YAML.
 	ShellArchitecture = "architecture"
+	// ShellDesignSystem is a file of the project's design system view.
+	ShellDesignSystem = "design-system"
 	// ShellInstruction is one instruction file of a repository (ADR 0057).
 	ShellInstruction = "instruction"
 )
@@ -179,6 +181,9 @@ type ShellDocumentWriter interface {
 type ShellScope struct {
 	ProjectID string
 	TicketID  string
+	// RepositoryID is the repository the session works in, "" for none: the
+	// shell shows the project design system when it uses it.
+	RepositoryID string
 }
 
 // ArchitectureFile is a repository's architecture as the resources root
@@ -212,6 +217,12 @@ type InstructionShellFile struct {
 // repositories that have a record, in the repositories' order.
 type ArchitectureFileReader interface {
 	ListArchitectureFiles(ctx context.Context, projectID string) ([]ArchitectureFile, error)
+}
+
+// DesignSystemByIDReader reads one design system, whole, by its id:
+// DESIGN_SYSTEM_NOT_FOUND when there is none.
+type DesignSystemByIDReader interface {
+	GetDesignSystem(ctx context.Context, designSystemID string) (*domain.DesignSystem, error)
 }
 
 // The Files view's reads of a session's virtual file system (see "Contract:

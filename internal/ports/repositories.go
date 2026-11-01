@@ -44,6 +44,11 @@ type RepositoryRepository interface {
 	CountByProject() (map[string]int, error)
 	AddIgnoredPath(repositoryID, path string) (*domain.Repository, error)
 	RemoveIgnoredPath(repositoryID, path string) (*domain.Repository, error)
+	// SetDesignSystem stores the design system (nil: none) and the (already
+	// checked) export path; REPOSITORY_NOT_FOUND for an unknown id.
+	SetDesignSystem(id string, designSystemID *string, path string) (*domain.Repository, error)
+	// ListByDesignSystem lists the repositories that use the design system.
+	ListByDesignSystem(designSystemID string) ([]*domain.Repository, error)
 }
 
 // ZoneRepository is the outbound port for persisting and retrieving zones.

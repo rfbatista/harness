@@ -47,7 +47,12 @@ type Catalog struct {
 		ResolveAgentRelations(a *domain.Agent)
 	}
 	MCPServers interface{ ListMCPServers() []*domain.MCPServer }
-	Zones      ports.ZoneReader
+	// DesignSystems names a repository's applied design system for the
+	// brief; nil leaves the pointer out.
+	DesignSystems interface {
+		GetDesignSystem(ctx context.Context, designSystemID string) (*domain.DesignSystem, error)
+	}
+	Zones ports.ZoneReader
 	// Contexts lists a project's bounded contexts for the brief of a
 	// project-level session; nil leaves them out of it.
 	Contexts interface {
@@ -513,7 +518,7 @@ func (s *Service) prepare(ctx context.Context, in prepareInput) (*prepared, erro
 	}
 	permission := parseAutoAccept(in.AutoAccept)
 	cfg := s.sessionConfig(id, ws.Path, in.Model, in.AllowedTools, permission, ag, subject, in.ZoneID, in.Role, in.RepositoryID)
-	cleanup, err := s.withShell(id, subject, &cfg, ag.cleanup)
+	cleanup, err := s.withShell(id, in.RepositoryID, subject, &cfg, ag.cleanup)
 	if err == nil {
 		cleanup = s.withCommitCheck(id, ws.Path, &cfg, false, cleanup)
 	}
@@ -646,11 +651,11 @@ func (s *Service) withGit(id, repositoryID string, cfg *llmkit.SessionConfig, cl
 // claude settings. The cleanup it answers runs cleanup and removes the
 // shell. A headless session with no task, or a service without Shells,
 // changes nothing.
-func (s *Service) withShell(id string, subject sessionSubject, cfg *llmkit.SessionConfig, cleanup func()) (func(), error) {
+func (s *Service) withShell(id, repositoryID string, subject sessionSubject, cfg *llmkit.SessionConfig, cleanup func()) (func(), error) {
 	if s.Shells == nil || (subject.ticket == nil && !subject.projectLevel()) {
 		return cleanup, nil
 	}
-	var scope ports.ShellScope
+	scope := ports.ShellScope{RepositoryID: repositoryID}
 	if subject.ticket != nil {
 		scope.TicketID = subject.ticket.ID
 	} else {
@@ -865,6 +870,9 @@ func (s *Service) sessionConfig(id, dir, model string, allowedTools []string, pe
 		applyTaskContext(&cfg, ticket, taskURL, role, counts)
 	}
 	if section := s.architectureSection(context.TODO(), role, ag.agent, subject.projectID(), repositoryID); section != "" {
+		cfg.AppendSystem = appendSection(cfg.AppendSystem, section)
+	}
+	if section := s.designSystemBrief(context.TODO(), repositoryID); section != "" {
 		cfg.AppendSystem = appendSection(cfg.AppendSystem, section)
 	}
 	cfg.InstructionFiles = s.instructionFiles(context.TODO(), role, ag.agent, subject.projectID(), repositoryID)

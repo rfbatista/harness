@@ -1,0 +1,160 @@
+package designsystem
+
+import "operators-mcp/internal/adapter/in/web/shell"
+
+// PageView is the page of one design system of a project. The first-start screen, the
+// tabs and the Save bar are drawn by designSystemPage
+// (web/src/modules/designsystem) from the record the server seeds; the server
+// renders the frame around them. Each tab is one panel, so a tab that arrives
+// later fills its own and touches no other.
+templ PageView(v View) {
+	@shell.AppShell(v.Frame) {
+		<main id="main" class="[ frame ]" x-data="designSystemPage" data-seed="design-system-seed">
+			@templ.JSONScript("design-system-seed", v.Seed)
+			<header class="[ toolbar ]">
+				<a class="[ crumb ]" href={ templ.SafeURL(v.ProjectHref) }>{ v.ProjectName } /</a>
+				<a class="[ crumb ]" href={ templ.SafeURL(v.IndexHref) }>Design systems /</a>
+				<span class="[ crumb ]" aria-current="page" x-text="name">{ v.Seed.Name }</span>
+			</header>
+			<div data-scroll class="[ arch-scroll ]">
+				<div class="[ wrapper flow ] [ region ]" style="--wrapper-max: 72rem">
+					<div x-data="designSystemMenu" data-seed="design-system-seed" class="[ flow ]">
+						<div class="[ arch-head ]">
+							<div class="[ flow ] [ flow-space-2xs ]">
+								<h1><span data-design-system-name x-text="name">{ v.Seed.Name }</span> <span class="[ badge ]" data-design-system-slug x-text="slug">{ v.Seed.Slug }</span></h1>
+								<p class="[ color-ink-muted ]" data-design-system-description x-show="hasDescription" x-text="description">{ v.Seed.Description }</p>
+								<template x-if="exists">
+									<p class="[ color-ink-muted text-sm ]" data-saved-line>
+										<span x-text="savedLine"></span> · <button type="button" class="[ button ]" data-variant="ghost" data-size="sm" data-action="open-history" x-on:click="openHistory">History</button>
+									</p>
+								</template>
+							</div>
+							<div class="[ cluster ]">
+								<span class="[ badge sync ]" data-design-state x-bind:data-tone="badge.tone" x-text="badge.label"></span>
+								@headerMenu()
+							</div>
+						</div>
+						@menuPanels()
+					</div>
+					<template x-if="deleted">
+						<div class="[ banner ]" data-tone="attention" role="alert" data-deleted>
+							<span class="[ grow ]">This design system was deleted. Nothing here can be saved.</span>
+							<a class="[ button ]" data-size="sm" href={ templ.SafeURL(v.IndexHref) }>Design systems</a>
+						</div>
+					</template>
+					<template x-if="error">
+						<div class="[ banner ]" data-tone="danger" role="alert">
+							<div class="[ flow ] [ flow-space-3xs grow ]">
+								<span x-text="error.message"></span>
+								<span class="[ code ]"><span x-text="error.code"></span> · <span x-text="error.next"></span></span>
+							</div>
+							<button type="button" class="[ button ]" data-variant="ghost" data-size="sm" data-action="retry" x-on:click="reload">Try again</button>
+						</div>
+					</template>
+					<template x-if="conflict">
+						<div class="[ banner ]" data-tone="attention" role="alert" data-conflict>
+							<span class="[ grow ]" x-text="conflictText"></span>
+							<button type="button" class="[ button ]" data-size="sm" data-action="reload" x-on:click="reload">Reload</button>
+						</div>
+					</template>
+					<template x-if="hasProblems">
+						<div class="[ banner ]" data-tone="danger" role="alert" data-problems>
+							<div class="[ flow ] [ flow-space-3xs grow ]">
+								<span x-text="problemsText"></span>
+								<ul class="[ flow ] [ flow-space-3xs text-sm ]">
+									<template x-for="p in problems" x-bind:key="p.key">
+										<li><span x-text="p.label"></span>: <span class="[ code ]" x-text="p.code"></span> <span x-text="p.message"></span></li>
+									</template>
+								</ul>
+							</div>
+						</div>
+					</template>
+					<template x-if="isFirstStart">
+						@firstStart(v.ProjectID, v.Seed.DesignSystemID)
+					</template>
+					<template x-if="isOpen">
+						<div class="[ arch-body ]">
+							<div id="design-system-tabs" class="[ tabs arch-tabs ]" role="tablist" aria-label="Design system sections">
+								<template x-for="t in tabs" x-bind:key="t.slug">
+									<button type="button" role="tab" x-bind:id="t.id" x-bind:aria-selected="t.selected" x-bind:aria-controls="t.panelId" x-on:click="openTab(t.slug)">
+										<span data-tab-label x-text="t.label"></span>
+										<template x-if="t.hasCount">
+											<span class="[ count ]" data-tab-count x-text="t.count"></span>
+										</template>
+									</button>
+								</template>
+							</div>
+							@tabTokens()
+							@tabPrinciples()
+							@tabRepositories(v.ProjectID, v.Seed.DesignSystemID)
+							@tabHistory()
+						</div>
+					</template>
+					<template x-if="isOpen">
+						@saveBar()
+					</template>
+				</div>
+			</div>
+		</main>
+	}
+}
+
+// firstStart is the screen of a design system with no version: three starts of
+// the same weight. Import and Spawn agent arrive with later slices and stay
+// inert until then; Start blank stores nothing until the first Save.
+templ firstStart(projectID, designSystemID string) {
+	<div id="design-system-start" class="[ flow ]">
+		<div class="[ switcher ]" style="--switcher-threshold: 48rem">
+			<div>
+				<section class="[ entry-card ]">
+					<div class="[ entry-card-body flow ]">
+						<h2>Import from a repository</h2>
+						<p class="[ color-ink-muted text-sm ]">Reads <code>DESIGN.md</code> and <code>tokens.json</code> from a repository of this project. You review before anything is stored.</p>
+						<p class="[ color-ink-faint text-sm ]">Not available yet.</p>
+						<button type="button" class="[ button ]" data-variant="primary" data-action="import" disabled>Preview import</button>
+					</div>
+				</section>
+			</div>
+			<div>
+				<section class="[ entry-card ]">
+					<div class="[ entry-card-body flow ]">
+						<h2>Start blank</h2>
+						<p class="[ color-ink-muted text-sm ]"><span x-text="startBlankText">An empty record, ready for its first tokens.</span></p>
+						<p class="[ color-ink-faint text-sm ]">Nothing is stored until you save.</p>
+						<button type="button" class="[ button ]" data-action="start-blank" x-on:click="startBlank">Start blank</button>
+					</div>
+				</section>
+			</div>
+			<div>
+				<section class="[ entry-card ]">
+					<div class="[ entry-card-body flow ]">
+						<h2>Ask an agent to set it up</h2>
+						<p class="[ color-ink-muted text-sm ]">An agent reads your repositories and proposes tokens and principles. You approve what lands.</p>
+						<p class="[ color-ink-faint text-sm ]">Not available yet.</p>
+						<button type="button" class="[ button ]" data-action="spawn" disabled>Spawn agent</button>
+					</div>
+				</section>
+			</div>
+		</div>
+		<section class="[ flow ]" aria-labelledby="design-system-start-repositories">
+			<h2 id="design-system-start-repositories">Repositories</h2>
+			@OptIn(projectID, designSystemID)
+		</section>
+	</div>
+}
+
+// saveBar is the one Save bar of the page: whatever the tabs edit is saved as
+// one version, with an optional one-line message.
+templ saveBar() {
+	<div class="[ save-bar ]" data-save-bar role="region" aria-label="Save">
+		<span class="[ badge ]" data-save-state x-bind:data-tone="barTone" x-text="barBadge"></span>
+		<span class="[ summary ]">
+			<span data-save-summary x-text="changeSummary"></span> · <span data-save-version x-text="versionText"></span>
+		</span>
+		<input data-field="message" class="[ text-sm ]" style="inline-size: 18rem; max-inline-size: 100%" type="text" maxlength="200" autocomplete="off" placeholder="Message (optional)" aria-label="Version message" x-model="message"/>
+		<span class="[ actions ]">
+			<button type="button" class="[ button ]" data-variant="ghost" data-size="sm" data-action="discard" x-bind:disabled="!dirty" x-on:click="discard">Discard</button>
+			<button type="button" class="[ button ]" data-variant="primary" data-size="sm" data-action="save" x-bind:disabled="!canSave" x-bind:aria-busy="saving" x-on:click="save">Save version</button>
+		</span>
+	</div>
+}

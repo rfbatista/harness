@@ -1,0 +1,88 @@
+package designsystem
+
+// headerMenu is the ⋯ menu of a design system's header (designSystemMenu):
+// Rename, Edit description and Delete, each opening an inline panel
+// (menuPanels) under the header. It is hidden once the design system is gone.
+templ headerMenu() {
+	<div class="[ menu ]" x-data="menu" data-align="end" x-show="!deleted" x-on:menu-select="menuSelect">
+		<button type="button" class="[ button ]" data-variant="ghost" aria-label="Design system menu" data-design-system-menu>⋯</button>
+		<div class="[ popup ]" role="menu">
+			<button type="button" role="menuitem" data-action="rename">Rename…</button>
+			<button type="button" role="menuitem" data-action="description">Edit description</button>
+			<hr role="separator"/>
+			<button type="button" role="menuitem" data-action="delete" data-tone="danger">Delete design system…</button>
+		</div>
+	</div>
+}
+
+// menuPanels are the forms the menu opens: rename (the slug is shown, read
+// only), a new description, and the delete confirmation by typing the name,
+// which becomes the refusal naming the repositories when they use it.
+templ menuPanels() {
+	<template x-if="panel !== ''">
+		<section class="[ pane ] [ flow ]" data-menu-panel style="padding: var(--space-l)">
+			<template x-if="error">
+				<div class="[ banner ]" data-tone="danger" role="alert" data-menu-error>
+					<div class="[ flow ] [ flow-space-3xs grow ]">
+						<span x-text="error.message"></span>
+						<span class="[ code ]"><span x-text="error.code"></span> · <span x-text="error.next"></span></span>
+					</div>
+				</div>
+			</template>
+			<template x-if="renaming">
+				<form class="[ flow ]" style="max-inline-size: 34rem" aria-label="Rename" data-panel="rename" x-on:submit.prevent="save">
+					<h2>Rename design system</h2>
+					<div class="[ field ]">
+						<label for="design-system-rename-name">Name</label>
+						<input id="design-system-rename-name" data-field="name" type="text" maxlength="60" autocomplete="off" x-bind:value="draftName" x-bind:aria-invalid="fault !== null" x-on:input="typeName"/>
+						<template x-if="fault">
+							<span class="[ error ]" data-fault><span x-text="fault.message"></span> <span class="[ code ]"><span x-text="fault.code"></span> · <span x-text="fault.next"></span></span></span>
+						</template>
+					</div>
+					<p class="[ color-ink-muted text-sm ]">Slug <code x-text="slug"></code> never changes: it is the name in the address.</p>
+					<div class="[ cluster ]">
+						<button type="submit" class="[ button ]" data-variant="primary" data-action="save" x-bind:disabled="!canSave" x-bind:aria-busy="saving">Rename</button>
+						<button type="button" class="[ button ]" data-variant="ghost" data-action="cancel" x-on:click="close">Cancel</button>
+					</div>
+				</form>
+			</template>
+			<template x-if="describing">
+				<form class="[ flow ]" style="max-inline-size: 34rem" aria-label="Edit description" data-panel="description" x-on:submit.prevent="save">
+					<h2>Edit description</h2>
+					<div class="[ field ]">
+						<label for="design-system-rename-description">Description</label>
+						<textarea id="design-system-rename-description" data-field="description" rows="2" x-bind:value="draftDescription" x-on:input="typeDescription"></textarea>
+					</div>
+					<div class="[ cluster ]">
+						<button type="submit" class="[ button ]" data-variant="primary" data-action="save" x-bind:disabled="!canSave" x-bind:aria-busy="saving">Save description</button>
+						<button type="button" class="[ button ]" data-variant="ghost" data-action="cancel" x-on:click="close">Cancel</button>
+					</div>
+				</form>
+			</template>
+			<template x-if="deleting">
+				<form class="[ flow ]" style="max-inline-size: 34rem" aria-label="Delete" data-panel="delete" x-on:submit.prevent="remove">
+					<h2>Delete “<span x-text="name"></span>”?</h2>
+					<p class="[ color-ink-muted ]" x-text="deleteNote"></p>
+					<template x-if="refused">
+						<div class="[ banner ]" data-tone="danger" role="alert" data-delete-refusal>
+							<div class="[ flow ] [ flow-space-3xs grow ]">
+								<b x-text="refusedTitle"></b>
+								<span data-refusal-repositories x-text="refusedRepositories"></span>
+								<span>Apply another design system or None to each, then delete.</span>
+								<span class="[ code ]">DESIGN_SYSTEM_IN_USE · Open the Repositories tab.</span>
+							</div>
+						</div>
+					</template>
+					<div class="[ field ]">
+						<label for="design-system-delete-name">Type <b x-text="name"></b> to confirm</label>
+						<input id="design-system-delete-name" data-field="confirm" type="text" autocomplete="off" x-bind:value="confirm" x-on:input="typeConfirm"/>
+					</div>
+					<div class="[ cluster ]">
+						<button type="submit" class="[ button ]" data-variant="danger" data-action="delete" x-bind:disabled="!canDelete" x-bind:aria-busy="saving">Delete design system</button>
+						<button type="button" class="[ button ]" data-variant="ghost" data-action="cancel" x-on:click="close">Cancel</button>
+					</div>
+				</form>
+			</template>
+		</section>
+	</template>
+}

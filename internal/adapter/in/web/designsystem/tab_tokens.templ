@@ -1,0 +1,120 @@
+package designsystem
+
+// tabTokens is the Tokens tab's panel: a filterable table of the draft's
+// tokens, edited in place. A row's first cell is its sample, drawn from the
+// value as typed; a row the draft changed carries the amber edge and a badge.
+// The server's errors for a row show under the field they name, with their
+// codes. Rename is its own action, saved as its own version.
+templ tabTokens() {
+	<section role="tabpanel" id="design-system-panel-tokens" aria-labelledby="design-system-tab-tokens" x-show="isTab('tokens')" class="[ flow ]">
+		<div class="[ arch-head ]" data-panel-head>
+			<div class="[ flow ] [ flow-space-3xs ]">
+				<h2>Tokens</h2>
+				<p class="[ color-ink-muted text-sm ]">The values every repository of the project builds with. A token is the CSS custom property <code class="[ font-mono ]">--group-name</code>.</p>
+			</div>
+			<div class="[ cluster ]">
+				<button type="button" class="[ button ]" data-variant="primary" data-size="sm" data-add-token x-on:click="addToken">Add token</button>
+			</div>
+		</div>
+		<p class="[ color-ink-muted text-sm ]" data-light-note>Only the light theme is supported for now: each token holds one value, and no dark palette is stored.</p>
+		<div class="[ cluster ]">
+			<input type="search" data-field="filter" class="[ text-sm ]" style="inline-size: 16rem" autocomplete="off" placeholder="Filter tokens…" aria-label="Filter tokens" x-model="filter"/>
+			<button type="button" class="[ chip ]" data-group-filter="" x-bind:aria-pressed="isGroup('')" x-on:click="pickGroup('')">All <span x-text="rows.length"></span></button>
+			<template x-for="g in groups" x-bind:key="g.group">
+				<button type="button" class="[ chip ]" x-bind:data-group-filter="g.group" x-bind:aria-pressed="isGroup(g.group)" x-on:click="pickGroup(g.group)"><span x-text="g.group"></span> <span x-text="g.count"></span></button>
+			</template>
+		</div>
+		<datalist id="design-system-groups">
+			<template x-for="g in groupSuggestions" x-bind:key="g">
+				<option x-bind:value="g"></option>
+			</template>
+		</datalist>
+		<template x-if="noRows">
+			<p class="[ color-ink-muted ]" data-no-tokens>No tokens yet. Add the first one.</p>
+		</template>
+		<template x-if="noMatch">
+			<p class="[ color-ink-muted ]" data-no-match>No token matches the filter.</p>
+		</template>
+		<section class="[ entry-card ]" x-show="hasVisible">
+			<table class="[ entry-table ]">
+				<thead>
+					<tr>
+						<th style="inline-size: 3rem"><span class="[ visually-hidden ]">Sample</span></th>
+						<th style="inline-size: 15%">Group</th>
+						<th style="inline-size: 14%">Name</th>
+						<th style="inline-size: 9rem">Type</th>
+						<th style="inline-size: 26%">Value</th>
+						<th style="inline-size: 14%">Note</th>
+						<th><span class="[ visually-hidden ]">Actions</span></th>
+					</tr>
+				</thead>
+				<template x-for="row in visibleRows" x-bind:key="row.id">
+					<tbody data-token-row x-bind:data-row-id="row.id" x-bind:data-edited="isEdited(row)">
+						<tr data-row>
+							<td>
+								<span data-sample x-bind:data-sample-kind="sample(row).kind" x-bind:data-invalid="sample(row).invalid" x-bind:style="sample(row).style" x-text="sample(row).glyph"></span>
+							</td>
+							<td>
+								<input data-field="group" class="[ text-sm font-mono ]" list="design-system-groups" autocomplete="off" placeholder="colors" aria-label="Group" x-model="row.group" x-bind:aria-invalid="isInvalid(row, 'group')" x-on:input="touch(row)"/>
+								<template x-for="e in cellErrors(row, 'group')" x-bind:key="e.key">
+									<span class="[ error ] [ text-xs ]" data-error-for x-bind:data-code="e.code"><code x-text="e.code"></code> <span x-text="e.message"></span></span>
+								</template>
+							</td>
+							<td>
+								<input data-field="name" class="[ text-sm font-mono ]" autocomplete="off" placeholder="signal" aria-label="Name" x-model="row.name" x-bind:aria-invalid="isInvalid(row, 'name')" x-on:input="touch(row)"/>
+								<template x-for="e in cellErrors(row, 'name')" x-bind:key="e.key">
+									<span class="[ error ] [ text-xs ]" data-error-for x-bind:data-code="e.code"><code x-text="e.code"></code> <span x-text="e.message"></span></span>
+								</template>
+							</td>
+							<td>
+								<select data-field="type" class="[ text-sm ]" style="min-inline-size: 8rem" aria-label="Type" x-model="row.type" x-on:change="touch(row)">
+									<option value="color">color</option>
+									<option value="dimension">dimension</option>
+									<option value="font">font</option>
+									<option value="number">number</option>
+									<option value="duration">duration</option>
+									<option value="shadow">shadow</option>
+									<option value="typography">typography</option>
+								</select>
+							</td>
+							<td>
+								<input data-field="value" class="[ text-sm font-mono ]" autocomplete="off" aria-label="Value" x-bind:placeholder="placeholder(row)" x-model="row.text" x-bind:aria-invalid="isInvalid(row, 'value')" x-on:input="touch(row)"/>
+								<template x-for="e in cellErrors(row, 'value')" x-bind:key="e.key">
+									<span class="[ error ] [ text-xs ]" data-error-for x-bind:data-code="e.code"><code x-text="e.code"></code> <span x-text="e.message"></span></span>
+								</template>
+							</td>
+							<td>
+								<input data-field="note" class="[ text-sm ]" autocomplete="off" placeholder="What it is for" aria-label="Note" x-model="row.note"/>
+							</td>
+							<td class="[ entry-action ]">
+								<template x-if="isEdited(row)">
+									<span class="[ badge ]" data-tone="attention" data-flag="edited" x-text="statusWord(row)"></span>
+								</template>
+								<button type="button" class="[ button ]" data-variant="ghost" data-size="sm" data-rename x-bind:disabled="!canRename(row)" x-bind:title="renameHint(row)" x-on:click="startRename(row)">Rename</button>
+								<button type="button" class="[ button ]" data-variant="ghost" data-size="sm" data-remove aria-label="Remove token" x-on:click="removeToken(row)">Remove</button>
+							</td>
+						</tr>
+						<template x-if="isRenaming(row)">
+							<tr data-rename-form>
+								<td></td>
+								<td colspan="6">
+									<div class="[ cluster ]">
+										<span class="[ text-sm ]">Rename <code class="[ font-mono ]" x-text="renameFrom"></code> to</span>
+										<input data-field="new-group" class="[ text-sm font-mono ]" list="design-system-groups" autocomplete="off" aria-label="New group" x-model="renameGroup"/>
+										<input data-field="new-name" class="[ text-sm font-mono ]" autocomplete="off" aria-label="New name" x-model="renameName" x-on:keydown.enter="applyRename"/>
+										<button type="button" class="[ button ]" data-variant="primary" data-size="sm" data-action="apply-rename" x-bind:disabled="!canApplyRename" x-on:click="applyRename">Rename</button>
+										<button type="button" class="[ button ]" data-variant="ghost" data-size="sm" data-action="cancel-rename" x-on:click="cancelRename">Cancel</button>
+									</div>
+									<p class="[ color-ink-faint text-xs ]">Saved at once as its own version. Component previews that use the token follow.</p>
+									<template x-if="renameError">
+										<p class="[ error ] [ text-xs ]" data-rename-error role="alert"><code x-text="renameError.code"></code> <span x-text="renameError.message"></span></p>
+									</template>
+								</td>
+							</tr>
+						</template>
+					</tbody>
+				</template>
+			</table>
+		</section>
+	</section>
+}

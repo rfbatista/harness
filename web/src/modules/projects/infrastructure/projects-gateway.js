@@ -108,7 +108,8 @@ export function projectsGateway(api, events) {
         url,
         root_dir: rootDir,
       });
-      return toRepository(body?.repository);
+      // the server says so once, when the project's design system exists
+      return Object.freeze({ ...toRepository(body?.repository), askDesignSystem: body?.ask_design_system === true });
     },
 
     async removeRepository(repositoryId) {

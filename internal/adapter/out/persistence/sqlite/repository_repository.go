@@ -100,6 +100,36 @@ func (r *RepositoryRepository) Update(id, name, description, url, rootDir string
 	return m.ToDomain(), nil
 }
 
+// SetDesignSystem stores the repository's design system (nil: none) and
+// export path.
+func (r *RepositoryRepository) SetDesignSystem(id string, designSystemID *string, path string) (*domain.Repository, error) {
+	var m RepositoryModel
+	if err := r.db.First(&m, "id = ?", id).Error; err != nil {
+		if err == gorm.ErrRecordNotFound {
+			return nil, &domain.StructuredError{Code: "REPOSITORY_NOT_FOUND", Message: "repository not found"}
+		}
+		return nil, err
+	}
+	m.DesignSystemID, m.DesignSystemPath = designSystemID, path
+	if err := r.db.Model(&m).Updates(map[string]any{"design_system_id": designSystemID, "design_system_path": path}).Error; err != nil {
+		return nil, err
+	}
+	return m.ToDomain(), nil
+}
+
+// ListByDesignSystem lists the repositories that use the design system.
+func (r *RepositoryRepository) ListByDesignSystem(designSystemID string) ([]*domain.Repository, error) {
+	var models []RepositoryModel
+	if err := r.db.Where("design_system_id = ?", designSystemID).Order("name, id").Find(&models).Error; err != nil {
+		return nil, err
+	}
+	out := make([]*domain.Repository, 0, len(models))
+	for i := range models {
+		out = append(out, models[i].ToDomain())
+	}
+	return out, nil
+}
+
 // DeleteByProject deletes all repositories for the given project.
 func (r *RepositoryRepository) DeleteByProject(projectID string) error {
 	return r.db.Where("project_id = ?", projectID).Delete(&RepositoryModel{}).Error

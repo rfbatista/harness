@@ -14,6 +14,7 @@ package vfs
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"log/slog"
 	"os"
@@ -66,6 +67,10 @@ type Sources struct {
 	// Architectures lists the repositories architecture files; nil shows
 	// none.
 	Architectures ports.ArchitectureFileReader
+	// DesignSystems and Repositories show the design system applied to a
+	// session's repository to that session; either nil shows it to none.
+	DesignSystems ports.DesignSystemByIDReader
+	Repositories  ports.RepositoryReader
 	// Settings holds "Agents move documents to project"; nil reads it as off.
 	Settings ports.SettingsReader
 }
@@ -80,6 +85,11 @@ type Service struct {
 
 	// events says when a root comes and goes; nil: nobody listens.
 	events *RootEvents
+
+	// rendered is each design system's files as last made, so a refresh that
+	// finds the same version, name, slug and description makes none.
+	renderMu sync.Mutex
+	rendered map[string]renderedDesignSystem // by design system id
 }
 
 // UseRootEvents has the service raise a RootEvent when a session's resources
@@ -91,7 +101,7 @@ func (s *Service) rootEvent(sessionID, path string, available bool) {
 }
 
 func New(src Sources) *Service {
-	return &Service{src: src, roots: map[string]*root{}}
+	return &Service{src: src, roots: map[string]*root{}, rendered: map[string]renderedDesignSystem{}}
 }
 
 // resources root is one session's folder and what it was last given of each file.
@@ -99,12 +109,17 @@ type root struct {
 	dir                         string
 	realDir                     string // dir with its symlinks resolved
 	sessionID, ticketID, projID string
+	repoID                      string // the session's repository, "" for none
+	designSystemID              string // the design system last shown, "" for none
 
 	// mu guards the folder and files; a refresh holds it from reading the
 	// sources to writing the last file, so refreshes never interleave.
 	mu     sync.Mutex
 	files  map[string]ports.ShellFile // by path
 	closed bool
+	// designSystem is whether the last refresh showed the design system
+	// folder; a refresh that cannot read the repository keeps it.
+	designSystem bool
 	// pending is the paths an agent was cleared to change, and since when:
 	// a refresh leaves them as they are until the change is committed.
 	// skipped says the last refresh left something out for them.
@@ -147,7 +162,7 @@ func (s *Service) Open(ctx context.Context, sessionID string, scope ports.ShellS
 	if err != nil {
 		realDir = dir
 	}
-	sh := &root{dir: dir, realDir: realDir, sessionID: sessionID, ticketID: scope.TicketID, projID: projID, files: map[string]ports.ShellFile{}}
+	sh := &root{dir: dir, realDir: realDir, sessionID: sessionID, ticketID: scope.TicketID, projID: projID, repoID: scope.RepositoryID, files: map[string]ports.ShellFile{}}
 	// Held until filled: a change heard meanwhile refreshes it after.
 	sh.mu.Lock()
 	s.mu.Lock()
@@ -338,6 +353,12 @@ func (s *Service) Subscribe(sub ports.EventSubscriber) {
 		s.changed(ev.ProjectID, "")
 		return nil
 	})
+	// Applying, moving or removing a design system of a repository changes
+	// the folder in the roots of the project's sessions.
+	ports.On(sub, func(_ context.Context, ev domain.RepositorySaved) error {
+		s.changed(ev.ProjectID, "")
+		return nil
+	})
 	// The README says which rule applies to moving documents to project.
 	ports.On(sub, func(_ context.Context, ev domain.SettingsChanged) error {
 		if ev.Key == domain.SettingAgentsMoveDocuments {
@@ -375,9 +396,28 @@ func (s *Service) AnnounceChange(c ports.ProjectChange) {
 		s.changed(c.ProjectID(), c.TicketComment.Comment.TicketID)
 	case c.TicketResource != nil && c.TicketResource.Resource != nil:
 		s.changed(c.ProjectID(), c.TicketResource.Resource.TicketID)
-	case c.ArchitectureChanged != nil, c.InstructionFileChanged != nil:
+	case c.DesignSystemChanged != nil:
+		s.forgetDeletedDesignSystem(c.DesignSystemChanged.DesignSystemID)
+		s.changed(c.ProjectID(), "")
+	case c.ArchitectureChanged != nil, c.InstructionFileChanged != nil, c.DesignSystemSaved != nil:
 		s.changed(c.ProjectID(), "")
 	}
+}
+
+// forgetDeletedDesignSystem drops the design system's rendered files when it
+// no longer exists, so a deleted one does not stay in memory.
+func (s *Service) forgetDeletedDesignSystem(designSystemID string) {
+	if s.src.DesignSystems == nil {
+		return
+	}
+	_, err := s.src.DesignSystems.GetDesignSystem(context.Background(), designSystemID)
+	var se *domain.StructuredError
+	if err == nil || !errors.As(err, &se) || se.Code != "DESIGN_SYSTEM_NOT_FOUND" {
+		return
+	}
+	s.renderMu.Lock()
+	delete(s.rendered, designSystemID)
+	s.renderMu.Unlock()
 }
 
 // AnnounceTicket hears a task change, its title, description or status
@@ -560,6 +600,10 @@ func (sh *root) sync(b *builder) error {
 			}
 			changed = true
 		}
+	}
+	if !b.designSystem {
+		// Left empty by an opt-out, the folder goes too: it is absent, not empty.
+		_ = os.Remove(sh.abs(designSystemDir))
 	}
 	if !changed {
 		return nil

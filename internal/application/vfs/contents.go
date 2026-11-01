@@ -11,6 +11,7 @@ import (
 	"strings"
 	"time"
 
+	"operators-mcp/internal/application/designsystem"
 	"operators-mcp/internal/domain"
 	"operators-mcp/internal/ports"
 )
@@ -23,10 +24,17 @@ import (
 func (s *Service) contents(ctx context.Context, sh *root, tk *domain.Ticket) (*builder, error) {
 	b := &builder{now: time.Now()}
 	sessionID := sh.sessionID
-	b.fixed(ports.ShellFile{Path: "README.md", Kind: ports.ShellReadme, Title: "README", UpdatedAt: b.now}, []byte(readmeFor(s.agentsMove())))
+	designSystemID, designSystem := s.appliedDesignSystem(ctx, sh)
+	sh.designSystem = designSystem
+	b.fixed(ports.ShellFile{Path: "README.md", Kind: ports.ShellReadme, Title: "README", UpdatedAt: b.now}, []byte(readmeFor(s.agentsMove(), designSystem)))
 
 	if err := b.architectures(ctx, s.src.Architectures, sh.projID); err != nil {
 		return nil, err
+	}
+	if designSystem {
+		if err := s.designSystemView(ctx, b, designSystemID); err != nil {
+			return nil, err
+		}
 	}
 
 	if tk == nil {
@@ -105,6 +113,8 @@ type builder struct {
 	files []*file
 	tasks []string
 	now   time.Time
+	// designSystem says the view of the project design system is wanted.
+	designSystem bool
 }
 
 // fixed keeps a read-only file at meta.Path; its version is its content's.
@@ -365,6 +375,62 @@ func oldestFirst(list []*domain.Artifact) []*domain.Artifact {
 		return strings.Compare(a.ID, c.ID)
 	})
 	return out
+}
+
+// designSystemDir is the folder of the project design system's files, there
+// only in the shells of sessions whose repository uses it.
+const designSystemDir = "project/design-system"
+
+// appliedDesignSystem is the id of the design system applied to the
+// session's repository, and whether it has one. A repository that cannot be
+// read keeps the state the root had, which then shows the same design system
+// (the one it showed last).
+func (s *Service) appliedDesignSystem(ctx context.Context, sh *root) (string, bool) {
+	src := s.src
+	if src.DesignSystems == nil || src.Repositories == nil || sh.repoID == "" {
+		return "", false
+	}
+	repo, err := src.Repositories.GetRepository(ctx, sh.repoID)
+	if err != nil {
+		return sh.designSystemID, sh.designSystem
+	}
+	if repo.DesignSystemID == nil {
+		return "", false
+	}
+	sh.designSystemID = *repo.DesignSystemID
+	return *repo.DesignSystemID, true
+}
+
+// renderedDesignSystem is the files made for one design system at one
+// version and identity.
+type renderedDesignSystem struct {
+	version  int
+	identity designsystem.Identity
+	files    []designsystem.File
+}
+
+// designSystemView adds the applied design system's files, read-only: the
+// current version's, made again only when the version, name, slug or
+// description changed.
+func (s *Service) designSystemView(ctx context.Context, b *builder, designSystemID string) error {
+	ds, err := s.src.DesignSystems.GetDesignSystem(ctx, designSystemID)
+	if err != nil {
+		return err
+	}
+	identity := designsystem.Identity{Name: ds.Name, Slug: ds.Slug, Description: ds.Description}
+	s.renderMu.Lock()
+	r, ok := s.rendered[designSystemID]
+	if !ok || r.version != ds.Version || r.identity != identity {
+		r = renderedDesignSystem{version: ds.Version, identity: identity,
+			files: designsystem.Files(identity, ds.Version, ds.UpdatedAt, ds.Record)}
+		s.rendered[designSystemID] = r
+	}
+	s.renderMu.Unlock()
+	b.designSystem = true
+	for _, f := range r.files {
+		b.fixed(ports.ShellFile{Path: designSystemDir + "/" + f.Path, Kind: ports.ShellDesignSystem, Scope: "project", Title: f.Path, UpdatedAt: ds.UpdatedAt}, f.Content)
+	}
+	return nil
 }
 
 // architectureDir is the folder of the repositories' architecture files.

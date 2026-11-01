@@ -73,6 +73,8 @@ func NewRouter(h *Handler, opts ...Option) *echo.Echo {
 	g.POST("/create_repository", h.handleCreateRepository)
 	g.POST("/update_repository", h.handleUpdateRepository)
 	g.POST("/delete_repository", h.handleDeleteRepository)
+	g.POST("/set_repository_design_system", h.handleSetRepositoryDesignSystem)
+	g.POST("/list_design_system_repositories", h.handleListDesignSystemRepositories)
 	g.POST("/add_repository_ignored_path", h.handleAddRepositoryIgnoredPath)
 	g.POST("/remove_repository_ignored_path", h.handleRemoveRepositoryIgnoredPath)
 
@@ -354,6 +356,17 @@ func NewRouter(h *Handler, opts ...Option) *echo.Echo {
 	g.POST("/rename_instruction_file", h.handleRenameInstructionFile)
 	g.POST("/delete_instruction_file", h.handleDeleteInstructionFile)
 	g.GET("/architecture.schema.json", h.handleArchitectureSchema)
+
+	// design systems: a project holds many, each one structured record kept as versions
+	g.POST("/list_design_systems", h.handleListDesignSystems)
+	g.POST("/create_design_system", h.handleCreateDesignSystem)
+	g.POST("/update_design_system", h.handleUpdateDesignSystem)
+	g.POST("/delete_design_system", h.handleDeleteDesignSystem)
+	g.POST("/get_design_system", h.handleGetDesignSystem)
+	g.POST("/save_design_system", h.handleSaveDesignSystem)
+	g.POST("/rename_design_token", h.handleRenameDesignToken)
+	g.POST("/list_design_system_versions", h.handleListDesignSystemVersions)
+	g.POST("/get_design_system_version", h.handleGetDesignSystemVersion)
 
 	// code views: read-only file trees, contents, diffs and the zone map
 	g.GET("/code/tree", h.handleCodeTree)

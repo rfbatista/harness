@@ -34,14 +34,16 @@ var (
 // Service implements the projects use cases.
 type Service struct {
 	projects     ports.ProjectRepository
-	repositories ports.RepositoryRepository  // nil: repositories unavailable
-	events       ports.EventPublisher        // nil: deletes are not announced
-	finder       ports.RepositoryFinder      // nil: discovery unavailable
-	envFiles     ports.EnvFileRepository     // nil: env files unavailable
-	envIO        ports.EnvFileIO             // nil: importing from checkouts unavailable
-	runCommands  ports.RunCommandRepository  // nil: saved run commands unavailable
-	tasks        ports.TaskActivityReader    // nil: summaries count no tasks
-	sessions     ports.SessionActivityReader // nil: no sessions counted, deletes not guarded
+	repositories ports.RepositoryRepository   // nil: repositories unavailable
+	events       ports.EventPublisher         // nil: deletes are not announced
+	finder       ports.RepositoryFinder       // nil: discovery unavailable
+	envFiles     ports.EnvFileRepository      // nil: env files unavailable
+	envIO        ports.EnvFileIO              // nil: importing from checkouts unavailable
+	runCommands  ports.RunCommandRepository   // nil: saved run commands unavailable
+	tasks        ports.TaskActivityReader     // nil: summaries count no tasks
+	sessions     ports.SessionActivityReader  // nil: no sessions counted, deletes not guarded
+	designs      ports.DesignSystemIdentities // nil: repositories cannot use a design system
+	designLock   sync.Locker                  // held while a repository's design system is checked and set
 
 	// mu serialises project writes, so a name is checked and taken at once
 	// and the feed announces changes in the order they were made.
@@ -54,6 +56,14 @@ type Service struct {
 // Planning and orchestration are built after the catalog, hence the setter.
 func (s *Service) UseActivity(tasks ports.TaskActivityReader, sessions ports.SessionActivityReader) {
 	s.tasks, s.sessions = tasks, sessions
+}
+
+// UseDesignSystems lets the context name the design systems repositories use.
+// lock is held across a design system's check and the repository's change to
+// it, and by the design system's delete (designsystem.Service.UseLock), so a
+// repository never ends up using a design system that was just deleted.
+func (s *Service) UseDesignSystems(designs ports.DesignSystemIdentities, lock sync.Locker) {
+	s.designs, s.designLock = designs, lock
 }
 
 // UseRunCommands lets the context keep repositories' saved run commands.
@@ -624,6 +634,74 @@ func (s *Service) ImportEnvFile(ctx context.Context, repositoryID, path string) 
 		return nil, err
 	}
 	return s.SaveEnvFile(ctx, repositoryID, clean, string(b))
+}
+
+// SetRepositoryDesignSystem implements ports.RepositoryCatalog. An empty path
+// keeps the one stored (the default for a repository that never set one);
+// removing the design system leaves it in place.
+func (s *Service) SetRepositoryDesignSystem(ctx context.Context, repositoryID string, designSystemID *string, path string, confirmMove bool) (*domain.Repository, error) {
+	repo, err := s.GetRepository(ctx, repositoryID)
+	if err != nil {
+		return nil, err
+	}
+	if path == "" {
+		path = repo.DesignSystemPath
+	}
+	path, err = domain.CleanDesignSystemPath(path)
+	if err != nil {
+		return nil, err
+	}
+	if designSystemID != nil && s.designLock != nil {
+		s.designLock.Lock()
+		defer s.designLock.Unlock()
+	}
+	if designSystemID != nil {
+		target, err := s.designSystemOf(ctx, repo.ProjectID, *designSystemID)
+		if err != nil {
+			return nil, err
+		}
+		if repo.DesignSystemID != nil && *repo.DesignSystemID != target.ID && !confirmMove {
+			return nil, s.moveNotConfirmed(ctx, *repo.DesignSystemID)
+		}
+	}
+	return s.saved(ctx)(s.repositories.SetDesignSystem(repositoryID, designSystemID, path))
+}
+
+// designSystemOf is the design system when it belongs to the project, else
+// DESIGN_SYSTEM_NOT_FOUND (one of another project is not visible here).
+func (s *Service) designSystemOf(ctx context.Context, projectID, designSystemID string) (*domain.DesignSystemIdentity, error) {
+	if s.designs == nil {
+		return nil, &domain.StructuredError{Code: "INTERNAL", Message: "design systems are not configured"}
+	}
+	id, err := s.designs.Identity(ctx, designSystemID)
+	if err != nil {
+		return nil, err
+	}
+	if id == nil || id.ProjectID != projectID {
+		return nil, &domain.StructuredError{Code: "DESIGN_SYSTEM_NOT_FOUND", Message: "design system not found"}
+	}
+	return id, nil
+}
+
+// moveNotConfirmed refuses a move away from the design system current.
+func (s *Service) moveNotConfirmed(ctx context.Context, current string) error {
+	name := ""
+	if id, err := s.designs.Identity(ctx, current); err == nil && id != nil {
+		name = id.Name
+	}
+	return &domain.DetailedError{
+		StructuredError: &domain.StructuredError{Code: "MOVE_NOT_CONFIRMED", Message: "the repository already uses the design system " + name + "; confirm to move it"},
+		Details:         map[string]any{"current": map[string]any{"design_system_id": current, "name": name}},
+	}
+}
+
+// RepositoriesUsingDesignSystem lists the repositories that use the design
+// system, the guard of its delete.
+func (s *Service) RepositoriesUsingDesignSystem(_ context.Context, designSystemID string) ([]*domain.Repository, error) {
+	if s.repositories == nil {
+		return nil, nil
+	}
+	return s.repositories.ListByDesignSystem(designSystemID)
 }
 
 // AddRepositoryIgnoredPath adds a path to a repository's ignored list.

@@ -141,6 +141,20 @@ type RepositoryCatalog interface {
 	DeleteRepository(ctx context.Context, id string) error
 	AddRepositoryIgnoredPath(ctx context.Context, repositoryID, path string) (*domain.Repository, error)
 	RemoveRepositoryIgnoredPath(ctx context.Context, repositoryID, path string) (*domain.Repository, error)
+	// SetRepositoryDesignSystem sets the design system a repository uses (nil:
+	// none) and its export path (empty: the default, or the stored one when
+	// it already has one). The design system must be one of the repository's
+	// project (DESIGN_SYSTEM_NOT_FOUND). A repository uses at most one: when
+	// it uses another, MOVE_NOT_CONFIRMED (details.current) unless
+	// confirmMove. A path that is not relative, does not end in "/" or
+	// leaves the repository is INVALID_INPUT. It never writes to the checkout.
+	SetRepositoryDesignSystem(ctx context.Context, repositoryID string, designSystemID *string, path string, confirmMove bool) (*domain.Repository, error)
+}
+
+// DesignSystemIdentities looks a design system up by id: nil when there is
+// none. The design system store satisfies it.
+type DesignSystemIdentities interface {
+	Identity(ctx context.Context, designSystemID string) (*domain.DesignSystemIdentity, error)
 }
 
 // ProjectReader is what other contexts read about projects.

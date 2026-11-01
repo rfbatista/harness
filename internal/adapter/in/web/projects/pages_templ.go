@@ -11,6 +11,7 @@ import templruntime "github.com/a-h/templ/runtime"
 import (
 	"operators-mcp/internal/adapter/in/web/components"
 	"operators-mcp/internal/adapter/in/web/credentials"
+	"operators-mcp/internal/adapter/in/web/designsystem"
 	"operators-mcp/internal/adapter/in/web/shell"
 	"operators-mcp/internal/adapter/in/web/tokensavers"
 )
@@ -117,7 +118,7 @@ func RepositoriesPage(v RepositoriesView) templ.Component {
 			var templ_7745c5c3_Var5 templ.SafeURL
 			templ_7745c5c3_Var5, templ_7745c5c3_Err = templ.JoinURLErrs(templ.SafeURL("/projects/" + v.ProjectID))
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `projects/pages.templ`, Line: 79, Col: 73}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `projects/pages.templ`, Line: 80, Col: 73}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var5))
 			if templ_7745c5c3_Err != nil {
@@ -130,13 +131,13 @@ func RepositoriesPage(v RepositoriesView) templ.Component {
 			var templ_7745c5c3_Var6 string
 			templ_7745c5c3_Var6, templ_7745c5c3_Err = templ.JoinStringErrs(v.ProjectName)
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `projects/pages.templ`, Line: 79, Col: 91}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `projects/pages.templ`, Line: 80, Col: 91}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var6))
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
-			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 5, " /</a><h1>Repositories</h1></header><div data-scroll><div class=\"[ wrapper flow ] [ region ]\" style=\"--wrapper-max: 48rem\"><p class=\"[ color-ink-muted ]\">The git checkouts this project's sessions run in. Each session gets its own worktree and branch, cut from the repository you pick.</p><template x-if=\"error\"><div class=\"[ banner ]\" data-tone=\"danger\" role=\"alert\"><div class=\"[ flow ] [ flow-space-3xs grow ]\"><span x-text=\"error.message\"></span> <span class=\"[ code ]\"><span x-text=\"error.code\"></span> · <span x-text=\"error.next\"></span></span></div><button type=\"button\" class=\"[ button ]\" data-variant=\"ghost\" data-size=\"sm\" x-on:click=\"dismissError\">Dismiss</button></div></template><section class=\"[ pane ]\" aria-label=\"Repositories\"><div x-ignore data-ssr>")
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 5, " /</a><h1>Repositories</h1></header><div data-scroll><div class=\"[ wrapper flow ] [ region ]\" style=\"--wrapper-max: 48rem\"><p class=\"[ color-ink-muted ]\">The git checkouts this project's sessions run in. Each session gets its own worktree and branch, cut from the repository you pick.</p><template x-if=\"error\"><div class=\"[ banner ]\" data-tone=\"danger\" role=\"alert\"><div class=\"[ flow ] [ flow-space-3xs grow ]\"><span x-text=\"error.message\"></span> <span class=\"[ code ]\"><span x-text=\"error.code\"></span> · <span x-text=\"error.next\"></span></span></div><button type=\"button\" class=\"[ button ]\" data-variant=\"ghost\" data-size=\"sm\" x-on:click=\"dismissError\">Dismiss</button></div></template><template x-for=\"q in questions\" x-bind:key=\"q.id\"><div class=\"[ banner ]\" data-tone=\"signal\" role=\"group\" aria-label=\"Design system\" data-design-system-question><div class=\"[ flow ] [ flow-space-xs grow ]\"><b>Which design system does this repository use?</b> <span><b x-text=\"q.name\"></b> was added. Its agents can follow one of the project's design systems. None is the default: nothing changes in this repository until you choose, and nothing is exported by this step. You can change it later in repository settings or on a design system's Repositories tab.</span><div class=\"[ field ]\"><label>Design system <select data-field=\"design-system\" x-on:change=\"chooseDesignSystem(q.id, $event.target.value)\"><option value=\"\" x-bind:selected=\"isChosen(q, '')\">None</option><template x-for=\"s in q.systems\" x-bind:key=\"s.id\"><option x-bind:value=\"s.id\" x-bind:selected=\"isChosen(q, s.id)\" x-text=\"s.name\"></option></template></select></label></div></div><button type=\"button\" class=\"[ button ]\" data-size=\"sm\" data-action=\"not-now\" x-on:click=\"dismissQuestion(q.id)\">Not now (None)</button> <button type=\"button\" class=\"[ button ]\" data-variant=\"primary\" data-size=\"sm\" data-action=\"apply\" x-on:click=\"answerDesignSystem(q.id)\">Apply</button></div></template><section class=\"[ pane ]\" aria-label=\"Repositories\"><div x-ignore data-ssr>")
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
@@ -154,7 +155,7 @@ func RepositoriesPage(v RepositoriesView) templ.Component {
 				var templ_7745c5c3_Var7 string
 				templ_7745c5c3_Var7, templ_7745c5c3_Err = templ.JoinStringErrs(r.Name)
 				if templ_7745c5c3_Err != nil {
-					return templ.Error{Err: templ_7745c5c3_Err, FileName: `projects/pages.templ`, Line: 102, Col: 50}
+					return templ.Error{Err: templ_7745c5c3_Err, FileName: `projects/pages.templ`, Line: 123, Col: 50}
 				}
 				_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var7))
 				if templ_7745c5c3_Err != nil {
@@ -167,7 +168,7 @@ func RepositoriesPage(v RepositoriesView) templ.Component {
 				var templ_7745c5c3_Var8 string
 				templ_7745c5c3_Var8, templ_7745c5c3_Err = templ.JoinStringErrs(r.RootDir)
 				if templ_7745c5c3_Err != nil {
-					return templ.Error{Err: templ_7745c5c3_Err, FileName: `projects/pages.templ`, Line: 103, Col: 73}
+					return templ.Error{Err: templ_7745c5c3_Err, FileName: `projects/pages.templ`, Line: 124, Col: 73}
 				}
 				_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var8))
 				if templ_7745c5c3_Err != nil {
@@ -180,7 +181,7 @@ func RepositoriesPage(v RepositoriesView) templ.Component {
 				var templ_7745c5c3_Var9 string
 				templ_7745c5c3_Var9, templ_7745c5c3_Err = templ.JoinStringErrs(r.Remote)
 				if templ_7745c5c3_Err != nil {
-					return templ.Error{Err: templ_7745c5c3_Err, FileName: `projects/pages.templ`, Line: 103, Col: 89}
+					return templ.Error{Err: templ_7745c5c3_Err, FileName: `projects/pages.templ`, Line: 124, Col: 89}
 				}
 				_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var9))
 				if templ_7745c5c3_Err != nil {
@@ -203,7 +204,7 @@ func RepositoriesPage(v RepositoriesView) templ.Component {
 				var templ_7745c5c3_Var10 templ.SafeURL
 				templ_7745c5c3_Var10, templ_7745c5c3_Err = templ.JoinURLErrs(templ.SafeURL(r.ArchitectureHref))
 				if templ_7745c5c3_Err != nil {
-					return templ.Error{Err: templ_7745c5c3_Err, FileName: `projects/pages.templ`, Line: 108, Col: 107}
+					return templ.Error{Err: templ_7745c5c3_Err, FileName: `projects/pages.templ`, Line: 129, Col: 107}
 				}
 				_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var10))
 				if templ_7745c5c3_Err != nil {
@@ -216,7 +217,7 @@ func RepositoriesPage(v RepositoriesView) templ.Component {
 				var templ_7745c5c3_Var11 templ.SafeURL
 				templ_7745c5c3_Var11, templ_7745c5c3_Err = templ.JoinURLErrs(templ.SafeURL(r.HistoryHref))
 				if templ_7745c5c3_Err != nil {
-					return templ.Error{Err: templ_7745c5c3_Err, FileName: `projects/pages.templ`, Line: 109, Col: 102}
+					return templ.Error{Err: templ_7745c5c3_Err, FileName: `projects/pages.templ`, Line: 130, Col: 102}
 				}
 				_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var11))
 				if templ_7745c5c3_Err != nil {
@@ -229,7 +230,7 @@ func RepositoriesPage(v RepositoriesView) templ.Component {
 				var templ_7745c5c3_Var12 templ.SafeURL
 				templ_7745c5c3_Var12, templ_7745c5c3_Err = templ.JoinURLErrs(templ.SafeURL(r.EnvHref))
 				if templ_7745c5c3_Err != nil {
-					return templ.Error{Err: templ_7745c5c3_Err, FileName: `projects/pages.templ`, Line: 110, Col: 98}
+					return templ.Error{Err: templ_7745c5c3_Err, FileName: `projects/pages.templ`, Line: 131, Col: 98}
 				}
 				_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var12))
 				if templ_7745c5c3_Err != nil {
@@ -322,7 +323,7 @@ func EnvFilesPage(v EnvFilesView) templ.Component {
 			var templ_7745c5c3_Var15 templ.SafeURL
 			templ_7745c5c3_Var15, templ_7745c5c3_Err = templ.JoinURLErrs(templ.SafeURL(RepositoriesHref(v.ProjectID)))
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `projects/pages.templ`, Line: 193, Col: 76}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `projects/pages.templ`, Line: 214, Col: 76}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var15))
 			if templ_7745c5c3_Err != nil {
@@ -335,7 +336,7 @@ func EnvFilesPage(v EnvFilesView) templ.Component {
 			var templ_7745c5c3_Var16 string
 			templ_7745c5c3_Var16, templ_7745c5c3_Err = templ.JoinStringErrs(v.ProjectName)
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `projects/pages.templ`, Line: 193, Col: 94}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `projects/pages.templ`, Line: 214, Col: 94}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var16))
 			if templ_7745c5c3_Err != nil {
@@ -348,7 +349,7 @@ func EnvFilesPage(v EnvFilesView) templ.Component {
 			var templ_7745c5c3_Var17 string
 			templ_7745c5c3_Var17, templ_7745c5c3_Err = templ.JoinStringErrs(v.RepositoryName)
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `projects/pages.templ`, Line: 193, Col: 132}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `projects/pages.templ`, Line: 214, Col: 132}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var17))
 			if templ_7745c5c3_Err != nil {
@@ -372,7 +373,7 @@ func EnvFilesPage(v EnvFilesView) templ.Component {
 				var templ_7745c5c3_Var18 string
 				templ_7745c5c3_Var18, templ_7745c5c3_Err = templ.JoinStringErrs(f.Path)
 				if templ_7745c5c3_Err != nil {
-					return templ.Error{Err: templ_7745c5c3_Err, FileName: `projects/pages.templ`, Line: 223, Col: 52}
+					return templ.Error{Err: templ_7745c5c3_Err, FileName: `projects/pages.templ`, Line: 244, Col: 52}
 				}
 				_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var18))
 				if templ_7745c5c3_Err != nil {
@@ -385,7 +386,7 @@ func EnvFilesPage(v EnvFilesView) templ.Component {
 				var templ_7745c5c3_Var19 string
 				templ_7745c5c3_Var19, templ_7745c5c3_Err = templ.JoinStringErrs(f.Content)
 				if templ_7745c5c3_Err != nil {
-					return templ.Error{Err: templ_7745c5c3_Err, FileName: `projects/pages.templ`, Line: 224, Col: 60}
+					return templ.Error{Err: templ_7745c5c3_Err, FileName: `projects/pages.templ`, Line: 245, Col: 60}
 				}
 				_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var19))
 				if templ_7745c5c3_Err != nil {
@@ -416,7 +417,7 @@ func EnvFilesPage(v EnvFilesView) templ.Component {
 				var templ_7745c5c3_Var20 string
 				templ_7745c5c3_Var20, templ_7745c5c3_Err = templ.JoinStringErrs(v.RootDir)
 				if templ_7745c5c3_Err != nil {
-					return templ.Error{Err: templ_7745c5c3_Err, FileName: `projects/pages.templ`, Line: 268, Col: 27}
+					return templ.Error{Err: templ_7745c5c3_Err, FileName: `projects/pages.templ`, Line: 289, Col: 27}
 				}
 				_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var20))
 				if templ_7745c5c3_Err != nil {
@@ -432,7 +433,15 @@ func EnvFilesPage(v EnvFilesView) templ.Component {
 					return templ_7745c5c3_Err
 				}
 			}
-			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 30, "</span></div><div class=\"[ cluster ]\"><button type=\"submit\" class=\"[ button ]\" data-variant=\"primary\" disabled x-bind:disabled=\"cannotAdd\" x-bind:aria-busy=\"adding\">Import from checkout</button> <button type=\"button\" class=\"[ button ]\" disabled x-bind:disabled=\"cannotAdd\" x-on:click=\"addEmpty\">Start empty</button></div></form>")
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 30, "</span></div><div class=\"[ cluster ]\"><button type=\"submit\" class=\"[ button ]\" data-variant=\"primary\" disabled x-bind:disabled=\"cannotAdd\" x-bind:aria-busy=\"adding\">Import from checkout</button> <button type=\"button\" class=\"[ button ]\" disabled x-bind:disabled=\"cannotAdd\" x-on:click=\"addEmpty\">Start empty</button></div></form><section class=\"[ flow ] [ flow-space-s ]\" aria-labelledby=\"repository-design-system\"><h2 id=\"repository-design-system\">Design system</h2><p class=\"[ color-ink-muted ]\">The design system agents follow in this repository. It reaches every session of this repository as read-only files, with a pointer in its brief. A repository uses one design system or none.</p>")
+			if templ_7745c5c3_Err != nil {
+				return templ_7745c5c3_Err
+			}
+			templ_7745c5c3_Err = designsystem.RepositorySelect(v.ProjectID, v.Seed.RepositoryID).Render(ctx, templ_7745c5c3_Buffer)
+			if templ_7745c5c3_Err != nil {
+				return templ_7745c5c3_Err
+			}
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 31, "</section>")
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
@@ -448,7 +457,7 @@ func EnvFilesPage(v EnvFilesView) templ.Component {
 					return templ_7745c5c3_Err
 				}
 			}
-			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 31, "</div></div></main>")
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 32, "</div></div></main>")
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
@@ -485,7 +494,7 @@ func runCommandsSection(seed RunCommandsSeed) templ.Component {
 			templ_7745c5c3_Var21 = templ.NopComponent
 		}
 		ctx = templ.ClearChildren(ctx)
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 32, "<section class=\"[ flow ] [ flow-space-m ]\" aria-labelledby=\"run-commands-title\" x-data=\"runsCommandsSettings\" data-seed=\"run-commands-seed\">")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 33, "<section class=\"[ flow ] [ flow-space-m ]\" aria-labelledby=\"run-commands-title\" x-data=\"runsCommandsSettings\" data-seed=\"run-commands-seed\">")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
@@ -493,7 +502,7 @@ func runCommandsSection(seed RunCommandsSeed) templ.Component {
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 33, "<h2 id=\"run-commands-title\">Run commands</h2><p class=\"[ color-ink-muted ]\">Named ways to run this repository's application, like <code>make air</code>. Every session of the repository offers them in its App tab, and runs them in its own worktree.</p><template x-if=\"error\"><div class=\"[ banner ]\" data-tone=\"danger\" role=\"alert\"><div class=\"[ flow ] [ flow-space-3xs grow ]\"><span x-text=\"error.message\"></span> <span class=\"[ code ]\"><span x-text=\"error.code\"></span> · <span x-text=\"error.next\"></span></span></div><button type=\"button\" class=\"[ button ]\" data-variant=\"ghost\" data-size=\"sm\" x-on:click=\"dismiss\">Dismiss</button></div></template><template x-if=\"notice\"><div class=\"[ banner ]\" data-tone=\"signal\" role=\"status\"><span class=\"[ grow ]\" x-text=\"notice\"></span> <button type=\"button\" class=\"[ button ]\" data-variant=\"ghost\" data-size=\"sm\" x-on:click=\"dismiss\">OK</button></div></template><div x-ignore data-ssr class=\"[ flow ]\">")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 34, "<h2 id=\"run-commands-title\">Run commands</h2><p class=\"[ color-ink-muted ]\">Named ways to run this repository's application, like <code>make air</code>. Every session of the repository offers them in its App tab, and runs them in its own worktree.</p><template x-if=\"error\"><div class=\"[ banner ]\" data-tone=\"danger\" role=\"alert\"><div class=\"[ flow ] [ flow-space-3xs grow ]\"><span x-text=\"error.message\"></span> <span class=\"[ code ]\"><span x-text=\"error.code\"></span> · <span x-text=\"error.next\"></span></span></div><button type=\"button\" class=\"[ button ]\" data-variant=\"ghost\" data-size=\"sm\" x-on:click=\"dismiss\">Dismiss</button></div></template><template x-if=\"notice\"><div class=\"[ banner ]\" data-tone=\"signal\" role=\"status\"><span class=\"[ grow ]\" x-text=\"notice\"></span> <button type=\"button\" class=\"[ button ]\" data-variant=\"ghost\" data-size=\"sm\" x-on:click=\"dismiss\">OK</button></div></template><div x-ignore data-ssr class=\"[ flow ]\">")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
@@ -504,38 +513,38 @@ func runCommandsSection(seed RunCommandsSeed) templ.Component {
 			}
 		}
 		for _, c := range seed.RunCommands {
-			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 34, "<section class=\"[ pane ]\"><header><span class=\"[ font-mono ]\">")
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 35, "<section class=\"[ pane ]\"><header><span class=\"[ font-mono ]\">")
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
 			var templ_7745c5c3_Var22 string
 			templ_7745c5c3_Var22, templ_7745c5c3_Err = templ.JoinStringErrs(c.Name)
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `projects/pages.templ`, Line: 321, Col: 49}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `projects/pages.templ`, Line: 347, Col: 49}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var22))
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
-			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 35, "</span></header><pre class=\"[ pad-m font-mono text-sm ]\">")
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 36, "</span></header><pre class=\"[ pad-m font-mono text-sm ]\">")
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
 			var templ_7745c5c3_Var23 string
 			templ_7745c5c3_Var23, templ_7745c5c3_Err = templ.JoinStringErrs(c.Command)
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `projects/pages.templ`, Line: 322, Col: 57}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `projects/pages.templ`, Line: 348, Col: 57}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var23))
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
-			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 36, "</pre></section>")
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 37, "</pre></section>")
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
 		}
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 37, "</div><template x-for=\"c in commands\" x-bind:key=\"c.name\"><section class=\"[ pane ]\" x-bind:aria-label=\"c.name\"><header><span class=\"[ font-mono ]\" x-text=\"c.name\"></span> <span class=\"[ push-end ] [ cluster ] [ gutter-xs ]\"><template x-if=\"!c.confirming\"><button type=\"button\" class=\"[ button ]\" data-variant=\"ghost\" data-size=\"sm\" x-on:click=\"askRemove(c.name)\">Remove</button></template><template x-if=\"c.confirming\"><span class=\"[ cluster ] [ gutter-xs ]\"><span class=\"[ text-sm color-danger weight-regular ]\">Remove? Sessions will no longer offer it.</span> <button type=\"button\" class=\"[ button ]\" data-variant=\"danger\" data-size=\"sm\" x-bind:aria-busy=\"c.removing\" x-on:click=\"remove(c.name)\">Remove</button> <button type=\"button\" class=\"[ button ]\" data-variant=\"ghost\" data-size=\"sm\" x-on:click=\"cancelRemove\">Keep</button></span></template></span></header><form class=\"[ cluster ] [ gutter-xs ] [ pad-m ]\" x-on:submit.prevent=\"save(c.name)\"><input class=\"[ font-mono text-sm grow ]\" spellcheck=\"false\" autocomplete=\"off\" x-model=\"c.draft\" x-bind:aria-label=\"'Command line of ' + c.name\"> <button type=\"submit\" class=\"[ button ]\" data-variant=\"primary\" data-size=\"sm\" x-bind:disabled=\"cannotSave(c.name)\" x-bind:aria-busy=\"c.saving\">Save</button> <button type=\"button\" class=\"[ button ]\" data-variant=\"ghost\" data-size=\"sm\" x-bind:disabled=\"cannotSave(c.name)\" x-on:click=\"revert(c.name)\">Revert</button></form></section></template><template x-if=\"isEmpty\">")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 38, "</div><template x-for=\"c in commands\" x-bind:key=\"c.name\"><section class=\"[ pane ]\" x-bind:aria-label=\"c.name\"><header><span class=\"[ font-mono ]\" x-text=\"c.name\"></span> <span class=\"[ push-end ] [ cluster ] [ gutter-xs ]\"><template x-if=\"!c.confirming\"><button type=\"button\" class=\"[ button ]\" data-variant=\"ghost\" data-size=\"sm\" x-on:click=\"askRemove(c.name)\">Remove</button></template><template x-if=\"c.confirming\"><span class=\"[ cluster ] [ gutter-xs ]\"><span class=\"[ text-sm color-danger weight-regular ]\">Remove? Sessions will no longer offer it.</span> <button type=\"button\" class=\"[ button ]\" data-variant=\"danger\" data-size=\"sm\" x-bind:aria-busy=\"c.removing\" x-on:click=\"remove(c.name)\">Remove</button> <button type=\"button\" class=\"[ button ]\" data-variant=\"ghost\" data-size=\"sm\" x-on:click=\"cancelRemove\">Keep</button></span></template></span></header><form class=\"[ cluster ] [ gutter-xs ] [ pad-m ]\" x-on:submit.prevent=\"save(c.name)\"><input class=\"[ font-mono text-sm grow ]\" spellcheck=\"false\" autocomplete=\"off\" x-model=\"c.draft\" x-bind:aria-label=\"'Command line of ' + c.name\"> <button type=\"submit\" class=\"[ button ]\" data-variant=\"primary\" data-size=\"sm\" x-bind:disabled=\"cannotSave(c.name)\" x-bind:aria-busy=\"c.saving\">Save</button> <button type=\"button\" class=\"[ button ]\" data-variant=\"ghost\" data-size=\"sm\" x-bind:disabled=\"cannotSave(c.name)\" x-on:click=\"revert(c.name)\">Revert</button></form></section></template><template x-if=\"isEmpty\">")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
@@ -543,7 +552,7 @@ func runCommandsSection(seed RunCommandsSeed) templ.Component {
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 38, "</template><form class=\"[ flow ] [ flow-space-m ]\" x-on:submit.prevent=\"add\"><h3>Add a run command</h3><div class=\"[ field ]\"><label for=\"run-command-name\">Name</label> <input id=\"run-command-name\" placeholder=\"server\" autocomplete=\"off\" x-model=\"newName\" x-bind:aria-invalid=\"!!newNameProblem\" aria-describedby=\"run-command-name-hint\"><template x-if=\"newNameProblem\"><span class=\"[ error ]\" x-text=\"newNameProblem\"></span></template><span class=\"[ hint ]\" id=\"run-command-name-hint\">Letters, digits, spaces and . _ -, up to 40 characters.</span></div><div class=\"[ field ]\"><label for=\"run-command-line\">Command line</label> <input id=\"run-command-line\" class=\"[ font-mono text-sm ]\" placeholder=\"make air\" spellcheck=\"false\" autocomplete=\"off\" x-model=\"newCommand\"></div><div class=\"[ cluster ]\"><button type=\"submit\" class=\"[ button ]\" data-variant=\"primary\" disabled x-bind:disabled=\"cannotAdd\" x-bind:aria-busy=\"adding\">Add command</button></div></form></section>")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 39, "</template><form class=\"[ flow ] [ flow-space-m ]\" x-on:submit.prevent=\"add\"><h3>Add a run command</h3><div class=\"[ field ]\"><label for=\"run-command-name\">Name</label> <input id=\"run-command-name\" placeholder=\"server\" autocomplete=\"off\" x-model=\"newName\" x-bind:aria-invalid=\"!!newNameProblem\" aria-describedby=\"run-command-name-hint\"><template x-if=\"newNameProblem\"><span class=\"[ error ]\" x-text=\"newNameProblem\"></span></template><span class=\"[ hint ]\" id=\"run-command-name-hint\">Letters, digits, spaces and . _ -, up to 40 characters.</span></div><div class=\"[ field ]\"><label for=\"run-command-line\">Command line</label> <input id=\"run-command-line\" class=\"[ font-mono text-sm ]\" placeholder=\"make air\" spellcheck=\"false\" autocomplete=\"off\" x-model=\"newCommand\"></div><div class=\"[ cluster ]\"><button type=\"submit\" class=\"[ button ]\" data-variant=\"primary\" disabled x-bind:disabled=\"cannotAdd\" x-bind:aria-busy=\"adding\">Add command</button></div></form></section>")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}

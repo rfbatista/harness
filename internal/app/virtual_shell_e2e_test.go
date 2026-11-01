@@ -40,14 +40,15 @@ import (
 // the harness keeps in sync (contract "Harness server ↔ Agent sessions —
 // virtual shell" §3).
 type shellE2E struct {
-	t       *testing.T
-	ctx     context.Context
-	orch    *orchestration.Service
-	plan    *planning.Service
-	srv     *httptest.Server
-	cat     catalog.Catalog
-	project string
-	repo    string
+	defaultDS string // the design system tests apply, made on first use
+	t         *testing.T
+	ctx       context.Context
+	orch      *orchestration.Service
+	plan      *planning.Service
+	srv       *httptest.Server
+	cat       catalog.Catalog
+	project   string
+	repo      string
 	// dataDir is the server's data directory.
 	dataDir string
 	// repoDir is the project's main checkout.
@@ -87,6 +88,7 @@ func (e *shellE2E) serve() {
 	mux.Handle("/api/", httpapi.NewRouter(httpapi.NewHandler(httpapi.Services{
 		Sessions: e.orch, Planning: e.plan, TaskResources: e.plan, TaskComments: e.plan, Artifacts: e.art, Shells: e.shells,
 		RepositoryArchitectures: e.cat.RepositoryArchitectures, ArchitectureRules: e.rules,
+		Projects: e.cat.Projects, DesignSystems: e.cat.DesignSystems,
 	})))
 	mux.Handle(mcpsession.PathPrefix, mcpsession.TaskHandler(sessionTaskTools(e.cat, e.orch, e.plan, e.sessions, e.art, e.channel, nil, nil)))
 	e.srv = httptest.NewServer(mux)

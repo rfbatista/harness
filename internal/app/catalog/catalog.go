@@ -21,14 +21,20 @@
 package catalog
 
 import (
+	"context"
+	"fmt"
+	"sync"
+
 	"operators-mcp/internal/adapter/out/eventbus"
 	"operators-mcp/internal/application/agents"
 	"operators-mcp/internal/application/architecture"
 	"operators-mcp/internal/application/capabilities"
+	"operators-mcp/internal/application/designsystem"
 	"operators-mcp/internal/application/projects"
 	"operators-mcp/internal/application/repoarch"
 	"operators-mcp/internal/application/settings"
 	"operators-mcp/internal/application/tooling"
+	"operators-mcp/internal/domain"
 	"operators-mcp/internal/ports"
 )
 
@@ -44,16 +50,18 @@ type Deps struct {
 	// ArchGit reads checkouts for previews and discovery; nil disables them.
 	ArchGit ports.ArchitectureGit
 	// ArchEvents keeps the architecture rule events the API lists.
-	ArchEvents  ports.ArchitectureRuleEventStore
-	Agents      ports.AgentRepository
-	Prompts     ports.PromptRepository
-	Skills      ports.SkillRepository
-	MCPServers  ports.MCPServerRepository
-	Tools       ports.ToolRepository
-	Settings    ports.SettingsRepository
-	Publisher   ports.SkillPublisher
-	PathMatcher ports.PathMatcher
-	TreeLister  ports.TreeLister
+	ArchEvents ports.ArchitectureRuleEventStore
+	// DesignRecords keeps projects' design system versions; nil disables them.
+	DesignRecords ports.DesignSystemStore
+	Agents        ports.AgentRepository
+	Prompts       ports.PromptRepository
+	Skills        ports.SkillRepository
+	MCPServers    ports.MCPServerRepository
+	Tools         ports.ToolRepository
+	Settings      ports.SettingsRepository
+	Publisher     ports.SkillPublisher
+	PathMatcher   ports.PathMatcher
+	TreeLister    ports.TreeLister
 	// RepositoryFinder lets projects discover git checkouts; nil disables it.
 	RepositoryFinder ports.RepositoryFinder
 	// EnvFiles and EnvFileIO keep repositories' env files; nil disables them.
@@ -75,9 +83,11 @@ type Catalog struct {
 	Architecture *architecture.Service
 	// RepositoryArchitectures is nil without Deps.ArchRecords.
 	RepositoryArchitectures *repoarch.Service
-	Agents                  *agents.Service
-	Capabilities            *capabilities.Service
-	Settings                *settings.Service
+	// DesignSystems is nil without Deps.DesignRecords.
+	DesignSystems *designsystem.Service
+	Agents        *agents.Service
+	Capabilities  *capabilities.Service
+	Settings      *settings.Service
 }
 
 // New builds the contexts, subscribes each to the events it reacts to, and
@@ -127,11 +137,37 @@ func New(d Deps) Catalog {
 		repoArch.Subscribe(bus)
 	}
 
+	var designs *designsystem.Service
+	if d.DesignRecords != nil {
+		designs = designsystem.NewService(designsystem.Deps{Store: d.DesignRecords, Projects: pr})
+		designs.Subscribe(bus)
+		var inUse sync.Mutex // apply and delete of a design system exclude each other
+		pr.UseDesignSystems(d.DesignRecords, &inUse)
+		designs.UseLock(&inUse)
+		designs.GuardDelete(func(ctx context.Context, designSystemID string) error {
+			used, err := pr.RepositoriesUsingDesignSystem(ctx, designSystemID)
+			if err != nil {
+				return err
+			}
+			if len(used) == 0 {
+				return nil
+			}
+			rows := make([]map[string]string, len(used))
+			for i, r := range used {
+				rows[i] = map[string]string{"repository_id": r.ID, "name": r.DisplayName()}
+			}
+			return &domain.DetailedError{
+				StructuredError: &domain.StructuredError{Code: "DESIGN_SYSTEM_IN_USE", Message: fmt.Sprintf("%d of the project's repositories use this design system; remove or move them first", len(used))},
+				Details:         map[string]any{"repositories": rows},
+			}
+		})
+	}
+
 	arch.Subscribe(bus)
 	ag.Subscribe(bus)
 	caps.Subscribe(bus)
 
-	return Catalog{Bus: bus, Projects: pr, Architecture: arch, RepositoryArchitectures: repoArch, Agents: ag, Capabilities: caps, Settings: st}
+	return Catalog{Bus: bus, Projects: pr, Architecture: arch, RepositoryArchitectures: repoArch, DesignSystems: designs, Agents: ag, Capabilities: caps, Settings: st}
 }
 
 // Tooling is the catalog as the built-in tool groups need it.

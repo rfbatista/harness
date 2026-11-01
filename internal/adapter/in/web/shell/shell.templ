@@ -303,6 +303,14 @@ templ projectNav(r Rail) {
 					</a>
 				</li>
 			}
+			if r.DesignSystemHref != "" {
+				<li>
+					<a href={ templ.SafeURL(r.DesignSystemHref) } { currentAttrs(r.Page == PageDesignSystem)... }>
+						@icon("design-system")
+						<span class="[ label ]">Design systems</span>
+					</a>
+				</li>
+			}
 			if r.UsageHref != "" {
 				<li>
 					<a href={ templ.SafeURL(r.UsageHref) } { currentAttrs(r.Page == PageUsage)... }>

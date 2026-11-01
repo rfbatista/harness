@@ -39,7 +39,7 @@ stored: what others change appears here, and what you write here is stored.
     project/architecture/<repository>/instructions/<path>
                               the repository's instruction files (AGENTS.md, CLAUDE.md, skills, sub-agents),
                               kept in the harness; delivered to you, read-only here
-    tasks/<task-id>/docs/     another task of the project: its documents, task scope
+{{DESIGN_SYSTEM}}    tasks/<task-id>/docs/     another task of the project: its documents, task scope
 
 File names are <slug of title>.<ext>, with -<short id> added only on a
 clash; a file you create keeps the name you chose. A document's extension
@@ -102,13 +102,21 @@ so write those another way.
 // readmeFor is the resources root's README at the current value of the setting
 // "Agents move documents to project" (ADR 0020): which rule applies to a
 // move from task/docs to project/docs.
-func readmeFor(agentsMove bool) string {
+func readmeFor(agentsMove, designSystem bool) string {
 	moveDocs, moveDenied := moveDocsOff, moveDeniedOff
 	if agentsMove {
 		moveDocs, moveDenied = moveDocsOn, moveDeniedOn
 	}
-	return strings.NewReplacer("{{MOVE_DOCS}}", moveDocs, "{{MOVE_DENIED}}", moveDenied).Replace(readmeTemplate)
+	designLine := ""
+	if designSystem {
+		designLine = designSystemLine
+	}
+	return strings.NewReplacer("{{DESIGN_SYSTEM}}", designLine, "{{MOVE_DOCS}}", moveDocs, "{{MOVE_DENIED}}", moveDenied).Replace(readmeTemplate)
 }
+
+// designSystemLine is the layout line of the design system folder, in the
+// README of the shells that have it.
+const designSystemLine = "    project/design-system/    README.md, DESIGN.md, tokens.json: the project's design system, tokens and principles (read-only)\n"
 
 const moveDocsOn = `The setting "Agents move documents to project" is on: mv task/docs/<file>
 project/docs/ makes one of this task's documents a project document, with
