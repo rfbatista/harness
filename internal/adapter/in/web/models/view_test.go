@@ -121,3 +121,16 @@ func TestTheAssistantsPaneHasTheArchitectureAssistantRowAtSonnetWhileUnset(t *te
 		t.Errorf("choices = %v", got)
 	}
 }
+
+func TestAnUnavailableArchitectureAssistantPutsItsReasonAndFixURLOnItsRowOnly(t *testing.T) {
+	v := NewView(settings{}).WithArchitectureAssistant(shell.Helper{Reason: "no agent credential", FixURL: "/agent-isolation#credential"})
+	if a := v.Assistants[1]; a.UnavailableReason != "no agent credential" || a.FixURL != "/agent-isolation#credential" {
+		t.Fatalf("row = %+v", a)
+	}
+	if w := v.Assistants[0]; w.UnavailableReason != "" {
+		t.Errorf("the writing helper's row changed: %+v", w)
+	}
+	if ok := NewView(settings{}).WithArchitectureAssistant(shell.Helper{Available: true}); ok.Assistants[1].UnavailableReason != "" {
+		t.Errorf("an available assistant has no reason: %+v", ok.Assistants[1])
+	}
+}

@@ -82,8 +82,19 @@ type ArchitectureAssistantAvailability struct {
 	FixURL    string
 }
 
+// ArchitectureAssistantReadiness tells the pages whether the assistant can
+// run, from the readiness state alone: it never starts anything.
+type ArchitectureAssistantReadiness interface {
+	// Availability says whether a turn could run for the repository now.
+	Availability(ctx context.Context, repositoryID string) ArchitectureAssistantAvailability
+	// Readiness says whether the harness could run a turn for any repository
+	// (Claude signed in, installed, a sandbox driver), for the Models page.
+	Readiness(ctx context.Context) ArchitectureAssistantAvailability
+}
+
 // ArchitectureAssistant runs the assistant's turns.
 type ArchitectureAssistant interface {
+	ArchitectureAssistantReadiness
 	// Run runs one turn and reports its events in order. A refusal before
 	// anything ran (INVALID_INPUT, REPOSITORY_NOT_FOUND, CONVERSATION_NOT_FOUND,
 	// CONVERSATION_BUSY, ARCHITECTURE_ASSISTANT_UNAVAILABLE), a failed turn
@@ -93,7 +104,4 @@ type ArchitectureAssistant interface {
 	// End forgets a conversation and deletes its transcript. An id that does
 	// not exist is not an error.
 	End(conversationID string)
-	// Availability says whether a turn could run for the repository now,
-	// without starting anything.
-	Availability(ctx context.Context, repositoryID string) ArchitectureAssistantAvailability
 }

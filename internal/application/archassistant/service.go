@@ -144,13 +144,29 @@ func (s *Service) Availability(ctx context.Context, repositoryID string) ports.A
 		return ports.ArchitectureAssistantAvailability{Reason: "the repository was not found"}
 	}
 	if err := s.unavailable(ctx, repo); err != nil {
-		var de *domain.DetailedError
-		if errors.As(err, &de) {
-			d, _ := de.Details.(map[string]string)
-			return ports.ArchitectureAssistantAvailability{Reason: de.Message, FixURL: d["fix_url"]}
+		return availabilityOf(err)
+	}
+	return ports.ArchitectureAssistantAvailability{Available: true}
+}
+
+// Readiness says whether the harness could run a turn for any repository, from
+// the readiness state alone.
+func (s *Service) Readiness(ctx context.Context) ports.ArchitectureAssistantAvailability {
+	if s.Peek != nil {
+		if err := s.Peek(ctx); err != nil {
+			return availabilityOf(unavailableError(err))
 		}
 	}
 	return ports.ArchitectureAssistantAvailability{Available: true}
+}
+
+func availabilityOf(err error) ports.ArchitectureAssistantAvailability {
+	var de *domain.DetailedError
+	if errors.As(err, &de) {
+		d, _ := de.Details.(map[string]string)
+		return ports.ArchitectureAssistantAvailability{Reason: de.Message, FixURL: d["fix_url"]}
+	}
+	return ports.ArchitectureAssistantAvailability{Reason: err.Error()}
 }
 
 // unavailable is the refusal for a repository the assistant cannot run on, nil

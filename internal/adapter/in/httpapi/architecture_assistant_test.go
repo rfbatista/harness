@@ -46,6 +46,10 @@ func (f *fakeArchitectureAssistant) Run(ctx context.Context, req ports.Architect
 
 func (f *fakeArchitectureAssistant) End(id string) { f.ended = append(f.ended, id) }
 
+func (f *fakeArchitectureAssistant) Readiness(context.Context) ports.ArchitectureAssistantAvailability {
+	return ports.ArchitectureAssistantAvailability{Available: true}
+}
+
 func (f *fakeArchitectureAssistant) Availability(context.Context, string) ports.ArchitectureAssistantAvailability {
 	return ports.ArchitectureAssistantAvailability{Available: true}
 }

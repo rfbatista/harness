@@ -252,3 +252,10 @@ func TestABaseIsTheTargetsValueInARecordOrNull(t *testing.T) {
 		t.Errorf("layer remove base = %s", got)
 	}
 }
+
+func TestARuleEventListsItsIDForTheAssistantToBeAskedAbout(t *testing.T) {
+	b, err := json.Marshal(ArchitectureRuleEvent{ID: "ev1", RuleID: "r"})
+	if err != nil || !strings.Contains(string(b), `"id":"ev1"`) {
+		t.Fatalf("event JSON = %s, %v", b, err)
+	}
+}
