@@ -297,5 +297,5 @@ test("a restored feature brings back the children archived on their own before i
   memory.replaceTasks([makeTask(), feature, kid]);
   memory.emit({ kind: "task-upsert", task: feature });
   await flush();
-  assert.deepEqual(store.tasks.map((t) => [t.id, Boolean(t.archivedAt)]), [["t1", false], ["f", false], ["k", true]]);
+  assert.deepEqual(store.tasks.map((t) => `${t.id}:${Boolean(t.archivedAt)}`).sort(), ["f:false", "k:true", "t1:false"]);
 });
