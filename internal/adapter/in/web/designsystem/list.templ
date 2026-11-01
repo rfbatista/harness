@@ -99,8 +99,9 @@ templ IndexView(v ListView) {
 }
 
 // starts are the three ways to begin a design system, of the same weight, on
-// a project with none. Only Start blank works; Import and Ask an agent arrive
-// with later slices. Alpine's copy (live) asks for the identity first.
+// a project with none. Start blank and Import work (Import only when a repository
+// holds the files); Ask an agent arrives with a later slice. Alpine's copy
+// (live) asks for the identity first.
 templ starts(live bool) {
 	<section id="design-system-starts" class="[ flow ]" aria-label="Start a design system">
 		<p class="[ color-ink-muted ]">Tokens, principles and components that your UI repositories share. Start the first one; you can add more later.</p>
@@ -110,8 +111,13 @@ templ starts(live bool) {
 					<div class="[ entry-card-body flow ]">
 						<h2>Import from a repository</h2>
 						<p class="[ color-ink-muted text-sm ]">Reads <code>DESIGN.md</code> and <code>tokens.json</code> from a repository of this project. You review before anything is stored.</p>
-						<p class="[ color-ink-faint text-sm ]">Not available yet.</p>
-						<button type="button" class="[ button ]" data-variant="primary" data-action="import" disabled>Import…</button>
+						if live {
+							<p class="[ color-ink-faint text-sm ]" x-show="!canImport">No repository of this project holds a DESIGN.md or tokens.json.</p>
+							<button type="button" class="[ button ]" data-action="import" x-bind:data-variant="importVariant" x-bind:disabled="!canImport" x-on:click="startImport">Import…</button>
+						} else {
+							<p class="[ color-ink-faint text-sm ]">Looking for repositories…</p>
+							<button type="button" class="[ button ]" data-action="import" disabled>Import…</button>
+						}
 					</div>
 				</section>
 			</div>
@@ -122,7 +128,7 @@ templ starts(live bool) {
 						<p class="[ color-ink-muted text-sm ]">An empty design system you fill in.</p>
 						<p class="[ color-ink-faint text-sm ]">Nothing is stored as a version until you save.</p>
 						if live {
-							<button type="button" class="[ button ]" data-action="start-blank" x-on:click="startFirst">Start blank…</button>
+							<button type="button" class="[ button ]" data-action="start-blank" x-bind:data-variant="blankVariant" x-on:click="startFirst">Start blank…</button>
 						} else {
 							<button type="button" class="[ button ]" data-action="start-blank">Start blank…</button>
 						}
@@ -195,9 +201,35 @@ templ newForm() {
 						<section class="[ entry-card ]">
 							<div class="[ entry-card-body flow ]">
 								<h3>Import from a repository</h3>
-								<p class="[ color-ink-muted text-sm ]">Reads <code>DESIGN.md</code> and <code>tokens.json</code>. Import always creates this new design system.</p>
-								<p class="[ color-ink-faint text-sm ]">Not available yet.</p>
-								<button type="button" class="[ button ]" data-action="import" disabled>Preview import</button>
+								<p class="[ color-ink-muted text-sm ]">Reads <code>DESIGN.md</code> and <code>tokens.json</code>. Import always creates this new design system; it never writes into another one.</p>
+								<template x-if="!canImport">
+									<p class="[ color-ink-faint text-sm ]">No repository of this project holds a DESIGN.md or tokens.json.</p>
+								</template>
+								<template x-if="canImport">
+									<div class="[ flow ] [ flow-space-xs ]">
+										<div class="[ field ]">
+											<label for="import-repository">Repository</label>
+											<select id="import-repository" data-field="import-repository" x-on:change="chooseRepository">
+												<template x-for="s in sources" x-bind:key="s.id">
+													<option x-bind:value="s.id" x-bind:selected="s.id === repositoryId" x-text="s.label"></option>
+												</template>
+											</select>
+										</div>
+										<div class="[ field ]">
+											<label for="import-design-md">DESIGN.md</label>
+											<input id="import-design-md" data-field="design-md-path" class="[ font-mono text-sm ]" type="text" spellcheck="false" x-bind:value="designMdPath" x-on:input="typeDesignMdPath"/>
+										</div>
+										<div class="[ field ]">
+											<label for="import-tokens">Token file</label>
+											<input id="import-tokens" data-field="tokens-path" class="[ font-mono text-sm ]" type="text" spellcheck="false" x-bind:value="tokensPath" x-on:input="typeTokensPath"/>
+										</div>
+										<div class="[ field ]">
+											<label for="import-components">Components folder</label>
+											<input id="import-components" data-field="components-dir" class="[ font-mono text-sm ]" type="text" spellcheck="false" x-bind:value="componentsDir" x-on:input="typeComponentsDir"/>
+										</div>
+									</div>
+								</template>
+								<button type="button" class="[ button ]" data-action="import" x-bind:data-variant="importVariant" x-bind:disabled="!canPreview || !canImport" x-bind:aria-busy="previewing" x-on:click="previewImport">Preview import</button>
 							</div>
 						</section>
 					</div>
@@ -206,7 +238,7 @@ templ newForm() {
 							<div class="[ entry-card-body flow ]">
 								<h3>Start blank</h3>
 								<p class="[ color-ink-muted text-sm ]">Creates the design system with no content. Nothing is stored as a version until your first Save.</p>
-								<button type="button" class="[ button ]" data-variant="primary" data-action="start-blank" x-bind:disabled="saving" x-bind:aria-busy="saving" x-on:click="startBlank">Start blank</button>
+								<button type="button" class="[ button ]" x-bind:data-variant="blankVariant" data-action="start-blank" x-bind:disabled="saving" x-bind:aria-busy="saving" x-on:click="startBlank">Start blank</button>
 							</div>
 						</section>
 					</div>
@@ -224,6 +256,46 @@ templ newForm() {
 				<div class="[ cluster ]">
 					<button type="button" class="[ button ]" data-variant="ghost" data-action="back" x-on:click="back">Back</button>
 					<button type="button" class="[ button ]" data-variant="ghost" data-action="cancel" x-on:click="cancel">Cancel</button>
+				</div>
+			</div>
+		</template>
+		<template x-if="previewStep">
+			<div class="[ flow ]" data-import-preview aria-labelledby="import-preview-title">
+				<p class="[ color-ink-faint text-sm ]">1 Name it › 2 Choose a start › <b>Preview</b></p>
+				<h2 id="import-preview-title" x-text="previewTitle"></h2>
+				<p class="[ color-ink-muted ]" data-preview-summary x-text="previewSummary"></p>
+				<section class="[ flow ] [ flow-space-2xs ]" aria-label="Tokens">
+					<h3>Tokens</h3>
+					<div class="[ cluster ] [ gutter-s ]">
+						<template x-for="g in preview.groups" x-bind:key="g.group">
+							<span class="[ badge ]" x-bind:data-count="g.group"><span x-text="g.group"></span> <b x-text="g.count"></b></span>
+						</template>
+					</div>
+				</section>
+				<section class="[ flow ] [ flow-space-2xs ]" aria-label="Principles">
+					<h3>Principles</h3>
+					<template x-if="!preview.hasPrinciples">
+						<p class="[ color-ink-faint text-sm ]">No principles found.</p>
+					</template>
+					<ul class="[ flow ] [ flow-space-3xs text-sm ]">
+						<template x-for="h in preview.sections" x-bind:key="h">
+							<li data-section x-text="h"></li>
+						</template>
+					</ul>
+				</section>
+				<template x-if="hasSkipped">
+					<section class="[ flow ] [ flow-space-2xs ]" aria-label="Skipped">
+						<h3 x-text="skippedTitle"></h3>
+						<ul class="[ flow ] [ flow-space-3xs text-sm ]">
+							<template x-for="k in preview.skipped" x-bind:key="k.path">
+								<li data-skipped><code x-text="k.path"></code> <span class="[ color-ink-muted ]" x-text="k.reason"></span></li>
+							</template>
+						</ul>
+					</section>
+				</template>
+				<div class="[ cluster ]">
+					<button type="button" class="[ button ]" data-variant="primary" data-action="confirm-import" x-bind:disabled="saving" x-bind:aria-busy="saving" x-on:click="confirmImport" x-text="confirmLabel">Import</button>
+					<button type="button" class="[ button ]" data-variant="ghost" data-action="cancel-preview" x-on:click="cancelPreview">Cancel</button>
 				</div>
 			</div>
 		</template>

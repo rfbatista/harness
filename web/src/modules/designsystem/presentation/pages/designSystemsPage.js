@@ -5,8 +5,10 @@
 //   <main x-data="designSystemsPage" data-seed="design-systems-seed">
 //
 // The server seeds the identities for the first paint; the repositories that
-// use each come from the API. Only Start blank is live: Import and Ask an
-// agent arrive with later slices and stay inert.
+// use each come from the API. Start blank and Import are live: Import offers
+// the repositories that hold a DESIGN.md or tokens.json, previews what parsed
+// and creates the design system when confirmed. Ask an agent arrives with a
+// later slice and stays inert.
 
 import { FeedStatus } from "../../../../shared/domain/feed.js";
 import { describeError } from "../../../../shared/presentation/errors.js";
@@ -21,7 +23,7 @@ export const designSystemsPage = ({ gateway, navigate }) => () => ({
   error: null,
   /** The server's first paint is replaced by the page's own rows. */
   live: false,
-  /** The form: whether it is open, its step ("identity" or "start"), the start chosen before it opened ("" or "blank"), and what is typed. */
+  /** The form: whether it is open, its step ("identity", "start" or "preview"), the start chosen before it opened ("", "blank" or "import"), and what is typed. */
   formOpen: false,
   step: "identity",
   chosen: "",
@@ -35,6 +37,14 @@ export const designSystemsPage = ({ gateway, navigate }) => () => ({
   formError: null,
   saving: false,
   unfollow: null,
+  /** Import: the repositories that hold design system files, the one chosen with its paths, and the preview read from it (null: none). */
+  sources: [],
+  repositoryId: "",
+  designMdPath: "",
+  tokensPath: "",
+  componentsDir: "",
+  preview: null,
+  previewing: false,
 
   get rowsView() {
     return sortRows(this.rows).map((r) => ({ ...r, href: `${this.indexHref}/${encodeURIComponent(r.slug)}` }));
@@ -72,6 +82,38 @@ export const designSystemsPage = ({ gateway, navigate }) => () => ({
   get descriptionFault() {
     return this.fault?.field === "description" ? this.fault : null;
   },
+  get canImport() {
+    return this.sources.length > 0;
+  },
+  /** Import is the primary start when a repository holds the files; Start blank is then secondary. */
+  get importVariant() {
+    return this.canImport ? "primary" : null;
+  },
+  get blankVariant() {
+    return this.canImport ? null : "primary";
+  },
+  get previewStep() {
+    return this.step === "preview";
+  },
+  get canPreview() {
+    return !this.previewing && this.repositoryId !== "";
+  },
+  get previewTitle() {
+    return `Import into “${this.name.trim()}”`;
+  },
+  get confirmLabel() {
+    return `Import as ${this.name.trim()}`;
+  },
+  get previewSummary() {
+    const p = this.preview;
+    return p ? `${p.tokenCount} tokens, ${p.sections.length} principle sections, ${p.components} components` : "";
+  },
+  get hasSkipped() {
+    return (this.preview?.skipped.length ?? 0) > 0;
+  },
+  get skippedTitle() {
+    return `Skipped (${this.preview?.skipped.length ?? 0})`;
+  },
   get startsName() {
     return this.name.trim();
   },
@@ -91,6 +133,7 @@ export const designSystemsPage = ({ gateway, navigate }) => () => ({
       this.live = true;
     });
     this.load();
+    this.loadSources();
     this.unfollow = gateway.followProject(this.projectId, {
       onChanged: () => this.load(),
       onStatus: (status) => {
@@ -113,6 +156,40 @@ export const designSystemsPage = ({ gateway, navigate }) => () => ({
     }
   },
 
+  /** Reads the repositories an import can start from; none when they cannot be read. */
+  async loadSources() {
+    try {
+      this.sources = await gateway.importSources(this.projectId);
+    } catch {
+      this.sources = [];
+    }
+    if (!this.sources.some((s) => s.id === this.repositoryId)) this.pickSource(this.sources[0]);
+  },
+
+  /** Chooses a repository and fills the paths found there. */
+  pickSource(source) {
+    this.repositoryId = source?.id ?? "";
+    this.designMdPath = source?.designMd || "DESIGN.md";
+    this.tokensPath = source?.tokens || "tokens.json";
+    this.componentsDir = "components/";
+  },
+
+  chooseRepository(event) {
+    this.pickSource(this.sources.find((s) => s.id === event.target.value));
+  },
+
+  typeDesignMdPath(event) {
+    this.designMdPath = event.target.value;
+  },
+
+  typeTokensPath(event) {
+    this.tokensPath = event.target.value;
+  },
+
+  typeComponentsDir(event) {
+    this.componentsDir = event.target.value;
+  },
+
   /** New design system: the identity form, then the starts. */
   openNew() {
     this.openForm("");
@@ -123,6 +200,11 @@ export const designSystemsPage = ({ gateway, navigate }) => () => ({
     this.openForm("blank");
   },
 
+  /** Import on the empty project's cards: the identity form, then the import card. */
+  startImport() {
+    this.openForm("import");
+  },
+
   openForm(start) {
     this.formOpen = true;
     this.step = "identity";
@@ -131,7 +213,9 @@ export const designSystemsPage = ({ gateway, navigate }) => () => ({
     this.slug = "";
     this.slugTouched = false;
     this.description = "";
+    this.preview = null;
     this.clearFault();
+    this.loadSources();
     this.$nextTick(() => this.$el.querySelector("[data-new-form] [data-field=name]")?.focus());
   },
 
@@ -173,6 +257,54 @@ export const designSystemsPage = ({ gateway, navigate }) => () => ({
 
   back() {
     this.step = "identity";
+  },
+
+  get importPaths() {
+    return { designMd: this.designMdPath.trim(), tokens: this.tokensPath.trim(), components: this.componentsDir.trim() };
+  },
+
+  /** Reads the repository and shows what would be stored; nothing is written. */
+  async previewImport() {
+    if (!this.canPreview) return;
+    this.previewing = true;
+    this.clearFault();
+    try {
+      this.preview = await gateway.previewImport(this.projectId, this.repositoryId, this.importPaths);
+      this.step = "preview";
+    } catch (err) {
+      this.formError = { ...describeError(err), code: err?.code ?? "" };
+    } finally {
+      this.previewing = false;
+    }
+  },
+
+  /** Leaves the preview for the import card; nothing was stored. */
+  cancelPreview() {
+    this.preview = null;
+    this.step = "start";
+  },
+
+  /** Creates the design system from the previewed files and opens its page. */
+  async confirmImport() {
+    if (!this.canContinue || this.preview === null) return;
+    this.saving = true;
+    this.clearFault();
+    const slug = this.slug;
+    try {
+      await gateway.importDesignSystem(this.projectId, this.repositoryId, this.importPaths, { name: this.name.trim(), slug, description: this.description.trim() });
+      navigate(`${this.indexHref}/${encodeURIComponent(slug)}`);
+    } catch (err) {
+      const fault = faultOf(err);
+      if (fault.field === "") {
+        this.formError = { ...describeError(err), code: fault.code };
+        this.step = "start";
+      } else {
+        this.fault = fault;
+        this.step = "identity";
+      }
+    } finally {
+      this.saving = false;
+    }
   },
 
   /** Creates the design system with nothing saved and opens its page. */

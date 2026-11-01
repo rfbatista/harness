@@ -365,6 +365,9 @@ func NewRouter(h *Handler, opts ...Option) *echo.Echo {
 	g.POST("/get_design_system", h.handleGetDesignSystem)
 	g.POST("/save_design_system", h.handleSaveDesignSystem)
 	g.POST("/rename_design_token", h.handleRenameDesignToken)
+	g.POST("/find_design_system_sources", h.handleFindDesignSystemSources)
+	g.POST("/preview_design_system_import", h.handlePreviewDesignSystemImport)
+	g.POST("/import_design_system", h.handleImportDesignSystem)
 	g.POST("/list_design_system_versions", h.handleListDesignSystemVersions)
 	g.POST("/get_design_system_version", h.handleGetDesignSystemVersion)
 

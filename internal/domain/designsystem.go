@@ -61,12 +61,19 @@ const (
 	TokenFont       = "font"
 	TokenNumber     = "number"
 	TokenDuration   = "duration"
+	TokenEasing     = "easing"
 	TokenShadow     = "shadow"
 	TokenTypography = "typography"
 )
 
 // Sources of a design-system version.
-const DesignSourceManual = "manual"
+const (
+	DesignSourceManual = "manual"
+	DesignSourceImport = "import"
+)
+
+// DesignByImport is who wrote a version an import made.
+const DesignByImport = "import"
 
 // DesignByPerson is who wrote a version the person saved.
 const DesignByPerson = "person"
@@ -103,12 +110,16 @@ type DesignSystemVersion struct {
 	DesignSystemID string
 	Version        int
 	At             time.Time
-	By             string // "person"
-	Source         string // "manual"
+	By             string // "person" or "import"
+	Source         string // "manual" or "import"
 	ProposalID     string
 	Message        string
 	Summary        DesignSummary
 	Record         DesignSystemRecord
+	// RepositoryID and RepositoryName say which repository an import (source
+	// "import") read; the name is kept as it was then.
+	RepositoryID   string
+	RepositoryName string
 }
 
 // DesignSystem is a design system as it is now: its identity and the latest
@@ -129,8 +140,11 @@ type DesignSystem struct {
 
 var (
 	designNamePattern = regexp.MustCompile(`^[a-z][a-z0-9-]*$`)
-	designKeyPattern  = regexp.MustCompile(`^[A-Za-z][A-Za-z0-9-]*$`)
-	durationPattern   = regexp.MustCompile(`^-?[0-9]*\.?[0-9]+m?s$`)
+	// designTokenNamePattern is a token's name: it may start with a digit
+	// (2xl, 3xs); a group and a slug may not.
+	designTokenNamePattern = regexp.MustCompile(`^[a-z0-9][a-z0-9-]*$`)
+	designKeyPattern       = regexp.MustCompile(`^[A-Za-z][A-Za-z0-9-]*$`)
+	durationPattern        = regexp.MustCompile(`^-?[0-9]*\.?[0-9]+m?s$`)
 	// cssVarRef finds a var(--name) reference and captures the name.
 	cssVarRef  = regexp.MustCompile(`var\(\s*(--[A-Za-z0-9_-]+)`)
 	scriptTag  = regexp.MustCompile(`(?i)<\s*script`)
@@ -217,8 +231,8 @@ func (r DesignSystemRecord) Validate(previous DesignSystemRecord) []DesignFieldE
 		if !designNamePattern.MatchString(t.Group) {
 			add(path+"/group", DesignBadName, "group %q must match ^[a-z][a-z0-9-]*$", t.Group)
 		}
-		if !designNamePattern.MatchString(t.Name) {
-			add(path+"/name", DesignBadName, "name %q must match ^[a-z][a-z0-9-]*$", t.Name)
+		if !designTokenNamePattern.MatchString(t.Name) {
+			add(path+"/name", DesignBadName, "name %q must match ^[a-z0-9][a-z0-9-]*$", t.Name)
 		}
 		if seen[t.Key()] {
 			add(path, DesignDuplicateToken, "token %s is defined more than once", t.Key())
@@ -290,7 +304,7 @@ func (r DesignSystemRecord) propertyOwners() map[string]string {
 
 func designValuePath(t DesignToken) string {
 	switch t.Type {
-	case TokenColor, TokenDimension, TokenFont, TokenNumber, TokenDuration, TokenShadow, TokenTypography:
+	case TokenColor, TokenDimension, TokenFont, TokenNumber, TokenDuration, TokenEasing, TokenShadow, TokenTypography:
 		return "/value"
 	}
 	return "/type"
@@ -300,7 +314,7 @@ func designValuePath(t DesignToken) string {
 // it does.
 func tokenValueProblem(t DesignToken) string {
 	switch t.Type {
-	case TokenColor, TokenDimension, TokenFont, TokenNumber, TokenDuration:
+	case TokenColor, TokenDimension, TokenFont, TokenNumber, TokenDuration, TokenEasing:
 		s, ok := t.Value.(string)
 		if !ok {
 			return fmt.Sprintf("a %s token's value is a string", t.Type)
@@ -336,7 +350,7 @@ func tokenValueProblem(t DesignToken) string {
 		}
 		return ""
 	}
-	return fmt.Sprintf("type %q is not one of color, dimension, font, number, duration, shadow, typography", t.Type)
+	return fmt.Sprintf("type %q is not one of color, dimension, font, number, duration, easing, shadow, typography", t.Type)
 }
 
 // cssValueProblem refuses a value that is empty or could end the :root rule
