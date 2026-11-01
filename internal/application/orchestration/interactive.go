@@ -39,6 +39,9 @@ func (s *Service) StartInteractive(ctx context.Context, req InteractiveRequest) 
 	if req.TicketID == "" && mode.NeedsTask() {
 		return nil, ports.AgentSpec{}, &domain.StructuredError{Code: "INVALID_INPUT", Message: "ticket_id is required"}
 	}
+	if (req.DesignSystemID != "") != (mode == domain.SessionModeDesignSystem) {
+		return nil, ports.AgentSpec{}, &domain.StructuredError{Code: "INVALID_INPUT", Message: "design_system_id is required by, and only for, a design session"}
+	}
 	// The project is read before the ticket, though prepare checks it too:
 	// a missing project must answer PROJECT_NOT_FOUND, not read as a ticket
 	// that belongs elsewhere. The ticket, when there is one, comes next: its
@@ -46,6 +49,12 @@ func (s *Service) StartInteractive(ctx context.Context, req InteractiveRequest) 
 	project, err := s.catalog.Projects.GetProject(ctx, req.ProjectID)
 	if err != nil {
 		return nil, ports.AgentSpec{}, err
+	}
+	var designSystem *domain.DesignSystem
+	if mode == domain.SessionModeDesignSystem {
+		if designSystem, err = s.designSessionTarget(ctx, project, req.DesignSystemID); err != nil {
+			return nil, ports.AgentSpec{}, err
+		}
 	}
 	var ticket *domain.Ticket
 	if req.TicketID != "" {
@@ -74,6 +83,9 @@ func (s *Service) StartInteractive(ctx context.Context, req InteractiveRequest) 
 	model := s.sessionModel(mode, req.ParentSessionID, req.Model)
 	id := llmkit.NewSessionID()
 	task, branch := "Product: "+project.Name, defaultBranchName("product "+project.Name)
+	if designSystem != nil {
+		task, branch = "Design system: "+designSystem.Name, defaultBranchName("design system "+designSystem.Slug)
+	}
 	if ticket != nil {
 		task, branch = ticket.Title, defaultBranchName(ticket.Title)
 	}
@@ -97,6 +109,7 @@ func (s *Service) StartInteractive(ctx context.Context, req InteractiveRequest) 
 		Model:        model,
 		AutoAccept:   req.AutoAccept,
 		Mode:         mode,
+		DesignSystem: designSystem,
 		Role:         s.newSessionRole(ctx, mode, req.ParentSessionID),
 
 		BranchChecked: named != "" && s.branchNames != nil,
@@ -112,6 +125,9 @@ func (s *Service) StartInteractive(ctx context.Context, req InteractiveRequest) 
 	}
 
 	opening := modePrompt(mode, ticket, project, req.Prompt)
+	if designSystem != nil {
+		opening = designSessionPrompt(project, designSystem, req.Prompt)
+	}
 	if plan != nil {
 		opening = s.architectOverPrompt(ctx, ticket, plan.Eligible, req.Prompt)
 	}
@@ -138,6 +154,7 @@ func (s *Service) StartInteractive(ctx context.Context, req InteractiveRequest) 
 		RunnerHost:      runnerHost(runsOn, req.RunnerHost),
 		ParentSessionID: req.ParentSessionID,
 		Mode:            mode,
+		DesignSystemID:  req.DesignSystemID,
 
 		TokenSavers:             p.savers.active,
 		TokenSaversNotInstalled: p.savers.notInstalled,
@@ -214,6 +231,11 @@ func (s *Service) ResumeInteractive(ctx context.Context, req ports.ResumeRequest
 	subject := sessionSubject{mode: sess.Mode}
 	if sess.TicketID != "" && s.tickets != nil {
 		subject.ticket = s.tickets.Get(context.WithoutCancel(ctx), sess.TicketID) // the resume goes on without the request
+	}
+	if sess.DesignSystemID != "" {
+		if subject.designSystem, err = s.designSessionTarget(context.WithoutCancel(ctx), nil, sess.DesignSystemID); err != nil {
+			return nil, ports.AgentSpec{}, err
+		}
 	}
 	if sess.TicketID == "" && !sess.Mode.NeedsTask() {
 		// A session with no task is briefed on its project again, and its

@@ -100,7 +100,8 @@ templ IndexView(v ListView) {
 
 // starts are the three ways to begin a design system, of the same weight, on
 // a project with none. Start blank and Import work (Import only when a repository
-// holds the files); Ask an agent arrives with a later slice. Alpine's copy
+// holds the files) and so does Ask an agent, which opens the new design system's
+// page on the spawn form. Alpine's copy
 // (live) asks for the identity first.
 templ starts(live bool) {
 	<section id="design-system-starts" class="[ flow ]" aria-label="Start a design system">
@@ -140,8 +141,12 @@ templ starts(live bool) {
 					<div class="[ entry-card-body flow ]">
 						<h2>Ask an agent</h2>
 						<p class="[ color-ink-muted text-sm ]">An agent reads your repositories and proposes tokens and principles. You approve what lands.</p>
-						<p class="[ color-ink-faint text-sm ]">Not available yet.</p>
-						<button type="button" class="[ button ]" data-action="spawn" disabled>Ask an agent…</button>
+						<p class="[ color-ink-faint text-sm ]">The design system is created first, then you pick the agent and write the instruction.</p>
+						if live {
+							<button type="button" class="[ button ]" data-action="spawn" x-on:click="startAgent">Ask an agent…</button>
+						} else {
+							<button type="button" class="[ button ]" data-action="spawn">Ask an agent…</button>
+						}
 					</div>
 				</section>
 			</div>
@@ -247,8 +252,8 @@ templ newForm() {
 							<div class="[ entry-card-body flow ]">
 								<h3>Ask an agent</h3>
 								<p class="[ color-ink-muted text-sm ]">An agent proposes tokens, principles and components for this design system only. You approve what lands.</p>
-								<p class="[ color-ink-faint text-sm ]">Not available yet.</p>
-								<button type="button" class="[ button ]" data-action="spawn" disabled>Create and spawn</button>
+								<p class="[ color-ink-faint text-sm ]">The design system is created first, then you pick the agent and write the instruction.</p>
+								<button type="button" class="[ button ]" data-action="spawn" x-bind:disabled="saving" x-bind:aria-busy="saving" x-on:click="startWithAgent">Create and spawn</button>
 							</div>
 						</section>
 					</div>

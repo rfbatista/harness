@@ -219,7 +219,7 @@ func NewHandler(deps Deps, assets *Assets, fallback http.Handler) http.Handler {
 		codePages.Branches = deps.Workspaces
 	}
 	architecturePages := architecture.Handler{Projects: deps.Projects, Repositories: deps.Repositories, Assistant: deps.ArchitectureAssistant, Layout: s.layout, Render: render}
-	designSystemPage := designsystem.Handler{Projects: deps.Projects, Designs: deps.DesignSystems, Layout: s.layout, Render: render}
+	designSystemPage := designsystem.Handler{Projects: deps.Projects, Designs: deps.DesignSystems, Agents: deps.Agents, Layout: s.layout, Render: render}
 	toProject := func(w http.ResponseWriter, r *http.Request) {
 		http.Redirect(w, r, "/projects/"+url.PathEscape(r.PathValue("project")), http.StatusFound)
 	}
@@ -391,10 +391,29 @@ func (s *server) layout(ctx context.Context, title, projectID, taskID string) (s
 	}
 	frame.Rail.DesignHref = tasks.ProjectDesignHref(projectID)
 	frame.Rail.DesignSystemHref = designsystem.IndexHref(projectID)
+	frame.Rail.DesignSystemProposals = s.openDesignProposals(ctx, projectID)
 	if s.deps.Usage != nil {
 		frame.Rail.UsageHref = usage.Href(projectID)
 	}
 	return frame, nil
+}
+
+// openDesignProposals counts the proposals waiting on the person across the
+// project's design systems; a failed read counts none, the badge follows the
+// feed once the page is open.
+func (s *server) openDesignProposals(ctx context.Context, projectID string) int {
+	if s.deps.DesignSystems == nil {
+		return 0
+	}
+	list, err := s.deps.DesignSystems.ListDesignSystems(ctx, projectID)
+	if err != nil {
+		return 0
+	}
+	n := 0
+	for _, d := range list {
+		n += d.OpenProposals
+	}
+	return n
 }
 
 // bell is the top bar's way to the inbox, with the unread count and the

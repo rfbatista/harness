@@ -7,6 +7,7 @@ import (
 	"github.com/labstack/echo/v4"
 
 	"operators-mcp/internal/domain"
+	"operators-mcp/internal/ports"
 )
 
 // designSystemBody is a design system as the API answers it.
@@ -65,6 +66,7 @@ func toDesignSystemBody(ds *domain.DesignSystem) designSystemBody {
 	b := designSystemBody{
 		DesignSystemID: ds.ID, ProjectID: ds.ProjectID, Name: ds.Name, Slug: ds.Slug, Description: ds.Description,
 		Exists: ds.Exists, Version: ds.Version, UpdatedBy: ds.UpdatedBy, Record: ds.Record,
+		OpenProposals: ds.OpenProposals, RunningDesignSessions: ds.RunningDesignSessions,
 	}
 	if ds.Exists {
 		at := ds.UpdatedAt
@@ -128,6 +130,7 @@ func (h *Handler) handleListDesignSystems(c echo.Context) error {
 		out = append(out, designSystemRow{
 			DesignSystemID: d.ID, Name: d.Name, Slug: d.Slug, Description: d.Description, CreatedAt: d.CreatedAt,
 			Version: d.Version, UpdatedAt: d.UpdatedAt, Repositories: used,
+			OpenProposals: d.OpenProposals, RunningDesignSessions: d.RunningDesignSessions,
 		})
 	}
 	return c.JSON(http.StatusOK, map[string]any{"design_systems": out})
@@ -276,4 +279,147 @@ func (h *Handler) handleGetDesignSystemVersion(c echo.Context) error {
 		return err
 	}
 	return c.JSON(http.StatusOK, map[string]any{"version": v.Version, "at": v.At, "record": v.Record})
+}
+
+func (h *Handler) handleStartDesignSession(c echo.Context) error {
+	if err := h.designSystems(); err != nil {
+		return err
+	}
+	var in struct {
+		DesignSystemID string `json:"design_system_id"`
+		AgentID        string `json:"agent_id"`
+		Prompt         string `json:"prompt"`
+	}
+	if err := bindJSON(c, &in); err != nil {
+		return err
+	}
+	id, err := h.designs.StartDesignSession(c.Request().Context(), in.DesignSystemID, in.AgentID, in.Prompt)
+	if err != nil {
+		return err
+	}
+	return c.JSON(http.StatusOK, map[string]string{"session_id": id})
+}
+
+// proposalBody is a proposal as the list answers it.
+type proposalBody struct {
+	ID             string     `json:"id"`
+	SessionID      string     `json:"session_id"`
+	Agent          string     `json:"agent"`
+	SessionRunning bool       `json:"session_running"`
+	State          string     `json:"state"`
+	BaseVersion    int        `json:"base_version"`
+	Summary        string     `json:"summary"`
+	Items          int        `json:"items"`
+	Conflicting    int        `json:"conflicting"`
+	SubmittedAt    *time.Time `json:"submitted_at"`
+	DecidedAt      *time.Time `json:"decided_at"`
+}
+
+func toProposalBody(r *ports.DesignProposalRow) proposalBody {
+	b := proposalBody{
+		ID: r.ID, SessionID: r.SessionID, Agent: r.Agent, SessionRunning: r.SessionRunning, State: r.State,
+		BaseVersion: r.BaseVersion, Summary: r.Summary, Items: r.Items, Conflicting: r.Conflicting,
+	}
+	if !r.SubmittedAt.IsZero() {
+		b.SubmittedAt = &r.SubmittedAt
+	}
+	if !r.DecidedAt.IsZero() {
+		b.DecidedAt = &r.DecidedAt
+	}
+	return b
+}
+
+func (h *Handler) handleListDesignSystemProposals(c echo.Context) error {
+	if err := h.designSystems(); err != nil {
+		return err
+	}
+	var in struct {
+		DesignSystemID string `json:"design_system_id"`
+		State          string `json:"state"`
+	}
+	if err := bindJSON(c, &in); err != nil {
+		return err
+	}
+	rows, err := h.designs.ListDesignProposals(c.Request().Context(), in.DesignSystemID, in.State)
+	if err != nil {
+		return err
+	}
+	out := make([]proposalBody, 0, len(rows))
+	for _, r := range rows {
+		out = append(out, toProposalBody(r))
+	}
+	return c.JSON(http.StatusOK, map[string]any{"proposals": out})
+}
+
+func (h *Handler) handleGetDesignSystemProposal(c echo.Context) error {
+	if err := h.designSystems(); err != nil {
+		return err
+	}
+	var in struct {
+		ProposalID string `json:"proposal_id"`
+	}
+	if err := bindJSON(c, &in); err != nil {
+		return err
+	}
+	v, err := h.designs.GetDesignProposal(c.Request().Context(), in.ProposalID)
+	if err != nil {
+		return err
+	}
+	affected := make([]map[string]any, 0, len(v.AffectedComponents))
+	for _, a := range v.AffectedComponents {
+		affected = append(affected, map[string]any{"slug": a.Slug, "by_items": a.ByItems})
+	}
+	items := v.Items
+	if items == nil {
+		items = []domain.DesignItem{}
+	}
+	return c.JSON(http.StatusOK, map[string]any{
+		"id": v.ID, "design_system_id": v.DesignSystemID, "session_id": v.SessionID, "agent": v.Agent, "session_running": v.SessionRunning,
+		"state": v.State, "base_version": v.BaseVersion, "current_version": v.CurrentVersion, "summary": v.Summary,
+		"items": items, "affected_components": affected, "proposed_record": v.ProposedRecord,
+		"submitted_at": toProposalBody(&v.DesignProposalRow).SubmittedAt, "decided_at": toProposalBody(&v.DesignProposalRow).DecidedAt,
+	})
+}
+
+func (h *Handler) handleDecideDesignSystemProposal(c echo.Context) error {
+	if err := h.designSystems(); err != nil {
+		return err
+	}
+	var in struct {
+		ProposalID string `json:"proposal_id"`
+		Decisions  []struct {
+			ItemID   string `json:"item_id"`
+			Decision string `json:"decision"`
+		} `json:"decisions"`
+		ConfirmOverwrite []string `json:"confirm_overwrite"`
+	}
+	if err := bindJSON(c, &in); err != nil {
+		return err
+	}
+	decisions := make([]ports.ItemDecision, len(in.Decisions))
+	for i, d := range in.Decisions {
+		decisions[i] = ports.ItemDecision{ItemID: d.ItemID, Decision: d.Decision}
+	}
+	out, err := h.designs.DecideDesignProposal(c.Request().Context(), in.ProposalID, decisions, in.ConfirmOverwrite)
+	if err != nil {
+		return err
+	}
+	return c.JSON(http.StatusOK, map[string]any{"version": out.Version, "state": out.State})
+}
+
+func (h *Handler) handleWithdrawDesignSystemProposal(c echo.Context) error {
+	if err := h.designSystems(); err != nil {
+		return err
+	}
+	var in struct {
+		ProposalID string `json:"proposal_id"`
+	}
+	if err := bindJSON(c, &in); err != nil {
+		return err
+	}
+	state, err := h.designs.WithdrawDesignProposal(c.Request().Context(), in.ProposalID)
+	if err != nil {
+		return err
+	}
+	return c.JSON(http.StatusOK, map[string]string{"state": state})
 }

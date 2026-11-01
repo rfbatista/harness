@@ -17,8 +17,8 @@ templ PageView(v View) {
 				<span class="[ crumb ]" aria-current="page" x-text="name">{ v.Seed.Name }</span>
 			</header>
 			<div data-scroll class="[ arch-scroll ]">
-				<div class="[ wrapper flow ] [ region ]" style="--wrapper-max: 72rem">
-					<div x-data="designSystemMenu" data-seed="design-system-seed" class="[ flow ]">
+				<div class="[ wrapper flow ] [ region ]" style="--wrapper-max: 72rem" x-data="designSystemProposals" data-seed="design-system-seed">
+					<div x-data="designSystemMenu" data-seed="design-system-seed" x-on:design-system-spawn.window="openSpawn" class="[ flow ]">
 						<div class="[ arch-head ]">
 							<div class="[ flow ] [ flow-space-2xs ]">
 								<h1><span data-design-system-name x-text="name">{ v.Seed.Name }</span> <span class="[ badge ]" data-design-system-slug x-text="slug">{ v.Seed.Slug }</span></h1>
@@ -32,6 +32,7 @@ templ PageView(v View) {
 							<div class="[ cluster ]">
 								<span class="[ badge sync ]" data-design-state x-bind:data-tone="badge.tone" x-text="badge.label"></span>
 								<button type="button" class="[ button ]" data-action="export-open" x-show="exists && !deleted" x-on:click="openExport">Export…</button>
+								<button type="button" class="[ button ]" data-action="spawn-header" x-show="!deleted" x-on:click="openSpawn">Spawn agent…</button>
 								@headerMenu()
 							</div>
 						</div>
@@ -70,6 +71,7 @@ templ PageView(v View) {
 							</div>
 						</div>
 					</template>
+					@proposalBanner()
 					<template x-if="isFirstStart">
 						@firstStart(v.ProjectID, v.Seed.DesignSystemID)
 					</template>
@@ -88,6 +90,7 @@ templ PageView(v View) {
 							@tabTokens()
 							@tabPrinciples()
 							@tabComponents()
+							@tabProposals()
 							@tabRepositories(v.ProjectID, v.Seed.DesignSystemID)
 							@tabHistory()
 						</div>
@@ -102,8 +105,9 @@ templ PageView(v View) {
 }
 
 // firstStart is the screen of a design system with no version: three starts of
-// the same weight. Import and Spawn agent arrive with later slices and stay
-// inert until then; Start blank stores nothing until the first Save.
+// the same weight. Import arrives with a later slice and stays inert until
+// then; Spawn agent opens the header's spawn form; Start blank stores nothing
+// until the first Save.
 templ firstStart(projectID, designSystemID string) {
 	<div id="design-system-start" class="[ flow ]">
 		<div class="[ switcher ]" style="--switcher-threshold: 48rem">
@@ -132,8 +136,7 @@ templ firstStart(projectID, designSystemID string) {
 					<div class="[ entry-card-body flow ]">
 						<h2>Ask an agent to set it up</h2>
 						<p class="[ color-ink-muted text-sm ]">An agent reads your repositories and proposes tokens and principles. You approve what lands.</p>
-						<p class="[ color-ink-faint text-sm ]">Not available yet.</p>
-						<button type="button" class="[ button ]" data-action="spawn" disabled>Spawn agent</button>
+						<button type="button" class="[ button ]" data-action="spawn" x-on:click="$dispatch('design-system-spawn')">Spawn agent</button>
 					</div>
 				</section>
 			</div>

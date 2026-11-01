@@ -53,6 +53,8 @@ type Deps struct {
 	ArchEvents ports.ArchitectureRuleEventStore
 	// DesignRecords keeps projects' design system versions; nil disables them.
 	DesignRecords ports.DesignSystemStore
+	// DesignProposals keeps design sessions' drafts and proposals.
+	DesignProposals ports.DesignProposalStore
 	// DesignExports keeps each repository's last design system export; nil
 	// disables the export.
 	DesignExports ports.DesignExportStore
@@ -142,7 +144,7 @@ func New(d Deps) Catalog {
 
 	var designs *designsystem.Service
 	if d.DesignRecords != nil {
-		designs = designsystem.NewService(designsystem.Deps{Store: d.DesignRecords, Projects: pr})
+		designs = designsystem.NewService(designsystem.Deps{Store: d.DesignRecords, Proposals: d.DesignProposals, Projects: pr})
 		designs.Subscribe(bus)
 		if d.ArchGit != nil {
 			designs.UseImport(d.ArchGit, pr)

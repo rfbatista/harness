@@ -308,6 +308,7 @@ templ projectNav(r Rail) {
 					<a href={ templ.SafeURL(r.DesignSystemHref) } { currentAttrs(r.Page == PageDesignSystem)... }>
 						@icon("design-system")
 						<span class="[ label ]">Design systems</span>
+						<span class="[ badge ]" data-tone="attention" data-nav-proposals title="Proposals waiting on you" aria-label="Proposals waiting on you" { shownIf(r.DesignSystemProposals > 0)... }>{ strconv.Itoa(r.DesignSystemProposals) }</span>
 					</a>
 				</li>
 			}

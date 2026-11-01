@@ -227,6 +227,9 @@ func (r *DesignSystemRepository) Delete(ctx context.Context, designSystemID stri
 		if err := tx.Where("design_system_id = ?", designSystemID).Delete(&DesignSystemVersionModel{}).Error; err != nil {
 			return err
 		}
+		if err := tx.Where("design_system_id = ?", designSystemID).Delete(&DesignProposalModel{}).Error; err != nil {
+			return err
+		}
 		return tx.Where("id = ?", designSystemID).Delete(&DesignSystemModel{}).Error
 	})
 }
@@ -236,6 +239,9 @@ func (r *DesignSystemRepository) DeleteByProject(ctx context.Context, projectID 
 	return r.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
 		ids := tx.Model(&DesignSystemModel{}).Select("id").Where("project_id = ?", projectID)
 		if err := tx.Where("design_system_id IN (?)", ids).Delete(&DesignSystemVersionModel{}).Error; err != nil {
+			return err
+		}
+		if err := tx.Where("design_system_id IN (?)", ids).Delete(&DesignProposalModel{}).Error; err != nil {
 			return err
 		}
 		return tx.Where("project_id = ?", projectID).Delete(&DesignSystemModel{}).Error

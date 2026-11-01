@@ -110,6 +110,9 @@ type ProjectChange struct {
 	// DesignSystemChanged says a project's design system was created,
 	// renamed, described or deleted; clients re-read the list.
 	DesignSystemChanged *DesignSystemIdentityChange `json:"design_system_changed,omitempty"`
+	// DesignSystemProposal says a design session's proposal reached a state:
+	// the banner, the navigation badge and the Proposals tab follow it.
+	DesignSystemProposal *DesignSystemProposalChange `json:"design_system_proposal,omitempty"`
 	// DesignSystemExport says a repository's export of its design system
 	// changed state: it was exported, or what it holds changed.
 	DesignSystemExport *DesignSystemExportChange `json:"design_system_export,omitempty"`
@@ -143,6 +146,15 @@ type DesignSystemChange struct {
 	DesignSystemID string `json:"design_system_id"`
 	Version        int    `json:"version"`
 	Source         string `json:"source"`
+}
+
+// DesignSystemProposalChange is a proposal that reached a state (drafting,
+// open, approved, partly_approved, rejected or withdrawn). ProjectID routes it.
+type DesignSystemProposalChange struct {
+	ProjectID      string `json:"project_id"`
+	DesignSystemID string `json:"design_system_id"`
+	ProposalID     string `json:"proposal_id"`
+	State          string `json:"state"`
 }
 
 // DesignSystemExportChange is a repository's design system export, with the
@@ -238,6 +250,8 @@ func (c ProjectChange) ProjectID() string {
 		return c.DesignSystemSaved.ProjectID
 	case c.DesignSystemChanged != nil:
 		return c.DesignSystemChanged.ProjectID
+	case c.DesignSystemProposal != nil:
+		return c.DesignSystemProposal.ProjectID
 	case c.DesignSystemExport != nil:
 		return c.DesignSystemExport.ProjectID
 	}
@@ -371,6 +385,9 @@ type InteractiveRequest struct {
 	ParentSessionID string `json:"parent_session_id,omitempty"`
 	// Mode layers a role on the agent (see domain.SessionMode); empty is none.
 	Mode string `json:"mode,omitempty"`
+	// DesignSystemID is the design system a design session (Mode
+	// "designsystem") is bound to; no other mode takes one.
+	DesignSystemID string `json:"design_system_id,omitempty"`
 	// StatusCheckMinutes is the status-check loop the task's architect wants
 	// on the session it starts: nil for the default (10 minutes), 0 for none,
 	// otherwise 2–240. Ignored when the starter is not the architect.

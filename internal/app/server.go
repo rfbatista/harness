@@ -240,10 +240,14 @@ type optionalNotifications struct {
 // sessionTaskTools are the tools each session reaches on its own task
 // endpoint, /mcp/task/{session}.
 func sessionTaskTools(cat catalog.Catalog, orch *orchestration.Service, plan *planning.Service, sessions ports.SessionRepository, art *artifacts.Service, channel *taskchannel.Service, notifier ports.Notifier, merges ports.BranchMerger) []domain.Tool {
+	var opts []tooling.Option
+	if cat.DesignSystems != nil {
+		opts = append(opts, tooling.WithDesignProposals(cat.DesignSystems))
+	}
 	return tooling.SessionTaskTools(plan, sessions, cat.Agents, cat.Architecture,
 		tooling.PeerStarter{Sessions: orch, Repositories: cat.Projects, Merger: merges},
 		tooling.ArtifactTooling{Publisher: art, Attachments: art, ViewURL: httpapi.ArtifactViewPath}, channel,
-		tooling.NotificationTooling{Notifier: notifier})
+		tooling.NotificationTooling{Notifier: notifier}, opts...)
 }
 
 // registerMCPServer builds the MCP server, registers all tools and the designer

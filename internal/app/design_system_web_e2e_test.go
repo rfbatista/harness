@@ -176,7 +176,7 @@ func TestDesignSystemPageInTheBrowserAgainstTheRealServer(t *testing.T) {
 		designPoll(`document.querySelector('[data-design-system-name]')?.textContent.trim() === 'App' && document.querySelector('[data-design-system-slug]')?.textContent.trim() === 'app'`),
 		designPoll(`document.querySelector('[data-design-system-description]')?.textContent.trim() === 'Marketing and product apps'`),
 		designPoll(`!!document.querySelector('#design-system-start [data-action=start-blank]')`),
-		designPoll(`document.querySelector('#design-system-start [data-action=import]')?.disabled === true && document.querySelector('#design-system-start [data-action=spawn]')?.disabled === true`),
+		designPoll(`document.querySelector('#design-system-start [data-action=import]')?.disabled === true && document.querySelector('#design-system-start [data-action=spawn]')?.disabled === false`),
 		shot("ds-page-first-start", "light"),
 		designClick(`#design-system-start [data-action=start-blank]`),
 		designPoll(`!document.querySelector('#design-system-start') && !!document.querySelector('[data-save-bar]')`),

@@ -102,7 +102,7 @@ so write those another way.
 // readmeFor is the resources root's README at the current value of the setting
 // "Agents move documents to project" (ADR 0020): which rule applies to a
 // move from task/docs to project/docs.
-func readmeFor(agentsMove, designSystem bool) string {
+func readmeFor(agentsMove, designSystem, draft bool) string {
 	moveDocs, moveDenied := moveDocsOff, moveDeniedOff
 	if agentsMove {
 		moveDocs, moveDenied = moveDocsOn, moveDeniedOn
@@ -110,6 +110,9 @@ func readmeFor(agentsMove, designSystem bool) string {
 	designLine := ""
 	if designSystem {
 		designLine = designSystemLine
+		if draft {
+			designLine = designSystemDraftLine
+		}
 	}
 	return strings.NewReplacer("{{DESIGN_SYSTEM}}", designLine, "{{MOVE_DOCS}}", moveDocs, "{{MOVE_DENIED}}", moveDenied).Replace(readmeTemplate)
 }
@@ -117,6 +120,10 @@ func readmeFor(agentsMove, designSystem bool) string {
 // designSystemLine is the layout line of the design system folder, in the
 // README of the shells that have it.
 const designSystemLine = "    project/design-system/    README.md, DESIGN.md, tokens.json: the project's design system, tokens and principles (read-only)\n"
+
+// designSystemDraftLine is the same line in a design session's shell, where the
+// folder is the draft of the design system it is bound to.
+const designSystemDraftLine = "    project/design-system/    README.md, DESIGN.md, tokens.json, components/: the draft of your design system; edit tokens.json, DESIGN.md's body and components/<slug>.html, then submit_design_system_proposal\n"
 
 const moveDocsOn = `The setting "Agents move documents to project" is on: mv task/docs/<file>
 project/docs/ makes one of this task's documents a project document, with

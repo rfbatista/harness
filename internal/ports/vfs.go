@@ -25,6 +25,9 @@ type ShellFile struct {
 	UpdatedAt time.Time `json:"updated_at"`
 	// Repository names the repository of an architecture file.
 	Repository string `json:"repository,omitempty"`
+	// Writable says the session may write the file: only the files of a
+	// design session's draft are, and only those the harness does not generate.
+	Writable bool `json:"writable,omitempty"`
 }
 
 // The kinds of file a resources root holds.
@@ -184,6 +187,9 @@ type ShellScope struct {
 	// RepositoryID is the repository the session works in, "" for none: the
 	// shell shows the project design system when it uses it.
 	RepositoryID string
+	// DesignSystemID is the design system a design session is bound to: its
+	// shell holds that design system's draft, writable.
+	DesignSystemID string
 }
 
 // ArchitectureFile is a repository's architecture as the resources root
@@ -293,4 +299,34 @@ type SessionFiles interface {
 	// SessionFile reads one file the way the Code tab does: its content up to
 	// the Code tab's cap, with its binary and truncated flags.
 	SessionFile(ctx context.Context, sessionID, root, path string) (*domain.CodeFile, error)
+}
+
+// DesignDraftFile is one file of a design session's draft.
+type DesignDraftFile struct {
+	// Path is relative to project/design-system/.
+	Path    string
+	Content []byte
+	// Editable is false for the files the harness generates alone.
+	Editable bool
+}
+
+// DesignDraftView is a design session's draft as its shell shows it: the
+// files the draft would export, and whether a proposal made from it waits.
+type DesignDraftView struct {
+	Files     []DesignDraftFile
+	Submitted bool
+}
+
+// DesignDrafts is what a design session's shell reads and writes of its
+// draft (contract "Harness server ↔ Agent sessions — design-system view,
+// draft and proposals"). A write the draft cannot take is refused with the
+// reason in the error's message.
+type DesignDrafts interface {
+	// DesignDraftFiles answers the draft of the design system the design
+	// session is bound to; nil when designSystemID is empty.
+	DesignDraftFiles(ctx context.Context, sessionID, designSystemID string) (*DesignDraftView, error)
+	// WriteDraftFile applies the file written at rel to the draft.
+	WriteDraftFile(ctx context.Context, sessionID, designSystemID, rel string, content []byte) error
+	// RemoveDraftFile applies the removal of rel to the draft.
+	RemoveDraftFile(ctx context.Context, sessionID, designSystemID, rel string) error
 }

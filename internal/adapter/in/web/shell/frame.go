@@ -169,6 +169,9 @@ type Rail struct {
 	DesignHref string
 	// DesignSystemHref is the project's design system page.
 	DesignSystemHref string
+	// DesignSystemProposals counts the design-system proposals waiting on the
+	// person across the project's design systems.
+	DesignSystemProposals int
 	// ReviewsHref is the project's review inbox: the requests its tasks'
 	// architects raised for the person; Reviews counts the pending ones.
 	ReviewsHref string

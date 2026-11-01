@@ -23,7 +23,33 @@ export const designSystemMenu = ({ gateway, navigate }) => () => ({
   /** The repositories (names) that refused a delete, once refused. */
   usedBy: [],
   saving: false,
+  /** The agents the project enables, as the page seeds them, and the spawn form. */
+  spawnAgents: [],
+  spawnAgentId: "",
+  spawnPrompt: "",
+  /** Design sessions already running on this design system, read when the form opens. */
+  spawnRunning: 0,
+  /** The session just started, "" before. */
+  spawnedId: "",
 
+  get spawning() {
+    return this.panel === "spawn";
+  },
+  get spawnNoAgents() {
+    return this.spawnAgents.length === 0;
+  },
+  get spawnHasRunning() {
+    return this.spawnRunning > 0;
+  },
+  get spawnRunningText() {
+    return this.spawnRunning === 1 ? "A design session is already running on this design system." : `${this.spawnRunning} design sessions are already running on this design system.`;
+  },
+  get canSpawn() {
+    return !this.saving && this.spawnAgentId !== "" && this.spawnPrompt.trim() !== "";
+  },
+  get spawnStarted() {
+    return this.spawnedId !== "";
+  },
   get renaming() {
     return this.panel === "rename";
   },
@@ -55,7 +81,49 @@ export const designSystemMenu = ({ gateway, navigate }) => () => ({
   },
 
   init() {
-    this.indexHref = readSeed(this.$el).index_href;
+    const seed = readSeed(this.$el);
+    this.indexHref = seed.index_href;
+    this.spawnAgents = Array.isArray(seed.agents) ? seed.agents : [];
+    this.spawnAgentId = this.spawnAgents[0]?.id ?? "";
+    if (new URLSearchParams(globalThis.location?.search ?? "").get("spawn") === "1") this.openSpawn();
+  },
+
+  /** Opens the spawn form, after reading how many design sessions already run here. */
+  async openSpawn() {
+    this.close();
+    this.spawnedId = "";
+    this.panel = "spawn";
+    try {
+      this.spawnRunning = await gateway.runningDesignSessions(this.designSystemId);
+    } catch {
+      this.spawnRunning = 0;
+    }
+    this.$nextTick(() => this.$el.querySelector("[data-menu-panel] textarea")?.focus());
+  },
+
+  typeSpawnAgent(event) {
+    this.spawnAgentId = event.target.value;
+  },
+
+  typeSpawnPrompt(event) {
+    this.spawnPrompt = event.target.value;
+  },
+
+  /** Starts the design session; a running one is only warned about, never a refusal. */
+  async startDesignSession() {
+    if (!this.canSpawn) return;
+    this.saving = true;
+    this.error = null;
+    try {
+      const { sessionId } = await gateway.startDesignSession(this.designSystemId, this.spawnAgentId, this.spawnPrompt.trim());
+      this.spawnPrompt = "";
+      this.spawnedId = sessionId;
+      this.panel = "";
+    } catch (err) {
+      this.error = describeError(err);
+    } finally {
+      this.saving = false;
+    }
   },
 
   menuSelect(event) {

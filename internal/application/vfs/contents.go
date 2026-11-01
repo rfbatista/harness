@@ -24,9 +24,17 @@ import (
 func (s *Service) contents(ctx context.Context, sh *root, tk *domain.Ticket) (*builder, error) {
 	b := &builder{now: time.Now()}
 	sessionID := sh.sessionID
+	draft, err := s.designDraft(ctx, sh)
+	if err != nil {
+		return nil, err
+	}
 	designSystemID, designSystem := s.appliedDesignSystem(ctx, sh)
+	if sh.draft {
+		// A design session sees its draft, not an applied design system.
+		designSystemID, designSystem = "", false
+	}
 	sh.designSystem = designSystem
-	b.fixed(ports.ShellFile{Path: "README.md", Kind: ports.ShellReadme, Title: "README", UpdatedAt: b.now}, []byte(readmeFor(s.agentsMove(), designSystem)))
+	b.fixed(ports.ShellFile{Path: "README.md", Kind: ports.ShellReadme, Title: "README", UpdatedAt: b.now}, []byte(readmeFor(s.agentsMove(), designSystem || sh.draft, sh.draft)))
 
 	if err := b.architectures(ctx, s.src.Architectures, sh.projID); err != nil {
 		return nil, err
@@ -35,6 +43,9 @@ func (s *Service) contents(ctx context.Context, sh *root, tk *domain.Ticket) (*b
 		if err := s.designSystemView(ctx, b, designSystemID); err != nil {
 			return nil, err
 		}
+	}
+	if draft != nil {
+		b.draft(draft, b.now)
 	}
 
 	if tk == nil {
@@ -375,6 +386,32 @@ func oldestFirst(list []*domain.Artifact) []*domain.Artifact {
 		return strings.Compare(a.ID, c.ID)
 	})
 	return out
+}
+
+// designDraft is the draft of the design session whose root sh is, nil for
+// any other session; it settles sh.draft.
+func (s *Service) designDraft(ctx context.Context, sh *root) (*ports.DesignDraftView, error) {
+	sh.draft = false
+	if s.src.Drafts == nil || sh.boundDS == "" {
+		return nil, nil
+	}
+	view, err := s.src.Drafts.DesignDraftFiles(ctx, sh.sessionID, sh.boundDS)
+	if err != nil || view == nil {
+		return nil, err
+	}
+	sh.draft = true
+	return view, nil
+}
+
+// draft adds the files of a design session's draft: each one the session may
+// write is writable and says so in the index, README.md is not.
+func (b *builder) draft(view *ports.DesignDraftView, at time.Time) {
+	b.designSystem = true
+	for _, f := range view.Files {
+		meta := ports.ShellFile{Path: designSystemDir + "/" + f.Path, Kind: ports.ShellDesignSystem, Scope: "project", Title: f.Path, UpdatedAt: at, Writable: f.Editable}
+		meta.Version = Version(f.Content)
+		b.files = append(b.files, &file{meta: meta, content: f.Content, readOnly: !f.Editable})
+	}
 }
 
 // designSystemDir is the folder of the project design system's files, there

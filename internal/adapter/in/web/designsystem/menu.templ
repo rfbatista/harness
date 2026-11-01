@@ -29,6 +29,38 @@ templ menuPanels() {
 					</div>
 				</div>
 			</template>
+			<template x-if="spawning">
+				<form class="[ flow ]" style="max-inline-size: 40rem" aria-label="Spawn agent" data-panel="spawn" x-on:submit.prevent="startDesignSession">
+					<h2>Spawn agent</h2>
+					<p class="[ color-ink-muted text-sm ]">A design session reads your repositories and edits a draft of <b x-text="name"></b>. It changes no repository. You review its one proposal before anything is saved.</p>
+					<template x-if="spawnHasRunning">
+						<div class="[ banner ]" data-tone="attention" role="status" data-running-warning>
+							<span class="[ grow ]" x-text="spawnRunningText"></span> <span>You can still start another; their proposals may conflict.</span>
+						</div>
+					</template>
+					<template x-if="spawnNoAgents">
+						<div class="[ banner ]" data-tone="attention" role="status" data-no-agents>
+							<span class="[ grow ]">This project enables no agent. Enable one in the project's settings.</span>
+						</div>
+					</template>
+					<div class="[ field ]">
+						<label for="design-system-spawn-agent">Agent</label>
+						<select id="design-system-spawn-agent" data-field="agent" x-on:change="typeSpawnAgent">
+							<template x-for="a in spawnAgents" x-bind:key="a.id">
+								<option x-bind:value="a.id" x-text="a.name" x-bind:selected="a.id === spawnAgentId"></option>
+							</template>
+						</select>
+					</div>
+					<div class="[ field ]">
+						<label for="design-system-spawn-prompt">Instruction</label>
+						<textarea id="design-system-spawn-prompt" data-field="prompt" rows="4" placeholder="What should the design system become?" x-bind:value="spawnPrompt" x-on:input="typeSpawnPrompt"></textarea>
+					</div>
+					<div class="[ cluster ]">
+						<button type="submit" class="[ button ]" data-variant="primary" data-action="start-session" x-bind:disabled="!canSpawn" x-bind:aria-busy="saving">Start design session</button>
+						<button type="button" class="[ button ]" data-variant="ghost" data-action="cancel" x-on:click="close">Cancel</button>
+					</div>
+				</form>
+			</template>
 			<template x-if="renaming">
 				<form class="[ flow ]" style="max-inline-size: 34rem" aria-label="Rename" data-panel="rename" x-on:submit.prevent="save">
 					<h2>Rename design system</h2>
@@ -84,5 +116,11 @@ templ menuPanels() {
 				</form>
 			</template>
 		</section>
+	</template>
+	<template x-if="spawnStarted">
+		<div class="[ banner ]" data-tone="info" role="status" data-session-started>
+			<span class="[ grow ]">Design session started. Its proposal will wait for you on the Proposals tab.</span>
+			<a class="[ button ]" data-size="sm" x-bind:href="'/projects/' + projectId + '/sessions'" data-action="open-session">Open sessions</a>
+		</div>
 	</template>
 }

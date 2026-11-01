@@ -15,6 +15,7 @@ import (
 // An unknown project is PROJECT_NOT_FOUND; an unknown design system is
 // DESIGN_SYSTEM_NOT_FOUND.
 type DesignSystems interface {
+	DesignProposals
 	// ListDesignSystems lists the project's design systems ordered by name.
 	ListDesignSystems(ctx context.Context, projectID string) ([]*domain.DesignSystemSummary, error)
 	// CreateDesignSystem stores a design system's identity only (version 0,
@@ -46,6 +47,18 @@ type DesignSystems interface {
 	// GetDesignSystemVersion is one version with its record; VERSION_NOT_FOUND
 	// when there is none.
 	GetDesignSystemVersion(ctx context.Context, designSystemID string, version int) (*domain.DesignSystemVersion, error)
+
+	// StartDesignSession starts a design session (ADR 0055) bound to the
+	// design system, as the agent, with the person's instruction, and answers
+	// its session id. DESIGN_SYSTEM_NOT_FOUND, AGENT_NOT_FOUND.
+	StartDesignSession(ctx context.Context, designSystemID, agentID, prompt string) (string, error)
+}
+
+// DesignSessionHost starts design sessions and counts the running ones; the
+// orchestration implements it.
+type DesignSessionHost interface {
+	StartDesignSession(ctx context.Context, designSystemID, agentID, prompt string) (*domain.Session, error)
+	RunningDesignSessions(ctx context.Context, designSystemID string) []string
 }
 
 // DesignSystemPages is what a design system's page reads: the project's design
@@ -159,6 +172,111 @@ type DesignSystemImports interface {
 	// ImportDesignSystem creates a design system whose version 1 is the
 	// import, all or nothing. SLUG_TAKEN as CreateDesignSystem.
 	ImportDesignSystem(ctx context.Context, req DesignImportRequest, name, slug, description string) (*domain.DesignSystemIdentity, *domain.DesignSystemVersion, error)
+}
+
+// DesignProposalStore keeps the design sessions' drafts and proposals
+// (driven). A session has at most one active one (drafting or open).
+type DesignProposalStore interface {
+	// Create stores p (it sets ID and the times).
+	Create(ctx context.Context, p *domain.DesignProposal) error
+	// Update stores p's changes (it sets UpdatedAt).
+	Update(ctx context.Context, p *domain.DesignProposal) error
+	// Get answers one proposal, or nil when there is none.
+	Get(ctx context.Context, id string) (*domain.DesignProposal, error)
+	// ActiveBySession answers the session's drafting or open proposal, or nil.
+	ActiveBySession(ctx context.Context, sessionID string) (*domain.DesignProposal, error)
+	// ListByDesignSystem answers the design system's proposals, newest first.
+	ListByDesignSystem(ctx context.Context, designSystemID string) ([]*domain.DesignProposal, error)
+	// DeleteByDesignSystem removes the design system's proposals.
+	DeleteByDesignSystem(ctx context.Context, designSystemID string) error
+}
+
+// SessionGetter reads a session by id; nil when there is none.
+type SessionGetter interface {
+	Get(id string) *domain.Session
+}
+
+// DesignProposals is what the person does with the proposals of a design
+// system's design sessions. *designsystem.Service satisfies it. An unknown
+// proposal is PROPOSAL_NOT_FOUND; one that is not open is PROPOSAL_NOT_OPEN.
+type DesignProposals interface {
+	// ListDesignProposals lists the design system's proposals, newest first,
+	// of one state or ("" ) every one. A draft with no change is not listed.
+	ListDesignProposals(ctx context.Context, designSystemID, state string) ([]*DesignProposalRow, error)
+	// GetDesignProposal is one proposal with its items, the components its
+	// token changes touch and the record as it would be if every item were
+	// approved.
+	GetDesignProposal(ctx context.Context, proposalID string) (*DesignProposalView, error)
+	// DecideDesignProposal approves every item or rejects every item (some
+	// items only is INVALID_INPUT until per-item decisions arrive). Approving
+	// writes one version, source proposal, on top of the current one; a
+	// conflicting item needs its id in confirmOverwrite (CONFLICT_NOT_CONFIRMED,
+	// details.item_ids). PROPOSAL_NOT_OPEN when it is not open.
+	DecideDesignProposal(ctx context.Context, proposalID string, decisions []ItemDecision, confirmOverwrite []string) (*DesignDecision, error)
+	// WithdrawDesignProposal drops a proposal whose design session ended
+	// (SESSION_RUNNING while it runs) and answers its state, withdrawn.
+	WithdrawDesignProposal(ctx context.Context, proposalID string) (string, error)
+}
+
+// ItemDecision is the person's decision on one item: "approve" or "reject".
+type ItemDecision struct {
+	ItemID   string
+	Decision string
+}
+
+// DesignDecision is what a decision did: the version it wrote (nil when it
+// wrote none) and the proposal's state now.
+type DesignDecision struct {
+	Version *int
+	State   string
+}
+
+// DesignProposalRow is one line of a design system's proposal list.
+type DesignProposalRow struct {
+	ID             string
+	DesignSystemID string
+	SessionID      string
+	Agent          string
+	SessionRunning bool
+	State          string
+	BaseVersion    int
+	Summary        string
+	Items          int
+	Conflicting    int
+	SubmittedAt    time.Time
+	DecidedAt      time.Time
+}
+
+// DesignProposalView is a proposal for the person to review.
+type DesignProposalView struct {
+	DesignProposalRow
+	CurrentVersion     int
+	Items              []domain.DesignItem
+	AffectedComponents []AffectedComponent
+	ProposedRecord     domain.DesignSystemRecord
+}
+
+// AffectedComponent is a component whose previews use a token that items
+// change or remove: the pair of before and after previews the person judges.
+type AffectedComponent struct {
+	Slug    string
+	ByItems []string
+}
+
+// DesignProposalSubmitter is the session tool's side: a design session hands
+// its draft over as its proposal.
+type DesignProposalSubmitter interface {
+	// SubmitDesignProposal makes the session's draft its open proposal.
+	// NOT_A_DESIGN_SESSION, PROPOSAL_EMPTY (the draft equals its base),
+	// PROPOSAL_SUBMITTED (one is open already).
+	SubmitDesignProposal(ctx context.Context, sessionID, summary string) (*DesignSubmission, error)
+}
+
+// DesignSubmission is what a submit answers.
+type DesignSubmission struct {
+	ProposalID  string
+	Items       int
+	Conflicting int
 }
 
 // DesignExportGit is what a design system export asks of a checkout: the

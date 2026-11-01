@@ -28,18 +28,35 @@ const (
 
 // Deps are the Service's collaborators.
 type Deps struct {
-	Store    ports.DesignSystemStore
-	Projects ports.ProjectReader
+	Store ports.DesignSystemStore
+	// Proposals keeps design sessions' drafts and proposals; nil leaves
+	// design sessions without them.
+	Proposals ports.DesignProposalStore
+	Projects  ports.ProjectReader
 }
 
 // Service implements the design system use cases.
 type Service struct {
-	store    ports.DesignSystemStore
-	projects ports.ProjectReader
-	feed     ports.ProjectChangeSink // nil until the orchestration is wired
+	store     ports.DesignSystemStore
+	proposals ports.DesignProposalStore
+	projects  ports.ProjectReader
+	notifier  ports.Notifier
+	turns     ports.TurnDelivery
+	agents    interface {
+		GetAgent(ctx context.Context, id string) (*domain.Agent, error)
+	}
+	// sessionStore tells a session's mode and design system.
+	sessionStore interface {
+		Get(id string) *domain.Session
+	}
+	// draftMu serialises the drafts' reads and writes.
+	draftMu sync.Mutex
+	feed    ports.ProjectChangeSink // nil until the orchestration is wired
 	// git and repos are what an import reads; nil until UseImport.
 	git   ports.ArchitectureGit
 	repos ports.DesignSourceRepositories
+	// sessions starts and counts design sessions; nil until UseSessions.
+	sessions ports.DesignSessionHost
 	// export is what an export reads and writes; nil until UseExport.
 	export *exporter
 	// guards refuse a delete (DESIGN_SYSTEM_IN_USE).
@@ -50,12 +67,28 @@ type Service struct {
 
 // NewService returns the design system context.
 func NewService(d Deps) *Service {
-	return &Service{store: d.Store, projects: d.Projects, now: time.Now}
+	return &Service{store: d.Store, proposals: d.Proposals, projects: d.Projects, now: time.Now}
 }
 
 // UseFeed sets where changes are announced: the project feed, which the
 // orchestration owns.
 func (s *Service) UseFeed(feed ports.ProjectChangeSink) { s.feed = feed }
+
+// UseSessions sets where design sessions start and are counted: the
+// orchestration. A design system with a design session running is not deleted.
+func (s *Service) UseSessions(h ports.DesignSessionHost) {
+	s.sessions = h
+	s.GuardDelete(func(ctx context.Context, designSystemID string) error {
+		ids := h.RunningDesignSessions(ctx, designSystemID)
+		if len(ids) == 0 {
+			return nil
+		}
+		return &domain.DetailedError{
+			StructuredError: &domain.StructuredError{Code: "DESIGN_SYSTEM_IN_USE", Message: fmt.Sprintf("%d design sessions work on this design system; stop them first", len(ids))},
+			Details:         map[string]any{"sessions": ids},
+		}
+	})
+}
 
 // UseLock sets the lock a delete holds from its guards to the store's delete;
 // whoever lets something start using a design system takes the same lock.
@@ -148,7 +181,7 @@ func (s *Service) ListDesignSystems(ctx context.Context, projectID string) ([]*d
 	}
 	out := make([]*domain.DesignSystemSummary, 0, len(ids))
 	for _, id := range ids {
-		sum := &domain.DesignSystemSummary{DesignSystemIdentity: *id}
+		sum := &domain.DesignSystemSummary{DesignSystemIdentity: *id, RunningDesignSessions: s.running(ctx, id.ID), OpenProposals: s.openProposals(ctx, id.ID)}
 		if st, ok := stamps[id.ID]; ok {
 			sum.Version = st.Version
 			if st.At.After(sum.UpdatedAt) {
@@ -245,7 +278,42 @@ func (s *Service) GetDesignSystem(ctx context.Context, designSystemID string) (*
 	if err != nil {
 		return nil, err
 	}
-	return view(id, cur), nil
+	ds := view(id, cur)
+	ds.RunningDesignSessions = s.running(ctx, designSystemID)
+	ds.OpenProposals = s.openProposals(ctx, designSystemID)
+	return ds, nil
+}
+
+// running is how many design sessions work on the design system now.
+func (s *Service) running(ctx context.Context, designSystemID string) int {
+	if s.sessions == nil {
+		return 0
+	}
+	return len(s.sessions.RunningDesignSessions(ctx, designSystemID))
+}
+
+// StartDesignSession implements ports.DesignSystems.
+func (s *Service) StartDesignSession(ctx context.Context, designSystemID, agentID, prompt string) (string, error) {
+	if _, err := s.identity(ctx, designSystemID); err != nil {
+		return "", err
+	}
+	if s.sessions == nil {
+		return "", &domain.StructuredError{Code: "UNAVAILABLE", Message: "design sessions are not available"}
+	}
+	// A delete holds the lock from its guards to the store's delete: a session
+	// starts either before it, and the guard sees it, or after, on nothing.
+	if s.lock != nil {
+		s.lock.Lock()
+		defer s.lock.Unlock()
+		if _, err := s.identity(ctx, designSystemID); err != nil {
+			return "", err
+		}
+	}
+	sess, err := s.sessions.StartDesignSession(ctx, designSystemID, agentID, prompt)
+	if err != nil {
+		return "", err
+	}
+	return sess.ID, nil
 }
 
 // SaveDesignSystem implements ports.DesignSystems.
@@ -283,6 +351,17 @@ func (s *Service) RenameDesignToken(ctx context.Context, designSystemID string, 
 // write validates record against the current version and appends it as the
 // next one, then announces it.
 func (s *Service) write(ctx context.Context, id *domain.DesignSystemIdentity, cur *domain.DesignSystemVersion, baseVersion int, record domain.DesignSystemRecord, message string) (*domain.DesignSystemVersion, error) {
+	return s.writeFrom(ctx, id, cur, baseVersion, record, message, origin{by: domain.DesignByPerson, source: domain.DesignSourceManual})
+}
+
+// origin says who a version is attributed to and where it came from.
+type origin struct {
+	by, source, proposalID string
+}
+
+// writeFrom is write for a version of any origin: a saved one, or one an
+// approved proposal wrote.
+func (s *Service) writeFrom(ctx context.Context, id *domain.DesignSystemIdentity, cur *domain.DesignSystemVersion, baseVersion int, record domain.DesignSystemRecord, message string, from origin) (*domain.DesignSystemVersion, error) {
 	if err := checkBase(cur, baseVersion); err != nil {
 		return nil, err
 	}
@@ -295,7 +374,7 @@ func (s *Service) write(ctx context.Context, id *domain.DesignSystemIdentity, cu
 		return nil, invalid(problems)
 	}
 	v := &domain.DesignSystemVersion{
-		DesignSystemID: id.ID, At: s.now(), By: domain.DesignByPerson, Source: domain.DesignSourceManual,
+		DesignSystemID: id.ID, At: s.now(), By: from.by, Source: from.source, ProposalID: from.proposalID,
 		Message: message, Summary: domain.SummarizeDesignChange(previous, record), Record: record,
 	}
 	if err := s.store.Append(ctx, v, baseVersion); err != nil {

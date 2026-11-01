@@ -80,6 +80,8 @@ export const designSystemPage = ({ gateway, clock, clipboard = { copyText: async
   updatedBy: "",
   /** Start blank was pressed on a design system with no version: the record is open, nothing is stored. */
   started: false,
+  /** Proposals waiting on the person, kept by the Proposals tab. */
+  openProposals: 0,
   /** The saved record as the server sent it. */
   saved: { tokens: [], principles: "", components: [] },
   /** The draft: the tokens as rows, and the parts no tab edits yet. */
@@ -202,8 +204,8 @@ export const designSystemPage = ({ gateway, clock, clipboard = { copyText: async
       id: `design-system-tab-${t.slug}`,
       panelId: `design-system-panel-${t.slug}`,
       selected: t.slug === this.tab,
-      hasCount: t.slug === "tokens" || t.slug === "components",
-      count: t.slug === "components" ? this.components.length : this.rows.length,
+      hasCount: t.slug === "tokens" || t.slug === "components" || t.slug === "proposals",
+      count: t.slug === "components" ? this.components.length : t.slug === "proposals" ? this.openProposals : this.rows.length,
     }));
   },
   get visibleRows() {

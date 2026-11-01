@@ -79,6 +79,9 @@ type Session struct {
 	// Mode is what the session was started to do beyond its agent; it brings
 	// its own skills, and they come back when the session is resumed.
 	Mode SessionMode `json:"mode,omitempty"`
+	// DesignSystemID is the design system a design session is bound to
+	// (ADR 0060); empty for every other session.
+	DesignSystemID string `json:"design_system_id,omitempty"`
 	// ClaudeSessionID is the claude conversation an interactive session resumes.
 	// It starts equal to ID (the CLI is launched with --session-id ID) and moves
 	// when the conversation does, e.g. after /clear; the CLI's SessionStart hook
@@ -162,20 +165,25 @@ const (
 	// creates one child task per piece of work with a brief each, and asks for
 	// review. It never writes code.
 	SessionModeProduct SessionMode = "product"
+	// SessionModeDesignSystem is a design session (ADR 0055): it runs on its
+	// project with no task, bound to one design system (ADR 0060), reads
+	// every repository and changes none, and edits a writable draft of that
+	// design system, its only output one proposal for the person to approve.
+	SessionModeDesignSystem SessionMode = "designsystem"
 )
 
 // NeedsTask says a session in this mode must run on a task. Only a product
-// session may run on its project alone (ADR 0016): it creates the feature
-// task itself.
-func (m SessionMode) NeedsTask() bool { return m != SessionModeProduct }
+// session (ADR 0016: it creates the feature task itself) and a design session
+// may run on their project alone.
+func (m SessionMode) NeedsTask() bool { return m != SessionModeProduct && m != SessionModeDesignSystem }
 
 // ParseSessionMode reads a mode as clients send it; empty is the default.
 func ParseSessionMode(s string) (SessionMode, error) {
 	switch m := SessionMode(s); m {
-	case SessionModeDefault, SessionModeArchitect, SessionModeImplement, SessionModeDesign, SessionModeProduct:
+	case SessionModeDefault, SessionModeArchitect, SessionModeImplement, SessionModeDesign, SessionModeProduct, SessionModeDesignSystem:
 		return m, nil
 	default:
-		return "", &StructuredError{Code: "INVALID_INPUT", Message: "unknown session mode " + s + `: use "", "architect", "implement", "design" or "product"`}
+		return "", &StructuredError{Code: "INVALID_INPUT", Message: "unknown session mode " + s + `: use "", "architect", "implement", "design", "product" or "designsystem"`}
 	}
 }
 
@@ -204,7 +212,7 @@ type SandboxFacts struct {
 // SandboxVisibilityFor is the repository visibility a sandbox gives a session
 // of mode: architect and product see every repository of the project.
 func SandboxVisibilityFor(mode SessionMode) string {
-	if mode == SessionModeArchitect || mode == SessionModeProduct {
+	if mode == SessionModeArchitect || mode == SessionModeProduct || mode == SessionModeDesignSystem {
 		return SandboxAllReposReadOnly
 	}
 	return SandboxOwnRepo
