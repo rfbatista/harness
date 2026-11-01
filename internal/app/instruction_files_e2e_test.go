@@ -425,6 +425,16 @@ func TestInstructionFiles_RemoveIsRefusedForADirtyCheckoutTheWrongBranchAndAFile
 	if status, body := s.removeFiles("CLAUDE.md", "web/GEMINI.md"); status != http.StatusConflict || body["code"] != "INSTRUCTION_NOT_IMPORTED" {
 		t.Errorf("not imported: %d %v", status, body)
 	}
+	// Imported, then edited on the branch: it differs, so nothing is removed.
+	s.commitFiles(map[string]string{"AGENTS.md": "agents memory, edited after the import"})
+	head = gitE2E(t, s.checkout, "rev-parse", "HEAD")
+	if status, body := s.removeFiles("CLAUDE.md", "AGENTS.md"); status != http.StatusConflict || body["code"] != "INSTRUCTION_DIFFERS" {
+		t.Errorf("differs: %d %v", status, body)
+	}
+	if _, err := os.Stat(filepath.Join(s.checkout, "CLAUDE.md")); err != nil {
+		t.Errorf("a refused remove deleted a file: %v", err)
+	}
+	s.mustPost("import_instruction_files", map[string]any{"repository_id": s.repo.ID, "paths": []string{"AGENTS.md"}})
 	// Imported, then gone from the branch: nothing to remove, and nothing removed.
 	s.saveFile("gone/CLAUDE.md", "memory", 0, "kept in the harness only")
 	if status, body := s.removeFiles("CLAUDE.md", "gone/CLAUDE.md"); status != http.StatusNotFound || body["code"] != "INSTRUCTION_NOT_FOUND" {
@@ -449,5 +459,29 @@ func TestInstructionFiles_RemoveIsRefusedForADirtyCheckoutTheWrongBranchAndAFile
 	gitE2E(t, s.checkout, "checkout", "-q", "main")
 	if now := gitE2E(t, s.checkout, "rev-parse", "HEAD"); now != head {
 		t.Error("a refused remove committed")
+	}
+}
+
+func TestInstructionFiles_AnUnreadableCheckoutIsSaidApartFromNoCopies(t *testing.T) {
+	s := startArchRecordServer(t)
+	s.commitFiles(map[string]string{"CLAUDE.md": "memory"})
+	s.saveFile("AGENTS.md", "memory", 0, "harness only")
+
+	got := s.mustPost("list_instruction_files", map[string]any{"repository_id": s.repo.ID})
+	if _, has := got["repository_unreadable"]; has || got["repository_error"] != nil {
+		t.Errorf("a readable checkout is flagged: %v", got)
+	}
+	if err := os.RemoveAll(s.checkout); err != nil {
+		t.Fatal(err)
+	}
+	got = s.mustPost("list_instruction_files", map[string]any{"repository_id": s.repo.ID})
+	if got["repository_unreadable"] != true || got["repository_error"] == "" || got["repository_error"] == nil {
+		t.Errorf("an unreadable checkout is not flagged: %v", got)
+	}
+	if copies, _ := got["repository_copies"].([]any); len(copies) != 0 {
+		t.Errorf("copies = %v", copies)
+	}
+	if files := got["files"].([]any); len(files) != 1 {
+		t.Errorf("the harness's own files do not list: %v", files)
 	}
 }

@@ -137,21 +137,21 @@ func (s *Service) announceRecord(repo *domain.Repository, version int) {
 }
 
 // ListRepositoryCopies implements ports.InstructionFiles.
-func (s *Service) ListRepositoryCopies(ctx context.Context, repositoryID string) ([]domain.RepositoryCopy, error) {
+func (s *Service) ListRepositoryCopies(ctx context.Context, repositoryID string) ([]domain.RepositoryCopy, string, error) {
 	repo, err := s.repos.GetRepository(ctx, repositoryID)
 	if err != nil {
-		return nil, err
+		return nil, "", err
 	}
 	branch, files, err := s.defaultBranchFiles(ctx, repo)
 	if err != nil {
 		// A checkout that cannot be read has no copies to show; the harness's
 		// own files still list.
 		slog.Warn("list the instruction files of a checkout", "repository", repositoryID, "err", err)
-		return []domain.RepositoryCopy{}, nil
+		return []domain.RepositoryCopy{}, err.Error(), nil
 	}
 	harness, err := s.store.ListInstructionFiles(ctx, repositoryID)
 	if err != nil {
-		return nil, err
+		return nil, "", err
 	}
 	have := map[string]string{}
 	for _, f := range harness {
@@ -165,7 +165,8 @@ func (s *Service) ListRepositoryCopies(ctx context.Context, repositoryID string)
 		}
 		blob, found, err := s.git.ReadFile(ctx, repo.RootDir, branch, f)
 		if err != nil {
-			return nil, err
+			slog.Warn("read an instruction file of a checkout", "repository", repositoryID, "path", f, "err", err)
+			return []domain.RepositoryCopy{}, err.Error(), nil
 		}
 		if !found {
 			continue
@@ -173,7 +174,7 @@ func (s *Service) ListRepositoryCopies(ctx context.Context, repositoryID string)
 		mine, ok := have[f]
 		out = append(out, domain.RepositoryCopy{Path: f, Kind: kind, Differs: !ok || mine != string(blob)})
 	}
-	return out, nil
+	return out, "", nil
 }
 
 // ImportInstructionFiles implements ports.InstructionFiles.
@@ -297,10 +298,19 @@ func (s *Service) RemoveInstructionFilesFromRepository(ctx context.Context, repo
 		return "", err
 	}
 	for _, p := range paths {
-		if _, found, err := s.git.ReadFile(ctx, repo.RootDir, branch, p); err != nil {
+		blob, found, err := s.git.ReadFile(ctx, repo.RootDir, branch, p)
+		if err != nil {
 			return "", err
-		} else if !found {
+		}
+		if !found {
 			return "", &domain.StructuredError{Code: "INSTRUCTION_NOT_FOUND", Message: p + " is not on the default branch " + branch}
+		}
+		mine, err := s.store.GetInstructionFile(ctx, repositoryID, p)
+		if err != nil {
+			return "", err
+		}
+		if mine.Content != string(blob) {
+			return "", &domain.StructuredError{Code: "INSTRUCTION_DIFFERS", Message: p + " on the default branch differs from the harness copy; import it again first"}
 		}
 	}
 	return s.git.RemoveFiles(ctx, repo.RootDir, paths, removeMessage)

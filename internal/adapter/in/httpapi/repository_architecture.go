@@ -185,7 +185,7 @@ func (h *Handler) handleListInstructionFiles(c echo.Context) error {
 	for i, f := range files {
 		out[i] = instructionFileBodyOf(f, false)
 	}
-	copies, err := h.repoArch.ListRepositoryCopies(c.Request().Context(), in.RepositoryID)
+	copies, unreadable, err := h.repoArch.ListRepositoryCopies(c.Request().Context(), in.RepositoryID)
 	if err != nil {
 		return err
 	}
@@ -198,7 +198,12 @@ func (h *Handler) handleListInstructionFiles(c echo.Context) error {
 	for i, cp := range copies {
 		cs[i] = copyBody{cp.Path, cp.Kind, cp.Differs}
 	}
-	return c.JSON(http.StatusOK, map[string]any{"files": out, "repository_copies": cs})
+	body := map[string]any{"files": out, "repository_copies": cs}
+	if unreadable != "" {
+		body["repository_unreadable"] = true
+		body["repository_error"] = unreadable
+	}
+	return c.JSON(http.StatusOK, body)
 }
 
 func (h *Handler) handleImportInstructionFiles(c echo.Context) error {

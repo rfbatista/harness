@@ -59,8 +59,9 @@ type InstructionFiles interface {
 	DeleteInstructionFile(ctx context.Context, repositoryID, path string, baseVersion int) error
 	// ListRepositoryCopies lists the instruction-like files of the checkout's
 	// default branch, with whether each differs from the harness copy. It is
-	// read from git on every call.
-	ListRepositoryCopies(ctx context.Context, repositoryID string) ([]domain.RepositoryCopy, error)
+	// read from git on every call. A checkout that cannot be read is not an
+	// error: the copies are empty and unreadable says why.
+	ListRepositoryCopies(ctx context.Context, repositoryID string) (copies []domain.RepositoryCopy, unreadable string, err error)
 	// ImportInstructionFiles copies the paths from the checkout's default
 	// branch into the harness, creating each file or adding a version when its
 	// content changed. A path the branch has no such file for is
