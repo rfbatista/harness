@@ -41,13 +41,21 @@ func (s *Service) contents(ctx context.Context, sh *root, tk *domain.Ticket) (*b
 		return b, nil
 	}
 
+	structure := &domain.TaskStructure{Children: []domain.TaskChild{}}
+	if s.src.Structure != nil {
+		var err error
+		if structure, err = s.src.Structure.TaskStructure(ctx, tk.ID); err != nil {
+			return nil, err
+		}
+	}
 	taskJSON, err := json.MarshalIndent(struct {
 		ID                 string  `json:"id"`
 		Title              string  `json:"title"`
 		Description        string  `json:"description"`
 		Status             string  `json:"status"`
 		ArchitectSessionID *string `json:"architect_session_id"`
-	}{tk.ID, tk.Title, tk.Description, string(tk.Status), tk.ArchitectSessionID}, "", "  ")
+		*domain.TaskStructure
+	}{tk.ID, tk.Title, tk.Description, string(tk.Status), tk.ArchitectSessionID, structure}, "", "  ")
 	if err != nil {
 		return nil, err
 	}
@@ -162,7 +170,7 @@ func (b *builder) documents(ctx context.Context, tickets ports.TicketReader, src
 		b.docs("task/docs/", domain.DocumentScopeTask, taskScoped(src.ListTicketDocuments(ctx, tk.ID)))
 	}
 	b.docs("project/docs/", domain.DocumentScopeProject, src.ListDocuments(projectID, domain.DocumentScopeProject))
-	others, err := tickets.ListTickets(ctx, projectID, ports.TicketFilter{})
+	others, err := tickets.ListTickets(ctx, projectID, ports.TicketFilter{ExcludeArchived: true})
 	if err != nil {
 		return err
 	}

@@ -22,6 +22,9 @@ type TicketRepository interface {
 	Update(id, title, description string, status domain.TicketStatus, parentID string) (*domain.Ticket, error)
 	// SetArchived archives the ticket at at, or restores it when at is nil.
 	SetArchived(id string, at *time.Time) (*domain.Ticket, error)
+	// SetArchivedMany does the same to every ticket in one transaction, all
+	// at the same instant, and answers them in the order of ids.
+	SetArchivedMany(ids []string, at *time.Time) ([]*domain.Ticket, error)
 	Delete(id string) error
 	// ActivityByProject answers each project's open and archived task
 	// counts and newest update, for every project that has tasks.
@@ -59,9 +62,13 @@ type DocumentRepository interface {
 // TicketFilter narrows ListTickets within a project. The zero value lists
 // every ticket of the project, children included. A non-nil ParentID lists
 // the children of that ticket only; pointing it at "" lists the top-level
-// tickets.
+// tickets. Besides the unarchived tickets, the list carries a child archived
+// on its own while its feature is not archived, with ArchivedAt set: the
+// feature's card on the board shows it as archived. ExcludeArchived leaves
+// those out, for a reader that wants only what is on the board.
 type TicketFilter struct {
-	ParentID *string
+	ParentID        *string
+	ExcludeArchived bool
 }
 
 // TicketReader reads a project's tickets: what a page that only shows tasks
@@ -69,6 +76,15 @@ type TicketFilter struct {
 type TicketReader interface {
 	GetTicket(ctx context.Context, id string) (*domain.Ticket, error)
 	ListTickets(ctx context.Context, projectID string, filter TicketFilter) ([]*domain.Ticket, error)
+}
+
+// TaskStructureReader reads how a task relates to the others of its project:
+// its feature when it is a child, its children when it is a feature task,
+// archived children included, ordered Review, In progress, Todo, Backlog,
+// Done and, within a status, the most recent move first. Planning implements
+// it.
+type TaskStructureReader interface {
+	TaskStructure(ctx context.Context, taskID string) (*domain.TaskStructure, error)
 }
 
 // TicketDocumentReader reads the documents linked to a task (written by its
@@ -140,13 +156,14 @@ type TicketPatcher interface {
 // and answer the ticket. While archived, a ticket cannot change status
 // (TASK_ARCHIVED) and leaves ListTickets; ListArchivedTickets lists the
 // project's archived tickets, newest archived first. ArchiveDoneTickets
-// archives every done ticket of the project that is not archived yet and
-// answers their ids, never nil.
+// archives the done tickets the Done column shows as cards, features with
+// their children, answers their ids (never nil) and how many features with
+// open children it skipped.
 type TicketArchiver interface {
 	ArchiveTicket(ctx context.Context, id string) (*domain.Ticket, error)
 	RestoreTicket(ctx context.Context, id string) (*domain.Ticket, error)
 	ListArchivedTickets(ctx context.Context, projectID string) ([]*domain.Ticket, error)
-	ArchiveDoneTickets(ctx context.Context, projectID string) ([]string, error)
+	ArchiveDoneTickets(ctx context.Context, projectID string) (ids []string, skipped int, err error)
 }
 
 // ArchivedTaskCounter counts a project's archived tasks, for the project
@@ -202,4 +219,5 @@ type Planning interface {
 	TicketBoard
 	TicketPatcher
 	DocumentLibrary
+	TaskStructureReader
 }

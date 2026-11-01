@@ -15,6 +15,21 @@ import { applyTaskChange, describeChange, dropMove } from "../../domain/board.js
 import { STATUSES } from "../../domain/task.js";
 import { archiveAllView, jumpChips, toColumns } from "../boardView.js";
 
+/** Where a feature card's open state is kept in the browser's preferences. */
+const featureKey = (id) => `board-feature:${id}`;
+
+const OPEN_STATUS = { backlog: "Backlog", todo: "Todo", in_progress: "In progress", review: "Review" };
+
+/** Why a feature was not archived, in words: the open children, from the error's details or its message. */
+function refusal(err) {
+  const open = err.details?.open_children;
+  const code = codeOf(err);
+  if (!Array.isArray(open) || open.length === 0) return { text: err.message, code };
+  const named = open.map((c) => `${c.title} (${OPEN_STATUS[c.status] ?? c.status})`);
+  const list = named.length > 1 ? `${named.slice(0, -1).join(", ")} and ${named.at(-1)}` : named[0];
+  return { text: `${open.length} of its tasks ${open.length === 1 ? "is" : "are"} still open: ${list}.`, code };
+}
+
 /** How long a task that arrived or moved over the feed stays highlighted. */
 export const FRESH_MS = 8_000;
 
@@ -51,6 +66,7 @@ export const AGE_TICK_MS = 60_000;
  * @param {{
  *   gateway: import("../../domain/ports.js").TaskGateway,
  *   store: import("./rail.js").RailStore,
+ *   prefs?: import("../../../../shared/infrastructure/storage.js").Preferences,  where each feature card's folded or open state is kept (ADR 0037)
  *   setTimeout?: typeof globalThis.setTimeout,
  *   clock?: { now: () => Date },
  *   isFine?: () => boolean,  a fine pointer (mouse, pen, trackpad): cards drag; touch uses the menu
@@ -58,7 +74,7 @@ export const AGE_TICK_MS = 60_000;
  * }} deps
  */
 export const board =
-  ({ gateway, store, setTimeout = globalThis.setTimeout.bind(globalThis), clock = { now: () => new Date() }, isFine = () => globalThis.matchMedia?.("(pointer: fine)").matches ?? false, isNarrow = () => globalThis.matchMedia?.("(width < 48rem)").matches ?? false }) =>
+  ({ gateway, store, prefs = { get: () => null, set() {} }, setTimeout = globalThis.setTimeout.bind(globalThis), clock = { now: () => new Date() }, isFine = () => globalThis.matchMedia?.("(pointer: fine)").matches ?? false, isNarrow = () => globalThis.matchMedia?.("(width < 48rem)").matches ?? false }) =>
   () => {
   /** The component's root (<main>): $el inside an event handler is the element that fired, not the root. */
   let root = null;
@@ -87,6 +103,12 @@ export const board =
     moves: {},
     /** A move's confirmed status whose echo may still arrive, per card. */
     echoes: {},
+    /** The feature cards the person opened or folded on this page; the rest read the browser's preference. */
+    opened: {},
+    /** Feature cards whose archiving the server refused, with why (ADR 0059): the card says it until the next change. */
+    refusals: {},
+    /** How many features the last "Archive all" left out. */
+    skippedByAll: 0,
     /** The card being dragged, its column, and the column under the pointer ("" for none); null when no drag. */
     drag: null,
     /** A fine pointer, read once: cards drag only there. */
@@ -103,12 +125,15 @@ export const board =
     /** What the cards' time in column is measured against; it moves once a minute, so nothing reorders. */
     now: clock.now(),
 
-    get columns() {
+    /** The columns as the view model draws them, before Done takes on "Archive all". */
+    get cardColumns() {
       const pending = Object.fromEntries(Object.entries(this.moves).map(([id, m]) => [id, m.pending.at(-1)]));
-      const columns = toColumns(store.tasks, { projectId: this.projectId, byTask: store.byTask, fresh: new Set(this.freshIds), now: this.now, pending, failed: new Set(this.failedIds), drag: this.drag, fine: this.fine });
+      return toColumns(store.tasks, { projectId: this.projectId, byTask: store.byTask, fresh: new Set(this.freshIds), open: (id) => this.isOpen(id), refusals: this.refusals, now: this.now, pending, failed: new Set(this.failedIds), drag: this.drag, fine: this.fine });
+    },
+    get columns() {
       // Done carries "Archive all": its strip, its fading cards and the receipt in place of the empty text.
       const all = this.archiveAll;
-      return columns.map((c) => {
+      return this.cardColumns.map((c) => {
         const isDone = c.status === "done";
         const receipt = isDone ? all.emptyText : "";
         return { ...c, isDone, archiving: isDone && all.busy, receipt, showsEmpty: c.isEmpty && !receipt };
@@ -122,8 +147,10 @@ export const board =
       return this.drag !== null;
     },
     get archiveAll() {
-      const done = store.tasks.filter((t) => t.status === "done").length;
-      return archiveAllView({ phase: this.archiveAllPhase, done, archived: this.archivedByAll });
+      // "Archive all" acts on what the Done column shows: a done feature with open children stays.
+      const cards = this.cardColumns.find((c) => c.status === "done").cards;
+      const skipping = cards.filter((c) => c.openChildren > 0).length;
+      return archiveAllView({ phase: this.archiveAllPhase, done: cards.length - skipping, skipping, archived: this.archivedByAll, skipped: this.skippedByAll });
     },
     get archivedLink() {
       return `Archived (${store.seeded ? (store.archivedCount ?? 0) : this.ssrArchivedCount})`;
@@ -176,6 +203,7 @@ export const board =
       const at = store.tasks.findIndex((t) => t.id === taskId);
       if (at < 0) return;
       const task = store.tasks[at];
+      if (store.tasks.some((t) => t.parentId === taskId)) return this.archiveFeature(task);
       const done = this.columns.find((c) => c.status === "done").cards.map((c) => c.id);
       const i = done.indexOf(taskId);
       const next = done[i + 1] ?? done[i - 1] ?? "";
@@ -199,6 +227,35 @@ export const board =
       }
     },
 
+    /** Takes a feature card's refusal off it. */
+    clearRefusal(...ids) {
+      if (ids.some((id) => id in this.refusals)) this.refusals = Object.fromEntries(Object.entries(this.refusals).filter(([id]) => !ids.includes(id)));
+    },
+
+    /**
+     * Archives a feature card with its children. Not optimistic: the server
+     * may refuse while a child is not done, and then the card stays, opens to
+     * its children and says which are open.
+     */
+    async archiveFeature(task) {
+      this.clearRefusal(task.id);
+      this.error = null;
+      try {
+        await gateway.archiveTask(task.id);
+        const kids = store.tasks.filter((t) => t.parentId === task.id && !t.archivedAt).length;
+        store.tasks = store.tasks.filter((t) => t.id !== task.id && t.parentId !== task.id);
+        store.archivedCount = (store.archivedCount ?? 0) + 1 + kids;
+        this.announcement = `Archived ${task.title}.`;
+      } catch (err) {
+        if (codeOf(err) !== Codes.FEATURE_HAS_OPEN_CHILDREN) {
+          this.error = describeError(err);
+        } else {
+          this.refusals = { ...this.refusals, [task.id]: refusal(err) };
+        }
+        this.announcement = `Couldn't archive ${task.title}.`;
+      }
+    },
+
     /**
      * Moves a card, optimistically: it lands on top of its new column at
      * once, faded until the server answers, and goes back if the server
@@ -212,6 +269,7 @@ export const board =
       this.moves = { ...this.moves, [taskId]: { ...move, pending: [...move.pending, status] } };
       delete this.echoes[taskId];
       this.failedIds = this.failedIds.filter((x) => x !== taskId);
+      this.clearRefusal(taskId);
       this.error = null;
       this.show(taskId, status, clock.now().getTime());
       if (refocus) this.refocus(taskId);
@@ -240,6 +298,20 @@ export const board =
         this.announcement = `Couldn't move ${task.title} to ${statusLabel(status)}.`;
         if (refocus) this.refocus(taskId);
       }
+    },
+
+    /** A feature card is open: what the person chose on this page, else the browser's preference; folded by default. */
+    isOpen(id) {
+      return id in this.opened ? this.opened[id] : prefs.get(featureKey(id)) === "open";
+    },
+
+    /** The disclosure on a feature card: folds or opens its children, and remembers it in this browser. */
+    toggleFeature(event) {
+      const id = event.target.closest?.("[data-task-id]")?.dataset.taskId ?? "";
+      if (!id) return;
+      const open = !this.isOpen(id);
+      this.opened = { ...this.opened, [id]: open };
+      prefs.set(featureKey(id), open ? "open" : null);
     },
 
     /** A press inside a card: remembered, so a drag from its title link or a button does not start. */
@@ -325,12 +397,13 @@ export const board =
       this.archiveAllPhase = "busy";
       this.archiveAllError = null;
       try {
-        const { archived, ids } = await gateway.archiveDoneTasks(this.projectId);
+        const { archived, ids, skipped = 0 } = await gateway.archiveDoneTasks(this.projectId);
         const gone = new Set(ids);
         const still = store.tasks.filter((t) => gone.has(t.id)).length;
         store.tasks = store.tasks.filter((t) => !gone.has(t.id));
         store.archivedCount = (store.archivedCount ?? 0) + still;
         this.archivedByAll = archived;
+        this.skippedByAll = skipped;
         this.archiveAllPhase = "done";
         this.announcement = `Archived ${archived} ${archived === 1 ? "task" : "tasks"}.`;
         this.$nextTick(() => root?.querySelector("[data-archived-receipt] a")?.focus());
@@ -419,6 +492,7 @@ export const board =
         return;
       }
       const { id, status } = change.task;
+      this.clearRefusal(id, change.task.parentId); // a change to the feature or one of its children: the refusal is stale
       if (this.drag?.id === id) this.drag = null; // changed elsewhere mid-drag: the drag is off, the change announced below
       if (change.task.archivedAt) {
         delete this.moves[id];

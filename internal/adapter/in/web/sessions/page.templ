@@ -64,11 +64,16 @@ templ Page(v PageView) {
 					@templ.JSONScript("task-savers-seed", v.TokenSavers)
 				}
 				<header class="[ toolbar ]">
-					<a class="[ crumb ]" href={ templ.SafeURL("/projects/" + v.ProjectID) }>{ v.ProjectName } /</a>
 					if v.Parent != nil {
-						<a class="[ crumb ]" href={ templ.SafeURL(v.Parent.Href) } data-parent-task={ v.Parent.ID } title="The feature task this task belongs to">{ v.Parent.Title } /</a>
+						<nav class="[ crumbline ]" aria-label="Feature">
+							<a class="[ feat ]" href={ templ.SafeURL(v.Parent.Href) } data-parent-task={ v.Parent.ID } title={ v.Parent.Title }>{ v.Parent.Title }</a>
+							<span class="[ sep ]" aria-hidden="true">/</span>
+							<h1 x-text="title" x-bind:title="title" title={ v.TaskTitle }>{ v.TaskTitle }</h1>
+						</nav>
+					} else {
+						<a class="[ crumb ]" href={ templ.SafeURL("/projects/" + v.ProjectID) }>{ v.ProjectName } /</a>
+						<h1 x-text="title">{ v.TaskTitle }</h1>
 					}
-					<h1 x-text="title">{ v.TaskTitle }</h1>
 					if !v.Archived() {
 						<select data-size="sm" data-fit aria-label="Task status" x-model="status" x-on:change="changeStatus">
 							for _, st := range v.StatusChoices {

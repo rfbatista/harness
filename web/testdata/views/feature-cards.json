@@ -1,0 +1,358 @@
+{
+  "$comment": "The board's feature cards (ADR 0058): which tasks get a card, in which column, a feature card's progress, hint, children in order and the signals rolled up from the feature and its children. since is minutes after a fixed origin: the newest status move first. The rail section pins the rail the same way: the top-level rows of each status group in list order, a feature row's children nested in card order (archived ones left out), and each row's one meta item (a folded feature's covers its children). Read by web/src/modules/tasks/presentation/boardView.test.js and internal/adapter/in/web/tasks/board_test.go so first paint and the live board agree. The Go first paint is internal/adapter/in/web/tasks/rail_test.go and the live copy railView.test.js.",
+  "tasks": [
+    {
+      "id": "f1",
+      "title": "Design system",
+      "status": "in_progress",
+      "parent_id": "",
+      "since": 10
+    },
+    {
+      "id": "f1-backlog",
+      "title": "Dark audit",
+      "status": "backlog",
+      "parent_id": "f1",
+      "since": 1
+    },
+    {
+      "id": "f1-review",
+      "title": "Spec tokens",
+      "status": "review",
+      "parent_id": "f1",
+      "since": 5,
+      "reviews": 1
+    },
+    {
+      "id": "f1-done-old",
+      "title": "Generator",
+      "status": "done",
+      "parent_id": "f1",
+      "since": 2,
+      "merge": "merged"
+    },
+    {
+      "id": "f1-done-new",
+      "title": "Colours",
+      "status": "done",
+      "parent_id": "f1",
+      "since": 8,
+      "merge": "not_merged"
+    },
+    {
+      "id": "f1-progress",
+      "title": "Specimen",
+      "status": "in_progress",
+      "parent_id": "f1",
+      "since": 6
+    },
+    {
+      "id": "f1-todo",
+      "title": "Card docs",
+      "status": "todo",
+      "parent_id": "f1",
+      "since": 3
+    },
+    {
+      "id": "f1-archived",
+      "title": "Reset layers",
+      "status": "done",
+      "parent_id": "f1",
+      "since": 4,
+      "archived": true
+    },
+    {
+      "id": "f2",
+      "title": "Code views",
+      "status": "in_progress",
+      "parent_id": "",
+      "since": 9
+    },
+    {
+      "id": "f2-a",
+      "title": "Diff view",
+      "status": "done",
+      "parent_id": "f2",
+      "since": 1
+    },
+    {
+      "id": "f2-b",
+      "title": "Code map",
+      "status": "done",
+      "parent_id": "f2",
+      "since": 2
+    },
+    {
+      "id": "f3",
+      "title": "Files tab",
+      "status": "review",
+      "parent_id": "",
+      "since": 7
+    },
+    {
+      "id": "f3-a",
+      "title": "Narrow layout",
+      "status": "review",
+      "parent_id": "f3",
+      "since": 1
+    },
+    {
+      "id": "f3-b",
+      "title": "Tree",
+      "status": "done",
+      "parent_id": "f3",
+      "since": 2
+    },
+    {
+      "id": "f4",
+      "title": "Shipped feature",
+      "status": "done",
+      "parent_id": "",
+      "since": 6
+    },
+    {
+      "id": "f4-a",
+      "title": "Only child",
+      "status": "done",
+      "parent_id": "f4",
+      "since": 1
+    },
+    {
+      "id": "lone",
+      "title": "Lone feature",
+      "status": "todo",
+      "parent_id": "",
+      "since": 5
+    },
+    {
+      "id": "orphan",
+      "title": "Lost child",
+      "status": "todo",
+      "parent_id": "gone",
+      "since": 4
+    },
+    {
+      "id": "stray",
+      "title": "Archived orphan",
+      "status": "done",
+      "parent_id": "gone",
+      "since": 3,
+      "archived": true
+    },
+    {
+      "id": "plain",
+      "title": "Plain",
+      "status": "backlog",
+      "parent_id": "",
+      "since": 2
+    }
+  ],
+  "sessions": [
+    {
+      "task_id": "f1-progress",
+      "status": "running"
+    },
+    {
+      "task_id": "f1-backlog",
+      "status": "running"
+    },
+    {
+      "task_id": "f1-review",
+      "status": "idle"
+    }
+  ],
+  "columns": {
+    "backlog": [
+      "plain"
+    ],
+    "todo": [
+      "lone",
+      "orphan"
+    ],
+    "in_progress": [
+      "f1",
+      "f2"
+    ],
+    "review": [
+      "f3"
+    ],
+    "done": [
+      "f4"
+    ]
+  },
+  "cards": [
+    {
+      "id": "f1",
+      "bar": "3 done, 1 review, 1 in progress, 1 todo, 1 backlog",
+      "summary": "3 of 7 done",
+      "tasks": "7 tasks",
+      "hint": "",
+      "children": [
+        "f1-review",
+        "f1-progress",
+        "f1-todo",
+        "f1-backlog",
+        "f1-done-new",
+        "f1-archived",
+        "f1-done-old"
+      ],
+      "archived": [
+        "f1-archived"
+      ],
+      "live": "waiting",
+      "reviews": "1 review",
+      "merge": "1 of 2 merged"
+    },
+    {
+      "id": "f2",
+      "bar": "2 done",
+      "summary": "2 of 2 done",
+      "tasks": "2 tasks",
+      "hint": "All 2 tasks done.",
+      "children": [
+        "f2-b",
+        "f2-a"
+      ],
+      "archived": [],
+      "live": "",
+      "reviews": "",
+      "merge": ""
+    },
+    {
+      "id": "f3",
+      "bar": "1 done, 1 review",
+      "summary": "1 of 2 done",
+      "tasks": "2 tasks",
+      "hint": "1 task open.",
+      "children": [
+        "f3-a",
+        "f3-b"
+      ],
+      "archived": [],
+      "live": "",
+      "reviews": "",
+      "merge": ""
+    },
+    {
+      "id": "f4",
+      "bar": "1 done",
+      "summary": "1 of 1 done",
+      "tasks": "1 task",
+      "hint": "",
+      "children": [
+        "f4-a"
+      ],
+      "archived": [],
+      "live": "",
+      "reviews": "",
+      "merge": ""
+    },
+    {
+      "id": "lone",
+      "children": []
+    },
+    {
+      "id": "orphan",
+      "children": []
+    },
+    {
+      "id": "plain",
+      "children": []
+    }
+  ],
+  "rail": {
+    "in_progress": [
+      {
+        "id": "f1",
+        "meta": "reviews:1 review",
+        "kids": [
+          {
+            "id": "f1-review",
+            "meta": "reviews:1 review"
+          },
+          {
+            "id": "f1-progress",
+            "meta": "live:1 live"
+          },
+          {
+            "id": "f1-todo",
+            "meta": "status:Todo"
+          },
+          {
+            "id": "f1-backlog",
+            "meta": "live:1 live"
+          },
+          {
+            "id": "f1-done-new",
+            "meta": "status:Done"
+          },
+          {
+            "id": "f1-done-old",
+            "meta": "status:Done"
+          }
+        ]
+      },
+      {
+        "id": "f2",
+        "meta": "",
+        "kids": [
+          {
+            "id": "f2-b",
+            "meta": "status:Done"
+          },
+          {
+            "id": "f2-a",
+            "meta": "status:Done"
+          }
+        ]
+      }
+    ],
+    "review": [
+      {
+        "id": "f3",
+        "meta": "",
+        "kids": [
+          {
+            "id": "f3-a",
+            "meta": "status:Review"
+          },
+          {
+            "id": "f3-b",
+            "meta": "status:Done"
+          }
+        ]
+      }
+    ],
+    "todo": [
+      {
+        "id": "lone",
+        "meta": "",
+        "kids": []
+      },
+      {
+        "id": "orphan",
+        "meta": "",
+        "kids": []
+      }
+    ],
+    "backlog": [
+      {
+        "id": "plain",
+        "meta": "",
+        "kids": []
+      }
+    ],
+    "done": [
+      {
+        "id": "f4",
+        "meta": "",
+        "kids": [
+          {
+            "id": "f4-a",
+            "meta": "status:Done"
+          }
+        ]
+      }
+    ]
+  }
+}

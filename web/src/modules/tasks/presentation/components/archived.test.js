@@ -81,3 +81,10 @@ test("nothing archived shows the empty state", () => {
   const { instance } = setup([]);
   assert.deepEqual([instance.isEmpty, instance.summary], [true, ""]);
 });
+
+test("restoring a child of an archived feature is refused in its row, with the feature to open first", async () => {
+  const { instance } = setup([makeTask({ id: "f", title: "Files tab", status: "done", archivedAt: 3 }), makeTask({ id: "c", title: "Narrow layout", status: "done", parentId: "f", archivedAt: 3 })]);
+  await instance.restore(on("c"));
+  const row = instance.rows.find((r) => r.id === "c");
+  assert.deepEqual([row.error.message, row.error.code, row.error.featureHref, row.receipt], ["Restore the feature “Files tab” first.", Codes.FEATURE_ARCHIVED, "/projects/p1/tasks/f", ""]);
+});

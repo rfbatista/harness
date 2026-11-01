@@ -20,14 +20,18 @@
  *           A status-only update: what the board sends when a card is moved.
  * @property {(id: string) => Promise<Task>} archiveTask
  *           Takes a done task off the board, keeping everything it has; an
- *           archived one again changes nothing. Rejects with TASK_NOT_DONE or
- *           TICKET_NOT_FOUND. An archived task's status cannot change
+ *           archived one again changes nothing. A feature task is archived with its
+ *           children. Rejects with TASK_NOT_DONE, TICKET_NOT_FOUND or
+ *           FEATURE_HAS_OPEN_CHILDREN (details: { open_children }). An archived task's status cannot change
  *           (TASK_ARCHIVED) until it is restored.
- * @property {(projectId: string) => Promise<{ archived: number, ids: string[] }>} archiveDoneTasks
- *           Archives every done task of the project still on the board, at
- *           once, and says which.
+ * @property {(projectId: string) => Promise<{ archived: number, ids: string[], skipped: number }>} archiveDoneTasks
+ *           Archives what the Done column shows, at once, and says which
+ *           (a feature's children included): done plain tasks, done orphan
+ *           children and done features with every child done. skipped counts
+ *           the done features left out for having open children.
  * @property {(id: string) => Promise<Task>} restoreTask
- *           Puts an archived task back in Done; one on the board is a no-op.
+ *           Puts an archived task back in Done; one on the board is a no-op. A child
+ *           of an archived feature is FEATURE_ARCHIVED (details: { feature }).
  *           Rejects with TICKET_NOT_FOUND.
  * @property {(id: string) => Promise<void>} deleteTask
  *           Rejects with TICKET_NOT_FOUND.

@@ -1,6 +1,7 @@
-import cues from "../../../../testdata/views/feature-cues.json" with { type: "json" };
+import cards from "../../../../testdata/views/feature-cards.json" with { type: "json" };
 import { assert, file, test } from "../../../shared/testing/test.js";
-import { childrenWord } from "../domain/feature.js";
+import { activityByTask } from "../domain/activity.js";
+import { onBoard } from "../domain/board.js";
 import { makeTask } from "../testing/fixtures.js";
 import { archiveAllView, jumpChips, toColumns } from "./boardView.js";
 
@@ -126,12 +127,42 @@ test("the narrow screen's jump chips: one link per column with its count; Review
   assert.equal(jumpChips(toColumns([], ctx()), { bumped: "" })[3].waiting, false, "an empty Review is quiet");
 });
 
-test("feature cues match the shared fixture: a child names its parent, a feature counts its children (parity with the BFF)", () => {
-  const tasks = cues.tasks.map((t) => makeTask({ id: t.id, title: t.title, status: t.status, parentId: t.parent_id }));
-  const cards = Object.fromEntries(toColumns(tasks, { projectId: "p1", byTask: {}, fresh: new Set() }).flatMap((c) => c.cards).map((c) => [c.id, c]));
-  for (const want of cues.cards) {
-    const card = cards[want.id];
-    assert.deepEqual([card.parentTitle, card.hasParent, card.children, card.hasChildren], [want.parent, want.parent !== "", want.children, want.children !== ""], want.id);
+test("feature cards match the shared fixture: one card per feature in its column, progress, hint, children in order, rolled-up signals (parity with the BFF)", () => {
+  const tasks = cards.tasks.map((t) =>
+    makeTask({
+      id: t.id,
+      title: t.title,
+      status: t.status,
+      parentId: t.parent_id,
+      statusSince: Date.parse("2026-10-19T08:00:00Z") + t.since * 60000,
+      pendingReviews: t.reviews ?? 0,
+      archivedAt: t.archived ? Date.parse("2026-10-01T12:00:00Z") : 0,
+      mergeState: t.merge ? { state: t.merge, merged: 1, total: 1 } : null,
+    }),
+  );
+  const byTask = activityByTask(cards.sessions.map((s) => ({ id: `s-${s.task_id}`, ticketId: s.task_id, status: s.status, pendingApprovals: 0 })));
+  const cols = toColumns(onBoard(tasks), ctx({ byTask }));
+  for (const col of cols) assert.deepEqual(col.cards.map((c) => c.id), cards.columns[col.status], col.status);
+  const byId = Object.fromEntries(cols.flatMap((c) => c.cards).map((c) => [c.id, c]));
+  for (const want of cards.cards) {
+    const card = byId[want.id];
+    assert.ok(card, want.id);
+    assert.equal(card.isFeature, want.children.length > 0, want.id);
+    if (!card.isFeature) continue;
+    assert.deepEqual(
+      [card.bar, card.summary, card.tasks, card.hint, card.children.map((c) => c.id), card.children.filter((c) => c.archived).map((c) => c.id), card.liveState, card.reviews, card.mergeWord],
+      [want.bar, want.summary, want.tasks, want.hint, want.children, want.archived, want.live, want.reviews, want.merge],
+      want.id,
+    );
   }
-  for (const w of cues.children_words) assert.equal(childrenWord(w.count), w.word);
+});
+
+test("Archive all counts what Done shows, says how many features stay, and its receipt says how many the server skipped", () => {
+  const confirm = archiveAllView({ phase: "confirm", done: 3, skipping: 2 });
+  assert.deepEqual([confirm.title, confirm.body.endsWith("2 features with open children stay on the board."), confirm.confirm], ["Archive all 3 done tasks?", true, "Archive 3"]);
+  assert.ok(archiveAllView({ phase: "confirm", done: 1, skipping: 1 }).body.endsWith("1 feature with open children stays on the board."));
+  assert.equal(archiveAllView({ phase: "confirm", done: 2 }).body.includes("open children"), false);
+  assert.equal(archiveAllView({ phase: "done", done: 2, archived: 5, skipped: 2 }).emptyText, "");
+  assert.equal(archiveAllView({ phase: "done", done: 0, archived: 5, skipped: 2 }).emptyText, "5 tasks archived. Skipped 2 features with open children.");
+  assert.equal(archiveAllView({ phase: "done", done: 0, archived: 1, skipped: 0 }).emptyText, "1 task archived.");
 });

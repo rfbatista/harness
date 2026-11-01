@@ -80,21 +80,51 @@ export function memoryTasks({ projects = [], tasks = [], sessions = [], document
       if (!task) throw new StructuredError(Codes.TICKET_NOT_FOUND, "ticket not found", 404);
       if (task.archivedAt) return task;
       if (task.status !== "done") throw new StructuredError(Codes.TASK_NOT_DONE, "only a done task can be archived", 409);
-      const archived = Object.freeze({ ...task, archivedAt: now() });
+      // A feature task is archived with its children (ADR 0059), and only when all of them are done.
+      const kids = [...store.values()].filter((t) => t.parentId === id && !t.archivedAt);
+      const open = kids.filter((t) => t.status !== "done");
+      if (open.length > 0) {
+        const message = `${open.length} ${open.length === 1 ? "task is" : "tasks are"} not done: ${open.map((t) => t.title).join(", ")}`;
+        throw new StructuredError(Codes.FEATURE_HAS_OPEN_CHILDREN, message, 409, { open_children: open.map((t) => ({ id: t.id, title: t.title, status: t.status })) });
+      }
+      const at = now();
+      for (const kid of kids) store.set(kid.id, Object.freeze({ ...kid, archivedAt: at }));
+      const archived = Object.freeze({ ...task, archivedAt: at });
       store.set(id, archived);
       return archived;
     },
 
     async archiveDoneTasks(projectId) {
-      const ids = [...store.values()].filter((t) => t.projectId === projectId && t.status === "done" && !t.archivedAt).map((t) => t.id);
-      for (const id of ids) store.set(id, Object.freeze({ ...store.get(id), archivedAt: now() }));
-      return { archived: ids.length, ids };
+      // What the Done column shows: done plain tasks, done orphan children and done features with every child done.
+      const all = [...store.values()].filter((t) => t.projectId === projectId);
+      const onBoard = new Set(all.filter((t) => !t.archivedAt).map((t) => t.id));
+      const cards = all.filter((t) => t.status === "done" && !t.archivedAt && !onBoard.has(t.parentId));
+      const ids = [];
+      let skipped = 0;
+      for (const card of cards) {
+        const before = store.get(card.id);
+        try {
+          await gateway.archiveTask(card.id);
+        } catch (err) {
+          if (err.code !== Codes.FEATURE_HAS_OPEN_CHILDREN) throw err;
+          skipped++;
+          continue;
+        }
+        ids.push(card.id, ...[...store.values()].filter((t) => t.parentId === before.id && t.archivedAt === store.get(before.id).archivedAt).map((t) => t.id));
+      }
+      return { archived: ids.length, ids, skipped };
     },
 
     async restoreTask(id) {
       const task = store.get(id);
       if (!task) throw new StructuredError(Codes.TICKET_NOT_FOUND, "ticket not found", 404);
       if (!task.archivedAt) return task;
+      const feature = store.get(task.parentId);
+      if (feature?.archivedAt) {
+        throw new StructuredError(Codes.FEATURE_ARCHIVED, `Restore the feature \u201c${feature.title}\u201d first.`, 409, { feature: { id: feature.id, title: feature.title } });
+      }
+      // A feature comes back with the children archived with it.
+      for (const kid of store.values()) if (kid.parentId === id && kid.archivedAt === task.archivedAt) store.set(kid.id, Object.freeze({ ...kid, archivedAt: 0 }));
       const restored = Object.freeze({ ...task, archivedAt: 0 });
       store.set(id, restored);
       return restored;

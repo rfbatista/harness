@@ -30,18 +30,6 @@ type Column struct {
 	Cards         []Card
 }
 
-// ChildrenWord is the children badge: "1 task", "3 tasks"; "" for none. The
-// browser's childrenWord (tasks/domain/feature.js) says the same.
-func ChildrenWord(n int) string {
-	if n < 1 {
-		return ""
-	}
-	if n == 1 {
-		return "1 task"
-	}
-	return strconv.Itoa(n) + " tasks"
-}
-
 // Waiting: Review holds tasks, which wait for the person's check.
 func (c Column) Waiting() bool { return c.Status == "review" && len(c.Cards) > 0 }
 
@@ -57,17 +45,14 @@ func (c Column) EmptyText() string {
 }
 
 // Card is a task as the board draws it: its link and activity, then its
-// signals, its last move and its time in column. Parent and Children are the
-// feature cues (ADR 0016): Parent is the feature task's title on a child (""
-// when top-level, or when the parent is not among the project's tasks);
-// Children counts a feature task's children. The browser's toCard
-// (boardView.js) derives the same from the store's task list;
-// web/testdata/views/feature-cues.json pins the words.
+// signals, its last move and its time in column. Feature is set on a feature
+// task (ADR 0058): its children are inside the card, and its signals cover
+// them. The browser's toCard (boardView.js) derives the same from the store's
+// task list; web/testdata/views/feature-cards.json pins the words.
 type Card struct {
 	shell.Link
-	Parent   string
-	Children int
-	Status   string
+	Feature *FeatureCard
+	Status  string
 	// LiveState is the dot: "waiting" when a session waits on the person,
 	// "running" when one runs, "" when quiet. Reviews have their own badge.
 	LiveState, LiveWord string
@@ -79,35 +64,43 @@ type Card struct {
 	Stale bool
 }
 
-// HasSignals: the card has a children badge, a live dot, a reviews badge or
-// a merge badge.
+// HasSignals: the card has a live dot, a reviews badge or a merge badge.
 func (c Card) HasSignals() bool {
-	return c.Children > 0 || c.LiveState != "" || c.Reviews > 0 || c.Merge != nil
+	return c.LiveState != "" || c.Reviews > 0 || c.Merge != nil
 }
 
 // BuildBoard groups a project's tasks by status with the same per-task
-// activity the rail shows, and the feature cues from the same list.
-// Archived tasks are not on it; each column lists its newest move first.
+// activity the rail shows. A feature task and its children are one card, in
+// the feature's column; a child whose feature is not on the board keeps a
+// card of its own. Archived tasks are not on it, except a child archived on
+// its own, which shows inside its feature's card. Each column lists its
+// newest move first.
 func BuildBoard(projectID string, tasks []*domain.Ticket, list []*domain.Session) Board {
-	// unarchived returns a new slice, so sorting it leaves the caller's alone.
-	tasks = unarchived(tasks)
+	tasks = onBoard(tasks)
 	byTask := activityByTask(list)
 	at := now()
 	slices.SortStableFunc(tasks, func(a, b *domain.Ticket) int { return b.StatusSince.Compare(a.StatusSince) })
-	titles := make(map[string]string, len(tasks))
-	children := map[string]int{}
+	live := map[string]bool{}
 	for _, t := range tasks {
-		titles[t.ID] = t.Title
+		if t.ArchivedAt == nil {
+			live[t.ID] = true
+		}
 	}
+	children := map[string][]*domain.Ticket{}
 	for _, t := range tasks {
-		if _, known := titles[t.ParentID]; t.ParentID != "" && known {
-			children[t.ParentID]++
+		if t.ParentID != "" && live[t.ParentID] {
+			children[t.ParentID] = append(children[t.ParentID], t)
 		}
 	}
 	byStatus := map[string][]Card{}
 	for _, t := range tasks {
+		if t.ArchivedAt != nil || (t.ParentID != "" && live[t.ParentID]) {
+			continue
+		}
 		c := boardCard(projectID, t, byTask, at)
-		c.Parent, c.Children = titles[t.ParentID], children[t.ID]
+		if kids := children[t.ID]; len(kids) > 0 {
+			rollUpCard(&c, projectID, t, kids, byTask)
+		}
 		byStatus[string(t.Status)] = append(byStatus[string(t.Status)], c)
 	}
 	b := Board{}
@@ -117,12 +110,37 @@ func BuildBoard(projectID string, tasks []*domain.Ticket, list []*domain.Session
 	return b
 }
 
-// unarchived leaves out the archived tasks: neither the board nor the rail
-// shows them, whatever list they are handed.
-func unarchived(tasks []*domain.Ticket) []*domain.Ticket {
-	out := tasks[:0:0]
+// rollUpCard makes c a feature card: the children inside it, and its live
+// dot, reviews and merge badge covering the feature and all of them.
+func rollUpCard(c *Card, projectID string, f *domain.Ticket, kids []*domain.Ticket, byTask map[string]activity) {
+	c.Feature = featureCard(projectID, f, kids, byTask)
+	a := byTask[f.ID]
+	badges := []*MergeBadge{mergeBadge(string(f.Status), cardFactsOf(f).merge)}
+	for _, k := range kids {
+		if k.ArchivedAt != nil {
+			continue // archived on its own: listed on the card, no longer a signal
+		}
+		a = rollUp(a, byTask[k.ID])
+		c.Reviews += k.PendingReviews
+		badges = append(badges, mergeBadge(string(k.Status), cardFactsOf(k).merge))
+	}
+	c.LiveState, c.LiveWord = liveDot(a)
+	c.Merge = rolledMerge(badges)
+}
+
+// onBoard leaves out the archived tasks the board does not show: a task
+// archived with its feature, or whose feature is gone. It keeps one archived
+// on its own while its feature is on the board; the card lists it.
+func onBoard(tasks []*domain.Ticket) []*domain.Ticket {
+	live := map[string]bool{}
 	for _, t := range tasks {
 		if t.ArchivedAt == nil {
+			live[t.ID] = true
+		}
+	}
+	out := tasks[:0:0]
+	for _, t := range tasks {
+		if t.ArchivedAt == nil || (t.ParentID != "" && live[t.ParentID]) {
 			out = append(out, t)
 		}
 	}
@@ -189,4 +207,16 @@ func reviewsWord(n int) string {
 		return "1 review"
 	}
 	return strconv.Itoa(n) + " reviews"
+}
+
+// unarchived leaves out the archived tasks: the rail shows none of them,
+// whatever list it is handed.
+func unarchived(tasks []*domain.Ticket) []*domain.Ticket {
+	out := tasks[:0:0]
+	for _, t := range tasks {
+		if t.ArchivedAt == nil {
+			out = append(out, t)
+		}
+	}
+	return out
 }

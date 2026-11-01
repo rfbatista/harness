@@ -68,7 +68,7 @@
     &[data-empty] > h3 { color: var(--color-ink-faint); font-weight: var(--weight-medium); }
 
     /* Collapsed: rows hide, except the open task and what needs the person. */
-    &[data-collapsed] > ul > li:not(:has(> a:is([aria-current="page"], [data-attention], [data-peek]))) { display: none; }
+    &[data-collapsed] > ul > li:not(:has(a:is([aria-current="page"], [data-attention], [data-peek]))) { display: none; }
 
     & > ul { margin-block-start: var(--space-3xs); }
 

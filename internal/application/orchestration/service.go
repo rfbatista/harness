@@ -182,6 +182,9 @@ type Service struct {
 	// task, for its brief. Nil leaves the counts out.
 	Resources ports.TaskResourceReader
 	Comments  ports.TaskCommentReader
+	// Structure tells a task's session its feature and its sibling or child
+	// tasks; nil leaves them out of the brief.
+	Structure ports.TaskStructureReader
 	// Shells gives each session with a task its virtual shell (see
 	// "Contract: Harness server ↔ Agent sessions — virtual shell"). Nil:
 	// sessions get none.
@@ -858,6 +861,7 @@ func (s *Service) sessionConfig(id, dir, model string, allowedTools []string, pe
 	} else {
 		counts := s.taskCounts(ticket)
 		counts.agentsMove = s.agentsMoveDocuments()
+		counts.structure = s.taskStructure(ticket)
 		applyTaskContext(&cfg, ticket, taskURL, role, counts)
 	}
 	if section := s.architectureSection(context.TODO(), role, ag.agent, subject.projectID(), repositoryID); section != "" {

@@ -23,8 +23,13 @@
  * .column[data-drop-self] says "Already in …"; .column[data-drag-origin]
  * dims its other cards; .card[data-ghost] holds the dragged card's place.
  * The reason unclamps, and the exact time shows, on hover or focus within.
- * A child task's card names its feature task above the title (.parent); a
- * feature task's card counts its children in a badge ([data-children]).
+ * A feature task and its children are one card (ADR 0058), .card[data-feature]:
+ * a .progress (a segmented .bar, one i[data-st] per status in fill order, and
+ * a .sum line) and, when the feature's status disagrees with its children, a
+ * .hint. The signals row covers the feature and all its children. A
+ * .disclosure button in the .sum line opens its .children (hidden when
+ * folded): one .child line per child, with a .tdot, its link (.t) and a .sig
+ * of live dot, reviews badge and status .word; .child[data-archived] is muted.
  */
 
 @layer blocks {
@@ -218,14 +223,169 @@
       &:hover { text-decoration: underline; }
     }
 
-    & > .parent {
-      font-size: var(--text-xs);
-      color: var(--color-ink-faint);
-      overflow: hidden;
-      text-overflow: ellipsis;
-      white-space: nowrap;
+    & .progress { display: grid; gap: var(--space-3xs); }
 
-      &::before { content: "↳ "; }
+    & .bar {
+      display: flex;
+      gap: 2px;
+      block-size: 0.375rem;
+
+      & > i {
+        display: block;
+        min-inline-size: 3px;
+        border-radius: 1px;
+        background: var(--color-line-strong);
+      }
+
+      & > i[data-st="done"] { background: var(--color-ink-faint); }
+      & > i[data-st="review"] { background: var(--color-attention); }
+      & > i[data-st="in_progress"] { background: var(--color-signal); }
+      & > i[data-st="todo"] { background: var(--color-line-control); }
+      & > i[data-st="backlog"] { background: transparent; box-shadow: inset 0 0 0 1px var(--color-line-control); }
+    }
+
+    & .sum {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: var(--space-s);
+      font-size: var(--text-xs);
+      color: var(--color-ink-muted);
+      font-variant-numeric: tabular-nums;
+
+      & b { color: var(--color-ink); font-weight: var(--weight-medium); }
+    }
+
+    & .disclosure {
+      display: inline-flex;
+      align-items: center;
+      gap: var(--space-2xs);
+      min-block-size: 1.5rem;
+      margin-inline-end: calc(var(--space-xs) * -1);
+      padding-inline: var(--space-xs);
+      border: 0;
+      border-radius: var(--radius-sm);
+      background: transparent;
+      color: var(--color-ink-muted);
+      font: inherit;
+      font-size: var(--text-xs);
+      cursor: pointer;
+
+      &:hover { background: var(--color-hover); color: var(--color-ink); }
+
+      &::after {
+        content: "";
+        inline-size: 0.4rem;
+        block-size: 0.4rem;
+        border: solid currentColor;
+        border-width: 0 1.5px 1.5px 0;
+        rotate: 45deg;
+        translate: 0 -0.1rem;
+        transition: rotate var(--duration-quick) var(--ease-out);
+      }
+
+      &[aria-expanded="true"]::after { rotate: -135deg; translate: 0 0.1rem; }
+
+      @media (pointer: coarse) { min-block-size: var(--size-touch); }
+    }
+
+    & .children {
+      margin: 0 calc(var(--space-xs) * -1) calc(var(--space-2xs) * -1) calc(var(--space-s) * -1);
+      padding: var(--space-2xs) var(--space-xs) var(--space-2xs) var(--space-s);
+      border-block-start: var(--border-width) solid var(--color-line);
+      list-style: none;
+
+      &[hidden] { display: none; }
+    }
+
+    & .child {
+      display: grid;
+      grid-template-columns: 0.75rem minmax(0, 1fr) auto;
+      align-items: center;
+      column-gap: var(--space-xs);
+      min-block-size: 1.75rem;
+      padding-inline: var(--space-2xs);
+      border-radius: var(--radius-xs);
+      font-size: var(--text-sm);
+
+      &:hover { background: var(--color-hover); }
+
+      & .t {
+        min-inline-size: 0;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+        color: var(--color-ink);
+        text-decoration: none;
+
+        &:hover { text-decoration: underline; }
+      }
+
+      & .sig {
+        display: inline-flex;
+        align-items: center;
+        gap: var(--space-xs);
+        font-size: var(--text-xs);
+        color: var(--color-ink-faint);
+        white-space: nowrap;
+      }
+
+      & .word { min-inline-size: 4.5rem; text-align: end; }
+      & .badge { block-size: 1.125rem; padding-inline: var(--space-2xs); }
+      & .live {
+        display: inline-flex;
+        align-items: center;
+        gap: var(--space-2xs);
+        color: var(--color-ink-muted);
+
+        &::before {
+          content: "";
+          inline-size: 0.5rem;
+          block-size: 0.5rem;
+          border-radius: var(--radius-round);
+          background: var(--color-signal);
+        }
+
+        &[data-state="waiting"]::before { background: var(--color-attention); }
+      }
+
+      &[data-archived] .t { color: var(--color-ink-faint); }
+      &[data-archived] .word { font-style: italic; }
+
+      /* Below 48rem the status word moves under the title, so a long title keeps its room. */
+      @media (width < 48rem) {
+        grid-template-columns: 0.75rem minmax(0, 1fr);
+        grid-template-rows: auto auto;
+        min-block-size: var(--size-touch);
+        padding-block: var(--space-2xs);
+
+        & .t { grid-column: 2; }
+        & .sig { grid-column: 2; grid-row: 2; }
+        & .word { order: -1; min-inline-size: 0; text-align: start; }
+        & .tdot { grid-row: 1 / 3; align-self: center; }
+      }
+    }
+
+    /* The server's refusal to archive a feature, on the card, with the red edge of a failed move. */
+    & .refusal {
+      display: grid;
+      gap: var(--space-3xs);
+      font-size: var(--text-xs);
+      line-height: var(--leading-snug);
+
+      & > p:first-child { color: var(--color-danger); }
+      & > .muted { color: var(--color-ink-muted); }
+      & > .code { font-family: var(--font-mono); color: var(--color-ink-faint); }
+    }
+
+    & .hint {
+      font-size: var(--text-xs);
+      line-height: var(--leading-snug);
+      color: var(--color-ink-muted);
+      padding-inline-start: var(--space-s);
+      border-inline-start: 2px solid var(--color-line-strong);
+
+      & b { font-weight: var(--weight-medium); color: var(--color-ink); }
     }
 
     & .move-to {
