@@ -72,6 +72,7 @@ export const architectureAssistant = ({ gateway }) => () => ({
   show() {
     if (this.unavailable) return;
     this.open = true;
+    this.assistantOpen = true;
     this.$nextTick(() => this.$refs.input.focus());
   },
 
@@ -79,6 +80,7 @@ export const architectureAssistant = ({ gateway }) => () => ({
   close() {
     if (!this.open) return;
     this.open = false;
+    this.assistantOpen = false;
     this.leave();
     this.reset();
   },

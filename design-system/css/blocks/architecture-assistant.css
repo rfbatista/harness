@@ -19,6 +19,11 @@
     margin-inline-start: auto;
   }
 
+  /* The page makes room for the open panel; on a narrow screen the panel lies over it. */
+  @media (min-width: 64rem) {
+    main[data-assistant-open] { margin-inline-end: min(26rem, 100%); }
+  }
+
   .assistant-panel {
     position: fixed;
     inset-block: 0;

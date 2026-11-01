@@ -717,3 +717,42 @@ func TestAssistantAskIsNotOfferedWithoutAnAssistantInTheBrowser(t *testing.T) {
 		t.Errorf("%d Ask the assistant buttons, want none", asks)
 	}
 }
+
+// The open panel makes room for the page: after Accept, Review diff and Save are visible and nothing
+// covers them, so the person can save without closing the panel.
+func TestAssistantPanelPushesThePageInTheBrowser(t *testing.T) {
+	rig, fake := newAssistantRig(t, true, "", "")
+	rig.api.seed(savedRecord())
+	fake.script(proposing("Here is a proposal.", portsProposal("p1")))
+
+	var covered []string
+	rig.run(t, asstReady(rig.url(""))...)
+	rig.run(t, asstOpenPanel()...)
+	rig.run(t,
+		asstType("Add a ports layer"),
+		asstKey(asstInput, "Enter", false),
+		poll(`!!document.querySelector('[data-proposal-accept]')`),
+		asstClick(`[data-proposal-accept]`),
+		poll(cardState+` === 'accepted'`),
+		poll(barVisible()),
+		chromedp.Evaluate(`['Review diff', 'Save to database'].map((label) => {
+			const b = [...document.querySelectorAll('[data-save-bar] button')].find((x) => x.textContent.trim() === label);
+			const r = b.getBoundingClientRect();
+			const top = document.elementFromPoint(r.x + r.width / 2, r.y + r.height / 2);
+			return b.contains(top) ? '' : label + ' is covered by ' + (top ? top.outerHTML.slice(0, 80) : 'nothing');
+		}).filter(Boolean)`, &covered),
+	)
+	if len(covered) != 0 {
+		t.Errorf("with the panel open: %v", covered)
+	}
+	// The page ends where the panel starts: the tab strip is not under it (it scrolls inside itself).
+	var right float64
+	var panelLeft float64
+	rig.run(t,
+		chromedp.Evaluate(`document.querySelector('#architecture-tabs').getBoundingClientRect().right`, &right),
+		chromedp.Evaluate(`document.querySelector('[data-assistant-panel]').getBoundingClientRect().left`, &panelLeft),
+	)
+	if right > panelLeft {
+		t.Errorf("the tab strip reaches %vpx, under the panel that starts at %vpx", right, panelLeft)
+	}
+}

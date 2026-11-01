@@ -79,6 +79,8 @@ export const architecturePage = ({ gateway }) => () => ({
   fileCounts: null,
   /** Whether the architecture assistant can run, from the seed: "Ask the assistant" on an event needs it. */
   assistantAvailable: false,
+  /** Whether the assistant's panel is open: the page makes room for it instead of lying under it. */
+  assistantOpen: false,
   /** Whether the page was opened on a tab's deep link and has not yet scrolled to the tabs. */
   deepLinked: false,
 

@@ -7,7 +7,7 @@ import "operators-mcp/internal/adapter/in/web/shell"
 // from the record the browser loads; the server renders the frame around them.
 templ PageView(v View) {
 	@shell.AppShell(v.Frame) {
-		<main id="main" class="[ frame ]" x-data="architecturePage" data-seed="architecture-seed">
+		<main id="main" class="[ frame ]" x-data="architecturePage" data-seed="architecture-seed" x-bind:data-assistant-open="assistantOpen">
 			@templ.JSONScript("architecture-seed", v.Seed)
 			<header class="[ toolbar ]">
 				<a class="[ crumb ]" href={ templ.SafeURL(v.SettingsHref) }>{ v.ProjectName } / repositories / { v.RepositoryName } /</a>
