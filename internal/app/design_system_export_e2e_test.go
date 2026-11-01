@@ -182,3 +182,155 @@ func TestDesignSystemExport_IsRefusedWithAReasonAndWritesNothing(t *testing.T) {
 	}
 	untouched("no design system")
 }
+
+// exportOf is the export object of the repository's row in the Repositories
+// tab of the design system ds.
+func (s *designServer) exportOf(ds string, r *exportRepo) map[string]any {
+	s.t.Helper()
+	out := s.mustPost("list_design_system_repositories", map[string]any{"design_system_id": ds})
+	for _, row := range out["repositories"].([]any) {
+		if m := row.(map[string]any); m["repository_id"] == r.id {
+			exp, _ := m["export"].(map[string]any)
+			return exp
+		}
+	}
+	s.t.Fatalf("repository %s not listed", r.id)
+	return nil
+}
+
+func (s *designServer) stateOf(r *exportRepo) string {
+	s.t.Helper()
+	exp := s.exportOf(s.ds, r)
+	if exp == nil {
+		s.t.Fatal("no export object")
+	}
+	return exp["state"].(string)
+}
+
+func TestDesignSystemExport_StateIsNeverExportedInSyncBehindAndEditedOutside(t *testing.T) {
+	s := startDesignServer(t)
+	s.mustSave(0, dsRecord(buttonComponent()))
+	r := s.addExportRepo("spillway", "")
+	if exp := s.exportOf(s.ds, r); exp["state"] != "never_exported" || exp["current_version"] != float64(1) || exp["exported_version"] != nil {
+		t.Errorf("before: %v", exp)
+	}
+
+	got := s.mustExport(r, false)
+	exp := s.exportOf(s.ds, r)
+	if exp["state"] != "in_sync" || exp["exported_version"] != float64(1) || exp["exported_commit"] != got["commit"] || exp["exported_at"] == nil {
+		t.Errorf("after export: %v", exp)
+	}
+
+	s.mustSave(1, dsRecord(buttonComponent()))
+	if exp := s.exportOf(s.ds, r); exp["state"] != "behind" || exp["exported_version"] != float64(1) || exp["current_version"] != float64(2) {
+		t.Errorf("after a save: %v", exp)
+	}
+	s.mustExport(r, false)
+
+	file := filepath.Join(r.checkout, ".harness/design-system/tokens.json")
+	if err := os.WriteFile(file, []byte("{}\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	gitE2E(t, r.checkout, "commit", "-q", "-am", "hand edit")
+	exp = s.exportOf(s.ds, r)
+	files, _ := exp["changed_files"].([]any)
+	if exp["state"] != "edited_outside" || len(files) != 1 || files[0] != "tokens.json" {
+		t.Errorf("after an edit: %v", exp)
+	}
+
+	if err := os.Remove(filepath.Join(r.checkout, ".harness/design-system/components/button.html")); err != nil {
+		t.Fatal(err)
+	}
+	gitE2E(t, r.checkout, "commit", "-q", "-am", "drop a component")
+	if exp := s.exportOf(s.ds, r); exp["state"] != "edited_outside" || len(exp["changed_files"].([]any)) != 2 {
+		t.Errorf("a missing file: %v", exp)
+	}
+}
+
+func TestDesignSystemExport_OverEditedOutsideFilesNeedsConfirmationAndShowsTheDifferingLines(t *testing.T) {
+	s := startDesignServer(t)
+	s.mustSave(0, dsRecord(buttonComponent()))
+	r := s.addExportRepo("spillway", "")
+	s.mustExport(r, false)
+	file := filepath.Join(r.checkout, ".harness/design-system/DESIGN.md")
+	original, _ := os.ReadFile(file)
+	if err := os.WriteFile(file, append(original, []byte("hand written line\n")...), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	gitE2E(t, r.checkout, "commit", "-q", "-am", "hand edit")
+	head := gitE2E(t, r.checkout, "rev-parse", "HEAD")
+
+	preview := s.mustPost("preview_design_system_export", map[string]any{"repository_id": r.id})["files"].([]any)
+	status := map[string]string{}
+	var diff string
+	for _, f := range preview {
+		m := f.(map[string]any)
+		status[m["path"].(string)] = m["status"].(string)
+		if strings.HasSuffix(m["path"].(string), "DESIGN.md") {
+			diff, _ = m["diff"].(string)
+		}
+	}
+	if status[".harness/design-system/DESIGN.md"] != "changed" || status[".harness/design-system/tokens.json"] != "unchanged" || status[".harness/design-system/components/button.html"] != "unchanged" {
+		t.Errorf("preview statuses %v", status)
+	}
+	if !strings.Contains(diff, "-hand written line") {
+		t.Errorf("the diff does not show the differing line:\n%s", diff)
+	}
+	if gitE2E(t, r.checkout, "rev-parse", "HEAD") != head {
+		t.Error("the preview committed")
+	}
+
+	st, out := s.export(r, false)
+	details, _ := out["details"].(map[string]any)
+	files, _ := details["changed_files"].([]any)
+	if st != http.StatusConflict || out["code"] != "EDITED_OUTSIDE" || len(files) != 1 || files[0] != "DESIGN.md" {
+		t.Errorf("unconfirmed: %d %v", st, out)
+	}
+	if gitE2E(t, r.checkout, "rev-parse", "HEAD") != head {
+		t.Error("a refused export committed")
+	}
+
+	got := s.mustExport(r, true)
+	if got["state"] != "in_sync" || gitE2E(t, r.checkout, "rev-parse", "HEAD") == head {
+		t.Errorf("confirmed: %v", got)
+	}
+	if now, _ := os.ReadFile(file); string(now) != string(original) {
+		t.Error("the hand edit was not replaced")
+	}
+	if s.stateOf(r) != "in_sync" {
+		t.Error("not in sync after the confirmed export")
+	}
+}
+
+func TestDesignSystemExport_AfterAMoveTheOldFilesAreEditedOutsideAgainstTheNewDesignSystem(t *testing.T) {
+	s := startDesignServer(t)
+	s.mustSave(0, dsRecord(buttonComponent()))
+	r := s.addExportRepo("spillway", "")
+	s.mustExport(r, false)
+
+	other := s.create("other", "Other")
+	status, out := s.post("save_design_system", map[string]any{"design_system_id": other, "base_version": 0, "record": dsRecord()})
+	if status != http.StatusOK {
+		t.Fatalf("%d %v", status, out)
+	}
+	s.mustApply(r.id, other, "", true)
+
+	if exp := s.exportOf(s.ds, r); exp != nil {
+		t.Errorf("the old design system still reports an export: %v", exp)
+	}
+	exp := s.exportOf(other, r)
+	if exp["state"] != "edited_outside" || exp["exported_version"] != float64(1) {
+		t.Errorf("against the new design system: %v", exp)
+	}
+	st, body := s.post("export_design_system", map[string]any{"repository_id": r.id})
+	if st != http.StatusConflict || body["code"] != "EDITED_OUTSIDE" {
+		t.Errorf("unconfirmed: %d %v", st, body)
+	}
+	s.mustExport(r, true)
+	if exp := s.exportOf(other, r); exp["state"] != "in_sync" {
+		t.Errorf("after exporting: %v", exp)
+	}
+	if _, err := os.Stat(filepath.Join(r.checkout, ".harness/design-system/components/button.html")); !os.IsNotExist(err) {
+		t.Errorf("the old design system's component file stayed: %v", err)
+	}
+}
