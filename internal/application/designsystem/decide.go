@@ -2,6 +2,7 @@ package designsystem
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"log/slog"
@@ -280,6 +281,130 @@ func (s *Service) deliverDecision(p *domain.DesignProposal, rejected []domain.De
 	if _, err := s.turns.Deliver(p.SessionID, "design-decided:"+p.ID, b.String(), nil); err != nil {
 		slog.Info("tell a design session its proposal was decided", "session", p.SessionID, "proposal", p.ID, "err", err)
 	}
+}
+
+// SendBackDesignItems implements ports.DesignProposals: the chosen pending
+// items go back to the running design session with the person's note. Its
+// draft is rebased on the current version, keeping its changes for the items
+// still pending or sent back, and the proposal is drafting again.
+func (s *Service) SendBackDesignItems(ctx context.Context, proposalID string, itemIDs []string, note string) (string, error) {
+	if s.proposals == nil {
+		return "", proposalNotFound()
+	}
+	s.draftMu.Lock()
+	defer s.draftMu.Unlock()
+	p, err := s.proposals.Get(ctx, proposalID)
+	if err != nil {
+		return "", err
+	}
+	if p == nil {
+		return "", proposalNotFound()
+	}
+	if p.State != domain.ProposalOpen {
+		return "", &domain.StructuredError{Code: "PROPOSAL_NOT_OPEN", Message: "the proposal is " + p.State + ", not open: nothing to send back"}
+	}
+	if s.sessionStore == nil || s.turns == nil {
+		return "", sessionNotRunning()
+	}
+	if sess := s.sessionStore.Get(p.SessionID); sess == nil || sess.Status.IsTerminal() {
+		return "", sessionNotRunning()
+	}
+	id, cur, err := s.current(ctx, p.DesignSystemID)
+	if err != nil {
+		return "", err
+	}
+	items, err := s.items(ctx, p, cur)
+	if err != nil {
+		return "", err
+	}
+	sending, err := pendingItems(items, itemIDs)
+	if err != nil {
+		return "", err
+	}
+	before := *p
+	before.Decisions = maps.Clone(p.Decisions)
+	// The draft keeps the session's value for each item still pending or sent
+	// back; everything else (approved, rejected) is the current version's.
+	var current domain.DesignSystemRecord
+	p.BaseVersion = 0
+	if cur != nil {
+		current, p.BaseVersion = cur.Record, cur.Version
+	}
+	stays := []domain.DesignItem{}
+	p.Decisions = map[string]string{}
+	for _, it := range items {
+		if it.Decision == domain.DecisionApproved || it.Decision == domain.DecisionRejected {
+			continue
+		}
+		stays = append(stays, it)
+	}
+	for _, it := range sending {
+		p.Decisions[it.ID] = domain.DecisionSentBack
+	}
+	p.Draft = domain.ApplyDesignItems(current, stays)
+	p.State, p.Approved, p.Rejected = domain.ProposalDrafting, 0, 0
+	if err := s.proposals.Update(ctx, p); err != nil {
+		return "", err
+	}
+	if _, err := s.turns.Deliver(p.SessionID, "design-sent-back:"+p.ID, sentBackTurn(p.ID, note, sending), nil); err != nil {
+		*p = before
+		if undo := s.proposals.Update(ctx, p); undo != nil {
+			slog.Error("put a proposal back after a refused send back", "proposal", p.ID, "err", undo)
+		}
+		return "", err
+	}
+	s.announceProposal(id.ProjectID, p)
+	return p.State, nil
+}
+
+func sessionNotRunning() error {
+	return &domain.StructuredError{Code: "SESSION_NOT_RUNNING", Message: "the proposal's design session has ended: reject the items or withdraw the proposal"}
+}
+
+// pendingItems are the items the ids name, each still pending.
+func pendingItems(items []domain.DesignItem, ids []string) ([]domain.DesignItem, error) {
+	bad := func(format string, a ...any) error {
+		return &domain.StructuredError{Code: "INVALID_INPUT", Message: fmt.Sprintf(format, a...)}
+	}
+	if len(ids) == 0 {
+		return nil, bad("item_ids is required: name the items to send back")
+	}
+	var out []domain.DesignItem
+	for _, itemID := range ids {
+		i := slices.IndexFunc(items, func(it domain.DesignItem) bool { return it.ID == itemID })
+		if i < 0 {
+			return nil, bad("the proposal has no item %s", itemID)
+		}
+		if items[i].Decision != domain.DecisionPending {
+			return nil, bad("item %s is already %s: only a pending item is sent back", items[i].Key, items[i].Decision)
+		}
+		if !slices.ContainsFunc(out, func(it domain.DesignItem) bool { return it.ID == itemID }) {
+			out = append(out, items[i])
+		}
+	}
+	return out, nil
+}
+
+// sentBackTurn is the turn that tells the design session which items the
+// person sent back, with their note and the item's current value.
+func sentBackTurn(proposalID, note string, items []domain.DesignItem) string {
+	var b strings.Builder
+	fmt.Fprintf(&b, "[design system · items sent back · proposal %s]\n", proposalID)
+	if note = strings.TrimSpace(note); note != "" {
+		b.WriteString(note + "\n")
+	}
+	b.WriteString("Rework these items and submit again:")
+	for _, it := range items {
+		current := "none: the design system has no such item"
+		if it.Current != nil {
+			if j, err := json.Marshal(it.Current); err == nil {
+				current = string(j)
+			}
+		}
+		fmt.Fprintf(&b, "\n- %s (%s %s), current value: %s", it.Key, it.Kind, it.Op, current)
+	}
+	b.WriteString("\nYour draft is now the current version plus your changes for the items still pending or sent back.")
+	return b.String()
 }
 
 // WithdrawDesignProposal implements ports.DesignProposals: the person drops a

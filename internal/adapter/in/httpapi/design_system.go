@@ -407,6 +407,25 @@ func (h *Handler) handleDecideDesignSystemProposal(c echo.Context) error {
 	return c.JSON(http.StatusOK, map[string]any{"version": out.Version, "state": out.State})
 }
 
+func (h *Handler) handleSendBackDesignSystemItems(c echo.Context) error {
+	if err := h.designSystems(); err != nil {
+		return err
+	}
+	var in struct {
+		ProposalID string   `json:"proposal_id"`
+		ItemIDs    []string `json:"item_ids"`
+		Note       string   `json:"note"`
+	}
+	if err := bindJSON(c, &in); err != nil {
+		return err
+	}
+	state, err := h.designs.SendBackDesignItems(c.Request().Context(), in.ProposalID, in.ItemIDs, in.Note)
+	if err != nil {
+		return err
+	}
+	return c.JSON(http.StatusOK, map[string]any{"state": state})
+}
+
 func (h *Handler) handleWithdrawDesignSystemProposal(c echo.Context) error {
 	if err := h.designSystems(); err != nil {
 		return err

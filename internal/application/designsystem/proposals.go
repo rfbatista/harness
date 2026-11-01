@@ -83,7 +83,9 @@ func (s *Service) SubmitDesignProposal(ctx context.Context, sessionID, summary s
 	if len(items) == 0 {
 		return nil, &domain.StructuredError{Code: "PROPOSAL_EMPTY", Message: "your draft equals its base: change tokens.json, DESIGN.md or a component first"}
 	}
+	// A resubmitted proposal starts again: every item waits on the person.
 	p.State, p.Summary, p.SubmittedAt = domain.ProposalOpen, summary, s.now()
+	p.Decisions, p.Approved, p.Rejected = nil, 0, 0
 	if err := s.proposals.Update(ctx, p); err != nil {
 		return nil, err
 	}

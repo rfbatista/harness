@@ -247,3 +247,165 @@ func toJSON(v any) string {
 	b, _ := json.Marshal(v)
 	return string(b)
 }
+
+// The person sends items back to the design session, which reworks them on
+// the current version (contract "Harness server ↔ Agent sessions — …", "Turns
+// to a design session"; ADR 0055).
+
+func (e *shellE2E) sendBack(proposalID, note string, items ...proposalItem) (int, map[string]any) {
+	e.t.Helper()
+	ids := []string{}
+	for _, it := range items {
+		ids = append(ids, it.ID)
+	}
+	body, _ := json.Marshal(map[string]any{"proposal_id": proposalID, "item_ids": ids, "note": note})
+	status, text := postJSON(e.t, e.srv.URL+"/api/send_back_design_system_items", string(body))
+	var out map[string]any
+	_ = json.Unmarshal([]byte(text), &out)
+	return status, out
+}
+
+// threeItemProposal is a design session's open proposal that adds ink,
+// changes the signal colour and widens the medium spacing.
+func (e *shellE2E) threeItemProposal() (ds string, s runningSession, proposalID string) {
+	e.t.Helper()
+	ds = e.savedDesignSystem()
+	s = e.designSession(ds)
+	tokens := strings.Replace(withInk(e.designFile(s, "tokens.json")), "oklch(0.5 0.095 182)", "oklch(0.4 0.1 200)", 1)
+	tokens = strings.Replace(tokens, `"1rem"`, `"2rem"`, 1)
+	if a := e.draftWrite(s, "tokens.json", tokens); !a.Allow {
+		e.t.Fatalf("write: %+v", a)
+	}
+	if text, isErr := e.submit(s, "Ink, calmer signal, wider spacing"); isErr {
+		e.t.Fatalf("submit: %s", text)
+	}
+	return ds, s, e.proposals(ds).Proposals[0].ID
+}
+
+func TestDesignProposalItems_SendingItemsBackRebasesTheDraftAndTheSessionResubmitsThem(t *testing.T) {
+	e := newShellE2E(t)
+	ds, s, id := e.threeItemProposal()
+	items := e.itemsByKey(id)
+	if len(items) != 3 {
+		t.Fatalf("items = %+v", items)
+	}
+	// The person meanwhile sets the medium spacing themselves.
+	record := dsRecord(buttonComponent())
+	for _, tok := range record["tokens"].([]any) {
+		if m := tok.(map[string]any); m["name"] == "md" {
+			m["value"] = "1.5rem"
+		}
+	}
+	e.saveTo(ds, 1, record)
+
+	// Approve ink (version 3), reject the spacing, send the signal back.
+	if status, out := e.decideWith(id, []map[string]string{decision(items["colors.ink"], "approve"), decision(items["spacing.md"], "reject")}, nil); status != http.StatusOK || out["state"] != "open" || out["version"] != float64(3) {
+		t.Fatalf("decide = %d %v", status, out)
+	}
+	status, out := e.sendBack(id, "Not that calm: go halfway.", items["colors.signal"])
+	if status != http.StatusOK || out["state"] != "drafting" {
+		t.Fatalf("send back = %d %v", status, out)
+	}
+	view := e.itemsByKey(id)
+	if view["colors.signal"].Decision != "sent_back" || e.proposal(id).State != "drafting" {
+		t.Fatalf("after send back: %+v", e.proposal(id))
+	}
+	if rows := e.proposals(ds).Proposals; rows[0].State != "drafting" {
+		t.Fatalf("the list says %s, want drafting", rows[0].State)
+	}
+
+	turn := nextTurn(t, e.orch, s.id)
+	for _, want := range []string{"[design system · items sent back · proposal " + id + "]", "Not that calm: go halfway.", "colors.signal", "change", "oklch(0.5 0.095 182)"} {
+		if !strings.Contains(turn, want) {
+			t.Errorf("the send-back turn lacks %q:\n%s", want, turn)
+		}
+	}
+	if strings.Contains(turn, "spacing.md") || strings.Contains(turn, "colors.ink") {
+		t.Errorf("the turn lists items that were not sent back:\n%s", turn)
+	}
+
+	// The draft is the current version plus the session's change for the
+	// sent-back item: ink is approved, the spacing is the person's.
+	eventually(t, "the draft is rebased", func() error { return fileWith(s.shell, designSystemDir+"/tokens.json", `1.5rem`) })
+	draft := e.designFile(s, "tokens.json")
+	for _, want := range []string{`"ink"`, "1.5rem", "oklch(0.4 0.1 200)"} {
+		if !strings.Contains(draft, want) {
+			t.Errorf("the rebased draft lacks %q:\n%s", want, draft)
+		}
+	}
+	if strings.Contains(draft, "2rem") {
+		t.Errorf("the rebased draft keeps the rejected spacing:\n%s", draft)
+	}
+
+	// The session reworks the item and resubmits.
+	reworked := strings.Replace(draft, "oklch(0.4 0.1 200)", "oklch(0.45 0.1 190)", 1)
+	if a := e.draftWrite(s, "tokens.json", reworked); !a.Allow {
+		t.Fatalf("write after send back: %+v", a)
+	}
+	if text, isErr := e.submit(s, "Halfway"); isErr {
+		t.Fatalf("resubmit: %s", text)
+	}
+	resubmitted := e.proposal(id)
+	if resubmitted.State != "open" || resubmitted.BaseVersion != 3 || len(resubmitted.Items) != 1 || resubmitted.Items[0].Key != "colors.signal" || resubmitted.Items[0].Decision != "pending" {
+		t.Fatalf("resubmitted = %+v", resubmitted)
+	}
+	if status, out := e.decide(id, "approve"); status != http.StatusOK || out["state"] != "approved" || out["version"] != float64(4) {
+		t.Fatalf("approve the rework = %d %v", status, out)
+	}
+	if e.storedTokens(ds)["colors.signal"]["value"] != "oklch(0.45 0.1 190)" {
+		t.Fatalf("tokens = %v", e.storedTokens(ds))
+	}
+}
+
+func TestDesignProposalItems_ASessionThatEndedCannotBeSentItemsBack(t *testing.T) {
+	e := newShellE2E(t)
+	ds, s, id := e.threeItemProposal()
+	items := e.itemsByKey(id)
+
+	for name, call := range map[string]func() (int, map[string]any){
+		"no items":     func() (int, map[string]any) { return e.sendBack(id, "x") },
+		"unknown item": func() (int, map[string]any) { return e.sendBack(id, "x", proposalItem{ID: "token:nope"}) },
+	} {
+		if status, out := call(); status != http.StatusBadRequest || out["code"] != "INVALID_INPUT" {
+			t.Errorf("%s: %d %v, want 400 INVALID_INPUT", name, status, out)
+		}
+	}
+	if status, out := e.decideWith(id, []map[string]string{decision(items["colors.ink"], "approve")}, nil); status != http.StatusOK {
+		t.Fatalf("decide = %d %v", status, out)
+	}
+	if status, out := e.sendBack(id, "x", items["colors.ink"]); status != http.StatusBadRequest || out["code"] != "INVALID_INPUT" {
+		t.Errorf("sending back an approved item = %d %v, want INVALID_INPUT", status, out)
+	}
+
+	if _, err := e.orch.EndInteractive(e.ctx, s.id, 0, true); err != nil {
+		t.Fatal(err)
+	}
+	status, out := e.sendBack(id, "Try again", items["colors.signal"])
+	if status < 400 || out["code"] != "SESSION_NOT_RUNNING" {
+		t.Fatalf("send back to an ended session = %d %v, want SESSION_NOT_RUNNING", status, out)
+	}
+	if v := e.proposal(id); v.State != "open" || e.itemsByKey(id)["colors.signal"].Decision != "pending" {
+		t.Fatalf("a refused send back changed the proposal: %+v", v)
+	}
+	if rows := e.proposals(ds).Proposals; rows[0].State != "open" {
+		t.Fatalf("the list says %s", rows[0].State)
+	}
+}
+
+func TestDesignProposalItems_ADraftingProposalIsNotDecidedOrWithdrawn(t *testing.T) {
+	e := newShellE2E(t)
+	_, _, id := e.threeItemProposal()
+	items := e.itemsByKey(id)
+	if status, out := e.sendBack(id, "again", items["colors.signal"]); status != http.StatusOK {
+		t.Fatalf("send back = %d %v", status, out)
+	}
+	if status, out := e.decideWith(id, []map[string]string{decision(items["colors.ink"], "approve")}, nil); status != http.StatusConflict || out["code"] != "PROPOSAL_NOT_OPEN" {
+		t.Fatalf("deciding a drafting proposal = %d %v", status, out)
+	}
+	if status, out := e.sendBack(id, "again", items["colors.ink"]); status != http.StatusConflict || out["code"] != "PROPOSAL_NOT_OPEN" {
+		t.Fatalf("sending back from a drafting proposal = %d %v", status, out)
+	}
+	if status, out := postJSON(t, e.srv.URL+"/api/withdraw_design_system_proposal", `{"proposal_id":"`+id+`"}`); status != http.StatusConflict || !strings.Contains(out, "SESSION_RUNNING") {
+		t.Fatalf("withdrawing a running session's proposal = %d %s", status, out)
+	}
+}
