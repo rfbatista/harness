@@ -2,6 +2,7 @@ package ports
 
 import (
 	"context"
+	"errors"
 	"time"
 
 	"operators-mcp/internal/domain"
@@ -39,6 +40,41 @@ type RepositoryArchitectures interface {
 	// nothing and answer the commit that has them.
 	ExportRepositoryArchitecture(ctx context.Context, repositoryID string, version int) (*domain.ArchitectureExportResult, error)
 	ArchitectureRuleEvents
+	InstructionFiles
+}
+
+// InstructionFiles are the instruction files the harness keeps for a
+// repository, apart from the record (ADR 0057). Errors: REPOSITORY_NOT_FOUND,
+// INSTRUCTION_NOT_FOUND, INSTRUCTION_CHANGED (stale base version),
+// INSTRUCTION_EXISTS and INSTRUCTION_INVALID (with field errors).
+type InstructionFiles interface {
+	// ListInstructionFiles lists the files, without content, by path.
+	ListInstructionFiles(ctx context.Context, repositoryID string) ([]domain.InstructionFile, error)
+	GetInstructionFile(ctx context.Context, repositoryID, path string) (*domain.InstructionFile, error)
+	// SaveInstructionFile creates the file when baseVersion is 0, otherwise
+	// stores a new version of it.
+	SaveInstructionFile(ctx context.Context, repositoryID, path, kind string, baseVersion int, content string) (*domain.InstructionFile, error)
+	// RenameInstructionFile moves a file, keeping its content and version.
+	RenameInstructionFile(ctx context.Context, repositoryID, path, newPath string, baseVersion int) (*domain.InstructionFile, error)
+	DeleteInstructionFile(ctx context.Context, repositoryID, path string, baseVersion int) error
+	// ListRepositoryCopies lists the instruction-like files of the checkout's
+	// default branch, with whether each differs from the harness copy. It is
+	// read from git on every call. A checkout that cannot be read is not an
+	// error: the copies are empty and unreadable says why.
+	ListRepositoryCopies(ctx context.Context, repositoryID string) (copies []domain.RepositoryCopy, unreadable string, err error)
+	// ImportInstructionFiles copies the paths from the checkout's default
+	// branch into the harness, creating each file or adding a version when its
+	// content changed. A path the branch has no such file for is
+	// INSTRUCTION_NOT_FOUND, one that is no instruction file
+	// INSTRUCTION_INVALID; then nothing is imported. It never writes the
+	// checkout.
+	ImportInstructionFiles(ctx context.Context, repositoryID string, paths []string) ([]domain.InstructionFile, error)
+	// RemoveInstructionFilesFromRepository deletes the paths from the local
+	// checkout and commits on the default branch, with no push. Each must
+	// already be in the harness (INSTRUCTION_NOT_IMPORTED); the checkout must
+	// be clean (CHECKOUT_DIRTY) and on the default branch (WRONG_BRANCH).
+	// It answers the commit.
+	RemoveInstructionFilesFromRepository(ctx context.Context, repositoryID string, paths []string) (string, error)
 }
 
 // StoredArchitecture is a repository's record row.
@@ -56,6 +92,10 @@ type StoredArchitecture struct {
 	ExportedSHA     string
 }
 
+// ErrInstructionFilesTooBig is what the store answers a save that would take
+// a repository's instruction files over the limit it was given.
+var ErrInstructionFilesTooBig = errors.New("the repository's instruction files would be over the limit")
+
 // ArchitectureRecordStore keeps the records and their layer zones (driven).
 type ArchitectureRecordStore interface {
 	// Get answers the repository's row, or nil when it has none.
@@ -72,6 +112,22 @@ type ArchitectureRecordStore interface {
 	DeleteByProject(ctx context.Context, projectID string) error
 	// ListByProject answers the records of the project's repositories.
 	ListByProject(ctx context.Context, projectID string) ([]*StoredArchitecture, error)
+	// The repository's instruction files (ADR 0057). A save, rename or delete
+	// refuses with INSTRUCTION_CHANGED when the stored version is not
+	// baseVersion, INSTRUCTION_NOT_FOUND when there is no such path and
+	// INSTRUCTION_EXISTS when a create or rename hits one. They go with the
+	// record, in Delete and DeleteByProject.
+	ListInstructionFiles(ctx context.Context, repositoryID string) ([]domain.InstructionFile, error)
+	GetInstructionFile(ctx context.Context, repositoryID, path string) (*domain.InstructionFile, error)
+	// SaveInstructionFile answers the stored file. totalLimit is the most the
+	// repository's files may hold together, counting this one.
+	SaveInstructionFile(ctx context.Context, f domain.InstructionFile, baseVersion, totalLimit int) (*domain.InstructionFile, error)
+	// RenameInstructionFile and DeleteInstructionFile also move or remove the
+	// file's entry in the record, in the same transaction, as a new version of
+	// the record. They answer that version, 0 when the record did not change
+	// (it has none, or has no entry for the file).
+	RenameInstructionFile(ctx context.Context, repositoryID, path, newPath string, baseVersion int) (*domain.InstructionFile, int, error)
+	DeleteInstructionFile(ctx context.Context, repositoryID, path string, baseVersion int) (int, error)
 	// SetExport records the last export: its version, commit, time and the
 	// SHA-256 of the YAML it wrote. It is not a new version of the record.
 	SetExport(ctx context.Context, repositoryID string, version int, commit string, at time.Time, sha string) (*StoredArchitecture, error)
@@ -99,6 +155,11 @@ type ArchitectureGit interface {
 	// without running the checkout's hooks. It never pushes. On failure the
 	// checkout is as it was. It answers the new commit.
 	CommitFiles(ctx context.Context, dir string, files map[string][]byte, message string) (string, error)
+	// RemoveFiles deletes the tracked files from the checkout (which is on
+	// the default branch and clean) and commits only the deletions with
+	// message, as CommitFiles does. A path the checkout does not track is an
+	// error and removes nothing. It answers the new commit.
+	RemoveFiles(ctx context.Context, dir string, paths []string, message string) (string, error)
 }
 
 // ArchitectureRuleEventStore keeps the rules that failed (driven). Events are
@@ -169,6 +230,9 @@ type ArchitectureBriefSource interface {
 	ListArchitectureRefs(ctx context.Context, projectID string) ([]ArchitectureRef, error)
 	// SavedArchitecture is the repository's saved record; nil when none.
 	SavedArchitecture(ctx context.Context, repositoryID string) (*domain.ArchitectureRecord, error)
+	// InstructionFilesOf is the repository's instruction files with their
+	// content, which a session gets delivered (ADR 0057).
+	InstructionFilesOf(ctx context.Context, repositoryID string) ([]domain.InstructionFile, error)
 }
 
 // CommitGuard installs and removes a git hooks directory for one worktree

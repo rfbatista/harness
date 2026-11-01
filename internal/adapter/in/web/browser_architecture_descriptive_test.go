@@ -139,7 +139,7 @@ func TestInstructionsRowsMatchThePublishedDesign(t *testing.T) {
 		t.Fatalf("entries = %d, edit buttons = %v", len(d.Entries), d.Edits)
 	}
 	wantPart(t, d, 0, "data-path", "CLAUDE.md")
-	wantPart(t, d, 0, "data-kind", "Rules")
+	wantPart(t, d, 0, "data-kind", "Memory")
 	wantPart(t, d, 0, "data-note", "Repository rules.")
 	wantPart(t, d, 0, "data-meta=applies", "Applies to all")
 	wantPart(t, d, 0, "data-meta=loaded", "Loaded Always")

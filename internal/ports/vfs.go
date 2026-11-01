@@ -40,6 +40,8 @@ const (
 	ShellDesignURL = "urls"
 	// ShellArchitecture is a repository architecture record as YAML.
 	ShellArchitecture = "architecture"
+	// ShellInstruction is one instruction file of a repository (ADR 0057).
+	ShellInstruction = "instruction"
 )
 
 // ResourcesRoots makes and removes task sessions' resources roots.
@@ -179,14 +181,31 @@ type ShellScope struct {
 	TicketID  string
 }
 
-// ArchitectureFile is a repository architecture record as the resources root
-// shows it: its YAML form and its version.
+// ArchitectureFile is a repository's architecture as the resources root
+// shows it: the record's YAML form and version when it has a record, and its
+// instruction files.
 type ArchitectureFile struct {
 	RepositoryID string
 	Repository   string
+	// Folder is the repository's name in the resources root, the same for
+	// every repository's file and with -<short id> for a name an earlier
+	// repository has.
+	Folder string
+	// HasRecord is false for a repository that has instruction files only;
+	// Version, YAML and UpdatedAt are then empty.
+	HasRecord    bool
 	Version      int
 	YAML         []byte
 	UpdatedAt    time.Time
+	Instructions []InstructionShellFile
+}
+
+// InstructionShellFile is an instruction file as the resources root shows it.
+type InstructionShellFile struct {
+	Path      string
+	Version   int
+	Content   []byte
+	UpdatedAt time.Time
 }
 
 // ArchitectureFileReader lists the architecture files of a project's

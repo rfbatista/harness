@@ -33,7 +33,7 @@ type ArchitectureRecord struct {
 // prose stays in the file: only its path is recorded.
 type ArchInstruction struct {
 	Path      string   `json:"path" yaml:"path"`
-	Kind      string   `json:"kind" yaml:"kind"` // rules | skill | subagent_prompt
+	Kind      string   `json:"kind" yaml:"kind"` // memory | skill | subagent
 	AppliesTo []string `json:"applies_to" yaml:"applies_to"`
 	Loaded    string   `json:"loaded" yaml:"loaded"` // always | on_demand
 	Note      string   `json:"note,omitempty" yaml:"note,omitempty"`
@@ -188,6 +188,19 @@ func NewLayerAccess() LayerAccess {
 	return LayerAccess{Default: AccessRead, Agents: map[string]AccessLevel{"software-architect": AccessChange}}
 }
 
+// CurrentInstructionKind reads the kind names an earlier version of the record
+// used (rules, subagent_prompt) as the current ones; any other value is
+// returned as it is.
+func CurrentInstructionKind(kind string) string {
+	switch kind {
+	case "rules":
+		return "memory"
+	case "subagent_prompt":
+		return "subagent"
+	}
+	return kind
+}
+
 // Normalize makes the record's lists non-nil and gives an unset access
 // default the level read, so equal records are equal in JSON and YAML.
 func (r *ArchitectureRecord) Normalize() {
@@ -197,6 +210,7 @@ func (r *ArchitectureRecord) Normalize() {
 	}
 	for i := range r.Instructions {
 		r.Instructions[i].AppliesTo = nonNil(r.Instructions[i].AppliesTo)
+		r.Instructions[i].Kind = CurrentInstructionKind(r.Instructions[i].Kind)
 	}
 	if r.Tools == nil {
 		r.Tools = []ArchTool{}
@@ -289,8 +303,8 @@ func (r *ArchitectureRecord) Validate(known ArchitectureKnown) []ArchFieldError 
 		if in.Path == "" {
 			add(p+"/path", ArchMissingField, "path is required")
 		}
-		if !oneOf(in.Kind, "rules", "skill", "subagent_prompt") {
-			add(p+"/kind", ArchInvalidValue, "kind must be rules, skill or subagent_prompt")
+		if !oneOf(in.Kind, "memory", "skill", "subagent") {
+			add(p+"/kind", ArchInvalidValue, "kind must be memory, skill or subagent")
 		}
 		if !oneOf(in.Loaded, "always", "on_demand") {
 			add(p+"/loaded", ArchInvalidValue, "loaded must be always or on_demand")

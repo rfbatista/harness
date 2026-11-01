@@ -36,6 +36,9 @@ stored: what others change appears here, and what you write here is stored.
     project/designs/          every project design asset, file bytes
     project/designs/urls.md   project design assets that are URLs (read-only)
     project/architecture/     <repository>.yaml: each repository's architecture, layers and rules (read-only)
+    project/architecture/<repository>/instructions/<path>
+                              the repository's instruction files (AGENTS.md, CLAUDE.md, skills, sub-agents),
+                              kept in the harness; delivered to you, read-only here
     tasks/<task-id>/docs/     another task of the project: its documents, task scope
 
 File names are <slug of title>.<ext>, with -<short id> added only on a

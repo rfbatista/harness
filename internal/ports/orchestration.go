@@ -100,6 +100,9 @@ type ProjectChange struct {
 	// ArchitectureChanged says a repository's architecture record was saved,
 	// deleted or exported.
 	ArchitectureChanged *ArchitectureChange `json:"repository_architecture_changed,omitempty"`
+	// InstructionFileChanged says an instruction file was saved, renamed,
+	// deleted or imported.
+	InstructionFileChanged *InstructionFileChange `json:"instruction_file_changed,omitempty"`
 	// ArchitectureRuleEvent is a rule that failed in a session.
 	ArchitectureRuleEvent *ArchitectureRuleEventChange `json:"architecture_rule_event,omitempty"`
 	// SessionFilesRoot says a root of a session's virtual file system went away
@@ -121,6 +124,16 @@ type ArchitectureRuleEventChange struct {
 // project's followers and is not on the wire.
 type ArchitectureChange struct {
 	RepositoryID string `json:"repository_id"`
+	Version      int    `json:"version"`
+	ProjectID    string `json:"-"`
+}
+
+// InstructionFileChange is an instruction file of a repository and the
+// version it has now (0 once deleted, or for the old path of a rename).
+// ProjectID routes it and is not on the wire.
+type InstructionFileChange struct {
+	RepositoryID string `json:"repository_id"`
+	Path         string `json:"path"`
 	Version      int    `json:"version"`
 	ProjectID    string `json:"-"`
 }
@@ -182,6 +195,8 @@ func (c ProjectChange) ProjectID() string {
 		return c.GitState.ProjectID
 	case c.ArchitectureChanged != nil:
 		return c.ArchitectureChanged.ProjectID
+	case c.InstructionFileChanged != nil:
+		return c.InstructionFileChanged.ProjectID
 	case c.ArchitectureRuleEvent != nil:
 		return c.ArchitectureRuleEvent.ProjectID
 	case c.SessionFilesRoot != nil:

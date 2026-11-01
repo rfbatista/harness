@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"path"
 	"slices"
 	"strconv"
 	"strings"
@@ -381,11 +382,21 @@ func (b *builder) architectures(ctx context.Context, src ports.ArchitectureFileR
 		return err
 	}
 	for _, a := range list {
-		b.named(architectureDir+"/", slugOr(a.Repository, "repository")+".yaml", &file{
-			meta: ports.ShellFile{Kind: ports.ShellArchitecture, ID: a.RepositoryID, Scope: "repository",
-				Version: strconv.Itoa(a.Version), Title: a.Repository, UpdatedAt: a.UpdatedAt, Repository: a.Repository},
-			content: a.YAML, readOnly: true,
-		})
+		if a.HasRecord {
+			b.named(architectureDir+"/", slugOr(a.Repository, "repository")+".yaml", &file{
+				meta: ports.ShellFile{Kind: ports.ShellArchitecture, ID: a.RepositoryID, Scope: "repository",
+					Version: strconv.Itoa(a.Version), Title: a.Repository, UpdatedAt: a.UpdatedAt, Repository: a.Repository},
+				content: a.YAML, readOnly: true,
+			})
+		}
+		for _, in := range a.Instructions {
+			dir, name := path.Split(in.Path)
+			b.named(architectureDir+"/"+slugOr(a.Folder, "repository")+"/instructions/"+dir, name, &file{
+				meta: ports.ShellFile{Kind: ports.ShellInstruction, ID: a.RepositoryID + ":" + in.Path, Scope: "repository",
+					Version: strconv.Itoa(in.Version), Title: in.Path, UpdatedAt: in.UpdatedAt, Repository: a.Repository},
+				content: in.Content, readOnly: true,
+			})
+		}
 	}
 	return nil
 }

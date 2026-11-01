@@ -54,3 +54,47 @@ func TestALiveWritingHelperCallHasItsOwnKindAndProject(t *testing.T) {
 		t.Error("project B's viewer saw project A's call")
 	}
 }
+
+// An architecture assistant turn is attributed
+// "harness:architecture-assistant:<project id>" and stored on that project, with
+// no session or task, as plain "harness:architecture-assistant".
+func TestAnArchitectureAssistantCallIsStoredOnItsProjectWithNoSession(t *testing.T) {
+	e := usagetest.NewEnv(t)
+	now := time.Now()
+	e.Service.Record(context.Background(), ports.UsageRequest{
+		ID: "aa1", Attribution: "harness:architecture-assistant:" + e.ProjectA, Method: "POST", Path: "/v1/messages",
+		Model: "claude-sonnet", Status: 200, StartedAt: now, EndedAt: now.Add(time.Second), InputTokens: 10, OutputTokens: 5,
+	})
+	got, err := e.Repo.ListRecent(ports.UsageFilter{ProjectID: e.ProjectA, Limit: 10})
+	if err != nil || len(got) != 1 {
+		t.Fatalf("records = %v, err %v", got, err)
+	}
+	r := got[0]
+	if r.ProjectID != e.ProjectA || r.SessionID != "" || r.TaskID != "" || r.Attribution != "harness:architecture-assistant" {
+		t.Fatalf("record = %+v, want project %s, no session or task, attribution harness:architecture-assistant", r, e.ProjectA)
+	}
+}
+
+func TestALiveArchitectureAssistantCallHasItsOwnKindAndProject(t *testing.T) {
+	e := usagetest.NewEnv(t)
+	mine, other := e.Service.OpenLiveCalls(e.ProjectA), e.Service.OpenLiveCalls(e.ProjectB)
+	defer mine.Close()
+	defer other.Close()
+	e.Service.Started(context.Background(), ports.CapturedRequest{
+		ID: "aa1", Attribution: "harness:architecture-assistant:" + e.ProjectA, Method: "POST", Path: "/v1/messages",
+		Header: http.Header{}, Body: []byte(`{}`), StartedAt: time.Now(),
+	})
+	ev, ok := mine.Take()
+	if !ok {
+		t.Fatal("project A's viewer saw nothing")
+	}
+	b, _ := ev.Data.(interface{ MarshalJSON() ([]byte, error) }).MarshalJSON()
+	for _, want := range []string{`"kind":"architecture-assistant"`, `"project_id":"` + e.ProjectA + `"`} {
+		if !strings.Contains(string(b), want) {
+			t.Errorf("event %s lacks %s", b, want)
+		}
+	}
+	if _, ok := other.Take(); ok {
+		t.Error("project B's viewer saw project A's call")
+	}
+}

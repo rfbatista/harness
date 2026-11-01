@@ -142,8 +142,10 @@
 @import url("./blocks/folder-picker.css");
 @import url("./blocks/architecture-entries.css");
 @import url("./blocks/architecture-diagram.css");
+@import url("./blocks/architecture-assistant.css");
 @import url("./blocks/agent-picker.css");
 @import url("./blocks/access-matrix.css");
 @import url("./blocks/layers-workspace.css");
 @import url("./blocks/hook-rules.css");
 @import url("./blocks/export-file.css");
+@import url("./blocks/instruction-editor.css");

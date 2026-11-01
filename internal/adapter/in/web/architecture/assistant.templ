@@ -1,0 +1,138 @@
+package architecture
+
+// assistantPanel is the architecture assistant: an Assistant button for the
+// toolbar and the side panel it opens. It is its own Alpine component,
+// architectureAssistant, nested in architecturePage: it reads the page's
+// draft and sends it with each turn, and it never saves anything. Without an
+// assistant the button is disabled and the reason is beside it.
+templ assistantPanel() {
+	<div class="[ assistant ]" x-data="architectureAssistant" x-on:pagehide.window="leave" x-on:architecture-ask-assistant.window="ask($event)">
+		<button type="button" class="[ button ]" data-size="sm" data-assistant-open x-bind:disabled="unavailable" x-bind:aria-expanded="open" aria-controls="architecture-assistant" x-on:click="toggle">Assistant</button>
+		<template x-if="unavailable">
+			<span class="[ text-xs color-ink-muted ]" data-assistant-unavailable role="status">
+				<span x-text="reason"></span>
+				<template x-if="fixUrl">
+					<a x-bind:href="fixUrl">Fix this</a>
+				</template>
+			</span>
+		</template>
+		<aside id="architecture-assistant" class="[ assistant-panel ]" data-assistant-panel role="complementary" aria-label="Architecture assistant" x-show="open" x-on:keydown="onPanelKey">
+			<header>
+				<h2>Architecture assistant</h2>
+				<button type="button" class="[ button ]" data-variant="ghost" data-size="sm" data-assistant-close x-on:click="close">Close</button>
+			</header>
+			<div class="[ log ]" role="log" aria-live="polite" aria-label="Conversation">
+				<template x-if="messages.length === 0">
+					<p class="[ color-ink-muted text-sm ]">Ask for the layers, the access or a rule for this repository, or a change to what is there. Nothing is saved until you press Save.</p>
+				</template>
+				<template x-for="m in messages" x-bind:key="m.id">
+					<div class="[ turn ]">
+						<div class="[ message ]" data-assistant-message x-bind:data-who="m.who" x-show="m.who === 'person' || m.text !== ''">
+							<span x-text="m.text"></span>
+						</div>
+						<template x-if="m.proposal">
+							<section class="[ proposal ]" data-assistant-proposal x-bind:data-state="m.proposal.state" aria-label="Proposal">
+								<p class="[ weight-medium ]" data-proposal-summary x-text="m.proposal.summary"></p>
+								<template x-for="g in m.proposal.groups" x-bind:key="g.slug">
+									<div class="[ group ]" data-proposal-group x-bind:data-group="g.slug">
+										<h3 x-text="g.label"></h3>
+										<ul role="list">
+											<template x-for="r in g.rows" x-bind:key="r.label">
+												<li data-proposal-change x-bind:data-op="r.op">
+													<span><span class="[ badge ]" x-text="r.opWord"></span> <span class="[ weight-medium ]" x-text="r.label"></span> <span class="[ font-mono text-xs color-ink-muted ]" x-text="r.detail"></span></span>
+													<span class="[ text-xs color-ink-muted ]"><template x-if="r.blocking"><span class="[ badge ]" data-tone="attention" data-proposal-blocking>blocking</span></template> <span data-proposal-reason x-text="r.reason"></span></span>
+												</li>
+											</template>
+										</ul>
+									</div>
+								</template>
+								<template x-if="m.proposal.preview === 'ready'">
+									<div class="[ preview ]" data-proposal-preview>
+										<span class="[ text-xs color-ink-muted ]">With this proposal:</span>
+										<ul role="list">
+											<template x-for="f in m.proposal.figures.layers" x-bind:key="f">
+												<li x-text="f"></li>
+											</template>
+											<li x-text="m.proposal.figures.unlayered"></li>
+											<li x-text="m.proposal.figures.overlaps"></li>
+										</ul>
+									</div>
+								</template>
+								<template x-if="m.proposal.preview === 'failed'">
+									<p class="[ text-xs color-ink-muted ]" data-proposal-preview-failed>The layer preview is not available.</p>
+								</template>
+								<template x-if="m.proposal.errors.length > 0">
+									<ul class="[ errors ]" role="list">
+										<template x-for="e in m.proposal.errors" x-bind:key="e">
+											<li class="[ error ]" data-proposal-error x-text="e"></li>
+										</template>
+									</ul>
+								</template>
+								<template x-if="m.proposal.state === 'conflicts'">
+									<div class="[ conflicts ]" data-proposal-conflict>
+										<p class="[ weight-medium ]">These changes touch what you edited. Pick the value to keep for each.</p>
+										<template x-for="c in m.proposal.conflicts" x-bind:key="c.index">
+											<div class="[ conflict ]" data-conflict>
+												<span class="[ weight-medium ]" x-text="c.label"></span>
+												<div class="[ choices ]">
+													<button type="button" class="[ button ]" data-size="sm" data-conflict-keep x-bind:aria-pressed="c.choice === 'draft'" x-on:click="pick(m.id, c.index, 'draft')">Yours: <span class="[ font-mono ]" x-text="c.draft"></span></button>
+													<button type="button" class="[ button ]" data-size="sm" data-conflict-take x-bind:aria-pressed="c.choice === 'proposal'" x-on:click="pick(m.id, c.index, 'proposal')">Proposed: <span class="[ font-mono ]" x-text="c.proposed"></span></button>
+												</div>
+											</div>
+										</template>
+										<div class="[ actions ]">
+											<button type="button" class="[ button ]" data-variant="ghost" data-size="sm" data-conflict-cancel x-on:click="unsettle(m.id)">Cancel</button>
+											<button type="button" class="[ button ]" data-variant="primary" data-size="sm" data-conflict-apply x-bind:disabled="!settled(m.proposal)" x-on:click="settle(m.id)">Apply</button>
+										</div>
+									</div>
+								</template>
+								<template x-if="m.proposal.state === 'open'">
+									<div class="[ actions ]">
+										<button type="button" class="[ button ]" data-variant="ghost" data-size="sm" data-proposal-discard x-on:click="discard(m.id)">Discard</button>
+										<template x-if="m.proposal.valid">
+											<button type="button" class="[ button ]" data-variant="primary" data-size="sm" data-proposal-accept x-on:click="accept(m.id)">Accept</button>
+										</template>
+									</div>
+								</template>
+								<template x-if="m.proposal.state !== 'open' && m.proposal.state !== 'conflicts'">
+									<p class="[ text-xs color-ink-muted ]" data-proposal-outcome x-text="outcomeText(m.proposal.state)"></p>
+								</template>
+							</section>
+						</template>
+					</div>
+				</template>
+				<template x-for="(line, i) in activity" x-bind:key="i">
+					<p class="[ activity-line ]" data-assistant-activity x-text="line"></p>
+				</template>
+				<template x-if="running">
+					<p class="[ working ]" role="status">The assistant is working…</p>
+				</template>
+				<template x-if="failure">
+					<p class="[ notice ]" data-tone="danger" data-assistant-error role="alert" x-text="failure"></p>
+				</template>
+				<template x-if="lost">
+					<div class="[ notice ]" data-tone="attention" data-assistant-lost role="alert">
+						<span>This conversation was lost: the server no longer knows it.</span>
+						<button type="button" class="[ button ]" data-size="sm" data-assistant-new x-on:click="startAgain">Start a new conversation</button>
+					</div>
+				</template>
+			</div>
+			<div class="[ compose ]">
+				<template x-if="quote">
+					<div class="[ quote ]" data-assistant-quote>
+						<span class="[ font-mono text-xs ]" x-text="quote.text"></span>
+						<button type="button" class="[ button ]" data-variant="ghost" data-size="sm" x-on:click="dropQuote">Remove</button>
+					</div>
+				</template>
+				<label class="[ visually-hidden ]" for="architecture-assistant-input">Message to the assistant</label>
+				<textarea id="architecture-assistant-input" rows="3" data-assistant-input x-ref="input" x-model="input" x-on:keydown.enter="onInputKey" placeholder="Set up the layers, or ask for a change…"></textarea>
+				<div class="[ actions ]">
+					<template x-if="running">
+						<button type="button" class="[ button ]" data-size="sm" data-assistant-stop x-on:click="stop">Stop</button>
+					</template>
+					<button type="button" class="[ button ]" data-variant="primary" data-size="sm" data-assistant-send x-bind:disabled="!canSend" x-on:click="send">Send</button>
+				</div>
+			</div>
+		</aside>
+	</div>
+}

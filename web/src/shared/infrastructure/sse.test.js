@@ -1,7 +1,7 @@
-import { assert, file, test } from "../../../shared/testing/test.js";
+import { assert, file, test } from "../testing/test.js";
 import { sseParser } from "./sse.js";
 
-file("writinghelper/infrastructure/sse");
+file("shared/infrastructure/sse");
 
 function collect() {
   const events = [];

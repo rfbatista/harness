@@ -102,3 +102,22 @@ func WritingHelperModel(stored string) string {
 	}
 	return DefaultWritingHelperModel
 }
+
+// The architecture assistant is the second assistant: one global model
+// setting, sonnet while unset, with the same choices as the writing helper.
+const (
+	// SettingModelArchitectureAssistant is the settings key holding the
+	// architecture assistant's model.
+	SettingModelArchitectureAssistant = "models.assistants.architecture"
+	// DefaultArchitectureAssistantModel is the model while the setting is unset.
+	DefaultArchitectureAssistantModel = "sonnet"
+)
+
+// ArchitectureAssistantModel reads the architecture assistant's stored
+// setting: unset, or a value it does not accept, takes the built-in model.
+func ArchitectureAssistantModel(stored string) string {
+	if slices.Contains(WritingHelperModelChoices, stored) {
+		return stored
+	}
+	return DefaultArchitectureAssistantModel
+}

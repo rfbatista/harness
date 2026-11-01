@@ -134,8 +134,7 @@ func TestRepositoryArchitectureInTheBrowserAgainstTheRealServer(t *testing.T) {
 	// First setup: the empty state, what the harness found, one layer, save.
 	me.run(t, "open the empty page",
 		chromedp.Navigate(page),
-		poll(`!!document.querySelector('#architecture-empty [data-action=discover]')`),
-		click(`#architecture-empty [data-action=discover]`),
+		// discovery runs on its own when the empty card shows
 		poll(`document.querySelectorAll('[data-candidates] input[type=checkbox]').length > 0`),
 		click(`#architecture-empty [data-action=confirm]`),
 		poll(`!!document.querySelector('[data-setup-done]')`),
@@ -144,19 +143,19 @@ func TestRepositoryArchitectureInTheBrowserAgainstTheRealServer(t *testing.T) {
 	)
 	me.run(t, "add a layer",
 		chromedp.Navigate(page+"/layers"),
-		click(`#architecture-panel-layers [data-add-layer=folder]`),
+		click(`#architecture-panel-layers [data-add-layer]`),
 		poll(`!!document.querySelector('#architecture-panel-layers [data-layer="0"] [data-field=pattern]')`),
 		chromedp.SetValue(`#architecture-panel-layers [data-layer="0"] [data-field=name]`, "core", chromedp.ByQuery),
 		chromedp.SetValue(`#architecture-panel-layers [data-layer="0"] [data-field=pattern]`, "internal", chromedp.ByQuery),
 		// the live preview, answered by the real server for the unsaved draft
-		poll(`document.querySelector('#architecture-panel-layers [data-layer="0"] [data-layer-count]')?.textContent.includes('1 file')`),
+		poll(`document.querySelector('#architecture-panel-layers [data-layer-count]')?.textContent.includes('1 file')`),
 		poll(`!!document.querySelector('[data-save-bar]')?.checkVisibility()`),
 		click(saveButton),
 		poll(`!document.querySelector('[data-save-bar]')?.checkVisibility()`),
 	)
 	// An invalid draft: the server's details.errors land on the page, nothing is stored.
 	me.run(t, "an invalid save",
-		click(`#architecture-panel-layers [data-add-layer=folder]`),
+		click(`#architecture-panel-layers [data-add-layer]`),
 		poll(`!!document.querySelector('#architecture-panel-layers [data-layer="1"]')`),
 		click(saveButton),
 	)

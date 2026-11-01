@@ -881,9 +881,10 @@ func allCheckouts(projects interface {
 // processing ports. Each port gets its own adapter so a consumer depends on the
 // single capability it uses rather than on "the text processor".
 var TextProcessingModule = fx.Module("textprocessing",
-	fx.Provide(fx.Private, newOneShotter, newStreamOneShotter),
+	fx.Provide(fx.Private, newOneShotter, newStreamOneShotter, newTurnStreamer),
 	fx.Provide(
 		newWritingHelper,
+		newArchitectureAssistant,
 		asPort(newSummarizer, new(ports.Summarizer)),
 		asPort(newTextGenerator, new(ports.TextGenerator)),
 		asPort(newTranslator, new(ports.Translator)),

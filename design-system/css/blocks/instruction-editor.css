@@ -1,0 +1,139 @@
+/*
+ * Instruction editor — the pane beside the Instructions & rules list that shows
+ * one instruction file: a monospace text area with a Markdown preview toggle
+ * (the .md-editor and .md-bar of the skill form). Not published as a
+ * design-system component; the design system's document editor look applies.
+ * <div class="arch-split" data-pane><ul class="arch-entries">…</ul>
+ *   <div class="arch-side"><aside class="arch-drawer">…</aside>
+ *     <section class="entry-card instruction-editor"><header>…</header><div class="content flow"><div class="md-editor">…</div></div></section></div></div>
+ * The pane and the metadata drawer share the column beside the list; the column
+ * moves below the list when the viewport is narrow. A row with data-viewing is
+ * the file the pane shows; its path is an .open-file button. A new file shows
+ * [data-new-file] (kind and path); a newer version shows [data-newer-notice]
+ * with Reload and, on request, .instruction-diff of line rows.
+ * A skill is a folder: <li data-skill-folder><div class="entry-row skill-folder">…</div></li>
+ * stands before its files, which are rows with data-in-skill (set in a step).
+ * Rename and delete ask in the pane: [data-rename-form] and [data-delete-confirm]
+ * are .instruction-ask.
+ */
+
+@layer blocks {
+  .arch-split[data-pane="true"] {
+    @media (min-width: 75rem) { grid-template-columns: minmax(0, 1fr) minmax(28rem, 40rem); }
+  }
+
+  /* With the pane open the list is only about 30rem wide: the path gets its own line and the metadata and Edit wrap under it. */
+  .arch-split[data-pane="true"] .arch-entries .entry-row {
+    flex-wrap: wrap;
+
+    & > .entry-main { flex: 1 1 100%; }
+    & > .entry-meta { min-inline-size: 0; flex: 1 1 8rem; }
+  }
+
+  .arch-side {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-m);
+    min-inline-size: 0;
+    align-self: start;
+
+    & > .arch-drawer { position: static; }
+  }
+
+  .instruction-editor {
+    & .md-editor textarea {
+      inline-size: 100%;
+      min-block-size: 22rem;
+      max-block-size: 70vh;
+      resize: vertical;
+      white-space: pre;
+      overflow: auto;
+    }
+
+    & .md-preview { min-block-size: 22rem; max-block-size: 70vh; }
+    & > header h3 { min-inline-size: 0; overflow-wrap: anywhere; font-size: var(--text-sm); }
+    & [data-new-file] { align-items: end; }
+    & [data-new-path] { inline-size: 100%; }
+    & textarea[aria-invalid="true"], & input[aria-invalid="true"] { border-color: var(--color-danger); }
+  }
+
+  /* Your text against the newest version, a line a row: the sign is the carrier, the wash repeats it. */
+  .instruction-diff {
+    max-block-size: 16rem;
+    overflow: auto;
+    border: var(--border-width) solid var(--color-line);
+    border-radius: var(--radius-xs);
+
+    & > [data-diff-line] {
+      padding-inline: var(--space-xs);
+      white-space: pre-wrap;
+      overflow-wrap: anywhere;
+      min-block-size: 1lh;
+
+      &::before { display: inline-block; inline-size: 2ch; }
+      &[data-diff-line="ins"] { background: var(--color-diff-add-wash); &::before { content: "+"; color: var(--color-diff-add); } }
+      &[data-diff-line="del"] { background: var(--color-diff-del-wash); &::before { content: "−"; color: var(--color-diff-del); } }
+      &[data-diff-line="eq"]::before { content: ""; }
+    }
+  }
+
+  .instruction-notice > p { margin-block: 0 var(--space-xs); }
+
+  .open-file {
+    all: unset;
+    cursor: pointer;
+    border-radius: var(--radius-xs);
+
+    &:hover code { text-decoration: underline; }
+    &:focus-visible { outline: var(--border-focus-width) solid var(--color-focus); outline-offset: 2px; }
+  }
+
+  .arch-entries > li[data-viewing="true"] { box-shadow: inset 3px 0 0 var(--color-signal); }
+
+  .instruction-ask {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-s);
+
+    & > p { margin-block: 0; }
+    & [data-rename-path] { inline-size: 100%; }
+    & input[aria-invalid="true"] { border-color: var(--color-danger); }
+  }
+
+  /* A skill folder header sits in the list like a row, quieter; its files step in under it. */
+  .arch-entries > li[data-skill-folder] {
+    background: var(--color-canvas);
+
+    & .skill-folder { min-block-size: 0; padding-block: var(--space-xs); }
+  }
+
+  .arch-entries > li[data-in-skill="true"] > .entry-row { padding-inline-start: calc(var(--space-m) + var(--space-l)); }
+  .arch-entries > li[data-in-skill="true"] + li[data-in-skill="true"] { border-block-start-style: dashed; }
+
+  /* What the repository still holds: a banner above the list, one row per copy, each with its marks and controls. The rows wrap on a narrow screen. */
+  .repository-banner {
+    display: block;
+
+    & [data-repository-note] { margin-block: 0; }
+    & .repository-copies {
+      list-style: none;
+      margin: 0;
+      padding: 0;
+      display: grid;
+      gap: var(--space-xs);
+    }
+    & .repository-copy {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      justify-content: space-between;
+      gap: var(--space-xs) var(--space-m);
+      padding-block: var(--space-xs);
+      border-block-start: var(--border-width) solid var(--color-line);
+      min-inline-size: 0;
+
+      & code { overflow-wrap: anywhere; }
+    }
+    & > :is(.flow, .instruction-ask, p) + :is(.instruction-ask, p) { margin-block-start: var(--space-s); }
+  }
+}

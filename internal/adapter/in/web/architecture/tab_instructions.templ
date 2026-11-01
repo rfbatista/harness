@@ -6,42 +6,128 @@ package architecture
 // the file as the published design does (path, kind, note, applies to, loaded,
 // Edit), marked edited when the draft differs from the saved version and
 // missing when discovery did not find the path; Edit opens the row in the edit
-// drawer beside the list.
-templ tabInstructions() {
+// drawer beside the list. A row whose file the harness holds opens it in the
+// editor pane beside the list (instructionEditor); the pane and the drawer share
+// the column beside the list.
+templ tabInstructions(v View) {
 	<section role="tabpanel" id="architecture-panel-instructions" aria-labelledby="architecture-tab-instructions" x-show="isTab('instructions')" x-data="architectureInstructionsTab" x-on:architecture-draft-replaced.window="closeDrawer" class="[ flow ]">
-		@panelHead("Instructions & rule files", "The files agents read: rules, skills and sub-agent prompts, who they apply to and when they load. Only the path is stored, never the prose.") {
-			<button type="button" class="[ button ]" data-variant="primary" data-size="sm" data-add x-on:click="add">Add file</button>
+		@panelHead("Instructions & rule files", "The files agents read: rules, skills and sub-agent prompts. The harness keeps them, not the repository, and hands them to each agent when its session starts.") {
+			<button type="button" class="[ button ]" data-variant="primary" data-size="sm" data-add x-on:click="addFile">Add file</button>
+			<button type="button" class="[ button ]" data-size="sm" data-add-entry x-on:click="add">Add entry</button>
 		}
-		<div class="[ arch-split ]" x-bind:data-open="drawerOpen()">
-			<ul class="[ arch-entries ]" data-entries>
-				<template x-for="(row, i) in rows()" x-bind:key="i">
-					<li data-entry="instruction" x-bind:data-open="isOpen(i)" x-bind:data-edited="isEdited(i)">
-						<div class="[ entry-row ]" data-row>
-							<div class="[ entry-main ]">
+		<p class="[ text-sm color-ink-muted ]" data-delivery-note>Running sessions keep the copy they started with, so a change reaches the sessions you start after it.</p>
+		<section class="[ banner ] [ repository-banner ]" data-repository-banner aria-label="Instruction files still in the repository" x-show="bannerShown">
+			<p data-repository-unreadable role="status" x-show="unreadable" x-text="unreadableNote"></p>
+			<template x-if="hasCopies">
+				<div class="[ flow ]">
+					<p data-repository-note>These instruction files are still in the repository. Importing copies them into the harness; the repository copies stay in git until you remove them from the repository.</p>
+					<p class="[ text-sm ]" data-both-copies role="status" x-show="hasBoth" x-text="bothText"></p>
+					<ul class="[ repository-copies ]" aria-label="Repository copies">
+						<template x-for="row in repoRows" x-bind:key="row.path">
+							<li class="[ repository-copy ]" data-repository-copy x-bind:data-copy-path="row.path">
 								<div class="[ entry-title ]">
-									<code class="[ font-mono ]" data-path x-text="row.path || 'New instruction file'"></code>
-									<span class="[ badge ]" data-kind x-text="kindLabel(row.kind)"></span>
-									<template x-if="isMissing(row)">
-										<span class="[ badge ]" data-tone="attention" data-flag="missing">missing</span>
-									</template>
-									<template x-if="isEdited(i)">
-										<span class="[ badge ]" data-tone="attention" data-flag="edited">edited</span>
+									<code class="[ font-mono ]" data-copy-name x-text="row.path"></code>
+									<span class="[ badge ]" data-kind x-text="kindOfCopy(row)"></span>
+									<span class="[ badge ]" data-copy-mark x-bind:data-tone="markTone(row)" x-text="row.mark"></span>
+									<template x-if="row.imported">
+										<span class="[ badge ]" data-copy-imported data-tone="success">in the harness</span>
 									</template>
 								</div>
-								<template x-if="row.note">
-									<p class="[ entry-note ]" data-note x-text="row.note"></p>
+								<div class="[ cluster ]">
+									<template x-if="canImport(row)">
+										<button type="button" class="[ button ]" data-size="sm" data-import x-bind:aria-label="importLabel(row)" x-bind:disabled="cannotAct" x-on:click="importRow(row)">Import</button>
+									</template>
+									<template x-if="row.imported">
+										<button type="button" class="[ button ]" data-variant="danger-outline" data-size="sm" data-remove-from-repository x-bind:aria-label="removeLabel(row)" x-bind:disabled="cannotAct" x-on:click="askRemoveRow(row)">Remove from repository</button>
+									</template>
+								</div>
+							</li>
+						</template>
+					</ul>
+					<div class="[ cluster ]">
+						<template x-if="canImportAll">
+							<button type="button" class="[ button ]" data-variant="primary" data-size="sm" data-import-all x-on:click="importAll">Import all</button>
+						</template>
+						<template x-if="canRemoveAll">
+							<button type="button" class="[ button ]" data-variant="danger-outline" data-size="sm" data-remove-all x-on:click="askRemoveAll">Remove all imported</button>
+						</template>
+					</div>
+				</div>
+			</template>
+			<div class="[ banner ] [ instruction-ask ]" data-tone="danger" role="alertdialog" aria-label="Remove from the repository" data-remove-confirm x-show="removeAsked">
+				<p x-text="removeText"></p>
+				<div class="[ cluster ]">
+					<button type="button" class="[ button ]" data-variant="danger" data-size="sm" data-confirm-remove x-bind:disabled="cannotAct" x-on:click="confirmRemove">Remove and commit</button>
+					<button type="button" class="[ button ]" data-variant="ghost" data-size="sm" data-cancel-remove x-on:click="cancelRemove">Cancel</button>
+				</div>
+			</div>
+			<p class="[ text-sm ]" data-removed-commit role="status" x-show="hasRemovedCommit" x-text="commitText"></p>
+			<div class="[ banner ] [ instruction-ask ]" data-tone="danger" role="alert" data-repository-error x-show="hasRepoError">
+				<p x-text="repoError"></p>
+				<div class="[ cluster ]">
+					<template x-for="row in refusalImports" x-bind:key="row.path">
+						<button type="button" class="[ button ]" data-size="sm" data-refusal-import x-bind:aria-label="importLabel(row)" x-bind:disabled="cannotAct" x-on:click="importRow(row)" x-text="importLabel(row)"></button>
+					</template>
+				</div>
+			</div>
+		</section>
+		<div class="[ arch-split ]" x-bind:data-open="drawerOpen()" x-bind:data-pane="paneOpen()">
+			<ul class="[ arch-entries ]" data-entries>
+				<template x-for="(item, n) in items()" x-bind:key="n">
+					<li x-bind:data-entry="item.entry" x-bind:data-skill-folder="item.folder" x-bind:data-in-skill="item.inSkill" x-bind:data-open="isOpen(item.index)" x-bind:data-edited="isEdited(item.index)" x-bind:data-viewing="isViewing(item.row)">
+						<template x-if="item.folder">
+							<div class="[ entry-row ] [ skill-folder ]" data-row>
+								<div class="[ entry-main ]">
+									<div class="[ entry-title ]">
+										<span aria-hidden="true">▸</span>
+										<code class="[ font-mono ]" data-folder-name x-text="item.folderPath"></code>
+										<span class="[ badge ]" data-kind>Skill folder</span>
+										<span class="[ text-xs color-ink-faint ]" x-text="item.count"></span>
+										<template x-if="item.needsSkillMd">
+											<span class="[ badge ]" data-tone="attention" data-flag="not-delivered">not delivered: add SKILL.md</span>
+										</template>
+									</div>
+								</div>
+								<template x-if="item.needsSkillMd">
+									<button type="button" class="[ button ]" data-size="sm" data-add-skill-md x-bind:aria-label="skillMdLabel(item)" x-on:click="addSkillMd(item)">Add SKILL.md</button>
 								</template>
-								<template x-if="isMissing(row)">
-									<p class="[ entry-note ]" data-missing-note>Not in the repository</p>
-								</template>
+								<button type="button" class="[ button ]" data-size="sm" data-add-skill-file x-bind:aria-label="skillLabel(item)" x-on:click="addToSkill(item)">Add file to skill</button>
 							</div>
-							<div class="[ entry-meta ]" data-meta="applies"><span class="[ entry-label ]">Applies to</span> <span x-text="agentSummary(row, 'applies_to')"></span></div>
-							<div class="[ entry-meta ]" data-meta="loaded"><span class="[ entry-label ]">Loaded</span> <span x-text="loadedLabel(row.loaded)"></span></div>
-							@editButton("isOpen(i)", "edit(i)")
-						</div>
+						</template>
+						<template x-if="item.row">
+							<div class="[ entry-row ]" data-row>
+								<div class="[ entry-main ]">
+									<div class="[ entry-title ]">
+										<template x-if="item.row.file">
+											<button type="button" class="[ open-file ]" data-open-file x-bind:aria-label="openLabel(item.row)" x-on:click="openRow(item.row)"><code class="[ font-mono ]" data-path x-text="item.row.path"></code></button>
+										</template>
+										<template x-if="!item.row.file">
+											<code class="[ font-mono ]" data-path x-text="item.row.path || 'New instruction file'"></code>
+										</template>
+										<span class="[ badge ]" data-kind x-text="kindLabel(item.row.kind)"></span>
+										<template x-if="isMissing(item.row)">
+											<span class="[ badge ]" data-tone="attention" data-flag="missing">missing</span>
+										</template>
+										<template x-if="isEdited(item.index)">
+											<span class="[ badge ]" data-tone="attention" data-flag="edited">edited</span>
+										</template>
+									</div>
+									<template x-if="item.row.note">
+										<p class="[ entry-note ]" data-note x-text="item.row.note"></p>
+									</template>
+									<template x-if="isMissing(item.row)">
+										<p class="[ entry-note ]" data-missing-note>Not in the repository</p>
+									</template>
+								</div>
+								<div class="[ entry-meta ]" data-meta="applies"><span class="[ entry-label ]">Applies to</span> <span x-text="agentSummary(item.row, 'applies_to')"></span></div>
+								<div class="[ entry-meta ]" data-meta="loaded"><span class="[ entry-label ]">Loaded</span> <span x-text="loadedLabel(item.row.loaded)"></span></div>
+								<button type="button" class="[ button ]" data-variant="ghost" data-size="sm" data-edit x-bind:aria-expanded="isOpen(item.index)" x-bind:aria-label="editLabel(item.row)" x-on:click="edit(item.index)">Edit</button>
+							</div>
+						</template>
 					</li>
 				</template>
 			</ul>
+			<div class="[ arch-side ]" x-show="sideOpen()">
 			@entryDrawer("instruction", "Edit instruction file", drawerFor("")) {
 				<div class="[ field ]">
 					<label>
@@ -57,9 +143,9 @@ templ tabInstructions() {
 						<label>
 							Kind
 							<select data-field="kind" class="[ text-sm ]" x-model="row.kind" x-bind:aria-invalid="bad(drawerIndex(), 'kind')">
-								<option value="rules">Rules</option>
+								<option value="rules">Memory</option>
 								<option value="skill">Skill</option>
-								<option value="subagent_prompt">Sub-agent prompt</option>
+								<option value="subagent_prompt">Sub-agent</option>
 							</select>
 						</label>
 						<template x-if="err(drawerIndex(), 'kind')">
@@ -93,6 +179,8 @@ templ tabInstructions() {
 					</label>
 				</div>
 			}
+			@instructionEditor(v)
+			</div>
 		</div>
 	</section>
 }

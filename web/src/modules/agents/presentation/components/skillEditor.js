@@ -16,7 +16,7 @@
 // to by name (see editors.js).
 
 import { describeError } from "../../../../shared/presentation/errors.js";
-import { renderMarkdown } from "../../domain/markdown.js";
+import { renderMarkdown } from "../../../../shared/domain/markdown.js";
 import { openSave, saveView, savedToast } from "../../domain/savePipeline.js";
 import {
   START_FROM, checkSkillDraft, coachDescription, decodeUpload, descriptionMeter, normalizeNewPath, normalizeUploadPath,

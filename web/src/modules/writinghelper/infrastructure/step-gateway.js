@@ -3,7 +3,7 @@
 // reader, not the shared page stream. Aborting the signal is Stop.
 
 import { Codes, StructuredError } from "../../../shared/domain/errors.js";
-import { sseParser } from "./sse.js";
+import { sseParser } from "../../../shared/infrastructure/sse.js";
 
 /**
  * @param {{ base: string, fetch?: typeof globalThis.fetch }} options
