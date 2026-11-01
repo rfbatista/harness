@@ -2,8 +2,8 @@
 // the words of the state badge and the Save bar. Pure.
 
 /**
- * A tab of the page; `slug` is its `?tab=` value. Components and Proposals
- * join the list when their slices land.
+ * A tab of the page; `slug` is its `?tab=` value. Proposals joins the list
+ * when its slice lands.
  * @typedef {{ slug: string, label: string }} Tab
  */
 
@@ -11,6 +11,7 @@
 export const TABS = Object.freeze([
   { slug: "tokens", label: "Tokens" },
   { slug: "principles", label: "Principles" },
+  { slug: "components", label: "Components" },
   { slug: "repositories", label: "Repositories" },
   { slug: "history", label: "History" },
 ]);

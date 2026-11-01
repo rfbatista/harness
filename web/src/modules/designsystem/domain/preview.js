@@ -133,3 +133,18 @@ export function validateComponents(record, previous = { tokens: [] }) {
   for (const owner of [...removed.keys()].sort()) add("/tokens", "TOKEN_IN_USE", `token ${owner} is used by ${removed.get(owner).join(", ")}`);
   return errs;
 }
+
+/** The tokens a preview can be drawn from: a row still being typed (no name, no value, a value that could end the rule) is left out. */
+export function usableTokens(tokens) {
+  const drawable = (v) => String(v).trim() !== "" && !/[{};<>]/.test(String(v));
+  return tokens.filter((t) => {
+    if (t.group === "" || t.name === "") return false;
+    return isComposite(t.value) ? Object.keys(t.value).length > 0 && Object.values(t.value).every(drawable) : drawable(t.value);
+  });
+}
+
+/** The custom properties a preview's css names that no token defines, once each, in order of appearance. */
+export function missingTokens(tokens, preview) {
+  const known = new Set(tokens.flatMap((t) => declarations(t).map(([p]) => p)));
+  return [...new Set([...preview.css.matchAll(VAR_REF)].map((m) => m[1]))].filter((p) => !known.has(p));
+}

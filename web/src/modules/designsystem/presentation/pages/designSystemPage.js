@@ -27,6 +27,8 @@ import {
 import { renderMarkdown } from "../../../../shared/domain/markdown.js";
 import { VERSIONS_PAGE, hasMore, mergeVersions, versionRow } from "../../domain/history.js";
 import { outlineOf } from "../../domain/principles.js";
+import { previewDocument, usableTokens } from "../../domain/preview.js";
+import { cardsOf, currentOf, itemsOf, notesOf } from "../../domain/showcase.js";
 import {
   STANDARD_GROUPS,
   changeCounts,
@@ -38,6 +40,7 @@ import {
   rowStatus,
   rowsFromRecord,
   sampleOf,
+  tokenOf,
 } from "../../domain/tokens.js";
 
 /** The fields of a row an error is shown under, by the cell that holds them. */
@@ -92,6 +95,9 @@ export const designSystemPage = ({ gateway, clock, clipboard = { copyText: async
   renameGroup: "",
   renameName: "",
   renameError: null,
+  /** The Components tab: the component open (its slug; "" for the first) and the previews that have come near the viewport, by card key. */
+  selectedSlug: "",
+  seen: {},
   /** The Principles tab: Write or Preview. */
   principlesMode: "write",
   /** The History tab: the versions read (newest first), whether the first page was read, a read in flight (and one asked for meanwhile), whether older ones may exist, and what went wrong. */
@@ -182,8 +188,8 @@ export const designSystemPage = ({ gateway, clock, clipboard = { copyText: async
       id: `design-system-tab-${t.slug}`,
       panelId: `design-system-panel-${t.slug}`,
       selected: t.slug === this.tab,
-      hasCount: t.slug === "tokens",
-      count: this.rows.length,
+      hasCount: t.slug === "tokens" || t.slug === "components",
+      count: t.slug === "components" ? this.components.length : this.rows.length,
     }));
   },
   get visibleRows() {
@@ -210,6 +216,37 @@ export const designSystemPage = ({ gateway, clock, clipboard = { copyText: async
     return !this.saving && name !== "" && group !== "" && `${group}.${name}` !== this.renameFrom;
   },
 
+  /** The tokens previews are drawn from: the draft's, saved or not. */
+  get previewTokens() {
+    return usableTokens(this.rows.map(tokenOf));
+  },
+  get componentItems() {
+    return itemsOf(this.components, this.previewTokens);
+  },
+  get hasComponents() {
+    return this.components.length > 0;
+  },
+  get noComponents() {
+    return this.components.length === 0;
+  },
+  get current() {
+    return currentOf(this.components, this.selectedSlug);
+  },
+  get currentCards() {
+    return this.current ? cardsOf(this.current, this.previewTokens) : [];
+  },
+  get currentDos() {
+    return notesOf(this.current?.do ?? []);
+  },
+  get currentDonts() {
+    return notesOf(this.current?.dont ?? []);
+  },
+  get currentMissing() {
+    return this.componentItems.find((i) => i.slug === this.current?.slug)?.missing.join(", ") ?? "";
+  },
+  get currentFlagged() {
+    return this.currentMissing !== "";
+  },
   get outline() {
     return outlineOf(this.principles);
   },
@@ -538,6 +575,60 @@ export const designSystemPage = ({ gateway, clock, clipboard = { copyText: async
     this.message = "";
     this.cancelRename();
     this.clearProblems();
+  },
+
+  isCurrent(item) {
+    return item.slug === this.current?.slug;
+  },
+
+  selectComponent(item) {
+    this.selectedSlug = item.slug;
+  },
+
+  /** The document a preview is drawn from; none until the card nears the viewport, so a page of many previews stays light. */
+  previewSrc(card) {
+    return this.seen[card.key] ? previewDocument(this.previewTokens, card.preview) : "";
+  },
+
+  /**
+   * Draws a card's preview in a frame inside its host. The frame has
+   * sandbox="" (no scripts, no same origin) and is built here because the CSP
+   * build of Alpine refuses directives on an iframe.
+   */
+  paintFrame(host, card) {
+    const doc = this.previewSrc(card);
+    if (doc === "") return;
+    let frame = host.querySelector("iframe");
+    if (!frame) {
+      frame = document.createElement("iframe");
+      frame.setAttribute("sandbox", "");
+      frame.setAttribute("data-preview-frame", "");
+      frame.setAttribute("title", card.label);
+      frame.style.cssText = "display:block;inline-size:100%;block-size:8rem;border:0;background:var(--color-canvas)";
+      host.append(frame);
+    }
+    if (frame.srcdoc !== doc) frame.srcdoc = doc;
+  },
+
+  /** Marks a card's frame as wanted once it comes near the viewport. */
+  watchFrame(el, card) {
+    const want = () => {
+      this.seen[card.key] = true;
+    };
+    if (!globalThis.IntersectionObserver) {
+      want();
+      return;
+    }
+    const observer = new IntersectionObserver(
+      (entries) => {
+        if (entries.some((e) => e.isIntersecting)) {
+          want();
+          observer.disconnect();
+        }
+      },
+      { rootMargin: "200px" },
+    );
+    observer.observe(el);
   },
 
   /** Opens a tab without leaving the page; the address follows it. */
