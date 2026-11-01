@@ -114,6 +114,24 @@ export function designSystemGateway(api, feed) {
       return list(body?.repositories).map(optInRow);
     },
 
+    /**
+     * Exports the repository's design system into its checkout: one local commit, nothing pushed. Answers { commit, version, state }.
+     * CHECKOUT_DIRTY, WRONG_BRANCH, NO_DESIGN_SYSTEM and EDITED_OUTSIDE (details.changed_files, unless confirmed) arrive as errors.
+     */
+    async exportDesignSystem(repositoryId, confirmEditedOutside = false) {
+      const body = await api.post("/export_design_system", { repository_id: repositoryId, confirm_edited_outside: confirmEditedOutside });
+      if (typeof body?.commit !== "string" || !Number.isInteger(body?.version)) {
+        throw new StructuredError(Codes.BAD_RESPONSE, "The export came back unreadable.");
+      }
+      return { commit: body.commit, version: body.version, state: body.state ?? "" };
+    },
+
+    /** The files an export would write or delete at the repository's path, each with its diff against the checkout. */
+    async previewExport(repositoryId) {
+      const body = await api.post("/preview_design_system_export", { repository_id: repositoryId });
+      return list(body?.files).map((f) => ({ path: f.path ?? "", status: f.status ?? "", diff: f.diff ?? "" }));
+    },
+
     /** One repository's design system ("" for none) and the folder an export writes to. */
     async repository(repositoryId) {
       const body = await api.get("/get_repository", { repository_id: repositoryId });
@@ -208,7 +226,7 @@ export function designSystemGateway(api, feed) {
      * Follows the project feed for what names this design system: saves of it and changes to its name or description
      * (or its deletion). Another design system's events raise nothing.
      */
-    follow(projectId, designSystemId, { onSaved, onChanged, onStatus }) {
+    follow(projectId, designSystemId, { onSaved, onChanged, onExport, onStatus }) {
       return feed.follow(`/events?project_id=${encodeURIComponent(projectId)}`, {
         onMessage(dto) {
           const saved = dto?.design_system_saved;
@@ -217,6 +235,8 @@ export function designSystemGateway(api, feed) {
           }
           const changed = dto?.design_system_changed;
           if (changed && changed.project_id === projectId && changed.design_system_id === designSystemId) onChanged?.();
+          const exported = dto?.design_system_export;
+          if (exported && exported.project_id === projectId && exported.design_system_id === designSystemId) onExport?.({ repositoryId: exported.repository_id ?? "", state: exported.state ?? "" });
         },
         onStatus,
       });

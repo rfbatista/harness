@@ -31,6 +31,7 @@ templ PageView(v View) {
 							</div>
 							<div class="[ cluster ]">
 								<span class="[ badge sync ]" data-design-state x-bind:data-tone="badge.tone" x-text="badge.label"></span>
+								<button type="button" class="[ button ]" data-action="export-open" x-show="exists && !deleted" x-on:click="openExport">Export…</button>
 								@headerMenu()
 							</div>
 						</div>

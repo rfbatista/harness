@@ -10,7 +10,7 @@
 // and retries confirmed. Any other refusal stays under its row.
 
 import { describeError } from "../../../../shared/presentation/errors.js";
-import { chip, exportLabel } from "../../domain/repositories.js";
+import { canExport, chip, exportBadge, exportLabel } from "../../domain/repositories.js";
 
 /** @param {{ gateway: ReturnType<typeof import("../../infrastructure/designsystem-gateway.js").designSystemGateway> }} deps */
 export const designSystemOptIn = ({ gateway }) => () => ({
@@ -21,6 +21,9 @@ export const designSystemOptIn = ({ gateway }) => () => ({
   rows: [],
   loaded: false,
   error: null,
+  unfollow: null,
+  /** The repository the header's Export… chose. */
+  chosen: "",
 
   get isEmpty() {
     return this.loaded && this.rows.length === 0;
@@ -30,6 +33,27 @@ export const designSystemOptIn = ({ gateway }) => () => ({
     this.projectId = this.$el.dataset.projectId ?? "";
     this.designSystemId = this.$el.dataset.designSystemId ?? "";
     await this.load();
+    this.unfollow = gateway.follow?.(this.projectId, this.designSystemId, {
+      onSaved: () => this.refreshExports(),
+      onExport: () => this.refreshExports(),
+    }) ?? null;
+  },
+
+  destroy() {
+    this.unfollow?.();
+  },
+
+  /** Reads the export states again, leaving what a row is doing (a draft path, a question, an export) alone. */
+  async refreshExports() {
+    try {
+      const fresh = await gateway.repositories(this.designSystemId);
+      for (const row of this.rows) {
+        const now = fresh.find((f) => f.id === row.id);
+        if (now && !row.saving && !row.exporting) row.export = now.export;
+      }
+    } catch {
+      // The next event, or Try again, reads them.
+    }
   },
 
   async load() {
@@ -50,6 +74,43 @@ export const designSystemOptIn = ({ gateway }) => () => ({
   },
   stateOf(row) {
     return exportLabel(row);
+  },
+  badgeOf(row) {
+    return exportBadge(row) ?? { label: "", tone: "" };
+  },
+  hasBadge(row) {
+    return exportBadge(row) !== null;
+  },
+  canExportRow(row) {
+    return canExport(row);
+  },
+  exportDisabled(row) {
+    return row.exporting || row.saving || row.review !== null;
+  },
+  isReviewing(row) {
+    return row.review !== null;
+  },
+  reviewFiles(row) {
+    return row.review === null ? [] : row.review;
+  },
+  currentVersion(row) {
+    return row.export === null ? "" : row.export.current_version;
+  },
+  shortCommit(row) {
+    return row.exported === null ? "" : row.exported.commit.slice(0, 7);
+  },
+  isChosen(row) {
+    return row.id === this.chosen;
+  },
+  /** The header's Export…: chooses the first repository that needs an export, else the first that uses the design system. */
+  choose() {
+    const using = this.rows.filter((r) => r.uses);
+    const pick = using.find((r) => r.export?.state !== "in_sync") ?? using[0];
+    this.chosen = pick?.id ?? "";
+    if (pick) {
+      this.$nextTick(() => this.$el.querySelector(`[data-optin-row][data-repository-id="${pick.id}"] [data-action=export]`)?.focus());
+    }
+    return pick;
   },
   cannotSavePath(row) {
     return row.saving || !row.uses || row.draft === row.path;
@@ -102,5 +163,49 @@ export const designSystemOptIn = ({ gateway }) => () => ({
     } finally {
       row.saving = false;
     }
+  },
+
+  /** Exports one repository. Files edited outside the harness are listed first, with their differing lines, and replaced only once confirmed. */
+  async exportRow(row) {
+    if (row.exporting) return;
+    row.exporting = true;
+    row.exportError = null;
+    row.exported = null;
+    try {
+      if (row.export?.state === "edited_outside" && row.review === null) {
+        const files = await gateway.previewExport(row.id);
+        row.review = files.filter((f) => f.status !== "unchanged");
+        return;
+      }
+      await this.runExport(row, row.review !== null);
+    } catch (err) {
+      row.exportError = describeError(err);
+    } finally {
+      row.exporting = false;
+    }
+  },
+
+  async runExport(row, confirmed) {
+    try {
+      row.exported = await gateway.exportDesignSystem(row.id, confirmed);
+      row.review = null;
+      await this.refreshOne(row);
+    } catch (err) {
+      if (err?.code === "EDITED_OUTSIDE" && !confirmed) {
+        row.review = (await gateway.previewExport(row.id)).filter((f) => f.status !== "unchanged");
+        return;
+      }
+      throw err;
+    }
+  },
+
+  /** Withdraws the edited outside question; nothing was written. */
+  cancelReview(row) {
+    row.review = null;
+  },
+
+  async refreshOne(row) {
+    const fresh = (await gateway.repositories(this.designSystemId)).find((f) => f.id === row.id);
+    if (fresh) row.export = fresh.export;
   },
 });
