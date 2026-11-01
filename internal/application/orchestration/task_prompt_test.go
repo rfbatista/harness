@@ -399,3 +399,77 @@ func TestModeSkills_MovingDocumentsFollowsTheSetting(t *testing.T) {
 		}
 	}
 }
+
+func golden(t *testing.T, name, got string) {
+	t.Helper()
+	path := "testdata/" + name + ".golden"
+	if os.Getenv("UPDATE_GOLDEN") != "" {
+		if err := os.WriteFile(path, []byte(got), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	want, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got != string(want) {
+		t.Fatalf("%s changed:\n%s", name, got)
+	}
+}
+
+var exportsFeature = &domain.TaskRef{ID: "f1", Title: "Exports", Status: domain.TicketStatusInProgress}
+
+// A session on a child task is told its feature, where the feature's PRD is,
+// its sibling tasks with their status, and that the feature's status is not
+// its to move.
+func TestTaskBrief_ChildNamesItsFeatureAndSiblings(t *testing.T) {
+	tk := &domain.Ticket{ID: "c1", Title: "CSV export", Description: "with care", Status: domain.TicketStatusInProgress, ParentID: "f1"}
+	got := taskBrief(tk, domain.RolePeer, taskCounts{structure: briefStructure{
+		parent: exportsFeature,
+		others: []domain.TaskChild{
+			{TaskRef: domain.TaskRef{ID: "c2", Title: "PDF export", Status: domain.TicketStatusTodo}},
+			{TaskRef: domain.TaskRef{ID: "c3", Title: "XLSX export", Status: domain.TicketStatusDone}, Archived: true},
+		},
+	}})
+	for _, want := range []string{
+		"child of a feature task", `"Exports" (f1)`, "tasks/f1/docs/", "PRD",
+		"c2 — PDF export (todo)", "c3 — XLSX export (done, archived)", "not yours to move",
+	} {
+		if !strings.Contains(got, want) {
+			t.Errorf("child brief lacks %q:\n%s", want, got)
+		}
+	}
+	golden(t, "child_brief", got)
+}
+
+// A session on a feature task is told its children and where each one's
+// documents are.
+func TestTaskBrief_FeatureNamesItsChildren(t *testing.T) {
+	tk := &domain.Ticket{ID: "f1", Title: "Exports", Description: "with care", Status: domain.TicketStatusInProgress}
+	got := taskBrief(tk, domain.RolePeer, taskCounts{structure: briefStructure{
+		children: []domain.TaskChild{
+			{TaskRef: domain.TaskRef{ID: "c1", Title: "CSV export", Status: domain.TicketStatusReview}},
+			{TaskRef: domain.TaskRef{ID: "c2", Title: "PDF export", Status: domain.TicketStatusDone}, Archived: true},
+		},
+	}})
+	for _, want := range []string{
+		"feature task", "c1 — CSV export (review)", "c2 — PDF export (done, archived)", "tasks/<child-id>/docs/",
+	} {
+		if !strings.Contains(got, want) {
+			t.Errorf("feature brief lacks %q:\n%s", want, got)
+		}
+	}
+	if strings.Contains(got, "not yours to move") {
+		t.Errorf("a feature's brief says its own status is not its to move:\n%s", got)
+	}
+	golden(t, "feature_brief", got)
+}
+
+// A task with no feature and no children costs no new words: the section is
+// absent, and the brief is the peer golden above.
+func TestTaskBrief_PlainTaskHasNoFeatureSection(t *testing.T) {
+	tk := &domain.Ticket{ID: "tk1", Title: "Ship the thing", Description: "with care", Status: domain.TicketStatusInProgress}
+	if got := taskBrief(tk, domain.RolePeer, taskCounts{structure: briefStructure{}}); strings.Contains(got, "feature task") {
+		t.Errorf("a plain task's brief mentions a feature:\n%s", got)
+	}
+}

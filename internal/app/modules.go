@@ -331,7 +331,7 @@ func newPlanningService(
 	svc.Resources, svc.Comments = sqlite.NewTicketResourceRepository(db), sqlite.NewTicketCommentRepository(db)
 	svc.Blobs, svc.ContentURL = blobstore.New(dir), httpapi.TicketResourceContentPath
 	// A session's brief counts them, and its task's additions become turns.
-	orch.Resources, orch.Comments = svc, svc
+	orch.Resources, orch.Comments, orch.Structure = svc, svc, svc
 	orch.SubscribeTaskUpdates(cat.Bus)
 	return svc, nil
 }
