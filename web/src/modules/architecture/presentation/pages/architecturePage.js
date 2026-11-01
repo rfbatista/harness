@@ -31,6 +31,9 @@ import { hexagonalLayers } from "../../domain/layers.js";
 /** What the page says on the window when it swaps the draft for another (a discard, a reload, a load): an open edit drawer holds a copy of a row that is gone. */
 export const DRAFT_REPLACED = "architecture-draft-replaced";
 
+/** What the page says on the window when the person asks the assistant about a rule event: { detail: the event's row }. */
+export const ASK_ASSISTANT = "architecture-ask-assistant";
+
 /** @param {{ gateway: ReturnType<typeof import("../../infrastructure/architecture-gateway.js").architectureGateway> }} deps */
 export const architecturePage = ({ gateway }) => () => ({
   projectId: "",
@@ -74,6 +77,10 @@ export const architecturePage = ({ gateway }) => () => ({
   unmatchedCount: 0,
   /** How many files each layer matches, by layer name, from the Layers tab's preview; null until it has answered. */
   fileCounts: null,
+  /** Whether the architecture assistant can run, from the seed: "Ask the assistant" on an event needs it. */
+  assistantAvailable: false,
+  /** Whether the assistant's panel is open: the page makes room for it instead of lying under it. */
+  assistantOpen: false,
   /** Whether the page was opened on a tab's deep link and has not yet scrolled to the tabs. */
   deepLinked: false,
 
@@ -166,6 +173,7 @@ export const architecturePage = ({ gateway }) => () => ({
       this.rootDir = seed.root_dir ?? "";
       this.ignoredPaths = Array.isArray(seed.ignored_paths) ? seed.ignored_paths : [];
       this.base = seed.base;
+      this.assistantAvailable = seed.assistant_available === true;
       this.deepLinked = (seed.tab ?? "") !== "";
       this.applyPath(seed.tab ?? "");
     } catch (err) {
@@ -271,6 +279,11 @@ export const architecturePage = ({ gateway }) => () => ({
     if (!this.deepLinked) return;
     this.deepLinked = false;
     this.$nextTick(() => document.getElementById("architecture-tabs")?.scrollIntoView({ block: "start" }));
+  },
+
+  /** Opens the assistant on a rule event of the list. */
+  askAssistant(row) {
+    window.dispatchEvent(new CustomEvent(ASK_ASSISTANT, { detail: row }));
   },
 
   toggleEvents() {

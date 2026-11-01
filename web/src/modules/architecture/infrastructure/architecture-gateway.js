@@ -3,14 +3,18 @@
 // record". The wire shapes are read here and nowhere else.
 
 import { StructuredError, Codes } from "../../../shared/domain/errors.js";
+import { sseParser } from "../../../shared/infrastructure/sse.js";
 import { readPreview } from "../domain/layers.js";
 import { instructionFilesGateway } from "./instruction-files-gateway.js";
+
+import { ASSISTANT_FAILED } from "../domain/assistant.js";
 
 /**
  * @param {import("../../../shared/infrastructure/api.js").ApiClient} api
  * @param {import("../../../shared/infrastructure/feed.js").Feed} feed
+ * @param {{ base?: string, fetch?: typeof globalThis.fetch, beacon?: (url: string, data: Blob) => boolean }} [transport] the assistant's streamed turn and end beacon
  */
-export function architectureGateway(api, feed) {
+export function architectureGateway(api, feed, { base = "/api", fetch = globalThis.fetch?.bind(globalThis), beacon = (url, data) => navigator.sendBeacon(url, data) } = {}) {
   /** @param {any} body */
   const toState = (body) => {
     if (!body || typeof body.record !== "object" || body.record === null) {
@@ -116,6 +120,36 @@ export function architectureGateway(api, feed) {
     },
 
     /**
+     * One turn of the architecture assistant (POST /api/run_architecture_assistant_turn). The answer
+     * streams as SSE-framed events: `conversation` and `activity` and `delta` go to the callbacks, and
+     * the promise answers with the `result` ({ text, proposal }). A refusal before the stream, or an
+     * `error` event, rejects with its code. Aborting the signal is Stop and rejects with an AbortError.
+     */
+    async runAssistantTurn(request, { signal, onConversation, onActivity, onDelta } = {}) {
+      let res;
+      try {
+        res = await fetch(`${base}/run_architecture_assistant_turn`, {
+          method: "POST",
+          signal,
+          headers: { "Content-Type": "application/json", Accept: "text/event-stream" },
+          body: JSON.stringify(request),
+        });
+      } catch (err) {
+        if (err?.name === "AbortError") throw err;
+        throw new StructuredError(Codes.NETWORK, "The harness server is not reachable.");
+      }
+      if (!res.ok) throw await assistantRefusal(res);
+      if (!res.body) throw assistantFailure("The assistant sent no answer.");
+      return readAssistantStream(res.body, { onConversation, onActivity, onDelta });
+    },
+
+    /** Ends a conversation with a beacon, which survives the page unloading. The server answers 204 either way. */
+    endAssistantConversation(conversationId) {
+      if (!conversationId) return;
+      beacon(`${base}/end_architecture_assistant_conversation`, new Blob([JSON.stringify({ conversation_id: conversationId })], { type: "application/json" }));
+    },
+
+    /**
      * The directory tree of a checkout (GET /api/list_tree rooted at it): nodes of
      * {path, is_dir, children}, paths relative to the root.
      */
@@ -180,4 +214,65 @@ export function architectureGateway(api, feed) {
     },
   };
   return self;
+}
+
+const assistantFailure = (message) => new StructuredError(ASSISTANT_FAILED, message);
+
+/** The JSON error a refused turn answers with, as a StructuredError (`fix_url` rides in the details). */
+async function assistantRefusal(res) {
+  let body = null;
+  try {
+    body = JSON.parse(await res.text());
+  } catch {
+    // not JSON: the status line will do
+  }
+  return new StructuredError(
+    body?.code ?? Codes.UNKNOWN,
+    body?.message ?? body?.error ?? `${res.status} ${res.statusText}`.trim(),
+    res.status,
+    body?.fix_url ? { fix_url: body.fix_url } : body?.details,
+  );
+}
+
+/** @param {ReadableStream<Uint8Array>} body */
+async function readAssistantStream(body, { onConversation, onActivity, onDelta }) {
+  /** @type {{ text: string, proposal: any } | undefined} */
+  let result;
+  /** @type {StructuredError | undefined} */
+  let error;
+  const parser = sseParser((name, data) => {
+    let payload;
+    try {
+      payload = JSON.parse(data);
+    } catch {
+      error ??= assistantFailure("The assistant sent an answer that cannot be read.");
+      return;
+    }
+    if (payload === null || typeof payload !== "object") {
+      error ??= assistantFailure("The assistant sent an answer that cannot be read.");
+      return;
+    }
+    if (name === "conversation") onConversation?.(String(payload.conversation_id ?? ""));
+    else if (name === "activity") onActivity?.({ tool: String(payload.tool ?? ""), target: String(payload.target ?? "") });
+    else if (name === "delta") onDelta?.(String(payload.text ?? ""));
+    else if (name === "result") result = { text: String(payload.text ?? ""), proposal: payload.proposal ?? null };
+    else if (name === "error") error = new StructuredError(payload.code ?? ASSISTANT_FAILED, payload.message ?? "The assistant failed.");
+  });
+
+  const reader = body.getReader();
+  const decoder = new TextDecoder();
+  try {
+    for (;;) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      parser.push(decoder.decode(value, { stream: true }));
+    }
+    parser.end();
+  } catch (err) {
+    if (err?.name === "AbortError") throw err;
+    throw assistantFailure("The connection to the assistant was lost.");
+  }
+  if (error) throw error;
+  if (!result) throw assistantFailure("The assistant stopped before it finished.");
+  return result;
 }

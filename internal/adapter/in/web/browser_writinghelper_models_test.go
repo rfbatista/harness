@@ -12,6 +12,7 @@ import (
 
 	"operators-mcp/internal/adapter/in/web/shell"
 	"operators-mcp/internal/domain"
+	"operators-mcp/internal/ports"
 )
 
 // fakeSettingsAPI is the settings store behind the Models page: the page
@@ -78,6 +79,8 @@ func modelsBrowser(t *testing.T, store *fakeSettingsAPI, helper shell.Helper) (c
 		Repositories:  fakeRepos{},
 		Settings:      store,
 		WritingHelper: func(context.Context) shell.Helper { return helper },
+		// The server always wires the architecture assistant; here it is ready, so the page's banners are the writing helper's own.
+		ArchitectureAssistant: fakeReadiness{ports.ArchitectureAssistantAvailability{Available: true}},
 	}, assets, nil)
 	mux := http.NewServeMux()
 	mux.Handle("/api/", store)

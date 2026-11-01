@@ -13,6 +13,7 @@ import (
 
 	"operators-mcp/internal/adapter/in/web/shell"
 	"operators-mcp/internal/domain"
+	"operators-mcp/internal/ports"
 )
 
 // archRig is a browser, the pages and a fake of the architecture endpoints,
@@ -27,14 +28,23 @@ type archRig struct {
 	feed  *sseFeed
 }
 
-func newArchRig(t *testing.T) *archRig {
+func newArchRig(t *testing.T) *archRig { return newArchRigWith(t, nil) }
+
+// newArchRigWith is newArchRig where wrap, when set, may put its own handlers
+// before the fake API and the pages.
+func newArchRigWith(t *testing.T, wrap func(api *fakeArchitectureAPI, pages http.Handler) (http.Handler, http.Handler)) *archRig {
 	t.Helper()
-	return newArchRigWithHelper(t, nil, nil)
+	return newArchRigFull(t, nil, nil, wrap, nil)
 }
 
 // newArchRigWithHelper is newArchRig with the writing helper's state on the
 // pages (nil leaves it unavailable) and a fake step endpoint behind it.
 func newArchRigWithHelper(t *testing.T, helper *shell.Helper, steps *fakeHelperAPI) *archRig {
+	t.Helper()
+	return newArchRigFull(t, helper, steps, nil, nil)
+}
+
+func newArchRigFull(t *testing.T, helper *shell.Helper, steps *fakeHelperAPI, wrap func(api *fakeArchitectureAPI, pages http.Handler) (http.Handler, http.Handler), assistant ports.ArchitectureAssistantReadiness) *archRig {
 	t.Helper()
 	assets, err := NewAssets()
 	if err != nil {
@@ -53,7 +63,8 @@ func newArchRigWithHelper(t *testing.T, helper *shell.Helper, steps *fakeHelperA
 			{ID: "r1", ProjectID: "p1", Name: "harness", RootDir: "/src/harness", IgnoredPaths: []string{"node_modules"}},
 			{ID: "r2", ProjectID: "p2", Name: "elsewhere", RootDir: "/src/elsewhere"},
 		}},
-		EnvFiles: fakeEnv{},
+		EnvFiles:              fakeEnv{},
+		ArchitectureAssistant: assistant,
 		WritingHelper: func(context.Context) shell.Helper {
 			if helper == nil {
 				return shell.Helper{}
@@ -63,6 +74,10 @@ func newArchRigWithHelper(t *testing.T, helper *shell.Helper, steps *fakeHelperA
 	}, assets, nil)
 	feed := &sseFeed{}
 	api := newFakeArchitectureAPI(feed)
+	var apiHandler, pageHandler http.Handler = api, pages
+	if wrap != nil {
+		apiHandler, pageHandler = wrap(api, pages)
+	}
 	mux := http.NewServeMux()
 	files := newFakeInstructionFiles(feed)
 	mux.Handle("/api/events", feed)
@@ -72,8 +87,8 @@ func newArchRigWithHelper(t *testing.T, helper *shell.Helper, steps *fakeHelperA
 	if steps != nil {
 		mux.Handle("/api/run_writing_helper_step", steps)
 	}
-	mux.Handle("/api/", api)
-	mux.Handle("/", pages)
+	mux.Handle("/api/", apiHandler)
+	mux.Handle("/", pageHandler)
 	srv := newBrowserServer(mux)
 	t.Cleanup(func() {
 		srv.CloseClientConnections()

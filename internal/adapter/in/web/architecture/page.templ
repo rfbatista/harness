@@ -7,11 +7,12 @@ import "operators-mcp/internal/adapter/in/web/shell"
 // from the record the browser loads; the server renders the frame around them.
 templ PageView(v View) {
 	@shell.AppShell(v.Frame) {
-		<main id="main" class="[ frame ]" x-data="architecturePage" data-seed="architecture-seed">
+		<main id="main" class="[ frame ]" x-data="architecturePage" data-seed="architecture-seed" x-bind:data-assistant-open="assistantOpen">
 			@templ.JSONScript("architecture-seed", v.Seed)
 			<header class="[ toolbar ]">
 				<a class="[ crumb ]" href={ templ.SafeURL(v.SettingsHref) }>{ v.ProjectName } / repositories / { v.RepositoryName } /</a>
 				<span class="[ crumb ]" aria-current="page">Architecture</span>
+				@assistantPanel()
 			</header>
 			<div data-scroll class="[ arch-scroll ]">
 				<div class="[ wrapper flow ] [ region ]" style="--wrapper-max: 72rem">
@@ -144,6 +145,9 @@ templ PageView(v View) {
 									</span>
 									<span class="[ cluster ] [ gutter-xs ]">
 										<span class="[ text-xs color-ink-faint ]" x-text="e.when"></span>
+										<template x-if="assistantAvailable">
+											<button type="button" class="[ button ]" data-variant="ghost" data-size="sm" data-rule-event-ask x-on:click="askAssistant(e)">Ask the assistant</button>
+										</template>
 										<template x-if="e.sessionHref">
 											<a class="[ button ]" data-variant="ghost" data-size="sm" x-bind:href="e.sessionHref">Session</a>
 										</template>
