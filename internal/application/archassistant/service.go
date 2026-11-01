@@ -210,6 +210,11 @@ func (s *Service) Run(ctx context.Context, req ports.ArchitectureAssistantReques
 	if err := validate(req); err != nil {
 		return err
 	}
+	var draft domain.ArchitectureRecord
+	if err := json.Unmarshal(req.Draft, &draft); err != nil {
+		return invalid("draft is not a repository architecture record")
+	}
+	draft.Normalize()
 	repo, err := s.Repos.GetRepository(ctx, req.RepositoryID)
 	if err != nil {
 		return err
@@ -228,17 +233,23 @@ func (s *Service) Run(ctx context.Context, req ports.ArchitectureAssistantReques
 		return err
 	}
 	emit(ports.ArchitectureAssistantEvent{Name: ports.ArchitectureAssistantEventConversation, Data: ports.ArchitectureAssistantConversation{ConversationID: id}})
-	res, err := s.turn(ctx, repo, conv, in, emit)
+	res, err := s.turn(ctx, repo, conv, in, emit, true)
 	if err != nil {
 		return err
 	}
-	emit(ports.ArchitectureAssistantEvent{Name: ports.ArchitectureAssistantEventResult, Data: ports.ArchitectureAssistantResult{Text: res.Text}})
+	out, err := s.conclude(ctx, repo, conv, draft, res, emit)
+	if err != nil {
+		return err
+	}
+	emit(ports.ArchitectureAssistantEvent{Name: ports.ArchitectureAssistantEventResult, Data: out})
 	return nil
 }
 
 // turn runs one claude turn of the conversation, passing its text and tool
-// uses on, and remembers the claude session it ended in.
-func (s *Service) turn(ctx context.Context, repo *domain.Repository, conv *conversation, input string, emit func(ports.ArchitectureAssistantEvent)) (TurnResult, error) {
+// uses on, and remembers the claude session it ended in. deltas says whether
+// its text is streamed on: a retry's is not, because the result carries the
+// corrected answer.
+func (s *Service) turn(ctx context.Context, repo *domain.Repository, conv *conversation, input string, emit func(ports.ArchitectureAssistantEvent), deltas bool) (TurnResult, error) {
 	s.mu.Lock()
 	resume := conv.session
 	s.mu.Unlock()
@@ -251,6 +262,9 @@ func (s *Service) turn(ctx context.Context, repo *domain.Repository, conv *conve
 		ResumeID:    resume,
 	}, TurnCallbacks{
 		OnText: func(text string) {
+			if !deltas {
+				return
+			}
 			emit(ports.ArchitectureAssistantEvent{Name: ports.ArchitectureAssistantEventDelta, Data: ports.ArchitectureAssistantDelta{Text: text}})
 		},
 		OnTool: func(tool, target string) {

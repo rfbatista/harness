@@ -64,7 +64,7 @@ type ProposalChange struct {
 // add and change set the item, remove deletes it, and a new item is appended
 // to its list. A change that cannot be applied (an unknown kind or op, a
 // missing key, a value of the wrong shape, an access cell of a layer that does
-// not exist) is the error; rec is never changed.
+// not exist) is a *ProposalApplyError; rec is never changed.
 func ApplyProposal(rec ArchitectureRecord, changes []ProposalChange) (ArchitectureRecord, error) {
 	out, err := cloneRecord(rec)
 	if err != nil {
@@ -72,11 +72,21 @@ func ApplyProposal(rec ArchitectureRecord, changes []ProposalChange) (Architectu
 	}
 	for i, c := range changes {
 		if err := applyChange(&out, c); err != nil {
-			return rec, fmt.Errorf("change %d (%s %s): %w", i+1, c.Op, c.Target.Kind, err)
+			return rec, &ProposalApplyError{Index: i, Err: fmt.Errorf("%s %s: %w", c.Op, c.Target.Kind, err)}
 		}
 	}
 	return out, nil
 }
+
+// ProposalApplyError is the change of a proposal that could not be applied,
+// by its position in the proposal (from 0).
+type ProposalApplyError struct {
+	Index int
+	Err   error
+}
+
+func (e *ProposalApplyError) Error() string { return fmt.Sprintf("change %d: %v", e.Index+1, e.Err) }
+func (e *ProposalApplyError) Unwrap() error { return e.Err }
 
 // ProposalBase is the value of target in rec in the record's JSON shape, or
 // null when it does not exist. For a layer being changed it leaves out the

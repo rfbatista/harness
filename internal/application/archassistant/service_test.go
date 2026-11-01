@@ -102,7 +102,7 @@ func (f fakeArch) ListArchitectureRuleEvents(_ context.Context, _ string, _ time
 type fakeAgents struct{}
 
 func (fakeAgents) ListAgents(context.Context) ([]*domain.Agent, error) {
-	return []*domain.Agent{{ID: "a1", Name: "go-developer", Description: "writes Go"}}, nil
+	return []*domain.Agent{{ID: "a1", Name: "go-developer", Description: "writes Go"}, {ID: "a2", Name: "software-architect"}}, nil
 }
 func (fakeAgents) GetAgent(context.Context, string) (*domain.Agent, error) { return nil, nil }
 
