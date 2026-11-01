@@ -223,6 +223,9 @@ type ArchitectureBriefSource interface {
 	ListArchitectureRefs(ctx context.Context, projectID string) ([]ArchitectureRef, error)
 	// SavedArchitecture is the repository's saved record; nil when none.
 	SavedArchitecture(ctx context.Context, repositoryID string) (*domain.ArchitectureRecord, error)
+	// InstructionFilesOf is the repository's instruction files with their
+	// content, which a session gets delivered (ADR 0057).
+	InstructionFilesOf(ctx context.Context, repositoryID string) ([]domain.InstructionFile, error)
 }
 
 // CommitGuard installs and removes a git hooks directory for one worktree

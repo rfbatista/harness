@@ -97,6 +97,11 @@ func (s *Service) ListArchitectureRefs(ctx context.Context, projectID string) ([
 	return out, nil
 }
 
+// InstructionFilesOf implements ports.ArchitectureBriefSource.
+func (s *Service) InstructionFilesOf(ctx context.Context, repositoryID string) ([]domain.InstructionFile, error) {
+	return s.store.ListInstructionFiles(ctx, repositoryID)
+}
+
 // SavedArchitecture implements ports.ArchitectureBriefSource.
 func (s *Service) SavedArchitecture(ctx context.Context, repositoryID string) (*domain.ArchitectureRecord, error) {
 	cur, err := s.Current(ctx, repositoryID)

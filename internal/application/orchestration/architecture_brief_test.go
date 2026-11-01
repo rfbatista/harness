@@ -13,6 +13,7 @@ import (
 type architectureSource struct {
 	refs    []ports.ArchitectureRef
 	records map[string]*domain.ArchitectureRecord
+	files   map[string][]domain.InstructionFile
 }
 
 func (a architectureSource) ListArchitectureRefs(context.Context, string) ([]ports.ArchitectureRef, error) {
