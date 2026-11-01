@@ -101,4 +101,31 @@
 
   .arch-entries > li[data-in-skill="true"] > .entry-row { padding-inline-start: calc(var(--space-m) + var(--space-l)); }
   .arch-entries > li[data-in-skill="true"] + li[data-in-skill="true"] { border-block-start-style: dashed; }
+
+  /* What the repository still holds: a banner above the list, one row per copy, each with its marks and controls. The rows wrap on a narrow screen. */
+  .repository-banner {
+    display: block;
+
+    & [data-repository-note] { margin-block: 0; }
+    & .repository-copies {
+      list-style: none;
+      margin: 0;
+      padding: 0;
+      display: grid;
+      gap: var(--space-xs);
+    }
+    & .repository-copy {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      justify-content: space-between;
+      gap: var(--space-xs) var(--space-m);
+      padding-block: var(--space-xs);
+      border-block-start: var(--border-width) solid var(--color-line);
+      min-inline-size: 0;
+
+      & code { overflow-wrap: anywhere; }
+    }
+    & > :is(.flow, .instruction-ask, p) + :is(.instruction-ask, p) { margin-block-start: var(--space-s); }
+  }
 }

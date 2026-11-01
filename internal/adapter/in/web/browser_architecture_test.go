@@ -54,6 +54,7 @@ func newArchRig(t *testing.T) *archRig {
 	mux.Handle("/api/events", feed)
 	files.register(mux)
 	files.onDeleted = api.dropInstruction
+	files.onRenamed = api.moveInstruction
 	mux.Handle("/api/", api)
 	mux.Handle("/", pages)
 	srv := newBrowserServer(mux)

@@ -12,7 +12,12 @@ import { renderMarkdown } from "../../../../shared/domain/markdown.js";
 import { describeError } from "../../../../shared/presentation/errors.js";
 import { INSTRUCTION_KINDS, LOADED, blankInstruction, isMissingPath, kindLabel, loadedLabel, rowsAt } from "../../domain/descriptive.js";
 import {
+  bothCopiesText,
+  canImportRow,
+  copyRefusalText,
+  copyRows,
   decideOnFeed,
+  importablePaths,
   fieldMessages,
   isDirty,
   lineDiff,
@@ -21,7 +26,11 @@ import {
   notFoundText,
   pathAfterKindChange,
   prefillPath,
+  recordKindOf,
   refusalText,
+  removablePaths,
+  removalAsk,
+  unreadableText,
 } from "../../domain/instructionFiles.js";
 import { agentPicker } from "./agentPicker.js";
 import { listEditing, noDrawer } from "./listEditing.js";
@@ -52,6 +61,18 @@ export const instructionsTab = ({ gateway }) => () => {
 
     /** The harness's files (metadata), once listed. */
     files: [],
+    /** What the repository's default branch still holds of instruction files (path, kind, differs), as the list last said. */
+    copies: [],
+    /** The banner: a request in flight, the paths a removal asks about, the commit the last removal made, and why the last import or removal was refused. */
+    repoBusy: false,
+    removeAsk: [],
+    removedCommit: "",
+    repoError: "",
+    repoErrorCode: "",
+    refusedPaths: [],
+    /** Whether the checkout could not be read, and the server's message. */
+    unreadable: false,
+    unreadableMessage: "",
     /** The open file with its text, the path being opened, and why a path could not be shown. */
     file: null,
     opening: "",
@@ -116,11 +137,152 @@ export const instructionsTab = ({ gateway }) => () => {
     },
     async loadFiles() {
       try {
-        this.files = (await files.list(this.repositoryId)).files;
+        const listed = await files.list(this.repositoryId);
+        this.files = listed.files;
+        this.copies = listed.repositoryCopies;
+        this.unreadable = listed.repositoryUnreadable;
+        this.unreadableMessage = listed.repositoryError;
       } catch {
         this.files = []; // the rows are the record's, as before
+        this.copies = [];
+        this.unreadable = false;
       }
     },
+    /** The banner's rows: each copy in the repository with its mark and whether the harness holds it too. */
+    get repoRows() {
+      return copyRows(this.copies, this.files);
+    },
+    get bannerShown() {
+      return this.copies.length > 0 || this.removedCommit !== "" || this.unreadable;
+    },
+    get hasCopies() {
+      return this.copies.length > 0;
+    },
+    get canImportAll() {
+      return !this.repoBusy && importablePaths(this.repoRows).length > 0;
+    },
+    get cannotImportAll() {
+      return !this.canImportAll;
+    },
+    get canRemoveAll() {
+      return !this.repoBusy && removablePaths(this.repoRows).length > 0;
+    },
+    get cannotRemoveAll() {
+      return !this.canRemoveAll;
+    },
+    /** Whether any copy is in the repository and in the harness: both reach the agent. */
+    get bothText() {
+      return bothCopiesText(removablePaths(this.repoRows).length);
+    },
+    get hasBoth() {
+      return this.bothText !== "";
+    },
+    get removeAsked() {
+      return this.removeAsk.length > 0;
+    },
+    get removeText() {
+      return removalAsk(this.removeAsk);
+    },
+    get hasRemovedCommit() {
+      return this.removedCommit !== "";
+    },
+    get commitText() {
+      return `Removed from the repository in commit ${this.removedCommit.slice(0, 7)}, on the default branch. Nothing was pushed.`;
+    },
+    get unreadableNote() {
+      return unreadableText(this.unreadableMessage);
+    },
+    /** After a removal refused because a repository copy changed: Import for each file asked about whose copy differs now. */
+    get refusalImports() {
+      if (this.repoErrorCode !== "INSTRUCTION_DIFFERS") return [];
+      return this.repoRows.filter((row) => this.refusedPaths.includes(row.path) && canImportRow(row));
+    },
+    get hasRepoError() {
+      return this.repoError !== "";
+    },
+    get cannotAct() {
+      return this.repoBusy;
+    },
+    importLabel(row) {
+      return `Import ${row.path}`;
+    },
+    removeLabel(row) {
+      return `Remove ${row.path} from the repository`;
+    },
+    canImport(row) {
+      return canImportRow(row);
+    },
+    markTone(row) {
+      if (row.differs) return "attention";
+      return "neutral";
+    },
+    kindOfCopy(row) {
+      return kindLabel("instruction", recordKindOf(row.kind));
+    },
+    /** Import: copies files from the repository into the harness. An open file with unsaved text is not touched: the feed event it causes shows the notice. */
+    async importPaths(paths) {
+      if (this.repoBusy || paths.length === 0) return;
+      this.clearRepoError();
+      this.removedCommit = "";
+      this.removeAsk = [];
+      this.repoBusy = true;
+      try {
+        await files.importFiles(this.repositoryId, paths);
+      } catch (err) {
+        this.refusedRepo(err, paths);
+      } finally {
+        this.repoBusy = false;
+      }
+      await this.loadFiles();
+    },
+    clearRepoError() {
+      this.repoError = "";
+      this.repoErrorCode = "";
+      this.refusedPaths = [];
+    },
+    refusedRepo(err, paths) {
+      this.repoError = copyRefusalText(err?.code) || describeError(err).message;
+      this.repoErrorCode = err?.code ?? "";
+      this.refusedPaths = paths;
+    },
+    importRow(row) {
+      return this.importPaths([row.path]);
+    },
+    importAll() {
+      return this.importPaths(importablePaths(this.repoRows));
+    },
+    /** Remove from repository: asks first, in the page, then makes one commit. */
+    askRemove(paths) {
+      if (this.repoBusy || paths.length === 0) return;
+      this.clearRepoError();
+      this.removeAsk = paths;
+    },
+    askRemoveRow(row) {
+      this.askRemove([row.path]);
+    },
+    askRemoveAll() {
+      this.askRemove(removablePaths(this.repoRows));
+    },
+    cancelRemove() {
+      this.removeAsk = [];
+    },
+    async confirmRemove() {
+      if (this.repoBusy || this.removeAsk.length === 0) return;
+      const paths = this.removeAsk;
+      this.clearRepoError();
+      this.repoBusy = true;
+      try {
+        const done = await files.removeFromRepository(this.repositoryId, paths);
+        this.removedCommit = done.commit;
+      } catch (err) {
+        this.refusedRepo(err, paths);
+      } finally {
+        this.repoBusy = false;
+        this.removeAsk = [];
+      }
+      await this.loadFiles();
+    },
+
     /** A deep link `…/instructions?path=<path>` opens that file. */
     openLinked() {
       const path = new URLSearchParams(window.location.search).get("path") ?? "";
@@ -458,6 +620,7 @@ export const instructionsTab = ({ gateway }) => () => {
         this.renaming = false;
         this.setAddress(meta.path);
         this.loadFiles();
+        this.instructionRenamed(request.path, meta.path);
       } catch (err) {
         this.refused(err);
       } finally {

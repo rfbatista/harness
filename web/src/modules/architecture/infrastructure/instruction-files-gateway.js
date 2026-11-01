@@ -39,12 +39,14 @@ export function instructionFilesGateway(api, feed) {
   };
 
   return {
-    /** The harness's files (metadata only) and the repository's copies of instruction-like files. */
+    /** The harness's files (metadata only) and the repository's copies of instruction-like files; when the checkout cannot be read, `repositoryUnreadable` with its `repositoryError`. */
     async list(repositoryId) {
       const body = await post("/list_instruction_files", { repository_id: repositoryId });
       return {
         files: list(body?.files).map(toMeta),
         repositoryCopies: list(body?.repository_copies).map((c) => ({ path: c?.path ?? "", kind: c?.kind ?? "", differs: c?.differs === true })),
+        repositoryUnreadable: body?.repository_unreadable === true,
+        repositoryError: typeof body?.repository_error === "string" ? body.repository_error : "",
       };
     },
 

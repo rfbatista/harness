@@ -27,9 +27,20 @@ test("list sends the repository and reads the files and the repository's copies"
   assert.deepEqual(list.repositoryCopies, [{ path: "AGENTS.md", kind: "memory", differs: true }]);
 });
 
+test("list reads that the repository could not be read, with its message", async () => {
+  const { gateway } = rig(() => jsonResponse(200, { files: [], repository_copies: [], repository_unreadable: true, repository_error: "no checkout" }));
+  const list = await gateway.list("r1");
+  assert.deepEqual(list.repositoryCopies, []);
+  assert.equal(list.repositoryUnreadable, true);
+  assert.equal(list.repositoryError, "no checkout");
+  const readable = await rig(() => jsonResponse(200, { files: [] })).gateway.list("r1");
+  assert.equal(readable.repositoryUnreadable, false);
+  assert.equal(readable.repositoryError, "");
+});
+
 test("list tolerates a missing copy list", async () => {
   const { gateway } = rig(() => jsonResponse(200, { files: [] }));
-  assert.deepEqual(await gateway.list("r1"), { files: [], repositoryCopies: [] });
+  assert.deepEqual(await gateway.list("r1"), { files: [], repositoryCopies: [], repositoryUnreadable: false, repositoryError: "" });
 });
 
 test("get sends the path and returns the content with the meta", async () => {

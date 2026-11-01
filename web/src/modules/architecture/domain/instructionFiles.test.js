@@ -1,6 +1,14 @@
 import { assert, file, test } from "../../../shared/testing/test.js";
 import {
+  bothCopiesText,
+  canImportRow,
+  copyRefusalText,
+  copyRows,
   decideOnFeed,
+  importablePaths,
+  removablePaths,
+  removalAsk,
+  unreadableText,
   fieldErrorsOf,
   fieldMessages,
   groupFiles,
@@ -110,6 +118,7 @@ test("each refusal code has one sentence; an unknown code has none", () => {
     "WRONG_BRANCH",
     "INSTRUCTION_NOT_IMPORTED",
     "INSTRUCTION_NOT_FOUND",
+    "INSTRUCTION_DIFFERS",
     "INSTRUCTION_CHANGED",
     "INSTRUCTION_EXISTS",
     "INSTRUCTION_INVALID",
@@ -126,6 +135,7 @@ test("each refusal code has one sentence; an unknown code has none", () => {
   assert.ok(refusalText("CHECKOUT_DIRTY").includes("uncommitted"));
   assert.ok(refusalText("WRONG_BRANCH").includes("default branch"));
   assert.ok(refusalText("INSTRUCTION_NOT_IMPORTED").includes("Import"));
+  assert.ok(refusalText("INSTRUCTION_DIFFERS").includes("Import it again first"));
   assert.equal(refusalText("NOPE"), "");
 });
 
@@ -223,4 +233,57 @@ test("a skill folder with no SKILL.md the harness holds is marked as not deliver
     folders.map((f) => `${f.name} ${f.needsSkillMd}`),
     ["solo true", "ok false", "recorded true", "deep true"],
   );
+});
+
+test("repository copies are marked differs or same and imported once the harness holds the path", () => {
+  const rows = copyRows(
+    [
+      { path: "AGENTS.md", kind: "memory", differs: true },
+      { path: "CLAUDE.md", kind: "memory", differs: false },
+      { path: ".claude/agents/r.md", kind: "subagent", differs: true },
+    ],
+    [{ path: "CLAUDE.md" }, { path: ".claude/agents/r.md" }],
+  );
+  assert.deepEqual(
+    rows.map((r) => `${r.path} ${r.mark} ${r.imported}`),
+    ["AGENTS.md differs false", "CLAUDE.md same true", ".claude/agents/r.md differs true"],
+  );
+});
+
+test("what Import all takes and what Remove takes", () => {
+  const rows = copyRows(
+    [
+      { path: "A.md", kind: "memory", differs: true },
+      { path: "B.md", kind: "memory", differs: false },
+      { path: "C.md", kind: "memory", differs: true },
+    ],
+    [{ path: "B.md" }, { path: "C.md" }],
+  );
+  assert.deepEqual(importablePaths(rows), ["A.md", "C.md"]);
+  assert.deepEqual(removablePaths(rows), ["B.md", "C.md"]);
+  assert.equal(canImportRow(rows[1]), false);
+  assert.equal(canImportRow(rows[2]), true);
+});
+
+test("the removal question and the both-copies warning name what they are about", () => {
+  assert.ok(removalAsk(["A.md"]).includes("A.md"));
+  assert.ok(removalAsk(["A.md"]).includes("one commit"));
+  assert.ok(removalAsk(["A.md"]).includes("no push"));
+  assert.ok(removalAsk(["A.md", "B.md"]).includes("2 files"));
+  assert.ok(bothCopiesText(1).includes("both"));
+  assert.ok(bothCopiesText(2).includes("2 files"));
+  assert.equal(bothCopiesText(0), "");
+});
+
+test("a refusal about a repository copy says a missing path is gone from the default branch", () => {
+  assert.equal(copyRefusalText("INSTRUCTION_NOT_FOUND"), "That file is no longer on the repository's default branch.");
+  assert.equal(copyRefusalText("INSTRUCTION_DIFFERS"), refusalText("INSTRUCTION_DIFFERS"));
+  assert.equal(copyRefusalText("CHECKOUT_DIRTY"), refusalText("CHECKOUT_DIRTY"));
+  assert.equal(copyRefusalText("NOPE"), "");
+});
+
+test("when the repository could not be read, the banner says so with the server's message", () => {
+  assert.ok(unreadableText("fatal: not a git repository").includes("could not be read"));
+  assert.ok(unreadableText("fatal: not a git repository").includes("fatal: not a git repository"));
+  assert.ok(unreadableText("").includes("could not be read"));
 });

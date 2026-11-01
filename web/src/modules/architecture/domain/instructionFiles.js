@@ -123,6 +123,7 @@ const REFUSALS = {
   CHECKOUT_DIRTY: "The repository's checkout has uncommitted changes. Commit or stash them, then try again.",
   WRONG_BRANCH: "The repository's checkout is not on its default branch. Switch it back to the default branch, then try again.",
   INSTRUCTION_NOT_IMPORTED: "That file is not in the harness yet. Import it first, then remove it from the repository.",
+  INSTRUCTION_DIFFERS: "The repository copy changed since you imported it. Import it again first.",
   INSTRUCTION_NOT_FOUND: "There is no such instruction file in the harness; it may have been deleted elsewhere.",
   INSTRUCTION_CHANGED: "Someone saved a newer version of this file; your text is kept, so reload to see theirs.",
   INSTRUCTION_EXISTS: "A file already exists at that path; pick another path.",
@@ -132,6 +133,42 @@ const REFUSALS = {
 
 /** One sentence for a refusal code, or "" when the code has none. */
 export const refusalText = (code) => REFUSALS[code] ?? "";
+
+/**
+ * The banner's rows: each copy the repository still holds, marked "differs" or
+ * "same" against the harness's text, and `imported` once the harness holds that path.
+ * @param {{ path: string, kind: string, differs: boolean }[]} copies
+ * @param {{ path: string }[]} files the harness's files
+ */
+export function copyRows(copies, files) {
+  const held = new Set(files.map((f) => f.path));
+  return copies.map((c) => ({ path: c.path, kind: c.kind, differs: c.differs, mark: c.differs ? "differs" : "same", imported: held.has(c.path) }));
+}
+
+/** Whether Import does something for a copy: the harness lacks it, or holds a different text. */
+export const canImportRow = (row) => !row.imported || row.differs;
+
+/** The paths Import all takes. */
+export const importablePaths = (rows) => rows.filter(canImportRow).map((r) => r.path);
+
+/** The paths Remove from repository takes: the copies the harness already holds. */
+export const removablePaths = (rows) => rows.filter((r) => r.imported).map((r) => r.path);
+
+const filesText = (paths) => (paths.length === 1 ? paths[0] : `${paths.length} files`);
+
+/** What the person is asked before the removal commits. */
+export const removalAsk = (paths) =>
+  `Remove ${filesText(paths)} from the repository? This makes one commit on the default branch that deletes ${paths.length === 1 ? "it" : "them"}, with no push. ${paths.length === 1 ? "It stays" : "They stay"} in the harness.`;
+
+/** The warning while copies are in the repository and in the harness, or "" when none are. */
+export const bothCopiesText = (count) =>
+  count === 0 ? "" : `${count === 1 ? "1 file is" : `${count} files are`} in both the repository and the harness: both copies reach the agent until ${count === 1 ? "it is" : "they are"} removed from the repository.`;
+
+/** One sentence for a refusal of an import or a removal: a path missing there means the file left the repository's default branch. */
+export const copyRefusalText = (code) => (code === "INSTRUCTION_NOT_FOUND" ? "That file is no longer on the repository's default branch." : refusalText(code));
+
+/** What the banner says when the checkout could not be read, with the server's message. */
+export const unreadableText = (message) => `The repository could not be read, so its instruction files are not listed.${message ? ` ${message}` : ""}`;
 
 /** The errors of an INSTRUCTION_INVALID refusal's details, one per field: { path, code, message }. */
 export function fieldErrorsOf(details) {

@@ -24,6 +24,8 @@ type fakeInstructionFiles struct {
 	// copies are the instruction-like files found in the checkout's default
 	// branch, in the order the list answers them. Setting them is setCopies.
 	copies []fakeRepositoryCopy
+	// unreadable is the message list_instruction_files answers with when the checkout cannot be read; "" means it can.
+	unreadable string
 	// refusals are the errors the next call of an endpoint answers with, by
 	// endpoint name (list_instruction_files, …); each is used once.
 	refusals map[string]fakeRefusal
@@ -36,6 +38,8 @@ type fakeInstructionFiles struct {
 	saveDelay time.Duration
 	// onDeleted is told the path of each file a delete_instruction_file removed, as the server also removes the row's record entry (the contract).
 	onDeleted func(path string)
+	// onRenamed is told the old and new path of each file a rename_instruction_file moved, as the server moves the row's record entry with it (the contract).
+	onRenamed func(from, to string)
 	// clock is the number of the next version stamp, so updated_at moves on.
 	clock int
 }
@@ -110,6 +114,42 @@ func (f *fakeInstructionFiles) setCopies(copies ...fakeRepositoryCopy) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	f.copies = copies
+}
+
+// changeCopy edits the checkout's copy of a file after it was imported.
+func (f *fakeInstructionFiles) changeCopy(path, content string) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	if c := f.copyAt(path); c != nil {
+		c.Content = content
+	}
+}
+
+// dropCopy takes a file off the checkout's default branch.
+func (f *fakeInstructionFiles) dropCopy(path string) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	kept := f.copies[:0:0]
+	for _, c := range f.copies {
+		if c.Path != path {
+			kept = append(kept, c)
+		}
+	}
+	f.copies = kept
+}
+
+// setUnreadable makes the checkout unreadable, with the message the server gives.
+func (f *fakeInstructionFiles) setUnreadable(message string) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.unreadable = message
+}
+
+// copiesNow are the files the checkout holds now.
+func (f *fakeInstructionFiles) copiesNow() []fakeRepositoryCopy {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return append([]fakeRepositoryCopy(nil), f.copies...)
 }
 
 // refuseNext makes the next call of an endpoint fail with the code.
@@ -265,6 +305,10 @@ func (f *fakeInstructionFiles) list(w http.ResponseWriter) {
 		files = append(files, f.meta(p, false))
 	}
 	copies := []any{}
+	if f.unreadable != "" {
+		f.json(w, map[string]any{"files": files, "repository_copies": copies, "repository_unreadable": true, "repository_error": f.unreadable})
+		return
+	}
 	for _, c := range f.copies {
 		cur := f.files[c.Path]
 		copies = append(copies, map[string]any{"path": c.Path, "kind": c.Kind, "differs": cur == nil || cur.Content != c.Content})
@@ -331,6 +375,9 @@ func (f *fakeInstructionFiles) rename(w http.ResponseWriter, in map[string]any) 
 	kind, content := cur.Kind, cur.Content
 	delete(f.files, path)
 	v := f.put(to, kind, content).Version
+	if f.onRenamed != nil {
+		f.onRenamed(path, to)
+	}
 	f.emitLocked(path, 0)
 	f.emitLocked(to, v)
 	f.json(w, f.meta(to, false))
@@ -388,6 +435,18 @@ func (f *fakeInstructionFiles) removeFromRepository(w http.ResponseWriter, in ma
 	for _, p := range paths {
 		if f.files[p] == nil {
 			f.fail(w, http.StatusConflict, "INSTRUCTION_NOT_IMPORTED", p+" is not in the harness yet", nil)
+			return
+		}
+	}
+	for _, p := range paths {
+		if f.copyAt(p) == nil {
+			f.fail(w, http.StatusNotFound, "INSTRUCTION_NOT_FOUND", p+" is no longer on the default branch", nil)
+			return
+		}
+	}
+	for _, p := range paths {
+		if f.copyAt(p).Content != f.files[p].Content {
+			f.fail(w, http.StatusConflict, "INSTRUCTION_DIFFERS", "the repository copy of "+p+" differs from the harness copy", nil)
 			return
 		}
 	}

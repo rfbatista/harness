@@ -31,6 +31,8 @@ func openInstructions(t *testing.T, rig *archRig, query string, width int64) {
 		poll(`document.querySelectorAll('[data-count]').length === 6`),
 		poll(`document.querySelectorAll('`+instructionsPanel+` [data-entry]').length >= 3 && document.querySelector('`+instructionsPanel+`').checkVisibility()`),
 	)
+	// An event the test sends before the page's feed is connected is lost, so every test starts once it is.
+	waitFor(t, "the page's feed", func() bool { return rig.feed.followers() >= 1 })
 }
 
 // openFile clicks the row's open control, as a person does, by the path it names.

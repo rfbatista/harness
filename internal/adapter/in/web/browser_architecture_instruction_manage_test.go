@@ -52,7 +52,7 @@ func TestInstructionsRenameKeepsTheEditorOpenOnTheNewPath(t *testing.T) {
 	rig.run(t, poll(editorTitle()+` === 'docs/GUIDE.md'`), poll(addressPath()+` === 'docs/GUIDE.md'`),
 		poll(`!`+edVisible(`[data-rename-form]`)),
 		poll(`JSON.parse(`+listedPaths()+`).includes('docs/GUIDE.md')`),
-		poll(`!document.querySelector('`+instructionsPanel+` [data-open-file][aria-label="Open CLAUDE.md"]')`))
+		poll(`!JSON.parse(`+listedPaths()+`).includes('CLAUDE.md')`))
 	var text string
 	rig.run(t, chromedp.Evaluate(editorText(), &text))
 	if text != "# Repository rules\n\nBe **kind** to the next reader.\n" {
@@ -99,8 +99,8 @@ func TestInstructionsRenameClashShowsTheRefusalAndKeepsTheFile(t *testing.T) {
 	// An invalid path says why.
 	rig.run(t, edSet(`[data-rename-path]`, "../out.md", "input"), edClick(`[data-confirm-rename]`),
 		poll(edVisible(`[data-error-for="path"]`)+` && `+edText(`[data-error-for="path"]`)+`.includes('..')`))
-	// Cancel closes the form.
-	rig.run(t, edClick(`[data-cancel-rename]`), poll(`!`+edVisible(`[data-rename-form]`)+` && !`+edVisible(`[data-error-for="path"]`)))
+	// Cancel closes the form. Alpine shows an x-show element from a timer, so an element shown and hidden within one tick can stay shown: let the error's timer fire before Cancel, as a person's click would.
+	rig.run(t, chromedp.Sleep(100*time.Millisecond), edClick(`[data-cancel-rename]`), poll(`!`+edVisible(`[data-rename-form]`)+` && !`+edVisible(`[data-error-for="path"]`)))
 }
 
 // Renaming with unsaved text says what happens to it, and the text stays.
@@ -317,4 +317,54 @@ func TestInstructionsSkillFolderWithoutSkillMdIsTaggedAndOffersIt(t *testing.T) 
 	rig.run(t, edType("---\nname: solo\n---\n"), edClick(`[data-save]`),
 		poll(`document.querySelector('`+instructionsPanel+` [data-file-version]')?.textContent.trim() === 'Version 1'`),
 		poll(`!`+folder("solo")+`.querySelector('[data-flag="not-delivered"]') && !`+folder("solo")+`.querySelector('[data-add-skill-md]')`))
+}
+
+// Renaming a file moves its record entry to the new path, with its metadata: the row follows, no row stays on the old path, and an unrelated unsaved metadata edit survives.
+func TestInstructionsRenameMovesTheRecordRowWithItsMetadata(t *testing.T) {
+	rig := savableRig(t)
+	openInstructions(t, rig, "?path=.claude/skills/go/SKILL.md", 1440)
+	rig.run(t, poll(editorText()+` !== ""`),
+		// an unrelated, unsaved metadata edit on the CLAUDE.md row
+		openDrawerOf("instructions", "instruction", 0),
+		setDrawerField("instructions", "instruction", "note", "Kept edit."),
+		archClick(drawerSel("instructions", "instruction", "[data-apply]")),
+		poll(`document.querySelectorAll('`+instructionsPanel+` [data-entry][data-edited=true]').length === 1`),
+	)
+	rig.run(t, renameTo(".claude/skills/golang/SKILL.md")...)
+	rig.run(t, poll(editorTitle()+` === '.claude/skills/golang/SKILL.md'`),
+		poll(`JSON.parse(`+listedPaths()+`).includes('.claude/skills/golang/SKILL.md')`),
+		poll(`!JSON.parse(`+listedPaths()+`).includes('.claude/skills/go/SKILL.md')`),
+		poll(`document.querySelectorAll('`+instructionsPanel+` [data-entry][data-edited=true]').length === 1`))
+	d := readDesc(t, rig, "instructions", "data-path", "data-note", "data-meta=applies", "data-meta=loaded")
+	var moved = -1
+	for i, e := range d.Entries {
+		path := ""
+		if e["data-path"] != nil {
+			path = *e["data-path"]
+		}
+		if strings.Contains(path, ".claude/skills/golang/SKILL.md") {
+			moved = i
+		}
+		if strings.Contains(path, ".claude/skills/go/SKILL.md") {
+			t.Fatalf("a row stays on the old path: %v", d.Entries)
+		}
+	}
+	if moved < 0 {
+		t.Fatalf("no row on the new path: %v", d.Entries)
+	}
+	wantPart(t, d, moved, "data-meta=applies", "Applies to go-developer, devops")
+	wantPart(t, d, moved, "data-meta=loaded", "Loaded On demand")
+	// No row is marked missing, and the page took the record's new version without a conflict.
+	var missing, conflict bool
+	rig.run(t, chromedp.Sleep(400*time.Millisecond),
+		chromedp.Evaluate(`!!document.querySelector('`+instructionsPanel+` [data-flag="missing"]')`, &missing),
+		chromedp.Evaluate(`document.body.textContent.includes('saved elsewhere')`, &conflict))
+	if missing || conflict {
+		t.Fatalf("after the rename: missing flag = %v, conflict = %v", missing, conflict)
+	}
+	rig.run(t, poll(`[...document.querySelectorAll('[data-save-bar]')].some(b => b.checkVisibility())`), clickButton(saveBar, "Save"), poll(`!`+barVisible()))
+	saved, _ := json.Marshal(rig.api.lastSaved()["instructions"])
+	if strings.Contains(string(saved), `"path":".claude/skills/go/SKILL.md"`) || !strings.Contains(string(saved), ".claude/skills/golang/SKILL.md") || !strings.Contains(string(saved), "Kept edit.") {
+		t.Fatalf("saved instructions = %s, want the moved row, the unrelated edit and no old row", saved)
+	}
 }

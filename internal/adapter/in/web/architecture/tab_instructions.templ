@@ -16,6 +16,61 @@ templ tabInstructions() {
 			<button type="button" class="[ button ]" data-size="sm" data-add-entry x-on:click="add">Add entry</button>
 		}
 		<p class="[ text-sm color-ink-muted ]" data-delivery-note>Agents get these files when their session starts; running sessions keep the copy they started with, so a change reaches the sessions you start after it.</p>
+		<section class="[ banner ] [ repository-banner ]" data-repository-banner aria-label="Instruction files still in the repository" x-show="bannerShown">
+			<p data-repository-unreadable role="status" x-show="unreadable" x-text="unreadableNote"></p>
+			<template x-if="hasCopies">
+				<div class="[ flow ]">
+					<p data-repository-note>These instruction files are still in the repository. Importing copies them into the harness; the repository copies stay in git until you remove them from the repository.</p>
+					<p class="[ text-sm ]" data-both-copies role="status" x-show="hasBoth" x-text="bothText"></p>
+					<ul class="[ repository-copies ]" aria-label="Repository copies">
+						<template x-for="row in repoRows" x-bind:key="row.path">
+							<li class="[ repository-copy ]" data-repository-copy x-bind:data-copy-path="row.path">
+								<div class="[ entry-title ]">
+									<code class="[ font-mono ]" data-copy-name x-text="row.path"></code>
+									<span class="[ badge ]" data-kind x-text="kindOfCopy(row)"></span>
+									<span class="[ badge ]" data-copy-mark x-bind:data-tone="markTone(row)" x-text="row.mark"></span>
+									<template x-if="row.imported">
+										<span class="[ badge ]" data-copy-imported data-tone="success">in the harness</span>
+									</template>
+								</div>
+								<div class="[ cluster ]">
+									<template x-if="canImport(row)">
+										<button type="button" class="[ button ]" data-size="sm" data-import x-bind:aria-label="importLabel(row)" x-bind:disabled="cannotAct" x-on:click="importRow(row)">Import</button>
+									</template>
+									<template x-if="row.imported">
+										<button type="button" class="[ button ]" data-variant="danger-outline" data-size="sm" data-remove-from-repository x-bind:aria-label="removeLabel(row)" x-bind:disabled="cannotAct" x-on:click="askRemoveRow(row)">Remove from repository</button>
+									</template>
+								</div>
+							</li>
+						</template>
+					</ul>
+					<div class="[ cluster ]">
+						<template x-if="canImportAll">
+							<button type="button" class="[ button ]" data-variant="primary" data-size="sm" data-import-all x-on:click="importAll">Import all</button>
+						</template>
+						<template x-if="canRemoveAll">
+							<button type="button" class="[ button ]" data-variant="danger-outline" data-size="sm" data-remove-all x-on:click="askRemoveAll">Remove all imported</button>
+						</template>
+					</div>
+				</div>
+			</template>
+			<div class="[ banner ] [ instruction-ask ]" data-tone="danger" role="alertdialog" aria-label="Remove from the repository" data-remove-confirm x-show="removeAsked">
+				<p x-text="removeText"></p>
+				<div class="[ cluster ]">
+					<button type="button" class="[ button ]" data-variant="danger" data-size="sm" data-confirm-remove x-bind:disabled="cannotAct" x-on:click="confirmRemove">Remove and commit</button>
+					<button type="button" class="[ button ]" data-variant="ghost" data-size="sm" data-cancel-remove x-on:click="cancelRemove">Cancel</button>
+				</div>
+			</div>
+			<p class="[ text-sm ]" data-removed-commit role="status" x-show="hasRemovedCommit" x-text="commitText"></p>
+			<div class="[ banner ] [ instruction-ask ]" data-tone="danger" role="alert" data-repository-error x-show="hasRepoError">
+				<p x-text="repoError"></p>
+				<div class="[ cluster ]">
+					<template x-for="row in refusalImports" x-bind:key="row.path">
+						<button type="button" class="[ button ]" data-size="sm" data-refusal-import x-bind:aria-label="importLabel(row)" x-bind:disabled="cannotAct" x-on:click="importRow(row)" x-text="importLabel(row)"></button>
+					</template>
+				</div>
+			</div>
+		</section>
 		<div class="[ arch-split ]" x-bind:data-open="drawerOpen()" x-bind:data-pane="paneOpen()">
 			<ul class="[ arch-entries ]" data-entries>
 				<template x-for="(item, n) in items()" x-bind:key="n">
