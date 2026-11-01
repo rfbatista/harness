@@ -143,9 +143,9 @@ templ tabInstructions(v View) {
 						<label>
 							Kind
 							<select data-field="kind" class="[ text-sm ]" x-model="row.kind" x-bind:aria-invalid="bad(drawerIndex(), 'kind')">
-								<option value="rules">Rules</option>
+								<option value="rules">Memory</option>
 								<option value="skill">Skill</option>
-								<option value="subagent_prompt">Sub-agent prompt</option>
+								<option value="subagent_prompt">Sub-agent</option>
 							</select>
 						</label>
 						<template x-if="err(drawerIndex(), 'kind')">

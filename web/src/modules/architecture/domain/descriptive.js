@@ -14,11 +14,11 @@ export const blankRoute = () => ({ agent: "", model: "" });
 export const blankHandoff = () => ({ from: "", to: "", when: "" });
 
 const KIND_LABELS = {
-  instruction: { rules: "Rules", skill: "Skill", subagent_prompt: "Sub-agent prompt" },
+  instruction: { rules: "Memory", skill: "Skill", subagent_prompt: "Sub-agent" },
   tool: { mcp: "MCP server", function: "Function", api: "API", cli: "CLI" },
 };
 
-/** What a row's kind tag says: "subagent_prompt" as "Sub-agent prompt". @param {"instruction" | "tool"} of */
+/** What a row's kind tag says: "subagent_prompt" as "Sub-agent". @param {"instruction" | "tool"} of */
 export const kindLabel = (of, kind) => KIND_LABELS[of]?.[kind] ?? String(kind ?? "");
 
 /** What a row says about when an instruction file loads. */

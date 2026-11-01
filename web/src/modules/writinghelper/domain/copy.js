@@ -34,3 +34,10 @@ export function pickedMessage() {
 /** What each part of the panel is called when the pen has no better label. */
 export const REFINE_CHIPS = ["Shorter", "More detail", "Add acceptance criteria", "Fix grammar only"];
 export const LIGHT_EDIT_CHIPS = ["Fix grammar only", "Shorter", "Add acceptance criteria"];
+const INSTRUCTION_CHIPS = ["Shorter", "More detail", "Fix grammar", "Make it imperative"];
+
+/** The chips under a proposal: an instruction file is not a task, so it never asks for acceptance criteria. @param {string} kind */
+export const refineChips = (kind) => (kind === "instruction_file" ? INSTRUCTION_CHIPS : REFINE_CHIPS);
+
+/** The chips on an already-good text. @param {string} kind */
+export const lightEditChips = (kind) => (kind === "instruction_file" ? INSTRUCTION_CHIPS : LIGHT_EDIT_CHIPS);

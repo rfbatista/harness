@@ -59,7 +59,7 @@ func TestInstructionsListTheHarnessFilesAndOpenOneBesideTheList(t *testing.T) {
 	wantPart(t, d, 0, "data-note", "Repository rules.")
 	wantPart(t, d, 1, "data-meta=applies", "Applies to go-developer, devops")
 	wantPart(t, d, 2, "data-path", ".claude/agents/reviewer.md")
-	wantPart(t, d, 2, "data-kind", "Sub-agent prompt")
+	wantPart(t, d, 2, "data-kind", "Sub-agent")
 	wantPart(t, d, 2, "data-note", "<none>")
 	wantPart(t, d, 2, "data-meta=applies", "Applies to all")
 	wantPart(t, d, 2, "data-meta=loaded", "Loaded Always")
@@ -271,5 +271,17 @@ func TestInstructionsRowsKeepEachPathOnOneLineBesideTheEditor(t *testing.T) {
 		if p[1] != float64(1) {
 			t.Errorf("%v wraps over %v lines beside the editor", p[0], p[1])
 		}
+	}
+}
+
+// The Add file picker names the kinds as the contract does: Memory, Skill, Sub-agent.
+func TestAddFileKindPickerNamesMemorySkillAndSubAgent(t *testing.T) {
+	rig := instructionRig(t)
+	openInstructions(t, rig, "", 1440)
+	rig.run(t, edClick(`[data-add]`), poll(edVisible(`[data-new-kind]`)))
+	var got string
+	rig.run(t, chromedp.Evaluate(`[...document.querySelectorAll('[data-new-kind] option')].map((o) => o.value + '=' + o.textContent.trim()).join(',')`, &got))
+	if got != "memory=Memory,skill=Skill,subagent=Sub-agent" {
+		t.Errorf("options = %q", got)
 	}
 }

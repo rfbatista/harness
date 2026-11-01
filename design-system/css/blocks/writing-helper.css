@@ -97,10 +97,10 @@
 
     & .lead { color: var(--color-ink-muted); }
 
-    /* Phone: a bottom sheet over a scrim; the footer stays above the keyboard. */
+    /* Phone: a bottom sheet over a scrim, resting on the shell's stream bar (1.75rem, stream-bar.css) so its input row and actions are never under it. */
     &[data-sheet] {
       position: fixed;
-      inset: auto 0 0;
+      inset: auto 0 1.75rem;
       z-index: var(--z-dialog);
       margin: 0;
       border-radius: var(--radius-md) var(--radius-md) 0 0;

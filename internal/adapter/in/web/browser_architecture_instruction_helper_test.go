@@ -1,6 +1,7 @@
 package web
 
 import (
+	"fmt"
 	"strings"
 	"testing"
 	"time"
@@ -183,4 +184,50 @@ func TestInstructionEditorPenFollowsTheWritePreviewToggle(t *testing.T) {
 		edClick(`[data-view="preview"]`), poll(edVisible(`[data-file-preview]`)+` && !`+edVisible(`textarea[data-file-text] ~ .pen`)),
 		edClick(`[data-view="text"]`), poll(edVisible(`textarea[data-file-text]`)+` && `+edVisible(`textarea[data-file-text] ~ .pen`)),
 	)
+}
+
+// The instruction editor's refine chips fit instructions: no "acceptance criteria", but a way to ask for imperative sentences.
+func TestInstructionEditorPenChipsHaveNoAcceptanceCriteria(t *testing.T) {
+	rig, _ := helperRig(t, whAvailable)
+	openInstructions(t, rig, "?path=CLAUDE.md", 1440)
+	rig.run(t, poll(editorText()+` !== ""`), whPoll(`!!document.querySelector('[data-panel-id=pen-instruction-file]')?._x_dataStack`),
+		chromedp.Evaluate(`document.querySelector('`+edPen+`').click()`, nil), whPoll(whPhase("Which fields get the pen first?")),
+		whClick(edPenPanel, "Skip questions"), whPoll(whPhase("Proposed instruction file")))
+	var chips string
+	rig.run(t, chromedp.Evaluate(`[...document.querySelectorAll('`+edPenPanel+` .chips .chip')].filter((c) => c.checkVisibility()).map((c) => c.textContent.trim()).join('|')`, &chips))
+	if chips != "Shorter|More detail|Fix grammar|Make it imperative" {
+		t.Errorf("chips = %q", chips)
+	}
+}
+
+// On a narrow screen the refine input and Use this are in view and not under the shell's stream bar.
+func TestInstructionEditorPenReachableOnNarrowScreens(t *testing.T) {
+	for _, width := range []int64{400, 600, 760} {
+		t.Run(fmt.Sprint(width), func(t *testing.T) {
+			rig, _ := helperRig(t, whAvailable)
+			openInstructions(t, rig, "?path=CLAUDE.md", width)
+			rig.run(t, poll(editorText()+` !== ""`), whPoll(`!!document.querySelector('[data-panel-id=pen-instruction-file]')?._x_dataStack`),
+				chromedp.Evaluate(`document.querySelector('`+edPen+`').click()`, nil), whPoll(whPhase("Which fields get the pen first?")),
+				whClick(edPenPanel, "Skip questions"), whPoll(whPhase("Proposed instruction file")), chromedp.Sleep(400*time.Millisecond))
+			var got string
+			rig.run(t, chromedp.Evaluate(`(() => {
+				const bar = document.querySelector('.stream-bar').getBoundingClientRect();
+				const out = [];
+				for (const [name, sel] of [['input', '`+edPenPanel+` footer input[data-refine]'], ['use', '`+edPenPanel+` footer [data-primary]']]) {
+					const el = [...document.querySelectorAll(sel)].find((e) => e.checkVisibility());
+					if (!el) { out.push(name + ' missing'); continue; }
+					const r = el.getBoundingClientRect();
+					const inView = r.top >= 0 && r.left >= 0 && r.bottom <= innerHeight && r.right <= innerWidth;
+					const clear = r.bottom <= bar.top + 0.5;
+					const hit = document.elementFromPoint(r.left + r.width / 2, r.top + r.height / 2);
+					const reach = hit === el || el.contains(hit);
+					if (!inView || !clear || !reach) out.push(name + ' inView=' + inView + ' clear=' + clear + ' reach=' + reach + ' box=' + [r.top, r.bottom].join('-') + ' bar=' + bar.top);
+				}
+				return out.join('; ');
+			})()`, &got))
+			if got != "" {
+				t.Errorf("at %d px: %s", width, got)
+			}
+		})
+	}
 }
