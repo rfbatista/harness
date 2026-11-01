@@ -2,10 +2,13 @@ import { assert, file, test } from "../../../shared/testing/test.js";
 import {
   decideOnFeed,
   fieldErrorsOf,
+  fieldMessages,
   groupFiles,
   isDirty,
   isStale,
+  lineDiff,
   mergeMetadata,
+  pathAfterKindChange,
   prefillPath,
   recordKindOf,
   refusalText,
@@ -132,4 +135,45 @@ test("INSTRUCTION_INVALID's details become one error per field", () => {
     { path: "/content", code: "", message: "Too large." },
   ]);
   assert.deepEqual(fieldErrorsOf(undefined), []);
+});
+
+test("field errors of an INSTRUCTION_INVALID refusal land on the path and the text", () => {
+  const errors = [
+    { path: "/path", code: "PATH_ESCAPES", message: "A path cannot contain .." },
+    { path: "/content", code: "TOO_LARGE", message: "A file can be at most 256 KB." },
+    { path: "/path", code: "OTHER", message: "second" },
+    { path: "/kind", code: "X", message: "kind" },
+  ];
+  assert.deepEqual(fieldMessages(errors), { path: "A path cannot contain ..", content: "A file can be at most 256 KB.", other: "kind" });
+  assert.deepEqual(fieldMessages([]), { path: "", content: "", other: "" });
+});
+
+test("changing the kind of a new file re-prefills the path only while the person has not typed their own", () => {
+  assert.equal(pathAfterKindChange("memory", "CLAUDE.md", "skill"), ".claude/skills/<name>/SKILL.md");
+  assert.equal(pathAfterKindChange("skill", ".claude/skills/<name>/SKILL.md", "subagent"), ".claude/agents/<name>.md");
+  assert.equal(pathAfterKindChange("memory", "", "subagent"), ".claude/agents/<name>.md");
+  assert.equal(pathAfterKindChange("skill", ".claude/skills/go/SKILL.md", "memory"), ".claude/skills/go/SKILL.md");
+});
+
+test("a line diff marks what the first text has alone, what the second has alone, and what they share", () => {
+  assert.deepEqual(lineDiff("a\nb\nc", "a\nB\nc"), [
+    { type: "eq", text: "a" },
+    { type: "del", text: "b" },
+    { type: "ins", text: "B" },
+    { type: "eq", text: "c" },
+  ]);
+  assert.deepEqual(lineDiff("", "x\ny"), [
+    { type: "ins", text: "x" },
+    { type: "ins", text: "y" },
+  ]);
+  assert.deepEqual(lineDiff("x\n", "x\n"), [{ type: "eq", text: "x" }]);
+  assert.deepEqual(lineDiff("", ""), []);
+  assert.deepEqual(lineDiff("a\nb", "b\nc").map((l) => l.type), ["del", "eq", "ins"]);
+});
+
+test("a diff of huge texts falls back to replacing the whole text", () => {
+  const big = (n) => Array.from({ length: n }, (_, i) => `line ${i}`).join("\n");
+  const d = lineDiff(big(3000), big(3000).replaceAll("line", "LINE"));
+  assert.equal(d.filter((l) => l.type === "del").length, 3000);
+  assert.equal(d.filter((l) => l.type === "ins").length, 3000);
 });

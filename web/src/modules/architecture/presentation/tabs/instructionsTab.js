@@ -5,12 +5,23 @@
 // rows are the harness's instruction files merged with the record's entries; a
 // row whose file the harness holds opens it in the editor pane beside the list.
 // The file's text is the harness's own copy, apart from the page's draft: it is
-// never part of the page's save bar.
+// never part of the page's save bar. It is saved on its own against the version
+// it started from; a refusal, a feed event and a tab switch all keep the text.
 
 import { renderMarkdown } from "../../../../shared/domain/markdown.js";
 import { describeError } from "../../../../shared/presentation/errors.js";
 import { INSTRUCTION_KINDS, LOADED, blankInstruction, isMissingPath, kindLabel, loadedLabel, rowsAt } from "../../domain/descriptive.js";
-import { mergeMetadata, notFoundText } from "../../domain/instructionFiles.js";
+import {
+  decideOnFeed,
+  fieldMessages,
+  isDirty,
+  lineDiff,
+  mergeMetadata,
+  notFoundText,
+  pathAfterKindChange,
+  prefillPath,
+  refusalText,
+} from "../../domain/instructionFiles.js";
 import { agentPicker } from "./agentPicker.js";
 import { listEditing, noDrawer } from "./listEditing.js";
 
@@ -20,6 +31,10 @@ export const instructionsTab = ({ gateway }) => () => {
   const files = gateway.instructionFiles;
   /** The entry the next Add makes: a file the record does not describe, taken into the draft with its defaults. */
   let pending = null;
+  let leave = null;
+  let unfollow = null;
+  /** Feed events that arrived while our own save was in flight, replayed once it has answered. */
+  let held = [];
   const editing = listEditing(["instructions"], () => pending ?? blankInstruction(), "editing", (row) => row.path ?? "");
   return {
     ...picker,
@@ -43,17 +58,50 @@ export const instructionsTab = ({ gateway }) => () => {
     openError: "",
     /** Which view of the open file shows: "text" or "preview". */
     fileView: "text",
+    /** The person's text in the editor, apart from the file's loaded text. */
+    body: "",
+    /** A new file's kind and path, and the kind whose prefill the path still holds. */
+    newKind: "memory",
+    newPath: "",
+    prefilledKind: "memory",
+    fileBusy: false,
+    /** Whether the file was deleted elsewhere (its text stays). */
+    fileDeleted: false,
+    /** Someone saved a newer version: whether to say so, which, its text once read, and whether the diff shows. */
+    newerShown: false,
+    newerVersion: 0,
+    newer: null,
+    showChanges: false,
+    /** What the last save said: next to the path, next to the text, or elsewhere. */
+    pathError: "",
+    bodyError: "",
+    saveError: "",
 
     async init() {
       this.$watch("errors", () => this.openForErrors());
       this.$watch("tab", (tab) => {
-        if (tab === "instructions") this.shown();
+        if (tab !== "instructions") return;
+        this.shown();
+        if (this.file !== null && !this.file.isNew) this.setAddress(this.file.path);
       });
       if (this.isTab("instructions")) {
         this.shown();
         this.openLinked();
       }
+      leave = (event) => this.leaving(event);
+      window.addEventListener("beforeunload", leave);
+      unfollow = files.follow(this.projectId, this.repositoryId, { onChanged: (change) => this.instructionChanged(change) });
       await picker.init.call(this);
+    },
+    destroy() {
+      window.removeEventListener("beforeunload", leave);
+      unfollow?.();
+    },
+    /** Leaving the page with unsaved text asks the browser to confirm. */
+    leaving(event) {
+      if (!this.fileDirty) return;
+      event.preventDefault();
+      event.returnValue = "";
     },
 
     /** The tab was shown: read what the harness holds and what discovery found. */
@@ -97,6 +145,7 @@ export const instructionsTab = ({ gateway }) => () => {
       return this.file !== null && this.file.path === row.path;
     },
     openRow(row) {
+      if (!this.canLeave()) return;
       return this.openPath(row.path);
     },
     /** Reads a file and shows it in the pane; a later choice wins over a slower earlier one. */
@@ -107,7 +156,7 @@ export const instructionsTab = ({ gateway }) => () => {
       try {
         const file = await files.get(this.repositoryId, path);
         if (this.opening !== path) return;
-        this.file = file;
+        this.take(file);
         this.fileView = "text";
         this.setAddress(path);
       } catch (err) {
@@ -120,8 +169,11 @@ export const instructionsTab = ({ gateway }) => () => {
       }
     },
     closeFile() {
+      if (!this.canLeave()) return;
       this.opening = "";
       this.file = null;
+      this.body = "";
+      this.clearRefusals();
       this.notFound = "";
       this.openError = "";
       this.setAddress("");
@@ -155,13 +207,59 @@ export const instructionsTab = ({ gateway }) => () => {
       return this.paneOpen() || this.drawerOpen();
     },
     get paneTitle() {
+      if (this.isNewFile) return "New instruction file";
       return this.file !== null ? this.file.path : this.opening;
     },
     get versionText() {
-      return this.file !== null ? `Version ${this.file.version}` : "";
+      if (this.file === null) return "";
+      return this.fileDeleted ? "Deleted" : `Version ${this.file.version}`;
     },
-    get fileText() {
-      return this.file !== null ? this.file.content : "";
+    get isNewFile() {
+      return this.file !== null && this.file.isNew === true;
+    },
+    get fileDirty() {
+      return this.file !== null && isDirty(this.file.content, this.body);
+    },
+    get canSave() {
+      return this.file !== null && !this.fileBusy && (this.fileDirty || this.isNewFile || this.fileDeleted);
+    },
+    get cannotSave() {
+      return !this.canSave;
+    },
+    get cannotDiscard() {
+      return !this.fileDirty || this.fileBusy;
+    },
+    get hasPathError() {
+      return this.pathError !== "";
+    },
+    get hasBodyError() {
+      return this.bodyError !== "";
+    },
+    get hasSaveError() {
+      return this.saveError !== "";
+    },
+    get pathInvalid() {
+      return String(this.hasPathError);
+    },
+    get bodyInvalid() {
+      return String(this.hasBodyError);
+    },
+    get newerText() {
+      const which = this.newerVersion > 0 ? `version ${this.newerVersion}` : "a newer version";
+      return `Someone saved ${which} of this file. Your text is kept; Reload loads theirs and drops yours.`;
+    },
+    get canShowDiff() {
+      return this.newer !== null;
+    },
+    get diffLabel() {
+      return this.showChanges ? "Hide changes" : "Show changes";
+    },
+    get diffShown() {
+      return this.newerShown && this.showChanges && this.newer !== null;
+    },
+    /** Your text against the newest version, line by line: removed lines are yours alone, added lines are theirs alone (what Reload would do to your text). */
+    get diffLines() {
+      return this.newer === null ? [] : lineDiff(this.body, this.newer.content);
     },
     get textShown() {
       return this.fileView === "text";
@@ -183,8 +281,163 @@ export const instructionsTab = ({ gateway }) => () => {
     },
     /** Puts the file's Markdown into its element, escaped on the way. Called from x-effect. @param {HTMLElement} el */
     paintPreview(el) {
-      if (this.file !== null && this.fileView === "preview") el.innerHTML = renderMarkdown(this.file.content) || "<p>Nothing to preview yet.</p>";
+      if (this.file !== null && this.fileView === "preview") el.innerHTML = renderMarkdown(this.body) || "<p>Nothing to preview yet.</p>";
       else el.innerHTML = "";
+    },
+
+    /** Takes a file read from the harness as the open one: its text is the editor's text, and nothing from an earlier refusal stays. */
+    take(file) {
+      this.file = file;
+      this.body = file.content;
+      this.clearRefusals();
+    },
+    clearRefusals() {
+      this.pathError = "";
+      this.bodyError = "";
+      this.saveError = "";
+      this.fileDeleted = false;
+      this.newerShown = false;
+      this.newerVersion = 0;
+      this.newer = null;
+      this.showChanges = false;
+    },
+    /** Whether the open file may be left: not with unsaved text, which the person saves or discards first. */
+    canLeave() {
+      if (!this.fileDirty) return true;
+      this.saveError = "This file has unsaved changes. Save or Discard them before leaving it.";
+      return false;
+    },
+
+    /** Add file: an empty editor for a new file, with kind and path to choose (the path prefilled from the kind). */
+    addFile() {
+      if (!this.canLeave()) return;
+      this.closeDrawer();
+      this.opening = "";
+      this.notFound = "";
+      this.openError = "";
+      this.take({ path: "", kind: "memory", version: 0, content: "", isNew: true });
+      this.newKind = "memory";
+      this.prefilledKind = "memory";
+      this.newPath = prefillPath("memory");
+      this.fileView = "text";
+      this.setAddress("");
+    },
+    kindChanged(event) {
+      const kind = event.target.value;
+      this.newPath = pathAfterKindChange(this.prefilledKind, this.newPath, kind);
+      this.prefilledKind = kind;
+      this.newKind = kind;
+    },
+
+    /** Saves the text against the version it started from (0 creates); a refusal keeps the text and says why. */
+    async saveFile() {
+      if (!this.canSave) return;
+      const isNew = this.isNewFile;
+      const sent = this.body;
+      const request = {
+        path: isNew ? this.newPath.trim() : this.file.path,
+        kind: isNew ? this.newKind : this.file.kind,
+        baseVersion: this.file.version,
+        content: sent,
+      };
+      this.clearRefusals();
+      this.fileBusy = true;
+      held = [];
+      try {
+        const meta = await files.save(this.repositoryId, request);
+        this.file = { path: meta.path, kind: meta.kind, version: meta.version, content: sent, isNew: false };
+        if (isNew) this.setAddress(meta.path);
+        this.loadFiles();
+      } catch (err) {
+        this.refused(err);
+      } finally {
+        this.fileBusy = false;
+        const later = held;
+        held = [];
+        later.forEach((change) => this.applyChange(change));
+      }
+    },
+    refused(err) {
+      if (err?.code === "INSTRUCTION_INVALID") {
+        const said = fieldMessages(err.fieldErrors ?? []);
+        this.pathError = said.path;
+        this.bodyError = said.content;
+        this.saveError = said.other || (said.path || said.content ? "" : refusalText(err.code));
+      } else if (err?.code === "INSTRUCTION_EXISTS") {
+        this.pathError = refusalText(err.code);
+      } else if (err?.code === "INSTRUCTION_CHANGED") {
+        this.noteNewer(0);
+      } else if (err?.code === "INSTRUCTION_NOT_FOUND") {
+        this.markDeleted();
+      } else {
+        this.saveError = refusalText(err?.code) || describeError(err).message;
+      }
+    },
+    /** Discard: the text goes back to what was loaded. */
+    discardText() {
+      if (this.file === null) return;
+      this.body = this.file.content;
+      this.clearRefusals();
+    },
+
+    /** Someone saved a newer version: say so, keep the text, and read that version for Reload and the diff. */
+    noteNewer(version) {
+      this.newerShown = true;
+      this.newerVersion = version;
+      this.newer = null;
+      this.showChanges = false;
+      this.readNewer(this.file.path);
+    },
+    async readNewer(path) {
+      try {
+        const newest = await files.get(this.repositoryId, path);
+        if (this.file === null || this.file.path !== path || !this.newerShown) return;
+        this.newer = newest;
+        this.newerVersion = newest.version;
+      } catch (err) {
+        if (err?.code === "INSTRUCTION_NOT_FOUND" && this.file !== null && this.file.path === path) this.markDeleted();
+      }
+    },
+    toggleChanges() {
+      this.showChanges = !this.showChanges;
+    },
+    /** Reload: the newest version replaces the editor's text. */
+    async reloadFile() {
+      if (this.file === null) return;
+      const path = this.file.path;
+      try {
+        const newest = await files.get(this.repositoryId, path);
+        if (this.file === null || this.file.path !== path) return;
+        this.take(newest);
+      } catch (err) {
+        if (err?.code === "INSTRUCTION_NOT_FOUND") this.markDeleted();
+        else this.saveError = describeError(err).message;
+      }
+    },
+    /** The file is gone from the harness; its text stays, and Save puts it back. */
+    markDeleted() {
+      if (this.file === null) return;
+      this.file = { ...this.file, version: 0 };
+      this.newerShown = false;
+      this.newer = null;
+      this.fileDeleted = true;
+    },
+
+    /** A change announced on the project feed: the list follows, and so does the open file unless our own save is in flight (its answer comes with the version; the echo must not read as someone else's change). */
+    instructionChanged(change) {
+      this.loadFiles();
+      if (this.fileBusy) {
+        held.push(change);
+        return;
+      }
+      this.applyChange(change);
+    },
+    applyChange(change) {
+      if (this.file === null || this.file.isNew) return;
+      const verdict = decideOnFeed({ path: this.file.path, version: this.file.version, dirty: this.fileDirty }, change);
+      if (verdict === "reload") this.reloadFile();
+      else if (verdict === "notice") this.noteNewer(change.version);
+      else if (verdict === "removed") this.markDeleted();
     },
 
     /** Reads which instruction files discovery found, once, when the tab is first shown (the page's one discovery, shared with the agent pickers). A failure leaves every row unmarked. */

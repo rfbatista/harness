@@ -54,7 +54,7 @@ func tabInstructions() templ.Component {
 				}()
 			}
 			ctx = templ.InitializeContext(ctx)
-			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 2, "<button type=\"button\" class=\"[ button ]\" data-variant=\"primary\" data-size=\"sm\" data-add x-on:click=\"add\">Add file</button>")
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 2, "<button type=\"button\" class=\"[ button ]\" data-variant=\"primary\" data-size=\"sm\" data-add x-on:click=\"addFile\">Add file</button> <button type=\"button\" class=\"[ button ]\" data-size=\"sm\" data-add-entry x-on:click=\"add\">Add entry</button>")
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}

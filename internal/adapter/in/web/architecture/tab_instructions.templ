@@ -12,7 +12,8 @@ package architecture
 templ tabInstructions() {
 	<section role="tabpanel" id="architecture-panel-instructions" aria-labelledby="architecture-tab-instructions" x-show="isTab('instructions')" x-data="architectureInstructionsTab" x-on:architecture-draft-replaced.window="closeDrawer" class="[ flow ]">
 		@panelHead("Instructions & rule files", "The files agents read: rules, skills and sub-agent prompts, who they apply to and when they load. Only the path is stored, never the prose.") {
-			<button type="button" class="[ button ]" data-variant="primary" data-size="sm" data-add x-on:click="add">Add file</button>
+			<button type="button" class="[ button ]" data-variant="primary" data-size="sm" data-add x-on:click="addFile">Add file</button>
+			<button type="button" class="[ button ]" data-size="sm" data-add-entry x-on:click="add">Add entry</button>
 		}
 		<p class="[ text-sm color-ink-muted ]" data-delivery-note>Agents get these files when their session starts; running sessions keep the copy they started with, so a change reaches the sessions you start after it.</p>
 		<div class="[ arch-split ]" x-bind:data-open="drawerOpen()" x-bind:data-pane="paneOpen()">

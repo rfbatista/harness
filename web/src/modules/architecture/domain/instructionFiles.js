@@ -116,3 +116,80 @@ export function fieldErrorsOf(details) {
 
 /** The message for a path that no file answers to. */
 export const notFoundText = (path) => `There is no instruction file at ${path}.`;
+
+/**
+ * Where an INSTRUCTION_INVALID refusal's errors show: `path` and `content` for
+ * the two fields of the editor (the first error of each), `other` for any other
+ * field (kind), so nothing the server said is dropped.
+ * @param {{ path: string, message: string }[]} errors
+ */
+export function fieldMessages(errors) {
+  const out = { path: "", content: "", other: "" };
+  for (const e of errors) {
+    const field = e.path === "/path" ? "path" : e.path === "/content" ? "content" : "other";
+    if (out[field] === "") out[field] = e.message;
+  }
+  return out;
+}
+
+/** The path of a new file after its kind changed: a path still at the old kind's prefill (or blank) follows the new kind; a path the person typed stays. */
+export function pathAfterKindChange(oldKind, path, newKind) {
+  if (path === "" || path === prefillPath(oldKind)) return prefillPath(newKind);
+  return path;
+}
+
+// Past this many cells the exact diff is not worth the wait; the whole text is replaced.
+const MAX_DIFF_CELLS = 4_000_000;
+
+const linesOf = (text) => {
+  const lines = String(text ?? "").split("\n");
+  if (lines.at(-1) === "") lines.pop();
+  return lines;
+};
+
+/**
+ * A line diff: lines only `before` has (del), only `after` has (ins), and the
+ * shared ones (eq), in reading order, a removal before its insertion.
+ * @returns {{ type: "eq" | "del" | "ins", text: string }[]}
+ */
+export function lineDiff(before, after) {
+  const a = linesOf(before);
+  const b = linesOf(after);
+  const out = [];
+  let start = 0;
+  while (start < a.length && start < b.length && a[start] === b[start]) out.push({ type: "eq", text: a[start++] });
+  let endA = a.length;
+  let endB = b.length;
+  const tail = [];
+  while (endA > start && endB > start && a[endA - 1] === b[endB - 1]) {
+    endA--;
+    endB--;
+    tail.unshift({ type: "eq", text: a[endA] });
+  }
+  const x = a.slice(start, endA);
+  const y = b.slice(start, endB);
+  if (x.length * y.length > MAX_DIFF_CELLS) {
+    return [...out, ...x.map((text) => ({ type: "del", text })), ...y.map((text) => ({ type: "ins", text })), ...tail];
+  }
+  // lcs[i][j]: the longest common run of x[i..] and y[j..].
+  const lcs = Array.from({ length: x.length + 1 }, () => new Uint32Array(y.length + 1));
+  for (let i = x.length - 1; i >= 0; i--) {
+    for (let j = y.length - 1; j >= 0; j--) {
+      lcs[i][j] = x[i] === y[j] ? lcs[i + 1][j + 1] + 1 : Math.max(lcs[i + 1][j], lcs[i][j + 1]);
+    }
+  }
+  let i = 0;
+  let j = 0;
+  while (i < x.length || j < y.length) {
+    if (i < x.length && j < y.length && x[i] === y[j]) {
+      out.push({ type: "eq", text: x[i] });
+      i++;
+      j++;
+    } else if (i < x.length && (j === y.length || lcs[i + 1][j] >= lcs[i][j + 1])) {
+      out.push({ type: "del", text: x[i++] });
+    } else {
+      out.push({ type: "ins", text: y[j++] });
+    }
+  }
+  return [...out, ...tail];
+}

@@ -8,7 +8,9 @@
  *     <section class="entry-card instruction-editor"><header>…</header><div class="content flow"><div class="md-editor">…</div></div></section></div></div>
  * The pane and the metadata drawer share the column beside the list; the column
  * moves below the list when the viewport is narrow. A row with data-viewing is
- * the file the pane shows; its path is an .open-file button.
+ * the file the pane shows; its path is an .open-file button. A new file shows
+ * [data-new-file] (kind and path); a newer version shows [data-newer-notice]
+ * with Reload and, on request, .instruction-diff of line rows.
  */
 
 @layer blocks {
@@ -38,7 +40,32 @@
 
     & .md-preview { min-block-size: 22rem; max-block-size: 70vh; }
     & > header h3 { min-inline-size: 0; overflow-wrap: anywhere; font-size: var(--text-sm); }
+    & [data-new-file] { align-items: end; }
+    & [data-new-path] { inline-size: 100%; }
+    & textarea[aria-invalid="true"], & input[aria-invalid="true"] { border-color: var(--color-danger); }
   }
+
+  /* Your text against the newest version, a line a row: the sign is the carrier, the wash repeats it. */
+  .instruction-diff {
+    max-block-size: 16rem;
+    overflow: auto;
+    border: var(--border-width) solid var(--color-line);
+    border-radius: var(--radius-xs);
+
+    & > [data-diff-line] {
+      padding-inline: var(--space-xs);
+      white-space: pre-wrap;
+      overflow-wrap: anywhere;
+      min-block-size: 1lh;
+
+      &::before { display: inline-block; inline-size: 2ch; }
+      &[data-diff-line="ins"] { background: var(--color-diff-add-wash); &::before { content: "+"; color: var(--color-diff-add); } }
+      &[data-diff-line="del"] { background: var(--color-diff-del-wash); &::before { content: "−"; color: var(--color-diff-del); } }
+      &[data-diff-line="eq"]::before { content: ""; }
+    }
+  }
+
+  .instruction-notice > p { margin-block: 0 var(--space-xs); }
 
   .open-file {
     all: unset;

@@ -68,7 +68,8 @@ func TestInstructionsListTheHarnessFilesAndOpenOneBesideTheList(t *testing.T) {
 		t.Fatal("the editor is open before any file was")
 	}
 	openFile(t, rig, "CLAUDE.md")
-	rig.run(t, poll(editorText()+` === "# Repository rules\n\nBe **kind** to the next reader.\n"`))
+	rig.run(t, poll(editorText()+` === "# Repository rules\n\nBe **kind** to the next reader.\n"`),
+		poll(`document.querySelector('`+instructionsPanel+` textarea[data-file-text]').checkVisibility()`))
 	var raw string
 	rig.run(t, chromedp.Evaluate(`(() => {
 		const panel = document.querySelector('`+instructionsPanel+`');
