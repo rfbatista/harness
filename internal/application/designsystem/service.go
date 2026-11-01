@@ -1,5 +1,5 @@
 // Package designsystem is the design system context: a project holds many
-// named design systems (ADR 0057), each one structured record — tokens,
+// named design systems (ADR 0060), each one structured record — tokens,
 // principles and components — saved only by the person here and kept as
 // immutable versions.
 //

@@ -8,7 +8,7 @@ import (
 // MaxDesignSystemNameLength is the longest name of a design system.
 const MaxDesignSystemNameLength = 60
 
-// DesignSystemIdentity is what names a design system in a project (ADR 0057):
+// DesignSystemIdentity is what names a design system in a project (ADR 0060):
 // a name and a slug that are unique in the project, and a one-line
 // description. The slug is chosen at creation and never changes.
 type DesignSystemIdentity struct {

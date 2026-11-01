@@ -8,7 +8,7 @@ import (
 )
 
 // DesignSystems is the design system use cases: a project holds many named
-// design systems (ADR 0057), each a structured record written only by the
+// design systems (ADR 0060), each a structured record written only by the
 // person here and kept as immutable versions. *designsystem.Service
 // satisfies it.
 //
