@@ -141,6 +141,9 @@ func New(d Deps) Catalog {
 	if d.DesignRecords != nil {
 		designs = designsystem.NewService(designsystem.Deps{Store: d.DesignRecords, Projects: pr})
 		designs.Subscribe(bus)
+		if d.ArchGit != nil {
+			designs.UseImport(d.ArchGit, pr)
+		}
 		var inUse sync.Mutex // apply and delete of a design system exclude each other
 		pr.UseDesignSystems(d.DesignRecords, &inUse)
 		designs.UseLock(&inUse)

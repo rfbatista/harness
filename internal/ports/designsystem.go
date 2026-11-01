@@ -69,6 +69,9 @@ type DesignSystemStore interface {
 	// details.field when the project has a design system with that slug or
 	// name.
 	Create(ctx context.Context, d *domain.DesignSystemIdentity) error
+	// CreateWithVersion stores the identity and its first version (v, whose
+	// DesignSystemID it sets) together or not at all, with Create's SLUG_TAKEN.
+	CreateWithVersion(ctx context.Context, d *domain.DesignSystemIdentity, v *domain.DesignSystemVersion) error
 	// Update stores the identity's name and description (never the slug), with
 	// the same SLUG_TAKEN for a name another design system has.
 	Update(ctx context.Context, d *domain.DesignSystemIdentity) error
@@ -95,4 +98,65 @@ type DesignSystemStore interface {
 	// (0 when there is none), else DESIGN_SYSTEM_CHANGED with
 	// details.current_version. It sets v.Version.
 	Append(ctx context.Context, v *domain.DesignSystemVersion, baseVersion int) error
+}
+
+// DesignSourceRepositories is what a design system import reads of the
+// project's repositories. *projects.Service satisfies it.
+type DesignSourceRepositories interface {
+	ListRepositories(ctx context.Context, projectID string) ([]*domain.Repository, error)
+	GetRepository(ctx context.Context, id string) (*domain.Repository, error)
+}
+
+// DesignSource is a repository whose default branch holds design system
+// files, with the paths found ("" for a file it lacks).
+type DesignSource struct {
+	RepositoryID string
+	Name         string
+	DesignMD     string
+	Tokens       string
+}
+
+// DesignImportRequest names what an import reads: a repository of the
+// project and three paths ("" for the defaults DESIGN.md, tokens.json and
+// components/).
+type DesignImportRequest struct {
+	ProjectID     string
+	RepositoryID  string
+	DesignMDPath  string
+	TokensPath    string
+	ComponentsDir string
+}
+
+// DesignImportSkip is one entry the import left out, and why.
+type DesignImportSkip struct {
+	Path   string `json:"path"`
+	Reason string `json:"reason"`
+}
+
+// DesignImportPreview is what an import would store: the record, what was
+// found, the tokens counted by group and what was skipped.
+type DesignImportPreview struct {
+	FoundDesignMD   bool
+	FoundTokens     bool
+	FoundComponents int
+	Record          domain.DesignSystemRecord
+	Counts          map[string]int
+	Skipped         []DesignImportSkip
+}
+
+// DesignSystemImports reads design system files from a repository's default
+// branch and creates a new design system from them (ADR 0060: an import never
+// writes into an existing one). *designsystem.Service satisfies it.
+//
+// IMPORT_UNREADABLE says neither DESIGN.md nor tokens.json parsed;
+// CROSS_PROJECT_ACCESS says the repository is another project's.
+type DesignSystemImports interface {
+	// FindDesignSystemSources lists the repositories whose default branch holds
+	// a DESIGN.md or a tokens.json at the root or one level down.
+	FindDesignSystemSources(ctx context.Context, projectID string) ([]DesignSource, error)
+	// PreviewDesignSystemImport reads and parses; it never writes.
+	PreviewDesignSystemImport(ctx context.Context, req DesignImportRequest) (*DesignImportPreview, error)
+	// ImportDesignSystem creates a design system whose version 1 is the
+	// import, all or nothing. SLUG_TAKEN as CreateDesignSystem.
+	ImportDesignSystem(ctx context.Context, req DesignImportRequest, name, slug, description string) (*domain.DesignSystemIdentity, *domain.DesignSystemVersion, error)
 }

@@ -27,13 +27,14 @@ type designSystemBody struct {
 
 // designVersionBody is one entry of a design system's version list.
 type designVersionBody struct {
-	Version    int                  `json:"version"`
-	At         time.Time            `json:"at"`
-	By         string               `json:"by"`
-	Source     string               `json:"source"`
-	ProposalID string               `json:"proposal_id,omitempty"`
-	Message    string               `json:"message"`
-	Summary    domain.DesignSummary `json:"summary"`
+	Version    int                      `json:"version"`
+	At         time.Time                `json:"at"`
+	By         string                   `json:"by"`
+	Source     string                   `json:"source"`
+	ProposalID string                   `json:"proposal_id,omitempty"`
+	Repository *designVersionRepository `json:"repository,omitempty"`
+	Message    string                   `json:"message"`
+	Summary    domain.DesignSummary     `json:"summary"`
 }
 
 func (h *Handler) designSystems() error {
@@ -254,7 +255,7 @@ func (h *Handler) handleListDesignSystemVersions(c echo.Context) error {
 	}
 	out := make([]designVersionBody, 0, len(versions))
 	for _, v := range versions {
-		out = append(out, designVersionBody{Version: v.Version, At: v.At, By: v.By, Source: v.Source, ProposalID: v.ProposalID, Message: v.Message, Summary: v.Summary})
+		out = append(out, designVersionBody{Version: v.Version, At: v.At, By: v.By, Source: v.Source, ProposalID: v.ProposalID, Repository: versionRepository(v), Message: v.Message, Summary: v.Summary})
 	}
 	return c.JSON(http.StatusOK, map[string]any{"versions": out})
 }
