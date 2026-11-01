@@ -61,14 +61,17 @@ import "../src/modules/credentials/presentation/components/gitCredentialsPage.te
 import "../src/modules/credentials/presentation/components/repositoryCredential.test.js";
 import "../src/modules/credentials/presentation/view.test.js";
 import "../src/modules/designsystem/domain/history.test.js";
+import "../src/modules/designsystem/domain/identity.test.js";
 import "../src/modules/designsystem/domain/principles.test.js";
 import "../src/modules/designsystem/domain/record.test.js";
 import "../src/modules/designsystem/domain/repositories.test.js";
 import "../src/modules/designsystem/domain/tokens.test.js";
 import "../src/modules/designsystem/infrastructure/designsystem-gateway.test.js";
+import "../src/modules/designsystem/presentation/components/designSystemMenu.test.js";
 import "../src/modules/designsystem/presentation/components/optIn.test.js";
 import "../src/modules/designsystem/presentation/components/repositoryDesignSystem.test.js";
 import "../src/modules/designsystem/presentation/pages/designSystemPage.test.js";
+import "../src/modules/designsystem/presentation/pages/designSystemsPage.test.js";
 import "../src/modules/models/infrastructure/models-gateway.test.js";
 import "../src/modules/models/presentation/components/modelTier.test.js";
 import "../src/modules/notifications/domain/notification.test.js";

@@ -3,6 +3,7 @@
 // The wire shapes are read here and nowhere else.
 
 import { StructuredError, Codes } from "../../../shared/domain/errors.js";
+import { listRow } from "../domain/identity.js";
 import { optInRow } from "../domain/repositories.js";
 
 /**
@@ -148,6 +149,44 @@ export function designSystemGateway(api, feed) {
       if (uses && !id) throw new StructuredError(Codes.BAD_RESPONSE, "The project has no design system.");
       const stored = await this.apply(repositoryId, uses ? id : null, path, confirmMove);
       return { ...stored, uses: stored.designSystemId !== "" };
+    },
+
+    /** The project's design systems as the list shows them: identity, version, the repositories using each. */
+    async list(projectId) {
+      const body = await api.post("/list_design_systems", { project_id: projectId });
+      return list(body?.design_systems).map(listRow);
+    },
+
+    /** Creates a design system with no version; answers its id. SLUG_TAKEN (details.field) and an invalid input arrive as errors. */
+    async create(projectId, { name, slug, description }) {
+      const body = await api.post("/create_design_system", { project_id: projectId, name, slug, description });
+      return body.design_system_id;
+    },
+
+    /** Renames a design system or changes its description; only the given parts are sent, and the slug never changes. */
+    async update(designSystemId, { name, description }) {
+      await api.post("/update_design_system", {
+        design_system_id: designSystemId,
+        ...(name === undefined ? {} : { name }),
+        ...(description === undefined ? {} : { description }),
+      });
+    },
+
+    /** Deletes a design system after its name was typed; DESIGN_SYSTEM_IN_USE (details.repositories) arrives as an error. */
+    async remove(designSystemId, confirmName) {
+      await api.post("/delete_design_system", { design_system_id: designSystemId, confirm_name: confirmName });
+    },
+
+    /** Follows the project feed for the list: any design system of the project saved, created, renamed or deleted. */
+    followProject(projectId, { onChanged, onStatus }) {
+      return feed.follow(`/events?project_id=${encodeURIComponent(projectId)}`, {
+        onMessage(dto) {
+          const saved = dto?.design_system_saved;
+          const changed = dto?.design_system_changed;
+          if ((saved && saved.project_id === projectId) || (changed && changed.project_id === projectId)) onChanged?.();
+        },
+        onStatus,
+      });
     },
 
     /**

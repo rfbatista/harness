@@ -158,21 +158,70 @@ func TestTheOldDesignSystemRouteIsGone(t *testing.T) {
 	}
 }
 
-func TestDesignSystemsRouteGoesToTheFirstDesignSystem(t *testing.T) {
+// listSeed reads the JSON the design systems list embeds.
+func listSeed(t *testing.T, body string) map[string]any {
+	t.Helper()
+	m := regexp.MustCompile(`(?s)<script id="design-systems-seed" type="application/json">(.*?)</script>`).FindStringSubmatch(body)
+	if m == nil {
+		t.Fatalf("no design-systems-seed in:\n%s", body)
+	}
+	var seed map[string]any
+	if err := json.Unmarshal([]byte(m[1]), &seed); err != nil {
+		t.Fatal(err)
+	}
+	return seed
+}
+
+func TestDesignSystemsListShowsEachDesignSystemByNameWithItsVersion(t *testing.T) {
 	w := board()
-	w.designs = savedDesignSystem()
+	w.designs = fakeDesignSystems{
+		{ID: "ds-m", ProjectID: "p1", Name: "Marketing", Slug: "marketing", Description: "Public site", Exists: true, Version: 4},
+		{ID: "ds-a", ProjectID: "p1", Name: "App", Slug: "app", Description: "Product apps"},
+		{ID: "ds-x", ProjectID: "p2", Name: "Elsewhere", Slug: "elsewhere"},
+	}
 	rec := get(t, newTestHandler(t, w), "/projects/p1/design-systems")
-	if rec.Code != http.StatusFound || rec.Header().Get("Location") != appPage {
-		t.Errorf("status %d, location %q", rec.Code, rec.Header().Get("Location"))
+	body := rec.Body.String()
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status %d:\n%s", rec.Code, body)
+	}
+	app, marketing := strings.Index(body, `href="/projects/p1/design-systems/app"`), strings.Index(body, `href="/projects/p1/design-systems/marketing"`)
+	if app < 0 || marketing < app {
+		t.Errorf("rows are not links ordered by name (app at %d, marketing at %d)", app, marketing)
+	}
+	for _, want := range []string{`x-data="designSystemsPage"`, `data-seed="design-systems-seed"`, `Product apps`, `Public site`, `>v0<`, `>v4<`, `data-action="new-design-system"`, `<title>Design systems · coding_pool`} {
+		if !strings.Contains(body, want) {
+			t.Errorf("page lacks %s", want)
+		}
+	}
+	if strings.Contains(body, "Elsewhere") {
+		t.Error("another project's design system is listed")
+	}
+	seed := listSeed(t, body)
+	rows, _ := seed["design_systems"].([]any)
+	if seed["project_id"] != "p1" || seed["index_href"] != "/projects/p1/design-systems" || len(rows) != 2 {
+		t.Fatalf("seed = %v", seed)
+	}
+	first, _ := rows[0].(map[string]any)
+	if first["design_system_id"] != "ds-a" || first["slug"] != "app" || first["version"] != float64(0) || first["open_proposals"] != float64(0) {
+		t.Errorf("first row = %v", first)
 	}
 }
 
-func TestDesignSystemsRouteOfAProjectWithNoneSaysSo(t *testing.T) {
+func TestDesignSystemsListOfAProjectWithNoneShowsTheThreeStarts(t *testing.T) {
 	w := board()
 	w.designs = fakeDesignSystems{}
 	rec := get(t, newTestHandler(t, w), "/projects/p1/design-systems")
-	if rec.Code != http.StatusOK || !strings.Contains(rec.Body.String(), "No design systems yet") {
-		t.Errorf("status %d:\n%s", rec.Code, rec.Body.String())
+	body := rec.Body.String()
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status %d:\n%s", rec.Code, body)
+	}
+	for _, want := range []string{`data-action="start-blank"`, `data-action="import" disabled`, `data-action="spawn" disabled`, `Import from a repository`, `Ask an agent`} {
+		if !strings.Contains(body, want) {
+			t.Errorf("page lacks %s", want)
+		}
+	}
+	if rows, _ := listSeed(t, body)["design_systems"].([]any); rows == nil || len(rows) != 0 {
+		t.Errorf("an empty project seeds [] rows")
 	}
 	if rec := get(t, newTestHandler(t, board()), "/projects/nope/design-systems"); rec.Code != http.StatusNotFound {
 		t.Errorf("unknown project: status %d", rec.Code)

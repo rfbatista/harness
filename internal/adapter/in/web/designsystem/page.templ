@@ -18,17 +18,23 @@ templ PageView(v View) {
 			</header>
 			<div data-scroll class="[ arch-scroll ]">
 				<div class="[ wrapper flow ] [ region ]" style="--wrapper-max: 72rem">
-					<div class="[ arch-head ]">
-						<div class="[ flow ] [ flow-space-2xs ]">
-							<h1><span data-design-system-name x-text="name">{ v.Seed.Name }</span> <span class="[ badge ]" data-design-system-slug x-text="slug">{ v.Seed.Slug }</span></h1>
-							<p class="[ color-ink-muted ]" data-design-system-description x-show="hasDescription" x-text="description">{ v.Seed.Description }</p>
-							<template x-if="exists">
-								<p class="[ color-ink-muted text-sm ]" data-saved-line>
-									<span x-text="savedLine"></span> · <button type="button" class="[ button ]" data-variant="ghost" data-size="sm" data-action="open-history" x-on:click="openHistory">History</button>
-								</p>
-							</template>
+					<div x-data="designSystemMenu" data-seed="design-system-seed" class="[ flow ]">
+						<div class="[ arch-head ]">
+							<div class="[ flow ] [ flow-space-2xs ]">
+								<h1><span data-design-system-name x-text="name">{ v.Seed.Name }</span> <span class="[ badge ]" data-design-system-slug x-text="slug">{ v.Seed.Slug }</span></h1>
+								<p class="[ color-ink-muted ]" data-design-system-description x-show="hasDescription" x-text="description">{ v.Seed.Description }</p>
+								<template x-if="exists">
+									<p class="[ color-ink-muted text-sm ]" data-saved-line>
+										<span x-text="savedLine"></span> · <button type="button" class="[ button ]" data-variant="ghost" data-size="sm" data-action="open-history" x-on:click="openHistory">History</button>
+									</p>
+								</template>
+							</div>
+							<div class="[ cluster ]">
+								<span class="[ badge sync ]" data-design-state x-bind:data-tone="badge.tone" x-text="badge.label"></span>
+								@headerMenu()
+							</div>
 						</div>
-						<span class="[ badge sync ]" data-design-state x-bind:data-tone="badge.tone" x-text="badge.label"></span>
+						@menuPanels()
 					</div>
 					<template x-if="deleted">
 						<div class="[ banner ]" data-tone="attention" role="alert" data-deleted>
@@ -147,24 +153,4 @@ templ saveBar() {
 			<button type="button" class="[ button ]" data-variant="primary" data-size="sm" data-action="save" x-bind:disabled="!canSave" x-bind:aria-busy="saving" x-on:click="save">Save version</button>
 		</span>
 	</div>
-}
-
-// IndexView stands in for the design systems list until ticket 14 builds it.
-templ IndexView(v View) {
-	@shell.AppShell(v.Frame) {
-		<main id="main" class="[ frame ]">
-			<header class="[ toolbar ]">
-				<a class="[ crumb ]" href={ templ.SafeURL(v.ProjectHref) }>{ v.ProjectName } /</a>
-				<span class="[ crumb ]" aria-current="page">Design systems</span>
-			</header>
-			<div data-scroll class="[ arch-scroll ]">
-				<div class="[ wrapper flow ] [ region ]" style="--wrapper-max: 72rem">
-					<h1>Design systems</h1>
-					<p class="[ color-ink-muted ]" data-no-design-systems>No design systems yet.</p>
-					<p class="[ color-ink-faint text-sm ]">Creating one arrives with the next slice.</p>
-					<button type="button" class="[ button ]" data-variant="primary" data-action="new-design-system" disabled>New design system</button>
-				</div>
-			</div>
-		</main>
-	}
 }

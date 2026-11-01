@@ -1,0 +1,231 @@
+package designsystem
+
+import (
+	"strconv"
+
+	"operators-mcp/internal/adapter/in/web/shell"
+)
+
+// listColumns are the columns of a design system row: name, version,
+// repositories using it and open proposals.
+const listColumns = "--row-columns: minmax(0, 1.3fr) 4rem minmax(0, 1.6fr) 6rem"
+
+// IndexView is a project's design systems: one row per design system, by name,
+// each a link to its page, and the New design system form. The server paints the
+// identities (the data-ssr block); designSystemsPage takes over from the seed and
+// reads the repositories that use each. A project with none shows the three
+// starts instead of the rows.
+templ IndexView(v ListView) {
+	@shell.AppShell(v.Frame) {
+		<main id="main" class="[ frame ]" x-data="designSystemsPage" data-seed="design-systems-seed">
+			@templ.JSONScript("design-systems-seed", v.Seed)
+			<header class="[ toolbar ]">
+				<a class="[ crumb ]" href={ templ.SafeURL(v.ProjectHref) }>{ v.ProjectName } /</a>
+				<span class="[ crumb ]" aria-current="page">Design systems</span>
+			</header>
+			<div data-scroll class="[ arch-scroll ]">
+				<div class="[ wrapper flow ] [ region ]" style="--wrapper-max: 72rem">
+					<div class="[ arch-head ]">
+						<div class="[ flow ] [ flow-space-2xs ]">
+							<h1>Design systems</h1>
+							<p class="[ color-ink-muted ]">One project can hold several looks. A repository uses at most one.</p>
+						</div>
+						<button type="button" class="[ button ]" data-variant="primary" data-action="new-design-system" hidden?={ len(v.Seed.DesignSystems) == 0 } x-bind:hidden="!showNew" x-on:click="openNew">New design system</button>
+					</div>
+					<div x-ignore data-ssr class="[ flow ]">
+						if len(v.Seed.DesignSystems) > 0 {
+							<section class="[ pane ]" aria-label="Design systems">
+								for _, r := range v.Seed.DesignSystems {
+									<a class="[ row ]" data-design-system-row href={ templ.SafeURL(r.Href) } style={ listColumns }>
+										<div class="[ flow ] [ flow-space-3xs pad-block-xs ]">
+											<span><span class="[ weight-medium ]">{ r.Name }</span> <code class="[ color-ink-muted ]">{ r.Slug }</code></span>
+											if r.Description != "" {
+												<span class="[ color-ink-muted text-sm ]">{ r.Description }</span>
+											}
+										</div>
+										<span>v{ strconv.Itoa(r.Version) }</span>
+										<span></span>
+										<span></span>
+									</a>
+								}
+							</section>
+						} else {
+							@starts(false)
+						}
+					</div>
+					<template x-if="live">
+						<div class="[ flow ]">
+							<template x-if="error">
+								<div class="[ banner ]" data-tone="danger" role="alert">
+									<div class="[ flow ] [ flow-space-3xs grow ]">
+										<span x-text="error.message"></span>
+										<span class="[ code ]"><span x-text="error.code"></span> · <span x-text="error.next"></span></span>
+									</div>
+									<button type="button" class="[ button ]" data-variant="ghost" data-size="sm" x-on:click="load">Try again</button>
+								</div>
+							</template>
+							<template x-if="formOpen">
+								@newForm()
+							</template>
+							<template x-if="hasRows">
+								<section class="[ pane ]" aria-label="Design systems" id="design-system-list">
+									<template x-for="r in rowsView" x-bind:key="r.id">
+										<a class="[ row ]" data-design-system-row x-bind:href="r.href" x-bind:data-slug="r.slug" style={ listColumns }>
+											<div class="[ flow ] [ flow-space-3xs pad-block-xs ]">
+												<span><span class="[ weight-medium ]" data-row-name x-text="r.name"></span> <code class="[ color-ink-muted ]" data-row-slug x-text="r.slug"></code></span>
+												<span class="[ color-ink-muted text-sm ]" data-row-description x-show="r.hasDescription" x-text="r.description"></span>
+											</div>
+											<span data-row-version x-text="r.versionLabel"></span>
+											<span class="[ cluster ] [ gutter-xs ]" data-row-repositories>
+												<template x-for="repo in r.repositories" x-bind:key="repo.id">
+													<span class="[ badge ]" x-text="repo.name"></span>
+												</template>
+												<span class="[ color-ink-faint text-sm ]" x-show="r.unused">No repository uses it yet</span>
+											</span>
+											<span data-row-proposals><span class="[ badge ]" data-tone="attention" x-show="r.hasProposals" x-text="r.proposalsLabel"></span></span>
+										</a>
+									</template>
+								</section>
+							</template>
+							<template x-if="showStarts">
+								@starts(true)
+							</template>
+						</div>
+					</template>
+				</div>
+			</div>
+		</main>
+	}
+}
+
+// starts are the three ways to begin a design system, of the same weight, on
+// a project with none. Only Start blank works; Import and Ask an agent arrive
+// with later slices. Alpine's copy (live) asks for the identity first.
+templ starts(live bool) {
+	<section id="design-system-starts" class="[ flow ]" aria-label="Start a design system">
+		<p class="[ color-ink-muted ]">Tokens, principles and components that your UI repositories share. Start the first one; you can add more later.</p>
+		<div class="[ switcher ]" style="--switcher-threshold: 48rem">
+			<div>
+				<section class="[ entry-card ]">
+					<div class="[ entry-card-body flow ]">
+						<h2>Import from a repository</h2>
+						<p class="[ color-ink-muted text-sm ]">Reads <code>DESIGN.md</code> and <code>tokens.json</code> from a repository of this project. You review before anything is stored.</p>
+						<p class="[ color-ink-faint text-sm ]">Not available yet.</p>
+						<button type="button" class="[ button ]" data-variant="primary" data-action="import" disabled>Import…</button>
+					</div>
+				</section>
+			</div>
+			<div>
+				<section class="[ entry-card ]">
+					<div class="[ entry-card-body flow ]">
+						<h2>Start blank</h2>
+						<p class="[ color-ink-muted text-sm ]">An empty design system you fill in.</p>
+						<p class="[ color-ink-faint text-sm ]">Nothing is stored as a version until you save.</p>
+						if live {
+							<button type="button" class="[ button ]" data-action="start-blank" x-on:click="startFirst">Start blank…</button>
+						} else {
+							<button type="button" class="[ button ]" data-action="start-blank">Start blank…</button>
+						}
+					</div>
+				</section>
+			</div>
+			<div>
+				<section class="[ entry-card ]">
+					<div class="[ entry-card-body flow ]">
+						<h2>Ask an agent</h2>
+						<p class="[ color-ink-muted text-sm ]">An agent reads your repositories and proposes tokens and principles. You approve what lands.</p>
+						<p class="[ color-ink-faint text-sm ]">Not available yet.</p>
+						<button type="button" class="[ button ]" data-action="spawn" disabled>Ask an agent…</button>
+					</div>
+				</section>
+			</div>
+		</div>
+	</section>
+}
+
+// newForm is the New design system panel: step 1 names it (name, slug suggested
+// from the name, description), step 2 offers the three starts. Import and Ask an
+// agent are inert until their slices; Start blank creates the design system.
+templ newForm() {
+	<section class="[ pane ] [ flow ]" id="new-design-system" data-new-form aria-labelledby="new-design-system-title" style="padding: var(--space-l)">
+		<template x-if="formError">
+			<div class="[ banner ]" data-tone="danger" role="alert" data-form-error>
+				<div class="[ flow ] [ flow-space-3xs grow ]">
+					<span x-text="formError.message"></span>
+					<span class="[ code ]"><span x-text="formError.code"></span> · <span x-text="formError.next"></span></span>
+				</div>
+			</div>
+		</template>
+		<template x-if="identityStep">
+			<form class="[ flow ]" style="max-inline-size: 34rem" x-on:submit.prevent="submit">
+				<p class="[ color-ink-faint text-sm ]"><b>1 Name it</b> › 2 Choose a start</p>
+				<h2 id="new-design-system-title">New design system</h2>
+				<div class="[ field ]">
+					<label for="new-design-system-name">Name</label>
+					<input id="new-design-system-name" data-field="name" type="text" maxlength="60" autocomplete="off" x-bind:value="name" x-bind:aria-invalid="nameFault !== null" x-on:input="typeName"/>
+					<span class="[ hint ]">1 to 60 characters. You can rename it later.</span>
+					<template x-if="nameFault">
+						<span class="[ error ]" data-fault="name"><span x-text="nameFault.message"></span> <span class="[ code ]"><span x-text="nameFault.code"></span> · <span x-text="nameFault.next"></span></span></span>
+					</template>
+				</div>
+				<div class="[ field ]">
+					<label for="new-design-system-slug">Slug</label>
+					<input id="new-design-system-slug" data-field="slug" class="[ font-mono text-sm ]" type="text" autocomplete="off" spellcheck="false" x-bind:value="slug" x-bind:aria-invalid="slugFault !== null" x-on:input="typeSlug"/>
+					<span class="[ hint ]">Fills from the name. Lowercase letters, digits and dashes. It cannot change afterwards, and it is the name in the URL.</span>
+					<template x-if="slugFault">
+						<span class="[ error ]" data-fault="slug"><span x-text="slugFault.message"></span> <span class="[ code ]"><span x-text="slugFault.code"></span> · <span x-text="slugFault.next"></span></span></span>
+					</template>
+				</div>
+				<div class="[ field ]">
+					<label for="new-design-system-description">Description (optional)</label>
+					<textarea id="new-design-system-description" data-field="description" rows="2" x-bind:value="description" x-on:input="typeDescription"></textarea>
+				</div>
+				<div class="[ cluster ]">
+					<button type="submit" class="[ button ]" data-variant="primary" data-action="continue" x-bind:disabled="!canContinue" x-bind:aria-busy="saving" x-text="submitLabel">Continue</button>
+					<button type="button" class="[ button ]" data-variant="ghost" data-action="cancel" x-on:click="cancel">Cancel</button>
+				</div>
+			</form>
+		</template>
+		<template x-if="startStep">
+			<div class="[ flow ]" id="new-design-system-starts">
+				<p class="[ color-ink-faint text-sm ]">1 Name it › <b>2 Choose a start</b></p>
+				<h2 id="new-design-system-title">Choose a start for “<span x-text="startsName"></span>”</h2>
+				<div class="[ switcher ]" style="--switcher-threshold: 48rem">
+					<div>
+						<section class="[ entry-card ]">
+							<div class="[ entry-card-body flow ]">
+								<h3>Import from a repository</h3>
+								<p class="[ color-ink-muted text-sm ]">Reads <code>DESIGN.md</code> and <code>tokens.json</code>. Import always creates this new design system.</p>
+								<p class="[ color-ink-faint text-sm ]">Not available yet.</p>
+								<button type="button" class="[ button ]" data-action="import" disabled>Preview import</button>
+							</div>
+						</section>
+					</div>
+					<div>
+						<section class="[ entry-card ]">
+							<div class="[ entry-card-body flow ]">
+								<h3>Start blank</h3>
+								<p class="[ color-ink-muted text-sm ]">Creates the design system with no content. Nothing is stored as a version until your first Save.</p>
+								<button type="button" class="[ button ]" data-variant="primary" data-action="start-blank" x-bind:disabled="saving" x-bind:aria-busy="saving" x-on:click="startBlank">Start blank</button>
+							</div>
+						</section>
+					</div>
+					<div>
+						<section class="[ entry-card ]">
+							<div class="[ entry-card-body flow ]">
+								<h3>Ask an agent</h3>
+								<p class="[ color-ink-muted text-sm ]">An agent proposes tokens, principles and components for this design system only. You approve what lands.</p>
+								<p class="[ color-ink-faint text-sm ]">Not available yet.</p>
+								<button type="button" class="[ button ]" data-action="spawn" disabled>Create and spawn</button>
+							</div>
+						</section>
+					</div>
+				</div>
+				<div class="[ cluster ]">
+					<button type="button" class="[ button ]" data-variant="ghost" data-action="back" x-on:click="back">Back</button>
+					<button type="button" class="[ button ]" data-variant="ghost" data-action="cancel" x-on:click="cancel">Cancel</button>
+				</div>
+			</div>
+		</template>
+	</section>
+}

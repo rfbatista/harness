@@ -132,3 +132,63 @@ test("a change of the identity raises only for this design system", () => {
   send({ design_system_changed: { project_id: "p1", design_system_id: "ds1" } });
   assert.equal(seen.changed, 1);
 });
+
+test("the project's design systems come as list rows with their repositories", async () => {
+  const { gateway, calls } = gatewayAnswering(() =>
+    jsonResponse(200, { design_systems: [{ design_system_id: "ds1", name: "App", slug: "app", description: "", version: 2, repositories: [{ repository_id: "r1", name: "spillway", export_state: "never_exported" }], open_proposals: 0 }] }),
+  );
+  const rows = await gateway.list("p1");
+  assert.equal(calls[0].url, "/api/list_design_systems");
+  assert.equal(calls[0].init.body, '{"project_id":"p1"}');
+  assert.deepEqual(rows.map((r) => [r.id, r.slug, r.versionLabel, r.usedBy]), [["ds1", "app", "v2", "spillway"]]);
+});
+
+test("a design system is created from a name, a slug and a description, and answers its id", async () => {
+  const { gateway, calls } = gatewayAnswering(() => jsonResponse(200, { design_system_id: "ds9" }));
+  assert.equal(await gateway.create("p1", { name: "Marketing", slug: "marketing", description: "Campaigns" }), "ds9");
+  assert.equal(calls[0].url, "/api/create_design_system");
+  assert.deepEqual(JSON.parse(calls[0].init.body), { project_id: "p1", name: "Marketing", slug: "marketing", description: "Campaigns" });
+});
+
+test("a taken slug arrives as a coded error that names its field", async () => {
+  const { gateway } = gatewayAnswering(() => jsonResponse(409, { error: "taken", code: "SLUG_TAKEN", details: { field: "slug" } }));
+  const err = await gateway.create("p1", { name: "App", slug: "app", description: "" }).catch((e) => e);
+  assert.deepEqual([err.code, err.details.field], ["SLUG_TAKEN", "slug"]);
+});
+
+test("a rename or a new description sends only what changes; the slug never goes", async () => {
+  const { gateway, calls } = gatewayAnswering(() => jsonResponse(200, { design_system: {} }));
+  await gateway.update("ds1", { name: "Apps" });
+  await gateway.update("ds1", { description: "Product apps" });
+  assert.deepEqual(calls.map((c) => JSON.parse(c.init.body)), [{ design_system_id: "ds1", name: "Apps" }, { design_system_id: "ds1", description: "Product apps" }]);
+});
+
+test("a design system is deleted with the name typed to confirm it", async () => {
+  const { gateway, calls } = gatewayAnswering(() => jsonResponse(200, {}));
+  await gateway.remove("ds1", "App");
+  assert.equal(calls[0].url, "/api/delete_design_system");
+  assert.deepEqual(JSON.parse(calls[0].init.body), { design_system_id: "ds1", confirm_name: "App" });
+});
+
+test("a design system in use is refused with the repositories that use it", async () => {
+  const { gateway } = gatewayAnswering(() => jsonResponse(409, { error: "in use", code: "DESIGN_SYSTEM_IN_USE", details: { repositories: [{ repository_id: "r1", name: "spillway" }] } }));
+  const err = await gateway.remove("ds1", "App").catch((e) => e);
+  assert.equal(err.code, "DESIGN_SYSTEM_IN_USE");
+  assert.deepEqual(err.details.repositories.map((r) => r.name), ["spillway"]);
+});
+
+test("the list follows the project's design system saves and changes, whichever design system", () => {
+  const handlers = [];
+  const gateway = designSystemGateway(apiClient({ base: "/api", fetch: fakeFetch(() => jsonResponse(200, {})).fetch }), { follow: (url, h) => (handlers.push([url, h]), () => {}) });
+  let raised = 0;
+  gateway.followProject("p1", { onChanged: () => raised++ });
+  const [url, h] = handlers[0];
+  assert.equal(url, "/events?project_id=p1");
+  h.onMessage({ design_system_saved: { project_id: "other", design_system_id: "ds1", version: 1 } });
+  h.onMessage({ design_system_changed: { project_id: "other", design_system_id: "ds1" } });
+  h.onMessage({ session: {} });
+  assert.equal(raised, 0);
+  h.onMessage({ design_system_saved: { project_id: "p1", design_system_id: "ds1", version: 1 } });
+  h.onMessage({ design_system_changed: { project_id: "p1", design_system_id: "ds2" } });
+  assert.equal(raised, 2);
+});
