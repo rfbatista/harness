@@ -251,3 +251,25 @@ func TestInstructionsEditOnAnUndescribedFileOpensTheDrawerAndCancelLeavesNoDraft
 		t.Fatalf("after Cancel: rows = %d, save bar shown = %v, want 3 rows and no draft", rows, barShown)
 	}
 }
+
+// With the editor open the list is a narrow column: every row's path stays on one line (the metadata wraps under it), skill files included.
+func TestInstructionsRowsKeepEachPathOnOneLineBesideTheEditor(t *testing.T) {
+	rig := instructionRig(t)
+	rig.files.seed(".claude/skills/go/notes.md", "skill", "Notes.\n")
+	openInstructions(t, rig, "?path=CLAUDE.md", 1440)
+	rig.run(t, poll(editorText()+` !== ""`), poll(`document.querySelectorAll('`+instructionsPanel+` [data-entry] [data-path]').length >= 4`))
+	var raw string
+	rig.run(t, chromedp.Evaluate(`JSON.stringify([...document.querySelectorAll('`+instructionsPanel+` [data-entry] [data-path]')].map(c => [c.textContent.trim(), c.getClientRects().length]))`, &raw))
+	var paths [][2]any
+	if err := json.Unmarshal([]byte(raw), &paths); err != nil {
+		t.Fatal(err)
+	}
+	if len(paths) < 4 {
+		t.Fatalf("paths = %s", raw)
+	}
+	for _, p := range paths {
+		if p[1] != float64(1) {
+			t.Errorf("%v wraps over %v lines beside the editor", p[0], p[1])
+		}
+	}
+}

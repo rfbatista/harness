@@ -22,6 +22,14 @@
     @media (min-width: 75rem) { grid-template-columns: minmax(0, 1fr) minmax(28rem, 40rem); }
   }
 
+  /* With the pane open the list is only about 30rem wide: the path gets its own line and the metadata and Edit wrap under it. */
+  .arch-split[data-pane="true"] .arch-entries .entry-row {
+    flex-wrap: wrap;
+
+    & > .entry-main { flex: 1 1 100%; }
+    & > .entry-meta { min-inline-size: 0; flex: 1 1 8rem; }
+  }
+
   .arch-side {
     display: flex;
     flex-direction: column;
