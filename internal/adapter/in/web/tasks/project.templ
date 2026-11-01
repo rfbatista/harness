@@ -159,21 +159,34 @@ templ ssrBoard(b Board) {
 	</div>
 }
 
+// ssrProgress is a feature card's progress bar, summary and status mismatch
+// hint; the browser's toCard (boardView.js) draws the same.
+templ ssrProgress(f *FeatureCard) {
+	<div class="[ progress ]">
+		<div class="[ bar ]" role="img" aria-label={ f.Bar }>
+			for _, s := range f.Segments {
+				<i data-st={ s.Status } style={ "flex-grow:" + strconv.Itoa(s.Count) }></i>
+			}
+		</div>
+		<div class="[ sum ]"><b>{ f.Summary }</b><span class="[ tasks ]">{ f.Tasks }</span></div>
+	</div>
+	if f.Hint != "" {
+		<p class="[ hint ]" data-mismatch><span><b>{ f.Hint }</b> { f.HintNote }</span></p>
+	}
+}
+
 // ssrCard is one card of the first paint.
 templ ssrCard(c Card, column string) {
-	<article class="[ card ]" data-task-id={ c.TaskID } data-status={ c.Status }>
-		if c.Parent != "" {
-			<span class="[ parent ]" data-parent-title>{ c.Parent }</span>
-		}
+	<article class="[ card ]" data-task-id={ c.TaskID } data-status={ c.Status } data-feature?={ c.Feature != nil }>
 		<div class="[ top ]">
 			<a class="[ title ]" href={ templ.SafeURL(c.Href) }>{ c.Label }</a>
 			<button type="button" class="[ button move-to ]" data-variant="ghost" data-size="sm" aria-haspopup="menu" aria-expanded="false">Move to…<span class="[ chevron ]" aria-hidden="true"></span></button>
 		</div>
+		if c.Feature != nil {
+			@ssrProgress(c.Feature)
+		}
 		if c.HasSignals() {
 			<div class="[ signals ]">
-				if c.Children > 0 {
-					<span class="[ badge ]" data-children>{ ChildrenWord(c.Children) }</span>
-				}
 				if c.LiveState != "" {
 					<span class="[ status ]" data-state={ c.LiveState }>{ c.LiveWord }</span>
 				}
@@ -237,19 +250,26 @@ templ liveBoard() {
 						</p>
 						<p class="[ drop-self ]" aria-hidden="true" x-text="column.selfText"></p>
 						<template x-for="card in column.cards" x-bind:key="card.id">
-							<article class="[ card ]" x-bind:data-task-id="card.id" x-bind:data-status="card.status" x-bind:data-fresh="card.fresh" x-bind:data-pending="card.pending" x-bind:data-failed="card.failed" x-bind:data-ghost="card.ghost" x-bind:draggable="card.draggable ? 'true' : null" x-on:pointerdown="pointerDown" x-on:dragstart="dragStart" x-on:dragend="dragEnd">
+							<article class="[ card ]" x-bind:data-task-id="card.id" x-bind:data-status="card.status" x-bind:data-feature="card.isFeature ? '' : null" x-bind:data-fresh="card.fresh" x-bind:data-pending="card.pending" x-bind:data-failed="card.failed" x-bind:data-ghost="card.ghost" x-bind:draggable="card.draggable ? 'true' : null" x-on:pointerdown="pointerDown" x-on:dragstart="dragStart" x-on:dragend="dragEnd">
 								<span class="[ grip ]" aria-hidden="true"></span>
-								<template x-if="card.hasParent">
-									<span class="[ parent ]" data-parent-title x-text="card.parentTitle"></span>
-								</template>
 								<div class="[ top ]">
 									<a class="[ title ]" draggable="false" x-bind:href="card.href" x-text="card.title"></a>
 									@moveMenu()
 								</div>
+								<template x-if="card.isFeature">
+									<div class="[ progress ]">
+										<div class="[ bar ]" role="img" x-bind:aria-label="card.bar">
+											<template x-for="seg in card.segments" x-bind:key="seg.status">
+												<i x-bind:data-st="seg.status" x-bind:style="seg.style"></i>
+											</template>
+										</div>
+										<div class="[ sum ]"><b x-text="card.summary"></b><span class="[ tasks ]" x-text="card.tasks"></span></div>
+									</div>
+								</template>
+								<template x-if="card.hasHint">
+									<p class="[ hint ]" data-mismatch><span><b x-text="card.hint"></b> <span x-text="card.hintNote"></span></span></p>
+								</template>
 								<div class="[ signals ]" x-show="card.hasSignals">
-									<template x-if="card.hasChildren">
-										<span class="[ badge ]" data-children x-text="card.children"></span>
-									</template>
 									<span class="[ status ]" x-show="card.hasLive" x-bind:data-state="card.liveState" x-text="card.liveWord"></span>
 									<template x-if="card.hasReviews">
 										<span class="[ badge ]" data-reviews>

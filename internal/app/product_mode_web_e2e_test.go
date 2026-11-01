@@ -156,13 +156,16 @@ func TestProductModeWeb_EndToEnd(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	// The board shows the real feature cues, over the real ParentID and the
-	// real ticket list (no fake TicketReader in the way).
+	// The board draws the feature and its child as one feature card, over the
+	// real ParentID and the real ticket list (no fake TicketReader in the way).
 	boardAfter := getBody(t, srv.URL+"/projects/"+p.ID)
-	for _, want := range []string{`data-parent-title`, ">Exports<", "1 task"} {
+	for _, want := range []string{`data-feature`, ">Exports<", "0 of 1 done"} {
 		if !strings.Contains(boardAfter, want) {
 			t.Errorf("board after feature creation lacks %q", want)
 		}
+	}
+	if strings.Contains(boardAfter, `data-task-id="`+child.ID+`" data-status`) {
+		t.Error("the child has a card of its own on the board")
 	}
 
 	// The feature task's page: its PRD, its child, the child's brief.

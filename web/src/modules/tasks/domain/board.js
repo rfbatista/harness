@@ -12,18 +12,25 @@ import { isStatus, STATUSES } from "./task.js";
 /** The rail's group order: what is moving first, done last. A permutation of STATUSES. */
 export const RAIL_ORDER = Object.freeze(["in_progress", "review", "todo", "backlog", "done"]);
 
-/** The tasks of a list that belong on the board and the rail: every one not archived. */
-export const onBoard = (tasks) => tasks.filter((t) => !t.archivedAt);
+/**
+ * The tasks of a list that the board draws: every one not archived, and a
+ * child archived on its own while its feature is on the board (the feature's
+ * card lists it; the board and the rail draw nothing else for it).
+ */
+export const onBoard = (tasks) => tasks.filter((t) => !t.archivedAt || (t.parentId !== "" && tasks.some((p) => p.id === t.parentId && !p.archivedAt)));
 
 /**
  * Applies one feed change. A changed task keeps its place in the list, so a
- * move does not shuffle its column. An archived task leaves the list, and a
- * restored one (archived_at cleared) comes back.
+ * move does not shuffle its column. An archived task leaves the list, with
+ * the children archived beside it, unless it is a child archived on its own
+ * while its feature is on the board: it stays, and its feature's card lists
+ * it. A restored one (archived_at cleared) comes back.
  */
 export function applyTaskChange(tasks, change) {
-  if (change.kind === "task-deleted" || change.task.archivedAt) {
+  const archivedAlone = change.kind === "task-upsert" && change.task.archivedAt && tasks.some((p) => p.id === change.task.parentId && !p.archivedAt);
+  if (change.kind === "task-deleted" || (change.task.archivedAt && !archivedAlone)) {
     const id = change.kind === "task-deleted" ? change.id : change.task.id;
-    return tasks.filter((t) => t.id !== id);
+    return tasks.filter((t) => t.id !== id && !(t.archivedAt && t.parentId === id));
   }
   const at = tasks.findIndex((t) => t.id === change.task.id);
   if (at < 0) return [...tasks, change.task];

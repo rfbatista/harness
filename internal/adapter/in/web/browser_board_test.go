@@ -279,10 +279,10 @@ func TestBrainstormAFeatureFromTheBoard(t *testing.T) {
 	}
 }
 
-// TestFeatureCuesFollowTheFeedOnTheBoard: a task that becomes a child over
-// the feed names its parent on its card, and the parent's card counts it,
-// without a reload.
-func TestFeatureCuesFollowTheFeedOnTheBoard(t *testing.T) {
+// TestFeatureCardsFollowTheFeedOnTheBoard: a task that becomes a child over
+// the feed leaves the board as a card and joins its feature's card, and a
+// task that leaves a feature gets a card of its own, without a reload.
+func TestFeatureCardsFollowTheFeedOnTheBoard(t *testing.T) {
 	assets, err := NewAssets()
 	if err != nil {
 		t.Fatal(err)
@@ -305,38 +305,36 @@ func TestFeatureCuesFollowTheFeedOnTheBoard(t *testing.T) {
 	srv := newBrowserServer(mux)
 	defer srv.Close()
 
-	cue := func(id string) string {
-		return fmt.Sprintf(`(c => (c?.querySelector('[data-parent-title]')?.textContent ?? '-') + '|' + (c?.querySelector('[data-children]')?.textContent ?? '-'))(document.querySelector('.board .card[data-task-id=%q]'))`, id)
+	// card reads a feature card: its summary, or "-" for a plain card, or "none" for no card.
+	card := func(id string) string {
+		return fmt.Sprintf(`(c => c === null ? 'none' : (c.querySelector('.progress .sum b')?.textContent ?? '-'))(document.querySelector('.board .card[data-task-id=%q]'))`, id)
 	}
-	var painted, child, parent, arrived string
+	var painted, arrived string
 	err = chromedp.Run(ctx,
 		chromedp.EmulateViewport(1280, 800),
 		chromedp.Navigate(srv.URL+"/projects/p1"),
+		chromedp.Evaluate(card("t-feed")+" + ' / ' + "+card("t-docs"), &painted),
 		chromedp.Poll(`document.querySelector('[data-ssr]') === null`, nil, chromedp.WithPollingTimeout(10*time.Second)),
-		chromedp.Evaluate(cue("t-docs")+" + ' / ' + "+cue("t-feed"), &painted),
-		chromedp.Poll(`document.querySelector('[data-stream-status]')?.dataset.state === 'live' || true`, nil, chromedp.WithPollingTimeout(5*time.Second)),
 		chromedp.ActionFunc(func(context.Context) error {
 			for feed.followers() == 0 {
 				time.Sleep(20 * time.Millisecond)
 			}
-			// A new child of Add SSE feed, and Write docs moved under another parent that is not listed.
-			feed.pushRaw(t, map[string]any{"ticket": map[string]any{"id": "t-new", "project_id": "p1", "title": "Add the SSE docs", "status": "todo", "parent_id": "t-feed"}})
+			// A new child of Add SSE feed, and Write docs moved out of the feature.
+			feed.pushRaw(t, map[string]any{"ticket": map[string]any{"id": "t-new", "project_id": "p1", "title": "Add the SSE docs", "status": "done", "parent_id": "t-feed"}})
 			feed.pushRaw(t, map[string]any{"ticket": map[string]any{"id": "t-docs", "project_id": "p1", "title": "Write docs", "status": "todo", "parent_id": ""}})
 			return nil
 		}),
-		chromedp.Poll(`document.querySelector('.board .card[data-task-id="t-new"] [data-parent-title]') !== null`, nil, chromedp.WithPollingTimeout(10*time.Second)),
-		chromedp.Evaluate(cue("t-new"), &arrived),
-		chromedp.Evaluate(cue("t-docs"), &child),
-		chromedp.Evaluate(cue("t-feed"), &parent),
+		chromedp.Poll(`document.querySelector('.board .card[data-task-id="t-docs"]') !== null`, nil, chromedp.WithPollingTimeout(10*time.Second)),
+		chromedp.Evaluate(card("t-feed")+" + ' / ' + "+card("t-docs")+" + ' / ' + "+card("t-new"), &arrived),
 	)
 	if err != nil {
 		t.Fatalf("%v\nJS errors: %v", err, errs.all())
 	}
-	if painted != "Add SSE feed|- / -|1 task" {
-		t.Errorf("first paint cues = %q", painted)
+	if painted != "0 of 1 done / none" {
+		t.Errorf("first paint = %q: the feature is one card with its child inside", painted)
 	}
-	if arrived != "Add SSE feed|-" || child != "-|-" || parent != "-|1 task" {
-		t.Errorf("after the feed: new %q, docs %q, feed %q", arrived, child, parent)
+	if arrived != "1 of 1 done / - / none" {
+		t.Errorf("after the feed = %q: want the feature's card counting its new child, Write docs on its own, the new child without a card", arrived)
 	}
 	if e := errs.all(); len(e) > 0 {
 		t.Errorf("JavaScript errors:\n%s", strings.Join(e, "\n"))
