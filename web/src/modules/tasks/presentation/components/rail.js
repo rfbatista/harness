@@ -252,12 +252,27 @@ export const rail = ({ gateway, store, prefs, browserPrefs = { get: () => null, 
     /**
      * Keeps "Archived (N)" in step: a task the store had that arrives
      * archived adds one. A done task the store did not have may be a restore
-     * (or a new task); only the server knows, so the count is read again.
+     * (or a new task); only the server knows, so the count is read again. A
+     * restored feature brings back the children archived with it over the
+     * feed, but not the ones archived on their own before it, which its card
+     * lists: the task list is read again too.
      */
     countArchived(change, previous) {
       if (change.kind !== "task-upsert") return;
       if (change.task.archivedAt && previous) store.archivedCount += 1;
-      else if (!change.task.archivedAt && !previous && change.task.status === "done") this.recountArchived();
+      else if (!change.task.archivedAt && !previous && change.task.status === "done") {
+        this.recountArchived();
+        this.reloadTasks();
+      }
+    },
+
+    /** Reads the project's tasks again, what resync does for them alone. */
+    async reloadTasks() {
+      try {
+        store.tasks = onBoard(await gateway.listTasks(this.projectId));
+      } catch {
+        // keeps what it shows until the next change or resync
+      }
     },
 
     async recountArchived() {
