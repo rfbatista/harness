@@ -70,7 +70,7 @@ function toCard(task, { projectId, byTask, fresh, open = false, refusal = null, 
   const kids = cardChildren(all, task);
   const feature = kids.length > 0 ? featureProgress(task, kids) : null;
   // A feature card's dot, reviews and merge badge cover the feature and all its children.
-  const covered = [task, ...kids];
+  const covered = [task, ...kids.filter((k) => !k.archivedAt)];
   const live = covered.reduce((n, t) => n + (byTask[t.id]?.live ?? 0), 0);
   const attention = covered.some((t) => byTask[t.id]?.attention);
   const reviews = covered.reduce((n, t) => n + t.pendingReviews, 0);

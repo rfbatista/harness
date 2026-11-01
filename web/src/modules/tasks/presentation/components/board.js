@@ -128,8 +128,7 @@ export const board =
     /** The columns as the view model draws them, before Done takes on "Archive all". */
     get cardColumns() {
       const pending = Object.fromEntries(Object.entries(this.moves).map(([id, m]) => [id, m.pending.at(-1)]));
-      const columns = toColumns(store.tasks, { projectId: this.projectId, byTask: store.byTask, fresh: new Set(this.freshIds), open: (id) => this.isOpen(id), refusals: this.refusals, now: this.now, pending, failed: new Set(this.failedIds), drag: this.drag, fine: this.fine });
-      return columns;
+      return toColumns(store.tasks, { projectId: this.projectId, byTask: store.byTask, fresh: new Set(this.freshIds), open: (id) => this.isOpen(id), refusals: this.refusals, now: this.now, pending, failed: new Set(this.failedIds), drag: this.drag, fine: this.fine });
     },
     get columns() {
       // Done carries "Archive all": its strip, its fading cards and the receipt in place of the empty text.
@@ -301,7 +300,6 @@ export const board =
       }
     },
 
-    /** A press inside a card: remembered, so a drag from its title link or a button does not start. */
     /** A feature card is open: what the person chose on this page, else the browser's preference; folded by default. */
     isOpen(id) {
       return id in this.opened ? this.opened[id] : prefs.get(featureKey(id)) === "open";
@@ -316,6 +314,7 @@ export const board =
       prefs.set(featureKey(id), open ? "open" : null);
     },
 
+    /** A press inside a card: remembered, so a drag from its title link or a button does not start. */
     pointerDown(event) {
       pressedControl = Boolean(event.target.closest?.("a, button"));
     },

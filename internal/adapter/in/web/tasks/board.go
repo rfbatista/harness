@@ -117,6 +117,9 @@ func rollUpCard(c *Card, projectID string, f *domain.Ticket, kids []*domain.Tick
 	a := byTask[f.ID]
 	badges := []*MergeBadge{mergeBadge(string(f.Status), cardFactsOf(f).merge)}
 	for _, k := range kids {
+		if k.ArchivedAt != nil {
+			continue // archived on its own: listed on the card, no longer a signal
+		}
 		a = rollUp(a, byTask[k.ID])
 		c.Reviews += k.PendingReviews
 		badges = append(badges, mergeBadge(string(k.Status), cardFactsOf(k).merge))

@@ -34,6 +34,9 @@ func (h Handler) Reviews(w http.ResponseWriter, r *http.Request) error {
 	var waiting []string // the tasks a review waits on, whose documents the inbox names
 	pending := 0
 	for _, t := range tickets {
+		if t.ArchivedAt != nil {
+			continue // a child archived on its own, listed for its feature's card
+		}
 		pending += t.PendingReviews
 		if t.PendingReviews > 0 {
 			waiting = append(waiting, t.ID)

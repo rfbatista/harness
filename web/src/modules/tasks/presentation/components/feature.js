@@ -57,7 +57,7 @@ export const feature = ({ store, hash = () => globalThis.location?.hash ?? "" })
 
   get children() {
     if (!store.seeded) return [];
-    return toChildRows(childrenOf(store.tasks, { id: this.taskId }), { projectId: this.projectId, documents: this.documents });
+    return toChildRows(childrenOf(store.tasks, { id: this.taskId }).filter((t) => !t.archivedAt), { projectId: this.projectId, documents: this.documents });
   },
   get hasChildren() {
     return store.seeded ? this.children.length > 0 : this.painted > 0;

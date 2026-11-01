@@ -39,10 +39,14 @@ type DesignLibrarySeed struct {
 // with its page: the same shape the task page seeds.
 type DesignLibraryTask = sessions.TaskLink
 
-// designTasks is every task of the project with its page.
+// designTasks is every task of the project with its page, but a child archived
+// on its own: the list carries it for its feature's card, not as a task to pick.
 func designTasks(tickets []*domain.Ticket, projectID string) []DesignLibraryTask {
 	out := make([]DesignLibraryTask, 0, len(tickets))
 	for _, tk := range tickets {
+		if tk.ArchivedAt != nil {
+			continue
+		}
 		out = append(out, DesignLibraryTask{ID: tk.ID, Title: tk.Title, Href: Href(projectID, tk.ID)})
 	}
 	return out
