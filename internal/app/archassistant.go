@@ -10,6 +10,7 @@ import (
 	"operators-mcp/internal/adapter/out/agents/claudetext"
 	"operators-mcp/internal/app/catalog"
 	"operators-mcp/internal/app/runtime"
+	"operators-mcp/internal/application/agentready"
 	"operators-mcp/internal/application/archassistant"
 	"operators-mcp/internal/application/planning"
 	"operators-mcp/internal/application/sandboxsettings"
@@ -29,7 +30,32 @@ func newTurnStreamer(cfg Config, p oneShotParts) claudetext.TurnStreamer {
 	if p.Orch != nil && p.Credential != nil {
 		one = claudetext.ConfinedTurn(one, readOnlyTurnPrep(bin, p))
 	}
-	return claudetext.GatedTurn(one, p.Ready.check())
+	return claudetext.GatedTurn(one, requireConfinement(p.Ready.check(), turnConfined(p)))
+}
+
+// turnConfined says whether a turn can be confined: the graph has the sandbox
+// and the credential, and the platform has a driver. The deny-writes profile
+// applies whatever the agent sandbox switch says (ADR 0060, like ADR 0052).
+func turnConfined(p oneShotParts) func() bool {
+	return func() bool {
+		return p.Orch != nil && p.Credential != nil && p.Orch.Sandbox != nil && p.Orch.Sandbox.Driver != nil
+	}
+}
+
+// requireConfinement is the readiness check of the assistant: it refuses while
+// a turn cannot be confined, so the assistant never runs with the tool
+// allowlist as its only guard, and then asks the readiness gate. A nil check is
+// always ready.
+func requireConfinement(check func(context.Context) error, confined func() bool) func(context.Context) error {
+	return func(ctx context.Context) error {
+		if !confined() {
+			return agentready.ReadOnlySandboxMissing()
+		}
+		if check == nil {
+			return nil
+		}
+		return check(ctx)
+	}
 }
 
 // readOnlyTurnPrep prepares each turn: the env entries of the agent credential
@@ -72,7 +98,7 @@ func newArchitectureAssistant(cat catalog.Catalog, turn claudetext.TurnStreamer,
 		Sandbox:       in.Sandbox,
 		Documents:     in.Plan,
 		Contexts:      cat.Architecture,
-		Peek:          p.Ready.peek(),
+		Peek:          requireConfinement(p.Ready.peek(), turnConfined(p)),
 	})
 }
 

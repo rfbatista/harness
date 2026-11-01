@@ -44,19 +44,33 @@ func TestReadOnlyWrap_TheCheckoutIsReadableNeverWritableAndTheTurnStartsInIt(t *
 	}
 }
 
-func TestReadOnlyWrap_SwitchedOffThereIsNoWrapAndOnWithoutADriverItIsRefused(t *testing.T) {
+func TestReadOnlyWrap_AppliesWithTheAgentSandboxSwitchedOffWhenThereIsADriver(t *testing.T) {
 	sb, d, _ := oneShotSandbox(t)
 	sb.Enabled = func() bool { return false }
-	if w, err := sb.ReadOnlyWrap("/work/x", nil); w != nil || err != nil {
-		t.Fatalf("ReadOnlyWrap = %v, %v; want nil, nil with the sandbox off", w, err)
+	wrap, err := sb.ReadOnlyWrap("/work/x", nil)
+	if err != nil || wrap == nil {
+		t.Fatalf("ReadOnlyWrap = %v, %v; want a wrap even with the sandbox switched off", wrap, err)
 	}
-	if n := len(d.Calls()); n != 0 {
-		t.Errorf("driver called %d times with the sandbox off", n)
+	if _, err := wrap(commandIn("/work/x")); err != nil {
+		t.Fatal(err)
 	}
-	sb.Enabled = nil
-	sb.Driver = nil
-	if _, err := sb.ReadOnlyWrap("/work/x", nil); err == nil || !strings.Contains(err.Error(), "sandbox driver") {
-		t.Fatalf("err = %v, want the missing-driver refusal", err)
+	if n := len(d.Calls()); n != 1 {
+		t.Errorf("driver called %d times, want 1", n)
+	}
+}
+
+func TestReadOnlyWrap_WithNoDriverItIsRefusedWhateverTheSwitchSays(t *testing.T) {
+	for _, on := range []bool{true, false} {
+		sb, _, _ := oneShotSandbox(t)
+		sb.Driver = nil
+		sb.Enabled = func() bool { return on }
+		if w, err := sb.ReadOnlyWrap("/work/x", nil); w != nil || err == nil || !strings.Contains(err.Error(), "sandbox driver") {
+			t.Errorf("switch %v: ReadOnlyWrap = %v, %v; want the missing-driver refusal", on, w, err)
+		}
+	}
+	var nilSandbox *Sandbox
+	if _, err := nilSandbox.ReadOnlyWrap("/work/x", nil); err == nil {
+		t.Error("a nil sandbox must refuse")
 	}
 }
 

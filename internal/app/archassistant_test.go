@@ -2,7 +2,9 @@ package app
 
 import (
 	"context"
+	"errors"
 	"slices"
+	"strings"
 	"testing"
 
 	"github.com/rfbatista/llmkit/claude"
@@ -52,5 +54,32 @@ func TestTheAssistantsClaudeTurnIsReadOnlyResumedAndReportsWhatItReads(t *testin
 	turn.DeleteTranscript("s1")
 	if !slices.Equal(rec.deleted, []string{"s1"}) {
 		t.Errorf("deleted = %v", rec.deleted)
+	}
+}
+
+func TestTheAssistantNeverRunsWithoutASandboxDriver(t *testing.T) {
+	baseCalled := false
+	base := func(context.Context) error { baseCalled = true; return nil }
+
+	refused := requireConfinement(base, func() bool { return false })
+	err := refused(context.Background())
+	if err == nil || !strings.Contains(err.Error(), "sandbox driver") {
+		t.Fatalf("err = %v, want the missing-driver refusal", err)
+	}
+	if baseCalled {
+		t.Error("the readiness gate ran for a turn that cannot be confined")
+	}
+
+	allowed := requireConfinement(base, func() bool { return true })
+	if err := allowed(context.Background()); err != nil || !baseCalled {
+		t.Fatalf("err = %v, base called = %v; want the gate's own answer", err, baseCalled)
+	}
+
+	boom := errors.New("not signed in")
+	if err := requireConfinement(func(context.Context) error { return boom }, func() bool { return true })(context.Background()); !errors.Is(err, boom) {
+		t.Errorf("err = %v, want the gate's refusal", err)
+	}
+	if err := requireConfinement(nil, func() bool { return true })(context.Background()); err != nil {
+		t.Errorf("a nil gate: %v", err)
 	}
 }

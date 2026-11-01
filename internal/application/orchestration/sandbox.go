@@ -332,14 +332,12 @@ func (b *Sandbox) OneShotWrap(allow []ports.SandboxPath) (llmkit.WrapFunc, error
 // architecture assistant's): the deny-writes profile. Like a one-shot's it
 // writes only its temp dir and the agent home (claude's transcript), and
 // starts in checkout, which it reads and never writes. The project's other
-// checkouts stay hidden. Nil with the sandbox off, the missing-driver refusal
-// when it is on without one.
+// checkouts stay hidden. Unlike the session profile it does not follow the
+// agent sandbox switch: it applies whenever the platform has a driver, and
+// with none it is refused, so a read-only turn never runs unconfined.
 func (b *Sandbox) ReadOnlyWrap(checkout string, allow []ports.SandboxPath) (llmkit.WrapFunc, error) {
-	if !b.on() {
-		return nil, nil
-	}
-	if b.Driver == nil {
-		return nil, agentready.SandboxDriverMissing()
+	if b == nil || b.Driver == nil {
+		return nil, agentready.ReadOnlySandboxMissing()
 	}
 	sess := SandboxSession{OneShot: true, ReadOnlyDir: checkout, TempDir: os.TempDir(), AgentHome: b.Home, UserHome: b.UserHome, ConfigHome: b.ConfigHome, Allow: allow}
 	if b.Checkouts != nil {
