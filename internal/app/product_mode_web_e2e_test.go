@@ -181,7 +181,7 @@ func TestProductModeWeb_EndToEnd(t *testing.T) {
 
 	// The child task's page: its crumb to the feature.
 	childPage := getBody(t, srv.URL+"/projects/"+p.ID+"/tasks/"+child.ID)
-	if !strings.Contains(childPage, `data-parent-task="`+feature.ID+`"`) || !strings.Contains(childPage, "Exports /") {
+	if !strings.Contains(childPage, `data-parent-task="`+feature.ID+`"`) || !strings.Contains(childPage, `title="Exports">Exports</a>`) {
 		t.Errorf("child task page lacks the parent crumb:\n%s", childPage)
 	}
 }

@@ -5,6 +5,7 @@
 
 import { RAIL_ORDER } from "./board.js";
 import { mergeBadge } from "./card.js";
+import { cardChildren, isInsideCard } from "./feature.js";
 import { STATUSES } from "./task.js";
 
 /** How many done tasks show before "Show N more"; the BFF's DoneCap. */
@@ -21,6 +22,8 @@ export const DONE_CAP = 5;
  *   filtering: boolean,   the filter or Needs you decides what shows: no folding, no cap
  *   rows: Task[],         shown (a collapsed group's are hidden by the peek rule, in CSS)
  *   more: Task[],         Done's rest, behind "Show N more"
+ *   kids: Record<string, Task[]>,       a feature task's children nested under its row, by its id; the filter may leave some out
+ *   kidTotals: Record<string, number>,  how many children each feature has, filtered or not
  * }} RailGroup
  */
 
@@ -84,23 +87,40 @@ export function railGroups(tasks, { byTask = {}, currentId = "", collapsed = [],
   const q = normalize(query.trim());
   const filtering = q !== "" || needsYouOnly;
   const waits = (t) => needsYou(t, byTask[t.id]);
-  const keeps = (t) => (!q || normalize(t.title).includes(q)) && (!needsYouOnly || waits(t));
+  const matches = (t) => !q || normalize(t.title).includes(q);
+  // A feature task's children nest under its row; an archived one is not drawn.
+  const allKids = (t) => cardChildren(tasks, t).filter((k) => !k.archivedAt);
+  const waitsRolled = (t) => waits(t) || allKids(t).some(waits);
+  // While the filter decides, a feature keeps the children that match, or all of them when it matches itself.
+  const kidsOf = (t) => {
+    let kids = allKids(t);
+    if (filtering && q && !matches(t)) kids = kids.filter(matches);
+    if (filtering && needsYouOnly) kids = kids.filter(waits);
+    return kids;
+  };
+  const keeps = (t) => (matches(t) && (!needsYouOnly || waits(t))) || (t.parentId === "" && filtering && kidsOf(t).length > 0);
 
   return RAIL_ORDER.map((key) => {
-    let list = tasks.filter((t) => t.status === key);
+    let list = tasks.filter((t) => t.status === key && !isInsideCard(tasks, t));
     if (key === "done") list = byLatest(list);
     const base = { key, label: STATUSES.find((s) => s.value === key).label, total: list.length, empty: list.length === 0, filtering };
+    const nest = (rows) => ({
+      kids: Object.fromEntries(rows.map((t) => [t.id, kidsOf(t)]).filter(([, kids]) => kids.length > 0)),
+      kidTotals: Object.fromEntries(rows.map((t) => [t.id, allKids(t).length]).filter(([, n]) => n > 0)),
+    });
     if (filtering) {
       const rows = list.filter(keeps);
-      return { ...base, matched: rows.length, collapsed: false, rows, more: [] };
+      return { ...base, matched: rows.length, collapsed: false, rows, more: [], ...nest(rows) };
     }
-    const shown = key === "done" ? list.filter((t, i) => i < DONE_CAP || t.id === currentId || waits(t)) : list;
+    const shown = key === "done" ? list.filter((t, i) => i < DONE_CAP || t.id === currentId || waitsRolled(t)) : list;
+    const more = list.filter((t) => !shown.includes(t));
     return {
       ...base,
       matched: list.length,
       collapsed: folded.has(key) && list.length > 0,
       rows: shown,
-      more: list.filter((t) => !shown.includes(t)),
+      more,
+      ...nest(list),
     };
   });
 }

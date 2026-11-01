@@ -488,7 +488,7 @@ func TestFeatureTaskPageShowsItsPRDAndChildren(t *testing.T) {
 
 func TestChildTaskPageLinksItsParentAndHidesTheFeatureSection(t *testing.T) {
 	body := get(t, newTestHandler(t, featureBoard()), "/projects/p1/tasks/t-docs").Body.String()
-	if !strings.Contains(body, `<a class="[ crumb ]" href="/projects/p1/tasks/t-feed" data-parent-task="t-feed" title="The feature task this task belongs to">Add SSE feed /</a>`) {
+	if !strings.Contains(body, `<a class="[ feat ]" href="/projects/p1/tasks/t-feed" data-parent-task="t-feed" title="Add SSE feed">Add SSE feed</a>`) {
 		t.Error("a child's crumbs must lead to its feature task")
 	}
 	if !strings.Contains(body, `data-children="0"`) || !strings.Contains(body, `id="task-feature-button"`) || strings.Contains(body, ` data-child-id="`) { // the live x-bind stays

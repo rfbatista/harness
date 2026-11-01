@@ -113,7 +113,7 @@ templ liveArchived() {
 								</div>
 							</div>
 							<template x-if="row.error">
-								<p class="[ row-error ]"><span x-text="row.error.message"></span><span class="[ code ]"><span x-text="row.error.code"></span> · <span x-text="row.error.next"></span></span></p>
+								<p class="[ row-error ]"><span x-text="row.error.message"></span><span class="[ code ]"><span x-text="row.error.code"></span> · <span x-text="row.error.next"></span></span><a x-show="row.error.featureHref" x-bind:href="row.error.featureHref">Open the feature</a></p>
 							</template>
 						</div>
 					</template>

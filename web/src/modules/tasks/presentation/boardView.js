@@ -28,17 +28,18 @@ export const taskHref = (projectId, taskId) => `/projects/${encodeURIComponent(p
  *   fresh: Set<string>,
  *   now: Date,
  *   open?: (id: string) => boolean,  a feature card is open (its children listed)
+ *   refusals?: Record<string, { text: string, code: string }>,  per feature card, why its archiving was refused
  *   pending?: Record<string, string>,  per card with a move in flight, the status it goes to
  *   failed?: Set<string>,              cards that went back after a refused move
  *   drag?: { id: string, from: string, over: string } | null,  the card being dragged, its column, and the column under the pointer ("" for none)
  *   fine?: boolean,                    a fine pointer: cards drag (touch uses the menu)
  * }} ctx
  */
-export function toColumns(tasks, { projectId, byTask, fresh, now, open = () => false, pending = {}, failed = new Set(), drag = null, fine = false }) {
+export function toColumns(tasks, { projectId, byTask, fresh, now, open = () => false, refusals = {}, pending = {}, failed = new Set(), drag = null, fine = false }) {
   const cols = byStatus(tasks.filter((t) => !isInsideCard(tasks, t)));
   return STATUSES.map(({ value, label }) => {
     const cards = cols[value].map((t) =>
-      toCard(t, { projectId, byTask, fresh: fresh.has(t.id), open: open(t.id), now, pendingTo: pending[t.id] ?? "", failed: failed.has(t.id), ghost: drag?.id === t.id, fine, all: tasks }),
+      toCard(t, { projectId, byTask, fresh: fresh.has(t.id), open: open(t.id), refusal: refusals[t.id] ?? null, now, pendingTo: pending[t.id] ?? "", failed: failed.has(t.id), ghost: drag?.id === t.id, fine, all: tasks }),
     );
     const waiting = value === "review" && cards.length > 0;
     const under = Boolean(drag) && drag.over === value;
@@ -64,7 +65,7 @@ export function toColumns(tasks, { projectId, byTask, fresh, now, open = () => f
 }
 
 /** all: every task of the project, to find a feature task's children. */
-function toCard(task, { projectId, byTask, fresh, open = false, now, pendingTo, failed, ghost = false, fine = false, all = [] }) {
+function toCard(task, { projectId, byTask, fresh, open = false, refusal = null, now, pendingTo, failed, ghost = false, fine = false, all = [] }) {
   // The reviews badge says the reviews; the dot is about sessions only.
   const kids = cardChildren(all, task);
   const feature = kids.length > 0 ? featureProgress(task, kids) : null;
@@ -82,8 +83,12 @@ function toCard(task, { projectId, byTask, fresh, open = false, now, pendingTo, 
     id: task.id,
     title: task.title,
     isFeature: feature !== null,
-    open: feature !== null && open,
-    openText: feature !== null && open ? "true" : "false",
+    // A refusal opens the card, so the open children are in view.
+    open: feature !== null && (open || refusal !== null),
+    openText: feature !== null && (open || refusal !== null) ? "true" : "false",
+    openChildren: feature?.open ?? 0,
+    refusal,
+    hasRefusal: refusal !== null,
     childrenId: `children-${task.id}`,
     segments: feature?.segments ?? [],
     bar: feature?.bar ?? "",
@@ -114,7 +119,7 @@ function toCard(task, { projectId, byTask, fresh, open = false, now, pendingTo, 
     stale: time.stale,
     ageTitle: since ? `In this column since ${since}` : "",
     pending: pendingTo !== "",
-    failed,
+    failed: failed || refusal !== null,
     note: pendingTo ? `Moving to ${statusLabel(pendingTo)}…` : failed ? "Move failed" : "",
     choices: moveChoices(task.status),
     canArchive: task.status === "done",
@@ -148,21 +153,29 @@ function childLine(task, { projectId, byTask }) {
  * the markup binds them. phase: rest (the button), confirm, busy (one
  * request, not optimistic), done (the column says how many went), failed.
  * The strip's count follows Done while it is open; Done emptying closes it.
- * @param {{ phase: "rest"|"confirm"|"busy"|"done"|"failed", done: number, archived?: number }} state
+ * done counts the Done column's cards that go (a feature's children go with
+ * it); skipping counts its features with open children, which stay; skipped
+ * is how many the server left out of the last one.
+ * @param {{ phase: "rest"|"confirm"|"busy"|"done"|"failed", done: number, skipping?: number, archived?: number, skipped?: number }} state
  */
-export function archiveAllView({ phase, done, archived = 0 }) {
+export function archiveAllView({ phase, done, skipping = 0, archived = 0, skipped = 0 }) {
   if (phase === "confirm" && done === 0) phase = "rest";
   const tasks = (n) => `${n} done ${n === 1 ? "task" : "tasks"}`;
+  const features = (n) => `${n} ${n === 1 ? "feature" : "features"}`;
   const view = { shows: done > 0 && (phase === "rest" || phase === "done"), open: false, phase, title: "", body: "", confirm: "", emptyText: "", asking: false, busy: false, failed: false, tone: null };
   switch (phase) {
-    case "confirm":
-      return { ...view, open: true, asking: true, title: `Archive all ${tasks(done)}?`, body: "They leave the board and the rail. Nothing is lost: restore any of them from Archived.", confirm: `Archive ${done}` };
+    case "confirm": {
+      const stays = skipping > 0 ? ` ${features(skipping)} with open children ${skipping === 1 ? "stays" : "stay"} on the board.` : "";
+      return { ...view, open: true, asking: true, title: `Archive all ${tasks(done)}?`, body: `They leave the board and the rail. Nothing is lost: restore any of them from Archived.${stays}`, confirm: `Archive ${done}` };
+    }
     case "busy":
       return { ...view, open: true, asking: true, busy: true, title: `Archiving ${done}…`, confirm: `Archive ${done}` };
     case "failed":
       return { ...view, open: true, failed: true, tone: "danger", title: "Couldn't archive. Nothing changed." };
-    case "done":
-      return { ...view, emptyText: done === 0 ? `${archived} ${archived === 1 ? "task" : "tasks"} archived.` : "" };
+    case "done": {
+      const left = skipped > 0 ? ` Skipped ${features(skipped)} with open children.` : "";
+      return { ...view, emptyText: done === 0 ? `${archived} ${archived === 1 ? "task" : "tasks"} archived.${left}` : "" };
+    }
   }
   return view;
 }

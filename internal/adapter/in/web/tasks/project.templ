@@ -316,6 +316,13 @@ templ liveBoard() {
 								</p>
 								<p class="[ reason ]" x-show="card.hasReason" x-text="card.reason"></p>
 								<p class="[ note ]" role="status" x-show="card.note" x-text="card.note"></p>
+								<template x-if="card.hasRefusal">
+									<div class="[ refusal ]" role="alert">
+										<p><b>Not archived.</b> <span x-text="card.refusal.text"></span></p>
+										<p class="[ muted ]">A feature is archived only when every task in it is done.</p>
+										<p class="[ code ]" x-text="card.refusal.code"></p>
+									</div>
+								</template>
 								<template x-if="card.isFeature">
 									<ul class="[ children ]" x-bind:id="card.childrenId" x-show="card.open">
 										<template x-for="child in card.children" x-bind:key="child.id">

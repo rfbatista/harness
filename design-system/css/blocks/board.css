@@ -366,19 +366,16 @@
       }
     }
 
-    /* The status dot of a child: its shape carries the status, colour repeats it, the word is on the line. */
-    & .tdot {
-      justify-self: center;
-      box-sizing: border-box;
-      inline-size: 0.5rem;
-      block-size: 0.5rem;
-      border-radius: var(--radius-round);
+    /* The server's refusal to archive a feature, on the card, with the red edge of a failed move. */
+    & .refusal {
+      display: grid;
+      gap: var(--space-3xs);
+      font-size: var(--text-xs);
+      line-height: var(--leading-snug);
 
-      &[data-st="backlog"] { border: 1px dashed var(--color-ink-faint); }
-      &[data-st="todo"] { box-shadow: inset 0 0 0 1.5px var(--color-ink-faint); }
-      &[data-st="in_progress"] { background: linear-gradient(90deg, var(--color-signal) 50%, transparent 50%); box-shadow: inset 0 0 0 1.5px var(--color-signal); }
-      &[data-st="review"] { background: var(--color-attention); }
-      &[data-st="done"] { background: var(--color-ink-faint); }
+      & > p:first-child { color: var(--color-danger); }
+      & > .muted { color: var(--color-ink-muted); }
+      & > .code { font-family: var(--font-mono); color: var(--color-ink-faint); }
     }
 
     & .hint {

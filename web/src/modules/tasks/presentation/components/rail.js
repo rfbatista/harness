@@ -31,6 +31,9 @@ const ANNOUNCE_MS = 2_000;
 const RESULT_MS = 500;
 
 /** What the rail's arrow keys move between, in the Tasks nav. */
+/** Where a feature row's open state is kept in the browser's preferences. */
+const featureKey = (id) => `rail-feature:${id}`;
+
 const NAV_ITEMS = "h3 > button, a[data-task-id], .more > details > summary";
 
 /**
@@ -46,7 +49,7 @@ const NAV_ITEMS = "h3 > button, a[data-task-id], .more > details > summary";
  */
 
 /** How many tasks need the person: a session waits, or a review does. */
-export const needsYouCount = (store) => store.tasks.filter((t) => needsYou(t, store.byTask[t.id])).length;
+export const needsYouCount = (store) => store.tasks.filter((t) => !t.archivedAt && needsYou(t, store.byTask[t.id])).length;
 
 /** Shown and focusable: not hidden, folded away or inside a closed <details>. */
 const isShown = (el) => (el.checkVisibility ? el.checkVisibility() : el.getClientRects().length > 0);
@@ -70,12 +73,13 @@ function reveal(row) {
  *   gateway: import("../../domain/ports.js").RailGateway,
  *   store: RailStore,
  *   prefs: import("../../domain/ports.js").RailPrefs,
+ *   browserPrefs?: import("../../../../shared/infrastructure/storage.js").Preferences,  where each feature row's open state is kept (ADR 0037)
  *   navigate: (url: string) => void,
  *   timers?: { setTimeout: typeof globalThis.setTimeout, clearTimeout: typeof globalThis.clearTimeout },
  *   isNarrow?: () => boolean,  the rail is a drawer (below 48rem)
  * }} deps
  */
-export const rail = ({ gateway, store, prefs, navigate, timers = globalThis, isNarrow = () => globalThis.matchMedia?.("(width < 48rem)").matches ?? false }) => () => {
+export const rail = ({ gateway, store, prefs, browserPrefs = { get: () => null, set() {} }, navigate, timers = globalThis, isNarrow = () => globalThis.matchMedia?.("(width < 48rem)").matches ?? false }) => () => {
   let unfollow = () => {};
   let sessions = [];
   /** The component's root: $el inside an event handler is the element that fired. */
@@ -106,6 +110,8 @@ export const rail = ({ gateway, store, prefs, navigate, timers = globalThis, isN
     signalIds: [],
     /** The task row with focus: it peeks out of a collapsed group. */
     focusedId: "",
+    /** The feature rows the person opened or folded on this page; the rest read the browser's preference. */
+    opened: {},
 
     /** The rail's groups: every status in RAIL_ORDER, as the markup binds them. */
     get groups() {
@@ -117,11 +123,12 @@ export const rail = ({ gateway, store, prefs, navigate, timers = globalThis, isN
         signal: new Set(this.signalIds),
         focusedId: this.focusedId,
         query: this.query,
+        open: (id) => this.isOpen(id),
       };
       return railGroups(store.tasks, { byTask: store.byTask, currentId: this.currentTaskId, collapsed: this.collapsed, query: this.query, needsYouOnly: this.needsYouOnly }).map((g) => toGroupView(g, ctx));
     },
     get total() {
-      return store.tasks.length;
+      return store.tasks.filter((t) => !t.archivedAt).length;
     },
     get hasTasks() {
       return store.seeded && store.tasks.length > 0;
@@ -131,7 +138,7 @@ export const rail = ({ gateway, store, prefs, navigate, timers = globalThis, isN
     },
     /** Review requests waiting on the person across the project, for the Review requests badge. */
     get reviewsCount() {
-      return store.tasks.reduce((n, t) => n + (t.pendingReviews ?? 0), 0);
+      return store.tasks.reduce((n, t) => n + (t.archivedAt ? 0 : (t.pendingReviews ?? 0)), 0);
     },
     get hasReviews() {
       return this.reviewsCount > 0;
@@ -313,6 +320,19 @@ export const rail = ({ gateway, store, prefs, navigate, timers = globalThis, isN
         this.focusedId = "";
         section.querySelector("h3 > button")?.focus();
       }
+    },
+
+    /** A feature row is open: what the person chose on this page, else the browser's preference; folded by default. */
+    isOpen(id) {
+      return id in this.opened ? this.opened[id] : browserPrefs.get(featureKey(id)) === "open";
+    },
+
+    /** A feature row's twisty: shows or hides its children, and remembers it in this browser. */
+    toggleFeature(event) {
+      const id = event.currentTarget.dataset.featureId;
+      const open = !this.isOpen(id);
+      this.opened = { ...this.opened, [id]: open };
+      browserPrefs.set(featureKey(id), open ? "open" : null);
     },
 
     toggleNeedsYou() {

@@ -95,10 +95,13 @@ func seed(projectID string, tasks []*domain.Ticket, list []*domain.Session) *she
 // task are not on the rail. Every known status has its group, empty or not;
 // collapsed holds the groups the person folded (shell.ParseCollapsed). The
 // seed is always there, so the browser follows the project even before its
-// first task. Archived tasks are neither on the rail nor in its seed.
+// first task. Archived tasks are not on the rail. Its seed carries them only
+// as a child archived on its own, which the board lists inside its feature's
+// card. A feature task's children are nested under its row (ADR 0058), not in
+// groups of their own.
 func BuildRail(projectID string, tasks []*domain.Ticket, list []*domain.Session, currentTaskID string, collapsed map[string]bool) shell.Rail {
+	rail := shell.Rail{Seed: seed(projectID, onBoard(tasks), list), Current: currentTaskID}
 	tasks = unarchived(tasks)
-	rail := shell.Rail{Seed: seed(projectID, tasks, list), Current: currentTaskID}
 	if len(tasks) == 0 {
 		rail.Empty = "No tasks yet."
 		return rail
@@ -107,9 +110,18 @@ func BuildRail(projectID string, tasks []*domain.Ticket, list []*domain.Session,
 		rail.Reviews += t.PendingReviews
 	}
 	byTask := activityByTask(list)
+	listed := map[string]bool{}
+	for _, t := range tasks {
+		listed[t.ID] = true
+	}
+	kids := map[string][]*domain.Ticket{}
 	byStatus := map[domain.TicketStatus][]*domain.Ticket{}
 	var other []*domain.Ticket
 	for _, t := range tasks {
+		if t.ParentID != "" && listed[t.ParentID] {
+			kids[t.ParentID] = append(kids[t.ParentID], t)
+			continue
+		}
 		if known(t.Status) {
 			byStatus[t.Status] = append(byStatus[t.Status], t)
 		} else {
@@ -119,7 +131,7 @@ func BuildRail(projectID string, tasks []*domain.Ticket, list []*domain.Session,
 	links := func(ts []*domain.Ticket) []shell.Link {
 		out := make([]shell.Link, 0, len(ts))
 		for _, t := range ts {
-			out = append(out, card(projectID, t, byTask, currentTaskID))
+			out = append(out, railRow(projectID, t, kids[t.ID], byTask, currentTaskID))
 		}
 		return out
 	}
@@ -166,6 +178,30 @@ func statusLabel(st domain.TicketStatus) string {
 		}
 	}
 	return string(st)
+}
+
+// railRow is a task's row. A feature task's carries its children, nested,
+// and its signals cover it and all of them, as the browser's toRow
+// (railView.js) draws a folded feature.
+func railRow(projectID string, t *domain.Ticket, kids []*domain.Ticket, byTask map[string]activity, currentTaskID string) shell.Link {
+	l := card(projectID, t, byTask, currentTaskID)
+	slices.SortStableFunc(kids, func(a, b *domain.Ticket) int {
+		if d := childRank(string(a.Status)) - childRank(string(b.Status)); d != 0 {
+			return d
+		}
+		return b.StatusSince.Compare(a.StatusSince)
+	})
+	for _, k := range kids {
+		kl := card(projectID, k, byTask, currentTaskID)
+		// A child has no merge badge on the rail: its status takes the slot.
+		kl.Merge, kl.MergeText = "", ""
+		kl.StatusWord, kl.StatusKey = statusLabel(k.Status), string(k.Status)
+		l.Kids = append(l.Kids, kl)
+		l.Live += kl.Live
+		l.Reviews += kl.Reviews
+		l.Attention = l.Attention || kl.Attention
+	}
+	return l
 }
 
 // card is a task as the rail links it and the board draws it.

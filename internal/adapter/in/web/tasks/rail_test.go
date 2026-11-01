@@ -216,3 +216,64 @@ func TestRailRowsCarryTheMergeStateOfReviewAndDone(t *testing.T) {
 		t.Errorf("rail merges:\n%s\nwant:\n%s", strings.Join(got, ","), want)
 	}
 }
+
+// railMeta is a row's one meta item as the markup draws it, in the words the
+// shared fixture uses.
+func railMeta(l shell.Link) string {
+	switch {
+	case l.Reviews > 0:
+		return "reviews:" + l.ReviewsText()
+	case l.Waiting():
+		return "waiting"
+	case l.Running():
+		return fmt.Sprintf("live:%d live", l.Live)
+	case l.Merging():
+		return "merge:" + l.MergeText
+	case l.ShowsStatus():
+		return "status:" + l.StatusWord
+	}
+	return ""
+}
+
+func TestRailNestsChildrenUnderTheirFeatureAsTheSharedFixtureSays(t *testing.T) {
+	fixture, tasks, sessions := loadFeatureFixture(t)
+	rail := BuildRail("p1", tasks, sessions, "", nil)
+
+	for _, g := range rail.Groups {
+		var got, want []string
+		for _, l := range g.Links {
+			var kids []string
+			for _, k := range l.Kids {
+				kids = append(kids, k.TaskID+"="+railMeta(k))
+			}
+			got = append(got, l.TaskID+"="+railMeta(l)+"["+strings.Join(kids, " ")+"]")
+		}
+		for _, w := range fixture.Rail[g.Key] {
+			var kids []string
+			for _, k := range w.Kids {
+				kids = append(kids, k.ID+"="+k.Meta)
+			}
+			want = append(want, w.ID+"="+w.Meta+"["+strings.Join(kids, " ")+"]")
+		}
+		if strings.Join(got, "\n") != strings.Join(want, "\n") {
+			t.Errorf("group %s:\n%s\nwant:\n%s", g.Key, strings.Join(got, "\n"), strings.Join(want, "\n"))
+		}
+		if g.Total != len(want) {
+			t.Errorf("group %s counts %d, want %d: children are not tasks of a group", g.Key, g.Total, len(want))
+		}
+	}
+	// The seed lists the child archived on its own, for the board's card; the heading does not count it.
+	var archivedInSeed bool
+	for _, tk := range rail.Seed.Tasks {
+		archivedInSeed = archivedInSeed || tk.ID == "f1-archived"
+		if tk.ID == "stray" {
+			t.Error("the seed carries an archived task whose feature is not on the board")
+		}
+	}
+	if !archivedInSeed {
+		t.Error("the seed lacks the child archived on its own")
+	}
+	if got, want := rail.TaskCount(), 18; got != want {
+		t.Errorf("the heading counts %d tasks, want %d", got, want)
+	}
+}

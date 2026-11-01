@@ -156,3 +156,13 @@ test("feature cards match the shared fixture: one card per feature in its column
     );
   }
 });
+
+test("Archive all counts what Done shows, says how many features stay, and its receipt says how many the server skipped", () => {
+  const confirm = archiveAllView({ phase: "confirm", done: 3, skipping: 2 });
+  assert.deepEqual([confirm.title, confirm.body.endsWith("2 features with open children stay on the board."), confirm.confirm], ["Archive all 3 done tasks?", true, "Archive 3"]);
+  assert.ok(archiveAllView({ phase: "confirm", done: 1, skipping: 1 }).body.endsWith("1 feature with open children stays on the board."));
+  assert.equal(archiveAllView({ phase: "confirm", done: 2 }).body.includes("open children"), false);
+  assert.equal(archiveAllView({ phase: "done", done: 2, archived: 5, skipped: 2 }).emptyText, "");
+  assert.equal(archiveAllView({ phase: "done", done: 0, archived: 5, skipped: 2 }).emptyText, "5 tasks archived. Skipped 2 features with open children.");
+  assert.equal(archiveAllView({ phase: "done", done: 0, archived: 1, skipped: 0 }).emptyText, "1 task archived.");
+});

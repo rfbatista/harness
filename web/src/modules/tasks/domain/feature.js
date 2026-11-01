@@ -76,6 +76,7 @@ export function featureProgress(task, children) {
     bar: segments.map((s) => `${s.count} ${s.word}`).join(", "),
     summary: `${total("done")} of ${children.length} done`,
     tasks: taskWord(children.length),
+    open,
     hint,
     hintNote,
   };

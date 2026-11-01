@@ -113,30 +113,39 @@ func TestBoardListsEachColumnNewestStatusSinceFirst(t *testing.T) {
 	}
 }
 
-func TestBoardFeatureCardsMatchTheSharedFixture(t *testing.T) {
+// featureFixture is web/testdata/views/feature-cards.json: the tasks and
+// sessions, and what the board and the rail are to make of them.
+type featureFixture struct {
+	Tasks []struct {
+		ID, Title, Status string
+		ParentID          string `json:"parent_id"`
+		Since             int
+		Reviews           int
+		Merge             string
+		Archived          bool
+	} `json:"tasks"`
+	Sessions []struct {
+		TaskID string `json:"task_id"`
+		Status string
+	} `json:"sessions"`
+	Columns map[string][]string `json:"columns"`
+	Cards   []struct {
+		ID, Bar, Summary, Tasks, Hint, Live, Reviews, Merge string
+		Children, Archived                                  []string
+	} `json:"cards"`
+	Rail map[string][]struct {
+		ID, Meta string
+		Kids     []struct{ ID, Meta string }
+	} `json:"rail"`
+}
+
+func loadFeatureFixture(t *testing.T) (featureFixture, []*domain.Ticket, []*domain.Session) {
+	t.Helper()
 	raw, err := os.ReadFile("../../../../../web/testdata/views/feature-cards.json")
 	if err != nil {
 		t.Fatal(err)
 	}
-	var fixture struct {
-		Tasks []struct {
-			ID, Title, Status string
-			ParentID          string `json:"parent_id"`
-			Since             int
-			Reviews           int
-			Merge             string
-			Archived          bool
-		} `json:"tasks"`
-		Sessions []struct {
-			TaskID string `json:"task_id"`
-			Status string
-		} `json:"sessions"`
-		Columns map[string][]string `json:"columns"`
-		Cards   []struct {
-			ID, Bar, Summary, Tasks, Hint, Live, Reviews, Merge string
-			Children, Archived                                  []string
-		} `json:"cards"`
-	}
+	var fixture featureFixture
 	if err := json.Unmarshal(raw, &fixture); err != nil {
 		t.Fatal(err)
 	}
@@ -156,6 +165,11 @@ func TestBoardFeatureCardsMatchTheSharedFixture(t *testing.T) {
 	for _, s := range fixture.Sessions {
 		sessions = append(sessions, &domain.Session{ID: "s-" + s.TaskID, TicketID: s.TaskID, Status: domain.SessionStatus(s.Status)})
 	}
+	return fixture, tasks, sessions
+}
+
+func TestBoardFeatureCardsMatchTheSharedFixture(t *testing.T) {
+	fixture, tasks, sessions := loadFeatureFixture(t)
 	board := BuildBoard("p1", tasks, sessions)
 	cards := map[string]Card{}
 	for _, col := range board.Columns {

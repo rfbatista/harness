@@ -112,7 +112,30 @@ export function taskGatewayContract(name, makeSubject) {
     const result = await subject.gateway.archiveDoneTasks("p1");
     assert.deepEqual([result.archived, [...result.ids].sort()], [2, ["a", "b"]]);
     assert.deepEqual(subject.tasks().filter((t) => !t.archivedAt).map((t) => t.id), ["c"]);
-    assert.deepEqual(await subject.gateway.archiveDoneTasks("p1"), { archived: 0, ids: [] });
+    assert.deepEqual(await subject.gateway.archiveDoneTasks("p1"), { archived: 0, ids: [], skipped: 0 });
+    assert.equal(result.skipped, 0);
+  });
+
+  contract("a feature is archived with its children, only when all are done; Archive all skips the ones that are not; a child waits for its feature to be restored", async () => {
+    const subject = makeSubject({
+      projects: ["p1"],
+      tasks: [
+        makeTask({ id: "f", title: "Feature", status: "done" }),
+        makeTask({ id: "f1", title: "Done kid", status: "done", parentId: "f" }),
+        makeTask({ id: "f2", title: "Open kid", status: "todo", parentId: "f" }),
+        makeTask({ id: "g", title: "Whole", status: "done" }),
+        makeTask({ id: "g1", status: "done", parentId: "g" }),
+      ],
+      sessions: [],
+    });
+    const refused = await subject.gateway.archiveTask("f").catch((e) => e);
+    assert.deepEqual([refused.code, refused.message, refused.details.open_children.map((c) => c.id)], [Codes.FEATURE_HAS_OPEN_CHILDREN, "1 task is not done: Open kid", ["f2"]]);
+    const result = await subject.gateway.archiveDoneTasks("p1");
+    assert.deepEqual([result.archived, [...result.ids].sort(), result.skipped], [2, ["g", "g1"], 1]);
+    const child = await subject.gateway.restoreTask("g1").catch((e) => e);
+    assert.deepEqual([child.code, child.message, child.details.feature.id], [Codes.FEATURE_ARCHIVED, "Restore the feature \u201cWhole\u201d first.", "g"]);
+    await subject.gateway.restoreTask("g");
+    assert.deepEqual(subject.tasks().filter((t) => t.archivedAt).map((t) => t.id), []);
   });
 
   contract("deleteTask removes it; twice is TICKET_NOT_FOUND", async () => {

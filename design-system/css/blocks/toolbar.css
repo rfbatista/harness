@@ -1,6 +1,12 @@
 /*
  * Toolbar — the header of every screen.
  * <header class="toolbar"><span class="crumb">…</span><h1>…</h1><div class="actions">…</div></header>
+ * A child task's page leads with its feature instead (ADR 0058): the crumb and
+ * the h1 sit in one <nav class="crumbline" aria-label="Feature"><a class="feat">
+ * Feature</a><span class="sep">/</span><h1>Child</h1></nav>, "‹ Feature / Child"
+ * on one line. The feature name truncates first, at 22rem, then the title; both
+ * keep the full name in their tooltip. Below 48rem the link stacks above the
+ * title, a touch-sized target.
  */
 
 @layer blocks {
@@ -24,6 +30,61 @@
     & .crumb {
       color: var(--color-ink-faint);
       font-size: var(--text-sm);
+    }
+
+    & .crumbline {
+      display: flex;
+      flex: 1 1 14rem;
+      align-items: baseline;
+      gap: var(--space-xs);
+      min-inline-size: 0;
+
+      & h1 {
+        min-inline-size: 0;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+      }
+
+      & .feat {
+        flex: 0 1 auto;
+        min-inline-size: 0;
+        max-inline-size: 22rem;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+        color: var(--color-ink-muted);
+        font-size: var(--text-sm);
+        font-weight: var(--weight-medium);
+        text-decoration: none;
+
+        &::before { content: "‹"; margin-inline-end: 0.35em; color: var(--color-ink-faint); }
+        &:hover { color: var(--color-ink); text-decoration: underline; }
+      }
+
+      & .sep { color: var(--color-line-strong); }
+
+      @media (width < 48rem) {
+        flex-basis: 100%;
+        flex-direction: column;
+        align-items: flex-start;
+        gap: 0;
+
+        & .sep { display: none; }
+        & .feat {
+          display: inline-flex;
+          align-items: center;
+          min-block-size: var(--size-touch);
+          max-inline-size: 100%;
+          font-size: var(--text-xs);
+        }
+        & h1 {
+          display: -webkit-box;
+          -webkit-line-clamp: 2;
+          -webkit-box-orient: vertical;
+          white-space: normal;
+        }
+      }
     }
 
     & .actions {
