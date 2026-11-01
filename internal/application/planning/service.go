@@ -4,6 +4,7 @@
 package planning
 
 import (
+	"cmp"
 	"context"
 	"fmt"
 	"log/slog"
@@ -236,6 +237,41 @@ func (s *Service) ListTickets(ctx context.Context, projectID string, filter port
 	}
 	s.decorate(ctx, tickets...)
 	return tickets, nil
+}
+
+// childOrder ranks a status in a feature's child list: Review first, Done last.
+var childOrder = map[domain.TicketStatus]int{
+	domain.TicketStatusReview: 0, domain.TicketStatusInProgress: 1, domain.TicketStatusTodo: 2, domain.TicketStatusBacklog: 3, domain.TicketStatusDone: 4,
+}
+
+// TaskStructure tells how a task relates to the others of its project: its
+// feature when it is a child, its children (archived ones too) when it is a
+// feature task. A task alone has neither. An unknown task is
+// TICKET_NOT_FOUND.
+func (s *Service) TaskStructure(ctx context.Context, id string) (*domain.TaskStructure, error) {
+	tk := s.tickets.Get(ctx, id)
+	if tk == nil {
+		return nil, &domain.StructuredError{Code: "TICKET_NOT_FOUND", Message: "ticket not found"}
+	}
+	out := &domain.TaskStructure{Children: []domain.TaskChild{}}
+	if tk.IsChild() {
+		if parent := s.tickets.Get(ctx, tk.ParentID); parent != nil {
+			out.Parent = &domain.TaskRef{ID: parent.ID, Title: parent.Title, Status: parent.Status}
+		}
+		return out, nil
+	}
+	children := s.childrenOf(ctx, tk)
+	s.fillLastMoves(ctx, children)
+	slices.SortStableFunc(children, func(a, b *domain.Ticket) int {
+		if c := cmp.Compare(childOrder[a.Status], childOrder[b.Status]); c != 0 {
+			return c
+		}
+		return b.StatusSince.Compare(a.StatusSince)
+	})
+	for _, c := range children {
+		out.Children = append(out.Children, domain.TaskChild{TaskRef: domain.TaskRef{ID: c.ID, Title: c.Title, Status: c.Status}, Archived: c.ArchivedAt != nil})
+	}
+	return out, nil
 }
 
 // withChildren fills tk's ChildrenCount from its project's tickets: the

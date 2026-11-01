@@ -51,7 +51,10 @@ var (
 // not stored. Sessions and Agents name a comment's writer; either may be
 // nil.
 type Sources struct {
-	Tickets   ports.TicketReader
+	Tickets ports.TicketReader
+	// Structure tells task/task.json a task's feature and children; nil
+	// leaves them out as none.
+	Structure ports.TaskStructureReader
 	Documents ports.DocumentReader
 	Comments  ports.SessionTaskComments
 	Resources ports.TaskResourceFiles

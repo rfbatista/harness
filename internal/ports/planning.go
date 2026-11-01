@@ -78,6 +78,15 @@ type TicketReader interface {
 	ListTickets(ctx context.Context, projectID string, filter TicketFilter) ([]*domain.Ticket, error)
 }
 
+// TaskStructureReader reads how a task relates to the others of its project:
+// its feature when it is a child, its children when it is a feature task,
+// archived children included, ordered Review, In progress, Todo, Backlog,
+// Done and, within a status, the most recent move first. Planning implements
+// it.
+type TaskStructureReader interface {
+	TaskStructure(ctx context.Context, taskID string) (*domain.TaskStructure, error)
+}
+
 // TicketDocumentReader reads the documents linked to a task (written by its
 // agents in task/docs of their virtual shell, or linked by a person): what the
 // task's documents page needs. Planning implements it.

@@ -24,7 +24,7 @@ stored: what others change appears here, and what you write here is stored.
 
     README.md                 this map (read-only)
     .index.json               every file: path, kind, id, scope, version, title, updated_at (read-only)
-    task/task.json            the task: id, title, description, status, architect_session_id (read-only)
+    task/task.json            the task: id, title, description, status, architect_session_id, parent, children (read-only)
     task/docs/                documents linked to this task, task scope
     task/comments/            one file per comment, body only
     task/resources/           the person's uploads under their names (read-only)

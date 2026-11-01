@@ -506,7 +506,7 @@ func newArtifactsService(cfg Config, repo ports.ArtifactRepository, sessions por
 // and stores the documents and comments agents write in them through
 // planning and their designs through the artifacts.
 func newVirtualShells(plan *planning.Service, art *artifacts.Service, sessions ports.SessionRepository, cat catalog.Catalog, events *vfs.RootEvents) *vfs.Service {
-	src := vfs.Sources{Tickets: plan, Documents: plan, Comments: plan, Resources: plan, Artifacts: art, Writes: plan,
+	src := vfs.Sources{Tickets: plan, Structure: plan, Documents: plan, Comments: plan, Resources: plan, Artifacts: art, Writes: plan,
 		Designs: art, Sessions: sessions, Agents: cat.Agents, Settings: cat.Settings}
 	if cat.RepositoryArchitectures != nil {
 		src.Architectures = cat.RepositoryArchitectures
