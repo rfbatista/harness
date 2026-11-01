@@ -40,8 +40,8 @@ type Service struct {
 	store     ports.DesignSystemStore
 	proposals ports.DesignProposalStore
 	projects  ports.ProjectReader
-	notifier ports.Notifier
-	agents   interface {
+	notifier  ports.Notifier
+	agents    interface {
 		GetAgent(ctx context.Context, id string) (*domain.Agent, error)
 	}
 	// sessionStore tells a session's mode and design system.
