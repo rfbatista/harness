@@ -237,7 +237,7 @@ func (s *Service) ResumeInteractive(ctx context.Context, req ports.ResumeRequest
 		permission = llmkit.PermissionBypass
 	}
 	cfg := s.sessionConfig(sess.ID, sess.WorkingDir, sess.Model, nil, permission, ag, subject, sess.ZoneID, s.sessionRole(ctx, sess.ID), sess.RepositoryID)
-	cleanup, err := s.withShell(sess.ID, subject, &cfg, ag.cleanup)
+	cleanup, err := s.withShell(sess.ID, sess.RepositoryID, subject, &cfg, ag.cleanup)
 	if err != nil {
 		return nil, ports.AgentSpec{}, err
 	}

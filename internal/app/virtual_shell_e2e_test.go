@@ -87,6 +87,7 @@ func (e *shellE2E) serve() {
 	mux.Handle("/api/", httpapi.NewRouter(httpapi.NewHandler(httpapi.Services{
 		Sessions: e.orch, Planning: e.plan, TaskResources: e.plan, TaskComments: e.plan, Artifacts: e.art, Shells: e.shells,
 		RepositoryArchitectures: e.cat.RepositoryArchitectures, ArchitectureRules: e.rules,
+		Projects: e.cat.Projects, DesignSystems: e.cat.DesignSystems,
 	})))
 	mux.Handle(mcpsession.PathPrefix, mcpsession.TaskHandler(sessionTaskTools(e.cat, e.orch, e.plan, e.sessions, e.art, e.channel, nil, nil)))
 	e.srv = httptest.NewServer(mux)

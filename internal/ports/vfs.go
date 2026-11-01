@@ -40,6 +40,8 @@ const (
 	ShellDesignURL = "urls"
 	// ShellArchitecture is a repository architecture record as YAML.
 	ShellArchitecture = "architecture"
+	// ShellDesignSystem is a file of the project's design system view.
+	ShellDesignSystem = "design-system"
 )
 
 // ResourcesRoots makes and removes task sessions' resources roots.
@@ -177,6 +179,9 @@ type ShellDocumentWriter interface {
 type ShellScope struct {
 	ProjectID string
 	TicketID  string
+	// RepositoryID is the repository the session works in, "" for none: the
+	// shell shows the project design system when it uses it.
+	RepositoryID string
 }
 
 // ArchitectureFile is a repository architecture record as the resources root
@@ -193,6 +198,12 @@ type ArchitectureFile struct {
 // repositories that have a record, in the repositories' order.
 type ArchitectureFileReader interface {
 	ListArchitectureFiles(ctx context.Context, projectID string) ([]ArchitectureFile, error)
+}
+
+// DesignSystemReader reads a project's design system as it is now; the
+// design system context implements it with the rest of DesignSystems.
+type DesignSystemReader interface {
+	GetDesignSystem(ctx context.Context, projectID string) (*domain.DesignSystem, error)
 }
 
 // The Files view's reads of a session's virtual file system (see "Contract:

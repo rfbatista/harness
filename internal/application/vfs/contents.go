@@ -10,6 +10,7 @@ import (
 	"strings"
 	"time"
 
+	"operators-mcp/internal/application/designsystem"
 	"operators-mcp/internal/domain"
 	"operators-mcp/internal/ports"
 )
@@ -22,10 +23,16 @@ import (
 func (s *Service) contents(ctx context.Context, sh *root, tk *domain.Ticket) (*builder, error) {
 	b := &builder{now: time.Now()}
 	sessionID := sh.sessionID
-	b.fixed(ports.ShellFile{Path: "README.md", Kind: ports.ShellReadme, Title: "README", UpdatedAt: b.now}, []byte(readmeFor(s.agentsMove())))
+	designSystem := s.usesDesignSystem(sh)
+	b.fixed(ports.ShellFile{Path: "README.md", Kind: ports.ShellReadme, Title: "README", UpdatedAt: b.now}, []byte(readmeFor(s.agentsMove(), designSystem)))
 
 	if err := b.architectures(ctx, s.src.Architectures, sh.projID); err != nil {
 		return nil, err
+	}
+	if designSystem {
+		if err := s.designSystemView(ctx, b, sh.projID); err != nil {
+			return nil, err
+		}
 	}
 
 	if tk == nil {
@@ -96,6 +103,8 @@ type builder struct {
 	files []*file
 	tasks []string
 	now   time.Time
+	// designSystem says the view of the project design system is wanted.
+	designSystem bool
 }
 
 // fixed keeps a read-only file at meta.Path; its version is its content's.
@@ -356,6 +365,56 @@ func oldestFirst(list []*domain.Artifact) []*domain.Artifact {
 		return strings.Compare(a.ID, c.ID)
 	})
 	return out
+}
+
+// designSystemDir is the folder of the project design system's files, there
+// only in the shells of sessions whose repository uses it.
+const designSystemDir = "project/design-system"
+
+// usesDesignSystem says the session's repository uses the project design
+// system.
+func (s *Service) usesDesignSystem(sh *root) bool {
+	src := s.src
+	if src.DesignSystems == nil || src.Projects == nil || src.Repositories == nil || sh.repoID == "" {
+		return false
+	}
+	repo, err := src.Repositories.GetRepository(context.Background(), sh.repoID)
+	return err == nil && repo.UsesDesignSystem
+}
+
+// renderedDesignSystem is the files made for one project at one version and
+// project name.
+type renderedDesignSystem struct {
+	version int
+	name    string
+	files   []designsystem.File
+}
+
+// designSystemView adds the project's design system files, read-only: the
+// current version's, made again only when the version or the project's name
+// changed.
+func (s *Service) designSystemView(ctx context.Context, b *builder, projectID string) error {
+	ds, err := s.src.DesignSystems.GetDesignSystem(ctx, projectID)
+	if err != nil {
+		return err
+	}
+	project, err := s.src.Projects.GetProject(ctx, projectID)
+	if err != nil {
+		return err
+	}
+	s.renderMu.Lock()
+	r, ok := s.rendered[projectID]
+	if !ok || r.version != ds.Version || r.name != project.Name {
+		r = renderedDesignSystem{version: ds.Version, name: project.Name,
+			files: designsystem.Files(project.Name, ds.Version, ds.UpdatedAt, ds.Record)}
+		s.rendered[projectID] = r
+	}
+	s.renderMu.Unlock()
+	b.designSystem = true
+	for _, f := range r.files {
+		b.fixed(ports.ShellFile{Path: designSystemDir + "/" + f.Path, Kind: ports.ShellDesignSystem, Scope: "project", Title: f.Path, UpdatedAt: ds.UpdatedAt}, f.Content)
+	}
+	return nil
 }
 
 // architectureDir is the folder of the repositories' architecture files.

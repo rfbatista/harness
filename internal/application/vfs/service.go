@@ -63,6 +63,12 @@ type Sources struct {
 	// Architectures lists the repositories architecture files; nil shows
 	// none.
 	Architectures ports.ArchitectureFileReader
+	// DesignSystems, Projects and Repositories show the project design
+	// system, named after the project, to the sessions whose repository
+	// uses it; any of them nil shows it to none.
+	DesignSystems ports.DesignSystemReader
+	Projects      ports.ProjectReader
+	Repositories  ports.RepositoryReader
 	// Settings holds "Agents move documents to project"; nil reads it as off.
 	Settings ports.SettingsReader
 }
@@ -77,6 +83,11 @@ type Service struct {
 
 	// events says when a root comes and goes; nil: nobody listens.
 	events *RootEvents
+
+	// rendered is each project's design system files as last made, so a
+	// refresh that finds the same version and project name makes none.
+	renderMu sync.Mutex
+	rendered map[string]renderedDesignSystem
 }
 
 // UseRootEvents has the service raise a RootEvent when a session's resources
@@ -88,7 +99,7 @@ func (s *Service) rootEvent(sessionID, path string, available bool) {
 }
 
 func New(src Sources) *Service {
-	return &Service{src: src, roots: map[string]*root{}}
+	return &Service{src: src, roots: map[string]*root{}, rendered: map[string]renderedDesignSystem{}}
 }
 
 // resources root is one session's folder and what it was last given of each file.
@@ -96,6 +107,7 @@ type root struct {
 	dir                         string
 	realDir                     string // dir with its symlinks resolved
 	sessionID, ticketID, projID string
+	repoID                      string // the session's repository, "" for none
 
 	// mu guards the folder and files; a refresh holds it from reading the
 	// sources to writing the last file, so refreshes never interleave.
@@ -144,7 +156,7 @@ func (s *Service) Open(ctx context.Context, sessionID string, scope ports.ShellS
 	if err != nil {
 		realDir = dir
 	}
-	sh := &root{dir: dir, realDir: realDir, sessionID: sessionID, ticketID: scope.TicketID, projID: projID, files: map[string]ports.ShellFile{}}
+	sh := &root{dir: dir, realDir: realDir, sessionID: sessionID, ticketID: scope.TicketID, projID: projID, repoID: scope.RepositoryID, files: map[string]ports.ShellFile{}}
 	// Held until filled: a change heard meanwhile refreshes it after.
 	sh.mu.Lock()
 	s.mu.Lock()
@@ -372,7 +384,7 @@ func (s *Service) AnnounceChange(c ports.ProjectChange) {
 		s.changed(c.ProjectID(), c.TicketComment.Comment.TicketID)
 	case c.TicketResource != nil && c.TicketResource.Resource != nil:
 		s.changed(c.ProjectID(), c.TicketResource.Resource.TicketID)
-	case c.ArchitectureChanged != nil:
+	case c.ArchitectureChanged != nil, c.DesignSystemSaved != nil:
 		s.changed(c.ProjectID(), "")
 	}
 }
@@ -557,6 +569,10 @@ func (sh *root) sync(b *builder) error {
 			}
 			changed = true
 		}
+	}
+	if !b.designSystem {
+		// Left empty by an opt-out, the folder goes too: it is absent, not empty.
+		_ = os.Remove(sh.abs(designSystemDir))
 	}
 	if !changed {
 		return nil

@@ -58,7 +58,7 @@ var readOnlyFiles = map[string]bool{
 
 func classify(rel string) area {
 	switch {
-	case readOnlyFiles[rel] || strings.HasPrefix(rel, "task/resources/") || rel == architectureDir || strings.HasPrefix(rel, architectureDir+"/"):
+	case readOnlyFiles[rel] || strings.HasPrefix(rel, "task/resources/") || rel == architectureDir || strings.HasPrefix(rel, architectureDir+"/") || rel == designSystemDir || strings.HasPrefix(rel, designSystemDir+"/"):
 		return readOnly
 	case layoutDirs[rel] || rel == tasksDir || tasksLayout(rel):
 		return layout
@@ -203,6 +203,9 @@ func refuse(code, reason string) ports.ShellAnswer {
 func refuseReadOnly(rel string) ports.ShellAnswer {
 	if rel == architectureDir || strings.HasPrefix(rel, architectureDir+"/") {
 		return refuse("READ_ONLY", rel+" is read-only: the person edits the repository architecture in the web UI; to propose a change, write it in your spec")
+	}
+	if rel == designSystemDir || strings.HasPrefix(rel, designSystemDir+"/") {
+		return refuse("READ_ONLY", rel+" is read-only: the design system changes only through a design session started by the person (and in the harness web UI); if it lacks something, say so in a task comment or in your spec")
 	}
 	return refuse("READ_ONLY", rel+" is read-only (task.json, resources, index, README, attached.md, urls.md)")
 }

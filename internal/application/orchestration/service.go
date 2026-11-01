@@ -510,7 +510,7 @@ func (s *Service) prepare(ctx context.Context, in prepareInput) (*prepared, erro
 	}
 	permission := parseAutoAccept(in.AutoAccept)
 	cfg := s.sessionConfig(id, ws.Path, in.Model, in.AllowedTools, permission, ag, subject, in.ZoneID, in.Role, in.RepositoryID)
-	cleanup, err := s.withShell(id, subject, &cfg, ag.cleanup)
+	cleanup, err := s.withShell(id, in.RepositoryID, subject, &cfg, ag.cleanup)
 	if err == nil {
 		cleanup = s.withCommitCheck(id, ws.Path, &cfg, false, cleanup)
 	}
@@ -643,11 +643,11 @@ func (s *Service) withGit(id, repositoryID string, cfg *llmkit.SessionConfig, cl
 // claude settings. The cleanup it answers runs cleanup and removes the
 // shell. A headless session with no task, or a service without Shells,
 // changes nothing.
-func (s *Service) withShell(id string, subject sessionSubject, cfg *llmkit.SessionConfig, cleanup func()) (func(), error) {
+func (s *Service) withShell(id, repositoryID string, subject sessionSubject, cfg *llmkit.SessionConfig, cleanup func()) (func(), error) {
 	if s.Shells == nil || (subject.ticket == nil && !subject.projectLevel()) {
 		return cleanup, nil
 	}
-	var scope ports.ShellScope
+	scope := ports.ShellScope{RepositoryID: repositoryID}
 	if subject.ticket != nil {
 		scope.TicketID = subject.ticket.ID
 	} else {

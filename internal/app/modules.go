@@ -514,6 +514,9 @@ func newVirtualShells(plan *planning.Service, art *artifacts.Service, sessions p
 	if cat.RepositoryArchitectures != nil {
 		src.Architectures = cat.RepositoryArchitectures
 	}
+	if cat.DesignSystems != nil {
+		src.DesignSystems, src.Projects, src.Repositories = cat.DesignSystems, cat.Projects, cat.Projects
+	}
 	shells := vfs.New(src)
 	shells.UseRootEvents(events)
 	return shells
@@ -566,6 +569,10 @@ func bindVirtualShells(orch *orchestration.Service, shells *vfs.Service, plan *p
 	// A saved architecture reaches the shells as well as the project feed.
 	if cat.RepositoryArchitectures != nil {
 		cat.RepositoryArchitectures.UseFeed(changeSinks{orch, shells})
+	}
+	// A saved design system does too: the shells of opted-in sessions show it.
+	if cat.DesignSystems != nil {
+		cat.DesignSystems.UseFeed(changeSinks{orch, shells})
 	}
 }
 
