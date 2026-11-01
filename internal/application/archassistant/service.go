@@ -95,7 +95,10 @@ type Deps struct {
 		ListArchitectureRuleEvents(ctx context.Context, repositoryID string, since time.Time, limit int) ([]domain.ArchitectureRuleEvent, error)
 	}
 	Agents ports.AgentLister
-	MCP    interface{ ListMCPServers() []*domain.MCPServer }
+	// Git reads where the checkout is, so the assistant can say when it is not
+	// on the default branch or has uncommitted changes; nil reads as unknown.
+	Git ports.ArchitectureGit
+	MCP interface{ ListMCPServers() []*domain.MCPServer }
 	// Sandbox is the person's sandbox configuration.
 	Sandbox interface {
 		Enabled() bool
@@ -430,6 +433,8 @@ func (s *Service) turnInput(ctx context.Context, repo *domain.Repository, req po
 	var b strings.Builder
 	block := func(tag, body string) { fmt.Fprintf(&b, "<%s>\n%s\n</%s>\n\n", tag, body, tag) }
 
+	block("checkout", s.checkout(ctx, repo))
+
 	saved, err := s.Architectures.GetRepositoryArchitecture(ctx, repo.ID)
 	if err != nil {
 		return "", err
@@ -498,6 +503,28 @@ func (s *Service) turnInput(ctx context.Context, repo *domain.Repository, req po
 	}
 	block("message", req.Message)
 	return b.String(), nil
+}
+
+// checkout says where the checkout the assistant reads is: the working tree,
+// which may not be the default branch's tree the layer preview reads, or may
+// hold uncommitted changes. It is a note, never an error.
+func (s *Service) checkout(ctx context.Context, repo *domain.Repository) string {
+	if s.Git == nil {
+		return "not available"
+	}
+	state, err := s.Git.Checkout(ctx, repo.RootDir)
+	if err != nil {
+		return "not available: " + err.Error()
+	}
+	defaultBranch, _ := s.Git.DefaultBranch(ctx, repo.RootDir)
+	return jsonOf(map[string]any{
+		"branch":                state.Branch,
+		"default_branch":        defaultBranch,
+		"head":                  state.Head,
+		"clean":                 state.Clean(),
+		"uncommitted_tracked":   len(state.Tracked),
+		"uncommitted_untracked": len(state.Untracked),
+	})
 }
 
 // projectDocuments is the project's Glossary and the titles of its ADRs.

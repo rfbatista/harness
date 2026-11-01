@@ -14,6 +14,7 @@ import (
 	"operators-mcp/internal/application/archassistant"
 	"operators-mcp/internal/application/planning"
 	"operators-mcp/internal/application/sandboxsettings"
+	"operators-mcp/internal/ports"
 )
 
 // assistantTools are the only built-in tools the architecture assistant's
@@ -79,6 +80,7 @@ type assistantParts struct {
 
 	Plan    *planning.Service      `optional:"true"`
 	Sandbox *sandboxsettings.Store `optional:"true"`
+	Git     ports.ArchitectureGit  `optional:"true"`
 }
 
 // newArchitectureAssistant is the architecture assistant over the read-only
@@ -94,6 +96,7 @@ func newArchitectureAssistant(cat catalog.Catalog, turn claudetext.TurnStreamer,
 		Repos:         cat.Projects,
 		Architectures: cat.RepositoryArchitectures,
 		Agents:        cat.Agents,
+		Git:           in.Git,
 		MCP:           cat.Capabilities,
 		Sandbox:       in.Sandbox,
 		Documents:     in.Plan,

@@ -62,6 +62,7 @@ type env struct {
 	events    []domain.ArchitectureRuleEvent
 	peekErr   error
 	agentsErr error
+	git       ports.ArchitectureGit
 	now       time.Time
 }
 
@@ -98,6 +99,24 @@ func (f fakeArch) ListArchitectureRuleEvents(_ context.Context, _ string, _ time
 		return f.e.events[:limit], nil
 	}
 	return f.e.events, nil
+}
+
+type fakeGit struct {
+	defaultBranch string
+	state         ports.CheckoutState
+}
+
+func (f fakeGit) DefaultBranch(context.Context, string) (string, error) { return f.defaultBranch, nil }
+func (f fakeGit) Checkout(context.Context, string) (ports.CheckoutState, error) {
+	return f.state, nil
+}
+func (fakeGit) Files(context.Context, string, string) ([]string, error) { return nil, nil }
+func (fakeGit) ReadFile(context.Context, string, string, string) ([]byte, bool, error) {
+	return nil, false, nil
+}
+func (fakeGit) LastCommit(context.Context, string, string, string) (string, error) { return "", nil }
+func (fakeGit) CommitFiles(context.Context, string, map[string][]byte, string) (string, error) {
+	return "", nil
 }
 
 type fakeAgents struct{ e *env }
@@ -148,13 +167,19 @@ func newEnv(t *testing.T) *env {
 		turn:     &fakeTurn{script: answering("plain answer")},
 		now:      time.Date(2026, 10, 31, 12, 0, 0, 0, time.UTC),
 	}
-	e.svc = archassistant.New(archassistant.Deps{
+	e.svc = archassistant.New(e.deps())
+	return e
+}
+
+// deps are the service's collaborators, reading the env's fields when a turn
+// runs; a test that sets e.git builds a new service from them.
+func (e *env) deps() archassistant.Deps {
+	return archassistant.Deps{
 		Turn: e.turn, Settings: settingsMap(e.settings), Repos: fakeRepos{e}, Architectures: fakeArch{e},
 		Agents: fakeAgents{e}, MCP: fakeMCP{}, Sandbox: fakeSandbox{}, Documents: fakeDocs{}, Contexts: fakeContexts{},
-		Peek: func(context.Context) error { return e.peekErr },
-		Now:  func() time.Time { return e.now },
-	})
-	return e
+		Git: e.git, Peek: func(context.Context) error { return e.peekErr },
+		Now: func() time.Time { return e.now },
+	}
 }
 
 func req(message string) ports.ArchitectureAssistantRequest {
@@ -618,5 +643,45 @@ func TestAConversationThatCouldNotReadItsContextIsNotLeftInTheRegistry(t *testin
 	}
 	if n := e.svc.Conversations(); n != 0 {
 		t.Errorf("%d conversations left, want 0", n)
+	}
+}
+
+func TestTheContextSaysWhichBranchTheCheckoutIsOnAndWhetherItIsDirty(t *testing.T) {
+	e := newEnv(t)
+	e.git = fakeGit{defaultBranch: "main", state: ports.CheckoutState{Branch: "feature/x", Head: "abc123", Tracked: []string{"a.go", "b.go"}, Untracked: []string{"c.txt"}}}
+	e.svc = archassistant.New(e.deps())
+	if _, err := e.run(context.Background(), req("x")); err != nil {
+		t.Fatal(err)
+	}
+	in := e.turn.callsMade()[0].Input
+	for _, want := range []string{"<checkout>", `"branch": "feature/x"`, `"default_branch": "main"`, `"clean": false`, `"uncommitted_tracked": 2`, `"uncommitted_untracked": 1`} {
+		if !strings.Contains(in, want) {
+			t.Errorf("the checkout block lacks %s:\n%s", want, in)
+		}
+	}
+}
+
+func TestACleanCheckoutOnTheDefaultBranchIsSaidSo(t *testing.T) {
+	e := newEnv(t)
+	e.git = fakeGit{defaultBranch: "main", state: ports.CheckoutState{Branch: "main", Head: "abc123"}}
+	e.svc = archassistant.New(e.deps())
+	if _, err := e.run(context.Background(), req("x")); err != nil {
+		t.Fatal(err)
+	}
+	in := e.turn.callsMade()[0].Input
+	for _, want := range []string{`"branch": "main"`, `"clean": true`} {
+		if !strings.Contains(in, want) {
+			t.Errorf("the checkout block lacks %s", want)
+		}
+	}
+}
+
+func TestWithoutGitTheCheckoutBlockSaysItIsUnknown(t *testing.T) {
+	e := newEnv(t)
+	if _, err := e.run(context.Background(), req("x")); err != nil {
+		t.Fatal(err)
+	}
+	if in := e.turn.callsMade()[0].Input; !strings.Contains(in, "<checkout>\nnot available") {
+		t.Errorf("input = %s", in)
 	}
 }
