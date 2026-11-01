@@ -65,6 +65,7 @@ func taskBrief(tk *domain.Ticket, role domain.SessionRole, counts taskCounts) st
 	if tk.Description != "" {
 		b.WriteString("\n" + tk.Description + "\n")
 	}
+	b.WriteString(counts.structure.section())
 	b.WriteString(`
 Your task's and your project's documents, comments, resources and designs
 are files in your virtual shell, $HARNESS_SHELL ("Your virtual shell" below
@@ -448,4 +449,75 @@ without task_id. If the review cannot be opened, tell the person with notify.
 
 These tools always act on this session's project; they take no project id.`)
 	return b.String() + "\n\n" + notificationsSection
+}
+
+// briefStructure is the part of the task's brief on its feature: on a child
+// task its feature (parent) and its sibling tasks (others); on a feature task
+// its children. The zero value is a task with neither.
+type briefStructure struct {
+	parent   *domain.TaskRef
+	others   []domain.TaskChild
+	children []domain.TaskChild
+}
+
+// section is the feature section of the brief, the lead "\n" included; empty
+// for a task with no feature and no children, so a plain task's brief does not
+// change.
+func (s briefStructure) section() string {
+	var b strings.Builder
+	switch {
+	case s.parent != nil:
+		fmt.Fprintf(&b, "\nThis task is a child of a feature task: %q (%s).\n", s.parent.Title, s.parent.ID)
+		fmt.Fprintf(&b, "The feature's documents, including its PRD, are in tasks/%s/docs/ in your virtual shell; read them there.\n", s.parent.ID)
+		if len(s.others) > 0 {
+			b.WriteString("Its other child tasks:\n")
+			writeChildren(&b, s.others)
+		}
+		b.WriteString("The feature's status is not yours to move.\n")
+	case len(s.children) > 0:
+		b.WriteString("\nThis task is a feature task. Its child tasks:\n")
+		writeChildren(&b, s.children)
+		b.WriteString("Each child has its own sessions, documents and status; its documents are in tasks/<child-id>/docs/ in your virtual shell.\n")
+	}
+	return b.String()
+}
+
+func writeChildren(b *strings.Builder, list []domain.TaskChild) {
+	for _, c := range list {
+		status := string(c.Status)
+		if c.Archived {
+			status += ", archived"
+		}
+		fmt.Fprintf(b, "- %s — %s (%s)\n", c.ID, c.Title, status)
+	}
+}
+
+// taskStructure reads the task's feature and its siblings, or its children,
+// for the brief. A failed or missing lookup leaves the section out: the brief
+// is help, not a gate.
+func (s *Service) taskStructure(tk *domain.Ticket) briefStructure {
+	if s.Structure == nil || tk == nil {
+		return briefStructure{}
+	}
+	ctx := context.Background()
+	own, err := s.Structure.TaskStructure(ctx, tk.ID)
+	if err != nil {
+		slog.Warn("read the task's feature for its brief", "ticket", tk.ID, "err", err)
+		return briefStructure{}
+	}
+	if own.Parent == nil {
+		return briefStructure{children: own.Children}
+	}
+	feature, err := s.Structure.TaskStructure(ctx, own.Parent.ID)
+	if err != nil {
+		slog.Warn("read the task's siblings for its brief", "ticket", tk.ID, "err", err)
+		return briefStructure{parent: own.Parent}
+	}
+	var others []domain.TaskChild
+	for _, c := range feature.Children {
+		if c.ID != tk.ID {
+			others = append(others, c)
+		}
+	}
+	return briefStructure{parent: own.Parent, others: others}
 }

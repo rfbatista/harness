@@ -103,6 +103,36 @@ func (r *TicketRepository) SetArchived(id string, at *time.Time) (*domain.Ticket
 	return m.ToDomain(), nil
 }
 
+func (r *TicketRepository) SetArchivedMany(ids []string, at *time.Time) ([]*domain.Ticket, error) {
+	var ms *int64
+	if at != nil {
+		v := at.UnixMilli()
+		ms = &v
+	}
+	out := make([]*domain.Ticket, 0, len(ids))
+	err := r.db.Transaction(func(tx *gorm.DB) error {
+		for _, id := range ids {
+			res := tx.Model(&TicketModel{}).Where("id = ?", id).Update("archived_at", ms)
+			if res.Error != nil {
+				return res.Error
+			}
+			if res.RowsAffected == 0 {
+				return &domain.StructuredError{Code: "TICKET_NOT_FOUND", Message: "ticket not found"}
+			}
+			var m TicketModel
+			if err := tx.First(&m, "id = ?", id).Error; err != nil {
+				return err
+			}
+			out = append(out, m.ToDomain())
+		}
+		return nil
+	})
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 func (r *TicketRepository) Delete(id string) error {
 	var m TicketModel
 	if err := r.db.First(&m, "id = ?", id).Error; err != nil {

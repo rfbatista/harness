@@ -4,14 +4,17 @@
 package planning
 
 import (
+	"cmp"
 	"context"
 	"fmt"
 	"log/slog"
 	"slices"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
 
+	"github.com/rfbatista/harnesskit/errs"
 	"github.com/rfbatista/harnesskit/tool"
 
 	"operators-mcp/internal/domain"
@@ -211,15 +214,61 @@ func (s *Service) GetTicket(ctx context.Context, id string) (*domain.Ticket, err
 	return tk, nil
 }
 
-// ListTickets lists a project's tickets that are not archived.
+// ListTickets lists a project's tickets that are not archived, and the
+// children archived on their own while their feature is not (see
+// ports.TicketFilter).
 func (s *Service) ListTickets(ctx context.Context, projectID string, filter ports.TicketFilter) ([]*domain.Ticket, error) {
 	tickets := s.tickets.ListByProject(ctx, projectID)
-	countChildren(append(tickets, s.tickets.ListArchivedByProject(ctx, projectID)...), tickets...)
+	archived := s.tickets.ListArchivedByProject(ctx, projectID)
+	countChildren(append(slices.Clone(tickets), archived...), tickets...)
+	if !filter.ExcludeArchived {
+		onBoard := idSet(tickets)
+		for _, tk := range archived {
+			if tk.IsChild() && onBoard[tk.ParentID] {
+				tickets = append(tickets, tk)
+			}
+		}
+	}
 	if filter.ParentID != nil {
 		tickets = slices.DeleteFunc(tickets, func(tk *domain.Ticket) bool { return tk.ParentID != *filter.ParentID })
 	}
 	s.decorate(ctx, tickets...)
 	return tickets, nil
+}
+
+// childOrder ranks a status in a feature's child list: Review first, Done last.
+var childOrder = map[domain.TicketStatus]int{
+	domain.TicketStatusReview: 0, domain.TicketStatusInProgress: 1, domain.TicketStatusTodo: 2, domain.TicketStatusBacklog: 3, domain.TicketStatusDone: 4,
+}
+
+// TaskStructure tells how a task relates to the others of its project: its
+// feature when it is a child, its children (archived ones too) when it is a
+// feature task. A task alone has neither. An unknown task is
+// TICKET_NOT_FOUND.
+func (s *Service) TaskStructure(ctx context.Context, id string) (*domain.TaskStructure, error) {
+	tk := s.tickets.Get(ctx, id)
+	if tk == nil {
+		return nil, &domain.StructuredError{Code: "TICKET_NOT_FOUND", Message: "ticket not found"}
+	}
+	out := &domain.TaskStructure{Children: []domain.TaskChild{}}
+	if tk.IsChild() {
+		if parent := s.tickets.Get(ctx, tk.ParentID); parent != nil {
+			out.Parent = &domain.TaskRef{ID: parent.ID, Title: parent.Title, Status: parent.Status}
+		}
+		return out, nil
+	}
+	children := s.childrenOf(ctx, tk)
+	s.fillLastMoves(ctx, children)
+	slices.SortStableFunc(children, func(a, b *domain.Ticket) int {
+		if c := cmp.Compare(childOrder[a.Status], childOrder[b.Status]); c != 0 {
+			return c
+		}
+		return b.StatusSince.Compare(a.StatusSince)
+	})
+	for _, c := range children {
+		out.Children = append(out.Children, domain.TaskChild{TaskRef: domain.TaskRef{ID: c.ID, Title: c.Title, Status: c.Status}, Archived: c.ArchivedAt != nil})
+	}
+	return out, nil
 }
 
 // withChildren fills tk's ChildrenCount from its project's tickets: the
@@ -382,50 +431,159 @@ func (s *Service) setArchived(ctx context.Context, id string, archive bool) (*do
 		s.decorate(ctx, existing)
 		return existing, nil
 	}
+	if archive && existing.Status != domain.TicketStatusDone {
+		return nil, &domain.StructuredError{Code: "TASK_NOT_DONE", Message: "only a done task can be archived"}
+	}
+	changed, err := s.moveFamily(ctx, existing, archive)
+	if err != nil {
+		return nil, err
+	}
+	return changed[0], nil
+}
+
+// moveFamily archives or restores existing with its family (see
+// archiveFamily), announces each change and answers them, existing first.
+// ticketMu is held.
+func (s *Service) moveFamily(ctx context.Context, existing *domain.Ticket, archive bool) ([]*domain.Ticket, error) {
+	family, lastSolo, err := s.archiveFamily(ctx, existing, archive)
+	if err != nil {
+		return nil, err
+	}
 	var at *time.Time
 	if archive {
-		if existing.Status != domain.TicketStatusDone {
-			return nil, &domain.StructuredError{Code: "TASK_NOT_DONE", Message: "only a done task can be archived"}
+		// Restore tells the children archived with a feature by its exact
+		// archive time, so no child archived on its own may share it.
+		now := time.Now().Truncate(time.Millisecond)
+		if !lastSolo.Before(now) {
+			now = lastSolo.Add(time.Millisecond)
 		}
-		now := time.Now()
 		at = &now
 	}
-	tk, err := s.tickets.SetArchived(id, at)
+	changed, err := s.tickets.SetArchivedMany(familyIDs(family), at)
 	if err != nil {
 		return nil, err
 	}
 	// The write is done: the change goes out whole even if the request ends.
-	s.decorate(context.WithoutCancel(ctx), tk)
-	s.announce(tk, false)
-	return tk, nil
+	ctx = context.WithoutCancel(ctx)
+	s.decorate(ctx, changed...)
+	for _, tk := range changed {
+		s.announce(tk, false)
+	}
+	return changed, nil
 }
 
-// ArchiveDoneTickets archives every done ticket of the project that is not
-// archived yet, announcing each, and answers their ids; none is an empty
-// list. An unknown project is PROJECT_NOT_FOUND.
-func (s *Service) ArchiveDoneTickets(ctx context.Context, projectID string) ([]string, error) {
+// archiveFamily answers the tickets that archive or restore with tk, tk
+// first. A plain task or a child is alone, except that a child cannot be
+// restored while its feature is archived (FEATURE_ARCHIVED). A feature
+// archives with every child still on the board, and only when all of them
+// are done (FEATURE_HAS_OPEN_CHILDREN); it restores with the children that
+// were archived together with it, which carry its exact archive time. The
+// time answered is the latest archive time of a child archived on its own.
+func (s *Service) archiveFamily(ctx context.Context, tk *domain.Ticket, archive bool) ([]*domain.Ticket, time.Time, error) {
+	family := []*domain.Ticket{tk}
+	if tk.IsChild() && !archive {
+		if parent := s.tickets.Get(ctx, tk.ParentID); parent != nil && parent.ArchivedAt != nil {
+			return nil, time.Time{}, domain.NewCatalogError("FEATURE_ARCHIVED", "Restore the feature “"+parent.Title+"” first.",
+				map[string]any{"feature": map[string]string{"id": parent.ID, "title": parent.Title}})
+		}
+	}
+	var open []map[string]string
+	var titles []string
+	var lastSolo time.Time
+	for _, child := range s.childrenOf(ctx, tk) {
+		if archive && child.ArchivedAt != nil && child.ArchivedAt.After(lastSolo) {
+			lastSolo = *child.ArchivedAt
+		}
+		switch {
+		case archive && child.ArchivedAt == nil:
+			if child.Status != domain.TicketStatusDone {
+				open = append(open, map[string]string{"id": child.ID, "title": child.Title, "status": string(child.Status)})
+				titles = append(titles, child.Title)
+			}
+			family = append(family, child)
+		case !archive && child.ArchivedAt != nil && tk.ArchivedAt != nil && child.ArchivedAt.UnixMilli() == tk.ArchivedAt.UnixMilli():
+			family = append(family, child)
+		}
+	}
+	if len(open) > 0 {
+		return nil, time.Time{}, domain.NewCatalogError("FEATURE_HAS_OPEN_CHILDREN", openChildrenMessage(titles), map[string]any{"open_children": open})
+	}
+	return family, lastSolo, nil
+}
+
+// idSet is the ids of tickets.
+func idSet(tickets []*domain.Ticket) map[string]bool {
+	set := make(map[string]bool, len(tickets))
+	for _, tk := range tickets {
+		set[tk.ID] = true
+	}
+	return set
+}
+
+// openChildrenMessage names the children that keep a feature from archiving.
+func openChildrenMessage(titles []string) string {
+	if len(titles) == 1 {
+		return "1 task is not done: " + titles[0]
+	}
+	return strconv.Itoa(len(titles)) + " tasks are not done: " + strings.Join(titles, ", ")
+}
+
+// childrenOf lists tk's children, archived ones included.
+func (s *Service) childrenOf(ctx context.Context, tk *domain.Ticket) []*domain.Ticket {
+	var children []*domain.Ticket
+	for _, list := range [][]*domain.Ticket{s.tickets.ListByProject(ctx, tk.ProjectID), s.tickets.ListArchivedByProject(ctx, tk.ProjectID)} {
+		for _, c := range list {
+			if c.ParentID == tk.ID {
+				children = append(children, c)
+			}
+		}
+	}
+	return children
+}
+
+func familyIDs(family []*domain.Ticket) []string {
+	ids := make([]string, len(family))
+	for i, tk := range family {
+		ids[i] = tk.ID
+	}
+	return ids
+}
+
+// ArchiveDoneTickets clears what the Done column shows: it archives every
+// done task on the board that stands as a card of its own, announcing each,
+// and answers the ids archived and how many features it skipped; none
+// archived is an empty list. Those cards are a done plain task, a done child
+// whose feature is not on the board, and a done feature with all its
+// children done, archived with them. A feature with an open child is
+// skipped. A done child whose feature is on the board is left alone: it is
+// inside its feature's card. An unknown project is PROJECT_NOT_FOUND.
+func (s *Service) ArchiveDoneTickets(ctx context.Context, projectID string) ([]string, int, error) {
 	if s.projects.Get(ctx, projectID) == nil {
-		return nil, &domain.StructuredError{Code: "PROJECT_NOT_FOUND", Message: "project not found"}
+		return nil, 0, &domain.StructuredError{Code: "PROJECT_NOT_FOUND", Message: "project not found"}
 	}
 	s.ticketMu.Lock()
 	defer s.ticketMu.Unlock()
 	// The writes go out whole even if the request ends midway.
 	ctx = context.WithoutCancel(ctx)
 	ids := []string{}
-	now := time.Now()
-	for _, tk := range s.tickets.ListByProject(ctx, projectID) {
-		if tk.Status != domain.TicketStatusDone {
+	skipped := 0
+	board := s.tickets.ListByProject(ctx, projectID)
+	onBoard := idSet(board)
+	for _, tk := range board {
+		if tk.Status != domain.TicketStatusDone || (tk.IsChild() && onBoard[tk.ParentID]) {
 			continue
 		}
-		archived, err := s.tickets.SetArchived(tk.ID, &now)
-		if err != nil {
-			return ids, err
+		changed, err := s.moveFamily(ctx, tk, true)
+		if errs.Code(err) == "FEATURE_HAS_OPEN_CHILDREN" {
+			skipped++
+			continue
 		}
-		s.decorate(ctx, archived)
-		s.announce(archived, false)
-		ids = append(ids, archived.ID)
+		if err != nil {
+			return ids, skipped, err
+		}
+		ids = append(ids, familyIDs(changed)...)
 	}
-	return ids, nil
+	return ids, skipped, nil
 }
 
 // checkParent refuses a parent that child (its ID empty while it is being

@@ -59,7 +59,7 @@ func sessionTasksTools(board ports.TicketBoard, sessions ports.SessionRepository
 				if err != nil {
 					return nil, err
 				}
-				var filter ports.TicketFilter
+				filter := ports.TicketFilter{ExcludeArchived: true}
 				if _, given := args["parent_id"]; given {
 					parentID := getString(args, "parent_id", "")
 					filter.ParentID = &parentID

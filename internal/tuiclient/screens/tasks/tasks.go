@@ -54,7 +54,7 @@ type (
 func (s *Screen) load() tea.Cmd {
 	board, sessions, pid := s.board, s.sessions, s.project.ID
 	return nav.Call(func(ctx context.Context) tea.Msg {
-		ts, err := board.ListTickets(ctx, pid, ports.TicketFilter{})
+		ts, err := board.ListTickets(ctx, pid, ports.TicketFilter{ExcludeArchived: true})
 		if err != nil {
 			return loadedMsg{projectID: pid, err: err}
 		}

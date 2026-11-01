@@ -143,7 +143,7 @@ func withShells(t *testing.T, svc *Service) *shellWorld {
 		},
 		bytes: map[string]string{"a-home": "<h1>home</h1>", "a-logo": "<svg/>", "a-palette": ":root{}"},
 	}
-	svc.Shells = vfs.New(vfs.Sources{Tickets: plan, Documents: plan, Comments: plan, Resources: plan, Artifacts: arts})
+	svc.Shells = vfs.New(vfs.Sources{Tickets: plan, Structure: plan, Documents: plan, Comments: plan, Resources: plan, Artifacts: arts})
 
 	inCatalog := *w.task
 	inCatalog.ProjectID = "p1"
@@ -258,6 +258,14 @@ func checkShell(t *testing.T, dir string, w *shellWorld) {
 		t.Fatal(err)
 	}
 	wantTask := map[string]any{"id": w.task.ID, "title": "Ship the thing", "description": "with care", "status": "in_progress", "architect_session_id": nil}
+	if children, ok := task["children"].([]any); !ok || len(children) != 0 {
+		t.Errorf("task.json children = %v, want []", task["children"])
+	}
+	delete(task, "children")
+	if task["parent"] != nil {
+		t.Errorf("task.json parent = %v, want null", task["parent"])
+	}
+	delete(task, "parent")
 	if len(task) != len(wantTask) {
 		t.Errorf("task.json = %v, want %v", task, wantTask)
 	}
