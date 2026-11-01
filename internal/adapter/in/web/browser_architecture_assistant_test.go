@@ -380,6 +380,8 @@ func portsProposal(id string) map[string]any {
 			map[string]any{"name": "ports", "match": map[string]any{"folder": "internal/ports"}, "access": map[string]any{"default": "read"}}, nil,
 			"internal/ports holds the interfaces the adapters implement."),
 		change(map[string]any{"kind": "pattern"}, "change", "hexagonal", nil, "The code follows ports and adapters."),
+		change(map[string]any{"kind": "rule", "id": "ports-only"}, "add",
+			map[string]any{"id": "ports-only", "kind": "edit_outside_layer", "mode": "blocking", "message": "Keep ports pure."}, nil, "Nothing outside ports may edit it."),
 	)
 }
 
@@ -416,8 +418,17 @@ func TestAssistantProposalCardAcceptsIntoTheDraftInTheBrowser(t *testing.T) {
 			t.Errorf("proposal card lacks %q: %q", want, card)
 		}
 	}
-	if strings.Join(groups, ",") != "pattern,layers" {
-		t.Errorf("groups = %v, want pattern,layers", groups)
+	if strings.Join(groups, ",") != "pattern,hooks,layers" {
+		t.Errorf("groups = %v, want pattern,hooks,layers", groups)
+	}
+	var blocking int
+	var badge string
+	rig.run(t,
+		chromedp.Evaluate(`document.querySelectorAll('[data-proposal-blocking]').length`, &blocking),
+		chromedp.Evaluate(`document.querySelector('[data-proposal-blocking]')?.closest('[data-proposal-change]')?.textContent.replace(/\s+/g, ' ') ?? ''`, &badge),
+	)
+	if blocking != 1 || !strings.Contains(badge, "ports-only") {
+		t.Errorf("blocking badges = %d on %q, want one on the ports-only rule", blocking, badge)
 	}
 	// The preview was asked for the draft with the proposal applied, and nothing is in the draft yet.
 	rig.run(t, chromedp.Evaluate(layersCount, &count), chromedp.Evaluate(barVisible(), nil))
@@ -435,7 +446,7 @@ func TestAssistantProposalCardAcceptsIntoTheDraftInTheBrowser(t *testing.T) {
 	if count != "hexagonal" {
 		t.Errorf("pattern after accept = %q", count)
 	}
-	if !strings.Contains(bar, "2 changes") {
+	if !strings.Contains(bar, "3 changes") {
 		t.Errorf("save bar = %q", bar)
 	}
 	var state string

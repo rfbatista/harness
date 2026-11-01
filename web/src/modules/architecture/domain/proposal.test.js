@@ -176,11 +176,11 @@ test("changes group by the tab they touch, in the tab order, keeping their own o
 test("a change reads as an op word, what it touches, its new value and its reason", () => {
   const row = (c) => changeRow({ ...c, reason: "because" });
   assert.deepEqual(row(ch({ kind: "layer", name: "ports" }, "add", { name: "ports", match: { folder: "internal/ports" } })), {
-    op: "add", opWord: "Add", label: "Layer ports", detail: "folder internal/ports", reason: "because",
+    op: "add", opWord: "Add", label: "Layer ports", detail: "folder internal/ports", reason: "because", blocking: false,
   });
   assert.deepEqual(row(ch({ kind: "layer", name: "web" }, "change", { name: "web", match: { regex: "^web/" } })).detail, "regex ^web/");
   assert.deepEqual(row(ch({ kind: "layer_access", layer: "web", agent: "*" }, "change", "none")), {
-    op: "change", opWord: "Change", label: "Access · web · everyone else", detail: "none", reason: "because",
+    op: "change", opWord: "Change", label: "Access · web · everyone else", detail: "none", reason: "because", blocking: false,
   });
   assert.equal(row(ch({ kind: "layer_access", layer: "web", agent: "devops" }, "remove")).detail, "falls back to the default");
   assert.equal(row(ch({ kind: "unlayered_access", agent: "devops" }, "add", "change")).label, "Unlayered access · devops");
@@ -206,4 +206,24 @@ test("a conflicting value reads as the change would word it, and a missing one a
   assert.equal(valueText(layer, null), "(none)");
   assert.equal(valueText(ch({ kind: "pattern" }, "change", "x"), "mine"), "mine");
   assert.equal(valueText(ch({ kind: "sandbox", name: "s" }, "change", { name: "s" }), { name: "s", runs: "x" }), '{"name":"s","runs":"x"}');
+});
+
+test("a rule the assistant wrote in blocking mode is marked on its row", () => {
+  const blocking = { id: "r", kind: "edit_outside_layer", mode: "blocking", message: "m" };
+  assert.equal(changeRow(ch({ kind: "rule", id: "r" }, "add", blocking)).blocking, true);
+  assert.equal(changeRow(ch({ kind: "rule", id: "r" }, "change", { ...blocking, mode: "warning" })).blocking, false);
+  assert.equal(changeRow(ch({ kind: "rule", id: "r" }, "remove", undefined, blocking)).blocking, false);
+});
+
+test("a layer remove has the whole layer as its base, and an access cell its level or none", () => {
+  const saved = record();
+  const draft = record();
+  draft.layers[1].purpose = "mine";
+  const removeWeb = proposal(ch({ kind: "layer", name: "web" }, "remove", undefined, saved.layers[1]));
+  assert.equal(proposalConflicts(draft, saved, removeWeb).length, 1);
+  assert.deepEqual(proposalConflicts(saved, saved, removeWeb), []);
+  const cell = (agent, base) => proposal(ch({ kind: "layer_access", layer: "domain", agent }, "change", "none", base));
+  assert.deepEqual(proposalConflicts(saved, saved, cell("go-developer", "change")), []);
+  assert.deepEqual(proposalConflicts(saved, saved, cell("devops", null)), []);
+  assert.deepEqual(proposalConflicts(saved, saved, cell("*", "read")), []);
 });

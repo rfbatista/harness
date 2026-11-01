@@ -40,7 +40,7 @@ templ assistantPanel() {
 											<template x-for="r in g.rows" x-bind:key="r.label">
 												<li data-proposal-change x-bind:data-op="r.op">
 													<span><span class="[ badge ]" x-text="r.opWord"></span> <span class="[ weight-medium ]" x-text="r.label"></span> <span class="[ font-mono text-xs color-ink-muted ]" x-text="r.detail"></span></span>
-													<span class="[ text-xs color-ink-muted ]" data-proposal-reason x-text="r.reason"></span>
+													<span class="[ text-xs color-ink-muted ]"><template x-if="r.blocking"><span class="[ badge ]" data-tone="danger" data-proposal-blocking>blocking</span></template> <span data-proposal-reason x-text="r.reason"></span></span>
 												</li>
 											</template>
 										</ul>

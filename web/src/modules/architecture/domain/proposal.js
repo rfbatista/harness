@@ -223,7 +223,8 @@ function labelOf(change) {
  * @param {ProposalChange} change
  */
 export function changeRow(change) {
-  return { op: change.op, opWord: OP_WORDS[change.op] ?? change.op, ...labelOf(change), reason: change.reason ?? "" };
+  const blocking = change.target.kind === "rule" && change.op !== "remove" && change.value?.mode === "blocking";
+  return { op: change.op, opWord: OP_WORDS[change.op] ?? change.op, ...labelOf(change), reason: change.reason ?? "", blocking };
 }
 
 /**
