@@ -24,7 +24,11 @@ type archRig struct {
 	feed *sseFeed
 }
 
-func newArchRig(t *testing.T) *archRig {
+func newArchRig(t *testing.T) *archRig { return newArchRigWith(t, nil) }
+
+// newArchRigWith is newArchRig where wrap, when set, may put its own handlers
+// before the fake API and the pages.
+func newArchRigWith(t *testing.T, wrap func(api *fakeArchitectureAPI, pages http.Handler) (http.Handler, http.Handler)) *archRig {
 	t.Helper()
 	assets, err := NewAssets()
 	if err != nil {
@@ -47,10 +51,14 @@ func newArchRig(t *testing.T) *archRig {
 	}, assets, nil)
 	feed := &sseFeed{}
 	api := newFakeArchitectureAPI(feed)
+	var apiHandler, pageHandler http.Handler = api, pages
+	if wrap != nil {
+		apiHandler, pageHandler = wrap(api, pages)
+	}
 	mux := http.NewServeMux()
 	mux.Handle("/api/events", feed)
-	mux.Handle("/api/", api)
-	mux.Handle("/", pages)
+	mux.Handle("/api/", apiHandler)
+	mux.Handle("/", pageHandler)
 	srv := newBrowserServer(mux)
 	t.Cleanup(func() {
 		srv.CloseClientConnections()

@@ -1,0 +1,102 @@
+/*
+ * Architecture assistant — the Assistant button in the Architecture page's
+ * toolbar and the side panel it opens beside the page.
+ * <div class="assistant"><button class="button">Assistant</button><span>reason</span>
+ *   <aside class="assistant-panel"><header><h2>…</h2><button class="button">Close</button></header>
+ *     <div class="log" role="log"><div class="message" data-who="person|assistant">…</div>
+ *       <p class="activity-line">Reading internal/domain/zone.go</p><p class="working">…</p>
+ *       <p class="notice" data-tone="danger|attention">…</p></div>
+ *     <div class="compose"><textarea></textarea><div class="actions">…</div></div></aside></div>
+ * Exceptions: data-who on .message, data-tone on .notice.
+ */
+
+@layer blocks {
+  .assistant {
+    display: flex;
+    align-items: center;
+    gap: var(--space-xs);
+    margin-inline-start: auto;
+  }
+
+  .assistant-panel {
+    position: fixed;
+    inset-block: 0;
+    inset-inline-end: 0;
+    z-index: var(--z-overlay);
+    display: flex;
+    flex-direction: column;
+    inline-size: min(26rem, 100%);
+    border-inline-start: var(--border-width) solid var(--color-line-strong);
+    background: var(--color-raised);
+    box-shadow: var(--shadow-float);
+    font-size: var(--text-sm);
+
+    &[hidden] { display: none; }
+
+    & > header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: var(--space-s);
+      padding: var(--space-s) var(--space-m);
+      border-block-end: var(--border-width) solid var(--color-line);
+
+      & > h2 { font-size: var(--text-sm); font-weight: var(--weight-bold); }
+    }
+
+    & > .log {
+      display: flex;
+      flex-direction: column;
+      gap: var(--space-s);
+      flex: 1;
+      min-block-size: 0;
+      padding: var(--space-m);
+      overflow-y: auto;
+    }
+
+    & .message {
+      max-inline-size: 90%;
+      padding: var(--space-xs) var(--space-s);
+      border-radius: var(--radius-md);
+      white-space: pre-wrap;
+      overflow-wrap: anywhere;
+
+      &[data-who="person"] { align-self: flex-end; background: var(--color-signal-wash); }
+      &[data-who="assistant"] { align-self: flex-start; background: var(--color-sunken); }
+    }
+
+    & .activity-line,
+    & .working {
+      color: var(--color-ink-faint);
+      font-size: var(--text-xs);
+      font-family: var(--font-mono);
+    }
+
+    & .notice {
+      display: flex;
+      flex-direction: column;
+      align-items: flex-start;
+      gap: var(--space-xs);
+      padding: var(--space-xs) var(--space-s);
+      border: var(--border-width) solid var(--color-line-strong);
+      border-radius: var(--radius-md);
+    }
+
+    & > .compose {
+      display: flex;
+      flex-direction: column;
+      gap: var(--space-xs);
+      padding: var(--space-s) var(--space-m);
+      border-block-start: var(--border-width) solid var(--color-line);
+
+      & > textarea {
+        inline-size: 100%;
+        resize: vertical;
+        min-block-size: 4.5rem;
+        max-block-size: 12rem;
+        font-size: var(--text-sm);
+      }
+      & > .actions { display: flex; justify-content: flex-end; gap: var(--space-xs); }
+    }
+  }
+}

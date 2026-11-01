@@ -12,6 +12,7 @@ templ PageView(v View) {
 			<header class="[ toolbar ]">
 				<a class="[ crumb ]" href={ templ.SafeURL(v.SettingsHref) }>{ v.ProjectName } / repositories / { v.RepositoryName } /</a>
 				<span class="[ crumb ]" aria-current="page">Architecture</span>
+				@assistantPanel()
 			</header>
 			<div data-scroll class="[ arch-scroll ]">
 				<div class="[ wrapper flow ] [ region ]" style="--wrapper-max: 72rem">
