@@ -115,6 +115,9 @@ type Services struct {
 	AgentAuth ports.AgentAuth
 	// WritingHelper runs the writing helper's steps; nil answers 503.
 	WritingHelper ports.WritingHelper
+	// ArchitectureAssistant runs the architecture assistant's turns; nil
+	// answers 503.
+	ArchitectureAssistant ports.ArchitectureAssistant
 	// Catalog is the agent catalog folder: agents, bundles, skills and MCP
 	// servers; nil answers 503.
 	Catalog ports.CatalogEditor
@@ -180,8 +183,9 @@ type Handler struct {
 	agentOAuth       ports.AgentOAuth
 	agentAuth        ports.AgentAuth
 
-	writingHelper ports.WritingHelper
-	catalog       ports.CatalogEditor
+	writingHelper         ports.WritingHelper
+	architectureAssistant ports.ArchitectureAssistant
+	catalog               ports.CatalogEditor
 
 	repoArch  ports.RepositoryArchitectures
 	archRules ports.ArchitectureRules
@@ -241,8 +245,9 @@ func NewHandler(s Services) *Handler {
 		agentOAuth:       s.AgentOAuth,
 		agentAuth:        s.AgentAuth,
 
-		writingHelper: s.WritingHelper,
-		catalog:       s.Catalog,
+		writingHelper:         s.WritingHelper,
+		architectureAssistant: s.ArchitectureAssistant,
+		catalog:               s.Catalog,
 	}
 }
 

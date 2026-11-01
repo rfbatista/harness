@@ -149,6 +149,10 @@ func NewRouter(h *Handler, opts ...Option) *echo.Echo {
 	// the writing helper: one step per request, streamed (SSE framing)
 	g.POST("/run_writing_helper_step", h.handleRunWritingHelperStep)
 
+	// the architecture assistant: one turn per request, streamed (SSE framing)
+	g.POST("/run_architecture_assistant_turn", h.handleRunArchitectureAssistantTurn)
+	g.POST("/end_architecture_assistant_conversation", h.handleEndArchitectureAssistantConversation)
+
 	// agent sandbox settings (the Agent isolation page)
 	g.GET("/get_sandbox_settings", h.handleGetSandboxSettings)
 	g.POST("/set_sandbox_enabled", h.handleSetSandboxEnabled)
