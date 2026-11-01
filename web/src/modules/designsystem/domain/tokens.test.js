@@ -137,3 +137,10 @@ test("a duration sample is a bar as long as the time, capped", () => {
 test("a number has no picture, only its value", () => {
   assert.equal(sampleOf({ ...newRow("n1", "scale", "number"), text: "1.25" }).kind, "number");
 });
+
+test("an easing token shows a small motion sample, and one that cannot be drawn is invalid", () => {
+  const ok = sampleOf({ ...newRow("n1", "motion", "easing"), text: "cubic-bezier(0.2, 0, 0, 1)" });
+  assert.equal(ok.kind, "motion");
+  assert.equal(ok.invalid, false);
+  assert.equal(sampleOf({ ...newRow("n2", "motion", "easing"), text: "" }).invalid, true);
+});

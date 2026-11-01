@@ -20,6 +20,20 @@ func TestParsingTheGeneratedFilesGivesTheRecordBack(t *testing.T) {
 			{Group: "typography", Name: "body", Type: "typography", Value: map[string]any{"fontFamily": "Inter, sans-serif", "fontSize": "0.875rem"}},
 		},
 		Principles: "# Principles\n\n## Calm\n\nKeep it quiet.\n",
+		Components: []domain.DesignComponent{
+			{
+				Slug: "button", Name: "Button & link", Purpose: "Starts an action.",
+				Do: []string{"Use one per view."}, Dont: []string{"Nest <buttons>.", "Say \"click\"."},
+				Previews: []domain.DesignPreview{
+					{Label: "Primary / default", Variant: "primary", State: "default", HTML: `<button class="btn">Save</button>`, CSS: ".btn{background:var(--colors-signal);padding:var(--space-m)}"},
+					{Label: "Primary / disabled", Variant: "primary", State: "disabled", HTML: `<button class="btn" disabled="">Save</button>`, CSS: ".btn[disabled]{opacity:.5}"},
+				},
+			},
+			{
+				Slug: "badge", Name: "Badge", Purpose: "A short label.", Do: []string{}, Dont: []string{},
+				Previews: []domain.DesignPreview{{Label: "Plain", Variant: "plain", State: "default", HTML: `<span class="badge">New</span>`, CSS: ".badge{color:var(--colors-ink)}"}},
+			},
+		},
 	}
 	files := Files(Identity{Name: "App", Slug: "app", Description: "The look"}, 3, time.Date(2026, 11, 1, 0, 0, 0, 0, time.UTC), record)
 	content := map[string][]byte{}
@@ -44,6 +58,20 @@ func TestParsingTheGeneratedFilesGivesTheRecordBack(t *testing.T) {
 	}
 	if !reflect.DeepEqual(jsonTokens, record.Tokens) {
 		t.Errorf("tokens.json tokens\n got %v\nwant %v", jsonTokens, record.Tokens)
+	}
+
+	for _, want := range record.Components {
+		page, ok := content["components/"+want.Slug+".html"]
+		if !ok {
+			t.Fatalf("no page for component %s among %v", want.Slug, files)
+		}
+		got, err := ParseComponentHTML(page)
+		if err != nil {
+			t.Fatalf("components/%s.html: %v", want.Slug, err)
+		}
+		if !reflect.DeepEqual(got, want) {
+			t.Errorf("components/%s.html\n got %+v\nwant %+v", want.Slug, got, want)
+		}
 	}
 }
 

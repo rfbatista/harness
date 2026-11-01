@@ -442,5 +442,47 @@
     "errors": [
       "TOKEN_IN_USE /tokens"
     ]
+  },
+  {
+    "name": "a token name that starts with a digit and an easing token",
+    "record": {
+      "tokens": [
+        {
+          "group": "spacing",
+          "name": "2xl",
+          "type": "dimension",
+          "value": "3rem",
+          "note": ""
+        },
+        {
+          "group": "motion",
+          "name": "ease-out",
+          "type": "easing",
+          "value": "cubic-bezier(0.2, 0, 0, 1)",
+          "note": ""
+        }
+      ],
+      "principles": "",
+      "components": [
+        {
+          "slug": "gap",
+          "name": "Gap",
+          "purpose": "",
+          "do": [],
+          "dont": [],
+          "previews": [
+            {
+              "label": "L",
+              "variant": "v",
+              "state": "s",
+              "html": "<i></i>",
+              "css": ".a{margin:var(--spacing-2xl);transition-timing-function:var(--motion-ease-out)}"
+            }
+          ]
+        }
+      ]
+    },
+    "root": ":root{--spacing-2xl:3rem;--motion-ease-out:cubic-bezier(0.2, 0, 0, 1)}",
+    "errors": []
   }
 ]
