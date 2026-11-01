@@ -202,7 +202,7 @@ func TestDesignProposal_AConflictingItemNeedsItsOverwriteConfirmed(t *testing.T)
 	}
 }
 
-func TestDesignProposal_OnlyAnOpenProposalIsDecidedAndOnlyAsAWhole(t *testing.T) {
+func TestDesignProposal_OnlyAnOpenProposalIsDecidedWithKnownItemsAndDecisions(t *testing.T) {
 	e := newShellE2E(t)
 	ds := e.savedDesignSystem()
 	s := e.designSession(ds)
@@ -232,8 +232,6 @@ func TestDesignProposal_OnlyAnOpenProposalIsDecidedAndOnlyAsAWhole(t *testing.T)
 		t.Fatalf("items = %+v", items)
 	}
 	for name, decisions := range map[string][]map[string]string{
-		"some items":  {{"item_id": items[0].ID, "decision": "approve"}},
-		"mixed":       {{"item_id": items[0].ID, "decision": "approve"}, {"item_id": items[1].ID, "decision": "reject"}},
 		"unknown":     {{"item_id": "token:nope", "decision": "approve"}, {"item_id": items[1].ID, "decision": "approve"}},
 		"no decision": {{"item_id": items[0].ID, "decision": "maybe"}, {"item_id": items[1].ID, "decision": "approve"}},
 		"none":        nil,

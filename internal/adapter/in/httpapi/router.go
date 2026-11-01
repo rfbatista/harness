@@ -370,6 +370,7 @@ func NewRouter(h *Handler, opts ...Option) *echo.Echo {
 	g.POST("/list_design_system_proposals", h.handleListDesignSystemProposals)
 	g.POST("/get_design_system_proposal", h.handleGetDesignSystemProposal)
 	g.POST("/decide_design_system_proposal", h.handleDecideDesignSystemProposal)
+	g.POST("/send_back_design_system_items", h.handleSendBackDesignSystemItems)
 	g.POST("/withdraw_design_system_proposal", h.handleWithdrawDesignSystemProposal)
 	g.POST("/rename_design_token", h.handleRenameDesignToken)
 	g.POST("/find_design_system_sources", h.handleFindDesignSystemSources)

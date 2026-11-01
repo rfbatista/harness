@@ -33,6 +33,9 @@ type DesignProposal struct {
 	Draft DesignSystemRecord
 	// DecidedVersion is the version an approval wrote, 0 for none.
 	DecidedVersion int
+	// Decisions is the person's decision per item id: approved, rejected or
+	// sent_back. An item with no entry is pending.
+	Decisions map[string]string
 	// Rejected is how many items a decision rejected, for the decided turn.
 	Approved, Rejected int
 	SubmittedAt        time.Time

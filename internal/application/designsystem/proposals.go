@@ -83,7 +83,9 @@ func (s *Service) SubmitDesignProposal(ctx context.Context, sessionID, summary s
 	if len(items) == 0 {
 		return nil, &domain.StructuredError{Code: "PROPOSAL_EMPTY", Message: "your draft equals its base: change tokens.json, DESIGN.md or a component first"}
 	}
+	// A resubmitted proposal starts again: every item waits on the person.
 	p.State, p.Summary, p.SubmittedAt = domain.ProposalOpen, summary, s.now()
+	p.Decisions, p.Approved, p.Rejected = nil, 0, 0
 	if err := s.proposals.Update(ctx, p); err != nil {
 		return nil, err
 	}
@@ -130,11 +132,19 @@ func (s *Service) items(ctx context.Context, p *domain.DesignProposal, cur *doma
 	}
 	current.Normalize()
 	items := domain.DeriveDesignItems(base, p.Draft, current)
-	if p.State != domain.ProposalDrafting && p.State != domain.ProposalOpen {
-		// What is decided no longer competes with the design system: it is
-		// the design system now, so nothing in it conflicts.
-		for i := range items {
-			items[i].Conflicting = false
+	decided := p.State != domain.ProposalDrafting && p.State != domain.ProposalOpen
+	for i := range items {
+		it := &items[i]
+		if d := p.Decisions[it.ID]; d != "" {
+			it.Decision = d
+		} else if decided {
+			it.Decision = decisionOf(p.State)
+		}
+		// What is decided no longer competes with the design system: an
+		// approved item is the design system now and a rejected one is gone,
+		// so nothing in it conflicts.
+		if decided || it.Decision == domain.DecisionApproved || it.Decision == domain.DecisionRejected {
+			it.Conflicting = false
 		}
 	}
 	return items, nil
@@ -208,24 +218,31 @@ func (s *Service) GetDesignProposal(ctx context.Context, proposalID string) (*po
 	if err != nil {
 		return nil, err
 	}
-	if p.State != domain.ProposalDrafting && p.State != domain.ProposalOpen {
-		for i := range items {
-			items[i].Decision = decisionOf(p.State)
-		}
-	}
 	view := &ports.DesignProposalView{DesignProposalRow: *s.row(p, items), Items: items, ProposedRecord: p.Draft}
 	if cur != nil {
 		view.CurrentVersion = cur.Version
-		view.ProposedRecord = domain.ApplyDesignItems(cur.Record, items)
+		view.ProposedRecord = domain.ApplyDesignItems(cur.Record, kept(items))
 	} else {
-		view.ProposedRecord = domain.ApplyDesignItems(domain.DesignSystemRecord{}, items)
+		view.ProposedRecord = domain.ApplyDesignItems(domain.DesignSystemRecord{}, kept(items))
 	}
 	view.AffectedComponents = affected(view.ProposedRecord, items)
 	return view, nil
 }
 
-// decisionOf is the decision every item of a decided proposal has: a whole
-// proposal is approved or rejected together.
+// kept are the items the proposed record still holds: every one but those
+// the person rejected.
+func kept(items []domain.DesignItem) []domain.DesignItem {
+	var out []domain.DesignItem
+	for _, it := range items {
+		if it.Decision != domain.DecisionRejected {
+			out = append(out, it)
+		}
+	}
+	return out
+}
+
+// decisionOf is the decision an item of a decided proposal has when none is
+// stored (a proposal decided as a whole before items were stored).
 func decisionOf(state string) string {
 	switch state {
 	case domain.ProposalApproved:

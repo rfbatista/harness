@@ -9,7 +9,16 @@
 import { describeError } from "../../../../shared/presentation/errors.js";
 import { FeedStatus } from "../../../../shared/domain/feed.js";
 import { readSeed } from "../../../../shared/presentation/seed.js";
-import { contrastFigures, itemView, previewPairs, rowView, sectionDiff, tokenRows } from "../../domain/proposals.js";
+import { contrastFigures, dependencyFlags, itemView, previewPairs, rowView, sectionDiff, tokenRows } from "../../domain/proposals.js";
+
+/** What an apply did, as the line shown above the review. */
+function decisionResult({ version, state }) {
+  const wrote = version > 0 ? `version ${version} was written` : "nothing was written";
+  if (state === "rejected") return "Rejected: nothing changed.";
+  if (state === "approved") return `Approved: ${wrote}.`;
+  if (state === "partly_approved") return `Partly approved: ${wrote}.`;
+  return `Applied: ${wrote}; the other changes wait for you.`;
+}
 
 /** @param {{ gateway: ReturnType<typeof import("../../infrastructure/designsystem-gateway.js").designSystemGateway>, clock: import("../../../../shared/infrastructure/clock.js").Clock, location?: Location }} deps */
 export const designSystemProposals = ({ gateway, clock, location = globalThis.location }) => () => ({
@@ -21,6 +30,12 @@ export const designSystemProposals = ({ gateway, clock, location = globalThis.lo
   currentRecord: { tokens: [], principles: "", components: [] },
   /** The ids of the conflicting items whose overwrite the person confirmed. */
   overwriteIds: [],
+  /** The person's marks on pending items, by item id: "approve" or "reject". Applied together. */
+  marks: {},
+  /** Why the server refused an item, by item key. */
+  itemProblems: {},
+  /** The person's note to the design session with the items sent back. */
+  sendBackNote: "",
   rejectingAll: false,
   deciding: false,
   proposalError: null,
@@ -69,6 +84,50 @@ export const designSystemProposals = ({ gateway, clock, location = globalThis.lo
   get proposalDecidable() {
     return this.proposalView !== null && this.proposalView.state === "open";
   },
+  get dependencyFlagsNow() {
+    return this.proposalView ? dependencyFlags(this.proposalView, this.marks) : {};
+  },
+  get markedItems() {
+    return (this.proposalView?.items ?? []).filter((it) => it.decision === "pending" && (this.marks[it.id] === "approve" || this.marks[it.id] === "reject"));
+  },
+  /** The items marked to go back to the design session. */
+  get backItems() {
+    return (this.proposalView?.items ?? []).filter((it) => it.decision === "pending" && this.marks[it.id] === "back");
+  },
+  get hasBackItems() {
+    return this.backItems.length > 0;
+  },
+  /** Send back is offered while the design session runs: nobody else can answer it. */
+  get canSendBack() {
+    return this.proposalDecidable && this.proposalView.sessionRunning;
+  },
+  get canSendBackNow() {
+    return this.canSendBack && !this.deciding && this.hasBackItems;
+  },
+  get sendBackText() {
+    const n = this.backItems.length;
+    return `Send back ${n} ${n === 1 ? "change" : "changes"}`;
+  },
+  get markedApprove() {
+    return this.markedItems.filter((it) => this.marks[it.id] === "approve");
+  },
+  get hasMarks() {
+    return this.markedItems.length > 0;
+  },
+  get pendingItems() {
+    return (this.proposalView?.items ?? []).filter((it) => it.decision === "pending");
+  },
+  get hasFlags() {
+    return Object.keys(this.dependencyFlagsNow).length > 0;
+  },
+  get canApplyMarks() {
+    return this.proposalDecidable && !this.deciding && this.hasMarks && !this.hasFlags && this.markedApprove.every((it) => !it.conflicting || this.overwriteIds.includes(it.id));
+  },
+  get marksText() {
+    const a = this.markedApprove.length;
+    const r = this.markedItems.length - a;
+    return `${a} approved, ${r} rejected`;
+  },
   get proposalItemViews() {
     return this.proposalView ? this.proposalView.items.map((it) => ({ ...itemView(it), confirmed: this.overwriteIds.includes(it.id) })) : [];
   },
@@ -90,6 +149,16 @@ export const designSystemProposals = ({ gateway, clock, location = globalThis.lo
         contrast: figures ?? { against: "", before: "", after: "" },
         conflictNote: it.conflicting ? "You changed this since the proposal's base. Approving overwrites your version." : "",
         confirmed: this.overwriteIds.includes(it.id),
+        canMark: this.proposalDecidable && it.decision === "pending",
+        approveOn: this.marks[it.id] === "approve",
+        rejectOn: this.marks[it.id] === "reject",
+        backOn: this.marks[it.id] === "back",
+        canSendBack: this.canSendBack && it.decision === "pending",
+        decided: it.decision === "approved" || it.decision === "rejected",
+        flag: this.dependencyFlagsNow[it.id] ?? "",
+        hasFlag: this.dependencyFlagsNow[it.id] !== undefined,
+        problem: this.itemProblems[it.key] ?? "",
+        hasProblem: this.itemProblems[it.key] !== undefined,
         componentNote: it.kind === "component" ? (it.op === "remove" ? "Removed by the proposal." : it.op === "add" ? "New component, see its previews below." : "Changed, see its previews below.") : "",
       };
     });
@@ -111,7 +180,7 @@ export const designSystemProposals = ({ gateway, clock, location = globalThis.lo
     return `You saved version ${this.proposalView?.currentVersion} after this proposal was made (its base is version ${this.proposalView?.baseVersion}). ${n === 1 ? "One change touches" : `${n} changes touch`} what you saved: confirm each overwrite below before approving.`;
   },
   get everyOverwriteConfirmed() {
-    return this.proposalView !== null && this.proposalView.items.filter((i) => i.conflicting).every((i) => this.overwriteIds.includes(i.id));
+    return this.proposalView !== null && this.pendingItems.filter((i) => i.conflicting).every((i) => this.overwriteIds.includes(i.id));
   },
   get canApproveProposal() {
     return this.proposalDecidable && !this.deciding && this.everyOverwriteConfirmed;
@@ -121,7 +190,10 @@ export const designSystemProposals = ({ gateway, clock, location = globalThis.lo
   },
   get proposalNextVersionText() {
     const v = this.proposalView;
-    return v ? `Approving writes version ${v.currentVersion + 1} · “${v.summary}”` : "";
+    if (!v) return "";
+    if (!this.hasMarks) return `Approving all writes version ${v.currentVersion + 1} · “${v.summary}”`;
+    const writes = this.markedApprove.length > 0 ? `writes version ${v.currentVersion + 1}` : "writes no version";
+    return `Applying ${this.marksText} ${writes} · ${this.pendingItems.length - this.markedItems.length} stay pending`;
   },
   get hasDecisionResult() {
     return this.decisionResult !== "";
@@ -186,6 +258,9 @@ export const designSystemProposals = ({ gateway, clock, location = globalThis.lo
     this.rejectingAll = false;
     this.decisionResult = "";
     this.proposalError = null;
+    this.marks = {};
+    this.sendBackNote = "";
+    this.itemProblems = {};
     await this.loadProposalView(id);
   },
 
@@ -197,6 +272,10 @@ export const designSystemProposals = ({ gateway, clock, location = globalThis.lo
       if (id !== this.proposalId) return;
       this.proposalView = view;
       this.currentRecord = record;
+      // A mark on an item that is no longer pending is spent.
+      this.marks = Object.fromEntries(Object.entries(this.marks).filter(([itemId]) => view.items.some((it) => it.id === itemId && it.decision === "pending")));
+      // The note belongs to the items marked back: with none left it goes.
+      if (!Object.values(this.marks).includes("back")) this.sendBackNote = "";
     } catch (err) {
       this.proposalError = describeError(err);
     }
@@ -214,6 +293,15 @@ export const designSystemProposals = ({ gateway, clock, location = globalThis.lo
     this.proposalId = "";
     this.proposalView = null;
     this.decisionResult = "";
+  },
+
+  /** Marks a pending item to approve or reject at the next apply; marking it the same way again unmarks it. */
+  markItem(id, decision) {
+    const marks = { ...this.marks };
+    if (marks[id] === decision) delete marks[id];
+    else marks[id] = decision;
+    this.marks = marks;
+    this.itemProblems = {};
   },
 
   toggleOverwrite(id) {
@@ -237,23 +325,56 @@ export const designSystemProposals = ({ gateway, clock, location = globalThis.lo
   },
 
   async decideProposal(decision) {
-    if (this.proposalView === null || this.deciding) return;
+    if (this.proposalView === null) return;
+    return this.send(this.pendingItems.map((i) => ({ id: i.id, decision })), decision === "approve" ? this.pendingItems.filter((i) => i.conflicting).map((i) => i.id) : []);
+  },
+
+  /** Applies the marks: the approved items become one version, the rejected are dropped, the rest stay pending. */
+  applyMarks() {
+    return this.send(
+      this.markedItems.map((it) => ({ id: it.id, decision: this.marks[it.id] })),
+      this.markedApprove.filter((it) => it.conflicting).map((it) => it.id),
+    );
+  },
+
+  /** Sends the items marked back to the design session with the note; the proposal becomes a draft again. */
+  async sendBackMarked() {
+    if (this.proposalView === null || this.deciding || !this.hasBackItems) return;
     this.deciding = true;
     this.proposalError = null;
     const id = this.proposalView.id;
     try {
-      const out = await gateway.decide(
-        id,
-        this.proposalView.items.map((i) => i.id),
-        decision,
-        decision === "approve" ? this.overwriteIds : [],
-      );
-      this.decisionResult = out.version > 0 ? `Approved: version ${out.version} was written.` : "Rejected: nothing changed.";
-      this.rejectingAll = false;
+      await gateway.sendBack(id, this.backItems.map((it) => it.id), this.sendBackNote);
+      this.decisionResult = "Sent back: the design session reworks those changes and submits again.";
+      this.marks = {};
+      this.sendBackNote = "";
       await this.reloadProposals();
       await this.loadProposalView(id);
     } catch (err) {
       this.proposalError = describeError(err);
+    } finally {
+      this.deciding = false;
+    }
+  },
+
+  async send(decisions, confirm) {
+    if (this.proposalView === null || this.deciding) return;
+    this.deciding = true;
+    this.proposalError = null;
+    this.itemProblems = {};
+    const id = this.proposalView.id;
+    try {
+      const out = await gateway.decideItems(id, decisions, confirm);
+      this.decisionResult = decisionResult(out);
+      this.rejectingAll = false;
+      this.marks = {};
+      await this.reloadProposals();
+      await this.loadProposalView(id);
+    } catch (err) {
+      this.proposalError = describeError(err);
+      // The design system refused some approved items: say which, on the item.
+      const keys = err?.details?.item_keys;
+      if (Array.isArray(keys)) this.itemProblems = Object.fromEntries(keys.map((k) => [k, "The design system cannot take this item as it is now. Reject it, or leave it pending."]));
     } finally {
       this.deciding = false;
     }

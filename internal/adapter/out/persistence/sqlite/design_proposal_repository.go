@@ -24,6 +24,7 @@ type DesignProposalModel struct {
 	Summary        string
 	DraftJSON      string `gorm:"column:draft_json"`
 	DecidedVersion int    `gorm:"column:decided_version"`
+	DecisionsJSON  string `gorm:"column:decisions_json"`
 	Approved       int
 	Rejected       int
 	SubmittedAt    time.Time `gorm:"column:submitted_at"`
@@ -40,7 +41,11 @@ func proposalModel(p *domain.DesignProposal) (*DesignProposalModel, error) {
 	if err != nil {
 		return nil, err
 	}
-	return &DesignProposalModel{
+	decisions, err := json.Marshal(p.Decisions)
+	if err != nil {
+		return nil, err
+	}
+	return &DesignProposalModel{DecisionsJSON: string(decisions),
 		ID: p.ID, DesignSystemID: p.DesignSystemID, SessionID: p.SessionID, State: p.State, BaseVersion: p.BaseVersion,
 		Summary: p.Summary, DraftJSON: string(draft), DecidedVersion: p.DecidedVersion, Approved: p.Approved, Rejected: p.Rejected,
 		SubmittedAt: p.SubmittedAt, DecidedAt: p.DecidedAt, CreatedAt: p.CreatedAt, UpdatedAt: p.UpdatedAt,
@@ -55,6 +60,11 @@ func (m *DesignProposalModel) toDomain() (*domain.DesignProposal, error) {
 	}
 	if err := json.Unmarshal([]byte(m.DraftJSON), &p.Draft); err != nil {
 		return nil, err
+	}
+	if m.DecisionsJSON != "" {
+		if err := json.Unmarshal([]byte(m.DecisionsJSON), &p.Decisions); err != nil {
+			return nil, err
+		}
 	}
 	p.Draft.Normalize()
 	return p, nil

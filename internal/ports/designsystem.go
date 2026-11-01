@@ -207,12 +207,19 @@ type DesignProposals interface {
 	// token changes touch and the record as it would be if every item were
 	// approved.
 	GetDesignProposal(ctx context.Context, proposalID string) (*DesignProposalView, error)
-	// DecideDesignProposal approves every item or rejects every item (some
-	// items only is INVALID_INPUT until per-item decisions arrive). Approving
-	// writes one version, source proposal, on top of the current one; a
-	// conflicting item needs its id in confirmOverwrite (CONFLICT_NOT_CONFIRMED,
-	// details.item_ids). PROPOSAL_NOT_OPEN when it is not open.
+	// DecideDesignProposal approves or rejects items; items left out stay
+	// pending and keep the proposal open. The approved items are applied as
+	// one version, source proposal, on top of the current one; a conflicting
+	// approved item needs its id in confirmOverwrite (CONFLICT_NOT_CONFIRMED,
+	// details.item_ids). An apply the design system refuses is
+	// DESIGN_SYSTEM_INVALID, details.item_keys naming the items. PROPOSAL_NOT_OPEN
+	// when it is not open.
 	DecideDesignProposal(ctx context.Context, proposalID string, decisions []ItemDecision, confirmOverwrite []string) (*DesignDecision, error)
+	// SendBackDesignItems returns pending items to the running design session
+	// with the person's note, rebases its draft on the current version and
+	// answers the proposal's state, drafting. SESSION_NOT_RUNNING when the
+	// session ended; INVALID_INPUT for no items or an item already decided.
+	SendBackDesignItems(ctx context.Context, proposalID string, itemIDs []string, note string) (string, error)
 	// WithdrawDesignProposal drops a proposal whose design session ended
 	// (SESSION_RUNNING while it runs) and answers its state, withdrawn.
 	WithdrawDesignProposal(ctx context.Context, proposalID string) (string, error)
