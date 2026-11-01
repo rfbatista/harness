@@ -149,6 +149,10 @@ func NewRouter(h *Handler, opts ...Option) *echo.Echo {
 	// the writing helper: one step per request, streamed (SSE framing)
 	g.POST("/run_writing_helper_step", h.handleRunWritingHelperStep)
 
+	// the architecture assistant: one turn per request, streamed (SSE framing)
+	g.POST("/run_architecture_assistant_turn", h.handleRunArchitectureAssistantTurn)
+	g.POST("/end_architecture_assistant_conversation", h.handleEndArchitectureAssistantConversation)
+
 	// agent sandbox settings (the Agent isolation page)
 	g.GET("/get_sandbox_settings", h.handleGetSandboxSettings)
 	g.POST("/set_sandbox_enabled", h.handleSetSandboxEnabled)
@@ -342,6 +346,13 @@ func NewRouter(h *Handler, opts ...Option) *echo.Echo {
 	g.POST("/export_repository_architecture", h.handleExportRepositoryArchitecture)
 	g.POST("/list_architecture_rule_events", h.handleListArchitectureRuleEvents)
 	g.POST("/discover_repository_architecture", h.handleDiscoverRepositoryArchitecture)
+	g.POST("/list_instruction_files", h.handleListInstructionFiles)
+	g.POST("/import_instruction_files", h.handleImportInstructionFiles)
+	g.POST("/remove_instruction_files_from_repository", h.handleRemoveInstructionFilesFromRepository)
+	g.POST("/get_instruction_file", h.handleGetInstructionFile)
+	g.POST("/save_instruction_file", h.handleSaveInstructionFile)
+	g.POST("/rename_instruction_file", h.handleRenameInstructionFile)
+	g.POST("/delete_instruction_file", h.handleDeleteInstructionFile)
 	g.GET("/architecture.schema.json", h.handleArchitectureSchema)
 
 	// code views: read-only file trees, contents, diffs and the zone map

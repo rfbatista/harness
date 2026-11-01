@@ -79,11 +79,11 @@ func (s *Service) DiscoverRepositoryArchitecture(ctx context.Context, repository
 	for _, f := range files {
 		switch base := path.Base(f); {
 		case base == "AGENTS.md" || base == "CLAUDE.md" || base == "GEMINI.md":
-			d.Instructions = append(d.Instructions, domain.ArchitectureCandidate{Path: f, Kind: "rules", Loaded: "always", Source: "repository"})
+			d.Instructions = append(d.Instructions, domain.ArchitectureCandidate{Path: f, Kind: "memory", Loaded: "always", Source: "repository"})
 		case base == "SKILL.md" && strings.HasPrefix(f, ".claude/skills/"):
 			d.Instructions = append(d.Instructions, domain.ArchitectureCandidate{Path: f, Kind: "skill", Loaded: "on_demand", Source: "repository"})
 		case strings.HasPrefix(f, ".claude/agents/") && path.Dir(f) == ".claude/agents" && strings.HasSuffix(f, ".md"):
-			d.Instructions = append(d.Instructions, domain.ArchitectureCandidate{Path: f, Kind: "subagent_prompt", Loaded: "on_demand", Source: "repository"})
+			d.Instructions = append(d.Instructions, domain.ArchitectureCandidate{Path: f, Kind: "subagent", Loaded: "on_demand", Source: "repository"})
 		case f == ".mcp.json":
 			hasMCPJSON = true
 		}
@@ -139,7 +139,7 @@ func (s *Service) DiscoverRepositoryArchitecture(ctx context.Context, repository
 		d.Agents = append(d.Agents, a.Name)
 		if a.PromptID != "" {
 			d.Instructions = append(d.Instructions, domain.ArchitectureCandidate{
-				Path: "harness://agents/" + a.Name, Kind: "subagent_prompt", Loaded: "on_demand", Source: "agent catalog",
+				Path: "harness://agents/" + a.Name, Kind: "subagent", Loaded: "on_demand", Source: "agent catalog",
 			})
 		}
 	}

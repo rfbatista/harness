@@ -208,6 +208,8 @@ func TestArchitectureOutputExportStateFollowsTheProjectFeed(t *testing.T) {
 		poll(`document.querySelector('[data-file-state-title]')?.textContent.trim() === 'Never exported'`),
 		poll(`document.querySelector('[data-export-state]')?.textContent.trim() === 'Never exported'`),
 	)
+	// an event sent before the page follows the feed is lost
+	waitFor(t, "the page's feed", func() bool { return rig.feed.followers() >= 1 })
 	rig.api.mu.Lock()
 	rig.api.export = map[string]any{"state": "in_sync", "path": ".harness/architecture.yaml", "exported_version": 1, "exported_commit": "feedbeef000", "exported_at": "2026-10-20T10:00:00Z"}
 	v := rig.api.version

@@ -863,6 +863,7 @@ func (s *Service) sessionConfig(id, dir, model string, allowedTools []string, pe
 	if section := s.architectureSection(context.TODO(), role, ag.agent, subject.projectID(), repositoryID); section != "" {
 		cfg.AppendSystem = appendSection(cfg.AppendSystem, section)
 	}
+	cfg.InstructionFiles = s.instructionFiles(context.TODO(), role, ag.agent, subject.projectID(), repositoryID)
 	if section := attachedAssetsSection(s.attachedAssets(ticket)); section != "" {
 		cfg.AppendSystem = appendSection(cfg.AppendSystem, section)
 	}

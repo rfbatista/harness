@@ -15,7 +15,7 @@
 
 import { describeError } from "../../../../shared/presentation/errors.js";
 import { Codes } from "../../../../shared/domain/errors.js";
-import { LIGHT_EDIT_CHIPS, REFINE_CHIPS, pickedMessage, startLead, startPlaceholder, startQuestion, usedMessage } from "../../domain/copy.js";
+import { lightEditChips, pickedMessage, refineChips, startLead, startPlaceholder, startQuestion, usedMessage } from "../../domain/copy.js";
 import { diffHtml, wordDiff } from "../../domain/diff.js";
 import * as model from "../../domain/panel.js";
 import { stepRequest } from "../../domain/steps.js";
@@ -273,10 +273,10 @@ export const writingPen = ({ gateway, coordinator, setTimeout: later = globalThi
       return `You changed the ${this.noun} after this draft. Using it would drop your new words.`;
     },
     get refineChips() {
-      return REFINE_CHIPS;
+      return refineChips(this.kind);
     },
     get lightEditChips() {
-      return LIGHT_EDIT_CHIPS;
+      return lightEditChips(this.kind);
     },
     get gapCount() {
       return model.openGaps(this.panel.draft).length;

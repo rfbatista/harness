@@ -192,3 +192,121 @@ func TestRepositoriesSharingANameGetDistinctFilesInTheShell(t *testing.T) {
 		t.Errorf("the second repository has no short-id name")
 	}
 }
+
+// A repository's instruction files are read-only files of the shell, under
+// project/architecture/<repository>/instructions/ (ADR 0057).
+
+func (e *shellE2E) saveInstruction(repo, path, kind string, base int, content string) {
+	e.t.Helper()
+	e.post("save_instruction_file", map[string]any{"repository_id": repo, "path": path, "kind": kind, "base_version": base, "content": content}, nil)
+}
+
+func TestInstructionFilesAreReadOnlyFilesInEveryShellOfTheProject(t *testing.T) {
+	e := newShellE2E(t)
+	a := e.start(e.task("Instructions in the shell"))
+	root := "project/architecture/harness/instructions/"
+	if _, err := os.Stat(filepath.Join(a.shell, "project", "architecture", "harness")); err == nil {
+		t.Fatal("a repository with no instruction files has a folder")
+	}
+
+	e.saveInstruction(e.repo, "CLAUDE.md", "memory", 0, "root memory")
+	e.saveInstruction(e.repo, "web/AGENTS.md", "memory", 0, "web memory")
+	e.saveInstruction(e.repo, ".claude/skills/review/SKILL.md", "skill", 0, "skill body")
+	e.saveInstruction(e.repo, ".claude/agents/reviewer.md", "subagent", 0, "agent body")
+	want := map[string]string{
+		"CLAUDE.md": "root memory", "web/AGENTS.md": "web memory",
+		".claude/skills/review/SKILL.md": "skill body", ".claude/agents/reviewer.md": "agent body",
+	}
+	eventually(t, "the files in the shell", func() error {
+		for p := range want {
+			if indexRow(t, a.shell, root+p) == nil {
+				return os.ErrNotExist
+			}
+		}
+		return nil
+	})
+	for p, content := range want {
+		got, err := os.ReadFile(filepath.Join(a.shell, root+p))
+		if err != nil || string(got) != content {
+			t.Errorf("%s = %q (%v), want %q", p, got, err, content)
+		}
+		row := indexRow(t, a.shell, root+p)
+		if row["kind"] != "instruction" || row["scope"] != "repository" || row["repository"] != "harness" || row["version"] != "1" {
+			t.Errorf("index row of %s = %v", p, row)
+		}
+		if info, _ := os.Stat(filepath.Join(a.shell, root+p)); info.Mode().Perm()&0o222 != 0 {
+			t.Errorf("%s is writable: %v", p, info.Mode())
+		}
+	}
+	if readme, _ := os.ReadFile(filepath.Join(a.shell, "README.md")); !strings.Contains(string(readme), "instructions/") {
+		t.Errorf("the README does not name the instructions folder:\n%s", readme)
+	}
+
+	// A shell opened later has them too, and every one follows a new version.
+	b := e.start(e.task("Another task"))
+	if indexRow(t, b.shell, root+"CLAUDE.md") == nil {
+		t.Error("a shell opened later has no file")
+	}
+	e.saveInstruction(e.repo, "CLAUDE.md", "memory", 1, "root memory v2")
+	eventually(t, "the new version", func() error {
+		if row := indexRow(t, a.shell, root+"CLAUDE.md"); row == nil || row["version"] != "2" {
+			return os.ErrNotExist
+		}
+		return nil
+	})
+	if got, _ := os.ReadFile(filepath.Join(a.shell, root+"CLAUDE.md")); string(got) != "root memory v2" {
+		t.Errorf("the content did not follow: %s", got)
+	}
+
+	// A delete takes the file out.
+	e.post("delete_instruction_file", map[string]any{"repository_id": e.repo, "path": "web/AGENTS.md", "base_version": 1}, nil)
+	eventually(t, "the file to go", func() error {
+		if _, err := os.Stat(filepath.Join(a.shell, root+"web/AGENTS.md")); err == nil {
+			return os.ErrExist
+		}
+		return nil
+	})
+}
+
+func TestAWriteIntoTheInstructionsFolderIsRefusedAsReadOnly(t *testing.T) {
+	e := newShellE2E(t)
+	e.saveInstruction(e.repo, "CLAUDE.md", "memory", 0, "memory")
+	a := e.start(e.task("Read only instructions"))
+	dir := filepath.Join(a.shell, "project", "architecture", "harness", "instructions")
+	file := filepath.Join(dir, "CLAUDE.md")
+	eventually(t, "the file", func() error {
+		_, err := os.Stat(file)
+		return err
+	})
+	check := func(op string, paths ...string) (bool, string) {
+		t.Helper()
+		body, _ := json.Marshal(map[string]any{"op": op, "paths": paths})
+		status, text := postJSON(t, e.srv.URL+"/api/sessions/"+a.id+"/shell/check", string(body))
+		if status != http.StatusOK {
+			t.Fatalf("%s = %d %s", op, status, text)
+		}
+		var ans ports.ShellAnswer
+		if err := json.Unmarshal([]byte(text), &ans); err != nil {
+			t.Fatal(err)
+		}
+		return ans.Allow, ans.Reason
+	}
+	for name, c := range map[string]struct {
+		op    string
+		paths []string
+	}{
+		"write":  {"write", []string{file}},
+		"create": {"write", []string{filepath.Join(dir, "AGENTS.md")}},
+		"rm":     {"rm", []string{file}},
+		"mv out": {"mv", []string{file, filepath.Join(a.shell, "project", "docs", "x.md")}},
+		"mkdir":  {"mkdir", []string{filepath.Join(dir, "sub")}},
+	} {
+		allow, got := check(c.op, c.paths...)
+		if allow || !strings.HasPrefix(got, "READ_ONLY: ") {
+			t.Errorf("%s: allow=%v reason=%q", name, allow, got)
+		}
+	}
+	if out := runHook(t, a, e.srv.URL, "PreToolUse", editTools, editInput("Write", file)); !strings.Contains(out, "READ_ONLY") {
+		t.Errorf("PreToolUse Write = %s", out)
+	}
+}

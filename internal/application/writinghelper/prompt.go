@@ -32,15 +32,27 @@ const titlesSystemPrompt = "You are a writing helper inside a project-management
 	"Do not repeat any <already_offered> title. " + rules +
 	`Reply with strict JSON only, no prose and no code fence: {"titles": ["...", "...", "..."]}.`
 
-func systemPrompt(step string) string {
+// instructionFileClause changes what the helper is writing: the field is an
+// agent instruction file, not a task. <sibling> blocks Path and Kind say which
+// file it is.
+const instructionFileClause = "This field is an instruction file for a coding agent (CLAUDE.md, AGENTS.md, GEMINI.md, a skill or a sub-agent prompt): the text is instructions the agent follows, not a task description. " +
+	"The <sibling> blocks Path and Kind say which file it is: memory, skill or subagent. " +
+	"Write it as instructions for a coding agent: imperative, specific, no filler. Say what to do and what never to do, and keep what the person already wrote. "
+
+func systemPrompt(step, kind string) string {
+	var s string
 	switch step {
 	case StepAnalyze:
-		return analyzeSystemPrompt
+		s = analyzeSystemPrompt
 	case StepDraft:
-		return draftSystemPrompt
+		s = draftSystemPrompt
 	default:
-		return titlesSystemPrompt
+		s = titlesSystemPrompt
 	}
+	if kind == KindInstructionFile {
+		return instructionFileClause + s
+	}
+	return s
 }
 
 // quote escapes every "<", so text cannot close a block early or open one

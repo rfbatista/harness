@@ -147,7 +147,7 @@
 
     &:focus-within { outline: var(--border-focus-width) solid var(--color-focus); outline-offset: -1px; }
 
-    & > textarea {
+    & textarea {
       min-block-size: 16rem;
       max-block-size: 36rem;
       border: 0;

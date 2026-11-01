@@ -5,6 +5,7 @@
 package architecture
 
 import (
+	"context"
 	"net/http"
 	"net/url"
 
@@ -18,8 +19,21 @@ import (
 type Handler struct {
 	Projects     ports.ProjectReader
 	Repositories ports.RepositoryLister
-	Layout       shell.Layout
-	Render       shell.Renderer
+	// Assistant says whether the architecture assistant can run for a
+	// repository; nil reads as it cannot.
+	Assistant ports.ArchitectureAssistantReadiness
+	Layout    shell.Layout
+	Render    shell.Renderer
+}
+
+// notConfigured is the reason of a page rendered without an assistant.
+const notConfigured = "the architecture assistant is not configured on this server"
+
+func (h Handler) assistant(ctx context.Context, repositoryID string) ports.ArchitectureAssistantAvailability {
+	if h.Assistant == nil {
+		return ports.ArchitectureAssistantAvailability{Reason: notConfigured}
+	}
+	return h.Assistant.Availability(ctx, repositoryID)
 }
 
 // Href is a repository's Architecture page; tab is "" for its first tab, or a
@@ -45,6 +59,12 @@ type Seed struct {
 	// /api/list_tree) without them.
 	RootDir      string   `json:"root_dir"`
 	IgnoredPaths []string `json:"ignored_paths"`
+	// AssistantAvailable says whether the architecture assistant can run for
+	// the repository. When it cannot, AssistantReason says why and
+	// AssistantFixURL is the page that fixes it; both are "" otherwise.
+	AssistantAvailable bool   `json:"assistant_available"`
+	AssistantReason    string `json:"assistant_reason"`
+	AssistantFixURL    string `json:"assistant_fix_url"`
 }
 
 // View is what the page renders.
@@ -88,6 +108,7 @@ func (h Handler) Page(tab string) func(w http.ResponseWriter, r *http.Request) e
 		if name == "" {
 			name = repo.RootDir
 		}
+		assistant := h.assistant(ctx, repo.ID)
 		return h.Render(w, r, http.StatusOK, PageView(View{
 			Frame:          frame,
 			ProjectID:      project.ID,
@@ -101,6 +122,10 @@ func (h Handler) Page(tab string) func(w http.ResponseWriter, r *http.Request) e
 				Tab:          tab,
 				RootDir:      repo.RootDir,
 				IgnoredPaths: append([]string{}, repo.IgnoredPaths...),
+
+				AssistantAvailable: assistant.Available,
+				AssistantReason:    assistant.Reason,
+				AssistantFixURL:    assistant.FixURL,
 			},
 		}))
 	}

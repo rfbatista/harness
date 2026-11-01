@@ -4,7 +4,7 @@
 // and the dev page.
 
 /**
- * @typedef {"task_title" | "task_description" | "comment"} FieldKind
+ * @typedef {"task_title" | "task_description" | "comment" | "instruction_file"} FieldKind
  *
  * @typedef {object} StepRequest
  * @property {string} project_id

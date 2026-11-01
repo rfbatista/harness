@@ -1,16 +1,16 @@
 package web
 
 import (
-	"bytes"
+	"context"
 	"encoding/json"
 	"fmt"
-	"io"
 	"net/http"
-	"net/http/httptest"
 	"strings"
 	"sync"
 	"testing"
 	"time"
+
+	"operators-mcp/internal/ports"
 )
 
 // fakeAssistant answers the two endpoints of "Contract: Harness server ↔ Web
@@ -160,44 +160,28 @@ func (f *fakeAssistant) turn(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-// withAssistantSeed wraps the page handler so the Architecture page's seed
-// carries the assistant attributes the server renders (availability, reason
-// and fix URL), whichever side of the contract is built first.
-func withAssistantSeed(pages http.Handler, available bool, reason, fixURL string) http.Handler {
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		rec := httptest.NewRecorder()
-		pages.ServeHTTP(rec, r)
-		body := rec.Body.Bytes()
-		const marker = `<script id="architecture-seed" type="application/json">`
-		if at := bytes.Index(body, []byte(marker)); at >= 0 {
-			start := at + len(marker)
-			end := start + bytes.Index(body[start:], []byte("</script>"))
-			var seed map[string]any
-			if json.Unmarshal(body[start:end], &seed) == nil {
-				seed["assistant_available"] = available
-				seed["assistant_reason"] = reason
-				seed["assistant_fix_url"] = fixURL
-				patched, _ := json.Marshal(seed)
-				body = append(append(append([]byte{}, body[:start]...), patched...), body[end:]...)
-			}
-		}
-		for k, v := range rec.Header() {
-			w.Header()[k] = v
-		}
-		w.Header().Del("Content-Length")
-		w.WriteHeader(rec.Code)
-		_, _ = io.Copy(w, bytes.NewReader(body))
-	})
+// fakeReadiness is the readiness the page handler reads for the assistant's availability, reason and
+// fix URL: the page seed is the server's own, not a rewrite of it.
+type fakeReadiness struct {
+	ports.ArchitectureAssistantAvailability
 }
 
-// newAssistantRig is newArchRig with the assistant's endpoints and seed
-// attributes. A turn with no script fails, so a test scripts every turn it sends.
+func (f fakeReadiness) Availability(context.Context, string) ports.ArchitectureAssistantAvailability {
+	return f.ArchitectureAssistantAvailability
+}
+func (f fakeReadiness) Readiness(context.Context) ports.ArchitectureAssistantAvailability {
+	return f.ArchitectureAssistantAvailability
+}
+
+// newAssistantRig is newArchRig with the assistant's endpoints and the page's own seed attributes. A
+// turn with no script fails, so a test scripts every turn it sends.
 func newAssistantRig(t *testing.T, available bool, reason, fixURL string) (*archRig, *fakeAssistant) {
 	t.Helper()
 	var fake *fakeAssistant
-	rig := newArchRigWith(t, func(api *fakeArchitectureAPI, pages http.Handler) (http.Handler, http.Handler) {
+	readiness := fakeReadiness{ports.ArchitectureAssistantAvailability{Available: available, Reason: reason, FixURL: fixURL}}
+	rig := newArchRigFull(t, nil, nil, func(api *fakeArchitectureAPI, pages http.Handler) (http.Handler, http.Handler) {
 		fake = newFakeAssistant(api)
-		return fake, withAssistantSeed(pages, available, reason, fixURL)
-	})
+		return fake, pages
+	}, readiness)
 	return rig, fake
 }
