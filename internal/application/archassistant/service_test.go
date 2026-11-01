@@ -546,3 +546,35 @@ func TestASweepNeverTouchesARunningTurn(t *testing.T) {
 		t.Errorf("a running conversation was swept: %v", e.turn.deleted)
 	}
 }
+
+func TestAFirstTurnThatFailsBeforeAnySessionExistsLeavesTheConversationUsableAndTheNextStartsFresh(t *testing.T) {
+	e := newEnv(t)
+	ctx, cancel := context.WithCancel(context.Background())
+	e.turn.script = func(int, archassistant.TurnCall, archassistant.TurnCallbacks) (archassistant.TurnResult, error) {
+		cancel() // the person pressed Stop before claude reported a session
+		return archassistant.TurnResult{}, ctx.Err()
+	}
+	var id string
+	err := e.svc.Run(ctx, req("one"), func(ev ports.ArchitectureAssistantEvent) {
+		if c, ok := ev.Data.(ports.ArchitectureAssistantConversation); ok {
+			id = c.ConversationID
+		}
+	})
+	if !errors.Is(err, context.Canceled) || id == "" {
+		t.Fatalf("err = %v, id = %q", err, id)
+	}
+	e.turn.script = answering("fresh")
+	r := req("two")
+	r.ConversationID = id
+	if _, err := e.run(context.Background(), r); err != nil {
+		t.Fatalf("the conversation is not usable: %v", err)
+	}
+	calls := e.turn.callsMade()
+	if calls[len(calls)-1].ResumeID != "" {
+		t.Errorf("resumed %q, want a fresh claude session", calls[len(calls)-1].ResumeID)
+	}
+	e.svc.End(id)
+	if len(e.turn.deleted) != 1 || e.turn.deleted[0] != "s1" {
+		t.Errorf("deleted = %v, want the session the second turn made", e.turn.deleted)
+	}
+}
