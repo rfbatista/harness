@@ -63,7 +63,9 @@ func Editable(rel string) bool { return rel != "README.md" }
 // UseSessionReader sets where a session's mode and design system are read.
 func (s *Service) UseSessionReader(r interface {
 	Get(id string) *domain.Session
-}) { s.sessionStore = r }
+}) {
+	s.sessionStore = r
+}
 
 // IsDesignSession says the session is a design session.
 func (s *Service) IsDesignSession(sessionID string) bool {
