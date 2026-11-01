@@ -1,5 +1,5 @@
 import { assert, file, test } from "../../../shared/testing/test.js";
-import { applyProposal, proposalConflicts, groupChanges, changeRow, proposalFigures } from "./proposal.js";
+import { applyProposal, proposalConflicts, groupChanges, changeRow, proposalFigures, valueText } from "./proposal.js";
 
 file("architecture/domain/proposal");
 
@@ -198,4 +198,12 @@ test("the preview figures are the file count per layer, the unlayered files and 
   });
   assert.deepEqual(f, { layers: ["domain 1 file", "ports 12 files"], unlayered: "4 files in no layer", overlaps: "1 overlap" });
   assert.equal(proposalFigures({ layers: [], unlayered: { fileCount: 1 }, overlaps: [] }).overlaps, "No overlaps");
+});
+
+test("a conflicting value reads as the change would word it, and a missing one as none", () => {
+  const layer = ch({ kind: "layer", name: "web" }, "change", { name: "web", match: { folder: "web" } });
+  assert.equal(valueText(layer, { name: "web", match: { regex: "^w" } }), "regex ^w");
+  assert.equal(valueText(layer, null), "(none)");
+  assert.equal(valueText(ch({ kind: "pattern" }, "change", "x"), "mine"), "mine");
+  assert.equal(valueText(ch({ kind: "sandbox", name: "s" }, "change", { name: "s" }), { name: "s", runs: "x" }), '{"name":"s","runs":"x"}');
 });

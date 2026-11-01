@@ -83,6 +83,10 @@
       & li[data-op] { display: flex; flex-direction: column; gap: var(--space-3xs); }
       & .preview { display: flex; flex-direction: column; gap: var(--space-3xs); padding-block-start: var(--space-xs); border-block-start: var(--border-width) solid var(--color-line); }
       & .preview ul { flex-direction: row; flex-wrap: wrap; gap: var(--space-2xs) var(--space-s); font-size: var(--text-xs); }
+      & .conflict { display: flex; flex-direction: column; gap: var(--space-2xs); }
+      & .conflict .choices { display: flex; flex-direction: column; gap: var(--space-2xs); }
+      & .conflict .button[aria-pressed="true"] { border-color: var(--color-signal); background: var(--color-signal-wash); }
+      &[data-state="superseded"] { opacity: 0.6; }
       & .actions { display: flex; justify-content: flex-end; gap: var(--space-xs); }
     }
 

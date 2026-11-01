@@ -61,14 +61,41 @@ templ assistantPanel() {
 								<template x-if="m.proposal.preview === 'failed'">
 									<p class="[ text-xs color-ink-muted ]" data-proposal-preview-failed>The layer preview is not available.</p>
 								</template>
+								<template x-if="m.proposal.errors.length > 0">
+									<ul class="[ errors ]" role="list">
+										<template x-for="e in m.proposal.errors" x-bind:key="e">
+											<li class="[ error ]" data-proposal-error x-text="e"></li>
+										</template>
+									</ul>
+								</template>
+								<template x-if="m.proposal.state === 'conflicts'">
+									<div class="[ conflicts ]" data-proposal-conflict>
+										<p class="[ weight-medium ]">These changes touch what you edited. Pick the value to keep for each.</p>
+										<template x-for="c in m.proposal.conflicts" x-bind:key="c.index">
+											<div class="[ conflict ]" data-conflict>
+												<span class="[ weight-medium ]" x-text="c.label"></span>
+												<div class="[ choices ]">
+													<button type="button" class="[ button ]" data-size="sm" data-conflict-keep x-bind:aria-pressed="c.choice === 'draft'" x-on:click="pick(m.id, c.index, 'draft')">Yours: <span class="[ font-mono ]" x-text="c.draft"></span></button>
+													<button type="button" class="[ button ]" data-size="sm" data-conflict-take x-bind:aria-pressed="c.choice === 'proposal'" x-on:click="pick(m.id, c.index, 'proposal')">Proposed: <span class="[ font-mono ]" x-text="c.proposed"></span></button>
+												</div>
+											</div>
+										</template>
+										<div class="[ actions ]">
+											<button type="button" class="[ button ]" data-variant="ghost" data-size="sm" data-conflict-cancel x-on:click="unsettle(m.id)">Cancel</button>
+											<button type="button" class="[ button ]" data-variant="primary" data-size="sm" data-conflict-apply x-bind:disabled="!settled(m.proposal)" x-on:click="settle(m.id)">Apply</button>
+										</div>
+									</div>
+								</template>
 								<template x-if="m.proposal.state === 'open'">
 									<div class="[ actions ]">
 										<button type="button" class="[ button ]" data-variant="ghost" data-size="sm" data-proposal-discard x-on:click="discard(m.id)">Discard</button>
-										<button type="button" class="[ button ]" data-variant="primary" data-size="sm" data-proposal-accept x-on:click="accept(m.id)">Accept</button>
+										<template x-if="m.proposal.valid">
+											<button type="button" class="[ button ]" data-variant="primary" data-size="sm" data-proposal-accept x-on:click="accept(m.id)">Accept</button>
+										</template>
 									</div>
 								</template>
-								<template x-if="m.proposal.state !== 'open'">
-									<p class="[ text-xs color-ink-muted ]" data-proposal-outcome x-text="m.proposal.state === 'accepted' ? 'Accepted into your unsaved changes.' : 'Discarded.'"></p>
+								<template x-if="m.proposal.state !== 'open' && m.proposal.state !== 'conflicts'">
+									<p class="[ text-xs color-ink-muted ]" data-proposal-outcome x-text="outcomeText(m.proposal.state)"></p>
 								</template>
 							</section>
 						</template>

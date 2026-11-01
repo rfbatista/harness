@@ -1,6 +1,7 @@
 package web
 
 import (
+	"context"
 	"fmt"
 	"strings"
 	"testing"
@@ -54,6 +55,33 @@ func asstKey(selector, key string, shift bool) chromedp.Action {
 // asstLastSaid is true when the newest assistant message contains text.
 func asstLastSaid(text string) string {
 	return fmt.Sprintf(`[...document.querySelectorAll('[data-assistant-message][data-who=assistant]')].at(-1)?.textContent.includes(%q) === true`, text)
+}
+
+// asstClick clicks the first visible, enabled element matching selector, waiting for one: a click by
+// coordinates can miss a button in the panel's log, which moves as cards change state.
+func asstClick(selector string) chromedp.Action {
+	return chromedp.ActionFunc(func(ctx context.Context) error {
+		js := fmt.Sprintf(`(() => {
+			const b = [...document.querySelectorAll(%q)].find((x) => x.checkVisibility() && !x.disabled);
+			if (!b) return false;
+			b.click();
+			return true;
+		})()`, selector)
+		deadline := time.Now().Add(8 * time.Second)
+		for {
+			var ok bool
+			if err := chromedp.Evaluate(js, &ok).Do(ctx); err != nil {
+				return err
+			}
+			if ok {
+				return nil
+			}
+			if time.Now().After(deadline) {
+				return fmt.Errorf("no enabled %s to click", selector)
+			}
+			time.Sleep(50 * time.Millisecond)
+		}
+	})
 }
 
 func asstOpenPanel() []chromedp.Action {
@@ -145,11 +173,11 @@ func TestAssistantTalksAndStreamsInTheBrowser(t *testing.T) {
 
 	// The panel stays while the tabs change, and a second turn resumes the conversation.
 	rig.run(t,
-		chromedp.Click(`#architecture-tab-layers`, chromedp.ByQuery),
+		asstClick(`#architecture-tab-layers`),
 		poll(`document.querySelector('#architecture-panel-layers').checkVisibility()`),
 		chromedp.Evaluate(asstShown, nil),
 		asstType("Go on."),
-		chromedp.Click(asstSend, chromedp.ByQuery),
+		asstClick(asstSend),
 		poll(`document.querySelectorAll('[data-assistant-message][data-who=assistant]').length === 2`),
 	)
 	var shown bool
@@ -176,15 +204,15 @@ func TestAssistantStopEndsTheTurnInTheBrowser(t *testing.T) {
 	rig.run(t, asstOpenPanel()...)
 	rig.run(t,
 		asstType("Take your time."),
-		chromedp.Click(asstSend, chromedp.ByQuery),
+		asstClick(asstSend),
 		poll(asstLastSaid("Looking")),
-		chromedp.Click(asstStop, chromedp.ByQuery),
+		asstClick(asstStop),
 		poll(`!document.querySelector('[data-assistant-stop]')?.checkVisibility()`),
 	)
 	waitFor(t, "the aborted request", func() bool { return fake.abortedTurns() == 1 })
 	rig.run(t,
 		asstType("Again."),
-		chromedp.Click(asstSend, chromedp.ByQuery),
+		asstClick(asstSend),
 		poll(asstLastSaid("Back again.")),
 	)
 	if got := fake.turns()[1]["conversation_id"]; got != "c1" {
@@ -398,7 +426,7 @@ func TestAssistantProposalCardAcceptsIntoTheDraftInTheBrowser(t *testing.T) {
 	}
 
 	rig.run(t,
-		chromedp.Click(`[data-proposal-accept]`, chromedp.ByQuery),
+		asstClick(`[data-proposal-accept]`),
 		poll(`document.querySelector('#architecture-tab-layers [data-tab-count]').textContent.trim() === '3'`),
 		poll(barVisible()),
 		chromedp.Evaluate(barSummaryJS, &bar),
@@ -444,7 +472,7 @@ func TestAssistantProposalDiscardLeavesTheDraftInTheBrowser(t *testing.T) {
 		asstType("Add a ports layer"),
 		asstKey(asstInput, "Enter", false),
 		poll(`!!document.querySelector('[data-proposal-discard]')`),
-		chromedp.Click(`[data-proposal-discard]`, chromedp.ByQuery),
+		asstClick(`[data-proposal-discard]`),
 		poll(cardState+` === 'discarded'`),
 		chromedp.Evaluate(layersCount, &count),
 	)
@@ -461,5 +489,158 @@ func TestAssistantProposalDiscardLeavesTheDraftInTheBrowser(t *testing.T) {
 	rig.run(t, chromedp.Evaluate(`document.querySelector('[data-save-bar]').checkVisibility()`, &shown))
 	if shown {
 		t.Error("the save bar shows after a discard")
+	}
+}
+
+// conflictCard sends a turn whose proposal sets the pattern and adds the ports layer, then has the person
+// edit the pattern before accepting: the pattern change now collides with an unsaved edit.
+func conflictCard(t *testing.T) (*archRig, *fakeAssistant) {
+	t.Helper()
+	rig, fake := newAssistantRig(t, true, "", "")
+	rig.api.seed(savedRecord())
+	fake.script(proposing("Here is a proposal.", portsProposal("p1")))
+	rig.run(t, asstReady(rig.url(""))...)
+	rig.run(t, asstOpenPanel()...)
+	rig.run(t,
+		asstType("Add a ports layer"),
+		asstKey(asstInput, "Enter", false),
+		poll(`!!document.querySelector('[data-proposal-accept]')`),
+		setField(patternField, "mine", "input"),
+		asstClick(`[data-proposal-accept]`),
+		poll(cardState+` === 'conflicts'`),
+	)
+	return rig, fake
+}
+
+// A change that touches what the person edited is shown with both values, and nothing lands until the
+// person has picked one for it. Keeping the person's value leaves it alone; the rest still lands.
+func TestAssistantConflictKeepsThePersonsValueInTheBrowser(t *testing.T) {
+	rig, _ := conflictCard(t)
+	var text, count, pattern string
+	var disabled bool
+	rig.run(t,
+		chromedp.Evaluate(`document.querySelector('[data-proposal-conflict]').textContent.replace(/\s+/g, ' ')`, &text),
+		chromedp.Evaluate(`document.querySelector('[data-conflict-apply]').disabled`, &disabled),
+		chromedp.Evaluate(layersCount, &count),
+	)
+	for _, want := range []string{"Pattern", "mine", "hexagonal"} {
+		if !strings.Contains(text, want) {
+			t.Errorf("conflict lacks %q: %q", want, text)
+		}
+	}
+	if !disabled {
+		t.Error("Apply is enabled before every conflict has a pick")
+	}
+	if count != "2" {
+		t.Fatalf("a proposal landed in part before the pick: layers = %s", count)
+	}
+	rig.run(t,
+		asstClick(`[data-conflict-keep]`),
+		poll(`!document.querySelector('[data-conflict-apply]').disabled`),
+		asstClick(`[data-conflict-apply]`),
+		poll(cardState+` === 'accepted'`),
+		chromedp.Evaluate(layersCount, &count),
+		chromedp.Evaluate(`document.querySelector('`+patternField+`').value`, &pattern),
+	)
+	if count != "3" {
+		t.Errorf("layers after apply = %s, want 3", count)
+	}
+	if pattern != "mine" {
+		t.Errorf("pattern = %q, want the person's value", pattern)
+	}
+}
+
+// Taking the proposal's value for the conflict replaces the person's edit.
+func TestAssistantConflictTakesTheProposalsValueInTheBrowser(t *testing.T) {
+	rig, _ := conflictCard(t)
+	var pattern string
+	rig.run(t,
+		asstClick(`[data-conflict-take]`),
+		asstClick(`[data-conflict-apply]`),
+		poll(cardState+` === 'accepted'`),
+		chromedp.Evaluate(`document.querySelector('`+patternField+`').value`, &pattern),
+	)
+	if pattern != "hexagonal" {
+		t.Errorf("pattern = %q, want the proposal's value", pattern)
+	}
+}
+
+// Cancelling the conflict view takes the card back to open with the draft untouched.
+func TestAssistantConflictCancelLeavesTheDraftInTheBrowser(t *testing.T) {
+	rig, _ := conflictCard(t)
+	var count string
+	rig.run(t,
+		asstClick(`[data-conflict-cancel]`),
+		poll(cardState+` === 'open'`),
+		chromedp.Evaluate(layersCount, &count),
+	)
+	if count != "2" {
+		t.Errorf("layers = %s after cancel", count)
+	}
+}
+
+// A reply that gets a revised proposal marks the earlier card as superseded: it offers no Accept.
+func TestAssistantRefineSupersedesTheEarlierCardInTheBrowser(t *testing.T) {
+	rig, fake := newAssistantRig(t, true, "", "")
+	rig.api.seed(savedRecord())
+	revised := proposalOf("p2", "Ports layer, blocking rule.",
+		change(map[string]any{"kind": "layer", "name": "ports"}, "add",
+			map[string]any{"name": "ports", "match": map[string]any{"folder": "internal/ports"}, "access": map[string]any{"default": "read"}}, nil, "Interfaces."))
+	fake.script(proposing("First.", portsProposal("p1")), proposing("Revised.", revised))
+
+	var states string
+	var accepts int
+	rig.run(t, asstReady(rig.url(""))...)
+	rig.run(t, asstOpenPanel()...)
+	rig.run(t,
+		asstType("Add a ports layer"),
+		asstKey(asstInput, "Enter", false),
+		poll(`document.querySelectorAll('[data-assistant-proposal]').length === 1 && !document.querySelector('[data-assistant-stop]')`),
+		asstType("Leave out the pattern."),
+		asstKey(asstInput, "Enter", false),
+		poll(`document.querySelectorAll('[data-assistant-proposal]').length === 2`),
+		chromedp.Evaluate(`[...document.querySelectorAll('[data-assistant-proposal]')].map(c => c.dataset.state).join(',')`, &states),
+		chromedp.Evaluate(`document.querySelectorAll('[data-proposal-accept]').length`, &accepts),
+	)
+	if states != "superseded,open" {
+		t.Errorf("card states = %q, want superseded,open", states)
+	}
+	if accepts != 1 {
+		t.Errorf("%d Accept buttons, want only the newest card's", accepts)
+	}
+}
+
+// A proposal the server marked invalid shows its errors as the save bar words them, and offers no Accept.
+func TestAssistantInvalidProposalShowsItsErrorsInTheBrowser(t *testing.T) {
+	rig, fake := newAssistantRig(t, true, "", "")
+	rig.api.seed(savedRecord())
+	bad := proposalOf("p1", "A layer that does not compile.",
+		change(map[string]any{"kind": "layer", "name": "ports"}, "add",
+			map[string]any{"name": "ports", "match": map[string]any{"regex": "(^internal"}}, nil, "Ports."))
+	bad["valid"] = false
+	bad["errors"] = []any{map[string]any{"path": "/layers/2/match/regex", "code": "INVALID_REGEX", "message": "does not compile"}}
+	fake.script(proposing("Here.", bad))
+
+	var errs string
+	var accept bool
+	rig.run(t, asstReady(rig.url(""))...)
+	rig.run(t, asstOpenPanel()...)
+	rig.run(t,
+		asstType("Add ports"),
+		asstKey(asstInput, "Enter", false),
+		poll(`!!document.querySelector('[data-proposal-error]')`),
+		chromedp.Evaluate(`document.querySelector('[data-proposal-error]').textContent.replace(/\s+/g, ' ').trim()`, &errs),
+		chromedp.Evaluate(`!!document.querySelector('[data-proposal-accept]')`, &accept),
+	)
+	if errs != "Layers › Layers › 3 › match › regex: does not compile" {
+		t.Errorf("error line = %q", errs)
+	}
+	if accept {
+		t.Error("an invalid proposal offers Accept")
+	}
+	var preview bool
+	rig.run(t, chromedp.Evaluate(`!!document.querySelector('[data-proposal-preview]')`, &preview))
+	if preview {
+		t.Error("the card shows the layer preview of an invalid proposal")
 	}
 }

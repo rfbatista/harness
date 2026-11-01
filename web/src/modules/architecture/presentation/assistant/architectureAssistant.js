@@ -10,8 +10,8 @@
 import { describeError } from "../../../../shared/presentation/errors.js";
 import { readSeed } from "../../../../shared/presentation/seed.js";
 import { ASSISTANT_CONVERSATION_NOT_FOUND, ASSISTANT_UNAVAILABLE, activityText, turnRequest } from "../../domain/assistant.js";
-import { applyProposal, changeRow, groupChanges, proposalFigures } from "../../domain/proposal.js";
-import { cleanRecord } from "../../domain/record.js";
+import { applyProposal, changeRow, groupChanges, proposalConflicts, proposalFigures, valueText } from "../../domain/proposal.js";
+import { TABS, cleanRecord, describePointer, tabOfPointer } from "../../domain/record.js";
 import { DRAFT_REPLACED } from "../pages/architecturePage.js";
 
 /** @param {{ gateway: ReturnType<typeof import("../../infrastructure/architecture-gateway.js").architectureGateway> }} deps */
@@ -164,15 +164,21 @@ export const architectureAssistant = ({ gateway }) => () => ({
 
   /** Attaches a proposal to the answer that carried it and asks for the layer preview of the draft with it applied. */
   propose(messageId, proposal) {
+    // A revised proposal replaces the ones still waiting for an answer.
+    for (const m of this.messages) {
+      if (m.proposal && (m.proposal.state === "open" || m.proposal.state === "conflicts")) m.proposal.state = "superseded";
+    }
     this.messageById(messageId).proposal = {
       id: proposal.id,
       summary: proposal.summary,
       valid: proposal.valid === true,
-      errors: Array.isArray(proposal.errors) ? proposal.errors.map((e) => ({ path: e.path, message: e.message })) : [],
+      errors: Array.isArray(proposal.errors) ? proposal.errors.map(errorLine) : [],
       groups: groupChanges(proposal).map((g) => ({ slug: g.slug, label: g.label, rows: g.changes.map(changeRow) })),
       raw: proposal,
-      /** "open", then "accepted" or "discarded". */
+      /** "open"; "conflicts" while the person picks; then "accepted" or "discarded", or "superseded" by a newer proposal. */
       state: "open",
+      /** The changes that touch what the person edited: { index, label, draft, proposed, choice } with choice "", "draft" or "proposal". */
+      conflicts: [],
       /** "loading", "ready" or "failed", with the figures once ready. */
       preview: "loading",
       figures: null,
@@ -193,18 +199,68 @@ export const architectureAssistant = ({ gateway }) => () => ({
     }
   },
 
-  /** Puts the proposal into the page's unsaved draft, whole. Nothing is saved: Save and Review diff work on it as on any edit. */
+  /**
+   * Puts the proposal into the page's unsaved draft, whole. A change that touches what the person edited
+   * and has not saved first has to be settled: the card shows both values and waits. Nothing is saved.
+   */
   accept(messageId) {
     const proposal = this.messageById(messageId).proposal;
     if (proposal.state !== "open" || !proposal.valid) return;
-    this.draft = applyProposal(this.draft, proposal.raw);
+    const conflicts = proposalConflicts(this.draft, this.saved.record, proposal.raw);
+    if (conflicts.length === 0) {
+      this.land(proposal, proposal.raw);
+      return;
+    }
+    proposal.conflicts = conflicts.map((c) => ({
+      index: c.index,
+      label: changeRow(c.change).label,
+      draft: valueText(c.change, c.draftValue),
+      proposed: valueText(c.change, c.proposedValue),
+      choice: "",
+    }));
+    proposal.state = "conflicts";
+  },
+
+  /** The person's pick for one conflict: "draft" keeps their value, "proposal" takes the assistant's. */
+  pick(messageId, index, choice) {
+    this.messageById(messageId).proposal.conflicts.find((c) => c.index === index).choice = choice;
+  },
+
+  /** Whether every conflict of a proposal has a pick. */
+  settled(proposal) {
+    return proposal.conflicts.every((c) => c.choice !== "");
+  },
+
+  /** Lands the proposal once every conflict has a pick; a change whose conflict kept the draft value is left out. */
+  settle(messageId) {
+    const proposal = this.messageById(messageId).proposal;
+    if (proposal.state !== "conflicts" || !this.settled(proposal)) return;
+    const kept = new Set(proposal.conflicts.filter((c) => c.choice === "draft").map((c) => c.index));
+    this.land(proposal, { ...proposal.raw, changes: proposal.raw.changes.filter((_, i) => !kept.has(i)) });
+  },
+
+  /** Back from the conflict view to the open card, the draft untouched. */
+  unsettle(messageId) {
+    const proposal = this.messageById(messageId).proposal;
+    if (proposal.state !== "conflicts") return;
+    proposal.conflicts = [];
+    proposal.state = "open";
+  },
+
+  land(proposal, changes) {
+    this.draft = applyProposal(this.draft, changes);
     proposal.state = "accepted";
     window.dispatchEvent(new CustomEvent(DRAFT_REPLACED));
   },
 
+  /** What a card that is no longer waiting says. */
+  outcomeText(state) {
+    return { accepted: "Accepted into your unsaved changes.", discarded: "Discarded.", superseded: "Superseded by a newer proposal." }[state] ?? "";
+  },
+
   discard(messageId) {
     const proposal = this.messageById(messageId).proposal;
-    if (proposal.state === "open") proposal.state = "discarded";
+    if (proposal.state === "open" || proposal.state === "conflicts") proposal.state = "discarded";
   },
 
   /** What a turn that did not finish leaves: a stopped turn keeps its text, a failed one says why. */
@@ -233,3 +289,9 @@ export const architectureAssistant = ({ gateway }) => () => ({
     this.controller?.abort();
   },
 });
+
+/** A validation error as the save bar words it: "Layers › Layers › 3 › match › regex: does not compile". */
+function errorLine(e) {
+  const tab = TABS.find((t) => t.slug === tabOfPointer(e.path));
+  return `${tab.label} › ${describePointer(e.path)}: ${e.message}`;
+}

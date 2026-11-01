@@ -239,3 +239,9 @@ export function proposalFigures(preview) {
     overlaps: n === 0 ? "No overlaps" : `${n} ${n === 1 ? "overlap" : "overlaps"}`,
   };
 }
+
+/** A value a conflict shows for one side, worded as the change would word it; "(none)" when the item is not there. */
+export function valueText(change, value) {
+  if (value === null || value === undefined) return "(none)";
+  return labelOf({ ...change, op: "change", value }).detail || JSON.stringify(value);
+}
