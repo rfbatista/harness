@@ -72,6 +72,29 @@ func InstructionPathProblem(p string) string {
 	return ""
 }
 
+// InstructionKindOf is the kind a repository file's path says it is, one of
+// the instruction file patterns; "" for a file that is none.
+func InstructionKindOf(p string) string {
+	if InstructionPathProblem(p) != "" {
+		return ""
+	}
+	for _, kind := range []string{"memory", "skill", "subagent"} {
+		if instructionKindProblem(p, kind) == "" {
+			return kind
+		}
+	}
+	return ""
+}
+
+// RepositoryCopy is an instruction-like file on the default branch of a
+// repository's checkout. Differs is true when it is not the harness's copy,
+// or the harness has none.
+type RepositoryCopy struct {
+	Path    string
+	Kind    string
+	Differs bool
+}
+
 func instructionKindProblem(p, kind string) string {
 	parts := strings.Split(p, "/")
 	switch kind {

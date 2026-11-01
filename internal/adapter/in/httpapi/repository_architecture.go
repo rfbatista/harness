@@ -185,6 +185,41 @@ func (h *Handler) handleListInstructionFiles(c echo.Context) error {
 	for i, f := range files {
 		out[i] = instructionFileBodyOf(f, false)
 	}
+	copies, err := h.repoArch.ListRepositoryCopies(c.Request().Context(), in.RepositoryID)
+	if err != nil {
+		return err
+	}
+	type copyBody struct {
+		Path    string `json:"path"`
+		Kind    string `json:"kind"`
+		Differs bool   `json:"differs"`
+	}
+	cs := make([]copyBody, len(copies))
+	for i, cp := range copies {
+		cs[i] = copyBody{cp.Path, cp.Kind, cp.Differs}
+	}
+	return c.JSON(http.StatusOK, map[string]any{"files": out, "repository_copies": cs})
+}
+
+func (h *Handler) handleImportInstructionFiles(c echo.Context) error {
+	if err := h.repositoryArchitectures(); err != nil {
+		return err
+	}
+	var in struct {
+		RepositoryID string   `json:"repository_id"`
+		Paths        []string `json:"paths"`
+	}
+	if err := bindJSON(c, &in); err != nil {
+		return err
+	}
+	files, err := h.repoArch.ImportInstructionFiles(c.Request().Context(), in.RepositoryID, in.Paths)
+	if err != nil {
+		return err
+	}
+	out := make([]instructionFileBody, len(files))
+	for i, f := range files {
+		out[i] = instructionFileBodyOf(f, false)
+	}
 	return c.JSON(http.StatusOK, map[string]any{"files": out})
 }
 

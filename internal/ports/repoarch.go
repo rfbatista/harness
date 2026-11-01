@@ -56,6 +56,17 @@ type InstructionFiles interface {
 	// RenameInstructionFile moves a file, keeping its content and version.
 	RenameInstructionFile(ctx context.Context, repositoryID, path, newPath string, baseVersion int) (*domain.InstructionFile, error)
 	DeleteInstructionFile(ctx context.Context, repositoryID, path string, baseVersion int) error
+	// ListRepositoryCopies lists the instruction-like files of the checkout's
+	// default branch, with whether each differs from the harness copy. It is
+	// read from git on every call.
+	ListRepositoryCopies(ctx context.Context, repositoryID string) ([]domain.RepositoryCopy, error)
+	// ImportInstructionFiles copies the paths from the checkout's default
+	// branch into the harness, creating each file or adding a version when its
+	// content changed. A path the branch has no such file for is
+	// INSTRUCTION_NOT_FOUND, one that is no instruction file
+	// INSTRUCTION_INVALID; then nothing is imported. It never writes the
+	// checkout.
+	ImportInstructionFiles(ctx context.Context, repositoryID string, paths []string) ([]domain.InstructionFile, error)
 }
 
 // StoredArchitecture is a repository's record row.

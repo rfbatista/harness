@@ -209,3 +209,116 @@ func TestInstructionFiles_DeletingTheArchitectureDeletesTheFiles(t *testing.T) {
 		t.Errorf("files = %v", files)
 	}
 }
+
+// copies is the repository_copies of a list, by path.
+func (s *archRecordServer) copies() map[string]map[string]any {
+	s.t.Helper()
+	out := map[string]map[string]any{}
+	for _, c := range s.mustPost("list_instruction_files", map[string]any{"repository_id": s.repo.ID})["repository_copies"].([]any) {
+		m := c.(map[string]any)
+		out[m["path"].(string)] = m
+	}
+	return out
+}
+
+func (s *archRecordServer) importFiles(paths ...string) (int, map[string]any) {
+	return s.post("import_instruction_files", map[string]any{"repository_id": s.repo.ID, "paths": paths})
+}
+
+var repositoryInstructionFiles = map[string]string{
+	"CLAUDE.md":                      "root memory",
+	"AGENTS.md":                      "agents memory",
+	"web/GEMINI.md":                  "gemini memory",
+	".claude/skills/review/SKILL.md": "skill",
+	".claude/skills/review/notes.md": "skill notes",
+	".claude/agents/reviewer.md":     "reviewer",
+	".claude/agents/notes.txt":       "not an agent",
+	"docs/CLAUDE.md.bak":             "not memory",
+	"main.go":                        "package main\n",
+}
+
+func TestInstructionFiles_RepositoryCopiesSayWhichDifferFromTheHarness(t *testing.T) {
+	s := startArchRecordServer(t)
+	s.commitFiles(repositoryInstructionFiles)
+
+	copies := s.copies()
+	kinds := map[string]string{
+		"CLAUDE.md": "memory", "AGENTS.md": "memory", "web/GEMINI.md": "memory",
+		".claude/skills/review/SKILL.md": "skill", ".claude/skills/review/notes.md": "skill", ".claude/agents/reviewer.md": "subagent",
+	}
+	if len(copies) != len(kinds) {
+		t.Errorf("copies = %v", copies)
+	}
+	for p, kind := range kinds {
+		if c := copies[p]; c == nil || c["kind"] != kind || c["differs"] != true {
+			t.Errorf("copy %s = %v, want kind %s differing", p, c, kind)
+		}
+	}
+
+	// The harness copy equal to the repository's does not differ; an edit does.
+	s.saveFile("CLAUDE.md", "memory", 0, "root memory")
+	if got := s.copies()["CLAUDE.md"]["differs"]; got != false {
+		t.Errorf("an equal copy differs = %v", got)
+	}
+	s.saveFile("CLAUDE.md", "memory", 1, "edited in the harness")
+	if got := s.copies()["CLAUDE.md"]["differs"]; got != true {
+		t.Errorf("an edited copy differs = %v", got)
+	}
+	// A change on the default branch shows at once, with nothing cached.
+	s.saveFile("CLAUDE.md", "memory", 2, "root memory")
+	s.commitFiles(map[string]string{"CLAUDE.md": "root memory, changed"})
+	if got := s.copies()["CLAUDE.md"]["differs"]; got != true {
+		t.Errorf("a changed repository copy differs = %v", got)
+	}
+}
+
+func TestInstructionFiles_ImportCopiesFromTheDefaultBranchAndAddsVersions(t *testing.T) {
+	s := startArchRecordServer(t)
+	s.commitFiles(repositoryInstructionFiles)
+	status, body := s.importFiles("CLAUDE.md", ".claude/agents/reviewer.md")
+	if status != http.StatusOK {
+		t.Fatalf("import: %d %v", status, body)
+	}
+	files := body["files"].([]any)
+	if len(files) != 2 || files[0].(map[string]any)["path"] != "CLAUDE.md" || files[0].(map[string]any)["kind"] != "memory" || files[0].(map[string]any)["version"] != float64(1) ||
+		files[1].(map[string]any)["kind"] != "subagent" {
+		t.Fatalf("files = %v", files)
+	}
+	if got := s.mustPost("get_instruction_file", map[string]any{"repository_id": s.repo.ID, "path": "CLAUDE.md"}); got["content"] != "root memory" {
+		t.Errorf("content = %v", got)
+	}
+	s.sawOnFeed("instruction_file_changed", `"path":".claude/agents/reviewer.md"`, `"version":1`)
+	if c := s.copies()["CLAUDE.md"]; c["differs"] != false {
+		t.Errorf("after import = %v", c)
+	}
+
+	// A repository change makes version 2; an unchanged file stays as it is.
+	s.commitFiles(map[string]string{"CLAUDE.md": "root memory v2"})
+	status, body = s.importFiles("CLAUDE.md", ".claude/agents/reviewer.md")
+	if status != http.StatusOK {
+		t.Fatalf("second import: %d %v", status, body)
+	}
+	versions := map[string]any{}
+	for _, f := range body["files"].([]any) {
+		versions[f.(map[string]any)["path"].(string)] = f.(map[string]any)["version"]
+	}
+	if versions["CLAUDE.md"] != float64(2) || versions[".claude/agents/reviewer.md"] != float64(1) {
+		t.Errorf("versions = %v", versions)
+	}
+
+	// An unknown path, or one that is no instruction file, imports nothing.
+	for _, bad := range []string{"missing/CLAUDE.md", "main.go"} {
+		status, body = s.importFiles("AGENTS.md", bad)
+		if status < 400 || (body["code"] != "INSTRUCTION_NOT_FOUND" && body["code"] != "INSTRUCTION_INVALID") {
+			t.Errorf("import with %s: %d %v", bad, status, body)
+		}
+	}
+	for _, f := range s.listFiles() {
+		if f["path"] == "AGENTS.md" {
+			t.Error("a refused import stored a file")
+		}
+	}
+	if status := gitE2E(t, s.checkout, "status", "--porcelain"); status != "" {
+		t.Errorf("import changed the checkout: %s", status)
+	}
+}

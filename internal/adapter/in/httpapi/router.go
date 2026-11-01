@@ -343,6 +343,7 @@ func NewRouter(h *Handler, opts ...Option) *echo.Echo {
 	g.POST("/list_architecture_rule_events", h.handleListArchitectureRuleEvents)
 	g.POST("/discover_repository_architecture", h.handleDiscoverRepositoryArchitecture)
 	g.POST("/list_instruction_files", h.handleListInstructionFiles)
+	g.POST("/import_instruction_files", h.handleImportInstructionFiles)
 	g.POST("/get_instruction_file", h.handleGetInstructionFile)
 	g.POST("/save_instruction_file", h.handleSaveInstructionFile)
 	g.POST("/rename_instruction_file", h.handleRenameInstructionFile)
