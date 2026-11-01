@@ -34,6 +34,8 @@ export const architectureAssistant = ({ gateway }) => () => ({
   lost: false,
   controller: null,
   counter: 0,
+  /** The rule event the person asked about: { id, text }, sent with the next turn only. */
+  quote: null,
 
   get unavailable() {
     return !this.available;
@@ -47,6 +49,19 @@ export const architectureAssistant = ({ gateway }) => () => ({
     this.available = seed.assistant_available === true;
     this.reason = seed.assistant_reason ?? "";
     this.fixUrl = seed.assistant_fix_url ?? "";
+  },
+
+  /** "Ask the assistant" on a rule event: the panel opens with the event quoted and a question ready to send. */
+  ask(event) {
+    if (this.unavailable) return;
+    const row = event.detail;
+    this.quote = { id: row.id, text: `${row.agent} · ${row.rule} · ${row.word} · ${row.path}${row.layer ? ` · ${row.layer}` : ""}` };
+    this.input = "Why did this rule fire, and how should I fix it?";
+    this.show();
+  },
+
+  dropQuote() {
+    this.quote = null;
   },
 
   toggle() {
@@ -83,6 +98,7 @@ export const architectureAssistant = ({ gateway }) => () => ({
     this.failure = "";
     this.lost = false;
     this.input = "";
+    this.quote = null;
     this.controller = null;
   },
 
@@ -122,6 +138,9 @@ export const architectureAssistant = ({ gateway }) => () => ({
     this.input = "";
     this.failure = "";
     this.lost = false;
+    // The event rides with this turn only; later turns are the conversation's own.
+    const quote = this.quote;
+    this.quote = null;
     this.add("person", text);
     const replyId = this.add("assistant");
     this.activity = [];
@@ -136,6 +155,7 @@ export const architectureAssistant = ({ gateway }) => () => ({
           message: text,
           draft: cleanRecord(this.draft),
           baseVersion: this.version,
+          ruleEventId: quote?.id,
         }),
         {
           signal: controller.signal,

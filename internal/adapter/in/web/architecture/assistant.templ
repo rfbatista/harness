@@ -6,7 +6,7 @@ package architecture
 // draft and sends it with each turn, and it never saves anything. Without an
 // assistant the button is disabled and the reason is beside it.
 templ assistantPanel() {
-	<div class="[ assistant ]" x-data="architectureAssistant" x-on:pagehide.window="leave">
+	<div class="[ assistant ]" x-data="architectureAssistant" x-on:pagehide.window="leave" x-on:architecture-ask-assistant.window="ask($event)">
 		<button type="button" class="[ button ]" data-size="sm" data-assistant-open x-bind:disabled="unavailable" x-bind:aria-expanded="open" aria-controls="architecture-assistant" x-on:click="toggle">Assistant</button>
 		<template x-if="unavailable">
 			<span class="[ text-xs color-ink-muted ]" data-assistant-unavailable role="status">
@@ -118,6 +118,12 @@ templ assistantPanel() {
 				</template>
 			</div>
 			<div class="[ compose ]">
+				<template x-if="quote">
+					<div class="[ quote ]" data-assistant-quote>
+						<span class="[ font-mono text-xs ]" x-text="quote.text"></span>
+						<button type="button" class="[ button ]" data-variant="ghost" data-size="sm" x-on:click="dropQuote">Remove</button>
+					</div>
+				</template>
 				<label class="[ visually-hidden ]" for="architecture-assistant-input">Message to the assistant</label>
 				<textarea id="architecture-assistant-input" rows="3" data-assistant-input x-ref="input" x-model="input" x-on:keydown.enter="onInputKey" placeholder="Set up the layers, or ask for a change…"></textarea>
 				<div class="[ actions ]">

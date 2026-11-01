@@ -114,6 +114,17 @@
       padding: var(--space-s) var(--space-m);
       border-block-start: var(--border-width) solid var(--color-line);
 
+      & > .quote {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: var(--space-xs);
+        padding: var(--space-2xs) var(--space-xs);
+        border-inline-start: 2px solid var(--color-signal);
+        background: var(--color-sunken);
+        overflow-wrap: anywhere;
+      }
+
       & > textarea {
         inline-size: 100%;
         resize: vertical;

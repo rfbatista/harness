@@ -644,3 +644,65 @@ func TestAssistantInvalidProposalShowsItsErrorsInTheBrowser(t *testing.T) {
 		t.Error("the card shows the layer preview of an invalid proposal")
 	}
 }
+
+// "Ask the assistant" on a rule event opens the panel with the event quoted; the turn it sends carries the
+// event's id, and a later plain message does not.
+func TestAssistantAskFromARuleEventInTheBrowser(t *testing.T) {
+	rig, fake := newAssistantRig(t, true, "", "")
+	rig.api.seed(savedRecord())
+	rig.api.events = []map[string]any{
+		ruleEvent("e2", "go-developer", "stay-in-your-layer", "blocked", "internal/domain/x.go", "domain"),
+		ruleEvent("e1", "plain", "archtest", "warned", "cmd/server/main.go", ""),
+	}
+	fake.script(answer("It fired because go-developer may not change domain."), answer("Anything else?"))
+
+	var quote, input string
+	rig.run(t, asstReady(rig.url(""))...)
+	rig.run(t,
+		poll(`document.querySelectorAll('[data-rule-event]').length === 2`),
+		asstClick(`[data-rule-event] [data-rule-event-ask]`),
+		poll(asstShown),
+		poll(`!!document.querySelector('[data-assistant-quote]')`),
+		chromedp.Evaluate(`document.querySelector('[data-assistant-quote]').textContent.replace(/\s+/g, ' ').trim()`, &quote),
+		chromedp.Evaluate(`document.querySelector('[data-assistant-input]').value`, &input),
+	)
+	for _, want := range []string{"go-developer", "stay-in-your-layer", "internal/domain/x.go"} {
+		if !strings.Contains(quote, want) {
+			t.Errorf("quote lacks %q: %q", want, quote)
+		}
+	}
+	if strings.TrimSpace(input) == "" {
+		t.Error("the message box is empty: the person has nothing to send")
+	}
+	rig.run(t,
+		asstKey(asstInput, "Enter", false),
+		poll(asstLastSaid("may not change domain")),
+		poll(`!document.querySelector('[data-assistant-quote]')`),
+		asstType("Thanks."),
+		asstKey(asstInput, "Enter", false),
+		poll(asstLastSaid("Anything else?")),
+	)
+	turns := fake.turns()
+	if turns[0]["rule_event_id"] != "e2" {
+		t.Errorf("first turn rule_event_id = %v, want e2", turns[0]["rule_event_id"])
+	}
+	if _, has := turns[1]["rule_event_id"]; has {
+		t.Errorf("a later plain message resent the rule event id: %v", turns[1]["rule_event_id"])
+	}
+}
+
+// With no assistant the events list offers no "Ask the assistant".
+func TestAssistantAskIsNotOfferedWithoutAnAssistantInTheBrowser(t *testing.T) {
+	rig, _ := newAssistantRig(t, false, "Claude is not signed in.", "/agent-isolation#credential")
+	rig.api.seed(savedRecord())
+	rig.api.events = []map[string]any{ruleEvent("e1", "plain", "archtest", "warned", "cmd/server/main.go", "")}
+	var asks int
+	rig.run(t, asstReady(rig.url(""))...)
+	rig.run(t,
+		poll(`document.querySelectorAll('[data-rule-event]').length === 1`),
+		chromedp.Evaluate(`document.querySelectorAll('[data-rule-event-ask]').length`, &asks),
+	)
+	if asks != 0 {
+		t.Errorf("%d Ask the assistant buttons, want none", asks)
+	}
+}
