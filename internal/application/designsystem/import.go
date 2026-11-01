@@ -257,16 +257,12 @@ func (s *Service) ImportDesignSystem(ctx context.Context, req ports.DesignImport
 		return nil, nil, err
 	}
 	id := &domain.DesignSystemIdentity{ProjectID: req.ProjectID, Name: name, Slug: slug, Description: strings.TrimSpace(description)}
-	if err := s.store.Create(ctx, id); err != nil {
-		return nil, nil, err
-	}
 	v := &domain.DesignSystemVersion{
-		DesignSystemID: id.ID, At: s.now(), By: domain.DesignByImport, Source: domain.DesignSourceImport,
+		At: s.now(), By: domain.DesignByImport, Source: domain.DesignSourceImport,
 		RepositoryID: repo.ID, RepositoryName: repo.DisplayName(),
 		Message: "Imported from " + repo.DisplayName(), Summary: domain.SummarizeDesignChange(domain.DesignSystemRecord{}, pv.Record), Record: pv.Record,
 	}
-	if err := s.store.Append(ctx, v, 0); err != nil {
-		_ = s.store.Delete(ctx, id.ID) // all or nothing
+	if err := s.store.CreateWithVersion(ctx, id, v); err != nil {
 		return nil, nil, err
 	}
 	s.announceChanged(id.ProjectID, id.ID)

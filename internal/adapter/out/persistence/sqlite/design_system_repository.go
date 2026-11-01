@@ -140,24 +140,39 @@ func refusal(field string, err error) error {
 
 // Create implements ports.DesignSystemStore.
 func (r *DesignSystemRepository) Create(ctx context.Context, d *domain.DesignSystemIdentity) error {
+	return r.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error { return createIdentity(tx, d) })
+}
+
+// createIdentity stores the identity inside tx.
+func createIdentity(tx *gorm.DB, d *domain.DesignSystemIdentity) error {
 	id, err := genID()
 	if err != nil {
 		return err
 	}
+	if field, err := taken(tx, d.ProjectID, "", d.Slug, d.Name); err != nil || field != "" {
+		return refusal(field, err)
+	}
+	now := time.Now()
+	m := DesignSystemModel{
+		ID: id, ProjectID: d.ProjectID, Name: d.Name, NameKey: nameKey(d.Name), Slug: d.Slug,
+		Description: d.Description, CreatedAt: now, UpdatedAt: now,
+	}
+	if err := tx.Create(&m).Error; err != nil {
+		return refusal("", err)
+	}
+	*d = *m.toDomain()
+	return nil
+}
+
+// CreateWithVersion implements ports.DesignSystemStore: the identity and its
+// first version are stored together or not at all.
+func (r *DesignSystemRepository) CreateWithVersion(ctx context.Context, d *domain.DesignSystemIdentity, v *domain.DesignSystemVersion) error {
 	return r.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
-		if field, err := taken(tx, d.ProjectID, "", d.Slug, d.Name); err != nil || field != "" {
-			return refusal(field, err)
+		if err := createIdentity(tx, d); err != nil {
+			return err
 		}
-		now := time.Now()
-		m := DesignSystemModel{
-			ID: id, ProjectID: d.ProjectID, Name: d.Name, NameKey: nameKey(d.Name), Slug: d.Slug,
-			Description: d.Description, CreatedAt: now, UpdatedAt: now,
-		}
-		if err := tx.Create(&m).Error; err != nil {
-			return refusal("", err)
-		}
-		*d = *m.toDomain()
-		return nil
+		v.DesignSystemID = d.ID
+		return appendVersion(tx, v, 0)
 	})
 }
 
@@ -299,6 +314,11 @@ func (r *DesignSystemRepository) List(ctx context.Context, designSystemID string
 
 // Append implements ports.DesignSystemStore.
 func (r *DesignSystemRepository) Append(ctx context.Context, v *domain.DesignSystemVersion, baseVersion int) error {
+	return r.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error { return appendVersion(tx, v, baseVersion) })
+}
+
+// appendVersion writes v as the version after baseVersion inside tx.
+func appendVersion(tx *gorm.DB, v *domain.DesignSystemVersion, baseVersion int) error {
 	record, err := json.Marshal(v.Record)
 	if err != nil {
 		return err
@@ -307,29 +327,27 @@ func (r *DesignSystemRepository) Append(ctx context.Context, v *domain.DesignSys
 	if err != nil {
 		return err
 	}
-	return r.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
-		cur, err := latestVersion(tx, v.DesignSystemID)
-		if err != nil {
-			return err
+	cur, err := latestVersion(tx, v.DesignSystemID)
+	if err != nil {
+		return err
+	}
+	stored := 0
+	if cur != nil {
+		stored = cur.Version
+	}
+	if stored != baseVersion {
+		return &domain.DetailedError{
+			StructuredError: &domain.StructuredError{Code: "DESIGN_SYSTEM_CHANGED", Message: "the design system was saved since you loaded it"},
+			Details:         map[string]any{"current_version": stored},
 		}
-		stored := 0
-		if cur != nil {
-			stored = cur.Version
-		}
-		if stored != baseVersion {
-			return &domain.DetailedError{
-				StructuredError: &domain.StructuredError{Code: "DESIGN_SYSTEM_CHANGED", Message: "the design system was saved since you loaded it"},
-				Details:         map[string]any{"current_version": stored},
-			}
-		}
-		m := DesignSystemVersionModel{
-			DesignSystemID: v.DesignSystemID, Version: stored + 1, At: v.At, By: v.By, Source: v.Source, ProposalID: v.ProposalID,
-			RepositoryID: v.RepositoryID, RepositoryName: v.RepositoryName, Message: v.Message, SummaryJSON: string(summary), RecordJSON: string(record),
-		}
-		if err := tx.Create(&m).Error; err != nil {
-			return err
-		}
-		v.Version = m.Version
-		return nil
-	})
+	}
+	m := DesignSystemVersionModel{
+		DesignSystemID: v.DesignSystemID, Version: stored + 1, At: v.At, By: v.By, Source: v.Source, ProposalID: v.ProposalID,
+		RepositoryID: v.RepositoryID, RepositoryName: v.RepositoryName, Message: v.Message, SummaryJSON: string(summary), RecordJSON: string(record),
+	}
+	if err := tx.Create(&m).Error; err != nil {
+		return err
+	}
+	v.Version = m.Version
+	return nil
 }

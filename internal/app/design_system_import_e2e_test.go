@@ -9,6 +9,9 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"gorm.io/driver/sqlite"
+	"gorm.io/gorm"
 )
 
 // importFixture is a git repository whose default branch holds a copy of the
@@ -272,4 +275,34 @@ func TestDesignImport_TheHarnessFixtureKeepsItsDigitNamesAndEasingTokens(t *test
 			t.Errorf("%s is still skipped: %s", path, skipped[path])
 		}
 	}
+}
+
+func TestDesignImport_AFailingVersionWriteLeavesNoDesignSystem(t *testing.T) {
+	s := startDesignServer(t)
+	harness, _ := s.importFixture("harness", harnessFiles(t))
+	project, err := s.cat.Projects.GetProject(s.ctx, s.project)
+	if err != nil {
+		t.Fatal(err)
+	}
+	// A second connection to the server's database makes the version insert fail.
+	db, err := gorm.Open(sqlite.Open("file:"+filepath.Join(project.RootDir, "harness.db")), &gorm.Config{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := db.Exec(`CREATE TRIGGER fail_version BEFORE INSERT ON design_system_versions BEGIN SELECT RAISE(ABORT, 'no versions today'); END`).Error; err != nil {
+		t.Fatal(err)
+	}
+
+	status, out := s.post("import_design_system", map[string]any{"repository_id": harness, "tokens_path": "design-system/tokens.json", "name": "Harness look", "slug": "harness-look"})
+	if status < 500 {
+		t.Fatalf("a failing version write answered %d %v", status, out)
+	}
+	if got := s.designSystemSlugs(); len(got) != 1 {
+		t.Errorf("the failed import left a design system behind: %v", got)
+	}
+
+	if err := db.Exec(`DROP TRIGGER fail_version`).Error; err != nil {
+		t.Fatal(err)
+	}
+	s.mustPost("import_design_system", map[string]any{"repository_id": harness, "tokens_path": "design-system/tokens.json", "name": "Harness look", "slug": "harness-look"})
 }

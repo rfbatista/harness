@@ -69,6 +69,9 @@ type DesignSystemStore interface {
 	// details.field when the project has a design system with that slug or
 	// name.
 	Create(ctx context.Context, d *domain.DesignSystemIdentity) error
+	// CreateWithVersion stores the identity and its first version (v, whose
+	// DesignSystemID it sets) together or not at all, with Create's SLUG_TAKEN.
+	CreateWithVersion(ctx context.Context, d *domain.DesignSystemIdentity, v *domain.DesignSystemVersion) error
 	// Update stores the identity's name and description (never the slug), with
 	// the same SLUG_TAKEN for a name another design system has.
 	Update(ctx context.Context, d *domain.DesignSystemIdentity) error
