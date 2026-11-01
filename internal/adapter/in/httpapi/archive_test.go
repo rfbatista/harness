@@ -1,6 +1,7 @@
 package httpapi
 
 import (
+	"encoding/json"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -79,5 +80,158 @@ func TestHTTP_ArchiveDoneTickets(t *testing.T) {
 	id := ticketIn(t, out)["id"].(string)
 	if code, body := post(); code != http.StatusOK || body != `{"archived":1,"ids":["`+id+`"]}` {
 		t.Fatalf("archive_done_tickets = %d %s", code, body)
+	}
+}
+
+// featureWithChildren creates a feature task with one child per status, all
+// through the API, and answers their ids.
+func featureWithChildren(t *testing.T, h *Handler, pid, featureStatus string, childStatuses ...string) (string, []string) {
+	t.Helper()
+	_, out := postTicket(t, h, "/api/create_ticket", map[string]any{"project_id": pid, "title": "Feature", "status": featureStatus})
+	feature := ticketIn(t, out)["id"].(string)
+	var children []string
+	for i, st := range childStatuses {
+		_, out := postTicket(t, h, "/api/create_ticket", map[string]any{"project_id": pid, "title": "Child " + string(rune('A'+i)), "status": st, "parent_id": feature})
+		children = append(children, ticketIn(t, out)["id"].(string))
+	}
+	return feature, children
+}
+
+func ticketOf(t *testing.T, h *Handler, id string) map[string]any {
+	t.Helper()
+	rec := getJSON(t, h, "/get_ticket?ticket_id="+id)
+	var out map[string]any
+	if err := json.Unmarshal(rec.Body.Bytes(), &out); err != nil {
+		t.Fatal(err)
+	}
+	return ticketIn(t, out)
+}
+
+func TestHTTP_ArchivingAFeatureArchivesItsChildrenTogether(t *testing.T) {
+	h, pid := newPlanningHandler(t)
+	feature, children := featureWithChildren(t, h, pid, "done", "done", "done")
+
+	code, out := postTicket(t, h, "/api/archive_ticket", map[string]any{"id": feature})
+	if code != http.StatusOK || ticketIn(t, out)["id"] != feature {
+		t.Fatalf("archive feature = %d %v", code, out)
+	}
+	at := ticketOf(t, h, feature)["archived_at"]
+	if at == nil {
+		t.Fatal("the feature is not archived")
+	}
+	for _, id := range children {
+		if got := ticketOf(t, h, id)["archived_at"]; got != at {
+			t.Errorf("child %s archived_at = %v, want the feature's %v", id, got, at)
+		}
+	}
+	if got := listTicketIDs(t, h, pid, ""); len(got) != 0 {
+		t.Fatalf("board = %v, want empty", got)
+	}
+}
+
+func TestHTTP_ArchivingAFeatureWithOpenChildrenIsRefusedAndNamesThem(t *testing.T) {
+	h, pid := newPlanningHandler(t)
+	feature, children := featureWithChildren(t, h, pid, "done", "done", "in_progress")
+
+	code, out := postTicket(t, h, "/api/archive_ticket", map[string]any{"id": feature})
+	if code != http.StatusConflict || out["code"] != "FEATURE_HAS_OPEN_CHILDREN" {
+		t.Fatalf("archive feature = %d %v", code, out)
+	}
+	if msg, _ := out["error"].(string); msg != "1 task is not done: Child B" {
+		t.Errorf("message = %q", msg)
+	}
+	open, _ := out["open_children"].([]any)
+	if len(open) != 1 {
+		t.Fatalf("open_children = %v", out["open_children"])
+	}
+	if c := open[0].(map[string]any); c["id"] != children[1] || c["title"] != "Child B" || c["status"] != "in_progress" {
+		t.Errorf("open_children[0] = %v", c)
+	}
+	for _, id := range append([]string{feature}, children...) {
+		if ticketOf(t, h, id)["archived_at"] != nil {
+			t.Errorf("%s was archived by a refused archive", id)
+		}
+	}
+}
+
+func TestHTTP_ArchivingAFeatureLeavesAChildArchivedOnItsOwnAlone(t *testing.T) {
+	h, pid := newPlanningHandler(t)
+	feature, children := featureWithChildren(t, h, pid, "done", "done", "done")
+	if code, out := postTicket(t, h, "/api/archive_ticket", map[string]any{"id": children[0]}); code != http.StatusOK {
+		t.Fatalf("archive child = %d %v", code, out)
+	}
+	before := ticketOf(t, h, children[0])["archived_at"]
+
+	if code, out := postTicket(t, h, "/api/archive_ticket", map[string]any{"id": feature}); code != http.StatusOK {
+		t.Fatalf("archive feature = %d %v", code, out)
+	}
+	if got := ticketOf(t, h, children[0])["archived_at"]; got != before {
+		t.Errorf("child archived on its own was re-stamped: %v -> %v", before, got)
+	}
+	if got := ticketOf(t, h, children[1])["archived_at"]; got != ticketOf(t, h, feature)["archived_at"] {
+		t.Errorf("other child archived_at = %v", got)
+	}
+}
+
+func TestHTTP_ArchivingAFeatureThatIsNotDoneIsTaskNotDone(t *testing.T) {
+	h, pid := newPlanningHandler(t)
+	feature, _ := featureWithChildren(t, h, pid, "in_progress", "done")
+	if code, out := postTicket(t, h, "/api/archive_ticket", map[string]any{"id": feature}); code != http.StatusConflict || out["code"] != "TASK_NOT_DONE" {
+		t.Fatalf("archive = %d %v", code, out)
+	}
+}
+
+func TestHTTP_RestoringAFeatureBringsBackOnlyTheChildrenArchivedWithIt(t *testing.T) {
+	h, pid := newPlanningHandler(t)
+	feature, children := featureWithChildren(t, h, pid, "done", "done", "done")
+	if code, out := postTicket(t, h, "/api/archive_ticket", map[string]any{"id": children[0]}); code != http.StatusOK {
+		t.Fatalf("archive child = %d %v", code, out)
+	}
+	if code, out := postTicket(t, h, "/api/archive_ticket", map[string]any{"id": feature}); code != http.StatusOK {
+		t.Fatalf("archive feature = %d %v", code, out)
+	}
+
+	code, out := postTicket(t, h, "/api/restore_ticket", map[string]any{"id": feature})
+	if code != http.StatusOK || ticketIn(t, out)["archived_at"] != nil {
+		t.Fatalf("restore feature = %d %v", code, out)
+	}
+	if ticketOf(t, h, children[1])["archived_at"] != nil || ticketOf(t, h, children[1])["status"] != "done" {
+		t.Errorf("the child archived with the feature is not back: %v", ticketOf(t, h, children[1]))
+	}
+	if ticketOf(t, h, children[0])["archived_at"] == nil {
+		t.Error("the child archived on its own came back with the feature")
+	}
+}
+
+func TestHTTP_RestoringAChildOfAnArchivedFeatureIsRefusedAndNamesTheFeature(t *testing.T) {
+	h, pid := newPlanningHandler(t)
+	feature, children := featureWithChildren(t, h, pid, "done", "done")
+	if code, out := postTicket(t, h, "/api/archive_ticket", map[string]any{"id": feature}); code != http.StatusOK {
+		t.Fatalf("archive feature = %d %v", code, out)
+	}
+
+	code, out := postTicket(t, h, "/api/restore_ticket", map[string]any{"id": children[0]})
+	if code != http.StatusConflict || out["code"] != "FEATURE_ARCHIVED" {
+		t.Fatalf("restore child = %d %v", code, out)
+	}
+	if out["error"] != "Restore the feature “Feature” first." {
+		t.Errorf("message = %q", out["error"])
+	}
+	if f, _ := out["feature"].(map[string]any); f["id"] != feature || f["title"] != "Feature" {
+		t.Errorf("feature = %v", out["feature"])
+	}
+	if ticketOf(t, h, children[0])["archived_at"] == nil {
+		t.Error("the refused restore restored the child")
+	}
+}
+
+func TestHTTP_RestoringAChildArchivedOnItsOwnWorksWhileItsFeatureIsOnTheBoard(t *testing.T) {
+	h, pid := newPlanningHandler(t)
+	_, children := featureWithChildren(t, h, pid, "in_progress", "done")
+	if code, out := postTicket(t, h, "/api/archive_ticket", map[string]any{"id": children[0]}); code != http.StatusOK {
+		t.Fatalf("archive child = %d %v", code, out)
+	}
+	if code, out := postTicket(t, h, "/api/restore_ticket", map[string]any{"id": children[0]}); code != http.StatusOK || ticketIn(t, out)["archived_at"] != nil {
+		t.Fatalf("restore child = %d %v", code, out)
 	}
 }

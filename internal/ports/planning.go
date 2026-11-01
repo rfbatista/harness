@@ -22,6 +22,9 @@ type TicketRepository interface {
 	Update(id, title, description string, status domain.TicketStatus, parentID string) (*domain.Ticket, error)
 	// SetArchived archives the ticket at at, or restores it when at is nil.
 	SetArchived(id string, at *time.Time) (*domain.Ticket, error)
+	// SetArchivedMany does the same to every ticket in one transaction, all
+	// at the same instant, and answers them in the order of ids.
+	SetArchivedMany(ids []string, at *time.Time) ([]*domain.Ticket, error)
 	Delete(id string) error
 	// ActivityByProject answers each project's open and archived task
 	// counts and newest update, for every project that has tasks.

@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"log/slog"
 	"slices"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -382,22 +383,101 @@ func (s *Service) setArchived(ctx context.Context, id string, archive bool) (*do
 		s.decorate(ctx, existing)
 		return existing, nil
 	}
+	if archive && existing.Status != domain.TicketStatusDone {
+		return nil, &domain.StructuredError{Code: "TASK_NOT_DONE", Message: "only a done task can be archived"}
+	}
+	family, lastSolo, err := s.archiveFamily(ctx, existing, archive)
+	if err != nil {
+		return nil, err
+	}
 	var at *time.Time
 	if archive {
-		if existing.Status != domain.TicketStatusDone {
-			return nil, &domain.StructuredError{Code: "TASK_NOT_DONE", Message: "only a done task can be archived"}
+		// Restore tells the children archived with a feature by its exact
+		// archive time, so no child archived on its own may share it.
+		now := time.Now().Truncate(time.Millisecond)
+		if !lastSolo.Before(now) {
+			now = lastSolo.Add(time.Millisecond)
 		}
-		now := time.Now()
 		at = &now
 	}
-	tk, err := s.tickets.SetArchived(id, at)
+	changed, err := s.tickets.SetArchivedMany(familyIDs(family), at)
 	if err != nil {
 		return nil, err
 	}
 	// The write is done: the change goes out whole even if the request ends.
-	s.decorate(context.WithoutCancel(ctx), tk)
-	s.announce(tk, false)
-	return tk, nil
+	ctx = context.WithoutCancel(ctx)
+	s.decorate(ctx, changed...)
+	for _, tk := range changed {
+		s.announce(tk, false)
+	}
+	return changed[0], nil
+}
+
+// archiveFamily answers the tickets that archive or restore with tk, tk
+// first. A plain task or a child is alone, except that a child cannot be
+// restored while its feature is archived (FEATURE_ARCHIVED). A feature
+// archives with every child still on the board, and only when all of them
+// are done (FEATURE_HAS_OPEN_CHILDREN); it restores with the children that
+// were archived together with it, which carry its exact archive time. The
+// time answered is the latest archive time of a child archived on its own.
+func (s *Service) archiveFamily(ctx context.Context, tk *domain.Ticket, archive bool) ([]*domain.Ticket, time.Time, error) {
+	family := []*domain.Ticket{tk}
+	if tk.IsChild() && !archive {
+		if parent := s.tickets.Get(ctx, tk.ParentID); parent != nil && parent.ArchivedAt != nil {
+			return nil, time.Time{}, domain.NewCatalogError("FEATURE_ARCHIVED", "Restore the feature “"+parent.Title+"” first.",
+				map[string]any{"feature": map[string]string{"id": parent.ID, "title": parent.Title}})
+		}
+	}
+	var open []map[string]string
+	var titles []string
+	var lastSolo time.Time
+	for _, child := range s.childrenOf(ctx, tk) {
+		if archive && child.ArchivedAt != nil && child.ArchivedAt.After(lastSolo) {
+			lastSolo = *child.ArchivedAt
+		}
+		switch {
+		case archive && child.ArchivedAt == nil:
+			if child.Status != domain.TicketStatusDone {
+				open = append(open, map[string]string{"id": child.ID, "title": child.Title, "status": string(child.Status)})
+				titles = append(titles, child.Title)
+			}
+			family = append(family, child)
+		case !archive && child.ArchivedAt != nil && tk.ArchivedAt != nil && child.ArchivedAt.UnixMilli() == tk.ArchivedAt.UnixMilli():
+			family = append(family, child)
+		}
+	}
+	if len(open) > 0 {
+		return nil, time.Time{}, domain.NewCatalogError("FEATURE_HAS_OPEN_CHILDREN", openChildrenMessage(titles), map[string]any{"open_children": open})
+	}
+	return family, lastSolo, nil
+}
+
+func openChildrenMessage(titles []string) string {
+	if len(titles) == 1 {
+		return "1 task is not done: " + titles[0]
+	}
+	return strconv.Itoa(len(titles)) + " tasks are not done: " + strings.Join(titles, ", ")
+}
+
+// childrenOf lists tk's children, archived ones included.
+func (s *Service) childrenOf(ctx context.Context, tk *domain.Ticket) []*domain.Ticket {
+	var children []*domain.Ticket
+	for _, list := range [][]*domain.Ticket{s.tickets.ListByProject(ctx, tk.ProjectID), s.tickets.ListArchivedByProject(ctx, tk.ProjectID)} {
+		for _, c := range list {
+			if c.ParentID == tk.ID {
+				children = append(children, c)
+			}
+		}
+	}
+	return children
+}
+
+func familyIDs(family []*domain.Ticket) []string {
+	ids := make([]string, len(family))
+	for i, tk := range family {
+		ids[i] = tk.ID
+	}
+	return ids
 }
 
 // ArchiveDoneTickets archives every done ticket of the project that is not
