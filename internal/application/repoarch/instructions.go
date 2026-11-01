@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"log/slog"
-	"slices"
 
 	"operators-mcp/internal/domain"
 	"operators-mcp/internal/ports"
@@ -74,7 +73,8 @@ func (s *Service) SaveInstructionFile(ctx context.Context, repositoryID, path, k
 	return f, nil
 }
 
-// RenameInstructionFile implements ports.InstructionFiles.
+// RenameInstructionFile implements ports.InstructionFiles. The file's record
+// entry moves with it, in the same transaction.
 func (s *Service) RenameInstructionFile(ctx context.Context, repositoryID, path, newPath string, baseVersion int) (*domain.InstructionFile, error) {
 	repo, err := s.repos.GetRepository(ctx, repositoryID)
 	if err != nil {
@@ -87,66 +87,40 @@ func (s *Service) RenameInstructionFile(ctx context.Context, repositoryID, path,
 	if problems := domain.ValidateInstructionFile(newPath, old.Kind, ""); len(problems) > 0 {
 		return nil, invalidInstruction(problems)
 	}
-	f, err := s.store.RenameInstructionFile(ctx, repositoryID, path, newPath, baseVersion)
+	f, recordVersion, err := s.store.RenameInstructionFile(ctx, repositoryID, path, newPath, baseVersion)
 	if err != nil {
 		return nil, err
 	}
-	if err := s.updateRecordEntries(ctx, repo, func(in []domain.ArchInstruction) []domain.ArchInstruction {
-		for i := range in {
-			if in[i].Path == path {
-				in[i].Path = newPath
-			}
-		}
-		return in
-	}); err != nil {
-		return nil, err
-	}
+	s.recordMoved(repo, recordVersion)
 	s.announceInstruction(repo.ProjectID, repositoryID, path, 0)
 	s.announceInstruction(repo.ProjectID, repositoryID, newPath, f.Version)
 	return f, nil
 }
 
-// DeleteInstructionFile implements ports.InstructionFiles.
+// DeleteInstructionFile implements ports.InstructionFiles. The file's record
+// entry goes with it, in the same transaction.
 func (s *Service) DeleteInstructionFile(ctx context.Context, repositoryID, path string, baseVersion int) error {
 	repo, err := s.repos.GetRepository(ctx, repositoryID)
 	if err != nil {
 		return err
 	}
-	if err := s.store.DeleteInstructionFile(ctx, repositoryID, path, baseVersion); err != nil {
+	recordVersion, err := s.store.DeleteInstructionFile(ctx, repositoryID, path, baseVersion)
+	if err != nil {
 		return err
 	}
-	if err := s.updateRecordEntries(ctx, repo, func(in []domain.ArchInstruction) []domain.ArchInstruction {
-		return slices.DeleteFunc(in, func(e domain.ArchInstruction) bool { return e.Path == path })
-	}); err != nil {
-		return err
-	}
+	s.recordMoved(repo, recordVersion)
 	s.announceInstruction(repo.ProjectID, repositoryID, path, 0)
 	return nil
 }
 
-// updateRecordEntries applies edit to the record's instruction entries and,
-// when it changed any, stores the record as a new version. A repository with
-// no record has nothing to keep in step.
-func (s *Service) updateRecordEntries(ctx context.Context, repo *domain.Repository, edit func([]domain.ArchInstruction) []domain.ArchInstruction) error {
-	stored, err := s.store.Get(ctx, repo.ID)
-	if err != nil || stored == nil {
-		return err
-	}
-	rec := stored.Record
-	before := slices.Clone(rec.Instructions)
-	rec.Instructions = edit(slices.Clone(rec.Instructions))
-	if slices.EqualFunc(before, rec.Instructions, func(a, b domain.ArchInstruction) bool {
-		return a.Path == b.Path
-	}) {
-		return nil
-	}
-	saved, err := s.store.SetRecord(ctx, repo.ID, rec)
-	if err != nil || saved == nil {
-		return err
+// recordMoved tells the record's followers it has a new version, after a file
+// change moved or removed one of its entries; version 0 says it did not change.
+func (s *Service) recordMoved(repo *domain.Repository, version int) {
+	if version == 0 {
+		return
 	}
 	s.forget(repo.ID)
-	s.announce(repo.ProjectID, repo.ID, saved.Version)
-	return nil
+	s.announce(repo.ProjectID, repo.ID, version)
 }
 
 // ListRepositoryCopies implements ports.InstructionFiles.

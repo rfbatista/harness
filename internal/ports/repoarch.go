@@ -116,11 +116,12 @@ type ArchitectureRecordStore interface {
 	// SaveInstructionFile answers the stored file. totalLimit is the most the
 	// repository's files may hold together, counting this one.
 	SaveInstructionFile(ctx context.Context, f domain.InstructionFile, baseVersion, totalLimit int) (*domain.InstructionFile, error)
-	RenameInstructionFile(ctx context.Context, repositoryID, path, newPath string, baseVersion int) (*domain.InstructionFile, error)
-	DeleteInstructionFile(ctx context.Context, repositoryID, path string, baseVersion int) error
-	// SetRecord replaces the stored record with a new version of it, leaving
-	// the layer zones as they are. It answers nil when there is no record.
-	SetRecord(ctx context.Context, repositoryID string, record domain.ArchitectureRecord) (*StoredArchitecture, error)
+	// RenameInstructionFile and DeleteInstructionFile also move or remove the
+	// file's entry in the record, in the same transaction, as a new version of
+	// the record. They answer that version, 0 when the record did not change
+	// (it has none, or has no entry for the file).
+	RenameInstructionFile(ctx context.Context, repositoryID, path, newPath string, baseVersion int) (*domain.InstructionFile, int, error)
+	DeleteInstructionFile(ctx context.Context, repositoryID, path string, baseVersion int) (int, error)
 	// SetExport records the last export: its version, commit, time and the
 	// SHA-256 of the YAML it wrote. It is not a new version of the record.
 	SetExport(ctx context.Context, repositoryID string, version int, commit string, at time.Time, sha string) (*StoredArchitecture, error)

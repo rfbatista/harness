@@ -189,6 +189,16 @@ func TestInstructionFiles_RenameAndDeleteKeepTheRecordEntryInStep(t *testing.T) 
 	if got := paths(); got != "web/CLAUDE.md:n,AGENTS.md:" {
 		t.Errorf("after rename: %s", got)
 	}
+	// The entry moved with its applies_to, loaded and note, as a new version of the record.
+	after := s.get()
+	if after["version"] != float64(2) {
+		t.Errorf("record version = %v, want 2", after["version"])
+	}
+	entry := after["record"].(map[string]any)["instructions"].([]any)[0].(map[string]any)
+	if entry["applies_to"].([]any)[0] != "go-developer" || entry["loaded"] != "always" || entry["note"] != "n" {
+		t.Errorf("the moved entry = %v", entry)
+	}
+	s.sawOnFeed("repository_architecture_changed", `"repository_id":"`+s.repo.ID+`"`, `"version":2`)
 	s.sawOnFeed("instruction_file_changed", `"path":"web/CLAUDE.md"`, `"version":1`)
 	s.sawOnFeed("instruction_file_changed", `"path":"CLAUDE.md"`, `"version":0`)
 	if got := s.mustPost("get_instruction_file", map[string]any{"repository_id": s.repo.ID, "path": "web/CLAUDE.md"}); got["content"] != "a" {

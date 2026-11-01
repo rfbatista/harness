@@ -3,12 +3,12 @@ package sqlite
 import (
 	"context"
 	"encoding/json"
+	"slices"
 	"time"
 
 	"gorm.io/gorm"
 
 	"operators-mcp/internal/domain"
-	"operators-mcp/internal/ports"
 )
 
 // InstructionFileModel is the GORM model of one instruction file of a
@@ -128,8 +128,9 @@ func (r *ArchitectureRecordRepository) SaveInstructionFile(ctx context.Context, 
 }
 
 // RenameInstructionFile implements ports.ArchitectureRecordStore.
-func (r *ArchitectureRecordRepository) RenameInstructionFile(ctx context.Context, repositoryID, path, newPath string, baseVersion int) (*domain.InstructionFile, error) {
+func (r *ArchitectureRecordRepository) RenameInstructionFile(ctx context.Context, repositoryID, path, newPath string, baseVersion int) (*domain.InstructionFile, int, error) {
 	var out *domain.InstructionFile
+	var recordVersion int
 	err := r.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
 		m, err := findInstructionFile(tx, repositoryID, path)
 		if err != nil {
@@ -156,14 +157,23 @@ func (r *ArchitectureRecordRepository) RenameInstructionFile(ctx context.Context
 		}
 		d := moved.toDomain()
 		out = &d
-		return nil
+		recordVersion, err = editRecordEntries(tx, repositoryID, func(in []domain.ArchInstruction) []domain.ArchInstruction {
+			for i := range in {
+				if in[i].Path == path {
+					in[i].Path = newPath
+				}
+			}
+			return in
+		})
+		return err
 	})
-	return out, err
+	return out, recordVersion, err
 }
 
 // DeleteInstructionFile implements ports.ArchitectureRecordStore.
-func (r *ArchitectureRecordRepository) DeleteInstructionFile(ctx context.Context, repositoryID, path string, baseVersion int) error {
-	return r.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+func (r *ArchitectureRecordRepository) DeleteInstructionFile(ctx context.Context, repositoryID, path string, baseVersion int) (int, error) {
+	var recordVersion int
+	err := r.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
 		m, err := findInstructionFile(tx, repositoryID, path)
 		if err != nil {
 			return err
@@ -174,28 +184,42 @@ func (r *ArchitectureRecordRepository) DeleteInstructionFile(ctx context.Context
 		if m.Version != baseVersion {
 			return instructionChanged(path)
 		}
-		return tx.Delete(m).Error
-	})
-}
-
-// SetRecord implements ports.ArchitectureRecordStore.
-func (r *ArchitectureRecordRepository) SetRecord(ctx context.Context, repositoryID string, record domain.ArchitectureRecord) (*ports.StoredArchitecture, error) {
-	raw, err := json.Marshal(record)
-	if err != nil {
-		return nil, err
-	}
-	var out *ports.StoredArchitecture
-	err = r.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
-		m, err := findRecord(tx, repositoryID)
-		if err != nil || m == nil {
+		if err := tx.Delete(m).Error; err != nil {
 			return err
 		}
-		m.Version, m.RecordJSON, m.UpdatedAt = m.Version+1, string(raw), time.Now()
-		if err := tx.Save(m).Error; err != nil {
-			return err
-		}
-		out, err = m.toStored()
+		recordVersion, err = editRecordEntries(tx, repositoryID, func(in []domain.ArchInstruction) []domain.ArchInstruction {
+			return slices.DeleteFunc(in, func(e domain.ArchInstruction) bool { return e.Path == path })
+		})
 		return err
 	})
-	return out, err
+	return recordVersion, err
+}
+
+// editRecordEntries applies edit to the instruction entries of the repository's
+// record and, when that changed a path, stores the record as a new version, all
+// in tx. It answers the new version, 0 when the record is unchanged or absent.
+func editRecordEntries(tx *gorm.DB, repositoryID string, edit func([]domain.ArchInstruction) []domain.ArchInstruction) (int, error) {
+	m, err := findRecord(tx, repositoryID)
+	if err != nil || m == nil {
+		return 0, err
+	}
+	stored, err := m.toStored()
+	if err != nil {
+		return 0, err
+	}
+	rec := stored.Record
+	before := slices.Clone(rec.Instructions)
+	rec.Instructions = edit(slices.Clone(rec.Instructions))
+	if slices.EqualFunc(before, rec.Instructions, func(a, b domain.ArchInstruction) bool { return a.Path == b.Path }) {
+		return 0, nil
+	}
+	raw, err := json.Marshal(rec)
+	if err != nil {
+		return 0, err
+	}
+	m.Version, m.RecordJSON, m.UpdatedAt = m.Version+1, string(raw), time.Now()
+	if err := tx.Save(m).Error; err != nil {
+		return 0, err
+	}
+	return m.Version, nil
 }
