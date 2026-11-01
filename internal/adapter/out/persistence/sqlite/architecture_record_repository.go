@@ -35,6 +35,9 @@ func (m *ArchitectureRecordModel) toStored() (*ports.StoredArchitecture, error) 
 	if err := json.Unmarshal([]byte(m.RecordJSON), &rec); err != nil {
 		return nil, err
 	}
+	for i := range rec.Instructions {
+		rec.Instructions[i].Kind = domain.CurrentInstructionKind(rec.Instructions[i].Kind)
+	}
 	return &ports.StoredArchitecture{
 		RepositoryID: m.RepositoryID, ProjectID: m.ProjectID, Version: m.Version, Record: rec, UpdatedAt: m.UpdatedAt,
 		ExportedVersion: m.ExportedVersion, ExportedCommit: m.ExportedCommit, ExportedAt: m.ExportedAt, ExportedSHA: m.ExportedSHA,
