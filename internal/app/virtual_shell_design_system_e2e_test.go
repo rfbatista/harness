@@ -477,3 +477,110 @@ func TestDesignSystemView_AVersionZeroDesignSystemGivesOnlyAReadmeThatNamesItAnd
 		t.Errorf("README.md:\n%s", got)
 	}
 }
+
+func shellComponentsRecord() map[string]any {
+	r := shellDesignRecord()
+	r["components"] = []any{
+		map[string]any{
+			"slug": "button", "name": "Button & link", "purpose": "Starts an action.",
+			"do": []any{"Use one per view."}, "dont": []any{"Nest <buttons>.", "Use it to navigate."},
+			"previews": []any{
+				map[string]any{"label": "Primary / default", "variant": "primary", "state": "default",
+					"html": `<button class="btn">Save</button>`,
+					"css":  `.btn{background:var(--colors-signal);padding:var(--spacing-md);font-size:var(--typography-headline-font-size)}`},
+				map[string]any{"label": "Primary / disabled", "variant": "primary", "state": "disabled",
+					"html": `<button class="btn" disabled>Save</button>`, "css": `.btn[disabled]{opacity:.5}`},
+			},
+		},
+		map[string]any{"slug": "badge", "name": "Badge", "purpose": "A short label.", "do": []any{}, "dont": []any{},
+			"previews": []any{map[string]any{"label": "Plain", "variant": "plain", "state": "default", "html": `<span class="badge">New</span>`, "css": `.badge{color:var(--colors-canvas)}`}}},
+	}
+	return r
+}
+
+func TestDesignSystemView_EachComponentIsASelfContainedPageInTheContractsFormat(t *testing.T) {
+	e := newShellE2E(t)
+	e.agents("software-architect", "devops", "go-developer")
+	e.saveDesignSystem(0, shellComponentsRecord())
+	e.useDesignSystem(e.repo, true)
+	a := e.start(e.task("Components"))
+	date := e.designSystemDate(e.designSystemID())
+
+	if got := strings.Join(e.listing(a, designSystemDir+"/components"), ","); got != "badge.html,button.html" {
+		t.Fatalf("components/ lists %q", got)
+	}
+	root := `:root{--colors-signal:oklch(0.5 0.095 182);--spacing-md:1rem;--colors-canvas:#fff;--typography-headline-font-family:Inter, sans-serif;--typography-headline-font-size:1.5rem;--typography-headline-font-weight:600}`
+	want := `<!doctype html><html><head><meta charset="utf-8"><title>Button &amp; link</title>
+<meta name="design-system-component" content="button">
+<style>` + root + `</style></head>
+<body>
+<!-- design system version 1 · ` + date + ` -->
+<h1>Button &amp; link</h1>
+<p data-purpose>Starts an action.</p>
+<ul data-do><li>Use one per view.</li></ul>
+<ul data-dont><li>Nest &lt;buttons&gt;.</li><li>Use it to navigate.</li></ul>
+<section data-preview data-variant="primary" data-state="default" data-label="Primary / default">
+<style>.btn{background:var(--colors-signal);padding:var(--spacing-md);font-size:var(--typography-headline-font-size)}</style>
+<button class="btn">Save</button>
+</section>
+<section data-preview data-variant="primary" data-state="disabled" data-label="Primary / disabled">
+<style>.btn[disabled]{opacity:.5}</style>
+<button class="btn" disabled>Save</button>
+</section>
+</body></html>
+`
+	if got := e.designFile(a, "components/button.html"); got != want {
+		t.Errorf("components/button.html:\n%s\n--- want ---\n%s", got, want)
+	}
+	if got := e.designFile(a, "components/badge.html"); !strings.Contains(got, `<ul data-do></ul>`) || !strings.Contains(got, `<ul data-dont></ul>`) {
+		t.Errorf("an empty note list is not an empty <ul>:\n%s", got)
+	}
+	for _, name := range []string{"components/button.html", "components/badge.html"} {
+		if info, _ := os.Stat(filepath.Join(a.shell, designSystemDir, name)); info == nil || info.Mode().Perm()&0o222 != 0 {
+			t.Errorf("%s is missing or writable", name)
+		}
+		if row := indexRow(t, a.shell, designSystemDir+"/"+name); row == nil || row["kind"] != "design-system" || row["writable"] == true {
+			t.Errorf("%s row = %v", name, row)
+		}
+	}
+	if !strings.Contains(e.designFile(a, "README.md"), "- `components/<slug>.html`:") {
+		t.Errorf("README.md does not name the components folder:\n%s", e.designFile(a, "README.md"))
+	}
+	if strings.Contains(e.designFile(a, "components/button.html"), "<script") {
+		t.Error("a component page holds a script")
+	}
+}
+
+func TestDesignSystemView_ARemovedComponentLeavesTheViewAndTwoDesignSystemsKeepTheirOwn(t *testing.T) {
+	e := newShellE2E(t)
+	e.agents("software-architect", "devops", "go-developer")
+	e.saveDesignSystem(0, shellComponentsRecord())
+	other := e.newDesignSystem("Other", "other", "")
+	alt := shellDesignRecord()
+	alt["components"] = []any{map[string]any{"slug": "card", "name": "Card", "purpose": "A box.", "do": []any{}, "dont": []any{},
+		"previews": []any{map[string]any{"label": "Plain", "variant": "plain", "state": "default", "html": `<div>x</div>`, "css": `div{margin:var(--spacing-md)}`}}}}
+	e.saveTo(other, 0, alt)
+	e.useDesignSystem(e.repo, true)
+	a := e.start(e.task("Removal"))
+	if got := strings.Join(e.listing(a, designSystemDir+"/components"), ","); got != "badge.html,button.html" {
+		t.Fatalf("the first design system lists %q", got)
+	}
+
+	fewer := shellComponentsRecord()
+	fewer["components"] = fewer["components"].([]any)[:1]
+	e.saveDesignSystem(1, fewer)
+	eventually(t, "the removed component gone from the running view", func() error {
+		if strings.Join(e.listing(a, designSystemDir+"/components"), ",") != "button.html" {
+			return os.ErrNotExist
+		}
+		return nil
+	})
+
+	e.saveDesignSystem(2, shellDesignRecord())
+	eventually(t, "no components folder when none is left", func() error {
+		if len(e.listing(a, designSystemDir+"/components")) != 0 {
+			return os.ErrNotExist
+		}
+		return nil
+	})
+}

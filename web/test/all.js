@@ -64,9 +64,11 @@ import "../src/modules/credentials/presentation/components/repositoryCredential.
 import "../src/modules/credentials/presentation/view.test.js";
 import "../src/modules/designsystem/domain/history.test.js";
 import "../src/modules/designsystem/domain/identity.test.js";
+import "../src/modules/designsystem/domain/preview.test.js";
 import "../src/modules/designsystem/domain/principles.test.js";
 import "../src/modules/designsystem/domain/record.test.js";
 import "../src/modules/designsystem/domain/repositories.test.js";
+import "../src/modules/designsystem/domain/showcase.test.js";
 import "../src/modules/designsystem/domain/tokens.test.js";
 import "../src/modules/designsystem/infrastructure/designsystem-gateway.test.js";
 import "../src/modules/designsystem/presentation/components/designSystemMenu.test.js";

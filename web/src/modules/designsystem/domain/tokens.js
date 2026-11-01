@@ -9,7 +9,7 @@
  */
 
 /** The token types, in the order the type select lists them. */
-export const TOKEN_TYPES = Object.freeze(["color", "dimension", "font", "number", "duration", "shadow", "typography"]);
+export const TOKEN_TYPES = Object.freeze(["color", "dimension", "font", "number", "duration", "easing", "shadow", "typography"]);
 
 const COMPOSITE = new Set(["shadow", "typography"]);
 const isComposite = (type) => COMPOSITE.has(type);
@@ -165,6 +165,10 @@ export function sampleOf(row, supports = () => true) {
       const pct = Math.max(0, Math.min(100, Math.round(ms / 10)));
       return { kind: "motion", style: `display:inline-block;vertical-align:middle;inline-size:3rem;block-size:0.5rem;border-radius:3px;background:linear-gradient(var(--color-signal),var(--color-signal)) 0 0 / ${pct}% 100% no-repeat,var(--color-sunken)`, glyph: "", invalid: false };
     }
+    case "easing":
+      return drawable(text)
+        ? { kind: "motion", style: "display:inline-block;vertical-align:middle;inline-size:3rem;block-size:0.5rem;border-radius:3px;background:linear-gradient(var(--color-signal),var(--color-signal)) 0 0 / 60% 100% no-repeat,var(--color-sunken)", glyph: "", invalid: false }
+        : bad("motion", "display:inline-block;inline-size:3rem;block-size:0.5rem;background:var(--color-sunken)");
     case "number":
       return { kind: "number", style: "font-family:var(--font-mono);color:var(--color-ink-muted)", glyph: "#", invalid: false };
     default:
@@ -185,6 +189,8 @@ export function placeholderFor(type) {
       return "1.25";
     case "duration":
       return "150ms";
+    case "easing":
+      return "cubic-bezier(0.2, 0, 0, 1)";
     case "shadow":
       return "offsetY: 2px; blur: 8px; color: #0003";
     case "typography":

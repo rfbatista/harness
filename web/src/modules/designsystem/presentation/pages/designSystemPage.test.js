@@ -7,13 +7,15 @@ import { designSystemPage } from "./designSystemPage.js";
 
 file("designsystem/presentation/pages/designSystemPage");
 
+const button = { slug: "button", name: "Button", purpose: "", do: [], dont: [], previews: [{ label: "Default", variant: "default", state: "default", html: "<b>x</b>", css: ".b{color:var(--colors-signal)}" }] };
+
 const colour = { group: "colors", name: "signal", type: "color", value: "#0a0", note: "" };
 const state = (over = {}) => ({
   exists: true,
   version: 3,
   updatedAt: "2026-10-01T10:00:00Z",
   updatedBy: "person",
-  record: { tokens: [colour], principles: "# Calm\n", components: [{ slug: "button" }] },
+  record: { tokens: [colour], principles: "# Calm\n", components: [button] },
   ...over,
 });
 const empty = () => state({ exists: false, version: 0, updatedAt: "", updatedBy: "", record: { tokens: [], principles: "", components: [] } });
@@ -182,7 +184,7 @@ test("save sends the whole record, principles and components included, against t
   assert.equal(sent.base, 3);
   assert.equal(sent.message, "Add ink");
   assert.equal(sent.record.principles, "# Calm\n");
-  assert.deepEqual(sent.record.components, [{ slug: "button" }]);
+  assert.deepEqual(sent.record.components, [button]);
   assert.deepEqual(sent.record.tokens.map((t) => t.name), ["signal", "ink"]);
   assert.equal(p.version, 4);
   assert.equal(p.dirty, false);
@@ -531,4 +533,58 @@ test("copy puts a value or the principles on the clipboard and says it did", asy
   await p.copyOpenedPrinciples();
   assert.equal(copied[1], "## Calm\n");
   assert.equal(p.copiedNote, "Copied the principles");
+});
+
+test("an added component makes the draft dirty, is saved with trimmed notes, and Discard drops it", async () => {
+  const { p, gateway } = page();
+  p.addComponent();
+  assert.equal(p.components.length, 2);
+  assert.equal(p.currentAt, 1);
+  assert.equal(p.dirty, true);
+  assert.equal(p.changeSummary, "Unsaved: components changed");
+  p.discard();
+  assert.deepEqual(p.components, [button]);
+  assert.equal(p.dirty, false);
+
+  p.addComponent();
+  p.current.do = ["Label with a verb.", "  ", ""];
+  await p.save();
+  assert.deepEqual(gateway.saves[0].record.components[1].do, ["Label with a verb."]);
+  assert.equal(p.dirty, false);
+});
+
+test("a preview that names a missing token or holds a script stops the save with the server's codes", async () => {
+  const { p, gateway } = page();
+  p.addComponent();
+  p.current.previews[0].css = ".a{color:var(--colors-gone)}";
+  p.current.previews[0].html = "<script>1</script>";
+  assert.deepEqual(p.componentErrors.map((e) => e.code), ["UNSAFE_PREVIEW", "UNKNOWN_TOKEN"]);
+  assert.equal(p.canSave, false);
+  await p.save();
+  assert.equal(gateway.saves.length, 0);
+  p.current.previews[0].css = ".a{color:var(--colors-signal)}";
+  p.current.previews[0].html = "<b>x</b>";
+  assert.equal(p.canSave, true);
+});
+
+test("removing the open component and its previews keeps the last preview", () => {
+  const { p } = page();
+  p.addComponent();
+  p.addPreview();
+  assert.equal(p.current.previews.length, 2);
+  p.removePreview(p.currentCards[0]);
+  assert.equal(p.onlyPreview, true);
+  p.removePreview(p.currentCards[0]);
+  assert.equal(p.current.previews.length, 1);
+  p.removeComponent();
+  assert.equal(p.components.length, 1);
+  assert.equal(p.currentAt, 0);
+});
+
+test("a server refusal of a component reads as where it is", async () => {
+  const { p, gateway } = page();
+  p.addComponent();
+  gateway.refuse = invalid([{ path: "/components/1/slug", code: "DUPLICATE_COMPONENT", message: "component is defined more than once" }]);
+  await p.save();
+  assert.equal(p.problems[0].label, "Components › new-component");
 });

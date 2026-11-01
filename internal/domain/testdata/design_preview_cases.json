@@ -1,0 +1,657 @@
+[
+  {
+    "name": "scalar and composite tokens, hyphenated names",
+    "record": {
+      "tokens": [
+        {
+          "group": "colors",
+          "name": "signal-strong",
+          "type": "color",
+          "value": "oklch(0.5 0.095 182)",
+          "note": ""
+        },
+        {
+          "group": "typography",
+          "name": "headline",
+          "type": "typography",
+          "value": {
+            "fontSize": "1.5rem",
+            "fontFamily": "Inter, sans-serif",
+            "lineHeight": "1.2"
+          },
+          "note": ""
+        },
+        {
+          "group": "shadows",
+          "name": "card",
+          "type": "shadow",
+          "value": {
+            "offsetY": "2px",
+            "blur": "8px",
+            "color": "rgba(0,0,0,.2)"
+          },
+          "note": ""
+        }
+      ],
+      "principles": "",
+      "components": [
+        {
+          "slug": "button",
+          "name": "Button",
+          "purpose": "p",
+          "do": [],
+          "dont": [],
+          "previews": [
+            {
+              "label": "L",
+              "variant": "v",
+              "state": "s",
+              "html": "<button class=\"btn\">Save</button>",
+              "css": ".btn{background:var(--colors-signal-strong);font-size:var( --typography-headline-font-size );box-shadow:0 var(--shadows-card-offset-y) var(--shadows-card-blur) var(--shadows-card-color)}"
+            }
+          ]
+        }
+      ]
+    },
+    "root": ":root{--colors-signal-strong:oklch(0.5 0.095 182);--typography-headline-font-family:Inter, sans-serif;--typography-headline-font-size:1.5rem;--typography-headline-line-height:1.2;--shadows-card-blur:8px;--shadows-card-color:rgba(0,0,0,.2);--shadows-card-offset-y:2px}",
+    "document": "<!doctype html><html><head><meta charset=\"utf-8\">\n<meta http-equiv=\"Content-Security-Policy\" content=\"default-src 'none'; style-src 'unsafe-inline'; img-src data:; font-src data:\">\n<style>:root{--colors-signal-strong:oklch(0.5 0.095 182);--typography-headline-font-family:Inter, sans-serif;--typography-headline-font-size:1.5rem;--typography-headline-line-height:1.2;--shadows-card-blur:8px;--shadows-card-color:rgba(0,0,0,.2);--shadows-card-offset-y:2px}</style>\n<style>.btn{background:var(--colors-signal-strong);font-size:var( --typography-headline-font-size );box-shadow:0 var(--shadows-card-offset-y) var(--shadows-card-blur) var(--shadows-card-color)}</style></head><body><button class=\"btn\">Save</button></body></html>",
+    "errors": []
+  },
+  {
+    "name": "an empty token list",
+    "record": {
+      "tokens": [],
+      "principles": "",
+      "components": []
+    },
+    "root": ":root{}",
+    "errors": []
+  },
+  {
+    "name": "a preview that names a missing token",
+    "record": {
+      "tokens": [
+        {
+          "group": "colors",
+          "name": "signal-strong",
+          "type": "color",
+          "value": "oklch(0.5 0.095 182)",
+          "note": ""
+        },
+        {
+          "group": "typography",
+          "name": "headline",
+          "type": "typography",
+          "value": {
+            "fontSize": "1.5rem",
+            "fontFamily": "Inter, sans-serif",
+            "lineHeight": "1.2"
+          },
+          "note": ""
+        },
+        {
+          "group": "shadows",
+          "name": "card",
+          "type": "shadow",
+          "value": {
+            "offsetY": "2px",
+            "blur": "8px",
+            "color": "rgba(0,0,0,.2)"
+          },
+          "note": ""
+        }
+      ],
+      "principles": "",
+      "components": [
+        {
+          "slug": "a",
+          "name": "A",
+          "purpose": "p",
+          "do": [],
+          "dont": [],
+          "previews": [
+            {
+              "label": "L",
+              "variant": "v",
+              "state": "s",
+              "html": "<i></i>",
+              "css": ".a{color:var(--colors-missing)}"
+            }
+          ]
+        }
+      ]
+    },
+    "root": ":root{--colors-signal-strong:oklch(0.5 0.095 182);--typography-headline-font-family:Inter, sans-serif;--typography-headline-font-size:1.5rem;--typography-headline-line-height:1.2;--shadows-card-blur:8px;--shadows-card-color:rgba(0,0,0,.2);--shadows-card-offset-y:2px}",
+    "errors": [
+      "UNKNOWN_TOKEN /components/0/previews/0/css"
+    ]
+  },
+  {
+    "name": "unsafe previews",
+    "record": {
+      "tokens": [
+        {
+          "group": "colors",
+          "name": "signal-strong",
+          "type": "color",
+          "value": "oklch(0.5 0.095 182)",
+          "note": ""
+        },
+        {
+          "group": "typography",
+          "name": "headline",
+          "type": "typography",
+          "value": {
+            "fontSize": "1.5rem",
+            "fontFamily": "Inter, sans-serif",
+            "lineHeight": "1.2"
+          },
+          "note": ""
+        },
+        {
+          "group": "shadows",
+          "name": "card",
+          "type": "shadow",
+          "value": {
+            "offsetY": "2px",
+            "blur": "8px",
+            "color": "rgba(0,0,0,.2)"
+          },
+          "note": ""
+        }
+      ],
+      "principles": "",
+      "components": [
+        {
+          "slug": "u",
+          "name": "U",
+          "purpose": "p",
+          "do": [],
+          "dont": [],
+          "previews": [
+            {
+              "label": "L",
+              "variant": "v",
+              "state": "s",
+              "html": "<p>hi</p><SCRIPT>alert(1)</SCRIPT>",
+              "css": ""
+            },
+            {
+              "label": "L",
+              "variant": "v",
+              "state": "s",
+              "html": "<button onclick=\"x()\">Save</button>",
+              "css": ""
+            },
+            {
+              "label": "L",
+              "variant": "v",
+              "state": "s",
+              "html": "<a title=\">\" onclick=\"x\">hi</a>",
+              "css": ""
+            },
+            {
+              "label": "L",
+              "variant": "v",
+              "state": "s",
+              "html": "<b/onclick=x>hi</b>",
+              "css": ""
+            },
+            {
+              "label": "L",
+              "variant": "v",
+              "state": "s",
+              "html": "<i></i>",
+              "css": ".a{background:url(\"https://example.com/a.png\")}"
+            },
+            {
+              "label": "L",
+              "variant": "v",
+              "state": "s",
+              "html": "<i></i>",
+              "css": "@import \"x.css\";"
+            },
+            {
+              "label": "L",
+              "variant": "v",
+              "state": "s",
+              "html": "<i></i>",
+              "css": ".a{background:url(data:image/png;base64,AAAA)}"
+            },
+            {
+              "label": "L",
+              "variant": "v",
+              "state": "s",
+              "html": "<a title=\"onclick\">fine</a>",
+              "css": ""
+            }
+          ]
+        }
+      ]
+    },
+    "root": ":root{--colors-signal-strong:oklch(0.5 0.095 182);--typography-headline-font-family:Inter, sans-serif;--typography-headline-font-size:1.5rem;--typography-headline-line-height:1.2;--shadows-card-blur:8px;--shadows-card-color:rgba(0,0,0,.2);--shadows-card-offset-y:2px}",
+    "errors": [
+      "UNSAFE_PREVIEW /components/0/previews/0/html",
+      "UNSAFE_PREVIEW /components/0/previews/1/html",
+      "UNSAFE_PREVIEW /components/0/previews/2/html",
+      "UNSAFE_PREVIEW /components/0/previews/3/html",
+      "UNSAFE_PREVIEW /components/0/previews/4/css",
+      "UNSAFE_PREVIEW /components/0/previews/5/css"
+    ]
+  },
+  {
+    "name": "a bad slug and a duplicate slug",
+    "record": {
+      "tokens": [
+        {
+          "group": "colors",
+          "name": "signal-strong",
+          "type": "color",
+          "value": "oklch(0.5 0.095 182)",
+          "note": ""
+        },
+        {
+          "group": "typography",
+          "name": "headline",
+          "type": "typography",
+          "value": {
+            "fontSize": "1.5rem",
+            "fontFamily": "Inter, sans-serif",
+            "lineHeight": "1.2"
+          },
+          "note": ""
+        },
+        {
+          "group": "shadows",
+          "name": "card",
+          "type": "shadow",
+          "value": {
+            "offsetY": "2px",
+            "blur": "8px",
+            "color": "rgba(0,0,0,.2)"
+          },
+          "note": ""
+        }
+      ],
+      "principles": "",
+      "components": [
+        {
+          "slug": "Bad Slug",
+          "name": "Bad Slug",
+          "purpose": "p",
+          "do": [],
+          "dont": [],
+          "previews": []
+        },
+        {
+          "slug": "ok",
+          "name": "Ok",
+          "purpose": "p",
+          "do": [],
+          "dont": [],
+          "previews": []
+        },
+        {
+          "slug": "ok",
+          "name": "Ok",
+          "purpose": "p",
+          "do": [],
+          "dont": [],
+          "previews": []
+        }
+      ]
+    },
+    "root": ":root{--colors-signal-strong:oklch(0.5 0.095 182);--typography-headline-font-family:Inter, sans-serif;--typography-headline-font-size:1.5rem;--typography-headline-line-height:1.2;--shadows-card-blur:8px;--shadows-card-color:rgba(0,0,0,.2);--shadows-card-offset-y:2px}",
+    "errors": [
+      "BAD_NAME /components/0/slug",
+      "BAD_VALUE /components/0/previews",
+      "BAD_VALUE /components/1/previews",
+      "DUPLICATE_COMPONENT /components/2/slug",
+      "BAD_VALUE /components/2/previews"
+    ]
+  },
+  {
+    "name": "a removed token that previews use",
+    "previous": {
+      "tokens": [
+        {
+          "group": "colors",
+          "name": "signal-strong",
+          "type": "color",
+          "value": "oklch(0.5 0.095 182)",
+          "note": ""
+        },
+        {
+          "group": "typography",
+          "name": "headline",
+          "type": "typography",
+          "value": {
+            "fontSize": "1.5rem",
+            "fontFamily": "Inter, sans-serif",
+            "lineHeight": "1.2"
+          },
+          "note": ""
+        },
+        {
+          "group": "shadows",
+          "name": "card",
+          "type": "shadow",
+          "value": {
+            "offsetY": "2px",
+            "blur": "8px",
+            "color": "rgba(0,0,0,.2)"
+          },
+          "note": ""
+        }
+      ],
+      "principles": "",
+      "components": [
+        {
+          "slug": "button",
+          "name": "Button",
+          "purpose": "p",
+          "do": [],
+          "dont": [],
+          "previews": [
+            {
+              "label": "L",
+              "variant": "v",
+              "state": "s",
+              "html": "<button class=\"btn\">Save</button>",
+              "css": ".btn{background:var(--colors-signal-strong);font-size:var( --typography-headline-font-size );box-shadow:0 var(--shadows-card-offset-y) var(--shadows-card-blur) var(--shadows-card-color)}"
+            }
+          ]
+        },
+        {
+          "slug": "badge",
+          "name": "Badge",
+          "purpose": "p",
+          "do": [],
+          "dont": [],
+          "previews": [
+            {
+              "label": "L",
+              "variant": "v",
+              "state": "s",
+              "html": "<b></b>",
+              "css": ".b{color:var(--colors-signal-strong)}"
+            }
+          ]
+        }
+      ]
+    },
+    "record": {
+      "tokens": [
+        {
+          "group": "typography",
+          "name": "headline",
+          "type": "typography",
+          "value": {
+            "fontSize": "1.5rem",
+            "fontFamily": "Inter, sans-serif",
+            "lineHeight": "1.2"
+          },
+          "note": ""
+        },
+        {
+          "group": "shadows",
+          "name": "card",
+          "type": "shadow",
+          "value": {
+            "offsetY": "2px",
+            "blur": "8px",
+            "color": "rgba(0,0,0,.2)"
+          },
+          "note": ""
+        }
+      ],
+      "principles": "",
+      "components": [
+        {
+          "slug": "button",
+          "name": "Button",
+          "purpose": "p",
+          "do": [],
+          "dont": [],
+          "previews": [
+            {
+              "label": "L",
+              "variant": "v",
+              "state": "s",
+              "html": "<button class=\"btn\">Save</button>",
+              "css": ".btn{background:var(--colors-signal-strong);font-size:var( --typography-headline-font-size );box-shadow:0 var(--shadows-card-offset-y) var(--shadows-card-blur) var(--shadows-card-color)}"
+            }
+          ]
+        },
+        {
+          "slug": "badge",
+          "name": "Badge",
+          "purpose": "p",
+          "do": [],
+          "dont": [],
+          "previews": [
+            {
+              "label": "L",
+              "variant": "v",
+              "state": "s",
+              "html": "<b></b>",
+              "css": ".b{color:var(--colors-signal-strong)}"
+            }
+          ]
+        }
+      ]
+    },
+    "root": ":root{--typography-headline-font-family:Inter, sans-serif;--typography-headline-font-size:1.5rem;--typography-headline-line-height:1.2;--shadows-card-blur:8px;--shadows-card-color:rgba(0,0,0,.2);--shadows-card-offset-y:2px}",
+    "errors": [
+      "TOKEN_IN_USE /tokens"
+    ]
+  },
+  {
+    "name": "a token name that starts with a digit and an easing token",
+    "record": {
+      "tokens": [
+        {
+          "group": "spacing",
+          "name": "2xl",
+          "type": "dimension",
+          "value": "3rem",
+          "note": ""
+        },
+        {
+          "group": "motion",
+          "name": "ease-out",
+          "type": "easing",
+          "value": "cubic-bezier(0.2, 0, 0, 1)",
+          "note": ""
+        }
+      ],
+      "principles": "",
+      "components": [
+        {
+          "slug": "gap",
+          "name": "Gap",
+          "purpose": "",
+          "do": [],
+          "dont": [],
+          "previews": [
+            {
+              "label": "L",
+              "variant": "v",
+              "state": "s",
+              "html": "<i></i>",
+              "css": ".a{margin:var(--spacing-2xl);transition-timing-function:var(--motion-ease-out)}"
+            }
+          ]
+        }
+      ]
+    },
+    "root": ":root{--spacing-2xl:3rem;--motion-ease-out:cubic-bezier(0.2, 0, 0, 1)}",
+    "errors": []
+  },
+  {
+    "name": "previews that close or forge a part of the page",
+    "record": {
+      "tokens": [
+        {
+          "group": "colors",
+          "name": "signal-strong",
+          "type": "color",
+          "value": "oklch(0.5 0.095 182)",
+          "note": ""
+        },
+        {
+          "group": "typography",
+          "name": "headline",
+          "type": "typography",
+          "value": {
+            "fontSize": "1.5rem",
+            "fontFamily": "Inter, sans-serif",
+            "lineHeight": "1.2"
+          },
+          "note": ""
+        },
+        {
+          "group": "shadows",
+          "name": "card",
+          "type": "shadow",
+          "value": {
+            "offsetY": "2px",
+            "blur": "8px",
+            "color": "rgba(0,0,0,.2)"
+          },
+          "note": ""
+        }
+      ],
+      "principles": "",
+      "components": [
+        {
+          "slug": "p",
+          "name": "P",
+          "purpose": "",
+          "do": [],
+          "dont": [],
+          "previews": [
+            {
+              "label": "L",
+              "variant": "v",
+              "state": "s",
+              "html": "<i></i>",
+              "css": "a{}</STYLE>"
+            },
+            {
+              "label": "L",
+              "variant": "v",
+              "state": "s",
+              "html": "</Section>",
+              "css": ""
+            },
+            {
+              "label": "L",
+              "variant": "v",
+              "state": "s",
+              "html": "<p></body>",
+              "css": ""
+            },
+            {
+              "label": "L",
+              "variant": "v",
+              "state": "s",
+              "html": "</HTML>",
+              "css": ""
+            },
+            {
+              "label": "L",
+              "variant": "v",
+              "state": "s",
+              "html": "<SECTION>",
+              "css": ""
+            },
+            {
+              "label": "L",
+              "variant": "v",
+              "state": "s",
+              "html": "<b>fine</b>",
+              "css": ".a{color:red}"
+            }
+          ]
+        }
+      ]
+    },
+    "root": ":root{--colors-signal-strong:oklch(0.5 0.095 182);--typography-headline-font-family:Inter, sans-serif;--typography-headline-font-size:1.5rem;--typography-headline-line-height:1.2;--shadows-card-blur:8px;--shadows-card-color:rgba(0,0,0,.2);--shadows-card-offset-y:2px}",
+    "errors": [
+      "UNSAFE_PREVIEW /components/0/previews/0/css",
+      "UNSAFE_PREVIEW /components/0/previews/1/html",
+      "UNSAFE_PREVIEW /components/0/previews/2/html",
+      "UNSAFE_PREVIEW /components/0/previews/3/html",
+      "UNSAFE_PREVIEW /components/0/previews/4/html"
+    ]
+  },
+  {
+    "name": "a component with no name and a component with no preview",
+    "record": {
+      "tokens": [
+        {
+          "group": "colors",
+          "name": "signal-strong",
+          "type": "color",
+          "value": "oklch(0.5 0.095 182)",
+          "note": ""
+        },
+        {
+          "group": "typography",
+          "name": "headline",
+          "type": "typography",
+          "value": {
+            "fontSize": "1.5rem",
+            "fontFamily": "Inter, sans-serif",
+            "lineHeight": "1.2"
+          },
+          "note": ""
+        },
+        {
+          "group": "shadows",
+          "name": "card",
+          "type": "shadow",
+          "value": {
+            "offsetY": "2px",
+            "blur": "8px",
+            "color": "rgba(0,0,0,.2)"
+          },
+          "note": ""
+        }
+      ],
+      "principles": "",
+      "components": [
+        {
+          "slug": "a",
+          "name": " ",
+          "purpose": "",
+          "do": [],
+          "dont": [],
+          "previews": [
+            {
+              "label": "L",
+              "variant": "v",
+              "state": "s",
+              "html": "<i></i>",
+              "css": ""
+            }
+          ]
+        },
+        {
+          "slug": "b",
+          "name": "B",
+          "purpose": "",
+          "do": [],
+          "dont": [],
+          "previews": []
+        }
+      ]
+    },
+    "root": ":root{--colors-signal-strong:oklch(0.5 0.095 182);--typography-headline-font-family:Inter, sans-serif;--typography-headline-font-size:1.5rem;--typography-headline-line-height:1.2;--shadows-card-blur:8px;--shadows-card-color:rgba(0,0,0,.2);--shadows-card-offset-y:2px}",
+    "errors": [
+      "BAD_VALUE /components/0/name",
+      "BAD_VALUE /components/1/previews"
+    ]
+  }
+]

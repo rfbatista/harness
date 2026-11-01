@@ -4,6 +4,8 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
+	"html"
+	"slices"
 	"sort"
 	"strings"
 	"time"
@@ -26,7 +28,8 @@ type Identity struct {
 }
 
 // Files are the files of one version of a design system, in a
-// fixed order: README.md, DESIGN.md, tokens.json. It is the one generator
+// fixed order: README.md, DESIGN.md, tokens.json, then components/<slug>.html
+// for each component in record order. It is the one generator
 // of the shell view and of the export (which leaves README.md out), so the
 // bytes are the same wherever they are written. The output depends only on
 // the arguments. A design system with nothing in it (version 0, or a record
@@ -37,11 +40,15 @@ func Files(id Identity, version int, date time.Time, record domain.DesignSystemR
 	if version == 0 || isEmpty(record) {
 		return []File{{Path: "README.md", Content: []byte(emptyReadme(id))}}
 	}
-	return []File{
-		{Path: "README.md", Content: []byte(readme(id, version, day))},
+	files := []File{
+		{Path: "README.md", Content: []byte(readme(id, version, day, len(record.Components) > 0))},
 		{Path: "DESIGN.md", Content: []byte(designMD(id, version, day, record))},
 		{Path: "tokens.json", Content: tokensJSON(version, day, record)},
 	}
+	for _, c := range record.Components {
+		files = append(files, File{Path: "components/" + c.Slug + ".html", Content: []byte(componentPage(version, day, record.Tokens, c))})
+	}
+	return files
 }
 
 func isEmpty(r domain.DesignSystemRecord) bool {
@@ -73,7 +80,13 @@ var readmeFiles = []string{
 	"- `DESIGN.md`: the same tokens as YAML frontmatter, then the principles: when and why to use what.",
 }
 
-func readme(id Identity, version int, day string) string {
+const readmeComponents = "- `components/<slug>.html`: one self-contained page per component, with its purpose, do and don't notes and a live preview of each variant and state. Copy its markup and structure into your stack."
+
+func readme(id Identity, version int, day string, hasComponents bool) string {
+	here := readmeFiles
+	if hasComponents {
+		here = append(slices.Clone(readmeFiles), readmeComponents)
+	}
 	return fmt.Sprintf(`# Project design system
 
 %s
@@ -92,7 +105,7 @@ This folder is the look of every UI in this project, kept by the person in the h
 ## Changing it
 
 These files are read-only: a write, rm, mv or touch here is refused. The design system changes only in the harness web UI (Design system page), or through a design session the person starts there. If it lacks something, say so in a task comment or in your spec and the person decides.
-`, who(id), version, day, strings.Join(readmeFiles, "\n"))
+`, who(id), version, day, strings.Join(here, "\n"))
 }
 
 // tokenGroup is the tokens of one group, in record order.
@@ -211,4 +224,33 @@ func tokensJSON(version int, day string, r domain.DesignSystemRecord) []byte {
 	}
 	b.WriteString("\n}\n")
 	return []byte(b.String())
+}
+
+// componentPage is a component as a page that renders on its own, with no
+// script and no network: the contract's components/<slug>.html. The preview
+// markup and CSS are written as the person wrote them; the validation that
+// guards every save keeps them free of script and network references.
+func componentPage(version int, day string, tokens []domain.DesignToken, c domain.DesignComponent) string {
+	esc := html.EscapeString
+	list := func(attr string, items []string) string {
+		var b strings.Builder
+		b.WriteString("<ul " + attr + ">")
+		for _, it := range items {
+			b.WriteString("<li>" + esc(it) + "</li>")
+		}
+		return b.String() + "</ul>\n"
+	}
+	var b strings.Builder
+	b.WriteString("<!doctype html><html><head><meta charset=\"utf-8\"><title>" + esc(c.Name) + "</title>\n")
+	b.WriteString("<meta name=\"design-system-component\" content=\"" + esc(c.Slug) + "\">\n")
+	b.WriteString("<style>" + domain.RootRule(tokens) + "</style></head>\n<body>\n")
+	b.WriteString(versionLine(version, day) + "\n")
+	b.WriteString("<h1>" + esc(c.Name) + "</h1>\n")
+	b.WriteString("<p data-purpose>" + esc(c.Purpose) + "</p>\n")
+	b.WriteString(list("data-do", c.Do) + list("data-dont", c.Dont))
+	for _, p := range c.Previews {
+		b.WriteString("<section data-preview data-variant=\"" + esc(p.Variant) + "\" data-state=\"" + esc(p.State) + "\" data-label=\"" + esc(p.Label) + "\">\n")
+		b.WriteString("<style>" + p.CSS + "</style>\n" + p.HTML + "\n</section>\n")
+	}
+	return b.String() + "</body></html>\n"
 }

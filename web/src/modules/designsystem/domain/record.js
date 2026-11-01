@@ -2,8 +2,8 @@
 // the words of the state badge and the Save bar. Pure.
 
 /**
- * A tab of the page; `slug` is its `?tab=` value. Components and Proposals
- * join the list when their slices land.
+ * A tab of the page; `slug` is its `?tab=` value. Proposals joins the list
+ * when its slice lands.
  * @typedef {{ slug: string, label: string }} Tab
  */
 
@@ -11,6 +11,7 @@
 export const TABS = Object.freeze([
   { slug: "tokens", label: "Tokens" },
   { slug: "principles", label: "Principles" },
+  { slug: "components", label: "Components" },
   { slug: "repositories", label: "Repositories" },
   { slug: "history", label: "History" },
 ]);
@@ -58,12 +59,13 @@ export function sortErrors(entries, rows) {
 export const saveBarText = (version) => `Saves as version ${version + 1}`;
 
 /** What the draft changes, in words. */
-export function changeText(counts, principlesChanged) {
+export function changeText(counts, principlesChanged, componentsChanged = false) {
   const parts = [];
   if (counts.edited > 0) parts.push(`${counts.edited} edited`);
   if (counts.added > 0) parts.push(`${counts.added} added`);
   if (counts.removed > 0) parts.push(`${counts.removed} removed`);
   if (principlesChanged) parts.push("principles changed");
+  if (componentsChanged) parts.push("components changed");
   return parts.length === 0 ? "No unsaved changes" : `Unsaved: ${parts.join(", ")}`;
 }
 
