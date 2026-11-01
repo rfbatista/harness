@@ -55,13 +55,14 @@ func answering(text string) func(int, archassistant.TurnCall, archassistant.Turn
 }
 
 type env struct {
-	svc      *archassistant.Service
-	turn     *fakeTurn
-	settings map[string]string
-	repos    map[string]*domain.Repository
-	events   []domain.ArchitectureRuleEvent
-	peekErr  error
-	now      time.Time
+	svc       *archassistant.Service
+	turn      *fakeTurn
+	settings  map[string]string
+	repos     map[string]*domain.Repository
+	events    []domain.ArchitectureRuleEvent
+	peekErr   error
+	agentsErr error
+	now       time.Time
 }
 
 type settingsMap map[string]string
@@ -99,9 +100,12 @@ func (f fakeArch) ListArchitectureRuleEvents(_ context.Context, _ string, _ time
 	return f.e.events, nil
 }
 
-type fakeAgents struct{}
+type fakeAgents struct{ e *env }
 
-func (fakeAgents) ListAgents(context.Context) ([]*domain.Agent, error) {
+func (f fakeAgents) ListAgents(context.Context) ([]*domain.Agent, error) {
+	if f.e != nil && f.e.agentsErr != nil {
+		return nil, f.e.agentsErr
+	}
 	return []*domain.Agent{{ID: "a1", Name: "go-developer", Description: "writes Go"}, {ID: "a2", Name: "software-architect"}}, nil
 }
 func (fakeAgents) GetAgent(context.Context, string) (*domain.Agent, error) { return nil, nil }
@@ -146,7 +150,7 @@ func newEnv(t *testing.T) *env {
 	}
 	e.svc = archassistant.New(archassistant.Deps{
 		Turn: e.turn, Settings: settingsMap(e.settings), Repos: fakeRepos{e}, Architectures: fakeArch{e},
-		Agents: fakeAgents{}, MCP: fakeMCP{}, Sandbox: fakeSandbox{}, Documents: fakeDocs{}, Contexts: fakeContexts{},
+		Agents: fakeAgents{e}, MCP: fakeMCP{}, Sandbox: fakeSandbox{}, Documents: fakeDocs{}, Contexts: fakeContexts{},
 		Peek: func(context.Context) error { return e.peekErr },
 		Now:  func() time.Time { return e.now },
 	})
@@ -576,5 +580,43 @@ func TestAFirstTurnThatFailsBeforeAnySessionExistsLeavesTheConversationUsableAnd
 	e.svc.End(id)
 	if len(e.turn.deleted) != 1 || e.turn.deleted[0] != "s1" {
 		t.Errorf("deleted = %v, want the session the second turn made", e.turn.deleted)
+	}
+}
+
+func TestAConversationEndedWhileItsTurnRunsLeavesNoTranscript(t *testing.T) {
+	e := newEnv(t)
+	started, release := make(chan struct{}), make(chan struct{})
+	e.turn.script = func(int, archassistant.TurnCall, archassistant.TurnCallbacks) (archassistant.TurnResult, error) {
+		close(started)
+		<-release
+		return archassistant.TurnResult{SessionID: "late", Text: "ok"}, nil
+	}
+	var id string
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		_ = e.svc.Run(context.Background(), req("one"), func(ev ports.ArchitectureAssistantEvent) {
+			if c, ok := ev.Data.(ports.ArchitectureAssistantConversation); ok {
+				id = c.ConversationID
+			}
+		})
+	}()
+	<-started
+	e.svc.End(id)
+	close(release)
+	<-done
+	if len(e.turn.deleted) != 1 || e.turn.deleted[0] != "late" {
+		t.Errorf("deleted = %v, want the session the turn made after the end", e.turn.deleted)
+	}
+}
+
+func TestAConversationThatCouldNotReadItsContextIsNotLeftInTheRegistry(t *testing.T) {
+	e := newEnv(t)
+	e.agentsErr = errors.New("catalog unreadable")
+	if _, err := e.run(context.Background(), req("one")); err == nil {
+		t.Fatal("expected the context error")
+	}
+	if n := e.svc.Conversations(); n != 0 {
+		t.Errorf("%d conversations left, want 0", n)
 	}
 }

@@ -25,16 +25,25 @@ import (
 
 // The codes the assistant's own errors carry.
 const (
-	CodeUnavailable   = "ARCHITECTURE_ASSISTANT_UNAVAILABLE"
-	CodeFailed        = "ARCHITECTURE_ASSISTANT_FAILED"
-	CodeNotFound      = "CONVERSATION_NOT_FOUND"
-	CodeBusy          = "CONVERSATION_BUSY"
+	CodeUnavailable = "ARCHITECTURE_ASSISTANT_UNAVAILABLE"
+	CodeFailed      = "ARCHITECTURE_ASSISTANT_FAILED"
+	CodeNotFound    = "CONVERSATION_NOT_FOUND"
+	CodeBusy        = "CONVERSATION_BUSY"
+)
+
+// Limits of a request and of what the service keeps.
+const (
+	maxMessageLen    = 20000
+	maxDraftBytes    = 1 << 20
+	eventsInContext  = 50
+	askedEventLookup = 500
+	conversationTTL  = 24 * time.Hour
+)
+
+const (
+	// attribution is what the assistant's claude calls are attributed to, with
+	// the project id appended.
 	attribution       = "harness:architecture-assistant:"
-	maxMessageLen     = 20000
-	maxDraftBytes     = 1 << 20
-	eventsInContext   = 50
-	askedEventLookup  = 500
-	conversationTTL   = 24 * time.Hour
 	noCheckoutReason  = "this repository has no local checkout for the assistant to read"
 	unavailableFixURL = "/agent-isolation#claude"
 )
@@ -124,6 +133,9 @@ type conversation struct {
 	session string
 	last    time.Time
 	running bool
+	// ended says the conversation was ended or swept: a turn still running
+	// then deletes the transcript it makes.
+	ended bool
 	// proposals counts the proposals the conversation made, for their ids.
 	proposals int
 }
@@ -211,9 +223,9 @@ func validate(r ports.ArchitectureAssistantRequest) error {
 	case len(r.Draft) == 0 || string(r.Draft) == "null":
 		return invalid("draft is required")
 	case utf8.RuneCountInString(r.Message) > maxMessageLen:
-		return invalid("message is longer than 20000 characters")
+		return invalid(fmt.Sprintf("message is longer than %d characters", maxMessageLen))
 	case len(r.Draft) > maxDraftBytes:
-		return invalid("draft is larger than 1 MB")
+		return invalid(fmt.Sprintf("draft is larger than %d bytes", maxDraftBytes))
 	case !json.Valid(r.Draft):
 		return invalid("draft is not valid JSON")
 	}
@@ -246,6 +258,9 @@ func (s *Service) Run(ctx context.Context, req ports.ArchitectureAssistantReques
 
 	in, err := s.turnInput(ctx, repo, req)
 	if err != nil {
+		if req.ConversationID == "" {
+			s.forget(id) // the client never saw this id
+		}
 		return err
 	}
 	emit(ports.ArchitectureAssistantEvent{Name: ports.ArchitectureAssistantEventConversation, Data: ports.ArchitectureAssistantConversation{ConversationID: id}})
@@ -296,7 +311,11 @@ func (s *Service) turn(ctx context.Context, repo *domain.Repository, conv *conve
 	if res.SessionID != "" {
 		s.mu.Lock()
 		conv.session = res.SessionID
+		ended := conv.ended
 		s.mu.Unlock()
+		if ended {
+			s.Turn.DeleteTranscript(res.SessionID)
+		}
 	}
 	res.Text = strings.TrimSpace(res.Text)
 	if res.Text == "" {
@@ -333,6 +352,20 @@ func (s *Service) finish(c *conversation) {
 	c.last = s.Now()
 }
 
+// forget drops a conversation that never ran a turn.
+func (s *Service) forget(id string) {
+	s.mu.Lock()
+	delete(s.convs, id)
+	s.mu.Unlock()
+}
+
+// Conversations is how many conversations the service remembers.
+func (s *Service) Conversations() int {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return len(s.convs)
+}
+
 func newID() string {
 	b := make([]byte, 16)
 	_, _ = rand.Read(b)
@@ -347,7 +380,7 @@ func (s *Service) End(conversationID string) {
 	delete(s.convs, conversationID)
 	var session string
 	if ok {
-		session = c.session
+		session, c.ended = c.session, true
 	}
 	s.mu.Unlock()
 	if session != "" {
@@ -364,6 +397,7 @@ func (s *Service) Sweep() {
 	for id, c := range s.convs {
 		if !c.running && c.last.Before(cutoff) {
 			delete(s.convs, id)
+			c.ended = true
 			if c.session != "" {
 				sessions = append(sessions, c.session)
 			}
@@ -375,7 +409,7 @@ func (s *Service) Sweep() {
 	}
 }
 
-// Run's sweeper: RunSweeper calls Sweep every interval until ctx ends.
+// RunSweeper calls Sweep every interval until ctx ends.
 func (s *Service) RunSweeper(ctx context.Context, interval time.Duration) {
 	t := time.NewTicker(interval)
 	defer t.Stop()

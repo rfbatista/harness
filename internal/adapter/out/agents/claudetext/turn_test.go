@@ -106,6 +106,9 @@ func TestATargetInsideTheCheckoutIsShownRelativeToIt(t *testing.T) {
 	if got := RelativeTo("/work/harness", "ArchLayer in /work/harness/internal"); got != "ArchLayer in internal" {
 		t.Errorf("got %q", got)
 	}
+	if got := RelativeTo("/work/harness", "see /work/harness/x in /work/harness/y"); got != "see /work/harness/x in y" {
+		t.Errorf("a pattern that names the checkout is not a path: got %q", got)
+	}
 	if got := RelativeTo("/work/harness", "/etc/passwd"); got != "/etc/passwd" {
 		t.Errorf("got %q", got)
 	}

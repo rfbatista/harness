@@ -93,13 +93,21 @@ func ToolTarget(tool string, input []byte) string {
 	return ""
 }
 
-// RelativeTo shows a target relative to the checkout it names a path in; a path
-// outside the checkout is left as it is.
+// RelativeTo shows a target relative to the checkout it names a path in: a
+// path inside the checkout, or the path after " in " of a search. Anything else
+// is left as it is.
 func RelativeTo(checkout, target string) string {
 	root := strings.TrimRight(checkout, "/")
 	if root == "" {
 		return target
 	}
-	target = strings.ReplaceAll(target, root+"/", "")
+	if rest, ok := strings.CutPrefix(target, root+"/"); ok {
+		return rest
+	}
+	if pattern, path, ok := strings.Cut(target, " in "); ok {
+		if rest, ok := strings.CutPrefix(path, root+"/"); ok {
+			return pattern + " in " + rest
+		}
+	}
 	return target
 }
