@@ -53,6 +53,9 @@ type Deps struct {
 	ArchEvents ports.ArchitectureRuleEventStore
 	// DesignRecords keeps projects' design system versions; nil disables them.
 	DesignRecords ports.DesignSystemStore
+	// DesignExports keeps each repository's last design system export; nil
+	// disables the export.
+	DesignExports ports.DesignExportStore
 	Agents        ports.AgentRepository
 	Prompts       ports.PromptRepository
 	Skills        ports.SkillRepository
@@ -143,6 +146,9 @@ func New(d Deps) Catalog {
 		designs.Subscribe(bus)
 		if d.ArchGit != nil {
 			designs.UseImport(d.ArchGit, pr)
+			if git, ok := d.ArchGit.(ports.DesignExportGit); ok && d.DesignExports != nil {
+				designs.UseExport(git, pr, d.DesignExports)
+			}
 		}
 		var inUse sync.Mutex // apply and delete of a design system exclude each other
 		pr.UseDesignSystems(d.DesignRecords, &inUse)

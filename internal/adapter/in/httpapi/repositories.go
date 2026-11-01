@@ -5,6 +5,8 @@ import (
 	"net/http"
 
 	"github.com/labstack/echo/v4"
+
+	"operators-mcp/internal/ports"
 )
 
 func (h *Handler) handleListRepositories(c echo.Context) error {
@@ -71,8 +73,8 @@ func (h *Handler) handleSetRepositoryDesignSystem(c echo.Context) error {
 }
 
 // handleListDesignSystemRepositories lists every repository of a design
-// system's project with the design system it uses. The export state arrives
-// with the export (null until then).
+// system's project with the design system it uses and, for those that use
+// this one, where their export stands.
 func (h *Handler) handleListDesignSystemRepositories(c echo.Context) error {
 	if err := h.designSystems(); err != nil {
 		return err
@@ -108,12 +110,21 @@ func (h *Handler) handleListDesignSystemRepositories(c echo.Context) error {
 		Path         string   `json:"path"`
 		Export       any      `json:"export"`
 	}
+	var exports map[string]*ports.DesignExportInfo
+	if h.exports != nil {
+		if exports, err = h.exports.ListDesignSystemExports(ctx, here.ID); err != nil {
+			return err
+		}
+	}
 	out := make([]row, 0, len(repos))
 	for _, r := range repos {
 		x := row{RepositoryID: r.ID, Name: r.DisplayName(), Path: r.DesignSystemPath}
 		if r.DesignSystemID != nil {
 			x.DesignSystem = &applied{DesignSystemID: *r.DesignSystemID, Name: names[*r.DesignSystemID]}
 			x.AppliedHere = *r.DesignSystemID == here.ID
+			if info := exports[r.ID]; x.AppliedHere && info != nil {
+				x.Export = info
+			}
 		}
 		out = append(out, x)
 	}

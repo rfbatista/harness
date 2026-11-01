@@ -110,6 +110,9 @@ type ProjectChange struct {
 	// DesignSystemChanged says a project's design system was created,
 	// renamed, described or deleted; clients re-read the list.
 	DesignSystemChanged *DesignSystemIdentityChange `json:"design_system_changed,omitempty"`
+	// DesignSystemExport says a repository's export of its design system
+	// changed state: it was exported, or what it holds changed.
+	DesignSystemExport *DesignSystemExportChange `json:"design_system_export,omitempty"`
 	// SessionFilesRoot says a root of a session's virtual file system went away
 	// or came back; the Files view follows it.
 	SessionFilesRoot *SessionFilesRootChange `json:"session_files_root,omitempty"`
@@ -140,6 +143,15 @@ type DesignSystemChange struct {
 	DesignSystemID string `json:"design_system_id"`
 	Version        int    `json:"version"`
 	Source         string `json:"source"`
+}
+
+// DesignSystemExportChange is a repository's design system export, with the
+// state it is in.
+type DesignSystemExportChange struct {
+	ProjectID      string `json:"project_id"`
+	DesignSystemID string `json:"design_system_id"`
+	RepositoryID   string `json:"repository_id"`
+	State          string `json:"state"`
 }
 
 // DesignSystemIdentityChange is a design system whose identity was created,
@@ -226,6 +238,8 @@ func (c ProjectChange) ProjectID() string {
 		return c.DesignSystemSaved.ProjectID
 	case c.DesignSystemChanged != nil:
 		return c.DesignSystemChanged.ProjectID
+	case c.DesignSystemExport != nil:
+		return c.DesignSystemExport.ProjectID
 	}
 	return ""
 }
