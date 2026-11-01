@@ -53,15 +53,17 @@ type Deps struct {
 	ArchEvents ports.ArchitectureRuleEventStore
 	// DesignRecords keeps projects' design system versions; nil disables them.
 	DesignRecords ports.DesignSystemStore
-	Agents        ports.AgentRepository
-	Prompts       ports.PromptRepository
-	Skills        ports.SkillRepository
-	MCPServers    ports.MCPServerRepository
-	Tools         ports.ToolRepository
-	Settings      ports.SettingsRepository
-	Publisher     ports.SkillPublisher
-	PathMatcher   ports.PathMatcher
-	TreeLister    ports.TreeLister
+	// DesignProposals keeps design sessions' drafts and proposals.
+	DesignProposals ports.DesignProposalStore
+	Agents          ports.AgentRepository
+	Prompts         ports.PromptRepository
+	Skills          ports.SkillRepository
+	MCPServers      ports.MCPServerRepository
+	Tools           ports.ToolRepository
+	Settings        ports.SettingsRepository
+	Publisher       ports.SkillPublisher
+	PathMatcher     ports.PathMatcher
+	TreeLister      ports.TreeLister
 	// RepositoryFinder lets projects discover git checkouts; nil disables it.
 	RepositoryFinder ports.RepositoryFinder
 	// EnvFiles and EnvFileIO keep repositories' env files; nil disables them.
@@ -139,7 +141,7 @@ func New(d Deps) Catalog {
 
 	var designs *designsystem.Service
 	if d.DesignRecords != nil {
-		designs = designsystem.NewService(designsystem.Deps{Store: d.DesignRecords, Projects: pr})
+		designs = designsystem.NewService(designsystem.Deps{Store: d.DesignRecords, Proposals: d.DesignProposals, Projects: pr})
 		designs.Subscribe(bus)
 		if d.ArchGit != nil {
 			designs.UseImport(d.ArchGit, pr)

@@ -87,6 +87,7 @@ var PersistenceModule = fx.Module("persistence",
 		asPort(sqlite.NewArchitectureRecordRepository, new(ports.ArchitectureRecordStore)),
 		asPort(sqlite.NewArchitectureRuleEventRepository, new(ports.ArchitectureRuleEventStore)),
 		asPort(sqlite.NewDesignSystemRepository, new(ports.DesignSystemStore)),
+		asPort(sqlite.NewDesignProposalRepository, new(ports.DesignProposalStore)),
 	),
 )
 
@@ -250,6 +251,7 @@ type catalogParams struct {
 	ArchGit         ports.ArchitectureGit
 	ArchEvents      ports.ArchitectureRuleEventStore
 	DesignRecords   ports.DesignSystemStore
+	DesignProposals ports.DesignProposalStore
 	Agents          ports.AgentRepository
 	Prompts         ports.PromptRepository
 	Skills          ports.SkillRepository
@@ -277,6 +279,7 @@ func newCatalog(p catalogParams) catalog.Catalog {
 		ArchGit:          p.ArchGit,
 		ArchEvents:       p.ArchEvents,
 		DesignRecords:    p.DesignRecords,
+		DesignProposals:  p.DesignProposals,
 		Agents:           p.Agents,
 		Prompts:          p.Prompts,
 		Skills:           p.Skills,
@@ -516,6 +519,7 @@ func newVirtualShells(plan *planning.Service, art *artifacts.Service, sessions p
 	}
 	if cat.DesignSystems != nil {
 		src.DesignSystems, src.Repositories = cat.DesignSystems, cat.Projects
+		src.Drafts = cat.DesignSystems
 	}
 	shells := vfs.New(src)
 	shells.UseRootEvents(events)
@@ -792,6 +796,7 @@ func newOrchestrationService(
 		cat.DesignSystems.UseFeed(svc)
 		// Design sessions start and are counted by the orchestration.
 		cat.DesignSystems.UseSessions(svc)
+		cat.DesignSystems.UseSessionReader(sessions)
 	}
 	if cat.RepositoryArchitectures != nil {
 		// Saves, deletes and exports reach open pages on the project feed.

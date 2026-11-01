@@ -330,8 +330,14 @@ func (s *Service) CommitShellEdit(ctx context.Context, sessionID string, e ports
 		if sh.skipped {
 			s.kick(sh)
 		}
-		ans := s.refuseAreas(ctx, sh, ed)
-		if ans.Allow {
+		var ans ports.ShellAnswer
+		if sh.touchesDraft(ed) {
+			ans = s.commitDraft(ctx, sh, ed)
+			if ans.Allow {
+				s.refreshLocked(sh)
+				return ans
+			}
+		} else if ans = s.refuseAreas(ctx, sh, ed); ans.Allow {
 			ans = s.commit(ctx, sh, ed)
 		}
 		if !ans.Allow {
@@ -493,6 +499,9 @@ func refuseMoveArea(ed edit) ports.ShellAnswer {
 // check is CheckShellEdit with sh held: the paths' areas, then the
 // session's copies of what the edit touches.
 func (s *Service) check(ctx context.Context, sh *root, ed edit) ports.ShellAnswer {
+	if sh.touchesDraft(ed) {
+		return s.checkDraft(ctx, sh, ed)
+	}
 	if ans := s.refuseAreas(ctx, sh, ed); !ans.Allow {
 		return ans
 	}

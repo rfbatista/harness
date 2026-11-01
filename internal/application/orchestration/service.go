@@ -660,6 +660,9 @@ func (s *Service) withShell(id, repositoryID string, subject sessionSubject, cfg
 		return cleanup, nil
 	}
 	scope := ports.ShellScope{RepositoryID: repositoryID}
+	if subject.designSystem != nil {
+		scope.DesignSystemID = subject.designSystem.ID
+	}
 	if subject.ticket != nil {
 		scope.TicketID = subject.ticket.ID
 	} else {

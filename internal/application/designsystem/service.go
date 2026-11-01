@@ -28,15 +28,25 @@ const (
 
 // Deps are the Service's collaborators.
 type Deps struct {
-	Store    ports.DesignSystemStore
-	Projects ports.ProjectReader
+	Store ports.DesignSystemStore
+	// Proposals keeps design sessions' drafts and proposals; nil leaves
+	// design sessions without them.
+	Proposals ports.DesignProposalStore
+	Projects  ports.ProjectReader
 }
 
 // Service implements the design system use cases.
 type Service struct {
-	store    ports.DesignSystemStore
-	projects ports.ProjectReader
-	feed     ports.ProjectChangeSink // nil until the orchestration is wired
+	store     ports.DesignSystemStore
+	proposals ports.DesignProposalStore
+	projects  ports.ProjectReader
+	// sessionStore tells a session's mode and design system.
+	sessionStore interface {
+		Get(id string) *domain.Session
+	}
+	// draftMu serialises the drafts' reads and writes.
+	draftMu sync.Mutex
+	feed    ports.ProjectChangeSink // nil until the orchestration is wired
 	// git and repos are what an import reads; nil until UseImport.
 	git   ports.ArchitectureGit
 	repos ports.DesignSourceRepositories
@@ -50,7 +60,7 @@ type Service struct {
 
 // NewService returns the design system context.
 func NewService(d Deps) *Service {
-	return &Service{store: d.Store, projects: d.Projects, now: time.Now}
+	return &Service{store: d.Store, proposals: d.Proposals, projects: d.Projects, now: time.Now}
 }
 
 // UseFeed sets where changes are announced: the project feed, which the

@@ -172,3 +172,25 @@ type DesignSystemImports interface {
 	// import, all or nothing. SLUG_TAKEN as CreateDesignSystem.
 	ImportDesignSystem(ctx context.Context, req DesignImportRequest, name, slug, description string) (*domain.DesignSystemIdentity, *domain.DesignSystemVersion, error)
 }
+
+// DesignProposalStore keeps the design sessions' drafts and proposals
+// (driven). A session has at most one active one (drafting or open).
+type DesignProposalStore interface {
+	// Create stores p (it sets ID and the times).
+	Create(ctx context.Context, p *domain.DesignProposal) error
+	// Update stores p's changes (it sets UpdatedAt).
+	Update(ctx context.Context, p *domain.DesignProposal) error
+	// Get answers one proposal, or nil when there is none.
+	Get(ctx context.Context, id string) (*domain.DesignProposal, error)
+	// ActiveBySession answers the session's drafting or open proposal, or nil.
+	ActiveBySession(ctx context.Context, sessionID string) (*domain.DesignProposal, error)
+	// ListByDesignSystem answers the design system's proposals, newest first.
+	ListByDesignSystem(ctx context.Context, designSystemID string) ([]*domain.DesignProposal, error)
+	// DeleteByDesignSystem removes the design system's proposals.
+	DeleteByDesignSystem(ctx context.Context, designSystemID string) error
+}
+
+// SessionGetter reads a session by id; nil when there is none.
+type SessionGetter interface {
+	Get(id string) *domain.Session
+}

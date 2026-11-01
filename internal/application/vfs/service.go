@@ -71,6 +71,9 @@ type Sources struct {
 	// session's repository to that session; either nil shows it to none.
 	DesignSystems ports.DesignSystemByIDReader
 	Repositories  ports.RepositoryReader
+	// Drafts is a design session's draft of its design system, which its
+	// shell shows writable; nil gives no session a draft.
+	Drafts ports.DesignDrafts
 	// Settings holds "Agents move documents to project"; nil reads it as off.
 	Settings ports.SettingsReader
 }
@@ -111,6 +114,7 @@ type root struct {
 	sessionID, ticketID, projID string
 	repoID                      string // the session's repository, "" for none
 	designSystemID              string // the design system last shown, "" for none
+	boundDS                     string // the design system a design session is bound to, "" for none
 
 	// mu guards the folder and files; a refresh holds it from reading the
 	// sources to writing the last file, so refreshes never interleave.
@@ -120,6 +124,9 @@ type root struct {
 	// designSystem is whether the last refresh showed the design system
 	// folder; a refresh that cannot read the repository keeps it.
 	designSystem bool
+	// draft says the shell is a design session's: project/design-system/ is
+	// its writable draft.
+	draft bool
 	// pending is the paths an agent was cleared to change, and since when:
 	// a refresh leaves them as they are until the change is committed.
 	// skipped says the last refresh left something out for them.
@@ -162,7 +169,7 @@ func (s *Service) Open(ctx context.Context, sessionID string, scope ports.ShellS
 	if err != nil {
 		realDir = dir
 	}
-	sh := &root{dir: dir, realDir: realDir, sessionID: sessionID, ticketID: scope.TicketID, projID: projID, repoID: scope.RepositoryID, files: map[string]ports.ShellFile{}}
+	sh := &root{dir: dir, realDir: realDir, sessionID: sessionID, ticketID: scope.TicketID, projID: projID, repoID: scope.RepositoryID, boundDS: scope.DesignSystemID, files: map[string]ports.ShellFile{}}
 	// Held until filled: a change heard meanwhile refreshes it after.
 	sh.mu.Lock()
 	s.mu.Lock()
