@@ -40,7 +40,9 @@ type designPage struct {
 func (p *designPage) mustPost(verb string, body map[string]any) map[string]any {
 	p.t.Helper()
 	if recordVerbs[verb] {
-		body["design_system_id"] = p.designSystemID()
+		if _, named := body["design_system_id"]; !named {
+			body["design_system_id"] = p.designSystemID()
+		}
 	} else {
 		body["project_id"] = p.project
 	}
@@ -58,20 +60,30 @@ func (p *designPage) mustPost(verb string, body map[string]any) map[string]any {
 	return out
 }
 
-// designSystemID is the project's design system, made on first use: the page
-// works on the project's first one.
+// designSystemID is the design system the page under test shows.
 func (p *designPage) designSystemID() string {
 	p.t.Helper()
-	if p.ds != "" {
-		return p.ds
+	if p.ds == "" {
+		p.t.Fatal("the page has no design system: use startDesignSystemPage or with")
 	}
-	list := p.mustPost("list_design_systems", map[string]any{})["design_systems"].([]any)
-	if len(list) > 0 {
-		p.ds = list[0].(map[string]any)["design_system_id"].(string)
-		return p.ds
-	}
-	p.ds = p.mustPost("create_design_system", map[string]any{"name": "Design system", "slug": "design-system"})["design_system_id"].(string)
 	return p.ds
+}
+
+// with creates a design system in the project and answers the page of it, on
+// the same server.
+func (p *designPage) with(slug, name, description string) *designPage {
+	p.t.Helper()
+	id := p.mustPost("create_design_system", map[string]any{"name": name, "slug": slug, "description": description})["design_system_id"].(string)
+	c := *p
+	c.ds = id
+	c.url = p.srv.URL + "/projects/" + p.project + "/design-systems/" + slug
+	return &c
+}
+
+// startDesignSystemPage is a server with one design system, App, at version 0.
+func startDesignSystemPage(t *testing.T) *designPage {
+	t.Helper()
+	return startDesignPage(t).with("app", "App", "Marketing and product apps")
 }
 
 func (p *designPage) get() map[string]any { return p.mustPost("get_design_system", map[string]any{}) }
@@ -81,6 +93,8 @@ func (p *designPage) mustSave(base int, record map[string]any) {
 	p.mustPost("save_design_system", map[string]any{"base_version": base, "record": record})
 }
 
+// startDesignPage is a server with a project and no design system yet; its url
+// is the project's Design systems page.
 func startDesignPage(t *testing.T) *designPage {
 	t.Helper()
 	assets, err := web.NewAssets()
@@ -126,7 +140,7 @@ func startDesignPage(t *testing.T) *designPage {
 		srv.CloseClientConnections()
 		srv.Close()
 	})
-	return &designPage{t: t, srv: srv, project: p.ID, url: srv.URL + "/projects/" + p.ID + "/design-system"}
+	return &designPage{t: t, srv: srv, project: p.ID, url: srv.URL + "/projects/" + p.ID + "/design-systems"}
 }
 
 func designPoll(js string) chromedp.Action {
@@ -152,14 +166,18 @@ func TestDesignSystemPageInTheBrowserAgainstTheRealServer(t *testing.T) {
 	if testing.Short() {
 		t.Skip("browser test: skipped in -short mode")
 	}
-	pg := startDesignPage(t)
+	pg := startDesignSystemPage(t)
 	me := newPerson(t)
 
-	// A project with no design system: the first-start screen, and nothing is stored by Start blank.
+	// A design system at version 0: the first-start screen under its header, and nothing is stored by Start blank.
 	me.run(t, "the first-start screen",
+		chromedp.EmulateViewport(1280, 900),
 		chromedp.Navigate(pg.url),
+		designPoll(`document.querySelector('[data-design-system-name]')?.textContent.trim() === 'App' && document.querySelector('[data-design-system-slug]')?.textContent.trim() === 'app'`),
+		designPoll(`document.querySelector('[data-design-system-description]')?.textContent.trim() === 'Marketing and product apps'`),
 		designPoll(`!!document.querySelector('#design-system-start [data-action=start-blank]')`),
 		designPoll(`document.querySelector('#design-system-start [data-action=import]')?.disabled === true && document.querySelector('#design-system-start [data-action=spawn]')?.disabled === true`),
+		shot("ds-page-first-start", "light"),
 		designClick(`#design-system-start [data-action=start-blank]`),
 		designPoll(`!document.querySelector('#design-system-start') && !!document.querySelector('[data-save-bar]')`),
 	)
@@ -245,6 +263,7 @@ func TestDesignSystemPageInTheBrowserAgainstTheRealServer(t *testing.T) {
 
 	// The page is server-rendered: a reload shows the tokens at once, on the tab asked for.
 	me.run(t, "reload", chromedp.Navigate(pg.url+"?tab=tokens"),
+		shot("ds-page-tokens", "light"),
 		designPoll(`document.querySelectorAll('#design-system-panel-tokens [data-token-row]').length === 2`),
 		designPoll(`document.querySelector('[role=tab][aria-selected=true]')?.textContent.includes('Tokens')`),
 	)
@@ -256,7 +275,7 @@ func TestDesignSystemPageFollowsASaveMadeElsewhere(t *testing.T) {
 	if testing.Short() {
 		t.Skip("browser test: skipped in -short mode")
 	}
-	pg := startDesignPage(t)
+	pg := startDesignSystemPage(t)
 	pg.mustSave(0, dsRecord())
 	here, there := newPerson(t), newPerson(t)
 	rows := `document.querySelectorAll('#design-system-panel-tokens [data-token-row]').length`
@@ -297,4 +316,66 @@ func TestDesignSystemPageFollowsASaveMadeElsewhere(t *testing.T) {
 		designPoll(`!document.querySelector('[data-conflict]') && document.querySelector('#design-system-panel-tokens [data-token-row]:nth-of-type(1) [data-field=note]').value === ''`),
 		designPoll(`document.querySelector('[data-save-bar] [data-save-version]')?.textContent.trim() === 'Saves as version 4'`),
 	)
+}
+
+// Two design systems of one project, open in two browsers: a save in one
+// raises nothing in the other, even over unsaved edits.
+func TestTwoDesignSystemsOpenTogetherDoNotDisturbEachOther(t *testing.T) {
+	if testing.Short() {
+		t.Skip("browser test: skipped in -short mode")
+	}
+	app := startDesignSystemPage(t)
+	brand := app.with("brand", "Brand", "The brand site")
+	app.mustSave(0, dsRecord())
+	brand.mustSave(0, dsRecord())
+	inApp, inBrand := newPerson(t), newPerson(t)
+	rows := `document.querySelectorAll('#design-system-panel-tokens [data-token-row]').length`
+	note := `#design-system-panel-tokens [data-token-row]:nth-of-type(1) [data-field=note]`
+	for p, pg := range map[*person]*designPage{inApp: app, inBrand: brand} {
+		p.run(t, "open", chromedp.Navigate(pg.url), designPoll(rows+` === 4`))
+	}
+	time.Sleep(time.Second) // each page's feed follow is open
+	for p, name := range map[*person]string{inApp: "App", inBrand: "Brand"} {
+		p.run(t, "each page shows its own design system", designPoll(`document.querySelector('[data-design-system-name]')?.textContent.trim() === '`+name+`'`))
+	}
+
+	// Edits in Brand, then a save in App: Brand must not hear of it, App must.
+	inBrand.run(t, "edit in brand", chromedp.SetValue(note, "mine", chromedp.ByQuery), designPoll(`document.querySelector('[data-save-bar] [data-action=save]')?.disabled === false`))
+	record := app.get()["record"].(map[string]any)
+	record["tokens"] = append(record["tokens"].([]any), dsToken("colors", "ink", "color", "#111"))
+	app.mustSave(1, record)
+	inApp.run(t, "app follows its own save", designPoll(rows+` === 5`))
+	if got := inBrand.text(t, `JSON.stringify([!!document.querySelector('[data-conflict]'), document.querySelector('`+note+`').value, `+rows+`, document.querySelector('`+dsSaveVersion+`').textContent.trim()])`); got != `[false,"mine",4,"Saves as version 2"]` {
+		t.Errorf("brand was disturbed by a save in app: %s", got)
+	}
+
+	// And the other way round.
+	record = brand.get()["record"].(map[string]any)
+	record["principles"] = "# Theirs\n"
+	brand.mustSave(1, record)
+	inBrand.run(t, "brand hears its own", designPoll(`document.querySelector('[data-conflict]')?.textContent.includes('Version 2 was saved elsewhere')`))
+	if inApp.text(t, `String(!!document.querySelector('[data-conflict]'))`) != "false" {
+		t.Error("app was disturbed by a save in brand")
+	}
+}
+
+// The header follows the design system's own name and description, and a
+// delete shows a notice instead of a page that can still save.
+func TestDesignSystemPageFollowsItsRenameAndDelete(t *testing.T) {
+	if testing.Short() {
+		t.Skip("browser test: skipped in -short mode")
+	}
+	pg := startDesignSystemPage(t)
+	pg.mustSave(0, dsRecord())
+	me := newPerson(t)
+	me.run(t, "open", chromedp.Navigate(pg.url), designPoll(`document.querySelectorAll('#design-system-panel-tokens [data-token-row]').length === 4`))
+	time.Sleep(time.Second)
+	pg.mustPost("update_design_system", map[string]any{"name": "Apps", "description": "Everything with a screen"})
+	me.run(t, "the header follows",
+		designPoll(`document.querySelector('[data-design-system-name]')?.textContent.trim() === 'Apps'`),
+		designPoll(`document.querySelector('[data-design-system-description]')?.textContent.trim() === 'Everything with a screen'`),
+		designPoll(`document.querySelector('[data-design-system-slug]')?.textContent.trim() === 'app'`),
+	)
+	pg.mustPost("delete_design_system", map[string]any{"confirm_name": "Apps"})
+	me.run(t, "the delete shows a notice", designPoll(`!!document.querySelector('[data-deleted]') && !document.querySelector('[data-save-bar]')`))
 }

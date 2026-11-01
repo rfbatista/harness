@@ -67,7 +67,7 @@ test("an answer without a repository is unreadable", async () => {
   await assert.rejects(gateway.apply("r1", "ds1", ""), "BAD_RESPONSE");
 });
 
-test("the tab's switch applies the project's first design system, or removes the one in use", async () => {
+test("the tab's switch applies the project's first design system when the page names none, or removes the one in use", async () => {
   const { gateway, calls } = gatewayAnswering((url) => systems(url) ?? jsonResponse(200, { repository: { id: "r1", design_system_id: JSON.parse(calls.at(-1).init.body).design_system_id, design_system_path: "ui/" } }));
   const on = await gateway.setRepository("r1", true, "ui/", "p1");
   assert.deepEqual([JSON.parse(calls[1].init.body).design_system_id, on.uses], ["ds1", true]);
@@ -75,31 +75,60 @@ test("the tab's switch applies the project's first design system, or removes the
   assert.deepEqual([JSON.parse(calls[2].init.body).design_system_id, off.uses], [null, false]);
 });
 
-const row = (id, created) => ({ design_system_id: id, name: id, created_at: created });
+const full = { exists: true, version: 1, record: { tokens: [], principles: "", components: [] } };
 
-test("the record is read and saved on the project's earliest design system, by its id", async () => {
-  const { gateway, calls } = gatewayAnswering((url) => {
-    if (url.endsWith("/list_design_systems")) return jsonResponse(200, { design_systems: [row("b", "2026-02-01T00:00:00Z"), row("a", "2026-03-01T00:00:00Z"), row("c", "2026-01-01T00:00:00Z")] });
-    if (url.endsWith("/save_design_system")) return jsonResponse(200, { version: 1 });
-    return jsonResponse(200, { exists: true, version: 1, record: { tokens: [], principles: "", components: [] } });
-  });
-  assert.equal((await gateway.get("p1")).version, 1);
-  assert.equal(await gateway.save("p1", 1, { tokens: [] }, "m"), 1);
-  assert.deepEqual(calls.map((c) => c.url), ["/api/list_design_systems", "/api/get_design_system", "/api/save_design_system"]);
-  assert.deepEqual(JSON.parse(calls[1].init.body), { design_system_id: "c" });
-  assert.equal(JSON.parse(calls[2].init.body).design_system_id, "c");
+test("the record is read, saved, renamed and listed by the design system's id, with no lookup", async () => {
+  const { gateway, calls } = gatewayAnswering((url) => (url.endsWith("/save_design_system") || url.endsWith("/rename_design_token") ? jsonResponse(200, { version: 2 }) : url.endsWith("/list_design_system_versions") ? jsonResponse(200, { versions: [] }) : jsonResponse(200, full)));
+  assert.equal((await gateway.get("ds1")).version, 1);
+  assert.equal(await gateway.save("ds1", 1, { tokens: [] }, "m"), 2);
+  assert.equal(await gateway.rename("ds1", 2, { group: "colors", name: "a" }, { group: "colors", name: "b" }), 2);
+  await gateway.versions("ds1", { limit: 5 });
+  await gateway.version("ds1", 1);
+  assert.deepEqual(calls.map((c) => c.url), ["/api/get_design_system", "/api/save_design_system", "/api/rename_design_token", "/api/list_design_system_versions", "/api/get_design_system_version"]);
+  for (const c of calls) assert.equal(JSON.parse(c.init.body).design_system_id, "ds1");
 });
 
-test("a project without a design system reads as empty and the first save creates one", async () => {
-  const { gateway, calls } = gatewayAnswering((url) => {
-    if (url.endsWith("/list_design_systems")) return jsonResponse(200, { design_systems: [] });
-    if (url.endsWith("/create_design_system")) return jsonResponse(200, { design_system_id: "n1" });
-    return jsonResponse(200, { version: 1 });
-  });
-  const state = await gateway.get("p1");
-  assert.equal(state.exists, false);
-  assert.deepEqual(await gateway.versions("p1"), []);
-  await gateway.save("p1", 0, { tokens: [] }, "");
-  assert.deepEqual(calls.map((c) => c.url), ["/api/list_design_systems", "/api/list_design_systems", "/api/list_design_systems", "/api/create_design_system", "/api/save_design_system"]);
-  assert.equal(JSON.parse(calls[4].init.body).design_system_id, "n1");
+test("the identity of a design system is its name and description, and null once it is gone", async () => {
+  const live = gatewayAnswering(() => jsonResponse(200, { ...full, name: "Brand", slug: "brand", description: "The brand site" }));
+  assert.deepEqual(await live.gateway.identity("ds1"), { name: "Brand", description: "The brand site" });
+  const gone = gatewayAnswering(() => jsonResponse(404, { error: "no such design system", code: "DESIGN_SYSTEM_NOT_FOUND" }));
+  assert.equal(await gone.gateway.identity("ds1"), null);
+  const down = gatewayAnswering(() => jsonResponse(500, { error: "boom", code: "INTERNAL" }));
+  await assert.rejects(down.gateway.identity("ds1"), "INTERNAL");
+});
+
+test("the tab's repositories and switch use the design system the page names", async () => {
+  const { gateway, calls } = gatewayAnswering((url) => (url.endsWith("/list_design_system_repositories") ? jsonResponse(200, { repositories: [] }) : jsonResponse(200, { repository: { id: "r1", design_system_id: "ds2", design_system_path: "ui/" } })));
+  await gateway.repositories("p1", "ds2");
+  await gateway.setRepository("r1", true, "ui/", "p1", false, "ds2");
+  assert.deepEqual(calls.map((c) => c.url), ["/api/list_design_system_repositories", "/api/set_repository_design_system"]);
+  assert.equal(JSON.parse(calls[0].init.body).design_system_id, "ds2");
+  assert.equal(JSON.parse(calls[1].init.body).design_system_id, "ds2");
+});
+
+/** The feed is the project's; the gateway hands the page only what names its design system. */
+function followed(designSystemId) {
+  const handlers = [];
+  const feedDouble = { follow: (_url, h) => (handlers.push(h), () => {}) };
+  const gateway = designSystemGateway(apiClient({ base: "/api", fetch: fakeFetch(() => jsonResponse(200, {})).fetch }), feedDouble);
+  const seen = { saved: [], changed: 0 };
+  gateway.follow("p1", designSystemId, { onSaved: (s) => seen.saved.push(s), onChanged: () => seen.changed++ });
+  return { send: (dto) => handlers[0].onMessage(dto), seen };
+}
+
+test("a save in another design system raises nothing; one in this one does", () => {
+  const { send, seen } = followed("ds1");
+  send({ design_system_saved: { project_id: "p1", design_system_id: "ds2", version: 9, source: "manual" } });
+  assert.deepEqual(seen.saved, []);
+  send({ design_system_saved: { project_id: "p1", design_system_id: "ds1", version: 4, source: "manual" } });
+  assert.deepEqual(seen.saved, [{ version: 4, source: "manual" }]);
+});
+
+test("a change of the identity raises only for this design system", () => {
+  const { send, seen } = followed("ds1");
+  send({ design_system_changed: { project_id: "p1", design_system_id: "ds2" } });
+  send({ design_system_changed: { project_id: "other", design_system_id: "ds1" } });
+  assert.equal(seen.changed, 0);
+  send({ design_system_changed: { project_id: "p1", design_system_id: "ds1" } });
+  assert.equal(seen.changed, 1);
 });

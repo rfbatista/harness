@@ -51,6 +51,14 @@ type DesignSystems interface {
 	GetDesignSystemVersion(ctx context.Context, designSystemID string, version int) (*domain.DesignSystemVersion, error)
 }
 
+// DesignSystemPages is what a design system's page reads: the project's design
+// systems to find one by slug, and the one found, record included. It stores
+// nothing. *designsystem.Service satisfies it.
+type DesignSystemPages interface {
+	ListDesignSystems(ctx context.Context, projectID string) ([]*domain.DesignSystemSummary, error)
+	GetDesignSystem(ctx context.Context, designSystemID string) (*domain.DesignSystem, error)
+}
+
 // DesignSystemStore keeps the identity of every project's design systems and
 // every version of them (driven). Versions are never changed once written.
 type DesignSystemStore interface {

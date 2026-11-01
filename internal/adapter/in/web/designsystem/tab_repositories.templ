@@ -4,7 +4,7 @@ package designsystem
 // project with the switch and path that its own settings show too. The export
 // state arrives with the export, so until then a repository that uses the
 // design system reads "Not exported yet".
-templ tabRepositories(projectID string) {
+templ tabRepositories(projectID, designSystemID string) {
 	<section role="tabpanel" id="design-system-panel-repositories" aria-labelledby="design-system-tab-repositories" x-show="isTab('repositories')" class="[ flow ]">
 		<div class="[ arch-head ]" data-panel-head>
 			<div class="[ flow ] [ flow-space-3xs ]">
@@ -12,15 +12,15 @@ templ tabRepositories(projectID string) {
 				<p class="[ color-ink-muted text-sm ]">Choose which repositories use the design system. Each repository's settings have a select with the same choice.</p>
 			</div>
 		</div>
-		@OptIn(projectID)
+		@OptIn(projectID, designSystemID)
 	</section>
 }
 
 // OptIn is the "Uses the design system" switch and path of a project's
 // repositories on the Repositories tab (designSystemOptIn), with the export
 // state. A repository's own settings use RepositorySelect.
-templ OptIn(projectID string) {
-	<div x-data="designSystemOptIn" data-design-system-optin data-project-id={ projectID } class="[ flow ]">
+templ OptIn(projectID, designSystemID string) {
+	<div x-data="designSystemOptIn" data-design-system-optin data-project-id={ projectID } data-design-system-id={ designSystemID } class="[ flow ]">
 		<template x-if="error">
 			<div class="[ banner ]" data-tone="danger" role="alert" data-optin-load-error>
 				<div class="[ flow ] [ flow-space-3xs grow ]">
@@ -87,7 +87,7 @@ templ RepositorySelect(projectID, repositoryID string) {
 		</div>
 		<p class="[ color-ink-muted ]" data-no-design-systems x-show="noSystems">
 			No design systems in this project yet.
-			<a href={ templ.URL("/projects/" + projectID + "/design-system") }>Start one</a> from Design system.
+			<a href={ templ.URL("/projects/" + projectID + "/design-systems") }>Start one</a> from Design systems.
 		</p>
 		<div class="[ banner ]" data-tone="attention" role="group" aria-label="Move design system" data-ds-move x-show="moveOpen">
 			<div class="[ flow ] [ flow-space-3xs grow ]">

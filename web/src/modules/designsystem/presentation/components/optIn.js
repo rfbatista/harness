@@ -14,6 +14,8 @@ import { EFFECT_NOTE, exportLabel } from "../../domain/repositories.js";
 /** @param {{ gateway: ReturnType<typeof import("../../infrastructure/designsystem-gateway.js").designSystemGateway> }} deps */
 export const designSystemOptIn = ({ gateway }) => () => ({
   projectId: "",
+  /** The design system the page names (BRIDGE, ticket 15: "" on a page that names none: the project's first). */
+  designSystemId: "",
   /** @type {ReturnType<typeof import("../../domain/repositories.js").optInRow>[]} */
   rows: [],
   loaded: false,
@@ -26,13 +28,14 @@ export const designSystemOptIn = ({ gateway }) => () => ({
 
   async init() {
     this.projectId = this.$el.dataset.projectId ?? "";
+    this.designSystemId = this.$el.dataset.designSystemId ?? "";
     await this.load();
   },
 
   async load() {
     this.error = null;
     try {
-      this.rows = await gateway.repositories(this.projectId);
+      this.rows = await gateway.repositories(this.projectId, this.designSystemId);
       this.loaded = true;
     } catch (err) {
       this.error = describeError(err);
@@ -87,7 +90,7 @@ export const designSystemOptIn = ({ gateway }) => () => ({
     row.error = null;
     row.uses = uses; // the switch already moved under the person's hand
     try {
-      const stored = await gateway.setRepository(row.id, uses, uses ? row.draft : row.path, this.projectId, confirmMove);
+      const stored = await gateway.setRepository(row.id, uses, uses ? row.draft : row.path, this.projectId, confirmMove, this.designSystemId);
       row.uses = stored.uses;
       row.path = stored.path || row.path;
       row.draft = row.path;

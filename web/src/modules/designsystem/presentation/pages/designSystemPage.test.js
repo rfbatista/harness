@@ -30,11 +30,11 @@ function fakeGateway(initial) {
     list: [],
     asked: [],
     full: {},
-    async versions(projectId, { limit, before } = {}) {
+    async versions(id, { limit, before } = {}) {
       g.asked.push({ limit, before });
       return g.list.filter((v) => !before || v.version < before).slice(0, limit);
     },
-    async version(projectId, number) {
+    async version(id, number) {
       const v = g.full[number];
       if (!v) throw new StructuredError("VERSION_NOT_FOUND", "no such version", 404);
       return structuredClone(v);
@@ -44,20 +44,28 @@ function fakeGateway(initial) {
     async get() {
       return structuredClone(g.server);
     },
-    async save(projectId, base, record, message) {
-      g.saves.push({ projectId, base, record, message });
+    async save(id, base, record, message) {
+      g.saves.push({ id, base, record, message });
       if (g.refuse) throw g.refuse;
       g.server = { ...g.server, exists: true, version: base + 1, record };
       g.afterSave?.();
       return base + 1;
     },
-    async rename(projectId, base, from, to) {
+    async rename(id, base, from, to) {
       g.renames.push({ base, from, to });
       if (g.refuse) throw g.refuse;
       g.server = { ...g.server, version: base + 1, record: { ...g.server.record, tokens: g.server.record.tokens.map((t) => (t.name === from.name ? { ...t, ...to } : t)) } };
       return base + 1;
     },
-    follow(projectId, handlers) {
+    /** What the design system is now (null: deleted), as the feed's design_system_changed makes the page ask. */
+    identityNow: { name: "App", description: "Marketing and product apps" },
+    async identity(id) {
+      g.identityAsked = id;
+      return g.identityNow;
+    },
+    followed: null,
+    follow(projectId, designSystemId, handlers) {
+      g.followed = [projectId, designSystemId];
       g.feed = handlers;
       return () => (g.feed = null);
     },
@@ -67,7 +75,7 @@ function fakeGateway(initial) {
 
 function page(initial = state(), seed = {}, extra = {}) {
   const gateway = fakeGateway(initial);
-  const el = seededElement({ project_id: "p1", base: "/projects/p1/design-system", tab: "", state: initial, ...seed });
+  const el = seededElement({ project_id: "p1", design_system_id: "ds1", name: "App", slug: "app", description: "Marketing and product apps", base: "/projects/p1/design-systems/app", tab: "", state: initial, ...seed });
   const pushed = [];
   const m = mount(designSystemPage({ gateway, clock: fixedClock("2026-10-01T10:30:00Z"), history: { pushState: (_s, _t, url) => pushed.push(url) }, location: { search: "" }, ...extra }), { el });
   m.instance.init();
@@ -89,7 +97,37 @@ test("the seeded state is on the page at once, with no read", () => {
   assert.equal(typeof gateway.feed.onSaved, "function");
 });
 
-test("a project with no design system opens on the first-start screen, and Start blank stores nothing", () => {
+test("the page is keyed by the design system: its name, slug and description, and the feed asked for it", () => {
+  const { p, gateway } = page();
+  assert.deepEqual([p.designSystemId, p.name, p.slug, p.description, p.hasDescription], ["ds1", "App", "app", "Marketing and product apps", true]);
+  assert.deepEqual(gateway.followed, ["p1", "ds1"]);
+  assert.equal(page(state(), { description: "" }).p.hasDescription, false);
+});
+
+test("a design system at version 0 opens on the first-start screen, naming it", () => {
+  const { p } = page(empty());
+  assert.equal(p.isFirstStart, true);
+  assert.equal(p.startBlankText, "An empty record for “App”, ready for its first tokens.");
+});
+
+test("the design system's own change updates the header; its name and description are read again", async () => {
+  const { p, gateway } = page();
+  gateway.identityNow = { name: "Brand", description: "" };
+  await p.identityChanged();
+  assert.equal(gateway.identityAsked, "ds1");
+  assert.deepEqual([p.name, p.description, p.hasDescription, p.slug, p.deleted], ["Brand", "", false, "app", false]);
+});
+
+test("a delete of this design system shows a notice and closes the page's work", async () => {
+  const { p, gateway } = page();
+  gateway.identityNow = null;
+  await p.identityChanged();
+  assert.equal(p.deleted, true);
+  assert.equal(p.isOpen, false);
+  assert.equal(p.canSave, false);
+});
+
+test("a design system with no version opens on the first-start screen, and Start blank stores nothing", () => {
   const { p, gateway } = page(empty());
   assert.equal(p.isFirstStart, true);
   assert.equal(p.isOpen, false);
@@ -104,7 +142,7 @@ test("a project with no design system opens on the first-start screen, and Start
 
 test("without a seed the page reads the state itself", async () => {
   const gateway = fakeGateway(state());
-  const m = mount(designSystemPage({ gateway, clock: fixedClock("2026-10-01T10:30:00Z") }), { el: seededElement({ project_id: "p1", base: "/b", tab: "", state: null }) });
+  const m = mount(designSystemPage({ gateway, clock: fixedClock("2026-10-01T10:30:00Z") }), { el: seededElement({ project_id: "p1", design_system_id: "ds1", name: "App", slug: "app", description: "", base: "/b", tab: "", state: null }) });
   m.instance.init();
   assert.equal(m.instance.loaded, false);
   await Promise.resolve();
@@ -118,7 +156,7 @@ test("the tab comes from the address and a switch puts it back", () => {
   assert.equal(p.tab, "history");
   p.openTab("tokens");
   p.openTab("principles");
-  assert.deepEqual(pushed, ["/projects/p1/design-system", "/projects/p1/design-system?tab=principles"]);
+  assert.deepEqual(pushed, ["/projects/p1/design-systems/app", "/projects/p1/design-systems/app?tab=principles"]);
 });
 
 test("adding a token opens a row in the filtered group and the page is dirty", () => {
@@ -140,6 +178,7 @@ test("save sends the whole record, principles and components included, against t
   p.message = " Add ink ";
   await p.save();
   const sent = gateway.saves[0];
+  assert.equal(sent.id, "ds1");
   assert.equal(sent.base, 3);
   assert.equal(sent.message, "Add ink");
   assert.equal(sent.record.principles, "# Calm\n");

@@ -12,7 +12,7 @@ import templruntime "github.com/a-h/templ/runtime"
 // project with the switch and path that its own settings show too. The export
 // state arrives with the export, so until then a repository that uses the
 // design system reads "Not exported yet".
-func tabRepositories(projectID string) templ.Component {
+func tabRepositories(projectID, designSystemID string) templ.Component {
 	return templruntime.GeneratedTemplate(func(templ_7745c5c3_Input templruntime.GeneratedComponentInput) (templ_7745c5c3_Err error) {
 		templ_7745c5c3_W, ctx := templ_7745c5c3_Input.Writer, templ_7745c5c3_Input.Context
 		if templ_7745c5c3_CtxErr := ctx.Err(); templ_7745c5c3_CtxErr != nil {
@@ -37,7 +37,7 @@ func tabRepositories(projectID string) templ.Component {
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
-		templ_7745c5c3_Err = OptIn(projectID).Render(ctx, templ_7745c5c3_Buffer)
+		templ_7745c5c3_Err = OptIn(projectID, designSystemID).Render(ctx, templ_7745c5c3_Buffer)
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
@@ -52,7 +52,7 @@ func tabRepositories(projectID string) templ.Component {
 // OptIn is the "Uses the design system" switch and path of a project's
 // repositories on the Repositories tab (designSystemOptIn), with the export
 // state. A repository's own settings use RepositorySelect.
-func OptIn(projectID string) templ.Component {
+func OptIn(projectID, designSystemID string) templ.Component {
 	return templruntime.GeneratedTemplate(func(templ_7745c5c3_Input templruntime.GeneratedComponentInput) (templ_7745c5c3_Err error) {
 		templ_7745c5c3_W, ctx := templ_7745c5c3_Input.Writer, templ_7745c5c3_Input.Context
 		if templ_7745c5c3_CtxErr := ctx.Err(); templ_7745c5c3_CtxErr != nil {
@@ -86,7 +86,20 @@ func OptIn(projectID string) templ.Component {
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 4, "\" class=\"[ flow ]\"><template x-if=\"error\"><div class=\"[ banner ]\" data-tone=\"danger\" role=\"alert\" data-optin-load-error><div class=\"[ flow ] [ flow-space-3xs grow ]\"><span x-text=\"error.message\"></span> <span class=\"[ code ]\"><span x-text=\"error.code\"></span> · <span x-text=\"error.next\"></span></span></div><button type=\"button\" class=\"[ button ]\" data-variant=\"ghost\" data-size=\"sm\" x-on:click=\"load\">Try again</button></div></template><template x-if=\"isEmpty\"><p class=\"[ color-ink-muted ]\" data-no-repositories>This project has no repositories yet. Add one, then choose here whether it uses the design system.</p></template><section class=\"[ pane ]\" x-show=\"loaded\"><template x-for=\"r in rows\" x-bind:key=\"r.id\"><div class=\"[ row ]\" data-optin-row x-bind:data-repository-id=\"r.id\" x-bind:data-phase=\"phase(r)\" style=\"--row-columns: minmax(0, 1fr)\"><div class=\"[ flow ] [ flow-space-xs pad-block-xs ]\"><span class=\"[ weight-medium ]\" x-text=\"r.name\"></span> <label class=\"[ cluster ] [ gutter-xs ]\"><input type=\"checkbox\" data-field=\"uses\" x-bind:checked=\"r.uses\" x-bind:disabled=\"r.saving\" x-bind:aria-busy=\"r.saving\" x-on:change=\"toggle(r)\"> Uses the design system</label> <span class=\"[ hint ]\" x-text=\"effectNote\"></span> <span class=\"[ hint ]\" data-elsewhere x-show=\"!r.uses\" x-text=\"elsewhere(r)\"></span><div class=\"[ banner ]\" data-tone=\"attention\" role=\"group\" aria-label=\"Move\" data-optin-move x-show=\"r.confirming\"><span class=\"[ grow ]\">Move <b x-text=\"r.name\"></b> from <b x-text=\"r.appliedName\"></b> to this design system? Files already exported stay where they are.</span> <button type=\"button\" class=\"[ button ]\" data-variant=\"primary\" data-size=\"sm\" data-action=\"move\" x-on:click=\"confirmMove(r)\">Move</button> <button type=\"button\" class=\"[ button ]\" data-size=\"sm\" data-action=\"keep\" x-on:click=\"keepCurrent(r)\">Keep</button></div><div class=\"[ field ]\" x-show=\"r.uses\"><label>Folder in the repository <input data-field=\"path\" class=\"[ font-mono text-sm ]\" autocomplete=\"off\" spellcheck=\"false\" x-model=\"r.draft\" x-bind:aria-invalid=\"r.error !== null\"></label> <span class=\"[ hint ]\">Where an export will write the files; relative, ending in /. The default is <code>.harness/design-system/</code>.</span> <span class=\"[ cluster ]\"><button type=\"button\" class=\"[ button ]\" data-size=\"sm\" data-action=\"save-path\" x-bind:disabled=\"cannotSavePath(r)\" x-on:click=\"savePath(r)\">Save path</button></span></div><template x-if=\"r.error\"><span class=\"[ error ]\" data-optin-error><span x-text=\"r.error.message\"></span> <span class=\"[ code ]\"><span x-text=\"r.error.code\"></span> · <span x-text=\"r.error.next\"></span></span></span></template><span class=\"[ text-sm color-ink-muted ]\" data-export-state x-show=\"r.uses\" x-text=\"stateOf(r)\"></span></div></div></template></section></div>")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 4, "\" data-design-system-id=\"")
+		if templ_7745c5c3_Err != nil {
+			return templ_7745c5c3_Err
+		}
+		var templ_7745c5c3_Var4 string
+		templ_7745c5c3_Var4, templ_7745c5c3_Err = templ.ResolveAttributeValue(designSystemID)
+		if templ_7745c5c3_Err != nil {
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `designsystem/tab_repositories.templ`, Line: 23, Col: 126}
+		}
+		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var4)
+		if templ_7745c5c3_Err != nil {
+			return templ_7745c5c3_Err
+		}
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 5, "\" class=\"[ flow ]\"><template x-if=\"error\"><div class=\"[ banner ]\" data-tone=\"danger\" role=\"alert\" data-optin-load-error><div class=\"[ flow ] [ flow-space-3xs grow ]\"><span x-text=\"error.message\"></span> <span class=\"[ code ]\"><span x-text=\"error.code\"></span> · <span x-text=\"error.next\"></span></span></div><button type=\"button\" class=\"[ button ]\" data-variant=\"ghost\" data-size=\"sm\" x-on:click=\"load\">Try again</button></div></template><template x-if=\"isEmpty\"><p class=\"[ color-ink-muted ]\" data-no-repositories>This project has no repositories yet. Add one, then choose here whether it uses the design system.</p></template><section class=\"[ pane ]\" x-show=\"loaded\"><template x-for=\"r in rows\" x-bind:key=\"r.id\"><div class=\"[ row ]\" data-optin-row x-bind:data-repository-id=\"r.id\" x-bind:data-phase=\"phase(r)\" style=\"--row-columns: minmax(0, 1fr)\"><div class=\"[ flow ] [ flow-space-xs pad-block-xs ]\"><span class=\"[ weight-medium ]\" x-text=\"r.name\"></span> <label class=\"[ cluster ] [ gutter-xs ]\"><input type=\"checkbox\" data-field=\"uses\" x-bind:checked=\"r.uses\" x-bind:disabled=\"r.saving\" x-bind:aria-busy=\"r.saving\" x-on:change=\"toggle(r)\"> Uses the design system</label> <span class=\"[ hint ]\" x-text=\"effectNote\"></span> <span class=\"[ hint ]\" data-elsewhere x-show=\"!r.uses\" x-text=\"elsewhere(r)\"></span><div class=\"[ banner ]\" data-tone=\"attention\" role=\"group\" aria-label=\"Move\" data-optin-move x-show=\"r.confirming\"><span class=\"[ grow ]\">Move <b x-text=\"r.name\"></b> from <b x-text=\"r.appliedName\"></b> to this design system? Files already exported stay where they are.</span> <button type=\"button\" class=\"[ button ]\" data-variant=\"primary\" data-size=\"sm\" data-action=\"move\" x-on:click=\"confirmMove(r)\">Move</button> <button type=\"button\" class=\"[ button ]\" data-size=\"sm\" data-action=\"keep\" x-on:click=\"keepCurrent(r)\">Keep</button></div><div class=\"[ field ]\" x-show=\"r.uses\"><label>Folder in the repository <input data-field=\"path\" class=\"[ font-mono text-sm ]\" autocomplete=\"off\" spellcheck=\"false\" x-model=\"r.draft\" x-bind:aria-invalid=\"r.error !== null\"></label> <span class=\"[ hint ]\">Where an export will write the files; relative, ending in /. The default is <code>.harness/design-system/</code>.</span> <span class=\"[ cluster ]\"><button type=\"button\" class=\"[ button ]\" data-size=\"sm\" data-action=\"save-path\" x-bind:disabled=\"cannotSavePath(r)\" x-on:click=\"savePath(r)\">Save path</button></span></div><template x-if=\"r.error\"><span class=\"[ error ]\" data-optin-error><span x-text=\"r.error.message\"></span> <span class=\"[ code ]\"><span x-text=\"r.error.code\"></span> · <span x-text=\"r.error.next\"></span></span></span></template><span class=\"[ text-sm color-ink-muted ]\" data-export-state x-show=\"r.uses\" x-text=\"stateOf(r)\"></span></div></div></template></section></div>")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
@@ -113,51 +126,51 @@ func RepositorySelect(projectID, repositoryID string) templ.Component {
 			}()
 		}
 		ctx = templ.InitializeContext(ctx)
-		templ_7745c5c3_Var4 := templ.GetChildren(ctx)
-		if templ_7745c5c3_Var4 == nil {
-			templ_7745c5c3_Var4 = templ.NopComponent
+		templ_7745c5c3_Var5 := templ.GetChildren(ctx)
+		if templ_7745c5c3_Var5 == nil {
+			templ_7745c5c3_Var5 = templ.NopComponent
 		}
 		ctx = templ.ClearChildren(ctx)
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 5, "<div x-data=\"repositoryDesignSystem\" data-repository-design-system data-project-id=\"")
-		if templ_7745c5c3_Err != nil {
-			return templ_7745c5c3_Err
-		}
-		var templ_7745c5c3_Var5 string
-		templ_7745c5c3_Var5, templ_7745c5c3_Err = templ.ResolveAttributeValue(projectID)
-		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `designsystem/tab_repositories.templ`, Line: 69, Col: 95}
-		}
-		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var5)
-		if templ_7745c5c3_Err != nil {
-			return templ_7745c5c3_Err
-		}
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 6, "\" data-repository-id=\"")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 6, "<div x-data=\"repositoryDesignSystem\" data-repository-design-system data-project-id=\"")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
 		var templ_7745c5c3_Var6 string
-		templ_7745c5c3_Var6, templ_7745c5c3_Err = templ.ResolveAttributeValue(repositoryID)
+		templ_7745c5c3_Var6, templ_7745c5c3_Err = templ.ResolveAttributeValue(projectID)
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `designsystem/tab_repositories.templ`, Line: 69, Col: 131}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `designsystem/tab_repositories.templ`, Line: 69, Col: 95}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var6)
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 7, "\" class=\"[ flow ]\"><template x-if=\"loadError\"><div class=\"[ banner ]\" data-tone=\"danger\" role=\"alert\" data-ds-load-error><div class=\"[ flow ] [ flow-space-3xs grow ]\"><span x-text=\"loadError.message\"></span> <span class=\"[ code ]\"><span x-text=\"loadError.code\"></span> · <span x-text=\"loadError.next\"></span></span></div><button type=\"button\" class=\"[ button ]\" data-variant=\"ghost\" data-size=\"sm\" x-on:click=\"load\">Try again</button></div></template><div class=\"[ field ]\" x-show=\"loaded\"><label for=\"repository-design-system-select\">Design system</label> <select id=\"repository-design-system-select\" data-field=\"design-system\" x-bind:disabled=\"selectDisabled\" x-bind:aria-busy=\"saving\" x-on:change=\"choose($event.target.value)\"><option value=\"\" x-bind:selected=\"isSelected('')\">None</option><template x-for=\"s in systems\" x-bind:key=\"s.id\"><option x-bind:value=\"s.id\" x-bind:selected=\"isSelected(s.id)\" x-text=\"s.name\"></option></template></select></div><p class=\"[ color-ink-muted ]\" data-no-design-systems x-show=\"noSystems\">No design systems in this project yet. <a href=\"")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 7, "\" data-repository-id=\"")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
-		var templ_7745c5c3_Var7 templ.SafeURL
-		templ_7745c5c3_Var7, templ_7745c5c3_Err = templ.JoinURLErrs(templ.URL("/projects/" + projectID + "/design-system"))
+		var templ_7745c5c3_Var7 string
+		templ_7745c5c3_Var7, templ_7745c5c3_Err = templ.ResolveAttributeValue(repositoryID)
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `designsystem/tab_repositories.templ`, Line: 90, Col: 67}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `designsystem/tab_repositories.templ`, Line: 69, Col: 131}
 		}
-		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var7))
+		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var7)
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 8, "\">Start one</a> from Design system.</p><div class=\"[ banner ]\" data-tone=\"attention\" role=\"group\" aria-label=\"Move design system\" data-ds-move x-show=\"moveOpen\"><div class=\"[ flow ] [ flow-space-3xs grow ]\"><b>Move this repository from <span x-text=\"moveFromName\"></span> to <span x-text=\"moveToName\"></span>?</b> <span>It uses <span x-text=\"moveFromName\"></span> now; it will use <span x-text=\"moveToName\"></span> instead. Agents here read <span x-text=\"moveToName\"></span> from their next session. Files already exported stay in the repository and show as edited outside the harness until you export <span x-text=\"moveToName\"></span>.</span></div><button type=\"button\" class=\"[ button ]\" data-variant=\"primary\" data-size=\"sm\" data-action=\"confirm-move\" x-on:click=\"confirmMove\">Move</button> <button type=\"button\" class=\"[ button ]\" data-size=\"sm\" data-action=\"keep-current\" x-on:click=\"keepCurrent\">Keep <span x-text=\"moveFromName\"></span></button></div><div class=\"[ field ]\" x-show=\"pathVisible\"><label for=\"repository-design-system-path\">Folder in this repository</label> <input id=\"repository-design-system-path\" data-field=\"path\" class=\"[ font-mono text-sm ]\" autocomplete=\"off\" spellcheck=\"false\" x-model=\"draft\" x-bind:aria-invalid=\"error !== null\"> <span class=\"[ hint ]\">Where an export will write the files; relative to the repository, ending in /, staying inside it. The default is <code>.harness/design-system/</code>.</span> <span class=\"[ cluster ]\"><button type=\"button\" class=\"[ button ]\" data-size=\"sm\" data-action=\"save-path\" x-bind:disabled=\"cannotSavePath\" x-on:click=\"savePath\">Save path</button></span></div><template x-if=\"error\"><span class=\"[ error ]\" data-ds-error><span x-text=\"error.message\"></span> <span class=\"[ code ]\"><span x-text=\"error.code\"></span> · <span x-text=\"error.next\"></span></span></span></template><span class=\"[ hint ]\" x-show=\"loaded\">Applying never writes to the repository, and removing leaves exported files in place. Exporting is a separate step on the design system's page.</span></div>")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 8, "\" class=\"[ flow ]\"><template x-if=\"loadError\"><div class=\"[ banner ]\" data-tone=\"danger\" role=\"alert\" data-ds-load-error><div class=\"[ flow ] [ flow-space-3xs grow ]\"><span x-text=\"loadError.message\"></span> <span class=\"[ code ]\"><span x-text=\"loadError.code\"></span> · <span x-text=\"loadError.next\"></span></span></div><button type=\"button\" class=\"[ button ]\" data-variant=\"ghost\" data-size=\"sm\" x-on:click=\"load\">Try again</button></div></template><div class=\"[ field ]\" x-show=\"loaded\"><label for=\"repository-design-system-select\">Design system</label> <select id=\"repository-design-system-select\" data-field=\"design-system\" x-bind:disabled=\"selectDisabled\" x-bind:aria-busy=\"saving\" x-on:change=\"choose($event.target.value)\"><option value=\"\" x-bind:selected=\"isSelected('')\">None</option><template x-for=\"s in systems\" x-bind:key=\"s.id\"><option x-bind:value=\"s.id\" x-bind:selected=\"isSelected(s.id)\" x-text=\"s.name\"></option></template></select></div><p class=\"[ color-ink-muted ]\" data-no-design-systems x-show=\"noSystems\">No design systems in this project yet. <a href=\"")
+		if templ_7745c5c3_Err != nil {
+			return templ_7745c5c3_Err
+		}
+		var templ_7745c5c3_Var8 templ.SafeURL
+		templ_7745c5c3_Var8, templ_7745c5c3_Err = templ.JoinURLErrs(templ.URL("/projects/" + projectID + "/design-systems"))
+		if templ_7745c5c3_Err != nil {
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `designsystem/tab_repositories.templ`, Line: 90, Col: 68}
+		}
+		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var8))
+		if templ_7745c5c3_Err != nil {
+			return templ_7745c5c3_Err
+		}
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 9, "\">Start one</a> from Design systems.</p><div class=\"[ banner ]\" data-tone=\"attention\" role=\"group\" aria-label=\"Move design system\" data-ds-move x-show=\"moveOpen\"><div class=\"[ flow ] [ flow-space-3xs grow ]\"><b>Move this repository from <span x-text=\"moveFromName\"></span> to <span x-text=\"moveToName\"></span>?</b> <span>It uses <span x-text=\"moveFromName\"></span> now; it will use <span x-text=\"moveToName\"></span> instead. Agents here read <span x-text=\"moveToName\"></span> from their next session. Files already exported stay in the repository and show as edited outside the harness until you export <span x-text=\"moveToName\"></span>.</span></div><button type=\"button\" class=\"[ button ]\" data-variant=\"primary\" data-size=\"sm\" data-action=\"confirm-move\" x-on:click=\"confirmMove\">Move</button> <button type=\"button\" class=\"[ button ]\" data-size=\"sm\" data-action=\"keep-current\" x-on:click=\"keepCurrent\">Keep <span x-text=\"moveFromName\"></span></button></div><div class=\"[ field ]\" x-show=\"pathVisible\"><label for=\"repository-design-system-path\">Folder in this repository</label> <input id=\"repository-design-system-path\" data-field=\"path\" class=\"[ font-mono text-sm ]\" autocomplete=\"off\" spellcheck=\"false\" x-model=\"draft\" x-bind:aria-invalid=\"error !== null\"> <span class=\"[ hint ]\">Where an export will write the files; relative to the repository, ending in /, staying inside it. The default is <code>.harness/design-system/</code>.</span> <span class=\"[ cluster ]\"><button type=\"button\" class=\"[ button ]\" data-size=\"sm\" data-action=\"save-path\" x-bind:disabled=\"cannotSavePath\" x-on:click=\"savePath\">Save path</button></span></div><template x-if=\"error\"><span class=\"[ error ]\" data-ds-error><span x-text=\"error.message\"></span> <span class=\"[ code ]\"><span x-text=\"error.code\"></span> · <span x-text=\"error.next\"></span></span></span></template><span class=\"[ hint ]\" x-show=\"loaded\">Applying never writes to the repository, and removing leaves exported files in place. Exporting is a separate step on the design system's page.</span></div>")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}

@@ -5,6 +5,7 @@
 package designsystem
 
 import (
+	"context"
 	"log/slog"
 	"net/http"
 	"net/url"
@@ -15,9 +16,14 @@ import (
 	"operators-mcp/internal/ports"
 )
 
-// Href is a project's Design system page; tab is "" for its first tab.
-func Href(projectID, tab string) string {
-	href := "/projects/" + url.PathEscape(projectID) + "/design-system"
+// IndexHref is a project's Design systems page.
+func IndexHref(projectID string) string {
+	return "/projects/" + url.PathEscape(projectID) + "/design-systems"
+}
+
+// Href is one design system's page; tab is "" for its first tab.
+func Href(projectID, slug, tab string) string {
+	href := IndexHref(projectID) + "/" + url.PathEscape(slug)
 	if tab != "" {
 		href += "?tab=" + url.QueryEscape(tab)
 	}
@@ -27,16 +33,18 @@ func Href(projectID, tab string) string {
 // tabs are the `?tab=` values the page opens on; anything else opens the first.
 var tabs = map[string]bool{"tokens": true, "principles": true, "repositories": true, "history": true}
 
-// Handler serves GET /projects/{project}/design-system.
+// Handler serves GET /projects/{project}/design-systems/{slug} and, until the
+// list page exists (ticket 14), GET /projects/{project}/design-systems.
 type Handler struct {
 	Projects ports.ProjectReader
-	// Designs seeds the record; nil leaves the read to the browser.
-	Designs ports.DesignSystemReader
+	// Designs finds the design system by slug and seeds its record; nil
+	// leaves every design system page not found.
+	Designs ports.DesignSystemPages
 	Layout  shell.Layout
 	Render  shell.Renderer
 }
 
-// State is the project's design system as get_design_system answers it.
+// State is the design system as get_design_system answers it.
 type State struct {
 	Exists    bool                      `json:"exists"`
 	Version   int                       `json:"version"`
@@ -47,7 +55,11 @@ type State struct {
 
 // Seed is what designSystemPage starts from.
 type Seed struct {
-	ProjectID string `json:"project_id"`
+	ProjectID      string `json:"project_id"`
+	DesignSystemID string `json:"design_system_id"`
+	Name           string `json:"name"`
+	Slug           string `json:"slug"`
+	Description    string `json:"description"`
 	// Base is the page's own path; the open tab is its ?tab= query.
 	Base string `json:"base"`
 	// Tab is the tab the address names, "" for the first.
@@ -62,34 +74,39 @@ type View struct {
 	ProjectID   string
 	ProjectName string
 	ProjectHref string
+	IndexHref   string
 	Seed        Seed
 }
 
-// Page renders the page. A failed read still renders it, and the browser
-// reads the record itself.
+// Page renders the page of the design system the slug names. A failed read of
+// its record still renders the page, and the browser reads the record itself.
 func (h Handler) Page(w http.ResponseWriter, r *http.Request) error {
 	ctx := r.Context()
 	project, err := h.Projects.GetProject(ctx, r.PathValue("project"))
 	if err != nil {
 		return err
 	}
-	seed := Seed{ProjectID: project.ID, Base: Href(project.ID, "")}
+	found, err := h.find(ctx, project.ID, r.PathValue("slug"))
+	if err != nil {
+		return err
+	}
+	seed := Seed{
+		ProjectID: project.ID, DesignSystemID: found.ID, Name: found.Name, Slug: found.Slug, Description: found.Description,
+		Base: Href(project.ID, found.Slug, ""),
+	}
 	if tab := r.URL.Query().Get("tab"); tabs[tab] {
 		seed.Tab = tab
 	}
-	if h.Designs != nil {
-		// ticket 13 re-keys this: the project's first design system stands in.
-		if ds, err := h.Designs.GetProjectDesignSystem(ctx, project.ID); err != nil {
-			slog.Warn("design system page: record not read; the browser reads it", "project", project.ID, "err", err)
-		} else {
-			seed.State = &State{Exists: ds.Exists, Version: ds.Version, UpdatedBy: ds.UpdatedBy, Record: ds.Record}
-			if ds.Exists {
-				seed.State.UpdatedAt = ds.UpdatedAt.Format(time.RFC3339)
-			}
-			seed.State.Record.Normalize()
+	if ds, err := h.Designs.GetDesignSystem(ctx, found.ID); err != nil {
+		slog.Warn("design system page: record not read; the browser reads it", "design_system", found.ID, "err", err)
+	} else {
+		seed.State = &State{Exists: ds.Exists, Version: ds.Version, UpdatedBy: ds.UpdatedBy, Record: ds.Record}
+		if ds.Exists {
+			seed.State.UpdatedAt = ds.UpdatedAt.Format(time.RFC3339)
 		}
+		seed.State.Record.Normalize()
 	}
-	frame, err := h.Layout(ctx, "Design system · "+project.Name, project.ID, "")
+	frame, err := h.Layout(ctx, found.Name+" · Design systems · "+project.Name, project.ID, "")
 	if err != nil {
 		return err
 	}
@@ -97,6 +114,50 @@ func (h Handler) Page(w http.ResponseWriter, r *http.Request) error {
 	frame.Rail.Page = shell.PageDesignSystem
 	return h.Render(w, r, http.StatusOK, PageView(View{
 		Frame: frame, ProjectID: project.ID, ProjectName: project.Name,
-		ProjectHref: "/projects/" + url.PathEscape(project.ID), Seed: seed,
+		ProjectHref: "/projects/" + url.PathEscape(project.ID), IndexHref: IndexHref(project.ID), Seed: seed,
+	}))
+}
+
+// find is the project's design system with the slug, or DESIGN_SYSTEM_NOT_FOUND.
+func (h Handler) find(ctx context.Context, projectID, slug string) (*domain.DesignSystemIdentity, error) {
+	if h.Designs != nil {
+		list, err := h.Designs.ListDesignSystems(ctx, projectID)
+		if err != nil {
+			return nil, err
+		}
+		for _, d := range list {
+			if d.Slug == slug {
+				return &d.DesignSystemIdentity, nil
+			}
+		}
+	}
+	return nil, &domain.StructuredError{Code: "DESIGN_SYSTEM_NOT_FOUND", Message: "the project has no design system “" + slug + "”"}
+}
+
+// Index stands in for the list page until ticket 14 builds it: it goes to the
+// project's first design system, or says there is none.
+func (h Handler) Index(w http.ResponseWriter, r *http.Request) error {
+	ctx := r.Context()
+	project, err := h.Projects.GetProject(ctx, r.PathValue("project"))
+	if err != nil {
+		return err
+	}
+	if h.Designs != nil {
+		list, err := h.Designs.ListDesignSystems(ctx, project.ID)
+		if err != nil {
+			return err
+		}
+		if len(list) > 0 {
+			http.Redirect(w, r, Href(project.ID, list[0].Slug, ""), http.StatusFound)
+			return nil
+		}
+	}
+	frame, err := h.Layout(ctx, "Design systems · "+project.Name, project.ID, "")
+	if err != nil {
+		return err
+	}
+	frame.Rail.Page = shell.PageDesignSystem
+	return h.Render(w, r, http.StatusOK, IndexView(View{
+		Frame: frame, ProjectID: project.ID, ProjectName: project.Name, ProjectHref: "/projects/" + url.PathEscape(project.ID),
 	}))
 }

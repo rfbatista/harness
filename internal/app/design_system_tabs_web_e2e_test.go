@@ -35,7 +35,7 @@ func TestDesignSystemPrinciplesInTheBrowserAgainstTheRealServer(t *testing.T) {
 	if testing.Short() {
 		t.Skip("browser test: skipped in -short mode")
 	}
-	pg := startDesignPage(t)
+	pg := startDesignSystemPage(t)
 	pg.mustSave(0, dsRecord())
 	me := newPerson(t)
 	text := "# Principles\n\n## Colour\n\nUse the signal colour for one action per view.\n\n## Space\n\nBreathe: spacing comes from the scale.\n"
@@ -98,7 +98,7 @@ func TestDesignSystemHistoryInTheBrowserAgainstTheRealServer(t *testing.T) {
 	if testing.Short() {
 		t.Skip("browser test: skipped in -short mode")
 	}
-	pg := startDesignPage(t)
+	pg := startDesignSystemPage(t)
 	pg.mustSave(0, dsRecord())
 	second := dsRecord()
 	second["tokens"] = append(second["tokens"].([]any), dsToken("colors", "ink", "color", "#111111"))

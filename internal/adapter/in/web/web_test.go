@@ -136,7 +136,7 @@ type world struct {
 	usage     ports.UsageDashboard
 	gitStates ports.WorktreeGit
 	archived  fakeArchivedCounts
-	designs   ports.DesignSystemReader
+	designs   ports.DesignSystemPages
 }
 
 // fakeArchivedCounts counts each project's archived tasks like planning.

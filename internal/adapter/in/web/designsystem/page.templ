@@ -2,7 +2,7 @@ package designsystem
 
 import "operators-mcp/internal/adapter/in/web/shell"
 
-// PageView is a project's Design system page. The first-start screen, the
+// PageView is the page of one design system of a project. The first-start screen, the
 // tabs and the Save bar are drawn by designSystemPage
 // (web/src/modules/designsystem) from the record the server seeds; the server
 // renders the frame around them. Each tab is one panel, so a tab that arrives
@@ -13,16 +13,15 @@ templ PageView(v View) {
 			@templ.JSONScript("design-system-seed", v.Seed)
 			<header class="[ toolbar ]">
 				<a class="[ crumb ]" href={ templ.SafeURL(v.ProjectHref) }>{ v.ProjectName } /</a>
-				<span class="[ crumb ]" aria-current="page">Design system</span>
+				<a class="[ crumb ]" href={ templ.SafeURL(v.IndexHref) }>Design systems /</a>
+				<span class="[ crumb ]" aria-current="page" x-text="name">{ v.Seed.Name }</span>
 			</header>
 			<div data-scroll class="[ arch-scroll ]">
 				<div class="[ wrapper flow ] [ region ]" style="--wrapper-max: 72rem">
 					<div class="[ arch-head ]">
 						<div class="[ flow ] [ flow-space-2xs ]">
-							<h1>Design system</h1>
-							<p class="[ color-ink-muted ]">
-								Tokens and principles that every UI repository of this project shares. Only you edit it here. Every save writes a version.
-							</p>
+							<h1><span data-design-system-name x-text="name">{ v.Seed.Name }</span> <span class="[ badge ]" data-design-system-slug x-text="slug">{ v.Seed.Slug }</span></h1>
+							<p class="[ color-ink-muted ]" data-design-system-description x-show="hasDescription" x-text="description">{ v.Seed.Description }</p>
 							<template x-if="exists">
 								<p class="[ color-ink-muted text-sm ]" data-saved-line>
 									<span x-text="savedLine"></span> · <button type="button" class="[ button ]" data-variant="ghost" data-size="sm" data-action="open-history" x-on:click="openHistory">History</button>
@@ -31,6 +30,12 @@ templ PageView(v View) {
 						</div>
 						<span class="[ badge sync ]" data-design-state x-bind:data-tone="badge.tone" x-text="badge.label"></span>
 					</div>
+					<template x-if="deleted">
+						<div class="[ banner ]" data-tone="attention" role="alert" data-deleted>
+							<span class="[ grow ]">This design system was deleted. Nothing here can be saved.</span>
+							<a class="[ button ]" data-size="sm" href={ templ.SafeURL(v.IndexHref) }>Design systems</a>
+						</div>
+					</template>
 					<template x-if="error">
 						<div class="[ banner ]" data-tone="danger" role="alert">
 							<div class="[ flow ] [ flow-space-3xs grow ]">
@@ -59,7 +64,7 @@ templ PageView(v View) {
 						</div>
 					</template>
 					<template x-if="isFirstStart">
-						@firstStart(v.ProjectName)
+						@firstStart()
 					</template>
 					<template x-if="isOpen">
 						<div class="[ arch-body ]">
@@ -75,7 +80,7 @@ templ PageView(v View) {
 							</div>
 							@tabTokens()
 							@tabPrinciples()
-							@tabRepositories(v.ProjectID)
+							@tabRepositories(v.ProjectID, v.Seed.DesignSystemID)
 							@tabHistory()
 						</div>
 					</template>
@@ -88,10 +93,10 @@ templ PageView(v View) {
 	}
 }
 
-// firstStart is the screen of a project with no design system: three starts of
+// firstStart is the screen of a design system with no version: three starts of
 // the same weight. Import and Spawn agent arrive with later slices and stay
 // inert until then; Start blank stores nothing until the first Save.
-templ firstStart(project string) {
+templ firstStart() {
 	<div id="design-system-start" class="[ flow ]">
 		<div class="[ switcher ]" style="--switcher-threshold: 48rem">
 			<div>
@@ -108,7 +113,7 @@ templ firstStart(project string) {
 				<section class="[ entry-card ]">
 					<div class="[ entry-card-body flow ]">
 						<h2>Start blank</h2>
-						<p class="[ color-ink-muted text-sm ]">An empty record for “{ project }”, ready for its first tokens.</p>
+						<p class="[ color-ink-muted text-sm ]"><span x-text="startBlankText">An empty record, ready for its first tokens.</span></p>
 						<p class="[ color-ink-faint text-sm ]">Nothing is stored until you save.</p>
 						<button type="button" class="[ button ]" data-action="start-blank" x-on:click="startBlank">Start blank</button>
 					</div>
@@ -142,4 +147,24 @@ templ saveBar() {
 			<button type="button" class="[ button ]" data-variant="primary" data-size="sm" data-action="save" x-bind:disabled="!canSave" x-bind:aria-busy="saving" x-on:click="save">Save version</button>
 		</span>
 	</div>
+}
+
+// IndexView stands in for the design systems list until ticket 14 builds it.
+templ IndexView(v View) {
+	@shell.AppShell(v.Frame) {
+		<main id="main" class="[ frame ]">
+			<header class="[ toolbar ]">
+				<a class="[ crumb ]" href={ templ.SafeURL(v.ProjectHref) }>{ v.ProjectName } /</a>
+				<span class="[ crumb ]" aria-current="page">Design systems</span>
+			</header>
+			<div data-scroll class="[ arch-scroll ]">
+				<div class="[ wrapper flow ] [ region ]" style="--wrapper-max: 72rem">
+					<h1>Design systems</h1>
+					<p class="[ color-ink-muted ]" data-no-design-systems>No design systems yet.</p>
+					<p class="[ color-ink-faint text-sm ]">Creating one arrives with the next slice.</p>
+					<button type="button" class="[ button ]" data-variant="primary" data-action="new-design-system" disabled>New design system</button>
+				</div>
+			</div>
+		</main>
+	}
 }

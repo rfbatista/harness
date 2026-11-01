@@ -202,7 +202,7 @@ func TestRepositorySettingsSelectIsDisabledWhenTheProjectHasNoDesignSystemInTheB
 		chromedp.Navigate(pg.settingsURL(id)),
 		designPoll(`document.querySelector('`+dsSelect+`')?.disabled === true`),
 		designPoll(`document.querySelector('`+dsSelectNone+`')?.textContent.includes('No design systems in this project yet')`),
-		designPoll(`document.querySelector('`+dsSelectNone+` a')?.getAttribute('href') === '/projects/`+pg.project+`/design-system'`),
+		designPoll(`document.querySelector('`+dsSelectNone+` a')?.getAttribute('href') === '/projects/`+pg.project+`/design-systems'`),
 		selectShot("repo-settings-select-empty"),
 	)
 }
@@ -211,7 +211,7 @@ func TestRepositoriesTabAndSettingsAgreeInTheBrowser(t *testing.T) {
 	if testing.Short() {
 		t.Skip("browser test: skipped in -short mode")
 	}
-	pg := startDesignPage(t)
+	pg := startDesignSystemPage(t)
 	pg.mustSave(0, dsRecord())
 	first := pg.designSystemID()
 	other := pg.createDesignSystem("brand", "Brand")
@@ -306,6 +306,7 @@ func TestAddingARepositoryToAProjectWithADesignSystemAsksOnceInTheBrowser(t *tes
 		append([]chromedp.Action{chromedp.Navigate(reposURL), designPoll(`!!document.querySelector('#repo-root')`)}, add("plain")...)...)
 	me.run(t, "still nothing asked", designPoll(`document.querySelector('`+dsQuestion+`') === null`))
 
+	pg = pg.with("app", "App", "")
 	pg.mustSave(0, dsRecord())
 
 	me.run(t, "now adding asks, and yes opts in",

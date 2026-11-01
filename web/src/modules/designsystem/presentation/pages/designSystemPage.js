@@ -1,4 +1,4 @@
-// A project's Design system page: one draft of the whole record, edited by the
+// The page of one design system of a project: one draft of the whole record, edited by the
 // tabs, beside the saved version it came from. One Save writes one version.
 //
 //   <main x-data="designSystemPage" data-seed="design-system-seed">
@@ -49,6 +49,12 @@ const supports = (property, value) => globalThis.CSS?.supports?.(property, value
 /** @param {{ gateway: ReturnType<typeof import("../../infrastructure/designsystem-gateway.js").designSystemGateway>, clock: import("../../../../shared/infrastructure/clock.js").Clock, clipboard?: { copyText: (text: string) => Promise<boolean> }, history?: History, location?: Location }} deps */
 export const designSystemPage = ({ gateway, clock, clipboard = { copyText: async () => false }, history = globalThis.history, location = globalThis.location }) => () => ({
   projectId: "",
+  designSystemId: "",
+  name: "",
+  slug: "",
+  description: "",
+  /** The design system was deleted (its change arrived and it is gone). */
+  deleted: false,
   base: "",
   tab: TABS[0].slug,
   loaded: false,
@@ -58,7 +64,7 @@ export const designSystemPage = ({ gateway, clock, clipboard = { copyText: async
   version: 0,
   updatedAt: "",
   updatedBy: "",
-  /** Start blank was pressed on a project with no design system: the record is open, nothing is stored. */
+  /** Start blank was pressed on a design system with no version: the record is open, nothing is stored. */
   started: false,
   /** The saved record as the server sent it. */
   saved: { tokens: [], principles: "", components: [] },
@@ -101,10 +107,16 @@ export const designSystemPage = ({ gateway, clock, clipboard = { copyText: async
   unfollow: null,
 
   get isFirstStart() {
-    return this.loaded && !this.exists && !this.started;
+    return this.loaded && !this.deleted && !this.exists && !this.started;
   },
   get isOpen() {
-    return this.loaded && (this.exists || this.started);
+    return this.loaded && !this.deleted && (this.exists || this.started);
+  },
+  get hasDescription() {
+    return this.description !== "";
+  },
+  get startBlankText() {
+    return `An empty record for “${this.name}”, ready for its first tokens.`;
   },
   get counts() {
     return changeCounts(this.rows, this.saved.tokens);
@@ -252,6 +264,10 @@ export const designSystemPage = ({ gateway, clock, clipboard = { copyText: async
     try {
       const seed = readSeed(this.$el);
       this.projectId = seed.project_id;
+      this.designSystemId = seed.design_system_id;
+      this.name = seed.name ?? "";
+      this.slug = seed.slug ?? "";
+      this.description = seed.description ?? "";
       this.base = seed.base;
       this.tab = tabForSlug(seed.tab ?? "").slug;
       if (seed.state) this.take(gateway.fromSeed(seed.state));
@@ -265,8 +281,9 @@ export const designSystemPage = ({ gateway, clock, clipboard = { copyText: async
     });
     if (!this.loaded) this.load();
     if (this.tab === "history") this.loadVersions();
-    this.unfollow = gateway.follow(this.projectId, {
+    this.unfollow = gateway.follow(this.projectId, this.designSystemId, {
       onSaved: (saved) => this.followed(saved),
+      onChanged: () => this.identityChanged(),
       onStatus: (status) => {
         if (status === FeedStatus.RESYNCED) this.catchUp();
       },
@@ -279,7 +296,7 @@ export const designSystemPage = ({ gateway, clock, clipboard = { copyText: async
 
   async load() {
     try {
-      this.take(await gateway.get(this.projectId));
+      this.take(await gateway.get(this.designSystemId));
       this.error = null;
     } catch (err) {
       this.error = describeError(err);
@@ -328,10 +345,25 @@ export const designSystemPage = ({ gateway, clock, clipboard = { copyText: async
     this.elsewhere = version;
   },
 
+  /** The design system's name or description changed, or it was deleted: read what it is now. */
+  async identityChanged() {
+    try {
+      const now = await gateway.identity(this.designSystemId);
+      if (now === null) {
+        this.deleted = true;
+        return;
+      }
+      this.name = now.name;
+      this.description = now.description;
+    } catch {
+      // the feed will say again; the header stays as it was
+    }
+  },
+
   /** After the feed reconnected: saves may have been missed, so ask what the server has. */
   async catchUp() {
     try {
-      this.followed({ version: (await gateway.get(this.projectId)).version });
+      this.followed({ version: (await gateway.get(this.designSystemId)).version });
     } catch {
       // the feed will say again; the page stays as it was
     }
@@ -441,7 +473,7 @@ export const designSystemPage = ({ gateway, clock, clipboard = { copyText: async
     this.announced = 0;
     this.renameError = null;
     try {
-      await gateway.rename(this.projectId, this.version, { group: was.group, name: was.name }, { group: this.renameGroup.trim(), name: this.renameName.trim() });
+      await gateway.rename(this.designSystemId, this.version, { group: was.group, name: was.name }, { group: this.renameGroup.trim(), name: this.renameName.trim() });
       await this.load();
     } catch (err) {
       if (err?.code === CHANGED) {
@@ -469,7 +501,7 @@ export const designSystemPage = ({ gateway, clock, clipboard = { copyText: async
     this.rowErrors = {};
     this.otherErrors = [];
     try {
-      await gateway.save(this.projectId, this.version, recordOf(rows, this.principles, this.components), this.message.trim());
+      await gateway.save(this.designSystemId, this.version, recordOf(rows, this.principles, this.components), this.message.trim());
       await this.load();
     } catch (err) {
       if (err?.code === CHANGED) {
@@ -562,7 +594,7 @@ export const designSystemPage = ({ gateway, clock, clipboard = { copyText: async
     this.historyBusy = true;
     this.historyAgain = false;
     try {
-      const fresh = await gateway.versions(this.projectId, { limit: VERSIONS_PAGE });
+      const fresh = await gateway.versions(this.designSystemId, { limit: VERSIONS_PAGE });
       this.versions = mergeVersions(this.versions, fresh);
       if (!this.historyLoaded) this.moreVersions = hasMore(fresh);
       this.historyLoaded = true;
@@ -581,7 +613,7 @@ export const designSystemPage = ({ gateway, clock, clipboard = { copyText: async
     if (!oldest || this.historyBusy) return;
     this.historyBusy = true;
     try {
-      const older = await gateway.versions(this.projectId, { limit: VERSIONS_PAGE, before: oldest });
+      const older = await gateway.versions(this.designSystemId, { limit: VERSIONS_PAGE, before: oldest });
       this.versions = [...this.versions, ...older];
       this.moreVersions = hasMore(older);
       this.historyError = null;
@@ -596,7 +628,7 @@ export const designSystemPage = ({ gateway, clock, clipboard = { copyText: async
   async openVersion(number) {
     this.copiedNote = "";
     try {
-      const v = await gateway.version(this.projectId, number);
+      const v = await gateway.version(this.designSystemId, number);
       this.opened = { version: v.version, at: v.at, rows: rowsFromRecord(v.record), principles: v.record.principles, components: v.record.components.length };
       this.historyError = null;
     } catch (err) {

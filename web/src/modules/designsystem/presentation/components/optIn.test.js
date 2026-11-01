@@ -16,11 +16,14 @@ function fakeGateway(initial) {
     server: initial.map((d) => ({ ...d })),
     calls: [],
     refuse: null,
-    async repositories() {
+    asked: [],
+    async repositories(projectId, designSystemId) {
+      g.asked.push([projectId, designSystemId]);
       return g.server.map(optInRow);
     },
-    async setRepository(id, uses, path, projectId, confirmMove) {
+    async setRepository(id, uses, path, projectId, confirmMove, designSystemId) {
       g.calls.push(confirmMove ? [id, uses, path, "move"] : [id, uses, path]);
+      g.applied = designSystemId;
       if (g.refuse) throw g.refuse;
       const d = g.server.find((x) => x.repository_id === id);
       d.applied_here = uses;
@@ -36,6 +39,7 @@ async function setup(initial) {
   const gateway = fakeGateway(initial);
   const el = document.createElement("div");
   el.dataset.projectId = "p1";
+  el.dataset.designSystemId = "ds1";
   const mounted = mount(designSystemOptIn({ gateway }), { el });
   await mounted.instance.init();
   return { ...mounted, gateway };
@@ -46,6 +50,13 @@ test("lists the project's repositories", async () => {
   assert.equal(instance.loaded, true);
   assert.deepEqual(instance.rows.map((r) => [r.name, r.uses, r.path]), [["api", false, ".harness/design-system/"], ["web", true, "ui/"]]);
   assert.equal(instance.isEmpty, false);
+});
+
+test("the rows are asked about the design system of the page, and switching on applies it", async () => {
+  const { instance, gateway } = await setup([dto("api")]);
+  assert.deepEqual(gateway.asked, [["p1", "ds1"]]);
+  await instance.toggle(instance.rows[0]);
+  assert.equal(gateway.applied, "ds1");
 });
 
 test("a project without repositories says so", async () => {
@@ -121,6 +132,7 @@ test("a failed read shows the coded error and can be retried", async () => {
   };
   const el = document.createElement("div");
   el.dataset.projectId = "p1";
+  el.dataset.designSystemId = "ds1";
   const { instance } = mount(designSystemOptIn({ gateway }), { el });
   await instance.init();
   assert.equal(instance.error.code, "INTERNAL");

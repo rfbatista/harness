@@ -129,9 +129,9 @@ type Deps struct {
 	// DataPaths are where the server keeps its data, for the Server page;
 	// nil leaves the page and its top bar link out.
 	DataPaths *serversettings.Paths
-	// DesignSystems reads a project's design system for its page's first
-	// paint; nil leaves the page to read it in the browser.
-	DesignSystems ports.DesignSystemReader
+	// DesignSystems resolves a design system page's slug and reads the record
+	// for its first paint; nil leaves the pages not found.
+	DesignSystems ports.DesignSystemPages
 	// Usage reads token usage for a project's Usage page and the task
 	// page's totals; nil leaves the page, its rail link and the totals out.
 	Usage ports.UsageDashboard
@@ -283,7 +283,8 @@ func NewHandler(deps Deps, assets *Assets, fallback http.Handler) http.Handler {
 		mux.Handle(session+"/map", s.page(taskPages.SessionCode(code.ViewMap)))
 	}
 	mux.Handle("GET /projects/{project}/design", s.page(taskPages.ProjectDesign))
-	mux.Handle("GET /projects/{project}/design-system", s.page(designSystemPage.Page))
+	mux.Handle("GET /projects/{project}/design-systems", s.page(designSystemPage.Index))
+	mux.Handle("GET /projects/{project}/design-systems/{slug}", s.page(designSystemPage.Page))
 	mux.Handle("GET /projects/{project}/reviews", s.page(taskPages.Reviews))
 	mux.Handle("GET /projects/{project}/archived", s.page(taskPages.Archived))
 	if deps.Usage != nil {
@@ -385,7 +386,7 @@ func (s *server) layout(ctx context.Context, title, projectID, taskID string) (s
 		frame.Rail.DocumentsHref = tasks.ProjectDocumentsHref(projectID, "")
 	}
 	frame.Rail.DesignHref = tasks.ProjectDesignHref(projectID)
-	frame.Rail.DesignSystemHref = designsystem.Href(projectID, "")
+	frame.Rail.DesignSystemHref = designsystem.IndexHref(projectID)
 	if s.deps.Usage != nil {
 		frame.Rail.UsageHref = usage.Href(projectID)
 	}
