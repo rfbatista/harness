@@ -13,9 +13,13 @@ import { baseName, isAbsolutePath, notYetAdded, relativeTo, repositoryURL } from
  * @param {{
  *   gateway: import("../../domain/ports.js").ProjectGateway,
  *   architecture?: { has: (repositoryId: string) => Promise<boolean> },
- *   designSystem?: { setRepository: (repositoryId: string, uses: boolean, path: string, projectId: string) => Promise<unknown> },
+ *   designSystem?: {
+ *     designSystems: (projectId: string) => Promise<{ id: string, name: string, version: number }[]>,
+ *     apply: (repositoryId: string, designSystemId: string | null, path: string) => Promise<unknown>,
+ *   },
  * }} deps  architecture says whether a repository has a saved architecture, for its link's words;
- *          designSystem answers the question asked after adding a repository to a project that has one.
+ *          designSystem lists the project's design systems and applies one: the question asked after adding a
+ *          repository to a project that has one.
  */
 export const repositoriesPage = ({ gateway, architecture, designSystem }) => () => ({
   projectId: "",
@@ -34,7 +38,7 @@ export const repositoriesPage = ({ gateway, architecture, designSystem }) => () 
   confirmingId: "",
   /** Repository ids known to have an architecture. @type {string[]} */
   withArchitecture: [],
-  /** Repositories just added to a project with a design system, still to be asked about it. @type {{ id: string, name: string }[]} */
+  /** Repositories just added to a project with a design system, still to be asked which it uses ("" selected: None). @type {{ id: string, name: string, selected: string, systems: { id: string, name: string, version: number }[] }[]} */
   questions: [],
   error: null,
   ready: false,
@@ -133,7 +137,7 @@ export const repositoriesPage = ({ gateway, architecture, designSystem }) => () 
         url: repositoryURL(f.remote, f.path),
         rootDir: f.path,
       });
-      this.added(repo);
+      await this.added(repo);
     } catch (err) {
       this.error = describeError(err);
     } finally {
@@ -154,7 +158,7 @@ export const repositoriesPage = ({ gateway, architecture, designSystem }) => () 
         url: repositoryURL(this.remoteUrl, rootDir),
         rootDir,
       });
-      this.added(repo);
+      await this.added(repo);
       this.rootDir = "";
       this.name = "";
       this.remoteUrl = "";
@@ -166,20 +170,46 @@ export const repositoriesPage = ({ gateway, architecture, designSystem }) => () 
   },
 
   /** Lists a repository just added, and queues the design system question when the server asked for it. */
-  added(repo) {
+  async added(repo) {
     this.repositories = [...this.repositories, repo];
-    if (repo.askDesignSystem && designSystem) this.questions = [...this.questions, { id: repo.id, name: repo.name || baseName(repo.rootDir) || repo.url }];
-  },
-
-  /** Yes opts the repository in at the default path; No leaves it off. The question is not asked again either way. */
-  async answerDesignSystem(id, uses) {
-    this.error = null;
+    if (!repo.askDesignSystem || !designSystem) return;
     try {
-      await designSystem.setRepository(id, uses, "", this.projectId);
-      this.questions = this.questions.filter((q) => q.id !== id);
+      const systems = await designSystem.designSystems(this.projectId);
+      this.questions = [...this.questions, { id: repo.id, name: repo.name || baseName(repo.rootDir) || repo.url, selected: "", systems }];
     } catch (err) {
       this.error = describeError(err);
     }
+  },
+
+  /** The select of a question moved to a design system ("" is None). */
+  chooseDesignSystem(id, designSystemId) {
+    const q = this.questions.find((x) => x.id === id);
+    if (q) q.selected = designSystemId;
+  },
+
+  isChosen(q, designSystemId) {
+    return q.selected === designSystemId;
+  },
+
+  /** Applies the chosen design system at the default path; None applies nothing. Either way the question is not asked again. */
+  async answerDesignSystem(id) {
+    const q = this.questions.find((x) => x.id === id);
+    if (!q) return;
+    this.error = null;
+    if (q.selected !== "") {
+      try {
+        await designSystem.apply(id, q.selected, "");
+      } catch (err) {
+        this.error = describeError(err);
+        return;
+      }
+    }
+    this.dismissQuestion(id);
+  },
+
+  /** Not now: the repository stays on None. */
+  dismissQuestion(id) {
+    this.questions = this.questions.filter((q) => q.id !== id);
   },
 
   askRemove(id) {

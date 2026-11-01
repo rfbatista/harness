@@ -8,6 +8,7 @@
 // writes to the repository, and removing leaves the exported files in place.
 
 import { describeError } from "../../../../shared/presentation/errors.js";
+import { DEFAULT_PATH } from "../../domain/repositories.js";
 
 /** @param {{ gateway: ReturnType<typeof import("../../infrastructure/designsystem-gateway.js").designSystemGateway> }} deps */
 export const repositoryDesignSystem = ({ gateway }) => () => ({
@@ -79,9 +80,9 @@ export const repositoryDesignSystem = ({ gateway }) => () => ({
     try {
       this.systems = await gateway.designSystems(this.projectId);
       if (this.systems.length > 0) {
-        const row = (await gateway.repositories(this.projectId)).find((r) => r.id === this.repositoryId);
-        this.applied = row?.appliedId ?? "";
-        this.path = row?.path ?? "";
+        const repo = await gateway.repository(this.repositoryId);
+        this.applied = repo.designSystemId;
+        this.path = repo.path || DEFAULT_PATH;
         this.draft = this.path;
       }
       this.selected = this.applied;

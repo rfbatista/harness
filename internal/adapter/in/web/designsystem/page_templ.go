@@ -180,7 +180,7 @@ func PageView(v View) templ.Component {
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
-			templ_7745c5c3_Err = firstStart().Render(ctx, templ_7745c5c3_Buffer)
+			templ_7745c5c3_Err = firstStart(v.ProjectID, v.Seed.DesignSystemID).Render(ctx, templ_7745c5c3_Buffer)
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
@@ -229,7 +229,7 @@ func PageView(v View) templ.Component {
 // firstStart is the screen of a design system with no version: three starts of
 // the same weight. Import and Spawn agent arrive with later slices and stay
 // inert until then; Start blank stores nothing until the first Save.
-func firstStart() templ.Component {
+func firstStart(projectID, designSystemID string) templ.Component {
 	return templruntime.GeneratedTemplate(func(templ_7745c5c3_Input templruntime.GeneratedComponentInput) (templ_7745c5c3_Err error) {
 		templ_7745c5c3_W, ctx := templ_7745c5c3_Input.Writer, templ_7745c5c3_Input.Context
 		if templ_7745c5c3_CtxErr := ctx.Err(); templ_7745c5c3_CtxErr != nil {
@@ -250,7 +250,15 @@ func firstStart() templ.Component {
 			templ_7745c5c3_Var11 = templ.NopComponent
 		}
 		ctx = templ.ClearChildren(ctx)
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 16, "<div id=\"design-system-start\" class=\"[ flow ]\"><div class=\"[ switcher ]\" style=\"--switcher-threshold: 48rem\"><div><section class=\"[ entry-card ]\"><div class=\"[ entry-card-body flow ]\"><h2>Import from a repository</h2><p class=\"[ color-ink-muted text-sm ]\">Reads <code>DESIGN.md</code> and <code>tokens.json</code> from a repository of this project. You review before anything is stored.</p><p class=\"[ color-ink-faint text-sm ]\">Not available yet.</p><button type=\"button\" class=\"[ button ]\" data-variant=\"primary\" data-action=\"import\" disabled>Preview import</button></div></section></div><div><section class=\"[ entry-card ]\"><div class=\"[ entry-card-body flow ]\"><h2>Start blank</h2><p class=\"[ color-ink-muted text-sm ]\"><span x-text=\"startBlankText\">An empty record, ready for its first tokens.</span></p><p class=\"[ color-ink-faint text-sm ]\">Nothing is stored until you save.</p><button type=\"button\" class=\"[ button ]\" data-action=\"start-blank\" x-on:click=\"startBlank\">Start blank</button></div></section></div><div><section class=\"[ entry-card ]\"><div class=\"[ entry-card-body flow ]\"><h2>Ask an agent to set it up</h2><p class=\"[ color-ink-muted text-sm ]\">An agent reads your repositories and proposes tokens and principles. You approve what lands.</p><p class=\"[ color-ink-faint text-sm ]\">Not available yet.</p><button type=\"button\" class=\"[ button ]\" data-action=\"spawn\" disabled>Spawn agent</button></div></section></div></div></div>")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 16, "<div id=\"design-system-start\" class=\"[ flow ]\"><div class=\"[ switcher ]\" style=\"--switcher-threshold: 48rem\"><div><section class=\"[ entry-card ]\"><div class=\"[ entry-card-body flow ]\"><h2>Import from a repository</h2><p class=\"[ color-ink-muted text-sm ]\">Reads <code>DESIGN.md</code> and <code>tokens.json</code> from a repository of this project. You review before anything is stored.</p><p class=\"[ color-ink-faint text-sm ]\">Not available yet.</p><button type=\"button\" class=\"[ button ]\" data-variant=\"primary\" data-action=\"import\" disabled>Preview import</button></div></section></div><div><section class=\"[ entry-card ]\"><div class=\"[ entry-card-body flow ]\"><h2>Start blank</h2><p class=\"[ color-ink-muted text-sm ]\"><span x-text=\"startBlankText\">An empty record, ready for its first tokens.</span></p><p class=\"[ color-ink-faint text-sm ]\">Nothing is stored until you save.</p><button type=\"button\" class=\"[ button ]\" data-action=\"start-blank\" x-on:click=\"startBlank\">Start blank</button></div></section></div><div><section class=\"[ entry-card ]\"><div class=\"[ entry-card-body flow ]\"><h2>Ask an agent to set it up</h2><p class=\"[ color-ink-muted text-sm ]\">An agent reads your repositories and proposes tokens and principles. You approve what lands.</p><p class=\"[ color-ink-faint text-sm ]\">Not available yet.</p><button type=\"button\" class=\"[ button ]\" data-action=\"spawn\" disabled>Spawn agent</button></div></section></div></div><section class=\"[ flow ]\" aria-labelledby=\"design-system-start-repositories\"><h2 id=\"design-system-start-repositories\">Repositories</h2>")
+		if templ_7745c5c3_Err != nil {
+			return templ_7745c5c3_Err
+		}
+		templ_7745c5c3_Err = OptIn(projectID, designSystemID).Render(ctx, templ_7745c5c3_Buffer)
+		if templ_7745c5c3_Err != nil {
+			return templ_7745c5c3_Err
+		}
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 17, "</section></div>")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
@@ -281,7 +289,7 @@ func saveBar() templ.Component {
 			templ_7745c5c3_Var12 = templ.NopComponent
 		}
 		ctx = templ.ClearChildren(ctx)
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 17, "<div class=\"[ save-bar ]\" data-save-bar role=\"region\" aria-label=\"Save\"><span class=\"[ badge ]\" data-save-state x-bind:data-tone=\"barTone\" x-text=\"barBadge\"></span> <span class=\"[ summary ]\"><span data-save-summary x-text=\"changeSummary\"></span> · <span data-save-version x-text=\"versionText\"></span></span> <input data-field=\"message\" class=\"[ text-sm ]\" style=\"inline-size: 18rem; max-inline-size: 100%\" type=\"text\" maxlength=\"200\" autocomplete=\"off\" placeholder=\"Message (optional)\" aria-label=\"Version message\" x-model=\"message\"> <span class=\"[ actions ]\"><button type=\"button\" class=\"[ button ]\" data-variant=\"ghost\" data-size=\"sm\" data-action=\"discard\" x-bind:disabled=\"!dirty\" x-on:click=\"discard\">Discard</button> <button type=\"button\" class=\"[ button ]\" data-variant=\"primary\" data-size=\"sm\" data-action=\"save\" x-bind:disabled=\"!canSave\" x-bind:aria-busy=\"saving\" x-on:click=\"save\">Save version</button></span></div>")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 18, "<div class=\"[ save-bar ]\" data-save-bar role=\"region\" aria-label=\"Save\"><span class=\"[ badge ]\" data-save-state x-bind:data-tone=\"barTone\" x-text=\"barBadge\"></span> <span class=\"[ summary ]\"><span data-save-summary x-text=\"changeSummary\"></span> · <span data-save-version x-text=\"versionText\"></span></span> <input data-field=\"message\" class=\"[ text-sm ]\" style=\"inline-size: 18rem; max-inline-size: 100%\" type=\"text\" maxlength=\"200\" autocomplete=\"off\" placeholder=\"Message (optional)\" aria-label=\"Version message\" x-model=\"message\"> <span class=\"[ actions ]\"><button type=\"button\" class=\"[ button ]\" data-variant=\"ghost\" data-size=\"sm\" data-action=\"discard\" x-bind:disabled=\"!dirty\" x-on:click=\"discard\">Discard</button> <button type=\"button\" class=\"[ button ]\" data-variant=\"primary\" data-size=\"sm\" data-action=\"save\" x-bind:disabled=\"!canSave\" x-bind:aria-busy=\"saving\" x-on:click=\"save\">Save version</button></span></div>")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}

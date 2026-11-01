@@ -1,5 +1,5 @@
 import { assert, file, test } from "../../../shared/testing/test.js";
-import { DEFAULT_PATH, EFFECT_NOTE, exportLabel, optInRow } from "./repositories.js";
+import { DEFAULT_PATH, chip, exportLabel, optInRow } from "./repositories.js";
 
 file("designsystem/domain/repositories");
 
@@ -20,6 +20,8 @@ test("the export state is not exported until the export exists, and only for a r
   assert.equal(exportLabel({ uses: false, export: null }), "");
 });
 
-test("the effect of the switch is stated in the person's words", () => {
-  assert.ok(/Nothing is written to the repository until you export/.test(EFFECT_NOTE));
+test("the chip says Applied here, which other design system it uses, or none", () => {
+  assert.deepEqual(chip(optInRow({ repository_id: "r1", design_system: { design_system_id: "ds1", name: "App" }, applied_here: true })), { label: "Applied here", tone: "signal" });
+  assert.deepEqual(chip(optInRow({ repository_id: "r2", design_system: { design_system_id: "ds2", name: "Brand" }, applied_here: false })), { label: "Uses Brand", tone: "" });
+  assert.deepEqual(chip(optInRow({ repository_id: "r3" })), { label: "No design system", tone: "" });
 });

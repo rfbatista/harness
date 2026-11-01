@@ -70,7 +70,7 @@ templ PageView(v View) {
 						</div>
 					</template>
 					<template x-if="isFirstStart">
-						@firstStart()
+						@firstStart(v.ProjectID, v.Seed.DesignSystemID)
 					</template>
 					<template x-if="isOpen">
 						<div class="[ arch-body ]">
@@ -102,7 +102,7 @@ templ PageView(v View) {
 // firstStart is the screen of a design system with no version: three starts of
 // the same weight. Import and Spawn agent arrive with later slices and stay
 // inert until then; Start blank stores nothing until the first Save.
-templ firstStart() {
+templ firstStart(projectID, designSystemID string) {
 	<div id="design-system-start" class="[ flow ]">
 		<div class="[ switcher ]" style="--switcher-threshold: 48rem">
 			<div>
@@ -136,6 +136,10 @@ templ firstStart() {
 				</section>
 			</div>
 		</div>
+		<section class="[ flow ]" aria-labelledby="design-system-start-repositories">
+			<h2 id="design-system-start-repositories">Repositories</h2>
+			@OptIn(projectID, designSystemID)
+		</section>
 	</div>
 }
 

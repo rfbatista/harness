@@ -94,9 +94,22 @@ templ RepositoriesPage(v RepositoriesView) {
 					</template>
 					<template x-for="q in questions" x-bind:key="q.id">
 						<div class="[ banner ]" data-tone="signal" role="group" aria-label="Design system" data-design-system-question>
-							<span class="[ grow ]">Use the project design system here? <b x-text="q.name"></b> can opt in now; nothing is written to it until you export.</span>
-							<button type="button" class="[ button ]" data-variant="primary" data-size="sm" data-answer="yes" x-on:click="answerDesignSystem(q.id, true)">Yes</button>
-							<button type="button" class="[ button ]" data-size="sm" data-answer="no" x-on:click="answerDesignSystem(q.id, false)">No</button>
+							<div class="[ flow ] [ flow-space-xs grow ]">
+								<b>Which design system does this repository use?</b>
+								<span><b x-text="q.name"></b> was added. Its agents can follow one of the project's design systems. None is the default: nothing changes in this repository until you choose, and nothing is exported by this step. You can change it later in repository settings or on a design system's Repositories tab.</span>
+								<div class="[ field ]">
+									<label>Design system
+										<select data-field="design-system" x-on:change="chooseDesignSystem(q.id, $event.target.value)">
+											<option value="" x-bind:selected="isChosen(q, '')">None</option>
+											<template x-for="s in q.systems" x-bind:key="s.id">
+												<option x-bind:value="s.id" x-bind:selected="isChosen(q, s.id)" x-text="s.name"></option>
+											</template>
+										</select>
+									</label>
+								</div>
+							</div>
+							<button type="button" class="[ button ]" data-size="sm" data-action="not-now" x-on:click="dismissQuestion(q.id)">Not now (None)</button>
+							<button type="button" class="[ button ]" data-variant="primary" data-size="sm" data-action="apply" x-on:click="answerDesignSystem(q.id)">Apply</button>
 						</div>
 					</template>
 					<section class="[ pane ]" aria-label="Repositories">

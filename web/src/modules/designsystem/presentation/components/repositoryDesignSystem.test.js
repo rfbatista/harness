@@ -1,7 +1,6 @@
 import { StructuredError } from "../../../../shared/domain/errors.js";
 import { mount } from "../../../../shared/testing/alpine.js";
 import { assert, file, test } from "../../../../shared/testing/test.js";
-import { optInRow } from "../../domain/repositories.js";
 import { repositoryDesignSystem } from "./repositoryDesignSystem.js";
 
 file("designsystem/presentation/components/repositoryDesignSystem");
@@ -16,13 +15,14 @@ function fakeGateway({ systems = SYSTEMS, applied = null, path = ".harness/desig
   const g = {
     state: { applied, path },
     calls: [],
+    read: [],
     refuse: null,
     async designSystems() {
       return systems;
     },
-    async repositories() {
-      const a = g.state.applied && systems.find((s) => s.id === g.state.applied);
-      return [optInRow({ repository_id: "r1", name: "spillway", design_system: a ? { design_system_id: a.id, name: a.name } : null, applied_here: false, path: g.state.path })];
+    async repository(id) {
+      g.read.push(id);
+      return { id, designSystemId: g.state.applied ?? "", path: g.state.path };
     },
     async apply(repositoryId, designSystemId, path, confirmMove) {
       g.calls.push([repositoryId, designSystemId, path, confirmMove]);
@@ -141,4 +141,9 @@ test("a failed read shows the coded error and can be retried", async () => {
   const { instance } = mount(repositoryDesignSystem({ gateway }), { el });
   await instance.init();
   assert.deepEqual([instance.loadError.code, instance.loaded], ["INTERNAL", false]);
+});
+
+test("the repository is read by its own id", async () => {
+  const { gateway } = await setup({ applied: "ds2" });
+  assert.deepEqual(gateway.read, ["r1"]);
 });

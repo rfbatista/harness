@@ -86,10 +86,13 @@ function setupAsking(ask = true) {
   const designSystem = {
     answers: [],
     refuse: null,
-    async setRepository(id, uses, path) {
-      designSystem.answers.push([id, uses, path]);
+    async designSystems() {
+      return [{ id: "ds1", name: "App", version: 3 }, { id: "ds2", name: "Brand", version: 0 }];
+    },
+    async apply(id, designSystemId, path) {
+      designSystem.answers.push([id, designSystemId, path]);
       if (designSystem.refuse) throw designSystem.refuse;
-      return { id, uses, path };
+      return { id, designSystemId, path };
     },
   };
   const el = seededElement({ project_id: "p1", repositories: [] });
@@ -99,48 +102,56 @@ function setupAsking(ask = true) {
   return { ...mounted, designSystem };
 }
 
-test("adding a repository to a project with a design system asks whether it uses it", async () => {
-  const { instance } = setupAsking();
-  assert.equal(instance.isAsking, false);
+async function addAsked(instance) {
   instance.rootDir = "/src/coding_pool/harness";
   await instance.add();
+}
+
+test("adding a repository to a project with design systems asks which it uses, None selected, the project's design systems as choices", async () => {
+  const { instance } = setupAsking();
+  assert.equal(instance.isAsking, false);
+  await addAsked(instance);
   assert.equal(instance.isAsking, true);
-  assert.deepEqual(instance.questions.map((q) => q.name), ["harness"]);
+  const [q] = instance.questions;
+  assert.deepEqual([q.name, q.selected], ["harness", ""]);
+  assert.deepEqual(q.systems.map((s) => s.name), ["App", "Brand"]);
 });
 
 test("a project without a design system asks nothing", async () => {
   const { instance } = setupAsking(false);
-  instance.rootDir = "/src/coding_pool/harness";
-  await instance.add();
+  await addAsked(instance);
   assert.equal(instance.isAsking, false);
 });
 
-test("yes opts the repository in and the question goes away", async () => {
+test("choosing a design system and applying uses it at the default path and the question goes away", async () => {
   const { instance, designSystem } = setupAsking();
-  instance.rootDir = "/src/coding_pool/harness";
-  await instance.add();
+  await addAsked(instance);
   const [q] = instance.questions;
-  await instance.answerDesignSystem(q.id, true);
-  assert.deepEqual(designSystem.answers, [[q.id, true, ""]]);
+  instance.chooseDesignSystem(q.id, "ds1");
+  await instance.answerDesignSystem(q.id);
+  assert.deepEqual(designSystem.answers, [[q.id, "ds1", ""]]);
   assert.equal(instance.isAsking, false);
 });
 
-test("no leaves the repository off, through the same endpoint, and the question goes away", async () => {
+test("applying with None selected, or Not now, calls nothing and the question goes away", async () => {
   const { instance, designSystem } = setupAsking();
-  instance.rootDir = "/src/coding_pool/harness";
-  await instance.add();
-  const [q] = instance.questions;
-  await instance.answerDesignSystem(q.id, false);
-  assert.deepEqual(designSystem.answers, [[q.id, false, ""]]);
+  await addAsked(instance);
+  await instance.answerDesignSystem(instance.questions[0].id);
   assert.equal(instance.isAsking, false);
+  await addAsked(instance);
+  instance.chooseDesignSystem(instance.questions[0].id, "ds2");
+  instance.dismissQuestion(instance.questions[0].id);
+  assert.equal(instance.isAsking, false);
+  assert.deepEqual(designSystem.answers, []);
 });
 
 test("a refused answer keeps the question and shows the coded error", async () => {
   const { instance, designSystem } = setupAsking();
   designSystem.refuse = new StructuredError("REPOSITORY_NOT_FOUND", "gone", 404);
-  instance.rootDir = "/src/coding_pool/harness";
-  await instance.add();
-  await instance.answerDesignSystem(instance.questions[0].id, true);
+  await addAsked(instance);
+  const [q] = instance.questions;
+  instance.chooseDesignSystem(q.id, "ds1");
+  await instance.answerDesignSystem(q.id);
   assert.equal(instance.isAsking, true);
   assert.equal(instance.error.code, "REPOSITORY_NOT_FOUND");
 });

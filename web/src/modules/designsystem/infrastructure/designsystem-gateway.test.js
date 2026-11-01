@@ -14,27 +14,28 @@ function gatewayAnswering(answer) {
 
 const systems = (url) => (url.endsWith("/list_design_systems") ? jsonResponse(200, { design_systems: [{ design_system_id: "ds1", name: "App", created_at: "2026-01-01T00:00:00Z", version: 12 }, { design_system_id: "ds2", name: "Brand", created_at: "2026-02-01T00:00:00Z", version: 0 }] }) : null);
 
-test("the project's repositories are asked about its first design system and come with the one each uses", async () => {
-  const { gateway, calls } = gatewayAnswering(
-    (url) =>
-      systems(url) ??
-      jsonResponse(200, {
-        repositories: [
-          { repository_id: "r1", name: "spillway", design_system: { design_system_id: "ds1", name: "App" }, applied_here: true, path: "ui/", export: null },
-          { repository_id: "r2", name: "docs", design_system: { design_system_id: "ds2", name: "Brand" }, applied_here: false, path: ".harness/design-system/", export: null },
-          { repository_id: "r3", name: "plain", design_system: null, applied_here: false, path: ".harness/design-system/", export: null },
-        ],
-      }),
+test("a design system's repositories are every repository of the project, with the design system each uses", async () => {
+  const { gateway, calls } = gatewayAnswering(() =>
+    jsonResponse(200, {
+      repositories: [
+        { repository_id: "r1", name: "spillway", design_system: { design_system_id: "ds1", name: "App" }, applied_here: true, path: "ui/", export: null },
+        { repository_id: "r2", name: "docs", design_system: { design_system_id: "ds2", name: "Brand" }, applied_here: false, path: ".harness/design-system/", export: null },
+        { repository_id: "r3", name: "plain", design_system: null, applied_here: false, path: ".harness/design-system/", export: null },
+      ],
+    }),
   );
-  const rows = await gateway.repositories("p1");
-  assert.equal(calls[1].url, "/api/list_design_system_repositories");
-  assert.equal(calls[1].init.body, '{"design_system_id":"ds1"}');
+  const rows = await gateway.repositories("ds1");
+  assert.deepEqual(calls.map((c) => c.url), ["/api/list_design_system_repositories"]);
+  assert.equal(calls[0].init.body, '{"design_system_id":"ds1"}');
   assert.deepEqual(rows.map((r) => [r.id, r.uses, r.appliedId, r.appliedName, r.path]), [["r1", true, "ds1", "App", "ui/"], ["r2", false, "ds2", "Brand", ".harness/design-system/"], ["r3", false, "", "", ".harness/design-system/"]]);
 });
 
-test("a project without design systems has no repository rows", async () => {
-  const { gateway } = gatewayAnswering(() => jsonResponse(200, { design_systems: [] }));
-  assert.deepEqual(await gateway.repositories("p1"), []);
+test("a repository is read with the design system and path it uses", async () => {
+  const { gateway, calls } = gatewayAnswering(() => jsonResponse(200, { repository: { id: "r1", design_system_id: "ds2", design_system_path: "ui/" } }));
+  assert.deepEqual(await gateway.repository("r1"), { id: "r1", designSystemId: "ds2", path: "ui/" });
+  assert.equal(calls[0].url, "/api/get_repository?repository_id=r1");
+  const none = gatewayAnswering(() => jsonResponse(200, { repository: { id: "r2", design_system_id: null } }));
+  assert.deepEqual(await none.gateway.repository("r2"), { id: "r2", designSystemId: "", path: "" });
 });
 
 test("the design systems are listed with their name and version", async () => {
@@ -67,14 +68,6 @@ test("an answer without a repository is unreadable", async () => {
   await assert.rejects(gateway.apply("r1", "ds1", ""), "BAD_RESPONSE");
 });
 
-test("the tab's switch applies the project's first design system when the page names none, or removes the one in use", async () => {
-  const { gateway, calls } = gatewayAnswering((url) => systems(url) ?? jsonResponse(200, { repository: { id: "r1", design_system_id: JSON.parse(calls.at(-1).init.body).design_system_id, design_system_path: "ui/" } }));
-  const on = await gateway.setRepository("r1", true, "ui/", "p1");
-  assert.deepEqual([JSON.parse(calls[1].init.body).design_system_id, on.uses], ["ds1", true]);
-  const off = await gateway.setRepository("r1", false, "ui/", "p1");
-  assert.deepEqual([JSON.parse(calls[2].init.body).design_system_id, off.uses], [null, false]);
-});
-
 const full = { exists: true, version: 1, record: { tokens: [], principles: "", components: [] } };
 
 test("the record is read, saved, renamed and listed by the design system's id, with no lookup", async () => {
@@ -95,15 +88,6 @@ test("the identity of a design system is its name and description, and null once
   assert.equal(await gone.gateway.identity("ds1"), null);
   const down = gatewayAnswering(() => jsonResponse(500, { error: "boom", code: "INTERNAL" }));
   await assert.rejects(down.gateway.identity("ds1"), "INTERNAL");
-});
-
-test("the tab's repositories and switch use the design system the page names", async () => {
-  const { gateway, calls } = gatewayAnswering((url) => (url.endsWith("/list_design_system_repositories") ? jsonResponse(200, { repositories: [] }) : jsonResponse(200, { repository: { id: "r1", design_system_id: "ds2", design_system_path: "ui/" } })));
-  await gateway.repositories("p1", "ds2");
-  await gateway.setRepository("r1", true, "ui/", "p1", false, "ds2");
-  assert.deepEqual(calls.map((c) => c.url), ["/api/list_design_system_repositories", "/api/set_repository_design_system"]);
-  assert.equal(JSON.parse(calls[0].init.body).design_system_id, "ds2");
-  assert.equal(JSON.parse(calls[1].init.body).design_system_id, "ds2");
 });
 
 /** The feed is the project's; the gateway hands the page only what names its design system. */

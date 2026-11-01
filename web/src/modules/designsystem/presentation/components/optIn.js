@@ -1,26 +1,26 @@
-// The "Uses the design system" switch and path of the project's repositories,
-// one row each, on the design system page's Repositories tab (ticket 15 redoes
-// it by design system). A repository's own settings use repositoryDesignSystem.
+// The Repositories tab of a design system: every repository of the project,
+// one row each, with the design system it uses (a chip), its path, and Apply
+// here or Remove. A repository's own settings use repositoryDesignSystem.
 //
-//   <div x-data="designSystemOptIn" data-project-id="p1">
+//   <div x-data="designSystemOptIn" data-project-id="p1" data-design-system-id="ds1">
 //
-// Switching saves at once, through set_repository_design_system; the path is
-// saved with its own button. Switching on a repository that uses another
-// design system asks to move it first. A refusal stays under its row.
+// Both act at once, through set_repository_design_system. Applying a
+// repository that uses another design system is refused by the server
+// (MOVE_NOT_CONFIRMED); the row then asks to move it, naming the current one,
+// and retries confirmed. Any other refusal stays under its row.
 
 import { describeError } from "../../../../shared/presentation/errors.js";
-import { EFFECT_NOTE, exportLabel } from "../../domain/repositories.js";
+import { chip, exportLabel } from "../../domain/repositories.js";
 
 /** @param {{ gateway: ReturnType<typeof import("../../infrastructure/designsystem-gateway.js").designSystemGateway> }} deps */
 export const designSystemOptIn = ({ gateway }) => () => ({
   projectId: "",
-  /** The design system the page names (BRIDGE, ticket 15: "" on a page that names none: the project's first). */
+  /** The design system the page is about. */
   designSystemId: "",
   /** @type {ReturnType<typeof import("../../domain/repositories.js").optInRow>[]} */
   rows: [],
   loaded: false,
   error: null,
-  effectNote: EFFECT_NOTE,
 
   get isEmpty() {
     return this.loaded && this.rows.length === 0;
@@ -35,7 +35,7 @@ export const designSystemOptIn = ({ gateway }) => () => ({
   async load() {
     this.error = null;
     try {
-      this.rows = await gateway.repositories(this.projectId, this.designSystemId);
+      this.rows = await gateway.repositories(this.designSystemId);
       this.loaded = true;
     } catch (err) {
       this.error = describeError(err);
@@ -45,60 +45,60 @@ export const designSystemOptIn = ({ gateway }) => () => ({
   phase(row) {
     return row.saving ? "saving" : "idle";
   },
+  chipOf(row) {
+    return chip(row);
+  },
   stateOf(row) {
     return exportLabel(row);
-  },
-  /** Which other design system the repository uses, for the note beside an unset row. */
-  elsewhere(row) {
-    return !row.uses && row.appliedName !== "" ? "Uses " + row.appliedName + " now." : "";
   },
   cannotSavePath(row) {
     return row.saving || !row.uses || row.draft === row.path;
   },
 
-  /** Flips the switch. Switching on carries the path as drafted; switching off keeps the saved one, so a path half typed never blocks it. */
-  async toggle(row) {
-    if (!row.uses && row.appliedId !== "") {
-      row.uses = true;
-      row.confirming = true;
-      return;
-    }
-    await this.save(row, !row.uses);
+  /** Applies this design system with the path as drafted; one that uses another asks to move first. */
+  async apply(row) {
+    await this.save(row, this.designSystemId, row.draft, false);
   },
 
   /** Moves the repository from the design system it uses to this one. */
   async confirmMove(row) {
     row.confirming = false;
-    row.uses = false;
-    await this.save(row, true, true);
+    await this.save(row, this.designSystemId, row.draft, true);
   },
 
   keepCurrent(row) {
     row.confirming = false;
-    row.uses = false;
+  },
+
+  /** Removes the design system in use; the saved path is sent so a half typed one is never stored. */
+  async remove(row) {
+    await this.save(row, null, row.path, false);
   },
 
   async savePath(row) {
     if (this.cannotSavePath(row)) return;
-    await this.save(row, true);
+    await this.apply(row);
   },
 
-  async save(row, uses, confirmMove = false) {
+  async save(row, designSystemId, path, confirmMove) {
     if (row.saving) return;
-    const before = row.uses;
     row.saving = true;
     row.error = null;
-    row.uses = uses; // the switch already moved under the person's hand
     try {
-      const stored = await gateway.setRepository(row.id, uses, uses ? row.draft : row.path, this.projectId, confirmMove, this.designSystemId);
-      row.uses = stored.uses;
+      const stored = await gateway.apply(row.id, designSystemId, path, confirmMove);
+      row.uses = stored.designSystemId === this.designSystemId;
+      row.appliedId = stored.designSystemId;
+      if (stored.designSystemId === "") row.appliedName = "";
       row.path = stored.path || row.path;
       row.draft = row.path;
-      row.appliedId = stored.designSystemId;
-      if (row.appliedId === "") row.appliedName = "";
+      row.confirming = false;
     } catch (err) {
-      row.uses = before;
-      row.error = describeError(err);
+      if (err?.code === "MOVE_NOT_CONFIRMED") {
+        row.movingFrom = err.details?.current?.name || row.appliedName;
+        row.confirming = true;
+      } else {
+        row.error = describeError(err);
+      }
     } finally {
       row.saving = false;
     }

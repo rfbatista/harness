@@ -4,10 +4,6 @@
 
 export const DEFAULT_PATH = ".harness/design-system/";
 
-/** Stated beside every switch: what opting in does, and what it does not. */
-export const EFFECT_NOTE =
-  "Sessions in this repository get a pointer to the design system and can read it. Nothing is written to the repository until you export.";
-
 /**
  * One repository of list_design_system_repositories, as a row the page edits:
  * the saved use and path, and a draft of the path.
@@ -21,6 +17,7 @@ export function optInRow(dto) {
     appliedId: dto?.design_system?.design_system_id ?? "",
     appliedName: dto?.design_system?.name ?? "",
     confirming: false,
+    movingFrom: "",
     path,
     draft: path,
     export: dto?.export ?? null,
@@ -33,4 +30,11 @@ export function optInRow(dto) {
 export function exportLabel(row) {
   if (!row.uses) return "";
   return row.export ? "Exported" : "Not exported yet";
+}
+
+/** The chip beside a repository: applied to this design system, using another, or using none. */
+export function chip(row) {
+  if (row.uses) return { label: "Applied here", tone: "signal" };
+  if (row.appliedId !== "") return { label: "Uses " + row.appliedName, tone: "" };
+  return { label: "No design system", tone: "" };
 }

@@ -31,16 +31,6 @@ export function designSystemGateway(api, feed) {
     };
   };
 
-  // BRIDGE (ticket 15): the Repositories tab's rows and the repository
-  // settings select still ask about the project's first design system when
-  // they are not given one.
-  const firstOf = async (projectId) => {
-    const body = await api.post("/list_design_systems", { project_id: projectId });
-    let first = null;
-    for (const d of list(body?.design_systems)) if (!first || String(d.created_at) < String(first.created_at)) first = d;
-    return first?.design_system_id ?? "";
-  };
-
   return {
     /** The state the server embedded in the page. */
     fromSeed: toState,
@@ -107,15 +97,20 @@ export function designSystemGateway(api, feed) {
       };
     },
 
-    /**
-     * The project's repositories with the design system each uses, as rows a page edits, asked about the given design system.
-     * BRIDGE (ticket 15): without one it is the project's first.
-     */
-    async repositories(projectId, designSystemId = "") {
-      const id = designSystemId || (await firstOf(projectId));
-      if (!id) return [];
-      const body = await api.post("/list_design_system_repositories", { design_system_id: id });
+    /** Every repository of the design system's project as rows a page edits, with the design system each uses. */
+    async repositories(designSystemId) {
+      const body = await api.post("/list_design_system_repositories", { design_system_id: designSystemId });
       return list(body?.repositories).map(optInRow);
+    },
+
+    /** One repository's design system ("" for none) and the folder an export writes to. */
+    async repository(repositoryId) {
+      const body = await api.get("/get_repository", { repository_id: repositoryId });
+      const repo = body?.repository;
+      if (typeof repo?.id !== "string" || repo.id === "") {
+        throw new StructuredError(Codes.BAD_RESPONSE, "The repository came back unreadable.");
+      }
+      return { id: repo.id, designSystemId: repo.design_system_id ?? "", path: repo.design_system_path ?? "" };
     },
 
     /** The project's design systems, by name, as the select lists them. */
@@ -141,14 +136,6 @@ export function designSystemGateway(api, feed) {
         throw new StructuredError(Codes.BAD_RESPONSE, "The repository came back unreadable.");
       }
       return { id: repo.id, designSystemId: repo.design_system_id ?? "", path: repo.design_system_path ?? "" };
-    },
-
-    /** Applies the given design system (BRIDGE, ticket 15: the project's first when none is given) or removes the one in use. Answers what is stored. */
-    async setRepository(repositoryId, uses, path, projectId, confirmMove = false, designSystemId = "") {
-      const id = uses ? designSystemId || (await firstOf(projectId)) : "";
-      if (uses && !id) throw new StructuredError(Codes.BAD_RESPONSE, "The project has no design system.");
-      const stored = await this.apply(repositoryId, uses ? id : null, path, confirmMove);
-      return { ...stored, uses: stored.designSystemId !== "" };
     },
 
     /** The project's design systems as the list shows them: identity, version, the repositories using each. */

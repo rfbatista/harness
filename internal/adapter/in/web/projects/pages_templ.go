@@ -137,7 +137,7 @@ func RepositoriesPage(v RepositoriesView) templ.Component {
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
-			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 5, " /</a><h1>Repositories</h1></header><div data-scroll><div class=\"[ wrapper flow ] [ region ]\" style=\"--wrapper-max: 48rem\"><p class=\"[ color-ink-muted ]\">The git checkouts this project's sessions run in. Each session gets its own worktree and branch, cut from the repository you pick.</p><template x-if=\"error\"><div class=\"[ banner ]\" data-tone=\"danger\" role=\"alert\"><div class=\"[ flow ] [ flow-space-3xs grow ]\"><span x-text=\"error.message\"></span> <span class=\"[ code ]\"><span x-text=\"error.code\"></span> · <span x-text=\"error.next\"></span></span></div><button type=\"button\" class=\"[ button ]\" data-variant=\"ghost\" data-size=\"sm\" x-on:click=\"dismissError\">Dismiss</button></div></template><template x-for=\"q in questions\" x-bind:key=\"q.id\"><div class=\"[ banner ]\" data-tone=\"signal\" role=\"group\" aria-label=\"Design system\" data-design-system-question><span class=\"[ grow ]\">Use the project design system here? <b x-text=\"q.name\"></b> can opt in now; nothing is written to it until you export.</span> <button type=\"button\" class=\"[ button ]\" data-variant=\"primary\" data-size=\"sm\" data-answer=\"yes\" x-on:click=\"answerDesignSystem(q.id, true)\">Yes</button> <button type=\"button\" class=\"[ button ]\" data-size=\"sm\" data-answer=\"no\" x-on:click=\"answerDesignSystem(q.id, false)\">No</button></div></template><section class=\"[ pane ]\" aria-label=\"Repositories\"><div x-ignore data-ssr>")
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 5, " /</a><h1>Repositories</h1></header><div data-scroll><div class=\"[ wrapper flow ] [ region ]\" style=\"--wrapper-max: 48rem\"><p class=\"[ color-ink-muted ]\">The git checkouts this project's sessions run in. Each session gets its own worktree and branch, cut from the repository you pick.</p><template x-if=\"error\"><div class=\"[ banner ]\" data-tone=\"danger\" role=\"alert\"><div class=\"[ flow ] [ flow-space-3xs grow ]\"><span x-text=\"error.message\"></span> <span class=\"[ code ]\"><span x-text=\"error.code\"></span> · <span x-text=\"error.next\"></span></span></div><button type=\"button\" class=\"[ button ]\" data-variant=\"ghost\" data-size=\"sm\" x-on:click=\"dismissError\">Dismiss</button></div></template><template x-for=\"q in questions\" x-bind:key=\"q.id\"><div class=\"[ banner ]\" data-tone=\"signal\" role=\"group\" aria-label=\"Design system\" data-design-system-question><div class=\"[ flow ] [ flow-space-xs grow ]\"><b>Which design system does this repository use?</b> <span><b x-text=\"q.name\"></b> was added. Its agents can follow one of the project's design systems. None is the default: nothing changes in this repository until you choose, and nothing is exported by this step. You can change it later in repository settings or on a design system's Repositories tab.</span><div class=\"[ field ]\"><label>Design system <select data-field=\"design-system\" x-on:change=\"chooseDesignSystem(q.id, $event.target.value)\"><option value=\"\" x-bind:selected=\"isChosen(q, '')\">None</option><template x-for=\"s in q.systems\" x-bind:key=\"s.id\"><option x-bind:value=\"s.id\" x-bind:selected=\"isChosen(q, s.id)\" x-text=\"s.name\"></option></template></select></label></div></div><button type=\"button\" class=\"[ button ]\" data-size=\"sm\" data-action=\"not-now\" x-on:click=\"dismissQuestion(q.id)\">Not now (None)</button> <button type=\"button\" class=\"[ button ]\" data-variant=\"primary\" data-size=\"sm\" data-action=\"apply\" x-on:click=\"answerDesignSystem(q.id)\">Apply</button></div></template><section class=\"[ pane ]\" aria-label=\"Repositories\"><div x-ignore data-ssr>")
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
@@ -155,7 +155,7 @@ func RepositoriesPage(v RepositoriesView) templ.Component {
 				var templ_7745c5c3_Var7 string
 				templ_7745c5c3_Var7, templ_7745c5c3_Err = templ.JoinStringErrs(r.Name)
 				if templ_7745c5c3_Err != nil {
-					return templ.Error{Err: templ_7745c5c3_Err, FileName: `projects/pages.templ`, Line: 110, Col: 50}
+					return templ.Error{Err: templ_7745c5c3_Err, FileName: `projects/pages.templ`, Line: 123, Col: 50}
 				}
 				_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var7))
 				if templ_7745c5c3_Err != nil {
@@ -168,7 +168,7 @@ func RepositoriesPage(v RepositoriesView) templ.Component {
 				var templ_7745c5c3_Var8 string
 				templ_7745c5c3_Var8, templ_7745c5c3_Err = templ.JoinStringErrs(r.RootDir)
 				if templ_7745c5c3_Err != nil {
-					return templ.Error{Err: templ_7745c5c3_Err, FileName: `projects/pages.templ`, Line: 111, Col: 73}
+					return templ.Error{Err: templ_7745c5c3_Err, FileName: `projects/pages.templ`, Line: 124, Col: 73}
 				}
 				_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var8))
 				if templ_7745c5c3_Err != nil {
@@ -181,7 +181,7 @@ func RepositoriesPage(v RepositoriesView) templ.Component {
 				var templ_7745c5c3_Var9 string
 				templ_7745c5c3_Var9, templ_7745c5c3_Err = templ.JoinStringErrs(r.Remote)
 				if templ_7745c5c3_Err != nil {
-					return templ.Error{Err: templ_7745c5c3_Err, FileName: `projects/pages.templ`, Line: 111, Col: 89}
+					return templ.Error{Err: templ_7745c5c3_Err, FileName: `projects/pages.templ`, Line: 124, Col: 89}
 				}
 				_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var9))
 				if templ_7745c5c3_Err != nil {
@@ -204,7 +204,7 @@ func RepositoriesPage(v RepositoriesView) templ.Component {
 				var templ_7745c5c3_Var10 templ.SafeURL
 				templ_7745c5c3_Var10, templ_7745c5c3_Err = templ.JoinURLErrs(templ.SafeURL(r.ArchitectureHref))
 				if templ_7745c5c3_Err != nil {
-					return templ.Error{Err: templ_7745c5c3_Err, FileName: `projects/pages.templ`, Line: 116, Col: 107}
+					return templ.Error{Err: templ_7745c5c3_Err, FileName: `projects/pages.templ`, Line: 129, Col: 107}
 				}
 				_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var10))
 				if templ_7745c5c3_Err != nil {
@@ -217,7 +217,7 @@ func RepositoriesPage(v RepositoriesView) templ.Component {
 				var templ_7745c5c3_Var11 templ.SafeURL
 				templ_7745c5c3_Var11, templ_7745c5c3_Err = templ.JoinURLErrs(templ.SafeURL(r.HistoryHref))
 				if templ_7745c5c3_Err != nil {
-					return templ.Error{Err: templ_7745c5c3_Err, FileName: `projects/pages.templ`, Line: 117, Col: 102}
+					return templ.Error{Err: templ_7745c5c3_Err, FileName: `projects/pages.templ`, Line: 130, Col: 102}
 				}
 				_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var11))
 				if templ_7745c5c3_Err != nil {
@@ -230,7 +230,7 @@ func RepositoriesPage(v RepositoriesView) templ.Component {
 				var templ_7745c5c3_Var12 templ.SafeURL
 				templ_7745c5c3_Var12, templ_7745c5c3_Err = templ.JoinURLErrs(templ.SafeURL(r.EnvHref))
 				if templ_7745c5c3_Err != nil {
-					return templ.Error{Err: templ_7745c5c3_Err, FileName: `projects/pages.templ`, Line: 118, Col: 98}
+					return templ.Error{Err: templ_7745c5c3_Err, FileName: `projects/pages.templ`, Line: 131, Col: 98}
 				}
 				_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var12))
 				if templ_7745c5c3_Err != nil {
@@ -323,7 +323,7 @@ func EnvFilesPage(v EnvFilesView) templ.Component {
 			var templ_7745c5c3_Var15 templ.SafeURL
 			templ_7745c5c3_Var15, templ_7745c5c3_Err = templ.JoinURLErrs(templ.SafeURL(RepositoriesHref(v.ProjectID)))
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `projects/pages.templ`, Line: 201, Col: 76}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `projects/pages.templ`, Line: 214, Col: 76}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var15))
 			if templ_7745c5c3_Err != nil {
@@ -336,7 +336,7 @@ func EnvFilesPage(v EnvFilesView) templ.Component {
 			var templ_7745c5c3_Var16 string
 			templ_7745c5c3_Var16, templ_7745c5c3_Err = templ.JoinStringErrs(v.ProjectName)
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `projects/pages.templ`, Line: 201, Col: 94}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `projects/pages.templ`, Line: 214, Col: 94}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var16))
 			if templ_7745c5c3_Err != nil {
@@ -349,7 +349,7 @@ func EnvFilesPage(v EnvFilesView) templ.Component {
 			var templ_7745c5c3_Var17 string
 			templ_7745c5c3_Var17, templ_7745c5c3_Err = templ.JoinStringErrs(v.RepositoryName)
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `projects/pages.templ`, Line: 201, Col: 132}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `projects/pages.templ`, Line: 214, Col: 132}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var17))
 			if templ_7745c5c3_Err != nil {
@@ -373,7 +373,7 @@ func EnvFilesPage(v EnvFilesView) templ.Component {
 				var templ_7745c5c3_Var18 string
 				templ_7745c5c3_Var18, templ_7745c5c3_Err = templ.JoinStringErrs(f.Path)
 				if templ_7745c5c3_Err != nil {
-					return templ.Error{Err: templ_7745c5c3_Err, FileName: `projects/pages.templ`, Line: 231, Col: 52}
+					return templ.Error{Err: templ_7745c5c3_Err, FileName: `projects/pages.templ`, Line: 244, Col: 52}
 				}
 				_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var18))
 				if templ_7745c5c3_Err != nil {
@@ -386,7 +386,7 @@ func EnvFilesPage(v EnvFilesView) templ.Component {
 				var templ_7745c5c3_Var19 string
 				templ_7745c5c3_Var19, templ_7745c5c3_Err = templ.JoinStringErrs(f.Content)
 				if templ_7745c5c3_Err != nil {
-					return templ.Error{Err: templ_7745c5c3_Err, FileName: `projects/pages.templ`, Line: 232, Col: 60}
+					return templ.Error{Err: templ_7745c5c3_Err, FileName: `projects/pages.templ`, Line: 245, Col: 60}
 				}
 				_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var19))
 				if templ_7745c5c3_Err != nil {
@@ -417,7 +417,7 @@ func EnvFilesPage(v EnvFilesView) templ.Component {
 				var templ_7745c5c3_Var20 string
 				templ_7745c5c3_Var20, templ_7745c5c3_Err = templ.JoinStringErrs(v.RootDir)
 				if templ_7745c5c3_Err != nil {
-					return templ.Error{Err: templ_7745c5c3_Err, FileName: `projects/pages.templ`, Line: 276, Col: 27}
+					return templ.Error{Err: templ_7745c5c3_Err, FileName: `projects/pages.templ`, Line: 289, Col: 27}
 				}
 				_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var20))
 				if templ_7745c5c3_Err != nil {
@@ -520,7 +520,7 @@ func runCommandsSection(seed RunCommandsSeed) templ.Component {
 			var templ_7745c5c3_Var22 string
 			templ_7745c5c3_Var22, templ_7745c5c3_Err = templ.JoinStringErrs(c.Name)
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `projects/pages.templ`, Line: 334, Col: 49}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `projects/pages.templ`, Line: 347, Col: 49}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var22))
 			if templ_7745c5c3_Err != nil {
@@ -533,7 +533,7 @@ func runCommandsSection(seed RunCommandsSeed) templ.Component {
 			var templ_7745c5c3_Var23 string
 			templ_7745c5c3_Var23, templ_7745c5c3_Err = templ.JoinStringErrs(c.Command)
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `projects/pages.templ`, Line: 335, Col: 57}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `projects/pages.templ`, Line: 348, Col: 57}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var23))
 			if templ_7745c5c3_Err != nil {

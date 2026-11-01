@@ -211,62 +211,113 @@ func TestRepositoriesTabAndSettingsAgreeInTheBrowser(t *testing.T) {
 	if testing.Short() {
 		t.Skip("browser test: skipped in -short mode")
 	}
-	pg := startDesignSystemPage(t)
-	pg.mustSave(0, dsRecord())
-	first := pg.designSystemID()
-	other := pg.createDesignSystem("brand", "Brand")
-	api := pg.addRepository("api")
-	web := pg.addRepository("web")
+	appPage := startDesignSystemPage(t) // App
+	appPage.mustSave(0, dsRecord())
+	brandPage := appPage.with("brand", "Brand", "") // Brand: identity only, version 0
+	app, brand := appPage.designSystemID(), brandPage.designSystemID()
+	api := appPage.addRepository("api")
+	web := appPage.addRepository("web")
+	docs := appPage.addRepository("docs")
 	me := newPerson(t)
 	rowOf := func(id string) string {
 		return `[data-design-system-optin] [data-optin-row][data-repository-id="` + id + `"]`
 	}
-	chosen := func(id string) any { return pg.repository(id)["design_system_id"] }
+	chipIs := func(id, label string) chromedp.Action {
+		return designPoll(`document.querySelector('` + rowOf(id) + ` [data-chip]')?.textContent.trim() === '` + label + `'`)
+	}
+	idle := func(id string) chromedp.Action {
+		return designPoll(`document.querySelector('` + rowOf(id) + `').dataset.phase === 'idle'`)
+	}
+	used := func(id string) any { return appPage.repository(id)["design_system_id"] }
 
-	me.run(t, "the tab lists both repositories, off, with no export state",
-		chromedp.Navigate(pg.url+"?tab=repositories"),
-		designPoll(`document.querySelectorAll('#design-system-panel-repositories [data-optin-row]').length === 2`),
-		designPoll(`document.querySelector('`+rowOf(web)+` [data-field=uses]').checked === false`),
-		designPoll(`!document.querySelector('`+rowOf(web)+` [data-export-state]')?.checkVisibility()`),
-	)
-
-	me.run(t, "switch web on here",
-		designClick(rowOf(web)+` [data-field=uses]`),
-		designPoll(`document.querySelector('`+rowOf(web)+`').dataset.phase === 'idle'`),
-		designPoll(`document.querySelector('`+rowOf(web)+` [data-export-state]')?.textContent.trim() === 'Not exported yet'`),
-		designPoll(`document.querySelector('`+rowOf(web)+` [data-field=path]').value === '.harness/design-system/'`),
+	me.run(t, "App's tab lists every repository with no design system, and no export state",
 		chromedp.EmulateViewport(1280, 900),
-		shot("repositories-tab", "light"),
+		chromedp.Navigate(appPage.url+"?tab=repositories"),
+		designPoll(`document.querySelectorAll('#design-system-panel-repositories [data-optin-row]').length === 3`),
+		chipIs(web, "No design system"),
+		designPoll(`!document.querySelector('`+rowOf(web)+` [data-export-state]')?.checkVisibility()`),
+		designPoll(`document.querySelector('`+rowOf(web)+` [data-field=path]').value === '.harness/design-system/'`),
 	)
-	if got := chosen(web); got != first {
-		t.Fatalf("the tab applied %v, want %v", got, first)
+
+	me.run(t, "applying web and api here",
+		designClick(rowOf(web)+` [data-action=apply]`),
+		chipIs(web, "Applied here"),
+		idle(web),
+		designPoll(`document.querySelector('`+rowOf(web)+` [data-export-state]')?.textContent.trim() === 'Not exported yet'`),
+		designPoll(`!!document.querySelector('`+rowOf(web)+` [data-action=remove]')?.checkVisibility()`),
+		designClick(rowOf(api)+` [data-action=apply]`),
+		chipIs(api, "Applied here"),
+		idle(api),
+	)
+	if got := used(web); got != app {
+		t.Fatalf("the tab applied %v, want %v", got, app)
 	}
 
-	me.run(t, "its settings show the same state, and the other repository is still none",
-		chromedp.Navigate(pg.settingsURL(web)),
-		designPoll(`document.querySelector('`+dsSelect+`')?.value === '`+first+`'`),
-		chromedp.Navigate(pg.settingsURL(api)),
+	me.run(t, "a refused path shows under its row and applies nothing",
+		chromedp.SetValue(rowOf(docs)+` [data-field=path]`, "ui", chromedp.ByQuery),
+		designClick(rowOf(docs)+` [data-action=apply]`),
+		designPoll(`document.querySelector('`+rowOf(docs)+` [data-optin-error]')?.textContent.includes('must end in /')`),
+		chipIs(docs, "No design system"),
+	)
+	if got := used(docs); got != nil {
+		t.Fatalf("a refused path applied %v", got)
+	}
+
+	me.run(t, "Brand's tab, identity only, is reachable and shows web uses App",
+		chromedp.Navigate(brandPage.url),
+		designPoll(`document.querySelectorAll('[data-design-system-optin] [data-optin-row]').length === 3`),
+		chipIs(web, "Uses App"),
+		chipIs(docs, "No design system"),
+	)
+
+	me.run(t, "applying web to Brand asks for the move, naming App, and applies nothing yet",
+		designClick(rowOf(web)+` [data-action=apply]`),
+		designPoll(`document.querySelector('`+rowOf(web)+` [data-optin-move]')?.checkVisibility() === true`),
+		designPoll(`document.querySelector('`+rowOf(web)+` [data-optin-move]').textContent.includes('App')`),
+		selectShot("ds-repositories-move"),
+	)
+	if got := used(web); got != app {
+		t.Fatalf("the question moved it: %v", got)
+	}
+
+	me.run(t, "keeping App closes the question, then confirming moves it",
+		designClick(rowOf(web)+` [data-optin-move] [data-action=keep]`),
+		designPoll(`document.querySelector('`+rowOf(web)+` [data-optin-move]')?.checkVisibility() === false`),
+		chipIs(web, "Uses App"),
+		designClick(rowOf(web)+` [data-action=apply]`),
+		designPoll(`document.querySelector('`+rowOf(web)+` [data-optin-move]')?.checkVisibility() === true`),
+		designClick(rowOf(web)+` [data-optin-move] [data-action=move]`),
+		chipIs(web, "Applied here"),
+		idle(web),
+	)
+	if got := used(web); got != brand {
+		t.Fatalf("after the move: %v, want %v", got, brand)
+	}
+
+	me.run(t, "the repository's settings select shows Brand after a reload",
+		chromedp.Navigate(appPage.settingsURL(web)),
+		designPoll(`document.querySelector('`+dsSelect+`')?.value === '`+brand+`'`),
+	)
+
+	me.run(t, "App's tab now says web uses Brand",
+		chromedp.Navigate(appPage.url+"?tab=repositories"),
+		chipIs(web, "Uses Brand"),
+		chipIs(api, "Applied here"),
+		chipIs(docs, "No design system"),
+		selectShot("ds-repositories-tab"),
+	)
+
+	me.run(t, "removing web from Brand's tab leaves it with none",
+		chromedp.Navigate(brandPage.url),
+		chipIs(web, "Applied here"),
+		designClick(rowOf(web)+` [data-action=remove]`),
+		chipIs(web, "No design system"),
+		idle(web),
+		chromedp.Navigate(appPage.settingsURL(web)),
 		designPoll(`document.querySelector('`+dsSelect+`')?.value === ''`),
 	)
-
-	me.run(t, "a change in settings is seen in the tab after a reload",
-		chooseDesignSystem(first),
-		designPoll(`document.querySelector('`+dsSelectPath+`')?.checkVisibility() === true && document.querySelector('`+dsSelect+`').disabled === false`),
-		chromedp.Navigate(pg.url+"?tab=repositories"),
-		designPoll(`document.querySelector('`+rowOf(api)+` [data-field=uses]')?.checked === true`),
-	)
-
-	pg.mustPost("set_repository_design_system", map[string]any{"repository_id": api, "design_system_id": other, "confirm_move": true})
-	me.run(t, "a repository that uses another design system is moved here after confirming",
-		chromedp.Navigate(pg.url+"?tab=repositories"),
-		designPoll(`document.querySelector('`+rowOf(api)+` [data-elsewhere]')?.textContent.trim() === 'Uses Brand now.'`),
-		designClick(rowOf(api)+` [data-field=uses]`),
-		designPoll(`document.querySelector('`+rowOf(api)+` [data-optin-move]')?.checkVisibility() === true`),
-		designClick(rowOf(api)+` [data-optin-move] [data-action=move]`),
-		designPoll(`document.querySelector('`+rowOf(api)+`').dataset.phase === 'idle' && document.querySelector('`+rowOf(api)+` [data-optin-move]')?.checkVisibility() === false`),
-	)
-	if got := chosen(api); got != first {
-		t.Fatalf("after the move: %v, want %v", got, first)
+	if got := used(web); got != nil {
+		t.Fatalf("after removing: %v", got)
 	}
 }
 
@@ -301,35 +352,54 @@ func TestAddingARepositoryToAProjectWithADesignSystemAsksOnceInTheBrowser(t *tes
 		t.Fatalf("no repository %q", name)
 		return ""
 	}
+	qSelect := dsQuestion + ` [data-field=design-system]`
+	choose := func(value string) chromedp.Action {
+		return designPoll(`(() => { const s = document.querySelector('` + qSelect + `'); if (!s) return false; s.value = ` + jsString(value) + `; s.dispatchEvent(new Event('change', { bubbles: true })); return true; })()`)
+	}
 
 	me.run(t, "no design system yet: nothing is asked",
 		append([]chromedp.Action{chromedp.Navigate(reposURL), designPoll(`!!document.querySelector('#repo-root')`)}, add("plain")...)...)
 	me.run(t, "still nothing asked", designPoll(`document.querySelector('`+dsQuestion+`') === null`))
 
-	pg = pg.with("app", "App", "")
-	pg.mustSave(0, dsRecord())
+	a := pg.with("app", "App", "")
+	a.mustSave(0, dsRecord())
+	pg.with("brand", "Brand", "")
 
-	me.run(t, "now adding asks, and yes opts in",
+	me.run(t, "adding asks which design system, with None selected and the project's design systems offered",
 		append([]chromedp.Action{chromedp.Navigate(reposURL), designPoll(`!!document.querySelector('#repo-root')`)}, add("api")...)...)
 	me.run(t, "the question names the repository",
-		designPoll(`document.querySelector('`+dsQuestion+`')?.textContent.includes('Use the project design system here?') && document.querySelector('`+dsQuestion+`').textContent.includes('api')`),
+		designPoll(`document.querySelector('`+dsQuestion+`')?.textContent.includes('Which design system does this repository use?') && document.querySelector('`+dsQuestion+`').textContent.includes('api')`),
+		designPoll(`document.querySelector('`+qSelect+`')?.value === ''`),
+		designPoll(`[...document.querySelectorAll('`+qSelect+` option')].map((o) => o.textContent.trim()).join(',') === 'None,App,Brand'`),
 		chromedp.EmulateViewport(1280, 900),
-		shot("new-repo-prompt", "light"),
-		designClick(dsQuestion+` [data-answer=yes]`),
+		selectShot("ds-new-repo-prompt"),
+		choose(a.designSystemID()),
+		designClick(dsQuestion+` [data-action=apply]`),
 		designPoll(`document.querySelector('`+dsQuestion+`') === null`),
 	)
-	if r := pg.repository(idOf("api")); r["design_system_id"] == nil {
-		t.Fatalf("yes: %v", r)
+	if r := pg.repository(idOf("api")); r["design_system_id"] != a.designSystemID() || r["design_system_path"] != ".harness/design-system/" {
+		t.Fatalf("choosing App: %v", r)
 	}
 
-	me.run(t, "no leaves the next one off",
+	me.run(t, "Not now leaves the next one unapplied",
 		append(add("web"),
-			designPoll(`!!document.querySelector('`+dsQuestion+` [data-answer=no]')`),
-			designClick(dsQuestion+` [data-answer=no]`),
+			designPoll(`!!document.querySelector('`+dsQuestion+` [data-action=not-now]')`),
+			choose(a.designSystemID()),
+			designClick(dsQuestion+` [data-action=not-now]`),
 			designPoll(`document.querySelector('`+dsQuestion+`') === null`),
 		)...)
 	if r := pg.repository(idOf("web")); r["design_system_id"] != nil {
-		t.Fatalf("no: %v", r)
+		t.Fatalf("not now: %v", r)
+	}
+
+	me.run(t, "Apply with None selected leaves the next one unapplied",
+		append(add("docs"),
+			designPoll(`document.querySelector('`+qSelect+`')?.value === ''`),
+			designClick(dsQuestion+` [data-action=apply]`),
+			designPoll(`document.querySelector('`+dsQuestion+`') === null`),
+		)...)
+	if r := pg.repository(idOf("docs")); r["design_system_id"] != nil {
+		t.Fatalf("None: %v", r)
 	}
 
 	me.run(t, "the question does not come back after a reload",
