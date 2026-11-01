@@ -173,10 +173,16 @@ func TestInstructionsDeepLinkOpensTheFileOrSaysItIsNotFound(t *testing.T) {
 func TestInstructionsDeliveryNoteAndKeyboard(t *testing.T) {
 	rig := instructionRig(t)
 	openInstructions(t, rig, "", 1440)
-	var note string
-	rig.run(t, chromedp.Evaluate(`document.querySelector('`+instructionsPanel+` [data-delivery-note]').textContent.replace(/\s+/g, ' ').trim()`, &note))
-	if !strings.Contains(note, "when their session starts") || !strings.Contains(note, "running sessions keep") {
+	var note, panel string
+	rig.run(t,
+		chromedp.Evaluate(`document.querySelector('`+instructionsPanel+` [data-delivery-note]').textContent.replace(/\s+/g, ' ').trim()`, &note),
+		chromedp.Evaluate(`document.querySelector('`+instructionsPanel+`').textContent.replace(/\s+/g, ' ')`, &panel),
+	)
+	if !strings.Contains(note, "Running sessions keep the copy they started with") {
 		t.Fatalf("delivery note = %q", note)
+	}
+	if !strings.Contains(panel, "The harness keeps them, not the repository, and hands them to each agent when its session starts.") || strings.Contains(panel, "never the prose") {
+		t.Fatalf("the tab's description is out of date: %q", panel)
 	}
 	rig.run(t,
 		chromedp.Evaluate(`document.querySelector('`+instructionsPanel+` [data-open-file][aria-label="Open CLAUDE.md"]').focus()`, nil),
