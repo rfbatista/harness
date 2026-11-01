@@ -9,13 +9,27 @@ import (
 	"operators-mcp/internal/ports"
 )
 
-// architectureSection is the brief's part about the repository architecture
-// (contract "Harness server ↔ Agent sessions — repository architecture
-// record"): for a session working in a repository that has a record, where to
-// read it and which layers its agent may change; for an architect, every
-// record of the project. A repository with no record adds nothing. The brief
-// is fixed when the session starts: rules apply live, the text does not.
+// architectureSection is the brief's part about the repository architecture:
+// one pointer line to the ARCHITECTURE.md the session is delivered, and to the
+// record in its virtual shell (ADR 0057). A repository with no record, and a
+// project with none for an architect, add nothing.
 func (s *Service) architectureSection(ctx context.Context, role domain.SessionRole, agent *domain.Agent, projectID, repositoryID string) string {
+	if s.architectureSummary(ctx, role, agent, projectID, repositoryID) == "" {
+		return ""
+	}
+	if role == domain.RoleArchitect {
+		return "## Repository architecture\n\nThe project's architecture records are summarised in ARCHITECTURE.md, delivered with this session; each is a read-only file in your virtual shell, project/architecture/<repo>.yaml."
+	}
+	return "## Repository architecture\n\nThis repository's architecture (your layers, your access and its rules) is in ARCHITECTURE.md, delivered with this session; the record is project/architecture/<repo>.yaml in your virtual shell."
+}
+
+// architectureSummary is the text of ARCHITECTURE.md (contract "Harness
+// server ↔ Agent sessions — repository architecture record"): for a session
+// working in a repository that has a record, where to read it and which
+// layers its agent may change; for an architect, every record of the project.
+// A repository with no record has none. It is fixed when the session starts:
+// rules apply live, the text does not.
+func (s *Service) architectureSummary(ctx context.Context, role domain.SessionRole, agent *domain.Agent, projectID, repositoryID string) string {
 	if s.Architectures == nil || projectID == "" {
 		return ""
 	}

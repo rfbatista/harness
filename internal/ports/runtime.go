@@ -33,6 +33,14 @@ type Launcher interface {
 	Launch(ctx context.Context, spec AgentSpec, size TermSize, shell Shell) (PTYProcess, error)
 }
 
+// AgentInstructionFile is one instruction file of an AgentSpec: Kind is
+// memory, skill or subagent, Path is repository-relative.
+type AgentInstructionFile struct {
+	Kind    string `json:"kind"`
+	Path    string `json:"path"`
+	Content []byte `json:"content"`
+}
+
 // AgentSpec is everything the server resolved for one interactive session:
 // what to run and with which agent configuration. It crosses the wire, so the
 // process can be started wherever the session runs.
@@ -56,6 +64,9 @@ type AgentSpec struct {
 	AddDirs      []string        `json:"add_dirs,omitempty"`
 	// SkillDirs are plugin directories carrying the agent's skills.
 	SkillDirs []string `json:"skill_dirs,omitempty"`
+	// InstructionFiles are the repository's instruction files the harness
+	// keeps (ADR 0057), delivered outside the worktree.
+	InstructionFiles []AgentInstructionFile `json:"instruction_files,omitempty"`
 	// HookURL, when set, is where the CLI reports the conversation it is in
 	// (claude's SessionStart hook).
 	HookURL string `json:"hook_url,omitempty"`

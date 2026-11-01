@@ -372,7 +372,7 @@ func (s *Service) AnnounceChange(c ports.ProjectChange) {
 		s.changed(c.ProjectID(), c.TicketComment.Comment.TicketID)
 	case c.TicketResource != nil && c.TicketResource.Resource != nil:
 		s.changed(c.ProjectID(), c.TicketResource.Resource.TicketID)
-	case c.ArchitectureChanged != nil:
+	case c.ArchitectureChanged != nil, c.InstructionFileChanged != nil:
 		s.changed(c.ProjectID(), "")
 	}
 }

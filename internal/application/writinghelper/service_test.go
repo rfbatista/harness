@@ -386,3 +386,62 @@ func TestEveryTextOfARequestIsBounded(t *testing.T) {
 		}
 	}
 }
+
+func instructionReq(step string) writinghelper.Request {
+	return writinghelper.Request{
+		ProjectID: "p1", Step: step,
+		Field:    writinghelper.Field{Kind: "instruction_file", Text: "Always run the tests before you commit."},
+		Siblings: []writinghelper.Sibling{{Label: "Path", Text: ".claude/agents/reviewer.md"}, {Label: "Kind", Text: "subagent"}},
+	}
+}
+
+func TestAnInstructionFileIsWrittenAsInstructionsForACodingAgent(t *testing.T) {
+	for _, step := range []string{"analyze", "draft"} {
+		f := &fakeStreamer{pieces: []string{"ok"}, answer: `{"already_good":true,"questions":[]}`}
+		if _, err := newRig(f).run(t, instructionReq(step)); err != nil {
+			t.Fatalf("%s: %v", step, err)
+		}
+		sys := strings.ToLower(f.calls[0].System)
+		for _, want := range []string{"instruction file", "coding agent", "imperative", "no filler"} {
+			if !strings.Contains(sys, want) {
+				t.Errorf("%s system prompt lacks %q", step, want)
+			}
+		}
+		in := f.calls[0].Input
+		for _, want := range []string{`kind="instruction_file"`, ".claude/agents/reviewer.md", "subagent", "Always run the tests"} {
+			if !strings.Contains(in, want) {
+				t.Errorf("%s input lacks %q:\n%s", step, want, in)
+			}
+		}
+		if !strings.Contains(sys, "[open:") {
+			t.Errorf("%s system prompt lost the rules", step)
+		}
+	}
+}
+
+func TestOnlyAnInstructionFileMayBeLongerThan20000CharactersAndAtMost256KB(t *testing.T) {
+	big := strings.Repeat("x", 200*1024)
+	f := &fakeStreamer{pieces: []string{"ok"}}
+	req := instructionReq("draft")
+	req.Field.Text = big
+	req.Draft, req.Request = big, "Shorter"
+	if _, err := newRig(f).run(t, req); err != nil {
+		t.Fatalf("a 200 KB instruction file: %v", err)
+	}
+
+	over := instructionReq("draft")
+	over.Field.Text = strings.Repeat("x", 256*1024+1)
+	other := instructionReq("draft")
+	other.Field.Text = big
+	other.Field.Kind = "task_description"
+	longRequest := instructionReq("draft")
+	longRequest.Request = strings.Repeat("x", 20001)
+	longSibling := instructionReq("draft")
+	longSibling.Siblings[0].Text = strings.Repeat("x", 20001)
+	for name, r := range map[string]writinghelper.Request{"over 256 KB": over, "another kind at 200 KB": other, "long request": longRequest, "long sibling": longSibling} {
+		f := &fakeStreamer{}
+		if _, err := newRig(f).run(t, r); code(err) != "INVALID_INPUT" || len(f.calls) != 0 {
+			t.Errorf("%s: err = %v, calls = %d", name, err, len(f.calls))
+		}
+	}
+}

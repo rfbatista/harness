@@ -11,7 +11,7 @@
 import { describeError } from "../../../../shared/presentation/errors.js";
 import { readSeed } from "../../../../shared/presentation/seed.js";
 import { AGENT_FILTERS, agentDetail, agentRows, agentsFooter } from "../../domain/library.js";
-import { renderMarkdown } from "../../domain/markdown.js";
+import { renderMarkdown } from "../../../../shared/domain/markdown.js";
 import { MCP_FILTERS, mcpDetail, mcpFooter, mcpRows } from "../../domain/mcp.js";
 import { SKILL_FILTERS, SKILL_PAGE, skillFiles, skillReach, skillRows, skillSummary, skillsFooter } from "../../domain/skills.js";
 import { TABS, routeOf, tabAfterKey } from "../../domain/tabs.js";

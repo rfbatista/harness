@@ -110,7 +110,7 @@ func TestEntriesAddedInTheDescriptiveTabsAreSavedAndReloaded(t *testing.T) {
 		chromedp.Navigate(rig.url("")),
 		poll(`document.querySelectorAll('[data-count]').length === 6`),
 		// Instructions & rules
-		archClick(`#architecture-panel-instructions [data-add]`),
+		archClick(`#architecture-panel-instructions [data-add-entry]`),
 		archFill("instructions", 2, "path", "docs/ARCH.md"),
 		archFill("instructions", 2, "kind", "skill"),
 		archFill("instructions", 2, "loaded", "on_demand"),

@@ -126,7 +126,7 @@ func (s *archRecordServer) layerZones() []*domain.Zone {
 func sample() map[string]any {
 	return map[string]any{
 		"version": 1, "repository": "widgets", "pattern": "hexagonal",
-		"instructions": []any{map[string]any{"path": "CLAUDE.md", "kind": "rules", "applies_to": []any{"all"}, "loaded": "always"}},
+		"instructions": []any{map[string]any{"path": "CLAUDE.md", "kind": "memory", "applies_to": []any{"all"}, "loaded": "always"}},
 		"tools":        []any{map[string]any{"name": "codegraph", "kind": "mcp", "used_by": []any{"all"}, "writes": false, "usage": "Query the code graph."}},
 		"sandboxes":    []any{map[string]any{"name": "seatbelt", "runs": "Every session.", "can_reach": []any{"the worktree"}, "cannot_reach": []any{"~/.ssh"}, "used_by": []any{"all"}}},
 		"orchestration": map[string]any{
@@ -596,9 +596,9 @@ func TestRepositoryArchitecture_DiscoveryFindsInstructionsToolsAndSandboxesWitho
 		instr[m["path"].(string)] = cand{m["kind"].(string), m["loaded"].(string), ""}
 	}
 	want := map[string]cand{
-		"CLAUDE.md": {"rules", "always", ""}, "AGENTS.md": {"rules", "always", ""}, "web/GEMINI.md": {"rules", "always", ""},
-		"services/api/AGENTS.md": {"rules", "always", ""}, ".claude/skills/review/SKILL.md": {"skill", "on_demand", ""},
-		".claude/agents/reviewer.md": {"subagent_prompt", "on_demand", ""},
+		"CLAUDE.md": {"memory", "always", ""}, "AGENTS.md": {"memory", "always", ""}, "web/GEMINI.md": {"memory", "always", ""},
+		"services/api/AGENTS.md": {"memory", "always", ""}, ".claude/skills/review/SKILL.md": {"skill", "on_demand", ""},
+		".claude/agents/reviewer.md": {"subagent", "on_demand", ""},
 	}
 	for path, c := range want {
 		if instr[path] != c {

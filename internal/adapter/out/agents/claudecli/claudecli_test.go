@@ -144,3 +144,33 @@ func TestASpecsExtraSettingsReachClaudesSettings(t *testing.T) {
 		t.Errorf("settings = %s", b)
 	}
 }
+
+func TestAnInteractiveSpecsInstructionFilesReachLlmkitAndLoadAsMemoryAndAPlugin(t *testing.T) {
+	spec := ports.AgentSpec{
+		SessionID: "s1", Dir: t.TempDir(), Conversation: ports.Conversation{ID: "s1"},
+		InstructionFiles: []ports.AgentInstructionFile{
+			{Kind: "memory", Path: "CLAUDE.md", Content: []byte("memory")},
+			{Kind: "skill", Path: ".claude/skills/review/SKILL.md", Content: []byte("skill")},
+			{Kind: "subagent", Path: ".claude/agents/reviewer.md", Content: []byte("agent")},
+		},
+	}
+	cmd, err := commandOf(t, spec, "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	args := strings.Join(cmd.Args, " ")
+	for _, flag := range []string{"--add-dir", "--plugin-dir"} {
+		if !strings.Contains(args, flag) {
+			t.Errorf("no %s in %v", flag, cmd.Args)
+		}
+	}
+	// llmkit turns the CLAUDE.md loading on itself; the harness never does.
+	if envOf(cmd.Env, "CLAUDE_CODE_ADDITIONAL_DIRECTORIES_CLAUDE_MD") != "1" {
+		t.Errorf("env = %v", cmd.Env)
+	}
+
+	spec.InstructionFiles = []ports.AgentInstructionFile{{Kind: "skill", Path: ".claude/skills/review/notes.md", Content: []byte("x")}}
+	if _, err := commandOf(t, spec, ""); !errors.Is(err, llmkit.ErrInvalidInstructions) || !strings.Contains(err.Error(), ".claude/skills/review") {
+		t.Errorf("a skill folder without SKILL.md: %v", err)
+	}
+}

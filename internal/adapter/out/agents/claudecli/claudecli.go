@@ -165,6 +165,9 @@ func Config(spec ports.AgentSpec) (claude.InteractiveConfig, error) {
 		Attribution:  spec.SessionID,
 		Settings:     sessionSettings(spec.HookURL, spec.Hooks, spec.Settings),
 	}
+	for _, f := range spec.InstructionFiles {
+		cfg.InstructionFiles = append(cfg.InstructionFiles, llmkit.InstructionFile{Kind: llmkit.InstructionKind(f.Kind), Path: f.Path, Content: f.Content})
+	}
 	switch spec.Permission {
 	case "accept_edits":
 		cfg.PermissionMode = "acceptEdits"
