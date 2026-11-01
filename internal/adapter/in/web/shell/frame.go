@@ -139,12 +139,13 @@ type Option struct{ ID, Name string }
 
 // The project pages the rail links to; Rail.Page marks the current one.
 const (
-	PageBoard     = "board"
-	PageCode      = "code"
-	PageReviews   = "reviews"
-	PageDocuments = "documents"
-	PageDesign    = "design"
-	PageUsage     = "usage"
+	PageBoard        = "board"
+	PageCode         = "code"
+	PageReviews      = "reviews"
+	PageDocuments    = "documents"
+	PageDesign       = "design"
+	PageDesignSystem = "design-system"
+	PageUsage        = "usage"
 )
 
 // Rail is the current project's tasks, in kanban groups, and the ways to its
@@ -166,6 +167,8 @@ type Rail struct {
 	// DesignHref is the project's design assets: the artifacts moved to
 	// project level.
 	DesignHref string
+	// DesignSystemHref is the project's design system page.
+	DesignSystemHref string
 	// ReviewsHref is the project's review inbox: the requests its tasks'
 	// architects raised for the person; Reviews counts the pending ones.
 	ReviewsHref string

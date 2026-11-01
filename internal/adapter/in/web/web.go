@@ -24,6 +24,7 @@ import (
 	"operators-mcp/internal/adapter/in/web/architecture"
 	"operators-mcp/internal/adapter/in/web/code"
 	"operators-mcp/internal/adapter/in/web/credentials"
+	"operators-mcp/internal/adapter/in/web/designsystem"
 	"operators-mcp/internal/adapter/in/web/history"
 	"operators-mcp/internal/adapter/in/web/home"
 	"operators-mcp/internal/adapter/in/web/models"
@@ -128,6 +129,9 @@ type Deps struct {
 	// DataPaths are where the server keeps its data, for the Server page;
 	// nil leaves the page and its top bar link out.
 	DataPaths *serversettings.Paths
+	// DesignSystems reads a project's design system for its page's first
+	// paint; nil leaves the page to read it in the browser.
+	DesignSystems ports.DesignSystemReader
 	// Usage reads token usage for a project's Usage page and the task
 	// page's totals; nil leaves the page, its rail link and the totals out.
 	Usage ports.UsageDashboard
@@ -211,6 +215,7 @@ func NewHandler(deps Deps, assets *Assets, fallback http.Handler) http.Handler {
 		codePages.Branches = deps.Workspaces
 	}
 	architecturePages := architecture.Handler{Projects: deps.Projects, Repositories: deps.Repositories, Layout: s.layout, Render: render}
+	designSystemPage := designsystem.Handler{Projects: deps.Projects, Designs: deps.DesignSystems, Layout: s.layout, Render: render}
 	toProject := func(w http.ResponseWriter, r *http.Request) {
 		http.Redirect(w, r, "/projects/"+url.PathEscape(r.PathValue("project")), http.StatusFound)
 	}
@@ -278,6 +283,7 @@ func NewHandler(deps Deps, assets *Assets, fallback http.Handler) http.Handler {
 		mux.Handle(session+"/map", s.page(taskPages.SessionCode(code.ViewMap)))
 	}
 	mux.Handle("GET /projects/{project}/design", s.page(taskPages.ProjectDesign))
+	mux.Handle("GET /projects/{project}/design-system", s.page(designSystemPage.Page))
 	mux.Handle("GET /projects/{project}/reviews", s.page(taskPages.Reviews))
 	mux.Handle("GET /projects/{project}/archived", s.page(taskPages.Archived))
 	if deps.Usage != nil {
@@ -379,6 +385,7 @@ func (s *server) layout(ctx context.Context, title, projectID, taskID string) (s
 		frame.Rail.DocumentsHref = tasks.ProjectDocumentsHref(projectID, "")
 	}
 	frame.Rail.DesignHref = tasks.ProjectDesignHref(projectID)
+	frame.Rail.DesignSystemHref = designsystem.Href(projectID, "")
 	if s.deps.Usage != nil {
 		frame.Rail.UsageHref = usage.Href(projectID)
 	}
