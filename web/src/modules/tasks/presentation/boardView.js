@@ -27,17 +27,18 @@ export const taskHref = (projectId, taskId) => `/projects/${encodeURIComponent(p
  *   byTask: Record<string, import("../domain/activity.js").Activity>,
  *   fresh: Set<string>,
  *   now: Date,
+ *   open?: (id: string) => boolean,  a feature card is open (its children listed)
  *   pending?: Record<string, string>,  per card with a move in flight, the status it goes to
  *   failed?: Set<string>,              cards that went back after a refused move
  *   drag?: { id: string, from: string, over: string } | null,  the card being dragged, its column, and the column under the pointer ("" for none)
  *   fine?: boolean,                    a fine pointer: cards drag (touch uses the menu)
  * }} ctx
  */
-export function toColumns(tasks, { projectId, byTask, fresh, now, pending = {}, failed = new Set(), drag = null, fine = false }) {
+export function toColumns(tasks, { projectId, byTask, fresh, now, open = () => false, pending = {}, failed = new Set(), drag = null, fine = false }) {
   const cols = byStatus(tasks.filter((t) => !isInsideCard(tasks, t)));
   return STATUSES.map(({ value, label }) => {
     const cards = cols[value].map((t) =>
-      toCard(t, { projectId, byTask, fresh: fresh.has(t.id), now, pendingTo: pending[t.id] ?? "", failed: failed.has(t.id), ghost: drag?.id === t.id, fine, all: tasks }),
+      toCard(t, { projectId, byTask, fresh: fresh.has(t.id), open: open(t.id), now, pendingTo: pending[t.id] ?? "", failed: failed.has(t.id), ghost: drag?.id === t.id, fine, all: tasks }),
     );
     const waiting = value === "review" && cards.length > 0;
     const under = Boolean(drag) && drag.over === value;
@@ -63,7 +64,7 @@ export function toColumns(tasks, { projectId, byTask, fresh, now, pending = {}, 
 }
 
 /** all: every task of the project, to find a feature task's children. */
-function toCard(task, { projectId, byTask, fresh, now, pendingTo, failed, ghost = false, fine = false, all = [] }) {
+function toCard(task, { projectId, byTask, fresh, open = false, now, pendingTo, failed, ghost = false, fine = false, all = [] }) {
   // The reviews badge says the reviews; the dot is about sessions only.
   const kids = cardChildren(all, task);
   const feature = kids.length > 0 ? featureProgress(task, kids) : null;
@@ -81,6 +82,9 @@ function toCard(task, { projectId, byTask, fresh, now, pendingTo, failed, ghost 
     id: task.id,
     title: task.title,
     isFeature: feature !== null,
+    open: feature !== null && open,
+    openText: feature !== null && open ? "true" : "false",
+    childrenId: `children-${task.id}`,
     segments: feature?.segments ?? [],
     bar: feature?.bar ?? "",
     summary: feature?.summary ?? "",
@@ -128,8 +132,9 @@ function childLine(task, { projectId, byTask }) {
     title: task.title,
     href: taskHref(projectId, task.id),
     status: task.status,
-    statusLabel: statusLabel(task.status),
     archived: Boolean(task.archivedAt),
+    word: task.archivedAt ? "archived" : statusLabel(task.status),
+    srWord: task.archivedAt ? `${statusLabel(task.status)}, archived. ` : `${statusLabel(task.status)}. `,
     liveState: state,
     liveWord: state === "waiting" ? "waiting" : state === "running" ? `${activity.live} live` : "",
     hasLive: state !== "",

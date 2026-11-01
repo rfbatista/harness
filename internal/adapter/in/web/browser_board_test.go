@@ -401,3 +401,90 @@ func TestAChildArrivingOverTheFeedJoinsTheFeatureSection(t *testing.T) {
 		t.Errorf("JavaScript errors:\n%s", strings.Join(e, "\n"))
 	}
 }
+
+// TestAFeatureCardOpensToItsChildrenAndMovesAlone: a feature and its children
+// are one card. Its disclosure lists the children, in the order Review, In
+// progress, Todo, Backlog, Done, and is still open after a reload. Only the
+// feature moves, from its "Move to…" menu: child lines have neither a grip
+// nor a menu.
+func TestAFeatureCardOpensToItsChildrenAndMovesAlone(t *testing.T) {
+	assets, err := NewAssets()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !assets.Built() {
+		t.Skip("browser test: web client not built; run `make web`")
+	}
+	ctx, errs := browser(t)
+
+	at := time.Date(2026, 10, 19, 8, 0, 0, 0, time.UTC)
+	deps := boardDeps()
+	deps.Tasks = fakeTickets{[]*domain.Ticket{
+		{ID: "t-feed", ProjectID: "p1", Title: "Add SSE feed", Status: domain.TicketStatusInProgress, StatusSince: at.Add(5 * time.Minute)},
+		{ID: "c-done", ProjectID: "p1", Title: "Wire the feed", Status: domain.TicketStatusDone, ParentID: "t-feed", StatusSince: at},
+		{ID: "c-todo", ProjectID: "p1", Title: "Write docs", Status: domain.TicketStatusTodo, ParentID: "t-feed", StatusSince: at.Add(time.Minute)},
+		{ID: "c-review", ProjectID: "p1", Title: "Reconnect", Status: domain.TicketStatusReview, ParentID: "t-feed", StatusSince: at.Add(2 * time.Minute), PendingReviews: 1},
+	}}
+	api := &fakeTicketsAPI{tickets: map[string]map[string]string{
+		"t-feed": {"id": "t-feed", "project_id": "p1", "title": "Add SSE feed", "status": "in_progress"},
+	}}
+	mux := http.NewServeMux()
+	mux.Handle("/api/", api)
+	mux.Handle("/", NewHandler(deps, assets, nil))
+	srv := newBrowserServer(mux)
+	defer srv.Close()
+
+	const disclosure = `.board .card[data-task-id="t-feed"] .disclosure`
+	state := `(b => b.getAttribute('aria-expanded') + '|' + document.getElementById(b.getAttribute('aria-controls')).checkVisibility())(document.querySelector('` + disclosure + `'))`
+	var folded, open, reloaded, kids, controls, cards string
+	var review []string
+	err = chromedp.Run(ctx,
+		chromedp.EmulateViewport(1280, 800),
+		chromedp.Navigate(srv.URL+"/projects/p1"),
+		chromedp.Poll(`document.querySelector('[data-ssr]') === null`, nil, chromedp.WithPollingTimeout(10*time.Second)),
+		chromedp.Evaluate(state, &folded),
+		chromedp.Click(disclosure, chromedp.ByQuery),
+		chromedp.Poll(`document.querySelector('`+disclosure+`').getAttribute('aria-expanded') === 'true'`, nil, chromedp.WithPollingTimeout(5*time.Second)),
+		chromedp.Evaluate(state, &open),
+		chromedp.Evaluate(`[...document.querySelectorAll('.board .card[data-task-id="t-feed"] .child .t')].map(a => a.textContent + '>' + a.getAttribute('href')).join(',')`, &kids),
+		chromedp.Evaluate(`document.querySelectorAll('.board .child .grip, .board .child .move-to, .board .child[draggable]').length + '|' + document.querySelectorAll('.board .card .grip').length`, &controls),
+		chromedp.Evaluate(`[...document.querySelectorAll('.board .card')].map(c => c.dataset.taskId).join(',')`, &cards),
+		chromedp.Reload(),
+		chromedp.Poll(`document.querySelector('[data-ssr]') === null`, nil, chromedp.WithPollingTimeout(10*time.Second)),
+		chromedp.Evaluate(state, &reloaded),
+		chromedp.Evaluate(`document.querySelector('.board .card[data-task-id="t-feed"] .move-to').focus()`, nil),
+		chromedp.KeyEvent(kb.ArrowDown),
+		chromedp.Poll(`document.activeElement?.getAttribute('role') === 'menuitemradio'`, nil, chromedp.WithPollingTimeout(5*time.Second)),
+		chromedp.KeyEvent("4"),
+		chromedp.Poll(cardsIn("Review")+`.includes('Add SSE feed')`, nil, chromedp.WithPollingTimeout(5*time.Second)),
+		chromedp.Evaluate(cardsIn("Review"), &review),
+	)
+	if err != nil {
+		t.Fatalf("%v\nAPI:\n%s\nJS errors: %v", err, api.log(), errs.all())
+	}
+	if folded != "false|false" {
+		t.Errorf("first paint: %q, want the card folded", folded)
+	}
+	if open != "true|true" {
+		t.Errorf("after the click: %q, want it open", open)
+	}
+	if want := "Reconnect>/projects/p1/tasks/c-review,Write docs>/projects/p1/tasks/c-todo,Wire the feed>/projects/p1/tasks/c-done"; kids != want {
+		t.Errorf("children = %q, want %q", kids, want)
+	}
+	if controls != "0|1" {
+		t.Errorf("grips and menus on child lines | grips on cards = %q, want 0|1", controls)
+	}
+	if cards != "t-feed" {
+		t.Errorf("cards on the board = %q, want only the feature", cards)
+	}
+	if reloaded != "true|true" {
+		t.Errorf("after a reload: %q, want it still open", reloaded)
+	}
+	if want := `/api/update_ticket {"status":"review","ticket_id":"t-feed"}`; api.log() != want {
+		t.Errorf("API calls:\n%s\nwant only the feature to move:\n%s", api.log(), want)
+	}
+	if e := errs.all(); len(e) > 0 {
+		t.Errorf("JavaScript errors:\n%s", strings.Join(e, "\n"))
+	}
+	_ = review
+}

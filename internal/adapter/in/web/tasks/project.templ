@@ -38,7 +38,7 @@ templ ProjectPage(f shell.Frame, projectID, projectName string, b Board, form se
 					<button type="button" class="[ button ]" data-variant="ghost" data-size="sm" x-on:click="dismissError">Dismiss</button>
 				</div>
 			</template>
-			<p class="[ visually-hidden ]" role="status" aria-live="polite" x-text="announcement"></p>
+			<p class="visually-hidden" role="status" aria-live="polite" x-text="announcement"></p>
 			<div data-scroll>
 				<div x-ignore data-ssr>
 					if b.Empty() {
@@ -161,18 +161,39 @@ templ ssrBoard(b Board) {
 
 // ssrProgress is a feature card's progress bar, summary and status mismatch
 // hint; the browser's toCard (boardView.js) draws the same.
-templ ssrProgress(f *FeatureCard) {
+templ ssrProgress(taskID string, f *FeatureCard) {
 	<div class="[ progress ]">
 		<div class="[ bar ]" role="img" aria-label={ f.Bar }>
 			for _, s := range f.Segments {
 				<i data-st={ s.Status } style={ "flex-grow:" + strconv.Itoa(s.Count) }></i>
 			}
 		</div>
-		<div class="[ sum ]"><b>{ f.Summary }</b><span class="[ tasks ]">{ f.Tasks }</span></div>
+		<div class="[ sum ]"><b>{ f.Summary }</b><button type="button" class="[ disclosure ]" aria-expanded="false" aria-controls={ f.ChildrenID(taskID) }>{ f.Tasks }</button></div>
 	</div>
 	if f.Hint != "" {
 		<p class="[ hint ]" data-mismatch><span><b>{ f.Hint }</b> { f.HintNote }</span></p>
 	}
+}
+
+// ssrChildren is a feature card's children, folded in the first paint.
+templ ssrChildren(taskID string, f *FeatureCard) {
+	<ul class="[ children ]" id={ f.ChildrenID(taskID) } hidden>
+		for _, k := range f.Children {
+			<li class="[ child ]" data-archived?={ k.Archived }>
+				<span class="[ tdot ]" data-st={ k.Status } aria-hidden="true"></span>
+				<a class="[ t ]" href={ templ.SafeURL(k.Href) } title={ k.Label }>{ k.Label }</a>
+				<span class="[ sig ]">
+					if k.LiveState != "" {
+						<span class="[ live ]" data-state={ k.LiveState }>{ k.LiveWord }</span>
+					}
+					if k.Reviews > 0 {
+						<span class="[ badge ]" data-reviews>{ reviewsWord(k.Reviews) }</span>
+					}
+					<span class="[ word ]"><span class="visually-hidden">{ k.SrWord() }</span><span aria-hidden="true">{ k.Word() }</span></span>
+				</span>
+			</li>
+		}
+	</ul>
 }
 
 // ssrCard is one card of the first paint.
@@ -183,7 +204,7 @@ templ ssrCard(c Card, column string) {
 			<button type="button" class="[ button move-to ]" data-variant="ghost" data-size="sm" aria-haspopup="menu" aria-expanded="false">Move to…<span class="[ chevron ]" aria-hidden="true"></span></button>
 		</div>
 		if c.Feature != nil {
-			@ssrProgress(c.Feature)
+			@ssrProgress(c.TaskID, c.Feature)
 		}
 		if c.HasSignals() {
 			<div class="[ signals ]">
@@ -217,6 +238,9 @@ templ ssrCard(c Card, column string) {
 		</p>
 		if c.Reason != "" {
 			<p class="[ reason ]">{ c.Reason }</p>
+		}
+		if c.Feature != nil {
+			@ssrChildren(c.TaskID, c.Feature)
 		}
 	</article>
 }
@@ -263,7 +287,7 @@ templ liveBoard() {
 												<i x-bind:data-st="seg.status" x-bind:style="seg.style"></i>
 											</template>
 										</div>
-										<div class="[ sum ]"><b x-text="card.summary"></b><span class="[ tasks ]" x-text="card.tasks"></span></div>
+										<div class="[ sum ]"><b x-text="card.summary"></b><button type="button" class="[ disclosure ]" x-bind:aria-expanded="card.openText" x-bind:aria-controls="card.childrenId" x-on:click="toggleFeature" x-text="card.tasks"></button></div>
 									</div>
 								</template>
 								<template x-if="card.hasHint">
@@ -292,6 +316,23 @@ templ liveBoard() {
 								</p>
 								<p class="[ reason ]" x-show="card.hasReason" x-text="card.reason"></p>
 								<p class="[ note ]" role="status" x-show="card.note" x-text="card.note"></p>
+								<template x-if="card.isFeature">
+									<ul class="[ children ]" x-bind:id="card.childrenId" x-show="card.open">
+										<template x-for="child in card.children" x-bind:key="child.id">
+											<li class="[ child ]" x-bind:data-archived="child.archived ? '' : null">
+												<span class="[ tdot ]" x-bind:data-st="child.status" aria-hidden="true"></span>
+												<a class="[ t ]" draggable="false" x-bind:href="child.href" x-bind:title="child.title" x-text="child.title"></a>
+												<span class="[ sig ]">
+													<span class="[ live ]" x-show="child.hasLive" x-bind:data-state="child.liveState" x-text="child.liveWord"></span>
+													<template x-if="child.hasReviews">
+														<span class="[ badge ]" data-reviews x-text="child.reviews"></span>
+													</template>
+													<span class="[ word ]"><span class="visually-hidden" x-text="child.srWord"></span><span aria-hidden="true" x-text="child.word"></span></span>
+												</span>
+											</li>
+										</template>
+									</ul>
+								</template>
 							</article>
 						</template>
 						<p class="[ column-empty ]" x-show="column.showsEmpty" x-text="column.emptyText"></p>

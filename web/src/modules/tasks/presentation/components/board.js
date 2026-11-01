@@ -15,6 +15,9 @@ import { applyTaskChange, describeChange, dropMove } from "../../domain/board.js
 import { STATUSES } from "../../domain/task.js";
 import { archiveAllView, jumpChips, toColumns } from "../boardView.js";
 
+/** Where a feature card's open state is kept in the browser's preferences. */
+const featureKey = (id) => `board-feature:${id}`;
+
 /** How long a task that arrived or moved over the feed stays highlighted. */
 export const FRESH_MS = 8_000;
 
@@ -51,6 +54,7 @@ export const AGE_TICK_MS = 60_000;
  * @param {{
  *   gateway: import("../../domain/ports.js").TaskGateway,
  *   store: import("./rail.js").RailStore,
+ *   prefs?: import("../../../../shared/infrastructure/storage.js").Preferences,  where each feature card's folded or open state is kept (ADR 0037)
  *   setTimeout?: typeof globalThis.setTimeout,
  *   clock?: { now: () => Date },
  *   isFine?: () => boolean,  a fine pointer (mouse, pen, trackpad): cards drag; touch uses the menu
@@ -58,7 +62,7 @@ export const AGE_TICK_MS = 60_000;
  * }} deps
  */
 export const board =
-  ({ gateway, store, setTimeout = globalThis.setTimeout.bind(globalThis), clock = { now: () => new Date() }, isFine = () => globalThis.matchMedia?.("(pointer: fine)").matches ?? false, isNarrow = () => globalThis.matchMedia?.("(width < 48rem)").matches ?? false }) =>
+  ({ gateway, store, prefs = { get: () => null, set() {} }, setTimeout = globalThis.setTimeout.bind(globalThis), clock = { now: () => new Date() }, isFine = () => globalThis.matchMedia?.("(pointer: fine)").matches ?? false, isNarrow = () => globalThis.matchMedia?.("(width < 48rem)").matches ?? false }) =>
   () => {
   /** The component's root (<main>): $el inside an event handler is the element that fired, not the root. */
   let root = null;
@@ -87,6 +91,8 @@ export const board =
     moves: {},
     /** A move's confirmed status whose echo may still arrive, per card. */
     echoes: {},
+    /** The feature cards the person opened or folded on this page; the rest read the browser's preference. */
+    opened: {},
     /** The card being dragged, its column, and the column under the pointer ("" for none); null when no drag. */
     drag: null,
     /** A fine pointer, read once: cards drag only there. */
@@ -105,7 +111,7 @@ export const board =
 
     get columns() {
       const pending = Object.fromEntries(Object.entries(this.moves).map(([id, m]) => [id, m.pending.at(-1)]));
-      const columns = toColumns(store.tasks, { projectId: this.projectId, byTask: store.byTask, fresh: new Set(this.freshIds), now: this.now, pending, failed: new Set(this.failedIds), drag: this.drag, fine: this.fine });
+      const columns = toColumns(store.tasks, { projectId: this.projectId, byTask: store.byTask, fresh: new Set(this.freshIds), open: (id) => this.isOpen(id), now: this.now, pending, failed: new Set(this.failedIds), drag: this.drag, fine: this.fine });
       // Done carries "Archive all": its strip, its fading cards and the receipt in place of the empty text.
       const all = this.archiveAll;
       return columns.map((c) => {
@@ -243,6 +249,20 @@ export const board =
     },
 
     /** A press inside a card: remembered, so a drag from its title link or a button does not start. */
+    /** A feature card is open: what the person chose on this page, else the browser's preference; folded by default. */
+    isOpen(id) {
+      return id in this.opened ? this.opened[id] : prefs.get(featureKey(id)) === "open";
+    },
+
+    /** The disclosure on a feature card: folds or opens its children, and remembers it in this browser. */
+    toggleFeature(event) {
+      const id = event.target.closest?.("[data-task-id]")?.dataset.taskId ?? "";
+      if (!id) return;
+      const open = !this.isOpen(id);
+      this.opened = { ...this.opened, [id]: open };
+      prefs.set(featureKey(id), open ? "open" : null);
+    },
+
     pointerDown(event) {
       pressedControl = Boolean(event.target.closest?.("a, button"));
     },

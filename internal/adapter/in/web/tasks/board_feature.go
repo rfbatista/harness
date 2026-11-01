@@ -47,6 +47,26 @@ type ChildLine struct {
 	Reviews             int
 }
 
+// Word is what the line says beside the child: its status, or "archived".
+func (c ChildLine) Word() string {
+	if c.Archived {
+		return "archived"
+	}
+	return c.StatusLabel
+}
+
+// SrWord is Word for a screen reader, which also hears the status of an
+// archived child.
+func (c ChildLine) SrWord() string {
+	if c.Archived {
+		return c.StatusLabel + ", archived. "
+	}
+	return c.StatusLabel + ". "
+}
+
+// ChildrenID is the id of the card's list of children, which its disclosure controls.
+func (f *FeatureCard) ChildrenID(taskID string) string { return "children-" + taskID }
+
 // childTotals counts the children by status.
 func childTotals(children []*domain.Ticket) map[string]int {
 	n := map[string]int{}
