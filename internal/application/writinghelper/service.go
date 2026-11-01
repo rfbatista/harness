@@ -27,6 +27,7 @@ const (
 	KindTaskTitle       = "task_title"
 	KindTaskDescription = "task_description"
 	KindComment         = "comment"
+	KindInstructionFile = "instruction_file"
 )
 
 // The codes the helper's own errors carry.
@@ -37,13 +38,16 @@ const (
 
 // Limits of a request.
 const (
-	maxTextLen   = 20000
-	maxSiblings  = 4
-	maxAnswers   = 3
-	maxExclude   = 50
-	maxQuestions = 3
-	maxChips     = 4
-	titleCount   = 3
+	maxTextLen = 20000
+	// maxInstructionBytes is an instruction file's size limit, which its field
+	// text and its draft share.
+	maxInstructionBytes = domain.MaxInstructionFileSize
+	maxSiblings         = 4
+	maxAnswers          = 3
+	maxExclude          = 50
+	maxQuestions        = 3
+	maxChips            = 4
+	titleCount          = 3
 )
 
 // StreamCall is one claude turn the service asks for.
@@ -128,7 +132,7 @@ func (s *Service) Run(ctx context.Context, req Request, emit func(Event)) error 
 		return err
 	}
 	call := StreamCall{
-		System:      systemPrompt(req.Step),
+		System:      systemPrompt(req.Step, req.Field.Kind),
 		Input:       input(project.Name, req),
 		Model:       domain.WritingHelperModel(s.settings.Setting(domain.SettingModelWritingHelper)),
 		Attribution: "harness:writing-helper:" + req.ProjectID,
@@ -168,9 +172,9 @@ func validate(r Request) error {
 		return invalid("step must be analyze, draft or titles")
 	}
 	switch r.Field.Kind {
-	case KindTaskTitle, KindTaskDescription, KindComment:
+	case KindTaskTitle, KindTaskDescription, KindComment, KindInstructionFile:
 	default:
-		return invalid("field.kind must be task_title, task_description or comment")
+		return invalid("field.kind must be task_title, task_description, comment or instruction_file")
 	}
 	if strings.TrimSpace(r.ProjectID) == "" {
 		return invalid("project_id is required")
@@ -184,7 +188,14 @@ func validate(r Request) error {
 	if len(r.Exclude) > maxExclude {
 		return invalid("at most 50 excluded titles")
 	}
-	texts := slices.Concat([]string{r.Field.Text, r.Draft, r.Request}, r.Exclude)
+	texts := slices.Concat([]string{r.Request}, r.Exclude)
+	if r.Field.Kind == KindInstructionFile {
+		if len(r.Field.Text) > maxInstructionBytes || len(r.Draft) > maxInstructionBytes {
+			return invalid("an instruction file is longer than 256 KB")
+		}
+	} else {
+		texts = append(texts, r.Field.Text, r.Draft)
+	}
 	for _, sb := range r.Siblings {
 		texts = append(texts, sb.Label, sb.Text)
 	}

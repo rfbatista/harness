@@ -44,8 +44,9 @@ you need), and use the glossary's terms in ticket titles, test names and code. E
 far as you need to slice the work — look for a prefactor that makes the change easy
 ("make the change easy, then make the easy change").
 
-Read the repository's architecture record too, `project/architecture/<repo>.yaml` in your
-virtual shell, before you write tickets. Keep each ticket inside the layers your agent may
+Read the repository's architecture too before you write tickets: the summary delivered with
+your session as `ARCHITECTURE.md`, and the record, `project/architecture/<repo>.yaml` in your
+virtual shell. Keep each ticket inside the layers your agent may
 change. Ask the architect (`mcp__task__message_architect`, kind `question`) before a ticket
 needs a layer you may not change, or when a rule blocks work the spec requires.
 

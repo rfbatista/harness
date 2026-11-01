@@ -430,8 +430,8 @@ func TestModeSkillsExplainTheRepositoryArchitecture(t *testing.T) {
 		skill string
 		want  []string
 	}{
-		"architect": {"task-architecture", []string{"project/architecture/<repo>.yaml", "Name it in each spec", "proposed change as a section of the spec", "Never edit the record"}},
-		"implement": {"task-implement-spec", []string{"project/architecture/<repo>.yaml", "inside the layers your agent may", "kind `question`", "a rule blocks work the spec requires"}},
+		"architect": {"task-architecture", []string{"ARCHITECTURE.md", "project/architecture/<repo>.yaml", "Name it in each spec", "proposed change as a section of the spec", "Never edit the record"}},
+		"implement": {"task-implement-spec", []string{"ARCHITECTURE.md", "project/architecture/<repo>.yaml", "inside the layers your agent may", "kind `question`", "a rule blocks work the spec requires"}},
 	} {
 		_, launch := startInteractive(t, svc, InteractiveRequest{Mode: mode})
 		body := strings.Join(strings.Fields(pluginSkill(t, launch, c.skill)), " ")

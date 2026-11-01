@@ -342,6 +342,13 @@ func NewRouter(h *Handler, opts ...Option) *echo.Echo {
 	g.POST("/export_repository_architecture", h.handleExportRepositoryArchitecture)
 	g.POST("/list_architecture_rule_events", h.handleListArchitectureRuleEvents)
 	g.POST("/discover_repository_architecture", h.handleDiscoverRepositoryArchitecture)
+	g.POST("/list_instruction_files", h.handleListInstructionFiles)
+	g.POST("/import_instruction_files", h.handleImportInstructionFiles)
+	g.POST("/remove_instruction_files_from_repository", h.handleRemoveInstructionFilesFromRepository)
+	g.POST("/get_instruction_file", h.handleGetInstructionFile)
+	g.POST("/save_instruction_file", h.handleSaveInstructionFile)
+	g.POST("/rename_instruction_file", h.handleRenameInstructionFile)
+	g.POST("/delete_instruction_file", h.handleDeleteInstructionFile)
 	g.GET("/architecture.schema.json", h.handleArchitectureSchema)
 
 	// code views: read-only file trees, contents, diffs and the zone map

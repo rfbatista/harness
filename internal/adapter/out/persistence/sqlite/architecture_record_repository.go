@@ -35,6 +35,9 @@ func (m *ArchitectureRecordModel) toStored() (*ports.StoredArchitecture, error) 
 	if err := json.Unmarshal([]byte(m.RecordJSON), &rec); err != nil {
 		return nil, err
 	}
+	for i := range rec.Instructions {
+		rec.Instructions[i].Kind = domain.CurrentInstructionKind(rec.Instructions[i].Kind)
+	}
 	return &ports.StoredArchitecture{
 		RepositoryID: m.RepositoryID, ProjectID: m.ProjectID, Version: m.Version, Record: rec, UpdatedAt: m.UpdatedAt,
 		ExportedVersion: m.ExportedVersion, ExportedCommit: m.ExportedCommit, ExportedAt: m.ExportedAt, ExportedSHA: m.ExportedSHA,
@@ -122,6 +125,9 @@ func (r *ArchitectureRecordRepository) Delete(ctx context.Context, repositoryID 
 		if err := tx.Where("repository_id = ?", repositoryID).Delete(&ZoneModel{}).Error; err != nil {
 			return err
 		}
+		if err := tx.Where("repository_id = ?", repositoryID).Delete(&InstructionFileModel{}).Error; err != nil {
+			return err
+		}
 		return tx.Where("repository_id = ?", repositoryID).Delete(&ArchitectureRecordModel{}).Error
 	})
 }
@@ -129,6 +135,9 @@ func (r *ArchitectureRecordRepository) Delete(ctx context.Context, repositoryID 
 // DeleteByProject implements ports.ArchitectureRecordStore.
 func (r *ArchitectureRecordRepository) DeleteByProject(ctx context.Context, projectID string) error {
 	return r.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		if err := tx.Where("project_id = ?", projectID).Delete(&InstructionFileModel{}).Error; err != nil {
+			return err
+		}
 		return tx.Where("project_id = ?", projectID).Delete(&ArchitectureRecordModel{}).Error
 	})
 }
