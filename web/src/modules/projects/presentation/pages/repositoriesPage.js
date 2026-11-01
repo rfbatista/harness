@@ -13,9 +13,11 @@ import { baseName, isAbsolutePath, notYetAdded, relativeTo, repositoryURL } from
  * @param {{
  *   gateway: import("../../domain/ports.js").ProjectGateway,
  *   architecture?: { has: (repositoryId: string) => Promise<boolean> },
- * }} deps  architecture says whether a repository has a saved architecture, for its link's words.
+ *   designSystem?: { setRepository: (repositoryId: string, uses: boolean, path: string) => Promise<unknown> },
+ * }} deps  architecture says whether a repository has a saved architecture, for its link's words;
+ *          designSystem answers the question asked after adding a repository to a project that has one.
  */
-export const repositoriesPage = ({ gateway, architecture }) => () => ({
+export const repositoriesPage = ({ gateway, architecture, designSystem }) => () => ({
   projectId: "",
   projectRoot: "",
   /** Checkouts found inside the project's directory. @type {import("../../domain/project.js").FoundRepository[]} */
@@ -32,6 +34,8 @@ export const repositoriesPage = ({ gateway, architecture }) => () => ({
   confirmingId: "",
   /** Repository ids known to have an architecture. @type {string[]} */
   withArchitecture: [],
+  /** Repositories just added to a project with a design system, still to be asked about it. @type {{ id: string, name: string }[]} */
+  questions: [],
   error: null,
   ready: false,
 
@@ -60,6 +64,9 @@ export const repositoriesPage = ({ gateway, architecture }) => () => ({
   },
   get hasSuggestions() {
     return this.suggestions.length > 0;
+  },
+  get isAsking() {
+    return this.questions.length > 0;
   },
   get isEmpty() {
     return this.repositories.length === 0;
@@ -126,7 +133,7 @@ export const repositoriesPage = ({ gateway, architecture }) => () => ({
         url: repositoryURL(f.remote, f.path),
         rootDir: f.path,
       });
-      this.repositories = [...this.repositories, repo];
+      this.added(repo);
     } catch (err) {
       this.error = describeError(err);
     } finally {
@@ -147,7 +154,7 @@ export const repositoriesPage = ({ gateway, architecture }) => () => ({
         url: repositoryURL(this.remoteUrl, rootDir),
         rootDir,
       });
-      this.repositories = [...this.repositories, repo];
+      this.added(repo);
       this.rootDir = "";
       this.name = "";
       this.remoteUrl = "";
@@ -155,6 +162,23 @@ export const repositoriesPage = ({ gateway, architecture }) => () => ({
       this.error = describeError(err);
     } finally {
       this.adding = false;
+    }
+  },
+
+  /** Lists a repository just added, and queues the design system question when the server asked for it. */
+  added(repo) {
+    this.repositories = [...this.repositories, repo];
+    if (repo.askDesignSystem && designSystem) this.questions = [...this.questions, { id: repo.id, name: repo.name || baseName(repo.rootDir) || repo.url }];
+  },
+
+  /** Yes opts the repository in at the default path; No leaves it off. The question is not asked again either way. */
+  async answerDesignSystem(id, uses) {
+    this.error = null;
+    try {
+      await designSystem.setRepository(id, uses, "");
+      this.questions = this.questions.filter((q) => q.id !== id);
+    } catch (err) {
+      this.error = describeError(err);
     }
   },
 

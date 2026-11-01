@@ -39,7 +39,8 @@
  *           Reads the projects page seed. Throws BAD_RESPONSE when malformed.
  * @property {(seed: unknown) => { project: Project, repositories: Repository[] }} decodeSettingsSeed
  *           Reads the settings page seed. Throws BAD_RESPONSE when malformed.
- * @property {(input: { projectId: string, name: string, description: string, url: string, rootDir: string }) => Promise<Repository>} addRepository
+ * @property {(input: { projectId: string, name: string, description: string, url: string, rootDir: string }) => Promise<Repository & { askDesignSystem?: boolean }>} addRepository
+ *           askDesignSystem is true once, when the project has a design system, so the person is asked about it.
  *           Rejects with PROJECT_NOT_FOUND or INVALID_URL.
  * @property {(repositoryId: string) => Promise<void>} removeRepository
  *           Rejects with REPOSITORY_NOT_FOUND.

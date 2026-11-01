@@ -83,7 +83,7 @@ func TestSettingsViewSeedsTheProjectAndLinksItsEnvFiles(t *testing.T) {
 		t.Errorf("view = %+v", v)
 	}
 	seed, _ := json.Marshal(v.Seed)
-	want := `{"project":{"id":"p1","name":"harness","root_dir":"/src/harness","ignored_paths":["dist"],"agents_read_all_repos":true},"repositories":[{"id":"r1","project_id":"p1","name":"","url":"","root_dir":"/src/harness/api"}]}`
+	want := `{"project":{"id":"p1","name":"harness","root_dir":"/src/harness","ignored_paths":["dist"],"agents_read_all_repos":true},"repositories":[{"id":"r1","project_id":"p1","name":"","url":"","root_dir":"/src/harness/api","uses_design_system":false,"design_system_path":""}]}`
 	if string(seed) != want {
 		t.Errorf("seed =\n%s\nwant\n%s", seed, want)
 	}

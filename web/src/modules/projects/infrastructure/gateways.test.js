@@ -45,3 +45,11 @@ test("http · a delete succeeds on any 2xx, with or without a body", async () =>
     assert.equal(calls[0].init.body, '{"project_id":"p1"}');
   }
 });
+
+test("http · an added repository carries whether the person is asked about the design system", async () => {
+  for (const [body, asked] of [[{ repository: { id: "r1" } }, false], [{ repository: { id: "r1" }, ask_design_system: true }, true]]) {
+    const { fetch } = fakeFetch(() => jsonResponse(200, body));
+    const repo = await projectsGateway(apiClient({ base: "/api", fetch }), feed({ base: "/api" })).addRepository({ projectId: "p1", name: "a", description: "", url: "u", rootDir: "/r" });
+    assert.deepEqual([repo.id, repo.askDesignSystem], ["r1", asked]);
+  }
+});

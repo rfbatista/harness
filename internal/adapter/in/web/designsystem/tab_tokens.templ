@@ -118,11 +118,3 @@ templ tabTokens() {
 		</section>
 	</section>
 }
-
-// The Repositories tab arrives with a later slice: its panel is inert until
-// then.
-templ tabRepositories() {
-	<section role="tabpanel" id="design-system-panel-repositories" aria-labelledby="design-system-tab-repositories" x-show="isTab('repositories')" class="[ flow ]">
-		<p class="[ color-ink-muted ]" data-inert>Choosing which repositories use the design system is not available here yet.</p>
-	</section>
-}

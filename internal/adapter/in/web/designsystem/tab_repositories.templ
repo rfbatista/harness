@@ -1,0 +1,59 @@
+package designsystem
+
+// tabRepositories is the Repositories tab's panel: every repository of the
+// project with the switch and path that its own settings show too. The export
+// state arrives with the export, so until then a repository that uses the
+// design system reads "Not exported yet".
+templ tabRepositories(projectID string) {
+	<section role="tabpanel" id="design-system-panel-repositories" aria-labelledby="design-system-tab-repositories" x-show="isTab('repositories')" class="[ flow ]">
+		<div class="[ arch-head ]" data-panel-head>
+			<div class="[ flow ] [ flow-space-3xs ]">
+				<h2>Repositories</h2>
+				<p class="[ color-ink-muted text-sm ]">Choose which repositories use the design system. The same switch is in each repository's settings.</p>
+			</div>
+		</div>
+		@OptIn(projectID, "", true)
+	</section>
+}
+
+// OptIn is the "Uses the design system" switch and path of a project's
+// repositories (designSystemOptIn): all of them on the Repositories tab, one
+// on a repository's settings (repositoryID). withState adds the export state.
+templ OptIn(projectID, repositoryID string, withState bool) {
+	<div x-data="designSystemOptIn" data-design-system-optin data-project-id={ projectID } class="[ flow ]" if repositoryID != "" { data-repository-id={ repositoryID } }>
+		<template x-if="error">
+			<div class="[ banner ]" data-tone="danger" role="alert" data-optin-load-error>
+				<div class="[ flow ] [ flow-space-3xs grow ]">
+					<span x-text="error.message"></span>
+					<span class="[ code ]"><span x-text="error.code"></span> · <span x-text="error.next"></span></span>
+				</div>
+				<button type="button" class="[ button ]" data-variant="ghost" data-size="sm" x-on:click="load">Try again</button>
+			</div>
+		</template>
+		<template x-if="isEmpty">
+			<p class="[ color-ink-muted ]" data-no-repositories>This project has no repositories yet. Add one, then choose here whether it uses the design system.</p>
+		</template>
+		<section class="[ pane ]" x-show="loaded">
+			<template x-for="r in rows" x-bind:key="r.id">
+				<div class="[ row ]" data-optin-row x-bind:data-repository-id="r.id" x-bind:data-phase="phase(r)" style="--row-columns: minmax(0, 1fr)">
+					<div class="[ flow ] [ flow-space-xs pad-block-xs ]">
+						<span class="[ weight-medium ]" x-show="!single" x-text="r.name"></span>
+						<label class="[ cluster ] [ gutter-xs ]"><input type="checkbox" data-field="uses" x-bind:checked="r.uses" x-bind:disabled="r.saving" x-bind:aria-busy="r.saving" x-on:change="toggle(r)"/> Uses the design system</label>
+						<span class="[ hint ]" x-text="effectNote"></span>
+						<div class="[ field ]" x-show="r.uses">
+							<label>Folder in the repository <input data-field="path" class="[ font-mono text-sm ]" autocomplete="off" spellcheck="false" x-model="r.draft" x-bind:aria-invalid="r.error !== null"/></label>
+							<span class="[ hint ]">Where an export will write the files; relative, ending in /. The default is <code>.harness/design-system/</code>.</span>
+							<span class="[ cluster ]"><button type="button" class="[ button ]" data-size="sm" data-action="save-path" x-bind:disabled="cannotSavePath(r)" x-on:click="savePath(r)">Save path</button></span>
+						</div>
+						<template x-if="r.error">
+							<span class="[ error ]" data-optin-error><span x-text="r.error.message"></span> <span class="[ code ]"><span x-text="r.error.code"></span> · <span x-text="r.error.next"></span></span></span>
+						</template>
+						if withState {
+							<span class="[ text-sm color-ink-muted ]" data-export-state x-show="r.uses" x-text="stateOf(r)"></span>
+						}
+					</div>
+				</div>
+			</template>
+		</section>
+	</div>
+}

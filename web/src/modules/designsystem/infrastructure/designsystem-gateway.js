@@ -3,6 +3,7 @@
 // The wire shapes are read here and nowhere else.
 
 import { StructuredError, Codes } from "../../../shared/domain/errors.js";
+import { optInRow } from "../domain/repositories.js";
 
 /**
  * @param {import("../../../shared/infrastructure/api.js").ApiClient} api
@@ -82,6 +83,29 @@ export function designSystemGateway(api, feed) {
         at: body.at ?? "",
         record: { tokens: list(record.tokens), principles: typeof record.principles === "string" ? record.principles : "", components: list(record.components) },
       };
+    },
+
+    /** The project's repositories with their opt-in to the design system, as rows a page edits. */
+    async repositories(projectId) {
+      const body = await api.post("/list_design_system_repositories", { project_id: projectId });
+      return list(body?.repositories).map(optInRow);
+    },
+
+    /**
+     * Opts a repository in or out and sets where its export goes; an empty path leaves the server's own.
+     * An invalid path (INVALID_INPUT) or an unknown repository arrives as an error. Answers what is stored.
+     */
+    async setRepository(repositoryId, uses, path) {
+      const body = await api.post("/set_repository_design_system", {
+        repository_id: repositoryId,
+        uses_design_system: uses,
+        ...(path ? { path } : {}),
+      });
+      const repo = body?.repository;
+      if (typeof repo?.id !== "string" || repo.id === "") {
+        throw new StructuredError(Codes.BAD_RESPONSE, "The repository came back unreadable.");
+      }
+      return { id: repo.id, uses: repo.uses_design_system === true, path: repo.design_system_path ?? "" };
     },
 
     /** Follows the project feed for saves of the design system. */
