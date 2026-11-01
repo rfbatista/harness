@@ -5,9 +5,11 @@ package app
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"io"
 	"net/http"
 	"slices"
+	"sync"
 	"testing"
 )
 
@@ -302,5 +304,48 @@ func TestDesignSystem_AddingARepositoryAsksOnlyOnceAndOnlyWhenTheProjectHasADesi
 	}
 	if repo := added["repository"].(map[string]any); repo["design_system_id"] != nil {
 		t.Errorf("adding applies nothing: %v", repo)
+	}
+}
+
+// Applying a design system to a repository and deleting that design system,
+// at the same time, never leaves the repository pointing at a missing one.
+func TestDesignSystem_ApplyAndDeleteRacingNeverLeaveARepositoryOnAMissingDesignSystem(t *testing.T) {
+	s := startDesignServer(t)
+	ctx := context.Background()
+	const pairs = 25
+	type pair struct{ ds, name, repo string }
+	ps := make([]pair, pairs)
+	for i := range ps {
+		name := fmt.Sprintf("Race %d", i)
+		ps[i] = pair{ds: s.create(fmt.Sprintf("race-%d", i), name), name: name, repo: repoID(t, s.addRepo(fmt.Sprintf("repo-%d", i)))}
+	}
+	var wg sync.WaitGroup
+	start := make(chan struct{})
+	for _, p := range ps {
+		wg.Add(2)
+		go func() {
+			defer wg.Done()
+			<-start
+			_, _ = s.cat.Projects.SetRepositoryDesignSystem(ctx, p.repo, &p.ds, "", true)
+		}()
+		go func() {
+			defer wg.Done()
+			<-start
+			_ = s.cat.DesignSystems.DeleteDesignSystem(ctx, p.ds, p.name)
+		}()
+	}
+	close(start)
+	wg.Wait()
+	for _, p := range ps {
+		repo, err := s.cat.Projects.GetRepository(ctx, p.repo)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if repo.DesignSystemID == nil {
+			continue
+		}
+		if id, err := s.store.Identity(ctx, *repo.DesignSystemID); err != nil || id == nil {
+			t.Errorf("repository %s uses the missing design system %s (%v)", p.repo, *repo.DesignSystemID, err)
+		}
 	}
 }

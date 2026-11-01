@@ -288,7 +288,7 @@ func designerResourceHandler(devMode bool) func(context.Context, mcplib.ReadReso
 	}
 }
 
-// designSystemReader is the design system context for the page's first paint;
+// designSystemReader is the design system context as the web pages read it;
 // nil, not a typed nil, when it is not built.
 func designSystemReader(cat catalog.Catalog) ports.DesignSystemPages {
 	if cat.DesignSystems == nil {

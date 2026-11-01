@@ -2,6 +2,7 @@ package ports
 
 import (
 	"context"
+	"time"
 
 	"operators-mcp/internal/domain"
 )
@@ -14,10 +15,6 @@ import (
 // An unknown project is PROJECT_NOT_FOUND; an unknown design system is
 // DESIGN_SYSTEM_NOT_FOUND.
 type DesignSystems interface {
-	// DesignSystemReader is the bridge for consumers that cannot name a
-	// design system yet (tickets 11-13 re-key them).
-	DesignSystemReader
-
 	// ListDesignSystems lists the project's design systems ordered by name.
 	ListDesignSystems(ctx context.Context, projectID string) ([]*domain.DesignSystemSummary, error)
 	// CreateDesignSystem stores a design system's identity only (version 0,
@@ -59,6 +56,12 @@ type DesignSystemPages interface {
 	GetDesignSystem(ctx context.Context, designSystemID string) (*domain.DesignSystem, error)
 }
 
+// DesignSystemStamp is a design system's newest version number and its time.
+type DesignSystemStamp struct {
+	Version int
+	At      time.Time
+}
+
 // DesignSystemStore keeps the identity of every project's design systems and
 // every version of them (driven). Versions are never changed once written.
 type DesignSystemStore interface {
@@ -80,6 +83,9 @@ type DesignSystemStore interface {
 
 	// Latest answers the design system's newest version, or nil when it has none.
 	Latest(ctx context.Context, designSystemID string) (*domain.DesignSystemVersion, error)
+	// LatestStamps answers the newest version number and time of each of the
+	// project's design systems that has one, without their records.
+	LatestStamps(ctx context.Context, projectID string) (map[string]DesignSystemStamp, error)
 	// Get answers one version, or nil when there is none.
 	Get(ctx context.Context, designSystemID string, version int) (*domain.DesignSystemVersion, error)
 	// List answers up to limit versions older than before (every one when 0),

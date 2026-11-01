@@ -48,7 +48,7 @@ type RepositoryRepository interface {
 	// checked) export path; REPOSITORY_NOT_FOUND for an unknown id.
 	SetDesignSystem(id string, designSystemID *string, path string) (*domain.Repository, error)
 	// ListByDesignSystem lists the repositories that use the design system.
-	ListByDesignSystem(designSystemID string) []*domain.Repository
+	ListByDesignSystem(designSystemID string) ([]*domain.Repository, error)
 }
 
 // ZoneRepository is the outbound port for persisting and retrieving zones.

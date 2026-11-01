@@ -14,6 +14,7 @@ package vfs
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"log/slog"
 	"os"
@@ -392,9 +393,28 @@ func (s *Service) AnnounceChange(c ports.ProjectChange) {
 		s.changed(c.ProjectID(), c.TicketComment.Comment.TicketID)
 	case c.TicketResource != nil && c.TicketResource.Resource != nil:
 		s.changed(c.ProjectID(), c.TicketResource.Resource.TicketID)
-	case c.ArchitectureChanged != nil, c.DesignSystemSaved != nil, c.DesignSystemChanged != nil:
+	case c.DesignSystemChanged != nil:
+		s.forgetDeletedDesignSystem(c.DesignSystemChanged.DesignSystemID)
+		s.changed(c.ProjectID(), "")
+	case c.ArchitectureChanged != nil, c.DesignSystemSaved != nil:
 		s.changed(c.ProjectID(), "")
 	}
+}
+
+// forgetDeletedDesignSystem drops the design system's rendered files when it
+// no longer exists, so a deleted one does not stay in memory.
+func (s *Service) forgetDeletedDesignSystem(designSystemID string) {
+	if s.src.DesignSystems == nil {
+		return
+	}
+	_, err := s.src.DesignSystems.GetDesignSystem(context.Background(), designSystemID)
+	var se *domain.StructuredError
+	if err == nil || !errors.As(err, &se) || se.Code != "DESIGN_SYSTEM_NOT_FOUND" {
+		return
+	}
+	s.renderMu.Lock()
+	delete(s.rendered, designSystemID)
+	s.renderMu.Unlock()
 }
 
 // AnnounceTicket hears a task change, its title, description or status

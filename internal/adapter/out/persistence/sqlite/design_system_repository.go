@@ -101,22 +101,39 @@ func slugTaken(field string) error {
 	}
 }
 
-// clash says which field of the project's other design systems d repeats
-// ("" when none); exceptID is d itself on an update.
-func clash(tx *gorm.DB, d *domain.DesignSystemIdentity, exceptID string) (string, error) {
-	var rows []DesignSystemModel
-	if err := tx.Where("project_id = ? AND id <> ?", d.ProjectID, exceptID).Find(&rows).Error; err != nil {
-		return "", err
+// taken reports whether another design system of the project has the slug
+// (empty slug: not asked) or the name; exceptID is the design system itself
+// on an update.
+func taken(tx *gorm.DB, projectID, exceptID, slug, name string) (string, error) {
+	count := func(where string, args ...any) (bool, error) {
+		var n int64
+		err := tx.Model(&DesignSystemModel{}).Where("project_id = ? AND id <> ?", projectID, exceptID).Where(where, args...).Count(&n).Error
+		return n > 0, err
 	}
-	for _, r := range rows {
-		if exceptID == "" && r.Slug == d.Slug {
-			return "slug", nil
+	if slug != "" {
+		if hit, err := count("slug = ?", slug); err != nil || hit {
+			return "slug", err
 		}
-		if r.NameKey == nameKey(d.Name) {
-			return "name", nil
-		}
+	}
+	if hit, err := count("name_key = ?", nameKey(name)); err != nil || hit {
+		return "name", err
 	}
 	return "", nil
+}
+
+// refusal turns a clash found by taken, or a unique index that caught one a
+// concurrent writer slipped in, into SLUG_TAKEN; any other error stays.
+func refusal(field string, err error) error {
+	if err != nil {
+		if !strings.Contains(err.Error(), "UNIQUE constraint failed") {
+			return err
+		}
+		field = "name"
+		if strings.Contains(err.Error(), "design_systems.slug") {
+			field = "slug"
+		}
+	}
+	return slugTaken(field)
 }
 
 // Create implements ports.DesignSystemStore.
@@ -126,11 +143,8 @@ func (r *DesignSystemRepository) Create(ctx context.Context, d *domain.DesignSys
 		return err
 	}
 	return r.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
-		if field, err := clash(tx, d, ""); err != nil || field != "" {
-			if err != nil {
-				return err
-			}
-			return slugTaken(field)
+		if field, err := taken(tx, d.ProjectID, "", d.Slug, d.Name); err != nil || field != "" {
+			return refusal(field, err)
 		}
 		now := time.Now()
 		m := DesignSystemModel{
@@ -138,7 +152,7 @@ func (r *DesignSystemRepository) Create(ctx context.Context, d *domain.DesignSys
 			Description: d.Description, CreatedAt: now, UpdatedAt: now,
 		}
 		if err := tx.Create(&m).Error; err != nil {
-			return err
+			return refusal("", err)
 		}
 		*d = *m.toDomain()
 		return nil
@@ -156,15 +170,12 @@ func (r *DesignSystemRepository) Update(ctx context.Context, d *domain.DesignSys
 			return &domain.StructuredError{Code: "DESIGN_SYSTEM_NOT_FOUND", Message: "design system not found"}
 		}
 		d.ProjectID = rows[0].ProjectID
-		if field, err := clash(tx, d, d.ID); err != nil || field != "" {
-			if err != nil {
-				return err
-			}
-			return slugTaken(field)
+		if field, err := taken(tx, d.ProjectID, d.ID, "", d.Name); err != nil || field != "" {
+			return refusal(field, err)
 		}
 		rows[0].Name, rows[0].NameKey, rows[0].Description, rows[0].UpdatedAt = d.Name, nameKey(d.Name), d.Description, time.Now()
 		if err := tx.Save(&rows[0]).Error; err != nil {
-			return err
+			return refusal("", err)
 		}
 		*d = *rows[0].toDomain()
 		return nil
@@ -231,6 +242,24 @@ func (r *DesignSystemRepository) Latest(ctx context.Context, designSystemID stri
 		return nil, err
 	}
 	return m.toDomain()
+}
+
+// LatestStamps implements ports.DesignSystemStore: one query on the version
+// column and its time, without the records.
+func (r *DesignSystemRepository) LatestStamps(ctx context.Context, projectID string) (map[string]ports.DesignSystemStamp, error) {
+	var rows []DesignSystemVersionModel
+	newest := r.db.Model(&DesignSystemVersionModel{}).Select("design_system_id, MAX(version)").Group("design_system_id")
+	err := r.db.WithContext(ctx).Select("design_system_id", "version", "at").
+		Where("design_system_id IN (?)", r.db.Model(&DesignSystemModel{}).Select("id").Where("project_id = ?", projectID)).
+		Where("(design_system_id, version) IN (?)", newest).Find(&rows).Error
+	if err != nil {
+		return nil, err
+	}
+	out := make(map[string]ports.DesignSystemStamp, len(rows))
+	for _, m := range rows {
+		out[m.DesignSystemID] = ports.DesignSystemStamp{Version: m.Version, At: m.At}
+	}
+	return out, nil
 }
 
 // Get implements ports.DesignSystemStore.

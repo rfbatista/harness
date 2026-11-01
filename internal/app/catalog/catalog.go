@@ -23,6 +23,7 @@ package catalog
 import (
 	"context"
 	"fmt"
+	"sync"
 
 	"operators-mcp/internal/adapter/out/eventbus"
 	"operators-mcp/internal/application/agents"
@@ -140,9 +141,14 @@ func New(d Deps) Catalog {
 	if d.DesignRecords != nil {
 		designs = designsystem.NewService(designsystem.Deps{Store: d.DesignRecords, Projects: pr})
 		designs.Subscribe(bus)
-		pr.UseDesignSystems(d.DesignRecords)
+		var inUse sync.Mutex // apply and delete of a design system exclude each other
+		pr.UseDesignSystems(d.DesignRecords, &inUse)
+		designs.UseLock(&inUse)
 		designs.GuardDelete(func(ctx context.Context, designSystemID string) error {
-			used := pr.RepositoriesUsingDesignSystem(ctx, designSystemID)
+			used, err := pr.RepositoriesUsingDesignSystem(ctx, designSystemID)
+			if err != nil {
+				return err
+			}
 			if len(used) == 0 {
 				return nil
 			}
@@ -151,7 +157,7 @@ func New(d Deps) Catalog {
 				rows[i] = map[string]string{"repository_id": r.ID, "name": r.DisplayName()}
 			}
 			return &domain.DetailedError{
-				StructuredError: &domain.StructuredError{Code: "DESIGN_SYSTEM_IN_USE", Message: fmt.Sprintf("DESIGN_SYSTEM_IN_USE: %d of the project's repositories use this design system; remove or move them first", len(used))},
+				StructuredError: &domain.StructuredError{Code: "DESIGN_SYSTEM_IN_USE", Message: fmt.Sprintf("%d of the project's repositories use this design system; remove or move them first", len(used))},
 				Details:         map[string]any{"repositories": rows},
 			}
 		})

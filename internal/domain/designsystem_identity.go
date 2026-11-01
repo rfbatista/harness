@@ -1,7 +1,6 @@
 package domain
 
 import (
-	"strings"
 	"time"
 	"unicode/utf8"
 )
@@ -44,10 +43,4 @@ func ValidateDesignSystemSlug(slug string) []DesignFieldError {
 		return []DesignFieldError{{Path: "/slug", Code: DesignBadName, Message: "the slug must match ^[a-z][a-z0-9-]*$"}}
 	}
 	return nil
-}
-
-// SameDesignSystemName reports whether two names are the same name: case and
-// surrounding space do not tell them apart.
-func SameDesignSystemName(a, b string) bool {
-	return strings.EqualFold(strings.TrimSpace(a), strings.TrimSpace(b))
 }

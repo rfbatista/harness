@@ -200,15 +200,6 @@ type ArchitectureFileReader interface {
 	ListArchitectureFiles(ctx context.Context, projectID string) ([]ArchitectureFile, error)
 }
 
-// DesignSystemReader reads a project's design system as it is now; the
-// design system context implements it with the rest of DesignSystems.
-type DesignSystemReader interface {
-	// GetProjectDesignSystem is the project's first design system by creation
-	// order, or an empty one (Exists false) when it has none.
-	// ticket 13 re-keys its last caller (the web page's first paint).
-	GetProjectDesignSystem(ctx context.Context, projectID string) (*domain.DesignSystem, error)
-}
-
 // DesignSystemByIDReader reads one design system, whole, by its id:
 // DESIGN_SYSTEM_NOT_FOUND when there is none.
 type DesignSystemByIDReader interface {

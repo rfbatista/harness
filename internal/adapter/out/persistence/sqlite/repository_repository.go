@@ -118,16 +118,16 @@ func (r *RepositoryRepository) SetDesignSystem(id string, designSystemID *string
 }
 
 // ListByDesignSystem lists the repositories that use the design system.
-func (r *RepositoryRepository) ListByDesignSystem(designSystemID string) []*domain.Repository {
+func (r *RepositoryRepository) ListByDesignSystem(designSystemID string) ([]*domain.Repository, error) {
 	var models []RepositoryModel
 	if err := r.db.Where("design_system_id = ?", designSystemID).Order("name, id").Find(&models).Error; err != nil {
-		return nil
+		return nil, err
 	}
 	out := make([]*domain.Repository, 0, len(models))
 	for i := range models {
 		out = append(out, models[i].ToDomain())
 	}
-	return out
+	return out, nil
 }
 
 // DeleteByProject deletes all repositories for the given project.

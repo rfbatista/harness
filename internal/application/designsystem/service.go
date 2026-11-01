@@ -12,16 +12,14 @@ import (
 	"fmt"
 	"slices"
 	"strings"
+	"sync"
 	"time"
 
 	"operators-mcp/internal/domain"
 	"operators-mcp/internal/ports"
 )
 
-var (
-	_ ports.DesignSystems      = (*Service)(nil)
-	_ ports.DesignSystemReader = (*Service)(nil)
-)
+var _ ports.DesignSystems = (*Service)(nil)
 
 const (
 	defaultVersionsLimit = 50
@@ -39,8 +37,9 @@ type Service struct {
 	store    ports.DesignSystemStore
 	projects ports.ProjectReader
 	feed     ports.ProjectChangeSink // nil until the orchestration is wired
-	// guards refuse a delete (DESIGN_SYSTEM_IN_USE, ticket 11).
+	// guards refuse a delete (DESIGN_SYSTEM_IN_USE).
 	guards []func(ctx context.Context, designSystemID string) error
+	lock   sync.Locker // held from the guards to the delete; nil: none
 	now    func() time.Time
 }
 
@@ -52,6 +51,10 @@ func NewService(d Deps) *Service {
 // UseFeed sets where changes are announced: the project feed, which the
 // orchestration owns.
 func (s *Service) UseFeed(feed ports.ProjectChangeSink) { s.feed = feed }
+
+// UseLock sets the lock a delete holds from its guards to the store's delete;
+// whoever lets something start using a design system takes the same lock.
+func (s *Service) UseLock(l sync.Locker) { s.lock = l }
 
 // GuardDelete adds a check a delete passes first; an error refuses it.
 func (s *Service) GuardDelete(check func(ctx context.Context, designSystemID string) error) {
@@ -128,17 +131,17 @@ func (s *Service) ListDesignSystems(ctx context.Context, projectID string) ([]*d
 	if err != nil {
 		return nil, err
 	}
+	stamps, err := s.store.LatestStamps(ctx, projectID)
+	if err != nil {
+		return nil, err
+	}
 	out := make([]*domain.DesignSystemSummary, 0, len(ids))
 	for _, id := range ids {
 		sum := &domain.DesignSystemSummary{DesignSystemIdentity: *id}
-		cur, err := s.store.Latest(ctx, id.ID)
-		if err != nil {
-			return nil, err
-		}
-		if cur != nil {
-			sum.Version = cur.Version
-			if cur.At.After(sum.UpdatedAt) {
-				sum.UpdatedAt = cur.At
+		if st, ok := stamps[id.ID]; ok {
+			sum.Version = st.Version
+			if st.At.After(sum.UpdatedAt) {
+				sum.UpdatedAt = st.At
 			}
 		}
 		out = append(out, sum)
@@ -209,6 +212,10 @@ func (s *Service) DeleteDesignSystem(ctx context.Context, designSystemID, confir
 	if strings.TrimSpace(confirmName) != id.Name {
 		return &domain.StructuredError{Code: "INVALID_INPUT", Message: "confirm_name must be the design system's name, " + id.Name}
 	}
+	if s.lock != nil {
+		s.lock.Lock()
+		defer s.lock.Unlock()
+	}
 	for _, guard := range s.guards {
 		if err := guard(ctx, designSystemID); err != nil {
 			return err
@@ -228,25 +235,6 @@ func (s *Service) GetDesignSystem(ctx context.Context, designSystemID string) (*
 		return nil, err
 	}
 	return view(id, cur), nil
-}
-
-// GetProjectDesignSystem implements ports.DesignSystemReader.
-// ticket 11/12/13 re-key this: consumers that cannot name a design system yet
-// read the project's first one by creation order.
-func (s *Service) GetProjectDesignSystem(ctx context.Context, projectID string) (*domain.DesignSystem, error) {
-	if _, err := s.projects.GetProject(ctx, projectID); err != nil {
-		return nil, err
-	}
-	ids, err := s.store.ListByProject(ctx, projectID)
-	if err != nil {
-		return nil, err
-	}
-	if len(ids) == 0 {
-		ds := &domain.DesignSystem{ProjectID: projectID}
-		ds.Record.Normalize()
-		return ds, nil
-	}
-	return s.GetDesignSystem(ctx, ids[0].ID)
 }
 
 // SaveDesignSystem implements ports.DesignSystems.

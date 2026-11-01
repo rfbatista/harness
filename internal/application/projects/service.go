@@ -43,6 +43,7 @@ type Service struct {
 	tasks        ports.TaskActivityReader     // nil: summaries count no tasks
 	sessions     ports.SessionActivityReader  // nil: no sessions counted, deletes not guarded
 	designs      ports.DesignSystemIdentities // nil: repositories cannot use a design system
+	designLock   sync.Locker                  // held while a repository's design system is checked and set
 
 	// mu serialises project writes, so a name is checked and taken at once
 	// and the feed announces changes in the order they were made.
@@ -58,7 +59,12 @@ func (s *Service) UseActivity(tasks ports.TaskActivityReader, sessions ports.Ses
 }
 
 // UseDesignSystems lets the context name the design systems repositories use.
-func (s *Service) UseDesignSystems(designs ports.DesignSystemIdentities) { s.designs = designs }
+// lock is held across a design system's check and the repository's change to
+// it, and by the design system's delete (designsystem.Service.UseLock), so a
+// repository never ends up using a design system that was just deleted.
+func (s *Service) UseDesignSystems(designs ports.DesignSystemIdentities, lock sync.Locker) {
+	s.designs, s.designLock = designs, lock
+}
 
 // UseRunCommands lets the context keep repositories' saved run commands.
 func (s *Service) UseRunCommands(store ports.RunCommandRepository) { s.runCommands = store }
@@ -645,6 +651,10 @@ func (s *Service) SetRepositoryDesignSystem(ctx context.Context, repositoryID st
 	if err != nil {
 		return nil, err
 	}
+	if designSystemID != nil && s.designLock != nil {
+		s.designLock.Lock()
+		defer s.designLock.Unlock()
+	}
 	if designSystemID != nil {
 		target, err := s.designSystemOf(ctx, repo.ProjectID, *designSystemID)
 		if err != nil {
@@ -687,9 +697,9 @@ func (s *Service) moveNotConfirmed(ctx context.Context, current string) error {
 
 // RepositoriesUsingDesignSystem lists the repositories that use the design
 // system, the guard of its delete.
-func (s *Service) RepositoriesUsingDesignSystem(_ context.Context, designSystemID string) []*domain.Repository {
+func (s *Service) RepositoriesUsingDesignSystem(_ context.Context, designSystemID string) ([]*domain.Repository, error) {
 	if s.repositories == nil {
-		return nil
+		return nil, nil
 	}
 	return s.repositories.ListByDesignSystem(designSystemID)
 }
