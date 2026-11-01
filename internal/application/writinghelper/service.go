@@ -41,7 +41,7 @@ const (
 	maxTextLen = 20000
 	// maxInstructionBytes is an instruction file's size limit, which its field
 	// text and its draft share.
-	maxInstructionBytes = 256 * 1024
+	maxInstructionBytes = domain.MaxInstructionFileSize
 	maxSiblings         = 4
 	maxAnswers          = 3
 	maxExclude          = 50

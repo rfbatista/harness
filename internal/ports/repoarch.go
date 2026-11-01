@@ -2,6 +2,7 @@ package ports
 
 import (
 	"context"
+	"errors"
 	"time"
 
 	"operators-mcp/internal/domain"
@@ -89,6 +90,10 @@ type StoredArchitecture struct {
 	ExportedAt      *time.Time
 	ExportedSHA     string
 }
+
+// ErrInstructionFilesTooBig is what the store answers a save that would take
+// a repository's instruction files over the limit it was given.
+var ErrInstructionFilesTooBig = errors.New("the repository's instruction files would be over the limit")
 
 // ArchitectureRecordStore keeps the records and their layer zones (driven).
 type ArchitectureRecordStore interface {

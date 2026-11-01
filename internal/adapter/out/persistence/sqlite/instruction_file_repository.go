@@ -9,6 +9,7 @@ import (
 	"gorm.io/gorm"
 
 	"operators-mcp/internal/domain"
+	"operators-mcp/internal/ports"
 )
 
 // InstructionFileModel is the GORM model of one instruction file of a
@@ -111,10 +112,7 @@ func (r *ArchitectureRecordRepository) SaveInstructionFile(ctx context.Context, 
 			return err
 		}
 		if others+len(f.Content) > totalLimit {
-			return &domain.DetailedError{
-				StructuredError: &domain.StructuredError{Code: "INSTRUCTION_INVALID", Message: "the repository's instruction files would be over the limit"},
-				Details:         map[string]any{"errors": []domain.ArchFieldError{{Path: "/content", Code: domain.ArchInvalidValue, Message: "all instruction files of a repository together are at most 3.75 MiB (4 MiB less 256 KB kept for ARCHITECTURE.md)"}}},
-			}
+			return ports.ErrInstructionFilesTooBig
 		}
 		m.ProjectID, m.Kind, m.Version, m.Content, m.UpdatedAt = f.ProjectID, f.Kind, m.Version+1, f.Content, time.Now()
 		if err := tx.Save(m).Error; err != nil {

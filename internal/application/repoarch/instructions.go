@@ -3,6 +3,7 @@ package repoarch
 import (
 	"context"
 	"errors"
+	"fmt"
 	"log/slog"
 
 	"operators-mcp/internal/domain"
@@ -11,6 +12,17 @@ import (
 
 var _ ports.InstructionFiles = (*Service)(nil)
 
+// tooBigAsInvalid turns the store's refusal of a save over the total limit
+// into the INSTRUCTION_INVALID the contract names; any other error is as it was.
+func tooBigAsInvalid(err error) error {
+	if !errors.Is(err, ports.ErrInstructionFilesTooBig) {
+		return err
+	}
+	return invalidInstruction([]domain.ArchFieldError{{Path: "/content", Code: domain.ArchInvalidValue,
+		Message: fmt.Sprintf("all instruction files of a repository together are at most %.2f MiB (4 MiB less 256 KB kept for ARCHITECTURE.md)", float64(domain.MaxInstructionFilesSize)/(1<<20))}})
+}
+
+// invalidInstruction is INSTRUCTION_INVALID with a field error per problem.
 func invalidInstruction(problems []domain.ArchFieldError) error {
 	return &domain.DetailedError{
 		StructuredError: &domain.StructuredError{Code: "INSTRUCTION_INVALID", Message: "the instruction file is invalid: " + problems[0].Message},
@@ -18,6 +30,7 @@ func invalidInstruction(problems []domain.ArchFieldError) error {
 	}
 }
 
+// announceInstruction puts a file change on the project feed.
 func (s *Service) announceInstruction(projectID, repositoryID, path string, version int) {
 	if s.feed == nil {
 		return
@@ -67,7 +80,7 @@ func (s *Service) SaveInstructionFile(ctx context.Context, repositoryID, path, k
 		RepositoryID: repositoryID, ProjectID: repo.ProjectID, Path: path, Kind: kind, Content: content,
 	}, baseVersion, domain.MaxInstructionFilesSize)
 	if err != nil {
-		return nil, err
+		return nil, tooBigAsInvalid(err)
 	}
 	s.announceInstruction(repo.ProjectID, repositoryID, path, f.Version)
 	return f, nil
@@ -91,7 +104,7 @@ func (s *Service) RenameInstructionFile(ctx context.Context, repositoryID, path,
 	if err != nil {
 		return nil, err
 	}
-	s.recordMoved(repo, recordVersion)
+	s.announceRecord(repo, recordVersion)
 	s.announceInstruction(repo.ProjectID, repositoryID, path, 0)
 	s.announceInstruction(repo.ProjectID, repositoryID, newPath, f.Version)
 	return f, nil
@@ -108,14 +121,14 @@ func (s *Service) DeleteInstructionFile(ctx context.Context, repositoryID, path 
 	if err != nil {
 		return err
 	}
-	s.recordMoved(repo, recordVersion)
+	s.announceRecord(repo, recordVersion)
 	s.announceInstruction(repo.ProjectID, repositoryID, path, 0)
 	return nil
 }
 
-// recordMoved tells the record's followers it has a new version, after a file
+// announceRecord tells the record's followers it has a new version, after a file
 // change moved or removed one of its entries; version 0 says it did not change.
-func (s *Service) recordMoved(repo *domain.Repository, version int) {
+func (s *Service) announceRecord(repo *domain.Repository, version int) {
 	if version == 0 {
 		return
 	}
@@ -197,6 +210,26 @@ func (s *Service) ImportInstructionFiles(ctx context.Context, repositoryID strin
 		}
 		sources = append(sources, source{p, kind, string(blob)})
 	}
+	// Refuse a batch that would go over the total before anything is saved, so an
+	// import is all or nothing.
+	stored, err := s.store.ListInstructionFiles(ctx, repositoryID)
+	if err != nil {
+		return nil, err
+	}
+	total := map[string]int{}
+	for _, f := range stored {
+		total[f.Path] = len(f.Content)
+	}
+	for _, src := range sources {
+		total[src.path] = len(src.content)
+	}
+	sum := 0
+	for _, n := range total {
+		sum += n
+	}
+	if sum > domain.MaxInstructionFilesSize {
+		return nil, tooBigAsInvalid(ports.ErrInstructionFilesTooBig)
+	}
 	out := []domain.InstructionFile{}
 	for _, src := range sources {
 		cur, err := s.store.GetInstructionFile(ctx, repositoryID, src.path)
@@ -209,6 +242,7 @@ func (s *Service) ImportInstructionFiles(ctx context.Context, repositoryID strin
 			}
 			base = cur.Version
 		case isCode(err, "INSTRUCTION_NOT_FOUND"):
+			// A new file: it is created at version 0 below.
 		default:
 			return nil, err
 		}
@@ -216,7 +250,7 @@ func (s *Service) ImportInstructionFiles(ctx context.Context, repositoryID strin
 			RepositoryID: repositoryID, ProjectID: repo.ProjectID, Path: src.path, Kind: src.kind, Content: src.content,
 		}, base, domain.MaxInstructionFilesSize)
 		if err != nil {
-			return nil, err
+			return nil, tooBigAsInvalid(err)
 		}
 		s.announceInstruction(repo.ProjectID, repositoryID, src.path, f.Version)
 		out = append(out, *f)
@@ -227,6 +261,7 @@ func (s *Service) ImportInstructionFiles(ctx context.Context, repositoryID strin
 	return out, nil
 }
 
+// isCode says err is a StructuredError with code.
 func isCode(err error, code string) bool {
 	var se *domain.StructuredError
 	return errors.As(err, &se) && se.Code == code
@@ -257,8 +292,16 @@ func (s *Service) RemoveInstructionFilesFromRepository(ctx context.Context, repo
 			return "", err
 		}
 	}
-	if _, err := s.cleanDefaultBranch(ctx, repo); err != nil {
+	branch, err := s.cleanDefaultBranch(ctx, repo)
+	if err != nil {
 		return "", err
+	}
+	for _, p := range paths {
+		if _, found, err := s.git.ReadFile(ctx, repo.RootDir, branch, p); err != nil {
+			return "", err
+		} else if !found {
+			return "", &domain.StructuredError{Code: "INSTRUCTION_NOT_FOUND", Message: p + " is not on the default branch " + branch}
+		}
 	}
 	return s.git.RemoveFiles(ctx, repo.RootDir, paths, removeMessage)
 }

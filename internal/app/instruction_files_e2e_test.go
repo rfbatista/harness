@@ -343,6 +343,27 @@ func TestInstructionFiles_ImportCopiesFromTheDefaultBranchAndAddsVersions(t *tes
 	}
 }
 
+func TestInstructionFiles_AnImportOverTheTotalImportsNothing(t *testing.T) {
+	s := startArchRecordServer(t)
+	chunk := strings.Repeat("a", 256*1024)
+	for i := 0; i < 14; i++ {
+		s.saveFile("d"+string(rune('a'+i))+"/CLAUDE.md", "memory", 0, chunk)
+	}
+	// 14 files are 3.5 MiB: two more of 200 KB do not fit together, one does.
+	big := strings.Repeat("b", 200*1024)
+	s.commitFiles(map[string]string{"AGENTS.md": big, "web/AGENTS.md": big})
+	status, body := s.importFiles("AGENTS.md", "web/AGENTS.md")
+	if status != http.StatusBadRequest || body["code"] != "INSTRUCTION_INVALID" {
+		t.Fatalf("import: %d %v", status, body)
+	}
+	if n := len(s.listFiles()); n != 14 {
+		t.Errorf("a refused import stored files: %d files", n)
+	}
+	if status, body := s.importFiles("AGENTS.md"); status != http.StatusOK {
+		t.Errorf("one file of the two: %d %v", status, body)
+	}
+}
+
 func (s *archRecordServer) removeFiles(paths ...string) (int, map[string]any) {
 	return s.post("remove_instruction_files_from_repository", map[string]any{"repository_id": s.repo.ID, "paths": paths})
 }
@@ -403,6 +424,11 @@ func TestInstructionFiles_RemoveIsRefusedForADirtyCheckoutTheWrongBranchAndAFile
 	// A path never imported: nothing is removed, though the others were.
 	if status, body := s.removeFiles("CLAUDE.md", "web/GEMINI.md"); status != http.StatusConflict || body["code"] != "INSTRUCTION_NOT_IMPORTED" {
 		t.Errorf("not imported: %d %v", status, body)
+	}
+	// Imported, then gone from the branch: nothing to remove, and nothing removed.
+	s.saveFile("gone/CLAUDE.md", "memory", 0, "kept in the harness only")
+	if status, body := s.removeFiles("CLAUDE.md", "gone/CLAUDE.md"); status != http.StatusNotFound || body["code"] != "INSTRUCTION_NOT_FOUND" {
+		t.Errorf("not on the branch: %d %v", status, body)
 	}
 	if _, err := os.Stat(filepath.Join(s.checkout, "CLAUDE.md")); err != nil {
 		t.Errorf("a refused remove deleted a file: %v", err)
