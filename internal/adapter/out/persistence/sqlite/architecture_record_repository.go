@@ -125,6 +125,9 @@ func (r *ArchitectureRecordRepository) Delete(ctx context.Context, repositoryID 
 		if err := tx.Where("repository_id = ?", repositoryID).Delete(&ZoneModel{}).Error; err != nil {
 			return err
 		}
+		if err := tx.Where("repository_id = ?", repositoryID).Delete(&InstructionFileModel{}).Error; err != nil {
+			return err
+		}
 		return tx.Where("repository_id = ?", repositoryID).Delete(&ArchitectureRecordModel{}).Error
 	})
 }
@@ -132,6 +135,9 @@ func (r *ArchitectureRecordRepository) Delete(ctx context.Context, repositoryID 
 // DeleteByProject implements ports.ArchitectureRecordStore.
 func (r *ArchitectureRecordRepository) DeleteByProject(ctx context.Context, projectID string) error {
 	return r.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		if err := tx.Where("project_id = ?", projectID).Delete(&InstructionFileModel{}).Error; err != nil {
+			return err
+		}
 		return tx.Where("project_id = ?", projectID).Delete(&ArchitectureRecordModel{}).Error
 	})
 }

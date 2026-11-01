@@ -147,3 +147,129 @@ func (h *Handler) handleExportRepositoryArchitecture(c echo.Context) error {
 	}
 	return c.JSON(http.StatusOK, res)
 }
+
+// instructionFileBody is an instruction file as the API answers it: content
+// only when the file is asked for.
+type instructionFileBody struct {
+	Path      string    `json:"path"`
+	Kind      string    `json:"kind"`
+	Version   int       `json:"version"`
+	Size      int       `json:"size"`
+	UpdatedAt time.Time `json:"updated_at"`
+	Content   *string   `json:"content,omitempty"`
+}
+
+func instructionFileBodyOf(f domain.InstructionFile, withContent bool) instructionFileBody {
+	b := instructionFileBody{Path: f.Path, Kind: f.Kind, Version: f.Version, Size: f.Size, UpdatedAt: f.UpdatedAt}
+	if withContent {
+		b.Content = &f.Content
+	}
+	return b
+}
+
+func (h *Handler) handleListInstructionFiles(c echo.Context) error {
+	if err := h.repositoryArchitectures(); err != nil {
+		return err
+	}
+	var in struct {
+		RepositoryID string `json:"repository_id"`
+	}
+	if err := bindJSON(c, &in); err != nil {
+		return err
+	}
+	files, err := h.repoArch.ListInstructionFiles(c.Request().Context(), in.RepositoryID)
+	if err != nil {
+		return err
+	}
+	out := make([]instructionFileBody, len(files))
+	for i, f := range files {
+		out[i] = instructionFileBodyOf(f, false)
+	}
+	return c.JSON(http.StatusOK, map[string]any{"files": out})
+}
+
+func (h *Handler) handleGetInstructionFile(c echo.Context) error {
+	if err := h.repositoryArchitectures(); err != nil {
+		return err
+	}
+	var in struct {
+		RepositoryID string `json:"repository_id"`
+		Path         string `json:"path"`
+	}
+	if err := bindJSON(c, &in); err != nil {
+		return err
+	}
+	f, err := h.repoArch.GetInstructionFile(c.Request().Context(), in.RepositoryID, in.Path)
+	if err != nil {
+		return err
+	}
+	return c.JSON(http.StatusOK, instructionFileBodyOf(*f, true))
+}
+
+func (h *Handler) handleSaveInstructionFile(c echo.Context) error {
+	if err := h.repositoryArchitectures(); err != nil {
+		return err
+	}
+	var in struct {
+		RepositoryID string `json:"repository_id"`
+		Path         string `json:"path"`
+		Kind         string `json:"kind"`
+		BaseVersion  *int   `json:"base_version"`
+		Content      string `json:"content"`
+	}
+	if err := bindJSON(c, &in); err != nil {
+		return err
+	}
+	if in.BaseVersion == nil {
+		return &domain.StructuredError{Code: "INVALID_INPUT", Message: "base_version is required"}
+	}
+	f, err := h.repoArch.SaveInstructionFile(c.Request().Context(), in.RepositoryID, in.Path, in.Kind, *in.BaseVersion, in.Content)
+	if err != nil {
+		return err
+	}
+	return c.JSON(http.StatusOK, instructionFileBodyOf(*f, false))
+}
+
+func (h *Handler) handleRenameInstructionFile(c echo.Context) error {
+	if err := h.repositoryArchitectures(); err != nil {
+		return err
+	}
+	var in struct {
+		RepositoryID string `json:"repository_id"`
+		Path         string `json:"path"`
+		NewPath      string `json:"new_path"`
+		BaseVersion  *int   `json:"base_version"`
+	}
+	if err := bindJSON(c, &in); err != nil {
+		return err
+	}
+	if in.BaseVersion == nil {
+		return &domain.StructuredError{Code: "INVALID_INPUT", Message: "base_version is required"}
+	}
+	f, err := h.repoArch.RenameInstructionFile(c.Request().Context(), in.RepositoryID, in.Path, in.NewPath, *in.BaseVersion)
+	if err != nil {
+		return err
+	}
+	return c.JSON(http.StatusOK, instructionFileBodyOf(*f, false))
+}
+
+func (h *Handler) handleDeleteInstructionFile(c echo.Context) error {
+	if err := h.repositoryArchitectures(); err != nil {
+		return err
+	}
+	var in struct {
+		RepositoryID string `json:"repository_id"`
+		Path         string `json:"path"`
+		BaseVersion  *int   `json:"base_version"`
+	}
+	if err := bindJSON(c, &in); err != nil {
+		return err
+	}
+	if in.BaseVersion == nil {
+		return &domain.StructuredError{Code: "INVALID_INPUT", Message: "base_version is required"}
+	}
+	if err := h.repoArch.DeleteInstructionFile(c.Request().Context(), in.RepositoryID, in.Path, *in.BaseVersion); err != nil {
+		return err
+	}
+	return c.NoContent(http.StatusNoContent)
+}
