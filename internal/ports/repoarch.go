@@ -67,6 +67,12 @@ type InstructionFiles interface {
 	// INSTRUCTION_INVALID; then nothing is imported. It never writes the
 	// checkout.
 	ImportInstructionFiles(ctx context.Context, repositoryID string, paths []string) ([]domain.InstructionFile, error)
+	// RemoveInstructionFilesFromRepository deletes the paths from the local
+	// checkout and commits on the default branch, with no push. Each must
+	// already be in the harness (INSTRUCTION_NOT_IMPORTED); the checkout must
+	// be clean (CHECKOUT_DIRTY) and on the default branch (WRONG_BRANCH).
+	// It answers the commit.
+	RemoveInstructionFilesFromRepository(ctx context.Context, repositoryID string, paths []string) (string, error)
 }
 
 // StoredArchitecture is a repository's record row.
@@ -142,6 +148,11 @@ type ArchitectureGit interface {
 	// without running the checkout's hooks. It never pushes. On failure the
 	// checkout is as it was. It answers the new commit.
 	CommitFiles(ctx context.Context, dir string, files map[string][]byte, message string) (string, error)
+	// RemoveFiles deletes the tracked files from the checkout (which is on
+	// the default branch and clean) and commits only the deletions with
+	// message, as CommitFiles does. A path the checkout does not track is an
+	// error and removes nothing. It answers the new commit.
+	RemoveFiles(ctx context.Context, dir string, paths []string, message string) (string, error)
 }
 
 // ArchitectureRuleEventStore keeps the rules that failed (driven). Events are

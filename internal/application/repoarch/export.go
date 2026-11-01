@@ -124,19 +124,9 @@ func (s *Service) ExportRepositoryArchitecture(ctx context.Context, repositoryID
 	if st.Version != version {
 		return nil, &domain.StructuredError{Code: "ARCHITECTURE_CHANGED", Message: fmt.Sprintf("version %d is not the current version, %d", version, st.Version)}
 	}
-	branch, err := s.git.DefaultBranch(ctx, repo.RootDir)
+	branch, err := s.cleanDefaultBranch(ctx, repo)
 	if err != nil {
 		return nil, err
-	}
-	state, err := s.git.Checkout(ctx, repo.RootDir)
-	if err != nil {
-		return nil, err
-	}
-	switch {
-	case branch == "" || state.Branch != branch:
-		return nil, &domain.StructuredError{Code: "WRONG_BRANCH", Message: "the checkout at " + repo.RootDir + " is on " + branchWord(state.Branch) + ", not on the default branch " + branch + "; check " + branch + " out there first"}
-	case !state.Clean():
-		return nil, &domain.StructuredError{Code: "CHECKOUT_DIRTY", Message: "the checkout at " + repo.RootDir + " has uncommitted changes; commit, stash or remove them first"}
 	}
 
 	text, err := ArchitectureYAML(st.Record)
@@ -167,6 +157,26 @@ func (s *Service) ExportRepositoryArchitecture(ctx context.Context, repositoryID
 	s.announce(repo.ProjectID, repositoryID, version)
 	exp := s.exportOf(ctx, repo, stored)
 	return &domain.ArchitectureExportResult{Commit: commit, Path: domain.ArchitectureFilePath, Export: exp}, nil
+}
+
+// cleanDefaultBranch is the repository's default branch, once the checkout is
+// on it with nothing uncommitted: WRONG_BRANCH or CHECKOUT_DIRTY otherwise.
+func (s *Service) cleanDefaultBranch(ctx context.Context, repo *domain.Repository) (string, error) {
+	branch, err := s.git.DefaultBranch(ctx, repo.RootDir)
+	if err != nil {
+		return "", err
+	}
+	state, err := s.git.Checkout(ctx, repo.RootDir)
+	if err != nil {
+		return "", err
+	}
+	switch {
+	case branch == "" || state.Branch != branch:
+		return "", &domain.StructuredError{Code: "WRONG_BRANCH", Message: "the checkout at " + repo.RootDir + " is on " + branchWord(state.Branch) + ", not on the default branch " + branch + "; check " + branch + " out there first"}
+	case !state.Clean():
+		return "", &domain.StructuredError{Code: "CHECKOUT_DIRTY", Message: "the checkout at " + repo.RootDir + " has uncommitted changes; commit, stash or remove them first"}
+	}
+	return branch, nil
 }
 
 func branchWord(b string) string {

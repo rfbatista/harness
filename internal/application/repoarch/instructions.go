@@ -257,3 +257,34 @@ func isCode(err error, code string) bool {
 	var se *domain.StructuredError
 	return errors.As(err, &se) && se.Code == code
 }
+
+// removeMessage is the commit message of a removal.
+const removeMessage = "chore(architecture): move instruction files into the harness"
+
+// RemoveInstructionFilesFromRepository implements ports.InstructionFiles.
+func (s *Service) RemoveInstructionFilesFromRepository(ctx context.Context, repositoryID string, paths []string) (string, error) {
+	repo, err := s.repos.GetRepository(ctx, repositoryID)
+	if err != nil {
+		return "", err
+	}
+	if s.git == nil {
+		return "", &domain.StructuredError{Code: "UNAVAILABLE", Message: "the checkout cannot be written"}
+	}
+	if len(paths) == 0 {
+		return "", &domain.StructuredError{Code: "INVALID_INPUT", Message: "paths is required"}
+	}
+	defer s.lockCheckout(repo.RootDir)()
+
+	for _, p := range paths {
+		if _, err := s.store.GetInstructionFile(ctx, repositoryID, p); err != nil {
+			if isCode(err, "INSTRUCTION_NOT_FOUND") {
+				return "", &domain.StructuredError{Code: "INSTRUCTION_NOT_IMPORTED", Message: p + " is not in the harness yet; import it first"}
+			}
+			return "", err
+		}
+	}
+	if _, err := s.cleanDefaultBranch(ctx, repo); err != nil {
+		return "", err
+	}
+	return s.git.RemoveFiles(ctx, repo.RootDir, paths, removeMessage)
+}

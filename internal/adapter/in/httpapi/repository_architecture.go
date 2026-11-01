@@ -308,3 +308,21 @@ func (h *Handler) handleDeleteInstructionFile(c echo.Context) error {
 	}
 	return c.NoContent(http.StatusNoContent)
 }
+
+func (h *Handler) handleRemoveInstructionFilesFromRepository(c echo.Context) error {
+	if err := h.repositoryArchitectures(); err != nil {
+		return err
+	}
+	var in struct {
+		RepositoryID string   `json:"repository_id"`
+		Paths        []string `json:"paths"`
+	}
+	if err := bindJSON(c, &in); err != nil {
+		return err
+	}
+	commit, err := h.repoArch.RemoveInstructionFilesFromRepository(c.Request().Context(), in.RepositoryID, in.Paths)
+	if err != nil {
+		return err
+	}
+	return c.JSON(http.StatusOK, map[string]any{"commit": commit})
+}

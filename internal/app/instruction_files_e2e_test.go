@@ -4,6 +4,8 @@ package app
 
 import (
 	"net/http"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 )
@@ -320,5 +322,88 @@ func TestInstructionFiles_ImportCopiesFromTheDefaultBranchAndAddsVersions(t *tes
 	}
 	if status := gitE2E(t, s.checkout, "status", "--porcelain"); status != "" {
 		t.Errorf("import changed the checkout: %s", status)
+	}
+}
+
+func (s *archRecordServer) removeFiles(paths ...string) (int, map[string]any) {
+	return s.post("remove_instruction_files_from_repository", map[string]any{"repository_id": s.repo.ID, "paths": paths})
+}
+
+func TestInstructionFiles_RemoveCommitsTheDeletionsOnTheDefaultBranchWithoutPushing(t *testing.T) {
+	s, bare := startExportServer(t)
+	s.commitFiles(repositoryInstructionFiles)
+	gitE2E(t, s.checkout, "push", "-q", "origin", "main")
+	s.mustPost("import_instruction_files", map[string]any{"repository_id": s.repo.ID, "paths": []string{"CLAUDE.md", "web/GEMINI.md", ".claude/agents/reviewer.md"}})
+	before := gitE2E(t, s.checkout, "rev-parse", "HEAD")
+	remoteBefore := gitE2E(t, bare, "rev-parse", "main")
+
+	status, got := s.removeFiles("CLAUDE.md", "web/GEMINI.md", ".claude/agents/reviewer.md")
+	if status != http.StatusOK {
+		t.Fatalf("remove: %d %v", status, got)
+	}
+	head := gitE2E(t, s.checkout, "rev-parse", "HEAD")
+	if got["commit"] != head || head == before {
+		t.Errorf("commit %v, head %s, before %s", got["commit"], head, before)
+	}
+	if n := gitE2E(t, s.checkout, "rev-list", "--count", before+"..HEAD"); n != "1" {
+		t.Errorf("%s commits", n)
+	}
+	if msg := gitE2E(t, s.checkout, "log", "-1", "--format=%s"); msg != "chore(architecture): move instruction files into the harness" {
+		t.Errorf("message = %q", msg)
+	}
+	if who := gitE2E(t, s.checkout, "log", "-1", "--format=%an <%ae>"); who != "harness <harness@harness.local>" {
+		t.Errorf("author = %q", who)
+	}
+	if files := gitE2E(t, s.checkout, "show", "--name-status", "--format=", "HEAD"); files != "D\t.claude/agents/reviewer.md\nD\tCLAUDE.md\nD\tweb/GEMINI.md" {
+		t.Errorf("the commit holds:\n%s", files)
+	}
+	for _, p := range []string{"CLAUDE.md", "web/GEMINI.md", ".claude/agents/reviewer.md"} {
+		if _, err := os.Stat(filepath.Join(s.checkout, p)); err == nil {
+			t.Errorf("%s is still in the checkout", p)
+		}
+	}
+	if _, err := os.Stat(filepath.Join(s.checkout, "AGENTS.md")); err != nil {
+		t.Errorf("a file that was not asked for is gone: %v", err)
+	}
+	if st := gitE2E(t, s.checkout, "status", "--porcelain"); st != "" {
+		t.Errorf("the checkout is not clean: %s", st)
+	}
+	if now := gitE2E(t, bare, "rev-parse", "main"); now != remoteBefore {
+		t.Error("the remove pushed")
+	}
+	if len(s.listFiles()) != 3 {
+		t.Errorf("the harness copies went: %v", s.listFiles())
+	}
+}
+
+func TestInstructionFiles_RemoveIsRefusedForADirtyCheckoutTheWrongBranchAndAFileNotImported(t *testing.T) {
+	s := startArchRecordServer(t)
+	s.commitFiles(repositoryInstructionFiles)
+	s.mustPost("import_instruction_files", map[string]any{"repository_id": s.repo.ID, "paths": []string{"CLAUDE.md", "AGENTS.md"}})
+	head := gitE2E(t, s.checkout, "rev-parse", "HEAD")
+
+	// A path never imported: nothing is removed, though the others were.
+	if status, body := s.removeFiles("CLAUDE.md", "web/GEMINI.md"); status != http.StatusConflict || body["code"] != "INSTRUCTION_NOT_IMPORTED" {
+		t.Errorf("not imported: %d %v", status, body)
+	}
+	if _, err := os.Stat(filepath.Join(s.checkout, "CLAUDE.md")); err != nil {
+		t.Errorf("a refused remove deleted a file: %v", err)
+	}
+
+	if err := os.WriteFile(filepath.Join(s.checkout, "main.go"), []byte("package changed\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if status, body := s.removeFiles("CLAUDE.md"); status != http.StatusConflict || body["code"] != "CHECKOUT_DIRTY" {
+		t.Errorf("dirty: %d %v", status, body)
+	}
+	gitE2E(t, s.checkout, "checkout", "-q", "--", "main.go")
+
+	gitE2E(t, s.checkout, "checkout", "-q", "-b", "side")
+	if status, body := s.removeFiles("CLAUDE.md"); status != http.StatusConflict || body["code"] != "WRONG_BRANCH" {
+		t.Errorf("wrong branch: %d %v", status, body)
+	}
+	gitE2E(t, s.checkout, "checkout", "-q", "main")
+	if now := gitE2E(t, s.checkout, "rev-parse", "HEAD"); now != head {
+		t.Error("a refused remove committed")
 	}
 }
