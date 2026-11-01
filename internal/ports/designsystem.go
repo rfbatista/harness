@@ -278,3 +278,93 @@ type DesignSubmission struct {
 	Items       int
 	Conflicting int
 }
+
+// DesignExportGit is what a design system export asks of a checkout: the
+// architecture export's reads and commit, plus a folder read whole and a commit
+// that also deletes (driven; gitcli implements it).
+type DesignExportGit interface {
+	ArchitectureGit
+	// ReadTree reads every file branch tracks under prefix, keyed by its path
+	// relative to prefix; empty when there is none.
+	ReadTree(ctx context.Context, dir, branch, prefix string) (map[string][]byte, error)
+	// CommitChanges writes files and deletes removed, both in the checkout
+	// (which is on the default branch and clean), and commits only those paths
+	// with message, as CommitFiles does. It never pushes. It answers the new
+	// commit.
+	CommitChanges(ctx context.Context, dir string, files map[string][]byte, removed []string, message string) (string, error)
+}
+
+// DesignExportRecord is what the last export of a repository wrote: the design
+// system and version, the commit and time, and the hash of the files.
+type DesignExportRecord struct {
+	RepositoryID   string
+	DesignSystemID string
+	Version        int
+	Commit         string
+	At             time.Time
+	SHA            string
+}
+
+// DesignExportStore keeps the last export of each repository (driven).
+type DesignExportStore interface {
+	// Get answers the repository's last export, or nil when it has none.
+	Get(ctx context.Context, repositoryID string) (*DesignExportRecord, error)
+	// Set replaces the repository's last export.
+	Set(ctx context.Context, rec *DesignExportRecord) error
+	// Delete forgets the repository's last export.
+	Delete(ctx context.Context, repositoryID string) error
+}
+
+// DesignExportResult is what an export answers.
+type DesignExportResult struct {
+	Commit  string `json:"commit"`
+	Version int    `json:"version"`
+	State   string `json:"state"`
+}
+
+// Export states of a repository against the design system it applies.
+const (
+	DesignExportNeverExported = "never_exported"
+	DesignExportInSync        = "in_sync"
+	DesignExportBehind        = "behind"
+	DesignExportEditedOutside = "edited_outside"
+)
+
+// DesignExportInfo is where one repository stands against the design system
+// it applies. The exported fields are null before the first export.
+type DesignExportInfo struct {
+	State           string     `json:"state"`
+	ExportedVersion *int       `json:"exported_version"`
+	CurrentVersion  int        `json:"current_version"`
+	ExportedCommit  string     `json:"exported_commit,omitempty"`
+	ExportedAt      *time.Time `json:"exported_at,omitempty"`
+	ChangedFiles    []string   `json:"changed_files,omitempty"`
+}
+
+// DesignExportFile is one file an export would write or delete, with how it
+// differs from the checkout.
+type DesignExportFile struct {
+	Path   string `json:"path"`
+	Status string `json:"status"` // added | changed | unchanged | deleted
+	Diff   string `json:"diff"`
+}
+
+// DesignSystemExports writes a design system into the repositories that use
+// it, on explicit request (ADR 0056). *designsystem.Service satisfies it.
+//
+// NO_DESIGN_SYSTEM says the repository applies none; CHECKOUT_DIRTY and
+// WRONG_BRANCH are the architecture export's; EDITED_OUTSIDE (details
+// changed_files) says the files differ from what was exported.
+type DesignSystemExports interface {
+	// ListDesignSystemExports answers, for each repository that applies the
+	// design system (keyed by repository id), where its export stands.
+	ListDesignSystemExports(ctx context.Context, designSystemID string) (map[string]*DesignExportInfo, error)
+	// PreviewDesignSystemExport lists the files an export would write or
+	// delete at the repository's path, each with its diff against the default
+	// branch. It writes nothing.
+	PreviewDesignSystemExport(ctx context.Context, repositoryID string) ([]DesignExportFile, error)
+	// ExportDesignSystem commits the repository's design system files at its
+	// path on the default branch of the local checkout, without pushing.
+	// Edited-outside files are overwritten only when confirmEditedOutside.
+	ExportDesignSystem(ctx context.Context, repositoryID string, confirmEditedOutside bool) (*DesignExportResult, error)
+}

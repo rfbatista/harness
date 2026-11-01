@@ -708,6 +708,12 @@ export const designSystemPage = ({ gateway, clock, clipboard = { copyText: async
     history.pushState(null, "", slug === TABS[0].slug ? this.base : `${this.base}?tab=${slug}`);
   },
 
+  /** The header's Export…: the Repositories tab, with the repository that needs an export chosen. */
+  openExport() {
+    this.openTab("repositories");
+    window.dispatchEvent(new CustomEvent("design-system-export-choose"));
+  },
+
   openHistory() {
     this.openTab("history");
   },

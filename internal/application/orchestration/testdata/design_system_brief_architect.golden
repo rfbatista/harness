@@ -114,7 +114,6 @@ You can read it and post to it; reading never marks anything read:
 
 - mcp__task__list_notifications — the inbox, newest first: scope all (default) or project, unread_only (default true), since, limit
 - mcp__task__notify — post to it as this session: title, body, level info or action, link (default: this task's page); it shows in the web UI live and goes out through every enabled delivery provider
-- mcp__task__submit_design_system_proposal — design sessions only: submit your draft of the design system as your one proposal, with a summary
 
 Use notify only for what the person has to know or do, never for progress
 chatter: request_user_review and moving a task to review already notify the

@@ -7,6 +7,12 @@ import (
 	"operators-mcp/internal/ports"
 )
 
+// DesignSessionToolNames lists the tools only a design session is told of. They
+// are served when WithDesignProposals is given, and kept out of
+// SessionTaskToolNames, which the task and project briefs and their allow-lists
+// follow.
+var DesignSessionToolNames = []string{"submit_design_system_proposal"}
+
 // Option adds a tool group to SessionTaskTools that not every server has.
 type Option func(*options)
 
@@ -14,9 +20,9 @@ type options struct {
 	proposals ports.DesignProposalSubmitter
 }
 
-// WithDesignProposals lets a design session submit its draft as its proposal.
-// Without it submit_design_system_proposal answers that proposals are
-// unavailable.
+// WithDesignProposals serves submit_design_system_proposal, with which a design
+// session hands its draft over as its proposal. Without it the tool is not
+// served.
 func WithDesignProposals(p ports.DesignProposalSubmitter) Option {
 	return func(o *options) { o.proposals = p }
 }
@@ -40,9 +46,6 @@ func sessionDesignProposalTools(sessions ports.SessionRepository, sub ports.Desi
 			sess, err := resolveProjectScope(ctx, sessions)
 			if err != nil {
 				return nil, err
-			}
-			if sub == nil {
-				return nil, &domain.StructuredError{Code: "UNAVAILABLE", Message: "design proposals are not available on this server"}
 			}
 			got, err := sub.SubmitDesignProposal(ctx, sess.ID, getString(args, "summary", ""))
 			if err != nil {

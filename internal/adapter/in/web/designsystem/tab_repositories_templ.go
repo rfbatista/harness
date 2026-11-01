@@ -9,9 +9,8 @@ import "github.com/a-h/templ"
 import templruntime "github.com/a-h/templ/runtime"
 
 // tabRepositories is the Repositories tab's panel: every repository of the
-// project with the design system it uses, and Apply here or Remove. The export
-// state arrives with the export, so until then a repository applied here
-// reads "Not exported yet".
+// project with the design system it uses, and Apply here or Remove. A
+// repository applied here also shows its export state and an Export button.
 func tabRepositories(projectID, designSystemID string) templ.Component {
 	return templruntime.GeneratedTemplate(func(templ_7745c5c3_Input templruntime.GeneratedComponentInput) (templ_7745c5c3_Err error) {
 		templ_7745c5c3_W, ctx := templ_7745c5c3_Input.Writer, templ_7745c5c3_Input.Context
@@ -75,14 +74,14 @@ func OptIn(projectID, designSystemID string) templ.Component {
 			templ_7745c5c3_Var2 = templ.NopComponent
 		}
 		ctx = templ.ClearChildren(ctx)
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 3, "<div x-data=\"designSystemOptIn\" data-design-system-optin data-project-id=\"")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 3, "<div x-data=\"designSystemOptIn\" x-on:design-system-export-choose.window=\"choose\" data-design-system-optin data-project-id=\"")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
 		var templ_7745c5c3_Var3 string
 		templ_7745c5c3_Var3, templ_7745c5c3_Err = templ.ResolveAttributeValue(projectID)
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `designsystem/tab_repositories.templ`, Line: 25, Col: 85}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `designsystem/tab_repositories.templ`, Line: 24, Col: 134}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var3)
 		if templ_7745c5c3_Err != nil {
@@ -95,13 +94,13 @@ func OptIn(projectID, designSystemID string) templ.Component {
 		var templ_7745c5c3_Var4 string
 		templ_7745c5c3_Var4, templ_7745c5c3_Err = templ.ResolveAttributeValue(designSystemID)
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `designsystem/tab_repositories.templ`, Line: 25, Col: 126}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `designsystem/tab_repositories.templ`, Line: 24, Col: 175}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var4)
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 5, "\" class=\"[ flow ]\"><template x-if=\"error\"><div class=\"[ banner ]\" data-tone=\"danger\" role=\"alert\" data-optin-load-error><div class=\"[ flow ] [ flow-space-3xs grow ]\"><span x-text=\"error.message\"></span> <span class=\"[ code ]\"><span x-text=\"error.code\"></span> · <span x-text=\"error.next\"></span></span></div><button type=\"button\" class=\"[ button ]\" data-variant=\"ghost\" data-size=\"sm\" x-on:click=\"load\">Try again</button></div></template><template x-if=\"isEmpty\"><p class=\"[ color-ink-muted ]\" data-no-repositories>This project has no repositories yet. Add one, then apply the design system to it here.</p></template><section class=\"[ pane ]\" x-show=\"loaded\"><template x-for=\"r in rows\" x-bind:key=\"r.id\"><div class=\"[ row ]\" data-optin-row x-bind:data-repository-id=\"r.id\" x-bind:data-phase=\"phase(r)\" style=\"--row-columns: minmax(0, 1fr)\"><div class=\"[ flow ] [ flow-space-xs pad-block-xs ]\"><div class=\"[ cluster ] [ gutter-xs ]\"><span class=\"[ weight-medium ]\" x-text=\"r.name\"></span> <span class=\"[ badge ]\" data-chip x-bind:data-tone=\"chipOf(r).tone\" x-text=\"chipOf(r).label\"></span> <span class=\"[ text-sm color-ink-muted ]\" data-export-state x-show=\"r.uses\" x-text=\"stateOf(r)\"></span></div><div class=\"[ banner ]\" data-tone=\"attention\" role=\"group\" aria-label=\"Move\" data-optin-move x-show=\"r.confirming\"><span class=\"[ grow ]\">Move <b x-text=\"r.name\"></b> from <b x-text=\"r.movingFrom\"></b> to this design system? It uses <b x-text=\"r.movingFrom\"></b> now and will use this one instead. Files already exported stay where they are.</span> <button type=\"button\" class=\"[ button ]\" data-variant=\"primary\" data-size=\"sm\" data-action=\"move\" x-on:click=\"confirmMove(r)\">Move here</button> <button type=\"button\" class=\"[ button ]\" data-size=\"sm\" data-action=\"keep\" x-on:click=\"keepCurrent(r)\">Keep <span x-text=\"r.movingFrom\"></span></button></div><div class=\"[ cluster ] [ gutter-xs ]\"><label class=\"[ cluster ] [ gutter-xs ] [ text-sm ]\">Folder <input data-field=\"path\" class=\"[ font-mono text-sm ]\" autocomplete=\"off\" spellcheck=\"false\" aria-label=\"Folder in the repository\" x-model=\"r.draft\" x-bind:aria-invalid=\"r.error !== null\"></label><template x-if=\"r.uses\"><span class=\"[ cluster ] [ gutter-xs ]\"><button type=\"button\" class=\"[ button ]\" data-size=\"sm\" data-action=\"save-path\" x-bind:disabled=\"cannotSavePath(r)\" x-on:click=\"savePath(r)\">Save path</button> <button type=\"button\" class=\"[ button ]\" data-variant=\"ghost\" data-size=\"sm\" data-action=\"remove\" x-bind:disabled=\"r.saving\" x-on:click=\"remove(r)\">Remove</button></span></template><template x-if=\"!r.uses\"><button type=\"button\" class=\"[ button ]\" data-size=\"sm\" data-action=\"apply\" x-bind:disabled=\"r.saving\" x-bind:aria-busy=\"r.saving\" x-on:click=\"apply(r)\">Apply here</button></template></div><template x-if=\"r.error\"><span class=\"[ error ]\" data-optin-error><span x-text=\"r.error.message\"></span> <span class=\"[ code ]\"><span x-text=\"r.error.code\"></span> · <span x-text=\"r.error.next\"></span></span></span></template></div></div></template></section><span class=\"[ hint ]\" x-show=\"loaded\">Applying never writes to the repository, and removing leaves exported files in place.</span></div>")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 5, "\" class=\"[ flow ]\"><template x-if=\"error\"><div class=\"[ banner ]\" data-tone=\"danger\" role=\"alert\" data-optin-load-error><div class=\"[ flow ] [ flow-space-3xs grow ]\"><span x-text=\"error.message\"></span> <span class=\"[ code ]\"><span x-text=\"error.code\"></span> · <span x-text=\"error.next\"></span></span></div><button type=\"button\" class=\"[ button ]\" data-variant=\"ghost\" data-size=\"sm\" x-on:click=\"load\">Try again</button></div></template><template x-if=\"isEmpty\"><p class=\"[ color-ink-muted ]\" data-no-repositories>This project has no repositories yet. Add one, then apply the design system to it here.</p></template><section class=\"[ pane ]\" x-show=\"loaded\"><template x-for=\"r in rows\" x-bind:key=\"r.id\"><div class=\"[ row ]\" data-optin-row x-bind:data-repository-id=\"r.id\" x-bind:data-phase=\"phase(r)\" x-bind:data-chosen=\"isChosen(r)\" style=\"--row-columns: minmax(0, 1fr)\"><div class=\"[ flow ] [ flow-space-xs pad-block-xs ]\"><div class=\"[ cluster ] [ gutter-xs ]\"><span class=\"[ weight-medium ]\" x-text=\"r.name\"></span> <span class=\"[ badge ]\" data-chip x-bind:data-tone=\"chipOf(r).tone\" x-text=\"chipOf(r).label\"></span> <span class=\"[ badge ]\" data-export-badge x-show=\"hasBadge(r)\" x-bind:data-tone=\"badgeOf(r).tone\" x-text=\"badgeOf(r).label\"></span> <span class=\"[ text-sm color-ink-muted ]\" data-export-state x-show=\"r.uses\" x-text=\"stateOf(r)\"></span></div><div class=\"[ banner ]\" data-tone=\"attention\" role=\"group\" aria-label=\"Move\" data-optin-move x-show=\"r.confirming\"><span class=\"[ grow ]\">Move <b x-text=\"r.name\"></b> from <b x-text=\"r.movingFrom\"></b> to this design system? It uses <b x-text=\"r.movingFrom\"></b> now and will use this one instead. Files already exported stay where they are.</span> <button type=\"button\" class=\"[ button ]\" data-variant=\"primary\" data-size=\"sm\" data-action=\"move\" x-on:click=\"confirmMove(r)\">Move here</button> <button type=\"button\" class=\"[ button ]\" data-size=\"sm\" data-action=\"keep\" x-on:click=\"keepCurrent(r)\">Keep <span x-text=\"r.movingFrom\"></span></button></div><div class=\"[ cluster ] [ gutter-xs ]\"><label class=\"[ cluster ] [ gutter-xs ] [ text-sm ]\">Folder <input data-field=\"path\" class=\"[ font-mono text-sm ]\" autocomplete=\"off\" spellcheck=\"false\" aria-label=\"Folder in the repository\" x-model=\"r.draft\" x-bind:aria-invalid=\"r.error !== null\"></label><template x-if=\"r.uses\"><span class=\"[ cluster ] [ gutter-xs ]\"><button type=\"button\" class=\"[ button ]\" data-variant=\"primary\" data-size=\"sm\" data-action=\"export\" x-bind:data-chosen=\"isChosen(r)\" x-bind:disabled=\"exportDisabled(r)\" x-bind:aria-busy=\"r.exporting\" x-on:click=\"exportRow(r)\">Export</button> <button type=\"button\" class=\"[ button ]\" data-size=\"sm\" data-action=\"save-path\" x-bind:disabled=\"cannotSavePath(r)\" x-on:click=\"savePath(r)\">Save path</button> <button type=\"button\" class=\"[ button ]\" data-variant=\"ghost\" data-size=\"sm\" data-action=\"remove\" x-bind:disabled=\"r.saving\" x-on:click=\"remove(r)\">Remove</button></span></template><template x-if=\"!r.uses\"><button type=\"button\" class=\"[ button ]\" data-size=\"sm\" data-action=\"apply\" x-bind:disabled=\"r.saving\" x-bind:aria-busy=\"r.saving\" x-on:click=\"apply(r)\">Apply here</button></template></div><div class=\"[ banner ]\" data-tone=\"attention\" role=\"group\" aria-label=\"Edited outside the harness\" data-export-review x-show=\"isReviewing(r)\"><div class=\"[ flow ] [ flow-space-xs grow ]\"><b>Files at <code x-text=\"r.path\"></code> were edited outside the harness.</b> <span>Exporting replaces them with version <span x-text=\"currentVersion(r)\"></span>. Those edits are lost unless an agent proposes them to the design system first.</span><template x-for=\"f in reviewFiles(r)\" x-bind:key=\"f.path\"><div class=\"[ flow ] [ flow-space-3xs ]\" data-export-file x-bind:data-status=\"f.status\"><span class=\"[ font-mono text-sm ]\"><span x-text=\"f.path\"></span> · <span x-text=\"f.status\"></span></span><pre class=\"[ font-mono text-sm ]\" data-export-diff x-text=\"f.diff\"></pre></div></template></div><button type=\"button\" class=\"[ button ]\" data-variant=\"primary\" data-size=\"sm\" data-action=\"export-confirm\" x-bind:disabled=\"r.exporting\" x-on:click=\"exportRow(r)\">Replace them</button> <button type=\"button\" class=\"[ button ]\" data-size=\"sm\" data-action=\"export-cancel\" x-on:click=\"cancelReview(r)\">Cancel</button></div><template x-if=\"r.exported\"><span class=\"[ hint ]\" data-export-done>Exported version <span x-text=\"r.exported.version\"></span>. Commit <code x-text=\"shortCommit(r)\"></code> on the default branch. Not pushed.</span></template><template x-if=\"r.exportError\"><div class=\"[ banner ]\" data-tone=\"attention\" role=\"alert\" data-export-error><div class=\"[ flow ] [ flow-space-3xs grow ]\"><b x-text=\"r.exportError.message\"></b> <span class=\"[ code ]\"><span x-text=\"r.exportError.code\"></span> · <span x-text=\"r.exportError.next\"></span></span></div></div></template><template x-if=\"r.error\"><span class=\"[ error ]\" data-optin-error><span x-text=\"r.error.message\"></span> <span class=\"[ code ]\"><span x-text=\"r.error.code\"></span> · <span x-text=\"r.error.next\"></span></span></span></template></div></div></template></section><span class=\"[ hint ]\" x-show=\"loaded\">Applying never writes to the repository, and removing leaves exported files in place.</span></div>")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
@@ -140,7 +139,7 @@ func RepositorySelect(projectID, repositoryID string) templ.Component {
 		var templ_7745c5c3_Var6 string
 		templ_7745c5c3_Var6, templ_7745c5c3_Err = templ.ResolveAttributeValue(projectID)
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `designsystem/tab_repositories.templ`, Line: 79, Col: 95}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `designsystem/tab_repositories.templ`, Line: 105, Col: 95}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var6)
 		if templ_7745c5c3_Err != nil {
@@ -153,7 +152,7 @@ func RepositorySelect(projectID, repositoryID string) templ.Component {
 		var templ_7745c5c3_Var7 string
 		templ_7745c5c3_Var7, templ_7745c5c3_Err = templ.ResolveAttributeValue(repositoryID)
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `designsystem/tab_repositories.templ`, Line: 79, Col: 131}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `designsystem/tab_repositories.templ`, Line: 105, Col: 131}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var7)
 		if templ_7745c5c3_Err != nil {
@@ -166,7 +165,7 @@ func RepositorySelect(projectID, repositoryID string) templ.Component {
 		var templ_7745c5c3_Var8 templ.SafeURL
 		templ_7745c5c3_Var8, templ_7745c5c3_Err = templ.JoinURLErrs(templ.URL("/projects/" + projectID + "/design-systems"))
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `designsystem/tab_repositories.templ`, Line: 100, Col: 68}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `designsystem/tab_repositories.templ`, Line: 126, Col: 68}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var8))
 		if templ_7745c5c3_Err != nil {

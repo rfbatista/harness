@@ -113,6 +113,9 @@ type ProjectChange struct {
 	// DesignSystemProposal says a design session's proposal reached a state:
 	// the banner, the navigation badge and the Proposals tab follow it.
 	DesignSystemProposal *DesignSystemProposalChange `json:"design_system_proposal,omitempty"`
+	// DesignSystemExport says a repository's export of its design system
+	// changed state: it was exported, or what it holds changed.
+	DesignSystemExport *DesignSystemExportChange `json:"design_system_export,omitempty"`
 	// SessionFilesRoot says a root of a session's virtual file system went away
 	// or came back; the Files view follows it.
 	SessionFilesRoot *SessionFilesRootChange `json:"session_files_root,omitempty"`
@@ -151,6 +154,15 @@ type DesignSystemProposalChange struct {
 	ProjectID      string `json:"project_id"`
 	DesignSystemID string `json:"design_system_id"`
 	ProposalID     string `json:"proposal_id"`
+	State          string `json:"state"`
+}
+
+// DesignSystemExportChange is a repository's design system export, with the
+// state it is in.
+type DesignSystemExportChange struct {
+	ProjectID      string `json:"project_id"`
+	DesignSystemID string `json:"design_system_id"`
+	RepositoryID   string `json:"repository_id"`
 	State          string `json:"state"`
 }
 
@@ -240,6 +252,8 @@ func (c ProjectChange) ProjectID() string {
 		return c.DesignSystemChanged.ProjectID
 	case c.DesignSystemProposal != nil:
 		return c.DesignSystemProposal.ProjectID
+	case c.DesignSystemExport != nil:
+		return c.DesignSystemExport.ProjectID
 	}
 	return ""
 }

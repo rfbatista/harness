@@ -55,15 +55,18 @@ type Deps struct {
 	DesignRecords ports.DesignSystemStore
 	// DesignProposals keeps design sessions' drafts and proposals.
 	DesignProposals ports.DesignProposalStore
-	Agents          ports.AgentRepository
-	Prompts         ports.PromptRepository
-	Skills          ports.SkillRepository
-	MCPServers      ports.MCPServerRepository
-	Tools           ports.ToolRepository
-	Settings        ports.SettingsRepository
-	Publisher       ports.SkillPublisher
-	PathMatcher     ports.PathMatcher
-	TreeLister      ports.TreeLister
+	// DesignExports keeps each repository's last design system export; nil
+	// disables the export.
+	DesignExports ports.DesignExportStore
+	Agents        ports.AgentRepository
+	Prompts       ports.PromptRepository
+	Skills        ports.SkillRepository
+	MCPServers    ports.MCPServerRepository
+	Tools         ports.ToolRepository
+	Settings      ports.SettingsRepository
+	Publisher     ports.SkillPublisher
+	PathMatcher   ports.PathMatcher
+	TreeLister    ports.TreeLister
 	// RepositoryFinder lets projects discover git checkouts; nil disables it.
 	RepositoryFinder ports.RepositoryFinder
 	// EnvFiles and EnvFileIO keep repositories' env files; nil disables them.
@@ -145,6 +148,9 @@ func New(d Deps) Catalog {
 		designs.Subscribe(bus)
 		if d.ArchGit != nil {
 			designs.UseImport(d.ArchGit, pr)
+			if git, ok := d.ArchGit.(ports.DesignExportGit); ok && d.DesignExports != nil {
+				designs.UseExport(git, pr, d.DesignExports)
+			}
 		}
 		var inUse sync.Mutex // apply and delete of a design system exclude each other
 		pr.UseDesignSystems(d.DesignRecords, &inUse)

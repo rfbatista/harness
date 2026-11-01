@@ -10,6 +10,7 @@ import (
 	"io/fs"
 	"os"
 	"path/filepath"
+	"regexp"
 	"slices"
 	"strings"
 	"time"
@@ -102,6 +103,9 @@ func (s *Service) resolve(ctx context.Context, sessionID string) (who, bool, err
 
 // CheckArchitecture implements ports.ArchitectureRules.
 func (s *Service) CheckArchitecture(ctx context.Context, c ports.ArchitectureCheck) ports.ArchitectureVerdict {
+	if v, refused := s.designSessionRefusal(c); refused {
+		return v
+	}
 	w, ok, err := s.resolve(ctx, c.SessionID)
 	if err != nil {
 		return ports.ArchitectureVerdict{Context: "Architecture rules could not be checked: the saved architecture could not be read."}
@@ -266,4 +270,60 @@ func withContents(worktree string, paths []string) []string {
 		})
 	}
 	return out
+}
+
+// gitWriteVerbs are the git commands that change a repository or what it holds.
+var gitWriteVerbs = map[string]bool{
+	"commit": true, "push": true, "merge": true, "rebase": true, "reset": true, "cherry-pick": true, "apply": true, "am": true,
+	"stash": true, "tag": true, "add": true, "rm": true, "mv": true, "checkout": true, "switch": true, "restore": true,
+	"clean": true, "branch": true,
+}
+
+// gitWrites says a shell command line runs a git command that writes: the
+// first word after git's own options, in any command of a pipeline or a list.
+func gitWrites(command string) bool {
+	for _, segment := range regexp.MustCompile(`&&|\|\||[|;&\n]`).Split(command, -1) {
+		words := strings.Fields(segment)
+		for i := 0; i < len(words); i++ {
+			if words[i] != "git" {
+				continue
+			}
+			for i++; i < len(words); i++ {
+				w := words[i]
+				switch {
+				case w == "-C" || w == "-c" || w == "--git-dir" || w == "--work-tree":
+					i++ // the option's argument
+				case strings.HasPrefix(w, "-"):
+				default:
+					if gitWriteVerbs[w] {
+						return true
+					}
+					i = len(words)
+				}
+			}
+		}
+	}
+	return false
+}
+
+// designSessionRefusal refuses what would change a repository from a design
+// session: a commit, a git command that writes, and a write inside its
+// worktree. Its only output is a proposal, so no rule of any record is
+// consulted. refused is false for any other session and for what a design
+// session may do.
+func (s *Service) designSessionRefusal(c ports.ArchitectureCheck) (ports.ArchitectureVerdict, bool) {
+	sess := s.d.Sessions.Get(c.SessionID)
+	if sess == nil || sess.Mode != domain.SessionModeDesignSystem {
+		return ports.ArchitectureVerdict{}, false
+	}
+	const why = "A design session changes no repository: its only output is one proposal, made by editing project/design-system/ in its virtual shell."
+	switch {
+	case c.Point == domain.PointBeforeCommit:
+		return ports.ArchitectureVerdict{Deny: why + " Nothing is committed."}, true
+	case c.Command != "" && gitWrites(c.Command):
+		return ports.ArchitectureVerdict{Deny: why + " This git command is refused."}, true
+	case sess.WorkingDir != "" && len(inside(sess.WorkingDir, c.Paths)) > 0:
+		return ports.ArchitectureVerdict{Deny: why + " This path is in a repository."}, true
+	}
+	return ports.ArchitectureVerdict{}, false
 }

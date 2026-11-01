@@ -297,3 +297,46 @@ func TestDesignDraft_ADesignMDThatRenamesTheDesignSystemIsRefused(t *testing.T) 
 		t.Fatalf("principles alone: %+v", a)
 	}
 }
+
+// A design session changes no repository through any route: the commit hook,
+// the PATH shims and the tool hooks refuse a commit, a git command that
+// writes and a write in its worktree, and let it write its draft.
+func TestDesignSession_EveryRouteIntoARepositoryIsRefused(t *testing.T) {
+	e := newShellE2E(t)
+	s := e.designSession(e.savedDesignSystem())
+	base := e.srv.URL + "/api/sessions/" + s.id + "/architecture/"
+
+	status, text := postJSON(t, base+"commit", "README.md\x00")
+	if status != 409 || !strings.Contains(text, "changes no repository") {
+		t.Fatalf("a commit = %d %q, want 409", status, text)
+	}
+	inWorktree := filepath.Join(s.worktree, "main.go")
+	_, text = postJSON(t, base+"check", `{"op":"write","tool":"Write","paths":["`+inWorktree+`"]}`)
+	if !strings.Contains(text, `"deny"`) {
+		t.Fatalf("a shim write in the worktree = %s", text)
+	}
+	_, text = postJSON(t, base+"check", `{"op":"write","tool":"Write","paths":["`+filepath.Join(s.shell, "scratch.txt")+`"]}`)
+	if strings.Contains(text, `"deny"`) {
+		t.Fatalf("a write in the shell was refused: %s", text)
+	}
+	hook := func(body string) string {
+		_, out := postJSON(t, base+"check?hook=PreToolUse", body)
+		return out
+	}
+	if out := hook(`{"tool_name":"Write","cwd":"` + s.worktree + `","tool_input":{"file_path":"` + inWorktree + `"}}`); !strings.Contains(out, `"deny"`) {
+		t.Errorf("a Write in the worktree = %s", out)
+	}
+	for _, cmd := range []string{"git commit -am x", "git -C . push origin HEAD", "git checkout -b other"} {
+		if out := hook(`{"tool_name":"Bash","cwd":"` + s.worktree + `","tool_input":{"command":"` + cmd + `"}}`); !strings.Contains(out, `"deny"`) {
+			t.Errorf("%q = %s", cmd, out)
+		}
+	}
+	if out := hook(`{"tool_name":"Bash","cwd":"` + s.worktree + `","tool_input":{"command":"git log --oneline && git diff"}}`); strings.Contains(out, `"deny"`) {
+		t.Errorf("reading with git was refused: %s", out)
+	}
+	// A task session's commit is not refused for being a design session's.
+	task := e.start(e.task("Build"))
+	if status, text := postJSON(t, e.srv.URL+"/api/sessions/"+task.id+"/architecture/commit", "README.md\x00"); status != 200 {
+		t.Errorf("a task session's commit = %d %q", status, text)
+	}
+}

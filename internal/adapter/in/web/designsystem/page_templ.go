@@ -147,7 +147,7 @@ func PageView(v View) templ.Component {
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
-			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 9, "</p><template x-if=\"exists\"><p class=\"[ color-ink-muted text-sm ]\" data-saved-line><span x-text=\"savedLine\"></span> · <button type=\"button\" class=\"[ button ]\" data-variant=\"ghost\" data-size=\"sm\" data-action=\"open-history\" x-on:click=\"openHistory\">History</button></p></template></div><div class=\"[ cluster ]\"><span class=\"[ badge sync ]\" data-design-state x-bind:data-tone=\"badge.tone\" x-text=\"badge.label\"></span> <button type=\"button\" class=\"[ button ]\" data-action=\"spawn-header\" x-show=\"!deleted\" x-on:click=\"openSpawn\">Spawn agent…</button>")
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 9, "</p><template x-if=\"exists\"><p class=\"[ color-ink-muted text-sm ]\" data-saved-line><span x-text=\"savedLine\"></span> · <button type=\"button\" class=\"[ button ]\" data-variant=\"ghost\" data-size=\"sm\" data-action=\"open-history\" x-on:click=\"openHistory\">History</button></p></template></div><div class=\"[ cluster ]\"><span class=\"[ badge sync ]\" data-design-state x-bind:data-tone=\"badge.tone\" x-text=\"badge.label\"></span> <button type=\"button\" class=\"[ button ]\" data-action=\"export-open\" x-show=\"exists && !deleted\" x-on:click=\"openExport\">Export…</button> <button type=\"button\" class=\"[ button ]\" data-action=\"spawn-header\" x-show=\"!deleted\" x-on:click=\"openSpawn\">Spawn agent…</button>")
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
@@ -170,7 +170,7 @@ func PageView(v View) templ.Component {
 			var templ_7745c5c3_Var10 templ.SafeURL
 			templ_7745c5c3_Var10, templ_7745c5c3_Err = templ.JoinURLErrs(templ.SafeURL(v.IndexHref))
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `designsystem/page.templ`, Line: 43, Col: 77}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `designsystem/page.templ`, Line: 44, Col: 77}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var10))
 			if templ_7745c5c3_Err != nil {

@@ -39,7 +39,6 @@ var SessionTaskToolNames = []string{
 	"merge_session_branch",
 	"list_notifications",
 	"notify",
-	"submit_design_system_proposal",
 }
 
 // MaxLiveTaskSessions caps the sessions running on one task at once, so agents
@@ -215,7 +214,10 @@ func SessionTaskTools(planningSvc ports.Planning, sessions ports.SessionReposito
 	for _, opt := range opts {
 		opt(&o)
 	}
-	return codedTools(append(tools, sessionDesignProposalTools(sessions, o.proposals)...))
+	if o.proposals != nil {
+		tools = append(tools, sessionDesignProposalTools(sessions, o.proposals)...)
+	}
+	return codedTools(tools)
 }
 
 // peerSession is another session on the same task, as list_task_sessions

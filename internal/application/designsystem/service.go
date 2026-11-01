@@ -57,6 +57,8 @@ type Service struct {
 	repos ports.DesignSourceRepositories
 	// sessions starts and counts design sessions; nil until UseSessions.
 	sessions ports.DesignSessionHost
+	// export is what an export reads and writes; nil until UseExport.
+	export *exporter
 	// guards refuse a delete (DESIGN_SYSTEM_IN_USE).
 	guards []func(ctx context.Context, designSystemID string) error
 	lock   sync.Locker // held from the guards to the delete; nil: none
@@ -102,6 +104,12 @@ func (s *Service) GuardDelete(check func(ctx context.Context, designSystemID str
 func (s *Service) Subscribe(sub ports.EventSubscriber) {
 	ports.On(sub, func(ctx context.Context, ev domain.ProjectDeleted) error {
 		return s.store.DeleteByProject(ctx, ev.ProjectID)
+	})
+	ports.On(sub, func(ctx context.Context, ev domain.RepositoryDeleted) error {
+		if s.export == nil {
+			return nil
+		}
+		return s.export.store.Delete(ctx, ev.RepositoryID)
 	})
 }
 
