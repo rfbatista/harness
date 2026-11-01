@@ -288,8 +288,6 @@ func designerResourceHandler(devMode bool) func(context.Context, mcplib.ReadReso
 	}
 }
 
-// exposed reports whether a listen address reaches beyond this machine: no
-// host (every interface), or a host that is not loopback.
 // designSystemReader is the design system context for the page's first paint;
 // nil, not a typed nil, when it is not built.
 func designSystemReader(cat catalog.Catalog) ports.DesignSystemReader {
@@ -299,6 +297,8 @@ func designSystemReader(cat catalog.Catalog) ports.DesignSystemReader {
 	return cat.DesignSystems
 }
 
+// exposed reports whether a listen address reaches beyond this machine: no
+// host (every interface), or a host that is not loopback.
 func exposed(addr string) bool {
 	host, _, err := net.SplitHostPort(addr)
 	if err != nil || host == "" {

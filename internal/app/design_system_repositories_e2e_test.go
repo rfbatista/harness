@@ -87,7 +87,7 @@ func TestDesignSystem_OptingInStoresTheDefaultOrACustomPathAndOptingOutKeepsIt(t
 func TestDesignSystem_APathThatIsNotRelativeInsideTheRepositoryEndingInASlashIsRefused(t *testing.T) {
 	s := startDesignServer(t)
 	id := repoID(t, s.addRepo("spillway"))
-	for _, path := range []string{"/etc/design/", "ui/tokens", "../outside/", "ui/../../outside/", "a/../../b/", ".."} {
+	for _, path := range []string{"/etc/design/", "ui/tokens", "../outside/", "ui/../../outside/", "a/../../b/", "..", ".git/", "ui/.GIT/hooks/", "a/.Git/", "ui\x00/", "ui\n/", "ui\t/"} {
 		status, out := s.setUse(id, true, path)
 		if status != http.StatusBadRequest || out["code"] != "INVALID_INPUT" {
 			t.Errorf("path %q: %d %v", path, status, out)

@@ -9,6 +9,8 @@ import (
 	"strconv"
 	"strings"
 	"time"
+
+	"golang.org/x/net/html"
 )
 
 // DesignSystemRecord is a project's design system: its tokens, its principles
@@ -125,11 +127,10 @@ var (
 	designKeyPattern  = regexp.MustCompile(`^[A-Za-z][A-Za-z0-9-]*$`)
 	durationPattern   = regexp.MustCompile(`^-?[0-9]*\.?[0-9]+m?s$`)
 	// cssVarRef finds a var(--name) reference and captures the name.
-	cssVarRef      = regexp.MustCompile(`var\(\s*(--[A-Za-z0-9_-]+)`)
-	scriptTag      = regexp.MustCompile(`(?i)<\s*script`)
-	eventAttribute = regexp.MustCompile(`(?i)<[a-z][^>]*[\s"'/]on[a-z]+\s*=`)
-	urlCall        = regexp.MustCompile(`(?i)url\(\s*['"]?\s*(data:)?`)
-	importRule     = regexp.MustCompile(`(?i)@import`)
+	cssVarRef  = regexp.MustCompile(`var\(\s*(--[A-Za-z0-9_-]+)`)
+	scriptTag  = regexp.MustCompile(`(?i)<\s*script`)
+	urlCall    = regexp.MustCompile(`(?i)url\(\s*['"]?\s*(data:)?`)
+	importRule = regexp.MustCompile(`(?i)@import`)
 )
 
 // Normalize makes the empty lists of a record decoded from JSON empty, not
@@ -345,13 +346,36 @@ func cssValueProblem(s string) string {
 	return ""
 }
 
+// hasEventAttribute says any start tag of the html has an attribute whose
+// name starts with "on". The tokenizer reads quotes and tag ends as a browser
+// does, so a ">" inside a value does not hide a later attribute.
+func hasEventAttribute(s string) bool {
+	z := html.NewTokenizer(strings.NewReader(s))
+	for {
+		switch z.Next() {
+		case html.ErrorToken:
+			return false
+		case html.StartTagToken, html.SelfClosingTagToken:
+			for {
+				key, _, more := z.TagAttr()
+				if strings.HasPrefix(strings.ToLower(string(key)), "on") {
+					return true
+				}
+				if !more {
+					break
+				}
+			}
+		}
+	}
+}
+
 // unsafePreviewProblem is why a preview's html or css is refused; "" when it
 // is fine.
 func unsafePreviewProblem(s string) string {
 	switch {
 	case scriptTag.MatchString(s):
 		return "holds a <script>"
-	case eventAttribute.MatchString(s):
+	case hasEventAttribute(s):
 		return "holds an on* attribute"
 	case importRule.MatchString(s):
 		return "holds an @import"

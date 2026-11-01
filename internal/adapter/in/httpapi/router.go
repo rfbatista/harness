@@ -73,8 +73,8 @@ func NewRouter(h *Handler, opts ...Option) *echo.Echo {
 	g.POST("/create_repository", h.handleCreateRepository)
 	g.POST("/update_repository", h.handleUpdateRepository)
 	g.POST("/delete_repository", h.handleDeleteRepository)
-g.POST("/set_repository_design_system", h.handleSetRepositoryDesignSystem)
-g.POST("/list_design_system_repositories", h.handleListDesignSystemRepositories)
+	g.POST("/set_repository_design_system", h.handleSetRepositoryDesignSystem)
+	g.POST("/list_design_system_repositories", h.handleListDesignSystemRepositories)
 	g.POST("/add_repository_ignored_path", h.handleAddRepositoryIgnoredPath)
 	g.POST("/remove_repository_ignored_path", h.handleRemoveRepositoryIgnoredPath)
 

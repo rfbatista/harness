@@ -3,6 +3,7 @@ package domain
 import (
 	"path"
 	"strings"
+	"unicode"
 )
 
 type Repository struct {
@@ -33,6 +34,11 @@ func CleanDesignSystemPath(p string) (string, error) {
 	bad := func(why string) (string, error) {
 		return "", &StructuredError{Code: "INVALID_INPUT", Message: "design system path " + why}
 	}
+	for _, r := range p {
+		if unicode.IsControl(r) {
+			return bad("must not hold control characters")
+		}
+	}
 	if strings.HasPrefix(p, "/") || strings.Contains(p, `\`) {
 		return bad("must be relative to the repository")
 	}
@@ -42,6 +48,9 @@ func CleanDesignSystemPath(p string) (string, error) {
 	for _, seg := range strings.Split(strings.TrimSuffix(p, "/"), "/") {
 		if seg == ".." {
 			return bad("must stay inside the repository")
+		}
+		if strings.EqualFold(seg, ".git") {
+			return bad("must not go into .git")
 		}
 		if seg == "" || seg == "." {
 			return bad("must not have empty or . segments")

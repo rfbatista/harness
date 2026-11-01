@@ -23,7 +23,8 @@ import (
 func (s *Service) contents(ctx context.Context, sh *root, tk *domain.Ticket) (*builder, error) {
 	b := &builder{now: time.Now()}
 	sessionID := sh.sessionID
-	designSystem := s.usesDesignSystem(sh)
+	designSystem := s.usesDesignSystem(ctx, sh)
+	sh.designSystem = designSystem
 	b.fixed(ports.ShellFile{Path: "README.md", Kind: ports.ShellReadme, Title: "README", UpdatedAt: b.now}, []byte(readmeFor(s.agentsMove(), designSystem)))
 
 	if err := b.architectures(ctx, s.src.Architectures, sh.projID); err != nil {
@@ -373,13 +374,17 @@ const designSystemDir = "project/design-system"
 
 // usesDesignSystem says the session's repository uses the project design
 // system.
-func (s *Service) usesDesignSystem(sh *root) bool {
+// A repository that cannot be read keeps the state the root had.
+func (s *Service) usesDesignSystem(ctx context.Context, sh *root) bool {
 	src := s.src
 	if src.DesignSystems == nil || src.Projects == nil || src.Repositories == nil || sh.repoID == "" {
 		return false
 	}
-	repo, err := src.Repositories.GetRepository(context.Background(), sh.repoID)
-	return err == nil && repo.UsesDesignSystem
+	repo, err := src.Repositories.GetRepository(ctx, sh.repoID)
+	if err != nil {
+		return sh.designSystem
+	}
+	return repo.UsesDesignSystem
 }
 
 // renderedDesignSystem is the files made for one project at one version and

@@ -41,7 +41,7 @@ export function designSystemGateway(api, feed) {
     /** Saves the record as the next version; DESIGN_SYSTEM_CHANGED and DESIGN_SYSTEM_INVALID arrive as errors. Answers the new version. */
     async save(projectId, baseVersion, record, message) {
       const body = await api.post("/save_design_system", { project_id: projectId, base_version: baseVersion, record, message });
-      return Number.isInteger(body?.version) ? body.version : baseVersion + 1;
+      return body.version;
     },
 
     /** Renames a saved token as its own version; answers the new version. */
@@ -54,7 +54,7 @@ export function designSystemGateway(api, feed) {
         new_group: to.group,
         new_name: to.name,
       });
-      return Number.isInteger(body?.version) ? body.version : baseVersion + 1;
+      return body.version;
     },
 
     /** One page of the version list, newest first; `before` is a version number, the page holds those older than it. */

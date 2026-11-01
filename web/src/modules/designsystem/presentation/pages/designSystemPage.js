@@ -583,7 +583,7 @@ export const designSystemPage = ({ gateway, clock, clipboard = { copyText: async
     try {
       const older = await gateway.versions(this.projectId, { limit: VERSIONS_PAGE, before: oldest });
       this.versions = [...this.versions, ...older];
-      this.moreVersions = hasMore(older.length === 0 ? [] : older);
+      this.moreVersions = hasMore(older);
       this.historyError = null;
     } catch (err) {
       this.historyError = describeError(err);

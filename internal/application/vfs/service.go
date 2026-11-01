@@ -114,6 +114,9 @@ type root struct {
 	mu     sync.Mutex
 	files  map[string]ports.ShellFile // by path
 	closed bool
+	// designSystem is whether the last refresh showed the design system
+	// folder; a refresh that cannot read the repository keeps it.
+	designSystem bool
 	// pending is the paths an agent was cleared to change, and since when:
 	// a refresh leaves them as they are until the change is committed.
 	// skipped says the last refresh left something out for them.
@@ -344,6 +347,12 @@ func (s *Service) Subscribe(sub ports.EventSubscriber) {
 		return nil
 	})
 	ports.On(sub, func(_ context.Context, ev domain.ArtifactChanged) error {
+		s.changed(ev.ProjectID, "")
+		return nil
+	})
+	// Opting a repository in or out of the design system adds or removes
+	// the folder in the roots of the project's sessions.
+	ports.On(sub, func(_ context.Context, ev domain.RepositorySaved) error {
 		s.changed(ev.ProjectID, "")
 		return nil
 	})

@@ -23,9 +23,9 @@ type DesignSystems interface {
 	// RenameDesignToken renames a token and rewrites the previews that use it
 	// as one version, with the same refusals as a save.
 	RenameDesignToken(ctx context.Context, projectID string, baseVersion int, group, name, newGroup, newName string) (*domain.DesignSystemVersion, error)
-	// ListDesignSystemVersions lists versions newest first, without their
-	// records: at most limit of them (a default when 0), older than before
-	// (every one when 0).
+	// ListDesignSystemVersions lists versions newest first, records included
+	// (callers that list drop them): at most limit of them (a default when 0),
+	// older than before (every one when 0).
 	ListDesignSystemVersions(ctx context.Context, projectID string, limit, before int) ([]*domain.DesignSystemVersion, error)
 	// GetDesignSystemVersion is one version with its record; VERSION_NOT_FOUND
 	// when there is none.

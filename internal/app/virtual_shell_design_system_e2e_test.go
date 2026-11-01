@@ -321,3 +321,29 @@ func TestDesignSystemView_ASaveOrARenameRefreshesARunningSessionsView(t *testing
 		return nil
 	})
 }
+
+func TestDesignSystemView_OptingInOrOutRefreshesARunningSessionsShell(t *testing.T) {
+	e := newShellE2E(t)
+	e.agents("software-architect", "devops", "go-developer")
+	e.saveDesignSystem(0, shellDesignRecord())
+	a := e.start(e.task("Opt in later"))
+	if got := e.listing(a, designSystemDir); got != nil {
+		t.Fatalf("before opting in the shell lists %v", got)
+	}
+
+	e.useDesignSystem(e.repo, true)
+	eventually(t, "the folder after opting in", func() error {
+		if strings.Join(e.listing(a, designSystemDir), ",") != "DESIGN.md,README.md,tokens.json" {
+			return os.ErrNotExist
+		}
+		return nil
+	})
+
+	e.useDesignSystem(e.repo, false)
+	eventually(t, "no folder after opting out", func() error {
+		if e.listing(a, designSystemDir) != nil {
+			return os.ErrExist
+		}
+		return nil
+	})
+}
