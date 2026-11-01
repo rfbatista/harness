@@ -59,12 +59,13 @@ export function sortErrors(entries, rows) {
 export const saveBarText = (version) => `Saves as version ${version + 1}`;
 
 /** What the draft changes, in words. */
-export function changeText(counts, principlesChanged) {
+export function changeText(counts, principlesChanged, componentsChanged = false) {
   const parts = [];
   if (counts.edited > 0) parts.push(`${counts.edited} edited`);
   if (counts.added > 0) parts.push(`${counts.added} added`);
   if (counts.removed > 0) parts.push(`${counts.removed} removed`);
   if (principlesChanged) parts.push("principles changed");
+  if (componentsChanged) parts.push("components changed");
   return parts.length === 0 ? "No unsaved changes" : `Unsaved: ${parts.join(", ")}`;
 }
 

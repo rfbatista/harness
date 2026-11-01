@@ -3,9 +3,9 @@
 //
 //   <main x-data="designSystemPage" data-seed="design-system-seed">
 //
-// The tokens are rows in the page's state; the principles and the components
-// are held as the server sent them, so a Save never drops what a tab does not
-// edit yet. The tabs are addresses (?tab=) the page switches between without
+// The tokens are rows in the page's state; the principles are text and the
+// components are copies of the saved ones, edited in place, so a Save never
+// drops what a tab does not edit. The tabs are addresses (?tab=) the page switches between without
 // a reload.
 
 import { FeedStatus } from "../../../../shared/domain/feed.js";
@@ -27,8 +27,19 @@ import {
 import { renderMarkdown } from "../../../../shared/domain/markdown.js";
 import { VERSIONS_PAGE, hasMore, mergeVersions, versionRow } from "../../domain/history.js";
 import { outlineOf } from "../../domain/principles.js";
-import { previewDocument, usableTokens } from "../../domain/preview.js";
-import { cardsOf, currentOf, itemsOf, notesOf } from "../../domain/showcase.js";
+import { previewDocument, usableTokens, validateComponents } from "../../domain/preview.js";
+import {
+  cardsOf,
+  cleanComponents,
+  componentsChanged,
+  copyComponents,
+  currentIndex,
+  itemsOf,
+  newComponent,
+  newPreview,
+  notesOf,
+  problemLabel,
+} from "../../domain/showcase.js";
 import {
   STANDARD_GROUPS,
   changeCounts,
@@ -95,8 +106,8 @@ export const designSystemPage = ({ gateway, clock, clipboard = { copyText: async
   renameGroup: "",
   renameName: "",
   renameError: null,
-  /** The Components tab: the component open (its slug; "" for the first) and the previews that have come near the viewport, by card key. */
-  selectedSlug: "",
+  /** The Components tab: the position of the component open and the previews that have come near the viewport, by card key. */
+  selectedAt: 0,
   seen: {},
   /** The Principles tab: Write or Preview. */
   principlesMode: "write",
@@ -130,12 +141,15 @@ export const designSystemPage = ({ gateway, clock, clipboard = { copyText: async
   get principlesChanged() {
     return this.principles !== this.saved.principles;
   },
+  get componentsChanged() {
+    return componentsChanged(this.components, this.saved.components);
+  },
   get dirty() {
     const c = this.counts;
-    return this.isOpen && (c.edited + c.added + c.removed > 0 || this.principlesChanged);
+    return this.isOpen && (c.edited + c.added + c.removed > 0 || this.principlesChanged || this.componentsChanged);
   },
   get canSave() {
-    return this.dirty && !this.saving && this.conflict === "";
+    return this.dirty && !this.saving && this.conflict === "" && !this.hasComponentProblems;
   },
   get badge() {
     return stateBadge({ exists: this.exists, started: this.started, version: this.version, dirty: this.dirty });
@@ -149,7 +163,7 @@ export const designSystemPage = ({ gateway, clock, clipboard = { copyText: async
     return this.exists ? "success" : "";
   },
   get changeSummary() {
-    return changeText(this.counts, this.principlesChanged);
+    return changeText(this.counts, this.principlesChanged, this.componentsChanged);
   },
   get versionText() {
     return saveBarText(this.version);
@@ -171,7 +185,7 @@ export const designSystemPage = ({ gateway, clock, clipboard = { copyText: async
         out.push({ key: `${row.id}:${e.field}:${e.code}`, label: `Tokens › ${row.group || "…"}.${row.name || "…"}`, code: e.code, message: e.message });
       }
     }
-    for (const e of this.otherErrors) out.push({ key: `${e.path}:${e.code}`, label: "Design system", code: e.code, message: e.message });
+    for (const e of this.otherErrors) out.push({ key: `${e.path}:${e.code}`, label: problemLabel(e.path, this.components), code: e.code, message: e.message });
     return out;
   },
   get hasProblems() {
@@ -220,8 +234,16 @@ export const designSystemPage = ({ gateway, clock, clipboard = { copyText: async
   get previewTokens() {
     return usableTokens(this.rows.map(tokenOf));
   },
+  /** What the browser finds wrong with the draft's components, with the server's codes. */
+  get componentErrors() {
+    const record = { tokens: this.previewTokens, components: this.components };
+    return validateComponents(record, { tokens: this.saved.tokens }).map((e) => ({ ...e, key: `${e.path}:${e.code}:${e.message}`, label: problemLabel(e.path, this.components) }));
+  },
+  get hasComponentProblems() {
+    return this.componentErrors.length > 0;
+  },
   get componentItems() {
-    return itemsOf(this.components, this.previewTokens);
+    return itemsOf(this.components, this.previewTokens, this.componentErrors);
   },
   get hasComponents() {
     return this.components.length > 0;
@@ -229,11 +251,14 @@ export const designSystemPage = ({ gateway, clock, clipboard = { copyText: async
   get noComponents() {
     return this.components.length === 0;
   },
+  get currentAt() {
+    return currentIndex(this.components, this.selectedAt);
+  },
   get current() {
-    return currentOf(this.components, this.selectedSlug);
+    return this.components[this.currentAt];
   },
   get currentCards() {
-    return this.current ? cardsOf(this.current, this.previewTokens) : [];
+    return this.current ? cardsOf(this.current, this.currentAt, this.previewTokens) : [];
   },
   get currentDos() {
     return notesOf(this.current?.do ?? []);
@@ -241,8 +266,17 @@ export const designSystemPage = ({ gateway, clock, clipboard = { copyText: async
   get currentDonts() {
     return notesOf(this.current?.dont ?? []);
   },
+  get doText() {
+    return (this.current?.do ?? []).join("\n");
+  },
+  get dontText() {
+    return (this.current?.dont ?? []).join("\n");
+  },
+  get onlyPreview() {
+    return (this.current?.previews.length ?? 0) <= 1;
+  },
   get currentMissing() {
-    return this.componentItems.find((i) => i.slug === this.current?.slug)?.missing.join(", ") ?? "";
+    return this.componentItems[this.currentAt]?.missing.join(", ") ?? "";
   },
   get currentFlagged() {
     return this.currentMissing !== "";
@@ -346,7 +380,7 @@ export const designSystemPage = ({ gateway, clock, clipboard = { copyText: async
     this.saved = state.record;
     this.rows = rowsFromRecord(state.record);
     this.principles = state.record.principles;
-    this.components = state.record.components;
+    this.components = copyComponents(state.record.components);
     this.exists = state.exists;
     this.started = state.exists;
     this.version = state.version;
@@ -538,7 +572,7 @@ export const designSystemPage = ({ gateway, clock, clipboard = { copyText: async
     this.rowErrors = {};
     this.otherErrors = [];
     try {
-      await gateway.save(this.designSystemId, this.version, recordOf(rows, this.principles, this.components), this.message.trim());
+      await gateway.save(this.designSystemId, this.version, recordOf(rows, this.principles, cleanComponents(this.components)), this.message.trim());
       await this.load();
     } catch (err) {
       if (err?.code === CHANGED) {
@@ -572,17 +606,50 @@ export const designSystemPage = ({ gateway, clock, clipboard = { copyText: async
     }
     this.rows = rowsFromRecord(this.saved);
     this.principles = this.saved.principles;
+    this.components = copyComponents(this.saved.components);
+    this.selectedAt = 0;
     this.message = "";
     this.cancelRename();
     this.clearProblems();
   },
 
   isCurrent(item) {
-    return item.slug === this.current?.slug;
+    return item.index === this.currentAt;
   },
 
   selectComponent(item) {
-    this.selectedSlug = item.slug;
+    this.selectedAt = item.index;
+  },
+
+  addComponent() {
+    this.components.push(newComponent(this.components));
+    this.selectedAt = this.components.length - 1;
+    this.$nextTick(() => document.querySelector("[data-component-editor] [data-field=component-name]")?.focus());
+  },
+
+  removeComponent() {
+    this.components.splice(this.currentAt, 1);
+    this.selectedAt = Math.max(0, this.currentAt - 1);
+  },
+
+  addPreview() {
+    this.current.previews.push(newPreview(this.current.previews.length));
+  },
+
+  removePreview(card) {
+    if (this.onlyPreview) return;
+    this.current.previews.splice(card.index, 1);
+  },
+
+  /** A notes textarea holds one note per line. */
+  setNotes(kind, el) {
+    this.current[kind] = el.value.split("\n");
+  },
+  setDo(el) {
+    this.setNotes("do", el);
+  },
+  setDont(el) {
+    this.setNotes("dont", el);
   },
 
   /** The document a preview is drawn from; none until the card nears the viewport, so a page of many previews stays light. */

@@ -8,6 +8,7 @@ import (
 	"image/png"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/chromedp/chromedp"
 )
@@ -146,5 +147,172 @@ func TestDesignSystemComponentsTabNeverRunsAScriptInAPreview(t *testing.T) {
 	}
 	if sandbox != "" || strings.Contains(sandbox, "allow") {
 		t.Errorf("sandbox = %q", sandbox)
+	}
+}
+
+const (
+	dsAddComponent = dsComponentsPanel + ` [data-add-component]`
+	dsEditor       = dsComponentsPanel + ` [data-component-editor]`
+	dsProblems     = dsComponentsPanel + ` [data-component-problems]`
+)
+
+// previewField is a field of the n-th preview's editor.
+func previewField(n int, field string) string {
+	return fmt.Sprintf(`%s [data-preview-editors] [data-preview-editor]:nth-of-type(%d) [data-field=%s]`, dsEditor, n, field)
+}
+
+// addButton adds a component and fills its first preview, as the person does.
+func addButton(me *person, t *testing.T, html, css string) {
+	t.Helper()
+	me.run(t, "add a component",
+		designClick(dsAddComponent),
+		designPoll(`!!document.querySelector('`+dsEditor+` [data-field=component-name]')`),
+		chromedp.SetValue(dsEditor+` [data-field=component-name]`, "Button", chromedp.ByQuery),
+		chromedp.SetValue(dsEditor+` [data-field=component-slug]`, "button", chromedp.ByQuery),
+		chromedp.SetValue(dsEditor+` [data-field=component-purpose]`, "Starts one action.", chromedp.ByQuery),
+		chromedp.SetValue(dsEditor+` [data-field=component-do]`, "Label with a verb.\n\n", chromedp.ByQuery),
+		chromedp.SetValue(dsEditor+` [data-field=component-dont]`, "Two primaries in a row.", chromedp.ByQuery),
+		chromedp.SetValue(previewField(1, "preview-label"), "Primary / default", chromedp.ByQuery),
+		chromedp.SetValue(previewField(1, "preview-variant"), "primary", chromedp.ByQuery),
+		chromedp.SetValue(previewField(1, "preview-state"), "default", chromedp.ByQuery),
+		chromedp.SetValue(previewField(1, "preview-html"), html, chromedp.ByQuery),
+		chromedp.SetValue(previewField(1, "preview-css"), css, chromedp.ByQuery),
+	)
+}
+
+const fillCSS = `body{margin:0}.fill{margin:0;height:100vh;background:var(--colors-signal)}`
+
+func TestDesignSystemComponentsAreAddedPreviewedAndSavedInTheBrowser(t *testing.T) {
+	if testing.Short() {
+		t.Skip("browser test: skipped in -short mode")
+	}
+	pg := startDesignSystemPage(t)
+	pg.mustSave(0, map[string]any{"tokens": []any{dsToken("colors", "signal", "color", "#ff0000")}, "principles": "", "components": []any{}})
+	me := newPerson(t)
+
+	me.run(t, "an empty showcase says how to start",
+		chromedp.EmulateViewport(1280, 900),
+		chromedp.Navigate(pg.url+"?tab=components"),
+		designPoll(`!!document.querySelector('`+dsComponentsPanel+` [data-no-components]')`),
+	)
+	addButton(me, t, `<p class="fill">Save</p>`, fillCSS)
+	eventually(t, "the typed preview is drawn", func() error {
+		if got := framePixel(me, t, 1); got != "#ff0000" {
+			return fmt.Errorf("frame is %s", got)
+		}
+		return nil
+	})
+	me.run(t, "the draft is unsaved", designPoll(`document.querySelector('[data-save-bar] [data-save-summary]')?.textContent.includes('components')`))
+
+	me.run(t, "change the token without saving",
+		designClick(`#design-system-tabs [role=tab][aria-controls=design-system-panel-tokens]`),
+		chromedp.SetValue(tokenRow(1, `[data-field=value]`), "#0000ff", chromedp.ByQuery),
+		designClick(`#design-system-tabs [role=tab][aria-controls=design-system-panel-components]`),
+		designPoll(`document.querySelectorAll('`+dsFrame+`').length === 1`),
+	)
+	eventually(t, "the unsaved token reaches the typed preview", func() error {
+		if got := framePixel(me, t, 1); got != "#0000ff" {
+			return fmt.Errorf("frame is %s", got)
+		}
+		return nil
+	})
+	me.run(t, "screenshot", shot("components-editing", "light"))
+
+	me.run(t, "save",
+		designClick(dsSaveButton),
+		designPoll(`document.querySelector('`+dsSaveVersion+`')?.textContent.includes('version 3')`),
+	)
+	saved := pg.get()["record"].(map[string]any)["components"].([]any)
+	if len(saved) != 1 {
+		t.Fatalf("saved components = %v", saved)
+	}
+	c := saved[0].(map[string]any)
+	if c["slug"] != "button" || c["purpose"] != "Starts one action." || !jsonEqual(c["do"], []any{"Label with a verb."}) || !jsonEqual(c["dont"], []any{"Two primaries in a row."}) {
+		t.Errorf("saved component = %v", c)
+	}
+	me.run(t, "after a reload the component is still listed",
+		chromedp.Navigate(pg.url+"?tab=components"),
+		designPoll(`document.querySelectorAll('`+dsComponentsPanel+` [data-component-item]').length === 1`),
+	)
+	eventually(t, "the saved preview is drawn from the saved token", func() error {
+		if got := framePixel(me, t, 1); got != "#0000ff" {
+			return fmt.Errorf("frame is %s", got)
+		}
+		return nil
+	})
+}
+
+func TestDesignSystemComponentsTabRefusesUnsafeAndUnknownPreviewsWhileTyping(t *testing.T) {
+	if testing.Short() {
+		t.Skip("browser test: skipped in -short mode")
+	}
+	pg := startDesignSystemPage(t)
+	pg.mustSave(0, map[string]any{"tokens": []any{dsToken("colors", "signal", "color", "#ff0000")}, "principles": "", "components": []any{}})
+	me := newPerson(t)
+	me.run(t, "open",
+		chromedp.EmulateViewport(1280, 900),
+		chromedp.Navigate(pg.url+"?tab=components"),
+		designPoll(`!!document.querySelector('`+dsAddComponent+`')`),
+		chromedp.Evaluate(`window.__ran = false; window.addEventListener('message', () => { window.__ran = true })`, nil),
+	)
+	addButton(me, t, `<p class="fill">Save</p>`, fillCSS)
+	saveDisabled := `document.querySelector('` + dsSaveButton + `').disabled`
+	problem := func(code, text string) chromedp.Action {
+		return designPoll(`[...document.querySelectorAll('` + dsProblems + ` [data-problem]')].some((e) => e.textContent.includes('` + code + `') && e.textContent.includes('` + text + `'))`)
+	}
+
+	me.run(t, "a script is refused with its reason",
+		chromedp.SetValue(previewField(1, "preview-html"), `<p>x</p><script>parent.postMessage("ran","*")</script>`, chromedp.ByQuery),
+		problem("UNSAFE_PREVIEW", "script"),
+		designPoll(saveDisabled),
+	)
+	me.run(t, "an event attribute is refused",
+		chromedp.SetValue(previewField(1, "preview-html"), `<button onclick="parent.postMessage('ran','*')">x</button>`, chromedp.ByQuery),
+		problem("UNSAFE_PREVIEW", "on*"),
+		designPoll(saveDisabled),
+	)
+	me.run(t, "a network URL is refused",
+		chromedp.SetValue(previewField(1, "preview-html"), `<p class="fill">x</p>`, chromedp.ByQuery),
+		chromedp.SetValue(previewField(1, "preview-css"), `.fill{background:url(https://example.com/a.png)}`, chromedp.ByQuery),
+		problem("UNSAFE_PREVIEW", "url("),
+		designPoll(saveDisabled),
+	)
+	me.run(t, "a missing token is named before saving",
+		chromedp.SetValue(previewField(1, "preview-css"), `.fill{color:var(--colors-nope)}`, chromedp.ByQuery),
+		problem("UNKNOWN_TOKEN", "--colors-nope"),
+		designPoll(saveDisabled),
+		shot("components-problems", "light"),
+	)
+	me.run(t, "fixed, it saves",
+		chromedp.SetValue(previewField(1, "preview-css"), fillCSS, chromedp.ByQuery),
+		designPoll(`!document.querySelector('`+dsProblems+`')`),
+		designPoll(`!`+saveDisabled),
+	)
+	var ran bool
+	me.run(t, "nothing ran", chromedp.Sleep(300*time.Millisecond), chromedp.Evaluate(`window.__ran`, &ran))
+	if ran {
+		t.Error("a script in a preview ran")
+	}
+}
+
+func TestDesignSystemComponentsAreRemovedAndSaved(t *testing.T) {
+	if testing.Short() {
+		t.Skip("browser test: skipped in -short mode")
+	}
+	pg := startDesignSystemPage(t)
+	pg.mustSave(0, componentsRecord())
+	me := newPerson(t)
+	me.run(t, "remove the open component, then save",
+		chromedp.EmulateViewport(1280, 900),
+		chromedp.Navigate(pg.url+"?tab=components"),
+		designPoll(`document.querySelectorAll('`+dsComponentsPanel+` [data-component-item]').length === 2`),
+		designClick(dsEditor+` [data-remove-component]`),
+		designPoll(`document.querySelectorAll('`+dsComponentsPanel+` [data-component-item]').length === 1`),
+		designPoll(`document.querySelector('`+dsComponentsPanel+` [data-component-item]').dataset.slug === 'badge'`),
+		designClick(dsSaveButton),
+		designPoll(`document.querySelector('`+dsSaveVersion+`')?.textContent.includes('version 3')`),
+	)
+	if got := pg.get()["record"].(map[string]any)["components"].([]any); len(got) != 1 || got[0].(map[string]any)["slug"] != "badge" {
+		t.Errorf("saved components = %v", got)
 	}
 }
