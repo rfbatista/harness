@@ -9,7 +9,7 @@ package architecture
 // drawer beside the list. A row whose file the harness holds opens it in the
 // editor pane beside the list (instructionEditor); the pane and the drawer share
 // the column beside the list.
-templ tabInstructions() {
+templ tabInstructions(v View) {
 	<section role="tabpanel" id="architecture-panel-instructions" aria-labelledby="architecture-tab-instructions" x-show="isTab('instructions')" x-data="architectureInstructionsTab" x-on:architecture-draft-replaced.window="closeDrawer" class="[ flow ]">
 		@panelHead("Instructions & rule files", "The files agents read: rules, skills and sub-agent prompts, who they apply to and when they load. Only the path is stored, never the prose.") {
 			<button type="button" class="[ button ]" data-variant="primary" data-size="sm" data-add x-on:click="addFile">Add file</button>
@@ -179,7 +179,7 @@ templ tabInstructions() {
 					</label>
 				</div>
 			}
-			@instructionEditor()
+			@instructionEditor(v)
 			</div>
 		</div>
 	</section>

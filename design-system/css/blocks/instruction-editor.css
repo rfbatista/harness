@@ -33,7 +33,7 @@
   }
 
   .instruction-editor {
-    & .md-editor > textarea {
+    & .md-editor textarea {
       inline-size: 100%;
       min-block-size: 22rem;
       max-block-size: 70vh;

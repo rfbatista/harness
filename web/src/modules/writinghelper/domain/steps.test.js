@@ -60,3 +60,20 @@ test("more than four siblings are cut to four", () => {
   const siblings = Array.from({ length: 6 }, (_, i) => ({ label: `S${i}`, text: "t" }));
   assert.equal(stepRequest("analyze", { ...base, siblings }).siblings.length, 4);
 });
+
+test("an instruction file request names its kind and carries Path and Kind as siblings", () => {
+  const body = stepRequest("analyze", {
+    projectId: "p1",
+    kind: "instruction_file",
+    text: "# Rules\n",
+    siblings: [
+      { label: "Path", text: ".claude/agents/planner.md" },
+      { label: "Kind", text: "subagent" },
+    ],
+  });
+  assert.deepEqual(body.field, { kind: "instruction_file", text: "# Rules\n" });
+  assert.deepEqual(body.siblings, [
+    { label: "Path", text: ".claude/agents/planner.md" },
+    { label: "Kind", text: "subagent" },
+  ]);
+});

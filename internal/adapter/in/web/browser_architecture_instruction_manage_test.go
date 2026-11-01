@@ -99,8 +99,8 @@ func TestInstructionsRenameClashShowsTheRefusalAndKeepsTheFile(t *testing.T) {
 	// An invalid path says why.
 	rig.run(t, edSet(`[data-rename-path]`, "../out.md", "input"), edClick(`[data-confirm-rename]`),
 		poll(edVisible(`[data-error-for="path"]`)+` && `+edText(`[data-error-for="path"]`)+`.includes('..')`))
-	// Cancel closes the form. Alpine shows an x-show element from a timer, so an element shown and hidden within one tick can stay shown: let the error's timer fire before Cancel, as a person's click would.
-	rig.run(t, chromedp.Sleep(100*time.Millisecond), edClick(`[data-cancel-rename]`), poll(`!`+edVisible(`[data-rename-form]`)+` && !`+edVisible(`[data-error-for="path"]`)))
+	// Cancel closes the form and the error goes with it.
+	rig.run(t, edClick(`[data-cancel-rename]`), poll(`!`+edVisible(`[data-rename-form]`)+` && !`+edVisible(`[data-error-for="path"]`)))
 }
 
 // Renaming with unsaved text says what happens to it, and the text stays.

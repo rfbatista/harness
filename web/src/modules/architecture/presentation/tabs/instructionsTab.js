@@ -386,6 +386,15 @@ export const instructionsTab = ({ gateway }) => () => {
       if (this.file === null) return "";
       return this.fileDeleted ? "Deleted" : `Version ${this.file.version}`;
     },
+    /** The open file's path and kind as the writing helper reads them: a new file's are the form's. */
+    get penPath() {
+      if (this.file === null) return "";
+      return this.file.isNew === true ? this.newPath : this.file.path;
+    },
+    get penKind() {
+      if (this.file === null) return "";
+      return this.file.isNew === true ? this.newKind : this.file.kind;
+    },
     get isNewFile() {
       return this.file !== null && this.file.isNew === true;
     },

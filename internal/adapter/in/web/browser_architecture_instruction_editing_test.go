@@ -67,11 +67,8 @@ func TestInstructionsAddFilePrefillsThePathPerKindAndCreatesTheFile(t *testing.T
 	if body["base_version"] != float64(0) || body["kind"] != "subagent" || body["repository_id"] != "r1" {
 		t.Fatalf("save body = %v, want base_version 0 and the subagent kind", body)
 	}
-	var fixed bool
-	rig.run(t, chromedp.Evaluate(`!document.querySelector('`+instructionsPanel+` [data-new-path]')?.checkVisibility()`, &fixed))
-	if !fixed {
-		t.Fatal("the path is still editable after the file exists")
-	}
+	// Alpine hides an x-show element from a timer: wait for it rather than read it once.
+	rig.run(t, poll(`!document.querySelector('`+instructionsPanel+` [data-new-path]')?.checkVisibility()`))
 }
 
 // Editing marks the editor dirty, Discard restores the saved text, Save clears the mark and shows the new version, and the page's save bar is never involved.

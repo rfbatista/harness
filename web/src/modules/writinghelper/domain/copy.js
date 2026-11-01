@@ -2,18 +2,21 @@
 
 /** The question the panel asks when the field is empty. */
 export function startQuestion(kind) {
+  if (kind === "instruction_file") return "What should this file make agents do?";
   return kind === "comment" ? "What do you want to say?" : "What is this task about?";
 }
 
 /** The line above the start question. */
 export function startLead(kind, noun, siblingLabel) {
   const from = siblingLabel ? `, or start from the ${siblingLabel}` : "";
+  if (kind === "instruction_file") return `The ${noun} is empty. Say in a few words what agents should do differently once they read it${from}.`;
   return kind === "comment"
     ? `The ${noun} is empty. Say in a few words what you want to tell the agents${from}.`
     : `The ${noun} is empty. Say in a few words what this task is about${from}.`;
 }
 
 export function startPlaceholder(kind) {
+  if (kind === "instruction_file") return "e.g. run the tests before every commit and never edit generated files";
   return kind === "comment" ? "e.g. keep the pen visible, not only on hover" : "e.g. let people get AI help writing task text";
 }
 

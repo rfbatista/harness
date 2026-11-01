@@ -177,6 +177,7 @@ import "../src/modules/usage/presentation/components/liveCallLog.test.js";
 import "../src/modules/usage/presentation/json-tree.test.js";
 import "../src/modules/usage/presentation/totals.test.js";
 import "../src/modules/usage/presentation/view.test.js";
+import "../src/modules/writinghelper/domain/copy.test.js";
 import "../src/modules/writinghelper/domain/diff.test.js";
 import "../src/modules/writinghelper/domain/panel.test.js";
 import "../src/modules/writinghelper/domain/steps.test.js";

@@ -8,7 +8,7 @@ import "encoding/json"
 type Pen struct {
 	// ID is unique on the page: the panel's id and the question inputs' ids start with it.
 	ID string
-	// Kind is the field kind the step request names: task_title, task_description or comment.
+	// Kind is the field kind the step request names: task_title, task_description, comment or instruction_file.
 	Kind string
 	// Noun is what the pen's label says ("description"), Label what the panel names ("Description").
 	Noun, Label string

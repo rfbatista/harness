@@ -11,6 +11,7 @@ import (
 
 	"github.com/chromedp/chromedp"
 
+	"operators-mcp/internal/adapter/in/web/shell"
 	"operators-mcp/internal/domain"
 )
 
@@ -27,6 +28,13 @@ type archRig struct {
 }
 
 func newArchRig(t *testing.T) *archRig {
+	t.Helper()
+	return newArchRigWithHelper(t, nil, nil)
+}
+
+// newArchRigWithHelper is newArchRig with the writing helper's state on the
+// pages (nil leaves it unavailable) and a fake step endpoint behind it.
+func newArchRigWithHelper(t *testing.T, helper *shell.Helper, steps *fakeHelperAPI) *archRig {
 	t.Helper()
 	assets, err := NewAssets()
 	if err != nil {
@@ -46,6 +54,12 @@ func newArchRig(t *testing.T) *archRig {
 			{ID: "r2", ProjectID: "p2", Name: "elsewhere", RootDir: "/src/elsewhere"},
 		}},
 		EnvFiles: fakeEnv{},
+		WritingHelper: func(context.Context) shell.Helper {
+			if helper == nil {
+				return shell.Helper{}
+			}
+			return *helper
+		},
 	}, assets, nil)
 	feed := &sseFeed{}
 	api := newFakeArchitectureAPI(feed)
@@ -55,6 +69,9 @@ func newArchRig(t *testing.T) *archRig {
 	files.register(mux)
 	files.onDeleted = api.dropInstruction
 	files.onRenamed = api.moveInstruction
+	if steps != nil {
+		mux.Handle("/api/run_writing_helper_step", steps)
+	}
 	mux.Handle("/api/", api)
 	mux.Handle("/", pages)
 	srv := newBrowserServer(mux)

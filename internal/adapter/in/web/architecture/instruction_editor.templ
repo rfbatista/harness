@@ -1,14 +1,18 @@
 package architecture
 
+import "operators-mcp/internal/adapter/in/web/components"
+
 // instructionEditor is the pane beside the Instructions list that shows one
 // instruction file: a monospace text area, a Markdown preview toggle, Save and
 // Discard with a dirty marker, and what went wrong when the file could not be
 // opened or saved. A new file asks for its kind and path first (prefilled from
 // the kind). It is part of architectureInstructionsTab's scope. The file is the
 // harness's own copy (ADR 0057); it is saved on its own against its version and
-// never touches the page's save bar. A refusal, a feed event and a tab switch
+// never touches the page's save bar. The text area carries the writing helper's
+// pen (kind instruction_file): it reads the file's path and kind, from the two
+// hidden inputs below, and replaces the text only when the person accepts a draft. A refusal, a feed event and a tab switch
 // keep the person's text.
-templ instructionEditor() {
+templ instructionEditor(v View) {
 	<section class="[ entry-card ] [ instruction-editor ]" data-instruction-editor aria-label="Instruction file" x-show="paneOpen()">
 		<header>
 			<h3 class="[ grow ]"><code class="[ font-mono ]" data-editor-path x-text="paneTitle"></code></h3>
@@ -40,7 +44,9 @@ templ instructionEditor() {
 					</label>
 				</div>
 			</div>
-			<p class="[ error ]" data-error-for="path" x-show="hasPathError"><span aria-hidden="true">✕</span> <span x-text="pathError"></span></p>
+			<template x-if="hasPathError">
+				<p class="[ error ]" data-error-for="path"><span aria-hidden="true">✕</span> <span x-text="pathError"></span></p>
+			</template>
 			<form class="[ instruction-ask ]" data-rename-form aria-label="Rename the file" x-show="renameShown" x-on:submit.prevent="renameFile">
 				<div class="[ field ]">
 					<label>
@@ -81,7 +87,21 @@ templ instructionEditor() {
 					<button type="button" data-view="preview" aria-pressed="false" x-bind:aria-pressed="previewPressed" x-on:click="showPreview">Preview</button>
 					<span class="[ text-xs color-ink-faint ]">Markdown</span>
 				</div>
-				<textarea data-file-text aria-label="Instruction file text" spellcheck="false" x-model="body" x-bind:aria-invalid="bodyInvalid" x-bind:hidden="!textShown"></textarea>
+				<input type="hidden" id="instruction-pen-path" x-bind:value="penPath"/>
+				<input type="hidden" id="instruction-pen-kind" x-bind:value="penKind"/>
+				<div x-bind:hidden="!textShown">
+					@components.WritingPen(components.Pen{
+						ID: "pen-instruction-file", Kind: "instruction_file", Noun: "instruction file", Label: "Instruction file",
+						ProjectID: v.ProjectID, ProjectName: v.ProjectName,
+						Siblings: []components.PenSibling{
+							{Label: "Path", Selector: "#instruction-pen-path"},
+							{Label: "Kind", Selector: "#instruction-pen-kind"},
+						},
+						Available: v.Frame.Helper.Available, Reason: v.Frame.Helper.Reason, FixURL: v.Frame.Helper.FixURL,
+					}) {
+						<textarea data-file-text aria-label="Instruction file text" spellcheck="false" x-model="body" x-bind:aria-invalid="bodyInvalid"></textarea>
+					}
+				</div>
 				<div class="[ prose md-preview ]" data-file-preview x-bind:hidden="!previewShown" x-effect="paintPreview($el)" hidden></div>
 			</div>
 			<p class="[ error ]" data-error-for="content" x-show="hasBodyError"><span aria-hidden="true">✕</span> <span x-text="bodyError"></span></p>
