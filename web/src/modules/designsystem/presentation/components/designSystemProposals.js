@@ -34,6 +34,8 @@ export const designSystemProposals = ({ gateway, clock, location = globalThis.lo
   marks: {},
   /** Why the server refused an item, by item key. */
   itemProblems: {},
+  /** The person's note to the design session with the items sent back. */
+  sendBackNote: "",
   rejectingAll: false,
   deciding: false,
   proposalError: null,
@@ -86,7 +88,25 @@ export const designSystemProposals = ({ gateway, clock, location = globalThis.lo
     return this.proposalView ? dependencyFlags(this.proposalView, this.marks) : {};
   },
   get markedItems() {
-    return (this.proposalView?.items ?? []).filter((it) => it.decision === "pending" && this.marks[it.id] !== undefined);
+    return (this.proposalView?.items ?? []).filter((it) => it.decision === "pending" && (this.marks[it.id] === "approve" || this.marks[it.id] === "reject"));
+  },
+  /** The items marked to go back to the design session. */
+  get backItems() {
+    return (this.proposalView?.items ?? []).filter((it) => it.decision === "pending" && this.marks[it.id] === "back");
+  },
+  get hasBackItems() {
+    return this.backItems.length > 0;
+  },
+  /** Send back is offered while the design session runs: nobody else can answer it. */
+  get canSendBack() {
+    return this.proposalDecidable && this.proposalView.sessionRunning;
+  },
+  get canSendBackNow() {
+    return this.canSendBack && !this.deciding && this.hasBackItems;
+  },
+  get sendBackText() {
+    const n = this.backItems.length;
+    return `Send back ${n} ${n === 1 ? "change" : "changes"}`;
   },
   get markedApprove() {
     return this.markedItems.filter((it) => this.marks[it.id] === "approve");
@@ -132,6 +152,8 @@ export const designSystemProposals = ({ gateway, clock, location = globalThis.lo
         canMark: this.proposalDecidable && it.decision === "pending",
         approveOn: this.marks[it.id] === "approve",
         rejectOn: this.marks[it.id] === "reject",
+        backOn: this.marks[it.id] === "back",
+        canSendBack: this.canSendBack && it.decision === "pending",
         decided: it.decision === "approved" || it.decision === "rejected",
         flag: this.dependencyFlagsNow[it.id] ?? "",
         hasFlag: this.dependencyFlagsNow[it.id] !== undefined,
@@ -237,6 +259,7 @@ export const designSystemProposals = ({ gateway, clock, location = globalThis.lo
     this.decisionResult = "";
     this.proposalError = null;
     this.marks = {};
+    this.sendBackNote = "";
     this.itemProblems = {};
     await this.loadProposalView(id);
   },
@@ -251,6 +274,8 @@ export const designSystemProposals = ({ gateway, clock, location = globalThis.lo
       this.currentRecord = record;
       // A mark on an item that is no longer pending is spent.
       this.marks = Object.fromEntries(Object.entries(this.marks).filter(([itemId]) => view.items.some((it) => it.id === itemId && it.decision === "pending")));
+      // The note belongs to the items marked back: with none left it goes.
+      if (!Object.values(this.marks).includes("back")) this.sendBackNote = "";
     } catch (err) {
       this.proposalError = describeError(err);
     }
@@ -310,6 +335,26 @@ export const designSystemProposals = ({ gateway, clock, location = globalThis.lo
       this.markedItems.map((it) => ({ id: it.id, decision: this.marks[it.id] })),
       this.markedApprove.filter((it) => it.conflicting).map((it) => it.id),
     );
+  },
+
+  /** Sends the items marked back to the design session with the note; the proposal becomes a draft again. */
+  async sendBackMarked() {
+    if (this.proposalView === null || this.deciding || !this.hasBackItems) return;
+    this.deciding = true;
+    this.proposalError = null;
+    const id = this.proposalView.id;
+    try {
+      await gateway.sendBack(id, this.backItems.map((it) => it.id), this.sendBackNote);
+      this.decisionResult = "Sent back: the design session reworks those changes and submits again.";
+      this.marks = {};
+      this.sendBackNote = "";
+      await this.reloadProposals();
+      await this.loadProposalView(id);
+    } catch (err) {
+      this.proposalError = describeError(err);
+    } finally {
+      this.deciding = false;
+    }
   },
 
   async send(decisions, confirm) {

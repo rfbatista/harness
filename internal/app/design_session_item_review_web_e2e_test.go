@@ -191,3 +191,79 @@ func TestItemReviewInTheBrowserFlagsAComponentWhoseTokenIsNotApproved(t *testing
 		t.Fatalf("design system = %v", got)
 	}
 }
+
+// While the design session runs, chosen items go back to it with a note; the
+// proposal then waits as a draft until the session resubmits.
+func TestItemReviewInTheBrowserSendsItemsBackToARunningSession(t *testing.T) {
+	if testing.Short() {
+		t.Skip("browser test: skipped in -short mode")
+	}
+	s := startDesignSessionPage(t)
+	s.mustSave(0, dsRecord(buttonComponent()))
+	sessionID := s.proposedItems("Ink and a calmer signal", addInk, calmerSignal)
+	me := newPerson(t)
+	me.run(t, "an item is marked to send back and the note is written",
+		chromedp.EmulateViewport(1280, 2100),
+		chromedp.Navigate(s.url+"?tab=proposals"),
+		designPoll(`!!document.querySelector('[data-proposal-row]')`),
+		designClick(`[data-action=open-proposal]`),
+		designPoll(`document.querySelectorAll('[data-proposal-panel] [data-action=mark-back]').length === 2`),
+		designPoll(`document.querySelector('[data-action=send-back]').disabled === true`),
+		designClick(item("token:colors.signal", ` [data-action=mark-back]`)),
+		designPoll(`document.querySelector('[data-action=send-back]').disabled === false`),
+		designPoll(`document.querySelector('[data-action=apply-decisions]').disabled === true`),
+		chromedp.SetValue(`[data-field=send-back-note]`, "Go halfway to the old colour.", chromedp.ByQuery),
+		shot("impl-item-review-send-back", "light"),
+		designClick(`[data-action=send-back]`),
+		designPoll(`document.querySelector('[data-proposal-row] [data-proposal-state]')?.textContent.trim() === 'Drafting'`),
+		designPoll(`document.querySelector('`+item("token:colors.signal", ` [data-item-decision]`)+`').textContent.trim() === 'Sent back'`),
+		designPoll(`!document.querySelector('[data-proposal-bar]')`),
+		shot("impl-item-review-drafting", "light"),
+	)
+	// The session resubmits: the proposal waits again with every item pending.
+	ctx := context.Background()
+	view, err := s.cat.DesignSystems.DesignDraftFiles(ctx, sessionID, s.ds)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, f := range view.Files {
+		if f.Path == "tokens.json" {
+			if err := s.cat.DesignSystems.WriteDraftFile(ctx, sessionID, s.ds, "tokens.json", []byte(strings.Replace(string(f.Content), "oklch(0.35 0.1 200)", "oklch(0.42 0.1 190)", 1))); err != nil {
+				t.Fatal(err)
+			}
+		}
+	}
+	if _, err := s.cat.DesignSystems.SubmitDesignProposal(ctx, sessionID, "Halfway"); err != nil {
+		t.Fatal(err)
+	}
+	me.run(t, "the proposal is open again",
+		designPoll(`document.querySelector('[data-proposal-row] [data-proposal-state]')?.textContent.trim() === 'Waiting'`),
+		designPoll(`getComputedStyle(document.querySelector('`+item("token:colors.signal", ` [data-item-decision]`)+`')).display === 'none'`),
+		designPoll(`!!document.querySelector('[data-proposal-bar]')`),
+	)
+}
+
+// When the session has ended there is nobody to answer: Send back is not
+// offered, and Withdraw still is.
+func TestItemReviewInTheBrowserOffersNoSendBackForAnEndedSession(t *testing.T) {
+	if testing.Short() {
+		t.Skip("browser test: skipped in -short mode")
+	}
+	s := startDesignSessionPage(t)
+	s.mustSave(0, dsRecord(buttonComponent()))
+	sessionID := s.proposedItems("Ink and a calmer signal", addInk, calmerSignal)
+	if err := s.orch.Stop(context.Background(), sessionID); err != nil {
+		t.Fatal(err)
+	}
+	me := newPerson(t)
+	me.run(t, "no Send back on an ended session",
+		chromedp.EmulateViewport(1280, 2100),
+		chromedp.Navigate(s.url+"?tab=proposals"),
+		designPoll(`!!document.querySelector('[data-proposal-row]')`),
+		designPoll(`!!document.querySelector('[data-action=withdraw-proposal]')`),
+		designPoll(`document.querySelector('[data-proposal-detail]').textContent.includes('session ended')`),
+		designClick(`[data-action=open-proposal]`),
+		designPoll(`document.querySelectorAll('[data-proposal-panel] [data-action=mark-approve]').length === 2`),
+		designPoll(`document.querySelector('[data-action=mark-back]') === null && document.querySelector('[data-action=send-back]') === null`),
+	)
+}

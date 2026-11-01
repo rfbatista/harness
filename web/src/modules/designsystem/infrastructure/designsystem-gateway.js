@@ -207,6 +207,12 @@ export function designSystemGateway(api, feed) {
       return { version: Number.isInteger(body?.version) ? body.version : 0, state: body?.state ?? "" };
     },
 
+    /** Sends pending items back to the running design session with a note; the proposal becomes a draft again. */
+    async sendBack(proposalId, itemIds, note) {
+      const body = await api.post("/send_back_design_system_items", { proposal_id: proposalId, item_ids: itemIds, note });
+      return body?.state ?? "";
+    },
+
     /** Drops a proposal whose session ended. */
     async withdraw(proposalId) {
       await api.post("/withdraw_design_system_proposal", { proposal_id: proposalId });

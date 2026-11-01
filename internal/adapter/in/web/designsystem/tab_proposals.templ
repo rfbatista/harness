@@ -107,6 +107,9 @@ templ proposalReview() {
 									<span class="[ badge ]" data-item-decision x-bind:data-decision="p.decision" x-show="!p.canMark" x-text="p.decisionLabel"></span>
 									<template x-if="p.canMark">
 										<span class="[ cluster ]" role="group" aria-label="Decide this change">
+											<template x-if="p.canSendBack">
+												<button type="button" class="[ button ]" data-size="sm" data-variant="ghost" data-action="mark-back" x-bind:aria-pressed="p.backOn" x-on:click="markItem(p.id, 'back')">Send back</button>
+											</template>
 											<button type="button" class="[ button ]" data-size="sm" data-variant="ghost" data-action="mark-reject" x-bind:aria-pressed="p.rejectOn" x-on:click="markItem(p.id, 'reject')">Reject this change</button>
 											<button type="button" class="[ button ]" data-size="sm" data-variant="primary" data-action="mark-approve" x-bind:aria-pressed="p.approveOn" x-on:click="markItem(p.id, 'approve')">Approve</button>
 										</span>
@@ -187,6 +190,15 @@ templ proposalReview() {
 		</div>
 		<template x-if="proposalDecidable">
 		<section class="[ entry-card ]" data-proposal-bar aria-label="Decide">
+			<template x-if="canSendBack">
+				<div class="[ entry-card-body flow ]" data-send-back>
+					<label class="[ flow ] [ flow-space-3xs ]">
+						<span class="text-sm">Note to the design session, for the changes you send back</span>
+						<textarea class="[ input ]" rows="2" data-field="send-back-note" x-model="sendBackNote" placeholder="What should it change?"></textarea>
+					</label>
+					<button type="button" class="[ button ]" data-size="sm" data-action="send-back" x-bind:disabled="!canSendBackNow" x-on:click="sendBackMarked" x-text="sendBackText"></button>
+				</div>
+			</template>
 			<div class="[ entry-card-body cluster ]" style="justify-content: space-between; align-items: center">
 			<span data-next-version x-text="proposalNextVersionText"></span>
 			<span class="[ actions ]">
