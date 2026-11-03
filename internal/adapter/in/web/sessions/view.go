@@ -91,8 +91,12 @@ type Row struct {
 	Unsandboxed bool
 	// CommitCheckOff is why the commit check does not guard the worktree; empty while it does.
 	CommitCheckOff string
-	Role           string
-	Depth          int
+	// Unassigned is "Unassigned from <repository>" while the session's agent
+	// is unassigned from its repository (ADR 0061); empty otherwise. The row
+	// adds that resuming will be refused.
+	Unassigned string
+	Role       string
+	Depth      int
 	// Sync is the chip of the row's worktree, from the page's seeded git
 	// state; nil when the row has none to show (see PageView.PaintSync).
 	Sync *gitsync.Chip
@@ -507,7 +511,9 @@ func NewPageView(frame shell.Frame, project *domain.Project, task *domain.Ticket
 	for _, g := range groups {
 		rows := make([]Row, 0, len(g.sessions))
 		for _, s := range g.sessions {
-			rows = append(rows, toRow(s, selected, names, now, byID, g.depth[s.ID], taskTitle))
+			row := toRow(s, selected, names, now, byID, g.depth[s.ID], taskTitle)
+			row.Unassigned = unassignedTitle(s, repoNames)
+			rows = append(rows, row)
 		}
 		views = append(views, Group{Key: g.key, Label: groupLabels[g.key], Tone: groupTones[g.key], Count: len(rows), Rows: rows})
 	}
@@ -898,4 +904,17 @@ func count(n int, noun string) string {
 		return fmt.Sprintf("%d %s", n, noun)
 	}
 	return fmt.Sprintf("%d %ss", n, noun)
+}
+
+// unassignedTitle is what a session's row says while its agent is unassigned
+// from its repository; the browser's toRowView says the same (session-row.json).
+func unassignedTitle(s *domain.Session, repoNames map[string]string) string {
+	if !s.AgentUnassigned {
+		return ""
+	}
+	name := repoNames[s.RepositoryID]
+	if name == "" {
+		name = "this repository"
+	}
+	return "Unassigned from " + name
 }

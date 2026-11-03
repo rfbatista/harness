@@ -587,6 +587,9 @@ templ ssrRows(v PageView) {
 							@components.Badge(r.Badge, "")
 						}
 						<span class="[ tokens ]">
+							if r.Unassigned != "" {
+								<span class="[ tag ]" data-kind="warn" data-agent-unassigned>{ r.Unassigned } · Resuming will be refused</span>
+							}
 							if r.Mode != "" {
 								<span class="[ tag ]" data-kind="mode">{ r.Mode }</span>
 							}
