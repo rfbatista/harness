@@ -89,9 +89,9 @@ export function notUsedNotice(row, repository, project) {
   return null;
 }
 
-/** The footer note of the Save bar. @param {{ dirty: boolean, conflict: boolean, over: boolean, version: string, current?: string }} s */
-export function barNote({ dirty, conflict, over, version, current }) {
-  if (conflict) return `Not saved: you edited version ${version || "none"}, the current one is ${current || "none"}.`;
+/** The footer note of the Save bar. @param {{ dirty: boolean, conflict: boolean, over: boolean }} s */
+export function barNote({ dirty, conflict, over }) {
+  if (conflict) return "Not saved: this prompt changed since you opened it. Choose what to do with your text.";
   if (over) return "Too long to save.";
   return dirty ? "Unsaved changes" : "No changes";
 }

@@ -19,6 +19,11 @@ export function repositoryActions({ repositories }) {
     /** What the last click said when it was refused: { text }. */
     repoRefusal: null,
 
+    /** Whether a click is in flight: a boolean, since Alpine reads "" as set for a boolean attribute. */
+    get repoIsBusy() {
+      return this.repoBusy !== "";
+    },
+
     /** @param {{ key: string, id: string, name: string, listVersion: string, unassigned: boolean }} repo */
     async toggleRepository(repo) {
       if (!repositories || this.repoBusy !== "") return;

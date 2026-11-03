@@ -376,10 +376,10 @@ templ agentDetail() {
 										<span class="[ cluster ] [ gutter-xs ]">
 											<a class="[ text-sm ]" data-repository-prompt x-bind:href="repo.promptHref" x-text="repo.promptText"></a>
 											<template x-if="!repo.unassigned">
-												<button type="button" class="[ button ]" data-variant="outline" data-size="sm" data-action="unassign-repository" x-bind:aria-label="repo.unassignLabel" x-bind:disabled="repoBusy" x-on:click="toggleRepository(repo)">Unassign</button>
+												<button type="button" class="[ button ]" data-variant="outline" data-size="sm" data-action="unassign-repository" x-bind:aria-label="repo.unassignLabel" x-bind:disabled="repoIsBusy" x-on:click="toggleRepository(repo)">Unassign</button>
 											</template>
 											<template x-if="repo.unassigned">
-												<button type="button" class="[ button ]" data-variant="primary" data-size="sm" data-action="assign-repository" x-bind:aria-label="repo.assignLabel" x-bind:disabled="repoBusy" x-on:click="toggleRepository(repo)">Assign again</button>
+												<button type="button" class="[ button ]" data-variant="primary" data-size="sm" data-action="assign-repository" x-bind:aria-label="repo.assignLabel" x-bind:disabled="repoIsBusy" x-on:click="toggleRepository(repo)">Assign again</button>
 											</template>
 										</span>
 									</td>

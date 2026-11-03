@@ -74,7 +74,7 @@ test("a stale save keeps the draft, shows both versions on request, and re-appli
   assert.equal(ed.draft, "Mine.", "the draft is kept");
   assert.equal(ed.conflict.content, "Theirs.");
   assert.equal(ed.canSave, false, "Save is off until the person chooses");
-  assert.ok(ed.barText.startsWith("Not saved: you edited version"));
+  assert.ok(ed.barText.startsWith("Not saved: this prompt changed since you opened it"));
   ed.showTheirVersion();
   assert.equal(ed.showTheirs, true);
   ed.reapplyMine();

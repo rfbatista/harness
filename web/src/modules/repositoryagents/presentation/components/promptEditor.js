@@ -47,7 +47,7 @@ export const promptEditorPart = ({ gateway }) => {
       return `Extra instructions for this agent only in ${this.repositoryName}. They are added after the agent's own prompt and never replace it. They apply when the agent starts or resumes here, whether you run it or another agent spawns it. Agents can read this text but cannot change it.`;
     },
     get editorAgents() {
-      return (this.tab?.agents ?? []).map((a) => ({
+      return (this.list?.agents ?? []).map((a) => ({
         name: a.name,
         current: a.name === this.editorAgent,
         ariaCurrent: a.name === this.editorAgent ? "true" : null,
@@ -74,11 +74,11 @@ export const promptEditorPart = ({ gateway }) => {
       return this.dirty && !this.count.over && !this.saving && this.conflict === null && !this.loadingPrompt;
     },
     get barText() {
-      return barNote({ dirty: this.dirty, conflict: this.conflict !== null, over: this.count.over, version: this.prompt?.version ?? "", current: this.conflict?.version });
+      return barNote({ dirty: this.dirty, conflict: this.conflict !== null, over: this.count.over });
     },
     get notUsed() {
-      const row = this.tab?.agents.find((a) => a.name === this.editorAgent);
-      return notUsedNotice(row, this.repositoryName, this.tab?.project.name ?? "");
+      const row = this.list?.agents.find((a) => a.name === this.editorAgent);
+      return notUsedNotice(row, this.repositoryName, this.list?.project.name ?? "");
     },
     get previewView() {
       if (!this.preview) return null;
@@ -160,6 +160,14 @@ export const promptEditorPart = ({ gateway }) => {
         area.focus();
         area.setSelectionRange(next.cursor, next.cursor);
       });
+    },
+
+    // The handlers take no arguments: the Alpine CSP build does not read literals in a call.
+    showWrite() {
+      return this.setEditorView("write");
+    },
+    showPreview() {
+      return this.setEditorView("preview");
     },
 
     async setEditorView(view) {

@@ -19,6 +19,7 @@ import (
 	"operators-mcp/internal/app/catalog"
 	"operators-mcp/internal/application/orchestration"
 	"operators-mcp/internal/application/planning"
+	"operators-mcp/internal/application/repoagents"
 	"operators-mcp/internal/domain"
 )
 
@@ -30,6 +31,7 @@ type tokenSaverWorld struct {
 	ctx      context.Context
 	cat      catalog.Catalog
 	plan     *planning.Service
+	repoAg   *repoagents.Service
 	srv      *httptest.Server
 	agentCat *agentcatalog.Catalog
 	root     string
@@ -57,7 +59,7 @@ func newTokenSaverWorld(t *testing.T, opts ...agentcatalog.Option) *tokenSaverWo
 		fx.Supply(app.Config{HTTPAddr: "127.0.0.1:0", MCPAddr: "127.0.0.1:0", DBPath: ":memory:", Root: w.root, ClaudeBin: "/bin/true", SessionShell: "direct"}),
 		app.PersistenceModule, app.CatalogModule, app.PlanningModule, app.WorkspacesModule,
 		app.AgentRuntimeModule, app.TaskChannelModule, app.TextProcessingModule, app.ToolingModule,
-		fx.Populate(&w.cat, &orch, &w.plan),
+		fx.Populate(&w.cat, &orch, &w.plan, &w.repoAg),
 		fx.NopLogger,
 	)
 	if err := fxApp.Start(w.ctx); err != nil {
@@ -75,12 +77,12 @@ func newTokenSaverWorld(t *testing.T, opts ...agentcatalog.Option) *tokenSaverWo
 	mux := http.NewServeMux()
 	mux.Handle("/api/", httpapi.NewRouter(httpapi.NewHandler(httpapi.Services{
 		Projects: w.cat.Projects, ProjectFeed: w.cat.Projects, Agents: w.cat.Agents, Sessions: orch, Planning: w.plan,
-		TokenSavers: w.cat.Capabilities, Catalog: w.agentCat,
+		TokenSavers: w.cat.Capabilities, Catalog: w.agentCat, RepositoryAgents: w.repoAg,
 	})))
 	mux.Handle("/", web.NewHandler(web.Deps{
 		Projects: w.cat.Projects, Tasks: w.plan, Sessions: orch, Agents: w.cat.Agents, Repositories: w.cat.Projects,
 		EnvFiles: w.cat.Projects, ProjectSummaries: w.cat.Projects, TokenSavers: w.cat.Capabilities,
-		AgentCatalog: app.CatalogSeed(w.agentCat, nil),
+		AgentCatalog: app.CatalogSeed(w.agentCat, w.repoAg),
 	}, assets, nil))
 	// Over HTTP/2: each page keeps an event stream open, and HTTP/1.1's six
 	// connections per host run out across the navigations.

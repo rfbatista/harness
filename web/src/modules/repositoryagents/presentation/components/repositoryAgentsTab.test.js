@@ -114,7 +114,7 @@ test("a resync re-reads the list", async () => {
   const seen = await gateway.getRepositoryAgents("r1");
   tab.busy = false;
   await gateway.unassignAgent({ repositoryId: "r1", agent: "tester", listVersion: seen.listVersion });
-  tab.tab = seen; // the page missed the event
+  tab.list = seen; // the page missed the event
   memory.resync();
   await flush();
   await flush();

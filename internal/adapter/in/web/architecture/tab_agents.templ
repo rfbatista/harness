@@ -12,7 +12,7 @@ templ tabAgents(v View) {
 			<div class="[ flow ] [ flow-space-3xs ]">
 				<h2>Agents</h2>
 				<p class="[ color-ink-muted text-sm ]" data-agents-line x-text="notice.line"></p>
-				<p class="[ color-ink-muted text-sm ]">Changes here apply at once. <a x-bind:href="layersHref" x-on:click.prevent="openTab('layers')">Layer access</a> is a different setting: it says what an agent may touch, not whether it may run here.</p>
+				<p class="[ color-ink-muted text-sm ]">Changes here apply at once. <a x-bind:href="layersHref" x-on:click.prevent="openLayers">Layer access</a> is a different setting: it says what an agent may touch, not whether it may run here.</p>
 			</div>
 		</div>
 		<template x-if="error">
@@ -132,8 +132,8 @@ templ tabAgents(v View) {
 						</div>
 					</template>
 					<div class="[ segmented ]" role="group" aria-label="Editor view" data-editor-views>
-						<button type="button" x-bind:aria-pressed="isWrite" data-view="write" x-on:click="setEditorView('write')">Write</button>
-						<button type="button" x-bind:aria-pressed="isPreview" data-view="preview" x-on:click="setEditorView('preview')">What the agent receives</button>
+						<button type="button" x-bind:aria-pressed="isWrite" data-view="write" x-on:click="showWrite">Write</button>
+						<button type="button" x-bind:aria-pressed="isPreview" data-view="preview" x-on:click="showPreview">What the agent receives</button>
 					</div>
 					<div class="[ field ]" x-show="isWrite">
 						<label class="[ visually-hidden ]" for="repository-prompt-text">Repository prompt</label>

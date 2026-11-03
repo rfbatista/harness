@@ -23,7 +23,7 @@ export const repositoryAgentsTab = ({ gateway }) => () => {
     repositoryId: "",
     layersHref: "",
     /** @type {import("../../domain/ports.js").RepositoryAgents | null} */
-    tab: null,
+    list: null,
     loaded: false,
     busy: false,
     error: null,
@@ -52,7 +52,7 @@ export const repositoryAgentsTab = ({ gateway }) => () => {
       await this.load();
       // A link from the agent catalog opens the editor on one agent: ?prompt=<agent>.
       const wanted = new URLSearchParams(globalThis.location?.search ?? "").get("prompt");
-      if (wanted && this.tab?.agents.some((a) => a.name === wanted)) await this.openPrompt(wanted);
+      if (wanted && this.list?.agents.some((a) => a.name === wanted)) await this.openPrompt(wanted);
     },
 
     destroy() {
@@ -61,7 +61,7 @@ export const repositoryAgentsTab = ({ gateway }) => () => {
 
     async load() {
       try {
-        this.tab = await gateway.getRepositoryAgents(this.repositoryId);
+        this.list = await gateway.getRepositoryAgents(this.repositoryId);
         this.error = null;
       } catch (err) {
         this.error = describeError(err);
@@ -77,12 +77,12 @@ export const repositoryAgentsTab = ({ gateway }) => () => {
     },
 
     get hasTab() {
-      return this.tab !== null;
+      return this.list !== null;
     },
     get groups() {
-      if (!this.tab) return { assigned: [], notAssigned: [], notEnabled: [] };
-      const g = groupAgents(this.tab);
-      const rows = (list) => list.map((a) => rowModel(a, this.tab));
+      if (!this.list) return { assigned: [], notAssigned: [], notEnabled: [] };
+      const g = groupAgents(this.list);
+      const rows = (list) => list.map((a) => rowModel(a, this.list));
       return { assigned: rows(g.assigned), notAssigned: rows(g.notAssigned), notEnabled: rows(g.notEnabled) };
     },
     get assignedRows() {
@@ -95,38 +95,38 @@ export const repositoryAgentsTab = ({ gateway }) => () => {
       return this.groups.notEnabled;
     },
     get notAssignedTitle() {
-      return `Not assigned to ${this.tab?.repository.name ?? ""} (${this.notAssignedRows.length})`;
+      return `Not assigned to ${this.list?.repository.name ?? ""} (${this.notAssignedRows.length})`;
     },
     get notEnabledTitle() {
-      return `Not enabled in ${this.tab?.project.name ?? ""} (${this.notEnabledRows.length})`;
+      return `Not enabled in ${this.list?.project.name ?? ""} (${this.notEnabledRows.length})`;
     },
     get stats() {
-      return this.tab ? stats(this.tab) : null;
+      return this.list ? stats(this.list) : null;
     },
     get notice() {
-      return this.tab ? modeNotice(this.tab) : { line: "", banner: null };
+      return this.list ? modeNotice(this.list) : { line: "", banner: null };
     },
     get nothingAssigned() {
-      return this.tab ? nothingAssigned(this.tab) : null;
+      return this.list ? nothingAssigned(this.list) : null;
     },
     get repositoryName() {
-      return this.tab?.repository.name ?? "";
+      return this.list?.repository.name ?? "";
     },
 
     /** Runs one write; a stale refusal swaps in the current list and says what changed. @returns {Promise<import("../../domain/ports.js").RepositoryAgents | null>} */
     async write(run) {
-      if (this.busy || !this.tab) return null;
+      if (this.busy || !this.list) return null;
       this.busy = true;
       this.stale = null;
-      const before = this.tab;
+      const before = this.list;
       try {
         const next = await run(before.listVersion);
-        this.tab = next;
+        this.list = next;
         this.error = null;
         return next;
       } catch (err) {
         if (err?.code === Codes.REPOSITORY_AGENTS_CHANGED && err.details?.current) {
-          this.tab = err.details.current;
+          this.list = err.details.current;
           this.stale = { text: staleBanner(before, err.details.current) };
           this.toast = null;
         } else {
@@ -144,7 +144,7 @@ export const repositoryAgentsTab = ({ gateway }) => () => {
     },
 
     async assign(agent) {
-      const promptSet = this.tab?.agents.find((a) => a.name === agent)?.prompt.set === true;
+      const promptSet = this.list?.agents.find((a) => a.name === agent)?.prompt.set === true;
       const next = await this.write((listVersion) => gateway.assignAgentAgain({ repositoryId: this.repositoryId, agent, listVersion }));
       if (next) this.toast = { text: assignedToast({ agent, repository: next.repository.name, promptSet }), undo: "" };
     },
@@ -160,6 +160,11 @@ export const repositoryAgentsTab = ({ gateway }) => () => {
       if (!agent) return;
       this.toast = null;
       await this.assign(agent);
+    },
+
+    /** The link under the title: the Architecture page's Layers tab, without leaving the page. */
+    openLayers() {
+      this.openTab("layers");
     },
 
     dismissToast() {
