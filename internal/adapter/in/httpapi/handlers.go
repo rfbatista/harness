@@ -129,6 +129,9 @@ type Services struct {
 	// ArchitectureRules checks sessions' hooks, shims and commits against
 	// their repository's rules; nil allows everything.
 	ArchitectureRules ports.ArchitectureRules
+	// RepositoryAgents keeps which agents each repository assigns; nil
+	// answers 503.
+	RepositoryAgents ports.RepositoryAgents
 }
 
 // Handler serves the application's driving ports as HTTP endpoints (the same
@@ -188,6 +191,7 @@ type Handler struct {
 	writingHelper         ports.WritingHelper
 	architectureAssistant ports.ArchitectureAssistant
 	catalog               ports.CatalogEditor
+	repoAgents            ports.RepositoryAgents
 
 	repoArch ports.RepositoryArchitectures
 	designs  ports.DesignSystems
@@ -258,6 +262,7 @@ func NewHandler(s Services) *Handler {
 		writingHelper:         s.WritingHelper,
 		architectureAssistant: s.ArchitectureAssistant,
 		catalog:               s.Catalog,
+		repoAgents:            s.RepositoryAgents,
 	}
 }
 

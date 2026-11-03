@@ -1,0 +1,89 @@
+package domain
+
+// RepositoryAgentList is a repository's list of unassigned agents (ADR 0061),
+// named by catalog name, with the stored version that guards a write. The
+// list is empty by default: every enabled agent is assigned.
+type RepositoryAgentList struct {
+	RepositoryID string
+	Agents       []string
+	// Version is opaque and changes on every write to the list.
+	Version string
+}
+
+// Has says whether the agent is on the list.
+func (l *RepositoryAgentList) Has(agent string) bool {
+	if l == nil {
+		return false
+	}
+	for _, a := range l.Agents {
+		if a == agent {
+			return true
+		}
+	}
+	return false
+}
+
+// States of an agent in a repository's Agents tab.
+const (
+	AgentAssigned   = "assigned"
+	AgentUnassigned = "unassigned"
+	AgentNotEnabled = "not_enabled"
+)
+
+// RepositoryAgentsView is the read behind a repository's Agents tab
+// (get_repository_agents).
+type RepositoryAgentsView struct {
+	Repository  RepositoryAgentsRepo    `json:"repository"`
+	Project     RepositoryAgentsProject `json:"project"`
+	ListVersion string                  `json:"list_version"`
+	Agents      []RepositoryAgentRow    `json:"agents"`
+}
+
+// RepositoryAgentsRepo names the repository of the view.
+type RepositoryAgentsRepo struct {
+	ID   string `json:"id"`
+	Name string `json:"name"`
+}
+
+// RepositoryAgentsProject is the project's agent setting at a glance.
+type RepositoryAgentsProject struct {
+	ID           string `json:"id"`
+	Name         string `json:"name"`
+	AgentsMode   string `json:"agents_mode"`
+	EnabledCount int    `json:"enabled_count"`
+	CatalogCount int    `json:"catalog_count"`
+}
+
+// RepositoryAgentRow is one agent in the Agents tab.
+type RepositoryAgentRow struct {
+	Name            string                 `json:"name"`
+	Description     string                 `json:"description"`
+	State           string                 `json:"state"`
+	Unassigned      bool                   `json:"unassigned"`
+	Prompt          RepositoryPromptDigest `json:"prompt"`
+	RunningSessions int                    `json:"running_sessions"`
+	PreviousName    string                 `json:"previous_name,omitempty"`
+}
+
+// RepositoryPromptDigest summarises a repository prompt on a tab row.
+type RepositoryPromptDigest struct {
+	Set     bool   `json:"set"`
+	Summary string `json:"summary"`
+	Length  int    `json:"length"`
+	Version string `json:"version"`
+}
+
+// RepositoryAgentsChanged says a repository's assignments or prompts changed
+// (the repository_agents_changed event).
+type RepositoryAgentsChanged struct {
+	ProjectID    string   `json:"project_id"`
+	RepositoryID string   `json:"repository_id"`
+	Agents       []string `json:"agents"`
+}
+
+// UnassignedAnswer is unassign_agent's answer: the view plus how many of the
+// agent's sessions still run in the repository.
+type UnassignedAnswer struct {
+	RepositoryAgentsView
+	RunningSessions int `json:"running_sessions"`
+}

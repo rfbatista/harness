@@ -669,3 +669,14 @@ func (m *WorkspaceModel) ToDomain() *domain.Workspace {
 		PushedAt:     m.PushedAt,
 	}
 }
+
+// RepositoryAgentListModel is a repository's list of unassigned agents
+// (domain.RepositoryAgentList), with its stored version.
+type RepositoryAgentListModel struct {
+	RepositoryID string      `gorm:"column:repository_id;primaryKey"`
+	Agents       stringSlice `gorm:"column:agents"`
+	Version      string      `gorm:"column:version"`
+}
+
+// TableName overrides the table name.
+func (RepositoryAgentListModel) TableName() string { return "repository_unassigned_agents" }

@@ -46,6 +46,7 @@ import (
 	"operators-mcp/internal/application/keychainpath"
 	"operators-mcp/internal/application/orchestration"
 	"operators-mcp/internal/application/planning"
+	"operators-mcp/internal/application/repoagents"
 	"operators-mcp/internal/application/taskchannel"
 	"operators-mcp/internal/application/tooling"
 	"operators-mcp/internal/application/vfs"
@@ -70,6 +71,7 @@ var PersistenceModule = fx.Module("persistence",
 		asPort(sqlite.NewRepositoryRepository, new(ports.RepositoryRepository)),
 		asPort(sqlite.NewEnvFileRepository, new(ports.EnvFileRepository)),
 		asPort(sqlite.NewRunCommandRepository, new(ports.RunCommandRepository)),
+		asPort(sqlite.NewRepositoryAgentListRepository, new(ports.RepositoryAgentListStore)),
 		asPort(sqlite.NewActivationRepository, new(ports.TokenSaverActivationRepository)),
 		asPort(sqlite.NewZoneRepository, new(ports.ZoneRepository)),
 		newAgentRepository,
@@ -180,6 +182,12 @@ func (p projectMCPServers) SetProjectMCPServers(_ context.Context, id string, na
 	return p.projects.SetMCPServers(id, names)
 }
 
+// newRepositoryAgents is the service that says which agents a repository
+// assigns (ADR 0061).
+func newRepositoryAgents(lists ports.RepositoryAgentListStore, projects ports.ProjectRepository, repos ports.RepositoryRepository, cat *agentcatalog.Catalog, sessions ports.SessionRepository) *repoagents.Service {
+	return repoagents.New(repoagents.Deps{Lists: lists, Projects: projects, Repositories: repos, Catalog: cat, Sessions: sessions})
+}
+
 // newAgentCatalog is the agent catalog: the "agents" folder of the data dir
 // (ADR 0030). The folder is made on the first write, not here.
 func newAgentCatalog(cfg Config, db *gorm.DB, projects ports.ProjectRepository) (*agentcatalog.Catalog, error) {
@@ -228,6 +236,7 @@ func importAgentCatalog(cfg Config, db *gorm.DB, cat *agentcatalog.Catalog) {
 var CatalogModule = fx.Module("catalog",
 	fx.Provide(
 		newAgentCatalog,
+		newRepositoryAgents,
 		asPort(filesystem.NewMatcher, new(ports.PathMatcher)),
 		asPort(filesystem.NewLister, new(ports.TreeLister)),
 		asPort(skillfs.NewPublisher, new(ports.SkillPublisher)),

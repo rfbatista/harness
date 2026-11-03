@@ -189,3 +189,73 @@ func (h *Handler) handleSetProjectAgents(c echo.Context) error {
 	}
 	return c.JSON(http.StatusOK, out)
 }
+
+func (h *Handler) repoAgentsOrUnavailable() error {
+	if h.repoAgents == nil {
+		return echo.NewHTTPError(http.StatusServiceUnavailable, "repository agents not configured")
+	}
+	return nil
+}
+
+func (h *Handler) handleGetRepositoryAgents(c echo.Context) error {
+	if err := h.repoAgentsOrUnavailable(); err != nil {
+		return err
+	}
+	out, err := h.repoAgents.GetRepositoryAgents(c.Request().Context(), c.QueryParam("repository_id"))
+	if err != nil {
+		return err
+	}
+	return c.JSON(http.StatusOK, out)
+}
+
+// repositoryAgentIn is the body of unassign_agent and assign_agent_again.
+type repositoryAgentIn struct {
+	RepositoryID string `json:"repository_id"`
+	Agent        string `json:"agent"`
+	ListVersion  string `json:"list_version"`
+}
+
+func (h *Handler) handleUnassignAgent(c echo.Context) error {
+	if err := h.repoAgentsOrUnavailable(); err != nil {
+		return err
+	}
+	var in repositoryAgentIn
+	if err := bindJSON(c, &in); err != nil {
+		return err
+	}
+	out, err := h.repoAgents.UnassignAgent(c.Request().Context(), in.RepositoryID, in.Agent, in.ListVersion)
+	if err != nil {
+		return err
+	}
+	return c.JSON(http.StatusOK, out)
+}
+
+func (h *Handler) handleAssignAgentAgain(c echo.Context) error {
+	if err := h.repoAgentsOrUnavailable(); err != nil {
+		return err
+	}
+	var in repositoryAgentIn
+	if err := bindJSON(c, &in); err != nil {
+		return err
+	}
+	out, err := h.repoAgents.AssignAgentAgain(c.Request().Context(), in.RepositoryID, in.Agent, in.ListVersion)
+	if err != nil {
+		return err
+	}
+	return c.JSON(http.StatusOK, out)
+}
+
+func (h *Handler) handleAssignAllAgentsAgain(c echo.Context) error {
+	if err := h.repoAgentsOrUnavailable(); err != nil {
+		return err
+	}
+	var in repositoryAgentIn
+	if err := bindJSON(c, &in); err != nil {
+		return err
+	}
+	out, err := h.repoAgents.AssignAllAgentsAgain(c.Request().Context(), in.RepositoryID, in.ListVersion)
+	if err != nil {
+		return err
+	}
+	return c.JSON(http.StatusOK, out)
+}
