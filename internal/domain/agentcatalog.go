@@ -43,10 +43,25 @@ type CatalogAgent struct {
 	AllowedTools      []string `json:"allowed_tools"`
 	// EnabledIn are the projects where the agent is enabled (ADR 0038).
 	EnabledIn []CatalogEnabledIn `json:"enabled_in"`
+	// Repositories are, for each project that enables the agent, its
+	// repositories with where the agent is unassigned and has a repository
+	// prompt (ADR 0061). Filled by the repository agents, not the catalog
+	// files.
+	Repositories []CatalogAgentRepository `json:"repositories"`
 	// Usage counts the sessions that ran as the agent and the zones that
 	// assign it.
 	Usage    AgentUsage       `json:"usage"`
 	Problems []CatalogProblem `json:"problems"`
+}
+
+// CatalogAgentRepository is one repository of a project that enables the agent.
+type CatalogAgentRepository struct {
+	ProjectID      string `json:"project_id"`
+	RepositoryID   string `json:"repository_id"`
+	RepositoryName string `json:"repository_name"`
+	Unassigned     bool   `json:"unassigned"`
+	PromptSet      bool   `json:"prompt_set"`
+	ListVersion    string `json:"list_version"`
 }
 
 // AgentUsage is where an agent is used: every session that ever ran as it, in

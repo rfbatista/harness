@@ -80,7 +80,7 @@ func newTokenSaverWorld(t *testing.T, opts ...agentcatalog.Option) *tokenSaverWo
 	mux.Handle("/", web.NewHandler(web.Deps{
 		Projects: w.cat.Projects, Tasks: w.plan, Sessions: orch, Agents: w.cat.Agents, Repositories: w.cat.Projects,
 		EnvFiles: w.cat.Projects, ProjectSummaries: w.cat.Projects, TokenSavers: w.cat.Capabilities,
-		AgentCatalog: app.CatalogSeed(w.agentCat),
+		AgentCatalog: app.CatalogSeed(w.agentCat, nil),
 	}, assets, nil))
 	// Over HTTP/2: each page keeps an event stream open, and HTTP/1.1's six
 	// connections per host run out across the navigations.

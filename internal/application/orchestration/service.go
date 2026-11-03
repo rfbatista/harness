@@ -108,6 +108,11 @@ type Service struct {
 	// baseBranches readies a session's base branch before anything is
 	// created (a remote base is fetched); nil readies nothing.
 	baseBranches ports.BaseBranchPreparer
+	// assignments says which agents a repository assigns (ADR 0061); nil
+	// assigns every agent everywhere.
+	assignments ports.AgentAssignments
+	// repoPrompts gives the text an agent adds in a repository; nil adds none.
+	repoPrompts ports.RepositoryPromptSections
 
 	DefaultEnv []string // test-only: extra env for spawned sessions
 
@@ -500,6 +505,13 @@ func (s *Service) prepare(ctx context.Context, in prepareInput) (*prepared, erro
 		return nil, &domain.StructuredError{Code: "AGENT_NOT_ENABLED",
 			Message: "AGENT_NOT_ENABLED: agent " + ag.agent.Name + " is not enabled in project " + proj.Name}
 	}
+	if err := s.checkAssigned(ctx, in.RepositoryID, ag.agent); err != nil {
+		if ag.cleanup != nil {
+			ag.cleanup()
+		}
+		return nil, err
+	}
+	s.addRepositoryPrompt(ctx, &ag, in.RepositoryID)
 
 	if err := s.ready(ctx); err != nil {
 		if ag.cleanup != nil {
@@ -1361,8 +1373,10 @@ func (s *Service) List(ctx context.Context, f ports.SessionFilter) ([]*domain.Se
 	if err != nil {
 		return nil, fmt.Errorf("list sessions: %w", err)
 	}
+	unassigned := map[string]bool{}
 	for _, sess := range list {
 		s.fillResumability(sess)
+		s.fillAssignment(ctx, sess, unassigned)
 	}
 	if s.Decorator != nil {
 		s.Decorator.DecorateSessions(ctx, list...) // the whole list at once: its queries do not grow with it

@@ -68,8 +68,15 @@ func (h *Handler) followCatalog(ctx context.Context) (<-chan any, error) {
 			return nil, err
 		}
 	}
-	if creds == nil && catalogChanges == nil {
+	var assignments <-chan domain.RepositoryAgentsChanged
+	if h.repoAgents != nil {
+		assignments, err = h.repoAgents.FollowRepositoryAgents(ctx)
+		if err != nil {
+			return nil, err
+		}
+	}
+	if creds == nil && catalogChanges == nil && assignments == nil {
 		return relayAs(ctx, changes, func(ch ports.ProjectCatalogChange) any { return projectEventOf(ch) }), nil
 	}
-	return catalogEvents(ctx, changes, creds, catalogChanges), nil
+	return catalogEvents(ctx, changes, creds, catalogChanges, assignments), nil
 }

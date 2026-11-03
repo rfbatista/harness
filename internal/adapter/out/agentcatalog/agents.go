@@ -145,6 +145,7 @@ func (c *Catalog) SaveCatalogAgent(in domain.SaveCatalogAgent) (*domain.CatalogW
 		verb = "Created"
 	case prev != a.Name:
 		agents.rename(prev, a.Name)
+		t.renamed = append(t.renamed, [2]string{prev, a.Name})
 		for _, p := range t.projectLists() {
 			if p.EnabledAgentsMode == domain.AgentsSelected {
 				if cur := t.enabledAgents(p); contains(cur, prev) {
@@ -195,6 +196,7 @@ func (c *Catalog) DeleteCatalogAgent(in domain.DeleteCatalogItem) (*domain.Catal
 		return nil, &domain.StructuredError{Code: "AGENT_NOT_FOUND", Message: "agent " + in.Name + " not found"}
 	}
 	t.agentsMap().remove(in.Name)
+	t.deleted = append(t.deleted, in.Name)
 	for _, p := range t.projectLists() {
 		if p.EnabledAgentsMode == domain.AgentsSelected {
 			if cur := t.enabledAgents(p); contains(cur, in.Name) {

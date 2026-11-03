@@ -62,3 +62,16 @@ type Agents interface {
 	AgentResolver
 	MCPServerUsage
 }
+
+// AgentOffer is what a repository offers a new session: the agents assigned
+// there, and the rest of the catalog with why it is not offered (ADR 0061).
+type AgentOffer struct {
+	Agents     []*domain.Agent
+	NotOffered []domain.NotOfferedAgent
+}
+
+// AgentOffers reads the agents a new session in a repository can run as.
+// tui-client implements it over HTTP.
+type AgentOffers interface {
+	ListAgentsFor(ctx context.Context, projectID, repositoryID string) (*AgentOffer, error)
+}

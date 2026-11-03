@@ -8,7 +8,10 @@ import (
 	"operators-mcp/internal/ports"
 )
 
-var _ ports.AgentCatalog = (*Agents)(nil)
+var (
+	_ ports.AgentCatalog = (*Agents)(nil)
+	_ ports.AgentOffers  = (*Agents)(nil)
+)
 
 // Agents is ports.AgentCatalog over the HTTP API.
 type Agents struct{ c *Client }
@@ -59,4 +62,18 @@ func (a *Agents) UpdateAgent(ctx context.Context, id, name, description, promptI
 
 func (a *Agents) DeleteAgent(ctx context.Context, id string) error {
 	return a.c.post(ctx, "/api/delete_agent", map[string]string{"agent_id": id}, nil)
+}
+
+// ListAgentsFor lists the agents a new session in the repository can run as,
+// and names the ones it is not offered.
+func (a *Agents) ListAgentsFor(ctx context.Context, projectID, repositoryID string) (*ports.AgentOffer, error) {
+	var out struct {
+		Agents     []*domain.Agent          `json:"agents"`
+		NotOffered []domain.NotOfferedAgent `json:"not_offered"`
+	}
+	q := url.Values{"project_id": {projectID}, "repository_id": {repositoryID}}
+	if err := a.c.get(ctx, "/api/list_agents", q, &out); err != nil {
+		return nil, err
+	}
+	return &ports.AgentOffer{Agents: out.Agents, NotOffered: out.NotOffered}, nil
 }

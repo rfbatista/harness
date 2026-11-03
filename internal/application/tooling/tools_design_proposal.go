@@ -17,7 +17,8 @@ var DesignSessionToolNames = []string{"submit_design_system_proposal"}
 type Option func(*options)
 
 type options struct {
-	proposals ports.DesignProposalSubmitter
+	proposals  ports.DesignProposalSubmitter
+	placements ports.AgentPlacements
 }
 
 // WithDesignProposals serves submit_design_system_proposal, with which a design
@@ -25,6 +26,12 @@ type options struct {
 // served.
 func WithDesignProposals(p ports.DesignProposalSubmitter) Option {
 	return func(o *options) { o.proposals = p }
+}
+
+// WithAgentPlacements makes list_agents name, for each agent, the repositories
+// it is unassigned from (ADR 0061). Without it the answer leaves that out.
+func WithAgentPlacements(p ports.AgentPlacements) Option {
+	return func(o *options) { o.placements = p }
 }
 
 // sessionDesignProposalTools is submit_design_system_proposal: the one way a
