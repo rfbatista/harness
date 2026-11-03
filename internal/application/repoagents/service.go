@@ -7,6 +7,7 @@ import (
 	"crypto/rand"
 	"encoding/hex"
 	"slices"
+	"strings"
 	"sync"
 
 	"operators-mcp/internal/domain"
@@ -275,4 +276,46 @@ func newVersion() (string, error) {
 		return "", err
 	}
 	return hex.EncodeToString(b[:]), nil
+}
+
+var _ ports.AgentAssignments = (*Service)(nil)
+
+// IsUnassigned says whether the repository's list holds the agent. A list that
+// cannot be read assigns every agent.
+func (s *Service) IsUnassigned(ctx context.Context, repositoryID, agent string) bool {
+	list, err := s.d.Lists.Get(ctx, repositoryID)
+	return err == nil && list.Has(agent)
+}
+
+// CheckAssigned is nil when the agent is assigned to the repository, else
+// AGENT_NOT_ASSIGNED. The message leads with the code and names the assigned
+// agents: an agent over MCP sees only the message.
+func (s *Service) CheckAssigned(ctx context.Context, repositoryID, agent string) error {
+	if !s.IsUnassigned(ctx, repositoryID, agent) {
+		return nil
+	}
+	repo, proj, err := s.repository(ctx, repositoryID)
+	if err != nil {
+		return err
+	}
+	view, err := s.view(ctx, repo, proj)
+	if err != nil {
+		return err
+	}
+	assigned := []string{}
+	for _, r := range view.Agents {
+		if r.State == domain.AgentAssigned {
+			assigned = append(assigned, r.Name)
+		}
+	}
+	msg := "AGENT_NOT_ASSIGNED: agent " + agent + " is not assigned to repository " + repo.Name + ". "
+	if len(assigned) == 0 {
+		msg += "No agent is assigned there. "
+	} else {
+		msg += "Assigned agents: " + strings.Join(assigned, ", ") + ". "
+	}
+	msg += "Only the person assigns agents, in the repository's settings."
+	return domain.NewCatalogError("AGENT_NOT_ASSIGNED", msg, map[string]any{
+		"agent": agent, "repository_id": repo.ID, "repository_name": repo.Name, "assigned": assigned,
+	})
 }

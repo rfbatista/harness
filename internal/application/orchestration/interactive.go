@@ -248,6 +248,12 @@ func (s *Service) ResumeInteractive(ctx context.Context, req ports.ResumeRequest
 	if err != nil {
 		return nil, ports.AgentSpec{}, err
 	}
+	if err := s.checkAssigned(ctx, sess.RepositoryID, ag.agent); err != nil {
+		if ag.cleanup != nil {
+			ag.cleanup()
+		}
+		return nil, ports.AgentSpec{}, err
+	}
 	if err := s.ready(ctx); err != nil {
 		if ag.cleanup != nil {
 			ag.cleanup()
@@ -365,6 +371,7 @@ func (s *Service) withResumability(ctx context.Context, sess *domain.Session) *d
 		return nil
 	}
 	s.fillResumability(sess)
+	s.fillAssignment(ctx, sess, map[string]bool{})
 	if s.Decorator != nil {
 		s.Decorator.DecorateSessions(ctx, sess)
 	}
@@ -680,6 +687,41 @@ func (s *Service) sessionModel(mode domain.SessionMode, parentSessionID, named s
 
 // UseBranchNames makes a start with a branch name check it first.
 func (s *Service) UseBranchNames(c ports.BranchNameChecker) { s.branchNames = c }
+
+// UseAssignments makes a start or a resume check that the agent is assigned
+// to the repository, and a session read say when it is not (ADR 0061).
+func (s *Service) UseAssignments(a ports.AgentAssignments) { s.assignments = a }
+
+// checkAssigned is AGENT_NOT_ASSIGNED when the agent is unassigned from the
+// repository. A session with no agent, or a server with no assignments, is
+// never refused.
+func (s *Service) checkAssigned(ctx context.Context, repositoryID string, agent *domain.Agent) error {
+	if s.assignments == nil || agent == nil || repositoryID == "" {
+		return nil
+	}
+	return s.assignments.CheckAssigned(ctx, repositoryID, agent.Name)
+}
+
+// fillAssignment sets AgentUnassigned, and blocks a resume that would
+// otherwise be accepted. seen remembers, within one read, which agents of
+// which repositories were asked about.
+func (s *Service) fillAssignment(ctx context.Context, sess *domain.Session, seen map[string]bool) {
+	if s.assignments == nil || sess.AgentID == "" || sess.RepositoryID == "" {
+		return
+	}
+	key := sess.RepositoryID + "\x00" + sess.AgentID
+	unassigned, ok := seen[key]
+	if !ok {
+		a, err := s.catalog.Agents.GetAgent(ctx, sess.AgentID)
+		unassigned = err == nil && s.assignments.IsUnassigned(ctx, sess.RepositoryID, a.Name)
+		seen[key] = unassigned
+	}
+	sess.AgentUnassigned = unassigned
+	if unassigned && sess.ResumeBlocked == "" {
+		sess.ResumeBlocked = "AGENT_NOT_ASSIGNED"
+		sess.Resumable = false
+	}
+}
 
 // UseBaseBranches makes a start from a named base check it first, and fetch
 // it when it is origin's (ADR 0049).

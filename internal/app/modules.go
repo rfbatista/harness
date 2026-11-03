@@ -787,6 +787,7 @@ func newOrchestrationService(
 	claudeBin ports.ManagedClaudeBin,
 	branchNames *workspaces.BranchNames,
 	baseBranches *workspaces.BaseBranches,
+	assignments *repoagents.Service,
 ) *orchestration.Service {
 	orchCatalog := orchestration.Catalog{
 		Projects:     cat.Projects,
@@ -803,6 +804,7 @@ func newOrchestrationService(
 	svc := orchestration.NewService(manager, broker, hub, sessions, orchCatalog, tickets, ws)
 	svc.UseBranchNames(branchNames)
 	svc.UseBaseBranches(baseBranches)
+	svc.UseAssignments(assignments)
 	if cat.DesignSystems != nil {
 		// Saves reach open pages on the project feed.
 		cat.DesignSystems.UseFeed(svc)

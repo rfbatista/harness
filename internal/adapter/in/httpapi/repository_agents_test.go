@@ -2,6 +2,7 @@ package httpapi
 
 import (
 	"context"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"path/filepath"
@@ -240,4 +241,35 @@ func contains(s, sub string) bool {
 		}
 	}
 	return false
+}
+
+func TestRepositoryAgents_TheRefusalMessageCarriesTheCodeAndTheAssignedAgents(t *testing.T) {
+	f := newRepoAgentsFixture(t)
+	r := f.repository(f.project("atlas"), "atlas-api")
+	if err := f.svc.CheckAssigned(context.Background(), r, "beta"); err != nil {
+		t.Fatalf("an assigned agent was refused: %v", err)
+	}
+	v := f.post("/api/unassign_agent", map[string]any{"repository_id": r, "agent": "beta", "list_version": ""}, 200)["list_version"]
+
+	err := f.svc.CheckAssigned(context.Background(), r, "beta")
+	if err == nil {
+		t.Fatal("an unassigned agent was accepted")
+	}
+	msg := err.Error()
+	for _, want := range []string{"AGENT_NOT_ASSIGNED", "beta", "atlas-api", "zeta, alpha", "Only the person assigns agents"} {
+		if !contains(msg, want) {
+			t.Errorf("message %q lacks %q", msg, want)
+		}
+	}
+	var ce *domain.CatalogError
+	if !errors.As(err, &ce) || !reflect.DeepEqual(ce.Fields["assigned"], []string{"zeta", "alpha"}) || ce.Fields["repository_name"] != "atlas-api" {
+		t.Fatalf("fields = %+v", ce)
+	}
+	// With no agent left the message says so.
+	for _, a := range []string{"alpha", "zeta"} {
+		v = f.post("/api/unassign_agent", map[string]any{"repository_id": r, "agent": a, "list_version": v}, 200)["list_version"]
+	}
+	if msg := f.svc.CheckAssigned(context.Background(), r, "beta").Error(); !contains(msg, "No agent is assigned there") {
+		t.Fatalf("message = %q", msg)
+	}
 }
