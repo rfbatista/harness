@@ -1,0 +1,137 @@
+package architecture
+
+// tabAgents is the Agents tab's panel: which agents may run in this
+// repository, with Unassign and Assign again on each row (ADR 0061). It is its
+// own Alpine component, repositoryAgentsTab (web/src/modules/repositoryagents),
+// and unlike the other tabs it does not edit the architecture record: each
+// click is saved at once, so the page's Save bar, version and Output do not
+// apply to it.
+templ tabAgents(v View) {
+	<section role="tabpanel" id="architecture-panel-agents" aria-labelledby="architecture-tab-agents" x-show="isTab('agents')" x-data="repositoryAgentsTab" data-project-id={ v.ProjectID } data-repository-id={ v.Seed.RepositoryID } data-layers-href={ Href(v.ProjectID, v.Seed.RepositoryID, "layers") } class="[ flow ]">
+		<div class="[ arch-head ]" data-panel-head>
+			<div class="[ flow ] [ flow-space-3xs ]">
+				<h2>Agents</h2>
+				<p class="[ color-ink-muted text-sm ]" data-agents-line x-text="notice.line"></p>
+				<p class="[ color-ink-muted text-sm ]">Changes here apply at once. <a x-bind:href="layersHref" x-on:click.prevent="openTab('layers')">Layer access</a> is a different setting: it says what an agent may touch, not whether it may run here.</p>
+			</div>
+		</div>
+		<template x-if="error">
+			<div class="[ banner ]" data-tone="danger" role="alert" data-agents-error>
+				<div class="[ flow ] [ flow-space-3xs grow ]">
+					<span x-text="error.message"></span>
+					<span class="[ code ]"><span x-text="error.code"></span> · <span x-text="error.next"></span></span>
+				</div>
+				<button type="button" class="[ button ]" data-size="sm" x-on:click="reload">Try again</button>
+			</div>
+		</template>
+		<template x-if="!loaded">
+			<p class="[ color-ink-muted text-sm ]" role="status" data-agents-loading>Loading agents…</p>
+		</template>
+		<template x-if="stale">
+			<div class="[ banner ]" data-tone="attention" role="alert" data-agents-stale>
+				<span class="[ grow ]" x-text="stale.text"></span>
+				<button type="button" class="[ button ]" data-variant="ghost" data-size="sm" x-on:click="dismissStale">Dismiss</button>
+			</div>
+		</template>
+		<template x-if="hasTab">
+			<div class="[ flow ]">
+				<template x-if="notice.banner">
+					<div class="[ banner ]" data-tone="info" data-agents-notice>
+						<span class="[ grow ]"><span x-text="notice.banner.text"></span> <a x-bind:href="notice.banner.href" x-text="notice.banner.linkText"></a></span>
+					</div>
+				</template>
+				<template x-if="nothingAssigned">
+					<div class="[ banner ]" data-tone="attention" role="alert" data-agents-none>
+						<span class="[ grow ]" x-text="nothingAssigned.text"></span>
+						<button type="button" class="[ button ]" data-variant="primary" data-size="sm" data-action="assign-all" x-bind:disabled="busy" x-on:click="assignAll">Assign all again</button>
+					</div>
+				</template>
+				<div class="[ stat-cards ]" role="list" aria-label="Agents in this repository">
+					<div class="[ stat ]" role="listitem" data-stat="assigned">
+						<b x-text="stats.assigned.value"></b>
+						<span x-text="stats.assigned.label"></span>
+					</div>
+					<div class="[ stat ]" role="listitem" data-stat="prompts">
+						<b x-text="stats.prompts.value"></b>
+						<span x-text="stats.prompts.label"></span>
+					</div>
+				</div>
+				<ul class="[ flow ] [ flow-space-2xs ]" role="list" aria-label="Assigned agents" data-group="assigned">
+					<template x-for="r in assignedRows" x-bind:key="r.name">
+						@agentRow()
+					</template>
+				</ul>
+				<template x-if="notAssignedRows.length > 0">
+					<section class="[ flow ] [ flow-space-2xs ]" data-group="not-assigned" aria-labelledby="agents-not-assigned-title">
+						<h3 id="agents-not-assigned-title" class="[ text-sm color-ink-muted ]" x-text="notAssignedTitle"></h3>
+						<ul class="[ flow ] [ flow-space-2xs ]" role="list">
+							<template x-for="r in notAssignedRows" x-bind:key="r.name">
+								@agentRow()
+							</template>
+						</ul>
+					</section>
+				</template>
+				<template x-if="notEnabledRows.length > 0">
+					<section class="[ flow ] [ flow-space-2xs ]" data-group="not-enabled" aria-labelledby="agents-not-enabled-title">
+						<h3 id="agents-not-enabled-title" class="[ text-sm color-ink-muted ]" x-text="notEnabledTitle"></h3>
+						<ul class="[ flow ] [ flow-space-2xs ]" role="list">
+							<template x-for="r in notEnabledRows" x-bind:key="r.name">
+								@agentRow()
+							</template>
+						</ul>
+					</section>
+				</template>
+			</div>
+		</template>
+		<div class="[ toast-region ]" role="status" aria-live="polite" aria-atomic="true">
+			<template x-if="toast">
+				<div class="[ toast ]" data-toast>
+					<span class="[ grow ]" x-text="toast.text"></span>
+					<template x-if="toast.undo">
+						<button type="button" class="[ button ]" data-variant="ghost" data-size="sm" data-undo x-on:click="undo">Undo</button>
+					</template>
+					<button type="button" class="[ button ]" data-variant="ghost" data-size="sm" aria-label="Dismiss" data-dismiss x-on:click="dismissToast">×</button>
+				</div>
+			</template>
+		</div>
+	</section>
+}
+
+// agentRow is one agent of the list, drawn inside an x-for over rows (r): its
+// badges with a word each, the one-line prompt summary, and the buttons its
+// state allows. A disabled button gives its reason in text beside it.
+templ agentRow() {
+	<li class="[ row ]" data-agent-row x-bind:data-agent="r.name" x-bind:data-state="r.state" style="--row-columns: minmax(0, 1fr) minmax(0, 2fr) auto">
+		<span class="[ flow ] [ flow-space-3xs pad-block-xs ]">
+			<span class="[ weight-medium ]" data-agent-name x-text="r.name"></span>
+			<span class="[ text-sm color-ink-muted ]" x-text="r.description"></span>
+		</span>
+		<span class="[ flow ] [ flow-space-3xs ]">
+			<span class="[ cluster ] [ gutter-xs ]">
+				<template x-for="b in r.badges" x-bind:key="b.word">
+					<span class="[ badge ]" data-badge x-bind:data-tone="b.tone" x-text="b.word"></span>
+				</template>
+			</span>
+			<span class="[ text-sm color-ink-muted ]" data-prompt-summary x-text="r.summary"></span>
+			<template x-for="n in r.notes" x-bind:key="n">
+				<span class="[ text-xs color-ink-faint ]" data-agent-note x-text="n"></span>
+			</template>
+		</span>
+		<span class="[ cluster ] [ gutter-xs ]">
+			<button type="button" class="[ button ]" data-size="sm" data-action="prompt" x-on:click="openPrompt(r.name)" x-text="r.promptAction"></button>
+			<template x-if="r.canUnassign">
+				<button type="button" class="[ button ]" data-variant="outline" data-size="sm" data-action="unassign" x-bind:aria-label="'Unassign ' + r.name + ' from ' + repositoryName" x-bind:disabled="busy" x-on:click="unassign(r.name)">Unassign</button>
+			</template>
+			<template x-if="r.canAssign && !r.assignDisabled">
+				<button type="button" class="[ button ]" data-variant="primary" data-size="sm" data-action="assign" x-bind:aria-label="'Assign ' + r.name + ' again'" x-bind:disabled="busy" x-on:click="assign(r.name)">Assign again</button>
+			</template>
+			<template x-if="r.assignDisabled">
+				<span class="[ cluster ] [ gutter-xs ]">
+					<button type="button" class="[ button ]" data-size="sm" data-action="assign" disabled x-bind:aria-describedby="'why-' + r.name">Assign again</button>
+					<span class="[ text-xs color-ink-muted ]" x-bind:id="'why-' + r.name" x-text="r.assignDisabledReason"></span>
+					<a class="[ text-xs ]" x-bind:href="r.enableHref" x-text="r.enableText"></a>
+				</span>
+			</template>
+		</span>
+	</li>
+}

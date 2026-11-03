@@ -1,0 +1,173 @@
+// A repository's Agents tab: who may run in it, with Unassign and Assign again
+// at once (no Save bar, ADR 0061). Nested in the Architecture page but not part
+// of its draft.
+//
+//   <section x-data="repositoryAgentsTab" data-project-id="…" data-repository-id="…" data-layers-href="…">
+//
+// Every click sends the list version the page read. A stale click is refused
+// with the current list: the page shows it, names what changed and applies
+// nothing. The tab re-reads on repository_agents_changed and after a resync.
+
+import { Codes } from "../../../../shared/domain/errors.js";
+import { FeedStatus } from "../../../../shared/domain/feed.js";
+import { describeError } from "../../../../shared/presentation/errors.js";
+import { assignedToast, groupAgents, modeNotice, nothingAssigned, rowModel, staleBanner, stats, unassignedToast } from "../../domain/agentsTab.js";
+
+/** @param {{ gateway: import("../../domain/ports.js").RepositoryAgentsGateway }} deps */
+export const repositoryAgentsTab = ({ gateway }) => () => {
+  let unfollow = () => {};
+  return {
+    projectId: "",
+    repositoryId: "",
+    layersHref: "",
+    /** @type {import("../../domain/ports.js").RepositoryAgents | null} */
+    tab: null,
+    loaded: false,
+    busy: false,
+    error: null,
+    /** The banner of a refused stale click: { text }. */
+    stale: null,
+    /** @type {{ text: string, undo: string } | null} Undo names the agent to assign again. */
+    toast: null,
+    /** The agent whose repository prompt the editor is open on; "" when it is closed. */
+    editorAgent: "",
+
+    async init() {
+      this.projectId = this.$el.dataset.projectId ?? "";
+      this.repositoryId = this.$el.dataset.repositoryId ?? "";
+      this.layersHref = this.$el.dataset.layersHref ?? "";
+      unfollow = gateway.followChanges(
+        (change) => {
+          if (change.repositoryId === this.repositoryId) this.reloadQuietly();
+        },
+        (status) => {
+          if (status === FeedStatus.RESYNCED) this.reloadQuietly();
+        },
+      );
+      await this.load();
+    },
+
+    destroy() {
+      unfollow();
+    },
+
+    async load() {
+      try {
+        this.tab = await gateway.getRepositoryAgents(this.repositoryId);
+        this.error = null;
+      } catch (err) {
+        this.error = describeError(err);
+      } finally {
+        this.loaded = true;
+      }
+    },
+
+    /** A re-read the feed asked for; our own write's echo is not re-read while the write is in flight. */
+    async reloadQuietly() {
+      if (this.busy) return;
+      await this.load();
+    },
+
+    get hasTab() {
+      return this.tab !== null;
+    },
+    get groups() {
+      if (!this.tab) return { assigned: [], notAssigned: [], notEnabled: [] };
+      const g = groupAgents(this.tab);
+      const rows = (list) => list.map((a) => rowModel(a, this.tab));
+      return { assigned: rows(g.assigned), notAssigned: rows(g.notAssigned), notEnabled: rows(g.notEnabled) };
+    },
+    get assignedRows() {
+      return this.groups.assigned;
+    },
+    get notAssignedRows() {
+      return this.groups.notAssigned;
+    },
+    get notEnabledRows() {
+      return this.groups.notEnabled;
+    },
+    get notAssignedTitle() {
+      return `Not assigned to ${this.tab?.repository.name ?? ""} (${this.notAssignedRows.length})`;
+    },
+    get notEnabledTitle() {
+      return `Not enabled in ${this.tab?.project.name ?? ""} (${this.notEnabledRows.length})`;
+    },
+    get stats() {
+      return this.tab ? stats(this.tab) : null;
+    },
+    get notice() {
+      return this.tab ? modeNotice(this.tab) : { line: "", banner: null };
+    },
+    get nothingAssigned() {
+      return this.tab ? nothingAssigned(this.tab) : null;
+    },
+    get repositoryName() {
+      return this.tab?.repository.name ?? "";
+    },
+
+    /** Runs one write; a stale refusal swaps in the current list and says what changed. @returns {Promise<import("../../domain/ports.js").RepositoryAgents | null>} */
+    async write(run) {
+      if (this.busy || !this.tab) return null;
+      this.busy = true;
+      this.stale = null;
+      const before = this.tab;
+      try {
+        const next = await run(before.listVersion);
+        this.tab = next;
+        this.error = null;
+        return next;
+      } catch (err) {
+        if (err?.code === Codes.REPOSITORY_AGENTS_CHANGED && err.details?.current) {
+          this.tab = err.details.current;
+          this.stale = { text: staleBanner(before, err.details.current) };
+          this.toast = null;
+        } else {
+          this.error = describeError(err);
+        }
+        return null;
+      } finally {
+        this.busy = false;
+      }
+    },
+
+    async unassign(agent) {
+      const next = await this.write((listVersion) => gateway.unassignAgent({ repositoryId: this.repositoryId, agent, listVersion }));
+      if (next) this.toast = { text: unassignedToast({ agent, repository: next.repository.name, running: next.runningSessions ?? 0 }), undo: agent };
+    },
+
+    async assign(agent) {
+      const promptSet = this.tab?.agents.find((a) => a.name === agent)?.prompt.set === true;
+      const next = await this.write((listVersion) => gateway.assignAgentAgain({ repositoryId: this.repositoryId, agent, listVersion }));
+      if (next) this.toast = { text: assignedToast({ agent, repository: next.repository.name, promptSet }), undo: "" };
+    },
+
+    async assignAll() {
+      const next = await this.write((listVersion) => gateway.assignAllAgentsAgain({ repositoryId: this.repositoryId, listVersion }));
+      if (next) this.toast = { text: `All enabled agents are assigned to ${next.repository.name} again.`, undo: "" };
+    },
+
+    /** The toast's Undo: assigns the agent again. */
+    async undo() {
+      const agent = this.toast?.undo;
+      if (!agent) return;
+      this.toast = null;
+      await this.assign(agent);
+    },
+
+    /** Opens the repository prompt editor on an agent (the editor is drawn by the same component). */
+    openPrompt(agent) {
+      this.editorAgent = agent;
+    },
+
+    dismissToast() {
+      this.toast = null;
+    },
+    dismissStale() {
+      this.stale = null;
+    },
+    async reload() {
+      this.stale = null;
+      await this.load();
+    },
+  };
+};

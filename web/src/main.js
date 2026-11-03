@@ -43,6 +43,8 @@ import { registerSync } from "./modules/sync/presentation/register.js";
 import { architectureGateway } from "./modules/architecture/infrastructure/architecture-gateway.js";
 import { copyText } from "./modules/architecture/infrastructure/clipboard.js";
 import { registerArchitecture } from "./modules/architecture/presentation/register.js";
+import { repositoryAgentsGateway } from "./modules/repositoryagents/infrastructure/repository-agents-gateway.js";
+import { registerRepositoryAgents } from "./modules/repositoryagents/presentation/register.js";
 import { designSystemGateway } from "./modules/designsystem/infrastructure/designsystem-gateway.js";
 import { registerDesignSystem } from "./modules/designsystem/presentation/register.js";
 import { registerProjects } from "./modules/projects/presentation/register.js";
@@ -88,6 +90,7 @@ startSwapRegions(htmx, { navigate });
 
 const architecture = architectureGateway(api, events);
 registerArchitecture(Alpine, { gateway: architecture, clipboard: { copyText } });
+registerRepositoryAgents(Alpine, { gateway: repositoryAgentsGateway(api, events) });
 const designSystem = designSystemGateway(api, events);
 registerDesignSystem(Alpine, { gateway: designSystem, clock: systemClock, clipboard: { copyText }, navigate });
 registerProjects(Alpine, { gateway: projectsGateway(api, events), architecture, designSystem, navigate, clock: systemClock });
