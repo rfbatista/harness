@@ -186,10 +186,7 @@ type ListAgentsOut struct {
 
 // NotOfferedAgent is a catalog agent a repository does not offer: its reason
 // is "unassigned" or "not_enabled".
-type NotOfferedAgent struct {
-	Name   string `json:"name"`
-	Reason string `json:"reason"`
-}
+type NotOfferedAgent = domain.NotOfferedAgent
 
 // GetAgentIn is the input for get_agent.
 type GetAgentIn struct {

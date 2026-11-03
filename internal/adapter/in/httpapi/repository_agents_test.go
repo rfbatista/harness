@@ -1,18 +1,19 @@
 package httpapi
 
 import (
-	"slices"
 	"context"
 	"errors"
 	"net/http"
 	"net/http/httptest"
 	"path/filepath"
 	"reflect"
+	"slices"
 	"strings"
 	"testing"
 	"time"
 
 	"operators-mcp/internal/adapter/out/agentcatalog"
+	"operators-mcp/internal/adapter/out/httpclient"
 	"operators-mcp/internal/adapter/out/persistence/sqlite"
 	"operators-mcp/internal/app/catalog"
 	"operators-mcp/internal/application/repoagents"
@@ -643,5 +644,37 @@ func TestRenamesDeletesAndRepositoryDeletesAreAnnounced(t *testing.T) {
 		}
 	case <-time.After(time.Second):
 		t.Fatal("no event after a delete")
+	}
+}
+
+func TestTheTUIClientListsOnlyTheAgentsAssignedInARepository(t *testing.T) {
+	f := newRepoAgentsFixture(t)
+	p := f.project("atlas")
+	r := f.repository(p, "atlas-api")
+	for _, n := range []string{"alpha", "beta", "zeta"} {
+		f.post("/api/create_agent", map[string]any{"name": n}, 200)
+	}
+	f.post("/api/set_project_agents", map[string]any{"project_id": p, "mode": "selected", "agents": []string{"alpha", "beta"}}, 200)
+	f.post("/api/unassign_agent", map[string]any{"repository_id": r, "agent": "beta", "list_version": ""}, 200)
+
+	srv := httptest.NewServer(f.router)
+	defer srv.Close()
+	offer, err := httpclient.NewAgents(httpclient.New(srv.URL)).ListAgentsFor(context.Background(), p, r)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var offered []string
+	for _, a := range offer.Agents {
+		offered = append(offered, a.Name)
+	}
+	if !reflect.DeepEqual(offered, []string{"alpha"}) {
+		t.Fatalf("offered = %v", offered)
+	}
+	reasons := map[string]string{}
+	for _, n := range offer.NotOffered {
+		reasons[n.Name] = n.Reason
+	}
+	if !reflect.DeepEqual(reasons, map[string]string{"beta": "unassigned", "zeta": "not_enabled"}) {
+		t.Fatalf("not offered = %v", reasons)
 	}
 }

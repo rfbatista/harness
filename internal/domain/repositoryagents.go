@@ -152,3 +152,10 @@ type AgentRepositoryState struct {
 	State     string
 	PromptSet bool
 }
+
+// NotOfferedAgent is a catalog agent a repository does not offer to a new
+// session, with why: "unassigned" or "not_enabled".
+type NotOfferedAgent struct {
+	Name   string `json:"name"`
+	Reason string `json:"reason"`
+}

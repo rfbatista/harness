@@ -19,10 +19,12 @@ import (
 
 type pickerStep int
 
+// The picker's steps, in order: the repository first, because which agents
+// are offered depends on it.
 const (
-	stepAgent pickerStep = iota
+	stepRepo pickerStep = iota
+	stepAgent
 	stepMode
-	stepRepo
 	stepPrompt
 )
 
@@ -39,24 +41,34 @@ var sessionModes = []sessionMode{
 	{domain.SessionModeProduct, "product", "interviews you into a PRD on this task and one child task per piece of work"},
 }
 
-// picker collects what a new session needs: which agent (or plain claude),
-// which mode, which repository when the project has more than one, and an
-// optional first message. Enter moves forward a step, esc back one.
+// picker collects what a new session needs: which repository when the project
+// has more than one, which of the agents assigned there (or plain claude),
+// which mode, and an optional first message. Enter moves forward a step, esc
+// back one.
 type picker struct {
 	step    pickerStep
 	loading bool
 
-	agents []*domain.Agent // index 0 is plain claude
+	repos []*domain.Repository
+	repo  int
+	// agents are the ones the repository assigns; index 0 is plain claude.
+	agents []*domain.Agent
 	agent  int
-	mode   int
-	repos  []*domain.Repository
-	repo   int
-	prompt textinput.Model
+	// notOffered are the rest of the catalog, named in one dim line.
+	notOffered []domain.NotOfferedAgent
+	mode       int
+	prompt     textinput.Model
 }
 
 type pickerDataMsg struct {
-	agents []*domain.Agent
-	repos  []*domain.Repository
+	repos []*domain.Repository
+	err   error
+}
+
+// pickerAgentsMsg is the agents a repository assigns.
+type pickerAgentsMsg struct {
+	repoID string
+	offer  *ports.AgentOffer
 	err    error
 }
 
@@ -66,21 +78,30 @@ func (s *Screen) openPicker() tea.Cmd {
 	in.Prompt = "› "
 	in.SetWidth(max(20, s.width-8))
 	s.overlay = &picker{loading: true, prompt: in}
-	agents, repos, pid := s.ports.Agents, s.ports.Repositories, s.project.ID
+	repos, pid := s.ports.Repositories, s.project.ID
 	return nav.Call(func(ctx context.Context) tea.Msg {
-		as, err := agents.ListAgents(ctx)
-		if err != nil {
-			return pickerDataMsg{err: err}
-		}
 		rs, err := repos.ListRepositories(ctx, pid)
-		return pickerDataMsg{agents: as, repos: rs, err: err}
+		return pickerDataMsg{repos: rs, err: err}
+	})
+}
+
+// loadAgents asks which agents the chosen repository assigns.
+func (p *picker) loadAgents(s *Screen) tea.Cmd {
+	p.loading = true
+	repoID, pid, agents := p.repos[p.repo].ID, s.project.ID, s.ports.Agents
+	return nav.Call(func(ctx context.Context) tea.Msg {
+		if offers, ok := agents.(ports.AgentOffers); ok {
+			offer, err := offers.ListAgentsFor(ctx, pid, repoID)
+			return pickerAgentsMsg{repoID: repoID, offer: offer, err: err}
+		}
+		list, err := agents.ListAgents(ctx)
+		return pickerAgentsMsg{repoID: repoID, offer: &ports.AgentOffer{Agents: list}, err: err}
 	})
 }
 
 func (p *picker) update(s *Screen, msg tea.Msg) tea.Cmd {
 	switch msg := msg.(type) {
 	case pickerDataMsg:
-		p.loading = false
 		if msg.err != nil {
 			s.overlay = nil
 			return nav.Fail(msg.err)
@@ -89,8 +110,24 @@ func (p *picker) update(s *Screen, msg tea.Msg) tea.Cmd {
 			s.overlay = nil
 			return nav.Fail(fmt.Errorf("project %s has no repositories; add one in coding_pool first", s.project.Name))
 		}
-		p.agents = append([]*domain.Agent{{Name: "plain claude", Description: "no agent template"}}, msg.agents...)
 		p.repos = msg.repos
+		p.loading = false
+		if len(p.repos) == 1 {
+			p.step = stepAgent
+			return p.loadAgents(s)
+		}
+		return nil
+	case pickerAgentsMsg:
+		if p.loading && msg.repoID == p.repos[p.repo].ID {
+			p.loading = false
+			if msg.err != nil {
+				s.overlay = nil
+				return nav.Fail(msg.err)
+			}
+			p.agents = append([]*domain.Agent{{Name: "plain claude", Description: "no agent template"}}, msg.offer.Agents...)
+			p.notOffered = msg.offer.NotOffered
+			p.agent = 0
+		}
 		return nil
 	case tea.KeyPressMsg:
 		if p.loading {
@@ -114,10 +151,8 @@ func (p *picker) key(s *Screen, msg tea.KeyPressMsg) tea.Cmd {
 	switch k {
 	case "esc":
 		switch {
-		case p.step == stepAgent:
+		case p.step == stepRepo, p.step == stepAgent && len(p.repos) <= 1:
 			s.overlay = nil
-		case p.step == stepPrompt && len(p.repos) <= 1:
-			p.step = stepMode
 		default:
 			p.step--
 		}
@@ -125,14 +160,12 @@ func (p *picker) key(s *Screen, msg tea.KeyPressMsg) tea.Cmd {
 		return nil
 	case "enter":
 		switch p.step {
+		case stepRepo:
+			p.step = stepAgent
+			return p.loadAgents(s)
 		case stepAgent:
 			p.step = stepMode
 		case stepMode:
-			p.step = stepPrompt
-			if len(p.repos) > 1 {
-				p.step = stepRepo
-			}
-		case stepRepo:
 			p.step = stepPrompt
 		case stepPrompt:
 			s.overlay = nil
@@ -150,12 +183,12 @@ func (p *picker) key(s *Screen, msg tea.KeyPressMsg) tea.Cmd {
 		return nil
 	}
 	switch p.step {
+	case stepRepo:
+		p.repo, _ = ui.MoveCursor(k, p.repo, len(p.repos))
 	case stepAgent:
 		p.agent, _ = ui.MoveCursor(k, p.agent, len(p.agents))
 	case stepMode:
 		p.mode, _ = ui.MoveCursor(k, p.mode, len(sessionModes))
-	case stepRepo:
-		p.repo, _ = ui.MoveCursor(k, p.repo, len(p.repos))
 	case stepPrompt:
 		var cmd tea.Cmd
 		p.prompt, cmd = p.prompt.Update(msg)
@@ -198,35 +231,43 @@ func (p *picker) view(_ *Screen, width, _ int) string {
 	var b strings.Builder
 	b.WriteString(ui.Header.Render("  New agent session") + "\n\n")
 
-	b.WriteString(stepTitle("Agent", p.step == stepAgent))
-	if p.step == stepAgent {
-		for i, a := range p.agents {
-			row := "    " + ui.Fit(a.Name, 24) + "  " + ui.Dim.Render(a.Description)
-			b.WriteString(ui.Row(row, i == p.agent, width-2) + "\n")
-		}
-	} else {
-		b.WriteString("    " + p.agents[p.agent].Name + "\n")
-	}
-
-	b.WriteString("\n" + stepTitle("Mode", p.step == stepMode))
-	if p.step == stepMode {
-		for i, m := range sessionModes {
-			row := "    " + ui.Fit(m.name, 24) + "  " + ui.Dim.Render(m.about)
-			b.WriteString(ui.Row(row, i == p.mode, width-2) + "\n")
-		}
-	} else if p.step > stepMode {
-		b.WriteString("    " + sessionModes[p.mode].name + "\n")
-	}
-
 	if len(p.repos) > 1 {
-		b.WriteString("\n" + stepTitle("Repository", p.step == stepRepo))
+		b.WriteString(stepTitle("Repository", p.step == stepRepo))
 		if p.step == stepRepo {
 			for i, r := range p.repos {
 				row := "    " + ui.Fit(r.Name, 24) + "  " + ui.Dim.Render(r.RootDir)
 				b.WriteString(ui.Row(row, i == p.repo, width-2) + "\n")
 			}
-		} else if p.step > stepRepo {
+		} else {
 			b.WriteString("    " + p.repos[p.repo].Name + "\n")
+		}
+		b.WriteString("\n")
+	}
+
+	if p.step >= stepAgent {
+		b.WriteString(stepTitle("Agent", p.step == stepAgent))
+		if p.step == stepAgent {
+			for i, a := range p.agents {
+				row := "    " + ui.Fit(a.Name, 24) + "  " + ui.Dim.Render(a.Description)
+				b.WriteString(ui.Row(row, i == p.agent, width-2) + "\n")
+			}
+			if line := notOfferedLine(p.notOffered); line != "" {
+				b.WriteString("    " + ui.Dim.Render(line) + "\n")
+			}
+		} else {
+			b.WriteString("    " + p.agents[p.agent].Name + "\n")
+		}
+	}
+
+	if p.step >= stepMode {
+		b.WriteString("\n" + stepTitle("Mode", p.step == stepMode))
+		if p.step == stepMode {
+			for i, m := range sessionModes {
+				row := "    " + ui.Fit(m.name, 24) + "  " + ui.Dim.Render(m.about)
+				b.WriteString(ui.Row(row, i == p.mode, width-2) + "\n")
+			}
+		} else {
+			b.WriteString("    " + sessionModes[p.mode].name + "\n")
 		}
 	}
 
@@ -236,6 +277,19 @@ func (p *picker) view(_ *Screen, width, _ int) string {
 	}
 	b.WriteString("\n" + ui.Note.Render("  ↑↓ choose · enter next · esc back"))
 	return b.String()
+}
+
+// notOfferedLine names the agents this repository does not offer, so nobody
+// looks for one that would be refused. "" when every agent is offered.
+func notOfferedLine(list []domain.NotOfferedAgent) string {
+	if len(list) == 0 {
+		return ""
+	}
+	names := make([]string, 0, len(list))
+	for _, n := range list {
+		names = append(names, n.Name+" ("+strings.ReplaceAll(n.Reason, "_", " ")+")")
+	}
+	return "not offered here: " + strings.Join(names, ", ")
 }
 
 func stepTitle(s string, current bool) string {
