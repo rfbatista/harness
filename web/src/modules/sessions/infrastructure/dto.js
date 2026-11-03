@@ -32,6 +32,7 @@ export function toSession(dto) {
     runnerHost: dto.runner_host ?? "",
     resumable: dto.resumable === true,
     resumeBlocked: typeof dto.resume_blocked === "string" ? dto.resume_blocked : "",
+    agentUnassigned: dto.agent_unassigned === true,
     role,
     architectSessionId: dto.architect_session_id ?? "",
     statusCheck: dto.status_check ? toStatusCheck(dto.status_check) : null,
@@ -227,11 +228,22 @@ export function toAgentChoices(enabledBody, catalogBody, projectBody) {
   if (!Array.isArray(enabledBody?.agents) || !Array.isArray(catalogBody?.agents)) bad("expected {agents: [...]}");
   const agents = enabledBody.agents.map((a) => {
     if (typeof a?.name !== "string" || a.name === "") bad("agent without a name");
-    return Object.freeze({ id: typeof a.id === "string" && a.id !== "" ? a.id : a.name, name: a.name, description: typeof a.description === "string" ? a.description : "" });
+    return Object.freeze({
+      id: typeof a.id === "string" && a.id !== "" ? a.id : a.name,
+      name: a.name,
+      description: typeof a.description === "string" ? a.description : "",
+      repositoryPromptSet: a.repository_prompt_set === true,
+    });
   });
+  // With a repository: the rest of the catalog and why each is not offered (contract "repository agents", section 2).
+  const notOffered = Array.isArray(enabledBody.not_offered)
+    ? enabledBody.not_offered
+        .filter((n) => typeof n?.name === "string" && n.name !== "")
+        .map((n) => Object.freeze({ name: n.name, reason: n.reason === "not_enabled" ? "not_enabled" : "unassigned" }))
+    : [];
   const total = catalogBody.agents.length;
   const mode = projectBody?.mode === "all" || projectBody?.mode === "selected" ? projectBody.mode : agents.length === total ? "all" : "selected";
-  return Object.freeze({ mode, agents, total });
+  return Object.freeze({ mode, agents, total, notOffered });
 }
 
 /** POST /api/start_interactive_session and /api/resume_interactive_session → {"session": {...}, "agent": {...}} */

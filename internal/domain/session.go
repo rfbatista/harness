@@ -113,6 +113,10 @@ type Session struct {
 	// error code it would answer otherwise. Derived on read, never stored.
 	Resumable     bool   `json:"resumable"`
 	ResumeBlocked string `json:"resume_blocked"`
+	// AgentUnassigned says the session's agent is now unassigned from its
+	// repository (ADR 0061); a resume is then AGENT_NOT_ASSIGNED. Derived on
+	// read, never stored.
+	AgentUnassigned bool `json:"agent_unassigned"`
 	// CommitCheckOff is why the session's worktree is not guarded by the commit
 	// check (ADR 0040); empty while it is guarded. Derived on read, never stored.
 	CommitCheckOff string    `json:"commit_check_off,omitempty"`

@@ -23,6 +23,7 @@ var (
 	_ ports.InteractiveSessions = (*Fake)(nil)
 	_ ports.TerminalAccess      = (*Fake)(nil)
 	_ ports.SessionFeed         = (*Fake)(nil)
+	_ ports.AgentOffers         = (*Fake)(nil)
 )
 
 // errReadOnly answers the catalog writes no screen makes yet.
@@ -38,7 +39,9 @@ type Fake struct {
 	Repositories []*domain.Repository
 	Tickets      []*domain.Ticket
 	Agents       []*domain.Agent
-	Sessions     []*domain.Session
+	// Unassigned names, by repository id, the agents it does not assign.
+	Unassigned map[string][]string
+	Sessions   []*domain.Session
 
 	// Launch builds the AgentSpec a started or resumed session gets.
 	Launch func(s *domain.Session, resume bool) ports.AgentSpec
@@ -251,6 +254,21 @@ func (f *Fake) ListAgents(context.Context) ([]*domain.Agent, error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	return slices.Clone(f.Agents), f.fail("ListAgents")
+}
+
+// ListAgentsFor answers the agents the repository assigns, and names the rest.
+func (f *Fake) ListAgentsFor(_ context.Context, _, repositoryID string) (*ports.AgentOffer, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	offer := &ports.AgentOffer{}
+	for _, a := range f.Agents {
+		if slices.Contains(f.Unassigned[repositoryID], a.Name) {
+			offer.NotOffered = append(offer.NotOffered, domain.NotOfferedAgent{Name: a.Name, Reason: "unassigned"})
+			continue
+		}
+		offer.Agents = append(offer.Agents, a)
+	}
+	return offer, f.fail("ListAgentsFor")
 }
 
 func (f *Fake) GetAgent(_ context.Context, id string) (*domain.Agent, error) {

@@ -39,6 +39,8 @@ stored: what others change appears here, and what you write here is stored.
     project/architecture/<repository>/instructions/<path>
                               the repository's instruction files (AGENTS.md, CLAUDE.md, skills, sub-agents),
                               kept in the harness; delivered to you, read-only here
+    project/architecture/<repository>/agents/<agent>.md
+                              what the person added to that agent's own prompt in this repository, if anything (read-only)
 {{DESIGN_SYSTEM}}    tasks/<task-id>/docs/     another task of the project: its documents, task scope
 
 File names are <slug of title>.<ext>, with -<short id> added only on a

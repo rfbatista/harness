@@ -6,14 +6,41 @@ import { Codes, codeOf } from "../../../shared/domain/errors.js";
 /** The project settings' Enabled agents section. @param {string} projectId */
 export const agentsSettingsHref = (projectId) => `/projects/${encodeURIComponent(projectId)}/settings#settings-agents-enabled`;
 
-/** The line over the picker: how many it offers; nothing when none. @param {number} count */
-export const pickerCount = (count) => (count > 0 ? `${count} enabled` : "");
+/** A repository's Agents tab, where an agent is assigned again. @param {string} projectId @param {string} repositoryId */
+export const repositoryAgentsHref = (projectId, repositoryId) =>
+  `/projects/${encodeURIComponent(projectId)}/repositories/${encodeURIComponent(repositoryId)}/architecture/agents`;
+
+/** How many of the picker's missing agents are unassigned from the repository (the others are not enabled in the project). @param {{ reason: string }[]} notOffered */
+export const unassignedCount = (notOffered) => notOffered.filter((n) => n.reason === "unassigned").length;
 
 /**
- * The hint under the picker.
- * @param {{ count: number, total: number, mode: "all" | "selected", project: string }} p
+ * The line over the picker: how many it offers; nothing when none. With
+ * agents unassigned from the chosen repository it counts the ones assigned
+ * there; otherwise (nothing changes for such a project) the enabled ones.
+ * @param {number} count @param {number} [unassigned]
  */
-export function pickerHint({ count, total, mode, project }) {
+export const pickerCount = (count, unassigned = 0) => (count > 0 ? `${count} ${unassigned > 0 ? "assigned" : "enabled"}` : "");
+
+/**
+ * The link after the hint: to the repository's Agents tab while agents are
+ * unassigned there, otherwise to the project's settings.
+ * @param {{ unassigned: number, repository: string, repositoryId: string, projectId: string }} p
+ */
+export function hintLink({ unassigned, repository, repositoryId, projectId }) {
+  if (repository && unassigned > 0) return { text: `Manage agents in ${repository}`, href: repositoryAgentsHref(projectId, repositoryId) };
+  return { text: "Change in project settings", href: agentsSettingsHref(projectId) };
+}
+
+/**
+ * The hint under the picker. With agents unassigned from the repository it
+ * counts the assigned ones.
+ * @param {{ count: number, total: number, mode: "all" | "selected", project: string, repository?: string, unassigned?: number }} p
+ */
+export function pickerHint({ count, total, mode, project, repository = "", unassigned = 0 }) {
+  if (repository && unassigned > 0) {
+    const noun = count === 1 ? "agent" : "agents";
+    return `Showing the ${count} ${noun} assigned to ${repository}, of ${count + unassigned} enabled in ${project}. ${unassigned} ${unassigned === 1 ? "is" : "are"} unassigned here.`;
+  }
   if (mode === "all") return `All agents are enabled in ${project}: every agent in the catalog is offered, and new agents appear automatically.`;
   return `Showing the ${count} ${count === 1 ? "agent" : "agents"} enabled in ${project} of ${total} in the catalog.`;
 }
@@ -26,6 +53,11 @@ export function pickerHint({ count, total, mode, project }) {
  * @param {unknown} data @param {string} projectId
  */
 export function catalogChangeTouches(data, projectId) {
+  // An agent was assigned or unassigned, or a repository prompt changed: this project's pickers re-read.
+  if (data !== null && typeof data === "object" && !Array.isArray(data) && "repository_agents_changed" in data) {
+    const body = /** @type {any} */ (data).repository_agents_changed;
+    return !body || typeof body.project_id !== "string" || body.project_id === projectId;
+  }
   if (data === null || typeof data !== "object" || Array.isArray(data) || !("agent_catalog_changed" in data)) return false;
   const body = /** @type {any} */ (data).agent_catalog_changed;
   const paths = (body && Array.isArray(body.paths) ? body.paths : []).filter((p) => typeof p === "string");
@@ -47,5 +79,39 @@ export function notEnabledRefusal(err, { agent, project, projectId }) {
     explanation: `${project} enables only the agents on its list, and ${agent} is not on it. Pick one of the agents offered, or enable ${agent} in the project's settings. Your prompt is kept.`,
     linkText: `Open ${project}'s Agents settings`,
     href: agentsSettingsHref(projectId),
+  };
+}
+
+/**
+ * The missing agents behind the disclosure, each with why and where to fix it.
+ * @param {{ name: string, reason: "unassigned" | "not_enabled" }[]} notOffered
+ * @param {{ repository: string, repositoryId: string, project: string, projectId: string }} ctx
+ */
+export function notOfferedRows(notOffered, { repository, repositoryId, project, projectId }) {
+  return notOffered.map((n) =>
+    n.reason === "not_enabled"
+      ? { name: n.name, reason: `not enabled in ${project}`, linkText: `Enable in ${project}`, href: agentsSettingsHref(projectId) }
+      : { name: n.name, reason: `unassigned from ${repository}`, linkText: `Manage agents in ${repository}`, href: repositoryAgentsHref(projectId, repositoryId) },
+  );
+}
+
+/**
+ * The banner for a start the server refused because the agent is not
+ * assigned to the repository; null for any other error. The server's own
+ * details name the repository, falling back to what the form knows.
+ * @param {unknown} err
+ * @param {{ agent: string, repository: string, repositoryId: string, projectId: string }} ctx
+ */
+export function notAssignedRefusal(err, { agent, repository, repositoryId, projectId }) {
+  if (codeOf(err) !== Codes.AGENT_NOT_ASSIGNED) return null;
+  const details = /** @type {any} */ (err).details ?? {};
+  const repo = (typeof details.repository_name === "string" && details.repository_name) || repository;
+  const id = (typeof details.repository_id === "string" && details.repository_id) || repositoryId;
+  return {
+    message: `The session was not started: ${agent} is not assigned to ${repo}.`,
+    code: Codes.AGENT_NOT_ASSIGNED,
+    explanation: `${repo} no longer lets ${agent} run there. Pick one of the agents offered, or assign ${agent} again in the repository's settings. Your prompt is kept.`,
+    linkText: `Open ${repo}'s Agents settings`,
+    href: repositoryAgentsHref(projectId, id),
   };
 }

@@ -1,6 +1,6 @@
 import { StructuredError } from "../../../shared/domain/errors.js";
 import { assert, file, test } from "../../../shared/testing/test.js";
-import { agentsSettingsHref, catalogChangeTouches, notEnabledRefusal, pickerCount, pickerHint } from "./agentPicker.js";
+import { agentsSettingsHref, catalogChangeTouches, notAssignedRefusal, notEnabledRefusal, hintLink, notOfferedRows, pickerCount, pickerHint, repositoryAgentsHref } from "./agentPicker.js";
 
 file("sessions/domain/agentPicker");
 
@@ -44,4 +44,44 @@ test("AGENT_NOT_ENABLED becomes the banner: the sentence, the code, the way out 
   assert.equal(refusal.linkText, "Open atlas-api's Agents settings");
   assert.equal(refusal.href, "/projects/p1/settings#settings-agents-enabled");
   assert.equal(notEnabledRefusal(new Error("boom"), { agent: "a", project: "p", projectId: "p1" }), null, "any other error is not this refusal");
+});
+
+test("with agents unassigned from the repository the hint and the count name the assigned ones", () => {
+  assert.equal(
+    pickerHint({ count: 3, total: 6, mode: "selected", project: "atlas", repository: "atlas-api", unassigned: 2 }),
+    "Showing the 3 agents assigned to atlas-api, of 5 enabled in atlas. 2 are unassigned here.",
+  );
+  assert.equal(pickerHint({ count: 1, total: 6, mode: "all", project: "atlas", repository: "atlas-api", unassigned: 1 }), "Showing the 1 agent assigned to atlas-api, of 2 enabled in atlas. 1 is unassigned here.");
+  assert.ok(pickerHint({ count: 6, total: 6, mode: "all", project: "atlas", repository: "atlas-api", unassigned: 0 }).includes("All agents are enabled in atlas"), "nothing unassigned: the project's hint stands");
+  assert.equal(pickerCount(3, 2), "3 assigned");
+  assert.equal(hintLink({ unassigned: 2, repository: "atlas-api", repositoryId: "r1", projectId: "p1" }).href, "/projects/p1/repositories/r1/architecture/agents");
+  assert.equal(hintLink({ unassigned: 0, repository: "atlas-api", repositoryId: "r1", projectId: "p1" }).href, "/projects/p1/settings#settings-agents-enabled", "nothing unassigned: the project settings");
+  assert.equal(pickerCount(3), "3 enabled");
+});
+
+test("the missing agents say why and where to fix it", () => {
+  const rows = notOfferedRows([{ name: "reviewer", reason: "unassigned" }, { name: "qa", reason: "not_enabled" }], { repository: "atlas-api", repositoryId: "r1", project: "atlas", projectId: "p1" });
+  assert.deepEqual(rows, [
+    { name: "reviewer", reason: "unassigned from atlas-api", linkText: "Manage agents in atlas-api", href: "/projects/p1/repositories/r1/architecture/agents" },
+    { name: "qa", reason: "not enabled in atlas", linkText: "Enable in atlas", href: "/projects/p1/settings#settings-agents-enabled" },
+  ]);
+  assert.equal(repositoryAgentsHref("p 1", "r/1"), "/projects/p%201/repositories/r%2F1/architecture/agents");
+});
+
+test("a repository agents event touches the picker of its project", () => {
+  const ev = (project_id) => ({ repository_agents_changed: { project_id, repository_id: "r1", agents: ["reviewer"] } });
+  assert.equal(catalogChangeTouches(ev("p1"), "p1"), true);
+  assert.equal(catalogChangeTouches(ev("p2"), "p1"), false);
+  assert.equal(catalogChangeTouches({ repository_agents_changed: {} }, "p1"), true, "an event that names no project may be ours");
+});
+
+test("AGENT_NOT_ASSIGNED becomes a banner laid out like AGENT_NOT_ENABLED, with the link to the Agents tab", () => {
+  const err = new StructuredError("AGENT_NOT_ASSIGNED", "AGENT_NOT_ASSIGNED: reviewer is not assigned to atlas-api.", 409, { agent: "reviewer", repository_id: "r1", repository_name: "atlas-api", assigned: ["backend"] });
+  const refusal = notAssignedRefusal(err, { agent: "reviewer", repository: "", repositoryId: "", projectId: "p1" });
+  assert.equal(refusal.message, "The session was not started: reviewer is not assigned to atlas-api.");
+  assert.equal(refusal.code, "AGENT_NOT_ASSIGNED");
+  assert.ok(refusal.explanation.includes("Your prompt is kept"), refusal.explanation);
+  assert.equal(refusal.linkText, "Open atlas-api's Agents settings");
+  assert.equal(refusal.href, "/projects/p1/repositories/r1/architecture/agents");
+  assert.equal(notAssignedRefusal(new StructuredError("AGENT_NOT_ENABLED", "x", 409), { agent: "a", repository: "r", repositoryId: "r1", projectId: "p1" }), null);
 });

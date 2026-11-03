@@ -30,6 +30,7 @@ import (
 	"operators-mcp/internal/application/notifications"
 	"operators-mcp/internal/application/orchestration"
 	"operators-mcp/internal/application/planning"
+	"operators-mcp/internal/application/repoagents"
 	"operators-mcp/internal/application/taskchannel"
 	"operators-mcp/internal/application/tooling"
 	"operators-mcp/internal/application/usage"
@@ -57,7 +58,7 @@ var ServerModule = fx.Module("server",
 
 // registerHTTPServer mounts the UI and JSON API on a mux and serves it,
 // shutting down gracefully when fx stops.
-func registerHTTPServer(lc fx.Lifecycle, cfg Config, cat catalog.Catalog, appRunner *apps.Service, ts *tooling.Service, exec *execution.Service, orch *orchestration.Service, plan *planning.Service, ws *workspaces.Service, broker *approval.Broker, sessions ports.SessionRepository, art *artifacts.Service, channel *taskchannel.Service, prs *workspaces.PullRequests, merges *workspaces.Merges, branchNames *workspaces.BranchNames, code ports.CodeBrowser, worktreeGit ports.WorktreeGit, inbox optionalNotifications, creds optionalGitCredentials, shells *vfs.Service, fsys *vfs.FileSystem, usageSvc *usage.Service, indexes optionalRepositoryIndexes, sandboxStore *sandboxsettings.Store, managedClaude *managedclaude.Service, claudeBin ports.ManagedClaudeBin, agentCred optionalAgentCredential, helper *writinghelper.Service, assistant *archassistant.Service, rules *archrules.Service, agentCat *agentcatalog.Catalog, persons *vshell.PersonTerminals) error {
+func registerHTTPServer(lc fx.Lifecycle, cfg Config, cat catalog.Catalog, appRunner *apps.Service, ts *tooling.Service, exec *execution.Service, orch *orchestration.Service, plan *planning.Service, ws *workspaces.Service, broker *approval.Broker, sessions ports.SessionRepository, art *artifacts.Service, channel *taskchannel.Service, prs *workspaces.PullRequests, merges *workspaces.Merges, branchNames *workspaces.BranchNames, code ports.CodeBrowser, worktreeGit ports.WorktreeGit, inbox optionalNotifications, creds optionalGitCredentials, shells *vfs.Service, fsys *vfs.FileSystem, usageSvc *usage.Service, indexes optionalRepositoryIndexes, sandboxStore *sandboxsettings.Store, managedClaude *managedclaude.Service, claudeBin ports.ManagedClaudeBin, agentCred optionalAgentCredential, helper *writinghelper.Service, assistant *archassistant.Service, rules *archrules.Service, agentCat *agentcatalog.Catalog, persons *vshell.PersonTerminals, repoAgents *repoagents.Service) error {
 	uiHandler, err := ui.SPAHandler(ui.Dist)
 	if err != nil {
 		return err
@@ -170,6 +171,8 @@ func registerHTTPServer(lc fx.Lifecycle, cfg Config, cat catalog.Catalog, appRun
 		ArchitectureRules: rules,
 		// The agent catalog folder: agents, bundles, skills, MCP servers.
 		Catalog: agentCat,
+		// Which agents each repository assigns, and its repository prompts.
+		RepositoryAgents: repoAgents,
 	}), httpapi.WithToken(cfg.APIToken), httpapi.WithExposedListener(exposed(cfg.HTTPAddr)))
 	// Requests slower than the threshold are logged with their query count.
 	// An approval waits on a person, so it is never a slow request.
@@ -178,7 +181,7 @@ func registerHTTPServer(lc fx.Lifecycle, cfg Config, cat catalog.Catalog, appRun
 	}
 	mux.Handle("/api/", slow(apiRouter))
 	mux.Handle(mcpapprove.PathPrefix, mcpapprove.Handler(broker))
-	mux.Handle(mcpsession.PathPrefix, slow(mcpsession.TaskHandler(sessionTaskTools(cat, orch, plan, sessions, art, channel, notifier, merges))))
+	mux.Handle(mcpsession.PathPrefix, slow(mcpsession.TaskHandler(sessionTaskTools(cat, orch, plan, sessions, art, channel, notifier, merges, tooling.WithAgentPlacements(repoAgents)))))
 	// The web client owns / and its pages; anything else reaches the legacy
 	// designer SPA until it is retired.
 	mux.Handle("/", slow(web.NewHandler(web.Deps{Projects: cat.Projects, Tasks: plan, Sessions: orch, Agents: cat.Agents, Repositories: cat.Projects, EnvFiles: cat.Projects, RunCommands: cat.Projects, Documents: plan, History: ws, Code: code, Workspaces: ws, Artifacts: art, ProjectSummaries: cat.Projects, PullRequests: prs, WorktreeGit: worktreeGit,
@@ -187,7 +190,7 @@ func registerHTTPServer(lc fx.Lifecycle, cfg Config, cat catalog.Catalog, appRun
 		ManagedClaude: managedClaude, ManagedClaudeBin: claudeBin, AgentCredential: agentCred.port(),
 		AgentOAuth: agentCred.oauth(), AgentAuth: agentCred.auth(), AgentHomeExposed: agentHomeExposed(cfg), AgentLogin: agentHasLogin(cfg), ArchivedTasks: plan, ArchivedList: plan,
 		// Whether the pens work, read from the gate without starting anything.
-		WritingHelper: helperState(helper), ArchitectureAssistant: architectureAssistant, AgentCatalog: CatalogSeed(agentCat)}, assets, uiHandler)))
+		WritingHelper: helperState(helper), ArchitectureAssistant: architectureAssistant, AgentCatalog: CatalogSeed(agentCat, repoAgents)}, assets, uiHandler)))
 
 	// The LLM proxy every claude process calls through (ADR 0006): loopback
 	// only, outside the API token and CORS, so its responses come back as
@@ -239,8 +242,8 @@ type optionalNotifications struct {
 
 // sessionTaskTools are the tools each session reaches on its own task
 // endpoint, /mcp/task/{session}.
-func sessionTaskTools(cat catalog.Catalog, orch *orchestration.Service, plan *planning.Service, sessions ports.SessionRepository, art *artifacts.Service, channel *taskchannel.Service, notifier ports.Notifier, merges ports.BranchMerger) []domain.Tool {
-	var opts []tooling.Option
+func sessionTaskTools(cat catalog.Catalog, orch *orchestration.Service, plan *planning.Service, sessions ports.SessionRepository, art *artifacts.Service, channel *taskchannel.Service, notifier ports.Notifier, merges ports.BranchMerger, extra ...tooling.Option) []domain.Tool {
+	opts := append([]tooling.Option{}, extra...)
 	if cat.DesignSystems != nil {
 		opts = append(opts, tooling.WithDesignProposals(cat.DesignSystems))
 	}

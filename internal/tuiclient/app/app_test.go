@@ -272,19 +272,22 @@ func TestClient_StartsASessionAsAPane(t *testing.T) {
 	r.until("echo", r.shows("echo-me"))
 }
 
-func TestClient_AgentPickerAndRepositoryStep(t *testing.T) {
+func TestClient_AgentPickerAsksTheRepositoryBeforeTheAgent(t *testing.T) {
 	be := fixture()
 	be.Repositories = append(be.Repositories, &domain.Repository{ID: "r2", ProjectID: "p1", Name: "worker"})
 	r := newRun(t, be, nil)
 	r.openTask()
 
 	r.press("n")
-	r.until("picker", r.shows("reviewer"))
+	r.until("repository step first", r.shows("worker"))
+	if strings.Contains(r.view(), "plain claude") {
+		t.Fatalf("the agents are shown before the repository is chosen:\n%s", r.view())
+	}
+	r.press("down", "enter")
+	r.until("agent step", r.shows("reviewer"))
 	r.press("down", "enter")
 	r.until("mode step", r.shows("architect"))
 	r.press("enter")
-	r.until("repository step", r.shows("worker"))
-	r.press("down", "enter")
 	r.until("prompt step", r.shows("First message"))
 	r.press("enter")
 	r.until("session", func() bool { _, ok := be.Session("s1"); return ok })
@@ -294,6 +297,55 @@ func TestClient_AgentPickerAndRepositoryStep(t *testing.T) {
 		t.Fatalf("picked reviewer on worker in the default mode, got agent %q repo %q mode %q", s.AgentID, s.RepositoryID, s.Mode)
 	}
 	r.until("pane labelled reviewer", r.shows(" 1 reviewer "))
+}
+
+func TestClient_AgentPickerOffersOnlyTheAgentsAssignedInTheRepositoryAndNamesTheRest(t *testing.T) {
+	be := fixture()
+	be.Repositories = append(be.Repositories, &domain.Repository{ID: "r2", ProjectID: "p1", Name: "worker"})
+	be.Unassigned = map[string][]string{"r2": {"reviewer"}}
+	r := newRun(t, be, nil)
+	r.openTask()
+
+	r.press("n")
+	r.until("repository step", r.shows("worker"))
+	r.press("down", "enter")
+	r.until("agent step", r.shows("plain claude"))
+	if v := r.view(); strings.Contains(v, "    reviewer  ") || !strings.Contains(v, "not offered here: reviewer (unassigned)") {
+		t.Fatalf("an unassigned agent is offered, or the dim line is missing:\n%s", v)
+	}
+	// The other repository still offers it, and esc goes back to the repository.
+	r.press("esc")
+	r.until("back to the repository step", r.shows("worker"))
+	r.press("up", "enter")
+	r.until("agent step of the first repository", r.shows("reviewer"))
+	if strings.Contains(r.view(), "not offered here") {
+		t.Fatalf("a repository that assigns every agent names some as not offered:\n%s", r.view())
+	}
+}
+
+func TestClient_AgentPickerSkipsTheRepositoryStepForOneRepository(t *testing.T) {
+	r := newRun(t, fixture(), nil)
+	r.openTask()
+	r.press("n")
+	r.until("agent step first", r.shows("plain claude"))
+	if strings.Contains(r.view(), "Repository") {
+		t.Fatalf("a repository step for a project with one repository:\n%s", r.view())
+	}
+	r.press("esc")
+	r.until("the picker closed", r.shows("No agent sessions open"))
+}
+
+func TestClient_ARefusedStartShowsTheAgentNotAssignedMessage(t *testing.T) {
+	be := fixture()
+	r := newRun(t, be, nil)
+	r.openTask()
+	be.Err = map[string]error{"StartInteractive": &domain.StructuredError{Code: "AGENT_NOT_ASSIGNED",
+		Message: "AGENT_NOT_ASSIGNED: agent reviewer is not assigned to repository api. Assigned agents: designer. Only the person assigns agents, in the repository's settings."}}
+	r.startSession("hi")
+	r.until("the refusal", r.shows("AGENT_NOT_ASSIGNED: agent reviewer is not assigned"))
+	if _, ok := be.Session("s1"); ok {
+		t.Fatal("a refused start created a session")
+	}
 }
 
 func TestClient_ArchitectModeStep(t *testing.T) {
@@ -447,6 +499,27 @@ func TestClient_SessionsOverlayResumesAnEndedSession(t *testing.T) {
 	}
 	if !strings.Contains(r.view(), " 1 fix-flaky-tests-1a2b ") {
 		t.Errorf("resumed pane not labelled by its branch:\n%s", r.view())
+	}
+}
+
+func TestClient_ARefusedResumeShowsTheAgentNotAssignedMessage(t *testing.T) {
+	be := fixture()
+	be.Sessions = []*domain.Session{
+		{ID: "old", ProjectID: "p1", TicketID: "t1", Branch: "agent/fix-flaky-tests-1a2b", Status: domain.SessionStopped, Interactive: true, ClaudeSessionID: "old", AgentID: "a1"},
+	}
+	be.Err = map[string]error{"ResumeInteractive": &domain.StructuredError{Code: "AGENT_NOT_ASSIGNED",
+		Message: "AGENT_NOT_ASSIGNED: agent reviewer is not assigned to repository api. Only the person assigns agents, in the repository's settings."}}
+	r := newRun(t, be, nil)
+	r.press("enter")
+	r.until("tasks", r.shows("1 session"))
+	r.press("enter")
+	r.until("task", r.shows("No agent sessions open"))
+	r.press("s")
+	r.until("overlay", r.shows("fix-flaky-tests-1a2b"))
+	r.press("enter")
+	r.until("the refusal", r.shows("AGENT_NOT_ASSIGNED: agent reviewer is not assigned"))
+	if s, _ := be.Session("old"); s.Status != domain.SessionStopped {
+		t.Errorf("a refused resume changed the session: %s", s.Status)
 	}
 }
 

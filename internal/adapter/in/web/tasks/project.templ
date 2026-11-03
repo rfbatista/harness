@@ -66,7 +66,7 @@ templ brainstormAction(projectID string, form sessions.NewSessionForm) {
 	if !form.CanStart() {
 		<a class="[ button ]" data-variant="ghost" data-size="sm" href={ templ.SafeURL(projects.RepositoriesHref(projectID)) } title="Add a repository to this project first: a session runs in one." data-brainstorm-needs-repository>Brainstorm a feature</a>
 	} else {
-		<span style="display: contents" x-data="sessionsBrainstorm" data-project-id={ projectID } data-default-repository={ form.DefaultRepository() } data-agents={ form.AgentsSeed() } data-agents-total={ form.AgentsTotalText() } data-agents-mode={ form.AgentsMode } data-project-name={ form.ProjectName }>
+		<span style="display: contents" x-data="sessionsBrainstorm" data-project-id={ projectID } data-default-repository={ form.DefaultRepository() } data-agents={ form.AgentsSeed() } data-repositories={ form.RepositoriesSeed() } data-agents-total={ form.AgentsTotalText() } data-agents-mode={ form.AgentsMode } data-project-name={ form.ProjectName }>
 			<button type="button" class="[ button ]" data-variant="ghost" data-size="sm" id="brainstorm-open" aria-haspopup="dialog" aria-controls="brainstorm" x-on:click="open">Brainstorm a feature</button>
 			<div class="[ popup ]" role="dialog" id="brainstorm" popover="manual" data-trap aria-labelledby="brainstorm-title" x-data="popupDialog" x-on:dialog-open.window="openFrom($event)">
 				<form class="[ confirm-panel ] [ flow ]" x-on:submit.prevent="start">
@@ -80,7 +80,7 @@ templ brainstormAction(projectID string, form sessions.NewSessionForm) {
 						<div class="[ dropdown ]" x-data="dropdown" x-show="!noAgentEnabled">
 							<select id="brainstorm-agent" x-model="agentId" data-initial-focus>
 								<option value="" data-description="claude with no agent definition">Plain claude</option>
-								<template x-for="a in agentChoices" x-bind:key="a.id">
+								<template x-for="a in agentOptions" x-bind:key="a.id">
 									<option x-bind:value="a.id" x-bind:data-description="a.description" x-text="a.name"></option>
 								</template>
 							</select>

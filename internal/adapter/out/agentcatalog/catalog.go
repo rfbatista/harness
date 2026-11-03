@@ -19,6 +19,7 @@ import (
 	"github.com/rfbatista/harnesskit/mcpserver"
 
 	"operators-mcp/internal/domain"
+	"operators-mcp/internal/ports"
 )
 
 // File names inside the catalog folder.
@@ -43,6 +44,7 @@ type Catalog struct {
 	lookupEnv func(string) (string, bool)
 	projects  Projects
 	usage     Usage
+	renames   ports.AgentRenames
 	prober    mcpserver.Prober
 
 	// wmu serializes writes: one change is built and applied at a time.
@@ -96,6 +98,10 @@ func WithUsage(u Usage) Option { return func(c *Catalog) { c.usage = u } }
 
 // UseUsage gives the catalog its usage counts after it was built, for wiring.
 func (c *Catalog) UseUsage(u Usage) { c.usage = u }
+
+// UseAgentRenames makes the catalog tell who keeps something under an agent's
+// name when an agent is renamed or deleted (ADR 0061).
+func (c *Catalog) UseAgentRenames(r ports.AgentRenames) { c.renames = r }
 
 // UseProjects gives the catalog its projects after it was built, for wiring
 // where the projects need the catalog first.

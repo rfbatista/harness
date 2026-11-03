@@ -26,6 +26,11 @@ func (h *Handler) handleGetAgentCatalog(c echo.Context) error {
 	if err != nil {
 		return err
 	}
+	if h.repoAgents != nil {
+		if view, err = h.repoAgents.DecorateCatalog(c.Request().Context(), view); err != nil {
+			return err
+		}
+	}
 	return c.JSON(http.StatusOK, view)
 }
 
@@ -184,6 +189,126 @@ func (h *Handler) handleSetProjectAgents(c echo.Context) error {
 		return err
 	}
 	out, err := h.catalog.SetProjectAgents(c.Request().Context(), in)
+	if err != nil {
+		return err
+	}
+	return c.JSON(http.StatusOK, out)
+}
+
+func (h *Handler) repoAgentsOrUnavailable() error {
+	if h.repoAgents == nil {
+		return echo.NewHTTPError(http.StatusServiceUnavailable, "repository agents not configured")
+	}
+	return nil
+}
+
+func (h *Handler) handleGetRepositoryAgents(c echo.Context) error {
+	if err := h.repoAgentsOrUnavailable(); err != nil {
+		return err
+	}
+	out, err := h.repoAgents.GetRepositoryAgents(c.Request().Context(), c.QueryParam("repository_id"))
+	if err != nil {
+		return err
+	}
+	return c.JSON(http.StatusOK, out)
+}
+
+// repositoryAgentIn is the body of unassign_agent and assign_agent_again.
+type repositoryAgentIn struct {
+	RepositoryID string `json:"repository_id"`
+	Agent        string `json:"agent"`
+	ListVersion  string `json:"list_version"`
+}
+
+func (h *Handler) handleUnassignAgent(c echo.Context) error {
+	if err := h.repoAgentsOrUnavailable(); err != nil {
+		return err
+	}
+	var in repositoryAgentIn
+	if err := bindJSON(c, &in); err != nil {
+		return err
+	}
+	out, err := h.repoAgents.UnassignAgent(c.Request().Context(), in.RepositoryID, in.Agent, in.ListVersion)
+	if err != nil {
+		return err
+	}
+	return c.JSON(http.StatusOK, out)
+}
+
+func (h *Handler) handleAssignAgentAgain(c echo.Context) error {
+	if err := h.repoAgentsOrUnavailable(); err != nil {
+		return err
+	}
+	var in repositoryAgentIn
+	if err := bindJSON(c, &in); err != nil {
+		return err
+	}
+	out, err := h.repoAgents.AssignAgentAgain(c.Request().Context(), in.RepositoryID, in.Agent, in.ListVersion)
+	if err != nil {
+		return err
+	}
+	return c.JSON(http.StatusOK, out)
+}
+
+func (h *Handler) handleAssignAllAgentsAgain(c echo.Context) error {
+	if err := h.repoAgentsOrUnavailable(); err != nil {
+		return err
+	}
+	var in repositoryAgentIn
+	if err := bindJSON(c, &in); err != nil {
+		return err
+	}
+	out, err := h.repoAgents.AssignAllAgentsAgain(c.Request().Context(), in.RepositoryID, in.ListVersion)
+	if err != nil {
+		return err
+	}
+	return c.JSON(http.StatusOK, out)
+}
+
+func (h *Handler) handleGetRepositoryPrompt(c echo.Context) error {
+	if err := h.repoAgentsOrUnavailable(); err != nil {
+		return err
+	}
+	out, err := h.repoAgents.GetRepositoryPrompt(c.Request().Context(), c.QueryParam("repository_id"), c.QueryParam("agent"))
+	if err != nil {
+		return err
+	}
+	return c.JSON(http.StatusOK, out)
+}
+
+// repositoryPromptIn is the body of save_repository_prompt and
+// preview_repository_prompt.
+type repositoryPromptIn struct {
+	RepositoryID string `json:"repository_id"`
+	Agent        string `json:"agent"`
+	Content      string `json:"content"`
+	Version      string `json:"version"`
+}
+
+func (h *Handler) handleSaveRepositoryPrompt(c echo.Context) error {
+	if err := h.repoAgentsOrUnavailable(); err != nil {
+		return err
+	}
+	var in repositoryPromptIn
+	if err := bindJSON(c, &in); err != nil {
+		return err
+	}
+	out, err := h.repoAgents.SaveRepositoryPrompt(c.Request().Context(), in.RepositoryID, in.Agent, in.Content, in.Version)
+	if err != nil {
+		return err
+	}
+	return c.JSON(http.StatusOK, out)
+}
+
+func (h *Handler) handlePreviewRepositoryPrompt(c echo.Context) error {
+	if err := h.repoAgentsOrUnavailable(); err != nil {
+		return err
+	}
+	var in repositoryPromptIn
+	if err := bindJSON(c, &in); err != nil {
+		return err
+	}
+	out, err := h.repoAgents.PreviewRepositoryPrompt(c.Request().Context(), in.RepositoryID, in.Agent, in.Content)
 	if err != nil {
 		return err
 	}

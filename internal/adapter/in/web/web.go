@@ -268,7 +268,7 @@ func NewHandler(deps Deps, assets *Assets, fallback http.Handler) http.Handler {
 	mux.Handle("GET /projects/{project}/settings", s.page(projectPages.Settings))
 	mux.Handle("GET /projects/{project}/repositories", s.page(projectPages.RepositoryList))
 	mux.Handle("GET /projects/{project}/repositories/{repository}/env", s.page(projectPages.EnvFileList))
-	for tab, slug := range map[string]string{"": "", "/instructions": "instructions", "/tools": "tools", "/sandboxes": "sandboxes", "/orchestration": "orchestration", "/rules": "rules", "/layers": "layers", "/file": "file", "/diagram": "diagram"} {
+	for tab, slug := range map[string]string{"": "", "/instructions": "instructions", "/tools": "tools", "/sandboxes": "sandboxes", "/orchestration": "orchestration", "/rules": "rules", "/layers": "layers", "/file": "file", "/diagram": "diagram", "/agents": "agents"} {
 		mux.Handle("GET /projects/{project}/repositories/{repository}/architecture"+tab, s.page(architecturePages.Page(slug)))
 	}
 	mux.Handle("GET /projects/{project}/repositories/{repository}/history", s.page(historyPages.Page))

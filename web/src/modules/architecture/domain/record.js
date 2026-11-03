@@ -17,6 +17,8 @@ export const TABS = Object.freeze([
   { slug: "hooks", label: "Hooks", paths: ["rules"] },
   { slug: "layers", label: "Layers", paths: ["layers"] },
   { slug: "output", label: "Output", paths: ["file", "diagram"] },
+  // Not part of the record: its changes are saved at once, so it has no count and no place in the draft (ADR 0061).
+  { slug: "agents", label: "Agents", paths: ["agents"] },
 ]);
 
 /** The codes the architecture endpoints refuse with that the page acts on. */
@@ -75,6 +77,7 @@ export function tabCounts(record) {
     hooks: list(r.rules).length,
     layers: list(r.layers).length,
     output: null,
+    agents: null,
   };
 }
 

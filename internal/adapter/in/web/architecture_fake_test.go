@@ -162,7 +162,9 @@ func (f *fakeArchitectureAPI) ServeHTTP(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 	var in map[string]any
-	_ = json.NewDecoder(r.Body).Decode(&in)
+	if r.Body != nil {
+		_ = json.NewDecoder(r.Body).Decode(&in)
+	}
 	if r.URL.Path == "/api/save_repository_architecture" {
 		defer f.delaySaveAnswer() // runs after the lock below is released
 	}

@@ -127,3 +127,20 @@ test("a delete sends the versions of the files it changes, only those the catalo
   assert.deepEqual(deleteBaseVersions(c, "mcp"), { "agents.json": "sha256:a1", "mcp-servers.json": "sha256:m1" });
   assert.deepEqual(deleteBaseVersions({ versions: {} }, "mcp"), {});
 });
+
+test("deleting an agent names the repository prompts that go with it", () => {
+  const dto = catalogDTO();
+  dto.agents[0].enabled_in = [{ id: "p1", name: "harness", mode: "all" }];
+  dto.agents[0].repositories = [
+    { project_id: "p1", repository_id: "r1", repository_name: "harness-api", unassigned: false, prompt_set: true, list_version: "l1" },
+    { project_id: "p1", repository_id: "r2", repository_name: "harness-web", unassigned: true, prompt_set: false, list_version: "l2" },
+    { project_id: "p1", repository_id: "r3", repository_name: "harness-docs", unassigned: true, prompt_set: true, list_version: "l3" },
+  ];
+  const d = deleteImpact(toCatalog(dto), "agent", dto.agents[0].name);
+  const prompts = d.groups.find((g) => g.key === "prompts");
+  assert.deepEqual(prompts.items.map((i) => i.name), ["harness-api in harness", "harness-docs in harness"]);
+  assert.equal(prompts.items[0].href, "/projects/p1/repositories/r1/architecture/agents?prompt=" + encodeURIComponent(dto.agents[0].name));
+  match(prompts.note, /deleted with the agent/);
+  const plain = deleteImpact(toCatalog(catalogDTO()), "agent", dto.agents[0].name);
+  assert.equal(plain.groups.some((g) => g.key === "prompts"), false, "nothing is said about prompts when none is set");
+});

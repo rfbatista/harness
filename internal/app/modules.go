@@ -46,6 +46,7 @@ import (
 	"operators-mcp/internal/application/keychainpath"
 	"operators-mcp/internal/application/orchestration"
 	"operators-mcp/internal/application/planning"
+	"operators-mcp/internal/application/repoagents"
 	"operators-mcp/internal/application/taskchannel"
 	"operators-mcp/internal/application/tooling"
 	"operators-mcp/internal/application/vfs"
@@ -70,6 +71,8 @@ var PersistenceModule = fx.Module("persistence",
 		asPort(sqlite.NewRepositoryRepository, new(ports.RepositoryRepository)),
 		asPort(sqlite.NewEnvFileRepository, new(ports.EnvFileRepository)),
 		asPort(sqlite.NewRunCommandRepository, new(ports.RunCommandRepository)),
+		asPort(sqlite.NewRepositoryAgentListRepository, new(ports.RepositoryAgentListStore)),
+		asPort(sqlite.NewRepositoryPromptRepository, new(ports.RepositoryPromptStore)),
 		asPort(sqlite.NewActivationRepository, new(ports.TokenSaverActivationRepository)),
 		asPort(sqlite.NewZoneRepository, new(ports.ZoneRepository)),
 		newAgentRepository,
@@ -180,6 +183,17 @@ func (p projectMCPServers) SetProjectMCPServers(_ context.Context, id string, na
 	return p.projects.SetMCPServers(id, names)
 }
 
+// newRepositoryAgents is the service that says which agents a repository
+// assigns (ADR 0061).
+func newRepositoryAgents(lists ports.RepositoryAgentListStore, prompts ports.RepositoryPromptStore, projects ports.ProjectRepository, repos ports.RepositoryRepository, cat *agentcatalog.Catalog, sessions ports.SessionRepository, catalogs catalog.Catalog) *repoagents.Service {
+	svc := repoagents.New(repoagents.Deps{Lists: lists, Prompts: prompts, Projects: projects, Repositories: repos, Catalog: cat, Sessions: sessions, Agents: catalogs.Agents, Events: catalogs.Bus})
+	// What a repository keeps under an agent's name follows its rename and
+	// goes with its delete, and with the repository.
+	cat.UseAgentRenames(svc)
+	svc.Subscribe(catalogs.Bus)
+	return svc
+}
+
 // newAgentCatalog is the agent catalog: the "agents" folder of the data dir
 // (ADR 0030). The folder is made on the first write, not here.
 func newAgentCatalog(cfg Config, db *gorm.DB, projects ports.ProjectRepository) (*agentcatalog.Catalog, error) {
@@ -228,6 +242,7 @@ func importAgentCatalog(cfg Config, db *gorm.DB, cat *agentcatalog.Catalog) {
 var CatalogModule = fx.Module("catalog",
 	fx.Provide(
 		newAgentCatalog,
+		newRepositoryAgents,
 		asPort(filesystem.NewMatcher, new(ports.PathMatcher)),
 		asPort(filesystem.NewLister, new(ports.TreeLister)),
 		asPort(skillfs.NewPublisher, new(ports.SkillPublisher)),
@@ -514,12 +529,13 @@ func newArtifactsService(cfg Config, repo ports.ArtifactRepository, sessions por
 // tickets, documents, comments and resources and the artifacts' designs,
 // and stores the documents and comments agents write in them through
 // planning and their designs through the artifacts.
-func newVirtualShells(plan *planning.Service, art *artifacts.Service, sessions ports.SessionRepository, cat catalog.Catalog, events *vfs.RootEvents) *vfs.Service {
+func newVirtualShells(plan *planning.Service, art *artifacts.Service, sessions ports.SessionRepository, cat catalog.Catalog, events *vfs.RootEvents, prompts *repoagents.Service) *vfs.Service {
 	src := vfs.Sources{Tickets: plan, Structure: plan, Documents: plan, Comments: plan, Resources: plan, Artifacts: art, Writes: plan,
 		Designs: art, Sessions: sessions, Agents: cat.Agents, Settings: cat.Settings}
 	if cat.RepositoryArchitectures != nil {
 		src.Architectures = cat.RepositoryArchitectures
 	}
+	src.RepositoryPrompts = prompts
 	if cat.DesignSystems != nil {
 		src.DesignSystems, src.Repositories = cat.DesignSystems, cat.Projects
 		src.Drafts = cat.DesignSystems
@@ -778,6 +794,7 @@ func newOrchestrationService(
 	claudeBin ports.ManagedClaudeBin,
 	branchNames *workspaces.BranchNames,
 	baseBranches *workspaces.BaseBranches,
+	assignments *repoagents.Service,
 ) *orchestration.Service {
 	orchCatalog := orchestration.Catalog{
 		Projects:     cat.Projects,
@@ -794,6 +811,8 @@ func newOrchestrationService(
 	svc := orchestration.NewService(manager, broker, hub, sessions, orchCatalog, tickets, ws)
 	svc.UseBranchNames(branchNames)
 	svc.UseBaseBranches(baseBranches)
+	svc.UseAssignments(assignments)
+	svc.UseRepositoryPrompts(assignments)
 	if cat.DesignSystems != nil {
 		// Saves reach open pages on the project feed.
 		cat.DesignSystems.UseFeed(svc)

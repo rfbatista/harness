@@ -201,6 +201,9 @@ func refuse(code, reason string) ports.ShellAnswer {
 }
 
 func refuseReadOnly(rel string) ports.ShellAnswer {
+	if strings.HasPrefix(rel, architectureDir+"/") && strings.Contains(rel, "/agents/") {
+		return refuse("READ_ONLY", rel+" is read-only: the person writes a repository prompt in the web UI (the repository's Agents tab); to ask for a change, say so in your spec or a task comment")
+	}
 	if rel == architectureDir || strings.HasPrefix(rel, architectureDir+"/") {
 		return refuse("READ_ONLY", rel+" is read-only: the person edits the repository architecture in the web UI; to propose a change, write it in your spec")
 	}

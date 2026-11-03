@@ -1,6 +1,7 @@
 {
   "$comment": "How a session's row reads on the sessions page (ADR 0029): who it is, its mode and model, a status chip for uncommon states, when, and a detail under it. `now` is 2026-10-02T14:00:00Z; `ago` is minutes before now and `next_in` minutes after it. `row` names the session whose row is checked among `sessions`; `task_title` is the page's task (empty on the project's brainstorm page). `report` is a message the delegate sent, and `messages_loaded` says the task's messages have loaded: the server never has them, so view_test.go skips the cases where it is true, and the browser's view.test.js reads all. `unsandboxedAttr` is the attribute value x-bind sets: \"\" for an unsandboxed row, null for any other. Read by web/src/modules/sessions/presentation/view.test.js and internal/adapter/in/web/sessions/view_test.go.",
   "agent_names": { "go": "go-developer", "web": "web-developer" },
+  "repository_names": { "r1": "atlas-api" },
   "cases": [
     {
       "name": "the architect: its badge says the mode, no detail",
@@ -347,6 +348,22 @@
         "detail": null,
         "detailText": "go-developer · implement · sonnet · unsandboxed · running · 5m",
         "resumeLabel": "Resume go-developer", "unsandboxedAttr": ""
+      }
+    },
+    {
+      "name": "an agent unassigned from its repository: the row warns, an assigned one does not",
+      "task_title": "AI Helper to write text",
+      "sessions": [
+        { "id": "peer", "agent_id": "go", "status": "running", "ago": 5, "task": "AI Helper to write text", "repository_id": "r1", "agent_unassigned": true }
+      ],
+      "row": "peer",
+      "expect": {
+        "agent": "go-developer", "leadsWithTitle": false, "mode": "", "model": "", "badge": "",
+        "chip": null, "word": "running", "state": "running", "when": "5m",
+        "detail": null,
+        "detailText": "go-developer · running · 5m",
+        "resumeLabel": "Resume go-developer", "unsandboxedAttr": null,
+        "unassigned": "Unassigned from atlas-api"
       }
     }
   ]

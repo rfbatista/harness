@@ -41,7 +41,7 @@ test("overlaps are counted in the plural and an empty record has zeros", () => {
 
 test("each tab counts its entries; Orchestration counts routes and hand-offs, Output has none", () => {
   assert.deepEqual(tabCounts(record), {
-    instructions: 2, tools: 1, sandboxes: 3, orchestration: 4, hooks: 3, layers: 2, output: null,
+    instructions: 2, tools: 1, sandboxes: 3, orchestration: 4, hooks: 3, layers: 2, output: null, agents: null,
   });
 });
 

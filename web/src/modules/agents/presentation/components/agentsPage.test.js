@@ -160,3 +160,52 @@ test("an agent's detail carries its usage line, its servers' targets and the Sta
   await backend.instance.init();
   assert.equal(backend.instance.detail.usage, "", "the memory gateway sends none for backend, as an older server");
 });
+
+// ── Unassign and Assign again from the detail (ADR 0061) ─────────────
+
+import { memoryRepositoryAgents } from "../../../repositoryagents/infrastructure/memory-gateway.js";
+import { makeWorld as repositoryWorld } from "../../../repositoryagents/testing/fixtures.js";
+
+async function detailPage() {
+  const { gateway, server } = memoryCatalog(makeWorld());
+  const repos = memoryRepositoryAgents(repositoryWorld());
+  const el = document.createElement("main");
+  const route = fakeHistory("/agents/ux-designer");
+  const m = mount(agentsPage({ gateway, repositories: repos.gateway, history: route.history, location: route.location }), { el });
+  await m.instance.init();
+  // The catalog read says where the agent is assigned: the server's answer, as the repository world has it.
+  const tab = await repos.gateway.getRepositoryAgents("r1");
+  const row = tab.agents.find((a) => a.name === "reviewer");
+  m.instance.item = "reviewer";
+  m.instance.refresh = async () => {};
+  return { ...m, page: m.instance, repos, server, repo: { key: "p1/r1", id: "r1", name: "atlas-api", listVersion: tab.listVersion, unassigned: row.unassigned } };
+}
+
+test("Unassign from the detail unassigns the agent in that repository and says what continues", async () => {
+  const { page, repos, repo } = await detailPage();
+  await page.toggleRepository(repo);
+  const after = await repos.gateway.getRepositoryAgents("r1");
+  assert.equal(after.agents.find((a) => a.name === "reviewer").state, "unassigned");
+  assert.equal(page.notice, "Unassigned reviewer from atlas-api. 1 running session continues. It stays available in other repositories.");
+  assert.equal(page.repoBusy, "");
+});
+
+test("Assign again from the detail puts it back", async () => {
+  const { page, repos, repo } = await detailPage();
+  const tab = await repos.gateway.getRepositoryAgents("r1");
+  const gone = await repos.gateway.unassignAgent({ repositoryId: "r1", agent: "reviewer", listVersion: tab.listVersion });
+  await page.toggleRepository({ ...repo, unassigned: true, listVersion: gone.listVersion });
+  assert.equal((await repos.gateway.getRepositoryAgents("r1")).agents.find((a) => a.name === "reviewer").state, "assigned");
+  assert.equal(page.notice, "reviewer is assigned to atlas-api again.");
+});
+
+test("a stale click from the detail is refused with a banner, nothing is applied, and the person can repeat it", async () => {
+  const { page, repos, repo } = await detailPage();
+  const tab = await repos.gateway.getRepositoryAgents("r1");
+  await repos.gateway.unassignAgent({ repositoryId: "r1", agent: "tester", listVersion: tab.listVersion });
+  await page.toggleRepository(repo);
+  assert.ok(page.repoRefusal.text.startsWith("The agents of atlas-api changed while this page was open. Nothing was applied"), page.repoRefusal.text);
+  assert.equal((await repos.gateway.getRepositoryAgents("r1")).agents.find((a) => a.name === "reviewer").state, "assigned");
+  page.dismissRepoRefusal();
+  assert.equal(page.repoRefusal, null);
+});

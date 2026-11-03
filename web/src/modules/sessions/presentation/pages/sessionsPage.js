@@ -12,6 +12,7 @@ import { mergeMessages, newestAt, upsertMessage } from "../../domain/channel.js"
 import { applyChange, displayOrder, group, INITIAL_TERMINAL_SIZE, isTerminal, ofTask } from "../../domain/session.js";
 import { artifactTitle, taskDesignHref } from "../artifactView.js";
 import { announceMessage } from "../channelView.js";
+import { catalogChangeTouches } from "../../domain/agentPicker.js";
 import { agentLabel, delegateOption, rowTitle, startedBy, statusCheckView, summary, toDetailView, toGroupViews } from "../view.js";
 import { DEFAULT_TEXT_SIZE, nextTextSize, TEXT_SIZES } from "../screenPrefs.js";
 
@@ -55,6 +56,7 @@ export const sessionsPage = ({
   isPhone = () => globalThis.matchMedia?.("(width < 48rem)").matches ?? false,
 }) => () => {
   let unfollow = () => {};
+  let unfollowAgents = () => {};
   let unfollowChannel = null;
   let ticker = null;
 
@@ -138,6 +140,7 @@ export const sessionsPage = ({
         selectedId: this.selectedId,
         now: this.now,
         agentNames: this.agentNames,
+        repositoryNames: this.repositoryNames,
         taskTitle: this.taskTitle,
         fresh: new Set(this.freshIds),
       });
@@ -553,6 +556,12 @@ export const sessionsPage = ({
         (change) => this.apply(change),
         (status) => this.feedStatus(status),
       );
+      // An agent assigned or unassigned in a repository moves the sessions' unassigned warnings: read the list again.
+      unfollowAgents = gateway.followAgents?.({
+        onEvent: (data) => {
+          if (catalogChangeTouches(data, this.projectId) && "repository_agents_changed" in (data ?? {})) void this.reload();
+        },
+      }) ?? (() => {});
       this.followChannel();
       ticker = setInterval(() => (this.now = clock.now()), TICK_MS);
 
@@ -565,6 +574,7 @@ export const sessionsPage = ({
 
     destroy() {
       unfollow();
+      unfollowAgents();
       unfollowChannel?.();
       clearInterval(ticker);
     },

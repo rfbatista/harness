@@ -1,5 +1,5 @@
 import { assert, file, test } from "../../../shared/testing/test.js";
-import { allProjects, enabledInView, listedIn, projectChangeFiles, projectChoices, projectModes, projectsChanged, projectsToRead, projectsToSend, toggleProject } from "./enabledIn.js";
+import { allProjects, enabledInView, listedIn, projectChangeFiles, projectChoices, projectModes, projectsChanged, projectsToRead, projectsToSend, repositoriesOpen, toggleProject } from "./enabledIn.js";
 
 file("agents/domain/enabledIn");
 
@@ -101,4 +101,46 @@ test("Review change shows each project whose enabled agents change, with what wa
   assert.equal(files[1].empty, true);
   assert.ok(/left empty/.test(files[1].emptyNote));
   assert.equal(files[0].emptyNote, "");
+});
+
+// ── repositories (ADR 0061) ──────────────────────────────────────────
+
+const repo = (projectId, repositoryId, repositoryName, over = {}) => ({ projectId, repositoryId, repositoryName, unassigned: false, promptSet: false, listVersion: "l1", ...over });
+const withRepos = (a, repositories) => ({ ...a, repositories });
+
+test("each project row lists its repositories with the assignment, the prompt and the actions' names", () => {
+  const a = withRepos(catalog.agents[0], [
+    repo("p-harness", "r-web", "harness-web", { unassigned: true, promptSet: true }),
+    repo("p-harness", "r-api", "harness-api"),
+    repo("p-atlas", "r-atlas", "atlas-api", { promptSet: true }),
+  ]);
+  const v = enabledInView({ agents: [a] }, a, projects);
+  const harness = v.rows.find((r) => r.name === "harness");
+  assert.deepEqual(harness.repositories.map((r) => [r.name, r.badge, r.promptText]), [["harness-api", "Assigned", "Add prompt"], ["harness-web", "Unassigned", "Repository prompt set"]]);
+  assert.equal(harness.repositories[1].promptHref, "/projects/p-harness/repositories/r-web/architecture/agents?prompt=ux-designer");
+  assert.equal(harness.repositories[1].assignLabel, "Assign ux-designer again in harness-web");
+  assert.equal(harness.repositories[0].unassignLabel, "Unassign ux-designer from harness-api");
+  assert.equal(harness.repositories[1].listVersion, "l1");
+  assert.equal(v.rows.find((r) => r.name === "notes-site").repositories.length, 0);
+});
+
+test("a project's repositories collapse when all are assigned and open while one is not, unless the person chose", () => {
+  const all = withRepos(catalog.agents[0], [repo("p-harness", "r1", "a"), repo("p-harness", "r2", "b")]);
+  const row = enabledInView({ agents: [all] }, all, projects).rows.find((r) => r.name === "harness");
+  assert.equal(row.repositoriesSummary, "2 repositories · all assigned");
+  assert.equal(repositoriesOpen(row, undefined), false);
+  assert.equal(repositoriesOpen(row, true), true);
+  const some = withRepos(catalog.agents[0], [repo("p-harness", "r1", "a", { unassigned: true }), repo("p-harness", "r2", "b")]);
+  const open = enabledInView({ agents: [some] }, some, projects).rows.find((r) => r.name === "harness");
+  assert.equal(open.repositoriesSummary, "2 repositories · 1 unassigned");
+  assert.equal(repositoriesOpen(open, undefined), true);
+  assert.equal(repositoriesOpen(open, false), false);
+  assert.equal(enabledInView({ agents: [some] }, some, projects).rows.find((r) => r.name === "notes-site").hasRepositories, false);
+});
+
+test("the Enabled in heading counts the repositories the agent is unassigned in, only in projects that enable it", () => {
+  const a = withRepos(catalog.agents[0], [repo("p-harness", "r1", "a", { unassigned: true }), repo("p-atlas", "r2", "b", { unassigned: true }), repo("p-lab", "r3", "c", { unassigned: true })]);
+  assert.equal(enabledInView({ agents: [a] }, a, projects).heading, "Enabled in · 3 of 5 projects · Unassigned in 2 repositories");
+  const one = withRepos(catalog.agents[0], [repo("p-harness", "r1", "a", { unassigned: true })]);
+  assert.equal(enabledInView({ agents: [one] }, one, projects).heading, "Enabled in · 3 of 5 projects · Unassigned in 1 repository");
 });

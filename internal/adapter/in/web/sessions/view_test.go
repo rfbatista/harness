@@ -337,8 +337,9 @@ func TestRowMatchesTheSharedFixture(t *testing.T) {
 		t.Fatal(err)
 	}
 	var fixture struct {
-		AgentNames map[string]string `json:"agent_names"`
-		Cases      []struct {
+		AgentNames      map[string]string `json:"agent_names"`
+		RepositoryNames map[string]string `json:"repository_names"`
+		Cases           []struct {
 			Name           string `json:"name"`
 			TaskTitle      string `json:"task_title"`
 			MessagesLoaded bool   `json:"messages_loaded"`
@@ -357,6 +358,8 @@ func TestRowMatchesTheSharedFixture(t *testing.T) {
 				TicketID         *string              `json:"ticket_id"`
 				Task             string               `json:"task"`
 				Sandboxed        *bool                `json:"sandboxed"`
+				RepositoryID     string               `json:"repository_id"`
+				AgentUnassigned  bool                 `json:"agent_unassigned"`
 				Check            *struct {
 					State  domain.StatusCheckState `json:"state"`
 					Every  int                     `json:"every"`
@@ -380,6 +383,7 @@ func TestRowMatchesTheSharedFixture(t *testing.T) {
 				DetailText      string  `json:"detailText"`
 				ResumeLabel     string  `json:"resumeLabel"`
 				UnsandboxedAttr *string `json:"unsandboxedAttr"`
+				Unassigned      *string `json:"unassigned"`
 			} `json:"expect"`
 		} `json:"cases"`
 	}
@@ -397,7 +401,7 @@ func TestRowMatchesTheSharedFixture(t *testing.T) {
 		others := map[string]*domain.Session{}
 		for _, f := range c.Sessions {
 			s := &domain.Session{ID: f.ID, AgentID: f.AgentID, Role: f.Role, ParentSessionID: f.Parent, BroughtUnder: f.BroughtUnder, Mode: f.Mode, Model: f.Model,
-				Status: f.Status, PendingApprovals: f.PendingApprovals, Task: f.Task, TicketID: "t1", UpdatedAt: now.Add(-time.Duration(f.Ago) * time.Minute)}
+				Status: f.Status, PendingApprovals: f.PendingApprovals, Task: f.Task, TicketID: "t1", RepositoryID: f.RepositoryID, AgentUnassigned: f.AgentUnassigned, UpdatedAt: now.Add(-time.Duration(f.Ago) * time.Minute)}
 			if f.TicketID != nil {
 				s.TicketID = *f.TicketID
 			}
@@ -423,6 +427,9 @@ func TestRowMatchesTheSharedFixture(t *testing.T) {
 			got.Badge != want.Badge || got.Word != want.Word || got.State != want.State || got.When != want.When ||
 			got.DetailText != want.DetailText || got.ResumeLabel != want.ResumeLabel || got.Unsandboxed != (want.UnsandboxedAttr != nil) {
 			t.Errorf("%s: got %+v, want %+v", c.Name, got, want)
+		}
+		if want.Unassigned != nil && unassignedTitle(others[c.Row], fixture.RepositoryNames) != *want.Unassigned {
+			t.Errorf("%s: unassigned %q, want %q", c.Name, unassignedTitle(others[c.Row], fixture.RepositoryNames), *want.Unassigned)
 		}
 		if !reflect.DeepEqual(got.Chip, wantChip) || !reflect.DeepEqual(got.Detail, want.Detail) {
 			t.Errorf("%s: chip %+v detail %+v, want chip %+v detail %+v", c.Name, got.Chip, got.Detail, wantChip, want.Detail)

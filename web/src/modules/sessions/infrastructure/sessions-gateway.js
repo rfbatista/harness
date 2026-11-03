@@ -41,9 +41,9 @@ export function sessionsGateway(api, feed) {
       );
     },
 
-    async agentChoices(projectId) {
+    async agentChoices(projectId, repositoryId = "") {
       const [enabled, catalog, project] = await Promise.all([
-        api.get("/list_agents", { project_id: projectId }),
+        api.get("/list_agents", { project_id: projectId, repository_id: repositoryId || undefined }),
         api.get("/list_agents"),
         api.get("/get_project_agents", { project_id: projectId }).catch(() => null),
       ]);

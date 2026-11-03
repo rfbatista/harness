@@ -164,7 +164,7 @@ func TestRepositoryRowLinksToTheArchitecturePage(t *testing.T) {
 	})
 }
 
-// The seven tabs, a deep link per tab, and no page reload between tabs.
+// The eight tabs, a deep link per tab, and no page reload between tabs.
 func TestArchitectureTabsAndDeepLinks(t *testing.T) {
 	rig := newArchRig(t)
 	rig.api.seed(savedRecord())
@@ -172,11 +172,11 @@ func TestArchitectureTabsAndDeepLinks(t *testing.T) {
 	rig.run(t,
 		chromedp.EmulateViewport(1280, 900),
 		chromedp.Navigate(rig.url("")),
-		poll(`document.querySelectorAll('[role=tab]').length === 7`),
+		poll(`document.querySelectorAll('[role=tab]').length === 8`),
 		chromedp.Evaluate(tabsText, &tabs),
 		chromedp.Evaluate(selectedTab, &sel),
 	)
-	if want := "Instructions & rules|Tools|Sandboxes|Orchestration|Hooks|Layers|Output"; tabs != want {
+	if want := "Instructions & rules|Tools|Sandboxes|Orchestration|Hooks|Layers|Output|Agents"; tabs != want {
 		t.Fatalf("tabs = %q, want %q", tabs, want)
 	}
 	if sel != "Instructions & rules" {
@@ -194,7 +194,7 @@ func TestArchitectureTabsAndDeepLinks(t *testing.T) {
 		t.Fatalf("after Layers: selected %q, marker %q (a reload loses it)", sel, marker)
 	}
 	for url, want := range map[string]string{
-		"/layers": "Layers", "/rules": "Hooks", "/file": "Output", "/diagram": "Output", "/tools": "Tools",
+		"/layers": "Layers", "/rules": "Hooks", "/file": "Output", "/diagram": "Output", "/tools": "Tools", "/agents": "Agents",
 	} {
 		rig.run(t,
 			chromedp.Navigate(rig.url(url)),
@@ -420,11 +420,11 @@ func TestArchitectureDraftSurvivesSwitchingTabs(t *testing.T) {
 func TestArchitectureEveryTabOpensWithoutAScriptError(t *testing.T) {
 	rig := newArchRig(t)
 	rig.api.seed(savedRecord())
-	for _, path := range []string{"", "/tools", "/sandboxes", "/orchestration", "/rules", "/layers", "/file", "/diagram"} {
+	for _, path := range []string{"", "/tools", "/sandboxes", "/orchestration", "/rules", "/layers", "/file", "/diagram", "/agents"} {
 		rig.run(t,
 			chromedp.EmulateViewport(1280, 900),
 			chromedp.Navigate(rig.url(path)),
-			poll(`document.querySelectorAll('[role=tab]').length === 7`),
+			poll(`document.querySelectorAll('[role=tab]').length === 8`),
 			chromedp.Sleep(400*time.Millisecond),
 		)
 		if errs := rig.errs.all(); len(errs) > 0 {

@@ -465,6 +465,94 @@ test("a choice taken off the list while the form is open stays visible, marked, 
   assert.equal(instance.agentRefusal, null);
 });
 
+// ── the picker follows the repository (ADR 0061) ─────────────────────────
+
+const OPS = { id: "ops", name: "ops", description: "Runs things.", repositoryPromptSet: true };
+
+function repositoryPicker({ search = "" } = {}) {
+  const memory = memoryGateway({ projects: ["p1"], repositories: { r1: "p1", r2: "p1" }, branches: BRANCHES });
+  memory.setAgentChoices("p1", { mode: "selected", agents: [REVIEWER, DESIGNER], total: 5 });
+  memory.setAgentChoices("p1", { mode: "selected", agents: [REVIEWER, DESIGNER], total: 5, notOffered: [] }, "r1");
+  memory.setAgentChoices("p1", { mode: "selected", agents: [REVIEWER, OPS], total: 5, notOffered: [{ name: "designer", reason: "unassigned" }, { name: "qa", reason: "not_enabled" }] }, "r2");
+  const form = document.createElement("form");
+  form.dataset.defaultRepository = "r1";
+  form.dataset.agents = JSON.stringify([REVIEWER, DESIGNER]);
+  form.dataset.agentsTotal = "5";
+  form.dataset.agentsMode = "selected";
+  form.dataset.projectName = "atlas";
+  form.dataset.projectId = "p1";
+  form.dataset.repositories = JSON.stringify([{ id: "r1", name: "atlas-api" }, { id: "r2", name: "atlas-web" }]);
+  const mounted = mount(() => newSession({ gateway: memory.gateway, debounceMs: DEBOUNCE, location: { search } })("p1", "t1"), { el: form });
+  mounted.instance.init();
+  return { ...mounted, memory };
+}
+
+test("another repository offers its own assigned agents, and the missing ones wait behind a disclosure with their reason", async () => {
+  const { instance, set } = repositoryPicker();
+  await flush();
+  assert.deepEqual(instance.agentChoices.map((a) => a.name), ["reviewer", "designer"]);
+  assert.equal(instance.hasNotOffered, false);
+  set("repositoryId", "r2");
+  await flush();
+  assert.deepEqual(instance.agentChoices.map((a) => a.name), ["reviewer", "ops"]);
+  assert.equal(instance.agentCount, "2 assigned");
+  assert.equal(instance.agentHintLink.href, "/projects/p1/repositories/r2/architecture/agents");
+  assert.equal(instance.agentHintLink.text, "Manage agents in atlas-web");
+  assert.equal(instance.agentHint, "Showing the 2 agents assigned to atlas-web, of 3 enabled in atlas. 1 is unassigned here.");
+  assert.equal(instance.notOfferedTitle, "Not offered in atlas-web (2)");
+  assert.deepEqual(instance.notOfferedList.map((r) => [r.name, r.reason, r.href]), [
+    ["designer", "unassigned from atlas-web", "/projects/p1/repositories/r2/architecture/agents"],
+    ["qa", "not enabled in atlas", "/projects/p1/settings#settings-agents-enabled"],
+  ]);
+});
+
+test("a chosen agent the new repository does not offer is dropped, with the reason; the prompt typed is kept", async () => {
+  const { instance, set } = repositoryPicker();
+  await flush();
+  instance.agentId = "designer";
+  instance.prompt = "keep this";
+  set("repositoryId", "r2");
+  await flush();
+  assert.equal(instance.agentId, "");
+  assert.equal(instance.agentNote, "designer is not assigned to atlas-web, so the agent is back on Plain claude.");
+  assert.equal(instance.prompt, "keep this");
+  set("repositoryId", "r1");
+  await flush();
+  assert.equal(instance.agentNote, "", "the note goes with the next read");
+});
+
+test("an agent with a repository prompt is marked in the picker", async () => {
+  const { instance, set } = repositoryPicker();
+  set("repositoryId", "r2");
+  await flush();
+  assert.deepEqual(instance.agentOptions.map((a) => [a.name, a.description]), [["reviewer", "Reviews code."], ["ops", "Runs things. · repository prompt set"]]);
+});
+
+test("the picker follows repository_agents_changed for the chosen repository while the form is open", async () => {
+  const { instance, memory } = repositoryPicker();
+  await flush();
+  memory.setAgentChoices("p1", { mode: "selected", agents: [REVIEWER], total: 5, notOffered: [{ name: "designer", reason: "unassigned" }] }, "r1");
+  await flush();
+  assert.deepEqual(instance.agentChoices.map((a) => a.name), ["reviewer"]);
+  assert.equal(instance.notOfferedList.length, 1);
+});
+
+test("a start refused AGENT_NOT_ASSIGNED shows the banner, drops the agent and keeps the prompt", async () => {
+  const { instance, memory, dispatched } = repositoryPicker();
+  await flush();
+  instance.agentId = "designer";
+  instance.prompt = "keep this";
+  memory.setUnassigned("r1", ["designer"]);
+  await instance.submit();
+  assert.deepEqual(dispatched, [], "no session started");
+  assert.equal(instance.agentRefusal.code, "AGENT_NOT_ASSIGNED");
+  assert.equal(instance.agentRefusal.message, "The session was not started: designer is not assigned to r1.");
+  assert.equal(instance.agentRefusal.href, "/projects/p1/repositories/r1/architecture/agents");
+  assert.equal(instance.agentId, "");
+  assert.equal(instance.prompt, "keep this");
+  assert.equal(instance.error, null, "the refusal has its own banner");
+});
+
 // ── Fetch from origin ────────────────────────────────────────────────
 
 const remoteNames = (instance) => instance.remoteBranches.map((b) => b.name);

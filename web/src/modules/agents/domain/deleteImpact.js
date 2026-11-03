@@ -90,6 +90,14 @@ export function deleteImpact(catalog, kind, name) {
           items: listing.map((p) => ({ name: p.name, href: `/projects/${enc(p.id)}/settings` })),
           note: emptied.length ? `${emptied.map((p) => p.name).join(", ")} ${emptied.length === 1 ? "is" : "are"} left with no agent enabled: nothing can be picked there until an agent is added to its list.` : "",
         },
+        {
+          key: "prompts",
+          label: "Repository prompts that go with it",
+          items: (agent.repositories ?? [])
+            .filter((r) => r.promptSet)
+            .map((r) => ({ name: `${r.repositoryName} in ${enabledIn.find((e) => e.id === r.projectId)?.name ?? r.projectId}`, href: `/projects/${enc(r.projectId)}/repositories/${enc(r.repositoryId)}/architecture/agents?prompt=${enc(name)}` })),
+          note: "Each is the text added to this agent’s own prompt in that repository. It is deleted with the agent, and so are its unassigned entries.",
+        },
       ],
       total: everyAll.length ? `Projects that use All agents (${everyAll.map((p) => p.name).join(", ")}) just stop offering it.` : "",
     });

@@ -39,6 +39,8 @@ type projectDeps struct {
 	agents ports.AgentLister
 	arch   ports.ArchitectureMap
 	repos  ports.RepositoryLister
+	// placements says where agents are unassigned; nil leaves it out.
+	placements ports.AgentPlacements
 }
 
 // scopedRepos answers only for the project the caller is in.
@@ -67,7 +69,11 @@ func projectToolsFixture(t *testing.T, deps func(projectID string) projectDeps) 
 	}
 	d := deps(proj.ID)
 	tools := map[string]domain.Tool{}
-	for _, tl := range SessionTaskTools(plan, sessions, d.agents, d.arch, PeerStarter{Repositories: d.repos}, ArtifactTooling{}, nil, NotificationTooling{}) {
+	var opts []Option
+	if d.placements != nil {
+		opts = append(opts, WithAgentPlacements(d.placements))
+	}
+	for _, tl := range SessionTaskTools(plan, sessions, d.agents, d.arch, PeerStarter{Repositories: d.repos}, ArtifactTooling{}, nil, NotificationTooling{}, opts...) {
 		tools[tl.Name] = tl
 	}
 	return func(name string) (map[string]any, error) {
@@ -203,5 +209,40 @@ func TestProjectToolsWorkInASessionWithoutATask(t *testing.T) {
 		if _, err := tools[name].Handler(ctx, map[string]any{"status": "review", "prompt": "go"}); errs.Code(err) != "SESSION_HAS_NO_TASK" {
 			t.Errorf("%s without a task = %v, want SESSION_HAS_NO_TASK", name, err)
 		}
+	}
+}
+
+// fakePlacements says which repositories each agent is unassigned from.
+type fakePlacements map[string][]domain.RepositoryRef
+
+func (f fakePlacements) UnassignedFrom(context.Context, string) (map[string][]domain.RepositoryRef, error) {
+	return f, nil
+}
+func (f fakePlacements) AgentStates(context.Context, string) (map[string]domain.AgentRepositoryState, error) {
+	return nil, nil
+}
+func (f fakePlacements) DecorateCatalog(_ context.Context, v *domain.CatalogView) (*domain.CatalogView, error) {
+	return v, nil
+}
+
+func TestListAgents_NamesTheRepositoriesEachIsUnassignedFrom(t *testing.T) {
+	call := projectToolsFixture(t, func(string) projectDeps {
+		return projectDeps{
+			agents:     agentList{{ID: "a1", Name: "reviewer"}, {ID: "a2", Name: "designer"}},
+			placements: fakePlacements{"reviewer": {{RepositoryID: "r-web", RepositoryName: "web"}}},
+		}
+	})
+	out, err := call("list_agents")
+	if err != nil {
+		t.Fatal(err)
+	}
+	agents := out["agents"].([]any)
+	reviewer, designer := agents[0].(map[string]any), agents[1].(map[string]any)
+	from := reviewer["unassigned_from"].([]any)
+	if len(from) != 1 || from[0].(map[string]any)["repository_name"] != "web" || from[0].(map[string]any)["repository_id"] != "r-web" {
+		t.Errorf("reviewer unassigned_from = %v", from)
+	}
+	if got, ok := designer["unassigned_from"].([]any); !ok || len(got) != 0 {
+		t.Errorf("designer unassigned_from = %v, want an empty list", designer["unassigned_from"])
 	}
 }
