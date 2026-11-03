@@ -6,6 +6,7 @@ import (
 	"context"
 	"crypto/rand"
 	"encoding/hex"
+	"log/slog"
 	"slices"
 	"strings"
 	"sync"
@@ -295,7 +296,11 @@ var _ ports.AgentAssignments = (*Service)(nil)
 // cannot be read assigns every agent.
 func (s *Service) IsUnassigned(ctx context.Context, repositoryID, agent string) bool {
 	list, err := s.d.Lists.Get(ctx, repositoryID)
-	return err == nil && list.Has(agent)
+	if err != nil {
+		slog.Warn("repository agents: the unassigned list was not read; the agent counts as assigned", "repository", repositoryID, "agent", agent, "err", err)
+		return false
+	}
+	return list.Has(agent)
 }
 
 // CheckAssigned is nil when the agent is assigned to the repository, else

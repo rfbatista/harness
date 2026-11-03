@@ -718,7 +718,9 @@ func (s *Service) fillAssignment(ctx context.Context, sess *domain.Session, seen
 		seen[key] = unassigned
 	}
 	sess.AgentUnassigned = unassigned
-	if unassigned && sess.ResumeBlocked == "" {
+	// A running or headless session keeps the reason it cannot be resumed; an
+	// ended interactive one is blocked by its agent, whatever else is wrong.
+	if unassigned && sess.Interactive && sess.Status.IsTerminal() {
 		sess.ResumeBlocked = "AGENT_NOT_ASSIGNED"
 		sess.Resumable = false
 	}
