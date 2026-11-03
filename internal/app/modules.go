@@ -806,6 +806,7 @@ func newOrchestrationService(
 	svc.UseBranchNames(branchNames)
 	svc.UseBaseBranches(baseBranches)
 	svc.UseAssignments(assignments)
+	svc.UseRepositoryPrompts(assignments)
 	if cat.DesignSystems != nil {
 		// Saves reach open pages on the project feed.
 		cat.DesignSystems.UseFeed(svc)

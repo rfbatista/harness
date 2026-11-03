@@ -2,6 +2,7 @@ package orchestration
 
 import (
 	"context"
+	"strings"
 	"testing"
 
 	"operators-mcp/internal/domain"
@@ -130,5 +131,69 @@ func TestUnassigningLeavesARunningSessionAlone(t *testing.T) {
 	}
 	if got.Status.IsTerminal() || got.ResumeBlocked != "SESSION_ALREADY_RUNNING" {
 		t.Fatalf("running session = %v / %q", got.Status, got.ResumeBlocked)
+	}
+}
+
+// fakeSections is the repository prompts: what each agent's section holds in
+// each repository.
+type fakeSections map[string]string
+
+func (f fakeSections) RepositoryPromptSection(_ context.Context, repo, agent string) string {
+	return f[repo+"/"+agent]
+}
+
+var _ ports.RepositoryPromptSections = fakeSections{}
+
+func promptWorld(t *testing.T) (*Service, *fakeResolver, fakeSections) {
+	t.Helper()
+	svc, res := catalogWorld(t)
+	res.agents["a1"].Prompt = &domain.Prompt{Content: "You are the backend agent."}
+	sections := fakeSections{"r1/backend": "## Repository prompt: atlas-api\n\nRun make check."}
+	svc.UseRepositoryPrompts(sections)
+	return svc, res, sections
+}
+
+func appendedOf(spec ports.AgentSpec) string { return spec.AppendSystem }
+
+func TestSessionStart_AppendsTheRepositoryPromptRightAfterTheAgentsOwn(t *testing.T) {
+	svc, _, _ := promptWorld(t)
+	_, launch := startInteractive(t, svc, InteractiveRequest{ProjectID: "p1", RepositoryID: "r1", TicketID: "tk1", AgentID: "a1"})
+	got := appendedOf(launch.Spec)
+	want := "You are the backend agent.\n\n## Repository prompt: atlas-api\n\nRun make check."
+	if !strings.HasPrefix(got, want) {
+		t.Fatalf("appended system prompt = %q, want it to start with %q", got, want)
+	}
+}
+
+func TestSessionStart_AddsNothingForNoAgentOrAnAgentWithNoRepositoryPrompt(t *testing.T) {
+	svc, _, sections := promptWorld(t)
+	_, plain := startInteractive(t, svc, InteractiveRequest{ProjectID: "p1", RepositoryID: "r1", TicketID: "tk1"})
+	if strings.Contains(appendedOf(plain.Spec), "Repository prompt") {
+		t.Fatalf("a plain session got a repository section: %q", appendedOf(plain.Spec))
+	}
+	delete(sections, "r1/backend")
+	_, empty := startInteractive(t, svc, InteractiveRequest{ProjectID: "p1", RepositoryID: "r1", TicketID: "tk1", AgentID: "a1"})
+	if strings.Contains(appendedOf(empty.Spec), "Repository prompt") || !strings.HasPrefix(appendedOf(empty.Spec), "You are the backend agent.") {
+		t.Fatalf("appended = %q", appendedOf(empty.Spec))
+	}
+}
+
+func TestSessionResume_UsesTheRepositoryPromptCurrentAtThatMomentAndARunningSessionKeepsItsOwn(t *testing.T) {
+	svc, _, sections := promptWorld(t)
+	ctx := t.Context()
+	sess, started := startInteractive(t, svc, InteractiveRequest{ProjectID: "p1", RepositoryID: "r1", TicketID: "tk1", AgentID: "a1"})
+	if _, err := svc.EndInteractive(ctx, sess.ID, 0, false); err != nil {
+		t.Fatal(err)
+	}
+	sections["r1/backend"] = "## Repository prompt: atlas-api\n\nNew text."
+	_, spec, err := svc.ResumeInteractive(ctx, ports.ResumeRequest{SessionID: sess.ID})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := appendedOf(spec); !strings.Contains(got, "New text.") || strings.Contains(got, "Run make check.") {
+		t.Fatalf("resumed appended = %q", got)
+	}
+	if got := appendedOf(started.Spec); !strings.Contains(got, "Run make check.") || strings.Contains(got, "New text.") {
+		t.Fatalf("the started session's spec changed: %q", got)
 	}
 }

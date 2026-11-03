@@ -421,3 +421,16 @@ func TestRepositoryPrompt_ASaveAnnouncesTheAgent(t *testing.T) {
 		t.Fatal("no event")
 	}
 }
+
+func TestRepositoryPrompt_TheTextASessionAppendsIsTheTextThePreviewShows(t *testing.T) {
+	f := newRepoAgentsFixture(t)
+	r := f.repository(f.project("atlas"), "atlas-api")
+	f.save(r, "alpha", "Use the gateway.\n", "", 200)
+	preview := f.post("/api/preview_repository_prompt", map[string]any{"repository_id": r, "agent": "alpha", "content": "Use the gateway.\n"}, 200)
+	if got := f.svc.RepositoryPromptSection(context.Background(), r, "alpha"); got == "" || got != preview["repository_section"] {
+		t.Fatalf("session section = %q, preview = %q", got, preview["repository_section"])
+	}
+	if got := f.svc.RepositoryPromptSection(context.Background(), r, "beta"); got != "" {
+		t.Fatalf("an agent with no prompt got %q", got)
+	}
+}

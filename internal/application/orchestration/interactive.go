@@ -254,6 +254,7 @@ func (s *Service) ResumeInteractive(ctx context.Context, req ports.ResumeRequest
 		}
 		return nil, ports.AgentSpec{}, err
 	}
+	s.addRepositoryPrompt(ctx, &ag, sess.RepositoryID)
 	if err := s.ready(ctx); err != nil {
 		if ag.cleanup != nil {
 			ag.cleanup()
@@ -720,6 +721,21 @@ func (s *Service) fillAssignment(ctx context.Context, sess *domain.Session, seen
 	if unassigned && sess.ResumeBlocked == "" {
 		sess.ResumeBlocked = "AGENT_NOT_ASSIGNED"
 		sess.Resumable = false
+	}
+}
+
+// UseRepositoryPrompts makes a start or a resume of an agent append the
+// repository's prompt after the agent's own (ADR 0061).
+func (s *Service) UseRepositoryPrompts(p ports.RepositoryPromptSections) { s.repoPrompts = p }
+
+// addRepositoryPrompt appends the agent's repository section to the prompt the
+// session starts with. A session with no agent gets nothing.
+func (s *Service) addRepositoryPrompt(ctx context.Context, ag *resolvedAgent, repositoryID string) {
+	if s.repoPrompts == nil || ag.agent == nil || repositoryID == "" {
+		return
+	}
+	if section := s.repoPrompts.RepositoryPromptSection(ctx, repositoryID, ag.agent.Name); section != "" {
+		ag.appendSystem = appendSection(ag.appendSystem, section)
 	}
 }
 

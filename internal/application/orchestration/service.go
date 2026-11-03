@@ -111,6 +111,8 @@ type Service struct {
 	// assignments says which agents a repository assigns (ADR 0061); nil
 	// assigns every agent everywhere.
 	assignments ports.AgentAssignments
+	// repoPrompts gives the text an agent adds in a repository; nil adds none.
+	repoPrompts ports.RepositoryPromptSections
 
 	DefaultEnv []string // test-only: extra env for spawned sessions
 
@@ -509,6 +511,7 @@ func (s *Service) prepare(ctx context.Context, in prepareInput) (*prepared, erro
 		}
 		return nil, err
 	}
+	s.addRepositoryPrompt(ctx, &ag, in.RepositoryID)
 
 	if err := s.ready(ctx); err != nil {
 		if ag.cleanup != nil {

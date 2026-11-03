@@ -145,3 +145,19 @@ func (s *Service) agentPrompt(ctx context.Context, name string) string {
 	}
 	return ""
 }
+
+var _ ports.RepositoryPromptSections = (*Service)(nil)
+
+// RepositoryPromptSection is the text a session of the agent in the repository
+// appends after the agent's own prompt, built by domain.RepositoryPromptSection.
+func (s *Service) RepositoryPromptSection(ctx context.Context, repositoryID, agent string) string {
+	repo := s.d.Repositories.Get(ctx, repositoryID)
+	if repo == nil {
+		return ""
+	}
+	p, err := s.d.Prompts.Get(ctx, repositoryID, agent)
+	if err != nil {
+		return ""
+	}
+	return domain.RepositoryPromptSection(repo.Name, p.Content)
+}

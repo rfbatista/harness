@@ -65,3 +65,13 @@ type RepositoryPrompts interface {
 	// saved or not, and stores nothing.
 	PreviewRepositoryPrompt(ctx context.Context, repositoryID, agent, content string) (*domain.RepositoryPromptPreview, error)
 }
+
+// RepositoryPromptSections is what a session start and resume read: the text
+// to append after an agent's own prompt in a repository. *repoagents.Service
+// satisfies it.
+type RepositoryPromptSections interface {
+	// RepositoryPromptSection is the heading and the repository prompt of the
+	// agent in the repository, "" when there is none. A prompt that cannot be
+	// read is none: a session does not fail on it.
+	RepositoryPromptSection(ctx context.Context, repositoryID, agent string) string
+}
