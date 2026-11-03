@@ -206,14 +206,14 @@ func SessionTaskTools(planningSvc ports.Planning, sessions ports.SessionReposito
 	}
 	tools = append(tools, sessionChannelTools(planningSvc, sessions, channel)...)
 	tools = append(tools, sessionMergeTools(planningSvc, sessions, channel, start.Merger)...)
-	tools = append(tools, sessionProjectTools(sessions, agents, arch, start.Repositories)...)
-	tools = append(tools, sessionTasksTools(planningSvc, sessions)...)
-	tools = append(tools, sessionNotificationTools(sessions, notes)...)
-	tools = append(tools, sessionArtifactTools(planningSvc, sessions, artifacts)...)
 	var o options
 	for _, opt := range opts {
 		opt(&o)
 	}
+	tools = append(tools, sessionProjectTools(sessions, agents, arch, start.Repositories, o.placements)...)
+	tools = append(tools, sessionTasksTools(planningSvc, sessions)...)
+	tools = append(tools, sessionNotificationTools(sessions, notes)...)
+	tools = append(tools, sessionArtifactTools(planningSvc, sessions, artifacts)...)
 	if o.proposals != nil {
 		tools = append(tools, sessionDesignProposalTools(sessions, o.proposals)...)
 	}

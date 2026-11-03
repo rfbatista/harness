@@ -11,7 +11,7 @@ import (
 // repositories (its applications), how the code is carved into bounded
 // contexts and zones, and the agents it can hand work to. They are read-only
 // and, like the task tools, scoped by the session id, never by arguments.
-func sessionProjectTools(sessions ports.SessionRepository, agents ports.AgentLister, arch ports.ArchitectureMap, repos ports.RepositoryLister) []domain.Tool {
+func sessionProjectTools(sessions ports.SessionRepository, agents ports.AgentLister, arch ports.ArchitectureMap, repos ports.RepositoryLister, placements ports.AgentPlacements) []domain.Tool {
 	noArgs := schemaFromJSON(`{"type":"object","properties":{}}`)
 	return []domain.Tool{
 		{
@@ -65,11 +65,13 @@ func sessionProjectTools(sessions ports.SessionRepository, agents ports.AgentLis
 		{
 			Name: "list_agents",
 			Description: "List the agents a session can run as — name, what each is for, and its skills. " +
+				"Each also names the repositories it is unassigned from (unassigned_from): start_task_session is refused there with AGENT_NOT_ASSIGNED, and only the person can assign it again. " +
 				"Pick one by its description and pass its name as start_task_session's agent.",
 			InputSchema: noArgs,
 			Source:      "code",
 			Handler: func(ctx context.Context, args map[string]any) (any, error) {
-				if _, err := resolveProjectScope(ctx, sessions); err != nil {
+				sess, err := resolveProjectScope(ctx, sessions)
+				if err != nil {
 					return nil, err
 				}
 				if agents == nil {
@@ -79,18 +81,28 @@ func sessionProjectTools(sessions ports.SessionRepository, agents ports.AgentLis
 				if err != nil {
 					return nil, err
 				}
+				var unassigned map[string][]domain.RepositoryRef
+				if placements != nil {
+					if unassigned, err = placements.UnassignedFrom(ctx, sess.ProjectID); err != nil {
+						return nil, err
+					}
+				}
 				out := make([]map[string]any, 0, len(list))
 				for _, a := range list {
 					skills := make([]string, 0, len(a.Skills))
 					for _, sk := range a.Skills {
 						skills = append(skills, sk.Name)
 					}
-					out = append(out, map[string]any{
+					entry := map[string]any{
 						"id":          a.ID,
 						"name":        a.Name,
 						"description": a.Description,
 						"skills":      skills,
-					})
+					}
+					if placements != nil {
+						entry["unassigned_from"] = append([]domain.RepositoryRef{}, unassigned[a.Name]...)
+					}
+					out = append(out, entry)
 				}
 				return map[string]any{"count": len(out), "agents": out}, nil
 			},

@@ -139,3 +139,16 @@ func RepositoryPromptSection(repositoryName, content string) string {
 	}
 	return RepositoryPromptHeading(repositoryName) + "\n\n" + content
 }
+
+// RepositoryRef names a repository.
+type RepositoryRef struct {
+	RepositoryID   string `json:"repository_id"`
+	RepositoryName string `json:"repository_name"`
+}
+
+// AgentRepositoryState is an agent's standing in one repository: its state
+// (assigned, unassigned or not enabled) and whether a repository prompt is set.
+type AgentRepositoryState struct {
+	State     string
+	PromptSet bool
+}

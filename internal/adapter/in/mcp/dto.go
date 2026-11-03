@@ -147,6 +147,12 @@ type AgentDTO struct {
 	Prompt       *PromptDTO      `json:"prompt,omitempty"`
 	Skills       []*SkillDTO     `json:"skills,omitempty"`
 	MCPServers   []*MCPServerDTO `json:"mcp_servers,omitempty"`
+	// UnassignedFrom names the repositories the agent is unassigned from
+	// (ADR 0061); list_agents sets it, an empty list included, and other
+	// reads leave it out.
+	UnassignedFrom *[]domain.RepositoryRef `json:"unassigned_from,omitempty"`
+	// RepositoryPromptSet is only on list_agents with a repository.
+	RepositoryPromptSet *bool `json:"repository_prompt_set,omitempty"`
 }
 
 // AgentToDTO converts a domain Agent to API DTO.

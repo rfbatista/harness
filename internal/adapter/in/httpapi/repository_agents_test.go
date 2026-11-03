@@ -1,6 +1,7 @@
 package httpapi
 
 import (
+	"slices"
 	"context"
 	"errors"
 	"net/http"
@@ -42,7 +43,7 @@ func newRepoAgentsFixture(t *testing.T) *repoAgentsFixture {
 		Sessions:     sqlite.NewSessionRepository(db),
 		Prompts:      sqlite.NewRepositoryPromptRepository(db),
 	})
-	f.router = NewRouter(NewHandler(Services{Catalog: cat, RepositoryAgents: svc, ProjectFeed: app.Projects}))
+	f.router = NewRouter(NewHandler(Services{Catalog: cat, RepositoryAgents: svc, ProjectFeed: app.Projects, Projects: app.Projects, Agents: app.Agents}))
 	f.write("agents.json", handWrittenAgents)
 	for _, n := range []string{"alpha", "beta"} {
 		f.post("/api/save_catalog_agent", map[string]any{"base_versions": f.versions(), "agent": map[string]any{"name": n, "description": n + " agent"}}, 200)
@@ -432,5 +433,97 @@ func TestRepositoryPrompt_TheTextASessionAppendsIsTheTextThePreviewShows(t *test
 	}
 	if got := f.svc.RepositoryPromptSection(context.Background(), r, "beta"); got != "" {
 		t.Fatalf("an agent with no prompt got %q", got)
+	}
+}
+
+// listAgents creates the agents the list reads and answers GET /api/list_agents.
+func (f *repoAgentsFixture) listAgents(query string) map[string]any {
+	return f.get("/api/list_agents?"+query, 200)
+}
+
+func TestListAgents_EachAgentSaysWhereItIsUnassigned(t *testing.T) {
+	f := newRepoAgentsFixture(t)
+	p := f.project("atlas")
+	api, web := f.repository(p, "atlas-api"), f.repository(p, "atlas-web")
+	f.post("/api/create_agent", map[string]any{"name": "alpha"}, 200)
+	f.post("/api/create_agent", map[string]any{"name": "beta"}, 200)
+	f.post("/api/unassign_agent", map[string]any{"repository_id": api, "agent": "alpha", "list_version": ""}, 200)
+	f.post("/api/unassign_agent", map[string]any{"repository_id": web, "agent": "alpha", "list_version": ""}, 200)
+
+	out := f.listAgents("project_id=" + p)
+	alpha, beta := byName(t, out["agents"], "alpha"), byName(t, out["agents"], "beta")
+	var got []string
+	for _, r := range list(alpha["unassigned_from"]) {
+		m := r.(map[string]any)
+		got = append(got, m["repository_id"].(string)+"="+m["repository_name"].(string))
+	}
+	slices.Sort(got)
+	want := []string{api + "=atlas-api", web + "=atlas-web"}
+	slices.Sort(want)
+	if !reflect.DeepEqual(got, want) {
+		t.Fatalf("alpha unassigned_from = %v, want %v", got, want)
+	}
+	if l, ok := beta["unassigned_from"].([]any); !ok || len(l) != 0 {
+		t.Fatalf("beta unassigned_from = %v, want an empty list", beta["unassigned_from"])
+	}
+	if _, ok := alpha["repository_prompt_set"]; ok {
+		t.Fatalf("repository_prompt_set without a repository: %v", alpha)
+	}
+	if _, ok := out["not_offered"]; ok {
+		t.Fatalf("not_offered without a repository: %v", out["not_offered"])
+	}
+}
+
+func TestListAgents_WithARepositoryHoldsOnlyTheAssignedAgentsAndNamesTheRest(t *testing.T) {
+	f := newRepoAgentsFixture(t)
+	p := f.project("atlas")
+	r := f.repository(p, "atlas-api")
+	for _, n := range []string{"alpha", "beta", "zeta"} {
+		f.post("/api/create_agent", map[string]any{"name": n}, 200)
+	}
+	f.post("/api/set_project_agents", map[string]any{"project_id": p, "mode": "selected", "agents": []string{"alpha", "beta"}}, 200)
+	f.post("/api/unassign_agent", map[string]any{"repository_id": r, "agent": "beta", "list_version": ""}, 200)
+	f.save(r, "alpha", "Run make check.", "", 200)
+
+	out := f.listAgents("project_id=" + p + "&repository_id=" + r)
+	if len(list(out["agents"])) != 1 {
+		t.Fatalf("agents = %v", out["agents"])
+	}
+	if alpha := byName(t, out["agents"], "alpha"); alpha["repository_prompt_set"] != true {
+		t.Fatalf("alpha = %v", alpha)
+	}
+	reasons := map[string]string{}
+	for _, n := range list(out["not_offered"]) {
+		m := n.(map[string]any)
+		reasons[m["name"].(string)] = m["reason"].(string)
+	}
+	if !reflect.DeepEqual(reasons, map[string]string{"beta": "unassigned", "zeta": "not_enabled"}) {
+		t.Fatalf("not_offered = %v", reasons)
+	}
+	f.get("/api/list_agents?repository_id=nope", 404)
+}
+
+func TestAgentCatalog_EachAgentListsItsRepositoriesInTheProjectsThatEnableIt(t *testing.T) {
+	f := newRepoAgentsFixture(t)
+	atlas, other := f.project("atlas"), f.project("other")
+	api, web := f.repository(atlas, "atlas-api"), f.repository(atlas, "atlas-web")
+	f.repository(other, "other-repo")
+	f.post("/api/set_project_agents", map[string]any{"project_id": other, "mode": "selected", "agents": []string{"beta"}}, 200)
+	v := f.post("/api/unassign_agent", map[string]any{"repository_id": api, "agent": "alpha", "list_version": ""}, 200)["list_version"]
+	f.save(web, "alpha", "text", "", 200)
+
+	rows := map[string]map[string]any{}
+	for _, r := range list(byName(t, f.get("/api/get_agent_catalog", 200)["agents"], "alpha")["repositories"]) {
+		m := r.(map[string]any)
+		rows[m["repository_id"].(string)] = m
+	}
+	if len(rows) != 2 {
+		t.Fatalf("alpha repositories = %v, want the two of atlas only", rows)
+	}
+	if rows[api]["unassigned"] != true || rows[api]["prompt_set"] != false || rows[api]["list_version"] != v || rows[api]["project_id"] != atlas || rows[api]["repository_name"] != "atlas-api" {
+		t.Fatalf("api = %v", rows[api])
+	}
+	if rows[web]["unassigned"] != false || rows[web]["prompt_set"] != true {
+		t.Fatalf("web = %v", rows[web])
 	}
 }

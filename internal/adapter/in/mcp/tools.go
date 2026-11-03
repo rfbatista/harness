@@ -179,6 +179,16 @@ type RemovePathFromZoneOut struct {
 // ListAgentsOut is the output for list_agents.
 type ListAgentsOut struct {
 	Agents []*AgentDTO `json:"agents"`
+	// NotOffered are the catalog agents a repository does not assign, with
+	// why; only with a repository.
+	NotOffered []NotOfferedAgent `json:"not_offered,omitempty"`
+}
+
+// NotOfferedAgent is a catalog agent a repository does not offer: its reason
+// is "unassigned" or "not_enabled".
+type NotOfferedAgent struct {
+	Name   string `json:"name"`
+	Reason string `json:"reason"`
 }
 
 // GetAgentIn is the input for get_agent.

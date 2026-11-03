@@ -473,27 +473,61 @@ func (h *Handler) handleRemovePathFromZone(c echo.Context) error {
 // --- Agent handlers ---
 
 func (h *Handler) handleListAgents(c echo.Context) error {
-	agents, err := h.agents.ListAgents(c.Request().Context())
+	ctx := c.Request().Context()
+	agents, err := h.agents.ListAgents(ctx)
 	if err != nil {
 		return err
 	}
-	// With a project_id, only the agents the project enables (ADR 0038).
+	// With a project_id, only the agents the project enables (ADR 0038); with a
+	// repository_id, only those it assigns (ADR 0061).
 	var project *domain.Project
 	if id := c.QueryParam("project_id"); id != "" {
 		if h.projects == nil {
 			return echo.NewHTTPError(http.StatusServiceUnavailable, "projects not configured")
 		}
-		if project, err = h.projects.GetProject(c.Request().Context(), id); err != nil {
+		if project, err = h.projects.GetProject(ctx, id); err != nil {
+			return err
+		}
+	}
+	repositoryID := c.QueryParam("repository_id")
+	var states map[string]domain.AgentRepositoryState
+	if repositoryID != "" && h.repoAgents != nil {
+		if states, err = h.repoAgents.AgentStates(ctx, repositoryID); err != nil {
+			return err
+		}
+	}
+	var unassignedFrom map[string][]domain.RepositoryRef
+	if h.repoAgents != nil {
+		projectID := ""
+		if project != nil {
+			projectID = project.ID
+		}
+		if unassignedFrom, err = h.repoAgents.UnassignedFrom(ctx, projectID); err != nil {
 			return err
 		}
 	}
 	out := make([]*mcp.AgentDTO, 0, len(agents))
+	var notOffered []mcp.NotOfferedAgent
 	for _, a := range agents {
-		if project == nil || project.AgentEnabled(a.Name) {
-			out = append(out, mcp.AgentToDTO(a))
+		if st, ok := states[a.Name]; ok && st.State != domain.AgentAssigned {
+			notOffered = append(notOffered, mcp.NotOfferedAgent{Name: a.Name, Reason: st.State})
+			continue
 		}
+		if project != nil && !project.AgentEnabled(a.Name) {
+			continue
+		}
+		dto := mcp.AgentToDTO(a)
+		if h.repoAgents != nil {
+			refs := append([]domain.RepositoryRef{}, unassignedFrom[a.Name]...)
+			dto.UnassignedFrom = &refs
+		}
+		if states != nil {
+			set := states[a.Name].PromptSet
+			dto.RepositoryPromptSet = &set
+		}
+		out = append(out, dto)
 	}
-	return c.JSON(http.StatusOK, mcp.ListAgentsOut{Agents: out})
+	return c.JSON(http.StatusOK, mcp.ListAgentsOut{Agents: out, NotOffered: notOffered})
 }
 
 func (h *Handler) handleGetAgent(c echo.Context) error {

@@ -26,6 +26,11 @@ func (h *Handler) handleGetAgentCatalog(c echo.Context) error {
 	if err != nil {
 		return err
 	}
+	if h.repoAgents != nil {
+		if view, err = h.repoAgents.DecorateCatalog(c.Request().Context(), view); err != nil {
+			return err
+		}
+	}
 	return c.JSON(http.StatusOK, view)
 }
 

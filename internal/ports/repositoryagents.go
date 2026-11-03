@@ -23,6 +23,7 @@ type RepositoryAgentListStore interface {
 // REPOSITORY_AGENTS_CHANGED.
 type RepositoryAgents interface {
 	RepositoryPrompts
+	AgentPlacements
 	GetRepositoryAgents(ctx context.Context, repositoryID string) (*domain.RepositoryAgentsView, error)
 	UnassignAgent(ctx context.Context, repositoryID, agent, listVersion string) (*domain.UnassignedAnswer, error)
 	AssignAgentAgain(ctx context.Context, repositoryID, agent, listVersion string) (*domain.RepositoryAgentsView, error)
@@ -74,4 +75,16 @@ type RepositoryPromptSections interface {
 	// agent in the repository, "" when there is none. A prompt that cannot be
 	// read is none: a session does not fail on it.
 	RepositoryPromptSection(ctx context.Context, repositoryID, agent string) string
+}
+
+// AgentPlacements says where agents are assigned, for the reads that list
+// agents. *repoagents.Service satisfies it.
+type AgentPlacements interface {
+	// UnassignedFrom names, for each agent, the repositories of the project it
+	// is unassigned from; an empty projectID reads every project.
+	UnassignedFrom(ctx context.Context, projectID string) (map[string][]domain.RepositoryRef, error)
+	// AgentStates is every catalog agent's standing in the repository.
+	AgentStates(ctx context.Context, repositoryID string) (map[string]domain.AgentRepositoryState, error)
+	// DecorateCatalog returns the catalog view with each agent's repositories.
+	DecorateCatalog(ctx context.Context, view *domain.CatalogView) (*domain.CatalogView, error)
 }
