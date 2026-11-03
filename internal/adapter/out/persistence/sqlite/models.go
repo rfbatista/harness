@@ -680,3 +680,15 @@ type RepositoryAgentListModel struct {
 
 // TableName overrides the table name.
 func (RepositoryAgentListModel) TableName() string { return "repository_unassigned_agents" }
+
+// RepositoryPromptModel is one agent's prompt in one repository
+// (domain.RepositoryPrompt).
+type RepositoryPromptModel struct {
+	RepositoryID string `gorm:"column:repository_id;primaryKey"`
+	Agent        string `gorm:"column:agent;primaryKey"`
+	Content      string `gorm:"column:content"`
+	Version      string `gorm:"column:version"`
+}
+
+// TableName overrides the table name.
+func (RepositoryPromptModel) TableName() string { return "repository_agent_prompts" }

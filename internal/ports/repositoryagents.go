@@ -22,6 +22,7 @@ type RepositoryAgentListStore interface {
 // satisfies it. Errors: REPOSITORY_NOT_FOUND, AGENT_NOT_FOUND,
 // REPOSITORY_AGENTS_CHANGED.
 type RepositoryAgents interface {
+	RepositoryPrompts
 	GetRepositoryAgents(ctx context.Context, repositoryID string) (*domain.RepositoryAgentsView, error)
 	UnassignAgent(ctx context.Context, repositoryID, agent, listVersion string) (*domain.UnassignedAnswer, error)
 	AssignAgentAgain(ctx context.Context, repositoryID, agent, listVersion string) (*domain.RepositoryAgentsView, error)
@@ -39,4 +40,28 @@ type AgentAssignments interface {
 	CheckAssigned(ctx context.Context, repositoryID, agent string) error
 	// IsUnassigned says whether the repository's list holds the agent.
 	IsUnassigned(ctx context.Context, repositoryID, agent string) bool
+}
+
+// RepositoryPromptStore keeps the repository prompts (driven, ADR 0061).
+type RepositoryPromptStore interface {
+	// Get is the entry, or one with empty content and version "" when none.
+	Get(ctx context.Context, repositoryID, agent string) (*domain.RepositoryPrompt, error)
+	// ListByRepository is the repository's entries that are set.
+	ListByRepository(ctx context.Context, repositoryID string) ([]*domain.RepositoryPrompt, error)
+	// Put creates or replaces the entry.
+	Put(ctx context.Context, p *domain.RepositoryPrompt) error
+	// Delete removes the entry; none is not an error.
+	Delete(ctx context.Context, repositoryID, agent string) error
+}
+
+// RepositoryPrompts writes and reads the repository prompts. *repoagents.Service
+// satisfies it. Errors: REPOSITORY_NOT_FOUND, AGENT_NOT_FOUND,
+// REPOSITORY_PROMPT_CHANGED, REPOSITORY_PROMPT_TOO_LONG.
+type RepositoryPrompts interface {
+	GetRepositoryPrompt(ctx context.Context, repositoryID, agent string) (*domain.RepositoryPromptAnswer, error)
+	// SaveRepositoryPrompt stores content; blank content removes the entry.
+	SaveRepositoryPrompt(ctx context.Context, repositoryID, agent, content, version string) (*domain.RepositoryPromptAnswer, error)
+	// PreviewRepositoryPrompt builds what the agent would receive for content,
+	// saved or not, and stores nothing.
+	PreviewRepositoryPrompt(ctx context.Context, repositoryID, agent, content string) (*domain.RepositoryPromptPreview, error)
 }

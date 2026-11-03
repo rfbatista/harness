@@ -259,3 +259,53 @@ func (h *Handler) handleAssignAllAgentsAgain(c echo.Context) error {
 	}
 	return c.JSON(http.StatusOK, out)
 }
+
+func (h *Handler) handleGetRepositoryPrompt(c echo.Context) error {
+	if err := h.repoAgentsOrUnavailable(); err != nil {
+		return err
+	}
+	out, err := h.repoAgents.GetRepositoryPrompt(c.Request().Context(), c.QueryParam("repository_id"), c.QueryParam("agent"))
+	if err != nil {
+		return err
+	}
+	return c.JSON(http.StatusOK, out)
+}
+
+// repositoryPromptIn is the body of save_repository_prompt and
+// preview_repository_prompt.
+type repositoryPromptIn struct {
+	RepositoryID string `json:"repository_id"`
+	Agent        string `json:"agent"`
+	Content      string `json:"content"`
+	Version      string `json:"version"`
+}
+
+func (h *Handler) handleSaveRepositoryPrompt(c echo.Context) error {
+	if err := h.repoAgentsOrUnavailable(); err != nil {
+		return err
+	}
+	var in repositoryPromptIn
+	if err := bindJSON(c, &in); err != nil {
+		return err
+	}
+	out, err := h.repoAgents.SaveRepositoryPrompt(c.Request().Context(), in.RepositoryID, in.Agent, in.Content, in.Version)
+	if err != nil {
+		return err
+	}
+	return c.JSON(http.StatusOK, out)
+}
+
+func (h *Handler) handlePreviewRepositoryPrompt(c echo.Context) error {
+	if err := h.repoAgentsOrUnavailable(); err != nil {
+		return err
+	}
+	var in repositoryPromptIn
+	if err := bindJSON(c, &in); err != nil {
+		return err
+	}
+	out, err := h.repoAgents.PreviewRepositoryPrompt(c.Request().Context(), in.RepositoryID, in.Agent, in.Content)
+	if err != nil {
+		return err
+	}
+	return c.JSON(http.StatusOK, out)
+}

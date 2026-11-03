@@ -1,5 +1,7 @@
 package domain
 
+import "strings"
+
 // RepositoryAgentList is a repository's list of unassigned agents (ADR 0061),
 // named by catalog name, with the stored version that guards a write. The
 // list is empty by default: every enabled agent is assigned.
@@ -86,4 +88,54 @@ type RepositoryAgentsChanged struct {
 type UnassignedAnswer struct {
 	RepositoryAgentsView
 	RunningSessions int `json:"running_sessions"`
+}
+
+// RepositoryPromptLimit is the most characters a repository prompt holds, so
+// one repository cannot bloat every session's context.
+const RepositoryPromptLimit = 8000
+
+// RepositoryPrompt is the optional text one repository adds to one agent's
+// own prompt (ADR 0061).
+type RepositoryPrompt struct {
+	RepositoryID string
+	Agent        string
+	Content      string
+	// Version is opaque and changes on every save; "" for an entry never saved.
+	Version string
+}
+
+// RepositoryPromptAnswer is the get_repository_prompt answer, and
+// save_repository_prompt's.
+type RepositoryPromptAnswer struct {
+	Agent        string `json:"agent"`
+	RepositoryID string `json:"repository_id"`
+	Content      string `json:"content"`
+	Version      string `json:"version"`
+	Limit        int    `json:"limit"`
+	Unassigned   bool   `json:"unassigned"`
+}
+
+// RepositoryPromptPreview is what preview_repository_prompt answers: the
+// agent's own prompt, the exact text appended after it, and its heading.
+type RepositoryPromptPreview struct {
+	AgentPrompt       string `json:"agent_prompt"`
+	RepositorySection string `json:"repository_section"`
+	Heading           string `json:"heading"`
+}
+
+// RepositoryPromptHeading is the heading of a repository's section of an
+// agent's system prompt.
+func RepositoryPromptHeading(repositoryName string) string {
+	return "## Repository prompt: " + repositoryName
+}
+
+// RepositoryPromptSection is the text appended after the agent's own prompt:
+// the heading, then the prompt. It is "" for a blank prompt. The one place it
+// is built: session starts, resumes, the preview and the shell file all use it.
+func RepositoryPromptSection(repositoryName, content string) string {
+	content = strings.TrimSpace(content)
+	if content == "" {
+		return ""
+	}
+	return RepositoryPromptHeading(repositoryName) + "\n\n" + content
 }

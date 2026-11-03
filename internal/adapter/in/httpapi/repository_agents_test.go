@@ -7,6 +7,7 @@ import (
 	"net/http/httptest"
 	"path/filepath"
 	"reflect"
+	"strings"
 	"testing"
 	"time"
 
@@ -39,6 +40,7 @@ func newRepoAgentsFixture(t *testing.T) *repoAgentsFixture {
 		Repositories: sqlite.NewRepositoryRepository(db),
 		Catalog:      cat,
 		Sessions:     sqlite.NewSessionRepository(db),
+		Prompts:      sqlite.NewRepositoryPromptRepository(db),
 	})
 	f.router = NewRouter(NewHandler(Services{Catalog: cat, RepositoryAgents: svc, ProjectFeed: app.Projects}))
 	f.write("agents.json", handWrittenAgents)
@@ -271,5 +273,151 @@ func TestRepositoryAgents_TheRefusalMessageCarriesTheCodeAndTheAssignedAgents(t 
 	}
 	if msg := f.svc.CheckAssigned(context.Background(), r, "beta").Error(); !contains(msg, "No agent is assigned there") {
 		t.Fatalf("message = %q", msg)
+	}
+}
+
+func (f *repoAgentsFixture) prompt(repo, agent string) map[string]any {
+	return f.get("/api/get_repository_prompt?repository_id="+repo+"&agent="+agent, 200)
+}
+
+func (f *repoAgentsFixture) save(repo, agent, content, version string, status int) map[string]any {
+	return f.post("/api/save_repository_prompt", map[string]any{"repository_id": repo, "agent": agent, "content": content, "version": version}, status)
+}
+
+func TestRepositoryPrompt_SaveReadAndSaveAgainWithTheNewVersion(t *testing.T) {
+	f := newRepoAgentsFixture(t)
+	r := f.repository(f.project("atlas"), "atlas-api")
+	if got := f.prompt(r, "alpha"); got["content"] != "" || got["version"] != "" || got["limit"] != float64(8000) || got["unassigned"] != false || got["agent"] != "alpha" || got["repository_id"] != r {
+		t.Fatalf("never saved = %v", got)
+	}
+	saved := f.save(r, "alpha", "Run make check before every commit.", "", 200)
+	if saved["content"] != "Run make check before every commit." || saved["version"] == "" {
+		t.Fatalf("saved = %v", saved)
+	}
+	if got := f.prompt(r, "alpha"); got["content"] != saved["content"] || got["version"] != saved["version"] {
+		t.Fatalf("read = %v", got)
+	}
+	again := f.save(r, "alpha", "Second text", saved["version"].(string), 200)
+	if again["version"] == saved["version"] || again["content"] != "Second text" {
+		t.Fatalf("again = %v", again)
+	}
+	// Another agent in the same repository is untouched.
+	if got := f.prompt(r, "beta"); got["content"] != "" {
+		t.Fatalf("beta = %v", got)
+	}
+}
+
+func TestRepositoryPrompt_AStaleVersionIsRefusedWithTheCurrentPrompt(t *testing.T) {
+	f := newRepoAgentsFixture(t)
+	r := f.repository(f.project("atlas"), "atlas-api")
+	saved := f.save(r, "alpha", "first", "", 200)
+	bad := f.save(r, "alpha", "mine", "", 409)
+	if bad["code"] != "REPOSITORY_PROMPT_CHANGED" {
+		t.Fatalf("body = %v", bad)
+	}
+	cur := bad["current"].(map[string]any)
+	if cur["content"] != "first" || cur["version"] != saved["version"] {
+		t.Fatalf("current = %v", cur)
+	}
+	if got := f.prompt(r, "alpha"); got["content"] != "first" {
+		t.Fatalf("a refused save applied: %v", got)
+	}
+}
+
+func TestRepositoryPrompt_ABlankSaveRemovesTheEntry(t *testing.T) {
+	f := newRepoAgentsFixture(t)
+	r := f.repository(f.project("atlas"), "atlas-api")
+	saved := f.save(r, "alpha", "text", "", 200)
+	gone := f.save(r, "alpha", " \n\t ", saved["version"].(string), 200)
+	if gone["version"] != "" || gone["content"] != "" {
+		t.Fatalf("blank save = %v", gone)
+	}
+	if row := byName(t, f.tab(r)["agents"], "alpha"); row["prompt"].(map[string]any)["set"] != false {
+		t.Fatalf("row = %v", row)
+	}
+	// Removing an entry that was never saved is accepted.
+	f.save(r, "beta", "", "", 200)
+}
+
+func TestRepositoryPrompt_TheLimitIs8000Characters(t *testing.T) {
+	f := newRepoAgentsFixture(t)
+	r := f.repository(f.project("atlas"), "atlas-api")
+	over := f.save(r, "alpha", strings.Repeat("é", 8001), "", 400)
+	if over["code"] != "REPOSITORY_PROMPT_TOO_LONG" || over["limit"] != float64(8000) || over["length"] != float64(8001) {
+		t.Fatalf("body = %v", over)
+	}
+	f.save(r, "alpha", strings.Repeat("é", 8000), "", 200)
+}
+
+func TestRepositoryPrompt_IsKeptWhileTheAgentIsUnassignedOrNotEnabled(t *testing.T) {
+	f := newRepoAgentsFixture(t)
+	p := f.project("atlas")
+	r := f.repository(p, "atlas-api")
+	saved := f.save(r, "alpha", "kept", "", 200)
+	v := f.post("/api/unassign_agent", map[string]any{"repository_id": r, "agent": "alpha", "list_version": ""}, 200)["list_version"]
+	if got := f.prompt(r, "alpha"); got["content"] != "kept" || got["unassigned"] != true {
+		t.Fatalf("unassigned = %v", got)
+	}
+	f.post("/api/assign_agent_again", map[string]any{"repository_id": r, "agent": "alpha", "list_version": v}, 200)
+	if got := f.prompt(r, "alpha"); got["content"] != "kept" || got["version"] != saved["version"] || got["unassigned"] != false {
+		t.Fatalf("assigned again = %v", got)
+	}
+	// A prompt can be saved for an agent the project does not enable.
+	f.post("/api/set_project_agents", map[string]any{"project_id": p, "mode": "selected", "agents": []string{"alpha"}}, 200)
+	f.save(r, "beta", "unused", "", 200)
+}
+
+func TestRepositoryPrompt_RowsSummariseTheFirstLine(t *testing.T) {
+	f := newRepoAgentsFixture(t)
+	r := f.repository(f.project("atlas"), "atlas-api")
+	first := strings.Repeat("x", 130)
+	saved := f.save(r, "alpha", first+"\nsecond line", "", 200)
+	row := byName(t, f.tab(r)["agents"], "alpha")["prompt"].(map[string]any)
+	if row["set"] != true || row["summary"] != strings.Repeat("x", 120) || row["length"] != float64(len(first)+len("\nsecond line")) || row["version"] != saved["version"] {
+		t.Fatalf("prompt = %v", row)
+	}
+}
+
+func TestRepositoryPrompt_RefusesAnUnknownAgentOrRepository(t *testing.T) {
+	f := newRepoAgentsFixture(t)
+	r := f.repository(f.project("atlas"), "atlas-api")
+	f.get("/api/get_repository_prompt?repository_id="+r+"&agent=ghost", 404)
+	f.get("/api/get_repository_prompt?repository_id=nope&agent=alpha", 404)
+	f.save(r, "ghost", "x", "", 404)
+}
+
+func TestRepositoryPrompt_PreviewBuildsTheSectionAfterTheAgentsOwnPromptAndStoresNothing(t *testing.T) {
+	f := newRepoAgentsFixture(t)
+	r := f.repository(f.project("atlas"), "atlas-api")
+	out := f.post("/api/preview_repository_prompt", map[string]any{"repository_id": r, "agent": "alpha", "content": "Use the gateway."}, 200)
+	if out["heading"] != "## Repository prompt: atlas-api" || out["repository_section"] != "## Repository prompt: atlas-api\n\nUse the gateway." {
+		t.Fatalf("preview = %v", out)
+	}
+	if _, ok := out["agent_prompt"].(string); !ok {
+		t.Fatalf("agent_prompt = %v", out["agent_prompt"])
+	}
+	if blank := f.post("/api/preview_repository_prompt", map[string]any{"repository_id": r, "agent": "alpha", "content": "  "}, 200); blank["repository_section"] != "" {
+		t.Fatalf("blank preview = %v", blank)
+	}
+	if got := f.prompt(r, "alpha"); got["version"] != "" {
+		t.Fatalf("preview stored something: %v", got)
+	}
+}
+
+func TestRepositoryPrompt_ASaveAnnouncesTheAgent(t *testing.T) {
+	f := newRepoAgentsFixture(t)
+	p := f.project("atlas")
+	r := f.repository(p, "atlas-api")
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	events, _ := f.svc.FollowRepositoryAgents(ctx)
+	f.save(r, "alpha", "text", "", 200)
+	select {
+	case ev := <-events:
+		if want := (domain.RepositoryAgentsChanged{ProjectID: p, RepositoryID: r, Agents: []string{"alpha"}}); !reflect.DeepEqual(ev, want) {
+			t.Fatalf("event = %+v", ev)
+		}
+	case <-time.After(time.Second):
+		t.Fatal("no event")
 	}
 }

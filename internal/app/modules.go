@@ -72,6 +72,7 @@ var PersistenceModule = fx.Module("persistence",
 		asPort(sqlite.NewEnvFileRepository, new(ports.EnvFileRepository)),
 		asPort(sqlite.NewRunCommandRepository, new(ports.RunCommandRepository)),
 		asPort(sqlite.NewRepositoryAgentListRepository, new(ports.RepositoryAgentListStore)),
+		asPort(sqlite.NewRepositoryPromptRepository, new(ports.RepositoryPromptStore)),
 		asPort(sqlite.NewActivationRepository, new(ports.TokenSaverActivationRepository)),
 		asPort(sqlite.NewZoneRepository, new(ports.ZoneRepository)),
 		newAgentRepository,
@@ -184,8 +185,8 @@ func (p projectMCPServers) SetProjectMCPServers(_ context.Context, id string, na
 
 // newRepositoryAgents is the service that says which agents a repository
 // assigns (ADR 0061).
-func newRepositoryAgents(lists ports.RepositoryAgentListStore, projects ports.ProjectRepository, repos ports.RepositoryRepository, cat *agentcatalog.Catalog, sessions ports.SessionRepository) *repoagents.Service {
-	return repoagents.New(repoagents.Deps{Lists: lists, Projects: projects, Repositories: repos, Catalog: cat, Sessions: sessions})
+func newRepositoryAgents(lists ports.RepositoryAgentListStore, prompts ports.RepositoryPromptStore, projects ports.ProjectRepository, repos ports.RepositoryRepository, cat *agentcatalog.Catalog, sessions ports.SessionRepository, catalogs catalog.Catalog) *repoagents.Service {
+	return repoagents.New(repoagents.Deps{Lists: lists, Prompts: prompts, Projects: projects, Repositories: repos, Catalog: cat, Sessions: sessions, Agents: catalogs.Agents})
 }
 
 // newAgentCatalog is the agent catalog: the "agents" folder of the data dir

@@ -21,6 +21,7 @@ type Deps struct {
 	Repositories ports.RepositoryRepository
 	// Catalog names the agents, in catalog order.
 	Catalog ports.CatalogReader
+	Prompts ports.RepositoryPromptStore
 	// Sessions counts an agent's running sessions in a repository.
 	Sessions ports.SessionRepository
 	// Agents maps a session's agent id to its catalog name; nil reads the id
@@ -76,6 +77,10 @@ func (s *Service) view(ctx context.Context, repo *domain.Repository, proj *domai
 		return nil, err
 	}
 	running := s.runningByAgent(ctx, repo)
+	prompts, err := s.digests(ctx, repo.ID)
+	if err != nil {
+		return nil, err
+	}
 	mode := domain.AgentsAll
 	if proj.EnabledAgentsMode == domain.AgentsSelected {
 		mode = domain.AgentsSelected
@@ -103,7 +108,7 @@ func (s *Service) view(ctx context.Context, repo *domain.Repository, proj *domai
 		}
 		v.Agents = append(v.Agents, domain.RepositoryAgentRow{
 			Name: a.Name, Description: a.Description, State: state, Unassigned: list.Has(a.Name),
-			RunningSessions: running[a.Name],
+			RunningSessions: running[a.Name], Prompt: prompts[a.Name],
 		})
 	}
 	v.Project = domain.RepositoryAgentsProject{ID: proj.ID, Name: proj.Name, AgentsMode: mode, EnabledCount: enabled, CatalogCount: len(cat.Agents)}
