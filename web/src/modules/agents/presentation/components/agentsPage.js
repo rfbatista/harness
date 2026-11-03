@@ -24,6 +24,7 @@ import { compose } from "./compose.js";
 import { deleteUi } from "./deleteUi.js";
 import { editors } from "./editors.js";
 import { liveCatalog, trackWrites } from "./liveCatalog.js";
+import { repositoryActions } from "./repositoryActions.js";
 import { mcpEditor } from "./mcpEditor.js";
 import { saveUi } from "./saveUi.js";
 import { skillEditor } from "./skillEditor.js";
@@ -42,13 +43,14 @@ const COUNTS = {
 /**
  * @param {{
  *   gateway: Pick<import("../../domain/ports.js").CatalogGateway, "decodeCatalog" | "follow" | "getCatalog" | "getSkill" | "checkEnvVars" | "saveAgent" | "saveBundle" | "saveSkill" | "saveMcpServer" | "deleteAgent" | "deleteBundle" | "deleteSkill" | "deleteMcpServer" | "testMcpServer" | "listProjects" | "getProjectAgents" | "undoChange">,
+ *   repositories?: Pick<import("../../../repositoryagents/domain/ports.js").RepositoryAgentsGateway, "unassignAgent" | "assignAgentAgain">,
  *   history: Pick<History, "pushState"> & Partial<Pick<History, "replaceState">>,
  *   location: Pick<Location, "pathname" | "search"> & Partial<Pick<Location, "hash" | "assign">>,
  *   clipboard?: Pick<Clipboard, "writeText">,
  *   timers?: { setTimeout: (fn: () => void, ms: number) => any, clearTimeout: (id: any) => void },
  * }} deps
  */
-export const agentsPage = ({ gateway: raw, history, location, clipboard, timers = globalThis }) => () => {
+export const agentsPage = ({ gateway: raw, repositories, history, location, clipboard, timers = globalThis }) => () => {
   // What this page writes itself is not a change from outside: the page watches its own writes.
   const tracker = trackWrites(raw);
   const gateway = tracker.gateway;
@@ -617,7 +619,7 @@ export const agentsPage = ({ gateway: raw, history, location, clipboard, timers 
       this.notice = "Could not copy the path";
     }
   },
-}, bundlesTab({ history }), liveCatalog({ gateway, tracker, timers }), editors(
+}, bundlesTab({ history }), liveCatalog({ gateway, tracker, timers }), repositoryActions({ repositories }), editors(
   { part: bundleEditor({ gateway, location, timers }) },
   // The MCP form's drawer opens over the agent editor: while it does, the shared members answer for the drawer.
   { part: agentEditor({ gateway, location, history, timers }), isOpen: (p) => p.agentDraft !== null && !p.mfOpen },

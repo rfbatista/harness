@@ -23,6 +23,36 @@ const enc = encodeURIComponent;
 const byName = (a, b) => a.name.localeCompare(b.name) || a.id.localeCompare(b.id);
 const plural = (n, one, many = `${one}s`) => `${n} ${n === 1 ? one : many}`;
 
+/** A repository's prompt editor, opened on one agent. @param {string} projectId @param {string} repositoryId @param {string} agent */
+export const repositoryPromptHref = (projectId, repositoryId, agent) =>
+  `/projects/${enc(projectId)}/repositories/${enc(repositoryId)}/architecture/agents?prompt=${enc(agent)}`;
+
+/**
+ * An agent's repositories in one project, as rows with their actions: the
+ * agent's assignment there and its repository prompt (ADR 0061).
+ * @param {CatalogAgent} agent @param {string} projectId
+ */
+export function repositoryRows(agent, projectId) {
+  return (agent.repositories ?? [])
+    .filter((r) => r.projectId === projectId)
+    .sort((a, b) => a.repositoryName.localeCompare(b.repositoryName) || a.repositoryId.localeCompare(b.repositoryId))
+    .map((r) => ({
+      key: `${r.projectId}/${r.repositoryId}`,
+      projectId: r.projectId,
+      id: r.repositoryId,
+      name: r.repositoryName,
+      unassigned: r.unassigned,
+      badge: r.unassigned ? "Unassigned" : "Assigned",
+      tone: r.unassigned ? "attention" : "success",
+      listVersion: r.listVersion,
+      promptSet: r.promptSet,
+      promptText: r.promptSet ? "Repository prompt set" : "Add prompt",
+      promptHref: repositoryPromptHref(r.projectId, r.repositoryId, agent.name),
+      unassignLabel: `Unassign ${agent.name} from ${r.repositoryName}`,
+      assignLabel: `Assign ${agent.name} again in ${r.repositoryName}`,
+    }));
+}
+
 /** Where a project's own settings are. @param {string} id */
 export const projectSettingsHref = (id) => `/projects/${enc(id)}/settings`;
 
@@ -81,13 +111,15 @@ export function enabledInView(catalog, agent, projects) {
       badge: auto ? "All agents" : "Selected agents",
       tone: auto ? "" : "signal",
       note: auto ? "Enabled automatically: every agent is enabled here, this one included. Change it in the project’s settings." : "On the project’s list",
+      repositories: repositoryRows(agent, e.id),
     };
   });
+  const unassigned = (agent.repositories ?? []).filter((r) => r.unassigned && on.has(r.projectId)).length;
   const missing = everyone.filter((p) => !on.has(p.id));
   const notListed = missing.map((p, i) => ({ id: p.id, name: p.name, href: projectSettingsHref(p.id), sep: i < missing.length - 2 ? ", " : i === missing.length - 2 ? " and " : "" }));
   const total = everyone.length;
   return {
-    heading: `Enabled in · ${rows.length} of ${total} projects`,
+    heading: `Enabled in · ${rows.length} of ${total} projects${unassigned > 0 ? ` · Unassigned in ${plural(unassigned, "repository", "repositories")}` : ""}`,
     rows,
     hasRows: rows.length > 0,
     noProjects: total === 0,

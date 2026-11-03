@@ -3,7 +3,7 @@
 import { apiClient } from "../../../shared/infrastructure/api.js";
 import { assert, file, test } from "../../../shared/testing/test.js";
 import { catalogGatewayContract } from "../testing/gateway-contract.js";
-import { makeWorld } from "../testing/fixtures.js";
+import { catalogDTO, makeWorld } from "../testing/fixtures.js";
 import { stubCatalogApi } from "../testing/stub-api.js";
 import { catalogGateway } from "./catalog-gateway.js";
 import { memoryCatalog } from "./memory-gateway.js";
@@ -48,4 +48,13 @@ test("http · a write sends nothing the caller did not ask for", async () => {
   const { gateway, stub } = http(makeWorld());
   await gateway.deleteAgent("backend");
   assert.deepEqual(stub.requests[0], ["POST", "/api/delete_catalog_agent", { name: "backend" }]);
+});
+
+test("the catalog read carries each agent's repositories: assignment, prompt and list version", async () => {
+  const { gateway } = memoryCatalog(makeWorld());
+  const dto = catalogDTO();
+  dto.agents[0].repositories = [{ project_id: "p1", repository_id: "r1", repository_name: "harness-api", unassigned: true, prompt_set: true, list_version: "l9" }];
+  const c = gateway.decodeCatalog(JSON.parse(JSON.stringify(dto)));
+  assert.deepEqual(c.agents[0].repositories, [{ projectId: "p1", repositoryId: "r1", repositoryName: "harness-api", unassigned: true, promptSet: true, listVersion: "l9" }]);
+  assert.deepEqual(c.agents[1].repositories, [], "an agent the server lists none for has none");
 });

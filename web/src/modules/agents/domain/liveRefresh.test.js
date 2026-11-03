@@ -53,6 +53,11 @@ test("only the catalog's one-key event is a catalog event; others on the page fe
   }
 });
 
+test("a repository agents event is a catalog event: the detail's repositories moved", () => {
+  assert.deepEqual(catalogEventPaths({ repository_agents_changed: { project_id: "p1", repository_id: "r1", agents: ["reviewer"] } }), ["repositories/r1"]);
+  assert.deepEqual(catalogEventPaths({ repository_agents_changed: {} }), []);
+});
+
 test("unrelated events and statuses never read the catalog", async () => {
   const { s, timers, reads } = subject();
   s.event({ project: { id: "p1" } });

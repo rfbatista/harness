@@ -15,7 +15,8 @@ import { FeedStatus } from "../../../shared/domain/feed.js";
 export const REFRESH_DELAY_MS = 150;
 
 /**
- * The paths an `agent_catalog_changed` event names, or null when the message
+ * The paths an `agent_catalog_changed` event names (a `repository_agents_changed`
+ * event names `repositories/<id>`), or null when the message
  * is anything else on the page feed (project, git_credential, git_identity …).
  * An event without paths (a project's MCP server list changed) is still one.
  * @param {unknown} data
@@ -23,6 +24,11 @@ export const REFRESH_DELAY_MS = 150;
  */
 export function catalogEventPaths(data) {
   if (data === null || typeof data !== "object" || Array.isArray(data)) return null;
+  // An agent was assigned or unassigned in a repository, or its repository prompt changed: the detail's repositories moved.
+  if ("repository_agents_changed" in data) {
+    const id = /** @type {any} */ (data).repository_agents_changed?.repository_id;
+    return typeof id === "string" && id !== "" ? [`repositories/${id}`] : [];
+  }
   if (!("agent_catalog_changed" in data)) return null;
   const body = /** @type {any} */ (data).agent_catalog_changed;
   const paths = body && Array.isArray(body.paths) ? body.paths : [];

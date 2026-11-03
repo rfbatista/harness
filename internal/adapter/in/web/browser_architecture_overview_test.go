@@ -35,7 +35,7 @@ func TestArchitectureOverviewHasTheTitleSyncPillStatCardsAndTabCounts(t *testing
 	if cards != wantCards {
 		t.Errorf("stat cards = %q, want %q", cards, wantCards)
 	}
-	wantTabs := "Instructions & rules 2|Tools 1|Sandboxes 1|Orchestration 2|Hooks 2|Layers 2|Output"
+	wantTabs := "Instructions & rules 2|Tools 1|Sandboxes 1|Orchestration 2|Hooks 2|Layers 2|Output|Agents"
 	if tabs != wantTabs {
 		t.Errorf("tabs = %q, want %q", tabs, wantTabs)
 	}

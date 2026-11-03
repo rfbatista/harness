@@ -18,6 +18,7 @@
  * @property {string[]} mcpServers
  * @property {string[]} allowedTools  empty: Claude's default tool set
  * @property {{ sessions: number, zones: number } | null} usage  sessions that ever ran as the agent, and zones (architecture records) that assign it; null when the server does not say
+ * @property {{ projectId: string, repositoryId: string, repositoryName: string, unassigned: boolean, promptSet: boolean, listVersion: string }[]} [repositories]  for each project that enables the agent, its repositories: where it is assigned and whether it has a repository prompt (repository agents contract, section 2)
  * @property {{ id: string, name: string, mode: "all" | "selected" }[]} enabledIn  every project the agent is enabled in: each All project, and each Selected project that lists it
  * @property {Problem[]} problems
  *

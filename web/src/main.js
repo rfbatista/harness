@@ -90,7 +90,8 @@ startSwapRegions(htmx, { navigate });
 
 const architecture = architectureGateway(api, events);
 registerArchitecture(Alpine, { gateway: architecture, clipboard: { copyText } });
-registerRepositoryAgents(Alpine, { gateway: repositoryAgentsGateway(api, events) });
+const repositoryAgents = repositoryAgentsGateway(api, events);
+registerRepositoryAgents(Alpine, { gateway: repositoryAgents });
 const designSystem = designSystemGateway(api, events);
 registerDesignSystem(Alpine, { gateway: designSystem, clock: systemClock, clipboard: { copyText }, navigate });
 registerProjects(Alpine, { gateway: projectsGateway(api, events), architecture, designSystem, navigate, clock: systemClock });
@@ -131,7 +132,7 @@ registerSync(Alpine, { gateway: syncGateway(api, events) });
 registerNotifications(Alpine, { gateway: notificationsGateway(api, events), alerts: desktopAlerts(), prefs, clock: systemClock, navigate });
 registerCredentials(Alpine, { gateway: credentialsGateway(api, events), clock: systemClock });
 registerUsage(Alpine, { gateway: usageGateway(api, events) });
-registerAgents(Alpine, { gateway: catalogGateway(api, events), history: window.history, location: window.location, clipboard: navigator.clipboard });
+registerAgents(Alpine, { gateway: catalogGateway(api, events), repositories: repositoryAgents, history: window.history, location: window.location, clipboard: navigator.clipboard });
 registerTokenSavers(Alpine, { gateway: tokenSavers, clock: systemClock });
 registerModels(Alpine, { gateway: modelsGateway(api) });
 registerSandbox(Alpine, { gateway: sandboxGateway(api) });
