@@ -44,6 +44,8 @@ export function memoryGateway({ projects = [], sessions = [], repositories = {},
   const followers = new Set();
   /** project id to what its agent picker offers; followers of the page feed catalog events. */
   const choices = new Map();
+  /** repository id → the agent ids unassigned there; a start of one is refused AGENT_NOT_ASSIGNED. */
+  const unassigned = new Map();
   const catalogFollowers = new Set();
 
   const taken = (repositoryId) => new Set((branches[repositoryId] ?? []).filter((b) => !b.remote).map((b) => b.name));
@@ -122,6 +124,14 @@ export function memoryGateway({ projects = [], sessions = [], repositories = {},
       const offered = choices.get(projectId);
       if (agentId && offered && !offered.agents.some((x) => x.id === agentId)) {
         throw new StructuredError(Codes.AGENT_NOT_ENABLED, `AGENT_NOT_ENABLED: agent ${agentId} is not enabled in project ${projectId}`, 409);
+      }
+      if (agentId && unassigned.get(repositoryId)?.has(agentId)) {
+        throw new StructuredError(Codes.AGENT_NOT_ASSIGNED, `AGENT_NOT_ASSIGNED: agent ${agentId} is not assigned to repository ${repositoryId}`, 409, {
+          agent: agentId,
+          repository_id: repositoryId,
+          repository_name: repositoryId,
+          assigned: (choices.get(`${projectId}/${repositoryId}`) ?? choices.get(projectId))?.agents.map((a) => a.name) ?? [],
+        });
       }
       if (branchName?.trim()) {
         const verdict = check({ repositoryId, name: branchName });
@@ -220,11 +230,12 @@ export function memoryGateway({ projects = [], sessions = [], repositories = {},
       publish(projectId, { kind: "deleted", id: sessionId });
     },
 
-    async agentChoices(projectId) {
+    async agentChoices(projectId, repositoryId = "") {
       if (!knownProjects.has(projectId)) {
         throw new StructuredError(Codes.PROJECT_NOT_FOUND, `project ${projectId} not found`, 404);
       }
-      return choices.get(projectId) ?? { mode: "all", agents: [], total: 0 };
+      const own = repositoryId ? choices.get(`${projectId}/${repositoryId}`) : undefined;
+      return own ?? choices.get(projectId) ?? { mode: "all", agents: [], total: 0 };
     },
 
     followAgents({ onEvent, onStatus = () => {} }) {
@@ -256,10 +267,22 @@ export function memoryGateway({ projects = [], sessions = [], repositories = {},
       publish(projectId, { kind: "deleted", id: sessionId });
     },
     update,
-    /** The picker of the project now offers `choice` ({ mode, agents, total }); followers hear agent_catalog_changed on projects/<id>. */
-    setAgentChoices(projectId, choice) {
+    /**
+     * The picker of the project now offers `choice` ({ mode, agents, total, notOffered? }); followers hear agent_catalog_changed on projects/<id>.
+     * With a repository, the choice is what that repository's picker offers, and followers hear repository_agents_changed.
+     */
+    setAgentChoices(projectId, choice, repositoryId = "") {
+      if (repositoryId) {
+        choices.set(`${projectId}/${repositoryId}`, choice);
+        for (const f of catalogFollowers) f.onEvent({ repository_agents_changed: { project_id: projectId, repository_id: repositoryId, agents: [] } });
+        return;
+      }
       choices.set(projectId, choice);
       for (const f of catalogFollowers) f.onEvent({ agent_catalog_changed: { paths: [`projects/${projectId}`] } });
+    },
+    /** The agents (ids) now unassigned from a repository: a start of one is refused. */
+    setUnassigned(repositoryId, agentIds) {
+      unassigned.set(repositoryId, new Set(agentIds));
     },
     /** A page feed message, as the server would send it. */
     publishCatalogEvent(data) {

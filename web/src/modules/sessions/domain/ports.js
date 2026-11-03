@@ -91,9 +91,11 @@
  *             onChange: (change: SessionChange) => void,
  *             onStatus: (status: FeedStatus) => void) => () => void} follow
  *           Follows the project's changes until the returned function is called.
- * @property {(projectId: string) => Promise<AgentChoices>} agentChoices
+ * @property {(projectId: string, repositoryId?: string) => Promise<AgentChoices>} agentChoices
  *           The agents the project enables, its mode and the catalog size:
- *           what the new-session and brainstorm pickers offer.
+ *           what the new-session and brainstorm pickers offer. With a
+ *           repository, only the agents assigned to it, and notOffered says why
+ *           each of the others is missing there.
  * @property {(handlers: { onEvent: (data: unknown) => void,
  *             onStatus?: (status: FeedStatus) => void }) => () => void} followAgents
  *           Follows the page feed messages (agent_catalog_changed among them)
@@ -103,8 +105,9 @@
 /**
  * @typedef {object} AgentChoices
  * @property {"all" | "selected"} mode
- * @property {{ id: string, name: string, description: string }[]} agents  the enabled agents
+ * @property {{ id: string, name: string, description: string, repositoryPromptSet?: boolean }[]} agents  the enabled agents
  * @property {number} total  how many agents the catalog has
+ * @property {{ name: string, reason: "unassigned" | "not_enabled" }[]} [notOffered]  with a repository: the rest of the catalog
  */
 
 /**

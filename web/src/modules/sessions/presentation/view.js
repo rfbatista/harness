@@ -155,7 +155,7 @@ function detailOf(session, { now, agentNames, others, taskTitle, report, loaded 
  * BFF's toRow (view.go) says the same; session-row.json pins both. taskTitle
  * is the page's task, whose title no row repeats.
  */
-export function toRowView(session, { selectedId, now, agentNames, others = [], fresh = false, depth = 0, messages, taskTitle = "" }) {
+export function toRowView(session, { selectedId, now, agentNames, repositoryNames = {}, others = [], fresh = false, depth = 0, messages, taskTitle = "" }) {
   const status = statusView(session);
   const leadsWithTitle = !session.ticketId;
   const agent = leadsWithTitle ? rowTitle(session) : agentLabel(session.agentId, agentNames);
@@ -186,6 +186,10 @@ export function toRowView(session, { selectedId, now, agentNames, others = [], f
     // What x-bind sets: null leaves the attribute off a sandboxed row.
     unsandboxed: isUnsandboxed(session),
     unsandboxedAttr: isUnsandboxed(session) ? "" : null,
+    // Set while the session's agent is unassigned from its repository (ADR 0061); the session itself continues.
+    unassigned: session.agentUnassigned === true
+      ? { title: `Unassigned from ${repositoryNames[session.repositoryId] || "this repository"}`, note: "Resuming will be refused" }
+      : null,
     // Why the commit check is off ("" while it guards the worktree).
     commitCheckOff: session.commitCheckOff ?? "",
     selected: session.id === selectedId,
@@ -203,13 +207,13 @@ export function toRowView(session, { selectedId, now, agentNames, others = [], f
 }
 
 /** fresh: the ids of sessions that just arrived over the feed, highlighted for a moment. */
-export function toGroupViews(sessions, { selectedId, now, agentNames, fresh = new Set(), messages, taskTitle = "" }) {
+export function toGroupViews(sessions, { selectedId, now, agentNames, repositoryNames, fresh = new Set(), messages, taskTitle = "" }) {
   return group(sessions).map(({ key, sessions: members, depth = {} }) => ({
     key,
     label: GROUP_LABEL[key],
     tone: key === "needs-you" ? "attention" : null,
     count: members.length,
-    rows: members.map((s) => toRowView(s, { selectedId, now, agentNames, others: sessions, fresh: fresh.has(s.id), depth: depth[s.id] ?? 0, messages, taskTitle })),
+    rows: members.map((s) => toRowView(s, { selectedId, now, agentNames, repositoryNames, others: sessions, fresh: fresh.has(s.id), depth: depth[s.id] ?? 0, messages, taskTitle })),
   }));
 }
 
@@ -312,6 +316,7 @@ export function tokenSaversView(session) {
 
 /** Why an ended session cannot be resumed, by the server's resume_blocked code. */
 const ENDED_NOTE = {
+  AGENT_NOT_ASSIGNED: "This session has ended and its agent is unassigned from the repository, so resuming is refused. Assign the agent again in the repository's Agents settings, or start a new session.",
   WORKSPACE_MISSING: "This session has ended and its worktree was removed, so it cannot be resumed. Start a new one.",
   SESSION_TRANSCRIPT_MISSING: "This session has ended and claude kept no conversation for it, so it cannot be resumed. Start a new one.",
 };

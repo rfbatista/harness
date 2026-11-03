@@ -26,6 +26,7 @@
  * @property {string} runnerHost         the machine of a "tui" session
  * @property {boolean} resumable         a resume would be accepted now (advisory: the call can still be refused)
  * @property {string} resumeBlocked      "" when resumable; otherwise the error code saying why not
+ * @property {boolean} [agentUnassigned]   its agent is unassigned from its repository: a resume is refused (ADR 0061)
  * @property {Role} role                 what it is on its task, derived by the server
  * @property {string} architectSessionId the task's architect; "" when the task has none
  * @property {import("./channel.js").StatusCheck | null} statusCheck  the loop checking on it, on a delegate the architect started

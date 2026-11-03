@@ -260,3 +260,16 @@ test("row titles match the shared fixture: a session with no task is a feature b
   assert.equal(group.rows[0].agent, "Feature brainstorm");
   assert.equal(group.rows[0].leadAttr, "title");
 });
+
+test("a session whose agent is unassigned from its repository says so in its row and why Resume is not offered", () => {
+  const now = new Date(T0.getTime() + 5 * 60_000);
+  const opts = { selectedId: "", now, agentNames: {}, repositoryNames: { r1: "atlas-api" } };
+  const stuck = makeSession({ id: "s", repositoryId: "r1", status: "done", agentUnassigned: true, resumable: false, resumeBlocked: "AGENT_NOT_ASSIGNED" });
+  const row = toRowView(stuck, opts);
+  assert.equal(row.unassigned.title, "Unassigned from atlas-api");
+  assert.equal(row.unassigned.note, "Resuming will be refused");
+  assert.equal(row.resumable, false);
+  assert.ok(terminalView(stuck).terminalNote.includes("assign"), terminalView(stuck).terminalNote);
+  assert.equal(toRowView(makeSession({ id: "t", repositoryId: "r1" }), opts).unassigned, null, "an assigned agent has no warning");
+  assert.equal(toRowView(stuck, { ...opts, repositoryNames: {} }).unassigned.title, "Unassigned from this repository", "a repository whose name is not known");
+});

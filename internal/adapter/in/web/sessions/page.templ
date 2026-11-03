@@ -663,6 +663,9 @@ templ liveRows() {
 							<template x-if="row.commitCheckOff">
 								<span class="[ tag ]" data-kind="warn" data-commit-check-off x-bind:title="row.commitCheckOff">Commit check off</span>
 							</template>
+							<template x-if="row.unassigned">
+								<span class="[ tag ]" data-kind="warn" data-agent-unassigned><span x-text="row.unassigned.title"></span> · <span x-text="row.unassigned.note"></span></span>
+							</template>
 						</span>
 						<template x-if="row.chip">
 							<span class="[ badge ]" x-bind:data-tone="row.chip.tone" aria-hidden="true" x-text="row.chip.word"></span>
@@ -764,6 +767,7 @@ templ newSessionForm(form NewSessionForm, lockedMode string) {
 		data-default-repository={ form.DefaultRepository() }
 		data-locked-mode={ lockedMode }
 		data-agents={ form.AgentsSeed() }
+		data-repositories={ form.RepositoriesSeed() }
 		data-agents-total={ form.AgentsTotalText() }
 		data-agents-mode={ form.AgentsMode }
 		data-project-name={ form.ProjectName }
@@ -779,6 +783,14 @@ templ newSessionForm(form NewSessionForm, lockedMode string) {
 		<template x-if="hasAgentRefusal">
 			@AgentRefusalBanner()
 		</template>
+		<div class="[ field ]">
+			<label for="new-session-repository">Repository</label>
+			<select id="new-session-repository" x-model="repositoryId" x-on:change="repositoryChanged">
+				for _, r := range form.Repositories {
+					<option value={ r.ID }>{ r.Name }</option>
+				}
+			</select>
+		</div>
 		<div class="[ field ]">
 			<label for="new-session-prompt">First message <span class="[ color-ink-faint weight-regular ]">(optional)</span></label>
 			<textarea id="new-session-prompt" class="[ font-mono text-sm ]" x-bind:placeholder="promptPlaceholder" x-model="prompt" x-ref="prompt"></textarea>
@@ -797,7 +809,7 @@ templ newSessionForm(form NewSessionForm, lockedMode string) {
 				<div class="[ dropdown ]" x-data="dropdown" x-show="!noAgentEnabled">
 					<select id="new-session-agent" x-model="agentId">
 						<option value="" data-description="claude with no agent definition">Plain claude</option>
-						<template x-for="a in agentChoices" x-bind:key="a.id">
+						<template x-for="a in agentOptions" x-bind:key="a.id">
 							<option x-bind:value="a.id" x-bind:data-description="a.description" x-text="a.name"></option>
 						</template>
 					</select>
@@ -809,6 +821,22 @@ templ newSessionForm(form NewSessionForm, lockedMode string) {
 					<span x-text="agentHint"></span>
 					<a x-bind:href="agentsSettingsLink" href={ templ.SafeURL(form.AgentsSettingsHref()) } data-agents-settings-link>Change in project settings</a>
 				</span>
+				<template x-if="hasAgentNote">
+					<span class="[ hint ]" role="status" data-agent-note x-text="agentNote"></span>
+				</template>
+				<template x-if="hasNotOffered">
+					<details class="[ hint ]" data-not-offered>
+						<summary x-text="notOfferedTitle"></summary>
+						<ul class="[ flow ] [ flow-space-3xs ]" role="list">
+							<template x-for="r in notOfferedList" x-bind:key="r.name">
+								<li data-not-offered-agent x-bind:data-agent="r.name">
+									<span aria-disabled="true" class="[ color-ink-faint ]"><span x-text="r.name"></span> — <span x-text="r.reason"></span></span>
+									<a x-bind:href="r.href" x-text="r.linkText"></a>
+								</li>
+							</template>
+						</ul>
+					</details>
+				</template>
 			</div>
 			<div class="[ field ]">
 				if lockedMode == "" {
@@ -830,14 +858,6 @@ templ newSessionForm(form NewSessionForm, lockedMode string) {
 					<span data-locked-mode-word>Product — the only mode that runs without a task.</span>
 				}
 				<span class="[ hint ]" x-text="modeHint"></span>
-			</div>
-			<div class="[ field ]">
-				<label for="new-session-repository">Repository</label>
-				<select id="new-session-repository" x-model="repositoryId" x-on:change="repositoryChanged">
-					for _, r := range form.Repositories {
-						<option value={ r.ID }>{ r.Name }</option>
-					}
-				</select>
 			</div>
 			<div class="[ field ]">
 				<label for="new-session-base">Branch off</label>

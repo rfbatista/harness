@@ -208,6 +208,20 @@ func (f NewSessionForm) AgentsSeed() string {
 	return string(raw)
 }
 
+// RepositoriesSeed is the repositories as the picker component reads them
+// (data-repositories): their names, which the hint and the disclosure use.
+func (f NewSessionForm) RepositoriesSeed() string {
+	list := make([]map[string]string, 0, len(f.Repositories))
+	for _, r := range f.Repositories {
+		list = append(list, map[string]string{"id": r.ID, "name": r.Name})
+	}
+	raw, err := json.Marshal(list)
+	if err != nil {
+		return "[]"
+	}
+	return string(raw)
+}
+
 // AgentsSettingsHref is the project's Enabled agents section.
 func (f NewSessionForm) AgentsSettingsHref() string {
 	return "/projects/" + url.PathEscape(f.ProjectID) + "/settings#settings-agents-enabled"

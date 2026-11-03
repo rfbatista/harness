@@ -138,6 +138,7 @@ export const sessionsPage = ({
         selectedId: this.selectedId,
         now: this.now,
         agentNames: this.agentNames,
+        repositoryNames: this.repositoryNames,
         taskTitle: this.taskTitle,
         fresh: new Set(this.freshIds),
       });
