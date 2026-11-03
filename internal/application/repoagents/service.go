@@ -22,6 +22,9 @@ type Deps struct {
 	// Catalog names the agents, in catalog order.
 	Catalog ports.CatalogReader
 	Prompts ports.RepositoryPromptStore
+	// Events announces a saved or removed prompt to the virtual shells; nil
+	// announces nothing.
+	Events ports.EventPublisher
 	// Sessions counts an agent's running sessions in a repository.
 	Sessions ports.SessionRepository
 	// Agents maps a session's agent id to its catalog name; nil reads the id

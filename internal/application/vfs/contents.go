@@ -36,7 +36,11 @@ func (s *Service) contents(ctx context.Context, sh *root, tk *domain.Ticket) (*b
 	sh.designSystem = designSystem
 	b.fixed(ports.ShellFile{Path: "README.md", Kind: ports.ShellReadme, Title: "README", UpdatedAt: b.now}, []byte(readmeFor(s.agentsMove(), designSystem || sh.draft, sh.draft)))
 
-	if err := b.architectures(ctx, s.src.Architectures, sh.projID); err != nil {
+	folders, err := b.architectures(ctx, s.src.Architectures, sh.projID)
+	if err != nil {
+		return nil, err
+	}
+	if err := b.repositoryPrompts(ctx, s.src.RepositoryPrompts, sh.projID, folders); err != nil {
 		return nil, err
 	}
 	if designSystem {
@@ -476,15 +480,17 @@ const architectureDir = "project/architecture"
 // architectures: one read-only YAML file per repository that has a record,
 // named after the repository, with -<short id> on a clash. Its version is
 // the record's.
-func (b *builder) architectures(ctx context.Context, src ports.ArchitectureFileReader, projectID string) error {
+func (b *builder) architectures(ctx context.Context, src ports.ArchitectureFileReader, projectID string) (map[string]string, error) {
+	folders := map[string]string{}
 	if src == nil {
-		return nil
+		return folders, nil
 	}
 	list, err := src.ListArchitectureFiles(ctx, projectID)
 	if err != nil {
-		return err
+		return nil, err
 	}
 	for _, a := range list {
+		folders[a.RepositoryID] = slugOr(a.Folder, "repository")
 		if a.HasRecord {
 			b.named(architectureDir+"/", slugOr(a.Repository, "repository")+".yaml", &file{
 				meta: ports.ShellFile{Kind: ports.ShellArchitecture, ID: a.RepositoryID, Scope: "repository",
@@ -500,6 +506,31 @@ func (b *builder) architectures(ctx context.Context, src ports.ArchitectureFileR
 				content: in.Content, readOnly: true,
 			})
 		}
+	}
+	return folders, nil
+}
+
+// repositoryPrompts: one read-only file per repository prompt that is set, in
+// the repository's folder beside its architecture file, named after the
+// agent. A repository with no architecture file takes its own name.
+func (b *builder) repositoryPrompts(ctx context.Context, src ports.RepositoryPromptFileReader, projectID string, folders map[string]string) error {
+	if src == nil {
+		return nil
+	}
+	list, err := src.ListRepositoryPromptFiles(ctx, projectID)
+	if err != nil {
+		return err
+	}
+	for _, p := range list {
+		folder, ok := folders[p.RepositoryID]
+		if !ok {
+			folder = slugOr(p.Repository, "repository")
+		}
+		b.named(architectureDir+"/"+folder+"/agents/", slugOr(p.Agent, "agent")+".md", &file{
+			meta: ports.ShellFile{Kind: ports.ShellRepositoryPrompt, ID: p.RepositoryID + ":" + p.Agent, Scope: "repository",
+				Version: p.Version, Title: p.Agent, UpdatedAt: p.UpdatedAt, Repository: p.Repository},
+			content: p.Content, readOnly: true,
+		})
 	}
 	return nil
 }

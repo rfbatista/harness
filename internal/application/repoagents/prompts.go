@@ -109,6 +109,11 @@ func (s *Service) SaveRepositoryPrompt(ctx context.Context, repositoryID, agent,
 		}
 	}
 	s.feed.announce(domain.RepositoryAgentsChanged{ProjectID: repo.ProjectID, RepositoryID: repo.ID, Agents: []string{agent}})
+	if s.d.Events != nil {
+		if err := s.d.Events.Publish(ctx, domain.RepositoryPromptsChanged{RepositoryID: repo.ID, ProjectID: repo.ProjectID}); err != nil {
+			return nil, err
+		}
+	}
 	return s.promptAnswer(ctx, repo.ID, agent)
 }
 
@@ -160,4 +165,24 @@ func (s *Service) RepositoryPromptSection(ctx context.Context, repositoryID, age
 		return ""
 	}
 	return domain.RepositoryPromptSection(repo.Name, p.Content)
+}
+
+var _ ports.RepositoryPromptFileReader = (*Service)(nil)
+
+// ListRepositoryPromptFiles lists the prompts that are set in the project's
+// repositories, for the files the virtual shell shows.
+func (s *Service) ListRepositoryPromptFiles(ctx context.Context, projectID string) ([]ports.RepositoryPromptFile, error) {
+	var out []ports.RepositoryPromptFile
+	for _, repo := range s.d.Repositories.ListByProject(ctx, projectID) {
+		list, err := s.d.Prompts.ListByRepository(ctx, repo.ID)
+		if err != nil {
+			return nil, err
+		}
+		for _, p := range list {
+			out = append(out, ports.RepositoryPromptFile{
+				RepositoryID: repo.ID, Repository: repo.Name, Agent: p.Agent, Version: p.Version, Content: []byte(p.Content),
+			})
+		}
+	}
+	return out, nil
 }

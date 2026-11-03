@@ -67,6 +67,9 @@ type Sources struct {
 	// Architectures lists the repositories architecture files; nil shows
 	// none.
 	Architectures ports.ArchitectureFileReader
+	// RepositoryPrompts lists the repository prompts, shown read-only beside
+	// the architecture files; nil shows none.
+	RepositoryPrompts ports.RepositoryPromptFileReader
 	// DesignSystems and Repositories show the design system applied to a
 	// session's repository to that session; either nil shows it to none.
 	DesignSystems ports.DesignSystemByIDReader
@@ -363,6 +366,11 @@ func (s *Service) Subscribe(sub ports.EventSubscriber) {
 	// Applying, moving or removing a design system of a repository changes
 	// the folder in the roots of the project's sessions.
 	ports.On(sub, func(_ context.Context, ev domain.RepositorySaved) error {
+		s.changed(ev.ProjectID, "")
+		return nil
+	})
+	// A saved or removed repository prompt changes its file.
+	ports.On(sub, func(_ context.Context, ev domain.RepositoryPromptsChanged) error {
 		s.changed(ev.ProjectID, "")
 		return nil
 	})

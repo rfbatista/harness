@@ -186,7 +186,7 @@ func (p projectMCPServers) SetProjectMCPServers(_ context.Context, id string, na
 // newRepositoryAgents is the service that says which agents a repository
 // assigns (ADR 0061).
 func newRepositoryAgents(lists ports.RepositoryAgentListStore, prompts ports.RepositoryPromptStore, projects ports.ProjectRepository, repos ports.RepositoryRepository, cat *agentcatalog.Catalog, sessions ports.SessionRepository, catalogs catalog.Catalog) *repoagents.Service {
-	return repoagents.New(repoagents.Deps{Lists: lists, Prompts: prompts, Projects: projects, Repositories: repos, Catalog: cat, Sessions: sessions, Agents: catalogs.Agents})
+	return repoagents.New(repoagents.Deps{Lists: lists, Prompts: prompts, Projects: projects, Repositories: repos, Catalog: cat, Sessions: sessions, Agents: catalogs.Agents, Events: catalogs.Bus})
 }
 
 // newAgentCatalog is the agent catalog: the "agents" folder of the data dir
@@ -524,12 +524,13 @@ func newArtifactsService(cfg Config, repo ports.ArtifactRepository, sessions por
 // tickets, documents, comments and resources and the artifacts' designs,
 // and stores the documents and comments agents write in them through
 // planning and their designs through the artifacts.
-func newVirtualShells(plan *planning.Service, art *artifacts.Service, sessions ports.SessionRepository, cat catalog.Catalog, events *vfs.RootEvents) *vfs.Service {
+func newVirtualShells(plan *planning.Service, art *artifacts.Service, sessions ports.SessionRepository, cat catalog.Catalog, events *vfs.RootEvents, prompts *repoagents.Service) *vfs.Service {
 	src := vfs.Sources{Tickets: plan, Structure: plan, Documents: plan, Comments: plan, Resources: plan, Artifacts: art, Writes: plan,
 		Designs: art, Sessions: sessions, Agents: cat.Agents, Settings: cat.Settings}
 	if cat.RepositoryArchitectures != nil {
 		src.Architectures = cat.RepositoryArchitectures
 	}
+	src.RepositoryPrompts = prompts
 	if cat.DesignSystems != nil {
 		src.DesignSystems, src.Repositories = cat.DesignSystems, cat.Projects
 		src.Drafts = cat.DesignSystems

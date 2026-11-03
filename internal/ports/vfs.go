@@ -47,6 +47,8 @@ const (
 	ShellDesignSystem = "design-system"
 	// ShellInstruction is one instruction file of a repository (ADR 0057).
 	ShellInstruction = "instruction"
+	// ShellRepositoryPrompt is one agent's repository prompt (ADR 0061).
+	ShellRepositoryPrompt = "repository-prompt"
 )
 
 // ResourcesRoots makes and removes task sessions' resources roots.
@@ -223,6 +225,24 @@ type InstructionShellFile struct {
 // repositories that have a record, in the repositories' order.
 type ArchitectureFileReader interface {
 	ListArchitectureFiles(ctx context.Context, projectID string) ([]ArchitectureFile, error)
+}
+
+// RepositoryPromptFile is a repository prompt as the resources root shows it,
+// at project/architecture/<repository>/agents/<agent>.md.
+type RepositoryPromptFile struct {
+	RepositoryID string
+	Repository   string
+	Agent        string
+	// Version is the prompt's stored version.
+	Version   string
+	Content   []byte
+	UpdatedAt time.Time
+}
+
+// RepositoryPromptFileReader lists the repository prompts that are set in a
+// project's repositories, in the repositories' order.
+type RepositoryPromptFileReader interface {
+	ListRepositoryPromptFiles(ctx context.Context, projectID string) ([]RepositoryPromptFile, error)
 }
 
 // DesignSystemByIDReader reads one design system, whole, by its id:

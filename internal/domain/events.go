@@ -26,6 +26,14 @@ type RepositorySaved struct {
 	ProjectID    string
 }
 
+// RepositoryPromptsChanged: a repository prompt was saved or removed, or
+// moved with its agent's rename. The virtual shells of the project's sessions
+// show the prompt files.
+type RepositoryPromptsChanged struct {
+	RepositoryID string
+	ProjectID    string
+}
+
 // PromptDeleted: a prompt is gone. Whatever referenced it drops the reference.
 type PromptDeleted struct{ PromptID string }
 
@@ -169,6 +177,7 @@ type ArtifactChanged struct {
 func (ProjectDeleted) EventName() string            { return "project.deleted" }
 func (RepositoryDeleted) EventName() string         { return "repository.deleted" }
 func (RepositorySaved) EventName() string           { return "repository.saved" }
+func (RepositoryPromptsChanged) EventName() string  { return "repository.prompts_changed" }
 func (PromptDeleted) EventName() string             { return "prompt.deleted" }
 func (AgentDeleted) EventName() string              { return "agent.deleted" }
 func (SkillDeleted) EventName() string              { return "skill.deleted" }
