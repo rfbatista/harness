@@ -91,7 +91,7 @@ templ tabAgents(v View) {
 					<ul class="[ flow ] [ flow-space-3xs ]" role="list">
 						<template x-for="a in editorAgents" x-bind:key="a.name">
 							<li>
-								<button type="button" class="[ button ]" data-variant="ghost" data-size="sm" data-editor-agent x-bind:data-agent="a.name" x-bind:aria-current="a.current ? 'true' : null" x-on:click="openPrompt(a.name)">
+								<button type="button" class="[ button ]" data-variant="ghost" data-size="sm" data-editor-agent x-bind:data-agent="a.name" x-bind:aria-current="a.ariaCurrent" x-on:click="openPrompt(a.name)">
 									<span x-text="a.name"></span>
 									<template x-if="a.mark"><span class="[ badge ]" data-mark x-text="a.mark"></span></template>
 									<template x-if="a.state"><span class="[ text-xs color-ink-faint ]" x-text="a.state"></span></template>
@@ -137,13 +137,13 @@ templ tabAgents(v View) {
 					</div>
 					<div class="[ field ]" x-show="isWrite">
 						<label class="[ visually-hidden ]" for="repository-prompt-text">Repository prompt</label>
-						<textarea id="repository-prompt-text" x-ref="promptText" rows="8" class="[ font-mono text-sm ]" x-model="draft" x-bind:placeholder="placeholder" x-bind:aria-invalid="count.over ? 'true' : null" x-bind:disabled="loadingPrompt" aria-describedby="repository-prompt-counter"></textarea>
+						<textarea id="repository-prompt-text" x-ref="promptText" rows="8" class="[ font-mono text-sm ]" x-model="draft" x-bind:placeholder="placeholder" x-bind:aria-invalid="countInvalid" x-bind:disabled="loadingPrompt" aria-describedby="repository-prompt-counter"></textarea>
 						<div class="[ cluster ] [ gutter-xs ]" data-chips>
 							<template x-for="c in chips" x-bind:key="c.key">
 								<button type="button" class="[ button ]" data-variant="ghost" data-size="sm" x-bind:data-chip="c.key" x-on:click="insertChip(c.key)" x-text="c.label"></button>
 							</template>
 						</div>
-						<p class="[ text-sm ]" id="repository-prompt-counter" data-counter x-bind:data-tone="count.over ? 'danger' : null"><span x-text="count.text"></span> · <span class="[ color-ink-muted ]" x-text="savedNote"></span></p>
+						<p class="[ text-sm ]" id="repository-prompt-counter" data-counter x-bind:data-tone="countTone"><span x-text="count.text"></span> · <span class="[ color-ink-muted ]" x-text="savedNote"></span></p>
 						<p class="[ text-sm color-ink-muted ]">For rules every agent in <span x-text="repositoryName"></span> should follow, use <a x-bind:href="instructionsHref">Instructions &amp; rules</a>.</p>
 					</div>
 					<div class="[ flow ]" x-show="isPreview" data-preview>
@@ -157,7 +157,7 @@ templ tabAgents(v View) {
 									<p class="[ text-xs color-ink-faint ]"><span x-text="editorAgent"></span>'s own prompt · <span x-text="previewView.own.length"></span> characters · <a x-bind:href="catalogHref">edit in the agent catalog</a></p>
 									<pre class="[ font-mono text-sm ]" x-text="previewView.own.text"></pre>
 									<template x-if="previewView.own.collapsible">
-										<button type="button" class="[ button ]" data-variant="ghost" data-size="sm" data-action="toggle-own" x-on:click="toggleOwn" x-text="showAllOwn ? 'Collapse' : 'Show all'"></button>
+										<button type="button" class="[ button ]" data-variant="ghost" data-size="sm" data-action="toggle-own" x-on:click="toggleOwn" x-text="ownToggleText"></button>
 									</template>
 								</div>
 								<template x-if="previewView.section">
@@ -220,15 +220,15 @@ templ agentRow() {
 		<span class="[ cluster ] [ gutter-xs ]">
 			<button type="button" class="[ button ]" data-size="sm" data-action="prompt" x-on:click="openPrompt(r.name)" x-text="r.promptAction"></button>
 			<template x-if="r.canUnassign">
-				<button type="button" class="[ button ]" data-variant="outline" data-size="sm" data-action="unassign" x-bind:aria-label="'Unassign ' + r.name + ' from ' + repositoryName" x-bind:disabled="busy" x-on:click="unassign(r.name)">Unassign</button>
+				<button type="button" class="[ button ]" data-variant="outline" data-size="sm" data-action="unassign" x-bind:aria-label="r.unassignLabel" x-bind:disabled="busy" x-on:click="unassign(r.name)">Unassign</button>
 			</template>
-			<template x-if="r.canAssign && !r.assignDisabled">
-				<button type="button" class="[ button ]" data-variant="primary" data-size="sm" data-action="assign" x-bind:aria-label="'Assign ' + r.name + ' again'" x-bind:disabled="busy" x-on:click="assign(r.name)">Assign again</button>
+			<template x-if="r.showAssign">
+				<button type="button" class="[ button ]" data-variant="primary" data-size="sm" data-action="assign" x-bind:aria-label="r.assignLabel" x-bind:disabled="busy" x-on:click="assign(r.name)">Assign again</button>
 			</template>
-			<template x-if="r.assignDisabled">
+			<template x-if="r.showAssignDisabled">
 				<span class="[ cluster ] [ gutter-xs ]">
-					<button type="button" class="[ button ]" data-size="sm" data-action="assign" disabled x-bind:aria-describedby="'why-' + r.name">Assign again</button>
-					<span class="[ text-xs color-ink-muted ]" x-bind:id="'why-' + r.name" x-text="r.assignDisabledReason"></span>
+					<button type="button" class="[ button ]" data-size="sm" data-action="assign" disabled x-bind:aria-describedby="r.whyId">Assign again</button>
+					<span class="[ text-xs color-ink-muted ]" x-bind:id="r.whyId" x-text="r.assignDisabledReason"></span>
 					<a class="[ text-xs ]" x-bind:href="r.enableHref" x-text="r.enableText"></a>
 				</span>
 			</template>

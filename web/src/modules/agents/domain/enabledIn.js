@@ -42,6 +42,7 @@ export function repositoryRows(agent, projectId) {
       id: r.repositoryId,
       name: r.repositoryName,
       unassigned: r.unassigned,
+      assignedAttr: r.unassigned ? "false" : "true",
       badge: r.unassigned ? "Unassigned" : "Assigned",
       tone: r.unassigned ? "attention" : "success",
       listVersion: r.listVersion,
@@ -230,4 +231,11 @@ export function projectChangeFiles(entries) {
         emptyNote: after.length === 0 ? "Its list is left empty: no agent can be picked there." : "",
       };
     });
+}
+
+/** What the detail says after an Unassign or Assign again from it. @param {{ agent: string, repository: string, unassigned: boolean, running: number }} p */
+export function repositoryToggled({ agent, repository, unassigned, running }) {
+  if (unassigned) return `${agent} is assigned to ${repository} again.`;
+  const sessions = running > 0 ? ` ${plural(running, "running session")} ${running === 1 ? "continues" : "continue"}.` : "";
+  return `Unassigned ${agent} from ${repository}.${sessions} It stays available in other repositories.`;
 }

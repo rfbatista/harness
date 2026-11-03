@@ -9,6 +9,7 @@
 
 import { Codes } from "../../../../shared/domain/errors.js";
 import { describeError } from "../../../../shared/presentation/errors.js";
+import { repositoryToggled } from "../../domain/enabledIn.js";
 
 /** @param {{ repositories: Pick<import("../../../repositoryagents/domain/ports.js").RepositoryAgentsGateway, "unassignAgent" | "assignAgentAgain"> | undefined }} deps */
 export function repositoryActions({ repositories }) {
@@ -25,14 +26,8 @@ export function repositoryActions({ repositories }) {
       this.repoRefusal = null;
       const input = { repositoryId: repo.id, agent: this.item, listVersion: repo.listVersion };
       try {
-        if (repo.unassigned) {
-          await repositories.assignAgentAgain(input);
-          this.notice = `${this.item} is assigned to ${repo.name} again.`;
-        } else {
-          const after = await repositories.unassignAgent(input);
-          const running = after.runningSessions ?? 0;
-          this.notice = `Unassigned ${this.item} from ${repo.name}.${running > 0 ? ` ${running} running ${running === 1 ? "session continues" : "sessions continue"}.` : ""} It stays available in other repositories.`;
-        }
+        const after = repo.unassigned ? await repositories.assignAgentAgain(input) : await repositories.unassignAgent(input);
+        this.notice = repositoryToggled({ agent: this.item, repository: repo.name, unassigned: repo.unassigned, running: after.runningSessions ?? 0 });
       } catch (err) {
         if (err?.code === Codes.REPOSITORY_AGENTS_CHANGED) {
           this.repoRefusal = { text: `The agents of ${repo.name} changed while this page was open. Nothing was applied; the list below is up to date, so you can repeat it.` };

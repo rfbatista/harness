@@ -50,6 +50,7 @@ export const promptEditorPart = ({ gateway }) => {
       return (this.tab?.agents ?? []).map((a) => ({
         name: a.name,
         current: a.name === this.editorAgent,
+        ariaCurrent: a.name === this.editorAgent ? "true" : null,
         mark: a.prompt.set ? "set" : "",
         state: a.state === "assigned" ? "" : a.state === "unassigned" ? "unassigned" : "not enabled",
       }));
@@ -59,6 +60,15 @@ export const promptEditorPart = ({ gateway }) => {
     },
     get count() {
       return counter(this.draft.length, this.prompt?.limit ?? PROMPT_LIMIT);
+    },
+    get countInvalid() {
+      return this.count.over ? "true" : null;
+    },
+    get countTone() {
+      return this.count.over ? "danger" : null;
+    },
+    get ownToggleText() {
+      return this.showAllOwn ? "Collapse" : "Show all";
     },
     get canSave() {
       return this.dirty && !this.count.over && !this.saving && this.conflict === null && !this.loadingPrompt;
@@ -89,7 +99,7 @@ export const promptEditorPart = ({ gateway }) => {
       return this.layersHref.replace(/\/layers$/, "");
     },
     get savedNote() {
-      return this.prompt && this.prompt.version !== "" ? `saved as version ${this.prompt.version}` : "not saved yet";
+      return this.prompt && this.prompt.version !== "" ? "saved" : "not saved yet";
     },
 
     /** Opens the editor on an agent, reading its prompt. */

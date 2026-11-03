@@ -98,6 +98,11 @@ export function rowModel(a, tab) {
     // Assign again is offered on an unassigned row; on a not enabled one it is disabled, with its reason in the notes.
     assignDisabled: a.state === "not_enabled",
     assignDisabledReason: a.state === "not_enabled" ? `Enable ${a.name} in ${project} first` : "",
+    showAssign: a.state === "unassigned",
+    showAssignDisabled: a.state === "not_enabled",
+    unassignLabel: `Unassign ${a.name} from ${repo}`,
+    assignLabel: `Assign ${a.name} again in ${repo}`,
+    whyId: `why-${a.name}`,
     enableHref: a.state === "not_enabled" ? enableAgentsHref(tab.project.id) : "",
     enableText: a.state === "not_enabled" ? `Enable in ${project}` : "",
   };

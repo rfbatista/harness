@@ -369,17 +369,17 @@ templ agentDetail() {
 								<td class="[ text-xs color-ink-muted ]" x-text="r.note"></td>
 							</tr>
 							<template x-for="repo in r.repositories" x-bind:key="repo.key">
-								<tr data-repository-row x-bind:data-repository="repo.id" x-bind:data-assigned="repo.unassigned ? 'false' : 'true'">
+								<tr data-repository-row x-bind:data-repository="repo.id" x-bind:data-assigned="repo.assignedAttr">
 									<td class="[ font-mono text-sm ]"><span aria-hidden="true">↳</span> <span x-text="repo.name"></span></td>
 									<td><span class="[ badge ]" data-repository-badge x-bind:data-tone="repo.tone" x-text="repo.badge"></span></td>
 									<td>
 										<span class="[ cluster ] [ gutter-xs ]">
 											<a class="[ text-sm ]" data-repository-prompt x-bind:href="repo.promptHref" x-text="repo.promptText"></a>
 											<template x-if="!repo.unassigned">
-												<button type="button" class="[ button ]" data-variant="outline" data-size="sm" data-action="unassign-repository" x-bind:aria-label="repo.unassignLabel" x-bind:disabled="repoBusy !== ''" x-on:click="toggleRepository(repo)">Unassign</button>
+												<button type="button" class="[ button ]" data-variant="outline" data-size="sm" data-action="unassign-repository" x-bind:aria-label="repo.unassignLabel" x-bind:disabled="repoBusy" x-on:click="toggleRepository(repo)">Unassign</button>
 											</template>
 											<template x-if="repo.unassigned">
-												<button type="button" class="[ button ]" data-variant="primary" data-size="sm" data-action="assign-repository" x-bind:aria-label="repo.assignLabel" x-bind:disabled="repoBusy !== ''" x-on:click="toggleRepository(repo)">Assign again</button>
+												<button type="button" class="[ button ]" data-variant="primary" data-size="sm" data-action="assign-repository" x-bind:aria-label="repo.assignLabel" x-bind:disabled="repoBusy" x-on:click="toggleRepository(repo)">Assign again</button>
 											</template>
 										</span>
 									</td>
