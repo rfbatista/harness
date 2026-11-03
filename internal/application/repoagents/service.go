@@ -39,10 +39,13 @@ type Service struct {
 	// mu serialises writes, so a version is checked and replaced at once.
 	mu   sync.Mutex
 	feed *feed
+	// renamed remembers, by new name, what an agent was called before a
+	// rename, for the Agents tab's hint. It is not kept across a restart.
+	renamed map[string]renamedFrom
 }
 
 // New returns the service.
-func New(d Deps) *Service { return &Service{d: d, feed: newFeed()} }
+func New(d Deps) *Service { return &Service{d: d, feed: newFeed(), renamed: map[string]renamedFrom{}} }
 
 var _ ports.RepositoryAgents = (*Service)(nil)
 
@@ -111,7 +114,7 @@ func (s *Service) view(ctx context.Context, repo *domain.Repository, proj *domai
 		}
 		v.Agents = append(v.Agents, domain.RepositoryAgentRow{
 			Name: a.Name, Description: a.Description, State: state, Unassigned: list.Has(a.Name),
-			RunningSessions: running[a.Name], Prompt: prompts[a.Name],
+			RunningSessions: running[a.Name], Prompt: prompts[a.Name], PreviousName: s.previousName(a.Name),
 		})
 	}
 	v.Project = domain.RepositoryAgentsProject{ID: proj.ID, Name: proj.Name, AgentsMode: mode, EnabledCount: enabled, CatalogCount: len(cat.Agents)}

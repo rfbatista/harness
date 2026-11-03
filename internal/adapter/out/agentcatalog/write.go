@@ -7,6 +7,7 @@ import (
 	"encoding/base64"
 	"encoding/hex"
 	"errors"
+	"log/slog"
 	"os"
 	"path/filepath"
 	"sort"
@@ -61,6 +62,10 @@ type txn struct {
 	projects    []*projectEdit
 	// projectList is every project, read once.
 	projectList []*domain.Project
+	// renamed and deleted are the agents this write renames (from, to) and
+	// deletes, for who keeps something under an agent's name.
+	renamed [][2]string
+	deleted []string
 }
 
 // begin starts a write. The caller holds c.wmu.
@@ -234,6 +239,7 @@ func (t *txn) commit(opts domain.CatalogWriteOptions, summary string) (*domain.C
 	if err := c.applyAll(t.edits, t.projects); err != nil {
 		return nil, err
 	}
+	c.followAgents(t)
 	change.ID = newChangeID()
 	c.last = &storedChange{id: change.ID, summary: summary, edits: t.edits, projects: t.projects}
 	c.publish(sortedKeys(keys))
@@ -485,6 +491,25 @@ func (c *Catalog) publish(paths []string) {
 		default:
 			delete(s.subs, ch)
 			close(ch)
+		}
+	}
+}
+
+// followAgents tells the holders of per-agent data about the renames and
+// deletes a stored write made. The files are written already, so a failure
+// is logged, not answered.
+func (c *Catalog) followAgents(t *txn) {
+	if c.renames == nil {
+		return
+	}
+	for _, r := range t.renamed {
+		if err := c.renames.AgentRenamed(context.Background(), r[0], r[1]); err != nil {
+			slog.Warn("agent catalog: an agent's repository settings were not moved", "from", r[0], "to", r[1], "err", err)
+		}
+	}
+	for _, name := range t.deleted {
+		if err := c.renames.AgentDeleted(context.Background(), name); err != nil {
+			slog.Warn("agent catalog: an agent's repository settings were not removed", "agent", name, "err", err)
 		}
 	}
 }

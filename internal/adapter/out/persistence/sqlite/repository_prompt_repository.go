@@ -62,3 +62,51 @@ func (r *RepositoryPromptRepository) Put(ctx context.Context, p *domain.Reposito
 func (r *RepositoryPromptRepository) Delete(ctx context.Context, repositoryID, agent string) error {
 	return r.db.WithContext(ctx).Delete(&RepositoryPromptModel{}, "repository_id = ? AND agent = ?", repositoryID, agent).Error
 }
+
+// repositoriesOf are the repositories holding an entry of the agent.
+func (r *RepositoryPromptRepository) repositoriesOf(tx *gorm.DB, agent string) ([]string, error) {
+	var ids []string
+	err := tx.Model(&RepositoryPromptModel{}).Where("agent = ?", agent).Order("repository_id").Pluck("repository_id", &ids).Error
+	return ids, err
+}
+
+// Rename moves every repository's entry of the agent to its new name.
+func (r *RepositoryPromptRepository) Rename(ctx context.Context, from, to string) ([]string, error) {
+	var ids []string
+	err := r.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		var err error
+		if ids, err = r.repositoriesOf(tx, from); err != nil || len(ids) == 0 {
+			return err
+		}
+		// An entry already under the new name (the name of a deleted agent that
+		// was left behind) gives way.
+		if err := tx.Where("agent = ?", to).Delete(&RepositoryPromptModel{}).Error; err != nil {
+			return err
+		}
+		return tx.Model(&RepositoryPromptModel{}).Where("agent = ?", from).Update("agent", to).Error
+	})
+	return ids, err
+}
+
+// DeleteAgent removes every repository's entry of the agent.
+func (r *RepositoryPromptRepository) DeleteAgent(ctx context.Context, agent string) ([]string, error) {
+	var ids []string
+	err := r.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		var err error
+		if ids, err = r.repositoriesOf(tx, agent); err != nil || len(ids) == 0 {
+			return err
+		}
+		return tx.Where("agent = ?", agent).Delete(&RepositoryPromptModel{}).Error
+	})
+	return ids, err
+}
+
+// DeleteByRepository forgets a deleted repository's entries.
+func (r *RepositoryPromptRepository) DeleteByRepository(ctx context.Context, repositoryID string) error {
+	return r.db.WithContext(ctx).Delete(&RepositoryPromptModel{}, "repository_id = ?", repositoryID).Error
+}
+
+// DeleteOrphans forgets the entries of repositories that no longer exist.
+func (r *RepositoryPromptRepository) DeleteOrphans(ctx context.Context) error {
+	return r.db.WithContext(ctx).Where("repository_id NOT IN (SELECT id FROM repositories)").Delete(&RepositoryPromptModel{}).Error
+}

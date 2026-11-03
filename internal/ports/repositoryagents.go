@@ -16,6 +16,9 @@ type RepositoryAgentListStore interface {
 	Put(ctx context.Context, list *domain.RepositoryAgentList) error
 	// DeleteByRepository forgets a deleted repository's list.
 	DeleteByRepository(ctx context.Context, repositoryID string) error
+	// DeleteOrphans forgets the lists of repositories that no longer exist
+	// (a deleted project takes its repositories without announcing each).
+	DeleteOrphans(ctx context.Context) error
 }
 
 // RepositoryAgents assigns agents to repositories. *repoagents.Service
@@ -53,6 +56,24 @@ type RepositoryPromptStore interface {
 	Put(ctx context.Context, p *domain.RepositoryPrompt) error
 	// Delete removes the entry; none is not an error.
 	Delete(ctx context.Context, repositoryID, agent string) error
+	// Rename moves every repository's entry of the agent to its new name and
+	// answers the repositories it touched.
+	Rename(ctx context.Context, from, to string) ([]string, error)
+	// DeleteAgent removes every repository's entry of the agent and answers
+	// the repositories it touched.
+	DeleteAgent(ctx context.Context, agent string) ([]string, error)
+	// DeleteByRepository forgets a deleted repository's entries.
+	DeleteByRepository(ctx context.Context, repositoryID string) error
+	// DeleteOrphans forgets the entries of repositories that no longer exist.
+	DeleteOrphans(ctx context.Context) error
+}
+
+// AgentRenames follows an agent catalog's renames and deletes, so what the
+// repositories keep under an agent's name follows it. *repoagents.Service
+// satisfies it.
+type AgentRenames interface {
+	AgentRenamed(ctx context.Context, from, to string) error
+	AgentDeleted(ctx context.Context, name string) error
 }
 
 // RepositoryPrompts writes and reads the repository prompts. *repoagents.Service

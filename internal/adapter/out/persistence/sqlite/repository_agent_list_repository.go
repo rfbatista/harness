@@ -44,3 +44,8 @@ func (r *RepositoryAgentListRepository) Put(ctx context.Context, l *domain.Repos
 func (r *RepositoryAgentListRepository) DeleteByRepository(ctx context.Context, repositoryID string) error {
 	return r.db.WithContext(ctx).Delete(&RepositoryAgentListModel{}, "repository_id = ?", repositoryID).Error
 }
+
+// DeleteOrphans forgets the lists of repositories that no longer exist.
+func (r *RepositoryAgentListRepository) DeleteOrphans(ctx context.Context) error {
+	return r.db.WithContext(ctx).Where("repository_id NOT IN (SELECT id FROM repositories)").Delete(&RepositoryAgentListModel{}).Error
+}

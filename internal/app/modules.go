@@ -186,7 +186,12 @@ func (p projectMCPServers) SetProjectMCPServers(_ context.Context, id string, na
 // newRepositoryAgents is the service that says which agents a repository
 // assigns (ADR 0061).
 func newRepositoryAgents(lists ports.RepositoryAgentListStore, prompts ports.RepositoryPromptStore, projects ports.ProjectRepository, repos ports.RepositoryRepository, cat *agentcatalog.Catalog, sessions ports.SessionRepository, catalogs catalog.Catalog) *repoagents.Service {
-	return repoagents.New(repoagents.Deps{Lists: lists, Prompts: prompts, Projects: projects, Repositories: repos, Catalog: cat, Sessions: sessions, Agents: catalogs.Agents, Events: catalogs.Bus})
+	svc := repoagents.New(repoagents.Deps{Lists: lists, Prompts: prompts, Projects: projects, Repositories: repos, Catalog: cat, Sessions: sessions, Agents: catalogs.Agents, Events: catalogs.Bus})
+	// What a repository keeps under an agent's name follows its rename and
+	// goes with its delete, and with the repository.
+	cat.UseAgentRenames(svc)
+	svc.Subscribe(catalogs.Bus)
+	return svc
 }
 
 // newAgentCatalog is the agent catalog: the "agents" folder of the data dir

@@ -43,6 +43,8 @@ func newRepoAgentsFixture(t *testing.T) *repoAgentsFixture {
 		Sessions:     sqlite.NewSessionRepository(db),
 		Prompts:      sqlite.NewRepositoryPromptRepository(db),
 	})
+	cat.UseAgentRenames(svc)
+	svc.Subscribe(app.Bus)
 	f.router = NewRouter(NewHandler(Services{Catalog: cat, RepositoryAgents: svc, ProjectFeed: app.Projects, Projects: app.Projects, Agents: app.Agents}))
 	f.write("agents.json", handWrittenAgents)
 	for _, n := range []string{"alpha", "beta"} {
@@ -525,5 +527,121 @@ func TestAgentCatalog_EachAgentListsItsRepositoriesInTheProjectsThatEnableIt(t *
 	}
 	if rows[web]["unassigned"] != false || rows[web]["prompt_set"] != true {
 		t.Fatalf("web = %v", rows[web])
+	}
+}
+
+func (f *repoAgentsFixture) rename(from, to string) {
+	f.post("/api/save_catalog_agent", map[string]any{"base_versions": f.versions(), "previous_name": from, "agent": map[string]any{"name": to, "description": to + " agent"}}, 200)
+}
+
+func TestRenamingAnAgentMovesItsUnassignedEntriesAndItsPrompts(t *testing.T) {
+	f := newRepoAgentsFixture(t)
+	p := f.project("atlas")
+	api, web := f.repository(p, "atlas-api"), f.repository(p, "atlas-web")
+	v := f.post("/api/unassign_agent", map[string]any{"repository_id": api, "agent": "alpha", "list_version": ""}, 200)["list_version"]
+	f.save(web, "alpha", "Web rules.", "", 200)
+	untouched := f.tab(web)["list_version"]
+
+	f.rename("alpha", "alpha-two")
+
+	tab := f.tab(api)
+	if row := byName(t, tab["agents"], "alpha-two"); row["state"] != "unassigned" || row["previous_name"] != "alpha" {
+		t.Fatalf("renamed row = %v", row)
+	}
+	for _, r := range list(tab["agents"]) {
+		if r.(map[string]any)["name"] == "alpha" {
+			t.Fatalf("the old name is still listed: %v", tab["agents"])
+		}
+	}
+	if tab["list_version"] == v || tab["list_version"] == "" {
+		t.Fatalf("the list version did not change on a rename that rewrote the list: %v -> %v", v, tab["list_version"])
+	}
+	if got := f.prompt(web, "alpha-two"); got["content"] != "Web rules." {
+		t.Fatalf("prompt under the new name = %v", got)
+	}
+	f.get("/api/get_repository_prompt?repository_id="+web+"&agent=alpha", 404)
+	if got := f.tab(web)["list_version"]; got != untouched {
+		t.Fatalf("a repository the agent was not unassigned from changed its list version: %v -> %v", untouched, got)
+	}
+}
+
+func TestDeletingAnAgentRemovesItsEntriesAndAPromptCountedInTheCatalog(t *testing.T) {
+	f := newRepoAgentsFixture(t)
+	p := f.project("atlas")
+	r := f.repository(p, "atlas-api")
+	f.post("/api/unassign_agent", map[string]any{"repository_id": r, "agent": "beta", "list_version": ""}, 200)
+	f.save(r, "beta", "Beta rules.", "", 200)
+	var promptSet any
+	for _, row := range list(byName(t, f.get("/api/get_agent_catalog", 200)["agents"], "beta")["repositories"]) {
+		promptSet = row.(map[string]any)["prompt_set"]
+	}
+	if promptSet != true {
+		t.Fatalf("the catalog does not say a prompt will go: %v", promptSet)
+	}
+
+	f.post("/api/delete_catalog_agent", map[string]any{"base_versions": f.versions(), "name": "beta"}, 200)
+
+	tab := f.tab(r)
+	for _, row := range list(tab["agents"]) {
+		if row.(map[string]any)["name"] == "beta" {
+			t.Fatalf("beta is still listed: %v", tab["agents"])
+		}
+	}
+	// A new agent with the same name starts clean.
+	f.post("/api/save_catalog_agent", map[string]any{"base_versions": f.versions(), "agent": map[string]any{"name": "beta", "description": "again"}}, 200)
+	if got := f.prompt(r, "beta"); got["content"] != "" || got["unassigned"] != false {
+		t.Fatalf("a new beta inherited %v", got)
+	}
+}
+
+func TestDeletingARepositoryRemovesItsListAndItsPrompts(t *testing.T) {
+	f := newRepoAgentsFixture(t)
+	p := f.project("atlas")
+	r := f.repository(p, "atlas-api")
+	f.post("/api/unassign_agent", map[string]any{"repository_id": r, "agent": "alpha", "list_version": ""}, 200)
+	f.save(r, "alpha", "text", "", 200)
+
+	if err := f.projects.DeleteRepository(context.Background(), r); err != nil {
+		t.Fatal(err)
+	}
+	if got := f.svc.IsUnassigned(context.Background(), r, "alpha"); got {
+		t.Fatal("the list outlived its repository")
+	}
+	if got := f.svc.RepositoryPromptSection(context.Background(), r, "alpha"); got != "" {
+		t.Fatalf("the prompt outlived its repository: %q", got)
+	}
+	var lists, prompts int64
+	f.db.Raw("SELECT COUNT(*) FROM repository_unassigned_agents").Scan(&lists)
+	f.db.Raw("SELECT COUNT(*) FROM repository_agent_prompts").Scan(&prompts)
+	if lists != 0 || prompts != 0 {
+		t.Fatalf("rows left: %d lists, %d prompts", lists, prompts)
+	}
+}
+
+func TestRenamesDeletesAndRepositoryDeletesAreAnnounced(t *testing.T) {
+	f := newRepoAgentsFixture(t)
+	p := f.project("atlas")
+	r := f.repository(p, "atlas-api")
+	f.post("/api/unassign_agent", map[string]any{"repository_id": r, "agent": "alpha", "list_version": ""}, 200)
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	events, _ := f.svc.FollowRepositoryAgents(ctx)
+	f.rename("alpha", "alpha-two")
+	select {
+	case ev := <-events:
+		if ev.RepositoryID != r || ev.ProjectID != p || !reflect.DeepEqual(ev.Agents, []string{"alpha", "alpha-two"}) {
+			t.Fatalf("event = %+v", ev)
+		}
+	case <-time.After(time.Second):
+		t.Fatal("no event after a rename")
+	}
+	f.post("/api/delete_catalog_agent", map[string]any{"base_versions": f.versions(), "name": "alpha-two"}, 200)
+	select {
+	case ev := <-events:
+		if ev.RepositoryID != r || !reflect.DeepEqual(ev.Agents, []string{"alpha-two"}) {
+			t.Fatalf("event = %+v", ev)
+		}
+	case <-time.After(time.Second):
+		t.Fatal("no event after a delete")
 	}
 }
