@@ -11,12 +11,14 @@
 import { Codes } from "../../../../shared/domain/errors.js";
 import { FeedStatus } from "../../../../shared/domain/feed.js";
 import { describeError } from "../../../../shared/presentation/errors.js";
+import { compose } from "../../../agents/presentation/components/compose.js";
+import { promptEditorPart } from "./promptEditor.js";
 import { assignedToast, groupAgents, modeNotice, nothingAssigned, rowModel, staleBanner, stats, unassignedToast } from "../../domain/agentsTab.js";
 
 /** @param {{ gateway: import("../../domain/ports.js").RepositoryAgentsGateway }} deps */
 export const repositoryAgentsTab = ({ gateway }) => () => {
   let unfollow = () => {};
-  return {
+  return compose({
     projectId: "",
     repositoryId: "",
     layersHref: "",
@@ -29,8 +31,6 @@ export const repositoryAgentsTab = ({ gateway }) => () => {
     stale: null,
     /** @type {{ text: string, undo: string } | null} Undo names the agent to assign again. */
     toast: null,
-    /** The agent whose repository prompt the editor is open on; "" when it is closed. */
-    editorAgent: "",
 
     async init() {
       this.projectId = this.$el.dataset.projectId ?? "";
@@ -38,13 +38,21 @@ export const repositoryAgentsTab = ({ gateway }) => () => {
       this.layersHref = this.$el.dataset.layersHref ?? "";
       unfollow = gateway.followChanges(
         (change) => {
-          if (change.repositoryId === this.repositoryId) this.reloadQuietly();
+          if (change.repositoryId !== this.repositoryId) return;
+          this.reloadQuietly();
+          this.promptMayHaveChanged(change.agents);
         },
         (status) => {
-          if (status === FeedStatus.RESYNCED) this.reloadQuietly();
+          if (status === FeedStatus.RESYNCED) {
+            this.reloadQuietly();
+            this.promptMayHaveChanged([this.editorAgent]);
+          }
         },
       );
       await this.load();
+      // A link from the agent catalog opens the editor on one agent: ?prompt=<agent>.
+      const wanted = new URLSearchParams(globalThis.location?.search ?? "").get("prompt");
+      if (wanted && this.tab?.agents.some((a) => a.name === wanted)) await this.openPrompt(wanted);
     },
 
     destroy() {
@@ -154,11 +162,6 @@ export const repositoryAgentsTab = ({ gateway }) => () => {
       await this.assign(agent);
     },
 
-    /** Opens the repository prompt editor on an agent (the editor is drawn by the same component). */
-    openPrompt(agent) {
-      this.editorAgent = agent;
-    },
-
     dismissToast() {
       this.toast = null;
     },
@@ -169,5 +172,5 @@ export const repositoryAgentsTab = ({ gateway }) => () => {
       this.stale = null;
       await this.load();
     },
-  };
+  }, promptEditorPart({ gateway }));
 };

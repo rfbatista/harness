@@ -96,6 +96,7 @@ import "../src/modules/pullrequests/presentation/components/pullRequestPanel.tes
 import "../src/modules/pullrequests/presentation/components/pullRequestWatch.test.js";
 import "../src/modules/pullrequests/presentation/view.test.js";
 import "../src/modules/repositoryagents/infrastructure/gateways.test.js";
+import "../src/modules/repositoryagents/presentation/components/promptEditor.test.js";
 import "../src/modules/repositoryagents/presentation/components/repositoryAgentsTab.test.js";
 import "../src/modules/reviews/domain/review.test.js";
 import "../src/modules/reviews/infrastructure/gateways.test.js";
