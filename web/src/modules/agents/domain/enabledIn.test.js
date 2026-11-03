@@ -1,5 +1,5 @@
 import { assert, file, test } from "../../../shared/testing/test.js";
-import { allProjects, enabledInView, listedIn, projectChangeFiles, projectChoices, projectModes, projectsChanged, projectsToRead, projectsToSend, toggleProject } from "./enabledIn.js";
+import { allProjects, enabledInView, listedIn, projectChangeFiles, projectChoices, projectModes, projectsChanged, projectsToRead, projectsToSend, repositoriesOpen, toggleProject } from "./enabledIn.js";
 
 file("agents/domain/enabledIn");
 
@@ -122,6 +122,20 @@ test("each project row lists its repositories with the assignment, the prompt an
   assert.equal(harness.repositories[0].unassignLabel, "Unassign ux-designer from harness-api");
   assert.equal(harness.repositories[1].listVersion, "l1");
   assert.equal(v.rows.find((r) => r.name === "notes-site").repositories.length, 0);
+});
+
+test("a project's repositories collapse when all are assigned and open while one is not, unless the person chose", () => {
+  const all = withRepos(catalog.agents[0], [repo("p-harness", "r1", "a"), repo("p-harness", "r2", "b")]);
+  const row = enabledInView({ agents: [all] }, all, projects).rows.find((r) => r.name === "harness");
+  assert.equal(row.repositoriesSummary, "2 repositories · all assigned");
+  assert.equal(repositoriesOpen(row, undefined), false);
+  assert.equal(repositoriesOpen(row, true), true);
+  const some = withRepos(catalog.agents[0], [repo("p-harness", "r1", "a", { unassigned: true }), repo("p-harness", "r2", "b")]);
+  const open = enabledInView({ agents: [some] }, some, projects).rows.find((r) => r.name === "harness");
+  assert.equal(open.repositoriesSummary, "2 repositories · 1 unassigned");
+  assert.equal(repositoriesOpen(open, undefined), true);
+  assert.equal(repositoriesOpen(open, false), false);
+  assert.equal(enabledInView({ agents: [some] }, some, projects).rows.find((r) => r.name === "notes-site").hasRepositories, false);
 });
 
 test("the Enabled in heading counts the repositories the agent is unassigned in, only in projects that enable it", () => {

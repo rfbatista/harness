@@ -1,6 +1,6 @@
 import { StructuredError } from "../../../shared/domain/errors.js";
 import { assert, file, test } from "../../../shared/testing/test.js";
-import { agentsSettingsHref, catalogChangeTouches, notAssignedRefusal, notEnabledRefusal, notOfferedRows, pickerCount, pickerHint, repositoryAgentsHref } from "./agentPicker.js";
+import { agentsSettingsHref, catalogChangeTouches, notAssignedRefusal, notEnabledRefusal, hintLink, notOfferedRows, pickerCount, pickerHint, repositoryAgentsHref } from "./agentPicker.js";
 
 file("sessions/domain/agentPicker");
 
@@ -53,7 +53,9 @@ test("with agents unassigned from the repository the hint and the count name the
   );
   assert.equal(pickerHint({ count: 1, total: 6, mode: "all", project: "atlas", repository: "atlas-api", unassigned: 1 }), "Showing the 1 agent assigned to atlas-api, of 2 enabled in atlas. 1 is unassigned here.");
   assert.ok(pickerHint({ count: 6, total: 6, mode: "all", project: "atlas", repository: "atlas-api", unassigned: 0 }).includes("All agents are enabled in atlas"), "nothing unassigned: the project's hint stands");
-  assert.equal(pickerCount(3, 2), "3 of 5 enabled");
+  assert.equal(pickerCount(3, 2), "3 assigned");
+  assert.equal(hintLink({ unassigned: 2, repository: "atlas-api", repositoryId: "r1", projectId: "p1" }).href, "/projects/p1/repositories/r1/architecture/agents");
+  assert.equal(hintLink({ unassigned: 0, repository: "atlas-api", repositoryId: "r1", projectId: "p1" }).href, "/projects/p1/settings#settings-agents-enabled", "nothing unassigned: the project settings");
   assert.equal(pickerCount(3), "3 enabled");
 });
 

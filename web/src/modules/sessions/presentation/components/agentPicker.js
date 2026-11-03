@@ -20,7 +20,7 @@
 // agentsChanged(), called after the list was read again.
 
 import { FeedStatus } from "../../../../shared/domain/feed.js";
-import { agentsSettingsHref, catalogChangeTouches, notAssignedRefusal, notEnabledRefusal, notOfferedRows, pickerCount, pickerHint, repositoryAgentsHref, unassignedCount } from "../../domain/agentPicker.js";
+import { agentsSettingsHref, catalogChangeTouches, hintLink, notAssignedRefusal, notEnabledRefusal, notOfferedRows, pickerCount, pickerHint, repositoryAgentsHref, unassignedCount } from "../../domain/agentPicker.js";
 
 function readNames(raw) {
   try {
@@ -176,6 +176,10 @@ export function withAgentPicker(component, { gateway }) {
     },
     get hasAgentRefusal() {
       return this.agentRefusal !== null;
+    },
+    /** The link after the hint: the repository's Agents tab while agents are unassigned there, else the project's settings. */
+    get agentHintLink() {
+      return hintLink({ unassigned: unassignedCount(this.notOffered), repository: this.repositoryName, repositoryId: this.repositoryId, projectId: this.projectId });
     },
     get agentsSettingsLink() {
       return agentsSettingsHref(this.projectId);

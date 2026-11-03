@@ -366,9 +366,14 @@ templ agentDetail() {
 							<tr data-enabled-row x-bind:data-mode="r.mode" x-bind:data-project="r.id">
 								<td><a class="[ font-mono ]" data-project-link x-bind:href="r.href" x-text="r.name"></a></td>
 								<td><span class="[ badge ]" x-bind:data-tone="r.tone" x-text="r.badge"></span></td>
-								<td class="[ text-xs color-ink-muted ]" x-text="r.note"></td>
+								<td class="[ text-xs color-ink-muted ]">
+									<span x-text="r.note"></span>
+									<template x-if="r.hasRepositories">
+										<button type="button" class="[ button ]" data-variant="ghost" data-size="sm" data-action="toggle-repositories" x-bind:aria-expanded="reposExpanded(r)" x-on:click="toggleRepos(r)" x-text="r.repositoriesSummary"></button>
+									</template>
+								</td>
 							</tr>
-							<template x-for="repo in r.repositories" x-bind:key="repo.key">
+							<template x-for="repo in reposShown(r)" x-bind:key="repo.key">
 								<tr data-repository-row x-bind:data-repository="repo.id" x-bind:data-assigned="repo.assignedAttr">
 									<td class="[ font-mono text-sm ]"><span aria-hidden="true">↳</span> <span x-text="repo.name"></span></td>
 									<td><span class="[ badge ]" data-repository-badge x-bind:data-tone="repo.tone" x-text="repo.badge"></span></td>

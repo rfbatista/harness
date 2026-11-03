@@ -54,6 +54,15 @@ export function repositoryRows(agent, projectId) {
     }));
 }
 
+/** What the collapsed repositories of a project say. @param {{ unassigned: boolean }[]} repos */
+export function repositoriesSummary(repos) {
+  const gone = repos.filter((r) => r.unassigned).length;
+  return `${plural(repos.length, "repository", "repositories")} · ${gone === 0 ? "all assigned" : `${gone} unassigned`}`;
+}
+
+/** Whether a project's repositories show: open while any is unassigned, unless the person chose. @param {{ repositories: { unassigned: boolean }[] }} row @param {boolean | undefined} chosen */
+export const repositoriesOpen = (row, chosen) => (chosen === undefined ? row.repositories.some((r) => r.unassigned) : chosen);
+
 /** Where a project's own settings are. @param {string} id */
 export const projectSettingsHref = (id) => `/projects/${enc(id)}/settings`;
 
@@ -103,6 +112,7 @@ export function enabledInView(catalog, agent, projects) {
   const on = new Set(enabledIn.map((e) => e.id));
   const rows = [...enabledIn].sort(byName).map((e) => {
     const auto = e.mode === "all";
+    const repos = repositoryRows(agent, e.id);
     return {
       id: e.id,
       name: e.name,
@@ -112,7 +122,9 @@ export function enabledInView(catalog, agent, projects) {
       badge: auto ? "All agents" : "Selected agents",
       tone: auto ? "" : "signal",
       note: auto ? "Enabled automatically: every agent is enabled here, this one included. Change it in the project’s settings." : "On the project’s list",
-      repositories: repositoryRows(agent, e.id),
+      repositories: repos,
+      hasRepositories: repos.length > 0,
+      repositoriesSummary: repositoriesSummary(repos),
     };
   });
   const unassigned = (agent.repositories ?? []).filter((r) => r.unassigned && on.has(r.projectId)).length;

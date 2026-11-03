@@ -162,6 +162,9 @@ func TestAgentsByRepositoryJourney_EndToEnd(t *testing.T) {
 	}
 	b.run("Assign again from the detail works, and Unassign takes it away once more",
 		raClick(`[data-action=assign-repository]`),
+		// assigned everywhere: the repositories collapse under a summary
+		waitUntil(`document.querySelectorAll('[data-repository-row]').length === 0 && document.querySelector('[data-action=toggle-repositories]')?.textContent.includes('all assigned')`),
+		raClick(`[data-action=toggle-repositories]`),
 		waitUntil(`!!document.querySelector('[data-repository-row] [data-action=unassign-repository]')`),
 		raClick(`[data-action=unassign-repository]`),
 		waitUntil(`!!document.querySelector('[data-repository-row] [data-action=assign-repository]')`),

@@ -822,7 +822,7 @@ templ newSessionForm(form NewSessionForm, lockedMode string) {
 				</template>
 				<span class="[ hint ]" data-agents-hint x-show="!noAgentEnabled">
 					<span x-text="agentHint"></span>
-					<a x-bind:href="agentsSettingsLink" href={ templ.SafeURL(form.AgentsSettingsHref()) } data-agents-settings-link>Change in project settings</a>
+					<a x-bind:href="agentHintLink.href" href={ templ.SafeURL(form.AgentsSettingsHref()) } data-agents-settings-link x-text="agentHintLink.text">Change in project settings</a>
 				</span>
 				<template x-if="hasAgentNote">
 					<span class="[ hint ]" role="status" data-agent-note x-text="agentNote"></span>

@@ -495,7 +495,9 @@ test("another repository offers its own assigned agents, and the missing ones wa
   set("repositoryId", "r2");
   await flush();
   assert.deepEqual(instance.agentChoices.map((a) => a.name), ["reviewer", "ops"]);
-  assert.equal(instance.agentCount, "2 of 3 enabled");
+  assert.equal(instance.agentCount, "2 assigned");
+  assert.equal(instance.agentHintLink.href, "/projects/p1/repositories/r2/architecture/agents");
+  assert.equal(instance.agentHintLink.text, "Manage agents in atlas-web");
   assert.equal(instance.agentHint, "Showing the 2 agents assigned to atlas-web, of 3 enabled in atlas. 1 is unassigned here.");
   assert.equal(instance.notOfferedTitle, "Not offered in atlas-web (2)");
   assert.deepEqual(instance.notOfferedList.map((r) => [r.name, r.reason, r.href]), [

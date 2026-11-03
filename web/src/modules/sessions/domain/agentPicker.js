@@ -14,11 +14,22 @@ export const repositoryAgentsHref = (projectId, repositoryId) =>
 export const unassignedCount = (notOffered) => notOffered.filter((n) => n.reason === "unassigned").length;
 
 /**
- * The line over the picker: how many it offers; nothing when none. Past the
- * agents unassigned from the repository it says how many are enabled.
+ * The line over the picker: how many it offers; nothing when none. With
+ * agents unassigned from the chosen repository it counts the ones assigned
+ * there; otherwise (nothing changes for such a project) the enabled ones.
  * @param {number} count @param {number} [unassigned]
  */
-export const pickerCount = (count, unassigned = 0) => (count > 0 ? (unassigned > 0 ? `${count} of ${count + unassigned} enabled` : `${count} enabled`) : "");
+export const pickerCount = (count, unassigned = 0) => (count > 0 ? `${count} ${unassigned > 0 ? "assigned" : "enabled"}` : "");
+
+/**
+ * The link after the hint: to the repository's Agents tab while agents are
+ * unassigned there, otherwise to the project's settings.
+ * @param {{ unassigned: number, repository: string, repositoryId: string, projectId: string }} p
+ */
+export function hintLink({ unassigned, repository, repositoryId, projectId }) {
+  if (repository && unassigned > 0) return { text: `Manage agents in ${repository}`, href: repositoryAgentsHref(projectId, repositoryId) };
+  return { text: "Change in project settings", href: agentsSettingsHref(projectId) };
+}
 
 /**
  * The hint under the picker. With agents unassigned from the repository it

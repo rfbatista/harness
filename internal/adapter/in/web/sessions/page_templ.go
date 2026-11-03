@@ -2202,7 +2202,7 @@ func newSessionForm(form NewSessionForm, lockedMode string) templ.Component {
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 187, "</template><span class=\"[ hint ]\" data-agents-hint x-show=\"!noAgentEnabled\"><span x-text=\"agentHint\"></span> <a x-bind:href=\"agentsSettingsLink\" href=\"")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 187, "</template><span class=\"[ hint ]\" data-agents-hint x-show=\"!noAgentEnabled\"><span x-text=\"agentHint\"></span> <a x-bind:href=\"agentHintLink.href\" href=\"")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
@@ -2215,7 +2215,7 @@ func newSessionForm(form NewSessionForm, lockedMode string) templ.Component {
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 188, "\" data-agents-settings-link>Change in project settings</a></span><template x-if=\"hasAgentNote\"><span class=\"[ hint ]\" role=\"status\" data-agent-note x-text=\"agentNote\"></span></template><template x-if=\"hasNotOffered\"><details class=\"[ hint ]\" data-not-offered><summary x-text=\"notOfferedTitle\"></summary><ul class=\"[ flow ] [ flow-space-3xs ]\" role=\"list\"><template x-for=\"r in notOfferedList\" x-bind:key=\"r.name\"><li data-not-offered-agent x-bind:data-agent=\"r.name\"><span aria-disabled=\"true\" class=\"[ color-ink-faint ]\"><span x-text=\"r.name\"></span> — <span x-text=\"r.reason\"></span></span> <a x-bind:href=\"r.href\" x-text=\"r.linkText\"></a></li></template></ul></details></template></div><div class=\"[ field ]\">")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 188, "\" data-agents-settings-link x-text=\"agentHintLink.text\">Change in project settings</a></span><template x-if=\"hasAgentNote\"><span class=\"[ hint ]\" role=\"status\" data-agent-note x-text=\"agentNote\"></span></template><template x-if=\"hasNotOffered\"><details class=\"[ hint ]\" data-not-offered><summary x-text=\"notOfferedTitle\"></summary><ul class=\"[ flow ] [ flow-space-3xs ]\" role=\"list\"><template x-for=\"r in notOfferedList\" x-bind:key=\"r.name\"><li data-not-offered-agent x-bind:data-agent=\"r.name\"><span aria-disabled=\"true\" class=\"[ color-ink-faint ]\"><span x-text=\"r.name\"></span> — <span x-text=\"r.reason\"></span></span> <a x-bind:href=\"r.href\" x-text=\"r.linkText\"></a></li></template></ul></details></template></div><div class=\"[ field ]\">")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}

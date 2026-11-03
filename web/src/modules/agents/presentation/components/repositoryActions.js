@@ -9,7 +9,7 @@
 
 import { Codes } from "../../../../shared/domain/errors.js";
 import { describeError } from "../../../../shared/presentation/errors.js";
-import { repositoryToggled } from "../../domain/enabledIn.js";
+import { repositoriesOpen, repositoryToggled } from "../../domain/enabledIn.js";
 
 /** @param {{ repositories: Pick<import("../../../repositoryagents/domain/ports.js").RepositoryAgentsGateway, "unassignAgent" | "assignAgentAgain"> | undefined }} deps */
 export function repositoryActions({ repositories }) {
@@ -18,6 +18,19 @@ export function repositoryActions({ repositories }) {
     repoBusy: "",
     /** What the last click said when it was refused: { text }. */
     repoRefusal: null,
+    /** Project id → whether the person opened (true) or closed (false) its repositories; unset follows the default. */
+    reposChosen: {},
+
+    /** The repositories of a project row that show now. */
+    reposShown(row) {
+      return repositoriesOpen(row, this.reposChosen[row.id]) ? row.repositories : [];
+    },
+    reposExpanded(row) {
+      return repositoriesOpen(row, this.reposChosen[row.id]);
+    },
+    toggleRepos(row) {
+      this.reposChosen = { ...this.reposChosen, [row.id]: !this.reposExpanded(row) };
+    },
 
     /** Whether a click is in flight: a boolean, since Alpine reads "" as set for a boolean attribute. */
     get repoIsBusy() {
