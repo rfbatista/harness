@@ -410,7 +410,12 @@ func withClaudeSandboxOff(cfg *llmkit.SessionConfig) {
 func confineSpec(spec *ports.AgentSpec, policy *ports.SandboxPolicy) {
 	spec.Sandbox = policy
 	if policy != nil {
-		spec.Settings = map[string]json.RawMessage{"sandbox": claudeSandboxOff}
+		settings := make(map[string]json.RawMessage, len(spec.Settings)+1)
+		for k, v := range spec.Settings {
+			settings[k] = v
+		}
+		settings["sandbox"] = claudeSandboxOff
+		spec.Settings = settings
 	}
 }
 
@@ -758,4 +763,38 @@ func (s *Service) SandboxViolations(id string) (ports.SandboxViolationLog, error
 		log.Violations = got
 	}
 	return log, nil
+}
+
+// withAttribution adds the person's agent attribution (ADR 0063) to the
+// session's --settings, next to what it already has, read now so that a start
+// or a resume gets the choice in force at that moment. With both lines on
+// Claude default it changes nothing.
+func (s *Service) withAttribution(cfg *llmkit.SessionConfig) {
+	if s.Settings == nil {
+		return
+	}
+	launch := domain.ParseAgentAttribution(s.Settings.Setting(domain.SettingAgentAttribution)).Launch()
+	if launch == nil {
+		return
+	}
+	var dc claude.Config
+	switch d := cfg.Driver.(type) {
+	case nil:
+	case claude.Config:
+		dc = d
+	default:
+		return
+	}
+	var settings claude.Settings
+	if dc.Settings != nil {
+		settings = *dc.Settings
+	}
+	extra := make(map[string]json.RawMessage, len(settings.Extra)+1)
+	for k, v := range settings.Extra {
+		extra[k] = v
+	}
+	extra["attribution"] = launch
+	settings.Extra = extra
+	dc.Settings = &settings
+	cfg.Driver = dc
 }

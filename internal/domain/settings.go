@@ -1,6 +1,7 @@
 package domain
 
 import (
+	"encoding/json"
 	"path/filepath"
 	"strings"
 )
@@ -37,6 +38,16 @@ func ValidateSetting(key, value string) error {
 	case SettingAgentsMoveDocuments:
 		if value != "" && value != "true" && value != "false" {
 			return &StructuredError{Code: "INVALID_INPUT", Message: key + " must be true or false"}
+		}
+	case SettingAgentAttribution:
+		if value != "" {
+			var a AgentAttribution
+			if err := json.Unmarshal([]byte(value), &a); err != nil {
+				return &StructuredError{Code: "INVALID_INPUT", Message: key + " must be the attribution JSON"}
+			}
+			if _, err := a.Normalize(); err != nil {
+				return err
+			}
 		}
 	case SettingModelArchitect, SettingModelImplementation:
 		if err := validateModelSetting(key, value); err != nil {
