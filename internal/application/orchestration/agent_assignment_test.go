@@ -134,6 +134,36 @@ func TestUnassigningLeavesARunningSessionAlone(t *testing.T) {
 	}
 }
 
+// A session whose agent was deleted from the catalog is not marked unassigned,
+// whatever the repository's list says, and a session of an assigned agent is
+// not either.
+func TestASessionOfADeletedAgentIsNotMarkedUnassigned(t *testing.T) {
+	svc, res, as, _ := assignedWorld(t)
+	ctx := t.Context()
+	sess, _ := startInteractive(t, svc, InteractiveRequest{ProjectID: "p1", RepositoryID: "r1", TicketID: "tk1", AgentID: "a1"})
+	if _, err := svc.EndInteractive(ctx, sess.ID, 0, false); err != nil {
+		t.Fatal(err)
+	}
+	flag := func() bool {
+		got, err := svc.Get(ctx, sess.ID)
+		if err != nil {
+			t.Fatal(err)
+		}
+		return got.AgentUnassigned
+	}
+	if flag() {
+		t.Fatal("an assigned agent's session is marked unassigned")
+	}
+	as.unassign("r1", "backend")
+	if !flag() {
+		t.Fatal("an unassigned agent's session is not marked")
+	}
+	delete(res.agents, "a1")
+	if flag() {
+		t.Fatal("a deleted agent's session is marked unassigned")
+	}
+}
+
 // fakeSections is the repository prompts: what each agent's section holds in
 // each repository.
 type fakeSections map[string]string

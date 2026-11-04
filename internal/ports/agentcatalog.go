@@ -13,6 +13,12 @@ type CatalogReader interface {
 	// is reported in CatalogView.Broken, with the lists of the last version
 	// that did.
 	ReadCatalog() (*domain.CatalogView, error)
+	// ReadCatalogAgents reads the agents alone, as the agents file says them:
+	// their names, descriptions, aliases, entries, resolved skills, MCP server
+	// names and allowed tools. It does not scan the skill folders, so it is the
+	// cheap read for callers that list agents. Problems, usage and where an
+	// agent is enabled are left empty.
+	ReadCatalogAgents() ([]domain.CatalogAgent, error)
 	// ReadCatalogSkill reads one skill's full content. SKILL_NOT_FOUND when
 	// there is none.
 	ReadCatalogSkill(name string) (*domain.CatalogSkillView, error)

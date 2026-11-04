@@ -15,6 +15,14 @@ func (s *Service) ListAgents(ctx context.Context) ([]*domain.Agent, error) {
 	return agents, nil
 }
 
+// ListAgentNames returns all agents as they are stored: id, name and
+// description, with their skill and server ids as the catalog holds them, but
+// no prompt, skill or MCP server looked up. It is the cheap list for callers
+// that show or look up names.
+func (s *Service) ListAgentNames(ctx context.Context) ([]*domain.Agent, error) {
+	return s.agents.List(ctx), nil
+}
+
 // GetAgent returns one agent by id with its relations resolved, or AGENT_NOT_FOUND.
 func (s *Service) GetAgent(_ context.Context, id string) (*domain.Agent, error) {
 	a := s.agents.Get(id)

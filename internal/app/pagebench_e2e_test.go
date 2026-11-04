@@ -85,7 +85,7 @@ func TestThePageBenchmarkMeasuresEveryProjectPage(t *testing.T) {
 			t.Errorf("%s: %+v", r.page, r)
 		}
 	}
-	if got := strings.Join(names, ","); got != "board,task page,settings,documents,code,design,design system,usage,reviews" {
+	if got := strings.Join(names, ","); got != "board,task page,settings,documents,code,design,design system,usage,reviews,history" {
 		t.Errorf("pages measured: %s", got)
 	}
 	if out := table(rows); !strings.Contains(out, "git (calls)") || !strings.Contains(out, "catalog (reads)") || !strings.Contains(out, "task page") {

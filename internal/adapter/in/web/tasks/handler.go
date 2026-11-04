@@ -23,7 +23,7 @@ type Handler struct {
 	Projects     ports.ProjectReader
 	Tasks        ports.TicketReader
 	Sessions     ports.SessionReader
-	Agents       ports.AgentLister
+	Agents       ports.AgentNameLister
 	Repositories ports.RepositoryLister
 	// Docs reads the documents linked to a task and the project's library;
 	// nil hides both.
@@ -85,7 +85,7 @@ func (h Handler) Project(w http.ResponseWriter, r *http.Request) error {
 		return err
 	}
 	// The brainstorm dialog's choices: an agent and a repository.
-	agents, err := h.Agents.ListAgents(ctx)
+	agents, err := h.Agents.ListAgentNames(ctx)
 	if err != nil {
 		return err
 	}
@@ -121,7 +121,7 @@ func (h Handler) ProjectSessions(w http.ResponseWriter, r *http.Request) error {
 		return err
 	}
 	list := ticketless(all)
-	agents, err := h.Agents.ListAgents(ctx)
+	agents, err := h.Agents.ListAgentNames(ctx)
 	if err != nil {
 		return err
 	}
@@ -238,7 +238,7 @@ func (h Handler) task(w http.ResponseWriter, r *http.Request, codeRoute *code.Ro
 	if err != nil {
 		return err
 	}
-	agents, err := h.Agents.ListAgents(ctx)
+	agents, err := h.Agents.ListAgentNames(ctx)
 	if err != nil {
 		return err
 	}

@@ -43,7 +43,7 @@ type Handler struct {
 	// leaves every design system page not found.
 	Designs ports.DesignSystemPages
 	// Agents lists the agents a design session may run as; nil offers none.
-	Agents ports.AgentLister
+	Agents ports.AgentNameLister
 	Layout shell.Layout
 	Render shell.Renderer
 }
@@ -88,7 +88,7 @@ func (h Handler) enabledAgents(ctx context.Context, project *domain.Project) []A
 	if h.Agents == nil {
 		return out
 	}
-	agents, err := h.Agents.ListAgents(ctx)
+	agents, err := h.Agents.ListAgentNames(ctx)
 	if err != nil {
 		slog.Warn("design system page: agents not read", "err", err)
 		return out

@@ -47,7 +47,7 @@ type Deps struct {
 	Tasks    ports.TicketReader
 	Sessions ports.SessionReader
 	// Agents and Repositories fill the new-session form.
-	Agents       ports.AgentLister
+	Agents       ports.AgentNameLister
 	Repositories ports.RepositoryLister
 	// EnvFiles lists a repository's env files for their page.
 	EnvFiles ports.EnvFileLister

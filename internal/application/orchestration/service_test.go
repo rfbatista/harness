@@ -51,6 +51,14 @@ func (f *fakeResolver) GetAgent(_ context.Context, id string) (*domain.Agent, er
 	return nil, &domain.StructuredError{Code: "AGENT_NOT_FOUND", Message: "agent not found"}
 }
 
+func (f *fakeResolver) ListAgentNames(context.Context) ([]*domain.Agent, error) {
+	out := make([]*domain.Agent, 0, len(f.agents))
+	for _, a := range f.agents {
+		out = append(out, a)
+	}
+	return out, nil
+}
+
 func (f *fakeResolver) ResolveAgentRelations(a *domain.Agent) {}
 func (f *fakeResolver) ListMCPServers() []*domain.MCPServer   { return f.servers }
 func (f *fakeResolver) GetZone(id string) *domain.Zone        { return nil }

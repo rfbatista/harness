@@ -44,6 +44,8 @@ func (s *stubResolver) GetAgent(context.Context, string) (*domain.Agent, error) 
 	return nil, &domain.StructuredError{Code: "AGENT_NOT_FOUND", Message: "agent not found"}
 }
 
+func (s *stubResolver) ListAgentNames(context.Context) ([]*domain.Agent, error) { return nil, nil }
+
 func (s *stubResolver) ResolveAgentRelations(a *domain.Agent) {}
 func (s *stubResolver) ListMCPServers() []*domain.MCPServer   { return nil }
 func (s *stubResolver) GetZone(id string) *domain.Zone        { return nil }

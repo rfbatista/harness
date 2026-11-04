@@ -44,6 +44,9 @@ import (
 // only held without it.
 func TestBudgetedPagesStayWithinThePageLoadBudget(t *testing.T) {
 	b := newBudgetProject(t)
+	// The live server reads an agent catalog for every session that runs as an
+	// agent: a project without one cannot show what that costs.
+	b.agents = seedAgentCatalog(t, b.dir)
 	pages := []struct{ name, path string }{
 		{"task page", "/projects/" + b.project + "/tasks/" + b.tickets[0]},
 		{"project page", "/projects/" + b.project},

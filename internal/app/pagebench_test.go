@@ -74,12 +74,45 @@ func (p *pageBench) pages() ([]benchPage, error) {
 	if taskPath == "" {
 		return nil, fmt.Errorf("the board of project %s links to no task, so there is no task page to time", p.project)
 	}
-	return []benchPage{
+	pages := []benchPage{
 		{"board", root}, {"task page", taskPath}, {"settings", root + "/settings"}, {"documents", root + "/documents"},
 		{"code", root + "/code"}, {"design", root + "/design"}, {"design system", root + "/design-systems"},
 		{"usage", root + "/usage"}, {"reviews", root + "/reviews"},
-	}, nil
+	}
+	if path := p.historyPath(board.body, task, root); path != "" {
+		pages = append(pages, benchPage{"history", path})
+	}
+	return pages, nil
 }
+
+// historyPath is the first session history page that answers, among the board's
+// first tasks' sessions (a session with no worktree has no history page): each
+// task page seeds its sessions as JSON. Empty when none does.
+func (p *pageBench) historyPath(board string, taskLink *regexp.Regexp, root string) string {
+	tried := 0
+	for _, t := range taskLink.FindAllStringSubmatch(board, -1) {
+		if strings.HasSuffix(t[1], "/tasks/new") {
+			continue
+		}
+		if tried++; tried > 400 {
+			break
+		}
+		page, err := p.get(t[1])
+		if err != nil {
+			continue
+		}
+		for _, m := range sessionIDRe.FindAllStringSubmatch(page.body, 5) {
+			path := t[1] + "/sessions/" + m[1] + "/history"
+			if got, err := p.get(path); err == nil && got.status == http.StatusOK {
+				return path
+			}
+		}
+	}
+	return ""
+}
+
+// sessionIDRe matches a session in the task page's seed.
+var sessionIDRe = regexp.MustCompile(`\{"id":"([^"]+)","project_id":"[^"]*","repository_id"`)
 
 // answer is one GET's result.
 type answer struct {

@@ -25,6 +25,16 @@ type AgentLister interface {
 	GetAgent(ctx context.Context, id string) (*domain.Agent, error)
 }
 
+// AgentNameLister reads what a page needs to name and offer the agents: each
+// one's id, name and description, with the skill and MCP server ids as the
+// catalog holds them and no prompt, skill or MCP server looked up. A page
+// request shares one catalog read among its callers, so asking for the names
+// of the agents costs one read however often it is asked. *agents.Service
+// satisfies it.
+type AgentNameLister interface {
+	ListAgentNames(ctx context.Context) ([]*domain.Agent, error)
+}
+
 // AgentCatalog manages agent templates. It is network-safe: tui-client
 // implements it over HTTP, so every method takes a context and reports
 // failure, AGENT_NOT_FOUND included, as an error.

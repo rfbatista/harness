@@ -45,6 +45,7 @@ type Catalog struct {
 	Agents interface {
 		GetAgent(ctx context.Context, id string) (*domain.Agent, error)
 		ResolveAgentRelations(a *domain.Agent)
+		ports.AgentNameLister
 	}
 	MCPServers interface{ ListMCPServers() []*domain.MCPServer }
 	// DesignSystems names a repository's applied design system for the
