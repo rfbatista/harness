@@ -25,7 +25,7 @@ TUI_FLAGS = $(if $(API),--api $(API)) $(if $(RUN),--run $(RUN)) \
 
 .PHONY: help air stop-api server run build build-server build-tui-client web web-watch design-tokens \
         tui-client tui-client-bin install-tui-client update-tui-client uninstall-tui-client \
-        test test-race vet check deps clean \
+        test test-race vet check page-bench perf-budget deps clean \
         crap build-crap install-crap update-crap \
         linkedin-login linkedin-mcp build-linkedin-mcp linkedin-mcpb
 
@@ -136,6 +136,16 @@ check: web ## what to run before calling work done: build, vet, race tests
 	go vet $(PKGS)
 	go test -race $(PKGS)
 	$(MAKE) test-design-system
+
+# The page benchmark requests every project page and prints its median and worst page
+# server time with the breakdown (see "Page time" in the README).
+page-bench: ## time every project page; PAGEBENCH_URL=http://127.0.0.1:8080 [PAGEBENCH_PROJECT=harness] for a live server, else the seeded four-times project
+	go test ./internal/app -run 'TestPageBenchmark$$' -count=1 -v -timeout 20m -pagebench $(if $(PAGEBENCH_URL),-pagebench.url=$(PAGEBENCH_URL) -pagebench.project=$(or $(PAGEBENCH_PROJECT),harness))
+
+# The budgets are in internal/app/testdata/page-budgets.json; each fix task lowers its pages'.
+# Its times depend on the machine, so it is not part of make check.
+perf-budget: ## fail when a project page is over its page-time budget, on the seeded four-times project
+	go test ./internal/app -run 'TestPageBenchmark$$' -count=1 -v -timeout 20m -pagebench -pagebench.budgets=testdata/page-budgets.json
 
 deps: ## download Go modules
 	go mod download

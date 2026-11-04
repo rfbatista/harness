@@ -1,0 +1,15 @@
+{
+  "note": "Page-time budgets in milliseconds, as the median on the seeded four-times project (make perf-budget). The target is 300 ms per page and 100 ms for the frame share. A page over its target carries a temporary budget: its measured median plus about 40% for the noise of a loaded machine, rounded up to 100 ms. Each fix task lowers the budgets of the pages it fixes, in this file.",
+  "frame": 1100,
+  "pages": {
+    "board": 1800,
+    "task page": 1800,
+    "settings": 1100,
+    "documents": 1100,
+    "code": 1100,
+    "design": 1100,
+    "design system": 1100,
+    "usage": 1100,
+    "reviews": 1800
+  }
+}
