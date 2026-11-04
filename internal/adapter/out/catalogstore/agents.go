@@ -4,6 +4,7 @@ import (
 	"context"
 
 	"operators-mcp/internal/domain"
+	"operators-mcp/internal/infra/readshare"
 	"operators-mcp/internal/ports"
 )
 
@@ -53,9 +54,11 @@ func (r *Agents) Get(id string) *domain.Agent {
 	return domainAgent(*a)
 }
 
-// List returns every agent.
-func (r *Agents) List(context.Context) []*domain.Agent {
-	view, err := r.cat.ReadCatalog()
+// List returns every agent. Within a page request the catalog is read once,
+// however often the page asks: only a read made with a request's context is
+// shared, so an action always reads the catalog fresh.
+func (r *Agents) List(ctx context.Context) []*domain.Agent {
+	view, err := readshare.Do(ctx, "agent catalog", r.cat.ReadCatalog)
 	if err != nil {
 		return nil
 	}

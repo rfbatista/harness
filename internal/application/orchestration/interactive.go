@@ -713,8 +713,8 @@ func (s *Service) fillAssignment(ctx context.Context, sess *domain.Session, seen
 	key := sess.RepositoryID + "\x00" + sess.AgentID
 	unassigned, ok := seen[key]
 	if !ok {
-		a, err := s.catalog.Agents.GetAgent(ctx, sess.AgentID)
-		unassigned = err == nil && s.assignments.IsUnassigned(ctx, sess.RepositoryID, a.Name)
+		name, found := s.catalogAgentName(ctx, sess.AgentID)
+		unassigned = found && s.assignments.IsUnassigned(ctx, sess.RepositoryID, name)
 		seen[key] = unassigned
 	}
 	sess.AgentUnassigned = unassigned
@@ -724,6 +724,22 @@ func (s *Service) fillAssignment(ctx context.Context, sess *domain.Session, seen
 		sess.ResumeBlocked = "AGENT_NOT_ASSIGNED"
 		sess.Resumable = false
 	}
+}
+
+// catalogAgentName is the name of the agent with the id, and whether the catalog has
+// it. It asks for the names only: resolving an agent's prompt, skills and
+// servers to learn its name reads the catalog once for each of them.
+func (s *Service) catalogAgentName(ctx context.Context, id string) (string, bool) {
+	list, err := s.catalog.Agents.ListAgentNames(ctx)
+	if err != nil {
+		return "", false
+	}
+	for _, a := range list {
+		if a.ID == id {
+			return a.Name, true
+		}
+	}
+	return "", false
 }
 
 // UseRepositoryPrompts makes a start or a resume of an agent append the

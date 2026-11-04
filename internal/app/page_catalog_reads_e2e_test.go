@@ -74,3 +74,29 @@ func dumpPage(t *testing.T, name, body string) {
 		t.Fatal(err)
 	}
 }
+
+// An agent saved in the catalog shows on the next page opened: what one page
+// request reads of the catalog does not outlive the request.
+func TestAnAgentSavedBetweenTwoPageRequestsShowsOnTheSecond(t *testing.T) {
+	b := newBudgetProject(t)
+	b.agents = seedAgentCatalog(t, b.dir)
+	b.addSessions(6)
+	page := func() string {
+		rec := httptest.NewRecorder()
+		b.handler.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/projects/"+b.project+"/tasks/"+b.tickets[0], nil))
+		if rec.Code != http.StatusOK {
+			t.Fatalf("status %d", rec.Code)
+		}
+		return rec.Body.String()
+	}
+	const name = "late-agent"
+	if strings.Contains(page(), name) {
+		t.Fatalf("the page shows %s before it exists", name)
+	}
+	if _, err := b.cat.Agents.CreateAgent(b.ctx, name, "Saved between two requests.", "", nil, nil); err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(page(), name) {
+		t.Errorf("the page opened after saving %s does not show it", name)
+	}
+}
