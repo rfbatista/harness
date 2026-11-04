@@ -1,5 +1,5 @@
 {
-  "note": "Page-time budgets in milliseconds, as the median on the seeded four-times project (make perf-budget). The target is 300 ms per page and 100 ms for the frame share. A page over its target carries a temporary budget: its measured median plus about 40% for the noise of a loaded machine, rounded up to 100 ms. Each fix task lowers the budgets of the pages it fixes, in this file.",
+  "note": "Page-time budgets in milliseconds, as the median on the seeded four-times project (make perf-budget). The final budgets are 300 ms per page and 100 ms for the frame share, with no margin. A page that is not fixed yet carries a temporary budget: its measured median plus 40% for the noise of a loaded machine, rounded up to 100 ms. Each fix task sets the budgets of the pages it fixes to the final values, in this file. The frame budget applies to the largest frame value across the pages; a page that reads the project session list before its layout does shows a frame of about 0 ms, because the layout takes the shared answer, so that page is held by its own budget.",
   "frame": 1100,
   "pages": {
     "board": 1800,

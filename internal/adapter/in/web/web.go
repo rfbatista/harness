@@ -329,6 +329,7 @@ func (s *server) page(h shell.Handler) http.Handler {
 		var timing *pagetime.Timing
 		if r.PathValue("project") != "" {
 			ctx, timing = pagetime.Start(ctx)
+			defer timing.Bind()()
 		}
 		r = r.WithContext(ctx)
 		if err := h(w, r); err != nil {
@@ -563,5 +564,5 @@ func render(w http.ResponseWriter, r *http.Request, status int, page templ.Compo
 func logPageTime(r *http.Request, t *pagetime.Timing) {
 	rep := t.Report(0)
 	slog.Info("page time", "route", r.Pattern, "project", r.PathValue("project"),
-		"total", rep.Total, "db", rep.DB, "git", rep.Git, "git_calls", rep.GitCalls, "render", rep.Render, "frame", rep.Frame)
+		"total", rep.Total, "db", rep.DB, "git", rep.Git, "git_calls", rep.GitCalls, "render", rep.Render, "frame", rep.Frame, "catalog", rep.Catalog, "catalog_reads", rep.CatalogReads)
 }

@@ -81,14 +81,14 @@ func TestThePageBenchmarkMeasuresEveryProjectPage(t *testing.T) {
 	var names []string
 	for _, r := range rows {
 		names = append(names, r.page)
-		if !r.breakdown || r.median <= 0 || r.worst < r.median {
+		if !r.breakdown || r.median <= 0 || r.worst < r.median || r.catalogReads < 0 {
 			t.Errorf("%s: %+v", r.page, r)
 		}
 	}
 	if got := strings.Join(names, ","); got != "board,task page,settings,documents,code,design,design system,usage,reviews" {
 		t.Errorf("pages measured: %s", got)
 	}
-	if out := table(rows); !strings.Contains(out, "git (calls)") || !strings.Contains(out, "task page") {
+	if out := table(rows); !strings.Contains(out, "git (calls)") || !strings.Contains(out, "catalog (reads)") || !strings.Contains(out, "task page") {
 		t.Errorf("table:\n%s", out)
 	}
 }

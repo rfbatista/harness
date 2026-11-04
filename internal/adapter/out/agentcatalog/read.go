@@ -8,11 +8,13 @@ import (
 	"path/filepath"
 	"sort"
 	"strings"
+	"time"
 	"unicode/utf8"
 
 	"github.com/rfbatista/harnesskit/skill"
 
 	"operators-mcp/internal/domain"
+	"operators-mcp/internal/infra/pagetime"
 )
 
 // builtInTools are the Claude built-in tools an agent's allowed tools may name.
@@ -149,6 +151,8 @@ func contains(list []string, s string) bool {
 
 // ReadCatalog reads the whole catalog.
 func (c *Catalog) ReadCatalog() (*domain.CatalogView, error) {
+	started := time.Now()
+	defer func() { pagetime.AddCatalogRead(time.Since(started)) }()
 	l, err := c.load()
 	if err != nil {
 		return nil, err
@@ -384,6 +388,8 @@ func (c *Catalog) ReadCatalogSkill(name string) (*domain.CatalogSkillView, error
 // ReadCatalogSkillContent reads one skill with its body and every other
 // file. It does not say who gets the skill.
 func (c *Catalog) ReadCatalogSkillContent(name string) (*domain.CatalogSkillView, error) {
+	started := time.Now()
+	defer func() { pagetime.AddCatalogRead(time.Since(started)) }()
 	if !slugRe.MatchString(name) {
 		return nil, domain.NewCatalogError("INVALID_INPUT", "a skill name is lower-case letters, digits and dashes", map[string]any{"field": "name"})
 	}

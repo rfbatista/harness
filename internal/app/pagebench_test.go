@@ -32,8 +32,8 @@ type benchRow struct {
 	// time to first byte seen by the client.
 	median, worst time.Duration
 	// The medians of the breakdown; zero with no breakdown.
-	db, git, render, frame time.Duration
-	gitCalls               int
+	db, git, render, frame, catalog time.Duration
+	gitCalls, catalogReads          int
 	breakdown              bool
 }
 
@@ -120,8 +120,8 @@ func (p *pageBench) measure(page benchPage) (benchRow, error) {
 	} else if first.status >= 300 && first.status < 400 {
 		path = first.where // a page that leads to another is timed at its end
 	}
-	var times, dbs, gits, renders, frames []time.Duration
-	var calls []int
+	var times, dbs, gits, renders, frames, catalogs []time.Duration
+	var calls, reads []int
 	row := benchRow{page: page.name, breakdown: true}
 	for range p.runs {
 		a, err := p.get(path)
@@ -131,20 +131,20 @@ func (p *pageBench) measure(page benchPage) (benchRow, error) {
 		if a.status != http.StatusOK {
 			return benchRow{}, fmt.Errorf("%s: GET %s answered %d", page.name, path, a.status)
 		}
-		m, n, ok := parseTiming(a.header.Get("Server-Timing"))
+		m, n, nr, ok := parseTiming(a.header.Get("Server-Timing"))
 		if !ok {
 			row.breakdown = false
 			times = append(times, a.first)
 			continue
 		}
 		times = append(times, m["total"])
-		dbs, gits, renders, frames = append(dbs, m["db"]), append(gits, m["git"]), append(renders, m["render"]), append(frames, m["frame"])
-		calls = append(calls, n)
+		dbs, gits, renders, frames, catalogs = append(dbs, m["db"]), append(gits, m["git"]), append(renders, m["render"]), append(frames, m["frame"]), append(catalogs, m["catalog"])
+		calls, reads = append(calls, n), append(reads, nr)
 	}
 	row.median, row.worst = median(times), slices.Max(times)
 	if row.breakdown {
 		row.db, row.git, row.render, row.frame = median(dbs), median(gits), median(renders), median(frames)
-		row.gitCalls = int(median(durations(calls)))
+		row.catalog, row.gitCalls, row.catalogReads = median(catalogs), int(median(durations(calls))), int(median(durations(reads)))
 	}
 	return row, nil
 }
@@ -181,13 +181,14 @@ func durations(n []int) []time.Duration {
 }
 
 var timingDur = regexp.MustCompile(`(?:^|;)dur=([0-9.]+)`)
+var timingReads = regexp.MustCompile(`desc="(\d+) reads"`)
 var timingCalls = regexp.MustCompile(`desc="(\d+) calls"`)
 
 // parseTiming reads a Server-Timing value: each metric's duration, and the
-// number of git calls. It is not ok when there is no total.
-func parseTiming(header string) (map[string]time.Duration, int, bool) {
+// number of git calls and of catalog reads. It is not ok when there is no total.
+func parseTiming(header string) (map[string]time.Duration, int, int, bool) {
 	out := map[string]time.Duration{}
-	calls := 0
+	calls, reads := 0, 0
 	for _, metric := range strings.Split(header, ",") {
 		metric = strings.TrimSpace(metric)
 		name, _, _ := strings.Cut(metric, ";")
@@ -198,22 +199,25 @@ func parseTiming(header string) (map[string]time.Duration, int, bool) {
 		if c := timingCalls.FindStringSubmatch(metric); c != nil {
 			calls, _ = strconv.Atoi(c[1])
 		}
+		if c := timingReads.FindStringSubmatch(metric); c != nil {
+			reads, _ = strconv.Atoi(c[1])
+		}
 	}
 	_, ok := out["total"]
-	return out, calls, ok
+	return out, calls, reads, ok
 }
 
 // table is the rows as the benchmark prints them.
 func table(rows []benchRow) string {
 	var b strings.Builder
-	fmt.Fprintf(&b, "%-14s %9s %9s %9s %14s %9s %9s\n", "page", "median", "worst", "db", "git (calls)", "render", "frame")
+	fmt.Fprintf(&b, "%-14s %9s %9s %9s %14s %9s %9s %17s\n", "page", "median", "worst", "db", "git (calls)", "render", "frame", "catalog (reads)")
 	ms := func(d time.Duration) string { return fmt.Sprintf("%.0f ms", float64(d)/float64(time.Millisecond)) }
 	for _, r := range rows {
 		if !r.breakdown {
 			fmt.Fprintf(&b, "%-14s %9s %9s   no breakdown (time to first byte)\n", r.page, ms(r.median), ms(r.worst))
 			continue
 		}
-		fmt.Fprintf(&b, "%-14s %9s %9s %9s %14s %9s %9s\n", r.page, ms(r.median), ms(r.worst), ms(r.db), fmt.Sprintf("%s (%d)", ms(r.git), r.gitCalls), ms(r.render), ms(r.frame))
+		fmt.Fprintf(&b, "%-14s %9s %9s %9s %14s %9s %9s %17s\n", r.page, ms(r.median), ms(r.worst), ms(r.db), fmt.Sprintf("%s (%d)", ms(r.git), r.gitCalls), ms(r.render), ms(r.frame), fmt.Sprintf("%s (%d)", ms(r.catalog), r.catalogReads))
 	}
 	return b.String()
 }
