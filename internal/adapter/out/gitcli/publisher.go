@@ -35,7 +35,7 @@ func NewBranchPublisher(opts ...Option) *BranchPublisher {
 func (p BranchPublisher) OriginURL(ctx context.Context, repoRoot string) (string, error) {
 	ctx, cancel := context.WithTimeout(ctx, p.d.read())
 	defer cancel()
-	out, err := p.d.gitCmd(ctx, repoRoot, "config", "--get", "remote.origin.url").Output()
+	out, err := outputTimed(ctx, p.d.gitCmd(ctx, repoRoot, "config", "--get", "remote.origin.url"))
 	if err := cut(ctx, "config", err); timedOut(err) {
 		return "", err
 	}

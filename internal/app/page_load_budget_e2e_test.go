@@ -110,9 +110,14 @@ type budgetProject struct {
 	repoDir  string
 	tickets  []string
 	seeded   int
+	dir      string   // the data directory: the database and the agent catalog live in it
+	agents   []string // the agents seeded sessions run as, in turn; none: no agent
+	live     int      // how many seeded sessions run; 0: every third one
 }
 
-func newBudgetProject(t *testing.T) *budgetProject {
+// newBudgetProject seeds the project. git, when given, is the git binary the
+// server runs.
+func newBudgetProject(t *testing.T, git ...string) *budgetProject {
 	t.Helper()
 	// Under Xcode, /usr/bin/git is a shim that looks the real git up on every
 	// run, which costs up to 50 ms a run on some machines: that is the
@@ -124,7 +129,7 @@ func newBudgetProject(t *testing.T) *budgetProject {
 	repoDir := filepath.Join(dir, "repo")
 	gitInit(t, repoDir)
 
-	b := &budgetProject{t: t, ctx: context.Background()}
+	b := &budgetProject{t: t, ctx: context.Background(), dir: dir}
 	var (
 		cat     catalog.Catalog
 		orch    *orchestration.Service
@@ -141,7 +146,7 @@ func newBudgetProject(t *testing.T) *budgetProject {
 	// Without ExecutionModule: it registers Genkit flows in a process-wide
 	// registry, so it cannot boot twice in one test binary.
 	app := fx.New(
-		fx.Supply(Config{HTTPAddr: "127.0.0.1:0", MCPAddr: "127.0.0.1:0", DBPath: filepath.Join(dir, "harness.db"), Root: dir, ClaudeBin: "/bin/true", SessionShell: "direct"}),
+		fx.Supply(Config{HTTPAddr: "127.0.0.1:0", MCPAddr: "127.0.0.1:0", DBPath: filepath.Join(dir, "harness.db"), Root: dir, ClaudeBin: "/bin/true", SessionShell: "direct", GitBin: strings.Join(git, "")}),
 		PersistenceModule, CatalogModule, PlanningModule, WorkspacesModule, GitCredentialsModule,
 		AgentRuntimeModule, TaskChannelModule, TextProcessingModule, UsageModule, NotificationsModule,
 		fx.Populate(&cat, &orch, &plan, &ws, &prs, &code, &wtGit, &art, &usageSv, &inbox, &creds, &b.db, &b.sessions),
@@ -225,8 +230,8 @@ func (b *budgetProject) addSessions(n int) {
 		b.seeded++
 		ticket := b.tickets[i%len(b.tickets)]
 		branch, path := fmt.Sprintf("agent/s-%d", i), b.t.TempDir()
-		if i == 0 {
-			b.worktree(branch, path) // the session whose history page is read
+		if i == 0 || (b.live > 0 && i < b.live) {
+			b.worktree(branch, path) // the session whose history page is read, and each live one
 		}
 		w, err := workspacesRepo.Create(domain.Workspace{RepositoryID: b.repo, Name: fmt.Sprintf("ws-%d", i), Branch: branch, Path: path, BaseRef: "main"})
 		if err != nil {
@@ -236,12 +241,16 @@ func (b *budgetProject) addSessions(n int) {
 		if i < len(b.tickets) {
 			mode = domain.SessionModeArchitect
 		}
-		if i%3 == 0 {
+		if (b.live == 0 && i%3 == 0) || (b.live > 0 && i < b.live) {
 			status = domain.SessionRunning
+		}
+		agent := ""
+		if len(b.agents) > 0 {
+			agent = b.agents[i%len(b.agents)]
 		}
 		s, err := b.sessions.Create(&domain.Session{
 			ID: fmt.Sprintf("s-%03d", i), ProjectID: b.project, RepositoryID: b.repo, TicketID: ticket, Task: "Work on the task",
-			WorkingDir: w.Path, Status: status, WorkspaceID: w.ID, Branch: w.Branch, Interactive: i%2 == 0, RunsOn: domain.RunnerServer, Mode: mode,
+			WorkingDir: w.Path, Status: status, WorkspaceID: w.ID, Branch: w.Branch, AgentID: agent, Interactive: i%2 == 0, RunsOn: domain.RunnerServer, Mode: mode,
 		})
 		if err != nil {
 			b.t.Fatal(err)

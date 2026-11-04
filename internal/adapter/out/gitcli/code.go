@@ -48,7 +48,7 @@ func (d config) codeOutput(ctx context.Context, dir string, args ...string) (str
 	cmd := d.codeCmd(ctx, dir, args...)
 	var stdout, stderr bytes.Buffer
 	cmd.Stdout, cmd.Stderr = &stdout, &stderr
-	if err := cmd.Run(); err != nil {
+	if err := runTimed(ctx, cmd); err != nil {
 		if err := cut(ctx, args[0], err); timedOut(err) {
 			return "", err
 		}
@@ -124,7 +124,7 @@ func (c Code) EmptyTree(ctx context.Context, dir string) (string, error) {
 	defer cancel()
 	cmd := c.d.codeCmd(ctx, dir, "hash-object", "-t", "tree", "--stdin")
 	cmd.Stdin = strings.NewReader("")
-	out, err := cmd.Output()
+	out, err := outputTimed(ctx, cmd)
 	if err := cut(ctx, "hash-object", err); timedOut(err) {
 		return "", err
 	}
@@ -280,7 +280,7 @@ func (d config) blobs(ctx context.Context, dir string, objects []string, max int
 	defer cancel()
 	cmd := d.codeCmd(ctx, dir, "cat-file", "--batch")
 	cmd.Stdin = strings.NewReader(strings.Join(objects, "\n") + "\n")
-	raw, err := cmd.Output()
+	raw, err := outputTimed(ctx, cmd)
 	if err := cut(ctx, "cat-file", err); timedOut(err) {
 		return nil, err
 	}

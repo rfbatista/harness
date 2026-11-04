@@ -82,7 +82,7 @@ func (a Architecture) ReadFile(ctx context.Context, dir, branch, path string) ([
 	cmd := a.d.gitCmd(rctx, dir, "cat-file", "blob", spec)
 	var stdout, stderr bytes.Buffer
 	cmd.Stdout, cmd.Stderr = &stdout, &stderr
-	if err := cmd.Run(); err != nil {
+	if err := runTimed(rctx, cmd); err != nil {
 		return nil, false, fmt.Errorf("git cat-file: %w: %s", err, strings.TrimSpace(stderr.String()))
 	}
 	return stdout.Bytes(), true, nil
