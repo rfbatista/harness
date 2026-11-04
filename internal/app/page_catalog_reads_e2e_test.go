@@ -42,6 +42,7 @@ func (b *budgetProject) projectPages() map[string]string {
 		"board": base, "task page": base + "/tasks/" + b.tickets[0], "settings": base + "/settings",
 		"documents": base + "/documents", "code": base + "/repositories/" + b.repo + "/code", "design": base + "/design",
 		"design system": base + "/design-systems", "usage": base + "/usage", "reviews": base + "/reviews",
+		"history": base + "/tasks/" + b.tickets[0] + "/sessions/s-000/history",
 	}
 }
 
