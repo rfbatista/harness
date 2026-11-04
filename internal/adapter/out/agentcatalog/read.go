@@ -149,6 +149,58 @@ func contains(list []string, s string) bool {
 	return false
 }
 
+// bundlesOf is the bundles' entries by name, and their names in file order.
+func bundlesOf(l *loaded) (map[string][]string, []string) {
+	entries := map[string][]string{}
+	var order []string
+	if b := l.agents.get("bundles"); b != nil {
+		for _, m := range b.members {
+			entries[m.key] = m.val.strs()
+			order = append(order, m.key)
+		}
+	}
+	return entries, order
+}
+
+// agentOf is the agent of one "agents" member, as the agents file says it, with
+// its entries resolved against the bundles, and that resolution.
+func agentOf(m *member, bundleEntries map[string][]string) (domain.CatalogAgent, resolution) {
+	ag := domain.CatalogAgent{
+		Name:         m.key,
+		Description:  m.val.get("description").str(),
+		Aliases:      nonNil(m.val.get("aliases").strs()),
+		Entries:      nonNil(m.val.get("skills").strs()),
+		MCPServers:   nonNil(m.val.get("mcp_servers").strs()),
+		AllowedTools: nonNil(m.val.get("allowed_tools").strs()),
+		Problems:     []domain.CatalogProblem{},
+	}
+	r := resolve(ag.Entries, bundleEntries)
+	ag.ResolvedSkills = nonNil(r.skills)
+	return ag, r
+}
+
+// ReadCatalogAgents reads the agents alone, as the agents file says them: no
+// skill folder is walked and no SKILL.md read, which is most of what the
+// whole-catalog read costs. An agent has no problems, usage or enabling here:
+// callers that show them read the whole catalog.
+func (c *Catalog) ReadCatalogAgents() ([]domain.CatalogAgent, error) {
+	started := time.Now()
+	defer func() { pagetime.AddCatalogRead(time.Since(started)) }()
+	l, err := c.load()
+	if err != nil {
+		return nil, err
+	}
+	bundleEntries, _ := bundlesOf(l)
+	out := []domain.CatalogAgent{}
+	if a := l.agents.get("agents"); a != nil {
+		for _, m := range a.members {
+			ag, _ := agentOf(m, bundleEntries)
+			out = append(out, ag)
+		}
+	}
+	return out, nil
+}
+
 // ReadCatalog reads the whole catalog.
 func (c *Catalog) ReadCatalog() (*domain.CatalogView, error) {
 	started := time.Now()
@@ -159,14 +211,7 @@ func (c *Catalog) ReadCatalog() (*domain.CatalogView, error) {
 	}
 	skills := c.scanSkills()
 
-	bundleEntries := map[string][]string{}
-	var bundleOrder []string
-	if b := l.agents.get("bundles"); b != nil {
-		for _, m := range b.members {
-			bundleEntries[m.key] = m.val.strs()
-			bundleOrder = append(bundleOrder, m.key)
-		}
-	}
+	bundleEntries, bundleOrder := bundlesOf(l)
 	serverNames := l.servers.keys()
 
 	v := &domain.CatalogView{
@@ -189,17 +234,7 @@ func (c *Catalog) ReadCatalog() (*domain.CatalogView, error) {
 
 	if a := l.agents.get("agents"); a != nil {
 		for _, m := range a.members {
-			ag := domain.CatalogAgent{
-				Name:         m.key,
-				Description:  m.val.get("description").str(),
-				Aliases:      nonNil(m.val.get("aliases").strs()),
-				Entries:      nonNil(m.val.get("skills").strs()),
-				MCPServers:   nonNil(m.val.get("mcp_servers").strs()),
-				AllowedTools: nonNil(m.val.get("allowed_tools").strs()),
-				Problems:     []domain.CatalogProblem{},
-			}
-			r := resolve(ag.Entries, bundleEntries)
-			ag.ResolvedSkills = nonNil(r.skills)
+			ag, r := agentOf(m, bundleEntries)
 			ag.DroppedDuplicates = nonNil(r.duplicates)
 			ag.MissingSkills = []string{}
 			ag.Problems = append(ag.Problems, r.problems...)

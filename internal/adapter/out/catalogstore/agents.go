@@ -58,12 +58,12 @@ func (r *Agents) Get(id string) *domain.Agent {
 // however often the page asks: only a read made with a request's context is
 // shared, so an action always reads the catalog fresh.
 func (r *Agents) List(ctx context.Context) []*domain.Agent {
-	view, err := readshare.Do(ctx, "agent catalog", r.cat.ReadCatalog)
+	list, err := readshare.Do(ctx, "agent catalog", r.cat.ReadCatalogAgents)
 	if err != nil {
 		return nil
 	}
-	out := make([]*domain.Agent, 0, len(view.Agents))
-	for _, a := range view.Agents {
+	out := make([]*domain.Agent, 0, len(list))
+	for _, a := range list {
 		out = append(out, domainAgent(a))
 	}
 	return out
