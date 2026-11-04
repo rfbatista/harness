@@ -6,6 +6,7 @@
 //
 //	#credential  credential.go + credential.templ   (the agent credential)
 //	#claude      claude.go + claude.templ           (the managed claude)
+//	#attribution attribution.go + attribution.templ (the agent attribution)
 //	#sandbox     sandbox.go + sandbox.templ         (the switch and extra paths)
 //
 // To add to a section, extend its View and its partial; the page only places
@@ -52,16 +53,19 @@ type Handler struct {
 	// Projects is read at each page load for each project's read-access row;
 	// nil lists none.
 	Projects ports.ProjectReader
+	// Settings holds the agent attribution; nil shows Claude default.
+	Settings ports.SettingsReader
 	Layout   shell.Layout
 	Render   shell.Renderer
 }
 
 // View is what the page renders: one view per section.
 type View struct {
-	Summary    Summary
-	Credential CredentialView
-	Claude     ClaudeView
-	Sandbox    SandboxView
+	Summary     Summary
+	Credential  CredentialView
+	Claude      ClaudeView
+	Attribution AttributionView
+	Sandbox     SandboxView
 }
 
 // Page renders the page.
@@ -81,9 +85,10 @@ func (h Handler) Page(w http.ResponseWriter, r *http.Request) error {
 // View reads each section's state.
 func (h Handler) View(ctx context.Context) View {
 	v := View{
-		Credential: NewCredentialView(ctx, h.Credential, h.OAuth, h.Auth, h.ClaudeBin),
-		Claude:     NewClaudeView(h.Claude, h.ClaudeBin),
-		Sandbox:    NewSandboxView(h.Sandbox, h.Driver),
+		Credential:  NewCredentialView(ctx, h.Credential, h.OAuth, h.Auth, h.ClaudeBin),
+		Claude:      NewClaudeView(h.Claude, h.ClaudeBin),
+		Attribution: NewAttributionView(h.Settings),
+		Sandbox:     NewSandboxView(h.Sandbox, h.Driver),
 	}
 	v.Credential.HomeExposed = h.HomeExposed != nil && h.HomeExposed()
 	v.Credential.Login = h.HasLogin != nil && h.HasLogin()

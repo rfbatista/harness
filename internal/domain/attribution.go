@@ -1,6 +1,7 @@
 package domain
 
 import (
+	"bytes"
 	"encoding/json"
 	"strings"
 )
@@ -114,8 +115,13 @@ func (a AgentAttribution) Launch() json.RawMessage {
 	if len(out) == 0 {
 		return nil
 	}
-	b, _ := json.Marshal(out)
-	return b
+	// Not HTML-escaped, so that the page's preview, built in the browser,
+	// reads the same.
+	var b bytes.Buffer
+	enc := json.NewEncoder(&b)
+	enc.SetEscapeHTML(false)
+	_ = enc.Encode(out)
+	return json.RawMessage(strings.TrimSuffix(b.String(), "\n"))
 }
 
 // Preview is the JSON the page shows: Launch under its key, with a "{}" for
