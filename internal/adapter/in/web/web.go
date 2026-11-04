@@ -36,6 +36,7 @@ import (
 	"operators-mcp/internal/adapter/in/web/tokensavers"
 	"operators-mcp/internal/adapter/in/web/usage"
 	"operators-mcp/internal/domain"
+	"operators-mcp/internal/infra/pagetime"
 	"operators-mcp/internal/infra/readshare"
 	"operators-mcp/internal/ports"
 )
@@ -324,9 +325,17 @@ func (s *server) page(h shell.Handler) http.Handler {
 		ctx := shell.WithCollapsed(r.Context(), r) // the rail's folded groups, for the layout
 		// One read of what the page, its layout and its parts read alike:
 		// the project's ticket and session lists, a worktree's status.
-		r = r.WithContext(readshare.With(ctx))
+		ctx = readshare.With(ctx)
+		var timing *pagetime.Timing
+		if r.PathValue("project") != "" {
+			ctx, timing = pagetime.Start(ctx)
+		}
+		r = r.WithContext(ctx)
 		if err := h(w, r); err != nil {
 			s.renderError(w, r, err)
+		}
+		if timing != nil {
+			logPageTime(r, timing)
 		}
 	})
 }
@@ -345,6 +354,8 @@ func switchProject(w http.ResponseWriter, r *http.Request) {
 // layout builds the shared frame: the assets, the project picker, and the
 // selected project's tasks on the rail with their live sessions.
 func (s *server) layout(ctx context.Context, title, projectID, taskID string) (shell.Frame, error) {
+	started := time.Now()
+	defer func() { pagetime.AddFrame(ctx, time.Since(started)) }()
 	frame := s.bareFrame(title)
 	frame.Notifications = s.bell(ctx)
 	frame.Helper = s.helper(ctx)
@@ -532,12 +543,25 @@ func nextStep(code string) string {
 // failure becomes an error instead of half a page.
 func render(w http.ResponseWriter, r *http.Request, status int, page templ.Component) error {
 	var buf bytes.Buffer
+	rendering := time.Now()
 	if err := page.Render(r.Context(), &buf); err != nil {
 		return err
+	}
+	if t := pagetime.From(r.Context()); t != nil {
+		w.Header().Set("Server-Timing", t.Report(time.Since(rendering)).Header())
 	}
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	w.Header().Set("Cache-Control", "no-store")
 	w.WriteHeader(status)
 	_, err := buf.WriteTo(w)
 	return err
+}
+
+// logPageTime writes the request's page server time and its breakdown, with
+// the route and the project, as one log line. The header carries the time
+// up to the write; this line carries it after.
+func logPageTime(r *http.Request, t *pagetime.Timing) {
+	rep := t.Report(0)
+	slog.Info("page time", "route", r.Pattern, "project", r.PathValue("project"),
+		"total", rep.Total, "db", rep.DB, "git", rep.Git, "git_calls", rep.GitCalls, "render", rep.Render, "frame", rep.Frame)
 }
