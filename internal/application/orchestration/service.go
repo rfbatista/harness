@@ -549,6 +549,7 @@ func (s *Service) prepare(ctx context.Context, in prepareInput) (*prepared, erro
 	}
 	s.withAgentCredential(&cfg)
 	s.withKeychainShim(&cfg)
+	s.withAttribution(&cfg)
 	savers := s.withTokenSavers(ctx, in, repo.RootDir, ws.Path, &cfg)
 	cleanup, err = s.withTempDir(id, &cfg, cleanup)
 	if err != nil {

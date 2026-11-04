@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
+	"maps"
 	"strings"
 	"time"
 
@@ -277,6 +278,7 @@ func (s *Service) ResumeInteractive(ctx context.Context, req ports.ResumeRequest
 	}
 	s.withAgentCredential(&cfg)
 	s.withKeychainShim(&cfg)
+	s.withAttribution(&cfg)
 	s.rewireTokenSavers(ctx, sess, &cfg)
 	// A resume starts under the rules now in force, not the ones it started
 	// under, and records them.
@@ -657,6 +659,9 @@ func (s *Service) agentSpec(cfg llmkit.SessionConfig, conv ports.Conversation, p
 	if dc, ok := cfg.Driver.(claude.Config); ok {
 		spec.SkillDirs = dc.SkillDirs
 		spec.Hooks = specHooks(dc.Settings)
+		if dc.Settings != nil && len(dc.Settings.Extra) > 0 {
+			spec.Settings = maps.Clone(dc.Settings.Extra)
+		}
 	}
 	if s.SessionHookURL != nil {
 		spec.HookURL = s.SessionHookURL(cfg.ID)
