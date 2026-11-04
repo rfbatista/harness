@@ -26,7 +26,7 @@ func (h Handler) Reviews(w http.ResponseWriter, r *http.Request) error {
 	if err != nil {
 		return err
 	}
-	agents, err := h.Agents.ListAgents(ctx)
+	agents, err := h.Agents.ListAgentNames(ctx)
 	if err != nil {
 		return err
 	}

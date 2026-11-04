@@ -55,6 +55,8 @@ type fakeAgents struct{ list []*domain.Agent }
 
 func (f fakeAgents) ListAgents(context.Context) ([]*domain.Agent, error) { return f.list, nil }
 
+func (f fakeAgents) ListAgentNames(context.Context) ([]*domain.Agent, error) { return f.list, nil }
+
 func (f fakeAgents) GetAgent(_ context.Context, id string) (*domain.Agent, error) {
 	for _, a := range f.list {
 		if a.ID == id {
