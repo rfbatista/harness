@@ -125,3 +125,16 @@ func TestAPageCountsTheDatabaseTimeAndTheGitProcessesItRan(t *testing.T) {
 		t.Errorf("git is %v: %s", m["git"], header)
 	}
 }
+
+// A project page that fails still reports its time.
+func TestAFailedProjectPageStillReportsItsPageServerTime(t *testing.T) {
+	b := newBudgetProject(t)
+	rec := httptest.NewRecorder()
+	b.handler.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/projects/"+b.project+"/tasks/no-such-task", nil))
+	if rec.Code != http.StatusNotFound {
+		t.Fatalf("status %d", rec.Code)
+	}
+	if m := parseServerTiming(t, rec.Header().Get("Server-Timing")); m["total"] <= 0 {
+		t.Errorf("Server-Timing %q", rec.Header().Get("Server-Timing"))
+	}
+}
