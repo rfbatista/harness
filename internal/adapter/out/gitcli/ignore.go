@@ -30,7 +30,7 @@ func (c Code) IgnoredPaths(ctx context.Context, dir string, paths []string) (map
 	cmd.Stdin = strings.NewReader(strings.Join(paths, "\x00") + "\x00")
 	var stdout, stderr bytes.Buffer
 	cmd.Stdout, cmd.Stderr = &stdout, &stderr
-	if err := cmd.Run(); err != nil {
+	if err := runTimed(ctx, cmd); err != nil {
 		var exit *exec.ExitError
 		if errors.As(err, &exit) && exit.ExitCode() == 1 {
 			return out, nil // none of them is ignored

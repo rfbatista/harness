@@ -5,9 +5,13 @@ package app
 import (
 	"bytes"
 	"context"
+	"fmt"
 	"log/slog"
 	"net/http"
 	"net/http/httptest"
+	"os"
+	"os/exec"
+	"path/filepath"
 	"strconv"
 	"strings"
 	"testing"
@@ -79,4 +83,45 @@ func parseServerTiming(t *testing.T, header string) map[string]time.Duration {
 		}
 	}
 	return out
+}
+
+// The task page reads a worktree's git state and the database: its db time is
+// above zero, and its git call count is the number of git processes it ran.
+func TestAPageCountsTheDatabaseTimeAndTheGitProcessesItRan(t *testing.T) {
+	real, err := exec.Command("git", "--exec-path").Output()
+	if err != nil {
+		t.Skip("no git")
+	}
+	dir := t.TempDir()
+	log := filepath.Join(dir, "runs")
+	script := "#!/bin/sh\necho run >> '" + log + "'\nexec '" + filepath.Join(strings.TrimSpace(string(real)), "git") + "' \"$@\"\n"
+	if err := os.WriteFile(filepath.Join(dir, "git"), []byte(script), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	b := newBudgetProject(t, filepath.Join(dir, "git"))
+	b.addSessions(6)
+	path := "/projects/" + b.project + "/tasks/" + b.tickets[0]
+
+	runsSoFar := func() int {
+		data, _ := os.ReadFile(log)
+		return strings.Count(string(data), "run\n")
+	}
+	before := runsSoFar()
+	rec := httptest.NewRecorder()
+	b.handler.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, path, nil))
+	runs := runsSoFar() - before
+	header := rec.Header().Get("Server-Timing")
+	m := parseServerTiming(t, header)
+	if m["db"] <= 0 {
+		t.Errorf("db is %v: %s", m["db"], header)
+	}
+	if runs == 0 {
+		t.Fatal("the task page ran no git: the wrapper git was not used")
+	}
+	if !strings.Contains(header, fmt.Sprintf("git;desc=\"%d calls\"", runs)) {
+		t.Errorf("the page ran git %d times: %s", runs, header)
+	}
+	if m["git"] <= 0 {
+		t.Errorf("git is %v: %s", m["git"], header)
+	}
 }

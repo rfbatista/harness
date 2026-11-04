@@ -112,7 +112,9 @@ type budgetProject struct {
 	seeded   int
 }
 
-func newBudgetProject(t *testing.T) *budgetProject {
+// newBudgetProject seeds the project. git, when given, is the git binary the
+// server runs.
+func newBudgetProject(t *testing.T, git ...string) *budgetProject {
 	t.Helper()
 	// Under Xcode, /usr/bin/git is a shim that looks the real git up on every
 	// run, which costs up to 50 ms a run on some machines: that is the
@@ -141,7 +143,7 @@ func newBudgetProject(t *testing.T) *budgetProject {
 	// Without ExecutionModule: it registers Genkit flows in a process-wide
 	// registry, so it cannot boot twice in one test binary.
 	app := fx.New(
-		fx.Supply(Config{HTTPAddr: "127.0.0.1:0", MCPAddr: "127.0.0.1:0", DBPath: filepath.Join(dir, "harness.db"), Root: dir, ClaudeBin: "/bin/true", SessionShell: "direct"}),
+		fx.Supply(Config{HTTPAddr: "127.0.0.1:0", MCPAddr: "127.0.0.1:0", DBPath: filepath.Join(dir, "harness.db"), Root: dir, ClaudeBin: "/bin/true", SessionShell: "direct", GitBin: strings.Join(git, "")}),
 		PersistenceModule, CatalogModule, PlanningModule, WorkspacesModule, GitCredentialsModule,
 		AgentRuntimeModule, TaskChannelModule, TextProcessingModule, UsageModule, NotificationsModule,
 		fx.Populate(&cat, &orch, &plan, &ws, &prs, &code, &wtGit, &art, &usageSv, &inbox, &creds, &b.db, &b.sessions),

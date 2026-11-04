@@ -14,6 +14,7 @@ import (
 	"strings"
 	"time"
 
+	"operators-mcp/internal/infra/pagetime"
 	"operators-mcp/internal/infra/querycount"
 
 	"gorm.io/gorm"
@@ -100,6 +101,7 @@ func (l slowCallLogger) LogMode(level logger.LogLevel) logger.Interface {
 // is not reported as failed: it was cut short.
 func (l slowCallLogger) Trace(ctx context.Context, begin time.Time, fc func() (string, int64), err error) {
 	querycount.Add(ctx)
+	pagetime.AddDB(ctx, time.Since(begin))
 	if !errors.Is(err, context.Canceled) || ctx.Err() == nil {
 		l.Interface.Trace(ctx, begin, fc, err)
 	}

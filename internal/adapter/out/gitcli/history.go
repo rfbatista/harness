@@ -211,7 +211,7 @@ func (d config) gitOutput(ctx context.Context, dir string, args ...string) (stri
 	cmd := d.gitCmd(ctx, dir, args...)
 	var stdout, stderr bytes.Buffer
 	cmd.Stdout, cmd.Stderr = &stdout, &stderr
-	if err := cmd.Run(); err != nil {
+	if err := runTimed(ctx, cmd); err != nil {
 		if err := cut(ctx, args[0], err); timedOut(err) {
 			return "", err
 		}
@@ -226,7 +226,7 @@ func (d config) gitRun(ctx context.Context, dir string, args ...string) (string,
 	cmd := d.gitCmd(ctx, dir, args...)
 	var stdout, stderr bytes.Buffer
 	cmd.Stdout, cmd.Stderr = &stdout, &stderr
-	if err := cmd.Run(); err != nil {
+	if err := runTimed(ctx, cmd); err != nil {
 		if err := cut(ctx, args[0], err); timedOut(err) {
 			return "", err
 		}
@@ -241,7 +241,8 @@ func (d config) gitRun(ctx context.Context, dir string, args ...string) (string,
 func (d config) gitOK(ctx context.Context, dir string, args ...string) (bool, error) {
 	ctx, cancel := context.WithTimeout(ctx, d.read())
 	defer cancel()
-	err := d.gitCmd(ctx, dir, args...).Run()
+	cmd := d.gitCmd(ctx, dir, args...)
+	err := runTimed(ctx, cmd)
 	if err != nil && ctx.Err() != nil {
 		return false, cut(ctx, args[0], ctx.Err())
 	}

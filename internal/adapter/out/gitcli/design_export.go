@@ -55,7 +55,7 @@ func (a Architecture) ReadTree(ctx context.Context, dir, branch, prefix string) 
 	cmd.Stdin = strings.NewReader(strings.Join(shas, "\n") + "\n")
 	var stdout, stderr bytes.Buffer
 	cmd.Stdout, cmd.Stderr = &stdout, &stderr
-	if err := cmd.Run(); err != nil {
+	if err := runTimed(rctx, cmd); err != nil {
 		return nil, fmt.Errorf("git cat-file: %w: %s", err, strings.TrimSpace(stderr.String()))
 	}
 	r := bufio.NewReader(&stdout)

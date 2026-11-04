@@ -7,6 +7,9 @@ import (
 	"os/exec"
 	"strconv"
 	"strings"
+	"time"
+
+	"operators-mcp/internal/infra/pagetime"
 )
 
 // localOverrides keep a git command that works on a checkout from ever
@@ -88,4 +91,21 @@ func CheckVersion(git string) error {
 		return fmt.Errorf("git %s is older than %d.%d: stored git credentials cannot be isolated from the machine's", fields[2], minGit[0], minGit[1])
 	}
 	return nil
+}
+
+// runTimed runs cmd, adding how long it took to the git time of the page
+// request ctx belongs to, when there is one. A page's git calls are counted
+// here and in outputTimed, so every git process a page starts must run
+// through one of them.
+func runTimed(ctx context.Context, cmd *exec.Cmd) error {
+	started := time.Now()
+	defer func() { pagetime.AddGit(ctx, time.Since(started)) }()
+	return cmd.Run()
+}
+
+// outputTimed is cmd.Output, counted like runTimed.
+func outputTimed(ctx context.Context, cmd *exec.Cmd) ([]byte, error) {
+	started := time.Now()
+	defer func() { pagetime.AddGit(ctx, time.Since(started)) }()
+	return cmd.Output()
 }
