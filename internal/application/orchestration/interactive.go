@@ -726,9 +726,9 @@ func (s *Service) fillAssignment(ctx context.Context, sess *domain.Session, seen
 	}
 }
 
-// catalogAgentName is the name of the agent with the id, and whether the catalog has
-// it. It asks for the names only: resolving an agent's prompt, skills and
-// servers to learn its name reads the catalog once for each of them.
+// catalogAgentName is the name of the agent with the id, and whether the
+// catalog has it. It asks for the names only: resolving an agent's prompt,
+// skills and servers to learn its name reads the catalog once for each of them.
 func (s *Service) catalogAgentName(ctx context.Context, id string) (string, bool) {
 	list, err := s.catalog.Agents.ListAgentNames(ctx)
 	if err != nil {
