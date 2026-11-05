@@ -81,6 +81,11 @@ export function startInPlaceNavigation(htmx, { Alpine, navigate, doc = document 
       if (item.dataset.page === page) link?.setAttribute("aria-current", "page");
       else link?.removeAttribute("aria-current");
     }
+    const top = state.dataset.top ?? "";
+    for (const link of doc.querySelectorAll("header.topbar a[href]")) {
+      if (link.getAttribute("href") === top) link.setAttribute("aria-current", "page");
+      else link.removeAttribute("aria-current");
+    }
     rail.dataset.currentTask = task;
     if (state.dataset.reportsFeed !== undefined) rail.setAttribute("data-reports-feed", "");
     else rail.removeAttribute("data-reports-feed");

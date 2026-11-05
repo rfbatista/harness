@@ -134,6 +134,27 @@ type TopBar struct {
 	OnServer bool
 }
 
+// CurrentHref is the href of the top bar's page that is open, "" when none is.
+func (t TopBar) CurrentHref() string {
+	switch {
+	case t.OnProjects:
+		return t.ProjectsHref
+	case t.OnAgents:
+		return t.AgentsHref
+	case t.OnCredentials:
+		return t.CredentialsHref
+	case t.OnTokenSavers:
+		return t.TokenSaversHref
+	case t.OnModels:
+		return t.ModelsHref
+	case t.OnAgentIsolation:
+		return t.AgentIsolationHref
+	case t.OnServer:
+		return t.ServerHref
+	}
+	return ""
+}
+
 // Option is one project in the picker.
 type Option struct{ ID, Name string }
 

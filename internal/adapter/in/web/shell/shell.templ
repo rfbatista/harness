@@ -54,7 +54,7 @@ templ pageFragment(f Frame) {
 // frameState carries what the frame shows for the current page and that the
 // browser applies to the rail: the open project page and the open task.
 templ frameState(f Frame, oob bool) {
-	<div id="frame-state" hidden data-page={ f.Rail.Page } data-task={ f.Rail.Current } { reportsFeedAttrs(f.Rail.ReportsFeed)... } { oobAttrs(oob)... }></div>
+	<div id="frame-state" hidden data-page={ f.Rail.Page } data-task={ f.Rail.Current } data-top={ f.Top.CurrentHref() } { reportsFeedAttrs(f.Rail.ReportsFeed)... } { oobAttrs(oob)... }></div>
 }
 
 templ fullShell(f Frame) {

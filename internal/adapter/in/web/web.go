@@ -424,6 +424,12 @@ func (s *server) fragmentFrame(ctx context.Context, title, projectID, taskID str
 	frame := shell.Frame{Title: title, Built: true}
 	frame.Helper = s.helper(ctx)
 	frame.Rail.Current = taskID
+	// The top bar stays in the document; which of its pages is open is named
+	// by its href, so the browser can mark it.
+	s.topLinks(&frame.Top)
+	if s.deps.ProjectSummaries != nil {
+		frame.Top.ProjectsHref = projects.ListHref
+	}
 	if s.deps.ArchivedTasks != nil && projectID != "" {
 		// The board paints the archived count from the rail's seed.
 		n, err := s.deps.ArchivedTasks.ArchivedTaskCount(ctx, projectID)
@@ -488,6 +494,26 @@ func (s *server) architectureAssistant(ctx context.Context) shell.Helper {
 	return shell.Helper{Available: a.Available, Reason: a.Reason, FixURL: a.FixURL}
 }
 
+// topLinks names the top bar's pages that this server serves.
+func (s *server) topLinks(top *shell.TopBar) {
+	top.AgentsHref = agents.Href
+	if s.deps.GitCredentials != nil {
+		top.CredentialsHref = credentials.Href
+	}
+	if s.deps.TokenSaverInstalls != nil {
+		top.TokenSaversHref = tokensavers.Href
+	}
+	if s.deps.Settings != nil {
+		top.ModelsHref = models.Href
+	}
+	if s.deps.SandboxSettings != nil {
+		top.AgentIsolationHref = agentisolation.Href
+	}
+	if s.deps.DataPaths != nil {
+		top.ServerHref = serversettings.Href
+	}
+}
+
 // bareFrame is a frame without the rail, for when the rail cannot be read.
 func (s *server) bareFrame(title string) shell.Frame {
 	f := shell.Frame{
@@ -497,22 +523,9 @@ func (s *server) bareFrame(title string) shell.Frame {
 		Built: s.assets.Built(),
 	}
 	f.Helper = s.helper(context.Background())
-	f.Top.AgentsHref = agents.Href
-	if s.deps.GitCredentials != nil {
-		f.Top.CredentialsHref = credentials.Href
-	}
-	if s.deps.TokenSaverInstalls != nil {
-		f.Top.TokenSaversHref = tokensavers.Href
-	}
-	if s.deps.Settings != nil {
-		f.Top.ModelsHref = models.Href
-	}
+	s.topLinks(&f.Top)
 	if s.deps.SandboxSettings != nil {
-		f.Top.AgentIsolationHref = agentisolation.Href
 		f.Top.AgentIsolationAttention = agentisolation.Blocks(s.deps.SandboxSettings, s.deps.SandboxDriver, s.deps.AgentCredential, s.deps.AgentLogin, s.deps.ManagedClaudeBin)
-	}
-	if s.deps.DataPaths != nil {
-		f.Top.ServerHref = serversettings.Href
 	}
 	return f
 }

@@ -41,13 +41,11 @@ func PageRequest(r *http.Request) bool {
 
 // SameFrame reports whether a click from the page the browser shows (htmx's
 // HX-Current-URL) to the page of r stays in one frame, so that only <main>
-// swaps. Two pages of one project share a frame; a request with no current
-// URL, or from another project or from outside any project, does not.
+// swaps. Two pages of one project share a frame, and so do two pages outside
+// any project; a request with no current URL, or from another project, or in
+// or out of a project, does not.
 func SameFrame(r *http.Request) bool {
 	to := frameOf(r.URL.Path)
-	if to == "" {
-		return false
-	}
 	current, err := url.Parse(r.Header.Get("HX-Current-URL"))
 	if err != nil || current.Path == "" {
 		return false
@@ -55,12 +53,17 @@ func SameFrame(r *http.Request) bool {
 	return frameOf(current.Path) == to
 }
 
-// frameOf is the project a path belongs to: its id, or "" for a page outside
-// any project (the list, New project, the catalogs, the settings).
+// frameOf names the frame a path is served in: the project's id, or for a page
+// outside any project (the list, New project, the catalogs, the settings) the
+// one frame of such pages. The Agents pages draw no rail, so they are a frame
+// of their own.
 func frameOf(path string) string {
 	parts := strings.Split(strings.Trim(path, "/"), "/")
-	if len(parts) < 2 || parts[0] != "projects" || parts[1] == "new" {
-		return ""
+	switch {
+	case parts[0] == "agents":
+		return "~agents"
+	case len(parts) < 2 || parts[0] != "projects" || parts[1] == "new":
+		return "~"
 	}
 	return parts[1]
 }
