@@ -28,6 +28,22 @@ func TestThePageBudgetCheckNamesEachPageOverItsBudget(t *testing.T) {
 	}
 }
 
+// A page fragment builds no frame: any frame share is over its budget, and a
+// fragment has a budget of its own like any page.
+func TestThePageBudgetCheckHoldsAFragmentToNoFrame(t *testing.T) {
+	b := pageBudgets{Frame: 100, Pages: map[string]int{"board fragment": 300}}
+	rows := []benchRow{
+		{page: "board fragment", median: 20 * time.Millisecond, breakdown: true, frame: 5 * time.Millisecond},
+		{page: "usage fragment", median: 20 * time.Millisecond, breakdown: true},
+	}
+	over := strings.Join(b.overBudget(rows), "\n")
+	for _, want := range []string{"board fragment: frame share 5ms, a fragment builds no frame", "usage fragment: no budget"} {
+		if !strings.Contains(over, want) {
+			t.Errorf("missing %q in:\n%s", want, over)
+		}
+	}
+}
+
 // The budgets file in the repository covers every project page.
 func TestThePageBudgetsFileCoversEveryProjectPage(t *testing.T) {
 	b, err := readPageBudgets("testdata/page-budgets.json")
@@ -37,6 +53,9 @@ func TestThePageBudgetsFileCoversEveryProjectPage(t *testing.T) {
 	for _, page := range []string{"board", "task page", "settings", "documents", "code", "design", "design system", "usage", "reviews"} {
 		if b.Pages[page] <= 0 {
 			t.Errorf("no budget for the %s", page)
+		}
+		if b.Pages[page+" fragment"] <= 0 {
+			t.Errorf("no budget for the %s as a fragment", page)
 		}
 	}
 	if b.Frame <= 0 {

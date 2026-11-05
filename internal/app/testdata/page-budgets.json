@@ -1,5 +1,5 @@
 {
-  "note": "Page-time budgets in milliseconds, as the median on the seeded four-times project (make perf-budget). The final budgets are 300 ms per page and 100 ms for the frame share, with no margin. The frame budget applies to the largest frame value across the pages; a page that reads the project session list before its layout does shows a frame of about 0 ms, because the layout takes the shared answer, so that page is held by its own budget.",
+  "note": "Page-time budgets in milliseconds, as the median on the seeded four-times project (make perf-budget). The final budgets are 300 ms per page and 100 ms for the frame share, with no margin. The frame budget applies to the largest frame value across the pages; a page that reads the project session list before its layout does shows a frame of about 0 ms, because the layout takes the shared answer, so that page is held by its own budget. Each page also has a fragment entry, \"<page> fragment\": the page asked for as a click on a link between two pages of the project asks (ADR 0064), at 300 ms with no frame share.",
   "frame": 100,
   "pages": {
     "board": 300,
@@ -11,6 +11,16 @@
     "design system": 300,
     "usage": 300,
     "reviews": 300,
-    "history": 300
+    "history": 300,
+    "board fragment": 300,
+    "task page fragment": 300,
+    "settings fragment": 300,
+    "documents fragment": 300,
+    "code fragment": 300,
+    "design fragment": 300,
+    "design system fragment": 300,
+    "usage fragment": 300,
+    "reviews fragment": 300,
+    "history fragment": 300
   }
 }
