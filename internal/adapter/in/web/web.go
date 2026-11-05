@@ -324,8 +324,12 @@ func (s *server) page(h shell.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		ctx := shell.WithCollapsed(r.Context(), r) // the rail's folded groups, for the layout
 		shell.VaryOnPage(w.Header())
-		if shell.PageRequest(r) && shell.SameFrame(r) {
-			ctx = shell.WithFragment(ctx) // <main> and what the frame shows for it, without the frame
+		if shell.PageRequest(r) {
+			if shell.SameFrame(r) {
+				ctx = shell.WithMode(ctx, shell.ModeFragment) // <main> and what the frame shows for it, without the frame
+			} else {
+				ctx = shell.WithMode(ctx, shell.ModeShell) // the new frame, without a new document
+			}
 		}
 		// One read of what the page, its layout and its parts read alike:
 		// the project's ticket and session lists, a worktree's status.
@@ -591,9 +595,7 @@ func render(w http.ResponseWriter, r *http.Request, status int, page templ.Compo
 	}
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	w.Header().Set("Cache-Control", "no-store")
-	if shell.IsFragment(r.Context()) {
-		shell.MarkFragment(w.Header())
-	}
+	shell.MarkAnswer(w.Header(), shell.ModeOf(r.Context()))
 	w.WriteHeader(status)
 	_, err := buf.WriteTo(w)
 	return err

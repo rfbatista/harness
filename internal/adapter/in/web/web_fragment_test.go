@@ -140,19 +140,41 @@ func TestAPageOutsideAnyProjectNamesItsTopBarLinkInTheFrameState(t *testing.T) {
 	}
 }
 
-// A click out of the frame is not answered as a fragment: the browser gets
-// the full page, which it never swaps into main (nav 04 answers the shell).
-func TestAClickAcrossFramesIsNotAFragment(t *testing.T) {
+// A click to another frame (another project, in or out of a project, or with
+// no current URL) is answered with the app shell of the new frame, without a
+// new document (ADR 0064).
+func TestAClickAcrossFramesAnswersTheAppShellOfTheNewFrame(t *testing.T) {
 	h := newTestHandler(t, fragmentWorld())
-	for name, from := range map[string]string{
-		"another project":       "/projects/p2",
-		"from outside":          "/projects",
-		"no current URL at all": "",
+	for name, c := range map[string]struct{ to, from, project string }{
+		"to another project":         {"/projects/p1", "/projects/p2", "coding_pool"},
+		"into a project":             {"/projects/p1/reviews", "/projects", "coding_pool"},
+		"out of a project":           {"/projects", "/projects/p1", ""},
+		"from the agents pages":      {"/projects", "/agents", ""},
+		"with no current URL at all": {"/projects/p1", "", "coding_pool"},
 	} {
-		rec := fragment(h, "/projects/p1", from)
-		if rec.Header().Get("X-Harness-Fragment") != "" {
-			t.Errorf("%s: answered a page fragment", name)
-		}
+		t.Run(name, func(t *testing.T) {
+			rec := fragment(h, c.to, c.from)
+			if rec.Code != http.StatusOK {
+				t.Fatalf("status %d", rec.Code)
+			}
+			body := rec.Body.String()
+			if rec.Header().Get("X-Harness-Fragment") != "shell" || rec.Header().Get("HX-Retarget") != "" {
+				t.Errorf("not marked as an app shell: %v", rec.Header())
+			}
+			for _, want := range []string{`<title>`, `id="app-shell"`, `class="[ topbar ]"`, `id="rail"`, `<main`, `id="stream-bar"`} {
+				if !strings.Contains(body, want) {
+					t.Errorf("app shell lacks %q", want)
+				}
+			}
+			for _, absent := range []string{"<html", "<body", "<head>", "hx-swap-oob"} {
+				if strings.Contains(body, absent) {
+					t.Errorf("app shell holds %q: it is no document and no fragment", absent)
+				}
+			}
+			if c.project != "" && !strings.Contains(body, `<option value="p1" selected>`+c.project) {
+				t.Errorf("the picker does not show the new project %q", c.project)
+			}
+		})
 	}
 }
 

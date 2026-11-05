@@ -30,14 +30,22 @@ templ Document(f Frame) {
 // AppShell is the app layout: the top bar, the task rail, the page's main
 // region, and the stream bar.
 templ AppShell(f Frame) {
-	if IsFragment(ctx) {
-		@pageFragment(f) {
-			{ children... }
-		}
-	} else {
-		@fullShell(f) {
-			{ children... }
-		}
+	switch ModeOf(ctx) {
+		case ModeFragment:
+			@pageFragment(f) {
+				{ children... }
+			}
+		case ModeShell:
+			<title>{ f.PageTitle() }</title>
+			@shellBody(f) {
+				{ children... }
+			}
+		default:
+			@Document(f) {
+				@shellBody(f) {
+					{ children... }
+				}
+			}
 	}
 }
 
@@ -57,19 +65,20 @@ templ frameState(f Frame, oob bool) {
 	<div id="frame-state" hidden data-page={ f.Rail.Page } data-task={ f.Rail.Current } data-top={ f.Top.CurrentHref() } { reportsFeedAttrs(f.Rail.ReportsFeed)... } { oobAttrs(oob)... }></div>
 }
 
-templ fullShell(f Frame) {
-	@Document(f) {
-		<div id="app-shell" class="[ app-shell ]" { boostAttrs()... } { noRailAttrs(f.NoRail)... }>
-			<a class="[ skip-link ] [ button ]" data-size="sm" href="#main">Skip to content</a>
-			@topBar(f)
-			if !f.NoRail {
-				@taskRail(f)
-			}
-			{ children... }
-			@frameState(f, false)
-			@streamBar(f.Live, f.Hints, false)
-		</div>
-	}
+// shellBody is the app layout: the top bar, the task rail, the page's main
+// region, and the stream bar. It is the one element that a click to another
+// frame swaps.
+templ shellBody(f Frame) {
+	<div id="app-shell" class="[ app-shell ]" { boostAttrs()... } { noRailAttrs(f.NoRail)... }>
+		<a class="[ skip-link ] [ button ]" data-size="sm" href="#main">Skip to content</a>
+		@topBar(f)
+		if !f.NoRail {
+			@taskRail(f)
+		}
+		{ children... }
+		@frameState(f, false)
+		@streamBar(f.Live, f.Hints, false)
+	</div>
 }
 
 // topBar holds the project picker and the way to every project: the

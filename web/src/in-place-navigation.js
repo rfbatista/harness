@@ -1,15 +1,19 @@
 // In-place navigation (ADR 0064): a click on a link between pages swaps only
 // what changes, without loading a new document. The shell carries the one
-// hx-boost (shell.AppShell), so every link inside it is a navigation; the
-// server answers the page fragment, which htmx places in #main (the answer's
-// HX-Retarget), and the out-of-band items bring the title, the frame state and
-// the stream bar. The rail, the top bar, the bell, the writing helper, the
-// stores and the one event stream stay in the document.
+// target, swap and push-url (shell.AppShell), and one delegated click handler
+// here asks htmx for the page: the links that Alpine renders (the rail's task
+// rows, the lists) are not htmx's to process, so the click is caught on the
+// document and every link inside the shell is a navigation alike. The server
+// answers the page fragment, which htmx places in #main (the answer's
+// HX-Retarget), or the app shell of another frame, which replaces the shell;
+// the out-of-band items bring the title, the frame state and the stream bar.
+// The rail, the top bar, the bell, the writing helper, the stores and the one
+// event stream stay in the document through a fragment.
 //
 // A navigation is a request that names the app shell as its target. Anything
-// the server answers without the X-Harness-Fragment mark (a page that has no
-// fragment, a redirect to a full page, an error) is never swapped: the URL
-// loads as a page, so a full document never lands inside #main.
+// the server answers without the X-Harness-Fragment mark (a redirect to a
+// page that has none, an error) is never swapped: the URL loads as a page, so
+// a full document never lands inside #main.
 //
 // The swapped-out <main> is removed from the document, which makes Alpine
 // call destroy() on its components; the new one boots from the seed in the
@@ -26,15 +30,12 @@ const FRAGMENT_HEADER = "X-Harness-Fragment";
 export function startInPlaceNavigation(htmx, { Alpine, navigate, doc = document }) {
   const isNavigation = (detail) => detail.requestConfig?.headers?.["HX-Target"] === NAV_TARGET;
 
-  // The shell boosts every link and form inside it. A form is an action or
-  // a filter that its page owns, and a link that downloads, that its page
-  // handles itself or that leaves the pages stays a plain link.
-  doc.addEventListener("htmx:beforeProcessNode", (e) => {
-    const el = e.target;
-    if (!(el instanceof Element) || el.hasAttribute("hx-boost")) return;
-    if (el.tagName === "FORM" || (el.tagName === "A" && keepsItsOwnClick(el))) {
-      el.setAttribute("hx-boost", "false");
-    }
+  doc.addEventListener("click", (e) => {
+    if (e.defaultPrevented || e.button !== 0 || e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) return;
+    const link = e.target instanceof Element ? e.target.closest("a[href]") : null;
+    if (!link || !link.closest(`#${NAV_TARGET}`) || !isPageLink(link, doc.location)) return;
+    e.preventDefault();
+    htmx.ajax("GET", link.href, { source: link, target: `#${NAV_TARGET}`, swap: "outerHTML", headers: { "HX-Boosted": "true" } });
   });
 
   doc.addEventListener("htmx:beforeSwap", (e) => {
@@ -98,13 +99,17 @@ export function startInPlaceNavigation(htmx, { Alpine, navigate, doc = document 
 }
 
 /**
- * A link that something else owns: a download, an API or asset URL, or one
- * that its Alpine component handles on click.
- * @param {Element} link
+ * Whether a click on link is a navigation: a link to another page of this
+ * server, not one that a swap region, a download, an Alpine handler or the
+ * browser (a new tab, an anchor on this page) already owns.
+ * @param {HTMLAnchorElement} link
+ * @param {Location} here
  */
-function keepsItsOwnClick(link) {
-  if (link.hasAttribute("download")) return true;
+function isPageLink(link, here) {
+  if (link.origin !== here.origin || (link.target && link.target !== "_self")) return false;
+  if (link.hasAttribute("download") || link.hasAttribute("hx-boost") || link.hasAttribute("hx-target")) return false;
   const href = link.getAttribute("href") ?? "";
-  if (href.startsWith("/api/") || href.startsWith("/static/")) return true;
-  return [...link.attributes].some((a) => a.name === "x-on:click" || a.name.startsWith("x-on:click.") || a.name.startsWith("@click"));
+  if (href.startsWith("#") || href.startsWith("/api/") || href.startsWith("/static/")) return false;
+  if (link.hash && link.pathname + link.search === here.pathname + here.search) return false;
+  return ![...link.attributes].some((a) => a.name === "x-on:click" || a.name.startsWith("x-on:click.") || a.name.startsWith("@click"));
 }

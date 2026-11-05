@@ -16,19 +16,35 @@ const FragmentHeader = "X-Harness-Fragment"
 // navigation (HX-Target). A swap region or a lazy section names its own id.
 const NavTarget = "app-shell"
 
-type fragmentKey struct{}
+// Mode is the shape a page's answer takes.
+type Mode int
 
-// WithFragment marks ctx as the request of a page fragment: the shell leaves
-// the shared project frame out of the page (ADR 0064).
-func WithFragment(ctx context.Context) context.Context {
-	return context.WithValue(ctx, fragmentKey{}, true)
+const (
+	// ModeFull is the whole document.
+	ModeFull Mode = iota
+	// ModeFragment is <main> and the out-of-band items, for a click within a
+	// frame: the shared project frame is not built (ADR 0064).
+	ModeFragment
+	// ModeShell is the whole app shell without a document around it, for a
+	// click to another frame.
+	ModeShell
+)
+
+type modeKey struct{}
+
+// WithMode records the shape of the answer on ctx.
+func WithMode(ctx context.Context, m Mode) context.Context {
+	return context.WithValue(ctx, modeKey{}, m)
+}
+
+// ModeOf is the shape of the answer to the request ctx belongs to.
+func ModeOf(ctx context.Context) Mode {
+	m, _ := ctx.Value(modeKey{}).(Mode)
+	return m
 }
 
 // IsFragment reports whether ctx belongs to a page fragment request.
-func IsFragment(ctx context.Context) bool {
-	v, _ := ctx.Value(fragmentKey{}).(bool)
-	return v
-}
+func IsFragment(ctx context.Context) bool { return ModeOf(ctx) == ModeFragment }
 
 // PageRequest reports whether r is a boosted click on a link between pages:
 // htmx's HX-Request, boosted, targeting the app shell. A swap region or a lazy
@@ -68,12 +84,18 @@ func frameOf(path string) string {
 	return parts[1]
 }
 
-// MarkFragment tells the client how to place the answer: a page fragment
-// replaces #main, whatever target the click named.
-func MarkFragment(h http.Header) {
-	h.Set(FragmentHeader, "page")
-	h.Set("HX-Retarget", "#main")
-	h.Set("HX-Reswap", "outerHTML")
+// MarkAnswer tells the client how to place the answer: a page fragment
+// replaces #main, whatever target the click named; an app shell replaces the
+// target the click named, the app shell.
+func MarkAnswer(h http.Header, m Mode) {
+	switch m {
+	case ModeFragment:
+		h.Set(FragmentHeader, "page")
+		h.Set("HX-Retarget", "#main")
+		h.Set("HX-Reswap", "outerHTML")
+	case ModeShell:
+		h.Set(FragmentHeader, "shell")
+	}
 }
 
 // VaryOnPage makes every answer of a page's URL vary on what picks its shape.

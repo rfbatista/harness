@@ -341,11 +341,11 @@ func oobAttrs(oob bool) templ.Attributes {
 	return nil
 }
 
-// boostAttrs boosts every link inside the app shell once, so that a click
-// between pages swaps in place (ADR 0064). The server answers the app shell
-// or, within a frame, retargets its answer to <main>.
+// boostAttrs is where a click on a link inside the app shell puts the page, set
+// once on the shell (ADR 0064): the web client asks for the page, and the server
+// answers the app shell or, within a frame, retargets its answer to <main>.
 func boostAttrs() templ.Attributes {
-	return templ.Attributes{"hx-boost": "true", "hx-target": "#" + NavTarget, "hx-swap": "outerHTML", "hx-push-url": "true"}
+	return templ.Attributes{"hx-target": "#" + NavTarget, "hx-swap": "outerHTML", "hx-push-url": "true"}
 }
 
 // reportsFeedAttrs tells the rail that this page's feed is the rail's own.
