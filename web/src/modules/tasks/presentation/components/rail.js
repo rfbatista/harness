@@ -550,6 +550,14 @@ export const rail = ({ gateway, store, prefs, browserPrefs = { get: () => null, 
       unfollow();
       timers.clearTimeout(announceTimer);
       timers.clearTimeout(resultTimer);
+      // The model is the project's whose rail this was; another frame's rail
+      // (or none) starts from its own seed.
+      store.tasks = [];
+      store.byTask = {};
+      store.seeded = false;
+      store.statusChanges = {};
+      store.archivedCount = 0;
+      store.drawerOpen = false;
     },
   };
 };

@@ -54,6 +54,8 @@ export function startInPlaceNavigation(htmx, { Alpine, navigate, doc = document 
     if (!isNavigation(e.detail)) return;
     // htmx wrote the new title, which has no unread count: the bell adds it.
     Alpine.store("notifications")?.retitle?.();
+    // The phone's drawer closes on a click, as the page load it replaced did.
+    doc.defaultView?.dispatchEvent(new CustomEvent("rail-close"));
     const main = doc.getElementById("main");
     if (!main) return;
     doc.defaultView?.scrollTo(0, 0);

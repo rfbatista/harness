@@ -180,7 +180,8 @@ export const architecturePage = ({ gateway }) => () => ({
       this.error = describeError(err);
       return;
     }
-    window.addEventListener("popstate", () => this.applyPath(this.pathFromLocation()));
+    this.onPopState = () => this.applyPath(this.pathFromLocation());
+    window.addEventListener("popstate", this.onPopState);
     this.load();
     this.unfollow = gateway.follow(this.projectId, this.repositoryId, {
       onChanged: (change) => this.followed(change),
@@ -193,6 +194,8 @@ export const architecturePage = ({ gateway }) => () => ({
 
   destroy() {
     this.unfollow?.();
+    // The page's own history entries are its alone while it is on screen.
+    window.removeEventListener("popstate", this.onPopState);
   },
 
   /** The overview's recent rule events; a failure leaves the list empty, the page still works. */

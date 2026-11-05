@@ -348,10 +348,11 @@ export const designSystemPage = ({ gateway, clock, clipboard = { copyText: async
       this.error = describeError(err);
       return;
     }
-    globalThis.addEventListener("popstate", () => {
+    this.onPopState = () => {
       this.tab = tabForSlug(new URLSearchParams(location.search).get("tab") ?? "").slug;
       if (this.tab === "history") this.loadVersions();
-    });
+    };
+    globalThis.addEventListener("popstate", this.onPopState);
     if (!this.loaded) this.load();
     if (this.tab === "history") this.loadVersions();
     this.unfollow = gateway.follow(this.projectId, this.designSystemId, {
@@ -365,6 +366,8 @@ export const designSystemPage = ({ gateway, clock, clipboard = { copyText: async
 
   destroy() {
     this.unfollow?.();
+    // The page's own history entries are its alone while it is on screen.
+    globalThis.removeEventListener("popstate", this.onPopState);
   },
 
   async load() {

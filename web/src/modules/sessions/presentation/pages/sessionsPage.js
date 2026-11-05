@@ -521,6 +521,10 @@ export const sessionsPage = ({
 
     // ── lifecycle ────────────────────────────────────────────────────────
     init() {
+      // The channel store holds one task's messages: this page's, not the
+      // task page that was open before it.
+      channelStore.messages = [];
+      channelStore.loaded = false;
       let openCode = "";
       try {
         const seed = gateway.decodeSeed(readSeed(this.$el));
@@ -577,6 +581,10 @@ export const sessionsPage = ({
       unfollowAgents();
       unfollowChannel?.();
       clearInterval(ticker);
+      // Focus mode and the Code tab's full screen are marks on the app shell,
+      // which a swap leaves in the document: they end with this page.
+      shell.setFocus(false);
+      shell.setCodeFullscreen(false);
     },
 
     // ── the architect channel ────────────────────────────────────────────

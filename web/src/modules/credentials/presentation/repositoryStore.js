@@ -7,6 +7,10 @@
 // of the feed) can change what a repository resolves to, so the store reads
 // them all again. Changes that arrive while a read is in flight cost one more
 // read when it ends, never one per change.
+//
+// The store belongs to the Repositories page that is open: the rows start it
+// and release it when they are swapped out, and the last release stops the
+// feed and forgets the page, so another project's page starts from its own seed.
 
 import { Codes, codeOf } from "../../../shared/domain/errors.js";
 import { FeedStatus } from "../../../shared/domain/feed.js";
@@ -20,6 +24,11 @@ export function repositoryCredentialsStore({ gateway }) {
   let started = false;
   let reading = null;
   let again = false;
+  /** The seed element the store read, which says which page it belongs to. */
+  let seedEl = null;
+  let unfollow = null;
+  let holders = 0;
+  let generation = 0;
 
   return {
     projectId: "",
@@ -30,12 +39,23 @@ export function repositoryCredentialsStore({ gateway }) {
     locked: false,
     error: null,
 
-    /** Reads the page's seed and follows the feed; only the first call does anything. */
+    /**
+     * Reads the page's seed and follows the feed for the first row of a page;
+     * the next rows only hold it. Returns what releases this row's hold.
+     * @returns {() => void}
+     */
     start(doc) {
-      if (started) return;
+      const script = doc.getElementById(SEED_ID);
+      if (started && script === seedEl) {
+        holders++;
+        return this.releaser(generation);
+      }
+      if (started) this.stop();
       started = true;
+      seedEl = script;
+      holders = 1;
+      generation++;
       try {
-        const script = doc.getElementById(SEED_ID);
         const seed = gateway.decodeRepositoriesSeed(JSON.parse(script?.textContent ?? "null"));
         this.projectId = seed.projectId;
         this.credentials = seed.credentials;
@@ -44,7 +64,7 @@ export function repositoryCredentialsStore({ gateway }) {
       } catch (err) {
         this.error = describeError(err);
       }
-      gateway.follow(
+      unfollow = gateway.follow(
         (change) => {
           if (change.kind === "identity") return;
           this.credentials = applyChange(this.credentials, change);
@@ -52,6 +72,29 @@ export function repositoryCredentialsStore({ gateway }) {
         },
         (status) => status === FeedStatus.RESYNCED && this.refresh(),
       );
+      return this.releaser(generation);
+    },
+
+    /** A release of a page that was swapped out already does nothing. */
+    releaser(forGeneration) {
+      return () => {
+        if (forGeneration !== generation) return;
+        if (--holders <= 0) this.stop();
+      };
+    },
+
+    /** Stops following and forgets the page. */
+    stop() {
+      unfollow?.();
+      unfollow = null;
+      started = false;
+      seedEl = null;
+      holders = 0;
+      this.projectId = "";
+      this.credentials = [];
+      this.byRepository = {};
+      this.locked = false;
+      this.error = null;
     },
 
     keep(list) {

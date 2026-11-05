@@ -47,6 +47,9 @@ export const CODE_HINTS = Object.freeze([
 /** @param {import("./codeBrowser.js").BrowserDeps} deps */
 export const codePanel = (deps) => (/** @type {PanelInput} */ panel) => {
   let observer = null;
+  /** The width query and its listener, which outlive the panel unless removed. */
+  let widthQuery = null;
+  let onWidth = null;
   const browser = codeBrowser(deps);
   const codeBrowserPopState = browser.popState;
   return compose(browser, {
@@ -113,6 +116,7 @@ export const codePanel = (deps) => (/** @type {PanelInput} */ panel) => {
 
     destroy() {
       observer?.disconnect();
+      widthQuery?.removeEventListener?.("change", onWidth);
       this.stop();
       if (this.fullscreen) this.$dispatch("code-fullscreen", { on: false });
       if (this.shown) this.$dispatch("stream-hints", null);
@@ -162,7 +166,9 @@ export const codePanel = (deps) => (/** @type {PanelInput} */ panel) => {
       const wide = globalThis.matchMedia?.("(width >= 64rem)");
       if (wide) {
         this.wide = wide.matches;
-        wide.addEventListener?.("change", (e) => (this.wide = e.matches));
+        onWidth = (e) => (this.wide = e.matches);
+        widthQuery = wide;
+        wide.addEventListener?.("change", onWidth);
       }
       // The panel itself is as wide as its layout, and is there from the start
       // (the layout is drawn after init and may be redrawn). A hidden tab is
