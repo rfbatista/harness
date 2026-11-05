@@ -85,7 +85,7 @@ func mcpServersSection(projectID, projectName, settingsHref string) templ.Compon
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
-		templ_7745c5c3_Err = components.SkeletonRows("Loading agents", 2, "").Render(ctx, templ_7745c5c3_Buffer)
+		templ_7745c5c3_Err = components.SkeletonRows("Loading agents", 1, "3.6rem").Render(ctx, templ_7745c5c3_Buffer)
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
@@ -106,7 +106,7 @@ func mcpServersSection(projectID, projectName, settingsHref string) templ.Compon
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
-		templ_7745c5c3_Err = components.SkeletonRows("Loading MCP servers", 2, "").Render(ctx, templ_7745c5c3_Buffer)
+		templ_7745c5c3_Err = components.SkeletonRows("Loading MCP servers", 3, "3.7rem").Render(ctx, templ_7745c5c3_Buffer)
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}

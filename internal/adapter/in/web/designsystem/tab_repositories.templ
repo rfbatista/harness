@@ -37,7 +37,7 @@ templ OptIn(projectID, designSystemID string) {
 			<p class="[ color-ink-muted ]" data-no-repositories>This project has no repositories yet. Add one, then apply the design system to it here.</p>
 		</template>
 		<template x-if="skeletonShown">
-			@components.SkeletonRows("Loading repositories", 2, "")
+			@components.SkeletonRows("Loading repositories", 2, "6.2rem")
 		</template>
 		<section class="[ pane ]" x-show="loaded" x-bind:class="skeletonIn">
 			<template x-for="r in rows" x-bind:key="r.id">

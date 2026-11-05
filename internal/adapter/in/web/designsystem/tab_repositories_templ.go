@@ -106,7 +106,7 @@ func OptIn(projectID, designSystemID string) templ.Component {
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
-		templ_7745c5c3_Err = components.SkeletonRows("Loading repositories", 2, "").Render(ctx, templ_7745c5c3_Buffer)
+		templ_7745c5c3_Err = components.SkeletonRows("Loading repositories", 2, "6.2rem").Render(ctx, templ_7745c5c3_Buffer)
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}

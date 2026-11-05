@@ -1192,7 +1192,7 @@ templ designPanel() {
 					x-on:keydown.up.prevent="previous"
 				>
 					<template x-if="skeletonShown">
-						@components.SkeletonRows("Loading what the session published", 3, "")
+						@components.SkeletonRows("Loading what the session published", 3, "5.3rem")
 					</template>
 					<template x-for="card in cards" x-bind:key="card.id">
 						@ArtifactCard()

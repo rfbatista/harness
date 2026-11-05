@@ -80,7 +80,7 @@ func tabAgents(v View) templ.Component {
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
-		templ_7745c5c3_Err = components.SkeletonRows("Loading agents", 3, "").Render(ctx, templ_7745c5c3_Buffer)
+		templ_7745c5c3_Err = components.SkeletonRows("Loading agents", 3, "3.6rem").Render(ctx, templ_7745c5c3_Buffer)
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}

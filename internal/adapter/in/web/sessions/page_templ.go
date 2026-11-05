@@ -2700,7 +2700,7 @@ func designPanel() templ.Component {
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
-		templ_7745c5c3_Err = components.SkeletonRows("Loading what the session published", 3, "").Render(ctx, templ_7745c5c3_Buffer)
+		templ_7745c5c3_Err = components.SkeletonRows("Loading what the session published", 3, "5.3rem").Render(ctx, templ_7745c5c3_Buffer)
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}

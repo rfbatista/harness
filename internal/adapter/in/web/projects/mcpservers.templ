@@ -43,7 +43,7 @@ templ mcpServersSection(projectID, projectName, settingsHref string) {
 				</div>
 			</template>
 			<template x-if="skeletonShown">
-				@components.SkeletonRows("Loading agents", 2, "")
+				@components.SkeletonRows("Loading agents", 1, "3.6rem")
 			</template>
 			<div class="[ flow ] [ flow-space-s ]" x-bind:hidden="isLoading" x-bind:class="skeletonIn">
 				<div class="[ segmented ]" role="group" aria-label="Enabled agents mode" style="justify-self: start" data-agents-mode>
@@ -138,7 +138,7 @@ templ mcpServersSection(projectID, projectName, settingsHref string) {
 			</div>
 		</template>
 		<template x-if="skeletonShown">
-			@components.SkeletonRows("Loading MCP servers", 2, "")
+			@components.SkeletonRows("Loading MCP servers", 3, "3.7rem")
 		</template>
 		<template x-if="isEmpty">
 			<div class="[ empty ]" data-mcp-empty>

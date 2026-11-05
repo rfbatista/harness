@@ -27,7 +27,7 @@ templ tabAgents(v View) {
 			</div>
 		</template>
 		<template x-if="skeletonShown">
-			@components.SkeletonRows("Loading agents", 3, "")
+			@components.SkeletonRows("Loading agents", 3, "3.6rem")
 		</template>
 		<template x-if="stale">
 			<div class="[ banner ]" data-tone="attention" role="alert" data-agents-stale>
