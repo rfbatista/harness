@@ -343,9 +343,10 @@ func oobAttrs(oob bool) templ.Attributes {
 
 // boostAttrs is where a click on a link inside the app shell puts the page, set
 // once on the shell (ADR 0064): the web client asks for the page, and the server
-// answers the app shell or, within a frame, retargets its answer to <main>.
+// answers the app shell or, within a frame, retargets its answer to <main>. The
+// web client pushes the address itself (it owns the history of the pages).
 func boostAttrs() templ.Attributes {
-	return templ.Attributes{"hx-target": "#" + NavTarget, "hx-swap": "outerHTML", "hx-push-url": "true"}
+	return templ.Attributes{"hx-target": "#" + NavTarget, "hx-swap": "outerHTML"}
 }
 
 // reportsFeedAttrs tells the rail that this page's feed is the rail's own.

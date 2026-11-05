@@ -15,6 +15,15 @@
 // page that has none, an error) is never swapped: the URL loads as a page, so
 // a full document never lands inside #main.
 //
+// History: the address bar follows each navigation (a push after the swap),
+// and Back and Forward ask the server for the page of the entry they land on,
+// with no snapshot of swapped pages. Every entry carries the id of the page
+// that was on screen when it was written (the history methods are wrapped to
+// add it, so a page's own pushState and replaceState keep it): an entry of
+// the page on screen is the page's own routing (the code browser, the design
+// system tabs, the agents catalog) and is left to it; an entry of another page
+// is a navigation, so the page is swapped for it.
+//
 // The swapped-out <main> is removed from the document, which makes Alpine
 // call destroy() on its components; the new one boots from the seed in the
 // fragment. After the swap, the new page's heading has focus and the page's
@@ -28,13 +37,40 @@ const FRAGMENT_HEADER = "X-Harness-Fragment";
  * @param {{ Alpine: any, navigate: (url: string) => void, doc?: Document }} deps
  */
 export function startInPlaceNavigation(htmx, { Alpine, navigate, doc = document }) {
+  const win = doc.defaultView;
+  const history = win.history;
   const isNavigation = (detail) => detail.requestConfig?.headers?.["HX-Target"] === NAV_TARGET;
+
+  // The page on screen: one id per document life, so that entries written
+  // before a reload are never taken for the page that is on screen now.
+  const life = Math.random().toString(36).slice(2);
+  let pages = 0;
+  let pageId = `${life}:${pages}`;
+  // Where the frame on screen was last loaded from, for HX-Current-URL when
+  // the address bar has moved ahead of it (Back and Forward).
+  let shownUrl = doc.location.href;
+  let restoring = false;
+
+  for (const method of ["pushState", "replaceState"]) {
+    const original = history[method].bind(history);
+    history[method] = (state, title, url) => original(state === null || (typeof state === "object" && !Array.isArray(state)) ? { ...state, page: pageId } : state, title, url);
+  }
+  history.replaceState(history.state, "");
+
+  win.addEventListener("popstate", (e) => {
+    const entry = e.state?.page;
+    if (entry === undefined || entry === pageId) return; // not an entry of ours, or the page's own
+    e.stopImmediatePropagation();
+    restoring = true;
+    htmx.ajax("GET", doc.location.href, { target: `#${NAV_TARGET}`, swap: "outerHTML", headers: { "HX-Boosted": "true", "HX-Current-URL": shownUrl } });
+  });
 
   doc.addEventListener("click", (e) => {
     if (e.defaultPrevented || e.button !== 0 || e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) return;
     const link = e.target instanceof Element ? e.target.closest("a[href]") : null;
     if (!link || !link.closest(`#${NAV_TARGET}`) || !isPageLink(link, doc.location)) return;
     e.preventDefault();
+    restoring = false; // a failed Back leaves no mark behind
     htmx.ajax("GET", link.href, { source: link, target: `#${NAV_TARGET}`, swap: "outerHTML", headers: { "HX-Boosted": "true" } });
   });
 
@@ -42,6 +78,7 @@ export function startInPlaceNavigation(htmx, { Alpine, navigate, doc = document 
     if (!isNavigation(e.detail) || !e.detail.shouldSwap) return;
     if (!e.detail.xhr.getResponseHeader(FRAGMENT_HEADER)) {
       e.preventDefault();
+      restoring = false;
       navigate(e.detail.pathInfo.requestPath);
     }
   });
@@ -52,6 +89,14 @@ export function startInPlaceNavigation(htmx, { Alpine, navigate, doc = document 
 
   doc.addEventListener("htmx:afterSettle", (e) => {
     if (!isNavigation(e.detail)) return;
+    pageId = `${life}:${++pages}`;
+    if (!restoring) {
+      // A click on the link to the page that is open replaces its entry.
+      const same = new URL(e.detail.pathInfo.responsePath, doc.location.href).href === doc.location.href;
+      history[same ? "replaceState" : "pushState"](null, "", e.detail.pathInfo.responsePath);
+    }
+    restoring = false;
+    shownUrl = doc.location.href;
     // htmx wrote the new title, which has no unread count: the bell adds it.
     Alpine.store("notifications")?.retitle?.();
     // The phone's drawer closes on a click, as the page load it replaced did.

@@ -81,7 +81,7 @@ func TestThePageURLWithoutHXRequestIsStillTheFullPage(t *testing.T) {
 		rec := httptest.NewRecorder()
 		b.handler.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, path, nil))
 		body := rec.Body.String()
-		for _, want := range []string{"<html", `class="[ topbar ]"`, `id="rail"`, `<main id="main"`, `id="stream-bar"`, `id="frame-state"`, `id="app-shell"`, `hx-target="#app-shell"`, `hx-push-url="true"`} {
+		for _, want := range []string{"<html", `class="[ topbar ]"`, `id="rail"`, `<main id="main"`, `id="stream-bar"`, `id="frame-state"`, `id="app-shell"`, `hx-target="#app-shell"`} {
 			if !strings.Contains(body, want) {
 				t.Errorf("full page %s lacks %q", path, want)
 			}
