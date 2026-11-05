@@ -71,9 +71,9 @@ func reviewsSkeletonCount(pending int) int {
 	return min(pending, 3)
 }
 
-// reviewsSkeletonStyle sets the skeleton's row count and row height.
+// reviewsSkeletonStyle sets the skeleton's row count and row height: a review card is about 13rem.
 func reviewsSkeletonStyle(pending int) string {
-	return "--rows: " + strconv.Itoa(reviewsSkeletonCount(pending))
+	return "--rows: " + strconv.Itoa(reviewsSkeletonCount(pending)) + "; --skeleton-row: 13rem"
 }
 
 // reviewsSeed names what the review band and the inbox show: sessions as
