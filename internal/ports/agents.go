@@ -35,6 +35,21 @@ type AgentNameLister interface {
 	ListAgentNames(ctx context.Context) ([]*domain.Agent, error)
 }
 
+// AgentNameOf is the name of the agent with the id in l's list, and whether
+// the list has it. An agent's id is its name in the catalog.
+func AgentNameOf(ctx context.Context, l AgentNameLister, id string) (string, bool) {
+	list, err := l.ListAgentNames(ctx)
+	if err != nil {
+		return "", false
+	}
+	for _, a := range list {
+		if a.ID == id {
+			return a.Name, true
+		}
+	}
+	return "", false
+}
+
 // AgentCatalog manages agent templates. It is network-safe: tui-client
 // implements it over HTTP, so every method takes a context and reports
 // failure, AGENT_NOT_FOUND included, as an error.

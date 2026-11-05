@@ -353,7 +353,7 @@ func (s *Service) checkTurn(c *domain.StatusCheck, ending string) string {
 		report += ", " + age(s.now().Sub(r.CreatedAt)) + " ago"
 	}
 	return fmt.Sprintf("[status check · %s session %s · status %s · last action %q · last report %s · pending reviews %s]",
-		s.agentName(d), c.DelegateSessionID, status, last, report, strconv.Itoa(s.reviews.CountPending(c.TaskID)))
+		s.agentName(context.Background(), d), c.DelegateSessionID, status, last, report, strconv.Itoa(s.reviews.CountPending(c.TaskID)))
 }
 
 func age(d time.Duration) string { return domain.ShortAge(d) }

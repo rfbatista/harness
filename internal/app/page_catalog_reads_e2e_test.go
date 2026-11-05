@@ -3,6 +3,7 @@
 package app
 
 import (
+	"context"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -11,6 +12,9 @@ import (
 	"strconv"
 	"strings"
 	"testing"
+
+	"operators-mcp/internal/infra/pagetime"
+	"operators-mcp/internal/infra/readshare"
 )
 
 // A project page reads the agent catalog at most once, however many sessions
@@ -99,5 +103,29 @@ func TestAnAgentSavedBetweenTwoPageRequestsShowsOnTheSecond(t *testing.T) {
 	}
 	if !strings.Contains(page(), name) {
 		t.Errorf("the page opened after saving %s does not show it", name)
+	}
+}
+
+// Naming the agents of a project's live sessions reads the catalog once for the
+// whole page request, and fresh for each call outside a request, as the refusal
+// to delete a project with live sessions does.
+func TestLiveProjectSessionsShareOneCatalogReadOnlyWithinARequest(t *testing.T) {
+	b := newFourTimesProject(t)
+	reads := func(ctx context.Context) int {
+		t.Helper()
+		ctx, timing := pagetime.Start(ctx)
+		defer timing.Bind()()
+		for range 3 {
+			if _, err := b.orch.LiveProjectSessions(ctx, b.project); err != nil {
+				t.Fatal(err)
+			}
+		}
+		return catalogReads(t, timing.Report(0).Header())
+	}
+	if n := reads(readshare.With(b.ctx)); n != 1 {
+		t.Errorf("within a request: %d catalog reads, want 1", n)
+	}
+	if n := reads(b.ctx); n < 3 {
+		t.Errorf("outside a request: %d catalog reads for 3 calls, want at least one each (fresh)", n)
 	}
 }

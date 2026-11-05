@@ -68,9 +68,7 @@ type Service struct {
 	}
 	// Agents names the agent a session runs, in turn headers. Nil uses the
 	// agent id.
-	Agents interface {
-		GetAgent(ctx context.Context, id string) (*domain.Agent, error)
-	}
+	Agents ports.AgentNameLister
 
 	// clock is the time source; SetClock swaps it while the scheduler runs.
 	clock atomic.Pointer[func() time.Time]
@@ -285,14 +283,16 @@ func ids(in []string) []string {
 	return in
 }
 
-// agentName is how turn headers name a session's agent.
-func (s *Service) agentName(sess *domain.Session) string {
+// agentName is how turn headers name a session's agent. It reads only the
+// agents' names: within a page request ctx shares the one catalog read, and
+// without one (a delivery, a tool call) the read is fresh.
+func (s *Service) agentName(ctx context.Context, sess *domain.Session) string {
 	if sess == nil || sess.AgentID == "" {
 		return "claude"
 	}
 	if s.Agents != nil {
-		if a, err := s.Agents.GetAgent(context.Background(), sess.AgentID); err == nil && a != nil && a.Name != "" {
-			return a.Name
+		if name, ok := ports.AgentNameOf(ctx, s.Agents, sess.AgentID); ok && name != "" {
+			return name
 		}
 	}
 	return sess.AgentID
@@ -423,7 +423,7 @@ func (s *Service) DecorateTickets(ctx context.Context, tickets ...*domain.Ticket
 		if name, ok := names[sess.AgentID]; ok {
 			return name
 		}
-		names[sess.AgentID] = s.agentName(sess)
+		names[sess.AgentID] = s.agentName(ctx, sess)
 		return names[sess.AgentID]
 	}
 	for _, tk := range tickets {

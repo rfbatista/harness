@@ -129,7 +129,7 @@ func (s *Service) messageTurn(m *domain.TaskMessage, from *domain.Session) strin
 		kind += "/" + string(m.Verdict)
 	}
 	var b strings.Builder
-	b.WriteString("[task message " + m.ID + " · " + kind + " · from " + s.agentName(from) + " session " + m.FromSessionID + "]\n")
+	b.WriteString("[task message " + m.ID + " · " + kind + " · from " + s.agentName(context.Background(), from) + " session " + m.FromSessionID + "]\n")
 	if m.InReplyTo != "" {
 		b.WriteString("In reply to " + m.InReplyTo + "\n")
 	}
