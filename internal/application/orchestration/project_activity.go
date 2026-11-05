@@ -37,8 +37,8 @@ func (s *Service) agentName(ctx context.Context, agentID string) string {
 	if agentID == "" || s.catalog.Agents == nil {
 		return agentID
 	}
-	if a, err := s.catalog.Agents.GetAgent(ctx, agentID); err == nil && a != nil && a.Name != "" {
-		return a.Name
+	if name, ok := ports.AgentNameOf(ctx, s.catalog.Agents, agentID); ok && name != "" {
+		return name
 	}
 	return agentID
 }

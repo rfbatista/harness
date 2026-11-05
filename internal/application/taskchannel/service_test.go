@@ -464,8 +464,12 @@ func TestReviewsAreAnnouncedOnTheBus(t *testing.T) {
 
 type agentNames map[string]string
 
-func (a agentNames) GetAgent(_ context.Context, id string) (*domain.Agent, error) {
-	return &domain.Agent{ID: id, Name: a[id]}, nil
+func (a agentNames) ListAgentNames(context.Context) ([]*domain.Agent, error) {
+	var out []*domain.Agent
+	for id, name := range a {
+		out = append(out, &domain.Agent{ID: id, Name: name})
+	}
+	return out, nil
 }
 
 // startAs records a session that runs agentID on the task, as start does.
@@ -511,5 +515,29 @@ func TestLastMove_NamesTheArchitectOrTheSession(t *testing.T) {
 	got, _ := f.plan.GetTicket(ctx, f.ticket)
 	if lm := got.LastMove; lm == nil || lm.By != domain.ChangedByArchitect || lm.SessionID != "arch" || lm.SessionLabel != "architect-agent" {
 		t.Fatalf("read back after the roles changed: %+v", got.LastMove)
+	}
+}
+
+// A session whose agent was deleted from the catalog is labelled by the agent's
+// id, and one that runs no agent is "claude": the labels do not depend on how
+// the agents' names are read.
+func TestLastMove_LabelsADeletedAgentByItsIDAndNoAgentAsClaude(t *testing.T) {
+	f := newFixture(t)
+	f.svc.Agents = agentNames{"agent-go": "go-developer"}
+	f.startAs(t, "gone", "agent-deleted", "")
+	tk, err := f.svc.SetTaskStatus(ctx, "gone", domain.TicketStatusInProgress, "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if lm := tk.LastMove; lm == nil || lm.SessionLabel != "agent-deleted" {
+		t.Fatalf("a deleted agent's session: %+v", tk.LastMove)
+	}
+	f.startAs(t, "plain", "", "")
+	tk, err = f.svc.SetTaskStatus(ctx, "plain", domain.TicketStatusReview, "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if lm := tk.LastMove; lm == nil || lm.SessionLabel != "claude" {
+		t.Fatalf("a session with no agent: %+v", tk.LastMove)
 	}
 }

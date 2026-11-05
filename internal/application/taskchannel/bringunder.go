@@ -182,7 +182,7 @@ func (s *Service) architectTurn(moved []*domain.Session) string {
 	b.WriteString("[task update · sessions brought under you] The person brought " + strconv.Itoa(len(moved)) + " " + noun +
 		" of this task under you. Each is now your delegate: it reports to you with task messages, it cannot move the task status, and the ones still running have a status-check loop at the default interval.\n\n")
 	for _, m := range moved {
-		b.WriteString(domain.BroughtUnderLine(s.agentName(m), m, now) + "\n")
+		b.WriteString(domain.BroughtUnderLine(s.agentName(context.Background(), m), m, now) + "\n")
 	}
 	b.WriteString("\nRead their messages so far with list_task_messages and their branches with list_task_sessions. Supervise them as you do a delegate you started: answer what they report with reply_to_session, tune or pause each loop with set_status_check, ask the person for review with request_user_review when their work is ready, and move the task status as the work moves. Do not restart or duplicate their work.")
 	return b.String()
@@ -194,5 +194,5 @@ func (s *Service) architectTurn(moved []*domain.Session) string {
 func (s *Service) delegateTurn(arch *domain.Session) string {
 	_, rest, _ := strings.Cut(domain.DelegateStatusSection, "\n")
 	return fmt.Sprintf("[task update · architect] This task now has an architect: %s session %s. You are its delegate from now on.\n%s Send it a status_report now, saying where your work stands.",
-		s.agentName(arch), arch.ID, rest)
+		s.agentName(context.Background(), arch), arch.ID, rest)
 }
