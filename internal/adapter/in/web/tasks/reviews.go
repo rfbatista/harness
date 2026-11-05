@@ -65,6 +65,17 @@ func reviewsWaiting(n int) string {
 	return strconv.Itoa(n) + " reviews wait on you"
 }
 
+// reviewsSkeletonCount is how many skeleton rows the inbox draws while its list
+// is read: one per waiting request, three at most.
+func reviewsSkeletonCount(pending int) int {
+	return min(pending, 3)
+}
+
+// reviewsSkeletonStyle sets the skeleton's row count and row height.
+func reviewsSkeletonStyle(pending int) string {
+	return "--rows: " + strconv.Itoa(reviewsSkeletonCount(pending))
+}
+
 // reviewsSeed names what the review band and the inbox show: sessions as
 // "go-developer · Server: architect channel", tasks with their page, and
 // documents by title. ticketID is "" on the project's inbox.

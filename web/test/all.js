@@ -206,6 +206,7 @@ import "../src/modules/writinghelper/presentation/coordinator.test.js";
 import "../src/modules/writinghelper/presentation/field.test.js";
 import "../src/screen-theme.test.js";
 import "../src/shared/domain/markdown.test.js";
+import "../src/shared/domain/skeletonRule.test.js";
 import "../src/shared/infrastructure/api.test.js";
 import "../src/shared/infrastructure/feed.test.js";
 import "../src/shared/infrastructure/shared-feed.test.js";

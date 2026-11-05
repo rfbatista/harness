@@ -93,7 +93,7 @@ func ReviewsPage(frame shell.Frame, projectID, projectName string, seed *compone
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
-			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 4, "</span></header><p class=\"[ visually-hidden ]\" role=\"status\" aria-live=\"polite\" x-text=\"announcement\"></p><div class=\"[ reviews-inbox ]\" data-scroll>")
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 4, "</span></header><p class=\"[ visually-hidden ]\" role=\"status\" aria-live=\"polite\" x-text=\"announcement\"></p><div class=\"[ reviews-inbox ]\" data-scroll x-bind:class=\"skeletonIn\">")
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
@@ -102,12 +102,35 @@ func ReviewsPage(frame shell.Frame, projectID, projectName string, seed *compone
 				return templ_7745c5c3_Err
 			}
 			if pending > 0 {
-				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 5, "<div class=\"[ flow ] [ flow-space-s pad-l ]\" x-show=\"notLoaded\" aria-hidden=\"true\"><span class=\"[ skeleton ]\" style=\"--skeleton-width: 40%\"></span> <span class=\"[ skeleton ]\" style=\"--skeleton-width: 75%\"></span> <span class=\"[ skeleton ]\" style=\"--skeleton-width: 60%\"></span></div>")
+				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 5, "<template x-if=\"skeletonShown\"><div class=\"[ skeleton ]\" data-variant=\"rows\" style=\"")
+				if templ_7745c5c3_Err != nil {
+					return templ_7745c5c3_Err
+				}
+				var templ_7745c5c3_Var6 string
+				templ_7745c5c3_Var6, templ_7745c5c3_Err = templruntime.SanitizeStyleAttributeValues(templ.SafeCSS(reviewsSkeletonStyle(pending)))
+				if templ_7745c5c3_Err != nil {
+					return templ.Error{Err: templ_7745c5c3_Err, FileName: `tasks/reviews.templ`, Line: 26, Col: 104}
+				}
+				_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var6))
+				if templ_7745c5c3_Err != nil {
+					return templ_7745c5c3_Err
+				}
+				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 6, "\" role=\"status\" aria-busy=\"true\"><span class=\"[ visually-hidden ]\">Loading reviews</span> ")
+				if templ_7745c5c3_Err != nil {
+					return templ_7745c5c3_Err
+				}
+				for i := 0; i < reviewsSkeletonCount(pending); i++ {
+					templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 7, "<div class=\"[ row ]\" aria-hidden=\"true\"><span class=\"[ bar ]\"></span><span class=\"[ bar ]\" data-h=\"sm\"></span><span class=\"[ bar ]\"></span></div>")
+					if templ_7745c5c3_Err != nil {
+						return templ_7745c5c3_Err
+					}
+				}
+				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 8, "</div></template>")
 				if templ_7745c5c3_Err != nil {
 					return templ_7745c5c3_Err
 				}
 			}
-			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 6, "<template x-for=\"group in groups\" x-bind:key=\"group.taskId\"><section class=\"[ reviews ]\" data-attention x-bind:aria-label=\"group.title\"><h2 class=\"[ reviews-head ]\" tabindex=\"-1\" data-reviews-heading><template x-if=\"group.href\"><a x-bind:href=\"group.href\" x-text=\"group.title\"></a></template><template x-if=\"!group.href\"><span x-text=\"group.title\"></span></template></h2><template x-for=\"card in group.cards\" x-bind:key=\"card.id\">")
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 9, "<template x-for=\"group in groups\" x-bind:key=\"group.taskId\"><section class=\"[ reviews ]\" data-attention x-bind:aria-label=\"group.title\"><h2 class=\"[ reviews-head ]\" tabindex=\"-1\" data-reviews-heading><template x-if=\"group.href\"><a x-bind:href=\"group.href\" x-text=\"group.title\"></a></template><template x-if=\"!group.href\"><span x-text=\"group.title\"></span></template></h2><template x-for=\"card in group.cards\" x-bind:key=\"card.id\">")
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
@@ -115,7 +138,7 @@ func ReviewsPage(frame shell.Frame, projectID, projectName string, seed *compone
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
-			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 7, "</template></section></template><template x-if=\"isEmpty\">")
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 10, "</template></section></template><template x-if=\"isEmpty\">")
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
@@ -123,7 +146,7 @@ func ReviewsPage(frame shell.Frame, projectID, projectName string, seed *compone
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
-			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 8, "</template></div></main>")
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 11, "</template></div></main>")
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
