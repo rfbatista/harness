@@ -106,3 +106,44 @@ func TestAFragmentOfAMissingTaskIsTheSame404(t *testing.T) {
 		t.Fatalf("status = %d, want 404", rec.Code)
 	}
 }
+
+// A fragment that the browser asked for ahead of the click (hover or focus on
+// a link) may be held for the click that follows, for 5 s, and no longer
+// (ADR 0064, ADR 0062). Any other answer is never stored.
+func TestOnlyAPrefetchedPageIsHeldBriefly(t *testing.T) {
+	b := newBudgetProject(t)
+	base := "/projects/" + b.project
+
+	plain := httptest.NewRecorder()
+	b.handler.ServeHTTP(plain, navRequest(base+"/reviews", base))
+	if got := plain.Header().Get("Cache-Control"); got != "no-store" {
+		t.Errorf("a click's answer: Cache-Control = %q, want no-store", got)
+	}
+
+	ahead := navRequest(base+"/reviews", base)
+	ahead.Header.Set("X-Harness-Prefetch", "1")
+	rec := httptest.NewRecorder()
+	b.handler.ServeHTTP(rec, ahead)
+	if got := rec.Header().Get("Cache-Control"); got != "private, max-age=5" {
+		t.Errorf("a prefetch's answer: Cache-Control = %q, want private, max-age=5", got)
+	}
+	if vary := strings.Join(rec.Header().Values("Vary"), ","); !strings.Contains(vary, "X-Harness-Prefetch") {
+		t.Errorf("Vary = %q: a prefetched answer must be used only by the click that asks for it", vary)
+	}
+
+	missing := navRequest(base+"/tasks/nope", base)
+	missing.Header.Set("X-Harness-Prefetch", "1")
+	rec = httptest.NewRecorder()
+	b.handler.ServeHTTP(rec, missing)
+	if rec.Code != http.StatusNotFound || rec.Header().Get("Cache-Control") != "no-store" {
+		t.Errorf("a prefetched error: status %d, Cache-Control %q; want 404 and no-store", rec.Code, rec.Header().Get("Cache-Control"))
+	}
+
+	full := httptest.NewRequest(http.MethodGet, base+"/reviews", nil)
+	full.Header.Set("X-Harness-Prefetch", "1")
+	rec = httptest.NewRecorder()
+	b.handler.ServeHTTP(rec, full)
+	if got := rec.Header().Get("Cache-Control"); got != "no-store" {
+		t.Errorf("a full page is never held, Cache-Control = %q", got)
+	}
+}

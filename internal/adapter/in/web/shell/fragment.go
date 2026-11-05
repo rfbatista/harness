@@ -98,8 +98,23 @@ func MarkAnswer(h http.Header, m Mode) {
 	}
 }
 
-// VaryOnPage makes every answer of a page's URL vary on what picks its shape.
+// PrefetchHeader marks a request that the browser made ahead of the click, on
+// hover or focus, and the click that uses what it fetched.
+const PrefetchHeader = "X-Harness-Prefetch"
+
+// Prefetched reports whether r asks for a page ahead of a click (ADR 0064).
+func Prefetched(r *http.Request) bool {
+	return PageRequest(r) && r.Header.Get(PrefetchHeader) == "1"
+}
+
+// PrefetchHold is how long the browser may keep a prefetched page for the click
+// that follows (ADR 0062: a held value is about 5 s old at most).
+const PrefetchHold = "private, max-age=5"
+
+// VaryOnPage makes every answer of a page's URL vary on what picks its shape,
+// and on whether it is a prefetched one: only the click that says so uses it.
 func VaryOnPage(h http.Header) {
 	h.Add("Vary", "HX-Request")
 	h.Add("Vary", "HX-Current-URL")
+	h.Add("Vary", PrefetchHeader)
 }

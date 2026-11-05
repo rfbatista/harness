@@ -595,6 +595,10 @@ func render(w http.ResponseWriter, r *http.Request, status int, page templ.Compo
 	}
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	w.Header().Set("Cache-Control", "no-store")
+	if status == http.StatusOK && shell.Prefetched(r) {
+		// Held for the click that follows the hover, and dropped after 5 s.
+		w.Header().Set("Cache-Control", shell.PrefetchHold)
+	}
 	shell.MarkAnswer(w.Header(), shell.ModeOf(r.Context()))
 	w.WriteHeader(status)
 	_, err := buf.WriteTo(w)

@@ -24,10 +24,14 @@
 // system tabs, the agents catalog) and is left to it; an entry of another page
 // is a navigation, so the page is swapped for it.
 //
+// Prefetch on hover is prefetch.js: the click uses what hover asked for.
+//
 // The swapped-out <main> is removed from the document, which makes Alpine
 // call destroy() on its components; the new one boots from the seed in the
 // fragment. After the swap, the new page's heading has focus and the page's
 // title is announced, as it is for a swap region.
+
+import { PREFETCH_HEADER, startPrefetch } from "./prefetch.js";
 
 const NAV_TARGET = "app-shell";
 const FRAGMENT_HEADER = "X-Harness-Fragment";
@@ -39,6 +43,7 @@ const FRAGMENT_HEADER = "X-Harness-Fragment";
 export function startInPlaceNavigation(htmx, { Alpine, navigate, doc = document }) {
   const win = doc.defaultView;
   const history = win.history;
+  const prefetch = startPrefetch({ doc, isPageLink });
   const isNavigation = (detail) => detail.requestConfig?.headers?.["HX-Target"] === NAV_TARGET;
 
   // The page on screen: one id per document life, so that entries written
@@ -71,7 +76,9 @@ export function startInPlaceNavigation(htmx, { Alpine, navigate, doc = document 
     if (!link || !link.closest(`#${NAV_TARGET}`) || !isPageLink(link, doc.location)) return;
     e.preventDefault();
     restoring = false; // a failed Back leaves no mark behind
-    htmx.ajax("GET", link.href, { source: link, target: `#${NAV_TARGET}`, swap: "outerHTML", headers: { "HX-Boosted": "true" } });
+    // A page asked for on hover is used by this click, once, from the browser's hold.
+    const headers = { "HX-Boosted": "true", ...(prefetch.use(link.href) ? { [PREFETCH_HEADER]: "1" } : {}) };
+    htmx.ajax("GET", link.href, { source: link, target: `#${NAV_TARGET}`, swap: "outerHTML", headers });
   });
 
   doc.addEventListener("htmx:beforeSwap", (e) => {
