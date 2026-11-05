@@ -54,12 +54,12 @@ templ pageFragment(f Frame) {
 // frameState carries what the frame shows for the current page and that the
 // browser applies to the rail: the open project page and the open task.
 templ frameState(f Frame, oob bool) {
-	<div id="frame-state" hidden data-page={ f.Rail.Page } data-task={ f.Rail.Current } { oobAttrs(oob)... }></div>
+	<div id="frame-state" hidden data-page={ f.Rail.Page } data-task={ f.Rail.Current } { reportsFeedAttrs(f.Rail.ReportsFeed)... } { oobAttrs(oob)... }></div>
 }
 
 templ fullShell(f Frame) {
 	@Document(f) {
-		<div class="[ app-shell ]" { noRailAttrs(f.NoRail)... }>
+		<div id="app-shell" class="[ app-shell ]" { boostAttrs()... } { noRailAttrs(f.NoRail)... }>
 			<a class="[ skip-link ] [ button ]" data-size="sm" href="#main">Skip to content</a>
 			@topBar(f)
 			if !f.NoRail {
@@ -290,7 +290,7 @@ templ projectNav(r Rail) {
 	<nav class="[ nav ]" aria-label="Project">
 		<ul role="list">
 			if r.BoardHref != "" {
-				<li>
+				<li data-page="board">
 					<a href={ templ.SafeURL(r.BoardHref) } { currentAttrs(r.Page == PageBoard)... }>
 						@icon("board")
 						<span class="[ label ]">Board</span>
@@ -298,7 +298,7 @@ templ projectNav(r Rail) {
 				</li>
 			}
 			if r.CodeHref != "" {
-				<li>
+				<li data-page="code">
 					<a href={ templ.SafeURL(r.CodeHref) } { currentAttrs(r.Page == PageCode)... }>
 						@icon("code")
 						<span class="[ label ]">Code</span>
@@ -306,7 +306,7 @@ templ projectNav(r Rail) {
 				</li>
 			}
 			if r.ReviewsHref != "" {
-				<li>
+				<li data-page="reviews">
 					<a href={ templ.SafeURL(r.ReviewsHref) } { currentAttrs(r.Page == PageReviews)... }>
 						@icon("review")
 						<span class="[ label ]">Review requests</span>
@@ -317,7 +317,7 @@ templ projectNav(r Rail) {
 				</li>
 			}
 			if r.DocumentsHref != "" {
-				<li>
+				<li data-page="documents">
 					<a href={ templ.SafeURL(r.DocumentsHref) } { currentAttrs(r.Page == PageDocuments)... }>
 						@icon("document")
 						<span class="[ label ]">Documents</span>
@@ -325,7 +325,7 @@ templ projectNav(r Rail) {
 				</li>
 			}
 			if r.DesignHref != "" {
-				<li>
+				<li data-page="design">
 					<a href={ templ.SafeURL(r.DesignHref) } { currentAttrs(r.Page == PageDesign)... }>
 						@icon("design")
 						<span class="[ label ]">Design assets</span>
@@ -333,7 +333,7 @@ templ projectNav(r Rail) {
 				</li>
 			}
 			if r.DesignSystemHref != "" {
-				<li>
+				<li data-page="design-system">
 					<a href={ templ.SafeURL(r.DesignSystemHref) } { currentAttrs(r.Page == PageDesignSystem)... }>
 						@icon("design-system")
 						<span class="[ label ]">Design systems</span>
@@ -342,7 +342,7 @@ templ projectNav(r Rail) {
 				</li>
 			}
 			if r.UsageHref != "" {
-				<li>
+				<li data-page="usage">
 					<a href={ templ.SafeURL(r.UsageHref) } { currentAttrs(r.Page == PageUsage)... }>
 						@icon("usage")
 						<span class="[ label ]">Usage</span>

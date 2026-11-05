@@ -320,6 +320,21 @@ func oobAttrs(oob bool) templ.Attributes {
 	return nil
 }
 
+// boostAttrs boosts every link inside the app shell once, so that a click
+// between pages swaps in place (ADR 0064). The server answers the app shell
+// or, within a frame, retargets its answer to <main>.
+func boostAttrs() templ.Attributes {
+	return templ.Attributes{"hx-boost": "true", "hx-target": "#" + NavTarget, "hx-swap": "outerHTML", "hx-push-url": "true"}
+}
+
+// reportsFeedAttrs tells the rail that this page's feed is the rail's own.
+func reportsFeedAttrs(reports bool) templ.Attributes {
+	if reports {
+		return templ.Attributes{"data-reports-feed": true}
+	}
+	return nil
+}
+
 // Layout builds a page's Frame: assets, the project picker and the task rail.
 // projectID and taskID say what is selected ("" for none).
 type Layout func(ctx context.Context, title, projectID, taskID string) (Frame, error)
