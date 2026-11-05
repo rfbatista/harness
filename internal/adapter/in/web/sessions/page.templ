@@ -11,6 +11,14 @@ import (
 	"operators-mcp/internal/adapter/in/web/tokensavers"
 )
 
+// GitStatesPage is the lazy section that fills the chips with the worktrees'
+// git state, after the page: only its own seed, read by syncStates.
+templ GitStatesPage(s GitStatesSection) {
+	<div x-data="syncStates" data-seed="git-states-seed" hidden>
+		@templ.JSONScript("git-states-seed", s)
+	</div>
+}
+
 // Page is a task: its sessions in the inner list, the selected one's detail
 // beside it. The server renders the first paint inside [data-ssr] and the
 // same rows as an Alpine template; sessionsPage (in the browser) removes the
@@ -50,6 +58,9 @@ templ Page(v PageView) {
 			}
 			if v.GitSync {
 				<div x-data="syncWatch" data-seed="sessions-seed" hidden></div>
+			}
+			if v.GitStatesHref != "" {
+				<div id="git-states" hx-get={ v.GitStatesHref } hx-trigger="load" hx-target="this" hx-swap="outerHTML" hidden></div>
 			}
 			if v.Usage != nil {
 				@templ.JSONScript("usage-totals-seed", v.Usage)

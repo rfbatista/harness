@@ -359,6 +359,17 @@ type PageView struct {
 	// GitSync turns on the sync module's chips and the Git popover; the
 	// states themselves are Seed.GitStates.
 	GitSync bool
+	// GitStatesHref is where the browser asks for the worktrees' git state
+	// after the page (the lazy section, ADR 0064); "" when the page carries
+	// them.
+	GitStatesHref string
+}
+
+// GitStatesSection is the lazy section's own seed: the git state of the
+// task's worktrees, as the sessions seed would carry it.
+type GitStatesSection struct {
+	ProjectID string            `json:"project_id"`
+	GitStates []domain.GitState `json:"git_states"`
 }
 
 // PaintSync gives each row whose session has a worktree on disk its sync chip,

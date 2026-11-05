@@ -55,6 +55,16 @@ func PageRequest(r *http.Request) bool {
 		r.Header.Get("HX-Target") == NavTarget
 }
 
+// SectionTarget is the id of the lazy section that r asks for at its page's own
+// URL (htmx's HX-Target), or "" for any other request. A page that has lazy
+// sections answers it with that section alone (ADR 0064).
+func SectionTarget(r *http.Request) string {
+	if r.Header.Get("HX-Request") != "true" || PageRequest(r) {
+		return ""
+	}
+	return r.Header.Get("HX-Target")
+}
+
 // SameFrame reports whether a click from the page the browser shows (htmx's
 // HX-Current-URL) to the page of r stays in one frame, so that only <main>
 // swaps. Two pages of one project share a frame, and so do two pages outside

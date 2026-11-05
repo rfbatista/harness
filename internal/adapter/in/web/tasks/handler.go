@@ -221,8 +221,16 @@ func (h Handler) SessionCode(view string) shell.Handler {
 	}
 }
 
+// gitStatesSection is the lazy section of the task page that holds the
+// worktrees' git state, whose reads cost a git call each (ADR 0064).
+const gitStatesSection = "git-states"
+
 func (h Handler) task(w http.ResponseWriter, r *http.Request, codeRoute *code.Route) error {
 	ctx := r.Context()
+	section := shell.SectionTarget(r)
+	if section != "" && (section != gitStatesSection || codeRoute != nil || h.WorktreeGit == nil) {
+		return errs.Newf("SECTION_NOT_FOUND", "the task page has no section %q", section)
+	}
 	project, err := h.Projects.GetProject(ctx, r.PathValue("project"))
 	if err != nil {
 		return err
@@ -233,6 +241,9 @@ func (h Handler) task(w http.ResponseWriter, r *http.Request, codeRoute *code.Ro
 	}
 	if task.ProjectID != project.ID {
 		return errs.Newf("TICKET_NOT_FOUND", "task %s is not in project %s", task.ID, project.Name)
+	}
+	if section == gitStatesSection {
+		return h.Render(w, r, http.StatusOK, sessions.GitStatesPage(sessions.GitStatesSection{ProjectID: project.ID, GitStates: h.gitStates(ctx, task.ID)}))
 	}
 	list, err := h.Sessions.List(ctx, ports.SessionFilter{ProjectID: project.ID, TicketID: task.ID})
 	if err != nil {
@@ -292,8 +303,13 @@ func (h Handler) task(w http.ResponseWriter, r *http.Request, codeRoute *code.Ro
 	if h.Usage != nil {
 		view.Usage = h.usageTotals(ctx, project.ID, task.ID, list)
 	}
-	view.Seed.GitStates = h.gitStates(ctx, task.ID)
-	view.PaintSync(view.Seed.GitStates, h.Now())
+	if h.WorktreeGit != nil && codeRoute == nil && shell.ModeOf(ctx) != shell.ModeFull {
+		// A click on a link: the page shows at once and the chips follow.
+		view.GitStatesHref = Href(project.ID, task.ID)
+	} else {
+		view.Seed.GitStates = h.gitStates(ctx, task.ID)
+		view.PaintSync(view.Seed.GitStates, h.Now())
+	}
 	view.TokenSavers = tokensavers.Read(ctx, h.TokenSavers, domain.ActivationOwner{Level: domain.ActivationLevelTask, ID: task.ID})
 	for _, st := range Statuses {
 		view.StatusChoices = append(view.StatusChoices, sessions.StatusChoice{Value: st.Value, Label: st.Label, Selected: st.Value == string(task.Status)})

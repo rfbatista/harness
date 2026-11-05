@@ -34,3 +34,21 @@ export const syncWatch = ({ gateway, actions }) => () => {
     },
   };
 };
+
+/**
+ * The git states that a task page's lazy section brings after the page, in
+ * a seed of their own (ADR 0064): they fill the same store the watch follows.
+ *
+ *   <div x-data="syncStates" data-seed="git-states-seed" hidden></div>
+ *
+ * @param {{ gateway: import("../../domain/ports.js").SyncGateway, actions: ReturnType<typeof import("./syncStore.js").syncActions> }} deps
+ */
+export const syncStates = ({ gateway, actions }) => () => ({
+  init() {
+    try {
+      for (const state of gateway.decodeSeed(readSeed(this.$el)).states) actions.keep(state);
+    } catch {
+      // the chips stay empty; the feed's git_state fills them as it comes
+    }
+  },
+});

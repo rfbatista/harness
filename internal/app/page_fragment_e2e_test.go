@@ -5,6 +5,7 @@ package app
 import (
 	"net/http"
 	"net/http/httptest"
+	"regexp"
 	"strings"
 	"testing"
 )
@@ -145,5 +146,65 @@ func TestOnlyAPrefetchedPageIsHeldBriefly(t *testing.T) {
 	b.handler.ServeHTTP(rec, full)
 	if got := rec.Header().Get("Cache-Control"); got != "no-store" {
 		t.Errorf("a full page is never held, Cache-Control = %q", got)
+	}
+}
+
+// The task page's worktree git state costs a git call per worktree, so a
+// page fragment leaves it out and the browser asks for it after the page, at
+// the page's own URL, naming the section (ADR 0064). The full page keeps
+// it, as on main.
+func TestTheTaskPageFragmentLoadsItsGitStateAfterThePage(t *testing.T) {
+	b := newBudgetProject(t)
+	b.live = 3
+	b.addSessions(3)
+	page := "/projects/" + b.project + "/tasks/" + b.tickets[0]
+	gitStates := regexp.MustCompile(`"git_states":\[\{`)
+
+	frag := httptest.NewRecorder()
+	b.handler.ServeHTTP(frag, navRequest(page, "/projects/"+b.project))
+	body := frag.Body.String()
+	if gitStates.MatchString(body) {
+		t.Errorf("the fragment carries git states: they load after the page")
+	}
+	for _, want := range []string{`id="git-states"`, `hx-get="` + page + `"`, `hx-trigger="load"`, `"git_states":[]`} {
+		if !strings.Contains(body, want) {
+			t.Errorf("the fragment lacks %q", want)
+		}
+	}
+	if m := parseServerTiming(t, frag.Header().Get("Server-Timing")); m["git"] != 0 {
+		t.Errorf("the fragment spent %v on git", m["git"])
+	}
+
+	full := httptest.NewRecorder()
+	b.handler.ServeHTTP(full, httptest.NewRequest(http.MethodGet, page, nil))
+	if !gitStates.MatchString(full.Body.String()) || strings.Contains(full.Body.String(), `id="git-states"`) {
+		t.Errorf("the full page must carry its git states and no lazy section")
+	}
+
+	section := httptest.NewRequest(http.MethodGet, page, nil)
+	section.Header.Set("HX-Request", "true")
+	section.Header.Set("HX-Target", "git-states")
+	sec := httptest.NewRecorder()
+	b.handler.ServeHTTP(sec, section)
+	sb := sec.Body.String()
+	if sec.Code != http.StatusOK || !gitStates.MatchString(sb) || !strings.Contains(sb, `id="git-states-seed"`) {
+		t.Fatalf("section: status %d, body %.300s", sec.Code, sb)
+	}
+	for _, absent := range []string{"<main", "<html", "hx-swap-oob"} {
+		if strings.Contains(sb, absent) {
+			t.Errorf("the section holds %q: it is the section alone", absent)
+		}
+	}
+	if sec.Header().Get("X-Harness-Fragment") != "" || sec.Header().Get("Cache-Control") != "no-store" {
+		t.Errorf("a section is no page fragment and is never held: %v", sec.Header())
+	}
+
+	unknown := httptest.NewRequest(http.MethodGet, page, nil)
+	unknown.Header.Set("HX-Request", "true")
+	unknown.Header.Set("HX-Target", "nope")
+	rec := httptest.NewRecorder()
+	b.handler.ServeHTTP(rec, unknown)
+	if rec.Code != http.StatusNotFound || strings.Contains(rec.Body.String(), `<main id="main" class="[ frame ]" x-data="sessionsPage"`) {
+		t.Errorf("an unknown section: status %d; it must be a not-found, never the whole page", rec.Code)
 	}
 }
