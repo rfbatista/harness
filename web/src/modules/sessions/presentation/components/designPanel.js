@@ -17,6 +17,7 @@
 import { FeedStatus } from "../../../../shared/domain/feed.js";
 import { describeError } from "../../../../shared/presentation/errors.js";
 import { feedStatusView } from "../../../../shared/presentation/feedStatus.js";
+import { followSkeleton, skeletonFields } from "../../../../shared/presentation/skeleton.js";
 import { applyChange, applyPublish, isNewer, isPublish } from "../../domain/artifact.js";
 import { artifactBrowsing, compose } from "./artifactBrowsing.js";
 
@@ -35,6 +36,8 @@ const ENDED = { state: "done", label: "session ended" };
 export const designPanel = ({ artifacts, clock, setTimeout = globalThis.setTimeout.bind(globalThis) }) => (panel = {}) => {
   let unfollow = () => {};
   let destroyed = false;
+  /** When the first read shows a skeleton (shared rule). */
+  let skeleton = null;
 
   return compose(artifactBrowsing(clock), {
     sessionId: panel.sessionId ?? "",
@@ -42,6 +45,7 @@ export const designPanel = ({ artifacts, clock, setTimeout = globalThis.setTimeo
     designHref: panel.designHref ?? "",
     /** The session is alive: its stream is worth following. */
     live: panel.live === true,
+    ...skeletonFields(),
     ready: false,
     error: null,
     feed: FeedStatus.CONNECTING,
@@ -67,6 +71,7 @@ export const designPanel = ({ artifacts, clock, setTimeout = globalThis.setTimeo
 
     // ── lifecycle ────────────────────────────────────────────────────────
     async init() {
+      skeleton = followSkeleton(this);
       await this.load();
       // Unmounted while the list was loading (another session picked): no stream to open.
       if (this.live && !destroyed && !this.ended) {
@@ -81,14 +86,18 @@ export const designPanel = ({ artifacts, clock, setTimeout = globalThis.setTimeo
     destroy() {
       destroyed = true;
       unfollow();
+      skeleton?.stop();
     },
 
     async load() {
+      if (!this.ready) skeleton?.begin();
       try {
         this.artifacts = await artifacts.list(this.sessionId);
         this.now = clock.now();
         this.keepSelection();
+        skeleton?.end();
       } catch (err) {
+        skeleton?.fail();
         this.error = describeError(err);
       } finally {
         this.ready = true;

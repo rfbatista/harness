@@ -14,15 +14,12 @@ import { skeletonRule } from "../domain/skeletonRule.js";
 
 export const skeletonFields = () => ({
   skeletonShown: false,
-  /** The content arrived after a skeleton: it takes the fade-in class. */
-  skeletonFaded: false,
-  get skeletonIn() {
-    return this.skeletonFaded ? "skeleton-in" : "";
-  },
+  /** "skeleton-in" once the content has arrived after a skeleton: bind it as the content's class. */
+  skeletonIn: "",
 });
 
 /**
- * @param {{ skeletonShown: boolean, skeletonFaded: boolean }} host  the component (`this` in init)
+ * @param {{ skeletonShown: boolean, skeletonIn: string }} host  the component (`this` in init)
  * @param {import("../domain/skeletonRule.js").Timers} [timers]
  */
 export function followSkeleton(host, timers) {
@@ -30,7 +27,7 @@ export function followSkeleton(host, timers) {
     timers,
     onChange: ({ visible, fade }) => {
       host.skeletonShown = visible;
-      if (fade) host.skeletonFaded = true;
+      if (fade) host.skeletonIn = "skeleton-in";
     },
   });
 }
