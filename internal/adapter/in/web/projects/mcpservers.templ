@@ -1,6 +1,10 @@
 package projects
 
-import "net/url"
+import (
+	"net/url"
+
+	"operators-mcp/internal/adapter/in/web/components"
+)
 
 // mcpServersSection is the Enabled agents and MCP servers sections of a
 // project's settings (projectMcpServers, web/src/modules/agents/presentation/components/projectMcpServers.js):
@@ -38,8 +42,10 @@ templ mcpServersSection(projectID, projectName, settingsHref string) {
 					<button type="button" class="[ button ]" data-variant="ghost" data-size="sm" x-on:click="dismissAgentBanner">Dismiss</button>
 				</div>
 			</template>
-			<p class="[ text-sm color-ink-faint ]" x-bind:hidden="!isLoading" data-agents-loading>Loading agents…</p>
-			<div class="[ flow ] [ flow-space-s ]" x-bind:hidden="isLoading">
+			<template x-if="skeletonShown">
+				@components.SkeletonRows("Loading agents", 2, "")
+			</template>
+			<div class="[ flow ] [ flow-space-s ]" x-bind:hidden="isLoading" x-bind:class="skeletonIn">
 				<div class="[ segmented ]" role="group" aria-label="Enabled agents mode" style="justify-self: start" data-agents-mode>
 					<button type="button" data-mode="all" aria-pressed="true" x-bind:aria-pressed="isAllMode" x-bind:disabled="saving" x-on:click="chooseAll">All agents</button>
 					<button type="button" data-mode="selected" aria-pressed="false" x-bind:aria-pressed="isSelectedMode" x-bind:disabled="saving" x-on:click="chooseSelected">Selected agents</button>
@@ -131,7 +137,9 @@ templ mcpServersSection(projectID, projectName, settingsHref string) {
 				<button type="button" class="[ button ]" data-variant="ghost" data-size="sm" x-on:click="dismissBanner">Dismiss</button>
 			</div>
 		</template>
-		<p class="[ text-sm color-ink-faint ]" x-bind:hidden="!isLoading" data-mcp-loading>Loading MCP servers…</p>
+		<template x-if="skeletonShown">
+			@components.SkeletonRows("Loading MCP servers", 2, "")
+		</template>
 		<template x-if="isEmpty">
 			<div class="[ empty ]" data-mcp-empty>
 				<b>No MCP servers in the catalog yet.</b>
@@ -140,7 +148,7 @@ templ mcpServersSection(projectID, projectName, settingsHref string) {
 			</div>
 		</template>
 		<template x-if="hasRows">
-			<div class="[ flow ] [ flow-space-s ]">
+			<div class="[ flow ] [ flow-space-s ]" x-bind:class="skeletonIn">
 				<div class="[ repel ]">
 					<h3 id="settings-mcp-pick">Servers this project gives</h3>
 					<span class="[ text-xs color-ink-faint ]" data-mcp-count x-text="count"></span>

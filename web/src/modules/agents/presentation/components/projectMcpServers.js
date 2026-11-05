@@ -17,6 +17,7 @@
 // replaced back with the same verbs.
 
 import { describeError } from "../../../../shared/presentation/errors.js";
+import { followSkeleton, skeletonFields } from "../../../../shared/presentation/skeleton.js";
 import { describeRefusal } from "../../domain/refusals.js";
 import { refreshScheduler } from "../../domain/liveRefresh.js";
 import { pickerKey } from "../../domain/entryPicker.js";
@@ -45,7 +46,10 @@ export function projectMcpServers({ gateway, timers = globalThis }) {
   return () => {
     let scheduler = null;
     let unfollow = () => {};
+    /** When the first read shows a skeleton (shared rule). */
+    let skeleton = null;
     return {
+      ...skeletonFields(),
       projectId: "",
       projectName: "",
       /** @type {import("../../domain/ports.js").Catalog | null} */
@@ -75,6 +79,7 @@ export function projectMcpServers({ gateway, timers = globalThis }) {
       feedStatus: "connecting",
 
       async init() {
+        skeleton = followSkeleton(this);
         this.projectId = this.$el.dataset.projectId ?? "";
         this.projectName = this.$el.dataset.projectName ?? "";
         await this.load();
@@ -90,6 +95,7 @@ export function projectMcpServers({ gateway, timers = globalThis }) {
       destroy() {
         unfollow();
         scheduler?.dispose();
+        skeleton?.stop();
       },
       windowFocused() {
         scheduler?.focus();
@@ -99,6 +105,7 @@ export function projectMcpServers({ gateway, timers = globalThis }) {
         return Promise.all([gateway.getCatalog(), gateway.getProjectMcpServers(this.projectId), gateway.getProjectAgents(this.projectId)]);
       },
       async load() {
+        if (!this.loaded) skeleton?.begin();
         try {
           const [catalog, names, agents] = await this.readAll();
           this.catalog = catalog;
@@ -106,7 +113,9 @@ export function projectMcpServers({ gateway, timers = globalThis }) {
           this.selected = [...this.saved];
           this.adoptAgents(agentsSaved(catalog, agents));
           this.error = null;
+          skeleton?.end();
         } catch (err) {
+          skeleton?.fail();
           this.error = describeError(err);
         } finally {
           this.loaded = true;
