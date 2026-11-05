@@ -30,17 +30,55 @@ templ Document(f Frame) {
 // AppShell is the app layout: the top bar, the task rail, the page's main
 // region, and the stream bar.
 templ AppShell(f Frame) {
-	@Document(f) {
-		<div class="[ app-shell ]" { noRailAttrs(f.NoRail)... }>
-			<a class="[ skip-link ] [ button ]" data-size="sm" href="#main">Skip to content</a>
-			@topBar(f)
-			if !f.NoRail {
-				@taskRail(f)
+	switch ModeOf(ctx) {
+		case ModeFragment:
+			@pageFragment(f) {
+				{ children... }
 			}
-			{ children... }
-			@streamBar(f.Live, f.Hints)
-		</div>
+		case ModeShell:
+			<title>{ f.PageTitle() }</title>
+			@shellBody(f) {
+				{ children... }
+			}
+		default:
+			@Document(f) {
+				@shellBody(f) {
+					{ children... }
+				}
+			}
 	}
+}
+
+// pageFragment is the answer to a click between two pages of one frame: the
+// page's <main> and the out-of-band items that the frame shows for this page
+// (ADR 0064). The title carries no unread count: the browser adds it.
+templ pageFragment(f Frame) {
+	<title>{ f.PageTitle() }</title>
+	@frameState(f, true)
+	{ children... }
+	@streamBar(f.Live, f.Hints, true)
+}
+
+// frameState carries what the frame shows for the current page and that the
+// browser applies to the rail: the open project page and the open task.
+templ frameState(f Frame, oob bool) {
+	<div id="frame-state" hidden data-page={ f.Rail.Page } data-task={ f.Rail.Current } data-top={ f.Top.CurrentHref() } { reportsFeedAttrs(f.Rail.ReportsFeed)... } { oobAttrs(oob)... }></div>
+}
+
+// shellBody is the app layout: the top bar, the task rail, the page's main
+// region, and the stream bar. It is the one element that a click to another
+// frame swaps.
+templ shellBody(f Frame) {
+	<div id="app-shell" class="[ app-shell ]" { boostAttrs()... } { noRailAttrs(f.NoRail)... }>
+		<a class="[ skip-link ] [ button ]" data-size="sm" href="#main">Skip to content</a>
+		@topBar(f)
+		if !f.NoRail {
+			@taskRail(f)
+		}
+		{ children... }
+		@frameState(f, false)
+		@streamBar(f.Live, f.Hints, false)
+	</div>
 }
 
 // topBar holds the project picker and the way to every project: the
@@ -261,7 +299,7 @@ templ projectNav(r Rail) {
 	<nav class="[ nav ]" aria-label="Project">
 		<ul role="list">
 			if r.BoardHref != "" {
-				<li>
+				<li data-page="board">
 					<a href={ templ.SafeURL(r.BoardHref) } { currentAttrs(r.Page == PageBoard)... }>
 						@icon("board")
 						<span class="[ label ]">Board</span>
@@ -269,7 +307,7 @@ templ projectNav(r Rail) {
 				</li>
 			}
 			if r.CodeHref != "" {
-				<li>
+				<li data-page="code">
 					<a href={ templ.SafeURL(r.CodeHref) } { currentAttrs(r.Page == PageCode)... }>
 						@icon("code")
 						<span class="[ label ]">Code</span>
@@ -277,7 +315,7 @@ templ projectNav(r Rail) {
 				</li>
 			}
 			if r.ReviewsHref != "" {
-				<li>
+				<li data-page="reviews">
 					<a href={ templ.SafeURL(r.ReviewsHref) } { currentAttrs(r.Page == PageReviews)... }>
 						@icon("review")
 						<span class="[ label ]">Review requests</span>
@@ -288,7 +326,7 @@ templ projectNav(r Rail) {
 				</li>
 			}
 			if r.DocumentsHref != "" {
-				<li>
+				<li data-page="documents">
 					<a href={ templ.SafeURL(r.DocumentsHref) } { currentAttrs(r.Page == PageDocuments)... }>
 						@icon("document")
 						<span class="[ label ]">Documents</span>
@@ -296,7 +334,7 @@ templ projectNav(r Rail) {
 				</li>
 			}
 			if r.DesignHref != "" {
-				<li>
+				<li data-page="design">
 					<a href={ templ.SafeURL(r.DesignHref) } { currentAttrs(r.Page == PageDesign)... }>
 						@icon("design")
 						<span class="[ label ]">Design assets</span>
@@ -304,7 +342,7 @@ templ projectNav(r Rail) {
 				</li>
 			}
 			if r.DesignSystemHref != "" {
-				<li>
+				<li data-page="design-system">
 					<a href={ templ.SafeURL(r.DesignSystemHref) } { currentAttrs(r.Page == PageDesignSystem)... }>
 						@icon("design-system")
 						<span class="[ label ]">Design systems</span>
@@ -313,7 +351,7 @@ templ projectNav(r Rail) {
 				</li>
 			}
 			if r.UsageHref != "" {
-				<li>
+				<li data-page="usage">
 					<a href={ templ.SafeURL(r.UsageHref) } { currentAttrs(r.Page == PageUsage)... }>
 						@icon("usage")
 						<span class="[ label ]">Usage</span>
@@ -557,8 +595,8 @@ templ railLiveLink() {
 
 // streamBar shows whether the page is live. The page's feed reports its
 // status as a `feed-status` window event; streamStatus listens for it.
-templ streamBar(live bool, hints []Hint) {
-	<footer class="[ stream-bar ]" aria-live="polite">
+templ streamBar(live bool, hints []Hint, oob bool) {
+	<footer id="stream-bar" class="[ stream-bar ]" aria-live="polite" { oobAttrs(oob)... }>
 		if live {
 			<span class="[ status ]" data-state="reconnecting" x-data="streamStatus" x-on:feed-status.window="update" x-bind:data-state="state" x-text="label">connecting</span>
 		}

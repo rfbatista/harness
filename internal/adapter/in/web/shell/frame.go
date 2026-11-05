@@ -134,6 +134,27 @@ type TopBar struct {
 	OnServer bool
 }
 
+// CurrentHref is the href of the top bar's page that is open, "" when none is.
+func (t TopBar) CurrentHref() string {
+	switch {
+	case t.OnProjects:
+		return t.ProjectsHref
+	case t.OnAgents:
+		return t.AgentsHref
+	case t.OnCredentials:
+		return t.CredentialsHref
+	case t.OnTokenSavers:
+		return t.TokenSaversHref
+	case t.OnModels:
+		return t.ModelsHref
+	case t.OnAgentIsolation:
+		return t.AgentIsolationHref
+	case t.OnServer:
+		return t.ServerHref
+	}
+	return ""
+}
+
 // Option is one project in the picker.
 type Option struct{ ID, Name string }
 
@@ -300,6 +321,40 @@ func (f Frame) DocumentTitle() string {
 		title = "(" + strconv.Itoa(n) + ") " + title
 	}
 	return title
+}
+
+// PageTitle is the <title> without the unread count: a page fragment carries
+// it, and the browser puts its own count in front (store.syncTitle).
+func (f Frame) PageTitle() string {
+	if f.Title == "" {
+		return "harness"
+	}
+	return f.Title + " · harness"
+}
+
+// oobAttrs makes an element of a page fragment replace the element with its
+// id outside <main>.
+func oobAttrs(oob bool) templ.Attributes {
+	if oob {
+		return templ.Attributes{"hx-swap-oob": "true"}
+	}
+	return nil
+}
+
+// boostAttrs is where a click on a link inside the app shell puts the page, set
+// once on the shell (ADR 0064): the web client asks for the page, and the server
+// answers the app shell or, within a frame, retargets its answer to <main>. The
+// web client pushes the address itself (it owns the history of the pages).
+func boostAttrs() templ.Attributes {
+	return templ.Attributes{"hx-target": "#" + NavTarget, "hx-swap": "outerHTML"}
+}
+
+// reportsFeedAttrs tells the rail that this page's feed is the rail's own.
+func reportsFeedAttrs(reports bool) templ.Attributes {
+	if reports {
+		return templ.Attributes{"data-reports-feed": true}
+	}
+	return nil
 }
 
 // Layout builds a page's Frame: assets, the project picker and the task rail.

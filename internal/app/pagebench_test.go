@@ -22,8 +22,13 @@ import (
 // than this feature) is timed by the client, to the first byte, and shown
 // with no breakdown.
 
-// benchPage is one project page: its name and its path under the project.
-type benchPage struct{ name, path string }
+// benchPage is one project page: its name and its path under the project. A
+// fragment page is the same URL asked for as a click on a link between two
+// pages of the project asks (ADR 0064), with the request headers it carries.
+type benchPage struct {
+	name, path string
+	header     http.Header
+}
 
 // benchRow is what the benchmark measured for one page.
 type benchRow struct {
@@ -34,7 +39,7 @@ type benchRow struct {
 	// The medians of the breakdown; zero with no breakdown.
 	db, git, render, frame, catalog time.Duration
 	gitCalls, catalogReads          int
-	breakdown              bool
+	breakdown                       bool
 }
 
 // pageBench runs the benchmark against the server at base.
@@ -75,14 +80,33 @@ func (p *pageBench) pages() ([]benchPage, error) {
 		return nil, fmt.Errorf("the board of project %s links to no task, so there is no task page to time", p.project)
 	}
 	pages := []benchPage{
-		{"board", root}, {"task page", taskPath}, {"settings", root + "/settings"}, {"documents", root + "/documents"},
-		{"code", root + "/code"}, {"design", root + "/design"}, {"design system", root + "/design-systems"},
-		{"usage", root + "/usage"}, {"reviews", root + "/reviews"},
+		{name: "board", path: root}, {name: "task page", path: taskPath}, {name: "settings", path: root + "/settings"}, {name: "documents", path: root + "/documents"},
+		{name: "code", path: root + "/code"}, {name: "design", path: root + "/design"}, {name: "design system", path: root + "/design-systems"},
+		{name: "usage", path: root + "/usage"}, {name: "reviews", path: root + "/reviews"},
 	}
 	if path := p.historyPath(board.body, task, root); path != "" {
-		pages = append(pages, benchPage{"history", path})
+		pages = append(pages, benchPage{name: "history", path: path})
+	}
+	// Each page again as a fragment: the click from another page of the project.
+	for _, page := range slices.Clone(pages) {
+		from := root + "/settings"
+		if page.path == from {
+			from = root
+		}
+		pages = append(pages, benchPage{name: page.name + " fragment", path: page.path, header: fragmentHeader(p.base + from)})
 	}
 	return pages, nil
+}
+
+// fragmentHeader is what htmx sends for a click on a link between two pages
+// of one project, from the page at current.
+func fragmentHeader(current string) http.Header {
+	h := http.Header{}
+	h.Set("HX-Request", "true")
+	h.Set("HX-Boosted", "true")
+	h.Set("HX-Target", "app-shell")
+	h.Set("HX-Current-URL", current)
+	return h
 }
 
 // historyPath is the first session history page that answers, among the board's
@@ -123,10 +147,16 @@ type answer struct {
 	where  string        // the Location of a redirect
 }
 
-func (p *pageBench) get(path string) (answer, error) {
+func (p *pageBench) get(path string) (answer, error) { return p.getWith(path, nil) }
+
+// getWith is get with the request headers header.
+func (p *pageBench) getWith(path string, header http.Header) (answer, error) {
 	req, err := http.NewRequest(http.MethodGet, p.base+path, nil)
 	if err != nil {
 		return answer{}, err
+	}
+	for name, values := range header {
+		req.Header[name] = values
 	}
 	var started, first time.Time
 	req = req.WithContext(httptrace.WithClientTrace(req.Context(), &httptrace.ClientTrace{
@@ -148,7 +178,7 @@ func (p *pageBench) get(path string) (answer, error) {
 // measure requests page one time to warm up and runs times to measure.
 func (p *pageBench) measure(page benchPage) (benchRow, error) {
 	path := page.path
-	if first, err := p.get(path); err != nil {
+	if first, err := p.getWith(path, page.header); err != nil {
 		return benchRow{}, fmt.Errorf("%s: %w", page.name, err)
 	} else if first.status >= 300 && first.status < 400 {
 		path = first.where // a page that leads to another is timed at its end
@@ -157,7 +187,7 @@ func (p *pageBench) measure(page benchPage) (benchRow, error) {
 	var calls, reads []int
 	row := benchRow{page: page.name, breakdown: true}
 	for range p.runs {
-		a, err := p.get(path)
+		a, err := p.getWith(path, page.header)
 		if err != nil {
 			return benchRow{}, fmt.Errorf("%s: %w", page.name, err)
 		}

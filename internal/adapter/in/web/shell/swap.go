@@ -7,11 +7,13 @@ import (
 )
 
 // SwapRequest reports whether htmx asked a page's URL for its swap region (a
-// fragment response) rather than the full page (ADR 0008). Either answer
-// varies on HX-Request, so it marks the response that way.
+// fragment response) rather than the full page (ADR 0005, kept by ADR 0064).
+// Either answer varies on HX-Request, so it marks the response that way.
 func SwapRequest(w http.ResponseWriter, r *http.Request) bool {
-	w.Header().Add("Vary", "HX-Request")
-	return r.Header.Get("HX-Request") == "true"
+	VaryOnPage(w.Header())
+	// A boosted click between pages names the app shell and is answered as a
+	// page (the full page or its fragment), whatever region the page holds.
+	return r.Header.Get("HX-Request") == "true" && !PageRequest(r)
 }
 
 // SwapRegion marks the element with id as a swap region: the web client

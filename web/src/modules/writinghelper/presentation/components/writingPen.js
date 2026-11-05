@@ -56,6 +56,9 @@ export const writingPen = ({ gateway, coordinator, setTimeout: later = globalThi
   /** What Try again runs for a failed draft. */
   let lastDraft = { request: "", base: "" };
   let observer = null;
+  /** The sheet query and its listener, which outlive the pen unless removed. */
+  let sheetQuery = null;
+  let onSheet = null;
 
   return {
     kind: "task_description",
@@ -115,11 +118,12 @@ export const writingPen = ({ gateway, coordinator, setTimeout: later = globalThi
         }
       }
       if (matchMedia) {
-        const query = matchMedia(SHEET_QUERY);
-        this.sheet = query.matches;
-        query.addEventListener?.("change", (e) => {
+        sheetQuery = matchMedia(SHEET_QUERY);
+        this.sheet = sheetQuery.matches;
+        onSheet = (e) => {
           this.sheet = e.matches;
-        });
+        };
+        sheetQuery.addEventListener?.("change", onSheet);
       }
       coordinator.add(this);
     },
@@ -127,6 +131,7 @@ export const writingPen = ({ gateway, coordinator, setTimeout: later = globalThi
     destroy() {
       this.close(false);
       observer?.disconnect();
+      sheetQuery?.removeEventListener?.("change", onSheet);
       cancel(toastTimer);
       cancel(ringTimer);
       coordinator.remove(this);

@@ -24,6 +24,8 @@ import { bindingLine, testLine } from "../view.js";
 export const repositoryCredential = ({ store }) => () => {
   /** This component's element: $root names the nearest x-data, which inside the dropdown is the dropdown. */
   let root = null;
+  /** What releases this row's hold on the page's store. */
+  let release = null;
   return {
     busy: false,
     /** The last select a pick came from, for Retry. */
@@ -76,9 +78,13 @@ export const repositoryCredential = ({ store }) => () => {
 
     init() {
       root = this.$el;
-      store.start(root.ownerDocument);
+      release = store.start(root.ownerDocument);
       // A repository added after the page loaded has no binding yet.
       queueMicrotask(() => this.repositoryId && !this.known && store.refresh());
+    },
+
+    destroy() {
+      release?.();
     },
 
     /**

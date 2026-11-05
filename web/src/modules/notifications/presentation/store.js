@@ -297,6 +297,13 @@ export function notificationsStore({ gateway, alerts, prefs, clock, navigate, an
       }
     },
 
+    /** A page swapped in place brings its own title, without a count: take it as the base and lead with the count again. */
+    retitle() {
+      if (!doc || !started) return;
+      baseTitle = doc.title.replace(/^\(\d+\+?\) /, "");
+      this.syncTitle();
+    },
+
     /** The unread count leads the document title: "(3) Notification · harness". */
     syncTitle() {
       if (!doc || !started) return;

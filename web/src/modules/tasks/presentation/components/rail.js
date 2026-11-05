@@ -212,6 +212,8 @@ export const rail = ({ gateway, store, prefs, browserPrefs = { get: () => null, 
 
     /** One feed change: a task's, or a session's. */
     apply(change) {
+      // The project changed under the pages fetched ahead of a click.
+      this.$dispatch("feed-change");
       if (change.kind === "task-status") {
         store.statusChanges = { ...store.statusChanges, [change.change.taskId]: change.change };
         return;
@@ -550,6 +552,14 @@ export const rail = ({ gateway, store, prefs, browserPrefs = { get: () => null, 
       unfollow();
       timers.clearTimeout(announceTimer);
       timers.clearTimeout(resultTimer);
+      // The model is the project's whose rail this was; another frame's rail
+      // (or none) starts from its own seed.
+      store.tasks = [];
+      store.byTask = {};
+      store.seeded = false;
+      store.statusChanges = {};
+      store.archivedCount = 0;
+      store.drawerOpen = false;
     },
   };
 };

@@ -7,8 +7,12 @@
 import { FeedStatus } from "../../domain/feed.js";
 import { feedStatusView } from "../feedStatus.js";
 
+// The connection as it was last reported: a stream bar swapped in with a page
+// starts from it, since the feed that reports it stays open across pages.
+let lastStatus = FeedStatus.CONNECTING;
+
 export const streamStatus = () => () => ({
-  status: FeedStatus.CONNECTING,
+  status: lastStatus,
 
   get state() {
     return feedStatusView(this.status).state;
@@ -21,6 +25,6 @@ export const streamStatus = () => () => ({
   update(event) {
     const next = event.detail;
     // resynced is a moment, not a state: the feed is live again.
-    this.status = next === FeedStatus.RESYNCED ? FeedStatus.LIVE : next;
+    this.status = lastStatus = next === FeedStatus.RESYNCED ? FeedStatus.LIVE : next;
   },
 });

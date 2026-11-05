@@ -77,6 +77,7 @@ import { registerWritingHelper } from "./modules/writinghelper/presentation/regi
 import { createHljs } from "./highlight.js";
 import { createScreen } from "./xterm-screen.js";
 import { startSwapRegions } from "./swap-regions.js";
+import { startInPlaceNavigation } from "./in-place-navigation.js";
 
 /** The code worker's bundle (web/src/code-worker.js) is served beside this one. */
 const codeWorkerUrl = () => new URL("code-worker.js", import.meta.url);
@@ -89,6 +90,7 @@ registerShared(Alpine, { prefs });
 const navigate = (url) => window.location.assign(url);
 const reload = () => window.location.reload();
 startSwapRegions(htmx, { navigate });
+startInPlaceNavigation(htmx, { Alpine, navigate });
 
 const architecture = architectureGateway(api, events);
 registerArchitecture(Alpine, { gateway: architecture, clipboard: { copyText } });
