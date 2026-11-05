@@ -57,6 +57,8 @@ export function startInPlaceNavigation(htmx, { Alpine, navigate, doc = document 
   let restoring = false;
   // The page that Back or Forward goes to: its entries keep the id they carry.
   let restoredId = "";
+  // The #anchor of the link followed (htmx drops it from the address it reports).
+  let anchor = "";
 
   for (const method of ["pushState", "replaceState"]) {
     const original = history[method].bind(history);
@@ -70,6 +72,7 @@ export function startInPlaceNavigation(htmx, { Alpine, navigate, doc = document 
     e.stopImmediatePropagation();
     restoring = true;
     restoredId = entry;
+    anchor = doc.location.hash;
     htmx.ajax("GET", doc.location.href, { target: `#${NAV_TARGET}`, swap: "outerHTML", headers: { "HX-Boosted": "true", "HX-Current-URL": shownUrl } });
   });
 
@@ -79,6 +82,7 @@ export function startInPlaceNavigation(htmx, { Alpine, navigate, doc = document 
     if (!link || !link.closest(`#${NAV_TARGET}`) || !isPageLink(link, doc.location)) return;
     e.preventDefault();
     restoring = false; // a failed Back leaves no mark behind
+    anchor = link.hash;
     // A page asked for on hover is used by this click, once, from the browser's hold.
     const headers = { "HX-Boosted": "true", ...(prefetch.use(link.href) ? { [PREFETCH_HEADER]: "1" } : {}) };
     htmx.ajax("GET", link.href, { source: link, target: `#${NAV_TARGET}`, swap: "outerHTML", headers });
@@ -97,24 +101,36 @@ export function startInPlaceNavigation(htmx, { Alpine, navigate, doc = document 
     if (e.target instanceof Element && e.target.id === "frame-state") applyFrameState(e.target);
   });
 
-  doc.addEventListener("htmx:afterSettle", (e) => {
+  // Right after the swap, before the new components boot: the address follows,
+  // and the pages' own history entries are written under the new page's id.
+  doc.addEventListener("htmx:afterSwap", (e) => {
     if (!isNavigation(e.detail)) return;
     pageId = restoring ? restoredId : `${life}:${++pages}`;
     if (!restoring) {
       // A click on the link to the page that is open replaces its entry.
-      const same = new URL(e.detail.pathInfo.responsePath, doc.location.href).href === doc.location.href;
-      history[same ? "replaceState" : "pushState"](null, "", e.detail.pathInfo.responsePath);
+      const address = e.detail.pathInfo.responsePath + anchor;
+      const same = new URL(address, doc.location.href).href === doc.location.href;
+      history[same ? "replaceState" : "pushState"](null, "", address);
     }
     restoring = false;
     shownUrl = doc.location.href;
+  });
+
+  doc.addEventListener("htmx:afterSettle", (e) => {
+    if (!isNavigation(e.detail)) return;
     // htmx wrote the new title, which has no unread count: the bell adds it.
     Alpine.store("notifications")?.retitle?.();
     // The phone's drawer closes on a click, as the page load it replaced did.
     doc.defaultView?.dispatchEvent(new CustomEvent("rail-close"));
     const main = doc.getElementById("main");
     if (!main) return;
-    doc.defaultView?.scrollTo(0, 0);
-    main.scrollTop = 0;
+    // A link to an anchor of the page puts the anchor in view, as the browser would.
+    const target = anchor ? doc.getElementById(decodeURIComponent(anchor.slice(1))) : null;
+    if (target) target.scrollIntoView();
+    else {
+      doc.defaultView?.scrollTo(0, 0);
+      main.scrollTop = 0;
+    }
     const heading = main.querySelector("h1, h2, h3");
     if (heading) {
       if (!heading.hasAttribute("tabindex")) heading.setAttribute("tabindex", "-1");
