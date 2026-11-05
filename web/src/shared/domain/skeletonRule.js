@@ -53,6 +53,11 @@ export function skeletonRule({ onChange, timers = browserTimers, showAfter = SKE
       return visible;
     },
 
+    /** A load is under way: begun, not yet ended or failed. */
+    get running() {
+      return running;
+    },
+
     begin() {
       if (running) return;
       running = true;

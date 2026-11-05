@@ -41,14 +41,42 @@ export const syncWatch = ({ gateway, actions }) => () => {
  *
  *   <div x-data="syncStates" data-seed="git-states-seed" hidden></div>
  *
- * @param {{ gateway: import("../../domain/ports.js").SyncGateway, actions: ReturnType<typeof import("./syncStore.js").syncActions> }} deps
+ * @param {{ gateway: import("../../domain/ports.js").SyncGateway, actions: ReturnType<typeof import("./syncStore.js").syncActions>, loading?: { end: () => void } }} deps
  */
-export const syncStates = ({ gateway, actions }) => () => ({
+export const syncStates = ({ gateway, actions, loading }) => () => ({
   init() {
+    loading?.end();
     try {
       for (const state of gateway.decodeSeed(readSeed(this.$el)).states) actions.keep(state);
     } catch {
       // the chips stay empty; the feed's git_state fills them as it comes
     }
+  },
+});
+
+/**
+ * The placeholder the task page answers with in place of the git states
+ * (hx-trigger="load"): while it is on the page the session rows draw skeleton
+ * chips, by the shared rule (ADR 0064). syncStates ends the load when the
+ * section replaces it; a failed request ends it with the rows as they were.
+ *
+ *   <div id="git-states" hx-get="…" hx-trigger="load" hx-swap="outerHTML" hidden
+ *        x-data="syncStatesLoading" x-on:htmx:response-error="failed" x-on:htmx:send-error="failed" x-on:htmx:timeout="failed"></div>
+ *
+ * @param {{ loading: { begin: () => void, fail: () => void, stop: () => void, readonly running: boolean }, timers?: { setTimeout: typeof setTimeout } }} deps
+ */
+export const syncStatesLoading = ({ loading, timers = globalThis }) => () => ({
+  init() {
+    loading.begin();
+  },
+  failed() {
+    loading.fail();
+  },
+  destroy() {
+    // The section's own element replaces this one and ends the load as it starts;
+    // a page that left before it came ends it here, so no skeleton stays.
+    timers.setTimeout(() => {
+      if (loading.running) loading.stop();
+    }, 0);
   },
 });

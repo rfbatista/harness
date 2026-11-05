@@ -15,10 +15,29 @@ import { canPush, isOld } from "../../domain/gitState.js";
 import { chipOf, panelOf, uncommittedLine } from "../view.js";
 
 /**
+ * The skeleton chip a session row draws, in the chip's place, while the git
+ * section loads and the row's worktree has no state yet.
+ *
+ *   <span class="skeleton" data-variant="chip" x-data="syncChipSkeleton(row.workspaceId)" x-show="shown" …>
+ *
+ * @param {{ store: import("./syncStore.js").SyncStore }} deps
+ */
+export const syncChipSkeleton = ({ store }) => (workspaceId = "") => ({
+  get shown() {
+    return store.statesLoading && workspaceId !== "" && !store.byWorkspace[workspaceId];
+  },
+});
+
+/**
  * @param {{ store: import("./syncStore.js").SyncStore, actions: ReturnType<typeof import("./syncStore.js").syncActions>, now?: () => Date }} deps
  */
 export const syncChip = ({ store, actions, now = () => new Date() }) => (workspaceId = "") => ({
   workspaceId,
+
+  /** The chip fades in where its skeleton chip was. */
+  get fadeClass() {
+    return store.statesIn;
+  },
 
   /** @returns {import("../../domain/gitState.js").GitState | null} */
   get gitState() {

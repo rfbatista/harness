@@ -148,3 +148,14 @@ test("begin while a load is already running does not restart the wait", () => {
   timers.advance(20);
   assert.equal(rule.visible, true);
 });
+
+test("running tells whether a load is under way, for a caller that must not cut a skeleton's 300 ms short", () => {
+  const { timers, rule } = setup();
+  assert.equal(rule.running, false);
+  rule.begin();
+  assert.equal(rule.running, true);
+  timers.advance(200);
+  rule.end();
+  assert.equal(rule.running, false, "ended: the skeleton waits out its 300 ms on its own");
+  assert.equal(rule.visible, true);
+});

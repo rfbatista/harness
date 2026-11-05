@@ -60,7 +60,7 @@ templ Page(v PageView) {
 				<div x-data="syncWatch" data-seed="sessions-seed" hidden></div>
 			}
 			if v.GitStatesHref != "" {
-				<div id="git-states" hx-get={ v.GitStatesHref } hx-trigger="load" hx-target="this" hx-swap="outerHTML" hidden></div>
+				<div id="git-states" hx-get={ v.GitStatesHref } hx-trigger="load" hx-target="this" hx-swap="outerHTML" hidden x-data="syncStatesLoading" x-on:htmx:response-error="failed" x-on:htmx:send-error="failed" x-on:htmx:timeout="failed"></div>
 			}
 			if v.Usage != nil {
 				@templ.JSONScript("usage-totals-seed", v.Usage)
@@ -274,12 +274,19 @@ templ reviewsButton(v PageView) {
 // state is held, and for a worktree that is gone. Its title holds the full
 // upstream ref and the fetch age; the arrows are aria-hidden and the words
 // visually hidden, so the state is carried by words.
+// While the lazy git section loads, a skeleton chip of the chip's size stands
+// in its place in each row that has a worktree.
 templ syncChip() {
+	<span class="[ skeleton ]" data-variant="chip" style="--chip-w: 6rem; display: none" x-data="syncChipSkeleton(row.workspaceId)" x-show="shown" role="status" aria-busy="true">
+		<span class="[ visually-hidden ]">Loading the git state</span>
+		<span class="[ bar ]" aria-hidden="true"></span>
+	</span>
 	<span
 		class="[ sync-state ]"
 		x-data="syncChip(row.workspaceId)"
 		x-show="shown"
 		style="display: none"
+		x-bind:class="fadeClass"
 		x-bind:data-state="state"
 		x-bind:data-loading="loadingAttr"
 		x-bind:data-old="oldAttr"
