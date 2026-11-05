@@ -41,16 +41,19 @@ export const syncWatch = ({ gateway, actions }) => () => {
  *
  *   <div x-data="syncStates" data-seed="git-states-seed" hidden></div>
  *
- * @param {{ gateway: import("../../domain/ports.js").SyncGateway, actions: ReturnType<typeof import("./syncStore.js").syncActions>, loading?: { end: () => void } }} deps
+ * @param {{ gateway: import("../../domain/ports.js").SyncGateway, actions: ReturnType<typeof import("./syncStore.js").syncActions>, loading?: { end: () => Promise<void> } }} deps
  */
 export const syncStates = ({ gateway, actions, loading }) => () => ({
-  init() {
-    loading?.end();
+  async init() {
+    let states = [];
     try {
-      for (const state of gateway.decodeSeed(readSeed(this.$el)).states) actions.keep(state);
+      states = gateway.decodeSeed(readSeed(this.$el)).states;
     } catch {
       // the chips stay empty; the feed's git_state fills them as it comes
     }
+    // The chips take their place once the skeleton chips are gone, so they never stack on them.
+    if (loading) await loading.end();
+    for (const state of states) actions.keep(state);
   },
 });
 

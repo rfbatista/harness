@@ -68,9 +68,11 @@ export const repositoryAgentsTab = ({ gateway }) => () => {
     async load() {
       if (!this.loaded) skeleton?.begin();
       try {
-        this.list = await gateway.getRepositoryAgents(this.repositoryId);
+        const list = await gateway.getRepositoryAgents(this.repositoryId);
+        // The rows come in once the skeleton is gone, so they never stack under it.
+        await skeleton?.end();
+        this.list = list;
         this.error = null;
-        skeleton?.end();
       } catch (err) {
         skeleton?.fail();
         this.error = describeError(err);

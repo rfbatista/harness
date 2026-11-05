@@ -159,3 +159,50 @@ test("running tells whether a load is under way, for a caller that must not cut 
   assert.equal(rule.running, false, "ended: the skeleton waits out its 300 ms on its own");
   assert.equal(rule.visible, true);
 });
+
+test("end() resolves when the skeleton is gone, so a caller shows its content then and nothing stacks under the skeleton", async () => {
+  const { timers, rule } = setup();
+  const log = [];
+  rule.begin();
+  timers.advance(200);
+  rule.end().then(() => log.push("content"));
+  await Promise.resolve();
+  assert.deepEqual(log, [], "the skeleton has 220 ms left");
+  timers.advance(220);
+  await Promise.resolve();
+  assert.deepEqual(log, ["content"]);
+  assert.equal(rule.visible, false);
+});
+
+test("end() resolves at once when no skeleton was shown", async () => {
+  const { timers, rule } = setup();
+  rule.begin();
+  timers.advance(50);
+  let done = false;
+  rule.end().then(() => (done = true));
+  await Promise.resolve();
+  assert.equal(done, true);
+});
+
+test("a skeleton that has been up 300 ms resolves end() at once", async () => {
+  const { timers, rule } = setup();
+  rule.begin();
+  timers.advance(1000);
+  let done = false;
+  rule.end().then(() => (done = true));
+  await Promise.resolve();
+  assert.equal(done, true);
+  assert.equal(rule.visible, false);
+});
+
+test("stopping while end() waits resolves it, so no caller waits for ever", async () => {
+  const { timers, rule } = setup();
+  rule.begin();
+  timers.advance(200);
+  let done = false;
+  rule.end().then(() => (done = true));
+  rule.stop();
+  await Promise.resolve();
+  assert.equal(done, true);
+  assert.equal(timers.pending, 0);
+});

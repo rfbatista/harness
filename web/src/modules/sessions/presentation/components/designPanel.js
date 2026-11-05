@@ -92,10 +92,12 @@ export const designPanel = ({ artifacts, clock, setTimeout = globalThis.setTimeo
     async load() {
       if (!this.ready) skeleton?.begin();
       try {
-        this.artifacts = await artifacts.list(this.sessionId);
+        const list = await artifacts.list(this.sessionId);
+        // The cards come in once the skeleton is gone, so they never stack under it.
+        await skeleton?.end();
+        this.artifacts = list;
         this.now = clock.now();
         this.keepSelection();
-        skeleton?.end();
       } catch (err) {
         skeleton?.fail();
         this.error = describeError(err);

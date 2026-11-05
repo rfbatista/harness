@@ -67,9 +67,11 @@ export const designSystemOptIn = ({ gateway }) => () => {
     this.error = null;
     if (!this.loaded) skeleton?.begin();
     try {
-      this.rows = await gateway.repositories(this.designSystemId);
+      const rows = await gateway.repositories(this.designSystemId);
+      // The rows come in once the skeleton is gone, so they never stack under it.
+      await skeleton?.end();
+      this.rows = rows;
       this.loaded = true;
-      skeleton?.end();
     } catch (err) {
       skeleton?.fail();
       this.error = describeError(err);

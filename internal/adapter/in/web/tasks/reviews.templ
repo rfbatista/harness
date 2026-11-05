@@ -23,12 +23,7 @@ templ ReviewsPage(frame shell.Frame, projectID, projectName string, seed *compon
 				@components.ReviewsError()
 				if pending > 0 {
 					<template x-if="skeletonShown">
-						<div class="[ skeleton ]" data-variant="rows" style={ templ.SafeCSS(reviewsSkeletonStyle(pending)) } role="status" aria-busy="true">
-							<span class="[ visually-hidden ]">Loading reviews</span>
-							for i := 0; i < reviewsSkeletonCount(pending); i++ {
-								<div class="[ row ]" aria-hidden="true"><span class="[ bar ]"></span><span class="[ bar ]" data-h="sm"></span><span class="[ bar ]"></span></div>
-							}
-						</div>
+						@components.SkeletonRows("Loading reviews", reviewsSkeletonCount(pending), reviewCardHeight)
 					</template>
 				}
 				<template x-for="group in groups" x-bind:key="group.taskId">

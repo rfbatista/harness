@@ -203,12 +203,13 @@ export const reviewsInbox = ({ gateway, clock, hash = () => globalThis.location?
       if (!this.loaded) skeleton?.begin();
       try {
         const list = this.forTask ? await gateway.listForTask(this.ticketId) : await gateway.listPendingForProject(this.projectId);
+        // The rows come in once the skeleton is gone, so they never stack under it.
+        await skeleton?.end();
         // Keep what the person is writing on a request that was withdrawn meanwhile.
         const kept = this.reviews.filter((r) => this.withdrawnWhileWriting(r) && !list.some((x) => x.id === r.id));
         this.reviews = [...list, ...kept].reduce(upsertReview, []);
         for (const r of this.reviews) this.ensureDraft(r.id);
         this.loaded = true;
-        skeleton?.end();
         this.now = clock.now();
         this.followLink();
       } catch (err) {

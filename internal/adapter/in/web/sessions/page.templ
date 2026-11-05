@@ -1192,12 +1192,7 @@ templ designPanel() {
 					x-on:keydown.up.prevent="previous"
 				>
 					<template x-if="skeletonShown">
-						<div class="[ skeleton ]" data-variant="rows" style="--rows: 3" role="status" aria-busy="true">
-							<span class="[ visually-hidden ]">Loading what the session published</span>
-							for i := 0; i < 3; i++ {
-								<div class="[ row ]" aria-hidden="true"><span class="[ bar ]"></span><span class="[ bar ]" data-h="sm"></span><span class="[ bar ]"></span></div>
-							}
-						</div>
+						@components.SkeletonRows("Loading what the session published", 3, "")
 					</template>
 					<template x-for="card in cards" x-bind:key="card.id">
 						@ArtifactCard()

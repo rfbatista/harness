@@ -108,12 +108,13 @@ export function projectMcpServers({ gateway, timers = globalThis }) {
         if (!this.loaded) skeleton?.begin();
         try {
           const [catalog, names, agents] = await this.readAll();
+          // The lists come in once the skeleton is gone, so they never stack under it.
+          await skeleton?.end();
           this.catalog = catalog;
           this.saved = projectMcpSaved(catalog, names);
           this.selected = [...this.saved];
           this.adoptAgents(agentsSaved(catalog, agents));
           this.error = null;
-          skeleton?.end();
         } catch (err) {
           skeleton?.fail();
           this.error = describeError(err);

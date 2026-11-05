@@ -6,7 +6,7 @@
 //
 //   const rule = skeletonRule({ onChange: ({ visible, fade }) => … });
 //   rule.begin();   // a load starts
-//   rule.end();     // it finished: the content replaces the skeleton (fade: true if one was shown)
+//   await rule.end(); // it finished: resolves once the skeleton is gone (at once if none showed); show the content then, so nothing stacks under it (fade: true if one was shown)
 //   rule.fail();    // it failed: the skeleton goes now, the list's error shows
 //   rule.stop();    // the component goes away: no timer is left
 
@@ -35,6 +35,7 @@ export function skeletonRule({ onChange, timers = browserTimers, showAfter = SKE
   let running = false;
   let timer = null;
   let shownAt = 0;
+  let waiting = [];
 
   const clear = () => {
     if (timer !== null) timers.clearTimeout(timer);
@@ -43,9 +44,10 @@ export function skeletonRule({ onChange, timers = browserTimers, showAfter = SKE
   const hide = (fade) => {
     clear();
     running = false;
-    if (!visible) return;
+    const wasVisible = visible;
     visible = false;
-    onChange({ visible: false, fade });
+    if (wasVisible) onChange({ visible: false, fade });
+    for (const resolve of waiting.splice(0)) resolve();
   };
 
   return {
@@ -62,7 +64,8 @@ export function skeletonRule({ onChange, timers = browserTimers, showAfter = SKE
       if (running) return;
       running = true;
       if (visible) {
-        clear(); // still up from the load before: it carries on
+        clear(); // still up from the load before: it carries on, and that load's content is let in
+        for (const resolve of waiting.splice(0)) resolve();
         return;
       }
       timer = timers.setTimeout(() => {
@@ -73,18 +76,23 @@ export function skeletonRule({ onChange, timers = browserTimers, showAfter = SKE
       }, showAfter);
     },
 
+    /** @returns {Promise<void>} resolves when the skeleton is gone: at once if none shows, else after its minimum */
     end() {
-      if (!running) return;
+      if (!running) return Promise.resolve();
       if (!visible) {
         clear();
         running = false;
-        return;
+        return Promise.resolve();
       }
       const wait = shownAt + minShown - timers.now();
-      if (wait <= 0) return hide(true);
+      if (wait <= 0) {
+        hide(true);
+        return Promise.resolve();
+      }
       clear();
       running = false;
       timer = timers.setTimeout(() => hide(true), wait);
+      return new Promise((resolve) => waiting.push(resolve));
     },
 
     fail() {
