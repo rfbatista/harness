@@ -10,6 +10,9 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"operators-mcp/internal/domain"
+	"operators-mcp/internal/ports"
 )
 
 // The four-times project is the page-time benchmark's seeded project: the
@@ -41,11 +44,13 @@ func newFourTimesProject(t *testing.T) *budgetProject {
 	b.addTickets(fourTimesTasks - len(b.tickets))
 	b.addRepositories(fourTimesRepos - 1)
 	b.addSessions(fourTimesSessions)
+	b.moveTasksBySessions(t)
 	for i := range fourTimesOthers {
 		other, err := b.cat.Projects.CreateProject(b.ctx, fmt.Sprintf("other-%d", i), b.repoDir)
 		if err != nil {
 			t.Fatal(err)
 		}
+		b.runSessionIn(t, other.ID, i)
 		for j := range 10 {
 			if _, err := b.plan.CreateTicket(b.ctx, other.ID, fmt.Sprintf("Task %d", j), "A task of another project.", "in_progress", ""); err != nil {
 				t.Fatal(err)
@@ -53,6 +58,35 @@ func newFourTimesProject(t *testing.T) *budgetProject {
 		}
 	}
 	return b
+}
+
+// moveTasksBySessions moves most tasks to review as the session that works on
+// them, as an agent's own status tool does. A page that lists tasks names the
+// agent of the session behind each task's last move, so the live project's
+// cost of naming agents is in the seed.
+func (b *budgetProject) moveTasksBySessions(t *testing.T) {
+	t.Helper()
+	review := domain.TicketStatusReview
+	for i, ticket := range b.tickets {
+		if i%10 == 9 {
+			continue // a few stay where the person left them
+		}
+		if _, err := b.plan.PatchTicket(b.ctx, ticket, ports.TicketPatch{Status: &review, BySessionID: fmt.Sprintf("s-%03d", i)}); err != nil {
+			t.Fatal(err)
+		}
+	}
+}
+
+// runSessionIn starts a session that runs as a seeded agent in another
+// project: the frame lists every project with the agents of its live sessions.
+func (b *budgetProject) runSessionIn(t *testing.T, projectID string, n int) {
+	t.Helper()
+	if _, err := b.sessions.Create(&domain.Session{
+		ID: fmt.Sprintf("other-s-%d", n), ProjectID: projectID, RepositoryID: b.repo, Task: "Work in another project",
+		WorkingDir: b.repoDir, Status: domain.SessionRunning, AgentID: b.agents[n%len(b.agents)], Interactive: true, RunsOn: domain.RunnerServer, Mode: domain.SessionModeImplement,
+	}); err != nil {
+		t.Fatal(err)
+	}
 }
 
 // seedAgentCatalog writes an agent catalog into the data directory's agents
