@@ -302,6 +302,24 @@ func (f Frame) DocumentTitle() string {
 	return title
 }
 
+// PageTitle is the <title> without the unread count: a page fragment carries
+// it, and the browser puts its own count in front (store.syncTitle).
+func (f Frame) PageTitle() string {
+	if f.Title == "" {
+		return "harness"
+	}
+	return f.Title + " · harness"
+}
+
+// oobAttrs makes an element of a page fragment replace the element with its
+// id outside <main>.
+func oobAttrs(oob bool) templ.Attributes {
+	if oob {
+		return templ.Attributes{"hx-swap-oob": "true"}
+	}
+	return nil
+}
+
 // Layout builds a page's Frame: assets, the project picker and the task rail.
 // projectID and taskID say what is selected ("" for none).
 type Layout func(ctx context.Context, title, projectID, taskID string) (Frame, error)

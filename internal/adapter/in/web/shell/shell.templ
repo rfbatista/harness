@@ -30,6 +30,34 @@ templ Document(f Frame) {
 // AppShell is the app layout: the top bar, the task rail, the page's main
 // region, and the stream bar.
 templ AppShell(f Frame) {
+	if IsFragment(ctx) {
+		@pageFragment(f) {
+			{ children... }
+		}
+	} else {
+		@fullShell(f) {
+			{ children... }
+		}
+	}
+}
+
+// pageFragment is the answer to a click between two pages of one frame: the
+// page's <main> and the out-of-band items that the frame shows for this page
+// (ADR 0064). The title carries no unread count: the browser adds it.
+templ pageFragment(f Frame) {
+	<title>{ f.PageTitle() }</title>
+	@frameState(f, true)
+	{ children... }
+	@streamBar(f.Live, f.Hints, true)
+}
+
+// frameState carries what the frame shows for the current page and that the
+// browser applies to the rail: the open project page and the open task.
+templ frameState(f Frame, oob bool) {
+	<div id="frame-state" hidden data-page={ f.Rail.Page } data-task={ f.Rail.Current } { oobAttrs(oob)... }></div>
+}
+
+templ fullShell(f Frame) {
 	@Document(f) {
 		<div class="[ app-shell ]" { noRailAttrs(f.NoRail)... }>
 			<a class="[ skip-link ] [ button ]" data-size="sm" href="#main">Skip to content</a>
@@ -38,7 +66,8 @@ templ AppShell(f Frame) {
 				@taskRail(f)
 			}
 			{ children... }
-			@streamBar(f.Live, f.Hints)
+			@frameState(f, false)
+			@streamBar(f.Live, f.Hints, false)
 		</div>
 	}
 }
@@ -557,8 +586,8 @@ templ railLiveLink() {
 
 // streamBar shows whether the page is live. The page's feed reports its
 // status as a `feed-status` window event; streamStatus listens for it.
-templ streamBar(live bool, hints []Hint) {
-	<footer class="[ stream-bar ]" aria-live="polite">
+templ streamBar(live bool, hints []Hint, oob bool) {
+	<footer id="stream-bar" class="[ stream-bar ]" aria-live="polite" { oobAttrs(oob)... }>
 		if live {
 			<span class="[ status ]" data-state="reconnecting" x-data="streamStatus" x-on:feed-status.window="update" x-bind:data-state="state" x-text="label">connecting</span>
 		}

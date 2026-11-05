@@ -323,6 +323,10 @@ type server struct {
 func (s *server) page(h shell.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		ctx := shell.WithCollapsed(r.Context(), r) // the rail's folded groups, for the layout
+		shell.VaryOnPage(w.Header())
+		if shell.PageRequest(r) && shell.SameFrame(r) {
+			ctx = shell.WithFragment(ctx) // <main> and what the frame shows for it, without the frame
+		}
 		// One read of what the page, its layout and its parts read alike:
 		// the project's ticket and session lists, a worktree's status.
 		ctx = readshare.With(ctx)
@@ -355,6 +359,9 @@ func switchProject(w http.ResponseWriter, r *http.Request) {
 // layout builds the shared frame: the assets, the project picker, and the
 // selected project's tasks on the rail with their live sessions.
 func (s *server) layout(ctx context.Context, title, projectID, taskID string) (shell.Frame, error) {
+	if shell.IsFragment(ctx) {
+		return s.fragmentFrame(ctx, title, projectID, taskID)
+	}
 	started := time.Now()
 	defer func() { pagetime.AddFrame(ctx, time.Since(started)) }()
 	frame := s.bareFrame(title)
@@ -406,6 +413,24 @@ func (s *server) layout(ctx context.Context, title, projectID, taskID string) (s
 	frame.Rail.DesignSystemProposals = s.openDesignProposals(ctx, projectID)
 	if s.deps.Usage != nil {
 		frame.Rail.UsageHref = usage.Href(projectID)
+	}
+	return frame, nil
+}
+
+// fragmentFrame is what a page fragment needs of the frame: the page's title
+// and what a handler reads back from it. The browser already holds the top
+// bar, the rail and the bell, so none of them is read (ADR 0064).
+func (s *server) fragmentFrame(ctx context.Context, title, projectID, taskID string) (shell.Frame, error) {
+	frame := shell.Frame{Title: title, Built: true}
+	frame.Helper = s.helper(ctx)
+	frame.Rail.Current = taskID
+	if s.deps.ArchivedTasks != nil && projectID != "" {
+		// The board paints the archived count from the rail's seed.
+		n, err := s.deps.ArchivedTasks.ArchivedTaskCount(ctx, projectID)
+		if err != nil {
+			return shell.Frame{}, err
+		}
+		frame.Rail.Seed = &shell.RailSeed{ProjectID: projectID, ArchivedCount: n}
 	}
 	return frame, nil
 }
@@ -553,6 +578,9 @@ func render(w http.ResponseWriter, r *http.Request, status int, page templ.Compo
 	}
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	w.Header().Set("Cache-Control", "no-store")
+	if shell.IsFragment(r.Context()) {
+		shell.MarkFragment(w.Header())
+	}
 	w.WriteHeader(status)
 	_, err := buf.WriteTo(w)
 	return err
