@@ -212,6 +212,8 @@ export const rail = ({ gateway, store, prefs, browserPrefs = { get: () => null, 
 
     /** One feed change: a task's, or a session's. */
     apply(change) {
+      // The project changed under the pages fetched ahead of a click.
+      this.$dispatch("feed-change");
       if (change.kind === "task-status") {
         store.statusChanges = { ...store.statusChanges, [change.change.taskId]: change.change };
         return;

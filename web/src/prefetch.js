@@ -6,7 +6,10 @@
 // marks it private, max-age=5 only when it is asked ahead (X-Harness-Prefetch),
 // and varies on that header, so only a click that sends it finds the answer.
 // This module sends it for the one click that follows a prefetch (use), and
-// for no other. A link is prefetched once per hover. A link to the page that
+// for no other, and none once anything has changed: a write this page makes
+// (`api-write`, from the API client) or a change the live feed announces
+// (`feed-change`, from the rail) ends every hold, so a click after an action
+// never shows a page read before it (ADR 0062). A link is prefetched once per hover. A link to the page that
 // is open, and any link that is not a plain GET page link, is never prefetched.
 //
 // htmx's own prefetching (its preload extension) works on the elements that
@@ -34,6 +37,11 @@ export function startPrefetch({ doc = document, isPageLink, fetch = doc.defaultV
   const resting = new Map();
   /** The links already prefetched during this hover. */
   const done = new WeakSet();
+
+  const win = doc.defaultView;
+  const endHolds = () => held.clear();
+  win.addEventListener("api-write", endHolds);
+  win.addEventListener("feed-change", endHolds);
 
   const linkOf = (target) => (target instanceof Element ? target.closest("a[href]") : null);
   const withoutHash = (url) => url.split("#")[0];

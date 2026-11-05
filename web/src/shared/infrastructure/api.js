@@ -27,6 +27,9 @@ function extraFields(body) {
 export function apiClient({ base, fetch = globalThis.fetch.bind(globalThis) }) {
   async function send(path, init) {
     let res;
+    // A write is about to change what a page shows: whatever was fetched ahead
+    // of a click (web/src/prefetch.js) is read before it.
+    if (init.method && init.method !== "GET") globalThis.dispatchEvent?.(new Event("api-write"));
     try {
       res = await fetch(base + path, { ...init, headers: { Accept: "application/json", ...init.headers } });
     } catch (err) {

@@ -55,6 +55,8 @@ export function startInPlaceNavigation(htmx, { Alpine, navigate, doc = document 
   // the address bar has moved ahead of it (Back and Forward).
   let shownUrl = doc.location.href;
   let restoring = false;
+  // The page that Back or Forward goes to: its entries keep the id they carry.
+  let restoredId = "";
 
   for (const method of ["pushState", "replaceState"]) {
     const original = history[method].bind(history);
@@ -67,6 +69,7 @@ export function startInPlaceNavigation(htmx, { Alpine, navigate, doc = document 
     if (entry === undefined || entry === pageId) return; // not an entry of ours, or the page's own
     e.stopImmediatePropagation();
     restoring = true;
+    restoredId = entry;
     htmx.ajax("GET", doc.location.href, { target: `#${NAV_TARGET}`, swap: "outerHTML", headers: { "HX-Boosted": "true", "HX-Current-URL": shownUrl } });
   });
 
@@ -96,7 +99,7 @@ export function startInPlaceNavigation(htmx, { Alpine, navigate, doc = document 
 
   doc.addEventListener("htmx:afterSettle", (e) => {
     if (!isNavigation(e.detail)) return;
-    pageId = `${life}:${++pages}`;
+    pageId = restoring ? restoredId : `${life}:${++pages}`;
     if (!restoring) {
       // A click on the link to the page that is open replaces its entry.
       const same = new URL(e.detail.pathInfo.responsePath, doc.location.href).href === doc.location.href;

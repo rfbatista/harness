@@ -13,8 +13,10 @@ import (
 
 // fragmentWorld is the board with what the pages that need more than tasks
 // read: documents, design assets and a design system.
-func fragmentWorld() world {
-	w := documentsBoard()
+func fragmentWorld(t *testing.T) world {
+	w := historyWorld(t)
+	w.docs = documentsBoard().docs
+	w.usage = fakeUsage{asked: new([]string)}
 	w.docs["t-docs"] = []*domain.Document{{ID: "d-other", ProjectID: "p1", Title: "Other"}}
 	w.artifacts = designBoard().artifacts
 	w.designs = savedDesignSystem()
@@ -34,24 +36,27 @@ const (
 // pages names each page route the shell serves and one URL of it, keyed by the
 // route as web.go registers it.
 var fragmentPages = map[string]fragmentPage{
-	`/projects/{project}`:                                   {"/projects/p1", inProject},
-	`/projects/{project}/tasks/{task}`:                      {"/projects/p1/tasks/t-feed", inProject},
-	`/projects/{project}/tasks/new`:                         {"/projects/p1/tasks/new", inProject},
-	`/projects/{project}/archived`:                          {"/projects/p1/archived", inProject},
-	`/projects/{project}/reviews`:                           {"/projects/p1/reviews", inProject},
-	`/projects/{project}/sessions`:                          {"/projects/p1/sessions", inProject},
-	`/projects/{project}/design`:                            {"/projects/p1/design", inProject},
-	`/projects/{project}/tasks/{task}/design`:               {"/projects/p1/tasks/t-feed/design", inProject},
-	`/projects/{project}/tasks/{task}/resources`:            {"/projects/p1/tasks/t-feed/resources", inProject},
-	`/projects/{project}/documents`:                         {"/projects/p1/documents", "/projects/p1"},
-	`/projects/{project}/documents/{document}`:              {"/projects/p1/documents/d-page", inProject},
-	`/projects/{project}/tasks/{task}/documents`:            {"/projects/p1/tasks/t-feed/documents", inProject},
-	`/projects/{project}/tasks/{task}/documents/{document}`: {"/projects/p1/tasks/t-feed/documents/d-plan", inProject},
-	`/projects/{project}/design-systems`:                    {"/projects/p1/design-systems", inProject},
-	`/projects/{project}/design-systems/{slug}`:             {"/projects/p1/design-systems/app", inProject},
-	`/projects/{project}/settings`:                          {"/projects/p1/settings", inProject},
-	`/projects/{project}/repositories`:                      {"/projects/p1/repositories", inProject},
-	`/projects/{project}/repositories/{repository}/env`:     {"/projects/p1/repositories/r-harness/env", inProject},
+	`/projects/{project}`:                                         {"/projects/p1", inProject},
+	`/projects/{project}/tasks/{task}`:                            {"/projects/p1/tasks/t-feed", inProject},
+	`/projects/{project}/tasks/new`:                               {"/projects/p1/tasks/new", inProject},
+	`/projects/{project}/archived`:                                {"/projects/p1/archived", inProject},
+	`/projects/{project}/reviews`:                                 {"/projects/p1/reviews", inProject},
+	`/projects/{project}/sessions`:                                {"/projects/p1/sessions", inProject},
+	`/projects/{project}/design`:                                  {"/projects/p1/design", inProject},
+	`/projects/{project}/tasks/{task}/design`:                     {"/projects/p1/tasks/t-feed/design", inProject},
+	`/projects/{project}/tasks/{task}/resources`:                  {"/projects/p1/tasks/t-feed/resources", inProject},
+	`/projects/{project}/documents`:                               {"/projects/p1/documents", "/projects/p1"},
+	`/projects/{project}/documents/{document}`:                    {"/projects/p1/documents/d-page", inProject},
+	`/projects/{project}/tasks/{task}/documents`:                  {"/projects/p1/tasks/t-feed/documents", inProject},
+	`/projects/{project}/tasks/{task}/documents/{document}`:       {"/projects/p1/tasks/t-feed/documents/d-plan", inProject},
+	`/projects/{project}/design-systems`:                          {"/projects/p1/design-systems", inProject},
+	`/projects/{project}/design-systems/{slug}`:                   {"/projects/p1/design-systems/app", inProject},
+	`/projects/{project}/usage`:                                   {"/projects/p1/usage", inProject},
+	`/projects/{project}/repositories/{repository}/history`:       {"/projects/p1/repositories/r1/history", inProject},
+	`/projects/{project}/tasks/{task}/sessions/{session}/history`: {"/projects/p1/tasks/t-feed/sessions/s-agent/history", inProject},
+	`/projects/{project}/settings`:                                {"/projects/p1/settings", inProject},
+	`/projects/{project}/repositories`:                            {"/projects/p1/repositories", inProject},
+	`/projects/{project}/repositories/{repository}/env`:           {"/projects/p1/repositories/r1/env", inProject},
 	`/projects`:     {"/projects", outside},
 	`/projects/new`: {"/projects/new", outside},
 }
@@ -64,20 +69,17 @@ var fragmentPages = map[string]fragmentPage{
 var notInTheTable = []string{
 	`/{$}`, `/projects/{project}/documents/{document}/view`, `/projects/{project}/tasks/{task}/documents/{document}/view`,
 	`notifications.Href`, `credentials.Href`, `tokensavers.Href`, `agents.Href`, `models.Href`, `agentisolation.Href`, `serversettings.Href`,
-	`/projects/{project}/usage`, `/projects/{project}/code`,
+	`/projects/{project}/code`,
 	`/projects/{project}/repositories/{repository}/code`,
-	`/projects/{project}/repositories/{repository}/history`,
-	`/projects/{project}/tasks/{task}/sessions/{session}/history`,
 	`/projects/{project}/repositories/{repository}/architecture`,
-	`/projects/{project}/repositories/{repository}/history/{commit}`,
 	`/projects/{project}/repositories/{repository}/code/files`, `/projects/{project}/repositories/{repository}/code/files/{path...}`, `/projects/{project}/repositories/{repository}/code/map`,
-	`/projects/{project}/tasks/{task}/sessions/{session}/history/{commit}`,
+	`/projects/{project}/repositories/{repository}/history/{commit}`, `/projects/{project}/tasks/{task}/sessions/{session}/history/{commit}`,
 }
 
 // Every URL answers two shapes (ADR 0064): with HX-Request, from a page of
 // its own frame, the page fragment; without it, the full page.
 func TestEveryPageAnswersItsFragmentAndItsFullPage(t *testing.T) {
-	h := newTestHandler(t, fragmentWorld())
+	h := newTestHandler(t, fragmentWorld(t))
 	for route, page := range fragmentPages {
 		t.Run(route, func(t *testing.T) {
 			full := get(t, h, page.path)
@@ -130,7 +132,7 @@ func TestEveryPageAnswersItsFragmentAndItsFullPage(t *testing.T) {
 // A page outside any project answers a fragment too, and marks its top bar
 // link open through the frame state.
 func TestAPageOutsideAnyProjectNamesItsTopBarLinkInTheFrameState(t *testing.T) {
-	h := newTestHandler(t, fragmentWorld())
+	h := newTestHandler(t, fragmentWorld(t))
 	frag := fragment(h, "/projects", "/projects/new")
 	if frag.Code != http.StatusOK {
 		t.Fatalf("status %d", frag.Code)
@@ -144,7 +146,7 @@ func TestAPageOutsideAnyProjectNamesItsTopBarLinkInTheFrameState(t *testing.T) {
 // no current URL) is answered with the app shell of the new frame, without a
 // new document (ADR 0064).
 func TestAClickAcrossFramesAnswersTheAppShellOfTheNewFrame(t *testing.T) {
-	h := newTestHandler(t, fragmentWorld())
+	h := newTestHandler(t, fragmentWorld(t))
 	for name, c := range map[string]struct{ to, from, project string }{
 		"to another project":         {"/projects/p1", "/projects/p2", "coding_pool"},
 		"into a project":             {"/projects/p1/reviews", "/projects", "coding_pool"},
