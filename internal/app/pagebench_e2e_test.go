@@ -67,7 +67,8 @@ func benchmarkRows(t *testing.T) []benchRow {
 }
 
 
-// The benchmark prints a row per project page, each with its breakdown.
+// The benchmark prints a row per project page and one more per page as a
+// fragment (the click from another page), each with its breakdown.
 func TestThePageBenchmarkMeasuresEveryProjectPage(t *testing.T) {
 	b := newBudgetProject(t)
 	b.addSessions(6)
@@ -85,7 +86,9 @@ func TestThePageBenchmarkMeasuresEveryProjectPage(t *testing.T) {
 			t.Errorf("%s: %+v", r.page, r)
 		}
 	}
-	if got := strings.Join(names, ","); got != "board,task page,settings,documents,code,design,design system,usage,reviews,history" {
+	pages := "board,task page,settings,documents,code,design,design system,usage,reviews,history"
+	fragments := strings.ReplaceAll(pages, ",", " fragment,") + " fragment"
+	if got := strings.Join(names, ","); got != pages+","+fragments {
 		t.Errorf("pages measured: %s", got)
 	}
 	if out := table(rows); !strings.Contains(out, "git (calls)") || !strings.Contains(out, "catalog (reads)") || !strings.Contains(out, "task page") {
