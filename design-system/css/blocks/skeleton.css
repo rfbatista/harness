@@ -1,7 +1,14 @@
-/* Skeleton — a placeholder bar while content loads. Width via --skeleton-width. */
+/* Skeleton — a grey stand-in for content that is still loading.
+ *
+ * Two forms share the name:
+ *  - a single bar, `<span class="skeleton" style="--skeleton-width: 40%">` (no data-variant): used by the code,
+ *    files, session and dropdown screens;
+ *  - the shaped skeleton, `data-variant` rows | chip, below. A table and a card grid variant are in the approved design (project/designs/skeleton.html); add them from there when a list needs one.
+ * Their keyframes differ: skeleton-sweep (bar) and skeleton-shimmer (shaped).
+ */
 
 @layer blocks {
-  .skeleton {
+  .skeleton:where(:not([data-variant])) {
     display: block;
     block-size: 0.75em;
     inline-size: var(--skeleton-width, 100%);
@@ -16,5 +23,86 @@
 
   @keyframes skeleton-sweep {
     to { background-position: -200% 0, 0 0; }
+  }
+}
+
+@layer blocks {
+  /*
+   * Skeleton — a grey stand-in, in the shape of content that is still loading.
+   * <div class="skeleton" data-variant="rows" style="--rows: 4" role="status" aria-busy="true">
+   *   <span class="visually-hidden">Loading reviews</span>
+   *   …one aria-hidden shape per row, cell, card or chip…
+   * </div>
+   * Variants (data-variant): rows (a list), chip (one inline chip; sized by --chip-w).
+   * --rows sets how many rows it draws; --skeleton-row is the height of one row
+   * (3.5rem unless set): give it the real row's height, so the content replaces
+   * the skeleton without moving anything.
+   */
+  .skeleton {
+    --_bar: var(--color-line);
+    --_sweep: var(--color-line-strong);
+    --_row: var(--skeleton-row, 3.5rem);
+
+    display: block;
+    pointer-events: none;
+    user-select: none;
+  }
+
+  /* Every drawn shape is a bar: a flat block that gets the shimmer. */
+  .skeleton .bar {
+    display: block;
+    block-size: 0.75rem;
+    border-radius: var(--radius-xs);
+    background: linear-gradient(90deg, var(--_bar) 35%, var(--_sweep) 50%, var(--_bar) 65%) 100% 0 / 300% 100%;
+    animation: skeleton-shimmer calc(var(--duration-signal) * 1.5) linear infinite;
+    opacity: 0.8;
+  }
+  .skeleton .bar[data-h="lg"] { block-size: 0.875rem; }
+  .skeleton .bar[data-h="sm"] { block-size: 0.625rem; }
+
+  /* rows: same box as a two-line list row (title + meta). */
+  .skeleton[data-variant="rows"] {
+    display: grid;
+    grid-template-rows: repeat(var(--rows, 3), var(--_row));
+    & > .row {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) auto;
+      align-content: center;
+      column-gap: var(--space-l);
+      row-gap: var(--space-xs);
+      padding-inline: var(--space-l);
+      border-block-end: var(--border-width) solid var(--color-line);
+    }
+    & > .row > .bar:nth-child(2) { grid-row: 2; }
+    & > .row > .bar:nth-child(3) { grid-column: 2; grid-row: 1 / span 2; align-self: center; }
+    & > .row:nth-child(3n+1) > .bar:nth-child(1) { inline-size: 62%; }
+    & > .row:nth-child(3n+2) > .bar:nth-child(1) { inline-size: 48%; }
+    & > .row:nth-child(3n) > .bar:nth-child(1) { inline-size: 71%; }
+    & > .row > .bar:nth-child(2) { inline-size: 34%; }
+    & > .row > .bar:nth-child(3) { inline-size: 3.5rem; block-size: 1.25rem; }
+  }
+
+  /* chip: inline, as tall as .badge. */
+  .skeleton[data-variant="chip"] {
+    display: inline-block;
+    vertical-align: middle;
+    & > .bar {
+      inline-size: var(--chip-w, 4.5rem);
+      block-size: 1.25rem;
+      border-radius: var(--radius-xs);
+    }
+  }
+
+  /* The content that replaces it fades in; nothing else moves. */
+  .skeleton-in { animation: skeleton-in var(--duration-settle) var(--ease-out) both; }
+
+  @keyframes skeleton-shimmer { to { background-position: 0 0; } }
+  @keyframes skeleton-pulse { 50% { opacity: 0.45; } }
+  @keyframes skeleton-in { from { opacity: 0; } }
+
+  /* Reduced motion: no sweep. A flat bar, at most a slow pulse. */
+  @media (prefers-reduced-motion: reduce) {
+    .skeleton .bar { background: var(--_bar); animation: skeleton-pulse calc(var(--duration-signal) * 2.5) ease-in-out infinite; opacity: 1; }
+    .skeleton-in { animation-duration: var(--duration-instant); }
   }
 }

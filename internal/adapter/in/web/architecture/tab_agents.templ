@@ -1,5 +1,7 @@
 package architecture
 
+import "operators-mcp/internal/adapter/in/web/components"
+
 // tabAgents is the Agents tab's panel: which agents may run in this
 // repository, with Unassign and Assign again on each row (ADR 0061). It is its
 // own Alpine component, repositoryAgentsTab (web/src/modules/repositoryagents),
@@ -24,8 +26,8 @@ templ tabAgents(v View) {
 				<button type="button" class="[ button ]" data-size="sm" x-on:click="reload">Try again</button>
 			</div>
 		</template>
-		<template x-if="!loaded">
-			<p class="[ color-ink-muted text-sm ]" role="status" data-agents-loading>Loading agents…</p>
+		<template x-if="skeletonShown">
+			@components.SkeletonRows("Loading agents", 3, "3.6rem")
 		</template>
 		<template x-if="stale">
 			<div class="[ banner ]" data-tone="attention" role="alert" data-agents-stale>
@@ -34,7 +36,7 @@ templ tabAgents(v View) {
 			</div>
 		</template>
 		<template x-if="hasTab">
-			<div class="[ flow ]" x-show="!editorOpen" data-agents-list>
+			<div class="[ flow ]" x-show="!editorOpen" x-bind:class="skeletonIn" data-agents-list>
 				<template x-if="notice.banner">
 					<div class="[ banner ]" data-tone="info" data-agents-notice>
 						<span class="[ grow ]"><span x-text="notice.banner.text"></span> <a x-bind:href="notice.banner.href" x-text="notice.banner.linkText"></a></span>

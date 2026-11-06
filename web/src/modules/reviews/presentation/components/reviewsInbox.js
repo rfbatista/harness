@@ -17,6 +17,7 @@ import { Codes, codeOf } from "../../../../shared/domain/errors.js";
 import { FeedStatus } from "../../../../shared/domain/feed.js";
 import { describeError } from "../../../../shared/presentation/errors.js";
 import { readSeed } from "../../../../shared/presentation/seed.js";
+import { followSkeleton, skeletonFields } from "../../../../shared/presentation/skeleton.js";
 import { isPending, noteProblem, upsertReview } from "../../domain/review.js";
 import { settledLine, toCard, waitingLine } from "../view.js";
 
@@ -38,10 +39,13 @@ const ANSWERED = { approved: "You approved", changes_requested: "You asked for c
 export const reviewsInbox = ({ gateway, clock, hash = () => globalThis.location?.hash ?? "" }) => () => {
   let unfollow = () => {};
   let ticker = null;
+  /** When the first read shows a skeleton (shared rule). */
+  let skeleton = null;
   /** The component's root: inside a handler $el is the element that fired. */
   let root = null;
 
   return {
+    ...skeletonFields(),
     projectId: "",
     /** The task page's band; "" for the project's inbox. */
     ticketId: "",
@@ -155,6 +159,7 @@ export const reviewsInbox = ({ gateway, clock, hash = () => globalThis.location?
     // ── lifecycle ────────────────────────────────────────────────────────
     init() {
       root = this.$el;
+      skeleton = followSkeleton(this);
       try {
         const seed = readSeed(this.$el) ?? {};
         this.projectId = seed.project_id ?? "";
@@ -191,11 +196,15 @@ export const reviewsInbox = ({ gateway, clock, hash = () => globalThis.location?
     destroy() {
       unfollow();
       clearInterval(ticker);
+      skeleton?.stop();
     },
 
     async load() {
+      if (!this.loaded) skeleton?.begin();
       try {
         const list = this.forTask ? await gateway.listForTask(this.ticketId) : await gateway.listPendingForProject(this.projectId);
+        // The rows come in once the skeleton is gone, so they never stack under it.
+        await skeleton?.end();
         // Keep what the person is writing on a request that was withdrawn meanwhile.
         const kept = this.reviews.filter((r) => this.withdrawnWhileWriting(r) && !list.some((x) => x.id === r.id));
         this.reviews = [...list, ...kept].reduce(upsertReview, []);
@@ -204,6 +213,7 @@ export const reviewsInbox = ({ gateway, clock, hash = () => globalThis.location?
         this.now = clock.now();
         this.followLink();
       } catch (err) {
+        skeleton?.fail();
         this.error = describeError(err);
       }
     },

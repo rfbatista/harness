@@ -10,10 +10,15 @@
 // and retries confirmed. Any other refusal stays under its row.
 
 import { describeError } from "../../../../shared/presentation/errors.js";
+import { followSkeleton, skeletonFields } from "../../../../shared/presentation/skeleton.js";
 import { chip, exportBadge, exportLabel } from "../../domain/repositories.js";
 
 /** @param {{ gateway: ReturnType<typeof import("../../infrastructure/designsystem-gateway.js").designSystemGateway> }} deps */
-export const designSystemOptIn = ({ gateway }) => () => ({
+export const designSystemOptIn = ({ gateway }) => () => {
+  /** When the first read shows a skeleton (shared rule). */
+  let skeleton = null;
+  return {
+  ...skeletonFields(),
   projectId: "",
   /** The design system the page is about. */
   designSystemId: "",
@@ -30,6 +35,7 @@ export const designSystemOptIn = ({ gateway }) => () => ({
   },
 
   async init() {
+    skeleton = followSkeleton(this);
     this.projectId = this.$el.dataset.projectId ?? "";
     this.designSystemId = this.$el.dataset.designSystemId ?? "";
     await this.load();
@@ -41,6 +47,7 @@ export const designSystemOptIn = ({ gateway }) => () => ({
 
   destroy() {
     this.unfollow?.();
+    skeleton?.stop();
   },
 
   /** Reads the export states again, leaving what a row is doing (a draft path, a question, an export) alone. */
@@ -58,10 +65,15 @@ export const designSystemOptIn = ({ gateway }) => () => ({
 
   async load() {
     this.error = null;
+    if (!this.loaded) skeleton?.begin();
     try {
-      this.rows = await gateway.repositories(this.designSystemId);
+      const rows = await gateway.repositories(this.designSystemId);
+      // The rows come in once the skeleton is gone, so they never stack under it.
+      await skeleton?.end();
+      this.rows = rows;
       this.loaded = true;
     } catch (err) {
+      skeleton?.fail();
       this.error = describeError(err);
     }
   },
@@ -205,4 +217,5 @@ export const designSystemOptIn = ({ gateway }) => () => ({
     row.review = null;
   },
 
-});
+};
+};

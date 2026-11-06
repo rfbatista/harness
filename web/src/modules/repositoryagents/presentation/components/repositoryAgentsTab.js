@@ -11,6 +11,7 @@
 import { Codes } from "../../../../shared/domain/errors.js";
 import { FeedStatus } from "../../../../shared/domain/feed.js";
 import { describeError } from "../../../../shared/presentation/errors.js";
+import { followSkeleton, skeletonFields } from "../../../../shared/presentation/skeleton.js";
 import { compose } from "../../../agents/presentation/components/compose.js";
 import { promptEditorPart } from "./promptEditor.js";
 import { assignedToast, groupAgents, modeNotice, nothingAssigned, rowModel, staleBanner, stats, unassignedToast } from "../../domain/agentsTab.js";
@@ -18,7 +19,10 @@ import { assignedToast, groupAgents, modeNotice, nothingAssigned, rowModel, stal
 /** @param {{ gateway: import("../../domain/ports.js").RepositoryAgentsGateway }} deps */
 export const repositoryAgentsTab = ({ gateway }) => () => {
   let unfollow = () => {};
+  /** When the first read shows a skeleton (shared rule). */
+  let skeleton = null;
   return compose({
+    ...skeletonFields(),
     projectId: "",
     repositoryId: "",
     layersHref: "",
@@ -33,6 +37,7 @@ export const repositoryAgentsTab = ({ gateway }) => () => {
     toast: null,
 
     async init() {
+      skeleton = followSkeleton(this);
       this.projectId = this.$el.dataset.projectId ?? "";
       this.repositoryId = this.$el.dataset.repositoryId ?? "";
       this.layersHref = this.$el.dataset.layersHref ?? "";
@@ -57,13 +62,19 @@ export const repositoryAgentsTab = ({ gateway }) => () => {
 
     destroy() {
       unfollow();
+      skeleton?.stop();
     },
 
     async load() {
+      if (!this.loaded) skeleton?.begin();
       try {
-        this.list = await gateway.getRepositoryAgents(this.repositoryId);
+        const list = await gateway.getRepositoryAgents(this.repositoryId);
+        // The rows come in once the skeleton is gone, so they never stack under it.
+        await skeleton?.end();
+        this.list = list;
         this.error = null;
       } catch (err) {
+        skeleton?.fail();
         this.error = describeError(err);
       } finally {
         this.loaded = true;

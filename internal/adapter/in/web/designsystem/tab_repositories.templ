@@ -1,5 +1,7 @@
 package designsystem
 
+import "operators-mcp/internal/adapter/in/web/components"
+
 // tabRepositories is the Repositories tab's panel: every repository of the
 // project with the design system it uses, and Apply here or Remove. A
 // repository applied here also shows its export state and an Export button.
@@ -34,7 +36,10 @@ templ OptIn(projectID, designSystemID string) {
 		<template x-if="isEmpty">
 			<p class="[ color-ink-muted ]" data-no-repositories>This project has no repositories yet. Add one, then apply the design system to it here.</p>
 		</template>
-		<section class="[ pane ]" x-show="loaded">
+		<template x-if="skeletonShown">
+			@components.SkeletonRows("Loading repositories", 2, "6.2rem")
+		</template>
+		<section class="[ pane ]" x-show="loaded" x-bind:class="skeletonIn">
 			<template x-for="r in rows" x-bind:key="r.id">
 				<div class="[ row ]" data-optin-row x-bind:data-repository-id="r.id" x-bind:data-phase="phase(r)" x-bind:data-chosen="isChosen(r)" style="--row-columns: minmax(0, 1fr)">
 					<div class="[ flow ] [ flow-space-xs pad-block-xs ]">

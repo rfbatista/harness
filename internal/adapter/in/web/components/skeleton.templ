@@ -1,0 +1,25 @@
+package components
+
+import "strconv"
+
+// SkeletonRows is the skeleton for a list of two-line rows while it loads
+// (Glossary: Skeleton). Put it inside <template x-if="skeletonShown">: the
+// component's shared rule (shared/presentation/skeleton.js) decides when it
+// shows. rowHeight is the real row's height, as a CSS length, so the content
+// replaces it without moving anything; "" keeps the design's 3.5rem.
+templ SkeletonRows(label string, rows int, rowHeight string) {
+	<div class="[ skeleton ]" data-variant="rows" style={ templ.SafeCSS(skeletonRowsStyle(rows, rowHeight)) } role="status" aria-busy="true">
+		<span class="[ visually-hidden ]">{ label }</span>
+		for i := 0; i < rows; i++ {
+			<div class="[ row ]" aria-hidden="true"><span class="[ bar ]"></span><span class="[ bar ]" data-h="sm"></span><span class="[ bar ]"></span></div>
+		}
+	</div>
+}
+
+func skeletonRowsStyle(rows int, rowHeight string) string {
+	style := "--rows: " + strconv.Itoa(rows)
+	if rowHeight != "" {
+		style += "; --skeleton-row: " + rowHeight
+	}
+	return style
+}

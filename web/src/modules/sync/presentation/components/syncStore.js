@@ -21,10 +21,12 @@ import { refusalOf } from "../view.js";
  * @property {Record<string, true>} pushing      by workspace id
  * @property {Record<string, ReturnType<typeof refusalOf>>} fetchFailure  by repository id
  * @property {Record<string, ReturnType<typeof refusalOf>>} pushFailure   by workspace id
+ * @property {boolean} statesLoading  the task page's lazy git section is loading and its skeleton chips show
+ * @property {string} statesIn        "skeleton-in" once the chips arrived after a skeleton
  */
 
 /** @returns {SyncStore} */
-export const emptyStore = () => ({ byWorkspace: {}, fetching: {}, pushing: {}, fetchFailure: {}, pushFailure: {} });
+export const emptyStore = () => ({ byWorkspace: {}, fetching: {}, pushing: {}, fetchFailure: {}, pushFailure: {}, statesLoading: false, statesIn: "" });
 
 const without = (record, key) => {
   const { [key]: _, ...rest } = record;
