@@ -8,11 +8,10 @@ import (
 	"fmt"
 	"net/http"
 	"os"
-	"os/exec"
-	"path/filepath"
 	"strings"
 	"time"
 
+	"operators-mcp/internal/adapter/out/gitprobe"
 	"operators-mcp/internal/domain"
 	"operators-mcp/internal/ports"
 )
@@ -44,7 +43,7 @@ func gitMain(args []string) int {
 	if err != nil {
 		return become(real)
 	}
-	actions := domain.ClassifyGit(args, cwd, gitProbe{real: real})
+	actions := domain.ClassifyGit(args, cwd, gitprobe.Probe{Git: real})
 	gated := actions[:0]
 	for _, a := range actions {
 		if a.Kind.Gated() {
@@ -85,52 +84,4 @@ func askGrant(base string, req ports.BranchGrantRequest) (ports.BranchGrantAnswe
 	var a ports.BranchGrantAnswer
 	err = json.NewDecoder(res.Body).Decode(&a)
 	return a, err
-}
-
-// gitProbe answers the classifier's questions by asking the real git.
-type gitProbe struct{ real string }
-
-func (p gitProbe) run(dir string, args ...string) (string, bool) {
-	cmd := exec.Command(p.real, append([]string{"-C", dir}, args...)...)
-	var out bytes.Buffer
-	cmd.Stdout = &out
-	if err := cmd.Run(); err != nil {
-		return "", false
-	}
-	return strings.TrimSpace(out.String()), true
-}
-
-func (p gitProbe) Commit(dir, ref string) string {
-	out, _ := p.run(dir, "rev-parse", "--verify", "--quiet", ref+"^{commit}")
-	return out
-}
-
-func (p gitProbe) Branch(dir, name string) bool {
-	_, ok := p.run(dir, "show-ref", "--verify", "--quiet", "refs/heads/"+name)
-	return ok
-}
-
-func (p gitProbe) RemoteBranch(dir, name string) (string, bool) {
-	out, _ := p.run(dir, "for-each-ref", "--format=%(refname)", "refs/remotes/*/"+name)
-	var remote string
-	n := 0
-	for _, ref := range strings.Fields(out) {
-		rest, ok := strings.CutPrefix(ref, "refs/remotes/")
-		if !ok || !strings.HasSuffix(rest, "/"+name) {
-			continue
-		}
-		remote = strings.TrimSuffix(rest, "/"+name)
-		n++
-	}
-	return remote, n == 1 && remote != "" && !strings.Contains(remote, "/")
-}
-
-func (p gitProbe) Path(dir, name string) bool {
-	_, err := os.Stat(filepath.Join(dir, name))
-	return err == nil
-}
-
-func (p gitProbe) Current(dir string) string {
-	out, _ := p.run(dir, "symbolic-ref", "--quiet", "--short", "HEAD")
-	return out
 }

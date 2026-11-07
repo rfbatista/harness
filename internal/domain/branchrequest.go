@@ -1,0 +1,99 @@
+package domain
+
+import "time"
+
+// BranchRequestState is where a branch request stands (Glossary "Branch
+// request"; contract "Harness server ↔ Web UI — branch requests and the
+// Branches list" §1).
+type BranchRequestState string
+
+const (
+	BranchRequestPending  BranchRequestState = "pending"
+	BranchRequestApproved BranchRequestState = "approved"
+	BranchRequestDenied   BranchRequestState = "denied"
+	// BranchRequestUsed means the branch grant was consumed.
+	BranchRequestUsed BranchRequestState = "used"
+	// BranchRequestExpired means the session ended with an unused grant, or
+	// while the request was still pending.
+	BranchRequestExpired BranchRequestState = "expired"
+)
+
+// Codes of a branch request that cannot be answered.
+const (
+	BranchRequestNotFound = "BRANCH_REQUEST_NOT_FOUND"
+	// BranchRequestAnswered: the request is no longer pending.
+	BranchRequestAnswered = "BRANCH_REQUEST_ANSWERED"
+)
+
+// BranchRemote is the remote a push or a remote action names.
+type BranchRemote struct {
+	Name    string  `json:"name"`
+	URL     string  `json:"url"`
+	NewName *string `json:"new_name"`
+}
+
+// BranchRequest is the stored record of one branch action an agent session asks
+// to make: only the person answers it, and an approval is a branch grant for
+// exactly that action, used once.
+type BranchRequest struct {
+	ID            string           `json:"id"`
+	SessionID     string           `json:"session_id"`
+	TaskID        *string          `json:"task_id"`
+	RepositoryID  string           `json:"repository_id"`
+	SessionBranch string           `json:"session_branch"`
+	Action        BranchActionKind `json:"action"`
+	// Branch is the branch acted on; for a rename the old name.
+	Branch  string  `json:"branch"`
+	NewName *string `json:"new_name"`
+	// StartPoint is set for create and switch.
+	StartPoint   *BranchStart  `json:"start_point"`
+	Remote       *BranchRemote `json:"remote"`
+	RemoteBranch *string       `json:"remote_branch"`
+	Commits      *int          `json:"commits"`
+	// Command is the command line as the agent ran it, or "push_branch".
+	Command string `json:"command"`
+	// Via is "git" or "push_branch".
+	Via         string             `json:"via"`
+	Reason      string             `json:"reason"`
+	State       BranchRequestState `json:"state"`
+	Note        string             `json:"note"`
+	RequestedAt time.Time          `json:"requested_at"`
+	AnsweredAt  *time.Time         `json:"answered_at"`
+}
+
+// Matches says whether the request, once approved, is the grant for action: the
+// same kind, branch, start point, remote and refspec.
+func (r BranchRequest) Matches(a BranchAction) bool {
+	if r.Action != a.Kind || r.Branch != a.Branch || strOr(r.NewName) != a.NewName {
+		return false
+	}
+	if startRef(r.StartPoint) != startRef(a.Start) {
+		return false
+	}
+	remote := ""
+	if r.Remote != nil {
+		remote = r.Remote.Name
+	}
+	return remote == a.Remote
+}
+
+func startRef(s *BranchStart) string {
+	if s == nil {
+		return ""
+	}
+	return s.Kind + ":" + s.Ref
+}
+
+func strOr(s *string) string {
+	if s == nil {
+		return ""
+	}
+	return *s
+}
+
+// BranchRequestFilter selects branch requests; empty fields match all.
+type BranchRequestFilter struct {
+	SessionID string
+	TaskID    string
+	State     BranchRequestState
+}

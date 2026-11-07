@@ -255,6 +255,9 @@ type Service struct {
 	resuming map[string]bool
 	// commitOff is why each session whose commit check is off is unguarded.
 	commitOff map[string]string
+	// branchWaits are the sessions with a pending branch request, by how many
+	// and the status each had before the first (ADR 0069).
+	branchWaits map[string]*branchWait
 
 	// DeveloperBin finds the active developer directory's usr/bin (macOS's
 	// xcode-select -p). It is asked once per server run; nil, an error or ""
@@ -269,7 +272,7 @@ func NewService(runtime llmkit.Manager, broker *approval.Broker, hub *Hub, sessi
 		runtime: runtime, broker: broker, hub: hub, sessions: sessions, catalog: catalog, tickets: tickets,
 		workspaces: workspaces,
 		seq:        map[string]int64{}, cleanups: map[string]func(){}, busy: map[string]bool{},
-		resuming: map[string]bool{}, commitOff: map[string]string{}, statuses: map[string]domain.SessionStatus{},
+		resuming: map[string]bool{}, commitOff: map[string]string{}, branchWaits: map[string]*branchWait{}, statuses: map[string]domain.SessionStatus{},
 	}
 	go s.approvalLoop()
 	go s.expiryLoop()
@@ -1532,4 +1535,64 @@ func validateBranchName(branch string) error {
 		return invalid
 	}
 	return nil
+}
+
+// branchWait is a session's pending branch requests.
+type branchWait struct {
+	pending int
+	prior   domain.SessionStatus
+}
+
+var _ ports.BranchRequestWaiter = (*Service)(nil)
+
+// BranchRequestFiled implements ports.BranchRequestWaiter: the session shows as
+// waiting for approval while it has a pending branch request.
+func (s *Service) BranchRequestFiled(id string) {
+	s.mu.Lock()
+	w := s.branchWaits[id]
+	first := w == nil
+	if first {
+		w = &branchWait{prior: domain.SessionThinking}
+		if cur := s.sessions.Get(id); cur != nil && cur.Status != domain.SessionWaitingApproval {
+			w.prior = cur.Status
+		}
+		s.branchWaits[id] = w
+	}
+	w.pending++
+	s.mu.Unlock()
+	change := sessionChange{status: domain.SessionWaitingApproval}
+	if m := s.metricsOf(id); m != nil {
+		m.PendingApprovals++
+		change.metrics = m
+	}
+	s.record(id, SessionEvent{Type: "branch_request_needed", Status: domain.SessionWaitingApproval, At: time.Now()}, change)
+}
+
+// BranchRequestSettled implements ports.BranchRequestWaiter: the last settled
+// request puts the session back to the status it had before.
+func (s *Service) BranchRequestSettled(id string) {
+	s.mu.Lock()
+	w := s.branchWaits[id]
+	if w == nil {
+		s.mu.Unlock()
+		return
+	}
+	w.pending--
+	last := w.pending <= 0
+	if last {
+		delete(s.branchWaits, id)
+	}
+	s.mu.Unlock()
+	change := sessionChange{}
+	if m := s.metricsOf(id); m != nil {
+		if m.PendingApprovals > 0 {
+			m.PendingApprovals--
+		}
+		change.metrics = m
+	}
+	ev := SessionEvent{Type: "branch_request_settled", At: time.Now()}
+	if last {
+		ev.Status, change.status = w.prior, w.prior
+	}
+	s.record(id, ev, change)
 }
