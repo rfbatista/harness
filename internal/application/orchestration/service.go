@@ -134,6 +134,9 @@ type Service struct {
 	// SessionBranchGateURL returns where a session's branch gate is asked
 	// (…/api/sessions/{id}/branch_gate). Nil: sessions get no git shim.
 	SessionBranchGateURL func(sessionID string) string
+	// BranchGateTimeout is the branch gate hook's timeout: the approval
+	// timeout. Zero is 24 hours.
+	BranchGateTimeout time.Duration
 	// Architectures is what the brief reads of the repository architecture;
 	// nil adds no section to any brief.
 	Architectures ports.ArchitectureBriefSource
@@ -676,6 +679,7 @@ func (s *Service) withGit(id, repositoryID string, cfg *llmkit.SessionConfig, cl
 // shell. A headless session with no task, or a service without Shells,
 // changes nothing.
 func (s *Service) withShell(id, repositoryID string, subject sessionSubject, cfg *llmkit.SessionConfig, cleanup func()) (func(), error) {
+	s.withBranchGate(id, cfg)
 	if s.Shells == nil || (subject.ticket == nil && !subject.projectLevel()) {
 		return s.withShims(id, cfg, cleanup, false)
 	}
@@ -714,6 +718,17 @@ func (s *Service) withShell(id, repositoryID string, subject sessionSubject, cfg
 		}
 		sh.Stop()
 	}, true)
+}
+
+// withBranchGate gives every agent session the branch gate's asking hook; the
+// git shim is made by withShims. Without a gate URL it changes nothing.
+func (s *Service) withBranchGate(id string, cfg *llmkit.SessionConfig) {
+	if s.SessionBranchGateURL == nil {
+		return
+	}
+	if dc, ok := withHooks(cfg.Driver, BranchGateHooks(s.SessionBranchGateURL(id), s.BranchGateTimeout)); ok {
+		cfg.Driver = dc
+	}
 }
 
 // withShims puts the session's shim dir first on its PATH: one link per
@@ -920,6 +935,9 @@ func (s *Service) sessionConfig(id, dir, model string, allowedTools []string, pe
 		cfg.AppendSystem = appendSection(cfg.AppendSystem, section)
 	}
 	cfg.InstructionFiles = s.instructionFiles(context.TODO(), role, ag.agent, subject.projectID(), repositoryID)
+	if s.SessionBranchGateURL != nil {
+		cfg.InstructionFiles = append(cfg.InstructionFiles, branchGateInstructionFile())
+	}
 	if section := attachedAssetsSection(s.attachedAssets(ticket)); section != "" {
 		cfg.AppendSystem = appendSection(cfg.AppendSystem, section)
 	}
