@@ -87,3 +87,21 @@ export function toEvent(e) {
     runningCount: Number(e.running_count ?? 0),
   };
 }
+
+/** @returns {import("../domain/ports.js").LogRead} */
+export function toLogRead(body) {
+  if (!body || typeof body.text !== "string") bad("expected a log read with text");
+  return {
+    text: body.text,
+    offset: Number(body.offset ?? 0),
+    next_offset: Number(body.next_offset ?? 0),
+    first_offset: Number(body.first_offset ?? 0),
+    run_id: String(body.run_id ?? ""),
+  };
+}
+
+/** @returns {{ kind: "chunk" | "reset", run_id: string, offset: number, text: string }} */
+export function toLogEvent(e) {
+  if (e?.kind !== "chunk" && e?.kind !== "reset") bad("expected a log event of kind chunk or reset");
+  return { kind: e.kind, run_id: String(e.run_id ?? ""), offset: Number(e.offset ?? 0), text: String(e.text ?? "") };
+}

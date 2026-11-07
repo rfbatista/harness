@@ -2,7 +2,7 @@
 // list the test sets, the feed it drives with `emit` and `status`, and a
 // record of what was read.
 
-import { toEvent, toServiceList } from "../infrastructure/dto.js";
+import { toEvent, toLogEvent, toService, toServiceList } from "../infrastructure/dto.js";
 
 /** The API's JSON for a service; override fields with `o`. */
 export function serviceDTO(o = {}) {
@@ -30,6 +30,7 @@ export function listDTO(services = [], o = {}) {
 /** @param {{ list?: object }} [o] */
 export function fakeServices({ list = listDTO() } = {}) {
   let handlers = null;
+  let logHandlers = null;
   const fake = {
     list,
     listCalls: 0,
@@ -38,6 +39,60 @@ export function fakeServices({ list = listDTO() } = {}) {
     unfollowed: 0,
     decodeSeed(seed) {
       return { projectId: seed.project_id, list: seed.list ? toServiceList(seed.list) : null };
+    },
+    /** Calls made to start, stop and restart, as "start:<id>". */
+    actions: [],
+    /**
+     * What each action answers; a test sets its own. By default the service in the list
+     * takes the status the action leads to.
+     */
+    answer: {
+      start: async (id) => ({ service: fake.byId(id, "running"), alreadyRunning: false }),
+      stop: async (id) => fake.byId(id, "stopped"),
+      restart: async (id) => fake.byId(id, "running"),
+    },
+    /** The API's JSON for service `id` as it would be in `status`. */
+    dtoOf(id, status, run) {
+      const dto = fake.list.services.find((s) => s.id === id);
+      return { ...dto, status, run: run ?? dto.run ?? runDTO() };
+    },
+    /** The mapped service `id` as it would be in `status`. */
+    byId(id, status, run) {
+      return toService(fake.dtoOf(id, status, run));
+    },
+    async startService(id) {
+      fake.actions.push(`start:${id}`);
+      return fake.answer.start(id);
+    },
+    async stopService(id) {
+      fake.actions.push(`stop:${id}`);
+      return fake.answer.stop(id);
+    },
+    async restartService(id) {
+      fake.actions.push(`restart:${id}`);
+      return fake.answer.restart(id);
+    },
+    /** The log's read answers; a test sets `logRead` (a function of the offset) or pushes with emitLog. */
+    logReads: [],
+    logRead: null,
+    logFollowed: [],
+    logUnfollowed: 0,
+    async readLog(serviceId, offset) {
+      fake.logReads.push([serviceId, offset]);
+      if (fake.logError) throw fake.logError;
+      return fake.logRead(offset);
+    },
+    followLog(serviceId, from, onEvent, onStatus) {
+      logHandlers = { onEvent, onStatus };
+      fake.logFollowed.push([serviceId, from]);
+      return () => { fake.logUnfollowed++; logHandlers = null; };
+    },
+    /** A chunk or reset of the log feed, in the API's JSON. */
+    emitLog(dto) {
+      logHandlers?.onEvent(toLogEvent(dto));
+    },
+    logStatus(s) {
+      logHandlers?.onStatus?.(s);
     },
     async listServices(projectId) {
       fake.listCalls++;
@@ -69,4 +124,9 @@ export function pageEl(seed) {
     getAttribute: () => "servicesPage",
     ownerDocument: { getElementById: () => ({ textContent: JSON.stringify(seed) }) },
   };
+}
+
+/** A read_service_log answer. */
+export function logDTO(o = {}) {
+  return { text: "", offset: 0, next_offset: 0, first_offset: 0, run_id: "r1", ...o };
 }

@@ -148,3 +148,217 @@ test("it stops following and ticking when the page goes", () => {
   page.destroy();
   assert.equal(gateway.unfollowed, 1);
 });
+
+// ── Start, Stop and Restart ──────────────────────────────────────────────
+const deferred = () => {
+  const d = {};
+  d.promise = new Promise((resolve, reject) => { d.resolve = resolve; d.reject = reject; });
+  return d;
+};
+const tick = async () => { for (let i = 0; i < 5; i++) await Promise.resolve(); };
+const openWith = (services, { runtime, sandbox, gateway } = {}) => {
+  const gw = gateway ?? fakeServices({ list: listDTO(services, { seq: 1, ...(runtime ? { runtime } : {}), ...(sandbox ? { sandbox } : {}) }) });
+  const { page } = open({ seed: { project_id: "p1", list: gw.list }, gateway: gw });
+  page.init();
+  return { page, gateway: gw };
+};
+const rowOf = (page, name) => page.groups.flatMap((g) => g.rows).find((r) => r.name === name);
+
+test("a stopped service offers Start; a running one offers Stop and Restart; each name carries the service", () => {
+  const { page } = openWith([serviceDTO({ id: "1", name: "db" }), running({ id: "2", name: "api" })]);
+  const db = rowOf(page, "db");
+  assert.deepEqual([db.start.show, db.stop.show, db.restart.show], [true, false, false]);
+  assert.equal(db.start.name, "Start db");
+  const api = rowOf(page, "api");
+  assert.deepEqual([api.start.show, api.stop.show, api.restart.show], [false, true, true]);
+  assert.deepEqual([api.stop.name, api.restart.name], ["Stop api", "Restart api"]);
+});
+
+test("a starting service offers Stop but not Restart", () => {
+  const { page } = openWith([serviceDTO({ id: "1", name: "db", status: "starting" })]);
+  const db = rowOf(page, "db");
+  assert.deepEqual([db.stop.show, db.restart.show], [true, false]);
+});
+
+test("Start calls start_service; while it is in flight only that row's buttons are disabled and say Starting…", async () => {
+  const { page, gateway } = openWith([serviceDTO({ id: "1", name: "db" }), serviceDTO({ id: "2", name: "web" })]);
+  const wait = deferred();
+  gateway.answer.start = () => wait.promise;
+  const pending = page.start("1");
+  assert.deepEqual(gateway.actions, ["start:1"]);
+  assert.deepEqual([rowOf(page, "db").start.disabled, rowOf(page, "db").start.busy, rowOf(page, "db").start.text], [true, true, "Starting…"]);
+  assert.equal(rowOf(page, "web").start.disabled, false);
+  wait.resolve({ service: toDTO(gateway, "1", "running"), alreadyRunning: false });
+  await pending;
+  assert.equal(rowOf(page, "db").stop.show, true);
+  assert.equal(rowOf(page, "db").start.busy, false);
+});
+
+function toDTO(gateway, id, status) {
+  return gateway.byId(id, status);
+}
+
+test("a second click on a row whose action is in flight starts nothing more", async () => {
+  const { page, gateway } = openWith([serviceDTO({ id: "1", name: "db" })]);
+  const wait = deferred();
+  gateway.answer.start = () => wait.promise;
+  const first = page.start("1");
+  await page.start("1");
+  await page.stop("1");
+  assert.deepEqual(gateway.actions, ["start:1"]);
+  wait.resolve({ service: toDTO(gateway, "1", "running"), alreadyRunning: false });
+  await first;
+});
+
+test("Stop and Restart call their endpoints and say Stopping… and Restarting…", async () => {
+  const { page, gateway } = openWith([running({ id: "1", name: "api" })]);
+  const wait = deferred();
+  gateway.answer.stop = () => wait.promise;
+  const stopping = page.stop("1");
+  assert.equal(rowOf(page, "api").stop.text, "Stopping…");
+  wait.resolve(toDTO(gateway, "1", "stopped"));
+  await stopping;
+  assert.equal(rowOf(page, "api").start.show, true);
+  const again = deferred();
+  gateway.answer.restart = () => again.promise;
+  page.services = [toDTO(gateway, "1", "running")];
+  const restarting = page.restart("1");
+  assert.equal(rowOf(page, "api").restart.text, "Restarting…");
+  again.resolve(toDTO(gateway, "1", "running"));
+  await restarting;
+  assert.deepEqual(gateway.actions, ["stop:1", "restart:1"]);
+});
+
+test("Start on a running service starts nothing: it opens the log", async () => {
+  const { page, gateway } = openWith([running({ id: "1", name: "api" })]);
+  await page.start("1");
+  assert.deepEqual(gateway.actions, []);
+  assert.equal(page.logId, "1");
+});
+
+test("when the server says it was already running, the log opens and nothing else changes", async () => {
+  const { page, gateway } = openWith([serviceDTO({ id: "1", name: "api" })]);
+  gateway.answer.start = async () => ({ service: toDTO(gateway, "1", "running"), alreadyRunning: true });
+  await page.start("1");
+  assert.equal(page.logId, "1");
+  assert.equal(rowOf(page, "api").stop.show, true);
+});
+
+test("the feed's echo of my own action can arrive before the answer without flicker", async () => {
+  const { page, gateway } = openWith([serviceDTO({ id: "1", name: "db" })]);
+  const wait = deferred();
+  gateway.answer.start = () => wait.promise;
+  const pending = page.start("1");
+  gateway.emit({ seq: 2, kind: "service_changed", service: gateway.dtoOf("1", "running"), running_count: 1 });
+  assert.equal(rowOf(page, "db").status.word, "running");
+  gateway.emit({ seq: 3, kind: "service_changed", service: gateway.dtoOf("1", "exited", runDTO({ exit_code: 0, ended_at: "2026-11-07T15:30:00Z" })), running_count: 0 });
+  wait.resolve({ service: toDTO(gateway, "1", "running"), alreadyRunning: false });
+  await pending;
+  assert.equal(rowOf(page, "db").status.word, "exited · code 0", "the older answer does not undo the newer event");
+});
+
+test("a refused Start shows the server's message with its code, and Dismiss clears it", async () => {
+  const { page, gateway } = openWith([serviceDTO({ id: "1", name: "api" })]);
+  gateway.answer.start = async () => { throw new StructuredError("SANDBOX_UNAVAILABLE", "The sandbox is unavailable on this machine, so nothing was started."); };
+  await page.start("1");
+  assert.equal(page.refusal.title, "api did not start.");
+  assert.equal(page.refusal.message, "The sandbox is unavailable on this machine, so nothing was started.");
+  assert.equal(page.refusal.code, "SANDBOX_UNAVAILABLE");
+  assert.equal(rowOf(page, "api").start.disabled, false, "Start works again after a refusal");
+  page.dismissRefusal();
+  assert.equal(page.refusal, null);
+});
+
+test("a refusal stays until dismissed or the next Start", async () => {
+  const { page, gateway } = openWith([serviceDTO({ id: "1", name: "api" }), serviceDTO({ id: "2", name: "db" })]);
+  gateway.answer.start = async (id) => { if (id === "1") throw new StructuredError("RUNTIME_UNAVAILABLE", "docker was not found"); return { service: toDTO(gateway, id, "running"), alreadyRunning: false }; };
+  await page.start("1");
+  assert.equal(page.refusal.code, "RUNTIME_UNAVAILABLE");
+  await page.start("2");
+  assert.equal(page.refusal, null);
+});
+
+test("a failed Stop shows its error too", async () => {
+  const { page, gateway } = openWith([running({ id: "1", name: "api" })]);
+  gateway.answer.stop = async () => { throw new StructuredError("SERVICE_NOT_FOUND", "no such service"); };
+  await page.stop("1");
+  assert.equal(page.refusal.title, "api did not stop.");
+  assert.equal(page.refusal.code, "SERVICE_NOT_FOUND");
+});
+
+test("a failed run comes back as the service with status failed, not as a refusal", async () => {
+  const { page, gateway } = openWith([serviceDTO({ id: "1", name: "api" })]);
+  gateway.answer.start = async () => ({ service: gateway.byId("1", "failed", runDTO({ error: "port 8080 is in use" })), alreadyRunning: false });
+  await page.start("1");
+  assert.equal(page.refusal, null);
+  assert.equal(rowOf(page, "api").reason, "port 8080 is in use");
+});
+
+test("the notices: sandbox unavailable, sandbox off, runtime not found; none when all is well", () => {
+  assert.equal(openWith([], {}).page.notices.length, 0);
+  assert.deepEqual(openWith([], { sandbox: "unavailable" }).page.notices.map((n) => n.key), ["sandbox-unavailable"]);
+  assert.deepEqual(openWith([], { sandbox: "off" }).page.notices.map((n) => n.key), ["sandbox-off"]);
+  const both = openWith([], { sandbox: "off", runtime: { name: "docker", available: false } }).page.notices;
+  assert.deepEqual(both.map((n) => n.key), ["sandbox-off", "runtime-missing"]);
+  assert.equal(both[1].title, "docker was not found on this machine.");
+  assert.equal(both[1].code, "RUNTIME_UNAVAILABLE");
+});
+
+test("with the runtime missing, Start on an image service is disabled with a reason, and a command service's is not", () => {
+  const img = serviceDTO({ id: "1", name: "db", kind: "image", command: null, image: { ref: "postgres:16", args: [], ports: [] } });
+  const cmd = serviceDTO({ id: "2", name: "api" });
+  const { page } = openWith([img, cmd], { runtime: { name: "docker", available: false } });
+  assert.equal(rowOf(page, "db").start.disabled, true);
+  assert.equal(rowOf(page, "db").start.title, "docker was not found. Image services cannot start.");
+  assert.equal(rowOf(page, "api").start.disabled, false);
+});
+
+test("with the sandbox unavailable, Start on a command service stays enabled: the server refuses and the banner explains", () => {
+  const { page } = openWith([serviceDTO({ id: "2", name: "api" })], { sandbox: "unavailable" });
+  assert.equal(rowOf(page, "api").start.disabled, false);
+});
+
+// ── the log beside the list ──────────────────────────────────────────────
+test("opening a service's log shows its header; the list keeps its place and marks the row", () => {
+  const { page } = openWith([running({ id: "1", name: "api", run: runDTO({ started_at: "2026-11-07T14:02:00" }) }), serviceDTO({ id: "2", name: "db" })]);
+  assert.equal(page.detailOpen, false);
+  assert.equal(page.noDetail, true);
+  page.openLog("1");
+  assert.equal(page.detailOpen, true);
+  assert.deepEqual(page.logIds, ["1"]);
+  assert.equal(page.logView.name, "api");
+  assert.equal(page.logView.status.word, "running");
+  assert.equal(page.logView.runLine, "Run started 14:02 · by you · main checkout @ main");
+  assert.equal(rowOf(page, "api").current, true);
+  assert.equal(rowOf(page, "db").current, false);
+});
+
+test("the log's header follows the service's status live", () => {
+  const { page, gateway } = openWith([running({ id: "1", name: "api" })]);
+  page.openLog("1");
+  gateway.emit({ seq: 2, kind: "service_changed", service: gateway.dtoOf("1", "exited", runDTO({ exit_code: 3, ended_at: "2026-11-07T15:30:00Z" })), running_count: 0 });
+  assert.equal(page.logView.status.word, "exited · code 3");
+});
+
+test("opening another service's log swaps the viewer; closing it leaves the list alone", () => {
+  const { page } = openWith([running({ id: "1", name: "api" }), running({ id: "2", name: "web" })]);
+  page.openLog("1");
+  page.openLog("2");
+  assert.deepEqual(page.logIds, ["2"]);
+  page.closeLog();
+  assert.deepEqual(page.logIds, []);
+  assert.equal(page.noDetail, true);
+});
+
+test("a service deleted while its log is open closes the log", () => {
+  const { page, gateway } = openWith([serviceDTO({ id: "1", name: "api" })]);
+  page.openLog("1");
+  gateway.emit({ seq: 2, kind: "service_deleted", service_id: "1", running_count: 0 });
+  assert.equal(page.logId, "");
+});
+
+test("a failed service's row opens its log from its reason", () => {
+  const { page } = openWith([serviceDTO({ id: "1", name: "api", status: "failed", run: runDTO({ error: "boom" }) })]);
+  page.openLogRow({ currentTarget: { dataset: { serviceId: "1" } } });
+  assert.equal(page.logId, "1");
+});

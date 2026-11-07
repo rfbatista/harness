@@ -63,3 +63,48 @@ test("the page's seed carries its list or none", () => {
   assert.equal(gw.decodeSeed({ project_id: "p1", list: listDTO([serviceDTO()]) }).list.services.length, 1);
   assert.equal(gw.decodeSeed({ project_id: "p1" }).projectId, "p1");
 });
+
+test("start, stop and restart post the service id and map the answer", async () => {
+  const calls = [];
+  const api = {
+    post: async (path, body) => {
+      calls.push([path, body]);
+      return path === "/start_service" ? { service: serviceDTO({ status: "running", run: runDTO() }), already_running: true } : { service: serviceDTO({ status: "stopped" }) };
+    },
+  };
+  const gw = servicesGateway(api, {});
+  const started = await gw.startService("s1");
+  assert.equal(started.alreadyRunning, true);
+  assert.equal(started.service.status, "running");
+  assert.equal((await gw.stopService("s1")).status, "stopped");
+  assert.equal((await gw.restartService("s1")).status, "stopped");
+  assert.deepEqual(calls, [["/start_service", { service_id: "s1" }], ["/stop_service", { service_id: "s1" }], ["/restart_service", { service_id: "s1" }]]);
+});
+
+test("a refused start rejects with the server's code", async () => {
+  const api = { post: async () => { throw new StructuredError("SANDBOX_UNAVAILABLE", "nothing was started"); } };
+  const err = await servicesGateway(api, {}).startService("s1").catch((e) => e);
+  assert.equal(err.code, "SANDBOX_UNAVAILABLE");
+});
+
+test("the log is read with its offset, or without one for the last part", async () => {
+  const calls = [];
+  const api = { get: async (path, q) => (calls.push([path, q]), { text: "hi\n", offset: 0, next_offset: 3, first_offset: 0, run_id: "r1" }) };
+  const gw = servicesGateway(api, {});
+  assert.equal((await gw.readLog("s1")).next_offset, 3);
+  await gw.readLog("s1", 120);
+  assert.deepEqual(calls, [["/read_service_log", { service_id: "s1", offset: undefined }], ["/read_service_log", { service_id: "s1", offset: "120" }]]);
+});
+
+test("the log feed is followed from an offset, and chunks and resets are mapped", () => {
+  const seen = [];
+  let handlers = null;
+  const feed = { follow: (path, h) => (seen.push(path), (handlers = h), () => {}) };
+  const events = [];
+  servicesGateway({}, feed).followLog("s 1", 42, (e) => events.push(e));
+  assert.deepEqual(seen, ["/services/log?service_id=s%201&from=42"]);
+  handlers.onMessage({ kind: "chunk", run_id: "r1", offset: 42, text: "x\n" });
+  handlers.onMessage({ kind: "reset", run_id: "r2" });
+  handlers.onMessage({ kind: "mystery" });
+  assert.deepEqual(events.map((e) => [e.kind, e.run_id, e.offset, e.text]), [["chunk", "r1", 42, "x\n"], ["reset", "r2", 0, ""]]);
+});

@@ -41,9 +41,27 @@
  */
 
 /**
+ * @typedef {object} LogRead  a read_service_log answer
+ * @property {string} text
+ * @property {number} offset  where `text` starts, in bytes since the run began
+ * @property {number} next_offset  where it ends: the log feed follows from here
+ * @property {number} first_offset  the first byte the server still keeps
+ * @property {string} run_id
+ */
+
+/**
  * @typedef {object} ServicesGateway
  * @property {(seed: unknown) => { projectId: string, list: ServiceList | null }} decodeSeed
  * @property {(projectId: string) => Promise<ServiceList>} listServices
+ * @property {(serviceId: string) => Promise<{ service: Service, alreadyRunning: boolean }>} startService
+ *           Rejects with SANDBOX_UNAVAILABLE or RUNTIME_UNAVAILABLE when nothing was started.
+ * @property {(serviceId: string) => Promise<Service>} stopService
+ * @property {(serviceId: string) => Promise<Service>} restartService
+ * @property {(serviceId: string, offset?: number) => Promise<LogRead>} readLog
+ *           The last 64 KB of the current or last run's log, or from `offset`.
+ * @property {(serviceId: string, from: number, onEvent: (event: { kind: "chunk" | "reset", run_id: string, offset: number, text: string }) => void,
+ *   onStatus?: (status: import("../../../shared/domain/feed.js").FeedStatus) => void) => () => void} followLog
+ *           Follows the log feed from byte offset `from`; returns the function that stops following.
  * @property {(projectId: string, onEvent: (event: ServiceEvent) => void,
  *   onStatus?: (status: import("../../../shared/domain/feed.js").FeedStatus) => void) => () => void} follow
  *           Follows the project's services feed; returns the function that stops following.
