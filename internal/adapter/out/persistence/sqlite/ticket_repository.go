@@ -30,6 +30,13 @@ func (r *TicketRepository) Get(ctx context.Context, id string) *domain.Ticket {
 	return m.ToDomain()
 }
 
+func (r *TicketRepository) ListByIDs(ctx context.Context, ids []string) []*domain.Ticket {
+	if len(ids) == 0 {
+		return nil
+	}
+	return r.list(r.db.WithContext(ctx).Where("id IN ?", ids))
+}
+
 func (r *TicketRepository) ListByProject(ctx context.Context, projectID string) []*domain.Ticket {
 	return r.list(r.db.WithContext(ctx).Where("project_id = ? AND archived_at IS NULL", projectID))
 }

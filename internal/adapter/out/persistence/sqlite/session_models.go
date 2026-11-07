@@ -38,6 +38,9 @@ type SessionModel struct {
 	DesignSystemID           string  `gorm:"column:design_system_id;index"`
 	CreatedAt                int64   `gorm:"autoCreateTime:milli"`
 	UpdatedAt                int64   `gorm:"autoUpdateTime:milli"`
+	// StatusSinceMs is when the status last changed (ms); 0 on rows from
+	// before the column, which read as their last update.
+	StatusSinceMs int64 `gorm:"column:status_since_ms"`
 
 	// TokenSavers and TokenSaversNotInstalled are comma-separated saver names.
 	TokenSavers             string `gorm:"column:token_savers"`
@@ -135,7 +138,20 @@ func (m *SessionModel) ToDomain() *domain.Session {
 		SquashedTip:              m.SquashedTip,
 		CreatedAt:                time.UnixMilli(m.CreatedAt),
 		UpdatedAt:                time.UnixMilli(m.UpdatedAt),
+		StatusSince:              m.statusSince(),
 	}
+}
+
+// statusSince is when the status last changed; a row from before the column
+// falls back to its last update, then its creation.
+func (m *SessionModel) statusSince() time.Time {
+	switch {
+	case m.StatusSinceMs > 0:
+		return time.UnixMilli(m.StatusSinceMs)
+	case m.UpdatedAt > 0:
+		return time.UnixMilli(m.UpdatedAt)
+	}
+	return time.UnixMilli(m.CreatedAt)
 }
 
 // joinSavers is savers as a session row stores them.

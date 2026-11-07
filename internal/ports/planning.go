@@ -11,6 +11,9 @@ import (
 // Tickets are scoped to a project.
 type TicketRepository interface {
 	Get(ctx context.Context, id string) *domain.Ticket
+	// ListByIDs reads the tickets with these ids, archived or not, in one
+	// query; unknown ids are left out.
+	ListByIDs(ctx context.Context, ids []string) []*domain.Ticket
 	// ListByProject lists a project's tickets that are not archived.
 	ListByProject(ctx context.Context, projectID string) []*domain.Ticket
 	// ListArchivedByProject lists a project's archived tickets, newest

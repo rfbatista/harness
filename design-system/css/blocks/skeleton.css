@@ -33,7 +33,7 @@
    *   <span class="visually-hidden">Loading reviews</span>
    *   …one aria-hidden shape per row, cell, card or chip…
    * </div>
-   * Variants (data-variant): rows (a list), chip (one inline chip; sized by --chip-w).
+   * Variants (data-variant): rows (a list), grid (cards), chip (one inline chip; sized by --chip-w).
    * --rows sets how many rows it draws; --skeleton-row is the height of one row
    * (3.5rem unless set): give it the real row's height, so the content replaces
    * the skeleton without moving anything.
@@ -80,6 +80,28 @@
     & > .row:nth-child(3n) > .bar:nth-child(1) { inline-size: 71%; }
     & > .row > .bar:nth-child(2) { inline-size: 34%; }
     & > .row > .bar:nth-child(3) { inline-size: 3.5rem; block-size: 1.25rem; }
+  }
+
+  /* grid: cards in the board's own grid and card box (--card-h is the real card's height). */
+  .skeleton[data-variant="grid"] {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(20rem, 1fr));
+    gap: var(--space-m);
+    @media (width < 48rem) { grid-template-columns: minmax(0, 1fr); }
+    & > .card {
+      display: grid;
+      align-content: start;
+      gap: var(--space-s);
+      min-block-size: var(--card-h, 9.5rem);
+      padding: var(--space-m);
+      border: var(--border-width) solid var(--color-line);
+      border-radius: var(--radius-md);
+      background: var(--color-panel);
+    }
+    & > .card > .bar:nth-child(1) { inline-size: 70%; block-size: 0.875rem; }
+    & > .card > .bar:nth-child(2) { inline-size: 30%; block-size: 1.25rem; }
+    & > .card > .bar:nth-child(3) { inline-size: 92%; margin-block-start: var(--space-xs); }
+    & > .card > .bar:nth-child(4) { inline-size: 78%; }
   }
 
   /* chip: inline, as tall as .badge. */

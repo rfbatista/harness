@@ -122,6 +122,10 @@ type Session struct {
 	CommitCheckOff string    `json:"commit_check_off,omitempty"`
 	CreatedAt      time.Time `json:"created_at"`
 	UpdatedAt      time.Time `json:"updated_at"`
+	// StatusSince is when the session entered its current status: set when
+	// it is created, moved only when the status actually changes. Rows from
+	// before it existed read as their last update. Not on the wire.
+	StatusSince time.Time `json:"-"`
 
 	// Role, ArchitectSessionID and StatusCheck are derived from the task's
 	// sessions when a session is read, never stored: what the session is on

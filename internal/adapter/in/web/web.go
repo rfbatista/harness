@@ -68,6 +68,9 @@ type Deps struct {
 	// ProjectSummaries counts every project for the projects list; nil
 	// leaves /projects unserved and the top bar offers New project instead.
 	ProjectSummaries ports.ProjectSummaries
+	// AgentBoard serves the home page, the Agent board: every task with a
+	// live session. Nil keeps the old home page, which opens the first project.
+	AgentBoard ports.AgentBoard
 	// PullRequests offers a session's branch as a pull request on its history
 	// page and badges the task page's rows; nil leaves both out.
 	PullRequests ports.PullRequests
@@ -194,7 +197,7 @@ func NewHandler(deps Deps, assets *Assets, fallback http.Handler) http.Handler {
 	}
 	s := &server{deps: deps, assets: assets}
 
-	homePage := home.Handler{Projects: deps.Projects, Layout: s.layout, Render: render}
+	homePage := home.Handler{Projects: deps.Projects, Board: deps.AgentBoard, Layout: s.layout, Render: render, Now: deps.Now}
 	taskPages := tasks.Handler{
 		Projects: deps.Projects, Tasks: deps.Tasks, Sessions: deps.Sessions,
 		Agents: deps.Agents, Repositories: deps.Repositories, Docs: deps.Documents, Artifacts: deps.Artifacts, PullRequests: deps.PullRequests, WorktreeGit: deps.WorktreeGit,
@@ -500,6 +503,9 @@ func (s *server) architectureAssistant(ctx context.Context) shell.Helper {
 
 // topLinks names the top bar's pages that this server serves.
 func (s *server) topLinks(top *shell.TopBar) {
+	if s.deps.AgentBoard != nil {
+		top.BoardHref = home.BoardHref
+	}
 	top.AgentsHref = agents.Href
 	if s.deps.GitCredentials != nil {
 		top.CredentialsHref = credentials.Href

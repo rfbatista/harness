@@ -26,6 +26,15 @@ type feed struct {
 	mu       sync.Mutex
 	subs     map[string]map[chan ports.SessionChange]struct{} // by project ID
 	observer ports.FeedFollowersObserver                      // nil: nobody asked
+	changes  ports.ProjectChangeObserver                      // nil: nobody asked
+}
+
+// ObserveChanges tells o of every change put on any project's feed (the
+// Agent board derives its live session feed from them).
+func (s *Service) ObserveChanges(o ports.ProjectChangeObserver) {
+	s.feed.mu.Lock()
+	defer s.feed.mu.Unlock()
+	s.feed.changes = o
 }
 
 // ObserveFeedFollowers tells o how many follow each project's feed every time
@@ -87,6 +96,16 @@ func (f *feed) drop(projectID string, c chan ports.SessionChange) {
 // send delivers change to the followers of its project. A follower that
 // cannot take it is dropped rather than waited for.
 func (f *feed) send(change ports.SessionChange) {
+	f.deliver(change)
+	f.mu.Lock()
+	o := f.changes
+	f.mu.Unlock()
+	if o != nil {
+		o.ProjectChanged(change)
+	}
+}
+
+func (f *feed) deliver(change ports.SessionChange) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	pid := change.ProjectID()
