@@ -19,8 +19,11 @@ type ServiceContainer struct {
 	// Args replace the image's command; none keeps it.
 	Args  []string
 	Ports []domain.ServicePort
-	// Env are the container's KEY=VALUE variables.
+	// Env are the container's KEY=VALUE variables. They reach the runtime in
+	// a file made just before it starts and removed once the container runs.
 	Env []string
+	// EnvDir is the harness-owned folder that file is made in.
+	EnvDir string
 }
 
 // ServiceRunDescriber is a process runner that can say, without starting

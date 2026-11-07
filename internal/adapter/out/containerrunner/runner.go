@@ -24,11 +24,15 @@ var (
 	_ ports.ServiceContainerSweeper = Runner{}
 )
 
-// readyPoll is how often a starting container is asked whether it runs.
-const readyPoll = 200 * time.Millisecond
+// defaultReadyPoll is how often a starting container is asked whether it runs.
+const defaultReadyPoll = 200 * time.Millisecond
 
 // Runner implements ports.ServiceProcessRunner for image services.
-type Runner struct{}
+type Runner struct {
+	// ReadyPoll is how often a starting container is asked whether it runs;
+	// zero is 200ms.
+	ReadyPoll time.Duration
+}
 
 func runtimeOK(runtime string) error {
 	if runtime != "docker" && runtime != "podman" {
@@ -50,7 +54,7 @@ func (Runner) Describe(spec ports.ServiceProcessSpec) string {
 // runtime reports the container running. An error here is a spawn that
 // failed; a runtime error (a pull that fails, a port in use) is the run
 // ending, with the runtime's message in its output.
-func (Runner) Start(_ context.Context, spec ports.ServiceProcessSpec) (ports.ServiceProcessHandle, error) {
+func (r Runner) Start(_ context.Context, spec ports.ServiceProcessSpec) (ports.ServiceProcessHandle, error) {
 	c := spec.Container
 	if c == nil || spec.Name == "" {
 		return nil, errors.New("not a container run")
@@ -62,35 +66,47 @@ func (Runner) Start(_ context.Context, spec ports.ServiceProcessSpec) (ports.Ser
 	if err != nil {
 		return nil, err
 	}
-	pr, pw, err := os.Pipe()
+	removeEnv, err := WriteEnvFile(spec.Name, *c)
 	if err != nil {
 		return nil, err
 	}
+	pr, pw, err := os.Pipe()
+	if err != nil {
+		removeEnv()
+		return nil, err
+	}
 	cmd := exec.Command(c.Runtime, args...)
-	cmd.Env = RunEnv(spec.Env, *c)
+	cmd.Env = RunEnv(spec.Env)
 	cmd.Stdout, cmd.Stderr = pw, pw
 	cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
 	err = cmd.Start()
 	_ = pw.Close()
 	if err != nil {
 		_ = pr.Close()
+		removeEnv()
 		return nil, err
 	}
-	h := &handle{cmd: cmd, out: pr, runtime: c.Runtime, name: spec.Name, env: spec.Env, done: make(chan struct{}), ready: make(chan struct{})}
+	poll := r.ReadyPoll
+	if poll <= 0 {
+		poll = defaultReadyPoll
+	}
+	h := &handle{removeEnv: removeEnv, poll: poll, cmd: cmd, out: pr, runtime: c.Runtime, name: spec.Name, env: spec.Env, done: make(chan struct{}), ready: make(chan struct{})}
 	go h.reap()
 	go h.watchReady()
 	return h, nil
 }
 
 type handle struct {
-	cmd     *exec.Cmd
-	out     *os.File
-	runtime string
-	name    string
-	env     []string
-	done    chan struct{}
-	ready   chan struct{}
-	code    int
+	removeEnv func()
+	poll      time.Duration
+	cmd       *exec.Cmd
+	out       *os.File
+	runtime   string
+	name      string
+	env       []string
+	done      chan struct{}
+	ready     chan struct{}
+	code      int
 }
 
 func (h *handle) Output() io.ReadCloser  { return h.out }
@@ -99,6 +115,7 @@ func (h *handle) Ready() <-chan struct{} { return h.ready }
 func (h *handle) reap() {
 	err := h.cmd.Wait()
 	h.code = exitCode(h.cmd, err)
+	h.removeEnv()
 	close(h.done)
 }
 
@@ -124,10 +141,11 @@ func (h *handle) watchReady() {
 		select {
 		case <-h.done:
 			return
-		case <-time.After(readyPoll):
+		case <-time.After(h.poll):
 		}
 		out, err := h.runtimeCmd(5*time.Second, "inspect", "-f", "{{.State.Running}}", h.name)
 		if err == nil && strings.TrimSpace(string(out)) == "true" {
+			h.removeEnv()
 			close(h.ready)
 			return
 		}

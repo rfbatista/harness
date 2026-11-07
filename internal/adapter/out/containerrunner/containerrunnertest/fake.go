@@ -8,6 +8,7 @@ import (
 	"context"
 	"errors"
 	"io"
+	"os"
 	"strings"
 	"sync"
 	"time"
@@ -38,10 +39,18 @@ type Run struct {
 	// `run` (without the runtime itself).
 	Runtime string
 	Argv    []string
-	// Env is the environment of the runtime's `run` command: the base and
-	// the container's variables, whose names Argv carries as `-e KEY`.
-	Env  []string
-	Spec ports.ServiceProcessSpec
+	// Env is the environment of the runtime's `run` command: the base only.
+	Env []string
+	// EnvFile is the file Argv's --env-file names; EnvFileAtStart its text
+	// and EnvFileMode its mode as the runtime's command started (empty and
+	// zero when the container has no variables). The file is removed once
+	// the run is released or ends.
+	EnvFile        string
+	EnvFileAtStart string
+	EnvFileMode    os.FileMode
+	Spec           ports.ServiceProcessSpec
+
+	removeEnv func()
 
 	mu       sync.Mutex
 	stops    []string
@@ -68,7 +77,20 @@ func (f *Fake) Start(_ context.Context, spec ports.ServiceProcessSpec) (ports.Se
 	if err != nil {
 		return nil, err
 	}
-	r := &Run{Runtime: spec.Container.Runtime, Argv: argv, Env: containerrunner.RunEnv(spec.Env, *spec.Container), Spec: spec, ready: make(chan struct{}), done: make(chan struct{})}
+	removeEnv, err := containerrunner.WriteEnvFile(spec.Name, *spec.Container)
+	if err != nil {
+		return nil, err
+	}
+	r := &Run{Runtime: spec.Container.Runtime, Argv: argv, Env: containerrunner.RunEnv(spec.Env), Spec: spec, removeEnv: removeEnv, ready: make(chan struct{}), done: make(chan struct{})}
+	if len(spec.Container.Env) > 0 {
+		r.EnvFile = containerrunner.EnvFilePath(spec.Name, *spec.Container)
+		if b, err := os.ReadFile(r.EnvFile); err == nil {
+			r.EnvFileAtStart = string(b)
+		}
+		if st, err := os.Stat(r.EnvFile); err == nil {
+			r.EnvFileMode = st.Mode().Perm()
+		}
+	}
 	r.pr, r.pw = io.Pipe()
 	f.mu.Lock()
 	hold, fail := f.Hold, f.Fail
@@ -96,7 +118,12 @@ func (f *Fake) Runs() []*Run {
 }
 
 // Release says the container has started.
-func (r *Run) Release() { r.readyOne.Do(func() { close(r.ready) }) }
+func (r *Run) Release() {
+	r.readyOne.Do(func() {
+		r.removeEnv()
+		close(r.ready)
+	})
+}
 
 // Say writes to the run's output, as the container's stdout would.
 func (r *Run) Say(text string) { _, _ = io.WriteString(r.pw, text) }
@@ -104,6 +131,7 @@ func (r *Run) Say(text string) { _, _ = io.WriteString(r.pw, text) }
 // End ends the run on its own with code.
 func (r *Run) End(code int) {
 	r.endOne.Do(func() {
+		r.removeEnv()
 		r.code = code
 		_ = r.pw.Close()
 		close(r.done)

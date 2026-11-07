@@ -111,13 +111,21 @@ func TestServicesImage_StartsShowStartingUntilTheContainerRunsThenRunning(t *tes
 	}) {
 		t.Fatalf("instance label: %q", r.Argv)
 	}
-	for _, want := range []string{"5432:5432/tcp", "5353:53/udp", "POSTGRES_PASSWORD"} {
+	for _, want := range []string{"127.0.0.1:5432:5432/tcp", "127.0.0.1:5353:53/udp", "--env-file"} {
 		if !slices.Contains(r.Argv, want) {
 			t.Fatalf("%q missing from %q", want, r.Argv)
 		}
 	}
-	if !slices.Contains(r.Env, "POSTGRES_PASSWORD=hunter2") {
-		t.Fatalf("the value reaches the runtime's environment: %q", r.Env)
+	if r.EnvFileAtStart != "POSTGRES_PASSWORD=hunter2\n" || r.EnvFileMode != 0o600 {
+		t.Fatalf("the value reaches the runtime in a 0600 file: %q %v", r.EnvFileAtStart, r.EnvFileMode)
+	}
+	if slices.ContainsFunc(r.Env, func(e string) bool {
+		return strings.Contains(e, "hunter2") || strings.HasPrefix(e, "POSTGRES_PASSWORD")
+	}) {
+		t.Fatalf("the value is in the runtime command's environment: %q", r.Env)
+	}
+	if _, err := os.Stat(r.EnvFile); err != nil {
+		t.Fatalf("the file is there while the container starts: %v", err)
 	}
 	for _, a := range r.Argv {
 		if strings.Contains(a, "hunter2") {
@@ -130,6 +138,9 @@ func TestServicesImage_StartsShowStartingUntilTheContainerRunsThenRunning(t *tes
 	f.awaitLog(id, "pulling")
 
 	r.Release()
+	if _, err := os.Stat(r.EnvFile); !os.IsNotExist(err) {
+		t.Fatalf("the env file is gone once the container runs: %v", err)
+	}
 	got := f.awaitStatus(id, "running")
 	if got["run"].(map[string]any)["where"].(map[string]any)["kind"] != "container" {
 		t.Fatalf("running = %v", got)
@@ -145,7 +156,7 @@ func TestServicesImage_StartsShowStartingUntilTheContainerRunsThenRunning(t *tes
 
 	r.Say("ready to accept connections\n")
 	log := f.awaitLog(id, "ready to accept connections")
-	if !strings.Contains(log, "[harness] command: docker run --rm --name "+wantName) || !strings.Contains(log, "-e POSTGRES_PASSWORD postgres:16 -c log_statement=all") {
+	if !strings.Contains(log, "[harness] command: docker run --rm --name "+wantName) || !strings.Contains(log, "--env-file "+r.EnvFile+" postgres:16 -c log_statement=all") {
 		t.Fatalf("the runtime command is in the log: %q", log)
 	}
 	if strings.Contains(log, "hunter2") {
@@ -178,12 +189,11 @@ func TestServicesImage_NoInputReachesTheRuntimeAsAFlagOrAShell(t *testing.T) {
 	run := fake.Runs()[0]
 	for _, kv := range []string{"X1=--privileged", "X2=-v /:/host", "X3=$(id)", "X4=a;b", "X5=--network=host"} {
 		k, _, _ := strings.Cut(kv, "=")
-		i := slices.Index(argv, k)
-		if i < 1 || argv[i-1] != "-e" {
-			t.Fatalf("%q is one -e entry: %q", k, argv)
+		if slices.Contains(argv, k) || slices.Contains(argv, kv) || slices.Contains(run.Env, kv) {
+			t.Fatalf("%q is in the file, not on the command line or in the runtime's environment", kv)
 		}
-		if !slices.Contains(run.Env, kv) || slices.Contains(argv, kv) {
-			t.Fatalf("%q is in the environment, not on the command line", kv)
+		if !strings.Contains(run.EnvFileAtStart, kv+"\n") {
+			t.Fatalf("%q is in the env file unchanged: %q", kv, run.EnvFileAtStart)
 		}
 	}
 	log := f.logText(id)
@@ -205,6 +215,11 @@ func TestServicesImage_ARuntimeErrorEndsTheRunFailedWithItsMessage(t *testing.T)
 		t.Fatalf("a failure after the run was created is not a refusal: %d %v", code, out)
 	}
 	got := f.awaitStatus(id, "failed")
+	if r := fake.Runs()[0]; r.EnvFileAtStart != "SECRET=s3cr3t\n" {
+		t.Fatalf("env file at start = %q", r.EnvFileAtStart)
+	} else if _, err := os.Stat(r.EnvFile); !os.IsNotExist(err) {
+		t.Fatalf("the env file is gone after a failed run: %v", err)
+	}
 	run := got["run"].(map[string]any)
 	if run["error"] != fake.Fail || run["ended_at"] == "" || run["exit_code"] != nil {
 		t.Fatalf("run = %v", run)
@@ -365,15 +380,9 @@ func TestServicesImage_TheRepositoryEnvIsExportedAsForACommandService(t *testing
 	}
 	envOf := func(r *containerrunnertest.Run) []string {
 		var env []string
-		for i, a := range r.Argv {
-			if a != "-e" {
-				continue
-			}
-			for _, kv := range slices.Backward(r.Env) {
-				if strings.HasPrefix(kv, r.Argv[i+1]+"=") {
-					env = append(env, kv)
-					break
-				}
+		for _, kv := range strings.Split(r.EnvFileAtStart, "\n") {
+			if kv != "" {
+				env = append(env, kv)
 			}
 		}
 		return env
