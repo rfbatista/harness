@@ -60,6 +60,11 @@ type Options struct {
 	EnvFiles ports.EnvFileLister
 	// Branches names the branch a main checkout holds; nil leaves it empty.
 	Branches ports.RunBranchReader
+	// Runtime is the container runtime setting; nil keeps docker in memory.
+	Runtime ports.ServiceRuntimeSetting
+	// Instance labels the containers this harness starts; empty is a fresh id
+	// per module.
+	Instance string
 	// BaseEnv is the clean environment every run starts from; nil is the
 	// server's own PATH, HOME and locale without the harness's shims.
 	BaseEnv func() []string
@@ -96,6 +101,12 @@ func New(store ports.ServiceStore, projects ports.ProjectReader, repos ports.Rep
 	}
 	if opts.LogCap <= 0 {
 		opts.LogCap = DefaultLogCap
+	}
+	if opts.Runtime == nil {
+		opts.Runtime = &memoryRuntime{}
+	}
+	if opts.Instance == "" {
+		opts.Instance = newServiceID()
 	}
 	if opts.BaseEnv == nil {
 		opts.BaseEnv = defaultBaseEnv
@@ -293,7 +304,8 @@ func (s *Service) publishLocked(projectID string, e ports.ServiceEvent) {
 
 // runtimeInfo names the container runtime and whether its command is found.
 func (s *Service) runtimeInfo() ports.ServiceRuntimeInfo {
-	return ports.ServiceRuntimeInfo{Name: DefaultRuntime, Available: s.avail.found(DefaultRuntime, s.opts.LookPath, s.opts.Now(), availableTTL)}
+	name := s.opts.Runtime.ContainerRuntime()
+	return ports.ServiceRuntimeInfo{Name: name, Available: s.avail.found(name, s.opts.LookPath, s.opts.Now(), availableTTL)}
 }
 
 // sandboxState reads the person's switch and the platform's driver.

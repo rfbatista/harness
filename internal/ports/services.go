@@ -40,6 +40,9 @@ type ServiceProcessSpec struct {
 	Args []string
 	Dir  string
 	Env  []string
+	// Container is what the container runner starts instead of Path and
+	// Args; Env is then the environment of the runtime's own command.
+	Container *ServiceContainer
 }
 
 // ServiceProcessRunner starts the process of a service run (driven). The command
@@ -170,6 +173,11 @@ type ServiceManager interface {
 	ServiceRunningCounter
 	ListServices(ctx context.Context, projectID string) (*ServiceList, error)
 	GetService(ctx context.Context, serviceID string) (*domain.Service, error)
+	// ContainerRuntime is the runtime image services start with, and whether
+	// its command is on the server's PATH. SetContainerRuntime changes it for
+	// the next start (INVALID_INPUT for a runtime other than docker or podman).
+	ContainerRuntime(ctx context.Context) ServiceRuntimeInfo
+	SetContainerRuntime(ctx context.Context, name string) (ServiceRuntimeInfo, error)
 	CreateService(ctx context.Context, projectID string, in domain.ServiceInput) (*domain.Service, error)
 	// UpdateService replaces the service's definition; restartNeeded says it
 	// runs and picks the change up at its next start.
