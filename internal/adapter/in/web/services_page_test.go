@@ -71,7 +71,7 @@ func TestServicesPageListsServicesAndFollowsTheFeed(t *testing.T) {
 	ctx, errs := browser(t)
 
 	started := time.Now().Add(-14 * time.Minute).UTC().Format(time.RFC3339)
-	run := &domain.ServiceRun{ID: "r1", StartedAt: started, StartedBy: domain.ServiceStartedBy{Kind: "person"}, Where: domain.ServiceWhere{Kind: "main", Branch: "main"}, Sandboxed: true}
+	run := &domain.ServiceRun{ID: "r1", StartedAt: started, StartedBy: domain.ServiceStartedBy{Kind: "session", SessionID: "sess-1234567", Agent: "backend", TaskID: "t1"}, Where: domain.ServiceWhere{Kind: "main", Branch: "main"}, Sandboxed: true}
 	fake := &fakeServices{list: ports.ServiceList{
 		Services: []*domain.Service{svc("s1", "api", domain.ServiceRunning, run), svc("s2", "db", domain.ServiceStopped, nil)},
 		Seq:      1, Runtime: ports.ServiceRuntimeInfo{Name: "docker", Available: true}, Sandbox: ports.ServiceSandboxOn,
@@ -120,6 +120,13 @@ func TestServicesPageListsServicesAndFollowsTheFeed(t *testing.T) {
 	}
 	if badge != "http://localhost:8080/" {
 		t.Errorf("port link = %q", badge)
+	}
+	var by string
+	if err := chromedp.Run(ctx, chromedp.Evaluate(`document.querySelector('[data-service][data-name=api] [data-service-by-link]').getAttribute('href')`, &by)); err != nil {
+		t.Fatalf("started-by link: %v", err)
+	}
+	if by != "/projects/p1/tasks/t1?session=sess-1234567" {
+		t.Errorf("the session links to its task page: %q", by)
 	}
 
 	// The feed's next event moves db into Running.

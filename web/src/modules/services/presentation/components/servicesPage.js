@@ -11,7 +11,7 @@ import { systemClock } from "../../../../shared/infrastructure/clock.js";
 import { describeError } from "../../../../shared/presentation/errors.js";
 import { readSeed } from "../../../../shared/presentation/seed.js";
 import { runLine } from "../../domain/log.js";
-import { applyEvent, groupServices, isActive, runningCount, statusView } from "../../domain/service.js";
+import { applyEvent, groupServices, isActive, runningCount, savedNotice, statusView, upsertService } from "../../domain/service.js";
 import { trapTab } from "../focusTrap.js";
 import { serviceRow } from "../view.js";
 
@@ -148,7 +148,7 @@ export const servicesPage = ({ gateway, clock = systemClock, timers = globalThis
           action: "Agent isolation",
         });
       }
-      if (!this.runtime.available) {
+      if (!this.runtime.available && this.services.some((s) => s.kind === "image")) {
         notices.push({
           key: "runtime-missing",
           title: `${this.runtime.name} was not found on this machine.`,
@@ -250,7 +250,7 @@ export const servicesPage = ({ gateway, clock = systemClock, timers = globalThis
     async act(verb, id) {
       const service = this.services.find((s) => s.id === id);
       if (!service || this.flights[id]) return;
-      if (verb === "start" && (service.status === "running" || service.status === "starting")) {
+      if (verb === "start" && isActive(service)) {
         this.openLog(id);
         return;
       }
@@ -278,7 +278,7 @@ export const servicesPage = ({ gateway, clock = systemClock, timers = globalThis
     /** The service an action answered with joins the list, unless the feed has moved on since. */
     settle(service, seqBefore) {
       if (this.seq !== seqBefore) return;
-      this.services = [...this.services.filter((s) => s.id !== service.id), service].sort((a, b) => (a.name < b.name ? -1 : 1));
+      this.services = upsertService(this.services, service);
     },
 
     /** @param {Event} event a row button's click: the row's service id is on the button */
@@ -332,9 +332,9 @@ export const servicesPage = ({ gateway, clock = systemClock, timers = globalThis
     /** The form saved: the service joins the list now (its feed event follows and agrees). */
     saved(event) {
       const { service, restartNeeded, created } = event.detail;
-      this.services = [...this.services.filter((s) => s.id !== service.id), service].sort((a, b) => (a.name < b.name ? -1 : 1));
+      this.services = upsertService(this.services, service);
       this.closeForm();
-      this.notice = created ? `${service.name} was created.` : restartNeeded ? `${service.name} was saved. Restart it to apply the change.` : `${service.name} was saved.`;
+      this.notice = savedNotice(service.name, { created, restartNeeded });
     },
 
     /** @param {{ currentTarget: HTMLElement, detail: { action: string } }} event the row menu's choice */

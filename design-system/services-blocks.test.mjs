@@ -37,6 +37,10 @@ test("tokens only: no colour literal, every var() is a token", () => {
   }
 });
 
+test("a notice slot over the list has its own padding, from tokens", () => {
+  assert.match(service, /\.list\[data-services\] > \.slot\s*\{[^}]*padding: var\(--space-s\) var\(--space-l\) 0/);
+});
+
 test("harness lines differ from program output by more than colour", () => {
   assert.match(service, /\.ln\[data-harness\][^{]*\{[^}]*box-shadow: inset/);
   assert.match(service, /\.ln\[data-harness\] > b\s*\{[^}]*font-weight/);

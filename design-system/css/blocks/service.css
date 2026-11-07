@@ -50,6 +50,7 @@
     }
   }
   .list[data-services] { container: services / inline-size; }
+  .list[data-services] > .slot { padding: var(--space-s) var(--space-l) 0; }
 
   .service-log {
     block-size: 100%;

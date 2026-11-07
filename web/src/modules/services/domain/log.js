@@ -88,6 +88,19 @@ export function applyChunk(log, chunk) {
   return { log: next, gap: false, added: done.length };
 }
 
+/**
+ * What a re-read from the end of the held log found. A read that starts where the log ends continues it
+ * (and the log is current to the answer's next_offset); a read that starts elsewhere (another run, or the
+ * server's 5 MB cap moved past what is held) replaces it.
+ * @returns {{ log: Log, replaced: boolean, added: number }}
+ */
+export function rereadLog(log, answer) {
+  const sameRun = log.runId === "" || answer.run_id === log.runId;
+  if (!sameRun || answer.offset !== log.end) return { log: fromRead(answer), replaced: true, added: 0 };
+  const next = applyChunk(log, { offset: log.end, text: answer.text, run_id: answer.run_id });
+  return { log: { ...next.log, end: answer.next_offset }, replaced: false, added: next.added };
+}
+
 /** A new run began: the log was cleared on the server. `at` is the time the viewer shows. */
 export function applyReset(log, reset, at) {
   const text = `New run started ${at} · the log was cleared`;
@@ -96,7 +109,7 @@ export function applyReset(log, reset, at) {
 
 /** The note over the log when its start is not shown. */
 export function tailNote(log) {
-  return log.earlier ? "Showing the last part of the log. The log keeps the last 5 MB of this run." : "";
+  return log.earlier ? "Showing the last 64 KB. The log keeps the last 5 MB of this run." : "";
 }
 
 const hhmm = (iso) => {

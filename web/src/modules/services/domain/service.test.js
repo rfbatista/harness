@@ -69,8 +69,10 @@ test("where a run runs, in words", () => {
 });
 
 test("who started a run: you, or an agent's session", () => {
-  assert.deepEqual(startedByView(run()), { text: "started by you", sessionId: "" });
-  assert.deepEqual(startedByView(run({ started_by: { kind: "session", session_id: "abcdef12-0000", agent: "backend" } })), { text: "started by backend · session abcdef12", sessionId: "abcdef12-0000" });
+  assert.deepEqual(startedByView(run()), { text: "started by you", sessionId: "", href: "" });
+  const by = (task_id) => run({ started_by: { kind: "session", session_id: "abcdef12-0000", agent: "backend", task_id } });
+  assert.deepEqual(startedByView(by("t1"), "p1"), { text: "started by backend · session abcdef12", sessionId: "abcdef12-0000", href: "/projects/p1/tasks/t1?session=abcdef12-0000" });
+  assert.equal(startedByView(by(""), "p1").href, "", "no task, no link: the text stands alone");
   assert.equal(startedByView(null), null);
 });
 

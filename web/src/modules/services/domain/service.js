@@ -105,12 +105,29 @@ export function whereLabel(run) {
   }
 }
 
-/** Who started a run; null with no run. `sessionId` is set for an agent's session. */
-export function startedByView(run) {
+/**
+ * Who started a run; null with no run. For an agent's session, `href` opens that session on its
+ * task's page; it is "" when the run has no task (the text stands alone).
+ */
+export function startedByView(run, projectId = "") {
   if (!run) return null;
   const by = run.started_by;
-  if (by.kind !== "session") return { text: "started by you", sessionId: "" };
-  return { text: `started by ${by.agent} · session ${by.session_id.slice(0, 8)}`, sessionId: by.session_id };
+  if (by.kind !== "session") return { text: "started by you", sessionId: "", href: "" };
+  const href = by.task_id && projectId
+    ? `/projects/${encodeURIComponent(projectId)}/tasks/${encodeURIComponent(by.task_id)}?session=${encodeURIComponent(by.session_id)}`
+    : "";
+  return { text: `started by ${by.agent} · session ${by.session_id.slice(0, 8)}`, sessionId: by.session_id, href };
+}
+
+/** What the page says, politely, after the form saved a service. */
+export function savedNotice(name, { created, restartNeeded }) {
+  if (created) return `${name} was created.`;
+  return restartNeeded ? `${name} was saved. Restart it to apply the change.` : `${name} was saved.`;
+}
+
+/** The list with `service` in it (replacing the one with its id), by name. */
+export function upsertService(services, service) {
+  return [...services.filter((s) => s.id !== service.id), service].sort(byName);
 }
 
 /**
@@ -124,7 +141,7 @@ export function applyEvent(state, event) {
   if (event.seq > state.seq + 1) return { state, reload: true, applied: false, runningCount: null };
   let services = state.services;
   if (event.kind === "service_changed" && event.service) {
-    services = [...services.filter((s) => s.id !== event.service.id), event.service].sort(byName);
+    services = upsertService(services, event.service);
   } else if (event.kind === "service_deleted") {
     services = services.filter((s) => s.id !== event.serviceId);
   }

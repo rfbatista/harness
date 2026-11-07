@@ -21,6 +21,7 @@ function toRun(r) {
     started_by: {
       kind: r.started_by?.kind === "session" ? "session" : "person",
       session_id: String(r.started_by?.session_id ?? ""),
+      task_id: String(r.started_by?.task_id ?? ""),
       agent: String(r.started_by?.agent ?? ""),
     },
     where: {

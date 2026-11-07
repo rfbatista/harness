@@ -298,7 +298,9 @@ test("the notices: sandbox unavailable, sandbox off, runtime not found; none whe
   assert.equal(openWith([], {}).page.notices.length, 0);
   assert.deepEqual(openWith([], { sandbox: "unavailable" }).page.notices.map((n) => n.key), ["sandbox-unavailable"]);
   assert.deepEqual(openWith([], { sandbox: "off" }).page.notices.map((n) => n.key), ["sandbox-off"]);
-  const both = openWith([], { sandbox: "off", runtime: { name: "docker", available: false } }).page.notices;
+  const image = serviceDTO({ id: "9", name: "db", kind: "image", command: null, image: { ref: "postgres:16", args: [], ports: [] } });
+  assert.deepEqual(openWith([serviceDTO()], { runtime: { name: "docker", available: false } }).page.notices.map((n) => n.key), [], "a project with only command services does not see it");
+  const both = openWith([image], { sandbox: "off", runtime: { name: "docker", available: false } }).page.notices;
   assert.deepEqual(both.map((n) => n.key), ["sandbox-off", "runtime-missing"]);
   assert.equal(both[1].title, "docker was not found on this machine.");
   assert.equal(both[1].code, "RUNTIME_UNAVAILABLE");

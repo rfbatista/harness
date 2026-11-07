@@ -1,6 +1,6 @@
 // What a service row binds, computed from a service (domain/service.js) and the clock.
 
-import { portLinks, startedByView, statusView, timeFact, whereLabel } from "../domain/service.js";
+import { isActive, portLinks, startedByView, statusView, timeFact, whereLabel } from "../domain/service.js";
 
 /** The command line, or the image reference with its arguments. */
 export function lineOf(service) {
@@ -35,8 +35,8 @@ function action(verb, label, service, { show, flight, blocked = "" }) {
 export function serviceRow(service, now, { flight = "", runtime = { name: "docker", available: true } } = {}) {
   const run = service.run;
   const ports = portLinks(service);
-  const startedBy = startedByView(run);
-  const active = service.status === "starting" || service.status === "running";
+  const startedBy = startedByView(run, service.projectId);
+  const active = isActive(service);
   // An image service cannot start without its runtime. A command service stays enabled
   // when the sandbox is unavailable: the server refuses and the banner says why.
   const blocked = service.kind === "image" && !runtime.available ? `${runtime.name} was not found. Image services cannot start.` : "";
@@ -50,6 +50,9 @@ export function serviceRow(service, now, { flight = "", runtime = { name: "docke
     hasPorts: ports.length > 0,
     startedBy,
     startedByText: startedBy?.text ?? "",
+    startedByHref: startedBy?.href ?? "",
+    startedByLinked: (startedBy?.href ?? "") !== "",
+    startedByPlain: startedBy !== null && startedBy.href === "",
     where: whereLabel(run),
     time: timeFact(service, now),
     notSandboxed: service.kind === "command" && run !== null && !run.sandboxed,

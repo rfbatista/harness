@@ -24,7 +24,7 @@ templ Page(frame shell.Frame, projectID, projectName string, seed Seed, repos []
 			<div class="[ split-view ]" data-scroll data-wide-list x-bind:data-detail="detailOpen ? '' : null" x-bind:data-no-detail="noDetail ? '' : null" data-no-detail x-on:service-log-close="closeLog">
 				<div class="[ list divide-end ]" data-services role="group" aria-label="Services" x-bind:aria-busy="loading">
 					<template x-for="notice in notices" x-bind:key="notice.key">
-						<div class="[ pad-s ]" style="padding: var(--space-s) var(--space-l) 0">
+						<div class="[ slot ]">
 							<div class="[ banner ]" data-tone="attention" role="status" data-services-notice x-bind:data-key="notice.key">
 								<div class="[ flow ] [ flow-space-3xs grow ]">
 									<strong x-text="notice.title"></strong>
@@ -36,7 +36,7 @@ templ Page(frame shell.Frame, projectID, projectName string, seed Seed, repos []
 						</div>
 					</template>
 					<template x-if="refusal">
-						<div class="[ pad-s ]" style="padding: var(--space-s) var(--space-l) 0">
+						<div class="[ slot ]">
 							<div class="[ banner ]" data-tone="danger" role="alert" data-services-refusal>
 								<div class="[ flow ] [ flow-space-3xs grow ]">
 									<strong x-text="refusal.title"></strong>
@@ -51,7 +51,7 @@ templ Page(frame shell.Frame, projectID, projectName string, seed Seed, repos []
 						</div>
 					</template>
 					<template x-if="error">
-						<div class="[ pad-s ]" style="padding: var(--space-s) var(--space-l) 0">
+						<div class="[ slot ]">
 							<div class="[ banner ]" data-tone="danger" role="alert">
 								<div class="[ flow ] [ flow-space-3xs grow ]">
 									<span x-text="error.message"></span>
@@ -91,7 +91,10 @@ templ Page(frame shell.Frame, projectID, projectName string, seed Seed, repos []
 												</template>
 											</span>
 											<span data-service-where x-bind:hidden="!row.where" x-text="row.where"></span>
-											<span data-service-by x-bind:hidden="!row.startedBy" x-text="row.startedByText"></span>
+											<span data-service-by x-bind:hidden="!row.startedBy">
+												<a data-service-by-link x-bind:href="row.startedByHref" x-bind:hidden="!row.startedByLinked" x-text="row.startedByText"></a>
+												<span x-bind:hidden="!row.startedByPlain" x-text="row.startedByText"></span>
+											</span>
 											<span data-service-time x-text="row.time"></span>
 										</div>
 										<p class="[ reason ]" data-service-reason x-bind:hidden="!row.hasReason"><span x-text="row.reason"></span> <button type="button" class="[ button ]" data-variant="ghost" data-size="sm" x-bind:data-service-id="row.id" x-on:click="openLogRow">Open log</button></p>
@@ -161,7 +164,7 @@ templ Page(frame shell.Frame, projectID, projectName string, seed Seed, repos []
 			</div>
 			<template x-if="formOpen">
 				<div class="[ mcp-form-host ]" data-mode="drawer" data-service-form-host x-on:service-saved="saved" x-on:service-form-close="closeForm">
-					<div class="[ skill-form mcp-form ]" role="dialog" aria-modal="true" aria-labelledby="sf-title" data-service-form x-data="serviceForm" x-init="setup(formService, projectId)" x-on:keydown="trap">
+					<div class="[ skill-form mcp-form ]" role="dialog" aria-modal="true" aria-labelledby="sf-title" data-service-form x-data="serviceForm" x-init="setup(formService, projectId, runtime)" x-on:keydown="trap">
 						<div class="[ skill-form-body ]">
 							<div class="[ skill-form-head ]">
 								<div class="[ repel ]">
@@ -193,7 +196,7 @@ templ Page(frame shell.Frame, projectID, projectName string, seed Seed, repos []
 									<legend>Service</legend>
 									<div class="[ field ]">
 										<span class="[ label ]" id="sf-kind-label">Kind</span>
-										<div class="[ transport ]" role="radiogroup" aria-labelledby="sf-kind-label">
+										<div class="[ transport ]" role="radiogroup" id="sf-kind" tabindex="-1" aria-labelledby="sf-kind-label">
 											<label>
 												<input type="radio" name="sf-kind" value="command" x-bind:checked="isCommand" x-bind:disabled="kindLocked" x-on:change="chooseKind"/>
 												<b>Command</b>
@@ -230,7 +233,7 @@ templ Page(frame shell.Frame, projectID, projectName string, seed Seed, repos []
 											<span class="[ hint ]" id="sf-subdir-hint">Relative to the main checkout. Empty is its root.</span>
 											<span class="[ error ]" id="sf-subdir-error" role="alert" x-bind:hidden="!hasMessage('subdir')" x-text="fieldMessage('subdir')"></span>
 										</div>
-										<div class="[ field ]" role="group" aria-labelledby="sf-ports-label">
+										<div class="[ field ]" role="group" id="sf-ports" tabindex="-1" aria-labelledby="sf-ports-label">
 											<span class="[ label ]" id="sf-ports-label">Ports</span>
 											<div class="[ mf-rows ]">
 												<template x-for="(port, i) in draft.ports" x-bind:key="i">
@@ -251,6 +254,9 @@ templ Page(frame shell.Frame, projectID, projectName string, seed Seed, repos []
 								<template x-if="isImage">
 									<fieldset data-kind-fields="image">
 										<legend>Image</legend>
+										<div class="[ banner ]" data-tone="attention" role="status" data-runtime-notice x-bind:hidden="!hasRuntimeNotice">
+											<span x-text="runtimeNotice"></span>
+										</div>
 										<div class="[ field ]">
 											<label for="sf-image">Image</label>
 											<input type="text" id="sf-image" class="[ font-mono ]" placeholder="postgres:16" spellcheck="false" autocomplete="off" x-model="draft.image" x-on:input="touch('image')" x-bind:aria-invalid="invalid('image') ? 'true' : null" aria-describedby="sf-image-hint sf-image-error"/>
@@ -272,7 +278,7 @@ templ Page(frame shell.Frame, projectID, projectName string, seed Seed, repos []
 											<button type="button" class="[ button addrow ]" data-size="sm" data-variant="ghost" x-on:click="addArg">+ Argument</button>
 											<span class="[ hint ]">Replace the image’s own command. None keeps it.</span>
 										</div>
-										<div class="[ field ]" role="group" aria-labelledby="sf-mappings-label">
+										<div class="[ field ]" role="group" id="sf-mappings" tabindex="-1" aria-labelledby="sf-mappings-label">
 											<span class="[ label ]" id="sf-mappings-label">Port mappings</span>
 											<div class="[ mf-rows ]">
 												<template x-for="(map, i) in draft.mappings" x-bind:key="i">

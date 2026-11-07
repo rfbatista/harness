@@ -7,6 +7,7 @@
 //
 //   <section x-data="serviceForm"> … x-init="setup(formService, projectId)" …
 
+import { isActive } from "../../domain/service.js";
 import { describeError } from "../../../../shared/presentation/errors.js";
 import {
   addRow, canSave, draftFromService, fieldOf, formTitle, newDraft, removeRow, setKind, toInput,
@@ -18,6 +19,7 @@ export const serviceForm = ({ gateway }) => () => {
   /** The service being edited; null for a new one. */
   let service = null;
   let projectId = "";
+  let runtime = { name: "docker", available: true };
 
   return {
     /** @type {import("../../domain/serviceForm.js").Draft} */
@@ -31,10 +33,11 @@ export const serviceForm = ({ gateway }) => () => {
     banner: null,
 
     /** Called once by the template, with what to edit. */
-    setup(editing, project) {
+    setup(editing, project, containerRuntime = runtime) {
       root = this.$root;
       service = editing;
       projectId = project;
+      runtime = containerRuntime;
       this.draft = editing ? draftFromService(editing) : newDraft();
       this.$nextTick(() => root?.querySelector("#sf-name")?.focus());
     },
@@ -56,7 +59,7 @@ export const serviceForm = ({ gateway }) => () => {
       return this.draft.kind === "image";
     },
     get running() {
-      return service !== null && (service.status === "running" || service.status === "starting");
+      return service !== null && isActive(service);
     },
     get restartBanner() {
       return this.running;
@@ -86,6 +89,13 @@ export const serviceForm = ({ gateway }) => () => {
     },
     get hasSubdir() {
       return this.draft.repositoryId !== "";
+    },
+    /** An image service cannot start without its runtime: said in the form, where the kind is chosen. */
+    get runtimeNotice() {
+      return this.isImage && !runtime.available ? `${runtime.name} was not found on this machine. Image services cannot start until it is installed, or you choose another runtime in the server settings.` : "";
+    },
+    get hasRuntimeNotice() {
+      return this.runtimeNotice !== "";
     },
     get hasBanner() {
       return this.banner !== null;

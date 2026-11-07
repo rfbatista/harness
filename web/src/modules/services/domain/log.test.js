@@ -1,5 +1,5 @@
 import { assert, file, test } from "../../../shared/testing/test.js";
-import { MAX_LINES, applyChunk, applyReset, emptyLog, fromRead, runLine, tailNote } from "./log.js";
+import { MAX_LINES, applyChunk, applyReset, emptyLog, fromRead, rereadLog, runLine, tailNote } from "./log.js";
 
 file("services/domain/log");
 
@@ -73,7 +73,7 @@ test("the oldest lines are dropped past the cap", () => {
 
 test("the note over the log says how much is shown", () => {
   assert.equal(tailNote(fromRead(read({ text: "a\n", next_offset: 2 }))), "");
-  assert.equal(tailNote(fromRead(read({ text: "x\ny\n", offset: 500, next_offset: 504 }))), "Showing the last part of the log. The log keeps the last 5 MB of this run.");
+  assert.equal(tailNote(fromRead(read({ text: "x\ny\n", offset: 500, next_offset: 504 }))), "Showing the last 64 KB. The log keeps the last 5 MB of this run.");
 });
 
 test("the run line says when, by whom and where", () => {
@@ -81,6 +81,19 @@ test("the run line says when, by whom and where", () => {
   assert.equal(runLine(run), "Run started 14:02 · by you · main checkout @ main");
   assert.equal(runLine({ ...run, started_by: { kind: "session", agent: "backend", session_id: "s" }, where: { kind: "container" } }), "Run started 14:02 · by backend · container");
   assert.equal(runLine(null), "");
+});
+
+test("a re-read that starts where the log ends continues it and trusts the server's end", () => {
+  const log = fromRead(read({ text: "one\n", next_offset: 4 }));
+  const r = rereadLog(log, read({ text: "two\n", offset: 4, next_offset: 8 }));
+  assert.deepEqual([r.replaced, texts(r.log), r.log.end], [false, ["one", "two"], 8]);
+});
+
+test("a re-read that starts elsewhere (another run, or past the 5 MB cap) replaces the log", () => {
+  const log = fromRead(read({ text: "one\n", next_offset: 4 }));
+  assert.equal(rereadLog(log, read({ text: "x\n", offset: 0, next_offset: 2, run_id: "r2" })).replaced, true);
+  const past = rereadLog(log, read({ text: "cut\nlate\n", offset: 9000, next_offset: 9009, first_offset: 9000 }));
+  assert.deepEqual([past.replaced, texts(past.log), past.log.end], [true, ["late"], 9009]);
 });
 
 test("an empty log has no lines", () => {

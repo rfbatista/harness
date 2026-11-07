@@ -157,6 +157,14 @@ test("a restart refused after Save and restart is shown, and the saved change is
   assert.equal(dispatched.length, 1, "the page learns of the save");
 });
 
+test("choosing Image says so in the form when the runtime was not found, and Command does not", () => {
+  const { instance: form } = mount(serviceForm({ gateway: fakeServices() }), { el: { querySelector: () => null } });
+  form.setup(null, "p1", { name: "docker", available: false });
+  assert.equal(form.hasRuntimeNotice, false);
+  form.chooseKind({ currentTarget: { value: "image" } });
+  assert.equal(form.runtimeNotice, "docker was not found on this machine. Image services cannot start until it is installed, or you choose another runtime in the server settings.");
+});
+
 test("the .env export is only offered once a repository is picked", () => {
   const { form } = open();
   assert.equal(form.canExport, false);

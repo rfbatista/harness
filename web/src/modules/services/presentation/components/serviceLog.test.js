@@ -134,7 +134,7 @@ test("a log that cannot be read shows the error and Retry reads it again", async
 
 test("the top note says the start is not shown when the read began inside the log", async () => {
   const { log } = await open(logDTO({ text: "cut off\nwhole\n", offset: 900, next_offset: 913 }));
-  assert.equal(log.note, "Showing the last part of the log. The log keeps the last 5 MB of this run.");
+  assert.equal(log.note, "Showing the last 64 KB. The log keeps the last 5 MB of this run.");
   assert.deepEqual(texts(log), ["whole"]);
 });
 

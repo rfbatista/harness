@@ -8,7 +8,7 @@
 import { FeedStatus } from "../../../../shared/domain/feed.js";
 import { systemClock } from "../../../../shared/infrastructure/clock.js";
 import { describeError } from "../../../../shared/presentation/errors.js";
-import { applyChunk, applyReset, emptyLog, fromRead, tailNote } from "../../domain/log.js";
+import { applyChunk, applyReset, fromRead, rereadLog, tailNote } from "../../domain/log.js";
 
 /** How close to the bottom still counts as at the bottom, in pixels. */
 const BOTTOM_SLACK = 8;
@@ -144,12 +144,9 @@ export const serviceLog = ({ gateway, clock = systemClock }) => (id = "") => {
     async reread() {
       try {
         const answer = await gateway.readLog(serviceId, this.end);
-        if (answer.run_id !== this.runId && this.runId !== "") {
-          this.show(fromRead({ ...answer, offset: 0 }));
-          return;
-        }
-        const next = applyChunk(this.held(), { offset: this.end, text: answer.text, run_id: answer.run_id });
-        this.take(next.log, next.added);
+        const next = rereadLog(this.held(), answer);
+        if (next.replaced) this.show(next.log);
+        else this.take(next.log, next.added);
       } catch (err) {
         this.error = describeError(err);
       }
