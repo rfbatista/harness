@@ -11,6 +11,8 @@ import { navBadge, runningCount } from "../../domain/service.js";
 /** @param {{ gateway: import("../../domain/ports.js").ServicesGateway }} deps */
 export const servicesNavCount = ({ gateway }) => () => {
   let unfollow = () => {};
+  /** The item itself, kept from init: it carries data-running-services. */
+  let root = null;
 
   return {
     count: 0,
@@ -25,6 +27,7 @@ export const servicesNavCount = ({ gateway }) => () => {
     },
 
     init() {
+      root = this.$el;
       const projectId = this.$el.dataset.projectId ?? "";
       this.count = Number(this.$el.dataset.runningServices ?? 0) || 0;
       if (projectId === "") return;
@@ -33,12 +36,18 @@ export const servicesNavCount = ({ gateway }) => () => {
         (event) => {
           if (event.seq <= this.seq) return;
           this.seq = event.seq;
-          this.count = event.runningCount;
+          this.show(event.runningCount);
         },
         (status) => {
           if (status === FeedStatus.RESYNCED) this.reread(projectId);
         },
       );
+    },
+
+    /** The count, on the badge and on the item's data-running-services. */
+    show(count) {
+      this.count = count;
+      if (root) root.dataset.runningServices = String(count);
     },
 
     destroy() {
@@ -50,7 +59,7 @@ export const servicesNavCount = ({ gateway }) => () => {
       try {
         const list = await gateway.listServices(projectId);
         this.seq = Math.max(this.seq, list.seq);
-        this.count = runningCount(list.services);
+        this.show(runningCount(list.services));
       } catch {
         // the next event or resync corrects it
       }

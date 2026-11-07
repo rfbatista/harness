@@ -31,6 +31,15 @@ test("a feed event sets the count from its running_count", () => {
   assert.equal(nav.badgeShown, false);
 });
 
+test("the item's data-running-services follows the count", () => {
+  const el = navEl(2);
+  const gateway = fakeServices();
+  const { instance } = mount(servicesNavCount({ gateway }), { el });
+  instance.init();
+  gateway.emit(changed(3, 5));
+  assert.equal(el.dataset.runningServices, "5");
+});
+
 test("an event older than one already seen is ignored", () => {
   const { nav, gateway } = open(2);
   gateway.emit(changed(8, 4));
