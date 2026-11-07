@@ -107,6 +107,9 @@ templ topBar(f Frame) {
 				<noscript><button type="submit" class="[ button ]" data-size="sm">Open</button></noscript>
 			</form>
 		}
+		if f.Top.BoardHref != "" {
+			<a class="[ button ]" data-variant="ghost" data-size="sm" href={ templ.SafeURL(f.Top.BoardHref) } { currentAttrs(f.Top.OnBoard)... }>Agent board</a>
+		}
 		if f.Top.ProjectsHref != "" {
 			<a class="[ button ]" data-variant="ghost" data-size="sm" href={ templ.SafeURL(f.Top.ProjectsHref) } { currentAttrs(f.Top.OnProjects)... }>Projects</a>
 		} else {

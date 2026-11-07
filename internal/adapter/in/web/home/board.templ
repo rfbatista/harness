@@ -1,0 +1,288 @@
+package home
+
+import "operators-mcp/internal/adapter/in/web/shell"
+
+// BoardPage is the Agent board, the home page: every task with a live session,
+// grouped by project. The server paints the seed's cards inside [data-ssr];
+// agentBoardPage (web/src/modules/agentboard/presentation/pages/agentBoardPage.js)
+// draws the same cards live from the live session feed. A page swapped in
+// place has no seed: the browser reads it, behind a skeleton that shows only
+// when the read is slow.
+templ BoardPage(v BoardView) {
+	@shell.AppShell(v.Frame) {
+		<main
+			id="main"
+			class="[ frame ]"
+			x-data="agentBoardPage"
+			x-on:keydown.window="key"
+			x-on:visibilitychange.document="onVisibility"
+			if v.Seed != nil {
+				data-seed="agent-board-seed"
+			}
+		>
+			if v.Seed != nil {
+				@templ.JSONScript("agent-board-seed", v.Seed)
+			}
+			<div data-scroll>
+				<div class="[ agent-board ]">
+					<div class="[ board-head ]">
+						<h1>Agent board</h1>
+						if v.Seed != nil {
+							<p class="[ summary ]" x-ignore data-ssr>
+								{ v.SummaryLead() }
+								if v.NeedsCount() > 0 {
+									{ " · " }<b>{ v.NeedsText() }</b>
+								}
+							</p>
+						}
+						<p class="[ summary ]" x-show="ready" style="display: none">
+							<span x-text="summary.lead"></span>
+							<template x-if="summary.hasNeeds">
+								<span>{ " · " }<b x-text="summary.needs"></b></span>
+							</template>
+						</p>
+						<template x-if="skeletonShown">
+							<p class="[ summary ]"><span class="[ skeleton ]" data-variant="chip" style="--chip-w: 16rem"><span class="[ bar ]"></span></span></p>
+						</template>
+						<div class="[ board-filter ]">
+							<label class="[ visually-hidden ]" for="board-filter">Filter by task, project or agent</label>
+							<input id="board-filter" type="search" placeholder="Filter by task, project or agent" autocomplete="off" x-ref="filter" x-model="query" x-on:keydown.escape.prevent="clearFilter"/>
+							<kbd aria-hidden="true">/</kbd>
+						</div>
+					</div>
+					<template x-if="banner">
+						<div class="[ banner ]" x-bind:data-tone="banner.tone" x-bind:role="banner.role">
+							@glyphAlert()
+							<div class="[ flow ] [ flow-space-3xs grow ]">
+								<span><strong x-text="banner.lead"></strong> <span x-text="banner.text"></span></span>
+								<template x-if="banner.code">
+									<span class="[ code ]" x-text="banner.code"></span>
+								</template>
+							</div>
+							<button type="button" class="[ button ]" data-size="sm" x-on:click="retry" x-text="banner.action"></button>
+							<template x-if="banner.projects">
+								<a class="[ button ]" data-variant="ghost" data-size="sm" href="/projects">Open projects</a>
+							</template>
+						</div>
+					</template>
+					<div class="[ visually-hidden ]" role="status" aria-live="polite" aria-atomic="false" x-text="liveText"></div>
+					<template x-if="skeletonShown">
+						<div class="[ board-groups ]">
+							@skeletonGroup(3)
+							@skeletonGroup(2)
+						</div>
+					</template>
+					if v.Seed != nil {
+						<div x-ignore data-ssr class="[ board-groups ]">
+							for _, s := range v.Sections {
+								<section class="[ project-group ]" data-project={ s.ID } aria-labelledby={ "p-" + s.ID }>
+									<div class="[ project-head ]">
+										<h2 id={ "p-" + s.ID }><a href={ templ.SafeURL(s.Href) }>{ s.Name }</a></h2>
+										if s.Needs != "" {
+											<span class="[ badge ]" data-tone="attention">
+												@glyphNeeds()
+												{ s.Needs }
+											</span>
+										}
+										<span class="[ count ]">{ s.Count }</span>
+									</div>
+									<ul class="[ cards ]">
+										for _, c := range s.Cards {
+											@boardCard(c)
+										}
+									</ul>
+								</section>
+							}
+							if len(v.Sections) == 0 {
+								@boardEmpty()
+							}
+						</div>
+					}
+					<template x-if="showBoard">
+						<div class="[ board-groups ]" x-bind:class="skeletonIn">
+							<template x-for="s in sections" x-bind:key="s.id">
+								<section class="[ project-group ]" x-bind:data-project="s.id" x-bind:aria-labelledby="s.headingId">
+									<div class="[ project-head ]">
+										<h2 x-bind:id="s.headingId"><a x-bind:href="s.href" x-text="s.name"></a></h2>
+										<template x-if="s.needs">
+											<span class="[ badge ]" data-tone="attention">
+												@glyphNeeds()
+												<span x-text="s.needs"></span>
+											</span>
+										</template>
+										<span class="[ count ]" x-text="s.count"></span>
+									</div>
+									<ul class="[ cards ]">
+										<template x-for="c in s.cards" x-bind:key="c.id">
+											<li
+												class="[ agent-card ]"
+												x-bind:data-task="c.id"
+												x-bind:data-needs-you="c.needsYou"
+												x-bind:data-fresh="c.fresh"
+												x-bind:data-arriving="c.arriving"
+												x-bind:data-leaving="c.leaving"
+												x-bind:data-kbd="c.cursor"
+												x-on:mouseenter="hover(c.id)"
+												x-on:mouseleave="unhover(c.id)"
+												x-on:focusin="focused(c.id)"
+												x-on:focusout="blurred(c.id, $event)"
+											>
+												<article class="[ card ]" x-bind:aria-labelledby="c.titleId">
+													<template x-if="c.feature">
+														<p class="[ crumb ]" x-bind:title="c.feature" x-text="c.feature"></p>
+													</template>
+													<h3 class="[ title ]" x-bind:id="c.titleId"><a x-bind:href="c.href" x-bind:aria-describedby="c.metaId" x-bind:title="c.title" x-text="c.title"></a></h3>
+													<div class="[ meta ]" x-bind:id="c.metaId">
+														<span class="[ badge ]" x-text="c.status"></span>
+														<template x-if="c.needsYou">
+															<span class="[ badge ]" data-tone="attention">
+																@glyphNeeds()
+																Needs you
+															</span>
+														</template>
+														<span class="[ visually-hidden ]" x-text="c.liveWord"></span>
+														<time x-text="c.active"></time>
+													</div>
+													<ul class="[ sessions ]">
+														<template x-for="l in c.lines" x-bind:key="l.id">
+															<li>
+																<a class="[ session-line ]" x-bind:href="l.href" x-bind:title="l.hover" x-bind:data-session="l.id" x-bind:data-fresh="l.fresh" x-bind:data-finished="l.finished">
+																	<span class="[ status ]" x-bind:data-state="l.dot" x-bind:data-signal="l.fresh" data-dot-only><span class="[ visually-hidden ]" x-text="l.word"></span></span>
+																	<span class="[ who ]">
+																		<span class="[ agent ]" x-text="l.agent"></span>
+																		<template x-if="l.chip">
+																			<span class="[ badge ]" x-bind:data-tone="l.tone" aria-hidden="true" x-text="l.word"></span>
+																		</template>
+																	</span>
+																	<time x-text="l.time"></time>
+																	<template x-if="l.waitingFor">
+																		<span class="[ wait ]" x-text="l.waitingFor"></span>
+																	</template>
+																</a>
+															</li>
+														</template>
+													</ul>
+													<template x-if="c.hasMore">
+														<button type="button" class="[ more ]" x-bind:aria-expanded="c.expanded" x-on:click="toggleMore(c.id)" x-text="c.moreLabel"></button>
+													</template>
+												</article>
+											</li>
+										</template>
+									</ul>
+								</section>
+							</template>
+						</div>
+					</template>
+					<template x-if="showEmpty">
+						@boardEmpty()
+					</template>
+					<template x-if="noMatch">
+						<div class="[ empty ] [ board-empty ]">
+							<h2>No match</h2>
+							<p x-text="noMatchText"></p>
+							<button type="button" class="[ button ]" x-on:click="clearFilter">Clear filter</button>
+						</div>
+					</template>
+					if v.Quiet != "" {
+						<p class="[ board-foot ]" x-ignore data-ssr>{ v.Quiet } <a href="/projects">All projects</a></p>
+					}
+					<template x-if="quiet">
+						<p class="[ board-foot ]"><span x-text="quiet"></span> <a href="/projects">All projects</a></p>
+					</template>
+				</div>
+			</div>
+		</main>
+	}
+}
+
+// NeedsText is the summary's attention part: "4 need you".
+func (v BoardView) NeedsText() string {
+	return itoa(v.NeedsCount()) + " need you"
+}
+
+// boardEmpty is projects with nothing live.
+templ boardEmpty() {
+	<div class="[ empty ] [ board-empty ]">
+		<h2>Nothing is running</h2>
+		<p>When an agent starts working on a task, the task shows up here with its sessions. A feature brainstorm is not a task, so it is not listed.</p>
+		<div class="[ actions ]">
+			<a class="[ button ]" data-variant="primary" href="/projects">Open projects</a>
+			<a class="[ button ]" href="/projects/new">New project</a>
+		</div>
+	</div>
+}
+
+// boardCard is one task's card, server-rendered.
+templ boardCard(c CardView) {
+	<li class="[ agent-card ]" data-task={ c.TaskID } { needsAttrs(c.NeedsYou)... }>
+		<article class="[ card ]" aria-labelledby={ "t-" + c.TaskID }>
+			if c.Feature != "" {
+				<p class="[ crumb ]" title={ c.Feature }>{ c.Feature }</p>
+			}
+			<h3 class="[ title ]" id={ "t-" + c.TaskID }><a href={ templ.SafeURL(c.Href) } aria-describedby={ "m-" + c.TaskID } title={ c.Title }>{ c.Title }</a></h3>
+			<div class="[ meta ]" id={ "m-" + c.TaskID }>
+				<span class="[ badge ]">{ c.Status }</span>
+				if c.NeedsYou {
+					<span class="[ badge ]" data-tone="attention">
+						@glyphNeeds()
+						Needs you
+					</span>
+				}
+				<span class="[ visually-hidden ]">{ c.LiveWord }</span>
+				<time>{ c.Active }</time>
+			</div>
+			<ul class="[ sessions ]">
+				for _, l := range c.Lines {
+					@boardLine(l)
+				}
+			</ul>
+			if len(c.Hidden) > 0 {
+				<ul class="[ sessions ]" data-more hidden>
+					for _, l := range c.Hidden {
+						@boardLine(l)
+					}
+				</ul>
+				<button type="button" class="[ more ]" aria-expanded="false">{ "+" + itoa(len(c.Hidden)) + " more" }</button>
+			}
+		</article>
+	</li>
+}
+
+// boardLine is one live session on a card, server-rendered.
+templ boardLine(l LineView) {
+	<li>
+		<a class="[ session-line ]" href={ templ.SafeURL(l.Href) } title={ l.Hover } data-session={ l.SessionID }>
+			<span class="[ status ]" data-state={ l.Dot } data-dot-only><span class="[ visually-hidden ]">{ l.Word }</span></span>
+			<span class="[ who ]">
+				<span class="[ agent ]">{ l.Agent }</span>
+				if l.Chip {
+					<span class="[ badge ]" { toneAttrs(l.Tone)... } aria-hidden="true">{ l.Word }</span>
+				}
+			</span>
+			<time>{ l.Time }</time>
+			if l.WaitingFor != "" {
+				<span class="[ wait ]">{ l.WaitingFor }</span>
+			}
+		</a>
+	</li>
+}
+
+templ skeletonGroup(cards int) {
+	<div class="[ project-group ]">
+		<div class="[ project-head ]"><span class="[ skeleton ]" data-variant="chip" style="--chip-w: 7rem"><span class="[ bar ]"></span></span></div>
+		<div class="[ skeleton ]" data-variant="grid" role="status" aria-busy="true">
+			<span class="[ visually-hidden ]">Loading the agent board</span>
+			for i := 0; i < cards; i++ {
+				<div class="[ card ]" aria-hidden="true"><span class="[ bar ]" data-h="lg"></span><span class="[ bar ]"></span><span class="[ bar ]"></span><span class="[ bar ]"></span></div>
+			}
+		</div>
+	</div>
+}
+
+templ glyphNeeds() {
+	<svg class="[ glyph ]" viewBox="0 0 16 16" aria-hidden="true"><circle cx="8" cy="8" r="6.5" fill="none" stroke="currentColor" stroke-width="1.5"></circle><path d="M8 4.5v4.2M8 10.9v.1" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"></path></svg>
+}
+
+templ glyphAlert() {
+	<svg viewBox="0 0 16 16" aria-hidden="true"><circle cx="8" cy="8" r="6.5" fill="none" stroke="currentColor" stroke-width="1.5"></circle><path d="M8 4.5v4.2M8 10.9v.1" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"></path></svg>
+}
