@@ -1,6 +1,9 @@
 package domain
 
-import "time"
+import (
+	"fmt"
+	"time"
+)
 
 // BranchRequestState is where a branch request stands (Glossary "Branch
 // request"; contract "Harness server ↔ Web UI — branch requests and the
@@ -75,6 +78,18 @@ func (r BranchRequest) Matches(a BranchAction) bool {
 		remote = r.Remote.Name
 	}
 	return remote == a.Remote
+}
+
+// Label names what the request asks, for a line the person or the agent reads:
+// "create feature-x", "rename a → b", "switch commit abc123".
+func (r BranchRequest) Label() string {
+	switch {
+	case r.Action == BranchRename && r.NewName != nil:
+		return fmt.Sprintf("%s %s → %s", r.Action, r.Branch, *r.NewName)
+	case r.Branch == "" && r.StartPoint != nil:
+		return fmt.Sprintf("%s commit %s", r.Action, r.StartPoint.Ref)
+	}
+	return fmt.Sprintf("%s %s", r.Action, r.Branch)
 }
 
 func startRef(s *BranchStart) string {

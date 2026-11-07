@@ -780,7 +780,7 @@ func newArchitectureRules(cat catalog.Catalog, sessions ports.SessionRepository,
 
 // newBranchGate decides the branch grants sessions' git shims ask for.
 func newBranchGate(cfg Config, cat catalog.Catalog, sessions ports.SessionRepository, requests ports.BranchRequestStore, orch *orchestration.Service) *branchgate.Service {
-	svc := branchgate.NewService(branchgate.Deps{Sessions: sessions, Requests: requests, Probe: gitprobe.Probe{Git: cfg.GitBin}, Waiter: orch, Turns: orch})
+	svc := branchgate.NewService(branchgate.Deps{Sessions: sessions, Requests: requests, Probe: gitprobe.Probe{Git: cfg.GitBin}, Waiter: orch, Turns: orch, Events: cat.Bus, Feed: orch})
 	svc.Subscribe(cat.Bus)
 	return svc
 }

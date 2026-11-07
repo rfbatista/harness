@@ -34,7 +34,11 @@ type Deps struct {
 	// Turns delivers the person's answer to a session whose hook is gone, as
 	// a turn; nil delivers none.
 	Turns ports.TurnDelivery
-	Now   func() time.Time
+	// Events and Feed announce each change of a request: the inbox follows
+	// the first, the project feed the second; nil announces nothing.
+	Events ports.EventPublisher
+	Feed   ports.ProjectChangeSink
+	Now    func() time.Time
 }
 
 // Service files and answers branch requests and hands out branch grants.
@@ -85,6 +89,8 @@ func (s *Service) Grant(ctx context.Context, sessionID string, req ports.BranchG
 	if switchesToSessionBranch(sess, req.BranchAction) {
 		return ports.BranchGrantAnswer{Allow: true}
 	}
+	var changed []domain.BranchRequest
+	defer func() { s.announce(ctx, sess.ProjectID, changed...) }() // after the unlock
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	approved, err := s.d.Requests.List(ctx, domain.BranchRequestFilter{SessionID: sessionID, State: domain.BranchRequestApproved})
@@ -99,6 +105,7 @@ func (s *Service) Grant(ctx context.Context, sessionID string, req ports.BranchG
 		if err := s.d.Requests.Save(ctx, &r); err != nil {
 			return ports.BranchGrantAnswer{Reason: "the branch grant could not be used"}
 		}
+		changed = append(changed, r)
 		return ports.BranchGrantAnswer{Allow: true}
 	}
 	return ports.BranchGrantAnswer{}
@@ -146,7 +153,7 @@ func (s *Service) Hook(ctx context.Context, sessionID string, in ports.BranchHoo
 			return ports.BranchHookVerdict{Decision: "deny", Reason: "Branch request " + f.id + " could not be read"}
 		}
 		if r.State == domain.BranchRequestDenied {
-			reason := fmt.Sprintf("The person denied branch request %s (%s)", r.ID, Label(*r))
+			reason := fmt.Sprintf("The person denied branch request %s (%s)", r.ID, r.Label())
 			if r.Note != "" {
 				reason += ". Note: " + r.Note
 			}
@@ -190,6 +197,7 @@ func (s *Service) file(ctx context.Context, sess *domain.Session, a domain.Branc
 	if a.Remote != "" || a.URL != "" {
 		r.Remote = &domain.BranchRemote{Name: a.Remote, URL: a.URL}
 	}
+	defer func() { s.announce(ctx, sess.ProjectID, *r) }() // after the unlock
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	if err := s.d.Requests.Add(ctx, r); err != nil {
@@ -214,6 +222,12 @@ func (s *Service) Answer(ctx context.Context, id, decision, note string) (*domai
 	default:
 		return nil, &domain.StructuredError{Code: "INVALID_INPUT", Message: `decision must be "approve" or "deny"`}
 	}
+	var answered *domain.BranchRequest
+	defer func() {
+		if answered != nil {
+			s.announce(ctx, s.projectOf(answered.SessionID), *answered) // after the unlock
+		}
+	}()
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	r, err := s.d.Requests.Get(ctx, id)
@@ -234,6 +248,7 @@ func (s *Service) Answer(ctx context.Context, id, decision, note string) (*domai
 	if err := s.d.Requests.Save(ctx, r); err != nil {
 		return nil, err
 	}
+	answered = r
 	ch, hookWaits := s.waiters[id]
 	if hookWaits {
 		close(ch)
@@ -267,6 +282,8 @@ func (s *Service) Subscribe(sub ports.EventSubscriber) {
 // expire marks the session's pending requests, and its approved ones whose
 // grant was never used, expired.
 func (s *Service) expire(ctx context.Context, sessionID string) error {
+	var expired []domain.BranchRequest
+	defer func() { s.announce(ctx, s.projectOf(sessionID), expired...) }() // after the unlock
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	for _, state := range []domain.BranchRequestState{domain.BranchRequestPending, domain.BranchRequestApproved} {
@@ -279,6 +296,7 @@ func (s *Service) expire(ctx context.Context, sessionID string) error {
 			if err := s.d.Requests.Save(ctx, &r); err != nil {
 				return err
 			}
+			expired = append(expired, r)
 			if state != domain.BranchRequestPending {
 				continue
 			}
@@ -297,7 +315,7 @@ func (s *Service) expire(ctx context.Context, sessionID string) error {
 // Turn is the turn the session gets when the person answers a request whose
 // hook is gone (contract "Harness server ↔ Agent sessions — branch gate" §5).
 func Turn(r domain.BranchRequest) string {
-	what := Label(r)
+	what := r.Label()
 	if r.StartPoint != nil && r.Branch != "" && (r.Action == domain.BranchCreate || r.Action == domain.BranchSwitch) {
 		what += " from " + r.StartPoint.Ref
 	}
@@ -316,14 +334,27 @@ func (s *Service) ListBranchRequests(ctx context.Context, f domain.BranchRequest
 	return s.d.Requests.List(ctx, f)
 }
 
-// Label names what a request asks, for a line the person or the agent reads:
-// "create feature-x", "rename a → b", "switch commit abc123".
-func Label(r domain.BranchRequest) string {
-	switch {
-	case r.Action == domain.BranchRename && r.NewName != nil:
-		return fmt.Sprintf("rename %s → %s", r.Branch, *r.NewName)
-	case r.Branch == "" && r.StartPoint != nil:
-		return fmt.Sprintf("%s commit %s", r.Action, r.StartPoint.Ref)
+// projectOf is the project of a session, "" when it is gone.
+func (s *Service) projectOf(sessionID string) string {
+	if sess := s.d.Sessions.Get(sessionID); sess != nil {
+		return sess.ProjectID
 	}
-	return fmt.Sprintf("%s %s", r.Action, r.Branch)
+	return ""
+}
+
+// announce tells the inbox and the project feed that requests changed.
+func (s *Service) announce(ctx context.Context, projectID string, changed ...domain.BranchRequest) {
+	if projectID == "" {
+		return
+	}
+	for _, r := range changed {
+		if s.d.Events != nil {
+			if err := s.d.Events.Publish(ctx, domain.BranchRequestChanged{Request: r, ProjectID: projectID}); err != nil {
+				slog.Warn("announce a branch request", "request", r.ID, "err", err)
+			}
+		}
+		if s.d.Feed != nil {
+			s.d.Feed.AnnounceChange(ports.ProjectChange{BranchRequest: &ports.BranchRequestChange{BranchRequest: &r, ProjectID: projectID}})
+		}
+	}
 }

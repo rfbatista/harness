@@ -1459,7 +1459,7 @@ func (s *Service) record(sessionID string, ev SessionEvent, change sessionChange
 	s.hub.Publish(sessionID, ev)
 	s.notify(sessionID, ev.Type)
 	if moved {
-		s.announce(domain.SessionStatusChanged{SessionID: sessionID, Status: ev.Status})
+		s.announce(domain.SessionStatusChanged{SessionID: sessionID, Status: ev.Status, ByBranchRequest: ev.Type == "branch_request_needed"})
 	}
 }
 

@@ -103,6 +103,9 @@ type ProjectChange struct {
 	// InstructionFileChanged says an instruction file was saved, renamed,
 	// deleted or imported.
 	InstructionFileChanged *InstructionFileChange `json:"instruction_file_changed,omitempty"`
+	// BranchRequest is a branch request as it is after being filed, answered,
+	// used or expired: the request itself on the wire.
+	BranchRequest *BranchRequestChange `json:"branch_request,omitempty"`
 	// ArchitectureRuleEvent is a rule that failed in a session.
 	ArchitectureRuleEvent *ArchitectureRuleEventChange `json:"architecture_rule_event,omitempty"`
 	// DesignSystemSaved says a design system got a new version.
@@ -120,6 +123,13 @@ type ProjectChange struct {
 	// or came back; the Files view follows it.
 	SessionFilesRoot *SessionFilesRootChange `json:"session_files_root,omitempty"`
 	Deleted          bool                    `json:"deleted,omitempty"`
+}
+
+// BranchRequestChange is a branch request on the feed; ProjectID routes it to
+// the project's followers and is not on the wire.
+type BranchRequestChange struct {
+	*domain.BranchRequest
+	ProjectID string `json:"-"`
 }
 
 // ArchitectureRuleEventChange is a rule event on the project feed. ProjectID
@@ -242,6 +252,8 @@ func (c ProjectChange) ProjectID() string {
 		return c.ArchitectureChanged.ProjectID
 	case c.InstructionFileChanged != nil:
 		return c.InstructionFileChanged.ProjectID
+	case c.BranchRequest != nil:
+		return c.BranchRequest.ProjectID
 	case c.ArchitectureRuleEvent != nil:
 		return c.ArchitectureRuleEvent.ProjectID
 	case c.SessionFilesRoot != nil:
