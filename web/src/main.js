@@ -34,6 +34,8 @@ import { hljsHighlighter } from "./modules/code/infrastructure/hljs-highlighter.
 import { lazyPreparer, workerPreparer } from "./modules/code/infrastructure/preparer.js";
 import { registerCode } from "./modules/code/presentation/register.js";
 import { runsGateway } from "./modules/runs/infrastructure/runs-gateway.js";
+import { branchRequestsGateway } from "./modules/branchrequests/infrastructure/branch-requests-gateway.js";
+import { registerBranchRequests } from "./modules/branchrequests/presentation/register.js";
 import { reviewsGateway } from "./modules/reviews/infrastructure/reviews-gateway.js";
 import { registerReviews } from "./modules/reviews/presentation/register.js";
 import { registerRuns } from "./modules/runs/presentation/register.js";
@@ -130,6 +132,7 @@ registerSessions(Alpine, {
 
 registerRuns(Alpine, { gateway: runsGateway(api), prefs });
 registerReviews(Alpine, { gateway: reviewsGateway(api, events), clock: systemClock });
+registerBranchRequests(Alpine, { gateway: branchRequestsGateway(api, events), clock: systemClock });
 registerPullRequests(Alpine, { gateway: pullRequestsGateway(api, events) });
 registerCode(Alpine, { gateway: codeGateway(api, events), files: filesGateway(api, events), highlighter: hljsHighlighter(createHljs()), preparer: lazyPreparer(() => workerPreparer(codeWorkerUrl())), prefs, navigate });
 registerSync(Alpine, { gateway: syncGateway(api, events) });

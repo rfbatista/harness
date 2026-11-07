@@ -40,6 +40,12 @@ type BranchHookVerdict struct {
 	Context string
 }
 
+// BranchRequestReader reads branch requests, newest first (driving; the web
+// pages' first paint reads it in process).
+type BranchRequestReader interface {
+	ListBranchRequests(ctx context.Context, f domain.BranchRequestFilter) ([]domain.BranchRequest, error)
+}
+
 // BranchGate is the harness's guard on an agent session's branch actions
 // (driving; ADR 0069). It never lets a branch action through on its own failure.
 type BranchGate interface {
@@ -53,8 +59,7 @@ type BranchGate interface {
 	// Answer is the person's answer to a pending branch request: decision is
 	// "approve" or "deny".
 	Answer(ctx context.Context, id, decision, note string) (*domain.BranchRequest, error)
-	// ListBranchRequests lists requests, newest first.
-	ListBranchRequests(ctx context.Context, f domain.BranchRequestFilter) ([]domain.BranchRequest, error)
+	BranchRequestReader
 }
 
 // BranchRequestStore keeps branch requests (driven).

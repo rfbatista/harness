@@ -246,10 +246,7 @@ func (s *Service) onBranchRequest(ev domain.BranchRequestChanged) {
 	if r.TaskID != nil {
 		taskID = *r.TaskID
 	}
-	link := domain.TaskLink(ev.ProjectID, taskID) + "?session=" + url.QueryEscape(r.SessionID)
-	if taskID == "" {
-		link = domain.ProjectLink(ev.ProjectID) + "?session=" + url.QueryEscape(r.SessionID)
-	}
+	link := domain.TaskLink(ev.ProjectID, taskID) + "?session=" + url.QueryEscape(r.SessionID) + "#branch-request-" + url.PathEscape(r.ID)
 	body := "Session " + r.SessionID
 	if sess != nil && sess.Task != "" {
 		body += " (" + sess.Task + ")"
