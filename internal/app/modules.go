@@ -872,6 +872,9 @@ func newOrchestrationService(
 	svc.TaskServerURL = func(sessionID string) string {
 		return base + mcpsession.PathPrefix + sessionID
 	}
+	svc.ServicesServerURL = func(sessionID string) string {
+		return base + mcpsession.ServicesPathPrefix + sessionID
+	}
 	svc.SessionHookURL = func(sessionID string) string {
 		return base + httpapi.InteractiveSessionHookPath + "?session_id=" + url.QueryEscape(sessionID)
 	}

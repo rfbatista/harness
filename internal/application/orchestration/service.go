@@ -120,6 +120,9 @@ type Service struct {
 	// TaskServerURL returns the per-session task MCP endpoint for a session id.
 	// Injected, so the application layer does not need to know the route.
 	TaskServerURL func(sessionID string) string
+	// ServicesServerURL returns the per-session services MCP endpoint (ADR
+	// 0075); nil serves sessions no services server.
+	ServicesServerURL func(sessionID string) string
 	// SessionHookURL returns where an interactive session's SessionStart hook
 	// reports its conversation id. Nil leaves the hook out.
 	SessionHookURL func(sessionID string) string
@@ -908,6 +911,7 @@ func (s *Service) sessionConfig(id, dir, model string, allowedTools []string, pe
 		cfg.AppendSystem = appendSection(cfg.AppendSystem, section)
 	}
 
+	s.applyServicesServer(&cfg, id, ag.agent, subject.project)
 	for _, m := range resolveAttachedMCPServers(ag.agent, subject.project, s.catalog.MCPServers.ListMCPServers()) {
 		cfg.MCPServers = append(cfg.MCPServers, llmkit.MCPServerSpec{
 			Name:      domain.Slug(m.Name),
