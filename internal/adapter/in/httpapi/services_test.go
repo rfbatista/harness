@@ -12,9 +12,11 @@ import (
 	"testing"
 	"time"
 
+	"operators-mcp/internal/adapter/out/commandrunner"
 	"operators-mcp/internal/adapter/out/persistence/sqlite"
 	"operators-mcp/internal/app/catalog"
 	"operators-mcp/internal/application/services"
+	"operators-mcp/internal/domain"
 	"operators-mcp/internal/ports"
 )
 
@@ -27,6 +29,7 @@ type servicesFixture struct {
 	srv       *httptest.Server
 	cat       catalog.Catalog
 	svc       *services.Service
+	store     ports.ServiceStore
 	logDir    string
 	projectID string
 	repoID    string
@@ -40,11 +43,23 @@ func newServicesFixture(t *testing.T, opts services.Options) *servicesFixture {
 	if err != nil {
 		t.Fatal(err)
 	}
-	cat := catalog.New(catalog.SQLiteDeps(db))
+	deps := catalog.SQLiteDeps(db)
+	deps.EnvFiles = sqlite.NewEnvFileRepository(db)
+	cat := catalog.New(deps)
 	if opts.LogDir == "" {
 		opts.LogDir = t.TempDir()
 	}
-	svc := services.New(sqlite.NewServiceRepository(db), cat.Projects, cat.Projects, opts)
+	if opts.Runners == nil {
+		opts.Runners = map[domain.ServiceKind]ports.ServiceProcessRunner{domain.ServiceKindCommand: commandrunner.Runner{}}
+	}
+	if opts.EnvFiles == nil {
+		opts.EnvFiles = cat.Projects
+	}
+	if opts.FolderDir == "" {
+		opts.FolderDir = t.TempDir()
+	}
+	store := sqlite.NewServiceRepository(db)
+	svc := services.New(store, cat.Projects, cat.Projects, opts)
 	s := servicesOf(cat)
 	s.Services = svc
 	srv := httptest.NewServer(NewRouter(NewHandler(s)))
@@ -59,7 +74,7 @@ func newServicesFixture(t *testing.T, opts services.Options) *servicesFixture {
 	if err != nil {
 		t.Fatal(err)
 	}
-	return &servicesFixture{t: t, srv: srv, cat: cat, svc: svc, logDir: opts.LogDir, projectID: p.ID, repoID: r.ID}
+	return &servicesFixture{t: t, srv: srv, cat: cat, svc: svc, store: store, logDir: opts.LogDir, projectID: p.ID, repoID: r.ID}
 }
 
 func (f *servicesFixture) call(method, path string, body any) (int, map[string]any) {

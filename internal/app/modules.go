@@ -28,6 +28,7 @@ import (
 	"operators-mcp/internal/adapter/out/agents/claudetext"
 	"operators-mcp/internal/adapter/out/blobstore"
 	"operators-mcp/internal/adapter/out/catalogstore"
+	"operators-mcp/internal/adapter/out/commandrunner"
 	"operators-mcp/internal/adapter/out/developerdir"
 	"operators-mcp/internal/adapter/out/filesystem"
 	"operators-mcp/internal/adapter/out/gitcli"
@@ -639,16 +640,24 @@ func newAppsService(orch *orchestration.Service, cat catalog.Catalog, host ports
 // newServicesModule keeps projects' services in the database, with their
 // logs in the data directory. It reads the sandbox switch and driver agents
 // run under, and looks the container runtime up on the server's PATH.
-func newServicesModule(cfg Config, db *gorm.DB, cat catalog.Catalog, orch *orchestration.Service, sandbox *sandboxsettings.Store) (*services.Service, error) {
+func newServicesModule(cfg Config, db *gorm.DB, cat catalog.Catalog, orch *orchestration.Service, sandbox *sandboxsettings.Store, git ports.GitCode) (*services.Service, error) {
 	logDir, err := dataDir(cfg, "service-logs")
 	if err != nil {
 		return nil, err
 	}
-	if err := os.MkdirAll(logDir, 0o700); err != nil {
+	folderDir, err := dataDir(cfg, "service-folders")
+	if err != nil {
 		return nil, err
 	}
+	for _, dir := range []string{logDir, folderDir} {
+		if err := os.MkdirAll(dir, 0o700); err != nil {
+			return nil, err
+		}
+	}
 	return services.New(sqlite.NewServiceRepository(db), cat.Projects, cat.Projects, services.Options{
-		LogDir: logDir, Sandbox: sandbox, Driver: sandboxDriver(orch), LookPath: exec.LookPath,
+		LogDir: logDir, FolderDir: folderDir, Sandbox: sandbox, Driver: sandboxDriver(orch), LookPath: exec.LookPath,
+		Runners:  map[domain.ServiceKind]ports.ServiceProcessRunner{domain.ServiceKindCommand: commandrunner.Runner{}},
+		EnvFiles: cat.Projects, Branches: git,
 	}), nil
 }
 

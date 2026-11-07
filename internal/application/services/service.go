@@ -2,8 +2,8 @@
 // person defines on a project, each a command line or a container image,
 // with the last run of each, and the feed that tells followers about every
 // change. It is a context of its own, beside the apps that run App tab runs,
-// and shares no state with them. This file holds the definitions; running
-// them is built on top.
+// and shares no state with them. This file holds the definitions; run.go
+// runs them and log.go keeps their logs.
 package services
 
 import (
@@ -42,6 +42,27 @@ type Options struct {
 	LookPath func(command string) (string, error)
 	// Now is the clock; nil is time.Now.
 	Now func() time.Time
+
+	// Runners start the process of a run, by the kind of the service; a kind
+	// with none cannot start.
+	Runners map[domain.ServiceKind]ports.ServiceProcessRunner
+	// StopGrace is how long a stop waits after SIGTERM before it kills; zero
+	// is DefaultStopGrace.
+	StopGrace time.Duration
+	// LogCap is how much of a run's output its log keeps; zero is
+	// DefaultLogCap.
+	LogCap int64
+	// FolderDir holds the harness-owned folder of each service with no
+	// repository, one per service id; empty is a folder in LogDir.
+	FolderDir string
+	// EnvFiles reads a repository's saved env files, for the root .env a
+	// service exports; nil exports nothing.
+	EnvFiles ports.EnvFileLister
+	// Branches names the branch a main checkout holds; nil leaves it empty.
+	Branches ports.RunBranchReader
+	// BaseEnv is the clean environment every run starts from; nil is the
+	// server's own PATH, HOME and locale without the harness's shims.
+	BaseEnv func() []string
 }
 
 // Service implements ports.ServiceManager.
@@ -57,6 +78,11 @@ type Service struct {
 	seq   map[string]int64 // per project
 	feed  *feed
 	avail availableCache
+	// runs are the live runs by service id. Guarded by mu.
+	runs map[string]*run
+
+	logMu sync.Mutex
+	logs  map[string]*logFile
 }
 
 // New returns the module over its store and the readers of projects and
@@ -65,7 +91,19 @@ func New(store ports.ServiceStore, projects ports.ProjectReader, repos ports.Rep
 	if opts.Now == nil {
 		opts.Now = time.Now
 	}
-	return &Service{store: store, projects: projects, repos: repos, opts: opts, seq: map[string]int64{}, feed: newFeed()}
+	if opts.StopGrace <= 0 {
+		opts.StopGrace = DefaultStopGrace
+	}
+	if opts.LogCap <= 0 {
+		opts.LogCap = DefaultLogCap
+	}
+	if opts.BaseEnv == nil {
+		opts.BaseEnv = defaultBaseEnv
+	}
+	return &Service{
+		store: store, projects: projects, repos: repos, opts: opts, seq: map[string]int64{}, feed: newFeed(),
+		runs: map[string]*run{}, logs: map[string]*logFile{},
+	}
 }
 
 func newServiceID() string {
@@ -188,8 +226,11 @@ func (s *Service) DeleteService(_ context.Context, serviceID string) error {
 	if err := s.store.DeleteService(serviceID); err != nil {
 		return err
 	}
-	if err := os.Remove(s.LogPath(serviceID)); err != nil && !os.IsNotExist(err) {
-		return err
+	s.forgetLog(serviceID)
+	for _, p := range []string{s.LogPath(serviceID), s.LogPath(serviceID) + ".first"} {
+		if err := os.Remove(p); err != nil && !os.IsNotExist(err) {
+			return err
+		}
 	}
 	count, err := s.store.RunningServices(cur.ProjectID)
 	if err != nil {

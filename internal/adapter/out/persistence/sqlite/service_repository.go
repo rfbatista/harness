@@ -148,3 +148,17 @@ func (r *ServiceRepository) RunningServices(projectID string) (int, error) {
 		Count(&n).Error
 	return int(n), err
 }
+
+// ActiveServices lists the starting and running services of every project.
+func (r *ServiceRepository) ActiveServices() ([]*domain.Service, error) {
+	var models []ServiceModel
+	err := r.db.Where("status IN ?", []string{string(domain.ServiceStarting), string(domain.ServiceRunning)}).Order("project_id, name").Find(&models).Error
+	if err != nil {
+		return nil, err
+	}
+	out := make([]*domain.Service, 0, len(models))
+	for i := range models {
+		out = append(out, models[i].toDomain())
+	}
+	return out, nil
+}
