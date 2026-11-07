@@ -90,6 +90,9 @@ func (e *boardE2E) followEvents() {
 				e.t.Errorf("event %q: %v", data, err)
 				return
 			}
+			if ev.Kind == domain.BoardSessionEnded && ev.Card == nil && !strings.Contains(data, `"card":null`) {
+				e.t.Errorf("a session_ended with no card left must carry card: null: %s", data)
+			}
 			out <- ev
 		}
 	}()

@@ -506,9 +506,7 @@ func (l Link) Merging() bool { return l.Merge != "" && !l.Attention && l.Live ==
 func (l Link) IsFeature() bool { return len(l.Kids) > 0 }
 
 // ShowsStatus: a child's row says its status, when no signal takes the slot.
-func (l Link) ShowsStatus() bool {
-	return l.StatusWord != "" && l.Reviews == 0 && !l.Attention && l.Live == 0
-}
+func (l Link) ShowsStatus() bool { return l.StatusWord != "" && l.Reviews == 0 && !l.Attention && l.Live == 0 }
 
 // KidsID is the id of the list of children, which the twisty controls.
 func (l Link) KidsID() string { return "rail-kids-" + l.TaskID }

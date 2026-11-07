@@ -449,7 +449,7 @@ func (s *Service) recompute(ctx context.Context, tid string) {
 	}
 	// Otherwise the task itself changed.
 	if card != nil && !emitted {
-		s.publish(domain.BoardEvent{Kind: domain.BoardTaskChanged, ProjectID: projectID, TaskID: tid, Card: card})
+		s.publish(domain.BoardEvent{Kind: domain.BoardTaskChanged, ProjectID: projectID, ProjectName: projectName, TaskID: tid, Card: card})
 	}
 }
 

@@ -1,6 +1,9 @@
 package domain
 
-import "time"
+import (
+	"encoding/json"
+	"time"
+)
 
 // LiveSessionStatuses are the statuses of a session that is live: the ones an
 // Agent board card shows a line for.
@@ -96,4 +99,17 @@ type BoardEvent struct {
 	// Card is the whole card after the change; nil (JSON null) when the task
 	// has no live session left. Not sent on project_changed.
 	Card *BoardCard `json:"card,omitempty"`
+}
+
+// MarshalJSON sends a session_ended event's card as an explicit null when the
+// task has no live session left; every other kind leaves it out when unset.
+func (e BoardEvent) MarshalJSON() ([]byte, error) {
+	type plain BoardEvent
+	if e.Kind == BoardSessionEnded {
+		return json.Marshal(struct {
+			plain
+			Card *BoardCard `json:"card"`
+		}{plain(e), e.Card})
+	}
+	return json.Marshal(plain(e))
 }

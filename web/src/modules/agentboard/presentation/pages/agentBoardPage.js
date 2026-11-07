@@ -324,7 +324,11 @@ export const agentBoardPage =
             const { board, notes } = reconcile(this.board, seed, { wholesale });
             this.commit(board, notes);
           } catch {
-            // the cards stay as they are; the stream bar and the banner tell the connection
+            // The cards stay as they are; the stream bar and the banner tell the connection.
+            // Events that waited on this read are dropped, not replayed: a replayed gap would
+            // read again at once and hammer a server that is down. The next event or a
+            // "resynced" status reads again.
+            waiting = [];
           } finally {
             reading = null;
           }
