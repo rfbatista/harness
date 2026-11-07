@@ -67,6 +67,7 @@
     border-block-end: var(--border-width) solid var(--color-line);
 
     & h2 { font-size: var(--text-md); font-weight: var(--weight-bold); }
+    & h2 a { color: inherit; text-decoration: none; }
     & h2 a:hover { text-decoration: underline; }
     & .count { color: var(--color-ink-faint); font-size: var(--text-sm); margin-inline-start: auto; }
   }
@@ -119,6 +120,7 @@
       overflow: hidden;
     }
     /* The stretched link: the whole card opens the task. */
+    & .title a { color: inherit; text-decoration: none; }
     & .title a::after { content: ""; position: absolute; inset: 0; border-radius: var(--radius-md); }
     & .title a:focus-visible { outline: none; }
     & .meta { display: flex; align-items: center; gap: var(--space-xs); flex-wrap: wrap; }
