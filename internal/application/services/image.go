@@ -3,6 +3,7 @@ package services
 import (
 	"context"
 	"io"
+	"path/filepath"
 	"strconv"
 	"strings"
 	"sync"
@@ -26,7 +27,8 @@ type imagePlan struct {
 // prepareImage refuses a start while the runtime's command is missing, so
 // nothing starts, and gathers the container's fields. The repository's .env
 // goes into the container's env as for a command service, but the server's
-// own environment does not: it is only the runtime command's.
+// own environment does not: the runtime command gets only the base, and the
+// container's env goes in a file in the service's folder.
 func (s *Service) prepareImage(ctx context.Context, svc *domain.Service) (*prepared, error) {
 	if svc.Image == nil {
 		return nil, &domain.StructuredError{Code: "INVALID_INPUT", Message: "image.ref is required for an image service"}
@@ -49,6 +51,7 @@ func (s *Service) prepareImage(ctx context.Context, svc *domain.Service) (*prepa
 		image: &imagePlan{container: ports.ServiceContainer{
 			Runtime: runtime, ServiceID: svc.ID, Instance: s.opts.Instance,
 			Image: svc.Image.Ref, Args: svc.Image.Args, Ports: svc.Image.Ports, Env: env,
+			EnvDir: filepath.Join(s.folderRoot(), svc.ID),
 		}},
 	}, nil
 }

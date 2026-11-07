@@ -14,7 +14,7 @@ import (
 func TestRunArgsNeverHoldAForbiddenFlagForHostileInput(t *testing.T) {
 	hostile := []string{"--privileged", "-v", "/:/host", "--network=host", "--device=/dev/mem", "; rm -rf /", "$(id)", "`id`", "a b", "--mount=type=bind,src=/,dst=/h"}
 	c := ports.ServiceContainer{
-		Runtime: "docker", ServiceID: "svc1", Instance: "inst1", Image: "repo/img:1$(id);--privileged",
+		Runtime: "docker", ServiceID: "svc1", Instance: "inst1", Image: "repo/img:1$(id);--privileged", EnvDir: "/h/folders/svc1",
 		Args:  hostile,
 		Ports: []domain.ServicePort{{Host: 5432, Container: 5432, Protocol: "tcp"}, {Host: 53, Container: 5353, Protocol: "udp"}},
 	}
@@ -39,57 +39,45 @@ func TestRunArgsNeverHoldAForbiddenFlagForHostileInput(t *testing.T) {
 	for range c.Ports {
 		want = append(want, "-p")
 	}
-	for range c.Env {
-		want = append(want, "-e")
-	}
+	want = append(want, "--env-file")
 	slices.Sort(want)
 	slices.Sort(flags)
 	if !slices.Equal(flags, want) {
 		t.Fatalf("flags = %q, want only %q", flags, want)
 	}
+	at := slices.Index(args[:image], "--env-file")
+	if at < 0 || args[at+1] != EnvFilePath("harness-svc-x-y", c) {
+		t.Fatalf("the env file is --env-file's one argument: %q", args)
+	}
 	for i, kv := range c.Env {
 		k, v, _ := strings.Cut(kv, "=")
-		at := slices.Index(args[:image], k)
-		if at < 1 || args[at-1] != "-e" {
-			t.Fatalf("env name %q is not its own -e entry of %q", k, args)
-		}
 		for _, a := range args[:image] {
-			if a == v || a == kv {
-				t.Fatalf("env value %q of entry %d is on the command line: %q", v, i, args)
+			if a == v || a == kv || a == k {
+				t.Fatalf("env %q of entry %d is on the command line: %q", kv, i, args)
 			}
 		}
-		if !slices.Contains(RunEnv([]string{"PATH=/bin"}, c), kv) {
-			t.Fatalf("env %q does not arrive in the runtime's environment", kv)
+		if slices.Contains(RunEnv([]string{"PATH=/bin"}), kv) {
+			t.Fatalf("env %q reaches the runtime's own environment", kv)
 		}
 	}
-	if env := RunEnv([]string{"PATH=/bin"}, c); env[0] != "PATH=/bin" || len(env) != 1+len(c.Env) {
-		t.Fatalf("the base environment comes first: %q", env)
+	if env := RunEnv([]string{"PATH=/bin"}); !slices.Equal(env, []string{"PATH=/bin"}) {
+		t.Fatalf("the runtime's environment is the base only: %q", env)
 	}
-	if !slices.Contains(args, "5432:5432/tcp") || !slices.Contains(args, "53:5353/udp") {
+	if !slices.Contains(args, "127.0.0.1:5432:5432/tcp") || !slices.Contains(args, "127.0.0.1:53:5353/udp") {
 		t.Fatalf("port mappings missing: %q", args)
 	}
-}
-
-func TestNoEnvValueIsOnTheCommandLineAnywhere(t *testing.T) {
-	c := ports.ServiceContainer{Runtime: "docker", Image: "pg", Env: []string{"PASS=hunter2", "TOKEN=s3cr3t=with=equals"}}
-	args, err := RunArgs("n", c)
-	if err != nil {
-		t.Fatal(err)
-	}
-	for _, a := range args {
-		if strings.Contains(a, "hunter2") || strings.Contains(a, "s3cr3t") {
-			t.Fatalf("a value is on the command line: %q", args)
+	for i, a := range args[:image] {
+		if a == "-p" && !strings.HasPrefix(args[i+1], "127.0.0.1:") {
+			t.Fatalf("a port is published beyond loopback: %q", args[i+1])
 		}
-	}
-	if !slices.Contains(args, "PASS") || !slices.Contains(args, "TOKEN") {
-		t.Fatalf("names are: %q", args)
 	}
 }
 
 func TestRunArgsRefuseWhatValidationShouldHave(t *testing.T) {
 	for _, c := range []ports.ServiceContainer{
 		{Image: "-v"}, {Image: ""},
-		{Image: "i", Env: []string{"--privileged=1"}},
+		{Image: "i", EnvDir: "/h", Env: []string{"--privileged=1"}},
+		{Image: "i", Env: []string{"A=1"}},
 		{Image: "i", Ports: []domain.ServicePort{{Host: 1, Container: 1, Protocol: "tcp -v /:/h"}}},
 	} {
 		if _, err := RunArgs("n", c); err == nil {
@@ -99,8 +87,8 @@ func TestRunArgsRefuseWhatValidationShouldHave(t *testing.T) {
 }
 
 func TestDescribeNamesEnvKeysNeverValues(t *testing.T) {
-	line := Describe("n", ports.ServiceContainer{Runtime: "podman", Image: "pg", Env: []string{"PASS=hunter2"}, Args: []string{"-c", "x"}})
-	if strings.Contains(line, "hunter2") || !strings.Contains(line, "-e PASS pg -c x") || !strings.HasPrefix(line, "podman run ") {
+	line := Describe("n", ports.ServiceContainer{Runtime: "podman", Image: "pg", EnvDir: "/h/f", Env: []string{"PASS=hunter2"}, Args: []string{"-c", "x"}})
+	if strings.Contains(line, "hunter2") || strings.Contains(line, "PASS") || !strings.Contains(line, "--env-file /h/f/n.env pg -c x") || !strings.HasPrefix(line, "podman run ") {
 		t.Fatal(line)
 	}
 }
