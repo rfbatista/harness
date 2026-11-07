@@ -64,6 +64,32 @@ templ Page(frame shell.Frame, v View) {
 							</li>
 						</ul>
 					</section>
+					<section class="[ pane ]" aria-labelledby="server-services-title" x-data="servicesRuntime" data-services-runtime>
+						<header><h2 id="server-services-title">Services</h2></header>
+						<ul role="list" class="[ list ]">
+							<li class="[ flow ] [ flow-space-2xs ]">
+								<p class="[ visually-hidden ]" role="status" aria-live="polite" x-text="announcement"></p>
+								<template x-if="error">
+									<div class="[ banner ]" data-tone="danger" role="alert">
+										<div class="[ flow ] [ flow-space-3xs grow ]">
+											<span x-text="error.message"></span>
+											<span class="[ code ]"><span x-text="error.code"></span> · <span x-text="error.next"></span></span>
+										</div>
+										<button type="button" class="[ button ]" data-variant="ghost" data-size="sm" x-on:click="dismissError">Dismiss</button>
+									</div>
+								</template>
+								<label class="[ row ]" style="--row-columns: 9rem auto">
+									<span class="[ title ]">Container runtime</span>
+									<select data-fit data-container-runtime x-bind:value="runtime" x-bind:disabled="loading || saving" x-bind:aria-busy="saving" x-on:change="choose">
+										<option value="docker">docker</option>
+										<option value="podman">podman</option>
+									</select>
+								</label>
+								<p class="[ text-sm ]" data-runtime-status x-bind:data-found="found" x-bind:hidden="loading" x-text="status"></p>
+								<p class="[ text-sm color-ink-muted ]">Runs the image services of every project. A change applies to the next start: a running image service keeps the runtime it started with.</p>
+							</li>
+						</ul>
+					</section>
 				</div>
 			</div>
 		</main>

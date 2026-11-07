@@ -175,7 +175,8 @@ export function mcpChoices(catalog, chosen) {
   const rows = catalog.mcpServers.map((s) => ({
     name: s.name,
     checked: on.has(s.name),
-    transport: s.transport,
+    transport: s.builtIn ? "built-in" : s.transport,
+    builtIn: s.builtIn,
     missing: false,
     refs: s.envRefs.map((r) => ({ label: "${" + r.name + "}", state: r.set ? "set" : "not set", tone: r.set ? "success" : "attention" })),
   }));

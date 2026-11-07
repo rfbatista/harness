@@ -38,7 +38,8 @@ export function projectMcpRows(catalog, projectId, selected) {
     const unset = vars.some((v) => v.tone === "attention");
     return {
       name: s.name,
-      transport: s.transport,
+      transport: s.builtIn ? "built-in" : s.transport,
+      builtIn: s.builtIn,
       checked: selected.includes(s.name),
       vars,
       who: whoElse(s, projectId),

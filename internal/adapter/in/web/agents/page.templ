@@ -567,6 +567,7 @@ templ mcpLibrary() {
 						<a class="[ library-row ]" data-mcp-row x-bind:href="row.href" x-bind:data-key="row.name" x-bind:aria-current="row.current" x-on:click="openAgent">
 							<span class="[ name font-mono ]" x-text="row.name"></span>
 							<span class="[ meta ]">
+								<span class="[ badge ]" data-tone="signal" data-built-in x-bind:hidden="!row.builtIn">Built-in</span>
 								<span class="[ badge ]" x-bind:hidden="row.noBadge" x-bind:data-tone="row.badgeTone" x-text="row.badgeLabel"></span>
 								<span x-text="row.meta"></span>
 							</span>
@@ -609,9 +610,12 @@ templ mcpDetail() {
 				<div class="[ cluster ]">
 					<h2 class="[ font-mono ]" x-text="mcp.name"></h2>
 					<span class="[ badge ]" data-transport x-text="mcp.transport"></span>
+					<span class="[ badge ]" data-tone="signal" data-built-in-badge x-bind:hidden="!mcp.builtIn">Built-in</span>
 					<span class="[ badge ]" data-tone="attention" data-unused-badge x-bind:hidden="!mcp.unused">Unused</span>
 				</div>
-				@actionsMenu("mcp")
+				<div x-bind:hidden="mcp.builtIn" data-actions>
+					@actionsMenu("mcp")
+				</div>
 			</div>
 			<code class="[ library-path ]" data-path x-text="mcp.path"></code>
 		</div>
@@ -621,6 +625,7 @@ templ mcpDetail() {
 			</div>
 			<button type="button" class="[ button ]" data-size="sm" x-bind:disabled="checking" x-on:click="checkAgain" x-text="checkLabel"></button>
 		</div>
+		<p class="[ color-ink-muted text-sm ]" data-built-in-note x-bind:hidden="!mcp.builtIn">services is built into the harness and cannot be edited or deleted. Add it to an agent or a project like any other server.</p>
 		<dl class="[ kv detail-card ]">
 			<dt x-text="mcp.targetLabel"></dt>
 			<dd class="[ font-mono text-sm ]" data-target x-text="mcp.target"></dd>

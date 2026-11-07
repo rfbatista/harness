@@ -126,7 +126,7 @@ test-race: ## run the tests with the race detector
 	go test -race $(PKGS)
 
 test-design-system: ## run the design system's CSS invariant tests
-	node --test design-system/session-row.test.mjs design-system/sync-blocks.test.mjs design-system/git-extensions.test.mjs design-system/preview-parity.test.mjs
+	node --test design-system/session-row.test.mjs design-system/sync-blocks.test.mjs design-system/git-extensions.test.mjs design-system/preview-parity.test.mjs design-system/services-blocks.test.mjs
 
 vet: ## run go vet
 	go vet $(PKGS)
