@@ -1,0 +1,86 @@
+/*
+ * Service — a service row and the log viewer of the Services page (ADR 0076).
+ * <div class="list" data-services><div class="row" data-layout="service">
+ *   <span class="status" data-state="…">…</span>
+ *   <div class="main"><div class="head"><a class="name"/><span class="badge"/></div>
+ *     <div class="line"/><div class="facts"><span class="ports"/>…</div><p class="reason"/></div>
+ *   <div class="actions">…</div></div></div>
+ * The list is a size container ("services"): below 46rem, with the log open beside it or on a
+ * phone, the row stacks (status and actions, then the main column).
+ * <section class="pane service-log"><header><h2/><span class="meta"/></header>
+ *   <div class="log" role="log"><p class="earlier"/><div class="ln"/><div class="ln" data-harness><b>[harness] </b>…</div>
+ *   <div class="reset"/></div><footer>…</footer></section>
+ * Read-only text, not a terminal. [data-harness] lines carry a bold prefix, a panel wash and a signal
+ * rule on the start edge, so they differ from the program's output without colour alone.
+ * Exceptions: aria-current (the row whose log is open), data-fresh (arrived over the live feed),
+ * .status[data-tone="attention"] (exited with a non-zero code).
+ */
+
+@layer blocks {
+  .row[data-layout="service"] {
+    --row-columns: 8.75rem minmax(0, 1fr) auto;
+    align-items: start;
+    padding-block: var(--space-m);
+    column-gap: var(--space-l);
+
+    & > .status { padding-block-start: 0.1875rem; }
+    & > .status[data-tone="attention"] { color: var(--color-attention-strong); }
+    & .main { display: grid; gap: var(--space-2xs); min-inline-size: 0; }
+    & .head { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2xs) var(--space-s); }
+    & .name { font-family: var(--font-mono); font-weight: var(--weight-medium); color: var(--color-ink); text-decoration: none; }
+    & .name:hover { text-decoration: underline; }
+    & .line { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-family: var(--font-mono); font-size: var(--text-xs); color: var(--color-ink-muted); }
+    & .facts { display: flex; flex-wrap: wrap; gap: var(--space-3xs) var(--space-m); font-size: var(--text-xs); color: var(--color-ink-muted); }
+    & .facts > span { display: inline-flex; align-items: center; gap: var(--space-2xs); }
+    & .facts .ports a { display: inline-flex; align-items: center; gap: var(--space-3xs); font-family: var(--font-mono); }
+    & .facts svg { inline-size: 0.75rem; block-size: 0.75rem; }
+    & .reason { margin: 0; font-size: var(--text-sm); color: var(--color-danger); }
+    & > .actions { display: flex; align-items: center; gap: var(--space-xs); }
+    &[aria-current="true"] { background: var(--color-selected); box-shadow: inset 2px 0 0 var(--color-signal); }
+
+    /* The list is a size container: with the log open beside it, or on a phone, the row stacks. */
+    @container services (width < 46rem) {
+      grid-template-columns: minmax(0, 1fr) auto;
+      grid-template-areas: "status actions" "main main";
+      row-gap: var(--space-s);
+      padding-inline: var(--space-m);
+      & > .status { grid-area: status; }
+      & > .actions { grid-area: actions; }
+      & > .main { grid-area: main; }
+    }
+  }
+  .list[data-services] { container: services / inline-size; }
+
+  .service-log {
+    block-size: 100%;
+    border-width: 0 0 0 var(--border-width);
+    border-radius: 0;
+
+    & > header { flex-wrap: wrap; row-gap: 0; padding-block: var(--space-xs); }
+    & > header h2 { font-family: var(--font-mono); font-size: var(--text-sm); }
+    & > header .meta { flex: 1 1 12rem; font-size: var(--text-xs); font-weight: var(--weight-regular); color: var(--color-ink-faint); }
+    & > .log {
+      flex: 1 1 auto; min-block-size: 0; overflow: auto; overscroll-behavior: contain;
+      padding-block: var(--space-s);
+      background: var(--color-sunken);
+      font-family: var(--font-mono); font-size: var(--text-xs); line-height: 1.55; tab-size: 4;
+    }
+    & .ln { padding-inline: var(--space-m); white-space: pre-wrap; overflow-wrap: anywhere; color: var(--color-ink); }
+    & .ln[data-harness] { background: var(--color-panel); box-shadow: inset 2px 0 0 var(--color-signal); color: var(--color-ink-muted); }
+    & .ln[data-harness] > b { font-weight: var(--weight-bold); color: var(--color-ink); }
+    & .earlier { padding: 0 var(--space-m) var(--space-s); font-family: var(--font-sans); color: var(--color-ink-faint); }
+    & .reset {
+      margin-block: var(--space-s); padding: var(--space-2xs) var(--space-m);
+      border-block: var(--border-width) dashed var(--color-line-strong);
+      font-family: var(--font-sans); font-size: var(--text-xs); text-align: center; color: var(--color-attention-strong);
+    }
+    & > footer {
+      display: flex; align-items: center; gap: var(--space-s); flex-wrap: wrap;
+      min-block-size: 2.5rem; padding: var(--space-2xs) var(--space-m);
+      background: var(--color-panel); border-block-start: var(--border-width) solid var(--color-line);
+      font-size: var(--text-xs); color: var(--color-ink-muted);
+    }
+    & > footer .push { margin-inline-start: auto; }
+    & .empty-log { margin: auto; padding: var(--space-xl); color: var(--color-ink-faint); font-family: var(--font-sans); font-size: var(--text-sm); text-align: center; }
+  }
+}
