@@ -109,6 +109,7 @@ import "../src/modules/sandbox/infrastructure/sandbox-gateway.test.js";
 import "../src/modules/sandbox/presentation/components/sandboxSettings.test.js";
 import "../src/modules/services/domain/service.test.js";
 import "../src/modules/services/infrastructure/services-gateway.test.js";
+import "../src/modules/services/presentation/components/servicesNavCount.test.js";
 import "../src/modules/services/presentation/components/servicesPage.test.js";
 import "../src/modules/services/presentation/components/servicesRuntime.test.js";
 import "../src/modules/sessions/domain/agentPicker.test.js";

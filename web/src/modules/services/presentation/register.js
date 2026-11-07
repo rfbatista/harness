@@ -1,6 +1,7 @@
 // The services module's Alpine components: the Services page and the container runtime pane on the Server page.
 
 import { systemClock } from "../../../shared/infrastructure/clock.js";
+import { servicesNavCount } from "./components/servicesNavCount.js";
 import { servicesPage } from "./components/servicesPage.js";
 import { servicesRuntime } from "./components/servicesRuntime.js";
 
@@ -10,5 +11,6 @@ import { servicesRuntime } from "./components/servicesRuntime.js";
  */
 export function registerServices(Alpine, deps) {
   Alpine.data("servicesPage", servicesPage({ gateway: deps.gateway, clock: deps.clock ?? systemClock }));
+  Alpine.data("servicesNavCount", servicesNavCount({ gateway: deps.gateway }));
   Alpine.data("servicesRuntime", servicesRuntime(deps));
 }

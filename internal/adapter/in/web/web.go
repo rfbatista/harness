@@ -140,6 +140,10 @@ type Deps struct {
 	// Services seeds a project's Services page with its services; nil leaves
 	// the page out.
 	Services services.Lister
+	// ServiceCounter reads how many of a project's services run, for the
+	// Services item of the project navigation on every project page; nil
+	// counts none.
+	ServiceCounter ports.ServiceRunningCounter
 	// Usage reads token usage for a project's Usage page and the task
 	// page's totals; nil leaves the page, its rail link and the totals out.
 	Usage ports.UsageDashboard
@@ -418,6 +422,9 @@ func (s *server) layout(ctx context.Context, title, projectID, taskID string) (s
 	if s.deps.Code != nil {
 		frame.Rail.CodeHref = code.IndexHref(projectID)
 	}
+	if s.deps.Services != nil {
+		frame.Rail.Services = shell.ServicesNav{Href: services.Href(projectID), ProjectID: projectID, Running: s.runningServices(ctx, projectID)}
+	}
 	frame.Rail.NewTaskHref = tasks.NewTaskHref(projectID)
 	frame.Rail.ReviewsHref = tasks.ReviewsHref(projectID)
 	if s.deps.Documents != nil {
@@ -459,6 +466,17 @@ func (s *server) fragmentFrame(ctx context.Context, title, projectID, taskID str
 // openDesignProposals counts the proposals waiting on the person across the
 // project's design systems; a failed read counts none, the badge follows the
 // feed once the page is open.
+func (s *server) runningServices(ctx context.Context, projectID string) int {
+	if s.deps.ServiceCounter == nil {
+		return 0
+	}
+	n, err := s.deps.ServiceCounter.RunningServiceCount(ctx, projectID)
+	if err != nil {
+		return 0 // the badge is a hint: the feed corrects it
+	}
+	return n
+}
+
 func (s *server) openDesignProposals(ctx context.Context, projectID string) int {
 	if s.deps.DesignSystems == nil {
 		return 0

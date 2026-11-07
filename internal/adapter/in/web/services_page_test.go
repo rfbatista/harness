@@ -153,3 +153,70 @@ func waitFollowers(t *testing.T, f *sseFeed) {
 		time.Sleep(20 * time.Millisecond)
 	}
 }
+
+// The navigation's Services item shows the running count on every project
+// page, as the server rendered it, and the services feed keeps it current.
+func TestProjectNavServicesCountFollowsTheFeedOnAnotherPage(t *testing.T) {
+	assets, err := NewAssets()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !assets.Built() {
+		t.Skip("browser test: web client not built; run `make web`")
+	}
+	ctx, errs := browser(t)
+
+	fake := &fakeServices{list: ports.ServiceList{Services: []*domain.Service{}, Seq: 1, Runtime: ports.ServiceRuntimeInfo{Name: "docker", Available: true}, Sandbox: ports.ServiceSandboxOn}}
+	pages := NewHandler(Deps{
+		Projects:       fakeProjects{[]*domain.Project{{ID: "p1", Name: "coding_pool"}}},
+		Tasks:          fakeTickets{[]*domain.Ticket{{ID: "t1", ProjectID: "p1", Title: "Add SSE feed", Status: domain.TicketStatusInProgress}}},
+		Agents:         fakeAgents{[]*domain.Agent{{ID: "a-lead", Name: "Lead dev"}}},
+		Repositories:   fakeRepos{[]*domain.Repository{{ID: "r1", ProjectID: "p1", Name: "harness"}}},
+		Sessions:       fakeSessions{},
+		Services:       fake,
+		ServiceCounter: fixedRunning(2),
+	}, assets, nil)
+	feed := &sseFeed{}
+	mux := http.NewServeMux()
+	mux.Handle("/api/services/events", feed)
+	mux.Handle("/api/", http.NotFoundHandler())
+	mux.Handle("/", pages)
+	srv := newBrowserServer(mux)
+	defer func() {
+		srv.CloseClientConnections()
+		srv.Close()
+	}()
+
+	item := `document.querySelector('nav[aria-label=Project] [data-page=services]')`
+	badge := `(() => { const b = ` + item + `.querySelector('[data-nav-running]'); return b.style.display === 'none' ? '' : b.textContent.trim(); })()`
+	poll := func(expr string) chromedp.Action {
+		return chromedp.Poll(expr, nil, chromedp.WithPollingTimeout(10*time.Second))
+	}
+	var rendered string
+	if err := chromedp.Run(ctx,
+		chromedp.EmulateViewport(1280, 800),
+		chromedp.Navigate(srv.URL+"/projects/p1/tasks/t1"),
+		poll(item+` !== null`),
+		chromedp.Evaluate(item+`.dataset.runningServices`, &rendered),
+		poll(badge+` === '2 running'`),
+	); err != nil {
+		t.Fatalf("%v\nJS errors: %v", err, errs.all())
+	}
+	if rendered != "2" {
+		t.Errorf("data-running-services = %q, want 2", rendered)
+	}
+	waitFollowers(t, feed)
+	feed.pushRaw(t, ports.ServiceEvent{Seq: 2, Kind: ports.ServiceDeleted, ServiceID: "s1", RunningCount: 0})
+	if err := chromedp.Run(ctx, poll(badge+` === ''`)); err != nil {
+		t.Fatalf("the badge did not clear at zero: %v\nJS errors: %v", err, errs.all())
+	}
+	feed.pushRaw(t, ports.ServiceEvent{Seq: 3, Kind: ports.ServiceDeleted, ServiceID: "s2", RunningCount: 140})
+	if err := chromedp.Run(ctx, poll(badge+` === '99+ running'`)); err != nil {
+		t.Fatalf("the badge did not cap at 99+: %v\nJS errors: %v", err, errs.all())
+	}
+}
+
+// fixedRunning answers every project's running count with one number.
+type fixedRunning int
+
+func (f fixedRunning) RunningServiceCount(context.Context, string) (int, error) { return int(f), nil }

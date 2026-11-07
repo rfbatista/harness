@@ -317,6 +317,17 @@ templ projectNav(r Rail) {
 					</a>
 				</li>
 			}
+			if r.Services.Href != "" {
+				<li data-page="services" x-data="servicesNavCount" data-project-id={ r.Services.ProjectID } data-running-services={ strconv.Itoa(r.Services.Running) }>
+					<a href={ templ.SafeURL(r.Services.Href) } { currentAttrs(r.Page == PageServices)... }>
+						@icon("services")
+						<span class="[ label ]">Services</span>
+						<span class="[ badge ]" data-tone="signal" data-nav-running role="status" x-show="badgeShown" { shownIf(r.Services.Running > 0)... }>
+							<span x-text="badgeText">{ r.Services.Badge() }</span><span class="[ visually-hidden ]">{ " running" }</span>
+						</span>
+					</a>
+				</li>
+			}
 			if r.ReviewsHref != "" {
 				<li data-page="reviews">
 					<a href={ templ.SafeURL(r.ReviewsHref) } { currentAttrs(r.Page == PageReviews)... }>

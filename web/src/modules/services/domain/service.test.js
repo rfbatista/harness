@@ -109,3 +109,11 @@ test("an event kind it does not know is ignored but keeps the sequence", () => {
   assert.equal(r.reload, false);
   assert.equal(r.state.seq, 2);
 });
+
+test("the navigation badge is hidden at 0, shows the count, and caps at 99+", async () => {
+  const { navBadge } = await import("./service.js");
+  assert.deepEqual(navBadge(0), { text: "", hidden: true });
+  assert.deepEqual(navBadge(3), { text: "3", hidden: false });
+  assert.deepEqual(navBadge(99), { text: "99", hidden: false });
+  assert.deepEqual(navBadge(140), { text: "99+", hidden: false });
+});

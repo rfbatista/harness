@@ -130,3 +130,9 @@ export function applyEvent(state, event) {
   }
   return { state: { seq: event.seq, services }, reload: false, applied: true, runningCount: event.runningCount };
 }
+
+/** The navigation item's badge: not drawn at 0, "99+" above 99. */
+export function navBadge(count) {
+  if (count <= 0) return { text: "", hidden: true };
+  return { text: count > 99 ? "99+" : String(count), hidden: false };
+}
