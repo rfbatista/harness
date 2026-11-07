@@ -29,6 +29,7 @@ import (
 	"operators-mcp/internal/adapter/out/blobstore"
 	"operators-mcp/internal/adapter/out/catalogstore"
 	"operators-mcp/internal/adapter/out/commandrunner"
+	"operators-mcp/internal/adapter/out/containerrunner"
 	"operators-mcp/internal/adapter/out/developerdir"
 	"operators-mcp/internal/adapter/out/filesystem"
 	"operators-mcp/internal/adapter/out/gitcli"
@@ -657,7 +658,10 @@ func newServicesModule(cfg Config, db *gorm.DB, cat catalog.Catalog, orch *orche
 	return services.New(sqlite.NewServiceRepository(db), cat.Projects, cat.Projects, services.Options{
 		LogDir: logDir, FolderDir: folderDir, Sandbox: sandbox, Driver: sandboxDriver(orch), LookPath: exec.LookPath,
 		Allow: sandboxAllow(orch, sandbox), Checkouts: func(projectID string) []string { return projectCheckouts(cat.Projects, projectID) },
-		Runners:  map[domain.ServiceKind]ports.ServiceProcessRunner{domain.ServiceKindCommand: commandrunner.Runner{}},
+		Runners: map[domain.ServiceKind]ports.ServiceProcessRunner{
+			domain.ServiceKindCommand: commandrunner.Runner{}, domain.ServiceKindImage: containerrunner.Runner{},
+		},
+		Runtime:  services.RuntimeSetting{Settings: cat.Settings},
 		EnvFiles: cat.Projects, Branches: git,
 	}), nil
 }

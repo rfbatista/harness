@@ -71,6 +71,8 @@ func NewRouter(h *Handler, opts ...Option) *echo.Echo {
 	g.POST("/create_service", h.handleCreateService)
 	g.POST("/update_service", h.handleUpdateService)
 	g.POST("/delete_service", h.handleDeleteService)
+	g.GET("/get_services_settings", h.handleGetServicesSettings)
+	g.POST("/set_services_settings", h.handleSetServicesSettings)
 
 	// token saver activations of a project, repository or task
 	g.GET("/list_token_saver_activations", h.handleListTokenSaverActivations)

@@ -42,6 +42,8 @@ type prepared struct {
 	notes   []string
 	// sandbox confines the run; nil is an unconfined one.
 	sandbox *confinement
+	// image is set for an image service's run.
+	image *imagePlan
 }
 
 // StartService implements ports.ServiceManager.
@@ -72,7 +74,8 @@ func (s *Service) StartService(ctx context.Context, serviceID string, opts ports
 	r := &run{id: "run-" + newServiceID(), serviceID: serviceID, settled: make(chan struct{}), done: make(chan struct{})}
 	cur.Status = domain.ServiceStarting
 	cur.Run = &domain.ServiceRun{
-		ID: r.id, StartedAt: s.opts.Now().UTC().Format(time.RFC3339), StartedBy: opts.StartedBy, Where: p.where, Sandboxed: p.sandbox != nil,
+		ID: r.id, StartedAt: s.opts.Now().UTC().Format(time.RFC3339), StartedBy: opts.StartedBy, Where: p.where,
+		Sandboxed: p.sandbox != nil || p.image != nil,
 	}
 	cur.UpdatedAt = s.opts.Now().UTC()
 	lg := s.logFor(cur)
@@ -90,7 +93,11 @@ func (s *Service) StartService(ctx context.Context, serviceID string, opts ports
 	s.announceLocked(cur)
 	s.mu.Unlock()
 
-	s.launch(ctx, r, cur, runner, p, lg)
+	if p.image != nil {
+		s.launchImage(ctx, r, cur, runner, p, lg)
+	} else {
+		s.launch(ctx, r, cur, runner, p, lg)
+	}
 	out, err := s.store.GetService(serviceID)
 	return out, false, err
 }
@@ -284,6 +291,9 @@ func (s *Service) WaitServiceSettled(ctx context.Context, serviceID string) (*do
 // prepare works out where a run goes and with what environment. The caller
 // has not created the run: a refusal here starts nothing.
 func (s *Service) prepare(ctx context.Context, svc *domain.Service, opts ports.ServiceStartOptions) (*prepared, error) {
+	if svc.Kind == domain.ServiceKindImage {
+		return s.prepareImage(ctx, svc)
+	}
 	p := &prepared{}
 	if svc.Command != nil {
 		p.display = svc.Command.Line
@@ -343,6 +353,11 @@ func (s *Service) folderRoot() string {
 // 0008, ADR 0039), then the service's own env. The notes name skipped lines
 // by number only.
 func (s *Service) runEnv(ctx context.Context, svc *domain.Service) (env, notes []string, err error) {
+	return s.layeredEnv(ctx, svc, s.opts.BaseEnv())
+}
+
+// layeredEnv is runEnv over the given base.
+func (s *Service) layeredEnv(ctx context.Context, svc *domain.Service, base []string) (env, notes []string, err error) {
 	var keys []string
 	vals := map[string]string{}
 	set := func(k, v string) {
@@ -351,7 +366,7 @@ func (s *Service) runEnv(ctx context.Context, svc *domain.Service) (env, notes [
 		}
 		vals[k] = v
 	}
-	for _, kv := range s.opts.BaseEnv() {
+	for _, kv := range base {
 		if k, v, ok := strings.Cut(kv, "="); ok {
 			set(k, v)
 		}
