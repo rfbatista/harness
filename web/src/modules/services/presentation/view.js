@@ -57,6 +57,7 @@ export function serviceRow(service, now, { flight = "", runtime = { name: "docke
     stop: action("stop", "Stop", service, { show: active, flight }),
     restart: action("restart", "Restart", service, { show: service.status === "running", flight }),
     logName: `Log of ${service.name}`,
+    moreName: `More actions for ${service.name}`,
     reason: service.status === "failed" ? (run?.error ?? "") : "",
     hasReason: service.status === "failed" && (run?.error ?? "") !== "",
   };

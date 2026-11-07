@@ -108,3 +108,21 @@ test("the log feed is followed from an offset, and chunks and resets are mapped"
   handlers.onMessage({ kind: "mystery" });
   assert.deepEqual(events.map((e) => [e.kind, e.run_id, e.offset, e.text]), [["chunk", "r1", 42, "x\n"], ["reset", "r2", 0, ""]]);
 });
+
+test("create, update and delete post their payloads and map the answers", async () => {
+  const calls = [];
+  const api = {
+    post: async (path, body) => {
+      calls.push([path, body]);
+      if (path === "/delete_service") return {};
+      return path === "/update_service" ? { service: serviceDTO(), restart_needed: true } : { service: serviceDTO() };
+    },
+  };
+  const gw = servicesGateway(api, {});
+  const input = { name: "api", kind: "command" };
+  assert.equal((await gw.createService("p1", input)).name, "api");
+  const updated = await gw.updateService("s1", input);
+  assert.deepEqual([updated.service.name, updated.restartNeeded], ["api", true]);
+  await gw.deleteService("s1");
+  assert.deepEqual(calls, [["/create_service", { project_id: "p1", service: input }], ["/update_service", { service_id: "s1", service: input }], ["/delete_service", { service_id: "s1" }]]);
+});

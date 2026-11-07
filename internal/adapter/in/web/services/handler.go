@@ -31,8 +31,10 @@ type Lister interface {
 type Handler struct {
 	Projects ports.ProjectReader
 	Services Lister
-	Layout   shell.Layout
-	Render   shell.Renderer
+	// Repositories fill the form's repository picker; nil offers none.
+	Repositories ports.RepositoryLister
+	Layout       shell.Layout
+	Render       shell.Renderer
 }
 
 // Seed is what servicesPage starts from. List is the answer of list_services,
@@ -40,6 +42,15 @@ type Handler struct {
 type Seed struct {
 	ProjectID string             `json:"project_id"`
 	List      *ports.ServiceList `json:"list"`
+}
+
+// Repository is a repository the form offers: where a command service runs, or
+// whose saved .env an image service exports.
+type Repository struct {
+	ID   string
+	Name string
+	// Dir is the repository's folder, the picker's second line.
+	Dir string
 }
 
 // Page renders the page. A failed services read still renders it, without a
@@ -59,10 +70,20 @@ func (h Handler) Page(w http.ResponseWriter, r *http.Request) error {
 		}
 		seed.List = list
 	}
+	var repos []Repository
+	if h.Repositories != nil {
+		list, err := h.Repositories.ListRepositories(ctx, project.ID)
+		if err != nil {
+			slog.Warn("services page: repositories not read; the form offers none", "project", project.ID, "err", err)
+		}
+		for _, r := range list {
+			repos = append(repos, Repository{ID: r.ID, Name: r.Name, Dir: r.RootDir})
+		}
+	}
 	frame, err := h.Layout(ctx, "Services", project.ID, "")
 	if err != nil {
 		return err
 	}
 	frame.Rail.Page = shell.PageServices
-	return h.Render(w, r, http.StatusOK, Page(frame, project.ID, project.Name, seed))
+	return h.Render(w, r, http.StatusOK, Page(frame, project.ID, project.Name, seed, repos))
 }

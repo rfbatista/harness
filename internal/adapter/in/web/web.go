@@ -308,7 +308,7 @@ func NewHandler(deps Deps, assets *Assets, fallback http.Handler) http.Handler {
 		mux.Handle("GET /projects/{project}/usage", s.page(usagePage.Page))
 	}
 	if deps.Services != nil {
-		servicesPage := services.Handler{Projects: deps.Projects, Services: deps.Services, Layout: s.layout, Render: render}
+		servicesPage := services.Handler{Projects: deps.Projects, Services: deps.Services, Repositories: deps.Repositories, Layout: s.layout, Render: render}
 		mux.Handle("GET /projects/{project}/services", s.page(servicesPage.Page))
 	}
 	mux.Handle("GET /projects/{project}/documents", s.page(taskPages.ProjectDocuments))

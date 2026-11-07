@@ -419,3 +419,108 @@ func TestServicesPageShowsAServiceLogAndFollowsIt(t *testing.T) {
 		t.Fatalf("a new run: %v\nJS errors: %v", err, errs.all())
 	}
 }
+
+// Create, edit and delete from the page: the drawer asks for the kind's own
+// fields, a refusal lands under the field it names, the saved service joins
+// the list, and Delete asks first.
+func TestServicesPageCreatesEditsAndDeletesAService(t *testing.T) {
+	assets, err := NewAssets()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !assets.Built() {
+		t.Skip("browser test: web client not built; run `make web`")
+	}
+	ctx, errs := browser(t)
+
+	fake := &fakeServices{list: ports.ServiceList{
+		Services: []*domain.Service{},
+		Seq:      1, Runtime: ports.ServiceRuntimeInfo{Name: "docker", Available: true}, Sandbox: ports.ServiceSandboxOn,
+	}}
+	pages := NewHandler(Deps{
+		Projects:     fakeProjects{[]*domain.Project{{ID: "p1", Name: "coding_pool"}}},
+		Tasks:        fakeTickets{},
+		Sessions:     fakeSessions{},
+		Repositories: fakeRepos{[]*domain.Repository{{ID: "r1", ProjectID: "p1", Name: "harness", RootDir: "/home/me/harness"}}},
+		Services:     fake,
+	}, assets, nil)
+	feed := &sseFeed{}
+	var created []domain.ServiceInput
+	var deleted []string
+	mux := http.NewServeMux()
+	mux.Handle("/api/services/events", feed)
+	mux.HandleFunc("POST /api/create_service", func(w http.ResponseWriter, r *http.Request) {
+		var in struct {
+			ProjectID string              `json:"project_id"`
+			Service   domain.ServiceInput `json:"service"`
+		}
+		_ = json.NewDecoder(r.Body).Decode(&in)
+		if in.Service.Command != nil && in.Service.Command.Subdir == "../x" {
+			w.WriteHeader(http.StatusBadRequest)
+			writeJSON(w, map[string]string{"error": "command.subdir must be relative and stay inside the repository", "code": "INVALID_INPUT"})
+			return
+		}
+		created = append(created, in.Service)
+		s := svc("s9", in.Service.Name, domain.ServiceStopped, nil)
+		s.Command = in.Service.Command
+		writeJSON(w, map[string]any{"service": s})
+	})
+	mux.HandleFunc("POST /api/delete_service", func(w http.ResponseWriter, r *http.Request) {
+		var in struct {
+			ServiceID string `json:"service_id"`
+		}
+		_ = json.NewDecoder(r.Body).Decode(&in)
+		deleted = append(deleted, in.ServiceID)
+		writeJSON(w, map[string]any{})
+	})
+	mux.Handle("/api/", http.NotFoundHandler())
+	mux.Handle("/", pages)
+	srv := newBrowserServer(mux)
+	defer func() {
+		srv.CloseClientConnections()
+		srv.Close()
+	}()
+
+	poll := func(expr string) chromedp.Action {
+		return chromedp.Poll(expr, nil, chromedp.WithPollingTimeout(10*time.Second))
+	}
+	steps := []struct {
+		name string
+		act  chromedp.Action
+	}{
+		{"load", chromedp.Navigate(srv.URL + "/projects/p1/services")},
+		{"empty state", poll(`!!document.querySelector('[data-services-empty]')`)},
+		{"open the form", chromedp.Click(`[data-new-service]`, chromedp.ByQuery)},
+		{"form is a dialog with the name focused", poll(`!!document.querySelector('[role=dialog][data-service-form]') && document.activeElement.id === 'sf-name'`)},
+		{"kind fields: command", poll(`!!document.querySelector('[data-kind-fields=command]') && !document.querySelector('[data-kind-fields=image]')`)},
+		{"fill the name", chromedp.SendKeys(`#sf-name`, "api", chromedp.ByQuery)},
+		{"fill the command", chromedp.SendKeys(`#sf-line`, "make air", chromedp.ByQuery)},
+		{"pick a repository so the subfolder shows", chromedp.Evaluate(`(() => { const s = document.querySelector('#sf-repository'); s.value = 'r1'; s.dispatchEvent(new Event('change', { bubbles: true })); })()`, nil)},
+		{"subfolder shown", poll(`document.querySelector('#sf-subdir').closest('.field').checkVisibility()`)},
+		{"a bad subfolder", chromedp.SendKeys(`#sf-subdir`, "../x", chromedp.ByQuery)},
+		{"create", chromedp.Click(`[data-form-save]`, chromedp.ByQuery)},
+		{"refused under its field", poll(`(() => { const e = document.getElementById('sf-subdir-error'); return !e.hidden && e.textContent.includes('relative') && document.getElementById('sf-subdir').getAttribute('aria-invalid') === 'true' && document.activeElement.id === 'sf-subdir'; })()`)},
+		{"fix the subfolder", chromedp.Evaluate(`(() => { const i = document.getElementById('sf-subdir'); i.value = 'cmd/api'; i.dispatchEvent(new Event('input', { bubbles: true })); })()`, nil)},
+		{"create again", chromedp.Click(`[data-form-save]`, chromedp.ByQuery)},
+		{"the drawer closes and the service is listed", poll(`!document.querySelector('[data-service-form]') && !!document.querySelector('[data-service][data-name=api]')`)},
+		{"delete asks first", chromedp.Click(`[data-service][data-name=api] .menu > button`, chromedp.ByQuery)},
+		{"menu opens", poll(`!!document.querySelector('[data-action=delete]') && document.querySelector('[data-action=delete]').checkVisibility()`)},
+		{"choose delete", chromedp.Click(`[data-action=delete]`, chromedp.ByQuery)},
+		{"the dialog opens on Keep it", poll(`!!document.querySelector('[role=alertdialog][data-delete-dialog]') && document.activeElement.hasAttribute('data-delete-keep')`)},
+		{"confirm", chromedp.Click(`[data-delete-confirm]`, chromedp.ByQuery)},
+		{"it is gone", poll(`!document.querySelector('[data-service][data-name=api]') && !!document.querySelector('[data-services-empty]')`)},
+	}
+	for _, step := range steps {
+		if err := chromedp.Run(ctx, step.act); err != nil {
+			var dump string
+			_ = chromedp.Run(ctx, chromedp.Evaluate(`document.body.innerText.slice(0, 1500)`, &dump))
+			t.Fatalf("%s: %v\nJS errors: %v\npage: %s", step.name, err, errs.all(), dump)
+		}
+	}
+	if len(created) != 1 || created[0].Name != "api" || created[0].Command == nil || created[0].Command.Line != "make air" || created[0].Command.Subdir != "cmd/api" || created[0].RepositoryID != "r1" || created[0].Kind != domain.ServiceKindCommand {
+		t.Errorf("created = %+v", created)
+	}
+	if len(deleted) != 1 || deleted[0] != "s9" {
+		t.Errorf("deleted = %v", deleted)
+	}
+}

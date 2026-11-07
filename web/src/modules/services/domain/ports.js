@@ -53,6 +53,10 @@
  * @typedef {object} ServicesGateway
  * @property {(seed: unknown) => { projectId: string, list: ServiceList | null }} decodeSeed
  * @property {(projectId: string) => Promise<ServiceList>} listServices
+ * @property {(projectId: string, input: object) => Promise<Service>} createService
+ *           `input` is the API's ServiceInput. Rejects with INVALID_INPUT naming the field, SERVICE_NAME_TAKEN or REPOSITORY_NOT_FOUND.
+ * @property {(serviceId: string, input: object) => Promise<{ service: Service, restartNeeded: boolean }>} updateService
+ * @property {(serviceId: string) => Promise<void>} deleteService  Rejects with SERVICE_RUNNING while it runs.
  * @property {(serviceId: string) => Promise<{ service: Service, alreadyRunning: boolean }>} startService
  *           Rejects with SANDBOX_UNAVAILABLE or RUNTIME_UNAVAILABLE when nothing was started.
  * @property {(serviceId: string) => Promise<Service>} stopService

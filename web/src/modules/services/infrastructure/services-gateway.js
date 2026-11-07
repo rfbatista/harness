@@ -23,6 +23,16 @@ export function servicesGateway(api, feed) {
     async listServices(projectId) {
       return toServiceList(await api.get("/list_services", { project_id: projectId }));
     },
+    async createService(projectId, input) {
+      return toService((await api.post("/create_service", { project_id: projectId, service: input }))?.service);
+    },
+    async updateService(serviceId, input) {
+      const body = await api.post("/update_service", { service_id: serviceId, service: input });
+      return { service: toService(body?.service), restartNeeded: body?.restart_needed === true };
+    },
+    async deleteService(serviceId) {
+      await api.post("/delete_service", { service_id: serviceId });
+    },
     async startService(serviceId) {
       const body = await api.post("/start_service", { service_id: serviceId });
       return { service: toService(body?.service), alreadyRunning: body?.already_running === true };

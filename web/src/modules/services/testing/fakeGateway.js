@@ -60,6 +60,25 @@ export function fakeServices({ list = listDTO() } = {}) {
     byId(id, status, run) {
       return toService(fake.dtoOf(id, status, run));
     },
+    /** Create, update and delete: what each answers; a test sets its own. */
+    saves: [],
+    save: {
+      create: async (projectId, input) => toService(serviceDTO({ id: "new", project_id: projectId, name: input.name, kind: input.kind, command: input.command, image: input.image })),
+      update: async (id, input) => ({ service: toService(serviceDTO({ id, name: input.name, kind: input.kind, command: input.command, image: input.image })), restartNeeded: false }),
+      remove: async () => {},
+    },
+    async createService(projectId, input) {
+      fake.saves.push(["create", projectId, input]);
+      return fake.save.create(projectId, input);
+    },
+    async updateService(id, input) {
+      fake.saves.push(["update", id, input]);
+      return fake.save.update(id, input);
+    },
+    async deleteService(id) {
+      fake.saves.push(["delete", id]);
+      return fake.save.remove(id);
+    },
     async startService(id) {
       fake.actions.push(`start:${id}`);
       return fake.answer.start(id);

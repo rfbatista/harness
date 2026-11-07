@@ -362,3 +362,85 @@ test("a failed service's row opens its log from its reason", () => {
   page.openLogRow({ currentTarget: { dataset: { serviceId: "1" } } });
   assert.equal(page.logId, "1");
 });
+
+// ── create, edit and delete ──────────────────────────────────────────────
+import { toService } from "../../infrastructure/dto.js";
+
+test("New service opens the form empty; Cancel (the form's close) shuts it", () => {
+  const { page } = openWith([serviceDTO({ id: "1", name: "api" })]);
+  assert.equal(page.formOpen, false);
+  page.openNew();
+  assert.equal(page.formOpen, true);
+  assert.equal(page.formService, null);
+  page.closeForm();
+  assert.equal(page.formOpen, false);
+});
+
+test("Edit opens the form on that service, from its menu", () => {
+  const { page } = openWith([serviceDTO({ id: "1", name: "api" })]);
+  page.menuSelect({ currentTarget: { dataset: { serviceId: "1" } }, detail: { action: "edit" } });
+  assert.equal(page.formOpen, true);
+  assert.equal(page.formService.name, "api");
+});
+
+test("a created service joins the list at once, the form closes, and the page says so", () => {
+  const { page } = openWith([serviceDTO({ id: "1", name: "web" })]);
+  page.openNew();
+  page.saved({ detail: { service: toService(serviceDTO({ id: "2", name: "api" })), restartNeeded: false, created: true } });
+  assert.deepEqual(rowNames(page), ["api", "web"]);
+  assert.equal(page.formOpen, false);
+  assert.equal(page.notice, "api was created.");
+});
+
+test("an edited service replaces its row; a running one says it needs a restart", () => {
+  const { page } = openWith([running({ id: "1", name: "api" })]);
+  page.openEdit("1");
+  page.saved({ detail: { service: toService(serviceDTO({ id: "1", name: "api", status: "running", run: runDTO() })), restartNeeded: true, created: false } });
+  assert.equal(page.notice, "api was saved. Restart it to apply the change.");
+  assert.equal(page.formOpen, false);
+});
+
+test("Delete asks first; Keep it cancels and nothing is deleted", () => {
+  const { page, gateway } = openWith([serviceDTO({ id: "1", name: "api" })]);
+  page.askDelete("1");
+  assert.equal(page.del.name, "api");
+  assert.equal(page.deleteOpen, true);
+  page.cancelDelete();
+  assert.equal(page.deleteOpen, false);
+  assert.deepEqual(gateway.saves, []);
+});
+
+test("confirming deletes the service and takes it off the list", async () => {
+  const { page, gateway } = openWith([serviceDTO({ id: "1", name: "api" }), serviceDTO({ id: "2", name: "db" })]);
+  page.askDelete("1");
+  await page.confirmDelete();
+  assert.deepEqual(gateway.saves, [["delete", "1"]]);
+  assert.deepEqual(rowNames(page), ["db"]);
+  assert.equal(page.deleteOpen, false);
+});
+
+test("Delete is unavailable on a running service", () => {
+  const { page } = openWith([running({ id: "1", name: "api" }), serviceDTO({ id: "2", name: "db" })]);
+  assert.equal(rowOf(page, "api").canDelete, false);
+  assert.equal(rowOf(page, "db").canDelete, true);
+  page.askDelete("1");
+  assert.equal(page.deleteOpen, false);
+});
+
+test("a delete the server refuses (SERVICE_RUNNING) shows in the dialog and keeps the service", async () => {
+  const { page, gateway } = openWith([serviceDTO({ id: "1", name: "api" })]);
+  gateway.save.remove = async () => { throw new StructuredError("SERVICE_RUNNING", "api is running"); };
+  page.askDelete("1");
+  await page.confirmDelete();
+  assert.equal(page.del.error.code, "SERVICE_RUNNING");
+  assert.deepEqual(rowNames(page), ["api"]);
+  assert.equal(page.deleteOpen, true);
+});
+
+test("deleting the service whose log is open closes the log", async () => {
+  const { page } = openWith([serviceDTO({ id: "1", name: "api" })]);
+  page.openLog("1");
+  page.askDelete("1");
+  await page.confirmDelete();
+  assert.equal(page.logId, "");
+});

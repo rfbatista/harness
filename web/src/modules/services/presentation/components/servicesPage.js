@@ -11,7 +11,8 @@ import { systemClock } from "../../../../shared/infrastructure/clock.js";
 import { describeError } from "../../../../shared/presentation/errors.js";
 import { readSeed } from "../../../../shared/presentation/seed.js";
 import { runLine } from "../../domain/log.js";
-import { applyEvent, groupServices, runningCount, statusView } from "../../domain/service.js";
+import { applyEvent, groupServices, isActive, runningCount, statusView } from "../../domain/service.js";
+import { trapTab } from "../focusTrap.js";
 import { serviceRow } from "../view.js";
 
 /** How often the times on the rows move on. */
@@ -49,6 +50,16 @@ export const servicesPage = ({ gateway, clock = systemClock, timers = globalThis
     refusal: null,
     /** The service whose log is open (the log viewer follows it). */
     logId: "",
+    /** The form drawer: "" closed, "new", or "edit" of formId. */
+    formMode: "",
+    formId: "",
+    /** The delete asked about: {id, name, error}; null for none. */
+    del: null,
+    deleting: false,
+    /** The control that opened a dialog, to give the focus back. */
+    opener: null,
+    /** Said politely to screen readers after a save. */
+    notice: "",
 
     // ── what the markup binds ────────────────────────────────────────────
     get groups() {
@@ -60,6 +71,7 @@ export const servicesPage = ({ gateway, clock = systemClock, timers = globalThis
         rows: g.services.map((s) => ({
           ...serviceRow(s, this.now, { flight: this.flights[s.id] ?? "", runtime: this.runtime }),
           current: s.id === this.logId,
+          canDelete: !isActive(s),
         })),
       }));
     },
@@ -75,6 +87,27 @@ export const servicesPage = ({ gateway, clock = systemClock, timers = globalThis
     get hasRunning() {
       return this.runningCount > 0;
     },
+    // ── the form and the delete dialog ───────────────────────────────────
+    get formOpen() {
+      return this.formMode !== "";
+    },
+    /** The service the form edits, for the form's own setup; null for a new one. */
+    get formService() {
+      return this.formMode === "edit" ? (this.services.find((s) => s.id === this.formId) ?? null) : null;
+    },
+    get deleteOpen() {
+      return this.del !== null;
+    },
+    get deleteTitle() {
+      return `Delete ${this.del?.name ?? ""}?`;
+    },
+    get deleteHasError() {
+      return (this.del?.error ?? null) !== null;
+    },
+    get deleteBusyLabel() {
+      return this.deleting ? "Deleting…" : "Delete service";
+    },
+
     // ── the log beside the list ──────────────────────────────────────────
     get detailOpen() {
       return this.logView !== null;
@@ -261,6 +294,87 @@ export const servicesPage = ({ gateway, clock = systemClock, timers = globalThis
 
     dismissRefusal() {
       this.refusal = null;
+    },
+
+    /** @param {KeyboardEvent & { currentTarget: HTMLElement }} event a key in the form drawer or the delete dialog */
+    trap(event) {
+      trapTab(event);
+    },
+    /** Esc closes the dialog on top: the delete question, else the form. */
+    escape() {
+      if (this.del !== null) this.cancelDelete();
+      else if (this.formMode !== "") this.closeForm();
+    },
+
+    openNew() {
+      this.opener = document.activeElement;
+      this.formMode = "new";
+      this.formId = "";
+    },
+    openEdit(id) {
+      this.opener = document.activeElement;
+      this.formMode = "edit";
+      this.formId = id;
+    },
+    closeForm() {
+      this.formMode = "";
+      this.formId = "";
+      this.restoreFocus();
+    },
+    /** Back to the control that opened the dialog; when it is gone (a menu item), to the page's New service. */
+    restoreFocus() {
+      this.$nextTick(() => {
+        const back = this.opener?.isConnected ? this.opener : this.$el.querySelector("[data-new-service]");
+        back?.focus?.();
+      });
+    },
+
+    /** The form saved: the service joins the list now (its feed event follows and agrees). */
+    saved(event) {
+      const { service, restartNeeded, created } = event.detail;
+      this.services = [...this.services.filter((s) => s.id !== service.id), service].sort((a, b) => (a.name < b.name ? -1 : 1));
+      this.closeForm();
+      this.notice = created ? `${service.name} was created.` : restartNeeded ? `${service.name} was saved. Restart it to apply the change.` : `${service.name} was saved.`;
+    },
+
+    /** @param {{ currentTarget: HTMLElement, detail: { action: string } }} event the row menu's choice */
+    menuSelect(event) {
+      const id = event.currentTarget.dataset.serviceId;
+      if (event.detail.action === "edit") this.openEdit(id);
+      else if (event.detail.action === "delete") this.askDelete(id);
+    },
+
+    /** The delete question opens on Keep it, the safe answer. */
+    focusKeep(el) {
+      this.$nextTick(() => el.querySelector("[data-delete-keep]")?.focus());
+    },
+
+    askDelete(id) {
+      const service = this.services.find((s) => s.id === id);
+      if (!service || isActive(service)) return;
+      this.opener = document.activeElement;
+      this.del = { id, name: service.name, error: null };
+    },
+    cancelDelete() {
+      if (this.deleting) return;
+      this.del = null;
+      this.restoreFocus();
+    },
+    async confirmDelete() {
+      if (!this.del || this.deleting) return;
+      const { id, name } = this.del;
+      this.deleting = true;
+      try {
+        await gateway.deleteService(id);
+        this.services = this.services.filter((s) => s.id !== id);
+        if (this.logId === id) this.closeLog();
+        this.del = null;
+        this.notice = `${name} was deleted.`;
+      } catch (err) {
+        this.del = { id, name, error: describeError(err) };
+      } finally {
+        this.deleting = false;
+      }
     },
 
     openLog(id) {
