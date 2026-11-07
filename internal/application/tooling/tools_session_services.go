@@ -19,14 +19,7 @@ import (
 
 // SessionServicesToolNames lists the tools SessionServicesTools returns, in
 // order. It is the single source of truth for the orchestration's allow-list.
-var SessionServicesToolNames = []string{
-	"list_services",
-	"service_status",
-	"start_service",
-	"stop_service",
-	"restart_service",
-	"read_service_logs",
-}
+var SessionServicesToolNames = domain.ServicesServerTools
 
 // DefaultServicesSettleTimeout is how long start_service and restart_service
 // wait for a run to be running or failed before they answer starting.

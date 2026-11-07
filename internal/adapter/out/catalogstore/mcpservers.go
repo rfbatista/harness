@@ -43,7 +43,8 @@ func (r *MCPServers) Get(id string) *mcpserver.Server {
 	return nil
 }
 
-// List returns every server.
+// List returns every server of the catalog file. The built-in services server
+// is not one: the harness serves it itself.
 func (r *MCPServers) List() []*mcpserver.Server {
 	view, err := r.cat.ReadCatalog()
 	if err != nil {
@@ -51,6 +52,9 @@ func (r *MCPServers) List() []*mcpserver.Server {
 	}
 	out := make([]*mcpserver.Server, 0, len(view.MCPServers))
 	for _, s := range view.MCPServers {
+		if s.BuiltIn {
+			continue
+		}
 		out = append(out, serverOf(s))
 	}
 	return out
