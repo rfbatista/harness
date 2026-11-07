@@ -23,10 +23,14 @@ type branchGate struct {
 	shimSession
 }
 
-func startBranchGate(t *testing.T) *branchGate {
+func startBranchGate(t *testing.T) *branchGate { return startBranchGateWith(t, ":memory:") }
+
+// startBranchGateWith is startBranchGate over the database at db: a file keeps
+// the requests across a restart.
+func startBranchGateWith(t *testing.T, db string) *branchGate {
 	t.Helper()
 	bin := buildServer(t)
-	e := newShellE2E(t)
+	e := newShellE2EWith(t, db)
 	e.orch.SessionBranchGateURL = func(id string) string { return e.srv.URL + "/api/sessions/" + id + "/branch_gate" }
 	g := &branchGate{shellE2E: e}
 	g.shimSession = e.startWithShims(e.task("Branch gate"), bin)

@@ -4,6 +4,7 @@ package app
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"fmt"
 	"net/http"
@@ -40,11 +41,22 @@ func (a hookAnswer) decision() string {
 // the answer once the hook returns.
 func (g *branchGate) askHook(command, description string) <-chan hookAnswer {
 	g.t.Helper()
+	ch, _ := g.askHookCancelable(command, description)
+	return ch
+}
+
+// askHookCancelable is askHook, with a cancel that makes claude's hook go away.
+func (g *branchGate) askHookCancelable(command, description string) (<-chan hookAnswer, func()) {
+	g.t.Helper()
+	ctx, cancel := context.WithCancel(context.Background())
+	g.t.Cleanup(cancel)
 	in := map[string]any{"tool_name": "Bash", "cwd": g.worktree, "tool_input": map[string]any{"command": command, "description": description}}
 	b, _ := json.Marshal(in)
 	out := make(chan hookAnswer, 1)
 	go func() {
-		res, err := http.Post(g.srv.URL+"/api/sessions/"+g.id+"/branch_gate?hook=PreToolUse", "application/json", bytes.NewReader(b))
+		req, _ := http.NewRequestWithContext(ctx, "POST", g.srv.URL+"/api/sessions/"+g.id+"/branch_gate?hook=PreToolUse", bytes.NewReader(b))
+		req.Header.Set("Content-Type", "application/json")
+		res, err := http.DefaultClient.Do(req)
 		if err != nil {
 			out <- hookAnswer{code: -1, body: err.Error()}
 			return
@@ -54,7 +66,7 @@ func (g *branchGate) askHook(command, description string) <-chan hookAnswer {
 		_, _ = buf.ReadFrom(res.Body)
 		out <- hookAnswer{res.StatusCode, buf.String()}
 	}()
-	return out
+	return out, cancel
 }
 
 // requests lists the session's branch requests, newest first.

@@ -460,7 +460,7 @@ var AgentRuntimeModule = fx.Module("agentruntime",
 		newPersonTerminals,
 	),
 	fx.Invoke(registerRuntimeShutdown, registerServerSessions, bindVirtualShells, bindWorkspaceRemovals, bindFilesRootFeed, bindSandboxSettings,
-		bindAgentReadiness, func(*archrules.Service) {}),
+		bindAgentReadiness, func(*archrules.Service) {}, func(*branchgate.Service) {}),
 )
 
 // TaskChannelModule wires the architect channel: its tables, the service,
@@ -779,8 +779,10 @@ func newArchitectureRules(cat catalog.Catalog, sessions ports.SessionRepository,
 }
 
 // newBranchGate decides the branch grants sessions' git shims ask for.
-func newBranchGate(cfg Config, sessions ports.SessionRepository, requests ports.BranchRequestStore, orch *orchestration.Service) *branchgate.Service {
-	return branchgate.NewService(branchgate.Deps{Sessions: sessions, Requests: requests, Probe: gitprobe.Probe{Git: cfg.GitBin}, Waiter: orch})
+func newBranchGate(cfg Config, cat catalog.Catalog, sessions ports.SessionRepository, requests ports.BranchRequestStore, orch *orchestration.Service) *branchgate.Service {
+	svc := branchgate.NewService(branchgate.Deps{Sessions: sessions, Requests: requests, Probe: gitprobe.Probe{Git: cfg.GitBin}, Waiter: orch, Turns: orch})
+	svc.Subscribe(cat.Bus)
+	return svc
 }
 
 func newOrchestrationService(

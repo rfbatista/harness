@@ -7,10 +7,13 @@ package branchgate
 import (
 	"context"
 	"fmt"
+	"log/slog"
 	"slices"
 	"strings"
 	"sync"
 	"time"
+
+	"github.com/rfbatista/harnesskit/errs"
 
 	"operators-mcp/internal/domain"
 	"operators-mcp/internal/ports"
@@ -28,7 +31,10 @@ type Deps struct {
 	Probe domain.GitProbe
 	// Waiter shows a session as waiting for approval; nil shows nothing.
 	Waiter ports.BranchRequestWaiter
-	Now    func() time.Time
+	// Turns delivers the person's answer to a session whose hook is gone, as
+	// a turn; nil delivers none.
+	Turns ports.TurnDelivery
+	Now   func() time.Time
 }
 
 // Service files and answers branch requests and hands out branch grants.
@@ -130,6 +136,7 @@ func (s *Service) Hook(ctx context.Context, sessionID string, in ports.BranchHoo
 		select {
 		case <-f.answered:
 		case <-ctx.Done():
+			s.forgetWaiters(filed)
 			return ports.BranchHookVerdict{Decision: "deny", Reason: "The hook stopped waiting for branch request " + f.id}
 		}
 	}
@@ -150,6 +157,16 @@ func (s *Service) Hook(ctx context.Context, sessionID string, in ports.BranchHoo
 		}
 	}
 	return ports.BranchHookVerdict{Decision: "allow", Context: strings.Join(notes, "\n")}
+}
+
+// forgetWaiters drops the waiters of requests whose hook is gone, so the answer
+// reaches the session as a turn.
+func (s *Service) forgetWaiters(filed []filedRequest) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	for _, f := range filed {
+		delete(s.waiters, f.id)
+	}
 }
 
 type filedRequest struct {
@@ -217,14 +234,81 @@ func (s *Service) Answer(ctx context.Context, id, decision, note string) (*domai
 	if err := s.d.Requests.Save(ctx, r); err != nil {
 		return nil, err
 	}
-	if ch, ok := s.waiters[id]; ok {
+	ch, hookWaits := s.waiters[id]
+	if hookWaits {
 		close(ch)
 		delete(s.waiters, id)
 	}
 	if s.d.Waiter != nil {
 		s.d.Waiter.BranchRequestSettled(r.SessionID)
 	}
+	if !hookWaits && s.d.Turns != nil {
+		// The hook that waited is gone (a restart): the answer is a new turn.
+		go s.deliver(*r)
+	}
 	return r, nil
+}
+
+// deliver puts the person's answer into the session as a turn.
+func (s *Service) deliver(r domain.BranchRequest) {
+	if _, err := s.d.Turns.Deliver(r.SessionID, "branch-request:"+r.ID, Turn(r), nil); err != nil && errs.Code(err) != "SESSION_NOT_RUNNING" {
+		slog.Warn("deliver a branch request's answer", "session", r.SessionID, "request", r.ID, "err", err)
+	}
+}
+
+// Subscribe registers the gate's reactions to other contexts' events: the
+// requests of a session that ended expire with it.
+func (s *Service) Subscribe(sub ports.EventSubscriber) {
+	ports.On(sub, func(ctx context.Context, ev domain.SessionEnded) error {
+		return s.expire(ctx, ev.SessionID)
+	})
+}
+
+// expire marks the session's pending requests, and its approved ones whose
+// grant was never used, expired.
+func (s *Service) expire(ctx context.Context, sessionID string) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	for _, state := range []domain.BranchRequestState{domain.BranchRequestPending, domain.BranchRequestApproved} {
+		open, err := s.d.Requests.List(ctx, domain.BranchRequestFilter{SessionID: sessionID, State: state})
+		if err != nil {
+			return err
+		}
+		for _, r := range open {
+			r.State = domain.BranchRequestExpired
+			if err := s.d.Requests.Save(ctx, &r); err != nil {
+				return err
+			}
+			if state != domain.BranchRequestPending {
+				continue
+			}
+			if ch, ok := s.waiters[r.ID]; ok {
+				close(ch)
+				delete(s.waiters, r.ID)
+			}
+			if s.d.Waiter != nil {
+				s.d.Waiter.BranchRequestSettled(sessionID)
+			}
+		}
+	}
+	return nil
+}
+
+// Turn is the turn the session gets when the person answers a request whose
+// hook is gone (contract "Harness server ↔ Agent sessions — branch gate" §5).
+func Turn(r domain.BranchRequest) string {
+	what := Label(r)
+	if r.StartPoint != nil && r.Branch != "" && (r.Action == domain.BranchCreate || r.Action == domain.BranchSwitch) {
+		what += " from " + r.StartPoint.Ref
+	}
+	note := ""
+	if r.Note != "" {
+		note = " Note: " + r.Note + "."
+	}
+	if r.State == domain.BranchRequestDenied {
+		return fmt.Sprintf("[branch request %s · denied] %s.%s", r.ID, what, note)
+	}
+	return fmt.Sprintf("[branch request %s · approved] %s.%s Run the command again: %s.", r.ID, what, note, r.Command)
 }
 
 // ListBranchRequests implements ports.BranchGate.
