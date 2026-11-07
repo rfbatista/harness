@@ -28,6 +28,9 @@ func resolveAttachedMCPServers(agent *domain.Agent, project *domain.Project, all
 	var out []*domain.MCPServer
 	seen := make(map[*domain.MCPServer]bool, len(names))
 	for _, n := range names {
+		if n == servicesServerName {
+			continue // the harness serves it itself (applyServicesServer)
+		}
 		m, ok := byKey[n]
 		if !ok {
 			slog.Warn("a session's MCP server is not in the agent catalog; skipped", "server", n)

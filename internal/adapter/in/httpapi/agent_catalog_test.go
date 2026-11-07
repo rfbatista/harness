@@ -281,10 +281,14 @@ func TestCatalog_NeverReturnsAVariableValue(t *testing.T) {
 func TestCatalog_AMissingFolderIsAnEmptyCatalog(t *testing.T) {
 	f := newCatalogFixture(t)
 	cat := f.get("/api/get_agent_catalog", 200)
-	for _, k := range []string{"agents", "bundles", "skills", "mcp_servers"} {
+	for _, k := range []string{"agents", "bundles", "skills"} {
 		if l, ok := cat[k].([]any); !ok || len(l) != 0 {
 			t.Fatalf("%s = %v, want an empty list", k, cat[k])
 		}
+	}
+	// The built-in services server is the only server there is.
+	if l := list(cat["mcp_servers"]); len(l) != 1 || l[0].(map[string]any)["name"] != "services" {
+		t.Fatalf("mcp_servers = %v, want services alone", cat["mcp_servers"])
 	}
 	if cat["broken"] != nil {
 		t.Fatalf("broken = %v", cat["broken"])
