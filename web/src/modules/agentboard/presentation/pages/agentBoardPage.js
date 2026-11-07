@@ -41,7 +41,9 @@ export const SKELETON_AFTER_MS = 400;
 /** Times on the lines ("4m") are refreshed this often. */
 export const CLOCK_MS = 30_000;
 
-const BASE_TITLE = /^\(\d+\+?\) /;
+/** What the board adds to the tab title, at its end: "Agent board · harness · 2 need you". The notification bell leads the title with its own count and the two leave each other's part alone. */
+const NEEDS_MARK = / · \d+ needs? you$/;
+const needsMark = (n) => (n === 1 ? " · 1 needs you" : ` · ${n} need you`);
 
 /**
  * @param {{
@@ -74,7 +76,6 @@ export const agentBoardPage =
     let reading = null;
     let waiting = [];
     let stopFeed = () => {};
-    let baseTitle = "";
     let root = null;
     let skeleton = null;
     let destroyed = false;
@@ -186,7 +187,6 @@ export const agentBoardPage =
 
       init() {
         root = this.$el;
-        baseTitle = (doc?.title ?? "").replace(BASE_TITLE, "");
         skeleton = skeletonRule({
           timers: { setTimeout: timers.setTimeout.bind(timers), clearTimeout: timers.clearTimeout.bind(timers), now: () => clock.now().getTime() },
           showAfter: SKELETON_AFTER_MS,
@@ -261,7 +261,7 @@ export const agentBoardPage =
       touch() {
         this.lastUpdate = clock.now();
         this.now = this.lastUpdate;
-        if (doc) doc.title = this.needsCount ? `(${this.needsCount}) ${baseTitle}` : baseTitle;
+        if (doc) doc.title = doc.title.replace(NEEDS_MARK, "") + (this.needsCount ? needsMark(this.needsCount) : "");
       },
 
       tickClock() {

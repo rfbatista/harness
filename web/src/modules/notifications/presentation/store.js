@@ -297,16 +297,19 @@ export function notificationsStore({ gateway, alerts, prefs, clock, navigate, an
       }
     },
 
-    /** A page swapped in place brings its own title, without a count: take it as the base and lead with the count again. */
+    /** A page swapped in place brings its own title, without a count: lead with the count again. */
     retitle() {
-      if (!doc || !started) return;
-      baseTitle = doc.title.replace(/^\(\d+\+?\) /, "");
       this.syncTitle();
     },
 
-    /** The unread count leads the document title: "(3) Notification · harness". */
+    /**
+     * The unread count leads the document title: "(3) Notification · harness".
+     * The title is read each time, minus this count only, so what a page adds
+     * to it (the Agent board's trailing "· 2 need you") is kept.
+     */
     syncTitle() {
       if (!doc || !started) return;
+      baseTitle = doc.title.replace(/^\(\d+\+?\) /, "");
       const n = this.unreadCount;
       doc.title = n ? `(${n}) ${baseTitle}` : baseTitle;
     },

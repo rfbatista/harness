@@ -214,15 +214,26 @@ test("task_changed and project_changed rename the card and the section in place;
   assert.deepEqual(instance.sections.map((s) => s.name), ["Beta", "zulu"]);
 });
 
-test("the summary and the section counts follow the cards; tab title leads with how many tasks need the person", async () => {
+test("the summary and the section counts follow the cards; the tab title ends with how many tasks need the person", async () => {
   const { instance, memory, doc } = await setup();
   assert.equal(doc.title, "Agent board · harness");
   memory.publish(live(card("t-a1", "p-alpha", "Retry policy", [line("s1", "backend", "idle", 0)])));
-  assert.equal(doc.title, "(1) Agent board · harness");
+  assert.equal(doc.title, "Agent board · harness · 1 needs you");
   assert.equal(instance.summary.needs, "1 need you");
   assert.equal(instance.sections[0].count, "2 tasks · 2 live");
   memory.publish(live(card("t-b1", "p-beta", "Landing page", [line("s3", "copywriter", "waiting_approval", 0)])));
-  assert.equal(doc.title, "(2) Agent board · harness");
+  assert.equal(doc.title, "Agent board · harness · 2 need you");
+});
+
+test("the notification bell's count and the board's coexist in the tab title, whichever writes last", async () => {
+  const { memory, doc } = await setup();
+  memory.publish(live(card("t-a1", "p-alpha", "Retry policy", [line("s1", "backend", "idle", 0)])));
+  doc.title = "(3) " + doc.title; // the bell store leads with its own count
+  memory.publish(live(card("t-b1", "p-beta", "Landing page", [line("s3", "copywriter", "waiting_approval", 0)])));
+  assert.equal(doc.title, "(3) Agent board · harness · 2 need you");
+  memory.publish(live(card("t-a1", "p-alpha", "Retry policy", [line("s1", "backend", "running", 0)])));
+  memory.publish(live(card("t-b1", "p-beta", "Landing page", [line("s3", "copywriter", "running", 0)])));
+  assert.equal(doc.title, "(3) Agent board · harness", "no mark when nobody needs the person");
 });
 
 // ---- a card that leaves ----
