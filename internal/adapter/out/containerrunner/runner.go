@@ -67,7 +67,7 @@ func (Runner) Start(_ context.Context, spec ports.ServiceProcessSpec) (ports.Ser
 		return nil, err
 	}
 	cmd := exec.Command(c.Runtime, args...)
-	cmd.Env = spec.Env
+	cmd.Env = RunEnv(spec.Env, *c)
 	cmd.Stdout, cmd.Stderr = pw, pw
 	cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
 	err = cmd.Start()

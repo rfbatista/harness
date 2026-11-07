@@ -79,6 +79,9 @@ type ServiceStartedBy struct {
 	Kind      string `json:"kind"` // person | session
 	SessionID string `json:"session_id"`
 	Agent     string `json:"agent"`
+	// TaskID is the task the starting session works on; empty for a person
+	// and for a session with no task.
+	TaskID string `json:"task_id"`
 }
 
 // ServiceWhere says where a run runs: main (a repository's main checkout),

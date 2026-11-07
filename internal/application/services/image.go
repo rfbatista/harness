@@ -31,13 +31,10 @@ func (s *Service) prepareImage(ctx context.Context, svc *domain.Service) (*prepa
 	if svc.Image == nil {
 		return nil, &domain.StructuredError{Code: "INVALID_INPUT", Message: "image.ref is required for an image service"}
 	}
+	if err := s.checkRuntime(svc); err != nil {
+		return nil, err
+	}
 	runtime := s.opts.Runtime.ContainerRuntime()
-	if s.opts.LookPath == nil {
-		return nil, runtimeUnavailable(runtime)
-	}
-	if _, err := s.opts.LookPath(runtime); err != nil {
-		return nil, runtimeUnavailable(runtime)
-	}
 	if _, err := s.repository(ctx, svc); err != nil {
 		return nil, err
 	}
@@ -54,6 +51,22 @@ func (s *Service) prepareImage(ctx context.Context, svc *domain.Service) (*prepa
 			Image: svc.Image.Ref, Args: svc.Image.Args, Ports: svc.Image.Ports, Env: env,
 		}},
 	}, nil
+}
+
+// checkRuntime refuses an image service while the runtime's command is
+// missing; a command service has none to miss.
+func (s *Service) checkRuntime(svc *domain.Service) error {
+	if svc.Kind != domain.ServiceKindImage {
+		return nil
+	}
+	runtime := s.opts.Runtime.ContainerRuntime()
+	if s.opts.LookPath == nil {
+		return runtimeUnavailable(runtime)
+	}
+	if _, err := s.opts.LookPath(runtime); err != nil {
+		return runtimeUnavailable(runtime)
+	}
+	return nil
 }
 
 func runtimeUnavailable(runtime string) error {

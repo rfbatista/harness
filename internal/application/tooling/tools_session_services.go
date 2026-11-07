@@ -275,9 +275,9 @@ func (t *servicesTools) refusal(ctx context.Context, err error, name string) err
 // startOptions say who starts a run and where: the calling session, in its own
 // worktree when the arguments ask for it and the service can run there.
 func (t *servicesTools) startOptions(ctx context.Context, sess *domain.Session, svc *domain.Service, args map[string]any) (ports.ServiceStartOptions, error) {
-	opts := ports.ServiceStartOptions{StartedBy: domain.ServiceStartedBy{Kind: "session", SessionID: sess.ID, Agent: t.agentName(ctx, sess)}}
+	opts := ports.ServiceStartOptions{StartedBy: domain.ServiceStartedBy{Kind: "session", SessionID: sess.ID, Agent: t.agentName(ctx, sess), TaskID: sess.TicketID}}
 	wt, given := args["worktree"]
-	if !given || wt == nil || wt == "" {
+	if !given || wt == nil {
 		return opts, nil
 	}
 	if wt != "own" {
@@ -431,8 +431,7 @@ func (t *servicesTools) readLogs(ctx context.Context, svc *domain.Service, args 
 		if err != nil {
 			return nil, t.refusal(ctx, err, svc.Name)
 		}
-		// Lines before the answer's start, however they were left out, are cut.
-		return logAnswer(read.Text, read.NextOffset, read.FirstOffset, truncated || read.Offset > read.FirstOffset), nil
+		return logAnswer(read.Text, read.NextOffset, read.FirstOffset, truncated), nil
 	}
 	read, err := t.services.ReadServiceLog(ctx, svc.ID, offset)
 	if err != nil {

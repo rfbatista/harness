@@ -137,7 +137,7 @@ func TestServicesRun_ACommandThatEndsExitsWithItsCodeAndLogsItsStory(t *testing.
 		t.Fatalf("start = %d %v", code, out)
 	}
 	run := out["service"].(map[string]any)["run"].(map[string]any)
-	if run["id"] == "" || run["started_by"].(map[string]any)["kind"] != "person" || run["sandboxed"] != false {
+	if run["id"] == "" || run["started_by"].(map[string]any)["kind"] != "person" || run["started_by"].(map[string]any)["task_id"] != "" || run["sandboxed"] != false {
 		t.Fatalf("run = %v", run)
 	}
 	where := run["where"].(map[string]any)

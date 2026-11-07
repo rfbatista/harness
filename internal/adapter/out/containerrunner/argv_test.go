@@ -47,13 +47,42 @@ func TestRunArgsNeverHoldAForbiddenFlagForHostileInput(t *testing.T) {
 	if !slices.Equal(flags, want) {
 		t.Fatalf("flags = %q, want only %q", flags, want)
 	}
-	for _, kv := range c.Env {
-		if !slices.Contains(args[:image], kv) {
-			t.Fatalf("env %q is not one entry of %q", kv, args)
+	for i, kv := range c.Env {
+		k, v, _ := strings.Cut(kv, "=")
+		at := slices.Index(args[:image], k)
+		if at < 1 || args[at-1] != "-e" {
+			t.Fatalf("env name %q is not its own -e entry of %q", k, args)
 		}
+		for _, a := range args[:image] {
+			if a == v || a == kv {
+				t.Fatalf("env value %q of entry %d is on the command line: %q", v, i, args)
+			}
+		}
+		if !slices.Contains(RunEnv([]string{"PATH=/bin"}, c), kv) {
+			t.Fatalf("env %q does not arrive in the runtime's environment", kv)
+		}
+	}
+	if env := RunEnv([]string{"PATH=/bin"}, c); env[0] != "PATH=/bin" || len(env) != 1+len(c.Env) {
+		t.Fatalf("the base environment comes first: %q", env)
 	}
 	if !slices.Contains(args, "5432:5432/tcp") || !slices.Contains(args, "53:5353/udp") {
 		t.Fatalf("port mappings missing: %q", args)
+	}
+}
+
+func TestNoEnvValueIsOnTheCommandLineAnywhere(t *testing.T) {
+	c := ports.ServiceContainer{Runtime: "docker", Image: "pg", Env: []string{"PASS=hunter2", "TOKEN=s3cr3t=with=equals"}}
+	args, err := RunArgs("n", c)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, a := range args {
+		if strings.Contains(a, "hunter2") || strings.Contains(a, "s3cr3t") {
+			t.Fatalf("a value is on the command line: %q", args)
+		}
+	}
+	if !slices.Contains(args, "PASS") || !slices.Contains(args, "TOKEN") {
+		t.Fatalf("names are: %q", args)
 	}
 }
 

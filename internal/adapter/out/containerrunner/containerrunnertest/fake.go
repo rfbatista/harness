@@ -38,7 +38,10 @@ type Run struct {
 	// `run` (without the runtime itself).
 	Runtime string
 	Argv    []string
-	Spec    ports.ServiceProcessSpec
+	// Env is the environment of the runtime's `run` command: the base and
+	// the container's variables, whose names Argv carries as `-e KEY`.
+	Env  []string
+	Spec ports.ServiceProcessSpec
 
 	mu       sync.Mutex
 	stops    []string
@@ -65,7 +68,7 @@ func (f *Fake) Start(_ context.Context, spec ports.ServiceProcessSpec) (ports.Se
 	if err != nil {
 		return nil, err
 	}
-	r := &Run{Runtime: spec.Container.Runtime, Argv: argv, Spec: spec, ready: make(chan struct{}), done: make(chan struct{})}
+	r := &Run{Runtime: spec.Container.Runtime, Argv: argv, Env: containerrunner.RunEnv(spec.Env, *spec.Container), Spec: spec, ready: make(chan struct{}), done: make(chan struct{})}
 	r.pr, r.pw = io.Pipe()
 	f.mu.Lock()
 	hold, fail := f.Hold, f.Fail

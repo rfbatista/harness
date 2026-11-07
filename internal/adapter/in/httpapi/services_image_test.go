@@ -106,12 +106,22 @@ func TestServicesImage_StartsShowStartingUntilTheContainerRunsThenRunning(t *tes
 	if r.Runtime != "docker" || !r.Has("--name", wantName) || !r.Has("--label", "harness.service="+id) {
 		t.Fatalf("name and label: %q", r.Argv)
 	}
-	if !slices.ContainsFunc(r.Argv, func(a string) bool { return strings.HasPrefix(a, "harness.instance=") && len(a) > len("harness.instance=") }) {
+	if !slices.ContainsFunc(r.Argv, func(a string) bool {
+		return strings.HasPrefix(a, "harness.instance=") && len(a) > len("harness.instance=")
+	}) {
 		t.Fatalf("instance label: %q", r.Argv)
 	}
-	for _, want := range []string{"5432:5432/tcp", "5353:53/udp", "POSTGRES_PASSWORD=hunter2"} {
+	for _, want := range []string{"5432:5432/tcp", "5353:53/udp", "POSTGRES_PASSWORD"} {
 		if !slices.Contains(r.Argv, want) {
 			t.Fatalf("%q missing from %q", want, r.Argv)
+		}
+	}
+	if !slices.Contains(r.Env, "POSTGRES_PASSWORD=hunter2") {
+		t.Fatalf("the value reaches the runtime's environment: %q", r.Env)
+	}
+	for _, a := range r.Argv {
+		if strings.Contains(a, "hunter2") {
+			t.Fatalf("an env value is on the command line: %q", r.Argv)
 		}
 	}
 	if tail := r.Argv[len(r.Argv)-3:]; !slices.Equal(tail, []string{"postgres:16", "-c", "log_statement=all"}) {
@@ -165,10 +175,15 @@ func TestServicesImage_NoInputReachesTheRuntimeAsAFlagOrAShell(t *testing.T) {
 			}
 		}
 	}
+	run := fake.Runs()[0]
 	for _, kv := range []string{"X1=--privileged", "X2=-v /:/host", "X3=$(id)", "X4=a;b", "X5=--network=host"} {
-		i := slices.Index(argv, kv)
+		k, _, _ := strings.Cut(kv, "=")
+		i := slices.Index(argv, k)
 		if i < 1 || argv[i-1] != "-e" {
-			t.Fatalf("%q is one -e entry: %q", kv, argv)
+			t.Fatalf("%q is one -e entry: %q", k, argv)
+		}
+		if !slices.Contains(run.Env, kv) || slices.Contains(argv, kv) {
+			t.Fatalf("%q is in the environment, not on the command line", kv)
 		}
 	}
 	log := f.logText(id)
@@ -223,6 +238,21 @@ func TestServicesImage_AMissingRuntimeRefusesTheStartAndStartsNothing(t *testing
 	}
 	if code, out := f.operate("restart_service", id); errCode(out) != "RUNTIME_UNAVAILABLE" {
 		t.Fatalf("restart = %d %v", code, out)
+	}
+}
+
+func TestServicesImage_ARefusedRestartLeavesTheRunningServiceRunning(t *testing.T) {
+	f, fake := newImageFixture(t, "docker") // podman is not installed
+	id := f.image("db", map[string]any{"image": map[string]any{"ref": "postgres:16"}})
+	f.operate("start_service", id)
+	f.awaitStatus(id, "running")
+
+	f.setRuntime("podman")
+	if code, out := f.operate("restart_service", id); code != 503 || errCode(out) != "RUNTIME_UNAVAILABLE" {
+		t.Fatalf("restart = %d %v", code, out)
+	}
+	if f.status(id) != "running" || len(fake.Runs()[0].Stops()) != 0 || len(fake.Runs()) != 1 {
+		t.Fatalf("a refused restart stops nothing: %s, stops %v, runs %d", f.status(id), fake.Runs()[0].Stops(), len(fake.Runs()))
 	}
 }
 
@@ -336,8 +366,14 @@ func TestServicesImage_TheRepositoryEnvIsExportedAsForACommandService(t *testing
 	envOf := func(r *containerrunnertest.Run) []string {
 		var env []string
 		for i, a := range r.Argv {
-			if a == "-e" {
-				env = append(env, r.Argv[i+1])
+			if a != "-e" {
+				continue
+			}
+			for _, kv := range slices.Backward(r.Env) {
+				if strings.HasPrefix(kv, r.Argv[i+1]+"=") {
+					env = append(env, kv)
+					break
+				}
 			}
 		}
 		return env

@@ -19,7 +19,7 @@ func fakeDocker(t *testing.T, runBody string) (dir string) {
 	script := `#!/bin/sh
 echo "$@" >> "` + dir + `/calls"
 case "$1" in
-run) ` + runBody + ` ;;
+run) echo "K=$K" >> "` + dir + `/envseen"; ` + runBody + ` ;;
 inspect) [ -f "` + dir + `/up" ] && echo true || exit 1 ;;
 stop) rm -f "` + dir + `/up"; kill $(cat "` + dir + `/pid") ;;
 ps) printf 'harness-svc-a-b\tsvc1\tinst1\nharness-svc-c-d\tsvc2\tinst2\n' ;;
@@ -68,9 +68,12 @@ func TestARunIsReadyOnceTheRuntimeReportsTheContainerAndStopsWithStop(t *testing
 	h.Stop(10 * time.Second)
 	h.Wait()
 	calls := read(t, filepath.Join(dir, "calls"))
-	if !strings.Contains(calls, "run --rm --name harness-svc-x-y --label harness.service=svc1 --label harness.instance=inst1 -e K=v postgres:16\n") ||
+	if !strings.Contains(calls, "run --rm --name harness-svc-x-y --label harness.service=svc1 --label harness.instance=inst1 -e K postgres:16\n") ||
 		!strings.Contains(calls, "stop -t 10 harness-svc-x-y\n") {
 		t.Fatalf("calls:\n%s", calls)
+	}
+	if seen := read(t, filepath.Join(dir, "envseen")); seen != "K=v\n" {
+		t.Fatalf("the container's value reaches the runtime through its environment, not its argv: %q", seen)
 	}
 }
 
