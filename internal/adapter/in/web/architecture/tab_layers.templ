@@ -151,7 +151,7 @@ templ tabLayers() {
 							</div>
 							<div class="[ field ]">
 								<label x-bind:for="current.ids.purpose">Purpose (optional)</label>
-								<input x-bind:id="current.ids.purpose" data-field="purpose" class="[ text-sm ]" autocomplete="off" x-model="current.purpose"/>
+								<textarea rows="4" x-bind:id="current.ids.purpose" data-field="purpose" class="[ text-sm ]" autocomplete="off" x-model="current.purpose"></textarea>
 							</div>
 						</div>
 					</div>
@@ -206,7 +206,7 @@ templ tabLayers() {
 						<div class="[ content ] [ flow ]">
 							<div class="[ banner ]" x-bind:data-tone="overlapTone" data-callout="overlap">
 								<div class="[ flow ] [ flow-space-3xs ]">
-									<span><strong>Overlap.</strong> <span data-overlap-title x-text="overlapTitle"></span>.<template x-if="overlaps.length > 0"> <span x-text="overlapRule"></span></template></span>
+									<span><strong>Overlap.</strong> <span data-overlap-title x-text="overlapTitle"></span>.<template x-if="overlaps.length > 0"><span x-text="overlapRule"></span></template></span>
 									<ul class="[ flow ] [ flow-space-3xs text-sm ]" data-overlaps>
 										<template x-for="o in overlapsShown" x-bind:key="o.path">
 											<li data-overlap><span class="[ font-mono ]" x-text="o.path"></span> <span x-text="o.text"></span></li>
