@@ -150,7 +150,7 @@ registerAttribution(Alpine, { gateway: attributionGateway(api) });
 registerAgentCredential(Alpine, { gateway: agentCredentialGateway(api) });
 registerAgentIsolation(Alpine);
 registerSettings(Alpine, { gateway: settingsGateway(api) });
-registerServices(Alpine, { gateway: servicesGateway(api) });
+registerServices(Alpine, { gateway: servicesGateway(api, events) });
 registerWritingHelper(Alpine, { gateway: stepGateway({ base: "/api" }) });
 
 Alpine.start();

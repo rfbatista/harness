@@ -31,6 +31,7 @@ import (
 	"operators-mcp/internal/adapter/in/web/notifications"
 	"operators-mcp/internal/adapter/in/web/projects"
 	"operators-mcp/internal/adapter/in/web/serversettings"
+	"operators-mcp/internal/adapter/in/web/services"
 	"operators-mcp/internal/adapter/in/web/shell"
 	"operators-mcp/internal/adapter/in/web/tasks"
 	"operators-mcp/internal/adapter/in/web/tokensavers"
@@ -136,6 +137,9 @@ type Deps struct {
 	// DesignSystems resolves a design system page's slug and reads the record
 	// for its first paint; nil leaves the pages not found.
 	DesignSystems ports.DesignSystemPages
+	// Services seeds a project's Services page with its services; nil leaves
+	// the page out.
+	Services services.Lister
 	// Usage reads token usage for a project's Usage page and the task
 	// page's totals; nil leaves the page, its rail link and the totals out.
 	Usage ports.UsageDashboard
@@ -298,6 +302,10 @@ func NewHandler(deps Deps, assets *Assets, fallback http.Handler) http.Handler {
 	if deps.Usage != nil {
 		usagePage := usage.Handler{Projects: deps.Projects, Usage: deps.Usage, Layout: s.layout, Render: render}
 		mux.Handle("GET /projects/{project}/usage", s.page(usagePage.Page))
+	}
+	if deps.Services != nil {
+		servicesPage := services.Handler{Projects: deps.Projects, Services: deps.Services, Layout: s.layout, Render: render}
+		mux.Handle("GET /projects/{project}/services", s.page(servicesPage.Page))
 	}
 	mux.Handle("GET /projects/{project}/documents", s.page(taskPages.ProjectDocuments))
 	mux.Handle("GET /projects/{project}/documents/{document}", s.page(taskPages.ProjectDocuments))

@@ -168,6 +168,7 @@ type Option struct{ ID, Name string }
 const (
 	PageBoard        = "board"
 	PageCode         = "code"
+	PageServices     = "services"
 	PageReviews      = "reviews"
 	PageDocuments    = "documents"
 	PageDesign       = "design"
