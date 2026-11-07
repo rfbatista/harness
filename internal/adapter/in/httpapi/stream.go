@@ -373,6 +373,10 @@ func (h *Handler) feedFor(ctx context.Context, path string) (<-chan any, error) 
 		return h.followProject(ctx, q.Get("project_id"))
 	case u.Path == "/project_events":
 		return h.followCatalog(ctx)
+	case u.Path == "/services/events":
+		return h.followServices(ctx, q.Get("project_id"))
+	case u.Path == "/services/log":
+		return h.followServiceLog(ctx, q.Get("service_id"), q.Get("from"))
 	case u.Path == "/notifications/events":
 		return h.followNotifications(ctx)
 	case u.Path == "/live_sessions/events":

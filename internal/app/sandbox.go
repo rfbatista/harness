@@ -53,3 +53,16 @@ func platformSandboxDriver() ports.SandboxDriver { return runtime.PlatformSandbo
 func sandboxBuiltin(svc *orchestration.Service) func() []ports.SandboxBuiltinGroup {
 	return func() []ports.SandboxBuiltinGroup { return svc.Sandbox.Builtin() }
 }
+
+// sandboxAllow is the allowlist a command service's sandbox adds to its own
+// paths: the one every agent session gets, then the person's extra paths. It
+// reads the orchestration each time, like sandboxDriver.
+func sandboxAllow(svc *orchestration.Service, store *sandboxsettings.Store) func() []ports.SandboxPath {
+	return func() []ports.SandboxPath {
+		var out []ports.SandboxPath
+		if svc.Sandbox != nil && svc.Sandbox.Allow != nil {
+			out = append(out, svc.Sandbox.Allow("")...)
+		}
+		return append(out, store.Extra()...)
+	}
+}
