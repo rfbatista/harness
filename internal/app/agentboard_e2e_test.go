@@ -35,6 +35,7 @@ type boardE2E struct {
 	plan     *planning.Service
 	sessions ports.SessionRepository
 	broker   *approval.Broker
+	board    *agentboard.Service
 	srv      *httptest.Server
 	events   <-chan domain.BoardEvent
 	lastSeq  int64
@@ -43,19 +44,18 @@ type boardE2E struct {
 func newBoardE2E(t *testing.T) *boardE2E {
 	t.Helper()
 	e := &boardE2E{t: t, ctx: context.Background()}
-	var board *agentboard.Service
 	app := fx.New(
 		fx.Supply(Config{HTTPAddr: "127.0.0.1:0", MCPAddr: "127.0.0.1:0", DBPath: ":memory:", Root: t.TempDir(), ClaudeBin: "/bin/true", SessionShell: "direct"}),
 		PersistenceModule, CatalogModule, PlanningModule, WorkspacesModule,
 		AgentRuntimeModule, TaskChannelModule, TextProcessingModule, AgentBoardModule,
-		fx.Populate(&e.orch, &e.plan, &e.cat, &e.sessions, &e.broker, &board),
+		fx.Populate(&e.orch, &e.plan, &e.cat, &e.sessions, &e.broker, &e.board),
 		fx.NopLogger,
 	)
 	if err := app.Start(e.ctx); err != nil {
 		t.Fatal(err)
 	}
 	t.Cleanup(func() { _ = app.Stop(context.Background()) })
-	e.srv = httptest.NewServer(httpapi.NewRouter(httpapi.NewHandler(httpapi.Services{AgentBoard: board})))
+	e.srv = httptest.NewServer(httpapi.NewRouter(httpapi.NewHandler(httpapi.Services{AgentBoard: e.board})))
 	t.Cleanup(e.srv.Close)
 	return e
 }
