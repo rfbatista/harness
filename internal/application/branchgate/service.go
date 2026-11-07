@@ -138,29 +138,44 @@ func (s *Service) Hook(ctx context.Context, sessionID string, in ports.BranchHoo
 		}
 		filed = append(filed, f)
 	}
-	var notes []string
+	// The command runs only when every request is approved: the first denial
+	// (or expiry) ends the wait.
+	answers := make(chan string, len(filed))
 	for _, f := range filed {
+		go func() {
+			select {
+			case <-f.answered:
+				answers <- f.id
+			case <-ctx.Done():
+			}
+		}()
+	}
+	var notes []string
+	for range filed {
+		var id string
 		select {
-		case <-f.answered:
+		case id = <-answers:
 		case <-ctx.Done():
 			s.forgetWaiters(filed)
-			return ports.BranchHookVerdict{Decision: "deny", Reason: "The hook stopped waiting for branch request " + f.id}
+			return ports.BranchHookVerdict{Decision: "deny", Reason: "The hook stopped waiting for its branch requests"}
 		}
-	}
-	for _, f := range filed {
-		r, err := s.d.Requests.Get(ctx, f.id)
+		r, err := s.d.Requests.Get(ctx, id)
 		if err != nil || r == nil {
-			return ports.BranchHookVerdict{Decision: "deny", Reason: "Branch request " + f.id + " could not be read"}
+			return ports.BranchHookVerdict{Decision: "deny", Reason: "Branch request " + id + " could not be read"}
 		}
-		if r.State == domain.BranchRequestDenied {
+		switch r.State {
+		case domain.BranchRequestApproved:
+			if r.Note != "" {
+				notes = append(notes, r.Note)
+			}
+		case domain.BranchRequestDenied:
 			reason := fmt.Sprintf("The person denied branch request %s (%s)", r.ID, r.Label())
 			if r.Note != "" {
 				reason += ". Note: " + r.Note
 			}
 			return ports.BranchHookVerdict{Decision: "deny", Reason: reason}
-		}
-		if r.Note != "" {
-			notes = append(notes, r.Note)
+		default: // expired: the session ended with the request unanswered
+			return ports.BranchHookVerdict{Decision: "deny", Reason: fmt.Sprintf("Branch request %s (%s) was never answered: it is %s", r.ID, r.Label(), r.State)}
 		}
 	}
 	return ports.BranchHookVerdict{Decision: "allow", Context: strings.Join(notes, "\n")}
@@ -269,6 +284,34 @@ func (s *Service) deliver(r domain.BranchRequest) {
 	if _, err := s.d.Turns.Deliver(r.SessionID, "branch-request:"+r.ID, Turn(r), nil); err != nil && errs.Code(err) != "SESSION_NOT_RUNNING" {
 		slog.Warn("deliver a branch request's answer", "session", r.SessionID, "request", r.ID, "err", err)
 	}
+}
+
+// Restore is what a restart leaves to rebuild: a session that is still going
+// shows as waiting for approval for each request that waits on the person (the
+// hook that waited is gone, so the answer will be a turn), and a request whose
+// session ended while the server was down expires.
+func (s *Service) Restore(ctx context.Context) error {
+	pending, err := s.d.Requests.List(ctx, domain.BranchRequestFilter{State: domain.BranchRequestPending})
+	if err != nil {
+		return err
+	}
+	ended := map[string]bool{}
+	for _, r := range pending {
+		sess := s.d.Sessions.Get(r.SessionID)
+		if sess == nil || sess.Status.IsTerminal() {
+			if !ended[r.SessionID] {
+				ended[r.SessionID] = true
+				if err := s.expire(ctx, r.SessionID); err != nil {
+					return err
+				}
+			}
+			continue
+		}
+		if s.d.Waiter != nil {
+			s.d.Waiter.BranchRequestFiled(r.SessionID)
+		}
+	}
+	return nil
 }
 
 // Subscribe registers the gate's reactions to other contexts' events: the

@@ -20,12 +20,12 @@ import (
 // branch gate" §3): git's own arguments are read by the classifier the hook
 // uses too, and a branch action runs only with a branch grant.
 
-// NeededMessage is what the agent is told when a branch action has no grant.
+// neededMessage is what the agent is told when a branch action has no grant.
 func neededMessage(args []string) string {
 	return fmt.Sprintf("BRANCH_REQUEST_NEEDED: run \"git %s\" as its own Bash command so the harness can ask the person", strings.Join(args, " "))
 }
 
-// Unavailable is what the agent is told when the harness cannot be reached:
+// gateUnavailable is what the agent is told when the harness cannot be reached:
 // the action is not made.
 const gateUnavailable = "BRANCH_GATE_UNAVAILABLE: the harness could not be reached; the branch action was not made. Try again later."
 

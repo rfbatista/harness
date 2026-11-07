@@ -1571,8 +1571,14 @@ func (s *Service) BranchRequestFiled(id string) {
 	first := w == nil
 	if first {
 		w = &branchWait{prior: domain.SessionThinking}
-		if cur := s.sessions.Get(id); cur != nil && cur.Status != domain.SessionWaitingApproval {
-			w.prior = cur.Status
+		if cur := s.sessions.Get(id); cur != nil {
+			switch {
+			case cur.Status != domain.SessionWaitingApproval:
+				w.prior = cur.Status
+			case cur.Interactive:
+				// stored as waiting before a restart: an interactive session was running
+				w.prior = domain.SessionRunning
+			}
 		}
 		s.branchWaits[id] = w
 	}

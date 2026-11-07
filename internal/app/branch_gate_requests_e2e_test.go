@@ -270,3 +270,23 @@ func TestOnlyAPendingRequestIsAnswered(t *testing.T) {
 		t.Errorf("a decision that is neither: %d", code)
 	}
 }
+
+func TestADenialEndsTheWaitAtOnceAndAnExpiredRequestIsNotAnApproval(t *testing.T) {
+	g := startBranchGate(t)
+	hook := g.askHook("git branch a && git branch b", "")
+	two := g.pending(2)
+	g.answer(two[0].ID, "deny", "no")
+	if a := answered(t, hook); a.decision() != "deny" || !strings.Contains(a.body, "no") {
+		t.Errorf("the first denial must answer the hook without the second request: %+v", a)
+	}
+
+	// A request whose session ends is never an approval.
+	ended := g.askHook("git branch c", "")
+	g.pending(2) // the second request of the denied command still waits
+	if _, err := g.orch.EndInteractive(g.ctx, g.id, 0, true); err != nil {
+		t.Fatal(err)
+	}
+	if a := answered(t, ended); a.decision() != "deny" {
+		t.Errorf("an expired request answered %+v, want a deny", a)
+	}
+}

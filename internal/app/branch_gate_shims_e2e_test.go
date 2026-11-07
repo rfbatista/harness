@@ -11,6 +11,7 @@ import (
 	"testing"
 
 	"operators-mcp/internal/application/orchestration"
+	"operators-mcp/internal/application/vshell"
 )
 
 // The branch gate's git shim, run as a real process the way an agent's Bash
@@ -170,4 +171,17 @@ func TestASessionWithNoVirtualShellHasTheGitShimToo(t *testing.T) {
 		}
 		return nil
 	})
+}
+
+func TestThePersonsTerminalIsNeverGated(t *testing.T) {
+	g := startBranchGate(t)
+	// The person's terminal runs with the session's environment stripped of every harness entry.
+	env := vshell.PersonEnv(append(os.Environ(), g.env...))
+	cmd := exec.Command("/bin/sh", "-c", "git checkout -b person-made && git branch --show-current")
+	cmd.Dir = g.worktree
+	cmd.Env = env
+	out, err := cmd.CombinedOutput()
+	if err != nil || !strings.Contains(string(out), "person-made") {
+		t.Errorf("the person's git: %v\n%s", err, out)
+	}
 }

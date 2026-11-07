@@ -55,8 +55,15 @@ func TestALateApprovalIsATurnThatTellsTheAgentToRunTheCommandAgain(t *testing.T)
 	if got := g.requests("pending"); len(got) != 1 || got[0].ID != req.ID {
 		t.Fatalf("pending after the restart = %+v", got)
 	}
+	// The session still shows as waiting for approval, and the answer ends it.
+	if got := g.status(); got != domain.SessionWaitingApproval {
+		t.Errorf("status after the restart = %s, want waiting_approval", got)
+	}
 	if code, body := g.answer(req.ID, "approve", "keep it small"); code != http.StatusOK {
 		t.Fatalf("answer: %d %s", code, body)
+	}
+	if got := g.status(); got != domain.SessionRunning {
+		t.Errorf("status after the late answer = %s, want running", got)
 	}
 	want := fmt.Sprintf("[branch request %s · approved] create feature-x from %s. Note: keep it small. Run the command again: git checkout -b feature-x.", req.ID, session)
 	eventually(t, "the approved turn", func() error {
