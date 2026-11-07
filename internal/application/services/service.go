@@ -70,6 +70,9 @@ type Options struct {
 	// Instance labels the containers this harness starts; empty is a fresh id
 	// per module.
 	Instance string
+	// Sweeper lists and removes the harness's labelled containers at boot;
+	// nil leaves them.
+	Sweeper ports.ServiceContainerSweeper
 	// BaseEnv is the clean environment every run starts from; nil is the
 	// server's own PATH, HOME and locale without the harness's shims.
 	BaseEnv func() []string
@@ -90,6 +93,8 @@ type Service struct {
 	avail availableCache
 	// runs are the live runs by service id. Guarded by mu.
 	runs map[string]*run
+	// closed is set by Shutdown: no run starts after it. Guarded by mu.
+	closed bool
 
 	logMu sync.Mutex
 	logs  map[string]*logFile

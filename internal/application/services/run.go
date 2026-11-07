@@ -71,6 +71,10 @@ func (s *Service) StartService(ctx context.Context, serviceID string, opts ports
 		s.mu.Unlock()
 		return cur, true, nil
 	}
+	if s.closed {
+		s.mu.Unlock()
+		return nil, false, &domain.StructuredError{Code: "UNAVAILABLE", Message: "the harness is shutting down: no service starts now"}
+	}
 	r := &run{id: "run-" + newServiceID(), serviceID: serviceID, settled: make(chan struct{}), done: make(chan struct{})}
 	cur.Status = domain.ServiceStarting
 	cur.Run = &domain.ServiceRun{

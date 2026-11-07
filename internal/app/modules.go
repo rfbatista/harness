@@ -11,6 +11,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"time"
 
 	"go.uber.org/fx"
 
@@ -641,7 +642,7 @@ func newAppsService(orch *orchestration.Service, cat catalog.Catalog, host ports
 // newServicesModule keeps projects' services in the database, with their
 // logs in the data directory. It reads the sandbox switch and driver agents
 // run under, and looks the container runtime up on the server's PATH.
-func newServicesModule(cfg Config, db *gorm.DB, cat catalog.Catalog, orch *orchestration.Service, sandbox *sandboxsettings.Store, git ports.GitCode) (*services.Service, error) {
+func newServicesModule(lc fx.Lifecycle, cfg Config, db *gorm.DB, cat catalog.Catalog, orch *orchestration.Service, sandbox *sandboxsettings.Store, git ports.GitCode) (*services.Service, error) {
 	logDir, err := dataDir(cfg, "service-logs")
 	if err != nil {
 		return nil, err
@@ -655,15 +656,30 @@ func newServicesModule(cfg Config, db *gorm.DB, cat catalog.Catalog, orch *orche
 			return nil, err
 		}
 	}
-	return services.New(sqlite.NewServiceRepository(db), cat.Projects, cat.Projects, services.Options{
+	svc := services.New(sqlite.NewServiceRepository(db), cat.Projects, cat.Projects, services.Options{
 		LogDir: logDir, FolderDir: folderDir, Sandbox: sandbox, Driver: sandboxDriver(orch), LookPath: exec.LookPath,
 		Allow: sandboxAllow(orch, sandbox), Checkouts: func(projectID string) []string { return projectCheckouts(cat.Projects, projectID) },
 		Runners: map[domain.ServiceKind]ports.ServiceProcessRunner{
 			domain.ServiceKindCommand: commandrunner.Runner{}, domain.ServiceKindImage: containerrunner.Runner{},
 		},
 		Runtime:  services.RuntimeSetting{Settings: cat.Settings},
+		Sweeper:  containerrunner.Runner{},
 		EnvFiles: cat.Projects, Branches: git,
-	}), nil
+	})
+	svc.Subscribe(cat.Bus)
+	// Services never outlive the server or start by themselves: boot settles
+	// the runs a dead server left and removes its containers; shutdown stops
+	// every run, bounded so the server's exit waits for the escalation and
+	// no longer.
+	lc.Append(fx.Hook{
+		OnStart: func(ctx context.Context) error { return svc.Recover(ctx) },
+		OnStop: func(ctx context.Context) error {
+			stopCtx, cancel := context.WithTimeout(ctx, services.DefaultStopGrace+3*time.Second)
+			defer cancel()
+			return svc.Shutdown(stopCtx)
+		},
+	})
+	return svc, nil
 }
 
 func newRuntimeConfig(cfg Config, bin ports.ManagedClaudeBin, home claudehome.Home, driver ports.SandboxDriver) runtime.Config {

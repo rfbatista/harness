@@ -40,3 +40,34 @@ func TestServiceRepository_CountsOnlyStartingAndRunningPerProject(t *testing.T) 
 		t.Fatal("two services of a project cannot share a name")
 	}
 }
+
+func TestServiceRepository_ActiveServicesAreTheStartingAndRunningOnesOfEveryProject(t *testing.T) {
+	db, err := Open(":memory:")
+	if err != nil {
+		t.Fatal(err)
+	}
+	r := NewServiceRepository(db)
+	for _, c := range []struct {
+		id, project, name string
+		status            domain.ServiceStatus
+	}{
+		{"a", "p2", "web", domain.ServiceRunning}, {"b", "p1", "zed", domain.ServiceStarting}, {"c", "p1", "api", domain.ServiceRunning},
+		{"d", "p1", "old", domain.ServiceStopped}, {"e", "p2", "bad", domain.ServiceFailed}, {"f", "p1", "done", domain.ServiceExited},
+	} {
+		s := &domain.Service{ID: c.id, ProjectID: c.project, Name: c.name, Kind: domain.ServiceKindCommand, Command: &domain.ServiceCommand{Line: "x"}, Status: c.status}
+		if err := r.SaveService(s); err != nil {
+			t.Fatal(err)
+		}
+	}
+	got, err := r.ActiveServices()
+	if err != nil {
+		t.Fatal(err)
+	}
+	var ids []string
+	for _, s := range got {
+		ids = append(ids, s.ID)
+	}
+	if want := []string{"c", "b", "a"}; len(ids) != 3 || ids[0] != want[0] || ids[1] != want[1] || ids[2] != want[2] {
+		t.Fatalf("active = %v, want %v (by project then name)", ids, want)
+	}
+}
