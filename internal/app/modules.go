@@ -656,6 +656,7 @@ func newServicesModule(cfg Config, db *gorm.DB, cat catalog.Catalog, orch *orche
 	}
 	return services.New(sqlite.NewServiceRepository(db), cat.Projects, cat.Projects, services.Options{
 		LogDir: logDir, FolderDir: folderDir, Sandbox: sandbox, Driver: sandboxDriver(orch), LookPath: exec.LookPath,
+		Allow: sandboxAllow(orch, sandbox), Checkouts: func(projectID string) []string { return projectCheckouts(cat.Projects, projectID) },
 		Runners:  map[domain.ServiceKind]ports.ServiceProcessRunner{domain.ServiceKindCommand: commandrunner.Runner{}},
 		EnvFiles: cat.Projects, Branches: git,
 	}), nil
@@ -932,6 +933,19 @@ func projectReadsAll(projects ports.ProjectReader, projectID string) bool {
 		return true
 	}
 	return p.AgentsReadAllRepos
+}
+
+// projectCheckouts lists the checkout of every repository of one project.
+func projectCheckouts(projects ports.RepositoryLister, projectID string) []string {
+	repos, err := projects.ListRepositories(context.Background(), projectID)
+	if err != nil {
+		return nil
+	}
+	var out []string
+	for _, r := range repos {
+		out = append(out, r.RootDir)
+	}
+	return out
 }
 
 // allCheckouts lists the checkout of every repository of every project.

@@ -37,6 +37,11 @@ type Options struct {
 	// driver (nil result: none); both nil reads as no sandbox in the way.
 	Sandbox interface{ Enabled() bool }
 	Driver  func() ports.SandboxDriver
+	// Allow is the allowlist a command service's sandbox adds to its own paths
+	// (what agents get, and the person's extra paths); Checkouts the main
+	// checkouts of a project's repositories, which it reads. Nil: none.
+	Allow     func() []ports.SandboxPath
+	Checkouts func(projectID string) []string
 	// LookPath finds a command on the server's PATH (exec.LookPath); nil
 	// reads every command as missing.
 	LookPath func(command string) (string, error)
@@ -298,7 +303,7 @@ func (s *Service) runtimeInfo() ports.ServiceRuntimeInfo {
 
 // sandboxState reads the person's switch and the platform's driver.
 func (s *Service) sandboxState() string {
-	if s.opts.Sandbox != nil && !s.opts.Sandbox.Enabled() {
+	if !s.sandboxSwitchOn() {
 		return ports.ServiceSandboxOff
 	}
 	if s.opts.Driver == nil || s.opts.Driver() == nil {

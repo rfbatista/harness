@@ -40,6 +40,8 @@ type prepared struct {
 	// lines (never an env value).
 	display string
 	notes   []string
+	// sandbox confines the run; nil is an unconfined one.
+	sandbox *confinement
 }
 
 // StartService implements ports.ServiceManager.
@@ -70,7 +72,7 @@ func (s *Service) StartService(ctx context.Context, serviceID string, opts ports
 	r := &run{id: "run-" + newServiceID(), serviceID: serviceID, settled: make(chan struct{}), done: make(chan struct{})}
 	cur.Status = domain.ServiceStarting
 	cur.Run = &domain.ServiceRun{
-		ID: r.id, StartedAt: s.opts.Now().UTC().Format(time.RFC3339), StartedBy: opts.StartedBy, Where: p.where,
+		ID: r.id, StartedAt: s.opts.Now().UTC().Format(time.RFC3339), StartedBy: opts.StartedBy, Where: p.where, Sandboxed: p.sandbox != nil,
 	}
 	cur.UpdatedAt = s.opts.Now().UTC()
 	lg := s.logFor(cur)
@@ -106,7 +108,7 @@ func (s *Service) current(serviceID string) (svc *domain.Service, live bool, err
 // launch writes the run's [harness] lines and spawns it: running when the
 // process is going, failed when it could not be.
 func (s *Service) launch(ctx context.Context, r *run, svc *domain.Service, runner ports.ServiceProcessRunner, p *prepared, lg *logFile) {
-	lg.append([]byte("[harness] command: " + oneLine(p.display) + "\n[harness] directory: " + p.where.Dir + "\n[harness] not sandboxed\n"))
+	lg.append([]byte("[harness] command: " + oneLine(p.display) + "\n[harness] directory: " + p.where.Dir + "\n[harness] " + p.sandbox.logLine() + "\n"))
 	for _, n := range p.notes {
 		lg.append([]byte("[harness] " + n + "\n"))
 	}
@@ -125,6 +127,13 @@ func (s *Service) launch(ctx context.Context, r *run, svc *domain.Service, runne
 		return
 	}
 	spec := ports.ServiceProcessSpec{Name: svc.ID, Path: "/bin/sh", Args: []string{"-c", svc.Command.Line}, Dir: p.where.Dir, Env: p.env}
+	if p.sandbox != nil {
+		var err error
+		if spec, err = p.sandbox.wrap(spec); err != nil {
+			s.fail(r, lg, "could not apply the sandbox: "+oneLine(err.Error()))
+			return
+		}
+	}
 	h, err := runner.Start(ctx, spec)
 	if err != nil {
 		s.fail(r, lg, "could not start: "+oneLine(err.Error()))
@@ -244,6 +253,12 @@ func (s *Service) StopService(ctx context.Context, serviceID string) (*domain.Se
 
 // RestartService implements ports.ServiceManager.
 func (s *Service) RestartService(ctx context.Context, serviceID string, opts ports.ServiceStartOptions) (*domain.Service, error) {
+	// A refused restart leaves the running service as it is.
+	if svc, err := s.store.GetService(serviceID); err == nil {
+		if err := s.checkSandbox(svc); err != nil {
+			return nil, err
+		}
+	}
 	if _, err := s.StopService(ctx, serviceID); err != nil {
 		return nil, err
 	}
@@ -293,6 +308,9 @@ func (s *Service) prepare(ctx context.Context, svc *domain.Service, opts ports.S
 	}
 	p.env, p.notes, err = s.runEnv(ctx, svc)
 	if err != nil {
+		return nil, err
+	}
+	if p.sandbox, err = s.confine(svc, p.where); err != nil {
 		return nil, err
 	}
 	return p, nil
