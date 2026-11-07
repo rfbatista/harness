@@ -131,6 +131,9 @@ type Service struct {
 	// checked (…/api/sessions/{id}/architecture). Nil: sessions get no
 	// architecture hooks.
 	SessionArchitectureURL func(sessionID string) string
+	// SessionBranchGateURL returns where a session's branch gate is asked
+	// (…/api/sessions/{id}/branch_gate). Nil: sessions get no git shim.
+	SessionBranchGateURL func(sessionID string) string
 	// Architectures is what the brief reads of the repository architecture;
 	// nil adds no section to any brief.
 	Architectures ports.ArchitectureBriefSource
@@ -671,7 +674,7 @@ func (s *Service) withGit(id, repositoryID string, cfg *llmkit.SessionConfig, cl
 // changes nothing.
 func (s *Service) withShell(id, repositoryID string, subject sessionSubject, cfg *llmkit.SessionConfig, cleanup func()) (func(), error) {
 	if s.Shells == nil || (subject.ticket == nil && !subject.projectLevel()) {
-		return cleanup, nil
+		return s.withShims(id, cfg, cleanup, false)
 	}
 	scope := ports.ShellScope{RepositoryID: repositoryID}
 	if subject.designSystem != nil {
@@ -707,7 +710,7 @@ func (s *Service) withShell(id, repositoryID string, subject sessionSubject, cfg
 			cleanup()
 		}
 		sh.Stop()
-	})
+	}, true)
 }
 
 // withShims puts the session's shim dir first on its PATH: one link per
@@ -715,7 +718,10 @@ func (s *Service) withShell(id, repositoryID string, subject sessionSubject, cfg
 // HARNESS_SHELL_URL. PATH is an override of the server's own, so it wins
 // over the inherited one. The cleanup it answers runs cleanup and removes
 // the dir. Without ShimBinary it changes nothing.
-func (s *Service) withShims(id string, cfg *llmkit.SessionConfig, cleanup func()) (func(), error) {
+func (s *Service) withShims(id string, cfg *llmkit.SessionConfig, cleanup func(), editProxy bool) (func(), error) {
+	if !editProxy && (s.SessionBranchGateURL == nil || s.ShimBinary == "") {
+		return cleanup, nil
+	}
 	if s.ShimBinary == "" {
 		s.withDeveloperBin(cfg)
 		return cleanup, nil
@@ -730,7 +736,14 @@ func (s *Service) withShims(id string, cfg *llmkit.SessionConfig, cleanup func()
 	if err != nil {
 		return fail(err)
 	}
-	for _, name := range ports.ShellShimCommands {
+	names := []string{ports.BranchGateShimCommand}
+	if editProxy {
+		names = append(names, ports.ShellShimCommands...)
+	}
+	if s.SessionBranchGateURL == nil {
+		names = slices.DeleteFunc(names, func(n string) bool { return n == ports.BranchGateShimCommand })
+	}
+	for _, name := range names {
 		if err := os.Symlink(s.ShimBinary, filepath.Join(dir, name)); err != nil {
 			_ = os.RemoveAll(dir)
 			return fail(err)
@@ -746,10 +759,13 @@ func (s *Service) withShims(id string, cfg *llmkit.SessionConfig, cleanup func()
 	}
 	setPath(cfg, path)
 	cfg.Env = append(cfg.Env, ports.ShimDirEnv+"="+dir)
-	if s.SessionShellURL != nil {
+	if s.SessionBranchGateURL != nil {
+		cfg.Env = append(cfg.Env, ports.BranchGateURLEnv+"="+s.SessionBranchGateURL(id))
+	}
+	if editProxy && s.SessionShellURL != nil {
 		cfg.Env = append(cfg.Env, ports.ShellURLEnv+"="+s.SessionShellURL(id))
 	}
-	if s.SessionArchitectureURL != nil && cfg.WorkingDir != "" {
+	if editProxy && s.SessionArchitectureURL != nil && cfg.WorkingDir != "" {
 		cfg.Env = append(cfg.Env, ports.ArchitectureURLEnv+"="+s.SessionArchitectureURL(id), ports.WorktreeEnv+"="+cfg.WorkingDir)
 	}
 	return func() {

@@ -41,6 +41,7 @@ import (
 	"operators-mcp/internal/application/apps"
 	"operators-mcp/internal/application/archrules"
 	"operators-mcp/internal/application/artifacts"
+	"operators-mcp/internal/application/branchgate"
 	"operators-mcp/internal/application/execution"
 	"operators-mcp/internal/application/gitcredentials"
 	"operators-mcp/internal/application/keychainpath"
@@ -441,6 +442,7 @@ var AgentRuntimeModule = fx.Module("agentruntime",
 		asPort(newClaudeTranscriptReader, new(ports.ClaudeTranscriptReader)),
 		newOrchestrationService,
 		newArchitectureRules,
+		newBranchGate,
 		platformSandboxDriver,
 		platformSandboxViolations,
 		newSandboxSettings,
@@ -774,6 +776,11 @@ func newArchitectureRules(cat catalog.Catalog, sessions ports.SessionRepository,
 	return svc
 }
 
+// newBranchGate decides the branch grants sessions' git shims ask for.
+func newBranchGate(sessions ports.SessionRepository) *branchgate.Service {
+	return branchgate.NewService(branchgate.Deps{Sessions: sessions})
+}
+
 func newOrchestrationService(
 	cfg Config,
 	commitGuard ports.CommitGuard,
@@ -846,6 +853,9 @@ func newOrchestrationService(
 	}
 	svc.SessionArchitectureURL = func(sessionID string) string {
 		return base + httpapi.SessionArchitecturePath(sessionID)
+	}
+	svc.SessionBranchGateURL = func(sessionID string) string {
+		return base + httpapi.SessionBranchGatePath(sessionID)
 	}
 	svc.ShimBinary = cfg.ShimBinary
 	svc.DeveloperBin = developerdir.Bin

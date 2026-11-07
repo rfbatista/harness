@@ -129,6 +129,9 @@ type Services struct {
 	// ArchitectureRules checks sessions' hooks, shims and commits against
 	// their repository's rules; nil allows everything.
 	ArchitectureRules ports.ArchitectureRules
+	// BranchGate decides the branch grants a session's git shim asks for; nil
+	// grants nothing.
+	BranchGate ports.BranchGate
 	// RepositoryAgents keeps which agents each repository assigns; nil
 	// answers 503.
 	RepositoryAgents ports.RepositoryAgents
@@ -198,8 +201,9 @@ type Handler struct {
 	// imports is the design systems' import, when they offer it.
 	imports ports.DesignSystemImports
 	// exports is the design systems' export into repositories, when they offer it.
-	exports   ports.DesignSystemExports
-	archRules ports.ArchitectureRules
+	exports    ports.DesignSystemExports
+	archRules  ports.ArchitectureRules
+	branchGate ports.BranchGate
 
 	streams streamRegistry // the browser tabs' live streams (stream.go)
 }
@@ -238,6 +242,7 @@ func NewHandler(s Services) *Handler {
 		imports:        designImports(s.DesignSystems),
 		exports:        designExports(s.DesignSystems),
 		archRules:      s.ArchitectureRules,
+		branchGate:     s.BranchGate,
 		notifications:  s.Notifications,
 		usage:          s.Usage,
 		liveCalls:      s.LiveCalls,

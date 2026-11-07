@@ -288,6 +288,8 @@ func NewRouter(h *Handler, opts ...Option) *echo.Echo {
 	// whether an action keeps to the repository's layers
 	g.POST(strings.TrimPrefix(ArchitectureCheckRoute, "/api"), h.handleArchitectureCheck)
 	g.POST(strings.TrimPrefix(ArchitectureCommitRoute, "/api"), h.handleArchitectureCommit)
+	// the branch gate: a session's git shim asks for a branch grant
+	g.POST(strings.TrimPrefix(BranchGateGrantRoute, "/api"), h.handleBranchGateGrant)
 
 	// the architect channel: what passes between a task's architect and its
 	// delegates, and the reviews it asks the person for
