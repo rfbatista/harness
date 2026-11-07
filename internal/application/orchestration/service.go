@@ -228,6 +228,9 @@ type Service struct {
 	updates       updateQueue
 	deliverUpdate func(sessionID, key, text string) error
 
+	// asks is what each session's outstanding approvals ask for.
+	asks asks
+
 	mu  sync.Mutex
 	seq map[string]int64
 	// statuses is the last status announced per session, so a status is
@@ -1078,6 +1081,7 @@ func (s *Service) expiryLoop() {
 // keeps working. A session that actually died gets the truth from its own exit
 // event moments later.
 func (s *Service) handleExpiry(e approval.Expiry) {
+	s.asks.drop(e.SessionID, e.ReqID)
 	s.record(e.SessionID, SessionEvent{
 		Type:     "approval_expired",
 		Status:   domain.SessionThinking,
@@ -1089,6 +1093,7 @@ func (s *Service) handleExpiry(e approval.Expiry) {
 }
 
 func (s *Service) handleApproval(req approval.Request) {
+	s.asks.add(req.SessionID, req.ID, askLine(req.ToolName, req.Input))
 	change := sessionChange{status: domain.SessionWaitingApproval}
 	if m := s.metricsOf(req.SessionID); m != nil {
 		m.PendingApprovals++
@@ -1192,6 +1197,7 @@ func (s *Service) SetAutoRun(ctx context.Context, id string, autoRun bool) error
 	})
 
 	for _, req := range flushed {
+		s.asks.drop(id, req.ID)
 		s.record(id, SessionEvent{
 			Type:     "approval_resolved",
 			Status:   domain.SessionThinking,
@@ -1214,6 +1220,7 @@ func (s *Service) decide(id, reqID string, d approval.Decision, text string) err
 	if err := s.broker.Resolve(id, reqID, d); err != nil {
 		return &domain.StructuredError{Code: "NO_PENDING_APPROVAL", Message: err.Error()}
 	}
+	s.asks.drop(id, reqID)
 	s.record(id, SessionEvent{
 		Type:     "approval_resolved",
 		Status:   domain.SessionThinking,
@@ -1412,6 +1419,9 @@ func (s *Service) record(sessionID string, ev SessionEvent, change sessionChange
 	ev.SessionID = sessionID
 	if ev.At.IsZero() {
 		ev.At = time.Now()
+	}
+	if ev.Status.IsTerminal() {
+		s.asks.clear(sessionID)
 	}
 	payload, _ := json.Marshal(ev)
 	if err := s.sessions.RecordEvent(sessionID, ports.SessionEventRecord{

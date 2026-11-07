@@ -375,6 +375,8 @@ func (h *Handler) feedFor(ctx context.Context, path string) (<-chan any, error) 
 		return h.followCatalog(ctx)
 	case u.Path == "/notifications/events":
 		return h.followNotifications(ctx)
+	case u.Path == "/live_sessions/events":
+		return h.followLiveSessions(ctx)
 	case len(parts) == 4 && parts[0] == "projects" && parts[2] == "usage" && parts[3] == "events" && parts[1] != "":
 		return h.followUsage(ctx, parts[1])
 	case len(parts) == 3 && parts[0] == "sessions" && parts[2] == "events" && parts[1] != "":

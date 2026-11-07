@@ -520,3 +520,45 @@ func TestOpenAddsTheBroughtUnderMarkToOlderSessions(t *testing.T) {
 		t.Fatalf("an older session reads brought_under false: %+v", got)
 	}
 }
+
+// A session's status_since moves only when its status actually changes, by
+// UpdateStatus and by RecordEvent alike.
+func TestSessionRepo_StatusSinceMovesOnlyWhenTheStatusChanges(t *testing.T) {
+	r := newTestDB(t)
+	s, err := r.Create(&domain.Session{ID: "a", ProjectID: "p1", Task: "t", Status: domain.SessionRunning})
+	if err != nil {
+		t.Fatal(err)
+	}
+	since := func() time.Time { return r.Get("a").StatusSince }
+	created := since()
+	if created.IsZero() || s.StatusSince.IsZero() {
+		t.Fatal("a new session has no status_since")
+	}
+	time.Sleep(3 * time.Millisecond)
+	if err := r.UpdateStatus("a", domain.SessionRunning); err != nil {
+		t.Fatal(err)
+	}
+	if !since().Equal(created) {
+		t.Fatal("UpdateStatus to the same status moved status_since")
+	}
+	if err := r.UpdateStatus("a", domain.SessionIdle); err != nil {
+		t.Fatal(err)
+	}
+	idle := since()
+	if !idle.After(created) {
+		t.Fatal("UpdateStatus to a new status did not move status_since")
+	}
+	time.Sleep(3 * time.Millisecond)
+	if err := r.RecordEvent("a", ports.SessionEventRecord{Seq: 1, Type: "x", Status: domain.SessionIdle}); err != nil {
+		t.Fatal(err)
+	}
+	if !since().Equal(idle) {
+		t.Fatal("RecordEvent with the same status moved status_since")
+	}
+	if err := r.RecordEvent("a", ports.SessionEventRecord{Seq: 2, Type: "x", Status: domain.SessionThinking}); err != nil {
+		t.Fatal(err)
+	}
+	if !since().After(idle) {
+		t.Fatal("RecordEvent with a new status did not move status_since")
+	}
+}
