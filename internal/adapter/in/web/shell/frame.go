@@ -101,6 +101,10 @@ type Hint struct {
 type TopBar struct {
 	Projects []Option
 	Current  string // project ID; "" when none is selected
+	// BoardHref is the Agent board (the home page); "" when it is not served.
+	BoardHref string
+	// OnBoard marks the Agent board as the current page.
+	OnBoard bool
 	// ProjectsHref is the projects list; "" when it is not served.
 	ProjectsHref string
 	// OnProjects marks the projects list as the current page.
@@ -137,6 +141,8 @@ type TopBar struct {
 // CurrentHref is the href of the top bar's page that is open, "" when none is.
 func (t TopBar) CurrentHref() string {
 	switch {
+	case t.OnBoard:
+		return t.BoardHref
 	case t.OnProjects:
 		return t.ProjectsHref
 	case t.OnAgents:
@@ -500,7 +506,9 @@ func (l Link) Merging() bool { return l.Merge != "" && !l.Attention && l.Live ==
 func (l Link) IsFeature() bool { return len(l.Kids) > 0 }
 
 // ShowsStatus: a child's row says its status, when no signal takes the slot.
-func (l Link) ShowsStatus() bool { return l.StatusWord != "" && l.Reviews == 0 && !l.Attention && l.Live == 0 }
+func (l Link) ShowsStatus() bool {
+	return l.StatusWord != "" && l.Reviews == 0 && !l.Attention && l.Live == 0
+}
 
 // KidsID is the id of the list of children, which the twisty controls.
 func (l Link) KidsID() string { return "rail-kids-" + l.TaskID }
