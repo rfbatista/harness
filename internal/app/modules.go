@@ -9,6 +9,7 @@ import (
 	"net/url"
 	"operators-mcp/internal/app/runtime"
 	"os"
+	"os/exec"
 	"path/filepath"
 
 	"go.uber.org/fx"
@@ -47,6 +48,8 @@ import (
 	"operators-mcp/internal/application/orchestration"
 	"operators-mcp/internal/application/planning"
 	"operators-mcp/internal/application/repoagents"
+	"operators-mcp/internal/application/sandboxsettings"
+	"operators-mcp/internal/application/services"
 	"operators-mcp/internal/application/taskchannel"
 	"operators-mcp/internal/application/tooling"
 	"operators-mcp/internal/application/vfs"
@@ -448,6 +451,7 @@ var AgentRuntimeModule = fx.Module("agentruntime",
 		newManagedClaudeBin,
 		newAgentReadiness,
 		newAppsService,
+		newServicesModule,
 		asPort(sqlite.NewArtifactRepository, new(ports.ArtifactRepository)),
 		newArtifactsService,
 		vfs.NewRootEvents,
@@ -630,6 +634,22 @@ func newAppsService(orch *orchestration.Service, cat catalog.Catalog, host ports
 	svc.UseRunWorktrees(repos, agents, git)
 	svc.Subscribe(cat.Bus)
 	return svc
+}
+
+// newServicesModule keeps projects' services in the database, with their
+// logs in the data directory. It reads the sandbox switch and driver agents
+// run under, and looks the container runtime up on the server's PATH.
+func newServicesModule(cfg Config, db *gorm.DB, cat catalog.Catalog, orch *orchestration.Service, sandbox *sandboxsettings.Store) (*services.Service, error) {
+	logDir, err := dataDir(cfg, "service-logs")
+	if err != nil {
+		return nil, err
+	}
+	if err := os.MkdirAll(logDir, 0o700); err != nil {
+		return nil, err
+	}
+	return services.New(sqlite.NewServiceRepository(db), cat.Projects, cat.Projects, services.Options{
+		LogDir: logDir, Sandbox: sandbox, Driver: sandboxDriver(orch), LookPath: exec.LookPath,
+	}), nil
 }
 
 func newRuntimeConfig(cfg Config, bin ports.ManagedClaudeBin, home claudehome.Home, driver ports.SandboxDriver) runtime.Config {
