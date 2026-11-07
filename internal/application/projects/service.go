@@ -103,16 +103,38 @@ func (s *Service) FindRepositories(_ context.Context, rootDir string) (string, [
 	return root, found, nil
 }
 
-// resolveDir expands a leading "~/" and checks the result is an existing
-// absolute directory.
-func resolveDir(dir string) (string, error) {
-	dir = strings.TrimSpace(dir)
+// normalizeRepositoryRoot returns a repository root dir as it is stored: "~"
+// expanded, cleaned and absolute, or empty. The directory need not exist
+// (ADR 0072).
+func normalizeRepositoryRoot(dir string) (string, error) {
+	dir, err := expandHome(strings.TrimSpace(dir))
+	if err != nil || dir == "" {
+		return dir, err
+	}
+	if !filepath.IsAbs(dir) {
+		return "", &domain.StructuredError{Code: "INVALID_ROOT", Message: "the directory must be an absolute path"}
+	}
+	return filepath.Clean(dir), nil
+}
+
+// expandHome expands a leading "~" or "~/" to the server's home directory.
+func expandHome(dir string) (string, error) {
 	if dir == "~" || strings.HasPrefix(dir, "~/") {
 		home, err := os.UserHomeDir()
 		if err != nil {
 			return "", &domain.StructuredError{Code: "INVALID_ROOT", Message: "cannot resolve ~: " + err.Error()}
 		}
-		dir = filepath.Join(home, strings.TrimPrefix(dir, "~"))
+		return filepath.Join(home, strings.TrimPrefix(dir, "~")), nil
+	}
+	return dir, nil
+}
+
+// resolveDir expands a leading "~/" and checks the result is an existing
+// absolute directory.
+func resolveDir(dir string) (string, error) {
+	dir, err := expandHome(strings.TrimSpace(dir))
+	if err != nil {
+		return "", err
 	}
 	if !filepath.IsAbs(dir) {
 		return "", &domain.StructuredError{Code: "INVALID_ROOT", Message: "the directory must be an absolute path"}
@@ -462,6 +484,10 @@ func (s *Service) CreateRepository(ctx context.Context, projectID, name, descrip
 	if s.projects.Get(ctx, projectID) == nil {
 		return nil, errProjectNotFound
 	}
+	rootDir, err := normalizeRepositoryRoot(rootDir)
+	if err != nil {
+		return nil, err
+	}
 	return s.saved(ctx)(s.repositories.Create(projectID, name, description, url, rootDir))
 }
 
@@ -469,6 +495,10 @@ func (s *Service) CreateRepository(ctx context.Context, projectID, name, descrip
 func (s *Service) UpdateRepository(ctx context.Context, id, name, description, url, rootDir string) (*domain.Repository, error) {
 	if s.repositories == nil {
 		return nil, errNoRepositories
+	}
+	rootDir, err := normalizeRepositoryRoot(rootDir)
+	if err != nil {
+		return nil, err
 	}
 	return s.saved(ctx)(s.repositories.Update(id, name, description, url, rootDir))
 }
