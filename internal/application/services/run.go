@@ -269,6 +269,9 @@ func (s *Service) RestartService(ctx context.Context, serviceID string, opts por
 		if err := s.checkSandbox(svc); err != nil {
 			return nil, err
 		}
+		if err := s.checkRuntime(svc); err != nil {
+			return nil, err
+		}
 	}
 	if _, err := s.StopService(ctx, serviceID); err != nil {
 		return nil, err

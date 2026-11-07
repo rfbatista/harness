@@ -51,8 +51,9 @@ func (s *Service) Shutdown(ctx context.Context) error {
 // the store belongs to a run of a server that is gone: it becomes stopped,
 // its log ends with the restart line and followers are told. Nothing is
 // started. Then the containers carrying this harness's instance label, which
-// that server may have left running, are removed (another harness's stay) when the container runtime is
-// available; a runtime that is missing or fails is logged, never fatal.
+// that server may have left running, are removed (another harness's stay) from
+// each container runtime that is available; a runtime that is missing or fails
+// is logged, never fatal.
 func (s *Service) Recover(ctx context.Context) error {
 	active, err := s.store.ActiveServices()
 	if err != nil {
@@ -78,15 +79,22 @@ func (s *Service) settleLeftover(svc *domain.Service) {
 	})
 }
 
-// sweepContainers removes every container the harness labelled.
+// sweepContainers removes every container this harness labelled, from both
+// runtimes whose command is on the PATH: the person may have switched the
+// setting since a run started, and its container stays with the old runtime.
 func (s *Service) sweepContainers(ctx context.Context) {
 	if s.opts.Sweeper == nil || s.opts.LookPath == nil {
 		return
 	}
-	runtime := s.opts.Runtime.ContainerRuntime()
-	if _, err := s.opts.LookPath(runtime); err != nil {
-		return
+	for _, runtime := range []string{"docker", "podman"} {
+		if _, err := s.opts.LookPath(runtime); err != nil {
+			continue
+		}
+		s.sweepRuntime(ctx, runtime)
 	}
+}
+
+func (s *Service) sweepRuntime(ctx context.Context, runtime string) {
 	found, err := s.opts.Sweeper.ListServiceContainers(ctx, runtime)
 	if err != nil {
 		slog.Warn("list the containers services left behind", "runtime", runtime, "err", err)

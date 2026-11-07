@@ -45,6 +45,8 @@ type mcpFixture struct {
 	mcpURL   string
 	// answers collects every text an MCP tool returned, for the secret check.
 	answers []string
+	// ticketID is the task the sessions made next work on.
+	ticketID string
 }
 
 const mcpSecret = "hunter2-secret-value"
@@ -80,7 +82,7 @@ func newMCPFixture(t *testing.T, settle time.Duration) *mcpFixture {
 // (its own dir and branch) or without.
 func (f *mcpFixture) session(id, projectID, repoID string, worktree bool) string {
 	f.t.Helper()
-	s := &domain.Session{ID: id, ProjectID: projectID, RepositoryID: repoID, AgentID: "agent-dev", Task: "go", WorkingDir: f.t.TempDir(), Status: domain.SessionRunning}
+	s := &domain.Session{ID: id, ProjectID: projectID, RepositoryID: repoID, AgentID: "agent-dev", Task: "go", TicketID: f.ticketID, WorkingDir: f.t.TempDir(), Status: domain.SessionRunning}
 	if worktree {
 		s.WorkspaceID, s.Branch = "ws-"+id, "feat/"+id
 	}
@@ -216,9 +218,11 @@ func anyStrings(v any) []string {
 
 func TestServicesMCP_StartIsRecordedForTheSessionAndAnAlreadyRunningOneIsLeftAlone(t *testing.T) {
 	f := newMCPFixture(t, 5*time.Second)
+	f.ticketID = "task-77"
 	f.session("sess-12345678abc", f.projectID, f.repoID, true)
 	id := f.commandIn(f.repoID, "web", "sleep 30", "")
 	agent := f.as("sess-12345678abc")
+	events := sseEvents(t, f.srv.URL+"/api/services/events?project_id="+f.projectID)
 
 	out := agent.ok("start_service", named("web"))
 	svc := out["service"].(map[string]any)
@@ -227,8 +231,13 @@ func TestServicesMCP_StartIsRecordedForTheSessionAndAnAlreadyRunningOneIsLeftAlo
 		run["where"] != "main checkout" || run["dir"] != f.repoDir() || run["exit_code"] != nil || run["ended_at"] != "" {
 		t.Fatalf("start = %v", out)
 	}
-	if by := f.service(id)["run"].(map[string]any)["started_by"].(map[string]any); by["kind"] != "session" || by["session_id"] != "sess-12345678abc" || by["agent"] != "dev" {
-		t.Fatalf("the run is stored as started by the session: %v", by)
+	if by := f.service(id)["run"].(map[string]any)["started_by"].(map[string]any); by["kind"] != "session" || by["session_id"] != "sess-12345678abc" || by["agent"] != "dev" || by["task_id"] != "task-77" {
+		t.Fatalf("the run is stored as started by the session, with its task: %v", by)
+	}
+	for _, e := range serviceChanges(t, events, id, 2) {
+		if by := e["service"].(map[string]any)["run"].(map[string]any)["started_by"].(map[string]any); by["task_id"] != "task-77" {
+			t.Fatalf("the feed carries the task: %v", by)
+		}
 	}
 
 	again := agent.ok("start_service", named("web"))
@@ -249,6 +258,25 @@ func TestServicesMCP_StartIsRecordedForTheSessionAndAnAlreadyRunningOneIsLeftAlo
 	restarted := agent.ok("restart_service", named("web"))["service"].(map[string]any)
 	if restarted["status"] != "running" || restarted["run"].(map[string]any)["started_at"] == run["started_at"] && restarted["run"].(map[string]any)["ended_at"] != "" {
 		t.Fatalf("restart = %v", restarted)
+	}
+}
+
+func TestServicesMCP_ARestartRecordsTheSessionsTaskAndATasklessSessionHasNone(t *testing.T) {
+	f := newMCPFixture(t, 5*time.Second)
+	f.ticketID = "task-9"
+	f.session("sess-task", f.projectID, f.repoID, true)
+	f.ticketID = ""
+	f.session("sess-bare", f.projectID, f.repoID, true)
+	id := f.commandIn(f.repoID, "web", "sleep 30", "")
+	by := func() map[string]any { return f.service(id)["run"].(map[string]any)["started_by"].(map[string]any) }
+
+	f.as("sess-task").ok("restart_service", named("web"))
+	if got := by(); got["task_id"] != "task-9" || got["session_id"] != "sess-task" {
+		t.Fatalf("restart by a session on a task: %v", got)
+	}
+	f.as("sess-bare").ok("restart_service", named("web"))
+	if got := by(); got["task_id"] != "" || got["session_id"] != "sess-bare" {
+		t.Fatalf("a session with no task has an empty task_id: %v", got)
 	}
 }
 
@@ -376,6 +404,8 @@ func TestServicesMCP_OwnWorktreeRefusals(t *testing.T) {
 	f.as("sess-bare").refused("start_service", own("web"), `"web" cannot run in your worktree: this session has no worktree`)
 	mine.refused("start_service", map[string]any{"name": "web", "worktree": "main"}, `worktree must be "own" or omitted`)
 	mine.refused("restart_service", map[string]any{"name": "web", "worktree": "main"}, `worktree must be "own" or omitted`)
+	mine.refused("start_service", map[string]any{"name": "web", "worktree": ""}, `worktree must be "own" or omitted`)
+	mine.refused("restart_service", map[string]any{"name": "web", "worktree": ""}, `worktree must be "own" or omitted`)
 	for _, name := range []string{"web", "job", "db"} {
 		if st := f.status(f.createdID(name)); st != "stopped" {
 			t.Fatalf("a refused start starts nothing: %s is %s", name, st)
@@ -396,8 +426,8 @@ func TestServicesMCP_ReadServiceLogs(t *testing.T) {
 		t.Fatalf("tail_lines 2 = %q", tail["text"])
 	}
 	def := agent.ok("read_service_logs", named("web"))
-	if strings.Count(def["text"].(string), "\n") != 200 || def["truncated"] != true {
-		t.Fatalf("the default is 200 lines, with earlier lines left: %d lines, truncated %v", strings.Count(def["text"].(string), "\n"), def["truncated"])
+	if strings.Count(def["text"].(string), "\n") != 200 || def["truncated"] != false {
+		t.Fatalf("the default is 200 lines; older lines existing is not a cut: %d lines, truncated %v", strings.Count(def["text"].(string), "\n"), def["truncated"])
 	}
 
 	first := agent.ok("read_service_logs", map[string]any{"name": "web", "offset": 0})
@@ -424,6 +454,29 @@ func TestServicesMCP_ReadServiceLogs(t *testing.T) {
 
 	for _, bad := range []any{0, -1, 2001, 1.5} {
 		agent.refused("read_service_logs", map[string]any{"name": "web", "tail_lines": bad}, "tail_lines must be between 1 and 2000")
+	}
+}
+
+func TestServicesMCP_ATailThatTheWindowCutsIsTruncatedAndStartsOnWholeLines(t *testing.T) {
+	f := newMCPFixture(t, 5*time.Second)
+	f.session("sess-1", f.projectID, f.repoID, true)
+	// 300 KB of one line, then two short ones: the 256 KB tail window starts
+	// inside the long line.
+	id := f.commandIn(f.repoID, "web", `head -c 300000 /dev/zero | tr '\0' 'x'; echo; echo mid; echo end-42; sleep 30`, "")
+	agent := f.as("sess-1")
+	agent.ok("start_service", named("web"))
+	f.awaitLog(id, "\nend-42\n")
+
+	few := agent.ok("read_service_logs", map[string]any{"name": "web", "tail_lines": 2})
+	if few["text"] != "mid\nend-42\n" || few["truncated"] != false {
+		t.Fatalf("two lines are answered whole, not cut: %q truncated %v", few["text"], few["truncated"])
+	}
+	many := agent.ok("read_service_logs", map[string]any{"name": "web", "tail_lines": 50})
+	if many["text"] != "mid\nend-42\n" || many["truncated"] != true {
+		t.Fatalf("the window cut the answer: no partial first line, truncated: %q %v", many["text"], many["truncated"])
+	}
+	if from := agent.ok("read_service_logs", map[string]any{"name": "web", "offset": 0}); from["truncated"] != true {
+		t.Fatalf("a 64 KB window cuts: %v", from["truncated"])
 	}
 }
 

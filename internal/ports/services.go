@@ -203,8 +203,9 @@ type ServiceManager interface {
 	// reads the last ServiceLogTailBytes.
 	ReadServiceLog(ctx context.Context, serviceID string, offset *int64) (*ServiceLogRead, error)
 	// ReadServiceLogTail reads the last lines of the log (at most
-	// ServiceLogMaxRead bytes of it); truncated says earlier lines exist
-	// beyond what was read.
+	// ServiceLogMaxRead bytes of it, from the start of a line); truncated says
+	// that window cut the answer short of the lines asked for, with earlier
+	// lines beyond it. Older lines left out of a full answer are not a cut.
 	ReadServiceLogTail(ctx context.Context, serviceID string, lines int) (read *ServiceLogRead, truncated bool, err error)
 	// FollowServiceLog streams the log from byte offset from (nil: its end)
 	// and then each new chunk, until ctx ends. The channel closes when the

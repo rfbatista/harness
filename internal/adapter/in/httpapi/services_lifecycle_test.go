@@ -26,6 +26,7 @@ import (
 type fakeSweeper struct {
 	mu        sync.Mutex
 	found     []ports.ServiceContainerRef
+	byRuntime map[string][]ports.ServiceContainerRef // when set, what each runtime lists
 	listErr   error
 	asked     []string // runtimes asked, in order
 	removed   []string
@@ -36,6 +37,9 @@ func (s *fakeSweeper) ListServiceContainers(_ context.Context, runtime string) (
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	s.asked = append(s.asked, runtime)
+	if s.byRuntime != nil {
+		return s.byRuntime[runtime], s.listErr
+	}
 	return s.found, s.listErr
 }
 
@@ -221,7 +225,6 @@ func TestServicesLifecycle_BootRemovesTheHarnessLabelledContainers(t *testing.T)
 		{Name: "harness-svc-cccc-3", ServiceID: "c", Instance: "mine"},
 	}}
 	g := restarted(t, f, services.Options{Instance: "mine", LookPath: lookPathOf("podman"), Sweeper: sweeper})
-	g.setRuntime("podman")
 
 	if err := g.svc.Recover(context.Background()); err != nil {
 		t.Fatal(err)
@@ -229,8 +232,34 @@ func TestServicesLifecycle_BootRemovesTheHarnessLabelledContainers(t *testing.T)
 	if got := sweeper.Removed(); !slices.Equal(got, []string{"harness-svc-aaaa-1", "harness-svc-cccc-3"}) {
 		t.Fatalf("only this harness's containers are removed, never another's: removed = %v", got)
 	}
-	if got := sweeper.Asked(); !slices.Equal(got, []string{"podman"}) {
-		t.Fatalf("asked the configured runtime: %v", got)
+}
+
+func TestServicesLifecycle_BootSweepsBothRuntimesEachWhenItsCommandIsThere(t *testing.T) {
+	f := newServicesFixture(t, services.Options{})
+	sweeper := &fakeSweeper{byRuntime: map[string][]ports.ServiceContainerRef{
+		"docker": {{Name: "harness-svc-aaaa-1", Instance: "mine"}, {Name: "harness-svc-bbbb-2", Instance: "another-harness"}},
+		"podman": {{Name: "harness-svc-cccc-3", Instance: "mine"}},
+	}}
+	g := restarted(t, f, services.Options{Instance: "mine", LookPath: lookPathOf("docker", "podman"), Sweeper: sweeper})
+	g.setRuntime("podman") // the person switched away from docker
+
+	if err := g.svc.Recover(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	if got := sweeper.Asked(); !slices.Equal(got, []string{"docker", "podman"}) {
+		t.Fatalf("both runtimes are asked: %v", got)
+	}
+	if got := sweeper.Removed(); !slices.Equal(got, []string{"harness-svc-aaaa-1", "harness-svc-cccc-3"}) {
+		t.Fatalf("this harness's containers of both runtimes go, another's stays: %v", got)
+	}
+
+	only := &fakeSweeper{byRuntime: map[string][]ports.ServiceContainerRef{"podman": {{Name: "p", Instance: "mine"}}}}
+	h := restarted(t, f, services.Options{Instance: "mine", LookPath: lookPathOf("podman"), Sweeper: only})
+	if err := h.svc.Recover(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	if got := only.Asked(); !slices.Equal(got, []string{"podman"}) {
+		t.Fatalf("a runtime whose command is missing is not asked: %v", got)
 	}
 }
 
