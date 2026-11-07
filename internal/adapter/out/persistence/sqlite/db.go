@@ -4,6 +4,8 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
+	"os"
+	"path/filepath"
 	"runtime"
 	"strings"
 
@@ -196,6 +198,34 @@ func migrate(db *gorm.DB) error {
 	}
 	if err := migrateSessionAgentIDs(db); err != nil {
 		return fmt.Errorf("sqlite session agent migration: %w", err)
+	}
+	if err := migrateRepositoryRootDirsToAbsolute(db); err != nil {
+		return fmt.Errorf("sqlite repository root dir migration: %w", err)
+	}
+	return nil
+}
+
+// migrateRepositoryRootDirsToAbsolute rewrites the root dir of a repository
+// saved with a leading "~" to the server's home directory (ADR 0072), since
+// the agent sandbox refuses a path that is not absolute. Absolute and empty
+// root dirs are left alone, so it is safe to re-run.
+func migrateRepositoryRootDirsToAbsolute(db *gorm.DB) error {
+	var rows []struct{ ID, RootDir string }
+	if err := db.Raw("SELECT id, root_dir FROM repositories WHERE root_dir = '~' OR root_dir LIKE '~/%'").Scan(&rows).Error; err != nil {
+		return err
+	}
+	if len(rows) == 0 {
+		return nil
+	}
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return fmt.Errorf("resolve ~: %w", err)
+	}
+	for _, r := range rows {
+		root := filepath.Join(home, strings.TrimPrefix(r.RootDir, "~"))
+		if err := db.Exec("UPDATE repositories SET root_dir = ? WHERE id = ?", root, r.ID).Error; err != nil {
+			return err
+		}
 	}
 	return nil
 }
