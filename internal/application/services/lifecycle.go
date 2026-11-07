@@ -50,8 +50,8 @@ func (s *Service) Shutdown(ctx context.Context) error {
 // Recover is the boot clean-up. Every service left starting or running in
 // the store belongs to a run of a server that is gone: it becomes stopped,
 // its log ends with the restart line and followers are told. Nothing is
-// started. Then the containers carrying the harness's label, which that
-// server may have left running, are removed when the container runtime is
+// started. Then the containers carrying this harness's instance label, which
+// that server may have left running, are removed (another harness's stay) when the container runtime is
 // available; a runtime that is missing or fails is logged, never fatal.
 func (s *Service) Recover(ctx context.Context) error {
 	active, err := s.store.ActiveServices()
@@ -93,6 +93,9 @@ func (s *Service) sweepContainers(ctx context.Context) {
 		return
 	}
 	for _, c := range found {
+		if c.Instance != s.opts.Instance {
+			continue
+		}
 		if err := s.opts.Sweeper.RemoveServiceContainer(ctx, runtime, c.Name); err != nil {
 			slog.Warn("remove a container a service left behind", "runtime", runtime, "container", c.Name, "err", err)
 			continue

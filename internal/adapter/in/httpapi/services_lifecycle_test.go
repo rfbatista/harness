@@ -217,16 +217,17 @@ func TestServicesLifecycle_BootStopsWhatWasLeftRunningAndStartsNothing(t *testin
 func TestServicesLifecycle_BootRemovesTheHarnessLabelledContainers(t *testing.T) {
 	f := newServicesFixture(t, services.Options{})
 	sweeper := &fakeSweeper{found: []ports.ServiceContainerRef{
-		{Name: "harness-svc-aaaa-1", ServiceID: "a", Instance: "old"}, {Name: "harness-svc-bbbb-2", ServiceID: "b", Instance: "other"},
+		{Name: "harness-svc-aaaa-1", ServiceID: "a", Instance: "mine"}, {Name: "harness-svc-bbbb-2", ServiceID: "b", Instance: "another-harness"},
+		{Name: "harness-svc-cccc-3", ServiceID: "c", Instance: "mine"},
 	}}
-	g := restarted(t, f, services.Options{LookPath: lookPathOf("podman"), Sweeper: sweeper})
+	g := restarted(t, f, services.Options{Instance: "mine", LookPath: lookPathOf("podman"), Sweeper: sweeper})
 	g.setRuntime("podman")
 
 	if err := g.svc.Recover(context.Background()); err != nil {
 		t.Fatal(err)
 	}
-	if got := sweeper.Removed(); !slices.Equal(got, []string{"harness-svc-aaaa-1", "harness-svc-bbbb-2"}) {
-		t.Fatalf("removed = %v", got)
+	if got := sweeper.Removed(); !slices.Equal(got, []string{"harness-svc-aaaa-1", "harness-svc-cccc-3"}) {
+		t.Fatalf("only this harness's containers are removed, never another's: removed = %v", got)
 	}
 	if got := sweeper.Asked(); !slices.Equal(got, []string{"podman"}) {
 		t.Fatalf("asked the configured runtime: %v", got)
@@ -237,8 +238,8 @@ func TestServicesLifecycle_BootCarriesOnWithoutARuntimeOrWhenTheSweepFails(t *te
 	f := newServicesFixture(t, services.Options{})
 	leaveRunning(t, f, f.command("web", "true"), domain.ServiceRunning)
 
-	none := &fakeSweeper{found: []ports.ServiceContainerRef{{Name: "c"}}}
-	g := restarted(t, f, services.Options{LookPath: lookPathOf(), Sweeper: none})
+	none := &fakeSweeper{found: []ports.ServiceContainerRef{{Name: "c", Instance: "mine"}}}
+	g := restarted(t, f, services.Options{Instance: "mine", LookPath: lookPathOf(), Sweeper: none})
 	if err := g.svc.Recover(context.Background()); err != nil {
 		t.Fatalf("no runtime: %v", err)
 	}
@@ -248,9 +249,9 @@ func TestServicesLifecycle_BootCarriesOnWithoutARuntimeOrWhenTheSweepFails(t *te
 
 	for name, sw := range map[string]*fakeSweeper{
 		"list fails":   {listErr: errors.New("daemon is not running")},
-		"remove fails": {found: []ports.ServiceContainerRef{{Name: "a"}, {Name: "b"}}, removeErr: errors.New("busy")},
+		"remove fails": {found: []ports.ServiceContainerRef{{Name: "a", Instance: "mine"}, {Name: "b", Instance: "mine"}}, removeErr: errors.New("busy")},
 	} {
-		h := restarted(t, f, services.Options{LookPath: lookPathOf("docker"), Sweeper: sw})
+		h := restarted(t, f, services.Options{Instance: "mine", LookPath: lookPathOf("docker"), Sweeper: sw})
 		if err := h.svc.Recover(context.Background()); err != nil {
 			t.Fatalf("%s: boot must not fail: %v", name, err)
 		}

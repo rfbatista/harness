@@ -48,7 +48,8 @@ type ServiceContainerRef struct {
 // started (driven), for clean-up of those a stopped harness left behind.
 type ServiceContainerSweeper interface {
 	// ListServiceContainers are the runtime's containers, running or not,
-	// that carry the harness's service label.
+	// that carry the harness's service label, each with its instance label
+	// (the caller keeps its own).
 	ListServiceContainers(ctx context.Context, runtime string) ([]ServiceContainerRef, error)
 	// RemoveServiceContainer force-removes the container.
 	RemoveServiceContainer(ctx context.Context, runtime, name string) error

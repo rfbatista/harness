@@ -2,6 +2,8 @@ package app
 
 import (
 	"context"
+	"crypto/rand"
+	"encoding/hex"
 	"errors"
 	"fmt"
 	"io"
@@ -11,6 +13,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strings"
 	"time"
 
 	"go.uber.org/fx"
@@ -656,7 +659,12 @@ func newServicesModule(lc fx.Lifecycle, cfg Config, db *gorm.DB, cat catalog.Cat
 			return nil, err
 		}
 	}
+	instance, err := serviceInstance(logDir)
+	if err != nil {
+		return nil, err
+	}
 	svc := services.New(sqlite.NewServiceRepository(db), cat.Projects, cat.Projects, services.Options{
+		Instance: instance,
 		LogDir: logDir, FolderDir: folderDir, Sandbox: sandbox, Driver: sandboxDriver(orch), LookPath: exec.LookPath,
 		Allow: sandboxAllow(orch, sandbox), Checkouts: func(projectID string) []string { return projectCheckouts(cat.Projects, projectID) },
 		Runners: map[domain.ServiceKind]ports.ServiceProcessRunner{
@@ -680,6 +688,24 @@ func newServicesModule(lc fx.Lifecycle, cfg Config, db *gorm.DB, cat catalog.Cat
 		},
 	})
 	return svc, nil
+}
+
+// serviceInstance is the id of this harness's data directory, made once and
+// kept in it. It labels the containers the harness starts, so boot removes
+// only its own and never another harness's on the same machine.
+func serviceInstance(dir string) (string, error) {
+	path := filepath.Join(dir, ".instance")
+	if b, err := os.ReadFile(path); err == nil {
+		if id := strings.TrimSpace(string(b)); id != "" {
+			return id, nil
+		}
+	}
+	var raw [8]byte
+	if _, err := rand.Read(raw[:]); err != nil {
+		return "", err
+	}
+	id := hex.EncodeToString(raw[:])
+	return id, os.WriteFile(path, []byte(id+"\n"), 0o600)
 }
 
 func newRuntimeConfig(cfg Config, bin ports.ManagedClaudeBin, home claudehome.Home, driver ports.SandboxDriver) runtime.Config {

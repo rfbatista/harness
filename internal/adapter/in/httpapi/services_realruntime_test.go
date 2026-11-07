@@ -57,6 +57,7 @@ func TestServicesRealRuntime_ImageServiceRunsStopsAndBootRemovesALabelledLeftove
 		},
 		LookPath: exec.LookPath,
 		Sweeper:  containerrunner.Runner{},
+		Instance: "real-test-instance",
 	})
 	if code, out := f.setRuntime(runtime); code != 200 {
 		t.Fatalf("set runtime = %d %v", code, out)
@@ -77,10 +78,13 @@ func TestServicesRealRuntime_ImageServiceRunsStopsAndBootRemovesALabelledLeftove
 		t.Fatalf("stop = %d %v", code, o)
 	}
 
-	leftover := "harness-svc-test-leftover"
-	t.Cleanup(func() { _ = exec.Command(runtime, "rm", "-f", leftover).Run() })
-	if out, err := exec.Command(runtime, "run", "-d", "--name", leftover, "--label", "harness.service=test", image, "sleep", "300").CombinedOutput(); err != nil {
-		t.Fatalf("leftover: %v %s", err, out)
+	leftover, foreign := "harness-svc-test-leftover", "harness-svc-test-foreign"
+	for name, instance := range map[string]string{leftover: "real-test-instance", foreign: "another-harness"} {
+		t.Cleanup(func() { _ = exec.Command(runtime, "rm", "-f", name).Run() })
+		if out, err := exec.Command(runtime, "run", "-d", "--name", name, "--label", "harness.service=test",
+			"--label", "harness.instance="+instance, image, "sleep", "300").CombinedOutput(); err != nil {
+			t.Fatalf("%s: %v %s", name, err, out)
+		}
 	}
 	if err := f.svc.Recover(context.Background()); err != nil {
 		t.Fatal(err)
@@ -89,4 +93,7 @@ func TestServicesRealRuntime_ImageServiceRunsStopsAndBootRemovesALabelledLeftove
 		out, _ := exec.Command(runtime, "ps", "-a", "--filter", "name="+leftover, "--format", "{{.Names}}").Output()
 		return strings.TrimSpace(string(out)) == ""
 	})
+	if out, _ := exec.Command(runtime, "ps", "-a", "--filter", "name="+foreign, "--format", "{{.Names}}").Output(); strings.TrimSpace(string(out)) != foreign {
+		t.Fatalf("another harness's container must survive the sweep, ps = %q", out)
+	}
 }
