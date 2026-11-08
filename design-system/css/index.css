@@ -72,6 +72,7 @@
 @import url("./blocks/row.css");
 @import url("./blocks/pickbar.css");
 @import url("./blocks/board.css");
+@import url("./blocks/agent-board.css");
 @import url("./blocks/archived.css");
 @import url("./blocks/confirm-strip.css");
 @import url("./blocks/tabs.css");

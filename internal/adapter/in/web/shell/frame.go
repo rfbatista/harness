@@ -101,6 +101,10 @@ type Hint struct {
 type TopBar struct {
 	Projects []Option
 	Current  string // project ID; "" when none is selected
+	// BoardHref is the Agent board (the home page); "" when it is not served.
+	BoardHref string
+	// OnBoard marks the Agent board as the current page.
+	OnBoard bool
 	// ProjectsHref is the projects list; "" when it is not served.
 	ProjectsHref string
 	// OnProjects marks the projects list as the current page.
@@ -137,6 +141,8 @@ type TopBar struct {
 // CurrentHref is the href of the top bar's page that is open, "" when none is.
 func (t TopBar) CurrentHref() string {
 	switch {
+	case t.OnBoard:
+		return t.BoardHref
 	case t.OnProjects:
 		return t.ProjectsHref
 	case t.OnAgents:

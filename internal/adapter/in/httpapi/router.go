@@ -334,6 +334,9 @@ func NewRouter(h *Handler, opts ...Option) *echo.Echo {
 	g.POST("/update_ticket_comment", h.handleUpdateTicketComment)
 	g.POST("/delete_ticket_comment", h.handleDeleteTicketComment)
 
+	// the Agent board: the seed, and the live session feed (SSE)
+	g.GET("/agent_board", h.handleAgentBoard)
+	g.GET("/live_sessions/events", h.handleLiveSessionEvents)
 	// notifications: the person's inbox across every project
 	g.GET("/notifications", h.handleListNotifications)
 	g.POST("/notifications/read", h.handleMarkNotificationsRead)

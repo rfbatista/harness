@@ -40,6 +40,7 @@ func (r *SessionRepository) Create(s *domain.Session) (*domain.Session, error) {
 		WorkingDir:      s.WorkingDir,
 		Model:           s.Model,
 		Status:          string(s.Status),
+		StatusSinceMs:   time.Now().UnixMilli(),
 		AutoRun:         s.AutoRun,
 		WorkspaceID:     s.WorkspaceID,
 		Branch:          s.Branch,
@@ -176,7 +177,7 @@ func (r *SessionRepository) SandboxViolations(sessionID string) ([]ports.Sandbox
 }
 
 func (r *SessionRepository) UpdateStatus(id string, status domain.SessionStatus) error {
-	return updateSession(r.db, id, map[string]any{"status": string(status)})
+	return updateSession(r.db, id, statusColumns(status))
 }
 
 func (r *SessionRepository) UpdateMetrics(id string, costUSD float64, tokens ports.SessionTokens, lastAction string, pendingApprovals int) error {
@@ -199,13 +200,25 @@ func (r *SessionRepository) RecordEvent(sessionID string, ev ports.SessionEventR
 			cols = metricsColumns(*ev.Metrics)
 		}
 		if ev.Status != "" {
-			cols["status"] = string(ev.Status)
+			for k, v := range statusColumns(ev.Status) {
+				cols[k] = v
+			}
 		}
 		if len(cols) == 0 {
 			return nil
 		}
 		return updateSession(tx, sessionID, cols)
 	})
+}
+
+// statusColumns sets the status and moves status_since_ms only when the
+// status actually changes.
+func statusColumns(status domain.SessionStatus) map[string]any {
+	return map[string]any{
+		"status": string(status),
+		"status_since_ms": gorm.Expr("CASE WHEN status <> ? OR status_since_ms = 0 THEN ? ELSE status_since_ms END",
+			string(status), time.Now().UnixMilli()),
+	}
 }
 
 func metricsColumns(m ports.SessionMetrics) map[string]any {

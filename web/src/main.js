@@ -39,6 +39,7 @@ import { registerBranchRequests } from "./modules/branchrequests/presentation/re
 import { reviewsGateway } from "./modules/reviews/infrastructure/reviews-gateway.js";
 import { registerReviews } from "./modules/reviews/presentation/register.js";
 import { registerRuns } from "./modules/runs/presentation/register.js";
+import { agentBoardGateway } from "./modules/agentboard/infrastructure/agentboard-gateway.js";
 import { projectsGateway } from "./modules/projects/infrastructure/projects-gateway.js";
 import { pullRequestsGateway } from "./modules/pullrequests/infrastructure/pullrequests-gateway.js";
 import { registerPullRequests } from "./modules/pullrequests/presentation/register.js";
@@ -51,6 +52,7 @@ import { repositoryAgentsGateway } from "./modules/repositoryagents/infrastructu
 import { registerRepositoryAgents } from "./modules/repositoryagents/presentation/register.js";
 import { designSystemGateway } from "./modules/designsystem/infrastructure/designsystem-gateway.js";
 import { registerDesignSystem } from "./modules/designsystem/presentation/register.js";
+import { registerAgentBoard } from "./modules/agentboard/presentation/register.js";
 import { registerProjects } from "./modules/projects/presentation/register.js";
 import { artifactsGateway } from "./modules/sessions/infrastructure/artifacts-gateway.js";
 import { channelGateway } from "./modules/sessions/infrastructure/channel-gateway.js";
@@ -100,6 +102,7 @@ const repositoryAgents = repositoryAgentsGateway(api, events);
 registerRepositoryAgents(Alpine, { gateway: repositoryAgents });
 const designSystem = designSystemGateway(api, events);
 registerDesignSystem(Alpine, { gateway: designSystem, clock: systemClock, clipboard: { copyText }, navigate });
+registerAgentBoard(Alpine, { gateway: agentBoardGateway(api, events), navigate, clock: systemClock });
 registerProjects(Alpine, { gateway: projectsGateway(api, events), architecture, designSystem, navigate, clock: systemClock });
 const tokenSavers = tokenSaversGateway(api);
 registerTasks(Alpine, {

@@ -92,6 +92,13 @@ test("the seed gives the count and the title; without one, the first read does",
   assert.deepEqual([bare.store.unreadCount, bare.doc.title], [2, "(2) Notification · harness"]);
 });
 
+test("the count leads the title and keeps what a page added to its end", () => {
+  const w = world({ seed: seedOf([makeNotification()], 1) });
+  w.doc.title = "(1) Agent board · harness · 2 need you";
+  w.server.push([makeNotification({ id: "a" })], 2);
+  assert.equal(w.doc.title, "(2) Agent board · harness · 2 need you");
+});
+
 test("a new action item is counted and announced once; info, read and known ones are not", () => {
   const w = world({ seed: seedOf([makeNotification({ id: "known" })], 1) });
   w.server.push([makeNotification({ id: "a", title: "Review requested", projectName: "tui" })], 2);

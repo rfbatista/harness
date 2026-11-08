@@ -69,6 +69,9 @@ type Services struct {
 	// Notifications is the person's inbox across every project; nil answers
 	// 503.
 	Notifications ports.Notifications
+	// AgentBoard is the Agent board's seed and live session feed; nil
+	// answers 503.
+	AgentBoard ports.AgentBoard
 	// Usage reads the token usage the LLM proxy measured; nil answers 503.
 	Usage ports.UsageReader
 	// LiveCalls opens the live call stream of a project's Usage page; nil
@@ -171,6 +174,7 @@ type Handler struct {
 	merges         ports.BranchMerger
 	branchNames    ports.BranchNameChecker
 	notifications  ports.Notifications
+	agentBoard     ports.AgentBoard
 	usage          ports.UsageReader
 	liveCalls      ports.LiveCalls
 	code           ports.CodeBrowser
@@ -244,6 +248,7 @@ func NewHandler(s Services) *Handler {
 		archRules:      s.ArchitectureRules,
 		branchGate:     s.BranchGate,
 		notifications:  s.Notifications,
+		agentBoard:     s.AgentBoard,
 		usage:          s.Usage,
 		liveCalls:      s.LiveCalls,
 		code:           s.Code,

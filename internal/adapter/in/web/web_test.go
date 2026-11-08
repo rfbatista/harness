@@ -139,6 +139,7 @@ type world struct {
 	gitStates ports.WorktreeGit
 	archived  fakeArchivedCounts
 	designs   ports.DesignSystemPages
+	board     ports.AgentBoard
 }
 
 // fakeArchivedCounts counts each project's archived tasks like planning.
@@ -166,6 +167,9 @@ func newTestHandler(t *testing.T, w world) http.Handler {
 		Repositories: fakeRepos{w.repos},
 		EnvFiles:     w.env,
 		Now:          func() time.Time { return now },
+	}
+	if w.board != nil {
+		deps.AgentBoard = w.board
 	}
 	if w.docs != nil {
 		deps.Documents = docReader{w.docs, w.tickets}

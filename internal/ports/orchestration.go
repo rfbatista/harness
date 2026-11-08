@@ -67,6 +67,13 @@ type FeedFollowersObserver interface {
 	ProjectFollowers(projectID string, followers int)
 }
 
+// ProjectChangeObserver is told of every change put on a project's feed, after
+// the project's followers got it. It runs in the publisher's goroutine without
+// the feed's lock: it must be quick, and it may read the stores.
+type ProjectChangeObserver interface {
+	ProjectChanged(change ProjectChange)
+}
+
 // ProjectChange is one thing in a project as it is after a change, or a
 // deleted one. Exactly one of the pointers is set; the wire tells them apart
 // by which key is present, so the others must be absent, never null.

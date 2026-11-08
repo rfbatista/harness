@@ -86,6 +86,8 @@ func SameFrame(r *http.Request) bool {
 func frameOf(path string) string {
 	parts := strings.Split(strings.Trim(path, "/"), "/")
 	switch {
+	case parts[0] == "":
+		return "~board" // the Agent board draws no rail either
 	case parts[0] == "agents":
 		return "~agents"
 	case len(parts) < 2 || parts[0] != "projects" || parts[1] == "new":
