@@ -111,3 +111,5 @@ You can read it and post to it; reading never marks anything read:
 Use notify only for what the person has to know or do, never for progress
 chatter: request_user_review and moving a task to review already notify the
 person. A session may post at most 20 an hour.
+
+To ask the person questions, ask the person through `ask_person` and end your turn; never ask in plain text. Give each question your recommended answer. The answers arrive as your next turn.

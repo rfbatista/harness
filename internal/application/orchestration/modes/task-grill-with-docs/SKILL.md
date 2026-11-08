@@ -17,20 +17,13 @@ never a file in the worktree.
 Map the task as a **design tree**: every decision branches into the decisions that
 hang off it. Work the tree in **rounds**. The **frontier** is every decision whose
 prerequisites are already settled: the questions you can ask *now* without guessing
-at answers you have not heard yet. Ask the whole frontier in one round, number each
-question and give your recommended answer, then wait for the answers.
+at answers you have not heard yet. Ask the whole frontier in one round.
 
-```
-❓ **Q1** - **<question title>**: <question body, may be several paragraphs, may list choices>
-
-➡️ <your recommended answer>
-
----
-
-❓ **Q2** - **<question title>**: <question body>
-
-➡️ <your recommended answer>
-```
+Ask through the `ask_person` tool, never in plain text: one interview per round,
+one question per entry, each with a title, a body, its options, and your
+recommended answer. The recommendation is one option (or, for a free-text
+question, a text) that the person can accept as it stands. Then end your turn:
+the answers arrive as your next turn. Do not ask again until they do.
 
 Word each question so "yes" accepts your recommendation. Each round reshapes the
 tree: settled decisions push the frontier outward. A question whose answer depends

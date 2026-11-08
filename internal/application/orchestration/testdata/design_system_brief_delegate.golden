@@ -111,6 +111,8 @@ Use notify only for what the person has to know or do, never for progress
 chatter: request_user_review and moving a task to review already notify the
 person. A session may post at most 20 an hour.
 
+To ask the person questions, ask the person through `ask_person` and end your turn; never ask in plain text. Give each question your recommended answer. The answers arrive as your next turn. As a delegate, ask your architect first, and ask the person only what your architect cannot settle.
+
 ## Design system
 
 This repository uses the project design system "Brand One". Read `project/design-system/README.md` in your virtual shell before you build or change UI. Use its tokens as CSS custom properties or through this repository's own token build, never raw values. The files are read-only: if the design system lacks something, say so in a comment or in your spec.

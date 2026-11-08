@@ -473,3 +473,22 @@ func TestTaskBrief_PlainTaskHasNoFeatureSection(t *testing.T) {
 		t.Errorf("a plain task's brief mentions a feature:\n%s", got)
 	}
 }
+
+// Every session is told to ask the person through ask_person and end its
+// turn; only a delegate is also told to ask its architect first. No brief
+// names a provider's tool.
+func TestTaskBrief_TellsTheAgentToAskThroughAskPerson(t *testing.T) {
+	tk := &domain.Ticket{ID: "tk1", Title: "Ship the thing", Status: domain.TicketStatusInProgress}
+	for _, role := range []domain.SessionRole{domain.RolePeer, domain.RoleArchitect, domain.RoleDelegate} {
+		got := taskBrief(tk, role, taskCounts{})
+		if !strings.Contains(got, "ask the person through `ask_person` and end your turn; never ask in plain text") {
+			t.Errorf("%s brief lacks the ask_person line:\n%s", role, got)
+		}
+		if strings.Contains(got, "AskUserQuestion") {
+			t.Errorf("%s brief names a provider tool", role)
+		}
+		if has := strings.Contains(got, "ask your architect first"); has != (role == domain.RoleDelegate) {
+			t.Errorf("%s brief: ask-your-architect-first = %v", role, has)
+		}
+	}
+}
