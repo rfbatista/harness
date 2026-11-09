@@ -44,6 +44,32 @@ type WorktreeGit interface {
 	// GIT_CREDENTIAL_REJECTED, GIT_CREDENTIAL_STORE_LOCKED, PUSH_STALE and
 	// PUSH_REJECTED (both with the state in their details), PUSH_FAILED.
 	PushBranch(ctx context.Context, workspaceID, expectedHead string) (*domain.GitState, error)
+	// PushBranchTo is PushBranch for a named remote and remote branch: the one
+	// push path the person's Push, a harness push for an approved branch
+	// request and the push_branch tool share (ADR 0071). The defaults are
+	// PushBranch's. A branch other than the workspace's is pushed from the
+	// repository, and ExpectedHead is then that branch's head.
+	//
+	// Errors: PushBranch's, and BRANCH_NOT_FOUND and REMOTE_NOT_FOUND.
+	PushBranchTo(ctx context.Context, t PushTarget) (*domain.GitState, error)
+}
+
+// PushTarget names what one push sends where. Branch defaults to the
+// workspace's branch, Remote to "origin", RemoteBranch to Branch.
+type PushTarget struct {
+	WorkspaceID  string
+	ExpectedHead string
+	Branch       string
+	Remote       string
+	RemoteBranch string
+	// Commit pins what is pushed: exactly this commit, as the remote branch,
+	// whatever the branch's head is now. "" pushes the branch's head.
+	Commit string
+	// RequestID is the branch request the push was approved under, "" for the
+	// person's own Push; it only labels the record of the push.
+	RequestID string
+	// By says who pushed: "person" (default) or "agent".
+	By string
 }
 
 // GitWorktreeStatus is what one status pass over a worktree reads.

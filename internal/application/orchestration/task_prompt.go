@@ -137,7 +137,7 @@ task/designs/attached.md. Its artifact_id is its id in .index.json:
 - mcp__task__detach_artifact_from_task — detach one from this task; it stays in the project
 
 These tools always act on this task; they take no project or task id.`)
-	return b.String() + "\n\n" + resourcesSection(counts) + "\n\n" + notificationsSection
+	return b.String() + "\n\n" + resourcesSection(counts) + "\n\n" + notificationsSection + "\n\n" + branchesSection
 }
 
 // moveDocsLine tells a session on a task who moves its documents to project
@@ -179,6 +179,13 @@ You can read it and post to it; reading never marks anything read:
 Use notify only for what the person has to know or do, never for progress
 chatter: request_user_review and moving a task to review already notify the
 person. A session may post at most 20 an hour.`
+
+// branchesSection names push_branch, the way to ask for a push without
+// waiting on it (ADR 0071).
+const branchesSection = `A git push, like any branch action, waits for the person's approval, whatever
+the branch or the remote. To ask for one without waiting on it:
+
+- mcp__task__push_branch — push a branch of your repository to a remote (default origin, under the branch's own name unless you give remote_branch): it files the request and returns at once, never forces, and the answer arrives as a new turn starting with [branch request …]: pushed, push failed (with the reason) or denied (with the person's note)`
 
 // shellSection names the session's virtual shell, the folder holding its
 // task's and project's resources as files; its README.md maps the layout.

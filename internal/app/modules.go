@@ -92,6 +92,7 @@ var PersistenceModule = fx.Module("persistence",
 		asPort(sqlite.NewArchitectureRecordRepository, new(ports.ArchitectureRecordStore)),
 		asPort(sqlite.NewArchitectureRuleEventRepository, new(ports.ArchitectureRuleEventStore)),
 		asPort(sqlite.NewBranchRequestRepository, new(ports.BranchRequestStore)),
+		asPort(sqlite.NewRecordedPushRepository, new(ports.PushRecords)),
 		asPort(sqlite.NewDesignSystemRepository, new(ports.DesignSystemStore)),
 		asPort(sqlite.NewDesignProposalRepository, new(ports.DesignProposalStore)),
 		asPort(sqlite.NewDesignExportRepository, new(ports.DesignExportStore)),
@@ -779,8 +780,47 @@ func newArchitectureRules(cat catalog.Catalog, sessions ports.SessionRepository,
 }
 
 // newBranchGate decides the branch grants sessions' git shims ask for.
-func newBranchGate(cfg Config, cat catalog.Catalog, sessions ports.SessionRepository, requests ports.BranchRequestStore, orch *orchestration.Service) *branchgate.Service {
-	svc := branchgate.NewService(branchgate.Deps{Sessions: sessions, Requests: requests, Probe: gitprobe.Probe{Git: cfg.GitBin}, Waiter: orch, Turns: orch, Events: cat.Bus, Feed: orch})
+func newBranchGate(cfg Config, cat catalog.Catalog, sessions ports.SessionRepository, requests ports.BranchRequestStore, pushes ports.PushRecords, workspaces ports.WorkspaceRepository, worktreeGit ports.WorktreeGit, orch *orchestration.Service) *branchgate.Service {
+	publisher := gitcli.NewBranchPublisher()
+	probe := gitprobe.Probe{Git: cfg.GitBin}
+	svc := branchgate.NewService(branchgate.Deps{
+		Sessions: sessions, Requests: requests, Probe: probe, Waiter: orch, Turns: orch, Events: cat.Bus, Feed: orch,
+		Pushes: pushes,
+		Commits: func(dir, branch, remote, remoteBranch, base string) (int, bool, error) {
+			return publisher.CommitsToPush(context.Background(), dir, branch, remote, remoteBranch, base)
+		},
+		DirOf: func(sess *domain.Session) string {
+			if ws := workspaces.Get(context.Background(), sess.WorkspaceID); ws != nil {
+				return ws.Path
+			}
+			return ""
+		},
+		// The server's one push path, pushing exactly the commit that was asked about.
+		Push: func(ctx context.Context, sess *domain.Session, r domain.BranchRequest) error {
+			ws := workspaces.Get(ctx, sess.WorkspaceID)
+			if ws == nil {
+				return &domain.StructuredError{Code: "WORKSPACE_NOT_FOUND", Message: "the session has no worktree"}
+			}
+			remote, remoteBranch := "origin", r.Branch
+			if r.Remote != nil {
+				remote = r.Remote.Name
+			}
+			if r.RemoteBranch != nil {
+				remoteBranch = *r.RemoteBranch
+			}
+			_, err := worktreeGit.PushBranchTo(ctx, ports.PushTarget{
+				WorkspaceID: ws.ID, ExpectedHead: r.Commit, Commit: r.Commit, Branch: r.Branch,
+				Remote: remote, RemoteBranch: remoteBranch, RequestID: r.ID, By: domain.PushByAgent,
+			})
+			return err
+		},
+		BaseOf: func(sess *domain.Session) string {
+			if ws := workspaces.Get(context.Background(), sess.WorkspaceID); ws != nil {
+				return ws.BaseRef
+			}
+			return ""
+		},
+	})
 	svc.Subscribe(cat.Bus)
 	return svc
 }
@@ -1142,10 +1182,11 @@ func newOriginFetcher(git ports.BranchPublisher, creds optionalGitCredentials) *
 // newWorktreeGit reads where each session worktree's branch stands against
 // its base and its upstream, from local git only, fetches origin on request
 // and announces the states a fetch moved on the project feed.
-func newWorktreeGit(ws ports.WorkspaceRepository, repos ports.RepositoryRepository, sessions ports.SessionRepository, tickets ports.TicketRepository, git ports.GitWorktreeReader, files ports.WorktreeFiles, publisher ports.BranchPublisher, fetcher *workspaces.OriginFetcher, orch *orchestration.Service) *workspaces.WorktreeGit {
+func newWorktreeGit(ws ports.WorkspaceRepository, repos ports.RepositoryRepository, sessions ports.SessionRepository, tickets ports.TicketRepository, git ports.GitWorktreeReader, files ports.WorktreeFiles, publisher ports.BranchPublisher, pushes ports.PushRecords, fetcher *workspaces.OriginFetcher, orch *orchestration.Service) *workspaces.WorktreeGit {
+	remotes, _ := publisher.(ports.RemotePublisher)
 	return workspaces.NewWorktreeGit(workspaces.WorktreeGitDeps{
 		Workspaces: ws, Repositories: repos, Sessions: sessions, Tickets: tickets, Git: git, Files: files,
-		Publisher: publisher, Fetcher: fetcher, Feed: orch,
+		Publisher: publisher, Fetcher: fetcher, Feed: orch, Remotes: remotes, Pushes: pushes,
 	})
 }
 

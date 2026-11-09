@@ -19,6 +19,7 @@ type Option func(*options)
 type options struct {
 	proposals  ports.DesignProposalSubmitter
 	placements ports.AgentPlacements
+	pushes     ports.BranchPusher
 }
 
 // WithDesignProposals serves submit_design_system_proposal, with which a design

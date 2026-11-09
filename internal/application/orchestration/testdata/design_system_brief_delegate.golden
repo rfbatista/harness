@@ -111,6 +111,11 @@ Use notify only for what the person has to know or do, never for progress
 chatter: request_user_review and moving a task to review already notify the
 person. A session may post at most 20 an hour.
 
+A git push, like any branch action, waits for the person's approval, whatever
+the branch or the remote. To ask for one without waiting on it:
+
+- mcp__task__push_branch — push a branch of your repository to a remote (default origin, under the branch's own name unless you give remote_branch): it files the request and returns at once, never forces, and the answer arrives as a new turn starting with [branch request …]: pushed, push failed (with the reason) or denied (with the person's note)
+
 ## Design system
 
 This repository uses the project design system "Brand One". Read `project/design-system/README.md` in your virtual shell before you build or change UI. Use its tokens as CSS custom properties or through this repository's own token build, never raw values. The files are read-only: if the design system lacks something, say so in a comment or in your spec.

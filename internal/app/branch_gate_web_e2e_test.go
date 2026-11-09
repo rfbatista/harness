@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -232,6 +233,65 @@ func TestABranchRequestCardInTheBrowserAnswersTheAgent(t *testing.T) {
 	}
 	p.run(t, "approve", clickInPopover(`#task-branch-requests button[data-action="approve"]`))
 	if v := e.verdict(inbox); v.Decision != "allow" {
+		t.Errorf("the agent got %+v", v)
+	}
+	if len(p.errors) > 0 {
+		t.Errorf("JS errors: %v", p.errors)
+	}
+}
+
+func TestThePushAndRemoteCardsInTheBrowserShowWhereItGoesAndAnswerTheAgent(t *testing.T) {
+	e := newBranchWeb(t)
+	p := newPerson(t)
+	task := e.srv.URL + "/projects/" + e.project + "/tasks/" + e.ticket
+
+	bare := filepath.Join(t.TempDir(), "origin.git")
+	for _, args := range [][]string{{"init", "-q", "--bare", bare}, {"-C", e.dir, "remote", "add", "origin", bare}} {
+		if out, err := exec.Command("git", args...).CombinedOutput(); err != nil {
+			t.Fatalf("git %v: %v %s", args, err, out)
+		}
+	}
+	session := e.session.Branch
+
+	push := e.ask("git push origin "+session+":review/x", "Ready for review")
+	e.pendingRequests(1)
+	p.run(t, "open the task page", chromedp.EmulateViewport(1280, 860), chromedp.Navigate(task),
+		poll(`getComputedStyle(document.querySelector('#task-branch-requests-button')).display !== 'none'`),
+		chromedp.Click(`#task-branch-requests-button`, chromedp.ByQuery),
+		poll(`document.querySelector('#task-branch-requests').matches(':popover-open') && `+cardJS+` !== null`))
+	card := p.text(t, cardJS+`.innerText`)
+	for _, want := range []string{"Branch", "Push branch " + session, "To origin (" + bare + ") as review/x", "commit", "against the base", "Ready for review"} {
+		if !strings.Contains(card, want) {
+			t.Errorf("the push card lacks %q:\n%s", want, card)
+		}
+	}
+	p.run(t, "approve the push", clickInPopover(`#task-branch-requests button[data-action="approve"]`),
+		poll(`!document.querySelector('#task-branch-requests').matches(':popover-open')`))
+	if v := e.verdict(push); v.Decision != "allow" {
+		t.Errorf("the agent got %+v", v)
+	}
+
+	// A remote the agent wants to add, with a credential in its URL: the card
+	// shows it redacted and denying leaves the agent the note.
+	add := e.ask("git remote add leak https://user:s3cret@example.com/x.git", "")
+	e.pendingRequests(1)
+	p.run(t, "the remote card arrives",
+		poll(`getComputedStyle(document.querySelector('#task-branch-requests-button')).display !== 'none'`),
+		chromedp.Click(`#task-branch-requests-button`, chromedp.ByQuery),
+		poll(`document.querySelector('#task-branch-requests').matches(':popover-open') && `+cardJS+` !== null`))
+	card = p.text(t, cardJS+`.innerText`)
+	for _, want := range []string{"Add remote leak", "New URL https://example.com/x.git"} {
+		if !strings.Contains(card, want) {
+			t.Errorf("the remote card lacks %q:\n%s", want, card)
+		}
+	}
+	if strings.Contains(card, "s3cret") {
+		t.Errorf("the card shows the credential:\n%s", card)
+	}
+	p.run(t, "deny the remote", chromedp.SendKeys(`#task-branch-requests textarea`, "Use origin", chromedp.ByQuery),
+		clickInPopover(`#task-branch-requests button[data-action="deny"]`),
+		poll(`!document.querySelector('#task-branch-requests').matches(':popover-open')`))
+	if v := e.verdict(add); v.Decision != "deny" || !strings.Contains(v.Reason, "Use origin") || strings.Contains(v.Reason, "s3cret") {
 		t.Errorf("the agent got %+v", v)
 	}
 	if len(p.errors) > 0 {

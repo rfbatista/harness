@@ -291,6 +291,7 @@ func NewRouter(h *Handler, opts ...Option) *echo.Echo {
 	// the branch gate: a session's git shim asks for a branch grant
 	g.POST(strings.TrimPrefix(BranchGateRoute, "/api"), h.handleBranchGateHook)
 	g.POST(strings.TrimPrefix(BranchGateGrantRoute, "/api"), h.handleBranchGateGrant)
+	g.POST(strings.TrimPrefix(BranchGatePushedRoute, "/api"), h.handleBranchGatePushed)
 	// the person's side of it: the requests, and their answers
 	g.GET("/branch_requests", h.handleBranchRequests)
 	g.POST("/branch_requests/:id/answer", h.handleAnswerBranchRequest)
