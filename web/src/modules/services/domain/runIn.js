@@ -8,7 +8,7 @@
 //   restored  whether the remembered pick has been looked at (it waits for the first list that arrives)
 //   fallback  {message} when the remembered or current pick is gone; null for none
 
-import { branchLabel, worktreeDescription, worktreeTone } from "../../../shared/domain/runWorktree.js";
+import { branchLabel, worktreeDescription, worktreeKindWord, worktreeTone } from "../../../shared/domain/runWorktree.js";
 
 /** The key of the main checkout: the default pick, which the server also reads from an empty key. */
 export const MAIN = "main";
@@ -69,3 +69,9 @@ export function runInOptions(pick) {
     sessions: pick.worktrees.filter((w) => w.kind === "session").map(option),
   };
 }
+
+/** A pick's notice is dismissed. */
+export const afterDismiss = (prev) => ({ ...prev, fallback: null });
+
+/** What a screen reader hears after a pick: "api runs in go-developer, branch agent/other." */
+export const pickAnnouncement = (serviceName, worktree) => `${serviceName} runs in ${worktreeKindWord(worktree)}, branch ${branchLabel(worktree.branch)}.`;

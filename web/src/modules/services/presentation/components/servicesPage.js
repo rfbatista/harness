@@ -7,12 +7,11 @@
 //   <main x-data="servicesPage" data-seed="services-seed"> …
 
 import { FeedStatus } from "../../../../shared/domain/feed.js";
-import { branchLabel, worktreeKindWord } from "../../../../shared/domain/runWorktree.js";
 import { systemClock } from "../../../../shared/infrastructure/clock.js";
 import { describeError } from "../../../../shared/presentation/errors.js";
 import { readSeed } from "../../../../shared/presentation/seed.js";
 import { runLine } from "../../domain/log.js";
-import { afterFailedRead, afterPick, afterRead, freshRunIn, hasRunIn, pickKeyOf, pickedWorktree, startKey } from "../../domain/runIn.js";
+import { afterDismiss, afterFailedRead, afterPick, afterRead, freshRunIn, hasRunIn, pickAnnouncement, pickKeyOf, pickedWorktree, startKey } from "../../domain/runIn.js";
 import { applyEvent, groupServices, isActive, runningCount, savedNotice, statusView, upsertService } from "../../domain/service.js";
 import { trapTab } from "../focusTrap.js";
 import { runInView, serviceRow } from "../view.js";
@@ -328,9 +327,7 @@ export const servicesPage = ({ gateway, clock = systemClock, timers = globalThis
       if (!picked) return;
       prefs.set(pickKeyOf(id), picked.clearStored ? null : event.detail.value);
       this.runIns = { ...this.runIns, [id]: picked.next };
-      const w = pickedWorktree(picked.next);
-      const name = this.services.find((s) => s.id === id)?.name ?? "";
-      this.notice = `${name} runs in ${worktreeKindWord(w)}, branch ${branchLabel(w.branch)}.`;
+      this.notice = pickAnnouncement(this.services.find((s) => s.id === id)?.name ?? "", pickedWorktree(picked.next));
     },
 
     /** The picker was touched to open (or Retry was pressed): the list is read again. */
@@ -340,7 +337,7 @@ export const servicesPage = ({ gateway, clock = systemClock, timers = globalThis
 
     dismissRunInFallback(event) {
       const id = event.currentTarget.dataset.serviceId;
-      if (this.runIns[id]) this.runIns = { ...this.runIns, [id]: { ...this.runIns[id], fallback: null } };
+      if (this.runIns[id]) this.runIns = { ...this.runIns, [id]: afterDismiss(this.runIns[id]) };
     },
 
     /** Puts a picker's select on the pick once its options exist (x-effect on the select). */
@@ -349,7 +346,7 @@ export const servicesPage = ({ gateway, clock = systemClock, timers = globalThis
       const pick = this.runIns[el.dataset.serviceId];
       if (!pick) return;
       const key = pick.pickedKey;
-      void pick.worktrees.length;
+      void pick.worktrees.length; // read so this effect runs again when the options arrive
       this.$nextTick(() => {
         if (el.isConnected && el.value !== key && [...el.options].some((o) => o.value === key)) el.value = key;
       });

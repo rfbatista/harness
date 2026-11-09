@@ -130,6 +130,7 @@ func TestAServiceIsStartedInASessionsWorktreeFromTheRunInPicker_EndToEnd(t *test
 		waitUntil(status+` === 'running'`),
 		waitUntil(row+`.querySelector('[data-service-where]').textContent === 'session worktree @ agent/other'`),
 		waitUntil(`!`+row+`.querySelector('[data-run-in]').checkVisibility()`),
+		waitUntil(row+`.querySelector('[data-action=restart]').title === 'Repeats the run: the same worktree and the same overrides'`),
 	)
 	b.run("the log's header names it too",
 		chromedp.Click(`[data-service][data-name=web] [data-action=log]`, chromedp.ByQuery),

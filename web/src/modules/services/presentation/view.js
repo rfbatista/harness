@@ -1,6 +1,6 @@
 // What a service row binds, computed from a service (domain/service.js) and the clock.
 
-import { runInOptions, hasRunIn } from "../domain/runIn.js";
+import { MAIN, hasRunIn, runInOptions } from "../domain/runIn.js";
 import { isActive, overrideMark, portLinks, startedByView, statusView, timeFact, whereLabel } from "../domain/service.js";
 
 /** The command line, or the image reference with its arguments. */
@@ -68,7 +68,7 @@ export function serviceRow(service, now, { flight = "", runtime = { name: "docke
   };
 }
 
-const NO_RUN_IN = { show: false, main: [], sessions: [], hasSessions: false, pickedKey: "main", selectId: "", loading: null, error: null, fallback: "", hasFallback: false, groupLabel: "", name: "" };
+const NO_RUN_IN = { show: false, main: [], sessions: [], hasSessions: false, pickedKey: MAIN, selectId: "", loading: null, error: null, fallback: "", hasFallback: false, groupLabel: "", name: "" };
 
 /**
  * The "Run in" picker of a row. It sits beside Start, so it shows with Start: a command service with a
