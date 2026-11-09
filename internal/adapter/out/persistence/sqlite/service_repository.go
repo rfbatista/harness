@@ -36,6 +36,19 @@ type ServiceModel struct {
 // TableName overrides the table name.
 func (ServiceModel) TableName() string { return "services" }
 
+// ServiceRunRecordModel is the run record of a service (ports.ServiceRunRecord):
+// the variables of its current or last run, values included, one row per
+// service. It is its own table so that no read of a service, and so no feed
+// event, can carry a value.
+type ServiceRunRecordModel struct {
+	ServiceID  string `gorm:"primaryKey;column:service_id"`
+	RunID      string `gorm:"column:run_id;index"`
+	RecordJSON string `gorm:"column:record_json"`
+}
+
+// TableName overrides the table name.
+func (ServiceRunRecordModel) TableName() string { return "service_run_records" }
+
 // ServiceRepository stores services.
 type ServiceRepository struct{ db *gorm.DB }
 
@@ -130,14 +143,41 @@ func (r *ServiceRepository) SaveService(s *domain.Service) error {
 
 // DeleteService removes a service, or SERVICE_NOT_FOUND.
 func (r *ServiceRepository) DeleteService(id string) error {
-	res := r.db.Where("id = ?", id).Delete(&ServiceModel{})
-	if res.Error != nil {
-		return res.Error
+	return r.db.Transaction(func(tx *gorm.DB) error {
+		res := tx.Where("id = ?", id).Delete(&ServiceModel{})
+		if res.Error != nil {
+			return res.Error
+		}
+		if res.RowsAffected == 0 {
+			return serviceNotFound()
+		}
+		return tx.Where("service_id = ?", id).Delete(&ServiceRunRecordModel{}).Error
+	})
+}
+
+// SaveRunRecord replaces the service's run record.
+func (r *ServiceRepository) SaveRunRecord(rec *ports.ServiceRunRecord) error {
+	b, err := json.Marshal(rec)
+	if err != nil {
+		return err
 	}
-	if res.RowsAffected == 0 {
-		return serviceNotFound()
+	return r.db.Save(&ServiceRunRecordModel{ServiceID: rec.ServiceID, RunID: rec.RunID, RecordJSON: string(b)}).Error
+}
+
+// GetRunRecord is the service's run record, nil for none.
+func (r *ServiceRepository) GetRunRecord(serviceID string) (*ports.ServiceRunRecord, error) {
+	var m ServiceRunRecordModel
+	if err := r.db.Where("service_id = ?", serviceID).Take(&m).Error; err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return nil, nil
+		}
+		return nil, err
 	}
-	return nil
+	rec := &ports.ServiceRunRecord{}
+	if err := json.Unmarshal([]byte(m.RecordJSON), rec); err != nil {
+		return nil, err
+	}
+	return rec, nil
 }
 
 // RunningServices counts a project's starting and running services.
