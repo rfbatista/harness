@@ -99,6 +99,7 @@ export function whereLabel(run) {
   switch (run?.where.kind) {
     case "main": return run.where.branch ? `main checkout @ ${run.where.branch}` : "main checkout";
     case "session": return `session worktree @ ${run.where.branch}`;
+    case "branch": return `branch @ ${run.where.remote ? "origin/" : ""}${run.where.branch}${run.where.sha ? ` · ${run.where.sha}` : ""}`;
     case "service_folder": return "service folder";
     case "container": return "container";
     default: return "";
