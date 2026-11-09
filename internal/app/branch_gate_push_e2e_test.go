@@ -56,7 +56,7 @@ func TestAPushIsHeldAndOnceApprovedRunsAndIsRecordedAgainstItsRequest(t *testing
 	waits(t, hook)
 	if req.Action != domain.BranchPush || req.Branch != session || req.Via != "git" || req.Reason != "Publish the work" ||
 		req.Remote == nil || req.Remote.Name != "origin" || req.Remote.URL != origin ||
-		req.RemoteBranch == nil || *req.RemoteBranch != session || req.Commits == nil || *req.Commits != commits {
+		req.RemoteBranch == nil || *req.RemoteBranch != session || req.Commits == nil || *req.Commits != commits || req.CommitsAgainst == nil || *req.CommitsAgainst != "base" {
 		t.Errorf("request = %+v (remote %+v)", req, req.Remote)
 	}
 	if r := g.git("git push origin " + session); r.code != 1 || !strings.Contains(r.stderr, needed) {

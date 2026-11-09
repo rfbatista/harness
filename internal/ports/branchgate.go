@@ -2,6 +2,7 @@ package ports
 
 import (
 	"context"
+	"time"
 
 	"operators-mcp/internal/domain"
 )
@@ -102,6 +103,10 @@ type PushRecords interface {
 	RecordPush(ctx context.Context, p domain.RecordedPush) error
 	// PushesOf lists a session's recorded pushes, newest first.
 	PushesOf(ctx context.Context, sessionID string) ([]domain.RecordedPush, error)
+	// PushesIn lists the pushes made in a repository by any session, or by the
+	// person, at or after since (the zero time lists all), newest first. Detection
+	// uses it to explain a push in the repository's reflog.
+	PushesIn(ctx context.Context, repositoryID string, since time.Time) ([]domain.RecordedPush, error)
 }
 
 // PushBranchInput is what the push_branch tool asks: the branch to push, the

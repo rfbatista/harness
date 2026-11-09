@@ -15,29 +15,30 @@ var _ ports.BranchRequestStore = (*BranchRequestRepository)(nil)
 
 // BranchRequestModel is the GORM model of domain.BranchRequest.
 type BranchRequestModel struct {
-	ID            string `gorm:"primaryKey"`
-	SessionID     string `gorm:"column:session_id;index"`
-	TaskID        string `gorm:"column:task_id;index"`
-	RepositoryID  string `gorm:"column:repository_id"`
-	SessionBranch string `gorm:"column:session_branch"`
-	Action        string
-	Branch        string
-	NewName       string `gorm:"column:new_name"`
-	StartKind     string `gorm:"column:start_kind"`
-	StartRef      string `gorm:"column:start_ref"`
-	StartCommit   string `gorm:"column:start_commit"`
-	RemoteName    string `gorm:"column:remote_name"`
-	RemoteURL     string `gorm:"column:remote_url"`
-	RemoteNewName string `gorm:"column:remote_new_name"`
-	RemoteBranch  string `gorm:"column:remote_branch"`
-	Commits       *int
-	Command       string
-	Via           string
-	Reason        string
-	State         string `gorm:"index"`
-	Note          string
-	RequestedAt   time.Time  `gorm:"column:requested_at"`
-	AnsweredAt    *time.Time `gorm:"column:answered_at"`
+	ID             string `gorm:"primaryKey"`
+	SessionID      string `gorm:"column:session_id;index"`
+	TaskID         string `gorm:"column:task_id;index"`
+	RepositoryID   string `gorm:"column:repository_id"`
+	SessionBranch  string `gorm:"column:session_branch"`
+	Action         string
+	Branch         string
+	NewName        string `gorm:"column:new_name"`
+	StartKind      string `gorm:"column:start_kind"`
+	StartRef       string `gorm:"column:start_ref"`
+	StartCommit    string `gorm:"column:start_commit"`
+	RemoteName     string `gorm:"column:remote_name"`
+	RemoteURL      string `gorm:"column:remote_url"`
+	RemoteNewName  string `gorm:"column:remote_new_name"`
+	RemoteBranch   string `gorm:"column:remote_branch"`
+	Commits        *int
+	CommitsAgainst string `gorm:"column:commits_against"`
+	Command        string
+	Via            string
+	Reason         string
+	State          string `gorm:"index"`
+	Note           string
+	RequestedAt    time.Time  `gorm:"column:requested_at"`
+	AnsweredAt     *time.Time `gorm:"column:answered_at"`
 }
 
 // TableName overrides the table name.
@@ -62,7 +63,7 @@ func (m BranchRequestModel) domain() domain.BranchRequest {
 	r := domain.BranchRequest{
 		ID: m.ID, SessionID: m.SessionID, TaskID: nilIfEmpty(m.TaskID), RepositoryID: m.RepositoryID, SessionBranch: m.SessionBranch,
 		Action: domain.BranchActionKind(m.Action), Branch: m.Branch, NewName: nilIfEmpty(m.NewName),
-		RemoteBranch: nilIfEmpty(m.RemoteBranch), Commits: m.Commits, Command: m.Command, Via: m.Via, Reason: m.Reason,
+		RemoteBranch: nilIfEmpty(m.RemoteBranch), Commits: m.Commits, CommitsAgainst: nilIfEmpty(m.CommitsAgainst), Command: m.Command, Via: m.Via, Reason: m.Reason,
 		State: domain.BranchRequestState(m.State), Note: m.Note, RequestedAt: m.RequestedAt, AnsweredAt: m.AnsweredAt,
 	}
 	if m.StartKind != "" {
@@ -77,7 +78,7 @@ func (m BranchRequestModel) domain() domain.BranchRequest {
 func branchRequestModel(r domain.BranchRequest) BranchRequestModel {
 	m := BranchRequestModel{
 		ID: r.ID, SessionID: r.SessionID, RepositoryID: r.RepositoryID, SessionBranch: r.SessionBranch,
-		Action: string(r.Action), Branch: r.Branch, Commits: r.Commits, Command: r.Command, Via: r.Via, Reason: r.Reason,
+		Action: string(r.Action), Branch: r.Branch, Commits: r.Commits, CommitsAgainst: derefOr(r.CommitsAgainst), Command: r.Command, Via: r.Via, Reason: r.Reason,
 		State: string(r.State), Note: r.Note, RequestedAt: r.RequestedAt, AnsweredAt: r.AnsweredAt,
 	}
 	if r.TaskID != nil {
@@ -153,4 +154,11 @@ func (r *BranchRequestRepository) List(ctx context.Context, f domain.BranchReque
 		out[i] = m.domain()
 	}
 	return out, nil
+}
+
+func derefOr(s *string) string {
+	if s == nil {
+		return ""
+	}
+	return *s
 }

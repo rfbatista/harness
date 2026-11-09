@@ -44,7 +44,12 @@ export function startLineOf(r) {
 export function detailLineOf(r) {
   if (r.action === "push" && r.remote) {
     const where = `To ${r.remote.name} (${r.remote.url}) as ${r.remoteBranch || r.branch}`;
-    return r.commits === null ? where : `${where} · ${count(r.commits, "commit")}`;
+    if (r.commits === null) return where;
+    const n = count(r.commits, "commit");
+    const target = `${r.remote.name}/${r.remoteBranch || r.branch}`;
+    if (r.commitsAgainst === "remote") return `${where} · ${n} not on ${target}`;
+    if (r.commitsAgainst === "base") return `${where} · ${n} against the base, ${target} is not known here`;
+    return `${where} · ${n}`;
   }
   if ((r.action === "remote_add" || r.action === "remote_set_url") && r.remote?.url) return `New URL ${r.remote.url}`;
   return "";

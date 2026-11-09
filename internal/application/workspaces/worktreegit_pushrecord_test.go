@@ -3,6 +3,7 @@ package workspaces_test
 import (
 	"context"
 	"testing"
+	"time"
 
 	"operators-mcp/internal/adapter/out/persistence/sqlite"
 	"operators-mcp/internal/application/workspaces/workspacestest"
@@ -18,6 +19,10 @@ func (m *memPushes) RecordPush(_ context.Context, p domain.RecordedPush) error {
 	return nil
 }
 func (m *memPushes) PushesOf(context.Context, string) ([]domain.RecordedPush, error) {
+	return m.got, nil
+}
+
+func (m *memPushes) PushesIn(context.Context, string, time.Time) ([]domain.RecordedPush, error) {
 	return m.got, nil
 }
 

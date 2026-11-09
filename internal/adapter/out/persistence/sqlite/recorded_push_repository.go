@@ -17,7 +17,7 @@ type RecordedPushModel struct {
 	ID           uint   `gorm:"primaryKey;autoIncrement"`
 	RequestID    string `gorm:"column:request_id"`
 	SessionID    string `gorm:"column:session_id;index"`
-	RepositoryID string `gorm:"column:repository_id"`
+	RepositoryID string `gorm:"column:repository_id;index"`
 	Branch       string
 	Remote       string
 	RemoteBranch string `gorm:"column:remote_branch"`
@@ -51,6 +51,23 @@ func (r *RecordedPushRepository) PushesOf(ctx context.Context, sessionID string)
 	if err := r.db.WithContext(ctx).Where("session_id = ?", sessionID).Order("at DESC, id DESC").Find(&rows).Error; err != nil {
 		return nil, err
 	}
+	return recordedPushes(rows), nil
+}
+
+// PushesIn implements ports.PushRecords.
+func (r *RecordedPushRepository) PushesIn(ctx context.Context, repositoryID string, since time.Time) ([]domain.RecordedPush, error) {
+	q := r.db.WithContext(ctx).Where("repository_id = ?", repositoryID)
+	if !since.IsZero() {
+		q = q.Where("at >= ?", since)
+	}
+	var rows []RecordedPushModel
+	if err := q.Order("at DESC, id DESC").Find(&rows).Error; err != nil {
+		return nil, err
+	}
+	return recordedPushes(rows), nil
+}
+
+func recordedPushes(rows []RecordedPushModel) []domain.RecordedPush {
 	out := make([]domain.RecordedPush, len(rows))
 	for i, m := range rows {
 		out[i] = domain.RecordedPush{
@@ -58,5 +75,5 @@ func (r *RecordedPushRepository) PushesOf(ctx context.Context, sessionID string)
 			Remote: m.Remote, RemoteBranch: m.RemoteBranch, Commit: m.Commit, At: m.At, By: m.By,
 		}
 	}
-	return out, nil
+	return out
 }

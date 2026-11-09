@@ -54,6 +54,10 @@ type BranchRequest struct {
 	Remote       *BranchRemote `json:"remote"`
 	RemoteBranch *string       `json:"remote_branch"`
 	Commits      *int          `json:"commits"`
+	// CommitsAgainst says what Commits counts against, push only: "remote"
+	// when the remote-tracking branch is known here, "base" when it is not and
+	// the count is against the branch's base.
+	CommitsAgainst *string `json:"commits_against"`
 	// Command is the command line as the agent ran it, or "push_branch".
 	Command string `json:"command"`
 	// Via is "git" or "push_branch".

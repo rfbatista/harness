@@ -27,6 +27,7 @@ export function toRequest(dto) {
     remote: remote ? Object.freeze({ name: remote.name ?? "", url: remote.url ?? "", newName: remote.new_name ?? "" }) : null,
     remoteBranch: dto.remote_branch ?? "",
     commits: typeof dto.commits === "number" ? dto.commits : null,
+    commitsAgainst: dto.commits_against ?? "",
     via: dto.via ?? "git",
     reason: dto.reason ?? "",
     state: dto.state,

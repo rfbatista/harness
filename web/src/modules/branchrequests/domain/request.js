@@ -18,6 +18,7 @@
  * @property {{ name: string, url: string, newName: string } | null} remote  push and remote actions
  * @property {string} remoteBranch  push only
  * @property {number | null} commits  push only: commits the remote branch does not have
+ * @property {"remote" | "base" | ""} commitsAgainst  push only: what commits counts against
  * @property {string} via  git, or push_branch for the tool
  * @property {string} reason
  * @property {"pending" | "approved" | "denied" | "used" | "expired"} state

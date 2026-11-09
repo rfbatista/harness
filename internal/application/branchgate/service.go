@@ -247,7 +247,7 @@ func (s *Service) file(ctx context.Context, sess *domain.Session, a domain.Branc
 	}
 	if a.Kind == domain.BranchPush {
 		r.RemoteBranch = &a.RemoteBranch
-		r.Commits = s.commitsToPush(sess, a)
+		r.Commits, r.CommitsAgainst = s.commitsToPush(sess, a)
 	}
 	defer func() { s.announce(ctx, sess.ProjectID, *r) }() // after the unlock
 	s.mu.Lock()
@@ -263,20 +263,25 @@ func (s *Service) file(ctx context.Context, sess *domain.Session, a domain.Branc
 	return filedRequest{id: r.ID, answered: ch}, nil
 }
 
-// commitsToPush is how many commits the push sends, nil when it cannot be read.
-func (s *Service) commitsToPush(sess *domain.Session, a domain.BranchAction) *int {
+// commitsToPush is how many commits the push sends and what they are counted
+// against, nil when it cannot be read.
+func (s *Service) commitsToPush(sess *domain.Session, a domain.BranchAction) (*int, *string) {
 	if s.d.Commits == nil || a.Branch == "" || a.Dir == "" {
-		return nil
+		return nil, nil
 	}
 	base := ""
 	if s.d.BaseOf != nil {
 		base = s.d.BaseOf(sess)
 	}
-	n, _, err := s.d.Commits(a.Dir, a.Branch, a.Remote, a.RemoteBranch, base)
+	n, known, err := s.d.Commits(a.Dir, a.Branch, a.Remote, a.RemoteBranch, base)
 	if err != nil {
-		return nil
+		return nil, nil
 	}
-	return &n
+	against := "base"
+	if known {
+		against = "remote"
+	}
+	return &n, &against
 }
 
 // Pushed implements ports.BranchGate: it keeps the push the request's grant

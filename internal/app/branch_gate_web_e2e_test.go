@@ -260,7 +260,7 @@ func TestThePushAndRemoteCardsInTheBrowserShowWhereItGoesAndAnswerTheAgent(t *te
 		chromedp.Click(`#task-branch-requests-button`, chromedp.ByQuery),
 		poll(`document.querySelector('#task-branch-requests').matches(':popover-open') && `+cardJS+` !== null`))
 	card := p.text(t, cardJS+`.innerText`)
-	for _, want := range []string{"Branch", "Push branch " + session, "To origin (" + bare + ") as review/x", "commit", "Ready for review"} {
+	for _, want := range []string{"Branch", "Push branch " + session, "To origin (" + bare + ") as review/x", "commit", "against the base", "Ready for review"} {
 		if !strings.Contains(card, want) {
 			t.Errorf("the push card lacks %q:\n%s", want, card)
 		}

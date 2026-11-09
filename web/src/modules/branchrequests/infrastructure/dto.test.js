@@ -70,14 +70,15 @@ test("a push card says the branch, the remote with its URL, the remote branch an
       remote: { name: "origin", url: "git@github.com:acme/widgets.git", new_name: null },
       remote_branch: "review/x",
       commits: 3,
+      commits_against: "remote",
       via: "push_branch",
     }),
   );
   assert.equal(titleOf(push), "Push branch agent/work");
-  assert.equal(detailLineOf(push), "To origin (git@github.com:acme/widgets.git) as review/x · 3 commits");
+  assert.equal(detailLineOf(push), "To origin (git@github.com:acme/widgets.git) as review/x · 3 commits not on origin/review/x");
   assert.equal(startLineOf(push), "");
-  const one = toRequest(wire({ action: "push", branch: "b", remote: { name: "origin", url: "/o.git", new_name: null }, remote_branch: "b", commits: 1 }));
-  assert.equal(detailLineOf(one), "To origin (/o.git) as b · 1 commit");
+  const one = toRequest(wire({ action: "push", branch: "b", remote: { name: "origin", url: "/o.git", new_name: null }, remote_branch: "b", commits: 1, commits_against: "base" }));
+  assert.equal(detailLineOf(one), "To origin (/o.git) as b · 1 commit against the base, origin/b is not known here");
   const unknown = toRequest(wire({ action: "push", branch: "b", remote: { name: "origin", url: "/o.git", new_name: null }, remote_branch: "b", commits: null }));
   assert.equal(detailLineOf(unknown), "To origin (/o.git) as b");
 });
