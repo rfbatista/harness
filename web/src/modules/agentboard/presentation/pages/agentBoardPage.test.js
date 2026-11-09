@@ -152,7 +152,7 @@ test("a session with an open interview reads questions, even while it runs: afte
   const lines = [...view.lines];
   assert.deepEqual(lines.map((l) => [l.id, l.word, l.dot, l.tone, l.chip]), [
     ["c", "approval", "waiting", "attention", true],
-    ["e", "questions", "waiting", "attention", true],
+    ["e", "questions", "running", "attention", true],
     ["d", "questions", "waiting", "attention", true],
   ]);
   assert.equal(lines[1].hover.includes("questions"), true);

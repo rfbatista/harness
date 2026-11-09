@@ -39,7 +39,12 @@ func TestACardLineReadsQuestionsForAnOpenInterviewAfterApprovalsAndBeforeYourTur
 			t.Fatalf("lines = %v, want %v", got, want)
 		}
 	}
-	if l := v.Lines[1]; l.Dot != "waiting" || l.Tone != "attention" || !l.Chip {
-		t.Errorf("the questions line = dot %q tone %q chip %v, want the attention chip", l.Dot, l.Tone, l.Chip)
+	// Only the word and the chip change: the dot is still the session's own.
+	for _, w := range []struct{ id, dot string }{{"asking-running", "running"}, {"asking-idle", "waiting"}} {
+		for _, l := range append(append([]LineView{}, v.Lines...), v.Hidden...) {
+			if l.SessionID == w.id && (l.Dot != w.dot || l.Tone != "attention" || !l.Chip) {
+				t.Errorf("%s = dot %q tone %q chip %v, want dot %q and the attention chip", w.id, l.Dot, l.Tone, l.Chip, w.dot)
+			}
+		}
 	}
 }

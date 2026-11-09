@@ -41,9 +41,6 @@ var statusViews = map[domain.SessionStatus]StatusView{
 	domain.SessionFailed:          {"failed", "failed"},
 }
 
-// questionsView is the status of a live session with an open interview.
-var questionsView = StatusView{"waiting", "questions"}
-
 // statusOf reads pending approvals before the status: a running session with
 // a tool call to approve is waiting on the developer. Next come open
 // interviews, whatever the status: approval, then questions, then your turn.
@@ -52,10 +49,12 @@ func statusOf(s *domain.Session) StatusView {
 	if live && (s.PendingApprovals > 0 || s.Status == domain.SessionWaitingApproval) {
 		return statusViews[domain.SessionWaitingApproval]
 	}
-	if live && s.OpenInterviewCount > 0 {
-		return questionsView
-	}
 	if v, ok := statusViews[s.Status]; ok {
+		// Only the word is the interview's: the dot stays the session's own, so a
+		// running agent keeps its running dot beside the chip.
+		if live && s.OpenInterviewCount > 0 {
+			v.Word = "questions"
+		}
 		return v
 	}
 	return StatusView{"idle", string(s.Status)}

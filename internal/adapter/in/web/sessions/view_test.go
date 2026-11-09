@@ -637,23 +637,25 @@ func TestAnOpenInterviewMakesASessionReadQuestionsAndNeedThePerson(t *testing.T)
 	cases := []struct {
 		name     string
 		session  domain.Session
+		state    string
 		word     string
 		needsYou bool
 	}{
-		{"running", domain.Session{Status: domain.SessionRunning, OpenInterviewCount: 1}, "questions", true},
-		{"thinking", domain.Session{Status: domain.SessionThinking, OpenInterviewCount: 2}, "questions", true},
-		{"idle: questions before your turn", domain.Session{Status: domain.SessionIdle, OpenInterviewCount: 1}, "questions", true},
-		{"approval status wins", domain.Session{Status: domain.SessionWaitingApproval, OpenInterviewCount: 1}, "approval", true},
-		{"pending approval wins", domain.Session{Status: domain.SessionRunning, PendingApprovals: 1, OpenInterviewCount: 1}, "approval", true},
-		{"no interview, idle", domain.Session{Status: domain.SessionIdle}, "your turn", true},
-		{"no interview, running", domain.Session{Status: domain.SessionRunning}, "running", false},
-		{"ended", domain.Session{Status: domain.SessionDone, OpenInterviewCount: 1}, "done", false},
-		{"failed", domain.Session{Status: domain.SessionFailed, OpenInterviewCount: 1}, "failed", false},
+		{"running keeps its running dot", domain.Session{Status: domain.SessionRunning, OpenInterviewCount: 1}, "running", "questions", true},
+		{"thinking keeps its running dot", domain.Session{Status: domain.SessionThinking, OpenInterviewCount: 2}, "running", "questions", true},
+		{"idle: questions before your turn", domain.Session{Status: domain.SessionIdle, OpenInterviewCount: 1}, "waiting", "questions", true},
+		{"paused keeps its idle dot", domain.Session{Status: domain.SessionPaused, OpenInterviewCount: 1}, "idle", "questions", true},
+		{"approval status wins", domain.Session{Status: domain.SessionWaitingApproval, OpenInterviewCount: 1}, "waiting", "approval", true},
+		{"pending approval wins", domain.Session{Status: domain.SessionRunning, PendingApprovals: 1, OpenInterviewCount: 1}, "waiting", "approval", true},
+		{"no interview, idle", domain.Session{Status: domain.SessionIdle}, "waiting", "your turn", true},
+		{"no interview, running", domain.Session{Status: domain.SessionRunning}, "running", "running", false},
+		{"ended", domain.Session{Status: domain.SessionDone, OpenInterviewCount: 1}, "done", "done", false},
+		{"failed", domain.Session{Status: domain.SessionFailed, OpenInterviewCount: 1}, "failed", "failed", false},
 	}
 	for _, c := range cases {
 		s := c.session
-		if got := statusOf(&s).Word; got != c.word {
-			t.Errorf("%s: word = %q, want %q", c.name, got, c.word)
+		if got := statusOf(&s); got != (StatusView{c.state, c.word}) {
+			t.Errorf("%s: status = %+v, want {%s %s}", c.name, got, c.state, c.word)
 		}
 		if got := NeedsYou(&s); got != c.needsYou {
 			t.Errorf("%s: needs you = %v, want %v", c.name, got, c.needsYou)

@@ -19,9 +19,6 @@ const STATUS = {
   failed: { state: "failed", word: "failed" },
 };
 
-/** A live session with an open interview, after approvals and before its turn. */
-const QUESTIONS = { state: "waiting", word: "questions" };
-
 /** How a session's agent reads: its name, its ID when unknown, "plain claude" without one. */
 export function agentLabel(agentId, agentNames = {}) {
   if (!agentId) return "plain claude";
@@ -61,8 +58,10 @@ const GROUP_LABEL = { architect: "Architect", "needs-you": "Needs you", active: 
 /** @returns {{ state: string, word: string }} */
 export function statusView(session) {
   if (!isTerminal(session) && session.pendingApprovals > 0) return STATUS.waiting_approval;
-  if (!isTerminal(session) && session.status !== "waiting_approval" && session.openInterviewCount > 0) return QUESTIONS;
-  return STATUS[session.status];
+  const status = STATUS[session.status];
+  // After approvals and before its turn: only the word is the interview's, the dot stays the session's own.
+  if (!isTerminal(session) && session.status !== "waiting_approval" && session.openInterviewCount > 0) return { ...status, word: "questions" };
+  return status;
 }
 
 /** .status[data-state] → an option's data-tone (the dot in a Listbox select). */

@@ -14,16 +14,20 @@ const LOOK = {
   thinking: { dot: "running", word: "thinking", tone: "signal", chip: true, rank: 3 },
   idle: { dot: "waiting", word: "your turn", tone: "attention", chip: true, rank: 2 },
   waiting_approval: { dot: "waiting", word: "approval", tone: "attention", chip: true, rank: 0 },
-  // A live session with an open interview, whatever its status says (not an approval).
-  questions: { dot: "waiting", word: "questions", tone: "attention", chip: true, rank: 1 },
   paused: { dot: "idle", word: "paused", tone: null, chip: true, rank: 3 },
   [FINISHED]: { dot: "done", word: "finished", tone: null, chip: true, rank: 3 },
 };
 
-/** The look of a line: its status's, or "questions" when an interview waits and no approval does. */
+/**
+ * The look of a line: its status's, with the chip and the place of "questions"
+ * when an interview waits and no approval does. The dot stays the session's own.
+ */
 const lookOf = (line) => {
-  const status = line.openInterviewCount > 0 && line.status !== "waiting_approval" && line.status !== FINISHED ? "questions" : line.status;
-  return LOOK[status] ?? { dot: "idle", word: status, tone: null, chip: true, rank: 3 };
+  const look = LOOK[line.status] ?? { dot: "idle", word: line.status, tone: null, chip: true, rank: 3 };
+  if (line.openInterviewCount > 0 && line.status !== "waiting_approval" && line.status !== FINISHED) {
+    return { ...look, word: "questions", tone: "attention", chip: true, rank: 1 };
+  }
+  return look;
 };
 
 const TASK_STATUS = { backlog: "Backlog", todo: "Todo", in_progress: "In progress", review: "Review", done: "Done" };

@@ -67,20 +67,18 @@ var looks = map[domain.SessionStatus]statusLook{
 	domain.SessionPaused:          {"idle", "paused", "", true, 3},
 }
 
-// questionsLook is how a live session with an open interview reads, whatever
-// its status says (an approval still comes first).
-var questionsLook = statusLook{"waiting", "questions", "attention", true, 1}
-
 // lookOf is the look of a session line: its status's, or questions while an
 // interview waits and no approval does.
 func lookOf(s domain.BoardSessionLine) statusLook {
+	look, ok := looks[s.Status]
+	if !ok {
+		look = statusLook{dot: "idle", word: string(s.Status), chip: true, rank: 3}
+	}
 	if s.OpenInterviewCount > 0 && s.Status != domain.SessionWaitingApproval {
-		return questionsLook
+		// The chip and its place are the interview's; the dot stays the session's own.
+		look.word, look.tone, look.chip, look.rank = "questions", "attention", true, 1
 	}
-	if look, ok := looks[s.Status]; ok {
-		return look
-	}
-	return statusLook{dot: "idle", word: string(s.Status), chip: true, rank: 3}
+	return look
 }
 
 var taskStatusWords = map[string]string{

@@ -465,8 +465,8 @@ func TestTheQuestionsChipShowsOnTheSessionRowAndHead(t *testing.T) {
 	if got := ivEval[string](t, ctx, `document.querySelector('.session-head .status').textContent.trim()`); got != "questions" {
 		t.Errorf("the session head says %q, want questions", got)
 	}
-	if got := ivEval[string](t, ctx, `document.querySelector('.session-head .status').dataset.state`); got != "waiting" {
-		t.Errorf("the session head's state = %q, want waiting", got)
+	if got := ivEval[string](t, ctx, `document.querySelector('.session-head .status').dataset.state`); got != "running" {
+		t.Errorf("the session head's state = %q, want running (the dot stays the session's own)", got)
 	}
 	groups := ivEval[[]string](t, ctx, `[...document.querySelectorAll('.list [role=group]')].map(g => g.querySelector('.group > span').textContent + ': ' + [...g.querySelectorAll('[role=option]')].map(r => r.dataset.sessionId).join(','))`)
 	if fmt.Sprint(groups) != "[Needs you: s-ask Running: s-run]" {

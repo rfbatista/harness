@@ -268,7 +268,7 @@
       "row": "asker",
       "expect": {
         "agent": "go-developer", "leadsWithTitle": false, "mode": "implement", "model": "", "badge": "",
-        "chip": { "word": "questions", "tone": "attention" }, "word": "questions", "state": "waiting", "when": "5m",
+        "chip": { "word": "questions", "tone": "attention" }, "word": "questions", "state": "running", "when": "5m",
         "detail": null,
         "detailText": "go-developer · implement · questions · 5m",
         "resumeLabel": "Resume go-developer", "unsandboxedAttr": null
