@@ -545,3 +545,20 @@ func TestProjectMCPSettings_TheBuiltInServicesServerIsNotListedAndIsRefused(t *t
 		}
 	}
 }
+
+func TestProjectMCPSettings_AReplacementThatOmitsAVanishedToolKeepsItsOverride(t *testing.T) {
+	f := catalogWithSkills(t)
+	p := f.project("Widgets")
+	githubWithTools(f)
+	f.post("/api/set_project_mcp_settings", map[string]any{"project_id": p, "servers": []map[string]any{
+		{"name": "github", "state": "agent", "tool_overrides": map[string]string{"a": "enabled", "vanished": "disabled"}},
+	}}, 200)
+	// The page shows only known tools, so it sends no "vanished"; a is cleared.
+	f.post("/api/set_project_mcp_settings", map[string]any{"project_id": p, "servers": []map[string]any{{"name": "github", "state": "agent"}}}, 200)
+	f.prober.result = mcpserver.ProbeResult{Status: "ok", ToolNames: []string{"a", "b", "vanished"}}
+	f.post("/api/refresh_catalog_mcp_server_tools", map[string]any{"name": "github"}, 200)
+	gh := projectServer(t, f.get("/api/get_project_mcp_servers?project_id="+p, 200), "github")
+	if toolOf(t, gh, "vanished")["override"] != "disabled" || toolOf(t, gh, "a")["override"] != "default" {
+		t.Fatalf("github = %v", gh)
+	}
+}

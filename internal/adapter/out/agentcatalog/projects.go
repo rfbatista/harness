@@ -343,6 +343,30 @@ func (c *Catalog) SetProjectMCPSettings(_ context.Context, in domain.SetCatalogP
 	if added == nil {
 		added = []string{}
 	}
+	// A tool the server no longer reports cannot be sent back by a page that
+	// shows only known tools, so its override stays for when it returns.
+	view, err := c.ReadCatalog()
+	if err != nil {
+		return nil, err
+	}
+	p := c.projectOf(in.ProjectID)
+	for _, s := range view.MCPServers {
+		if !seen[s.Name] {
+			continue
+		}
+		for tool, v := range p.MCPToolOverrides[s.Name] {
+			if contains(s.KnownTools, tool) {
+				continue
+			}
+			if _, named := overrides[s.Name][tool]; named {
+				continue
+			}
+			if overrides[s.Name] == nil {
+				overrides[s.Name] = map[string]string{}
+			}
+			overrides[s.Name][tool] = v
+		}
+	}
 	if err := c.setProjectNames(in.ProjectID, added); err != nil {
 		return nil, err
 	}
