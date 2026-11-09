@@ -16,6 +16,9 @@ import { terminal } from "./components/terminal.js";
 import { statusCheck } from "./components/statusCheck.js";
 import { sessionsPage } from "./pages/sessionsPage.js";
 import { screenPrefs } from "./screenPrefs.js";
+import { interviewPanel } from "./components/interviewPanel.js";
+import { interviewDrafts } from "../infrastructure/interviewDrafts.js";
+import { interviewStore } from "./interviewStore.js";
 
 /**
  * @param {import("alpinejs").Alpine} Alpine
@@ -32,6 +35,7 @@ import { screenPrefs } from "./screenPrefs.js";
  *   createScreen: import("./components/terminal.js").CreateScreen,
  *   clock: import("../../../shared/infrastructure/clock.js").Clock,
  *   channel?: import("../domain/ports.js").ChannelGateway,  the architect channel
+ *   interviews?: import("../domain/ports.js").InterviewGateway,  a session's interviews, for its panel beside the terminal
  *   prefs?: import("../../../shared/infrastructure/storage.js").Preferences,  this browser's text size and focus mode
  *   navigate?: (url: string) => void,  where "Brainstorm a feature" goes once its session starts
  * }} deps
@@ -46,7 +50,11 @@ export function registerSessions(Alpine, deps) {
     setFocus: (on) => globalThis.document?.querySelector(".app-shell")?.toggleAttribute("data-focus", on),
     setCodeFullscreen: (on) => globalThis.document?.querySelector(".app-shell")?.toggleAttribute("data-code-fullscreen", on),
   };
-  Alpine.data("sessionsPage", sessionsPage({ ...deps, channelStore, prefs: screen, shell }));
+  // The sessions' interviews, shared by the page (seed, the tab row's toggle) and the panel.
+  Alpine.store("sessionsInterviews", interviewStore({ gateway: deps.interviews, prefs: screen, drafts: interviewDrafts() }));
+  const interviews = Alpine.store("sessionsInterviews");
+  Alpine.data("sessionsPage", sessionsPage({ ...deps, channelStore, interviews, prefs: screen, shell, pinTitle: (n) => Alpine.store("notifications")?.pinTitleCount?.(n) }));
+  Alpine.data("sessionsInterviewPanel", interviewPanel({ interviews }));
   Alpine.data("sessionsConversation", conversation({ ...deps, channelStore }));
   Alpine.data("sessionsStatusCheck", statusCheck(deps));
   Alpine.data("sessionsNewSession", newSession(deps));

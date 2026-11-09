@@ -1,5 +1,5 @@
-// What this browser chose for the session screen: the terminal's text size
-// and focus mode. Kept in the shared per-browser preferences, which can be
+// What this browser chose for the session screen: the terminal's text size,
+// focus mode and which sessions' interview panels it hid. Kept in the shared per-browser preferences, which can be
 // missing or throw: the defaults then apply to this page only.
 
 /** The terminal's text sizes, smallest first. */
@@ -12,6 +12,7 @@ export const DEFAULT_TEXT_SIZE = 13;
 
 const TEXT_KEY = "terminal-text-size";
 const FOCUS_KEY = "session-focus";
+const INTERVIEW_HIDDEN_KEY = "interview-hidden:";
 
 /**
  * @param {import("../../../shared/infrastructure/storage.js").Preferences} prefs
@@ -27,6 +28,14 @@ export function screenPrefs(prefs) {
     setTextSize(px) {
       if (!TEXT_SIZES.some((s) => s.px === px)) return;
       prefs.set(TEXT_KEY, px === DEFAULT_TEXT_SIZE ? null : String(px));
+    },
+    /** The person hid the interview panel in this session. */
+    interviewHidden(sessionId) {
+      return prefs.get(INTERVIEW_HIDDEN_KEY + sessionId) === "on";
+    },
+    /** @param {string} sessionId @param {boolean} hidden */
+    setInterviewHidden(sessionId, hidden) {
+      prefs.set(INTERVIEW_HIDDEN_KEY + sessionId, hidden ? "on" : null);
     },
     focus() {
       return prefs.get(FOCUS_KEY) === "on";

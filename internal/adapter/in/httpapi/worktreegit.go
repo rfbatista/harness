@@ -6,6 +6,7 @@ import (
 	"github.com/labstack/echo/v4"
 
 	"operators-mcp/internal/domain"
+	"operators-mcp/internal/ports"
 )
 
 // The git state of a session worktree. Every answer and error code comes from
@@ -64,11 +65,17 @@ func (h *Handler) handlePushBranch(c echo.Context) error {
 	var in struct {
 		WorkspaceID  string `json:"workspace_id"`
 		ExpectedHead string `json:"expected_head"`
+		// Additive (web contract §2): all three default as the person's Push did.
+		Branch       string `json:"branch"`
+		Remote       string `json:"remote"`
+		RemoteBranch string `json:"remote_branch"`
 	}
 	if err := bindJSON(c, &in); err != nil {
 		return err
 	}
-	st, err := h.worktreeGit.PushBranch(c.Request().Context(), in.WorkspaceID, in.ExpectedHead)
+	st, err := h.worktreeGit.PushBranchTo(c.Request().Context(), ports.PushTarget{
+		WorkspaceID: in.WorkspaceID, ExpectedHead: in.ExpectedHead, Branch: in.Branch, Remote: in.Remote, RemoteBranch: in.RemoteBranch,
+	})
 	if err != nil {
 		return err
 	}

@@ -277,3 +277,20 @@ func TestRailNestsChildrenUnderTheirFeatureAsTheSharedFixtureSays(t *testing.T) 
 		t.Errorf("the heading counts %d tasks, want %d", got, want)
 	}
 }
+
+// A task whose running session has an open interview needs the person, and
+// the rail's seed carries the count for the browser.
+func TestRailCountsATaskWithAnOpenInterviewAsNeedingThePerson(t *testing.T) {
+	rail := BuildRail("p1",
+		[]*domain.Ticket{{ID: "t1", Status: domain.TicketStatusInProgress}, {ID: "t2", Status: domain.TicketStatusInProgress}},
+		[]*domain.Session{
+			{ID: "s1", TicketID: "t1", Status: domain.SessionRunning, OpenInterviewCount: 1, OpenQuestionCount: 2},
+			{ID: "s2", TicketID: "t2", Status: domain.SessionRunning},
+		}, "", nil)
+	if n := rail.NeedsYou(); n != 1 {
+		t.Errorf("needs you = %d, want 1", n)
+	}
+	if got := rail.Seed.Sessions[0].OpenInterviewCount; got != 1 {
+		t.Errorf("seed open_interview_count = %d", got)
+	}
+}

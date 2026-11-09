@@ -3,7 +3,6 @@ package workspaces
 import (
 	"context"
 	"errors"
-	"regexp"
 	"sync"
 	"time"
 
@@ -28,6 +27,7 @@ func (e *OriginFetchError) Unwrap() error { return e.Err }
 // per repository runs at a time, and observers hear each one that succeeded.
 type OriginFetcher struct {
 	git     ports.BranchPublisher
+	remotes ports.RemotePublisher
 	auth    ports.GitAuth
 	timeout time.Duration
 
@@ -44,6 +44,12 @@ func NewOriginFetcher(git ports.BranchPublisher, auth ports.GitAuth) *OriginFetc
 // WithTimeout bounds each fetch to d instead of OriginFetchTimeout.
 func (f *OriginFetcher) WithTimeout(d time.Duration) *OriginFetcher {
 	f.timeout = d
+	return f
+}
+
+// WithRemotes lets the fetcher push to a named remote (PushTo).
+func (f *OriginFetcher) WithRemotes(r ports.RemotePublisher) *OriginFetcher {
+	f.remotes = r
 	return f
 }
 
@@ -207,9 +213,33 @@ func (f *OriginFetcher) Push(ctx context.Context, repositoryID, root, originURL,
 	return nil
 }
 
-// urlUserinfo is the user and password of a URL in git's output
-// ("unable to access 'https://user:token@host/…'"): never shown.
-var urlUserinfo = regexp.MustCompile(`(://)[^/\s@'"]+@`)
+// redactURLs is msg without the credentials a URL in it carries (git's output
+// says "unable to access 'https://user:token@host/…'"): never shown.
+func redactURLs(msg string) string { return domain.RedactURL(msg) }
 
-// redactURLs is msg without the credentials a URL in it carries.
-func redactURLs(msg string) string { return urlUserinfo.ReplaceAllString(msg, "$1") }
+// PushTo publishes branch to the named remote as remoteBranch with the
+// credential stored for that remote's host, never forced (ADR 0071). Failures
+// are Push's.
+func (f *OriginFetcher) PushTo(ctx context.Context, repositoryID, root, remoteURL, branch, commit, remote, remoteBranch string) error {
+	if f.remotes == nil {
+		return &domain.StructuredError{Code: "UNAVAILABLE", Message: "pushing to a named remote is not available"}
+	}
+	op, err := f.credential(ctx, repositoryID, remoteURL)
+	if err != nil {
+		return err
+	}
+	defer op.Release()
+	pushCtx, cancel := context.WithTimeout(ctx, f.timeout)
+	err = f.remotes.PushTo(pushCtx, root, branch, commit, remote, remoteBranch, op.Env)
+	cancel()
+	switch {
+	case errors.Is(err, ports.ErrRemoteAuthRejected):
+		return refused(op, err)
+	case err != nil:
+		return &OriginPushError{Err: err, Rejected: errors.Is(err, ports.ErrPushRejected)}
+	}
+	if op.Push != nil {
+		f.auth.Used(op.Push.ID)
+	}
+	return nil
+}

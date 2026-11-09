@@ -18,6 +18,7 @@ import (
 	"encoding/base64"
 	"fmt"
 	"log/slog"
+	"net/url"
 	"strconv"
 	"strings"
 	"sync"
@@ -171,11 +172,23 @@ func (s *Service) Subscribe(bus ports.EventSubscriber) {
 		s.onSessionStatus(ev)
 		return nil
 	})
+	ports.On(bus, func(ctx context.Context, ev domain.BranchRequestChanged) error {
+		s.onBranchRequest(ev)
+		return nil
+	})
 	ports.On(bus, func(ctx context.Context, ev domain.SessionEnded) error {
 		s.resolve(sessionWaitingKey(ev.SessionID))
 		if ev.Status == domain.SessionFailed {
 			s.onSessionFailed(ev.SessionID)
 		}
+		return nil
+	})
+	ports.On(bus, func(ctx context.Context, ev domain.InterviewOpened) error {
+		s.onInterviewOpened(ev)
+		return nil
+	})
+	ports.On(bus, func(ctx context.Context, ev domain.InterviewClosed) error {
+		s.resolve(interviewKey(ev.InterviewID))
 		return nil
 	})
 	ports.On(bus, func(ctx context.Context, ev domain.SessionCommitCheckChanged) error {
@@ -211,6 +224,7 @@ func sessionWaitingKey(id string) string { return "session_waiting:" + id }
 func sessionFailedKey(id string) string  { return "session_failed:" + id }
 func taskReviewKey(id string) string     { return "task_review:" + id }
 func commitCheckKey(id string) string    { return "commit_check_off:" + id }
+func interviewKey(id string) string      { return "interview:" + id }
 
 func (s *Service) onReview(ev domain.ReviewRequestChanged) {
 	if ev.State != domain.ReviewPending {
@@ -225,7 +239,51 @@ func (s *Service) onReview(ev domain.ReviewRequestChanged) {
 	}, false)
 }
 
+func branchRequestKey(id string) string { return "branch_request:" + id }
+
+// onBranchRequest records one action notification for a pending branch request,
+// and settles it once the request is answered or gone. An answer posts nothing
+// new.
+func (s *Service) onBranchRequest(ev domain.BranchRequestChanged) {
+	r := ev.Request
+	if r.State != domain.BranchRequestPending {
+		s.resolve(branchRequestKey(r.ID))
+		return
+	}
+	sess := s.readers.Sessions.Get(r.SessionID)
+	taskID := ""
+	if r.TaskID != nil {
+		taskID = *r.TaskID
+	}
+	link := domain.TaskLink(ev.ProjectID, taskID) + "?session=" + url.QueryEscape(r.SessionID) + "#branch-request-" + url.PathEscape(r.ID)
+	body := "Session " + r.SessionID
+	if sess != nil && sess.Task != "" {
+		body += " (" + sess.Task + ")"
+	}
+	body += ", task " + taskOrNone(taskID) + ", repository " + r.RepositoryID + "."
+	if r.Reason != "" {
+		body += " " + r.Reason
+	}
+	s.record(&domain.Notification{
+		ProjectID: ev.ProjectID, TaskID: taskID, SessionID: r.SessionID,
+		Kind: domain.NotificationBranchRequest, Level: domain.NotificationAction,
+		Title: clip("Branch: "+r.Label(), domain.MaxNotificationTitleLen),
+		Body:  clip(body, domain.MaxNotificationBodyLen),
+		Link:  link, CauseKey: branchRequestKey(r.ID),
+	}, false)
+}
+
+func taskOrNone(id string) string {
+	if id == "" {
+		return "none"
+	}
+	return id
+}
+
 func (s *Service) onSessionStatus(ev domain.SessionStatusChanged) {
+	if ev.ByBranchRequest {
+		return
+	}
 	if ev.Status != domain.SessionWaitingApproval {
 		s.resolve(sessionWaitingKey(ev.SessionID))
 		return
@@ -242,6 +300,28 @@ func (s *Service) onSessionStatus(ev domain.SessionStatusChanged) {
 		Body:  clip(sess.LastAction, domain.MaxNotificationBodyLen),
 		Link:  domain.TaskLink(sess.ProjectID, sess.TicketID), CauseKey: sessionWaitingKey(sess.ID),
 	}, false)
+}
+
+// onInterviewOpened records one notification per interview, which the person
+// settles by answering or dismissing it. It takes the session_waiting kind:
+// the session waits on the person.
+func (s *Service) onInterviewOpened(ev domain.InterviewOpened) {
+	sess := s.readers.Sessions.Get(ev.SessionID)
+	if sess == nil || sess.ProjectID == "" {
+		slog.Warn("notification for a session that is not recorded", "session", ev.SessionID)
+		return
+	}
+	body := strconv.Itoa(ev.Questions) + " questions"
+	if ev.Questions == 1 {
+		body = "1 question"
+	}
+	s.record(&domain.Notification{
+		ProjectID: sess.ProjectID, TaskID: sess.TicketID, SessionID: sess.ID,
+		Kind: domain.NotificationSessionWaiting, Level: domain.NotificationAction,
+		Title: clip("A session has questions for you: "+strings.TrimSpace(ev.Title), domain.MaxNotificationTitleLen),
+		Body:  body,
+		Link:  domain.TaskLink(sess.ProjectID, sess.TicketID) + "?session=" + url.QueryEscape(sess.ID), CauseKey: interviewKey(ev.InterviewID),
+	}, true)
 }
 
 // onCommitCheck records one notification for a session whose commit check is

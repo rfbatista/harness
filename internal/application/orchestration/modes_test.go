@@ -56,6 +56,12 @@ func TestStartInteractive_ArchitectMode(t *testing.T) {
 	if spec := pluginSkill(t, launch, "task-to-spec"); !strings.Contains(spec, "# Spec: <application> — <feature>") || !strings.Contains(spec, "task/docs/") {
 		t.Error("task-to-spec SKILL.md lacks the Spec template written to task/docs/")
 	}
+	// Skills that interview the person ask through ask_person, never in plain text.
+	for _, name := range []string{"task-architecture", "task-grill-with-docs", "task-to-spec"} {
+		if sk := pluginSkill(t, launch, name); !strings.Contains(sk, "ask_person") || strings.Contains(sk, "AskUserQuestion") {
+			t.Errorf("%s SKILL.md must tell the agent to ask through ask_person and name no provider tool", name)
+		}
+	}
 	if !strings.Contains(body, "already notify the person") {
 		t.Error("task-architecture SKILL.md does not say review requests and the review status already notify the person")
 	}

@@ -84,6 +84,9 @@ type Deps struct {
 	// Workspaces names a session's base branch and lists a repository's
 	// branches for the code pages' ref select; nil shortens both.
 	Workspaces CodeWorkspaces
+	// BranchRequests seeds the task page's Branch requests button and popover;
+	// nil leaves them out.
+	BranchRequests ports.BranchRequestReader
 	// Notifications seeds the top bar's unread count and the inbox's latest
 	// page; nil, or a failed read, renders the page without a seed.
 	Notifications ports.NotificationReader
@@ -144,6 +147,9 @@ type Deps struct {
 	// Services item of the project navigation on every project page; nil
 	// counts none.
 	ServiceCounter ports.ServiceRunningCounter
+	// Interviews seeds each session's interviews on the task page; nil
+	// seeds none.
+	Interviews ports.InterviewReader
 	// Usage reads token usage for a project's Usage page and the task
 	// page's totals; nil leaves the page, its rail link and the totals out.
 	Usage ports.UsageDashboard
@@ -209,8 +215,8 @@ func NewHandler(deps Deps, assets *Assets, fallback http.Handler) http.Handler {
 	taskPages := tasks.Handler{
 		Projects: deps.Projects, Tasks: deps.Tasks, Sessions: deps.Sessions,
 		Agents: deps.Agents, Repositories: deps.Repositories, Docs: deps.Documents, Artifacts: deps.Artifacts, PullRequests: deps.PullRequests, WorktreeGit: deps.WorktreeGit,
-		Resources: deps.Resources, Comments: deps.Comments, Code: deps.Code, Usage: deps.Usage, TokenSavers: deps.TokenSavers,
-		ArchivedTasks: deps.ArchivedList, Layout: s.layout, Render: render, Now: deps.Now,
+		Resources: deps.Resources, Comments: deps.Comments, Code: deps.Code, Usage: deps.Usage, TokenSavers: deps.TokenSavers, Interviews: deps.Interviews,
+		ArchivedTasks: deps.ArchivedList, BranchRequests: deps.BranchRequests, Layout: s.layout, Render: render, Now: deps.Now,
 	}
 	if deps.Workspaces != nil {
 		taskPages.Workspaces = deps.Workspaces

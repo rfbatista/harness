@@ -1,0 +1,30 @@
+/*
+ * Interview toggle — the Questions button at the start of the tab row's
+ * terminal tools, before the connection: a ghost button with the panel icon,
+ * the word and the number of open questions. It shows while the session has an
+ * open interview; aria-pressed says whether the panel is shown. It is not a
+ * .pref, so it stays on a phone. A new interview that arrives while the panel
+ * is hidden rings it once.
+ * <button class="button interview-toggle" data-variant="ghost" data-size="sm" aria-pressed="true" aria-label="Questions, 5 open">
+ *   <svg/><span class="word">Questions</span><span class="badge" data-tone="attention">5</span></button>
+ * Exceptions: data-signal (the 1.2s ring).
+ */
+
+@layer blocks {
+  .interview-toggle {
+    --_ink: var(--color-ink);
+
+    &[aria-pressed="true"] { background: var(--color-selected); }
+    & > .badge { justify-content: center; block-size: 1.125rem; min-inline-size: 1.125rem; padding-inline: var(--space-2xs); }
+    &[data-signal] { animation: interview-ring var(--duration-signal) var(--ease-out) 1; }
+
+    @media (prefers-reduced-motion: reduce) {
+      &[data-signal] { outline: var(--border-focus-width) solid color-mix(in oklch, var(--color-attention) 45%, transparent); outline-offset: var(--border-focus-offset); animation: none; }
+    }
+  }
+
+  @keyframes interview-ring {
+    from { box-shadow: 0 0 0 0 color-mix(in oklch, var(--color-attention) 55%, transparent); }
+    to { box-shadow: 0 0 0 0.45rem transparent; }
+  }
+}

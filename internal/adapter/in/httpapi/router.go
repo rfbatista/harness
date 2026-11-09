@@ -254,6 +254,10 @@ func NewRouter(h *Handler, opts ...Option) *echo.Echo {
 	g.DELETE("/sessions/:id", h.handleDeleteSession)
 	g.GET("/events", h.handleEvents) // a project's session changes (SSE)
 	g.GET("/sessions/:id/events", h.handleSessionEvents)
+	g.GET("/sessions/:id/interviews", h.handleSessionInterviews)
+	g.GET("/sessions/:id/interviews/events", h.handleSessionInterviewEvents)
+	g.POST("/interviews/:id/answers", h.handleSubmitInterview)
+	g.POST("/interviews/:id/dismiss", h.handleDismissInterview)
 	g.GET("/sessions/:id/terminal", h.handleSessionTerminal) // WebSocket upgrade
 	// the person's own terminals on a session's virtual file system (ADR 0051 guards each)
 	guard := personGuard(o)
@@ -303,6 +307,13 @@ func NewRouter(h *Handler, opts ...Option) *echo.Echo {
 	// whether an action keeps to the repository's layers
 	g.POST(strings.TrimPrefix(ArchitectureCheckRoute, "/api"), h.handleArchitectureCheck)
 	g.POST(strings.TrimPrefix(ArchitectureCommitRoute, "/api"), h.handleArchitectureCommit)
+	// the branch gate: a session's git shim asks for a branch grant
+	g.POST(strings.TrimPrefix(BranchGateRoute, "/api"), h.handleBranchGateHook)
+	g.POST(strings.TrimPrefix(BranchGateGrantRoute, "/api"), h.handleBranchGateGrant)
+	g.POST(strings.TrimPrefix(BranchGatePushedRoute, "/api"), h.handleBranchGatePushed)
+	// the person's side of it: the requests, and their answers
+	g.GET("/branch_requests", h.handleBranchRequests)
+	g.POST("/branch_requests/:id/answer", h.handleAnswerBranchRequest)
 
 	// the architect channel: what passes between a task's architect and its
 	// delegates, and the reviews it asks the person for

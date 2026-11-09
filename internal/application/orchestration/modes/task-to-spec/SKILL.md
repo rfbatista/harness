@@ -12,7 +12,8 @@ contracts between them. Now write **one Spec document per application**, a file 
 
 **Do not interview the person again.** Synthesise what was already settled in this
 session, the Glossary and ADR files in `project/docs/`, and the contracts. The one
-thing you check with them is the test seams (step 2).
+thing you check with them is the test seams (step 2); ask it through `ask_person`,
+with your recommended seams as the recommended answer, and end your turn.
 
 ## Process
 

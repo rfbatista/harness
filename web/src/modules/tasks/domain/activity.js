@@ -8,6 +8,7 @@
  * @property {string} ticketId
  * @property {string} status
  * @property {number} pendingApprovals
+ * @property {number} openInterviewCount
  *
  * @typedef {{ live: number, attention: boolean }} Activity
  */
@@ -16,7 +17,7 @@ const ENDED = new Set(["done", "stopped", "failed"]);
 
 export const isLive = (s) => !ENDED.has(s.status);
 
-export const needsYou = (s) => isLive(s) && (s.status === "waiting_approval" || s.status === "idle" || s.pendingApprovals > 0);
+export const needsYou = (s) => isLive(s) && (s.status === "waiting_approval" || s.status === "idle" || s.pendingApprovals > 0 || s.openInterviewCount > 0);
 
 /** @returns {Record<string, Activity>} by task id; sessions without a task are left out */
 export function activityByTask(sessions) {

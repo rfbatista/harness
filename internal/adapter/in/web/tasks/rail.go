@@ -84,7 +84,7 @@ func seed(projectID string, tasks []*domain.Ticket, list []*domain.Session) *she
 	}
 	for _, x := range list {
 		if x.TicketID != "" {
-			s.Sessions = append(s.Sessions, shell.RailSession{ID: x.ID, TicketID: x.TicketID, Status: string(x.Status), PendingApprovals: x.PendingApprovals})
+			s.Sessions = append(s.Sessions, shell.RailSession{ID: x.ID, TicketID: x.TicketID, Status: string(x.Status), PendingApprovals: x.PendingApprovals, OpenInterviewCount: x.OpenInterviewCount})
 		}
 	}
 	return s

@@ -51,6 +51,8 @@
     --border-focus-width: 2px;
     --border-focus-offset: 2px;
     --border-icon-width: 1.5px;
+    --border-edge-width: 3px;
+    --border-rule-width: 2px;
 
     --ease-out: cubic-bezier(0.25, 1, 0.5, 1);
     --ease-out-expo: cubic-bezier(0.16, 1, 0.3, 1);
