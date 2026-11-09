@@ -987,7 +987,7 @@ func gitButton(v PageView) templ.Component {
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
-			templ_7745c5c3_Err = code.BranchesSection("row.branches.rows", "row.branches.shown", "row.branches.label", "row.sessionId").Render(ctx, templ_7745c5c3_Buffer)
+			templ_7745c5c3_Err = code.BranchesSection("row.branches.rows", "row.branches.shown", "row.branches.label", "row.sessionId", "row.workspaceId").Render(ctx, templ_7745c5c3_Buffer)
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}

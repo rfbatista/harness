@@ -22,12 +22,14 @@ import { refusalOf } from "../view.js";
  * @property {Record<string, ReturnType<typeof refusalOf>>} fetchFailure  by repository id
  * @property {Record<string, ReturnType<typeof refusalOf>>} pushFailure   by workspace id
  * @property {Record<string, import("../../domain/branches.js").SessionBranch[]>} branches  each session's Branches list, by session id
+ * @property {Record<string, Array<{ name: string, url: string }>>} remotes  each repository's remotes, origin first, by repository id
+ * @property {{ workspaceId: string, repositoryId: string, branch: string, remote: string, preview: { head: string, commits: number, commitsAgainst: string, remoteBranch: string } | null, failure: ReturnType<typeof refusalOf> | null } | null} branchPush  the Push confirmation open on a Branches row; one at a time
  * @property {boolean} statesLoading  the task page's lazy git section is loading and its skeleton chips show
  * @property {string} statesIn        "skeleton-in" once the chips arrived after a skeleton
  */
 
 /** @returns {SyncStore} */
-export const emptyStore = () => ({ byWorkspace: {}, fetching: {}, pushing: {}, fetchFailure: {}, pushFailure: {}, branches: {}, statesLoading: false, statesIn: "" });
+export const emptyStore = () => ({ byWorkspace: {}, fetching: {}, pushing: {}, fetchFailure: {}, pushFailure: {}, branches: {}, remotes: {}, branchPush: null, statesLoading: false, statesIn: "" });
 
 const without = (record, key) => {
   const { [key]: _, ...rest } = record;
@@ -67,6 +69,21 @@ export function syncActions({ gateway, store }) {
   /** Sessions whose list was asked for already, so a panel reads each once. */
   const askedBranches = new Set();
 
+  /** Repositories whose remotes were asked for already. */
+  const askedRemotes = new Set();
+
+  /** Reads what the open confirmation would push: the head and the commit count for the remote picked. */
+  async function loadPreview() {
+    const ask = store.branchPush;
+    if (!ask || !gateway.pushPreview) return;
+    try {
+      const preview = await gateway.pushPreview({ workspaceId: ask.workspaceId, branch: ask.branch, remote: ask.remote });
+      if (store.branchPush === ask) store.branchPush = { ...ask, preview };
+    } catch (err) {
+      if (store.branchPush === ask) store.branchPush = { ...ask, failure: refusalOf(err) };
+    }
+  }
+
   const workspacesOf = (repositoryId) => Object.values(store.byWorkspace).filter((s) => s.repositoryId === repositoryId);
 
   /** Reads a workspace again, after changes may have been missed. Gone (WORKSPACE_NOT_FOUND) or unreachable keeps what is shown. */
@@ -97,6 +114,74 @@ export function syncActions({ gateway, store }) {
       } catch {
         // the panel shows no list; the feed fills it when one changes
       }
+    },
+
+    /** Reads the repository's remotes once, for the remote picker of its Branches rows. */
+    async ensureRemotes(repositoryId) {
+      if (!repositoryId || store.remotes[repositoryId] || askedRemotes.has(repositoryId) || !gateway.remotes) return;
+      askedRemotes.add(repositoryId);
+      try {
+        const remotes = await gateway.remotes(repositoryId);
+        store.remotes = { ...store.remotes, [repositoryId]: remotes };
+      } catch {
+        askedRemotes.delete(repositoryId); // asked again when the panel next opens
+      }
+    },
+
+    /** Opens the Push confirmation on a row, origin picked when the repository has it, and reads what it would push. */
+    async askBranchPush({ workspaceId, repositoryId, branch }) {
+      if (!workspaceId || store.pushing[workspaceId]) return;
+      const remotes = store.remotes[repositoryId] ?? [];
+      const remote = (remotes.find((r) => r.name === "origin") ?? remotes[0])?.name;
+      if (!remote) return;
+      store.branchPush = { workspaceId, repositoryId, branch, remote, preview: null, failure: null };
+      await loadPreview();
+    },
+
+    /** The person picked another remote: the count is read again for it. */
+    async pickBranchRemote(remote) {
+      const ask = store.branchPush;
+      if (!ask || ask.remote === remote || store.pushing[ask.workspaceId]) return;
+      store.branchPush = { ...ask, remote, preview: null, failure: null };
+      await loadPreview();
+    },
+
+    cancelBranchPush() {
+      if (store.branchPush && !store.pushing[store.branchPush.workspaceId]) store.branchPush = null;
+    },
+
+    /**
+     * Pushes the row's branch to the remote picked, at the head the preview
+     * named. Returns whether it pushed; a refusal stays on the confirmation.
+     */
+    async confirmBranchPush() {
+      const ask = store.branchPush;
+      if (!ask?.preview || store.pushing[ask.workspaceId]) return false;
+      const { workspaceId } = ask;
+      store.pushing = { ...store.pushing, [workspaceId]: true };
+      store.branchPush = { ...ask, failure: null };
+      let ok = false;
+      try {
+        const after = await gateway.push({ workspaceId, expectedHead: ask.preview.head, branch: ask.branch, remote: ask.remote, remoteBranch: ask.preview.remoteBranch });
+        held.set(workspaceId, fresher(held.get(workspaceId), after));
+        ok = true;
+        store.branchPush = null;
+        if (gateway.branchesOf && after.sessionId) {
+          try {
+            keepBranches(await gateway.branchesOf(after.sessionId));
+          } catch {
+            // the feed brings the row's new push line
+          }
+        }
+      } catch (err) {
+        const reread = err?.details?.state;
+        if (reread && (codeOf(err) === Codes.PUSH_REJECTED || codeOf(err) === Codes.PUSH_STALE)) held.set(workspaceId, fresher(held.get(workspaceId), reread));
+        if (store.branchPush) store.branchPush = { ...store.branchPush, failure: refusalOf(err) };
+      } finally {
+        store.pushing = without(store.pushing, workspaceId);
+        release(workspaceId);
+      }
+      return ok;
     },
 
     /** Reads every list the page holds again, after the feed dropped. */

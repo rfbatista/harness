@@ -72,6 +72,26 @@ export function toStateAnswer(body) {
   return toGitState(body.state);
 }
 
+/** GET /api/repository_remotes → {"remotes": [{name, url}]}, origin first. */
+export function toRemotes(body) {
+  if (!body || !Array.isArray(body.remotes)) bad("expected {remotes: [...]}");
+  return body.remotes.map((r) => Object.freeze({ name: text(r.name), url: text(r.url) })).filter((r) => r.name !== "");
+}
+
+/**
+ * GET /api/push_preview → what the Push confirmation shows: the head the
+ * confirmation sends back, the commits counted and what they are counted against.
+ */
+export function toPushPreview(body) {
+  if (!body || typeof body.head !== "string" || body.head === "") bad("expected a push preview with a head");
+  return Object.freeze({
+    head: body.head,
+    commits: count(body.commits),
+    commitsAgainst: body.commits_against === "remote" ? "remote" : "base",
+    remoteBranch: text(body.remote_branch),
+  });
+}
+
 /** GET /api/list_worktree_git_states → {"states": [GitState]} */
 export function toStates(body) {
   if (!body || !Array.isArray(body.states)) bad("expected {states: [...]}");

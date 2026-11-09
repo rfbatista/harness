@@ -30,6 +30,7 @@ type fakeGitHost struct {
 	order             []string
 	fetches           []string
 	pushes            []map[string]any
+	remotes           []string // the repositories' remotes, origin first; nil is newFakeGitHost's origin and fork
 	streams           []chan string
 }
 
@@ -54,7 +55,7 @@ func wireState(ws, repo, session, branch string, base, upstream map[string]any, 
 }
 
 func newFakeGitHost(states ...map[string]any) *fakeGitHost {
-	f := &fakeGitHost{states: map[string]map[string]any{}}
+	f := &fakeGitHost{states: map[string]map[string]any{}, remotes: []string{"origin", "fork"}}
 	for _, s := range states {
 		id := s["workspace_id"].(string)
 		f.states[id] = s
@@ -131,8 +132,30 @@ func (f *fakeGitHost) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		f.pushes = append(f.pushes, body)
 		ws := fmt.Sprint(body["workspace_id"])
 		branch := fmt.Sprint(f.states[ws]["branch"])
-		f.update(ws, map[string]any{"upstream": upstreamOf("in_sync", "origin/"+branch, 0, 0)})
+		if body["branch"] == nil && body["remote"] == nil {
+			f.update(ws, map[string]any{"upstream": upstreamOf("in_sync", "origin/"+branch, 0, 0)})
+		}
 		_ = json.NewEncoder(w).Encode(map[string]any{"state": f.states[ws]})
+	case "/api/repository_remotes":
+		f.mu.Lock()
+		defer f.mu.Unlock()
+		remotes := []map[string]string{}
+		for _, name := range f.remotes {
+			remotes = append(remotes, map[string]string{"name": name, "url": "https://example.test/" + name + ".git"})
+		}
+		_ = json.NewEncoder(w).Encode(map[string]any{"remotes": remotes})
+	case "/api/push_preview":
+		q := r.URL.Query()
+		branch, remote := q.Get("branch"), q.Get("remote")
+		against, commits := "base", 3
+		if remote == "origin" {
+			against, commits = "remote", 2
+		}
+		remoteBranch := q.Get("remote_branch")
+		if remoteBranch == "" {
+			remoteBranch = branch
+		}
+		_ = json.NewEncoder(w).Encode(map[string]any{"head": "head-of-" + branch, "commits": commits, "commits_against": against, "remote_branch": remoteBranch})
 	case "/api/events":
 		w.Header().Set("Content-Type", "text/event-stream")
 		ch := make(chan string, 8)

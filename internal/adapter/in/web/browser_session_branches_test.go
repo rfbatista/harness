@@ -1,8 +1,10 @@
 package web
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
+	"io"
 	"net/http"
 	"strings"
 	"sync"
@@ -53,7 +55,29 @@ func (f *fakeBranchLists) change(id string, list []domain.SessionBranch) {
 	}
 }
 
+// recordPush notes a branch push on the row it names, as the server's push
+// record does, so the list the page reads after a push shows where it went.
+func (f *fakeBranchLists) recordPush(r *http.Request) {
+	raw, _ := io.ReadAll(r.Body)
+	r.Body = io.NopCloser(bytes.NewReader(raw))
+	var body map[string]string
+	_ = json.Unmarshal(raw, &body)
+	session := map[string]string{"ws-1": "s1", "ws-2": "s2"}[body["workspace_id"]]
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	list := append([]domain.SessionBranch(nil), f.lists[session]...)
+	for i := range list {
+		if body["branch"] != "" && list[i].Name == body["branch"] {
+			list[i].Pushed = append([]domain.SessionBranchPush{{Remote: body["remote"], RemoteBranch: body["remote_branch"], At: time.Now(), By: domain.PushedByPerson}}, list[i].Pushed...)
+		}
+	}
+	f.lists[session] = list
+}
+
 func (f *fakeBranchLists) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	if r.URL.Path == "/api/push_branch" {
+		f.recordPush(r)
+	}
 	if r.URL.Path == "/api/session_branches" {
 		f.mu.Lock()
 		list := f.lists[r.URL.Query().Get("session_id")]

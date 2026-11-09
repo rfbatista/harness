@@ -406,7 +406,7 @@ templ gitButton(v PageView) {
 								</template>
 								<a x-bind:href="row.codeHref">Code</a>
 							</div>
-							@code.BranchesSection("row.branches.rows", "row.branches.shown", "row.branches.label", "row.sessionId")
+							@code.BranchesSection("row.branches.rows", "row.branches.shown", "row.branches.label", "row.sessionId", "row.workspaceId")
 							<template x-if="row.confirming">
 								<div class="[ confirm-strip ]" data-confirm="push" role="group" x-bind:aria-label="row.question">
 									<h3 x-text="row.question"></h3>

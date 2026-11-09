@@ -29,10 +29,40 @@ export const isFlagged = (b) => b.state === "unapproved" || b.flaggedAt !== null
 /** How many of the session's branches are flagged. */
 export const flaggedCount = (branches) => branches.filter(isFlagged).length;
 
-/** What a template binds for one row. */
-export function rowOf(b) {
+/** A branch the person may push: the session's own or an approved one. */
+export const isPushable = (b) => b.state === "session" || b.state === "approved";
+
+/** The Push confirmation's heading for a preview, naming the remote, the remote branch and the commit count. */
+export function pushQuestion(branch, push) {
+  const target = `${push.remote}/${push.preview?.remoteBranch ?? branch}`;
+  if (!push.preview) return `Push ${branch} to ${target}?`;
+  const n = push.preview.commits;
+  const commits = `${n} ${n === 1 ? "commit" : "commits"}`;
+  return push.preview.commitsAgainst === "remote"
+    ? `Push ${commits} of ${branch} to ${target}?`
+    : `Push ${branch} to ${target}? ${commits} ahead of its base; ${target} is not known here.`;
+}
+
+/**
+ * What a template binds for one row. `ctx` is where Push stands for the
+ * workspace the list belongs to: its remotes (undefined until read) and the
+ * confirmation open on one of its rows, if any.
+ * @param {SessionBranch} b
+ * @param {{ remotes?: Array<{ name: string }>, push?: { branch: string, remote: string, preview: object | null, failure: object | null } | null }} [ctx]
+ */
+export function rowOf(b, ctx = {}) {
   const base = b.base;
+  const remotes = ctx.remotes ?? [];
+  const push = ctx.push && ctx.push.branch === b.name ? ctx.push : null;
   return {
+    offersPush: isPushable(b) && remotes.length > 0 && !push,
+    confirming: !!push,
+    question: push ? pushQuestion(b.name, push) : "",
+    remoteOptions: remotes.map((r) => ({ name: r.name, selected: push?.remote === r.name })),
+    pushRefusal: push?.failure ?? null,
+    pushRefusalBanner: push?.failure?.tone === "banner",
+    pushRefusalStrip: push?.failure?.tone === "danger",
+    previewLoading: !!push && !push.preview && !push.failure,
     name: b.name,
     state: b.state,
     stateLabel: b.state === "session" ? "session branch" : b.state,
