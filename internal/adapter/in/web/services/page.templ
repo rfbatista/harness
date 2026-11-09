@@ -166,6 +166,35 @@ templ Page(frame shell.Frame, projectID, projectName string, seed Seed, repos []
 								<button type="button" class="[ button ]" data-size="sm" x-on:click="retry">Try again</button>
 							</div>
 						</template>
+						<section class="[ variables ]" aria-label="Variables" data-service-variables x-data="serviceVariables(id)" x-effect="runChanged(logView.runId)" x-bind:data-service-id="id">
+							<div class="[ bar ]">
+								<button type="button" class="[ button ]" data-variant="ghost" data-size="sm" data-variables-toggle aria-expanded="false" aria-controls="service-variables-list" x-bind:aria-expanded="opened" x-on:click="toggleSection">Variables</button>
+								<span class="[ summary ]" role="status" aria-live="polite" data-variables-summary x-text="summary"></span>
+								<button type="button" class="[ button ]" data-variant="ghost" data-size="sm" data-variables-all x-show="opened && hasRows" x-on:click="toggleAll" x-text="allLabel"></button>
+							</div>
+							<div id="service-variables-list" x-show="opened">
+								<template x-if="error">
+									<div class="[ banner ]" data-tone="danger" role="alert">
+										<div class="[ flow ] [ flow-space-3xs grow ]">
+											<span x-text="error.message"></span>
+											<span class="[ code ]"><span x-text="error.code"></span> · <span x-text="error.next"></span></span>
+										</div>
+										<button type="button" class="[ button ]" data-size="sm" x-on:click="retry">Try again</button>
+									</div>
+								</template>
+								<p class="[ note ]" x-show="neverRan">This service has not run yet, so there are no variables.</p>
+								<p class="[ note ]" x-show="empty">This run was given no variables of its own. The system environment is not listed.</p>
+								<ul class="[ vars ]" data-variables x-bind:hidden="!hasRows" x-bind:aria-busy="loading">
+									<template x-for="row in rows" x-bind:key="row.name">
+										<li class="[ var ]" data-variable x-bind:data-name="row.name">
+											<span class="[ name ]"><span x-text="row.name"></span><small x-text="row.source"></small></span>
+											<span class="[ value ]" data-variable-value x-bind:data-masked="row.masked ? '' : null"><span x-bind:aria-hidden="row.masked" x-text="row.shown"></span><span class="[ visually-hidden ]" x-show="row.masked">value hidden</span></span>
+											<button type="button" class="[ button ]" data-variant="ghost" data-size="sm" data-variable-toggle x-bind:data-name="row.name" x-bind:aria-label="row.toggleName" x-on:click="toggle" x-text="row.toggleText"></button>
+										</li>
+									</template>
+								</ul>
+							</div>
+						</section>
 						<div class="[ log ]" role="log" tabindex="0" aria-live="off" aria-label="Log" x-ref="log" x-on:scroll="onScroll" x-bind:aria-busy="loading" data-log>
 							<p class="[ earlier ]" data-log-note x-bind:hidden="!hasNote" x-text="note"></p>
 							<template x-for="line in lines" x-bind:key="line.id">

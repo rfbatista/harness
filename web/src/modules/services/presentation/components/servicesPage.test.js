@@ -587,3 +587,12 @@ test("a picker's select follows the pick once its options exist", async () => {
   after();
   assert.equal(select.value, "session:s2");
 });
+
+test("the open log's panel knows the run on screen, so its variables follow a new run", () => {
+  const { page, gateway } = openWith([running({ id: "1", name: "api" })]);
+  page.openLog("1");
+  assert.equal(page.logView.runId, "r1");
+  gateway.emit({ seq: 2, kind: "service_changed", service: running({ id: "1", name: "api", run: runDTO({ id: "r2" }) }), running_count: 1 });
+  assert.equal(page.logView.runId, "r2");
+  assert.equal(openWith([serviceDTO({ id: "1", name: "idle" })]).page.groups[0].rows.length, 1);
+});

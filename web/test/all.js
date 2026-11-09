@@ -115,6 +115,7 @@ import "../src/modules/services/domain/serviceForm.test.js";
 import "../src/modules/services/infrastructure/services-gateway.test.js";
 import "../src/modules/services/presentation/components/serviceForm.test.js";
 import "../src/modules/services/presentation/components/serviceLog.test.js";
+import "../src/modules/services/presentation/components/serviceVariables.test.js";
 import "../src/modules/services/presentation/components/servicesNavCount.test.js";
 import "../src/modules/services/presentation/components/servicesPage.test.js";
 import "../src/modules/services/presentation/components/servicesRuntime.test.js";

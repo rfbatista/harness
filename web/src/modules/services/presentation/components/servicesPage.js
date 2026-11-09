@@ -126,7 +126,7 @@ export const servicesPage = ({ gateway, clock = systemClock, timers = globalThis
     /** The open log's service, for its header. */
     get logView() {
       const s = this.services.find((x) => x.id === this.logId);
-      return s ? { id: s.id, name: s.name, status: statusView(s), runLine: runLine(s.run) } : null;
+      return s ? { id: s.id, name: s.name, status: statusView(s), runLine: runLine(s.run), runId: s.run?.id ?? "" } : null;
     },
     /** The ids to draw a viewer for: one, so a new id makes a new viewer. */
     get logIds() {

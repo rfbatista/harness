@@ -3,6 +3,7 @@
 import { systemClock } from "../../../shared/infrastructure/clock.js";
 import { serviceForm } from "./components/serviceForm.js";
 import { serviceLog } from "./components/serviceLog.js";
+import { serviceVariables } from "./components/serviceVariables.js";
 import { servicesNavCount } from "./components/servicesNavCount.js";
 import { servicesPage } from "./components/servicesPage.js";
 import { servicesRuntime } from "./components/servicesRuntime.js";
@@ -15,6 +16,7 @@ export function registerServices(Alpine, deps) {
   Alpine.data("servicesPage", servicesPage({ gateway: deps.gateway, clock: deps.clock ?? systemClock, prefs: deps.prefs }));
   Alpine.data("serviceForm", serviceForm({ gateway: deps.gateway }));
   Alpine.data("serviceLog", serviceLog({ gateway: deps.gateway, clock: deps.clock ?? systemClock }));
+  Alpine.data("serviceVariables", serviceVariables({ gateway: deps.gateway }));
   Alpine.data("servicesNavCount", servicesNavCount({ gateway: deps.gateway }));
   Alpine.data("servicesRuntime", servicesRuntime(deps));
 }
