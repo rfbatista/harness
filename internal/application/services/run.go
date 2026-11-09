@@ -35,7 +35,10 @@ type run struct {
 // prepared is what a start works out before it creates the run.
 type prepared struct {
 	where domain.ServiceWhere
-	env   []string
+	// base and subdir split where.Dir into the run worktree and the
+	// subfolder below it; subdir is "" for none.
+	base, subdir string
+	env          []string
 	// display is the command line the log names; notes are more [harness]
 	// lines (never an env value).
 	display string
@@ -134,6 +137,10 @@ func (s *Service) launch(ctx context.Context, r *run, svc *domain.Service, runne
 		}
 	}
 	if fi, err := os.Stat(p.where.Dir); err != nil || !fi.IsDir() {
+		if p.subdir != "" && dirExists(p.base) {
+			s.fail(r, lg, "subfolder "+strconv.Quote(p.subdir)+" does not exist in "+p.base)
+			return
+		}
 		s.fail(r, lg, "working directory "+p.where.Dir+" does not exist")
 		return
 	}
@@ -321,6 +328,7 @@ func (s *Service) prepare(ctx context.Context, svc *domain.Service, opts ports.S
 		}
 	}
 	if repo != nil && p.where.Dir != "" && svc.Command != nil && svc.Command.Subdir != "" {
+		p.base, p.subdir = p.where.Dir, svc.Command.Subdir
 		p.where.Dir = filepath.Join(p.where.Dir, svc.Command.Subdir)
 	}
 	p.env, p.notes, err = s.runEnv(ctx, svc)
@@ -454,4 +462,9 @@ func withoutShimDirs(path string) string {
 		keep = append(keep, dir)
 	}
 	return strings.Join(keep, string(os.PathListSeparator))
+}
+
+func dirExists(dir string) bool {
+	fi, err := os.Stat(dir)
+	return err == nil && fi.IsDir()
 }

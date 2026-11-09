@@ -317,10 +317,18 @@ func TestServicesRun_RestartStopsThenStartsAndClearsTheLog(t *testing.T) {
 
 func TestServicesRun_AMissingWorkingDirectoryFailsWithAOneLineError(t *testing.T) {
 	f := newServicesFixture(t, services.Options{})
+	sub := filepath.Join(f.repoDir(), "no/such/dir")
+	if err := os.MkdirAll(sub, 0o755); err != nil {
+		t.Fatal(err)
+	}
 	in := commandInput("web")
 	in["repository_id"] = f.repoID
 	in["command"] = map[string]any{"line": "true", "subdir": "no/such/dir"}
 	id := f.createID(in)
+	// The folder goes away after the save.
+	if err := os.RemoveAll(filepath.Join(f.repoDir(), "no")); err != nil {
+		t.Fatal(err)
+	}
 
 	code, out := f.operate("start_service", id)
 	if code != 200 {
@@ -328,19 +336,19 @@ func TestServicesRun_AMissingWorkingDirectoryFailsWithAOneLineError(t *testing.T
 	}
 	svc := out["service"].(map[string]any)
 	run := svc["run"].(map[string]any)
-	dir := filepath.Join(f.repoDir(), "no/such/dir")
-	if svc["status"] != "failed" || run["error"] != "working directory "+dir+" does not exist" || run["exit_code"] != nil || run["ended_at"] == "" {
+	want := `subfolder "no/such/dir" does not exist in ` + f.repoDir()
+	if svc["status"] != "failed" || run["error"] != want || run["exit_code"] != nil || run["ended_at"] == "" {
 		t.Fatalf("service = %v", svc)
 	}
 	if n, _ := f.svc.RunningServiceCount(context.Background(), f.projectID); n != 0 {
 		t.Fatalf("a failed run does not count: %d", n)
 	}
-	if !strings.HasSuffix(f.logText(id), "[harness] failed: working directory "+dir+" does not exist\n") {
+	if !strings.HasSuffix(f.logText(id), "[harness] failed: "+want+"\n") {
 		t.Fatalf("log = %q", f.logText(id))
 	}
 
 	// A failed service starts again.
-	if err := os.MkdirAll(dir, 0o755); err != nil {
+	if err := os.MkdirAll(sub, 0o755); err != nil {
 		t.Fatal(err)
 	}
 	_, out = f.operate("start_service", id)
@@ -348,6 +356,58 @@ func TestServicesRun_AMissingWorkingDirectoryFailsWithAOneLineError(t *testing.T
 		t.Fatalf("restart of a failed service = %v", out)
 	}
 	f.awaitStatus(id, "exited")
+}
+
+// A command typed into the subfolder field (the reported bug) is refused at
+// the save, not at every start.
+func TestServicesRun_ASubfolderThatIsNotAFolderIsRefusedAtSave(t *testing.T) {
+	f := newServicesFixture(t, services.Options{})
+	if err := os.MkdirAll(filepath.Join(f.repoDir(), "cmd/web"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(f.repoDir(), "afile"), nil, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	input := func(name, sub string) map[string]any {
+		in := commandInput(name)
+		in["repository_id"] = f.repoID
+		in["command"] = map[string]any{"line": "true", "subdir": sub}
+		return in
+	}
+
+	for _, sub := range []string{"npm run dev", "afile", "no/such"} {
+		code, out := f.create(input("bad", sub))
+		c, msg := errorOf(out)
+		want := `command.subdir: "` + sub + `" is not a folder in api's main checkout`
+		if code != 400 || c != "INVALID_INPUT" || msg != want {
+			t.Fatalf("create with %q = %d %v", sub, code, out)
+		}
+	}
+	if _, out := f.call("GET", "/api/list_services?project_id="+f.projectID, nil); len(out["services"].([]any)) != 0 {
+		t.Fatalf("a refused save stores nothing: %v", out)
+	}
+
+	for _, sub := range []string{"", "cmd/web"} {
+		if code, out := f.create(input("ok-"+strings.ReplaceAll(sub, "/", "-"), sub)); code != 200 {
+			t.Fatalf("create with %q = %d %v", sub, code, out)
+		}
+	}
+
+	id := f.createID(input("edit", "cmd"))
+	code, out := f.call("POST", "/api/update_service", map[string]any{"service_id": id, "service": input("edit", "npm run dev")})
+	if c, _ := errorOf(out); code != 400 || c != "INVALID_INPUT" {
+		t.Fatalf("update to a missing subfolder = %d %v", code, out)
+	}
+	if got := f.service(id)["command"].(map[string]any)["subdir"]; got != "cmd" {
+		t.Fatalf("a refused update changes nothing: %v", got)
+	}
+
+	// No repository: nothing to check.
+	loose := commandInput("loose")
+	loose["command"] = map[string]any{"line": "true", "subdir": "whatever"}
+	if code, out := f.create(loose); code != 200 {
+		t.Fatalf("no repository = %d %v", code, out)
+	}
 }
 
 func TestServicesRun_AServiceWithNoRepositoryRunsInItsOwnFolder(t *testing.T) {
