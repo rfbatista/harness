@@ -1254,10 +1254,11 @@ func newPullRequestsService(
 	cat catalog.Catalog,
 	creds *gitcredentials.Service,
 	fetcher *workspaces.OriginFetcher,
+	pushes ports.RecordedPushStore,
 ) *workspaces.PullRequests {
 	svc := workspaces.NewPullRequests(workspaces.PullRequestDeps{
 		Workspaces: ws, Repositories: repos, History: history, Git: git, Host: host, Store: store,
-		Sessions: sessions, Tickets: plan, Feed: changeSinks{orch, merges}, Auth: creds, Fetcher: fetcher,
+		Sessions: sessions, Tickets: plan, Feed: changeSinks{orch, merges}, Auth: creds, Fetcher: fetcher, Pushes: pushes,
 	})
 	svc.Subscribe(cat.Bus)
 	lc.Append(fx.Hook{OnStop: func(context.Context) error {

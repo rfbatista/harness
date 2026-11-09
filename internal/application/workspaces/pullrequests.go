@@ -3,6 +3,7 @@ package workspaces
 import (
 	"context"
 	"errors"
+	"log/slog"
 	"strconv"
 	"strings"
 	"sync"
@@ -46,6 +47,9 @@ type PullRequestDeps struct {
 	// Fetcher is the fetch of origin a base refresh runs, shared with the
 	// worktree git state; nil builds one over Git and Auth.
 	Fetcher *OriginFetcher
+	// Pushes keeps the push that opens a pull request, so the after-turn
+	// check does not take it for a bypass; nil keeps none.
+	Pushes ports.RecordedPushStore
 	// Now is the clock the refresh rate is measured with; nil is time.Now.
 	Now func() time.Time
 }
@@ -166,6 +170,31 @@ func (s *PullRequests) compareRef(ctx context.Context, root, base string) (ref s
 		return r, false
 	}
 	return "", false
+}
+
+// recordPush keeps the push of the workspace's branch to origin that opening a
+// pull request made, by the person, with the session that runs in it.
+func (s *PullRequests) recordPush(ctx context.Context, ws *domain.Workspace) {
+	if s.d.Pushes == nil || s.d.History == nil {
+		return
+	}
+	st, err := s.d.History.Status(ctx, ws.Path)
+	if err != nil {
+		return
+	}
+	sessionID := ""
+	if s.d.Sessions != nil {
+		if found, err := s.d.Sessions.Query(ctx, ports.SessionFilter{WorkspaceID: ws.ID}); err == nil && len(found) > 0 {
+			sessionID = found[0].ID
+		}
+	}
+	err = s.d.Pushes.Record(ctx, ports.RecordedPush{
+		RepositoryID: ws.RepositoryID, SessionID: sessionID, Branch: ws.Branch, Remote: "origin", RemoteBranch: ws.Branch,
+		Commit: st.Head, At: s.d.Now(), By: domain.PushedByPerson,
+	})
+	if err != nil {
+		slog.Warn("push not recorded", "branch", ws.Branch, "err", err)
+	}
 }
 
 func (s *PullRequests) ahead(ctx context.Context, root, ref, head string) int {
@@ -494,6 +523,7 @@ func (s *PullRequests) CreatePullRequest(ctx context.Context, req ports.CreatePu
 		return nil, domain.PullRequestError(domain.CodePRPushFailed, "pushing "+t.ws.Branch+" to origin failed: "+err.Error())
 	}
 	s.d.Auth.Used(op.Push.ID)
+	s.recordPush(ctx, t.ws)
 
 	hostCtx, cancel := context.WithTimeout(ctx, hostTimeout)
 	defer cancel()
