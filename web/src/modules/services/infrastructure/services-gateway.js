@@ -1,7 +1,7 @@
 // ServicesGateway over the harness HTTP API.
 
 import { Codes, StructuredError } from "../../../shared/domain/errors.js";
-import { toEvent, toLogEvent, toLogRead, toSeed, toService, toServiceList } from "./dto.js";
+import { toEvent, toLogEvent, toLogRead, toRunVariables, toRunWorktrees, toSeed, toService, toServiceList } from "./dto.js";
 
 /** @returns {import("../domain/ports.js").ServicesSettings} */
 export function toSettings(body) {
@@ -33,8 +33,8 @@ export function servicesGateway(api, feed) {
     async deleteService(serviceId) {
       await api.post("/delete_service", { service_id: serviceId });
     },
-    async startService(serviceId) {
-      const body = await api.post("/start_service", { service_id: serviceId });
+    async startService(serviceId, worktree = "") {
+      const body = await api.post("/start_service", worktree === "" ? { service_id: serviceId } : { service_id: serviceId, worktree });
       return { service: toService(body?.service), alreadyRunning: body?.already_running === true };
     },
     async stopService(serviceId) {
@@ -42,6 +42,12 @@ export function servicesGateway(api, feed) {
     },
     async restartService(serviceId) {
       return toService((await api.post("/restart_service", { service_id: serviceId }))?.service);
+    },
+    async listRunWorktrees(serviceId) {
+      return toRunWorktrees(await api.get("/list_service_run_worktrees", { service_id: serviceId }));
+    },
+    async getRunVariables(serviceId) {
+      return toRunVariables(await api.get("/get_run_variables", { service_id: serviceId }));
     },
     async readLog(serviceId, offset) {
       return toLogRead(await api.get("/read_service_log", { service_id: serviceId, offset: offset === undefined ? undefined : String(offset) }));

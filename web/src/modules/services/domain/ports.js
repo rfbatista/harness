@@ -9,7 +9,7 @@
  */
 
 /**
- * @typedef {object} Service  the API's service, mapped (infrastructure/dto.js); `run` keeps the API's field names
+ * @typedef {object} Service  the API's service, mapped (infrastructure/dto.js); `run` keeps the API's field names (worktree_key, overrides: [{name, by}]), see the contract's Run
  * @property {string} id
  * @property {string} projectId
  * @property {string} name
@@ -21,6 +21,14 @@
  * @property {{ ref: string, args: string[], ports: { host: number, container: number, protocol: "tcp" | "udp" }[] } | null} image
  * @property {"stopped" | "starting" | "running" | "exited" | "failed"} status
  * @property {object | null} run
+ */
+
+/**
+ * @typedef {import("../../runs/domain/run.js").RunWorktree} RunWorktree  a run worktree of a command service (list_service_run_worktrees): key "main" or "session:<id>"
+ *
+ * @typedef {object} RunVariables  a get_run_variables answer
+ * @property {string} runId  "" for a service that never ran
+ * @property {{ name: string, value: string, source: "repository_env" | "service" | "override", by: string }[]} variables  sorted by name; values are the person's to see, never stored or logged
  */
 
 /**
@@ -57,8 +65,11 @@
  *           `input` is the API's ServiceInput. Rejects with INVALID_INPUT naming the field, SERVICE_NAME_TAKEN or REPOSITORY_NOT_FOUND.
  * @property {(serviceId: string, input: object) => Promise<{ service: Service, restartNeeded: boolean }>} updateService
  * @property {(serviceId: string) => Promise<void>} deleteService  Rejects with SERVICE_RUNNING while it runs.
- * @property {(serviceId: string) => Promise<{ service: Service, alreadyRunning: boolean }>} startService
- *           Rejects with SANDBOX_UNAVAILABLE or RUNTIME_UNAVAILABLE when nothing was started.
+ * @property {(serviceId: string, worktree?: string) => Promise<{ service: Service, alreadyRunning: boolean }>} startService
+ *           `worktree` is a run worktree key; sent only when given (the server reads none as the main checkout).
+ *           Rejects with SANDBOX_UNAVAILABLE or RUNTIME_UNAVAILABLE when nothing was started, WORKTREE_NOT_AVAILABLE when the worktree is gone.
+ * @property {(serviceId: string) => Promise<RunWorktree[]>} listRunWorktrees  the main checkout first, then session worktrees; [] for an image service or one with no repository
+ * @property {(serviceId: string) => Promise<RunVariables>} getRunVariables
  * @property {(serviceId: string) => Promise<Service>} stopService
  * @property {(serviceId: string) => Promise<Service>} restartService
  * @property {(serviceId: string, offset?: number) => Promise<LogRead>} readLog
