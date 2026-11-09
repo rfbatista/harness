@@ -41,6 +41,7 @@ export const syncPopover = ({ store, actions, now = () => new Date() }) => () =>
       confirming: this.confirming,
       pushFailure: store.pushFailure,
       fetchFailure: store.fetchFailure,
+      branches: store.branches,
     });
   },
   get shown() {
@@ -69,6 +70,16 @@ export const syncPopover = ({ store, actions, now = () => new Date() }) => () =>
   openPopover() {
     this.popoverOpen = true;
     this.$dispatch("dialog-open", { id: POPOVER_ID, anchor: document.getElementById(BUTTON_ID) });
+  },
+  /** A session row's "N branches" link: open at that session's Branches section. */
+  showBranches(event) {
+    const id = event?.detail?.sessionId;
+    if (!this.popoverOpen) this.openPopover();
+    this.$nextTick(() => {
+      const section = [...document.querySelectorAll("#task-git [data-branches-for]")].find((el) => el.dataset.branchesFor === id);
+      section?.scrollIntoView?.({ block: "nearest" });
+      section?.focus?.();
+    });
   },
   /** The dialog closed (Esc, Close or a press outside). */
   popoverClosed(event) {

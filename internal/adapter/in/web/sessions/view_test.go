@@ -108,7 +108,7 @@ func TestSeedIsNeverNull(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if string(b) != `{"project_id":"p1","ticket_id":"t1","sessions":[],"agent_names":{},"repository_names":{},"artifacts":[],"tasks":[],"git_states":[],"interviews":{}}` {
+	if string(b) != `{"project_id":"p1","ticket_id":"t1","sessions":[],"agent_names":{},"repository_names":{},"artifacts":[],"tasks":[],"git_states":[],"session_branches":[],"interviews":{}}` {
 		t.Errorf("seed = %s", b)
 	}
 	if !v.Empty() {

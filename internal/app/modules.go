@@ -50,6 +50,7 @@ import (
 	"operators-mcp/internal/application/archrules"
 	"operators-mcp/internal/application/artifacts"
 	"operators-mcp/internal/application/branchgate"
+	"operators-mcp/internal/application/branchwatch"
 	"operators-mcp/internal/application/execution"
 	"operators-mcp/internal/application/gitcredentials"
 	"operators-mcp/internal/application/keychainpath"
@@ -101,6 +102,7 @@ var PersistenceModule = fx.Module("persistence",
 		asPort(sqlite.NewArchitectureRecordRepository, new(ports.ArchitectureRecordStore)),
 		asPort(sqlite.NewArchitectureRuleEventRepository, new(ports.ArchitectureRuleEventStore)),
 		asPort(sqlite.NewBranchRequestRepository, new(ports.BranchRequestStore)),
+		asPort(sqlite.NewBranchWatchRepository, new(ports.BranchWatchStore)),
 		asPort(sqlite.NewRecordedPushRepository, new(ports.PushRecords)),
 		asPort(sqlite.NewDesignSystemRepository, new(ports.DesignSystemStore)),
 		asPort(sqlite.NewDesignProposalRepository, new(ports.DesignProposalStore)),
@@ -455,6 +457,7 @@ var AgentRuntimeModule = fx.Module("agentruntime",
 		newOrchestrationService,
 		newArchitectureRules,
 		newBranchGate,
+		newBranchWatch,
 		platformSandboxDriver,
 		platformSandboxViolations,
 		newSandboxSettings,
@@ -471,7 +474,7 @@ var AgentRuntimeModule = fx.Module("agentruntime",
 		newPersonTerminals,
 	),
 	fx.Invoke(registerRuntimeShutdown, registerServerSessions, bindVirtualShells, bindWorkspaceRemovals, bindFilesRootFeed, bindSandboxSettings,
-		bindAgentReadiness, func(*archrules.Service) {}, restoreBranchGate),
+		bindAgentReadiness, func(*archrules.Service) {}, restoreBranchGate, func(*branchwatch.Service) {}),
 )
 
 // TaskChannelModule wires the architect channel: its tables, the service,
@@ -670,7 +673,7 @@ func newServicesModule(lc fx.Lifecycle, cfg Config, db *gorm.DB, cat catalog.Cat
 	}
 	svc := services.New(sqlite.NewServiceRepository(db), cat.Projects, cat.Projects, services.Options{
 		Instance: instance,
-		LogDir: logDir, FolderDir: folderDir, Sandbox: sandbox, Driver: sandboxDriver(orch), LookPath: exec.LookPath,
+		LogDir:   logDir, FolderDir: folderDir, Sandbox: sandbox, Driver: sandboxDriver(orch), LookPath: exec.LookPath,
 		Allow: sandboxAllow(orch, sandbox), Checkouts: func(projectID string) []string { return projectCheckouts(cat.Projects, projectID) },
 		Runners: map[domain.ServiceKind]ports.ServiceProcessRunner{
 			domain.ServiceKindCommand: commandrunner.Runner{}, domain.ServiceKindImage: containerrunner.Runner{},
@@ -898,6 +901,17 @@ func newBranchGate(cfg Config, cat catalog.Catalog, sessions ports.SessionReposi
 			}
 			return ""
 		},
+	})
+	svc.Subscribe(cat.Bus)
+	return svc
+}
+
+// newBranchWatch keeps each session's Branches list and checks, after every
+// agent turn, for branches and pushes no branch request explains (ADR 0070).
+func newBranchWatch(cat catalog.Catalog, sessions ports.SessionRepository, ws ports.WorkspaceRepository, repos ports.RepositoryRepository, requests ports.BranchRequestStore, store ports.BranchWatchStore, pushes ports.PushRecords, evidence ports.GitBranchEvidence, git ports.GitWorktreeReader, orch *orchestration.Service) *branchwatch.Service {
+	svc := branchwatch.NewService(branchwatch.Deps{
+		Sessions: sessions, Workspaces: ws, Repositories: repos, Requests: requests, Store: store, Pushes: pushes,
+		Evidence: evidence, Git: git, Events: cat.Bus, Feed: orch,
 	})
 	svc.Subscribe(cat.Bus)
 	return svc
@@ -1236,6 +1250,7 @@ var WorkspacesModule = fx.Module("workspaces",
 		asPort(githubapi.New, new(ports.CodeHost)),
 		asPort(newGitCode, new(ports.GitCode)),
 		asPort(newGitCode, new(ports.GitWorktreeReader)),
+		asPort(newGitCode, new(ports.GitBranchEvidence)),
 		asPort(filesystem.NewWorktreeFiles, new(ports.WorktreeFiles)),
 		newWorkspacesService,
 		newPullRequestsService,
@@ -1373,10 +1388,11 @@ func newPullRequestsService(
 	cat catalog.Catalog,
 	creds *gitcredentials.Service,
 	fetcher *workspaces.OriginFetcher,
+	pushes ports.PushRecords,
 ) *workspaces.PullRequests {
 	svc := workspaces.NewPullRequests(workspaces.PullRequestDeps{
 		Workspaces: ws, Repositories: repos, History: history, Git: git, Host: host, Store: store,
-		Sessions: sessions, Tickets: plan, Feed: changeSinks{orch, merges}, Auth: creds, Fetcher: fetcher,
+		Sessions: sessions, Tickets: plan, Feed: changeSinks{orch, merges}, Auth: creds, Fetcher: fetcher, Pushes: pushes,
 	})
 	svc.Subscribe(cat.Bus)
 	lc.Append(fx.Hook{OnStop: func(context.Context) error {

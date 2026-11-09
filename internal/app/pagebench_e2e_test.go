@@ -66,7 +66,6 @@ func benchmarkRows(t *testing.T) []benchRow {
 	return rows
 }
 
-
 // The benchmark prints a row per project page and one more per page as a
 // fragment (the click from another page), each with its breakdown.
 func TestThePageBenchmarkMeasuresEveryProjectPage(t *testing.T) {

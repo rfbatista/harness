@@ -179,6 +179,9 @@ type Seed struct {
 	// GitStates are the sessions' worktrees' git state, in the session list's
 	// order, as GET /api/list_worktree_git_states answers them. Never null.
 	GitStates []domain.GitState `json:"git_states"`
+	// SessionBranches are the sessions' Branches lists, as GET
+	// /api/list_session_branches answers them. Never null.
+	SessionBranches []domain.SessionBranches `json:"session_branches"`
 	// Interviews are the sessions' interviews, by session id, each as
 	// GET /api/sessions/{id}/interviews answers them: the seed of the
 	// interview panel. Never null; empty when they were not read.
@@ -555,7 +558,7 @@ func NewPageView(frame shell.Frame, project *domain.Project, task *domain.Ticket
 		Summary:     summary(list),
 		Groups:      views,
 		Seed: Seed{ProjectID: project.ID, Sessions: list, AgentNames: names, RepositoryNames: repoNames,
-			Artifacts: []*domain.Artifact{}, Tasks: []TaskLink{}, GitStates: []domain.GitState{}, Interviews: map[string]*domain.InterviewList{}},
+			Artifacts: []*domain.Artifact{}, Tasks: []TaskLink{}, GitStates: []domain.GitState{}, SessionBranches: []domain.SessionBranches{}, Interviews: map[string]*domain.InterviewList{}},
 		NewSession: form,
 	}
 	if task != nil {

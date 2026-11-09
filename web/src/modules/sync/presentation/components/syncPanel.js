@@ -10,6 +10,7 @@
 // wiring's (they need a browser); the open state is never stored.
 
 import { syncChip } from "./syncChip.js";
+import { branchesOf } from "../popoverView.js";
 import { fetchedPhrase, panelOf } from "../view.js";
 
 /**
@@ -30,6 +31,22 @@ export const syncPanel = (deps) => (workspaceId = "", projectId = "") => {
     },
     destroy() {
       unfollow();
+    },
+    /** The session's Branches section: its rows, from the sync store's list. */
+    get branches() {
+      return branchesOf(store.branches[this.gitState?.sessionId ?? ""]);
+    },
+    get branchRows() {
+      return this.branches.rows;
+    },
+    get branchesShown() {
+      return this.branches.shown;
+    },
+    get branchesSessionId() {
+      return this.gitState?.sessionId ?? "";
+    },
+    get branchesTitle() {
+      return this.branches.label;
     },
     /** The id of the panel's dialog (`.popup`), the one its chip opens. */
     get dialogId() {
@@ -148,6 +165,7 @@ export const syncPanel = (deps) => (workspaceId = "", projectId = "") => {
     },
     show() {
       this.open = true;
+      actions.ensureBranches(this.gitState?.sessionId);
     },
     close() {
       this.open = false;

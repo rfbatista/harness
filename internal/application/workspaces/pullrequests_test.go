@@ -112,6 +112,8 @@ type fakeHistory struct {
 	changes    int
 	missing    bool
 	rootBranch string
+	// head is the worktree's HEAD commit.
+	head string
 }
 
 func (h *fakeHistory) Log(context.Context, string, ports.HistoryQuery) ([]domain.Commit, error) {
@@ -129,7 +131,7 @@ func (h *fakeHistory) Status(_ context.Context, dir string) (*domain.WorktreeSta
 	if h.missing {
 		return nil, &domain.StructuredError{Code: "WORKSPACE_MISSING", Message: "gone"}
 	}
-	st := &domain.WorktreeStatus{Changes: []domain.WorkingChange{}}
+	st := &domain.WorktreeStatus{Head: h.head, Changes: []domain.WorkingChange{}}
 	for i := range h.changes {
 		st.Changes = append(st.Changes, domain.WorkingChange{Path: fmt.Sprintf("f%d", i)})
 	}
@@ -897,5 +899,72 @@ func TestTheBackgroundRefreshNeedsAStoredToken(t *testing.T) {
 	}
 	if _, gets, _ := f.host.Calls(); gets != 0 {
 		t.Fatal("RefreshNow asked the host without a stored token")
+	}
+}
+
+// pushRecorder is ports.PushRecords in memory.
+type pushRecorder struct {
+	mu   sync.Mutex
+	list []domain.RecordedPush
+}
+
+func (r *pushRecorder) RecordPush(_ context.Context, p domain.RecordedPush) error {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.list = append(r.list, p)
+	return nil
+}
+
+func (r *pushRecorder) PushesOf(_ context.Context, sessionID string) ([]domain.RecordedPush, error) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	var out []domain.RecordedPush
+	for _, p := range r.list {
+		if p.SessionID == sessionID {
+			out = append(out, p)
+		}
+	}
+	return out, nil
+}
+
+func (r *pushRecorder) PushesIn(context.Context, string, time.Time) ([]domain.RecordedPush, error) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	return append([]domain.RecordedPush(nil), r.list...), nil
+}
+
+// Opening a pull request pushes the workspace's branch to origin, and that push
+// is recorded once, by the person, with the commit it carried and the session
+// that runs in the workspace, so the after-turn check does not take it for a
+// bypass (ADR 0071). A create that is refused before the push records nothing.
+func TestCreateRecordsItsPushOnceForTheSession(t *testing.T) {
+	f := newPRFixture(t)
+	f.history.head = "0123456789abcdef0123456789abcdef01234567"
+	rec := &pushRecorder{}
+	deps := f.deps
+	deps.Pushes = rec
+	svc := workspaces.NewPullRequests(deps)
+	t.Cleanup(svc.Close)
+
+	f.history.setAhead("refs/remotes/origin/main", 0)
+	if _, err := svc.CreatePullRequest(context.Background(), ports.CreatePullRequest{WorkspaceID: f.ws.ID, Title: "t"}); err == nil {
+		t.Fatal("a pull request with no commits was opened")
+	}
+	if len(rec.list) != 0 {
+		t.Fatalf("a refused create recorded %+v", rec.list)
+	}
+
+	f.history.setAhead("refs/remotes/origin/main", 2)
+	if _, err := svc.CreatePullRequest(context.Background(), ports.CreatePullRequest{WorkspaceID: f.ws.ID, Title: "t"}); err != nil {
+		t.Fatal(err)
+	}
+	got, _ := rec.PushesOf(context.Background(), "s1")
+	if len(got) != 1 {
+		t.Fatalf("recorded pushes = %+v, want exactly one", got)
+	}
+	p := got[0]
+	if p.Branch != "agent/x" || p.Remote != "origin" || p.RemoteBranch != "agent/x" || p.Commit != f.history.head ||
+		p.By != domain.PushByPerson || p.RequestID != "" || p.RepositoryID != f.ws.RepositoryID || p.At.IsZero() {
+		t.Errorf("recorded %+v", p)
 	}
 }

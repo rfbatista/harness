@@ -315,6 +315,8 @@ func NewRouter(h *Handler, opts ...Option) *echo.Echo {
 	g.POST(strings.TrimPrefix(BranchGatePushedRoute, "/api"), h.handleBranchGatePushed)
 	// the person's side of it: the requests, and their answers
 	g.GET("/branch_requests", h.handleBranchRequests)
+	g.GET("/session_branches", h.handleSessionBranches)
+	g.GET("/list_session_branches", h.handleListSessionBranches)
 	g.POST("/branch_requests/:id/answer", h.handleAnswerBranchRequest)
 
 	// the architect channel: what passes between a task's architect and its

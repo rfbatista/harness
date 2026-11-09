@@ -26,6 +26,7 @@ export const syncWatch = ({ gateway, actions }) => () => {
       }
       this.projectId = seed.projectId;
       for (const state of seed.states) actions.keep(state);
+      for (const list of seed.sessionBranches) actions.keepBranches(list);
       unfollow = actions.watch(this.projectId);
     },
 

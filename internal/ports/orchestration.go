@@ -113,6 +113,10 @@ type ProjectChange struct {
 	// BranchRequest is a branch request as it is after being filed, answered,
 	// used or expired: the request itself on the wire.
 	BranchRequest *BranchRequestChange `json:"branch_request,omitempty"`
+	// SessionBranches is a session's Branches list whenever it changes, and
+	// UnattributedBranch a finding no evidence ties to one session.
+	SessionBranches    *SessionBranchesChange    `json:"session_branches,omitempty"`
+	UnattributedBranch *UnattributedBranchChange `json:"unattributed_branch,omitempty"`
 	// ArchitectureRuleEvent is a rule that failed in a session.
 	ArchitectureRuleEvent *ArchitectureRuleEventChange `json:"architecture_rule_event,omitempty"`
 	// DesignSystemSaved says a design system got a new version.
@@ -136,6 +140,19 @@ type ProjectChange struct {
 // the project's followers and is not on the wire.
 type BranchRequestChange struct {
 	*domain.BranchRequest
+	ProjectID string `json:"-"`
+}
+
+// SessionBranchesChange is a session's Branches list on the feed; ProjectID
+// routes it and is not on the wire.
+type SessionBranchesChange struct {
+	domain.SessionBranches
+	ProjectID string `json:"-"`
+}
+
+// UnattributedBranchChange is an unattributed finding on the feed.
+type UnattributedBranchChange struct {
+	domain.UnattributedBranch
 	ProjectID string `json:"-"`
 }
 
@@ -261,6 +278,10 @@ func (c ProjectChange) ProjectID() string {
 		return c.InstructionFileChanged.ProjectID
 	case c.BranchRequest != nil:
 		return c.BranchRequest.ProjectID
+	case c.SessionBranches != nil:
+		return c.SessionBranches.ProjectID
+	case c.UnattributedBranch != nil:
+		return c.UnattributedBranch.ProjectID
 	case c.ArchitectureRuleEvent != nil:
 		return c.ArchitectureRuleEvent.ProjectID
 	case c.SessionFilesRoot != nil:

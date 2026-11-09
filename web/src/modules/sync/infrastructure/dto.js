@@ -4,6 +4,7 @@
 // the pages' seeds, and its mapping to the domain.
 
 import { Codes, StructuredError } from "../../../shared/domain/errors.js";
+import { BRANCH_STATES } from "../domain/branches.js";
 import { UPSTREAM_STATES } from "../domain/gitState.js";
 
 const count = (n) => (Number.isInteger(n) && n > 0 ? n : 0);
@@ -105,16 +106,59 @@ export function toGitStateEvent(dto) {
   return toGitState(dto.git_state);
 }
 
+/** @returns {import("../domain/branches.js").SessionBranch} */
+function toBranch(dto) {
+  if (!dto || typeof dto.name !== "string" || dto.name === "") bad("branch without a name");
+  if (!BRANCH_STATES.includes(dto.state)) bad(`branch ${dto.name} has unknown state "${dto.state}"`);
+  const base = dto.base;
+  return Object.freeze({
+    name: dto.name,
+    isSessionBranch: dto.is_session_branch === true,
+    state: dto.state,
+    base: base ? Object.freeze({ ref: text(base.ref), ahead: count(base.ahead), behind: count(base.behind) }) : null,
+    pushed: (Array.isArray(dto.pushed) ? dto.pushed : []).map((p) =>
+      Object.freeze({ remote: text(p.remote), remoteBranch: text(p.remote_branch), at: time(p.at, `push of ${dto.name}: at`), by: text(p.by) }),
+    ),
+    requestIds: Array.isArray(dto.request_ids) ? dto.request_ids.filter((id) => typeof id === "string") : [],
+    flaggedAt: dto.flagged_at ? time(dto.flagged_at, `${dto.name}: flagged_at`) : null,
+  });
+}
+
+/** One session's Branches list: `{session_id, branches}`. */
+export function toSessionBranches(dto) {
+  if (!dto || typeof dto.session_id !== "string" || dto.session_id === "") bad("branches without a session_id");
+  return Object.freeze({ sessionId: dto.session_id, branches: (Array.isArray(dto.branches) ? dto.branches : []).map(toBranch) });
+}
+
+/** GET /api/session_branches → {"branches": [...]} for the session asked. */
+export function toSessionBranchesAnswer(sessionId, body) {
+  if (!body || !Array.isArray(body.branches)) bad("expected {branches: [...]}");
+  return toSessionBranches({ session_id: sessionId, branches: body.branches });
+}
+
+/** GET /api/list_session_branches → {"sessions": [{session_id, branches}]} */
+export function toTaskBranches(body) {
+  if (!body || !Array.isArray(body.sessions)) bad("expected {sessions: [...]}");
+  return body.sessions.map(toSessionBranches);
+}
+
+/** One feed message: the list it carries (`session_branches`), or null for any other kind. */
+export function toBranchesEvent(dto) {
+  if (!dto || typeof dto !== "object" || !dto.session_branches) return null;
+  return toSessionBranches(dto.session_branches);
+}
+
 /**
  * What the task page's `sessions-seed` carries for the chips: its project and
  * `git_states`, one GitState per session of the task that has a workspace (a
  * session page is a view of the same seed).
- * @returns {{ projectId: string, states: import("../domain/gitState.js").GitState[] }}
+ * @returns {{ projectId: string, states: import("../domain/gitState.js").GitState[], sessionBranches: ReturnType<typeof toSessionBranches>[] }}
  */
 export function toSeed(raw) {
   if (!raw || typeof raw !== "object") bad("expected a git state seed");
   const list = Array.isArray(raw.git_states) ? raw.git_states : [];
-  return { projectId: text(raw.project_id), states: list.map(toGitState) };
+  const branches = Array.isArray(raw.session_branches) ? raw.session_branches : [];
+  return { projectId: text(raw.project_id), states: list.map(toGitState), sessionBranches: branches.map(toSessionBranches) };
 }
 
 function bad(detail) {

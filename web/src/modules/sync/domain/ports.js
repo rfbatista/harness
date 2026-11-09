@@ -13,6 +13,10 @@
  *           Rejects with WORKSPACE_NOT_FOUND, INVALID_INPUT or UNAVAILABLE.
  * @property {(taskId: string, signal?: AbortSignal) => Promise<GitState[]>} listForTask
  *           GET /api/list_worktree_git_states, in the task page's session order.
+ * @property {(sessionId: string, signal?: AbortSignal) => Promise<{ sessionId: string, branches: import("./branches.js").SessionBranch[] }>} [branchesOf]
+ *           GET /api/session_branches: the session's Branches list, from stored state.
+ * @property {(taskId: string, signal?: AbortSignal) => Promise<Array<{ sessionId: string, branches: import("./branches.js").SessionBranch[] }>>} [branchesForTask]
+ *           GET /api/list_session_branches.
  * @property {(repositoryId: string) => Promise<{ fetchedAt: Date }>} fetchRemote
  *           POST /api/fetch_remote: git fetch origin --prune with the stored
  *           credential. Rejects with REPOSITORY_NOT_FOUND, NO_REMOTE,
@@ -23,7 +27,8 @@
  *           or PUSH_STALE (both carry error.details.state, a GitState) or PUSH_FAILED.
  * @property {(projectId: string,
  *             onState: (state: GitState) => void,
- *             onStatus: (status: FeedStatus) => void) => () => void} follow
+ *             onStatus: (status: FeedStatus) => void,
+ *             onBranches?: (list: { sessionId: string, branches: import("./branches.js").SessionBranch[] }) => void) => () => void} follow
  *           Every `git_state` of the project, until the returned function is
  *           called. Other feed messages are not delivered.
  * @property {(raw: unknown) => { projectId: string, states: GitState[] }} decodeSeed
