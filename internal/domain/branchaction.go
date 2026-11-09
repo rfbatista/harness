@@ -19,12 +19,12 @@ const (
 	BranchRemoteRemove BranchActionKind = "remote_remove"
 )
 
-// Gated says whether the branch gate asks the person about the kind. Remote
-// actions are recognised but pass through until the remote spec ticket switches
-// them on; a push waits on the person (ADR 0071).
+// Gated says whether the branch gate asks the person about the kind: every
+// branch action, every push and every change of where a push goes (ADR 0071).
 func (k BranchActionKind) Gated() bool {
 	switch k {
-	case BranchCreate, BranchSwitch, BranchRename, BranchDelete, BranchPush:
+	case BranchCreate, BranchSwitch, BranchRename, BranchDelete, BranchPush,
+		BranchRemoteAdd, BranchRemoteSetURL, BranchRemoteRename, BranchRemoteRemove:
 		return true
 	}
 	return false

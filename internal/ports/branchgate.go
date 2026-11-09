@@ -103,3 +103,23 @@ type PushRecords interface {
 	// PushesOf lists a session's recorded pushes, newest first.
 	PushesOf(ctx context.Context, sessionID string) ([]domain.RecordedPush, error)
 }
+
+// PushBranchInput is what the push_branch tool asks: the branch to push, the
+// remote it goes to ("origin" when empty) and the branch it lands on (the
+// branch's own name when empty).
+type PushBranchInput struct {
+	Branch       string
+	Remote       string
+	RemoteBranch string
+	Reason       string
+}
+
+// BranchPusher files a push branch request for an agent session and returns
+// at once (driving; ADR 0071). The person's answer, and after an approval the
+// result of the push the harness made, reach the session as a turn. It never
+// forces.
+//
+// Errors: INVALID_INPUT, BRANCH_NOT_FOUND, REMOTE_NOT_FOUND.
+type BranchPusher interface {
+	RequestPush(ctx context.Context, sessionID string, in PushBranchInput) (*domain.BranchRequest, error)
+}

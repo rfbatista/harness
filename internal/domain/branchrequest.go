@@ -2,6 +2,7 @@ package domain
 
 import (
 	"fmt"
+	"strings"
 	"time"
 )
 
@@ -68,7 +69,11 @@ type BranchRequest struct {
 // same kind, branch, start point, remote with its URL, and remote branch: a
 // push to another URL or under another name asks again.
 func (r BranchRequest) Matches(a BranchAction) bool {
-	if r.Action != a.Kind || r.Branch != a.Branch || strOr(r.NewName) != a.NewName {
+	newName := strOr(r.NewName)
+	if r.Action == BranchRemoteRename && r.Remote != nil {
+		newName = strOr(r.Remote.NewName)
+	}
+	if r.Action != a.Kind || r.Branch != a.Branch || newName != a.NewName {
 		return false
 	}
 	if startRef(r.StartPoint) != startRef(a.Start) {
@@ -78,7 +83,7 @@ func (r BranchRequest) Matches(a BranchAction) bool {
 	if r.Remote != nil {
 		remote, url = r.Remote.Name, r.Remote.URL
 	}
-	return remote == a.Remote && url == a.URL && strOr(r.RemoteBranch) == a.RemoteBranch
+	return remote == a.Remote && url == RedactURL(a.URL) && strOr(r.RemoteBranch) == a.RemoteBranch
 }
 
 // Label names what the request asks, for a line the person or the agent reads:
@@ -91,6 +96,12 @@ func (r BranchRequest) Label() string {
 			rb = *r.RemoteBranch
 		}
 		return fmt.Sprintf("push %s → %s/%s", r.Branch, r.Remote.Name, rb)
+	case (r.Action == BranchRemoteAdd || r.Action == BranchRemoteSetURL) && r.Remote != nil:
+		return fmt.Sprintf("%s %s %s", strings.ReplaceAll(string(r.Action), "_", " "), r.Remote.Name, r.Remote.URL)
+	case r.Action == BranchRemoteRename && r.Remote != nil && r.Remote.NewName != nil:
+		return fmt.Sprintf("remote rename %s → %s", r.Remote.Name, *r.Remote.NewName)
+	case r.Action == BranchRemoteRemove && r.Remote != nil:
+		return "remote remove " + r.Remote.Name
 	case r.Action == BranchRename && r.NewName != nil:
 		return fmt.Sprintf("%s %s → %s", r.Action, r.Branch, *r.NewName)
 	case r.Branch == "" && r.StartPoint != nil:

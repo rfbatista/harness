@@ -20,6 +20,7 @@ import (
 )
 
 var _ ports.BranchGate = (*Service)(nil)
+var _ ports.BranchPusher = (*Service)(nil)
 
 // Deps are the Service's collaborators.
 type Deps struct {
@@ -38,6 +39,12 @@ type Deps struct {
 	// branch was cut from. Either nil leaves the count out of the request.
 	Commits func(dir, branch, remote, remoteBranch, base string) (n int, known bool, err error)
 	BaseOf  func(sess *domain.Session) string
+	// DirOf is the directory the session's git runs in: its worktree.
+	DirOf func(sess *domain.Session) string
+	// Push makes the push of an approved push_branch request with the stored
+	// credential, never forced (the server's one push path, ADR 0071); nil
+	// answers every such request with a failed push.
+	Push func(ctx context.Context, sess *domain.Session, r domain.BranchRequest) error
 	// Waiter shows a session as waiting for approval; nil shows nothing.
 	Waiter ports.BranchRequestWaiter
 	// Turns delivers the person's answer to a session whose hook is gone, as
@@ -216,19 +223,27 @@ type filedRequest struct {
 
 // file stores a pending request for a, and shows the session as waiting.
 func (s *Service) file(ctx context.Context, sess *domain.Session, a domain.BranchAction, command, reason string) (filedRequest, error) {
+	via := "git"
+	if command == "push_branch" {
+		via = "push_branch"
+	}
 	r := &domain.BranchRequest{
 		SessionID: sess.ID, RepositoryID: sess.RepositoryID, SessionBranch: sess.Branch,
-		Action: a.Kind, Branch: a.Branch, StartPoint: a.Start, Command: command, Via: "git", Reason: reason,
+		Action: a.Kind, Branch: a.Branch, StartPoint: a.Start, Command: command, Via: via, Reason: reason,
 		State: domain.BranchRequestPending, RequestedAt: s.d.Now(),
 	}
 	if sess.TicketID != "" {
 		r.TaskID = &sess.TicketID
 	}
-	if a.NewName != "" {
+	r.Command = domain.RedactURL(r.Command)
+	if a.NewName != "" && a.Kind != domain.BranchRemoteRename {
 		r.NewName = &a.NewName
 	}
 	if a.Remote != "" || a.URL != "" {
-		r.Remote = &domain.BranchRemote{Name: a.Remote, URL: a.URL}
+		r.Remote = &domain.BranchRemote{Name: a.Remote, URL: domain.RedactURL(a.URL)}
+		if a.Kind == domain.BranchRemoteRename {
+			r.Remote.NewName = &a.NewName
+		}
 	}
 	if a.Kind == domain.BranchPush {
 		r.RemoteBranch = &a.RemoteBranch
@@ -332,11 +347,138 @@ func (s *Service) Answer(ctx context.Context, id, decision, note string) (*domai
 	if s.d.Waiter != nil {
 		s.d.Waiter.BranchRequestSettled(r.SessionID)
 	}
-	if !hookWaits && s.d.Turns != nil {
+	switch {
+	case r.Via == "push_branch" && r.State == domain.BranchRequestApproved:
+		// No hook waits on a push_branch request: the harness pushes, and the
+		// result is the turn.
+		go s.pushAndDeliver(*r)
+	case !hookWaits && s.d.Turns != nil:
 		// The hook that waited is gone (a restart): the answer is a new turn.
 		go s.deliver(*r)
 	}
 	return r, nil
+}
+
+// RequestPush implements ports.BranchPusher.
+func (s *Service) RequestPush(ctx context.Context, sessionID string, in ports.PushBranchInput) (*domain.BranchRequest, error) {
+	sess := s.d.Sessions.Get(sessionID)
+	if sess == nil {
+		return nil, &domain.StructuredError{Code: "SESSION_NOT_FOUND", Message: "no such session"}
+	}
+	branch, remote, remoteBranch := strings.TrimSpace(in.Branch), strings.TrimSpace(in.Remote), strings.TrimSpace(in.RemoteBranch)
+	if branch == "" {
+		return nil, invalidPush("branch is required")
+	}
+	if remote == "" {
+		remote = "origin"
+	}
+	if remoteBranch == "" {
+		remoteBranch = branch
+	}
+	// A refspec is not a name: force (+) and deletion (:) are refused outright.
+	for _, name := range []string{branch, remote, remoteBranch} {
+		if strings.ContainsAny(name, "+:*? \t\n") || strings.HasPrefix(name, "-") {
+			return nil, invalidPush(fmt.Sprintf("%q is not a plain branch or remote name: a push_branch never forces or deletes", name))
+		}
+	}
+	dir := ""
+	if s.d.DirOf != nil {
+		dir = s.d.DirOf(sess)
+	}
+	if dir == "" {
+		return nil, &domain.StructuredError{Code: "UNAVAILABLE", Message: "the session has no worktree to push from"}
+	}
+	if !s.d.Probe.Branch(dir, branch) {
+		return nil, &domain.StructuredError{Code: "BRANCH_NOT_FOUND", Message: "the repository has no branch " + branch}
+	}
+	url := s.d.Probe.RemoteURL(dir, remote)
+	if url == "" {
+		return nil, &domain.StructuredError{Code: "REMOTE_NOT_FOUND", Message: "the repository has no remote " + remote}
+	}
+	a := domain.BranchAction{Kind: domain.BranchPush, Branch: branch, Remote: remote, URL: url, RemoteBranch: remoteBranch, Dir: dir}
+	f, err := s.file(ctx, sess, a, "push_branch", in.Reason)
+	if err != nil {
+		return nil, err
+	}
+	// Via push_branch no hook waits.
+	s.mu.Lock()
+	delete(s.waiters, f.id)
+	s.mu.Unlock()
+	r, err := s.d.Requests.Get(ctx, f.id)
+	if err != nil || r == nil {
+		return nil, &domain.StructuredError{Code: "UNAVAILABLE", Message: "the push request could not be read back"}
+	}
+	return r, nil
+}
+
+func invalidPush(msg string) error {
+	return &domain.StructuredError{Code: "INVALID_INPUT", Message: msg}
+}
+
+// pushAndDeliver makes the push an approved push_branch request asks for, uses
+// the request up and tells the session how it went.
+func (s *Service) pushAndDeliver(r domain.BranchRequest) {
+	ctx := context.Background()
+	sess := s.d.Sessions.Get(r.SessionID)
+	var err error
+	switch {
+	case sess == nil:
+		err = &domain.StructuredError{Code: "SESSION_NOT_FOUND", Message: "the session is gone"}
+	case s.d.Push == nil:
+		err = &domain.StructuredError{Code: "UNAVAILABLE", Message: "pushing is not available"}
+	default:
+		err = s.d.Push(ctx, sess, r)
+	}
+	s.mu.Lock()
+	cur, getErr := s.d.Requests.Get(ctx, r.ID)
+	if getErr == nil && cur != nil && cur.State == domain.BranchRequestApproved {
+		cur.State = domain.BranchRequestUsed
+		if saveErr := s.d.Requests.Save(ctx, cur); saveErr == nil {
+			r = *cur
+		}
+	}
+	s.mu.Unlock()
+	s.announce(ctx, s.projectOf(r.SessionID), r)
+	if s.d.Turns == nil {
+		return
+	}
+	text := PushedTurn(r)
+	if err != nil {
+		text = PushFailedTurn(r, err)
+	}
+	if _, derr := s.d.Turns.Deliver(r.SessionID, "branch-request:"+r.ID, text, nil); derr != nil && errs.Code(derr) != "SESSION_NOT_RUNNING" {
+		slog.Warn("deliver the result of a push", "session", r.SessionID, "request", r.ID, "err", derr)
+	}
+}
+
+// PushedTurn is the turn the session gets once the harness pushed an approved
+// push_branch request (contract "Harness server ↔ Agent sessions — branch
+// gate" §5).
+func PushedTurn(r domain.BranchRequest) string {
+	remote, remoteBranch := "", r.Branch
+	if r.Remote != nil {
+		remote = r.Remote.Name
+	}
+	if r.RemoteBranch != nil {
+		remoteBranch = *r.RemoteBranch
+	}
+	commits := ""
+	if r.Commits != nil {
+		commits = fmt.Sprintf(", %d commits", *r.Commits)
+	}
+	return fmt.Sprintf("[branch request %s · pushed] %s → %s/%s%s.", r.ID, r.Branch, remote, remoteBranch, commits)
+}
+
+// PushFailedTurn is the turn the session gets when the push of an approved
+// push_branch request failed: the code, then git's reason or the credential
+// error naming the host.
+func PushFailedTurn(r domain.BranchRequest, err error) string {
+	reason := domain.RedactURL(err.Error())
+	if code := errs.Code(err); code != "" {
+		reason = strings.TrimPrefix(reason, code+": ")
+		return fmt.Sprintf("[branch request %s · push failed] %s: %s.", r.ID, code, reason)
+	}
+	return fmt.Sprintf("[branch request %s · push failed] PUSH_FAILED: %s.", r.ID, reason)
 }
 
 // deliver puts the person's answer into the session as a turn.

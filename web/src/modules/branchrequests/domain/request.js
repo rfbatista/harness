@@ -15,6 +15,10 @@
  * @property {string} branch
  * @property {string} newName
  * @property {{ kind: string, ref: string, commit: string } | null} startPoint
+ * @property {{ name: string, url: string, newName: string } | null} remote  push and remote actions
+ * @property {string} remoteBranch  push only
+ * @property {number | null} commits  push only: commits the remote branch does not have
+ * @property {string} via  git, or push_branch for the tool
  * @property {string} reason
  * @property {"pending" | "approved" | "denied" | "used" | "expired"} state
  * @property {string} note

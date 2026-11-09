@@ -128,6 +128,7 @@ templ BranchRequestCard() {
 	<article class="[ review ]" x-bind:id="card.anchor" data-branch-request x-bind:data-request-id="card.id">
 		<h3 tabindex="-1" data-branch-request-heading><span class="[ badge ]" data-tone="signal" data-branch-tag>Branch</span> <span x-text="card.title"></span></h3>
 		<p class="[ meta ]" x-text="card.startLine"></p>
+		<p class="[ meta ]" x-show="card.detailLine" x-text="card.detailLine"></p>
 		<p class="[ meta ]"><span x-text="card.sessionName"></span> · <span x-text="card.age"></span></p>
 		<p class="[ meta ]">Repository <span x-text="card.repository"></span> · session branch <span x-text="card.sessionBranch"></span></p>
 		<p class="[ body ]" x-show="card.reason" x-text="card.reason"></p>

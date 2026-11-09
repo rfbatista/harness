@@ -13,6 +13,7 @@ export function toRequest(dto) {
   const requestedAt = new Date(dto.requested_at);
   if (Number.isNaN(requestedAt.getTime())) bad(`${at} has no requested_at`);
   const start = dto.start_point;
+  const remote = dto.remote;
   return Object.freeze({
     id: dto.id,
     sessionId: dto.session_id ?? "",
@@ -23,6 +24,10 @@ export function toRequest(dto) {
     branch: dto.branch ?? "",
     newName: dto.new_name ?? "",
     startPoint: start ? Object.freeze({ kind: start.kind ?? "", ref: start.ref ?? "", commit: start.commit ?? "" }) : null,
+    remote: remote ? Object.freeze({ name: remote.name ?? "", url: remote.url ?? "", newName: remote.new_name ?? "" }) : null,
+    remoteBranch: dto.remote_branch ?? "",
+    commits: typeof dto.commits === "number" ? dto.commits : null,
+    via: dto.via ?? "git",
     reason: dto.reason ?? "",
     state: dto.state,
     note: dto.note ?? "",

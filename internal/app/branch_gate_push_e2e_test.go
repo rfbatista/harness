@@ -47,7 +47,10 @@ func TestAPushIsHeldAndOnceApprovedRunsAndIsRecordedAgainstItsRequest(t *testing
 	session := strings.TrimSpace(g.git("git rev-parse --abbrev-ref HEAD").stdout)
 	g.setup("commit -q --allow-empty -m one")
 
-	commits := func() int { n, _ := strconv.Atoi(strings.TrimSpace(g.git("git rev-list --count HEAD").stdout)); return n }()
+	commits := func() int {
+		n, _ := strconv.Atoi(strings.TrimSpace(g.git("git rev-list --count HEAD").stdout))
+		return n
+	}()
 	hook := g.askHook("git push origin "+session, "Publish the work")
 	req := g.pending(1)[0]
 	waits(t, hook)

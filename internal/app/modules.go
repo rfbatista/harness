@@ -780,13 +780,39 @@ func newArchitectureRules(cat catalog.Catalog, sessions ports.SessionRepository,
 }
 
 // newBranchGate decides the branch grants sessions' git shims ask for.
-func newBranchGate(cfg Config, cat catalog.Catalog, sessions ports.SessionRepository, requests ports.BranchRequestStore, pushes ports.PushRecords, workspaces ports.WorkspaceRepository, orch *orchestration.Service) *branchgate.Service {
+func newBranchGate(cfg Config, cat catalog.Catalog, sessions ports.SessionRepository, requests ports.BranchRequestStore, pushes ports.PushRecords, workspaces ports.WorkspaceRepository, worktreeGit ports.WorktreeGit, orch *orchestration.Service) *branchgate.Service {
 	publisher := gitcli.NewBranchPublisher()
+	probe := gitprobe.Probe{Git: cfg.GitBin}
 	svc := branchgate.NewService(branchgate.Deps{
-		Sessions: sessions, Requests: requests, Probe: gitprobe.Probe{Git: cfg.GitBin}, Waiter: orch, Turns: orch, Events: cat.Bus, Feed: orch,
+		Sessions: sessions, Requests: requests, Probe: probe, Waiter: orch, Turns: orch, Events: cat.Bus, Feed: orch,
 		Pushes: pushes,
 		Commits: func(dir, branch, remote, remoteBranch, base string) (int, bool, error) {
 			return publisher.CommitsToPush(context.Background(), dir, branch, remote, remoteBranch, base)
+		},
+		DirOf: func(sess *domain.Session) string {
+			if ws := workspaces.Get(context.Background(), sess.WorkspaceID); ws != nil {
+				return ws.Path
+			}
+			return ""
+		},
+		// The server's one push path, with the head the person saw approved.
+		Push: func(ctx context.Context, sess *domain.Session, r domain.BranchRequest) error {
+			ws := workspaces.Get(ctx, sess.WorkspaceID)
+			if ws == nil {
+				return &domain.StructuredError{Code: "WORKSPACE_NOT_FOUND", Message: "the session has no worktree"}
+			}
+			remote, remoteBranch := "origin", r.Branch
+			if r.Remote != nil {
+				remote = r.Remote.Name
+			}
+			if r.RemoteBranch != nil {
+				remoteBranch = *r.RemoteBranch
+			}
+			_, err := worktreeGit.PushBranchTo(ctx, ports.PushTarget{
+				WorkspaceID: ws.ID, ExpectedHead: probe.Commit(ws.Path, "refs/heads/"+r.Branch), Branch: r.Branch,
+				Remote: remote, RemoteBranch: remoteBranch, RequestID: r.ID, By: domain.PushByAgent,
+			})
+			return err
 		},
 		BaseOf: func(sess *domain.Session) string {
 			if ws := workspaces.Get(context.Background(), sess.WorkspaceID); ws != nil {
