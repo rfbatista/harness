@@ -26,6 +26,7 @@ func TestStatusViewMatchesTheSharedFixture(t *testing.T) {
 		Cases []struct {
 			Status           domain.SessionStatus `json:"status"`
 			PendingApprovals int                  `json:"pending_approvals"`
+			OpenInterviews   int                  `json:"open_interview_count"`
 			State, Word      string
 			NeedsYou         bool `json:"needs_you"`
 		} `json:"cases"`
@@ -37,12 +38,13 @@ func TestStatusViewMatchesTheSharedFixture(t *testing.T) {
 		t.Fatal("fixture has no cases")
 	}
 	for _, c := range fixture.Cases {
-		s := &domain.Session{Status: c.Status, PendingApprovals: c.PendingApprovals}
+		s := &domain.Session{Status: c.Status, PendingApprovals: c.PendingApprovals, OpenInterviewCount: c.OpenInterviews}
+		label := fmt.Sprintf("%s+%d+%d", c.Status, c.PendingApprovals, c.OpenInterviews)
 		if got := statusOf(s); got != (StatusView{c.State, c.Word}) {
-			t.Errorf("%s+%d: got %+v, want {%s %s}", c.Status, c.PendingApprovals, got, c.State, c.Word)
+			t.Errorf("%s: got %+v, want {%s %s}", label, got, c.State, c.Word)
 		}
 		if got := NeedsYou(s); got != c.NeedsYou {
-			t.Errorf("%s+%d: needsYou = %v, want %v", c.Status, c.PendingApprovals, got, c.NeedsYou)
+			t.Errorf("%s: needsYou = %v, want %v", label, got, c.NeedsYou)
 		}
 	}
 }
@@ -354,6 +356,7 @@ func TestRowMatchesTheSharedFixture(t *testing.T) {
 				Model            string               `json:"model"`
 				Status           domain.SessionStatus `json:"status"`
 				PendingApprovals int                  `json:"pending_approvals"`
+				OpenInterviews   int                  `json:"open_interview_count"`
 				Ago              int                  `json:"ago"`
 				TicketID         *string              `json:"ticket_id"`
 				Task             string               `json:"task"`
@@ -401,7 +404,7 @@ func TestRowMatchesTheSharedFixture(t *testing.T) {
 		others := map[string]*domain.Session{}
 		for _, f := range c.Sessions {
 			s := &domain.Session{ID: f.ID, AgentID: f.AgentID, Role: f.Role, ParentSessionID: f.Parent, BroughtUnder: f.BroughtUnder, Mode: f.Mode, Model: f.Model,
-				Status: f.Status, PendingApprovals: f.PendingApprovals, Task: f.Task, TicketID: "t1", RepositoryID: f.RepositoryID, AgentUnassigned: f.AgentUnassigned, UpdatedAt: now.Add(-time.Duration(f.Ago) * time.Minute)}
+				Status: f.Status, PendingApprovals: f.PendingApprovals, OpenInterviewCount: f.OpenInterviews, Task: f.Task, TicketID: "t1", RepositoryID: f.RepositoryID, AgentUnassigned: f.AgentUnassigned, UpdatedAt: now.Add(-time.Duration(f.Ago) * time.Minute)}
 			if f.TicketID != nil {
 				s.TicketID = *f.TicketID
 			}

@@ -63,3 +63,18 @@ export function arrived(before, next) {
   const had = new Set(openOnes(before).map((i) => i.id));
   return openOnes(next).filter((i) => !had.has(i.id));
 }
+
+/** When an interview ended, or when it was asked while nothing says it ended: what the history sorts by. */
+const endedOrAsked = (i) => (i.endedAt ?? i.askedAt).getTime();
+
+/** The interviews that are not open (sent, dismissed, expired), the most recently ended first: the panel's Earlier. */
+export const historyOf = (list) =>
+  list.interviews
+    .filter((i) => i.state !== "open")
+    .sort((a, b) => (b.endedAt !== null) - (a.endedAt !== null) || endedOrAsked(b) - endedOrAsked(a) || a.id.localeCompare(b.id));
+
+/** The interviews of `next` that `before` had open and are not open any more: what was answered, dismissed or expired meanwhile. */
+export function closedNow(before, next) {
+  const had = new Set(openOnes(before).map((i) => i.id));
+  return next.interviews.filter((i) => i.state !== "open" && had.has(i.id));
+}

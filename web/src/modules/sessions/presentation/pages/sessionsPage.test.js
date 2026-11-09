@@ -9,7 +9,7 @@ import { memoryGateway } from "../../infrastructure/memory-gateway.js";
 import { makeArtifact } from "../../testing/artifact-fixtures.js";
 import { makeCheck, makeMessage } from "../../testing/channel-fixtures.js";
 import { makeSession, T0, toDTO } from "../../testing/fixtures.js";
-import { interviewDTO } from "../../testing/interview-fixtures.js";
+import { interviewDTO, makeInterview, questionDTO } from "../../testing/interview-fixtures.js";
 import { interviewStore } from "../interviewStore.js";
 import { sessionsPage } from "./sessionsPage.js";
 
@@ -1006,4 +1006,86 @@ test("the Questions toggle is the open interviews of the session whose terminal 
   instance.showApp();
   assert.equal(instance.interviewToggle, null, "a run's terminal has no interview");
   instance.destroy();
+});
+
+// ── signals outside the panel ───────────────────────────────────────────────
+
+/** A page whose session "live" has two interviews open (4 questions), with the pinned title count and the feed followers recorded. */
+function askingPage() {
+  const sessions = [makeSession({ id: "live", openInterviewCount: 2, openQuestionCount: 4 }), makeSession({ id: "other" })];
+  const memory = memoryGateway({ projects: ["p1"], sessions, now: () => T0 });
+  const el = seededElement({
+    project_id: "p1", ticket_id: "t1", sessions: sessions.map(toDTO), agent_names: {}, repository_names: {},
+    interviews: { live: { seq: 2, interviews: [interviewDTO({ id: "a", session_id: "live" }), interviewDTO({ id: "b", session_id: "live" })] } },
+  });
+  const pins = [];
+  const feeds = [];
+  const gateway = {
+    async list() { return { seq: 2, interviews: [] }; },
+    follow: (id, onEvent) => {
+      const f = { id, onEvent, stopped: false };
+      feeds.push(f);
+      return () => (f.stopped = true);
+    },
+  };
+  const interviews = interviewStore({ gateway });
+  const mounted = mount(sessionsPage({ gateway: memory.gateway, clock: fixedClock(T0), interviews, pinTitle: (n) => pins.push(n) }), { el });
+  mounted.instance.init();
+  mounted.instance.select("live");
+  return { ...mounted, interviews, pins, feeds };
+}
+
+test("with another tab in front, the Agent tab carries the number of open questions; on the Agent tab the toggle takes over", () => {
+  const { instance, interviews } = askingPage();
+  assert.equal(instance.questionsBadge, null, "the Agent tab is in front");
+  instance.showHistory();
+  assert.deepEqual(instance.questionsBadge, { count: "4", label: "4 open questions" });
+  assert.equal(instance.attentionDot, false, "the badge holds the dot");
+  instance.showAgent();
+  assert.equal(instance.questionsBadge, null);
+  instance.showApp();
+  interviews.receive("live", { seq: 3, kind: "interview_changed", interview: makeInterview({ id: "a", session_id: "live", state: "sent", ended_at: "2026-11-08T14:41:00Z", delivery: "queued" }) });
+  interviews.receive("live", { seq: 4, kind: "interview_changed", interview: makeInterview({ id: "b", session_id: "live", state: "dismissed", ended_at: "2026-11-08T14:42:00Z" }) });
+  assert.equal(instance.questionsBadge, null, "nothing open: no badge");
+  instance.destroy();
+});
+
+test("one open question reads in the singular", () => {
+  const { instance, interviews } = askingPage();
+  instance.showHistory();
+  interviews.receive("live", { seq: 3, kind: "interview_changed", interview: makeInterview({ id: "a", session_id: "live", state: "dismissed", ended_at: "2026-11-08T14:42:00Z" }) });
+  interviews.receive("live", { seq: 4, kind: "interview_changed", interview: makeInterview({ id: "b", session_id: "live", questions: [questionDTO()] }) });
+  assert.deepEqual(instance.questionsBadge, { count: "1", label: "1 open question" });
+  instance.destroy();
+});
+
+test("the title counts the open questions of the session in view, and lets go at none, on another session, and when the page leaves", () => {
+  const { instance, interviews, pins } = askingPage();
+  instance.syncInterviews();
+  assert.equal(pins.at(-1), 4);
+  interviews.receive("live", { seq: 3, kind: "interview_changed", interview: makeInterview({ id: "a", session_id: "live", state: "dismissed", ended_at: "2026-11-08T14:42:00Z" }) });
+  instance.syncInterviews();
+  assert.equal(pins.at(-1), 2);
+  instance.select("other");
+  instance.syncInterviews();
+  assert.equal(pins.at(-1), 0, "another session has none");
+  instance.select("live");
+  instance.syncInterviews();
+  assert.equal(pins.at(-1), 2);
+  instance.destroy();
+  assert.equal(pins.at(-1), 0);
+});
+
+test("the page follows the selected session's interviews whichever tab is in front, and lets go of the one it leaves", () => {
+  const { instance, feeds } = askingPage();
+  instance.showApp();
+  instance.syncInterviews();
+  assert.deepEqual(feeds.map((f) => [f.id, f.stopped]), [["live", false]]);
+  instance.syncInterviews();
+  assert.equal(feeds.length, 1, "asking again follows nothing new");
+  instance.select("other");
+  instance.syncInterviews();
+  assert.deepEqual(feeds.map((f) => [f.id, f.stopped]), [["live", true], ["other", false]]);
+  instance.destroy();
+  assert.equal(feeds[1].stopped, true);
 });

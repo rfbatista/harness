@@ -39,6 +39,7 @@ export const FRESH_MS = 8_000;
  *   location?: { search: string },  ?session=<id> opens that session (a comment links to the session that wrote it); ?agent=<name> opens the project's new-session form with that agent
  *   prefs?: ReturnType<typeof import("../screenPrefs.js").screenPrefs>,  this browser's text size and focus mode
  *   shell?: { setFocus: (on: boolean) => void, setCodeFullscreen: (on: boolean) => void },  the app shell around the page (focus mode and the Code tab's full screen hide the rail and more)
+ *   pinTitle?: (count: number) => void,  leads the document title with a count (the open questions of the session in view); 0 lets it go
  *   clipboard?: { writeText: (text: string) => Promise<void> },
  *   isPhone?: () => boolean,
  * }} deps
@@ -55,6 +56,7 @@ export const sessionsPage = ({
   history = globalThis.history,
   prefs = { textSize: () => DEFAULT_TEXT_SIZE, setTextSize() {}, focus: () => false, setFocus() {} },
   shell = { setFocus() {}, setCodeFullscreen() {} },
+  pinTitle = () => {},
   clipboard = { writeText: (text) => globalThis.navigator.clipboard.writeText(text) },
   isPhone = () => globalThis.matchMedia?.("(width < 48rem)").matches ?? false,
 }) => () => {
@@ -62,6 +64,9 @@ export const sessionsPage = ({
   let unfollowAgents = () => {};
   let unfollowChannel = null;
   let ticker = null;
+  /** The session whose interview feed the page follows (the selected one), and how to let go of it. */
+  let followedInterviews = "";
+  let unfollowInterviews = () => {};
 
   return {
     projectId: "",
@@ -316,6 +321,30 @@ export const sessionsPage = ({
     /** The agent waits on the person: the Agent tab's dot and the terminal's amber edge. */
     get attention() {
       return this.showingSession && this.selected.state === "waiting";
+    },
+    /** The Agent tab's badge while another tab is in front: the open questions of the session, with the dot inside; null otherwise (on the Agent tab the toggle says it). */
+    get questionsBadge() {
+      if (!this.showingSession || this.agentTabSelected) return null;
+      const n = interviews.openQuestions(this.selectedId);
+      return n > 0 ? { count: String(n), label: `${n} open question${n === 1 ? "" : "s"}` } : null;
+    },
+    /** The Agent tab's plain dot: the session waits on the person and no badge holds it. */
+    get attentionDot() {
+      return this.attention && this.questionsBadge === null;
+    },
+    /**
+     * Follows the selected session's interview feed whichever tab is in front
+     * (the panel follows it only while the Agent tab shows its terminal), and
+     * leads the document title with its open questions (x-effect).
+     */
+    syncInterviews() {
+      const id = this.showingSession ? this.selectedId : "";
+      if (id !== followedInterviews) {
+        unfollowInterviews();
+        followedInterviews = id;
+        unfollowInterviews = id ? interviews.follow(id, (text) => (this.announcement = text)) : () => {};
+      }
+      pinTitle(id ? interviews.openQuestions(id) : 0);
     },
     /** Focus mode is on, and there is a terminal's Exit focus to leave it by. */
     get focusActive() {
@@ -587,6 +616,9 @@ export const sessionsPage = ({
     },
 
     destroy() {
+      unfollowInterviews();
+      followedInterviews = "";
+      pinTitle(0);
       unfollow();
       unfollowAgents();
       unfollowChannel?.();

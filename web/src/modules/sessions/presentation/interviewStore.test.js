@@ -57,10 +57,10 @@ function memoryDrafts(held = {}) {
   return drafts;
 }
 
-function setup({ lists = {}, gateway = fakeGateway(), drafts = memoryDrafts() } = {}) {
+function setup({ lists = {}, gateway = fakeGateway(), drafts = memoryDrafts(), visible = () => true } = {}) {
   const prefs = memoryPrefs();
   const timers = fakeTimers();
-  const store = interviewStore({ gateway, prefs, timers, drafts });
+  const store = interviewStore({ gateway, prefs, timers, drafts, visible });
   store.seed(lists);
   const said = [];
   return { store, gateway, prefs, timers, drafts, said, announce: (t) => said.push(t) };
@@ -273,4 +273,190 @@ test("an interview that arrives later gets its draft too", () => {
   const { store } = setup({ lists: { s1: makeList(0) }, drafts });
   store.receive("s1", asked(1, makeInterview({ id: "late" })));
   assert.equal(store.isChecked("late", 0, "0"), true);
+});
+
+// ── stack, history, and what the feed does to them ──────────────────────────
+
+const changed = (seq, interview) => ({ seq, kind: "interview_changed", interview });
+const closedAs = (id, state, over = {}) => makeInterview({ id, state, ended_at: "2026-11-08T14:41:00Z", ...(state === "sent" ? { delivery: "delivered", delivered_at: "2026-11-08T14:41:00Z", answers: [{ chosen: [0], text: "", note: "", skipped: false }, { chosen: [], text: "", note: "", skipped: true }] } : {}), ...over });
+const cardsOf = (store, sid = "s1") => store.view(sid).cards.map((c) => [c.id, c.folded]);
+const rowsOf = (store, sid = "s1") => store.view(sid).history.rows.map((r) => [r.id, r.state]);
+
+test("a second interview is added above as a new card; the first, untouched, folds", () => {
+  const { store, announce, said } = setup({ lists: { s1: makeList(1, makeInterview({ id: "a" })) } });
+  assert.deepEqual(cardsOf(store), [["a", false]]);
+  store.receive("s1", asked(2, makeInterview({ id: "b" })), announce);
+  assert.deepEqual(cardsOf(store), [["b", false], ["a", true]]);
+  assert.deepEqual(said, ["architect asked 2 more questions"]);
+  assert.equal(store.view("s1").cards[1].foldedBadge, "0 of 2");
+});
+
+test("the first interview stays open when the person had touched it, and the new one is added above it", () => {
+  const { store, announce } = setup({ lists: { s1: makeList(1, makeInterview({ id: "a" })) } });
+  store.choose("a", 0, "0");
+  store.receive("s1", asked(2, makeInterview({ id: "b" })), announce);
+  assert.deepEqual(cardsOf(store), [["b", false], ["a", false]]);
+  assert.equal(store.view("s1").cards[1].foldedBadge, "1 of 2");
+});
+
+test("an interview whose answers were only a note counts as touched too", () => {
+  const { store, announce } = setup({ lists: { s1: makeList(1, makeInterview({ id: "a" })) } });
+  store.note("a", 1, "a thought");
+  store.receive("s1", asked(2, makeInterview({ id: "b" })), announce);
+  assert.deepEqual(cardsOf(store), [["b", false], ["a", false]]);
+});
+
+test("each open card folds and expands on its own, whatever the order says", () => {
+  const { store } = setup({ lists: { s1: makeList(2, makeInterview({ id: "a" }), makeInterview({ id: "b" })) } });
+  assert.deepEqual(cardsOf(store), [["b", false], ["a", true]]);
+  store.toggleCard("a");
+  assert.deepEqual(cardsOf(store), [["b", false], ["a", false]]);
+  store.toggleCard("b");
+  assert.deepEqual(cardsOf(store), [["b", true], ["a", false]]);
+  store.toggleCard("a");
+  assert.deepEqual(cardsOf(store), [["b", true], ["a", true]], "both can be folded");
+});
+
+test("when the newest is sent, the next one takes its place, expanded", () => {
+  const { store } = setup({ lists: { s1: makeList(2, makeInterview({ id: "a" }), makeInterview({ id: "b" })) } });
+  store.receive("s1", changed(3, closedAs("b", "sent")));
+  assert.deepEqual(cardsOf(store), [["a", false]]);
+});
+
+test("an interview changed to sent by the feed moves to Earlier, drops the unsent draft, and says so", () => {
+  const { store, drafts, announce, said } = setup({ lists: { s1: makeList(1, makeInterview({ id: "a" }), makeInterview({ id: "b" })) } });
+  store.choose("a", 0, "1");
+  store.receive("s1", changed(2, closedAs("a", "sent")), announce);
+  assert.deepEqual(cardsOf(store), [["b", false]]);
+  assert.deepEqual(rowsOf(store), [["a", "sent"]]);
+  assert.equal(store.view("s1").history.label, "Earlier · 1");
+  assert.equal(drafts.held.a, undefined);
+  assert.ok(drafts.dropped.includes("a"));
+  assert.equal(store.answers.a, undefined);
+  assert.deepEqual(said, ["Interview answered in another tab"]);
+});
+
+test("dismissed from another tab: Earlier, draft dropped, the dismissal announced", () => {
+  const { store, drafts, announce, said } = setup({ lists: { s1: makeList(1, makeInterview({ id: "a" })) } });
+  store.choose("a", 0, "0");
+  store.receive("s1", changed(2, closedAs("a", "dismissed")), announce);
+  assert.deepEqual(rowsOf(store), [["a", "dismissed"]]);
+  assert.equal(drafts.held.a, undefined);
+  assert.deepEqual(said, ["Interview dismissed in another tab"]);
+});
+
+test("an expired interview keeps what was typed to be read back and copied, and says the session ended", () => {
+  const { store, drafts, announce, said } = setup({ lists: { s1: makeList(1, makeInterview({ id: "a" })) } });
+  store.choose("a", 0, "1");
+  store.type("a", 1, "in the page seed");
+  store.receive("s1", changed(2, closedAs("a", "expired")), announce);
+  assert.deepEqual(rowsOf(store), [["a", "expired"]]);
+  assert.ok(drafts.held.a, "the draft stays in this browser");
+  const row = store.view("s1").history.rows[0];
+  assert.deepEqual(row.questions.map((q) => q.answer), ["The harness database", "in the page seed"]);
+  assert.equal(row.copy, true);
+  assert.deepEqual(said, ["Interview expired: the session ended"]);
+  assert.equal(store.copyText("a").startsWith("1. Which store holds interviews?\nThe harness database"), true);
+});
+
+test("an expired interview that came with the seed reads back its draft after a reload", () => {
+  const draft = [{ chosen: [0], own: false, text: "", note: "" }, { chosen: [], own: false, text: "typed before the end", note: "" }];
+  const { store } = setup({ lists: { s1: makeList(1, closedAs("x", "expired")) }, drafts: memoryDrafts({ x: draft }) });
+  assert.deepEqual(store.view("s1").history.rows[0].questions.map((q) => q.answer), ["A file per interview", "typed before the end"]);
+});
+
+test("an interview moved to Earlier here is not announced as another tab when the server's echo arrives", () => {
+  const { store, announce, said } = setup({ lists: { s1: makeList(1, makeInterview({ id: "a" })) } });
+  store.moveToEarlier("s1", closedAs("a", "sent", { delivery: "queued", delivered_at: null }));
+  assert.deepEqual(rowsOf(store), [["a", "sent"]]);
+  assert.equal(store.list("s1").seq, 1, "the feed's numbering is the server's");
+  store.receive("s1", changed(2, closedAs("a", "sent")), announce);
+  assert.deepEqual(said, []);
+  assert.equal(store.view("s1").history.rows[0].sub.endsWith("delivered " + clockOf("2026-11-08T14:41:00Z")), true, "the server's copy replaces the local one");
+});
+
+const clockOf = (iso) => new Date(iso).toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit", hour12: false });
+
+test("history rows open and close on their own", () => {
+  const { store } = setup({ lists: { s1: makeList(1, closedAs("a", "sent"), closedAs("b", "dismissed", { ended_at: "2026-11-08T13:00:00Z" })) } });
+  assert.deepEqual(store.view("s1").history.rows.map((r) => [r.id, r.opened]), [["a", false], ["b", false]]);
+  store.toggleRow("b");
+  assert.deepEqual(store.view("s1").history.rows.map((r) => [r.id, r.opened]), [["a", false], ["b", true]]);
+  store.toggleRow("b");
+  assert.equal(store.view("s1").history.rows[1].opened, false);
+});
+
+test("with only history the toggle is there without a badge, and shows the panel; it is not shown until asked", () => {
+  const { store } = setup({ lists: { s1: makeList(1, closedAs("a", "sent")), s2: makeList(0) } });
+  assert.equal(store.toggle("s2"), null);
+  assert.deepEqual(store.toggle("s1"), { count: "", label: "Questions", pressed: false, signal: false });
+  assert.equal(store.shown("s1"), false);
+  store.flip("s1");
+  assert.equal(store.shown("s1"), true);
+  assert.equal(store.toggle("s1").pressed, true);
+  store.flip("s1");
+  assert.equal(store.shown("s1"), false);
+});
+
+test("narrow, the toggle opens the history as the sheet, and there is no peek strip for it", () => {
+  const { store } = setup({ lists: { s1: makeList(1, closedAs("a", "sent")) } });
+  store.setDocked(false);
+  assert.equal(store.peeking("s1"), false);
+  store.flip("s1");
+  assert.equal(store.shown("s1"), true);
+});
+
+test("when the last open interview is sent in another tab, a panel that was showing stays, now holding Earlier", () => {
+  const { store, announce } = setup({ lists: { s1: makeList(1, makeInterview({ id: "a" })) } });
+  assert.equal(store.shown("s1"), true);
+  store.receive("s1", changed(2, closedAs("a", "sent")), announce);
+  assert.equal(store.shown("s1"), true);
+  assert.equal(store.view("s1").empty, true);
+  assert.deepEqual(store.toggle("s1"), { count: "", label: "Questions", pressed: true, signal: false });
+});
+
+test("a panel the person hid stays hidden when the last interview closes", () => {
+  const { store, announce } = setup({ lists: { s1: makeList(1, makeInterview({ id: "a" })) } });
+  store.flip("s1");
+  store.receive("s1", changed(2, closedAs("a", "sent")), announce);
+  assert.equal(store.shown("s1"), false);
+});
+
+test("a gap reads the list again and the panel matches the server, Earlier included", async () => {
+  const gateway = fakeGateway({ s1: makeList(9, closedAs("a", "sent"), makeInterview({ id: "n" }), closedAs("o", "expired", { ended_at: "2026-11-08T10:00:00Z" })) });
+  const { store, announce, said, drafts } = setup({ lists: { s1: makeList(3, makeInterview({ id: "a" })) }, gateway });
+  store.choose("a", 0, "0");
+  store.receive("s1", changed(8, closedAs("a", "sent")), announce);
+  await flush();
+  assert.deepEqual(gateway.reads, ["s1"]);
+  assert.deepEqual(cardsOf(store), [["n", false]]);
+  assert.deepEqual(rowsOf(store), [["a", "sent"], ["o", "expired"]]);
+  assert.ok(drafts.dropped.includes("a"), "the interview that closed in what was missed loses its draft");
+  assert.deepEqual(said, ["architect asked 2 more questions", "Interview answered in another tab"]);
+});
+
+test("the open questions of a session are what the title and the Agent tab count", () => {
+  const { store, announce } = setup({ lists: { s1: makeList(1, makeInterview({ id: "a" })), s2: makeList(0) } });
+  assert.equal(store.openQuestions("s1"), 2);
+  assert.equal(store.openQuestions("s2"), 0);
+  assert.equal(store.openQuestions("nope"), 0);
+  store.receive("s1", asked(2, makeInterview({ id: "b" })), announce);
+  assert.equal(store.openQuestions("s1"), 4);
+  store.receive("s1", changed(3, closedAs("a", "sent")), announce);
+  assert.equal(store.openQuestions("s1"), 2);
+});
+
+test("in a hidden tab an arrival is applied with no ring and no announcement", () => {
+  let visible = false;
+  const { store, timers, announce, said } = setup({ lists: { s1: makeList(2, makeInterview()) }, visible: () => visible });
+  store.flip("s1");
+  store.receive("s1", asked(3, makeInterview({ id: "b" })), announce);
+  timers.run(0);
+  assert.equal(store.toggle("s1").signal, false);
+  assert.deepEqual(said, []);
+  assert.equal(store.toggle("s1").count, "4", "the count is current when the tab comes back");
+  visible = true;
+  store.receive("s1", asked(4, makeInterview({ id: "c" })), announce);
+  timers.run(0);
+  assert.equal(store.toggle("s1").signal, true);
 });

@@ -53,7 +53,7 @@ export function registerSessions(Alpine, deps) {
   // The sessions' interviews, shared by the page (seed, the tab row's toggle) and the panel.
   Alpine.store("sessionsInterviews", interviewStore({ gateway: deps.interviews, prefs: screen, drafts: interviewDrafts() }));
   const interviews = Alpine.store("sessionsInterviews");
-  Alpine.data("sessionsPage", sessionsPage({ ...deps, channelStore, interviews, prefs: screen, shell }));
+  Alpine.data("sessionsPage", sessionsPage({ ...deps, channelStore, interviews, prefs: screen, shell, pinTitle: (n) => Alpine.store("notifications")?.pinTitleCount?.(n) }));
   Alpine.data("sessionsInterviewPanel", interviewPanel({ interviews }));
   Alpine.data("sessionsConversation", conversation({ ...deps, channelStore }));
   Alpine.data("sessionsStatusCheck", statusCheck(deps));

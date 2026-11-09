@@ -2,7 +2,8 @@
 // "sessionsInterviews" (spread into it): the answers per interview id, the
 // changes the panel's controls make, the counts the footer shows, and the
 // draft each change leaves in this browser. Nothing here sends: tickets that
-// send or dismiss read `submission(id)` and call `drop(id)`.
+// send or dismiss read `submission(id)` and call `drop(id)`. An expired
+// interview keeps what was typed, to be read back (`typedAnswers`).
 
 import { acceptOne, acceptRecommended, blankAnswers, isAnswered, progress, selectOption, selectOwn, toAnswers, withNote, withText } from "../domain/answers.js";
 import { openOnes } from "../domain/interviews.js";
@@ -20,7 +21,11 @@ export function answering(drafts) {
       const next = { ...this.answers };
       for (const list of Object.values(lists)) {
         for (const interview of list.interviews) {
-          if (interview.state !== "open") {
+          if (interview.state === "expired") {
+            // What was typed stays, to be read back and copied: it is all that is left of it.
+            const kept = interview.id in next ? null : drafts.read(interview.id, interview.questions.length);
+            if (kept) next[interview.id] = kept;
+          } else if (interview.state !== "open") {
             delete next[interview.id];
             drafts.drop(interview.id);
           } else if (!(interview.id in next)) {
@@ -29,6 +34,11 @@ export function answering(drafts) {
         }
       }
       this.answers = next;
+    },
+
+    /** Whether the person has put anything into the open interview: an option, text or a note. */
+    touched(id) {
+      return (this.answers[id] ?? []).some((s) => s.chosen.length > 0 || s.own || s.text.trim() !== "" || s.note.trim() !== "");
     },
 
     /** The open interview with this id, or null. */

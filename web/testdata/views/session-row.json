@@ -260,6 +260,21 @@
       }
     },
     {
+      "name": "an open interview on a running session: the questions chip, and it needs the person",
+      "task_title": "AI Helper to write text",
+      "sessions": [
+        { "id": "asker", "agent_id": "go", "mode": "implement", "status": "running", "open_interview_count": 1, "ago": 5, "task": "AI Helper to write text" }
+      ],
+      "row": "asker",
+      "expect": {
+        "agent": "go-developer", "leadsWithTitle": false, "mode": "implement", "model": "", "badge": "",
+        "chip": { "word": "questions", "tone": "attention" }, "word": "questions", "state": "waiting", "when": "5m",
+        "detail": null,
+        "detailText": "go-developer · implement · questions · 5m",
+        "resumeLabel": "Resume go-developer", "unsandboxedAttr": null
+      }
+    },
+    {
       "name": "one approval pending",
       "task_title": "AI Helper to write text",
       "sessions": [

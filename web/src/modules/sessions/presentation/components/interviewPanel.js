@@ -16,7 +16,7 @@
 //   </div>
 
 import { dockedAt } from "../../domain/interviews.js";
-import { bodyHtml, footerView, optionForKey } from "../interviewView.js";
+import { bodyHtml, footerView, noteSummary, optionForKey } from "../interviewView.js";
 
 /**
  * @param {{
@@ -24,9 +24,10 @@ import { bodyHtml, footerView, optionForKey } from "../interviewView.js";
  *   observeResize?: (el: HTMLElement, onResize: () => void) => () => void,
  *   remPx?: () => number,  what a rem is in px, for the dock width
  *   doc?: Document,
+ *   clipboard?: { writeText: (text: string) => Promise<void> },  where Copy answers puts the text
  * }} deps
  */
-export const interviewPanel = ({ interviews, observeResize = resizeObserver, remPx = rootFontSize, doc = globalThis.document }) => (sessionId = "") => {
+export const interviewPanel = ({ interviews, observeResize = resizeObserver, remPx = rootFontSize, doc = globalThis.document, clipboard = { writeText: (text) => globalThis.navigator.clipboard.writeText(text) } }) => (sessionId = "") => {
   /** The stage. A method called from a control that has since left the page (the peek strip's Answer) cannot find it through $root, so it is kept. */
   let root = null;
   let stopObserving = () => {};
@@ -85,6 +86,9 @@ export const interviewPanel = ({ interviews, observeResize = resizeObserver, rem
     textOf: (card, q) => interviews.textOf(card.id, q.at),
     noteOf: (card, q) => interviews.noteOf(card.id, q.at),
     progress: (card) => footerView(interviews.progress(card.id)),
+
+    /** The note's summary: Note once it holds text, Add a note while it is empty. */
+    noteLabel: (card, q) => noteSummary(interviews.noteOf(card.id, q.at)),
 
     /** A note opens by itself once it holds text; the person's own opening and closing is left to the disclosure. */
     openNote(el, card, q) {
@@ -163,6 +167,28 @@ export const interviewPanel = ({ interviews, observeResize = resizeObserver, rem
       const next = fieldset.nextElementSibling;
       if (next?.matches("fieldset")) this.focusQuestion(next);
       else fieldset.closest("section")?.querySelector("[data-interview-send]")?.focus();
+    },
+
+    // ── the stack and Earlier ────────────────────────────────────────────
+    /** A card folds or expands on its own; the focus and the scroll stay where they are. */
+    toggleCard(card) {
+      interviews.toggleCard(card.id);
+    },
+
+    /** An Earlier row opens or folds. */
+    toggleRow(row) {
+      interviews.toggleRow(row.id);
+    },
+
+    /** Copy answers on an expired interview: what was typed, as plain text, on the clipboard. */
+    async copyAnswers(row) {
+      let said = "Answers copied";
+      try {
+        await clipboard.writeText(interviews.copyText(row.id));
+      } catch {
+        said = "Could not copy the answers";
+      }
+      this.$dispatch("announce", { text: said });
     },
 
     // ── what the person does ─────────────────────────────────────────────

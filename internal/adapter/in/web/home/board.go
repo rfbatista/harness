@@ -59,12 +59,28 @@ type statusLook struct {
 }
 
 var looks = map[domain.SessionStatus]statusLook{
-	domain.SessionStarting:        {"queued", "starting", "", true, 2},
-	domain.SessionRunning:         {"running", "running", "", false, 2},
-	domain.SessionThinking:        {"running", "thinking", "signal", true, 2},
-	domain.SessionIdle:            {"waiting", "your turn", "attention", true, 1},
+	domain.SessionStarting:        {"queued", "starting", "", true, 3},
+	domain.SessionRunning:         {"running", "running", "", false, 3},
+	domain.SessionThinking:        {"running", "thinking", "signal", true, 3},
+	domain.SessionIdle:            {"waiting", "your turn", "attention", true, 2},
 	domain.SessionWaitingApproval: {"waiting", "approval", "attention", true, 0},
-	domain.SessionPaused:          {"idle", "paused", "", true, 2},
+	domain.SessionPaused:          {"idle", "paused", "", true, 3},
+}
+
+// questionsLook is how a live session with an open interview reads, whatever
+// its status says (an approval still comes first).
+var questionsLook = statusLook{"waiting", "questions", "attention", true, 1}
+
+// lookOf is the look of a session line: its status's, or questions while an
+// interview waits and no approval does.
+func lookOf(s domain.BoardSessionLine) statusLook {
+	if s.OpenInterviewCount > 0 && s.Status != domain.SessionWaitingApproval {
+		return questionsLook
+	}
+	if look, ok := looks[s.Status]; ok {
+		return look
+	}
+	return statusLook{dot: "idle", word: string(s.Status), chip: true, rank: 3}
 }
 
 var taskStatusWords = map[string]string{
@@ -160,13 +176,13 @@ func newCard(c domain.BoardCard, now time.Time) CardView {
 	return cv
 }
 
-// orderLines puts approvals first, then your turn, then the rest in the
-// order the server sent (a stable sort).
+// orderLines puts approvals first, then questions, then your turn, then the
+// rest in the order the server sent (a stable sort).
 func orderLines(in []domain.BoardSessionLine) []domain.BoardSessionLine {
 	out := make([]domain.BoardSessionLine, 0, len(in))
-	for rank := 0; rank <= 2; rank++ {
+	for rank := 0; rank <= 3; rank++ {
 		for _, s := range in {
-			if looks[s.Status].rank == rank {
+			if lookOf(s).rank == rank {
 				out = append(out, s)
 			}
 		}
@@ -175,10 +191,7 @@ func orderLines(in []domain.BoardSessionLine) []domain.BoardSessionLine {
 }
 
 func newLine(s domain.BoardSessionLine, taskHref string, now time.Time) LineView {
-	look, ok := looks[s.Status]
-	if !ok {
-		look = statusLook{dot: "idle", word: string(s.Status), chip: true, rank: 2}
-	}
+	look := lookOf(s)
 	l := LineView{
 		SessionID: s.SessionID, Href: taskHref + "?session=" + url.QueryEscape(s.SessionID), Agent: s.AgentName,
 		Dot: look.dot, Word: look.word, Tone: look.tone, Chip: look.chip, Time: relative(s.StatusSince, now),

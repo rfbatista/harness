@@ -10,6 +10,14 @@
     { "status": "paused", "pending_approvals": 0, "state": "idle", "word": "paused", "needs_you": false },
     { "status": "done", "pending_approvals": 0, "state": "done", "word": "done", "needs_you": false },
     { "status": "stopped", "pending_approvals": 0, "state": "done", "word": "stopped", "needs_you": false },
-    { "status": "failed", "pending_approvals": 3, "state": "failed", "word": "failed", "needs_you": false }
+    { "status": "failed", "pending_approvals": 3, "state": "failed", "word": "failed", "needs_you": false },
+    { "status": "running", "pending_approvals": 0, "open_interview_count": 1, "state": "waiting", "word": "questions", "needs_you": true },
+    { "status": "thinking", "pending_approvals": 0, "open_interview_count": 2, "state": "waiting", "word": "questions", "needs_you": true },
+    { "status": "idle", "pending_approvals": 0, "open_interview_count": 1, "state": "waiting", "word": "questions", "needs_you": true },
+    { "status": "waiting_approval", "pending_approvals": 1, "open_interview_count": 1, "state": "waiting", "word": "approval", "needs_you": true },
+    { "status": "running", "pending_approvals": 2, "open_interview_count": 1, "state": "waiting", "word": "approval", "needs_you": true },
+    { "status": "paused", "pending_approvals": 0, "open_interview_count": 1, "state": "waiting", "word": "questions", "needs_you": true },
+    { "status": "done", "pending_approvals": 0, "open_interview_count": 1, "state": "done", "word": "done", "needs_you": false },
+    { "status": "failed", "pending_approvals": 0, "open_interview_count": 1, "state": "failed", "word": "failed", "needs_you": false }
   ]
 }

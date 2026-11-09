@@ -8,7 +8,7 @@ import { fileURLToPath } from "node:url";
 
 const read = (p) => readFileSync(fileURLToPath(new URL(p, import.meta.url)), "utf8");
 const strip = (css) => css.replace(/\/\*[\s\S]*?\*\//g, "");
-const BLOCKS = ["agent-stage", "interview", "interview-set", "interview-question", "interview-note", "interview-option", "interview-sheet", "interview-toggle"];
+const BLOCKS = ["agent-stage", "interview", "interview-set", "interview-history", "interview-question", "interview-note", "interview-option", "interview-sheet", "interview-toggle"];
 const css = Object.fromEntries(BLOCKS.map((b) => [b, read(`./css/blocks/${b}.css`)]));
 const code = Object.fromEntries(BLOCKS.map((b) => [b, strip(css[b])]));
 const index = read("./css/index.css");
@@ -80,6 +80,22 @@ test("the footer sticks to the foot of the panel's scroller and the progress bar
 test("the note is a quiet disclosure: its marker is drawn, and its summary shows a focus ring", () => {
   assert.match(code["interview-note"], /::before\s*\{\s*content:\s*"\+"/);
   assert.match(code["interview-note"], /summary:focus-visible|&:focus-visible\s*\{[^}]*outline/s);
+});
+
+test("a folded or closed interview is a row: a full-width button with a chevron that turns, on the hover wash", () => {
+  const set = code["interview-history"];
+  assert.match(set, /> \.head\s*\{[^}]*display:\s*flex[^}]*inline-size:\s*100%/s);
+  assert.match(set, /> button\.head:hover\s*\{[^}]*background:\s*var\(--color-hover\)/s);
+  assert.match(set, /\.chev\s*\{[^}]*rotate:\s*45deg/s);
+  assert.match(set, /\[data-collapsed\]\s*>\s*\.head\s*\.chev\s*\{[^}]*rotate:\s*-45deg/s);
+  assert.match(set, /\.head:focus-visible\s*\{[^}]*outline/s);
+});
+
+test("a closed interview reads back its answers: Skipped is italic and faint, a note has a rule beside it", () => {
+  const history = code["interview-history"];
+  assert.match(history, /\.skipped\s*\{[^}]*font-style:\s*italic[^}]*color:\s*var\(--color-ink-faint\)|\.skipped\s*\{[^}]*color:\s*var\(--color-ink-faint\)[^}]*font-style:\s*italic/s);
+  assert.match(history, /\.note\s*\{[^}]*border-inline-start:\s*2px solid var\(--color-line-strong\)/s);
+  assert.match(history, /\.interview-group\s*\{[^}]*text-transform:\s*uppercase/s);
 });
 
 test("the specimen and DESIGN.md show each block", () => {

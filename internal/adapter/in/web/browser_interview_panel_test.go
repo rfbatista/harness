@@ -178,16 +178,22 @@ func interviewPage(t *testing.T, live *liveInterviews, pty http.Handler, gate ch
 		t.Skip("browser test: web client not built; run `make web`")
 	}
 	wire := &gatedInterviews{liveInterviews: live, gate: gate}
+	// The inbox's bell leads the title with a count, as in the app: with it the
+	// page's open questions can lead the title instead.
+	inbox := &fakeInbox{stream: &sseFeed{}}
 	pages := NewHandler(Deps{
-		Projects:     fakeProjects{[]*domain.Project{{ID: "p1", Name: "coding_pool"}}},
-		Tasks:        fakeTickets{[]*domain.Ticket{{ID: "t1", ProjectID: "p1", Title: "Add SSE feed", Status: domain.TicketStatusInProgress}}},
-		Agents:       fakeAgents{},
-		Repositories: fakeRepos{[]*domain.Repository{{ID: "r1", ProjectID: "p1", Name: "harness"}}},
-		Sessions:     fakeSessions{[]*domain.Session{liveSession()}},
-		Interviews:   live,
+		Notifications: inbox,
+		Projects:      fakeProjects{[]*domain.Project{{ID: "p1", Name: "coding_pool"}}},
+		Tasks:         fakeTickets{[]*domain.Ticket{{ID: "t1", ProjectID: "p1", Title: "Add SSE feed", Status: domain.TicketStatusInProgress}}},
+		Agents:        fakeAgents{},
+		Repositories:  fakeRepos{[]*domain.Repository{{ID: "r1", ProjectID: "p1", Name: "harness"}}},
+		Sessions:      fakeSessions{[]*domain.Session{liveSession()}},
+		Interviews:    live,
 	}, assets, nil)
 	mux := http.NewServeMux()
 	mux.Handle("/api/sessions/s1/terminal", pty)
+	mux.Handle("/api/notifications/events", inbox.stream)
+	mux.Handle("/api/notifications", inbox)
 	mux.Handle("/api/", httpapi.NewRouter(httpapi.NewHandler(httpapi.Services{Interviews: wire})))
 	mux.Handle("/", pages)
 	srv := newBrowserServer(mux)

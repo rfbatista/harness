@@ -27,6 +27,8 @@ export function toSession(dto) {
     model: dto.model ?? "",
     status: dto.status,
     pendingApprovals: Number(dto.pending_approvals ?? 0),
+    openInterviewCount: Number(dto.open_interview_count ?? 0),
+    openQuestionCount: Number(dto.open_question_count ?? 0),
     lastAction: dto.last_action ?? "",
     interactive: dto.interactive === true,
     runsOn: dto.runs_on ?? "",

@@ -3,7 +3,7 @@
 
 import { renderMarkdown } from "../../../shared/domain/markdown.js";
 import { count } from "../../../shared/presentation/format.js";
-import { openOnes, openQuestionCount } from "../domain/interviews.js";
+import { historyOf, openOnes, openQuestionCount } from "../domain/interviews.js";
 
 /** A time of day, "14:32". */
 export const clockTime = (date) => date.toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit", hour12: false });
@@ -94,12 +94,23 @@ export function optionForKey(question, key) {
   return question.options[Number(key) - 1] ?? null;
 }
 
-/** An open interview as its card draws it. */
-export function cardView(interview) {
+/**
+ * An open interview as its card draws it. A folded card is a row: who asks,
+ * its first question as a second line, and how far the person got.
+ * @param {{ folded?: boolean, progress?: { answered: number, total: number } }} [state]
+ */
+export function cardView(interview, { folded = false, progress } = {}) {
   const n = interview.questions.length;
+  const { answered, total } = progress ?? { answered: 0, total: n };
+  const label = `Open interview from ${interview.agentName}`;
   return {
     id: interview.id,
-    label: `Open interview from ${interview.agentName}`,
+    label,
+    foldLabel: `${label}, folded`,
+    foldButton: `Fold the interview from ${interview.agentName}`,
+    folded,
+    foldedSub: interview.questions[0]?.title ?? "",
+    foldedBadge: `${answered} of ${total}`,
     heading: `${interview.agentName} asks ${count(n, "question")}`,
     asked: `Asked ${clockTime(interview.askedAt)}`,
     recommended: recommendedCount(interview.questions),
@@ -108,18 +119,121 @@ export function cardView(interview) {
   };
 }
 
-/** The whole panel for a list: newest open interview first (the study's order), with the head's words. */
-export function panelView(list) {
+/** The note disclosure's summary: it says Note once it holds text, and Add a note while it is empty. */
+export const noteSummary = (text) => (text.trim() === "" ? "Add a note" : "Note");
+
+/** What the polite region says when an interview that was open here is closed by something else (another tab, the server). */
+export function closedText(interview) {
+  if (interview.state === "sent") return "Interview answered in another tab";
+  if (interview.state === "dismissed") return "Interview dismissed in another tab";
+  return "Interview expired: the session ended";
+}
+
+/** An answer read back: the options chosen, then the text; null when it holds nothing (skipped). */
+function answerText(question, answer) {
+  if (!answer || answer.skipped) return null;
+  const parts = answer.chosen.map((i) => question.options[i]?.label).filter(Boolean);
+  if (answer.text.trim() !== "") parts.push(answer.text.trim());
+  return parts.length > 0 ? parts.join(", ") : null;
+}
+
+/** The questions of a closed interview with what was answered to each, "Skipped" for a blank. */
+function readBack(interview, answers) {
+  return interview.questions.map((q, at) => {
+    const text = answerText(q, answers?.[at]);
+    return {
+      key: `${interview.id}.${at}`,
+      number: String(at + 1),
+      title: q.title,
+      heading: `${at + 1} · ${q.title}`,
+      answer: text ?? "Skipped",
+      answered: text !== null,
+      skipped: text === null,
+      note: answers?.[at]?.note?.trim() ?? "",
+    };
+  });
+}
+
+/** The answers as plain text, for Copy answers: each question with its answer, then its note. */
+export function answersText(interview, answers) {
+  return readBack(interview, answers)
+    .map((q) => [`${q.number}. ${q.title}`, q.answer, ...(q.note ? [`Note: ${q.note}`] : [])].join("\n"))
+    .join("\n\n");
+}
+
+const WORD = { sent: "Sent", dismissed: "Dismissed", expired: "Expired" };
+const TONE = { sent: "success", dismissed: null, expired: "danger" };
+
+/** The folded row's second line: counts and delivery for a sent one, the end for the others. */
+function subOf(interview, answers) {
+  const ended = clockTime(interview.endedAt ?? interview.askedAt);
+  if (interview.state === "dismissed") return `Dismissed ${ended} · the agent was told`;
+  if (interview.state === "expired") return `Session ended ${ended} · the agent never read it`;
+  const done = (answers ?? []).filter((a) => !a.skipped).length;
+  const skipped = (answers ?? []).filter((a) => a.skipped).length;
+  const counts = `${done} answered${skipped > 0 ? `, ${skipped} skipped` : ""}`;
+  if (interview.delivery === "queued") return `${counts} · queued: the agent is mid-turn`;
+  return `${counts} · ${interview.deliveredAt ? `delivered ${clockTime(interview.deliveredAt)}` : `sent ${ended}`}`;
+}
+
+/**
+ * A sent, dismissed or expired interview as its row in Earlier draws it, folded
+ * or opened. `typed` is what the person had typed, for an expired interview
+ * (the server keeps no answers for it).
+ * @param {import("../domain/interviews.js").Interview} interview
+ * @param {readonly import("../domain/interviews.js").Answer[] | null} typed
+ */
+export function historyRowView(interview, typed = null) {
+  const answers = interview.answers ?? typed;
+  const at = clockTime(interview.askedAt);
+  const word = WORD[interview.state];
+  return {
+    id: interview.id,
+    state: interview.state,
+    label: `${word} interview from ${interview.agentName} at ${at}`,
+    title: `${word} · ${interview.agentName} · ${at}`,
+    sub: subOf(interview, answers),
+    badge: count(interview.questions.length, "question"),
+    tone: TONE[interview.state],
+    copy: interview.state === "expired",
+    dismissNote: interview.dismissNote ?? "",
+    questions: readBack(interview, answers),
+  };
+}
+
+export const EMPTY_TITLE = "No questions right now";
+export const EMPTY_TEXT = "When an agent asks you questions, they appear here, and your answers go back to it automatically.";
+
+/**
+ * The whole panel for a list: the open interviews newest first (the study's
+ * order), the newest expanded and the others folded unless the person said
+ * otherwise, then Earlier.
+ * @param {object} [state]  what the store knows: the person's fold choices, how far each interview is, the rows opened, what an expired interview had typed
+ * @param {(id: string) => boolean | undefined} [state.folded]
+ * @param {(id: string) => { answered: number, total: number }} [state.progress]
+ * @param {(id: string) => boolean} [state.opened]
+ * @param {(interview: import("../domain/interviews.js").Interview) => readonly import("../domain/interviews.js").Answer[] | null} [state.typed]
+ */
+export function panelView(list, { folded = () => undefined, progress = () => undefined, opened = () => false, typed = () => null } = {}) {
   const open = openOnes(list);
   const n = openQuestionCount(list);
+  const history = historyOf(list);
   return {
     open: open.length > 0,
     questions: n,
     openLabel: `${n} open`,
     toggleLabel: toggleLabel(n),
-    who: headWho(open),
+    who: open.length > 0 ? headWho(open) : history.length > 0 ? "nothing open" : "",
     peek: open.length > 0 ? peekText(n, open[open.length - 1].agentName) : "",
-    cards: [...open].reverse().map(cardView),
+    cards: [...open].reverse().map((i, at) => ({ ...cardView(i, { folded: folded(i.id) ?? at > 0, progress: progress(i.id) }), foldable: open.length > 1 })),
+    hasHistory: history.length > 0,
+    empty: open.length === 0 && history.length > 0,
+    emptyTitle: EMPTY_TITLE,
+    emptyText: EMPTY_TEXT,
+    history: {
+      label: `Earlier · ${history.length}`,
+      rows: history.map((i) => ({ ...historyRowView(i, typed(i)), opened: opened(i.id) })),
+    },
   };
 }
 

@@ -27,6 +27,8 @@ export function toSessionLine(dto) {
     waitingFor: typeof dto.waiting_for === "string" && dto.waiting_for !== "" ? dto.waiting_for : null,
     mode: str(dto.mode),
     model: str(dto.model),
+    openInterviewCount: Number.isInteger(dto.open_interview_count) ? dto.open_interview_count : 0,
+    openQuestionCount: Number.isInteger(dto.open_question_count) ? dto.open_question_count : 0,
   });
 }
 

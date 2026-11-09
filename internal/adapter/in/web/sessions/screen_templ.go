@@ -328,7 +328,7 @@ func paneTabs() templ.Component {
 			templ_7745c5c3_Var6 = templ.NopComponent
 		}
 		ctx = templ.ClearChildren(ctx)
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 20, "<div class=\"[ pane-tabs ]\" x-bind:data-focus=\"focusActive ? '' : null\"><template x-if=\"focusActive\"><span class=\"[ lead ]\"><span class=\"[ status ]\" x-bind:data-state=\"selected.state\" data-dot-only x-bind:aria-label=\"selected.word\"></span><span x-text=\"selected.title\"></span></span></template><div class=\"[ tabs ]\" role=\"tablist\" aria-label=\"Session views\"><button type=\"button\" role=\"tab\" x-bind:aria-selected=\"agentTabSelected\" x-on:click=\"showAgent\">Agent<template x-if=\"attention\"><span class=\"[ status ]\" data-state=\"waiting\" data-dot-only aria-label=\"waiting on you\"></span></template></button> <button type=\"button\" role=\"tab\" x-bind:aria-selected=\"historyTabSelected\" x-on:click=\"showHistory\">History</button> <button type=\"button\" role=\"tab\" x-bind:aria-selected=\"appTabSelected\" x-on:click=\"showApp\">App</button><template x-if=\"hasTask\"><button type=\"button\" role=\"tab\" x-bind:aria-selected=\"designTabSelected\" x-on:click=\"showDesign\">Design<template x-if=\"designBadge\"><span class=\"[ badge ]\" data-tone=\"signal\" x-text=\"designBadge\"></span></template></button></template><template x-if=\"hasCode\"><button type=\"button\" role=\"tab\" x-bind:aria-selected=\"codeTabSelected\" x-on:click=\"showCode\">Code<template x-if=\"codeBadge\"><span class=\"[ badge ]\" x-text=\"codeBadge\"></span></template></button></template><template x-if=\"hasFiles\"><button type=\"button\" role=\"tab\" x-bind:aria-selected=\"filesTabSelected\" x-on:click=\"showFiles\">Files<template x-if=\"filesBadge\"><span class=\"[ badge ]\" data-tone=\"signal\" x-bind:title=\"filesBadgeTitle\">")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 20, "<div class=\"[ pane-tabs ]\" x-bind:data-focus=\"focusActive ? '' : null\"><template x-if=\"focusActive\"><span class=\"[ lead ]\"><span class=\"[ status ]\" x-bind:data-state=\"selected.state\" data-dot-only x-bind:aria-label=\"selected.word\"></span><span x-text=\"selected.title\"></span></span></template><div class=\"[ tabs ]\" role=\"tablist\" aria-label=\"Session views\"><button type=\"button\" role=\"tab\" x-bind:aria-selected=\"agentTabSelected\" x-on:click=\"showAgent\">Agent<template x-if=\"attentionDot\"><span class=\"[ status ]\" data-state=\"waiting\" data-dot-only aria-label=\"waiting on you\"></span></template><template x-if=\"questionsBadge\"><span class=\"[ badge ]\" data-tone=\"attention\" x-bind:title=\"questionsBadge.label\" data-questions-badge><span class=\"[ status ]\" data-state=\"waiting\" data-dot-only aria-hidden=\"true\"></span> <span class=\"[ visually-hidden ]\" x-text=\"questionsBadge.label\"></span> <span aria-hidden=\"true\" x-text=\"questionsBadge.count\"></span></span></template></button> <button type=\"button\" role=\"tab\" x-bind:aria-selected=\"historyTabSelected\" x-on:click=\"showHistory\">History</button> <button type=\"button\" role=\"tab\" x-bind:aria-selected=\"appTabSelected\" x-on:click=\"showApp\">App</button><template x-if=\"hasTask\"><button type=\"button\" role=\"tab\" x-bind:aria-selected=\"designTabSelected\" x-on:click=\"showDesign\">Design<template x-if=\"designBadge\"><span class=\"[ badge ]\" data-tone=\"signal\" x-text=\"designBadge\"></span></template></button></template><template x-if=\"hasCode\"><button type=\"button\" role=\"tab\" x-bind:aria-selected=\"codeTabSelected\" x-on:click=\"showCode\">Code<template x-if=\"codeBadge\"><span class=\"[ badge ]\" x-text=\"codeBadge\"></span></template></button></template><template x-if=\"hasFiles\"><button type=\"button\" role=\"tab\" x-bind:aria-selected=\"filesTabSelected\" x-on:click=\"showFiles\">Files<template x-if=\"filesBadge\"><span class=\"[ badge ]\" data-tone=\"signal\" x-bind:title=\"filesBadgeTitle\">")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
@@ -441,7 +441,7 @@ func paneTools() templ.Component {
 }
 
 // interviewToggle opens and hides the interview panel (contract: the session
-// has an open interview). It sits before the connection, is not a .pref so it
+// has an open interview, or earlier ones to read: then it has no badge). It sits before the connection, is not a .pref so it
 // stays on a phone, and never takes the focus to the terminal.
 func interviewToggle() templ.Component {
 	return templruntime.GeneratedTemplate(func(templ_7745c5c3_Input templruntime.GeneratedComponentInput) (templ_7745c5c3_Err error) {
@@ -472,7 +472,7 @@ func interviewToggle() templ.Component {
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 32, "<span class=\"[ word ]\">Questions</span> <span class=\"[ badge ]\" data-tone=\"attention\" x-text=\"interviewToggle.count\"></span></button>")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 32, "<span class=\"[ word ]\">Questions</span><template x-if=\"interviewToggle.count\"><span class=\"[ badge ]\" data-tone=\"attention\" x-text=\"interviewToggle.count\"></span></template></button>")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}

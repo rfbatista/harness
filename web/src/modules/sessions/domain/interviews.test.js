@@ -1,6 +1,6 @@
 import { assert, file, test } from "../../../shared/testing/test.js";
 import { makeInterview, makeList } from "../testing/interview-fixtures.js";
-import { applyEvent, arrived, DOCK_MIN_REM, dockedAt, emptyList, openOnes, openQuestionCount } from "./interviews.js";
+import { applyEvent, arrived, closedNow, DOCK_MIN_REM, dockedAt, emptyList, historyOf, openOnes, openQuestionCount } from "./interviews.js";
 
 file("sessions/domain/interviews");
 
@@ -48,4 +48,30 @@ test("the panel docks from 56rem of session column, whatever the rem is", () => 
   assert.equal(dockedAt(896, 16), true);
   assert.equal(dockedAt(895, 16), false);
   assert.equal(dockedAt(1000, 20), false, "a larger rem is a narrower column in rem");
+});
+
+const ended = (id, state, at) => makeInterview({ id, state, ended_at: at });
+
+test("the history is the interviews that are not open, the most recently ended first", () => {
+  const list = makeList(
+    6,
+    makeInterview({ id: "open" }),
+    ended("old", "sent", "2026-11-08T12:00:00Z"),
+    ended("new", "expired", "2026-11-08T15:00:00Z"),
+    ended("mid", "dismissed", "2026-11-08T13:00:00Z"),
+  );
+  assert.deepEqual(historyOf(list).map((i) => i.id), ["new", "mid", "old"]);
+  assert.deepEqual(historyOf(makeList(1, makeInterview())), []);
+});
+
+test("an interview with no end time sorts after the ended ones, the most recently asked first", () => {
+  const list = makeList(3, ended("sent", "sent", "2026-11-08T12:00:00Z"), makeInterview({ id: "b", state: "expired", ended_at: null, asked_at: "2026-11-08T10:00:00Z" }), makeInterview({ id: "c", state: "expired", ended_at: null, asked_at: "2026-11-08T11:00:00Z" }));
+  assert.deepEqual(historyOf(list).map((i) => i.id), ["sent", "c", "b"]);
+});
+
+test("what closed is the interviews that were open and no longer are", () => {
+  const before = makeList(2, makeInterview({ id: "a" }), makeInterview({ id: "b" }), ended("c", "sent", "2026-11-08T12:00:00Z"));
+  const next = makeList(3, ended("a", "sent", "2026-11-08T14:00:00Z"), makeInterview({ id: "b" }), ended("c", "sent", "2026-11-08T12:00:00Z"), ended("d", "expired", "2026-11-08T14:00:00Z"));
+  assert.deepEqual(closedNow(before, next).map((i) => [i.id, i.state]), [["a", "sent"]], "d was never open here");
+  assert.deepEqual(closedNow(next, next), []);
 });

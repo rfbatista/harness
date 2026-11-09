@@ -48,6 +48,7 @@ templ Page(v PageView) {
 			x-on:dialog-action="dialogAction"
 			x-effect="applyFocus()"
 		>
+			<span hidden x-effect="syncInterviews()"></span>
 			@templ.JSONScript("sessions-seed", v.Seed)
 			if v.Code != nil {
 				@templ.JSONScript("code-seed", v.Code.Seed)

@@ -5,13 +5,15 @@
  * ("3 recommended" and its button); the footer sticks to the foot of the
  * panel's scroller and says how far the person is, with a thin bar, then
  * Dismiss and Send. Exceptions: data-state (open draws an attention edge on
- * its border).
+ * its border; sent, dismissed and expired are closed and read-only) and
+ * data-collapsed (folded to its .head row).
  * <section class="interview-set" data-state="open" aria-label="Open interview from architect">
  *   <header><strong>architect asks 5 questions</strong><span class="asked">Asked 14:32</span>
  *     <div class="bulk"><span>3 recommended</span><button class="button">Accept all recommended</button></div></header>
  *   <fieldset class="interview-question">…</fieldset>…
  *   <footer><div class="sum"><span>3 of 5 answered · 2 will be skipped</span><span class="bar"><i style="inline-size:60%"></i></span></div>
  *     <div class="actions"><button class="button">Dismiss</button><span class="grow"></span><button class="button">Send · 2 skipped</button></div></footer></section>
+ * Folded (data-collapsed), and what is closed, are interview-history.css's.
  */
 
 @layer blocks {

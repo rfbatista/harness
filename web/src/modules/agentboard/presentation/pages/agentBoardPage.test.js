@@ -36,7 +36,7 @@ const NEEDS = new Set(["idle", "waiting_approval"]);
 
 /** A card; needs_you is set the way the server would (the page never derives it). */
 const card = (task, project, title, sessions, extra = {}) => {
-  const needs = sessions.some((s) => NEEDS.has(s.status));
+  const needs = sessions.some((s) => NEEDS.has(s.status) || s.open_interview_count > 0);
   return {
     task_id: task,
     project_id: project,
@@ -136,6 +136,35 @@ test("a card shows approvals first, then your turn, then the rest in the server'
   assert.equal(view.lines[0].waitingFor, "Run: git push");
   assert.equal(view.hasMore, true);
   assert.equal(view.moreLabel, "+1 more");
+});
+
+test("a session with an open interview reads questions, even while it runs: after approval, before your turn", async () => {
+  const c = card("t1", "p", "Busy", [
+    line("a", "one", "running"),
+    line("b", "two", "idle"),
+    line("e", "five", "running", 1, { open_interview_count: 1, open_question_count: 3 }),
+    line("c", "three", "waiting_approval", 1, { waiting_for: "Run: git push", open_interview_count: 1, open_question_count: 2 }),
+    line("d", "four", "idle", 1, { open_interview_count: 2, open_question_count: 4 }),
+  ]);
+  const { instance } = await setup({ seed: seedOf([["p", "proj", [c]]]) });
+  const view = card1(instance, "t1");
+  assert.equal(view.needsYou, true, "the server's flag: an open interview makes the task need the person");
+  const lines = [...view.lines];
+  assert.deepEqual(lines.map((l) => [l.id, l.word, l.dot, l.tone, l.chip]), [
+    ["c", "approval", "waiting", "attention", true],
+    ["e", "questions", "waiting", "attention", true],
+    ["d", "questions", "waiting", "attention", true],
+  ]);
+  assert.equal(lines[1].hover.includes("questions"), true);
+});
+
+test("a count that changes on a running session changes its line in place, with the wash", async () => {
+  const { instance, memory } = await setup();
+  memory.publish(live(card("t-a1", "p-alpha", "Retry policy", [line("s1", "backend", "running", 1, { open_interview_count: 1, open_question_count: 2 })])));
+  const l = card1(instance, "t-a1").lines[0];
+  assert.deepEqual([l.word, l.fresh], ["questions", true]);
+  memory.publish(live(card("t-a1", "p-alpha", "Retry policy", [line("s1", "backend", "running", 1)])));
+  assert.equal(card1(instance, "t-a1").lines[0].word, "running", "answered: the chip goes");
 });
 
 test("nothing live shows the empty state and no project at all never reaches the page", async () => {

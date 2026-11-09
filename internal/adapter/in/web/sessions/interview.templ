@@ -8,6 +8,8 @@ package sessions
 // "sessionsInterviews". The answers are kept in that store (and as a draft in
 // the browser) as the person gives them; the footer counts them. Its Send and
 // Dismiss buttons are drawn and do nothing yet: sending is a later change.
+// Open interviews stack (the newest expanded, older ones folded to a row), and
+// what is no longer open sits under Earlier, read-only.
 
 // agentStage is the Agent tab's pane: the terminal, and what sits beside or over it.
 templ agentStage() {
@@ -36,7 +38,8 @@ templ agentStage() {
 }
 
 // interviewPanel is the session's open interviews, newest first, each a card
-// of its questions. Its scroller takes the focus only when the person asks
+// of its questions, then Earlier: the interviews that are sent, dismissed or
+// expired, folded rows. Its scroller takes the focus only when the person asks
 // (Alt+Shift+Q), never on what arrives.
 templ interviewPanel() {
 	<aside class="[ interview ]" aria-label="Interview panel" data-interview-panel>
@@ -44,7 +47,9 @@ templ interviewPanel() {
 			<h2>Interview</h2>
 			<span class="[ who ]" x-text="view.who"></span>
 			<span class="[ grow ]"></span>
-			<span class="[ badge ]" data-tone="attention" x-text="view.openLabel"></span>
+			<template x-if="view.open">
+				<span class="[ badge ]" data-tone="attention" x-text="view.openLabel"></span>
+			</template>
 			<button type="button" class="[ button ]" data-variant="ghost" data-size="sm" data-icon aria-label="Hide interview panel" title="Hide panel" x-on:click="closePanel">
 				@icon("close")
 			</button>
@@ -53,17 +58,80 @@ templ interviewPanel() {
 			<template x-for="card in view.cards" x-bind:key="card.id">
 				@interviewCard()
 			</template>
+			<template x-if="view.empty">
+				<div class="[ empty ]" data-interview-empty>
+					<h2 x-text="view.emptyTitle"></h2>
+					<p x-text="view.emptyText"></p>
+				</div>
+			</template>
+			<template x-if="view.hasHistory">
+				<h3 class="[ interview-group ]" data-interview-earlier x-text="view.history.label"></h3>
+			</template>
+			<template x-for="row in view.history.rows" x-bind:key="row.id">
+				@interviewRow()
+			</template>
 		</div>
 	</aside>
 }
 
+// interviewRow is one interview that is no longer open: a row naming its state,
+// who asked and when, with its counts and how it was delivered; opened, each
+// question with its answer, its note, or "Skipped". An expired one offers Copy
+// answers, so what was typed is not lost.
+templ interviewRow() {
+	<section class="[ interview-set ]" x-bind:data-state="row.state" x-bind:data-collapsed="row.opened ? null : ''" x-bind:aria-label="row.label" data-interview-row>
+		<button type="button" class="[ head ]" x-bind:aria-expanded="row.opened ? 'true' : 'false'" x-on:click="toggleRow(row)">
+			<span class="[ text ]"><strong x-text="row.title"></strong><span x-text="row.sub"></span></span>
+			<span class="[ badge ]" x-bind:data-tone="row.tone" x-text="row.badge"></span>
+			<span class="[ chev ]"></span>
+		</button>
+		<div class="[ interview-read ]">
+			<template x-for="q in row.questions" x-bind:key="q.key">
+				<div class="[ q ]">
+					<span class="[ title ]" x-text="q.heading"></span>
+					<template x-if="q.skipped">
+						<dd><span class="[ skipped ]">Skipped</span></dd>
+					</template>
+					<template x-if="q.answered">
+						<dd x-text="q.answer"></dd>
+					</template>
+					<template x-if="q.note">
+						<div class="[ note ]" x-text="q.note"></div>
+					</template>
+				</div>
+			</template>
+			<template x-if="row.dismissNote">
+				<div class="[ q ]"><span class="[ title ]">Your note to the agent</span><div class="[ note ]" x-text="row.dismissNote"></div></div>
+			</template>
+		</div>
+		<template x-if="row.copy">
+			<div class="[ foot ]">
+				<button type="button" class="[ button ]" data-size="sm" data-interview-copy x-on:click="copyAnswers(row)">Copy answers</button>
+			</div>
+		</template>
+	</section>
+}
+
 // interviewCard is one open interview: who asks and when, the bulk action,
-// its questions, and the footer that says how far the person is.
+// its questions, and the footer that says how far the person is. Folded, it is
+// the row (.head) alone: the design system hides the rest while data-collapsed
+// is set, so what the person typed stays where it is.
 templ interviewCard() {
-	<section class="[ interview-set ]" x-bind:aria-label="card.label" data-state="open">
+	<section class="[ interview-set ]" x-bind:aria-label="card.folded ? card.foldLabel : card.label" x-bind:data-collapsed="card.folded ? '' : null" data-state="open" x-bind:data-interview-card="card.id">
+		<button type="button" class="[ head ]" aria-expanded="false" x-on:click="toggleCard(card)">
+			<span class="[ status ]" data-state="waiting" data-dot-only aria-hidden="true"></span>
+			<span class="[ text ]"><strong x-text="card.heading"></strong><span x-text="card.foldedSub"></span></span>
+			<span class="[ badge ]" data-tone="attention" x-text="card.foldedBadge"></span>
+			<span class="[ chev ]"></span>
+		</button>
 		<header>
 			<strong x-text="card.heading"></strong>
 			<span class="[ asked ]" x-text="card.asked"></span>
+			<template x-if="card.foldable">
+				<button type="button" class="[ button fold ]" data-variant="ghost" data-size="sm" data-icon aria-expanded="true" x-bind:aria-label="card.foldButton" title="Fold" x-on:click="toggleCard(card)">
+					<span class="[ chev ]"></span>
+				</button>
+			</template>
 			<template x-if="card.recommended">
 				<div class="[ bulk ]">
 					<span x-text="card.recommendedLabel"></span>
@@ -141,7 +209,7 @@ templ interviewQuestion() {
 				<textarea rows="3" placeholder="Write your answer" data-interview-own x-bind:aria-label="q.ownLabel" x-bind:value="textOf(card, q)" x-on:input="type(card, q, $event)" x-on:keydown.escape="leaveBox($event)"></textarea>
 			</template>
 			<details class="[ interview-note ]" x-effect="openNote($el, card, q)">
-				<summary>Add a note</summary>
+				<summary x-text="noteLabel(card, q)">Add a note</summary>
 				<textarea rows="2" placeholder="Anything the agent should know about this answer" data-interview-note x-bind:aria-label="q.noteLabel" x-bind:value="noteOf(card, q)" x-on:input="typeNote(card, q, $event)" x-on:keydown.escape="leaveBox($event)"></textarea>
 			</details>
 		</div>

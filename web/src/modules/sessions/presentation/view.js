@@ -19,6 +19,9 @@ const STATUS = {
   failed: { state: "failed", word: "failed" },
 };
 
+/** A live session with an open interview, after approvals and before its turn. */
+const QUESTIONS = { state: "waiting", word: "questions" };
+
 /** How a session's agent reads: its name, its ID when unknown, "plain claude" without one. */
 export function agentLabel(agentId, agentNames = {}) {
   if (!agentId) return "plain claude";
@@ -58,6 +61,7 @@ const GROUP_LABEL = { architect: "Architect", "needs-you": "Needs you", active: 
 /** @returns {{ state: string, word: string }} */
 export function statusView(session) {
   if (!isTerminal(session) && session.pendingApprovals > 0) return STATUS.waiting_approval;
+  if (!isTerminal(session) && session.status !== "waiting_approval" && session.openInterviewCount > 0) return QUESTIONS;
   return STATUS[session.status];
 }
 
@@ -104,7 +108,7 @@ export function projectSessionsHref(projectId, sessionId = "") {
 }
 
 /** The status word's chip tone on a row: only the uncommon states have a chip. */
-const CHIP_TONE = { thinking: "signal", "your turn": "attention", approval: "attention", failed: "danger" };
+const CHIP_TONE = { thinking: "signal", "your turn": "attention", approval: "attention", questions: "attention", failed: "danger" };
 const NO_CHIP = new Set(["running", "done"]);
 
 /** A row's status chip, null for running and done. */

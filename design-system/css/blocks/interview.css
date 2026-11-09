@@ -59,6 +59,10 @@
       animation: interview-in var(--duration-quick) var(--ease-out);
     }
 
+    /* Nothing open and nothing earlier is no panel; with only history, a short line says so. */
+    & > .scroll > .empty { margin: var(--space-xl) 0; padding: 0; }
+    & > .scroll > .empty h2 { font-size: var(--text-base); }
+
     @media (prefers-reduced-motion: reduce) { & > .scroll { animation: none; } }
   }
 
