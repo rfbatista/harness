@@ -245,8 +245,9 @@ func (c *Catalog) GetProjectMCPServers(_ context.Context, projectID string) (*do
 }
 
 // SetProjectMCPServers makes the named servers Added. An Added server that is
-// not named goes back to Agent's choice; bans and tool overrides stay, except
-// that naming a banned server adds it. Each name must be in the catalog.
+// not named goes back to Agent's choice; bans and tool overrides stay as they
+// are (a banned server that is named is Added and stays banned). Each name
+// must be in the catalog.
 func (c *Catalog) SetProjectMCPServers(_ context.Context, in domain.SetCatalogProjectMCPServers) (*domain.CatalogProjectMCPServers, error) {
 	c.wmu.Lock()
 	defer c.wmu.Unlock()
@@ -275,17 +276,6 @@ func (c *Catalog) SetProjectMCPServers(_ context.Context, in domain.SetCatalogPr
 	}
 	if err := c.setProjectNames(in.ProjectID, names); err != nil {
 		return nil, err
-	}
-	banned := []string{}
-	for _, b := range p.MCPBanned {
-		if !seen[b] {
-			banned = append(banned, b)
-		}
-	}
-	if len(banned) != len(p.MCPBanned) {
-		if _, err := c.projects.SetProjectMCPSettings(context.Background(), in.ProjectID, domain.ProjectMCPSettings{Banned: banned, ToolOverrides: p.MCPToolOverrides}); err != nil {
-			return nil, err
-		}
 	}
 	c.last = nil // the latest change is no longer the latest write
 	c.publish([]string{"projects/" + in.ProjectID})
@@ -333,7 +323,7 @@ func (c *Catalog) SetProjectMCPSettings(_ context.Context, in domain.SetCatalogP
 			}
 			overrides[s.Name][tool] = v
 		}
-		if s.Name != domain.ServicesServerName && l.servers.get(s.Name) == nil {
+		if l.servers.get(s.Name) == nil {
 			unknown = append(unknown, s.Name)
 		}
 	}

@@ -498,9 +498,9 @@ func TestProjectMCPSettings_TheListWriteOnlyMovesTheAddedServers(t *testing.T) {
 	if gh["state"] != "agent" || projectServer(t, got, "nb")["state"] != "banned" || toolOf(t, gh, "a")["override"] != "enabled" {
 		t.Fatalf("read = %v", got)
 	}
-	// Naming a banned server adds it.
+	// Naming a banned server does not lift the ban.
 	f.post("/api/set_project_mcp_servers", map[string]any{"project_id": p, "mcp_servers": []string{"nb"}}, 200)
-	if got := f.get("/api/get_project_mcp_servers?project_id="+p, 200); projectServer(t, got, "nb")["state"] != "added" {
+	if got := f.get("/api/get_project_mcp_servers?project_id="+p, 200); projectServer(t, got, "nb")["state"] != "banned" {
 		t.Fatalf("read = %v", got)
 	}
 }
