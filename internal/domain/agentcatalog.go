@@ -147,6 +147,13 @@ type CatalogMCPServer struct {
 	Projects  []CatalogProjectRef `json:"projects"`
 	Problems  []CatalogProblem    `json:"problems"`
 	Tools     []string            `json:"tools,omitempty"`
+	// KnownTools are the tool names of the last successful probe, in the order
+	// the server gave them: nil (null) before any, empty when it has none.
+	// ProbedAt is when they were taken. DisabledTools is the tool default: the
+	// names of the tools every project without its own setting hides.
+	KnownTools    []string `json:"known_tools"`
+	ProbedAt      *string  `json:"probed_at"`
+	DisabledTools []string `json:"disabled_tools"`
 }
 
 // CatalogBuiltInTool is a Claude built-in tool an agent may be restricted to.
@@ -250,6 +257,29 @@ type CatalogChange struct {
 type CatalogWriteResult struct {
 	Change   CatalogChange     `json:"change"`
 	Versions map[string]string `json:"versions"`
+	// Probe is how probing the server went on a save of an MCP server; nil
+	// for every other write.
+	Probe *CatalogProbeOutcome `json:"probe,omitempty"`
+}
+
+// CatalogProbeOutcome is how one probe of an MCP server went. Status is ok or
+// error; Error and Hint say why it failed.
+type CatalogProbeOutcome struct {
+	Status string `json:"status"`
+	Error  string `json:"error"`
+	Hint   string `json:"hint"`
+}
+
+// RefreshCatalogMCPServerTools probes a saved MCP server and stores its tools.
+type RefreshCatalogMCPServerTools struct {
+	Name string `json:"name"`
+}
+
+// CatalogMCPServerTools is the answer of a refresh: the catalog entry and the
+// probe.
+type CatalogMCPServerTools struct {
+	Server CatalogMCPServer    `json:"server"`
+	Probe  CatalogProbeOutcome `json:"probe"`
 }
 
 // CatalogAgentInput is an agent as the editor saves it.
@@ -376,6 +406,9 @@ type SaveCatalogMCPServer struct {
 	Server       CatalogServerInput `json:"server"`
 	Agents       []string           `json:"agents"`
 	Projects     []string           `json:"projects"`
+	// DisabledTools is the tool default: nil keeps the stored list, empty
+	// clears it.
+	DisabledTools []string `json:"disabled_tools"`
 }
 
 // TestCatalogMCPServer probes an unsaved MCP server.

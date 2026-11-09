@@ -41,11 +41,14 @@ type CatalogEditor interface {
 	DeleteCatalogBundle(in domain.DeleteCatalogItem) (*domain.CatalogWriteResult, error)
 	SaveCatalogSkill(in domain.SaveCatalogSkill) (*domain.CatalogWriteResult, error)
 	DeleteCatalogSkill(in domain.DeleteCatalogItem) (*domain.CatalogWriteResult, error)
-	SaveCatalogMCPServer(in domain.SaveCatalogMCPServer) (*domain.CatalogWriteResult, error)
+	SaveCatalogMCPServer(ctx context.Context, in domain.SaveCatalogMCPServer) (*domain.CatalogWriteResult, error)
 	DeleteCatalogMCPServer(in domain.DeleteCatalogItem) (*domain.CatalogWriteResult, error)
 	// TestCatalogMCPServer starts or calls the server once, outside any agent
 	// sandbox, and says what it found. It stores nothing.
 	TestCatalogMCPServer(ctx context.Context, in domain.TestCatalogMCPServer) (*domain.CatalogProbeResult, error)
+	// RefreshCatalogMCPServerTools probes a saved server and stores its tools,
+	// as a save does. It writes only the tool data.
+	RefreshCatalogMCPServerTools(ctx context.Context, in domain.RefreshCatalogMCPServerTools) (*domain.CatalogMCPServerTools, error)
 	GetProjectMCPServers(ctx context.Context, projectID string) (*domain.CatalogProjectMCPServers, error)
 	SetProjectMCPServers(ctx context.Context, in domain.SetCatalogProjectMCPServers) (*domain.CatalogProjectMCPServers, error)
 	GetProjectAgents(ctx context.Context, projectID string) (*domain.CatalogProjectAgents, error)

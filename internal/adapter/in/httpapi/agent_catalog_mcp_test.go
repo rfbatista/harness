@@ -243,3 +243,126 @@ func TestCatalogMCPServers_TestHintsAtWhyItFailed(t *testing.T) {
 	f.prober.result = mcpserver.ProbeResult{}
 	f.post("/api/test_catalog_mcp_server", map[string]any{"server": map[string]any{"name": "x", "transport": "stdio"}}, 400)
 }
+
+func TestCatalogMCPServers_SaveProbesAndKeepsTheKnownToolsApartFromTheServerFile(t *testing.T) {
+	f := catalogWithSkills(t)
+	f.prober.result = mcpserver.ProbeResult{Status: "ok", ToolNames: []string{"create_issue", "search_code"}}
+	out := f.post("/api/save_catalog_mcp_server", map[string]any{"server": stdioServer("github"), "disabled_tools": []string{"create_issue"}}, 200)
+	if probe := out["probe"].(map[string]any); probe["status"] != "ok" {
+		t.Fatalf("probe = %v", probe)
+	}
+	gh := byName(t, f.get("/api/get_agent_catalog", 200)["mcp_servers"], "github")
+	if got := strList(gh["known_tools"]); !reflect.DeepEqual(got, []string{"create_issue", "search_code"}) {
+		t.Fatalf("known_tools = %v", gh["known_tools"])
+	}
+	if s, _ := gh["probed_at"].(string); s == "" {
+		t.Fatalf("probed_at = %v", gh["probed_at"])
+	}
+	if got := strList(gh["disabled_tools"]); !reflect.DeepEqual(got, []string{"create_issue"}) {
+		t.Fatalf("disabled_tools = %v", gh["disabled_tools"])
+	}
+	if file := f.read("mcp-servers.json"); strings.Contains(file, "create_issue") || strings.Contains(file, "known_tools") {
+		t.Fatalf("the tool data leaked into mcp-servers.json: %s", file)
+	}
+
+	// Absent keeps the default, [] clears it.
+	f.post("/api/save_catalog_mcp_server", map[string]any{"previous_name": "github", "server": stdioServer("github")}, 200)
+	gh = byName(t, f.get("/api/get_agent_catalog", 200)["mcp_servers"], "github")
+	if got := strList(gh["disabled_tools"]); !reflect.DeepEqual(got, []string{"create_issue"}) {
+		t.Fatalf("an absent list changed the default: %v", got)
+	}
+	f.post("/api/save_catalog_mcp_server", map[string]any{"previous_name": "github", "server": stdioServer("github"), "disabled_tools": []string{}}, 200)
+	gh = byName(t, f.get("/api/get_agent_catalog", 200)["mcp_servers"], "github")
+	if got := strList(gh["disabled_tools"]); len(got) != 0 {
+		t.Fatalf("an empty list did not clear the default: %v", got)
+	}
+}
+
+func TestCatalogMCPServers_AFailedProbeOnSaveKeepsTheServerAndItsLastKnownTools(t *testing.T) {
+	f := catalogWithSkills(t)
+	f.env["NB_TOKEN"] = "tok-123456-secret"
+	f.post("/api/save_catalog_mcp_server", map[string]any{"server": stdioServer("github")}, 200)
+	gh := byName(t, f.get("/api/get_agent_catalog", 200)["mcp_servers"], "github")
+	if gh["known_tools"] != nil || gh["probed_at"] != nil || len(strList(gh["disabled_tools"])) != 0 {
+		t.Fatalf("a never probed server = %v", gh)
+	}
+
+	f.prober.result = mcpserver.ProbeResult{Status: "ok", ToolNames: []string{"a"}}
+	f.post("/api/save_catalog_mcp_server", map[string]any{"previous_name": "github", "server": stdioServer("github")}, 200)
+	before := byName(t, f.get("/api/get_agent_catalog", 200)["mcp_servers"], "github")
+
+	f.prober.result = mcpserver.ProbeResult{Status: "error", Error: "initialize: bad token tok-123456-secret"}
+	out := f.post("/api/save_catalog_mcp_server", map[string]any{"previous_name": "github", "server": stdioServer("github")}, 200)
+	probe := out["probe"].(map[string]any)
+	if probe["status"] != "error" || strings.Contains(probe["error"].(string), "tok-123456-secret") {
+		t.Fatalf("probe = %v", probe)
+	}
+	after := byName(t, f.get("/api/get_agent_catalog", 200)["mcp_servers"], "github")
+	if !reflect.DeepEqual(after["known_tools"], before["known_tools"]) || after["probed_at"] != before["probed_at"] {
+		t.Fatalf("a failed probe changed the tools: before %v after %v", before, after)
+	}
+}
+
+func TestCatalogMCPServers_RefreshProbesASavedServerAndWritesOnlyTheToolData(t *testing.T) {
+	f := catalogWithSkills(t)
+	f.post("/api/save_catalog_mcp_server", map[string]any{"server": stdioServer("github")}, 200)
+	file := f.read("mcp-servers.json")
+
+	f.prober.result = mcpserver.ProbeResult{Status: "ok", ToolNames: []string{"a", "b"}}
+	out := f.post("/api/refresh_catalog_mcp_server_tools", map[string]any{"name": "github"}, 200)
+	if out["probe"].(map[string]any)["status"] != "ok" {
+		t.Fatalf("answer = %v", out)
+	}
+	srv := out["server"].(map[string]any)
+	if srv["name"] != "github" || !reflect.DeepEqual(strList(srv["known_tools"]), []string{"a", "b"}) {
+		t.Fatalf("server = %v", srv)
+	}
+	if f.read("mcp-servers.json") != file {
+		t.Fatal("a refresh rewrote mcp-servers.json")
+	}
+
+	f.prober.result = mcpserver.ProbeResult{Status: "ok", ToolNames: []string{}}
+	out = f.post("/api/refresh_catalog_mcp_server_tools", map[string]any{"name": "github"}, 200)
+	if got := out["server"].(map[string]any)["known_tools"]; got == nil || len(list(got)) != 0 {
+		t.Fatalf("a server probed with no tools = %v", got)
+	}
+
+	missing := f.post("/api/refresh_catalog_mcp_server_tools", map[string]any{"name": "ghost"}, 404)
+	if missing["code"] != "UNKNOWN_REFERENCE" || !reflect.DeepEqual(strList(missing["names"]), []string{"ghost"}) {
+		t.Fatalf("body = %v", missing)
+	}
+}
+
+func TestCatalogMCPServers_RenameCarriesTheToolDataAndDeleteRemovesIt(t *testing.T) {
+	f := catalogWithSkills(t)
+	f.prober.result = mcpserver.ProbeResult{Status: "ok", ToolNames: []string{"a", "b"}}
+	f.post("/api/save_catalog_mcp_server", map[string]any{"server": stdioServer("github"), "disabled_tools": []string{"a", "gone"}}, 200)
+
+	f.prober.result = mcpserver.ProbeResult{Status: "error", Error: "down"}
+	f.post("/api/save_catalog_mcp_server", map[string]any{"previous_name": "github", "server": stdioServer("gh")}, 200)
+	gh := byName(t, f.get("/api/get_agent_catalog", 200)["mcp_servers"], "gh")
+	if !reflect.DeepEqual(strList(gh["known_tools"]), []string{"a", "b"}) || !reflect.DeepEqual(strList(gh["disabled_tools"]), []string{"a", "gone"}) {
+		t.Fatalf("renamed server = %v", gh)
+	}
+
+	f.post("/api/delete_catalog_mcp_server", map[string]any{"name": "gh"}, 200)
+	f.post("/api/save_catalog_mcp_server", map[string]any{"server": stdioServer("gh")}, 200)
+	gh = byName(t, f.get("/api/get_agent_catalog", 200)["mcp_servers"], "gh")
+	if gh["known_tools"] != nil || len(strList(gh["disabled_tools"])) != 0 {
+		t.Fatalf("a deleted server's tool data came back: %v", gh)
+	}
+}
+
+func TestCatalogMCPServers_AnUnparseableToolDataFileIsCatalogBroken(t *testing.T) {
+	f := catalogWithSkills(t)
+	f.write("mcp-tools.json", "{not json")
+	cat := f.get("/api/get_agent_catalog", 200)
+	if b, _ := cat["broken"].(map[string]any); b == nil || b["path"] != "mcp-tools.json" {
+		t.Fatalf("broken = %v", cat["broken"])
+	}
+	f.prober.result = mcpserver.ProbeResult{Status: "ok", ToolNames: []string{"a"}}
+	got := f.post("/api/save_catalog_mcp_server", map[string]any{"server": stdioServer("github")}, 409)
+	if got["code"] != "CATALOG_BROKEN" {
+		t.Fatalf("body = %v", got)
+	}
+}

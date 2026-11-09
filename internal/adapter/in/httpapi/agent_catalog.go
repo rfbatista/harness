@@ -1,6 +1,7 @@
 package httpapi
 
 import (
+	"errors"
 	"net/http"
 	"strings"
 
@@ -118,8 +119,29 @@ func (h *Handler) handleDeleteCatalogSkill(c echo.Context) error {
 
 func (h *Handler) handleSaveCatalogMCPServer(c echo.Context) error {
 	return catalogWrite(h, c, func(in domain.SaveCatalogMCPServer) (*domain.CatalogWriteResult, error) {
-		return h.catalog.SaveCatalogMCPServer(in)
+		return h.catalog.SaveCatalogMCPServer(c.Request().Context(), in)
 	})
+}
+
+func (h *Handler) handleRefreshCatalogMCPServerTools(c echo.Context) error {
+	if err := h.catalogOrUnavailable(); err != nil {
+		return err
+	}
+	var in domain.RefreshCatalogMCPServerTools
+	if err := bindJSON(c, &in); err != nil {
+		return err
+	}
+	out, err := h.catalog.RefreshCatalogMCPServerTools(c.Request().Context(), in)
+	if err != nil {
+		var se *domain.StructuredError
+		if errors.As(err, &se) && se.Code == "UNKNOWN_REFERENCE" {
+			// The name is in the body, not the path: a missing server is a 404.
+			writeCoded(c, http.StatusNotFound, err, se)
+			return nil
+		}
+		return err
+	}
+	return c.JSON(http.StatusOK, out)
 }
 
 func (h *Handler) handleDeleteCatalogMCPServer(c echo.Context) error {

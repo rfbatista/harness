@@ -58,6 +58,7 @@ type txn struct {
 	l           *loaded
 	agents      *node
 	serversRoot *node
+	tools       *node
 	edits       []*fileEdit
 	projects    []*projectEdit
 	// projectList is every project, read once.
@@ -74,7 +75,7 @@ func (c *Catalog) begin() (*txn, error) {
 	if err != nil {
 		return nil, err
 	}
-	return &txn{c: c, l: l, agents: l.agents.clone(), serversRoot: l.serversRoot.clone()}, nil
+	return &txn{c: c, l: l, agents: l.agents.clone(), serversRoot: l.serversRoot.clone(), tools: l.tools.clone()}, nil
 }
 
 // bundlesView and serversView read an object without adding it to the file.
@@ -148,7 +149,7 @@ func (t *txn) finishJSON() error {
 		path string
 		root *node
 		orig *node
-	}{{agentsFile, t.agents, t.l.agents}, {mcpServersFile, t.serversRoot, t.l.serversRoot}} {
+	}{{agentsFile, t.agents, t.l.agents}, {mcpServersFile, t.serversRoot, t.l.serversRoot}, {mcpToolsFile, t.tools, t.l.tools}} {
 		if bytes.Equal(f.root.encode(), f.orig.encode()) {
 			continue
 		}

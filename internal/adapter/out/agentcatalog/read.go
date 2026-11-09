@@ -330,6 +330,7 @@ func (c *Catalog) ReadCatalog() (*domain.CatalogView, error) {
 			continue // the built-in one is listed below
 		}
 		srv := c.serverView(name, l.servers.get(name), agentsOfServer[name])
+		withToolData(&srv, l.tools.get(toolsServersKey).get(name))
 		for _, p := range projects {
 			if contains(p.MCPServers, name) {
 				srv.Projects = append(srv.Projects, domain.CatalogProjectRef{ID: p.ID, Name: p.Name})
@@ -357,6 +358,8 @@ func (c *Catalog) servicesServerView(agents []string, projects []*domain.Project
 		Projects:  []domain.CatalogProjectRef{},
 		Problems:  []domain.CatalogProblem{},
 		Tools:     domain.ServicesServerTools,
+		// A built-in server's tools are fixed, so it has no tool default.
+		DisabledTools: []string{},
 	}
 	if inFile {
 		srv.Problems = append(srv.Problems, domain.CatalogProblem{Code: domain.CatalogProblemBuiltInName,
