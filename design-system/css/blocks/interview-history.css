@@ -1,0 +1,95 @@
+/*
+ * Interview history — the folding of an interview card, and what the panel
+ * keeps under "Earlier" once an interview is sent, dismissed or expired.
+ * A card folded (data-collapsed) is its .head row alone: who, a second line,
+ * a badge and a chevron that turns. An open card shows its row only while
+ * folded; a closed one (sent, dismissed, expired) always has it, and opening
+ * it shows the answers read back (.interview-read), one block per question. A
+ * blank is the word "Skipped", italic and faint; a note sits beside a rule. An
+ * expired interview ends with a Copy answers button in a .foot. A stack's open
+ * cards fold with the .fold button at the corner of their header.
+ * <h3 class="interview-group">Earlier · 3</h3>
+ * <section class="interview-set" data-state="sent" aria-label="Sent interview from architect at 13:58">
+ *   <button class="head" aria-expanded="true"><span class="text"><strong>Sent · architect · 13:58</strong><span>1 answered, 1 skipped · delivered 13:58</span></span>
+ *     <span class="badge">2 questions</span><span class="chev"></span></button>
+ *   <div class="interview-read"><div class="q"><span class="title">1 · Which store?</span><dd>The harness database</dd><div class="note">because</div></div>
+ *     <div class="q"><span class="title">2 · Where is it read?</span><dd><span class="skipped">Skipped</span></dd></div></div></section>
+ */
+
+@layer blocks {
+  .interview-set {
+    position: relative;
+
+    & > .head {
+      display: flex;
+      align-items: center;
+      gap: var(--space-s);
+      inline-size: 100%;
+      min-block-size: var(--size-row);
+      padding: var(--space-s) var(--space-m);
+      border: 0;
+      background: none;
+      text-align: start;
+
+      & > .text { display: grid; flex: 1; min-inline-size: 0; }
+      & > .text > strong { font-size: var(--text-sm); }
+      & > .text > span { overflow: hidden; color: var(--color-ink-faint); font-size: var(--text-xs); text-overflow: ellipsis; white-space: nowrap; }
+    }
+    & > button.head:hover { background: var(--color-hover); }
+    & > button.head:focus-visible { outline: var(--border-focus-width) solid var(--color-focus); outline-offset: calc(-1 * var(--border-focus-offset)); }
+
+    & .chev {
+      flex: none;
+      inline-size: 0.5rem;
+      block-size: 0.5rem;
+      border-inline-end: var(--border-icon-width) solid var(--color-ink-faint);
+      border-block-end: var(--border-icon-width) solid var(--color-ink-faint);
+      rotate: 45deg;
+      translate: 0 -15%;
+    }
+    &[data-collapsed] > .head .chev { rotate: -45deg; translate: -10% 0; }
+    &[data-collapsed] > :not(.head) { display: none; }
+    &[data-state="open"]:not([data-collapsed]) > .head { display: none; }
+
+    & > header > .fold { position: absolute; inset-block-start: var(--space-2xs); inset-inline-end: var(--space-2xs); }
+    & > header > .fold > .chev { border-color: currentcolor; rotate: 225deg; translate: 0 25%; }
+
+    & > .foot {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      gap: var(--space-xs);
+      padding: var(--space-s) var(--space-m);
+      border-block-start: var(--border-width) solid var(--color-line);
+    }
+  }
+
+  .interview-group {
+    margin-block-start: var(--space-xs);
+    color: var(--color-ink-faint);
+    font-size: var(--text-xs);
+    font-weight: var(--weight-medium);
+    letter-spacing: 0.05em;
+    text-transform: uppercase;
+  }
+
+  .interview-read {
+    & > .q {
+      display: grid;
+      gap: var(--space-3xs);
+      padding: var(--space-s) var(--space-m);
+      border-block-start: var(--border-width) solid var(--color-line);
+    }
+    & .title { color: var(--color-ink-faint); font-size: var(--text-xs); }
+    & dd { margin: 0; color: var(--color-ink); font-size: var(--text-sm); font-weight: var(--weight-medium); white-space: pre-wrap; overflow-wrap: anywhere; }
+    & .skipped { font-style: italic; font-weight: var(--weight-regular); color: var(--color-ink-faint); }
+    & .note {
+      padding-inline-start: var(--space-s);
+      border-inline-start: var(--border-rule-width) solid var(--color-line-strong);
+      color: var(--color-ink-muted);
+      font-size: var(--text-xs);
+      white-space: pre-wrap;
+      overflow-wrap: anywhere;
+    }
+  }
+}

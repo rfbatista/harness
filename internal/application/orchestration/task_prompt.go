@@ -137,7 +137,7 @@ task/designs/attached.md. Its artifact_id is its id in .index.json:
 - mcp__task__detach_artifact_from_task — detach one from this task; it stays in the project
 
 These tools always act on this task; they take no project or task id.`)
-	return b.String() + "\n\n" + resourcesSection(counts) + "\n\n" + notificationsSection + "\n\n" + branchesSection
+	return b.String() + "\n\n" + resourcesSection(counts) + "\n\n" + notificationsSection + "\n\n" + branchesSection + "\n\n" + askSection(role == domain.RoleDelegate)
 }
 
 // moveDocsLine tells a session on a task who moves its documents to project
@@ -179,6 +179,17 @@ You can read it and post to it; reading never marks anything read:
 Use notify only for what the person has to know or do, never for progress
 chatter: request_user_review and moving a task to review already notify the
 person. A session may post at most 20 an hour.`
+
+// askSection tells a session how to put questions to the person: through the
+// ask_person tool, ending its turn, since the answers arrive as its next turn
+// (ADR 0076). A delegate asks its architect first.
+func askSection(delegate bool) string {
+	s := "To ask the person questions, ask the person through `ask_person` and end your turn; never ask in plain text. Give each question your recommended answer. The answers arrive as your next turn."
+	if delegate {
+		s += " As a delegate, ask your architect first, and ask the person only what your architect cannot settle."
+	}
+	return s
+}
 
 // branchesSection names push_branch, the way to ask for a push without
 // waiting on it (ADR 0071).
@@ -455,7 +466,7 @@ tools; mcp__task__request_user_review and mcp__task__update_task_status do too
 without task_id. If the review cannot be opened, tell the person with notify.
 
 These tools always act on this session's project; they take no project id.`)
-	return b.String() + "\n\n" + notificationsSection
+	return b.String() + "\n\n" + notificationsSection + "\n\n" + askSection(false)
 }
 
 // briefStructure is the part of the task's brief on its feature: on a child

@@ -58,7 +58,10 @@ const GROUP_LABEL = { architect: "Architect", "needs-you": "Needs you", active: 
 /** @returns {{ state: string, word: string }} */
 export function statusView(session) {
   if (!isTerminal(session) && session.pendingApprovals > 0) return STATUS.waiting_approval;
-  return STATUS[session.status];
+  const status = STATUS[session.status];
+  // After approvals and before its turn: only the word is the interview's, the dot stays the session's own.
+  if (!isTerminal(session) && session.status !== "waiting_approval" && session.openInterviewCount > 0) return { ...status, word: "questions" };
+  return status;
 }
 
 /** .status[data-state] → an option's data-tone (the dot in a Listbox select). */
@@ -104,7 +107,7 @@ export function projectSessionsHref(projectId, sessionId = "") {
 }
 
 /** The status word's chip tone on a row: only the uncommon states have a chip. */
-const CHIP_TONE = { thinking: "signal", "your turn": "attention", approval: "attention", failed: "danger" };
+const CHIP_TONE = { thinking: "signal", "your turn": "attention", approval: "attention", questions: "attention", failed: "danger" };
 const NO_CHIP = new Set(["running", "done"]);
 
 /** A row's status chip, null for running and done. */

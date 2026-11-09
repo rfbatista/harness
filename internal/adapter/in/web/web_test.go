@@ -121,25 +121,26 @@ func builtAssets(t *testing.T) *Assets {
 }
 
 type world struct {
-	projects  []*domain.Project
-	tickets   []*domain.Ticket
-	sessions  []*domain.Session
-	agents    []*domain.Agent
-	repos     []*domain.Repository
-	env       fakeEnv
-	docs      fakeDocs
-	history   ports.RepositoryHistory
-	artifacts []*domain.Artifact
-	summaries fakeSummaries
-	resources []*domain.TicketResource
-	comments  []*domain.TicketComment
-	prs       ports.PullRequests
-	creds     ports.GitCredentials
-	usage     ports.UsageDashboard
-	gitStates ports.WorktreeGit
-	archived  fakeArchivedCounts
-	designs   ports.DesignSystemPages
-	board     ports.AgentBoard
+	projects   []*domain.Project
+	tickets    []*domain.Ticket
+	sessions   []*domain.Session
+	agents     []*domain.Agent
+	repos      []*domain.Repository
+	env        fakeEnv
+	docs       fakeDocs
+	history    ports.RepositoryHistory
+	artifacts  []*domain.Artifact
+	summaries  fakeSummaries
+	resources  []*domain.TicketResource
+	comments   []*domain.TicketComment
+	prs        ports.PullRequests
+	creds      ports.GitCredentials
+	usage      ports.UsageDashboard
+	gitStates  ports.WorktreeGit
+	archived   fakeArchivedCounts
+	designs    ports.DesignSystemPages
+	board      ports.AgentBoard
+	interviews ports.InterviewReader
 }
 
 // fakeArchivedCounts counts each project's archived tasks like planning.
@@ -206,6 +207,9 @@ func newTestHandler(t *testing.T, w world) http.Handler {
 	}
 	if w.designs != nil {
 		deps.DesignSystems = w.designs
+	}
+	if w.interviews != nil {
+		deps.Interviews = w.interviews
 	}
 	return NewHandler(deps, builtAssets(t), fallback)
 }

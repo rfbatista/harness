@@ -9,11 +9,16 @@ import { assert, file, test } from "../../../shared/testing/test.js";
 import { makeTask, taskDTO } from "../testing/fixtures.js";
 import { railGatewayContract } from "../testing/rail-contract.js";
 import { memoryRail } from "./memory-rail.js";
-import { railGateway, toProjectChange, toRailChange } from "./rail-gateway.js";
+import { railGateway, toProjectChange, toRailChange, toRailSession } from "./rail-gateway.js";
 
 file("tasks/infrastructure/rail");
 
-const toDTO = (s) => ({ id: s.id, ticket_id: s.ticketId || undefined, status: s.status, pending_approvals: s.pendingApprovals });
+const toDTO = (s) => ({ id: s.id, ticket_id: s.ticketId || undefined, status: s.status, pending_approvals: s.pendingApprovals, open_interview_count: s.openInterviewCount });
+
+test("a rail session carries its open interviews, none when the server says nothing", () => {
+  assert.equal(toRailSession({ id: "a", status: "running" }).openInterviewCount, 0);
+  assert.equal(toRailSession({ id: "a", status: "running", open_interview_count: 2 }).openInterviewCount, 2);
+});
 
 railGatewayContract("memory", (world) => {
   const m = memoryRail(world);

@@ -22,6 +22,8 @@
  * @property {string|null} waitingFor
  * @property {string} mode
  * @property {string} model
+ * @property {number} openInterviewCount  its open interviews: one makes the line read "questions"
+ * @property {number} openQuestionCount
  *
  * @typedef {object} Card
  * @property {string} taskId
@@ -113,7 +115,7 @@ export function placeCard(board, card, name = "") {
     if (old.leaving) notes.push({ type: "revived", taskId: card.taskId });
     for (const line of next.sessions) {
       const before = old.sessions.find((l) => l.sessionId === line.sessionId);
-      if (!before || before.status !== line.status) notes.push({ type: "line", taskId: card.taskId, sessionId: line.sessionId });
+      if (!before || before.status !== line.status || before.openInterviewCount !== line.openInterviewCount) notes.push({ type: "line", taskId: card.taskId, sessionId: line.sessionId });
     }
     const cards = section.cards.map((c, i) => (i === at.c ? next : c));
     if (next.needsYou && !old.needsYou) {
@@ -203,7 +205,7 @@ export function reconcile(board, seed, { wholesale = false } = {}) {
       else {
         for (const line of card.sessions) {
           const before = old.sessions.find((l) => l.sessionId === line.sessionId);
-          if (!before || before.status !== line.status) notes.push({ type: "line", taskId: card.taskId, sessionId: line.sessionId });
+          if (!before || before.status !== line.status || before.openInterviewCount !== line.openInterviewCount) notes.push({ type: "line", taskId: card.taskId, sessionId: line.sessionId });
         }
         if (old.leaving) notes.push({ type: "revived", taskId: card.taskId });
       }

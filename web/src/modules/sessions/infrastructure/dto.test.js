@@ -29,6 +29,12 @@ test("maps the wire format to a frozen domain session", () => {
   assert.equal("cost_usd" in s, false, "fields the UI does not use stay behind");
 });
 
+test("a session carries how many interviews and questions are open, none when the server says nothing", () => {
+  assert.deepEqual([toSession(wire).openInterviewCount, toSession(wire).openQuestionCount], [0, 0]);
+  const asking = toSession({ ...wire, open_interview_count: 2, open_question_count: 5 });
+  assert.deepEqual([asking.openInterviewCount, asking.openQuestionCount], [2, 5]);
+});
+
 test("the newest merge result comes with the session, and a session never merged has none", () => {
   assert.equal(toSession(wire).lastMerge, null);
   const merged = toSession({ ...wire, last_merge: { at: "2026-10-23T12:00:00Z", merged: true, into: "main", head: "abc123" } }).lastMerge;
@@ -80,6 +86,13 @@ test("the seed carries agent names for live updates", () => {
   assert.deepEqual(seed.agentNames, { a1: "Reviewer" });
   assert.deepEqual(toSeed({ project_id: "p1", sessions: [] }).agentNames, {});
   assert.deepEqual([toSeed({ project_id: "p1", sessions: [], task_title: "Port" }).taskTitle, toSeed({ project_id: "p1", sessions: [] }).taskTitle], ["Port", ""]);
+});
+
+test("the seed carries each session's interviews, none when it has none", () => {
+  const seed = toSeed({ project_id: "p1", sessions: [], interviews: { s1: { seq: 3, interviews: [] } } });
+  assert.deepEqual(Object.keys(seed.interviews), ["s1"]);
+  assert.equal(seed.interviews.s1.seq, 3);
+  assert.deepEqual(toSeed({ project_id: "p1", sessions: [] }).interviews, {});
 });
 
 test("feed lines become upserts or deletions", () => {

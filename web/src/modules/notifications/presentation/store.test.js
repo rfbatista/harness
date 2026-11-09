@@ -92,6 +92,19 @@ test("the seed gives the count and the title; without one, the first read does",
   assert.deepEqual([bare.store.unreadCount, bare.doc.title], [2, "(2) Notification · harness"]);
 });
 
+test("a page can pin the count that leads the title (the open questions of the session in view); letting it go brings the unread count back", () => {
+  const w = world({ seed: seedOf([makeNotification()], 1) });
+  assert.equal(w.doc.title, "(1) Notification · harness");
+  w.store.pinTitleCount(5);
+  assert.equal(w.doc.title, "(5) Notification · harness");
+  w.server.push([makeNotification({ id: "a" })], 2);
+  assert.equal(w.doc.title, "(5) Notification · harness", "an arriving notification does not unpin it");
+  w.store.pinTitleCount(0);
+  assert.equal(w.doc.title, "(2) Notification · harness");
+  w.store.pinTitleCount(null);
+  assert.equal(w.doc.title, "(2) Notification · harness");
+});
+
 test("the count leads the title and keeps what a page added to its end", () => {
   const w = world({ seed: seedOf([makeNotification()], 1) });
   w.doc.title = "(1) Agent board · harness · 2 need you";

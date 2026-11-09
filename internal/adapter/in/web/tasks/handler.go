@@ -39,6 +39,8 @@ type Handler struct {
 	PullRequests ports.PullRequests
 	// WorktreeGit seeds each session worktree's git state; nil seeds none.
 	WorktreeGit ports.WorktreeGit
+	// Interviews seeds each session's interviews; nil seeds none.
+	Interviews ports.InterviewReader
 	// Usage seeds the task's and its sessions' token totals; nil leaves them out.
 	Usage ports.UsageDashboard
 	// Code serves the sessions' Code tab; nil leaves it out. Workspaces
@@ -138,6 +140,7 @@ func (h Handler) ProjectSessions(w http.ResponseWriter, r *http.Request) error {
 	}
 	frame.Live = true // sessionsPage follows the project's feed
 	view := sessions.NewPageView(frame, project, nil, list, agents, repos, h.Now())
+	view.Seed.Interviews = h.interviews(ctx, list)
 	if h.PullRequests != nil {
 		view.PullRequests = pullrequests.NewWatchSeed(ctx, h.PullRequests, project.ID, workspaceIDs(list))
 	}
@@ -266,6 +269,7 @@ func (h Handler) task(w http.ResponseWriter, r *http.Request, codeRoute *code.Ro
 	}
 	frame.Live = true // sessionsPage follows the project's feed
 	view := sessions.NewPageView(frame, project, task, list, agents, repos, h.Now())
+	view.Seed.Interviews = h.interviews(ctx, list)
 	if view.Seed.Artifacts, err = h.designArtifacts(ctx, ports.ArtifactFilter{TicketID: task.ID}); err != nil {
 		return err
 	}
@@ -343,6 +347,34 @@ func (h Handler) task(w http.ResponseWriter, r *http.Request, codeRoute *code.Ro
 		view.Seed.OpenCode = codeRoute.SessionID
 	}
 	return h.Render(w, r, http.StatusOK, sessions.Page(view))
+}
+
+// interviews reads each session's interviews for the seed, as
+// GET /api/sessions/{id}/interviews answers them: a session with none has an
+// empty list at seq 0. The map is never nil; a read that fails seeds none and
+// the panel reads them itself: they are not worth the page.
+func (h Handler) interviews(ctx context.Context, list []*domain.Session) map[string]*domain.InterviewList {
+	out := map[string]*domain.InterviewList{}
+	if h.Interviews == nil || len(list) == 0 {
+		return out
+	}
+	ids := make([]string, len(list))
+	for i, s := range list {
+		ids[i] = s.ID
+	}
+	read, err := h.Interviews.ListInterviews(ctx, ids)
+	if err != nil {
+		slog.Warn("sessions page: interviews not read", "err", err)
+		return out
+	}
+	for _, id := range ids {
+		if l := read[id]; l != nil {
+			out[id] = l
+		} else {
+			out[id] = &domain.InterviewList{Interviews: []*domain.Interview{}}
+		}
+	}
+	return out
 }
 
 // usageTotals reads the task's and each of its sessions' all-time token

@@ -14,6 +14,7 @@ export function toRailSession(dto) {
     ticketId: dto.ticket_id ?? "",
     status: dto.status,
     pendingApprovals: Number(dto.pending_approvals ?? 0),
+    openInterviewCount: Number(dto.open_interview_count ?? 0),
   });
 }
 

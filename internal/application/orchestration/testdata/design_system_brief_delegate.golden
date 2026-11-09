@@ -116,6 +116,8 @@ the branch or the remote. To ask for one without waiting on it:
 
 - mcp__task__push_branch — push a branch of your repository to a remote (default origin, under the branch's own name unless you give remote_branch): it files the request and returns at once, never forces, and the answer arrives as a new turn starting with [branch request …]: pushed, push failed (with the reason) or denied (with the person's note)
 
+To ask the person questions, ask the person through `ask_person` and end your turn; never ask in plain text. Give each question your recommended answer. The answers arrive as your next turn. As a delegate, ask your architect first, and ask the person only what your architect cannot settle.
+
 ## Design system
 
 This repository uses the project design system "Brand One". Read `project/design-system/README.md` in your virtual shell before you build or change UI. Use its tokens as CSS custom properties or through this repository's own token build, never raw values. The files are read-only: if the design system lacks something, say so in a comment or in your spec.

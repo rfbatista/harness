@@ -183,6 +183,14 @@ func (s *Service) Subscribe(bus ports.EventSubscriber) {
 		}
 		return nil
 	})
+	ports.On(bus, func(ctx context.Context, ev domain.InterviewOpened) error {
+		s.onInterviewOpened(ev)
+		return nil
+	})
+	ports.On(bus, func(ctx context.Context, ev domain.InterviewClosed) error {
+		s.resolve(interviewKey(ev.InterviewID))
+		return nil
+	})
 	ports.On(bus, func(ctx context.Context, ev domain.SessionCommitCheckChanged) error {
 		s.onCommitCheck(ev)
 		return nil
@@ -216,6 +224,7 @@ func sessionWaitingKey(id string) string { return "session_waiting:" + id }
 func sessionFailedKey(id string) string  { return "session_failed:" + id }
 func taskReviewKey(id string) string     { return "task_review:" + id }
 func commitCheckKey(id string) string    { return "commit_check_off:" + id }
+func interviewKey(id string) string      { return "interview:" + id }
 
 func (s *Service) onReview(ev domain.ReviewRequestChanged) {
 	if ev.State != domain.ReviewPending {
@@ -291,6 +300,28 @@ func (s *Service) onSessionStatus(ev domain.SessionStatusChanged) {
 		Body:  clip(sess.LastAction, domain.MaxNotificationBodyLen),
 		Link:  domain.TaskLink(sess.ProjectID, sess.TicketID), CauseKey: sessionWaitingKey(sess.ID),
 	}, false)
+}
+
+// onInterviewOpened records one notification per interview, which the person
+// settles by answering or dismissing it. It takes the session_waiting kind:
+// the session waits on the person.
+func (s *Service) onInterviewOpened(ev domain.InterviewOpened) {
+	sess := s.readers.Sessions.Get(ev.SessionID)
+	if sess == nil || sess.ProjectID == "" {
+		slog.Warn("notification for a session that is not recorded", "session", ev.SessionID)
+		return
+	}
+	body := strconv.Itoa(ev.Questions) + " questions"
+	if ev.Questions == 1 {
+		body = "1 question"
+	}
+	s.record(&domain.Notification{
+		ProjectID: sess.ProjectID, TaskID: sess.TicketID, SessionID: sess.ID,
+		Kind: domain.NotificationSessionWaiting, Level: domain.NotificationAction,
+		Title: clip("A session has questions for you: "+strings.TrimSpace(ev.Title), domain.MaxNotificationTitleLen),
+		Body:  body,
+		Link:  domain.TaskLink(sess.ProjectID, sess.TicketID) + "?session=" + url.QueryEscape(sess.ID), CauseKey: interviewKey(ev.InterviewID),
+	}, true)
 }
 
 // onCommitCheck records one notification for a session whose commit check is

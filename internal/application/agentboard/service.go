@@ -213,13 +213,25 @@ func (s *Service) buildCard(tk, feature *domain.Ticket, sessions []*domain.Sessi
 		if line.StatusSince.After(card.LastStatusChangeAt) {
 			card.LastStatusChangeAt = line.StatusSince
 		}
-		if sess.Status.NeedsPerson() {
+		if sess.NeedsPerson() {
 			card.NeedsYou = true
 			// Without a card to go by, the card needs the person since its
-			// earliest still-waiting session began to.
-			if needSince == nil || line.StatusSince.Before(*needSince) {
-				t := line.StatusSince
-				needSince = &t
+			// earliest signal: a session's wait on its turn or approval, or
+			// its earliest open interview.
+			signals := []time.Time{}
+			if sess.Status.NeedsPerson() {
+				signals = append(signals, line.StatusSince)
+			}
+			if sess.OpenInterviewSince != nil {
+				signals = append(signals, *sess.OpenInterviewSince)
+			}
+			if len(signals) == 0 {
+				signals = append(signals, line.StatusSince) // an open interview with no time: since its status
+			}
+			for _, t := range signals {
+				if needSince == nil || t.Before(*needSince) {
+					needSince = &t
+				}
 			}
 		}
 	}
@@ -255,6 +267,7 @@ func (s *Service) line(sess *domain.Session, taskSessions []*domain.Session, age
 	line := domain.BoardSessionLine{
 		SessionID: sess.ID, AgentName: name, Role: roleName, Status: sess.Status,
 		StatusSince: sess.StatusSince, Mode: string(sess.Mode), Model: sess.Model,
+		OpenInterviewCount: sess.OpenInterviewCount, OpenQuestionCount: sess.OpenQuestionCount,
 	}
 	if sess.Status == domain.SessionWaitingApproval && s.Asks != nil {
 		if ask := s.Asks.PendingAsk(sess.ID); ask != "" {

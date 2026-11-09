@@ -239,6 +239,10 @@ func NewRouter(h *Handler, opts ...Option) *echo.Echo {
 	g.DELETE("/sessions/:id", h.handleDeleteSession)
 	g.GET("/events", h.handleEvents) // a project's session changes (SSE)
 	g.GET("/sessions/:id/events", h.handleSessionEvents)
+	g.GET("/sessions/:id/interviews", h.handleSessionInterviews)
+	g.GET("/sessions/:id/interviews/events", h.handleSessionInterviewEvents)
+	g.POST("/interviews/:id/answers", h.handleSubmitInterview)
+	g.POST("/interviews/:id/dismiss", h.handleDismissInterview)
 	g.GET("/sessions/:id/terminal", h.handleSessionTerminal) // WebSocket upgrade
 	// the person's own terminals on a session's virtual file system (ADR 0051 guards each)
 	guard := personGuard(o)

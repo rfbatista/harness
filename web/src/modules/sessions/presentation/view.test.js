@@ -12,8 +12,8 @@ file("sessions/presentation/view");
 
 test("status words match the shared fixture (parity with the BFF)", () => {
   for (const c of fixture.cases) {
-    const session = makeSession({ status: c.status, pendingApprovals: c.pending_approvals });
-    const label = `${c.status}+${c.pending_approvals}`;
+    const session = makeSession({ status: c.status, pendingApprovals: c.pending_approvals, openInterviewCount: c.open_interview_count ?? 0 });
+    const label = `${c.status}+${c.pending_approvals}+${c.open_interview_count ?? 0}`;
     assert.deepEqual(statusView(session), { state: c.state, word: c.word }, label);
     assert.equal(needsYou(session), c.needs_you, `${label} needs_you`);
   }
@@ -192,7 +192,7 @@ test("rows match the shared fixture (parity with the BFF)", () => {
     const sessions = c.sessions.map((f) =>
       makeSession({
         id: f.id, agentId: f.agent_id, role: f.role ?? "", mode: f.mode ?? "", model: f.model ?? "", status: f.status,
-        pendingApprovals: f.pending_approvals ?? 0, task: f.task, ticketId: f.ticket_id ?? "t1", parentSessionId: f.parent ?? "", broughtUnder: f.brought_under === true,
+        pendingApprovals: f.pending_approvals ?? 0, openInterviewCount: f.open_interview_count ?? 0, task: f.task, ticketId: f.ticket_id ?? "t1", parentSessionId: f.parent ?? "", broughtUnder: f.brought_under === true,
         updatedAt: ago(f.ago), repositoryId: f.repository_id ?? "", agentUnassigned: f.agent_unassigned === true, sandbox: f.sandboxed === false ? { sandboxed: false, visibility: "unrestricted", driver: "" } : null,
         statusCheck: f.check ? makeCheck({ state: f.check.state, everyMinutes: f.check.every, nextAt: new Date(T0.getTime() + f.check.next_in * 60_000) }) : null,
       }),

@@ -111,3 +111,5 @@ A git push, like any branch action, waits for the person's approval, whatever
 the branch or the remote. To ask for one without waiting on it:
 
 - mcp__task__push_branch — push a branch of your repository to a remote (default origin, under the branch's own name unless you give remote_branch): it files the request and returns at once, never forces, and the answer arrives as a new turn starting with [branch request …]: pushed, push failed (with the reason) or denied (with the person's note)
+
+To ask the person questions, ask the person through `ask_person` and end your turn; never ask in plain text. Give each question your recommended answer. The answers arrive as your next turn.

@@ -20,6 +20,8 @@
  * @property {""|"architect"|"implement"|"design"|"product"} mode  the role it was started in on top of its agent; "" for none. A "product" session may run with no task (ticketId ""): a feature brainstorm at project level.
  * @property {SessionStatus} status
  * @property {number} pendingApprovals  tool calls waiting for the developer
+ * @property {number} openInterviewCount  interviews its agent asked that wait for answers
+ * @property {number} openQuestionCount  the questions across them
  * @property {string} lastAction        "" until the agent has done something
  * @property {boolean} interactive       claude runs in a terminal (a PTY) rather than over stream-json
  * @property {"server"|"tui"|""} runsOn  where an interactive session's terminal lives; "" when headless
@@ -90,12 +92,13 @@ export const isActive = (session) =>
   session.status === Status.STARTING || session.status === Status.RUNNING || session.status === Status.THINKING;
 
 /**
- * The session is waiting on the developer: an approval, or — for an
- * interactive session at its turn boundary (idle) — the next message.
+ * The session is waiting on the developer: an approval, an open interview
+ * (whatever the status: the agent may have gone on), or — for an interactive
+ * session at its turn boundary (idle) — the next message.
  */
 export const needsYou = (session) =>
   !isTerminal(session) &&
-  (session.status === Status.WAITING_APPROVAL || session.status === Status.IDLE || session.pendingApprovals > 0);
+  (session.status === Status.WAITING_APPROVAL || session.status === Status.IDLE || session.pendingApprovals > 0 || session.openInterviewCount > 0);
 
 /** The terminal of this session can be attached from here: it runs on the server and is alive. */
 export const hasLiveTerminal = (session) => session.interactive && session.runsOn === "server" && !isTerminal(session);

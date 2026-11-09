@@ -72,6 +72,9 @@ type Services struct {
 	// AgentBoard is the Agent board's seed and live session feed; nil
 	// answers 503.
 	AgentBoard ports.AgentBoard
+	// Interviews reads and follows what sessions asked the person; nil
+	// answers 503.
+	Interviews ports.Interviews
 	// Usage reads the token usage the LLM proxy measured; nil answers 503.
 	Usage ports.UsageReader
 	// LiveCalls opens the live call stream of a project's Usage page; nil
@@ -175,6 +178,7 @@ type Handler struct {
 	branchNames    ports.BranchNameChecker
 	notifications  ports.Notifications
 	agentBoard     ports.AgentBoard
+	interviews     ports.Interviews
 	usage          ports.UsageReader
 	liveCalls      ports.LiveCalls
 	code           ports.CodeBrowser
@@ -249,6 +253,7 @@ func NewHandler(s Services) *Handler {
 		branchGate:     s.BranchGate,
 		notifications:  s.Notifications,
 		agentBoard:     s.AgentBoard,
+		interviews:     s.Interviews,
 		usage:          s.Usage,
 		liveCalls:      s.LiveCalls,
 		code:           s.Code,

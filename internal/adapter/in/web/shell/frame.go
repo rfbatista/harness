@@ -238,6 +238,9 @@ type RailSession struct {
 	TicketID         string `json:"ticket_id,omitempty"`
 	Status           string `json:"status"`
 	PendingApprovals int    `json:"pending_approvals"`
+	// OpenInterviewCount is the session's open interviews: one makes it need
+	// the person.
+	OpenInterviewCount int `json:"open_interview_count"`
 }
 
 // RailGroup is one status group: "In progress", "Todo", …
