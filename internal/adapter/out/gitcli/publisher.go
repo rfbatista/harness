@@ -77,6 +77,83 @@ func (p BranchPublisher) Push(ctx context.Context, repoRoot, branch string, env 
 	return err
 }
 
+// RemoteURL is where a push to remote <name> goes: its first pushurl when it
+// has one, else remote.<name>.url; "" when the checkout has no such remote.
+func (p BranchPublisher) RemoteURL(ctx context.Context, repoRoot, name string) (string, error) {
+	if push, ok := p.configFirst(ctx, repoRoot, "remote."+name+".pushurl"); ok {
+		return push, nil
+	}
+	ctx, cancel := context.WithTimeout(ctx, p.d.read())
+	defer cancel()
+	out, err := outputTimed(ctx, p.d.gitCmd(ctx, repoRoot, "config", "--get", "remote."+name+".url"))
+	if err := cut(ctx, "config", err); timedOut(err) {
+		return "", err
+	}
+	if err != nil {
+		if ee, ok := err.(*exec.ExitError); ok && ee.ExitCode() == 1 {
+			return "", nil
+		}
+		return "", fmt.Errorf("git config: %w", err)
+	}
+	return strings.TrimSpace(string(out)), nil
+}
+
+// configFirst is the first value of a config key; ok is false when it has none.
+func (p BranchPublisher) configFirst(ctx context.Context, repoRoot, key string) (string, bool) {
+	ctx, cancel := context.WithTimeout(ctx, p.d.read())
+	defer cancel()
+	out, err := outputTimed(ctx, p.d.gitCmd(ctx, repoRoot, "config", "--get-all", key))
+	if err != nil {
+		return "", false
+	}
+	first, _, _ := strings.Cut(strings.TrimSpace(string(out)), "\n")
+	return first, first != ""
+}
+
+// PushTo publishes refs/heads/<branch> to the named remote as
+// refs/heads/<remoteBranch>, never forced. With a commit it publishes exactly
+// that commit instead of the branch's head. The upstream is set only when it
+// is the branch itself to origin under the same name, which is what the
+// person's Push has always done. A rejection carries git's reason (ADR 0071).
+func (p BranchPublisher) PushTo(ctx context.Context, repoRoot, branch, commit, remote, remoteBranch string, env []string) error {
+	args := []string{"push", "--porcelain"}
+	src := "refs/heads/" + branch
+	if commit != "" {
+		src = commit
+	} else if remote == "origin" && remoteBranch == branch {
+		args = append(args, "--set-upstream")
+	}
+	args = append(args, "--", remote, src+":refs/heads/"+remoteBranch)
+	_, err := p.d.gitNetwork(ctx, repoRoot, env, args...)
+	if err != nil && pushRefused(err.Error()) && !errors.Is(err, ports.ErrRemoteAuthRejected) {
+		return rejectedPush{err}
+	}
+	return err
+}
+
+// CommitsToPush counts the commits branch has that the remote branch lacks, as
+// last fetched or pushed (no network). known says the remote-tracking ref
+// exists; when it does not the count is against base instead.
+func (p BranchPublisher) CommitsToPush(ctx context.Context, repoRoot, branch, remote, remoteBranch, base string) (n int, known bool, err error) {
+	against := "refs/remotes/" + remote + "/" + remoteBranch
+	known = p.HasRef(ctx, repoRoot, against)
+	args := []string{"rev-list", "--count", "--end-of-options", against + "..refs/heads/" + branch}
+	if !known {
+		if base != "" {
+			args[3] = base + "..refs/heads/" + branch
+		} else {
+			// No base to count against: what no ref of the remote has.
+			args = []string{"rev-list", "--count", "refs/heads/" + branch, "--not", "--remotes=" + remote}
+		}
+	}
+	out, err := p.d.gitOutput(ctx, repoRoot, args...)
+	if err != nil {
+		return 0, known, err
+	}
+	n, err = strconv.Atoi(strings.TrimSpace(out))
+	return n, known, err
+}
+
 // rejectedPush is a push error the remote's refusal caused; it keeps git's
 // text and answers errors.Is(err, ports.ErrPushRejected).
 type rejectedPush struct{ error }

@@ -52,9 +52,12 @@ type Handler struct {
 	// Archived lists the project's archived tasks for the Archived view;
 	// nil lists none.
 	ArchivedTasks ArchivedLister
-	Layout        shell.Layout
-	Render        shell.Renderer
-	Now           func() time.Time
+	// BranchRequests seeds the Branch requests button and its popover with
+	// the task's pending requests; nil leaves them out.
+	BranchRequests ports.BranchRequestReader
+	Layout         shell.Layout
+	Render         shell.Renderer
+	Now            func() time.Time
 }
 
 // workspaceIDs are the sessions' worktrees, each once.
@@ -300,6 +303,13 @@ func (h Handler) task(w http.ResponseWriter, r *http.Request, codeRoute *code.Ro
 	}
 	view.Feature = BuildFeature(project.ID, task, tickets, docs, docsOf, h.Now())
 	view.Reviews = reviewsSeed(project.ID, task.ID, list, agents, []*domain.Ticket{task}, docs)
+	if h.BranchRequests != nil {
+		// The button is painted from the count; a failed read hides it and the browser reads the requests itself.
+		if pending, err := h.BranchRequests.ListBranchRequests(ctx, domain.BranchRequestFilter{TaskID: task.ID, State: domain.BranchRequestPending}); err == nil {
+			view.BranchRequests = view.Reviews
+			view.PendingBranchRequests = len(pending)
+		}
+	}
 	if h.PullRequests != nil {
 		view.PullRequests = pullrequests.NewWatchSeed(ctx, h.PullRequests, project.ID, workspaceIDs(list))
 	}

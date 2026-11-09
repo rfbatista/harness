@@ -28,6 +28,10 @@ func (f *fakeWorktreeGit) PushBranch(_ context.Context, workspaceID, expectedHea
 	return f.state, f.err
 }
 
+func (f *fakeWorktreeGit) PushBranchTo(ctx context.Context, t ports.PushTarget) (*domain.GitState, error) {
+	return f.PushBranch(ctx, t.WorkspaceID, t.ExpectedHead)
+}
+
 func (f *fakeWorktreeGit) FetchRemote(_ context.Context, repositoryID string) (time.Time, error) {
 	f.fetch = repositoryID
 	return time.Date(2026, 10, 28, 12, 0, 0, 0, time.UTC), f.err

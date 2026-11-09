@@ -349,7 +349,13 @@ type PageView struct {
 	// PendingReviews is how many requests wait on the person, for the band's
 	// first paint.
 	PendingReviews int
-	NewSession     NewSessionForm
+	// BranchRequests seeds the Branch requests button and popover
+	// (branchRequests, web/src/modules/branchrequests) with the names the page
+	// knows; nil hides them. PendingBranchRequests is how many wait on the
+	// person, for the button's first paint.
+	BranchRequests        *components.ReviewsSeed
+	PendingBranchRequests int
+	NewSession            NewSessionForm
 	// PullRequests seeds the rows' pull request badges; nil leaves them to
 	// the feed alone.
 	PullRequests *pullrequests.WatchSeed

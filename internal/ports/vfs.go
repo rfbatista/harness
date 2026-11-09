@@ -124,6 +124,15 @@ const (
 	WorktreeEnv        = "HARNESS_WORKTREE"
 )
 
+// BranchGateShimCommand is the git shim, a link to the shim binary in every
+// agent session's shim dir: it refuses a branch action that has no branch grant
+// (contract "Harness server ↔ Agent sessions — branch gate" §3).
+const BranchGateShimCommand = "git"
+
+// BranchGateURLEnv names, in a session's environment, its branch gate's base
+// (…/api/sessions/{id}/branch_gate), which the git shim asks for a grant.
+const BranchGateURLEnv = "HARNESS_BRANCH_GATE_URL"
+
 // ShellUnavailable is the refusal when the harness cannot be reached before
 // a change is made (contract §6).
 const ShellUnavailable = "SHELL_UNAVAILABLE: the harness could not be reached; nothing was written"

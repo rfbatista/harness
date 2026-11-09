@@ -48,6 +48,8 @@ const NEXT_STEP = {
   [Codes.STATUS_CHECK_NOT_FOUND]: "its loop is gone (the session ended?); the list will refresh",
   [Codes.REVIEW_NOT_FOUND]: "the architect's request is gone; reload the page",
   [Codes.REVIEW_NOT_PENDING]: "it was already answered or withdrawn; the list now shows where it stands",
+  [Codes.BRANCH_REQUEST_NOT_FOUND]: "the request is gone; reload the page",
+  [Codes.BRANCH_REQUEST_ANSWERED]: "it was already answered; the list now shows where it stands",
   [Codes.GIT_CREDENTIAL_NOT_FOUND]: "it was deleted; the list will refresh",
   [Codes.GIT_CREDENTIAL_NAME_TAKEN]: "pick a name no other credential uses",
   [Codes.GIT_CREDENTIAL_INVALID_KEY]: "give an OpenSSH or PEM private key, with its passphrase if it has one",

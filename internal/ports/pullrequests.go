@@ -148,3 +148,19 @@ type PullRequestRepository interface {
 	LatestForWorkspaces(ctx context.Context, workspaceIDs []string) []*domain.PullRequest
 	DeleteByProject(projectID string) error
 }
+
+// RemotePublisher is what the harness's push to a named remote needs of git
+// (driven; gitcli's BranchPublisher implements it next to BranchPublisher).
+type RemotePublisher interface {
+	// RemoteURL is where a push to remote <name> goes: its pushurl when it has
+	// one, else its url; "" when there is no such remote.
+	RemoteURL(ctx context.Context, repoRoot, name string) (string, error)
+	// PushTo publishes the local branch to the remote as remoteBranch, never
+	// forced; with a commit, exactly that commit instead of the branch's head. A rejection wraps ErrPushRejected; an auth refusal wraps
+	// ErrRemoteAuthRejected.
+	PushTo(ctx context.Context, repoRoot, branch, commit, remote, remoteBranch string, env []string) error
+	// CommitsToPush counts the commits branch has that the remote branch
+	// lacks, from the remote-tracking ref (no network); known is false, and
+	// the count against base, when that ref does not exist.
+	CommitsToPush(ctx context.Context, repoRoot, branch, remote, remoteBranch, base string) (n int, known bool, err error)
+}
