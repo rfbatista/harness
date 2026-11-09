@@ -1,5 +1,7 @@
 import { assert, file, test } from "../../../shared/testing/test.js";
-import { MAIN, afterFailedRead, afterPick, afterRead, freshRunIn, hasRunIn, pickKeyOf, pickedWorktree, runInOptions, startKey } from "./runIn.js";
+import {
+  BRANCH_ENTRY, MAIN, afterFailedRead, afterPick, afterRead, branchNameOf, branchOptions, freshRunIn, hasRunIn, isBranchKey, pickAnnouncement, pickKeyOf, pickedWorktree, runInOptions, startKey,
+} from "./runIn.js";
 
 file("services/domain/runIn");
 
@@ -69,4 +71,57 @@ test("the options are the main checkout then the sessions, in the server's order
   assert.deepEqual(o.main.map((x) => [x.key, x.label, x.description]), [["main", "main", "Main checkout · your own working copy"]]);
   assert.deepEqual(o.sessions.map((x) => [x.key, x.label, x.description, x.tone]), [["session:s2", "agent/other", "go-developer · running", "signal"]]);
   assert.equal(pickedWorktree(ready("session:s2")).agent, "go-developer");
+});
+
+test("a branch key is told apart from a worktree key, and its label drops the prefix", () => {
+  assert.equal(isBranchKey("branch:feature/x"), true);
+  assert.equal(isBranchKey("branch:origin/feature/x"), true);
+  assert.equal(isBranchKey("branch:"), false, "the Branch… entry is not a branch");
+  assert.equal(isBranchKey("session:s2"), false);
+  assert.equal(branchNameOf("branch:origin/feature/x"), "origin/feature/x");
+});
+
+test("the picker ends with a Branch… entry, and a picked branch has an option of its own", () => {
+  const plain = runInOptions(ready());
+  assert.deepEqual([plain.branchEntry.key, plain.branchEntry.label], [BRANCH_ENTRY, "Branch…"]);
+  assert.equal(plain.branch, null);
+  const picked = runInOptions({ ...ready(), pickedKey: "branch:feature/x" });
+  assert.deepEqual([picked.branch.key, picked.branch.label, picked.branch.description], ["branch:feature/x", "feature/x", "Branch · committed work only"]);
+  assert.equal(runInOptions({ ...ready(), pickedKey: "branch:origin/dev" }).branch.description, "Remote branch · fetched when you start");
+});
+
+test("a branch can be picked though no list offers it, and a start sends it even before a list arrived", () => {
+  const { next, clearStored } = afterPick(ready(), "branch:feature/x");
+  assert.deepEqual([next.pickedKey, clearStored], ["branch:feature/x", false]);
+  assert.equal(startKey(next), "branch:feature/x");
+  assert.equal(startKey({ ...freshRunIn(), pickedKey: "branch:feature/x" }), "branch:feature/x");
+  assert.equal(afterPick(ready(), BRANCH_ENTRY), null, "the entry itself is not a pick");
+});
+
+test("a re-read of the worktree list keeps a branch pick", () => {
+  const { next, clearStored } = afterRead(ready("branch:feature/x"), [main], { stored: "branch:feature/x" });
+  assert.deepEqual([next.pickedKey, next.fallback, clearStored], ["branch:feature/x", null, false]);
+});
+
+test("the branches become options: local first, remote marked and fetched first, with the truncation line", () => {
+  const now = new Date("2026-11-07T14:00:00Z");
+  const list = {
+    branches: [
+      { name: "feature/x", remote: false, sha: "abc1234", subject: "Add the thing", committedAt: "2026-11-07T12:00:00Z" },
+      { name: "dev", remote: true, sha: "def5678", subject: "", committedAt: "" },
+    ],
+    truncated: true,
+  };
+  const options = branchOptions(list, now);
+  assert.deepEqual(options.map((o) => [o.value, o.label, o.group ?? "", o.description ?? "", o.meta ?? "", o.disabled ?? false]), [
+    ["branch:feature/x", "feature/x", "Local branches", "abc1234 · Add the thing", "2h ago", false],
+    ["branch:origin/dev", "origin/dev", "Remote branches · fetched first", "def5678", "", false],
+    ["", "Showing the first 200, type to narrow", "", "", "", true],
+  ]);
+  assert.equal(branchOptions({ branches: [], truncated: false }, now).length, 0);
+});
+
+test("a branch pick is announced as a branch", () => {
+  assert.equal(pickAnnouncement("api", { ...ready(), pickedKey: "branch:feature/x" }), "api runs branch feature/x.");
+  assert.equal(pickAnnouncement("api", ready("session:s2")), "api runs in go-developer, branch agent/other.");
 });

@@ -60,6 +60,12 @@ function span(ms) {
 
 const ago = (ms) => (ms < MINUTE ? "just now" : `${span(ms)} ago`);
 
+/** How long ago an RFC 3339 time was: "2h ago"; "" for a time that does not read. */
+export function agoLabel(iso, now) {
+  const at = Date.parse(iso);
+  return Number.isNaN(at) ? "" : ago(now.getTime() - at);
+}
+
 /** The time fact of a row: how long it has been up, how it ended, or that it never ran. */
 export function timeFact(service, now) {
   const run = service.run;

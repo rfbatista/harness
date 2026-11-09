@@ -2,7 +2,7 @@ import { StructuredError } from "../../../../shared/domain/errors.js";
 import { fixedClock } from "../../../../shared/infrastructure/clock.js";
 import { mount } from "../../../../shared/testing/alpine.js";
 import { assert, file, test } from "../../../../shared/testing/test.js";
-import { fakeServices, listDTO, pageEl, runDTO, serviceDTO, worktreeDTO } from "../../testing/fakeGateway.js";
+import { branchDTO, fakeServices, listDTO, pageEl, runDTO, serviceDTO, worktreeDTO } from "../../testing/fakeGateway.js";
 import { servicesPage } from "./servicesPage.js";
 
 file("services/presentation/components/servicesPage");
@@ -602,4 +602,82 @@ test("a row whose run has agent overrides says so; a run without them has no mar
   const { page } = openWith([withOverrides, running({ id: "2", name: "web" })]);
   assert.equal(rowOf(page, "api").overrides, "2 overrides by go-developer");
   assert.equal(rowOf(page, "web").overrides, "");
+});
+
+// ── "Run in": a branch ───────────────────────────────────────────────────
+const branches = [
+  branchDTO({ name: "feature/x", sha: "abc1234", subject: "Add the thing", committed_at: "2026-11-07T14:00:00Z" }),
+  branchDTO({ name: "dev", remote: true, sha: "def5678", subject: "Work in progress", committed_at: "2026-11-07T10:00:00Z" }),
+];
+const openBranchRunIn = async (o = {}) => {
+  const world = await openRunIn(o);
+  world.gateway.branches = branches;
+  return world;
+};
+const pickBranch = (page, id, key) => page.branchPicked({ currentTarget: { dataset: { serviceId: id } }, detail: { value: key } });
+
+test("the picker ends with a Branch… entry, which opens the search without changing the pick or starting anything", async () => {
+  const { page, gateway } = await openBranchRunIn();
+  const entry = rowOf(page, "api").runIn.branchEntry;
+  assert.deepEqual([entry.key, entry.label], ["branch:", "Branch…"]);
+  assert.equal(rowOf(page, "api").runIn.searchOpen, false);
+  pickRunIn(page, "1", "branch:");
+  assert.equal(rowOf(page, "api").runIn.searchOpen, true);
+  assert.equal(rowOf(page, "api").runIn.pickedKey, "main");
+  assert.deepEqual(gateway.starts, []);
+});
+
+test("the search asks the server with the typed text and lists local branches before remote ones", async () => {
+  const { page, gateway } = await openBranchRunIn();
+  pickRunIn(page, "1", "branch:");
+  const all = await page.searchBranches("", new AbortController().signal);
+  assert.deepEqual(all.map((o) => [o.value, o.group]), [["branch:feature/x", "Local branches"], ["branch:origin/dev", "Remote branches · fetched first"]]);
+  assert.equal(all[0].meta, "2h ago");
+  const narrowed = await page.searchBranches("DEV", new AbortController().signal);
+  assert.deepEqual(narrowed.map((o) => o.value), ["branch:origin/dev"]);
+  assert.deepEqual(gateway.branchQueries, ["", "DEV"]);
+});
+
+test("a server that says there are more than 200 adds the line that says so", async () => {
+  const { page, gateway } = await openBranchRunIn();
+  gateway.branchesTruncated = true;
+  pickRunIn(page, "1", "branch:");
+  const options = await page.searchBranches("", new AbortController().signal);
+  assert.deepEqual([options.at(-1).label, options.at(-1).disabled], ["Showing the first 200, type to narrow", true]);
+});
+
+test("a branch list that cannot be read is the combobox's error: the source rejects", async () => {
+  const { page, gateway } = await openBranchRunIn();
+  gateway.branchesError = new StructuredError("NETWORK", "down");
+  pickRunIn(page, "1", "branch:");
+  const err = await page.searchBranches("", new AbortController().signal).catch((e) => e);
+  assert.equal(err.code, "NETWORK");
+});
+
+test("picking a branch sets the pick, closes the search, is remembered and announced, and Start sends it", async () => {
+  const { page, gateway, prefs } = await openBranchRunIn();
+  pickRunIn(page, "1", "branch:");
+  pickBranch(page, "1", "branch:origin/dev");
+  const runIn = rowOf(page, "api").runIn;
+  assert.deepEqual([runIn.searchOpen, runIn.pickedKey, runIn.branch.label, runIn.hasBranch], [false, "branch:origin/dev", "origin/dev", true]);
+  assert.equal(prefs.get("service-run-worktree:1"), "branch:origin/dev");
+  assert.equal(page.notice, "api runs branch origin/dev.");
+  assert.deepEqual(gateway.starts, []);
+  await page.start("1");
+  assert.deepEqual(gateway.starts, [["1", "branch:origin/dev"]]);
+});
+
+test("Cancel closes the search and keeps the previous pick", async () => {
+  const { page } = await openBranchRunIn();
+  pickRunIn(page, "1", "session:s2");
+  pickRunIn(page, "1", "branch:");
+  page.cancelBranchSearch({ currentTarget: { closest: () => null } });
+  assert.deepEqual([rowOf(page, "api").runIn.searchOpen, rowOf(page, "api").runIn.pickedKey], [false, "session:s2"]);
+});
+
+test("the search is shown for one service at a time", async () => {
+  const { page } = await openBranchRunIn({ services: [withRepo(), withRepo({ id: "2", name: "web" })] });
+  pickRunIn(page, "1", "branch:");
+  pickRunIn(page, "2", "branch:");
+  assert.deepEqual([rowOf(page, "api").runIn.searchOpen, rowOf(page, "web").runIn.searchOpen], [false, true]);
 });

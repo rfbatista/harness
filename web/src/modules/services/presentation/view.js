@@ -68,13 +68,13 @@ export function serviceRow(service, now, { flight = "", runtime = { name: "docke
   };
 }
 
-const NO_RUN_IN = { show: false, main: [], sessions: [], hasSessions: false, pickedKey: MAIN, selectId: "", loading: null, error: null, fallback: "", hasFallback: false, groupLabel: "", name: "" };
+const NO_RUN_IN = { show: false, main: [], sessions: [], hasSessions: false, branch: null, hasBranch: false, branchGroup: [], branchEntry: null, searchOpen: false, pickedKey: MAIN, selectId: "", loading: null, error: null, fallback: "", hasFallback: false, groupLabel: "", name: "" };
 
 /**
  * The "Run in" picker of a row. It sits beside Start, so it shows with Start: a command service with a
  * repository that is not running. `pick` is the page's state for the service (domain/runIn.js).
  */
-export function runInView(service, pick) {
+export function runInView(service, pick, { searchOpen = false } = {}) {
   if (!pick || !hasRunIn(service)) return NO_RUN_IN;
   const options = runInOptions(pick);
   return {
@@ -82,6 +82,11 @@ export function runInView(service, pick) {
     main: options.main,
     sessions: options.sessions,
     hasSessions: options.sessions.length > 0,
+    branch: options.branch,
+    branchGroup: [options.branch, options.branchEntry].filter(Boolean),
+    hasBranch: options.branch !== null,
+    branchEntry: options.branchEntry,
+    searchOpen,
     pickedKey: pick.pickedKey,
     loading: pick.state === "loading" ? "true" : null,
     error: pick.state === "failed" ? "Could not load worktrees." : null,
