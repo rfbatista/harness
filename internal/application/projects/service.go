@@ -431,6 +431,17 @@ func (s *Service) SetProjectMCPServers(_ context.Context, projectID string, name
 	return s.projects.SetMCPServers(projectID, names)
 }
 
+// SetProjectMCPSettings stores the project's banned MCP servers and tool
+// overrides. The catalog checks the names; this stores them.
+func (s *Service) SetProjectMCPSettings(_ context.Context, projectID string, settings domain.ProjectMCPSettings) (*domain.Project, error) {
+	if projectID == "" {
+		return nil, errProjectIDMissing
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.projects.SetMCPSettings(projectID, settings)
+}
+
 // SetProjectAgents stores the project's enabled agents. The catalog checks the
 // names; this stores them.
 func (s *Service) SetProjectAgents(_ context.Context, projectID, mode string, names []string) (*domain.Project, error) {

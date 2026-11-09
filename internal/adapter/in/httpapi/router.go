@@ -217,6 +217,7 @@ func NewRouter(h *Handler, opts ...Option) *echo.Echo {
 	g.POST("/refresh_catalog_mcp_server_tools", h.handleRefreshCatalogMCPServerTools)
 	g.GET("/get_project_mcp_servers", h.handleGetProjectMCPServers)
 	g.POST("/set_project_mcp_servers", h.handleSetProjectMCPServers)
+	g.POST("/set_project_mcp_settings", h.handleSetProjectMCPSettings)
 	g.GET("/get_project_agents", h.handleGetProjectAgents)
 	g.POST("/set_project_agents", h.handleSetProjectAgents)
 	g.GET("/get_repository_agents", h.handleGetRepositoryAgents)

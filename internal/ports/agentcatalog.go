@@ -51,6 +51,9 @@ type CatalogEditor interface {
 	RefreshCatalogMCPServerTools(ctx context.Context, in domain.RefreshCatalogMCPServerTools) (*domain.CatalogMCPServerTools, error)
 	GetProjectMCPServers(ctx context.Context, projectID string) (*domain.CatalogProjectMCPServers, error)
 	SetProjectMCPServers(ctx context.Context, in domain.SetCatalogProjectMCPServers) (*domain.CatalogProjectMCPServers, error)
+	// SetProjectMCPSettings replaces a project's states and tool overrides for
+	// the catalog's servers (ADR 0067).
+	SetProjectMCPSettings(ctx context.Context, in domain.SetCatalogProjectMCPSettings) (*domain.CatalogProjectMCPServers, error)
 	GetProjectAgents(ctx context.Context, projectID string) (*domain.CatalogProjectAgents, error)
 	SetProjectAgents(ctx context.Context, in domain.SetCatalogProjectAgents) (*domain.CatalogProjectAgents, error)
 	UndoCatalogChange(in domain.UndoCatalogChange) (*domain.CatalogWriteResult, error)

@@ -91,7 +91,9 @@ func (t *txn) editOf(p *domain.Project) *projectEdit {
 	}
 	e := &projectEdit{id: p.ID, name: p.Name,
 		before: append([]string{}, p.MCPServers...), after: append([]string{}, p.MCPServers...),
-		enBefore: append([]string{}, p.EnabledAgents...), enAfter: append([]string{}, p.EnabledAgents...)}
+		enBefore: append([]string{}, p.EnabledAgents...), enAfter: append([]string{}, p.EnabledAgents...),
+		banBefore: append([]string{}, p.MCPBanned...), banAfter: append([]string{}, p.MCPBanned...),
+		ovBefore: copyOverrides(p.MCPToolOverrides), ovAfter: copyOverrides(p.MCPToolOverrides)}
 	t.projects = append(t.projects, e)
 	return e
 }
@@ -127,6 +129,15 @@ func (c *Catalog) applyProject(p *projectEdit, forward bool) error {
 			return err
 		}
 	}
+	if p.settingsChanged() {
+		ban, ov := p.banAfter, p.ovAfter
+		if !forward {
+			ban, ov = p.banBefore, p.ovBefore
+		}
+		if _, err := c.projects.SetProjectMCPSettings(context.Background(), p.id, domain.ProjectMCPSettings{Banned: ban, ToolOverrides: ov}); err != nil {
+			return err
+		}
+	}
 	if !sameNames(en, prevEn) {
 		if _, err := c.projects.SetProjectAgents(context.Background(), p.id, domain.AgentsSelected, en); err != nil {
 			return err
@@ -139,28 +150,105 @@ func (c *Catalog) applyProject(p *projectEdit, forward bool) error {
 func (t *txn) dropUnchangedProjects() {
 	kept := t.projects[:0]
 	for _, e := range t.projects {
-		if !sameNames(e.before, e.after) || !sameNames(e.enBefore, e.enAfter) {
+		if e.listChanged() || e.settingsChanged() {
 			kept = append(kept, e)
 		}
 	}
 	t.projects = kept
 }
 
-// GetProjectMCPServers reads the MCP servers a project gives its sessions.
-func (c *Catalog) GetProjectMCPServers(_ context.Context, projectID string) (*domain.CatalogProjectMCPServers, error) {
-	names, ok := c.projectNames(projectID)
-	if !ok {
-		return nil, &domain.StructuredError{Code: "PROJECT_NOT_FOUND", Message: "project " + projectID + " not found"}
+func copyOverrides(in map[string]map[string]string) map[string]map[string]string {
+	out := make(map[string]map[string]string, len(in))
+	for server, tools := range in {
+		out[server] = make(map[string]string, len(tools))
+		for tool, v := range tools {
+			out[server][tool] = v
+		}
 	}
-	return &domain.CatalogProjectMCPServers{MCPServers: nonNil(names)}, nil
+	return out
 }
 
-// SetProjectMCPServers replaces the MCP servers a project gives its sessions.
-// Each name must be in the catalog.
+// moveProjectMCPSettings makes every project's ban and tool overrides of the
+// server from follow its rename to to, or go with its delete when to is "".
+func (t *txn) moveProjectMCPSettings(from, to string) {
+	for _, p := range t.projectLists() {
+		if !contains(p.MCPBanned, from) && p.MCPToolOverrides[from] == nil {
+			continue
+		}
+		e := t.editOf(p)
+		if contains(e.banAfter, from) {
+			if to == "" {
+				e.banAfter = without(e.banAfter, from)
+			} else {
+				e.banAfter = replaceName(e.banAfter, from, to)
+			}
+		}
+		if tools, ok := e.ovAfter[from]; ok {
+			delete(e.ovAfter, from)
+			if to != "" {
+				e.ovAfter[to] = tools
+			}
+		}
+	}
+}
+
+// projectMCPView is a project's MCP settings: every catalog server with the
+// state the project gave it, who lists it and its tools in effect.
+func (c *Catalog) projectMCPView(p *domain.Project) (*domain.CatalogProjectMCPServers, error) {
+	cat, err := c.ReadCatalog()
+	if err != nil {
+		return nil, err
+	}
+	out := &domain.CatalogProjectMCPServers{MCPServers: nonNil(p.MCPServers), Servers: []domain.CatalogProjectMCPServer{}}
+	for _, s := range cat.MCPServers {
+		srv := domain.CatalogProjectMCPServer{Name: s.Name, State: domain.MCPStateAgent, UsedByAgents: []string{}}
+		switch {
+		case contains(p.MCPBanned, s.Name):
+			srv.State = domain.MCPStateBanned
+		case contains(p.MCPServers, s.Name):
+			srv.State = domain.MCPStateAdded
+		}
+		for _, a := range cat.Agents {
+			if contains(a.MCPServers, s.Name) {
+				srv.UsedByAgents = append(srv.UsedByAgents, a.Name)
+			}
+		}
+		if s.KnownTools != nil {
+			srv.Tools = make([]domain.CatalogProjectMCPTool, 0, len(s.KnownTools))
+			for _, name := range s.KnownTools {
+				tool := domain.CatalogProjectMCPTool{Name: name, Default: domain.ToolEnabled, Override: "default"}
+				if contains(s.DisabledTools, name) {
+					tool.Default = domain.ToolDisabled
+				}
+				tool.Effective = tool.Default
+				if o := p.MCPToolOverrides[s.Name][name]; o == domain.ToolEnabled || o == domain.ToolDisabled {
+					tool.Override, tool.Effective = o, o
+				}
+				srv.Tools = append(srv.Tools, tool)
+			}
+		}
+		out.Servers = append(out.Servers, srv)
+	}
+	return out, nil
+}
+
+// GetProjectMCPServers reads the MCP settings of a project.
+func (c *Catalog) GetProjectMCPServers(_ context.Context, projectID string) (*domain.CatalogProjectMCPServers, error) {
+	p := c.projectOf(projectID)
+	if p == nil {
+		return nil, &domain.StructuredError{Code: "PROJECT_NOT_FOUND", Message: "project " + projectID + " not found"}
+	}
+	return c.projectMCPView(p)
+}
+
+// SetProjectMCPServers makes the named servers Added. An Added server that is
+// not named goes back to Agent's choice; bans and tool overrides stay, except
+// that naming a banned server adds it. Each name must be in the catalog.
 func (c *Catalog) SetProjectMCPServers(_ context.Context, in domain.SetCatalogProjectMCPServers) (*domain.CatalogProjectMCPServers, error) {
 	c.wmu.Lock()
 	defer c.wmu.Unlock()
-	if _, ok := c.projectNames(in.ProjectID); !ok {
+	p := c.projectOf(in.ProjectID)
+	if p == nil {
 		return nil, &domain.StructuredError{Code: "PROJECT_NOT_FOUND", Message: "project " + in.ProjectID + " not found"}
 	}
 	l, err := c.load()
@@ -185,9 +273,79 @@ func (c *Catalog) SetProjectMCPServers(_ context.Context, in domain.SetCatalogPr
 	if err := c.setProjectNames(in.ProjectID, names); err != nil {
 		return nil, err
 	}
+	banned := []string{}
+	for _, b := range p.MCPBanned {
+		if !seen[b] {
+			banned = append(banned, b)
+		}
+	}
+	if len(banned) != len(p.MCPBanned) {
+		if _, err := c.projects.SetProjectMCPSettings(context.Background(), in.ProjectID, domain.ProjectMCPSettings{Banned: banned, ToolOverrides: p.MCPToolOverrides}); err != nil {
+			return nil, err
+		}
+	}
 	c.last = nil // the latest change is no longer the latest write
 	c.publish([]string{"projects/" + in.ProjectID})
-	return &domain.CatalogProjectMCPServers{MCPServers: names}, nil
+	return c.projectMCPView(c.projectOf(in.ProjectID))
+}
+
+// SetProjectMCPSettings replaces a project's states and tool overrides: a
+// catalog server not named is Agent's choice with no overrides.
+func (c *Catalog) SetProjectMCPSettings(_ context.Context, in domain.SetCatalogProjectMCPSettings) (*domain.CatalogProjectMCPServers, error) {
+	c.wmu.Lock()
+	defer c.wmu.Unlock()
+	if c.projectOf(in.ProjectID) == nil {
+		return nil, &domain.StructuredError{Code: "PROJECT_NOT_FOUND", Message: "project " + in.ProjectID + " not found"}
+	}
+	l, err := c.load()
+	if err != nil {
+		return nil, err
+	}
+	var unknown, added, banned []string
+	seen := map[string]bool{}
+	overrides := map[string]map[string]string{}
+	for _, s := range in.Servers {
+		if seen[s.Name] {
+			return nil, invalid("servers", "the server "+s.Name+" is named twice")
+		}
+		seen[s.Name] = true
+		switch s.State {
+		case domain.MCPStateAdded:
+			added = append(added, s.Name)
+		case domain.MCPStateBanned:
+			banned = append(banned, s.Name)
+		case domain.MCPStateAgent:
+		default:
+			return nil, invalid("state", "state is added, agent or banned")
+		}
+		for tool, v := range s.ToolOverrides {
+			if v != domain.ToolEnabled && v != domain.ToolDisabled {
+				return nil, invalid("tool_overrides", "an override is enabled or disabled")
+			}
+			if overrides[s.Name] == nil {
+				overrides[s.Name] = map[string]string{}
+			}
+			overrides[s.Name][tool] = v
+		}
+		if s.Name != domain.ServicesServerName && l.servers.get(s.Name) == nil {
+			unknown = append(unknown, s.Name)
+		}
+	}
+	if len(unknown) > 0 {
+		return nil, unknownRefs(unknown)
+	}
+	if added == nil {
+		added = []string{}
+	}
+	if err := c.setProjectNames(in.ProjectID, added); err != nil {
+		return nil, err
+	}
+	if _, err := c.projects.SetProjectMCPSettings(context.Background(), in.ProjectID, domain.ProjectMCPSettings{Banned: banned, ToolOverrides: overrides}); err != nil {
+		return nil, err
+	}
+	c.last = nil
+	c.publish([]string{"projects/" + in.ProjectID})
+	return c.projectMCPView(c.projectOf(in.ProjectID))
 }
 
 // GetProjectAgents reads a project's enabled agents.

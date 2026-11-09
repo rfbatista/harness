@@ -10,6 +10,7 @@ import (
 	"log/slog"
 	"os"
 	"path/filepath"
+	"reflect"
 	"sort"
 	"strconv"
 	"strings"
@@ -40,6 +41,28 @@ type projectEdit struct {
 	before, after []string
 	// enBefore and enAfter are the selected-mode agent list.
 	enBefore, enAfter []string
+	// banBefore/banAfter and ovBefore/ovAfter are the banned servers and the
+	// tool overrides, which follow a server's rename and delete.
+	banBefore, banAfter []string
+	ovBefore, ovAfter   map[string]map[string]string
+}
+
+// listChanged says whether the edit moves the project's server list or its
+// enabled agents, which is what the answer shows of a project.
+func (p *projectEdit) listChanged() bool {
+	return !sameNames(p.before, p.after) || !sameNames(p.enBefore, p.enAfter)
+}
+
+// settingsChanged says whether the edit moves the bans or tool overrides.
+func (p *projectEdit) settingsChanged() bool {
+	return !sameNames(p.banBefore, p.banAfter) || !reflect.DeepEqual(nonNilOverrides(p.ovBefore), nonNilOverrides(p.ovAfter))
+}
+
+func nonNilOverrides(m map[string]map[string]string) map[string]map[string]string {
+	if m == nil {
+		return map[string]map[string]string{}
+	}
+	return m
 }
 
 // projectChange is the edit as the answer shows it.
@@ -228,7 +251,9 @@ func (t *txn) commit(opts domain.CatalogWriteOptions, summary string) (*domain.C
 		change.Writes = append(change.Writes, fileWrite(e))
 	}
 	for _, p := range t.projects {
-		change.Projects = append(change.Projects, p.projectChange())
+		if p.listChanged() {
+			change.Projects = append(change.Projects, p.projectChange())
+		}
 		keys["projects/"+p.id] = true
 	}
 	if change.Projects == nil {
@@ -420,10 +445,12 @@ func (c *Catalog) UndoCatalogChange(in domain.UndoCatalogChange) (*domain.Catalo
 	var projects []*projectEdit
 	for i := len(c.last.projects) - 1; i >= 0; i-- {
 		p := c.last.projects[i]
-		if cur := c.projectOf(p.id); cur == nil || !sameNames(cur.MCPServers, p.after) || !sameNames(cur.EnabledAgents, p.enAfter) {
+		if cur := c.projectOf(p.id); cur == nil || !sameNames(cur.MCPServers, p.after) || !sameNames(cur.EnabledAgents, p.enAfter) ||
+			!sameNames(cur.MCPBanned, p.banAfter) || !reflect.DeepEqual(nonNilOverrides(cur.MCPToolOverrides), nonNilOverrides(p.ovAfter)) {
 			moved["projects/"+p.id] = true
 		}
-		projects = append(projects, &projectEdit{id: p.id, name: p.name, before: p.after, after: p.before, enBefore: p.enAfter, enAfter: p.enBefore})
+		projects = append(projects, &projectEdit{id: p.id, name: p.name, before: p.after, after: p.before, enBefore: p.enAfter, enAfter: p.enBefore,
+			banBefore: p.banAfter, banAfter: p.banBefore, ovBefore: p.ovAfter, ovAfter: p.ovBefore})
 	}
 	if len(moved) > 0 && !in.Force {
 		return nil, c.conflict(edits, moved)
@@ -431,7 +458,9 @@ func (c *Catalog) UndoCatalogChange(in domain.UndoCatalogChange) (*domain.Catalo
 	keys := map[string]bool{}
 	change := domain.CatalogChange{Summary: "Undid: " + c.last.summary, Writes: []domain.CatalogFileWrite{}, Projects: []domain.CatalogProjectChange{}}
 	for _, p := range projects {
-		change.Projects = append(change.Projects, p.projectChange())
+		if p.listChanged() {
+			change.Projects = append(change.Projects, p.projectChange())
+		}
 		keys["projects/"+p.id] = true
 	}
 	for _, e := range edits {

@@ -442,9 +442,50 @@ type SetCatalogProjectMCPServers struct {
 	MCPServers []string `json:"mcp_servers"`
 }
 
-// CatalogProjectMCPServers is a project's MCP server names.
+// Project MCP server states: Added (every session gets it), Agent's choice
+// (only sessions whose agent lists it) and Banned (no session gets it).
+const (
+	MCPStateAdded  = "added"
+	MCPStateAgent  = "agent"
+	MCPStateBanned = "banned"
+)
+
+// CatalogProjectMCPServers is a project's MCP settings: the Added servers'
+// names, and every catalog server with its state and tools.
 type CatalogProjectMCPServers struct {
-	MCPServers []string `json:"mcp_servers"`
+	MCPServers []string                  `json:"mcp_servers"`
+	Servers    []CatalogProjectMCPServer `json:"servers"`
+}
+
+// CatalogProjectMCPServer is one catalog server in a project. Tools is nil
+// (null) while the server's tools are unknown.
+type CatalogProjectMCPServer struct {
+	Name         string                  `json:"name"`
+	State        string                  `json:"state"`
+	UsedByAgents []string                `json:"used_by_agents"`
+	Tools        []CatalogProjectMCPTool `json:"tools"`
+}
+
+// CatalogProjectMCPTool is a tool with the catalog's default, the project's
+// override (default, enabled or disabled) and what is in effect.
+type CatalogProjectMCPTool struct {
+	Name      string `json:"name"`
+	Default   string `json:"default"`
+	Override  string `json:"override"`
+	Effective string `json:"effective"`
+}
+
+// SetCatalogProjectMCPSettings replaces a project's whole MCP settings.
+type SetCatalogProjectMCPSettings struct {
+	ProjectID string                         `json:"project_id"`
+	Servers   []CatalogProjectMCPServerInput `json:"servers"`
+}
+
+// CatalogProjectMCPServerInput is the state and tool overrides of one server.
+type CatalogProjectMCPServerInput struct {
+	Name          string            `json:"name"`
+	State         string            `json:"state"`
+	ToolOverrides map[string]string `json:"tool_overrides"`
 }
 
 // SetCatalogProjectAgents replaces a project's enabled agents.

@@ -86,6 +86,9 @@ type Projects interface {
 	// SetProjectAgents replaces a project's enabled agents: mode all or
 	// selected, and the list of the selected mode.
 	SetProjectAgents(ctx context.Context, projectID, mode string, names []string) (*domain.Project, error)
+	// SetProjectMCPSettings replaces a project's banned servers and tool
+	// overrides (ADR 0067).
+	SetProjectMCPSettings(ctx context.Context, projectID string, settings domain.ProjectMCPSettings) (*domain.Project, error)
 }
 
 // WithProjects gives the catalog the projects whose MCP server lists it reads

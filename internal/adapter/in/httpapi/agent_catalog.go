@@ -191,6 +191,21 @@ func (h *Handler) handleSetProjectMCPServers(c echo.Context) error {
 	return c.JSON(http.StatusOK, out)
 }
 
+func (h *Handler) handleSetProjectMCPSettings(c echo.Context) error {
+	if err := h.catalogOrUnavailable(); err != nil {
+		return err
+	}
+	var in domain.SetCatalogProjectMCPSettings
+	if err := bindJSON(c, &in); err != nil {
+		return err
+	}
+	out, err := h.catalog.SetProjectMCPSettings(c.Request().Context(), in)
+	if err != nil {
+		return err
+	}
+	return c.JSON(http.StatusOK, out)
+}
+
 func (h *Handler) handleGetProjectAgents(c echo.Context) error {
 	if err := h.catalogOrUnavailable(); err != nil {
 		return err

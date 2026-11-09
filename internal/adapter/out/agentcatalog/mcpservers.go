@@ -176,6 +176,7 @@ func (c *Catalog) SaveCatalogMCPServer(ctx context.Context, in domain.SaveCatalo
 		servers.rename(prev, s.Name)
 		serverNode(servers.get(s.Name), s, transport)
 		t.renameTools(prev, s.Name)
+		t.moveProjectMCPSettings(prev, s.Name)
 		refs := 0
 		for _, m := range t.agentsMap().members {
 			if list := m.val.get("mcp_servers"); list != nil {
@@ -301,6 +302,7 @@ func (c *Catalog) DeleteCatalogMCPServer(in domain.DeleteCatalogItem) (*domain.C
 	}
 	t.serversMap().remove(in.Name)
 	t.toolEntries().remove(in.Name)
+	t.moveProjectMCPSettings(in.Name, "")
 	refs := 0
 	for _, m := range t.agentsMap().members {
 		if list := m.val.get("mcp_servers"); list != nil && setMembership(list, in.Name, false) {

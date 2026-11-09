@@ -196,6 +196,10 @@ func (p projectMCPServers) SetProjectMCPServers(_ context.Context, id string, na
 	return p.projects.SetMCPServers(id, names)
 }
 
+func (p projectMCPServers) SetProjectMCPSettings(_ context.Context, id string, s domain.ProjectMCPSettings) (*domain.Project, error) {
+	return p.projects.SetMCPSettings(id, s)
+}
+
 // newRepositoryAgents is the service that says which agents a repository
 // assigns (ADR 0061).
 func newRepositoryAgents(lists ports.RepositoryAgentListStore, prompts ports.RepositoryPromptStore, projects ports.ProjectRepository, repos ports.RepositoryRepository, cat *agentcatalog.Catalog, sessions ports.SessionRepository, catalogs catalog.Catalog) *repoagents.Service {
