@@ -119,6 +119,18 @@ export function startedByView(run, projectId = "") {
   return { text: `started by ${by.agent} · session ${by.session_id.slice(0, 8)}`, sessionId: by.session_id, href };
 }
 
+/**
+ * "2 overrides by go-developer": the run was given variables by an agent, which the person should notice.
+ * `by` names the agent and its session ("go-developer · session abcdef12"). "" with none.
+ */
+export function overrideMark(run) {
+  const overrides = run?.overrides ?? [];
+  if (overrides.length === 0) return "";
+  const agents = [...new Set(overrides.map((o) => o.by.split(" · ")[0] || "an agent"))];
+  const who = agents.length === 1 ? agents[0] : `${agents.slice(0, -1).join(", ")} and ${agents.at(-1)}`;
+  return `${overrides.length} override${overrides.length === 1 ? "" : "s"} by ${who}`;
+}
+
 /** What the page says, politely, after the form saved a service. */
 export function savedNotice(name, { created, restartNeeded }) {
   if (created) return `${name} was created.`;

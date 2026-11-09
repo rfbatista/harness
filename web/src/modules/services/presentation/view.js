@@ -1,7 +1,7 @@
 // What a service row binds, computed from a service (domain/service.js) and the clock.
 
 import { runInOptions, hasRunIn } from "../domain/runIn.js";
-import { isActive, portLinks, startedByView, statusView, timeFact, whereLabel } from "../domain/service.js";
+import { isActive, overrideMark, portLinks, startedByView, statusView, timeFact, whereLabel } from "../domain/service.js";
 
 /** The command line, or the image reference with its arguments. */
 export function lineOf(service) {
@@ -56,6 +56,7 @@ export function serviceRow(service, now, { flight = "", runtime = { name: "docke
     startedByPlain: startedBy !== null && startedBy.href === "",
     where: whereLabel(run),
     time: timeFact(service, now),
+    overrides: overrideMark(run),
     notSandboxed: service.kind === "command" && run !== null && !run.sandboxed,
     start: action("start", "Start", service, { show: !active, flight, blocked }),
     stop: action("stop", "Stop", service, { show: active, flight }),

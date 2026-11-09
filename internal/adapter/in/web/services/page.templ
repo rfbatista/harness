@@ -78,6 +78,7 @@ templ Page(frame shell.Frame, projectID, projectName string, seed Seed, repos []
 										<div class="[ head ]">
 											<span class="[ name ]" data-service-name x-text="row.name"></span>
 											<span class="[ badge ]" x-text="row.kindLabel"></span>
+											<span class="[ badge ]" data-tone="attention" data-service-overrides title="An agent started this run with its own variables. Open the log to see them." x-bind:hidden="!row.overrides" x-text="row.overrides"></span>
 											<span class="[ badge ]" data-tone="attention" data-not-sandboxed title="The sandbox setting was off: this run is not confined" x-bind:hidden="!row.notSandboxed">not sandboxed</span>
 										</div>
 										<div class="[ line ]" x-bind:title="row.line" x-text="row.line"></div>
@@ -278,7 +279,7 @@ templ Page(frame shell.Frame, projectID, projectName string, seed Seed, repos []
 										<div class="[ field ]" x-bind:hidden="!hasSubdir">
 											<label for="sf-subdir">Subfolder</label>
 											<input type="text" id="sf-subdir" class="[ font-mono ]" placeholder="cmd/api" spellcheck="false" autocomplete="off" x-model="draft.subdir" x-on:input="touch('subdir')" x-bind:aria-invalid="invalid('subdir') ? 'true' : null" aria-describedby="sf-subdir-hint sf-subdir-error"/>
-											<span class="[ hint ]" id="sf-subdir-hint">Relative to the main checkout. Empty is its root.</span>
+											<span class="[ hint ]" id="sf-subdir-hint" x-text="subdirHint"></span>
 											<span class="[ error ]" id="sf-subdir-error" role="alert" x-bind:hidden="!hasMessage('subdir')" x-text="fieldMessage('subdir')"></span>
 										</div>
 										<div class="[ field ]" role="group" id="sf-ports" tabindex="-1" aria-labelledby="sf-ports-label">

@@ -596,3 +596,10 @@ test("the open log's panel knows the run on screen, so its variables follow a ne
   assert.equal(page.logView.runId, "r2");
   assert.equal(openWith([serviceDTO({ id: "1", name: "idle" })]).page.groups[0].rows.length, 1);
 });
+
+test("a row whose run has agent overrides says so; a run without them has no mark", () => {
+  const withOverrides = running({ id: "1", name: "api", run: runDTO({ overrides: [{ name: "A", by: "go-developer · session abcdef12" }, { name: "B", by: "go-developer · session abcdef12" }] }) });
+  const { page } = openWith([withOverrides, running({ id: "2", name: "web" })]);
+  assert.equal(rowOf(page, "api").overrides, "2 overrides by go-developer");
+  assert.equal(rowOf(page, "web").overrides, "");
+});
