@@ -42,23 +42,31 @@ var statusViews = map[domain.SessionStatus]StatusView{
 }
 
 // statusOf reads pending approvals before the status: a running session with
-// a tool call to approve is waiting on the developer.
+// a tool call to approve is waiting on the developer. Next come open
+// interviews, whatever the status: approval, then questions, then your turn.
 func statusOf(s *domain.Session) StatusView {
-	if !s.Status.IsTerminal() && s.PendingApprovals > 0 {
+	live := !s.Status.IsTerminal()
+	if live && (s.PendingApprovals > 0 || s.Status == domain.SessionWaitingApproval) {
 		return statusViews[domain.SessionWaitingApproval]
 	}
 	if v, ok := statusViews[s.Status]; ok {
+		// Only the word is the interview's: the dot stays the session's own, so a
+		// running agent keeps its running dot beside the chip.
+		if live && s.OpenInterviewCount > 0 {
+			v.Word = "questions"
+		}
 		return v
 	}
 	return StatusView{"idle", string(s.Status)}
 }
 
-// NeedsYou: an approval, or an interactive session at its turn boundary.
+// NeedsYou: an approval, an open interview, or an interactive session at its
+// turn boundary.
 func NeedsYou(s *domain.Session) bool {
 	if s.Status.IsTerminal() {
 		return false
 	}
-	return s.Status == domain.SessionWaitingApproval || s.Status == domain.SessionIdle || s.PendingApprovals > 0
+	return s.Status == domain.SessionWaitingApproval || s.Status == domain.SessionIdle || s.PendingApprovals > 0 || s.OpenInterviewCount > 0
 }
 
 // MaxDepth is how far a delegate's row is indented: deeper ones line up at
@@ -174,6 +182,10 @@ type Seed struct {
 	// SessionBranches are the sessions' Branches lists, as GET
 	// /api/list_session_branches answers them. Never null.
 	SessionBranches []domain.SessionBranches `json:"session_branches"`
+	// Interviews are the sessions' interviews, by session id, each as
+	// GET /api/sessions/{id}/interviews answers them: the seed of the
+	// interview panel. Never null; empty when they were not read.
+	Interviews map[string]*domain.InterviewList `json:"interviews"`
 }
 
 // TaskLink is a task of the project with its page, as the design seeds
@@ -546,7 +558,7 @@ func NewPageView(frame shell.Frame, project *domain.Project, task *domain.Ticket
 		Summary:     summary(list),
 		Groups:      views,
 		Seed: Seed{ProjectID: project.ID, Sessions: list, AgentNames: names, RepositoryNames: repoNames,
-			Artifacts: []*domain.Artifact{}, Tasks: []TaskLink{}, GitStates: []domain.GitState{}, SessionBranches: []domain.SessionBranches{}},
+			Artifacts: []*domain.Artifact{}, Tasks: []TaskLink{}, GitStates: []domain.GitState{}, SessionBranches: []domain.SessionBranches{}, Interviews: map[string]*domain.InterviewList{}},
 		NewSession: form,
 	}
 	if task != nil {
@@ -650,7 +662,7 @@ func joinFacts(facts []string) string {
 	return strings.Join(kept, " · ")
 }
 
-var chipTones = map[string]string{"thinking": "signal", "your turn": "attention", "approval": "attention", "failed": "danger"}
+var chipTones = map[string]string{"thinking": "signal", "your turn": "attention", "approval": "attention", "questions": "attention", "failed": "danger"}
 
 // chipOf is the row's status chip: nil for running and done.
 func chipOf(st StatusView) *Chip {

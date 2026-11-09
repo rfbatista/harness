@@ -5,6 +5,7 @@ package app
 import (
 	"encoding/json"
 	"fmt"
+	"io"
 	"net/http"
 	"os"
 	"os/exec"
@@ -319,19 +320,26 @@ func TestAPushAroundTheGateIsFlaggedAndAFetchIsNot(t *testing.T) {
 	}
 }
 
-// A push the harness made is recorded with its request or its person, and the
-// check takes the record as the explanation (the person's Push records it in
-// WorktreeGit, tested in internal/application/workspaces).
-func TestAPushTheHarnessRecordedFillsPushedAndFlagsNothing(t *testing.T) {
+// The person's Push goes through the server's push path, which records it once;
+// the check takes the record as the explanation and the list says who pushed.
+func TestThePersonsPushIsRecordedOnceFillsPushedAndFlagsNothing(t *testing.T) {
 	g, _ := startWatch(t, ":memory:", true)
 	session := g.sessionBranch()
-	g.setup("push -q origin " + session)
+	g.setup("-c user.name=n -c user.email=n@x commit --allow-empty -m work")
 	head := strings.TrimSpace(g.git("git rev-parse HEAD").stdout)
-	if err := g.pushes.Record(g.ctx, ports.RecordedPush{
-		RepositoryID: g.repo, SessionID: g.id, Branch: session, Remote: "origin", RemoteBranch: session, Commit: head,
-		At: time.Now(), By: domain.PushedByPerson,
-	}); err != nil {
+	b, _ := json.Marshal(map[string]string{"workspace_id": g.sessions.Get(g.id).WorkspaceID, "expected_head": head})
+	res, err := http.Post(g.srv.URL+"/api/push_branch", "application/json", strings.NewReader(string(b)))
+	if err != nil {
 		t.Fatal(err)
+	}
+	var body strings.Builder
+	_, _ = io.Copy(&body, res.Body)
+	res.Body.Close()
+	if res.StatusCode != http.StatusOK {
+		t.Fatalf("push: %d %s", res.StatusCode, body.String())
+	}
+	if got, err := g.pushes.PushesOf(g.ctx, g.id); err != nil || len(got) != 1 || got[0].By != domain.PushByPerson || got[0].Commit != head {
+		t.Fatalf("recorded pushes = %+v, %v; want exactly one by the person", got, err)
 	}
 	g.endTurnOf(g.id)
 	g.endTurnOf(g.id)
@@ -344,6 +352,9 @@ func TestAPushTheHarnessRecordedFillsPushedAndFlagsNothing(t *testing.T) {
 	})
 	time.Sleep(500 * time.Millisecond)
 	if got := g.findings(); len(got) != 0 || g.branches()[0].FlaggedAt != nil {
-		t.Errorf("a recorded push was flagged: %+v", got)
+		t.Errorf("the person's push was flagged: %+v", got)
+	}
+	if got, _ := g.pushes.PushesOf(g.ctx, g.id); len(got) != 1 {
+		t.Errorf("recorded pushes after the checks = %d, want 1", len(got))
 	}
 }

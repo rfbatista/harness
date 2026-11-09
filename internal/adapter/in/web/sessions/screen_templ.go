@@ -28,6 +28,8 @@ var icons = map[string]string{
 	"branch":    `<svg viewBox="0 0 16 16" width="16" height="16" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"><circle cx="4.5" cy="3.5" r="1.5"/><circle cx="4.5" cy="12.5" r="1.5"/><circle cx="11.5" cy="5.5" r="1.5"/><path d="M4.5 5v6M11.5 7c0 3-7 2-7 4"/></svg>`,
 	"stop":      `<svg viewBox="0 0 16 16" width="16" height="16" aria-hidden="true" fill="currentColor"><rect x="4" y="4" width="8" height="8" rx="1.5"/></svg>`,
 	"term":      `<svg viewBox="0 0 16 16" width="16" height="16" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M2.5 3.5h11v9h-11zM5 6.5l2 1.75L5 10M8.5 10h2.5"/></svg>`,
+	"panel":     `<svg viewBox="0 0 16 16" width="16" height="16" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="3" width="12" height="10" rx="1.5"/><path d="M10 3v10"/></svg>`,
+	"close":     `<svg viewBox="0 0 16 16" width="16" height="16" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M4 4l8 8M12 4l-8 8"/></svg>`,
 	"reconnect": `<svg viewBox="0 0 16 16" width="16" height="16" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M13 8a5 5 0 1 1-1.5-3.5M13 2.5v3h-3"/></svg>`,
 }
 
@@ -326,7 +328,7 @@ func paneTabs() templ.Component {
 			templ_7745c5c3_Var6 = templ.NopComponent
 		}
 		ctx = templ.ClearChildren(ctx)
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 20, "<div class=\"[ pane-tabs ]\" x-bind:data-focus=\"focusActive ? '' : null\"><template x-if=\"focusActive\"><span class=\"[ lead ]\"><span class=\"[ status ]\" x-bind:data-state=\"selected.state\" data-dot-only x-bind:aria-label=\"selected.word\"></span><span x-text=\"selected.title\"></span></span></template><div class=\"[ tabs ]\" role=\"tablist\" aria-label=\"Session views\"><button type=\"button\" role=\"tab\" x-bind:aria-selected=\"agentTabSelected\" x-on:click=\"showAgent\">Agent<template x-if=\"attention\"><span class=\"[ status ]\" data-state=\"waiting\" data-dot-only aria-label=\"waiting on you\"></span></template></button> <button type=\"button\" role=\"tab\" x-bind:aria-selected=\"historyTabSelected\" x-on:click=\"showHistory\">History</button> <button type=\"button\" role=\"tab\" x-bind:aria-selected=\"appTabSelected\" x-on:click=\"showApp\">App</button><template x-if=\"hasTask\"><button type=\"button\" role=\"tab\" x-bind:aria-selected=\"designTabSelected\" x-on:click=\"showDesign\">Design<template x-if=\"designBadge\"><span class=\"[ badge ]\" data-tone=\"signal\" x-text=\"designBadge\"></span></template></button></template><template x-if=\"hasCode\"><button type=\"button\" role=\"tab\" x-bind:aria-selected=\"codeTabSelected\" x-on:click=\"showCode\">Code<template x-if=\"codeBadge\"><span class=\"[ badge ]\" x-text=\"codeBadge\"></span></template></button></template><template x-if=\"hasFiles\"><button type=\"button\" role=\"tab\" x-bind:aria-selected=\"filesTabSelected\" x-on:click=\"showFiles\">Files<template x-if=\"filesBadge\"><span class=\"[ badge ]\" data-tone=\"signal\" x-bind:title=\"filesBadgeTitle\">")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 20, "<div class=\"[ pane-tabs ]\" x-bind:data-focus=\"focusActive ? '' : null\"><template x-if=\"focusActive\"><span class=\"[ lead ]\"><span class=\"[ status ]\" x-bind:data-state=\"selected.state\" data-dot-only x-bind:aria-label=\"selected.word\"></span><span x-text=\"selected.title\"></span></span></template><div class=\"[ tabs ]\" role=\"tablist\" aria-label=\"Session views\"><button type=\"button\" role=\"tab\" x-bind:aria-selected=\"agentTabSelected\" x-on:click=\"showAgent\">Agent<template x-if=\"attentionDot\"><span class=\"[ status ]\" data-state=\"waiting\" data-dot-only aria-label=\"waiting on you\"></span></template><template x-if=\"questionsBadge\"><span class=\"[ badge ]\" data-tone=\"attention\" x-bind:title=\"questionsBadge.label\" data-questions-badge><span class=\"[ status ]\" data-state=\"waiting\" data-dot-only aria-hidden=\"true\"></span> <span class=\"[ visually-hidden ]\" x-text=\"questionsBadge.label\"></span> <span aria-hidden=\"true\" x-text=\"questionsBadge.count\"></span></span></template></button> <button type=\"button\" role=\"tab\" x-bind:aria-selected=\"historyTabSelected\" x-on:click=\"showHistory\">History</button> <button type=\"button\" role=\"tab\" x-bind:aria-selected=\"appTabSelected\" x-on:click=\"showApp\">App</button><template x-if=\"hasTask\"><button type=\"button\" role=\"tab\" x-bind:aria-selected=\"designTabSelected\" x-on:click=\"showDesign\">Design<template x-if=\"designBadge\"><span class=\"[ badge ]\" data-tone=\"signal\" x-text=\"designBadge\"></span></template></button></template><template x-if=\"hasCode\"><button type=\"button\" role=\"tab\" x-bind:aria-selected=\"codeTabSelected\" x-on:click=\"showCode\">Code<template x-if=\"codeBadge\"><span class=\"[ badge ]\" x-text=\"codeBadge\"></span></template></button></template><template x-if=\"hasFiles\"><button type=\"button\" role=\"tab\" x-bind:aria-selected=\"filesTabSelected\" x-on:click=\"showFiles\">Files<template x-if=\"filesBadge\"><span class=\"[ badge ]\" data-tone=\"signal\" x-bind:title=\"filesBadgeTitle\">")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
@@ -382,7 +384,15 @@ func paneTools() templ.Component {
 			templ_7745c5c3_Var7 = templ.NopComponent
 		}
 		ctx = templ.ClearChildren(ctx)
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 24, "<div class=\"[ tools ]\" role=\"group\" x-bind:aria-label=\"paneTools.groupLabel\"><template x-if=\"paneTools.down\"><span class=\"[ status ]\" x-bind:data-state=\"paneTools.statusState\" role=\"status\"><span class=\"[ word ]\" x-text=\"paneTools.word\"></span></span></template><template x-if=\"paneTools.down\"><button type=\"button\" class=\"[ button ]\" data-size=\"sm\" x-bind:disabled=\"paneTools.reconnectDisabled\" x-bind:aria-busy=\"paneTools.reconnectBusy\" x-on:click=\"requestReconnect()\">")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 24, "<div class=\"[ tools ]\" role=\"group\" x-bind:aria-label=\"paneTools.groupLabel\"><template x-if=\"interviewToggle\">")
+		if templ_7745c5c3_Err != nil {
+			return templ_7745c5c3_Err
+		}
+		templ_7745c5c3_Err = interviewToggle().Render(ctx, templ_7745c5c3_Buffer)
+		if templ_7745c5c3_Err != nil {
+			return templ_7745c5c3_Err
+		}
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 25, "</template><template x-if=\"interviewToggle\"><span class=\"[ sep ]\"></span></template><template x-if=\"paneTools.down\"><span class=\"[ status ]\" x-bind:data-state=\"paneTools.statusState\" role=\"status\"><span class=\"[ word ]\" x-text=\"paneTools.word\"></span></span></template><template x-if=\"paneTools.down\"><button type=\"button\" class=\"[ button ]\" data-size=\"sm\" x-bind:disabled=\"paneTools.reconnectDisabled\" x-bind:aria-busy=\"paneTools.reconnectBusy\" x-on:click=\"requestReconnect()\">")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
@@ -390,7 +400,7 @@ func paneTools() templ.Component {
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 25, "<span class=\"[ word ]\">Reconnect</span></button></template><template x-if=\"!paneTools.down\"><span class=\"[ status ]\" data-dot-only role=\"status\" x-bind:data-state=\"paneTools.dotState\" x-bind:aria-label=\"paneTools.dotLabel\" x-bind:title=\"paneTools.dotLabel\"></span></template><template x-if=\"paneTools.jump\"><button type=\"button\" class=\"[ button jump ]\" data-size=\"sm\" x-bind:aria-label=\"paneTools.jumpLabel\" x-on:click=\"requestJump()\">")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 26, "<span class=\"[ word ]\">Reconnect</span></button></template><template x-if=\"!paneTools.down\"><span class=\"[ status ]\" data-dot-only role=\"status\" x-bind:data-state=\"paneTools.dotState\" x-bind:aria-label=\"paneTools.dotLabel\" x-bind:title=\"paneTools.dotLabel\"></span></template><template x-if=\"paneTools.jump\"><button type=\"button\" class=\"[ button jump ]\" data-size=\"sm\" x-bind:aria-label=\"paneTools.jumpLabel\" x-on:click=\"requestJump()\">")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
@@ -398,7 +408,7 @@ func paneTools() templ.Component {
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 26, "<template x-if=\"paneTools.jumpCount\"><span x-text=\"paneTools.jumpCount\"></span></template><span class=\"[ word ]\" x-text=\"paneTools.jumpCount ? 'new lines' : 'latest'\"></span></button></template><template x-if=\"!paneTools.down\"><span class=\"[ sep ]\"></span></template><template x-if=\"!paneTools.down\"><div class=\"[ menu pref ]\" x-data=\"menu\" data-align=\"end\"><button type=\"button\" class=\"[ button ]\" data-variant=\"ghost\" data-size=\"sm\" data-icon aria-label=\"Text size\" title=\"Text size\">")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 27, "<template x-if=\"paneTools.jumpCount\"><span x-text=\"paneTools.jumpCount\"></span></template><span class=\"[ word ]\" x-text=\"paneTools.jumpCount ? 'new lines' : 'latest'\"></span></button></template><template x-if=\"!paneTools.down\"><span class=\"[ sep ]\"></span></template><template x-if=\"!paneTools.down\"><div class=\"[ menu pref ]\" x-data=\"menu\" data-align=\"end\"><button type=\"button\" class=\"[ button ]\" data-variant=\"ghost\" data-size=\"sm\" data-icon aria-label=\"Text size\" title=\"Text size\">")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
@@ -406,7 +416,7 @@ func paneTools() templ.Component {
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 27, "</button><div class=\"[ popup ]\" role=\"menu\" popover=\"manual\"><div class=\"[ group ]\">Text size</div><template x-for=\"size in textSizes\" x-bind:key=\"size.value\"><button type=\"button\" role=\"menuitemradio\" data-action=\"text-size\" x-bind:data-value=\"size.value\" x-bind:aria-checked=\"size.checked ? 'true' : 'false'\"><span x-text=\"size.label\"></span><span class=\"[ meta ]\" x-text=\"size.px + 'px'\"></span></button></template></div></div></template><template x-if=\"!paneTools.down\"><button type=\"button\" class=\"[ button pref ]\" data-variant=\"ghost\" data-size=\"sm\" x-bind:class=\"focusActive ? 'exit-focus' : ''\" x-bind:data-icon=\"focusActive ? null : ''\" x-bind:aria-pressed=\"focusActive ? 'true' : 'false'\" x-bind:aria-label=\"focusActive ? null : 'Focus mode'\" x-bind:title=\"focusActive ? null : 'Focus mode'\" x-on:click=\"toggleFocus()\"><span x-show=\"!focusActive\">")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 28, "</button><div class=\"[ popup ]\" role=\"menu\" popover=\"manual\"><div class=\"[ group ]\">Text size</div><template x-for=\"size in textSizes\" x-bind:key=\"size.value\"><button type=\"button\" role=\"menuitemradio\" data-action=\"text-size\" x-bind:data-value=\"size.value\" x-bind:aria-checked=\"size.checked ? 'true' : 'false'\"><span x-text=\"size.label\"></span><span class=\"[ meta ]\" x-text=\"size.px + 'px'\"></span></button></template></div></div></template><template x-if=\"!paneTools.down\"><button type=\"button\" class=\"[ button pref ]\" data-variant=\"ghost\" data-size=\"sm\" x-bind:class=\"focusActive ? 'exit-focus' : ''\" x-bind:data-icon=\"focusActive ? null : ''\" x-bind:aria-pressed=\"focusActive ? 'true' : 'false'\" x-bind:aria-label=\"focusActive ? null : 'Focus mode'\" x-bind:title=\"focusActive ? null : 'Focus mode'\" x-on:click=\"toggleFocus()\"><span x-show=\"!focusActive\">")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
@@ -414,7 +424,7 @@ func paneTools() templ.Component {
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 28, "</span> <span x-show=\"focusActive\">")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 29, "</span> <span x-show=\"focusActive\">")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
@@ -422,7 +432,47 @@ func paneTools() templ.Component {
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 29, "</span> <span class=\"[ word ]\" x-show=\"focusActive\">Exit focus</span></button></template></div>")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 30, "</span> <span class=\"[ word ]\" x-show=\"focusActive\">Exit focus</span></button></template></div>")
+		if templ_7745c5c3_Err != nil {
+			return templ_7745c5c3_Err
+		}
+		return nil
+	})
+}
+
+// interviewToggle opens and hides the interview panel (contract: the session
+// has an open interview, or earlier ones to read: then it has no badge). It sits before the connection, is not a .pref so it
+// stays on a phone, and never takes the focus to the terminal.
+func interviewToggle() templ.Component {
+	return templruntime.GeneratedTemplate(func(templ_7745c5c3_Input templruntime.GeneratedComponentInput) (templ_7745c5c3_Err error) {
+		templ_7745c5c3_W, ctx := templ_7745c5c3_Input.Writer, templ_7745c5c3_Input.Context
+		if templ_7745c5c3_CtxErr := ctx.Err(); templ_7745c5c3_CtxErr != nil {
+			return templ_7745c5c3_CtxErr
+		}
+		templ_7745c5c3_Buffer, templ_7745c5c3_IsBuffer := templruntime.GetBuffer(templ_7745c5c3_W)
+		if !templ_7745c5c3_IsBuffer {
+			defer func() {
+				templ_7745c5c3_BufErr := templruntime.ReleaseBuffer(templ_7745c5c3_Buffer)
+				if templ_7745c5c3_Err == nil {
+					templ_7745c5c3_Err = templ_7745c5c3_BufErr
+				}
+			}()
+		}
+		ctx = templ.InitializeContext(ctx)
+		templ_7745c5c3_Var8 := templ.GetChildren(ctx)
+		if templ_7745c5c3_Var8 == nil {
+			templ_7745c5c3_Var8 = templ.NopComponent
+		}
+		ctx = templ.ClearChildren(ctx)
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 31, "<button type=\"button\" class=\"[ button interview-toggle ]\" data-variant=\"ghost\" data-size=\"sm\" data-interview-toggle x-bind:aria-pressed=\"interviewToggle.pressed ? 'true' : 'false'\" x-bind:aria-label=\"interviewToggle.label\" x-bind:title=\"interviewToggle.pressed ? 'Hide interview panel' : 'Show interview panel'\" x-bind:data-signal=\"interviewToggle.signal ? '' : null\" x-on:click=\"toggleInterviews\">")
+		if templ_7745c5c3_Err != nil {
+			return templ_7745c5c3_Err
+		}
+		templ_7745c5c3_Err = icon("panel").Render(ctx, templ_7745c5c3_Buffer)
+		if templ_7745c5c3_Err != nil {
+			return templ_7745c5c3_Err
+		}
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 32, "<span class=\"[ word ]\">Questions</span><template x-if=\"interviewToggle.count\"><span class=\"[ badge ]\" data-tone=\"attention\" x-text=\"interviewToggle.count\"></span></template></button>")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
@@ -448,12 +498,12 @@ func paneNote() templ.Component {
 			}()
 		}
 		ctx = templ.InitializeContext(ctx)
-		templ_7745c5c3_Var8 := templ.GetChildren(ctx)
-		if templ_7745c5c3_Var8 == nil {
-			templ_7745c5c3_Var8 = templ.NopComponent
+		templ_7745c5c3_Var9 := templ.GetChildren(ctx)
+		if templ_7745c5c3_Var9 == nil {
+			templ_7745c5c3_Var9 = templ.NopComponent
 		}
 		ctx = templ.ClearChildren(ctx)
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 30, "<div class=\"[ pane-note ]\" role=\"status\" x-bind:data-tone=\"paneNote.failed ? 'danger' : null\"><span class=\"[ text ]\" x-text=\"paneNote.text\"></span><template x-if=\"paneNote.resumable\"><button type=\"button\" class=\"[ button ]\" data-variant=\"primary\" data-size=\"sm\" x-bind:disabled=\"cannotResume\" x-bind:aria-busy=\"resumingSelected\" x-on:click=\"resume()\">Resume session</button></template></div>")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 33, "<div class=\"[ pane-note ]\" role=\"status\" x-bind:data-tone=\"paneNote.failed ? 'danger' : null\"><span class=\"[ text ]\" x-text=\"paneNote.text\"></span><template x-if=\"paneNote.resumable\"><button type=\"button\" class=\"[ button ]\" data-variant=\"primary\" data-size=\"sm\" x-bind:disabled=\"cannotResume\" x-bind:aria-busy=\"resumingSelected\" x-on:click=\"resume()\">Resume session</button></template></div>")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}

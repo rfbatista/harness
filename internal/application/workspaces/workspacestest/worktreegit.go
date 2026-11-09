@@ -133,13 +133,17 @@ func NewWorktreeGitWithFeed(t *testing.T, f *portstest.WorktreeGitFixture, opts 
 			at.TaskOrder = append(at.TaskOrder, sess.Branch)
 		}
 	}
+	if o.pushes == nil {
+		o.pushes = sqlite.NewRecordedPushRepository(db)
+	}
+	remotes, _ := o.publisher.(ports.RemotePublisher)
 	clock := &passingClock{now: time.Now()}
 	feed := &FeedRecorder{}
 	code := gitcli.NewCode()
 	svc := workspaces.NewWorktreeGit(workspaces.WorktreeGitDeps{
 		Workspaces: wsRepo, Repositories: repos, Sessions: sessions, Tickets: tickets,
 		Git: o.reader(code), Files: filesystem.NewWorktreeFiles(), Now: clock.Now,
-		Publisher: o.publisher, Fetcher: workspaces.NewOriginFetcher(o.publisher, gitcredentialstest.New()).WithTimeout(o.timeout), Feed: feed, Pushes: o.pushes,
+		Publisher: o.publisher, Remotes: remotes, Pushes: o.pushes, Fetcher: workspaces.NewOriginFetcher(o.publisher, gitcredentialstest.New()).WithTimeout(o.timeout), Feed: feed,
 	})
 	at.PassInterval = clock.Pass
 	if o.codeOut != nil {
@@ -201,12 +205,13 @@ type worktreeGitOptions struct {
 	reader    func(*gitcli.Code) ports.GitWorktreeReader
 	watched   *Watched
 	codeOut   *CodeHandle
-	pushes    ports.RecordedPushStore
+	// pushes keeps what the service pushed; nil is a fresh sqlite table.
+	pushes ports.PushRecords
 }
 
-// WithPushes keeps the person's pushes in store.
-func WithPushes(store ports.RecordedPushStore) WorktreeGitOption {
-	return func(o *worktreeGitOptions) { o.pushes = store }
+// WithPushRecords keeps the pushes the service makes in p, so a test reads them.
+func WithPushRecords(p ports.PushRecords) WorktreeGitOption {
+	return func(o *worktreeGitOptions) { o.pushes = p }
 }
 
 // WithCodeWatcher builds a code watcher over the fixture's running sessions,

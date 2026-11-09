@@ -27,6 +27,9 @@ import (
 type WorktreeGitFixture struct {
 	// RepoDir is the main checkout, on main; OriginDir the bare origin.
 	RepoDir, OriginDir string
+	// MirrorDir is a second bare remote, "mirror", of the main checkout: a push
+	// to a named remote other than origin lands there.
+	MirrorDir string
 	// NoOriginDir is a second repository with no origin remote at all.
 	NoOriginDir string
 	// Worktrees are the session worktrees by branch name.
@@ -49,7 +52,7 @@ func NewWorktreeGitFixture(t *testing.T) *WorktreeGitFixture {
 	t.Helper()
 	base := t.TempDir()
 	f := &WorktreeGitFixture{
-		NoOriginDir: filepath.Join(base, "no-origin"), RepoDir: filepath.Join(base, "repo"), OriginDir: filepath.Join(base, "origin.git"), other: filepath.Join(base, "other"),
+		NoOriginDir: filepath.Join(base, "no-origin"), RepoDir: filepath.Join(base, "repo"), OriginDir: filepath.Join(base, "origin.git"), MirrorDir: filepath.Join(base, "mirror.git"), other: filepath.Join(base, "other"),
 		Worktrees: map[string]string{}, Heads: map[string]string{}, BaseRef: "main",
 	}
 	f.git = func(dir string, args ...string) string {
@@ -80,7 +83,7 @@ func NewWorktreeGitFixture(t *testing.T) *WorktreeGitFixture {
 		f.git(dir, "commit", "-q", "-m", "add "+name)
 	}
 
-	for _, d := range []string{f.RepoDir, f.OriginDir, f.NoOriginDir} {
+	for _, d := range []string{f.RepoDir, f.OriginDir, f.MirrorDir, f.NoOriginDir} {
 		if err := os.MkdirAll(d, 0o755); err != nil {
 			t.Fatal(err)
 		}
@@ -96,7 +99,9 @@ func NewWorktreeGitFixture(t *testing.T) *WorktreeGitFixture {
 	write(f.RepoDir, "staged.txt", "one\n")
 	f.git(f.RepoDir, "add", "-A")
 	f.git(f.RepoDir, "commit", "-q", "-m", "root")
+	f.git(f.MirrorDir, "init", "-q", "--bare", "-b", "main")
 	f.git(f.RepoDir, "remote", "add", "origin", f.OriginDir)
+	f.git(f.RepoDir, "remote", "add", "mirror", f.MirrorDir)
 	f.git(f.RepoDir, "push", "-q", "-u", "origin", "main")
 
 	for _, name := range WorktreeGitBranches {
@@ -191,4 +196,14 @@ func (f *WorktreeGitFixture) RefuseInOrigin(t *testing.T, branch string) (remove
 		t.Fatal(err)
 	}
 	return func() { _ = os.Remove(hook) }
+}
+
+// MirrorRev is the commit the mirror remote holds for branch ("" when none).
+func (f *WorktreeGitFixture) MirrorRev(t *testing.T, branch string) string {
+	t.Helper()
+	cmd := exec.Command("git", "rev-parse", "--verify", "--quiet", "refs/heads/"+branch)
+	cmd.Dir = f.MirrorDir
+	cmd.Env = append(os.Environ(), "GIT_CONFIG_NOSYSTEM=1", "GIT_CONFIG_GLOBAL=/dev/null")
+	out, _ := cmd.Output()
+	return strings.TrimSpace(string(out))
 }

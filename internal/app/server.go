@@ -34,6 +34,7 @@ import (
 	"operators-mcp/internal/application/orchestration"
 	"operators-mcp/internal/application/planning"
 	"operators-mcp/internal/application/repoagents"
+	"operators-mcp/internal/application/services"
 	"operators-mcp/internal/application/taskchannel"
 	"operators-mcp/internal/application/tooling"
 	"operators-mcp/internal/application/usage"
@@ -48,6 +49,7 @@ import (
 	mcpserver "github.com/mark3labs/mcp-go/server"
 	"github.com/rfbatista/llmkit/approval"
 	"github.com/rfbatista/llmkit/claude/mcpapprove"
+	llminterview "github.com/rfbatista/llmkit/interview"
 )
 
 // ServerModule starts the inbound servers: the HTTP server (UI + JSON API) and
@@ -61,7 +63,7 @@ var ServerModule = fx.Module("server",
 
 // registerHTTPServer mounts the UI and JSON API on a mux and serves it,
 // shutting down gracefully when fx stops.
-func registerHTTPServer(lc fx.Lifecycle, cfg Config, cat catalog.Catalog, appRunner *apps.Service, ts *tooling.Service, exec *execution.Service, orch *orchestration.Service, plan *planning.Service, ws *workspaces.Service, broker *approval.Broker, sessions ports.SessionRepository, art *artifacts.Service, channel *taskchannel.Service, prs *workspaces.PullRequests, merges *workspaces.Merges, branchNames *workspaces.BranchNames, code ports.CodeBrowser, worktreeGit ports.WorktreeGit, inbox optionalNotifications, creds optionalGitCredentials, shells *vfs.Service, fsys *vfs.FileSystem, usageSvc *usage.Service, indexes optionalRepositoryIndexes, sandboxStore *sandboxsettings.Store, managedClaude *managedclaude.Service, claudeBin ports.ManagedClaudeBin, agentCred optionalAgentCredential, helper *writinghelper.Service, assistant *archassistant.Service, rules *archrules.Service, gate *branchgate.Service, watch *branchwatch.Service, agentCat *agentcatalog.Catalog, persons *vshell.PersonTerminals, repoAgents *repoagents.Service, board optionalAgentBoard) error {
+func registerHTTPServer(lc fx.Lifecycle, cfg Config, cat catalog.Catalog, appRunner *apps.Service, svcs *services.Service, ts *tooling.Service, exec *execution.Service, orch *orchestration.Service, plan *planning.Service, ws *workspaces.Service, broker *approval.Broker, sessions ports.SessionRepository, art *artifacts.Service, channel *taskchannel.Service, prs *workspaces.PullRequests, merges *workspaces.Merges, branchNames *workspaces.BranchNames, code ports.CodeBrowser, worktreeGit ports.WorktreeGit, inbox optionalNotifications, creds optionalGitCredentials, shells *vfs.Service, fsys *vfs.FileSystem, usageSvc *usage.Service, indexes optionalRepositoryIndexes, sandboxStore *sandboxsettings.Store, managedClaude *managedclaude.Service, claudeBin ports.ManagedClaudeBin, agentCred optionalAgentCredential, helper *writinghelper.Service, assistant *archassistant.Service, rules *archrules.Service, gate *branchgate.Service, watch *branchwatch.Service, agentCat *agentcatalog.Catalog, persons *vshell.PersonTerminals, repoAgents *repoagents.Service, board optionalAgentBoard, asked optionalInterviews) error {
 	uiHandler, err := ui.SPAHandler(ui.Dist)
 	if err != nil {
 		return err
@@ -89,6 +91,12 @@ func registerHTTPServer(lc fx.Lifecycle, cfg Config, cat catalog.Catalog, appRun
 	var agentBoard ports.AgentBoard
 	if board.Service != nil {
 		agentBoard = board.Service
+	}
+
+	// Same for the interviews.
+	var interviewsPort ports.Interviews
+	if asked.Service != nil {
+		interviewsPort = asked.Service
 	}
 
 	// Discovery offers the platform's sandbox and what the person added to it.
@@ -120,6 +128,7 @@ func registerHTTPServer(lc fx.Lifecycle, cfg Config, cat catalog.Catalog, appRun
 		Env:          cat.Projects,
 		RunCommands:  cat.Projects,
 		Apps:         appRunner,
+		Services:     svcs,
 		Architecture: cat.Architecture,
 		Agents:       cat.Agents,
 		Capabilities: cat.Capabilities,
@@ -144,6 +153,7 @@ func registerHTTPServer(lc fx.Lifecycle, cfg Config, cat catalog.Catalog, appRun
 		BranchNames:      branchNames,
 		Notifications:    notes,
 		AgentBoard:       agentBoard,
+		Interviews:       interviewsPort,
 		Usage:            usageSvc,
 		LiveCalls:        usageSvc,
 		Code:             code,
@@ -195,16 +205,20 @@ func registerHTTPServer(lc fx.Lifecycle, cfg Config, cat catalog.Catalog, appRun
 	}
 	mux.Handle("/api/", slow(apiRouter))
 	mux.Handle(mcpapprove.PathPrefix, mcpapprove.Handler(broker))
-	mux.Handle(mcpsession.PathPrefix, slow(mcpsession.TaskHandler(sessionTaskTools(cat, orch, plan, sessions, art, channel, notifier, merges, tooling.WithAgentPlacements(repoAgents)))))
+	if asked.Service != nil {
+		mux.Handle(llminterview.PathPrefix, interviewHandler(asked.Service))
+	}
+	mux.Handle(mcpsession.PathPrefix, slow(mcpsession.TaskHandler(sessionTaskTools(cat, orch, plan, sessions, art, channel, notifier, merges, tooling.WithAgentPlacements(repoAgents), tooling.WithBranchPush(gate)))))
+	mux.Handle(mcpsession.ServicesPathPrefix, slow(mcpsession.ServicesHandler(tooling.SessionServicesTools(sessions, cat.Agents, svcs, cat.Projects))))
 	// The web client owns / and its pages; anything else reaches the legacy
 	// designer SPA until it is retired.
 	mux.Handle("/", slow(web.NewHandler(web.Deps{Projects: cat.Projects, Tasks: plan, Sessions: orch, Agents: cat.Agents, Repositories: cat.Projects, EnvFiles: cat.Projects, RunCommands: cat.Projects, Documents: plan, History: ws, Code: code, Workspaces: ws, Artifacts: art, ProjectSummaries: cat.Projects, PullRequests: prs, WorktreeGit: worktreeGit,
-		DesignSystems: designSystemReader(cat), Resources: plan, Comments: plan, Notifications: noteReader, BranchRequests: gate, SessionBranches: watch, GitCredentials: creds.port(), Usage: usageSvc, TokenSavers: cat.Capabilities,
+		DesignSystems: designSystemReader(cat), Resources: plan, Comments: plan, Notifications: noteReader, BranchRequests: gate, SessionBranches: watch, GitCredentials: creds.port(), Usage: usageSvc, Services: svcs, ServiceCounter: svcs, TokenSavers: cat.Capabilities,
 		TokenSaverInstalls: cat.Capabilities, RepositoryIndexes: indexes.port(), Settings: cat.Settings, DataPaths: dataPaths(cfg), SandboxSettings: sandboxStore, SandboxDriver: sandboxDriver(orch), SandboxBuiltin: sandboxBuiltin(orch),
 		ManagedClaude: managedClaude, ManagedClaudeBin: claudeBin, AgentCredential: agentCred.port(),
 		AgentOAuth: agentCred.oauth(), AgentAuth: agentCred.auth(), AgentHomeExposed: agentHomeExposed(cfg), AgentLogin: agentHasLogin(cfg), ArchivedTasks: plan, ArchivedList: plan,
 		// Whether the pens work, read from the gate without starting anything.
-		WritingHelper: helperState(helper), ArchitectureAssistant: architectureAssistant, AgentCatalog: CatalogSeed(agentCat, repoAgents), AgentBoard: agentBoard}, assets, uiHandler)))
+		WritingHelper: helperState(helper), ArchitectureAssistant: architectureAssistant, AgentCatalog: CatalogSeed(agentCat, repoAgents), AgentBoard: agentBoard, Interviews: interviewsPort}, assets, uiHandler)))
 
 	// The LLM proxy every claude process calls through (ADR 0006): loopback
 	// only, outside the API token and CORS, so its responses come back as

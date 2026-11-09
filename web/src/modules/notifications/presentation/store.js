@@ -59,6 +59,8 @@ export function notificationsStore({ gateway, alerts, prefs, clock, navigate, an
   let seedPage = null;
   let started = false;
   let baseTitle = "";
+  /** A count a page pins to lead the title instead of the unread count (the open questions of the session in view); 0 when none. */
+  let pinned = 0;
 
   const each = (fn) => {
     for (const v of [...views]) fn(v);
@@ -310,8 +312,16 @@ export function notificationsStore({ gateway, alerts, prefs, clock, navigate, an
     syncTitle() {
       if (!doc || !started) return;
       baseTitle = doc.title.replace(/^\(\d+\+?\) /, "");
-      const n = this.unreadCount;
+      const n = pinned || this.unreadCount;
       doc.title = n ? `(${n}) ${baseTitle}` : baseTitle;
+    },
+
+    /** A page pins the count that leads the title while it has something more specific than the unread count; 0 or null lets it go. */
+    pinTitleCount(n) {
+      const next = n > 0 ? n : 0;
+      if (next === pinned) return;
+      pinned = next;
+      this.syncTitle();
     },
   };
 }

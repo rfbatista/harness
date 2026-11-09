@@ -57,20 +57,18 @@ type listInputs struct {
 	reqs     map[string][]domain.BranchRequest
 	stats    map[string]map[string]ports.BranchStat
 	findings map[string][]ports.BranchFinding
-	pushes   map[string][]ports.RecordedPush // by session id
-	baseRef  map[string]string               // by session id
+	pushes   map[string][]domain.RecordedPush // by session id
+	baseRef  map[string]string                // by session id
 }
 
 func (s *Service) inputs(ctx context.Context, sessions []*domain.Session, reqs map[string][]domain.BranchRequest) (*listInputs, error) {
 	in := &listInputs{
 		reqs: reqs, stats: map[string]map[string]ports.BranchStat{}, findings: map[string][]ports.BranchFinding{},
-		pushes: map[string][]ports.RecordedPush{}, baseRef: map[string]string{},
+		pushes: map[string][]domain.RecordedPush{}, baseRef: map[string]string{},
 	}
 	ids := make([]string, 0, len(sessions))
-	repos := map[string]bool{}
 	for _, sess := range sessions {
 		ids = append(ids, sess.ID)
-		repos[sess.RepositoryID] = true
 		if ws := s.workspaceOf(ctx, sess); ws != nil {
 			in.baseRef[sess.ID] = ws.BaseRef
 		}
@@ -95,14 +93,12 @@ func (s *Service) inputs(ctx context.Context, sessions []*domain.Session, reqs m
 		}
 	}
 	if s.d.Pushes != nil {
-		for repo := range repos {
-			ps, err := s.d.Pushes.List(ctx, repo)
+		for _, id := range ids {
+			ps, err := s.d.Pushes.PushesOf(ctx, id)
 			if err != nil {
 				return nil, err
 			}
-			for _, p := range ps {
-				in.pushes[p.SessionID] = append(in.pushes[p.SessionID], p)
-			}
+			in.pushes[id] = ps
 		}
 	}
 	return in, nil

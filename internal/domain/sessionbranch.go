@@ -25,8 +25,8 @@ type BranchBase struct {
 
 // Who pushed a branch.
 const (
-	PushedByPerson     = "person"
-	PushedByAgent      = "agent"
+	PushedByPerson     = PushByPerson
+	PushedByAgent      = PushByAgent
 	PushedByUnapproved = "unapproved"
 )
 

@@ -142,7 +142,7 @@ templ mcpServersSection(projectID, projectName, settingsHref string) {
 		</template>
 		<template x-if="isEmpty">
 			<div class="[ empty ]" data-mcp-empty>
-				<b>No MCP servers in the catalog yet.</b>
+				<b>No MCP servers of your own yet.</b>
 				<span class="[ text-sm ]">Create one on the Agents page, then give it to this project here.</span>
 				<a class="[ button ]" data-variant="primary" href={ templ.SafeURL(newMCPServerHref(settingsHref)) }>New MCP server…</a>
 			</div>

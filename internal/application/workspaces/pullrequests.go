@@ -49,7 +49,7 @@ type PullRequestDeps struct {
 	Fetcher *OriginFetcher
 	// Pushes keeps the push that opens a pull request, so the after-turn
 	// check does not take it for a bypass; nil keeps none.
-	Pushes ports.RecordedPushStore
+	Pushes ports.PushRecords
 	// Now is the clock the refresh rate is measured with; nil is time.Now.
 	Now func() time.Time
 }
@@ -188,9 +188,9 @@ func (s *PullRequests) recordPush(ctx context.Context, ws *domain.Workspace) {
 			sessionID = found[0].ID
 		}
 	}
-	err = s.d.Pushes.Record(ctx, ports.RecordedPush{
+	err = s.d.Pushes.RecordPush(ctx, domain.RecordedPush{
 		RepositoryID: ws.RepositoryID, SessionID: sessionID, Branch: ws.Branch, Remote: "origin", RemoteBranch: ws.Branch,
-		Commit: st.Head, At: s.d.Now(), By: domain.PushedByPerson,
+		Commit: st.Head, At: s.d.Now(), By: domain.PushByPerson,
 	})
 	if err != nil {
 		slog.Warn("push not recorded", "branch", ws.Branch, "err", err)

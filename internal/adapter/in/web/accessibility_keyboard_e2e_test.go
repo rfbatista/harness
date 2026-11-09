@@ -153,7 +153,7 @@ func TestAccessibilityAgentIsCreatedByKeyboardAlone_EndToEnd(t *testing.T) {
 		chromedp.EmulateViewport(1280, 900),
 		chromedp.Navigate(w.srv.URL+"/agents/new"),
 		waitUntil(visible(`[data-agent-editor]`)),
-		waitUntil(`document.querySelectorAll('[data-agent-editor] [data-mcp-row]').length === 2`),
+		waitUntil(`document.querySelectorAll('[data-agent-editor] [data-mcp-row]').length === 3`),
 		chromedp.Evaluate(a11yRingsJS, nil),
 		a11yTabUntil(active+` === 'agent-name'`, false),
 		is(a11yRole(`#agent-name`), "textbox: Name"),
@@ -214,7 +214,7 @@ func TestAccessibilityAgentIsCreatedByKeyboardAlone_EndToEnd(t *testing.T) {
 		is(a11yRole(`[data-agent-editor] [data-mcp-row][data-name=github] input`), "checkbox: github http"),
 		is(`document.querySelector('[data-agent-editor] [data-mcp-row][data-name=github] input').closest('[role=group]').getAttribute('aria-label')`, "MCP servers"),
 		chromedp.KeyEvent(" "),
-		waitUntil(`document.querySelector('[data-agent-editor] [data-mcp-row][data-name=github] input').checked && `+flat(`[data-mcp-summary]`)+` === '1 of 2 servers'`),
+		waitUntil(`document.querySelector('[data-agent-editor] [data-mcp-row][data-name=github] input').checked && `+flat(`[data-mcp-summary]`)+` === '1 of 3 servers'`),
 	)
 
 	b.run("New MCP server… opens the drawer as a modal dialog: the focus moves in, Tab stays in, Escape closes and gives the focus back",

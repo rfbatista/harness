@@ -160,3 +160,9 @@ test("a refusal lands on the field it names; unknown names split between skills 
   assert.equal(agentFieldErrors(refuse("INVALID_INPUT", "harness enables every agent", { field: "projects" }), draft).projects, "harness enables every agent", "a refusal about `projects` shows at the Projects section");
   assert.deepEqual(agentFieldErrors(null, draft), { name: "", description: "", aliases: "", entries: "", mcp: "", tools: "", projects: "", form: "" });
 });
+
+test("the built-in services server is a tickable choice marked built-in", () => {
+  const withServices = { ...catalog, mcpServers: [...catalog.mcpServers, { ...catalog.mcpServers[0], name: "services", transport: "built_in", builtIn: true, tools: ["list_services"], envRefs: [] }] };
+  const row = mcpChoices(withServices, ["services"]).find((r) => r.name === "services");
+  assert.deepEqual([row.checked, row.transport, row.builtIn, row.refs], [true, "built-in", true, []]);
+});

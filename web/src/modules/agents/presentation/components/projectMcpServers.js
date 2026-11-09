@@ -16,6 +16,7 @@
 // Neither verb makes a catalog change to undo, so Undo puts the lists a save
 // replaced back with the same verbs.
 
+import { noOwnServers } from "../../domain/mcp.js";
 import { describeError } from "../../../../shared/presentation/errors.js";
 import { followSkeleton, skeletonFields } from "../../../../shared/presentation/skeleton.js";
 import { describeRefusal } from "../../domain/refusals.js";
@@ -234,7 +235,7 @@ export function projectMcpServers({ gateway, timers = globalThis }) {
         return this.catalog ? projectMcpRows(this.catalog, this.projectId, this.selected) : [];
       },
       get isEmpty() {
-        return this.loaded && this.catalog !== null && this.catalog.mcpServers.length === 0;
+        return this.loaded && this.catalog !== null && noOwnServers(this.catalog);
       },
       get hasRows() {
         return this.rows.length > 0;

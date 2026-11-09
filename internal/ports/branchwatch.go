@@ -64,24 +64,6 @@ type BranchWatchStore interface {
 	Findings(ctx context.Context, repositoryID string, sessionIDs ...string) ([]BranchFinding, error)
 }
 
-// RecordedPush is a push the harness made itself, stored with who asked: the
-// person's Push or an approved agent push.
-type RecordedPush struct {
-	RepositoryID, SessionID, Branch string
-	Remote, RemoteBranch, Commit    string
-	At                              time.Time
-	By                              string
-	// RequestID is the branch request of an agent push, "" for the person's.
-	RequestID string
-}
-
-// RecordedPushStore keeps the pushes the harness made (driven).
-type RecordedPushStore interface {
-	// Record is called after a push succeeded, before the push returns.
-	Record(ctx context.Context, p RecordedPush) error
-	List(ctx context.Context, repositoryID string) ([]RecordedPush, error)
-}
-
 // SessionBranchLists is the Branches list, read from stored state only
 // (driving; web pages read it in process).
 type SessionBranchLists interface {

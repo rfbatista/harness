@@ -2,6 +2,7 @@ package domain
 
 import (
 	"fmt"
+	"strings"
 	"time"
 )
 
@@ -53,6 +54,14 @@ type BranchRequest struct {
 	Remote       *BranchRemote `json:"remote"`
 	RemoteBranch *string       `json:"remote_branch"`
 	Commits      *int          `json:"commits"`
+	// CommitsAgainst says what Commits counts against, push only: "remote"
+	// when the remote-tracking branch is known here, "base" when it is not and
+	// the count is against the branch's base.
+	CommitsAgainst *string `json:"commits_against"`
+	// Commit pins a push_branch request to the commit the branch was at when it
+	// was asked: that commit, not the branch's later head, is what goes. It is
+	// not part of the web contract's JSON.
+	Commit string `json:"-"`
 	// Command is the command line as the agent ran it, or "push_branch".
 	Command string `json:"command"`
 	// Via is "git" or "push_branch".
@@ -65,25 +74,42 @@ type BranchRequest struct {
 }
 
 // Matches says whether the request, once approved, is the grant for action: the
-// same kind, branch, start point, remote and refspec.
+// same kind, branch, start point, remote with its URL, and remote branch: a
+// push to another URL or under another name asks again.
 func (r BranchRequest) Matches(a BranchAction) bool {
-	if r.Action != a.Kind || r.Branch != a.Branch || strOr(r.NewName) != a.NewName {
+	newName := strOr(r.NewName)
+	if r.Action == BranchRemoteRename && r.Remote != nil {
+		newName = strOr(r.Remote.NewName)
+	}
+	if r.Action != a.Kind || r.Branch != a.Branch || newName != a.NewName {
 		return false
 	}
 	if startRef(r.StartPoint) != startRef(a.Start) {
 		return false
 	}
-	remote := ""
+	remote, url := "", ""
 	if r.Remote != nil {
-		remote = r.Remote.Name
+		remote, url = r.Remote.Name, r.Remote.URL
 	}
-	return remote == a.Remote
+	return remote == a.Remote && url == RedactURL(a.URL) && strOr(r.RemoteBranch) == a.RemoteBranch
 }
 
 // Label names what the request asks, for a line the person or the agent reads:
 // "create feature-x", "rename a → b", "switch commit abc123".
 func (r BranchRequest) Label() string {
 	switch {
+	case r.Action == BranchPush && r.Remote != nil:
+		rb := r.Branch
+		if r.RemoteBranch != nil {
+			rb = *r.RemoteBranch
+		}
+		return fmt.Sprintf("push %s → %s/%s", r.Branch, r.Remote.Name, rb)
+	case (r.Action == BranchRemoteAdd || r.Action == BranchRemoteSetURL) && r.Remote != nil:
+		return fmt.Sprintf("%s %s %s", strings.ReplaceAll(string(r.Action), "_", " "), r.Remote.Name, r.Remote.URL)
+	case r.Action == BranchRemoteRename && r.Remote != nil && r.Remote.NewName != nil:
+		return fmt.Sprintf("remote rename %s → %s", r.Remote.Name, *r.Remote.NewName)
+	case r.Action == BranchRemoteRemove && r.Remote != nil:
+		return "remote remove " + r.Remote.Name
 	case r.Action == BranchRename && r.NewName != nil:
 		return fmt.Sprintf("%s %s → %s", r.Action, r.Branch, *r.NewName)
 	case r.Branch == "" && r.StartPoint != nil:

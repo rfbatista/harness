@@ -65,3 +65,42 @@ func TestRailGroupHeadingWords(t *testing.T) {
 		t.Errorf("more: %q", m)
 	}
 }
+
+func renderProjectNav(t *testing.T, r Rail) string {
+	t.Helper()
+	var b strings.Builder
+	if err := projectNav(r).Render(context.Background(), &b); err != nil {
+		t.Fatal(err)
+	}
+	return b.String()
+}
+
+// The project navigation's Services item sits after Code, carries the running
+// count for the browser to keep current (contract: Harness server ↔ Web UI —
+// services, section 8), and shows its badge only above zero.
+func TestProjectNavServicesItemFollowsCodeAndCarriesTheRunningCount(t *testing.T) {
+	rail := Rail{BoardHref: "/b", CodeHref: "/c", ReviewsHref: "/r", Services: ServicesNav{Href: "/projects/p1/services", ProjectID: "p1", Running: 3}}
+	got := renderProjectNav(t, rail)
+	for _, want := range []string{`data-page="services"`, `data-running-services="3"`, `data-project-id="p1"`, `href="/projects/p1/services"`, `>3</span>`, `> running</span>`} {
+		if !strings.Contains(got, want) {
+			t.Errorf("nav lacks %q:\n%s", want, got)
+		}
+	}
+	code, services, reviews := strings.Index(got, `data-page="code"`), strings.Index(got, `data-page="services"`), strings.Index(got, `data-page="reviews"`)
+	if !(code < services && services < reviews) {
+		t.Errorf("Services must sit after Code and before Review requests: code %d services %d reviews %d", code, services, reviews)
+	}
+}
+
+func TestProjectNavServicesBadgeIsHiddenAtZeroAndCapsAt99(t *testing.T) {
+	zero := renderProjectNav(t, Rail{Services: ServicesNav{Href: "/s", ProjectID: "p1"}})
+	if !strings.Contains(zero, `data-running-services="0"`) || !strings.Contains(zero, `style="display: none"`) {
+		t.Errorf("at zero the badge is drawn hidden:\n%s", zero)
+	}
+	if got := renderProjectNav(t, Rail{Services: ServicesNav{Href: "/s", ProjectID: "p1", Running: 140}}); !strings.Contains(got, `>99+</span>`) {
+		t.Errorf("140 reads 99+:\n%s", got)
+	}
+	if got := renderProjectNav(t, Rail{}); strings.Contains(got, `data-page="services"`) {
+		t.Errorf("no services href, no item:\n%s", got)
+	}
+}

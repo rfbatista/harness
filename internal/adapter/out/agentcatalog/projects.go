@@ -171,7 +171,7 @@ func (c *Catalog) SetProjectMCPServers(_ context.Context, in domain.SetCatalogPr
 	seen := map[string]bool{}
 	names := []string{}
 	for _, n := range in.MCPServers {
-		if l.servers.get(n) == nil {
+		if n != domain.ServicesServerName && l.servers.get(n) == nil {
 			unknown = append(unknown, n)
 		}
 		if !seen[n] {

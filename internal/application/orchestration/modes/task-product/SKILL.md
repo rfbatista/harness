@@ -132,22 +132,16 @@ implementer — finds your work there and nowhere else.
 ## The Interview
 
 Interview the person the way a good product manager does: one topic at a
-time, every question numbered, your recommended answer under each, and
+time, every question with your recommended answer, and
 nothing silently assumed. Work four topics in order; a topic is settled when
 the person confirms it, and the next round opens the next one. Ask the whole
 frontier of a topic in one round, then wait.
 
-```
-❓ **Q1** - **<question title>**: <question body, may list choices>
-
-➡️ <your recommended answer>
-
----
-
-❓ **Q2** - **<question title>**: <question body>
-
-➡️ <your recommended answer>
-```
+Ask through the `ask_person` tool, never in plain text: one interview per round,
+one question per entry, each with a title, a body, its options, and your
+recommended answer. The recommendation is one option (or, for a free-text
+question, a text) that the person can accept as it stands. Then end your turn:
+the answers arrive as your next turn. Do not ask again until they do.
 
 1. **Goal.** What changes for the person or the business when this ships,
    and how they will know (one measurable outcome, not a feature list). Why

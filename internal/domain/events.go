@@ -81,6 +81,21 @@ type SessionEnded struct {
 	Status    SessionStatus
 }
 
+// InterviewOpened: a session's agent asked the person an interview, which was
+// stored as open. It is published once per interview.
+type InterviewOpened struct {
+	InterviewID string
+	SessionID   string
+	Title       string
+	Questions   int
+}
+
+// InterviewClosed: an interview left open: it was sent, dismissed or expired.
+type InterviewClosed struct {
+	InterviewID string
+	SessionID   string
+}
+
 // SessionCommitCheckChanged: a session's commit check went off (Off, with the
 // Reason) or was repaired. It is published at every check while the session
 // stays off, so a subscriber deduplicates by session.
@@ -217,6 +232,8 @@ func (SettingsChanged) EventName() string            { return "settings.changed"
 func (SessionDeleted) EventName() string             { return "session.deleted" }
 func (SessionStarted) EventName() string             { return "session.started" }
 func (SessionEnded) EventName() string               { return "session.ended" }
+func (InterviewOpened) EventName() string            { return "interview.opened" }
+func (InterviewClosed) EventName() string            { return "interview.closed" }
 func (SessionTurnEnded) EventName() string           { return "session.turn_ended" }
 func (SessionCommitCheckChanged) EventName() string  { return "session.commit_check_changed" }
 func (TicketStatusChanged) EventName() string        { return "ticket.status_changed" }

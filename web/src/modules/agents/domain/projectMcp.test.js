@@ -79,3 +79,12 @@ test("the example is the first agent that has servers, else the first agent, els
   assert.equal(sessionExample(catalogWith([], [agent("a", [])]), ["s"]).agent, "a");
   assert.equal(sessionExample(catalogWith([], []), ["s"]).agent, "");
 });
+
+test("the built-in services server is offered to a project like any server, marked built-in", () => {
+  const c = catalogWith([server({ name: "services", transport: "built_in", command: "", built_in: true, tools: ["list_services"] })]);
+  const [row] = projectMcpRows(c, "p1", []);
+  assert.equal(row.name, "services");
+  assert.equal(row.transport, "built-in");
+  assert.equal(row.builtIn, true);
+  assert.deepEqual(row.vars, []);
+});

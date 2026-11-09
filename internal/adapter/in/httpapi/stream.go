@@ -373,12 +373,18 @@ func (h *Handler) feedFor(ctx context.Context, path string) (<-chan any, error) 
 		return h.followProject(ctx, q.Get("project_id"))
 	case u.Path == "/project_events":
 		return h.followCatalog(ctx)
+	case u.Path == "/services/events":
+		return h.followServices(ctx, q.Get("project_id"))
+	case u.Path == "/services/log":
+		return h.followServiceLog(ctx, q.Get("service_id"), q.Get("from"))
 	case u.Path == "/notifications/events":
 		return h.followNotifications(ctx)
 	case u.Path == "/live_sessions/events":
 		return h.followLiveSessions(ctx)
 	case len(parts) == 4 && parts[0] == "projects" && parts[2] == "usage" && parts[3] == "events" && parts[1] != "":
 		return h.followUsage(ctx, parts[1])
+	case len(parts) == 4 && parts[0] == "sessions" && parts[2] == "interviews" && parts[3] == "events" && parts[1] != "":
+		return h.followInterviews(ctx, parts[1])
 	case len(parts) == 3 && parts[0] == "sessions" && parts[2] == "events" && parts[1] != "":
 		var from int64
 		if v := q.Get("from_seq"); v != "" {

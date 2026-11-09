@@ -17,6 +17,8 @@ import (
 const (
 	BranchGateRoute      = "/api/sessions/:id/branch_gate"
 	BranchGateGrantRoute = "/api/sessions/:id/branch_gate/grant"
+	// BranchGatePushedRoute is where the shim says a push it let through succeeded.
+	BranchGatePushedRoute = "/api/sessions/:id/branch_gate/pushed"
 )
 
 // SessionBranchGatePath is the path the session's branch gate endpoints are
@@ -67,6 +69,23 @@ func (h *Handler) handleBranchGateGrant(c echo.Context) error {
 		return c.JSON(http.StatusOK, ports.BranchGrantAnswer{})
 	}
 	return c.JSON(http.StatusOK, h.branchGate.Grant(c.Request().Context(), c.Param("id"), req))
+}
+
+func (h *Handler) handleBranchGatePushed(c echo.Context) error {
+	if !isLoopback(c.Request().RemoteAddr) {
+		return echo.NewHTTPError(http.StatusForbidden, "loopback only")
+	}
+	var in ports.BranchPushed
+	if err := bindJSON(c, &in); err != nil {
+		return err
+	}
+	if h.branchGate == nil {
+		return c.NoContent(http.StatusOK)
+	}
+	if err := h.branchGate.Pushed(c.Request().Context(), c.Param("id"), in); err != nil {
+		return err
+	}
+	return c.NoContent(http.StatusOK)
 }
 
 func (h *Handler) handleBranchRequests(c echo.Context) error {

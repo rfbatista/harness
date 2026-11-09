@@ -145,7 +145,7 @@ To see the project around the design:
 
 The tools that act on a session's own task answer SESSION_HAS_NO_TASK here.
 These tools always act on this session's project; they take no project id.`)
-	return b.String() + "\n\n" + notificationsSection
+	return b.String() + "\n\n" + notificationsSection + "\n\n" + askSection(false)
 }
 
 // StartDesignSession starts a design session bound to the design system, as

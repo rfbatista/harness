@@ -59,6 +59,23 @@ func NewRouter(h *Handler, opts ...Option) *echo.Echo {
 	g.POST("/save_repository_run_command", h.handleSaveRunCommand)
 	g.POST("/delete_repository_run_command", h.handleDeleteRunCommand)
 
+	// services: a project's programs, defined here and run beside each other
+	g.GET("/list_services", h.handleListServices)
+	g.GET("/get_service", h.handleGetService)
+	g.GET("/read_service_log", h.handleReadServiceLog)
+	g.GET("/list_service_run_worktrees", h.handleListServiceRunWorktrees)
+	g.GET("/get_run_variables", h.handleGetRunVariables)
+	g.GET("/services/events", h.handleServiceEvents) // a project's services as they change (SSE)
+	g.GET("/services/log", h.handleServiceLogEvents) // a service's log as it grows (SSE)
+	g.POST("/start_service", h.handleStartService)
+	g.POST("/stop_service", h.handleStopService)
+	g.POST("/restart_service", h.handleRestartService)
+	g.POST("/create_service", h.handleCreateService)
+	g.POST("/update_service", h.handleUpdateService)
+	g.POST("/delete_service", h.handleDeleteService)
+	g.GET("/get_services_settings", h.handleGetServicesSettings)
+	g.POST("/set_services_settings", h.handleSetServicesSettings)
+
 	// token saver activations of a project, repository or task
 	g.GET("/list_token_saver_activations", h.handleListTokenSaverActivations)
 	g.POST("/set_token_saver_activation", h.handleSetTokenSaverActivation)
@@ -239,6 +256,10 @@ func NewRouter(h *Handler, opts ...Option) *echo.Echo {
 	g.DELETE("/sessions/:id", h.handleDeleteSession)
 	g.GET("/events", h.handleEvents) // a project's session changes (SSE)
 	g.GET("/sessions/:id/events", h.handleSessionEvents)
+	g.GET("/sessions/:id/interviews", h.handleSessionInterviews)
+	g.GET("/sessions/:id/interviews/events", h.handleSessionInterviewEvents)
+	g.POST("/interviews/:id/answers", h.handleSubmitInterview)
+	g.POST("/interviews/:id/dismiss", h.handleDismissInterview)
 	g.GET("/sessions/:id/terminal", h.handleSessionTerminal) // WebSocket upgrade
 	// the person's own terminals on a session's virtual file system (ADR 0051 guards each)
 	guard := personGuard(o)
@@ -291,6 +312,7 @@ func NewRouter(h *Handler, opts ...Option) *echo.Echo {
 	// the branch gate: a session's git shim asks for a branch grant
 	g.POST(strings.TrimPrefix(BranchGateRoute, "/api"), h.handleBranchGateHook)
 	g.POST(strings.TrimPrefix(BranchGateGrantRoute, "/api"), h.handleBranchGateGrant)
+	g.POST(strings.TrimPrefix(BranchGatePushedRoute, "/api"), h.handleBranchGatePushed)
 	// the person's side of it: the requests, and their answers
 	g.GET("/branch_requests", h.handleBranchRequests)
 	g.GET("/session_branches", h.handleSessionBranches)

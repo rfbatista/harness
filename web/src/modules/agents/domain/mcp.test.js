@@ -1,7 +1,7 @@
 import { assert, file, test } from "../../../shared/testing/test.js";
 import { toCatalog } from "../infrastructure/dto.js";
 import { catalogDTO } from "../testing/fixtures.js";
-import { mcpDetail, mcpFooter, mcpRows, varNames } from "./mcp.js";
+import { mcpDetail, mcpFooter, mcpRows, noOwnServers, varNames } from "./mcp.js";
 
 file("agents/domain/mcp");
 
@@ -84,4 +84,64 @@ test("the rows' filters: stdio, http, Needs a secret, Unused", () => {
 
 test("the footer names mcp-servers.json", () => {
   assert.equal(mcpFooter(catalogWith([server({ name: "a" }), server({ name: "b" })])), "mcp-servers.json · 2 servers");
+});
+
+const builtIn = (o) => server({
+  name: "services", transport: "built_in", command: "", built_in: true,
+  tools: ["list_services", "start_service"], agents: ["ux"], projects: [{ id: "p1", name: "harness" }], ...o,
+});
+
+test("the built-in services server is read with its tools and the built-in mark", () => {
+  const c = catalogWith([builtIn(), server({ name: "plain" })]);
+  const [b, p] = c.mcpServers;
+  assert.equal(b.builtIn, true);
+  assert.deepEqual(b.tools, ["list_services", "start_service"]);
+  assert.equal(p.builtIn, false);
+  assert.deepEqual(p.tools, []);
+});
+
+test("a built-in row says so, and an ordinary row does not", () => {
+  const rows = mcpRows(catalogWith([builtIn(), server({ name: "plain", agents: ["ux"] })]));
+  const b = rows.find((r) => r.name === "services");
+  assert.equal(b.builtIn, true);
+  assert.equal(b.meta, "1 agent · 1 project");
+  assert.equal(b.description, "list_services, start_service");
+  assert.equal(rows.find((r) => r.name === "plain").builtIn, false);
+});
+
+test("a built-in server is neither stdio nor http, and is never Unused", () => {
+  const c = catalogWith([builtIn(), builtIn({ name: "x", agents: [], projects: [] }), server({ name: "own" })]);
+  assert.deepEqual(mcpRows(c, { filter: "stdio" }).map((r) => r.name), ["own"]);
+  assert.deepEqual(mcpRows(c, { filter: "unused" }).map((r) => r.name), ["own"]);
+  assert.equal(mcpDetail(c, "x", {}).unused, false);
+  assert.equal(mcpRows(c).find((r) => r.name === "x").meta, "");
+});
+
+test("a built-in detail lists its tools, and has no edit, duplicate, delete or check", () => {
+  const d = mcpDetail(catalogWith([builtIn()]), "services", {});
+  assert.equal(d.builtIn, true);
+  assert.deepEqual(d.tools, ["list_services", "start_service"]);
+  assert.equal(d.targetLabel, "Tools");
+  assert.equal(d.target, "list_services, start_service");
+  assert.equal(d.editHref, "");
+  assert.equal(d.duplicateHref, "");
+  assert.equal(d.entries.length, 0);
+  assert.deepEqual(d.agents, [{ name: "ux", href: "/agents/ux" }]);
+});
+
+test("an ordinary detail is not built-in and keeps its edit link", () => {
+  const d = mcpDetail(catalogWith([server({})]), "s", {});
+  assert.equal(d.builtIn, false);
+  assert.equal(d.editHref, "/agents/mcp/s/edit");
+});
+
+test("the footer counts the file's servers, not the built-in one", () => {
+  assert.equal(mcpFooter(catalogWith([builtIn(), server({ name: "a" }), server({ name: "b" })])), "mcp-servers.json · 2 servers");
+  assert.equal(mcpFooter(catalogWith([builtIn()])), "mcp-servers.json · 0 servers");
+});
+
+test("a catalog with only built-in servers has none of the person's own", () => {
+  assert.equal(noOwnServers(catalogWith([])), true);
+  assert.equal(noOwnServers(catalogWith([builtIn()])), true);
+  assert.equal(noOwnServers(catalogWith([builtIn(), server({})])), false);
 });

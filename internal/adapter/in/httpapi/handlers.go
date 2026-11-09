@@ -72,6 +72,9 @@ type Services struct {
 	// AgentBoard is the Agent board's seed and live session feed; nil
 	// answers 503.
 	AgentBoard ports.AgentBoard
+	// Interviews reads and follows what sessions asked the person; nil
+	// answers 503.
+	Interviews ports.Interviews
 	// Usage reads the token usage the LLM proxy measured; nil answers 503.
 	Usage ports.UsageReader
 	// LiveCalls opens the live call stream of a project's Usage page; nil
@@ -140,6 +143,8 @@ type Services struct {
 	// RepositoryAgents keeps which agents each repository assigns; nil
 	// answers 503.
 	RepositoryAgents ports.RepositoryAgents
+	// Services keeps projects' services; nil answers 503.
+	Services ports.ServiceManager
 }
 
 // Handler serves the application's driving ports as HTTP endpoints (the same
@@ -177,6 +182,7 @@ type Handler struct {
 	branchNames    ports.BranchNameChecker
 	notifications  ports.Notifications
 	agentBoard     ports.AgentBoard
+	interviews     ports.Interviews
 	usage          ports.UsageReader
 	liveCalls      ports.LiveCalls
 	code           ports.CodeBrowser
@@ -201,6 +207,8 @@ type Handler struct {
 	architectureAssistant ports.ArchitectureAssistant
 	catalog               ports.CatalogEditor
 	repoAgents            ports.RepositoryAgents
+
+	services ports.ServiceManager
 
 	repoArch ports.RepositoryArchitectures
 	designs  ports.DesignSystems
@@ -253,6 +261,7 @@ func NewHandler(s Services) *Handler {
 		sessionBranches: s.SessionBranches,
 		notifications:   s.Notifications,
 		agentBoard:      s.AgentBoard,
+		interviews:      s.Interviews,
 		usage:           s.Usage,
 		liveCalls:       s.LiveCalls,
 		code:            s.Code,
@@ -277,6 +286,7 @@ func NewHandler(s Services) *Handler {
 		architectureAssistant: s.ArchitectureAssistant,
 		catalog:               s.Catalog,
 		repoAgents:            s.RepositoryAgents,
+		services:              s.Services,
 	}
 }
 

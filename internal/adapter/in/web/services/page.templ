@@ -1,0 +1,420 @@
+package services
+
+import (
+	"operators-mcp/internal/adapter/in/web/components"
+	"operators-mcp/internal/adapter/in/web/shell"
+)
+
+// Page is a project's Services page. servicesPage renders it from the seed:
+// the services grouped Running and Not running, each row with its status,
+// ports, where it runs and who started it, kept live by the services feed.
+templ Page(frame shell.Frame, projectID, projectName string, seed Seed, repos []Repository) {
+	@shell.AppShell(frame) {
+		@templ.JSONScript("services-seed", seed)
+		<main id="main" class="[ frame ]" x-data="servicesPage" data-seed="services-seed" x-on:keydown.escape.window="escape">
+			<header class="[ toolbar ]">
+				<a class="[ crumb ]" href={ templ.SafeURL("/projects/" + projectID) }>{ projectName } /</a>
+				<h1>Services</h1>
+				<span class="[ badge ]" data-tone="signal" role="status" data-running-badge x-bind:hidden="!hasRunning" x-text="runningLabel"></span>
+				<div class="[ actions ]">
+					<button type="button" class="[ button ]" data-variant="primary" data-size="sm" data-new-service x-on:click="openNew">New service</button>
+				</div>
+			</header>
+			<p class="[ visually-hidden ]" role="status" aria-live="polite" data-services-notice-live x-text="notice"></p>
+			<div class="[ split-view ]" data-scroll data-wide-list x-bind:data-detail="detailOpen ? '' : null" x-bind:data-no-detail="noDetail ? '' : null" data-no-detail x-on:service-log-close="closeLog">
+				<div class="[ list divide-end ]" data-services role="group" aria-label="Services" x-bind:aria-busy="loading">
+					<template x-for="notice in notices" x-bind:key="notice.key">
+						<div class="[ slot ]">
+							<div class="[ banner ]" data-tone="attention" role="status" data-services-notice x-bind:data-key="notice.key">
+								<div class="[ flow ] [ flow-space-3xs grow ]">
+									<strong x-text="notice.title"></strong>
+									<span x-text="notice.message"></span>
+									<span class="[ code ]" x-bind:hidden="!notice.hasCode"><span x-text="notice.code"></span> · <span x-text="notice.next"></span></span>
+								</div>
+								<a class="[ button ]" data-size="sm" x-bind:href="notice.href" x-text="notice.action"></a>
+							</div>
+						</div>
+					</template>
+					<template x-if="refusal">
+						<div class="[ slot ]">
+							<div class="[ banner ]" data-tone="danger" role="alert" data-services-refusal>
+								<div class="[ flow ] [ flow-space-3xs grow ]">
+									<strong x-text="refusal.title"></strong>
+									<span x-text="refusal.message"></span>
+									<span class="[ code ]"><span x-text="refusal.code"></span> · <span x-text="refusal.next"></span></span>
+								</div>
+								<template x-for="link in refusal.links" x-bind:key="link.href">
+									<a class="[ button ]" data-size="sm" x-bind:href="link.href" x-text="link.text"></a>
+								</template>
+								<button type="button" class="[ button ]" data-variant="ghost" data-size="sm" x-on:click="dismissRefusal">Dismiss</button>
+							</div>
+						</div>
+					</template>
+					<template x-if="error">
+						<div class="[ slot ]">
+							<div class="[ banner ]" data-tone="danger" role="alert">
+								<div class="[ flow ] [ flow-space-3xs grow ]">
+									<span x-text="error.message"></span>
+									<span class="[ code ]"><span x-text="error.code"></span> · <span x-text="error.next"></span></span>
+								</div>
+								<button type="button" class="[ button ]" data-size="sm" x-on:click="retry">Try again</button>
+								<button type="button" class="[ button ]" data-variant="ghost" data-size="sm" x-on:click="dismissError">Dismiss</button>
+							</div>
+						</div>
+					</template>
+					<template x-if="skeleton">
+						@components.SkeletonRows("Loading services", 4, "7rem")
+					</template>
+					<template x-for="group in groups" x-bind:key="group.key">
+						<div role="group" data-service-group x-bind:data-group="group.key" x-bind:aria-label="group.label">
+							<div class="[ group ]">
+								<span x-text="group.label"></span>
+								<span class="[ badge ]" x-bind:data-tone="group.tone" x-text="group.count"></span>
+							</div>
+							<template x-for="row in group.rows" x-bind:key="row.id">
+								<div class="[ row ]" data-layout="service" data-service x-bind:data-name="row.name" x-bind:aria-current="row.current ? 'true' : null">
+									<span class="[ status ]" data-service-status x-bind:data-state="row.status.state" x-bind:data-tone="row.status.tone" x-text="row.status.word"></span>
+									<div class="[ main ]">
+										<div class="[ head ]">
+											<span class="[ name ]" data-service-name x-text="row.name"></span>
+											<span class="[ badge ]" x-text="row.kindLabel"></span>
+											<span class="[ badge ]" data-tone="attention" data-service-overrides title="An agent started this run with its own variables. Open the log to see them." x-bind:hidden="!row.overrides" x-text="row.overrides"></span>
+											<span class="[ badge ]" data-tone="attention" data-not-sandboxed title="The sandbox setting was off: this run is not confined" x-bind:hidden="!row.notSandboxed">not sandboxed</span>
+										</div>
+										<div class="[ line ]" x-bind:title="row.line" x-text="row.line"></div>
+										<div class="[ facts ]">
+											<span class="[ ports ]" x-bind:hidden="!row.hasPorts">
+												<template x-for="port in row.ports" x-bind:key="port.text">
+													<span>
+														<a data-service-port x-bind:href="port.href" x-bind:aria-label="port.name" target="_blank" rel="noopener" x-bind:hidden="!port.link" x-text="port.text"></a>
+														<span x-bind:hidden="port.link" x-text="port.text"></span>
+													</span>
+												</template>
+											</span>
+											<span data-service-where x-bind:hidden="!row.where" x-text="row.where"></span>
+											<span data-service-by x-bind:hidden="!row.startedBy">
+												<a data-service-by-link x-bind:href="row.startedByHref" x-bind:hidden="!row.startedByLinked" x-text="row.startedByText"></a>
+												<span x-bind:hidden="!row.startedByPlain" x-text="row.startedByText"></span>
+											</span>
+											<span data-service-time x-text="row.time"></span>
+										</div>
+										<div class="[ banner ]" data-tone="attention" role="status" data-run-in-fallback x-bind:hidden="!row.runIn.hasFallback">
+											<span class="[ grow ]"><strong>Your last pick is gone.</strong> <span x-text="row.runIn.fallback"></span></span>
+											<button type="button" class="[ button ]" data-variant="ghost" data-size="sm" x-bind:data-service-id="row.id" x-on:click="dismissRunInFallback">Dismiss</button>
+										</div>
+										<p class="[ reason ]" data-service-reason x-bind:hidden="!row.hasReason"><span x-text="row.reason"></span> <button type="button" class="[ button ]" data-variant="ghost" data-size="sm" x-bind:data-service-id="row.id" x-on:click="openLogRow">Open log</button></p>
+									</div>
+									<div class="[ actions ]">
+										<div class="[ run-in ]" data-run-in x-show="row.runIn.show" x-bind:data-service-id="row.id">
+											<label class="[ visually-hidden ]" x-bind:for="row.runIn.selectId" x-text="row.runIn.name"></label>
+											<div class="[ dropdown ]" x-data="dropdown" data-fit x-bind:data-service-id="row.id" x-bind:aria-busy="row.runIn.loading" x-bind:data-error="row.runIn.error" x-on:dropdown-change="runInPicked" x-on:dropdown-retry="runInOpened" x-on:click="runInOpened" x-on:keydown.down="runInOpened" x-on:keydown.enter="runInOpened" x-on:keydown.space="runInOpened">
+												<select x-bind:id="row.runIn.selectId" x-bind:data-service-id="row.id" x-effect="syncRunIn" x-bind:disabled="row.start.disabled">
+													<template x-for="o in row.runIn.main" x-bind:key="o.key">
+														<option x-bind:value="o.key" x-bind:data-description="o.description" x-text="o.label"></option>
+													</template>
+													<optgroup x-bind:label="row.runIn.groupLabel">
+														<template x-for="o in row.runIn.sessions" x-bind:key="o.key">
+															<option x-bind:value="o.key" x-bind:data-description="o.description" x-bind:data-tone="o.tone" x-text="o.label"></option>
+														</template>
+													</optgroup>
+												</select>
+											</div>
+										</div>
+										<button type="button" class="[ button ]" data-variant="primary" data-size="sm" data-action="start" x-show="row.start.show" x-bind:data-service-id="row.id" x-bind:aria-label="row.start.name" x-bind:title="row.start.title" x-bind:disabled="row.start.disabled" x-bind:aria-busy="row.start.busy" x-on:click="startRow" x-text="row.start.text"></button>
+										<button type="button" class="[ button ]" data-size="sm" data-action="stop" x-show="row.stop.show" x-bind:data-service-id="row.id" x-bind:aria-label="row.stop.name" x-bind:disabled="row.stop.disabled" x-bind:aria-busy="row.stop.busy" x-on:click="stopRow" x-text="row.stop.text"></button>
+										<button type="button" class="[ button ]" data-size="sm" data-action="restart" x-show="row.restart.show" x-bind:data-service-id="row.id" x-bind:aria-label="row.restart.name" x-bind:title="row.restart.title" x-bind:disabled="row.restart.disabled" x-bind:aria-busy="row.restart.busy" x-on:click="restartRow" x-text="row.restart.text"></button>
+										<button type="button" class="[ button ]" data-variant="ghost" data-size="sm" data-action="log" x-bind:data-service-id="row.id" x-bind:aria-label="row.logName" x-bind:title="row.logName" x-on:click="openLogRow">Log</button>
+										<div class="[ menu ]" x-data="menu" data-align="end" x-bind:data-service-id="row.id" x-on:menu-select="menuSelect">
+											<button type="button" class="[ button ]" data-variant="ghost" data-size="sm" x-bind:aria-label="row.moreName">⋯</button>
+											<div class="[ popup ]" role="menu">
+												<button type="button" role="menuitem" data-action="edit">Edit…</button>
+												<hr role="separator"/>
+												<button type="button" role="menuitem" data-action="delete" data-tone="danger" x-bind:aria-disabled="row.canDelete ? null : 'true'" x-bind:title="row.canDelete ? null : 'Stop it first'">Delete…</button>
+											</div>
+										</div>
+									</div>
+								</div>
+							</template>
+						</div>
+					</template>
+					<template x-if="empty">
+						<div class="[ empty ]" data-services-empty>
+							<h2>No services yet</h2>
+							<p>A service is a program that keeps running for this project, like a dev server, a worker or a database. Define it once as a command or a container image, then start and stop it here and read its log.</p>
+							<p>Agents can start, stop and read the logs of your services, but only you create or edit them.</p>
+							<div class="[ actions ]">
+								<button type="button" class="[ button ]" data-variant="primary" x-on:click="openNew">New service</button>
+								<a class="[ button ]" data-variant="ghost" href="/agents/mcp">Give agents the services tool</a>
+							</div>
+						</div>
+					</template>
+				</div>
+				<template x-for="id in logIds" x-bind:key="id">
+					<section class="[ pane service-log ]" x-data="serviceLog(id)" x-bind:aria-label="'Log of ' + logView.name" data-service-log>
+						<header>
+							<button type="button" class="[ button ]" data-variant="ghost" data-size="sm" data-split-back x-on:click="$dispatch('service-log-close')">Back to the services</button>
+							<span class="[ status ]" x-bind:data-state="logView.status.state" x-bind:data-tone="logView.status.tone" x-text="logView.status.word"></span>
+							<h2 x-text="logView.name"></h2>
+							<span class="[ meta ]" x-text="logView.runLine"></span>
+							<button type="button" class="[ button ]" data-variant="ghost" data-size="sm" x-bind:aria-label="'Close the log of ' + logView.name" x-on:click="$dispatch('service-log-close')">Close</button>
+						</header>
+						<template x-if="error">
+							<div class="[ banner ]" data-tone="danger" role="alert">
+								<div class="[ flow ] [ flow-space-3xs grow ]">
+									<span x-text="error.message"></span>
+									<span class="[ code ]"><span x-text="error.code"></span> · <span x-text="error.next"></span></span>
+								</div>
+								<button type="button" class="[ button ]" data-size="sm" x-on:click="retry">Try again</button>
+							</div>
+						</template>
+						<section class="[ variables ]" aria-label="Variables" data-service-variables x-data="serviceVariables(id)" x-effect="runChanged(logView.runId)" x-bind:data-service-id="id">
+							<div class="[ bar ]">
+								<button type="button" class="[ button ]" data-variant="ghost" data-size="sm" data-variables-toggle aria-expanded="false" aria-controls="service-variables-list" x-bind:aria-expanded="opened" x-on:click="toggleSection">Variables</button>
+								<span class="[ summary ]" role="status" aria-live="polite" data-variables-summary x-text="summary"></span>
+								<button type="button" class="[ button ]" data-variant="ghost" data-size="sm" data-variables-all x-show="opened && hasRows" x-on:click="toggleAll" x-text="allLabel"></button>
+							</div>
+							<div id="service-variables-list" x-show="opened">
+								<template x-if="error">
+									<div class="[ banner ]" data-tone="danger" role="alert">
+										<div class="[ flow ] [ flow-space-3xs grow ]">
+											<span x-text="error.message"></span>
+											<span class="[ code ]"><span x-text="error.code"></span> · <span x-text="error.next"></span></span>
+										</div>
+										<button type="button" class="[ button ]" data-size="sm" x-on:click="retry">Try again</button>
+									</div>
+								</template>
+								<p class="[ note ]" x-show="neverRan">This service has not run yet, so there are no variables.</p>
+								<p class="[ note ]" x-show="empty">This run was given no variables of its own. The system environment is not listed.</p>
+								<ul class="[ vars ]" data-variables x-bind:hidden="!hasRows" x-bind:aria-busy="loading">
+									<template x-for="row in rows" x-bind:key="row.name">
+										<li class="[ var ]" data-variable x-bind:data-name="row.name">
+											<span class="[ name ]"><span x-text="row.name"></span><small x-text="row.source"></small></span>
+											<span class="[ value ]" data-variable-value x-bind:data-masked="row.masked ? '' : null"><span x-bind:aria-hidden="row.masked" x-text="row.shown"></span><span class="[ visually-hidden ]" x-show="row.masked">value hidden</span></span>
+											<button type="button" class="[ button ]" data-variant="ghost" data-size="sm" data-variable-toggle x-bind:data-name="row.name" x-bind:aria-label="row.toggleName" x-on:click="toggle" x-text="row.toggleText"></button>
+										</li>
+									</template>
+								</ul>
+							</div>
+						</section>
+						<div class="[ log ]" role="log" tabindex="0" aria-live="off" aria-label="Log" x-ref="log" x-on:scroll="onScroll" x-bind:aria-busy="loading" data-log>
+							<p class="[ earlier ]" data-log-note x-bind:hidden="!hasNote" x-text="note"></p>
+							<template x-for="line in lines" x-bind:key="line.id">
+								<div x-bind:class="line.kind === 'reset' ? 'reset' : 'ln'" x-bind:data-harness="line.harness ? '' : null" data-log-line><b x-show="line.harness" x-text="line.prefix"></b><span x-text="line.body"></span></div>
+							</template>
+							<p class="[ empty-log ]" x-bind:hidden="!empty">Nothing has been written to the log yet.</p>
+						</div>
+						<footer>
+							<span role="status" aria-live="polite" data-log-follow x-text="footer"></span>
+							<span x-bind:hidden="!hasUnseen" x-text="unseenText"></span>
+							<button type="button" class="[ button push ]" data-variant="ghost" data-size="sm" x-bind:hidden="following" x-on:click="jump">Jump to latest</button>
+						</footer>
+					</section>
+				</template>
+			</div>
+			<template x-if="formOpen">
+				<div class="[ mcp-form-host ]" data-mode="drawer" data-service-form-host x-on:service-saved="saved" x-on:service-form-close="closeForm">
+					<div class="[ skill-form mcp-form ]" role="dialog" aria-modal="true" aria-labelledby="sf-title" data-service-form x-data="serviceForm" x-init="setup(formService, projectId, runtime)" x-on:keydown="trap">
+						<div class="[ skill-form-body ]">
+							<div class="[ skill-form-head ]">
+								<div class="[ repel ]">
+									<h1 id="sf-title" x-text="title"></h1>
+									<button type="button" class="[ button ]" data-variant="ghost" data-size="sm" aria-label="Close without saving" x-on:click="cancel">×</button>
+								</div>
+								<p class="[ text-sm color-ink-muted ]">Saved on the project. Agents can start and stop it but never change it.</p>
+								<template x-if="restartBanner">
+									<div class="[ banner ]" data-tone="attention" role="status" data-restart-banner>
+										<div class="[ flow ] [ flow-space-3xs grow ]">
+											<strong x-text="restartTitle"></strong>
+											<span>Restart to apply: your changes are saved now and take effect the next time it starts.</span>
+										</div>
+										<button type="button" class="[ button ]" data-size="sm" x-bind:disabled="saveDisabled" x-on:click="saveAndRestart">Save and restart</button>
+									</div>
+								</template>
+								<template x-if="hasBanner">
+									<div class="[ banner ]" data-tone="danger" role="alert" data-form-banner>
+										<div class="[ flow ] [ flow-space-3xs grow ]">
+											<strong x-text="banner.title"></strong>
+											<span x-text="banner.message"></span>
+											<span class="[ code ]"><span x-text="banner.code"></span> · <span x-text="banner.next"></span></span>
+										</div>
+									</div>
+								</template>
+							</div>
+							<form class="[ skill-fields ]" x-on:submit.prevent="save" novalidate>
+								<fieldset>
+									<legend>Service</legend>
+									<div class="[ field ]">
+										<span class="[ label ]" id="sf-kind-label">Kind</span>
+										<div class="[ transport ]" role="radiogroup" id="sf-kind" tabindex="-1" aria-labelledby="sf-kind-label">
+											<label>
+												<input type="radio" name="sf-kind" value="command" x-bind:checked="isCommand" x-bind:disabled="kindLocked" x-on:change="chooseKind"/>
+												<b>Command</b>
+												<span class="[ d ]">Runs a command line in a folder, inside the agent sandbox. For dev servers and workers.</span>
+											</label>
+											<label>
+												<input type="radio" name="sf-kind" value="image" x-bind:checked="isImage" x-bind:disabled="kindLocked" x-on:change="chooseKind"/>
+												<b>Image</b>
+												<span class="[ d ]" data-image-card x-text="imageCardText"></span>
+											</label>
+										</div>
+										<span class="[ hint ]" x-bind:hidden="!kindLocked">The kind cannot change after the service is created.</span>
+									</div>
+									<div class="[ field ]">
+										<label for="sf-name">Name</label>
+										<input type="text" id="sf-name" class="[ font-mono ]" placeholder="api" spellcheck="false" autocomplete="off" x-model="draft.name" x-on:input="touch('name')" x-bind:aria-invalid="invalid('name') ? 'true' : null" aria-describedby="sf-name-hint sf-name-error"/>
+										<span class="[ hint ]" id="sf-name-hint">Lowercase letters, digits, - _ and . · unique in this project.</span>
+										<span class="[ error ]" id="sf-name-error" role="alert" x-bind:hidden="!hasMessage('name')" x-text="fieldMessage('name')"></span>
+									</div>
+								</fieldset>
+								<template x-if="isCommand">
+									<fieldset data-kind-fields="command">
+										<legend>Command</legend>
+										<div class="[ field ]">
+											<label for="sf-line">Command line</label>
+											<input type="text" id="sf-line" class="[ font-mono ]" placeholder="make air" spellcheck="false" autocomplete="off" x-model="draft.line" x-on:input="touch('line')" x-bind:aria-invalid="invalid('line') ? 'true' : null" aria-describedby="sf-line-hint sf-line-error"/>
+											<span class="[ hint ]" id="sf-line-hint">Run in a shell, in the folder below.</span>
+											<span class="[ error ]" id="sf-line-error" role="alert" x-bind:hidden="!hasMessage('line')" x-text="fieldMessage('line')"></span>
+										</div>
+										@repositoryField(repos, "Repository", "Runs in its main checkout. Empty: a folder the harness keeps for this service.")
+										<div class="[ field ]" x-bind:hidden="!hasSubdir">
+											<label for="sf-subdir">Subfolder</label>
+											<input type="text" id="sf-subdir" class="[ font-mono ]" placeholder="cmd/api" spellcheck="false" autocomplete="off" x-model="draft.subdir" x-on:input="touch('subdir')" x-bind:aria-invalid="invalid('subdir') ? 'true' : null" aria-describedby="sf-subdir-hint sf-subdir-error"/>
+											<span class="[ hint ]" id="sf-subdir-hint" x-text="subdirHint"></span>
+											<span class="[ error ]" id="sf-subdir-error" role="alert" x-bind:hidden="!hasMessage('subdir')" x-text="fieldMessage('subdir')"></span>
+										</div>
+										<div class="[ field ]" role="group" id="sf-ports" tabindex="-1" aria-labelledby="sf-ports-label">
+											<span class="[ label ]" id="sf-ports-label">Ports</span>
+											<div class="[ mf-rows ]">
+												<template x-for="(port, i) in draft.ports" x-bind:key="i">
+													<div class="[ mf-row-wrap ]">
+														<div class="[ mf-row ]" data-kind="num">
+															<input type="number" class="[ font-mono ]" placeholder="Port" x-bind:aria-label="'Port ' + (i + 1)" x-model="port.value" x-on:input="touch('ports')" x-bind:aria-invalid="rowInvalid('ports', i) ? 'true' : null"/>
+															<button type="button" class="[ button ]" data-variant="ghost" x-bind:aria-label="'Remove port ' + (i + 1)" data-list="ports" x-bind:data-index="i" x-on:click="removeRow">×</button>
+														</div>
+													</div>
+												</template>
+											</div>
+											<button type="button" class="[ button addrow ]" data-size="sm" data-variant="ghost" x-on:click="addPort">+ Port</button>
+											<span class="[ error ]" id="sf-ports-error" role="alert" x-bind:hidden="!hasMessage('ports')" x-text="fieldMessage('ports')"></span>
+											<span class="[ hint ]">Only shown as links on the page. Nothing is published for you.</span>
+										</div>
+									</fieldset>
+								</template>
+								<template x-if="isImage">
+									<fieldset data-kind-fields="image">
+										<legend>Image</legend>
+										<div class="[ banner ]" data-tone="attention" role="status" data-runtime-notice x-bind:hidden="!hasRuntimeNotice">
+											<span x-text="runtimeNotice"></span>
+										</div>
+										<div class="[ field ]">
+											<label for="sf-image">Image</label>
+											<input type="text" id="sf-image" class="[ font-mono ]" placeholder="postgres:16" spellcheck="false" autocomplete="off" x-model="draft.image" x-on:input="touch('image')" x-bind:aria-invalid="invalid('image') ? 'true' : null" aria-describedby="sf-image-hint sf-image-error"/>
+											<span class="[ hint ]" id="sf-image-hint">Pulled on the first start; the Starting status lasts until it runs.</span>
+											<span class="[ error ]" id="sf-image-error" role="alert" x-bind:hidden="!hasMessage('image')" x-text="fieldMessage('image')"></span>
+										</div>
+										<div class="[ field ]" role="group" aria-labelledby="sf-args-label">
+											<span class="[ label ]" id="sf-args-label">Arguments</span>
+											<div class="[ mf-rows ]">
+												<template x-for="(arg, i) in draft.args" x-bind:key="i">
+													<div class="[ mf-row-wrap ]">
+														<div class="[ mf-row ]" data-kind="arg">
+															<input type="text" class="[ font-mono ]" placeholder="Argument" x-bind:aria-label="'Argument ' + (i + 1)" spellcheck="false" autocomplete="off" x-model="arg.value"/>
+															<button type="button" class="[ button ]" data-variant="ghost" x-bind:aria-label="'Remove argument ' + (i + 1)" data-list="args" x-bind:data-index="i" x-on:click="removeRow">×</button>
+														</div>
+													</div>
+												</template>
+											</div>
+											<button type="button" class="[ button addrow ]" data-size="sm" data-variant="ghost" x-on:click="addArg">+ Argument</button>
+											<span class="[ hint ]">Replace the image’s own command. None keeps it.</span>
+										</div>
+										<div class="[ field ]" role="group" id="sf-mappings" tabindex="-1" aria-labelledby="sf-mappings-label">
+											<span class="[ label ]" id="sf-mappings-label">Port mappings</span>
+											<div class="[ mf-rows ]">
+												<template x-for="(map, i) in draft.mappings" x-bind:key="i">
+													<div class="[ mf-row-wrap ]">
+														<div class="[ mf-row ]" data-kind="port">
+															<input type="number" class="[ font-mono ]" placeholder="Host" x-bind:aria-label="'Host port ' + (i + 1)" x-model="map.host" x-on:input="touch('mappings')" x-bind:aria-invalid="rowInvalid('mappings', i) ? 'true' : null"/>
+															<input type="number" class="[ font-mono ]" placeholder="Container" x-bind:aria-label="'Container port ' + (i + 1)" x-model="map.container" x-on:input="touch('mappings')" x-bind:aria-invalid="rowInvalid('mappings', i) ? 'true' : null"/>
+															<select x-bind:aria-label="'Protocol ' + (i + 1)" x-model="map.protocol">
+																<option value="tcp">tcp</option>
+																<option value="udp">udp</option>
+															</select>
+															<button type="button" class="[ button ]" data-variant="ghost" x-bind:aria-label="'Remove mapping ' + (i + 1)" data-list="mappings" x-bind:data-index="i" x-on:click="removeRow">×</button>
+														</div>
+													</div>
+												</template>
+											</div>
+											<button type="button" class="[ button addrow ]" data-size="sm" data-variant="ghost" x-on:click="addMapping">+ Mapping</button>
+											<span class="[ error ]" id="sf-mappings-error" role="alert" x-bind:hidden="!hasMessage('mappings')" x-text="fieldMessage('mappings')"></span>
+											<span class="[ hint ]">Host:container. The host port becomes a link on the page.</span>
+										</div>
+										@repositoryField(repos, "Repository (optional)", "Only used to export its saved .env. The container never sees its files.")
+									</fieldset>
+								</template>
+								<fieldset>
+									<legend>Environment</legend>
+									<div class="[ field ]">
+										<label for="sf-env">Variables</label>
+										<textarea id="sf-env" class="[ font-mono ]" rows="4" spellcheck="false" autocomplete="off" x-model="draft.env" x-on:input="touch('env')" x-bind:aria-invalid="invalid('env') ? 'true' : null" aria-describedby="sf-env-hint sf-env-error"></textarea>
+										<span class="[ hint ]" id="sf-env-hint">One KEY=VALUE per line, read like a .env file. Values are shown only in this form.</span>
+										<span class="[ error ]" id="sf-env-error" role="alert" x-bind:hidden="!hasMessage('env')" x-text="fieldMessage('env')"></span>
+									</div>
+									<div class="[ field ]">
+										<button type="button" class="[ switch ]" role="switch" data-export-env x-bind:aria-checked="draft.exportRepositoryEnv && canExport ? 'true' : 'false'" x-bind:disabled="!canExport" x-on:click="draft.exportRepositoryEnv = !draft.exportRepositoryEnv"><span class="[ track ]"></span><span>Also export the repository’s saved .env</span></button>
+										<span class="[ hint ]" x-text="exportHint"></span>
+									</div>
+								</fieldset>
+							</form>
+						</div>
+						<div class="[ save-footer ]">
+							<div class="[ save-footer-in ]">
+								<span class="[ save-state ]" x-text="saveState"></span>
+								<button type="button" class="[ button ]" data-variant="ghost" x-on:click="cancel">Cancel</button>
+								<button type="button" class="[ button ]" data-variant="primary" data-form-save x-bind:disabled="saveDisabled" x-bind:aria-busy="saving" x-on:click="save" x-text="saveLabel"></button>
+							</div>
+						</div>
+					</div>
+				</div>
+			</template>
+			<template x-if="deleteOpen">
+				<div class="[ confirm-scrim ]" data-delete-scrim x-on:keydown="trap">
+					<div class="[ confirm-dialog ]" role="alertdialog" aria-modal="true" aria-labelledby="sd-title" aria-describedby="sd-body" data-delete-dialog x-init="focusKeep($el)">
+						<div class="[ confirm-body ]">
+							<h2 id="sd-title" x-text="deleteTitle"></h2>
+							<p id="sd-body" class="[ color-ink-muted ]">Its settings, variables and log are removed. Agents can no longer start it. This cannot be undone.</p>
+							<template x-if="deleteHasError">
+								<div class="[ banner ]" data-tone="danger" role="alert" data-delete-error>
+									<div class="[ flow ] [ flow-space-3xs grow ]">
+										<strong x-text="del.error.message"></strong>
+										<span class="[ code ]"><span x-text="del.error.code"></span> · <span x-text="del.error.next"></span></span>
+									</div>
+								</div>
+							</template>
+						</div>
+						<div class="[ confirm-foot ]">
+							<button type="button" class="[ button ]" data-variant="ghost" x-ref="keep" data-delete-keep x-on:click="cancelDelete">Keep it</button>
+							<button type="button" class="[ button ]" data-variant="danger" data-delete-confirm x-bind:disabled="deleting" x-bind:aria-busy="deleting" x-on:click="confirmDelete" x-text="deleteBusyLabel"></button>
+						</div>
+					</div>
+				</div>
+			</template>
+		</main>
+	}
+}
+
+// repositoryField is the repository picker: the project's repositories in a
+// Listbox select with the folder as a second line, clearable.
+templ repositoryField(repos []Repository, label, hint string) {
+	<div class="[ field ]">
+		<label for="sf-repository">{ label }</label>
+		<div class="[ dropdown ]" x-data="dropdown" data-clearable data-placeholder="No repository">
+			<select id="sf-repository" x-model="draft.repositoryId" x-on:change="touch('repositoryId')">
+				<option value="">No repository</option>
+				for _, r := range repos {
+					<option value={ r.ID } data-description={ r.Dir }>{ r.Name }</option>
+				}
+			</select>
+		</div>
+		<span class="[ hint ]">{ hint }</span>
+	</div>
+}

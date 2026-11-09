@@ -68,6 +68,11 @@ const NEXT_STEP = {
   [Codes.MANAGED_CLAUDE_INSTALLING]: "it installs on its own; start again when it is done",
   [Codes.MANAGED_CLAUDE_INSTALL_FAILED]: "retry the install in Agent isolation, then start again",
   [Codes.SANDBOX_DRIVER_MISSING]: "install a driver or turn the sandbox off in Agent isolation, then start again",
+  [Codes.SANDBOX_UNAVAILABLE]: "turn the sandbox off in Settings → Agent isolation, or run on a supported platform",
+  [Codes.RUNTIME_UNAVAILABLE]: "install docker or choose podman in Server settings",
+  [Codes.SERVICE_NOT_FOUND]: "it was deleted; the list will refresh",
+  [Codes.SERVICE_NAME_TAKEN]: "pick a name no other service of the project uses",
+  [Codes.SERVICE_RUNNING]: "stop it first, then delete it",
   [Codes.WRITING_HELPER_FAILED]: "try again; if it keeps failing, check the Claude login in Settings",
   [Codes.WRITING_HELPER_UNAVAILABLE]: "sign in to Claude or fix the agent setup, then reload the page",
   [Codes.BAD_RESPONSE]: "the server and the web client disagree; reload the page",
@@ -80,6 +85,8 @@ const FIX_LINKS = {
   [Codes.MANAGED_CLAUDE_INSTALLING]: { href: "/agent-isolation#claude", text: "Follow the install in Agent isolation settings" },
   [Codes.MANAGED_CLAUDE_INSTALL_FAILED]: { href: "/agent-isolation#claude", text: "Retry the install in Agent isolation settings" },
   [Codes.SANDBOX_DRIVER_MISSING]: { href: "/agent-isolation#sandbox", text: "Install a driver or turn the sandbox off" },
+  [Codes.SANDBOX_UNAVAILABLE]: { href: "/agent-isolation#sandbox", text: "Agent isolation" },
+  [Codes.RUNTIME_UNAVAILABLE]: { href: "/server", text: "Server settings" },
 };
 
 /**

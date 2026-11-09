@@ -77,6 +77,8 @@ export function toCatalog(body) {
       url: String(m?.url ?? ""),
       headers: object(m?.headers),
       envRefs: list(m?.env_refs, "env_refs").map((r) => ({ name: String(r?.name ?? ""), set: r?.set === true })),
+      builtIn: m?.built_in === true,
+      tools: strings(m?.tools, "tools"),
       agents: strings(m?.agents, "agents"),
       projects: list(m?.projects, "projects").map((p) => ({ id: String(p?.id ?? ""), name: String(p?.name ?? "") })),
       problems: problems(m?.problems),

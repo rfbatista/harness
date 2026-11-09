@@ -28,12 +28,15 @@ import (
 	"operators-mcp/internal/application/artifacts"
 	"operators-mcp/internal/application/branchgate"
 	"operators-mcp/internal/application/branchwatch"
+	"operators-mcp/internal/application/gitcredentials/gitcredentialstest"
 	"operators-mcp/internal/application/notifications"
 	"operators-mcp/internal/application/orchestration"
 	"operators-mcp/internal/application/planning"
 	"operators-mcp/internal/application/repoagents"
 	"operators-mcp/internal/application/taskchannel"
+	"operators-mcp/internal/application/tooling"
 	"operators-mcp/internal/application/vfs"
+	"operators-mcp/internal/application/workspaces"
 	"operators-mcp/internal/domain"
 	"operators-mcp/internal/ports"
 )
@@ -67,7 +70,8 @@ type shellE2E struct {
 	rules    *archrules.Service
 	gate     *branchgate.Service
 	watch    *branchwatch.Service
-	pushes   ports.RecordedPushStore
+	pushes   ports.PushRecords
+	wgit     ports.WorktreeGit
 	notes    *notifications.Service
 	// repoAgents is which agents each repository assigns, and its prompts.
 	repoAgents *repoagents.Service
@@ -80,7 +84,15 @@ func (e *shellE2E) boot() {
 		fx.Supply(e.cfg),
 		PersistenceModule, CatalogModule, PlanningModule, WorkspacesModule,
 		AgentRuntimeModule, TaskChannelModule, TextProcessingModule, NotificationsModule,
-		fx.Populate(&e.orch, &e.plan, &e.channel, &e.art, &e.cat, &e.sessions, &e.shells, &e.rules, &e.gate, &e.watch, &e.pushes, &e.notes, &e.repoAgents),
+		// The graph has no credentials context: the origin fetch a push needs is
+		// built over the in-memory one, which has no credential for any host.
+		fx.Decorate(func(f *workspaces.OriginFetcher, git ports.BranchPublisher) *workspaces.OriginFetcher {
+			if f != nil {
+				return f
+			}
+			return workspaces.NewOriginFetcher(git, gitcredentialstest.New())
+		}),
+		fx.Populate(&e.orch, &e.plan, &e.channel, &e.art, &e.cat, &e.sessions, &e.shells, &e.rules, &e.gate, &e.watch, &e.pushes, &e.wgit, &e.notes, &e.repoAgents),
 		fx.NopLogger,
 	)
 	if err := e.app.Start(e.ctx); err != nil {
@@ -95,10 +107,10 @@ func (e *shellE2E) serve() {
 	mux := http.NewServeMux()
 	mux.Handle("/api/", httpapi.NewRouter(httpapi.NewHandler(httpapi.Services{
 		Sessions: e.orch, Planning: e.plan, TaskResources: e.plan, TaskComments: e.plan, Artifacts: e.art, Shells: e.shells,
-		RepositoryArchitectures: e.cat.RepositoryArchitectures, ArchitectureRules: e.rules, BranchGate: e.gate, SessionBranches: e.watch,
+		RepositoryArchitectures: e.cat.RepositoryArchitectures, ArchitectureRules: e.rules, BranchGate: e.gate, SessionBranches: e.watch, WorktreeGit: e.wgit,
 		Projects: e.cat.Projects, DesignSystems: e.cat.DesignSystems, RepositoryAgents: e.repoAgents,
 	})))
-	mux.Handle(mcpsession.PathPrefix, mcpsession.TaskHandler(sessionTaskTools(e.cat, e.orch, e.plan, e.sessions, e.art, e.channel, nil, nil)))
+	mux.Handle(mcpsession.PathPrefix, mcpsession.TaskHandler(sessionTaskTools(e.cat, e.orch, e.plan, e.sessions, e.art, e.channel, nil, nil, tooling.WithBranchPush(e.gate))))
 	e.srv = httptest.NewServer(mux)
 	e.t.Cleanup(e.srv.Close)
 }

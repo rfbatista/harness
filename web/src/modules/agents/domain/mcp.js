@@ -17,7 +17,12 @@ export const MCP_FILTERS = [
 
 const plural = (n, word) => `${n} ${word}${n === 1 ? "" : "s"}`;
 const enc = encodeURIComponent;
-const unusedServer = (s) => s.agents.length === 0 && s.projects.length === 0;
+const target = (s) => (s.builtIn ? s.tools.join(", ") : s.transport === "stdio" ? [s.command, ...s.args].join(" ") : s.url);
+const kind = (s) => (s.builtIn ? "built-in" : s.transport);
+// A built-in row carries the Built-in badge, so its meta line leaves the kind out.
+const metaKind = (s) => (s.builtIn ? [] : [s.transport]);
+// A built-in server is never "Unused": it cannot be deleted, so there is nothing to tidy.
+const unusedServer = (s) => !s.builtIn && s.agents.length === 0 && s.projects.length === 0;
 
 /**
  * The variables a text names with ${NAME} or ${NAME:-default}, in order, once each.
@@ -30,6 +35,13 @@ export function varNames(text) {
   return names;
 }
 
+/** The row's meta line: the kind, then who gets it, or Unused. A built-in server nobody has yet says nothing. */
+function metaOf(s) {
+  if (unusedServer(s)) return [...metaKind(s), "Unused"].join(" · ");
+  if (s.builtIn && s.agents.length === 0 && s.projects.length === 0) return "";
+  return [...metaKind(s), plural(s.agents.length, "agent"), ...(s.projects.length ? [plural(s.projects.length, "project")] : [])].join(" · ");
+}
+
 /** @param {Catalog} catalog @param {{ query?: string, filter?: string }} [o] */
 export function mcpRows(catalog, { query = "", filter = "all" } = {}) {
   const q = query.trim().toLowerCase();
@@ -40,22 +52,27 @@ export function mcpRows(catalog, { query = "", filter = "all" } = {}) {
     secret: (s) => s.envRefs.length > 0,
     unused: unusedServer,
   }[filter] ?? (() => true);
-  const target = (s) => (s.transport === "stdio" ? [s.command, ...s.args].join(" ") : s.url);
   return catalog.mcpServers.filter((s) => keep(s) && (!q || s.name.toLowerCase().includes(q) || target(s).toLowerCase().includes(q))).map((s) => ({
     name: s.name,
     href: `/agents/mcp/${enc(s.name)}`,
     description: target(s),
-    meta: unusedServer(s)
-      ? `${s.transport} · Unused`
-      : [s.transport, plural(s.agents.length, "agent"), ...(s.projects.length ? [plural(s.projects.length, "project")] : [])].join(" · "),
+    builtIn: s.builtIn,
+    meta: metaOf(s),
     badge: problemBadge(s.problems),
   }));
 }
 
 /** @param {Pick<Catalog, "mcpServers">} catalog */
 export function mcpFooter(catalog) {
-  return `mcp-servers.json · ${plural(catalog.mcpServers.length, "server")}`;
+  return `mcp-servers.json · ${plural(catalog.mcpServers.filter((s) => !s.builtIn).length, "server")}`;
 }
+
+/**
+ * Whether the catalog holds no server of the person's own: only built-in ones, or none. The tab and
+ * the project's section then say so and offer New MCP server, below the built-in ones.
+ * @param {Pick<Catalog, "mcpServers">} catalog
+ */
+export const noOwnServers = (catalog) => catalog.mcpServers.every((s) => s.builtIn);
 
 /**
  * The detail of the server `name`, or null. `checked` is the last Check again
@@ -73,7 +90,7 @@ export function mcpDetail(catalog, name, checked) {
     return { name: n, label: "${" + n + "}", set, state: set ? "set" : "not set", tone: set ? "success" : "attention" };
   };
   const stdio = s.transport === "stdio";
-  const pairs = Object.entries(stdio ? s.env : s.headers);
+  const pairs = s.builtIn ? [] : Object.entries(stdio ? s.env : s.headers);
   const entries = pairs.map(([key, value]) => {
     const refs = varNames(String(value)).map(ref);
     const plain = refs.length === 0;
@@ -87,12 +104,14 @@ export function mcpDetail(catalog, name, checked) {
   const unset = refs.filter((r) => !r.set).map((r) => r.name);
   return {
     name: s.name,
-    transport: s.transport,
+    transport: kind(s),
+    builtIn: s.builtIn,
+    tools: s.tools,
     unused: unusedServer(s),
     path: `mcp-servers.json › mcpServers.${s.name}`,
     copyPath: `${catalog.root}/mcp-servers.json`,
-    targetLabel: stdio ? "Command" : "URL",
-    target: stdio ? [s.command, ...s.args].join(" ") : s.url,
+    targetLabel: s.builtIn ? "Tools" : stdio ? "Command" : "URL",
+    target: target(s),
     entriesLabel: stdio ? "Env" : "Headers",
     entries,
     refs,
@@ -102,7 +121,7 @@ export function mcpDetail(catalog, name, checked) {
     unsetVerb: unset.length === 1 ? "is not set" : "are not set",
     agents: s.agents.map((n) => ({ name: n, href: `/agents/${enc(n)}` })),
     projects: s.projects.map((p) => ({ name: p.name, href: `/projects/${enc(p.id)}/settings` })),
-    editHref: `/agents/mcp/${enc(s.name)}/edit`,
-    duplicateHref: `/agents/mcp/new?from=${enc(s.name)}`,
+    editHref: s.builtIn ? "" : `/agents/mcp/${enc(s.name)}/edit`,
+    duplicateHref: s.builtIn ? "" : `/agents/mcp/new?from=${enc(s.name)}`,
   };
 }

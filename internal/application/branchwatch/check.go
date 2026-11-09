@@ -296,9 +296,9 @@ func (s *Service) bypassedPushes(ctx context.Context, repo *domain.Repository, s
 	if err != nil {
 		return nil
 	}
-	var recorded []ports.RecordedPush
+	var recorded []domain.RecordedPush
 	if s.d.Pushes != nil {
-		recorded, _ = s.d.Pushes.List(ctx, repo.ID)
+		recorded, _ = s.d.Pushes.PushesIn(ctx, repo.ID, time.Time{})
 	}
 	sort.Strings(moved)
 	var out []finding
@@ -323,7 +323,7 @@ func (s *Service) bypassedPushes(ctx context.Context, repo *domain.Repository, s
 	return out
 }
 
-func isRecorded(rs []ports.RecordedPush, remote, branch, commit string) bool {
+func isRecorded(rs []domain.RecordedPush, remote, branch, commit string) bool {
 	for _, r := range rs {
 		if r.Remote == remote && r.RemoteBranch == branch && r.Commit == commit {
 			return true

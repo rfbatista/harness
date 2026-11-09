@@ -40,3 +40,15 @@ test("focus mode: on or off, off by default; storage that throws leaves the defa
 test("the phone sheet's Text size steps up and wraps", () => {
   assert.deepEqual([nextTextSize(12), nextTextSize(13), nextTextSize(15)], [13, 15, 12]);
 });
+
+test("a hidden interview panel is remembered per session, and shown again removes the choice", () => {
+  const storage = memoryStorage();
+  const prefs = screenPrefs(preferences(storage));
+  assert.equal(prefs.interviewHidden("s1"), false);
+  prefs.setInterviewHidden("s1", true);
+  assert.equal(prefs.interviewHidden("s1"), true);
+  assert.equal(prefs.interviewHidden("s2"), false);
+  assert.ok(storage.items.has("harness:interview-hidden:s1"));
+  prefs.setInterviewHidden("s1", false);
+  assert.equal(storage.items.size, 0);
+});

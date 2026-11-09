@@ -57,17 +57,18 @@ func TestAProjectsSettingsPickAndSaveItsMcpServers_EndToEnd(t *testing.T) {
 	b.run("the section lists every catalog server with its transport, variables and who uses it, and no secret",
 		chromedp.EmulateViewport(1280, 1100),
 		chromedp.Navigate(w.srv.URL+settings),
-		waitUntil(names+` === 'github,linear,postgres,old-search'`),
+		waitUntil(names+` === 'github,linear,postgres,old-search,services'`),
 		waitUntil(`document.querySelector('[data-mcp-section]').dataset.feed === 'live'`),
 		waitUntil(flat(row("github")+` .badge`)+` === 'http'`),
 		waitUntil(flat(row("github")+` [data-mcp-var]`)+` === '${PROJMCP_E2E_SET} set'`),
 		waitUntil(flat(row("github")+` [data-mcp-who]`)+` === 'Used by 1 agent'`),
 		waitUntil(flat(row("linear")+` [data-mcp-var]`)+` === '${PROJMCP_E2E_UNSET} not set'`),
 		waitUntil(flat(row("linear")+` [data-mcp-who]`)+` === 'Unused'`),
+		waitUntil(flat(row("services")+` .badge`)+` === 'built-in'`),
 		waitUntil(`!document.querySelector('[data-mcp-section]').textContent.includes('hunter2')`),
 		waitUntil(`document.querySelector('[data-mcp-manage]').getAttribute('href') === '/agents/mcp'`),
 		waitUntil(`document.querySelector('[data-mcp-new]').getAttribute('href') === '/agents/mcp/new?return=`+strings.ReplaceAll(settings, "/", "%2F")+`'`),
-		waitUntil(flat(`[data-mcp-count]`)+` === '0 of 4 selected'`),
+		waitUntil(flat(`[data-mcp-count]`)+` === '0 of 5 selected'`),
 		waitUntil(`!`+visible(`[data-mcp-save]`)+` || document.querySelector('[data-mcp-save]').disabled`),
 		waitUntil(`!`+visible(`[data-mcp-cancel]`)),
 		waitUntil(`document.querySelectorAll('[data-mcp-no-agent] .chip').length === 0 && `+visible(`[data-mcp-no-agent] span.text-sm`)),
@@ -112,9 +113,9 @@ func TestAProjectsSettingsPickAndSaveItsMcpServers_EndToEnd(t *testing.T) {
 		clickButton(`document.querySelector('[data-mcp-section]')`, "Save"),
 		waitUntil(visible(`[data-toast]`)),
 		chromedp.Navigate(w.srv.URL+settings),
-		waitUntil(names+` === 'github,linear,postgres,old-search'`),
+		waitUntil(names+` === 'github,linear,postgres,old-search,services'`),
 		waitUntil(ticked+` === 'linear,postgres'`),
-		waitUntil(flat(`[data-mcp-count]`)+` === '2 of 4 selected'`),
+		waitUntil(flat(`[data-mcp-count]`)+` === '2 of 5 selected'`),
 	)
 	b.run("an unsaved tick survives a catalog change; deleting a project server in another tab names it in a banner",
 		tick("old-search"),
@@ -127,7 +128,7 @@ func TestAProjectsSettingsPickAndSaveItsMcpServers_EndToEnd(t *testing.T) {
 	b.run("the banner names the server taken off the project and the list is up to date",
 		waitUntil(visible(`[data-mcp-removed]`)),
 		waitUntil(flat(`[data-mcp-removed]`)+`.includes('“postgres” was deleted from the catalog and was taken off this project too.')`),
-		waitUntil(names+` === 'github,linear,old-search'`),
+		waitUntil(names+` === 'github,linear,old-search,services'`),
 		waitUntil(ticked+` === 'linear,old-search'`),
 		bothSchemes("project-mcp-removed"),
 		clickButton(`document.querySelector('[data-mcp-removed]')`, "Dismiss"),
@@ -158,19 +159,21 @@ func TestAProjectsMcpSectionShowsTheEmptyStateAndTurnsSaveOffWhenTheCatalogIsBro
 	}
 
 	b := newTLSBrowser(t)
-	b.run("with no server in the catalog the section says so and links to New MCP server",
+	b.run("with no server of the person's own the section shows the built-in one, says so and links to New MCP server",
 		chromedp.EmulateViewport(1280, 900),
 		chromedp.Navigate(w.srv.URL+settings),
 		waitUntil(visible(`[data-mcp-empty]`)),
 		waitUntil(`document.querySelector('[data-mcp-empty] a').getAttribute('href') === '/agents/mcp/new?return=`+strings.ReplaceAll(settings, "/", "%2F")+`'`),
-		waitUntil(`document.querySelectorAll('[data-mcp-row]').length === 0 && !`+visible(`[data-mcp-example]`)),
+		waitUntil(`document.querySelector('[data-mcp-empty]').textContent.trim().startsWith('No MCP servers of your own yet.')`),
+		waitUntil(`[...document.querySelectorAll('[data-mcp-row]')].map(r => r.dataset.name).join() === 'services'`),
 		bothSchemes("project-mcp-empty"),
 	)
 
 	writeCatalogFile(t, w, "mcp-servers.json", `{"mcpServers": {"linear": {"command": "npx"}}}`)
 	b.run("a catalog file that parses shows the server",
 		chromedp.Navigate(w.srv.URL+settings),
-		waitUntil(`document.querySelectorAll('[data-mcp-row]').length === 1`),
+		waitUntil(`[...document.querySelectorAll('[data-mcp-row]')].map(r => r.dataset.name).join() === 'linear,services'`),
+		waitUntil(`!`+visible(`[data-mcp-empty]`)),
 	)
 	writeCatalogFile(t, w, "mcp-servers.json", `{"mcpServers": {"linear": {"command": "npx",}}}`)
 	b.run("once it stops parsing Save is off and the banner says why",

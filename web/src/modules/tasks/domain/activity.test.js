@@ -3,7 +3,7 @@ import { activityByTask, applyRailChange, linkState } from "./activity.js";
 
 file("tasks/domain/activity");
 
-const s = (id, ticketId, status, pendingApprovals = 0) => ({ id, ticketId, status, pendingApprovals });
+const s = (id, ticketId, status, pendingApprovals = 0, openInterviewCount = 0) => ({ id, ticketId, status, pendingApprovals, openInterviewCount });
 
 test("counts live sessions per task and marks one waiting on you", () => {
   const byTask = activityByTask([
@@ -18,6 +18,16 @@ test("counts live sessions per task and marks one waiting on you", () => {
     t1: { live: 2, attention: true },
     t2: { live: 1, attention: true },
     t3: { live: 0, attention: false },
+  });
+});
+
+test("an open interview makes a live session need the person whatever its status; an ended one never does", () => {
+  const byTask = activityByTask([s("a", "t1", "running", 0, 1), s("b", "t2", "thinking", 0, 3), s("c", "t3", "done", 0, 1), s("d", "t4", "failed", 0, 2)]);
+  assert.deepEqual(byTask, {
+    t1: { live: 1, attention: true },
+    t2: { live: 1, attention: true },
+    t3: { live: 0, attention: false },
+    t4: { live: 0, attention: false },
   });
 });
 

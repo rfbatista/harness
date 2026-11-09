@@ -31,6 +31,7 @@ import (
 	"operators-mcp/internal/adapter/in/web/notifications"
 	"operators-mcp/internal/adapter/in/web/projects"
 	"operators-mcp/internal/adapter/in/web/serversettings"
+	"operators-mcp/internal/adapter/in/web/services"
 	"operators-mcp/internal/adapter/in/web/shell"
 	"operators-mcp/internal/adapter/in/web/tasks"
 	"operators-mcp/internal/adapter/in/web/tokensavers"
@@ -142,6 +143,16 @@ type Deps struct {
 	// DesignSystems resolves a design system page's slug and reads the record
 	// for its first paint; nil leaves the pages not found.
 	DesignSystems ports.DesignSystemPages
+	// Services seeds a project's Services page with its services; nil leaves
+	// the page out.
+	Services services.Lister
+	// ServiceCounter reads how many of a project's services run, for the
+	// Services item of the project navigation on every project page; nil
+	// counts none.
+	ServiceCounter ports.ServiceRunningCounter
+	// Interviews seeds each session's interviews on the task page; nil
+	// seeds none.
+	Interviews ports.InterviewReader
 	// Usage reads token usage for a project's Usage page and the task
 	// page's totals; nil leaves the page, its rail link and the totals out.
 	Usage ports.UsageDashboard
@@ -207,7 +218,7 @@ func NewHandler(deps Deps, assets *Assets, fallback http.Handler) http.Handler {
 	taskPages := tasks.Handler{
 		Projects: deps.Projects, Tasks: deps.Tasks, Sessions: deps.Sessions,
 		Agents: deps.Agents, Repositories: deps.Repositories, Docs: deps.Documents, Artifacts: deps.Artifacts, PullRequests: deps.PullRequests, WorktreeGit: deps.WorktreeGit,
-		Resources: deps.Resources, Comments: deps.Comments, Code: deps.Code, Usage: deps.Usage, TokenSavers: deps.TokenSavers,
+		Resources: deps.Resources, Comments: deps.Comments, Code: deps.Code, Usage: deps.Usage, TokenSavers: deps.TokenSavers, Interviews: deps.Interviews,
 		ArchivedTasks: deps.ArchivedList, BranchRequests: deps.BranchRequests, SessionBranches: deps.SessionBranches, Layout: s.layout, Render: render, Now: deps.Now,
 	}
 	if deps.Workspaces != nil {
@@ -304,6 +315,10 @@ func NewHandler(deps Deps, assets *Assets, fallback http.Handler) http.Handler {
 	if deps.Usage != nil {
 		usagePage := usage.Handler{Projects: deps.Projects, Usage: deps.Usage, Layout: s.layout, Render: render}
 		mux.Handle("GET /projects/{project}/usage", s.page(usagePage.Page))
+	}
+	if deps.Services != nil {
+		servicesPage := services.Handler{Projects: deps.Projects, Services: deps.Services, Repositories: deps.Repositories, Layout: s.layout, Render: render}
+		mux.Handle("GET /projects/{project}/services", s.page(servicesPage.Page))
 	}
 	mux.Handle("GET /projects/{project}/documents", s.page(taskPages.ProjectDocuments))
 	mux.Handle("GET /projects/{project}/documents/{document}", s.page(taskPages.ProjectDocuments))
@@ -416,6 +431,9 @@ func (s *server) layout(ctx context.Context, title, projectID, taskID string) (s
 	if s.deps.Code != nil {
 		frame.Rail.CodeHref = code.IndexHref(projectID)
 	}
+	if s.deps.Services != nil {
+		frame.Rail.Services = shell.ServicesNav{Href: services.Href(projectID), ProjectID: projectID, Running: s.runningServices(ctx, projectID)}
+	}
 	frame.Rail.NewTaskHref = tasks.NewTaskHref(projectID)
 	frame.Rail.ReviewsHref = tasks.ReviewsHref(projectID)
 	if s.deps.Documents != nil {
@@ -457,6 +475,17 @@ func (s *server) fragmentFrame(ctx context.Context, title, projectID, taskID str
 // openDesignProposals counts the proposals waiting on the person across the
 // project's design systems; a failed read counts none, the badge follows the
 // feed once the page is open.
+func (s *server) runningServices(ctx context.Context, projectID string) int {
+	if s.deps.ServiceCounter == nil {
+		return 0
+	}
+	n, err := s.deps.ServiceCounter.RunningServiceCount(ctx, projectID)
+	if err != nil {
+		return 0 // the badge is a hint: the feed corrects it
+	}
+	return n
+}
+
 func (s *server) openDesignProposals(ctx context.Context, projectID string) int {
 	if s.deps.DesignSystems == nil {
 		return 0

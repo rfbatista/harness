@@ -45,6 +45,7 @@ const branchGateInstruction = `# Branches
 - Stay on your session branch. Do not create, switch, rename or delete branches.
 - Ask for another branch only when it is really needed. Run the git command as its own Bash command, so the harness can ask the person. It waits until the person answers.
 - Every branch action waits for the person's approval, and an approval covers that one action only. If the person denies it, their note says why.
+- A push waits for the person's approval too, whatever the branch or the remote, your session branch included (ADR 0071).
 - Force pushes and remote branch deletions are refused.
 `
 

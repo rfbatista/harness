@@ -9,16 +9,26 @@ import { FINISHED, liveCards } from "../domain/board.js";
 export const COLLAPSE_AT = 3;
 
 const LOOK = {
-  starting: { dot: "queued", word: "starting", tone: null, chip: true, rank: 2 },
-  running: { dot: "running", word: "running", tone: null, chip: false, rank: 2 },
-  thinking: { dot: "running", word: "thinking", tone: "signal", chip: true, rank: 2 },
-  idle: { dot: "waiting", word: "your turn", tone: "attention", chip: true, rank: 1 },
+  starting: { dot: "queued", word: "starting", tone: null, chip: true, rank: 3 },
+  running: { dot: "running", word: "running", tone: null, chip: false, rank: 3 },
+  thinking: { dot: "running", word: "thinking", tone: "signal", chip: true, rank: 3 },
+  idle: { dot: "waiting", word: "your turn", tone: "attention", chip: true, rank: 2 },
   waiting_approval: { dot: "waiting", word: "approval", tone: "attention", chip: true, rank: 0 },
-  paused: { dot: "idle", word: "paused", tone: null, chip: true, rank: 2 },
-  [FINISHED]: { dot: "done", word: "finished", tone: null, chip: true, rank: 2 },
+  paused: { dot: "idle", word: "paused", tone: null, chip: true, rank: 3 },
+  [FINISHED]: { dot: "done", word: "finished", tone: null, chip: true, rank: 3 },
 };
 
-const lookOf = (status) => LOOK[status] ?? { dot: "idle", word: status, tone: null, chip: true, rank: 2 };
+/**
+ * The look of a line: its status's, with the chip and the place of "questions"
+ * when an interview waits and no approval does. The dot stays the session's own.
+ */
+const lookOf = (line) => {
+  const look = LOOK[line.status] ?? { dot: "idle", word: line.status, tone: null, chip: true, rank: 3 };
+  if (line.openInterviewCount > 0 && line.status !== "waiting_approval" && line.status !== FINISHED) {
+    return { ...look, word: "questions", tone: "attention", chip: true, rank: 1 };
+  }
+  return look;
+};
 
 const TASK_STATUS = { backlog: "Backlog", todo: "Todo", in_progress: "In progress", review: "Review", done: "Done" };
 
@@ -26,21 +36,21 @@ const enc = encodeURIComponent;
 export const taskHref = (card) => `/projects/${enc(card.projectId)}/tasks/${enc(card.taskId)}`;
 export const sessionHref = (card, sessionId) => `${taskHref(card)}?session=${enc(sessionId)}`;
 
-/** Approvals first, then your turn, then the rest in the order the server sent. */
+/** Approvals first, then questions, then your turn, then the rest in the order the server sent. */
 export const orderedLines = (sessions) =>
-  [0, 1, 2].flatMap((rank) => sessions.filter((s) => lookOf(s.status).rank === rank));
+  [0, 1, 2, 3].flatMap((rank) => sessions.filter((s) => lookOf(s).rank === rank));
 
 /** The word a session that needs the person is announced with ("approval", "your turn"). */
 export const needsWord = (card) => {
   const line = orderedLines(card.sessions)[0];
-  return line ? lookOf(line.status).word : "";
+  return line ? lookOf(line).word : "";
 };
 
 const hover = (s, since) =>
-  [s.agentName, s.role, s.mode, s.model, lookOf(s.status).word, s.waitingFor, since].filter(Boolean).join(" · ");
+  [s.agentName, s.role, s.mode, s.model, lookOf(s).word, s.waitingFor, since].filter(Boolean).join(" · ");
 
 function lineView(card, s, now, ui) {
-  const look = lookOf(s.status);
+  const look = lookOf(s);
   const since = relativeTime(s.statusSince, now);
   return {
     id: s.sessionId,

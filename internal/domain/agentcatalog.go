@@ -20,7 +20,31 @@ const (
 	CatalogProblemNoDescription    = "NO_DESCRIPTION"
 	CatalogProblemSecretNotSet     = "SECRET_NOT_SET"
 	CatalogProblemInvalidSkill     = "INVALID_SKILL"
+	// CatalogProblemBuiltInName: the catalog file defines a server named like
+	// a built-in one. The built-in one wins and the file's entry is ignored.
+	CatalogProblemBuiltInName = "BUILT_IN_NAME"
 )
+
+// ServicesServerName is the built-in services MCP server (ADR 0075). It is
+// listed in the MCP catalog but never written to mcp-servers.json.
+const ServicesServerName = "services"
+
+// ServicesServerTools are the tools of the services server, known without a
+// probe. They agree with tooling.SessionServicesToolNames.
+var ServicesServerTools = []string{
+	"list_services",
+	"service_status",
+	"start_service",
+	"stop_service",
+	"restart_service",
+	"read_service_logs",
+}
+
+// ErrServicesServerBuiltIn refuses editing, deleting or testing the services
+// server of the catalog.
+func ErrServicesServerBuiltIn() error {
+	return &StructuredError{Code: "MCP_SERVER_BUILT_IN", Message: ServicesServerName + " is built into the harness and cannot be edited or deleted"}
+}
 
 // CatalogBroken says which catalog file does not parse, and where.
 type CatalogBroken struct {
@@ -108,7 +132,10 @@ type CatalogProjectRef struct {
 // CatalogMCPServer is one MCP server of the catalog. Values are exactly as
 // written: ${VAR} stays unexpanded.
 type CatalogMCPServer struct {
-	Name      string              `json:"name"`
+	Name string `json:"name"`
+	// BuiltIn marks a server the harness serves itself: transport "built_in",
+	// no command or url, and its Tools known without a probe.
+	BuiltIn   bool                `json:"built_in"`
 	Transport string              `json:"transport"`
 	Command   string              `json:"command"`
 	Args      []string            `json:"args"`
@@ -119,6 +146,7 @@ type CatalogMCPServer struct {
 	Agents    []string            `json:"agents"`
 	Projects  []CatalogProjectRef `json:"projects"`
 	Problems  []CatalogProblem    `json:"problems"`
+	Tools     []string            `json:"tools,omitempty"`
 }
 
 // CatalogBuiltInTool is a Claude built-in tool an agent may be restricted to.

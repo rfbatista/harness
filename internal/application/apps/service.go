@@ -413,15 +413,57 @@ func (s *Service) runWorktrees(ctx context.Context, sess *domain.Session) ([]*do
 		}
 		out = append(out, main)
 	}
-	others, err := s.sessions.List(ctx, ports.SessionFilter{ProjectID: sess.ProjectID})
+	others, err := s.sessionWorktrees(ctx, sess.ProjectID, sess.RepositoryID, root, func(o *domain.Session) bool {
+		return o.ID == sess.ID || filepath.Clean(o.WorkingDir) == filepath.Clean(sess.WorkingDir)
+	})
 	if err != nil {
 		return nil, err
 	}
-	others = slices.DeleteFunc(slices.Clone(others), func(o *domain.Session) bool {
-		return o.ID == sess.ID || o.RepositoryID != sess.RepositoryID || o.WorkingDir == "" ||
-			filepath.Clean(o.WorkingDir) == root || filepath.Clean(o.WorkingDir) == filepath.Clean(sess.WorkingDir) || !dirExists(o.WorkingDir)
+	return append(out, others...), nil
+}
+
+// ListRepositoryRunWorktrees returns the run worktrees of a repository with
+// no session asking: its main checkout, then the worktree of each session of
+// it that exists on disk, newest first. A command service of the repository
+// picks among these.
+func (s *Service) ListRepositoryRunWorktrees(ctx context.Context, projectID, repositoryID string) ([]*domain.RunWorktree, error) {
+	if repositoryID == "" || s.repos == nil {
+		return nil, nil
+	}
+	repo := s.repos.Get(ctx, repositoryID)
+	if repo == nil {
+		return nil, nil
+	}
+	var out []*domain.RunWorktree
+	root := filepath.Clean(repo.RootDir)
+	if repo.RootDir != "" && dirExists(root) {
+		main := &domain.RunWorktree{Key: "main", Kind: domain.RunWorktreeMain, Dir: repo.RootDir}
+		if s.branches != nil {
+			main.Branch, _ = s.branches.CurrentBranch(ctx, repo.RootDir)
+		}
+		out = append(out, main)
+	}
+	sessions, err := s.sessionWorktrees(ctx, projectID, repositoryID, root, func(*domain.Session) bool { return false })
+	if err != nil {
+		return nil, err
+	}
+	return append(out, sessions...), nil
+}
+
+// sessionWorktrees is the worktree of each session of the repository that
+// exists on disk and is not the main checkout, newest first, leaving out the
+// sessions skip names.
+func (s *Service) sessionWorktrees(ctx context.Context, projectID, repositoryID, root string, skip func(*domain.Session) bool) ([]*domain.RunWorktree, error) {
+	all, err := s.sessions.List(ctx, ports.SessionFilter{ProjectID: projectID})
+	if err != nil {
+		return nil, err
+	}
+	others := slices.DeleteFunc(slices.Clone(all), func(o *domain.Session) bool {
+		return o.RepositoryID != repositoryID || o.WorkingDir == "" || filepath.Clean(o.WorkingDir) == root ||
+			!dirExists(o.WorkingDir) || skip(o)
 	})
 	slices.SortFunc(others, func(a, b *domain.Session) int { return b.CreatedAt.Compare(a.CreatedAt) })
+	var out []*domain.RunWorktree
 	for _, o := range others {
 		w := &domain.RunWorktree{
 			Key: "session:" + o.ID, Kind: domain.RunWorktreeSession, Branch: o.Branch, Dir: o.WorkingDir,

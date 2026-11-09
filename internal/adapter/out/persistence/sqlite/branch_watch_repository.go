@@ -13,10 +13,7 @@ import (
 	"operators-mcp/internal/ports"
 )
 
-var (
-	_ ports.BranchWatchStore  = (*BranchWatchRepository)(nil)
-	_ ports.RecordedPushStore = (*BranchWatchRepository)(nil)
-)
+var _ ports.BranchWatchStore = (*BranchWatchRepository)(nil)
 
 // BranchBaselineModel is a stored snapshot of a repository's branches.
 type BranchBaselineModel struct {
@@ -56,23 +53,6 @@ type BranchFindingModel struct {
 
 // TableName overrides the table name.
 func (BranchFindingModel) TableName() string { return "branch_findings" }
-
-// BranchPushModel is a push the harness made itself.
-type BranchPushModel struct {
-	ID           string `gorm:"primaryKey"`
-	RepositoryID string `gorm:"column:repository_id;index"`
-	SessionID    string `gorm:"column:session_id"`
-	Branch       string
-	Remote       string
-	RemoteBranch string `gorm:"column:remote_branch"`
-	Commit       string
-	At           time.Time
-	By           string `gorm:"column:pushed_by"`
-	RequestID    string `gorm:"column:request_id"`
-}
-
-// TableName overrides the table name.
-func (BranchPushModel) TableName() string { return "branch_pushes" }
 
 // BranchWatchRepository persists the Branches list's stored state.
 type BranchWatchRepository struct{ db *gorm.DB }
@@ -183,34 +163,6 @@ func (r *BranchWatchRepository) Findings(ctx context.Context, repositoryID strin
 			f.Candidates = strings.Split(m.Candidates, ",")
 		}
 		out[i] = f
-	}
-	return out, nil
-}
-
-// Record implements ports.RecordedPushStore.
-func (r *BranchWatchRepository) Record(ctx context.Context, p ports.RecordedPush) error {
-	id, err := genID()
-	if err != nil {
-		return err
-	}
-	return r.db.WithContext(ctx).Create(&BranchPushModel{
-		ID: id, RepositoryID: p.RepositoryID, SessionID: p.SessionID, Branch: p.Branch, Remote: p.Remote,
-		RemoteBranch: p.RemoteBranch, Commit: p.Commit, At: p.At, By: p.By, RequestID: p.RequestID,
-	}).Error
-}
-
-// List implements ports.RecordedPushStore.
-func (r *BranchWatchRepository) List(ctx context.Context, repositoryID string) ([]ports.RecordedPush, error) {
-	var rows []BranchPushModel
-	if err := r.db.WithContext(ctx).Where("repository_id = ?", repositoryID).Order("at, id").Find(&rows).Error; err != nil {
-		return nil, err
-	}
-	out := make([]ports.RecordedPush, len(rows))
-	for i, m := range rows {
-		out[i] = ports.RecordedPush{
-			RepositoryID: m.RepositoryID, SessionID: m.SessionID, Branch: m.Branch, Remote: m.Remote,
-			RemoteBranch: m.RemoteBranch, Commit: m.Commit, At: m.At, By: m.By, RequestID: m.RequestID,
-		}
 	}
 	return out, nil
 }

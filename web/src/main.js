@@ -56,6 +56,7 @@ import { registerAgentBoard } from "./modules/agentboard/presentation/register.j
 import { registerProjects } from "./modules/projects/presentation/register.js";
 import { artifactsGateway } from "./modules/sessions/infrastructure/artifacts-gateway.js";
 import { channelGateway } from "./modules/sessions/infrastructure/channel-gateway.js";
+import { interviewsGateway } from "./modules/sessions/infrastructure/interviews-gateway.js";
 import { sessionsGateway } from "./modules/sessions/infrastructure/sessions-gateway.js";
 import { personTerminalsGateway } from "./modules/sessions/infrastructure/person-terminals-gateway.js";
 import { terminalGateway } from "./modules/sessions/infrastructure/terminal-gateway.js";
@@ -70,6 +71,8 @@ import { tasksGateway } from "./modules/tasks/infrastructure/tasks-gateway.js";
 import { registerTasks } from "./modules/tasks/presentation/register.js";
 import { modelsGateway } from "./modules/models/infrastructure/models-gateway.js";
 import { registerModels } from "./modules/models/presentation/register.js";
+import { servicesGateway } from "./modules/services/infrastructure/services-gateway.js";
+import { registerServices } from "./modules/services/presentation/register.js";
 import { settingsGateway } from "./modules/settings/infrastructure/settings-gateway.js";
 import { registerSettings } from "./modules/settings/presentation/register.js";
 import { tokenSaversGateway } from "./modules/tokensavers/infrastructure/tokensavers-gateway.js";
@@ -120,6 +123,7 @@ registerSessions(Alpine, {
   gateway: sessionsGateway(api, events),
   artifacts: artifactsGateway(api, events),
   channel: channelGateway(api, events),
+  interviews: interviewsGateway(api, events),
   terminals: terminalGateway({ base: "/api" }),
   transcripts: transcriptGateway(api),
   sandbox: sessionSandboxGateway(api),
@@ -151,6 +155,7 @@ registerAttribution(Alpine, { gateway: attributionGateway(api) });
 registerAgentCredential(Alpine, { gateway: agentCredentialGateway(api) });
 registerAgentIsolation(Alpine);
 registerSettings(Alpine, { gateway: settingsGateway(api) });
+registerServices(Alpine, { gateway: servicesGateway(api, events), prefs });
 registerWritingHelper(Alpine, { gateway: stepGateway({ base: "/api" }) });
 
 Alpine.start();

@@ -23,7 +23,7 @@ type Deps struct {
 	Repositories ports.RepositoryRepository
 	Requests     ports.BranchRequestStore
 	Store        ports.BranchWatchStore
-	Pushes       ports.RecordedPushStore
+	Pushes       ports.PushRecords
 	Evidence     ports.GitBranchEvidence
 	Git          ports.GitWorktreeReader
 	// Events announces findings to the inbox, Feed the lists to the project
