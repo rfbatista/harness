@@ -477,6 +477,70 @@ func (s *WorktreeGit) PushBranchTo(ctx context.Context, t ports.PushTarget) (*do
 	return after, nil
 }
 
+// PushPreview implements ports.PushPreviews: the checks of PushBranchTo that
+// need no lock and no network, and the count its confirmation shows.
+func (s *WorktreeGit) PushPreview(ctx context.Context, t ports.PushTarget) (*ports.PushPreview, error) {
+	if strings.TrimSpace(t.WorkspaceID) == "" {
+		return nil, invalid("workspace_id is required")
+	}
+	ws := s.d.Workspaces.Get(ctx, t.WorkspaceID)
+	if ws == nil {
+		return nil, &domain.StructuredError{Code: "WORKSPACE_NOT_FOUND", Message: "workspace not found"}
+	}
+	repo, err := s.repository(ctx, ws.RepositoryID)
+	if err != nil {
+		return nil, err
+	}
+	if s.d.Publisher == nil || s.d.Remotes == nil {
+		return nil, &domain.StructuredError{Code: "UNAVAILABLE", Message: "pushing is not available"}
+	}
+	if !s.d.Files.Exists(ws.Path) {
+		return nil, worktreeMissing(ws)
+	}
+	remote := t.Remote
+	if remote == "" {
+		remote = "origin"
+	}
+	if _, err := s.remoteURL(ctx, repo, remote); err != nil {
+		return nil, err
+	}
+	now, err := s.stateOf(ctx, ws, repo)
+	if err != nil {
+		return nil, err
+	}
+	s.nameSession(ctx, now)
+	if now.Gone {
+		return nil, worktreeMissing(ws)
+	}
+	if err := s.checkPushable(ctx, repo, now, t); err != nil {
+		return nil, err
+	}
+	branch := t.Branch
+	if branch == "" {
+		branch = now.Branch
+	}
+	if branch == "" {
+		return nil, invalid("the worktree's HEAD is detached; there is no branch to push")
+	}
+	head, err := s.d.Git.ResolveCommit(ctx, repo.RootDir, "refs/heads/"+branch)
+	if err != nil {
+		return nil, &domain.StructuredError{Code: "BRANCH_NOT_FOUND", Message: "the repository has no branch " + branch}
+	}
+	remoteBranch := t.RemoteBranch
+	if remoteBranch == "" {
+		remoteBranch = branch
+	}
+	n, known, err := s.d.Remotes.CommitsToPush(ctx, repo.RootDir, branch, remote, remoteBranch, ws.BaseRef)
+	if err != nil {
+		return nil, err
+	}
+	against := "base"
+	if known {
+		against = "remote"
+	}
+	return &ports.PushPreview{Head: head, Commits: n, CommitsAgainst: against, RemoteBranch: remoteBranch}, nil
+}
+
 // RepositoryRemotes implements ports.RepositoryRemoteLists.
 func (s *WorktreeGit) RepositoryRemotes(ctx context.Context, repositoryID string) ([]ports.GitRemote, error) {
 	repo, err := s.repository(ctx, repositoryID)

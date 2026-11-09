@@ -8,6 +8,7 @@ import (
 	"io"
 	"net/http"
 	"os/exec"
+	"strconv"
 	"strings"
 	"testing"
 
@@ -230,5 +231,62 @@ func TestARepositoryWithNoRemoteListsNoneAndAnUnknownRepositoryIsRefused(t *test
 	}
 	if code, _, body := g.remotesOf("no-such-repository"); code != http.StatusNotFound || body["code"] != "REPOSITORY_NOT_FOUND" {
 		t.Errorf("unknown repository: %d %v", code, body)
+	}
+}
+
+// pushPreview reads GET /api/push_preview.
+func (g *branchGate) pushPreview(query string) (int, map[string]any) {
+	g.t.Helper()
+	res, err := http.Get(g.srv.URL + "/api/push_preview?workspace_id=" + g.sessions.Get(g.id).WorkspaceID + "&" + query)
+	if err != nil {
+		g.t.Fatal(err)
+	}
+	defer res.Body.Close()
+	raw, _ := io.ReadAll(res.Body)
+	var out map[string]any
+	_ = json.Unmarshal(raw, &out)
+	return res.StatusCode, out
+}
+
+func TestThePushPreviewCountsAgainstTheRemoteBranchOrAgainstTheBaseAndNamesTheHead(t *testing.T) {
+	g, _ := startWatch(t, ":memory:", true)
+	g.withRemote("mirror")
+	session := g.sessionBranch()
+	g.setup("-c user.name=n -c user.email=n@x commit -q --allow-empty -m one", "-c user.name=n -c user.email=n@x commit -q --allow-empty -m two")
+	head := g.head()
+	ahead, _ := strconv.Atoi(strings.TrimSpace(g.git("git rev-list --count HEAD").stdout))
+
+	// Never pushed to origin from here, and mirror has never heard of it: the base counts.
+	code, got := g.pushPreview("remote=mirror")
+	if code != http.StatusOK || got["head"] != head || got["commits"] != float64(ahead) || got["commits_against"] != "base" || got["remote_branch"] != session {
+		t.Fatalf("against the base: %d %v (commits in HEAD: %d)", code, got, ahead)
+	}
+	if code, body := g.postPushBranch(map[string]string{"expected_head": head}); code != http.StatusOK {
+		t.Fatalf("push: %d %s", code, body)
+	}
+	g.setup("-c user.name=n -c user.email=n@x commit -q --allow-empty -m three")
+	code, got = g.pushPreview("")
+	if code != http.StatusOK || got["head"] != g.head() || got["commits"] != float64(1) || got["commits_against"] != "remote" {
+		t.Fatalf("against the remote branch: %d %v", code, got)
+	}
+	if code, got = g.pushPreview("remote_branch=review/x"); code != http.StatusOK || got["remote_branch"] != "review/x" || got["commits_against"] != "base" {
+		t.Errorf("another remote branch: %d %v", code, got)
+	}
+}
+
+func TestThePushPreviewRefusesWhatAPushRefuses(t *testing.T) {
+	g, _ := startWatch(t, ":memory:", true)
+	if code, got := g.pushPreview("branch=other"); code != http.StatusConflict || got["code"] != "BRANCH_NOT_PUSHABLE" {
+		t.Errorf("not pushable: %d %v", code, got)
+	}
+	if code, got := g.pushPreview("branch=no-such-branch"); code != http.StatusNotFound || got["code"] != "BRANCH_NOT_FOUND" {
+		t.Errorf("no such branch: %d %v", code, got)
+	}
+	if code, got := g.pushPreview("remote=nowhere"); code != http.StatusBadRequest || got["code"] != "REMOTE_NOT_FOUND" {
+		t.Errorf("unknown remote: %d %v", code, got)
+	}
+	g2, _ := startWatch(t, ":memory:", false)
+	if code, got := g2.pushPreview(""); code != http.StatusBadRequest || got["code"] != "NO_REMOTE" {
+		t.Errorf("no remote: %d %v", code, got)
 	}
 }

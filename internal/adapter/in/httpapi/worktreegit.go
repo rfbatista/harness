@@ -115,3 +115,21 @@ func (h *Handler) handleRepositoryRemotes(c echo.Context) error {
 	}
 	return c.JSON(http.StatusOK, map[string]any{"remotes": remotes})
 }
+
+func (h *Handler) handlePushPreview(c echo.Context) error {
+	if err := h.worktreeGitOr503(); err != nil {
+		return err
+	}
+	previews, ok := h.worktreeGit.(ports.PushPreviews)
+	if !ok {
+		return &domain.StructuredError{Code: "UNAVAILABLE", Message: "the push preview is not available"}
+	}
+	p, err := previews.PushPreview(c.Request().Context(), ports.PushTarget{
+		WorkspaceID: c.QueryParam("workspace_id"), Branch: c.QueryParam("branch"),
+		Remote: c.QueryParam("remote"), RemoteBranch: c.QueryParam("remote_branch"),
+	})
+	if err != nil {
+		return err
+	}
+	return c.JSON(http.StatusOK, map[string]any{"head": p.Head, "commits": p.Commits, "commits_against": p.CommitsAgainst, "remote_branch": p.RemoteBranch})
+}
