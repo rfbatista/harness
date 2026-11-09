@@ -254,6 +254,15 @@
       white-space: nowrap;
     }
 
+    /* "N approvals pending" with a branch request among them leads to its card. */
+    & > .detail .lead[data-action] {
+      cursor: pointer;
+      text-decoration: underline;
+      text-underline-offset: 0.2em;
+
+      &:hover { background: color-mix(in oklch, var(--_tone) 28%, transparent); }
+    }
+
     /* A peer's starter or a prompt is a label, not a state: no pill. */
     & > .detail:is([data-report="by"], [data-report="prompt"]) .lead {
       padding: 0;

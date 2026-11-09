@@ -35,3 +35,12 @@ export function upsertRequest(list, request) {
   const rest = list.filter((r) => r.id !== request.id);
   return [...rest, request].sort((a, b) => b.requestedAt - a.requestedAt || (a.id < b.id ? 1 : -1));
 }
+
+/** The oldest pending request of each session, by session id: where a session's "approvals pending" leads. */
+export function oldestPendingBySession(list) {
+  const oldest = {};
+  for (const r of list) {
+    if (isPending(r) && (!oldest[r.sessionId] || r.requestedAt < oldest[r.sessionId].requestedAt)) oldest[r.sessionId] = r;
+  }
+  return Object.fromEntries(Object.entries(oldest).map(([sessionId, r]) => [sessionId, r.id]));
+}
