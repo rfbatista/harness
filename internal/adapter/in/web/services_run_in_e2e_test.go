@@ -94,6 +94,7 @@ func TestAServiceIsStartedInASessionsWorktreeFromTheRunInPicker_EndToEnd(t *test
 	})
 	svc, err := w.svc.CreateService(context.Background(), w.project.ID, domain.ServiceInput{
 		Name: "web", Kind: domain.ServiceKindCommand, RepositoryID: w.repo.ID,
+		Env:     "PORT=8080\nTOKEN=s3cret",
 		Command: &domain.ServiceCommand{Line: "echo up; sleep 30"},
 	})
 	if err != nil {
@@ -133,6 +134,27 @@ func TestAServiceIsStartedInASessionsWorktreeFromTheRunInPicker_EndToEnd(t *test
 	b.run("the log's header names it too",
 		chromedp.Click(`[data-service][data-name=web] [data-action=log]`, chromedp.ByQuery),
 		waitUntil(`document.querySelector('[data-service-log] .meta').textContent.includes('session worktree @ agent/other')`),
+	)
+	const (
+		vars  = `document.querySelector('[data-service-variables]')`
+		item  = `(name) => ` + vars + `.querySelector('[data-variable][data-name=' + name + ']')`
+		value = `(name) => (` + item + `)(name).querySelector('[data-variable-value]').textContent.trim()`
+	)
+	b.run("the Variables section lists the run's variables with their source, masked",
+		waitUntil(vars+`.querySelector('[data-variables-summary]').textContent === '2 variables'`),
+		chromedp.Click(`[data-variables-toggle]`, chromedp.ByQuery),
+		waitUntil(`!!(`+item+`)('PORT') && (`+item+`)('PORT').checkVisibility()`),
+		waitUntil(`(`+item+`)('PORT').textContent.includes('service')`),
+		waitUntil(`(`+value+`)('PORT').startsWith('••')`),
+		waitUntil(`!document.body.innerText.includes('s3cret') && !document.body.innerText.includes('8080')`),
+	)
+	b.run("reveal one value: only that one shows",
+		chromedp.Click(`[data-variable][data-name=PORT] [data-variable-toggle]`, chromedp.ByQuery),
+		waitUntil(`(`+value+`)('PORT').startsWith('8080')`),
+		waitUntil(`(`+value+`)('TOKEN').startsWith('••') && !document.body.innerText.includes('s3cret')`),
+		waitUntil(`document.querySelector('[data-variable][data-name=PORT] [data-variable-toggle]').getAttribute('aria-label') === 'Hide PORT'`),
+	)
+	b.run("the screenshots, then Reveal all",
 		chromedp.Sleep(300*time.Millisecond),
 		theme("light"),
 		chromedp.Sleep(200*time.Millisecond),
@@ -140,6 +162,9 @@ func TestAServiceIsStartedInASessionsWorktreeFromTheRunInPicker_EndToEnd(t *test
 		theme("dark"),
 		chromedp.Sleep(200*time.Millisecond),
 		shot("running-in-session-dark"),
+		chromedp.Click(`[data-variables-all]`, chromedp.ByQuery),
+		waitUntil(`(`+value+`)('TOKEN').startsWith('s3cret') && document.querySelector('[data-variables-all]').textContent === 'Hide all'`),
+		waitUntil(`!JSON.stringify(localStorage).includes('s3cret') && !location.href.includes('s3cret')`),
 	)
 	b.run("stop it, reload: the pick is remembered",
 		chromedp.Click(`[data-service][data-name=web] [data-action=stop]`, chromedp.ByQuery),
