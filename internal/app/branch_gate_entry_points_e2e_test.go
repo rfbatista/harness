@@ -4,10 +4,12 @@ package app
 
 import (
 	"errors"
+	"strconv"
 	"strings"
 	"testing"
 
 	"github.com/chromedp/chromedp"
+	"github.com/chromedp/chromedp/kb"
 
 	"operators-mcp/internal/ports"
 )
@@ -67,16 +69,26 @@ func TestASessionRowsPendingApprovalOpensItsOldestBranchRequest(t *testing.T) {
 	reqs := e.pendingRequests(2) // newest first
 	oldest := reqs[1]
 
-	lead := `document.querySelector('[data-session-id="` + e.session.ID + `"] .detail .lead')`
+	row := `[data-session-id="` + e.session.ID + `"] .detail `
+	lead := `document.querySelector('` + row + `button.lead')`
 	p.run(t, "open the task page", chromedp.EmulateViewport(1280, 860), chromedp.Navigate(e.srv.URL+"/projects/"+e.project+"/tasks/"+e.ticket),
 		poll(`document.querySelector('#task-branch-requests-button') && getComputedStyle(document.querySelector('#task-branch-requests-button')).display !== 'none'`),
-		poll(`(`+lead+`?.textContent ?? '').includes('approvals pending') && `+lead+`.dataset.action !== undefined`))
-	if role := p.text(t, lead+`.getAttribute('role')`); role != "button" {
-		t.Errorf("the approvals text has role %q, want button", role)
+		poll(`(`+lead+`?.textContent ?? '').includes('approvals pending')`))
+	if name := p.text(t, lead+`.getAttribute('aria-label')`); !strings.Contains(name, "approvals pending") || !strings.Contains(name, "branch request") {
+		t.Errorf("the approvals button is named %q: it must say what it opens", name)
 	}
-	p.run(t, "click the approvals text", chromedp.Evaluate(lead+`.click()`, nil),
-		poll(`document.querySelector('#task-branch-requests').matches(':popover-open')`))
-	if got := p.text(t, `document.activeElement.closest('article[data-branch-request]')?.dataset.requestId ?? ''`); got != oldest.ID {
+	oldestCard := `(document.activeElement.closest('article[data-branch-request]')?.dataset.requestId ?? '')`
+	open := `document.querySelector('#task-branch-requests').matches(':popover-open')`
+	for _, key := range []string{kb.Enter, " "} {
+		p.run(t, "focus the button and press "+strconv.Quote(key), chromedp.Evaluate(lead+`.focus()`, nil), chromedp.KeyEvent(key),
+			poll(open+` && `+oldestCard+` !== ''`))
+		if got := p.text(t, oldestCard); got != oldest.ID {
+			t.Errorf("key %q opened the popover at request %q, want the session's oldest, %q", key, got, oldest.ID)
+		}
+		p.run(t, "close", clickInPopover(`#task-branch-requests .pop-head button`), poll(`!`+open))
+	}
+	p.run(t, "click the button", chromedp.Evaluate(lead+`.click()`, nil), poll(open+` && `+oldestCard+` !== ''`))
+	if got := p.text(t, oldestCard); got != oldest.ID {
 		t.Errorf("the popover opened at request %q, want the session's oldest, %q", got, oldest.ID)
 	}
 

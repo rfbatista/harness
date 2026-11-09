@@ -7,32 +7,29 @@ function lead(pendingBySession, sessionId = "s1") {
   const sent = [];
   const instance = branchRequestLead({ store: { pendingBySession } })(sessionId);
   instance.$dispatch = (name, detail) => sent.push({ name, detail });
-  const click = { stopped: false, stopPropagation() { this.stopped = true; }, preventDefault() {} };
-  return { instance, sent, click };
+  return { instance, sent };
 }
 
-test("a session with a pending branch request has an approvals text that opens it", () => {
-  const { instance, sent, click } = lead({ s1: "r1" });
-  assert.equal(instance.role("approval"), "button");
-  assert.equal(instance.tabindex("approval"), "0");
-  assert.equal(instance.actionAttr("approval"), "");
-  instance.open("approval", click);
+test("a session with a pending branch request has an approvals button that opens it", () => {
+  const { instance, sent } = lead({ s1: "r1" });
+  assert.equal(instance.actionable("approval"), true);
+  assert.equal(instance.plain("approval"), false);
+  assert.equal(instance.describe("approval", "2 approvals pending"), "2 approvals pending: show the branch request waiting on you");
+  instance.open("approval");
   assert.deepEqual(sent, [{ name: "branch-request-show", detail: { sessionId: "s1" } }]);
-  assert.ok(click.stopped, "the click is not a row selection");
 });
 
 test("a session waiting only on a tool approval keeps plain text", () => {
-  const { instance, sent, click } = lead({ s2: "r2" });
-  assert.equal(instance.role("approval"), null);
-  assert.equal(instance.actionAttr("approval"), null);
-  instance.open("approval", click);
+  const { instance, sent } = lead({ s2: "r2" });
+  assert.equal(instance.actionable("approval"), false);
+  assert.equal(instance.plain("approval"), true);
+  instance.open("approval");
   assert.deepEqual(sent, []);
-  assert.ok(!click.stopped, "the row still gets its click");
 });
 
 test("only the approvals text leads to a request, never a report's lead", () => {
-  const { instance, sent, click } = lead({ s1: "r1" });
-  assert.equal(instance.role("blocked"), null);
-  instance.open("blocked", click);
+  const { instance, sent } = lead({ s1: "r1" });
+  assert.equal(instance.plain("blocked"), true);
+  instance.open("blocked");
   assert.deepEqual(sent, []);
 });
