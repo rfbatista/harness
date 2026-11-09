@@ -313,3 +313,51 @@ func TestStopServerSessions_WaitingForApproval(t *testing.T) {
 		t.Errorf("pending approvals after shutdown = %d, want 0", got)
 	}
 }
+
+// A tui-client session outlives the server. At boot its count is set to its
+// stored pending requests, never added to, and settling one lowers it.
+func TestBranchRequestsRestored_RecountsInsteadOfAdding(t *testing.T) {
+	svc, _ := newInteractiveService(t)
+	tui, _ := startInteractive(t, svc, InteractiveRequest{})
+	// Stored as the previous server left it: waiting, and counting 2 for what is
+	// one pending request.
+	if err := svc.sessions.UpdateStatus(tui.ID, domain.SessionWaitingApproval); err != nil {
+		t.Fatal(err)
+	}
+	svc.record(tui.ID, SessionEvent{Type: "x"}, sessionChange{metrics: &ports.SessionMetrics{PendingApprovals: 2}})
+
+	for restart := 1; restart <= 2; restart++ {
+		svc.BranchRequestsRestored(tui.ID, 1)
+		got := sessionOf(svc, tui.ID)
+		if got.PendingApprovals != 1 || got.Status != domain.SessionWaitingApproval {
+			t.Fatalf("after restart %d: %d pending, %s; want 1, waiting_approval", restart, got.PendingApprovals, got.Status)
+		}
+	}
+	svc.BranchRequestSettled(tui.ID)
+	got := sessionOf(svc, tui.ID)
+	if got.PendingApprovals != 0 || got.Status != domain.SessionRunning {
+		t.Errorf("after the answer: %d pending, %s; want 0, running", got.PendingApprovals, got.Status)
+	}
+}
+
+func TestBranchRequestsRestored_TheFirstOfTwoAnswersLeavesOneWaiting(t *testing.T) {
+	svc, _ := newInteractiveService(t)
+	tui, _ := startInteractive(t, svc, InteractiveRequest{})
+	svc.BranchRequestsRestored(tui.ID, 2)
+	svc.BranchRequestSettled(tui.ID)
+	if got := sessionOf(svc, tui.ID); got.PendingApprovals != 1 || got.Status != domain.SessionWaitingApproval {
+		t.Errorf("after one answer: %d pending, %s; want 1, waiting_approval", got.PendingApprovals, got.Status)
+	}
+}
+
+// A live session with nothing pending is not left showing a stale count.
+func TestBranchRequestsRestored_ClearsAStaleWait(t *testing.T) {
+	svc, _ := newInteractiveService(t)
+	tui, _ := startInteractive(t, svc, InteractiveRequest{})
+	svc.sessions.UpdateStatus(tui.ID, domain.SessionWaitingApproval)
+	svc.record(tui.ID, SessionEvent{Type: "x"}, sessionChange{metrics: &ports.SessionMetrics{PendingApprovals: 1}})
+	svc.BranchRequestsRestored(tui.ID, 0)
+	if got := sessionOf(svc, tui.ID); got.PendingApprovals != 0 || got.Status != domain.SessionRunning {
+		t.Errorf("%d pending, %s; want 0, running", got.PendingApprovals, got.Status)
+	}
+}
