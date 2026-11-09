@@ -144,3 +144,21 @@ func (c *Catalog) RefreshCatalogMCPServerTools(ctx context.Context, in domain.Re
 	}
 	return nil, domain.NewCatalogError("UNKNOWN_REFERENCE", "these do not exist: "+in.Name, map[string]any{"names": []string{in.Name}})
 }
+
+// DisabledMCPTools is the tool default of every catalog server that has one:
+// the names of its disabled tools, by server name. A catalog that does not
+// read gives none.
+func (c *Catalog) DisabledMCPTools() map[string][]string {
+	l, err := c.load()
+	if err != nil {
+		return nil
+	}
+	out := map[string][]string{}
+	entries := l.tools.get(toolsServersKey)
+	for _, name := range entries.keys() {
+		if disabled := entries.get(name).get(disabledKey).strs(); len(disabled) > 0 {
+			out[name] = disabled
+		}
+	}
+	return out
+}

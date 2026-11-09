@@ -934,6 +934,7 @@ func newOrchestrationService(
 	branchNames *workspaces.BranchNames,
 	baseBranches *workspaces.BaseBranches,
 	assignments *repoagents.Service,
+	agentCatalog *agentcatalog.Catalog,
 ) *orchestration.Service {
 	orchCatalog := orchestration.Catalog{
 		Projects:     cat.Projects,
@@ -948,6 +949,7 @@ func newOrchestrationService(
 		orchCatalog.DesignSystems = cat.DesignSystems
 	}
 	svc := orchestration.NewService(manager, broker, hub, sessions, orchCatalog, tickets, ws)
+	svc.MCPToolDefaults = agentCatalog.DisabledMCPTools
 	svc.UseBranchNames(branchNames)
 	svc.UseBaseBranches(baseBranches)
 	svc.UseAssignments(assignments)

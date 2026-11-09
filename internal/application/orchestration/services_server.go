@@ -17,6 +17,9 @@ const servicesServerName = "services"
 // namesServicesServer says whether the session's agent lists the services
 // server, or its project's list names it.
 func namesServicesServer(agent *domain.Agent, project *domain.Project) bool {
+	if project != nil && slices.Contains(project.MCPBanned, servicesServerName) {
+		return false // the project bans it, whatever the agent lists
+	}
 	return agent != nil && slices.Contains(agent.MCPServerIDs, servicesServerName) ||
 		project != nil && slices.Contains(project.MCPServers, servicesServerName)
 }
