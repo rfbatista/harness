@@ -73,7 +73,13 @@ type runView struct {
 	Yours     bool   `json:"yours"`
 	Where     string `json:"where"`
 	Dir       string `json:"dir"`
-	Sandboxed bool   `json:"sandboxed"`
+	// Branch is the run worktree's branch, "" for none or detached.
+	Branch string `json:"branch"`
+	// Overrides are the run overrides with their values, never a value from
+	// the service or the repository .env; OverrideBy is who set them.
+	Overrides  map[string]string `json:"overrides"`
+	OverrideBy string            `json:"override_by"`
+	Sandboxed  bool              `json:"sandboxed"`
 }
 
 // SessionServicesTools serves the six tools of the services MCP server. Like
@@ -87,6 +93,7 @@ func SessionServicesTools(sessions ports.SessionRepository, agents ports.AgentLi
 		o(t)
 	}
 	nameSchema := `"name":{"type":"string","description":"The service's name, as list_services gives it."}`
+	envSchema := `"env":{"type":"object","additionalProperties":{"type":"string"},"description":"Run overrides: environment variables for this run only, on top of the repository .env and the service's own variables; the service itself is never changed. Names match [A-Za-z_][A-Za-z0-9_]*, at most 100; an image service's values have no line break. restart_service without worktree and env repeats the last run's overrides; env {} clears them."}`
 	worktreeSchema := `"worktree":{"type":"string","enum":["own"],"description":"own: run a command service of your repository in your worktree instead of the repository's main checkout. Omit for the main checkout."}`
 	return []domain.Tool{
 		{
@@ -130,8 +137,9 @@ func SessionServicesTools(sessions ports.SessionRepository, agents ports.AgentLi
 				"Without worktree a command service runs in its repository's main checkout. worktree: \"own\" runs it in your worktree, " +
 				"which only a command service of your own repository can. A service that is already starting or running is returned with " +
 				"already_running true, wherever it runs and whoever started it; nothing is restarted. If the run is still starting after " +
-				"a minute the answer says starting: call service_status.",
-			InputSchema: schemaFromJSON(`{"type":"object","required":["name"],"properties":{` + nameSchema + `,` + worktreeSchema + `}}`),
+				"a minute the answer says starting: call service_status. env sets run overrides for this run only; with env on a running " +
+				"service nothing changes: call restart_service with the new env.",
+			InputSchema: schemaFromJSON(`{"type":"object","required":["name"],"properties":{` + nameSchema + `,` + worktreeSchema + `,` + envSchema + `}}`),
 			Source:      "code",
 			Handler: func(ctx context.Context, args map[string]any) (any, error) {
 				sess, svc, err := t.target(ctx, args)
@@ -172,8 +180,9 @@ func SessionServicesTools(sessions ports.SessionRepository, agents ports.AgentLi
 		{
 			Name: "restart_service",
 			Description: "Stop a service's run, if there is one, then start it with the rules of start_service (worktree included), " +
-				"and answer once the new run is running or has failed. Without worktree it repeats the last run in the same worktree.",
-			InputSchema: schemaFromJSON(`{"type":"object","required":["name"],"properties":{` + nameSchema + `,` + worktreeSchema + `}}`),
+				"and answer once the new run is running or has failed. Without worktree and env it repeats the last run: the same worktree and " +
+				"the same run overrides. With either one it uses what it is given; env {} clears the overrides.",
+			InputSchema: schemaFromJSON(`{"type":"object","required":["name"],"properties":{` + nameSchema + `,` + worktreeSchema + `,` + envSchema + `}}`),
 			Source:      "code",
 			Handler: func(ctx context.Context, args map[string]any) (any, error) {
 				sess, svc, err := t.target(ctx, args)
@@ -184,8 +193,8 @@ func SessionServicesTools(sessions ports.SessionRepository, agents ports.AgentLi
 				if err != nil {
 					return nil, err
 				}
-				// Without a worktree it repeats the last run (ADR 0077).
-				if wt, given := args["worktree"]; !given || wt == nil {
+				// Without a worktree and env it repeats the last run (ADR 0077).
+				if wt, given := args["worktree"]; (!given || wt == nil) && opts.Env == nil {
 					opts.Repeat = true
 				}
 				restarted, err := t.services.RestartService(ctx, svc.ID, opts)
@@ -280,6 +289,11 @@ func (t *servicesTools) refusal(ctx context.Context, err error, name string) err
 // worktree when the arguments ask for it and the service can run there.
 func (t *servicesTools) startOptions(ctx context.Context, sess *domain.Session, svc *domain.Service, args map[string]any) (ports.ServiceStartOptions, error) {
 	opts := ports.ServiceStartOptions{StartedBy: domain.ServiceStartedBy{Kind: "session", SessionID: sess.ID, Agent: t.agentName(ctx, sess), TaskID: sess.TicketID}}
+	env, err := envArg(args)
+	if err != nil {
+		return opts, err
+	}
+	opts.Env = env
 	wt, given := args["worktree"]
 	if !given || wt == nil {
 		return opts, nil
@@ -292,6 +306,28 @@ func (t *servicesTools) startOptions(ctx context.Context, sess *domain.Session, 
 	}
 	opts.Worktree = &ports.ServiceWorktree{Dir: sess.WorkingDir, Branch: sess.Branch, SessionID: sess.ID}
 	return opts, nil
+}
+
+// envArg reads the run overrides: nil when env is not given, an empty map for
+// env {}. The module checks names, counts and value contents.
+func envArg(args map[string]any) (map[string]string, error) {
+	raw, given := args["env"]
+	if !given || raw == nil {
+		return nil, nil
+	}
+	m, ok := raw.(map[string]any)
+	if !ok {
+		return nil, invalidInput("env must be an object of variable names to string values")
+	}
+	env := make(map[string]string, len(m))
+	for k, v := range m {
+		str, ok := v.(string)
+		if !ok {
+			return nil, invalidInput("env: the value of " + strconv.Quote(k) + " must be a string")
+		}
+		env[k] = str
+	}
+	return env, nil
 }
 
 // noWorktree is why the service cannot run in the session's worktree, "" when
@@ -374,7 +410,16 @@ func (t *servicesTools) view(ctx context.Context, svc *domain.Service, sessionID
 		v.Run = &runView{
 			StartedAt: r.StartedAt, EndedAt: r.EndedAt, ExitCode: r.ExitCode, Error: r.Error,
 			StartedBy: startedByText(r.StartedBy), Yours: r.StartedBy.Kind == "session" && r.StartedBy.SessionID == sessionID,
-			Where: whereText(r.Where, sessionID), Dir: r.Where.Dir, Sandboxed: r.Sandboxed,
+			Where: whereText(r.Where, sessionID), Dir: r.Where.Dir, Branch: r.Where.Branch, Sandboxed: r.Sandboxed,
+			Overrides: map[string]string{},
+		}
+		// The override values come from the run's variables: never a value of
+		// the service or the repository .env.
+		if vars, err := t.services.GetRunVariables(ctx, svc.ID); err == nil && vars.RunID != "" && len(vars.Overrides) > 0 {
+			v.Run.Overrides = vars.Overrides
+			if vars.OverrideBy != nil {
+				v.Run.OverrideBy = startedByText(*vars.OverrideBy)
+			}
 		}
 	}
 	return v

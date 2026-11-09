@@ -172,6 +172,19 @@ func (h *Handler) handleRestartService(c echo.Context) error {
 	return c.JSON(http.StatusOK, map[string]any{"service": svc})
 }
 
+// handleGetRunVariables answers the variables the service's current or last
+// run was given, with their values: they are read here and travel on no feed.
+func (h *Handler) handleGetRunVariables(c echo.Context) error {
+	if h.services == nil {
+		return errServicesOff
+	}
+	vars, err := h.services.GetRunVariables(c.Request().Context(), c.QueryParam("service_id"))
+	if err != nil {
+		return err
+	}
+	return c.JSON(http.StatusOK, vars)
+}
+
 func (h *Handler) handleListServiceRunWorktrees(c echo.Context) error {
 	if h.services == nil {
 		return errServicesOff

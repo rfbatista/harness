@@ -97,6 +97,10 @@ type Service struct {
 	avail availableCache
 	// runs are the live runs by service id. Guarded by mu.
 	runs map[string]*run
+	// records are the variables of each service's current or last run, with
+	// the override values, by service id. They live only in memory: a value
+	// must reach no store, feed or log. Guarded by mu.
+	records map[string]*runRecord
 	// closed is set by Shutdown: no run starts after it. Guarded by mu.
 	closed bool
 
@@ -127,7 +131,7 @@ func New(store ports.ServiceStore, projects ports.ProjectReader, repos ports.Rep
 	}
 	return &Service{
 		store: store, projects: projects, repos: repos, opts: opts, seq: map[string]int64{}, feed: newFeed(),
-		runs: map[string]*run{}, logs: map[string]*logFile{},
+		runs: map[string]*run{}, records: map[string]*runRecord{}, logs: map[string]*logFile{},
 	}
 }
 
