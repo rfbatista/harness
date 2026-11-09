@@ -161,8 +161,12 @@ type BranchFindingFound struct {
 	SessionID    string
 	RepositoryID string
 	Branch       string
-	// Kind is "branch" or "push".
-	Kind       string
+	// Kind says what was found; Branch is the branch, or the remote's name for
+	// a remote, and NewName the new name of a rename.
+	Kind    BranchFindingKind
+	NewName string
+	// URL is the remote's URL, redacted, for a remote finding.
+	URL        string
 	Candidates []string
 	FoundAt    time.Time
 }

@@ -64,8 +64,10 @@ func (s *Service) Check(ctx context.Context, repositoryID string, ended ...strin
 }
 
 type finding struct {
-	kind, branch, remote, remoteBranch, commit string
-	candidates                                 []string
+	kind                                          domain.BranchFindingKind
+	branch, remote, remoteBranch, commit, newName string
+	// owners are the sessions the finding may belong to; nil is every session.
+	owners []*domain.Session
 }
 
 func (s *Service) check(ctx context.Context, repoID string, ended []string) {
@@ -189,16 +191,25 @@ func (s *Service) attribute(ctx context.Context, repo *domain.Repository, snap *
 		}
 	}
 	sort.Strings(newBranches)
+	gone, taken := s.vanished(ctx, sessions, snap, prev, reqs, newBranches)
 	for _, name := range newBranches {
-		found = append(found, finding{kind: ports.FindingBranch, branch: name})
+		if !taken[name] {
+			found = append(found, finding{kind: domain.FindingBranch, branch: name})
+		}
 	}
+	found = append(found, gone...)
 	found = append(found, s.bypassedPushes(ctx, repo, snap, prev)...)
+	found = append(found, unapprovedRemotes(snap, prev, reqs)...)
 
 	for _, f := range found {
-		who := s.evidenceFor(ctx, f, snap, sessions, baselines, overlap)
+		candidates := sessions
+		if f.owners != nil {
+			candidates = f.owners
+		}
+		who := s.evidenceFor(ctx, f, snap, candidates, baselines, overlap)
 		fd := &ports.BranchFinding{
 			RepositoryID: repo.ID, Branch: f.branch, Kind: f.kind, Remote: f.remote, RemoteBranch: f.remoteBranch,
-			Commit: f.commit, FoundAt: s.d.Now(),
+			Commit: f.commit, NewName: f.newName, FoundAt: s.d.Now(),
 		}
 		if len(who) == 1 {
 			fd.SessionID = who[0]
@@ -216,13 +227,136 @@ func (s *Service) attribute(ctx context.Context, repo *domain.Repository, snap *
 	}
 }
 
+// vanished are the branches of prev that are gone and that a session made or
+// touched, with no approved delete or rename behind them: each a delete
+// finding, or a rename finding when a branch no request explains appeared at
+// its commit in the same check (taken names those new branches). A branch the
+// session never touched is left alone, and so is a session branch whose
+// worktree the harness removed.
+func (s *Service) vanished(ctx context.Context, sessions []*domain.Session, snap *ports.GitBranchSnapshot, prev *ports.BranchBaseline, reqs []domain.BranchRequest, newBranches []string) ([]finding, map[string]bool) {
+	byName := map[string]map[string]bool{} // branch -> sessions that made or touched it
+	touch := func(name, sessionID string) {
+		if name == "" {
+			return
+		}
+		if byName[name] == nil {
+			byName[name] = map[string]bool{}
+		}
+		byName[name][sessionID] = true
+	}
+	approvedAway := map[string]bool{}
+	// A branch an approved create made existed even when no check saw it: it
+	// went between two checks, with the commit it started at.
+	made := map[string]string{}
+	for _, r := range reqs {
+		if r.Action == domain.BranchCreate && r.State == domain.BranchRequestUsed && r.Branch != "" && r.StartPoint != nil {
+			made[r.Branch] = r.StartPoint.Commit
+		}
+		touch(r.Branch, r.SessionID)
+		if r.NewName != nil {
+			touch(*r.NewName, r.SessionID)
+		}
+		if answered(r) && (r.Action == domain.BranchDelete || r.Action == domain.BranchRename) {
+			approvedAway[r.Branch] = true
+		}
+	}
+	ids := make([]string, 0, len(sessions))
+	removed := map[string]bool{}
+	live := map[string]*domain.Session{}
+	for _, sess := range sessions {
+		ids = append(ids, sess.ID)
+		live[sess.ID] = sess
+		if s.workspaceOf(ctx, sess) != nil {
+			touch(sess.Branch, sess.ID)
+		} else {
+			removed[sess.Branch] = true // the harness took the worktree and its branch away
+		}
+	}
+	if fs, err := s.d.Store.Findings(ctx, ids); err == nil {
+		for _, f := range fs {
+			if f.Kind == domain.FindingBranch {
+				touch(f.Branch, f.SessionID)
+			}
+		}
+	}
+	commitOf := map[string]string{}
+	for name, commit := range made {
+		commitOf[name] = commit
+	}
+	for name, commit := range prev.Branches {
+		commitOf[name] = commit
+	}
+	var names []string
+	for name := range commitOf {
+		if _, there := snap.Branches[name]; !there && !approvedAway[name] && !removed[name] && len(byName[name]) > 0 {
+			names = append(names, name)
+		}
+	}
+	sort.Strings(names)
+	taken := map[string]bool{}
+	var out []finding
+	for _, name := range names {
+		var owners []*domain.Session
+		for id := range byName[name] {
+			if sess := live[id]; sess != nil {
+				owners = append(owners, sess)
+			}
+		}
+		if len(owners) == 0 {
+			continue
+		}
+		sort.Slice(owners, func(i, j int) bool { return owners[i].ID < owners[j].ID })
+		f := finding{kind: domain.FindingDelete, branch: name, commit: commitOf[name], owners: owners}
+		for _, n := range newBranches {
+			if !taken[n] && commitOf[name] != "" && snap.Branches[n] == commitOf[name] {
+				f.kind, f.newName = domain.FindingRename, n
+				taken[n] = true
+				break
+			}
+		}
+		out = append(out, f)
+	}
+	return out, taken
+}
+
+// unapprovedRemotes are the remotes added since prev, or whose URL changed,
+// that no approved remote request covers.
+func unapprovedRemotes(snap *ports.GitBranchSnapshot, prev *ports.BranchBaseline, reqs []domain.BranchRequest) []finding {
+	before := map[string]string{}
+	for _, r := range prev.Remotes {
+		before[r.Name] = r.URL
+	}
+	approved := map[string]bool{}
+	for _, r := range reqs {
+		if !answered(r) || r.Remote == nil {
+			continue
+		}
+		switch r.Action {
+		case domain.BranchRemoteAdd, domain.BranchRemoteSetURL:
+			approved[r.Remote.Name] = true
+		case domain.BranchRemoteRename:
+			if r.Remote.NewName != nil {
+				approved[*r.Remote.NewName] = true
+			}
+		}
+	}
+	var out []finding
+	for _, r := range snap.Remotes {
+		if url, had := before[r.Name]; (!had || url != r.URL) && !approved[r.Name] {
+			out = append(out, finding{kind: domain.FindingRemote, branch: r.Name, remote: domain.RedactURL(r.URL)})
+		}
+	}
+	sort.Slice(out, func(i, j int) bool { return out[i].branch < out[j].branch })
+	return out
+}
+
 // evidenceFor names the sessions the evidence ties the finding to: those whose
 // worktree has the branch checked out or whose HEAD history moved to it,
 // else the turns that overlapped. A branch that existed when a session started
 // is never that session's.
 func (s *Service) evidenceFor(ctx context.Context, f finding, snap *ports.GitBranchSnapshot, sessions []*domain.Session, baselines map[string]*ports.BranchBaseline, overlap map[string]bool) []string {
 	live := func(sess *domain.Session) bool {
-		if f.kind != ports.FindingBranch {
+		if f.kind != domain.FindingBranch {
 			return true
 		}
 		_, existed := baselines[sess.ID].Branches[f.branch]
@@ -233,7 +367,7 @@ func (s *Service) evidenceFor(ctx context.Context, f finding, snap *ports.GitBra
 		if !live(sess) {
 			continue
 		}
-		if s.checkedOut(ctx, sess, f.branch, snap) || s.headMovedTo(ctx, sess, f.branch) || (f.kind == ports.FindingPush && sess.Branch == f.branch) {
+		if s.checkedOut(ctx, sess, f.branch, snap) || s.headMovedTo(ctx, sess, f.branch) || (f.kind == domain.FindingPush && sess.Branch == f.branch) {
 			named = append(named, sess.ID)
 		}
 	}
@@ -331,7 +465,7 @@ func (s *Service) bypassedPushes(ctx context.Context, repo *domain.Repository, s
 		if isRecorded(recorded, remote, branch, oid) {
 			continue
 		}
-		out = append(out, finding{kind: ports.FindingPush, branch: branch, remote: remote, remoteBranch: branch, commit: oid})
+		out = append(out, finding{kind: domain.FindingPush, branch: branch, remote: remote, remoteBranch: branch, commit: oid})
 	}
 	return out
 }
@@ -349,7 +483,7 @@ func isRecorded(rs []domain.RecordedPush, remote, branch, commit string) bool {
 func (s *Service) announceFinding(ctx context.Context, repo *domain.Repository, f *ports.BranchFinding) {
 	ev := domain.BranchFindingFound{
 		ProjectID: repo.ProjectID, SessionID: f.SessionID, RepositoryID: repo.ID, Branch: f.Branch,
-		Kind: f.Kind, Candidates: f.Candidates, FoundAt: f.FoundAt,
+		Kind: f.Kind, NewName: f.NewName, URL: remoteURL(f), Candidates: f.Candidates, FoundAt: f.FoundAt,
 	}
 	if sess := s.d.Sessions.Get(f.SessionID); sess != nil {
 		ev.TaskID = sess.TicketID
@@ -362,7 +496,7 @@ func (s *Service) announceFinding(ctx context.Context, repo *domain.Repository, 
 	if f.SessionID == "" && s.d.Feed != nil {
 		s.d.Feed.AnnounceChange(ports.ProjectChange{UnattributedBranch: &ports.UnattributedBranchChange{
 			UnattributedBranch: domain.UnattributedBranch{
-				RepositoryID: repo.ID, Branch: f.Branch, Kind: f.Kind, CandidateSessionIDs: f.Candidates, FoundAt: f.FoundAt,
+				RepositoryID: repo.ID, Branch: f.Branch, Kind: string(f.Kind), CandidateSessionIDs: f.Candidates, FoundAt: f.FoundAt,
 			}, ProjectID: repo.ProjectID,
 		}})
 	}
@@ -421,4 +555,12 @@ func (s *Service) divergenceDir(ctx context.Context, sess *domain.Session) strin
 		return repo.RootDir
 	}
 	return ""
+}
+
+// remoteURL is the redacted URL a remote finding names, "" for any other.
+func remoteURL(f *ports.BranchFinding) string {
+	if f.Kind != domain.FindingRemote {
+		return ""
+	}
+	return f.Remote
 }

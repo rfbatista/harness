@@ -24,22 +24,20 @@ type BranchStat struct {
 	Ahead, Behind              int
 }
 
-// Kinds of branch finding.
-const (
-	FindingBranch = "branch"
-	FindingPush   = "push"
-)
-
 // BranchFinding is something the after-turn check found that no branch request
 // explains. SessionID is "" for an unattributed one.
 type BranchFinding struct {
 	ID           string
 	RepositoryID string
 	SessionID    string
-	Branch       string
-	Kind         string
-	// Remote, RemoteBranch and Commit name a push.
+	// Branch is the branch, or the remote's name for a remote finding.
+	Branch string
+	Kind   domain.BranchFindingKind
+	// Remote, RemoteBranch and Commit name a push; Remote is the URL of a
+	// remote finding, Commit the head a deleted or renamed branch had, and
+	// NewName the name a renamed branch took.
 	Remote, RemoteBranch, Commit string
+	NewName                      string
 	Candidates                   []string
 	FoundAt                      time.Time
 }
@@ -59,9 +57,8 @@ type BranchWatchStore interface {
 	// repository, kind, branch, remote, remote branch and commit); it says
 	// whether it stored it.
 	AddFinding(ctx context.Context, f *BranchFinding) (bool, error)
-	// Findings reads the findings of the sessions, or of a repository's
-	// unattributed ones when sessionIDs is empty.
-	Findings(ctx context.Context, repositoryID string, sessionIDs ...string) ([]BranchFinding, error)
+	// Findings reads the findings attributed to the sessions.
+	Findings(ctx context.Context, sessionIDs []string) ([]BranchFinding, error)
 }
 
 // SessionBranchLists is the Branches list, read from stored state only

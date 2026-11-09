@@ -358,3 +358,120 @@ func TestThePersonsPushIsRecordedOnceFillsPushedAndFlagsNothing(t *testing.T) {
 		t.Errorf("recorded pushes after the checks = %d, want 1", len(got))
 	}
 }
+
+// waitFindings waits for n inbox entries about branches nothing explains.
+func (g *branchGate) waitFindings(n int) []*domain.Notification {
+	g.t.Helper()
+	eventually(g.t, fmt.Sprintf("%d findings in the inbox", n), func() error {
+		if got := len(g.findings()); got != n {
+			return fmt.Errorf("%d inbox entries", got)
+		}
+		return nil
+	})
+	return g.findings()
+}
+
+func TestARemoteAddedOrChangedAroundTheGateIsFlaggedAndAnApprovedOneIsNot(t *testing.T) {
+	g, bare := startWatch(t, ":memory:", true)
+	// approved: no finding
+	g.approved("git remote add fine https://example.com/fine.git")
+	// around the gate: a new remote, and origin pointed elsewhere
+	g.setup("remote add sneaky https://user:secret@example.com/sneaky.git", "remote set-url origin "+bare+"-moved")
+	g.endTurnOf(g.id)
+	got := g.waitFindings(2)
+	titles := got[0].Title + " | " + got[1].Title
+	for _, want := range []string{"Unapproved remote: sneaky", "Unapproved remote: origin"} {
+		if !strings.Contains(titles, want) {
+			t.Errorf("inbox titles %q lack %q", titles, want)
+		}
+	}
+	for _, n := range got {
+		if !strings.Contains(n.Body, g.id) || !strings.Contains(n.Body, g.repo) || n.Level != domain.NotificationAction {
+			t.Errorf("entry = %+v", n)
+		}
+	}
+	// a remote is no branch: the list has no row for it
+	for _, name := range []string{"remote sneaky", "remote origin", "remote fine"} {
+		if x := rowOf(g.branches(), name); x != nil {
+			t.Errorf("the Branches list has a row for a remote: %+v", x)
+		}
+	}
+	if strings.Contains(titles+got[0].Body+got[1].Body, "secret") {
+		t.Errorf("the entry leaks the URL's credentials: %v", got)
+	}
+	if !strings.Contains(titles, "example.com/sneaky.git") {
+		t.Errorf("the entry does not name the URL: %q", titles)
+	}
+	// reported once
+	g.endTurnOf(g.id)
+	g.endTurnOf(g.id)
+	time.Sleep(500 * time.Millisecond)
+	if n := len(g.findings()); n != 2 {
+		t.Errorf("%d inbox entries after more turns, want 2", n)
+	}
+}
+
+func TestABranchTheSessionTouchedDeletedOrRenamedAroundTheGateIsAFinding(t *testing.T) {
+	g, _ := startWatch(t, ":memory:", false)
+	session := g.sessionBranch()
+	g.approved("git checkout -b temp")
+	g.setup("checkout " + session)
+	g.approved("git checkout -b feature-x")
+	g.setup("checkout " + session)
+
+	// around the gate: a rename of one touched branch, a delete of another, and
+	// a delete of a branch the session never touched
+	g.setup("branch -m feature-x renamed-x", "branch -D temp", "branch -D other")
+	g.endTurnOf(g.id)
+	got := g.waitFindings(2)
+	titles := got[0].Title + " | " + got[1].Title
+	for _, want := range []string{"Unapproved branch deletion: temp", "Unapproved branch rename: feature-x → renamed-x"} {
+		if !strings.Contains(titles, want) {
+			t.Errorf("inbox titles %q lack %q", titles, want)
+		}
+	}
+	eventually(t, "the rows", func() error {
+		list := g.branches()
+		if x := rowOf(list, "temp"); x == nil || x.State != domain.SessionBranchDeleted || x.FlaggedAt == nil {
+			return fmt.Errorf("temp = %+v", x)
+		}
+		if x := rowOf(list, "feature-x"); x == nil || x.State != domain.SessionBranchDeleted || x.FlaggedAt == nil {
+			return fmt.Errorf("feature-x = %+v", x)
+		}
+		if x := rowOf(list, "renamed-x"); x == nil || x.State != domain.SessionBranchUnapproved || x.FlaggedAt == nil {
+			return fmt.Errorf("renamed-x = %+v", x)
+		}
+		if x := rowOf(list, "other"); x != nil {
+			return fmt.Errorf("a branch the session never touched is listed: %+v", x)
+		}
+		return nil
+	})
+}
+
+func TestAnApprovedDeleteOrRenameIsNotAFinding(t *testing.T) {
+	g, _ := startWatch(t, ":memory:", false)
+	g.approved("git branch -m to-rename renamed")
+	g.approved("git branch -D to-delete")
+	g.endTurnOf(g.id)
+	g.endTurnOf(g.id)
+	time.Sleep(700 * time.Millisecond)
+	if got := g.findings(); len(got) != 0 {
+		t.Errorf("approved actions were flagged: %+v", got)
+	}
+}
+
+// A check a restart dropped is made up for by the next one, which compares the
+// repository with the baseline the last finished check stored.
+func TestACheckDroppedByARestartIsCaughtByTheNextOne(t *testing.T) {
+	g, _ := startWatch(t, "dropped.db", false)
+	g.writeRef("sneaky")
+	g.restartGate() // the turn ended, but the server went down before its check ran
+	if got := g.findings(); len(got) != 0 {
+		t.Fatalf("flagged before any check: %+v", got)
+	}
+	g.endTurnOf(g.id)
+	g.waitFindings(1)
+	if x := rowOf(g.branches(), "sneaky"); x == nil || x.State != domain.SessionBranchUnapproved {
+		t.Errorf("sneaky = %+v", x)
+	}
+}

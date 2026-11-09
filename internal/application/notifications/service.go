@@ -282,8 +282,15 @@ func (s *Service) onBranchRequest(ev domain.BranchRequestChanged) {
 // or the sessions whose turns overlapped when none is named (ADR 0070).
 func (s *Service) onBranchFinding(ev domain.BranchFindingFound) {
 	what := "Unapproved branch: " + ev.Branch
-	if ev.Kind == "push" { // domain.BranchFindingFound.Kind: "branch" or "push"
+	switch ev.Kind {
+	case domain.FindingPush:
 		what = "Unapproved push: " + ev.Branch
+	case domain.FindingRemote:
+		what = "Unapproved remote: " + ev.Branch + " (" + ev.URL + ")"
+	case domain.FindingDelete:
+		what = "Unapproved branch deletion: " + ev.Branch
+	case domain.FindingRename:
+		what = "Unapproved branch rename: " + ev.Branch + " → " + ev.NewName
 	}
 	who := "No agent turn was running that names a session"
 	if len(ev.Candidates) > 0 {
@@ -297,12 +304,12 @@ func (s *Service) onBranchFinding(ev domain.BranchFindingFound) {
 		who = "Session " + ev.SessionID
 		link += "?session=" + url.QueryEscape(ev.SessionID)
 	}
-	body := who + ", repository " + ev.RepositoryID + ". No branch request covers it."
+	body := who + ", repository " + ev.RepositoryID + ". No approved branch request covers it."
 	s.record(&domain.Notification{
 		ProjectID: ev.ProjectID, TaskID: ev.TaskID, SessionID: ev.SessionID,
 		Kind: domain.NotificationBranchFinding, Level: domain.NotificationAction,
 		Title: clip(what, domain.MaxNotificationTitleLen), Body: clip(body, domain.MaxNotificationBodyLen),
-		Link: link, CauseKey: "branch_finding:" + ev.RepositoryID + ":" + ev.Kind + ":" + ev.Branch + ":" + ev.FoundAt.Format(time.RFC3339Nano),
+		Link: link, CauseKey: "branch_finding:" + ev.RepositoryID + ":" + string(ev.Kind) + ":" + ev.Branch + ":" + ev.FoundAt.Format(time.RFC3339Nano),
 	}, false)
 }
 

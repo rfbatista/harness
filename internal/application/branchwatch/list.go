@@ -84,7 +84,7 @@ func (s *Service) inputs(ctx context.Context, sessions []*domain.Session, reqs m
 		in.stats[st.SessionID][st.Branch] = st
 	}
 	if len(ids) > 0 {
-		fs, err := s.d.Store.Findings(ctx, "", ids...)
+		fs, err := s.d.Store.Findings(ctx, ids)
 		if err != nil {
 			return nil, err
 		}
@@ -201,28 +201,41 @@ func (in *listInputs) build(sess *domain.Session) []domain.SessionBranch {
 	for name := range touched {
 		slices.Reverse(rows[name].b.RequestIDs)
 	}
+	flag := func(x *row, f ports.BranchFinding) {
+		t := f.FoundAt
+		x.b.FlaggedAt = &t
+		if f.FoundAt.After(x.activity) {
+			x.activity = f.FoundAt
+		}
+	}
 	for _, f := range in.findings[sess.ID] {
-		if f.Kind == ports.FindingBranch {
+		switch f.Kind {
+		case domain.FindingBranch:
 			x := get(f.Branch)
-			if !x.b.IsSessionBranch && x.b.State != domain.SessionBranchApproved {
-				x.b.State = domain.SessionBranchUnapproved
-			}
 			if !x.b.IsSessionBranch && len(x.b.RequestIDs) == 0 {
 				x.b.State = domain.SessionBranchUnapproved
 			}
-		}
-		if f.Kind == ports.FindingPush {
+			flag(x, f)
+		case domain.FindingPush:
 			x := get(f.Branch)
 			if len(x.b.RequestIDs) == 0 && !x.b.IsSessionBranch {
 				x.b.State = domain.SessionBranchUnapproved
 			}
 			x.b.Pushed = append(x.b.Pushed, domain.SessionBranchPush{Remote: f.Remote, RemoteBranch: f.RemoteBranch, At: f.FoundAt, By: domain.PushedByUnapproved})
-		}
-		x := get(f.Branch)
-		t := f.FoundAt
-		x.b.FlaggedAt = &t
-		if f.FoundAt.After(x.activity) {
-			x.activity = f.FoundAt
+			flag(x, f)
+		case domain.FindingRemote:
+			// A remote is no branch: the inbox says it, the list has no row for it.
+		case domain.FindingDelete:
+			x := get(f.Branch)
+			x.b.State = domain.SessionBranchDeleted
+			flag(x, f)
+		case domain.FindingRename:
+			old := get(f.Branch)
+			old.b.State = domain.SessionBranchDeleted
+			flag(old, f)
+			renamed := get(f.NewName)
+			renamed.b.State = domain.SessionBranchUnapproved
+			flag(renamed, f)
 		}
 	}
 	for _, p := range in.pushes[sess.ID] {

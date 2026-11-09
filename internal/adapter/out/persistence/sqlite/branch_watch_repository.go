@@ -10,6 +10,7 @@ import (
 	"gorm.io/gorm"
 	"gorm.io/gorm/clause"
 
+	"operators-mcp/internal/domain"
 	"operators-mcp/internal/ports"
 )
 
@@ -47,6 +48,7 @@ type BranchFindingModel struct {
 	Remote       string `gorm:"uniqueIndex:branch_findings_key"`
 	RemoteBranch string `gorm:"column:remote_branch;uniqueIndex:branch_findings_key"`
 	Commit       string `gorm:"uniqueIndex:branch_findings_key"`
+	NewName      string `gorm:"column:new_name"`
 	Candidates   string
 	FoundAt      time.Time `gorm:"column:found_at"`
 }
@@ -129,8 +131,8 @@ func (r *BranchWatchRepository) AddFinding(ctx context.Context, f *ports.BranchF
 		return false, err
 	}
 	m := BranchFindingModel{
-		ID: id, RepositoryID: f.RepositoryID, SessionID: f.SessionID, Branch: f.Branch, Kind: f.Kind,
-		Remote: f.Remote, RemoteBranch: f.RemoteBranch, Commit: f.Commit,
+		ID: id, RepositoryID: f.RepositoryID, SessionID: f.SessionID, Branch: f.Branch, Kind: string(f.Kind),
+		NewName: f.NewName, Remote: f.Remote, RemoteBranch: f.RemoteBranch, Commit: f.Commit,
 		Candidates: strings.Join(f.Candidates, ","), FoundAt: f.FoundAt,
 	}
 	res := r.db.WithContext(ctx).Clauses(clause.OnConflict{DoNothing: true}).Create(&m)
@@ -142,22 +144,19 @@ func (r *BranchWatchRepository) AddFinding(ctx context.Context, f *ports.BranchF
 }
 
 // Findings implements ports.BranchWatchStore.
-func (r *BranchWatchRepository) Findings(ctx context.Context, repositoryID string, sessionIDs ...string) ([]ports.BranchFinding, error) {
-	q := r.db.WithContext(ctx)
-	if len(sessionIDs) > 0 {
-		q = q.Where("session_id IN ?", sessionIDs)
-	} else {
-		q = q.Where("repository_id = ? AND session_id = ''", repositoryID)
+func (r *BranchWatchRepository) Findings(ctx context.Context, sessionIDs []string) ([]ports.BranchFinding, error) {
+	if len(sessionIDs) == 0 {
+		return nil, nil
 	}
 	var rows []BranchFindingModel
-	if err := q.Order("found_at, id").Find(&rows).Error; err != nil {
+	if err := r.db.WithContext(ctx).Where("session_id IN ?", sessionIDs).Order("found_at, id").Find(&rows).Error; err != nil {
 		return nil, err
 	}
 	out := make([]ports.BranchFinding, len(rows))
 	for i, m := range rows {
 		f := ports.BranchFinding{
-			ID: m.ID, RepositoryID: m.RepositoryID, SessionID: m.SessionID, Branch: m.Branch, Kind: m.Kind,
-			Remote: m.Remote, RemoteBranch: m.RemoteBranch, Commit: m.Commit, FoundAt: m.FoundAt,
+			ID: m.ID, RepositoryID: m.RepositoryID, SessionID: m.SessionID, Branch: m.Branch, Kind: domain.BranchFindingKind(m.Kind),
+			NewName: m.NewName, Remote: m.Remote, RemoteBranch: m.RemoteBranch, Commit: m.Commit, FoundAt: m.FoundAt,
 		}
 		if m.Candidates != "" {
 			f.Candidates = strings.Split(m.Candidates, ",")
