@@ -94,6 +94,10 @@ type BranchRequestWaiter interface {
 	// BranchRequestSettled takes a request away; the last one puts the session
 	// back to the status it had.
 	BranchRequestSettled(sessionID string)
+	// BranchRequestsRestored is the boot's recount: it sets the session's
+	// pending-approvals count to the number of its stored pending requests,
+	// never adding to what was stored (ADR 0078).
+	BranchRequestsRestored(sessionID string, pending int)
 }
 
 // PushRecords keeps the pushes the harness made (driven; ADR 0071). The server

@@ -243,3 +243,121 @@ func TestResume_ConcurrentCallsSpawnOnce(t *testing.T) {
 	}
 	screenOf(t, svc, sess.ID, "back")
 }
+
+// A session stored as waiting for approval at boot is as orphaned as one
+// stored as running: its process died with the previous server (ADR 0078).
+func TestStopOrphanedServerSessions_EveryLiveStatus(t *testing.T) {
+	svc := newHostedService(t, scriptAgent{script: `cat`})
+	for _, status := range domain.LiveSessionStatuses {
+		if _, err := svc.sessions.Create(&domain.Session{
+			ID: "orphan-" + string(status), ProjectID: "p1", Status: status, Interactive: true, RunsOn: domain.RunnerServer, PendingApprovals: 2,
+		}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	tui, _ := startInteractive(t, svc, InteractiveRequest{})
+
+	n, err := svc.StopOrphanedServerSessions(context.Background())
+	if err != nil || n != len(domain.LiveSessionStatuses) {
+		t.Fatalf("StopOrphanedServerSessions = %d, %v; want %d", n, err, len(domain.LiveSessionStatuses))
+	}
+	for _, status := range domain.LiveSessionStatuses {
+		got := sessionOf(svc, "orphan-"+string(status))
+		if got.Status != domain.SessionStopped || got.PendingApprovals != 0 {
+			t.Errorf("%s orphan = %s with %d pending, want stopped with 0", status, got.Status, got.PendingApprovals)
+		}
+	}
+	if got := sessionOf(svc, tui.ID).Status; got != domain.SessionRunning {
+		t.Errorf("tui-client session = %s, want it left running", got)
+	}
+}
+
+// A headless session's process and its open tool approvals died with the server.
+func TestStopOrphanedServerSessions_HeadlessSessions(t *testing.T) {
+	svc := newHostedService(t, scriptAgent{script: `cat`})
+	for _, status := range domain.LiveSessionStatuses {
+		if _, err := svc.sessions.Create(&domain.Session{
+			ID: "headless-" + string(status), ProjectID: "p1", Status: status, PendingApprovals: 1,
+		}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	done, _ := svc.sessions.Create(&domain.Session{ID: "headless-done", ProjectID: "p1", Status: domain.SessionDone})
+
+	n, err := svc.StopOrphanedServerSessions(context.Background())
+	if err != nil || n != len(domain.LiveSessionStatuses) {
+		t.Fatalf("StopOrphanedServerSessions = %d, %v; want %d", n, err, len(domain.LiveSessionStatuses))
+	}
+	for _, status := range domain.LiveSessionStatuses {
+		got := sessionOf(svc, "headless-"+string(status))
+		if got.Status != domain.SessionStopped || got.PendingApprovals != 0 {
+			t.Errorf("%s headless = %s with %d pending, want stopped with 0", status, got.Status, got.PendingApprovals)
+		}
+	}
+	if got := sessionOf(svc, done.ID).Status; got != domain.SessionDone {
+		t.Errorf("done session = %s, want it untouched", got)
+	}
+}
+
+// Shutdown records a session waiting for approval as stopped, not failed.
+func TestStopServerSessions_WaitingForApproval(t *testing.T) {
+	svc := newHostedService(t, scriptAgent{script: `cat`})
+	sess := startOnServer(t, svc)
+	svc.BranchRequestFiled(sess.ID)
+	if got := sessionOf(svc, sess.ID); got.Status != domain.SessionWaitingApproval {
+		t.Fatalf("status = %s, want waiting_approval", got.Status)
+	}
+	svc.StopServerSessions(context.Background())
+	waitStatus(t, svc, sess.ID, domain.SessionStopped)
+	if got := sessionOf(svc, sess.ID).PendingApprovals; got != 0 {
+		t.Errorf("pending approvals after shutdown = %d, want 0", got)
+	}
+}
+
+// A tui-client session outlives the server. At boot its count is set to its
+// stored pending requests, never added to, and settling one lowers it.
+func TestBranchRequestsRestored_RecountsInsteadOfAdding(t *testing.T) {
+	svc, _ := newInteractiveService(t)
+	tui, _ := startInteractive(t, svc, InteractiveRequest{})
+	// Stored as the previous server left it: waiting, and counting 2 for what is
+	// one pending request.
+	if err := svc.sessions.UpdateStatus(tui.ID, domain.SessionWaitingApproval); err != nil {
+		t.Fatal(err)
+	}
+	svc.record(tui.ID, SessionEvent{Type: "x"}, sessionChange{metrics: &ports.SessionMetrics{PendingApprovals: 2}})
+
+	for restart := 1; restart <= 2; restart++ {
+		svc.BranchRequestsRestored(tui.ID, 1)
+		got := sessionOf(svc, tui.ID)
+		if got.PendingApprovals != 1 || got.Status != domain.SessionWaitingApproval {
+			t.Fatalf("after restart %d: %d pending, %s; want 1, waiting_approval", restart, got.PendingApprovals, got.Status)
+		}
+	}
+	svc.BranchRequestSettled(tui.ID)
+	got := sessionOf(svc, tui.ID)
+	if got.PendingApprovals != 0 || got.Status != domain.SessionRunning {
+		t.Errorf("after the answer: %d pending, %s; want 0, running", got.PendingApprovals, got.Status)
+	}
+}
+
+func TestBranchRequestsRestored_TheFirstOfTwoAnswersLeavesOneWaiting(t *testing.T) {
+	svc, _ := newInteractiveService(t)
+	tui, _ := startInteractive(t, svc, InteractiveRequest{})
+	svc.BranchRequestsRestored(tui.ID, 2)
+	svc.BranchRequestSettled(tui.ID)
+	if got := sessionOf(svc, tui.ID); got.PendingApprovals != 1 || got.Status != domain.SessionWaitingApproval {
+		t.Errorf("after one answer: %d pending, %s; want 1, waiting_approval", got.PendingApprovals, got.Status)
+	}
+}
+
+// A live session with nothing pending is not left showing a stale count.
+func TestBranchRequestsRestored_ClearsAStaleWait(t *testing.T) {
+	svc, _ := newInteractiveService(t)
+	tui, _ := startInteractive(t, svc, InteractiveRequest{})
+	svc.sessions.UpdateStatus(tui.ID, domain.SessionWaitingApproval)
+	svc.record(tui.ID, SessionEvent{Type: "x"}, sessionChange{metrics: &ports.SessionMetrics{PendingApprovals: 1}})
+	svc.BranchRequestsRestored(tui.ID, 0)
+	if got := sessionOf(svc, tui.ID); got.PendingApprovals != 0 || got.Status != domain.SessionRunning {
+		t.Errorf("%d pending, %s; want 0, running", got.PendingApprovals, got.Status)
+	}
+}

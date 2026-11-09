@@ -1606,6 +1606,47 @@ func (s *Service) BranchRequestFiled(id string) {
 	s.record(id, SessionEvent{Type: "branch_request_needed", Status: domain.SessionWaitingApproval, At: time.Now()}, change)
 }
 
+// BranchRequestsRestored implements ports.BranchRequestWaiter: the boot's
+// recount. The session's count becomes the pending requests stored for it,
+// whatever it was, and the wait behind the count is rebuilt so that settling a
+// request filed before the restart lowers it.
+func (s *Service) BranchRequestsRestored(id string, pending int) {
+	cur := s.sessions.Get(id)
+	if cur == nil {
+		return
+	}
+	prior := cur.Status
+	if cur.Status == domain.SessionWaitingApproval {
+		// stored as waiting before a restart: the status it had is not stored
+		prior = domain.SessionThinking
+		if cur.Interactive {
+			prior = domain.SessionRunning
+		}
+	}
+	s.mu.Lock()
+	delete(s.branchWaits, id)
+	if pending > 0 {
+		s.branchWaits[id] = &branchWait{pending: pending, prior: prior}
+	}
+	s.mu.Unlock()
+
+	change := sessionChange{}
+	if m := s.metricsOf(id); m != nil {
+		m.PendingApprovals = pending
+		change.metrics = m
+	}
+	ev := SessionEvent{Type: "branch_requests_restored", At: time.Now()}
+	switch {
+	case pending > 0:
+		ev.Status, change.status = domain.SessionWaitingApproval, domain.SessionWaitingApproval
+	case cur.Status == domain.SessionWaitingApproval:
+		ev.Status, change.status = prior, prior
+	case change.metrics == nil || cur.PendingApprovals == pending:
+		return // nothing to correct
+	}
+	s.record(id, ev, change)
+}
+
 // BranchRequestSettled implements ports.BranchRequestWaiter: the last settled
 // request puts the session back to the status it had before.
 func (s *Service) BranchRequestSettled(id string) {
