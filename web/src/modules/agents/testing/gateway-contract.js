@@ -209,6 +209,60 @@ export function catalogGatewayContract(name, makeSubject) {
     assert.deepEqual([bad.status, bad.error, bad.hint], ["error", "executable not found", "Install it first."]);
   });
 
+  contract("the catalog read says a never-probed server's tools are unknown", async () => {
+    const { gateway } = subject();
+    const github = (await gateway.getCatalog()).mcpServers[0];
+    assert.deepEqual([github.knownTools, github.probedAt, github.disabledTools], [null, "", []]);
+  });
+
+  contract("an MCP server save probes once, keeps the tool default and answers the probe", async () => {
+    const { gateway } = subject();
+    const server = { name: "github", transport: "stdio", command: "npx", args: ["-y"], disabledTools: ["search", "gone"] };
+    const saved = await gateway.saveMcpServer({ previousName: "github", server, agents: ["ux-designer"], projects: ["p1"] });
+    assert.deepEqual(saved.probe, { status: "ok", error: "", hint: "" });
+    const github = (await gateway.getCatalog()).mcpServers[0];
+    assert.deepEqual([github.knownTools, github.disabledTools], [["search"], ["search", "gone"]], "a name the tools no longer hold is kept");
+    assert.ok(github.probedAt !== "", "the probe time is kept");
+    const dry = await gateway.saveMcpServer({ previousName: "github", server, agents: ["ux-designer"], projects: ["p1"] }, { dryRun: true });
+    assert.equal(dry.probe ?? null, null, "a dry run probes nothing");
+    const absent = await gateway.saveMcpServer({ previousName: "github", server: { ...server, disabledTools: undefined }, agents: ["ux-designer"], projects: ["p1"] });
+    assert.deepEqual((await gateway.getCatalog()).mcpServers[0].disabledTools, ["search", "gone"], "an absent list keeps the stored one");
+    assert.equal(absent.probe?.status, "ok");
+    await gateway.saveMcpServer({ previousName: "github", server: { ...server, disabledTools: [] }, agents: ["ux-designer"], projects: ["p1"] });
+    assert.deepEqual((await gateway.getCatalog()).mcpServers[0].disabledTools, [], "an empty list clears it");
+  });
+
+  contract("a failed probe on save keeps the server saved and its last known tools", async () => {
+    const { gateway } = subject();
+    const base = { name: "github", transport: "stdio", command: "npx", disabledTools: [] };
+    await gateway.saveMcpServer({ previousName: "github", server: base, agents: [], projects: [] });
+    const known = (await gateway.getCatalog()).mcpServers[0];
+    const saved = await gateway.saveMcpServer({ previousName: "github", server: { ...base, command: "missing-cmd" }, agents: [], projects: [] });
+    assert.deepEqual([saved.probe?.status, saved.probe?.error, saved.probe?.hint], ["error", "executable not found", "Install it first."]);
+    const after = (await gateway.getCatalog()).mcpServers[0];
+    assert.equal(after.command, "missing-cmd");
+    assert.deepEqual([after.knownTools, after.probedAt], [known.knownTools, known.probedAt]);
+  });
+
+  contract("Refresh tools probes a saved server, answers its entry and probe, and refuses an unknown name", async () => {
+    const { gateway } = subject();
+    const answer = await gateway.refreshMcpServerTools("github");
+    assert.deepEqual(answer.probe, { status: "ok", error: "", hint: "" });
+    assert.deepEqual(answer.server.knownTools, ["search"]);
+    assert.equal(answer.server.name, "github");
+    assert.deepEqual((await gateway.getCatalog()).mcpServers[0].knownTools, ["search"]);
+    const err = await assert.rejects(gateway.refreshMcpServerTools("nope"), "UNKNOWN_REFERENCE");
+    assert.deepEqual(describeRefusal(err).names, ["nope"]);
+  });
+
+  contract("a rename keeps the server's tool data under the new name", async () => {
+    const { gateway } = subject();
+    await gateway.refreshMcpServerTools("github");
+    await gateway.saveMcpServer({ previousName: "github", server: { name: "gh", transport: "stdio", command: "npx" }, agents: [], projects: [] });
+    const gh = (await gateway.getCatalog()).mcpServers.find((m) => m.name === "gh");
+    assert.deepEqual(gh.knownTools, ["search"]);
+  });
+
   contract("lists the projects a server can be given to", async () => {
     const { gateway } = subject();
     assert.deepEqual(await gateway.listProjects(), [{ id: "p1", name: "harness" }]);

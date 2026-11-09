@@ -18,11 +18,12 @@ const without = (list, name) => list.filter((x) => x !== name);
 const swap = (list, from, to) => list.map((x) => (x === from ? to : x));
 
 /**
- * @param {{ catalog: object, projects?: Record<string, string[]>, projectNames?: Record<string, string>, projectAgents?: Record<string, { mode: string, agents: string[] }>, env?: Record<string, boolean> }} world
- *   catalog is the wire format of GET /api/get_agent_catalog
+ * @param {{ catalog: object, projects?: Record<string, string[]>, projectNames?: Record<string, string>, projectAgents?: Record<string, { mode: string, agents: string[] }>, env?: Record<string, boolean>, probeTools?: Record<string, string[]> }} world
+ *   catalog is the wire format of GET /api/get_agent_catalog; probeTools is what probing a server by name finds (default: one tool, search)
  */
-export function memoryCatalogServer({ catalog, projects = {}, projectNames = {}, projectAgents = {}, env = {} }) {
+export function memoryCatalogServer({ catalog, projects = {}, projectNames = {}, projectAgents = {}, env = {}, probeTools = {} }) {
   let cat = clone(catalog);
+  let probes = 0;
   let projectLists = clone(projects);
   /** Each project's enabled agents; a project not listed has mode all. */
   let enabledAgents = clone(projectAgents);
@@ -114,6 +115,14 @@ export function memoryCatalogServer({ catalog, projects = {}, projectNames = {},
     if (missing.length) fail("UNKNOWN_REFERENCE", `unknown: ${missing.join(", ")}`, 400, { names: missing });
   };
   const namesOf = (list) => list.map((x) => x.name);
+
+  /** The probe of a server: a command "missing-cmd" fails; any other lists the world's tools for it, or one. Stores the result on the entry, as the server does. */
+  const probeInto = (entry) => {
+    if (entry.command === "missing-cmd") return { status: "error", error: "executable not found", hint: "Install it first." };
+    entry.known_tools = [...(probeTools[entry.name] ?? ["search"])];
+    entry.probed_at = new Date(Date.UTC(2026, 10, 9, 10, ++probes)).toISOString();
+    return { status: "ok", error: "", hint: "" };
+  };
 
   /** Each verb edits the draft and answers the files it touches and its summary. */
   const verbs = {
@@ -232,10 +241,15 @@ export function memoryCatalogServer({ catalog, projects = {}, projectNames = {},
         projectLists[id] = without(projectLists[id], server.name);
         if (inProjects.includes(id)) projectLists[id].push(server.name);
       }
-      const next = { ...server, env_refs: [], agents: [], projects: [], problems: [] };
+      // The tool data stays with the server through a rename; disabled_tools absent keeps it, [] clears it.
+      const old = at < 0 ? null : c.mcp_servers[at];
+      const { disabled_tools: disabled, ...fields } = server;
+      const next = { ...fields, env_refs: [], agents: [], projects: [], problems: [], known_tools: old?.known_tools ?? null, probed_at: old?.probed_at ?? null, disabled_tools: disabled ?? old?.disabled_tools ?? [] };
       if (at < 0) c.mcp_servers.push(next);
       else c.mcp_servers[at] = next;
-      return { files: ["mcp-servers.json", "agents.json"], summary: () => `Saved mcp-servers.json — ${server.name}` };
+      // Every save probes once; a failed probe keeps the last known tools and never fails the save.
+      const probe = probeInto(next);
+      return { files: ["mcp-servers.json", "agents.json"], summary: () => `Saved mcp-servers.json — ${server.name}`, probe };
     },
     delete_catalog_mcp_server(c, { name }) {
       if (!c.mcp_servers.some((m) => m.name === name)) fail("MCP_SERVER_NOT_FOUND", `no server ${name}`, 404);
@@ -260,7 +274,7 @@ export function memoryCatalogServer({ catalog, projects = {}, projectNames = {},
 
   function commit(verb, body, keep) {
     const draft = clone(cat);
-    let { files, summary } = verbs[verb](draft, body);
+    let { files, summary, probe } = verbs[verb](draft, body);
     derive(draft);
     // A server's save writes agents.json only when an agent's list changed.
     if (verb.endsWith("_mcp_server")) files = files.filter((f) => f !== "agents.json" || textOf[f](cat) !== textOf[f](draft));
@@ -290,7 +304,7 @@ export function memoryCatalogServer({ catalog, projects = {}, projectNames = {},
     const id = `change-${++counter}`;
     latest = { id, before, files, after: Object.fromEntries(files.map((f) => [f, cat.versions[f]])) };
     publish({ agent_catalog_changed: { paths: [...files] } });
-    return { change: { id, summary: summary(cat), writes, projects }, versions: clone(cat.versions) };
+    return { change: { id, summary: summary(cat), writes, projects }, versions: clone(cat.versions), ...(probe ? { probe } : {}) };
   }
 
   const routes = {
@@ -317,6 +331,12 @@ export function memoryCatalogServer({ catalog, projects = {}, projectNames = {},
       return { change: { id: "", summary: "Undid the last change", writes }, versions: clone(cat.versions) };
     },
     "POST test_catalog_mcp_server": ({ server }) => ({ probe: server.command === "missing-cmd" ? { status: "error", tools: [], error: "executable not found", hint: "Install it first." } : { status: "ok", tools: [{ name: "search", description: "Searches." }], error: "", hint: "" } }),
+    "POST refresh_catalog_mcp_server_tools": ({ name }) => {
+      const at = cat.mcp_servers.findIndex((m) => m.name === name);
+      if (at < 0) fail("UNKNOWN_REFERENCE", `unknown: ${name}`, 404, { names: [name] });
+      const probe = probeInto(cat.mcp_servers[at]);
+      return { server: clone(cat.mcp_servers[at]), probe };
+    },
     "GET get_project_mcp_servers": ({ project_id: id }) => ({ mcp_servers: clone(projectLists[id] ?? fail("PROJECT_NOT_FOUND", `no project ${id}`, 404)) }),
     "POST set_project_mcp_servers": ({ project_id: id, mcp_servers: names }) => {
       if (!(id in projectLists)) fail("PROJECT_NOT_FOUND", `no project ${id}`, 404);

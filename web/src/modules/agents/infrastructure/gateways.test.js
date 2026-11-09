@@ -58,3 +58,15 @@ test("the catalog read carries each agent's repositories: assignment, prompt and
   assert.deepEqual(c.agents[0].repositories, [{ projectId: "p1", repositoryId: "r1", repositoryName: "harness-api", unassigned: true, promptSet: true, listVersion: "l9" }]);
   assert.deepEqual(c.agents[1].repositories, [], "an agent the server lists none for has none");
 });
+
+test("http · an MCP server save carries disabled_tools only when asked, and Refresh tools posts the name alone", async () => {
+  const { gateway, stub } = http(makeWorld());
+  const server = { name: "github", transport: "stdio", command: "npx" };
+  await gateway.saveMcpServer({ previousName: "github", server: { ...server, disabledTools: ["search"] }, agents: [], projects: [] });
+  await gateway.saveMcpServer({ previousName: "github", server, agents: [], projects: [] });
+  await gateway.refreshMcpServerTools("github");
+  const [withTools, without, refresh] = stub.requests.map(([, path, body]) => [path, body]);
+  assert.deepEqual(withTools[1].server.disabled_tools, ["search"]);
+  assert.ok(!("disabled_tools" in without[1].server));
+  assert.deepEqual(refresh, ["/api/refresh_catalog_mcp_server_tools", { name: "github" }]);
+});

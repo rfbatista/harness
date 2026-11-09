@@ -50,6 +50,9 @@
  * @property {{ name: string, set: boolean }[]} envRefs  never a value
  * @property {boolean} builtIn  built into the harness (the services server): no edit, delete or test
  * @property {string[]} tools  a built-in server's tool names, [] for any other
+ * @property {string[] | null} knownTools  the tool names of the last successful probe; null: never probed, tools unknown; []: probed, no tools
+ * @property {string} probedAt  when knownTools was taken (ISO time), "" with it
+ * @property {string[]} disabledTools  the tool default: names of the disabled tools; may name a tool knownTools no longer holds
  * @property {string[]} agents
  * @property {{ id: string, name: string }[]} projects
  * @property {Problem[]} problems
@@ -78,6 +81,12 @@
  *           id is "" for a dry run; before is null for a new file, after for a deleted one;
  *           projects are the project lists the change sets: MCP servers (before, after) and enabled agents (enabledAgentsBefore, enabledAgentsAfter)
  * @property {Record<string, string>} versions
+ * @property {ProbeOutcome | null} [probe]  an MCP server save's own probe (not on a dry run); null for any other write
+ *
+ * @typedef {object} ProbeOutcome
+ * @property {"ok"|"error"} status
+ * @property {string} error
+ * @property {string} hint
  *
  * @typedef {object} Probe
  * @property {"ok"|"error"} status
@@ -97,10 +106,11 @@
  * @property {(name: string, options?: WriteOptions) => Promise<WriteResult>} deleteBundle
  * @property {(input: { previousName?: string, skill: { name: string, description: string, body: string, files: { path: string, content: string, encoding?: string }[], deletedFiles: string[] }, addTo: { agents: string[], bundles: string[] } }, options?: WriteOptions) => Promise<WriteResult>} saveSkill
  * @property {(name: string, options?: WriteOptions) => Promise<WriteResult>} deleteSkill
- * @property {(input: { previousName?: string, server: { name: string, transport: string, command?: string, args?: string[], env?: Record<string, string>, url?: string, headers?: Record<string, string> }, agents: string[], projects: string[] }, options?: WriteOptions) => Promise<WriteResult>} saveMcpServer
+ * @property {(input: { previousName?: string, server: { name: string, transport: string, command?: string, args?: string[], env?: Record<string, string>, url?: string, headers?: Record<string, string>, disabledTools?: string[] }, agents: string[], projects: string[] }, options?: WriteOptions) => Promise<WriteResult>} saveMcpServer
  * @property {(name: string, options?: WriteOptions) => Promise<WriteResult>} deleteMcpServer
  * @property {(changeId: string) => Promise<WriteResult>} undoChange  rejects CHANGE_NOT_UNDOABLE or CATALOG_CHANGED
  * @property {(server: object) => Promise<Probe>} testMcpServer  an unsaved server; stores nothing
+ * @property {(name: string) => Promise<{ server: CatalogMcpServer, probe: ProbeOutcome }>} refreshMcpServerTools  probes a saved server and stores only its tool data; rejects UNKNOWN_REFERENCE
  * @property {() => Promise<{ id: string, name: string }[]>} listProjects  every project, for Who gets it
  * @property {(projectId: string) => Promise<string[]>} getProjectMcpServers
  * @property {(projectId: string, names: string[]) => Promise<string[]>} setProjectMcpServers

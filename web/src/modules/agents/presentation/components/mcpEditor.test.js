@@ -27,8 +27,9 @@ function fakeTimers() {
 const settle = () => new Promise((r) => setTimeout(r, 0));
 
 /** The page at `path`, over the memory catalog with two projects. */
-async function open(path, { search = "", hash = "", probe, env } = {}) {
+async function open(path, { search = "", hash = "", probe, env, github } = {}) {
   const world = makeWorld();
+  if (github) Object.assign(world.catalog.mcp_servers[0], github);
   world.projects.p2 = [];
   world.projectNames.p2 = "billing-api";
   world.catalog.agents[1].description = "Builds the API.";
@@ -128,7 +129,7 @@ test("a typed name and command ask the server for a preview after a pause, and A
   await timers.fire();
   assert.equal(saves(server, true).length, 1);
   const sent = saves(server, true)[0][2];
-  assert.deepEqual(sent.server, { name: "playwright", transport: "stdio", command: "npx", args: [], env: {}, url: "", headers: {} });
+  assert.deepEqual(sent.server, { name: "playwright", transport: "stdio", command: "npx", args: [], env: {}, url: "", headers: {}, disabled_tools: [] });
   assert.deepEqual([sent.agents, sent.projects], [[], []]);
   assert.deepEqual(sent.base_versions, { "agents.json": "sha256:a1", "mcp-servers.json": "sha256:m1" });
   assert.deepEqual(page.mfPreviewFiles.map((f) => f.path), ["mcp-servers.json"]);
@@ -564,4 +565,55 @@ test("Tab wraps inside the drawer, and the full page leaves the keyboard alone",
   const free = tab();
   full.page.mfTrapTab(free);
   assert.equal(free.prevented, false);
+});
+
+const TOOLS = { known_tools: ["create_issue", "search_code"], probed_at: "2026-11-09T10:00:00Z", disabled_tools: ["create_issue"] };
+
+test("the editor lists the known tools with their default, the last probe time, and a toggle that marks it changed", async () => {
+  const { page, timers, server } = await open("/agents/mcp/github/edit", { github: TOOLS });
+  assert.equal(page.mfToolsKnown, true);
+  assert.deepEqual(page.mfToolRows.map((r) => [r.name, r.checked, r.label]), [["create_issue", false, "Disabled"], ["search_code", true, "Enabled"]]);
+  assert.equal(page.mfToolsProbed, "Last probed 2026-11-09 10:00 UTC.");
+  assert.equal(page.mfRefreshShown, true);
+  assert.equal(page.sv.canSave, false);
+  page.mfToggleTool(ev({ name: "search_code" }));
+  assert.equal(page.mfChangeCount, 1);
+  await timers.fire();
+  assert.deepEqual(saves(server, true).at(-1)[2].server.disabled_tools, ["create_issue", "search_code"]);
+  await page.saveEditor();
+  assert.deepEqual(page.catalog.mcpServers[0].disabledTools, ["create_issue", "search_code"]);
+});
+
+test("a never-probed server says its tools are unknown and lists none; a new server has nothing to refresh", async () => {
+  const { page } = await open("/agents/mcp/github/edit");
+  assert.equal(page.mfToolsUnknown, true);
+  assert.deepEqual(page.mfToolRows, []);
+  assert.equal(page.mfToolsSummary, "Tools unknown. Every tool of this server is enabled.");
+  const fresh = await open("/agents/mcp/new");
+  assert.equal(fresh.page.mfRefreshShown, false);
+});
+
+test("Refresh tools adopts the server's tools and keeps the definition and toggles being edited", async () => {
+  const { page, server } = await open("/agents/mcp/github/edit", { github: TOOLS });
+  page.mfDraft.command = "npx2";
+  page.mfChanged();
+  page.mfToggleTool(ev({ name: "search_code" }));
+  await page.mfRefresh();
+  assert.deepEqual(page.mfToolRows.map((r) => r.name), ["search"], "the server now lists one tool");
+  assert.equal(page.mfDraft.command, "npx2");
+  assert.deepEqual(page.mfDraft.disabledTools, ["create_issue", "search_code"]);
+  assert.equal(page.mfRefreshNoteText, "Probed the server: 1 tool found.");
+  assert.equal(page.mfRefreshDisabled, false);
+  assert.deepEqual(server.requests.filter(([, p]) => p === "/refresh_catalog_mcp_server_tools").map(([, , b]) => b), [{ name: "github" }]);
+});
+
+test("a save that cannot probe says why in its toast while the server stays saved", async () => {
+  const { page, timers } = await open("/agents/mcp/github/edit", { github: TOOLS });
+  typeCommand(page, "missing-cmd");
+  await timers.fire();
+  await page.saveEditor();
+  assert.equal(page.catalog.mcpServers[0].command, "missing-cmd");
+  assert.deepEqual(page.catalog.mcpServers[0].knownTools, ["create_issue", "search_code"]);
+  assert.equal(page.toast.tone, "danger");
+  assert.ok(page.toast.note.startsWith("The server is saved, but probing it failed: executable not found Install it first. Its last known tools are kept."));
 });
