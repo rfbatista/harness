@@ -4,7 +4,10 @@ package web_test
 
 import (
 	"context"
+	"os"
+	"path/filepath"
 	"testing"
+	"time"
 
 	"github.com/chromedp/chromedp"
 
@@ -48,6 +51,27 @@ func (s stubRunWorktrees) ListRepositoryRunWorktrees(_ context.Context, _, _ str
 	return []*domain.RunWorktree{{Key: "main", Kind: domain.RunWorktreeMain, Branch: "main"}, s.session}, nil
 }
 
+// shot saves a screenshot of the page as <name>.png in $SERVICES_SHOTS_DIR, to compare with
+// the designs; without the variable it does nothing.
+func shot(name string) chromedp.Action {
+	return chromedp.ActionFunc(func(ctx context.Context) error {
+		dir := os.Getenv("SERVICES_SHOTS_DIR")
+		if dir == "" {
+			return nil
+		}
+		var png []byte
+		if err := chromedp.CaptureScreenshot(&png).Do(ctx); err != nil {
+			return err
+		}
+		return os.WriteFile(filepath.Join(dir, name+".png"), png, 0o644)
+	})
+}
+
+// theme pins the page's theme, light or dark.
+func theme(name string) chromedp.Action {
+	return chromedp.Evaluate(`document.documentElement.dataset.theme = '`+name+`'`, nil)
+}
+
 type fixedBranch string
 
 func (b fixedBranch) CurrentBranch(context.Context, string) (string, error) { return string(b), nil }
@@ -87,6 +111,13 @@ func TestAServiceIsStartedInASessionsWorktreeFromTheRunInPicker_EndToEnd(t *test
 		waitUntil(`!!`+trigger+` && `+trigger+`.textContent.includes('main')`),
 		chromedp.Evaluate(trigger+`.click()`, nil),
 		waitUntil(`[...document.querySelectorAll('[role=option]')].some((o) => o.textContent.includes('agent/other') && o.textContent.includes('go-developer'))`),
+		chromedp.Sleep(300*time.Millisecond),
+		theme("light"),
+		chromedp.Sleep(200*time.Millisecond),
+		shot("picker-open-light"),
+		theme("dark"),
+		chromedp.Sleep(200*time.Millisecond),
+		shot("picker-open-dark"),
 	)
 	b.run("pick the session's worktree: nothing starts",
 		chromedp.Evaluate(`[...document.querySelectorAll('[role=option]')].find((o) => o.textContent.includes('agent/other')).click()`, nil),
@@ -102,6 +133,13 @@ func TestAServiceIsStartedInASessionsWorktreeFromTheRunInPicker_EndToEnd(t *test
 	b.run("the log's header names it too",
 		chromedp.Click(`[data-service][data-name=web] [data-action=log]`, chromedp.ByQuery),
 		waitUntil(`document.querySelector('[data-service-log] .meta').textContent.includes('session worktree @ agent/other')`),
+		chromedp.Sleep(300*time.Millisecond),
+		theme("light"),
+		chromedp.Sleep(200*time.Millisecond),
+		shot("running-in-session-light"),
+		theme("dark"),
+		chromedp.Sleep(200*time.Millisecond),
+		shot("running-in-session-dark"),
 	)
 	b.run("stop it, reload: the pick is remembered",
 		chromedp.Click(`[data-service][data-name=web] [data-action=stop]`, chromedp.ByQuery),
