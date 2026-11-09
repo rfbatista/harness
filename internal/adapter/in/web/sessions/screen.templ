@@ -20,6 +20,8 @@ var icons = map[string]string{
 	"branch":    `<svg viewBox="0 0 16 16" width="16" height="16" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"><circle cx="4.5" cy="3.5" r="1.5"/><circle cx="4.5" cy="12.5" r="1.5"/><circle cx="11.5" cy="5.5" r="1.5"/><path d="M4.5 5v6M11.5 7c0 3-7 2-7 4"/></svg>`,
 	"stop":      `<svg viewBox="0 0 16 16" width="16" height="16" aria-hidden="true" fill="currentColor"><rect x="4" y="4" width="8" height="8" rx="1.5"/></svg>`,
 	"term":      `<svg viewBox="0 0 16 16" width="16" height="16" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M2.5 3.5h11v9h-11zM5 6.5l2 1.75L5 10M8.5 10h2.5"/></svg>`,
+	"panel":     `<svg viewBox="0 0 16 16" width="16" height="16" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="3" width="12" height="10" rx="1.5"/><path d="M10 3v10"/></svg>`,
+	"close":     `<svg viewBox="0 0 16 16" width="16" height="16" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M4 4l8 8M12 4l-8 8"/></svg>`,
 	"reconnect": `<svg viewBox="0 0 16 16" width="16" height="16" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M13 8a5 5 0 1 1-1.5-3.5M13 2.5v3h-3"/></svg>`,
 }
 
@@ -270,6 +272,12 @@ templ paneTabs() {
 // size and focus mode. None of them focuses the terminal but Reconnect (F2).
 templ paneTools() {
 	<div class="[ tools ]" role="group" x-bind:aria-label="paneTools.groupLabel">
+		<template x-if="interviewToggle">
+			@interviewToggle()
+		</template>
+		<template x-if="interviewToggle">
+			<span class="[ sep ]"></span>
+		</template>
 		<template x-if="paneTools.down">
 			<span class="[ status ]" x-bind:data-state="paneTools.statusState" role="status"><span class="[ word ]" x-text="paneTools.word"></span></span>
 		</template>
@@ -319,6 +327,17 @@ templ paneTools() {
 			</button>
 		</template>
 	</div>
+}
+
+// interviewToggle opens and hides the interview panel (contract: the session
+// has an open interview). It sits before the connection, is not a .pref so it
+// stays on a phone, and never takes the focus to the terminal.
+templ interviewToggle() {
+	<button type="button" class="[ button interview-toggle ]" data-variant="ghost" data-size="sm" data-interview-toggle x-bind:aria-pressed="interviewToggle.pressed ? 'true' : 'false'" x-bind:aria-label="interviewToggle.label" x-bind:title="interviewToggle.pressed ? 'Hide interview panel' : 'Show interview panel'" x-bind:data-signal="interviewToggle.signal ? '' : null" x-on:click="toggleInterviews">
+		@icon("panel")
+		<span class="[ word ]">Questions</span>
+		<span class="[ badge ]" data-tone="attention" x-text="interviewToggle.count"></span>
+	</button>
 }
 
 // paneNote is the strip at the top of the Agent pane when there is no live

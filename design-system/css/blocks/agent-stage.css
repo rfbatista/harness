@@ -1,0 +1,28 @@
+/*
+ * Agent stage — the Agent tab's pane: the terminal, and beside or over it the
+ * interview panel. It fills the session column below the tab row; the
+ * terminal takes the room the panel leaves (it may shrink to nothing, never
+ * hold its content's width, or xterm would never refit). Docked, the panel is
+ * a sibling of the terminal (layout contract L1–L3); narrower than 56rem of
+ * session column it is a sheet (interview-sheet.css), out of flow, which
+ * never resizes the terminal.
+ * <div class="agent-stage"><div class="terminal">…</div>
+ *   [<aside class="interview">…</aside> | <div class="interview-peek">…</div> | <div class="interview-modal">…</div>]</div>
+ */
+
+@layer blocks {
+  .agent-stage {
+    position: relative;
+    display: flex;
+    flex: 1 1 0;
+    min-block-size: 0;
+    min-inline-size: 0;
+
+    & > .terminal { min-inline-size: 0; }
+
+    /* The panel docks only while the session column is wide enough. */
+    @container session (inline-size < 56rem) {
+      & > .interview { display: none; }
+    }
+  }
+}

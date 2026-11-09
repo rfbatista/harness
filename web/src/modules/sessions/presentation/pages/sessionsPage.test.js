@@ -9,6 +9,8 @@ import { memoryGateway } from "../../infrastructure/memory-gateway.js";
 import { makeArtifact } from "../../testing/artifact-fixtures.js";
 import { makeCheck, makeMessage } from "../../testing/channel-fixtures.js";
 import { makeSession, T0, toDTO } from "../../testing/fixtures.js";
+import { interviewDTO } from "../../testing/interview-fixtures.js";
+import { interviewStore } from "../interviewStore.js";
 import { sessionsPage } from "./sessionsPage.js";
 
 file("sessions/presentation/sessionsPage");
@@ -981,5 +983,27 @@ test("a refusal shows in the bar; NOTHING_TO_MOVE names the skipped sessions by 
   assert.equal(instance.selecting, true, "select mode stays so the person can pick again");
   instance.pick("peer-a");
   assert.equal(instance.pickError, "", "picking clears the error");
+  instance.destroy();
+});
+
+test("the Questions toggle is the open interviews of the session whose terminal is on screen, seeded by the page; it flips the panel", () => {
+  const sessions = [makeSession({ id: "live" })];
+  const memory = memoryGateway({ projects: ["p1"], sessions, now: () => T0 });
+  const el = seededElement({
+    project_id: "p1", ticket_id: "t1", sessions: sessions.map(toDTO), agent_names: {}, repository_names: {},
+    interviews: { live: { seq: 2, interviews: [interviewDTO({ session_id: "live" })] } },
+  });
+  const hidden = new Set();
+  const interviews = interviewStore({ prefs: { interviewHidden: (id) => hidden.has(id), setInterviewHidden: (id, on) => (on ? hidden.add(id) : hidden.delete(id)) } });
+  const { instance } = mount(sessionsPage({ gateway: memory.gateway, clock: fixedClock(T0), interviews }), { el });
+  instance.init();
+  instance.select("live");
+  instance.terminalStatus({ detail: status({}) });
+  assert.deepEqual(instance.interviewToggle, { count: "2", label: "Questions, 2 open", pressed: true, signal: false });
+  instance.toggleInterviews();
+  assert.equal(instance.interviewToggle.pressed, false);
+  instance.terminalStatus({ detail: status({ id: "r9", kind: "run" }) });
+  instance.showApp();
+  assert.equal(instance.interviewToggle, null, "a run's terminal has no interview");
   instance.destroy();
 });

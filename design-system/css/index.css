@@ -115,6 +115,13 @@
 @import url("./blocks/person-terms.css");
 @import url("./blocks/terminal.css");
 @import url("./blocks/pane-note.css");
+@import url("./blocks/agent-stage.css");
+@import url("./blocks/interview.css");
+@import url("./blocks/interview-set.css");
+@import url("./blocks/interview-question.css");
+@import url("./blocks/interview-option.css");
+@import url("./blocks/interview-sheet.css");
+@import url("./blocks/interview-toggle.css");
 @import url("./blocks/credential.css");
 @import url("./blocks/artifact-card.css");
 @import url("./blocks/preview.css");

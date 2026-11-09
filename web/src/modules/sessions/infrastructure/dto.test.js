@@ -82,6 +82,13 @@ test("the seed carries agent names for live updates", () => {
   assert.deepEqual([toSeed({ project_id: "p1", sessions: [], task_title: "Port" }).taskTitle, toSeed({ project_id: "p1", sessions: [] }).taskTitle], ["Port", ""]);
 });
 
+test("the seed carries each session's interviews, none when it has none", () => {
+  const seed = toSeed({ project_id: "p1", sessions: [], interviews: { s1: { seq: 3, interviews: [] } } });
+  assert.deepEqual(Object.keys(seed.interviews), ["s1"]);
+  assert.equal(seed.interviews.s1.seq, 3);
+  assert.deepEqual(toSeed({ project_id: "p1", sessions: [] }).interviews, {});
+});
+
 test("feed lines become upserts or deletions", () => {
   assert.equal(toChange({ session: wire }).kind, "upsert");
   assert.deepEqual(toChange({ session: { id: "s1" }, deleted: true }), { kind: "deleted", id: "s1" });

@@ -319,3 +319,21 @@ export {};
  *           Rejects with SESSION_NOT_FOUND. `available` is false where the
  *           platform collects none (Linux).
  */
+
+/**
+ * A session's interviews, read and followed. Implemented by
+ * infrastructure/interviews-gateway.js (GET /api/sessions/{id}/interviews and
+ * the session's interview feed).
+ *
+ * @typedef {import("./interviews.js").InterviewList} InterviewList
+ * @typedef {{ seq: number, kind: "interview_asked" | "interview_changed", interview: import("./interviews.js").Interview }} InterviewEvent
+ *
+ * @typedef {object} InterviewGateway
+ * @property {(sessionId: string, signal?: AbortSignal) => Promise<InterviewList>} list
+ *           The seed's body again, for a resync.
+ * @property {(sessionId: string,
+ *             onEvent: (event: InterviewEvent) => void,
+ *             onStatus: (status: FeedStatus) => void) => () => void} follow
+ *           Follows the session's interview feed until the returned function
+ *           is called. An event it cannot read is dropped.
+ */

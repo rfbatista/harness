@@ -1,0 +1,30 @@
+/*
+ * Interview set — one interview as a bordered card: who asked and when, then
+ * its questions (.interview-question). The card is the common region, so two
+ * stacked interviews are never confused. Exceptions: data-state (open draws
+ * an attention edge on its border).
+ * <section class="interview-set" data-state="open" aria-label="Open interview from architect">
+ *   <header><strong>architect asks 5 questions</strong><span class="asked">Asked 14:32</span></header>
+ *   <fieldset class="interview-question">…</fieldset>…</section>
+ */
+
+@layer blocks {
+  .interview-set {
+    border: var(--border-width) solid var(--color-line-strong);
+    border-radius: var(--radius-md);
+    background: var(--color-raised);
+    overflow: clip;
+
+    &[data-state="open"] { border-color: color-mix(in oklch, var(--color-attention) 45%, var(--color-line-strong)); }
+
+    & > header {
+      display: grid;
+      gap: var(--space-3xs);
+      min-block-size: var(--size-row);
+      padding: var(--space-s) var(--space-m);
+
+      & > strong { font-size: var(--text-sm); }
+      & > .asked { color: var(--color-ink-faint); font-size: var(--text-xs); }
+    }
+  }
+}

@@ -15,6 +15,7 @@ import { announceMessage } from "../channelView.js";
 import { catalogChangeTouches } from "../../domain/agentPicker.js";
 import { agentLabel, delegateOption, rowTitle, startedBy, statusCheckView, summary, toDetailView, toGroupViews } from "../view.js";
 import { DEFAULT_TEXT_SIZE, nextTextSize, TEXT_SIZES } from "../screenPrefs.js";
+import { interviewStore } from "../interviewStore.js";
 
 const TICK_MS = 30_000;
 
@@ -33,6 +34,7 @@ export const FRESH_MS = 8_000;
  *   clock: import("../../../../shared/infrastructure/clock.js").Clock,
  *   channel?: import("../../domain/ports.js").ChannelGateway,  the architect channel; without it the page shows none
  *   channelStore?: ChannelStore,
+ *   interviews?: ReturnType<typeof interviewStore>,  the sessions' interviews, shared with the panel beside the terminal (Alpine.store("sessionsInterviews"))
  *   merge?: import("../../domain/ports.js").MergeGateway,  merging a session's branch; without it there is no Merge tab
  *   location?: { search: string },  ?session=<id> opens that session (a comment links to the session that wrote it); ?agent=<name> opens the project's new-session form with that agent
  *   prefs?: ReturnType<typeof import("../screenPrefs.js").screenPrefs>,  this browser's text size and focus mode
@@ -46,6 +48,7 @@ export const sessionsPage = ({
   clock,
   channel = null,
   channelStore = { messages: [], loaded: false },
+  interviews = interviewStore(),
   merge = null,
   setTimeout = globalThis.setTimeout.bind(globalThis),
   location = globalThis.location,
@@ -305,6 +308,11 @@ export const sessionsPage = ({
     get noteOnly() {
       return this.terminalPanes.length === 0 ? this.paneNote : null;
     },
+    /** The tab row's Questions toggle for the agent terminal on screen; null without an open interview. */
+    get interviewToggle() {
+      const t = this.paneTools;
+      return t?.kind === "agent" ? interviews.toggle(t.id) : null;
+    },
     /** The agent waits on the person: the Agent tab's dot and the terminal's amber edge. */
     get attention() {
       return this.showingSession && this.selected.state === "waiting";
@@ -539,6 +547,8 @@ export const sessionsPage = ({
         this.baseRefs = seed.baseRefs ?? {};
         this.sessions = seed.sessions.filter(ofTask(this.ticketId));
         for (const s of this.sessions) this.remember(s.statusCheck);
+        // The panel paints from the seed: it never waits on a request.
+        interviews.seed(seed.interviews ?? {});
       } catch (err) {
         this.error = describeError(err);
         return;
@@ -1111,6 +1121,13 @@ export const sessionsPage = ({
     },
     cycleTextSize() {
       this.setTextSize(nextTextSize(this.textSize));
+    },
+    /** The Questions toggle: hides or shows the panel; a sheet that opens takes the focus. */
+    toggleInterviews() {
+      const id = this.paneTools?.id;
+      if (!id) return;
+      interviews.flip(id);
+      if (!interviews.docked && interviews.shown(id)) this.$nextTick(() => this.$dispatch("interview-sheet-opened"));
     },
     toggleFocus() {
       this.focusMode = !this.focusMode;

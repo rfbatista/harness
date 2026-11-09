@@ -1,0 +1,63 @@
+/*
+ * Interview — the panel of questions an agent asked the person, docked beside
+ * the terminal in the Agent tab (docs: "UX study: Interview panel"). A head the
+ * height of the tab row, then a scroller that holds the interviews (each an
+ * .interview-set) and scrolls inside itself, never the page. Its width follows
+ * the session column, not the window, and does not animate: animating it would
+ * refit the terminal every frame. Only its content fades in.
+ * <aside class="interview" aria-label="Interview panel"><header><h2>Interview</h2>
+ *   <span class="who">architect · 2 open</span><span class="grow"></span>
+ *   <span class="badge" data-tone="attention">5 open</span><button class="button" data-icon>×</button></header>
+ *   <div class="scroll" tabindex="-1"><section class="interview-set">…</section></div></aside>
+ * The scroller's tabindex is -1 only so Alt+Shift+Q can focus it.
+ */
+
+@layer blocks {
+  .interview {
+    display: flex;
+    flex: none;
+    flex-direction: column;
+    min-block-size: 0;
+    inline-size: clamp(20rem, 34cqi, 26rem);
+    border-inline-start: var(--border-width) solid var(--color-line);
+    background: var(--color-panel);
+
+    & > header {
+      display: flex;
+      flex: none;
+      align-items: center;
+      gap: var(--space-s);
+      min-block-size: 2.5rem;
+      padding-inline: var(--space-m) var(--space-s);
+      border-block-end: var(--border-width) solid var(--color-line);
+
+      & > h2 { font-size: var(--text-base); }
+      & > .grow { flex: 1; }
+      & > .who {
+        min-inline-size: 0;
+        overflow: hidden;
+        color: var(--color-ink-faint);
+        font-size: var(--text-xs);
+        text-overflow: ellipsis;
+        white-space: nowrap;
+      }
+    }
+
+    & > .scroll {
+      display: grid;
+      flex: 1 1 0;
+      grid-template-columns: minmax(0, 1fr);
+      align-content: start;
+      gap: var(--space-m);
+      min-block-size: 0;
+      padding: var(--space-m);
+      overflow: auto;
+      overscroll-behavior: contain;
+      animation: interview-in var(--duration-quick) var(--ease-out);
+    }
+
+    @media (prefers-reduced-motion: reduce) { & > .scroll { animation: none; } }
+  }
+
+  @keyframes interview-in { from { opacity: 0; } }
+}

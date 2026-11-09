@@ -1,0 +1,42 @@
+/*
+ * Interview option — one answer row of a question: a native radio (or a
+ * checkbox in a multiple choice) and its words; the whole row is the label
+ * and the target (32px, 44px on a phone sheet). The recommended option is the
+ * first row, with a signal edge, a wash and the words "Agent recommends": it
+ * is never checked for the person.
+ * Exceptions: data-recommended.
+ * <label class="interview-option" data-recommended><input type="radio" name="q1" value="1">
+ *   <span class="text"><span class="tag">Agent recommends</span><span>The harness database</span><small>Survives restarts.</small></span></label>
+ */
+
+@layer blocks {
+  .interview-option {
+    display: grid;
+    grid-template-columns: auto minmax(0, 1fr);
+    align-items: start;
+    gap: var(--space-s);
+    min-block-size: var(--size-control-md);
+    padding: var(--space-xs) var(--space-s);
+    border: var(--border-width) solid var(--color-line);
+    border-radius: var(--radius-sm);
+    background: var(--color-canvas);
+    font-size: var(--text-sm);
+    cursor: pointer;
+
+    &:hover { background: var(--color-hover); }
+    &:has(input:checked) { border-color: color-mix(in oklch, var(--color-signal) 55%, transparent); background: var(--color-selected); }
+    &:has(input:focus-visible) { outline: var(--border-focus-width) solid var(--color-focus); outline-offset: 1px; }
+    & > input { margin-block-start: 0.15rem; }
+
+    & > .text { display: grid; min-inline-size: 0; }
+    & small { color: var(--color-ink-faint); font-size: var(--text-xs); }
+    & .tag { color: var(--color-signal-strong); font-size: var(--text-xs); font-weight: var(--weight-medium); }
+
+    &[data-recommended] {
+      border-color: color-mix(in oklch, var(--color-signal) 40%, transparent);
+      border-inline-start: 3px solid var(--color-signal);
+      background: var(--color-signal-wash);
+    }
+    &[data-recommended]:has(input:checked) { background: var(--color-selected); }
+  }
+}

@@ -1,0 +1,72 @@
+/*
+ * Interview sheet — the interview panel where the session column is narrower
+ * than 56rem: a peek strip over the terminal's foot ("5 questions from
+ * architect  [Answer]"), and the Answer button opens the panel as a sheet.
+ * Both are out of flow in the agent stage, so neither resizes the terminal; the
+ * sheet never opens by itself. The sheet is centred up to 40rem and 88% high;
+ * on a phone (below 48rem) it is full width and 92% high, with 44px rows.
+ * <div class="interview-peek" role="status"><span class="status" data-dot-only></span><span class="text">…</span><button class="button">Answer</button></div>
+ * <div class="interview-modal"><div class="interview-scrim"></div>
+ *   <div class="interview-sheet" role="dialog" aria-modal="true"><span class="grab"></span><aside class="interview">…</aside></div></div>
+ */
+
+@layer blocks {
+  .interview-peek {
+    position: absolute;
+    inset-inline: var(--space-s);
+    inset-block-end: var(--space-s);
+    z-index: var(--z-sticky);
+    display: flex;
+    align-items: center;
+    gap: var(--space-s);
+    min-block-size: var(--size-touch);
+    padding: var(--space-xs) var(--space-s);
+    border: var(--border-width) solid color-mix(in oklch, var(--color-attention) 45%, transparent);
+    border-radius: var(--radius-md);
+    background: var(--color-raised);
+    box-shadow: var(--shadow-float);
+    font-size: var(--text-sm);
+
+    & > .text { flex: 1; min-inline-size: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  }
+
+  .interview-modal { display: contents; }
+
+  .interview-scrim { position: absolute; inset: 0; z-index: var(--z-overlay); background: var(--color-scrim); }
+
+  .interview-sheet {
+    position: absolute;
+    inset-inline: 0;
+    inset-block-end: 0;
+    z-index: calc(var(--z-overlay) + 1);
+    display: flex;
+    flex-direction: column;
+    inline-size: min(100%, 40rem);
+    max-block-size: 88%;
+    margin-inline: auto;
+    overflow: hidden;
+    border: var(--border-width) solid var(--color-line-strong);
+    border-block-end: 0;
+    border-radius: var(--radius-md) var(--radius-md) 0 0;
+    background: var(--color-panel);
+    box-shadow: var(--shadow-float);
+    animation: interview-sheet-in var(--duration-settle) var(--ease-out-expo);
+
+    & > .grab { display: grid; flex: none; place-items: center; block-size: 0.875rem; }
+    & > .grab::before { content: ""; inline-size: 2.25rem; block-size: 4px; border-radius: 2px; background: var(--color-line-strong); }
+    /* The sheet is as tall as its questions, up to its maximum; they scroll past that. */
+    & > .interview { flex: 0 1 auto; inline-size: auto; border: 0; background: none; }
+    & > .interview > .scroll { flex: 0 1 auto; }
+    & > .interview > header { min-block-size: var(--size-touch); }
+    & .interview-option { min-block-size: var(--size-touch); align-items: center; }
+
+    @media (width < 48rem) {
+      inline-size: 100%;
+      max-block-size: 92%;
+      & > .interview > header .button { min-block-size: var(--size-touch); min-inline-size: var(--size-touch); }
+    }
+    @media (prefers-reduced-motion: reduce) { animation: none; }
+  }
+
+  @keyframes interview-sheet-in { from { translate: 0 100%; } }
+}
