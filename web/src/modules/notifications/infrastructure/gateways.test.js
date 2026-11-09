@@ -83,6 +83,15 @@ test("a notification without its optional fields reads them as empty", () => {
   assert.ok(Object.isFrozen(n));
 });
 
+test("the branch gate's notifications map; any other unknown kind is still BAD_RESPONSE", () => {
+  const dto = notificationDTO(makeNotification());
+  for (const kind of ["branch_request", "branch_finding"]) {
+    const n = toNotification({ ...dto, kind, level: "action", link: "/projects/p1/tasks/t1?session=s1#branch-request-r1" });
+    assert.equal(n.kind, kind);
+  }
+  assert.throws(() => toNotification({ ...dto, kind: "branch_gossip" }), Codes.BAD_RESPONSE);
+});
+
 test("a malformed notification or answer is BAD_RESPONSE; a link off the web UI is refused", () => {
   const dto = notificationDTO(makeNotification());
   assert.throws(() => toNotification({ ...dto, id: "" }), Codes.BAD_RESPONSE);

@@ -105,7 +105,7 @@ func newBranchWeb(t *testing.T) *branchWeb {
 
 	mux := http.NewServeMux()
 	mux.Handle("/api/", httpapi.NewRouter(httpapi.NewHandler(httpapi.Services{
-		Projects: cat.Projects, Agents: cat.Agents, Sessions: e.orch, Planning: plan, BranchGate: e.gate,
+		Projects: cat.Projects, Agents: cat.Agents, Sessions: e.orch, Planning: plan, BranchGate: e.gate, Notifications: e.notes,
 	})))
 	mux.Handle("/", web.NewHandler(web.Deps{
 		Projects: cat.Projects, Tasks: plan, Sessions: e.orch, Agents: cat.Agents, Repositories: cat.Projects,
