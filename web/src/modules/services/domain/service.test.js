@@ -62,7 +62,7 @@ test("a command service's ports link to localhost; an image's link on the host p
 
 test("where a run runs, in words", () => {
   assert.equal(whereLabel(run()), "main checkout @ main");
-  assert.equal(whereLabel(run({ where: { kind: "session", dir: "/w", branch: "agent/x", session_id: "s" } })), "worktree · agent/x");
+  assert.equal(whereLabel(run({ where: { kind: "session", dir: "/w", branch: "agent/x", session_id: "s" } })), "session worktree @ agent/x");
   assert.equal(whereLabel(run({ where: { kind: "service_folder", dir: "/f", branch: "", session_id: "" } })), "service folder");
   assert.equal(whereLabel(run({ where: { kind: "container", dir: "", branch: "", session_id: "" } })), "container");
   assert.equal(whereLabel(null), "");

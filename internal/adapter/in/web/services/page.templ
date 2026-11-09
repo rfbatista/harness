@@ -97,9 +97,28 @@ templ Page(frame shell.Frame, projectID, projectName string, seed Seed, repos []
 											</span>
 											<span data-service-time x-text="row.time"></span>
 										</div>
+										<div class="[ banner ]" data-tone="attention" role="status" data-run-in-fallback x-bind:hidden="!row.runIn.hasFallback">
+											<span class="[ grow ]"><strong>Your last pick is gone.</strong> <span x-text="row.runIn.fallback"></span></span>
+											<button type="button" class="[ button ]" data-variant="ghost" data-size="sm" x-bind:data-service-id="row.id" x-on:click="dismissRunInFallback">Dismiss</button>
+										</div>
 										<p class="[ reason ]" data-service-reason x-bind:hidden="!row.hasReason"><span x-text="row.reason"></span> <button type="button" class="[ button ]" data-variant="ghost" data-size="sm" x-bind:data-service-id="row.id" x-on:click="openLogRow">Open log</button></p>
 									</div>
 									<div class="[ actions ]">
+										<div class="[ run-in ]" data-run-in x-show="row.runIn.show" x-bind:data-service-id="row.id">
+											<label class="[ visually-hidden ]" x-bind:for="row.runIn.selectId" x-text="row.runIn.name"></label>
+											<div class="[ dropdown ]" x-data="dropdown" data-fit x-bind:data-service-id="row.id" x-bind:aria-busy="row.runIn.loading" x-bind:data-error="row.runIn.error" x-on:dropdown-change="runInPicked" x-on:dropdown-retry="runInOpened" x-on:click="runInOpened" x-on:keydown.down="runInOpened" x-on:keydown.enter="runInOpened" x-on:keydown.space="runInOpened">
+												<select x-bind:id="row.runIn.selectId" x-bind:data-service-id="row.id" x-effect="syncRunIn" x-bind:disabled="row.start.disabled">
+													<template x-for="o in row.runIn.main" x-bind:key="o.key">
+														<option x-bind:value="o.key" x-bind:data-description="o.description" x-text="o.label"></option>
+													</template>
+													<optgroup x-bind:label="row.runIn.groupLabel">
+														<template x-for="o in row.runIn.sessions" x-bind:key="o.key">
+															<option x-bind:value="o.key" x-bind:data-description="o.description" x-bind:data-tone="o.tone" x-text="o.label"></option>
+														</template>
+													</optgroup>
+												</select>
+											</div>
+										</div>
 										<button type="button" class="[ button ]" data-variant="primary" data-size="sm" data-action="start" x-show="row.start.show" x-bind:data-service-id="row.id" x-bind:aria-label="row.start.name" x-bind:title="row.start.title" x-bind:disabled="row.start.disabled" x-bind:aria-busy="row.start.busy" x-on:click="startRow" x-text="row.start.text"></button>
 										<button type="button" class="[ button ]" data-size="sm" data-action="stop" x-show="row.stop.show" x-bind:data-service-id="row.id" x-bind:aria-label="row.stop.name" x-bind:disabled="row.stop.disabled" x-bind:aria-busy="row.stop.busy" x-on:click="stopRow" x-text="row.stop.text"></button>
 										<button type="button" class="[ button ]" data-size="sm" data-action="restart" x-show="row.restart.show" x-bind:data-service-id="row.id" x-bind:aria-label="row.restart.name" x-bind:disabled="row.restart.disabled" x-bind:aria-busy="row.restart.busy" x-on:click="restartRow" x-text="row.restart.text"></button>

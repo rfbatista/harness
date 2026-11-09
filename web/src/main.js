@@ -155,7 +155,7 @@ registerAttribution(Alpine, { gateway: attributionGateway(api) });
 registerAgentCredential(Alpine, { gateway: agentCredentialGateway(api) });
 registerAgentIsolation(Alpine);
 registerSettings(Alpine, { gateway: settingsGateway(api) });
-registerServices(Alpine, { gateway: servicesGateway(api, events) });
+registerServices(Alpine, { gateway: servicesGateway(api, events), prefs });
 registerWritingHelper(Alpine, { gateway: stepGateway({ base: "/api" }) });
 
 Alpine.start();

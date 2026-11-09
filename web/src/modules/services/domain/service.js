@@ -98,7 +98,7 @@ export function portLinks(service) {
 export function whereLabel(run) {
   switch (run?.where.kind) {
     case "main": return run.where.branch ? `main checkout @ ${run.where.branch}` : "main checkout";
-    case "session": return `worktree · ${run.where.branch}`;
+    case "session": return `session worktree @ ${run.where.branch}`;
     case "service_folder": return "service folder";
     case "container": return "container";
     default: return "";

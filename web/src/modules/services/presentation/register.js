@@ -9,10 +9,10 @@ import { servicesRuntime } from "./components/servicesRuntime.js";
 
 /**
  * @param {import("alpinejs").Alpine} Alpine
- * @param {{ gateway: import("../domain/ports.js").ServicesGateway }} deps
+ * @param {{ gateway: import("../domain/ports.js").ServicesGateway, prefs?: import("../../../shared/infrastructure/storage.js").Preferences }} deps
  */
 export function registerServices(Alpine, deps) {
-  Alpine.data("servicesPage", servicesPage({ gateway: deps.gateway, clock: deps.clock ?? systemClock }));
+  Alpine.data("servicesPage", servicesPage({ gateway: deps.gateway, clock: deps.clock ?? systemClock, prefs: deps.prefs }));
   Alpine.data("serviceForm", serviceForm({ gateway: deps.gateway }));
   Alpine.data("serviceLog", serviceLog({ gateway: deps.gateway, clock: deps.clock ?? systemClock }));
   Alpine.data("servicesNavCount", servicesNavCount({ gateway: deps.gateway }));

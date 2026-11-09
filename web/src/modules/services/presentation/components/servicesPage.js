@@ -7,25 +7,30 @@
 //   <main x-data="servicesPage" data-seed="services-seed"> …
 
 import { FeedStatus } from "../../../../shared/domain/feed.js";
+import { branchLabel, worktreeKindWord } from "../../../../shared/domain/runWorktree.js";
 import { systemClock } from "../../../../shared/infrastructure/clock.js";
 import { describeError } from "../../../../shared/presentation/errors.js";
 import { readSeed } from "../../../../shared/presentation/seed.js";
 import { runLine } from "../../domain/log.js";
+import { afterFailedRead, afterPick, afterRead, freshRunIn, hasRunIn, pickKeyOf, pickedWorktree, startKey } from "../../domain/runIn.js";
 import { applyEvent, groupServices, isActive, runningCount, savedNotice, statusView, upsertService } from "../../domain/service.js";
 import { trapTab } from "../focusTrap.js";
-import { serviceRow } from "../view.js";
+import { runInView, serviceRow } from "../view.js";
 
 /** How often the times on the rows move on. */
 const TICK_MS = 15_000;
+
+const noPrefs = { get: () => null, set() {} };
 
 /**
  * @param {{
  *   gateway: import("../../domain/ports.js").ServicesGateway,
  *   clock?: import("../../../../shared/infrastructure/clock.js").Clock,
  *   timers?: { setInterval: typeof setInterval, clearInterval: typeof clearInterval },
+ *   prefs?: import("../../../../shared/infrastructure/storage.js").Preferences,  the browser's own choices: each service's "Run in" pick
  * }} deps
  */
-export const servicesPage = ({ gateway, clock = systemClock, timers = globalThis }) => () => {
+export const servicesPage = ({ gateway, clock = systemClock, timers = globalThis, prefs = noPrefs }) => () => {
   let unfollow = () => {};
   let ticker = null;
 
@@ -46,6 +51,8 @@ export const servicesPage = ({ gateway, clock = systemClock, timers = globalThis
     error: null,
     /** The action in flight per service id: "start", "stop" or "restart". */
     flights: {},
+    /** The "Run in" pick per service id that offers one (domain/runIn.js). */
+    runIns: {},
     /** The refusal of the last action, {title, message, code, next, links}; null for none. */
     refusal: null,
     /** The service whose log is open (the log viewer follows it). */
@@ -70,6 +77,7 @@ export const servicesPage = ({ gateway, clock = systemClock, timers = globalThis
         count: g.services.length,
         rows: g.services.map((s) => ({
           ...serviceRow(s, this.now, { flight: this.flights[s.id] ?? "", runtime: this.runtime }),
+          runIn: runInView(s, this.runIns[s.id]),
           current: s.id === this.logId,
           canDelete: !isActive(s),
         })),
@@ -207,6 +215,7 @@ export const servicesPage = ({ gateway, clock = systemClock, timers = globalThis
       if (!next.applied) return;
       this.services = next.state.services;
       this.seq = next.state.seq;
+      this.readRunIns();
       if (this.logId !== "" && !this.services.some((x) => x.id === this.logId)) this.closeLog();
     },
 
@@ -215,6 +224,7 @@ export const servicesPage = ({ gateway, clock = systemClock, timers = globalThis
       this.seq = list.seq;
       this.runtime = list.runtime;
       this.sandbox = list.sandbox;
+      this.readRunIns();
     },
 
     /** Reads the list. Events the feed delivers meanwhile are at or below its seq, or a gap again. */
@@ -259,7 +269,7 @@ export const servicesPage = ({ gateway, clock = systemClock, timers = globalThis
       const seqBefore = this.seq;
       try {
         if (verb === "start") {
-          const answer = await gateway.startService(id);
+          const answer = await gateway.startService(id, this.runIns[id] ? startKey(this.runIns[id]) : "");
           if (answer.alreadyRunning) this.openLog(id);
           this.settle(answer.service, seqBefore);
         } else {
@@ -269,6 +279,8 @@ export const servicesPage = ({ gateway, clock = systemClock, timers = globalThis
         const shown = describeError(err);
         this.refusal = { ...shown, title: `${service.name} did not ${verb === "restart" ? "restart" : verb}.` };
         if (shown.code === "SERVICE_NOT_FOUND") this.load();
+        // The worktree is gone: the refusal says so already, so the list is read again without a second notice.
+        if (shown.code === "WORKTREE_NOT_AVAILABLE") await this.loadRunIn(id, { silent: true });
       } finally {
         const { [id]: _done, ...rest } = this.flights;
         this.flights = rest;
@@ -279,6 +291,68 @@ export const servicesPage = ({ gateway, clock = systemClock, timers = globalThis
     settle(service, seqBefore) {
       if (this.seq !== seqBefore) return;
       this.services = upsertService(this.services, service);
+    },
+
+    // ── "Run in" ─────────────────────────────────────────────────────────
+
+    /** Reads the run worktrees of each service that offers a pick and has none yet. */
+    readRunIns() {
+      for (const s of this.services) {
+        if (!hasRunIn(s) || this.runIns[s.id]) continue;
+        this.runIns = { ...this.runIns, [s.id]: freshRunIn() };
+        this.loadRunIn(s.id);
+      }
+    },
+
+    /** Reads one service's list: on load (the first list restores the remembered pick), when the picker opens, and after a refusal. */
+    async loadRunIn(id, { silent = false } = {}) {
+      let worktrees;
+      try {
+        worktrees = await gateway.listRunWorktrees(id);
+      } catch {
+        if (this.runIns[id]) this.runIns = { ...this.runIns, [id]: afterFailedRead(this.runIns[id]) };
+        return;
+      }
+      const prev = this.runIns[id];
+      if (!prev) return;
+      const { next, clearStored } = afterRead(prev, worktrees, { stored: prefs.get(pickKeyOf(id)), silent });
+      if (clearStored) prefs.set(pickKeyOf(id), null);
+      this.runIns = { ...this.runIns, [id]: next };
+    },
+
+    /** @param {{ currentTarget: HTMLElement, detail: { value: string } }} event the picker's dropdown-change: nothing starts */
+    runInPicked(event) {
+      const id = event.currentTarget.dataset.serviceId;
+      const prev = this.runIns[id];
+      const picked = prev ? afterPick(prev, event.detail.value) : null;
+      if (!picked) return;
+      prefs.set(pickKeyOf(id), picked.clearStored ? null : event.detail.value);
+      this.runIns = { ...this.runIns, [id]: picked.next };
+      const w = pickedWorktree(picked.next);
+      const name = this.services.find((s) => s.id === id)?.name ?? "";
+      this.notice = `${name} runs in ${worktreeKindWord(w)}, branch ${branchLabel(w.branch)}.`;
+    },
+
+    /** The picker was touched to open (or Retry was pressed): the list is read again. */
+    runInOpened(event) {
+      return this.loadRunIn(event.currentTarget.dataset.serviceId);
+    },
+
+    dismissRunInFallback(event) {
+      const id = event.currentTarget.dataset.serviceId;
+      if (this.runIns[id]) this.runIns = { ...this.runIns, [id]: { ...this.runIns[id], fallback: null } };
+    },
+
+    /** Puts a picker's select on the pick once its options exist (x-effect on the select). */
+    syncRunIn() {
+      const el = this.$el;
+      const pick = this.runIns[el.dataset.serviceId];
+      if (!pick) return;
+      const key = pick.pickedKey;
+      void pick.worktrees.length;
+      this.$nextTick(() => {
+        if (el.isConnected && el.value !== key && [...el.options].some((o) => o.value === key)) el.value = key;
+      });
     },
 
     /** @param {Event} event a row button's click: the row's service id is on the button */
@@ -333,6 +407,7 @@ export const servicesPage = ({ gateway, clock = systemClock, timers = globalThis
     saved(event) {
       const { service, restartNeeded, created } = event.detail;
       this.services = upsertService(this.services, service);
+      this.readRunIns();
       this.closeForm();
       this.notice = savedNotice(service.name, { created, restartNeeded });
     },

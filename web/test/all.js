@@ -109,6 +109,7 @@ import "../src/modules/runs/presentation/components/appPanel.test.js";
 import "../src/modules/sandbox/infrastructure/sandbox-gateway.test.js";
 import "../src/modules/sandbox/presentation/components/sandboxSettings.test.js";
 import "../src/modules/services/domain/log.test.js";
+import "../src/modules/services/domain/runIn.test.js";
 import "../src/modules/services/domain/service.test.js";
 import "../src/modules/services/domain/serviceForm.test.js";
 import "../src/modules/services/infrastructure/services-gateway.test.js";
