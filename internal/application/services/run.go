@@ -35,6 +35,8 @@ type run struct {
 // prepared is what a start works out before it creates the run.
 type prepared struct {
 	where domain.ServiceWhere
+	// worktreeKey is the run worktree, "" when the run has none.
+	worktreeKey string
 	// base and subdir split where.Dir into the run worktree and the
 	// subfolder below it; subdir is "" for none.
 	base, subdir string
@@ -81,7 +83,7 @@ func (s *Service) StartService(ctx context.Context, serviceID string, opts ports
 	r := &run{id: "run-" + newServiceID(), serviceID: serviceID, settled: make(chan struct{}), done: make(chan struct{})}
 	cur.Status = domain.ServiceStarting
 	cur.Run = &domain.ServiceRun{
-		ID: r.id, StartedAt: s.opts.Now().UTC().Format(time.RFC3339), StartedBy: opts.StartedBy, Where: p.where,
+		ID: r.id, StartedAt: s.opts.Now().UTC().Format(time.RFC3339), StartedBy: opts.StartedBy, Where: p.where, WorktreeKey: p.worktreeKey,
 		Sandboxed: p.sandbox != nil || p.image != nil,
 	}
 	cur.UpdatedAt = s.opts.Now().UTC()
@@ -279,6 +281,19 @@ func (s *Service) RestartService(ctx context.Context, serviceID string, opts por
 		if err := s.checkRuntime(svc); err != nil {
 			return nil, err
 		}
+		if opts.Repeat {
+			opts.Repeat = false
+			if svc.Run != nil {
+				opts.WorktreeKey, opts.Worktree = svc.Run.WorktreeKey, nil
+			}
+		}
+		repo, err := s.repository(ctx, svc)
+		if err != nil {
+			return nil, err
+		}
+		if _, err := s.pickWorktree(ctx, svc, repo, opts); err != nil {
+			return nil, err
+		}
 	}
 	if _, err := s.StopService(ctx, serviceID); err != nil {
 		return nil, err
@@ -306,6 +321,9 @@ func (s *Service) WaitServiceSettled(ctx context.Context, serviceID string) (*do
 // has not created the run: a refusal here starts nothing.
 func (s *Service) prepare(ctx context.Context, svc *domain.Service, opts ports.ServiceStartOptions) (*prepared, error) {
 	if svc.Kind == domain.ServiceKindImage {
+		if _, err := s.pickWorktree(ctx, svc, nil, opts); err != nil {
+			return nil, err
+		}
 		return s.prepareImage(ctx, svc)
 	}
 	p := &prepared{}
@@ -316,16 +334,19 @@ func (s *Service) prepare(ctx context.Context, svc *domain.Service, opts ports.S
 	if err != nil {
 		return nil, err
 	}
+	pick, err := s.pickWorktree(ctx, svc, repo, opts)
+	if err != nil {
+		return nil, err
+	}
 	switch {
 	case repo == nil:
 		p.where = domain.ServiceWhere{Kind: "service_folder", Dir: filepath.Join(s.folderRoot(), svc.ID)}
-	case opts.Worktree != nil:
-		p.where = domain.ServiceWhere{Kind: "session", Dir: opts.Worktree.Dir, Branch: opts.Worktree.Branch, SessionID: opts.Worktree.SessionID}
+	case pick.Kind == domain.RunWorktreeSession:
+		p.where = domain.ServiceWhere{Kind: "session", Dir: pick.Dir, Branch: pick.Branch, SessionID: pick.SessionID}
+		p.worktreeKey = pick.Key
 	default:
-		p.where = domain.ServiceWhere{Kind: "main", Dir: repo.RootDir}
-		if s.opts.Branches != nil && repo.RootDir != "" {
-			p.where.Branch, _ = s.opts.Branches.CurrentBranch(ctx, repo.RootDir)
-		}
+		p.where = domain.ServiceWhere{Kind: "main", Dir: pick.Dir, Branch: pick.Branch}
+		p.worktreeKey = pick.Key
 	}
 	if repo != nil && p.where.Dir != "" && svc.Command != nil && svc.Command.Subdir != "" {
 		p.base, p.subdir = p.where.Dir, svc.Command.Subdir
@@ -467,4 +488,71 @@ func withoutShimDirs(path string) string {
 func dirExists(dir string) bool {
 	fi, err := os.Stat(dir)
 	return err == nil && fi.IsDir()
+}
+
+// pickWorktree resolves the run worktree a start asked for. The key is
+// looked up among the worktrees on offer now: nothing in a request is
+// trusted as a path. A service with no repository or an image service has
+// none, and refuses a key.
+func (s *Service) pickWorktree(ctx context.Context, svc *domain.Service, repo *domain.Repository, opts ports.ServiceStartOptions) (*domain.RunWorktree, error) {
+	key := strings.TrimSpace(opts.WorktreeKey)
+	if opts.Worktree == nil && key != "" && (svc.Kind != domain.ServiceKindCommand || repo == nil) {
+		return nil, &domain.StructuredError{Code: "INVALID_INPUT", Message: "worktree: only a command service of a repository runs in a worktree"}
+	}
+	if repo == nil {
+		return nil, nil
+	}
+	if w := opts.Worktree; w != nil {
+		// Trusted: the agent's own worktree, checked by its tool.
+		return &domain.RunWorktree{Key: "session:" + w.SessionID, Kind: domain.RunWorktreeSession, Branch: w.Branch, Dir: w.Dir, SessionID: w.SessionID}, nil
+	}
+	if key == "" || key == "main" {
+		main := &domain.RunWorktree{Key: "main", Kind: domain.RunWorktreeMain, Dir: repo.RootDir}
+		if s.opts.Branches != nil && repo.RootDir != "" {
+			main.Branch, _ = s.opts.Branches.CurrentBranch(ctx, repo.RootDir)
+		}
+		return main, nil
+	}
+	all, err := s.runWorktrees(ctx, svc, repo)
+	if err != nil {
+		return nil, err
+	}
+	for _, w := range all {
+		if w.Key == key {
+			return w, nil
+		}
+	}
+	return nil, &domain.StructuredError{Code: "WORKTREE_NOT_AVAILABLE", Message: "that worktree is no longer available"}
+}
+
+// runWorktrees is the worktrees a command service of the repository can run
+// in now.
+func (s *Service) runWorktrees(ctx context.Context, svc *domain.Service, repo *domain.Repository) ([]*domain.RunWorktree, error) {
+	if s.opts.RunWorktrees == nil {
+		return nil, nil
+	}
+	return s.opts.RunWorktrees.ListRepositoryRunWorktrees(ctx, svc.ProjectID, repo.ID)
+}
+
+// ListServiceRunWorktrees implements ports.ServiceManager.
+func (s *Service) ListServiceRunWorktrees(ctx context.Context, serviceID string) ([]*domain.RunWorktree, error) {
+	svc, err := s.store.GetService(serviceID)
+	if err != nil {
+		return nil, err
+	}
+	if svc.Kind != domain.ServiceKindCommand || svc.RepositoryID == "" {
+		return []*domain.RunWorktree{}, nil
+	}
+	repo, err := s.repository(ctx, svc)
+	if err != nil {
+		return nil, err
+	}
+	all, err := s.runWorktrees(ctx, svc, repo)
+	if err != nil {
+		return nil, err
+	}
+	if all == nil {
+		all = []*domain.RunWorktree{}
+	}
+	return all, nil
 }

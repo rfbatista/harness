@@ -244,3 +244,31 @@ func TestASessionRunningInTheMainCheckoutGetsNoEnvFiles(t *testing.T) {
 		t.Fatalf("env files were written into the main checkout: %v", io.roots)
 	}
 }
+
+// A service has no session of its own, so it lists a repository's run
+// worktrees: its main checkout, then each session's, newest first.
+func TestTheRepositoryRunWorktreesAreMainThenItsSessionsNewestFirst(t *testing.T) {
+	f := newWorktreeFixture(t)
+	if err := os.RemoveAll(f.w2); err != nil {
+		t.Fatal(err)
+	}
+	got, err := f.svc.ListRepositoryRunWorktrees(context.Background(), "p1", "r1")
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := []domain.RunWorktree{
+		{Key: "main", Kind: domain.RunWorktreeMain, Branch: "main", Dir: f.main},
+		{Key: "session:s3", Kind: domain.RunWorktreeSession, Branch: "agent/newer", Dir: f.w3, SessionID: "s3", Agent: "go-developer", SessionStatus: domain.SessionRunning},
+		{Key: "session:s1", Kind: domain.RunWorktreeSession, Branch: "agent/own", Dir: f.own, SessionID: "s1", SessionStatus: domain.SessionRunning},
+	}
+	// s1 is the newest: it comes first.
+	want[1], want[2] = want[2], want[1]
+	if len(got) != len(want) {
+		t.Fatalf("got %+v (s2's worktree is gone, x1 is another repository's, bare has none)", got)
+	}
+	for i := range want {
+		if *got[i] != want[i] {
+			t.Errorf("[%d] = %+v, want %+v", i, *got[i], want[i])
+		}
+	}
+}

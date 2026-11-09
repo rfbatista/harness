@@ -42,6 +42,7 @@ type mcpFixture struct {
 	*servicesFixture
 	fake     *containerrunnertest.Fake
 	sessions ports.SessionRepository
+	lookup   *fakeRunWorktrees
 	mcpURL   string
 	// answers collects every text an MCP tool returned, for the secret check.
 	answers []string
@@ -54,10 +55,12 @@ const mcpSecret = "hunter2-secret-value"
 func newMCPFixture(t *testing.T, settle time.Duration) *mcpFixture {
 	t.Helper()
 	fake := &containerrunnertest.Fake{}
+	lookup := &fakeRunWorktrees{}
 	f := newServicesFixture(t, services.Options{
-		Runners:   map[domain.ServiceKind]ports.ServiceProcessRunner{domain.ServiceKindCommand: commandrunner.Runner{}, domain.ServiceKindImage: fake},
-		LookPath:  func(c string) (string, error) { return "/usr/bin/" + c, nil },
-		StopGrace: 5 * time.Second,
+		RunWorktrees: lookup,
+		Runners:      map[domain.ServiceKind]ports.ServiceProcessRunner{domain.ServiceKindCommand: commandrunner.Runner{}, domain.ServiceKindImage: fake},
+		LookPath:     func(c string) (string, error) { return "/usr/bin/" + c, nil },
+		StopGrace:    5 * time.Second,
 	})
 	t.Cleanup(func() {
 		list, _ := f.svc.ListServices(context.Background(), f.projectID)
@@ -75,7 +78,7 @@ func newMCPFixture(t *testing.T, settle time.Duration) *mcpFixture {
 	agents := fakeAgents{byID: map[string]*domain.Agent{"agent-dev": {ID: "agent-dev", Name: "dev"}}}
 	srv := httptest.NewServer(mcpsession.ServicesHandler(tooling.SessionServicesTools(sessions, agents, f.svc, f.cat.Projects, tooling.WithServicesSettleTimeout(settle))))
 	t.Cleanup(srv.Close)
-	return &mcpFixture{servicesFixture: f, fake: fake, sessions: sessions, mcpURL: srv.URL + mcpsession.ServicesPathPrefix}
+	return &mcpFixture{servicesFixture: f, fake: fake, sessions: sessions, lookup: lookup, mcpURL: srv.URL + mcpsession.ServicesPathPrefix}
 }
 
 // session saves a session of the project and repository with worktree set
@@ -88,6 +91,9 @@ func (f *mcpFixture) session(id, projectID, repoID string, worktree bool) string
 	}
 	if _, err := f.sessions.Create(s); err != nil {
 		f.t.Fatal(err)
+	}
+	if worktree {
+		f.lookup.list = append(f.lookup.list, &domain.RunWorktree{Key: "session:" + id, Kind: domain.RunWorktreeSession, Branch: s.Branch, Dir: s.WorkingDir, SessionID: id, SessionStatus: s.Status})
 	}
 	return s.WorkingDir
 }
@@ -341,7 +347,7 @@ func (f *servicesFixture) createdID(name string) string {
 	return ""
 }
 
-func TestServicesMCP_OwnWorktreeRunsInTheSessionsWorktreeAndTheWebRestartGoesBackToMain(t *testing.T) {
+func TestServicesMCP_OwnWorktreeRunsInTheSessionsWorktreeAndTheWebRestartRepeatsIt(t *testing.T) {
 	f := newMCPFixture(t, 5*time.Second)
 	dir := f.session("sess-1", f.projectID, f.repoID, true)
 	f.session("sess-2", f.projectID, f.repoID, true)
@@ -363,13 +369,27 @@ func TestServicesMCP_OwnWorktreeRunsInTheSessionsWorktreeAndTheWebRestartGoesBac
 		t.Fatalf("another session sees %v", seen)
 	}
 
-	// The web UI's restart passes no worktree: the run is back in the main checkout.
+	// The web UI's restart repeats the last run: the same worktree, now
+	// started by the person (ADR 0077).
 	if code, out := f.operate("restart_service", id); code != 200 {
 		t.Fatalf("restart = %d %v", code, out)
 	}
 	web := f.awaitStatus(id, "running")["run"].(map[string]any)
-	if w := web["where"].(map[string]any); w["kind"] != "main" || w["dir"] != f.repoDir() || web["started_by"].(map[string]any)["kind"] != "person" {
-		t.Fatalf("a web restart runs in the main checkout, started by the person: %v", web)
+	if w := web["where"].(map[string]any); w["kind"] != "session" || w["dir"] != dir || web["worktree_key"] != "session:sess-1" || web["started_by"].(map[string]any)["kind"] != "person" {
+		t.Fatalf("a web restart repeats the worktree, started by the person: %v", web)
+	}
+
+	// A fresh start begins in the main checkout.
+	f.operate("stop_service", id)
+	f.operate("start_service", id)
+	if w := f.awaitStatus(id, "running")["run"].(map[string]any)["where"].(map[string]any); w["kind"] != "main" || w["dir"] != f.repoDir() {
+		t.Fatalf("a web start runs in the main checkout: %v", w)
+	}
+
+	// An agent's restart with no worktree repeats the last run too.
+	repeated := mine.ok("restart_service", named("web"))["service"].(map[string]any)["run"].(map[string]any)
+	if repeated["where"] != "main checkout" {
+		t.Fatalf("restart without a worktree repeats the main checkout run: %v", repeated)
 	}
 
 	// restart_service takes worktree as start does, and moves it into the worktree again.
@@ -540,7 +560,7 @@ func TestServicesMCP_TheContainerRuntimeAndSandboxRefusalsUseTheContractsMessage
 	sessions := sqlite.NewSessionRepository(db)
 	srv := httptest.NewServer(mcpsession.ServicesHandler(tooling.SessionServicesTools(sessions, nil, f.svc, f.cat.Projects)))
 	t.Cleanup(srv.Close)
-	m := &mcpFixture{servicesFixture: f, fake: fake, sessions: sessions, mcpURL: srv.URL + mcpsession.ServicesPathPrefix}
+	m := &mcpFixture{servicesFixture: f, fake: fake, sessions: sessions, lookup: &fakeRunWorktrees{}, mcpURL: srv.URL + mcpsession.ServicesPathPrefix}
 	m.session("sess-1", f.projectID, f.repoID, true)
 	f.createID(imageInput("db"))
 	f.createID(commandInput("web"))

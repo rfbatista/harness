@@ -172,7 +172,7 @@ func SessionServicesTools(sessions ports.SessionRepository, agents ports.AgentLi
 		{
 			Name: "restart_service",
 			Description: "Stop a service's run, if there is one, then start it with the rules of start_service (worktree included), " +
-				"and answer once the new run is running or has failed.",
+				"and answer once the new run is running or has failed. Without worktree it repeats the last run in the same worktree.",
 			InputSchema: schemaFromJSON(`{"type":"object","required":["name"],"properties":{` + nameSchema + `,` + worktreeSchema + `}}`),
 			Source:      "code",
 			Handler: func(ctx context.Context, args map[string]any) (any, error) {
@@ -183,6 +183,10 @@ func SessionServicesTools(sessions ports.SessionRepository, agents ports.AgentLi
 				opts, err := t.startOptions(ctx, sess, svc, args)
 				if err != nil {
 					return nil, err
+				}
+				// Without a worktree it repeats the last run (ADR 0077).
+				if wt, given := args["worktree"]; !given || wt == nil {
+					opts.Repeat = true
 				}
 				restarted, err := t.services.RestartService(ctx, svc.ID, opts)
 				if err != nil {
