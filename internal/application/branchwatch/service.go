@@ -109,8 +109,10 @@ func (s *Service) sessionStarted(ctx context.Context, sessionID string) {
 		slog.Warn("store a session's starting snapshot", "session", sessionID, "err", err)
 	}
 	// The repository's latest snapshot starts here when no check made one.
-	if prev, _ := s.d.Store.Baseline(ctx, repoKey(repo.ID)); prev == nil {
-		_ = s.d.Store.SaveBaseline(ctx, repoKey(repo.ID), b)
+	if prev, err := s.d.Store.Baseline(ctx, repoKey(repo.ID)); err == nil && prev == nil {
+		if err := s.d.Store.SaveBaseline(ctx, repoKey(repo.ID), b); err != nil {
+			slog.Warn("store a repository's latest snapshot", "repository", repo.ID, "err", err)
+		}
 	}
 }
 

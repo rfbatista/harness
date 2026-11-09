@@ -90,10 +90,17 @@ func (s *Service) check(ctx context.Context, repoID string, ended []string) {
 	// one, so nothing earlier is attributed to it.
 	baselines := map[string]*ports.BranchBaseline{}
 	for _, sess := range sessions {
-		b, _ := s.d.Store.Baseline(ctx, sessionKey(sess.ID))
+		b, err := s.d.Store.Baseline(ctx, sessionKey(sess.ID))
+		if err != nil {
+			// A read that failed is not a missing snapshot: leave the session's alone.
+			slog.Warn("read a session's starting snapshot", "session", sess.ID, "err", err)
+			continue
+		}
 		if b == nil {
 			b = &cur
-			_ = s.d.Store.SaveBaseline(ctx, sessionKey(sess.ID), cur)
+			if err := s.d.Store.SaveBaseline(ctx, sessionKey(sess.ID), cur); err != nil {
+				slog.Warn("store a session's starting snapshot", "session", sess.ID, "err", err)
+			}
 		}
 		baselines[sess.ID] = b
 	}
@@ -294,11 +301,17 @@ func (s *Service) bypassedPushes(ctx context.Context, repo *domain.Repository, s
 	}
 	updates, err := s.d.Evidence.RemoteRefUpdates(ctx, repo.RootDir)
 	if err != nil {
+		slog.Warn("read a repository's remote-tracking reflogs", "repository", repo.ID, "err", err)
 		return nil
 	}
 	var recorded []domain.RecordedPush
 	if s.d.Pushes != nil {
-		recorded, _ = s.d.Pushes.PushesIn(ctx, repo.ID, time.Time{})
+		var err error
+		if recorded, err = s.d.Pushes.PushesIn(ctx, repo.ID, time.Time{}); err != nil {
+			// Without the records every push looks like a bypass: flag none this time.
+			slog.Warn("read a repository's recorded pushes", "repository", repo.ID, "err", err)
+			return nil
+		}
 	}
 	sort.Strings(moved)
 	var out []finding

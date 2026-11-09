@@ -282,10 +282,13 @@ func (s *Service) onBranchRequest(ev domain.BranchRequestChanged) {
 // or the sessions whose turns overlapped when none is named (ADR 0070).
 func (s *Service) onBranchFinding(ev domain.BranchFindingFound) {
 	what := "Unapproved branch: " + ev.Branch
-	if ev.Kind == "push" {
+	if ev.Kind == "push" { // domain.BranchFindingFound.Kind: "branch" or "push"
 		what = "Unapproved push: " + ev.Branch
 	}
-	who := "Sessions whose turns overlapped: " + strings.Join(ev.Candidates, ", ")
+	who := "No agent turn was running that names a session"
+	if len(ev.Candidates) > 0 {
+		who = "Sessions whose turns overlapped: " + strings.Join(ev.Candidates, ", ")
+	}
 	link := domain.TaskLink(ev.ProjectID, ev.TaskID)
 	if ev.TaskID == "" {
 		link = domain.ProjectLink(ev.ProjectID)
