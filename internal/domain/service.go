@@ -94,6 +94,13 @@ type ServiceWhere struct {
 	SessionID string `json:"session_id"`
 }
 
+// ServiceRunOverride names a run override and says who set it, as the person
+// reads it: "<agent> · session <short id>".
+type ServiceRunOverride struct {
+	Name string `json:"name"`
+	By   string `json:"by"`
+}
+
 // ServiceRun is the current or last run of a service.
 type ServiceRun struct {
 	ID        string `json:"id"`
@@ -108,6 +115,13 @@ type ServiceRun struct {
 	// WorktreeKey is the run worktree a command service of a repository ran
 	// in: main or session:<id>; empty for any other run. Restart reuses it.
 	WorktreeKey string `json:"worktree_key"`
+	// Overrides are the run overrides the run was given, by name (ADR 0077).
+	// Their values are never kept here: they live only in the module, and a
+	// reader of a run with a reason to see them asks for the run's variables.
+	Overrides []ServiceRunOverride `json:"overrides"`
+	// OverrideBy is who set the overrides; nil when there are none. A restart
+	// that repeats them keeps it.
+	OverrideBy *ServiceStartedBy `json:"override_by,omitempty"`
 	// Sandboxed is false for a command service that ran unconfined because
 	// the sandbox setting was off (ADR 0074).
 	Sandboxed bool `json:"sandboxed"`
@@ -265,6 +279,11 @@ func (s *Service) Clone() *Service {
 		if s.Run.ExitCode != nil {
 			code := *s.Run.ExitCode
 			run.ExitCode = &code
+		}
+		run.Overrides = append([]ServiceRunOverride{}, s.Run.Overrides...)
+		if s.Run.OverrideBy != nil {
+			by := *s.Run.OverrideBy
+			run.OverrideBy = &by
 		}
 		c.Run = &run
 	}

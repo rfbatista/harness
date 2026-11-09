@@ -137,9 +137,44 @@ type ServiceStartOptions struct {
 	// Repeat makes a restart run where the last run did, ignoring WorktreeKey
 	// and Worktree. It has no effect on a start.
 	Repeat bool
+	// Env are the run overrides (ADR 0077): variables for this run only, on
+	// top of the repository .env and the service's own. Nil is none given;
+	// on a restart that means "repeat the last run's", and an empty map clears
+	// them. A bad entry is INVALID_INPUT naming the key.
+	Env map[string]string
 	// Worktree, when set, is where a command service of a repository runs
 	// (its subdir applies inside it); nil is the main checkout.
 	Worktree *ServiceWorktree
+}
+
+// Where a run variable comes from, the one that won.
+const (
+	VariableFromRepositoryEnv = "repository_env"
+	VariableFromService       = "service"
+	VariableFromOverride      = "override"
+)
+
+// ServiceRunVariable is one variable a run was given, with its value, the
+// source that won and, for an override, who set it as the person reads it.
+// The base system environment is never one.
+type ServiceRunVariable struct {
+	Name   string `json:"name"`
+	Value  string `json:"value"`
+	Source string `json:"source"`
+	By     string `json:"by"`
+}
+
+// ServiceRunVariables are the variables of a service's current or last run,
+// sorted by name; RunID is empty for a service that never ran. Values travel
+// only in this answer, never on a feed.
+type ServiceRunVariables struct {
+	RunID     string               `json:"run_id"`
+	Variables []ServiceRunVariable `json:"variables"`
+	// Overrides are the override values by name, for the agent that set them.
+	// It is not part of the person's answer.
+	Overrides map[string]string `json:"-"`
+	// OverrideBy is who set them; nil for none.
+	OverrideBy *domain.ServiceStartedBy `json:"-"`
 }
 
 // ServiceLogRead is one read of a service's log.
@@ -219,6 +254,10 @@ type ServiceManager interface {
 	// WaitServiceSettled blocks until the service is no longer starting (or
 	// ctx ends) and returns it.
 	WaitServiceSettled(ctx context.Context, serviceID string) (*domain.Service, error)
+	// GetRunVariables is the variables the service's current or last run was
+	// given. Values held in memory only: after a restart of the harness the
+	// run is known but its variables are not.
+	GetRunVariables(ctx context.Context, serviceID string) (*ServiceRunVariables, error)
 	// ReadServiceLog reads the current or last run's log from offset; nil
 	// reads the last ServiceLogTailBytes.
 	ReadServiceLog(ctx context.Context, serviceID string, offset *int64) (*ServiceLogRead, error)
