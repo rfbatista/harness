@@ -1,0 +1,391 @@
+// The interview panel beside a session's terminal: the glue between the page's
+// DOM and the store "sessionsInterviews", which holds the interviews and the
+// rules for when the panel is shown. It decides docked or sheet from the width
+// of the session column, follows the session's interview feed while it is
+// mounted, and claims Alt+Shift+Q for the page. It never moves the focus or the
+// scroll of anything the person is using: an interview that arrives only draws.
+// The person's answers are the store's; this turns the controls' events into
+// them (a change, a number key, Enter on the recommendation) and moves the
+// focus between questions the way the UX study's keyboard table says. It also
+// sends and dismisses: Send, ⌘/Ctrl+Enter, the strips that ask, Try again; the
+// store holds where each interview is in that, this puts the focus where the
+// person's next step is (never into the terminal) and tells the polite region.
+//
+//   <div class="[ agent-stage ]" x-data="sessionsInterviewPanel(sid)" x-on:keydown.window.capture="claimKey">
+//     <div class="[ terminal ]" …>…</div>
+//     <template x-if="dockShown"><aside class="[ interview ]">…</aside></template>
+//     <template x-if="peeking">…the peek strip…</template>
+//     <template x-if="sheetShown">…the sheet…</template>
+//   </div>
+
+import { dockedAt } from "../../domain/interviews.js";
+import { bodyHtml, footerView, noteSummary, optionForKey } from "../interviewView.js";
+
+/**
+ * @param {{
+ *   interviews: ReturnType<typeof import("../interviewStore.js").interviewStore>,
+ *   observeResize?: (el: HTMLElement, onResize: () => void) => () => void,
+ *   remPx?: () => number,  what a rem is in px, for the dock width
+ *   doc?: Document,
+ *   clipboard?: { writeText: (text: string) => Promise<void> },  where Copy answers puts the text
+ * }} deps
+ */
+export const interviewPanel = ({ interviews, observeResize = resizeObserver, remPx = rootFontSize, doc = globalThis.document, clipboard = { writeText: (text) => globalThis.navigator.clipboard.writeText(text) } }) => (sessionId = "") => {
+  /** The stage. A method called from a control that has since left the page (the peek strip's Answer) cannot find it through $root, so it is kept. */
+  let root = null;
+  let stopObserving = () => {};
+  let unfollow = () => {};
+  /** Which control opened the sheet: where the focus goes back when it closes. */
+  let openedBy = "toggle";
+  /** The markdown last drawn into each body, so a store change does not redraw (and unselect) what has not changed. */
+  const drawn = new WeakMap();
+
+  return {
+    sessionId,
+
+    init() {
+      root = this.$el;
+      this.measure();
+      stopObserving = observeResize(root, () => this.measure());
+      unfollow = interviews.follow(sessionId, (text) => this.$dispatch("announce", { text }));
+    },
+
+    destroy() {
+      stopObserving();
+      unfollow();
+      interviews.sheet = false;
+    },
+
+    /** Docks the panel when the session column is wide enough. */
+    measure() {
+      interviews.setDocked(dockedAt(root.clientWidth, remPx()));
+    },
+
+    // ── what the markup binds ────────────────────────────────────────────
+    get view() {
+      return interviews.view(sessionId);
+    },
+    get dockShown() {
+      return interviews.docked && interviews.shown(sessionId);
+    },
+    get sheetShown() {
+      return !interviews.docked && interviews.shown(sessionId);
+    },
+    get peeking() {
+      return interviews.peeking(sessionId);
+    },
+
+    /** The markdown of a question's body, drawn as HTML into its element (x-effect). */
+    placeBody(el, question) {
+      if (drawn.get(el) === question.body) return;
+      drawn.set(el, question.body);
+      el.innerHTML = bodyHtml(question.body);
+    },
+
+    // ── the answers the markup binds ─────────────────────────────────────
+    checked: (card, q, value) => interviews.isChecked(card.id, q.at, value),
+    ownOpen: (card, q) => interviews.ownOpen(card.id, q.at),
+    answered: (card, q) => interviews.answered(card.id, q.at),
+    textOf: (card, q) => interviews.textOf(card.id, q.at),
+    noteOf: (card, q) => interviews.noteOf(card.id, q.at),
+    progress: (card) => footerView(interviews.progress(card.id)),
+    foot: (card) => interviews.footer(card.id),
+
+    /** The note's summary: Note once it holds text, Add a note while it is empty. */
+    noteLabel: (card, q) => noteSummary(interviews.noteOf(card.id, q.at)),
+
+    /** A note opens by itself once it holds text; the person's own opening and closing is left to the disclosure. */
+    openNote(el, card, q) {
+      if (interviews.noteOf(card.id, q.at).trim() !== "" && !el.open) el.open = true;
+    },
+
+    // ── what the person answers ──────────────────────────────────────────
+    /** An option or Write my own was ticked (radio: selected). Write my own takes the focus into its box. */
+    choose(card, q, event) {
+      const input = event.target;
+      interviews.choose(card.id, q.at, input.value, input.checked);
+      if (input.value === "own" && input.checked) this.$nextTick(() => input.closest("fieldset")?.querySelector("[data-interview-own]")?.focus());
+    },
+
+    type(card, q, event) {
+      interviews.type(card.id, q.at, event.target.value);
+    },
+
+    typeNote(card, q, event) {
+      interviews.note(card.id, q.at, event.target.value);
+    },
+
+    use(card, q) {
+      interviews.use(card.id, q.at);
+    },
+
+    /** Accept all recommended: fills the blank questions, sends nothing. */
+    acceptAll(card) {
+      interviews.acceptAll(card.id);
+    },
+
+    /**
+     * Keys on an option row: 1–8 select that row in the drawn order, Enter on
+     * the recommendation selects it and moves on to the next question. Every
+     * other key (arrows, Space, Tab) is the browser's.
+     * @param {KeyboardEvent} event
+     */
+    optionKey(event, card, q) {
+      const input = event.target;
+      if (input.tagName !== "INPUT" || event.altKey || event.ctrlKey || event.metaKey) return;
+      if (event.key === "Enter" && input.closest("label")?.hasAttribute("data-recommended")) {
+        event.preventDefault();
+        interviews.choose(card.id, q.at, input.value, true);
+        this.focusNext(input.closest("fieldset"));
+        return;
+      }
+      const option = event.shiftKey ? null : optionForKey(q, event.key);
+      if (!option) return;
+      event.preventDefault();
+      interviews.choose(card.id, q.at, option.value, true);
+      input.closest(".options").querySelector(`input[value="${option.value}"]`)?.focus();
+    },
+
+    /** Esc in a text box: back to the question's option group. It is the panel's, so it neither closes the sheet nor hides the panel. */
+    leaveBox(event) {
+      event.preventDefault();
+      event.stopPropagation();
+      const box = event.target;
+      const fieldset = box.closest("fieldset");
+      const other = [...fieldset.querySelectorAll("textarea")].find((t) => t !== box);
+      (this.optionGroup(fieldset) ?? (box.hasAttribute("data-interview-note") ? other : fieldset.querySelector("summary")))?.focus();
+    },
+
+    /** The checked option of a question, or its first: where Tab lands in the group. */
+    optionGroup(fieldset) {
+      return fieldset.querySelector(".options input:checked") ?? fieldset.querySelector(".options input");
+    },
+
+    /** A question's first control: its option group, or its box when it is a text question. */
+    focusQuestion(fieldset) {
+      (this.optionGroup(fieldset) ?? fieldset.querySelector("textarea"))?.focus();
+    },
+
+    /** The question after this one, or the Send button when it was the last. */
+    focusNext(fieldset) {
+      const next = fieldset.nextElementSibling;
+      if (next?.matches("fieldset")) this.focusQuestion(next);
+      else fieldset.closest("section")?.querySelector("[data-interview-send]")?.focus();
+    },
+
+    // ── sending and dismissing ───────────────────────────────────────────
+    /**
+     * What the polite region is told: the page's, through the "announce" event.
+     * Sent from the stage, not from `$el`: by the time an answer comes back the
+     * button that was pressed may have left the page with its card.
+     */
+    say(text) {
+      root.dispatchEvent(new CustomEvent("announce", { detail: { text }, bubbles: true }));
+    },
+
+    /** The card's section, which a method called after the card has gone cannot find through the event. */
+    section(id) {
+      return root.querySelector(`[data-interview-card="${CSS.escape(id)}"]`);
+    },
+
+    /** The primary button: Send, or Try again once a send or a dismiss failed. */
+    primary(card) {
+      return interviews.footer(card.id).error?.retry ? this.retry(card) : this.send(card);
+    },
+
+    /** Send, ⌘/Ctrl+Enter: blanks ask first (the strip takes the focus), a fully answered interview goes. */
+    async send(card) {
+      const id = card.id;
+      const pending = interviews.send(sessionId, id, (text) => this.say(text));
+      this.landed(id);
+      await pending;
+      this.landed(id);
+    },
+
+    async retry(card) {
+      const id = card.id;
+      const pending = interviews.retry(sessionId, id, (text) => this.say(text));
+      this.landed(id);
+      await pending;
+      this.landed(id);
+    },
+
+    /** Dismiss, in the confirm strip. */
+    async dismissNow(card) {
+      const id = card.id;
+      const pending = interviews.confirmDismiss(sessionId, id, (text) => this.say(text));
+      this.landed(id);
+      await pending;
+      this.landed(id);
+    },
+
+    askDismiss(card) {
+      interviews.askDismiss(card.id);
+      this.landed(card.id);
+    },
+
+    /** Keep answering: back to the interview, the focus on the Dismiss button. */
+    keepAnswering(card) {
+      interviews.keepAnswering(card.id);
+      this.$nextTick(() => this.section(card.id)?.querySelector("[data-interview-dismiss]")?.focus());
+    },
+
+    /** Review skipped: the first blank question takes the focus. */
+    review(card) {
+      const at = interviews.review(card.id);
+      this.$nextTick(() => {
+        const fieldset = this.section(card.id)?.querySelectorAll("fieldset")[at];
+        if (fieldset) this.focusQuestion(fieldset);
+      });
+    },
+
+    typeDismissNote(card, event) {
+      interviews.typeDismissNote(card.id, event.target.value);
+    },
+
+    /**
+     * After a step the focus goes where the person's next step is, once the
+     * footer has been drawn: the default button of the strip that asks (the
+     * safe one for a dismiss), the footer's status while it sends, the primary
+     * button after a failure, the row in Earlier once the interview has left
+     * the open ones. It never goes to the terminal.
+     */
+    landed(id) {
+      const aim = () => {
+        const step = interviews.step(id);
+        if (!interviews.openInterview(id)) return root.querySelector(`[data-row-id="${CSS.escape(id)}"] > .head`);
+        const selector = {
+          confirming: step.kind === "dismiss" ? "[data-interview-keep]" : "[data-interview-confirm-send]",
+          sending: "[data-interview-status]",
+          failed: "[data-interview-send]",
+        }[step.phase];
+        return selector ? this.section(id)?.querySelector(selector) : null;
+      };
+      // The footer is drawn a frame after the step changes: look for the target for a moment.
+      let tries = 0;
+      const look = () => {
+        const target = aim();
+        if (target) target.focus();
+        else if (++tries < 20 && !(interviews.openInterview(id) && interviews.step(id).phase === "idle")) setTimeout(look, 16);
+      };
+      this.$nextTick(look);
+    },
+
+    /**
+     * ⌘/Ctrl+Enter anywhere in the panel, text boxes included, is the Send
+     * button: the card the focus is in, else the newest.
+     * @param {KeyboardEvent} event
+     */
+    panelKey(event) {
+      if (event.key !== "Enter" || !(event.metaKey || event.ctrlKey) || event.altKey || event.shiftKey) return;
+      event.preventDefault();
+      if (event.repeat) return;
+      const id = event.target.closest?.("[data-interview-card]")?.dataset.interviewCard ?? this.view.cards[0]?.id;
+      if (id) void this.send({ id });
+    },
+
+    // ── the stack and Earlier ────────────────────────────────────────────
+    /** A card folds or expands on its own; the focus and the scroll stay where they are. */
+    toggleCard(card) {
+      interviews.toggleCard(card.id);
+    },
+
+    /** An Earlier row opens or folds. */
+    toggleRow(row) {
+      interviews.toggleRow(row.id);
+    },
+
+    /** Copy answers on an expired interview: what was typed, as plain text, on the clipboard. */
+    async copyAnswers(row) {
+      let said = "Answers copied";
+      try {
+        await clipboard.writeText(interviews.copyText(row.id));
+      } catch {
+        said = "Could not copy the answers";
+      }
+      this.$dispatch("announce", { text: said });
+    },
+
+    // ── what the person does ─────────────────────────────────────────────
+    /** The peek strip's Answer: the sheet opens and takes the focus. */
+    openSheet() {
+      openedBy = "peek";
+      interviews.reveal(sessionId);
+      this.$nextTick(() => this.focusPanel());
+    },
+
+    /** The close button: hides the docked panel (a choice this browser keeps), or closes the sheet. */
+    closePanel() {
+      const sheet = this.sheetShown;
+      interviews.dismissPanel(sessionId);
+      if (sheet) this.$nextTick(() => this.focusOpener());
+    },
+
+    /** The sheet's scrim or Esc. */
+    closeSheet() {
+      interviews.dismissPanel(sessionId);
+      this.$nextTick(() => this.focusOpener());
+    },
+
+    /**
+     * Alt+Shift+Q: the page's, never the agent's. It opens the panel when it is
+     * collapsed and focuses its first question's first control; pressed again
+     * from inside the panel it gives the focus back to the terminal.
+     * @param {KeyboardEvent} event  heard in the capture phase, before xterm
+     */
+    claimKey(event) {
+      if (!event.altKey || !event.shiftKey || event.ctrlKey || event.metaKey || event.code !== "KeyQ") return;
+      event.preventDefault();
+      event.stopPropagation();
+      if (event.repeat) return;
+      const panel = root.querySelector("[data-interview-panel]");
+      if (panel?.contains(doc.activeElement)) {
+        // Under the sheet the terminal is inert: it takes the focus once the sheet is gone.
+        if (this.sheetShown) interviews.dismissPanel(sessionId);
+        this.$nextTick(() => this.$dispatch("terminal-focus-requested"));
+        return;
+      }
+      if (!interviews.view(sessionId).open) return;
+      openedBy = "toggle";
+      interviews.reveal(sessionId);
+      this.$nextTick(() => this.focusFirstControl());
+    },
+
+    /** The tab row's Questions toggle opened the sheet (the page says so): it takes the focus. */
+    sheetOpened() {
+      openedBy = "toggle";
+      this.focusPanel();
+    },
+
+    /** The sheet took the focus: its scroller, which holds the questions. */
+    focusPanel() {
+      root.querySelector("[data-interview-scroll]")?.focus({ preventScroll: true });
+    },
+
+    /** The first unanswered question of the newest interview (its first question when all are answered). */
+    focusFirstControl() {
+      const card = this.view.cards[0];
+      const fieldsets = root.querySelectorAll("[data-interview-panel] section")[0]?.querySelectorAll("fieldset");
+      const at = Math.max(0, card ? card.questions.findIndex((q) => !interviews.answered(card.id, q.at)) : 0);
+      const target = fieldsets?.[at];
+      if (target) this.focusQuestion(target);
+      else root.querySelector("[data-interview-scroll]")?.focus();
+    },
+
+    /** The sheet closed: the focus returns to the toggle or the peek strip that opened it. */
+    focusOpener() {
+      const toggle = doc.querySelector("[data-interview-toggle]");
+      const peek = root.querySelector("[data-interview-peek] button");
+      (openedBy === "peek" ? (peek ?? toggle) : (toggle ?? peek))?.focus();
+    },
+  };
+};
+
+const rootFontSize = () => parseFloat(globalThis.getComputedStyle?.(globalThis.document.documentElement).fontSize) || 16;
+
+function resizeObserver(el, onResize) {
+  if (typeof ResizeObserver === "undefined") return () => {};
+  const observer = new ResizeObserver(() => onResize());
+  observer.observe(el);
+  return () => observer.disconnect();
+}

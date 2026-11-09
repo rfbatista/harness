@@ -5,8 +5,9 @@
  * answer to, so they adapt to the column (rail open, list beside it), not
  * only to the window.
  * <section class="session" aria-label="Session"><header class="session-head">…</header>
- *   <div class="pane-tabs">…</div><div class="terminal">…</div></section>
- * The head is session-head.css, the tab row pane-tabs.css.
+ *   <div class="pane-tabs">…</div><div class="agent-stage"><div class="terminal">…</div></div></section>
+ * The head is session-head.css, the tab row pane-tabs.css, the Agent tab's
+ * terminal and the interview panel beside it agent-stage.css.
  */
 
 @layer blocks {

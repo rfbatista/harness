@@ -1,0 +1,103 @@
+// Package gitprobe answers the branch action classifier's questions about a
+// repository by asking git itself.
+package gitprobe
+
+import (
+	"bytes"
+	"os"
+	"os/exec"
+	"path/filepath"
+	"strings"
+
+	"operators-mcp/internal/domain"
+)
+
+var _ domain.GitProbe = Probe{}
+
+// Probe runs the git binary at Git; "" finds git on PATH.
+type Probe struct{ Git string }
+
+func (p Probe) run(dir string, args ...string) (string, bool) {
+	bin := p.Git
+	if bin == "" {
+		bin = "git"
+	}
+	cmd := exec.Command(bin, append([]string{"-C", dir}, args...)...)
+	var out bytes.Buffer
+	cmd.Stdout = &out
+	if err := cmd.Run(); err != nil {
+		return "", false
+	}
+	return strings.TrimSpace(out.String()), true
+}
+
+// Commit implements domain.GitProbe.
+func (p Probe) Commit(dir, ref string) string {
+	out, _ := p.run(dir, "rev-parse", "--verify", "--quiet", ref+"^{commit}")
+	return out
+}
+
+// Branch implements domain.GitProbe.
+func (p Probe) Branch(dir, name string) bool {
+	_, ok := p.run(dir, "show-ref", "--verify", "--quiet", "refs/heads/"+name)
+	return ok
+}
+
+// RemoteBranch implements domain.GitProbe.
+func (p Probe) RemoteBranch(dir, name string) (string, bool) {
+	out, _ := p.run(dir, "for-each-ref", "--format=%(refname)", "refs/remotes/*/"+name)
+	var remote string
+	n := 0
+	for _, ref := range strings.Fields(out) {
+		rest, ok := strings.CutPrefix(ref, "refs/remotes/")
+		if !ok || !strings.HasSuffix(rest, "/"+name) {
+			continue
+		}
+		remote = strings.TrimSuffix(rest, "/"+name)
+		n++
+	}
+	return remote, n == 1 && remote != "" && !strings.Contains(remote, "/")
+}
+
+// Path implements domain.GitProbe.
+func (p Probe) Path(dir, name string) bool {
+	_, err := os.Stat(filepath.Join(dir, name))
+	return err == nil
+}
+
+// Current implements domain.GitProbe.
+func (p Probe) Current(dir string) string {
+	out, _ := p.run(dir, "symbolic-ref", "--quiet", "--short", "HEAD")
+	return out
+}
+
+// RemoteURL implements domain.GitProbe: a push goes to the pushurls when the
+// remote has any, else to its url.
+func (p Probe) RemoteURL(dir, name string) string {
+	if out, ok := p.run(dir, "config", "--get-all", "remote."+name+".pushurl"); ok && out != "" {
+		return strings.Join(strings.Fields(out), ", ")
+	}
+	out, _ := p.run(dir, "config", "--get", "remote."+name+".url")
+	return out
+}
+
+// Config implements domain.GitProbe.
+func (p Probe) Config(dir, key string) string {
+	out, _ := p.run(dir, "config", "--get-all", key)
+	return out
+}
+
+// PushRemote implements domain.GitProbe.
+func (p Probe) PushRemote(dir, branch string) string {
+	if branch != "" {
+		for _, key := range []string{"branch." + branch + ".pushRemote", "branch." + branch + ".remote"} {
+			if out, ok := p.run(dir, "config", "--get", key); ok && out != "" {
+				return out
+			}
+		}
+	}
+	if out, ok := p.run(dir, "config", "--get", "remote.pushDefault"); ok && out != "" {
+		return out
+	}
+	return "origin"
+}

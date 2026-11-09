@@ -81,7 +81,11 @@ func (r *SessionRepository) Find(ctx context.Context, id string) (*domain.Sessio
 	if err != nil {
 		return nil, err
 	}
-	return m.ToDomain(), nil
+	sess := m.ToDomain()
+	if err := r.fillOpenInterviews(ctx, sess); err != nil {
+		return nil, err
+	}
+	return sess, nil
 }
 
 // List is Query for callers that treat a failed read as no sessions.
@@ -128,7 +132,40 @@ func (r *SessionRepository) Query(ctx context.Context, filter ports.SessionFilte
 	for i := range models {
 		out = append(out, models[i].ToDomain())
 	}
+	if err := r.fillOpenInterviews(ctx, out...); err != nil {
+		return nil, err
+	}
 	return out, nil
+}
+
+// fillOpenInterviews sets what each session's open interviews add up to, in
+// one query however many sessions there are: few interviews are open at once.
+func (r *SessionRepository) fillOpenInterviews(ctx context.Context, list ...*domain.Session) error {
+	if len(list) == 0 {
+		return nil
+	}
+	var rows []struct {
+		SessionID             string
+		Interviews, Questions int
+		Since                 int64
+	}
+	err := r.db.WithContext(ctx).Model(&InterviewModel{}).
+		Select("session_id, COUNT(*) AS interviews, SUM(json_array_length(questions)) AS questions, MIN(asked_at) AS since").
+		Where("state = ?", string(domain.InterviewOpen)).Group("session_id").Scan(&rows).Error
+	if err != nil {
+		return err
+	}
+	byID := make(map[string]int, len(rows))
+	for i, row := range rows {
+		byID[row.SessionID] = i
+	}
+	for _, sess := range list {
+		if i, ok := byID[sess.ID]; ok {
+			sess.OpenInterviewCount, sess.OpenQuestionCount = rows[i].Interviews, rows[i].Questions
+			sess.OpenInterviewSince = timeFromMilli(rows[i].Since)
+		}
+	}
+	return nil
 }
 
 func (r *SessionRepository) Delete(id string) error {

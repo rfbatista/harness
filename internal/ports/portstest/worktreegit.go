@@ -362,6 +362,51 @@ func WorktreeGitConformance(t *testing.T, newPort func(t *testing.T, f *Worktree
 		}
 	})
 
+	t.Run("a push to a named remote lands under the remote branch name asked for", func(t *testing.T) {
+		head := state(t, "insync").Head
+		st, err := p.PushBranchTo(ctx, ports.PushTarget{WorkspaceID: at.Workspaces["insync"], ExpectedHead: head, Remote: "mirror", RemoteBranch: "review/insync"})
+		if err != nil {
+			t.Fatal(err)
+		}
+		if got := f.MirrorRev(t, "review/insync"); got != head {
+			t.Errorf("mirror holds review/insync at %q, want %s", got, head)
+		}
+		if got := f.MirrorRev(t, "insync"); got != "" {
+			t.Errorf("mirror holds insync at %q: the remote branch name was not honoured", got)
+		}
+		if st.Upstream.Ref == nil || *st.Upstream.Ref != "origin/insync" {
+			t.Errorf("a push to another remote moved the upstream: %+v", st.Upstream)
+		}
+	})
+
+	t.Run("a push of another branch of the repository needs that branch's head", func(t *testing.T) {
+		other := f.Heads["behind"]
+		_, err := p.PushBranchTo(ctx, ports.PushTarget{WorkspaceID: at.Workspaces["insync"], ExpectedHead: other, Branch: "ahead", Remote: "mirror"})
+		wantCode(t, err, "PUSH_STALE")
+		if _, err := p.PushBranchTo(ctx, ports.PushTarget{WorkspaceID: at.Workspaces["insync"], ExpectedHead: f.Heads["ahead"], Branch: "ahead", Remote: "mirror"}); err != nil {
+			t.Fatal(err)
+		}
+		if got := f.MirrorRev(t, "ahead"); got != f.Heads["ahead"] {
+			t.Errorf("mirror holds ahead at %q, want %s", got, f.Heads["ahead"])
+		}
+		_, err = p.PushBranchTo(ctx, ports.PushTarget{WorkspaceID: at.Workspaces["insync"], ExpectedHead: "abc", Branch: "no-such-branch", Remote: "mirror"})
+		wantCode(t, err, "BRANCH_NOT_FOUND")
+	})
+
+	t.Run("a push to a remote the repository does not have is REMOTE_NOT_FOUND", func(t *testing.T) {
+		_, err := p.PushBranchTo(ctx, ports.PushTarget{WorkspaceID: at.Workspaces["insync"], ExpectedHead: f.Heads["insync"], Remote: "nowhere"})
+		wantCode(t, err, "REMOTE_NOT_FOUND")
+	})
+
+	t.Run("a push to a named remote is never forced", func(t *testing.T) {
+		before := f.OriginRev(t, "diverged")
+		_, err := p.PushBranchTo(ctx, ports.PushTarget{WorkspaceID: at.Workspaces["diverged"], ExpectedHead: state(t, "diverged").Head, Remote: "origin"})
+		wantCode(t, err, "PUSH_REJECTED")
+		if got := f.OriginRev(t, "diverged"); got != before {
+			t.Errorf("origin's diverged moved from %s to %s", before, got)
+		}
+	})
+
 	t.Run("a push needs a worktree on disk and a repository with an origin", func(t *testing.T) {
 		_, err := p.PushBranch(ctx, at.Workspaces["gone"], f.Heads["gone"])
 		wantCode(t, err, "WORKSPACE_MISSING")

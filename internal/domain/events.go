@@ -79,6 +79,21 @@ type SessionEnded struct {
 	Status    SessionStatus
 }
 
+// InterviewOpened: a session's agent asked the person an interview, which was
+// stored as open. It is published once per interview.
+type InterviewOpened struct {
+	InterviewID string
+	SessionID   string
+	Title       string
+	Questions   int
+}
+
+// InterviewClosed: an interview left open: it was sent, dismissed or expired.
+type InterviewClosed struct {
+	InterviewID string
+	SessionID   string
+}
+
 // SessionCommitCheckChanged: a session's commit check went off (Off, with the
 // Reason) or was repaired. It is published at every check while the session
 // stays off, so a subscriber deduplicates by session.
@@ -119,6 +134,16 @@ type ReviewRequestChanged struct {
 type SessionStatusChanged struct {
 	SessionID string
 	Status    SessionStatus
+	// ByBranchRequest says the status moved because a branch request is
+	// pending: the inbox has its own notification for that.
+	ByBranchRequest bool
+}
+
+// BranchRequestChanged: a branch request was filed, answered, used or expired;
+// Request is it as it is now.
+type BranchRequestChanged struct {
+	Request   BranchRequest
+	ProjectID string
 }
 
 // TicketResourceAdded: a person added a resource to a task. Edits and
@@ -186,6 +211,8 @@ func (SettingsChanged) EventName() string           { return "settings.changed" 
 func (SessionDeleted) EventName() string            { return "session.deleted" }
 func (SessionStarted) EventName() string            { return "session.started" }
 func (SessionEnded) EventName() string              { return "session.ended" }
+func (InterviewOpened) EventName() string           { return "interview.opened" }
+func (InterviewClosed) EventName() string           { return "interview.closed" }
 func (SessionTurnEnded) EventName() string          { return "session.turn_ended" }
 func (SessionCommitCheckChanged) EventName() string { return "session.commit_check_changed" }
 func (TicketStatusChanged) EventName() string       { return "ticket.status_changed" }
@@ -193,6 +220,7 @@ func (TicketDeleted) EventName() string             { return "ticket.deleted" }
 func (TicketResourceAdded) EventName() string       { return "ticket.resource_added" }
 func (ReviewRequestChanged) EventName() string      { return "review_request.changed" }
 func (SessionStatusChanged) EventName() string      { return "session.status_changed" }
+func (BranchRequestChanged) EventName() string      { return "branch_request.changed" }
 func (TicketCommentAdded) EventName() string        { return "ticket.comment_added" }
 func (DocumentChanged) EventName() string           { return "document.changed" }
 func (ArtifactChanged) EventName() string           { return "artifact.changed" }

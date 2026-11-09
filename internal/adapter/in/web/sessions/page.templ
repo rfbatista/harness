@@ -48,6 +48,7 @@ templ Page(v PageView) {
 			x-on:dialog-action="dialogAction"
 			x-effect="applyFocus()"
 		>
+			<span hidden x-effect="syncInterviews()"></span>
 			@templ.JSONScript("sessions-seed", v.Seed)
 			if v.Code != nil {
 				@templ.JSONScript("code-seed", v.Code.Seed)
@@ -100,6 +101,7 @@ templ Page(v PageView) {
 					<div class="[ actions ]">
 						@featureButton(v)
 						@reviewsButton(v)
+						@branchRequestsButton(v)
 						@gitButton(v)
 						<button type="button" class="[ button ]" id="task-note-button" data-variant="ghost" data-size="sm" aria-haspopup="dialog" aria-expanded="false" aria-controls="task-note" x-show="hasDescription" x-on:click="openNote" { hiddenUnless(v.TaskDescription != "")... }>Description</button>
 						if v.Documents != nil {
@@ -733,7 +735,7 @@ templ detail(form NewSessionForm, paint *code.View, usage bool, lockedMode strin
 				@sessionHead(usage)
 				@paneTabs()
 				<template x-for="t in terminalPanes" x-bind:key="t.key">
-					@terminalPane()
+					@agentStage()
 				</template>
 				<template x-if="noteOnly">
 					<div class="[ terminal ]" data-state="ended">
@@ -986,6 +988,7 @@ templ terminalPane() {
 		x-data="sessionsTerminal(t.id)"
 		x-bind:data-state="state"
 		x-bind:data-attention="attention ? '' : null"
+		x-bind:inert="sheetShown ? '' : null"
 		x-on:terminal-focus-requested.window="focus"
 		x-on:terminal-reconnect-requested.window="reconnectRequested"
 		x-on:terminal-jump-requested.window="jumpRequested"

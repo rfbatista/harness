@@ -132,7 +132,8 @@ navigate it.
    A repository is an application; a bounded context tells you which part of it
    owns a concept. Read code only to confirm a boundary.
 3. **Grill the person** with the `task-grill-with-docs` skill: rounds of
-   numbered questions over the design tree, each with your recommended answer,
+   questions over the design tree, asked through `ask_person` and each with your
+   recommended answer,
    facts looked up by you, settled terms and decisions written to the
    `Glossary:` and `ADR:` files in `project/docs/` as they settle. Stop here
    until the person confirms you share an understanding.

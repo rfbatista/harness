@@ -34,6 +34,8 @@ import { hljsHighlighter } from "./modules/code/infrastructure/hljs-highlighter.
 import { lazyPreparer, workerPreparer } from "./modules/code/infrastructure/preparer.js";
 import { registerCode } from "./modules/code/presentation/register.js";
 import { runsGateway } from "./modules/runs/infrastructure/runs-gateway.js";
+import { branchRequestsGateway } from "./modules/branchrequests/infrastructure/branch-requests-gateway.js";
+import { registerBranchRequests } from "./modules/branchrequests/presentation/register.js";
 import { reviewsGateway } from "./modules/reviews/infrastructure/reviews-gateway.js";
 import { registerReviews } from "./modules/reviews/presentation/register.js";
 import { registerRuns } from "./modules/runs/presentation/register.js";
@@ -54,6 +56,7 @@ import { registerAgentBoard } from "./modules/agentboard/presentation/register.j
 import { registerProjects } from "./modules/projects/presentation/register.js";
 import { artifactsGateway } from "./modules/sessions/infrastructure/artifacts-gateway.js";
 import { channelGateway } from "./modules/sessions/infrastructure/channel-gateway.js";
+import { interviewsGateway } from "./modules/sessions/infrastructure/interviews-gateway.js";
 import { sessionsGateway } from "./modules/sessions/infrastructure/sessions-gateway.js";
 import { personTerminalsGateway } from "./modules/sessions/infrastructure/person-terminals-gateway.js";
 import { terminalGateway } from "./modules/sessions/infrastructure/terminal-gateway.js";
@@ -118,6 +121,7 @@ registerSessions(Alpine, {
   gateway: sessionsGateway(api, events),
   artifacts: artifactsGateway(api, events),
   channel: channelGateway(api, events),
+  interviews: interviewsGateway(api, events),
   terminals: terminalGateway({ base: "/api" }),
   transcripts: transcriptGateway(api),
   sandbox: sessionSandboxGateway(api),
@@ -133,6 +137,7 @@ registerSessions(Alpine, {
 
 registerRuns(Alpine, { gateway: runsGateway(api), prefs });
 registerReviews(Alpine, { gateway: reviewsGateway(api, events), clock: systemClock });
+registerBranchRequests(Alpine, { gateway: branchRequestsGateway(api, events), clock: systemClock });
 registerPullRequests(Alpine, { gateway: pullRequestsGateway(api, events) });
 registerCode(Alpine, { gateway: codeGateway(api, events), files: filesGateway(api, events), highlighter: hljsHighlighter(createHljs()), preparer: lazyPreparer(() => workerPreparer(codeWorkerUrl())), prefs, navigate });
 registerSync(Alpine, { gateway: syncGateway(api, events) });

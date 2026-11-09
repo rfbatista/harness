@@ -214,3 +214,13 @@ func gitButtonAttrs(hasWorkspace bool) templ.Attributes {
 	}
 	return templ.Attributes{"style": "display: none"}
 }
+
+// branchRequestsButtonAttrs paints the title row's Branch requests button
+// before the browser reads the requests: named with the count when some wait on
+// the person, hidden when none do (as reviewsButtonAttrs does).
+func branchRequestsButtonAttrs(pending int) templ.Attributes {
+	if pending > 0 {
+		return templ.Attributes{"aria-label": "Branch requests, " + strconv.Itoa(pending) + " waiting"}
+	}
+	return templ.Attributes{"style": "display: none"}
+}

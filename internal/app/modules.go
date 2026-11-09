@@ -38,6 +38,7 @@ import (
 	"operators-mcp/internal/adapter/out/filesystem"
 	"operators-mcp/internal/adapter/out/gitcli"
 	"operators-mcp/internal/adapter/out/githubapi"
+	"operators-mcp/internal/adapter/out/gitprobe"
 	"operators-mcp/internal/adapter/out/keychainshim"
 	"operators-mcp/internal/adapter/out/persistence/sqlite"
 	"operators-mcp/internal/adapter/out/personshell"
@@ -48,6 +49,7 @@ import (
 	"operators-mcp/internal/application/apps"
 	"operators-mcp/internal/application/archrules"
 	"operators-mcp/internal/application/artifacts"
+	"operators-mcp/internal/application/branchgate"
 	"operators-mcp/internal/application/execution"
 	"operators-mcp/internal/application/gitcredentials"
 	"operators-mcp/internal/application/keychainpath"
@@ -98,6 +100,8 @@ var PersistenceModule = fx.Module("persistence",
 		asPort(sqlite.NewPullRequestRepository, new(ports.PullRequestRepository)),
 		asPort(sqlite.NewArchitectureRecordRepository, new(ports.ArchitectureRecordStore)),
 		asPort(sqlite.NewArchitectureRuleEventRepository, new(ports.ArchitectureRuleEventStore)),
+		asPort(sqlite.NewBranchRequestRepository, new(ports.BranchRequestStore)),
+		asPort(sqlite.NewRecordedPushRepository, new(ports.PushRecords)),
 		asPort(sqlite.NewDesignSystemRepository, new(ports.DesignSystemStore)),
 		asPort(sqlite.NewDesignProposalRepository, new(ports.DesignProposalStore)),
 		asPort(sqlite.NewDesignExportRepository, new(ports.DesignExportStore)),
@@ -450,6 +454,7 @@ var AgentRuntimeModule = fx.Module("agentruntime",
 		asPort(newClaudeTranscriptReader, new(ports.ClaudeTranscriptReader)),
 		newOrchestrationService,
 		newArchitectureRules,
+		newBranchGate,
 		platformSandboxDriver,
 		platformSandboxViolations,
 		newSandboxSettings,
@@ -466,7 +471,7 @@ var AgentRuntimeModule = fx.Module("agentruntime",
 		newPersonTerminals,
 	),
 	fx.Invoke(registerRuntimeShutdown, registerServerSessions, bindVirtualShells, bindWorkspaceRemovals, bindFilesRootFeed, bindSandboxSettings,
-		bindAgentReadiness, func(*archrules.Service) {}),
+		bindAgentReadiness, func(*archrules.Service) {}, restoreBranchGate),
 )
 
 // TaskChannelModule wires the architect channel: its tables, the service,
@@ -753,6 +758,8 @@ func newClaudeManager(cfg Config, bin ports.ManagedClaudeBin, home claudehome.Ho
 		ApprovalURL: func(sessionID string) string {
 			return base + mcpapprove.PathPrefix + sessionID
 		},
+		// Interactive sessions ask the person through the interview panel.
+		InterviewURL:    interviewURLs(base),
 		ApprovalTimeout: cfg.ApprovalTimeout,
 		RawLog:          rawLogWriter(cfg),
 		ProxyURL:        cfg.llmProxyURL(),
@@ -850,6 +857,58 @@ func newArchitectureRules(cat catalog.Catalog, sessions ports.SessionRepository,
 	return svc
 }
 
+// newBranchGate decides the branch grants sessions' git shims ask for.
+func newBranchGate(cfg Config, cat catalog.Catalog, sessions ports.SessionRepository, requests ports.BranchRequestStore, pushes ports.PushRecords, workspaces ports.WorkspaceRepository, worktreeGit ports.WorktreeGit, orch *orchestration.Service) *branchgate.Service {
+	publisher := gitcli.NewBranchPublisher()
+	probe := gitprobe.Probe{Git: cfg.GitBin}
+	svc := branchgate.NewService(branchgate.Deps{
+		Sessions: sessions, Requests: requests, Probe: probe, Waiter: orch, Turns: orch, Events: cat.Bus, Feed: orch,
+		Pushes: pushes,
+		Commits: func(dir, branch, remote, remoteBranch, base string) (int, bool, error) {
+			return publisher.CommitsToPush(context.Background(), dir, branch, remote, remoteBranch, base)
+		},
+		DirOf: func(sess *domain.Session) string {
+			if ws := workspaces.Get(context.Background(), sess.WorkspaceID); ws != nil {
+				return ws.Path
+			}
+			return ""
+		},
+		// The server's one push path, pushing exactly the commit that was asked about.
+		Push: func(ctx context.Context, sess *domain.Session, r domain.BranchRequest) error {
+			ws := workspaces.Get(ctx, sess.WorkspaceID)
+			if ws == nil {
+				return &domain.StructuredError{Code: "WORKSPACE_NOT_FOUND", Message: "the session has no worktree"}
+			}
+			remote, remoteBranch := "origin", r.Branch
+			if r.Remote != nil {
+				remote = r.Remote.Name
+			}
+			if r.RemoteBranch != nil {
+				remoteBranch = *r.RemoteBranch
+			}
+			_, err := worktreeGit.PushBranchTo(ctx, ports.PushTarget{
+				WorkspaceID: ws.ID, ExpectedHead: r.Commit, Commit: r.Commit, Branch: r.Branch,
+				Remote: remote, RemoteBranch: remoteBranch, RequestID: r.ID, By: domain.PushByAgent,
+			})
+			return err
+		},
+		BaseOf: func(sess *domain.Session) string {
+			if ws := workspaces.Get(context.Background(), sess.WorkspaceID); ws != nil {
+				return ws.BaseRef
+			}
+			return ""
+		},
+	})
+	svc.Subscribe(cat.Bus)
+	return svc
+}
+
+// restoreBranchGate rebuilds, at start, what a restart leaves of the branch
+// requests that wait on the person.
+func restoreBranchGate(lc fx.Lifecycle, svc *branchgate.Service) {
+	lc.Append(fx.Hook{OnStart: svc.Restore})
+}
+
 func newOrchestrationService(
 	cfg Config,
 	commitGuard ports.CommitGuard,
@@ -926,6 +985,10 @@ func newOrchestrationService(
 	svc.SessionArchitectureURL = func(sessionID string) string {
 		return base + httpapi.SessionArchitecturePath(sessionID)
 	}
+	svc.SessionBranchGateURL = func(sessionID string) string {
+		return base + httpapi.SessionBranchGatePath(sessionID)
+	}
+	svc.BranchGateTimeout = cfg.ApprovalTimeout
 	svc.ShimBinary = cfg.ShimBinary
 	svc.DeveloperBin = developerdir.Bin
 	svc.TokenSavers = cat.Capabilities
@@ -1213,10 +1276,11 @@ func newOriginFetcher(git ports.BranchPublisher, creds optionalGitCredentials) *
 // newWorktreeGit reads where each session worktree's branch stands against
 // its base and its upstream, from local git only, fetches origin on request
 // and announces the states a fetch moved on the project feed.
-func newWorktreeGit(ws ports.WorkspaceRepository, repos ports.RepositoryRepository, sessions ports.SessionRepository, tickets ports.TicketRepository, git ports.GitWorktreeReader, files ports.WorktreeFiles, publisher ports.BranchPublisher, fetcher *workspaces.OriginFetcher, orch *orchestration.Service) *workspaces.WorktreeGit {
+func newWorktreeGit(ws ports.WorkspaceRepository, repos ports.RepositoryRepository, sessions ports.SessionRepository, tickets ports.TicketRepository, git ports.GitWorktreeReader, files ports.WorktreeFiles, publisher ports.BranchPublisher, pushes ports.PushRecords, fetcher *workspaces.OriginFetcher, orch *orchestration.Service) *workspaces.WorktreeGit {
+	remotes, _ := publisher.(ports.RemotePublisher)
 	return workspaces.NewWorktreeGit(workspaces.WorktreeGitDeps{
 		Workspaces: ws, Repositories: repos, Sessions: sessions, Tickets: tickets, Git: git, Files: files,
-		Publisher: publisher, Fetcher: fetcher, Feed: orch,
+		Publisher: publisher, Fetcher: fetcher, Feed: orch, Remotes: remotes, Pushes: pushes,
 	})
 }
 

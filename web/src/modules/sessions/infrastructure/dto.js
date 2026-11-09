@@ -5,6 +5,7 @@
 import { Codes, StructuredError } from "../../../shared/domain/errors.js";
 import { CHECK_STATES, ROLES } from "../domain/channel.js";
 import { STATUSES } from "../domain/session.js";
+import { toSeedInterviews } from "./interviews-dto.js";
 
 /** @returns {import("../domain/session.js").Session} */
 export function toSession(dto) {
@@ -26,6 +27,8 @@ export function toSession(dto) {
     model: dto.model ?? "",
     status: dto.status,
     pendingApprovals: Number(dto.pending_approvals ?? 0),
+    openInterviewCount: Number(dto.open_interview_count ?? 0),
+    openQuestionCount: Number(dto.open_question_count ?? 0),
     lastAction: dto.last_action ?? "",
     interactive: dto.interactive === true,
     runsOn: dto.runs_on ?? "",
@@ -134,6 +137,8 @@ export function toSeed(body) {
     code: body.code === true,
     openCode: typeof body.open_code === "string" ? body.open_code : "",
     baseRefs: { ...(body.base_refs ?? {}) },
+    // Each session's interviews and the feed seq they are current to, for the panel's first paint.
+    interviews: toSeedInterviews(body.interviews),
   };
 }
 

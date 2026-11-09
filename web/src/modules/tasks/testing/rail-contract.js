@@ -4,7 +4,7 @@ import { assert, test } from "../../../shared/testing/test.js";
 import { flush } from "../../../shared/testing/doubles.js";
 import { makeTask } from "./fixtures.js";
 
-const session = (id, ticketId, status) => ({ id, ticketId, status, pendingApprovals: 0 });
+const session = (id, ticketId, status) => ({ id, ticketId, status, pendingApprovals: 0, openInterviewCount: 0 });
 
 /**
  * @param {string} name

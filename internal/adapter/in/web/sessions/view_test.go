@@ -26,6 +26,7 @@ func TestStatusViewMatchesTheSharedFixture(t *testing.T) {
 		Cases []struct {
 			Status           domain.SessionStatus `json:"status"`
 			PendingApprovals int                  `json:"pending_approvals"`
+			OpenInterviews   int                  `json:"open_interview_count"`
 			State, Word      string
 			NeedsYou         bool `json:"needs_you"`
 		} `json:"cases"`
@@ -37,12 +38,13 @@ func TestStatusViewMatchesTheSharedFixture(t *testing.T) {
 		t.Fatal("fixture has no cases")
 	}
 	for _, c := range fixture.Cases {
-		s := &domain.Session{Status: c.Status, PendingApprovals: c.PendingApprovals}
+		s := &domain.Session{Status: c.Status, PendingApprovals: c.PendingApprovals, OpenInterviewCount: c.OpenInterviews}
+		label := fmt.Sprintf("%s+%d+%d", c.Status, c.PendingApprovals, c.OpenInterviews)
 		if got := statusOf(s); got != (StatusView{c.State, c.Word}) {
-			t.Errorf("%s+%d: got %+v, want {%s %s}", c.Status, c.PendingApprovals, got, c.State, c.Word)
+			t.Errorf("%s: got %+v, want {%s %s}", label, got, c.State, c.Word)
 		}
 		if got := NeedsYou(s); got != c.NeedsYou {
-			t.Errorf("%s+%d: needsYou = %v, want %v", c.Status, c.PendingApprovals, got, c.NeedsYou)
+			t.Errorf("%s: needsYou = %v, want %v", label, got, c.NeedsYou)
 		}
 	}
 }
@@ -106,7 +108,7 @@ func TestSeedIsNeverNull(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if string(b) != `{"project_id":"p1","ticket_id":"t1","sessions":[],"agent_names":{},"repository_names":{},"artifacts":[],"tasks":[],"git_states":[]}` {
+	if string(b) != `{"project_id":"p1","ticket_id":"t1","sessions":[],"agent_names":{},"repository_names":{},"artifacts":[],"tasks":[],"git_states":[],"interviews":{}}` {
 		t.Errorf("seed = %s", b)
 	}
 	if !v.Empty() {
@@ -354,6 +356,7 @@ func TestRowMatchesTheSharedFixture(t *testing.T) {
 				Model            string               `json:"model"`
 				Status           domain.SessionStatus `json:"status"`
 				PendingApprovals int                  `json:"pending_approvals"`
+				OpenInterviews   int                  `json:"open_interview_count"`
 				Ago              int                  `json:"ago"`
 				TicketID         *string              `json:"ticket_id"`
 				Task             string               `json:"task"`
@@ -401,7 +404,7 @@ func TestRowMatchesTheSharedFixture(t *testing.T) {
 		others := map[string]*domain.Session{}
 		for _, f := range c.Sessions {
 			s := &domain.Session{ID: f.ID, AgentID: f.AgentID, Role: f.Role, ParentSessionID: f.Parent, BroughtUnder: f.BroughtUnder, Mode: f.Mode, Model: f.Model,
-				Status: f.Status, PendingApprovals: f.PendingApprovals, Task: f.Task, TicketID: "t1", RepositoryID: f.RepositoryID, AgentUnassigned: f.AgentUnassigned, UpdatedAt: now.Add(-time.Duration(f.Ago) * time.Minute)}
+				Status: f.Status, PendingApprovals: f.PendingApprovals, OpenInterviewCount: f.OpenInterviews, Task: f.Task, TicketID: "t1", RepositoryID: f.RepositoryID, AgentUnassigned: f.AgentUnassigned, UpdatedAt: now.Add(-time.Duration(f.Ago) * time.Minute)}
 			if f.TicketID != nil {
 				s.TicketID = *f.TicketID
 			}
@@ -624,5 +627,55 @@ func TestNewSessionFormOffersOnlyTheProjectsEnabledAgents(t *testing.T) {
 	v := NewPageView(shell.Frame{}, &domain.Project{ID: "p1", EnabledAgentsMode: domain.AgentsSelected}, nil, nil, agents, nil, time.Now())
 	if len(v.Seed.AgentNames) != 3 {
 		t.Errorf("agent names for existing sessions = %v, want all three", v.Seed.AgentNames)
+	}
+}
+
+// A live session with an open interview reads "questions" and needs the
+// person whatever its status; an approval comes first, then the questions,
+// then your turn. An ended session owes nothing, however many it left.
+func TestAnOpenInterviewMakesASessionReadQuestionsAndNeedThePerson(t *testing.T) {
+	cases := []struct {
+		name     string
+		session  domain.Session
+		state    string
+		word     string
+		needsYou bool
+	}{
+		{"running keeps its running dot", domain.Session{Status: domain.SessionRunning, OpenInterviewCount: 1}, "running", "questions", true},
+		{"thinking keeps its running dot", domain.Session{Status: domain.SessionThinking, OpenInterviewCount: 2}, "running", "questions", true},
+		{"idle: questions before your turn", domain.Session{Status: domain.SessionIdle, OpenInterviewCount: 1}, "waiting", "questions", true},
+		{"paused keeps its idle dot", domain.Session{Status: domain.SessionPaused, OpenInterviewCount: 1}, "idle", "questions", true},
+		{"approval status wins", domain.Session{Status: domain.SessionWaitingApproval, OpenInterviewCount: 1}, "waiting", "approval", true},
+		{"pending approval wins", domain.Session{Status: domain.SessionRunning, PendingApprovals: 1, OpenInterviewCount: 1}, "waiting", "approval", true},
+		{"no interview, idle", domain.Session{Status: domain.SessionIdle}, "waiting", "your turn", true},
+		{"no interview, running", domain.Session{Status: domain.SessionRunning}, "running", "running", false},
+		{"ended", domain.Session{Status: domain.SessionDone, OpenInterviewCount: 1}, "done", "done", false},
+		{"failed", domain.Session{Status: domain.SessionFailed, OpenInterviewCount: 1}, "failed", "failed", false},
+	}
+	for _, c := range cases {
+		s := c.session
+		if got := statusOf(&s); got != (StatusView{c.state, c.word}) {
+			t.Errorf("%s: status = %+v, want {%s %s}", c.name, got, c.state, c.word)
+		}
+		if got := NeedsYou(&s); got != c.needsYou {
+			t.Errorf("%s: needs you = %v, want %v", c.name, got, c.needsYou)
+		}
+	}
+
+	now := time.Date(2026, 10, 2, 14, 0, 0, 0, time.UTC)
+	list := []*domain.Session{
+		{ID: "asking", TicketID: "t1", Status: domain.SessionRunning, OpenInterviewCount: 1, OpenQuestionCount: 3, UpdatedAt: now},
+		{ID: "quiet", TicketID: "t1", Status: domain.SessionRunning, UpdatedAt: now.Add(-time.Minute)},
+	}
+	v := NewPageView(shell.Frame{}, &domain.Project{ID: "p1"}, &domain.Ticket{ID: "t1", Title: "x"}, list, nil, nil, now)
+	if v.Groups[0].Label != "Needs you" || v.Groups[0].Rows[0].ID != "asking" {
+		t.Fatalf("groups: %+v", v.Groups)
+	}
+	row := v.Groups[0].Rows[0]
+	if !row.Attention || row.Chip == nil || row.Chip.Word != "questions" || row.Chip.Tone != "attention" {
+		t.Errorf("row: %+v chip %+v", row, row.Chip)
+	}
+	if v.Summary != "2 sessions · 1 waiting" {
+		t.Errorf("summary = %q", v.Summary)
 	}
 }

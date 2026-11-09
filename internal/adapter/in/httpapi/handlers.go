@@ -72,6 +72,9 @@ type Services struct {
 	// AgentBoard is the Agent board's seed and live session feed; nil
 	// answers 503.
 	AgentBoard ports.AgentBoard
+	// Interviews reads and follows what sessions asked the person; nil
+	// answers 503.
+	Interviews ports.Interviews
 	// Usage reads the token usage the LLM proxy measured; nil answers 503.
 	Usage ports.UsageReader
 	// LiveCalls opens the live call stream of a project's Usage page; nil
@@ -132,6 +135,9 @@ type Services struct {
 	// ArchitectureRules checks sessions' hooks, shims and commits against
 	// their repository's rules; nil allows everything.
 	ArchitectureRules ports.ArchitectureRules
+	// BranchGate decides the branch grants a session's git shim asks for; nil
+	// grants nothing.
+	BranchGate ports.BranchGate
 	// RepositoryAgents keeps which agents each repository assigns; nil
 	// answers 503.
 	RepositoryAgents ports.RepositoryAgents
@@ -174,6 +180,7 @@ type Handler struct {
 	branchNames    ports.BranchNameChecker
 	notifications  ports.Notifications
 	agentBoard     ports.AgentBoard
+	interviews     ports.Interviews
 	usage          ports.UsageReader
 	liveCalls      ports.LiveCalls
 	code           ports.CodeBrowser
@@ -206,8 +213,9 @@ type Handler struct {
 	// imports is the design systems' import, when they offer it.
 	imports ports.DesignSystemImports
 	// exports is the design systems' export into repositories, when they offer it.
-	exports   ports.DesignSystemExports
-	archRules ports.ArchitectureRules
+	exports    ports.DesignSystemExports
+	archRules  ports.ArchitectureRules
+	branchGate ports.BranchGate
 
 	streams streamRegistry // the browser tabs' live streams (stream.go)
 }
@@ -246,8 +254,10 @@ func NewHandler(s Services) *Handler {
 		imports:        designImports(s.DesignSystems),
 		exports:        designExports(s.DesignSystems),
 		archRules:      s.ArchitectureRules,
+		branchGate:     s.BranchGate,
 		notifications:  s.Notifications,
 		agentBoard:     s.AgentBoard,
+		interviews:     s.Interviews,
 		usage:          s.Usage,
 		liveCalls:      s.LiveCalls,
 		code:           s.Code,

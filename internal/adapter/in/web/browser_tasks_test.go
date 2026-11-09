@@ -46,6 +46,15 @@ func (f *fakeTicketsAPI) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		http.NotFound(w, r)
 		return
 	}
+	// A live terminal's interview panel reads and follows its session's interviews: none here.
+	if strings.HasPrefix(r.URL.Path, "/api/sessions/") && strings.Contains(r.URL.Path, "/interviews") {
+		if strings.HasSuffix(r.URL.Path, "/events") {
+			http.NotFound(w, r)
+			return
+		}
+		_, _ = w.Write([]byte(`{"seq":0,"interviews":[]}`))
+		return
+	}
 	var in map[string]string
 	_ = json.NewDecoder(r.Body).Decode(&in)
 	f.mu.Lock()

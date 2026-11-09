@@ -192,4 +192,38 @@ func ReviewsError() templ.Component {
 	})
 }
 
+// BranchRequestCard is one branch request, bound to branchRequests' `card`: the
+// "Branch" tag, the action and the branch it acts on with what it starts from,
+// then the session, task, repository and session branch, the agent's reason, and
+// the person's answer (a note; Approve or Deny). It has the review card's look
+// (ADR 0069). Everything in it is the agent's text: x-text, never HTML.
+func BranchRequestCard() templ.Component {
+	return templruntime.GeneratedTemplate(func(templ_7745c5c3_Input templruntime.GeneratedComponentInput) (templ_7745c5c3_Err error) {
+		templ_7745c5c3_W, ctx := templ_7745c5c3_Input.Writer, templ_7745c5c3_Input.Context
+		if templ_7745c5c3_CtxErr := ctx.Err(); templ_7745c5c3_CtxErr != nil {
+			return templ_7745c5c3_CtxErr
+		}
+		templ_7745c5c3_Buffer, templ_7745c5c3_IsBuffer := templruntime.GetBuffer(templ_7745c5c3_W)
+		if !templ_7745c5c3_IsBuffer {
+			defer func() {
+				templ_7745c5c3_BufErr := templruntime.ReleaseBuffer(templ_7745c5c3_Buffer)
+				if templ_7745c5c3_Err == nil {
+					templ_7745c5c3_Err = templ_7745c5c3_BufErr
+				}
+			}()
+		}
+		ctx = templ.InitializeContext(ctx)
+		templ_7745c5c3_Var6 := templ.GetChildren(ctx)
+		if templ_7745c5c3_Var6 == nil {
+			templ_7745c5c3_Var6 = templ.NopComponent
+		}
+		ctx = templ.ClearChildren(ctx)
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 9, "<article class=\"[ review ]\" x-bind:id=\"card.anchor\" data-branch-request x-bind:data-request-id=\"card.id\"><h3 tabindex=\"-1\" data-branch-request-heading><span class=\"[ badge ]\" data-tone=\"signal\" data-branch-tag>Branch</span> <span x-text=\"card.title\"></span></h3><p class=\"[ meta ]\" x-text=\"card.startLine\"></p><p class=\"[ meta ]\" x-show=\"card.detailLine\" x-text=\"card.detailLine\"></p><p class=\"[ meta ]\"><span x-text=\"card.sessionName\"></span> · <span x-text=\"card.age\"></span></p><p class=\"[ meta ]\">Repository <span x-text=\"card.repository\"></span> · session branch <span x-text=\"card.sessionBranch\"></span></p><p class=\"[ body ]\" x-show=\"card.reason\" x-text=\"card.reason\"></p><div class=\"[ flow ] [ flow-space-s ]\"><div class=\"[ field ]\"><label x-bind:for=\"card.noteId\">Note <span class=\"[ color-ink-faint weight-regular ]\">(the agent gets it)</span></label> <textarea x-bind:id=\"card.noteId\" rows=\"2\" x-model=\"card.draft.note\"></textarea></div><div class=\"[ actions ] [ cluster ] [ gutter-xs ]\"><button type=\"button\" class=\"[ button ]\" data-variant=\"primary\" data-size=\"sm\" data-action=\"approve\" x-bind:aria-busy=\"card.draft.busy\" x-bind:disabled=\"card.draft.busy\" x-on:click=\"approve(card.id)\">Approve</button> <button type=\"button\" class=\"[ button ]\" data-size=\"sm\" data-action=\"deny\" x-bind:disabled=\"card.draft.busy\" x-on:click=\"deny(card.id)\">Deny</button></div></div></article>")
+		if templ_7745c5c3_Err != nil {
+			return templ_7745c5c3_Err
+		}
+		return nil
+	})
+}
+
 var _ = templruntime.GeneratedTemplate
