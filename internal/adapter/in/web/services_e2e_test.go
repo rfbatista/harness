@@ -32,9 +32,17 @@ type servicesWorld struct {
 	srv     *httptest.Server
 	project *domain.Project
 	repo    *domain.Repository
+	svc     *services.Service
 }
 
 func newServicesWorld(t *testing.T) *servicesWorld {
+	t.Helper()
+	return newServicesWorldWith(t, nil)
+}
+
+// newServicesWorldWith is newServicesWorld with the services options adjusted
+// by tune (the run worktree lookup, say) before the service is built.
+func newServicesWorldWith(t *testing.T, tune func(*services.Options)) *servicesWorld {
 	t.Helper()
 	if testing.Short() {
 		t.Skip("browser test: skipped in -short mode")
@@ -68,13 +76,17 @@ func newServicesWorld(t *testing.T) *servicesWorld {
 		t.Fatal(err)
 	}
 	t.Cleanup(func() { _ = sqlite.Close(db) })
-	svc := services.New(sqlite.NewServiceRepository(db), cat.Projects, cat.Projects, services.Options{
+	opts := services.Options{
 		LogDir:    t.TempDir(),
 		FolderDir: t.TempDir(),
 		Runners:   map[domain.ServiceKind]ports.ServiceProcessRunner{domain.ServiceKindCommand: commandrunner.Runner{}},
-	})
+	}
+	if tune != nil {
+		tune(&opts)
+	}
+	svc := services.New(sqlite.NewServiceRepository(db), cat.Projects, cat.Projects, opts)
 
-	w := &servicesWorld{}
+	w := &servicesWorld{svc: svc}
 	if w.project, err = cat.Projects.CreateProject(ctx, "harness", root); err != nil {
 		t.Fatal(err)
 	}
