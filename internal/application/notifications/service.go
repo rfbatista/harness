@@ -172,6 +172,10 @@ func (s *Service) Subscribe(bus ports.EventSubscriber) {
 		s.onSessionStatus(ev)
 		return nil
 	})
+	ports.On(bus, func(ctx context.Context, ev domain.BranchFindingFound) error {
+		s.onBranchFinding(ev)
+		return nil
+	})
 	ports.On(bus, func(ctx context.Context, ev domain.BranchRequestChanged) error {
 		s.onBranchRequest(ev)
 		return nil
@@ -261,6 +265,32 @@ func (s *Service) onBranchRequest(ev domain.BranchRequestChanged) {
 		Title: clip("Branch: "+r.Label(), domain.MaxNotificationTitleLen),
 		Body:  clip(body, domain.MaxNotificationBodyLen),
 		Link:  link, CauseKey: branchRequestKey(r.ID),
+	}, false)
+}
+
+// onBranchFinding records one action notification for a branch or push that no
+// branch request explains: it names the branch, the repository and the session,
+// or the sessions whose turns overlapped when none is named (ADR 0070).
+func (s *Service) onBranchFinding(ev domain.BranchFindingFound) {
+	what := "Unapproved branch: " + ev.Branch
+	if ev.Kind == "push" {
+		what = "Unapproved push: " + ev.Branch
+	}
+	who := "Sessions whose turns overlapped: " + strings.Join(ev.Candidates, ", ")
+	link := domain.TaskLink(ev.ProjectID, ev.TaskID)
+	if ev.TaskID == "" {
+		link = domain.ProjectLink(ev.ProjectID)
+	}
+	if ev.SessionID != "" {
+		who = "Session " + ev.SessionID
+		link += "?session=" + url.QueryEscape(ev.SessionID)
+	}
+	body := who + ", repository " + ev.RepositoryID + ". No branch request covers it."
+	s.record(&domain.Notification{
+		ProjectID: ev.ProjectID, TaskID: ev.TaskID, SessionID: ev.SessionID,
+		Kind: domain.NotificationBranchFinding, Level: domain.NotificationAction,
+		Title: clip(what, domain.MaxNotificationTitleLen), Body: clip(body, domain.MaxNotificationBodyLen),
+		Link: link, CauseKey: "branch_finding:" + ev.RepositoryID + ":" + ev.Kind + ":" + ev.Branch + ":" + ev.FoundAt.Format(time.RFC3339Nano),
 	}, false)
 }
 

@@ -51,6 +51,46 @@ func TestAPushAnnouncesTheStateItLeft(t *testing.T) {
 	}
 }
 
+type pushLog struct {
+	mu   sync.Mutex
+	list []ports.RecordedPush
+}
+
+func (l *pushLog) Record(_ context.Context, p ports.RecordedPush) error {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	l.list = append(l.list, p)
+	return nil
+}
+
+func (l *pushLog) List(context.Context, string) ([]ports.RecordedPush, error) { return l.list, nil }
+
+// The person's push is recorded with its branch, remote, head and session, so
+// the Branches list shows it and the after-turn check never takes it for a bypass.
+func TestThePersonsPushIsRecordedAndARefusedOneIsNot(t *testing.T) {
+	f := portstest.NewWorktreeGitFixture(t)
+	log := &pushLog{}
+	svc, at, _ := workspacestest.NewWorktreeGitWithFeed(t, f, workspacestest.WithPushes(log))
+	ctx := context.Background()
+	st, err := svc.GitState(ctx, at.Workspaces["nopush"])
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := svc.PushBranch(ctx, at.Workspaces["nopush"], st.Head); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := svc.PushBranch(ctx, at.Workspaces["diverged"], "abc"); err == nil {
+		t.Fatal("a stale push went through")
+	}
+	if len(log.list) != 1 {
+		t.Fatalf("recorded %+v", log.list)
+	}
+	if p := log.list[0]; p.Branch != "nopush" || p.Remote != "origin" || p.RemoteBranch != "nopush" || p.Commit != st.Head ||
+		p.By != domain.PushedByPerson || p.SessionID != at.Sessions["nopush"] || p.RepositoryID != at.RepositoryID || p.RequestID != "" {
+		t.Errorf("recorded %+v", p)
+	}
+}
+
 // pushingPublisher is real git for reads and a slow or hung push for the rest.
 type pushingPublisher struct {
 	*gitcli.BranchPublisher

@@ -135,6 +135,8 @@ type Services struct {
 	// BranchGate decides the branch grants a session's git shim asks for; nil
 	// grants nothing.
 	BranchGate ports.BranchGate
+	// SessionBranches reads the Branches lists; nil answers empty lists.
+	SessionBranches ports.SessionBranchLists
 	// RepositoryAgents keeps which agents each repository assigns; nil
 	// answers 503.
 	RepositoryAgents ports.RepositoryAgents
@@ -205,9 +207,10 @@ type Handler struct {
 	// imports is the design systems' import, when they offer it.
 	imports ports.DesignSystemImports
 	// exports is the design systems' export into repositories, when they offer it.
-	exports    ports.DesignSystemExports
-	archRules  ports.ArchitectureRules
-	branchGate ports.BranchGate
+	exports         ports.DesignSystemExports
+	archRules       ports.ArchitectureRules
+	branchGate      ports.BranchGate
+	sessionBranches ports.SessionBranchLists
 
 	streams streamRegistry // the browser tabs' live streams (stream.go)
 }
@@ -215,47 +218,48 @@ type Handler struct {
 // NewHandler returns an HTTP handler that serves /api/list_tree, /api/list_zones, /api/list_projects, etc.
 func NewHandler(s Services) *Handler {
 	return &Handler{
-		projects:       s.Projects,
-		projectFeed:    s.ProjectFeed,
-		discovery:      s.Discovery,
-		env:            s.Env,
-		runCommands:    s.RunCommands,
-		apps:           s.Apps,
-		architecture:   s.Architecture,
-		agents:         s.Agents,
-		capabilities:   s.Capabilities,
-		tokenSavers:    s.TokenSavers,
-		settings:       s.Settings,
-		toolingSvc:     s.Tools,
-		execSvc:        s.Tasks,
-		orchSvc:        s.Sessions,
-		persons:        s.PersonTerminals,
-		planningSvc:    s.Planning,
-		workspacesSvc:  s.Workspaces,
-		artifactsSvc:   s.Artifacts,
-		channel:        s.TaskChannel,
-		resources:      s.TaskResources,
-		comments:       s.TaskComments,
-		archive:        s.TaskArchive,
-		pullRequests:   s.PullRequests,
-		prBases:        s.PullRequestBases,
-		merges:         s.Merges,
-		branchNames:    s.BranchNames,
-		repoArch:       s.RepositoryArchitectures,
-		designs:        s.DesignSystems,
-		imports:        designImports(s.DesignSystems),
-		exports:        designExports(s.DesignSystems),
-		archRules:      s.ArchitectureRules,
-		branchGate:     s.BranchGate,
-		notifications:  s.Notifications,
-		agentBoard:     s.AgentBoard,
-		usage:          s.Usage,
-		liveCalls:      s.LiveCalls,
-		code:           s.Code,
-		worktreeGit:    s.WorktreeGit,
-		sessionFiles:   s.SessionFiles,
-		gitCredentials: s.GitCredentials,
-		shells:         s.Shells,
+		projects:        s.Projects,
+		projectFeed:     s.ProjectFeed,
+		discovery:       s.Discovery,
+		env:             s.Env,
+		runCommands:     s.RunCommands,
+		apps:            s.Apps,
+		architecture:    s.Architecture,
+		agents:          s.Agents,
+		capabilities:    s.Capabilities,
+		tokenSavers:     s.TokenSavers,
+		settings:        s.Settings,
+		toolingSvc:      s.Tools,
+		execSvc:         s.Tasks,
+		orchSvc:         s.Sessions,
+		persons:         s.PersonTerminals,
+		planningSvc:     s.Planning,
+		workspacesSvc:   s.Workspaces,
+		artifactsSvc:    s.Artifacts,
+		channel:         s.TaskChannel,
+		resources:       s.TaskResources,
+		comments:        s.TaskComments,
+		archive:         s.TaskArchive,
+		pullRequests:    s.PullRequests,
+		prBases:         s.PullRequestBases,
+		merges:          s.Merges,
+		branchNames:     s.BranchNames,
+		repoArch:        s.RepositoryArchitectures,
+		designs:         s.DesignSystems,
+		imports:         designImports(s.DesignSystems),
+		exports:         designExports(s.DesignSystems),
+		archRules:       s.ArchitectureRules,
+		branchGate:      s.BranchGate,
+		sessionBranches: s.SessionBranches,
+		notifications:   s.Notifications,
+		agentBoard:      s.AgentBoard,
+		usage:           s.Usage,
+		liveCalls:       s.LiveCalls,
+		code:            s.Code,
+		worktreeGit:     s.WorktreeGit,
+		sessionFiles:    s.SessionFiles,
+		gitCredentials:  s.GitCredentials,
+		shells:          s.Shells,
 
 		tokenSaverInstalls: s.TokenSaverInstalls,
 		repositoryIndexes:  s.RepositoryIndexes,

@@ -388,6 +388,8 @@ func (s *Service) Start(ctx context.Context, req StartRequest) (*domain.Session,
 		return nil, fmt.Errorf("persist session: %w", err)
 	}
 	provisioned = nil
+	// The Branches list takes its starting snapshot before the agent acts.
+	s.announce(domain.SessionWorktreeProvisioned{SessionID: sess.ID()})
 	if s.commitCheckReason(sess.ID()) != "" {
 		s.announceCommitCheck(sess.ID(), false)
 	}

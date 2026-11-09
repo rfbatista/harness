@@ -138,6 +138,9 @@ func (r *BranchRequestRepository) List(ctx context.Context, f domain.BranchReque
 	if f.SessionID != "" {
 		q = q.Where("session_id = ?", f.SessionID)
 	}
+	if f.RepositoryID != "" {
+		q = q.Where("repository_id = ?", f.RepositoryID)
+	}
 	if f.TaskID != "" {
 		q = q.Where("task_id = ?", f.TaskID)
 	}

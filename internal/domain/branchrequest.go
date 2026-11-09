@@ -108,7 +108,8 @@ func strOr(s *string) string {
 
 // BranchRequestFilter selects branch requests; empty fields match all.
 type BranchRequestFilter struct {
-	SessionID string
-	TaskID    string
-	State     BranchRequestState
+	SessionID    string
+	RepositoryID string
+	TaskID       string
+	State        BranchRequestState
 }

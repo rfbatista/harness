@@ -35,6 +35,9 @@ type WorktreeGitDeps struct {
 	Publisher ports.BranchPublisher
 	Fetcher   *OriginFetcher
 	Feed      ports.ProjectChangeSink
+	// Pushes keeps each push the person makes, so the Branches list shows it
+	// and the after-turn check does not take it for a bypass; nil keeps none.
+	Pushes ports.RecordedPushStore
 	// Now is the clock the state's age is measured with; nil is time.Now.
 	Now func() time.Time
 }
@@ -407,6 +410,7 @@ func (s *WorktreeGit) PushBranch(ctx context.Context, workspaceID, expectedHead 
 	} else {
 		ws.PushedAt = &pushedAt
 	}
+	s.recordPush(ctx, repo.ID, now, pushedAt)
 	s.forget(ws.ID)
 	after, err := s.stateOf(ctx, ws, repo)
 	if err != nil {
@@ -417,6 +421,20 @@ func (s *WorktreeGit) PushBranch(ctx context.Context, workspaceID, expectedHead 
 		s.d.Feed.AnnounceChange(ports.ProjectChange{GitState: &ports.GitStateChange{GitState: copyState(after), ProjectID: repo.ProjectID}})
 	}
 	return after, nil
+}
+
+// recordPush keeps the person's push of st's branch to origin, under its name.
+func (s *WorktreeGit) recordPush(ctx context.Context, repositoryID string, st *domain.GitState, at time.Time) {
+	if s.d.Pushes == nil {
+		return
+	}
+	err := s.d.Pushes.Record(ctx, ports.RecordedPush{
+		RepositoryID: repositoryID, SessionID: st.SessionID, Branch: st.Branch, Remote: "origin", RemoteBranch: st.Branch,
+		Commit: st.Head, At: at, By: domain.PushedByPerson,
+	})
+	if err != nil {
+		slog.Warn("push not recorded", "branch", st.Branch, "err", err)
+	}
 }
 
 // reread is the workspace's state now, or before when it cannot be read.

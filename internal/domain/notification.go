@@ -24,6 +24,7 @@ const (
 	NotificationSessionFailed   NotificationKind = "session_failed"
 	NotificationCommitCheckOff  NotificationKind = "commit_check_off"
 	NotificationBranchRequest   NotificationKind = "branch_request"
+	NotificationBranchFinding   NotificationKind = "branch_finding"
 	NotificationAgent           NotificationKind = "agent"
 )
 

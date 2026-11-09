@@ -166,6 +166,7 @@ func (s *Service) StartInteractive(ctx context.Context, req InteractiveRequest) 
 		s.adoptCleanup(id, withViolations(p.cleanup, s.collectViolations(id, p.cfg.WorkingDir, p.sandbox.facts)))
 		s.courier.setTurn(id, startTurn(spec))
 		s.publish(id, SessionEvent{Type: "status", Status: domain.SessionRunning, Text: startedText(runsOn), At: time.Now()})
+		s.announce(domain.SessionWorktreeProvisioned{SessionID: id})
 		// Announced before the CLI runs, so the architect channel has the
 		// session's status-check loop in place when the start returns.
 		s.announce(domain.SessionStarted{SessionID: id, ProjectID: req.ProjectID, TicketID: req.TicketID,

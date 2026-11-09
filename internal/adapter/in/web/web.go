@@ -86,6 +86,9 @@ type Deps struct {
 	// BranchRequests seeds the task page's Branch requests button and popover;
 	// nil leaves them out.
 	BranchRequests ports.BranchRequestReader
+	// SessionBranches seeds the Branches section and the task page's branch
+	// links; nil shows none.
+	SessionBranches ports.SessionBranchLists
 	// Notifications seeds the top bar's unread count and the inbox's latest
 	// page; nil, or a failed read, renders the page without a seed.
 	Notifications ports.NotificationReader

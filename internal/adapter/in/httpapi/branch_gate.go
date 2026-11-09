@@ -102,3 +102,39 @@ func (h *Handler) handleAnswerBranchRequest(c echo.Context) error {
 	}
 	return c.JSON(http.StatusOK, map[string]any{"request": r})
 }
+
+func (h *Handler) handleSessionBranches(c echo.Context) error {
+	id := c.QueryParam("session_id")
+	if id == "" {
+		return &domain.StructuredError{Code: "INVALID_INPUT", Message: "session_id is required"}
+	}
+	list := []domain.SessionBranch{}
+	if h.sessionBranches != nil {
+		got, err := h.sessionBranches.SessionBranches(c.Request().Context(), id)
+		if err != nil {
+			return err
+		}
+		if got != nil {
+			list = got
+		}
+	}
+	return c.JSON(http.StatusOK, map[string]any{"branches": list})
+}
+
+func (h *Handler) handleListSessionBranches(c echo.Context) error {
+	id := c.QueryParam("task_id")
+	if id == "" {
+		return &domain.StructuredError{Code: "INVALID_INPUT", Message: "task_id is required"}
+	}
+	list := []domain.SessionBranches{}
+	if h.sessionBranches != nil {
+		got, err := h.sessionBranches.TaskSessionBranches(c.Request().Context(), id)
+		if err != nil {
+			return err
+		}
+		if got != nil {
+			list = got
+		}
+	}
+	return c.JSON(http.StatusOK, map[string]any{"sessions": list})
+}

@@ -139,7 +139,7 @@ func NewWorktreeGitWithFeed(t *testing.T, f *portstest.WorktreeGitFixture, opts 
 	svc := workspaces.NewWorktreeGit(workspaces.WorktreeGitDeps{
 		Workspaces: wsRepo, Repositories: repos, Sessions: sessions, Tickets: tickets,
 		Git: o.reader(code), Files: filesystem.NewWorktreeFiles(), Now: clock.Now,
-		Publisher: o.publisher, Fetcher: workspaces.NewOriginFetcher(o.publisher, gitcredentialstest.New()).WithTimeout(o.timeout), Feed: feed,
+		Publisher: o.publisher, Fetcher: workspaces.NewOriginFetcher(o.publisher, gitcredentialstest.New()).WithTimeout(o.timeout), Feed: feed, Pushes: o.pushes,
 	})
 	at.PassInterval = clock.Pass
 	if o.codeOut != nil {
@@ -201,6 +201,12 @@ type worktreeGitOptions struct {
 	reader    func(*gitcli.Code) ports.GitWorktreeReader
 	watched   *Watched
 	codeOut   *CodeHandle
+	pushes    ports.RecordedPushStore
+}
+
+// WithPushes keeps the person's pushes in store.
+func WithPushes(store ports.RecordedPushStore) WorktreeGitOption {
+	return func(o *worktreeGitOptions) { o.pushes = store }
 }
 
 // WithCodeWatcher builds a code watcher over the fixture's running sessions,
