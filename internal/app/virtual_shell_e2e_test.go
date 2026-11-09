@@ -65,6 +65,7 @@ type shellE2E struct {
 	shells   *vfs.Service
 	rules    *archrules.Service
 	gate     *branchgate.Service
+	pushes   ports.PushRecords
 	notes    *notifications.Service
 	// repoAgents is which agents each repository assigns, and its prompts.
 	repoAgents *repoagents.Service
@@ -77,7 +78,7 @@ func (e *shellE2E) boot() {
 		fx.Supply(e.cfg),
 		PersistenceModule, CatalogModule, PlanningModule, WorkspacesModule,
 		AgentRuntimeModule, TaskChannelModule, TextProcessingModule, NotificationsModule,
-		fx.Populate(&e.orch, &e.plan, &e.channel, &e.art, &e.cat, &e.sessions, &e.shells, &e.rules, &e.gate, &e.notes, &e.repoAgents),
+		fx.Populate(&e.orch, &e.plan, &e.channel, &e.art, &e.cat, &e.sessions, &e.shells, &e.rules, &e.gate, &e.pushes, &e.notes, &e.repoAgents),
 		fx.NopLogger,
 	)
 	if err := e.app.Start(e.ctx); err != nil {

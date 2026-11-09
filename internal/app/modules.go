@@ -780,8 +780,21 @@ func newArchitectureRules(cat catalog.Catalog, sessions ports.SessionRepository,
 }
 
 // newBranchGate decides the branch grants sessions' git shims ask for.
-func newBranchGate(cfg Config, cat catalog.Catalog, sessions ports.SessionRepository, requests ports.BranchRequestStore, orch *orchestration.Service) *branchgate.Service {
-	svc := branchgate.NewService(branchgate.Deps{Sessions: sessions, Requests: requests, Probe: gitprobe.Probe{Git: cfg.GitBin}, Waiter: orch, Turns: orch, Events: cat.Bus, Feed: orch})
+func newBranchGate(cfg Config, cat catalog.Catalog, sessions ports.SessionRepository, requests ports.BranchRequestStore, pushes ports.PushRecords, workspaces ports.WorkspaceRepository, orch *orchestration.Service) *branchgate.Service {
+	publisher := gitcli.NewBranchPublisher()
+	svc := branchgate.NewService(branchgate.Deps{
+		Sessions: sessions, Requests: requests, Probe: gitprobe.Probe{Git: cfg.GitBin}, Waiter: orch, Turns: orch, Events: cat.Bus, Feed: orch,
+		Pushes: pushes,
+		Commits: func(dir, branch, remote, remoteBranch, base string) (int, bool, error) {
+			return publisher.CommitsToPush(context.Background(), dir, branch, remote, remoteBranch, base)
+		},
+		BaseOf: func(sess *domain.Session) string {
+			if ws := workspaces.Get(context.Background(), sess.WorkspaceID); ws != nil {
+				return ws.BaseRef
+			}
+			return ""
+		},
+	})
 	svc.Subscribe(cat.Bus)
 	return svc
 }

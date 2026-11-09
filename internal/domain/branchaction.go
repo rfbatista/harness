@@ -19,12 +19,12 @@ const (
 	BranchRemoteRemove BranchActionKind = "remote_remove"
 )
 
-// Gated says whether the branch gate asks the person about the kind. Push and
-// remote actions are recognised but pass through until the agent push spec
-// switches them on.
+// Gated says whether the branch gate asks the person about the kind. Remote
+// actions are recognised but pass through until the remote spec ticket switches
+// them on; a push waits on the person (ADR 0071).
 func (k BranchActionKind) Gated() bool {
 	switch k {
-	case BranchCreate, BranchSwitch, BranchRename, BranchDelete:
+	case BranchCreate, BranchSwitch, BranchRename, BranchDelete, BranchPush:
 		return true
 	}
 	return false
@@ -46,10 +46,16 @@ type BranchAction struct {
 	NewName string `json:"new_name,omitempty"`
 	// Start is set for create and switch.
 	Start *BranchStart `json:"start_point"`
-	// Remote, URL and Refspec describe a push or a remote action.
-	Remote  string `json:"remote,omitempty"`
-	URL     string `json:"url,omitempty"`
-	Refspec string `json:"refspec,omitempty"`
+	// Remote, URL and Refspec describe a push or a remote action. For a push
+	// Branch is the local branch, RemoteBranch the branch it lands on, URL the
+	// remote's URL as configured, and Refspec what the agent typed.
+	Remote       string `json:"remote,omitempty"`
+	URL          string `json:"url,omitempty"`
+	Refspec      string `json:"refspec,omitempty"`
+	RemoteBranch string `json:"remote_branch,omitempty"`
+	// Dir is the directory git runs in, set by the gate for what it reads of
+	// the repository.
+	Dir string `json:"-"`
 	// Refused is the reason the action is refused outright; "" when it is
 	// not.
 	Refused string `json:"-"`
@@ -68,6 +74,12 @@ type GitProbe interface {
 	Path(dir, p string) bool
 	// Current is the checked-out branch; "" when HEAD is detached.
 	Current(dir string) string
+	// RemoteURL is the URL remote name is configured with; "" when there is
+	// no such remote.
+	RemoteURL(dir, name string) string
+	// PushRemote is where a bare `git push` of branch goes: its pushRemote,
+	// its remote, remote.pushDefault, else origin.
+	PushRemote(dir, branch string) string
 }
 
 // ClassifyGit turns the arguments of one git invocation (without "git") into
@@ -471,7 +483,7 @@ func (c classifier) rebase(args []string) []BranchAction {
 const (
 	refusedForce  = "REFUSED: a force push is refused. Push without --force, --force-with-lease, --force-if-includes or a + refspec."
 	refusedDelete = "REFUSED: deleting a branch on a remote is refused."
-	refusedBulk   = "REFUSED: --mirror and --prune pushes are refused."
+	refusedBulk   = "REFUSED: --mirror, --prune, --all and --tags pushes are refused. Push the branch you mean by name."
 )
 
 func (c classifier) push(args []string) []BranchAction {
@@ -484,7 +496,7 @@ func (c classifier) push(args []string) []BranchAction {
 			refused = refusedForce
 		case a == "-d" || a == "--delete":
 			refused = refusedDelete
-		case a == "--mirror" || a == "--prune":
+		case a == "--mirror" || a == "--prune" || a == "--all" || a == "--branches" || a == "--tags":
 			refused = refusedBulk
 		case a == "--repo" || a == "-o" || a == "--push-option" || a == "--receive-pack" || a == "--exec":
 			i++
@@ -493,26 +505,44 @@ func (c classifier) push(args []string) []BranchAction {
 			pos = append(pos, a)
 		}
 	}
-	act := BranchAction{Kind: BranchPush, Remote: "origin", Refused: refused}
+	current := c.p.Current(c.dir)
+	remote := ""
 	if len(pos) > 0 {
-		act.Remote = pos[0]
+		remote = pos[0]
+		pos = pos[1:]
+	} else {
+		remote = c.p.PushRemote(c.dir, current)
 	}
-	for _, ref := range pos[min(1, len(pos)):] {
-		act.Refspec = ref
-		if act.Branch == "" {
-			act.Branch = strings.TrimPrefix(strings.SplitN(ref, ":", 2)[0], "+")
-		}
+	url := c.p.RemoteURL(c.dir, remote)
+	if url == "" && (strings.Contains(remote, "://") || strings.Contains(remote, "/") || strings.Contains(remote, "@")) {
+		url = remote // git was given the URL itself
+	}
+	if len(pos) == 0 {
+		pos = []string{""}
+	}
+	out := make([]BranchAction, 0, len(pos))
+	for _, ref := range pos {
+		act := BranchAction{Kind: BranchPush, Remote: remote, URL: url, Refspec: ref, Refused: refused}
+		src, dst, _ := strings.Cut(ref, ":")
 		switch {
 		case strings.HasPrefix(ref, "+"):
 			act.Refused = refusedForce
+			src = strings.TrimPrefix(src, "+")
 		case strings.HasPrefix(ref, ":"):
 			act.Refused = refusedDelete
 		}
+		if src == "HEAD" || src == "" {
+			src = current
+		}
+		src = strings.TrimPrefix(src, "refs/heads/")
+		dst = strings.TrimPrefix(dst, "refs/heads/")
+		if dst == "" {
+			dst = src
+		}
+		act.Branch, act.RemoteBranch = src, dst
+		out = append(out, act)
 	}
-	if act.Branch == "" {
-		act.Branch = c.p.Current(c.dir)
-	}
-	return []BranchAction{act}
+	return out
 }
 
 func (c classifier) remote(args []string) []BranchAction {

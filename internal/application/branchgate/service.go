@@ -29,6 +29,15 @@ type Deps struct {
 	Requests ports.BranchRequestStore
 	// Probe lets the classifier read git's arguments as git does.
 	Probe domain.GitProbe
+	// Pushes keeps the pushes a session's git ran under a grant (ADR 0071); nil
+	// keeps none.
+	Pushes ports.PushRecords
+	// Commits counts the commits a push sends, read where git runs from the
+	// remote-tracking ref (no network); known is false, and the count is
+	// against base, when that ref does not exist. BaseOf is where the session's
+	// branch was cut from. Either nil leaves the count out of the request.
+	Commits func(dir, branch, remote, remoteBranch, base string) (n int, known bool, err error)
+	BaseOf  func(sess *domain.Session) string
 	// Waiter shows a session as waiting for approval; nil shows nothing.
 	Waiter ports.BranchRequestWaiter
 	// Turns delivers the person's answer to a session whose hook is gone, as
@@ -68,7 +77,8 @@ func (s *Service) gatedActions(sess *domain.Session, invocations []domain.GitInv
 			dir = cwd
 		}
 		for _, a := range domain.ClassifyGit(inv.Args, dir, s.d.Probe) {
-			if a.Kind.Gated() && !switchesToSessionBranch(sess, a) {
+			a.Dir = dir
+			if (a.Refused != "" || a.Kind.Gated()) && !switchesToSessionBranch(sess, a) {
 				out = append(out, a)
 			}
 		}
@@ -89,6 +99,9 @@ func (s *Service) Grant(ctx context.Context, sessionID string, req ports.BranchG
 	if switchesToSessionBranch(sess, req.BranchAction) {
 		return ports.BranchGrantAnswer{Allow: true}
 	}
+	if req.Refused != "" {
+		return ports.BranchGrantAnswer{Reason: req.Refused}
+	}
 	var changed []domain.BranchRequest
 	defer func() { s.announce(ctx, sess.ProjectID, changed...) }() // after the unlock
 	s.mu.Lock()
@@ -106,7 +119,7 @@ func (s *Service) Grant(ctx context.Context, sessionID string, req ports.BranchG
 			return ports.BranchGrantAnswer{Reason: "the branch grant could not be used"}
 		}
 		changed = append(changed, r)
-		return ports.BranchGrantAnswer{Allow: true}
+		return ports.BranchGrantAnswer{Allow: true, RequestID: r.ID}
 	}
 	return ports.BranchGrantAnswer{}
 }
@@ -129,6 +142,11 @@ func (s *Service) Hook(ctx context.Context, sessionID string, in ports.BranchHoo
 	actions := s.gatedActions(sess, invocations, in.Cwd)
 	if len(actions) == 0 {
 		return ports.BranchHookVerdict{}
+	}
+	for _, a := range actions {
+		if a.Refused != "" {
+			return ports.BranchHookVerdict{Decision: "deny", Reason: a.Refused}
+		}
 	}
 	var filed []filedRequest
 	for _, a := range actions {
@@ -212,6 +230,10 @@ func (s *Service) file(ctx context.Context, sess *domain.Session, a domain.Branc
 	if a.Remote != "" || a.URL != "" {
 		r.Remote = &domain.BranchRemote{Name: a.Remote, URL: a.URL}
 	}
+	if a.Kind == domain.BranchPush {
+		r.RemoteBranch = &a.RemoteBranch
+		r.Commits = s.commitsToPush(sess, a)
+	}
 	defer func() { s.announce(ctx, sess.ProjectID, *r) }() // after the unlock
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -224,6 +246,44 @@ func (s *Service) file(ctx context.Context, sess *domain.Session, a domain.Branc
 		s.d.Waiter.BranchRequestFiled(sess.ID)
 	}
 	return filedRequest{id: r.ID, answered: ch}, nil
+}
+
+// commitsToPush is how many commits the push sends, nil when it cannot be read.
+func (s *Service) commitsToPush(sess *domain.Session, a domain.BranchAction) *int {
+	if s.d.Commits == nil || a.Branch == "" || a.Dir == "" {
+		return nil
+	}
+	base := ""
+	if s.d.BaseOf != nil {
+		base = s.d.BaseOf(sess)
+	}
+	n, _, err := s.d.Commits(a.Dir, a.Branch, a.Remote, a.RemoteBranch, base)
+	if err != nil {
+		return nil
+	}
+	return &n
+}
+
+// Pushed implements ports.BranchGate: it keeps the push the request's grant
+// let through, as the agent's.
+func (s *Service) Pushed(ctx context.Context, sessionID string, p ports.BranchPushed) error {
+	if s.d.Pushes == nil {
+		return nil
+	}
+	sess := s.d.Sessions.Get(sessionID)
+	r, err := s.d.Requests.Get(ctx, p.RequestID)
+	if err != nil || sess == nil || r == nil || r.SessionID != sessionID || r.Action != domain.BranchPush || r.State != domain.BranchRequestUsed || r.Remote == nil {
+		return errs.New("BRANCH_REQUEST_NOT_FOUND", "no used push request "+p.RequestID)
+	}
+	remoteBranch := r.Branch
+	if r.RemoteBranch != nil {
+		remoteBranch = *r.RemoteBranch
+	}
+	return s.d.Pushes.RecordPush(ctx, domain.RecordedPush{
+		RequestID: r.ID, SessionID: sessionID, RepositoryID: r.RepositoryID, Branch: r.Branch,
+		Remote: r.Remote.Name, RemoteBranch: remoteBranch, Commit: s.d.Probe.Commit(p.CWD, "refs/heads/"+r.Branch),
+		At: s.d.Now().UTC(), By: domain.PushByAgent,
+	})
 }
 
 // Answer implements ports.BranchGate.

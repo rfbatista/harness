@@ -70,3 +70,24 @@ func (p Probe) Current(dir string) string {
 	out, _ := p.run(dir, "symbolic-ref", "--quiet", "--short", "HEAD")
 	return out
 }
+
+// RemoteURL implements domain.GitProbe.
+func (p Probe) RemoteURL(dir, name string) string {
+	out, _ := p.run(dir, "config", "--get", "remote."+name+".url")
+	return out
+}
+
+// PushRemote implements domain.GitProbe.
+func (p Probe) PushRemote(dir, branch string) string {
+	if branch != "" {
+		for _, key := range []string{"branch." + branch + ".pushRemote", "branch." + branch + ".remote"} {
+			if out, ok := p.run(dir, "config", "--get", key); ok && out != "" {
+				return out
+			}
+		}
+	}
+	if out, ok := p.run(dir, "config", "--get", "remote.pushDefault"); ok && out != "" {
+		return out
+	}
+	return "origin"
+}

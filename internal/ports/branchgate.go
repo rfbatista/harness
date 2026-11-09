@@ -19,6 +19,16 @@ type BranchGrantRequest struct {
 type BranchGrantAnswer struct {
 	Allow  bool   `json:"allow"`
 	Reason string `json:"reason,omitempty"`
+	// RequestID is the branch request whose grant was used; the shim hands it
+	// back when a push it let through succeeded.
+	RequestID string `json:"request_id,omitempty"`
+}
+
+// BranchPushed is what the shim tells the gate after a push it let through
+// exited 0: the request it ran under and where git ran.
+type BranchPushed struct {
+	RequestID string `json:"request_id"`
+	CWD       string `json:"cwd"`
 }
 
 // BranchHookInput is the part of claude's PreToolUse hook input the gate reads.
@@ -52,6 +62,9 @@ type BranchGate interface {
 	// Grant uses up the session's branch grant for the action, if it has one.
 	// A switch back to the session's own branch needs none.
 	Grant(ctx context.Context, sessionID string, req BranchGrantRequest) BranchGrantAnswer
+	// Pushed records a push the shim ran under a used grant, so the Branches
+	// list explains it (ADR 0071).
+	Pushed(ctx context.Context, sessionID string, p BranchPushed) error
 	// Hook answers the asking hook: at once when the command has no branch
 	// action, else after filing a branch request per action and waiting for
 	// the person's answers. It returns when ctx ends, with a deny.

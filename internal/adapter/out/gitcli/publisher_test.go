@@ -303,3 +303,14 @@ func TestPublisher_CommitsToPushCountsAgainstTheRemoteTrackingRefOrTheBase(t *te
 		t.Fatalf("after the push = %d known=%v, %v; want 0 true", n, known, err)
 	}
 }
+
+func TestPublisher_CommitsToPushWithNoBaseCountsWhatTheRemoteLacks(t *testing.T) {
+	ctx := context.Background()
+	p := NewBranchPublisher()
+	repo, _, _ := publishRepo(t)
+	// origin holds main only: agent/x has its two commits, and main's are there.
+	n, known, err := p.CommitsToPush(ctx, repo, "agent/x", "origin", "agent/x", "")
+	if err != nil || known || n != 2 {
+		t.Fatalf("no base = %d known=%v, %v; want 2 false", n, known, err)
+	}
+}

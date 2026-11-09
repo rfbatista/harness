@@ -117,10 +117,16 @@ func (p BranchPublisher) PushTo(ctx context.Context, repoRoot, branch, remote, r
 func (p BranchPublisher) CommitsToPush(ctx context.Context, repoRoot, branch, remote, remoteBranch, base string) (n int, known bool, err error) {
 	against := "refs/remotes/" + remote + "/" + remoteBranch
 	known = p.HasRef(ctx, repoRoot, against)
+	args := []string{"rev-list", "--count", "--end-of-options", against + "..refs/heads/" + branch}
 	if !known {
-		against = base
+		if base != "" {
+			args[3] = base + "..refs/heads/" + branch
+		} else {
+			// No base to count against: what no ref of the remote has.
+			args = []string{"rev-list", "--count", "refs/heads/" + branch, "--not", "--remotes=" + remote}
+		}
 	}
-	out, err := p.d.gitOutput(ctx, repoRoot, "rev-list", "--count", "--end-of-options", against+"..refs/heads/"+branch)
+	out, err := p.d.gitOutput(ctx, repoRoot, args...)
 	if err != nil {
 		return 0, known, err
 	}

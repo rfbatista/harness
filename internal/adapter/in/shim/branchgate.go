@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"net/http"
 	"os"
+	"os/exec"
 	"strings"
 	"time"
 
@@ -44,6 +45,12 @@ func gitMain(args []string) int {
 		return become(real)
 	}
 	actions := domain.ClassifyGit(args, cwd, gitprobe.Probe{Git: real})
+	for _, a := range actions {
+		if a.Refused != "" {
+			fmt.Fprintln(os.Stderr, a.Refused)
+			return 1
+		}
+	}
 	gated := actions[:0]
 	for _, a := range actions {
 		if a.Kind.Gated() {
@@ -54,6 +61,7 @@ func gitMain(args []string) int {
 		return become(real)
 	}
 	base := strings.TrimRight(os.Getenv(ports.BranchGateURLEnv), "/")
+	var pushRequests []string
 	for _, a := range gated {
 		ans, err := askGrant(base, ports.BranchGrantRequest{BranchAction: a, CWD: cwd})
 		if err != nil {
@@ -61,11 +69,42 @@ func gitMain(args []string) int {
 			return 1
 		}
 		if !ans.Allow {
-			fmt.Fprintln(os.Stderr, neededMessage(args))
+			if ans.Reason != "" && strings.HasPrefix(ans.Reason, "REFUSED") {
+				fmt.Fprintln(os.Stderr, ans.Reason)
+			} else {
+				fmt.Fprintln(os.Stderr, neededMessage(args))
+			}
 			return 1
 		}
+		if a.Kind == domain.BranchPush && ans.RequestID != "" {
+			pushRequests = append(pushRequests, ans.RequestID)
+		}
 	}
-	return become(real)
+	if len(pushRequests) == 0 {
+		return become(real)
+	}
+	// A push runs as a child, so the harness hears it succeeded and can keep
+	// the push against its request (ADR 0071).
+	cmd := exec.Command(real, args...)
+	cmd.Stdin, cmd.Stdout, cmd.Stderr = os.Stdin, os.Stdout, os.Stderr
+	err = cmd.Run()
+	code := cmd.ProcessState.ExitCode()
+	if err == nil {
+		for _, id := range pushRequests {
+			tellPushed(base, ports.BranchPushed{RequestID: id, CWD: cwd})
+		}
+	}
+	return code
+}
+
+// tellPushed is best effort: a push that happened stays one when the harness
+// cannot be told.
+func tellPushed(base string, p ports.BranchPushed) {
+	body, _ := json.Marshal(p)
+	res, err := gateClient.Post(base+"/pushed", "application/json", bytes.NewReader(body))
+	if err == nil {
+		res.Body.Close()
+	}
 }
 
 func askGrant(base string, req ports.BranchGrantRequest) (ports.BranchGrantAnswer, error) {

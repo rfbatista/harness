@@ -65,7 +65,8 @@ type BranchRequest struct {
 }
 
 // Matches says whether the request, once approved, is the grant for action: the
-// same kind, branch, start point, remote and refspec.
+// same kind, branch, start point, remote with its URL, and remote branch: a
+// push to another URL or under another name asks again.
 func (r BranchRequest) Matches(a BranchAction) bool {
 	if r.Action != a.Kind || r.Branch != a.Branch || strOr(r.NewName) != a.NewName {
 		return false
@@ -73,17 +74,23 @@ func (r BranchRequest) Matches(a BranchAction) bool {
 	if startRef(r.StartPoint) != startRef(a.Start) {
 		return false
 	}
-	remote := ""
+	remote, url := "", ""
 	if r.Remote != nil {
-		remote = r.Remote.Name
+		remote, url = r.Remote.Name, r.Remote.URL
 	}
-	return remote == a.Remote
+	return remote == a.Remote && url == a.URL && strOr(r.RemoteBranch) == a.RemoteBranch
 }
 
 // Label names what the request asks, for a line the person or the agent reads:
 // "create feature-x", "rename a → b", "switch commit abc123".
 func (r BranchRequest) Label() string {
 	switch {
+	case r.Action == BranchPush && r.Remote != nil:
+		rb := r.Branch
+		if r.RemoteBranch != nil {
+			rb = *r.RemoteBranch
+		}
+		return fmt.Sprintf("push %s → %s/%s", r.Branch, r.Remote.Name, rb)
 	case r.Action == BranchRename && r.NewName != nil:
 		return fmt.Sprintf("%s %s → %s", r.Action, r.Branch, *r.NewName)
 	case r.Branch == "" && r.StartPoint != nil:
