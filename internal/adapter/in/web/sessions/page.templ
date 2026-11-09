@@ -303,7 +303,8 @@ templ syncChip() {
 	</span>
 }
 
-// branchLink is a session row's "N branches" link, after the sync chip: it
+// branchLink is a session row's "N branches" link, before the sync chip (which
+// stays last in the row's first line): it
 // opens the Git popover at that session's Branches section, and carries a flag
 // when one of the session's branches is unapproved (contract "Harness server ↔
 // Web UI — branch requests and the Branches list" §6). It reads the sync
@@ -718,8 +719,8 @@ templ liveRows() {
 							<span class="[ badge ]" x-bind:data-tone="row.chip.tone" aria-hidden="true" x-text="row.chip.word"></span>
 						</template>
 						@pullrequests.Badge("row.workspaceId")
-						@syncChip()
 						@branchLink()
+						@syncChip()
 					</span>
 					<time class="[ when ]" x-text="row.when"></time>
 					<template x-if="row.detail">

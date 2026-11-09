@@ -290,3 +290,10 @@ func TestThePushPreviewRefusesWhatAPushRefuses(t *testing.T) {
 		t.Errorf("no remote: %d %v", code, got)
 	}
 }
+
+func TestAPushOfARepositoryWithoutOriginAnswersNoRemote(t *testing.T) {
+	g, _ := startWatch(t, ":memory:", false)
+	if code, body := g.postPushBranch(map[string]string{"expected_head": g.head()}); code != http.StatusBadRequest || codeOf(body) != "NO_REMOTE" {
+		t.Errorf("no origin: %d %s", code, body)
+	}
+}

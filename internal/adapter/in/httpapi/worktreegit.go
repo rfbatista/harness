@@ -86,10 +86,12 @@ func (h *Handler) handlePushBranch(c echo.Context) error {
 		if name == "" {
 			name = st.Branch
 		}
+		// The push is done; a list that cannot be read now only costs the row.
 		if rows, err := h.sessionBranches.SessionBranches(c.Request().Context(), st.SessionID); err == nil {
 			for i := range rows {
 				if rows[i].Name == name {
 					out["branch"] = rows[i]
+					break
 				}
 			}
 		}

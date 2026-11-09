@@ -64,7 +64,7 @@ export function popoverOf({ sessions, states, agentNames = {}, repositoryNames =
       branch: state?.branch || s.branch,
       codeHref: codeHref(projectId, ticketId || s.ticketId, s.id),
       hasState: state !== null,
-      branches: branchesOf(branches[s.id], { remotes: remotes[s.repositoryId], push: branchPush?.workspaceId === s.workspaceId ? branchPush : null }),
+      branches: branchesOf(branches[s.id], { remotes: remotes[s.repositoryId], push: branchPush?.workspaceId === s.workspaceId ? branchPush : null, pushing: !!pushing[s.workspaceId] }),
       gone: false,
       offersPush: false,
       showsPush: false,

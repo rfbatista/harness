@@ -3,8 +3,10 @@ package gitcli
 import (
 	"bufio"
 	"context"
+	"errors"
 	"io/fs"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"sort"
 	"strconv"
@@ -39,8 +41,9 @@ func (c Code) BranchSnapshot(ctx context.Context, repoRoot string) (*ports.GitBr
 			snap.RemoteRefs[strings.TrimPrefix(ref, "refs/remotes/")] = oid
 		}
 	}
-	// A repository with no remote has none to list.
-	snap.Remotes, _ = c.Remotes(ctx, repoRoot)
+	if snap.Remotes, err = c.Remotes(ctx, repoRoot); err != nil {
+		return nil, err
+	}
 	wts, err := c.d.codeOutput(ctx, repoRoot, "worktree", "list", "--porcelain")
 	if err != nil {
 		return nil, err
@@ -62,8 +65,11 @@ func (c Code) BranchSnapshot(ctx context.Context, repoRoot string) (*ports.GitBr
 
 // Remotes lists the configured remotes with their URLs, in one git run.
 func (c Code) Remotes(ctx context.Context, repoRoot string) ([]ports.GitRemote, error) {
-	// config exits 1 when there is no remote.
 	cfg, err := c.d.codeOutput(ctx, repoRoot, "config", "--get-regexp", `^remote\..*\.url$`)
+	var exit *exec.ExitError
+	if errors.As(err, &exit) && exit.ExitCode() == 1 {
+		return nil, nil // config exits 1 when there is no remote
+	}
 	if err != nil {
 		return nil, err
 	}

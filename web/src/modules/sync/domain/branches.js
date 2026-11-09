@@ -48,7 +48,7 @@ export function pushQuestion(branch, push) {
  * workspace the list belongs to: its remotes (undefined until read) and the
  * confirmation open on one of its rows, if any.
  * @param {SessionBranch} b
- * @param {{ remotes?: Array<{ name: string }>, push?: { branch: string, remote: string, preview: object | null, failure: object | null } | null }} [ctx]
+ * @param {{ remotes?: Array<{ name: string }>, push?: { branch: string, remote: string, preview: object | null, failure: object | null } | null, pushing?: boolean }} [ctx]
  */
 export function rowOf(b, ctx = {}) {
   const base = b.base;
@@ -63,6 +63,7 @@ export function rowOf(b, ctx = {}) {
     pushRefusalBanner: push?.failure?.tone === "banner",
     pushRefusalStrip: push?.failure?.tone === "danger",
     noRemote: isPushable(b) && ctx.remotes !== undefined && remotes.length === 0,
+    pushing: !!push && ctx.pushing === true,
     previewLoading: !!push && !push.preview && !push.failure,
     name: b.name,
     state: b.state,

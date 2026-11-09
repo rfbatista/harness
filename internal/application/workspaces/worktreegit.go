@@ -6,7 +6,6 @@ import (
 	"log/slog"
 	"reflect"
 	"slices"
-	"sort"
 	"strings"
 	"sync"
 	"time"
@@ -553,17 +552,21 @@ func (s *WorktreeGit) RepositoryRemotes(ctx context.Context, repositoryID string
 	}
 	found, err := s.d.RemoteLister.Remotes(ctx, repo.RootDir)
 	if err != nil {
-		// git config exits 1 when the repository has no remote.
-		return out, nil
+		return nil, err
 	}
 	for _, r := range found {
 		out = append(out, ports.GitRemote{Name: r.Name, URL: domain.RedactURL(r.URL)})
 	}
-	sort.SliceStable(out, func(i, j int) bool {
-		if (out[i].Name == "origin") != (out[j].Name == "origin") {
-			return out[i].Name == "origin"
+	slices.SortStableFunc(out, func(a, b ports.GitRemote) int {
+		switch {
+		case a.Name == b.Name:
+			return 0
+		case a.Name == "origin":
+			return -1
+		case b.Name == "origin":
+			return 1
 		}
-		return out[i].Name < out[j].Name
+		return strings.Compare(a.Name, b.Name)
 	})
 	return out, nil
 }

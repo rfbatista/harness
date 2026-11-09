@@ -36,7 +36,7 @@ export const syncPanel = (deps) => (workspaceId = "", projectId = "") => {
     get branches() {
       const s = this.gitState;
       const ask = store.branchPush;
-      return branchesOf(store.branches[s?.sessionId ?? ""], { remotes: store.remotes[s?.repositoryId ?? ""], push: ask && ask.workspaceId === s?.workspaceId ? ask : null });
+      return branchesOf(store.branches[s?.sessionId ?? ""], { remotes: store.remotes[s?.repositoryId ?? ""], push: ask && ask.workspaceId === s?.workspaceId ? ask : null, pushing: !!store.pushing[s?.workspaceId ?? ""] });
     },
     get branchRows() {
       return this.branches.rows;
