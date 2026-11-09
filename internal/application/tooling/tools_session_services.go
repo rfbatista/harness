@@ -93,7 +93,7 @@ func SessionServicesTools(sessions ports.SessionRepository, agents ports.AgentLi
 		o(t)
 	}
 	nameSchema := `"name":{"type":"string","description":"The service's name, as list_services gives it."}`
-	envSchema := `"env":{"type":"object","additionalProperties":{"type":"string"},"description":"Run overrides: environment variables for this run only, on top of the repository .env and the service's own variables; the service itself is never changed. Names match [A-Za-z_][A-Za-z0-9_]*, at most 100; an image service's values have no line break. restart_service without worktree and env repeats the last run's overrides; env {} clears them."}`
+	envSchema := `"env":{"type":"object","additionalProperties":{"type":"string"},"description":"Run overrides: environment variables for this run only, on top of the repository .env and the service's own variables; the service itself is never changed. Names match [A-Za-z_][A-Za-z0-9_]*, at most 100; an image service's values have no line break. restart_service without env repeats the last run's overrides; env {} clears them."}`
 	worktreeSchema := `"worktree":{"type":"string","enum":["own"],"description":"own: run a command service of your repository in your worktree instead of the repository's main checkout. Omit for the main checkout."}`
 	return []domain.Tool{
 		{
@@ -180,8 +180,9 @@ func SessionServicesTools(sessions ports.SessionRepository, agents ports.AgentLi
 		{
 			Name: "restart_service",
 			Description: "Stop a service's run, if there is one, then start it with the rules of start_service (worktree included), " +
-				"and answer once the new run is running or has failed. Without worktree and env it repeats the last run: the same worktree and " +
-				"the same run overrides. With either one it uses what it is given; env {} clears the overrides.",
+				"and answer once the new run is running or has failed. Each argument you omit repeats the last run: no worktree keeps its " +
+				"worktree when you may use it (the main checkout, or your own), else the main checkout; no env keeps its overrides. " +
+				"env {} clears them. So env alone changes the variables on the same branch.",
 			InputSchema: schemaFromJSON(`{"type":"object","required":["name"],"properties":{` + nameSchema + `,` + worktreeSchema + `,` + envSchema + `}}`),
 			Source:      "code",
 			Handler: func(ctx context.Context, args map[string]any) (any, error) {
@@ -193,9 +194,11 @@ func SessionServicesTools(sessions ports.SessionRepository, agents ports.AgentLi
 				if err != nil {
 					return nil, err
 				}
-				// Without a worktree and env it repeats the last run (ADR 0077).
-				if wt, given := args["worktree"]; (!given || wt == nil) && opts.Env == nil {
-					opts.Repeat = true
+				// Each omitted argument repeats the last run on its own (ADR 0077):
+				// no env keeps the overrides (the module does), no worktree keeps
+				// the run worktree the agent may use, else the main checkout.
+				if wt, given := args["worktree"]; (!given || wt == nil) && t.mayRepeat(ctx, sess, svc) {
+					opts.Worktree = &ports.ServiceWorktree{Dir: sess.WorkingDir, Branch: sess.Branch, SessionID: sess.ID}
 				}
 				restarted, err := t.services.RestartService(ctx, svc.ID, opts)
 				if err != nil {
@@ -328,6 +331,12 @@ func envArg(args map[string]any) (map[string]string, error) {
 		env[k] = str
 	}
 	return env, nil
+}
+
+// mayRepeat says the last run of the service ran in the session's own
+// worktree and the session can still use it.
+func (t *servicesTools) mayRepeat(ctx context.Context, sess *domain.Session, svc *domain.Service) bool {
+	return svc.Run != nil && svc.Run.WorktreeKey == "session:"+sess.ID && t.noWorktree(ctx, sess, svc) == ""
 }
 
 // noWorktree is why the service cannot run in the session's worktree, "" when

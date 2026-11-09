@@ -35,16 +35,6 @@ type run struct {
 	done    chan struct{}
 }
 
-// runRecord is what a run was given, kept in memory for its service. It
-// holds values, so nothing outside GetRunVariables reads them.
-type runRecord struct {
-	runID string
-	vars  []ports.ServiceRunVariable
-	// overrides are the run overrides and by who set them.
-	overrides map[string]string
-	by        *domain.ServiceStartedBy
-}
-
 // overrideSet is the run overrides a start applies and who set them.
 type overrideSet struct {
 	values map[string]string
@@ -161,11 +151,11 @@ func (s *Service) start(ctx context.Context, serviceID string, opts ports.Servic
 		ID: r.id, StartedAt: s.opts.Now().UTC().Format(time.RFC3339), StartedBy: opts.StartedBy, Where: p.where, WorktreeKey: p.worktreeKey,
 		Sandboxed: p.sandbox != nil || p.image != nil, Overrides: []domain.ServiceRunOverride{},
 	}
-	rec := &runRecord{runID: r.id, vars: p.vars}
+	rec := &ports.ServiceRunRecord{ServiceID: serviceID, RunID: r.id, Variables: p.vars}
 	if len(ov.values) > 0 {
 		by := ov.by
 		cur.Run.OverrideBy = &by
-		rec.overrides, rec.by = ov.values, &by
+		rec.Overrides, rec.OverrideBy = ov.values, &by
 		for _, name := range sortedKeys(ov.values) {
 			cur.Run.Overrides = append(cur.Run.Overrides, domain.ServiceRunOverride{Name: name, By: overrideByText(by)})
 		}
@@ -176,6 +166,9 @@ func (s *Service) start(ctx context.Context, serviceID string, opts ports.Servic
 	// starting finds the new log.
 	resetErr := lg.reset(r.id)
 	if resetErr == nil {
+		resetErr = s.store.SaveRunRecord(rec)
+	}
+	if resetErr == nil {
 		resetErr = s.store.SaveService(cur)
 	}
 	if resetErr != nil {
@@ -183,7 +176,6 @@ func (s *Service) start(ctx context.Context, serviceID string, opts ports.Servic
 		return nil, false, resetErr
 	}
 	s.runs[serviceID] = r
-	s.records[serviceID] = rec
 	s.announceLocked(cur)
 	s.mu.Unlock()
 
@@ -375,9 +367,9 @@ func (s *Service) RestartService(ctx context.Context, serviceID string, opts por
 			if svc.Run != nil {
 				opts.WorktreeKey, opts.Worktree = svc.Run.WorktreeKey, nil
 			}
-			if opts.Env == nil {
-				ov = s.lastOverrides(serviceID)
-			}
+		}
+		if opts.Env == nil {
+			ov = s.lastOverrides(serviceID)
 		}
 		if err := checkOverrides(svc.Kind, ov.values); err != nil {
 			return nil, err
@@ -401,19 +393,19 @@ func (s *Service) RestartService(ctx context.Context, serviceID string, opts por
 // set them; none when that run is not the one on record (after a restart of
 // the harness).
 func (s *Service) lastOverrides(serviceID string) overrideSet {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	rec := s.records[serviceID]
-	if rec == nil || rec.by == nil {
+	svc, err := s.store.GetService(serviceID)
+	if err != nil || svc.Run == nil {
 		return overrideSet{}
 	}
-	return overrideSet{values: maps.Clone(rec.overrides), by: *rec.by}
+	rec, err := s.store.GetRunRecord(serviceID)
+	if err != nil || rec == nil || rec.RunID != svc.Run.ID || rec.OverrideBy == nil {
+		return overrideSet{}
+	}
+	return overrideSet{values: maps.Clone(rec.Overrides), by: *rec.OverrideBy}
 }
 
 // GetRunVariables implements ports.ServiceManager.
 func (s *Service) GetRunVariables(_ context.Context, serviceID string) (*ports.ServiceRunVariables, error) {
-	s.mu.Lock()
-	defer s.mu.Unlock()
 	svc, err := s.store.GetService(serviceID)
 	if err != nil {
 		return nil, err
@@ -423,9 +415,13 @@ func (s *Service) GetRunVariables(_ context.Context, serviceID string) (*ports.S
 		return out, nil
 	}
 	out.RunID = svc.Run.ID
-	if rec := s.records[serviceID]; rec != nil && rec.runID == svc.Run.ID {
-		out.Variables = append(out.Variables, rec.vars...)
-		out.Overrides, out.OverrideBy = maps.Clone(rec.overrides), rec.by
+	rec, err := s.store.GetRunRecord(serviceID)
+	if err != nil {
+		return nil, err
+	}
+	if rec != nil && rec.RunID == svc.Run.ID {
+		out.Variables = append(out.Variables, rec.Variables...)
+		out.Overrides, out.OverrideBy = maps.Clone(rec.Overrides), rec.OverrideBy
 	}
 	return out, nil
 }

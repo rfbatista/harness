@@ -23,6 +23,12 @@ type ServiceStore interface {
 	SaveService(s *domain.Service) error
 	// DeleteService removes the service, or SERVICE_NOT_FOUND.
 	DeleteService(id string) error
+	// SaveRunRecord replaces the run record of rec.ServiceID: one per service,
+	// the current or last run's. It holds values, so it is kept apart from
+	// the service and never reaches a feed.
+	SaveRunRecord(rec *ServiceRunRecord) error
+	// GetRunRecord is the service's run record; nil, nil for none.
+	GetRunRecord(serviceID string) (*ServiceRunRecord, error)
 	// RunningServices counts the project's services that are starting or
 	// running: a single indexed read.
 	RunningServices(projectID string) (int, error)
@@ -162,6 +168,17 @@ type ServiceRunVariable struct {
 	Value  string `json:"value"`
 	Source string `json:"source"`
 	By     string `json:"by"`
+}
+
+// ServiceRunRecord is what a run was given, stored beside the service so a
+// restart of the harness still repeats its overrides: every variable with its
+// source, and the override values with who set them.
+type ServiceRunRecord struct {
+	ServiceID  string                   `json:"service_id"`
+	RunID      string                   `json:"run_id"`
+	Variables  []ServiceRunVariable     `json:"variables"`
+	Overrides  map[string]string        `json:"overrides"`
+	OverrideBy *domain.ServiceStartedBy `json:"override_by"`
 }
 
 // ServiceRunVariables are the variables of a service's current or last run,

@@ -6,6 +6,8 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"operators-mcp/internal/application/services"
 )
 
 // Run overrides (ADR 0077): an agent starts or restarts a service with `env`
@@ -263,4 +265,77 @@ func TestServicesOverrides_BadEntriesAreRefusedNamingTheKeyAndStartNothing(t *te
 func TestServicesOverrides_AgentsAreStillRefusedEveryWorktreeButOwn(t *testing.T) {
 	f := newOverridesFixture(t)
 	f.as("sess-1").refused("start_service", map[string]any{"name": "web", "worktree": "session:other", "env": map[string]any{"A": "b"}}, `worktree must be "own" or omitted`)
+}
+
+func TestServicesOverrides_ARestartRepeatsEachOmittedArgumentOnItsOwn(t *testing.T) {
+	f := newOverridesFixture(t)
+	f.session("sess-2", f.projectID, f.repoID, true)
+	agent := f.as("sess-1")
+	agent.ok("start_service", map[string]any{"name": "web", "worktree": "own", "env": map[string]any{"D": "first"}})
+	f.awaitLog(f.id, "D=first")
+
+	// env alone changes the variables in place, on the same branch.
+	run := viewRunOf(agent.ok("restart_service", map[string]any{"name": "web", "env": map[string]any{"D": "second"}}))
+	if run["where"] != "your worktree" || run["branch"] != "feat/sess-1" || run["overrides"].(map[string]any)["D"] != "second" {
+		t.Fatalf("restart {env} stays in the worktree: %v", run)
+	}
+	f.awaitLog(f.id, "D=second")
+
+	// worktree alone keeps the overrides.
+	run = viewRunOf(agent.ok("restart_service", map[string]any{"name": "web", "worktree": "own"}))
+	if run["where"] != "your worktree" || run["overrides"].(map[string]any)["D"] != "second" {
+		t.Fatalf("restart {worktree} keeps the overrides: %v", run)
+	}
+
+	// The person moves the run to another session's worktree: the agent may
+	// not use it, so its bare restart goes to the main checkout and keeps the
+	// overrides the run had (none, as the person started it).
+	f.operate("stop_service", f.id)
+	if code, out := f.call("POST", "/api/start_service", map[string]any{"service_id": f.id, "worktree": "session:sess-2"}); code != 200 {
+		t.Fatalf("start = %d %v", code, out)
+	}
+	f.awaitStatus(f.id, "running")
+	run = viewRunOf(agent.ok("restart_service", named("web")))
+	if run["where"] != "main checkout" {
+		t.Fatalf("a worktree the agent may not use falls back to main: %v", run)
+	}
+}
+
+func TestServicesOverrides_TheValuesSurviveAServerRestartAndGoWithTheService(t *testing.T) {
+	f := newOverridesFixture(t)
+	f.as("sess-1").ok("start_service", map[string]any{"name": "web", "env": map[string]any{"D": "agent-value"}})
+	f.awaitLog(f.id, "D=agent-value")
+	f.operate("stop_service", f.id)
+
+	// A new module over the same store, as after a restart of the server.
+	g := restarted(t, f.servicesFixture, services.Options{})
+	if got := g.variables(f.id); len(got) == 0 {
+		t.Fatal("the last run's variables are known after a restart")
+	}
+	var d map[string]any
+	for _, v := range g.variables(f.id) {
+		if v["name"] == "D" {
+			d = v
+		}
+	}
+	if d == nil || d["value"] != "agent-value" || d["source"] != "override" || d["by"] != "dev · session sess-1" {
+		t.Fatalf("D = %v", d)
+	}
+	if code, out := g.operate("restart_service", f.id); code != 200 {
+		t.Fatalf("restart = %d %v", code, out)
+	}
+	t.Cleanup(func() { g.operate("stop_service", f.id) })
+	g.awaitLog(f.id, "D=agent-value")
+
+	// The record is not in the service's JSON, and goes with the service.
+	if rec, _ := f.store.GetRunRecord(f.id); rec == nil {
+		t.Fatal("a record is stored")
+	}
+	g.operate("stop_service", f.id)
+	if code, out := g.call("POST", "/api/delete_service", map[string]any{"service_id": f.id}); code != 200 {
+		t.Fatalf("delete = %d %v", code, out)
+	}
+	if rec, _ := f.store.GetRunRecord(f.id); rec != nil {
+		t.Fatalf("a deleted service keeps its record: %v", rec)
+	}
 }
