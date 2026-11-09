@@ -2,6 +2,8 @@ package app
 
 import (
 	"context"
+	"crypto/rand"
+	"encoding/hex"
 	"errors"
 	"fmt"
 	"io"
@@ -9,7 +11,10 @@ import (
 	"net/url"
 	"operators-mcp/internal/app/runtime"
 	"os"
+	"os/exec"
 	"path/filepath"
+	"strings"
+	"time"
 
 	"go.uber.org/fx"
 
@@ -27,6 +32,8 @@ import (
 	"operators-mcp/internal/adapter/out/agents/claudetext"
 	"operators-mcp/internal/adapter/out/blobstore"
 	"operators-mcp/internal/adapter/out/catalogstore"
+	"operators-mcp/internal/adapter/out/commandrunner"
+	"operators-mcp/internal/adapter/out/containerrunner"
 	"operators-mcp/internal/adapter/out/developerdir"
 	"operators-mcp/internal/adapter/out/filesystem"
 	"operators-mcp/internal/adapter/out/gitcli"
@@ -49,6 +56,8 @@ import (
 	"operators-mcp/internal/application/orchestration"
 	"operators-mcp/internal/application/planning"
 	"operators-mcp/internal/application/repoagents"
+	"operators-mcp/internal/application/sandboxsettings"
+	"operators-mcp/internal/application/services"
 	"operators-mcp/internal/application/taskchannel"
 	"operators-mcp/internal/application/tooling"
 	"operators-mcp/internal/application/vfs"
@@ -453,6 +462,7 @@ var AgentRuntimeModule = fx.Module("agentruntime",
 		newManagedClaudeBin,
 		newAgentReadiness,
 		newAppsService,
+		newServicesModule,
 		asPort(sqlite.NewArtifactRepository, new(ports.ArtifactRepository)),
 		newArtifactsService,
 		vfs.NewRootEvents,
@@ -635,6 +645,72 @@ func newAppsService(orch *orchestration.Service, cat catalog.Catalog, host ports
 	svc.UseRunWorktrees(repos, agents, git)
 	svc.Subscribe(cat.Bus)
 	return svc
+}
+
+// newServicesModule keeps projects' services in the database, with their
+// logs in the data directory. It reads the sandbox switch and driver agents
+// run under, and looks the container runtime up on the server's PATH.
+func newServicesModule(lc fx.Lifecycle, cfg Config, db *gorm.DB, cat catalog.Catalog, orch *orchestration.Service, sandbox *sandboxsettings.Store, git ports.GitCode) (*services.Service, error) {
+	logDir, err := dataDir(cfg, "service-logs")
+	if err != nil {
+		return nil, err
+	}
+	folderDir, err := dataDir(cfg, "service-folders")
+	if err != nil {
+		return nil, err
+	}
+	for _, dir := range []string{logDir, folderDir} {
+		if err := os.MkdirAll(dir, 0o700); err != nil {
+			return nil, err
+		}
+	}
+	instance, err := serviceInstance(logDir)
+	if err != nil {
+		return nil, err
+	}
+	svc := services.New(sqlite.NewServiceRepository(db), cat.Projects, cat.Projects, services.Options{
+		Instance: instance,
+		LogDir: logDir, FolderDir: folderDir, Sandbox: sandbox, Driver: sandboxDriver(orch), LookPath: exec.LookPath,
+		Allow: sandboxAllow(orch, sandbox), Checkouts: func(projectID string) []string { return projectCheckouts(cat.Projects, projectID) },
+		Runners: map[domain.ServiceKind]ports.ServiceProcessRunner{
+			domain.ServiceKindCommand: commandrunner.Runner{}, domain.ServiceKindImage: containerrunner.Runner{},
+		},
+		Runtime:  services.RuntimeSetting{Settings: cat.Settings},
+		Sweeper:  containerrunner.Runner{},
+		EnvFiles: cat.Projects, Branches: git,
+	})
+	svc.Subscribe(cat.Bus)
+	// Services never outlive the server or start by themselves: boot settles
+	// the runs a dead server left and removes its containers; shutdown stops
+	// every run, bounded so the server's exit waits for the escalation and
+	// no longer.
+	lc.Append(fx.Hook{
+		OnStart: func(ctx context.Context) error { return svc.Recover(ctx) },
+		OnStop: func(ctx context.Context) error {
+			stopCtx, cancel := context.WithTimeout(ctx, services.DefaultStopGrace+3*time.Second)
+			defer cancel()
+			return svc.Shutdown(stopCtx)
+		},
+	})
+	return svc, nil
+}
+
+// serviceInstance is the id of this harness's data directory, made once and
+// kept in it. It labels the containers the harness starts, so boot removes
+// only its own and never another harness's on the same machine.
+func serviceInstance(dir string) (string, error) {
+	path := filepath.Join(dir, ".instance")
+	if b, err := os.ReadFile(path); err == nil {
+		if id := strings.TrimSpace(string(b)); id != "" {
+			return id, nil
+		}
+	}
+	var raw [8]byte
+	if _, err := rand.Read(raw[:]); err != nil {
+		return "", err
+	}
+	id := hex.EncodeToString(raw[:])
+	return id, os.WriteFile(path, []byte(id+"\n"), 0o600)
 }
 
 func newRuntimeConfig(cfg Config, bin ports.ManagedClaudeBin, home claudehome.Home, driver ports.SandboxDriver) runtime.Config {
@@ -897,6 +973,9 @@ func newOrchestrationService(
 	svc.TaskServerURL = func(sessionID string) string {
 		return base + mcpsession.PathPrefix + sessionID
 	}
+	svc.ServicesServerURL = func(sessionID string) string {
+		return base + mcpsession.ServicesPathPrefix + sessionID
+	}
 	svc.SessionHookURL = func(sessionID string) string {
 		return base + httpapi.InteractiveSessionHookPath + "?session_id=" + url.QueryEscape(sessionID)
 	}
@@ -966,6 +1045,19 @@ func projectReadsAll(projects ports.ProjectReader, projectID string) bool {
 		return true
 	}
 	return p.AgentsReadAllRepos
+}
+
+// projectCheckouts lists the checkout of every repository of one project.
+func projectCheckouts(projects ports.RepositoryLister, projectID string) []string {
+	repos, err := projects.ListRepositories(context.Background(), projectID)
+	if err != nil {
+		return nil
+	}
+	var out []string
+	for _, r := range repos {
+		out = append(out, r.RootDir)
+	}
+	return out
 }
 
 // allCheckouts lists the checkout of every repository of every project.

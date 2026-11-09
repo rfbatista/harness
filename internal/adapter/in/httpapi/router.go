@@ -59,6 +59,21 @@ func NewRouter(h *Handler, opts ...Option) *echo.Echo {
 	g.POST("/save_repository_run_command", h.handleSaveRunCommand)
 	g.POST("/delete_repository_run_command", h.handleDeleteRunCommand)
 
+	// services: a project's programs, defined here and run beside each other
+	g.GET("/list_services", h.handleListServices)
+	g.GET("/get_service", h.handleGetService)
+	g.GET("/read_service_log", h.handleReadServiceLog)
+	g.GET("/services/events", h.handleServiceEvents) // a project's services as they change (SSE)
+	g.GET("/services/log", h.handleServiceLogEvents) // a service's log as it grows (SSE)
+	g.POST("/start_service", h.handleStartService)
+	g.POST("/stop_service", h.handleStopService)
+	g.POST("/restart_service", h.handleRestartService)
+	g.POST("/create_service", h.handleCreateService)
+	g.POST("/update_service", h.handleUpdateService)
+	g.POST("/delete_service", h.handleDeleteService)
+	g.GET("/get_services_settings", h.handleGetServicesSettings)
+	g.POST("/set_services_settings", h.handleSetServicesSettings)
+
 	// token saver activations of a project, repository or task
 	g.GET("/list_token_saver_activations", h.handleListTokenSaverActivations)
 	g.POST("/set_token_saver_activation", h.handleSetTokenSaverActivation)

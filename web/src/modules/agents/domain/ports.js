@@ -48,6 +48,8 @@
  * @property {string} url
  * @property {Record<string, string>} headers
  * @property {{ name: string, set: boolean }[]} envRefs  never a value
+ * @property {boolean} builtIn  built into the harness (the services server): no edit, delete or test
+ * @property {string[]} tools  a built-in server's tool names, [] for any other
  * @property {string[]} agents
  * @property {{ id: string, name: string }[]} projects
  * @property {Problem[]} problems

@@ -71,6 +71,8 @@ import { tasksGateway } from "./modules/tasks/infrastructure/tasks-gateway.js";
 import { registerTasks } from "./modules/tasks/presentation/register.js";
 import { modelsGateway } from "./modules/models/infrastructure/models-gateway.js";
 import { registerModels } from "./modules/models/presentation/register.js";
+import { servicesGateway } from "./modules/services/infrastructure/services-gateway.js";
+import { registerServices } from "./modules/services/presentation/register.js";
 import { settingsGateway } from "./modules/settings/infrastructure/settings-gateway.js";
 import { registerSettings } from "./modules/settings/presentation/register.js";
 import { tokenSaversGateway } from "./modules/tokensavers/infrastructure/tokensavers-gateway.js";
@@ -153,6 +155,7 @@ registerAttribution(Alpine, { gateway: attributionGateway(api) });
 registerAgentCredential(Alpine, { gateway: agentCredentialGateway(api) });
 registerAgentIsolation(Alpine);
 registerSettings(Alpine, { gateway: settingsGateway(api) });
+registerServices(Alpine, { gateway: servicesGateway(api, events) });
 registerWritingHelper(Alpine, { gateway: stepGateway({ base: "/api" }) });
 
 Alpine.start();

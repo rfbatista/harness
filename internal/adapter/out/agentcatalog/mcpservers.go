@@ -117,6 +117,9 @@ func (c *Catalog) SaveCatalogMCPServer(in domain.SaveCatalogMCPServer) (*domain.
 		return nil, err
 	}
 	s := in.Server
+	if s.Name == domain.ServicesServerName || in.PreviousName == domain.ServicesServerName {
+		return nil, domain.ErrServicesServerBuiltIn()
+	}
 	if !serverNameRe.MatchString(s.Name) {
 		return nil, invalid("name", "an MCP server name is letters, digits, dashes and underscores, up to 64")
 	}
@@ -265,6 +268,9 @@ func without(list []string, drop string) []string {
 func (c *Catalog) DeleteCatalogMCPServer(in domain.DeleteCatalogItem) (*domain.CatalogWriteResult, error) {
 	c.wmu.Lock()
 	defer c.wmu.Unlock()
+	if in.Name == domain.ServicesServerName {
+		return nil, domain.ErrServicesServerBuiltIn()
+	}
 	t, err := c.begin()
 	if err != nil {
 		return nil, err
@@ -308,6 +314,9 @@ func (c *Catalog) expand(s string, used map[string]string) string {
 // this call alone: the values are never stored, returned or logged.
 func (c *Catalog) TestCatalogMCPServer(ctx context.Context, in domain.TestCatalogMCPServer) (*domain.CatalogProbeResult, error) {
 	s := in.Server
+	if s.Name == domain.ServicesServerName {
+		return nil, domain.ErrServicesServerBuiltIn()
+	}
 	transport, err := checkServer(s)
 	if err != nil {
 		return nil, err

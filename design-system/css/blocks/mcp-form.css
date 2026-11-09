@@ -81,6 +81,9 @@
     &[data-kind="arg"] { grid-template-columns: minmax(0, 1fr) auto; }
     &[data-kind="env"] { grid-template-columns: minmax(0, 1fr) minmax(0, 1.4fr) auto auto; }
     &[data-kind="header"] { grid-template-columns: minmax(0, 1fr) minmax(0, 1.6fr) auto auto; }
+    &[data-kind="port"] { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) 5.5rem auto; }
+    &[data-kind="port"] .sep { color: var(--color-ink-faint); }
+    &[data-kind="num"] { grid-template-columns: 8rem auto; justify-content: start; }
 
     @media (max-width: 40rem) {
       &[data-kind="env"], &[data-kind="header"] { grid-template-columns: minmax(0, 1fr) auto auto; }

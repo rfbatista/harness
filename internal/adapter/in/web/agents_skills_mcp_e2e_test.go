@@ -203,11 +203,13 @@ func TestMcpServersTabShowsEachServerAndChecksItsVariablesAgain_EndToEnd(t *test
 	b.run("the list names every server, the one with an unset secret wears its badge, the footer names the file",
 		chromedp.EmulateViewport(1280, 900),
 		chromedp.Navigate(w.srv.URL+"/agents/mcp"),
-		waitUntil(rows+` === 'nb,linear,spare'`),
+		waitUntil(rows+` === 'nb,linear,spare,services'`),
 		waitUntil(`document.querySelector('[data-mcp-foot]').textContent.trim() === 'mcp-servers.json · 3 servers'`),
 		waitUntil(rowText("nb")+`.includes('secret not set')`),
 		waitUntil(rowText("spare")+`.includes('stdio · Unused')`),
 		waitUntil(rowText("linear")+`.includes('https://linear.example/mcp')`),
+		waitUntil(`document.querySelector('[data-mcp-row][data-key="services"] [data-built-in]')?.checkVisibility() === true`),
+		waitUntil(`!document.querySelector('[data-mcp-row][data-key="nb"] [data-built-in]').checkVisibility()`),
 	)
 	b.run("the quick filters narrow the list",
 		clickButton(filters, "stdio"),
@@ -219,7 +221,7 @@ func TestMcpServersTabShowsEachServerAndChecksItsVariablesAgain_EndToEnd(t *test
 		clickButton(filters, "Unused"),
 		waitUntil(rows+` === 'spare'`),
 		clickButton(filters, "All"),
-		waitUntil(rows+` === 'nb,linear,spare'`),
+		waitUntil(rows+` === 'nb,linear,spare,services'`),
 	)
 	b.run("a stdio server shows its command, its references with set or not set, and a banner to check again",
 		chromedp.Click(`[data-mcp-row][data-key="nb"]`, chromedp.ByQuery),

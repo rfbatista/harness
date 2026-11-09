@@ -107,7 +107,7 @@ func (c *Catalog) SaveCatalogAgent(in domain.SaveCatalogAgent) (*domain.CatalogW
 		if !serverNameRe.MatchString(s) {
 			return nil, invalid("mcp_servers", "bad MCP server name: "+s)
 		}
-		if t.serversView().get(s) == nil {
+		if s != domain.ServicesServerName && t.serversView().get(s) == nil {
 			unknown = append(unknown, s)
 		}
 	}

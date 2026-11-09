@@ -12,7 +12,7 @@ import { describeError } from "../../../../shared/presentation/errors.js";
 import { readSeed } from "../../../../shared/presentation/seed.js";
 import { AGENT_FILTERS, agentDetail, agentRows, agentsFooter } from "../../domain/library.js";
 import { renderMarkdown } from "../../../../shared/domain/markdown.js";
-import { MCP_FILTERS, mcpDetail, mcpFooter, mcpRows } from "../../domain/mcp.js";
+import { MCP_FILTERS, mcpDetail, mcpFooter, mcpRows, noOwnServers } from "../../domain/mcp.js";
 import { SKILL_FILTERS, SKILL_PAGE, skillFiles, skillReach, skillRows, skillSummary, skillsFooter } from "../../domain/skills.js";
 import { TABS, routeOf, tabAfterKey } from "../../domain/tabs.js";
 import { TOOL_FILTERS, toolDetail, toolRows, toolsFooter } from "../../domain/tools.js";
@@ -510,6 +510,10 @@ export const agentsPage = ({ gateway: raw, repositories, history, location, clip
   },
   get mcpFoot() {
     return this.catalog ? mcpFooter(this.catalog) : "";
+  },
+  /** No server of the person's own, and no filter or query hiding any: the tab says so under the built-in ones. */
+  get noOwnMcp() {
+    return this.catalog !== null && noOwnServers(this.catalog) && this.mcpQuery.trim() === "" && this.mcpFilter === "all";
   },
   get noMcpRows() {
     return this.catalog !== null && this.mcpRowsView.length === 0;

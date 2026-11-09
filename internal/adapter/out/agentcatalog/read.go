@@ -257,7 +257,7 @@ func (c *Catalog) ReadCatalog() (*domain.CatalogView, error) {
 			}
 			for _, s := range ag.MCPServers {
 				agentsOfServer[s] = append(agentsOfServer[s], ag.Name)
-				if !contains(serverNames, s) {
+				if s != domain.ServicesServerName && !contains(serverNames, s) {
 					ag.Problems = append(ag.Problems, domain.CatalogProblem{Code: domain.CatalogProblemUnknownMCPServer, Message: "the MCP server " + s + " does not exist"})
 				}
 			}
@@ -326,6 +326,9 @@ func (c *Catalog) ReadCatalog() (*domain.CatalogView, error) {
 		}
 	}
 	for _, name := range serverNames {
+		if name == domain.ServicesServerName {
+			continue // the built-in one is listed below
+		}
 		srv := c.serverView(name, l.servers.get(name), agentsOfServer[name])
 		for _, p := range projects {
 			if contains(p.MCPServers, name) {
@@ -334,7 +337,37 @@ func (c *Catalog) ReadCatalog() (*domain.CatalogView, error) {
 		}
 		v.MCPServers = append(v.MCPServers, srv)
 	}
+	v.MCPServers = append(v.MCPServers, c.servicesServerView(agentsOfServer[domain.ServicesServerName], projects, contains(serverNames, domain.ServicesServerName)))
 	return v, nil
+}
+
+// servicesServerView is the built-in services server as the catalog read
+// lists it: synthesised, never written to mcp-servers.json. A file entry of
+// the same name is ignored and reported.
+func (c *Catalog) servicesServerView(agents []string, projects []*domain.Project, inFile bool) domain.CatalogMCPServer {
+	srv := domain.CatalogMCPServer{
+		Name:      domain.ServicesServerName,
+		BuiltIn:   true,
+		Transport: "built_in",
+		Args:      []string{},
+		Env:       map[string]string{},
+		Headers:   map[string]string{},
+		EnvRefs:   []domain.CatalogEnvRef{},
+		Agents:    nonNil(agents),
+		Projects:  []domain.CatalogProjectRef{},
+		Problems:  []domain.CatalogProblem{},
+		Tools:     domain.ServicesServerTools,
+	}
+	if inFile {
+		srv.Problems = append(srv.Problems, domain.CatalogProblem{Code: domain.CatalogProblemBuiltInName,
+			Message: mcpServersFile + " defines a server named " + domain.ServicesServerName + ": the built-in one is used and the entry is ignored"})
+	}
+	for _, p := range projects {
+		if contains(p.MCPServers, domain.ServicesServerName) {
+			srv.Projects = append(srv.Projects, domain.CatalogProjectRef{ID: p.ID, Name: p.Name})
+		}
+	}
+	return srv
 }
 
 // serverView is one mcp-servers.json entry as the catalog read lists it.

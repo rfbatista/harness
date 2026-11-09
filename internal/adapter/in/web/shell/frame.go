@@ -168,6 +168,7 @@ type Option struct{ ID, Name string }
 const (
 	PageBoard        = "board"
 	PageCode         = "code"
+	PageServices     = "services"
 	PageReviews      = "reviews"
 	PageDocuments    = "documents"
 	PageDesign       = "design"
@@ -188,6 +189,8 @@ type Rail struct {
 	// CodeHref is the project's code pages; "" when code browsing is not
 	// served.
 	CodeHref string
+	// Services is the project's Services item in the navigation.
+	Services ServicesNav
 	// DocumentsHref is the project's documents library; "" when documents
 	// are not served.
 	DocumentsHref string
@@ -218,6 +221,27 @@ type Rail struct {
 	// tasks and sessions, followed over the project's feed. Nil leaves the
 	// rail static (no project selected).
 	Seed *RailSeed
+}
+
+// ServicesNav is the navigation's Services item: its page, and how many of
+// the project's services are starting or running, which the browser keeps
+// current from the services feed.
+type ServicesNav struct {
+	// Href is the Services page; "" leaves the item out.
+	Href      string
+	ProjectID string
+	Running   int
+}
+
+// Badge is the count as the badge reads it: "" at zero, "99+" above 99.
+func (n ServicesNav) Badge() string {
+	switch {
+	case n.Running <= 0:
+		return ""
+	case n.Running > 99:
+		return "99+"
+	}
+	return strconv.Itoa(n.Running)
 }
 
 // RailSeed is the project's tasks and sessions, as much as the rail and the
