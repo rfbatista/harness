@@ -336,4 +336,12 @@ export {};
  *             onStatus: (status: FeedStatus) => void) => () => void} follow
  *           Follows the session's interview feed until the returned function
  *           is called. An event it cannot read is dropped.
+ * @property {(id: string, answers: import("./interviews.js").Answer[]) => Promise<import("./interviews.js").Interview>} submit
+ *           Sends the answers, one per question. Idempotent per interview id: a
+ *           repeat returns the stored interview and delivers nothing. Refusals
+ *           are StructuredErrors: INTERVIEW_EXPIRED and INTERVIEW_NOT_OPEN carry
+ *           the current interview in `details.interview` (read into the model),
+ *           INTERVIEW_ANSWERS_INVALID and INTERVIEW_NOT_FOUND only their message.
+ * @property {(id: string, note: string) => Promise<import("./interviews.js").Interview>} dismiss
+ *           Closes the interview without answers, with an optional note. As submit.
  */

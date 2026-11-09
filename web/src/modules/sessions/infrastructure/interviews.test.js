@@ -65,3 +65,41 @@ test("the gateway follows the session's feed, drops what it cannot read and pass
   assert.equal(source.closed, true);
   assert.throws(() => toInterviewEvent({ seq: 1, kind: "nope" }), Codes.BAD_RESPONSE);
 });
+
+const answersGateway = (handler) => {
+  const { fetch, calls } = fakeFetch(handler);
+  return { gateway: interviewsGateway(apiClient({ base: "/api", fetch }), feed({ base: "/api", EventSource: fakeEventSourceClass().EventSource })), calls };
+};
+
+test("submit posts the answers as the contract has them and reads the interview back", async () => {
+  const { gateway, calls } = answersGateway(() => jsonResponse(200, { interview: interviewDTO({ state: "sent", ended_at: "2026-11-08T14:41:00Z", delivery: "queued" }) }));
+  const answers = [{ chosen: [1], text: "", note: "because", skipped: false }, { chosen: [], text: "", note: "", skipped: true }];
+  const iv = await gateway.submit("iv 1", answers);
+  assert.equal(calls[0].url, "/api/interviews/iv%201/answers");
+  assert.equal(calls[0].init.method, "POST");
+  assert.deepEqual(JSON.parse(calls[0].init.body), { answers });
+  assert.deepEqual([iv.state, iv.delivery], ["sent", "queued"]);
+});
+
+test("dismiss posts the note, or an empty one, and reads the interview back", async () => {
+  const { gateway, calls } = answersGateway(() => jsonResponse(200, { interview: interviewDTO({ state: "dismissed", ended_at: "2026-11-08T14:41:00Z", delivery: "delivered" }) }));
+  const iv = await gateway.dismiss("iv-1", "not now");
+  assert.equal(calls[0].url, "/api/interviews/iv-1/dismiss");
+  assert.deepEqual(JSON.parse(calls[0].init.body), { note: "not now" });
+  assert.equal(iv.state, "dismissed");
+  await gateway.dismiss("iv-1", "");
+  assert.deepEqual(JSON.parse(calls[1].init.body), { note: "" });
+});
+
+test("a refusal that carries the interview comes back with it read into the model; any other failure is left as it is", async () => {
+  const refused = interviewDTO({ state: "expired", ended_at: "2026-11-08T14:41:00Z" });
+  const { gateway } = answersGateway((url) =>
+    url.endsWith("/answers") ? jsonResponse(409, { error: "the session ended", code: "INTERVIEW_EXPIRED", details: { interview: refused } }) : jsonResponse(500, { error: "boom" }),
+  );
+  const err = await gateway.submit("iv-1", []).then(() => null, (e) => e);
+  assert.equal(err.code, "INTERVIEW_EXPIRED");
+  assert.equal(err.details.interview.state, "expired");
+  assert.ok(err.details.interview.askedAt instanceof Date);
+  const down = await gateway.dismiss("iv-1", "").then(() => null, (e) => e);
+  assert.equal(down.status, 500);
+});

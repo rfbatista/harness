@@ -68,6 +68,9 @@ export function progress(questions, states) {
   return { answered, total: questions.length, skipped: questions.length - answered };
 }
 
+/** The index of the first question a send would skip, or -1 when none: where Review skipped goes. */
+export const firstBlank = (questions, states) => questions.findIndex((q, at) => !isAnswered(q, states[at]));
+
 /**
  * The contract's answers: a skipped question carries nothing, an answered one
  * its options, its own text (only while Write my own is selected) and its note.

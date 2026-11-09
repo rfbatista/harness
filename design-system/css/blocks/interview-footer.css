@@ -1,0 +1,41 @@
+/*
+ * Interview footer states — what an open interview's footer (interview-set.css)
+ * draws once the person acts: a strip that asks first (.confirm: send with blanks,
+ * or dismiss with its optional note), the status line while it sends (.say, a
+ * polite live region, always there and empty until it speaks), and the danger
+ * banner of a failure. While the footer is aria-busy the questions above it are
+ * read-only and dim; the busy button is the button block's. A sent interview
+ * shows the signal banner above its answers (.interview-set > .banner).
+ * <footer aria-busy="true"><div class="say" role="status">Sending your answers…</div>
+ *   <div class="actions"><button class="button" disabled>Dismiss</button><span class="grow"></span><button class="button" aria-busy="true" disabled>Sending…</button></div></footer>
+ * <footer><div class="confirm" role="alert"><p><strong>Send with 2 skipped?</strong> The agent reads “skipped” for those questions. You cannot edit after sending.</p>
+ *   <div class="actions"><button class="button" data-size="sm">Review skipped</button><span class="grow"></span><button class="button" data-variant="primary" data-size="sm">Send 5 answers</button></div></div></footer>
+ */
+
+@layer blocks {
+  .interview-set {
+    &:has(> footer[aria-busy="true"]) > .interview-question { opacity: 0.7; }
+
+    & > .banner { margin: var(--space-s) var(--space-m) 0; font-size: var(--text-xs); }
+
+    & > footer {
+      & .say { color: var(--color-ink-muted); font-size: var(--text-sm); }
+      & .say:empty { display: none; }
+      & .say:focus-visible { outline: var(--border-focus-width) solid var(--color-focus); outline-offset: 2px; }
+      & .banner { font-size: var(--text-xs); }
+
+      & .confirm {
+        display: grid;
+        gap: var(--space-xs);
+        padding: var(--space-xs) var(--space-s);
+        border: var(--border-width) solid color-mix(in oklch, var(--color-attention) 35%, transparent);
+        border-radius: var(--radius-sm);
+        background: var(--color-attention-wash);
+        font-size: var(--text-xs);
+
+        & > p { margin: 0; }
+        & > textarea { inline-size: 100%; min-block-size: 2.5rem; resize: vertical; font-size: var(--text-sm); }
+      }
+    }
+  }
+}

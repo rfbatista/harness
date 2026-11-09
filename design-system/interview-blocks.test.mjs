@@ -8,7 +8,7 @@ import { fileURLToPath } from "node:url";
 
 const read = (p) => readFileSync(fileURLToPath(new URL(p, import.meta.url)), "utf8");
 const strip = (css) => css.replace(/\/\*[\s\S]*?\*\//g, "");
-const BLOCKS = ["agent-stage", "interview", "interview-set", "interview-history", "interview-question", "interview-note", "interview-option", "interview-sheet", "interview-toggle"];
+const BLOCKS = ["agent-stage", "interview", "interview-set", "interview-history", "interview-footer", "interview-question", "interview-note", "interview-option", "interview-sheet", "interview-toggle"];
 const css = Object.fromEntries(BLOCKS.map((b) => [b, read(`./css/blocks/${b}.css`)]));
 const code = Object.fromEntries(BLOCKS.map((b) => [b, strip(css[b])]));
 const index = read("./css/index.css");
@@ -104,4 +104,13 @@ test("the specimen and DESIGN.md show each block", () => {
     assert.ok(design.includes(`.${b}`), `${b} is not in DESIGN.md`);
   }
   assert.match(specimen, /class="\[ agent-stage \]"/);
+});
+
+test("the footer's strip asks in an attention wash, its status line is a live region that hides while empty, and a busy footer dims the questions", () => {
+  const footer = code["interview-footer"];
+  assert.match(footer, /\.confirm\s*\{[^}]*background:\s*var\(--color-attention-wash\)/s);
+  assert.match(footer, /\.say:empty\s*\{\s*display:\s*none/);
+  assert.match(footer, /footer\[aria-busy="true"\]\)\s*>\s*\.interview-question\s*\{\s*opacity:/);
+  assert.match(specimen, /Sending your answers…/);
+  assert.match(specimen, /INTERVIEW_SEND_FAILED · try again/);
 });

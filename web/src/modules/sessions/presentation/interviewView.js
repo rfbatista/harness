@@ -4,6 +4,7 @@
 import { renderMarkdown } from "../../../shared/domain/markdown.js";
 import { count } from "../../../shared/presentation/format.js";
 import { historyOf, openOnes, openQuestionCount } from "../domain/interviews.js";
+import { canSend, WAITING_FOR_CONNECTION } from "../domain/sending.js";
 
 /** A time of day, "14:32". */
 export const clockTime = (date) => date.toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit", hour12: false });
@@ -88,6 +89,72 @@ export function footerView({ answered, total, skipped }) {
   };
 }
 
+/** The banner on an interview the person just sent from this page. */
+export const SENT_BANNER = "Answers sent. The agent reads them as its next message, after its current turn.";
+
+/** The banner on an interview whose send found the session ended. */
+export const EXPIRED_BANNER = "The session ended before the agent could read your answers. Copy them if you need them.";
+
+const FAILED = {
+  send: { title: "Could not send your answers.", sending: "Sending your answers…", button: "Sending…" },
+  dismiss: { title: "Could not dismiss the interview.", sending: "Dismissing the interview…", button: "Dismissing…" },
+};
+
+/**
+ * The footer of an open interview: how far it is, the Send button, and what a
+ * step of sending or dismissing puts in its place (the strip that asks, the
+ * status while it goes, the banner of a failure). Wording is the UX study's.
+ * @param {{ answered: number, total: number, skipped: number }} progress
+ * @param {import("../domain/sending.js").Step} step
+ * @param {{ connection: string, note: string }} state  the page stream's status, and the note typed into the dismiss confirm
+ */
+export function footView(progress, step, { connection, note }) {
+  const base = footerView(progress);
+  const live = canSend(connection);
+  const sending = step.phase === "sending";
+  const failure = step.phase === "failed" ? step.error : null;
+  const wording = FAILED[step.kind ?? "send"];
+  const isSend = step.kind === "send";
+  return {
+    ...base,
+    phase: step.phase,
+    kind: step.kind,
+    // What the footer draws: the progress line while the person decides, one strip that asks, the banner of a failure, the buttons unless a strip asks.
+    sumShown: step.phase === "idle" || (step.phase === "confirming" && isSend),
+    stripSend: step.phase === "confirming" && isSend,
+    stripDismiss: step.phase === "confirming" && step.kind === "dismiss",
+    errorShown: failure !== null,
+    actionsShown: step.phase !== "confirming",
+    locked: sending,
+    busy: sending,
+    dismissDisabled: sending,
+    sendDisabled: sending || !live,
+    reason: !live && !sending ? WAITING_FOR_CONNECTION : "",
+    status: sending ? wording.sending : "",
+    send: sending && isSend ? wording.button : failure?.retry ? "Try again" : base.send,
+    confirm: {
+      title: `Send with ${progress.skipped} skipped?`,
+      text: "The agent reads “skipped” for those questions. You cannot edit after sending.",
+      review: "Review skipped",
+      send: `Send ${progress.total} answers`,
+    },
+    dismiss: {
+      title: "Dismiss this interview?",
+      text: "The agent is told you chose not to answer. Your typed answers are discarded. You cannot undo it.",
+      keep: "Keep answering",
+      confirm: sending && !isSend ? wording.button : "Dismiss interview",
+      note,
+    },
+    error: failure && {
+      code: failure.code,
+      title: wording.title,
+      text: failure.retry ? "The harness did not answer. Your answers are kept here." : failure.message,
+      tail: failure.retry ? "INTERVIEW_SEND_FAILED · try again" : failure.code,
+      retry: failure.retry,
+    },
+  };
+}
+
 /** The option the number key `key` selects in the drawn order ("1" is the first row), or null: no such row, not a digit, or past the 8 options a question holds. */
 export function optionForKey(question, key) {
   if (!/^[1-8]$/.test(key)) return null;
@@ -161,6 +228,9 @@ export function answersText(interview, answers) {
     .join("\n\n");
 }
 
+/** What a sent or expired interview says over its answers, where this page sent it: the tone of its banner and how it is announced. */
+const BANNER = { sent: { text: SENT_BANNER, tone: "signal", role: "status" }, expired: { text: EXPIRED_BANNER, tone: "danger", role: "alert" } };
+
 const WORD = { sent: "Sent", dismissed: "Dismissed", expired: "Expired" };
 const TONE = { sent: "success", dismissed: null, expired: "danger" };
 
@@ -179,11 +249,12 @@ function subOf(interview, answers) {
 /**
  * A sent, dismissed or expired interview as its row in Earlier draws it, folded
  * or opened. `typed` is what the person had typed, for an expired interview
- * (the server keeps no answers for it).
+ * (the server keeps no answers for it); `here`: the person sent it from this
+ * page, so a sent or expired one carries its banner.
  * @param {import("../domain/interviews.js").Interview} interview
  * @param {readonly import("../domain/interviews.js").Answer[] | null} typed
  */
-export function historyRowView(interview, typed = null) {
+export function historyRowView(interview, typed = null, here = false) {
   const answers = interview.answers ?? typed;
   const at = clockTime(interview.askedAt);
   const word = WORD[interview.state];
@@ -193,6 +264,9 @@ export function historyRowView(interview, typed = null) {
     label: `${word} interview from ${interview.agentName} at ${at}`,
     title: `${word} · ${interview.agentName} · ${at}`,
     sub: subOf(interview, answers),
+    banner: here ? (BANNER[interview.state]?.text ?? "") : "",
+    bannerTone: BANNER[interview.state]?.tone ?? "",
+    bannerRole: BANNER[interview.state]?.role ?? "",
     badge: count(interview.questions.length, "question"),
     tone: TONE[interview.state],
     copy: interview.state === "expired",
@@ -213,8 +287,9 @@ export const EMPTY_TEXT = "When an agent asks you questions, they appear here, a
  * @param {(id: string) => { answered: number, total: number }} [state.progress]
  * @param {(id: string) => boolean} [state.opened]
  * @param {(interview: import("../domain/interviews.js").Interview) => readonly import("../domain/interviews.js").Answer[] | null} [state.typed]
+ * @param {(id: string) => boolean} [state.sentHere]  the interview was sent from this page
  */
-export function panelView(list, { folded = () => undefined, progress = () => undefined, opened = () => false, typed = () => null } = {}) {
+export function panelView(list, { folded = () => undefined, progress = () => undefined, opened = () => false, typed = () => null, sentHere = () => false } = {}) {
   const open = openOnes(list);
   const n = openQuestionCount(list);
   const history = historyOf(list);
@@ -232,7 +307,7 @@ export function panelView(list, { folded = () => undefined, progress = () => und
     emptyText: EMPTY_TEXT,
     history: {
       label: `Earlier · ${history.length}`,
-      rows: history.map((i) => ({ ...historyRowView(i, typed(i)), opened: opened(i.id) })),
+      rows: history.map((i) => ({ ...historyRowView(i, typed(i), sentHere(i.id)), opened: opened(i.id) })),
     },
   };
 }

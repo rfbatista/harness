@@ -6,7 +6,10 @@
 // scroll of anything the person is using: an interview that arrives only draws.
 // The person's answers are the store's; this turns the controls' events into
 // them (a change, a number key, Enter on the recommendation) and moves the
-// focus between questions the way the UX study's keyboard table says.
+// focus between questions the way the UX study's keyboard table says. It also
+// sends and dismisses: Send, ⌘/Ctrl+Enter, the strips that ask, Try again; the
+// store holds where each interview is in that, this puts the focus where the
+// person's next step is (never into the terminal) and tells the polite region.
 //
 //   <div class="[ agent-stage ]" x-data="sessionsInterviewPanel(sid)" x-on:keydown.window.capture="claimKey">
 //     <div class="[ terminal ]" …>…</div>
@@ -86,6 +89,7 @@ export const interviewPanel = ({ interviews, observeResize = resizeObserver, rem
     textOf: (card, q) => interviews.textOf(card.id, q.at),
     noteOf: (card, q) => interviews.noteOf(card.id, q.at),
     progress: (card) => footerView(interviews.progress(card.id)),
+    foot: (card) => interviews.footer(card.id),
 
     /** The note's summary: Note once it holds text, Add a note while it is empty. */
     noteLabel: (card, q) => noteSummary(interviews.noteOf(card.id, q.at)),
@@ -167,6 +171,117 @@ export const interviewPanel = ({ interviews, observeResize = resizeObserver, rem
       const next = fieldset.nextElementSibling;
       if (next?.matches("fieldset")) this.focusQuestion(next);
       else fieldset.closest("section")?.querySelector("[data-interview-send]")?.focus();
+    },
+
+    // ── sending and dismissing ───────────────────────────────────────────
+    /**
+     * What the polite region is told: the page's, through the "announce" event.
+     * Sent from the stage, not from `$el`: by the time an answer comes back the
+     * button that was pressed may have left the page with its card.
+     */
+    say(text) {
+      root.dispatchEvent(new CustomEvent("announce", { detail: { text }, bubbles: true }));
+    },
+
+    /** The card's section, which a method called after the card has gone cannot find through the event. */
+    section(id) {
+      return root.querySelector(`[data-interview-card="${CSS.escape(id)}"]`);
+    },
+
+    /** The primary button: Send, or Try again once a send or a dismiss failed. */
+    primary(card) {
+      return interviews.footer(card.id).error?.retry ? this.retry(card) : this.send(card);
+    },
+
+    /** Send, ⌘/Ctrl+Enter: blanks ask first (the strip takes the focus), a fully answered interview goes. */
+    async send(card) {
+      const id = card.id;
+      const pending = interviews.send(sessionId, id, (text) => this.say(text));
+      this.landed(id);
+      await pending;
+      this.landed(id);
+    },
+
+    async retry(card) {
+      const id = card.id;
+      const pending = interviews.retry(sessionId, id, (text) => this.say(text));
+      this.landed(id);
+      await pending;
+      this.landed(id);
+    },
+
+    /** Dismiss, in the confirm strip. */
+    async dismissNow(card) {
+      const id = card.id;
+      const pending = interviews.confirmDismiss(sessionId, id, (text) => this.say(text));
+      this.landed(id);
+      await pending;
+      this.landed(id);
+    },
+
+    askDismiss(card) {
+      interviews.askDismiss(card.id);
+      this.landed(card.id);
+    },
+
+    /** Keep answering: back to the interview, the focus on the Dismiss button. */
+    keepAnswering(card) {
+      interviews.keepAnswering(card.id);
+      this.$nextTick(() => this.section(card.id)?.querySelector("[data-interview-dismiss]")?.focus());
+    },
+
+    /** Review skipped: the first blank question takes the focus. */
+    review(card) {
+      const at = interviews.review(card.id);
+      this.$nextTick(() => {
+        const fieldset = this.section(card.id)?.querySelectorAll("fieldset")[at];
+        if (fieldset) this.focusQuestion(fieldset);
+      });
+    },
+
+    typeDismissNote(card, event) {
+      interviews.typeDismissNote(card.id, event.target.value);
+    },
+
+    /**
+     * After a step the focus goes where the person's next step is, once the
+     * footer has been drawn: the default button of the strip that asks (the
+     * safe one for a dismiss), the footer's status while it sends, the primary
+     * button after a failure, the row in Earlier once the interview has left
+     * the open ones. It never goes to the terminal.
+     */
+    landed(id) {
+      const aim = () => {
+        const step = interviews.step(id);
+        if (!interviews.openInterview(id)) return root.querySelector(`[data-row-id="${CSS.escape(id)}"] > .head`);
+        const selector = {
+          confirming: step.kind === "dismiss" ? "[data-interview-keep]" : "[data-interview-confirm-send]",
+          sending: "[data-interview-status]",
+          failed: "[data-interview-send]",
+        }[step.phase];
+        return selector ? this.section(id)?.querySelector(selector) : null;
+      };
+      // The footer is drawn a frame after the step changes: look for the target for a moment.
+      let tries = 0;
+      const look = () => {
+        const target = aim();
+        if (target) target.focus();
+        else if (++tries < 20 && !(interviews.openInterview(id) && interviews.step(id).phase === "idle")) setTimeout(look, 16);
+      };
+      this.$nextTick(look);
+    },
+
+    /**
+     * ⌘/Ctrl+Enter anywhere in the panel, text boxes included, is the Send
+     * button: the card the focus is in, else the newest.
+     * @param {KeyboardEvent} event
+     */
+    panelKey(event) {
+      if (event.key !== "Enter" || !(event.metaKey || event.ctrlKey) || event.altKey || event.shiftKey) return;
+      event.preventDefault();
+      if (event.repeat) return;
+      const id = event.target.closest?.("[data-interview-card]")?.dataset.interviewCard ?? this.view.cards[0]?.id;
+      if (id) void this.send({ id });
     },
 
     // ── the stack and Earlier ────────────────────────────────────────────

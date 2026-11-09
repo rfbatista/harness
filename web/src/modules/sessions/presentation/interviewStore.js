@@ -23,6 +23,7 @@
 import { toAnswers } from "../domain/answers.js";
 import { applyEvent, arrived, closedNow, emptyList, historyOf, openOnes } from "../domain/interviews.js";
 import { answering } from "./interviewAnswering.js";
+import { sending } from "./interviewSending.js";
 import { answersText, arrivalText, closedText, panelView } from "./interviewView.js";
 
 const noDrafts = { read: () => null, write() {}, drop() {}, sweep() {} };
@@ -45,9 +46,12 @@ export function interviewStore({ gateway = null, prefs = { interviewHidden: () =
   const rings = new Map();
   /** The feeds being followed, by session: the page follows its selected session and the panel follows its own, over one feed. */
   const following = new Map();
+  /** The interviews being sent or dismissed from this page: their echo on the feed is this tab's own doing. */
+  const inflight = new Set();
 
   return {
     ...answering(drafts),
+    ...sending({ gateway, inflight }),
     /** @type {Record<string, import("../domain/interviews.js").InterviewList>} */
     lists: {},
     /** The session column is wide enough to dock the panel (set by the panel from its width). */
@@ -89,6 +93,7 @@ export function interviewStore({ gateway = null, prefs = { interviewHidden: () =
         progress: (id) => this.progress(id),
         opened: (id) => this.openedRows[id] === true,
         typed: (interview) => this.typedAnswers(interview),
+        sentHere: (id) => this.sentHere[id] === true,
       });
     },
 
@@ -209,6 +214,7 @@ export function interviewStore({ gateway = null, prefs = { interviewHidden: () =
           sessionId,
           (event) => this.receive(sessionId, event, tell),
           (status) => {
+            this.connection = status;
             if (status === "resynced") void this.reload(sessionId, tell);
           },
         );
@@ -255,7 +261,8 @@ export function interviewStore({ gateway = null, prefs = { interviewHidden: () =
     replace(sessionId, list, announce) {
       const before = this.list(sessionId);
       const now = arrived(before, list);
-      const closed = closedNow(before, list);
+      // What this page is sending closed because it sent it, not because another tab did.
+      const closed = closedNow(before, list).filter((i) => !inflight.has(i.id));
       const wasShown = this.shown(sessionId);
       if (now.length > 0) this.keepTouched(sessionId);
       this.lists = { ...this.lists, [sessionId]: list };

@@ -32,6 +32,8 @@ type liveInterviews struct {
 	seq  int64
 	list []*domain.Interview
 	subs map[chan domain.InterviewEvent]struct{}
+	// down refuses a follow: the feed is not there.
+	down bool
 }
 
 func newLiveInterviews() *liveInterviews {
@@ -80,6 +82,10 @@ func (l *liveInterviews) ListInterviews(_ context.Context, ids []string) (map[st
 func (l *liveInterviews) FollowInterviews(ctx context.Context, _ string) (<-chan domain.InterviewEvent, error) {
 	ch := make(chan domain.InterviewEvent, 16)
 	l.mu.Lock()
+	if l.down {
+		l.mu.Unlock()
+		return nil, errors.New("the feed is down")
+	}
 	l.subs[ch] = struct{}{}
 	l.mu.Unlock()
 	go func() {
@@ -98,6 +104,10 @@ type gatedInterviews struct {
 	gate  chan struct{}
 	mu    sync.Mutex
 	reads int
+	// answers is the server's side of Submit and Dismiss, for the tests that send; nil: not answered here.
+	answers *answerer
+	// url is where the page is served.
+	url string
 }
 
 func (g *gatedInterviews) wait(ctx context.Context) error {
@@ -136,12 +146,18 @@ func (g *gatedInterviews) apiReads() int {
 }
 
 // The panel tests read and follow; answering is the server's (see the
-// interviews end-to-end tests).
-func (g *gatedInterviews) Submit(context.Context, string, []domain.InterviewAnswer) (*domain.Interview, error) {
+// interviews end-to-end tests) unless a test gives the page an answerer.
+func (g *gatedInterviews) Submit(ctx context.Context, id string, answers []domain.InterviewAnswer) (*domain.Interview, error) {
+	if g.answers != nil {
+		return g.answers.respond(ctx, id, domain.InterviewSent, answers, "")
+	}
 	return nil, errors.New("not answered here")
 }
 
-func (g *gatedInterviews) Dismiss(context.Context, string, string) (*domain.Interview, error) {
+func (g *gatedInterviews) Dismiss(ctx context.Context, id, note string) (*domain.Interview, error) {
+	if g.answers != nil {
+		return g.answers.respond(ctx, id, domain.InterviewDismissed, nil, note)
+	}
 	return nil, errors.New("not answered here")
 }
 
@@ -170,6 +186,13 @@ func askedInterview(id, agent string) *domain.Interview {
 // API's answers (nil: none held).
 func interviewPage(t *testing.T, live *liveInterviews, pty http.Handler, gate chan struct{}) (*httptest.Server, *gatedInterviews) {
 	t.Helper()
+	return interviewPageWrapped(t, live, pty, gate, nil)
+}
+
+// interviewPageWrapped is interviewPage with what the server answers passed
+// through wrap (nil: as it is), for a test that watches or breaks a request.
+func interviewPageWrapped(t *testing.T, live *liveInterviews, pty http.Handler, gate chan struct{}, wrap func(http.Handler) http.Handler) (*httptest.Server, *gatedInterviews) {
+	t.Helper()
 	assets, err := NewAssets()
 	if err != nil {
 		t.Fatal(err)
@@ -196,8 +219,13 @@ func interviewPage(t *testing.T, live *liveInterviews, pty http.Handler, gate ch
 	mux.Handle("/api/notifications", inbox)
 	mux.Handle("/api/", httpapi.NewRouter(httpapi.NewHandler(httpapi.Services{Interviews: wire})))
 	mux.Handle("/", pages)
-	srv := newBrowserServer(mux)
+	var served http.Handler = mux
+	if wrap != nil {
+		served = wrap(mux)
+	}
+	srv := newBrowserServer(served)
 	t.Cleanup(srv.Close)
+	wire.url = srv.URL
 	return srv, wire
 }
 
@@ -218,8 +246,14 @@ func ivPoll(js string) chromedp.Action {
 // terminal and the stream to be live.
 func openInterviewPage(t *testing.T, live *liveInterviews, width int64) (context.Context, *errorLog, *historyPTY, *gatedInterviews) {
 	t.Helper()
+	return openInterviewPageWrapped(t, live, width, nil)
+}
+
+// openInterviewPageWrapped is openInterviewPage over a server wrapped by wrap.
+func openInterviewPageWrapped(t *testing.T, live *liveInterviews, width int64, wrap func(http.Handler) http.Handler) (context.Context, *errorLog, *historyPTY, *gatedInterviews) {
+	t.Helper()
 	pty := newHistoryPTY()
-	srv, wire := interviewPage(t, live, pty, nil)
+	srv, wire := interviewPageWrapped(t, live, pty, nil, wrap)
 	ctx, errs := browser(t)
 	err := chromedp.Run(ctx,
 		chromedp.EmulateViewport(width, 800),
