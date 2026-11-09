@@ -1,6 +1,6 @@
 // What a service row binds, computed from a service (domain/service.js) and the clock.
 
-import { MAIN, hasRunIn, runInOptions } from "../domain/runIn.js";
+import { MAIN, hasRunIn, restartNote, runInOptions } from "../domain/runIn.js";
 import { isActive, overrideMark, portLinks, startedByView, statusView, timeFact, whereLabel } from "../domain/service.js";
 
 /** The command line, or the image reference with its arguments. */
@@ -60,7 +60,7 @@ export function serviceRow(service, now, { flight = "", runtime = { name: "docke
     notSandboxed: service.kind === "command" && run !== null && !run.sandboxed,
     start: action("start", "Start", service, { show: !active, flight, blocked }),
     stop: action("stop", "Stop", service, { show: active, flight }),
-    restart: { ...action("restart", "Restart", service, { show: service.status === "running", flight }), title: "Repeats the run: the same worktree and the same overrides" },
+    restart: { ...action("restart", "Restart", service, { show: service.status === "running", flight }), title: restartNote(run?.worktree_key ?? "") },
     logName: `Log of ${service.name}`,
     moreName: `More actions for ${service.name}`,
     reason: service.status === "failed" ? (run?.error ?? "") : "",

@@ -1,6 +1,6 @@
 import { assert, file, test } from "../../../shared/testing/test.js";
 import {
-  BRANCH_ENTRY, MAIN, afterFailedRead, afterPick, afterRead, branchNameOf, branchOptions, freshRunIn, hasRunIn, isBranchKey, pickAnnouncement, pickKeyOf, pickedWorktree, runInOptions, startKey,
+  BRANCH_ENTRY, MAIN, afterFailedRead, afterPick, afterRead, afterRefusal, branchNameOf, branchOptions, freshRunIn, hasRunIn, isBranchKey, pickAnnouncement, pickKeyOf, pickedWorktree, restartNote, runInOptions, startKey,
 } from "./runIn.js";
 
 file("services/domain/runIn");
@@ -124,4 +124,17 @@ test("the branches become options: local first, remote marked and fetched first,
 test("a branch pick is announced as a branch", () => {
   assert.equal(pickAnnouncement("api", { ...ready(), pickedKey: "branch:feature/x" }), "api runs branch feature/x.");
   assert.equal(pickAnnouncement("api", ready("session:s2")), "api runs in go-developer, branch agent/other.");
+});
+
+test("a refused branch is forgotten: the pick goes back to the main checkout, with no second notice", () => {
+  const { next, clearStored } = afterRefusal({ ...ready(), pickedKey: "branch:gone" });
+  assert.deepEqual([next.pickedKey, next.fallback, clearStored], [MAIN, null, true]);
+  const same = afterRefusal(ready("session:s2"));
+  assert.deepEqual([same.next.pickedKey, same.clearStored], ["session:s2", false], "a refusal for a worktree is the list's business");
+});
+
+test("a branch run is restarted at its latest commit, and a worktree run where it ran", () => {
+  assert.equal(restartNote("branch:feature/x"), "Runs the same branch again at its latest commit");
+  assert.equal(restartNote("session:s2"), "Repeats the run: the same worktree and the same overrides");
+  assert.equal(restartNote(""), "Repeats the run: the same worktree and the same overrides");
 });

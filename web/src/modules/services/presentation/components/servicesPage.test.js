@@ -681,3 +681,30 @@ test("the search is shown for one service at a time", async () => {
   pickRunIn(page, "2", "branch:");
   assert.deepEqual([rowOf(page, "api").runIn.searchOpen, rowOf(page, "web").runIn.searchOpen], [false, true]);
 });
+
+test("a branch pick is restored after a reload from its key alone, and a re-read of the list keeps it", async () => {
+  const { page } = await openBranchRunIn({ prefs: memoryPrefs({ "service-run-worktree:1": "branch:feature/x" }) });
+  const runIn = rowOf(page, "api").runIn;
+  assert.deepEqual([runIn.pickedKey, runIn.branch.label, runIn.fallback], ["branch:feature/x", "feature/x", ""]);
+  await reopenRunIn(page, "1");
+  assert.equal(rowOf(page, "api").runIn.pickedKey, "branch:feature/x");
+});
+
+test("a branch that no longer exists is refused: the server's message shows, the pick is forgotten and goes back to the main checkout", async () => {
+  const { page, gateway, prefs } = await openBranchRunIn();
+  pickBranch(page, "1", "branch:feature/gone");
+  gateway.answer.start = async () => { throw new StructuredError("WORKTREE_NOT_AVAILABLE", 'branch "feature/gone" does not exist in api'); };
+  await page.start("1");
+  await tick();
+  assert.equal(page.refusal.message, 'branch "feature/gone" does not exist in api');
+  assert.equal(page.refusal.code, "WORKTREE_NOT_AVAILABLE");
+  const runIn = rowOf(page, "api").runIn;
+  assert.deepEqual([runIn.pickedKey, runIn.hasBranch, runIn.fallback], ["main", false, ""]);
+  assert.equal(prefs.get("service-run-worktree:1"), null);
+});
+
+test("Restart on a branch run says it runs the branch again at its latest commit", () => {
+  const onBranch = running({ id: "1", name: "api", repository_id: "r1", run: runDTO({ worktree_key: "branch:feature/x", where: { kind: "branch", dir: "/s", branch: "feature/x", sha: "abc1234", remote: false, session_id: "" } }) });
+  const { page } = openWith([onBranch]);
+  assert.equal(rowOf(page, "api").restart.title, "Runs the same branch again at its latest commit");
+});

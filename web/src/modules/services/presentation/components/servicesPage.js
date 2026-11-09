@@ -11,7 +11,7 @@ import { systemClock } from "../../../../shared/infrastructure/clock.js";
 import { describeError } from "../../../../shared/presentation/errors.js";
 import { readSeed } from "../../../../shared/presentation/seed.js";
 import { runLine } from "../../domain/log.js";
-import { BRANCH_ENTRY, afterDismiss, branchOptions, afterFailedRead, afterPick, afterRead, freshRunIn, hasRunIn, pickAnnouncement, pickKeyOf, startKey } from "../../domain/runIn.js";
+import { BRANCH_ENTRY, afterDismiss, afterFailedRead, afterPick, afterRead, afterRefusal, branchOptions, freshRunIn, hasRunIn, pickAnnouncement, pickKeyOf, startKey } from "../../domain/runIn.js";
 import { applyEvent, groupServices, isActive, runningCount, savedNotice, statusView, upsertService } from "../../domain/service.js";
 import { trapTab } from "../focusTrap.js";
 import { runInView, serviceRow } from "../view.js";
@@ -281,7 +281,7 @@ export const servicesPage = ({ gateway, clock = systemClock, timers = globalThis
         this.refusal = { ...shown, title: `${service.name} did not ${verb === "restart" ? "restart" : verb}.` };
         if (shown.code === "SERVICE_NOT_FOUND") this.load();
         // The worktree is gone: the refusal says so already, so the list is read again without a second notice.
-        if (shown.code === "WORKTREE_NOT_AVAILABLE") await this.loadRunIn(id, { silent: true });
+        if (shown.code === "WORKTREE_NOT_AVAILABLE") await this.refusedWorktree(id);
       } finally {
         const { [id]: _done, ...rest } = this.flights;
         this.flights = rest;
@@ -377,6 +377,16 @@ export const servicesPage = ({ gateway, clock = systemClock, timers = globalThis
     focusRunIn(from) {
       const row = from.closest?.("[data-service]") ?? null;
       this.$nextTick(() => row?.querySelector("[data-run-in] .trigger")?.focus());
+    },
+
+    /** A start named a worktree or branch that is gone: a branch is forgotten, and the list is read again without a second notice. */
+    async refusedWorktree(id) {
+      if (this.runIns[id]) {
+        const { next, clearStored } = afterRefusal(this.runIns[id]);
+        if (clearStored) prefs.set(pickKeyOf(id), null);
+        this.runIns = { ...this.runIns, [id]: next };
+      }
+      await this.loadRunIn(id, { silent: true });
     },
 
     /** The picker was touched to open (or Retry was pressed): the list is read again. */

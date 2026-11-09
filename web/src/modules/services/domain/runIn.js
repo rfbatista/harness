@@ -66,6 +66,20 @@ export function afterFailedRead(prev) {
   return prev.restored ? prev : { ...prev, state: "failed" };
 }
 
+/**
+ * A start was refused as WORKTREE_NOT_AVAILABLE. A branch that is gone is forgotten and the pick goes back
+ * to the main checkout, with no notice of its own (the refusal says it). A worktree is left to the re-read.
+ */
+export function afterRefusal(prev) {
+  if (!isBranchKey(prev.pickedKey)) return { next: prev, clearStored: false };
+  return { next: { ...prev, pickedKey: MAIN, fallback: null }, clearStored: true };
+}
+
+/** What Restart does for a run, by its run worktree key (the run's `worktree_key`). */
+export const restartNote = (worktreeKey) => (isBranchKey(worktreeKey)
+  ? "Runs the same branch again at its latest commit"
+  : "Repeats the run: the same worktree and the same overrides");
+
 /** A worktree is picked; null when it is not on offer. `clearStored` is the main checkout, the default, which is not remembered. */
 export function afterPick(prev, key) {
   if (!offered(prev, key)) return null;
