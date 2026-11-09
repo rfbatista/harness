@@ -64,6 +64,9 @@ type Options struct {
 	// EnvFiles reads a repository's saved env files, for the root .env a
 	// service exports; nil exports nothing.
 	EnvFiles ports.EnvFileLister
+	// RunWorktrees lists the worktrees a command service of a repository can
+	// run in besides its main checkout; nil offers the main checkout only.
+	RunWorktrees ports.ServiceRunWorktrees
 	// Branches names the branch a main checkout holds; nil leaves it empty.
 	Branches ports.RunBranchReader
 	// Runtime is the container runtime setting; nil keeps docker in memory.

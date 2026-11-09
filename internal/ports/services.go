@@ -117,9 +117,26 @@ type ServiceWorktree struct {
 	SessionID string
 }
 
+// ServiceRunWorktrees lists the run worktrees of a repository, for the
+// services that run in one: its main checkout first, then each session's
+// worktree that exists on disk, newest first. It is the lookup the App tab
+// uses (ADR 0039).
+type ServiceRunWorktrees interface {
+	ListRepositoryRunWorktrees(ctx context.Context, projectID, repositoryID string) ([]*domain.RunWorktree, error)
+}
+
 // ServiceStartOptions say who starts a run and where.
 type ServiceStartOptions struct {
 	StartedBy domain.ServiceStartedBy
+	// WorktreeKey is the run worktree the person picked: main or session:<id>,
+	// one ListServiceRunWorktrees offers now. Empty is the main checkout. Any
+	// other key is WORKTREE_NOT_AVAILABLE, and a key on a service with no
+	// repository, or an image service, is INVALID_INPUT. It is ignored when
+	// Worktree is set.
+	WorktreeKey string
+	// Repeat makes a restart run where the last run did, ignoring WorktreeKey
+	// and Worktree. It has no effect on a start.
+	Repeat bool
 	// Worktree, when set, is where a command service of a repository runs
 	// (its subdir applies inside it); nil is the main checkout.
 	Worktree *ServiceWorktree
@@ -173,6 +190,9 @@ type ServiceManager interface {
 	ServiceRunningCounter
 	ListServices(ctx context.Context, projectID string) (*ServiceList, error)
 	GetService(ctx context.Context, serviceID string) (*domain.Service, error)
+	// ListServiceRunWorktrees is the run worktrees a start can pick for the
+	// service now: empty for an image service or a service with no repository.
+	ListServiceRunWorktrees(ctx context.Context, serviceID string) ([]*domain.RunWorktree, error)
 	// ContainerRuntime is the runtime image services start with, and whether
 	// its command is on the server's PATH. SetContainerRuntime changes it for
 	// the next start (INVALID_INPUT for a runtime other than docker or podman).

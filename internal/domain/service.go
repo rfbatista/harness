@@ -105,6 +105,9 @@ type ServiceRun struct {
 	Error     string           `json:"error"`
 	StartedBy ServiceStartedBy `json:"started_by"`
 	Where     ServiceWhere     `json:"where"`
+	// WorktreeKey is the run worktree a command service of a repository ran
+	// in: main or session:<id>; empty for any other run. Restart reuses it.
+	WorktreeKey string `json:"worktree_key"`
 	// Sandboxed is false for a command service that ran unconfined because
 	// the sandbox setting was off (ADR 0074).
 	Sandboxed bool `json:"sandboxed"`
