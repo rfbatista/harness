@@ -37,6 +37,11 @@ test("tokens only: no colour literal, every var() is a token", () => {
   }
 });
 
+test("the signal badge reads the strong ink, so its text reaches 4.5:1 on the wash", () => {
+  const badge = readFileSync(fileURLToPath(new URL("./css/blocks/badge.css", import.meta.url)), "utf8");
+  assert.match(badge, /&\[data-tone="signal"\]\s*\{\s*--_tone: var\(--color-signal-strong\)/);
+});
+
 test("a notice slot over the list has its own padding, from tokens", () => {
   assert.match(service, /\.list\[data-services\] > \.slot\s*\{[^}]*padding: var\(--space-s\) var\(--space-l\) 0/);
 });

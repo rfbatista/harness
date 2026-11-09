@@ -189,3 +189,26 @@ func TestTheBuiltInServicesServerShowsInTheMcpCatalog_EndToEnd(t *testing.T) {
 		waitUntil(`document.querySelector('[data-mcp-detail] h2')?.textContent.trim() === 'browser' && document.querySelector('[data-mcp-detail] [data-actions]').checkVisibility() === true`),
 	)
 }
+
+// With no server of the person's own, the MCP servers tab lists the built-in
+// services server and says so, with the way to create one; once a server of
+// their own exists the hint is gone.
+func TestTheMcpTabSaysThereAreNoServersOfYourOwnYet_EndToEnd(t *testing.T) {
+	w := newTokenSaverWorld(t)
+	const rows = `[...document.querySelectorAll('[data-mcp-row]')].map(r => r.dataset.key).join(',')`
+	b := newTLSBrowser(t)
+	b.run("only the built-in server: its row and the hint with the link",
+		chromedp.EmulateViewport(1280, 900),
+		chromedp.Navigate(w.srv.URL+"/agents/mcp"),
+		waitUntil(rows+` === 'services'`),
+		waitUntil(`document.querySelector('[data-mcp-own-empty]')?.textContent.includes('No MCP servers of your own yet.') === true`),
+		waitUntil(`document.querySelector('[data-mcp-own-empty] a').getAttribute('href') === '/agents/mcp/new'`),
+		waitUntil(`document.querySelector('[data-mcp-foot]').textContent.trim() === 'mcp-servers.json · 0 servers'`),
+	)
+	writeCatalogFile(t, w, "mcp-servers.json", `{"mcpServers": {"browser": {"command": "npx"}}}`)
+	b.run("a server of their own takes the hint away",
+		chromedp.Navigate(w.srv.URL+"/agents/mcp"),
+		waitUntil(rows+` === 'browser,services'`),
+		waitUntil(`!document.querySelector('[data-mcp-own-empty]')`),
+	)
+}

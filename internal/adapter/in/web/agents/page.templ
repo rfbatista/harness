@@ -582,6 +582,12 @@ templ mcpLibrary() {
 					<span class="[ text-sm ]">Clear the filter, or <a href="/agents/mcp/new">create an MCP server</a>.</span>
 				</div>
 			</template>
+			<template x-if="noOwnMcp">
+				<div class="[ library-empty ]" data-mcp-own-empty>
+					<strong>No MCP servers of your own yet.</strong>
+					<span class="[ text-sm ]"><a href="/agents/mcp/new">Create an MCP server</a>, then give it to agents and projects.</span>
+				</div>
+			</template>
 			<p class="[ library-foot ]" data-mcp-foot x-text="mcpFoot"></p>
 		</div>
 		<section class="[ library-detail ]" aria-label="MCP server">

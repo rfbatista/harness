@@ -1,7 +1,7 @@
 import { assert, file, test } from "../../../shared/testing/test.js";
 import { toCatalog } from "../infrastructure/dto.js";
 import { catalogDTO } from "../testing/fixtures.js";
-import { mcpDetail, mcpFooter, mcpRows, varNames } from "./mcp.js";
+import { mcpDetail, mcpFooter, mcpRows, noOwnServers, varNames } from "./mcp.js";
 
 file("agents/domain/mcp");
 
@@ -109,10 +109,12 @@ test("a built-in row says so, and an ordinary row does not", () => {
   assert.equal(rows.find((r) => r.name === "plain").builtIn, false);
 });
 
-test("a built-in server is neither stdio nor http but it is never Unused when somebody gets it", () => {
-  const c = catalogWith([builtIn(), builtIn({ name: "x", agents: [], projects: [] })]);
-  assert.deepEqual(mcpRows(c, { filter: "stdio" }).map((r) => r.name), []);
-  assert.deepEqual(mcpRows(c, { filter: "unused" }).map((r) => r.name), ["x"]);
+test("a built-in server is neither stdio nor http, and is never Unused", () => {
+  const c = catalogWith([builtIn(), builtIn({ name: "x", agents: [], projects: [] }), server({ name: "own" })]);
+  assert.deepEqual(mcpRows(c, { filter: "stdio" }).map((r) => r.name), ["own"]);
+  assert.deepEqual(mcpRows(c, { filter: "unused" }).map((r) => r.name), ["own"]);
+  assert.equal(mcpDetail(c, "x", {}).unused, false);
+  assert.equal(mcpRows(c).find((r) => r.name === "x").meta, "");
 });
 
 test("a built-in detail lists its tools, and has no edit, duplicate, delete or check", () => {
@@ -131,4 +133,15 @@ test("an ordinary detail is not built-in and keeps its edit link", () => {
   const d = mcpDetail(catalogWith([server({})]), "s", {});
   assert.equal(d.builtIn, false);
   assert.equal(d.editHref, "/agents/mcp/s/edit");
+});
+
+test("the footer counts the file's servers, not the built-in one", () => {
+  assert.equal(mcpFooter(catalogWith([builtIn(), server({ name: "a" }), server({ name: "b" })])), "mcp-servers.json · 2 servers");
+  assert.equal(mcpFooter(catalogWith([builtIn()])), "mcp-servers.json · 0 servers");
+});
+
+test("a catalog with only built-in servers has none of the person's own", () => {
+  assert.equal(noOwnServers(catalogWith([])), true);
+  assert.equal(noOwnServers(catalogWith([builtIn()])), true);
+  assert.equal(noOwnServers(catalogWith([builtIn(), server({})])), false);
 });
