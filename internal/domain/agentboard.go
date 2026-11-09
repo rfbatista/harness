@@ -28,6 +28,13 @@ func (s SessionStatus) NeedsPerson() bool {
 	return s == SessionIdle || s == SessionWaitingApproval
 }
 
+// NeedsPerson reports whether a session waits on the person: it is live and
+// idle, asks for approval or has an open interview, which counts whatever its
+// status.
+func (s *Session) NeedsPerson() bool {
+	return s.Status.IsLive() && (s.Status.NeedsPerson() || s.OpenInterviewCount > 0)
+}
+
 // BoardSessionLine is one live session on an Agent board card.
 type BoardSessionLine struct {
 	SessionID   string        `json:"session_id"`
@@ -41,6 +48,11 @@ type BoardSessionLine struct {
 	WaitingFor *string `json:"waiting_for"`
 	Mode       string  `json:"mode"`
 	Model      string  `json:"model"`
+	// OpenInterviewCount and OpenQuestionCount are the session's open
+	// interviews and the questions across them; either makes it need the
+	// person whatever its status.
+	OpenInterviewCount int `json:"open_interview_count"`
+	OpenQuestionCount  int `json:"open_question_count"`
 }
 
 // BoardCard is one task with at least one live session.
@@ -51,8 +63,9 @@ type BoardCard struct {
 	TaskStatus   string  `json:"task_status"`
 	FeatureID    *string `json:"feature_id"`
 	FeatureTitle *string `json:"feature_title"`
-	// NeedsYou is true exactly when a live session is idle or waiting for
-	// approval. The server decides it; clients never derive it.
+	// NeedsYou is true exactly when a live session is idle, waiting for
+	// approval or has an open interview. The server decides it; clients
+	// never derive it. NeedsYouSince is the earliest of those signals.
 	NeedsYou           bool               `json:"needs_you"`
 	NeedsYouSince      *time.Time         `json:"needs_you_since"`
 	LastStatusChangeAt time.Time          `json:"last_status_change_at"`

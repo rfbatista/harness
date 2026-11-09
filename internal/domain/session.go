@@ -53,6 +53,17 @@ type Session struct {
 	CacheReadInputTokens     int    `json:"cache_read_input_tokens"`
 	LastAction               string `json:"last_action,omitempty"`
 	PendingApprovals         int    `json:"pending_approvals"`
+	// OpenInterviewCount and OpenQuestionCount are what the session's agent
+	// has asked the person and they have not answered: its interviews in
+	// `open`, and the questions across them. Derived from the interviews on
+	// every read, never stored on the session. A session with an open
+	// interview needs the person, whatever its status.
+	OpenInterviewCount int `json:"open_interview_count"`
+	OpenQuestionCount  int `json:"open_question_count"`
+	// OpenInterviewSince is when the earliest open interview was asked; nil
+	// when none is open. It is not on the wire: the Agent board dates its
+	// wait with it.
+	OpenInterviewSince *time.Time `json:"-"`
 	// AutoRun means the session answers its own permission requests: tool calls
 	// run without asking. It is switched per session while it runs, and it never
 	// covers AskUserQuestion — a question needs the user's actual answer.

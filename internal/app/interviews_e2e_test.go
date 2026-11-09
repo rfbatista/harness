@@ -86,7 +86,7 @@ func (e *interviewsE2E) restart() {
 
 func (e *interviewsE2E) session(id string, status domain.SessionStatus, agent string) {
 	e.t.Helper()
-	if _, err := e.sessions.Create(&domain.Session{ID: id, ProjectID: e.project, AgentID: agent, Status: status, Interactive: true, RunsOn: domain.RunnerServer}); err != nil {
+	if _, err := e.sessions.Create(&domain.Session{ID: id, ProjectID: e.project, AgentID: agent, Status: status, Interactive: true, RunsOn: domain.RunnerTUI}); err != nil {
 		e.t.Fatal(err)
 	}
 }

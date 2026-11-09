@@ -626,3 +626,51 @@ func TestNewSessionFormOffersOnlyTheProjectsEnabledAgents(t *testing.T) {
 		t.Errorf("agent names for existing sessions = %v, want all three", v.Seed.AgentNames)
 	}
 }
+
+// A live session with an open interview reads "questions" and needs the
+// person whatever its status; an approval comes first, then the questions,
+// then your turn. An ended session owes nothing, however many it left.
+func TestAnOpenInterviewMakesASessionReadQuestionsAndNeedThePerson(t *testing.T) {
+	cases := []struct {
+		name     string
+		session  domain.Session
+		word     string
+		needsYou bool
+	}{
+		{"running", domain.Session{Status: domain.SessionRunning, OpenInterviewCount: 1}, "questions", true},
+		{"thinking", domain.Session{Status: domain.SessionThinking, OpenInterviewCount: 2}, "questions", true},
+		{"idle: questions before your turn", domain.Session{Status: domain.SessionIdle, OpenInterviewCount: 1}, "questions", true},
+		{"approval status wins", domain.Session{Status: domain.SessionWaitingApproval, OpenInterviewCount: 1}, "approval", true},
+		{"pending approval wins", domain.Session{Status: domain.SessionRunning, PendingApprovals: 1, OpenInterviewCount: 1}, "approval", true},
+		{"no interview, idle", domain.Session{Status: domain.SessionIdle}, "your turn", true},
+		{"no interview, running", domain.Session{Status: domain.SessionRunning}, "running", false},
+		{"ended", domain.Session{Status: domain.SessionDone, OpenInterviewCount: 1}, "done", false},
+		{"failed", domain.Session{Status: domain.SessionFailed, OpenInterviewCount: 1}, "failed", false},
+	}
+	for _, c := range cases {
+		s := c.session
+		if got := statusOf(&s).Word; got != c.word {
+			t.Errorf("%s: word = %q, want %q", c.name, got, c.word)
+		}
+		if got := NeedsYou(&s); got != c.needsYou {
+			t.Errorf("%s: needs you = %v, want %v", c.name, got, c.needsYou)
+		}
+	}
+
+	now := time.Date(2026, 10, 2, 14, 0, 0, 0, time.UTC)
+	list := []*domain.Session{
+		{ID: "asking", TicketID: "t1", Status: domain.SessionRunning, OpenInterviewCount: 1, OpenQuestionCount: 3, UpdatedAt: now},
+		{ID: "quiet", TicketID: "t1", Status: domain.SessionRunning, UpdatedAt: now.Add(-time.Minute)},
+	}
+	v := NewPageView(shell.Frame{}, &domain.Project{ID: "p1"}, &domain.Ticket{ID: "t1", Title: "x"}, list, nil, nil, now)
+	if v.Groups[0].Label != "Needs you" || v.Groups[0].Rows[0].ID != "asking" {
+		t.Fatalf("groups: %+v", v.Groups)
+	}
+	row := v.Groups[0].Rows[0]
+	if !row.Attention || row.Chip == nil || row.Chip.Word != "questions" || row.Chip.Tone != "attention" {
+		t.Errorf("row: %+v chip %+v", row, row.Chip)
+	}
+	if v.Summary != "2 sessions · 1 waiting" {
+		t.Errorf("summary = %q", v.Summary)
+	}
+}

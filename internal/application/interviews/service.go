@@ -5,6 +5,8 @@ package interviews
 
 import (
 	"context"
+	"errors"
+	"log/slog"
 	"sync"
 	"time"
 
@@ -25,6 +27,11 @@ type Deps struct {
 	Sessions ports.SessionRepository
 	Agents   ports.AgentRepository
 	Clock    func() time.Time // nil: time.Now
+	// Announce puts a session's record, with its open counts, on the project's
+	// feed after they change; nil announces nothing.
+	Announce ports.SessionChangeAnnouncer
+	// Events carries what the inbox reacts to; nil publishes nothing.
+	Events ports.EventPublisher
 }
 
 // Service implements ports.Interviews and ports.InterviewAsker.
@@ -70,26 +77,91 @@ func (s *Service) Ask(_ context.Context, i domain.Interview) (*domain.Interview,
 	i.EndedAt, i.Delivery, i.DeliveredAt, i.Answers, i.DismissNote = nil, nil, nil, nil, nil
 
 	s.mu.Lock()
-	defer s.mu.Unlock()
 	seq, err := s.Repo.Create(&i)
 	if err != nil {
+		s.mu.Unlock()
 		return nil, err
 	}
 	s.publish(domain.InterviewEvent{Seq: seq, Kind: domain.InterviewAsked, Interview: &i})
+	s.mu.Unlock()
+	s.signal(domain.InterviewOpened{InterviewID: i.ID, SessionID: i.SessionID, Title: i.Title, Questions: len(i.Questions)})
+	s.announce(i.SessionID)
 	return &i, nil
 }
 
 // Change replaces the stored interview with i's id by i and publishes
-// interview_changed, carrying the whole interview.
+// interview_changed, carrying the whole interview. A change to a state other
+// than open also puts the session's lower counts on its feeds.
 func (s *Service) Change(_ context.Context, i domain.Interview) (*domain.Interview, error) {
 	s.mu.Lock()
-	defer s.mu.Unlock()
 	seq, err := s.Repo.Update(&i)
 	if err != nil {
+		s.mu.Unlock()
 		return nil, err
 	}
 	s.publish(domain.InterviewEvent{Seq: seq, Kind: domain.InterviewChanged, Interview: &i})
+	s.mu.Unlock()
+	if i.State.Closed() {
+		s.signal(domain.InterviewClosed{InterviewID: i.ID, SessionID: i.SessionID})
+		s.announce(i.SessionID)
+	}
 	return &i, nil
+}
+
+// Expire closes the session's open interviews as expired, as of now, for a
+// session that ended: each is published as interview_changed, and the
+// session's counts, now zero, go on its feeds once. Closed interviews stay as
+// they are, so expiring twice changes nothing the second time.
+func (s *Service) Expire(ctx context.Context, sessionID string) error {
+	lists, err := s.Repo.List([]string{sessionID})
+	if err != nil {
+		return err
+	}
+	list := lists[sessionID]
+	if list == nil {
+		return nil
+	}
+	now := s.now()
+	var errs []error
+	for _, iv := range list.Interviews {
+		if iv.State != domain.InterviewOpen {
+			continue
+		}
+		expired := *iv
+		expired.State, expired.EndedAt = domain.InterviewExpired, &now
+		if _, err := s.Change(ctx, expired); err != nil {
+			errs = append(errs, err)
+		}
+	}
+	return errors.Join(errs...)
+}
+
+// Subscribe has the service expire a session's open interviews when the
+// session ends.
+func (s *Service) Subscribe(bus ports.EventSubscriber) {
+	ports.On(bus, func(ctx context.Context, ev domain.SessionEnded) error {
+		if err := s.Expire(ctx, ev.SessionID); err != nil {
+			slog.Warn("expire a session's interviews", "session", ev.SessionID, "err", err)
+		}
+		return nil
+	})
+}
+
+// signal tells the bus of ev; the interviews do not fail for a subscriber.
+func (s *Service) signal(ev domain.Event) {
+	if s.Events == nil {
+		return
+	}
+	if err := s.Events.Publish(context.Background(), ev); err != nil {
+		slog.Warn("announce interview event", "event", ev.EventName(), "err", err)
+	}
+}
+
+// announce puts the session's record on its project's feed.
+func (s *Service) announce(sessionID string) {
+	if s.Announce != nil {
+		s.Announce.AnnounceSession(sessionID)
+	}
 }
 
 // ListInterviews reads each session's interviews.

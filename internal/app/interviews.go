@@ -5,7 +5,9 @@ import (
 	"gorm.io/gorm"
 
 	"operators-mcp/internal/adapter/out/persistence/sqlite"
+	"operators-mcp/internal/app/catalog"
 	"operators-mcp/internal/application/interviews"
+	"operators-mcp/internal/application/orchestration"
 	"operators-mcp/internal/ports"
 )
 
@@ -13,6 +15,7 @@ import (
 // over their table. llmkit's Sink asks through it.
 var InterviewsModule = fx.Module("interviews",
 	fx.Provide(newInterviews),
+	fx.Invoke(subscribeInterviews),
 )
 
 type interviewsParams struct {
@@ -21,10 +24,23 @@ type interviewsParams struct {
 	DB       *gorm.DB
 	Sessions ports.SessionRepository
 	Agents   ports.AgentRepository
+	Cat      catalog.Catalog
+	// Orch puts the sessions' open counts on the project feeds; graphs built
+	// without the orchestration announce none.
+	Orch *orchestration.Service `optional:"true"`
 }
 
 func newInterviews(p interviewsParams) *interviews.Service {
-	return interviews.New(interviews.Deps{Repo: sqlite.NewInterviewRepository(p.DB), Sessions: p.Sessions, Agents: p.Agents})
+	deps := interviews.Deps{Repo: sqlite.NewInterviewRepository(p.DB), Sessions: p.Sessions, Agents: p.Agents, Events: p.Cat.Bus}
+	if p.Orch != nil {
+		deps.Announce = p.Orch
+	}
+	return interviews.New(deps)
+}
+
+// subscribeInterviews has a session that ends expire its open interviews.
+func subscribeInterviews(svc *interviews.Service, cat catalog.Catalog) {
+	svc.Subscribe(cat.Bus)
 }
 
 // optionalInterviews is the interviews service when InterviewsModule is in the

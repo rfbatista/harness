@@ -41,11 +41,19 @@ var statusViews = map[domain.SessionStatus]StatusView{
 	domain.SessionFailed:          {"failed", "failed"},
 }
 
+// questionsView is the status of a live session with an open interview.
+var questionsView = StatusView{"waiting", "questions"}
+
 // statusOf reads pending approvals before the status: a running session with
-// a tool call to approve is waiting on the developer.
+// a tool call to approve is waiting on the developer. Next come open
+// interviews, whatever the status: approval, then questions, then your turn.
 func statusOf(s *domain.Session) StatusView {
-	if !s.Status.IsTerminal() && s.PendingApprovals > 0 {
+	live := !s.Status.IsTerminal()
+	if live && (s.PendingApprovals > 0 || s.Status == domain.SessionWaitingApproval) {
 		return statusViews[domain.SessionWaitingApproval]
+	}
+	if live && s.OpenInterviewCount > 0 {
+		return questionsView
 	}
 	if v, ok := statusViews[s.Status]; ok {
 		return v
@@ -53,12 +61,13 @@ func statusOf(s *domain.Session) StatusView {
 	return StatusView{"idle", string(s.Status)}
 }
 
-// NeedsYou: an approval, or an interactive session at its turn boundary.
+// NeedsYou: an approval, an open interview, or an interactive session at its
+// turn boundary.
 func NeedsYou(s *domain.Session) bool {
 	if s.Status.IsTerminal() {
 		return false
 	}
-	return s.Status == domain.SessionWaitingApproval || s.Status == domain.SessionIdle || s.PendingApprovals > 0
+	return s.Status == domain.SessionWaitingApproval || s.Status == domain.SessionIdle || s.PendingApprovals > 0 || s.OpenInterviewCount > 0
 }
 
 // MaxDepth is how far a delegate's row is indented: deeper ones line up at
@@ -645,7 +654,7 @@ func joinFacts(facts []string) string {
 	return strings.Join(kept, " · ")
 }
 
-var chipTones = map[string]string{"thinking": "signal", "your turn": "attention", "approval": "attention", "failed": "danger"}
+var chipTones = map[string]string{"thinking": "signal", "your turn": "attention", "approval": "attention", "questions": "attention", "failed": "danger"}
 
 // chipOf is the row's status chip: nil for running and done.
 func chipOf(st StatusView) *Chip {
