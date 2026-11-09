@@ -64,3 +64,43 @@ func TestInterviewSeqsAreKeptPerSessionAndSurviveReopening(t *testing.T) {
 		t.Errorf("an empty session must list [], got %#v", lists["s3"].Interviews)
 	}
 }
+
+// ExpireQueued is a compare-and-set on a sent or dismissed interview whose
+// turn is still queued: an open one, a delivered one and a second call lose
+// and take no feed number.
+func TestExpireQueuedOnlyWinsWhileTheTurnIsStillQueued(t *testing.T) {
+	repo, closeDB := openInterviews(t, filepath.Join(t.TempDir(), "h.db"))
+	defer closeDB()
+	end, queued, delivered := time.Now(), domain.InterviewQueued, domain.InterviewDelivered
+	expired := func(i *domain.Interview) *domain.Interview {
+		e := *i
+		e.State, e.Delivery = domain.InterviewExpired, nil
+		return &e
+	}
+	sent := func(id string, d *domain.InterviewDelivery) *domain.Interview {
+		i := anInterview(id, "s1")
+		i.State, i.EndedAt, i.Delivery = domain.InterviewSent, &end, d
+		return i
+	}
+	open, waiting, read := anInterview("open", "s1"), sent("waiting", &queued), sent("read", &delivered)
+	for _, i := range []*domain.Interview{open, waiting, read} {
+		if _, err := repo.Create(i); err != nil {
+			t.Fatal(err)
+		}
+	}
+	for _, c := range []struct {
+		i   *domain.Interview
+		won bool
+	}{{open, false}, {read, false}, {waiting, true}, {waiting, false}} {
+		won, seq, err := repo.ExpireQueued(expired(c.i))
+		if err != nil || won != c.won || (won && seq != 4) || (!won && seq != 0) {
+			t.Fatalf("%s: won %v seq %d err %v, want won %v", c.i.ID, won, seq, err, c.won)
+		}
+	}
+	if got, _ := repo.Get("waiting"); got.State != domain.InterviewExpired || got.Delivery != nil {
+		t.Errorf("waiting: %+v", got)
+	}
+	if got, _ := repo.Get("read"); got.State != domain.InterviewSent || *got.Delivery != domain.InterviewDelivered {
+		t.Errorf("read: %+v", got)
+	}
+}

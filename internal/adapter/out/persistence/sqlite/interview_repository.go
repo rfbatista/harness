@@ -155,6 +155,17 @@ func interviewNotFound(id string) error {
 }
 
 func (r *InterviewRepository) Close(i *domain.Interview) (bool, int64, error) {
+	return r.swap(i, "state = ?", string(domain.InterviewOpen))
+}
+
+func (r *InterviewRepository) ExpireQueued(i *domain.Interview) (bool, int64, error) {
+	return r.swap(i, "state IN ? AND delivery = ?",
+		[]string{string(domain.InterviewSent), string(domain.InterviewDismissed)}, string(domain.InterviewQueued))
+}
+
+// swap replaces the stored interview with i's id by i while it still meets
+// cond (compare-and-set in one statement), taking a feed number only on a win.
+func (r *InterviewRepository) swap(i *domain.Interview, cond string, args ...any) (bool, int64, error) {
 	m, err := interviewModel(i)
 	if err != nil {
 		return false, 0, err
@@ -164,7 +175,7 @@ func (r *InterviewRepository) Close(i *domain.Interview) (bool, int64, error) {
 		won bool
 	)
 	err = r.db.Transaction(func(tx *gorm.DB) error {
-		res := tx.Model(&InterviewModel{}).Where("id = ? AND state = ?", i.ID, string(domain.InterviewOpen)).
+		res := tx.Model(&InterviewModel{}).Where("id = ? AND "+cond, append([]any{i.ID}, args...)...).
 			Select("*").Omit("id", "session_id").Updates(m)
 		if res.Error != nil || res.RowsAffected == 0 {
 			return res.Error

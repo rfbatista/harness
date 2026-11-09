@@ -10,6 +10,8 @@ import (
 	"sync"
 	"time"
 
+	"github.com/rfbatista/harnesskit/errs"
+
 	"operators-mcp/internal/domain"
 	"operators-mcp/internal/ports"
 )
@@ -131,16 +133,36 @@ func (s *Service) Expire(_ context.Context, sessionID string) error {
 	now := s.now()
 	var errs []error
 	for _, iv := range list.Interviews {
-		if iv.State != domain.InterviewOpen {
-			continue
-		}
 		expired := *iv
 		expired.State, expired.EndedAt = domain.InterviewExpired, &now
-		if _, err := s.leaveOpen(&expired); err != nil {
+		var err error
+		switch {
+		case iv.State == domain.InterviewOpen:
+			_, err = s.leaveOpen(&expired)
+		case iv.Delivery != nil && *iv.Delivery == domain.InterviewQueued:
+			// Sent or dismissed, its turn never went in: the agent never read it.
+			expired.Delivery, expired.DeliveredAt = nil, nil
+			_, err = s.leaveQueued(&expired)
+		}
+		if err != nil {
 			errs = append(errs, err)
 		}
 	}
 	return errors.Join(errs...)
+}
+
+// leaveQueued writes i, a sent or dismissed interview's expired state, only
+// while its turn is still queued, and says whether it won. A win is published
+// as interview_changed; the session's open counts do not move.
+func (s *Service) leaveQueued(i *domain.Interview) (bool, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	won, seq, err := s.Repo.ExpireQueued(i)
+	if err != nil || !won {
+		return false, err
+	}
+	s.publish(domain.InterviewEvent{Seq: seq, Kind: domain.InterviewChanged, Interview: i})
+	return true, nil
 }
 
 // leaveOpen writes i, an open interview's next state, only while the stored
@@ -233,7 +255,9 @@ func (s *Service) respond(id string, to domain.InterviewState, prepare func(*dom
 	if !won {
 		return s.current(id, to)
 	}
-	s.deliver(iv, text)
+	if err := s.deliver(iv, text); err != nil {
+		return nil, err
+	}
 	return s.Repo.Get(id)
 }
 
@@ -283,14 +307,34 @@ func refusal(code, message string, iv *domain.Interview) error {
 
 // deliver hands the turn to the courier; the interview reads delivered, with
 // its time, once the turn went in.
-func (s *Service) deliver(iv *domain.Interview, text string) {
+//
+// A courier that refuses because the session ended in the meantime leaves
+// nothing to wait for: the interview expires (the agent never read it) and the
+// caller is refused with INTERVIEW_EXPIRED carrying it. Any other failure is
+// logged and leaves the turn queued.
+func (s *Service) deliver(iv *domain.Interview, text string) error {
 	if s.Delivery == nil {
-		return
+		return nil
 	}
 	_, err := s.Delivery.Deliver(iv.SessionID, "interview:"+iv.ID, text, func(at time.Time) { s.delivered(iv.ID, at) })
-	if err != nil {
-		slog.Warn("deliver an interview's turn", "interview", iv.ID, "session", iv.SessionID, "err", err)
+	if err == nil {
+		return nil
 	}
+	if errs.Code(err) != "SESSION_NOT_RUNNING" {
+		slog.Warn("deliver an interview's turn", "interview", iv.ID, "session", iv.SessionID, "err", err)
+		return nil
+	}
+	expired := *iv
+	now := s.now()
+	expired.State, expired.EndedAt, expired.Delivery, expired.DeliveredAt = domain.InterviewExpired, &now, nil, nil
+	if _, err := s.leaveQueued(&expired); err != nil {
+		return err
+	}
+	cur, err := s.Repo.Get(iv.ID)
+	if err != nil {
+		return err
+	}
+	return refusal("INTERVIEW_EXPIRED", "the session ended before the agent could read the answer, so the interview expired", cur)
 }
 
 // delivered records that the interview's turn went in at at.

@@ -437,8 +437,10 @@ func TestRacingCallersOfOneInterviewHaveExactlyOneWinner(t *testing.T) {
 			t.Fatalf("round %d: %+v %v", round, final, err)
 		}
 		delivered := len(courier.texts) - before
+		// A send that won and was then outlived by the session's end expires
+		// with its turn still queued: one turn handed over, never read.
 		wantTurns := 1
-		if final.State == domain.InterviewExpired {
+		if final.State == domain.InterviewExpired && final.Answers == nil && final.DismissNote == nil {
 			wantTurns = 0
 		}
 		if delivered != wantTurns {
@@ -448,7 +450,7 @@ func TestRacingCallersOfOneInterviewHaveExactlyOneWinner(t *testing.T) {
 			switch r.op {
 			case "submit", "dismiss":
 				own := map[string]domain.InterviewState{"submit": domain.InterviewSent, "dismiss": domain.InterviewDismissed}[r.op]
-				if final.State == own {
+				if final.State == own || (final.State == domain.InterviewExpired && r.err == nil) {
 					if r.err != nil || r.iv.State != own {
 						t.Fatalf("round %d: the winner's %s: %+v %v", round, r.op, r.iv, r.err)
 					}
@@ -565,5 +567,118 @@ func TestSubmitOnAnIdleSessionIsPastedIntoItsTerminal(t *testing.T) {
 			t.Fatalf("the terminal never showed %q: %q", missing, screen)
 		}
 		time.Sleep(10 * time.Millisecond)
+	}
+}
+
+// notRunningTurns is a courier whose session ended after the interview was
+// closed: it refuses every turn.
+type notRunningTurns struct{}
+
+func (notRunningTurns) Deliver(_, _, _ string, _ func(time.Time)) (bool, error) {
+	return false, &domain.StructuredError{Code: "SESSION_NOT_RUNNING", Message: "session is not running"}
+}
+
+// next reads the interview feed's next event.
+func next(t *testing.T, events <-chan domain.InterviewEvent) domain.InterviewEvent {
+	t.Helper()
+	select {
+	case ev := <-events:
+		return ev
+	case <-time.After(5 * time.Second):
+		t.Fatal("no interview event")
+		return domain.InterviewEvent{}
+	}
+}
+
+// A courier that refuses because the session ended after the person sent or
+// dismissed must not leave the interview queued for ever: it becomes expired
+// (the agent never read it), published as interview_changed, and the person is
+// told it expired. What the person typed stays on the record.
+func TestACourierRefusalBecauseTheSessionEndedExpiresTheInterview(t *testing.T) {
+	e := newSignalsE2E(t)
+	e.svc.Delivery = notRunningTurns{}
+	session := e.start(domain.SessionRunning)
+	e.ask("iv-1", session)
+	e.ask("iv-2", session)
+	events, err := e.svc.FollowInterviews(e.ctx, session)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	for _, c := range []struct{ id, path, body string }{
+		{"iv-1", "/answers", submitBody},
+		{"iv-2", "/dismiss", `{"note":"no"}`},
+	} {
+		status, out := e.post("/api/interviews/"+c.id+c.path, c.body)
+		_, carried := refusalOf(t, status, out, http.StatusConflict, "INTERVIEW_EXPIRED")
+		if carried["state"] != "expired" || carried["delivery"] != nil || carried["delivered_at"] != nil || carried["ended_at"] == nil {
+			t.Fatalf("%s: the refusal carries %+v", c.id, carried)
+		}
+		got := e.stored(session, c.id)
+		if got.State != domain.InterviewExpired || got.Delivery != nil || got.EndedAt == nil {
+			t.Fatalf("%s stays %s/%v", c.id, got.State, got.Delivery)
+		}
+		// The sent -> expired event is the closing write's; the expiry follows.
+		if ev := next(t, events); ev.Interview.ID != c.id || ev.Kind != domain.InterviewChanged || ev.Interview.State == domain.InterviewOpen {
+			t.Fatalf("%s: first event %+v", c.id, ev)
+		}
+		if ev := next(t, events); ev.Interview.ID != c.id || ev.Kind != domain.InterviewChanged || ev.Interview.State != domain.InterviewExpired {
+			t.Fatalf("%s: second event %+v", c.id, ev)
+		}
+	}
+	if got := e.stored(session, "iv-1"); len(got.Answers) != 2 || got.Answers[1].Text != "Because." {
+		t.Fatalf("the answers are kept: %+v", got.Answers)
+	}
+	if got := e.stored(session, "iv-2"); got.DismissNote == nil || *got.DismissNote != "no" {
+		t.Fatalf("the note is kept: %+v", got.DismissNote)
+	}
+}
+
+// A sent or dismissed interview whose turn still waits for the end of the
+// agent's turn expires with the session, and one already delivered does not.
+func TestAQueuedTurnStillWaitingWhenTheSessionEndsExpiresItsInterview(t *testing.T) {
+	e := newSignalsE2E(t)
+	session := e.start(domain.SessionRunning)
+	e.ask("iv-1", session)
+	e.ask("iv-2", session)
+	e.ask("iv-3", session)
+	e.submit("iv-1")
+	if reason := e.stop(session); reason == "" {
+		t.Fatal("the Stop hook delivers the turn")
+	}
+	const delivered = "iv-1"
+	e.dismiss("iv-2", `{}`)
+	e.submit("iv-3")
+	for _, id := range []string{"iv-1", "iv-2", "iv-3"} {
+		if d, _ := e.delivery(session, id); (id == delivered) != (d == "delivered") {
+			t.Fatalf("%s: %s", id, d)
+		}
+	}
+	events, err := e.svc.FollowInterviews(e.ctx, session)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if _, err := e.orch.EndInteractive(e.ctx, session, 0, true); err != nil {
+		t.Fatal(err)
+	}
+
+	// Every interview whose turn never went in expires, one event each.
+	for range 2 {
+		if ev := next(t, events); ev.Kind != domain.InterviewChanged || ev.Interview.State != domain.InterviewExpired || ev.Interview.ID == delivered {
+			t.Fatalf("event %+v", ev)
+		}
+	}
+	for _, id := range []string{"iv-1", "iv-2", "iv-3"} {
+		got := e.stored(session, id)
+		if id == delivered {
+			if d, _ := e.delivery(session, id); d != "delivered" || got.State == domain.InterviewExpired {
+				t.Fatalf("%s was read by the agent and stays so: %s/%v", id, got.State, got.Delivery)
+			}
+			continue
+		}
+		if got.State != domain.InterviewExpired || got.Delivery != nil || got.DeliveredAt != nil || got.EndedAt == nil {
+			t.Fatalf("%s still waiting at the end: %s/%v", id, got.State, got.Delivery)
+		}
 	}
 }

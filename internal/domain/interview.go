@@ -72,7 +72,9 @@ type InterviewAnswer struct {
 
 // Interview is a session's questions and what became of them. EndedAt is nil
 // while open. Delivery and DeliveredAt are set only on sent and dismissed
-// ones, Answers only on sent ones, DismissNote only on dismissed ones.
+// ones, Answers only on sent ones, DismissNote only on dismissed ones; one
+// that expired after being sent or dismissed (its turn never went in) keeps
+// them, with no delivery.
 type Interview struct {
 	ID          string              `json:"id"`
 	SessionID   string              `json:"session_id"`

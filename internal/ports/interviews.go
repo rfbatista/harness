@@ -86,6 +86,11 @@ type InterviewRepository interface {
 	// statement. It answers whether it won; a loser changed nothing and took
 	// no feed number. INTERVIEW_NOT_FOUND when there is none.
 	Close(i *domain.Interview) (won bool, seq int64, err error)
+	// ExpireQueued replaces the stored interview with i's id by i, an expired
+	// one, only while the stored one is still sent or dismissed with its turn
+	// queued: compare-and-set in one statement, as Close. A turn already
+	// delivered is not taken back.
+	ExpireQueued(i *domain.Interview) (won bool, seq int64, err error)
 	// List reads each session's interviews in the contract's order, with
 	// the closed ones capped, in a fixed number of queries. Every session
 	// asked has an entry: one with no interview is an empty list.
