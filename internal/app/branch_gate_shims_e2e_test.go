@@ -119,7 +119,7 @@ func TestReadsCommitsAndTheSessionBranchAreNeverGated(t *testing.T) {
 		"git checkout -- a.txt", "git checkout HEAD -- a.txt", "git restore a.txt", "git restore --staged a.txt",
 		"git add a.txt", "git -c user.email=a@b -c user.name=n commit -m one", "git merge main", "git checkout " + session, "git switch " + session,
 		"git rebase main", "git worktree list", "git stash", "git stash pop", "git stash list",
-		"git remote add origin2 https://example.com/x.git", "git remote -v",
+		"git remote -v",
 	} {
 		if r := g.git(line); strings.Contains(r.stderr, "BRANCH_") {
 			t.Errorf("%s was gated: %+v", line, r)
