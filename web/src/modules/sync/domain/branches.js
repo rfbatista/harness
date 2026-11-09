@@ -62,6 +62,7 @@ export function rowOf(b, ctx = {}) {
     pushRefusal: push?.failure ?? null,
     pushRefusalBanner: push?.failure?.tone === "banner",
     pushRefusalStrip: push?.failure?.tone === "danger",
+    noRemote: isPushable(b) && ctx.remotes !== undefined && remotes.length === 0,
     previewLoading: !!push && !push.preview && !push.failure,
     name: b.name,
     state: b.state,

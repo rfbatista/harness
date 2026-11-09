@@ -177,10 +177,13 @@ export function syncActions({ gateway, store }) {
         const reread = err?.details?.state;
         if (reread && (codeOf(err) === Codes.PUSH_REJECTED || codeOf(err) === Codes.PUSH_STALE)) held.set(workspaceId, fresher(held.get(workspaceId), reread));
         if (store.branchPush) store.branchPush = { ...store.branchPush, failure: refusalOf(err) };
+        // The branch moved: the confirmation shows what it is now, and the next Push goes at that head.
+        if (codeOf(err) === Codes.PUSH_STALE && store.branchPush) store.branchPush = { ...store.branchPush, preview: null };
       } finally {
         store.pushing = without(store.pushing, workspaceId);
         release(workspaceId);
       }
+      if (!ok && store.branchPush && !store.branchPush.preview) await loadPreview();
       return ok;
     },
 

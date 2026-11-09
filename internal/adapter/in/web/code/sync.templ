@@ -147,6 +147,9 @@ templ BranchesSection(rows string, shown string, title string, sessionID string,
 					<template x-for="p in b.pushed" x-bind:key="p.key">
 						<span class="[ pushed ]" x-bind:data-by="p.by" x-text="p.line"></span>
 					</template>
+					<template x-if="b.noRemote">
+						<span class="[ hint ]" data-no-remote>No remote is configured, so there is nowhere to push this branch.</span>
+					</template>
 					<template x-if="b.offersPush">
 						<button type="button" class="[ button ]" data-variant="ghost" data-size="sm" data-branch-push x-bind:aria-label="'Push ' + b.name" x-on:click={ "askBranchPush(" + workspaceID + ", b.name)" }>Push</button>
 					</template>

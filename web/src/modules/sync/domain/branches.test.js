@@ -78,3 +78,8 @@ test("the Push question names the remote, the remote branch and the commit count
   const loading = ask(null);
   assert.deepEqual([loading.confirming, loading.previewLoading, loading.offersPush, loading.remoteOptions.map((o) => o.selected)], [true, true, false, [false, true]]);
 });
+
+test("a pushable row of a repository with no remote says so; before the remotes are read it says nothing", () => {
+  const row = (state, ctx) => rowOf(toSessionBranches({ session_id: "s1", branches: [wire("b", state)] }).branches[0], ctx);
+  assert.deepEqual([row("approved", { remotes: [] }).noRemote, row("approved", {}).noRemote, row("denied", { remotes: [] }).noRemote], [true, false, false]);
+});

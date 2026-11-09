@@ -323,14 +323,14 @@ func BranchesSection(rows string, shown string, title string, sessionID string, 
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 18, "\" x-bind:key=\"b.name\"><li class=\"[ item ]\" x-bind:data-state=\"b.state\" x-bind:data-flagged=\"b.flagAttr\"><code class=\"[ name ]\" x-text=\"b.name\" x-bind:title=\"b.name\"></code> <span class=\"[ badge ]\" x-bind:data-tone=\"b.tone\" x-text=\"b.stateLabel\"></span> <span class=\"[ counts ]\" x-show=\"b.hasBase\" x-bind:title=\"b.countsLabel\"><span class=\"[ ahead ]\"><span aria-hidden=\"true\">↑</span><span x-text=\"b.ahead\"></span><span class=\"[ visually-hidden ]\">ahead of</span></span> <span class=\"[ behind ]\"><span aria-hidden=\"true\">↓</span><span x-text=\"b.behind\"></span><span class=\"[ visually-hidden ]\">behind</span></span> <span class=\"[ vs ]\" x-text=\"b.baseRef\"></span></span><template x-for=\"p in b.pushed\" x-bind:key=\"p.key\"><span class=\"[ pushed ]\" x-bind:data-by=\"p.by\" x-text=\"p.line\"></span></template><template x-if=\"b.offersPush\"><button type=\"button\" class=\"[ button ]\" data-variant=\"ghost\" data-size=\"sm\" data-branch-push x-bind:aria-label=\"'Push ' + b.name\" x-on:click=\"")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 18, "\" x-bind:key=\"b.name\"><li class=\"[ item ]\" x-bind:data-state=\"b.state\" x-bind:data-flagged=\"b.flagAttr\"><code class=\"[ name ]\" x-text=\"b.name\" x-bind:title=\"b.name\"></code> <span class=\"[ badge ]\" x-bind:data-tone=\"b.tone\" x-text=\"b.stateLabel\"></span> <span class=\"[ counts ]\" x-show=\"b.hasBase\" x-bind:title=\"b.countsLabel\"><span class=\"[ ahead ]\"><span aria-hidden=\"true\">↑</span><span x-text=\"b.ahead\"></span><span class=\"[ visually-hidden ]\">ahead of</span></span> <span class=\"[ behind ]\"><span aria-hidden=\"true\">↓</span><span x-text=\"b.behind\"></span><span class=\"[ visually-hidden ]\">behind</span></span> <span class=\"[ vs ]\" x-text=\"b.baseRef\"></span></span><template x-for=\"p in b.pushed\" x-bind:key=\"p.key\"><span class=\"[ pushed ]\" x-bind:data-by=\"p.by\" x-text=\"p.line\"></span></template><template x-if=\"b.noRemote\"><span class=\"[ hint ]\" data-no-remote>No remote is configured, so there is nowhere to push this branch.</span></template><template x-if=\"b.offersPush\"><button type=\"button\" class=\"[ button ]\" data-variant=\"ghost\" data-size=\"sm\" data-branch-push x-bind:aria-label=\"'Push ' + b.name\" x-on:click=\"")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
 		var templ_7745c5c3_Var12 string
 		templ_7745c5c3_Var12, templ_7745c5c3_Err = templ.ResolveAttributeValue("askBranchPush(" + workspaceID + ", b.name)")
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `code/sync.templ`, Line: 151, Col: 194}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `code/sync.templ`, Line: 154, Col: 194}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var12)
 		if templ_7745c5c3_Err != nil {
