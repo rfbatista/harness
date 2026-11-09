@@ -164,6 +164,35 @@ export function toServerNames(body) {
   return strings(body?.mcp_servers, "mcp_servers");
 }
 
+const STATES = ["added", "agent", "banned"];
+const settingOf = (v, what) => (v === "enabled" || v === "disabled" ? v : bad(`${what} is neither enabled nor disabled`));
+
+/** A project's MCP settings: get_project_mcp_servers, and the answer of set_project_mcp_settings. @param {any} body @returns {import("../domain/ports.js").ProjectMcpSettings} */
+export function toProjectMcpSettings(body) {
+  return {
+    added: strings(body?.mcp_servers, "mcp_servers"),
+    servers: list(body?.servers, "servers").map((s) => {
+      if (!STATES.includes(s?.state)) bad("a server's state is not added, agent or banned");
+      return {
+        name: String(s?.name ?? ""),
+        state: s.state,
+        usedByAgents: strings(s?.used_by_agents, "used_by_agents"),
+        tools: s?.tools === undefined || s?.tools === null ? null : list(s.tools, "tools").map((t) => ({
+          name: String(t?.name ?? ""),
+          default: settingOf(t?.default, "a tool's default"),
+          override: t?.override === "default" ? "default" : settingOf(t?.override, "a tool's override"),
+          effective: settingOf(t?.effective, "a tool's effective setting"),
+        })),
+      };
+    }),
+  };
+}
+
+/** The write body of set_project_mcp_settings. @param {string} projectId @param {{ name: string, state: string, toolOverrides?: Record<string, string> }[]} servers */
+export function projectMcpSettingsBody(projectId, servers) {
+  return { project_id: projectId, servers: servers.map((s) => ({ name: s.name, state: s.state, tool_overrides: s.toolOverrides ?? {} })) };
+}
+
 /** @param {unknown} body @returns {import("../domain/projectAgents.js").ProjectAgents} */
 export function toProjectAgents(body) {
   const mode = body?.mode;

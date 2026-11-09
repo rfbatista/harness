@@ -14,7 +14,7 @@ const fail = (code, message, status, details) => {
 };
 const invalid = (field, message) => fail(Codes.INVALID_INPUT, message, 400, { field });
 const clone = (v) => structuredClone(v);
-const without = (list, name) => list.filter((x) => x !== name);
+const without = (list, ...names) => list.filter((x) => !names.includes(x));
 const swap = (list, from, to) => list.map((x) => (x === from ? to : x));
 
 /**
@@ -25,6 +25,9 @@ export function memoryCatalogServer({ catalog, projects = {}, projectNames = {},
   let cat = clone(catalog);
   let probes = 0;
   let projectLists = clone(projects);
+  /** Each project's Banned servers and tool overrides ({ server: { tool: "enabled" | "disabled" } }); a project not listed has none. */
+  let banned = {};
+  let overrides = {};
   /** Each project's enabled agents; a project not listed has mode all. */
   let enabledAgents = clone(projectAgents);
   let counter = 0;
@@ -232,6 +235,12 @@ export function memoryCatalogServer({ catalog, projects = {}, projectNames = {},
       if (prev && prev !== server.name) {
         for (const a of c.agents) a.mcp_servers = swap(a.mcp_servers, prev, server.name);
         for (const id of Object.keys(projectLists)) projectLists[id] = swap(projectLists[id], prev, server.name);
+        for (const id of Object.keys(banned)) banned[id] = swap(banned[id], prev, server.name);
+        for (const o of Object.values(overrides)) {
+          if (!(prev in o)) continue;
+          o[server.name] = o[prev];
+          delete o[prev];
+        }
       }
       for (const a of c.agents) {
         a.mcp_servers = without(a.mcp_servers, server.name);
@@ -239,7 +248,10 @@ export function memoryCatalogServer({ catalog, projects = {}, projectNames = {},
       }
       for (const id of Object.keys(projectLists)) {
         projectLists[id] = without(projectLists[id], server.name);
-        if (inProjects.includes(id)) projectLists[id].push(server.name);
+        if (inProjects.includes(id)) {
+          projectLists[id].push(server.name);
+          banned[id] = without(banned[id] ?? [], server.name);
+        }
       }
       // The tool data stays with the server through a rename; disabled_tools absent keeps it, [] clears it.
       const old = at < 0 ? null : c.mcp_servers[at];
@@ -256,23 +268,30 @@ export function memoryCatalogServer({ catalog, projects = {}, projectNames = {},
       c.mcp_servers = c.mcp_servers.filter((m) => m.name !== name);
       for (const a of c.agents) a.mcp_servers = without(a.mcp_servers, name);
       for (const id of Object.keys(projectLists)) projectLists[id] = without(projectLists[id], name);
+      for (const id of Object.keys(banned)) banned[id] = without(banned[id], name);
+      for (const o of Object.values(overrides)) delete o[name];
       return { files: ["mcp-servers.json", "agents.json"], summary: () => `Deleted ${name} from mcp-servers.json` };
     },
   };
 
   function write(verb, body) {
     // A verb may set project lists as it goes; a dry run or a refusal puts them back.
-    const keep = { lists: clone(projectLists), enabled: clone(enabledAgents) };
-    try {
-      return commit(verb, body, keep);
-    } catch (err) {
+    const keep = { lists: clone(projectLists), enabled: clone(enabledAgents), banned: clone(banned), overrides: clone(overrides) };
+    const restore = () => {
       projectLists = keep.lists;
       enabledAgents = keep.enabled;
+      banned = keep.banned;
+      overrides = keep.overrides;
+    };
+    try {
+      return commit(verb, body, keep, restore);
+    } catch (err) {
+      restore();
       throw err;
     }
   }
 
-  function commit(verb, body, keep) {
+  function commit(verb, body, keep, restore) {
     const draft = clone(cat);
     let { files, summary, probe } = verbs[verb](draft, body);
     derive(draft);
@@ -294,11 +313,10 @@ export function memoryCatalogServer({ catalog, projects = {}, projectNames = {},
       .filter((id) => JSON.stringify(keep.lists[id]) !== JSON.stringify(projectLists[id]) || JSON.stringify(enabledBefore(id)) !== JSON.stringify(enabledAfter(id)))
       .map((id) => ({ id, name: projectNames[id] ?? id, before: keep.lists[id] ?? [], after: [...projectLists[id]], enabled_agents_before: enabledBefore(id), enabled_agents_after: [...enabledAfter(id)] }));
     if (body.dry_run) {
-      projectLists = keep.lists;
-      enabledAgents = keep.enabled;
+      restore();
       return { change: { id: "", summary: summary(draft), writes, projects }, versions: clone(cat.versions) };
     }
-    const before = { cat, projects: keep.lists, enabled: keep.enabled };
+    const before = { cat, projects: keep.lists, enabled: keep.enabled, banned: keep.banned, overrides: keep.overrides };
     cat = draft;
     for (const f of files) cat.versions[f] = `sha256:${f}-${++counter}`;
     const id = `change-${++counter}`;
@@ -306,6 +324,21 @@ export function memoryCatalogServer({ catalog, projects = {}, projectNames = {},
     publish({ agent_catalog_changed: { paths: [...files] } });
     return { change: { id, summary: summary(cat), writes, projects }, versions: clone(cat.versions), ...(probe ? { probe } : {}) };
   }
+
+  /** The wire answer of get_project_mcp_servers: the Added names, and each server's state and tools (never the built-in services server). */
+  const mcpSettingsOf = (id) => {
+    if (!(id in projectLists)) fail("PROJECT_NOT_FOUND", `no project ${id}`, 404);
+    const servers = cat.mcp_servers.filter((m) => !m.built_in && m.name !== "services").map((m) => {
+      const state = projectLists[id].includes(m.name) ? "added" : (banned[id] ?? []).includes(m.name) ? "banned" : "agent";
+      const tools = (m.known_tools ?? null) === null ? null : m.known_tools.map((name) => {
+        const def = (m.disabled_tools ?? []).includes(name) ? "disabled" : "enabled";
+        const override = overrides[id]?.[m.name]?.[name] ?? "default";
+        return { name, default: def, override, effective: override === "default" ? def : override };
+      });
+      return { name: m.name, state, used_by_agents: cat.agents.filter((a) => a.mcp_servers.includes(m.name)).map((a) => a.name), tools };
+    });
+    return { mcp_servers: clone(projectLists[id]), servers };
+  };
 
   const routes = {
     "GET get_agent_catalog": () => clone(cat),
@@ -325,6 +358,8 @@ export function memoryCatalogServer({ catalog, projects = {}, projectNames = {},
       cat = clone(latest.before.cat);
       projectLists = clone(latest.before.projects);
       enabledAgents = clone(latest.before.enabled);
+      banned = clone(latest.before.banned);
+      overrides = clone(latest.before.overrides);
       cat.versions = versions;
       for (const f of files) cat.versions[f] = `sha256:${f}-${++counter}`;
       latest = null;
@@ -337,13 +372,35 @@ export function memoryCatalogServer({ catalog, projects = {}, projectNames = {},
       const probe = probeInto(cat.mcp_servers[at]);
       return { server: clone(cat.mcp_servers[at]), probe };
     },
-    "GET get_project_mcp_servers": ({ project_id: id }) => ({ mcp_servers: clone(projectLists[id] ?? fail("PROJECT_NOT_FOUND", `no project ${id}`, 404)) }),
+    "GET get_project_mcp_servers": ({ project_id: id }) => mcpSettingsOf(id),
     "POST set_project_mcp_servers": ({ project_id: id, mcp_servers: names }) => {
       if (!(id in projectLists)) fail("PROJECT_NOT_FOUND", `no project ${id}`, 404);
       mustExist(names, namesOf(cat.mcp_servers));
+      // The named servers become Added; an Added one not named becomes Agent's choice; Banned ones and overrides stay.
       projectLists[id] = [...names];
+      banned[id] = without(banned[id] ?? [], ...names);
       derive(cat);
-      return { mcp_servers: [...names] };
+      return mcpSettingsOf(id);
+    },
+    "POST set_project_mcp_settings": ({ project_id: id, servers = [] }) => {
+      if (!(id in projectLists)) fail("PROJECT_NOT_FOUND", `no project ${id}`, 404);
+      const seen = new Set();
+      for (const s of servers) {
+        if (s.name === "services" || cat.mcp_servers.find((m) => m.name === s.name)?.built_in) invalid("servers", `${s.name} is built in and has no project settings`);
+        if (seen.has(s.name)) invalid("servers", `${s.name} is named twice`);
+        seen.add(s.name);
+        if (!["added", "agent", "banned"].includes(s.state)) invalid("servers", `state ${JSON.stringify(s.state)} is not added, agent or banned`);
+        for (const v of Object.values(s.tool_overrides ?? {})) if (v !== "enabled" && v !== "disabled") invalid("servers", `override ${JSON.stringify(v)} is neither enabled nor disabled`);
+      }
+      mustExist(servers.map((s) => s.name), namesOf(cat.mcp_servers));
+      // The whole settings are replaced: a server not named is Agent's choice with no overrides.
+      const inState = (state) => cat.mcp_servers.map((m) => m.name).filter((n) => servers.some((s) => s.name === n && s.state === state));
+      projectLists[id] = inState("added");
+      banned[id] = inState("banned");
+      overrides[id] = Object.fromEntries(servers.filter((s) => Object.keys(s.tool_overrides ?? {}).length > 0).map((s) => [s.name, { ...s.tool_overrides }]));
+      derive(cat);
+      publish({ agent_catalog_changed: { paths: [`projects/${id}`] } });
+      return mcpSettingsOf(id);
     },
     "GET get_project_agents": ({ project_id: id }) => {
       if (!(id in projectLists)) fail("PROJECT_NOT_FOUND", `no project ${id}`, 404);

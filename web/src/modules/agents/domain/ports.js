@@ -94,6 +94,22 @@
  * @property {string} error
  * @property {string} hint
  *
+ * @typedef {object} ProjectMcpTool
+ * @property {string} name
+ * @property {"enabled"|"disabled"} default  the server's global tool default
+ * @property {"default"|"enabled"|"disabled"} override  the project's tool override
+ * @property {"enabled"|"disabled"} effective
+ *
+ * @typedef {object} ProjectMcpServerSettings
+ * @property {string} name
+ * @property {"added"|"agent"|"banned"} state  the project MCP state
+ * @property {string[]} usedByAgents  the catalog agents that list it, enabled in the project or not
+ * @property {ProjectMcpTool[] | null} tools  one per known tool; null: tools unknown
+ *
+ * @typedef {object} ProjectMcpSettings
+ * @property {string[]} added  the Added servers' names (mcp_servers)
+ * @property {ProjectMcpServerSettings[]} servers  every catalog server but the built-in services one, in catalog order
+ *
  * @typedef {object} CatalogGateway
  * @property {(seed: unknown) => Catalog} decodeCatalog  the page's first paint, as the server seeded it
  * @property {(handlers: { onEvent: (data: unknown) => void, onStatus?: (status: import("../../../shared/domain/feed.js").FeedStatus) => void }) => () => void} follow  the page feed (/api/project_events): every message, whatever it is, and the feed's status; returns the function that stops following
@@ -113,7 +129,9 @@
  * @property {(name: string) => Promise<{ server: CatalogMcpServer, probe: ProbeOutcome }>} refreshMcpServerTools  probes a saved server and stores only its tool data; rejects UNKNOWN_REFERENCE
  * @property {() => Promise<{ id: string, name: string }[]>} listProjects  every project, for Who gets it
  * @property {(projectId: string) => Promise<string[]>} getProjectMcpServers
- * @property {(projectId: string, names: string[]) => Promise<string[]>} setProjectMcpServers
+ * @property {(projectId: string, names: string[]) => Promise<string[]>} setProjectMcpServers  the Added servers only; bans and overrides stay
+ * @property {(projectId: string) => Promise<ProjectMcpSettings>} getProjectMcpSettings  every server's state and tools
+ * @property {(projectId: string, servers: { name: string, state: string, toolOverrides: Record<string, string> }[]) => Promise<ProjectMcpSettings>} setProjectMcpSettings  replaces the project's whole MCP settings; rejects PROJECT_NOT_FOUND, UNKNOWN_REFERENCE or INVALID_INPUT
  * @property {(projectId: string) => Promise<import("./projectAgents.js").ProjectAgents>} getProjectAgents  the project's enabled agents: mode all (agents empty) or selected
  * @property {(projectId: string, enabled: import("./projectAgents.js").ProjectAgents) => Promise<import("./projectAgents.js").ProjectAgents>} setProjectAgents  answers no change id; rejects UNKNOWN_REFERENCE naming the agents
  *

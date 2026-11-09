@@ -284,6 +284,75 @@ export function catalogGatewayContract(name, makeSubject) {
     assert.deepEqual(plain.change.projects, [], "a write with no project list says so");
   });
 
+  contract("reads a project's MCP settings: each server's state, the agents that list it and its tools with default, override and effective", async () => {
+    const { gateway } = subject();
+    await gateway.saveMcpServer({ previousName: "github", server: { name: "github", transport: "stdio", command: "npx", disabledTools: ["search"] }, agents: ["ux-designer"], projects: ["p1"] });
+    await gateway.saveMcpServer({ server: { name: "linear", transport: "http", url: "https://linear.example/mcp" }, agents: [], projects: [] }, {});
+    const settings = await gateway.getProjectMcpSettings("p1");
+    assert.deepEqual(settings.added, ["github"]);
+    assert.deepEqual(settings.servers.map((s) => [s.name, s.state, s.usedByAgents]), [["github", "added", ["ux-designer"]], ["linear", "agent", []]]);
+    assert.deepEqual(settings.servers[0].tools, [{ name: "search", default: "disabled", override: "default", effective: "disabled" }]);
+    assert.deepEqual(await gateway.getProjectMcpServers("p1"), ["github"], "the names-only read still works");
+    await assert.rejects(gateway.getProjectMcpSettings("gone"), "PROJECT_NOT_FOUND");
+  });
+
+  contract("a never-probed server reads with tools null", async () => {
+    const { gateway } = subject();
+    assert.equal((await gateway.getProjectMcpSettings("p1")).servers[0].tools, null);
+  });
+
+  contract("setProjectMcpSettings replaces the whole settings and answers like the read", async () => {
+    const { gateway } = subject();
+    await gateway.refreshMcpServerTools("github");
+    await gateway.saveMcpServer({ server: { name: "linear", transport: "http", url: "https://linear.example/mcp" }, agents: [], projects: [] });
+    const answer = await gateway.setProjectMcpSettings("p1", [
+      { name: "github", state: "banned", toolOverrides: { search: "disabled" } },
+      { name: "linear", state: "added", toolOverrides: {} },
+    ]);
+    assert.deepEqual(answer.added, ["linear"]);
+    assert.deepEqual(answer.servers.map((s) => s.state), ["banned", "added"]);
+    assert.deepEqual(answer.servers[0].tools, [{ name: "search", default: "enabled", override: "disabled", effective: "disabled" }]);
+    assert.deepEqual(await gateway.getProjectMcpSettings("p1"), answer);
+    const again = await gateway.setProjectMcpSettings("p1", [{ name: "linear", state: "agent", toolOverrides: {} }]);
+    assert.deepEqual(again.servers.map((s) => s.state), ["agent", "agent"], "a server not named is Agent's choice again");
+    assert.equal(again.servers[0].tools[0].override, "default", "and its overrides are gone");
+  });
+
+  contract("setProjectMcpServers leaves bans and overrides alone", async () => {
+    const { gateway } = subject();
+    await gateway.refreshMcpServerTools("github");
+    await gateway.saveMcpServer({ server: { name: "linear", transport: "http", url: "https://linear.example/mcp" }, agents: [], projects: [] });
+    await gateway.setProjectMcpSettings("p1", [{ name: "github", state: "agent", toolOverrides: { search: "disabled" } }, { name: "linear", state: "banned", toolOverrides: {} }]);
+    await gateway.setProjectMcpServers("p1", ["github"]);
+    const settings = await gateway.getProjectMcpSettings("p1");
+    assert.deepEqual(settings.servers.map((s) => s.state), ["added", "banned"]);
+    assert.equal(settings.servers[0].tools[0].override, "disabled");
+  });
+
+  contract("setProjectMcpSettings refuses an unknown project, an unknown server, a bad value, a repeat and the services server", async () => {
+    const { gateway } = subject();
+    const one = (over) => [{ name: "github", state: "added", toolOverrides: {}, ...over }];
+    await assert.rejects(gateway.setProjectMcpSettings("gone", one({})), "PROJECT_NOT_FOUND");
+    const err = await assert.rejects(gateway.setProjectMcpSettings("p1", one({ name: "nope" })), "UNKNOWN_REFERENCE");
+    assert.deepEqual(describeRefusal(err).names, ["nope"]);
+    await assert.rejects(gateway.setProjectMcpSettings("p1", one({ state: "maybe" })), Codes.INVALID_INPUT);
+    await assert.rejects(gateway.setProjectMcpSettings("p1", one({ toolOverrides: { search: "default" } })), Codes.INVALID_INPUT);
+    await assert.rejects(gateway.setProjectMcpSettings("p1", [...one({}), ...one({})]), Codes.INVALID_INPUT);
+    await assert.rejects(gateway.setProjectMcpSettings("p1", one({ name: "services" })), Codes.INVALID_INPUT);
+    assert.deepEqual((await gateway.getProjectMcpSettings("p1")).added, ["github"], "a refusal changes nothing");
+  });
+
+  contract("a rename carries a project's ban and overrides to the new name; a delete removes them", async () => {
+    const { gateway } = subject();
+    await gateway.refreshMcpServerTools("github");
+    await gateway.setProjectMcpSettings("p1", [{ name: "github", state: "banned", toolOverrides: { search: "disabled" } }]);
+    await gateway.saveMcpServer({ previousName: "github", server: { name: "gh", transport: "stdio", command: "npx" }, agents: [], projects: [] });
+    const [gh] = (await gateway.getProjectMcpSettings("p1")).servers;
+    assert.deepEqual([gh.name, gh.state, gh.tools[0].override], ["gh", "banned", "disabled"]);
+    await gateway.deleteMcpServer("gh");
+    assert.deepEqual((await gateway.getProjectMcpSettings("p1")).servers, []);
+  });
+
   contract("sets a project's MCP servers; an unknown project or server is refused", async () => {
     const { gateway } = subject();
     assert.deepEqual(await gateway.setProjectMcpServers("p1", []), []);

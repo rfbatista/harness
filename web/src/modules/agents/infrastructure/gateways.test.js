@@ -70,3 +70,13 @@ test("http · an MCP server save carries disabled_tools only when asked, and Ref
   assert.ok(!("disabled_tools" in without[1].server));
   assert.deepEqual(refresh, ["/api/refresh_catalog_mcp_server_tools", { name: "github" }]);
 });
+
+test("http · the project's MCP settings are read from get_project_mcp_servers and written to set_project_mcp_settings in snake_case", async () => {
+  const { gateway, stub } = http(makeWorld());
+  await gateway.getProjectMcpSettings("p1");
+  await gateway.setProjectMcpSettings("p1", [{ name: "github", state: "banned", toolOverrides: { search: "disabled" } }]);
+  assert.deepEqual(stub.requests.map(([m, p, b]) => [m, p, b]), [
+    ["GET", "/api/get_project_mcp_servers", { project_id: "p1" }],
+    ["POST", "/api/set_project_mcp_settings", { project_id: "p1", servers: [{ name: "github", state: "banned", tool_overrides: { search: "disabled" } }] }],
+  ]);
+});
