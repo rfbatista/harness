@@ -243,3 +243,73 @@ func TestResume_ConcurrentCallsSpawnOnce(t *testing.T) {
 	}
 	screenOf(t, svc, sess.ID, "back")
 }
+
+// A session stored as waiting for approval at boot is as orphaned as one
+// stored as running: its process died with the previous server (ADR 0078).
+func TestStopOrphanedServerSessions_EveryLiveStatus(t *testing.T) {
+	svc := newHostedService(t, scriptAgent{script: `cat`})
+	for _, status := range domain.LiveSessionStatuses {
+		if _, err := svc.sessions.Create(&domain.Session{
+			ID: "orphan-" + string(status), ProjectID: "p1", Status: status, Interactive: true, RunsOn: domain.RunnerServer, PendingApprovals: 2,
+		}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	tui, _ := startInteractive(t, svc, InteractiveRequest{})
+
+	n, err := svc.StopOrphanedServerSessions(context.Background())
+	if err != nil || n != len(domain.LiveSessionStatuses) {
+		t.Fatalf("StopOrphanedServerSessions = %d, %v; want %d", n, err, len(domain.LiveSessionStatuses))
+	}
+	for _, status := range domain.LiveSessionStatuses {
+		got := sessionOf(svc, "orphan-"+string(status))
+		if got.Status != domain.SessionStopped || got.PendingApprovals != 0 {
+			t.Errorf("%s orphan = %s with %d pending, want stopped with 0", status, got.Status, got.PendingApprovals)
+		}
+	}
+	if got := sessionOf(svc, tui.ID).Status; got != domain.SessionRunning {
+		t.Errorf("tui-client session = %s, want it left running", got)
+	}
+}
+
+// A headless session's process and its open tool approvals died with the server.
+func TestStopOrphanedServerSessions_HeadlessSessions(t *testing.T) {
+	svc := newHostedService(t, scriptAgent{script: `cat`})
+	for _, status := range domain.LiveSessionStatuses {
+		if _, err := svc.sessions.Create(&domain.Session{
+			ID: "headless-" + string(status), ProjectID: "p1", Status: status, PendingApprovals: 1,
+		}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	done, _ := svc.sessions.Create(&domain.Session{ID: "headless-done", ProjectID: "p1", Status: domain.SessionDone})
+
+	n, err := svc.StopOrphanedServerSessions(context.Background())
+	if err != nil || n != len(domain.LiveSessionStatuses) {
+		t.Fatalf("StopOrphanedServerSessions = %d, %v; want %d", n, err, len(domain.LiveSessionStatuses))
+	}
+	for _, status := range domain.LiveSessionStatuses {
+		got := sessionOf(svc, "headless-"+string(status))
+		if got.Status != domain.SessionStopped || got.PendingApprovals != 0 {
+			t.Errorf("%s headless = %s with %d pending, want stopped with 0", status, got.Status, got.PendingApprovals)
+		}
+	}
+	if got := sessionOf(svc, done.ID).Status; got != domain.SessionDone {
+		t.Errorf("done session = %s, want it untouched", got)
+	}
+}
+
+// Shutdown records a session waiting for approval as stopped, not failed.
+func TestStopServerSessions_WaitingForApproval(t *testing.T) {
+	svc := newHostedService(t, scriptAgent{script: `cat`})
+	sess := startOnServer(t, svc)
+	svc.BranchRequestFiled(sess.ID)
+	if got := sessionOf(svc, sess.ID); got.Status != domain.SessionWaitingApproval {
+		t.Fatalf("status = %s, want waiting_approval", got.Status)
+	}
+	svc.StopServerSessions(context.Background())
+	waitStatus(t, svc, sess.ID, domain.SessionStopped)
+	if got := sessionOf(svc, sess.ID).PendingApprovals; got != 0 {
+		t.Errorf("pending approvals after shutdown = %d, want 0", got)
+	}
+}
