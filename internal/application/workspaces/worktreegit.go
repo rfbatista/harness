@@ -6,6 +6,7 @@ import (
 	"log/slog"
 	"reflect"
 	"slices"
+	"sort"
 	"strings"
 	"sync"
 	"time"
@@ -39,7 +40,12 @@ type WorktreeGitDeps struct {
 	// is then UNAVAILABLE, and nothing is recorded.
 	Remotes ports.RemotePublisher
 	Pushes  ports.PushRecords
-	Feed    ports.ProjectChangeSink
+	// Branches is the session's Branches list: the person's push sends only a
+	// branch on it in state session or approved. Nil skips the check.
+	Branches ports.SessionBranchLists
+	// RemoteLister lists a repository's remotes; nil lists none.
+	RemoteLister ports.GitRemoteLister
+	Feed     ports.ProjectChangeSink
 	// Now is the clock the state's age is measured with; nil is time.Now.
 	Now func() time.Time
 }
@@ -396,6 +402,9 @@ func (s *WorktreeGit) PushBranchTo(ctx context.Context, t ports.PushTarget) (*do
 	}
 	s.nameSession(ctx, now)
 	branch := t.Branch
+	if err := s.checkPushable(ctx, repo, now, t); err != nil {
+		return nil, err
+	}
 	switch {
 	case now.Gone:
 		return nil, worktreeMissing(ws)
@@ -466,6 +475,71 @@ func (s *WorktreeGit) PushBranchTo(ctx context.Context, t ports.PushTarget) (*do
 		s.d.Feed.AnnounceChange(ports.ProjectChange{GitState: &ports.GitStateChange{GitState: copyState(after), ProjectID: repo.ProjectID}})
 	}
 	return after, nil
+}
+
+// RepositoryRemotes implements ports.RepositoryRemoteLists.
+func (s *WorktreeGit) RepositoryRemotes(ctx context.Context, repositoryID string) ([]ports.GitRemote, error) {
+	repo, err := s.repository(ctx, repositoryID)
+	if err != nil {
+		return nil, err
+	}
+	out := []ports.GitRemote{}
+	if s.d.RemoteLister == nil {
+		return out, nil
+	}
+	found, err := s.d.RemoteLister.Remotes(ctx, repo.RootDir)
+	if err != nil {
+		// git config exits 1 when the repository has no remote.
+		return out, nil
+	}
+	for _, r := range found {
+		out = append(out, ports.GitRemote{Name: r.Name, URL: domain.RedactURL(r.URL)})
+	}
+	sort.SliceStable(out, func(i, j int) bool {
+		if (out[i].Name == "origin") != (out[j].Name == "origin") {
+			return out[i].Name == "origin"
+		}
+		return out[i].Name < out[j].Name
+	})
+	return out, nil
+}
+
+// checkPushable refuses the person's push of a branch that is not on the
+// session's Branches list in state session or approved. A harness push for an
+// approved branch request, or one pinned to a commit, was decided by that
+// request and is not checked again.
+func (s *WorktreeGit) checkPushable(ctx context.Context, repo *domain.Repository, now *domain.GitState, t ports.PushTarget) error {
+	if s.d.Branches == nil || t.By == domain.PushByAgent || t.Commit != "" || now.Gone || now.SessionID == "" {
+		return nil
+	}
+	name := t.Branch
+	if name == "" {
+		name = now.Branch
+	}
+	if name == "" {
+		return nil
+	}
+	list, err := s.d.Branches.SessionBranches(ctx, now.SessionID)
+	if err != nil {
+		return err
+	}
+	for _, row := range list {
+		if row.Name != name {
+			continue
+		}
+		if row.State == domain.SessionBranchSession || row.State == domain.SessionBranchApproved {
+			return nil
+		}
+		return notPushable(name, string(row.State))
+	}
+	if _, err := s.d.Git.ResolveCommit(ctx, repo.RootDir, "refs/heads/"+name); err != nil {
+		return &domain.StructuredError{Code: "BRANCH_NOT_FOUND", Message: "the repository has no branch " + name}
+	}
+	return notPushable(name, "not on the session's list")
+}
+
+func notPushable(name, why string) error {
+	return &domain.StructuredError{Code: "BRANCH_NOT_PUSHABLE", Message: "branch " + name + " is not pushable: " + why + "; only the session branch and approved branches are pushed"}
 }
 
 // remoteURL is the URL of the named remote: NO_REMOTE for a repository with no

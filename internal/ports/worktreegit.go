@@ -131,3 +131,20 @@ type GitWorktreeReader interface {
 type GitStatusSnapshotter interface {
 	SnapshotStatus(ctx context.Context, dir string) (head, fingerprint string, st *GitWorktreeStatus, err error)
 }
+
+// GitRemoteLister reads a repository's configured remotes (driven; gitcli's
+// Code implements it next to GitBranchEvidence).
+type GitRemoteLister interface {
+	// Remotes lists the remotes of the repository at repoRoot with their URLs,
+	// as configured; none is an empty list.
+	Remotes(ctx context.Context, repoRoot string) ([]GitRemote, error)
+}
+
+// RepositoryRemoteLists answers the remotes a push can go to (driving; the
+// worktree git service implements it next to WorktreeGit).
+type RepositoryRemoteLists interface {
+	// RepositoryRemotes lists the repository's remotes, origin first and the
+	// rest by name, with no credential in a URL. Errors: REPOSITORY_NOT_FOUND,
+	// INVALID_ROOT.
+	RepositoryRemotes(ctx context.Context, repositoryID string) ([]GitRemote, error)
+}

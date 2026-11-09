@@ -14,7 +14,10 @@ import (
 	"operators-mcp/internal/ports"
 )
 
-var _ ports.GitBranchEvidence = (*Code)(nil)
+var (
+	_ ports.GitBranchEvidence = (*Code)(nil)
+	_ ports.GitRemoteLister  = (*Code)(nil)
+)
 
 // BranchSnapshot reads the repository's refs, remotes and worktrees in three
 // git runs, however many branches there are.
@@ -36,17 +39,8 @@ func (c Code) BranchSnapshot(ctx context.Context, repoRoot string) (*ports.GitBr
 			snap.RemoteRefs[strings.TrimPrefix(ref, "refs/remotes/")] = oid
 		}
 	}
-	// config exits 1 when there is no remote.
-	if cfg, err := c.d.codeOutput(ctx, repoRoot, "config", "--get-regexp", `^remote\..*\.url$`); err == nil {
-		for _, line := range strings.Split(cfg, "\n") {
-			key, url, ok := strings.Cut(line, " ")
-			if !ok {
-				continue
-			}
-			name := strings.TrimSuffix(strings.TrimPrefix(key, "remote."), ".url")
-			snap.Remotes = append(snap.Remotes, ports.GitRemote{Name: name, URL: url})
-		}
-	}
+	// A repository with no remote has none to list.
+	snap.Remotes, _ = c.Remotes(ctx, repoRoot)
 	wts, err := c.d.codeOutput(ctx, repoRoot, "worktree", "list", "--porcelain")
 	if err != nil {
 		return nil, err
@@ -64,6 +58,25 @@ func (c Code) BranchSnapshot(ctx context.Context, repoRoot string) (*ports.GitBr
 		}
 	}
 	return snap, nil
+}
+
+// Remotes lists the configured remotes with their URLs, in one git run.
+func (c Code) Remotes(ctx context.Context, repoRoot string) ([]ports.GitRemote, error) {
+	// config exits 1 when there is no remote.
+	cfg, err := c.d.codeOutput(ctx, repoRoot, "config", "--get-regexp", `^remote\..*\.url$`)
+	if err != nil {
+		return nil, err
+	}
+	var out []ports.GitRemote
+	for _, line := range strings.Split(cfg, "\n") {
+		key, url, ok := strings.Cut(line, " ")
+		if !ok {
+			continue
+		}
+		name := strings.TrimSuffix(strings.TrimPrefix(key, "remote."), ".url")
+		out = append(out, ports.GitRemote{Name: name, URL: url})
+	}
+	return out, nil
 }
 
 // gitDirs answers dir's own git directory and the common one.
