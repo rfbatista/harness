@@ -205,7 +205,7 @@ templ Page(frame shell.Frame, projectID, projectName string, seed Seed, repos []
 											<label>
 												<input type="radio" name="sf-kind" value="image" x-bind:checked="isImage" x-bind:disabled="kindLocked" x-on:change="chooseKind"/>
 												<b>Image</b>
-												<span class="[ d ]">Runs a container image with docker. The container sees none of your files. For databases and tools.</span>
+												<span class="[ d ]" data-image-card x-text="imageCardText"></span>
 											</label>
 										</div>
 										<span class="[ hint ]" x-bind:hidden="!kindLocked">The kind cannot change after the service is created.</span>
@@ -239,7 +239,7 @@ templ Page(frame shell.Frame, projectID, projectName string, seed Seed, repos []
 												<template x-for="(port, i) in draft.ports" x-bind:key="i">
 													<div class="[ mf-row-wrap ]">
 														<div class="[ mf-row ]" data-kind="num">
-															<input type="number" class="[ font-mono ]" aria-label="Port" x-model="port.value" x-on:input="touch('ports')" x-bind:aria-invalid="rowInvalid('ports', i) ? 'true' : null"/>
+															<input type="number" class="[ font-mono ]" placeholder="Port" x-bind:aria-label="'Port ' + (i + 1)" x-model="port.value" x-on:input="touch('ports')" x-bind:aria-invalid="rowInvalid('ports', i) ? 'true' : null"/>
 															<button type="button" class="[ button ]" data-variant="ghost" x-bind:aria-label="'Remove port ' + (i + 1)" data-list="ports" x-bind:data-index="i" x-on:click="removeRow">×</button>
 														</div>
 													</div>
@@ -269,7 +269,7 @@ templ Page(frame shell.Frame, projectID, projectName string, seed Seed, repos []
 												<template x-for="(arg, i) in draft.args" x-bind:key="i">
 													<div class="[ mf-row-wrap ]">
 														<div class="[ mf-row ]" data-kind="arg">
-															<input type="text" class="[ font-mono ]" aria-label="Argument" spellcheck="false" autocomplete="off" x-model="arg.value"/>
+															<input type="text" class="[ font-mono ]" placeholder="Argument" x-bind:aria-label="'Argument ' + (i + 1)" spellcheck="false" autocomplete="off" x-model="arg.value"/>
 															<button type="button" class="[ button ]" data-variant="ghost" x-bind:aria-label="'Remove argument ' + (i + 1)" data-list="args" x-bind:data-index="i" x-on:click="removeRow">×</button>
 														</div>
 													</div>
@@ -284,9 +284,9 @@ templ Page(frame shell.Frame, projectID, projectName string, seed Seed, repos []
 												<template x-for="(map, i) in draft.mappings" x-bind:key="i">
 													<div class="[ mf-row-wrap ]">
 														<div class="[ mf-row ]" data-kind="port">
-															<input type="number" class="[ font-mono ]" aria-label="Host port" x-model="map.host" x-on:input="touch('mappings')" x-bind:aria-invalid="rowInvalid('mappings', i) ? 'true' : null"/>
-															<input type="number" class="[ font-mono ]" aria-label="Container port" x-model="map.container" x-on:input="touch('mappings')" x-bind:aria-invalid="rowInvalid('mappings', i) ? 'true' : null"/>
-															<select aria-label="Protocol" x-model="map.protocol">
+															<input type="number" class="[ font-mono ]" placeholder="Host" x-bind:aria-label="'Host port ' + (i + 1)" x-model="map.host" x-on:input="touch('mappings')" x-bind:aria-invalid="rowInvalid('mappings', i) ? 'true' : null"/>
+															<input type="number" class="[ font-mono ]" placeholder="Container" x-bind:aria-label="'Container port ' + (i + 1)" x-model="map.container" x-on:input="touch('mappings')" x-bind:aria-invalid="rowInvalid('mappings', i) ? 'true' : null"/>
+															<select x-bind:aria-label="'Protocol ' + (i + 1)" x-model="map.protocol">
 																<option value="tcp">tcp</option>
 																<option value="udp">udp</option>
 															</select>
@@ -316,12 +316,12 @@ templ Page(frame shell.Frame, projectID, projectName string, seed Seed, repos []
 									</div>
 								</fieldset>
 							</form>
-							<div class="[ save-footer ]">
-								<div class="[ save-footer-in ]">
-									<span class="[ save-state ]" x-text="saveState"></span>
-									<button type="button" class="[ button ]" data-variant="ghost" x-on:click="cancel">Cancel</button>
-									<button type="button" class="[ button ]" data-variant="primary" data-form-save x-bind:disabled="saveDisabled" x-bind:aria-busy="saving" x-on:click="save" x-text="saveLabel"></button>
-								</div>
+						</div>
+						<div class="[ save-footer ]">
+							<div class="[ save-footer-in ]">
+								<span class="[ save-state ]" x-text="saveState"></span>
+								<button type="button" class="[ button ]" data-variant="ghost" x-on:click="cancel">Cancel</button>
+								<button type="button" class="[ button ]" data-variant="primary" data-form-save x-bind:disabled="saveDisabled" x-bind:aria-busy="saving" x-on:click="save" x-text="saveLabel"></button>
 							</div>
 						</div>
 					</div>

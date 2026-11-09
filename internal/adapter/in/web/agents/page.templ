@@ -609,7 +609,7 @@ templ mcpDetail() {
 			<div class="[ repel ]">
 				<div class="[ cluster ]">
 					<h2 class="[ font-mono ]" x-text="mcp.name"></h2>
-					<span class="[ badge ]" data-transport x-text="mcp.transport"></span>
+					<span class="[ badge ]" data-transport x-bind:hidden="mcp.builtIn" x-text="mcp.transport"></span>
 					<span class="[ badge ]" data-tone="signal" data-built-in-badge x-bind:hidden="!mcp.builtIn">Built-in</span>
 					<span class="[ badge ]" data-tone="attention" data-unused-badge x-bind:hidden="!mcp.unused">Unused</span>
 				</div>
@@ -617,7 +617,7 @@ templ mcpDetail() {
 					@actionsMenu("mcp")
 				</div>
 			</div>
-			<code class="[ library-path ]" data-path x-text="mcp.path"></code>
+			<code class="[ library-path ]" data-path x-bind:hidden="mcp.builtIn" x-text="mcp.path"></code>
 		</div>
 		<div class="[ banner ]" data-tone="attention" data-unset-banner x-bind:hidden="mcpAllSet">
 			<div class="[ grow ]">

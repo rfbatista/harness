@@ -94,6 +94,10 @@ export const serviceForm = ({ gateway }) => () => {
     get runtimeNotice() {
       return this.isImage && !runtime.available ? `${runtime.name} was not found on this machine. Image services cannot start until it is installed, or you choose another runtime in the server settings.` : "";
     },
+    /** What the Image card says it runs with: the configured runtime. */
+    get imageCardText() {
+      return `Runs a container image with ${runtime.name}. The container sees none of your files. For databases and tools.`;
+    },
     get hasRuntimeNotice() {
       return this.runtimeNotice !== "";
     },

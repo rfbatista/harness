@@ -208,3 +208,9 @@ test("the env value is never put in the console", async () => {
   }
   assert.equal(logged.some((l) => l.includes("hunter2")), false);
 });
+
+test("the Image card names the configured runtime", () => {
+  const { instance: form } = mount(serviceForm({ gateway: fakeServices() }), { el: { querySelector: () => null } });
+  form.setup(null, "p1", { name: "podman", available: true });
+  assert.equal(form.imageCardText, "Runs a container image with podman. The container sees none of your files. For databases and tools.");
+});
