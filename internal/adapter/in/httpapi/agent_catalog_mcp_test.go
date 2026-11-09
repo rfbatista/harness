@@ -528,3 +528,20 @@ func TestProjectMCPSettings_RenameAndDeleteRewriteEveryProjectsSettings(t *testi
 		t.Fatalf("a deleted server left its project settings behind: %v", gh)
 	}
 }
+
+func TestProjectMCPSettings_TheBuiltInServicesServerIsNotListedAndIsRefused(t *testing.T) {
+	f := catalogWithSkills(t)
+	p := f.project("Widgets")
+	got := f.get("/api/get_project_mcp_servers?project_id="+p, 200)
+	for _, s := range list(got["servers"]) {
+		if s.(map[string]any)["name"] == "services" {
+			t.Fatalf("the built-in server is listed: %v", got["servers"])
+		}
+	}
+	for _, state := range []string{"banned", "agent", "added"} {
+		out := f.post("/api/set_project_mcp_settings", map[string]any{"project_id": p, "servers": []map[string]any{{"name": "services", "state": state}}}, 400)
+		if out["code"] != "INVALID_INPUT" || !strings.Contains(out["error"].(string), "built in") {
+			t.Fatalf("%s: body = %v", state, out)
+		}
+	}
+}

@@ -35,7 +35,8 @@ func resolveAttachedMCPServers(agent *domain.Agent, project *domain.Project, all
 // and the catalog: the servers attached and the tools denied. disabledByDefault
 // is each server's global tool default, by name. A tool left at Default in the
 // project follows it; an override of the project wins. The built-in task,
-// browser and codegraph servers are not catalog servers and are never touched.
+// browser and codegraph servers are not catalog servers, and the services server
+// is built in: none of them is ever banned or trimmed.
 func resolveMCP(agent *domain.Agent, project *domain.Project, all []*domain.MCPServer, disabledByDefault map[string][]string) mcpAttachment {
 	var names []string
 	var banned []string
@@ -54,14 +55,10 @@ func resolveMCP(agent *domain.Agent, project *domain.Project, all []*domain.MCPS
 	var out mcpAttachment
 	seen := make(map[string]bool, len(names))
 	for _, n := range names {
-		if slices.Contains(banned, n) || seen[n] {
-			continue
-		}
 		if n == servicesServerName {
-			// The harness serves it itself (applyServicesServer); only its
-			// tools are trimmed here.
-			seen[n] = true
-			out.Denied = append(out.Denied, deniedTools(servicesServerName, n, project, disabledByDefault[n])...)
+			continue // built in: the harness serves it itself (applyServicesServer), never banned or trimmed
+		}
+		if slices.Contains(banned, n) || seen[n] {
 			continue
 		}
 		m, ok := byKey[n]

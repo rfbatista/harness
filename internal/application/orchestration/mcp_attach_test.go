@@ -114,19 +114,18 @@ func TestResolveMCP_OnlyAttachedServersAreTrimmedAndTheBuiltInOnesAreNeverNamed(
 	}
 }
 
-func TestResolveMCP_DeniesTheServicesServerToolsOnlyWhileItIsAttached(t *testing.T) {
-	overrides := map[string]map[string]string{servicesServerName: {"stop_service": domain.ToolDisabled}}
+func TestResolveMCP_TheBuiltInServicesServerIsNeverBannedOrTrimmed(t *testing.T) {
 	agent := &domain.Agent{MCPServerIDs: []string{servicesServerName}}
-	got := resolveMCP(agent, &domain.Project{MCPToolOverrides: overrides}, nil, nil)
-	if !reflect.DeepEqual(got.Denied, []string{"mcp__services__stop_service"}) {
-		t.Fatalf("denied = %v", got.Denied)
+	project := &domain.Project{
+		MCPBanned:        []string{servicesServerName},
+		MCPToolOverrides: map[string]map[string]string{servicesServerName: {"stop_service": domain.ToolDisabled}},
 	}
-	banned := &domain.Project{MCPBanned: []string{servicesServerName}, MCPToolOverrides: overrides}
-	if got := resolveMCP(agent, banned, nil, nil); len(got.Denied) != 0 {
-		t.Fatalf("a banned server was trimmed: %v", got.Denied)
+	got := resolveMCP(agent, project, nil, map[string][]string{servicesServerName: {"start_service"}})
+	if len(got.Servers) != 0 || len(got.Denied) != 0 {
+		t.Fatalf("resolution = %+v", got)
 	}
-	if namesServicesServer(agent, banned) {
-		t.Fatal("a banned services server is still named")
+	if !namesServicesServer(agent, project) {
+		t.Fatal("a ban took the services server from the session")
 	}
 }
 

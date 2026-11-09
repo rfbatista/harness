@@ -201,6 +201,9 @@ func (c *Catalog) projectMCPView(p *domain.Project) (*domain.CatalogProjectMCPSe
 	}
 	out := &domain.CatalogProjectMCPServers{MCPServers: nonNil(p.MCPServers), Servers: []domain.CatalogProjectMCPServer{}}
 	for _, s := range cat.MCPServers {
+		if s.BuiltIn {
+			continue // the harness's own servers are not the project's to ban or trim
+		}
 		srv := domain.CatalogProjectMCPServer{Name: s.Name, State: domain.MCPStateAgent, UsedByAgents: []string{}}
 		switch {
 		case contains(p.MCPBanned, s.Name):
@@ -309,6 +312,9 @@ func (c *Catalog) SetProjectMCPSettings(_ context.Context, in domain.SetCatalogP
 			return nil, invalid("servers", "the server "+s.Name+" is named twice")
 		}
 		seen[s.Name] = true
+		if s.Name == domain.ServicesServerName {
+			return nil, invalid("servers", "the "+s.Name+" server is built in: a project cannot ban it or trim its tools")
+		}
 		switch s.State {
 		case domain.MCPStateAdded:
 			added = append(added, s.Name)
