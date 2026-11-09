@@ -6,6 +6,7 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
+	"io"
 	"net/http"
 	"os"
 	"os/exec"
@@ -88,6 +89,10 @@ func gitMain(args []string) int {
 	cmd := exec.Command(real, args...)
 	cmd.Stdin, cmd.Stdout, cmd.Stderr = os.Stdin, os.Stdout, os.Stderr
 	err = cmd.Run()
+	if cmd.ProcessState == nil { // git did not start
+		fmt.Fprintf(os.Stderr, "git: %v\n", err)
+		return 126
+	}
 	code := cmd.ProcessState.ExitCode()
 	if err == nil {
 		for _, id := range pushRequests {
@@ -103,6 +108,7 @@ func tellPushed(base string, p ports.BranchPushed) {
 	body, _ := json.Marshal(p)
 	res, err := gateClient.Post(base+"/pushed", "application/json", bytes.NewReader(body))
 	if err == nil {
+		_, _ = io.Copy(io.Discard, res.Body)
 		res.Body.Close()
 	}
 }

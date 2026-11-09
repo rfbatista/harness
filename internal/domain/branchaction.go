@@ -86,6 +86,9 @@ type GitProbe interface {
 // the branch actions it makes: none for a command that is not one. dir is the
 // directory git runs in.
 func ClassifyGit(args []string, dir string, p GitProbe) []BranchAction {
+	if reason := refusedOverride(args); reason != "" {
+		return []BranchAction{{Kind: BranchPush, Refused: reason}}
+	}
 	args, dir = skipGlobalOptions(args, dir)
 	if len(args) == 0 {
 		return nil
@@ -115,6 +118,49 @@ func ClassifyGit(args []string, dir string, p GitProbe) []BranchAction {
 		return c.config(rest)
 	}
 	return nil
+}
+
+// refusedConfigKey says whether a one-off `git -c key=value` changes where or how
+// a push goes: a remote's URL, push URL or push refspec, or a URL rewrite.
+func refusedConfigKey(key string) bool {
+	key = strings.ToLower(key)
+	if strings.HasPrefix(key, "url.") {
+		return true
+	}
+	if !strings.HasPrefix(key, "remote.") {
+		return false
+	}
+	switch key[strings.LastIndex(key, ".")+1:] {
+	case "url", "pushurl", "push":
+		return true
+	}
+	return false
+}
+
+const refusedOverrideReason = "REFUSED: git -c cannot change a remote's URL, push URL or push refspec for one command. Ask for the change with git remote set-url or git config, which waits for the person."
+
+// refusedOverride is the reason a git invocation is refused for a `-c` that
+// redirects pushes, "" when it has none.
+func refusedOverride(args []string) string {
+	for i := 0; i < len(args) && strings.HasPrefix(args[i], "-"); i++ {
+		a := args[i]
+		switch {
+		case a == "-c" && i+1 < len(args):
+			key, _, _ := strings.Cut(args[i+1], "=")
+			if refusedConfigKey(key) {
+				return refusedOverrideReason
+			}
+			i++
+		case a == "-C" || a == "--git-dir" || a == "--work-tree" || a == "--namespace":
+			i++
+		case strings.HasPrefix(a, "-c") && len(a) > 2 && a[1] == 'c':
+			key, _, _ := strings.Cut(a[2:], "=")
+			if refusedConfigKey(key) {
+				return refusedOverrideReason
+			}
+		}
+	}
+	return ""
 }
 
 func skipGlobalOptions(args []string, dir string) ([]string, string) {
@@ -483,8 +529,31 @@ func (c classifier) rebase(args []string) []BranchAction {
 const (
 	refusedForce  = "REFUSED: a force push is refused. Push without --force, --force-with-lease, --force-if-includes or a + refspec."
 	refusedDelete = "REFUSED: deleting a branch on a remote is refused."
-	refusedBulk   = "REFUSED: --mirror, --prune, --all and --tags pushes are refused. Push the branch you mean by name."
+	refusedBulk   = "REFUSED: --mirror, --prune, --all, --branches, --tags and --follow-tags pushes are refused. Push the branch you mean by name."
 )
+
+// refusedLongPushOptions are the long options of git push that are refused, in
+// the order they are matched. git takes any unambiguous abbreviation of a long
+// option, so a prefix of one of them is refused too.
+var refusedLongPushOptions = []struct{ name, reason string }{
+	{"--force-with-lease", refusedForce}, {"--force-if-includes", refusedForce}, {"--force", refusedForce},
+	{"--delete", refusedDelete},
+	{"--mirror", refusedBulk}, {"--prune", refusedBulk}, {"--all", refusedBulk}, {"--branches", refusedBulk},
+	{"--tags", refusedBulk}, {"--follow-tags", refusedBulk},
+}
+
+func refusedLongPushOption(a string) string {
+	name, _, _ := strings.Cut(a, "=")
+	if len(name) < 3 {
+		return ""
+	}
+	for _, o := range refusedLongPushOptions {
+		if strings.HasPrefix(o.name, name) || strings.HasPrefix(name, o.name) {
+			return o.reason
+		}
+	}
+	return ""
+}
 
 func (c classifier) push(args []string) []BranchAction {
 	var pos []string
@@ -492,15 +561,27 @@ func (c classifier) push(args []string) []BranchAction {
 	for i := 0; i < len(args); i++ {
 		a := args[i]
 		switch {
-		case a == "-f" || a == "--force" || strings.HasPrefix(a, "--force-with-lease") || a == "--force-if-includes":
-			refused = refusedForce
-		case a == "-d" || a == "--delete":
-			refused = refusedDelete
-		case a == "--mirror" || a == "--prune" || a == "--all" || a == "--branches" || a == "--tags":
-			refused = refusedBulk
+		case a == "--":
+			pos = append(pos, args[i+1:]...)
+			i = len(args)
 		case a == "--repo" || a == "-o" || a == "--push-option" || a == "--receive-pack" || a == "--exec":
 			i++
-		case strings.HasPrefix(a, "-"):
+		case strings.HasPrefix(a, "--"):
+			if r := refusedLongPushOption(a); r != "" {
+				refused = r
+			}
+		case strings.HasPrefix(a, "-") && a != "-":
+			// bundled short flags, as -fu or -df
+			for _, f := range a[1:] {
+				switch f {
+				case 'f':
+					refused = refusedForce
+				case 'd':
+					refused = refusedDelete
+				case 'o':
+					i++ // -o takes the next argument
+				}
+			}
 		default:
 			pos = append(pos, a)
 		}
@@ -611,11 +692,17 @@ func (c classifier) config(args []string) []BranchAction {
 	case strings.HasPrefix(key, "remote.") && strings.HasSuffix(key, ".url"):
 		return []BranchAction{{Kind: BranchRemoteSetURL, Remote: strings.TrimSuffix(strings.TrimPrefix(key, "remote."), ".url"), URL: valueAt(pos, 1)}}
 	case strings.HasPrefix(key, "remote."):
+		// pushurl, push, fetch, tagopt …: the setting itself is what is held, with its value.
 		name := strings.TrimPrefix(key, "remote.")
-		if i := strings.Index(name, "."); i > 0 {
-			name = name[:i]
+		name = name[:strings.LastIndex(name, ".")]
+		setting := valueAt(pos, 1)
+		if !strings.HasSuffix(key, ".pushurl") {
+			setting = key + "=" + setting
 		}
-		return []BranchAction{{Kind: BranchRemoteSetURL, Remote: name}}
+		return []BranchAction{{Kind: BranchRemoteSetURL, Remote: name, URL: setting}}
+	case strings.HasPrefix(key, "url."):
+		// a URL rewrite redirects every remote it matches
+		return []BranchAction{{Kind: BranchRemoteSetURL, Remote: "url", URL: key + "=" + valueAt(pos, 1)}}
 	case strings.HasPrefix(key, "branch.") && (strings.HasSuffix(key, ".remote") || strings.HasSuffix(key, ".pushremote")):
 		name := strings.TrimPrefix(key, "branch.")
 		name = name[:strings.LastIndex(name, ".")]

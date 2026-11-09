@@ -106,3 +106,21 @@ func TestRemoteReadsAreNeverGatedAndACredentialInAUrlIsRedacted(t *testing.T) {
 	g.answer(req.ID, "deny", "")
 	answered(t, hook)
 }
+
+func TestAConfigWriteThatChangesWhereOrHowAPushGoesIsHeldWithItsValue(t *testing.T) {
+	g := startBranchGate(t)
+	g.withRemote("origin")
+	for _, c := range []struct{ line, url string }{
+		{"git config remote.origin.pushurl /elsewhere", "/elsewhere"},
+		{"git config remote.origin.push +refs/heads/*:refs/heads/*", "remote.origin.push=+refs/heads/*:refs/heads/*"},
+		{"git config url./elsewhere/.insteadOf /somewhere", "url./elsewhere/.insteadof=/somewhere"},
+	} {
+		hook := g.askHook(c.line, "")
+		req := g.pending(1)[0]
+		if req.Remote == nil || req.Remote.URL != c.url {
+			t.Errorf("%s: request remote = %+v, want url %q", c.line, req.Remote, c.url)
+		}
+		g.answer(req.ID, "deny", "")
+		answered(t, hook)
+	}
+}

@@ -795,7 +795,8 @@ func newBranchGate(cfg Config, cat catalog.Catalog, sessions ports.SessionReposi
 			}
 			return ""
 		},
-		// The server's one push path, with the head the person saw approved.
+		// The server's one push path, with the branch's head now: the person approved
+		// pushing that branch, so commits made since the request go with it.
 		Push: func(ctx context.Context, sess *domain.Session, r domain.BranchRequest) error {
 			ws := workspaces.Get(ctx, sess.WorkspaceID)
 			if ws == nil {

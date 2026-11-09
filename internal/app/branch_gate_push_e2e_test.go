@@ -170,7 +170,11 @@ func TestEveryForcePushAndRemoteBranchDeletionIsRefusedAtOnceWithNoRequest(t *te
 		"git push --force-with-lease=" + session + " origin " + session, "git push --force-if-includes origin " + session,
 		"git push origin +" + session, "git push origin +" + session + ":other", "git push --delete origin " + session,
 		"git push -d origin " + session, "git push origin :" + session, "git push --mirror origin", "git push --prune origin",
-		"git push --all origin", "git push --tags origin",
+		"git push --all origin", "git push --tags origin", "git push --follow-tags origin",
+		// bundled short flags, abbreviated long options and a one-off config override
+		"git push -fu origin " + session, "git push -uf origin " + session, "git push -df origin " + session,
+		"git push --forc origin " + session, "git push --force-with origin " + session, "git push --del origin " + session,
+		"git -c remote.origin.url=/elsewhere push origin " + session, "git -c remote.origin.pushurl=/elsewhere push origin " + session,
 	} {
 		a := answered(t, g.askHook(line, ""))
 		if a.decision() != "deny" || !strings.Contains(a.body, "REFUSED") {
