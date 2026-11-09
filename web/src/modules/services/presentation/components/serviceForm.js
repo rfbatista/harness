@@ -90,6 +90,10 @@ export const serviceForm = ({ gateway }) => () => {
     get hasSubdir() {
       return this.draft.repositoryId !== "";
     },
+    /** What the Subfolder field is, since a command typed there is only found out when the service fails to start. */
+    get subdirHint() {
+      return "A folder in the repository's main checkout, relative to its root, such as cmd/api. It is not a command: the command line is above. Empty is the root.";
+    },
     /** An image service cannot start without its runtime: said in the form, where the kind is chosen. */
     get runtimeNotice() {
       return this.isImage && !runtime.available ? `${runtime.name} was not found on this machine. Image services cannot start until it is installed, or you choose another runtime in the server settings.` : "";

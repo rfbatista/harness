@@ -26,6 +26,7 @@ var _ ports.BranchPusher = (*Service)(nil)
 type Deps struct {
 	Sessions interface {
 		Get(id string) *domain.Session
+		List(ctx context.Context, filter ports.SessionFilter) []*domain.Session
 	}
 	Requests ports.BranchRequestStore
 	// Probe lets the classifier read git's arguments as git does.
@@ -511,13 +512,15 @@ func (s *Service) deliver(r domain.BranchRequest) {
 // Restore is what a restart leaves to rebuild: a session that is still going
 // shows as waiting for approval for each request that waits on the person (the
 // hook that waited is gone, so the answer will be a turn), and a request whose
-// session ended while the server was down expires.
+// session ended while the server was down expires. The count of each live
+// session is set to its stored pending requests, never added to (ADR 0078).
 func (s *Service) Restore(ctx context.Context) error {
 	pending, err := s.d.Requests.List(ctx, domain.BranchRequestFilter{State: domain.BranchRequestPending})
 	if err != nil {
 		return err
 	}
 	ended := map[string]bool{}
+	counts := map[string]int{}
 	for _, r := range pending {
 		sess := s.d.Sessions.Get(r.SessionID)
 		if sess == nil || sess.Status.IsTerminal() {
@@ -529,9 +532,13 @@ func (s *Service) Restore(ctx context.Context) error {
 			}
 			continue
 		}
-		if s.d.Waiter != nil {
-			s.d.Waiter.BranchRequestFiled(r.SessionID)
-		}
+		counts[r.SessionID]++
+	}
+	if s.d.Waiter == nil {
+		return nil
+	}
+	for _, sess := range s.d.Sessions.List(ctx, ports.SessionFilter{Statuses: domain.LiveSessionStatuses}) {
+		s.d.Waiter.BranchRequestsRestored(sess.ID, counts[sess.ID])
 	}
 	return nil
 }

@@ -1,5 +1,6 @@
 import { StructuredError } from "../../../shared/domain/errors.js";
 import { assert, file, test } from "../../../shared/testing/test.js";
+import { toService } from "./dto.js";
 import { servicesGateway } from "./services-gateway.js";
 
 file("services/infrastructure/services-gateway");
@@ -125,4 +126,60 @@ test("create, update and delete post their payloads and map the answers", async 
   assert.deepEqual([updated.service.name, updated.restartNeeded], ["api", true]);
   await gw.deleteService("s1");
   assert.deepEqual(calls, [["/create_service", { project_id: "p1", service: input }], ["/update_service", { service_id: "s1", service: input }], ["/delete_service", { service_id: "s1" }]]);
+});
+
+test("start posts a run worktree only when one is given", async () => {
+  const calls = [];
+  const api = { post: async (path, body) => (calls.push(body), { service: serviceDTO({ status: "running", run: runDTO() }) }) };
+  const gw = servicesGateway(api, {});
+  await gw.startService("s1");
+  await gw.startService("s1", "");
+  await gw.startService("s1", "session:abc");
+  assert.deepEqual(calls, [{ service_id: "s1" }, { service_id: "s1" }, { service_id: "s1", worktree: "session:abc" }]);
+});
+
+test("a run carries its run worktree key and its overrides", () => {
+  const withRun = { ...serviceDTO({ status: "running" }), run: runDTO({ worktree_key: "session:s2", overrides: [{ name: "LOG_LEVEL", by: "go-developer · session abcdef12" }] }) };
+  const run = toService(withRun).run;
+  assert.equal(run.worktree_key, "session:s2");
+  assert.deepEqual(run.overrides, [{ name: "LOG_LEVEL", by: "go-developer · session abcdef12" }]);
+  const plain = toService({ ...serviceDTO({ status: "running" }), run: runDTO() }).run;
+  assert.equal(plain.worktree_key, "");
+  assert.deepEqual(plain.overrides, []);
+});
+
+test("the run worktrees of a service are read from list_service_run_worktrees", async () => {
+  const calls = [];
+  const api = {
+    get: async (path, q) => (calls.push([path, q]), {
+      worktrees: [
+        { key: "main", kind: "main", branch: "main", dir: "/r", session_id: "", agent: "", session_status: "" },
+        { key: "session:s2", kind: "session", branch: "", dir: "/w", session_id: "s2", agent: "go-developer", session_status: "running" },
+      ],
+    }),
+  };
+  const list = await servicesGateway(api, {}).listRunWorktrees("s1");
+  assert.deepEqual(calls, [["/list_service_run_worktrees", { service_id: "s1" }]]);
+  assert.deepEqual(list.map((w) => [w.key, w.kind, w.branch, w.sessionId, w.agent, w.sessionStatus]), [["main", "main", "main", "", "", ""], ["session:s2", "session", "", "s2", "go-developer", "running"]]);
+});
+
+test("a run worktree list that is not a list is a bad response", async () => {
+  const err = await servicesGateway({ get: async () => ({}) }, {}).listRunWorktrees("s1").catch((e) => e);
+  assert.equal(err.code, "BAD_RESPONSE");
+});
+
+test("the variables of a run are read from get_run_variables", async () => {
+  const calls = [];
+  const api = { get: async (path, q) => (calls.push([path, q]), { run_id: "r1", variables: [{ name: "PORT", value: "8080", source: "service", by: "" }, { name: "LOG", value: "x", source: "override", by: "go-developer · session abcdef12" }] }) };
+  const read = await servicesGateway(api, {}).getRunVariables("s1");
+  assert.deepEqual(calls, [["/get_run_variables", { service_id: "s1" }]]);
+  assert.equal(read.runId, "r1");
+  assert.deepEqual(read.variables, [{ name: "PORT", value: "8080", source: "service", by: "" }, { name: "LOG", value: "x", source: "override", by: "go-developer · session abcdef12" }]);
+});
+
+test("run variables with an unknown source, or no list, are a bad response", async () => {
+  const bad = (body) => servicesGateway({ get: async () => body }, {}).getRunVariables("s1").catch((e) => e.code);
+  assert.equal(await bad({ run_id: "r1", variables: [{ name: "A", value: "1", source: "mystery" }] }), "BAD_RESPONSE");
+  assert.equal(await bad({}), "BAD_RESPONSE");
+  assert.deepEqual((await servicesGateway({ get: async () => ({ run_id: "", variables: [] }) }, {}).getRunVariables("s1")).variables, []);
 });

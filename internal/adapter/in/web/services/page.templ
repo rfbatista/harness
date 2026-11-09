@@ -78,6 +78,7 @@ templ Page(frame shell.Frame, projectID, projectName string, seed Seed, repos []
 										<div class="[ head ]">
 											<span class="[ name ]" data-service-name x-text="row.name"></span>
 											<span class="[ badge ]" x-text="row.kindLabel"></span>
+											<span class="[ badge ]" data-tone="attention" data-service-overrides title="An agent started this run with its own variables. Open the log to see them." x-bind:hidden="!row.overrides" x-text="row.overrides"></span>
 											<span class="[ badge ]" data-tone="attention" data-not-sandboxed title="The sandbox setting was off: this run is not confined" x-bind:hidden="!row.notSandboxed">not sandboxed</span>
 										</div>
 										<div class="[ line ]" x-bind:title="row.line" x-text="row.line"></div>
@@ -97,12 +98,31 @@ templ Page(frame shell.Frame, projectID, projectName string, seed Seed, repos []
 											</span>
 											<span data-service-time x-text="row.time"></span>
 										</div>
+										<div class="[ banner ]" data-tone="attention" role="status" data-run-in-fallback x-bind:hidden="!row.runIn.hasFallback">
+											<span class="[ grow ]"><strong>Your last pick is gone.</strong> <span x-text="row.runIn.fallback"></span></span>
+											<button type="button" class="[ button ]" data-variant="ghost" data-size="sm" x-bind:data-service-id="row.id" x-on:click="dismissRunInFallback">Dismiss</button>
+										</div>
 										<p class="[ reason ]" data-service-reason x-bind:hidden="!row.hasReason"><span x-text="row.reason"></span> <button type="button" class="[ button ]" data-variant="ghost" data-size="sm" x-bind:data-service-id="row.id" x-on:click="openLogRow">Open log</button></p>
 									</div>
 									<div class="[ actions ]">
+										<div class="[ run-in ]" data-run-in x-show="row.runIn.show" x-bind:data-service-id="row.id">
+											<label class="[ visually-hidden ]" x-bind:for="row.runIn.selectId" x-text="row.runIn.name"></label>
+											<div class="[ dropdown ]" x-data="dropdown" data-fit x-bind:data-service-id="row.id" x-bind:aria-busy="row.runIn.loading" x-bind:data-error="row.runIn.error" x-on:dropdown-change="runInPicked" x-on:dropdown-retry="runInOpened" x-on:click="runInOpened" x-on:keydown.down="runInOpened" x-on:keydown.enter="runInOpened" x-on:keydown.space="runInOpened">
+												<select x-bind:id="row.runIn.selectId" x-bind:data-service-id="row.id" x-effect="syncRunIn" x-bind:disabled="row.start.disabled">
+													<template x-for="o in row.runIn.main" x-bind:key="o.key">
+														<option x-bind:value="o.key" x-bind:data-description="o.description" x-text="o.label"></option>
+													</template>
+													<optgroup x-bind:label="row.runIn.groupLabel">
+														<template x-for="o in row.runIn.sessions" x-bind:key="o.key">
+															<option x-bind:value="o.key" x-bind:data-description="o.description" x-bind:data-tone="o.tone" x-text="o.label"></option>
+														</template>
+													</optgroup>
+												</select>
+											</div>
+										</div>
 										<button type="button" class="[ button ]" data-variant="primary" data-size="sm" data-action="start" x-show="row.start.show" x-bind:data-service-id="row.id" x-bind:aria-label="row.start.name" x-bind:title="row.start.title" x-bind:disabled="row.start.disabled" x-bind:aria-busy="row.start.busy" x-on:click="startRow" x-text="row.start.text"></button>
 										<button type="button" class="[ button ]" data-size="sm" data-action="stop" x-show="row.stop.show" x-bind:data-service-id="row.id" x-bind:aria-label="row.stop.name" x-bind:disabled="row.stop.disabled" x-bind:aria-busy="row.stop.busy" x-on:click="stopRow" x-text="row.stop.text"></button>
-										<button type="button" class="[ button ]" data-size="sm" data-action="restart" x-show="row.restart.show" x-bind:data-service-id="row.id" x-bind:aria-label="row.restart.name" x-bind:disabled="row.restart.disabled" x-bind:aria-busy="row.restart.busy" x-on:click="restartRow" x-text="row.restart.text"></button>
+										<button type="button" class="[ button ]" data-size="sm" data-action="restart" x-show="row.restart.show" x-bind:data-service-id="row.id" x-bind:aria-label="row.restart.name" x-bind:title="row.restart.title" x-bind:disabled="row.restart.disabled" x-bind:aria-busy="row.restart.busy" x-on:click="restartRow" x-text="row.restart.text"></button>
 										<button type="button" class="[ button ]" data-variant="ghost" data-size="sm" data-action="log" x-bind:data-service-id="row.id" x-bind:aria-label="row.logName" x-bind:title="row.logName" x-on:click="openLogRow">Log</button>
 										<div class="[ menu ]" x-data="menu" data-align="end" x-bind:data-service-id="row.id" x-on:menu-select="menuSelect">
 											<button type="button" class="[ button ]" data-variant="ghost" data-size="sm" x-bind:aria-label="row.moreName">⋯</button>
@@ -147,6 +167,35 @@ templ Page(frame shell.Frame, projectID, projectName string, seed Seed, repos []
 								<button type="button" class="[ button ]" data-size="sm" x-on:click="retry">Try again</button>
 							</div>
 						</template>
+						<section class="[ variables ]" aria-label="Variables" data-service-variables x-data="serviceVariables(id)" x-effect="runChanged(logView.runId)" x-bind:data-service-id="id">
+							<div class="[ bar ]">
+								<button type="button" class="[ button ]" data-variant="ghost" data-size="sm" data-variables-toggle aria-expanded="false" aria-controls="service-variables-list" x-bind:aria-expanded="opened" x-on:click="toggleSection">Variables</button>
+								<span class="[ summary ]" role="status" aria-live="polite" data-variables-summary x-text="summary"></span>
+								<button type="button" class="[ button ]" data-variant="ghost" data-size="sm" data-variables-all x-show="opened && hasRows" x-on:click="toggleAll" x-text="allLabel"></button>
+							</div>
+							<div id="service-variables-list" x-show="opened">
+								<template x-if="error">
+									<div class="[ banner ]" data-tone="danger" role="alert">
+										<div class="[ flow ] [ flow-space-3xs grow ]">
+											<span x-text="error.message"></span>
+											<span class="[ code ]"><span x-text="error.code"></span> · <span x-text="error.next"></span></span>
+										</div>
+										<button type="button" class="[ button ]" data-size="sm" x-on:click="retry">Try again</button>
+									</div>
+								</template>
+								<p class="[ note ]" x-show="neverRan">This service has not run yet, so there are no variables.</p>
+								<p class="[ note ]" x-show="empty">This run was given no variables of its own. The system environment is not listed.</p>
+								<ul class="[ vars ]" data-variables x-bind:hidden="!hasRows" x-bind:aria-busy="loading">
+									<template x-for="row in rows" x-bind:key="row.name">
+										<li class="[ var ]" data-variable x-bind:data-name="row.name">
+											<span class="[ name ]"><span x-text="row.name"></span><small x-text="row.source"></small></span>
+											<span class="[ value ]" data-variable-value x-bind:data-masked="row.masked ? '' : null"><span x-bind:aria-hidden="row.masked" x-text="row.shown"></span><span class="[ visually-hidden ]" x-show="row.masked">value hidden</span></span>
+											<button type="button" class="[ button ]" data-variant="ghost" data-size="sm" data-variable-toggle x-bind:data-name="row.name" x-bind:aria-label="row.toggleName" x-on:click="toggle" x-text="row.toggleText"></button>
+										</li>
+									</template>
+								</ul>
+							</div>
+						</section>
 						<div class="[ log ]" role="log" tabindex="0" aria-live="off" aria-label="Log" x-ref="log" x-on:scroll="onScroll" x-bind:aria-busy="loading" data-log>
 							<p class="[ earlier ]" data-log-note x-bind:hidden="!hasNote" x-text="note"></p>
 							<template x-for="line in lines" x-bind:key="line.id">
@@ -230,7 +279,7 @@ templ Page(frame shell.Frame, projectID, projectName string, seed Seed, repos []
 										<div class="[ field ]" x-bind:hidden="!hasSubdir">
 											<label for="sf-subdir">Subfolder</label>
 											<input type="text" id="sf-subdir" class="[ font-mono ]" placeholder="cmd/api" spellcheck="false" autocomplete="off" x-model="draft.subdir" x-on:input="touch('subdir')" x-bind:aria-invalid="invalid('subdir') ? 'true' : null" aria-describedby="sf-subdir-hint sf-subdir-error"/>
-											<span class="[ hint ]" id="sf-subdir-hint">Relative to the main checkout. Empty is its root.</span>
+											<span class="[ hint ]" id="sf-subdir-hint" x-text="subdirHint"></span>
 											<span class="[ error ]" id="sf-subdir-error" role="alert" x-bind:hidden="!hasMessage('subdir')" x-text="fieldMessage('subdir')"></span>
 										</div>
 										<div class="[ field ]" role="group" id="sf-ports" tabindex="-1" aria-labelledby="sf-ports-label">

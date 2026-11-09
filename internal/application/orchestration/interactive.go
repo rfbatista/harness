@@ -467,6 +467,7 @@ func (s *Service) end(id string, exitCode int, closedByUser bool) (*domain.Sessi
 	if sess.Status.IsTerminal() {
 		return s.withResumability(context.Background(), sess), nil
 	}
+	s.clearPendingApprovals(id)
 
 	status, text := domain.SessionDone, "exited"
 	switch {
@@ -561,43 +562,118 @@ func (s *Service) stopHosted(id string) error {
 	return nil
 }
 
-// StopOrphanedServerSessions ends the RunnerServer sessions recorded as
-// running that have no terminal on this server — at boot, every one of them:
-// their processes died with the previous server. It returns how many it
+// ranByServer reports whether the server's own process ran sess: a headless
+// session, or an interactive one that runs on the server. A session in a
+// tui-client outlives the server.
+func ranByServer(sess *domain.Session) bool {
+	return !sess.Interactive || sess.RunsOn == domain.RunnerServer
+}
+
+// liveServerSessions are the sessions the server runs that are stored with a
+// live status, whatever it is (ADR 0078).
+func (s *Service) liveServerSessions(ctx context.Context) ([]*domain.Session, error) {
+	live, err := s.List(ctx, ports.SessionFilter{Statuses: domain.LiveSessionStatuses})
+	if err != nil {
+		return nil, err
+	}
+	ran := live[:0]
+	for _, sess := range live {
+		if ranByServer(sess) {
+			ran = append(ran, sess)
+		}
+	}
+	return ran, nil
+}
+
+// hasProcess reports whether this server holds a live process for sess.
+func (s *Service) hasProcess(sess *domain.Session) bool {
+	if !sess.Interactive {
+		_, ok := s.runtime.Get(sess.ID)
+		return ok
+	}
+	if s.Terminals == nil {
+		return false
+	}
+	_, err := s.Terminals.Attach(sess.ID)
+	return err == nil
+}
+
+// StopOrphanedServerSessions records as stopped every session the server ran
+// that is stored with a live status and has no process on this server: at
+// boot, every one of them, since their processes died with the previous
+// server. Their branch requests expire with them. It returns how many it
 // ended.
 func (s *Service) StopOrphanedServerSessions(ctx context.Context) (int, error) {
-	running, err := s.List(ctx, ports.SessionFilter{Statuses: []domain.SessionStatus{domain.SessionRunning}})
+	live, err := s.liveServerSessions(ctx)
 	if err != nil {
 		return 0, err
 	}
 	n := 0
-	for _, sess := range running {
-		if !sess.Interactive || sess.RunsOn != domain.RunnerServer {
+	for _, sess := range live {
+		if s.hasProcess(sess) {
 			continue
 		}
-		if s.Terminals != nil {
-			if _, err := s.Terminals.Attach(sess.ID); err == nil {
-				continue
-			}
-		}
-		if _, err := s.end(sess.ID, 0, true); err == nil {
+		if err := s.stopOrphan(sess); err == nil {
 			n++
 		}
 	}
 	return n, nil
 }
 
-// StopServerSessions stops every RunnerServer session still running,
-// recording each as stopped. The server calls it on shutdown.
+// stopOrphan records a session whose process is gone as stopped.
+func (s *Service) stopOrphan(sess *domain.Session) error {
+	if sess.Interactive {
+		_, err := s.end(sess.ID, 0, true)
+		return err
+	}
+	return s.endHeadless(sess.ID)
+}
+
+// endHeadless records a headless session as stopped: its open approvals are
+// gone with it, its stream closes and its end is announced.
+func (s *Service) endHeadless(id string) error {
+	s.runCleanup(id)
+	s.clearPendingApprovals(id)
+	if err := s.sessions.UpdateStatus(id, domain.SessionStopped); err != nil {
+		return err
+	}
+	s.publish(id, SessionEvent{Type: "done", Status: domain.SessionStopped, Text: "stopped", At: time.Now()})
+	s.hub.End(id)
+	s.announce(domain.SessionEnded{SessionID: id, Status: domain.SessionStopped})
+	return nil
+}
+
+// clearPendingApprovals zeroes the stored count of a session that ends: a
+// dead session owes the person no decision, and the waits behind the count
+// are gone with it.
+func (s *Service) clearPendingApprovals(id string) {
+	s.mu.Lock()
+	delete(s.branchWaits, id)
+	s.mu.Unlock()
+	m := s.metricsOf(id)
+	if m == nil || m.PendingApprovals == 0 {
+		return
+	}
+	m.PendingApprovals = 0
+	s.record(id, SessionEvent{Type: "branch_request_settled", At: time.Now()}, sessionChange{metrics: m})
+}
+
+// StopServerSessions stops every session the server runs that is still live,
+// whatever its live status, recording each as stopped. The server calls it on
+// shutdown.
 func (s *Service) StopServerSessions(ctx context.Context) {
-	running, err := s.List(ctx, ports.SessionFilter{Statuses: []domain.SessionStatus{domain.SessionRunning}})
+	live, err := s.liveServerSessions(ctx)
 	if err != nil {
 		return
 	}
-	for _, sess := range running {
-		if sess.Interactive && sess.RunsOn == domain.RunnerServer {
+	for _, sess := range live {
+		if sess.Interactive {
 			_ = s.stopHosted(sess.ID)
+			continue
 		}
+		s.broker.DenyAll(sess.ID)
+		_ = s.endHeadless(sess.ID)
+		_ = s.runtime.Stop(sess.ID)
 	}
 }
 

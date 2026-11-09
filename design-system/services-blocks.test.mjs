@@ -28,6 +28,12 @@ test("the service row and the log viewer exist", () => {
   assert.match(service, /@container services \(width < 46rem\)/);
 });
 
+test("the log panel's variables section exists, with a masked value", () => {
+  assert.match(service, /\.variables\b/);
+  assert.match(service, /\.var\b/);
+  assert.match(service, /\.value\[data-masked\]/);
+});
+
 test("tokens only: no colour literal, every var() is a token", () => {
   const defined = new Set([...tokens.matchAll(/(--[\w-]+)\s*:/g)].map((m) => m[1]));
   const local = new Set([...service.matchAll(/(--[\w-]+)\s*:/g)].map((m) => m[1]));
