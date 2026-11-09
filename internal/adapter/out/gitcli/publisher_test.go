@@ -249,7 +249,7 @@ func TestPublisher_PushToANamedRemoteUnderAnotherBranchName(t *testing.T) {
 	gitIn(t, repo, "remote", "add", "mirror", mirror)
 	head := strings.TrimSpace(gitOut(t, wt, "rev-parse", "HEAD"))
 
-	if err := p.PushTo(ctx, repo, "agent/x", "mirror", "review/x", nil); err != nil {
+	if err := p.PushTo(ctx, repo, "agent/x", "", "mirror", "review/x", nil); err != nil {
 		t.Fatal(err)
 	}
 	if got := strings.TrimSpace(gitOut(t, mirror, "rev-parse", "refs/heads/review/x")); got != head {
@@ -267,7 +267,7 @@ func TestPublisher_PushToNeverForces(t *testing.T) {
 	ctx := context.Background()
 	p := NewBranchPublisher()
 	repo, wt, origin := publishRepo(t)
-	if err := p.PushTo(ctx, repo, "agent/x", "origin", "agent/x", nil); err != nil {
+	if err := p.PushTo(ctx, repo, "agent/x", "", "origin", "agent/x", nil); err != nil {
 		t.Fatal(err)
 	}
 	gitIn(t, wt, "reset", "-q", "--hard", "HEAD~1")
@@ -277,7 +277,7 @@ func TestPublisher_PushToNeverForces(t *testing.T) {
 	gitIn(t, wt, "add", ".")
 	gitIn(t, wt, "commit", "-q", "-m", "diverge")
 	before := strings.TrimSpace(gitOut(t, origin, "rev-parse", "refs/heads/agent/x"))
-	err := p.PushTo(ctx, repo, "agent/x", "origin", "agent/x", nil)
+	err := p.PushTo(ctx, repo, "agent/x", "", "origin", "agent/x", nil)
 	if !errors.Is(err, ports.ErrPushRejected) {
 		t.Fatalf("diverged push = %v, want ErrPushRejected", err)
 	}
@@ -295,7 +295,7 @@ func TestPublisher_CommitsToPushCountsAgainstTheRemoteTrackingRefOrTheBase(t *te
 	if err != nil || known || n != 2 {
 		t.Fatalf("unknown remote branch = %d known=%v, %v; want 2 false", n, known, err)
 	}
-	if err := p.PushTo(ctx, repo, "agent/x", "origin", "agent/x", nil); err != nil {
+	if err := p.PushTo(ctx, repo, "agent/x", "", "origin", "agent/x", nil); err != nil {
 		t.Fatal(err)
 	}
 	n, known, err = p.CommitsToPush(ctx, repo, "agent/x", "origin", "agent/x", "main")
@@ -312,5 +312,28 @@ func TestPublisher_CommitsToPushWithNoBaseCountsWhatTheRemoteLacks(t *testing.T)
 	n, known, err := p.CommitsToPush(ctx, repo, "agent/x", "origin", "agent/x", "")
 	if err != nil || known || n != 2 {
 		t.Fatalf("no base = %d known=%v, %v; want 2 false", n, known, err)
+	}
+}
+
+func TestPublisher_PushToWithACommitPushesThatCommitAndNotTheHead(t *testing.T) {
+	ctx := context.Background()
+	p := NewBranchPublisher()
+	repo, wt, origin := publishRepo(t)
+	pinned := strings.TrimSpace(gitOut(t, wt, "rev-parse", "HEAD~1"))
+	if err := p.PushTo(ctx, repo, "agent/x", pinned, "origin", "review/x", nil); err != nil {
+		t.Fatal(err)
+	}
+	if got := strings.TrimSpace(gitOut(t, origin, "rev-parse", "refs/heads/review/x")); got != pinned {
+		t.Errorf("origin holds %s, want the pinned %s", got, pinned)
+	}
+}
+
+func TestPublisher_RemoteURLIsThePushurlWhenThereIsOne(t *testing.T) {
+	ctx := context.Background()
+	p := NewBranchPublisher()
+	repo, _, origin := publishRepo(t)
+	gitIn(t, repo, "config", "remote.origin.pushurl", "/somewhere/else.git")
+	if got, err := p.RemoteURL(ctx, repo, "origin"); err != nil || got != "/somewhere/else.git" {
+		t.Fatalf("url = %q, %v; want the pushurl (the url is %s)", got, err, origin)
 	}
 }

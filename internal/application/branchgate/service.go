@@ -246,6 +246,7 @@ func (s *Service) file(ctx context.Context, sess *domain.Session, a domain.Branc
 		}
 	}
 	if a.Kind == domain.BranchPush {
+		r.Commit = a.Commit
 		r.RemoteBranch = &a.RemoteBranch
 		r.Commits, r.CommitsAgainst = s.commitsToPush(sess, a)
 	}
@@ -401,6 +402,8 @@ func (s *Service) RequestPush(ctx context.Context, sessionID string, in ports.Pu
 		return nil, &domain.StructuredError{Code: "REMOTE_NOT_FOUND", Message: "the repository has no remote " + remote}
 	}
 	a := domain.BranchAction{Kind: domain.BranchPush, Branch: branch, Remote: remote, URL: url, RemoteBranch: remoteBranch, Dir: dir}
+	// The commit the person is asked about is the one that goes.
+	a.Commit = s.d.Probe.Commit(dir, "refs/heads/"+branch)
 	f, err := s.file(ctx, sess, a, "push_branch", in.Reason)
 	if err != nil {
 		return nil, err
@@ -448,12 +451,24 @@ func (s *Service) pushAndDeliver(r domain.BranchRequest) {
 		return
 	}
 	text := PushedTurn(r)
+	if s.moved(sess, r) {
+		text += " The branch has moved since: the commit that was approved was pushed, not the new head."
+	}
 	if err != nil {
 		text = PushFailedTurn(r, err)
 	}
 	if _, derr := s.d.Turns.Deliver(r.SessionID, "branch-request:"+r.ID, text, nil); derr != nil && errs.Code(derr) != "SESSION_NOT_RUNNING" {
 		slog.Warn("deliver the result of a push", "session", r.SessionID, "request", r.ID, "err", derr)
 	}
+}
+
+// moved says the branch is no longer at the commit the request pinned.
+func (s *Service) moved(sess *domain.Session, r domain.BranchRequest) bool {
+	if sess == nil || s.d.DirOf == nil || r.Commit == "" {
+		return false
+	}
+	head := s.d.Probe.Commit(s.d.DirOf(sess), "refs/heads/"+r.Branch)
+	return head != "" && head != r.Commit
 }
 
 // PushedTurn is the turn the session gets once the harness pushed an approved

@@ -32,6 +32,7 @@ type BranchRequestModel struct {
 	RemoteBranch   string `gorm:"column:remote_branch"`
 	Commits        *int
 	CommitsAgainst string `gorm:"column:commits_against"`
+	Commit         string `gorm:"column:commit_sha"`
 	Command        string
 	Via            string
 	Reason         string
@@ -63,7 +64,7 @@ func (m BranchRequestModel) domain() domain.BranchRequest {
 	r := domain.BranchRequest{
 		ID: m.ID, SessionID: m.SessionID, TaskID: nilIfEmpty(m.TaskID), RepositoryID: m.RepositoryID, SessionBranch: m.SessionBranch,
 		Action: domain.BranchActionKind(m.Action), Branch: m.Branch, NewName: nilIfEmpty(m.NewName),
-		RemoteBranch: nilIfEmpty(m.RemoteBranch), Commits: m.Commits, CommitsAgainst: nilIfEmpty(m.CommitsAgainst), Command: m.Command, Via: m.Via, Reason: m.Reason,
+		RemoteBranch: nilIfEmpty(m.RemoteBranch), Commits: m.Commits, CommitsAgainst: nilIfEmpty(m.CommitsAgainst), Commit: m.Commit, Command: m.Command, Via: m.Via, Reason: m.Reason,
 		State: domain.BranchRequestState(m.State), Note: m.Note, RequestedAt: m.RequestedAt, AnsweredAt: m.AnsweredAt,
 	}
 	if m.StartKind != "" {
@@ -78,7 +79,7 @@ func (m BranchRequestModel) domain() domain.BranchRequest {
 func branchRequestModel(r domain.BranchRequest) BranchRequestModel {
 	m := BranchRequestModel{
 		ID: r.ID, SessionID: r.SessionID, RepositoryID: r.RepositoryID, SessionBranch: r.SessionBranch,
-		Action: string(r.Action), Branch: r.Branch, Commits: r.Commits, CommitsAgainst: derefOr(r.CommitsAgainst), Command: r.Command, Via: r.Via, Reason: r.Reason,
+		Action: string(r.Action), Branch: r.Branch, Commits: r.Commits, CommitsAgainst: derefOr(r.CommitsAgainst), Commit: r.Commit, Command: r.Command, Via: r.Via, Reason: r.Reason,
 		State: string(r.State), Note: r.Note, RequestedAt: r.RequestedAt, AnsweredAt: r.AnsweredAt,
 	}
 	if r.TaskID != nil {

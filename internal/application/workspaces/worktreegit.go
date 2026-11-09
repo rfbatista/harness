@@ -399,6 +399,14 @@ func (s *WorktreeGit) PushBranchTo(ctx context.Context, t ports.PushTarget) (*do
 	switch {
 	case now.Gone:
 		return nil, worktreeMissing(ws)
+	case t.Commit != "":
+		// Pinned: exactly this commit goes, whatever the branch is at now.
+		if branch == "" {
+			branch = now.Branch
+		}
+		if _, err := s.d.Git.ResolveCommit(ctx, repo.RootDir, t.Commit); err != nil {
+			return nil, &domain.StructuredError{Code: "BRANCH_NOT_FOUND", Message: "the repository has no commit " + t.Commit}
+		}
 	case branch == "" || branch == now.Branch:
 		branch = now.Branch
 		if branch == "" {
@@ -421,10 +429,10 @@ func (s *WorktreeGit) PushBranchTo(ctx context.Context, t ports.PushTarget) (*do
 		remoteBranch = branch
 	}
 
-	if remote == "origin" && remoteBranch == branch {
+	if remote == "origin" && remoteBranch == branch && t.Commit == "" {
 		err = s.d.Fetcher.Push(ctx, repo.ID, repo.RootDir, remoteURL, branch)
 	} else {
-		err = s.d.Fetcher.PushTo(ctx, repo.ID, repo.RootDir, remoteURL, branch, remote, remoteBranch)
+		err = s.d.Fetcher.PushTo(ctx, repo.ID, repo.RootDir, remoteURL, branch, t.Commit, remote, remoteBranch)
 	}
 	s.forget(ws.ID)
 	var failed *OriginPushError
@@ -463,15 +471,19 @@ func (s *WorktreeGit) PushBranchTo(ctx context.Context, t ports.PushTarget) (*do
 // remoteURL is the URL of the named remote: NO_REMOTE for a repository with no
 // origin, REMOTE_NOT_FOUND for any other name it does not have.
 func (s *WorktreeGit) remoteURL(ctx context.Context, repo *domain.Repository, remote string) (string, error) {
-	if remote == "origin" {
-		return s.originOf(ctx, repo)
-	}
 	if s.d.Remotes == nil {
+		if remote == "origin" {
+			return s.originOf(ctx, repo)
+		}
 		return "", &domain.StructuredError{Code: "UNAVAILABLE", Message: "pushing to a named remote is not available"}
 	}
+	// Where the push goes: the credential is the one for that host.
 	url, err := s.d.Remotes.RemoteURL(ctx, repo.RootDir, remote)
 	if err != nil {
 		return "", err
+	}
+	if url == "" && remote == "origin" {
+		return s.originOf(ctx, repo)
 	}
 	if url == "" {
 		return "", &domain.StructuredError{Code: "REMOTE_NOT_FOUND", Message: "the repository has no remote " + remote}
@@ -484,7 +496,10 @@ func (s *WorktreeGit) recordPush(ctx context.Context, ws *domain.Workspace, repo
 	if s.d.Pushes == nil {
 		return
 	}
-	commit, _ := s.d.Git.ResolveCommit(ctx, repo.RootDir, "refs/heads/"+branch)
+	commit := t.Commit
+	if commit == "" {
+		commit, _ = s.d.Git.ResolveCommit(ctx, repo.RootDir, "refs/heads/"+branch)
+	}
 	by := t.By
 	if by == "" {
 		by = domain.PushByPerson

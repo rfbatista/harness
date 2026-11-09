@@ -220,7 +220,7 @@ func redactURLs(msg string) string { return domain.RedactURL(msg) }
 // PushTo publishes branch to the named remote as remoteBranch with the
 // credential stored for that remote's host, never forced (ADR 0071). Failures
 // are Push's.
-func (f *OriginFetcher) PushTo(ctx context.Context, repositoryID, root, remoteURL, branch, remote, remoteBranch string) error {
+func (f *OriginFetcher) PushTo(ctx context.Context, repositoryID, root, remoteURL, branch, commit, remote, remoteBranch string) error {
 	if f.remotes == nil {
 		return &domain.StructuredError{Code: "UNAVAILABLE", Message: "pushing to a named remote is not available"}
 	}
@@ -230,7 +230,7 @@ func (f *OriginFetcher) PushTo(ctx context.Context, repositoryID, root, remoteUR
 	}
 	defer op.Release()
 	pushCtx, cancel := context.WithTimeout(ctx, f.timeout)
-	err = f.remotes.PushTo(pushCtx, root, branch, remote, remoteBranch, op.Env)
+	err = f.remotes.PushTo(pushCtx, root, branch, commit, remote, remoteBranch, op.Env)
 	cancel()
 	switch {
 	case errors.Is(err, ports.ErrRemoteAuthRejected):

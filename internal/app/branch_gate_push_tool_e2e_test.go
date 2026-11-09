@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"os/exec"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"testing"
 
@@ -174,4 +175,46 @@ func TestAPushBranchTheRemoteRefusesOrHasNoCredentialForReportsWhyAsATurn(t *tes
 	}
 	g.answer(g.pending(1)[0].ID, "approve", "")
 	g.turnWith("[branch request ", "· push failed] GIT_CREDENTIAL_MISSING: ", "git.example.invalid")
+}
+
+func TestPushBranchPushesExactlyTheCommitThatWasRequestedAndSaysWhenTheBranchMoved(t *testing.T) {
+	g := startBranchGate(t)
+	origin := g.withRemote("origin")
+	session := strings.TrimSpace(g.git("git rev-parse --abbrev-ref HEAD").stdout)
+	g.setup("commit -q --allow-empty -m one")
+	asked := g.head()
+	asCount := func() int {
+		n, _ := strconv.Atoi(strings.TrimSpace(g.git("git rev-list --count HEAD").stdout))
+		return n
+	}()
+
+	if _, err := g.pushBranch(map[string]any{"branch": session, "remote_branch": "review/pinned"}); err != nil {
+		t.Fatal(err)
+	}
+	req := g.pending(1)[0]
+	if req.Commits == nil || *req.Commits != asCount {
+		t.Fatalf("the card counts %v commits, want %d", req.Commits, asCount)
+	}
+	// The branch moves on before the person answers.
+	g.setup("commit -q --allow-empty -m two")
+	moved := g.head()
+	g.answer(req.ID, "approve", "")
+	g.turnWith(fmt.Sprintf("[branch request %s · pushed] %s → origin/review/pinned, %d commits", req.ID, session, asCount), "moved", "approved")
+	if got := remoteHas(origin, "review/pinned"); got != asked {
+		t.Errorf("the remote holds %q, want the approved commit %s (the branch is at %s)", got, asked, moved)
+	}
+	pushes, err := g.pushes.PushesOf(g.ctx, g.id)
+	if err != nil || len(pushes) != 1 || pushes[0].Commit != asked {
+		t.Errorf("recorded pushes = %+v, %v; want the approved commit", pushes, err)
+	}
+
+	// A branch that did not move says nothing about it.
+	if _, err := g.pushBranch(map[string]any{"branch": session, "remote_branch": "review/still"}); err != nil {
+		t.Fatal(err)
+	}
+	g.answer(g.pending(1)[0].ID, "approve", "")
+	turn := g.turnWith("[branch request ", "· pushed] ")
+	if strings.Contains(turn, "moved") {
+		t.Errorf("turn %q claims the branch moved", turn)
+	}
 }

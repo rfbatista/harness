@@ -58,6 +58,10 @@ type BranchRequest struct {
 	// when the remote-tracking branch is known here, "base" when it is not and
 	// the count is against the branch's base.
 	CommitsAgainst *string `json:"commits_against"`
+	// Commit pins a push_branch request to the commit the branch was at when it
+	// was asked: that commit, not the branch's later head, is what goes. It is
+	// not part of the web contract's JSON.
+	Commit string `json:"-"`
 	// Command is the command line as the agent ran it, or "push_branch".
 	Command string `json:"command"`
 	// Via is "git" or "push_branch".

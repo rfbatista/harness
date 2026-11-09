@@ -62,6 +62,9 @@ type PushTarget struct {
 	Branch       string
 	Remote       string
 	RemoteBranch string
+	// Commit pins what is pushed: exactly this commit, as the remote branch,
+	// whatever the branch's head is now. "" pushes the branch's head.
+	Commit string
 	// RequestID is the branch request the push was approved under, "" for the
 	// person's own Push; it only labels the record of the push.
 	RequestID string

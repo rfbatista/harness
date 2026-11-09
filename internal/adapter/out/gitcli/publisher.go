@@ -77,8 +77,12 @@ func (p BranchPublisher) Push(ctx context.Context, repoRoot, branch string, env 
 	return err
 }
 
-// RemoteURL is remote.<name>.url, "" when the checkout has no such remote.
+// RemoteURL is where a push to remote <name> goes: its first pushurl when it
+// has one, else remote.<name>.url; "" when the checkout has no such remote.
 func (p BranchPublisher) RemoteURL(ctx context.Context, repoRoot, name string) (string, error) {
+	if push, ok := p.configFirst(ctx, repoRoot, "remote."+name+".pushurl"); ok {
+		return push, nil
+	}
 	ctx, cancel := context.WithTimeout(ctx, p.d.read())
 	defer cancel()
 	out, err := outputTimed(ctx, p.d.gitCmd(ctx, repoRoot, "config", "--get", "remote."+name+".url"))
@@ -94,16 +98,32 @@ func (p BranchPublisher) RemoteURL(ctx context.Context, repoRoot, name string) (
 	return strings.TrimSpace(string(out)), nil
 }
 
+// configFirst is the first value of a config key; ok is false when it has none.
+func (p BranchPublisher) configFirst(ctx context.Context, repoRoot, key string) (string, bool) {
+	ctx, cancel := context.WithTimeout(ctx, p.d.read())
+	defer cancel()
+	out, err := outputTimed(ctx, p.d.gitCmd(ctx, repoRoot, "config", "--get-all", key))
+	if err != nil {
+		return "", false
+	}
+	first, _, _ := strings.Cut(strings.TrimSpace(string(out)), "\n")
+	return first, first != ""
+}
+
 // PushTo publishes refs/heads/<branch> to the named remote as
-// refs/heads/<remoteBranch>, never forced. The upstream is set only when it is
-// origin under the same name, which is what the person's Push has always done.
-// A rejection carries git's reason (ADR 0071).
-func (p BranchPublisher) PushTo(ctx context.Context, repoRoot, branch, remote, remoteBranch string, env []string) error {
+// refs/heads/<remoteBranch>, never forced. With a commit it publishes exactly
+// that commit instead of the branch's head. The upstream is set only when it
+// is the branch itself to origin under the same name, which is what the
+// person's Push has always done. A rejection carries git's reason (ADR 0071).
+func (p BranchPublisher) PushTo(ctx context.Context, repoRoot, branch, commit, remote, remoteBranch string, env []string) error {
 	args := []string{"push", "--porcelain"}
-	if remote == "origin" && remoteBranch == branch {
+	src := "refs/heads/" + branch
+	if commit != "" {
+		src = commit
+	} else if remote == "origin" && remoteBranch == branch {
 		args = append(args, "--set-upstream")
 	}
-	args = append(args, "--", remote, "refs/heads/"+branch+":refs/heads/"+remoteBranch)
+	args = append(args, "--", remote, src+":refs/heads/"+remoteBranch)
 	_, err := p.d.gitNetwork(ctx, repoRoot, env, args...)
 	if err != nil && pushRefused(err.Error()) && !errors.Is(err, ports.ErrRemoteAuthRejected) {
 		return rejectedPush{err}

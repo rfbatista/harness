@@ -71,9 +71,19 @@ func (p Probe) Current(dir string) string {
 	return out
 }
 
-// RemoteURL implements domain.GitProbe.
+// RemoteURL implements domain.GitProbe: a push goes to the pushurls when the
+// remote has any, else to its url.
 func (p Probe) RemoteURL(dir, name string) string {
+	if out, ok := p.run(dir, "config", "--get-all", "remote."+name+".pushurl"); ok && out != "" {
+		return strings.Join(strings.Fields(out), ", ")
+	}
 	out, _ := p.run(dir, "config", "--get", "remote."+name+".url")
+	return out
+}
+
+// Config implements domain.GitProbe.
+func (p Probe) Config(dir, key string) string {
+	out, _ := p.run(dir, "config", "--get-all", key)
 	return out
 }
 

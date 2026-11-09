@@ -53,6 +53,8 @@ type BranchAction struct {
 	URL          string `json:"url,omitempty"`
 	Refspec      string `json:"refspec,omitempty"`
 	RemoteBranch string `json:"remote_branch,omitempty"`
+	// Commit is the commit a push_branch request pins, "" otherwise.
+	Commit string `json:"-"`
 	// Dir is the directory git runs in, set by the gate for what it reads of
 	// the repository.
 	Dir string `json:"-"`
@@ -74,9 +76,13 @@ type GitProbe interface {
 	Path(dir, p string) bool
 	// Current is the checked-out branch; "" when HEAD is detached.
 	Current(dir string) string
-	// RemoteURL is the URL remote name is configured with; "" when there is
-	// no such remote.
+	// RemoteURL is where a push to remote name goes: its pushurl when it has
+	// one (several are joined by ", "), else its url; "" when there is no such
+	// remote.
 	RemoteURL(dir, name string) string
+	// Config is every value git config holds for key, one per line; "" when
+	// it has none.
+	Config(dir, key string) string
 	// PushRemote is where a bare `git push` of branch goes: its pushRemote,
 	// its remote, remote.pushDefault, else origin.
 	PushRemote(dir, branch string) string
@@ -604,6 +610,19 @@ func (c classifier) push(args []string) []BranchAction {
 	out := make([]BranchAction, 0, len(pos))
 	for _, ref := range pos {
 		act := BranchAction{Kind: BranchPush, Remote: remote, URL: url, Refspec: ref, Refused: refused}
+		if ref == "" {
+			// git picks the branch and where it goes: say which, or refuse.
+			dst, why := c.bareDestination(remote, current)
+			if why != "" && act.Refused == "" {
+				act.Refused = refusedUnclear(why)
+			}
+			act.Branch, act.RemoteBranch = current, dst
+			out = append(out, act)
+			continue
+		}
+		if strings.Contains(ref, "*") && act.Refused == "" {
+			act.Refused = refusedUnclear("the refspec " + ref + " has a pattern")
+		}
 		src, dst, _ := strings.Cut(ref, ":")
 		switch {
 		case strings.HasPrefix(ref, "+"):
@@ -624,6 +643,34 @@ func (c classifier) push(args []string) []BranchAction {
 		out = append(out, act)
 	}
 	return out
+}
+
+func refusedUnclear(why string) string {
+	return "REFUSED: git cannot say which branch this push sends where (" + why + "). Run it as an explicit git push <remote> <branch>:<remote-branch>."
+}
+
+// bareDestination is the remote branch a `git push` with no refspec sends the
+// current branch to, the way git picks it (push.default and remote.<n>.push);
+// why says so when it cannot be told for this one branch.
+func (c classifier) bareDestination(remote, current string) (dst, why string) {
+	if current == "" {
+		return "", "HEAD is detached"
+	}
+	if c.p.Config(c.dir, "remote."+remote+".push") != "" {
+		return "", "remote." + remote + ".push is set"
+	}
+	mode := strings.ToLower(strings.TrimSpace(c.p.Config(c.dir, "push.default")))
+	switch mode {
+	case "", "simple", "current":
+		return current, ""
+	case "upstream", "tracking":
+		merge := strings.TrimPrefix(strings.TrimSpace(c.p.Config(c.dir, "branch."+current+".merge")), "refs/heads/")
+		if merge == "" {
+			return "", "push.default=upstream and " + current + " has no upstream"
+		}
+		return merge, ""
+	}
+	return "", "push.default=" + mode
 }
 
 func (c classifier) remote(args []string) []BranchAction {

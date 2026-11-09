@@ -226,3 +226,92 @@ func TestADeniedPushReachesNothingAndGivesTheAgentTheNote(t *testing.T) {
 		t.Error("a denied push reached the remote")
 	}
 }
+
+// git config in the worktree, with no shim.
+func (g *branchGate) config(kv ...string) {
+	g.t.Helper()
+	for i := 0; i+1 < len(kv); i += 2 {
+		g.setup("config " + kv[i] + " " + kv[i+1])
+	}
+}
+
+func TestABarePushIsHeldAsTheDestinationGitWouldPickOrRefusedWhenItCannotBeKnown(t *testing.T) {
+	g := startBranchGate(t)
+	origin := g.withRemote("origin")
+	session := strings.TrimSpace(g.git("git rev-parse --abbrev-ref HEAD").stdout)
+	g.setup("commit -q --allow-empty -m one")
+	head := g.head()
+
+	// push.default=upstream sends the branch to its upstream's name.
+	g.config("push.default", "upstream", "branch."+session+".remote", "origin", "branch."+session+".merge", "refs/heads/elsewhere")
+	hook := g.askHook("git push", "")
+	req := g.pending(1)[0]
+	if req.Branch != session || req.Remote == nil || req.Remote.Name != "origin" || req.RemoteBranch == nil || *req.RemoteBranch != "elsewhere" {
+		t.Fatalf("a bare push under push.default=upstream: %+v (remote %+v, remote branch %v)", req, req.Remote, req.RemoteBranch)
+	}
+	g.answer(req.ID, "approve", "")
+	answered(t, hook)
+	if r := g.git("git push"); r.code != 0 {
+		t.Fatalf("the approved bare push: %+v", r)
+	}
+	if remoteHas(origin, "elsewhere") != head || remoteHas(origin, session) != "" {
+		t.Errorf("the push did not land where the card said")
+	}
+
+	// A destination git picks by a rule the gate cannot read for one branch is refused, asking for the explicit form.
+	for _, c := range []struct{ why, config string }{
+		{"push.default=matching", "config push.default matching"},
+		{"a remote.origin.push refspec", "config push.default simple && git config remote.origin.push 'refs/heads/*:refs/heads/*'"},
+		{"push.default=upstream and no upstream", "config push.default upstream"},
+	} {
+		g.setup("config --unset-all remote.origin.push || true", "config --unset branch."+session+".merge || true", c.config)
+		for _, line := range []string{"git push", "git push origin"} {
+			a := answered(t, g.askHook(line, ""))
+			if a.decision() != "deny" || !strings.Contains(jsonUnescaped(a.body), "git push <remote> <branch>:<remote-branch>") {
+				t.Errorf("%s with %s: hook answered %+v, want a deny asking for the explicit form", line, c.why, a)
+			}
+			if r := g.git(line); r.code != 1 || !strings.Contains(r.stderr, "git push <remote> <branch>:<remote-branch>") {
+				t.Errorf("%s with %s: shim ran %+v", line, c.why, r)
+			}
+		}
+	}
+	if n := len(g.requests("pending")); n != 0 {
+		t.Errorf("%d requests pending for refused pushes", n)
+	}
+}
+
+func TestAPushToARemoteWithAPushurlIsHeldWithThePushurlAndLandsThere(t *testing.T) {
+	g := startBranchGate(t)
+	fetchOnly := g.withRemote("origin")
+	pushTo := filepath.Join(t.TempDir(), "pushto.git")
+	if out, err := exec.Command("git", "init", "-q", "--bare", pushTo).CombinedOutput(); err != nil {
+		t.Fatalf("init bare: %v %s", err, out)
+	}
+	g.config("remote.origin.pushurl", pushTo)
+	session := strings.TrimSpace(g.git("git rev-parse --abbrev-ref HEAD").stdout)
+	hook := g.askHook("git push origin "+session, "")
+	req := g.pending(1)[0]
+	if req.Remote == nil || req.Remote.URL != pushTo {
+		t.Fatalf("the card shows %+v, want the pushurl %s (the url is %s)", req.Remote, pushTo, fetchOnly)
+	}
+	g.answer(req.ID, "approve", "")
+	answered(t, hook)
+	head := g.head()
+	if r := g.git("git push origin " + session); r.code != 0 {
+		t.Fatalf("the approved push: %+v", r)
+	}
+	if remoteHas(pushTo, session) != head || remoteHas(fetchOnly, session) != "" {
+		t.Error("the push did not land at the pushurl")
+	}
+	// Changing the pushurl after the approval asks again.
+	g.setup("commit -q --allow-empty -m two")
+	hook = g.askHook("git push origin "+session, "")
+	g.pending(1)
+	g.answer(g.pending(1)[0].ID, "deny", "")
+	answered(t, hook)
+}
+
+// jsonUnescaped is a hook answer with the < and > that encoding/json escapes put back.
+func jsonUnescaped(body string) string {
+	return strings.NewReplacer(`\u003c`, "<", `\u003e`, ">").Replace(body)
+}

@@ -795,8 +795,7 @@ func newBranchGate(cfg Config, cat catalog.Catalog, sessions ports.SessionReposi
 			}
 			return ""
 		},
-		// The server's one push path, with the branch's head now: the person approved
-		// pushing that branch, so commits made since the request go with it.
+		// The server's one push path, pushing exactly the commit that was asked about.
 		Push: func(ctx context.Context, sess *domain.Session, r domain.BranchRequest) error {
 			ws := workspaces.Get(ctx, sess.WorkspaceID)
 			if ws == nil {
@@ -810,7 +809,7 @@ func newBranchGate(cfg Config, cat catalog.Catalog, sessions ports.SessionReposi
 				remoteBranch = *r.RemoteBranch
 			}
 			_, err := worktreeGit.PushBranchTo(ctx, ports.PushTarget{
-				WorkspaceID: ws.ID, ExpectedHead: probe.Commit(ws.Path, "refs/heads/"+r.Branch), Branch: r.Branch,
+				WorkspaceID: ws.ID, ExpectedHead: r.Commit, Commit: r.Commit, Branch: r.Branch,
 				Remote: remote, RemoteBranch: remoteBranch, RequestID: r.ID, By: domain.PushByAgent,
 			})
 			return err
