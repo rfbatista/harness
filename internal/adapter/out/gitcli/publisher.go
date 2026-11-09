@@ -77,6 +77,57 @@ func (p BranchPublisher) Push(ctx context.Context, repoRoot, branch string, env 
 	return err
 }
 
+// RemoteURL is remote.<name>.url, "" when the checkout has no such remote.
+func (p BranchPublisher) RemoteURL(ctx context.Context, repoRoot, name string) (string, error) {
+	ctx, cancel := context.WithTimeout(ctx, p.d.read())
+	defer cancel()
+	out, err := outputTimed(ctx, p.d.gitCmd(ctx, repoRoot, "config", "--get", "remote."+name+".url"))
+	if err := cut(ctx, "config", err); timedOut(err) {
+		return "", err
+	}
+	if err != nil {
+		if ee, ok := err.(*exec.ExitError); ok && ee.ExitCode() == 1 {
+			return "", nil
+		}
+		return "", fmt.Errorf("git config: %w", err)
+	}
+	return strings.TrimSpace(string(out)), nil
+}
+
+// PushTo publishes refs/heads/<branch> to the named remote as
+// refs/heads/<remoteBranch>, never forced. The upstream is set only when it is
+// origin under the same name, which is what the person's Push has always done.
+// A rejection carries git's reason (ADR 0071).
+func (p BranchPublisher) PushTo(ctx context.Context, repoRoot, branch, remote, remoteBranch string, env []string) error {
+	args := []string{"push", "--porcelain"}
+	if remote == "origin" && remoteBranch == branch {
+		args = append(args, "--set-upstream")
+	}
+	args = append(args, "--", remote, "refs/heads/"+branch+":refs/heads/"+remoteBranch)
+	_, err := p.d.gitNetwork(ctx, repoRoot, env, args...)
+	if err != nil && pushRefused(err.Error()) && !errors.Is(err, ports.ErrRemoteAuthRejected) {
+		return rejectedPush{err}
+	}
+	return err
+}
+
+// CommitsToPush counts the commits branch has that the remote branch lacks, as
+// last fetched or pushed (no network). known says the remote-tracking ref
+// exists; when it does not the count is against base instead.
+func (p BranchPublisher) CommitsToPush(ctx context.Context, repoRoot, branch, remote, remoteBranch, base string) (n int, known bool, err error) {
+	against := "refs/remotes/" + remote + "/" + remoteBranch
+	known = p.HasRef(ctx, repoRoot, against)
+	if !known {
+		against = base
+	}
+	out, err := p.d.gitOutput(ctx, repoRoot, "rev-list", "--count", "--end-of-options", against+"..refs/heads/"+branch)
+	if err != nil {
+		return 0, known, err
+	}
+	n, err = strconv.Atoi(strings.TrimSpace(out))
+	return n, known, err
+}
+
 // rejectedPush is a push error the remote's refusal caused; it keeps git's
 // text and answers errors.Is(err, ports.ErrPushRejected).
 type rejectedPush struct{ error }

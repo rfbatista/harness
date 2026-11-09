@@ -225,3 +225,81 @@ func TestPublisher_FetchOriginWithoutACredentialIsRefusedAsAuth(t *testing.T) {
 		t.Fatalf("an unreachable origin is no auth refusal: %v", err)
 	}
 }
+
+func TestPublisher_RemoteURLReadsAnyNamedRemote(t *testing.T) {
+	ctx := context.Background()
+	p := NewBranchPublisher()
+	repo, _, origin := publishRepo(t)
+	if got, err := p.RemoteURL(ctx, repo, "origin"); err != nil || got != origin {
+		t.Fatalf("origin = %q, %v; want %q", got, err, origin)
+	}
+	if got, err := p.RemoteURL(ctx, repo, "nope"); err != nil || got != "" {
+		t.Fatalf("unknown remote = %q, %v; want \"\", nil", got, err)
+	}
+}
+
+func TestPublisher_PushToANamedRemoteUnderAnotherBranchName(t *testing.T) {
+	ctx := context.Background()
+	p := NewBranchPublisher()
+	repo, wt, _ := publishRepo(t)
+	mirror := filepath.Join(t.TempDir(), "mirror.git")
+	if out, err := exec.Command("git", "init", "-q", "--bare", mirror).CombinedOutput(); err != nil {
+		t.Fatalf("init bare: %v %s", err, out)
+	}
+	gitIn(t, repo, "remote", "add", "mirror", mirror)
+	head := strings.TrimSpace(gitOut(t, wt, "rev-parse", "HEAD"))
+
+	if err := p.PushTo(ctx, repo, "agent/x", "mirror", "review/x", nil); err != nil {
+		t.Fatal(err)
+	}
+	if got := strings.TrimSpace(gitOut(t, mirror, "rev-parse", "refs/heads/review/x")); got != head {
+		t.Errorf("mirror review/x = %s, want %s", got, head)
+	}
+	if out := gitOut(t, repo, "for-each-ref", "refs/remotes/origin/agent"); strings.TrimSpace(out) != "" {
+		t.Errorf("origin got agent/x: %s", out)
+	}
+	if up := strings.TrimSpace(gitOut(t, repo, "for-each-ref", "--format=%(upstream)", "refs/heads/agent/x")); up != "" {
+		t.Errorf("a push to another remote or name set an upstream: %q", up)
+	}
+}
+
+func TestPublisher_PushToNeverForces(t *testing.T) {
+	ctx := context.Background()
+	p := NewBranchPublisher()
+	repo, wt, origin := publishRepo(t)
+	if err := p.PushTo(ctx, repo, "agent/x", "origin", "agent/x", nil); err != nil {
+		t.Fatal(err)
+	}
+	gitIn(t, wt, "reset", "-q", "--hard", "HEAD~1")
+	if err := os.WriteFile(filepath.Join(wt, "other.txt"), []byte("x"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	gitIn(t, wt, "add", ".")
+	gitIn(t, wt, "commit", "-q", "-m", "diverge")
+	before := strings.TrimSpace(gitOut(t, origin, "rev-parse", "refs/heads/agent/x"))
+	err := p.PushTo(ctx, repo, "agent/x", "origin", "agent/x", nil)
+	if !errors.Is(err, ports.ErrPushRejected) {
+		t.Fatalf("diverged push = %v, want ErrPushRejected", err)
+	}
+	if got := strings.TrimSpace(gitOut(t, origin, "rev-parse", "refs/heads/agent/x")); got != before {
+		t.Errorf("origin moved: the push was forced")
+	}
+}
+
+func TestPublisher_CommitsToPushCountsAgainstTheRemoteTrackingRefOrTheBase(t *testing.T) {
+	ctx := context.Background()
+	p := NewBranchPublisher()
+	repo, _, _ := publishRepo(t)
+	// remote branch unknown: against the base (main), two commits
+	n, known, err := p.CommitsToPush(ctx, repo, "agent/x", "origin", "agent/x", "main")
+	if err != nil || known || n != 2 {
+		t.Fatalf("unknown remote branch = %d known=%v, %v; want 2 false", n, known, err)
+	}
+	if err := p.PushTo(ctx, repo, "agent/x", "origin", "agent/x", nil); err != nil {
+		t.Fatal(err)
+	}
+	n, known, err = p.CommitsToPush(ctx, repo, "agent/x", "origin", "agent/x", "main")
+	if err != nil || !known || n != 0 {
+		t.Fatalf("after the push = %d known=%v, %v; want 0 true", n, known, err)
+	}
+}

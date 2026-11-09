@@ -81,3 +81,12 @@ type BranchRequestWaiter interface {
 	// back to the status it had.
 	BranchRequestSettled(sessionID string)
 }
+
+// PushRecords keeps the pushes the harness made (driven; ADR 0071). The server
+// push path writes one after each push that succeeded; the Branches list reads
+// them.
+type PushRecords interface {
+	RecordPush(ctx context.Context, p domain.RecordedPush) error
+	// PushesOf lists a session's recorded pushes, newest first.
+	PushesOf(ctx context.Context, sessionID string) ([]domain.RecordedPush, error)
+}

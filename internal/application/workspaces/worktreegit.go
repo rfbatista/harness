@@ -34,7 +34,12 @@ type WorktreeGitDeps struct {
 	// FetchRemote then answers UNAVAILABLE, and nothing is announced.
 	Publisher ports.BranchPublisher
 	Fetcher   *OriginFetcher
-	Feed      ports.ProjectChangeSink
+	// Remotes reads a named remote and pushes to it; Pushes keeps what was
+	// pushed (ADR 0071). Each may be nil: a push to a remote other than origin
+	// is then UNAVAILABLE, and nothing is recorded.
+	Remotes ports.RemotePublisher
+	Pushes  ports.PushRecords
+	Feed    ports.ProjectChangeSink
 	// Now is the clock the state's age is measured with; nil is time.Now.
 	Now func() time.Time
 }
@@ -78,6 +83,9 @@ func NewWorktreeGit(d WorktreeGitDeps) *WorktreeGit {
 	s := &WorktreeGit{d: d, slots: map[string]*stateSlot{}, pushLocks: map[string]*sync.Mutex{}}
 	if d.Fetcher != nil {
 		d.Fetcher.OnFetched(s.afterFetch)
+		if d.Remotes != nil {
+			d.Fetcher.WithRemotes(d.Remotes)
+		}
 	}
 	return s
 }
@@ -342,13 +350,20 @@ func (s *WorktreeGit) FetchRemote(ctx context.Context, repositoryID string) (tim
 // left. The HEAD is read again under the workspace's lock, so a commit made
 // since the person confirmed is never pushed.
 func (s *WorktreeGit) PushBranch(ctx context.Context, workspaceID, expectedHead string) (*domain.GitState, error) {
+	return s.PushBranchTo(ctx, ports.PushTarget{WorkspaceID: workspaceID, ExpectedHead: expectedHead})
+}
+
+// PushBranchTo implements ports.WorktreeGit: the one push path (ADR 0071). The
+// credential is the one stored for the remote's host, the push is never
+// forced, and a successful one is recorded.
+func (s *WorktreeGit) PushBranchTo(ctx context.Context, t ports.PushTarget) (*domain.GitState, error) {
 	switch {
-	case strings.TrimSpace(workspaceID) == "":
+	case strings.TrimSpace(t.WorkspaceID) == "":
 		return nil, invalid("workspace_id is required")
-	case strings.TrimSpace(expectedHead) == "":
+	case strings.TrimSpace(t.ExpectedHead) == "":
 		return nil, invalid("expected_head is required")
 	}
-	ws := s.d.Workspaces.Get(ctx, workspaceID)
+	ws := s.d.Workspaces.Get(ctx, t.WorkspaceID)
 	if ws == nil {
 		return nil, &domain.StructuredError{Code: "WORKSPACE_NOT_FOUND", Message: "workspace not found"}
 	}
@@ -362,7 +377,11 @@ func (s *WorktreeGit) PushBranch(ctx context.Context, workspaceID, expectedHead 
 	if !s.d.Files.Exists(ws.Path) {
 		return nil, worktreeMissing(ws)
 	}
-	origin, err := s.originOf(ctx, repo)
+	remote := t.Remote
+	if remote == "" {
+		remote = "origin"
+	}
+	remoteURL, err := s.remoteURL(ctx, repo, remote)
 	if err != nil {
 		return nil, err
 	}
@@ -376,16 +395,37 @@ func (s *WorktreeGit) PushBranch(ctx context.Context, workspaceID, expectedHead 
 		return nil, err
 	}
 	s.nameSession(ctx, now)
+	branch := t.Branch
 	switch {
 	case now.Gone:
 		return nil, worktreeMissing(ws)
-	case now.Branch == "":
-		return nil, invalid("the worktree's HEAD is detached; there is no branch to push")
-	case now.Head != expectedHead:
-		return nil, domain.GitStateError(domain.CodePushStale, "the branch moved since you confirmed: its HEAD is now "+now.Head, now)
+	case branch == "" || branch == now.Branch:
+		branch = now.Branch
+		if branch == "" {
+			return nil, invalid("the worktree's HEAD is detached; there is no branch to push")
+		}
+		if now.Head != t.ExpectedHead {
+			return nil, domain.GitStateError(domain.CodePushStale, "the branch moved since you confirmed: its HEAD is now "+now.Head, now)
+		}
+	default:
+		head, err := s.d.Git.ResolveCommit(ctx, repo.RootDir, "refs/heads/"+branch)
+		if err != nil {
+			return nil, &domain.StructuredError{Code: "BRANCH_NOT_FOUND", Message: "the repository has no branch " + branch}
+		}
+		if head != t.ExpectedHead {
+			return nil, domain.GitStateError(domain.CodePushStale, "the branch moved since you confirmed: its HEAD is now "+head, now)
+		}
+	}
+	remoteBranch := t.RemoteBranch
+	if remoteBranch == "" {
+		remoteBranch = branch
 	}
 
-	err = s.d.Fetcher.Push(ctx, repo.ID, repo.RootDir, origin, now.Branch)
+	if remote == "origin" && remoteBranch == branch {
+		err = s.d.Fetcher.Push(ctx, repo.ID, repo.RootDir, remoteURL, branch)
+	} else {
+		err = s.d.Fetcher.PushTo(ctx, repo.ID, repo.RootDir, remoteURL, branch, remote, remoteBranch)
+	}
 	s.forget(ws.ID)
 	var failed *OriginPushError
 	switch {
@@ -394,14 +434,15 @@ func (s *WorktreeGit) PushBranch(ctx context.Context, workspaceID, expectedHead 
 		if failed.Rejected {
 			return nil, domain.GitStateError(domain.CodePushRejected, "the remote rejected the push: "+failed.Error(), after)
 		}
-		return nil, &domain.StructuredError{Code: domain.CodePushFailed, Message: "pushing " + now.Branch + " to origin failed: " + failed.Error()}
+		return nil, &domain.StructuredError{Code: domain.CodePushFailed, Message: "pushing " + branch + " to " + remote + " failed: " + failed.Error()}
 	case err != nil:
 		return nil, err
 	}
+	pushedAt := s.d.Now().UTC()
+	s.recordPush(ctx, ws, repo, now.SessionID, t, branch, remote, remoteBranch, pushedAt)
 	// The push wrote the remote-tracking ref: the counts hold even when the
 	// repository was never fetched. A record that cannot be kept only costs
 	// the lift, so the push still answers.
-	pushedAt := s.d.Now().UTC()
 	if err := s.d.Workspaces.SetPushedAt(ws.ID, pushedAt); err != nil {
 		slog.Warn("push time not recorded", "workspace", ws.ID, "err", err)
 	} else {
@@ -417,6 +458,44 @@ func (s *WorktreeGit) PushBranch(ctx context.Context, workspaceID, expectedHead 
 		s.d.Feed.AnnounceChange(ports.ProjectChange{GitState: &ports.GitStateChange{GitState: copyState(after), ProjectID: repo.ProjectID}})
 	}
 	return after, nil
+}
+
+// remoteURL is the URL of the named remote: NO_REMOTE for a repository with no
+// origin, REMOTE_NOT_FOUND for any other name it does not have.
+func (s *WorktreeGit) remoteURL(ctx context.Context, repo *domain.Repository, remote string) (string, error) {
+	if remote == "origin" {
+		return s.originOf(ctx, repo)
+	}
+	if s.d.Remotes == nil {
+		return "", &domain.StructuredError{Code: "UNAVAILABLE", Message: "pushing to a named remote is not available"}
+	}
+	url, err := s.d.Remotes.RemoteURL(ctx, repo.RootDir, remote)
+	if err != nil {
+		return "", err
+	}
+	if url == "" {
+		return "", &domain.StructuredError{Code: "REMOTE_NOT_FOUND", Message: "the repository has no remote " + remote}
+	}
+	return url, nil
+}
+
+// recordPush keeps what a push sent where. It never fails the push.
+func (s *WorktreeGit) recordPush(ctx context.Context, ws *domain.Workspace, repo *domain.Repository, sessionID string, t ports.PushTarget, branch, remote, remoteBranch string, at time.Time) {
+	if s.d.Pushes == nil {
+		return
+	}
+	commit, _ := s.d.Git.ResolveCommit(ctx, repo.RootDir, "refs/heads/"+branch)
+	by := t.By
+	if by == "" {
+		by = domain.PushByPerson
+	}
+	err := s.d.Pushes.RecordPush(ctx, domain.RecordedPush{
+		RequestID: t.RequestID, SessionID: sessionID, RepositoryID: repo.ID, Branch: branch,
+		Remote: remote, RemoteBranch: remoteBranch, Commit: commit, At: at, By: by,
+	})
+	if err != nil {
+		slog.Warn("push not recorded", "workspace", ws.ID, "branch", branch, "err", err)
+	}
 }
 
 // reread is the workspace's state now, or before when it cannot be read.

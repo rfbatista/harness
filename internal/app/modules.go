@@ -92,6 +92,7 @@ var PersistenceModule = fx.Module("persistence",
 		asPort(sqlite.NewArchitectureRecordRepository, new(ports.ArchitectureRecordStore)),
 		asPort(sqlite.NewArchitectureRuleEventRepository, new(ports.ArchitectureRuleEventStore)),
 		asPort(sqlite.NewBranchRequestRepository, new(ports.BranchRequestStore)),
+		asPort(sqlite.NewRecordedPushRepository, new(ports.PushRecords)),
 		asPort(sqlite.NewDesignSystemRepository, new(ports.DesignSystemStore)),
 		asPort(sqlite.NewDesignProposalRepository, new(ports.DesignProposalStore)),
 		asPort(sqlite.NewDesignExportRepository, new(ports.DesignExportStore)),
@@ -1142,10 +1143,11 @@ func newOriginFetcher(git ports.BranchPublisher, creds optionalGitCredentials) *
 // newWorktreeGit reads where each session worktree's branch stands against
 // its base and its upstream, from local git only, fetches origin on request
 // and announces the states a fetch moved on the project feed.
-func newWorktreeGit(ws ports.WorkspaceRepository, repos ports.RepositoryRepository, sessions ports.SessionRepository, tickets ports.TicketRepository, git ports.GitWorktreeReader, files ports.WorktreeFiles, publisher ports.BranchPublisher, fetcher *workspaces.OriginFetcher, orch *orchestration.Service) *workspaces.WorktreeGit {
+func newWorktreeGit(ws ports.WorkspaceRepository, repos ports.RepositoryRepository, sessions ports.SessionRepository, tickets ports.TicketRepository, git ports.GitWorktreeReader, files ports.WorktreeFiles, publisher ports.BranchPublisher, pushes ports.PushRecords, fetcher *workspaces.OriginFetcher, orch *orchestration.Service) *workspaces.WorktreeGit {
+	remotes, _ := publisher.(ports.RemotePublisher)
 	return workspaces.NewWorktreeGit(workspaces.WorktreeGitDeps{
 		Workspaces: ws, Repositories: repos, Sessions: sessions, Tickets: tickets, Git: git, Files: files,
-		Publisher: publisher, Fetcher: fetcher, Feed: orch,
+		Publisher: publisher, Fetcher: fetcher, Feed: orch, Remotes: remotes, Pushes: pushes,
 	})
 }
 
