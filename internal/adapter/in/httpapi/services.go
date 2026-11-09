@@ -121,18 +121,23 @@ func (h *Handler) handleStartService(c echo.Context) error {
 	if h.services == nil {
 		return errServicesOff
 	}
-	var in serviceIDRequest
+	var in struct {
+		ServiceID string `json:"service_id"`
+		Worktree  string `json:"worktree"`
+	}
 	if err := bindJSON(c, &in); err != nil {
 		return err
 	}
-	svc, already, err := h.services.StartService(c.Request().Context(), in.ServiceID, personStart)
+	opts := personStart
+	opts.WorktreeKey = in.Worktree
+	svc, already, err := h.services.StartService(c.Request().Context(), in.ServiceID, opts)
 	if err != nil {
 		return err
 	}
 	return c.JSON(http.StatusOK, map[string]any{"service": svc, "already_running": already})
 }
 
-// personStart is a start by the person: always in the main checkout.
+// personStart is a start by the person, in the run worktree they pick.
 var personStart = ports.ServiceStartOptions{StartedBy: domain.ServiceStartedBy{Kind: "person"}}
 
 func (h *Handler) handleStopService(c echo.Context) error {
@@ -158,11 +163,37 @@ func (h *Handler) handleRestartService(c echo.Context) error {
 	if err := bindJSON(c, &in); err != nil {
 		return err
 	}
-	svc, err := h.services.RestartService(c.Request().Context(), in.ServiceID, personStart)
+	opts := personStart
+	opts.Repeat = true // the same run worktree as the last run (ADR 0077)
+	svc, err := h.services.RestartService(c.Request().Context(), in.ServiceID, opts)
 	if err != nil {
 		return err
 	}
 	return c.JSON(http.StatusOK, map[string]any{"service": svc})
+}
+
+// handleGetRunVariables answers the variables the service's current or last
+// run was given, with their values: they are read here and travel on no feed.
+func (h *Handler) handleGetRunVariables(c echo.Context) error {
+	if h.services == nil {
+		return errServicesOff
+	}
+	vars, err := h.services.GetRunVariables(c.Request().Context(), c.QueryParam("service_id"))
+	if err != nil {
+		return err
+	}
+	return c.JSON(http.StatusOK, vars)
+}
+
+func (h *Handler) handleListServiceRunWorktrees(c echo.Context) error {
+	if h.services == nil {
+		return errServicesOff
+	}
+	worktrees, err := h.services.ListServiceRunWorktrees(c.Request().Context(), c.QueryParam("service_id"))
+	if err != nil {
+		return err
+	}
+	return c.JSON(http.StatusOK, map[string]any{"worktrees": worktrees})
 }
 
 // optionalOffset reads a byte offset query parameter; absent is nil.

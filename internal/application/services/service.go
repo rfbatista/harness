@@ -12,6 +12,7 @@ import (
 	"encoding/hex"
 	"os"
 	"path/filepath"
+	"strconv"
 	"sync"
 	"time"
 
@@ -63,6 +64,9 @@ type Options struct {
 	// EnvFiles reads a repository's saved env files, for the root .env a
 	// service exports; nil exports nothing.
 	EnvFiles ports.EnvFileLister
+	// RunWorktrees lists the worktrees a command service of a repository can
+	// run in besides its main checkout; nil offers the main checkout only.
+	RunWorktrees ports.ServiceRunWorktrees
 	// Branches names the branch a main checkout holds; nil leaves it empty.
 	Branches ports.RunBranchReader
 	// Runtime is the container runtime setting; nil keeps docker in memory.
@@ -177,6 +181,9 @@ func (s *Service) CreateService(ctx context.Context, projectID string, in domain
 	if err := s.checkRepository(ctx, projectID, in.RepositoryID); err != nil {
 		return nil, err
 	}
+	if err := s.checkSubdir(ctx, in); err != nil {
+		return nil, err
+	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	if err := s.checkNameFree(projectID, in.Name, ""); err != nil {
@@ -210,6 +217,9 @@ func (s *Service) UpdateService(ctx context.Context, serviceID string, in domain
 		return nil, false, &domain.StructuredError{Code: "INVALID_INPUT", Message: "kind cannot be changed after the service is created"}
 	}
 	if err := s.checkRepository(ctx, cur.ProjectID, in.RepositoryID); err != nil {
+		return nil, false, err
+	}
+	if err := s.checkSubdir(ctx, in); err != nil {
 		return nil, false, err
 	}
 	s.mu.Lock()
@@ -278,6 +288,24 @@ func (s *Service) checkRepository(ctx context.Context, projectID, repositoryID s
 	r, err := s.repos.GetRepository(ctx, repositoryID)
 	if err != nil || r == nil || r.ProjectID != projectID {
 		return &domain.StructuredError{Code: "REPOSITORY_NOT_FOUND", Message: "repository " + repositoryID + " is not in this project"}
+	}
+	return nil
+}
+
+// checkSubdir refuses a command service whose subfolder is not a folder in
+// its repository's main checkout, so a command typed into the wrong field is
+// caught at the save and not at every start. A repository with no checkout on
+// this machine has nothing to check against.
+func (s *Service) checkSubdir(ctx context.Context, in domain.ServiceInput) error {
+	if in.Command == nil || in.Command.Subdir == "" || in.RepositoryID == "" {
+		return nil
+	}
+	repo, err := s.repos.GetRepository(ctx, in.RepositoryID)
+	if err != nil || repo == nil || repo.RootDir == "" {
+		return nil
+	}
+	if fi, err := os.Stat(filepath.Join(repo.RootDir, in.Command.Subdir)); err != nil || !fi.IsDir() {
+		return &domain.StructuredError{Code: "INVALID_INPUT", Message: "command.subdir: " + strconv.Quote(in.Command.Subdir) + " is not a folder in " + repo.Name + "'s main checkout"}
 	}
 	return nil
 }

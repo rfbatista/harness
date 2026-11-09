@@ -12,6 +12,8 @@
  *   <div class="reset"/></div><footer>…</footer></section>
  * Read-only text, not a terminal. [data-harness] lines carry a bold prefix, a panel wash and a signal
  * rule on the start edge, so they differ from the program's output without colour alone.
+ * <div class="variables"> sits between the header and the log: a bar (toggle, summary, Reveal all) and,
+ * when open, one .var row per variable (name and source, mask or value, Reveal/Hide). Values are masked.
  * Exceptions: aria-current (the row whose log is open), data-fresh (arrived over the live feed),
  * .status[data-tone="attention"] (exited with a non-zero code).
  */
@@ -69,6 +71,21 @@
     & .ln { padding-inline: var(--space-m); white-space: pre-wrap; overflow-wrap: anywhere; color: var(--color-ink); }
     & .ln[data-harness] { background: var(--color-panel); box-shadow: inset 2px 0 0 var(--color-signal); color: var(--color-ink-muted); }
     & .ln[data-harness] > b { font-weight: var(--weight-bold); color: var(--color-ink); }
+    & > .variables { flex: none; background: var(--color-panel); border-block-end: var(--border-width) solid var(--color-line); font-size: var(--text-xs); }
+    & .variables .bar { display: flex; align-items: center; gap: var(--space-s); flex-wrap: wrap; padding: var(--space-2xs) var(--space-m); }
+    & .variables .bar .summary { flex: 1 1 8rem; color: var(--color-ink-muted); }
+    & .variables .vars { max-block-size: 14rem; overflow: auto; margin: 0; padding: 0 var(--space-m) var(--space-s); list-style: none; display: grid; gap: var(--space-2xs); }
+    & .variables .var { display: grid; grid-template-columns: minmax(7rem, 14rem) minmax(0, 1fr) auto; align-items: start; gap: var(--space-2xs) var(--space-s); }
+    & .variables .var .name { display: grid; min-inline-size: 0; font-family: var(--font-mono); color: var(--color-ink); overflow-wrap: anywhere; }
+    & .variables .var .name small { font-family: var(--font-sans); font-size: var(--text-xs); color: var(--color-ink-faint); }
+    & .variables .var .value { font-family: var(--font-mono); color: var(--color-ink); white-space: pre-wrap; overflow-wrap: anywhere; }
+    & .variables .var .value[data-masked] { color: var(--color-ink-faint); letter-spacing: 0.0625em; }
+    & .variables .note { margin: 0; padding: 0 var(--space-m) var(--space-s); color: var(--color-ink-faint); }
+    & .variables .banner { margin: 0 var(--space-m) var(--space-s); }
+    @media (width < 40rem) {
+      & .variables .var { grid-template-columns: minmax(0, 1fr) auto; }
+      & .variables .var .value { grid-column: 1 / -1; grid-row: 2; }
+    }
     & .earlier { padding: 0 var(--space-m) var(--space-s); font-family: var(--font-sans); color: var(--color-ink-faint); }
     & .reset {
       margin-block: var(--space-s); padding: var(--space-2xs) var(--space-m);

@@ -98,7 +98,7 @@ export function portLinks(service) {
 export function whereLabel(run) {
   switch (run?.where.kind) {
     case "main": return run.where.branch ? `main checkout @ ${run.where.branch}` : "main checkout";
-    case "session": return `worktree · ${run.where.branch}`;
+    case "session": return `session worktree @ ${run.where.branch}`;
     case "service_folder": return "service folder";
     case "container": return "container";
     default: return "";
@@ -117,6 +117,18 @@ export function startedByView(run, projectId = "") {
     ? `/projects/${encodeURIComponent(projectId)}/tasks/${encodeURIComponent(by.task_id)}?session=${encodeURIComponent(by.session_id)}`
     : "";
   return { text: `started by ${by.agent} · session ${by.session_id.slice(0, 8)}`, sessionId: by.session_id, href };
+}
+
+/**
+ * "2 overrides by go-developer": the run was given variables by an agent, which the person should notice.
+ * `by` names the agent and its session ("go-developer · session abcdef12"). "" with none.
+ */
+export function overrideMark(run) {
+  const overrides = run?.overrides ?? [];
+  if (overrides.length === 0) return "";
+  const agents = [...new Set(overrides.map((o) => o.by.split(" · ")[0] || "an agent"))];
+  const who = agents.length === 1 ? agents[0] : `${agents.slice(0, -1).join(", ")} and ${agents.at(-1)}`;
+  return `${overrides.length} override${overrides.length === 1 ? "" : "s"} by ${who}`;
 }
 
 /** What the page says, politely, after the form saved a service. */

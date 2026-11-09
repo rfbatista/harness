@@ -1,6 +1,6 @@
 import { assert, file, test } from "../../../shared/testing/test.js";
 import {
-  applyEvent, groupServices, isActive, portLinks, runningCount, startedByView, statusView, timeFact, whereLabel,
+  applyEvent, groupServices, isActive, overrideMark, portLinks, runningCount, startedByView, statusView, timeFact, whereLabel,
 } from "./service.js";
 
 file("services/domain/service");
@@ -62,7 +62,7 @@ test("a command service's ports link to localhost; an image's link on the host p
 
 test("where a run runs, in words", () => {
   assert.equal(whereLabel(run()), "main checkout @ main");
-  assert.equal(whereLabel(run({ where: { kind: "session", dir: "/w", branch: "agent/x", session_id: "s" } })), "worktree · agent/x");
+  assert.equal(whereLabel(run({ where: { kind: "session", dir: "/w", branch: "agent/x", session_id: "s" } })), "session worktree @ agent/x");
   assert.equal(whereLabel(run({ where: { kind: "service_folder", dir: "/f", branch: "", session_id: "" } })), "service folder");
   assert.equal(whereLabel(run({ where: { kind: "container", dir: "", branch: "", session_id: "" } })), "container");
   assert.equal(whereLabel(null), "");
@@ -118,4 +118,15 @@ test("the navigation badge is hidden at 0, shows the count, and caps at 99+", as
   assert.deepEqual(navBadge(3), { text: "3", hidden: false });
   assert.deepEqual(navBadge(99), { text: "99", hidden: false });
   assert.deepEqual(navBadge(140), { text: "99+", hidden: false });
+});
+
+test("a run's overrides read as a mark naming who set them, and none as no mark", () => {
+  const by = (agent) => ({ name: "X", by: `${agent} · session abcdef12` });
+  assert.equal(overrideMark({ overrides: [] }), "");
+  assert.equal(overrideMark(null), "");
+  assert.equal(overrideMark({ overrides: [by("go-developer")] }), "1 override by go-developer");
+  assert.equal(overrideMark({ overrides: [by("go-developer"), by("go-developer")] }), "2 overrides by go-developer");
+  assert.equal(overrideMark({ overrides: [by("go-developer"), by("backend"), by("go-developer")] }), "3 overrides by go-developer and backend");
+  assert.equal(overrideMark({ overrides: [by("a"), by("b"), by("c")] }), "3 overrides by a, b and c");
+  assert.equal(overrideMark({ overrides: [{ name: "X", by: "" }] }), "1 override by an agent");
 });

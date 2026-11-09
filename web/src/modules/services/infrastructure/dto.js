@@ -30,7 +30,40 @@ function toRun(r) {
       branch: String(r.where?.branch ?? ""),
       session_id: String(r.where?.session_id ?? ""),
     },
+    worktree_key: String(r.worktree_key ?? ""),
+    overrides: array(r.overrides).map((o) => ({ name: String(o?.name ?? ""), by: String(o?.by ?? "") })),
     sandboxed: r.sandboxed !== false,
+  };
+}
+
+const SOURCES = ["repository_env", "service", "override"];
+
+/** @returns {import("../domain/ports.js").RunWorktree[]} */
+export function toRunWorktrees(body) {
+  if (!body || !Array.isArray(body.worktrees)) bad("expected {worktrees: […]}");
+  return body.worktrees.map((w) => {
+    if (typeof w?.key !== "string" || w.key === "") bad("a run worktree without a key");
+    return Object.freeze({
+      key: w.key,
+      kind: w.kind === "main" ? "main" : "session",
+      branch: String(w.branch ?? ""),
+      dir: String(w.dir ?? ""),
+      sessionId: String(w.session_id ?? ""),
+      agent: String(w.agent ?? ""),
+      sessionStatus: String(w.session_status ?? ""),
+    });
+  });
+}
+
+/** @returns {import("../domain/ports.js").RunVariables} */
+export function toRunVariables(body) {
+  if (!body || !Array.isArray(body.variables)) bad("expected {run_id, variables: […]}");
+  return {
+    runId: String(body.run_id ?? ""),
+    variables: body.variables.map((v) => {
+      if (typeof v?.name !== "string" || !SOURCES.includes(v.source)) bad(`a run variable ${JSON.stringify(v?.name)} with source ${JSON.stringify(v?.source)}`);
+      return { name: v.name, value: String(v.value ?? ""), source: v.source, by: String(v.by ?? "") };
+    }),
   };
 }
 

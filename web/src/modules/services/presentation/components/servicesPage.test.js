@@ -2,7 +2,7 @@ import { StructuredError } from "../../../../shared/domain/errors.js";
 import { fixedClock } from "../../../../shared/infrastructure/clock.js";
 import { mount } from "../../../../shared/testing/alpine.js";
 import { assert, file, test } from "../../../../shared/testing/test.js";
-import { fakeServices, listDTO, pageEl, runDTO, serviceDTO } from "../../testing/fakeGateway.js";
+import { fakeServices, listDTO, pageEl, runDTO, serviceDTO, worktreeDTO } from "../../testing/fakeGateway.js";
 import { servicesPage } from "./servicesPage.js";
 
 file("services/presentation/components/servicesPage");
@@ -10,10 +10,10 @@ file("services/presentation/components/servicesPage");
 const NOW = "2026-11-07T16:00:00Z";
 const running = (o = {}) => serviceDTO({ status: "running", run: runDTO({ started_at: "2026-11-07T14:00:00Z" }), ...o });
 
-function open({ seed, gateway = fakeServices() } = {}) {
+function open({ seed, gateway = fakeServices(), prefs } = {}) {
   const timers = { intervals: [], setInterval: (fn) => (timers.intervals.push(fn), timers.intervals.length), clearInterval() {} };
   const el = pageEl(seed ?? { project_id: "p1", list: listDTO([running({ id: "1", name: "web" }), serviceDTO({ id: "2", name: "db" })], { seq: 4 }) });
-  const { instance } = mount(servicesPage({ gateway, clock: fixedClock(NOW), timers }), { el });
+  const { instance } = mount(servicesPage({ gateway, clock: fixedClock(NOW), timers, prefs }), { el });
   return { page: instance, gateway, timers };
 }
 const rowNames = (page) => page.groups.flatMap((g) => g.rows.map((r) => r.name));
@@ -156,9 +156,9 @@ const deferred = () => {
   return d;
 };
 const tick = async () => { for (let i = 0; i < 5; i++) await Promise.resolve(); };
-const openWith = (services, { runtime, sandbox, gateway } = {}) => {
+const openWith = (services, { runtime, sandbox, gateway, prefs } = {}) => {
   const gw = gateway ?? fakeServices({ list: listDTO(services, { seq: 1, ...(runtime ? { runtime } : {}), ...(sandbox ? { sandbox } : {}) }) });
-  const { page } = open({ seed: { project_id: "p1", list: gw.list }, gateway: gw });
+  const { page } = open({ seed: { project_id: "p1", list: gw.list }, gateway: gw, prefs });
   page.init();
   return { page, gateway: gw };
 };
@@ -445,4 +445,161 @@ test("deleting the service whose log is open closes the log", async () => {
   page.askDelete("1");
   await page.confirmDelete();
   assert.equal(page.logId, "");
+});
+
+// ── "Run in" ─────────────────────────────────────────────────────────────
+const memoryPrefs = (initial = {}) => {
+  const map = new Map(Object.entries(initial));
+  return { map, get: (k) => map.get(k) ?? null, set: (k, v) => (v === null ? map.delete(k) : map.set(k, v)) };
+};
+const mainWt = worktreeDTO({ key: "main", kind: "main", branch: "main", dir: "/repo" });
+const otherWt = worktreeDTO({ key: "session:s2", kind: "session", branch: "agent/other", dir: "/w", session_id: "s2", agent: "go-developer", session_status: "running" });
+const withRepo = (o = {}) => serviceDTO({ id: "1", name: "api", repository_id: "r1", ...o });
+const openRunIn = async ({ services = [withRepo()], worktrees = [mainWt, otherWt], prefs = memoryPrefs() } = {}) => {
+  const gateway = fakeServices({ list: listDTO(services, { seq: 1 }) });
+  gateway.worktrees = worktrees;
+  const { page } = open({ seed: { project_id: "p1", list: gateway.list }, gateway, prefs });
+  page.init();
+  await tick();
+  return { page, gateway, prefs };
+};
+const pickRunIn = (page, id, key) => page.runInPicked({ currentTarget: { dataset: { serviceId: id } }, detail: { value: key } });
+const reopenRunIn = (page, id) => page.runInOpened({ currentTarget: { dataset: { serviceId: id } } });
+
+test("a command service with a repository offers Run in: the main checkout, then the sessions' worktrees in the server's order", async () => {
+  const { page, gateway } = await openRunIn();
+  assert.deepEqual(gateway.worktreeReads, ["1"]);
+  const runIn = rowOf(page, "api").runIn;
+  assert.equal(runIn.show, true);
+  assert.deepEqual(runIn.main.map((o) => [o.key, o.label]), [["main", "main"]]);
+  assert.deepEqual(runIn.sessions.map((o) => [o.key, o.label, o.description]), [["session:s2", "agent/other", "go-developer · running"]]);
+  assert.equal(runIn.pickedKey, "main");
+});
+
+test("an image service, or one with no repository, has no picker and reads no worktrees", async () => {
+  const image = serviceDTO({ id: "2", name: "db", kind: "image", command: null, image: { ref: "postgres:16", args: [], ports: [] }, repository_id: "r1" });
+  const { page, gateway } = await openRunIn({ services: [image, serviceDTO({ id: "3", name: "bare" })] });
+  assert.equal(rowOf(page, "db").runIn.show, false);
+  assert.equal(rowOf(page, "bare").runIn.show, false);
+  assert.deepEqual(gateway.worktreeReads, []);
+});
+
+test("the picker is not offered while the service runs: Start is not there either", async () => {
+  const { page } = await openRunIn({ services: [running({ id: "1", name: "api", repository_id: "r1" })] });
+  assert.equal(rowOf(page, "api").runIn.show, false);
+});
+
+test("picking a worktree starts nothing, is remembered under the service's own key, and is announced", async () => {
+  const { page, gateway, prefs } = await openRunIn();
+  pickRunIn(page, "1", "session:s2");
+  assert.deepEqual(gateway.starts, []);
+  assert.equal(prefs.get("service-run-worktree:1"), "session:s2");
+  assert.equal(prefs.get("app-run-worktree:1"), null);
+  assert.equal(rowOf(page, "api").runIn.pickedKey, "session:s2");
+  assert.equal(page.notice, "api runs in go-developer, branch agent/other.");
+  pickRunIn(page, "1", "main");
+  assert.equal(prefs.get("service-run-worktree:1"), null, "the main checkout is the default, so it is forgotten");
+});
+
+test("Start sends the pick; Restart sends none", async () => {
+  const { page, gateway } = await openRunIn();
+  pickRunIn(page, "1", "session:s2");
+  await page.start("1");
+  assert.deepEqual(gateway.starts, [["1", "session:s2"]]);
+  await page.restart("1");
+  assert.deepEqual(gateway.actions, ["start:1", "restart:1"]);
+  assert.equal(rowOf(page, "api").restart.title, "Repeats the run: the same worktree and the same overrides");
+});
+
+test("Start sends nothing while the list loads or when it failed", async () => {
+  const gateway = fakeServices({ list: listDTO([withRepo()], { seq: 1 }) });
+  gateway.worktreesError = new StructuredError("NETWORK", "down");
+  const { page } = open({ seed: { project_id: "p1", list: gateway.list }, gateway, prefs: memoryPrefs() });
+  page.init();
+  assert.equal(rowOf(page, "api").runIn.loading, "true");
+  await page.start("1");
+  await tick();
+  assert.deepEqual(gateway.starts, [["1", ""]]);
+  assert.equal(rowOf(page, "api").runIn.error, "Could not load worktrees.");
+  assert.equal(rowOf(page, "api").runIn.loading, null);
+});
+
+test("opening the picker reads the list again", async () => {
+  const { page, gateway } = await openRunIn();
+  await reopenRunIn(page, "1");
+  assert.deepEqual(gateway.worktreeReads, ["1", "1"]);
+});
+
+test("a remembered pick is restored silently once the list is in", async () => {
+  const { page } = await openRunIn({ prefs: memoryPrefs({ "service-run-worktree:1": "session:s2" }) });
+  assert.equal(rowOf(page, "api").runIn.pickedKey, "session:s2");
+  assert.equal(rowOf(page, "api").runIn.fallback, "");
+});
+
+test("a remembered worktree that is gone falls back to the main checkout with a notice, once, and forgets it", async () => {
+  const prefs = memoryPrefs({ "service-run-worktree:1": "session:gone" });
+  const { page } = await openRunIn({ prefs });
+  const runIn = rowOf(page, "api").runIn;
+  assert.equal(runIn.pickedKey, "main");
+  assert.equal(runIn.fallback, "That worktree no longer exists. Running in the main checkout.");
+  assert.equal(prefs.get("service-run-worktree:1"), null);
+  page.dismissRunInFallback({ currentTarget: { dataset: { serviceId: "1" } } });
+  assert.equal(rowOf(page, "api").runIn.fallback, "");
+});
+
+test("a worktree that vanished before Start is refused: the server's message shows, the list is read again, the pick moves", async () => {
+  const { page, gateway } = await openRunIn();
+  pickRunIn(page, "1", "session:s2");
+  gateway.worktrees = [mainWt];
+  gateway.answer.start = async () => { throw new StructuredError("WORKTREE_NOT_AVAILABLE", "that worktree is no longer available"); };
+  await page.start("1");
+  await tick();
+  assert.equal(page.refusal.message, "that worktree is no longer available");
+  assert.equal(page.refusal.code, "WORKTREE_NOT_AVAILABLE");
+  assert.deepEqual(gateway.worktreeReads, ["1", "1"]);
+  const runIn = rowOf(page, "api").runIn;
+  assert.equal(runIn.pickedKey, "main");
+  assert.equal(runIn.fallback, "", "the refusal already says it");
+});
+
+test("a service that joins the list later gets its worktrees read", async () => {
+  const { page, gateway } = await openRunIn({ services: [] });
+  gateway.emit({ seq: 2, kind: "service_changed", service: withRepo({ id: "9", name: "new" }), running_count: 0 });
+  await tick();
+  assert.deepEqual(gateway.worktreeReads, ["9"]);
+  assert.equal(rowOf(page, "new").runIn.show, true);
+});
+
+test("the row names where the run runs: the branch and whether it is the main checkout or a session's worktree", () => {
+  const main = running({ id: "1", name: "a", repository_id: "r1", run: runDTO({ where: { kind: "main", dir: "/r", branch: "main", session_id: "" } }) });
+  const wt = running({ id: "2", name: "b", repository_id: "r1", run: runDTO({ worktree_key: "session:s2", where: { kind: "session", dir: "/w", branch: "agent/other", session_id: "s2" } }) });
+  const { page } = openWith([main, wt]);
+  assert.equal(rowOf(page, "a").where, "main checkout @ main");
+  assert.equal(rowOf(page, "b").where, "session worktree @ agent/other");
+});
+
+test("a picker's select follows the pick once its options exist", async () => {
+  const { page } = await openRunIn({ prefs: memoryPrefs({ "service-run-worktree:1": "session:s2" }) });
+  const select = { value: "main", isConnected: true, dataset: { serviceId: "1" }, options: [{ value: "main" }, { value: "session:s2" }] };
+  let after = null;
+  const scope = Object.create(page, { $el: { value: select }, $nextTick: { value: (fn) => { after = fn; } } });
+  page.syncRunIn.call(scope);
+  after();
+  assert.equal(select.value, "session:s2");
+});
+
+test("the open log's panel knows the run on screen, so its variables follow a new run", () => {
+  const { page, gateway } = openWith([running({ id: "1", name: "api" })]);
+  page.openLog("1");
+  assert.equal(page.logView.runId, "r1");
+  gateway.emit({ seq: 2, kind: "service_changed", service: running({ id: "1", name: "api", run: runDTO({ id: "r2" }) }), running_count: 1 });
+  assert.equal(page.logView.runId, "r2");
+  assert.equal(openWith([serviceDTO({ id: "1", name: "idle" })]).page.groups[0].rows.length, 1);
+});
+
+test("a row whose run has agent overrides says so; a run without them has no mark", () => {
+  const withOverrides = running({ id: "1", name: "api", run: runDTO({ overrides: [{ name: "A", by: "go-developer · session abcdef12" }, { name: "B", by: "go-developer · session abcdef12" }] }) });
+  const { page } = openWith([withOverrides, running({ id: "2", name: "web" })]);
+  assert.equal(rowOf(page, "api").overrides, "2 overrides by go-developer");
+  assert.equal(rowOf(page, "web").overrides, "");
 });

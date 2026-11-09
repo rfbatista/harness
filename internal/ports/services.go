@@ -23,6 +23,12 @@ type ServiceStore interface {
 	SaveService(s *domain.Service) error
 	// DeleteService removes the service, or SERVICE_NOT_FOUND.
 	DeleteService(id string) error
+	// SaveRunRecord replaces the run record of rec.ServiceID: one per service,
+	// the current or last run's. It holds values, so it is kept apart from
+	// the service and never reaches a feed.
+	SaveRunRecord(rec *ServiceRunRecord) error
+	// GetRunRecord is the service's run record; nil, nil for none.
+	GetRunRecord(serviceID string) (*ServiceRunRecord, error)
 	// RunningServices counts the project's services that are starting or
 	// running: a single indexed read.
 	RunningServices(projectID string) (int, error)
@@ -117,12 +123,75 @@ type ServiceWorktree struct {
 	SessionID string
 }
 
+// ServiceRunWorktrees lists the run worktrees of a repository, for the
+// services that run in one: its main checkout first, then each session's
+// worktree that exists on disk, newest first. It is the lookup the App tab
+// uses (ADR 0039).
+type ServiceRunWorktrees interface {
+	ListRepositoryRunWorktrees(ctx context.Context, projectID, repositoryID string) ([]*domain.RunWorktree, error)
+}
+
 // ServiceStartOptions say who starts a run and where.
 type ServiceStartOptions struct {
 	StartedBy domain.ServiceStartedBy
+	// WorktreeKey is the run worktree the person picked: main or session:<id>,
+	// one ListServiceRunWorktrees offers now. Empty is the main checkout. Any
+	// other key is WORKTREE_NOT_AVAILABLE, and a key on a service with no
+	// repository, or an image service, is INVALID_INPUT. It is ignored when
+	// Worktree is set.
+	WorktreeKey string
+	// Repeat makes a restart run where the last run did, ignoring WorktreeKey
+	// and Worktree. It has no effect on a start.
+	Repeat bool
+	// Env are the run overrides (ADR 0077): variables for this run only, on
+	// top of the repository .env and the service's own. Nil is none given;
+	// on a restart that means "repeat the last run's", and an empty map clears
+	// them. A bad entry is INVALID_INPUT naming the key.
+	Env map[string]string
 	// Worktree, when set, is where a command service of a repository runs
 	// (its subdir applies inside it); nil is the main checkout.
 	Worktree *ServiceWorktree
+}
+
+// Where a run variable comes from, the one that won.
+const (
+	VariableFromRepositoryEnv = "repository_env"
+	VariableFromService       = "service"
+	VariableFromOverride      = "override"
+)
+
+// ServiceRunVariable is one variable a run was given, with its value, the
+// source that won and, for an override, who set it as the person reads it.
+// The base system environment is never one.
+type ServiceRunVariable struct {
+	Name   string `json:"name"`
+	Value  string `json:"value"`
+	Source string `json:"source"`
+	By     string `json:"by"`
+}
+
+// ServiceRunRecord is what a run was given, stored beside the service so a
+// restart of the harness still repeats its overrides: every variable with its
+// source, and the override values with who set them.
+type ServiceRunRecord struct {
+	ServiceID  string                   `json:"service_id"`
+	RunID      string                   `json:"run_id"`
+	Variables  []ServiceRunVariable     `json:"variables"`
+	Overrides  map[string]string        `json:"overrides"`
+	OverrideBy *domain.ServiceStartedBy `json:"override_by"`
+}
+
+// ServiceRunVariables are the variables of a service's current or last run,
+// sorted by name; RunID is empty for a service that never ran. Values travel
+// only in this answer, never on a feed.
+type ServiceRunVariables struct {
+	RunID     string               `json:"run_id"`
+	Variables []ServiceRunVariable `json:"variables"`
+	// Overrides are the override values by name, for the agent that set them.
+	// It is not part of the person's answer.
+	Overrides map[string]string `json:"-"`
+	// OverrideBy is who set them; nil for none.
+	OverrideBy *domain.ServiceStartedBy `json:"-"`
 }
 
 // ServiceLogRead is one read of a service's log.
@@ -173,6 +242,9 @@ type ServiceManager interface {
 	ServiceRunningCounter
 	ListServices(ctx context.Context, projectID string) (*ServiceList, error)
 	GetService(ctx context.Context, serviceID string) (*domain.Service, error)
+	// ListServiceRunWorktrees is the run worktrees a start can pick for the
+	// service now: empty for an image service or a service with no repository.
+	ListServiceRunWorktrees(ctx context.Context, serviceID string) ([]*domain.RunWorktree, error)
 	// ContainerRuntime is the runtime image services start with, and whether
 	// its command is on the server's PATH. SetContainerRuntime changes it for
 	// the next start (INVALID_INPUT for a runtime other than docker or podman).
@@ -199,6 +271,10 @@ type ServiceManager interface {
 	// WaitServiceSettled blocks until the service is no longer starting (or
 	// ctx ends) and returns it.
 	WaitServiceSettled(ctx context.Context, serviceID string) (*domain.Service, error)
+	// GetRunVariables is the variables the service's current or last run was
+	// given. Values held in memory only: after a restart of the harness the
+	// run is known but its variables are not.
+	GetRunVariables(ctx context.Context, serviceID string) (*ServiceRunVariables, error)
 	// ReadServiceLog reads the current or last run's log from offset; nil
 	// reads the last ServiceLogTailBytes.
 	ReadServiceLog(ctx context.Context, serviceID string, offset *int64) (*ServiceLogRead, error)

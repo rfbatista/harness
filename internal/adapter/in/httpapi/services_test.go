@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 	"time"
@@ -118,6 +119,9 @@ func errorOf(out map[string]any) (code, message string) {
 
 func TestServices_DefineReadEditAndDelete(t *testing.T) {
 	f := newServicesFixture(t, services.Options{})
+	if err := os.MkdirAll(filepath.Join(f.repoDir(), "cmd/web"), 0o755); err != nil {
+		t.Fatal(err)
+	}
 
 	code, out := f.create(map[string]any{
 		"name": "web", "kind": "command", "repository_id": f.repoID, "export_repository_env": true,

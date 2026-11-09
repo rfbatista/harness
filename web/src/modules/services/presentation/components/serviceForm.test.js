@@ -214,3 +214,21 @@ test("the Image card names the configured runtime", () => {
   form.setup(null, "p1", { name: "podman", available: true });
   assert.equal(form.imageCardText, "Runs a container image with podman. The container sees none of your files. For databases and tools.");
 });
+
+test("the server's refusal of a subfolder that is not a folder lands under the Subfolder field, not in the banner", async () => {
+  const gateway = fakeServices({ list: listDTO([serviceDTO({ id: "s1" })]) });
+  gateway.save.update = async () => { throw new StructuredError("INVALID_INPUT", "command.subdir: \"npm run dev\" is not a folder in harness's main checkout"); };
+  const { form } = open(editing(), gateway);
+  form.draft.subdir = "npm run dev";
+  await form.save();
+  assert.equal(form.fieldMessage("subdir"), "command.subdir: \"npm run dev\" is not a folder in harness's main checkout");
+  assert.equal(form.invalid("subdir"), true);
+  assert.equal(form.hasBanner, false);
+  form.touch("subdir");
+  assert.equal(form.hasMessage("subdir"), false, "typing takes the refusal away");
+});
+
+test("the Subfolder hint says it is a folder relative to the repository, not a command", () => {
+  const { form } = open();
+  assert.equal(form.subdirHint, "A folder in the repository's main checkout, relative to its root, such as cmd/api. It is not a command: the command line is above. Empty is the root.");
+});

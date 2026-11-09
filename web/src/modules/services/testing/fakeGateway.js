@@ -2,7 +2,7 @@
 // list the test sets, the feed it drives with `emit` and `status`, and a
 // record of what was read.
 
-import { toEvent, toLogEvent, toService, toServiceList } from "../infrastructure/dto.js";
+import { toEvent, toLogEvent, toRunVariables, toRunWorktrees, toService, toServiceList } from "../infrastructure/dto.js";
 
 /** The API's JSON for a service; override fields with `o`. */
 export function serviceDTO(o = {}) {
@@ -18,8 +18,13 @@ export function runDTO(o = {}) {
   return {
     id: "r1", started_at: "2026-11-07T15:00:00Z", ended_at: "", exit_code: null, error: "",
     started_by: { kind: "person", session_id: "", agent: "" },
-    where: { kind: "main", dir: "/repo", branch: "main", session_id: "" }, sandboxed: true, ...o,
+    where: { kind: "main", dir: "/repo", branch: "main", session_id: "" }, worktree_key: "", overrides: [], sandboxed: true, ...o,
   };
+}
+
+/** The API's JSON for a run worktree; override fields with `o`. */
+export function worktreeDTO(o = {}) {
+  return { key: "main", kind: "main", branch: "main", dir: "/repo", session_id: "", agent: "", session_status: "", ...o };
 }
 
 /** A list_services answer. */
@@ -79,9 +84,30 @@ export function fakeServices({ list = listDTO() } = {}) {
       fake.saves.push(["delete", id]);
       return fake.save.remove(id);
     },
-    async startService(id) {
+    /** What each start was sent: [service id, run worktree key ("" when none was sent)]. */
+    starts: [],
+    async startService(id, worktree = "") {
       fake.actions.push(`start:${id}`);
-      return fake.answer.start(id);
+      fake.starts.push([id, worktree]);
+      return fake.answer.start(id, worktree);
+    },
+    /** The run worktrees on offer (the API's JSON); a test sets its own. A listError makes the read fail. */
+    worktrees: [worktreeDTO({ key: "main", kind: "main", branch: "main", dir: "/repo" })],
+    worktreesError: null,
+    worktreeReads: [],
+    async listRunWorktrees(id) {
+      fake.worktreeReads.push(id);
+      if (fake.worktreesError) throw fake.worktreesError;
+      return toRunWorktrees({ worktrees: fake.worktrees });
+    },
+    /** The variables read answers (the API's JSON); a test sets its own. */
+    variables: { run_id: "", variables: [] },
+    variablesError: null,
+    variableReads: [],
+    async getRunVariables(id) {
+      fake.variableReads.push(id);
+      if (fake.variablesError) throw fake.variablesError;
+      return toRunVariables(fake.variables);
     },
     async stopService(id) {
       fake.actions.push(`stop:${id}`);

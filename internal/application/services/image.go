@@ -29,7 +29,7 @@ type imagePlan struct {
 // goes into the container's env as for a command service, but the server's
 // own environment does not: the runtime command gets only the base, and the
 // container's env goes in a file in the service's folder.
-func (s *Service) prepareImage(ctx context.Context, svc *domain.Service) (*prepared, error) {
+func (s *Service) prepareImage(ctx context.Context, svc *domain.Service, overrides map[string]string) (*prepared, error) {
 	if svc.Image == nil {
 		return nil, &domain.StructuredError{Code: "INVALID_INPUT", Message: "image.ref is required for an image service"}
 	}
@@ -40,7 +40,7 @@ func (s *Service) prepareImage(ctx context.Context, svc *domain.Service) (*prepa
 	if _, err := s.repository(ctx, svc); err != nil {
 		return nil, err
 	}
-	env, notes, err := s.layeredEnv(ctx, svc, nil)
+	env, notes, vars, err := s.layeredEnv(ctx, svc, nil, overrides)
 	if err != nil {
 		return nil, err
 	}
@@ -48,6 +48,7 @@ func (s *Service) prepareImage(ctx context.Context, svc *domain.Service) (*prepa
 		where: domain.ServiceWhere{Kind: "container"},
 		env:   s.opts.BaseEnv(),
 		notes: notes,
+		vars:  vars,
 		image: &imagePlan{container: ports.ServiceContainer{
 			Runtime: runtime, ServiceID: svc.ID, Instance: s.opts.Instance,
 			Image: svc.Image.Ref, Args: svc.Image.Args, Ports: svc.Image.Ports, Env: env,
