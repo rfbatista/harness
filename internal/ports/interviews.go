@@ -59,8 +59,8 @@ type InterviewTurns interface {
 	RenderDismissed(iv domain.Interview, note string) string
 }
 
-// InterviewAsker records an interview an agent asked. It is what llmkit's
-// Sink calls.
+// InterviewAsker records an interview an agent asked. It is what the agent-facing
+// adapter calls when an agent asks.
 type InterviewAsker interface {
 	// Ask stores i, an interview with no state, time or agent name
 	// yet, as open on its session and publishes it. A session that is not

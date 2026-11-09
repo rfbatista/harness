@@ -18,6 +18,7 @@ import (
 	"encoding/base64"
 	"fmt"
 	"log/slog"
+	"net/url"
 	"strconv"
 	"strings"
 	"sync"
@@ -271,7 +272,7 @@ func (s *Service) onInterviewOpened(ev domain.InterviewOpened) {
 		Kind: domain.NotificationSessionWaiting, Level: domain.NotificationAction,
 		Title: clip("A session has questions for you: "+strings.TrimSpace(ev.Title), domain.MaxNotificationTitleLen),
 		Body:  body,
-		Link:  domain.TaskLink(sess.ProjectID, sess.TicketID), CauseKey: interviewKey(ev.InterviewID),
+		Link:  domain.TaskLink(sess.ProjectID, sess.TicketID) + "?session=" + url.QueryEscape(sess.ID), CauseKey: interviewKey(ev.InterviewID),
 	}, true)
 }
 

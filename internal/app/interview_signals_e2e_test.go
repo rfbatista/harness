@@ -347,7 +347,7 @@ func TestAnInterviewAndAnApprovalOrIdleBothNeedThePerson(t *testing.T) {
 }
 
 // One inbox notification per interview: level action, linking to the
-// session's task page, and not again however the interview changes.
+// session (the task page with ?session=<id>), and not again however the interview changes.
 func TestEachInterviewPostsOneActionNotification(t *testing.T) {
 	e := newSignalsE2E(t)
 	id := e.start(domain.SessionRunning)
@@ -359,7 +359,7 @@ func TestEachInterviewPostsOneActionNotification(t *testing.T) {
 		t.Fatalf("notifications: %d, want 2: %+v", len(ns), ns)
 	}
 	for _, n := range ns {
-		if n.Level != domain.NotificationAction || n.Link != domain.TaskLink(e.project, e.task) || n.TaskID != e.task || n.Title == "" {
+		if n.Level != domain.NotificationAction || n.Link != domain.TaskLink(e.project, e.task)+"?session="+id || n.TaskID != e.task || n.Title == "" {
 			t.Errorf("notification: %+v", n)
 		}
 	}
