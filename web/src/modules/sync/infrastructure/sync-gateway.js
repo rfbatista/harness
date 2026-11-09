@@ -1,7 +1,7 @@
 // SyncGateway over the harness HTTP API (Contract: worktree git state, fetch
 // and push) and the project feed's `git_state` key.
 
-import { toFetched, toGitStateEvent, toPushError, toSeed, toStateAnswer, toStates } from "./dto.js";
+import { toBranchesEvent, toFetched, toGitStateEvent, toPushError, toSeed, toSessionBranchesAnswer, toStateAnswer, toStates, toTaskBranches } from "./dto.js";
 
 /**
  * @param {import("../../../shared/infrastructure/api.js").ApiClient} api
@@ -18,6 +18,14 @@ export function syncGateway(api, feed) {
       return toStates(await api.get("/list_worktree_git_states", { task_id: taskId }, signal));
     },
 
+    async branchesOf(sessionId, signal) {
+      return toSessionBranchesAnswer(sessionId, await api.get("/session_branches", { session_id: sessionId }, signal));
+    },
+
+    async branchesForTask(taskId, signal) {
+      return toTaskBranches(await api.get("/list_session_branches", { task_id: taskId }, signal));
+    },
+
     async fetchRemote(repositoryId) {
       return toFetched(await api.post("/fetch_remote", { repository_id: repositoryId }));
     },
@@ -30,16 +38,17 @@ export function syncGateway(api, feed) {
       }
     },
 
-    follow(projectId, onState, onStatus) {
+    follow(projectId, onState, onStatus, onBranches = () => {}) {
       return feed.follow(`/events?project_id=${encodeURIComponent(projectId)}`, {
         onMessage: (dto) => {
-          let state;
           try {
-            state = toGitStateEvent(dto);
+            const state = toGitStateEvent(dto);
+            if (state) onState(state);
+            const branches = toBranchesEvent(dto);
+            if (branches) onBranches(branches);
           } catch {
-            return; // a message we cannot read is dropped; the next resync corrects it
+            // a message we cannot read is dropped; the next resync corrects it
           }
-          if (state) onState(state);
         },
         onStatus,
       });

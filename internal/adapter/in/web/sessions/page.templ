@@ -302,6 +302,29 @@ templ syncChip() {
 	</span>
 }
 
+// branchLink is a session row's "N branches" link, after the sync chip: it
+// opens the Git popover at that session's Branches section, and carries a flag
+// when one of the session's branches is unapproved (contract "Harness server ↔
+// Web UI — branch requests and the Branches list" §6). It reads the sync
+// store's Branches lists, seeded by the page and kept live by the feed, and is
+// hidden until the session's list is held.
+templ branchLink() {
+	<button
+		type="button"
+		class="[ branch-link ]"
+		x-data="syncBranchLink(row.id)"
+		x-show="shown"
+		style="display: none"
+		x-bind:data-flagged="flagAttr"
+		x-bind:aria-label="describe"
+		aria-haspopup="dialog"
+		x-on:click.stop="open"
+	>
+		<span class="[ label ]" x-text="label"></span>
+		<span class="[ flag ]" x-show="flagged"><span aria-hidden="true">⚑</span> unapproved</span>
+	</button>
+}
+
 // gitButton is the task's worktrees and where each stands against its base and
 // its remote (ADR 0043's surface, ADR 0042: nothing joins the vertical stack):
 // a ghost button in the title row, after Feature and Reviews, and the Git
@@ -315,7 +338,7 @@ templ syncChip() {
 // The open state is never stored.
 templ gitButton(v PageView) {
 	if v.GitSync {
-		<span style="display: contents" x-data="syncPopover" x-on:dialog-close.window="popoverClosed($event)">
+		<span style="display: contents" x-data="syncPopover" x-on:dialog-close.window="popoverClosed($event)" x-on:branches-show.window="showBranches($event)">
 			<button
 				type="button"
 				class="[ button ]"
@@ -382,6 +405,7 @@ templ gitButton(v PageView) {
 								</template>
 								<a x-bind:href="row.codeHref">Code</a>
 							</div>
+							@code.BranchesSection("row.branches.rows", "row.branches.shown", "row.branches.label", "row.sessionId")
 							<template x-if="row.confirming">
 								<div class="[ confirm-strip ]" data-confirm="push" role="group" x-bind:aria-label="row.question">
 									<h3 x-text="row.question"></h3>
@@ -694,6 +718,7 @@ templ liveRows() {
 						</template>
 						@pullrequests.Badge("row.workspaceId")
 						@syncChip()
+						@branchLink()
 					</span>
 					<time class="[ when ]" x-text="row.when"></time>
 					<template x-if="row.detail">

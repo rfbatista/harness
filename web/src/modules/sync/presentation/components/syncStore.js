@@ -21,12 +21,13 @@ import { refusalOf } from "../view.js";
  * @property {Record<string, true>} pushing      by workspace id
  * @property {Record<string, ReturnType<typeof refusalOf>>} fetchFailure  by repository id
  * @property {Record<string, ReturnType<typeof refusalOf>>} pushFailure   by workspace id
+ * @property {Record<string, import("../../domain/branches.js").SessionBranch[]>} branches  each session's Branches list, by session id
  * @property {boolean} statesLoading  the task page's lazy git section is loading and its skeleton chips show
  * @property {string} statesIn        "skeleton-in" once the chips arrived after a skeleton
  */
 
 /** @returns {SyncStore} */
-export const emptyStore = () => ({ byWorkspace: {}, fetching: {}, pushing: {}, fetchFailure: {}, pushFailure: {}, statesLoading: false, statesIn: "" });
+export const emptyStore = () => ({ byWorkspace: {}, fetching: {}, pushing: {}, fetchFailure: {}, pushFailure: {}, branches: {}, statesLoading: false, statesIn: "" });
 
 const without = (record, key) => {
   const { [key]: _, ...rest } = record;
@@ -58,6 +59,14 @@ export function syncActions({ gateway, store }) {
     if (state) apply(state);
   }
 
+  /** A session's Branches list from the feed, a seed or a read. */
+  function keepBranches(list) {
+    store.branches = { ...store.branches, [list.sessionId]: list.branches };
+  }
+
+  /** Sessions whose list was asked for already, so a panel reads each once. */
+  const askedBranches = new Set();
+
   const workspacesOf = (repositoryId) => Object.values(store.byWorkspace).filter((s) => s.repositoryId === repositoryId);
 
   /** Reads a workspace again, after changes may have been missed. Gone (WORKSPACE_NOT_FOUND) or unreachable keeps what is shown. */
@@ -77,6 +86,31 @@ export function syncActions({ gateway, store }) {
 
   const api = {
     keep,
+    keepBranches,
+
+    /** Reads the session's Branches list when the page holds none for it (a panel the page's seed did not cover). */
+    async ensureBranches(sessionId) {
+      if (!sessionId || store.branches[sessionId] || askedBranches.has(sessionId) || !gateway.branchesOf) return;
+      askedBranches.add(sessionId);
+      try {
+        keepBranches(await gateway.branchesOf(sessionId));
+      } catch {
+        // the panel shows no list; the feed fills it when one changes
+      }
+    },
+
+    /** Reads every list the page holds again, after the feed dropped. */
+    async rereadBranches() {
+      if (!gateway.branchesOf) return;
+      await Promise.all(Object.keys(store.branches).map(async (id) => {
+        try {
+          keepBranches(await gateway.branchesOf(id));
+        } catch {
+          // keeps what is shown
+        }
+      }));
+    },
+
 
     /**
      * Follows the project feed's git_state into the store, once per project
@@ -91,7 +125,12 @@ export function syncActions({ gateway, store }) {
         const stop = gateway.follow(
           projectId,
           (state) => keep(state),
-          (status) => status === FeedStatus.RESYNCED && api.rereadAll(),
+          (status) => {
+            if (status !== FeedStatus.RESYNCED) return;
+            api.rereadAll();
+            api.rereadBranches();
+          },
+          (list) => keepBranches(list),
         );
         feed = { holders: 0, stop };
         feeds.set(projectId, feed);

@@ -53,9 +53,11 @@ type Handler struct {
 	// BranchRequests seeds the Branch requests button and its popover with
 	// the task's pending requests; nil leaves them out.
 	BranchRequests ports.BranchRequestReader
-	Layout         shell.Layout
-	Render         shell.Renderer
-	Now            func() time.Time
+	// SessionBranches seeds the sessions' Branches lists; nil seeds none.
+	SessionBranches ports.SessionBranchLists
+	Layout          shell.Layout
+	Render          shell.Renderer
+	Now             func() time.Time
 }
 
 // workspaceIDs are the sessions' worktrees, each once.
@@ -304,6 +306,12 @@ func (h Handler) task(w http.ResponseWriter, r *http.Request, codeRoute *code.Ro
 		if pending, err := h.BranchRequests.ListBranchRequests(ctx, domain.BranchRequestFilter{TaskID: task.ID, State: domain.BranchRequestPending}); err == nil {
 			view.BranchRequests = view.Reviews
 			view.PendingBranchRequests = len(pending)
+		}
+	}
+	if h.SessionBranches != nil {
+		// Stored state only: no git runs for the first paint.
+		if lists, err := h.SessionBranches.TaskSessionBranches(ctx, task.ID); err == nil && lists != nil {
+			view.Seed.SessionBranches = lists
 		}
 	}
 	if h.PullRequests != nil {

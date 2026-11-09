@@ -39,6 +39,7 @@ templ SyncPopup() {
 			</span>
 			<span class="hint" x-text="upstreamHint"></span>
 		</div>
+		@BranchesSection("branchRows", "branchesShown", "branchesTitle", "branchesSessionId")
 		<template x-if="refusalIsBanner">
 			<div class="banner" data-tone="attention" role="status">
 				<div class="[ flow ]"><span x-text="refusalLead"></span> <a x-bind:href="refusalHref" x-text="refusalLinkText"></a></div>
@@ -118,4 +119,33 @@ templ syncStateBody(named bool) {
 	<template x-if="hasWord">
 		<span class="word" x-text="word"></span>
 	</template>
+}
+
+// BranchesSection is a session's Branches list (contract "Harness server ↔ Web
+// UI — branch requests and the Branches list" §6): the session branch and every
+// branch it made or touched, each with its state, its commits against the
+// branch it started from, where it was pushed and who pushed it. The four
+// arguments are Alpine expressions over the host component: the rows
+// (branchesOf's), whether any shows, the heading and the session's id. A branch
+// that is unapproved carries data-flagged.
+templ BranchesSection(rows string, shown string, title string, sessionID string) {
+	<section class="[ branches ]" aria-label="Branches" tabindex="-1" x-show={ shown } x-bind:data-branches-for={ sessionID }>
+		<h4 class="[ title ]" x-text={ title }></h4>
+		<ul class="[ list ]">
+			<template x-for={ "b in " + rows } x-bind:key="b.name">
+				<li class="[ item ]" x-bind:data-state="b.state" x-bind:data-flagged="b.flagAttr">
+					<code class="[ name ]" x-text="b.name" x-bind:title="b.name"></code>
+					<span class="[ badge ]" x-bind:data-tone="b.tone" x-text="b.stateLabel"></span>
+					<span class="[ counts ]" x-show="b.hasBase" x-bind:title="b.countsLabel">
+						<span class="[ ahead ]"><span aria-hidden="true">↑</span><span x-text="b.ahead"></span><span class="[ visually-hidden ]"> ahead of</span></span>
+						<span class="[ behind ]"><span aria-hidden="true">↓</span><span x-text="b.behind"></span><span class="[ visually-hidden ]"> behind</span></span>
+						<span class="[ vs ]" x-text="b.baseRef"></span>
+					</span>
+					<template x-for="p in b.pushed" x-bind:key="p.key">
+						<span class="[ pushed ]" x-bind:data-by="p.by" x-text="p.line"></span>
+					</template>
+				</li>
+			</template>
+		</ul>
+	</section>
 }

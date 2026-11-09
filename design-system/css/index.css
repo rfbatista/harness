@@ -98,6 +98,7 @@
 @import url("./blocks/sync-state.css");
 @import url("./blocks/sync-panel.css");
 @import url("./blocks/git-popover.css");
+@import url("./blocks/branches-list.css");
 @import url("./blocks/file-tree.css");
 @import url("./blocks/files-pane.css");
 @import url("./blocks/diff-summary.css");

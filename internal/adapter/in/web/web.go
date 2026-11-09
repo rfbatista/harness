@@ -208,7 +208,7 @@ func NewHandler(deps Deps, assets *Assets, fallback http.Handler) http.Handler {
 		Projects: deps.Projects, Tasks: deps.Tasks, Sessions: deps.Sessions,
 		Agents: deps.Agents, Repositories: deps.Repositories, Docs: deps.Documents, Artifacts: deps.Artifacts, PullRequests: deps.PullRequests, WorktreeGit: deps.WorktreeGit,
 		Resources: deps.Resources, Comments: deps.Comments, Code: deps.Code, Usage: deps.Usage, TokenSavers: deps.TokenSavers,
-		ArchivedTasks: deps.ArchivedList, BranchRequests: deps.BranchRequests, Layout: s.layout, Render: render, Now: deps.Now,
+		ArchivedTasks: deps.ArchivedList, BranchRequests: deps.BranchRequests, SessionBranches: deps.SessionBranches, Layout: s.layout, Render: render, Now: deps.Now,
 	}
 	if deps.Workspaces != nil {
 		taskPages.Workspaces = deps.Workspaces
