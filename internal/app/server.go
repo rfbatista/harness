@@ -46,6 +46,7 @@ import (
 	mcpserver "github.com/mark3labs/mcp-go/server"
 	"github.com/rfbatista/llmkit/approval"
 	"github.com/rfbatista/llmkit/claude/mcpapprove"
+	llminterview "github.com/rfbatista/llmkit/interview"
 )
 
 // ServerModule starts the inbound servers: the HTTP server (UI + JSON API) and
@@ -196,6 +197,9 @@ func registerHTTPServer(lc fx.Lifecycle, cfg Config, cat catalog.Catalog, appRun
 	}
 	mux.Handle("/api/", slow(apiRouter))
 	mux.Handle(mcpapprove.PathPrefix, mcpapprove.Handler(broker))
+	if asked.Service != nil {
+		mux.Handle(llminterview.PathPrefix, interviewHandler(asked.Service))
+	}
 	mux.Handle(mcpsession.PathPrefix, slow(mcpsession.TaskHandler(sessionTaskTools(cat, orch, plan, sessions, art, channel, notifier, merges, tooling.WithAgentPlacements(repoAgents)))))
 	// The web client owns / and its pages; anything else reaches the legacy
 	// designer SPA until it is retired.

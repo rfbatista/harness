@@ -677,6 +677,8 @@ func newClaudeManager(cfg Config, bin ports.ManagedClaudeBin, home claudehome.Ho
 		ApprovalURL: func(sessionID string) string {
 			return base + mcpapprove.PathPrefix + sessionID
 		},
+		// Interactive sessions ask the person through the interview panel.
+		InterviewURL:    interviewURLs(base),
 		ApprovalTimeout: cfg.ApprovalTimeout,
 		RawLog:          rawLogWriter(cfg),
 		ProxyURL:        cfg.llmProxyURL(),

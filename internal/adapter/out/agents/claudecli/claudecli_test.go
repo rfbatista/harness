@@ -174,3 +174,15 @@ func TestAnInteractiveSpecsInstructionFilesReachLlmkitAndLoadAsMemoryAndAPlugin(
 		t.Errorf("a skill folder without SKILL.md: %v", err)
 	}
 }
+
+// llmkit names the interview endpoint by the config's ID, which is the
+// harness session id, not the claude conversation.
+func TestAnInteractiveConfigIsNamedByTheHarnessSession(t *testing.T) {
+	cfg, err := Config(ports.AgentSpec{SessionID: "s1", Conversation: ports.Conversation{ID: "c1"}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if cfg.ID != "s1" {
+		t.Errorf("ID = %q, want the session id s1", cfg.ID)
+	}
+}

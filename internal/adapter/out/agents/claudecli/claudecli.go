@@ -153,6 +153,7 @@ func Config(spec ports.AgentSpec) (claude.InteractiveConfig, error) {
 	}
 	cfg := claude.InteractiveConfig{
 		Dir:          spec.Dir,
+		ID:           spec.SessionID,
 		Env:          spec.Env,
 		Conversation: spec.Conversation.ID,
 		Resume:       spec.Conversation.Resume,

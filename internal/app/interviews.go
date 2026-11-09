@@ -1,9 +1,14 @@
 package app
 
 import (
+	"net/http"
+
 	"go.uber.org/fx"
 	"gorm.io/gorm"
 
+	llminterview "github.com/rfbatista/llmkit/interview"
+
+	"operators-mcp/internal/adapter/in/mcpinterview"
 	"operators-mcp/internal/adapter/out/persistence/sqlite"
 	"operators-mcp/internal/app/catalog"
 	"operators-mcp/internal/application/interviews"
@@ -49,4 +54,17 @@ type optionalInterviews struct {
 	fx.In
 
 	Service *interviews.Service `optional:"true"`
+}
+
+// interviewHandler is llmkit's interview handler over the service: the ask
+// tool and the capture of every interactive session, mounted at
+// llminterview.PathPrefix.
+func interviewHandler(svc *interviews.Service) http.Handler {
+	return llminterview.Handler(mcpinterview.Sink{Interviews: svc})
+}
+
+// interviewURLs gives a session its interview endpoint on the loopback server
+// at base, named by the harness session id.
+func interviewURLs(base string) func(sessionID string) string {
+	return func(sessionID string) string { return base + llminterview.PathPrefix + sessionID }
 }
