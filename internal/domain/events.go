@@ -119,6 +119,16 @@ type ReviewRequestChanged struct {
 type SessionStatusChanged struct {
 	SessionID string
 	Status    SessionStatus
+	// ByBranchRequest says the status moved because a branch request is
+	// pending: the inbox has its own notification for that.
+	ByBranchRequest bool
+}
+
+// BranchRequestChanged: a branch request was filed, answered, used or expired;
+// Request is it as it is now.
+type BranchRequestChanged struct {
+	Request   BranchRequest
+	ProjectID string
 }
 
 // TicketResourceAdded: a person added a resource to a task. Edits and
@@ -193,6 +203,7 @@ func (TicketDeleted) EventName() string             { return "ticket.deleted" }
 func (TicketResourceAdded) EventName() string       { return "ticket.resource_added" }
 func (ReviewRequestChanged) EventName() string      { return "review_request.changed" }
 func (SessionStatusChanged) EventName() string      { return "session.status_changed" }
+func (BranchRequestChanged) EventName() string      { return "branch_request.changed" }
 func (TicketCommentAdded) EventName() string        { return "ticket.comment_added" }
 func (DocumentChanged) EventName() string           { return "document.changed" }
 func (ArtifactChanged) EventName() string           { return "artifact.changed" }

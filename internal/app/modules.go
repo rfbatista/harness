@@ -31,6 +31,7 @@ import (
 	"operators-mcp/internal/adapter/out/filesystem"
 	"operators-mcp/internal/adapter/out/gitcli"
 	"operators-mcp/internal/adapter/out/githubapi"
+	"operators-mcp/internal/adapter/out/gitprobe"
 	"operators-mcp/internal/adapter/out/keychainshim"
 	"operators-mcp/internal/adapter/out/persistence/sqlite"
 	"operators-mcp/internal/adapter/out/personshell"
@@ -41,6 +42,7 @@ import (
 	"operators-mcp/internal/application/apps"
 	"operators-mcp/internal/application/archrules"
 	"operators-mcp/internal/application/artifacts"
+	"operators-mcp/internal/application/branchgate"
 	"operators-mcp/internal/application/execution"
 	"operators-mcp/internal/application/gitcredentials"
 	"operators-mcp/internal/application/keychainpath"
@@ -89,6 +91,7 @@ var PersistenceModule = fx.Module("persistence",
 		asPort(sqlite.NewPullRequestRepository, new(ports.PullRequestRepository)),
 		asPort(sqlite.NewArchitectureRecordRepository, new(ports.ArchitectureRecordStore)),
 		asPort(sqlite.NewArchitectureRuleEventRepository, new(ports.ArchitectureRuleEventStore)),
+		asPort(sqlite.NewBranchRequestRepository, new(ports.BranchRequestStore)),
 		asPort(sqlite.NewDesignSystemRepository, new(ports.DesignSystemStore)),
 		asPort(sqlite.NewDesignProposalRepository, new(ports.DesignProposalStore)),
 		asPort(sqlite.NewDesignExportRepository, new(ports.DesignExportStore)),
@@ -441,6 +444,7 @@ var AgentRuntimeModule = fx.Module("agentruntime",
 		asPort(newClaudeTranscriptReader, new(ports.ClaudeTranscriptReader)),
 		newOrchestrationService,
 		newArchitectureRules,
+		newBranchGate,
 		platformSandboxDriver,
 		platformSandboxViolations,
 		newSandboxSettings,
@@ -456,7 +460,7 @@ var AgentRuntimeModule = fx.Module("agentruntime",
 		newPersonTerminals,
 	),
 	fx.Invoke(registerRuntimeShutdown, registerServerSessions, bindVirtualShells, bindWorkspaceRemovals, bindFilesRootFeed, bindSandboxSettings,
-		bindAgentReadiness, func(*archrules.Service) {}),
+		bindAgentReadiness, func(*archrules.Service) {}, restoreBranchGate),
 )
 
 // TaskChannelModule wires the architect channel: its tables, the service,
@@ -774,6 +778,19 @@ func newArchitectureRules(cat catalog.Catalog, sessions ports.SessionRepository,
 	return svc
 }
 
+// newBranchGate decides the branch grants sessions' git shims ask for.
+func newBranchGate(cfg Config, cat catalog.Catalog, sessions ports.SessionRepository, requests ports.BranchRequestStore, orch *orchestration.Service) *branchgate.Service {
+	svc := branchgate.NewService(branchgate.Deps{Sessions: sessions, Requests: requests, Probe: gitprobe.Probe{Git: cfg.GitBin}, Waiter: orch, Turns: orch, Events: cat.Bus, Feed: orch})
+	svc.Subscribe(cat.Bus)
+	return svc
+}
+
+// restoreBranchGate rebuilds, at start, what a restart leaves of the branch
+// requests that wait on the person.
+func restoreBranchGate(lc fx.Lifecycle, svc *branchgate.Service) {
+	lc.Append(fx.Hook{OnStart: svc.Restore})
+}
+
 func newOrchestrationService(
 	cfg Config,
 	commitGuard ports.CommitGuard,
@@ -847,6 +864,10 @@ func newOrchestrationService(
 	svc.SessionArchitectureURL = func(sessionID string) string {
 		return base + httpapi.SessionArchitecturePath(sessionID)
 	}
+	svc.SessionBranchGateURL = func(sessionID string) string {
+		return base + httpapi.SessionBranchGatePath(sessionID)
+	}
+	svc.BranchGateTimeout = cfg.ApprovalTimeout
 	svc.ShimBinary = cfg.ShimBinary
 	svc.DeveloperBin = developerdir.Bin
 	svc.TokenSavers = cat.Capabilities

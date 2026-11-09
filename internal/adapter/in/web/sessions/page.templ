@@ -100,6 +100,7 @@ templ Page(v PageView) {
 					<div class="[ actions ]">
 						@featureButton(v)
 						@reviewsButton(v)
+						@branchRequestsButton(v)
 						@gitButton(v)
 						<button type="button" class="[ button ]" id="task-note-button" data-variant="ghost" data-size="sm" aria-haspopup="dialog" aria-expanded="false" aria-controls="task-note" x-show="hasDescription" x-on:click="openNote" { hiddenUnless(v.TaskDescription != "")... }>Description</button>
 						if v.Documents != nil {

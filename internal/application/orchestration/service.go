@@ -131,6 +131,12 @@ type Service struct {
 	// checked (…/api/sessions/{id}/architecture). Nil: sessions get no
 	// architecture hooks.
 	SessionArchitectureURL func(sessionID string) string
+	// SessionBranchGateURL returns where a session's branch gate is asked
+	// (…/api/sessions/{id}/branch_gate). Nil: sessions get no git shim.
+	SessionBranchGateURL func(sessionID string) string
+	// BranchGateTimeout is the branch gate hook's timeout: the approval
+	// timeout. Zero is 24 hours.
+	BranchGateTimeout time.Duration
 	// Architectures is what the brief reads of the repository architecture;
 	// nil adds no section to any brief.
 	Architectures ports.ArchitectureBriefSource
@@ -255,6 +261,9 @@ type Service struct {
 	resuming map[string]bool
 	// commitOff is why each session whose commit check is off is unguarded.
 	commitOff map[string]string
+	// branchWaits are the sessions with a pending branch request, by how many
+	// and the status each had before the first (ADR 0069).
+	branchWaits map[string]*branchWait
 
 	// DeveloperBin finds the active developer directory's usr/bin (macOS's
 	// xcode-select -p). It is asked once per server run; nil, an error or ""
@@ -269,7 +278,7 @@ func NewService(runtime llmkit.Manager, broker *approval.Broker, hub *Hub, sessi
 		runtime: runtime, broker: broker, hub: hub, sessions: sessions, catalog: catalog, tickets: tickets,
 		workspaces: workspaces,
 		seq:        map[string]int64{}, cleanups: map[string]func(){}, busy: map[string]bool{},
-		resuming: map[string]bool{}, commitOff: map[string]string{}, statuses: map[string]domain.SessionStatus{},
+		resuming: map[string]bool{}, commitOff: map[string]string{}, branchWaits: map[string]*branchWait{}, statuses: map[string]domain.SessionStatus{},
 	}
 	go s.approvalLoop()
 	go s.expiryLoop()
@@ -673,8 +682,9 @@ func (s *Service) withGit(id, repositoryID string, cfg *llmkit.SessionConfig, cl
 // shell. A headless session with no task, or a service without Shells,
 // changes nothing.
 func (s *Service) withShell(id, repositoryID string, subject sessionSubject, cfg *llmkit.SessionConfig, cleanup func()) (func(), error) {
+	s.withBranchGate(id, cfg)
 	if s.Shells == nil || (subject.ticket == nil && !subject.projectLevel()) {
-		return cleanup, nil
+		return s.withShims(id, cfg, cleanup, false)
 	}
 	scope := ports.ShellScope{RepositoryID: repositoryID}
 	if subject.designSystem != nil {
@@ -710,7 +720,18 @@ func (s *Service) withShell(id, repositoryID string, subject sessionSubject, cfg
 			cleanup()
 		}
 		sh.Stop()
-	})
+	}, true)
+}
+
+// withBranchGate gives every agent session the branch gate's asking hook; the
+// git shim is made by withShims. Without a gate URL it changes nothing.
+func (s *Service) withBranchGate(id string, cfg *llmkit.SessionConfig) {
+	if s.SessionBranchGateURL == nil {
+		return
+	}
+	if dc, ok := withHooks(cfg.Driver, BranchGateHooks(s.SessionBranchGateURL(id), s.BranchGateTimeout)); ok {
+		cfg.Driver = dc
+	}
 }
 
 // withShims puts the session's shim dir first on its PATH: one link per
@@ -718,7 +739,10 @@ func (s *Service) withShell(id, repositoryID string, subject sessionSubject, cfg
 // HARNESS_SHELL_URL. PATH is an override of the server's own, so it wins
 // over the inherited one. The cleanup it answers runs cleanup and removes
 // the dir. Without ShimBinary it changes nothing.
-func (s *Service) withShims(id string, cfg *llmkit.SessionConfig, cleanup func()) (func(), error) {
+func (s *Service) withShims(id string, cfg *llmkit.SessionConfig, cleanup func(), editProxy bool) (func(), error) {
+	if !editProxy && (s.SessionBranchGateURL == nil || s.ShimBinary == "") {
+		return cleanup, nil
+	}
 	if s.ShimBinary == "" {
 		s.withDeveloperBin(cfg)
 		return cleanup, nil
@@ -733,7 +757,14 @@ func (s *Service) withShims(id string, cfg *llmkit.SessionConfig, cleanup func()
 	if err != nil {
 		return fail(err)
 	}
-	for _, name := range ports.ShellShimCommands {
+	names := []string{ports.BranchGateShimCommand}
+	if editProxy {
+		names = append(names, ports.ShellShimCommands...)
+	}
+	if s.SessionBranchGateURL == nil {
+		names = slices.DeleteFunc(names, func(n string) bool { return n == ports.BranchGateShimCommand })
+	}
+	for _, name := range names {
 		if err := os.Symlink(s.ShimBinary, filepath.Join(dir, name)); err != nil {
 			_ = os.RemoveAll(dir)
 			return fail(err)
@@ -749,10 +780,13 @@ func (s *Service) withShims(id string, cfg *llmkit.SessionConfig, cleanup func()
 	}
 	setPath(cfg, path)
 	cfg.Env = append(cfg.Env, ports.ShimDirEnv+"="+dir)
-	if s.SessionShellURL != nil {
+	if s.SessionBranchGateURL != nil {
+		cfg.Env = append(cfg.Env, ports.BranchGateURLEnv+"="+s.SessionBranchGateURL(id))
+	}
+	if editProxy && s.SessionShellURL != nil {
 		cfg.Env = append(cfg.Env, ports.ShellURLEnv+"="+s.SessionShellURL(id))
 	}
-	if s.SessionArchitectureURL != nil && cfg.WorkingDir != "" {
+	if editProxy && s.SessionArchitectureURL != nil && cfg.WorkingDir != "" {
 		cfg.Env = append(cfg.Env, ports.ArchitectureURLEnv+"="+s.SessionArchitectureURL(id), ports.WorktreeEnv+"="+cfg.WorkingDir)
 	}
 	return func() {
@@ -904,6 +938,9 @@ func (s *Service) sessionConfig(id, dir, model string, allowedTools []string, pe
 		cfg.AppendSystem = appendSection(cfg.AppendSystem, section)
 	}
 	cfg.InstructionFiles = s.instructionFiles(context.TODO(), role, ag.agent, subject.projectID(), repositoryID)
+	if s.SessionBranchGateURL != nil {
+		cfg.InstructionFiles = append(cfg.InstructionFiles, branchGateInstructionFile())
+	}
 	if section := attachedAssetsSection(s.attachedAssets(ticket)); section != "" {
 		cfg.AppendSystem = appendSection(cfg.AppendSystem, section)
 	}
@@ -1432,7 +1469,7 @@ func (s *Service) record(sessionID string, ev SessionEvent, change sessionChange
 	s.hub.Publish(sessionID, ev)
 	s.notify(sessionID, ev.Type)
 	if moved {
-		s.announce(domain.SessionStatusChanged{SessionID: sessionID, Status: ev.Status})
+		s.announce(domain.SessionStatusChanged{SessionID: sessionID, Status: ev.Status, ByBranchRequest: ev.Type == "branch_request_needed"})
 	}
 }
 
@@ -1526,4 +1563,70 @@ func validateBranchName(branch string) error {
 		return invalid
 	}
 	return nil
+}
+
+// branchWait is a session's pending branch requests.
+type branchWait struct {
+	pending int
+	prior   domain.SessionStatus
+}
+
+var _ ports.BranchRequestWaiter = (*Service)(nil)
+
+// BranchRequestFiled implements ports.BranchRequestWaiter: the session shows as
+// waiting for approval while it has a pending branch request.
+func (s *Service) BranchRequestFiled(id string) {
+	s.mu.Lock()
+	w := s.branchWaits[id]
+	first := w == nil
+	if first {
+		w = &branchWait{prior: domain.SessionThinking}
+		if cur := s.sessions.Get(id); cur != nil {
+			switch {
+			case cur.Status != domain.SessionWaitingApproval:
+				w.prior = cur.Status
+			case cur.Interactive:
+				// stored as waiting before a restart: an interactive session was running
+				w.prior = domain.SessionRunning
+			}
+		}
+		s.branchWaits[id] = w
+	}
+	w.pending++
+	s.mu.Unlock()
+	change := sessionChange{status: domain.SessionWaitingApproval}
+	if m := s.metricsOf(id); m != nil {
+		m.PendingApprovals++
+		change.metrics = m
+	}
+	s.record(id, SessionEvent{Type: "branch_request_needed", Status: domain.SessionWaitingApproval, At: time.Now()}, change)
+}
+
+// BranchRequestSettled implements ports.BranchRequestWaiter: the last settled
+// request puts the session back to the status it had before.
+func (s *Service) BranchRequestSettled(id string) {
+	s.mu.Lock()
+	w := s.branchWaits[id]
+	if w == nil {
+		s.mu.Unlock()
+		return
+	}
+	w.pending--
+	last := w.pending <= 0
+	if last {
+		delete(s.branchWaits, id)
+	}
+	s.mu.Unlock()
+	change := sessionChange{}
+	if m := s.metricsOf(id); m != nil {
+		if m.PendingApprovals > 0 {
+			m.PendingApprovals--
+		}
+		change.metrics = m
+	}
+	ev := SessionEvent{Type: "branch_request_settled", At: time.Now()}
+	if last {
+		ev.Status, change.status = w.prior, w.prior
+	}
+	s.record(id, ev, change)
 }

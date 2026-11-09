@@ -18,6 +18,7 @@ import (
 	"encoding/base64"
 	"fmt"
 	"log/slog"
+	"net/url"
 	"strconv"
 	"strings"
 	"sync"
@@ -171,6 +172,10 @@ func (s *Service) Subscribe(bus ports.EventSubscriber) {
 		s.onSessionStatus(ev)
 		return nil
 	})
+	ports.On(bus, func(ctx context.Context, ev domain.BranchRequestChanged) error {
+		s.onBranchRequest(ev)
+		return nil
+	})
 	ports.On(bus, func(ctx context.Context, ev domain.SessionEnded) error {
 		s.resolve(sessionWaitingKey(ev.SessionID))
 		if ev.Status == domain.SessionFailed {
@@ -225,7 +230,51 @@ func (s *Service) onReview(ev domain.ReviewRequestChanged) {
 	}, false)
 }
 
+func branchRequestKey(id string) string { return "branch_request:" + id }
+
+// onBranchRequest records one action notification for a pending branch request,
+// and settles it once the request is answered or gone. An answer posts nothing
+// new.
+func (s *Service) onBranchRequest(ev domain.BranchRequestChanged) {
+	r := ev.Request
+	if r.State != domain.BranchRequestPending {
+		s.resolve(branchRequestKey(r.ID))
+		return
+	}
+	sess := s.readers.Sessions.Get(r.SessionID)
+	taskID := ""
+	if r.TaskID != nil {
+		taskID = *r.TaskID
+	}
+	link := domain.TaskLink(ev.ProjectID, taskID) + "?session=" + url.QueryEscape(r.SessionID) + "#branch-request-" + url.PathEscape(r.ID)
+	body := "Session " + r.SessionID
+	if sess != nil && sess.Task != "" {
+		body += " (" + sess.Task + ")"
+	}
+	body += ", task " + taskOrNone(taskID) + ", repository " + r.RepositoryID + "."
+	if r.Reason != "" {
+		body += " " + r.Reason
+	}
+	s.record(&domain.Notification{
+		ProjectID: ev.ProjectID, TaskID: taskID, SessionID: r.SessionID,
+		Kind: domain.NotificationBranchRequest, Level: domain.NotificationAction,
+		Title: clip("Branch: "+r.Label(), domain.MaxNotificationTitleLen),
+		Body:  clip(body, domain.MaxNotificationBodyLen),
+		Link:  link, CauseKey: branchRequestKey(r.ID),
+	}, false)
+}
+
+func taskOrNone(id string) string {
+	if id == "" {
+		return "none"
+	}
+	return id
+}
+
 func (s *Service) onSessionStatus(ev domain.SessionStatusChanged) {
+	if ev.ByBranchRequest {
+		return
+	}
 	if ev.Status != domain.SessionWaitingApproval {
 		s.resolve(sessionWaitingKey(ev.SessionID))
 		return
