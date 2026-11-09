@@ -1,11 +1,17 @@
 /*
  * Interview set — one interview as a bordered card: who asked and when, then
  * its questions (.interview-question). The card is the common region, so two
- * stacked interviews are never confused. Exceptions: data-state (open draws
- * an attention edge on its border).
+ * stacked interviews are never confused. The header ends with the bulk line
+ * ("3 recommended" and its button); the footer sticks to the foot of the
+ * panel's scroller and says how far the person is, with a thin bar, then
+ * Dismiss and Send. Exceptions: data-state (open draws an attention edge on
+ * its border).
  * <section class="interview-set" data-state="open" aria-label="Open interview from architect">
- *   <header><strong>architect asks 5 questions</strong><span class="asked">Asked 14:32</span></header>
- *   <fieldset class="interview-question">…</fieldset>…</section>
+ *   <header><strong>architect asks 5 questions</strong><span class="asked">Asked 14:32</span>
+ *     <div class="bulk"><span>3 recommended</span><button class="button">Accept all recommended</button></div></header>
+ *   <fieldset class="interview-question">…</fieldset>…
+ *   <footer><div class="sum"><span>3 of 5 answered · 2 will be skipped</span><span class="bar"><i style="inline-size:60%"></i></span></div>
+ *     <div class="actions"><button class="button">Dismiss</button><span class="grow"></span><button class="button">Send · 2 skipped</button></div></footer></section>
  */
 
 @layer blocks {
@@ -25,6 +31,34 @@
 
       & > strong { font-size: var(--text-sm); }
       & > .asked { color: var(--color-ink-faint); font-size: var(--text-xs); }
+
+      & > .bulk {
+        display: flex;
+        flex-wrap: wrap;
+        align-items: center;
+        justify-content: space-between;
+        gap: var(--space-s);
+        color: var(--color-ink-faint);
+        font-size: var(--text-xs);
+
+        & > .button { flex: none; }
+      }
+    }
+
+    & > footer {
+      position: sticky;
+      inset-block-end: 0;
+      display: grid;
+      gap: var(--space-xs);
+      padding: var(--space-s) var(--space-m);
+      border-block-start: var(--border-width) solid var(--color-line);
+      background: var(--color-raised);
+
+      & .sum { display: flex; align-items: center; gap: var(--space-s); color: var(--color-ink-muted); font-size: var(--text-xs); }
+      & .bar { flex: none; inline-size: 30%; block-size: 4px; border-radius: 2px; background: var(--color-sunken); overflow: hidden; }
+      & .bar > i { display: block; block-size: 100%; background: var(--color-signal); }
+      & .actions { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-xs); }
+      & .actions > .grow { flex: 1; }
     }
   }
 }

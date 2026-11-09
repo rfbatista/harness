@@ -1,7 +1,7 @@
 import { assert, file, test } from "../../../shared/testing/test.js";
 import { makeInterview, makeList, questionDTO } from "../testing/interview-fixtures.js";
 import { toInterview } from "../infrastructure/interviews-dto.js";
-import { arrivalText, bodyHtml, cardView, clockTime, headWho, panelView, peekText, questionView, toggleLabel } from "./interviewView.js";
+import { arrivalText, bodyHtml, cardView, clockTime, footerView, headWho, optionForKey, panelView, peekText, questionView, toggleLabel } from "./interviewView.js";
 
 file("sessions/presentation/interviewView");
 
@@ -78,4 +78,31 @@ test("a body is markdown, and raw HTML in it is shown as text", () => {
   assert.ok(!html.includes("javascript:"));
   assert.ok(html.includes('href="https://example.com"') && html.includes('target="_blank"'));
   assert.equal(bodyHtml(""), "");
+});
+
+test("the footer says how far the interview is, and the Send button says what happens", () => {
+  assert.equal(footerView({ answered: 3, total: 5, skipped: 2 }).text, "3 of 5 answered · 2 will be skipped");
+  assert.equal(footerView({ answered: 3, total: 5, skipped: 2 }).send, "Send · 2 skipped");
+  assert.equal(footerView({ answered: 3, total: 5, skipped: 2 }).bar, "inline-size: 60%");
+  assert.equal(footerView({ answered: 0, total: 5, skipped: 5 }).text, "0 of 5 answered · 5 will be skipped");
+  assert.equal(footerView({ answered: 0, total: 5, skipped: 5 }).send, "Send, all skipped");
+  assert.equal(footerView({ answered: 5, total: 5, skipped: 0 }).text, "5 of 5 answered");
+  assert.equal(footerView({ answered: 5, total: 5, skipped: 0 }).send, "Send answers");
+});
+
+test("number keys pick the row in the drawn order: the recommendation is 1, the options stop at 8", () => {
+  const iv = makeInterview();
+  const q = questionView(iv.questions[0], 0, iv.id);
+  assert.equal(optionForKey(q, "1").label, "The harness database");
+  assert.equal(optionForKey(q, "2").label, "A file per interview");
+  assert.equal(optionForKey(q, "3"), null, "Write my own has no number");
+  assert.equal(optionForKey(q, "9"), null);
+  assert.equal(optionForKey(q, "a"), null);
+  assert.equal(optionForKey(q, "12"), null);
+});
+
+test("the card counts the questions the agent recommends an answer to", () => {
+  const iv = makeInterview({ questions: [questionDTO(), questionDTO({ recommended: null }), questionDTO({ kind: "text", options: [], recommended: { text: "x" } })] });
+  assert.equal(cardView(iv).recommended, 2);
+  assert.equal(cardView(iv).questions[2].at, 2);
 });

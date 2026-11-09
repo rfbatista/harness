@@ -4,6 +4,9 @@
 // of the session column, follows the session's interview feed while it is
 // mounted, and claims Alt+Shift+Q for the page. It never moves the focus or the
 // scroll of anything the person is using: an interview that arrives only draws.
+// The person's answers are the store's; this turns the controls' events into
+// them (a change, a number key, Enter on the recommendation) and moves the
+// focus between questions the way the UX study's keyboard table says.
 //
 //   <div class="[ agent-stage ]" x-data="sessionsInterviewPanel(sid)" x-on:keydown.window.capture="claimKey">
 //     <div class="[ terminal ]" …>…</div>
@@ -13,7 +16,7 @@
 //   </div>
 
 import { dockedAt } from "../../domain/interviews.js";
-import { bodyHtml } from "../interviewView.js";
+import { bodyHtml, footerView, optionForKey } from "../interviewView.js";
 
 /**
  * @param {{
@@ -75,6 +78,93 @@ export const interviewPanel = ({ interviews, observeResize = resizeObserver, rem
       el.innerHTML = bodyHtml(question.body);
     },
 
+    // ── the answers the markup binds ─────────────────────────────────────
+    checked: (card, q, value) => interviews.isChecked(card.id, q.at, value),
+    ownOpen: (card, q) => interviews.ownOpen(card.id, q.at),
+    answered: (card, q) => interviews.answered(card.id, q.at),
+    textOf: (card, q) => interviews.textOf(card.id, q.at),
+    noteOf: (card, q) => interviews.noteOf(card.id, q.at),
+    progress: (card) => footerView(interviews.progress(card.id)),
+
+    /** A note opens by itself once it holds text; the person's own opening and closing is left to the disclosure. */
+    openNote(el, card, q) {
+      if (interviews.noteOf(card.id, q.at).trim() !== "" && !el.open) el.open = true;
+    },
+
+    // ── what the person answers ──────────────────────────────────────────
+    /** An option or Write my own was ticked (radio: selected). Write my own takes the focus into its box. */
+    choose(card, q, event) {
+      const input = event.target;
+      interviews.choose(card.id, q.at, input.value, input.checked);
+      if (input.value === "own" && input.checked) this.$nextTick(() => input.closest("fieldset")?.querySelector("[data-interview-own]")?.focus());
+    },
+
+    type(card, q, event) {
+      interviews.type(card.id, q.at, event.target.value);
+    },
+
+    typeNote(card, q, event) {
+      interviews.note(card.id, q.at, event.target.value);
+    },
+
+    use(card, q) {
+      interviews.use(card.id, q.at);
+    },
+
+    /** Accept all recommended: fills the blank questions, sends nothing. */
+    acceptAll(card) {
+      interviews.acceptAll(card.id);
+    },
+
+    /**
+     * Keys on an option row: 1–8 select that row in the drawn order, Enter on
+     * the recommendation selects it and moves on to the next question. Every
+     * other key (arrows, Space, Tab) is the browser's.
+     * @param {KeyboardEvent} event
+     */
+    optionKey(event, card, q) {
+      const input = event.target;
+      if (input.tagName !== "INPUT" || event.altKey || event.ctrlKey || event.metaKey) return;
+      if (event.key === "Enter" && input.closest("label")?.hasAttribute("data-recommended")) {
+        event.preventDefault();
+        interviews.choose(card.id, q.at, input.value, true);
+        this.focusNext(input.closest("fieldset"));
+        return;
+      }
+      const option = event.shiftKey ? null : optionForKey(q, event.key);
+      if (!option) return;
+      event.preventDefault();
+      interviews.choose(card.id, q.at, option.value, true);
+      input.closest(".options").querySelector(`input[value="${option.value}"]`)?.focus();
+    },
+
+    /** Esc in a text box: back to the question's option group. It is the panel's, so it neither closes the sheet nor hides the panel. */
+    leaveBox(event) {
+      event.preventDefault();
+      event.stopPropagation();
+      const box = event.target;
+      const fieldset = box.closest("fieldset");
+      const other = [...fieldset.querySelectorAll("textarea")].find((t) => t !== box);
+      (this.optionGroup(fieldset) ?? (box.hasAttribute("data-interview-note") ? other : fieldset.querySelector("summary")))?.focus();
+    },
+
+    /** The checked option of a question, or its first: where Tab lands in the group. */
+    optionGroup(fieldset) {
+      return fieldset.querySelector(".options input:checked") ?? fieldset.querySelector(".options input");
+    },
+
+    /** A question's first control: its option group, or its box when it is a text question. */
+    focusQuestion(fieldset) {
+      (this.optionGroup(fieldset) ?? fieldset.querySelector("textarea"))?.focus();
+    },
+
+    /** The question after this one, or the Send button when it was the last. */
+    focusNext(fieldset) {
+      const next = fieldset.nextElementSibling;
+      if (next?.matches("fieldset")) this.focusQuestion(next);
+      else fieldset.closest("section")?.querySelector("[data-interview-send]")?.focus();
+    },
+
     // ── what the person does ─────────────────────────────────────────────
     /** The peek strip's Answer: the sheet opens and takes the focus. */
     openSheet() {
@@ -131,9 +221,14 @@ export const interviewPanel = ({ interviews, observeResize = resizeObserver, rem
       root.querySelector("[data-interview-scroll]")?.focus({ preventScroll: true });
     },
 
+    /** The first unanswered question of the newest interview (its first question when all are answered). */
     focusFirstControl() {
-      const first = root.querySelector("[data-interview-panel] .interview-question :is(input, textarea)");
-      (first ?? root.querySelector("[data-interview-scroll]"))?.focus();
+      const card = this.view.cards[0];
+      const fieldsets = root.querySelectorAll("[data-interview-panel] section")[0]?.querySelectorAll("fieldset");
+      const at = Math.max(0, card ? card.questions.findIndex((q) => !interviews.answered(card.id, q.at)) : 0);
+      const target = fieldsets?.[at];
+      if (target) this.focusQuestion(target);
+      else root.querySelector("[data-interview-scroll]")?.focus();
     },
 
     /** The sheet closed: the focus returns to the toggle or the peek strip that opened it. */

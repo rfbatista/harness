@@ -1,0 +1,26 @@
+/*
+ * Interview note — the quiet "Add a note" disclosure that ends every answer:
+ * a "+" that turns to a minus when open, and a small textarea. A script opens
+ * it once it holds text. A note is sent with an answer, never instead of one.
+ * <details class="interview-note"><summary>Add a note</summary><textarea rows="2"></textarea></details>
+ */
+
+@layer blocks {
+  .interview-note {
+    & > summary {
+      display: flex;
+      align-items: center;
+      min-block-size: 1.5rem;
+      color: var(--color-ink-muted);
+      font-size: var(--text-xs);
+      list-style: none;
+      cursor: pointer;
+
+      &::-webkit-details-marker { display: none; }
+      &::before { content: "+"; inline-size: 1rem; font-weight: var(--weight-bold); }
+      &:focus-visible { outline: var(--border-focus-width) solid var(--color-focus); outline-offset: 1px; }
+    }
+    &[open] > summary::before { content: "\2212"; }
+    & > textarea { inline-size: 100%; min-block-size: 2.5rem; margin-block-start: var(--space-2xs); resize: vertical; font-size: var(--text-sm); }
+  }
+}

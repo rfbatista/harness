@@ -13,8 +13,9 @@ import templruntime "github.com/a-h/templ/runtime"
 // the session column is at least 56rem wide, the panel docked beside it; narrower,
 // a peek strip over the terminal's foot opens the same panel as a sheet.
 // sessionsInterviewPanel decides which, and fills the panel from the store
-// "sessionsInterviews". The answer controls are drawn but not yet kept: the
-// person answers in a later change, so they carry no state here.
+// "sessionsInterviews". The answers are kept in that store (and as a draft in
+// the browser) as the person gives them; the footer counts them. Its Send and
+// Dismiss buttons are drawn and do nothing yet: sending is a later change.
 
 // agentStage is the Agent tab's pane: the terminal, and what sits beside or over it.
 func agentStage() templ.Component {
@@ -118,7 +119,8 @@ func interviewPanel() templ.Component {
 	})
 }
 
-// interviewCard is one open interview: who asks and when, then its questions.
+// interviewCard is one open interview: who asks and when, the bulk action,
+// its questions, and the footer that says how far the person is.
 func interviewCard() templ.Component {
 	return templruntime.GeneratedTemplate(func(templ_7745c5c3_Input templruntime.GeneratedComponentInput) (templ_7745c5c3_Err error) {
 		templ_7745c5c3_W, ctx := templ_7745c5c3_Input.Writer, templ_7745c5c3_Input.Context
@@ -140,7 +142,7 @@ func interviewCard() templ.Component {
 			templ_7745c5c3_Var3 = templ.NopComponent
 		}
 		ctx = templ.ClearChildren(ctx)
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 8, "<section class=\"[ interview-set ]\" x-bind:aria-label=\"card.label\" data-state=\"open\"><header><strong x-text=\"card.heading\"></strong> <span class=\"[ asked ]\" x-text=\"card.asked\"></span></header><template x-for=\"q in card.questions\" x-bind:key=\"q.key\">")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 8, "<section class=\"[ interview-set ]\" x-bind:aria-label=\"card.label\" data-state=\"open\"><header><strong x-text=\"card.heading\"></strong> <span class=\"[ asked ]\" x-text=\"card.asked\"></span><template x-if=\"card.recommended\"><div class=\"[ bulk ]\"><span x-text=\"card.recommendedLabel\"></span> <button type=\"button\" class=\"[ button ]\" data-variant=\"ghost\" data-size=\"sm\" title=\"Fill every blank question with the agent's recommendation. Nothing is sent.\" x-on:click=\"acceptAll(card)\">Accept all recommended</button></div></template></header><template x-for=\"q in card.questions\" x-bind:key=\"q.key\">")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
@@ -148,7 +150,7 @@ func interviewCard() templ.Component {
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 9, "</template></section>")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 9, "</template><footer data-interview-footer><div class=\"[ sum ]\"><span data-interview-progress x-text=\"progress(card).text\"></span> <span class=\"[ bar ]\" aria-hidden=\"true\"><i x-bind:style=\"progress(card).bar\"></i></span></div><div class=\"[ actions ]\"><button type=\"button\" class=\"[ button ]\" data-variant=\"ghost\" data-interview-dismiss>Dismiss</button> <span class=\"[ grow ]\"></span> <button type=\"button\" class=\"[ button ]\" data-variant=\"primary\" data-interview-send x-text=\"progress(card).send\"></button></div></footer></section>")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
@@ -158,8 +160,8 @@ func interviewCard() templ.Component {
 
 // interviewQuestion is a question: its number and title in the legend, the
 // agent's markdown body (drawn by placeBody, which escapes raw HTML), then the
-// answer control for its kind. The recommended option is first and labelled,
-// and nothing is checked.
+// answer control for its kind, and a note. The recommended option is first and
+// labelled, and nothing is checked until the person chooses.
 func interviewQuestion() templ.Component {
 	return templruntime.GeneratedTemplate(func(templ_7745c5c3_Input templruntime.GeneratedComponentInput) (templ_7745c5c3_Err error) {
 		templ_7745c5c3_W, ctx := templ_7745c5c3_Input.Writer, templ_7745c5c3_Input.Context
@@ -181,7 +183,7 @@ func interviewQuestion() templ.Component {
 			templ_7745c5c3_Var4 = templ.NopComponent
 		}
 		ctx = templ.ClearChildren(ctx)
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 10, "<fieldset class=\"[ interview-question ]\"><legend><span class=\"[ heading ]\"><span class=\"[ number ]\" x-text=\"q.number\"></span><h3 x-text=\"q.title\"></h3></span></legend><div class=\"[ body ]\" x-effect=\"placeBody($el, q)\"></div><div class=\"[ answer ]\"><template x-if=\"q.hint\"><p class=\"[ hint ]\" x-text=\"q.hint\"></p></template><template x-if=\"q.recommendedText\"><div class=\"[ recommendation ]\"><span class=\"[ tag ]\">Agent recommends</span><p x-text=\"q.recommendedText\"></p></div></template><template x-if=\"q.text\"><textarea rows=\"3\" placeholder=\"Write your answer\" x-bind:name=\"q.name\" x-bind:aria-label=\"q.title\"></textarea></template><div class=\"[ options ]\"><template x-for=\"o in q.options\" x-bind:key=\"o.id\"><label class=\"[ interview-option ]\" x-bind:data-recommended=\"o.recommended ? '' : null\"><input x-bind:type=\"q.multiple ? 'checkbox' : 'radio'\" x-bind:name=\"q.name\" x-bind:value=\"o.value\"> <span class=\"[ text ]\"><template x-if=\"o.recommended\"><span class=\"[ tag ]\">Agent recommends</span></template><span x-text=\"o.label\"></span><template x-if=\"o.description\"><small x-text=\"o.description\"></small></template></span></label></template><template x-if=\"q.own\"><label class=\"[ interview-option ]\"><input x-bind:type=\"q.multiple ? 'checkbox' : 'radio'\" x-bind:name=\"q.name\" value=\"own\"> <span class=\"[ text ]\"><span x-text=\"q.own.label\"></span></span></label></template></div></div></fieldset>")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 10, "<fieldset class=\"[ interview-question ]\" x-bind:data-answered=\"answered(card, q) ? '' : null\"><legend><span class=\"[ heading ]\"><span class=\"[ number ]\" x-text=\"q.number\"></span><h3 x-text=\"q.title\"></h3></span></legend><div class=\"[ body ]\" x-effect=\"placeBody($el, q)\"></div><div class=\"[ answer ]\"><template x-if=\"q.hint\"><p class=\"[ hint ]\" x-text=\"q.hint\"></p></template><template x-if=\"q.recommendedText\"><div class=\"[ recommendation ]\"><span class=\"[ tag ]\">Agent recommends</span><p x-text=\"q.recommendedText\"></p><button type=\"button\" class=\"[ button ]\" data-variant=\"ghost\" data-size=\"sm\" x-on:click=\"use(card, q)\">Use this text</button></div></template><template x-if=\"q.text\"><textarea rows=\"3\" placeholder=\"Write your answer\" data-interview-text x-bind:name=\"q.name\" x-bind:aria-label=\"q.title\" x-bind:value=\"textOf(card, q)\" x-on:input=\"type(card, q, $event)\" x-on:keydown.escape=\"leaveBox($event)\"></textarea></template><div class=\"[ options ]\" x-on:keydown=\"optionKey($event, card, q)\"><template x-for=\"o in q.options\" x-bind:key=\"o.id\"><label class=\"[ interview-option ]\" x-bind:data-recommended=\"o.recommended ? '' : null\"><input x-bind:type=\"q.multiple ? 'checkbox' : 'radio'\" x-bind:name=\"q.name\" x-bind:value=\"o.value\" x-bind:checked=\"checked(card, q, o.value)\" x-on:change=\"choose(card, q, $event)\"> <span class=\"[ text ]\"><template x-if=\"o.recommended\"><span class=\"[ tag ]\">Agent recommends</span></template><span x-text=\"o.label\"></span><template x-if=\"o.description\"><small x-text=\"o.description\"></small></template></span></label></template><template x-if=\"q.own\"><label class=\"[ interview-option ]\"><input x-bind:type=\"q.multiple ? 'checkbox' : 'radio'\" x-bind:name=\"q.name\" value=\"own\" x-bind:checked=\"checked(card, q, 'own')\" x-on:change=\"choose(card, q, $event)\"> <span class=\"[ text ]\"><span x-text=\"q.own.label\"></span></span></label></template></div><template x-if=\"q.own && ownOpen(card, q)\"><textarea rows=\"3\" placeholder=\"Write your answer\" data-interview-own x-bind:aria-label=\"q.ownLabel\" x-bind:value=\"textOf(card, q)\" x-on:input=\"type(card, q, $event)\" x-on:keydown.escape=\"leaveBox($event)\"></textarea></template><details class=\"[ interview-note ]\" x-effect=\"openNote($el, card, q)\"><summary>Add a note</summary> <textarea rows=\"2\" placeholder=\"Anything the agent should know about this answer\" data-interview-note x-bind:aria-label=\"q.noteLabel\" x-bind:value=\"noteOf(card, q)\" x-on:input=\"typeNote(card, q, $event)\" x-on:keydown.escape=\"leaveBox($event)\"></textarea></details></div></fieldset>")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}

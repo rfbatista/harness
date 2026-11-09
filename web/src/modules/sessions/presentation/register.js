@@ -17,6 +17,7 @@ import { statusCheck } from "./components/statusCheck.js";
 import { sessionsPage } from "./pages/sessionsPage.js";
 import { screenPrefs } from "./screenPrefs.js";
 import { interviewPanel } from "./components/interviewPanel.js";
+import { interviewDrafts } from "../infrastructure/interviewDrafts.js";
 import { interviewStore } from "./interviewStore.js";
 
 /**
@@ -50,7 +51,7 @@ export function registerSessions(Alpine, deps) {
     setCodeFullscreen: (on) => globalThis.document?.querySelector(".app-shell")?.toggleAttribute("data-code-fullscreen", on),
   };
   // The sessions' interviews, shared by the page (seed, the tab row's toggle) and the panel.
-  Alpine.store("sessionsInterviews", interviewStore({ gateway: deps.interviews, prefs: screen }));
+  Alpine.store("sessionsInterviews", interviewStore({ gateway: deps.interviews, prefs: screen, drafts: interviewDrafts() }));
   const interviews = Alpine.store("sessionsInterviews");
   Alpine.data("sessionsPage", sessionsPage({ ...deps, channelStore, interviews, prefs: screen, shell }));
   Alpine.data("sessionsInterviewPanel", interviewPanel({ interviews }));

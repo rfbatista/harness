@@ -49,6 +49,8 @@ export function questionView(question, at, interviewId) {
   const choice = question.kind !== "text";
   return {
     key: `${interviewId}.${at}`,
+    at,
+    kind: question.kind,
     number: String(at + 1),
     title: question.title,
     body: question.body,
@@ -58,8 +60,38 @@ export function questionView(question, at, interviewId) {
     hint: question.kind === "multiple" ? "Choose any number" : "",
     options,
     own: choice ? { id: `${interviewId}.${at}.own`, label: "Write my own" } : null,
+    ownLabel: `Your own answer to: ${question.title}`,
+    noteLabel: `Note on: ${question.title}`,
     recommendedText: question.recommended && "text" in question.recommended ? question.recommended.text : "",
   };
+}
+
+/** How many questions the agent recommends an answer to: the bulk line's "3 recommended". */
+export const recommendedCount = (questions) => questions.filter((q) => q.recommended).length;
+
+/** The bulk line's tooltip: what the button does and does not do. */
+export const ACCEPT_ALL_TITLE = "Fill every blank question with the agent's recommendation. Nothing is sent.";
+
+/**
+ * The footer's words for how far the interview is: "3 of 5 answered · 2 will
+ * be skipped", the Send button that says what happens, and the bar's fill.
+ * @param {{ answered: number, total: number, skipped: number }} p
+ */
+export function footerView({ answered, total, skipped }) {
+  const send = answered === 0 ? "Send, all skipped" : skipped > 0 ? `Send · ${skipped} skipped` : "Send answers";
+  return {
+    count: `${answered} of ${total}`,
+    rest: skipped > 0 ? ` answered · ${skipped} will be skipped` : " answered",
+    text: `${answered} of ${total} answered${skipped > 0 ? ` · ${skipped} will be skipped` : ""}`,
+    send,
+    bar: `inline-size: ${total === 0 ? 0 : Math.round((answered / total) * 100)}%`,
+  };
+}
+
+/** The option the number key `key` selects in the drawn order ("1" is the first row), or null: no such row, not a digit, or past the 8 options a question holds. */
+export function optionForKey(question, key) {
+  if (!/^[1-8]$/.test(key)) return null;
+  return question.options[Number(key) - 1] ?? null;
 }
 
 /** An open interview as its card draws it. */
@@ -70,6 +102,8 @@ export function cardView(interview) {
     label: `Open interview from ${interview.agentName}`,
     heading: `${interview.agentName} asks ${count(n, "question")}`,
     asked: `Asked ${clockTime(interview.askedAt)}`,
+    recommended: recommendedCount(interview.questions),
+    recommendedLabel: `${recommendedCount(interview.questions)} recommended`,
     questions: interview.questions.map((q, at) => questionView(q, at, interview.id)),
   };
 }

@@ -6,11 +6,14 @@
  * script escapes it). The recommendation is the first option, or a box with
  * the recommended text. The focused question gets an attention edge, a
  * border so it survives forced colours.
+ * Write my own reveals a textarea under the options; the answer ends with an
+ * .interview-note.
  * Exceptions: data-answered (the number fills with the signal colour).
  * <fieldset class="interview-question"><legend><span class="heading"><span class="number">1</span><h3>Title</h3></span></legend>
  *   <div class="body">…markdown…</div><div class="answer">[<p class="hint">Choose any number</p>]
  *   [<div class="recommendation"><span class="tag">Agent recommends</span><p>text</p></div>]
- *   [<textarea>] <div class="options"><label class="interview-option">…</label></div></div></fieldset>
+ *   [<textarea>] <div class="options"><label class="interview-option">…</label></div>
+ *   [<textarea>] <details class="interview-note"><summary>Add a note</summary><textarea></textarea></details></div></fieldset>
  */
 
 @layer blocks {
@@ -81,6 +84,7 @@
       background: var(--color-signal-wash);
       font-size: var(--text-sm);
     }
+    & .recommendation > .button { justify-self: start; }
     & .tag { color: var(--color-signal-strong); font-size: var(--text-xs); font-weight: var(--weight-medium); }
   }
 }

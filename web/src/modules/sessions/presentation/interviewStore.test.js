@@ -41,13 +41,29 @@ function fakeTimers() {
   };
 }
 
-function setup({ lists = {}, gateway = fakeGateway() } = {}) {
+/** Drafts held in memory: what was written, what was dropped. */
+function memoryDrafts(held = {}) {
+  const drafts = {
+    held,
+    dropped: [],
+    read: (id, n) => (held[id]?.length === n ? held[id] : null),
+    write: (id, answers) => (held[id] = JSON.parse(JSON.stringify(answers))),
+    drop: (id) => {
+      drafts.dropped.push(id);
+      delete held[id];
+    },
+    sweep() {},
+  };
+  return drafts;
+}
+
+function setup({ lists = {}, gateway = fakeGateway(), drafts = memoryDrafts() } = {}) {
   const prefs = memoryPrefs();
   const timers = fakeTimers();
-  const store = interviewStore({ gateway, prefs, timers });
+  const store = interviewStore({ gateway, prefs, timers, drafts });
   store.seed(lists);
   const said = [];
-  return { store, gateway, prefs, timers, said, announce: (t) => said.push(t) };
+  return { store, gateway, prefs, timers, drafts, said, announce: (t) => said.push(t) };
 }
 
 const asked = (seq, interview) => ({ seq, kind: "interview_asked", interview });
@@ -164,4 +180,97 @@ test("without a gateway the store only holds what it was seeded with", () => {
   store.seed({ s1: makeList(1, makeInterview()) });
   store.follow("s1", () => {})();
   assert.equal(store.shown("s1"), true);
+});
+
+const progressOf = (store, id = "iv-1") => store.progress(id);
+
+test("choosing an option, accepting the recommendation, writing own text and a note move the counts", () => {
+  const { store } = setup({ lists: { s1: makeList(1, makeInterview()) } });
+  assert.deepEqual(progressOf(store), { answered: 0, total: 2, skipped: 2 });
+  store.choose("iv-1", 0, "0");
+  assert.deepEqual(progressOf(store), { answered: 1, total: 2, skipped: 1 });
+  assert.equal(store.isChecked("iv-1", 0, "0"), true);
+  assert.equal(store.isChecked("iv-1", 0, "1"), false);
+  store.choose("iv-1", 0, "own");
+  assert.deepEqual(progressOf(store), { answered: 0, total: 2, skipped: 2 }, "own with no text is not an answer");
+  assert.equal(store.ownOpen("iv-1", 0), true);
+  store.type("iv-1", 0, "a third way");
+  assert.equal(progressOf(store).answered, 1);
+  store.note("iv-1", 1, "only a note");
+  assert.equal(progressOf(store).answered, 1, "a note is never an answer");
+  store.type("iv-1", 1, "in the UI");
+  assert.deepEqual(progressOf(store), { answered: 2, total: 2, skipped: 0 });
+});
+
+test("a multiple choice ticks and unticks, and a single choice keeps one", () => {
+  const multi = makeInterview({ id: "m", questions: [{ title: "t", body: "", kind: "multiple", options: [{ label: "A", description: "" }, { label: "B", description: "" }], recommended: null }] });
+  const { store } = setup({ lists: { s1: makeList(1, makeInterview(), multi) } });
+  store.choose("m", 0, "0", true);
+  store.choose("m", 0, "1", true);
+  assert.deepEqual(store.answersFor("m")[0].chosen, [0, 1]);
+  store.choose("m", 0, "0", false);
+  assert.deepEqual(store.answersFor("m")[0].chosen, [1]);
+  store.choose("iv-1", 0, "0");
+  store.choose("iv-1", 0, "1");
+  assert.deepEqual(store.answersFor("iv-1")[0].chosen, [1]);
+});
+
+test("accept all recommended fills only the blank questions that have a recommendation and sends nothing", () => {
+  const { store, gateway } = setup({ lists: { s1: makeList(1, makeInterview()) } });
+  store.choose("iv-1", 0, "0");
+  store.acceptAll("iv-1");
+  assert.deepEqual(store.answersFor("iv-1")[0].chosen, [0], "the answer the person gave stays");
+  assert.equal(progressOf(store).answered, 1, "the text question has no recommendation");
+  const blank = setup({ lists: { s1: makeList(1, makeInterview()) } });
+  blank.store.acceptAll("iv-1");
+  assert.deepEqual(blank.store.answersFor("iv-1")[0].chosen, [1]);
+  assert.deepEqual(gateway.reads, []);
+});
+
+test("the answers are the contract's: chosen, text, note, skipped", () => {
+  const { store } = setup({ lists: { s1: makeList(1, makeInterview()) } });
+  store.choose("iv-1", 0, "1");
+  store.note("iv-1", 0, "sure");
+  assert.deepEqual(store.submission("iv-1"), [
+    { chosen: [1], text: "", note: "sure", skipped: false },
+    { chosen: [], text: "", note: "", skipped: true },
+  ]);
+  assert.equal(store.submission("nope"), null);
+});
+
+test("every change is kept as a draft, and a draft is restored when the list is seeded again (a reload)", () => {
+  const drafts = memoryDrafts();
+  const first = setup({ lists: { s1: makeList(1, makeInterview()) }, drafts });
+  first.store.choose("iv-1", 0, "own");
+  first.store.type("iv-1", 0, "mine");
+  assert.equal(drafts.held["iv-1"][0].text, "mine");
+  const reloaded = setup({ lists: { s1: makeList(1, makeInterview()) }, drafts });
+  assert.equal(reloaded.store.answersFor("iv-1")[0].text, "mine");
+  assert.equal(reloaded.store.ownOpen("iv-1", 0), true);
+  assert.equal(progressOf(reloaded.store).answered, 1);
+});
+
+test("answers survive the interview being replaced by a changed copy, and drafts of interviews no longer open are dropped", () => {
+  const { store, drafts } = setup({ lists: { s1: makeList(1, makeInterview(), makeInterview({ id: "b" })) } });
+  store.choose("iv-1", 0, "0");
+  store.choose("b", 0, "0");
+  store.receive("s1", { seq: 2, kind: "interview_changed", interview: makeInterview({ id: "b", state: "sent", ended_at: "2026-11-08T14:40:00Z", delivery: "queued" }) });
+  assert.deepEqual(store.answersFor("iv-1")[0].chosen, [0]);
+  assert.deepEqual(drafts.dropped, ["b"]);
+  assert.equal(drafts.held.b, undefined);
+});
+
+test("drop forgets one interview's answers and its draft, for the tickets that send and dismiss", () => {
+  const { store, drafts } = setup({ lists: { s1: makeList(1, makeInterview()) } });
+  store.choose("iv-1", 0, "0");
+  store.drop("iv-1");
+  assert.deepEqual(progressOf(store), { answered: 0, total: 2, skipped: 2 });
+  assert.equal(drafts.held["iv-1"], undefined);
+});
+
+test("an interview that arrives later gets its draft too", () => {
+  const drafts = memoryDrafts({ late: [{ chosen: [0], own: false, text: "", note: "" }, { chosen: [], own: false, text: "", note: "" }] });
+  const { store } = setup({ lists: { s1: makeList(0) }, drafts });
+  store.receive("s1", asked(1, makeInterview({ id: "late" })));
+  assert.equal(store.isChecked("late", 0, "0"), true);
 });

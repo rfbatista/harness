@@ -8,9 +8,15 @@
 // panel is docked (the session column is wide enough) and the person has not
 // hidden it in this session, or it is a sheet the person opened. A sheet never
 // opens by itself. The person's choice to hide is kept in this browser.
+//
+// The store also holds what the person has answered in each open interview
+// (interviewAnswering.js): kept in this browser as a draft until it is sent.
 
 import { applyEvent, arrived, emptyList, openOnes } from "../domain/interviews.js";
+import { answering } from "./interviewAnswering.js";
 import { arrivalText, panelView } from "./interviewView.js";
+
+const noDrafts = { read: () => null, write() {}, drop() {}, sweep() {} };
 
 /** How long the toggle's signal ring shows after an arrival the panel did not show. */
 export const SIGNAL_MS = 1_200;
@@ -20,14 +26,16 @@ export const SIGNAL_MS = 1_200;
  *   gateway?: import("../domain/ports.js").InterviewGateway | null,  without it nothing is followed or read again
  *   prefs?: { interviewHidden: (sessionId: string) => boolean, setInterviewHidden: (sessionId: string, hidden: boolean) => void },
  *   timers?: { setTimeout: typeof globalThis.setTimeout, clearTimeout: typeof globalThis.clearTimeout },
+ *   drafts?: { read: Function, write: Function, drop: Function, sweep: Function },  the unsent answers kept in this browser
  * }} deps
  */
-export function interviewStore({ gateway = null, prefs = { interviewHidden: () => false, setInterviewHidden() {} }, timers = globalThis } = {}) {
+export function interviewStore({ gateway = null, prefs = { interviewHidden: () => false, setInterviewHidden() {} }, timers = globalThis, drafts = noDrafts } = {}) {
   /** Sessions whose list was followed and then let go: events may have been missed. */
   const stale = new Set();
   const rings = new Map();
 
   return {
+    ...answering(drafts),
     /** @type {Record<string, import("../domain/interviews.js").InterviewList>} */
     lists: {},
     /** The session column is wide enough to dock the panel (set by the panel from its width). */
@@ -42,6 +50,8 @@ export function interviewStore({ gateway = null, prefs = { interviewHidden: () =
     /** @param {Record<string, import("../domain/interviews.js").InterviewList>} lists  the page seed's, by session id */
     seed(lists) {
       this.lists = { ...lists };
+      drafts.sweep();
+      this.hydrate(this.lists);
     },
 
     list(sessionId) {
@@ -152,6 +162,7 @@ export function interviewStore({ gateway = null, prefs = { interviewHidden: () =
       const before = this.list(sessionId);
       const now = arrived(before, list);
       this.lists = { ...this.lists, [sessionId]: list };
+      this.hydrate({ [sessionId]: list });
       const others = openOnes(before).length > 0;
       now.forEach((interview, n) => announce?.(arrivalText(interview, others || n > 0)));
       if (now.length > 0 && this.docked && this.hidden(sessionId)) this.ring(sessionId);

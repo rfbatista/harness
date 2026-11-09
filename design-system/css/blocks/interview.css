@@ -9,7 +9,9 @@
  *   <span class="who">architect · 2 open</span><span class="grow"></span>
  *   <span class="badge" data-tone="attention">5 open</span><button class="button" data-icon>×</button></header>
  *   <div class="scroll" tabindex="-1"><section class="interview-set">…</section></div></aside>
- * The scroller's tabindex is -1 only so Alt+Shift+Q can focus it.
+ * The scroller's tabindex is -1 only so Alt+Shift+Q can focus it. It keeps
+ * 7rem clear at its foot (scroll-padding) so what takes the focus never ends up
+ * under an interview's sticky footer.
  */
 
 @layer blocks {
@@ -53,6 +55,7 @@
       padding: var(--space-m);
       overflow: auto;
       overscroll-behavior: contain;
+      scroll-padding-block-end: 7rem;
       animation: interview-in var(--duration-quick) var(--ease-out);
     }
 

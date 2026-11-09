@@ -8,7 +8,7 @@ import { fileURLToPath } from "node:url";
 
 const read = (p) => readFileSync(fileURLToPath(new URL(p, import.meta.url)), "utf8");
 const strip = (css) => css.replace(/\/\*[\s\S]*?\*\//g, "");
-const BLOCKS = ["agent-stage", "interview", "interview-set", "interview-question", "interview-option", "interview-sheet", "interview-toggle"];
+const BLOCKS = ["agent-stage", "interview", "interview-set", "interview-question", "interview-note", "interview-option", "interview-sheet", "interview-toggle"];
 const css = Object.fromEntries(BLOCKS.map((b) => [b, read(`./css/blocks/${b}.css`)]));
 const code = Object.fromEntries(BLOCKS.map((b) => [b, strip(css[b])]));
 const index = read("./css/index.css");
@@ -70,6 +70,16 @@ test("the sheet is out of flow, centred to 40rem and 88% high, full width and 92
   assert.match(sheet, /max-block-size:\s*88%/);
   assert.match(sheet, /@media \(width < 48rem\)\s*\{[^}]*max-block-size:\s*92%/s);
   assert.match(sheet, /\.interview-peek\s*\{[^}]*position:\s*absolute/s);
+});
+
+test("the footer sticks to the foot of the panel's scroller and the progress bar is a token-coloured fill", () => {
+  assert.match(code["interview-set"], /> footer\s*\{[^}]*position:\s*sticky;[^}]*inset-block-end:\s*0/s);
+  assert.match(code["interview-set"], /\.bar > i\s*\{[^}]*background:\s*var\(--color-signal\)/s);
+});
+
+test("the note is a quiet disclosure: its marker is drawn, and its summary shows a focus ring", () => {
+  assert.match(code["interview-note"], /::before\s*\{\s*content:\s*"\+"/);
+  assert.match(code["interview-note"], /summary:focus-visible|&:focus-visible\s*\{[^}]*outline/s);
 });
 
 test("the specimen and DESIGN.md show each block", () => {
