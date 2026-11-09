@@ -2,6 +2,9 @@ package httpapi
 
 import (
 	"context"
+	"encoding/json"
+	"errors"
+	"io"
 	"net/http"
 
 	"github.com/labstack/echo/v4"
@@ -51,4 +54,42 @@ func (h *Handler) followInterviews(ctx context.Context, sessionID string) (<-cha
 		return nil, err
 	}
 	return relayAs(ctx, events, func(ev domain.InterviewEvent) any { return ev }), nil
+}
+
+// handleSubmitInterview sends the person's answers: 200 {"interview"} with
+// the interview now sent. A repeat answers the same.
+func (h *Handler) handleSubmitInterview(c echo.Context) error {
+	if h.interviews == nil {
+		return errInterviewsOff
+	}
+	var body struct {
+		Answers []domain.InterviewAnswer `json:"answers"`
+	}
+	if err := bindJSON(c, &body); err != nil {
+		return err
+	}
+	iv, err := h.interviews.Submit(c.Request().Context(), c.Param("id"), body.Answers)
+	if err != nil {
+		return err
+	}
+	return c.JSON(http.StatusOK, map[string]any{"interview": iv})
+}
+
+// handleDismissInterview dismisses the interview with an optional note: 200
+// {"interview"} with the interview now dismissed. A repeat answers the same.
+func (h *Handler) handleDismissInterview(c echo.Context) error {
+	if h.interviews == nil {
+		return errInterviewsOff
+	}
+	var body struct {
+		Note string `json:"note"`
+	}
+	if err := json.NewDecoder(c.Request().Body).Decode(&body); err != nil && !errors.Is(err, io.EOF) {
+		return echo.NewHTTPError(http.StatusBadRequest, "invalid body")
+	}
+	iv, err := h.interviews.Dismiss(c.Request().Context(), c.Param("id"), body.Note)
+	if err != nil {
+		return err
+	}
+	return c.JSON(http.StatusOK, map[string]any{"interview": iv})
 }

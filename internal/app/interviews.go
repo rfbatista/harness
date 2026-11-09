@@ -36,9 +36,10 @@ type interviewsParams struct {
 }
 
 func newInterviews(p interviewsParams) *interviews.Service {
-	deps := interviews.Deps{Repo: sqlite.NewInterviewRepository(p.DB), Sessions: p.Sessions, Agents: p.Agents, Events: p.Cat.Bus}
+	deps := interviews.Deps{Repo: sqlite.NewInterviewRepository(p.DB), Sessions: p.Sessions, Agents: p.Agents, Events: p.Cat.Bus, Turns: mcpinterview.Turns{}}
 	if p.Orch != nil {
 		deps.Announce = p.Orch
+		deps.Delivery = p.Orch
 	}
 	return interviews.New(deps)
 }

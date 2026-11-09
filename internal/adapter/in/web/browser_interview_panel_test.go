@@ -2,6 +2,7 @@ package web
 
 import (
 	"context"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -132,6 +133,16 @@ func (g *gatedInterviews) apiReads() int {
 	g.mu.Lock()
 	defer g.mu.Unlock()
 	return g.reads
+}
+
+// The panel tests read and follow; answering is the server's (see the
+// interviews end-to-end tests).
+func (g *gatedInterviews) Submit(context.Context, string, []domain.InterviewAnswer) (*domain.Interview, error) {
+	return nil, errors.New("not answered here")
+}
+
+func (g *gatedInterviews) Dismiss(context.Context, string, string) (*domain.Interview, error) {
+	return nil, errors.New("not answered here")
 }
 
 var _ ports.Interviews = (*gatedInterviews)(nil)

@@ -32,6 +32,12 @@ type Deps struct {
 	Announce ports.SessionChangeAnnouncer
 	// Events carries what the inbox reacts to; nil publishes nothing.
 	Events ports.EventPublisher
+	// Turns validates answers and renders the agent's turn; nil refuses
+	// Submit and Dismiss with UNAVAILABLE.
+	Turns ports.InterviewTurns
+	// Delivery is the turn courier the rendered turn goes through; nil
+	// delivers nothing.
+	Delivery ports.TurnDelivery
 }
 
 // Service implements ports.Interviews and ports.InterviewAsker.
@@ -109,10 +115,11 @@ func (s *Service) Change(_ context.Context, i domain.Interview) (*domain.Intervi
 }
 
 // Expire closes the session's open interviews as expired, as of now, for a
-// session that ended: each is published as interview_changed, and the
-// session's counts, now zero, go on its feeds once. Closed interviews stay as
+// session that ended: each is published as interview_changed and the session's
+// counts, now lower, go on its feeds. Each is a compare-and-set on open: one
+// the person closed first stays as they closed it. Closed interviews stay as
 // they are, so expiring twice changes nothing the second time.
-func (s *Service) Expire(ctx context.Context, sessionID string) error {
+func (s *Service) Expire(_ context.Context, sessionID string) error {
 	lists, err := s.Repo.List([]string{sessionID})
 	if err != nil {
 		return err
@@ -129,11 +136,179 @@ func (s *Service) Expire(ctx context.Context, sessionID string) error {
 		}
 		expired := *iv
 		expired.State, expired.EndedAt = domain.InterviewExpired, &now
-		if _, err := s.Change(ctx, expired); err != nil {
+		if _, err := s.leaveOpen(&expired); err != nil {
 			errs = append(errs, err)
 		}
 	}
 	return errors.Join(errs...)
+}
+
+// leaveOpen writes i, an open interview's next state, only while the stored
+// one is still open, and says whether it won. A win is published as
+// interview_changed and puts the session's lower counts on its feeds.
+func (s *Service) leaveOpen(i *domain.Interview) (bool, error) {
+	s.mu.Lock()
+	won, seq, err := s.Repo.Close(i)
+	if err != nil || !won {
+		s.mu.Unlock()
+		return false, err
+	}
+	s.publish(domain.InterviewEvent{Seq: seq, Kind: domain.InterviewChanged, Interview: i})
+	s.mu.Unlock()
+	s.signal(domain.InterviewClosed{InterviewID: i.ID, SessionID: i.SessionID})
+	s.announce(i.SessionID)
+	return true, nil
+}
+
+// Submit closes the interview as sent with the answers and delivers the
+// agent's next turn (ports.InterviewResponder).
+func (s *Service) Submit(_ context.Context, id string, answers []domain.InterviewAnswer) (*domain.Interview, error) {
+	if s.Turns == nil {
+		return nil, errNoTurns
+	}
+	return s.respond(id, domain.InterviewSent, func(iv *domain.Interview) (string, error) {
+		answers = normalized(answers)
+		if err := s.Turns.ValidateAnswers(*iv, answers); err != nil {
+			return "", &domain.StructuredError{Code: "INTERVIEW_ANSWERS_INVALID", Message: err.Error()}
+		}
+		iv.Answers = answers
+		return s.Turns.RenderAnswers(*iv, answers), nil
+	})
+}
+
+// Dismiss closes the interview as dismissed, with the note, and delivers the
+// agent's next turn (ports.InterviewResponder).
+func (s *Service) Dismiss(_ context.Context, id, note string) (*domain.Interview, error) {
+	if s.Turns == nil {
+		return nil, errNoTurns
+	}
+	return s.respond(id, domain.InterviewDismissed, func(iv *domain.Interview) (string, error) {
+		if note != "" {
+			iv.DismissNote = &note
+		}
+		return s.Turns.RenderDismissed(*iv, note), nil
+	})
+}
+
+var errNoTurns = &domain.StructuredError{Code: "UNAVAILABLE", Message: "interviews cannot be answered here"}
+
+// normalized gives every answer a chosen list, never null.
+func normalized(in []domain.InterviewAnswer) []domain.InterviewAnswer {
+	out := make([]domain.InterviewAnswer, len(in))
+	for i, a := range in {
+		if a.Chosen == nil {
+			a.Chosen = []int{}
+		}
+		out[i] = a
+	}
+	return out
+}
+
+// respond moves the open interview to state to (sent or dismissed): prepare
+// fills in what the person said and renders the turn. Only the caller that
+// wins the compare-and-set on open delivers; one that loses gets the current
+// interview back.
+func (s *Service) respond(id string, to domain.InterviewState, prepare func(*domain.Interview) (string, error)) (*domain.Interview, error) {
+	iv, err := s.Repo.Get(id)
+	if err != nil {
+		return nil, err
+	}
+	if iv.State != domain.InterviewOpen {
+		return refuse(iv, to)
+	}
+	if sess := s.Sessions.Get(iv.SessionID); sess == nil || sess.Status.IsTerminal() {
+		return s.expire(iv, to)
+	}
+	text, err := prepare(iv)
+	if err != nil {
+		return nil, err
+	}
+	now := s.now()
+	queued := domain.InterviewQueued
+	iv.State, iv.EndedAt, iv.Delivery, iv.DeliveredAt = to, &now, &queued, nil
+	won, err := s.leaveOpen(iv)
+	if err != nil {
+		return nil, err
+	}
+	if !won {
+		return s.current(id, to)
+	}
+	s.deliver(iv, text)
+	return s.Repo.Get(id)
+}
+
+// expire closes an open interview of a session that ended, and refuses with
+// INTERVIEW_EXPIRED carrying it.
+func (s *Service) expire(iv *domain.Interview, to domain.InterviewState) (*domain.Interview, error) {
+	now := s.now()
+	expired := *iv
+	expired.State, expired.EndedAt = domain.InterviewExpired, &now
+	won, err := s.leaveOpen(&expired)
+	if err != nil {
+		return nil, err
+	}
+	if !won {
+		return s.current(iv.ID, to)
+	}
+	return nil, refusal("INTERVIEW_EXPIRED", "the session ended before the answer, so the interview expired", &expired)
+}
+
+// current re-reads the interview a caller lost the race for.
+func (s *Service) current(id string, to domain.InterviewState) (*domain.Interview, error) {
+	iv, err := s.Repo.Get(id)
+	if err != nil {
+		return nil, err
+	}
+	return refuse(iv, to)
+}
+
+// refuse answers for an interview that is not open: the same operation that
+// already succeeded returns it, anything else is INTERVIEW_NOT_OPEN carrying it.
+func refuse(iv *domain.Interview, to domain.InterviewState) (*domain.Interview, error) {
+	if iv.State == to {
+		return iv, nil
+	}
+	return nil, refusal("INTERVIEW_NOT_OPEN", "the interview is "+string(iv.State)+", not open", iv)
+}
+
+// refusal is a coded error whose details carry the current interview.
+func refusal(code, message string, iv *domain.Interview) error {
+	return &domain.DetailedError{
+		StructuredError: &domain.StructuredError{Code: code, Message: message},
+		Details: struct {
+			Interview *domain.Interview `json:"interview"`
+		}{iv},
+	}
+}
+
+// deliver hands the turn to the courier; the interview reads delivered, with
+// its time, once the turn went in.
+func (s *Service) deliver(iv *domain.Interview, text string) {
+	if s.Delivery == nil {
+		return
+	}
+	_, err := s.Delivery.Deliver(iv.SessionID, "interview:"+iv.ID, text, func(at time.Time) { s.delivered(iv.ID, at) })
+	if err != nil {
+		slog.Warn("deliver an interview's turn", "interview", iv.ID, "session", iv.SessionID, "err", err)
+	}
+}
+
+// delivered records that the interview's turn went in at at.
+func (s *Service) delivered(id string, at time.Time) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	iv, err := s.Repo.Get(id)
+	if err != nil || iv.Delivery == nil || *iv.Delivery == domain.InterviewDelivered {
+		return
+	}
+	done := domain.InterviewDelivered
+	iv.Delivery, iv.DeliveredAt = &done, &at
+	seq, err := s.Repo.Update(iv)
+	if err != nil {
+		slog.Warn("record an interview's delivery", "interview", id, "err", err)
+		return
+	}
+	s.publish(domain.InterviewEvent{Seq: seq, Kind: domain.InterviewChanged, Interview: iv})
 }
 
 // Subscribe has the service expire a session's open interviews when the

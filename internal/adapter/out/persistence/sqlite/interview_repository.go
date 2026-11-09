@@ -131,12 +131,52 @@ func (r *InterviewRepository) Update(i *domain.Interview) (int64, error) {
 			return res.Error
 		}
 		if res.RowsAffected == 0 {
-			return &domain.StructuredError{Code: "INTERVIEW_NOT_FOUND", Message: "interview " + i.ID + " not found"}
+			return interviewNotFound(i.ID)
 		}
 		seq, err = nextSeq(tx, i.SessionID)
 		return err
 	})
 	return seq, err
+}
+
+func (r *InterviewRepository) Get(id string) (*domain.Interview, error) {
+	var rows []InterviewModel
+	if err := r.db.Where("id = ?", id).Limit(1).Find(&rows).Error; err != nil {
+		return nil, err
+	}
+	if len(rows) == 0 {
+		return nil, interviewNotFound(id)
+	}
+	return rows[0].toDomain(), nil
+}
+
+func interviewNotFound(id string) error {
+	return &domain.StructuredError{Code: "INTERVIEW_NOT_FOUND", Message: "interview " + id + " not found"}
+}
+
+func (r *InterviewRepository) Close(i *domain.Interview) (bool, int64, error) {
+	m, err := interviewModel(i)
+	if err != nil {
+		return false, 0, err
+	}
+	var (
+		seq int64
+		won bool
+	)
+	err = r.db.Transaction(func(tx *gorm.DB) error {
+		res := tx.Model(&InterviewModel{}).Where("id = ? AND state = ?", i.ID, string(domain.InterviewOpen)).
+			Select("*").Omit("id", "session_id").Updates(m)
+		if res.Error != nil || res.RowsAffected == 0 {
+			return res.Error
+		}
+		won = true
+		seq, err = nextSeq(tx, i.SessionID)
+		return err
+	})
+	if err == nil && !won {
+		_, err = r.Get(i.ID) // a miss because the interview is not there
+	}
+	return won, seq, err
 }
 
 // The open interviews of the sessions, and for each session its newest closed
