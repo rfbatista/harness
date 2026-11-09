@@ -265,7 +265,10 @@ export const servicesPage = ({ gateway, clock = systemClock, timers = globalThis
         this.openLog(id);
         return;
       }
-      if (verb === "start") this.refusal = null;
+      if (verb === "start") {
+        this.refusal = null;
+        if (this.branchSearchId === id) this.branchSearchId = "";
+      }
       this.flights = { ...this.flights, [id]: verb };
       const seqBefore = this.seq;
       try {

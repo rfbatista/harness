@@ -708,3 +708,11 @@ test("Restart on a branch run says it runs the branch again at its latest commit
   const { page } = openWith([onBranch]);
   assert.equal(rowOf(page, "api").restart.title, "Runs the same branch again at its latest commit");
 });
+
+test("Start while the branch search is open closes it and runs the pick", async () => {
+  const { page, gateway } = await openBranchRunIn();
+  pickRunIn(page, "1", "branch:");
+  await page.start("1");
+  assert.equal(rowOf(page, "api").runIn.searchOpen, false);
+  assert.deepEqual(gateway.starts, [["1", "main"]]);
+});
