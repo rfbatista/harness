@@ -58,7 +58,7 @@ test("every animation is switched off under reduced motion", () => {
 });
 
 test("the recommendation and the focused question are borders, so they survive forced colours", () => {
-  assert.match(code["interview-option"], /\[data-recommended\]\s*\{[^}]*border-inline-start:\s*3px solid var\(--color-signal\)/s);
+  assert.match(code["interview-option"], /\[data-recommended\]\s*\{[^}]*border-inline-start:\s*var\(--border-edge-width\) solid var\(--color-signal\)/s);
   assert.match(code["interview-question"], /:focus-within\s*\{\s*border-inline-start-color:\s*var\(--color-attention\)/);
   assert.match(code["interview-question"], /forced-colors: active/);
 });
@@ -94,7 +94,7 @@ test("a folded or closed interview is a row: a full-width button with a chevron 
 test("a closed interview reads back its answers: Skipped is italic and faint, a note has a rule beside it", () => {
   const history = code["interview-history"];
   assert.match(history, /\.skipped\s*\{[^}]*font-style:\s*italic[^}]*color:\s*var\(--color-ink-faint\)|\.skipped\s*\{[^}]*color:\s*var\(--color-ink-faint\)[^}]*font-style:\s*italic/s);
-  assert.match(history, /\.note\s*\{[^}]*border-inline-start:\s*2px solid var\(--color-line-strong\)/s);
+  assert.match(history, /\.note\s*\{[^}]*border-inline-start:\s*var\(--border-rule-width\) solid var\(--color-line-strong\)/s);
   assert.match(history, /\.interview-group\s*\{[^}]*text-transform:\s*uppercase/s);
 });
 

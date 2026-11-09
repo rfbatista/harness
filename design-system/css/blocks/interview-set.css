@@ -57,7 +57,7 @@
       background: var(--color-raised);
 
       & .sum { display: flex; align-items: center; gap: var(--space-s); color: var(--color-ink-muted); font-size: var(--text-xs); }
-      & .bar { flex: none; inline-size: 30%; block-size: 4px; border-radius: 2px; background: var(--color-sunken); overflow: hidden; }
+      & .bar { flex: none; inline-size: 30%; block-size: var(--space-2xs); border-radius: var(--radius-xs); background: var(--color-sunken); overflow: hidden; }
       & .bar > i { display: block; block-size: 100%; background: var(--color-signal); }
       & .actions { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-xs); }
       & .actions > .grow { flex: 1; }

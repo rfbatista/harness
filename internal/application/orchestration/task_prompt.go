@@ -182,7 +182,7 @@ person. A session may post at most 20 an hour.`
 
 // askSection tells a session how to put questions to the person: through the
 // ask_person tool, ending its turn, since the answers arrive as its next turn
-// (ADR 0073). A delegate asks its architect first.
+// (ADR 0076). A delegate asks its architect first.
 func askSection(delegate bool) string {
 	s := "To ask the person questions, ask the person through `ask_person` and end your turn; never ask in plain text. Give each question your recommended answer. The answers arrive as your next turn."
 	if delegate {

@@ -36,14 +36,14 @@
       & > .text > span { overflow: hidden; color: var(--color-ink-faint); font-size: var(--text-xs); text-overflow: ellipsis; white-space: nowrap; }
     }
     & > button.head:hover { background: var(--color-hover); }
-    & > button.head:focus-visible { outline: var(--border-focus-width) solid var(--color-focus); outline-offset: -2px; }
+    & > button.head:focus-visible { outline: var(--border-focus-width) solid var(--color-focus); outline-offset: calc(-1 * var(--border-focus-offset)); }
 
     & .chev {
       flex: none;
       inline-size: 0.5rem;
       block-size: 0.5rem;
-      border-inline-end: 1.5px solid var(--color-ink-faint);
-      border-block-end: 1.5px solid var(--color-ink-faint);
+      border-inline-end: var(--border-icon-width) solid var(--color-ink-faint);
+      border-block-end: var(--border-icon-width) solid var(--color-ink-faint);
       rotate: 45deg;
       translate: 0 -15%;
     }
@@ -85,7 +85,7 @@
     & .skipped { font-style: italic; font-weight: var(--weight-regular); color: var(--color-ink-faint); }
     & .note {
       padding-inline-start: var(--space-s);
-      border-inline-start: 2px solid var(--color-line-strong);
+      border-inline-start: var(--border-rule-width) solid var(--color-line-strong);
       color: var(--color-ink-muted);
       font-size: var(--text-xs);
       white-space: pre-wrap;

@@ -53,7 +53,7 @@
     animation: interview-sheet-in var(--duration-settle) var(--ease-out-expo);
 
     & > .grab { display: grid; flex: none; place-items: center; block-size: 0.875rem; }
-    & > .grab::before { content: ""; inline-size: 2.25rem; block-size: 4px; border-radius: 2px; background: var(--color-line-strong); }
+    & > .grab::before { content: ""; inline-size: var(--size-row); block-size: var(--space-2xs); border-radius: var(--radius-xs); background: var(--color-line-strong); }
     /* The sheet is as tall as its questions, up to its maximum; they scroll past that. */
     & > .interview { flex: 0 1 auto; inline-size: auto; border: 0; background: none; }
     & > .interview > .scroll { flex: 0 1 auto; }

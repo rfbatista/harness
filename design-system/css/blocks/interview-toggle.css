@@ -19,7 +19,7 @@
     &[data-signal] { animation: interview-ring var(--duration-signal) var(--ease-out) 1; }
 
     @media (prefers-reduced-motion: reduce) {
-      &[data-signal] { outline: 2px solid color-mix(in oklch, var(--color-attention) 45%, transparent); outline-offset: 2px; animation: none; }
+      &[data-signal] { outline: var(--border-focus-width) solid color-mix(in oklch, var(--color-attention) 45%, transparent); outline-offset: var(--border-focus-offset); animation: none; }
     }
   }
 

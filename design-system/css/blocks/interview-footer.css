@@ -21,7 +21,7 @@
     & > footer {
       & .say { color: var(--color-ink-muted); font-size: var(--text-sm); }
       & .say:empty { display: none; }
-      & .say:focus-visible { outline: var(--border-focus-width) solid var(--color-focus); outline-offset: 2px; }
+      & .say:focus-visible { outline: var(--border-focus-width) solid var(--color-focus); outline-offset: var(--border-focus-offset); }
       & .banner { font-size: var(--text-xs); }
 
       & .confirm {

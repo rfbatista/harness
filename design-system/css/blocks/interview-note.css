@@ -18,7 +18,7 @@
 
       &::-webkit-details-marker { display: none; }
       &::before { content: "+"; inline-size: 1rem; font-weight: var(--weight-bold); }
-      &:focus-visible { outline: var(--border-focus-width) solid var(--color-focus); outline-offset: 1px; }
+      &:focus-visible { outline: var(--border-focus-width) solid var(--color-focus); outline-offset: var(--border-width); }
     }
     &[open] > summary::before { content: "\2212"; }
     & > textarea { inline-size: 100%; min-block-size: 2.5rem; margin-block-start: var(--space-2xs); resize: vertical; font-size: var(--text-sm); }

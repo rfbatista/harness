@@ -25,10 +25,10 @@
     min-inline-size: 0;
     margin: 0;
     padding: var(--space-m);
-    padding-inline-start: calc(var(--space-m) - 3px);
+    padding-inline-start: calc(var(--space-m) - var(--border-edge-width));
     border: 0;
     border-block-start: var(--border-width) solid var(--color-line);
-    border-inline-start: 3px solid transparent;
+    border-inline-start: var(--border-edge-width) solid transparent;
 
     &:focus-within { border-inline-start-color: var(--color-attention); }
     @media (forced-colors: active) { &:focus-within { border-inline-start-color: Highlight; } }
@@ -66,7 +66,7 @@
       & code { padding: 0 var(--space-3xs); border-radius: var(--radius-xs); background: var(--color-sunken); color: var(--color-ink); }
       & pre { padding: var(--space-xs) var(--space-s); overflow: auto; border-radius: var(--radius-sm); background: var(--color-sunken); color: var(--color-ink); font-size: var(--text-xs); white-space: pre; }
       & pre code { padding: 0; background: none; }
-      & blockquote { padding-inline-start: var(--space-s); border-inline-start: 2px solid var(--color-line-strong); }
+      & blockquote { padding-inline-start: var(--space-s); border-inline-start: var(--border-rule-width) solid var(--color-line-strong); }
     }
 
     & > .answer { display: grid; gap: var(--space-xs); padding-inline-start: var(--_indent); }
@@ -79,7 +79,7 @@
       gap: var(--space-xs);
       padding: var(--space-xs) var(--space-s);
       border: var(--border-width) solid color-mix(in oklch, var(--color-signal) 40%, transparent);
-      border-inline-start: 3px solid var(--color-signal);
+      border-inline-start: var(--border-edge-width) solid var(--color-signal);
       border-radius: var(--radius-sm);
       background: var(--color-signal-wash);
       font-size: var(--text-sm);
