@@ -110,6 +110,9 @@ func gitFixture(t *testing.T, opts services.Options) (*servicesFixture, *gitRepo
 			domain.ServiceKindCommand: commandrunner.Runner{}, domain.ServiceKindImage: &containerrunnertest.Fake{},
 		}
 	}
+	if opts.WorktreeRoot != "" {
+		opts.WorktreeRoot = filepath.Clean(opts.WorktreeRoot)
+	}
 	opts.BranchGit = gitcli.NewServiceBranches(gitcli.WithGit(realGit))
 	opts.StopGrace = 5 * time.Second
 	f := newServicesFixture(t, opts)

@@ -32,6 +32,8 @@ type servicesFixture struct {
 	svc       *services.Service
 	store     ports.ServiceStore
 	logDir    string
+	// worktreeRoot is where service worktrees are made, when the test set one.
+	worktreeRoot string
 	projectID string
 	repoID    string
 }
@@ -75,7 +77,7 @@ func newServicesFixture(t *testing.T, opts services.Options) *servicesFixture {
 	if err != nil {
 		t.Fatal(err)
 	}
-	return &servicesFixture{t: t, srv: srv, cat: cat, svc: svc, store: store, logDir: opts.LogDir, projectID: p.ID, repoID: r.ID}
+	return &servicesFixture{t: t, srv: srv, cat: cat, svc: svc, store: store, logDir: opts.LogDir, worktreeRoot: opts.WorktreeRoot, projectID: p.ID, repoID: r.ID}
 }
 
 func (f *servicesFixture) call(method, path string, body any) (int, map[string]any) {
