@@ -726,7 +726,23 @@ templ liveRows() {
 					<template x-if="row.detail">
 						<span class="[ detail ]" x-bind:data-report="row.detail.kind">
 							<template x-if="row.detail.lead">
-								<span class="[ lead ]" x-text="row.detail.lead"></span>
+								<span style="display: contents" x-data="branchRequestLead(row.id)">
+									<template x-if="actionable(row.detail.kind)">
+										<button
+											type="button"
+											class="[ lead ]"
+											data-action
+											x-text="row.detail.lead"
+											x-bind:aria-label="describe(row.detail.kind, row.detail.lead)"
+											aria-haspopup="dialog"
+											x-on:click.stop="open(row.detail.kind)"
+											x-on:keydown.stop
+										></button>
+									</template>
+									<template x-if="plain(row.detail.kind)">
+										<span class="[ lead ]" x-text="row.detail.lead"></span>
+									</template>
+								</span>
 							</template>
 							<template x-if="row.detail.text">
 								<span class="[ quote ]" x-text="row.detail.text"></span>
