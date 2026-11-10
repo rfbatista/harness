@@ -16,6 +16,7 @@ package notifications
 import (
 	"context"
 	"encoding/base64"
+	"errors"
 	"fmt"
 	"log/slog"
 	"net/url"
@@ -94,6 +95,9 @@ type Options struct {
 	Settings ports.SettingsReader
 	// Clock defaults to time.Now.
 	Clock func() time.Time
+	// Resumer resumes the sessions Resume all interrupted lists; nil answers
+	// every resume as failed.
+	Resumer ports.SessionResumer
 }
 
 // Service implements the inbox.
@@ -102,6 +106,10 @@ type Service struct {
 	readers  Readers
 	now      func() time.Time
 	delivery *dispatcher
+	resumer  ports.SessionResumer
+	// resumeMu keeps two clicks of Resume all interrupted from running at
+	// once: the second waits, then retries only what is still marked.
+	resumeMu sync.Mutex
 
 	// Each write (its checks, the change and the unread count) is one write
 	// transaction, numbered inside it; stream sends the changes to the
@@ -163,7 +171,7 @@ func New(repo ports.NotificationRepository, readers Readers, opts Options) (*Ser
 		return nil, err
 	}
 	return &Service{
-		repo: repo, readers: readers, now: now, delivery: d, stream: newSequencer(),
+		repo: repo, readers: readers, now: now, delivery: d, resumer: opts.Resumer, stream: newSequencer(),
 		followers: map[chan ports.NotificationChange]struct{}{},
 	}, nil
 }
@@ -454,6 +462,90 @@ func (s *Service) onSessionsInterrupted(ctx context.Context, ev domain.SessionsI
 		return
 	}
 	s.delivery.enqueue(*c.Changed[len(c.Changed)-1])
+}
+
+var _ ports.InterruptedResumer = (*Service)(nil)
+
+// ResumeInterrupted implements ports.InterruptedResumer. It resumes the listed
+// sessions that still carry the mark one at a time, each through the same
+// resume as a person's click, and a failure never stops the others.
+func (s *Service) ResumeInterrupted(ctx context.Context, id string) (*ports.ResumeInterruptedAnswer, error) {
+	s.resumeMu.Lock()
+	defer s.resumeMu.Unlock()
+	n := s.repo.Get(id)
+	if n == nil {
+		return nil, &domain.StructuredError{Code: "NOTIFICATION_NOT_FOUND", Message: "notification " + id + " not found"}
+	}
+	if n.Kind != domain.NotificationSessionsInterrupted {
+		return nil, invalid("notification " + id + " is not a sessions_interrupted notification")
+	}
+	// The click starts over: an earlier failure's reason goes, and comes back
+	// only if this call fails the session again.
+	list := make([]domain.InterruptedSession, len(n.InterruptedSessions))
+	results := make([]ports.ResumeResult, len(list))
+	for i, e := range n.InterruptedSessions {
+		e.Reason = ""
+		list[i] = e
+		results[i] = ports.ResumeResult{SessionID: e.SessionID, Outcome: ports.ResumeSkipped}
+		if sess := s.readers.Sessions.Get(e.SessionID); sess == nil || sess.InterruptedAt == nil {
+			continue
+		}
+		if err := s.resumeOne(ctx, e.SessionID); err != nil {
+			list[i].Reason = errMessage(err)
+			results[i].Outcome, results[i].Reason = ports.ResumeFailed, list[i].Reason
+			continue
+		}
+		results[i].Outcome = ports.ResumeResumed
+	}
+	marked := false
+	for _, e := range list {
+		if sess := s.readers.Sessions.Get(e.SessionID); sess != nil && sess.InterruptedAt != nil {
+			marked = true
+		}
+	}
+	c, err := s.write(func(tx ports.NotificationRepository, now time.Time) ([]*domain.Notification, bool, error) {
+		cur, err := tx.SetInterruptedSessions(id, list)
+		if err != nil || cur == nil {
+			return nil, false, err
+		}
+		if !marked && cur.ResolvedAt == nil {
+			if _, err := tx.Resolve(domain.SessionsInterruptedCauseKey, now); err != nil {
+				return nil, false, err
+			}
+			cur = tx.Get(id)
+		}
+		return []*domain.Notification{cur}, true, nil
+	})
+	if err != nil {
+		return nil, err
+	}
+	answer := &ports.ResumeInterruptedAnswer{Results: results}
+	if c != nil {
+		answer.Notification = c.Changed[0]
+	}
+	return answer, nil
+}
+
+// resumeOne resumes one session; a panic or a missing resumer is a failure
+// of that session alone.
+func (s *Service) resumeOne(ctx context.Context, sessionID string) (err error) {
+	if s.resumer == nil {
+		return fmt.Errorf("resuming sessions is not available on this server")
+	}
+	defer func() {
+		if r := recover(); r != nil {
+			err = fmt.Errorf("resume panicked: %v", r)
+		}
+	}()
+	return s.resumer.ResumeSession(ctx, sessionID)
+}
+
+func errMessage(err error) string {
+	var se *domain.StructuredError
+	if errors.As(err, &se) {
+		return se.Message
+	}
+	return err.Error()
 }
 
 // refreshInterrupted sends the open sessions_interrupted notification again

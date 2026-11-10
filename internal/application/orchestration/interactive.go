@@ -351,6 +351,17 @@ func (s *Service) interruption(id string) SessionEvent {
 	return SessionEvent{}
 }
 
+var _ ports.SessionResumer = (*Service)(nil)
+
+// ResumeSession implements ports.SessionResumer: the resume the person's
+// click makes, on the server's terminal host, where an interrupted session ran.
+func (s *Service) ResumeSession(ctx context.Context, id string) error {
+	_, _, err := s.ResumeInteractive(ctx, ports.ResumeRequest{
+		SessionID: id, RunsOn: domain.RunnerServer, Size: ports.TermSize{Cols: 120, Rows: 32},
+	})
+	return err
+}
+
 // resumeSandbox is the sandbox step of a resume: the session's policy under
 // the current settings.
 func (s *Service) resumeSandbox(ctx context.Context, sess *domain.Session, env, skillDirs []string) (sandboxed, error) {

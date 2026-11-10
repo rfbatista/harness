@@ -423,6 +423,12 @@ func (r *SessionRepository) ListEvents(sessionID string, fromSeq int64) ([]ports
 	return out, nil
 }
 
+func (r *SessionRepository) LastEventSeq(sessionID string) (int64, error) {
+	var last int64
+	err := r.db.Model(&SessionEventModel{}).Where("session_id = ?", sessionID).Select("COALESCE(MAX(seq), 0)").Scan(&last).Error
+	return last, err
+}
+
 // ActivityByProject answers each project's live session count and newest
 // session activity, in one query.
 func (r *SessionRepository) ActivityByProject() (map[string]ports.SessionActivity, error) {

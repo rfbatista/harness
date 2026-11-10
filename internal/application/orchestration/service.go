@@ -1459,6 +1459,18 @@ type sessionChange struct {
 // it out live. A store failure is logged; the live stream still gets it.
 func (s *Service) record(sessionID string, ev SessionEvent, change sessionChange) {
 	s.mu.Lock()
+	_, known := s.seq[sessionID]
+	s.mu.Unlock()
+	var stored int64
+	if !known {
+		// A session from an earlier run continues its log, so the events a
+		// restart records (interrupted, resumed) come after the ones it holds.
+		stored, _ = s.sessions.LastEventSeq(sessionID)
+	}
+	s.mu.Lock()
+	if _, known := s.seq[sessionID]; !known {
+		s.seq[sessionID] = stored
+	}
 	s.seq[sessionID]++
 	ev.Seq = s.seq[sessionID]
 	moved := ev.Status != "" && s.statuses[sessionID] != ev.Status

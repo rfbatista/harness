@@ -214,3 +214,29 @@ func TestAResumedSessionStoppedMidTurnIsMarkedAgain(t *testing.T) {
 		t.Errorf("%d interrupted_by_restart events, want 2", n)
 	}
 }
+
+// The events a restart records come after the ones the session already holds,
+// so the history reads in order and a client that follows by seq misses none.
+func TestTheRestartsEventsContinueTheSessionsLog(t *testing.T) {
+	svc, _ := newInteractiveService(t)
+	orphan(t, svc, "s1", domain.SessionThinking)
+	svc.publish("s1", SessionEvent{Type: "output", Text: "working"})
+	svc.publish("s1", SessionEvent{Type: "output", Text: "still working"})
+	before, err := svc.sessions.LastEventSeq("s1")
+	if err != nil || before != 2 {
+		t.Fatalf("log of the session ends at seq %d, %v; want 2", before, err)
+	}
+	svc.seq = map[string]int64{} // a new server: nothing is counted in memory
+	if _, err := svc.StopOrphanedServerSessions(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	stored, err := svc.sessions.ListEvents("s1", before)
+	if err != nil || len(stored) < 2 {
+		t.Fatalf("events after the restart = %+v, %v", stored, err)
+	}
+	for i, ev := range stored {
+		if ev.Seq != before+int64(i)+1 {
+			t.Errorf("event %d (%s) has seq %d, want %d", i, ev.Type, ev.Seq, before+int64(i)+1)
+		}
+	}
+}

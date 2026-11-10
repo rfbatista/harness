@@ -135,3 +135,63 @@ func TestABootWithNoInterruptedSessionPostsNoNotification(t *testing.T) {
 		t.Fatalf("notifications = %+v, want none", got)
 	}
 }
+
+func TestResumeAllAfterACrashMarksEveryInterruptedSessionResumed(t *testing.T) {
+	e := newShellE2EWith(t, "interrupted.db")
+	task := e.task("Ship")
+	a, b := e.startOnTheServer(task), e.startOnTheServer(task)
+	e.crash(map[string]domain.SessionStatus{a: domain.SessionThinking, b: domain.SessionRunning})
+	e.orch.Transcripts = transcriptsThatResume{}
+	notes := e.interruptedNotifications()
+	if len(notes) != 1 {
+		t.Fatalf("notifications = %+v", notes)
+	}
+
+	var out struct {
+		Notification *domain.Notification `json:"notification"`
+		Results      []struct {
+			SessionID string `json:"session_id"`
+			Outcome   string `json:"outcome"`
+			Reason    string `json:"reason"`
+		} `json:"results"`
+	}
+	e.post("notifications/"+notes[0].ID+"/resume_interrupted", map[string]string{}, &out)
+
+	if len(out.Results) != 2 {
+		t.Fatalf("results = %+v", out.Results)
+	}
+	for _, r := range out.Results {
+		if r.Outcome != "resumed" {
+			t.Errorf("session %s: %s %s", r.SessionID, r.Outcome, r.Reason)
+		}
+	}
+	// Whether the fake agent then keeps running is the terminal host's: what
+	// the resume did is the mark cleared and the continue turn recorded.
+	for _, id := range []string{a, b} {
+		if got := e.session(id); got.InterruptedAt != nil {
+			t.Errorf("session %s still carries the mark after Resume all", id)
+		}
+		if n := len(eventsOfType(t, e.sessions, id, "resumed_with_continue_turn")); n != 1 {
+			t.Errorf("session %s has %d resumed_with_continue_turn events, want 1", id, n)
+		}
+	}
+	if out.Notification == nil || out.Notification.ResolvedAt == nil {
+		t.Errorf("notification = %+v, want it resolved", out.Notification)
+	}
+}
+
+// eventsOfType are the logged events of a session of the given type.
+func eventsOfType(t *testing.T, sessions ports.SessionRepository, id, typ string) []ports.StoredEvent {
+	t.Helper()
+	all, err := sessions.ListEvents(id, 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var out []ports.StoredEvent
+	for _, ev := range all {
+		if ev.Type == typ {
+			out = append(out, ev)
+		}
+	}
+	return out
+}

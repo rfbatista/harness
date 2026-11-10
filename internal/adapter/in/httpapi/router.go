@@ -366,7 +366,8 @@ func NewRouter(h *Handler, opts ...Option) *echo.Echo {
 	// notifications: the person's inbox across every project
 	g.GET("/notifications", h.handleListNotifications)
 	g.POST("/notifications/read", h.handleMarkNotificationsRead)
-	g.GET("/notifications/events", h.handleNotificationEvents) // every inbox change (SSE)
+	g.POST("/notifications/:id/resume_interrupted", h.handleResumeInterrupted) // Resume all interrupted
+	g.GET("/notifications/events", h.handleNotificationEvents)                 // every inbox change (SSE)
 
 	// usage: the token usage the LLM proxy measured, per project
 	// (_harness is the harness's own spend)

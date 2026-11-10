@@ -14,6 +14,7 @@ import (
 	"operators-mcp/internal/adapter/out/persistence/sqlite"
 	"operators-mcp/internal/app/catalog"
 	"operators-mcp/internal/application/notifications"
+	"operators-mcp/internal/application/orchestration"
 	"operators-mcp/internal/application/taskchannel"
 	"operators-mcp/internal/domain"
 	"operators-mcp/internal/ports"
@@ -84,6 +85,8 @@ type notificationsParams struct {
 	Cat       catalog.Catalog
 	Channel   *taskchannel.Service
 	Providers []notifications.Provider `group:"notification_providers"`
+	// Resumer resumes the sessions Resume all interrupted lists.
+	Resumer *orchestration.Service `optional:"true"`
 }
 
 // newNotificationsService builds the inbox, subscribes it to the bus, and
@@ -91,9 +94,12 @@ type notificationsParams struct {
 // from the stores directly, never through the services, so a handler running
 // inside a publisher's call cannot take a lock the publisher holds.
 func newNotificationsService(p notificationsParams) (*notifications.Service, error) {
+	opts := notifications.Options{Providers: p.Providers, Settings: p.Cat.Settings}
+	if p.Resumer != nil { // an interface holding a nil pointer is not nil
+		opts.Resumer = p.Resumer
+	}
 	svc, err := notifications.New(sqlite.NewNotificationRepository(p.DB),
-		notifications.Readers{Projects: p.Projects, Tickets: p.Tickets, Sessions: p.Sessions, Agents: p.Cat.Agents},
-		notifications.Options{Providers: p.Providers, Settings: p.Cat.Settings})
+		notifications.Readers{Projects: p.Projects, Tickets: p.Tickets, Sessions: p.Sessions, Agents: p.Cat.Agents}, opts)
 	if err != nil {
 		return nil, err
 	}

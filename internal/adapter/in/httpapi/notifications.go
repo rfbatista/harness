@@ -67,6 +67,20 @@ func (h *Handler) handleMarkNotificationsRead(c echo.Context) error {
 	return c.JSON(http.StatusOK, notificationsRead{Notifications: change.Changed, UnreadCount: change.UnreadCount})
 }
 
+// handleResumeInterrupted is Resume all interrupted: it resumes the sessions a
+// sessions_interrupted notification lists (contract "Harness server ↔ Web UI
+// — interrupted sessions and Resume all" §5).
+func (h *Handler) handleResumeInterrupted(c echo.Context) error {
+	if h.interrupted == nil {
+		return errNotificationsOff
+	}
+	answer, err := h.interrupted.ResumeInterrupted(c.Request().Context(), c.Param("id"))
+	if err != nil {
+		return err
+	}
+	return c.JSON(http.StatusOK, answer)
+}
+
 // handleNotificationEvents streams every committed inbox change, across
 // projects, as bare `data:` lines of ports.NotificationChange.
 func (h *Handler) handleNotificationEvents(c echo.Context) error {

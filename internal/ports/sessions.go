@@ -145,6 +145,8 @@ type SessionRepository interface {
 	// it changes on the session, all or nothing.
 	RecordEvent(sessionID string, ev SessionEventRecord) error
 	ListEvents(sessionID string, fromSeq int64) ([]StoredEvent, error)
+	// LastEventSeq is the newest seq on the session's log; 0 when it has none.
+	LastEventSeq(sessionID string) (int64, error)
 }
 
 // SessionEventRecord is one event of a session's log as stored, with what it
