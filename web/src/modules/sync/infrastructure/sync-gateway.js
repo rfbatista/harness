@@ -1,7 +1,7 @@
 // SyncGateway over the harness HTTP API (Contract: worktree git state, fetch
 // and push) and the project feed's `git_state` key.
 
-import { toBranchesEvent, toFetched, toGitStateEvent, toPushError, toSeed, toSessionBranchesAnswer, toStateAnswer, toStates, toTaskBranches } from "./dto.js";
+import { toBranchesEvent, toFetched, toGitStateEvent, toPushError, toPushPreview, toRemotes, toSeed, toSessionBranchesAnswer, toStateAnswer, toStates, toTaskBranches } from "./dto.js";
 
 /**
  * @param {import("../../../shared/infrastructure/api.js").ApiClient} api
@@ -30,9 +30,23 @@ export function syncGateway(api, feed) {
       return toFetched(await api.post("/fetch_remote", { repository_id: repositoryId }));
     },
 
-    async push({ workspaceId, expectedHead }) {
+    async remotes(repositoryId, signal) {
+      return toRemotes(await api.get("/repository_remotes", { repository_id: repositoryId }, signal));
+    },
+
+    async pushPreview({ workspaceId, branch, remote, remoteBranch }, signal) {
+      const query = { workspace_id: workspaceId, branch, remote };
+      if (remoteBranch) query.remote_branch = remoteBranch;
+      return toPushPreview(await api.get("/push_preview", query, signal));
+    },
+
+    async push({ workspaceId, expectedHead, branch, remote, remoteBranch }) {
+      const body = { workspace_id: workspaceId, expected_head: expectedHead };
+      if (branch) body.branch = branch;
+      if (remote) body.remote = remote;
+      if (remoteBranch) body.remote_branch = remoteBranch;
       try {
-        return toStateAnswer(await api.post("/push_branch", { workspace_id: workspaceId, expected_head: expectedHead }));
+        return toStateAnswer(await api.post("/push_branch", body));
       } catch (err) {
         throw toPushError(err);
       }

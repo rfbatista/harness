@@ -60,3 +60,26 @@ test("a row says its state, its counts and who pushed where", () => {
   assert.equal(row.pushed[0].line, "pushed to origin/f by no approval");
   assert.equal(rowOf(toSessionBranches({ session_id: "s", branches: [wire("a", "session")] }).branches[0]).stateLabel, "session branch");
 });
+
+test("Push is offered on the session branch and an approved one, when the repository has a remote", () => {
+  const remotes = [{ name: "origin" }, { name: "fork" }];
+  const offers = (state, ctx) => rowOf(toSessionBranches({ session_id: "s1", branches: [wire("b", state)] }).branches[0], ctx).offersPush;
+  assert.deepEqual(["session", "approved"].map((s) => offers(s, { remotes })), [true, true]);
+  assert.deepEqual(["denied", "deleted", "unapproved"].map((s) => offers(s, { remotes })), [false, false, false]);
+  assert.equal(offers("approved", { remotes: [] }), false);
+  assert.equal(offers("approved", {}), false);
+});
+
+test("the Push question names the remote, the remote branch and the commit count, worded by what they are counted against", () => {
+  const branch = toSessionBranches({ session_id: "s1", branches: [wire("feature-x", "approved")] }).branches[0];
+  const ask = (preview) => rowOf(branch, { remotes: [{ name: "origin" }, { name: "fork" }], push: { branch: "feature-x", remote: "fork", preview, failure: null } });
+  assert.equal(ask({ head: "h", commits: 1, commitsAgainst: "remote", remoteBranch: "feature-x" }).question, "Push 1 commit of feature-x to fork/feature-x?");
+  assert.equal(ask({ head: "h", commits: 3, commitsAgainst: "base", remoteBranch: "review/x" }).question, "Push feature-x to fork/review/x? 3 commits ahead of its base; fork/review/x is not known here.");
+  const loading = ask(null);
+  assert.deepEqual([loading.confirming, loading.previewLoading, loading.offersPush, loading.remoteOptions.map((o) => o.selected)], [true, true, false, [false, true]]);
+});
+
+test("a pushable row of a repository with no remote says so; before the remotes are read it says nothing", () => {
+  const row = (state, ctx) => rowOf(toSessionBranches({ session_id: "s1", branches: [wire("b", state)] }).branches[0], ctx);
+  assert.deepEqual([row("approved", { remotes: [] }).noRemote, row("approved", {}).noRemote, row("denied", { remotes: [] }).noRemote], [true, false, false]);
+});

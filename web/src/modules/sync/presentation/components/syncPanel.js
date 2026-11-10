@@ -34,7 +34,9 @@ export const syncPanel = (deps) => (workspaceId = "", projectId = "") => {
     },
     /** The session's Branches section: its rows, from the sync store's list. */
     get branches() {
-      return branchesOf(store.branches[this.gitState?.sessionId ?? ""]);
+      const s = this.gitState;
+      const ask = store.branchPush;
+      return branchesOf(store.branches[s?.sessionId ?? ""], { remotes: store.remotes[s?.repositoryId ?? ""], push: ask && ask.workspaceId === s?.workspaceId ? ask : null, pushing: !!store.pushing[s?.workspaceId ?? ""] });
     },
     get branchRows() {
       return this.branches.rows;
@@ -44,6 +46,24 @@ export const syncPanel = (deps) => (workspaceId = "", projectId = "") => {
     },
     get branchesSessionId() {
       return this.gitState?.sessionId ?? "";
+    },
+    get branchesWorkspaceId() {
+      return this.gitState?.workspaceId ?? "";
+    },
+    /** A Branches row's Push: opens the confirmation on that row, with the repository's remotes. */
+    askBranchPush(workspaceId, branch) {
+      this.confirming = false;
+      return actions.askBranchPush({ workspaceId, repositoryId: this.gitState?.repositoryId ?? "", branch });
+    },
+    pickBranchRemote(remote) {
+      return actions.pickBranchRemote(remote);
+    },
+    cancelBranchPush() {
+      actions.cancelBranchPush();
+    },
+    async confirmBranchPush() {
+      const ok = await actions.confirmBranchPush();
+      this.say(ok ? "Pushed." : store.branchPush?.failure?.lead);
     },
     get branchesTitle() {
       return this.branches.label;
@@ -166,10 +186,12 @@ export const syncPanel = (deps) => (workspaceId = "", projectId = "") => {
     show() {
       this.open = true;
       actions.ensureBranches(this.gitState?.sessionId);
+      actions.ensureRemotes(this.gitState?.repositoryId);
     },
     close() {
       this.open = false;
       this.confirming = false;
+      actions.cancelBranchPush();
     },
 
     /** Fetches the repository's origin: the chip and the panel say Fetching… until the new counts are in. */

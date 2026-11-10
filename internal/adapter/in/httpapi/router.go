@@ -113,6 +113,8 @@ func NewRouter(h *Handler, opts ...Option) *echo.Echo {
 	g.GET("/list_worktree_git_states", h.handleListWorktreeGitStates)
 	g.POST("/fetch_remote", h.handleFetchRemote)
 	g.POST("/push_branch", h.handlePushBranch)
+	g.GET("/repository_remotes", h.handleRepositoryRemotes)
+	g.GET("/push_preview", h.handlePushPreview)
 
 	// bounded contexts
 	g.GET("/list_bounded_contexts", h.handleListBoundedContexts)

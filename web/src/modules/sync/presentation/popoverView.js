@@ -17,12 +17,13 @@ export const codeHref = (projectId, ticketId, sessionId) => `/projects/${encodeU
 /**
  * What a Branches section binds: its rows, the count and whether any is flagged.
  * @param {import("../domain/branches.js").SessionBranch[] | undefined} list
+ * @param {Parameters<typeof branchRowOf>[1]} [ctx]  the remotes and the open Push confirmation of the list's workspace
  */
-export function branchesOf(list) {
+export function branchesOf(list, ctx = {}) {
   const branches = list ?? [];
   const flagged = flaggedCount(branches);
   return {
-    rows: branches.map(branchRowOf),
+    rows: branches.map((b) => branchRowOf(b, ctx)),
     count: branches.length,
     label: branchesLabel(branches.length),
     flagged: flagged > 0,
@@ -46,9 +47,11 @@ export function branchesOf(list) {
  *   pushFailure?: Record<string, object>,   the last refused push by workspace id (refusalOf's shape)
  *   fetchFailure?: Record<string, object>,  the last refused fetch by repository id
  *   branches?: Record<string, import("../domain/branches.js").SessionBranch[]>,  Branches lists by session id
+ *   remotes?: Record<string, Array<{ name: string }>>,  each repository's remotes, by repository id
+ *   branchPush?: object | null,       the Push confirmation open on a Branches row (the store's)
  * }} input
  */
-export function popoverOf({ sessions, states, agentNames = {}, repositoryNames = {}, projectId, ticketId, now = new Date(), fetching = {}, pushing = {}, confirming = "", pushFailure = {}, fetchFailure = {}, branches = {} }) {
+export function popoverOf({ sessions, states, agentNames = {}, repositoryNames = {}, projectId, ticketId, now = new Date(), fetching = {}, pushing = {}, confirming = "", pushFailure = {}, fetchFailure = {}, branches = {}, remotes = {}, branchPush = null }) {
   const worktrees = sessions.filter((s) => s.workspaceId && (!ticketId || s.ticketId === ticketId));
 
   const rows = worktrees.map((s) => {
@@ -61,7 +64,7 @@ export function popoverOf({ sessions, states, agentNames = {}, repositoryNames =
       branch: state?.branch || s.branch,
       codeHref: codeHref(projectId, ticketId || s.ticketId, s.id),
       hasState: state !== null,
-      branches: branchesOf(branches[s.id]),
+      branches: branchesOf(branches[s.id], { remotes: remotes[s.repositoryId], push: branchPush?.workspaceId === s.workspaceId ? branchPush : null, pushing: !!pushing[s.workspaceId] }),
       gone: false,
       offersPush: false,
       showsPush: false,
