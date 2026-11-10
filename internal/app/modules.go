@@ -728,7 +728,7 @@ func newRuntimeConfig(cfg Config, bin ports.ManagedClaudeBin, home claudehome.Ho
 // running died with the previous server. On shutdown each is recorded as
 // stopped before the host kills it, so it does not read as failed. Its hooks
 // run inside the host's: the host was built first.
-func registerServerSessions(lc fx.Lifecycle, svc *orchestration.Service) {
+func registerServerSessions(lc fx.Lifecycle, svc *orchestration.Service, _ optionalNotifications) {
 	lc.Append(fx.Hook{
 		OnStart: func(ctx context.Context) error {
 			// Every live worktree is guarded again before sessions are
@@ -740,7 +740,15 @@ func registerServerSessions(lc fx.Lifecycle, svc *orchestration.Service) {
 			if n > 0 {
 				slog.Info("stopped server sessions left running by a previous run", "count", n)
 			}
-			return err
+			if err != nil {
+				return err
+			}
+			// The inbox lists every session still marked, so the person
+			// finds them in one place (ADR 0081).
+			if err := svc.AnnounceInterrupted(ctx); err != nil {
+				slog.Warn("announce the interrupted sessions", "err", err)
+			}
+			return nil
 		},
 		OnStop: func(ctx context.Context) error {
 			svc.StopServerSessions(ctx)

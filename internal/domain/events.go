@@ -131,6 +131,11 @@ type ReviewRequestChanged struct {
 	State          ReviewState
 }
 
+// SessionsInterrupted: the boot found these sessions carrying the interrupted
+// mark, marked by this boot or by an earlier one and never resumed. Empty when
+// it found none.
+type SessionsInterrupted struct{ SessionIDs []string }
+
 // SessionStatusChanged: a session's recorded status moved to Status. It is
 // announced on a real transition only, not on every event that restates it.
 type SessionStatusChanged struct {
@@ -245,6 +250,7 @@ func (TicketDeleted) EventName() string              { return "ticket.deleted" }
 func (TicketResourceAdded) EventName() string        { return "ticket.resource_added" }
 func (ReviewRequestChanged) EventName() string       { return "review_request.changed" }
 func (SessionStatusChanged) EventName() string       { return "session.status_changed" }
+func (SessionsInterrupted) EventName() string        { return "sessions.interrupted" }
 func (SessionWorktreeProvisioned) EventName() string { return "session.worktree_provisioned" }
 func (BranchFindingFound) EventName() string         { return "branch.finding_found" }
 func (BranchRequestChanged) EventName() string       { return "branch_request.changed" }

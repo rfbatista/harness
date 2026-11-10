@@ -92,7 +92,7 @@ type notificationsParams struct {
 // inside a publisher's call cannot take a lock the publisher holds.
 func newNotificationsService(p notificationsParams) (*notifications.Service, error) {
 	svc, err := notifications.New(sqlite.NewNotificationRepository(p.DB),
-		notifications.Readers{Projects: p.Projects, Tickets: p.Tickets, Sessions: p.Sessions},
+		notifications.Readers{Projects: p.Projects, Tickets: p.Tickets, Sessions: p.Sessions, Agents: p.Cat.Agents},
 		notifications.Options{Providers: p.Providers, Settings: p.Cat.Settings})
 	if err != nil {
 		return nil, err

@@ -710,6 +710,27 @@ func continueTurn(ev SessionEvent) string {
 	return b.String()
 }
 
+// AnnounceInterrupted tells the inbox which sessions carry the interrupted
+// mark: the ones this boot marked and the ones an earlier boot marked that no
+// resume has cleared (ADR 0081). The server calls it once, after
+// StopOrphanedServerSessions. It announces nothing without Events.
+func (s *Service) AnnounceInterrupted(ctx context.Context) error {
+	if s.Events == nil {
+		return nil
+	}
+	stopped, err := s.List(ctx, ports.SessionFilter{Statuses: []domain.SessionStatus{domain.SessionStopped}})
+	if err != nil {
+		return err
+	}
+	var ids []string
+	for _, sess := range stopped {
+		if sess.InterruptedAt != nil {
+			ids = append(ids, sess.ID)
+		}
+	}
+	return s.Events.Publish(ctx, domain.SessionsInterrupted{SessionIDs: ids})
+}
+
 // stopOrphan records a session whose process is gone as stopped, marked
 // interrupted first when it was mid-turn.
 func (s *Service) stopOrphan(sess *domain.Session) error {

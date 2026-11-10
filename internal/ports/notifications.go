@@ -117,6 +117,9 @@ type NotificationRepository interface {
 	MarkAllRead(projectID string, at time.Time) ([]*domain.Notification, error)
 	// Resolve settles the unresolved ones with causeKey and answers them.
 	Resolve(causeKey string, at time.Time) ([]*domain.Notification, error)
+	// SetInterruptedSessions replaces the list of a sessions_interrupted
+	// notification and answers it as it now is; nil when there is none with id.
+	SetInterruptedSessions(id string, list []domain.InterruptedSession) (*domain.Notification, error)
 	// ResolveTask settles every unresolved one of the task.
 	ResolveTask(taskID string, at time.Time) ([]*domain.Notification, error)
 	// CountAgentSince counts agent notifications created after since: the

@@ -70,11 +70,19 @@ type Sessions interface {
 	Get(id string) *domain.Session
 }
 
-// Readers are what the service reads from other contexts.
+// Agents finds an agent, for the name a sessions_interrupted list shows; the
+// agent catalog satisfies it.
+type Agents interface {
+	GetAgent(ctx context.Context, id string) (*domain.Agent, error)
+}
+
+// Readers are what the service reads from other contexts. Agents may be nil:
+// a list then names no agent.
 type Readers struct {
 	Projects Projects
 	Tickets  Tickets
 	Sessions Sessions
+	Agents   Agents
 }
 
 // Options configure delivery and time.
@@ -170,6 +178,11 @@ func (s *Service) Subscribe(bus ports.EventSubscriber) {
 	})
 	ports.On(bus, func(ctx context.Context, ev domain.SessionStatusChanged) error {
 		s.onSessionStatus(ev)
+		s.refreshInterrupted(ev.SessionID)
+		return nil
+	})
+	ports.On(bus, func(ctx context.Context, ev domain.SessionsInterrupted) error {
+		s.onSessionsInterrupted(ctx, ev)
 		return nil
 	})
 	ports.On(bus, func(ctx context.Context, ev domain.BranchFindingFound) error {
@@ -202,6 +215,7 @@ func (s *Service) Subscribe(bus ports.EventSubscriber) {
 	ports.On(bus, func(ctx context.Context, ev domain.SessionDeleted) error {
 		s.resolve(commitCheckKey(ev.SessionID))
 		s.resolve(sessionWaitingKey(ev.SessionID))
+		s.refreshInterrupted(ev.SessionID)
 		return nil
 	})
 	ports.On(bus, func(ctx context.Context, ev domain.TicketStatusChanged) error {
@@ -383,6 +397,121 @@ func (s *Service) onCommitCheck(ev domain.SessionCommitCheckChanged) {
 		Body:  clip(ev.Reason, domain.MaxNotificationBodyLen),
 		Link:  domain.TaskLink(ev.ProjectID, ev.TicketID), CauseKey: commitCheckKey(ev.SessionID),
 	}, false)
+}
+
+// onSessionsInterrupted posts the one sessions_interrupted notification of a
+// boot that found marked sessions, resolving the one an earlier boot left open
+// (ADR 0081). A boot that found none posts nothing.
+func (s *Service) onSessionsInterrupted(ctx context.Context, ev domain.SessionsInterrupted) {
+	var list []domain.InterruptedSession
+	var lines []string
+	projectID := ""
+	for _, id := range ev.SessionIDs {
+		sess := s.readers.Sessions.Get(id)
+		if sess == nil || sess.InterruptedAt == nil {
+			continue
+		}
+		entry := domain.InterruptedSession{
+			SessionID: sess.ID, ProjectID: sess.ProjectID, TaskID: sess.TicketID,
+			AgentName: s.agentName(ctx, sess.AgentID), Link: sessionLink(sess),
+		}
+		title := "(no task)"
+		if tk := s.readers.Tickets.Get(ctx, sess.TicketID); sess.TicketID != "" && tk != nil {
+			title = tk.Title
+		}
+		if projectID == "" {
+			projectID = sess.ProjectID
+		}
+		list = append(list, entry)
+		lines = append(lines, title+" · "+entry.AgentName)
+	}
+	if len(list) == 0 {
+		return
+	}
+	title := strconv.Itoa(len(list)) + " sessions interrupted by a restart"
+	if len(list) == 1 {
+		title = "1 session interrupted by a restart"
+	}
+	c, err := s.write(func(tx ports.NotificationRepository, now time.Time) ([]*domain.Notification, bool, error) {
+		changed, err := tx.Resolve(domain.SessionsInterruptedCauseKey, now)
+		if err != nil {
+			return nil, false, err
+		}
+		created, err := tx.Create(&domain.Notification{
+			ProjectID: projectID, Source: domain.NotificationFromSystem,
+			Kind: domain.NotificationSessionsInterrupted, Level: domain.NotificationAction,
+			Title: title, Body: clip(strings.Join(lines, "\n"), domain.MaxNotificationBodyLen),
+			Link: "/notifications", CauseKey: domain.SessionsInterruptedCauseKey, CreatedAt: now,
+			InterruptedSessions: list,
+		})
+		if err != nil {
+			return nil, false, err
+		}
+		return append(changed, created), true, nil
+	})
+	if err != nil {
+		slog.Warn("record the sessions interrupted notification", "err", err)
+		return
+	}
+	s.delivery.enqueue(*c.Changed[len(c.Changed)-1])
+}
+
+// refreshInterrupted sends the open sessions_interrupted notification again
+// when sessionID is one it lists, its state having changed, and resolves it
+// when none of its sessions still carries the mark.
+func (s *Service) refreshInterrupted(sessionID string) {
+	open := s.repo.OpenByCause(domain.SessionsInterruptedCauseKey)
+	if open == nil || !lists(open, sessionID) {
+		return
+	}
+	s.reconcileInterrupted(open)
+}
+
+// reconcileInterrupted sends n again, or resolves it when no listed session
+// still carries the mark. Sessions are read before the write: a transaction
+// holds the database's one writer connection.
+func (s *Service) reconcileInterrupted(n *domain.Notification) {
+	marked := false
+	for _, e := range n.InterruptedSessions {
+		if sess := s.readers.Sessions.Get(e.SessionID); sess != nil && sess.InterruptedAt != nil {
+			marked = true
+		}
+	}
+	s.logged("refresh the sessions interrupted notification", func(tx ports.NotificationRepository, now time.Time) ([]*domain.Notification, bool, error) {
+		if !marked {
+			changed, err := tx.Resolve(domain.SessionsInterruptedCauseKey, now)
+			return changed, len(changed) > 0, err
+		}
+		if cur := tx.Get(n.ID); cur != nil && cur.ResolvedAt == nil {
+			return []*domain.Notification{cur}, true, nil
+		}
+		return nil, false, nil
+	})
+}
+
+func lists(n *domain.Notification, sessionID string) bool {
+	for _, e := range n.InterruptedSessions {
+		if e.SessionID == sessionID {
+			return true
+		}
+	}
+	return false
+}
+
+// agentName is the name of agent id; empty when it has none or is unknown.
+func (s *Service) agentName(ctx context.Context, id string) string {
+	if s.readers.Agents == nil || id == "" {
+		return ""
+	}
+	if a, err := s.readers.Agents.GetAgent(ctx, id); err == nil && a != nil {
+		return a.Name
+	}
+	return ""
+}
+
+// sessionLink is the page of a session: its task's, or its project's.
+func sessionLink(sess *domain.Session) string {
+	return domain.TaskLink(sess.ProjectID, sess.TicketID) + "?session=" + url.QueryEscape(sess.ID)
 }
 
 func (s *Service) onSessionFailed(sessionID string) {
@@ -729,7 +858,44 @@ func (s *Service) named(ctx context.Context, list ...*domain.Notification) []*do
 			}
 			c.TaskTitle = title
 		}
+		if len(c.InterruptedSessions) > 0 {
+			c.InterruptedSessions = s.interruptedStates(ctx, c.InterruptedSessions, tasks)
+		}
 		out = append(out, &c)
+	}
+	return out
+}
+
+// interruptedStates is list with each session's state and its task's current
+// title as of now. The stored list is not changed.
+func (s *Service) interruptedStates(ctx context.Context, list []domain.InterruptedSession, tasks map[string]string) []domain.InterruptedSession {
+	out := make([]domain.InterruptedSession, len(list))
+	for i, e := range list {
+		sess := s.readers.Sessions.Get(e.SessionID)
+		switch {
+		case sess == nil:
+			e.State = domain.InterruptedSessionGone
+		case sess.InterruptedAt == nil:
+			e.State = domain.InterruptedSessionResumed
+		case e.Reason != "":
+			e.State = domain.InterruptedSessionFailed
+		default:
+			e.State = domain.InterruptedSessionInterrupted
+		}
+		if e.State != domain.InterruptedSessionFailed {
+			e.Reason = ""
+		}
+		if e.TaskID != "" {
+			title, ok := tasks[e.TaskID]
+			if !ok {
+				if tk := s.readers.Tickets.Get(ctx, e.TaskID); tk != nil {
+					title = tk.Title
+				}
+				tasks[e.TaskID] = title
+			}
+			e.TaskTitle = title
+		}
+		out[i] = e
 	}
 	return out
 }

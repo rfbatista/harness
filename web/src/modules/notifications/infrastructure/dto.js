@@ -3,7 +3,7 @@
 // /api/notifications/events stream) and its mapping to domain notifications.
 
 import { Codes, StructuredError } from "../../../shared/domain/errors.js";
-import { KINDS, LEVELS, SOURCES } from "../domain/notification.js";
+import { INTERRUPTED_STATES, KINDS, LEVELS, SOURCES } from "../domain/notification.js";
 
 /** @returns {import("../domain/notification.js").Notification} */
 export function toNotification(dto) {
@@ -32,6 +32,23 @@ export function toNotification(dto) {
     createdAt,
     readAt: date(dto.read_at, `${at}: read_at`),
     resolvedAt: date(dto.resolved_at, `${at}: resolved_at`),
+    interruptedSessions: (dto.interrupted_sessions ?? []).map((s) => toInterruptedSession(s, at)),
+  });
+}
+
+function toInterruptedSession(dto, at) {
+  if (!dto || typeof dto.session_id !== "string" || dto.session_id === "") bad(`${at} lists a session without an id`);
+  if (!INTERRUPTED_STATES.includes(dto.state)) bad(`${at} lists session ${dto.session_id} in unknown state "${dto.state}"`);
+  if (typeof dto.link !== "string" || !dto.link.startsWith("/") || dto.link.startsWith("//")) bad(`${at} lists session ${dto.session_id} with a link off the web UI`);
+  return Object.freeze({
+    sessionId: dto.session_id,
+    projectId: dto.project_id ?? "",
+    taskId: dto.task_id ?? "",
+    taskTitle: dto.task_title ?? "",
+    agentName: dto.agent_name ?? "",
+    link: dto.link,
+    state: dto.state,
+    reason: dto.reason ?? "",
   });
 }
 
