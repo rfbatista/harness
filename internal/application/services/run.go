@@ -703,3 +703,39 @@ func (s *Service) ListServiceRunWorktrees(ctx context.Context, serviceID string)
 	}
 	return all, nil
 }
+
+// ListServiceBranches implements ports.ServiceManager.
+func (s *Service) ListServiceBranches(ctx context.Context, serviceID, query string) (*ports.ServiceBranchList, error) {
+	none := &ports.ServiceBranchList{Branches: []ports.ServiceBranch{}}
+	svc, err := s.store.GetService(serviceID)
+	if err != nil {
+		return nil, err
+	}
+	if svc.Kind != domain.ServiceKindCommand || svc.RepositoryID == "" || s.opts.BranchGit == nil {
+		return none, nil
+	}
+	repo, err := s.repository(ctx, svc)
+	if err != nil {
+		return nil, err
+	}
+	if repo.RootDir == "" || !dirExists(repo.RootDir) {
+		return none, nil
+	}
+	all, err := s.opts.BranchGit.ListServiceBranches(ctx, repo.RootDir)
+	if err != nil {
+		return nil, err
+	}
+	query = strings.ToLower(strings.TrimSpace(query))
+	out := none
+	for _, b := range all {
+		if query != "" && !strings.Contains(strings.ToLower(b.Name), query) {
+			continue
+		}
+		if len(out.Branches) == ports.ServiceBranchLimit {
+			out.Truncated = true
+			break
+		}
+		out.Branches = append(out.Branches, b)
+	}
+	return out, nil
+}

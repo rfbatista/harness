@@ -131,6 +131,48 @@ type ServiceRunWorktrees interface {
 	ListRepositoryRunWorktrees(ctx context.Context, projectID, repositoryID string) ([]*domain.RunWorktree, error)
 }
 
+// ServiceBranch is a branch a command service can run, as the picker lists it
+// (ADR 0080). A remote branch is one of origin's, named without "origin/".
+type ServiceBranch struct {
+	Name        string `json:"name"`
+	Remote      bool   `json:"remote"`
+	SHA         string `json:"sha"`
+	Subject     string `json:"subject"`
+	CommittedAt string `json:"committed_at"`
+}
+
+// ServiceBranchList is a service's branches, at most ServiceBranchLimit;
+// Truncated says there were more.
+type ServiceBranchList struct {
+	Branches  []ServiceBranch `json:"branches"`
+	Truncated bool            `json:"truncated"`
+}
+
+// ServiceBranchLimit is how many branches one list answers.
+const ServiceBranchLimit = 200
+
+// ServiceBranchGit is the git a service's branch runs need (driven; gitcli
+// implements it). Every path is one the module made or the repository's own
+// root.
+type ServiceBranchGit interface {
+	// ListServiceBranches lists the local branches then origin's remote-tracking
+	// branches of the checkout at repoRoot, each group newest commit first,
+	// without HEAD aliases. It never fetches.
+	ListServiceBranches(ctx context.Context, repoRoot string) ([]ServiceBranch, error)
+	// ResolveCommit is the full sha of the commit ref names in the checkout.
+	ResolveCommit(ctx context.Context, repoRoot, ref string) (string, error)
+	// PrepareServiceWorktree makes the service worktree at dir for the
+	// repository at repoRoot when it is not there, detached at HEAD.
+	PrepareServiceWorktree(ctx context.Context, repoRoot, dir string) error
+	// CheckoutDetached moves the worktree at dir to sha, detached, resetting
+	// its tracked files and keeping untracked and ignored ones. It creates and
+	// moves no branch.
+	CheckoutDetached(ctx context.Context, dir, sha string) error
+	// RemoveServiceWorktree deregisters and deletes the worktree at dir; one
+	// already gone is no error.
+	RemoveServiceWorktree(ctx context.Context, dir string) error
+}
+
 // ServiceStartOptions say who starts a run and where.
 type ServiceStartOptions struct {
 	StartedBy domain.ServiceStartedBy
@@ -245,6 +287,11 @@ type ServiceManager interface {
 	// ListServiceRunWorktrees is the run worktrees a start can pick for the
 	// service now: empty for an image service or a service with no repository.
 	ListServiceRunWorktrees(ctx context.Context, serviceID string) ([]*domain.RunWorktree, error)
+	// ListServiceBranches is the local and origin branches a command service
+	// of a repository can run, filtered by a case-insensitive substring of the
+	// name; empty for an image service, a service with no repository, or a
+	// repository with no checkout on this machine.
+	ListServiceBranches(ctx context.Context, serviceID, query string) (*ServiceBranchList, error)
 	// ContainerRuntime is the runtime image services start with, and whether
 	// its command is on the server's PATH. SetContainerRuntime changes it for
 	// the next start (INVALID_INPUT for a runtime other than docker or podman).

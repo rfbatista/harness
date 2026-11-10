@@ -678,6 +678,7 @@ func newServicesModule(lc fx.Lifecycle, cfg Config, db *gorm.DB, cat catalog.Cat
 		Runtime:  services.RuntimeSetting{Settings: cat.Settings},
 		Sweeper:  containerrunner.Runner{},
 		EnvFiles: cat.Projects, Branches: git, RunWorktrees: worktrees,
+		BranchGit: gitcli.NewServiceBranches(cfg.gitOptions()...),
 	})
 	svc.Subscribe(cat.Bus)
 	// Services never outlive the server or start by themselves: boot settles
