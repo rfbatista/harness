@@ -159,7 +159,7 @@ type SessionEventRecord struct {
 	Metrics *SessionMetrics
 	Status  domain.SessionStatus
 	// Interrupted sets the interrupted mark to this time; ClearInterrupted
-	// removes it (ADR 0080). The mark moves with the event that records why.
+	// removes it (ADR 0082). The mark moves with the event that records why.
 	Interrupted      *time.Time
 	ClearInterrupted bool
 }

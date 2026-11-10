@@ -131,7 +131,7 @@ type Session struct {
 	// CommitCheckOff is why the session's worktree is not guarded by the commit
 	// check (ADR 0040); empty while it is guarded. Derived on read, never stored.
 	CommitCheckOff string `json:"commit_check_off,omitempty"`
-	// InterruptedAt is the interrupted mark (ADR 0080): when a restart found
+	// InterruptedAt is the interrupted mark (ADR 0082): when a restart found
 	// the session mid-turn. Present only while the session is stopped and a
 	// resume has not cleared it; stored, never derived.
 	InterruptedAt *time.Time `json:"interrupted_at,omitempty"`

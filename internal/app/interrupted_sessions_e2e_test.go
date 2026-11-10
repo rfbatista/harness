@@ -3,7 +3,9 @@
 package app
 
 import (
+	"context"
 	"testing"
+	"time"
 
 	"operators-mcp/internal/adapter/out/persistence/sqlite"
 	"operators-mcp/internal/domain"
@@ -12,7 +14,7 @@ import (
 
 // A restart stops every session the server ran (ADR 0078); the ones that were
 // mid-turn carry the interrupted mark, and the boot lists them in one inbox
-// notification (ADR 0080, ADR 0081).
+// notification (ADR 0082, ADR 0083).
 
 // startOnTheServer starts a session whose agent the server's own terminal
 // host runs, the kind a restart orphans.
@@ -24,25 +26,49 @@ func (e *shellE2E) startOnTheServer(taskID string) string {
 	}).id
 }
 
-// crash stops the server and puts each session back in the status it was
-// stored in when the old server died: a crash, a SIGKILL or a reboot runs no
-// shutdown step, so the database still holds what the session was doing.
+// crash stands for a SIGKILL, a power cut or a reboot: the old server is never
+// told to stop, so no shutdown step runs and nothing is written for its
+// sessions. Each of them is left stored in the status given, as the dead
+// server last wrote it, and a new server boots over the same database file.
+//
+// The old server stays up until the test ends, and a fake agent can still exit
+// by itself (in the agent sandbox it exits at once, with status 71) and write
+// its end. A real kill writes nothing, so the test waits for those writes to
+// settle, then puts the log and the status back as they were before them.
 func (e *shellE2E) crash(stored map[string]domain.SessionStatus) {
 	e.t.Helper()
-	if err := e.app.Stop(e.ctx); err != nil {
-		e.t.Fatal(err)
-	}
+	old := e.app
+	e.t.Cleanup(func() { _ = old.Stop(context.Background()) })
 	e.srv.Close()
+	logged := map[string]int64{}
+	for id := range stored {
+		n, err := e.sessions.LastEventSeq(id)
+		if err != nil {
+			e.t.Fatal(err)
+		}
+		logged[id] = n
+	}
+	for deadline := time.Now().Add(1500 * time.Millisecond); time.Now().Before(deadline); time.Sleep(50 * time.Millisecond) {
+		ended := 0
+		for id := range stored {
+			if sess := e.session(id); sess.Status.IsTerminal() {
+				ended++
+			}
+		}
+		if ended == len(stored) {
+			break
+		}
+	}
+	time.Sleep(100 * time.Millisecond)
 	db, err := sqlite.Open(e.cfg.DBPath)
 	if err != nil {
 		e.t.Fatal(err)
 	}
 	for id, status := range stored {
-		err := db.Exec("UPDATE sessions SET status = ?, interrupted_at_ms = 0 WHERE id = ?", string(status), id).Error
-		if err != nil {
+		if err := db.Exec("UPDATE sessions SET status = ?, interrupted_at_ms = 0 WHERE id = ?", string(status), id).Error; err != nil {
 			e.t.Fatal(err)
 		}
-		if err := db.Exec("DELETE FROM session_events WHERE session_id = ? AND type = 'interrupted_by_restart'", id).Error; err != nil {
+		if err := db.Exec("DELETE FROM session_events WHERE session_id = ? AND seq > ?", id, logged[id]).Error; err != nil {
 			e.t.Fatal(err)
 		}
 	}

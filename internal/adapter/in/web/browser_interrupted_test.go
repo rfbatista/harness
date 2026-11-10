@@ -15,7 +15,7 @@ import (
 	"operators-mcp/internal/ports"
 )
 
-// The sessions a restart interrupted, in the browser (ADR 0080, ADR 0081): the
+// The sessions a restart interrupted, in the browser (ADR 0082, ADR 0083): the
 // stopped session's row says so, the inbox item lists the sessions and
 // resumes them all with one click, and the states update live.
 

@@ -26,7 +26,7 @@ const (
 	NotificationBranchRequest   NotificationKind = "branch_request"
 	NotificationBranchFinding   NotificationKind = "branch_finding"
 	// NotificationSessionsInterrupted lists the sessions a restart interrupted
-	// mid-turn, with a Resume all interrupted action (ADR 0081).
+	// mid-turn, with a Resume all interrupted action (ADR 0083).
 	NotificationSessionsInterrupted NotificationKind = "sessions_interrupted"
 	NotificationAgent               NotificationKind = "agent"
 )

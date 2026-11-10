@@ -296,7 +296,7 @@ func (s *Service) ResumeInteractive(ctx context.Context, req ports.ResumeRequest
 		return nil, ports.AgentSpec{}, err
 	}
 	// A session a restart interrupted mid-turn is told so: its first turn is
-	// the continue turn (ADR 0080); any other resumes idle, with no turn.
+	// the continue turn (ADR 0082); any other resumes idle, with no turn.
 	prompt := ""
 	if sess.InterruptedAt != nil {
 		prompt = continueTurn(s.interruption(sess.ID))
@@ -688,7 +688,7 @@ const (
 
 // midTurn says a session stored in status was working or waiting on the
 // person's decision, not waiting for a prompt: a restart interrupts it
-// (ADR 0080).
+// (ADR 0082).
 func midTurn(status domain.SessionStatus) bool {
 	switch status {
 	case domain.SessionStarting, domain.SessionRunning, domain.SessionThinking, domain.SessionWaitingApproval:
@@ -720,7 +720,7 @@ func (s *Service) markInterrupted(sess *domain.Session) {
 }
 
 // continueTurn is the turn a resume of an interrupted session sends, filled
-// with what the server knows of the interruption (ADR 0080): the agent checks
+// with what the server knows of the interruption (ADR 0082): the agent checks
 // its last action before it redoes it, and asks again for what expired.
 func continueTurn(ev SessionEvent) string {
 	var b strings.Builder
@@ -747,7 +747,7 @@ func continueTurn(ev SessionEvent) string {
 
 // AnnounceInterrupted tells the inbox which sessions carry the interrupted
 // mark: the ones this boot marked and the ones an earlier boot marked that no
-// resume has cleared (ADR 0081). The server calls it once, after
+// resume has cleared (ADR 0083). The server calls it once, after
 // StopOrphanedServerSessions. It announces nothing without Events.
 func (s *Service) AnnounceInterrupted(ctx context.Context) error {
 	if s.Events == nil {

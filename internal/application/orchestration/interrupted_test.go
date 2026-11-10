@@ -58,7 +58,7 @@ func orphan(t *testing.T, svc *Service, id string, status domain.SessionStatus) 
 	}
 }
 
-// An interrupted session was mid-turn when the server stopped (ADR 0080): the
+// An interrupted session was mid-turn when the server stopped (ADR 0082): the
 // boot reads the stored status, so a crash loses nothing.
 func TestBoot_MarksTheSessionsThatWereMidTurn(t *testing.T) {
 	svc := newHostedService(t, scriptAgent{script: `cat`})
@@ -137,7 +137,7 @@ func TestAStopTheServerDidNotMakeLeavesNoMark(t *testing.T) {
 	}
 }
 
-// A resume of a marked session sends the continue turn (ADR 0080).
+// A resume of a marked session sends the continue turn (ADR 0082).
 func TestResume_OfAnInterruptedSessionSendsTheContinueTurn(t *testing.T) {
 	svc, _ := newInteractiveService(t)
 	svc.BranchRequests = pendingRequests{}
@@ -261,5 +261,35 @@ func TestAResumeThatFailsToStartTheAgentKeepsTheSessionInterrupted(t *testing.T)
 	svc.Terminals = termhost.New(shell.Direct{}, ptyunix.New(), scriptAgent{script: `cat`})
 	if _, spec, err := svc.ResumeInteractive(context.Background(), ports.ResumeRequest{SessionID: "s1", RunsOn: domain.RunnerServer}); err != nil || spec.Prompt == "" {
 		t.Errorf("the retry = %v with prompt %q, want a resume that sends the continue turn", err, spec.Prompt)
+	}
+}
+
+// The sessions an agent starts with start_task_session (architect, product,
+// implement and a plain peer) are interactive and run on the server, so a
+// restart marks them (ADR 0082).
+func TestEverySessionAnAgentStartsIsOneARestartMarks(t *testing.T) {
+	svc := newHostedService(t, scriptAgent{script: `cat`})
+	var ids []string
+	for _, mode := range []string{"", "architect", "product", "implement"} {
+		sess, _ := startInteractive(t, svc, InteractiveRequest{Mode: mode, ParentSessionID: "parent", RunsOn: domain.RunnerServer, Size: ports.TermSize{Cols: 80, Rows: 24}})
+		if !sess.Interactive || sess.RunsOn != domain.RunnerServer {
+			t.Fatalf("mode %q started interactive=%v on %q", mode, sess.Interactive, sess.RunsOn)
+		}
+		ids = append(ids, sess.ID)
+	}
+	// A new server: no process holds them, and each is stored mid-turn.
+	svc.Terminals = termhost.New(shell.Direct{}, ptyunix.New(), scriptAgent{script: `cat`})
+	for _, id := range ids {
+		if err := svc.sessions.UpdateStatus(id, domain.SessionThinking); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if _, err := svc.StopOrphanedServerSessions(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	for _, id := range ids {
+		if got := sessionOf(svc, id); got.Status != domain.SessionStopped || got.InterruptedAt == nil {
+			t.Errorf("session %s = %s marked %v, want stopped and marked", id, got.Status, got.InterruptedAt)
+		}
 	}
 }

@@ -54,7 +54,7 @@ func statusOf(s *domain.Session) StatusView {
 		return statusViews[domain.SessionWaitingApproval]
 	}
 	if v, ok := statusViews[s.Status]; ok {
-		// A stopped session a restart interrupted says so beside its dot (ADR 0080).
+		// A stopped session a restart interrupted says so beside its dot (ADR 0082).
 		if s.Status == domain.SessionStopped && s.InterruptedAt != nil {
 			v.Word = interruptedWord
 		}

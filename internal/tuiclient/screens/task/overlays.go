@@ -357,7 +357,7 @@ func (s *Screen) resume(sess *domain.Session) tea.Cmd {
 }
 
 // statusLabel is a session's status as the list reads it: a stopped session a
-// restart interrupted says so (ADR 0080).
+// restart interrupted says so (ADR 0082).
 func statusLabel(sess *domain.Session) string {
 	if sess.Status == domain.SessionStopped && sess.InterruptedAt != nil {
 		return "interrupted by restart"

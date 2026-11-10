@@ -746,7 +746,7 @@ func registerServerSessions(lc fx.Lifecycle, svc *orchestration.Service, _ optio
 				return err
 			}
 			// The inbox lists every session still marked, so the person
-			// finds them in one place (ADR 0081).
+			// finds them in one place (ADR 0083).
 			if err := svc.AnnounceInterrupted(ctx); err != nil {
 				slog.Warn("announce the interrupted sessions", "err", err)
 			}

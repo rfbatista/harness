@@ -409,7 +409,7 @@ func (s *Service) onCommitCheck(ev domain.SessionCommitCheckChanged) {
 
 // onSessionsInterrupted posts the one sessions_interrupted notification of a
 // boot that found marked sessions, resolving the one an earlier boot left open
-// (ADR 0081). A boot that found none posts nothing.
+// (ADR 0083). A boot that found none posts nothing.
 func (s *Service) onSessionsInterrupted(ctx context.Context, ev domain.SessionsInterrupted) {
 	var list []domain.InterruptedSession
 	var lines []string

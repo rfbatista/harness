@@ -503,7 +503,7 @@ func TestClient_SessionsOverlayResumesAnEndedSession(t *testing.T) {
 }
 
 // A restart interrupted a session mid-turn: the past sessions list says so
-// beside its status, for that session only (ADR 0080).
+// beside its status, for that session only (ADR 0082).
 func TestClient_SessionsOverlayLabelsASessionARestartInterrupted(t *testing.T) {
 	be := fixture()
 	at := time.Now()
