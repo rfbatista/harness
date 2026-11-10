@@ -85,13 +85,18 @@ type ServiceStartedBy struct {
 }
 
 // ServiceWhere says where a run runs: main (a repository's main checkout),
-// session (an agent's worktree), service_folder (the harness-owned folder of
-// a command service with no repository) or container.
+// session (an agent's worktree), branch (the service worktree, detached at a
+// branch's tip), service_folder (the harness-owned folder of a command service
+// with no repository) or container.
 type ServiceWhere struct {
 	Kind      string `json:"kind"`
 	Dir       string `json:"dir"`
 	Branch    string `json:"branch"`
 	SessionID string `json:"session_id"`
+	// SHA is the short commit a branch run runs; Remote says the branch is one
+	// of origin's. Both are empty for the other kinds.
+	SHA    string `json:"sha"`
+	Remote bool   `json:"remote"`
 }
 
 // ServiceRunOverride names a run override and says who set it, as the person

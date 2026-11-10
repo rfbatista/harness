@@ -2,6 +2,7 @@ package services
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"maps"
 	"os"
@@ -90,9 +91,25 @@ type prepared struct {
 	sandbox *confinement
 	// image is set for an image service's run.
 	image *imagePlan
+	// branch is set for a run on a branch of the repository (ADR 0080).
+	branch *branchPlan
 	// vars are the variables the run is given, for its record.
 	vars []ports.ServiceRunVariable
 }
+
+// branchPlan is a run on a branch, in the service worktree: where it is, and
+// the ref to move it to.
+type branchPlan struct {
+	name   string
+	remote bool
+	// repoID and repoRoot name the repository the service worktree belongs to.
+	repoID, repoRoot string
+	// dir is the service worktree.
+	dir string
+}
+
+// branchKeyPrefix starts the run worktree key of a branch run.
+const branchKeyPrefix = "branch:"
 
 // StartService implements ports.ServiceManager.
 func (s *Service) StartService(ctx context.Context, serviceID string, opts ports.ServiceStartOptions) (*domain.Service, bool, error) {
@@ -204,6 +221,12 @@ func (s *Service) launch(ctx context.Context, r *run, svc *domain.Service, runne
 	lg.append([]byte("[harness] command: " + oneLine(p.display) + "\n[harness] directory: " + p.where.Dir + "\n[harness] " + p.sandbox.logLine() + "\n"))
 	for _, n := range p.notes {
 		lg.append([]byte("[harness] " + n + "\n"))
+	}
+	if p.branch != nil {
+		if err := s.checkoutBranch(ctx, r, p, lg); err != nil {
+			s.fail(r, lg, oneLine(err.Error()))
+			return
+		}
 	}
 	if p.where.Dir == "" {
 		s.fail(r, lg, "the repository has no main checkout on this machine")
@@ -483,6 +506,11 @@ func (s *Service) prepare(ctx context.Context, svc *domain.Service, opts ports.S
 	switch {
 	case repo == nil:
 		p.where = domain.ServiceWhere{Kind: "service_folder", Dir: filepath.Join(s.folderRoot(), svc.ID)}
+	case pick.Kind == domain.RunWorktreeBranch:
+		name, remote := branchOfKey(pick.Key)
+		p.where = domain.ServiceWhere{Kind: "branch", Dir: pick.Dir, Branch: name, Remote: remote}
+		p.worktreeKey = pick.Key
+		p.branch = &branchPlan{name: name, remote: remote, repoID: repo.ID, repoRoot: repo.RootDir, dir: pick.Dir}
 	case pick.Kind == domain.RunWorktreeSession:
 		p.where = domain.ServiceWhere{Kind: "session", Dir: pick.Dir, Branch: pick.Branch, SessionID: pick.SessionID}
 		p.worktreeKey = pick.Key
@@ -653,6 +681,9 @@ func (s *Service) pickWorktree(ctx context.Context, svc *domain.Service, repo *d
 		// Trusted: the agent's own worktree, checked by its tool.
 		return &domain.RunWorktree{Key: "session:" + w.SessionID, Kind: domain.RunWorktreeSession, Branch: w.Branch, Dir: w.Dir, SessionID: w.SessionID}, nil
 	}
+	if strings.HasPrefix(key, branchKeyPrefix) {
+		return s.pickBranch(ctx, svc, repo, key)
+	}
 	if key == "" || key == "main" {
 		main := &domain.RunWorktree{Key: "main", Kind: domain.RunWorktreeMain, Dir: repo.RootDir}
 		if s.opts.Branches != nil && repo.RootDir != "" {
@@ -670,6 +701,101 @@ func (s *Service) pickWorktree(ctx context.Context, svc *domain.Service, repo *d
 		}
 	}
 	return nil, &domain.StructuredError{Code: "WORKTREE_NOT_AVAILABLE", Message: "that worktree is no longer available"}
+}
+
+// pickBranch resolves a branch key against the branches listed now: nothing in
+// a request is trusted as a ref. The service worktree it names is the
+// service's own, made at the first run.
+func (s *Service) pickBranch(ctx context.Context, svc *domain.Service, repo *domain.Repository, key string) (*domain.RunWorktree, error) {
+	name, remote := branchOfKey(key)
+	gone := &domain.StructuredError{Code: "WORKTREE_NOT_AVAILABLE", Message: "branch " + strconv.Quote(name) + " does not exist in " + repo.Name}
+	if s.opts.BranchGit == nil || repo.RootDir == "" || !dirExists(repo.RootDir) || name == "" {
+		return nil, gone
+	}
+	all, err := s.opts.BranchGit.ListServiceBranches(ctx, repo.RootDir)
+	if err != nil {
+		return nil, err
+	}
+	for _, b := range all {
+		if b.Name == name && b.Remote == remote {
+			return &domain.RunWorktree{Key: key, Kind: domain.RunWorktreeBranch, Branch: name, Dir: s.serviceWorktreeDir(svc.ID)}, nil
+		}
+	}
+	return nil, gone
+}
+
+// branchOfKey splits a branch key: branch:<name> is local, branch:origin/<name>
+// a branch of origin.
+func branchOfKey(key string) (name string, remote bool) {
+	name = strings.TrimPrefix(key, branchKeyPrefix)
+	if rest, ok := strings.CutPrefix(name, "origin/"); ok {
+		return rest, true
+	}
+	return name, false
+}
+
+// serviceWorktreeDir is where the service's service worktree is, or will be.
+func (s *Service) serviceWorktreeDir(serviceID string) string {
+	root := s.opts.WorktreeRoot
+	if root == "" {
+		root = filepath.Join(s.opts.LogDir, "service-worktrees")
+	}
+	return filepath.Join(root, serviceID)
+}
+
+// checkoutBranch readies a branch run: the service worktree is made when it is
+// not there and moved, detached, to the branch's tip with its tracked files
+// reset, then the repository's saved env files are written into it. The run
+// records the short commit it runs.
+func (s *Service) checkoutBranch(ctx context.Context, r *run, p *prepared, lg *logFile) error {
+	b, git := p.branch, s.opts.BranchGit
+	if git == nil {
+		return errors.New("branch runs are not available")
+	}
+	ref := "refs/heads/" + b.name
+	if b.remote {
+		ref = "refs/remotes/origin/" + b.name
+	}
+	sha, err := git.ResolveCommit(ctx, b.repoRoot, ref)
+	if err != nil {
+		return err
+	}
+	if err := git.PrepareServiceWorktree(ctx, b.repoRoot, b.dir); err != nil {
+		return err
+	}
+	if err := git.CheckoutDetached(ctx, b.dir, sha); err != nil {
+		return err
+	}
+	if s.opts.EnvFiles != nil && s.opts.EnvWriter != nil {
+		files, err := s.opts.EnvFiles.ListEnvFiles(ctx, b.repoID)
+		if err != nil {
+			return err
+		}
+		if len(files) > 0 {
+			if err := s.opts.EnvWriter.Write(b.dir, files); err != nil {
+				return errors.New("writing the repository's env files into the service worktree failed: " + err.Error())
+			}
+		}
+	}
+	short := shortSHA(sha)
+	lg.append([]byte("[harness] branch: " + b.name + " @ " + short + " (service worktree)\n"))
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if svc, err := s.store.GetService(r.serviceID); err == nil && svc.Run != nil && svc.Run.ID == r.id {
+		svc.Run.Where.SHA = short
+		svc.UpdatedAt = s.opts.Now().UTC()
+		if err := s.store.SaveService(svc); err == nil {
+			s.announceLocked(svc)
+		}
+	}
+	return nil
+}
+
+func shortSHA(sha string) string {
+	if len(sha) > 7 {
+		return sha[:7]
+	}
+	return sha
 }
 
 // runWorktrees is the worktrees a command service of the repository can run
@@ -702,4 +828,40 @@ func (s *Service) ListServiceRunWorktrees(ctx context.Context, serviceID string)
 		all = []*domain.RunWorktree{}
 	}
 	return all, nil
+}
+
+// ListServiceBranches implements ports.ServiceManager.
+func (s *Service) ListServiceBranches(ctx context.Context, serviceID, query string) (*ports.ServiceBranchList, error) {
+	none := &ports.ServiceBranchList{Branches: []ports.ServiceBranch{}}
+	svc, err := s.store.GetService(serviceID)
+	if err != nil {
+		return nil, err
+	}
+	if svc.Kind != domain.ServiceKindCommand || svc.RepositoryID == "" || s.opts.BranchGit == nil {
+		return none, nil
+	}
+	repo, err := s.repository(ctx, svc)
+	if err != nil {
+		return nil, err
+	}
+	if repo.RootDir == "" || !dirExists(repo.RootDir) {
+		return none, nil
+	}
+	all, err := s.opts.BranchGit.ListServiceBranches(ctx, repo.RootDir)
+	if err != nil {
+		return nil, err
+	}
+	query = strings.ToLower(strings.TrimSpace(query))
+	out := none
+	for _, b := range all {
+		if query != "" && !strings.Contains(strings.ToLower(b.Name), query) {
+			continue
+		}
+		if len(out.Branches) == ports.ServiceBranchLimit {
+			out.Truncated = true
+			break
+		}
+		out.Branches = append(out.Branches, b)
+	}
+	return out, nil
 }

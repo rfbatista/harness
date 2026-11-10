@@ -69,6 +69,15 @@ type Options struct {
 	RunWorktrees ports.ServiceRunWorktrees
 	// Branches names the branch a main checkout holds; nil leaves it empty.
 	Branches ports.RunBranchReader
+	// BranchGit is the git a branch run needs: the branch list, and the service
+	// worktree (ADR 0080); nil offers no branch.
+	BranchGit ports.ServiceBranchGit
+	// WorktreeRoot holds the service worktrees, one folder per service id;
+	// empty is a folder in LogDir.
+	WorktreeRoot string
+	// EnvWriter writes a repository's saved env files into a service worktree
+	// before a branch run; nil writes none.
+	EnvWriter ports.EnvFileIO
 	// Runtime is the container runtime setting; nil keeps docker in memory.
 	Runtime ports.ServiceRuntimeSetting
 	// Instance labels the containers this harness starts; empty is a fresh id
