@@ -1,6 +1,7 @@
 package catalogstore
 
 import (
+	"context"
 	"time"
 
 	"github.com/rfbatista/harnesskit/mcpserver"
@@ -76,7 +77,7 @@ func inputOf(in mcpserver.Input) domain.CatalogServerInput {
 
 // Create adds a server. A description is not kept: the catalog has none.
 func (r *MCPServers) Create(in mcpserver.Input) (*mcpserver.Server, error) {
-	if _, err := r.cat.SaveCatalogMCPServer(domain.SaveCatalogMCPServer{Server: inputOf(in)}); err != nil {
+	if _, err := r.cat.SaveCatalogMCPServer(context.Background(), domain.SaveCatalogMCPServer{Server: inputOf(in)}); err != nil {
 		return nil, err
 	}
 	return r.Get(in.Name), nil
@@ -88,7 +89,7 @@ func (r *MCPServers) Update(id string, in mcpserver.Input) (*mcpserver.Server, e
 	if r.Get(id) == nil {
 		return nil, errNotFound("MCP_SERVER_NOT_FOUND", "MCP server "+id)
 	}
-	if _, err := r.cat.SaveCatalogMCPServer(domain.SaveCatalogMCPServer{PreviousName: id, Server: inputOf(in)}); err != nil {
+	if _, err := r.cat.SaveCatalogMCPServer(context.Background(), domain.SaveCatalogMCPServer{PreviousName: id, Server: inputOf(in)}); err != nil {
 		return nil, err
 	}
 	return r.Get(in.Name), nil

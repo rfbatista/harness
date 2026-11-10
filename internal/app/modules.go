@@ -198,6 +198,10 @@ func (p projectMCPServers) SetProjectMCPServers(_ context.Context, id string, na
 	return p.projects.SetMCPServers(id, names)
 }
 
+func (p projectMCPServers) SetProjectMCPSettings(_ context.Context, id string, s domain.ProjectMCPSettings) (*domain.Project, error) {
+	return p.projects.SetMCPSettings(id, s)
+}
+
 // newRepositoryAgents is the service that says which agents a repository
 // assigns (ADR 0061).
 func newRepositoryAgents(lists ports.RepositoryAgentListStore, prompts ports.RepositoryPromptStore, projects ports.ProjectRepository, repos ports.RepositoryRepository, cat *agentcatalog.Catalog, sessions ports.SessionRepository, catalogs catalog.Catalog) *repoagents.Service {
@@ -944,6 +948,7 @@ func newOrchestrationService(
 	branchNames *workspaces.BranchNames,
 	baseBranches *workspaces.BaseBranches,
 	assignments *repoagents.Service,
+	agentCatalog *agentcatalog.Catalog,
 ) *orchestration.Service {
 	orchCatalog := orchestration.Catalog{
 		Projects:     cat.Projects,
@@ -958,6 +963,7 @@ func newOrchestrationService(
 		orchCatalog.DesignSystems = cat.DesignSystems
 	}
 	svc := orchestration.NewService(manager, broker, hub, sessions, orchCatalog, tickets, ws)
+	svc.MCPToolDefaults = agentCatalog.DisabledMCPTools
 	svc.UseBranchNames(branchNames)
 	svc.UseBaseBranches(baseBranches)
 	svc.UseAssignments(assignments)

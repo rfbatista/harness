@@ -103,6 +103,8 @@ func cloneProject(p *domain.Project) *domain.Project {
 	c.IgnoredPaths = append([]string(nil), p.IgnoredPaths...)
 	c.MCPServers = append([]string(nil), p.MCPServers...)
 	c.EnabledAgents = append([]string(nil), p.EnabledAgents...)
+	c.MCPBanned = append([]string(nil), p.MCPBanned...)
+	c.MCPToolOverrides = cloneOverrides(p.MCPToolOverrides)
 	return &c
 }
 
@@ -158,6 +160,18 @@ func (s *ProjectStore) SetMCPServers(projectID string, names []string) (*domain.
 	return cloneProject(p), nil
 }
 
+// SetMCPSettings stores the project's banned MCP servers and tool overrides.
+func (s *ProjectStore) SetMCPSettings(projectID string, in domain.ProjectMCPSettings) (*domain.Project, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	p, ok := s.projects[projectID]
+	if !ok {
+		return nil, &domain.StructuredError{Code: "PROJECT_NOT_FOUND", Message: "project not found"}
+	}
+	p.MCPBanned, p.MCPToolOverrides = in.Banned, in.ToolOverrides
+	return cloneProject(p), nil
+}
+
 // SetEnabledAgents stores which agents the project's sessions may run as.
 func (s *ProjectStore) SetEnabledAgents(projectID, mode string, names []string) (*domain.Project, error) {
 	s.mu.Lock()
@@ -180,4 +194,18 @@ func (s *ProjectStore) SetAgentsReadAllRepos(projectID string, on bool) (*domain
 	}
 	p.AgentsReadAllRepos = on
 	return cloneProject(p), nil
+}
+
+func cloneOverrides(in map[string]map[string]string) map[string]map[string]string {
+	if in == nil {
+		return nil
+	}
+	out := make(map[string]map[string]string, len(in))
+	for server, tools := range in {
+		out[server] = make(map[string]string, len(tools))
+		for tool, v := range tools {
+			out[server][tool] = v
+		}
+	}
+	return out
 }

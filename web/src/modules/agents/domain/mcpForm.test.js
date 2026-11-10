@@ -2,7 +2,7 @@ import { StructuredError } from "../../../shared/domain/errors.js";
 import { assert, file, test } from "../../../shared/testing/test.js";
 import {
   addRow, checkMcpDraft, detectToken, hideSecrets, mcpChanges, mcpDraft, mcpFieldErrors, mcpPreviewModel, mcpRefs, mcpSave,
-  probeView, referenceName, removeRow, rename, setMode, splitCommandLine, toReference, useReference, whoGetsIt,
+  adoptTools, mcpTools, probeOutcome, probeView, referenceName, removeRow, rename, setMode, splitCommandLine, toReference, toggleTool, useReference, whoGetsIt,
 } from "./mcpForm.js";
 import { describeRefusal } from "./refusals.js";
 
@@ -292,13 +292,13 @@ test("the save sends the chosen transport's fields, skips empty rows and trims",
   d.projects = ["p2"];
   assert.deepEqual(mcpSave(d), {
     previousName: "github",
-    server: { name: "github2", transport: "stdio", command: "npx", args: ["-y", "gh-mcp"], env: { TOKEN: "${GITHUB_TOKEN}" }, url: "", headers: {} },
+    server: { name: "github2", transport: "stdio", command: "npx", args: ["-y", "gh-mcp"], env: { TOKEN: "${GITHUB_TOKEN}" }, url: "", headers: {}, disabledTools: [] },
     agents: ["backend"],
     projects: ["p2"],
   });
   d.transport = "http";
   d.url = " https://mcp.example.com ";
-  assert.deepEqual(mcpSave(d).server, { name: "github2", transport: "http", command: "", args: [], env: {}, url: "https://mcp.example.com", headers: { A: "b" } });
+  assert.deepEqual(mcpSave(d).server, { name: "github2", transport: "http", command: "", args: [], env: {}, url: "https://mcp.example.com", headers: { A: "b" }, disabledTools: [] });
   assert.equal(mcpSave(mcpDraft(catalog, {})).previousName, undefined);
 });
 
@@ -398,4 +398,77 @@ test("the probe's answer reads as success with its tool names, or a failure with
   assert.equal(bad.hint, "LINEAR_API_KEY is not set in the harness server's environment.");
   assert.equal(bad.canSave, "You can still save; agents will see the server fail to start.");
   assert.equal(probeView({ status: "error", tools: [], error: "", hint: "" }).title, "The server did not connect.");
+});
+
+// Tools: the tool default.
+
+const probed = { ...catalog.mcpServers[0], knownTools: ["create_issue", "search_code", "list_prs"], probedAt: "2026-11-09T10:00:00Z", disabledTools: ["create_issue", "vanished"] };
+
+test("tool rows show enabled or disabled from disabled_tools, and hide a name the known tools no longer hold", () => {
+  const t = mcpTools(mcpDraft(catalog, { previous: probed }));
+  assert.equal(t.unknown, false);
+  assert.deepEqual(t.rows, [{ name: "create_issue", enabled: false }, { name: "search_code", enabled: true }, { name: "list_prs", enabled: true }]);
+  assert.equal(t.summary, "3 tools, 1 disabled.");
+  assert.equal(t.probed, "Last probed 2026-11-09 10:00 UTC.");
+});
+
+test("a server probed with no tools says so, and every tool of one that lists them reads all enabled", () => {
+  assert.equal(mcpTools(mcpDraft(catalog, { previous: { ...probed, knownTools: [], disabledTools: [] } })).summary, "The server lists no tools.");
+  assert.equal(mcpTools(mcpDraft(catalog, { previous: { ...probed, disabledTools: [] } })).summary, "3 tools, all enabled.");
+});
+
+test("a never-probed server reads as tools unknown, all enabled, with no rows", () => {
+  const t = mcpTools(mcpDraft(catalog, { previous: catalog.mcpServers[0] }));
+  assert.equal(t.unknown, true);
+  assert.deepEqual(t.rows, []);
+  assert.equal(t.summary, "Tools unknown. Every tool of this server is enabled.");
+  assert.equal(t.probed, "");
+  assert.equal(t.refreshable, true);
+  const fresh = mcpTools(mcpDraft(catalog, {}));
+  assert.equal(fresh.unknown, true);
+  assert.equal(fresh.refreshable, false, "an unsaved server has nothing to refresh");
+});
+
+test("toggling a tool changes the editor, and toggling it back does not", () => {
+  const d = mcpDraft(catalog, { previous: probed });
+  assert.equal(mcpChanges(d), 0);
+  toggleTool(d, "search_code");
+  assert.equal(mcpChanges(d), 1);
+  assert.equal(mcpTools(d).rows[1].enabled, false);
+  toggleTool(d, "search_code");
+  toggleTool(d, "create_issue");
+  assert.equal(mcpChanges(d), 1);
+  assert.equal(mcpTools(d).rows[0].enabled, true);
+});
+
+test("the save body carries every disabled name, the hidden one too", () => {
+  const d = mcpDraft(catalog, { previous: probed });
+  toggleTool(d, "list_prs");
+  assert.deepEqual(mcpSave(d).server.disabledTools, ["create_issue", "vanished", "list_prs"]);
+  assert.deepEqual(mcpSave(mcpDraft(catalog, {})).server.disabledTools, []);
+});
+
+test("Refresh tools adopts the new tool list and leaves the unsaved definition and toggles alone", () => {
+  const d = mcpDraft(catalog, { previous: probed });
+  d.command = "npx2";
+  d.agents = [...d.agents, "backend"];
+  toggleTool(d, "list_prs");
+  adoptTools(d, { knownTools: ["create_issue", "search_code", "list_prs", "new_tool"], probedAt: "2026-11-09T11:30:00Z" });
+  assert.deepEqual(mcpTools(d).rows.map((r) => r.name), ["create_issue", "search_code", "list_prs", "new_tool"]);
+  assert.equal(mcpTools(d).rows[3].enabled, true, "a tool the server gained is enabled");
+  assert.equal(mcpTools(d).probed, "Last probed 2026-11-09 11:30 UTC.");
+  assert.equal(d.command, "npx2");
+  assert.deepEqual(d.agents, ["designer", "writer", "backend"]);
+  assert.deepEqual(d.disabledTools, ["create_issue", "vanished", "list_prs"]);
+  assert.equal(mcpChanges(d), 3, "command, agent and toggle; the refresh adds none");
+});
+
+test("the probe outcome of a save or a refresh: ok counts the tools, an error says why and what is kept", () => {
+  assert.deepEqual(probeOutcome(null, { tools: null }), { show: false, tone: "", text: "" });
+  assert.equal(probeOutcome({ status: "ok", error: "", hint: "" }, { tools: ["a", "b"] }).text, "Probed the server: 2 tools found.");
+  assert.equal(probeOutcome({ status: "ok", error: "", hint: "" }, { tools: [] }).text, "Probed the server: it lists no tools.");
+  const failed = probeOutcome({ status: "error", error: "executable not found", hint: "Install it first." }, { tools: ["a"], saved: true });
+  assert.equal(failed.tone, "attention");
+  assert.equal(failed.text, "The server is saved, but probing it failed: executable not found Install it first. Its last known tools are kept.");
+  assert.equal(probeOutcome({ status: "error", error: "", hint: "" }, { tools: null }).text, "Probing the server failed: The server did not connect. Its tools stay unknown.");
 });

@@ -85,9 +85,9 @@ test("switching back to All keeps the list but ignores it: nothing is unsaved an
   page.chooseSelected();
   assert.deepEqual(page.agentTicked, ["backend"], "the kept list is back, not every agent");
   page.chooseAll();
-  page.toggle("linear");
+  page.setState("linear", "added");
   await page.save();
-  assert.deepEqual(calls(), ["set_project_mcp_servers"]);
+  assert.deepEqual(calls(), ["set_project_mcp_settings"]);
 });
 
 test("an empty Selected list warns, Tick all fills it, and saving it empty is allowed", async () => {
@@ -108,7 +108,7 @@ test("an empty Selected list warns, Tick all fills it, and saving it empty is al
 test("Cancel puts the saved mode and list back, for both lists", async () => {
   const { page } = await open();
   page.chooseSelected();
-  page.toggle("linear");
+  page.setState("linear", "added");
   page.cancel();
   assert.equal(page.agentMode, "all");
   assert.deepEqual(page.selected, ["github"]);
@@ -117,12 +117,12 @@ test("Cancel puts the saved mode and list back, for both lists", async () => {
 
 test("one dirty list is enough to turn Save on, and one Save writes both lists, agents first", async () => {
   const { page, other, calls } = await open();
-  page.toggle("linear");
+  page.setState("linear", "added");
   assert.equal(page.cannotSave, false);
   page.chooseSelected();
   page.toggleAgent("backend");
   await page.save();
-  assert.deepEqual(calls(), ["set_project_agents", "set_project_mcp_servers"]);
+  assert.deepEqual(calls(), ["set_project_agents", "set_project_mcp_settings"]);
   assert.deepEqual(await other.getProjectMcpServers("p1"), ["github", "linear"]);
   assert.equal(page.toast.text, "Saved — harness now enables 1 agent and gives 2 MCP servers to its sessions.");
   await page.undoSave();
@@ -141,10 +141,10 @@ test("naming an agent the catalog lacks is refused with the names, and the list 
 });
 
 test("agents saved and MCP refused: it says so, shows the refusal and only the MCP list stays unsaved", async () => {
-  const { page, other } = await open({ wrap: (g) => ({ ...g, setProjectMcpServers: refusal("UNKNOWN_REFERENCE", "unknown: linear", { names: ["linear"] }) }) });
+  const { page, other } = await open({ wrap: (g) => ({ ...g, setProjectMcpSettings: refusal("UNKNOWN_REFERENCE", "unknown: linear", { names: ["linear"] }) }) });
   page.chooseSelected();
   page.toggleAgent("backend");
-  page.toggle("linear");
+  page.setState("linear", "added");
   await page.save();
   assert.deepEqual(await other.getProjectAgents("p1"), { mode: "selected", agents: ["ux-designer"] });
   assert.equal(page.partial.text, "Enabled agents were saved. MCP servers were not: These do not exist: linear.");
@@ -159,9 +159,9 @@ test("agents saved and MCP refused: it says so, shows the refusal and only the M
 test("MCP saved and agents refused: it says so, shows the refusal and only the agents stay unsaved", async () => {
   const { page, other, calls } = await open({ wrap: (g) => ({ ...g, setProjectAgents: refusal("INVALID_INPUT", "mode is invalid", {}) }) });
   page.chooseSelected();
-  page.toggle("linear");
+  page.setState("linear", "added");
   await page.save();
-  assert.deepEqual(calls(), ["set_project_mcp_servers"], "the refused agents call never reached the server");
+  assert.deepEqual(calls(), ["set_project_mcp_settings"], "the refused agents call never reached the server");
   assert.deepEqual(await other.getProjectMcpServers("p1"), ["github", "linear"]);
   assert.equal(page.partial.text, "MCP servers were saved. Enabled agents were not: mode is invalid");
   assert.ok(page.agentsRefusal);
@@ -174,9 +174,9 @@ test("MCP saved and agents refused: it says so, shows the refusal and only the a
 
 test("when both calls are refused nothing saved, so no part is named as saved", async () => {
   const no = refusal("INVALID_INPUT", "no", {});
-  const { page } = await open({ wrap: (g) => ({ ...g, setProjectAgents: no, setProjectMcpServers: no }) });
+  const { page } = await open({ wrap: (g) => ({ ...g, setProjectAgents: no, setProjectMcpSettings: no }) });
   page.chooseSelected();
-  page.toggle("linear");
+  page.setState("linear", "added");
   await page.save();
   assert.equal(page.partial, null);
   assert.ok(page.agentsRefusal && page.refusal);
