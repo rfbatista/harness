@@ -3,6 +3,7 @@
 // sessions the page holds and the states the store holds; the component binds
 // what they return. Copy follows the UX study (the popover of section 3.4).
 
+import { branchesLabel, flaggedCount, rowOf as branchRowOf } from "../domain/branches.js";
 import { fetchAge, panelOf, uncommittedLine } from "./view.js";
 
 /** What a template needs to draw a refusal: the credential banner or the danger strip. */
@@ -12,6 +13,24 @@ const agentOf = (agentId, agentNames) => (agentId ? agentNames[agentId] || agent
 
 /** The session's Code tab. */
 export const codeHref = (projectId, ticketId, sessionId) => `/projects/${encodeURIComponent(projectId)}/tasks/${encodeURIComponent(ticketId)}/sessions/${encodeURIComponent(sessionId)}/code`;
+
+/**
+ * What a Branches section binds: its rows, the count and whether any is flagged.
+ * @param {import("../domain/branches.js").SessionBranch[] | undefined} list
+ * @param {Parameters<typeof branchRowOf>[1]} [ctx]  the remotes and the open Push confirmation of the list's workspace
+ */
+export function branchesOf(list, ctx = {}) {
+  const branches = list ?? [];
+  const flagged = flaggedCount(branches);
+  return {
+    rows: branches.map((b) => branchRowOf(b, ctx)),
+    count: branches.length,
+    label: branchesLabel(branches.length),
+    flagged: flagged > 0,
+    flaggedLabel: flagged === 1 ? "1 unapproved" : `${flagged} unapproved`,
+    shown: branches.length > 0,
+  };
+}
 
 /**
  * @param {{
@@ -27,9 +46,12 @@ export const codeHref = (projectId, ticketId, sessionId) => `/projects/${encodeU
  *   confirming?: string,               the workspace whose push question is asked
  *   pushFailure?: Record<string, object>,   the last refused push by workspace id (refusalOf's shape)
  *   fetchFailure?: Record<string, object>,  the last refused fetch by repository id
+ *   branches?: Record<string, import("../domain/branches.js").SessionBranch[]>,  Branches lists by session id
+ *   remotes?: Record<string, Array<{ name: string }>>,  each repository's remotes, by repository id
+ *   branchPush?: object | null,       the Push confirmation open on a Branches row (the store's)
  * }} input
  */
-export function popoverOf({ sessions, states, agentNames = {}, repositoryNames = {}, projectId, ticketId, now = new Date(), fetching = {}, pushing = {}, confirming = "", pushFailure = {}, fetchFailure = {} }) {
+export function popoverOf({ sessions, states, agentNames = {}, repositoryNames = {}, projectId, ticketId, now = new Date(), fetching = {}, pushing = {}, confirming = "", pushFailure = {}, fetchFailure = {}, branches = {}, remotes = {}, branchPush = null }) {
   const worktrees = sessions.filter((s) => s.workspaceId && (!ticketId || s.ticketId === ticketId));
 
   const rows = worktrees.map((s) => {
@@ -42,6 +64,7 @@ export function popoverOf({ sessions, states, agentNames = {}, repositoryNames =
       branch: state?.branch || s.branch,
       codeHref: codeHref(projectId, ticketId || s.ticketId, s.id),
       hasState: state !== null,
+      branches: branchesOf(branches[s.id], { remotes: remotes[s.repositoryId], push: branchPush?.workspaceId === s.workspaceId ? branchPush : null, pushing: !!pushing[s.workspaceId] }),
       gone: false,
       offersPush: false,
       showsPush: false,

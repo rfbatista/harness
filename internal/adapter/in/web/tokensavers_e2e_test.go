@@ -32,6 +32,11 @@ type tokenSaverWorld struct {
 	cat      catalog.Catalog
 	plan     *planning.Service
 	repoAg   *repoagents.Service
+	orch     *orchestration.Service
+	// appCat is the catalog the application's own sessions read; agentCat is
+	// the one the pages here read. They are separate folders unless a test
+	// writes the same files to both.
+	appCat *agentcatalog.Catalog
 	srv      *httptest.Server
 	agentCat *agentcatalog.Catalog
 	root     string
@@ -59,13 +64,14 @@ func newTokenSaverWorld(t *testing.T, opts ...agentcatalog.Option) *tokenSaverWo
 		fx.Supply(app.Config{HTTPAddr: "127.0.0.1:0", MCPAddr: "127.0.0.1:0", DBPath: ":memory:", Root: w.root, ClaudeBin: "/bin/true", SessionShell: "direct"}),
 		app.PersistenceModule, app.CatalogModule, app.PlanningModule, app.WorkspacesModule,
 		app.AgentRuntimeModule, app.TaskChannelModule, app.TextProcessingModule, app.ToolingModule,
-		fx.Populate(&w.cat, &orch, &w.plan, &w.repoAg),
+		fx.Populate(&w.cat, &orch, &w.plan, &w.repoAg, &w.appCat),
 		fx.NopLogger,
 	)
 	if err := fxApp.Start(w.ctx); err != nil {
 		t.Fatal(err)
 	}
 	t.Cleanup(func() { _ = fxApp.Stop(context.Background()) })
+	w.orch = orch
 
 	if w.project, err = w.cat.Projects.CreateProject(w.ctx, "harness", w.root); err != nil {
 		t.Fatal(err)

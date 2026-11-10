@@ -13,7 +13,7 @@ import { codeOf, Codes } from "../../../../shared/domain/errors.js";
 import { FeedStatus } from "../../../../shared/domain/feed.js";
 import { describeError } from "../../../../shared/presentation/errors.js";
 import { readSeed } from "../../../../shared/presentation/seed.js";
-import { isPending, upsertRequest } from "../../domain/request.js";
+import { isPending, oldestPendingBySession, upsertRequest } from "../../domain/request.js";
 import { toCard, waitingLine } from "../view.js";
 
 const TICK_MS = 30_000;
@@ -24,10 +24,11 @@ const BUTTON_ID = "task-branch-requests-button";
  * @param {{
  *   gateway: ReturnType<typeof import("../../infrastructure/branch-requests-gateway.js").branchRequestsGateway>,
  *   clock: import("../../../../shared/infrastructure/clock.js").Clock,
+ *   store: { pendingBySession: Record<string, string> },
  *   hash?: () => string,
- * }} deps  hash is the page's URL fragment: a link to a request (#branch-request-{id}) or to #branch-requests
+ * }} deps  store is what the session rows read to lead to a request; hash is the page's URL fragment: a link to a request (#branch-request-{id}) or to #branch-requests
  */
-export const branchRequests = ({ gateway, clock, hash = () => globalThis.location?.hash ?? "" }) => () => {
+export const branchRequests = ({ gateway, clock, store, hash = () => globalThis.location?.hash ?? "" }) => () => {
   let unfollow = () => {};
   let ticker = null;
   let root = null;
@@ -90,6 +91,7 @@ export const branchRequests = ({ gateway, clock, hash = () => globalThis.locatio
         this.error = describeError(err);
         return;
       }
+      this.$watch("requests", () => (store.pendingBySession = oldestPendingBySession(this.requests)));
       this.load();
       unfollow = gateway.follow(
         this.projectId,
@@ -124,6 +126,17 @@ export const branchRequests = ({ gateway, clock, hash = () => globalThis.locatio
       const target = hash();
       const id = target.startsWith("#branch-request-") ? decodeURIComponent(target.slice("#branch-request-".length)) : "";
       if ((target !== "#branch-requests" && !id) || this.pendingCount === 0) return;
+      this.showRequest(id);
+    },
+
+    /** A session row asked for its pending approval: open at that session's oldest pending request. */
+    showFor(event) {
+      const id = store.pendingBySession[event?.detail?.sessionId];
+      if (id) this.showRequest(id);
+    },
+
+    /** Opens the popover and focuses the request's card (the list's heading when id is ""). */
+    showRequest(id) {
       this.openPopover();
       this.$nextTick(() => {
         const card = [...(root?.querySelectorAll("article[data-branch-request]") ?? [])].find((a) => a.dataset.requestId === id);

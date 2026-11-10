@@ -147,6 +147,13 @@ type CatalogMCPServer struct {
 	Projects  []CatalogProjectRef `json:"projects"`
 	Problems  []CatalogProblem    `json:"problems"`
 	Tools     []string            `json:"tools,omitempty"`
+	// KnownTools are the tool names of the last successful probe, in the order
+	// the server gave them: nil (null) before any, empty when it has none.
+	// ProbedAt is when they were taken. DisabledTools is the tool default: the
+	// names of the tools every project without its own setting hides.
+	KnownTools    []string `json:"known_tools"`
+	ProbedAt      *string  `json:"probed_at"`
+	DisabledTools []string `json:"disabled_tools"`
 }
 
 // CatalogBuiltInTool is a Claude built-in tool an agent may be restricted to.
@@ -250,6 +257,29 @@ type CatalogChange struct {
 type CatalogWriteResult struct {
 	Change   CatalogChange     `json:"change"`
 	Versions map[string]string `json:"versions"`
+	// Probe is how probing the server went on a save of an MCP server; nil
+	// for every other write.
+	Probe *CatalogProbeOutcome `json:"probe,omitempty"`
+}
+
+// CatalogProbeOutcome is how one probe of an MCP server went. Status is ok or
+// error; Error and Hint say why it failed.
+type CatalogProbeOutcome struct {
+	Status string `json:"status"`
+	Error  string `json:"error"`
+	Hint   string `json:"hint"`
+}
+
+// RefreshCatalogMCPServerTools probes a saved MCP server and stores its tools.
+type RefreshCatalogMCPServerTools struct {
+	Name string `json:"name"`
+}
+
+// CatalogMCPServerTools is the answer of a refresh: the catalog entry and the
+// probe.
+type CatalogMCPServerTools struct {
+	Server CatalogMCPServer    `json:"server"`
+	Probe  CatalogProbeOutcome `json:"probe"`
 }
 
 // CatalogAgentInput is an agent as the editor saves it.
@@ -376,6 +406,9 @@ type SaveCatalogMCPServer struct {
 	Server       CatalogServerInput `json:"server"`
 	Agents       []string           `json:"agents"`
 	Projects     []string           `json:"projects"`
+	// DisabledTools is the tool default: nil keeps the stored list, empty
+	// clears it.
+	DisabledTools []string `json:"disabled_tools"`
 }
 
 // TestCatalogMCPServer probes an unsaved MCP server.
@@ -409,9 +442,50 @@ type SetCatalogProjectMCPServers struct {
 	MCPServers []string `json:"mcp_servers"`
 }
 
-// CatalogProjectMCPServers is a project's MCP server names.
+// Project MCP server states: Added (every session gets it), Agent's choice
+// (only sessions whose agent lists it) and Banned (no session gets it).
+const (
+	MCPStateAdded  = "added"
+	MCPStateAgent  = "agent"
+	MCPStateBanned = "banned"
+)
+
+// CatalogProjectMCPServers is a project's MCP settings: the Added servers'
+// names, and every catalog server with its state and tools.
 type CatalogProjectMCPServers struct {
-	MCPServers []string `json:"mcp_servers"`
+	MCPServers []string                  `json:"mcp_servers"`
+	Servers    []CatalogProjectMCPServer `json:"servers"`
+}
+
+// CatalogProjectMCPServer is one catalog server in a project. Tools is nil
+// (null) while the server's tools are unknown.
+type CatalogProjectMCPServer struct {
+	Name         string                  `json:"name"`
+	State        string                  `json:"state"`
+	UsedByAgents []string                `json:"used_by_agents"`
+	Tools        []CatalogProjectMCPTool `json:"tools"`
+}
+
+// CatalogProjectMCPTool is a tool with the catalog's default, the project's
+// override (default, enabled or disabled) and what is in effect.
+type CatalogProjectMCPTool struct {
+	Name      string `json:"name"`
+	Default   string `json:"default"`
+	Override  string `json:"override"`
+	Effective string `json:"effective"`
+}
+
+// SetCatalogProjectMCPSettings replaces a project's whole MCP settings.
+type SetCatalogProjectMCPSettings struct {
+	ProjectID string                         `json:"project_id"`
+	Servers   []CatalogProjectMCPServerInput `json:"servers"`
+}
+
+// CatalogProjectMCPServerInput is the state and tool overrides of one server.
+type CatalogProjectMCPServerInput struct {
+	Name          string            `json:"name"`
+	State         string            `json:"state"`
+	ToolOverrides map[string]string `json:"tool_overrides"`
 }
 
 // SetCatalogProjectAgents replaces a project's enabled agents.

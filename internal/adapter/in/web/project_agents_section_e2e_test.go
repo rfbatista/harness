@@ -172,7 +172,7 @@ func TestAnAgentTakenOutOfTheCatalogIsNamedAtTheChecklistWhenSaving_EndToEnd(t *
 	)
 	writeCatalogFile(t, w, "agents.json", `{"agents": {"designer": {"description": "Designs screens."}, "backend": {"description": "APIs and services."}}}`)
 	b.run("saving a list that names the removed agent is refused and names it at the checklist",
-		waitUntil(`(() => { const i = document.querySelector('[data-mcp-row] input'); if (!i) return false; i.click(); return true; })()`),
+		waitUntil(`(() => { const i = document.querySelector('[data-mcp-row] [data-mcp-state-choice][data-state="added"]'); if (!i) return false; i.click(); return true; })()`),
 		clickButton(root, "Save"),
 		waitUntil(visible(`[data-agents-refusal]`)),
 		waitUntil(`document.querySelector('[data-agents-refusal]').textContent.includes('reviewer')`),

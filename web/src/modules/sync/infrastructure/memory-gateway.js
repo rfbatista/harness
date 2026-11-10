@@ -68,6 +68,10 @@ export function memorySync({ workspaces = [], now = () => new Date(), delayMs = 
   let echoesFirst = echoFirst;
   const calls = { fetch: 0, push: 0, get: 0 };
   const pushed = [];
+  /** Remote names by repository id; origin alone when not set. */
+  const remoteNames = {};
+  /** Heads of branches other than a workspace's, by `workspace/branch`. */
+  const branchHeads = {};
 
   for (const w of workspaces) addWorkspace(w);
 
@@ -144,7 +148,19 @@ export function memorySync({ workspaces = [], now = () => new Date(), delayMs = 
       return { fetchedAt };
     },
 
-    async push({ workspaceId, expectedHead }) {
+    async remotes(repositoryId) {
+      await wait();
+      return (remoteNames[repositoryId] ?? ["origin"]).map((name) => ({ name, url: `https://example.test/${name}.git` }));
+    },
+
+    async pushPreview({ workspaceId, branch, remote, remoteBranch }) {
+      const w = workspace(workspaceId);
+      await wait();
+      const known = (w.knownRemoteBranches ?? []).includes(`${remote}/${remoteBranch || branch}`);
+      return { head: branchHeads[`${workspaceId}/${branch}`] ?? w.state.head, commits: w.state.upstream.ahead || 1, commitsAgainst: known ? "remote" : "base", remoteBranch: remoteBranch || branch };
+    },
+
+    async push({ workspaceId, expectedHead, branch, remote, remoteBranch }) {
       calls.push++;
       if (!workspaceId) throw new StructuredError(Codes.INVALID_INPUT, "INVALID_INPUT: workspace_id is required", 400);
       const w = workspace(workspaceId);
@@ -157,7 +173,7 @@ export function memorySync({ workspaces = [], now = () => new Date(), delayMs = 
       if (expectedHead !== w.state.head) throw refusal(Codes.PUSH_STALE, undefined, { state: reread(w, {}) });
       const up = w.state.upstream;
       if (up.state === "behind" || up.state === "diverged") throw refusal(Codes.PUSH_REJECTED, undefined, { state: reread(w, {}) });
-      pushed.push({ workspaceId, expectedHead });
+      pushed.push({ workspaceId, expectedHead, ...(branch && { branch }), ...(remote && { remote }), ...(remoteBranch && { remoteBranch }) });
       const ref = up.ref ?? `origin/${w.state.branch}`;
       reread(w, { pushedAt: now(), upstream: Object.freeze({ state: "in_sync", ref, remote: "origin", ahead: 0, behind: 0 }) });
       if (echoesFirst) {
@@ -211,6 +227,14 @@ export function memorySync({ workspaces = [], now = () => new Date(), delayMs = 
     /** Whether the feed echo of a fetch or a push lands before its answer. */
     echoFirst(on = true) {
       echoesFirst = on;
+    },
+    /** The repository's remotes, origin first by the caller's order. */
+    setRemotes(repositoryId, names) {
+      remoteNames[repositoryId] = names;
+    },
+    /** The head of a branch other than the workspace's, as push_preview reads it. */
+    setBranchHead(workspaceId, branch, head) {
+      branchHeads[`${workspaceId}/${branch}`] = head;
     },
     /** The workspace row is deleted. */
     forget(workspaceId) {

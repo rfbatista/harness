@@ -114,6 +114,8 @@ func NewRouter(h *Handler, opts ...Option) *echo.Echo {
 	g.GET("/list_worktree_git_states", h.handleListWorktreeGitStates)
 	g.POST("/fetch_remote", h.handleFetchRemote)
 	g.POST("/push_branch", h.handlePushBranch)
+	g.GET("/repository_remotes", h.handleRepositoryRemotes)
+	g.GET("/push_preview", h.handlePushPreview)
 
 	// bounded contexts
 	g.GET("/list_bounded_contexts", h.handleListBoundedContexts)
@@ -217,8 +219,10 @@ func NewRouter(h *Handler, opts ...Option) *echo.Echo {
 	g.POST("/save_catalog_mcp_server", h.handleSaveCatalogMCPServer)
 	g.POST("/delete_catalog_mcp_server", h.handleDeleteCatalogMCPServer)
 	g.POST("/test_catalog_mcp_server", h.handleTestCatalogMCPServer)
+	g.POST("/refresh_catalog_mcp_server_tools", h.handleRefreshCatalogMCPServerTools)
 	g.GET("/get_project_mcp_servers", h.handleGetProjectMCPServers)
 	g.POST("/set_project_mcp_servers", h.handleSetProjectMCPServers)
+	g.POST("/set_project_mcp_settings", h.handleSetProjectMCPSettings)
 	g.GET("/get_project_agents", h.handleGetProjectAgents)
 	g.POST("/set_project_agents", h.handleSetProjectAgents)
 	g.GET("/get_repository_agents", h.handleGetRepositoryAgents)
@@ -316,6 +320,8 @@ func NewRouter(h *Handler, opts ...Option) *echo.Echo {
 	g.POST(strings.TrimPrefix(BranchGatePushedRoute, "/api"), h.handleBranchGatePushed)
 	// the person's side of it: the requests, and their answers
 	g.GET("/branch_requests", h.handleBranchRequests)
+	g.GET("/session_branches", h.handleSessionBranches)
+	g.GET("/list_session_branches", h.handleListSessionBranches)
 	g.POST("/branch_requests/:id/answer", h.handleAnswerBranchRequest)
 
 	// the architect channel: what passes between a task's architect and its

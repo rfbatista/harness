@@ -24,6 +24,26 @@ type Project struct {
 	// ADR 0038.
 	EnabledAgentsMode string   `json:"enabled_agents_mode,omitempty"`
 	EnabledAgents     []string `json:"enabled_agents,omitempty"`
+	// MCPBanned names the catalog MCP servers no session of the project gets,
+	// whatever its agent lists (ADR 0067).
+	MCPBanned []string `json:"mcp_banned,omitempty"`
+	// MCPToolOverrides are the project's own tool settings: server, then tool,
+	// then ToolEnabled or ToolDisabled. A tool not named follows the tool
+	// default the catalog keeps.
+	MCPToolOverrides map[string]map[string]string `json:"mcp_tool_overrides,omitempty"`
+}
+
+// A project's override of one MCP tool.
+const (
+	ToolEnabled  = "enabled"
+	ToolDisabled = "disabled"
+)
+
+// ProjectMCPSettings are the parts of a project's MCP settings besides its
+// Added servers list: the banned servers and the tool overrides.
+type ProjectMCPSettings struct {
+	Banned        []string                     `json:"banned,omitempty"`
+	ToolOverrides map[string]map[string]string `json:"tool_overrides,omitempty"`
 }
 
 // Enabled agent modes of a project.

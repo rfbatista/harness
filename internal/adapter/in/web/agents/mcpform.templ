@@ -239,6 +239,27 @@ templ mcpFormPage(v View) {
 										</div>
 									</div>
 								</fieldset>
+								<fieldset data-mf-tools>
+									<legend>Tools</legend>
+									<div class="[ repel ]">
+										<span class="[ text-sm ]" data-mf-tools-summary role="status" x-text="mfToolsSummary"></span>
+										<button type="button" class="[ button ]" data-size="sm" data-mf-refresh x-bind:hidden="!mfRefreshShown" x-bind:disabled="mfRefreshDisabled" x-bind:aria-busy="mfRefreshBusy" x-on:click="mfRefresh" x-text="mfRefreshLabel" hidden>Refresh tools</button>
+									</div>
+									<span class="[ text-xs color-ink-muted ]" data-mf-tools-probed x-bind:hidden="!mfToolsHasProbed" x-text="mfToolsProbed" hidden></span>
+									<span class="[ hint ]" data-mf-tools-hint x-bind:hidden="!mfToolsHint" x-text="mfToolsHint" hidden></span>
+									<div class="[ banner ]" data-mf-refresh-note role="status" x-bind:data-tone="mfRefreshNoteTone" x-bind:hidden="!mfRefreshNoteShown" hidden>
+										<div class="[ grow text-sm ]" x-text="mfRefreshNoteText"></div>
+									</div>
+									<div class="[ targets ]" data-mf-tool-list x-bind:hidden="!mfToolsKnown" hidden>
+										<template x-for="t in mfToolRows" x-bind:key="t.name">
+											<label class="[ target ]" data-mf-tool-row x-bind:data-name="t.name" x-bind:data-state="t.state">
+												<input type="checkbox" data-mf-tool x-bind:checked="t.checked" x-bind:data-name="t.name" x-bind:aria-label="t.aria" x-on:change="mfToggleTool"/>
+												<span class="[ font-mono text-sm ]" x-text="t.name"></span>
+												<span class="[ text-xs color-ink-faint ]" x-text="t.label"></span>
+											</label>
+										</template>
+									</div>
+								</fieldset>
 								<fieldset data-mf-who x-bind:hidden="!mfAttachable">
 									<legend>Who gets it</legend>
 									<fieldset class="[ field ]">

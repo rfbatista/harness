@@ -127,8 +127,8 @@ templ mcpServersSection(projectID, projectName, settingsHref string) {
 		<div class="[ flow ] [ flow-space-3xs ]">
 			<h2 id="settings-mcp">MCP servers</h2>
 			<p class="[ text-sm color-ink-muted ]">
-				The servers every session in <b>{ projectName }</b> gets, whichever agent runs it. Servers are defined once, on the
-				<a href="/agents/mcp">Agents page</a>, under MCP servers. Here you only choose which of them this project gives.
+				Which MCP servers sessions in <b>{ projectName }</b> get. <b>Added</b>: every session gets it. <b>Agent’s choice</b>: only sessions whose agent lists it. <b>Banned</b>: no session gets it, whatever its agent lists. Under each server, set its tools to Default, Enabled or Disabled for this project. Servers are defined once, on the
+				<a href="/agents/mcp">Agents page</a>, under MCP servers.
 			</p>
 		</div>
 		<template x-if="hasBanner">
@@ -150,27 +150,65 @@ templ mcpServersSection(projectID, projectName, settingsHref string) {
 		<template x-if="hasRows">
 			<div class="[ flow ] [ flow-space-s ]" x-bind:class="skeletonIn">
 				<div class="[ repel ]">
-					<h3 id="settings-mcp-pick">Servers this project gives</h3>
+					<h3 id="settings-mcp-pick">Servers in this project</h3>
 					<span class="[ text-xs color-ink-faint ]" data-mcp-count x-text="count"></span>
 				</div>
-				<div class="[ targets ]" role="group" aria-labelledby="settings-mcp-pick" x-bind:aria-describedby="mcpDescribedBy" data-mcp-list>
+				<div class="[ targets ]" role="list" aria-labelledby="settings-mcp-pick" x-bind:aria-describedby="mcpDescribedBy" data-mcp-list>
 					<template x-for="r in rows" x-bind:key="r.name">
-						<label class="[ target ]" data-mcp-row x-bind:data-name="r.name">
-							<input type="checkbox" x-bind:checked="r.checked" x-bind:disabled="saving" x-on:change="toggle(r.name)"/>
-							<div class="[ flow ] [ flow-space-3xs ]">
-								<div class="[ cluster ] [ gutter-xs ]">
-									<span class="[ font-mono text-sm ]" x-text="r.name"></span>
-									<span class="[ badge ]" x-text="r.transport"></span>
-									<template x-for="v in r.vars" x-bind:key="v.label">
-										<span class="[ badge ]" data-mcp-var x-bind:data-tone="v.tone"><span class="[ font-mono ]" x-text="v.label"></span> <span x-text="v.state"></span></span>
+						<div class="[ pane ] [ flow ] [ flow-space-xs ]" style="padding: var(--space-s) var(--space-m)" role="listitem" data-mcp-row x-bind:data-name="r.name" x-bind:data-state="r.state">
+							<div class="[ repel ]">
+								<div class="[ flow ] [ flow-space-3xs ]">
+									<div class="[ cluster ] [ gutter-xs ]">
+										<span class="[ font-mono text-sm ]" x-text="r.name"></span>
+										<span class="[ badge ]" x-text="r.transport"></span>
+										<template x-for="v in r.vars" x-bind:key="v.label">
+											<span class="[ badge ]" data-mcp-var x-bind:data-tone="v.tone"><span class="[ font-mono ]" x-text="v.label"></span> <span x-text="v.state"></span></span>
+										</template>
+									</div>
+									<div class="[ text-xs color-ink-faint ]">
+										<span data-mcp-who x-text="r.who"></span>
+										<span x-bind:hidden="!r.warning" x-text="r.warningText"></span>
+									</div>
+								</div>
+								<div class="[ segmented ]" role="group" data-mcp-state x-bind:aria-label="r.stateAria">
+									<template x-for="c in r.choices" x-bind:key="c.value">
+										<button type="button" data-mcp-state-choice aria-pressed="false" x-bind:data-name="r.name" x-bind:data-state="c.value" x-bind:aria-pressed="c.pressed" x-bind:disabled="saving" x-on:click="pickState" x-text="c.label"></button>
 									</template>
 								</div>
-								<div class="[ text-xs color-ink-faint ]">
-									<span data-mcp-who x-text="r.who"></span>
-									<span x-bind:hidden="!r.warning" x-text="r.warningText"></span>
+							</div>
+							<div class="[ text-xs color-ink-muted ]" data-mcp-state-hint x-text="r.stateHint"></div>
+							<div class="[ banner ]" data-tone="attention" role="status" data-mcp-ban x-bind:hidden="!r.banned" hidden>
+								<div class="[ grow text-sm ]" x-text="r.banWarning"></div>
+							</div>
+							<div class="[ flow ] [ flow-space-2xs ]" data-mcp-tools x-bind:hidden="!r.showTools" hidden>
+								<div class="[ repel ]">
+									<span class="[ text-xs color-ink-muted ]" data-mcp-tools-summary x-bind:hidden="!r.hasToolRows" x-text="r.tools.summary" hidden></span>
+									<span class="[ cluster ]">
+										<button type="button" class="[ button ]" data-size="sm" data-variant="ghost" data-mcp-reset x-bind:data-name="r.name" x-bind:hidden="!r.hasToolRows" x-bind:disabled="!r.canReset || saving" x-on:click="resetTools" hidden>Reset to defaults</button>
+										<button type="button" class="[ button ]" data-size="sm" data-variant="ghost" data-mcp-refresh x-bind:data-name="r.name" x-bind:disabled="r.refreshDisabled" x-bind:aria-busy="r.refreshBusy" x-on:click="refreshTools" x-text="r.refreshLabel">Refresh tools</button>
+									</span>
+								</div>
+								<div class="[ banner ]" role="status" data-mcp-refresh-note x-bind:data-tone="r.refreshTone" x-bind:hidden="!r.hasRefreshNote" hidden>
+									<div class="[ grow text-sm ]" x-text="r.refreshNote"></div>
+								</div>
+								<div class="[ text-sm color-ink-muted ]" data-mcp-tools-unknown x-bind:hidden="!r.toolsUnknown" x-text="r.tools.text" hidden></div>
+								<div class="[ flow ] [ flow-space-3xs ]" role="list" aria-label="Tools" data-mcp-tool-list x-bind:hidden="!r.hasToolRows" hidden>
+									<template x-for="t in r.tools.rows" x-bind:key="t.name">
+										<div class="[ repel ]" role="listitem" data-mcp-tool x-bind:data-name="t.name" x-bind:data-effective="t.effective" x-bind:data-choice="t.choice">
+											<div class="[ flow ] [ flow-space-3xs ]">
+												<span class="[ font-mono text-sm ]" x-text="t.name"></span>
+												<span class="[ text-xs color-ink-faint ]"><span data-mcp-tool-effective x-text="t.effectiveText"></span> <span x-text="t.source"></span></span>
+											</div>
+											<div class="[ segmented ]" data-size="sm" role="group" x-bind:aria-label="t.aria">
+												<template x-for="c in t.choices" x-bind:key="c.value">
+													<button type="button" data-mcp-tool-choice aria-pressed="false" x-bind:data-name="r.name" x-bind:data-tool="t.name" x-bind:data-choice="c.value" x-bind:aria-pressed="c.pressed" x-bind:disabled="saving" x-on:click="pickTool" x-text="c.label"></button>
+												</template>
+											</div>
+										</div>
+									</template>
 								</div>
 							</div>
-						</label>
+						</div>
 					</template>
 				</div>
 			</div>
@@ -188,7 +226,7 @@ templ mcpServersSection(projectID, projectName, settingsHref string) {
 				<div class="[ pane ] [ flow ] [ flow-space-xs ]" style="padding: var(--space-m)">
 					<template x-if="example.hasAgent">
 						<div class="[ flow ] [ flow-space-3xs ]" data-mcp-with-agent>
-							<div><b x-text="example.asAgent"></b> <span class="[ text-xs color-ink-faint ]">agent’s servers + this project’s</span></div>
+							<div><b x-text="example.asAgent"></b> <span class="[ text-xs color-ink-faint ]">agent’s servers + this project’s Added ones</span></div>
 							<div class="[ cluster ]">
 								<template x-for="s in example.withAgent" x-bind:key="s.name">
 									<span class="[ chip ] [ font-mono ]">
@@ -210,7 +248,8 @@ templ mcpServersSection(projectID, projectName, settingsHref string) {
 						</div>
 					</div>
 				</div>
-				<p class="[ hint ]">A session gets its agent’s servers plus these, a name that appears twice counted once. A session with no agent gets only these. Running sessions keep the servers they started with.</p>
+				<p class="[ text-sm color-ink-muted ]" data-mcp-example-banned x-bind:hidden="!example.hasBanned" x-text="example.bannedText" hidden></p>
+				<p class="[ hint ]">A session gets its agent’s servers plus the Added ones, a name that appears twice counted once, and never a banned server. A session with no agent gets only the Added ones. Running sessions keep the servers they started with.</p>
 			</div>
 		</template>
 		</section>

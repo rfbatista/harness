@@ -35,6 +35,9 @@ import { previewModel } from "./skillForm.js";
  * @property {ValueRow[]} headers
  * @property {string[]} agents  every agent that gets it after the save
  * @property {string[]} projects  every project id that gets it after the save
+ * @property {string[] | null} knownTools  the tool names of the server's last successful probe; null: tools unknown
+ * @property {string} probedAt  when knownTools was taken, "" while unknown
+ * @property {string[]} disabledTools  the tool default: the names of the disabled tools, hidden ones included
  * @property {object} base  what the form started with
  */
 
@@ -134,7 +137,7 @@ function snapshot(d) {
   return {
     name: d.name, transport: d.transport, command: d.command, args: d.args.map((a) => a.value),
     env: Object.fromEntries(d.env.map((r) => [r.key, r.value])), url: d.url, headers: Object.fromEntries(d.headers.map((r) => [r.key, r.value])),
-    agents: [...d.agents], projects: [...d.projects],
+    agents: [...d.agents], projects: [...d.projects], disabledTools: [...d.disabledTools],
   };
 }
 
@@ -158,9 +161,12 @@ export function mcpDraft(_catalog, { previous, from, name = "" } = {}) {
     headers: Object.entries(source?.headers ?? {}).map(([k, v]) => rowFrom(k, v)),
     agents: previous ? [...previous.agents] : [],
     projects: previous ? previous.projects.map((p) => p.id) : [],
+    knownTools: previous?.knownTools ? [...previous.knownTools] : null,
+    probedAt: previous?.probedAt ?? "",
+    disabledTools: previous ? [...(previous.disabledTools ?? [])] : [],
     base: {},
   };
-  draft.base = previous ? snapshot(draft) : snapshot({ ...draft, name: "", transport: "stdio", command: "", args: [], env: [], url: "", headers: [], agents: [], projects: [] });
+  draft.base = previous ? snapshot(draft) : snapshot({ ...draft, name: "", transport: "stdio", command: "", args: [], env: [], url: "", headers: [], agents: [], projects: [], disabledTools: [] });
   return draft;
 }
 
@@ -175,7 +181,7 @@ export function mcpChanges(d) {
   for (const f of /** @type {const} */ (["name", "transport", "command", "url"])) if (now[f] !== was[f]) n++;
   if (JSON.stringify(now.args) !== JSON.stringify(was.args)) n++;
   n += pairsChanged(now.env, was.env) + pairsChanged(now.headers, was.headers);
-  return n + symmetric(now.agents, was.agents) + symmetric(now.projects, was.projects);
+  return n + symmetric(now.agents, was.agents) + symmetric(now.projects, was.projects) + symmetric(now.disabledTools, was.disabledTools);
 }
 
 /** The ${VAR} references of the fields the chosen transport uses, once each, in order. @param {McpDraft} d */
@@ -194,6 +200,72 @@ export function rename(catalog, d) {
   const projects = was?.projects.length ?? 0;
   if (agents + projects === 0) return { show: true, text: "No agent and no project has this server, so a rename changes nothing else." };
   return { show: true, text: `Renaming rewrites the name in ${plural(agents, "agent")} and ${plural(projects, "project")}. One save changes them all, or none.` };
+}
+
+// Tools: the tool default, a global enable/disable per known tool.
+
+/** The probe time as the editor shows it, in UTC so it reads the same anywhere. @param {string} iso */
+export function probedAtText(iso) {
+  const t = Date.parse(iso);
+  return Number.isNaN(t) ? "" : `${new Date(t).toISOString().slice(0, 16).replace("T", " ")} UTC`;
+}
+
+/**
+ * The tool list as the editor lays it out. A server never probed successfully
+ * has unknown tools, all enabled, and no rows. A name in disabledTools that
+ * knownTools no longer holds has no row; the save keeps it.
+ * @param {Pick<McpDraft, "knownTools" | "probedAt" | "disabledTools" | "previousName">} d
+ */
+export function mcpTools(d) {
+  const saved = d.previousName !== "";
+  if (d.knownTools === null) {
+    return {
+      unknown: true, rows: [], refreshable: saved, probed: "",
+      summary: "Tools unknown. Every tool of this server is enabled.",
+      hint: saved ? "Save the server or choose Refresh tools to learn its tools." : "Save the server and the harness learns its tools.",
+    };
+  }
+  const rows = d.knownTools.map((name) => ({ name, enabled: !d.disabledTools.includes(name) }));
+  const off = rows.filter((r) => !r.enabled).length;
+  const probed = probedAtText(d.probedAt);
+  return {
+    unknown: false, rows, refreshable: saved, probed: probed ? `Last probed ${probed}.` : "",
+    summary: rows.length === 0 ? "The server lists no tools." : `${plural(rows.length, "tool")}, ${off === 0 ? "all enabled" : `${off} disabled`}.`,
+    hint: rows.length > 0 ? "A disabled tool is hidden from every project that does not set it itself." : "",
+  };
+}
+
+/** Flips one tool of the default: enabled becomes disabled and back. @param {McpDraft} d @param {string} name */
+export function toggleTool(d, name) {
+  d.disabledTools = d.disabledTools.includes(name) ? d.disabledTools.filter((t) => t !== name) : [...d.disabledTools, name];
+}
+
+/**
+ * Takes the tool data of a refreshed catalog entry and nothing else: the
+ * definition the person is editing and the toggles they set stay as they are.
+ * @param {McpDraft} d @param {{ knownTools: string[] | null, probedAt: string }} entry
+ */
+export function adoptTools(d, entry) {
+  d.knownTools = entry.knownTools ? [...entry.knownTools] : null;
+  d.probedAt = entry.probedAt ?? "";
+}
+
+/**
+ * What a probe outcome says: after a save (the server is saved either way) or
+ * after Refresh tools. `tools` is the entry's known tools once it is read.
+ * @param {{ status: "ok"|"error", error: string, hint: string } | null | undefined} probe
+ * @param {{ tools: string[] | null, saved?: boolean }} o  saved: the probe ran with a save
+ * @returns {{ show: boolean, tone: "" | "attention", text: string }}
+ */
+export function probeOutcome(probe, { tools, saved = false }) {
+  if (!probe) return { show: false, tone: "", text: "" };
+  if (probe.status === "ok") {
+    const n = tools?.length ?? 0;
+    return { show: true, tone: "", text: n === 0 ? "Probed the server: it lists no tools." : `Probed the server: ${plural(n, "tool")} found.` };
+  }
+  const why = probe.error || "The server did not connect.";
+  const kept = tools === null ? "Its tools stay unknown." : "Its last known tools are kept.";
+  return { show: true, tone: "attention", text: `${saved ? "The server is saved, but probing it failed" : "Probing the server failed"}: ${why}${probe.hint ? ` ${probe.hint}` : ""} ${kept}` };
 }
 
 // Rows.
@@ -346,6 +418,7 @@ export function mcpSave(d, { unattached = false } = {}) {
       env: local ? pairs(d.env) : {},
       url: local ? "" : d.url.trim(),
       headers: local ? {} : pairs(d.headers),
+      disabledTools: [...d.disabledTools],
     },
     agents: unattached ? [] : [...d.agents],
     projects: unattached ? [] : [...d.projects],

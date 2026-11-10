@@ -30,7 +30,19 @@ type fakeGitHost struct {
 	order             []string
 	fetches           []string
 	pushes            []map[string]any
+	attempts          []map[string]any // every push asked for, refused or not
+	pushFailures      []fakeFailure // answered, in turn, instead of a push
+	headMoves         map[string]string // a branch's head after a PUSH_STALE, by branch
+	remotes           []string // the repositories' remotes, origin first; nil is newFakeGitHost's origin and fork
 	streams           []chan string
+}
+
+// fakeFailure is a refusal the fake host answers a push with.
+type fakeFailure struct {
+	status        int
+	code, message string
+	details       map[string]any
+	moves         string // the branch's head from then on, for a PUSH_STALE
 }
 
 func upstreamOf(state, ref string, ahead, behind any) map[string]any {
@@ -54,7 +66,7 @@ func wireState(ws, repo, session, branch string, base, upstream map[string]any, 
 }
 
 func newFakeGitHost(states ...map[string]any) *fakeGitHost {
-	f := &fakeGitHost{states: map[string]map[string]any{}}
+	f := &fakeGitHost{states: map[string]map[string]any{}, remotes: []string{"origin", "fork"}, headMoves: map[string]string{}}
 	for _, s := range states {
 		id := s["workspace_id"].(string)
 		f.states[id] = s
@@ -128,11 +140,51 @@ func (f *fakeGitHost) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		_ = json.NewDecoder(r.Body).Decode(&body)
 		f.mu.Lock()
 		defer f.mu.Unlock()
+		f.attempts = append(f.attempts, body)
+		if len(f.pushFailures) > 0 {
+			fail := f.pushFailures[0]
+			f.pushFailures = f.pushFailures[1:]
+			if fail.moves != "" {
+				f.headMoves[fmt.Sprint(body["branch"])] = fail.moves
+			}
+			w.Header().Set("Content-Type", "application/json")
+			w.WriteHeader(fail.status)
+			_ = json.NewEncoder(w).Encode(map[string]any{"error": fail.message, "code": fail.code, "details": fail.details})
+			return
+		}
 		f.pushes = append(f.pushes, body)
 		ws := fmt.Sprint(body["workspace_id"])
 		branch := fmt.Sprint(f.states[ws]["branch"])
-		f.update(ws, map[string]any{"upstream": upstreamOf("in_sync", "origin/"+branch, 0, 0)})
+		if body["branch"] == nil && body["remote"] == nil {
+			f.update(ws, map[string]any{"upstream": upstreamOf("in_sync", "origin/"+branch, 0, 0)})
+		}
 		_ = json.NewEncoder(w).Encode(map[string]any{"state": f.states[ws]})
+	case "/api/repository_remotes":
+		f.mu.Lock()
+		defer f.mu.Unlock()
+		remotes := []map[string]string{}
+		for _, name := range f.remotes {
+			remotes = append(remotes, map[string]string{"name": name, "url": "https://example.test/" + name + ".git"})
+		}
+		_ = json.NewEncoder(w).Encode(map[string]any{"remotes": remotes})
+	case "/api/push_preview":
+		q := r.URL.Query()
+		branch, remote := q.Get("branch"), q.Get("remote")
+		against, commits := "base", 3
+		if remote == "origin" {
+			against, commits = "remote", 2
+		}
+		remoteBranch := q.Get("remote_branch")
+		if remoteBranch == "" {
+			remoteBranch = branch
+		}
+		f.mu.Lock()
+		head := "head-of-" + branch
+		if moved := f.headMoves[branch]; moved != "" {
+			head = moved
+		}
+		f.mu.Unlock()
+		_ = json.NewEncoder(w).Encode(map[string]any{"head": head, "commits": commits, "commits_against": against, "remote_branch": remoteBranch})
 	case "/api/events":
 		w.Header().Set("Content-Type", "text/event-stream")
 		ch := make(chan string, 8)

@@ -4,6 +4,7 @@
 
 import { emptyStore, syncActions } from "./components/syncStore.js";
 import { skeletonRule } from "../../../shared/domain/skeletonRule.js";
+import { syncBranchLink } from "./components/syncBranchLink.js";
 import { syncChip, syncChipSkeleton } from "./components/syncChip.js";
 import { syncFetch } from "./components/syncFetch.js";
 import { syncPanel } from "./components/syncPanel.js";
@@ -30,6 +31,7 @@ export function registerSync(Alpine, { gateway, now = () => new Date(), timers }
   Alpine.data("syncStatesLoading", syncStatesLoading({ loading }));
   Alpine.data("syncChipSkeleton", syncChipSkeleton({ store }));
   Alpine.data("syncChip", syncChip({ store, actions, now }));
+  Alpine.data("syncBranchLink", syncBranchLink({ store }));
   Alpine.data("syncPanel", syncPanel({ store, actions, now }));
   Alpine.data("syncFetch", syncFetch({ store, actions, now }));
   Alpine.data("syncPopover", syncPopover({ store, actions, now }));

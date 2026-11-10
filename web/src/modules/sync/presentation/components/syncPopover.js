@@ -41,6 +41,9 @@ export const syncPopover = ({ store, actions, now = () => new Date() }) => () =>
       confirming: this.confirming,
       pushFailure: store.pushFailure,
       fetchFailure: store.fetchFailure,
+      branches: store.branches,
+      remotes: store.remotes,
+      branchPush: store.branchPush,
     });
   },
   get shown() {
@@ -68,15 +71,43 @@ export const syncPopover = ({ store, actions, now = () => new Date() }) => () =>
   /** Opens the popover under the Git button; the dialog hands the focus back to it. */
   openPopover() {
     this.popoverOpen = true;
+    for (const id of new Set(this.view.rows.map((r) => r.repositoryId))) actions.ensureRemotes(id);
     this.$dispatch("dialog-open", { id: POPOVER_ID, anchor: document.getElementById(BUTTON_ID) });
+  },
+  /** A session row's "N branches" link: open at that session's Branches section. */
+  showBranches(event) {
+    const id = event?.detail?.sessionId;
+    if (!this.popoverOpen) this.openPopover();
+    this.$nextTick(() => {
+      const section = [...document.querySelectorAll("#task-git [data-branches-for]")].find((el) => el.dataset.branchesFor === id);
+      section?.scrollIntoView?.({ block: "nearest" });
+      section?.focus?.();
+    });
   },
   /** The dialog closed (Esc, Close or a press outside). */
   popoverClosed(event) {
     if (event?.detail?.id !== POPOVER_ID) return;
     this.popoverOpen = false;
     this.confirming = "";
+    actions.cancelBranchPush();
   },
 
+  /** A Branches row's Push: opens the confirmation on that row, with the repository's remotes. */
+  askBranchPush(workspaceId, branch) {
+    const row = this.view.rows.find((r) => r.workspaceId === workspaceId);
+    this.confirming = "";
+    return actions.askBranchPush({ workspaceId, repositoryId: row?.repositoryId ?? "", branch });
+  },
+  pickBranchRemote(remote) {
+    return actions.pickBranchRemote(remote);
+  },
+  cancelBranchPush() {
+    actions.cancelBranchPush();
+  },
+  async confirmBranchPush() {
+    const ok = await actions.confirmBranchPush();
+    this.say(ok ? "Pushed." : store.branchPush?.failure?.lead);
+  },
   askPush(workspaceId) {
     this.confirming = workspaceId;
   },

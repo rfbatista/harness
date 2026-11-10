@@ -26,8 +26,12 @@ import (
 const (
 	agentsFile     = "agents.json"
 	mcpServersFile = "mcp-servers.json"
-	skillsDir      = "skills"
-	skillFileName  = "SKILL.md"
+	// mcpToolsFile holds what is known of each MCP server's tools, apart from
+	// mcp-servers.json so that file stays pasteable into a Claude Code
+	// .mcp.json (ADR 0067).
+	mcpToolsFile  = "mcp-tools.json"
+	skillsDir     = "skills"
+	skillFileName = "SKILL.md"
 	// tempPrefix starts the name of a file being written, before its rename.
 	tempPrefix = ".catalog-"
 )
@@ -55,6 +59,7 @@ type Catalog struct {
 	// is broken.
 	lastAgents  *node
 	lastServers *node
+	lastTools   *node
 
 	// last is the latest change, the only one that can be undone. It lives
 	// in memory: a restart clears it.
@@ -81,6 +86,9 @@ type Projects interface {
 	// SetProjectAgents replaces a project's enabled agents: mode all or
 	// selected, and the list of the selected mode.
 	SetProjectAgents(ctx context.Context, projectID, mode string, names []string) (*domain.Project, error)
+	// SetProjectMCPSettings replaces a project's banned servers and tool
+	// overrides (ADR 0067).
+	SetProjectMCPSettings(ctx context.Context, projectID string, settings domain.ProjectMCPSettings) (*domain.Project, error)
 }
 
 // WithProjects gives the catalog the projects whose MCP server lists it reads
@@ -134,8 +142,10 @@ type loaded struct {
 	servers *node // the "mcpServers" object, never nil
 	// serversRoot is the whole mcp-servers.json object, never nil.
 	serversRoot *node
-	versions    map[string]string
-	broken      *domain.CatalogBroken
+	// tools is the whole mcp-tools.json object, never nil.
+	tools    *node
+	versions map[string]string
+	broken   *domain.CatalogBroken
 	// text is each file's bytes as read, nil when missing.
 	text map[string][]byte
 }
@@ -146,7 +156,7 @@ func (c *Catalog) load() (*loaded, error) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	l := &loaded{versions: map[string]string{}, text: map[string][]byte{}}
-	for _, name := range []string{agentsFile, mcpServersFile} {
+	for _, name := range []string{agentsFile, mcpServersFile, mcpToolsFile} {
 		data, err := os.ReadFile(filepath.Join(c.root, name))
 		if err != nil && !errors.Is(err, os.ErrNotExist) {
 			return nil, err
@@ -169,12 +179,18 @@ func (c *Catalog) load() (*loaded, error) {
 		} else {
 			n = newObject()
 		}
-		if name == agentsFile {
+		switch name {
+		case agentsFile:
 			if n != nil {
 				c.lastAgents = n
 			}
 			l.agents = c.lastAgents
-		} else {
+		case mcpToolsFile:
+			if n != nil {
+				c.lastTools = n
+			}
+			l.tools = c.lastTools
+		default:
 			if n != nil {
 				c.lastServers = n
 			}
@@ -192,6 +208,9 @@ func (c *Catalog) load() (*loaded, error) {
 	}
 	if l.servers == nil {
 		l.servers = newObject()
+	}
+	if l.tools == nil {
+		l.tools = newObject()
 	}
 	return l, nil
 }

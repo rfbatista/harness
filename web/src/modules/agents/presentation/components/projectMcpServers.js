@@ -3,18 +3,21 @@
 // "Unsaved change" footer. Enabled agents: a switch between All agents and
 // Selected agents and, in Selected, a checklist of every catalog agent (a
 // search combobox with chips past fifteen). MCP servers: a checklist of every
-// catalog server and the What a session gets example. Both name what the
-// catalog took off the project and follow the catalog like the Agents page
-// does (domain/liveRefresh.js).
+// catalog server, each with its project MCP state (Added, Agent's choice or
+// Banned) and, under a server whose tools are known, a tool list (Default,
+// Enabled or Disabled each), then the What a session gets example. Both name
+// what the catalog took off the project and follow the catalog like the Agents
+// page does (domain/liveRefresh.js).
 //
 //   <div x-data="projectMcpServers" data-project-id="…" data-project-name="…">
 //
-// Save is two calls, set_project_agents then set_project_mcp_servers, and it
+// Save is two calls, set_project_agents then set_project_mcp_settings, and it
 // is not atomic: a list that did not change is not written; each call is made
 // whatever the other answered, and when one fails after the other succeeded
 // the page says which part saved and keeps only the unsaved part dirty.
 // Neither verb makes a catalog change to undo, so Undo puts the lists a save
-// replaced back with the same verbs.
+// replaced back with the same verbs. Refresh tools probes one server and takes
+// its new tool list; the states and overrides the person has not saved stay.
 
 import { noOwnServers } from "../../domain/mcp.js";
 import { describeError } from "../../../../shared/presentation/errors.js";
@@ -26,11 +29,12 @@ import {
   ALL, COMBOBOX_PAST, SELECTED, agentPicker, agentRows, agentsChanged, agentsCount, agentsHint, agentsPhrase, agentsSaved, agentsToWrite,
   emptySelection, removedAgents, startSelected,
 } from "../../domain/projectAgents.js";
+import { probeOutcome } from "../../domain/mcpForm.js";
 import {
-  projectMcpRows, projectMcpSaved, removedFromProject, selectionChanged, sessionExample,
+  addedNames, mergeSettings, namesInState, projectMcpRows, removedFromProject, resetServerOverrides, sessionExample, setNames, setServerState,
+  setToolOverride, settingsChanged, settingsCount, settingsDraft, settingsPhrase, settingsToWrite,
 } from "../../domain/projectMcp.js";
 
-const plural = (n, word) => `${n} ${word}${n === 1 ? "" : "s"}`;
 const quoted = (names) => names.map((n) => `“${n}”`).join(", ");
 const NOTE = "They reach sessions from their next start. Running sessions keep what they started with.";
 const LABEL = { agents: "enabled agents", mcp: "MCP servers" };
@@ -39,7 +43,7 @@ const gone = (names) => `${quoted(names)} ${names.length === 1 ? "was" : "were"}
 
 /**
  * @param {{
- *   gateway: Pick<import("../../domain/ports.js").CatalogGateway, "getCatalog" | "getProjectMcpServers" | "setProjectMcpServers" | "getProjectAgents" | "setProjectAgents"> & Partial<Pick<import("../../domain/ports.js").CatalogGateway, "follow">>,
+ *   gateway: Pick<import("../../domain/ports.js").CatalogGateway, "getCatalog" | "getProjectMcpSettings" | "setProjectMcpSettings" | "refreshMcpServerTools" | "getProjectAgents" | "setProjectAgents"> & Partial<Pick<import("../../domain/ports.js").CatalogGateway, "follow">>,
  *   timers?: { setTimeout: (fn: () => void, ms: number) => any, clearTimeout: (id: any) => void },
  * }} deps
  */
@@ -55,9 +59,12 @@ export function projectMcpServers({ gateway, timers = globalThis }) {
       projectName: "",
       /** @type {import("../../domain/ports.js").Catalog | null} */
       catalog: null,
-      /** The MCP list the project has saved, and the one ticked now. */
-      saved: /** @type {string[]} */ ([]),
-      selected: /** @type {string[]} */ ([]),
+      /** The MCP settings the project has saved, and the states and overrides on the page now. */
+      settings: /** @type {import("../../domain/ports.js").ProjectMcpSettings} */ ({ added: [], servers: [] }),
+      draft: /** @type {import("../../domain/projectMcp.js").McpDraft} */ ({}),
+      /** The server Refresh tools is probing ("" when none), and what each refresh found. */
+      refreshingName: "",
+      refreshNotes: /** @type {Record<string, { show: boolean, tone: string, text: string }>} */ ({}),
       /** The enabled agents the project has saved; the mode and list on the page now (null: no list yet, so Selected starts with every agent ticked). */
       savedAgents: /** @type {import("../../domain/projectAgents.js").ProjectAgents} */ ({ mode: ALL, agents: [] }),
       agentMode: ALL,
@@ -103,17 +110,17 @@ export function projectMcpServers({ gateway, timers = globalThis }) {
       },
 
       readAll() {
-        return Promise.all([gateway.getCatalog(), gateway.getProjectMcpServers(this.projectId), gateway.getProjectAgents(this.projectId)]);
+        return Promise.all([gateway.getCatalog(), gateway.getProjectMcpSettings(this.projectId), gateway.getProjectAgents(this.projectId)]);
       },
       async load() {
         if (!this.loaded) skeleton?.begin();
         try {
-          const [catalog, names, agents] = await this.readAll();
+          const [catalog, settings, agents] = await this.readAll();
           // The lists come in once the skeleton is gone, so they never stack under it.
           await skeleton?.end();
           this.catalog = catalog;
-          this.saved = projectMcpSaved(catalog, names);
-          this.selected = [...this.saved];
+          this.settings = settings;
+          this.draft = settingsDraft(settings);
           this.adoptAgents(agentsSaved(catalog, agents));
           this.error = null;
         } catch (err) {
@@ -134,26 +141,23 @@ export function projectMcpServers({ gateway, timers = globalThis }) {
       async refresh() {
         if (this.saving) return;
         let catalog;
-        let names;
+        let settings;
         let agents;
         try {
-          [catalog, names, agents] = await this.readAll();
+          [catalog, settings, agents] = await this.readAll();
         } catch (err) {
           this.error = describeError(err);
           return;
         }
         this.error = null;
-        const goneServers = removedFromProject(this.saved, catalog, names);
+        const goneServers = removedFromProject(setNames(this.settings), catalog, setNames(settings));
         const goneAgents = removedAgents(this.savedAgents, catalog, agents);
-        const keep = selectionChanged(this.saved, this.selected);
-        const next = projectMcpSaved(catalog, names);
-        const ticked = projectMcpSaved(catalog, this.selected);
         const keepAgents = this.agentsDirty;
         const mode = this.agentMode;
         const tickedAgents = this.agentTicked;
         if (JSON.stringify(catalog) !== JSON.stringify(this.catalog)) this.catalog = catalog;
-        this.saved = next;
-        this.selected = keep ? ticked : [...next];
+        this.draft = mergeSettings(this.settings, this.draft, settings);
+        this.settings = settings;
         this.adoptAgents(agentsSaved(catalog, agents));
         if (keepAgents) {
           this.agentMode = mode;
@@ -231,8 +235,20 @@ export function projectMcpServers({ gateway, timers = globalThis }) {
       get hasCatalog() {
         return this.catalog !== null;
       },
+      /** The Added servers saved, and the ones Added on the page now. */
+      get saved() {
+        return addedNames(this.settings);
+      },
+      get selected() {
+        return namesInState(this.settings, this.draft, "added");
+      },
       get rows() {
-        return this.catalog ? projectMcpRows(this.catalog, this.projectId, this.selected) : [];
+        if (!this.catalog) return [];
+        return projectMcpRows(this.catalog, this.projectId, this.settings, this.draft).map((r) => {
+          const note = this.refreshNotes[r.name] ?? { show: false, tone: "", text: "" };
+          const busy = this.refreshingName === r.name;
+          return { ...r, refreshBusy: String(busy), refreshDisabled: this.refreshingName !== "" || this.saving, refreshLabel: busy ? "Refreshing…" : "Refresh tools", refreshNote: note.text, hasRefreshNote: note.show, refreshTone: note.tone };
+        });
       },
       get isEmpty() {
         return this.loaded && this.catalog !== null && noOwnServers(this.catalog);
@@ -244,7 +260,7 @@ export function projectMcpServers({ gateway, timers = globalThis }) {
         return !this.loaded;
       },
       get mcpChanged() {
-        return selectionChanged(this.saved, this.selected);
+        return settingsChanged(this.settings, this.draft);
       },
       /** Either list differs from what is saved. */
       get changed() {
@@ -254,7 +270,7 @@ export function projectMcpServers({ gateway, timers = globalThis }) {
         return !this.changed;
       },
       get count() {
-        return this.hasRows ? `${this.selected.length} of ${this.rows.length} selected` : "";
+        return this.hasRows ? settingsCount(this.settings, this.draft) : "";
       },
       get brokenWhy() {
         const b = this.catalog?.broken ?? null;
@@ -276,9 +292,11 @@ export function projectMcpServers({ gateway, timers = globalThis }) {
         return this.refusal ? "settings-mcp-refusal" : null;
       },
       get example() {
-        const ex = this.catalog ? sessionExample(this.catalog, this.selected) : { agent: "", withAgent: [], withoutAgent: [] };
+        const ex = this.catalog ? sessionExample(this.catalog, this.settings, this.draft) : { agent: "", withAgent: [], withoutAgent: [], banned: [] };
         return {
           ...ex,
+          hasBanned: ex.banned.length > 0,
+          bannedText: `Banned in this project, so no session gets ${ex.banned.length === 1 ? "it" : "them"}: ${ex.banned.join(", ")}`,
           hasAgent: ex.agent !== "",
           asAgent: `As ${ex.agent}`,
           noneWithAgent: ex.withAgent.length === 0,
@@ -301,11 +319,52 @@ export function projectMcpServers({ gateway, timers = globalThis }) {
 
       // What the person does.
 
-      /** @param {string} name */
-      toggle(name) {
+      /** A server's state button: data-name and data-state. @param {MouseEvent} event */
+      pickState(event) {
+        const { name, state } = /** @type {HTMLElement} */ (event.currentTarget).dataset;
+        this.setState(name ?? "", state ?? "");
+      },
+      /** @param {string} name @param {string} state added, agent or banned */
+      setState(name, state) {
         this.refusal = null;
         this.partial = null;
-        this.selected = this.selected.includes(name) ? this.selected.filter((n) => n !== name) : [...this.selected, name];
+        this.draft = setServerState(this.draft, name, /** @type {any} */ (state));
+      },
+      /** A tool's Default, Enabled or Disabled button: data-name, data-tool and data-choice. @param {MouseEvent} event */
+      pickTool(event) {
+        const { name, tool, choice } = /** @type {HTMLElement} */ (event.currentTarget).dataset;
+        this.setTool(name ?? "", tool ?? "", choice ?? "");
+      },
+      /** @param {string} name @param {string} tool @param {string} choice default, enabled or disabled */
+      setTool(name, tool, choice) {
+        this.refusal = null;
+        this.partial = null;
+        this.draft = setToolOverride(this.draft, name, tool, /** @type {any} */ (choice));
+      },
+      /** Reset to defaults: every tool override of one server goes back to Default. @param {MouseEvent} event */
+      resetTools(event) {
+        this.refusal = null;
+        this.partial = null;
+        this.draft = resetServerOverrides(this.draft, /** @type {HTMLElement} */ (event.currentTarget).dataset.name ?? "");
+      },
+      /** Refresh tools: probes the server, then reads the settings again; what the person changed and has not saved stays. @param {MouseEvent} event */
+      async refreshTools(event) {
+        const name = /** @type {HTMLElement} */ (event.currentTarget).dataset.name ?? "";
+        if (this.refreshingName !== "" || this.saving) return;
+        this.refreshingName = name;
+        this.refreshNotes = { ...this.refreshNotes, [name]: { show: false, tone: "", text: "" } };
+        let note;
+        try {
+          const { server, probe } = await gateway.refreshMcpServerTools(name);
+          const next = await gateway.getProjectMcpSettings(this.projectId);
+          this.draft = mergeSettings(this.settings, this.draft, next);
+          this.settings = next;
+          note = probeOutcome(probe, { tools: server.knownTools });
+        } catch (err) {
+          note = { show: true, tone: "attention", text: describeError(err).message };
+        }
+        this.refreshNotes = { ...this.refreshNotes, [name]: note };
+        this.refreshingName = "";
       },
       /** @param {"all" | "selected"} mode */
       setMode(mode) {
@@ -370,7 +429,7 @@ export function projectMcpServers({ gateway, timers = globalThis }) {
         this.refusal = null;
         this.agentsRefusal = null;
         this.partial = null;
-        this.selected = [...this.saved];
+        this.draft = settingsDraft(this.settings);
         this.adoptAgents(this.savedAgents);
       },
       dismissBanner() {
@@ -387,7 +446,7 @@ export function projectMcpServers({ gateway, timers = globalThis }) {
         if (this.cannotSave) return;
         const parts = {};
         if (this.agentsDirty && this.catalog) parts.agents = agentsToWrite(this.catalog, this.agentMode, this.agentTicked);
-        if (this.mcpChanged) parts.mcp = [...this.selected];
+        if (this.mcpChanged) parts.mcp = settingsToWrite(this.settings, this.draft);
         await this.write(parts, "saved");
       },
       async undoSave() {
@@ -398,11 +457,11 @@ export function projectMcpServers({ gateway, timers = globalThis }) {
 
       /**
        * Writes the parts given, agents first, each whatever the other answered.
-       * @param {{ agents?: import("../../domain/projectAgents.js").ProjectAgents, mcp?: string[] }} parts
+       * @param {{ agents?: import("../../domain/projectAgents.js").ProjectAgents, mcp?: ReturnType<typeof settingsToWrite> }} parts
        * @param {"saved"|"undone"} kind
        */
       async write(parts, kind) {
-        const previous = { agents: this.savedAgents, mcp: this.saved };
+        const previous = { agents: this.savedAgents, mcp: settingsToWrite(this.settings, settingsDraft(this.settings)) };
         const done = /** @type {string[]} */ ([]);
         const failed = /** @type {{ part: string, refusal: any }[]} */ ([]);
         this.saving = true;
@@ -424,9 +483,9 @@ export function projectMcpServers({ gateway, timers = globalThis }) {
           }
           if (parts.mcp) {
             try {
-              const answer = await gateway.setProjectMcpServers(this.projectId, parts.mcp);
-              this.saved = projectMcpSaved(this.catalog, answer);
-              this.selected = [...this.saved];
+              const answer = await gateway.setProjectMcpSettings(this.projectId, parts.mcp);
+              this.settings = answer;
+              this.draft = settingsDraft(answer);
               done.push("mcp");
             } catch (err) {
               const r = describeRefusal(err);
@@ -451,7 +510,7 @@ export function projectMcpServers({ gateway, timers = globalThis }) {
           // Nothing was written: a save shows its refusals at the lists, an Undo says so here.
           return kind === "undone" ? { text: failed[0].refusal.message, note: "", tone: "danger", undoTo: null, hasUndo: false } : this.toast;
         }
-        const phrases = done.map((p) => (p === "agents" ? agentsPhrase(this.savedAgents) : `gives ${plural(this.saved.length, "MCP server")}${kind === "saved" ? " to its sessions" : ""}`));
+        const phrases = done.map((p) => (p === "agents" ? agentsPhrase(this.savedAgents) : settingsPhrase(this.settings, kind)));
         const text = kind === "saved" ? `Saved — ${this.projectName} now ${phrases.join(" and ")}.` : `Undone — ${this.projectName} ${phrases.join(" and ")} again.`;
         if (kind === "undone") return { text, note: "Running sessions keep what they started with.", tone: "", undoTo: null, hasUndo: false };
         const undoTo = {};

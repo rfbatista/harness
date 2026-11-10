@@ -1,8 +1,8 @@
 // CatalogGateway over the harness HTTP API (contract sections 3 and 4).
 
 import {
-  agentBody, bundleBody, mcpServerBody, serverFields, skillBody,
-  toCatalog, toProbe, toProjectAgents, toProjectList, toServerNames, toSkillDetail, toWriteResult, writeFields,
+  agentBody, bundleBody, mcpServerBody, projectMcpSettingsBody, serverFields, skillBody,
+  toCatalog, toProbe, toProjectAgents, toProjectMcpSettings, toRefreshedTools, toProjectList, toServerNames, toSkillDetail, toWriteResult, writeFields,
 } from "./dto.js";
 
 /**
@@ -42,6 +42,9 @@ export function catalogGateway(api, events) {
     async testMcpServer(server) {
       return toProbe(await api.post("/test_catalog_mcp_server", { server: serverFields(server) }));
     },
+    async refreshMcpServerTools(name) {
+      return toRefreshedTools(await api.post("/refresh_catalog_mcp_server_tools", { name }));
+    },
     async listProjects() {
       return toProjectList(await api.get("/list_projects"));
     },
@@ -50,6 +53,12 @@ export function catalogGateway(api, events) {
     },
     async setProjectMcpServers(projectId, names) {
       return toServerNames(await api.post("/set_project_mcp_servers", { project_id: projectId, mcp_servers: names }));
+    },
+    async getProjectMcpSettings(projectId) {
+      return toProjectMcpSettings(await api.get("/get_project_mcp_servers", { project_id: projectId }));
+    },
+    async setProjectMcpSettings(projectId, servers) {
+      return toProjectMcpSettings(await api.post("/set_project_mcp_settings", projectMcpSettingsBody(projectId, servers)));
     },
     async getProjectAgents(projectId) {
       return toProjectAgents(await api.get("/get_project_agents", { project_id: projectId }));
