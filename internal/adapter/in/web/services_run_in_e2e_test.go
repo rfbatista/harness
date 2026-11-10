@@ -5,12 +5,16 @@ package web_test
 import (
 	"context"
 	"os"
+	"os/exec"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
 	"github.com/chromedp/chromedp"
+	"github.com/chromedp/chromedp/kb"
 
+	"operators-mcp/internal/adapter/out/gitcli"
 	"operators-mcp/internal/application/services"
 	"operators-mcp/internal/domain"
 )
@@ -70,6 +74,13 @@ func shot(name string) chromedp.Action {
 // theme pins the page's theme, light or dark.
 func theme(name string) chromedp.Action {
 	return chromedp.Evaluate(`document.documentElement.dataset.theme = '`+name+`'`, nil)
+}
+
+// mainOnlyRunWorktrees offers the main checkout alone, as a repository with no live session does.
+type mainOnlyRunWorktrees struct{}
+
+func (mainOnlyRunWorktrees) ListRepositoryRunWorktrees(context.Context, string, string) ([]*domain.RunWorktree, error) {
+	return []*domain.RunWorktree{{Key: "main", Kind: domain.RunWorktreeMain, Branch: "main"}}, nil
 }
 
 type fixedBranch string
@@ -173,5 +184,156 @@ func TestAServiceIsStartedInASessionsWorktreeFromTheRunInPicker_EndToEnd(t *test
 		chromedp.Navigate(w.srv.URL+"/projects/"+w.project.ID+"/services"),
 		waitUntil(`!!`+trigger+` && `+trigger+`.textContent.includes('agent/other')`),
 		waitUntil(`localStorage.getItem('harness:service-run-worktree:`+svc.ID+`') === 'session:s2'`),
+	)
+}
+
+// git runs a git command in dir for the test, with an author, failing the test on error.
+func git(t *testing.T, dir string, args ...string) string {
+	t.Helper()
+	cmd := exec.Command(realGit(t), append([]string{"-c", "user.name=Test", "-c", "user.email=test@example.com", "-c", "commit.gpgsign=false"}, args...)...)
+	cmd.Dir = dir
+	// A fixture repository in a temp folder: the agent shims in PATH (the branch gate's) are not for it.
+	cmd.Env = withoutShims(os.Environ())
+	out, err := cmd.CombinedOutput()
+	if err != nil {
+		t.Fatalf("git %v: %v\n%s", args, err, out)
+	}
+	return strings.TrimSpace(string(out))
+}
+
+// realGit is the git of the PATH without the agent shims (exec resolves the name against the parent's PATH).
+func realGit(t *testing.T) string {
+	t.Helper()
+	for _, kv := range withoutShims([]string{"PATH=" + os.Getenv("PATH")}) {
+		if path, ok := strings.CutPrefix(kv, "PATH="); ok {
+			for _, dir := range filepath.SplitList(path) {
+				if p := filepath.Join(dir, "git"); isExecutable(p) {
+					return p
+				}
+			}
+		}
+	}
+	t.Skip("browser test: git not found")
+	return ""
+}
+
+func isExecutable(p string) bool {
+	info, err := os.Stat(p)
+	return err == nil && !info.IsDir() && info.Mode()&0o111 != 0
+}
+
+// withoutShims is env without the harness's agent shims in PATH.
+func withoutShims(env []string) []string {
+	out := make([]string, 0, len(env))
+	for _, kv := range env {
+		if path, ok := strings.CutPrefix(kv, "PATH="); ok {
+			var keep []string
+			for _, dir := range filepath.SplitList(path) {
+				if !strings.Contains(dir, "harness-shims") {
+					keep = append(keep, dir)
+				}
+			}
+			kv = "PATH=" + strings.Join(keep, string(os.PathListSeparator))
+		}
+		out = append(out, kv)
+	}
+	return out
+}
+
+// A branch is run from the "Run in" picker against a real server and a real git
+// repository (spec "Web UI — services: run a branch from the Run in picker",
+// testing decisions; contract section 12): the person searches the branches,
+// picks a local one that is checked out nowhere, starts the service, sees
+// branch @ <name> · <sha> on its row and in the log's header, the program ran
+// that branch's files, and a reload remembers the pick.
+func TestAServiceRunsABranchPickedFromTheBranchSearch_EndToEnd(t *testing.T) {
+	// The server's own git calls are not an agent's: without the agent shims in PATH.
+	for _, kv := range withoutShims([]string{"PATH=" + os.Getenv("PATH")}) {
+		t.Setenv("PATH", strings.TrimPrefix(kv, "PATH="))
+	}
+	w := newServicesWorldWith(t, func(o *services.Options) {
+		o.RunWorktrees = mainOnlyRunWorktrees{}
+		o.BranchGit = gitcli.NewServiceBranches()
+		o.WorktreeRoot = t.TempDir()
+	})
+	repo := w.repo.RootDir
+	git(t, repo, "init", "-q", "-b", "main")
+	if err := os.WriteFile(filepath.Join(repo, "WHERE.txt"), []byte("on main\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	git(t, repo, "add", ".")
+	git(t, repo, "commit", "-q", "-m", "main work")
+	git(t, repo, "checkout", "-q", "-b", "feature/x")
+	if err := os.WriteFile(filepath.Join(repo, "WHERE.txt"), []byte("on feature x\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	git(t, repo, "commit", "-q", "-am", "Add the feature")
+	sha := git(t, repo, "rev-parse", "--short=7", "HEAD")
+	git(t, repo, "checkout", "-q", "main")
+	svc, err := w.svc.CreateService(context.Background(), w.project.ID, domain.ServiceInput{
+		Name: "web", Kind: domain.ServiceKindCommand, RepositoryID: w.repo.ID,
+		Command: &domain.ServiceCommand{Line: "cat WHERE.txt; sleep 30"},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	const (
+		row     = `document.querySelector('[data-service][data-name=web]')`
+		trigger = row + `.querySelector('[data-run-in] .trigger')`
+		status  = row + `?.querySelector('[data-service-status]')?.textContent`
+		option  = `[...document.querySelectorAll('[data-branch-search] [role=option]')].find((o) => o.textContent.includes('feature/x'))`
+	)
+	b := newTLSBrowser(t)
+	b.run("open the picker and choose Branch…",
+		chromedp.EmulateViewport(1280, 900),
+		chromedp.Navigate(w.srv.URL+"/projects/"+w.project.ID+"/services"),
+		waitUntil(`!!`+trigger+` && `+trigger+`.textContent.includes('main')`),
+		chromedp.Evaluate(trigger+`.click()`, nil),
+		waitUntil(`[...document.querySelectorAll('[role=option]')].some((o) => o.textContent.includes('Branch…'))`),
+		chromedp.Evaluate(`[...document.querySelectorAll('[role=option]')].find((o) => o.textContent.includes('Branch…')).click()`, nil),
+		waitUntil(`!!document.querySelector('[data-branch-search]')`),
+	)
+	b.run("the search lists the branches with their commit; typing narrows it",
+		waitUntil(`!!(`+option+`) && (`+option+`).textContent.includes('`+sha+`') && (`+option+`).textContent.includes('Add the feature')`),
+		waitUntil(`document.querySelector('[data-branch-search] .popup').textContent.includes('Local branches')`),
+		chromedp.Sleep(300*time.Millisecond),
+		theme("light"),
+		chromedp.Sleep(200*time.Millisecond),
+		shot("branch-search-light"),
+		theme("dark"),
+		chromedp.Sleep(200*time.Millisecond),
+		shot("branch-search-dark"),
+		chromedp.SendKeys(`[data-branch-search] input:not([type=hidden])`, "zzz", chromedp.ByQuery),
+		waitUntil(`!(`+option+`)`),
+	)
+	b.run("pick the branch: the picker reads it, nothing starts",
+		chromedp.SendKeys(`[data-branch-search] input:not([type=hidden])`, strings.Repeat(kb.Backspace, 3), chromedp.ByQuery),
+		waitUntil(`!!(`+option+`)`),
+		chromedp.Evaluate(`(`+option+`).click()`, nil),
+		waitUntil(`!document.querySelector('[data-branch-search]')`),
+		waitUntil(trigger+`.textContent.includes('feature/x')`),
+		waitUntil(status+` === 'stopped'`),
+	)
+	b.run("Start runs it: the row and the log header name the branch and its commit",
+		chromedp.Click(`[data-service][data-name=web] [data-action=start]`, chromedp.ByQuery),
+		waitUntil(status+` === 'running'`),
+		waitUntil(row+`.querySelector('[data-service-where]').textContent === 'branch @ feature/x · `+sha+`'`),
+		chromedp.Click(`[data-service][data-name=web] [data-action=log]`, chromedp.ByQuery),
+		waitUntil(`document.querySelector('[data-service-log] .meta').textContent.includes('branch @ feature/x · `+sha+`')`),
+		waitUntil(`document.querySelector('[data-log]').textContent.includes('on feature x')`),
+		chromedp.Sleep(300*time.Millisecond),
+		theme("light"),
+		chromedp.Sleep(200*time.Millisecond),
+		shot("branch-run-light"),
+		theme("dark"),
+		chromedp.Sleep(200*time.Millisecond),
+		shot("branch-run-dark"),
+	)
+	b.run("stop it and reload: the pick is remembered",
+		chromedp.Click(`[data-service][data-name=web] [data-action=stop]`, chromedp.ByQuery),
+		waitUntil(status+` === 'stopped'`),
+		chromedp.Navigate(w.srv.URL+"/projects/"+w.project.ID+"/services"),
+		waitUntil(`!!`+trigger+` && `+trigger+`.textContent.includes('feature/x')`),
+		waitUntil(`localStorage.getItem('harness:service-run-worktree:`+svc.ID+`') === 'branch:feature/x'`),
 	)
 }
