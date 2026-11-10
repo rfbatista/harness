@@ -502,6 +502,39 @@ func TestClient_SessionsOverlayResumesAnEndedSession(t *testing.T) {
 	}
 }
 
+// A restart interrupted a session mid-turn: the past sessions list says so
+// beside its status, for that session only (ADR 0080).
+func TestClient_SessionsOverlayLabelsASessionARestartInterrupted(t *testing.T) {
+	be := fixture()
+	at := time.Now()
+	be.Sessions = []*domain.Session{
+		{ID: "cut", ProjectID: "p1", TicketID: "t1", Branch: "agent/cut-short-1a2b", Status: domain.SessionStopped, Interactive: true, InterruptedAt: &at},
+		{ID: "calm", ProjectID: "p1", TicketID: "t1", Branch: "agent/stopped-calmly-3c4d", Status: domain.SessionStopped, Interactive: true},
+	}
+	r := newRun(t, be, nil)
+	r.press("enter")
+	r.until("tasks", r.shows("2 sessions"))
+	r.press("enter")
+	r.until("task", r.shows("No agent sessions open"))
+	r.press("s")
+	r.until("overlay", r.shows("cut-short-1a2b"))
+
+	rows := map[string]string{}
+	for _, line := range strings.Split(r.view(), "\n") {
+		for _, branch := range []string{"cut-short-1a2b", "stopped-calmly-3c4d"} {
+			if strings.Contains(line, branch) {
+				rows[branch] = line
+			}
+		}
+	}
+	if !strings.Contains(rows["cut-short-1a2b"], "interrupted by restart") {
+		t.Errorf("the interrupted session's row = %q, want the label", rows["cut-short-1a2b"])
+	}
+	if strings.Contains(rows["stopped-calmly-3c4d"], "interrupted") || !strings.Contains(rows["stopped-calmly-3c4d"], "stopped") {
+		t.Errorf("the other session's row = %q, want plain stopped", rows["stopped-calmly-3c4d"])
+	}
+}
+
 func TestClient_ARefusedResumeShowsTheAgentNotAssignedMessage(t *testing.T) {
 	be := fixture()
 	be.Sessions = []*domain.Session{

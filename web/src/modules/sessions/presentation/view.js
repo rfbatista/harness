@@ -55,10 +55,15 @@ export function isUnsandboxed(session) {
 
 const GROUP_LABEL = { architect: "Architect", "needs-you": "Needs you", active: "Running", finished: "Earlier" };
 
+/** The chip of a stopped session a restart interrupted. The BFF's interruptedWord (view.go) says the same. */
+export const INTERRUPTED_WORD = "interrupted by restart";
+
 /** @returns {{ state: string, word: string }} */
 export function statusView(session) {
   if (!isTerminal(session) && session.pendingApprovals > 0) return STATUS.waiting_approval;
   const status = STATUS[session.status];
+  // A stopped session a restart interrupted says so beside its dot (ADR 0080).
+  if (session.status === "stopped" && session.interruptedAt) return { ...status, word: INTERRUPTED_WORD };
   // After approvals and before its turn: only the word is the interview's, the dot stays the session's own.
   if (!isTerminal(session) && session.status !== "waiting_approval" && session.openInterviewCount > 0) return { ...status, word: "questions" };
   return status;
@@ -107,7 +112,7 @@ export function projectSessionsHref(projectId, sessionId = "") {
 }
 
 /** The status word's chip tone on a row: only the uncommon states have a chip. */
-const CHIP_TONE = { thinking: "signal", "your turn": "attention", approval: "attention", questions: "attention", failed: "danger" };
+const CHIP_TONE = { thinking: "signal", "your turn": "attention", approval: "attention", questions: "attention", [INTERRUPTED_WORD]: "attention", failed: "danger" };
 const NO_CHIP = new Set(["running", "done"]);
 
 /** A row's status chip, null for running and done. */

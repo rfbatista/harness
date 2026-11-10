@@ -304,6 +304,10 @@
  *           SESSION_TRANSCRIPT_MISSING (no saved conversation yet),
  *           SESSION_NOT_FOUND or INVALID_INPUT (a bad cursor or limit, or
  *           both cursors).
+ * @property {(sessionId: string, since?: { afterSeq?: number }, signal?: AbortSignal) => Promise<{ events: { seq: number, type: string, at: string, payload: any }[], lastSeq: number }>} [events]
+ *           The session's event log after `afterSeq`, for the lines a
+ *           restart adds to its history (restartMarkers). Optional: without
+ *           it the History tab shows the conversation alone.
  */
 
 export {};

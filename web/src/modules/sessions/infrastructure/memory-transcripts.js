@@ -10,6 +10,8 @@ import { Codes, StructuredError } from "../../../shared/domain/errors.js";
 export function memoryTranscripts(world = {}) {
   /** @type {Map<string, import("../domain/transcript.js").TranscriptEntry[]>} */
   const files = new Map();
+  /** @type {Map<string, { seq: number, type: string, at: string, payload: any }[]>} the event logs */
+  const logs = new Map();
   let seq = 0;
   /** Every page asked for, in order: what a test checks the polling against. */
   const calls = [];
@@ -71,9 +73,21 @@ export function memoryTranscripts(world = {}) {
     },
   };
 
+  gateway.events = async (sessionId, { afterSeq = 0 } = {}) => {
+    const events = (logs.get(sessionId) ?? []).filter((e) => e.seq > afterSeq);
+    return { events, lastSeq: events.reduce((n, e) => Math.max(n, e.seq), afterSeq) };
+  };
+
   return {
     gateway,
     calls,
+    /** The session's event log gains an event, as the server logs it. */
+    logEvent(sessionId, type, fields = {}) {
+      const list = logs.get(sessionId) ?? [];
+      const e = { seq: list.length + 1, type, at: fields.at ?? new Date().toISOString(), payload: { ...fields } };
+      logs.set(sessionId, [...list, e]);
+      return e;
+    },
     /** The CLI wrote more of the session's conversation (creating it if it had none). */
     append(sessionId, ...fields) {
       const list = files.get(sessionId) ?? [];

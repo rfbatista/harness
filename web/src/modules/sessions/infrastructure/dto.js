@@ -49,6 +49,7 @@ export function toSession(dto) {
     sandbox: toSandbox(dto.sandbox),
     commitCheckOff: typeof dto.commit_check_off === "string" ? dto.commit_check_off : "",
     lastMerge: toMergeResult(dto.last_merge),
+    interruptedAt: dto.interrupted_at ? new Date(dto.interrupted_at) : null,
     updatedAt,
   });
 }

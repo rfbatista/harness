@@ -35,6 +35,7 @@ export function makeSession(overrides = {}) {
     tokenSaversNotInstalled: [],
     sandbox: null,
     lastMerge: null,
+    interruptedAt: null,
     updatedAt: T0,
     ...overrides,
   });
@@ -71,6 +72,7 @@ export function toDTO(session) {
     token_savers_not_installed: session.tokenSaversNotInstalled?.length ? [...session.tokenSaversNotInstalled] : undefined,
     sandbox: session.sandbox ? { sandboxed: session.sandbox.sandboxed, visibility: session.sandbox.visibility, driver: session.sandbox.driver || undefined } : undefined,
     last_merge: session.lastMerge ? mergeDTO(session.lastMerge) : undefined,
+    interrupted_at: session.interruptedAt ? session.interruptedAt.toISOString() : undefined,
     updated_at: session.updatedAt.toISOString(),
   };
 }
