@@ -749,6 +749,18 @@ func registerServerSessions(lc fx.Lifecycle, svc *orchestration.Service) {
 	})
 }
 
+// pendingBranchRequests counts a session's pending branch requests for the
+// orchestration, which records how many expire with an interrupted session.
+type pendingBranchRequests struct{ ports.BranchRequestStore }
+
+func (p pendingBranchRequests) PendingBranchRequests(ctx context.Context, sessionID string) int {
+	pending, err := p.List(ctx, domain.BranchRequestFilter{SessionID: sessionID, State: domain.BranchRequestPending})
+	if err != nil {
+		return 0
+	}
+	return len(pending)
+}
+
 // newClaudeManager is the headless runtime: every agent claude runs from the
 // managed install (or the -claude.bin override) in the agent Claude home,
 // isolated from the person's own configuration (ADR 0018).
@@ -944,6 +956,7 @@ func newOrchestrationService(
 	branchNames *workspaces.BranchNames,
 	baseBranches *workspaces.BaseBranches,
 	assignments *repoagents.Service,
+	branchRequests ports.BranchRequestStore,
 ) *orchestration.Service {
 	orchCatalog := orchestration.Catalog{
 		Projects:     cat.Projects,
@@ -1011,6 +1024,7 @@ func newOrchestrationService(
 	svc.TranscriptReader = transcriptReader
 	svc.Terminals = terminals
 	svc.Events = cat.Bus
+	svc.BranchRequests = pendingBranchRequests{branchRequests}
 	toolsDir, _ := dataDir(cfg, "tools")
 	userHome, _ := os.UserHomeDir()
 	allow := sandboxAllowlist(allowSources{

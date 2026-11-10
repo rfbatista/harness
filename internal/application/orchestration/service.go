@@ -231,6 +231,11 @@ type Service struct {
 	// Sandbox is the agent sandbox step of a session start (ADR 0017). Nil:
 	// sessions run unconfined.
 	Sandbox *Sandbox
+	// BranchRequests counts a session's pending branch requests, for the
+	// interrupted mark's record of what expired with it. Nil counts none.
+	BranchRequests interface {
+		PendingBranchRequests(ctx context.Context, sessionID string) int
+	}
 
 	// updates feeds the task-update turns to the courier, one at a time;
 	// deliverUpdate replaces the courier in tests.
@@ -1445,6 +1450,9 @@ func (s *Service) publish(sessionID string, ev SessionEvent) {
 type sessionChange struct {
 	metrics *ports.SessionMetrics
 	status  domain.SessionStatus
+	// interrupted sets the interrupted mark; clearInterrupted removes it.
+	interrupted      *time.Time
+	clearInterrupted bool
 }
 
 // record sequences ev, stores it with change in one transaction, then fans
@@ -1469,6 +1477,7 @@ func (s *Service) record(sessionID string, ev SessionEvent, change sessionChange
 	payload, _ := json.Marshal(ev)
 	if err := s.sessions.RecordEvent(sessionID, ports.SessionEventRecord{
 		Seq: ev.Seq, Type: ev.Type, Payload: payload, Metrics: change.metrics, Status: change.status,
+		Interrupted: change.interrupted, ClearInterrupted: change.clearInterrupted,
 	}); err != nil {
 		slog.Error("session event not stored", "session", sessionID, "seq", ev.Seq, "type", ev.Type, "err", err)
 	}

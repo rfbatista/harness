@@ -156,6 +156,10 @@ type SessionEventRecord struct {
 	Payload []byte
 	Metrics *SessionMetrics
 	Status  domain.SessionStatus
+	// Interrupted sets the interrupted mark to this time; ClearInterrupted
+	// removes it (ADR 0080). The mark moves with the event that records why.
+	Interrupted      *time.Time
+	ClearInterrupted bool
 }
 
 // SessionMetrics are a session's running totals and latest activity.

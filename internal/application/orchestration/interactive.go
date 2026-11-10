@@ -2,6 +2,7 @@ package orchestration
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"log/slog"
 	"maps"
@@ -294,7 +295,13 @@ func (s *Service) ResumeInteractive(ctx context.Context, req ports.ResumeRequest
 		}
 		return nil, ports.AgentSpec{}, err
 	}
-	spec := s.agentSpec(cfg, ports.Conversation{ID: claudeID(sess), Resume: true}, "")
+	// A session a restart interrupted mid-turn is told so: its first turn is
+	// the continue turn (ADR 0080); any other resumes idle, with no turn.
+	prompt := ""
+	if sess.InterruptedAt != nil {
+		prompt = continueTurn(s.interruption(sess.ID))
+	}
+	spec := s.agentSpec(cfg, ports.Conversation{ID: claudeID(sess), Resume: true}, prompt)
 	spec.EnvFile = envFile
 	confineSpec(&spec, sb.policy)
 	err = s.sessions.UpdateRunner(sess.ID, runsOn, runnerHost(runsOn, req.RunnerHost))
@@ -311,7 +318,12 @@ func (s *Service) ResumeInteractive(ctx context.Context, req ports.ResumeRequest
 		return nil, ports.AgentSpec{}, err
 	}
 	s.adoptCleanup(sess.ID, withViolations(cleanup, s.collectViolations(sess.ID, sess.WorkingDir, sb.facts)))
-	s.courier.setTurn(sess.ID, turnIdle) // a resumed conversation waits for its next prompt
+	if sess.InterruptedAt != nil {
+		s.record(sess.ID, SessionEvent{Type: "resumed_with_continue_turn", InterruptedAt: sess.InterruptedAt, At: time.Now()}, sessionChange{clearInterrupted: true})
+		s.courier.setTurn(sess.ID, turnBusy) // the continue turn is its first
+	} else {
+		s.courier.setTurn(sess.ID, turnIdle) // a resumed conversation waits for its next prompt
+	}
 	s.publish(sess.ID, SessionEvent{Type: "status", Status: domain.SessionRunning, Text: "resumed" + strings.TrimPrefix(startedText(runsOn), "started"), At: time.Now()})
 	if runsOn == domain.RunnerServer {
 		if err := s.spawn(ctx, sess.ID, spec, req.Size); err != nil {
@@ -319,6 +331,24 @@ func (s *Service) ResumeInteractive(ctx context.Context, req ports.ResumeRequest
 		}
 	}
 	return s.withResumability(ctx, s.sessions.Get(sess.ID)), spec, nil
+}
+
+// interruption is the newest "interrupted_by_restart" event of a session: the
+// facts its continue turn carries. Empty when the log has none.
+func (s *Service) interruption(id string) SessionEvent {
+	stored, err := s.sessions.ListEvents(id, 0)
+	if err != nil {
+		return SessionEvent{}
+	}
+	for i := len(stored) - 1; i >= 0; i-- {
+		if stored[i].Type != "interrupted_by_restart" {
+			continue
+		}
+		var ev SessionEvent
+		_ = json.Unmarshal(stored[i].Payload, &ev)
+		return ev
+	}
+	return SessionEvent{}
 }
 
 // resumeSandbox is the sandbox step of a resume: the session's policy under
@@ -621,8 +651,69 @@ func (s *Service) StopOrphanedServerSessions(ctx context.Context) (int, error) {
 	return n, nil
 }
 
-// stopOrphan records a session whose process is gone as stopped.
+// midTurn says a session stored in status was working or waiting on the
+// person's decision, not waiting for a prompt: a restart interrupts it
+// (ADR 0080).
+func midTurn(status domain.SessionStatus) bool {
+	switch status {
+	case domain.SessionStarting, domain.SessionRunning, domain.SessionThinking, domain.SessionWaitingApproval:
+		return true
+	}
+	return false
+}
+
+// markInterrupted gives an interactive session that was mid-turn when the
+// server stopped the interrupted mark, with the event that records the status
+// it was in, its last action and the branch requests that expire with it.
+// The boot and the shutdown step both call it before they record the session
+// stopped, so one rule decides the mark whatever stopped the server. A
+// session the person did not see mid-turn (idle, paused) and a headless one,
+// which cannot be resumed, are left unmarked.
+func (s *Service) markInterrupted(sess *domain.Session) {
+	if !sess.Interactive || !midTurn(sess.Status) {
+		return
+	}
+	expired := 0
+	if s.BranchRequests != nil {
+		expired = s.BranchRequests.PendingBranchRequests(context.Background(), sess.ID)
+	}
+	now := time.Now()
+	s.record(sess.ID, SessionEvent{
+		Type: "interrupted_by_restart", PreviousStatus: sess.Status, LastAction: sess.LastAction,
+		ExpiredBranchRequests: &expired, At: now,
+	}, sessionChange{interrupted: &now})
+}
+
+// continueTurn is the turn a resume of an interrupted session sends, filled
+// with what the server knows of the interruption (ADR 0080): the agent checks
+// its last action before it redoes it, and asks again for what expired.
+func continueTurn(ev SessionEvent) string {
+	var b strings.Builder
+	b.WriteString("The harness restarted during your turn, so it was interrupted. Before you redo anything, check the state of your last action, then continue where you were.")
+	if ev.PreviousStatus != "" {
+		fmt.Fprintf(&b, "\n\nYour status when it stopped: %s.", ev.PreviousStatus)
+	}
+	if ev.LastAction != "" {
+		fmt.Fprintf(&b, "\nYour last recorded action: %s.", ev.LastAction)
+	}
+	if ev.ExpiredBranchRequests != nil && *ev.ExpiredBranchRequests > 0 {
+		n := *ev.ExpiredBranchRequests
+		noun := "branch request"
+		if n > 1 {
+			noun += "s"
+		}
+		fmt.Fprintf(&b, "\n%d %s of yours expired with the restart; ask again for what you still need.", n, noun)
+	}
+	if ev.PreviousStatus == domain.SessionWaitingApproval {
+		b.WriteString("\nA tool approval you were waiting for expired too; ask again.")
+	}
+	return b.String()
+}
+
+// stopOrphan records a session whose process is gone as stopped, marked
+// interrupted first when it was mid-turn.
 func (s *Service) stopOrphan(sess *domain.Session) error {
+	s.markInterrupted(sess)
 	if sess.Interactive {
 		_, err := s.end(sess.ID, 0, true)
 		return err
@@ -668,6 +759,7 @@ func (s *Service) StopServerSessions(ctx context.Context) {
 		return
 	}
 	for _, sess := range live {
+		s.markInterrupted(sess)
 		if sess.Interactive {
 			_ = s.stopHosted(sess.ID)
 			continue

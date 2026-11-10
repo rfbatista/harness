@@ -241,6 +241,12 @@ func (r *SessionRepository) RecordEvent(sessionID string, ev ports.SessionEventR
 				cols[k] = v
 			}
 		}
+		switch {
+		case ev.Interrupted != nil:
+			cols["interrupted_at_ms"] = ev.Interrupted.UnixMilli()
+		case ev.ClearInterrupted:
+			cols["interrupted_at_ms"] = 0
+		}
 		if len(cols) == 0 {
 			return nil
 		}
