@@ -19,6 +19,7 @@ templ branchRequestsButton(v PageView) {
 		<span
 			style="display: contents"
 			x-data="branchRequests"
+			x-on:branch-request-show.window="showFor($event)"
 			data-seed="branch-requests-seed"
 			data-ticket-id={ v.BranchRequests.TicketID }
 			data-pending={ strconv.Itoa(v.PendingBranchRequests) }
