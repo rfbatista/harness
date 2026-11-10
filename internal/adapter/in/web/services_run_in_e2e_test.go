@@ -270,6 +270,20 @@ func TestAServiceRunsABranchPickedFromTheBranchSearch_EndToEnd(t *testing.T) {
 	git(t, repo, "commit", "-q", "-am", "Add the feature")
 	sha := git(t, repo, "rev-parse", "--short=7", "HEAD")
 	git(t, repo, "checkout", "-q", "main")
+	// A branch that exists only on origin: pushed to a bare origin, then removed locally.
+	origin := filepath.Join(t.TempDir(), "origin.git")
+	git(t, repo, "init", "-q", "--bare", "-b", "main", origin)
+	git(t, repo, "remote", "add", "origin", origin)
+	git(t, repo, "checkout", "-q", "-b", "remote-only")
+	if err := os.WriteFile(filepath.Join(repo, "WHERE.txt"), []byte("on origin only\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	git(t, repo, "commit", "-q", "-am", "Work that lives on origin")
+	remoteSha := git(t, repo, "rev-parse", "--short=7", "HEAD")
+	git(t, repo, "push", "-q", "origin", "remote-only")
+	git(t, repo, "checkout", "-q", "main")
+	git(t, repo, "branch", "-q", "-D", "remote-only")
+	git(t, repo, "fetch", "-q", "origin")
 	svc, err := w.svc.CreateService(context.Background(), w.project.ID, domain.ServiceInput{
 		Name: "web", Kind: domain.ServiceKindCommand, RepositoryID: w.repo.ID,
 		Command: &domain.ServiceCommand{Line: "cat WHERE.txt; sleep 30"},
@@ -335,5 +349,39 @@ func TestAServiceRunsABranchPickedFromTheBranchSearch_EndToEnd(t *testing.T) {
 		chromedp.Navigate(w.srv.URL+"/projects/"+w.project.ID+"/services"),
 		waitUntil(`!!`+trigger+` && `+trigger+`.textContent.includes('feature/x')`),
 		waitUntil(`localStorage.getItem('harness:service-run-worktree:`+svc.ID+`') === 'branch:feature/x'`),
+	)
+	const remoteOption = `[...document.querySelectorAll('[data-branch-search] [role=option]')].find((o) => o.textContent.includes('origin/remote-only'))`
+	b.run("search for a branch that exists only on origin: it is listed under the remote branches",
+		chromedp.Evaluate(trigger+`.click()`, nil),
+		waitUntil(`[...document.querySelectorAll('[role=option]')].some((o) => o.textContent.includes('Branch…'))`),
+		chromedp.Evaluate(`[...document.querySelectorAll('[role=option]')].find((o) => o.textContent.includes('Branch…')).click()`, nil),
+		waitUntil(`!!document.querySelector('[data-branch-search]')`),
+		waitUntil(`!!(`+remoteOption+`) && document.querySelector('[data-branch-search] .popup').textContent.includes('Remote branches · fetched first')`),
+		waitUntil(`(`+remoteOption+`).textContent.includes('`+remoteSha+`')`),
+		chromedp.Sleep(300*time.Millisecond),
+		theme("light"),
+		chromedp.Sleep(200*time.Millisecond),
+		shot("branch-search-remote-light"),
+		theme("dark"),
+		chromedp.Sleep(200*time.Millisecond),
+		shot("branch-search-remote-dark"),
+		chromedp.Evaluate(`(`+remoteOption+`).click()`, nil),
+		waitUntil(`!document.querySelector('[data-branch-search]')`),
+		waitUntil(trigger+`.textContent.includes('origin/remote-only')`),
+	)
+	b.run("Start fetches and runs it: the row and the log read branch @ origin/<name> · <sha>",
+		chromedp.Click(`[data-service][data-name=web] [data-action=start]`, chromedp.ByQuery),
+		waitUntil(status+` === 'running'`),
+		waitUntil(row+`.querySelector('[data-service-where]').textContent === 'branch @ origin/remote-only · `+remoteSha+`'`),
+		chromedp.Click(`[data-service][data-name=web] [data-action=log]`, chromedp.ByQuery),
+		waitUntil(`document.querySelector('[data-service-log] .meta').textContent.includes('branch @ origin/remote-only · `+remoteSha+`')`),
+		waitUntil(`document.querySelector('[data-log]').textContent.includes('on origin only')`),
+		chromedp.Sleep(300*time.Millisecond),
+		theme("light"),
+		chromedp.Sleep(200*time.Millisecond),
+		shot("branch-run-remote-light"),
+		theme("dark"),
+		chromedp.Sleep(200*time.Millisecond),
+		shot("branch-run-remote-dark"),
 	)
 }
