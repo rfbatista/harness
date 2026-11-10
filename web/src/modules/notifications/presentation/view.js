@@ -51,8 +51,6 @@ export function bellLabel(count) {
  * @property {boolean} hasReason
  */
 
-const STATE_WORD = { interrupted: "interrupted", resumed: "resumed", failed: "failed", gone: "gone" };
-
 /** One session of a sessions_interrupted item: who it was, and where it stands. */
 function sessionLine(s) {
   return {
@@ -60,7 +58,6 @@ function sessionLine(s) {
     label: [s.taskTitle || "No task", s.agentName].filter(Boolean).join(" · "),
     href: s.link,
     state: s.state,
-    stateLabel: STATE_WORD[s.state] ?? s.state,
     reason: s.reason,
     hasReason: s.reason !== "",
   };

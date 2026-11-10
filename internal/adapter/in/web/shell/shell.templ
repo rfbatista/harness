@@ -231,7 +231,7 @@ templ NotificationLiveRow(actions bool) {
 				<template x-for="s in row.sessions" x-bind:key="s.key">
 					<li x-bind:data-state="s.state">
 						<a x-bind:href="s.href" x-text="s.label"></a>
-						<span class="[ state ]" x-text="s.stateLabel"></span>
+						<span class="[ state ]" x-text="s.state"></span>
 						<span class="[ reason ]" x-show="s.hasReason" x-text="s.reason"></span>
 					</li>
 				</template>

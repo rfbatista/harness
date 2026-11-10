@@ -5,6 +5,7 @@ package orchestration
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"strings"
 	"testing"
 
@@ -238,5 +239,27 @@ func TestTheRestartsEventsContinueTheSessionsLog(t *testing.T) {
 		if ev.Seq != before+int64(i)+1 {
 			t.Errorf("event %d (%s) has seq %d, want %d", i, ev.Type, ev.Seq, before+int64(i)+1)
 		}
+	}
+}
+
+// A resume that cannot start the agent leaves the session stopped and marked,
+// so the next resume (or Resume all) tries it again.
+func TestAResumeThatFailsToStartTheAgentKeepsTheSessionInterrupted(t *testing.T) {
+	svc := newHostedService(t, scriptAgent{script: `cat`, err: errors.New("no such agent")})
+	orphan(t, svc, "s1", domain.SessionThinking)
+	if _, err := svc.StopOrphanedServerSessions(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	if _, _, err := svc.ResumeInteractive(context.Background(), ports.ResumeRequest{SessionID: "s1", RunsOn: domain.RunnerServer}); err == nil {
+		t.Fatal("the resume succeeded with an agent that cannot start")
+	}
+	got := sessionOf(svc, "s1")
+	if got.Status != domain.SessionStopped || got.InterruptedAt == nil {
+		t.Errorf("session = %s marked %v, want stopped and still marked", got.Status, got.InterruptedAt)
+	}
+	// The next resume, with an agent that starts, still finds the mark.
+	svc.Terminals = termhost.New(shell.Direct{}, ptyunix.New(), scriptAgent{script: `cat`})
+	if _, spec, err := svc.ResumeInteractive(context.Background(), ports.ResumeRequest{SessionID: "s1", RunsOn: domain.RunnerServer}); err != nil || spec.Prompt == "" {
+		t.Errorf("the retry = %v with prompt %q, want a resume that sends the continue turn", err, spec.Prompt)
 	}
 }

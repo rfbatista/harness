@@ -487,7 +487,7 @@ func (s *Service) ResumeInterrupted(ctx context.Context, id string) (*ports.Resu
 		e.Reason = ""
 		list[i] = e
 		results[i] = ports.ResumeResult{SessionID: e.SessionID, Outcome: ports.ResumeSkipped}
-		if sess := s.readers.Sessions.Get(e.SessionID); sess == nil || sess.InterruptedAt == nil {
+		if !s.stillMarked(e.SessionID) {
 			continue
 		}
 		if err := s.resumeOne(ctx, e.SessionID); err != nil {
@@ -499,9 +499,7 @@ func (s *Service) ResumeInterrupted(ctx context.Context, id string) (*ports.Resu
 	}
 	marked := false
 	for _, e := range list {
-		if sess := s.readers.Sessions.Get(e.SessionID); sess != nil && sess.InterruptedAt != nil {
-			marked = true
-		}
+		marked = marked || s.stillMarked(e.SessionID)
 	}
 	c, err := s.write(func(tx ports.NotificationRepository, now time.Time) ([]*domain.Notification, bool, error) {
 		cur, err := tx.SetInterruptedSessions(id, list)
@@ -565,9 +563,7 @@ func (s *Service) refreshInterrupted(sessionID string) {
 func (s *Service) reconcileInterrupted(n *domain.Notification) {
 	marked := false
 	for _, e := range n.InterruptedSessions {
-		if sess := s.readers.Sessions.Get(e.SessionID); sess != nil && sess.InterruptedAt != nil {
-			marked = true
-		}
+		marked = marked || s.stillMarked(e.SessionID)
 	}
 	s.logged("refresh the sessions interrupted notification", func(tx ports.NotificationRepository, now time.Time) ([]*domain.Notification, bool, error) {
 		if !marked {
@@ -579,6 +575,12 @@ func (s *Service) reconcileInterrupted(n *domain.Notification) {
 		}
 		return nil, false, nil
 	})
+}
+
+// stillMarked says the session exists and carries the interrupted mark.
+func (s *Service) stillMarked(sessionID string) bool {
+	sess := s.readers.Sessions.Get(sessionID)
+	return sess != nil && sess.InterruptedAt != nil
 }
 
 func lists(n *domain.Notification, sessionID string) bool {

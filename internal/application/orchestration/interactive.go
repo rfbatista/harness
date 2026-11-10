@@ -319,7 +319,7 @@ func (s *Service) ResumeInteractive(ctx context.Context, req ports.ResumeRequest
 	}
 	s.adoptCleanup(sess.ID, withViolations(cleanup, s.collectViolations(sess.ID, sess.WorkingDir, sb.facts)))
 	if sess.InterruptedAt != nil {
-		s.record(sess.ID, SessionEvent{Type: "resumed_with_continue_turn", InterruptedAt: sess.InterruptedAt, At: time.Now()}, sessionChange{clearInterrupted: true})
+		s.record(sess.ID, SessionEvent{Type: eventResumed, InterruptedAt: sess.InterruptedAt, At: time.Now()}, sessionChange{clearInterrupted: true})
 		s.courier.setTurn(sess.ID, turnBusy) // the continue turn is its first
 	} else {
 		s.courier.setTurn(sess.ID, turnIdle) // a resumed conversation waits for its next prompt
@@ -327,10 +327,23 @@ func (s *Service) ResumeInteractive(ctx context.Context, req ports.ResumeRequest
 	s.publish(sess.ID, SessionEvent{Type: "status", Status: domain.SessionRunning, Text: "resumed" + strings.TrimPrefix(startedText(runsOn), "started"), At: time.Now()})
 	if runsOn == domain.RunnerServer {
 		if err := s.spawn(ctx, sess.ID, spec, req.Size); err != nil {
+			s.restoreInterruption(sess)
 			return nil, ports.AgentSpec{}, err
 		}
 	}
 	return s.withResumability(ctx, s.sessions.Get(sess.ID)), spec, nil
+}
+
+// restoreInterruption puts a session whose resume failed back as it was: stopped
+// and carrying the mark it had, so the person (or the next Resume all) can try
+// again (contract "Harness server ↔ Web UI — interrupted sessions and Resume
+// all" §5). A session that was not interrupted is left as the failure made it.
+func (s *Service) restoreInterruption(sess *domain.Session) {
+	if sess.InterruptedAt == nil {
+		return
+	}
+	s.record(sess.ID, SessionEvent{Type: eventResumeFailed, Status: domain.SessionStopped, Text: "the resume failed; still interrupted", At: time.Now()},
+		sessionChange{status: domain.SessionStopped, interrupted: sess.InterruptedAt})
 }
 
 // interruption is the newest "interrupted_by_restart" event of a session: the
@@ -341,11 +354,13 @@ func (s *Service) interruption(id string) SessionEvent {
 		return SessionEvent{}
 	}
 	for i := len(stored) - 1; i >= 0; i-- {
-		if stored[i].Type != "interrupted_by_restart" {
+		if stored[i].Type != eventInterrupted {
 			continue
 		}
 		var ev SessionEvent
-		_ = json.Unmarshal(stored[i].Payload, &ev)
+		if err := json.Unmarshal(stored[i].Payload, &ev); err != nil {
+			slog.Warn("read the interruption of a session", "session", id, "err", err)
+		}
 		return ev
 	}
 	return SessionEvent{}
@@ -662,6 +677,15 @@ func (s *Service) StopOrphanedServerSessions(ctx context.Context) (int, error) {
 	return n, nil
 }
 
+// The session events an interruption and its resume log (contract "Harness
+// server ↔ Web UI — interrupted sessions and Resume all" §2); eventResumeFailed
+// is the harness's own note that a resume put the session back.
+const (
+	eventInterrupted  = "interrupted_by_restart"
+	eventResumed      = "resumed_with_continue_turn"
+	eventResumeFailed = "resume_failed"
+)
+
 // midTurn says a session stored in status was working or waiting on the
 // person's decision, not waiting for a prompt: a restart interrupts it
 // (ADR 0080).
@@ -690,7 +714,7 @@ func (s *Service) markInterrupted(sess *domain.Session) {
 	}
 	now := time.Now()
 	s.record(sess.ID, SessionEvent{
-		Type: "interrupted_by_restart", PreviousStatus: sess.Status, LastAction: sess.LastAction,
+		Type: eventInterrupted, PreviousStatus: sess.Status, LastAction: sess.LastAction,
 		ExpiredBranchRequests: &expired, At: now,
 	}, sessionChange{interrupted: &now})
 }

@@ -728,6 +728,8 @@ func newRuntimeConfig(cfg Config, bin ports.ManagedClaudeBin, home claudehome.Ho
 // running died with the previous server. On shutdown each is recorded as
 // stopped before the host kills it, so it does not read as failed. Its hooks
 // run inside the host's: the host was built first.
+// The inbox is a parameter only so that it is built, and subscribed to the bus,
+// before the boot announces the interrupted sessions.
 func registerServerSessions(lc fx.Lifecycle, svc *orchestration.Service, _ optionalNotifications) {
 	lc.Append(fx.Hook{
 		OnStart: func(ctx context.Context) error {
@@ -764,6 +766,7 @@ type pendingBranchRequests struct{ ports.BranchRequestStore }
 func (p pendingBranchRequests) PendingBranchRequests(ctx context.Context, sessionID string) int {
 	pending, err := p.List(ctx, domain.BranchRequestFilter{SessionID: sessionID, State: domain.BranchRequestPending})
 	if err != nil {
+		slog.Warn("count a session's pending branch requests", "session", sessionID, "err", err)
 		return 0
 	}
 	return len(pending)
