@@ -500,7 +500,7 @@ func TestProjectMCPSettings_TheListWriteOnlyMovesTheAddedServers(t *testing.T) {
 	}
 	// Naming a banned server does not lift the ban.
 	f.post("/api/set_project_mcp_servers", map[string]any{"project_id": p, "mcp_servers": []string{"nb"}}, 200)
-	if got := f.get("/api/get_project_mcp_servers?project_id="+p, 200); projectServer(t, got, "nb")["state"] != "banned" {
+	if got := f.get("/api/get_project_mcp_servers?project_id="+p, 200); projectServer(t, got, "nb")["state"] != "banned" || len(strList(got["mcp_servers"])) != 0 {
 		t.Fatalf("read = %v", got)
 	}
 }
@@ -560,5 +560,23 @@ func TestProjectMCPSettings_AReplacementThatOmitsAVanishedToolKeepsItsOverride(t
 	gh := projectServer(t, f.get("/api/get_project_mcp_servers?project_id="+p, 200), "github")
 	if toolOf(t, gh, "vanished")["override"] != "disabled" || toolOf(t, gh, "a")["override"] != "default" {
 		t.Fatalf("github = %v", gh)
+	}
+}
+
+func TestProjectMCPSettings_AServerHasOneStateAndMCPServersListsExactlyTheAddedOnes(t *testing.T) {
+	f := catalogWithSkills(t)
+	p := f.project("Widgets")
+	githubWithTools(f)
+	set := func(state string) map[string]any {
+		return f.post("/api/set_project_mcp_settings", map[string]any{"project_id": p, "servers": []map[string]any{{"name": "github", "state": state}, {"name": "nb", "state": "added"}}}, 200)
+	}
+	for state, want := range map[string][]string{"added": {"github", "nb"}, "banned": {"nb"}, "agent": {"nb"}} {
+		got := set(state)
+		if !reflect.DeepEqual(strList(got["mcp_servers"]), want) || projectServer(t, got, "github")["state"] != state {
+			t.Fatalf("%s: answer = %v, want mcp_servers %v", state, got, want)
+		}
+		if read := f.get("/api/get_project_mcp_servers?project_id="+p, 200); !reflect.DeepEqual(strList(read["mcp_servers"]), want) {
+			t.Fatalf("%s: read = %v", state, read)
+		}
 	}
 }

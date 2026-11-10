@@ -246,7 +246,7 @@ func (c *Catalog) GetProjectMCPServers(_ context.Context, projectID string) (*do
 
 // SetProjectMCPServers makes the named servers Added. An Added server that is
 // not named goes back to Agent's choice; bans and tool overrides stay as they
-// are (a banned server that is named is Added and stays banned). Each name
+// are (a banned server that is named stays banned and is not Added). Each name
 // must be in the catalog.
 func (c *Catalog) SetProjectMCPServers(_ context.Context, in domain.SetCatalogProjectMCPServers) (*domain.CatalogProjectMCPServers, error) {
 	c.wmu.Lock()
@@ -274,7 +274,15 @@ func (c *Catalog) SetProjectMCPServers(_ context.Context, in domain.SetCatalogPr
 	if len(unknown) > 0 {
 		return nil, unknownRefs(unknown)
 	}
-	if err := c.setProjectNames(in.ProjectID, names); err != nil {
+	// A server has one state: a banned server that is named stays banned and
+	// is not put in the Added list.
+	added := make([]string, 0, len(names))
+	for _, n := range names {
+		if !contains(p.MCPBanned, n) {
+			added = append(added, n)
+		}
+	}
+	if err := c.setProjectNames(in.ProjectID, added); err != nil {
 		return nil, err
 	}
 	c.last = nil // the latest change is no longer the latest write
