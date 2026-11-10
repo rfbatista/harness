@@ -173,6 +173,14 @@ type ServiceBranchGit interface {
 	RemoveServiceWorktree(ctx context.Context, dir string) error
 }
 
+// ServiceBranchFetcher fetches one branch of a repository's origin into its
+// tracking ref (driven; the workspaces context implements it with the stored
+// credentials). An error is worded for a run's `error`: git's reason, never a
+// credential.
+type ServiceBranchFetcher interface {
+	FetchServiceBranch(ctx context.Context, repositoryID, repoRoot, branch string) error
+}
+
 // ServiceStartOptions say who starts a run and where.
 type ServiceStartOptions struct {
 	StartedBy domain.ServiceStartedBy

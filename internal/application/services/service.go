@@ -72,6 +72,9 @@ type Options struct {
 	// BranchGit is the git a branch run needs: the branch list, and the service
 	// worktree (ADR 0080); nil offers no branch.
 	BranchGit ports.ServiceBranchGit
+	// Fetcher fetches a remote branch before a run on it; nil runs the tracking
+	// ref as it is.
+	Fetcher ports.ServiceBranchFetcher
 	// WorktreeRoot holds the service worktrees, one folder per service id;
 	// empty is a folder in LogDir.
 	WorktreeRoot string
