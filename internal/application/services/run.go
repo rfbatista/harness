@@ -738,11 +738,20 @@ func branchOfKey(key string) (name string, remote bool) {
 
 // serviceWorktreeDir is where the service's service worktree is, or will be.
 func (s *Service) serviceWorktreeDir(serviceID string) string {
-	root := s.opts.WorktreeRoot
-	if root == "" {
-		root = filepath.Join(s.opts.LogDir, "service-worktrees")
+	return filepath.Join(s.worktreeRoot(), serviceID)
+}
+
+func (s *Service) worktreeRoot() string {
+	if s.opts.WorktreeRoot != "" {
+		return filepath.Clean(s.opts.WorktreeRoot)
 	}
-	return filepath.Join(root, serviceID)
+	return filepath.Join(s.opts.LogDir, "service-worktrees")
+}
+
+// ownsWorktreeDir says dir is a direct child of the service worktrees folder:
+// the only kind of path the module clears or removes.
+func (s *Service) ownsWorktreeDir(dir string) bool {
+	return filepath.Dir(filepath.Clean(dir)) == s.worktreeRoot() && filepath.Base(dir) != ".." && filepath.Base(dir) != "."
 }
 
 // checkoutBranch readies a branch run: the service worktree is made when it is
@@ -753,6 +762,9 @@ func (s *Service) checkoutBranch(ctx context.Context, r *run, p *prepared, lg *l
 	b, git := p.branch, s.opts.BranchGit
 	if git == nil {
 		return errors.New("branch runs are not available")
+	}
+	if !s.ownsWorktreeDir(b.dir) {
+		return errors.New("the service worktree is not under the harness's service-worktrees folder")
 	}
 	ref := "refs/heads/" + b.name
 	if b.remote {
@@ -810,6 +822,9 @@ func redactUserinfo(s string) string { return userinfoPattern.ReplaceAllString(s
 // never fails a delete: what is left is logged.
 func (s *Service) removeServiceWorktree(ctx context.Context, serviceID string) {
 	dir := s.serviceWorktreeDir(serviceID)
+	if !s.ownsWorktreeDir(dir) {
+		return
+	}
 	var err error
 	if s.opts.BranchGit != nil {
 		err = s.opts.BranchGit.RemoveServiceWorktree(ctx, dir)
