@@ -192,7 +192,7 @@ templ notificationsBell(b *Bell) {
 				<ul role="list" class="[ notification-list ]">
 					<template x-for="row in rows" x-bind:key="row.id">
 						<li>
-							@NotificationLiveRow()
+							@NotificationLiveRow(false)
 						</li>
 					</template>
 				</ul>
@@ -210,8 +210,10 @@ templ notificationsBell(b *Bell) {
 
 // NotificationLiveRow is one notification as the browser renders it, in an
 // x-for over `rows` (the bell's panel, the inbox page): its fields are
-// web/src/modules/notifications/presentation/view.js's Row.
-templ NotificationLiveRow() {
+// web/src/modules/notifications/presentation/view.js's Row. The inbox page
+// passes actions: a sessions_interrupted item's Resume all interrupted button
+// lives there only; the panel lists its sessions and links to the page.
+templ NotificationLiveRow(actions bool) {
 	<article class="[ notification ]" x-bind:data-level="row.level" x-bind:data-state="row.state">
 		<span class="[ marker ]" aria-hidden="true"></span>
 		<div class="[ text ]">
@@ -224,7 +226,19 @@ templ NotificationLiveRow() {
 				<span class="[ level ]" x-show="row.levelLabel" x-text="row.levelLabel"></span>
 				<time x-bind:datetime="row.at" x-text="row.age"></time>
 			</p>
-			<p class="[ body ]" x-show="row.body" x-text="row.body"></p>
+			<p class="[ body ]" x-show="row.body && !row.hasSessions" x-text="row.body"></p>
+			<ul role="list" class="[ interrupted-sessions ]" x-show="row.hasSessions">
+				<template x-for="s in row.sessions" x-bind:key="s.key">
+					<li x-bind:data-state="s.state">
+						<a x-bind:href="s.href" x-text="s.label"></a>
+						<span class="[ state ]" x-text="s.stateLabel"></span>
+						<span class="[ reason ]" x-show="s.hasReason" x-text="s.reason"></span>
+					</li>
+				</template>
+			</ul>
+			if actions {
+				<button type="button" class="[ button ] [ resume-all ]" data-size="sm" x-show="row.canResumeAll" x-bind:data-id="row.id" x-bind:disabled="resuming" x-bind:aria-busy="resuming" x-on:click="resumeAll">Resume all interrupted</button>
+			}
 		</div>
 		<button type="button" class="[ button ] [ mark ]" data-variant="ghost" data-size="sm" x-show="row.unread" x-bind:data-id="row.id" x-bind:aria-label="row.markLabel" x-on:click="markOne">Mark read</button>
 	</article>

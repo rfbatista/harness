@@ -74,6 +74,15 @@ export function toStreamChange(body) {
   return { notifications: body.changed.map(toNotification), unreadCount: count(body.unread_count) };
 }
 
+/** POST /api/notifications/{id}/resume_interrupted → {notification, results: [{session_id, outcome, reason?}]} */
+export function toResumeAnswer(body) {
+  if (!body || !body.notification || !Array.isArray(body.results)) bad("expected {notification, results}");
+  return {
+    notification: toNotification(body.notification),
+    results: body.results.map((r) => Object.freeze({ sessionId: String(r.session_id ?? ""), outcome: r.outcome, reason: r.reason ?? "" })),
+  };
+}
+
 function count(v) {
   if (!Number.isInteger(v) || v < 0) bad("unread_count is not a count");
   return v;

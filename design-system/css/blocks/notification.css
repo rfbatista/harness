@@ -94,6 +94,29 @@
 
     & > .mark { align-self: center; }
 
+    /* A sessions_interrupted item: the sessions a restart interrupted, each with where it stands. */
+    & .interrupted-sessions {
+      display: grid;
+      gap: var(--space-3xs);
+      margin: 0;
+      padding: 0;
+      list-style: none;
+      font-size: var(--text-sm);
+
+      & > li {
+        display: flex;
+        flex-wrap: wrap;
+        align-items: baseline;
+        gap: 0 var(--space-xs);
+        max-inline-size: none;
+      }
+      & .state { color: var(--color-ink-muted); font-size: var(--text-xs); }
+      & > li[data-state="failed"] .state { color: var(--color-danger); font-weight: var(--weight-medium); }
+      & > li[data-state="resumed"] .state { color: var(--color-ink-faint); }
+      & .reason { flex-basis: 100%; color: var(--color-ink-muted); font-size: var(--text-xs); }
+    }
+    & .resume-all { justify-self: start; margin-block-start: var(--space-2xs); }
+
     &[data-state="settled"] {
       & .title { color: var(--color-ink-muted); font-weight: var(--weight-regular); }
       & .meta > .level { color: var(--color-ink-faint); }

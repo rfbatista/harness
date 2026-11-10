@@ -18,6 +18,10 @@
  *
  * @typedef {{ ids: string[] } | { all: true, projectId?: string }} ReadRequest
  *
+ * @typedef {object} ResumeAnswer
+ * @property {Notification} notification
+ * @property {{ sessionId: string, outcome: "resumed"|"skipped"|"failed", reason: string }[]} results
+ *
  * @typedef {object} NotificationGateway
  * @property {(query: ListQuery, signal?: AbortSignal) => Promise<Page>} list
  *           Newest first, across every project unless projectId narrows it.
@@ -28,6 +32,13 @@
  *           a project. Answers with the ones it changed; ids already read
  *           are not an error. Rejects with NOTIFICATION_NOT_FOUND for an
  *           unknown id, INVALID_INPUT for neither ids nor all.
+ * @property {(id: string) => Promise<ResumeAnswer>} resumeInterrupted
+ *           Resume all interrupted: resumes, one by one, the sessions a
+ *           sessions_interrupted notification lists that still carry the
+ *           mark. Answers the notification after the call and each session's
+ *           outcome; a session that fails stays listed with its reason.
+ *           Rejects with NOTIFICATION_NOT_FOUND, or INVALID_INPUT for a
+ *           notification of another kind.
  * @property {(seed: unknown) => Page} fromSeed
  *           Decodes the page the server embedded for the first paint (the
  *           GET's JSON). Throws BAD_RESPONSE when it cannot be read.

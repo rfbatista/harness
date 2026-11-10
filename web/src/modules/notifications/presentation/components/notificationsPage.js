@@ -36,6 +36,8 @@ export const notificationsPage = ({ gateway, store, clock }) => () => {
     live: false,
     loadingMore: false,
     marking: false,
+    /** Resume all interrupted is in flight: its button waits for the answer. */
+    resuming: false,
     error: null,
     now: clock.now(),
 
@@ -153,6 +155,21 @@ export const notificationsPage = ({ gateway, store, clock }) => () => {
         this.error = describeError(err);
       } finally {
         this.marking = false;
+      }
+    },
+    /** Resume all interrupted: the sessions the item lists, one by one; the item shows each one's outcome. */
+    async resumeAll(event) {
+      if (this.resuming) return;
+      const { id } = event.currentTarget.dataset;
+      this.resuming = true;
+      this.error = null;
+      try {
+        const { notification } = await gateway.resumeInterrupted(id);
+        this.items = merge(this.items, [notification], this.filter);
+      } catch (err) {
+        this.error = describeError(err);
+      } finally {
+        this.resuming = false;
       }
     },
     dismissError() {

@@ -17,7 +17,7 @@ import { at, makeNotification, notificationDTO } from "./fixtures.js";
 
 /**
  * @param {string} name
- * @param {(world: { notifications?: object[], beforeAnswer?: () => Promise<void> }) => Subject} makeSubject
+ * @param {(world: { notifications?: object[], beforeAnswer?: () => Promise<void>, resumeSession?: (id: string) => string }) => Subject} makeSubject
  */
 export function notificationGatewayContract(name, makeSubject) {
   const contract = (title, fn) => test(`${name} · ${title}`, fn);
@@ -141,5 +141,39 @@ export function notificationGatewayContract(name, makeSubject) {
     const change = await pending;
     assert.equal(change.unreadCount, 0);
     close();
+  });
+
+  const interrupted = (states) =>
+    makeNotification({
+      id: "restart", kind: "sessions_interrupted", link: "/notifications", title: "3 sessions interrupted by a restart",
+      interruptedSessions: states.map((state, i) => ({ sessionId: `s${i + 1}`, projectId: "p1", taskId: "", taskTitle: "Ship", agentName: "go-developer", link: `/projects/p1?session=s${i + 1}`, state, reason: "" })),
+    });
+
+  contract("Resume all interrupted resumes the listed sessions still marked, keeps a failed one with its reason, and settles the item when none is left", async () => {
+    const subject = makeSubject({
+      notifications: [interrupted(["interrupted", "interrupted", "resumed"])],
+      resumeSession: (id) => (id === "s2" ? "the worktree is gone" : ""),
+    });
+    const first = await subject.gateway.resumeInterrupted("restart");
+    assert.deepEqual(first.results.map((r) => [r.sessionId, r.outcome, r.reason]), [["s1", "resumed", ""], ["s2", "failed", "the worktree is gone"], ["s3", "skipped", ""]]);
+    assert.deepEqual(first.notification.interruptedSessions.map((s) => [s.state, s.reason]), [["resumed", ""], ["failed", "the worktree is gone"], ["resumed", ""]]);
+    assert.equal(first.notification.resolvedAt, null);
+
+    const second = await makeSubject({ notifications: [first.notification] }).gateway.resumeInterrupted("restart");
+    assert.deepEqual(second.results.map((r) => [r.sessionId, r.outcome]), [["s1", "skipped"], ["s2", "resumed"], ["s3", "skipped"]]);
+    assert.ok(second.notification.resolvedAt instanceof Date, "nothing left marked: the item is settled");
+  });
+
+  contract("Resume all interrupted is streamed like any change, and refuses an unknown notification or another kind", async () => {
+    const subject = makeSubject({ notifications: [interrupted(["interrupted"]), makeNotification({ id: "other" })] });
+    const changes = [];
+    const close = subject.gateway.follow((c) => changes.push(c), () => {});
+    await flush();
+    await subject.gateway.resumeInterrupted("restart");
+    await flush();
+    assert.deepEqual(changes.map((c) => c.notifications.map((n) => n.id)), [["restart"]]);
+    close();
+    await assert.rejects(subject.gateway.resumeInterrupted("missing"), Codes.NOTIFICATION_NOT_FOUND);
+    await assert.rejects(subject.gateway.resumeInterrupted("other"), Codes.INVALID_INPUT);
   });
 }
