@@ -4,9 +4,11 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"log/slog"
 	"maps"
 	"os"
 	"path/filepath"
+	"regexp"
 	"sort"
 	"strconv"
 	"strings"
@@ -755,6 +757,12 @@ func (s *Service) checkoutBranch(ctx context.Context, r *run, p *prepared, lg *l
 	ref := "refs/heads/" + b.name
 	if b.remote {
 		ref = "refs/remotes/origin/" + b.name
+		if s.opts.Fetcher != nil {
+			lg.append([]byte("[harness] fetching origin/" + b.name + "\n"))
+			if err := s.opts.Fetcher.FetchServiceBranch(ctx, b.repoID, b.repoRoot, b.name); err != nil {
+				return errors.New(redactUserinfo(err.Error()))
+			}
+		}
 	}
 	sha, err := git.ResolveCommit(ctx, b.repoRoot, ref)
 	if err != nil {
@@ -789,6 +797,28 @@ func (s *Service) checkoutBranch(ctx context.Context, r *run, p *prepared, lg *l
 		}
 	}
 	return nil
+}
+
+// userinfoPattern matches the credentials of a URL, "://user:token@".
+var userinfoPattern = regexp.MustCompile(`://[^/@\s]+@`)
+
+// redactUserinfo drops the credentials a URL in git's message carries.
+func redactUserinfo(s string) string { return userinfoPattern.ReplaceAllString(s, "://") }
+
+// removeServiceWorktree removes the service's service worktree: git's
+// registration and the directory, through the one path this module made. It
+// never fails a delete: what is left is logged.
+func (s *Service) removeServiceWorktree(ctx context.Context, serviceID string) {
+	dir := s.serviceWorktreeDir(serviceID)
+	var err error
+	if s.opts.BranchGit != nil {
+		err = s.opts.BranchGit.RemoveServiceWorktree(ctx, dir)
+	} else {
+		err = os.RemoveAll(dir)
+	}
+	if err != nil {
+		slog.Warn("remove a service worktree", "service", serviceID, "dir", dir, "err", err)
+	}
 }
 
 func shortSHA(sha string) string {
