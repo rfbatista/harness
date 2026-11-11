@@ -5,7 +5,7 @@
 
 /**
  * @typedef {"system"|"agent"} Source
- * @typedef {"review_requested"|"session_waiting"|"task_review"|"session_failed"|"commit_check_off"|"branch_request"|"branch_finding"|"agent"} Kind
+ * @typedef {"review_requested"|"session_waiting"|"task_review"|"session_failed"|"commit_check_off"|"branch_request"|"branch_finding"|"sessions_interrupted"|"agent"} Kind
  * @typedef {"info"|"action"} Level  action: the person has to do something
  *
  * @typedef {object} Notification
@@ -24,6 +24,18 @@
  * @property {Date} createdAt
  * @property {Date | null} readAt      the person read or dismissed it
  * @property {Date | null} resolvedAt  its cause was settled (system kinds only)
+ * @property {InterruptedSession[]} interruptedSessions  a sessions_interrupted item's list; [] for every other kind
+ *
+ * @typedef {"interrupted"|"resumed"|"failed"|"gone"} InterruptedState
+ * @typedef {object} InterruptedSession  one session a restart interrupted, as of the last change
+ * @property {string} sessionId
+ * @property {string} projectId
+ * @property {string} taskId       ""
+ * @property {string} taskTitle    ""
+ * @property {string} agentName
+ * @property {string} link         the session's page, starting with "/"
+ * @property {InterruptedState} state
+ * @property {string} reason       why the last Resume all failed; "" unless state is "failed"
  *
  * @typedef {object} Filter
  * @property {string} [projectId]  "" or absent: every project
@@ -40,7 +52,8 @@
  */
 
 export const SOURCES = Object.freeze(["system", "agent"]);
-export const KINDS = Object.freeze(["review_requested", "session_waiting", "task_review", "session_failed", "commit_check_off", "branch_request", "branch_finding", "agent"]);
+export const KINDS = Object.freeze(["review_requested", "session_waiting", "task_review", "session_failed", "commit_check_off", "branch_request", "branch_finding", "sessions_interrupted", "agent"]);
+export const INTERRUPTED_STATES = Object.freeze(["interrupted", "resumed", "failed", "gone"]);
 export const LEVELS = Object.freeze(["info", "action"]);
 
 /** Unread: neither read nor resolved. */

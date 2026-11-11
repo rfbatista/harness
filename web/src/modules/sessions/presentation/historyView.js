@@ -13,6 +13,7 @@
  * @typedef {object} HistoryEntry
  * @property {string} cursor
  * @property {"user" | "assistant" | "tool_use" | "tool_result" | "system"} kind
+ * @property {Date | null} at
  * @property {string} time   HH:MM, "" without a time
  * @property {string} stamp  the full time, for the tooltip
  * @property {string} day    the calendar day, "" without a time
@@ -77,6 +78,7 @@ export function historyEntry(entry) {
   return {
     cursor: entry.cursor,
     kind: entry.kind,
+    at,
     time: at ? `${two(at.getHours())}:${two(at.getMinutes())}` : "",
     stamp: at ? at.toLocaleString() : "",
     day: at ? dayOf(at) : "",
@@ -86,6 +88,53 @@ export function historyEntry(entry) {
     isError: entry.isError,
     cut: entry.truncated,
     lower: entry.text.toLowerCase(),
+  };
+}
+
+const RESTART_LINES = {
+  interrupted_by_restart: (e) => `Interrupted by a restart while ${String(e.payload?.previous_status ?? "working").replaceAll("_", " ")}`,
+  resumed_with_continue_turn: () => "Resumed with a continue turn",
+};
+
+/**
+ * The lines a restart adds to a session's history, from the session's event
+ * log (contract "Harness server ↔ Web UI — interrupted sessions and Resume
+ * all" §2); every other event type is skipped.
+ * @param {{ seq: number, type: string, at: string, payload?: any }[]} events
+ * @returns {{ key: string, at: Date, text: string }[]}
+ */
+export function restartMarkers(events) {
+  return events
+    .filter((e) => e.type in RESTART_LINES)
+    .map((e) => ({ key: `event:${e.seq}`, at: new Date(e.at), text: RESTART_LINES[e.type](e) }));
+}
+
+/**
+ * The entries with the markers among them by time, as system notes. A marker
+ * older than the first entry shows only once nothing older can load; one newer
+ * than the last shows only at the end of the log.
+ * @param {import("./historyView.js").HistoryEntry[]} entries
+ */
+export function withMarkers(entries, markers, { olderPossible, atEnd }) {
+  if (markers.length === 0) return entries;
+  const out = [];
+  const pending = [...markers].sort((a, b) => a.at - b.at);
+  for (const e of entries) {
+    while (pending.length > 0 && e.at instanceof Date && pending[0].at <= e.at) {
+      const m = pending.shift();
+      if (out.length > 0 || !olderPossible) out.push(markerEntry(m));
+    }
+    out.push(e);
+  }
+  if (atEnd) for (const m of pending) out.push(markerEntry(m));
+  return out;
+}
+
+function markerEntry(m) {
+  return {
+    cursor: `marker:${m.key}`, kind: "system", at: m.at,
+    time: `${two(m.at.getHours())}:${two(m.at.getMinutes())}`, stamp: m.at.toLocaleString(), day: dayOf(m.at),
+    text: m.text, html: "", tool: "", isError: false, cut: false, lower: m.text.toLowerCase(),
   };
 }
 

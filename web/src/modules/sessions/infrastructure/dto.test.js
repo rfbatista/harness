@@ -29,6 +29,11 @@ test("maps the wire format to a frozen domain session", () => {
   assert.equal("cost_usd" in s, false, "fields the UI does not use stay behind");
 });
 
+test("a session carries its interrupted mark, null without one", () => {
+  assert.equal(toSession(wire).interruptedAt, null);
+  assert.equal(toSession({ ...wire, status: "stopped", interrupted_at: "2026-11-10T15:00:00Z" }).interruptedAt.toISOString(), "2026-11-10T15:00:00.000Z");
+});
+
 test("a session carries how many interviews and questions are open, none when the server says nothing", () => {
   assert.deepEqual([toSession(wire).openInterviewCount, toSession(wire).openQuestionCount], [0, 0]);
   const asking = toSession({ ...wire, open_interview_count: 2, open_question_count: 5 });

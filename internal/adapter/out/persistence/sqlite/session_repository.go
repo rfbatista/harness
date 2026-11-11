@@ -241,6 +241,12 @@ func (r *SessionRepository) RecordEvent(sessionID string, ev ports.SessionEventR
 				cols[k] = v
 			}
 		}
+		switch {
+		case ev.Interrupted != nil:
+			cols["interrupted_at_ms"] = ev.Interrupted.UnixMilli()
+		case ev.ClearInterrupted:
+			cols["interrupted_at_ms"] = 0
+		}
 		if len(cols) == 0 {
 			return nil
 		}
@@ -415,6 +421,12 @@ func (r *SessionRepository) ListEvents(sessionID string, fromSeq int64) ([]ports
 		})
 	}
 	return out, nil
+}
+
+func (r *SessionRepository) LastEventSeq(sessionID string) (int64, error) {
+	var last int64
+	err := r.db.Model(&SessionEventModel{}).Where("session_id = ?", sessionID).Select("COALESCE(MAX(seq), 0)").Scan(&last).Error
+	return last, err
 }
 
 // ActivityByProject answers each project's live session count and newest

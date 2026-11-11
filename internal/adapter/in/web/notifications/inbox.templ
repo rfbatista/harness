@@ -70,7 +70,7 @@ templ InboxPage(frame shell.Frame, v View) {
 						<ul role="list" class="[ notification-list ]" x-show="hasRows">
 							<template x-for="row in rows" x-bind:key="row.id">
 								<li>
-									@shell.NotificationLiveRow()
+									@shell.NotificationLiveRow(true)
 								</li>
 							</template>
 						</ul>
@@ -100,7 +100,19 @@ templ serverRow(row Row) {
 				}
 				<time datetime={ row.At }>{ row.Age }</time>
 			</p>
-			if row.Body != "" {
+			if len(row.Sessions) > 0 {
+				<ul role="list" class="[ interrupted-sessions ]">
+					for _, s := range row.Sessions {
+						<li data-state={ s.State }>
+							<a href={ templ.SafeURL(s.Href) }>{ s.Label }</a>
+							<span class="[ state ]">{ s.State }</span>
+							if s.Reason != "" {
+								<span class="[ reason ]">{ s.Reason }</span>
+							}
+						</li>
+					}
+				</ul>
+			} else if row.Body != "" {
 				<p class="[ body ]">{ row.Body }</p>
 			}
 		</div>

@@ -477,10 +477,19 @@ type SessionEvent struct {
 	// ID, Reason and Message are a "person_terminal_ended" event's: which
 	// terminal of the person ended, why (exited, root_gone, server_stopped)
 	// and the sentence its pane shows. It is live only, never persisted.
-	ID      string    `json:"id,omitempty"`
-	Reason  string    `json:"reason,omitempty"`
-	Message string    `json:"message,omitempty"`
-	At      time.Time `json:"at"`
+	ID      string `json:"id,omitempty"`
+	Reason  string `json:"reason,omitempty"`
+	Message string `json:"message,omitempty"`
+	// PreviousStatus, LastAction and ExpiredBranchRequests are an
+	// "interrupted_by_restart" event's: the status the session was stored in,
+	// its last recorded action and how many branch requests expired with it.
+	// InterruptedAt is a "resumed_with_continue_turn" event's: the mark it
+	// cleared.
+	PreviousStatus        domain.SessionStatus `json:"previous_status,omitempty"`
+	LastAction            string               `json:"last_action,omitempty"`
+	ExpiredBranchRequests *int                 `json:"expired_branch_requests,omitempty"`
+	InterruptedAt         *time.Time           `json:"interrupted_at,omitempty"`
+	At                    time.Time            `json:"at"`
 }
 
 type Usage struct {

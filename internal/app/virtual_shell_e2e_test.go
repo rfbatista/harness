@@ -109,6 +109,7 @@ func (e *shellE2E) serve() {
 		Sessions: e.orch, Planning: e.plan, TaskResources: e.plan, TaskComments: e.plan, Artifacts: e.art, Shells: e.shells,
 		RepositoryArchitectures: e.cat.RepositoryArchitectures, ArchitectureRules: e.rules, BranchGate: e.gate, SessionBranches: e.watch, WorktreeGit: e.wgit,
 		Projects: e.cat.Projects, DesignSystems: e.cat.DesignSystems, RepositoryAgents: e.repoAgents,
+		Notifications: e.notes, InterruptedResumer: e.notes,
 	})))
 	mux.Handle(mcpsession.PathPrefix, mcpsession.TaskHandler(sessionTaskTools(e.cat, e.orch, e.plan, e.sessions, e.art, e.channel, nil, nil, tooling.WithBranchPush(e.gate))))
 	e.srv = httptest.NewServer(mux)

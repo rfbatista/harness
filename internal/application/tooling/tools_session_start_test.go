@@ -279,3 +279,18 @@ func TestStartTaskSession_OffersProductMode(t *testing.T) {
 		}
 	}
 }
+
+// A session an agent starts with start_task_session runs on the server's own
+// terminal host, in whatever mode: the kind a restart interrupts and a resume
+// brings back (ADR 0082).
+func TestStartTaskSession_EveryModeStartsAServerRunSession(t *testing.T) {
+	for _, mode := range []string{"", "architect", "product", "implement", "design"} {
+		start, starter, _ := startFixture(t, false)
+		if _, err := start(map[string]any{"prompt": "go", "mode": mode}); err != nil {
+			t.Fatalf("mode %q: %v", mode, err)
+		}
+		if got := starter.got[0].RunsOn; got != domain.RunnerServer {
+			t.Errorf("mode %q starts on %q, want the server", mode, got)
+		}
+	}
+}

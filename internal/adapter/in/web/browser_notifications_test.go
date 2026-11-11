@@ -35,6 +35,7 @@ type fakeInbox struct {
 	hold     chan struct{}
 	posts    []map[string]any
 	next     int
+	resume   *interruptedResume
 }
 
 func (f *fakeInbox) unread() int {
@@ -179,6 +180,12 @@ type inboxHarness struct {
 
 func newInboxHarness(t *testing.T, list []*domain.Notification) *inboxHarness {
 	t.Helper()
+	return newInboxHarnessWith(t, list, nil)
+}
+
+// newInboxHarnessWith is newInboxHarness with the web deps tweaked first.
+func newInboxHarnessWith(t *testing.T, list []*domain.Notification, tweak func(*Deps)) *inboxHarness {
+	t.Helper()
 	assets, err := NewAssets()
 	if err != nil {
 		t.Fatal(err)
@@ -191,11 +198,15 @@ func newInboxHarness(t *testing.T, list []*domain.Notification) *inboxHarness {
 	deps := railWorld()
 	deps.Projects = fakeProjects{[]*domain.Project{{ID: "p1", Name: "harness"}, {ID: "p2", Name: "tui"}}}
 	deps.Notifications = inbox
+	if tweak != nil {
+		tweak(&deps)
+	}
 	mux := http.NewServeMux()
 	mux.Handle("/api/events", &sseFeed{})
 	mux.Handle("/api/notifications/events", inbox.stream)
 	mux.Handle("/api/notifications", inbox)
 	mux.Handle("/api/notifications/read", inbox)
+	mux.HandleFunc("POST /api/notifications/{id}/resume_interrupted", inbox.resumeInterrupted)
 	mux.Handle("/api/", http.NotFoundHandler())
 	mux.Handle("/", NewHandler(deps, assets, nil))
 	srv := newBrowserServer(mux)

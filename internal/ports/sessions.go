@@ -145,6 +145,8 @@ type SessionRepository interface {
 	// it changes on the session, all or nothing.
 	RecordEvent(sessionID string, ev SessionEventRecord) error
 	ListEvents(sessionID string, fromSeq int64) ([]StoredEvent, error)
+	// LastEventSeq is the newest seq on the session's log; 0 when it has none.
+	LastEventSeq(sessionID string) (int64, error)
 }
 
 // SessionEventRecord is one event of a session's log as stored, with what it
@@ -156,6 +158,10 @@ type SessionEventRecord struct {
 	Payload []byte
 	Metrics *SessionMetrics
 	Status  domain.SessionStatus
+	// Interrupted sets the interrupted mark to this time; ClearInterrupted
+	// removes it (ADR 0082). The mark moves with the event that records why.
+	Interrupted      *time.Time
+	ClearInterrupted bool
 }
 
 // SessionMetrics are a session's running totals and latest activity.

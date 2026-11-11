@@ -41,6 +41,10 @@ var statusViews = map[domain.SessionStatus]StatusView{
 	domain.SessionFailed:          {"failed", "failed"},
 }
 
+// interruptedWord is the chip of a stopped session a restart interrupted. The
+// browser's INTERRUPTED_WORD (view.js) is the same.
+const interruptedWord = "interrupted by restart"
+
 // statusOf reads pending approvals before the status: a running session with
 // a tool call to approve is waiting on the developer. Next come open
 // interviews, whatever the status: approval, then questions, then your turn.
@@ -50,6 +54,10 @@ func statusOf(s *domain.Session) StatusView {
 		return statusViews[domain.SessionWaitingApproval]
 	}
 	if v, ok := statusViews[s.Status]; ok {
+		// A stopped session a restart interrupted says so beside its dot (ADR 0082).
+		if s.Status == domain.SessionStopped && s.InterruptedAt != nil {
+			v.Word = interruptedWord
+		}
 		// Only the word is the interview's: the dot stays the session's own, so a
 		// running agent keeps its running dot beside the chip.
 		if live && s.OpenInterviewCount > 0 {
@@ -662,7 +670,7 @@ func joinFacts(facts []string) string {
 	return strings.Join(kept, " · ")
 }
 
-var chipTones = map[string]string{"thinking": "signal", "your turn": "attention", "approval": "attention", "questions": "attention", "failed": "danger"}
+var chipTones = map[string]string{"thinking": "signal", "your turn": "attention", "approval": "attention", "questions": "attention", interruptedWord: "attention", "failed": "danger"}
 
 // chipOf is the row's status chip: nil for running and done.
 func chipOf(st StatusView) *Chip {

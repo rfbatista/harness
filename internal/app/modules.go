@@ -743,7 +743,9 @@ func newRuntimeConfig(cfg Config, bin ports.ManagedClaudeBin, home claudehome.Ho
 // running died with the previous server. On shutdown each is recorded as
 // stopped before the host kills it, so it does not read as failed. Its hooks
 // run inside the host's: the host was built first.
-func registerServerSessions(lc fx.Lifecycle, svc *orchestration.Service) {
+// The inbox is a parameter only so that it is built, and subscribed to the bus,
+// before the boot announces the interrupted sessions.
+func registerServerSessions(lc fx.Lifecycle, svc *orchestration.Service, _ optionalNotifications) {
 	lc.Append(fx.Hook{
 		OnStart: func(ctx context.Context) error {
 			// Every live worktree is guarded again before sessions are
@@ -755,13 +757,34 @@ func registerServerSessions(lc fx.Lifecycle, svc *orchestration.Service) {
 			if n > 0 {
 				slog.Info("stopped server sessions left running by a previous run", "count", n)
 			}
-			return err
+			if err != nil {
+				return err
+			}
+			// The inbox lists every session still marked, so the person
+			// finds them in one place (ADR 0083).
+			if err := svc.AnnounceInterrupted(ctx); err != nil {
+				slog.Warn("announce the interrupted sessions", "err", err)
+			}
+			return nil
 		},
 		OnStop: func(ctx context.Context) error {
 			svc.StopServerSessions(ctx)
 			return nil
 		},
 	})
+}
+
+// pendingBranchRequests counts a session's pending branch requests for the
+// orchestration, which records how many expire with an interrupted session.
+type pendingBranchRequests struct{ ports.BranchRequestStore }
+
+func (p pendingBranchRequests) PendingBranchRequests(ctx context.Context, sessionID string) int {
+	pending, err := p.List(ctx, domain.BranchRequestFilter{SessionID: sessionID, State: domain.BranchRequestPending})
+	if err != nil {
+		slog.Warn("count a session's pending branch requests", "session", sessionID, "err", err)
+		return 0
+	}
+	return len(pending)
 }
 
 // newClaudeManager is the headless runtime: every agent claude runs from the
@@ -960,6 +983,7 @@ func newOrchestrationService(
 	baseBranches *workspaces.BaseBranches,
 	assignments *repoagents.Service,
 	agentCatalog *agentcatalog.Catalog,
+	branchRequests ports.BranchRequestStore,
 ) *orchestration.Service {
 	orchCatalog := orchestration.Catalog{
 		Projects:     cat.Projects,
@@ -1028,6 +1052,7 @@ func newOrchestrationService(
 	svc.TranscriptReader = transcriptReader
 	svc.Terminals = terminals
 	svc.Events = cat.Bus
+	svc.BranchRequests = pendingBranchRequests{branchRequests}
 	toolsDir, _ := dataDir(cfg, "tools")
 	userHome, _ := os.UserHomeDir()
 	allow := sandboxAllowlist(allowSources{

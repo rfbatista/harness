@@ -38,7 +38,30 @@ export function bellLabel(count) {
  * @property {string} at           ISO time, for <time datetime>
  * @property {string} markLabel    the row's Mark read button, named for the row
  * @property {string} label        the link's accessible name
+ * @property {SessionLine[]} sessions  a sessions_interrupted item's list; [] for the others
+ * @property {boolean} hasSessions
+ * @property {boolean} canResumeAll    a sessions_interrupted item whose cause is not settled
+ *
+ * @typedef {object} SessionLine
+ * @property {string} key
+ * @property {string} label        "Ship the thing · go-developer"
+ * @property {string} href
+ * @property {string} state        interrupted | resumed | failed | gone
+ * @property {string} reason       why the last resume failed, "" otherwise
+ * @property {boolean} hasReason
  */
+
+/** One session of a sessions_interrupted item: who it was, and where it stands. */
+function sessionLine(s) {
+  return {
+    key: s.sessionId,
+    label: [s.taskTitle || "No task", s.agentName].filter(Boolean).join(" · "),
+    href: s.link,
+    state: s.state,
+    reason: s.reason,
+    hasReason: s.reason !== "",
+  };
+}
 
 /**
  * @param {import("../domain/notification.js").Notification} n
@@ -66,6 +89,9 @@ export function toRow(n, now) {
     age: relativeTime(n.createdAt, now),
     at: n.createdAt.toISOString(),
     markLabel: `Mark “${n.title}” read`,
+    sessions: n.interruptedSessions.map(sessionLine),
+    hasSessions: n.interruptedSessions.length > 0,
+    canResumeAll: n.kind === "sessions_interrupted" && !settled,
     label: [unread ? "Unread." : "", levelLabel ? `${levelLabel}.` : "", n.title, where ? `— ${where}` : ""].filter(Boolean).join(" "),
   };
 }

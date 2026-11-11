@@ -69,6 +69,9 @@ type Services struct {
 	// Notifications is the person's inbox across every project; nil answers
 	// 503.
 	Notifications ports.Notifications
+	// InterruptedResumer is Resume all interrupted, the action of the inbox's
+	// sessions_interrupted item; nil answers 503.
+	InterruptedResumer ports.InterruptedResumer
 	// AgentBoard is the Agent board's seed and live session feed; nil
 	// answers 503.
 	AgentBoard ports.AgentBoard
@@ -181,6 +184,7 @@ type Handler struct {
 	merges         ports.BranchMerger
 	branchNames    ports.BranchNameChecker
 	notifications  ports.Notifications
+	interrupted    ports.InterruptedResumer
 	agentBoard     ports.AgentBoard
 	interviews     ports.Interviews
 	usage          ports.UsageReader
@@ -260,6 +264,7 @@ func NewHandler(s Services) *Handler {
 		branchGate:      s.BranchGate,
 		sessionBranches: s.SessionBranches,
 		notifications:   s.Notifications,
+		interrupted:     s.InterruptedResumer,
 		agentBoard:      s.AgentBoard,
 		interviews:      s.Interviews,
 		usage:           s.Usage,

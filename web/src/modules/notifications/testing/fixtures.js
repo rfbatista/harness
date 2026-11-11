@@ -20,6 +20,7 @@ export function makeNotification(overrides = {}) {
     createdAt: N0,
     readAt: null,
     resolvedAt: null,
+    interruptedSessions: [],
     ...overrides,
   });
 }
@@ -42,6 +43,9 @@ export function notificationDTO(n) {
     created_at: n.createdAt.toISOString(),
     read_at: n.readAt?.toISOString(),
     resolved_at: n.resolvedAt?.toISOString(),
+    interrupted_sessions: n.interruptedSessions?.length
+      ? n.interruptedSessions.map((s) => ({ session_id: s.sessionId, project_id: s.projectId || undefined, task_id: s.taskId || undefined, task_title: s.taskTitle || undefined, agent_name: s.agentName, link: s.link, state: s.state, reason: s.reason || undefined }))
+      : undefined,
   };
 }
 

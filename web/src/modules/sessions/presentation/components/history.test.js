@@ -26,8 +26,9 @@ function memoryStorage(values = {}) {
   return { getItem: (k) => map.get(k) ?? null, setItem: (k, v) => map.set(k, String(v)), map };
 }
 
-async function make({ transcripts = { s1: numbered(5) }, live = false, visible = () => true, storage = memoryStorage(), clipboard = null, agent } = {}) {
+async function make({ transcripts = { s1: numbered(5) }, live = false, visible = () => true, storage = memoryStorage(), clipboard = null, agent, events = [] } = {}) {
   const memory = memoryTranscripts({ transcripts });
+  for (const [type, fields] of events) memory.logEvent("s1", type, fields);
   const timers = manualTimers();
   const log = fakeLog();
   const el = { querySelector: (selector) => (selector === "[role=log]" ? log : null) };
@@ -269,4 +270,19 @@ test("a cursor the server no longer takes starts History again from the newest p
   memory.failNext(new StructuredError(Codes.INVALID_INPUT, "bad cursor", 400));
   await instance.older();
   assert.deepEqual([instance.showsError, instance.entries.length, instance.hasOlder, memory.calls.at(-1).before], [false, 200, true, undefined]);
+});
+
+test("a restart's lines stand among the conversation by time, and a later one arrives with the catch-up", async () => {
+  const at = (m) => new Date(2026, 10, 10, 9, m);
+  const { instance, memory, timers } = await make({
+    live: true,
+    transcripts: { s1: [{ kind: "user", text: "go", at: at(1) }, { kind: "assistant", text: "working", at: at(2) }] },
+    events: [["interrupted_by_restart", { at: at(3).toISOString(), previous_status: "thinking" }]],
+  });
+  const lines = () => instance.items.filter((i) => i.type === "system").map((i) => i.label);
+  assert.deepEqual(lines(), ["Interrupted by a restart while thinking"]);
+  memory.logEvent("s1", "resumed_with_continue_turn", { at: at(4).toISOString() });
+  timers.tick();
+  await flush();
+  assert.deepEqual(lines(), ["Interrupted by a restart while thinking", "Resumed with a continue turn"]);
 });

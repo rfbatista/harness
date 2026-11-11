@@ -82,9 +82,10 @@ func registerHTTPServer(lc fx.Lifecycle, cfg Config, cat catalog.Catalog, appRun
 		notes      ports.Notifications
 		noteReader ports.NotificationReader
 		notifier   ports.Notifier
+		resumeAll  ports.InterruptedResumer
 	)
 	if inbox.Service != nil {
-		notes, noteReader, notifier = inbox.Service, inbox.Service, inbox.Service
+		notes, noteReader, notifier, resumeAll = inbox.Service, inbox.Service, inbox.Service, inbox.Service
 	}
 
 	// Same for the Agent board.
@@ -144,20 +145,21 @@ func registerHTTPServer(lc fx.Lifecycle, cfg Config, cat catalog.Catalog, appRun
 		Artifacts:       art,
 		TaskChannel:     channel,
 		// What a person adds to a task: files, images, audio, links, comments.
-		TaskResources:    plan,
-		TaskComments:     plan,
-		TaskArchive:      plan,
-		PullRequests:     prs,
-		PullRequestBases: prs,
-		Merges:           merges,
-		BranchNames:      branchNames,
-		Notifications:    notes,
-		AgentBoard:       agentBoard,
-		Interviews:       interviewsPort,
-		Usage:            usageSvc,
-		LiveCalls:        usageSvc,
-		Code:             code,
-		WorktreeGit:      worktreeGit,
+		TaskResources:      plan,
+		TaskComments:       plan,
+		TaskArchive:        plan,
+		PullRequests:       prs,
+		PullRequestBases:   prs,
+		Merges:             merges,
+		BranchNames:        branchNames,
+		Notifications:      notes,
+		InterruptedResumer: resumeAll,
+		AgentBoard:         agentBoard,
+		Interviews:         interviewsPort,
+		Usage:              usageSvc,
+		LiveCalls:          usageSvc,
+		Code:               code,
+		WorktreeGit:        worktreeGit,
 		// A session's virtual file system, for the Files view.
 		SessionFiles: fsys,
 		// The git credentials every remote operation authenticates with.

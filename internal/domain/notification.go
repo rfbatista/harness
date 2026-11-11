@@ -25,7 +25,10 @@ const (
 	NotificationCommitCheckOff  NotificationKind = "commit_check_off"
 	NotificationBranchRequest   NotificationKind = "branch_request"
 	NotificationBranchFinding   NotificationKind = "branch_finding"
-	NotificationAgent           NotificationKind = "agent"
+	// NotificationSessionsInterrupted lists the sessions a restart interrupted
+	// mid-turn, with a Resume all interrupted action (ADR 0083).
+	NotificationSessionsInterrupted NotificationKind = "sessions_interrupted"
+	NotificationAgent               NotificationKind = "agent"
 )
 
 // NotificationLevel is how much a notification asks of the person: action
@@ -74,7 +77,44 @@ type Notification struct {
 	// so a cause that repeats while unresolved adds nothing. Agent
 	// notifications have none.
 	CauseKey string `json:"-"`
+	// InterruptedSessions is the list of a sessions_interrupted notification:
+	// the sessions it lists, each with its state as of this read. Stored with
+	// the notification: which sessions, and why the last resume of one failed.
+	InterruptedSessions []InterruptedSession `json:"interrupted_sessions,omitempty"`
 }
+
+// InterruptedSessionState is where one listed session stands.
+type InterruptedSessionState string
+
+const (
+	// InterruptedSessionInterrupted: the session still carries the mark.
+	InterruptedSessionInterrupted InterruptedSessionState = "interrupted"
+	// InterruptedSessionResumed: a resume cleared the mark.
+	InterruptedSessionResumed InterruptedSessionState = "resumed"
+	// InterruptedSessionFailed: the last Resume all could not resume it; it
+	// still carries the mark.
+	InterruptedSessionFailed InterruptedSessionState = "failed"
+	// InterruptedSessionGone: the session was deleted.
+	InterruptedSessionGone InterruptedSessionState = "gone"
+)
+
+// InterruptedSession is one entry of a sessions_interrupted notification's
+// list (contract "Harness server ↔ Web UI — interrupted sessions and Resume
+// all" §4). State and TaskTitle are filled when the notification is read.
+type InterruptedSession struct {
+	SessionID string                  `json:"session_id"`
+	ProjectID string                  `json:"project_id"`
+	TaskID    string                  `json:"task_id,omitempty"`
+	TaskTitle string                  `json:"task_title,omitempty"`
+	AgentName string                  `json:"agent_name"`
+	Link      string                  `json:"link"`
+	State     InterruptedSessionState `json:"state"`
+	Reason    string                  `json:"reason,omitempty"`
+}
+
+// SessionsInterruptedCauseKey is the cause of every sessions_interrupted
+// notification: only one is open at a time.
+const SessionsInterruptedCauseKey = "sessions_interrupted"
 
 // Unread says whether the person still has to see it.
 func (n *Notification) Unread() bool { return n.ReadAt == nil && n.ResolvedAt == nil }
