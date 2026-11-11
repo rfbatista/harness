@@ -60,7 +60,7 @@ func TestSessionModelsAreSetOnTheModelsPage_EndToEnd(t *testing.T) {
 		waitUntil(implementation+` === 'haiku'`),
 		waitUntil(architect+` === 'opus'`),
 	)
-	if got := cat.Settings.Setting(domain.SettingModelImplementation); got != "haiku" {
+	if got := cat.Settings.Setting(domain.ModeModelKey(domain.SessionModeImplement)); got != "haiku" {
 		t.Errorf("stored implementation model = %q, want haiku", got)
 	}
 	if e := b.jsErrors(); len(e) > 0 {

@@ -32,6 +32,11 @@ func (s *Service) StartInteractive(ctx context.Context, req InteractiveRequest) 
 	if req.ProjectID == "" {
 		return nil, ports.AgentSpec{}, &domain.StructuredError{Code: "INVALID_INPUT", Message: "project_id is required"}
 	}
+	if req.Model != "" {
+		if err := domain.ValidModelChoice("model", req.Model); err != nil {
+			return nil, ports.AgentSpec{}, err
+		}
+	}
 	// The mode comes first: only a product-mode session may start with no
 	// task, on its project alone (ADR 0016).
 	mode, err := domain.ParseSessionMode(req.Mode)
@@ -82,7 +87,7 @@ func (s *Service) StartInteractive(ctx context.Context, req InteractiveRequest) 
 	// A task can hold several sessions at once, so the branch carries part of
 	// the session id: two sessions on one task must never race for one branch.
 	// A session with no task is named after the product work on its project.
-	model := s.sessionModel(mode, req.ParentSessionID, req.Model)
+	model := s.sessionModel(mode, req.Model)
 	id := llmkit.NewSessionID()
 	task, branch := "Product: "+project.Name, defaultBranchName("product "+project.Name)
 	if designSystem != nil {
@@ -901,19 +906,14 @@ func (s *Service) agentsMoveDocuments() bool {
 }
 
 // sessionModel is the model a new session starts with: the one its start
-// names, else its tier's from the settings (domain.ResolveSessionModel).
-func (s *Service) sessionModel(mode domain.SessionMode, parentSessionID, named string) string {
-	if named != "" {
-		return named
-	}
-	var architect, implementation string
+// names, else its mode's from the settings (domain.ResolveSessionModel). Who
+// started the session does not matter (ADR 0084).
+func (s *Service) sessionModel(mode domain.SessionMode, named string) string {
+	var stored string
 	if s.Settings != nil {
-		architect = s.Settings.Setting(domain.SettingModelArchitect)
-		implementation = s.Settings.Setting(domain.SettingModelImplementation)
+		stored = s.Settings.Setting(domain.ModeModelKey(mode))
 	}
-	return domain.ResolveSessionModel(mode, parentSessionID != "",
-		domain.TierModel(architect, domain.DefaultArchitectModel),
-		domain.TierModel(implementation, domain.DefaultImplementationModel))
+	return domain.ResolveSessionModel(mode, named, stored)
 }
 
 // UseBranchNames makes a start with a branch name check it first.

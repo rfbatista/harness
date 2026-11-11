@@ -23,6 +23,7 @@ type fakeSettings map[string]string
 func (f fakeSettings) All() (map[string]string, error) { return f, nil }
 func (f fakeSettings) Get(key string) (string, error)  { return f[key], nil }
 func (f fakeSettings) Set(key, value string) error     { f[key] = value; return nil }
+func (f fakeSettings) Delete(key string) error         { delete(f, key); return nil }
 
 // fakeWorktree records Add/Remove/DeleteBranch calls and can inject errors.
 type fakeWorktree struct {

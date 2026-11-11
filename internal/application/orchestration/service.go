@@ -229,7 +229,7 @@ type Service struct {
 	// IndexBuilds says when a repository index build runs on a checkout, so
 	// a session start does not copy an index being written. Nil: never.
 	IndexBuilds ports.RepositoryIndexBuilds
-	// Settings holds the architect and implementation models a new session
+	// Settings holds the mode models (ADR 0084) a new session
 	// starts with when its start names none. Nil: the built-in ones.
 	Settings ports.SettingsReader
 	// Sandbox is the agent sandbox step of a session start (ADR 0017). Nil:

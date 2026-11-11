@@ -126,6 +126,8 @@ type SettingsRepository interface {
 	All() (map[string]string, error)
 	Get(key string) (string, error)
 	Set(key, value string) error
+	// Delete removes a key; a key that is not stored is not an error.
+	Delete(key string) error
 }
 
 // MCPServerRepository persists MCP server configurations.

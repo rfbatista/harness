@@ -138,3 +138,78 @@ func TestUnavailableWithoutRepository(t *testing.T) {
 		t.Fatal("UpdateSettings without a repository must fail")
 	}
 }
+
+// modelMigrationService is a service over a store holding the given rows, as
+// an upgraded server finds it at boot.
+func modelMigrationService(t *testing.T, rows map[string]string) (*Service, ports.SettingsRepository) {
+	t.Helper()
+	db, err := sqlite.Open(":memory:")
+	if err != nil {
+		t.Fatal(err)
+	}
+	repo := sqlite.NewSettingsRepository(db)
+	for k, v := range rows {
+		if err := repo.Set(k, v); err != nil {
+			t.Fatal(err)
+		}
+	}
+	return NewService(repo, nil), repo
+}
+
+func TestMigrateModelSettings_MovesTheSavedValuesToTheirModes(t *testing.T) {
+	svc, _ := modelMigrationService(t, map[string]string{
+		"models.claude.architect":      "fable",
+		"models.claude.implementation": "haiku",
+		"other.key":                    "v",
+	})
+	if err := svc.MigrateModelSettings(); err != nil {
+		t.Fatal(err)
+	}
+	all, _ := svc.GetSettings()
+	want := map[string]string{
+		"models.claude.mode.architect": "fable",
+		"models.claude.mode.implement": "haiku",
+		"other.key":                    "v",
+	}
+	if len(all) != len(want) {
+		t.Fatalf("settings = %v, want %v", all, want)
+	}
+	for k, v := range want {
+		if all[k] != v {
+			t.Errorf("settings[%q] = %q, want %q (all: %v)", k, all[k], v, all)
+		}
+	}
+	// A second boot changes nothing.
+	if err := svc.MigrateModelSettings(); err != nil {
+		t.Fatal(err)
+	}
+	again, _ := svc.GetSettings()
+	if len(again) != len(want) || again["models.claude.mode.architect"] != "fable" {
+		t.Errorf("settings after a second migration = %v, want %v", again, want)
+	}
+}
+
+func TestMigrateModelSettings_NeverOverwritesANewKeyButStillDeletesTheOldOne(t *testing.T) {
+	svc, _ := modelMigrationService(t, map[string]string{
+		"models.claude.architect":      "fable",
+		"models.claude.mode.architect": "sonnet",
+	})
+	if err := svc.MigrateModelSettings(); err != nil {
+		t.Fatal(err)
+	}
+	all, _ := svc.GetSettings()
+	if len(all) != 1 || all["models.claude.mode.architect"] != "sonnet" {
+		t.Errorf("settings = %v, want only the architect mode kept at sonnet", all)
+	}
+}
+
+func TestMigrateModelSettings_ChangesNothingWithoutOldKeys(t *testing.T) {
+	svc, _ := modelMigrationService(t, map[string]string{"models.claude.mode.design": "haiku"})
+	if err := svc.MigrateModelSettings(); err != nil {
+		t.Fatal(err)
+	}
+	all, _ := svc.GetSettings()
+	if len(all) != 1 || all["models.claude.mode.design"] != "haiku" {
+		t.Errorf("settings = %v, want the design row alone", all)
+	}
+}
