@@ -243,3 +243,340 @@ func TestCatalogMCPServers_TestHintsAtWhyItFailed(t *testing.T) {
 	f.prober.result = mcpserver.ProbeResult{}
 	f.post("/api/test_catalog_mcp_server", map[string]any{"server": map[string]any{"name": "x", "transport": "stdio"}}, 400)
 }
+
+func TestCatalogMCPServers_SaveProbesAndKeepsTheKnownToolsApartFromTheServerFile(t *testing.T) {
+	f := catalogWithSkills(t)
+	f.prober.result = mcpserver.ProbeResult{Status: "ok", ToolNames: []string{"create_issue", "search_code"}}
+	out := f.post("/api/save_catalog_mcp_server", map[string]any{"server": stdioServer("github"), "disabled_tools": []string{"create_issue"}}, 200)
+	if probe := out["probe"].(map[string]any); probe["status"] != "ok" {
+		t.Fatalf("probe = %v", probe)
+	}
+	gh := byName(t, f.get("/api/get_agent_catalog", 200)["mcp_servers"], "github")
+	if got := strList(gh["known_tools"]); !reflect.DeepEqual(got, []string{"create_issue", "search_code"}) {
+		t.Fatalf("known_tools = %v", gh["known_tools"])
+	}
+	if s, _ := gh["probed_at"].(string); s == "" {
+		t.Fatalf("probed_at = %v", gh["probed_at"])
+	}
+	if got := strList(gh["disabled_tools"]); !reflect.DeepEqual(got, []string{"create_issue"}) {
+		t.Fatalf("disabled_tools = %v", gh["disabled_tools"])
+	}
+	if file := f.read("mcp-servers.json"); strings.Contains(file, "create_issue") || strings.Contains(file, "known_tools") {
+		t.Fatalf("the tool data leaked into mcp-servers.json: %s", file)
+	}
+
+	// Absent keeps the default, [] clears it.
+	f.post("/api/save_catalog_mcp_server", map[string]any{"previous_name": "github", "server": stdioServer("github")}, 200)
+	gh = byName(t, f.get("/api/get_agent_catalog", 200)["mcp_servers"], "github")
+	if got := strList(gh["disabled_tools"]); !reflect.DeepEqual(got, []string{"create_issue"}) {
+		t.Fatalf("an absent list changed the default: %v", got)
+	}
+	f.post("/api/save_catalog_mcp_server", map[string]any{"previous_name": "github", "server": stdioServer("github"), "disabled_tools": []string{}}, 200)
+	gh = byName(t, f.get("/api/get_agent_catalog", 200)["mcp_servers"], "github")
+	if got := strList(gh["disabled_tools"]); len(got) != 0 {
+		t.Fatalf("an empty list did not clear the default: %v", got)
+	}
+}
+
+func TestCatalogMCPServers_AFailedProbeOnSaveKeepsTheServerAndItsLastKnownTools(t *testing.T) {
+	f := catalogWithSkills(t)
+	f.env["NB_TOKEN"] = "tok-123456-secret"
+	f.post("/api/save_catalog_mcp_server", map[string]any{"server": stdioServer("github")}, 200)
+	gh := byName(t, f.get("/api/get_agent_catalog", 200)["mcp_servers"], "github")
+	if gh["known_tools"] != nil || gh["probed_at"] != nil || len(strList(gh["disabled_tools"])) != 0 {
+		t.Fatalf("a never probed server = %v", gh)
+	}
+
+	f.prober.result = mcpserver.ProbeResult{Status: "ok", ToolNames: []string{"a"}}
+	f.post("/api/save_catalog_mcp_server", map[string]any{"previous_name": "github", "server": stdioServer("github")}, 200)
+	before := byName(t, f.get("/api/get_agent_catalog", 200)["mcp_servers"], "github")
+
+	f.prober.result = mcpserver.ProbeResult{Status: "error", Error: "initialize: bad token tok-123456-secret"}
+	out := f.post("/api/save_catalog_mcp_server", map[string]any{"previous_name": "github", "server": stdioServer("github")}, 200)
+	probe := out["probe"].(map[string]any)
+	if probe["status"] != "error" || strings.Contains(probe["error"].(string), "tok-123456-secret") {
+		t.Fatalf("probe = %v", probe)
+	}
+	after := byName(t, f.get("/api/get_agent_catalog", 200)["mcp_servers"], "github")
+	if !reflect.DeepEqual(after["known_tools"], before["known_tools"]) || after["probed_at"] != before["probed_at"] {
+		t.Fatalf("a failed probe changed the tools: before %v after %v", before, after)
+	}
+}
+
+func TestCatalogMCPServers_RefreshProbesASavedServerAndWritesOnlyTheToolData(t *testing.T) {
+	f := catalogWithSkills(t)
+	f.post("/api/save_catalog_mcp_server", map[string]any{"server": stdioServer("github")}, 200)
+	file := f.read("mcp-servers.json")
+
+	f.prober.result = mcpserver.ProbeResult{Status: "ok", ToolNames: []string{"a", "b"}}
+	out := f.post("/api/refresh_catalog_mcp_server_tools", map[string]any{"name": "github"}, 200)
+	if out["probe"].(map[string]any)["status"] != "ok" {
+		t.Fatalf("answer = %v", out)
+	}
+	srv := out["server"].(map[string]any)
+	if srv["name"] != "github" || !reflect.DeepEqual(strList(srv["known_tools"]), []string{"a", "b"}) {
+		t.Fatalf("server = %v", srv)
+	}
+	if f.read("mcp-servers.json") != file {
+		t.Fatal("a refresh rewrote mcp-servers.json")
+	}
+
+	f.prober.result = mcpserver.ProbeResult{Status: "ok", ToolNames: []string{}}
+	out = f.post("/api/refresh_catalog_mcp_server_tools", map[string]any{"name": "github"}, 200)
+	if got := out["server"].(map[string]any)["known_tools"]; got == nil || len(list(got)) != 0 {
+		t.Fatalf("a server probed with no tools = %v", got)
+	}
+
+	missing := f.post("/api/refresh_catalog_mcp_server_tools", map[string]any{"name": "ghost"}, 404)
+	if missing["code"] != "UNKNOWN_REFERENCE" || !reflect.DeepEqual(strList(missing["names"]), []string{"ghost"}) {
+		t.Fatalf("body = %v", missing)
+	}
+}
+
+func TestCatalogMCPServers_RenameCarriesTheToolDataAndDeleteRemovesIt(t *testing.T) {
+	f := catalogWithSkills(t)
+	f.prober.result = mcpserver.ProbeResult{Status: "ok", ToolNames: []string{"a", "b"}}
+	f.post("/api/save_catalog_mcp_server", map[string]any{"server": stdioServer("github"), "disabled_tools": []string{"a", "gone"}}, 200)
+
+	f.prober.result = mcpserver.ProbeResult{Status: "error", Error: "down"}
+	f.post("/api/save_catalog_mcp_server", map[string]any{"previous_name": "github", "server": stdioServer("gh")}, 200)
+	gh := byName(t, f.get("/api/get_agent_catalog", 200)["mcp_servers"], "gh")
+	if !reflect.DeepEqual(strList(gh["known_tools"]), []string{"a", "b"}) || !reflect.DeepEqual(strList(gh["disabled_tools"]), []string{"a", "gone"}) {
+		t.Fatalf("renamed server = %v", gh)
+	}
+
+	f.post("/api/delete_catalog_mcp_server", map[string]any{"name": "gh"}, 200)
+	f.post("/api/save_catalog_mcp_server", map[string]any{"server": stdioServer("gh")}, 200)
+	gh = byName(t, f.get("/api/get_agent_catalog", 200)["mcp_servers"], "gh")
+	if gh["known_tools"] != nil || len(strList(gh["disabled_tools"])) != 0 {
+		t.Fatalf("a deleted server's tool data came back: %v", gh)
+	}
+}
+
+func TestCatalogMCPServers_AnUnparseableToolDataFileIsCatalogBroken(t *testing.T) {
+	f := catalogWithSkills(t)
+	f.write("mcp-tools.json", "{not json")
+	cat := f.get("/api/get_agent_catalog", 200)
+	if b, _ := cat["broken"].(map[string]any); b == nil || b["path"] != "mcp-tools.json" {
+		t.Fatalf("broken = %v", cat["broken"])
+	}
+	f.prober.result = mcpserver.ProbeResult{Status: "ok", ToolNames: []string{"a"}}
+	got := f.post("/api/save_catalog_mcp_server", map[string]any{"server": stdioServer("github")}, 409)
+	if got["code"] != "CATALOG_BROKEN" {
+		t.Fatalf("body = %v", got)
+	}
+}
+
+// projectServer is one entry of a project's servers read.
+func projectServer(t *testing.T, got map[string]any, name string) map[string]any {
+	t.Helper()
+	return byName(t, got["servers"], name)
+}
+
+func toolOf(t *testing.T, srv map[string]any, name string) map[string]any {
+	t.Helper()
+	return byName(t, srv["tools"], name)
+}
+
+// githubWithTools saves a github server whose probe found a and b, a disabled
+// by default, used by the agent zeta.
+func githubWithTools(f *catalogFixture, projectIDs ...string) {
+	f.prober.result = mcpserver.ProbeResult{Status: "ok", ToolNames: []string{"a", "b"}}
+	f.post("/api/save_catalog_mcp_server", map[string]any{"server": stdioServer("github"), "agents": []string{"zeta"}, "disabled_tools": []string{"a"}}, 200)
+}
+
+func TestProjectMCPSettings_EveryServerReadsAgentsChoiceUntilTheProjectSetsIt(t *testing.T) {
+	f := catalogWithSkills(t)
+	p := f.project("Widgets")
+	githubWithTools(f)
+	got := f.get("/api/get_project_mcp_servers?project_id="+p, 200)
+	if len(strList(got["mcp_servers"])) != 0 {
+		t.Fatalf("mcp_servers = %v", got["mcp_servers"])
+	}
+	gh := projectServer(t, got, "github")
+	if gh["state"] != "agent" || !reflect.DeepEqual(strList(gh["used_by_agents"]), []string{"zeta"}) {
+		t.Fatalf("github = %v", gh)
+	}
+	a, b := toolOf(t, gh, "a"), toolOf(t, gh, "b")
+	if a["default"] != "disabled" || a["override"] != "default" || a["effective"] != "disabled" || b["effective"] != "enabled" {
+		t.Fatalf("tools = %v %v", a, b)
+	}
+	// nb was never probed: its tools are unknown.
+	if nb := projectServer(t, got, "nb"); nb["tools"] != nil || nb["state"] != "agent" {
+		t.Fatalf("nb = %v", nb)
+	}
+
+	// A project that listed servers before this existed has them Added.
+	f.post("/api/set_project_mcp_servers", map[string]any{"project_id": p, "mcp_servers": []string{"nb"}}, 200)
+	got = f.get("/api/get_project_mcp_servers?project_id="+p, 200)
+	if projectServer(t, got, "nb")["state"] != "added" || !reflect.DeepEqual(strList(got["mcp_servers"]), []string{"nb"}) {
+		t.Fatalf("read = %v", got)
+	}
+}
+
+func TestProjectMCPSettings_SetReplacesTheWholeSettingsAndAToolFollowsTheGlobalDefault(t *testing.T) {
+	f := catalogWithSkills(t)
+	p := f.project("Widgets")
+	githubWithTools(f)
+	out := f.post("/api/set_project_mcp_settings", map[string]any{"project_id": p, "servers": []map[string]any{
+		{"name": "nb", "state": "banned"},
+		{"name": "github", "state": "added", "tool_overrides": map[string]string{"a": "enabled", "b": "disabled", "vanished": "disabled"}},
+	}}, 200)
+	if projectServer(t, out, "nb")["state"] != "banned" || !reflect.DeepEqual(strList(out["mcp_servers"]), []string{"github"}) {
+		t.Fatalf("answer = %v", out)
+	}
+	gh := projectServer(t, f.get("/api/get_project_mcp_servers?project_id="+p, 200), "github")
+	if a := toolOf(t, gh, "a"); a["override"] != "enabled" || a["effective"] != "enabled" || a["default"] != "disabled" {
+		t.Fatalf("a = %v", a)
+	}
+	if b := toolOf(t, gh, "b"); b["effective"] != "disabled" {
+		t.Fatalf("b = %v", b)
+	}
+	if len(list(gh["tools"])) != 2 {
+		t.Fatalf("a tool the server does not know is shown: %v", gh["tools"])
+	}
+
+	// Left at Default, a tool follows the global default.
+	f.post("/api/set_project_mcp_settings", map[string]any{"project_id": p, "servers": []map[string]any{{"name": "github", "state": "agent"}}}, 200)
+	f.post("/api/save_catalog_mcp_server", map[string]any{"previous_name": "github", "server": stdioServer("github"), "disabled_tools": []string{"b"}}, 200)
+	got := f.get("/api/get_project_mcp_servers?project_id="+p, 200)
+	gh = projectServer(t, got, "github")
+	if toolOf(t, gh, "a")["effective"] != "enabled" || toolOf(t, gh, "b")["effective"] != "disabled" || gh["state"] != "agent" {
+		t.Fatalf("github = %v", gh)
+	}
+	if projectServer(t, got, "nb")["state"] != "agent" {
+		t.Fatal("a server left out of the replacement did not go back to Agent's choice")
+	}
+
+	// A tool the server lost keeps its override for when it comes back.
+	f.post("/api/set_project_mcp_settings", map[string]any{"project_id": p, "servers": []map[string]any{{"name": "github", "state": "agent", "tool_overrides": map[string]string{"vanished": "disabled"}}}}, 200)
+	f.prober.result = mcpserver.ProbeResult{Status: "ok", ToolNames: []string{"a", "b", "vanished"}}
+	f.post("/api/refresh_catalog_mcp_server_tools", map[string]any{"name": "github"}, 200)
+	gh = projectServer(t, f.get("/api/get_project_mcp_servers?project_id="+p, 200), "github")
+	if v := toolOf(t, gh, "vanished"); v["override"] != "disabled" || v["effective"] != "disabled" {
+		t.Fatalf("vanished = %v", v)
+	}
+}
+
+func TestProjectMCPSettings_RefusalsChangeNothing(t *testing.T) {
+	f := catalogWithSkills(t)
+	p := f.project("Widgets")
+	githubWithTools(f)
+	f.post("/api/set_project_mcp_settings", map[string]any{"project_id": p, "servers": []map[string]any{{"name": "nb", "state": "banned"}}}, 200)
+	f.post("/api/set_project_mcp_settings", map[string]any{"project_id": "nope", "servers": []map[string]any{}}, 404)
+	unknown := f.post("/api/set_project_mcp_settings", map[string]any{"project_id": p, "servers": []map[string]any{{"name": "ghost", "state": "added"}}}, 400)
+	if unknown["code"] != "UNKNOWN_REFERENCE" || !reflect.DeepEqual(strList(unknown["names"]), []string{"ghost"}) {
+		t.Fatalf("body = %v", unknown)
+	}
+	for name, servers := range map[string][]map[string]any{
+		"bad state":    {{"name": "github", "state": "pigeon"}},
+		"bad override": {{"name": "github", "state": "agent", "tool_overrides": map[string]string{"a": "default"}}},
+		"twice":        {{"name": "github", "state": "agent"}, {"name": "github", "state": "added"}},
+	} {
+		if got := f.post("/api/set_project_mcp_settings", map[string]any{"project_id": p, "servers": servers}, 400); got["code"] != "INVALID_INPUT" {
+			t.Errorf("%s: body = %v", name, got)
+		}
+	}
+	got := f.get("/api/get_project_mcp_servers?project_id="+p, 200)
+	if projectServer(t, got, "nb")["state"] != "banned" || projectServer(t, got, "github")["state"] != "agent" {
+		t.Fatalf("a refusal changed the settings: %v", got)
+	}
+}
+
+func TestProjectMCPSettings_TheListWriteOnlyMovesTheAddedServers(t *testing.T) {
+	f := catalogWithSkills(t)
+	p := f.project("Widgets")
+	githubWithTools(f)
+	f.post("/api/set_project_mcp_settings", map[string]any{"project_id": p, "servers": []map[string]any{
+		{"name": "nb", "state": "banned"},
+		{"name": "github", "state": "added", "tool_overrides": map[string]string{"a": "enabled"}},
+	}}, 200)
+	// Naming nothing turns the Added server into Agent's choice and keeps the ban and the override.
+	f.post("/api/set_project_mcp_servers", map[string]any{"project_id": p, "mcp_servers": []string{}}, 200)
+	got := f.get("/api/get_project_mcp_servers?project_id="+p, 200)
+	gh := projectServer(t, got, "github")
+	if gh["state"] != "agent" || projectServer(t, got, "nb")["state"] != "banned" || toolOf(t, gh, "a")["override"] != "enabled" {
+		t.Fatalf("read = %v", got)
+	}
+	// Naming a banned server does not lift the ban.
+	f.post("/api/set_project_mcp_servers", map[string]any{"project_id": p, "mcp_servers": []string{"nb"}}, 200)
+	if got := f.get("/api/get_project_mcp_servers?project_id="+p, 200); projectServer(t, got, "nb")["state"] != "banned" || len(strList(got["mcp_servers"])) != 0 {
+		t.Fatalf("read = %v", got)
+	}
+}
+
+func TestProjectMCPSettings_RenameAndDeleteRewriteEveryProjectsSettings(t *testing.T) {
+	f := catalogWithSkills(t)
+	p := f.project("Widgets")
+	githubWithTools(f)
+	f.post("/api/set_project_mcp_settings", map[string]any{"project_id": p, "servers": []map[string]any{
+		{"name": "github", "state": "banned", "tool_overrides": map[string]string{"a": "enabled"}},
+	}}, 200)
+
+	f.post("/api/save_catalog_mcp_server", map[string]any{"previous_name": "github", "server": stdioServer("gh")}, 200)
+	gh := projectServer(t, f.get("/api/get_project_mcp_servers?project_id="+p, 200), "gh")
+	if gh["state"] != "banned" || toolOf(t, gh, "a")["override"] != "enabled" {
+		t.Fatalf("gh = %v", gh)
+	}
+
+	f.post("/api/delete_catalog_mcp_server", map[string]any{"name": "gh"}, 200)
+	f.post("/api/save_catalog_mcp_server", map[string]any{"server": stdioServer("gh")}, 200)
+	f.prober.result = mcpserver.ProbeResult{Status: "ok", ToolNames: []string{"a", "b"}}
+	f.post("/api/refresh_catalog_mcp_server_tools", map[string]any{"name": "gh"}, 200)
+	gh = projectServer(t, f.get("/api/get_project_mcp_servers?project_id="+p, 200), "gh")
+	if gh["state"] != "agent" || toolOf(t, gh, "a")["override"] != "default" {
+		t.Fatalf("a deleted server left its project settings behind: %v", gh)
+	}
+}
+
+func TestProjectMCPSettings_TheBuiltInServicesServerIsNotListedAndIsRefused(t *testing.T) {
+	f := catalogWithSkills(t)
+	p := f.project("Widgets")
+	got := f.get("/api/get_project_mcp_servers?project_id="+p, 200)
+	for _, s := range list(got["servers"]) {
+		if s.(map[string]any)["name"] == "services" {
+			t.Fatalf("the built-in server is listed: %v", got["servers"])
+		}
+	}
+	for _, state := range []string{"banned", "agent", "added"} {
+		out := f.post("/api/set_project_mcp_settings", map[string]any{"project_id": p, "servers": []map[string]any{{"name": "services", "state": state}}}, 400)
+		if out["code"] != "INVALID_INPUT" || !strings.Contains(out["error"].(string), "built in") {
+			t.Fatalf("%s: body = %v", state, out)
+		}
+	}
+}
+
+func TestProjectMCPSettings_AReplacementThatOmitsAVanishedToolKeepsItsOverride(t *testing.T) {
+	f := catalogWithSkills(t)
+	p := f.project("Widgets")
+	githubWithTools(f)
+	f.post("/api/set_project_mcp_settings", map[string]any{"project_id": p, "servers": []map[string]any{
+		{"name": "github", "state": "agent", "tool_overrides": map[string]string{"a": "enabled", "vanished": "disabled"}},
+	}}, 200)
+	// The page shows only known tools, so it sends no "vanished"; a is cleared.
+	f.post("/api/set_project_mcp_settings", map[string]any{"project_id": p, "servers": []map[string]any{{"name": "github", "state": "agent"}}}, 200)
+	f.prober.result = mcpserver.ProbeResult{Status: "ok", ToolNames: []string{"a", "b", "vanished"}}
+	f.post("/api/refresh_catalog_mcp_server_tools", map[string]any{"name": "github"}, 200)
+	gh := projectServer(t, f.get("/api/get_project_mcp_servers?project_id="+p, 200), "github")
+	if toolOf(t, gh, "vanished")["override"] != "disabled" || toolOf(t, gh, "a")["override"] != "default" {
+		t.Fatalf("github = %v", gh)
+	}
+}
+
+func TestProjectMCPSettings_AServerHasOneStateAndMCPServersListsExactlyTheAddedOnes(t *testing.T) {
+	f := catalogWithSkills(t)
+	p := f.project("Widgets")
+	githubWithTools(f)
+	set := func(state string) map[string]any {
+		return f.post("/api/set_project_mcp_settings", map[string]any{"project_id": p, "servers": []map[string]any{{"name": "github", "state": state}, {"name": "nb", "state": "added"}}}, 200)
+	}
+	for state, want := range map[string][]string{"added": {"github", "nb"}, "banned": {"nb"}, "agent": {"nb"}} {
+		got := set(state)
+		if !reflect.DeepEqual(strList(got["mcp_servers"]), want) || projectServer(t, got, "github")["state"] != state {
+			t.Fatalf("%s: answer = %v, want mcp_servers %v", state, got, want)
+		}
+		if read := f.get("/api/get_project_mcp_servers?project_id="+p, 200); !reflect.DeepEqual(strList(read["mcp_servers"]), want) {
+			t.Fatalf("%s: read = %v", state, read)
+		}
+	}
+}

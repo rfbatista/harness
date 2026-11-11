@@ -21,6 +21,28 @@ const problems = (v) => list(v, "problems").map((p) => ({ code: String(p?.code ?
 /** An agent's usage {sessions, zones}; null while the server sends none. */
 const usage = (u) => (u && typeof u === "object" && !Array.isArray(u) ? { sessions: Number(u.sessions ?? 0), zones: Number(u.zones ?? 0) } : null);
 
+/** One catalog MCP server; known_tools null is "tools unknown", [] is a server with no tools. @returns {import("../domain/ports.js").CatalogMcpServer} */
+function toMcpServer(m) {
+  return {
+    name: String(m?.name ?? ""),
+    transport: String(m?.transport ?? ""),
+    command: String(m?.command ?? ""),
+    args: strings(m?.args, "args"),
+    env: object(m?.env),
+    url: String(m?.url ?? ""),
+    headers: object(m?.headers),
+    envRefs: list(m?.env_refs, "env_refs").map((r) => ({ name: String(r?.name ?? ""), set: r?.set === true })),
+    builtIn: m?.built_in === true,
+    tools: strings(m?.tools, "tools"),
+    knownTools: m?.known_tools === undefined || m?.known_tools === null ? null : strings(m.known_tools, "known_tools"),
+    probedAt: typeof m?.probed_at === "string" ? m.probed_at : "",
+    disabledTools: strings(m?.disabled_tools, "disabled_tools"),
+    agents: strings(m?.agents, "agents"),
+    projects: list(m?.projects, "projects").map((p) => ({ id: String(p?.id ?? ""), name: String(p?.name ?? "") })),
+    problems: problems(m?.problems),
+  };
+}
+
 /** @returns {import("../domain/ports.js").Catalog} */
 export function toCatalog(body) {
   if (!body || typeof body !== "object" || Array.isArray(body)) bad("expected an object");
@@ -68,21 +90,7 @@ export function toCatalog(body) {
       agentCount: Number(s?.agent_count ?? 0),
       problems: problems(s?.problems),
     })),
-    mcpServers: list(body.mcp_servers, "mcp_servers").map((m) => ({
-      name: String(m?.name ?? ""),
-      transport: String(m?.transport ?? ""),
-      command: String(m?.command ?? ""),
-      args: strings(m?.args, "args"),
-      env: object(m?.env),
-      url: String(m?.url ?? ""),
-      headers: object(m?.headers),
-      envRefs: list(m?.env_refs, "env_refs").map((r) => ({ name: String(r?.name ?? ""), set: r?.set === true })),
-      builtIn: m?.built_in === true,
-      tools: strings(m?.tools, "tools"),
-      agents: strings(m?.agents, "agents"),
-      projects: list(m?.projects, "projects").map((p) => ({ id: String(p?.id ?? ""), name: String(p?.name ?? "") })),
-      problems: problems(m?.problems),
-    })),
+    mcpServers: list(body.mcp_servers, "mcp_servers").map(toMcpServer),
     builtInTools: list(body.built_in_tools, "built_in_tools").map((t) => ({ name: String(t?.name ?? ""), description: String(t?.description ?? "") })),
   };
 }
@@ -123,7 +131,20 @@ export function toWriteResult(body) {
       projects: (Array.isArray(c.projects) ? c.projects : []).map((p) => ({ id: String(p?.id ?? ""), name: String(p?.name ?? ""), before: strings(p?.before ?? [], "before"), after: strings(p?.after ?? [], "after"), enabledAgentsBefore: strings(p?.enabled_agents_before ?? [], "enabled_agents_before"), enabledAgentsAfter: strings(p?.enabled_agents_after ?? [], "enabled_agents_after") })),
     },
     versions: object(body.versions),
+    probe: body.probe ? toProbeOutcome(body.probe) : null,
   };
+}
+
+/** What a save or Refresh tools probe reports: no tool list, the catalog entry has it. @returns {import("../domain/ports.js").ProbeOutcome} */
+export function toProbeOutcome(p) {
+  if (!p || (p.status !== "ok" && p.status !== "error")) bad("expected a probe with a status");
+  return { status: p.status, error: String(p.error ?? ""), hint: String(p.hint ?? "") };
+}
+
+/** @returns {{ server: import("../domain/ports.js").CatalogMcpServer, probe: import("../domain/ports.js").ProbeOutcome }} */
+export function toRefreshedTools(body) {
+  if (!body?.server || typeof body.server !== "object") bad("expected {server: {…}, probe: {…}}");
+  return { server: toMcpServer(body.server), probe: toProbeOutcome(body.probe) };
 }
 
 /** @returns {import("../domain/ports.js").Probe} */
@@ -141,6 +162,35 @@ export function toProbe(body) {
 /** @param {unknown} body @returns {string[]} */
 export function toServerNames(body) {
   return strings(body?.mcp_servers, "mcp_servers");
+}
+
+const STATES = ["added", "agent", "banned"];
+const settingOf = (v, what) => (v === "enabled" || v === "disabled" ? v : bad(`${what} is neither enabled nor disabled`));
+
+/** A project's MCP settings: get_project_mcp_servers, and the answer of set_project_mcp_settings. @param {any} body @returns {import("../domain/ports.js").ProjectMcpSettings} */
+export function toProjectMcpSettings(body) {
+  return {
+    added: strings(body?.mcp_servers, "mcp_servers"),
+    servers: list(body?.servers, "servers").map((s) => {
+      if (!STATES.includes(s?.state)) bad("a server's state is not added, agent or banned");
+      return {
+        name: String(s?.name ?? ""),
+        state: s.state,
+        usedByAgents: strings(s?.used_by_agents, "used_by_agents"),
+        tools: s?.tools === undefined || s?.tools === null ? null : list(s.tools, "tools").map((t) => ({
+          name: String(t?.name ?? ""),
+          default: settingOf(t?.default, "a tool's default"),
+          override: t?.override === "default" ? "default" : settingOf(t?.override, "a tool's override"),
+          effective: settingOf(t?.effective, "a tool's effective setting"),
+        })),
+      };
+    }),
+  };
+}
+
+/** The write body of set_project_mcp_settings. @param {string} projectId @param {{ name: string, state: string, toolOverrides?: Record<string, string> }[]} servers */
+export function projectMcpSettingsBody(projectId, servers) {
+  return { project_id: projectId, servers: servers.map((s) => ({ name: s.name, state: s.state, tool_overrides: s.toolOverrides ?? {} })) };
 }
 
 /** @param {unknown} body @returns {import("../domain/projectAgents.js").ProjectAgents} */
@@ -196,7 +246,8 @@ export function serverFields(s) {
 }
 
 export function mcpServerBody(input) {
-  return { ...withPrevious(input.previousName), server: serverFields(input.server), agents: input.agents ?? [], projects: input.projects ?? [] };
+  const disabled = input.server.disabledTools === undefined ? {} : { disabled_tools: input.server.disabledTools };
+  return { ...withPrevious(input.previousName), server: { ...serverFields(input.server), ...disabled }, agents: input.agents ?? [], projects: input.projects ?? [] };
 }
 
 /** @param {unknown} body @returns {{ id: string, name: string }[]} */

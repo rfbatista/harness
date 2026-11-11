@@ -1,6 +1,7 @@
 package sqlite
 
 import (
+	"encoding/json"
 	"context"
 	"operators-mcp/internal/domain"
 	"operators-mcp/internal/ports"
@@ -172,6 +173,26 @@ func (r *ProjectRepository) SetMCPServers(projectID string, names []string) (*do
 	}
 	m.MCPServers = stringSlice(append([]string{}, names...))
 	if err := r.db.Model(&m).Update("mcp_servers", m.MCPServers).Error; err != nil {
+		return nil, err
+	}
+	return m.ToDomain(), nil
+}
+
+// SetMCPSettings stores the project's banned MCP servers and tool overrides.
+func (r *ProjectRepository) SetMCPSettings(projectID string, s domain.ProjectMCPSettings) (*domain.Project, error) {
+	var m ProjectModel
+	if err := r.db.First(&m, "id = ?", projectID).Error; err != nil {
+		if err == gorm.ErrRecordNotFound {
+			return nil, &domain.StructuredError{Code: "PROJECT_NOT_FOUND", Message: "project not found"}
+		}
+		return nil, err
+	}
+	raw, err := json.Marshal(s)
+	if err != nil {
+		return nil, err
+	}
+	m.MCPSettings = string(raw)
+	if err := r.db.Model(&m).Update("mcp_settings", m.MCPSettings).Error; err != nil {
 		return nil, err
 	}
 	return m.ToDomain(), nil

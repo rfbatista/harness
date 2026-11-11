@@ -109,7 +109,16 @@ func serverNode(old *node, s domain.CatalogServerInput, transport string) *node 
 
 // SaveCatalogMCPServer creates, updates or renames an MCP server and sets
 // which agents and projects get it.
-func (c *Catalog) SaveCatalogMCPServer(in domain.SaveCatalogMCPServer) (*domain.CatalogWriteResult, error) {
+func (c *Catalog) SaveCatalogMCPServer(ctx context.Context, in domain.SaveCatalogMCPServer) (*domain.CatalogWriteResult, error) {
+	// The probe is slow, so it runs before the write lock. A save that is
+	// refused after it has probed for nothing, and changes nothing.
+	var outcome *domain.CatalogProbeOutcome
+	var found []string
+	var probed bool
+	if _, err := checkServer(in.Server); err == nil && !in.DryRun && in.Server.Name != domain.ServicesServerName && serverNameRe.MatchString(in.Server.Name) {
+		o, names, ok := c.probeOutcome(ctx, in.Server)
+		outcome, found, probed = &o, names, ok
+	}
 	c.wmu.Lock()
 	defer c.wmu.Unlock()
 	t, err := c.begin()
@@ -166,6 +175,8 @@ func (c *Catalog) SaveCatalogMCPServer(in domain.SaveCatalogMCPServer) (*domain.
 	default:
 		servers.rename(prev, s.Name)
 		serverNode(servers.get(s.Name), s, transport)
+		t.renameTools(prev, s.Name)
+		t.moveProjectMCPSettings(prev, s.Name)
 		refs := 0
 		for _, m := range t.agentsMap().members {
 			if list := m.val.get("mcp_servers"); list != nil {
@@ -217,9 +228,20 @@ func (c *Catalog) SaveCatalogMCPServer(in domain.SaveCatalogMCPServer) (*domain.
 			}
 		}
 	}
+	if in.DisabledTools != nil {
+		t.setDisabledTools(s.Name, in.DisabledTools)
+	}
+	if probed {
+		t.setKnownTools(s.Name, found, time.Now())
+	}
 	summary := fmt.Sprintf("%s %s — %s is on %d agents and %d projects", verb, mcpServersFile, s.Name,
 		t.serverAgentCount(s.Name), t.serverProjectCount(s.Name))
-	return t.commit(in.CatalogWriteOptions, summary)
+	res, err := t.commit(in.CatalogWriteOptions, summary)
+	if err != nil {
+		return nil, err
+	}
+	res.Probe = outcome
+	return res, nil
 }
 
 func (t *txn) serverAgentCount(name string) int {
@@ -279,6 +301,8 @@ func (c *Catalog) DeleteCatalogMCPServer(in domain.DeleteCatalogItem) (*domain.C
 		return nil, &domain.StructuredError{Code: "MCP_SERVER_NOT_FOUND", Message: "MCP server " + in.Name + " not found"}
 	}
 	t.serversMap().remove(in.Name)
+	t.toolEntries().remove(in.Name)
+	t.moveProjectMCPSettings(in.Name, "")
 	refs := 0
 	for _, m := range t.agentsMap().members {
 		if list := m.val.get("mcp_servers"); list != nil && setMembership(list, in.Name, false) {

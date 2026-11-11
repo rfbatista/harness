@@ -26,6 +26,10 @@
 /**
  * @typedef {import("../../runs/domain/run.js").RunWorktree} RunWorktree  a run worktree of a command service (list_service_run_worktrees): key "main" or "session:<id>"
  *
+ * @typedef {object} BranchList  a list_service_branches answer
+ * @property {{ name: string, remote: boolean, sha: string, subject: string, committedAt: string }[]} branches  local first, then origin/*, newest commit first; a remote branch's name has no origin/
+ * @property {boolean} truncated  there were more than the 200 returned
+ *
  * @typedef {object} RunVariables  a get_run_variables answer
  * @property {string} runId  "" for a service that never ran
  * @property {{ name: string, value: string, source: "repository_env" | "service" | "override", by: string }[]} variables  sorted by name; values are the person's to see, never stored or logged
@@ -69,6 +73,7 @@
  *           `worktree` is a run worktree key; sent only when given (the server reads none as the main checkout).
  *           Rejects with SANDBOX_UNAVAILABLE or RUNTIME_UNAVAILABLE when nothing was started, WORKTREE_NOT_AVAILABLE when the worktree is gone.
  * @property {(serviceId: string) => Promise<RunWorktree[]>} listRunWorktrees  the main checkout first, then session worktrees; [] for an image service or one with no repository
+ * @property {(serviceId: string, query?: string) => Promise<BranchList>} listBranches  the query filters by a case-insensitive part of the name; sent only when not empty
  * @property {(serviceId: string) => Promise<RunVariables>} getRunVariables
  * @property {(serviceId: string) => Promise<Service>} stopService
  * @property {(serviceId: string) => Promise<Service>} restartService

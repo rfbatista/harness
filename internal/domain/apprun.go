@@ -74,6 +74,9 @@ const (
 	RunWorktreeMain RunWorktreeKind = "main"
 	// RunWorktreeSession is another session's worktree of the same repository.
 	RunWorktreeSession RunWorktreeKind = "session"
+	// RunWorktreeBranch is a service's own service worktree, detached at a
+	// branch's tip (ADR 0080).
+	RunWorktreeBranch RunWorktreeKind = "branch"
 )
 
 // RunWorktree is a directory a session can run its application in. Its Key

@@ -123,6 +123,10 @@ type Service struct {
 	// ServicesServerURL returns the per-session services MCP endpoint (ADR
 	// 0075); nil serves sessions no services server.
 	ServicesServerURL func(sessionID string) string
+	// MCPToolDefaults returns each catalog MCP server's global tool default
+	// (ADR 0067): the names of the tools disabled for every project without
+	// its own setting, by server name. Nil means no tool is disabled by default.
+	MCPToolDefaults func() map[string][]string
 	// SessionHookURL returns where an interactive session's SessionStart hook
 	// reports its conversation id. Nil leaves the hook out.
 	SessionHookURL func(sessionID string) string
@@ -956,7 +960,13 @@ func (s *Service) sessionConfig(id, dir, model string, allowedTools []string, pe
 	}
 
 	s.applyServicesServer(&cfg, id, ag.agent, subject.project)
-	for _, m := range resolveAttachedMCPServers(ag.agent, subject.project, s.catalog.MCPServers.ListMCPServers()) {
+	var defaults map[string][]string
+	if s.MCPToolDefaults != nil {
+		defaults = s.MCPToolDefaults()
+	}
+	attached := resolveMCP(ag.agent, subject.project, s.catalog.MCPServers.ListMCPServers(), defaults)
+	withDeniedMCPTools(&cfg, attached.Denied)
+	for _, m := range attached.Servers {
 		cfg.MCPServers = append(cfg.MCPServers, llmkit.MCPServerSpec{
 			Name:      domain.Slug(m.Name),
 			Transport: m.Transport,

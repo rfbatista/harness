@@ -198,6 +198,10 @@ func (p projectMCPServers) SetProjectMCPServers(_ context.Context, id string, na
 	return p.projects.SetMCPServers(id, names)
 }
 
+func (p projectMCPServers) SetProjectMCPSettings(_ context.Context, id string, s domain.ProjectMCPSettings) (*domain.Project, error) {
+	return p.projects.SetMCPSettings(id, s)
+}
+
 // newRepositoryAgents is the service that says which agents a repository
 // assigns (ADR 0061).
 func newRepositoryAgents(lists ports.RepositoryAgentListStore, prompts ports.RepositoryPromptStore, projects ports.ProjectRepository, repos ports.RepositoryRepository, cat *agentcatalog.Catalog, sessions ports.SessionRepository, catalogs catalog.Catalog) *repoagents.Service {
@@ -653,7 +657,7 @@ func newAppsService(orch *orchestration.Service, cat catalog.Catalog, host ports
 // newServicesModule keeps projects' services in the database, with their
 // logs in the data directory. It reads the sandbox switch and driver agents
 // run under, and looks the container runtime up on the server's PATH.
-func newServicesModule(lc fx.Lifecycle, cfg Config, db *gorm.DB, cat catalog.Catalog, orch *orchestration.Service, sandbox *sandboxsettings.Store, git ports.GitCode, worktrees *apps.Service) (*services.Service, error) {
+func newServicesModule(lc fx.Lifecycle, cfg Config, db *gorm.DB, cat catalog.Catalog, orch *orchestration.Service, sandbox *sandboxsettings.Store, git ports.GitCode, worktrees *apps.Service, envIO ports.EnvFileIO, publisher ports.BranchPublisher, fetcher *workspaces.OriginFetcher) (*services.Service, error) {
 	logDir, err := dataDir(cfg, "service-logs")
 	if err != nil {
 		return nil, err
@@ -662,7 +666,11 @@ func newServicesModule(lc fx.Lifecycle, cfg Config, db *gorm.DB, cat catalog.Cat
 	if err != nil {
 		return nil, err
 	}
-	for _, dir := range []string{logDir, folderDir} {
+	worktreeDir, err := dataDir(cfg, "service-worktrees")
+	if err != nil {
+		return nil, err
+	}
+	for _, dir := range []string{logDir, folderDir, worktreeDir} {
 		if err := os.MkdirAll(dir, 0o700); err != nil {
 			return nil, err
 		}
@@ -670,6 +678,12 @@ func newServicesModule(lc fx.Lifecycle, cfg Config, db *gorm.DB, cat catalog.Cat
 	instance, err := serviceInstance(logDir)
 	if err != nil {
 		return nil, err
+	}
+	// Without the credentials context (some tests) nothing is fetched: a run on
+	// a remote branch uses the tracking ref as it is.
+	var branchFetch ports.ServiceBranchFetcher
+	if fetcher != nil {
+		branchFetch = workspaces.NewServiceBranchFetch(publisher, fetcher)
 	}
 	svc := services.New(sqlite.NewServiceRepository(db), cat.Projects, cat.Projects, services.Options{
 		Instance: instance,
@@ -681,6 +695,7 @@ func newServicesModule(lc fx.Lifecycle, cfg Config, db *gorm.DB, cat catalog.Cat
 		Runtime:  services.RuntimeSetting{Settings: cat.Settings},
 		Sweeper:  containerrunner.Runner{},
 		EnvFiles: cat.Projects, Branches: git, RunWorktrees: worktrees,
+		BranchGit: gitcli.NewServiceBranches(cfg.gitOptions()...), WorktreeRoot: worktreeDir, EnvWriter: envIO, Fetcher: branchFetch,
 	})
 	svc.Subscribe(cat.Bus)
 	// Services never outlive the server or start by themselves: boot settles
@@ -967,6 +982,7 @@ func newOrchestrationService(
 	branchNames *workspaces.BranchNames,
 	baseBranches *workspaces.BaseBranches,
 	assignments *repoagents.Service,
+	agentCatalog *agentcatalog.Catalog,
 	branchRequests ports.BranchRequestStore,
 ) *orchestration.Service {
 	orchCatalog := orchestration.Catalog{
@@ -982,6 +998,7 @@ func newOrchestrationService(
 		orchCatalog.DesignSystems = cat.DesignSystems
 	}
 	svc := orchestration.NewService(manager, broker, hub, sessions, orchCatalog, tickets, ws)
+	svc.MCPToolDefaults = agentCatalog.DisabledMCPTools
 	svc.UseBranchNames(branchNames)
 	svc.UseBaseBranches(baseBranches)
 	svc.UseAssignments(assignments)

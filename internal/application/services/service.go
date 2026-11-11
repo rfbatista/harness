@@ -69,6 +69,18 @@ type Options struct {
 	RunWorktrees ports.ServiceRunWorktrees
 	// Branches names the branch a main checkout holds; nil leaves it empty.
 	Branches ports.RunBranchReader
+	// BranchGit is the git a branch run needs: the branch list, and the service
+	// worktree (ADR 0080); nil offers no branch.
+	BranchGit ports.ServiceBranchGit
+	// Fetcher fetches a remote branch before a run on it; nil runs the tracking
+	// ref as it is.
+	Fetcher ports.ServiceBranchFetcher
+	// WorktreeRoot holds the service worktrees, one folder per service id;
+	// empty is a folder in LogDir.
+	WorktreeRoot string
+	// EnvWriter writes a repository's saved env files into a service worktree
+	// before a branch run; nil writes none.
+	EnvWriter ports.EnvFileIO
 	// Runtime is the container runtime setting; nil keeps docker in memory.
 	Runtime ports.ServiceRuntimeSetting
 	// Instance labels the containers this harness starts; empty is a fresh id
@@ -244,7 +256,7 @@ func (s *Service) UpdateService(ctx context.Context, serviceID string, in domain
 
 // DeleteService removes a service that is not starting or running, and its
 // log.
-func (s *Service) DeleteService(_ context.Context, serviceID string) error {
+func (s *Service) DeleteService(ctx context.Context, serviceID string) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	cur, err := s.store.GetService(serviceID)
@@ -257,6 +269,7 @@ func (s *Service) DeleteService(_ context.Context, serviceID string) error {
 	if err := s.store.DeleteService(serviceID); err != nil {
 		return err
 	}
+	s.removeServiceWorktree(context.WithoutCancel(ctx), serviceID)
 	s.forgetLog(serviceID)
 	for _, p := range []string{s.LogPath(serviceID), s.LogPath(serviceID) + ".first"} {
 		if err := os.Remove(p); err != nil && !os.IsNotExist(err) {
