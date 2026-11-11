@@ -169,6 +169,7 @@ export function toStartBody(req) {
     auto_accept: req.autoAccept,
     runs_on: "server",
     size: req.size,
+    model: req.model || undefined,
     base_branch: req.baseBranch || undefined,
     branch_name: req.branchName?.trim() || undefined,
     bring_under_session_ids: req.bringUnderSessionIds?.length ? req.bringUnderSessionIds : undefined,

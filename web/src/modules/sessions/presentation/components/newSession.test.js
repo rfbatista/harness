@@ -19,11 +19,16 @@ const BRANCHES = {
 const DEBOUNCE = 10;
 const pause = (ms = DEBOUNCE * 4) => new Promise((resolve) => setTimeout(resolve, ms));
 
-function setup({ defaultRepository = "r1", repositories = { r1: "p1", r2: "p1" }, branches = BRANCHES } = {}) {
+/** Every mode's model as the page renders it (contract: mode models, §2). */
+const MODE_MODELS = { "": "default", architect: "opus", implement: "sonnet", design: "default", product: "default", designsystem: "default" };
+
+function setup({ defaultRepository = "r1", repositories = { r1: "p1", r2: "p1" }, branches = BRANCHES, modeModels = MODE_MODELS, lockedMode = "" } = {}) {
   const memory = memoryGateway({ projects: ["p1"], repositories, branches });
   const form = document.createElement("form");
   if (defaultRepository !== null) form.dataset.defaultRepository = defaultRepository;
-  const mounted = mount(() => newSession({ gateway: memory.gateway, debounceMs: DEBOUNCE })("p1", "t1"), { el: form });
+  form.dataset.modeModels = JSON.stringify(modeModels);
+  if (lockedMode) form.dataset.lockedMode = lockedMode;
+  const mounted = mount(() => newSession({ gateway: memory.gateway, debounceMs: DEBOUNCE })("p1", "t1", lockedMode), { el: form });
   mounted.instance.init();
   return { ...mounted, memory };
 }
@@ -780,4 +785,112 @@ test("refusals about the name and the agent keep their places, and any other cod
   assert.equal(instance.nameState, "taken");
   assert.equal(instance.baseInvalid, false);
   assert.equal(instance.error, null);
+});
+
+test("the Model select shows the chosen mode's model and follows the mode", async () => {
+  const { instance, set } = setup();
+  await flush();
+  assert.equal(instance.model, "default", "the default mode takes the CLI's choice");
+  set("mode", "architect");
+  assert.equal(instance.model, "opus");
+  set("mode", "implement");
+  assert.equal(instance.model, "sonnet");
+  set("mode", "design");
+  assert.equal(instance.model, "default");
+});
+
+test("the Model select keeps the person's pick when the mode changes", async () => {
+  const { instance, set } = setup();
+  await flush();
+  set("mode", "architect");
+  instance.pickModel({ target: { value: "haiku" } });
+  assert.equal(instance.model, "haiku");
+  set("mode", "implement");
+  assert.equal(instance.model, "haiku", "a held pick does not follow the mode");
+  set("mode", "design");
+  assert.equal(instance.model, "haiku");
+});
+
+test("a start names the model only when the pick differs from the mode's model", async () => {
+  const { instance, set, memory } = setup();
+  await flush();
+  set("mode", "architect");
+  await instance.submit();
+  assert.ok(!("model" in memory.starts.at(-1)) || memory.starts.at(-1).model === undefined, "following the mode sends no model");
+
+  instance.pickModel({ target: { value: "haiku" } });
+  await instance.submit();
+  assert.equal(memory.starts.at(-1).model, "haiku");
+
+  instance.pickModel({ target: { value: "opus" } });
+  await instance.submit();
+  assert.equal(memory.starts.at(-1).model, undefined, "a pick equal to the mode's model sends none");
+
+  set("mode", "implement");
+  await instance.submit();
+  assert.equal(memory.starts.at(-1).model, "opus", "the held pick now differs from sonnet");
+});
+
+test("the CLI default can be picked as an override", async () => {
+  const { instance, set, memory } = setup();
+  await flush();
+  set("mode", "architect");
+  instance.pickModel({ target: { value: "default" } });
+  await instance.submit();
+  assert.equal(memory.starts.at(-1).model, "default");
+});
+
+test("a pick that differs from the mode's model is said, and reset returns the select to the mode", async () => {
+  const { instance, set, memory } = setup();
+  await flush();
+  set("mode", "architect");
+  assert.equal(instance.modelDiffers, false, "following the mode says nothing");
+  instance.pickModel({ target: { value: "haiku" } });
+  assert.equal(instance.modelDiffers, true);
+  assert.equal(instance.modelHint, "Mode model: opus");
+
+  instance.resetModel();
+  assert.equal(instance.model, "opus");
+  assert.equal(instance.modelDiffers, false);
+  set("mode", "implement");
+  assert.equal(instance.model, "sonnet", "after a reset the select follows the mode again");
+  await instance.submit();
+  assert.equal(memory.starts.at(-1).model, undefined);
+});
+
+test("a pick equal to the mode's model says nothing", async () => {
+  const { instance, set } = setup();
+  await flush();
+  set("mode", "architect");
+  instance.pickModel({ target: { value: "opus" } });
+  assert.equal(instance.modelDiffers, false);
+});
+
+test("the product-locked form has no model picker and sends no model", async () => {
+  const { instance, memory } = setup({ lockedMode: "product" });
+  await flush();
+  assert.equal(instance.showModelPicker, false);
+  await instance.submit();
+  assert.equal(memory.starts.at(-1).mode, "product");
+  assert.equal(memory.starts.at(-1).model, undefined);
+});
+
+test("the architect-locked form keeps the model picker", async () => {
+  const { instance } = setup({ lockedMode: "architect" });
+  await flush();
+  assert.equal(instance.showModelPicker, true);
+  assert.equal(instance.model, "opus");
+});
+
+test("a start refused for its model shows in the error row and the form stays usable", async () => {
+  const { instance, memory, dispatched } = setup();
+  await flush();
+  instance.pickModel({ target: { value: "haiku" } });
+  memory.refuseStart(new StructuredError(Codes.INVALID_INPUT, 'model must be one of "default", "fable", "opus", "sonnet" or "haiku"', 400));
+  await instance.submit();
+  assert.equal(instance.error.code, Codes.INVALID_INPUT);
+  assert.ok(instance.error.message.includes("model must be one of"), instance.error.message);
+  assert.equal(instance.submitting, false);
+  assert.equal(instance.cannotSubmit, false);
+  assert.equal(dispatched.length, 0);
 });
