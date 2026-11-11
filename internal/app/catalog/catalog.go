@@ -23,6 +23,7 @@ package catalog
 import (
 	"context"
 	"fmt"
+	"log/slog"
 	"sync"
 
 	"operators-mcp/internal/adapter/out/eventbus"
@@ -104,6 +105,9 @@ func New(d Deps) Catalog {
 	}
 
 	st := settings.NewService(d.Settings, bus)
+	if err := st.MigrateModelSettings(); err != nil {
+		slog.Warn("move the saved models to their session modes", "err", err)
+	}
 	pr := projects.NewService(d.Projects, d.Repositories, bus)
 	caps := capabilities.NewService(capabilities.Deps{
 		Skills:      d.Skills,

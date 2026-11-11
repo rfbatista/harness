@@ -89,3 +89,31 @@ func (s *Service) UpdateSettings(values map[string]string) (map[string]string, e
 	}
 	return all, nil
 }
+
+// MigrateModelSettings moves a value saved under a retired model key to the
+// key of its session mode (ADR 0084), then deletes the retired key. A mode key
+// already set is never overwritten. It is safe to run on every boot.
+func (s *Service) MigrateModelSettings() error {
+	if s.repo == nil {
+		return nil
+	}
+	for old, key := range domain.RetiredModelKeys() {
+		saved, err := s.repo.Get(old)
+		if err != nil {
+			return err
+		}
+		if saved != "" {
+			if current, err := s.repo.Get(key); err != nil {
+				return err
+			} else if current == "" {
+				if err := s.repo.Set(key, saved); err != nil {
+					return err
+				}
+			}
+		}
+		if err := s.repo.Delete(old); err != nil {
+			return err
+		}
+	}
+	return nil
+}
