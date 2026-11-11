@@ -49,13 +49,16 @@ func ValidateSetting(key, value string) error {
 				return err
 			}
 		}
-	case SettingModelArchitect, SettingModelImplementation:
-		if err := validateModelSetting(key, value); err != nil {
-			return err
-		}
+	case RetiredSettingModelArchitect, RetiredSettingModelImplementation:
+		return &StructuredError{Code: "INVALID_INPUT", Message: key + " is retired: use " + retiredModelKeys[key]}
 	case SettingModelWritingHelper, SettingModelArchitectureAssistant:
 		if err := validateWritingHelperModel(key, value); err != nil {
 			return err
+		}
+	}
+	for _, mode := range modeModelModes {
+		if key == ModeModelKey(mode) {
+			return validateModelSetting(key, value)
 		}
 	}
 	return validateProviderSetting(key, value)

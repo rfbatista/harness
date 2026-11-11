@@ -44,7 +44,7 @@ func TestUnsetTiersShowTheBuiltInModels(t *testing.T) {
 }
 
 func TestTiersShowTheStoredModels(t *testing.T) {
-	v := NewView(settings{domain.SettingModelArchitect: "fable", domain.SettingModelImplementation: domain.ModelDefault})
+	v := NewView(settings{domain.ModeModelKey(domain.SessionModeArchitect): "fable", domain.ModeModelKey(domain.SessionModeImplement): domain.ModelDefault})
 	if got := selected(t, v.Tiers[0]); got != "fable" {
 		t.Errorf("architect selects %q, want fable", got)
 	}

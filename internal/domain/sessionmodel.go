@@ -2,74 +2,131 @@ package domain
 
 import "slices"
 
-// A session runs on one of two model tiers. An architect session plans the
-// task, so it gets the architect model; a session another session started
-// (through the start_task_session tool) carries out part of that plan, so it
-// gets the cheaper implementation model. A session a person starts outside
-// architect mode gets neither: the CLI picks its model.
+// A session starts on the model of its session mode (ADR 0084): one
+// server-wide setting per mode, so the mode alone decides, whoever started the
+// session. A person's model override for one session wins over it.
+
+// SettingModelModePrefix starts the settings key of each mode model; the mode
+// value ends it, "default" for the default mode.
+const SettingModelModePrefix = "models.claude.mode."
+
+// The keys the mode models replaced. They are retired: a write is refused and
+// a boot migration moves a stored value to the mode's key.
 const (
-	// SettingModelArchitect is the settings key holding the model of
-	// architect-mode sessions.
-	SettingModelArchitect = "models.claude.architect"
-	// SettingModelImplementation is the settings key holding the model of
-	// sessions started by another session.
-	SettingModelImplementation = "models.claude.implementation"
+	RetiredSettingModelArchitect      = "models.claude.architect"
+	RetiredSettingModelImplementation = "models.claude.implementation"
 )
 
 // ModelDefault is the model setting value that leaves the choice to the CLI:
 // the session starts with no --model. An unset setting is not the same: it
-// takes the tier's built-in default.
+// takes the mode's built-in model.
 const ModelDefault = "default"
-
-// The built-in tier models, used while their setting is unset.
-const (
-	DefaultArchitectModel      = "opus"
-	DefaultImplementationModel = "sonnet"
-)
 
 // ModelChoices are the values a model setting accepts, in the order a person
 // is offered them. The names are the CLI's aliases, which follow the newest
 // model of each family.
 var ModelChoices = []string{ModelDefault, "fable", "opus", "sonnet", "haiku"}
 
-func validateModelSetting(key, value string) error {
-	if value == "" {
-		return nil
+// modeModelModes are the session modes that have a model, in the order a
+// person reads them.
+var modeModelModes = []SessionMode{
+	SessionModeDefault, SessionModeArchitect, SessionModeImplement,
+	SessionModeDesign, SessionModeProduct, SessionModeDesignSystem,
+}
+
+// ModeModelKey is the settings key holding a mode's model.
+func ModeModelKey(mode SessionMode) string {
+	if mode == SessionModeDefault {
+		return SettingModelModePrefix + "default"
 	}
-	for _, c := range ModelChoices {
-		if value == c {
-			return nil
+	return SettingModelModePrefix + string(mode)
+}
+
+// ModeBuiltInModel is the model a mode takes while its setting is unset: opus
+// for architect, sonnet for implement, and ModelDefault (the CLI chooses) for
+// the rest.
+func ModeBuiltInModel(mode SessionMode) string {
+	switch mode {
+	case SessionModeArchitect:
+		return "opus"
+	case SessionModeImplement:
+		return "sonnet"
+	default:
+		return ModelDefault
+	}
+}
+
+// ModeModel is one row of the mode models read.
+type ModeModel struct {
+	Mode SessionMode
+	Key  string
+	// Current is the stored value, or the built-in while it is unset: always
+	// one of ModelChoices.
+	Current string
+	BuiltIn string
+}
+
+// ModeModels reads every mode's model through read, which returns a setting's
+// stored value ("" while unset), in the order a person reads the modes.
+func ModeModels(read func(key string) string) []ModeModel {
+	out := make([]ModeModel, 0, len(modeModelModes))
+	for _, mode := range modeModelModes {
+		key, builtIn := ModeModelKey(mode), ModeBuiltInModel(mode)
+		current := read(key)
+		if current == "" {
+			current = builtIn
 		}
+		out = append(out, ModeModel{Mode: mode, Key: key, Current: current, BuiltIn: builtIn})
+	}
+	return out
+}
+
+// retiredModelKeys maps each retired key to the key that replaced it.
+var retiredModelKeys = map[string]string{
+	RetiredSettingModelArchitect:      ModeModelKey(SessionModeArchitect),
+	RetiredSettingModelImplementation: ModeModelKey(SessionModeImplement),
+}
+
+// RetiredModelKeys maps each retired model key to the mode key that replaced it.
+func RetiredModelKeys() map[string]string {
+	out := make(map[string]string, len(retiredModelKeys))
+	for old, key := range retiredModelKeys {
+		out[old] = key
+	}
+	return out
+}
+
+func validateModelSetting(key, value string) error {
+	if value == "" || slices.Contains(ModelChoices, value) {
+		return nil
 	}
 	return &StructuredError{Code: "INVALID_INPUT", Message: key + ` must be one of "default", "fable", "opus", "sonnet" or "haiku"`}
 }
 
-// TierModel reads a tier's stored setting: unset takes the built-in model,
-// ModelDefault takes none ("").
-func TierModel(stored, builtIn string) string {
-	switch stored {
-	case "":
-		return builtIn
-	case ModelDefault:
-		return ""
-	default:
-		return stored
+// ValidModelChoice is nil when value is a model a start may name: one of
+// ModelChoices.
+func ValidModelChoice(field, value string) error {
+	if !slices.Contains(ModelChoices, value) {
+		return &StructuredError{Code: "INVALID_INPUT", Message: field + ` must be one of "default", "fable", "opus", "sonnet" or "haiku"`}
 	}
+	return nil
 }
 
-// ResolveSessionModel is the model a new session starts with when its start
-// names none: the architect model in architect mode, the implementation model
-// when another session started it, otherwise none (the CLI's choice).
-// architect and implementation are the tiers' models as TierModel reads them.
-func ResolveSessionModel(mode SessionMode, startedBySession bool, architect, implementation string) string {
-	switch {
-	case mode == SessionModeArchitect:
-		return architect
-	case startedBySession:
-		return implementation
-	default:
+// ResolveSessionModel is the --model a new session starts with: the override
+// when the start names one, else the mode's stored setting, else the mode's
+// built-in. ModelDefault at either step is no model (""): the CLI chooses.
+func ResolveSessionModel(mode SessionMode, override, stored string) string {
+	model := override
+	if model == "" {
+		model = stored
+	}
+	if model == "" {
+		model = ModeBuiltInModel(mode)
+	}
+	if model == ModelDefault {
 		return ""
 	}
+	return model
 }
 
 // The writing helper (ADR 0026) is an assistant, not a session: one global

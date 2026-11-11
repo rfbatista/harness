@@ -1,6 +1,6 @@
-// The Models page, /models: the model each session tier starts with. An
-// architect-mode session gets the architect model; a session another
-// session started gets the implementation model (domain.ResolveSessionModel).
+// The Models page, /models: the model each session mode starts with
+// (domain.ModeModels, ADR 0084). The two rows it still shows are the architect
+// and implement modes.
 // The server paints each select at the stored model; the browser's modelTier
 // (web/src/modules/models) saves a change through /api/update_settings.
 
@@ -96,26 +96,25 @@ func (t Tier) Choices() []Choice {
 	return out
 }
 
-// NewView reads each tier's stored model.
+// NewView reads each session tier's mode model (domain.ModeModels).
 func NewView(settings ports.SettingsReader) View {
-	current := func(key, builtIn string) string {
-		if v := settings.Setting(key); v != "" {
-			return v
-		}
-		return builtIn
+	current := map[domain.SessionMode]domain.ModeModel{}
+	for _, m := range domain.ModeModels(settings.Setting) {
+		current[m.Mode] = m
 	}
+	architect, implement := current[domain.SessionModeArchitect], current[domain.SessionModeImplement]
 	return View{Tiers: []Tier{
 		{
-			Key:     domain.SettingModelArchitect,
+			Key:     architect.Key,
 			Title:   "Architect",
 			Lead:    "Sessions started in architect mode: they plan the task and hand its parts to other sessions.",
-			Current: current(domain.SettingModelArchitect, domain.DefaultArchitectModel),
+			Current: architect.Current,
 		},
 		{
-			Key:     domain.SettingModelImplementation,
+			Key:     implement.Key,
 			Title:   "Implementation",
 			Lead:    "Sessions another session started, through start_task_session: they carry out a part of the plan.",
-			Current: current(domain.SettingModelImplementation, domain.DefaultImplementationModel),
+			Current: implement.Current,
 		},
 	}, Assistants: []Tier{{
 		Key:       domain.SettingModelWritingHelper,
