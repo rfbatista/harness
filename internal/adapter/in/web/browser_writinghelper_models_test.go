@@ -133,6 +133,83 @@ func TestModelsPageWritingHelperRowInTheBrowser(t *testing.T) {
 	}
 }
 
+const modeRowSelects = `[data-setting^="models.claude.mode."] select`
+
+func TestModelsPageSessionModeRowsInTheBrowser(t *testing.T) {
+	store := &fakeSettingsAPI{values: map[string]string{"models.claude.mode.design": "haiku"}}
+	ctx, url, errs := modelsBrowser(t, store, whAvailable)
+
+	var rows, lead, labels, announced, afterReload, implementation string
+	err := chromedp.Run(ctx,
+		chromedp.EmulateViewport(1280, 900),
+		chromedp.Navigate(url+"/models"),
+		chromedp.WaitVisible(modeRowSelects, chromedp.ByQuery),
+		chromedp.Evaluate(`[...document.querySelectorAll('[data-setting^="models.claude.mode."]')].map((r) => r.dataset.setting.replace('models.claude.mode.', '') + '=' + r.querySelector('select').value).join(',')`, &rows),
+		chromedp.Evaluate(`document.querySelector('[data-setting="models.claude.mode.design"] p.text-sm').textContent`, &lead),
+		chromedp.Evaluate(`[...document.querySelectorAll('[data-setting="models.claude.mode.architect"] option')].map((o) => o.value + '=' + o.textContent).join(',')`, &labels),
+		chromedp.Evaluate(`document.querySelectorAll('#model-Implementation').length + document.querySelectorAll('[data-setting="models.claude.implementation"]').length + ''`, &implementation),
+		whShot("models-modes"),
+		whPoll(`!!document.querySelector('[data-setting="models.claude.mode.product"]')._x_dataStack`),
+		setField(`[data-setting="models.claude.mode.product"] select`, "fable", "change"),
+		whPoll(`document.querySelector('[data-setting="models.claude.mode.product"] [role=status]').textContent === 'Model set to fable.'`),
+		chromedp.Evaluate(`document.querySelector('[data-setting="models.claude.mode.product"] [role=status]').textContent`, &announced),
+		chromedp.Navigate(url+"/models"),
+		chromedp.WaitVisible(modeRowSelects, chromedp.ByQuery),
+		chromedp.Evaluate(`document.querySelector('[data-setting="models.claude.mode.product"] select').value`, &afterReload),
+	)
+	if err != nil {
+		t.Fatalf("models: %v\nJS errors: %v", err, errs.all())
+	}
+	if want := "default=default,architect=opus,implement=sonnet,design=haiku,product=default,designsystem=default"; rows != want {
+		t.Errorf("rows %q, want %q", rows, want)
+	}
+	if !strings.Contains(lead, "design mode") || !strings.Contains(lead, "Design tab") {
+		t.Errorf("design lead %q", lead)
+	}
+	if want := "default=default: the CLI chooses,fable=fable,opus=opus (default),sonnet=sonnet,haiku=haiku"; labels != want {
+		t.Errorf("architect choices %q, want %q", labels, want)
+	}
+	if implementation != "0" {
+		t.Errorf("the Implementation row is still on the page")
+	}
+	if announced != "Model set to fable." || afterReload != "fable" {
+		t.Errorf("announced %q, after reload %q", announced, afterReload)
+	}
+	if got := store.log(); got != `{"models.claude.mode.product":"fable"}` {
+		t.Errorf("saved %q", got)
+	}
+	if e := errs.all(); len(e) > 0 {
+		t.Errorf("JavaScript errors:\n%s", strings.Join(e, "\n"))
+	}
+}
+
+func TestModelsPageSessionModeRowSaveFailureInTheBrowser(t *testing.T) {
+	store := &fakeSettingsAPI{values: map[string]string{}, refuse: true}
+	ctx, url, errs := modelsBrowser(t, store, whAvailable)
+
+	const row = `[data-setting="models.claude.mode.architect"]`
+	var banner, current string
+	err := chromedp.Run(ctx,
+		chromedp.EmulateViewport(1280, 900),
+		chromedp.Navigate(url+"/models"),
+		chromedp.WaitVisible(row+" select", chromedp.ByQuery),
+		whPoll(`!!document.querySelector('`+row+`')._x_dataStack`),
+		setField(row+" select", "haiku", "change"),
+		whPoll(`!!document.querySelector('`+row+` [role=alert]')`),
+		chromedp.Evaluate(`document.querySelector('`+row+` [role=alert]').textContent.replace(/\s+/g, ' ').trim()`, &banner),
+		chromedp.Evaluate(`document.querySelector('`+row+` select').value`, &current),
+	)
+	if err != nil {
+		t.Fatalf("failure: %v\nJS errors: %v", err, errs.all())
+	}
+	if !strings.Contains(banner, "The model was not saved.") || !strings.Contains(banner, "INVALID_INPUT") || current != "opus" {
+		t.Errorf("banner %q, select back at %q", banner, current)
+	}
+	if e := errs.all(); len(e) > 0 {
+		t.Errorf("JavaScript errors:\n%s", strings.Join(e, "\n"))
+	}
+}
+
 func TestModelsPageWritingHelperSaveFailureInTheBrowser(t *testing.T) {
 	store := &fakeSettingsAPI{values: map[string]string{}, refuse: true}
 	ctx, url, errs := modelsBrowser(t, store, whAvailable)
