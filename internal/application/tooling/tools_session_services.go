@@ -459,6 +459,8 @@ func whereText(w domain.ServiceWhere, sessionID string) string {
 			return "your worktree"
 		}
 		return "worktree of session " + shortSessionID(w.SessionID)
+	case "branch":
+		return "service worktree"
 	case "service_folder":
 		return "service folder"
 	case "container":

@@ -1,7 +1,7 @@
 // ServicesGateway over the harness HTTP API.
 
 import { Codes, StructuredError } from "../../../shared/domain/errors.js";
-import { toEvent, toLogEvent, toLogRead, toRunVariables, toRunWorktrees, toSeed, toService, toServiceList } from "./dto.js";
+import { toBranchList, toEvent, toLogEvent, toLogRead, toRunVariables, toRunWorktrees, toSeed, toService, toServiceList } from "./dto.js";
 
 /** @returns {import("../domain/ports.js").ServicesSettings} */
 export function toSettings(body) {
@@ -45,6 +45,9 @@ export function servicesGateway(api, feed) {
     },
     async listRunWorktrees(serviceId) {
       return toRunWorktrees(await api.get("/list_service_run_worktrees", { service_id: serviceId }));
+    },
+    async listBranches(serviceId, query = "") {
+      return toBranchList(await api.get("/list_service_branches", query === "" ? { service_id: serviceId } : { service_id: serviceId, query }));
     },
     async getRunVariables(serviceId) {
       return toRunVariables(await api.get("/get_run_variables", { service_id: serviceId }));

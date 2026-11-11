@@ -98,6 +98,18 @@ templ Page(frame shell.Frame, projectID, projectName string, seed Seed, repos []
 											</span>
 											<span data-service-time x-text="row.time"></span>
 										</div>
+										<template x-if="row.runIn.searchOpen">
+											<div class="[ branch-search ]" data-branch-search x-bind:data-service-id="row.id" x-init="focusBranchSearch" x-on:keydown.escape.stop.prevent="cancelBranchSearch">
+												<div class="[ cluster ] [ gutter-xs ]">
+													<label class="[ text-sm color-ink-muted ]" for="branch-search-field">Branch</label>
+													<div class="[ dropdown ] [ grow ]" x-data="combobox" data-source="searchBranches" data-placeholder="Search local and origin branches" data-size="sm" x-bind:data-service-id="row.id" x-on:dropdown-change="branchPicked">
+														<input type="hidden" id="branch-search-field"/>
+													</div>
+													<button type="button" class="[ button ]" data-variant="ghost" data-size="sm" x-on:click="cancelBranchSearch">Cancel</button>
+												</div>
+												<p class="[ text-sm color-ink-muted ]">Only committed work runs, at the branch's latest commit. To run a session's uncommitted edits, pick that session's worktree. A remote branch is fetched when you start.</p>
+											</div>
+										</template>
 										<div class="[ banner ]" data-tone="attention" role="status" data-run-in-fallback x-bind:hidden="!row.runIn.hasFallback">
 											<span class="[ grow ]"><strong>Your last pick is gone.</strong> <span x-text="row.runIn.fallback"></span></span>
 											<button type="button" class="[ button ]" data-variant="ghost" data-size="sm" x-bind:data-service-id="row.id" x-on:click="dismissRunInFallback">Dismiss</button>
@@ -115,6 +127,11 @@ templ Page(frame shell.Frame, projectID, projectName string, seed Seed, repos []
 													<optgroup x-bind:label="row.runIn.groupLabel">
 														<template x-for="o in row.runIn.sessions" x-bind:key="o.key">
 															<option x-bind:value="o.key" x-bind:data-description="o.description" x-bind:data-tone="o.tone" x-text="o.label"></option>
+														</template>
+													</optgroup>
+													<optgroup label="Branch">
+														<template x-for="o in row.runIn.branchGroup" x-bind:key="o.key">
+															<option x-bind:value="o.key" x-bind:data-description="o.description" x-text="o.label"></option>
 														</template>
 													</optgroup>
 												</select>

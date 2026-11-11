@@ -79,6 +79,7 @@ test("the note over the log says how much is shown", () => {
 test("the run line says when, by whom and where", () => {
   const run = { started_at: "2026-11-07T14:02:00", started_by: { kind: "person", agent: "", session_id: "" }, where: { kind: "main", branch: "main" } };
   assert.equal(runLine(run), "Run started 14:02 · by you · main checkout @ main");
+  assert.equal(runLine({ ...run, where: { kind: "branch", branch: "feature/x", sha: "abc1234", remote: false } }), "Run started 14:02 · by you · branch @ feature/x · abc1234");
   assert.equal(runLine({ ...run, started_by: { kind: "session", agent: "backend", session_id: "s" }, where: { kind: "container" } }), "Run started 14:02 · by backend · container");
   assert.equal(runLine(null), "");
 });

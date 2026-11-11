@@ -29,10 +29,24 @@ function toRun(r) {
       dir: String(r.where?.dir ?? ""),
       branch: String(r.where?.branch ?? ""),
       session_id: String(r.where?.session_id ?? ""),
+      sha: String(r.where?.sha ?? ""),
+      remote: r.where?.remote === true,
     },
     worktree_key: String(r.worktree_key ?? ""),
     overrides: array(r.overrides).map((o) => ({ name: String(o?.name ?? ""), by: String(o?.by ?? "") })),
     sandboxed: r.sandboxed !== false,
+  };
+}
+
+/** @returns {import("../domain/ports.js").BranchList} */
+export function toBranchList(body) {
+  if (!body || !Array.isArray(body.branches)) bad("expected {branches: […], truncated}");
+  return {
+    branches: body.branches.map((b) => {
+      if (typeof b?.name !== "string" || b.name === "") bad("a branch without a name");
+      return { name: b.name, remote: b.remote === true, sha: String(b.sha ?? ""), subject: String(b.subject ?? ""), committedAt: String(b.committed_at ?? "") };
+    }),
+    truncated: body.truncated === true,
   };
 }
 

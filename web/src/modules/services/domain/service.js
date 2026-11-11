@@ -60,6 +60,12 @@ function span(ms) {
 
 const ago = (ms) => (ms < MINUTE ? "just now" : `${span(ms)} ago`);
 
+/** How long ago an RFC 3339 time was: "2h ago"; "" for a time that does not read. */
+export function agoLabel(iso, now) {
+  const at = Date.parse(iso);
+  return Number.isNaN(at) ? "" : ago(now.getTime() - at);
+}
+
 /** The time fact of a row: how long it has been up, how it ended, or that it never ran. */
 export function timeFact(service, now) {
   const run = service.run;
@@ -99,6 +105,7 @@ export function whereLabel(run) {
   switch (run?.where.kind) {
     case "main": return run.where.branch ? `main checkout @ ${run.where.branch}` : "main checkout";
     case "session": return `session worktree @ ${run.where.branch}`;
+    case "branch": return `branch @ ${run.where.remote ? "origin/" : ""}${run.where.branch}${run.where.sha ? ` · ${run.where.sha}` : ""}`;
     case "service_folder": return "service folder";
     case "container": return "container";
     default: return "";

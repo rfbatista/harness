@@ -183,3 +183,28 @@ test("run variables with an unknown source, or no list, are a bad response", asy
   assert.equal(await bad({}), "BAD_RESPONSE");
   assert.deepEqual((await servicesGateway({ get: async () => ({ run_id: "", variables: [] }) }, {}).getRunVariables("s1")).variables, []);
 });
+
+test("a run on a branch carries its short commit and whether it is remote", () => {
+  const run = toService({ ...serviceDTO({ status: "running" }), run: runDTO({ where: { kind: "branch", dir: "/s", branch: "feature/x", sha: "abc1234", remote: true } }) }).run;
+  assert.deepEqual([run.where.kind, run.where.sha, run.where.remote], ["branch", "abc1234", true]);
+  const main = toService({ ...serviceDTO({ status: "running" }), run: runDTO() }).run;
+  assert.deepEqual([main.where.sha, main.where.remote], ["", false]);
+});
+
+test("the branches of a service are read from list_service_branches, the query only when typed", async () => {
+  const calls = [];
+  const api = { get: async (path, q) => (calls.push([path, q]), { branches: [{ name: "feature/x", remote: false, sha: "abc1234", subject: "Add", committed_at: "2026-11-07T12:00:00Z" }, { name: "dev", remote: true, sha: "def5678", subject: "", committed_at: "" }], truncated: true }) };
+  const gw = servicesGateway(api, {});
+  const list = await gw.listBranches("s1");
+  await gw.listBranches("s1", "fea");
+  assert.deepEqual(calls, [["/list_service_branches", { service_id: "s1" }], ["/list_service_branches", { service_id: "s1", query: "fea" }]]);
+  assert.deepEqual(list.branches.map((b) => [b.name, b.remote, b.sha, b.subject, b.committedAt]), [["feature/x", false, "abc1234", "Add", "2026-11-07T12:00:00Z"], ["dev", true, "def5678", "", ""]]);
+  assert.equal(list.truncated, true);
+});
+
+test("a branch list that is not a list, or a branch without a name, is a bad response", async () => {
+  const bad = (body) => servicesGateway({ get: async () => body }, {}).listBranches("s1").catch((e) => e.code);
+  assert.equal(await bad({}), "BAD_RESPONSE");
+  assert.equal(await bad({ branches: [{ remote: false }] }), "BAD_RESPONSE");
+  assert.deepEqual((await servicesGateway({ get: async () => ({ branches: [], truncated: false }) }, {}).listBranches("s1")).branches, []);
+});

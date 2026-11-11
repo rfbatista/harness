@@ -11,7 +11,7 @@ import { systemClock } from "../../../../shared/infrastructure/clock.js";
 import { describeError } from "../../../../shared/presentation/errors.js";
 import { readSeed } from "../../../../shared/presentation/seed.js";
 import { runLine } from "../../domain/log.js";
-import { afterDismiss, afterFailedRead, afterPick, afterRead, freshRunIn, hasRunIn, pickAnnouncement, pickKeyOf, pickedWorktree, startKey } from "../../domain/runIn.js";
+import { BRANCH_ENTRY, afterDismiss, afterFailedRead, afterPick, afterRead, afterRefusal, branchOptions, freshRunIn, hasRunIn, pickAnnouncement, pickKeyOf, startKey } from "../../domain/runIn.js";
 import { applyEvent, groupServices, isActive, runningCount, savedNotice, statusView, upsertService } from "../../domain/service.js";
 import { trapTab } from "../focusTrap.js";
 import { runInView, serviceRow } from "../view.js";
@@ -52,6 +52,8 @@ export const servicesPage = ({ gateway, clock = systemClock, timers = globalThis
     flights: {},
     /** The "Run in" pick per service id that offers one (domain/runIn.js). */
     runIns: {},
+    /** The service whose branch search is open ("" for none): the combobox asks for its branches. */
+    branchSearchId: "",
     /** The refusal of the last action, {title, message, code, next, links}; null for none. */
     refusal: null,
     /** The service whose log is open (the log viewer follows it). */
@@ -76,7 +78,7 @@ export const servicesPage = ({ gateway, clock = systemClock, timers = globalThis
         count: g.services.length,
         rows: g.services.map((s) => ({
           ...serviceRow(s, this.now, { flight: this.flights[s.id] ?? "", runtime: this.runtime }),
-          runIn: runInView(s, this.runIns[s.id]),
+          runIn: runInView(s, this.runIns[s.id], { searchOpen: s.id === this.branchSearchId }),
           current: s.id === this.logId,
           canDelete: !isActive(s),
         })),
@@ -263,7 +265,10 @@ export const servicesPage = ({ gateway, clock = systemClock, timers = globalThis
         this.openLog(id);
         return;
       }
-      if (verb === "start") this.refusal = null;
+      if (verb === "start") {
+        this.refusal = null;
+        if (this.branchSearchId === id) this.branchSearchId = "";
+      }
       this.flights = { ...this.flights, [id]: verb };
       const seqBefore = this.seq;
       try {
@@ -279,7 +284,7 @@ export const servicesPage = ({ gateway, clock = systemClock, timers = globalThis
         this.refusal = { ...shown, title: `${service.name} did not ${verb === "restart" ? "restart" : verb}.` };
         if (shown.code === "SERVICE_NOT_FOUND") this.load();
         // The worktree is gone: the refusal says so already, so the list is read again without a second notice.
-        if (shown.code === "WORKTREE_NOT_AVAILABLE") await this.loadRunIn(id, { silent: true });
+        if (shown.code === "WORKTREE_NOT_AVAILABLE") await this.refusedWorktree(id);
       } finally {
         const { [id]: _done, ...rest } = this.flights;
         this.flights = rest;
@@ -322,12 +327,69 @@ export const servicesPage = ({ gateway, clock = systemClock, timers = globalThis
     /** @param {{ currentTarget: HTMLElement, detail: { value: string } }} event the picker's dropdown-change: nothing starts */
     runInPicked(event) {
       const id = event.currentTarget.dataset.serviceId;
+      if (event.detail.value === BRANCH_ENTRY) {
+        this.openBranchSearch(id);
+        // The select now reads the entry, which is not a pick: it goes back to the pick.
+        const select = event.currentTarget.querySelector?.("select");
+        this.$nextTick(() => { if (select && this.runIns[id]) select.value = this.runIns[id].pickedKey; });
+        return;
+      }
       const prev = this.runIns[id];
       const picked = prev ? afterPick(prev, event.detail.value) : null;
       if (!picked) return;
       prefs.set(pickKeyOf(id), picked.clearStored ? null : event.detail.value);
       this.runIns = { ...this.runIns, [id]: picked.next };
-      this.notice = pickAnnouncement(this.services.find((s) => s.id === id)?.name ?? "", pickedWorktree(picked.next));
+      this.notice = pickAnnouncement(this.services.find((s) => s.id === id)?.name ?? "", picked.next);
+    },
+
+    /** "Branch…" was chosen: the branch search opens under the row; the pick stays what it was. */
+    openBranchSearch(id) {
+      this.branchSearchId = id;
+    },
+
+    /** The combobox's source (data-source): the branches of the service whose search is open, filtered by the typed text. */
+    async searchBranches(query) {
+      return branchOptions(await gateway.listBranches(this.branchSearchId, query), this.now);
+    },
+
+    /** @param {{ currentTarget: HTMLElement, detail: { value: string } }} event the search's dropdown-change: a branch is picked; nothing starts */
+    branchPicked(event) {
+      const id = event.currentTarget.dataset.serviceId;
+      const picked = this.runIns[id] ? afterPick(this.runIns[id], event.detail.value) : null;
+      this.branchSearchId = "";
+      if (!picked) return;
+      prefs.set(pickKeyOf(id), event.detail.value);
+      this.runIns = { ...this.runIns, [id]: picked.next };
+      this.notice = pickAnnouncement(this.services.find((s) => s.id === id)?.name ?? "", picked.next);
+      this.focusRunIn(event.currentTarget);
+    },
+
+    /** The search has opened (x-init): the focus goes to its text field. */
+    focusBranchSearch() {
+      const search = this.$el;
+      this.$nextTick(() => { const field = search.querySelector('.dropdown input:not([type="hidden"])'); field?.focus(); field?.dispatchEvent(new KeyboardEvent("keydown", { key: "ArrowDown", bubbles: true })); });
+    },
+
+    /** Cancel, or Esc in the search: it closes and the picker has the focus again. */
+    cancelBranchSearch(event) {
+      this.branchSearchId = "";
+      this.focusRunIn(event.currentTarget);
+    },
+
+    /** Gives the focus back to the row's picker, once the search has gone. */
+    focusRunIn(from) {
+      const row = from.closest?.("[data-service]") ?? null;
+      this.$nextTick(() => row?.querySelector("[data-run-in] .trigger")?.focus());
+    },
+
+    /** A start named a worktree or branch that is gone: a branch is forgotten, and the list is read again without a second notice. */
+    async refusedWorktree(id) {
+      if (this.runIns[id]) {
+        const { next, clearStored } = afterRefusal(this.runIns[id]);
+        if (clearStored) prefs.set(pickKeyOf(id), null);
+        this.runIns = { ...this.runIns, [id]: next };
+      }
+      await this.loadRunIn(id, { silent: true });
     },
 
     /** The picker was touched to open (or Retry was pressed): the list is read again. */

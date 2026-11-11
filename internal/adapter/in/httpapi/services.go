@@ -185,6 +185,17 @@ func (h *Handler) handleGetRunVariables(c echo.Context) error {
 	return c.JSON(http.StatusOK, vars)
 }
 
+func (h *Handler) handleListServiceBranches(c echo.Context) error {
+	if h.services == nil {
+		return errServicesOff
+	}
+	list, err := h.services.ListServiceBranches(c.Request().Context(), c.QueryParam("service_id"), c.QueryParam("query"))
+	if err != nil {
+		return err
+	}
+	return c.JSON(http.StatusOK, list)
+}
+
 func (h *Handler) handleListServiceRunWorktrees(c echo.Context) error {
 	if h.services == nil {
 		return errServicesOff

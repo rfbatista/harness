@@ -116,10 +116,30 @@ func (s *Service) sweepRuntime(ctx context.Context, runtime string) {
 // deleted: each is stopped, then removed with its log, and announced as
 // service_deleted.
 func (s *Service) Subscribe(sub ports.EventSubscriber) {
+	ports.On(sub, func(ctx context.Context, ev domain.RepositoryDeleted) error {
+		s.removeRepositoryWorktrees(ctx, ev.ProjectID, ev.RepositoryID)
+		return nil
+	})
 	ports.On(sub, func(ctx context.Context, ev domain.ProjectDeleted) error {
 		s.deleteProjectServices(ctx, ev.ProjectID)
 		return nil
 	})
+}
+
+// removeRepositoryWorktrees removes the service worktree of each service of the
+// repository. The services stay: a start of one is refused while the repository
+// is gone.
+func (s *Service) removeRepositoryWorktrees(ctx context.Context, projectID, repositoryID string) {
+	list, err := s.store.ListServices(projectID)
+	if err != nil {
+		slog.Warn("list a repository's services", "repository", repositoryID, "err", err)
+		return
+	}
+	for _, svc := range list {
+		if svc.RepositoryID == repositoryID {
+			s.removeServiceWorktree(context.WithoutCancel(ctx), svc.ID)
+		}
+	}
 }
 
 // deleteProjectServices is best effort: the project is already gone, so a
