@@ -219,6 +219,43 @@ type NewSessionForm struct {
 	// A form built with NewSessionFormOf offers every agent of the catalog.
 	ProjectID, ProjectName, AgentsMode string
 	AgentsTotal                        int
+	// ModeModels is each session mode's model (mode value → model), which the
+	// Model select starts on and follows. NewSessionFormOf fills in the
+	// built-in models; WithModeModels reads the stored ones.
+	ModeModels map[string]string
+}
+
+// WithModeModels reads every mode's model through read, which returns a
+// setting's stored value ("" while unset).
+func (f NewSessionForm) WithModeModels(read func(key string) string) NewSessionForm {
+	f.ModeModels = make(map[string]string)
+	for _, m := range domain.ModeModels(read) {
+		f.ModeModels[string(m.Mode)] = m.Current
+	}
+	return f
+}
+
+// ModeModelsSeed is ModeModels as JSON, for the form component (data-mode-models).
+func (f NewSessionForm) ModeModelsSeed() string {
+	raw, err := json.Marshal(f.ModeModels)
+	if err != nil {
+		return "{}"
+	}
+	return string(raw)
+}
+
+// ModelOptions are the models the Model select offers, in the Models page's
+// order and words.
+func (f NewSessionForm) ModelOptions() []Option {
+	out := make([]Option, 0, len(domain.ModelChoices))
+	for _, m := range domain.ModelChoices {
+		name := m
+		if m == domain.ModelDefault {
+			name = "default: the CLI chooses"
+		}
+		out = append(out, Option{ID: m, Name: name})
+	}
+	return out
 }
 
 // AgentsSeed is the enabled agents as the picker component reads them
@@ -280,7 +317,7 @@ func NewSessionFormFor(project *domain.Project, agents []*domain.Agent, repos []
 // NewSessionFormOf offers the agents and the project's repositories, in the
 // order given: the task page's form and the board's brainstorm dialog share it.
 func NewSessionFormOf(agents []*domain.Agent, repos []*domain.Repository) NewSessionForm {
-	form := NewSessionForm{}
+	form := NewSessionForm{}.WithModeModels(func(string) string { return "" })
 	for _, a := range agents {
 		form.Agents = append(form.Agents, Option{ID: a.ID, Name: a.Name, Description: a.Description})
 	}

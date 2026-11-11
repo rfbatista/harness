@@ -33,6 +33,8 @@ export function memoryGateway({ projects = [], sessions = [], repositories = {},
   const origin = {};
   /** The repositories fetched, in order; a failure to throw on the next fetches; a gate to hold them. */
   const fetches = [];
+  /** The start requests received, oldest first. */
+  const starts = [];
   let fetchFailure = null;
   let fetchGate = null;
   /** The next start is refused with this error, once. */
@@ -106,12 +108,13 @@ export function memoryGateway({ projects = [], sessions = [], repositories = {},
       return Object.freeze(check(query));
     },
 
-    async start({ projectId, ticketId, repositoryId, agentId, prompt, mode, branchName }) {
+    async start({ projectId, ticketId, repositoryId, agentId, prompt, mode, branchName, model }) {
       if (startRefusal) {
         const refusal = startRefusal;
         startRefusal = null;
         throw refusal;
       }
+      starts.push({ projectId, ticketId, repositoryId, agentId, prompt, mode, branchName, model });
       if (!knownProjects.has(projectId)) {
         throw new StructuredError(Codes.PROJECT_NOT_FOUND, `project ${projectId} not found`, 404);
       }
@@ -302,6 +305,7 @@ export function memoryGateway({ projects = [], sessions = [], repositories = {},
     },
     /** The repositories fetched so far. */
     fetches,
+    starts,
     /** The next fetches fail with `error`; null makes them succeed again. */
     failFetch(error) {
       fetchFailure = error;

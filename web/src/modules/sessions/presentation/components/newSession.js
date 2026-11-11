@@ -39,6 +39,12 @@ export const newSession = ({ gateway, debounceMs = 300, location = globalThis.lo
   lockedMode,
   /** The sessions of the task the page selected: starting the architect moves them under it. */
   bringUnder: [...bringUnder],
+  /** Every mode's model, from the server (mode value → model); the Model select starts on the chosen mode's. */
+  modeModels: {},
+  /** The Model select's value: the mode's model while the person has not picked one. */
+  model: "",
+  /** The person picked a model: the select keeps it when the mode changes. */
+  modelPicked: false,
   repositoryId: "",
   autoAccept: "off",
   /** @type {import("../../domain/ports.js").Branch[]} */
@@ -84,6 +90,9 @@ export const newSession = ({ gateway, debounceMs = 300, location = globalThis.lo
       this.lockedMode = locked;
       this.mode = locked;
     }
+    this.modeModels = JSON.parse(this.$el.dataset.modeModels || "{}");
+    this.model = this.modeModel;
+    this.$watch("mode", () => this.followMode());
     this.repositoryId = this.$el.dataset.defaultRepository ?? "";
     this.startAgentPicker(this.$el.dataset);
     // A link such as the Agents page's Start a session as <agent> names the agent: chosen once it is one the project enables.
@@ -239,6 +248,41 @@ export const newSession = ({ gateway, debounceMs = 300, location = globalThis.lo
     } finally {
       this.loadingBranches = false;
     }
+  },
+
+  /** The model the chosen mode starts with. */
+  get modeModel() {
+    return this.modeModels[this.mode] ?? "default";
+  },
+  /** The model select follows the mode until the person picks one. */
+  followMode() {
+    if (!this.modelPicked) this.model = this.modeModel;
+  },
+  /** @param {{ target: { value: string } }} event the select's change */
+  pickModel(event) {
+    this.model = event.target.value;
+    this.modelPicked = true;
+  },
+  /** The pick differs from the mode's model. */
+  get modelDiffers() {
+    return this.model !== this.modeModel;
+  },
+  /** Says what the pick overrides, beside the select. */
+  get modelHint() {
+    return `Mode model: ${this.modeModel}`;
+  },
+  /** Back to the mode's model, which the select follows again. */
+  resetModel() {
+    this.modelPicked = false;
+    this.model = this.modeModel;
+  },
+  /** The product brainstorm's form is locked to the Product row: it offers no pick. */
+  get showModelPicker() {
+    return this.lockedMode !== "product";
+  },
+  /** The model the start overrides the mode's with; undefined lets the server resolve the mode's. */
+  get modelOverride() {
+    return this.showModelPicker && this.modelDiffers ? this.model : undefined;
   },
 
   get architect() {
@@ -426,6 +470,7 @@ export const newSession = ({ gateway, debounceMs = 300, location = globalThis.lo
         autoAccept: this.autoAccept,
         baseBranch: this.baseBranch,
         branchName: this.branchName.trim(),
+        model: this.modelOverride,
         size: INITIAL_TERMINAL_SIZE,
         bringUnderSessionIds: this.bringingUnder ? this.bringUnder : undefined,
       });
