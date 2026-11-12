@@ -617,3 +617,34 @@ func TestDocumentsPagesShowATextDocumentAsPreformattedText(t *testing.T) {
 		}
 	}
 }
+
+// imagesBoard is a task whose document names its images by virtual shell
+// path: a design of the task and an upload the person added.
+func imagesBoard(content string) world {
+	w := board()
+	w.artifacts = []*domain.Artifact{
+		{ID: "a-flow", TicketID: "t-feed", ProjectID: "p1", Kind: domain.ArtifactImage, Title: "Flow", Path: "flow.png",
+			Revision: 1, Scope: domain.ArtifactScopeTask, CreatedAt: now.Add(-2 * time.Hour)},
+	}
+	w.resources = []*domain.TicketResource{
+		{ID: "r-shot", TicketID: "t-feed", ProjectID: "p1", Kind: domain.ResourceKind("image"), Title: "screenshot.png", Mime: "image/png",
+			ContentURL: "/api/ticket_resources/r-shot/content", CreatedAt: now, UpdatedAt: now},
+	}
+	w.docs = fakeDocs{"t-feed": {{ID: "d-images", ProjectID: "p1", Title: "Images", Format: domain.DocumentFormatMarkdown, UpdatedAt: now, Content: content}}}
+	return w
+}
+
+func TestATaskDocumentShowsItsTasksImagesByShellPath(t *testing.T) {
+	w := imagesBoard("![flow](../designs/flow.png)\n\n![shot](../resources/screenshot.png)\n\n![root](task/designs/flow.png)\n\n![gone](../designs/gone.png)\n")
+	body := get(t, newTestHandler(t, w), "/projects/p1/tasks/t-feed/documents/d-images").Body.String()
+	for _, want := range []string{
+		`<img src="/api/artifacts/a-flow/view/" alt="flow">`,
+		`<img src="/api/ticket_resources/r-shot/content" alt="shot">`,
+		`<img src="/api/artifacts/a-flow/view/" alt="root">`,
+		`<img src="../designs/gone.png" alt="gone">`,
+	} {
+		if !strings.Contains(body, want) {
+			t.Errorf("page lacks %q", want)
+		}
+	}
+}
