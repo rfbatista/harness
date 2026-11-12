@@ -23,6 +23,36 @@ func TestHTMLNeverPassesScriptThrough(t *testing.T) {
 	}
 }
 
+func TestHTMLWithImagesRewritesOnlyTheImagesItResolves(t *testing.T) {
+	resolve := func(dest string) (string, bool) {
+		if dest == "../designs/flow.png" {
+			return "/api/artifacts/a1/view/", true
+		}
+		return "", false
+	}
+	got := HTMLWithImages("![flow](../designs/flow.png)\n\n![gone](../designs/gone.png)\n\n![web](https://example.com/a.png)\n\n[flow](../designs/flow.png)", resolve)
+	for _, want := range []string{
+		`<img src="/api/artifacts/a1/view/" alt="flow">`,
+		`<img src="../designs/gone.png" alt="gone">`,
+		`<img src="https://example.com/a.png" alt="web">`,
+		`<a href="../designs/flow.png">flow</a>`, // a link is not an image
+	} {
+		if !strings.Contains(got, want) {
+			t.Errorf("HTMLWithImages misses %q in:\n%s", want, got)
+		}
+	}
+}
+
+func TestHTMLWithImagesStaysSafe(t *testing.T) {
+	resolve := func(string) (string, bool) { return "/api/x", true }
+	got := HTMLWithImages("<img src=x onerror=alert(1)>\n\n<script>alert(1)</script>\n\n[click](javascript:alert(1))", resolve)
+	for _, bad := range []string{"<img", "<script", "onerror", "javascript:"} {
+		if strings.Contains(got, bad) {
+			t.Errorf("HTMLWithImages passed %q through:\n%s", bad, got)
+		}
+	}
+}
+
 func TestTextEscapes(t *testing.T) {
 	if got := Text("<b>x</b>"); got != "<pre>&lt;b&gt;x&lt;/b&gt;</pre>" {
 		t.Errorf("Text = %q", got)
