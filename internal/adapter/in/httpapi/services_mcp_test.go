@@ -99,9 +99,10 @@ func newMCPFixtureBase(t *testing.T, settle time.Duration, withRequests bool) *m
 	if withRequests {
 		waiter = &fakeRequestWaiter{}
 		requests = servicerequests.NewService(servicerequests.Deps{
-			Services: f.svc, Store: sqlite.NewServiceRequestRepository(db), Sessions: sessions, Agents: agents, Waiter: waiter, Events: f.cat.Bus,
+			Services: f.svc, Store: f.requestStore, Sessions: sessions, Agents: agents, Waiter: waiter, Events: f.cat.Bus,
 		})
 		requests.Subscribe(f.cat.Bus)
+		f.svc.Subscribe(f.cat.Bus)
 		toolOpts = append(toolOpts, tooling.WithServiceRequests(requests))
 		// The person's HTTP API, with the requests it answers.
 		s := servicesOf(f.cat)
@@ -276,8 +277,15 @@ func TestServicesMCP_StartIsRecordedForTheSessionAndAnAlreadyRunningOneIsLeftAlo
 	if by := f.service(id)["run"].(map[string]any)["started_by"].(map[string]any); by["kind"] != "session" || by["session_id"] != "sess-12345678abc" || by["agent"] != "dev" || by["task_id"] != "task-77" {
 		t.Fatalf("the run is stored as started by the session, with its task: %v", by)
 	}
-	for _, e := range serviceChanges(t, events, id, 2) {
-		if by := e["service"].(map[string]any)["run"].(map[string]any)["started_by"].(map[string]any); by["task_id"] != "task-77" {
+	// The request's own announcements (the pending count) have no run yet.
+	for seen := 0; seen < 2; {
+		e := serviceChanges(t, events, id, 1)[0]
+		run, ok := e["service"].(map[string]any)["run"].(map[string]any)
+		if !ok {
+			continue
+		}
+		seen++
+		if by := run["started_by"].(map[string]any); by["task_id"] != "task-77" {
 			t.Fatalf("the feed carries the task: %v", by)
 		}
 	}
@@ -544,7 +552,7 @@ func TestServicesMCP_RefusalsCarryTheContractsMessages(t *testing.T) {
 	f.createID(imageInput("db"))
 	agent := f.as("sess-1")
 
-	for _, tool := range tooling.SessionServicesToolNames[1:] {
+	for _, tool := range serviceTakingTools() {
 		agent.refused(tool, named("ghost"), `no service named "ghost" in this project; call list_services`)
 	}
 	f.as("sess-orphan").refused("list_services", nil, "this session has no project")
@@ -572,7 +580,7 @@ func TestServicesMCP_ASessionSeesOnlyItsProjectsServices(t *testing.T) {
 	if got["count"] != float64(1) || got["services"].([]any)[0].(map[string]any)["name"] != "web" {
 		t.Fatalf("project 1 lists %v", got)
 	}
-	for _, tool := range tooling.SessionServicesToolNames[1:] {
+	for _, tool := range serviceTakingTools() {
 		mine.refused(tool, named("secret-job"), `no service named "secret-job" in this project; call list_services`)
 		theirs.refused(tool, named("web"), `no service named "web" in this project; call list_services`)
 	}
@@ -610,4 +618,16 @@ func TestServicesMCP_TheContainerRuntimeAndSandboxRefusalsUseTheContractsMessage
 	// The sandbox is on and this platform's driver is absent (the fixture has none).
 	agent.refused("start_service", named("web"), "the sandbox is on but this platform has no sandbox driver; command services cannot start")
 	agent.refused("restart_service", named("web"), "the sandbox is on but this platform has no sandbox driver; command services cannot start")
+}
+
+// serviceTakingTools are the tools that name an existing service: every tool
+// but the list and create_service.
+func serviceTakingTools() []string {
+	var out []string
+	for _, name := range tooling.SessionServicesToolNames[1:] {
+		if name != "create_service" {
+			out = append(out, name)
+		}
+	}
+	return out
 }

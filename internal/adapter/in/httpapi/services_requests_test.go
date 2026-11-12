@@ -3,6 +3,7 @@ package httpapi
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"strings"
 	"sync"
 	"testing"
@@ -33,8 +34,13 @@ func (w *fakeRequestWaiter) ServiceRequestFiled(id string) {
 func (w *fakeRequestWaiter) ServiceRequestSettled(id string) {
 	w.mu.Lock()
 	defer w.mu.Unlock()
+	if w.pending == nil {
+		w.pending = map[string]int{}
+	}
 	w.pending[id]--
 }
+
+func (w *fakeRequestWaiter) ServiceRequestsRestored(string, int) {}
 
 func (w *fakeRequestWaiter) count(id string) int {
 	w.mu.Lock()
@@ -389,5 +395,361 @@ func TestServicesRequests_ARestartRefusedBeforeFilingFilesNothing(t *testing.T) 
 	}
 	if n := len(f.pendingRequests()); n != 0 {
 		t.Fatalf("%d pending", n)
+	}
+}
+
+// create_service
+
+func (f *mcpFixture) approveNext(done <-chan toolAnswer) toolAnswer {
+	f.t.Helper()
+	r := f.awaitPending(1)[0]
+	if code, out := f.answer(r["id"].(string), "approve", ""); code != 200 {
+		f.t.Fatalf("approve = %d %v", code, out)
+	}
+	return f.waitingFor(done)
+}
+
+func TestServicesRequests_CreateServiceFilesTheWholeDefinitionAndCreatesItOnApproval(t *testing.T) {
+	f, _ := requestsFixtureWithService(t)
+	agent := f.as("sess-1")
+
+	done := agent.callAsync("create_service", map[string]any{
+		"name": "api", "kind": "command", "repository": "api", "reason": "I need a dev server",
+		"env":     map[string]any{"PORT": "8080", "TOKEN": "s3cret-token"},
+		"command": map[string]any{"line": "npm run dev", "subdir": "", "ports": []int{8080}},
+	})
+	r := f.awaitPending(1)[0]
+	f.stillWaiting(done)
+	proposed := r["proposed"].(map[string]any)
+	if r["action"] != "create" || r["service_id"] != "" || r["service_name"] != "api" || r["reason"] != "I need a dev server" ||
+		proposed["name"] != "api" || proposed["kind"] != "command" || proposed["repository_id"] != f.repoID ||
+		proposed["command"].(map[string]any)["line"] != "npm run dev" {
+		t.Fatalf("request = %v", r)
+	}
+	if s, _ := r["summary"].(string); s != "create command service api: npm run dev in api" {
+		t.Fatalf("summary = %q", s)
+	}
+	vars := r["env"].([]any)
+	if len(vars) != 2 || vars[0].(map[string]any)["name"] != "PORT" || vars[1].(map[string]any)["value"] != "s3cret-token" || vars[0].(map[string]any)["change"] != "set" {
+		t.Fatalf("env = %v", vars)
+	}
+	list := agent.ok("list_services", nil)["services"].([]any)
+	for _, s := range list {
+		if s.(map[string]any)["name"] == "api" {
+			t.Fatal("nothing is created before the answer")
+		}
+	}
+
+	got := f.approveNext(done)
+	if got.msg != "" {
+		t.Fatalf("create refused: %s", got.msg)
+	}
+	svc := got.out["service"].(map[string]any)
+	if svc["name"] != "api" || svc["created_by"] != "session sess-1 (dev)" || svc["status"] != "stopped" || svc["command"] != "npm run dev" {
+		t.Fatalf("service = %v", svc)
+	}
+	id := f.createdID("api")
+	stored := f.service(id)
+	if stored["env"] != "PORT=8080\nTOKEN=s3cret-token\n" && stored["env"] != "PORT=8080\nTOKEN=s3cret-token" {
+		t.Fatalf("saved env = %q", stored["env"])
+	}
+	if by := stored["created_by"].(map[string]any); by["kind"] != "session" || by["session_id"] != "sess-1" || by["agent"] != "dev" || by["task_id"] != "task-1" {
+		t.Fatalf("created_by = %v", by)
+	}
+	if first := f.service(f.createdID("web")); first["created_by"].(map[string]any)["kind"] != "person" {
+		t.Fatalf("a service the person made = %v", first["created_by"])
+	}
+}
+
+func TestServicesRequests_CreateServiceMakesAnImageServiceAndRefusesBadInputBeforeFiling(t *testing.T) {
+	f, _ := requestsFixtureWithService(t)
+	agent := f.as("sess-1")
+
+	done := agent.callAsync("create_service", map[string]any{
+		"name": "db", "kind": "image", "reason": "a database",
+		"image": map[string]any{"ref": "postgres:16", "args": []string{"-c", "fsync=off"}, "ports": []map[string]any{{"host": 5432, "container": 5432}}},
+	})
+	got := f.approveNext(done)
+	if got.msg != "" || got.out["service"].(map[string]any)["image"] != "postgres:16" || got.out["service"].(map[string]any)["created_by"] != "session sess-1 (dev)" {
+		t.Fatalf("image create = %v / %q", got.out, got.msg)
+	}
+
+	cases := []struct {
+		name string
+		args map[string]any
+		want string
+	}{
+		{"taken", map[string]any{"name": "web", "kind": "command", "command": map[string]any{"line": "x"}, "reason": "r"}, `a service named "web" already exists in this project`},
+		{"repository", map[string]any{"name": "n1", "kind": "command", "repository": "nope", "command": map[string]any{"line": "x"}, "reason": "r"}, `no repository named "nope" in this project`},
+		{"subdir", map[string]any{"name": "n2", "kind": "command", "repository": "api", "command": map[string]any{"line": "x", "subdir": "missing"}, "reason": "r"}, `command.subdir`},
+		{"port", map[string]any{"name": "n3", "kind": "command", "command": map[string]any{"line": "x", "ports": []int{99999}}, "reason": "r"}, `command.ports[0]`},
+		{"name", map[string]any{"name": "Bad Name", "kind": "command", "command": map[string]any{"line": "x"}, "reason": "r"}, `name must be`},
+		{"key", map[string]any{"name": "n4", "kind": "command", "env": map[string]any{"1BAD": "x"}, "command": map[string]any{"line": "x"}, "reason": "r"}, `env key "1BAD" is not a valid variable name`},
+		{"newline", map[string]any{"name": "n5", "kind": "image", "env": map[string]any{"X": "a\nb"}, "image": map[string]any{"ref": "x"}, "reason": "r"}, `env value of "X" contains a newline (image services)`},
+		{"kind", map[string]any{"name": "n6", "kind": "vm", "reason": "r"}, `kind must be command or image`},
+		{"noreason", map[string]any{"name": "n7", "kind": "command", "command": map[string]any{"line": "x"}}, `reason`},
+	}
+	for _, c := range cases {
+		if _, msg := agent.call("create_service", c.args); !strings.Contains(msg, c.want) {
+			t.Fatalf("%s: refusal = %q, want it to hold %q", c.name, msg, c.want)
+		}
+	}
+	if n := len(f.pendingRequests()); n != 0 {
+		t.Fatalf("a refused create files nothing: %d pending", n)
+	}
+}
+
+func TestServicesRequests_ADeniedCreateCreatesNothing(t *testing.T) {
+	f, _ := requestsFixtureWithService(t)
+	agent := f.as("sess-1")
+	done := agent.callAsync("create_service", map[string]any{"name": "api", "kind": "command", "command": map[string]any{"line": "x"}, "reason": "r"})
+	f.answer(f.awaitPending(1)[0]["id"].(string), "deny", "no")
+	if got := f.waitingFor(done); got.msg != "the person denied this service request: no" {
+		t.Fatalf("denied = %q", got.msg)
+	}
+	list := agent.ok("list_services", nil)["services"].([]any)
+	if len(list) != 1 {
+		t.Fatalf("services = %v", list)
+	}
+}
+
+// update_service
+
+func updateInput(name string, changes map[string]any) map[string]any {
+	return map[string]any{"name": name, "changes": changes, "reason": "tuning"}
+}
+
+func TestServicesRequests_UpdateServiceSetsReplacesAndUnsetsVariablesAndShowsOnlyItsOwnValues(t *testing.T) {
+	f := newRequestsFixture(t, 5*time.Second)
+	f.session("sess-1", f.projectID, f.repoID, true)
+	f.session("sess-2", f.projectID, f.repoID, true)
+	if _, err := f.cat.Projects.SaveEnvFile(context.Background(), f.repoID, ".env", "DOTENV_ONLY=dotenv-secret\n"); err != nil {
+		t.Fatal(err)
+	}
+	in := commandInput("web")
+	in["repository_id"], in["export_repository_env"] = f.repoID, true
+	in["env"] = "FROM_PERSON=person-secret\nREPLACE_ME=old\nDROP_ME=gone\n"
+	in["command"] = map[string]any{"line": "make dev"}
+	id := f.createID(in)
+	agent, other := f.as("sess-1"), f.as("sess-2")
+
+	done := agent.callAsync("update_service", updateInput("web", map[string]any{
+		"command": map[string]any{"line": "npm run dev"},
+		"env":     map[string]any{"set": map[string]any{"NEW_ONE": "mine", "REPLACE_ME": "new"}, "unset": []string{"DROP_ME"}},
+	}))
+	r := f.awaitPending(1)[0]
+	f.stillWaiting(done)
+	if r["action"] != "update" || r["service_id"] != id {
+		t.Fatalf("request = %v", r)
+	}
+	var line map[string]any
+	for _, c := range r["changes"].([]any) {
+		if c.(map[string]any)["field"] == "command.line" {
+			line = c.(map[string]any)
+		}
+		if strings.HasPrefix(c.(map[string]any)["field"].(string), "env.") && (c.(map[string]any)["before"] != "" || c.(map[string]any)["after"] != "") {
+			t.Fatalf("an env change shows a value: %v", c)
+		}
+	}
+	if line == nil || line["before"] != "make dev" || line["after"] != "npm run dev" {
+		t.Fatalf("changes = %v", r["changes"])
+	}
+	prev := map[string]any{}
+	for _, e := range r["env"].([]any) {
+		m := e.(map[string]any)
+		prev[m["name"].(string)+"/"+m["change"].(string)] = m["previous_set"]
+	}
+	if prev["NEW_ONE/set"] != false || prev["REPLACE_ME/set"] != true || prev["DROP_ME/unset"] != true {
+		t.Fatalf("env changes = %v", r["env"])
+	}
+	if f.service(id)["command"].(map[string]any)["line"] != "make dev" {
+		t.Fatal("nothing changes before the answer")
+	}
+
+	got := f.approveNext(done)
+	if got.msg != "" || got.out["restart_needed"] != false {
+		t.Fatalf("update = %v / %q", got.out, got.msg)
+	}
+	saved := f.service(id)
+	for _, want := range []string{"FROM_PERSON=person-secret", "NEW_ONE=mine", "REPLACE_ME=new"} {
+		if !strings.Contains(saved["env"].(string), want) {
+			t.Fatalf("saved env = %q, missing %q", saved["env"], want)
+		}
+	}
+	if strings.Contains(saved["env"].(string), "DROP_ME") || saved["command"].(map[string]any)["line"] != "npm run dev" {
+		t.Fatalf("saved = %v", saved)
+	}
+
+	// The agent sees the values it set, and no one else's; another session sees none.
+	view := agent.ok("service_status", named("web"))["service"].(map[string]any)
+	values := view["env_values"].(map[string]any)
+	if len(values) != 2 || values["NEW_ONE"] != "mine" || values["REPLACE_ME"] != "new" {
+		t.Fatalf("env_values = %v", values)
+	}
+	if len(other.ok("service_status", named("web"))["service"].(map[string]any)["env_values"].(map[string]any)) != 0 {
+		t.Fatal("another session sees values it did not set")
+	}
+	f.answersMu.Lock()
+	all := strings.Join(f.answers, "\n")
+	f.answersMu.Unlock()
+	for _, secret := range []string{"person-secret", "dotenv-secret"} {
+		if strings.Contains(all, secret) {
+			t.Fatalf("an MCP answer holds %q", secret)
+		}
+	}
+
+	// A later change by the person takes the key out of env_values.
+	upd := map[string]any{"service_id": id, "service": map[string]any{
+		"name": "web", "kind": "command", "repository_id": f.repoID, "export_repository_env": true,
+		"env": "NEW_ONE=changed-by-person\n", "command": map[string]any{"line": "npm run dev"},
+	}}
+	if code, out := f.call("POST", "/api/update_service", upd); code != 200 {
+		t.Fatalf("person update = %d %v", code, out)
+	}
+	if v := agent.ok("service_status", named("web"))["service"].(map[string]any)["env_values"].(map[string]any); len(v) != 0 {
+		t.Fatalf("env_values after the person changed them = %v", v)
+	}
+}
+
+func TestServicesRequests_UpdateServiceThatChangesNothingFilesNothingAndInvalidResultsAreRefused(t *testing.T) {
+	f, _ := requestsFixtureWithService(t)
+	agent := f.as("sess-1")
+
+	out := agent.ok("update_service", updateInput("web", map[string]any{"name": "web", "env": map[string]any{"unset": []string{"NOT_SET"}}}))
+	if out["restart_needed"] != false || len(f.pendingRequests()) != 0 {
+		t.Fatalf("a no-op update = %v", out)
+	}
+	if out := agent.ok("update_service", updateInput("web", map[string]any{})); out["service"] == nil || len(f.pendingRequests()) != 0 {
+		t.Fatalf("an empty update = %v", out)
+	}
+
+	other := commandInput("other")
+	f.createID(other)
+	for name, c := range map[string]struct {
+		changes map[string]any
+		want    string
+	}{
+		"taken":      {map[string]any{"name": "other"}, `a service named "other" already exists in this project`},
+		"repository": {map[string]any{"repository": "nope"}, `no repository named "nope" in this project`},
+		"image":      {map[string]any{"image": map[string]any{"ref": "x"}}, `image`},
+		"key":        {map[string]any{"env": map[string]any{"set": map[string]any{"1BAD": "x"}}}, `env key "1BAD" is not a valid variable name`},
+		"subdir":     {map[string]any{"command": map[string]any{"subdir": "missing"}}, `command.subdir`},
+		"line":       {map[string]any{"command": map[string]any{"line": " "}}, `command.line`},
+	} {
+		if _, msg := agent.call("update_service", updateInput("web", c.changes)); !strings.Contains(msg, c.want) {
+			t.Fatalf("%s: refusal = %q, want %q", name, msg, c.want)
+		}
+	}
+	if n := len(f.pendingRequests()); n != 0 {
+		t.Fatalf("refused updates file nothing: %d pending", n)
+	}
+}
+
+func TestServicesRequests_UpdateServiceOfARunningServiceSaysRestartNeededAndADenialChangesNothing(t *testing.T) {
+	f, id := requestsFixtureWithService(t)
+	agent := f.as("sess-1")
+	f.operate("start_service", id)
+	f.awaitStatus(id, "running")
+	t.Cleanup(func() { f.operate("stop_service", id) })
+
+	done := agent.callAsync("update_service", updateInput("web", map[string]any{"command": map[string]any{"line": "sleep 31"}}))
+	r := f.awaitPending(1)[0]
+	f.answer(r["id"].(string), "deny", "")
+	if got := f.waitingFor(done); got.msg != "the person denied this service request" {
+		t.Fatalf("denied = %q", got.msg)
+	}
+	if f.service(id)["command"].(map[string]any)["line"] == "sleep 31" {
+		t.Fatal("a denied update changed the service")
+	}
+
+	done = agent.callAsync("update_service", updateInput("web", map[string]any{"command": map[string]any{"line": "sleep 31"}}))
+	got := f.approveNext(done)
+	if got.msg != "" || got.out["restart_needed"] != true {
+		t.Fatalf("update of a running service = %v / %q", got.out, got.msg)
+	}
+	if view := got.out["service"].(map[string]any); view["pending_request"] != nil {
+		t.Fatalf("pending_request = %v", view["pending_request"])
+	}
+}
+
+func TestServicesRequests_ServiceViewShowsThisSessionsPendingRequest(t *testing.T) {
+	f, _ := requestsFixtureWithService(t)
+	f.session("sess-2", f.projectID, f.repoID, true)
+	agent, other := f.as("sess-1"), f.as("sess-2")
+	done := agent.callAsync("start_service", named("web"))
+	r := f.awaitPending(1)[0]
+
+	mine := agent.ok("service_status", named("web"))["service"].(map[string]any)["pending_request"].(map[string]any)
+	if mine["id"] != r["id"] || mine["action"] != "start" {
+		t.Fatalf("pending_request = %v", mine)
+	}
+	if other.ok("service_status", named("web"))["service"].(map[string]any)["pending_request"] != nil {
+		t.Fatal("another session sees a request that is not its own")
+	}
+	f.answer(r["id"].(string), "deny", "")
+	f.waitingFor(done)
+}
+
+// The feed and the pending count
+
+func TestServicesRequests_TheFeedAnnouncesEachStepWithNoValueAndPendingRequestsCountsThePendingOnes(t *testing.T) {
+	f, id := requestsFixtureWithService(t)
+	events, err := f.svc.FollowServices(context.Background(), f.projectID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	agent := f.as("sess-1")
+	const secret = "feed-secret-override"
+
+	done := agent.callAsync("start_service", map[string]any{"name": "web", "env": map[string]any{"D": secret}, "reason": "try"})
+	r := f.awaitPending(1)[0]
+	if got := f.service(id)["pending_requests"]; got != float64(1) {
+		t.Fatalf("pending_requests = %v, want 1", got)
+	}
+	_, listed := f.call("GET", "/api/list_services?project_id="+f.projectID, nil)
+	if n := listed["services"].([]any)[0].(map[string]any)["pending_requests"]; n != float64(1) {
+		t.Fatalf("listed pending_requests = %v", n)
+	}
+	f.answer(r["id"].(string), "approve", "")
+	f.waitingFor(done)
+	t.Cleanup(func() { f.operate("stop_service", id) })
+	if got := f.service(id)["pending_requests"]; got != float64(0) {
+		t.Fatalf("pending_requests after = %v, want 0", got)
+	}
+
+	var states []string
+	var pendingCounts []float64
+	var all []byte
+	deadline := time.After(5 * time.Second)
+	for len(states) < 3 {
+		select {
+		case e := <-events:
+			b, _ := json.Marshal(e)
+			all = append(all, b...)
+			if e.Kind == "service_request" {
+				if e.Request == nil || e.Request.ID != r["id"] {
+					t.Fatalf("event = %+v", e)
+				}
+				states = append(states, string(e.Request.State))
+			}
+			if e.Kind == "service_changed" && e.Service != nil && e.Service.ID == id {
+				pendingCounts = append(pendingCounts, float64(e.Service.PendingRequests))
+			}
+		case <-deadline:
+			t.Fatalf("feed events so far: states %v", states)
+		}
+	}
+	if strings.Join(states, ",") != "pending,approved,done" {
+		t.Fatalf("request states on the feed = %v", states)
+	}
+	if strings.Contains(string(all), secret) {
+		t.Fatalf("a feed event holds a variable value: %s", all)
+	}
+	if len(pendingCounts) == 0 || pendingCounts[0] != 1 {
+		t.Fatalf("the service's pending_requests on the feed = %v", pendingCounts)
+	}
+	if code, out := f.call("GET", "/api/service_requests?project_id="+f.projectID+"&service_id="+id, nil); code != 200 ||
+		!strings.Contains(fmt.Sprint(out), secret) {
+		t.Fatalf("the person still reads the value with the GET: %d %v", code, out)
 	}
 }

@@ -7,7 +7,7 @@ import (
 
 const servicesBuiltInMessage = "services is built into the harness and cannot be edited or deleted"
 
-var servicesTools = []string{"list_services", "service_status", "start_service", "stop_service", "restart_service", "read_service_logs"}
+var servicesTools = []string{"list_services", "service_status", "create_service", "update_service", "start_service", "stop_service", "restart_service", "read_service_logs"}
 
 func TestCatalogBuiltInServices_IsListedSynthesisedAndNeverWritten(t *testing.T) {
 	f := catalogWithSkills(t)

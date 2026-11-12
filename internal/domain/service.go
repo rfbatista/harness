@@ -145,8 +145,14 @@ type Service struct {
 	Image               *ServiceImage   `json:"image"`
 	Status              ServiceStatus   `json:"status"`
 	Run                 *ServiceRun     `json:"run"`
-	CreatedAt           time.Time       `json:"created_at"`
-	UpdatedAt           time.Time       `json:"updated_at"`
+	// CreatedBy is who made the service: the person, or an agent's session
+	// whose service request the person approved (ADR 0083).
+	CreatedBy ServiceStartedBy `json:"created_by"`
+	// PendingRequests is how many service requests of agents wait on the person
+	// for this service; the module fills it in on a read.
+	PendingRequests int       `json:"pending_requests"`
+	CreatedAt       time.Time `json:"created_at"`
+	UpdatedAt       time.Time `json:"updated_at"`
 }
 
 // ServiceInput is what the person defines: a Service's own fields.

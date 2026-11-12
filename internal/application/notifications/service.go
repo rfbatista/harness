@@ -201,6 +201,10 @@ func (s *Service) Subscribe(bus ports.EventSubscriber) {
 		s.onBranchRequest(ev)
 		return nil
 	})
+	ports.On(bus, func(ctx context.Context, ev domain.ServiceRequestChanged) error {
+		s.onServiceRequest(ev)
+		return nil
+	})
 	ports.On(bus, func(ctx context.Context, ev domain.SessionEnded) error {
 		s.resolve(sessionWaitingKey(ev.SessionID))
 		if ev.Status == domain.SessionFailed {
@@ -296,6 +300,34 @@ func (s *Service) onBranchRequest(ev domain.BranchRequestChanged) {
 		Title: clip("Branch: "+r.Label(), domain.MaxNotificationTitleLen),
 		Body:  clip(body, domain.MaxNotificationBodyLen),
 		Link:  link, CauseKey: branchRequestKey(r.ID),
+	}, false)
+}
+
+func serviceRequestKey(id string) string { return "service_request:" + id }
+
+// onServiceRequest records one action notification for a pending service
+// request, and settles it once the request is answered or expired. An answer
+// posts nothing new. It never holds a variable value.
+func (s *Service) onServiceRequest(ev domain.ServiceRequestChanged) {
+	r := ev.Request
+	if r.State != domain.ServiceRequestPending {
+		s.resolve(serviceRequestKey(r.ID))
+		return
+	}
+	body := "Session " + r.SessionID
+	if r.Agent != "" {
+		body += " (" + r.Agent + ")"
+	}
+	body += ", task " + taskOrNone(r.TaskID) + "."
+	if r.Reason != "" {
+		body += " " + r.Reason
+	}
+	s.record(&domain.Notification{
+		ProjectID: ev.ProjectID, TaskID: r.TaskID, SessionID: r.SessionID,
+		Kind: domain.NotificationServiceRequest, Level: domain.NotificationAction,
+		Title: clip("Service: "+r.Summary, domain.MaxNotificationTitleLen),
+		Body:  clip(body, domain.MaxNotificationBodyLen),
+		Link:  "/projects/" + url.PathEscape(ev.ProjectID) + "/services#service-request-" + url.PathEscape(r.ID), CauseKey: serviceRequestKey(r.ID),
 	}, false)
 }
 

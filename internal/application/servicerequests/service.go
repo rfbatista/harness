@@ -44,6 +44,8 @@ type Deps struct {
 type Service struct {
 	d  Deps
 	mu sync.Mutex
+	// restored says the boot's restore ran: it adds to a count, so it runs once.
+	restored bool
 	// waiters belong to the tool calls blocked on a request, by request id.
 	waiters map[string]*waiter
 }
@@ -110,7 +112,19 @@ func (s *Service) build(ctx context.Context, sess *domain.Session, in ports.Serv
 			r.Env = append(r.Env, domain.ServiceRequestEnv{Name: name, Value: in.Env[name], Change: "set"})
 		}
 	}
-	r.Summary = summary(r)
+	if in.Action == domain.ServiceRequestCreate || in.Action == domain.ServiceRequestUpdate {
+		r.Proposed, r.Changes, r.Env = in.Proposed, in.Changes, in.EnvChanges
+		if r.Changes == nil {
+			r.Changes = []domain.ServiceRequestChange{}
+		}
+		if r.Env == nil {
+			r.Env = []domain.ServiceRequestEnv{}
+		}
+	}
+	r.Summary = in.Summary
+	if r.Summary == "" {
+		r.Summary = summary(r)
+	}
 	return r
 }
 
@@ -271,6 +285,25 @@ func (s *Service) perform(ctx context.Context, r *domain.ServiceRequest) (*ports
 			return nil, err
 		}
 		return &ports.ServiceRequestOutcome{Service: svc}, nil
+	case domain.ServiceRequestCreate:
+		if r.Proposed == nil {
+			return nil, errors.New("the request holds no definition")
+		}
+		svc, err := s.d.Services.CreateServiceBy(ctx, r.ProjectID, *r.Proposed, domain.ServiceStartedBy{Kind: "session", SessionID: sess.ID, Agent: s.agentName(ctx, sess), TaskID: sess.TicketID})
+		if err != nil {
+			return nil, err
+		}
+		r.ServiceID = svc.ID
+		return &ports.ServiceRequestOutcome{Service: svc}, nil
+	case domain.ServiceRequestUpdate:
+		if r.Proposed == nil {
+			return nil, errors.New("the request holds no definition")
+		}
+		svc, restart, err := s.d.Services.UpdateService(ctx, r.ServiceID, *r.Proposed)
+		if err != nil {
+			return nil, err
+		}
+		return &ports.ServiceRequestOutcome{Service: svc, RestartNeeded: restart}, nil
 	case domain.ServiceRequestStop:
 		svc, err := s.d.Services.StopService(ctx, r.ServiceID)
 		if err != nil {
@@ -304,11 +337,90 @@ func (s *Service) List(ctx context.Context, f domain.ServiceRequestFilter) ([]do
 	return s.d.Store.List(ctx, f)
 }
 
+// Restore implements ports.ServiceRequests.
+func (s *Service) Restore(ctx context.Context) error {
+	s.mu.Lock()
+	if s.restored {
+		s.mu.Unlock()
+		return nil
+	}
+	s.restored = true
+	s.mu.Unlock()
+
+	// An approved request whose action never ran: the server died between the
+	// answer and the action. It is not replayed, since the action may have run
+	// in part; the session is told and can ask again.
+	approved, err := s.d.Store.List(ctx, domain.ServiceRequestFilter{State: domain.ServiceRequestApproved})
+	if err != nil {
+		return err
+	}
+	for i := range approved {
+		r := &approved[i]
+		r.State, r.ResultError = domain.ServiceRequestFailed, "the harness restarted before the approved action ran: ask again"
+		if err := s.d.Store.Save(ctx, r); err != nil {
+			return err
+		}
+		s.announce(ctx, *r)
+		s.finish(ctx, r, nil, nil, nil)
+	}
+
+	pending, err := s.d.Store.List(ctx, domain.ServiceRequestFilter{State: domain.ServiceRequestPending})
+	if err != nil {
+		return err
+	}
+	ended := map[string]bool{}
+	counts := map[string]int{}
+	for _, r := range pending {
+		sess := s.d.Sessions.Get(r.SessionID)
+		if sess == nil || sess.Status.IsTerminal() {
+			if !ended[r.SessionID] {
+				ended[r.SessionID] = true
+				if err := s.expire(ctx, r.SessionID); err != nil {
+					return err
+				}
+			}
+			continue
+		}
+		counts[r.SessionID]++
+	}
+	if s.d.Waiter != nil {
+		for id, n := range counts {
+			s.d.Waiter.ServiceRequestsRestored(id, n)
+		}
+	}
+	return nil
+}
+
 // Subscribe makes the requests of a session that ended expire with it.
 func (s *Service) Subscribe(sub ports.EventSubscriber) {
 	ports.On(sub, func(ctx context.Context, ev domain.SessionEnded) error {
 		return s.expire(ctx, ev.SessionID)
 	})
+	ports.On(sub, func(ctx context.Context, ev domain.ProjectDeleted) error {
+		return s.deleteProject(ctx, ev.ProjectID)
+	})
+}
+
+// deleteProject removes a deleted project's requests, the variable values they
+// hold with them. A tool call still waiting on one ends as expired.
+func (s *Service) deleteProject(ctx context.Context, projectID string) error {
+	all, err := s.d.Store.List(ctx, domain.ServiceRequestFilter{ProjectID: projectID})
+	if err != nil {
+		return err
+	}
+	for i := range all {
+		r := &all[i]
+		if r.State != domain.ServiceRequestPending {
+			continue
+		}
+		s.mu.Lock()
+		w := s.waiters[r.ID]
+		s.mu.Unlock()
+		if w != nil {
+			s.finish(ctx, r, w, nil, &domain.StructuredError{Code: domain.ServiceRequestExpiredCode, Message: "the service request expired"})
+		}
+	}
+	return s.d.Store.DeleteForProject(ctx, projectID)
 }
 
 // expire ends the pending requests of a session that ended.

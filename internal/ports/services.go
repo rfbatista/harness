@@ -102,17 +102,23 @@ type ServiceList struct {
 // already in the list. RunningCount is the project's starting or running
 // services.
 type ServiceEvent struct {
-	Seq          int64           `json:"seq"`
-	Kind         string          `json:"kind"` // service_changed | service_deleted
-	Service      *domain.Service `json:"service,omitempty"`
-	ServiceID    string          `json:"service_id,omitempty"`
-	RunningCount int             `json:"running_count"`
+	Seq     int64           `json:"seq"`
+	Kind    string          `json:"kind"` // service_changed | service_deleted | service_request
+	Service *domain.Service `json:"service,omitempty"`
+	// Request is a service request that changed, without any variable value
+	// (kind service_request).
+	Request      *domain.ServiceRequest `json:"request,omitempty"`
+	ServiceID    string                 `json:"service_id,omitempty"`
+	RunningCount int                    `json:"running_count"`
 }
 
 // Service feed event kinds.
 const (
 	ServiceChanged = "service_changed"
 	ServiceDeleted = "service_deleted"
+	// ServiceRequestEvent announces a service request that was filed,
+	// answered, performed or expired.
+	ServiceRequestEvent = "service_request"
 )
 
 // ServiceWorktree is a directory a command service of a repository runs in
@@ -306,6 +312,14 @@ type ServiceManager interface {
 	ContainerRuntime(ctx context.Context) ServiceRuntimeInfo
 	SetContainerRuntime(ctx context.Context, name string) (ServiceRuntimeInfo, error)
 	CreateService(ctx context.Context, projectID string, in domain.ServiceInput) (*domain.Service, error)
+	// CreateServiceBy is CreateService recording who made the service: the
+	// session whose request the person approved (ADR 0083).
+	CreateServiceBy(ctx context.Context, projectID string, in domain.ServiceInput, by domain.ServiceStartedBy) (*domain.Service, error)
+	// ValidateServiceInput checks a definition as CreateService (serviceID
+	// empty) or UpdateService would, without saving it, and answers it in its
+	// stored form: names, kinds, ports, subfolder, dotenv, repository, and a name
+	// another service has (SERVICE_NAME_TAKEN).
+	ValidateServiceInput(ctx context.Context, projectID, serviceID string, in domain.ServiceInput) (domain.ServiceInput, error)
 	// UpdateService replaces the service's definition; restartNeeded says it
 	// runs and picks the change up at its next start.
 	UpdateService(ctx context.Context, serviceID string, in domain.ServiceInput) (s *domain.Service, restartNeeded bool, err error)

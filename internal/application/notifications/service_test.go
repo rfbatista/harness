@@ -485,3 +485,57 @@ func TestAFollowerThatFallsBehindIsClosed(t *testing.T) {
 		t.Fatalf("a follower that never read got %d changes before closing, want its buffer of 64", n)
 	}
 }
+
+func TestAServiceRequestIsRecordedOnceAndResolvedWhenAnsweredWithoutAValue(t *testing.T) {
+	r := newRig(t)
+	tk := r.task(t, r.ProjectA, "Ship")
+	r.session(t, "s1", r.ProjectA, tk.ID)
+	pending := domain.ServiceRequest{
+		ID: "sr1", ProjectID: r.ProjectA, ServiceName: "api", Action: domain.ServiceRequestStart, SessionID: "s1", TaskID: tk.ID, Agent: "go-developer",
+		Reason: "to try the build", Summary: "start service api with run overrides TOKEN", State: domain.ServiceRequestPending,
+		Env: []domain.ServiceRequestEnv{{Name: "TOKEN", Value: "super-secret-value", Change: "set"}},
+	}
+	r.publish(t, domain.ServiceRequestChanged{Request: pending, ProjectID: r.ProjectA})
+	r.publish(t, domain.ServiceRequestChanged{Request: pending, ProjectID: r.ProjectA})
+
+	page := r.list(t, ports.NotificationQuery{})
+	var got []*domain.Notification
+	for _, n := range page.Notifications {
+		if n.Kind == domain.NotificationServiceRequest {
+			got = append(got, n)
+		}
+	}
+	if len(got) != 1 {
+		t.Fatalf("service request notifications = %d, want 1: %+v", len(got), page.Notifications)
+	}
+	n := got[0]
+	if n.Level != domain.NotificationAction || n.Title != "Service: start service api with run overrides TOKEN" || n.SessionID != "s1" ||
+		n.Link != "/projects/"+r.ProjectA+"/services#service-request-sr1" {
+		t.Fatalf("notification = %+v", n)
+	}
+	for _, want := range []string{"s1", tk.ID, "go-developer", "to try the build"} {
+		if !strings.Contains(n.Body, want) {
+			t.Fatalf("body %q lacks %q", n.Body, want)
+		}
+	}
+	if strings.Contains(n.Title+n.Body+n.Link, "super-secret-value") {
+		t.Fatalf("the notification holds a value: %+v", n)
+	}
+
+	answered := pending
+	answered.State = domain.ServiceRequestDone
+	r.publish(t, domain.ServiceRequestChanged{Request: answered, ProjectID: r.ProjectA})
+	page = r.list(t, ports.NotificationQuery{})
+	count := 0
+	for _, n := range page.Notifications {
+		if n.Kind == domain.NotificationServiceRequest {
+			count++
+			if n.ResolvedAt == nil {
+				t.Fatalf("an answered request leaves its notification open: %+v", n)
+			}
+		}
+	}
+	if count != 1 {
+		t.Fatalf("the answer posted another notification: %d", count)
+	}
+}

@@ -57,6 +57,7 @@ func TestServicesBranchCleanup_ADeleteSucceedsWhenThereIsNoServiceWorktreeOrItWa
 	id2 := f.command("second", "true")
 	in := commandInput("third")
 	in["repository_id"] = f.repoID
+	in["command"] = map[string]any{"line": "sleep 30"}
 	id3 := f.createID(in)
 	f.startOn(id3, "branch:feature")
 	dir := f.awaitStatus(id3, "running")["run"].(map[string]any)["where"].(map[string]any)["dir"].(string)

@@ -43,11 +43,13 @@ func (s *Service) applyServicesServer(cfg *llmkit.SessionConfig, sessionID strin
 // have to agree with tooling.SessionServicesToolNames.
 const servicesBrief = `## Services
 
-Your project's services are programs the person defined to run beside each other: a command line in the agent sandbox or a container image. You operate them, you do not define them.
+Your project's services are programs the person defined to run beside each other: a command line in the agent sandbox or a container image. You operate them, and you can ask to create or change them. Every change (create, update, start, stop, restart) waits for the person to approve it: the call blocks until they answer, so say why in reason. A denied request fails with the person's note.
 
 - mcp__services__list_services — the project's services with status and last run; environment variables show as names only
 - mcp__services__service_status — one service: who started it, where it runs, how it ended
-- mcp__services__start_service — start one and wait until it runs or fails; worktree "own" runs a command service of your repository in your worktree
-- mcp__services__stop_service — stop one, whoever started it
-- mcp__services__restart_service — stop and start it again, with the same worktree rule
+- mcp__services__create_service — request a new command or image service, with its variables
+- mcp__services__update_service — request changes to a service's definition, setting or unsetting saved variables
+- mcp__services__start_service — request a start and wait until it runs or fails; worktree "own" runs a command service of your repository in your worktree
+- mcp__services__stop_service — request a stop, whoever started it
+- mcp__services__restart_service — request a stop and start again; each argument you omit repeats the last run
 - mcp__services__read_service_logs — the last tail_lines of its log, or from a byte offset, to follow it with next_offset`

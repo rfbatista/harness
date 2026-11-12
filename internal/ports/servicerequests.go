@@ -21,8 +21,9 @@ type ServiceRequestStore interface {
 	Save(ctx context.Context, r *domain.ServiceRequest) error
 	// List lists requests newest first.
 	List(ctx context.Context, f domain.ServiceRequestFilter) ([]domain.ServiceRequest, error)
-	// DeleteForService removes a deleted service's requests.
-	DeleteForService(ctx context.Context, serviceID string) error
+	// DeleteForProject removes every request of a deleted project, with the
+	// variable values they hold.
+	DeleteForProject(ctx context.Context, projectID string) error
 }
 
 // ServiceRequestInput is an agent's request, already validated by the tool
@@ -36,6 +37,13 @@ type ServiceRequestInput struct {
 	// Worktree is "own" for a run in the session's worktree, "" for the
 	// repository's main checkout.
 	Worktree string
+	// Summary, Proposed, Changes and EnvChanges describe a create or an update:
+	// the readable line, the definition after it, each changed field, and the
+	// variables set or unset. Create and update are performed from Proposed.
+	Summary    string
+	Proposed   *domain.ServiceInput
+	Changes    []domain.ServiceRequestChange
+	EnvChanges []domain.ServiceRequestEnv
 	// Env are the run overrides of a start or restart; EnvGiven says they were
 	// named (a restart repeats the last run's when they were not).
 	Env      map[string]string
@@ -55,6 +63,10 @@ type ServiceRequestOutcome struct {
 type ServiceRequestWaiter interface {
 	ServiceRequestFiled(sessionID string)
 	ServiceRequestSettled(sessionID string)
+	// ServiceRequestsRestored is the boot's recount: it adds the session's
+	// stored pending service requests to its pending-approvals count, after the
+	// branch gate set the count to its own (ADR 0078).
+	ServiceRequestsRestored(sessionID string, pending int)
 }
 
 // ServiceRequests files, answers and lists service requests (driving).
@@ -69,4 +81,9 @@ type ServiceRequests interface {
 	// REQUEST_NOT_PENDING.
 	Answer(ctx context.Context, id, decision, note string) (*domain.ServiceRequest, error)
 	List(ctx context.Context, f domain.ServiceRequestFilter) ([]domain.ServiceRequest, error)
+	// Restore is what a restart leaves to rebuild, once at boot: a request whose
+	// session ended while the server was down expires, a request that was
+	// approved but never carried out fails (it is not replayed), and each live
+	// session's pending count is raised by its pending requests.
+	Restore(ctx context.Context) error
 }
