@@ -207,6 +207,29 @@ func (s *Service) start(ctx context.Context, serviceID string, opts ports.Servic
 	return out, false, err
 }
 
+// ValidateStart implements ports.ServiceManager.
+func (s *Service) ValidateStart(ctx context.Context, serviceID string, opts ports.ServiceStartOptions) error {
+	svc, err := s.store.GetService(serviceID)
+	if err != nil {
+		return err
+	}
+	if err := s.checkSandbox(svc); err != nil {
+		return err
+	}
+	if err := s.checkRuntime(svc); err != nil {
+		return err
+	}
+	if err := checkOverrides(svc.Kind, opts.Env); err != nil {
+		return err
+	}
+	repo, err := s.repository(ctx, svc)
+	if err != nil {
+		return err
+	}
+	_, err = s.pickWorktree(ctx, svc, repo, opts)
+	return err
+}
+
 // current reads the service and says whether it has a run going in this
 // instance. The read is under mu, so a run that was created is already
 // stored.

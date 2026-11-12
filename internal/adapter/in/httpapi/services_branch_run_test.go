@@ -38,7 +38,9 @@ func (f *servicesFixture) startOn(id, worktree string) (int, map[string]any) {
 	return f.call("POST", "/api/start_service", map[string]any{"service_id": id, "worktree": worktree})
 }
 
-func refsOf(repo *gitRepo) string { return repo.git("for-each-ref", "--format=%(refname) %(objectname)") }
+func refsOf(repo *gitRepo) string {
+	return repo.git("for-each-ref", "--format=%(refname) %(objectname)")
+}
 
 func TestServicesBranchRun_ALocalBranchCheckedOutElsewhereRunsAtItsTipInTheServiceWorktree(t *testing.T) {
 	f, repo, id := branchRunFixture(t)

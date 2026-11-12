@@ -34,6 +34,7 @@ import (
 	"operators-mcp/internal/application/orchestration"
 	"operators-mcp/internal/application/planning"
 	"operators-mcp/internal/application/repoagents"
+	"operators-mcp/internal/application/servicerequests"
 	"operators-mcp/internal/application/services"
 	"operators-mcp/internal/application/taskchannel"
 	"operators-mcp/internal/application/tooling"
@@ -63,7 +64,7 @@ var ServerModule = fx.Module("server",
 
 // registerHTTPServer mounts the UI and JSON API on a mux and serves it,
 // shutting down gracefully when fx stops.
-func registerHTTPServer(lc fx.Lifecycle, cfg Config, cat catalog.Catalog, appRunner *apps.Service, svcs *services.Service, ts *tooling.Service, exec *execution.Service, orch *orchestration.Service, plan *planning.Service, ws *workspaces.Service, broker *approval.Broker, sessions ports.SessionRepository, art *artifacts.Service, channel *taskchannel.Service, prs *workspaces.PullRequests, merges *workspaces.Merges, branchNames *workspaces.BranchNames, code ports.CodeBrowser, worktreeGit ports.WorktreeGit, inbox optionalNotifications, creds optionalGitCredentials, shells *vfs.Service, fsys *vfs.FileSystem, usageSvc *usage.Service, indexes optionalRepositoryIndexes, sandboxStore *sandboxsettings.Store, managedClaude *managedclaude.Service, claudeBin ports.ManagedClaudeBin, agentCred optionalAgentCredential, helper *writinghelper.Service, assistant *archassistant.Service, rules *archrules.Service, gate *branchgate.Service, watch *branchwatch.Service, agentCat *agentcatalog.Catalog, persons *vshell.PersonTerminals, repoAgents *repoagents.Service, board optionalAgentBoard, asked optionalInterviews) error {
+func registerHTTPServer(lc fx.Lifecycle, cfg Config, cat catalog.Catalog, appRunner *apps.Service, svcs *services.Service, svcRequests *servicerequests.Service, ts *tooling.Service, exec *execution.Service, orch *orchestration.Service, plan *planning.Service, ws *workspaces.Service, broker *approval.Broker, sessions ports.SessionRepository, art *artifacts.Service, channel *taskchannel.Service, prs *workspaces.PullRequests, merges *workspaces.Merges, branchNames *workspaces.BranchNames, code ports.CodeBrowser, worktreeGit ports.WorktreeGit, inbox optionalNotifications, creds optionalGitCredentials, shells *vfs.Service, fsys *vfs.FileSystem, usageSvc *usage.Service, indexes optionalRepositoryIndexes, sandboxStore *sandboxsettings.Store, managedClaude *managedclaude.Service, claudeBin ports.ManagedClaudeBin, agentCred optionalAgentCredential, helper *writinghelper.Service, assistant *archassistant.Service, rules *archrules.Service, gate *branchgate.Service, watch *branchwatch.Service, agentCat *agentcatalog.Catalog, persons *vshell.PersonTerminals, repoAgents *repoagents.Service, board optionalAgentBoard, asked optionalInterviews) error {
 	uiHandler, err := ui.SPAHandler(ui.Dist)
 	if err != nil {
 		return err
@@ -123,21 +124,22 @@ func registerHTTPServer(lc fx.Lifecycle, cfg Config, cat catalog.Catalog, appRun
 
 	mux := http.NewServeMux()
 	apiRouter := httpapi.NewRouter(httpapi.NewHandler(httpapi.Services{
-		Projects:     cat.Projects,
-		ProjectFeed:  cat.Projects,
-		Discovery:    cat.Projects,
-		Env:          cat.Projects,
-		RunCommands:  cat.Projects,
-		Apps:         appRunner,
-		Services:     svcs,
-		Architecture: cat.Architecture,
-		Agents:       cat.Agents,
-		Capabilities: cat.Capabilities,
-		TokenSavers:  cat.Capabilities,
-		Settings:     cat.Settings,
-		Tools:        ts,
-		Tasks:        exec,
-		Sessions:     orch,
+		Projects:        cat.Projects,
+		ProjectFeed:     cat.Projects,
+		Discovery:       cat.Projects,
+		Env:             cat.Projects,
+		RunCommands:     cat.Projects,
+		Apps:            appRunner,
+		Services:        svcs,
+		ServiceRequests: svcRequests,
+		Architecture:    cat.Architecture,
+		Agents:          cat.Agents,
+		Capabilities:    cat.Capabilities,
+		TokenSavers:     cat.Capabilities,
+		Settings:        cat.Settings,
+		Tools:           ts,
+		Tasks:           exec,
+		Sessions:        orch,
 		// The person's own terminals on a session's files.
 		PersonTerminals: persons,
 		Planning:        plan,
@@ -211,7 +213,7 @@ func registerHTTPServer(lc fx.Lifecycle, cfg Config, cat catalog.Catalog, appRun
 		mux.Handle(llminterview.PathPrefix, interviewHandler(asked.Service))
 	}
 	mux.Handle(mcpsession.PathPrefix, slow(mcpsession.TaskHandler(sessionTaskTools(cat, orch, plan, sessions, art, channel, notifier, merges, tooling.WithAgentPlacements(repoAgents), tooling.WithBranchPush(gate)))))
-	mux.Handle(mcpsession.ServicesPathPrefix, slow(mcpsession.ServicesHandler(tooling.SessionServicesTools(sessions, cat.Agents, svcs, cat.Projects))))
+	mux.Handle(mcpsession.ServicesPathPrefix, slow(mcpsession.ServicesHandler(tooling.SessionServicesTools(sessions, cat.Agents, svcs, cat.Projects, tooling.WithServiceRequests(svcRequests)))))
 	// The web client owns / and its pages; anything else reaches the legacy
 	// designer SPA until it is retired.
 	mux.Handle("/", slow(web.NewHandler(web.Deps{Projects: cat.Projects, Tasks: plan, Sessions: orch, Agents: cat.Agents, Repositories: cat.Projects, EnvFiles: cat.Projects, RunCommands: cat.Projects, Documents: plan, History: ws, Code: code, Workspaces: ws, Artifacts: art, ProjectSummaries: cat.Projects, PullRequests: prs, WorktreeGit: worktreeGit,

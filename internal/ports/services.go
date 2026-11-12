@@ -312,6 +312,10 @@ type ServiceManager interface {
 	// DeleteService removes a service that is not starting or running, with
 	// its log.
 	DeleteService(ctx context.Context, serviceID string) error
+	// ValidateStart refuses a start that could not happen, as StartService
+	// would before it creates a run: the sandbox and the container runtime, the
+	// run overrides and the run worktree. It starts nothing.
+	ValidateStart(ctx context.Context, serviceID string, opts ServiceStartOptions) error
 	// StartService starts the service's run, in the repository's main checkout
 	// (or its service folder) unless opts name a worktree, and answers once the
 	// run is going (running) or could not start (failed). A service that is

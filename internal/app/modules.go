@@ -58,6 +58,7 @@ import (
 	"operators-mcp/internal/application/planning"
 	"operators-mcp/internal/application/repoagents"
 	"operators-mcp/internal/application/sandboxsettings"
+	"operators-mcp/internal/application/servicerequests"
 	"operators-mcp/internal/application/services"
 	"operators-mcp/internal/application/taskchannel"
 	"operators-mcp/internal/application/tooling"
@@ -470,6 +471,7 @@ var AgentRuntimeModule = fx.Module("agentruntime",
 		newAgentReadiness,
 		newAppsService,
 		newServicesModule,
+		newServiceRequests,
 		asPort(sqlite.NewArtifactRepository, new(ports.ArtifactRepository)),
 		newArtifactsService,
 		vfs.NewRootEvents,
@@ -711,6 +713,18 @@ func newServicesModule(lc fx.Lifecycle, cfg Config, db *gorm.DB, cat catalog.Cat
 		},
 	})
 	return svc, nil
+}
+
+// newServiceRequests holds what agents ask of services until the person
+// answers (ADR 0083): requests are stored, the asking session shows as waiting
+// for approval, and a request expires with its session.
+func newServiceRequests(db *gorm.DB, cat catalog.Catalog, sessions ports.SessionRepository, orch *orchestration.Service, svcs *services.Service) *servicerequests.Service {
+	svc := servicerequests.NewService(servicerequests.Deps{
+		Services: svcs, Store: sqlite.NewServiceRequestRepository(db), Sessions: sessions, Agents: cat.Agents,
+		Waiter: orch, Turns: orch, Events: cat.Bus,
+	})
+	svc.Subscribe(cat.Bus)
+	return svc
 }
 
 // serviceInstance is the id of this harness's data directory, made once and
