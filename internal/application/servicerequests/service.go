@@ -44,6 +44,8 @@ type Deps struct {
 type Service struct {
 	d  Deps
 	mu sync.Mutex
+	// restored says the boot's restore ran: it adds to a count, so it runs once.
+	restored bool
 	// waiters belong to the tool calls blocked on a request, by request id.
 	waiters map[string]*waiter
 }
@@ -333,6 +335,60 @@ func (s *Service) startOptions(ctx context.Context, sess *domain.Session, r *dom
 // List implements ports.ServiceRequests.
 func (s *Service) List(ctx context.Context, f domain.ServiceRequestFilter) ([]domain.ServiceRequest, error) {
 	return s.d.Store.List(ctx, f)
+}
+
+// Restore implements ports.ServiceRequests.
+func (s *Service) Restore(ctx context.Context) error {
+	s.mu.Lock()
+	if s.restored {
+		s.mu.Unlock()
+		return nil
+	}
+	s.restored = true
+	s.mu.Unlock()
+
+	// An approved request whose action never ran: the server died between the
+	// answer and the action. It is not replayed, since the action may have run
+	// in part; the session is told and can ask again.
+	approved, err := s.d.Store.List(ctx, domain.ServiceRequestFilter{State: domain.ServiceRequestApproved})
+	if err != nil {
+		return err
+	}
+	for i := range approved {
+		r := &approved[i]
+		r.State, r.ResultError = domain.ServiceRequestFailed, "the harness restarted before the approved action ran: ask again"
+		if err := s.d.Store.Save(ctx, r); err != nil {
+			return err
+		}
+		s.announce(ctx, *r)
+		s.finish(ctx, r, nil, nil, nil)
+	}
+
+	pending, err := s.d.Store.List(ctx, domain.ServiceRequestFilter{State: domain.ServiceRequestPending})
+	if err != nil {
+		return err
+	}
+	ended := map[string]bool{}
+	counts := map[string]int{}
+	for _, r := range pending {
+		sess := s.d.Sessions.Get(r.SessionID)
+		if sess == nil || sess.Status.IsTerminal() {
+			if !ended[r.SessionID] {
+				ended[r.SessionID] = true
+				if err := s.expire(ctx, r.SessionID); err != nil {
+					return err
+				}
+			}
+			continue
+		}
+		counts[r.SessionID]++
+	}
+	if s.d.Waiter != nil {
+		for id, n := range counts {
+			s.d.Waiter.ServiceRequestsRestored(id, n)
+		}
+	}
+	return nil
 }
 
 // Subscribe makes the requests of a session that ended expire with it.

@@ -480,7 +480,7 @@ var AgentRuntimeModule = fx.Module("agentruntime",
 		newPersonTerminals,
 	),
 	fx.Invoke(registerRuntimeShutdown, registerServerSessions, bindVirtualShells, bindWorkspaceRemovals, bindFilesRootFeed, bindSandboxSettings,
-		bindAgentReadiness, func(*archrules.Service) {}, restoreBranchGate, func(*branchwatch.Service) {}),
+		bindAgentReadiness, func(*archrules.Service) {}, restoreBranchGate, restoreServiceRequests, func(*branchwatch.Service) {}),
 )
 
 // TaskChannelModule wires the architect channel: its tables, the service,
@@ -972,6 +972,13 @@ func newBranchWatch(cat catalog.Catalog, sessions ports.SessionRepository, ws po
 // restoreBranchGate rebuilds, at start, what a restart leaves of the branch
 // requests that wait on the person.
 func restoreBranchGate(lc fx.Lifecycle, svc *branchgate.Service) {
+	lc.Append(fx.Hook{OnStart: svc.Restore})
+}
+
+// restoreServiceRequests rebuilds, at start and after the branch gate's own
+// recount, what a restart leaves of the service requests that wait on the
+// person.
+func restoreServiceRequests(lc fx.Lifecycle, svc *servicerequests.Service) {
 	lc.Append(fx.Hook{OnStart: svc.Restore})
 }
 

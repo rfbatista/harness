@@ -60,6 +60,10 @@ type ServiceRequestOutcome struct {
 type ServiceRequestWaiter interface {
 	ServiceRequestFiled(sessionID string)
 	ServiceRequestSettled(sessionID string)
+	// ServiceRequestsRestored is the boot's recount: it adds the session's
+	// stored pending service requests to its pending-approvals count, after the
+	// branch gate set the count to its own (ADR 0078).
+	ServiceRequestsRestored(sessionID string, pending int)
 }
 
 // ServiceRequests files, answers and lists service requests (driving).
@@ -74,4 +78,9 @@ type ServiceRequests interface {
 	// REQUEST_NOT_PENDING.
 	Answer(ctx context.Context, id, decision, note string) (*domain.ServiceRequest, error)
 	List(ctx context.Context, f domain.ServiceRequestFilter) ([]domain.ServiceRequest, error)
+	// Restore is what a restart leaves to rebuild, once at boot: a request whose
+	// session ended while the server was down expires, a request that was
+	// approved but never carried out fails (it is not replayed), and each live
+	// session's pending count is raised by its pending requests.
+	Restore(ctx context.Context) error
 }

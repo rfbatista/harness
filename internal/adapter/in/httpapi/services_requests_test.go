@@ -34,8 +34,13 @@ func (w *fakeRequestWaiter) ServiceRequestFiled(id string) {
 func (w *fakeRequestWaiter) ServiceRequestSettled(id string) {
 	w.mu.Lock()
 	defer w.mu.Unlock()
+	if w.pending == nil {
+		w.pending = map[string]int{}
+	}
 	w.pending[id]--
 }
+
+func (w *fakeRequestWaiter) ServiceRequestsRestored(string, int) {}
 
 func (w *fakeRequestWaiter) count(id string) int {
 	w.mu.Lock()
