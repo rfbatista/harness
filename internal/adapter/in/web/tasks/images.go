@@ -15,14 +15,16 @@ import (
 
 // imagePaths is where the files a Markdown document may show as images are
 // served from, by their path in the virtual shell (task/designs/…,
-// task/resources/…, project/designs/…), named as the shell names them: oldest first, with
-// -<short id> on a clash.
+// task/resources/…, project/designs/…), named as the shell names them: oldest
+// first, with -<short id> on a clash. The page knows no session, so it cannot
+// see where a session's shell kept a file; each file also answers to its
+// -<short id> name, where the shell keeps it once the older file is gone.
 type imagePaths map[string]string
 
 // projectImagePaths are the project's file design assets. A list that
 // cannot be read leaves its images as written.
 func (h Handler) projectImagePaths(ctx context.Context, projectID string) imagePaths {
-	paths := imagePaths{}
+	paths := shellFixedFiles()
 	if h.Artifacts != nil {
 		if list, err := h.Artifacts.ListArtifacts(ctx, ports.ArtifactFilter{ProjectID: projectID, Scope: domain.ArtifactScopeProject}); err == nil {
 			paths.addDesigns("project/designs/", list)
@@ -55,25 +57,32 @@ func (h Handler) taskImagePaths(ctx context.Context, projectID, taskID string) i
 	return paths
 }
 
+// shellFixedFiles holds the names the shell gives its own files in the
+// folders images come from, so no design or upload takes them: they serve
+// nothing.
+func shellFixedFiles() imagePaths {
+	return imagePaths{"task/designs/urls.md": "", "task/designs/attached.md": "", "project/designs/urls.md": "", "task/resources/links.md": ""}
+}
+
 // addDesigns adds the file artifacts of list under folder, oldest first as
 // the shell places them; a url artifact is no file.
 func (p imagePaths) addDesigns(folder string, list []*domain.Artifact) {
-	list = slices.Clone(list)
-	slices.SortFunc(list, func(a, c *domain.Artifact) int {
-		if n := a.CreatedAt.Compare(c.CreatedAt); n != 0 {
-			return n
-		}
-		return strings.Compare(a.ID, c.ID)
-	})
-	for _, a := range list {
+	for _, a := range vfs.OldestFirst(list) {
 		if a.Kind != domain.ArtifactURL {
 			p.add(folder+vfs.ArtifactFileName(a), a.ID, httpapi.ArtifactViewPath(a.ID))
 		}
 	}
 }
 
+// add puts the file id at name, or at its -<short id> name when name is
+// taken, and at that -<short id> name in any case while it is free.
 func (p imagePaths) add(name, id, served string) {
-	p[vfs.Unique(name, id, func(q string) bool { _, ok := p[q]; return ok })] = served
+	taken := func(q string) bool { _, ok := p[q]; return ok }
+	p[vfs.Unique(name, id, taken)] = served
+	ext := path.Ext(name)
+	if alias := strings.TrimSuffix(name, ext) + "-" + vfs.ShortID(id) + ext; !taken(alias) {
+		p[alias] = served
+	}
 }
 
 // resolver reads an image destination as a shell path, from folder (the
@@ -89,7 +98,7 @@ func (p imagePaths) resolver(folder string) func(string) (string, bool) {
 			name = dest
 		}
 		for _, q := range []string{path.Join(folder, name), path.Clean(name)} {
-			if served, ok := p[q]; ok {
+			if served, ok := p[q]; ok && served != "" {
 				return served, true
 			}
 		}

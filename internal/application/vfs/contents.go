@@ -326,7 +326,7 @@ func (b *builder) designs(ctx context.Context, src ports.ArtifactReader, project
 	if tk != nil {
 		var taskURLs strings.Builder
 		taskURLs.WriteString("# Design URLs\n\nDev-server URLs published on this task, not files.\n\n")
-		for _, a := range oldestFirst(onTask) {
+		for _, a := range OldestFirst(onTask) {
 			if a.TicketID != tk.ID || a.Scope == domain.ArtifactScopeProject {
 				continue
 			}
@@ -341,7 +341,7 @@ func (b *builder) designs(ctx context.Context, src ports.ArtifactReader, project
 	var urls strings.Builder
 	urls.WriteString("# Design URLs\n\nProject design assets that are URLs, not files.\n\n")
 	urlsFile := &file{meta: ports.ShellFile{Path: "project/designs/urls.md"}}
-	for _, a := range oldestFirst(inProject) {
+	for _, a := range OldestFirst(inProject) {
 		if a.Kind == domain.ArtifactURL {
 			fmt.Fprintf(&urls, "- [%s](%s)\n", a.Title, a.URL)
 			where[a.ID] = urlsFile
@@ -352,7 +352,7 @@ func (b *builder) designs(ctx context.Context, src ports.ArtifactReader, project
 
 	if tk != nil {
 		var attachedHere []*domain.Artifact
-		for _, a := range oldestFirst(onTask) {
+		for _, a := range OldestFirst(onTask) {
 			if a.Scope == domain.ArtifactScopeProject && a.AttachedTo(tk.ID) {
 				attachedHere = append(attachedHere, a)
 			}
@@ -381,7 +381,9 @@ func readArtifact(ctx context.Context, src ports.ArtifactReader, id string) ([]b
 	return io.ReadAll(f.Content)
 }
 
-func oldestFirst(list []*domain.Artifact) []*domain.Artifact {
+// OldestFirst is list in the order the shell names artifacts: by creation,
+// then id.
+func OldestFirst(list []*domain.Artifact) []*domain.Artifact {
 	out := slices.Clone(list)
 	slices.SortFunc(out, func(a, c *domain.Artifact) int {
 		if n := a.CreatedAt.Compare(c.CreatedAt); n != 0 {
