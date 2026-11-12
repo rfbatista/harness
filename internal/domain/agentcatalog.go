@@ -401,6 +401,8 @@ type CatalogServerInput struct {
 	Env       map[string]string `json:"env"`
 	URL       string            `json:"url"`
 	Headers   map[string]string `json:"headers"`
+	// ProjectOnly sets Project only on a save: nil keeps the stored value.
+	ProjectOnly *bool `json:"project_only,omitempty"`
 }
 
 // SaveCatalogMCPServer creates, updates or renames an MCP server. Agents and
@@ -414,8 +416,6 @@ type SaveCatalogMCPServer struct {
 	// DisabledTools is the tool default: nil keeps the stored list, empty
 	// clears it.
 	DisabledTools []string `json:"disabled_tools"`
-	// ProjectOnly sets Project only: nil keeps the stored value.
-	ProjectOnly *bool `json:"project_only"`
 }
 
 // TestCatalogMCPServer probes an unsaved MCP server.

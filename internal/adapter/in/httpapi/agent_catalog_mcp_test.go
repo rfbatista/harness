@@ -289,7 +289,7 @@ func TestCatalogMCPServers_ProjectOnlyIsSavedReadBackAndFollowsRenameAndDelete(t
 		t.Fatalf("a new server's project_only = %v, want false", got)
 	}
 
-	f.post("/api/save_catalog_mcp_server", map[string]any{"previous_name": "linear", "server": stdioServer("linear"), "project_only": true}, 200)
+	f.post("/api/save_catalog_mcp_server", map[string]any{"previous_name": "linear", "server": projectOnlyServer("linear", true)}, 200)
 	if got := projectOnly("linear"); got != true {
 		t.Fatalf("project_only = %v, want true", got)
 	}
@@ -307,12 +307,12 @@ func TestCatalogMCPServers_ProjectOnlyIsSavedReadBackAndFollowsRenameAndDelete(t
 		t.Fatalf("after a rename without project_only = %v, want true", got)
 	}
 
-	f.post("/api/save_catalog_mcp_server", map[string]any{"previous_name": "linear-subq", "server": stdioServer("linear-subq"), "project_only": false}, 200)
+	f.post("/api/save_catalog_mcp_server", map[string]any{"previous_name": "linear-subq", "server": projectOnlyServer("linear-subq", false)}, 200)
 	if got := projectOnly("linear-subq"); got != false {
 		t.Fatalf("project_only = %v after turning it off", got)
 	}
 
-	f.post("/api/save_catalog_mcp_server", map[string]any{"previous_name": "linear-subq", "server": stdioServer("linear-subq"), "project_only": true}, 200)
+	f.post("/api/save_catalog_mcp_server", map[string]any{"previous_name": "linear-subq", "server": projectOnlyServer("linear-subq", true)}, 200)
 	f.post("/api/delete_catalog_mcp_server", map[string]any{"name": "linear-subq"}, 200)
 	f.post("/api/save_catalog_mcp_server", map[string]any{"server": stdioServer("linear-subq")}, 200)
 	if got := projectOnly("linear-subq"); got != false {
@@ -621,4 +621,10 @@ func TestProjectMCPSettings_AServerHasOneStateAndMCPServersListsExactlyTheAddedO
 			t.Fatalf("%s: read = %v", state, read)
 		}
 	}
+}
+
+func projectOnlyServer(name string, on bool) map[string]any {
+	s := stdioServer(name)
+	s["project_only"] = on
+	return s
 }
