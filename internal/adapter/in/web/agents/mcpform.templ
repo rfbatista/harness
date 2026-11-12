@@ -288,6 +288,13 @@ templ mcpFormPage(v View) {
 											<span class="[ text-sm color-ink-muted ]" x-bind:hidden="!mfNoProjects" hidden>There are no projects yet.</span>
 										</div>
 									</fieldset>
+									<div class="[ field ]">
+										<label class="[ target ]" data-mf-project-only>
+											<input type="checkbox" x-model="mfDraft.projectOnly" aria-describedby="mf-project-only-hint"/>
+											<span class="[ text-sm ]">Project only</span>
+										</label>
+										<span class="[ hint ]" id="mf-project-only-hint">Only projects that add the server give it to their sessions. An agent ticked above does not bring it into other projects.</span>
+									</div>
 									<div class="[ banner ]" data-mf-reach role="status" x-bind:data-tone="mfWhoTone">
 										<div class="[ grow text-sm ]" x-text="mfWhoText"></div>
 									</div>

@@ -284,9 +284,15 @@ func TestCatalogMCPServers_ProjectOnlyIsSavedReadBackAndFollowsRenameAndDelete(t
 	projectOnly := func(name string) any {
 		return byName(t, f.get("/api/get_agent_catalog", 200)["mcp_servers"], name)["project_only"]
 	}
-	f.post("/api/save_catalog_mcp_server", map[string]any{"server": stdioServer("linear")}, 200)
+	out := f.post("/api/save_catalog_mcp_server", map[string]any{"server": projectOnlyServer("linear", false)}, 200)
 	if got := projectOnly("linear"); got != false {
 		t.Fatalf("a new server's project_only = %v, want false", got)
+	}
+	// Off on a server with no tool data writes nothing to the tool file.
+	for _, fc := range list(out["change"].(map[string]any)["writes"]) {
+		if path := fc.(map[string]any)["path"]; path == "mcp-tools.json" {
+			t.Fatalf("project_only false wrote mcp-tools.json: %v", fc)
+		}
 	}
 
 	f.post("/api/save_catalog_mcp_server", map[string]any{"previous_name": "linear", "server": projectOnlyServer("linear", true)}, 200)

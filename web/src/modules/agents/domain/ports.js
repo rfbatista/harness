@@ -53,6 +53,7 @@
  * @property {string[] | null} knownTools  the tool names of the last successful probe; null: never probed, tools unknown; []: probed, no tools
  * @property {string} probedAt  when knownTools was taken (ISO time), "" with it
  * @property {string[]} disabledTools  the tool default: names of the disabled tools; may name a tool knownTools no longer holds
+ * @property {boolean} projectOnly  Project only: a session gets it only when its project has it Added
  * @property {string[]} agents
  * @property {{ id: string, name: string }[]} projects
  * @property {Problem[]} problems
@@ -104,6 +105,7 @@
  * @property {string} name
  * @property {"added"|"agent"|"banned"} state  the project MCP state
  * @property {string[]} usedByAgents  the catalog agents that list it, enabled in the project or not
+ * @property {boolean} projectOnly  Project only: no agent brings it, only the Added state
  * @property {ProjectMcpTool[] | null} tools  one per known tool; null: tools unknown
  *
  * @typedef {object} ProjectMcpSettings
@@ -122,7 +124,7 @@
  * @property {(name: string, options?: WriteOptions) => Promise<WriteResult>} deleteBundle
  * @property {(input: { previousName?: string, skill: { name: string, description: string, body: string, files: { path: string, content: string, encoding?: string }[], deletedFiles: string[] }, addTo: { agents: string[], bundles: string[] } }, options?: WriteOptions) => Promise<WriteResult>} saveSkill
  * @property {(name: string, options?: WriteOptions) => Promise<WriteResult>} deleteSkill
- * @property {(input: { previousName?: string, server: { name: string, transport: string, command?: string, args?: string[], env?: Record<string, string>, url?: string, headers?: Record<string, string>, disabledTools?: string[] }, agents: string[], projects: string[] }, options?: WriteOptions) => Promise<WriteResult>} saveMcpServer
+ * @property {(input: { previousName?: string, server: { name: string, transport: string, command?: string, args?: string[], env?: Record<string, string>, url?: string, headers?: Record<string, string>, disabledTools?: string[], projectOnly?: boolean }, agents: string[], projects: string[] }, options?: WriteOptions) => Promise<WriteResult>} saveMcpServer
  * @property {(name: string, options?: WriteOptions) => Promise<WriteResult>} deleteMcpServer
  * @property {(changeId: string) => Promise<WriteResult>} undoChange  rejects CHANGE_NOT_UNDOABLE or CATALOG_CHANGED
  * @property {(server: object) => Promise<Probe>} testMcpServer  an unsaved server; stores nothing

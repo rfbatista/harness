@@ -63,15 +63,17 @@ func (t *txn) setDisabledTools(name string, disabled []string) {
 	t.dropEmptyToolEntry(name)
 }
 
-// setProjectOnly stores Project only; off leaves no key.
+// setProjectOnly stores Project only; off leaves no key, and a server with no
+// entry stays without one, so mcp-tools.json is not written for nothing.
 func (t *txn) setProjectOnly(name string, on bool) {
-	e := t.toolEntry(name)
 	if on {
-		e.set(projectOnlyKey, scalarOf(true))
-	} else {
-		e.remove(projectOnlyKey)
+		t.toolEntry(name).set(projectOnlyKey, scalarOf(true))
+		return
 	}
-	t.dropEmptyToolEntry(name)
+	if e := t.tools.get(toolsServersKey).get(name); e != nil && e.kind == 'o' {
+		e.remove(projectOnlyKey)
+		t.dropEmptyToolEntry(name)
+	}
 }
 
 // setKnownTools stores what a successful probe found.

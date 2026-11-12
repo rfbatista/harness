@@ -38,6 +38,7 @@ import { previewModel } from "./skillForm.js";
  * @property {string[] | null} knownTools  the tool names of the server's last successful probe; null: tools unknown
  * @property {string} probedAt  when knownTools was taken, "" while unknown
  * @property {string[]} disabledTools  the tool default: the names of the disabled tools, hidden ones included
+ * @property {boolean} projectOnly  Project only: only a project's Added list brings it, never an agent alone
  * @property {object} base  what the form started with
  */
 
@@ -137,7 +138,7 @@ function snapshot(d) {
   return {
     name: d.name, transport: d.transport, command: d.command, args: d.args.map((a) => a.value),
     env: Object.fromEntries(d.env.map((r) => [r.key, r.value])), url: d.url, headers: Object.fromEntries(d.headers.map((r) => [r.key, r.value])),
-    agents: [...d.agents], projects: [...d.projects], disabledTools: [...d.disabledTools],
+    agents: [...d.agents], projects: [...d.projects], disabledTools: [...d.disabledTools], projectOnly: d.projectOnly,
   };
 }
 
@@ -164,9 +165,10 @@ export function mcpDraft(_catalog, { previous, from, name = "" } = {}) {
     knownTools: previous?.knownTools ? [...previous.knownTools] : null,
     probedAt: previous?.probedAt ?? "",
     disabledTools: previous ? [...(previous.disabledTools ?? [])] : [],
+    projectOnly: previous?.projectOnly ?? false,
     base: {},
   };
-  draft.base = previous ? snapshot(draft) : snapshot({ ...draft, name: "", transport: "stdio", command: "", args: [], env: [], url: "", headers: [], agents: [], projects: [], disabledTools: [] });
+  draft.base = previous ? snapshot(draft) : snapshot({ ...draft, name: "", transport: "stdio", command: "", args: [], env: [], url: "", headers: [], agents: [], projects: [], disabledTools: [], projectOnly: false });
   return draft;
 }
 
@@ -178,7 +180,7 @@ export function mcpChanges(d) {
   const now = snapshot(d);
   const was = /** @type {ReturnType<typeof snapshot>} */ (d.base);
   let n = 0;
-  for (const f of /** @type {const} */ (["name", "transport", "command", "url"])) if (now[f] !== was[f]) n++;
+  for (const f of /** @type {const} */ (["name", "transport", "command", "url", "projectOnly"])) if (now[f] !== was[f]) n++;
   if (JSON.stringify(now.args) !== JSON.stringify(was.args)) n++;
   n += pairsChanged(now.env, was.env) + pairsChanged(now.headers, was.headers);
   return n + symmetric(now.agents, was.agents) + symmetric(now.projects, was.projects) + symmetric(now.disabledTools, was.disabledTools);
@@ -419,6 +421,7 @@ export function mcpSave(d, { unattached = false } = {}) {
       url: local ? "" : d.url.trim(),
       headers: local ? {} : pairs(d.headers),
       disabledTools: [...d.disabledTools],
+      projectOnly: d.projectOnly,
     },
     agents: unattached ? [] : [...d.agents],
     projects: unattached ? [] : [...d.projects],

@@ -181,6 +181,33 @@ test("What a session gets: the agent's servers plus the project's Added ones, a 
   assert.deepEqual(ex.banned, ["pg"]);
 });
 
+test("a project-only server at Agent's choice says no session gets it; Added and Banned read as usual", () => {
+  const c = catalogWith([server({ name: "linear" }), server({ name: "github" })]);
+  const s = toProjectMcpSettings({
+    mcp_servers: [],
+    servers: [{ name: "linear", state: "agent", used_by_agents: ["architect"], tools: null, project_only: true }, { name: "github", state: "agent", used_by_agents: [], tools: null }],
+  });
+  const [linear, github] = projectMcpRows(c, "p1", s, settingsDraft(s));
+  assert.equal(linear.projectOnly, true);
+  assert.equal(linear.stateHint, "Project only: no session gets it unless it is Added here, even if its agent lists it.");
+  assert.equal(github.projectOnly, false);
+  assert.equal(github.stateHint, "Only sessions whose agent lists it get it.");
+  const added = projectMcpRows(c, "p1", s, setServerState(settingsDraft(s), "linear", "added"))[0];
+  assert.equal(added.stateHint, "Every session in the project gets it.");
+  const banned = projectMcpRows(c, "p1", s, setServerState(settingsDraft(s), "linear", "banned"))[0];
+  assert.equal(banned.stateHint, "No session in the project gets it.");
+});
+
+test("What a session gets leaves out a project-only server the agent lists unless it is Added", () => {
+  const c = catalogWith([server({ name: "github" }), server({ name: "linear", project_only: true })], [agent("architect", ["github", "linear"])]);
+  const s = read(["github", "agent"], ["linear", "agent"]);
+  const ex = sessionExample(c, s, settingsDraft(s));
+  assert.deepEqual(ex.withAgent.map((x) => [x.name, x.origin]), [["github", "agent"]]);
+  const addedEx = sessionExample(c, s, setServerState(settingsDraft(s), "linear", "added"));
+  assert.deepEqual(addedEx.withAgent.map((x) => [x.name, x.origin]), [["github", "agent"], ["linear", "both, counted once"]]);
+  assert.deepEqual(addedEx.withoutAgent, ["linear"]);
+});
+
 test("the example follows the draft, not what is saved", () => {
   const c = catalogWith([server({ name: "github" })], [agent("ux", ["github"])]);
   const s = read(["github", "agent"]);

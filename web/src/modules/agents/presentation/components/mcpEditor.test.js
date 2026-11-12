@@ -129,7 +129,7 @@ test("a typed name and command ask the server for a preview after a pause, and A
   await timers.fire();
   assert.equal(saves(server, true).length, 1);
   const sent = saves(server, true)[0][2];
-  assert.deepEqual(sent.server, { name: "playwright", transport: "stdio", command: "npx", args: [], env: {}, url: "", headers: {}, disabled_tools: [] });
+  assert.deepEqual(sent.server, { name: "playwright", transport: "stdio", command: "npx", args: [], env: {}, url: "", headers: {}, disabled_tools: [], project_only: false });
   assert.deepEqual([sent.agents, sent.projects], [[], []]);
   assert.deepEqual(sent.base_versions, { "agents.json": "sha256:a1", "mcp-servers.json": "sha256:m1" });
   assert.deepEqual(page.mfPreviewFiles.map((f) => f.path), ["mcp-servers.json"]);
