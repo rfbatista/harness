@@ -26,16 +26,16 @@ type fakeSandboxSwitch bool
 func (f fakeSandboxSwitch) Enabled() bool { return bool(f) }
 
 type servicesFixture struct {
-	t         *testing.T
-	srv       *httptest.Server
-	cat       catalog.Catalog
-	svc       *services.Service
-	store     ports.ServiceStore
-	logDir    string
+	t      *testing.T
+	srv    *httptest.Server
+	cat    catalog.Catalog
+	svc    *services.Service
+	store  ports.ServiceStore
+	logDir string
 	// worktreeRoot is where service worktrees are made, when the test set one.
 	worktreeRoot string
-	projectID string
-	repoID    string
+	projectID    string
+	repoID       string
 }
 
 // newServicesFixture serves the services module over a real in-memory store,

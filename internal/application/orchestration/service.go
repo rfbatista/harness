@@ -1639,6 +1639,15 @@ func (s *Service) BranchRequestFiled(id string) {
 	s.record(id, SessionEvent{Type: "branch_request_needed", Status: domain.SessionWaitingApproval, At: time.Now()}, change)
 }
 
+var _ ports.ServiceRequestWaiter = (*Service)(nil)
+
+// ServiceRequestFiled implements ports.ServiceRequestWaiter: a pending service
+// request shows the session as waiting for approval, as a branch request does.
+func (s *Service) ServiceRequestFiled(id string) { s.BranchRequestFiled(id) }
+
+// ServiceRequestSettled implements ports.ServiceRequestWaiter.
+func (s *Service) ServiceRequestSettled(id string) { s.BranchRequestSettled(id) }
+
 // BranchRequestsRestored implements ports.BranchRequestWaiter: the boot's
 // recount. The session's count becomes the pending requests stored for it,
 // whatever it was, and the wait behind the count is rebuilt so that settling a

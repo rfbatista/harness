@@ -263,3 +263,42 @@ func (h *Handler) followServiceLog(ctx context.Context, serviceID, from string) 
 	}
 	return relayAs(ctx, events, func(e ports.ServiceLogEvent) any { return e }), nil
 }
+
+// Service requests (ADR 0083): what agents ask of services, and the person's
+// answers.
+
+func (h *Handler) handleListServiceRequests(c echo.Context) error {
+	if h.serviceRequests == nil {
+		return errServicesOff
+	}
+	f := domain.ServiceRequestFilter{
+		ProjectID: c.QueryParam("project_id"), ServiceID: c.QueryParam("service_id"),
+		State: domain.ServiceRequestState(c.QueryParam("state")),
+	}
+	list, err := h.serviceRequests.List(c.Request().Context(), f)
+	if err != nil {
+		return err
+	}
+	if list == nil {
+		list = []domain.ServiceRequest{}
+	}
+	return c.JSON(http.StatusOK, map[string]any{"requests": list})
+}
+
+func (h *Handler) handleAnswerServiceRequest(c echo.Context) error {
+	if h.serviceRequests == nil {
+		return errServicesOff
+	}
+	var in struct {
+		Decision string `json:"decision"`
+		Note     string `json:"note"`
+	}
+	if err := bindJSON(c, &in); err != nil {
+		return err
+	}
+	r, err := h.serviceRequests.Answer(c.Request().Context(), c.Param("id"), in.Decision, in.Note)
+	if err != nil {
+		return err
+	}
+	return c.JSON(http.StatusOK, map[string]any{"request": r})
+}

@@ -49,6 +49,15 @@ type servicesTools struct {
 	services ports.ServiceManager
 	repos    ports.RepositoryReader
 	settle   time.Duration
+	// requests holds every change an agent asks for until the person answers
+	// (ADR 0083); nil lets the tools act directly.
+	requests ports.ServiceRequests
+}
+
+// WithServiceRequests makes start_service and the other changing tools file a
+// service request and wait for the person's answer.
+func WithServiceRequests(r ports.ServiceRequests) ServicesOption {
+	return func(t *servicesTools) { t.requests = r }
 }
 
 // serviceView is the shape every services tool returns for a service.
@@ -94,6 +103,7 @@ func SessionServicesTools(sessions ports.SessionRepository, agents ports.AgentLi
 	}
 	nameSchema := `"name":{"type":"string","description":"The service's name, as list_services gives it."}`
 	envSchema := `"env":{"type":"object","additionalProperties":{"type":"string"},"description":"Run overrides: environment variables for this run only, on top of the repository .env and the service's own variables; the service itself is never changed. Names match [A-Za-z_][A-Za-z0-9_]*, at most 100; an image service's values have no line break. restart_service without env repeats the last run's overrides; env {} clears them."}`
+	reasonSchema := `"reason":{"type":"string","description":"Why you ask: the person reads it when deciding."}`
 	worktreeSchema := `"worktree":{"type":"string","enum":["own"],"description":"own: run a command service of your repository in your worktree instead of the repository's main checkout. Omit for the main checkout."}`
 	return []domain.Tool{
 		{
@@ -138,8 +148,9 @@ func SessionServicesTools(sessions ports.SessionRepository, agents ports.AgentLi
 				"which only a command service of your own repository can. A service that is already starting or running is returned with " +
 				"already_running true, wherever it runs and whoever started it; nothing is restarted. If the run is still starting after " +
 				"a minute the answer says starting: call service_status. env sets run overrides for this run only; with env on a running " +
-				"service nothing changes: call restart_service with the new env.",
-			InputSchema: schemaFromJSON(`{"type":"object","required":["name"],"properties":{` + nameSchema + `,` + worktreeSchema + `,` + envSchema + `}}`),
+				"service nothing changes: call restart_service with the new env. Starting asks the person: the call waits, with no time limit, " +
+				"until the person approves or denies the request; say why in reason.",
+			InputSchema: schemaFromJSON(`{"type":"object","required":["name"],"properties":{` + nameSchema + `,` + worktreeSchema + `,` + envSchema + `,` + reasonSchema + `}}`),
 			Source:      "code",
 			Handler: func(ctx context.Context, args map[string]any) (any, error) {
 				sess, svc, err := t.target(ctx, args)
@@ -150,7 +161,7 @@ func SessionServicesTools(sessions ports.SessionRepository, agents ports.AgentLi
 				if err != nil {
 					return nil, err
 				}
-				started, already, err := t.services.StartService(ctx, svc.ID, opts)
+				started, already, err := t.start(ctx, sess, svc, opts, args)
 				if err != nil {
 					return nil, t.refusal(ctx, err, svc.Name)
 				}
@@ -161,16 +172,17 @@ func SessionServicesTools(sessions ports.SessionRepository, agents ports.AgentLi
 			},
 		},
 		{
-			Name:        "stop_service",
-			Description: "Stop a service, whoever started it, and answer once its run has ended. A service that is not running is returned unchanged.",
-			InputSchema: schemaFromJSON(`{"type":"object","required":["name"],"properties":{` + nameSchema + `}}`),
+			Name: "stop_service",
+			Description: "Stop a service, whoever started it, and answer once its run has ended. A service that is not running is returned unchanged. " +
+				"Stopping asks the person: the call waits, with no time limit, until the person approves or denies the request; say why in reason.",
+			InputSchema: schemaFromJSON(`{"type":"object","required":["name"],"properties":{` + nameSchema + `,` + reasonSchema + `}}`),
 			Source:      "code",
 			Handler: func(ctx context.Context, args map[string]any) (any, error) {
 				sess, svc, err := t.target(ctx, args)
 				if err != nil {
 					return nil, err
 				}
-				stopped, err := t.services.StopService(ctx, svc.ID)
+				stopped, err := t.stop(ctx, sess, svc, args)
 				if err != nil {
 					return nil, t.refusal(ctx, err, svc.Name)
 				}
@@ -182,8 +194,9 @@ func SessionServicesTools(sessions ports.SessionRepository, agents ports.AgentLi
 			Description: "Stop a service's run, if there is one, then start it with the rules of start_service (worktree included), " +
 				"and answer once the new run is running or has failed. Each argument you omit repeats the last run: no worktree keeps its " +
 				"worktree when you may use it (the main checkout, or your own), else the main checkout; no env keeps its overrides. " +
-				"env {} clears them. So env alone changes the variables on the same branch.",
-			InputSchema: schemaFromJSON(`{"type":"object","required":["name"],"properties":{` + nameSchema + `,` + worktreeSchema + `,` + envSchema + `}}`),
+				"env {} clears them. So env alone changes the variables on the same branch. Restarting asks the person: the call waits, with no time " +
+				"limit, until the person approves or denies the request; say why in reason.",
+			InputSchema: schemaFromJSON(`{"type":"object","required":["name"],"properties":{` + nameSchema + `,` + worktreeSchema + `,` + envSchema + `,` + reasonSchema + `}}`),
 			Source:      "code",
 			Handler: func(ctx context.Context, args map[string]any) (any, error) {
 				sess, svc, err := t.target(ctx, args)
@@ -200,7 +213,7 @@ func SessionServicesTools(sessions ports.SessionRepository, agents ports.AgentLi
 				if wt, given := args["worktree"]; (!given || wt == nil) && t.mayRepeat(ctx, sess, svc) {
 					opts.Worktree = &ports.ServiceWorktree{Dir: sess.WorkingDir, Branch: sess.Branch, SessionID: sess.ID}
 				}
-				restarted, err := t.services.RestartService(ctx, svc.ID, opts)
+				restarted, err := t.restart(ctx, sess, svc, opts, args)
 				if err != nil {
 					return nil, t.refusal(ctx, err, svc.Name)
 				}
@@ -225,6 +238,74 @@ func SessionServicesTools(sessions ports.SessionRepository, agents ports.AgentLi
 			},
 		},
 	}
+}
+
+// start is a start the person approves first (ADR 0083): a service that is
+// already starting or running is answered at once, a start that could not
+// happen is refused at once, and anything else files a service request and
+// waits for the person's answer. Without a request store it starts directly.
+func (t *servicesTools) start(ctx context.Context, sess *domain.Session, svc *domain.Service, opts ports.ServiceStartOptions, args map[string]any) (*domain.Service, bool, error) {
+	if t.requests == nil {
+		return t.services.StartService(ctx, svc.ID, opts)
+	}
+	if svc.Status.Active() {
+		return svc, true, nil
+	}
+	if err := t.services.ValidateStart(ctx, svc.ID, opts); err != nil {
+		return nil, false, err
+	}
+	out, err := t.requests.Submit(ctx, ports.ServiceRequestInput{
+		SessionID: sess.ID, Action: domain.ServiceRequestStart, ServiceID: svc.ID, ServiceName: svc.Name,
+		Reason: getString(args, "reason", ""), Worktree: ownWorktree(opts), Env: opts.Env, EnvGiven: opts.Env != nil,
+	})
+	if err != nil {
+		return nil, false, err
+	}
+	return out.Service, out.AlreadyRunning, nil
+}
+
+// restart is a restart the person approves first: one that could not happen is
+// refused at once, anything else files a service request and waits. Without a
+// request store it restarts directly.
+func (t *servicesTools) restart(ctx context.Context, sess *domain.Session, svc *domain.Service, opts ports.ServiceStartOptions, args map[string]any) (*domain.Service, error) {
+	if t.requests == nil {
+		return t.services.RestartService(ctx, svc.ID, opts)
+	}
+	if err := t.services.ValidateStart(ctx, svc.ID, opts); err != nil {
+		return nil, err
+	}
+	out, err := t.requests.Submit(ctx, ports.ServiceRequestInput{
+		SessionID: sess.ID, Action: domain.ServiceRequestRestart, ServiceID: svc.ID, ServiceName: svc.Name,
+		Reason: getString(args, "reason", ""), Worktree: ownWorktree(opts), Env: opts.Env, EnvGiven: opts.Env != nil,
+	})
+	if err != nil {
+		return nil, err
+	}
+	return out.Service, nil
+}
+
+// stop is a stop the person approves first: a service with no run going is
+// answered at once, anything else files a service request and waits. Without a
+// request store it stops directly.
+func (t *servicesTools) stop(ctx context.Context, sess *domain.Session, svc *domain.Service, args map[string]any) (*domain.Service, error) {
+	if t.requests == nil || !svc.Status.Active() {
+		return t.services.StopService(ctx, svc.ID)
+	}
+	out, err := t.requests.Submit(ctx, ports.ServiceRequestInput{
+		SessionID: sess.ID, Action: domain.ServiceRequestStop, ServiceID: svc.ID, ServiceName: svc.Name, Reason: getString(args, "reason", ""),
+	})
+	if err != nil {
+		return nil, err
+	}
+	return out.Service, nil
+}
+
+// ownWorktree is "own" when the options run in the session's worktree.
+func ownWorktree(opts ports.ServiceStartOptions) string {
+	if opts.Worktree != nil {
+		return "own"
+	}
+	return ""
 }
 
 // scope is the session's project: every tool's first step.

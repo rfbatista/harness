@@ -361,3 +361,27 @@ func TestBranchRequestsRestored_ClearsAStaleWait(t *testing.T) {
 		t.Errorf("%d pending, %s; want 0, running", got.PendingApprovals, got.Status)
 	}
 }
+
+// A pending service request shows its session as waiting for approval and
+// counts in its pending approvals, as a pending branch request does; the last
+// answer puts the session back (ADR 0083).
+func TestServiceRequests_ShowTheSessionAsWaitingAndCountThem(t *testing.T) {
+	svc := newHostedService(t, scriptAgent{script: `cat`})
+	sess := startOnServer(t, svc)
+	before := sessionOf(svc, sess.ID).Status
+
+	svc.ServiceRequestFiled(sess.ID)
+	svc.BranchRequestFiled(sess.ID)
+	got := sessionOf(svc, sess.ID)
+	if got.Status != domain.SessionWaitingApproval || got.PendingApprovals != 2 {
+		t.Fatalf("with a service and a branch request: %s, %d pending", got.Status, got.PendingApprovals)
+	}
+	svc.ServiceRequestSettled(sess.ID)
+	if got := sessionOf(svc, sess.ID); got.Status != domain.SessionWaitingApproval || got.PendingApprovals != 1 {
+		t.Fatalf("one left: %s, %d pending", got.Status, got.PendingApprovals)
+	}
+	svc.BranchRequestSettled(sess.ID)
+	if got := sessionOf(svc, sess.ID); got.Status != before || got.PendingApprovals != 0 {
+		t.Fatalf("none left: %s, %d pending, want %s, 0", got.Status, got.PendingApprovals, before)
+	}
+}
