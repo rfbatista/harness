@@ -3,6 +3,7 @@ package httpapi
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"strings"
 	"sync"
 	"testing"
@@ -682,4 +683,68 @@ func TestServicesRequests_ServiceViewShowsThisSessionsPendingRequest(t *testing.
 	}
 	f.answer(r["id"].(string), "deny", "")
 	f.waitingFor(done)
+}
+
+// The feed and the pending count
+
+func TestServicesRequests_TheFeedAnnouncesEachStepWithNoValueAndPendingRequestsCountsThePendingOnes(t *testing.T) {
+	f, id := requestsFixtureWithService(t)
+	events, err := f.svc.FollowServices(context.Background(), f.projectID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	agent := f.as("sess-1")
+	const secret = "feed-secret-override"
+
+	done := agent.callAsync("start_service", map[string]any{"name": "web", "env": map[string]any{"D": secret}, "reason": "try"})
+	r := f.awaitPending(1)[0]
+	if got := f.service(id)["pending_requests"]; got != float64(1) {
+		t.Fatalf("pending_requests = %v, want 1", got)
+	}
+	_, listed := f.call("GET", "/api/list_services?project_id="+f.projectID, nil)
+	if n := listed["services"].([]any)[0].(map[string]any)["pending_requests"]; n != float64(1) {
+		t.Fatalf("listed pending_requests = %v", n)
+	}
+	f.answer(r["id"].(string), "approve", "")
+	f.waitingFor(done)
+	t.Cleanup(func() { f.operate("stop_service", id) })
+	if got := f.service(id)["pending_requests"]; got != float64(0) {
+		t.Fatalf("pending_requests after = %v, want 0", got)
+	}
+
+	var states []string
+	var pendingCounts []float64
+	var all []byte
+	deadline := time.After(5 * time.Second)
+	for len(states) < 3 {
+		select {
+		case e := <-events:
+			b, _ := json.Marshal(e)
+			all = append(all, b...)
+			if e.Kind == "service_request" {
+				if e.Request == nil || e.Request.ID != r["id"] {
+					t.Fatalf("event = %+v", e)
+				}
+				states = append(states, string(e.Request.State))
+			}
+			if e.Kind == "service_changed" && e.Service != nil && e.Service.ID == id {
+				pendingCounts = append(pendingCounts, float64(e.Service.PendingRequests))
+			}
+		case <-deadline:
+			t.Fatalf("feed events so far: states %v", states)
+		}
+	}
+	if strings.Join(states, ",") != "pending,approved,done" {
+		t.Fatalf("request states on the feed = %v", states)
+	}
+	if strings.Contains(string(all), secret) {
+		t.Fatalf("a feed event holds a variable value: %s", all)
+	}
+	if len(pendingCounts) == 0 || pendingCounts[0] != 1 {
+		t.Fatalf("the service's pending_requests on the feed = %v", pendingCounts)
+	}
+	if code, out := f.call("GET", "/api/service_requests?project_id="+f.projectID+"&service_id="+id, nil); code != 200 ||
+		!strings.Contains(fmt.Sprint(out), secret) {
+		t.Fatalf("the person still reads the value with the GET: %d %v", code, out)
+	}
 }

@@ -116,6 +116,10 @@ func (s *Service) sweepRuntime(ctx context.Context, runtime string) {
 // deleted: each is stopped, then removed with its log, and announced as
 // service_deleted.
 func (s *Service) Subscribe(sub ports.EventSubscriber) {
+	ports.On(sub, func(ctx context.Context, ev domain.ServiceRequestChanged) error {
+		s.requestChanged(ev)
+		return nil
+	})
 	ports.On(sub, func(ctx context.Context, ev domain.RepositoryDeleted) error {
 		s.removeRepositoryWorktrees(ctx, ev.ProjectID, ev.RepositoryID)
 		return nil

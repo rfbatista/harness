@@ -123,8 +123,3 @@ func (r *ServiceRequestRepository) List(ctx context.Context, f domain.ServiceReq
 	}
 	return out, nil
 }
-
-// DeleteForService implements ports.ServiceRequestStore.
-func (r *ServiceRequestRepository) DeleteForService(ctx context.Context, serviceID string) error {
-	return r.db.WithContext(ctx).Where("service_id = ?", serviceID).Delete(&ServiceRequestModel{}).Error
-}

@@ -69,6 +69,9 @@ type Options struct {
 	RunWorktrees ports.ServiceRunWorktrees
 	// Branches names the branch a main checkout holds; nil leaves it empty.
 	Branches ports.RunBranchReader
+	// Requests is the store of agents' service requests, read for each
+	// service's pending count; nil counts none.
+	Requests ports.ServiceRequestStore
 	// BranchGit is the git a branch run needs: the branch list, and the service
 	// worktree (ADR 0080); nil offers no branch.
 	BranchGit ports.ServiceBranchGit
@@ -173,12 +176,21 @@ func (s *Service) ListServices(ctx context.Context, projectID string) (*ports.Se
 	if err != nil {
 		return nil, err
 	}
+	counts := s.pendingRequests(projectID)
+	for _, svc := range list {
+		svc.PendingRequests = counts[svc.ID]
+	}
 	return &ports.ServiceList{Services: list, Seq: seq, Runtime: s.runtimeInfo(), Sandbox: s.sandboxState()}, nil
 }
 
 // GetService reads one service.
 func (s *Service) GetService(_ context.Context, serviceID string) (*domain.Service, error) {
-	return s.store.GetService(serviceID)
+	svc, err := s.store.GetService(serviceID)
+	if err != nil {
+		return nil, err
+	}
+	svc.PendingRequests = s.pendingRequests(svc.ProjectID)[svc.ID]
+	return svc, nil
 }
 
 // CreateService saves a new, stopped service the person made.
@@ -377,7 +389,42 @@ func (s *Service) checkNameFree(projectID, name, exceptID string) error {
 // running count. The caller holds mu.
 func (s *Service) announceLocked(svc *domain.Service) {
 	count, _ := s.store.RunningServices(svc.ProjectID)
-	s.publishLocked(svc.ProjectID, ports.ServiceEvent{Kind: ports.ServiceChanged, Service: svc.Clone(), RunningCount: count})
+	c := svc.Clone()
+	c.PendingRequests = s.pendingRequests(svc.ProjectID)[svc.ID]
+	s.publishLocked(svc.ProjectID, ports.ServiceEvent{Kind: ports.ServiceChanged, Service: c, RunningCount: count})
+}
+
+// pendingRequests counts each service's pending service requests of a project.
+func (s *Service) pendingRequests(projectID string) map[string]int {
+	counts := map[string]int{}
+	if s.opts.Requests == nil {
+		return counts
+	}
+	pending, err := s.opts.Requests.List(context.Background(), domain.ServiceRequestFilter{ProjectID: projectID, State: domain.ServiceRequestPending})
+	if err != nil {
+		return counts
+	}
+	for _, r := range pending {
+		if r.ServiceID != "" {
+			counts[r.ServiceID]++
+		}
+	}
+	return counts
+}
+
+// requestChanged puts a changed service request on the project's feed, without
+// its values, and the service it is about with its new pending count.
+func (s *Service) requestChanged(ev domain.ServiceRequestChanged) {
+	r := ev.Request.WithoutValues()
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.publishLocked(ev.ProjectID, ports.ServiceEvent{Kind: ports.ServiceRequestEvent, Request: &r})
+	if ev.Request.ServiceID == "" {
+		return
+	}
+	if svc, err := s.store.GetService(ev.Request.ServiceID); err == nil {
+		s.announceLocked(svc)
+	}
 }
 
 // publishLocked numbers the event within its project and sends it. The

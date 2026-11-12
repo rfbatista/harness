@@ -102,17 +102,23 @@ type ServiceList struct {
 // already in the list. RunningCount is the project's starting or running
 // services.
 type ServiceEvent struct {
-	Seq          int64           `json:"seq"`
-	Kind         string          `json:"kind"` // service_changed | service_deleted
-	Service      *domain.Service `json:"service,omitempty"`
-	ServiceID    string          `json:"service_id,omitempty"`
-	RunningCount int             `json:"running_count"`
+	Seq     int64           `json:"seq"`
+	Kind    string          `json:"kind"` // service_changed | service_deleted | service_request
+	Service *domain.Service `json:"service,omitempty"`
+	// Request is a service request that changed, without any variable value
+	// (kind service_request).
+	Request      *domain.ServiceRequest `json:"request,omitempty"`
+	ServiceID    string                 `json:"service_id,omitempty"`
+	RunningCount int                    `json:"running_count"`
 }
 
 // Service feed event kinds.
 const (
 	ServiceChanged = "service_changed"
 	ServiceDeleted = "service_deleted"
+	// ServiceRequestEvent announces a service request that was filed,
+	// answered, performed or expired.
+	ServiceRequestEvent = "service_request"
 )
 
 // ServiceWorktree is a directory a command service of a repository runs in

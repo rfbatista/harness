@@ -99,9 +99,10 @@ func newMCPFixtureBase(t *testing.T, settle time.Duration, withRequests bool) *m
 	if withRequests {
 		waiter = &fakeRequestWaiter{}
 		requests = servicerequests.NewService(servicerequests.Deps{
-			Services: f.svc, Store: sqlite.NewServiceRequestRepository(db), Sessions: sessions, Agents: agents, Waiter: waiter, Events: f.cat.Bus,
+			Services: f.svc, Store: f.requestStore, Sessions: sessions, Agents: agents, Waiter: waiter, Events: f.cat.Bus,
 		})
 		requests.Subscribe(f.cat.Bus)
+		f.svc.Subscribe(f.cat.Bus)
 		toolOpts = append(toolOpts, tooling.WithServiceRequests(requests))
 		// The person's HTTP API, with the requests it answers.
 		s := servicesOf(f.cat)
@@ -276,8 +277,15 @@ func TestServicesMCP_StartIsRecordedForTheSessionAndAnAlreadyRunningOneIsLeftAlo
 	if by := f.service(id)["run"].(map[string]any)["started_by"].(map[string]any); by["kind"] != "session" || by["session_id"] != "sess-12345678abc" || by["agent"] != "dev" || by["task_id"] != "task-77" {
 		t.Fatalf("the run is stored as started by the session, with its task: %v", by)
 	}
-	for _, e := range serviceChanges(t, events, id, 2) {
-		if by := e["service"].(map[string]any)["run"].(map[string]any)["started_by"].(map[string]any); by["task_id"] != "task-77" {
+	// The request's own announcements (the pending count) have no run yet.
+	for seen := 0; seen < 2; {
+		e := serviceChanges(t, events, id, 1)[0]
+		run, ok := e["service"].(map[string]any)["run"].(map[string]any)
+		if !ok {
+			continue
+		}
+		seen++
+		if by := run["started_by"].(map[string]any); by["task_id"] != "task-77" {
 			t.Fatalf("the feed carries the task: %v", by)
 		}
 	}

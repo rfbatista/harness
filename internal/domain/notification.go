@@ -25,6 +25,9 @@ const (
 	NotificationCommitCheckOff  NotificationKind = "commit_check_off"
 	NotificationBranchRequest   NotificationKind = "branch_request"
 	NotificationBranchFinding   NotificationKind = "branch_finding"
+	// NotificationServiceRequest is an agent's pending request to change a
+	// service (ADR 0083).
+	NotificationServiceRequest NotificationKind = "service_request"
 	// NotificationSessionsInterrupted lists the sessions a restart interrupted
 	// mid-turn, with a Resume all interrupted action (ADR 0083).
 	NotificationSessionsInterrupted NotificationKind = "sessions_interrupted"
