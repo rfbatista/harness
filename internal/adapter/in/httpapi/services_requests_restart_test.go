@@ -183,3 +183,33 @@ func TestServicesRequestsRestart_AnApprovedRequestThatNeverRanIsFailedOnceNotRep
 		t.Fatalf("the session is told once: %d turns", n)
 	}
 }
+
+func TestServicesRequestsRestart_DeletingTheProjectDeletesItsRequestsWithTheirValues(t *testing.T) {
+	f, _ := requestsFixtureWithService(t)
+	agent := f.as("sess-1")
+	const secret = "stored-secret-value"
+
+	done := agent.callAsync("start_service", map[string]any{"name": "web", "env": map[string]any{"D": secret}})
+	r := f.awaitPending(1)[0]
+	f.answer(r["id"].(string), "approve", "")
+	f.waitingFor(done)
+	f.operate("stop_service", f.createdID("web"))
+	waiting := agent.callAsync("stop_service", named("web")) // nothing running: answered at once
+	f.waitingFor(waiting)
+	pending := agent.callAsync("create_service", map[string]any{"name": "api", "kind": "command", "env": map[string]any{"K": secret}, "command": map[string]any{"line": "x"}, "reason": "r"})
+	f.awaitPending(1)
+
+	if all, err := f.requestStore.List(context.Background(), domain.ServiceRequestFilter{ProjectID: f.projectID}); err != nil || len(all) != 2 {
+		t.Fatalf("requests before = %d, %v", len(all), err)
+	}
+	if code, out := f.call("POST", "/api/delete_project", map[string]any{"project_id": f.projectID}); code != 204 {
+		t.Fatalf("delete_project = %d %v", code, out)
+	}
+	if got := f.waitingFor(pending); got.msg != "the service request expired" {
+		t.Fatalf("a call waiting when its project goes = %q", got.msg)
+	}
+	all, err := f.requestStore.List(context.Background(), domain.ServiceRequestFilter{ProjectID: f.projectID})
+	if err != nil || len(all) != 0 {
+		t.Fatalf("the project's requests outlive it: %v, %v", all, err)
+	}
+}

@@ -21,6 +21,9 @@ type ServiceRequestStore interface {
 	Save(ctx context.Context, r *domain.ServiceRequest) error
 	// List lists requests newest first.
 	List(ctx context.Context, f domain.ServiceRequestFilter) ([]domain.ServiceRequest, error)
+	// DeleteForProject removes every request of a deleted project, with the
+	// variable values they hold.
+	DeleteForProject(ctx context.Context, projectID string) error
 }
 
 // ServiceRequestInput is an agent's request, already validated by the tool

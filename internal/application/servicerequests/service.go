@@ -396,6 +396,31 @@ func (s *Service) Subscribe(sub ports.EventSubscriber) {
 	ports.On(sub, func(ctx context.Context, ev domain.SessionEnded) error {
 		return s.expire(ctx, ev.SessionID)
 	})
+	ports.On(sub, func(ctx context.Context, ev domain.ProjectDeleted) error {
+		return s.deleteProject(ctx, ev.ProjectID)
+	})
+}
+
+// deleteProject removes a deleted project's requests, the variable values they
+// hold with them. A tool call still waiting on one ends as expired.
+func (s *Service) deleteProject(ctx context.Context, projectID string) error {
+	all, err := s.d.Store.List(ctx, domain.ServiceRequestFilter{ProjectID: projectID})
+	if err != nil {
+		return err
+	}
+	for i := range all {
+		r := &all[i]
+		if r.State != domain.ServiceRequestPending {
+			continue
+		}
+		s.mu.Lock()
+		w := s.waiters[r.ID]
+		s.mu.Unlock()
+		if w != nil {
+			s.finish(ctx, r, w, nil, &domain.StructuredError{Code: domain.ServiceRequestExpiredCode, Message: "the service request expired"})
+		}
+	}
+	return s.d.Store.DeleteForProject(ctx, projectID)
 }
 
 // expire ends the pending requests of a session that ended.

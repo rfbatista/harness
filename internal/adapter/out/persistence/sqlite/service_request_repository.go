@@ -123,3 +123,8 @@ func (r *ServiceRequestRepository) List(ctx context.Context, f domain.ServiceReq
 	}
 	return out, nil
 }
+
+// DeleteForProject implements ports.ServiceRequestStore.
+func (r *ServiceRequestRepository) DeleteForProject(ctx context.Context, projectID string) error {
+	return r.db.WithContext(ctx).Where("project_id = ?", projectID).Delete(&ServiceRequestModel{}).Error
+}
