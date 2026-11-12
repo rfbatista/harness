@@ -306,6 +306,14 @@ type ServiceManager interface {
 	ContainerRuntime(ctx context.Context) ServiceRuntimeInfo
 	SetContainerRuntime(ctx context.Context, name string) (ServiceRuntimeInfo, error)
 	CreateService(ctx context.Context, projectID string, in domain.ServiceInput) (*domain.Service, error)
+	// CreateServiceBy is CreateService recording who made the service: the
+	// session whose request the person approved (ADR 0083).
+	CreateServiceBy(ctx context.Context, projectID string, in domain.ServiceInput, by domain.ServiceStartedBy) (*domain.Service, error)
+	// ValidateServiceInput checks a definition as CreateService (serviceID
+	// empty) or UpdateService would, without saving it, and answers it in its
+	// stored form: names, kinds, ports, subfolder, dotenv, repository, and a name
+	// another service has (SERVICE_NAME_TAKEN).
+	ValidateServiceInput(ctx context.Context, projectID, serviceID string, in domain.ServiceInput) (domain.ServiceInput, error)
 	// UpdateService replaces the service's definition; restartNeeded says it
 	// runs and picks the change up at its next start.
 	UpdateService(ctx context.Context, serviceID string, in domain.ServiceInput) (s *domain.Service, restartNeeded bool, err error)

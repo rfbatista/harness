@@ -110,7 +110,19 @@ func (s *Service) build(ctx context.Context, sess *domain.Session, in ports.Serv
 			r.Env = append(r.Env, domain.ServiceRequestEnv{Name: name, Value: in.Env[name], Change: "set"})
 		}
 	}
-	r.Summary = summary(r)
+	if in.Action == domain.ServiceRequestCreate || in.Action == domain.ServiceRequestUpdate {
+		r.Proposed, r.Changes, r.Env = in.Proposed, in.Changes, in.EnvChanges
+		if r.Changes == nil {
+			r.Changes = []domain.ServiceRequestChange{}
+		}
+		if r.Env == nil {
+			r.Env = []domain.ServiceRequestEnv{}
+		}
+	}
+	r.Summary = in.Summary
+	if r.Summary == "" {
+		r.Summary = summary(r)
+	}
 	return r
 }
 
@@ -271,6 +283,25 @@ func (s *Service) perform(ctx context.Context, r *domain.ServiceRequest) (*ports
 			return nil, err
 		}
 		return &ports.ServiceRequestOutcome{Service: svc}, nil
+	case domain.ServiceRequestCreate:
+		if r.Proposed == nil {
+			return nil, errors.New("the request holds no definition")
+		}
+		svc, err := s.d.Services.CreateServiceBy(ctx, r.ProjectID, *r.Proposed, domain.ServiceStartedBy{Kind: "session", SessionID: sess.ID, Agent: s.agentName(ctx, sess), TaskID: sess.TicketID})
+		if err != nil {
+			return nil, err
+		}
+		r.ServiceID = svc.ID
+		return &ports.ServiceRequestOutcome{Service: svc}, nil
+	case domain.ServiceRequestUpdate:
+		if r.Proposed == nil {
+			return nil, errors.New("the request holds no definition")
+		}
+		svc, restart, err := s.d.Services.UpdateService(ctx, r.ServiceID, *r.Proposed)
+		if err != nil {
+			return nil, err
+		}
+		return &ports.ServiceRequestOutcome{Service: svc, RestartNeeded: restart}, nil
 	case domain.ServiceRequestStop:
 		svc, err := s.d.Services.StopService(ctx, r.ServiceID)
 		if err != nil {

@@ -34,6 +34,8 @@ const ServicesServerName = "services"
 var ServicesServerTools = []string{
 	"list_services",
 	"service_status",
+	"create_service",
+	"update_service",
 	"start_service",
 	"stop_service",
 	"restart_service",

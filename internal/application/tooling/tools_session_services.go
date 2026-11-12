@@ -3,6 +3,7 @@ package tooling
 import (
 	"context"
 	"errors"
+	"slices"
 	"strconv"
 	"strings"
 	"time"
@@ -43,11 +44,18 @@ func WithServicesSettleTimeout(d time.Duration) ServicesOption {
 	return func(t *servicesTools) { t.settle = d }
 }
 
+// ServiceRepositories are the repositories the services tools read: one by id,
+// and the project's by name.
+type ServiceRepositories interface {
+	ports.RepositoryReader
+	ports.RepositoryLister
+}
+
 type servicesTools struct {
 	sessions ports.SessionRepository
 	agents   ports.AgentLister
 	services ports.ServiceManager
-	repos    ports.RepositoryReader
+	repos    ServiceRepositories
 	settle   time.Duration
 	// requests holds every change an agent asks for until the person answers
 	// (ADR 0083); nil lets the tools act directly.
@@ -70,7 +78,18 @@ type serviceView struct {
 	Repository string   `json:"repository"`
 	Ports      []string `json:"ports"`
 	EnvNames   []string `json:"env_names"`
-	Run        *runView `json:"run"`
+	// CreatedBy is who made the service; EnvValues are the saved variables this
+	// session's approved requests set, with their values, and no other.
+	CreatedBy string            `json:"created_by"`
+	EnvValues map[string]string `json:"env_values"`
+	// PendingRequest is this session's own pending request on the service.
+	PendingRequest *pendingRequestView `json:"pending_request"`
+	Run            *runView            `json:"run"`
+}
+
+type pendingRequestView struct {
+	ID     string `json:"id"`
+	Action string `json:"action"`
 }
 
 type runView struct {
@@ -96,7 +115,7 @@ type runView struct {
 // context and every handler resolves its project from it, so a session only
 // reaches the services of its own project. agents, when set, names the agent
 // that starts a run.
-func SessionServicesTools(sessions ports.SessionRepository, agents ports.AgentLister, services ports.ServiceManager, repos ports.RepositoryReader, opts ...ServicesOption) []domain.Tool {
+func SessionServicesTools(sessions ports.SessionRepository, agents ports.AgentLister, services ports.ServiceManager, repos ServiceRepositories, opts ...ServicesOption) []domain.Tool {
 	t := &servicesTools{sessions: sessions, agents: agents, services: services, repos: repos, settle: DefaultServicesSettleTimeout}
 	for _, o := range opts {
 		o(t)
@@ -105,7 +124,7 @@ func SessionServicesTools(sessions ports.SessionRepository, agents ports.AgentLi
 	envSchema := `"env":{"type":"object","additionalProperties":{"type":"string"},"description":"Run overrides: environment variables for this run only, on top of the repository .env and the service's own variables; the service itself is never changed. Names match [A-Za-z_][A-Za-z0-9_]*, at most 100; an image service's values have no line break. restart_service without env repeats the last run's overrides; env {} clears them."}`
 	reasonSchema := `"reason":{"type":"string","description":"Why you ask: the person reads it when deciding."}`
 	worktreeSchema := `"worktree":{"type":"string","enum":["own"],"description":"own: run a command service of your repository in your worktree instead of the repository's main checkout. Omit for the main checkout."}`
-	return []domain.Tool{
+	tools := []domain.Tool{
 		{
 			Name: "list_services",
 			Description: "List the services of this session's project, by name: the programs the person defined to run beside each other " +
@@ -238,6 +257,8 @@ func SessionServicesTools(sessions ports.SessionRepository, agents ports.AgentLi
 			},
 		},
 	}
+	// create_service and update_service come after the reads.
+	return slices.Insert(tools, 2, t.definitionTools()...)
 }
 
 // start is a start the person approves first (ADR 0083): a service that is
@@ -361,6 +382,8 @@ func (t *servicesTools) refusal(ctx context.Context, err error, name string) err
 		return serviceNotFound(name)
 	case "PROJECT_NOT_FOUND":
 		return errNoServicesProject
+	case "SERVICE_NAME_TAKEN":
+		return &domain.StructuredError{Code: se.Code, Message: "a service named " + strconv.Quote(name) + " already exists in this project"}
 	case "SANDBOX_UNAVAILABLE":
 		return &domain.StructuredError{Code: se.Code, Message: "the sandbox is on but this platform has no sandbox driver; command services cannot start"}
 	case "RUNTIME_UNAVAILABLE":
@@ -491,11 +514,14 @@ func (t *servicesTools) view(ctx context.Context, svc *domain.Service, sessionID
 			v.Ports = append(v.Ports, strconv.Itoa(p.Host)+"->"+strconv.Itoa(p.Container)+"/"+p.Protocol)
 		}
 	}
-	// Names only: a value never leaves the server.
+	// Names only: a value never leaves the server, but the ones this session
+	// set itself.
 	vars, _ := domain.ParseDotenv(svc.Env)
 	for _, e := range vars {
 		v.EnvNames = append(v.EnvNames, e.Key)
 	}
+	v.CreatedBy = startedByText(svc.CreatedBy)
+	v.EnvValues, v.PendingRequest = t.requestState(ctx, svc, vars, sessionID)
 	if r := svc.Run; r != nil {
 		v.Run = &runView{
 			StartedAt: r.StartedAt, EndedAt: r.EndedAt, ExitCode: r.ExitCode, Error: r.Error,

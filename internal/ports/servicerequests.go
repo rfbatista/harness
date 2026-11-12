@@ -36,6 +36,13 @@ type ServiceRequestInput struct {
 	// Worktree is "own" for a run in the session's worktree, "" for the
 	// repository's main checkout.
 	Worktree string
+	// Summary, Proposed, Changes and EnvChanges describe a create or an update:
+	// the readable line, the definition after it, each changed field, and the
+	// variables set or unset. Create and update are performed from Proposed.
+	Summary    string
+	Proposed   *domain.ServiceInput
+	Changes    []domain.ServiceRequestChange
+	EnvChanges []domain.ServiceRequestEnv
 	// Env are the run overrides of a start or restart; EnvGiven says they were
 	// named (a restart repeats the last run's when they were not).
 	Env      map[string]string

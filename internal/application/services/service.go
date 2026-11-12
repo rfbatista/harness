@@ -181,8 +181,43 @@ func (s *Service) GetService(_ context.Context, serviceID string) (*domain.Servi
 	return s.store.GetService(serviceID)
 }
 
-// CreateService saves a new, stopped service.
+// CreateService saves a new, stopped service the person made.
 func (s *Service) CreateService(ctx context.Context, projectID string, in domain.ServiceInput) (*domain.Service, error) {
+	return s.CreateServiceBy(ctx, projectID, in, domain.ServiceStartedBy{Kind: "person"})
+}
+
+// ValidateServiceInput implements ports.ServiceManager: the checks of a create,
+// or of an update of serviceID, on the definition in its stored form.
+func (s *Service) ValidateServiceInput(ctx context.Context, projectID, serviceID string, in domain.ServiceInput) (domain.ServiceInput, error) {
+	if _, err := s.projects.GetProject(ctx, projectID); err != nil {
+		return in, err
+	}
+	in, err := in.Normalized()
+	if err != nil {
+		return in, err
+	}
+	if serviceID != "" {
+		cur, err := s.store.GetService(serviceID)
+		if err != nil {
+			return in, err
+		}
+		if in.Kind != cur.Kind {
+			return in, &domain.StructuredError{Code: "INVALID_INPUT", Message: "kind cannot be changed after the service is created"}
+		}
+	}
+	if err := s.checkRepository(ctx, projectID, in.RepositoryID); err != nil {
+		return in, err
+	}
+	if err := s.checkSubdir(ctx, in); err != nil {
+		return in, err
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return in, s.checkNameFree(projectID, in.Name, serviceID)
+}
+
+// CreateServiceBy saves a new, stopped service made by by.
+func (s *Service) CreateServiceBy(ctx context.Context, projectID string, in domain.ServiceInput, by domain.ServiceStartedBy) (*domain.Service, error) {
 	if _, err := s.projects.GetProject(ctx, projectID); err != nil {
 		return nil, err
 	}
@@ -205,7 +240,7 @@ func (s *Service) CreateService(ctx context.Context, projectID string, in domain
 	svc := &domain.Service{
 		ID: newServiceID(), ProjectID: projectID, Name: in.Name, Kind: in.Kind,
 		RepositoryID: in.RepositoryID, ExportRepositoryEnv: in.ExportRepositoryEnv, Env: in.Env,
-		Command: in.Command, Image: in.Image, Status: domain.ServiceStopped, CreatedAt: now, UpdatedAt: now,
+		Command: in.Command, Image: in.Image, Status: domain.ServiceStopped, CreatedBy: by, CreatedAt: now, UpdatedAt: now,
 	}
 	if err := s.store.SaveService(svc); err != nil {
 		return nil, err
