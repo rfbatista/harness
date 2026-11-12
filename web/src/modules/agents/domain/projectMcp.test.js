@@ -199,13 +199,26 @@ test("a project-only server at Agent's choice says no session gets it; Added and
 });
 
 test("What a session gets leaves out a project-only server the agent lists unless it is Added", () => {
-  const c = catalogWith([server({ name: "github" }), server({ name: "linear", project_only: true })], [agent("architect", ["github", "linear"])]);
-  const s = read(["github", "agent"], ["linear", "agent"]);
+  // The flag comes from the project's read, the same source as the row hint.
+  const c = catalogWith([server({ name: "github" }), server({ name: "linear" })], [agent("architect", ["github", "linear"])]);
+  const s = toProjectMcpSettings({
+    mcp_servers: [],
+    servers: [{ name: "github", state: "agent", used_by_agents: ["architect"], tools: null }, { name: "linear", state: "agent", used_by_agents: ["architect"], tools: null, project_only: true }],
+  });
   const ex = sessionExample(c, s, settingsDraft(s));
   assert.deepEqual(ex.withAgent.map((x) => [x.name, x.origin]), [["github", "agent"]]);
   const addedEx = sessionExample(c, s, setServerState(settingsDraft(s), "linear", "added"));
   assert.deepEqual(addedEx.withAgent.map((x) => [x.name, x.origin]), [["github", "agent"], ["linear", "both, counted once"]]);
   assert.deepEqual(addedEx.withoutAgent, ["linear"]);
+  const bannedEx = sessionExample(c, s, setServerState(settingsDraft(s), "linear", "banned"));
+  assert.deepEqual([bannedEx.withAgent.map((x) => x.name), bannedEx.withoutAgent, bannedEx.banned], [["github"], [], ["linear"]]);
+});
+
+test("the ban warning of a project-only server says no agent loses it, since none brings it here", () => {
+  assert.equal(banWarning(["architect"], true), "Banned: no session in this project gets this server, whatever its agent lists. It is Project only, so no agent brings it here anyway.");
+  const c = catalogWith([server({ name: "linear" })]);
+  const s = toProjectMcpSettings({ mcp_servers: [], servers: [{ name: "linear", state: "banned", used_by_agents: ["architect"], tools: null, project_only: true }] });
+  assert.ok(/It is Project only/.test(projectMcpRows(c, "p1", s, settingsDraft(s))[0].banWarning));
 });
 
 test("the example follows the draft, not what is saved", () => {

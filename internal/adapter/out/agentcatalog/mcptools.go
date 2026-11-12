@@ -31,6 +31,15 @@ func (t *txn) toolEntry(name string) *node {
 	return e
 }
 
+// existingToolEntry is a server's entry, nil when it has none; unlike
+// toolEntry it creates nothing.
+func (t *txn) existingToolEntry(name string) *node {
+	if e := t.tools.get(toolsServersKey).get(name); e != nil && e.kind == 'o' {
+		return e
+	}
+	return nil
+}
+
 // dropEmptyToolEntry keeps the file free of servers with nothing to say.
 func (t *txn) dropEmptyToolEntry(name string) {
 	if e := t.toolEntries().get(name); e != nil && len(e.members) == 0 {
@@ -70,7 +79,7 @@ func (t *txn) setProjectOnly(name string, on bool) {
 		t.toolEntry(name).set(projectOnlyKey, scalarOf(true))
 		return
 	}
-	if e := t.tools.get(toolsServersKey).get(name); e != nil && e.kind == 'o' {
+	if e := t.existingToolEntry(name); e != nil {
 		e.remove(projectOnlyKey)
 		t.dropEmptyToolEntry(name)
 	}
