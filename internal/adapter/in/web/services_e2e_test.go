@@ -39,6 +39,17 @@ type servicesWorld struct {
 	requests *servicerequests.Service
 }
 
+// stubAgents names the one agent the stub session runs as.
+type stubAgents struct{}
+
+func (stubAgents) ListAgents(context.Context) ([]*domain.Agent, error) {
+	return []*domain.Agent{{ID: "a-dev", Name: "go-developer"}}, nil
+}
+
+func (stubAgents) GetAgent(context.Context, string) (*domain.Agent, error) {
+	return &domain.Agent{ID: "a-dev", Name: "go-developer"}, nil
+}
+
 // stubSessions is the one session an agent's request is filed for.
 type stubSessions struct{ session *domain.Session }
 
@@ -90,7 +101,9 @@ func newServicesWorldWith(t *testing.T, tune func(*services.Options)) *servicesW
 		t.Fatal(err)
 	}
 	t.Cleanup(func() { _ = sqlite.Close(db) })
+	requestStore := sqlite.NewServiceRequestRepository(db)
 	opts := services.Options{
+		Requests:  requestStore,
 		LogDir:    t.TempDir(),
 		FolderDir: t.TempDir(),
 		Runners:   map[domain.ServiceKind]ports.ServiceProcessRunner{domain.ServiceKindCommand: commandrunner.Runner{}},
@@ -99,6 +112,7 @@ func newServicesWorldWith(t *testing.T, tune func(*services.Options)) *servicesW
 		tune(&opts)
 	}
 	svc := services.New(sqlite.NewServiceRepository(db), cat.Projects, cat.Projects, opts)
+	svc.Subscribe(cat.Bus)
 
 	w := &servicesWorld{svc: svc}
 	if w.project, err = cat.Projects.CreateProject(ctx, "harness", root); err != nil {
@@ -108,8 +122,9 @@ func newServicesWorldWith(t *testing.T, tune func(*services.Options)) *servicesW
 		t.Fatal(err)
 	}
 	w.requests = servicerequests.NewService(servicerequests.Deps{
-		Services: svc, Store: sqlite.NewServiceRequestRepository(db), Events: cat.Bus,
-		Sessions: stubSessions{session: &domain.Session{ID: "abcdef12-agent-session", ProjectID: w.project.ID, TicketID: "t1"}},
+		Services: svc, Store: requestStore, Events: cat.Bus,
+		Agents:   stubAgents{},
+		Sessions: stubSessions{session: &domain.Session{ID: "abcdef12-agent-session", ProjectID: w.project.ID, TicketID: "t1", AgentID: "a-dev"}},
 	})
 	mux := http.NewServeMux()
 	mux.Handle("/api/", httpapi.NewRouter(httpapi.NewHandler(httpapi.Services{
