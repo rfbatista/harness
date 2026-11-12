@@ -104,7 +104,51 @@ export function toService(s) {
       : null,
     status: s.status,
     run: toRun(s.run),
+    createdBy: {
+      kind: s.created_by?.kind === "session" ? "session" : "person",
+      sessionId: String(s.created_by?.session_id ?? ""),
+      taskId: String(s.created_by?.task_id ?? ""),
+      agent: String(s.created_by?.agent ?? ""),
+    },
+    pendingRequests: Number.isInteger(s.pending_requests) ? s.pending_requests : 0,
   };
+}
+
+const ACTIONS = ["create", "update", "start", "restart", "stop"];
+const REQUEST_STATES = ["pending", "approved", "denied", "expired", "done", "failed"];
+
+/** @returns {import("../domain/ports.js").ServiceRequest} */
+export function toServiceRequest(r) {
+  if (!r || typeof r.id !== "string" || r.id === "") bad("expected a service request with an id");
+  if (!ACTIONS.includes(r.action)) bad(`service request action ${JSON.stringify(r.action)}`);
+  if (!REQUEST_STATES.includes(r.state)) bad(`service request state ${JSON.stringify(r.state)}`);
+  return {
+    id: r.id,
+    projectId: String(r.project_id ?? ""),
+    serviceId: String(r.service_id ?? ""),
+    serviceName: String(r.service_name ?? ""),
+    action: r.action,
+    sessionId: String(r.session_id ?? ""),
+    taskId: String(r.task_id ?? ""),
+    agent: String(r.agent ?? ""),
+    reason: String(r.reason ?? ""),
+    summary: String(r.summary ?? ""),
+    proposed: r.proposed && typeof r.proposed === "object" ? r.proposed : null,
+    changes: array(r.changes).map((c) => ({ field: String(c?.field ?? ""), before: String(c?.before ?? ""), after: String(c?.after ?? "") })),
+    env: array(r.env).map((e) => ({ name: String(e?.name ?? ""), value: String(e?.value ?? ""), change: e?.change === "unset" ? "unset" : "set", previousSet: e?.previous_set === true })),
+    worktree: String(r.worktree ?? ""),
+    state: r.state,
+    note: String(r.note ?? ""),
+    resultError: String(r.result_error ?? ""),
+    requestedAt: String(r.requested_at ?? ""),
+    answeredAt: String(r.answered_at ?? ""),
+  };
+}
+
+/** @returns {import("../domain/ports.js").ServiceRequest[]} */
+export function toServiceRequests(body) {
+  if (!body || !Array.isArray(body.requests)) bad("expected {requests: […]}");
+  return body.requests.map(toServiceRequest);
 }
 
 /** @returns {import("../domain/ports.js").ServiceList} */
@@ -131,8 +175,9 @@ export function toEvent(e) {
     seq: e.seq,
     kind: String(e.kind ?? ""),
     service: e.kind === "service_changed" ? toService(e.service) : null,
+    request: e.kind === "service_request" ? toServiceRequest(e.request) : null,
     serviceId: String(e.service_id ?? ""),
-    runningCount: Number(e.running_count ?? 0),
+    runningCount: Number.isInteger(e.running_count) ? e.running_count : (e.kind === "service_request" ? null : Number(e.running_count ?? 0)),
   };
 }
 

@@ -2,7 +2,7 @@ import { StructuredError } from "../../../../shared/domain/errors.js";
 import { fixedClock } from "../../../../shared/infrastructure/clock.js";
 import { mount } from "../../../../shared/testing/alpine.js";
 import { assert, file, test } from "../../../../shared/testing/test.js";
-import { branchDTO, fakeServices, listDTO, pageEl, runDTO, serviceDTO, worktreeDTO } from "../../testing/fakeGateway.js";
+import { branchDTO, fakeServices, listDTO, pageEl, requestDTO, runDTO, serviceDTO, worktreeDTO } from "../../testing/fakeGateway.js";
 import { servicesPage } from "./servicesPage.js";
 
 file("services/presentation/components/servicesPage");
@@ -715,4 +715,25 @@ test("Start while the branch search is open closes it and runs the pick", async 
   await page.start("1");
   assert.equal(rowOf(page, "api").runIn.searchOpen, false);
   assert.deepEqual(gateway.starts, [["1", "main"]]);
+});
+
+test("a service an agent created says so on its row; the person's own says nothing", () => {
+  const { page } = openWith([serviceDTO({ id: "1", name: "made", created_by: { kind: "session", session_id: "abcdef12-x", task_id: "t1", agent: "go-developer" } }), serviceDTO({ id: "2", name: "mine" })]);
+  assert.equal(rowOf(page, "made").createdBy, "created by go-developer");
+  assert.equal(rowOf(page, "mine").createdBy, "");
+});
+
+test("a service with requests waiting shows a badge with their number, and its name says on which service", () => {
+  const { page } = openWith([serviceDTO({ id: "1", name: "api", pending_requests: 2 }), serviceDTO({ id: "2", name: "web", pending_requests: 1 }), serviceDTO({ id: "3", name: "db" })]);
+  assert.deepEqual([rowOf(page, "api").pendingRequests.text, rowOf(page, "api").pendingRequests.show, rowOf(page, "api").pendingRequests.name], ["2 requests", true, "2 requests waiting on api"]);
+  assert.equal(rowOf(page, "web").pendingRequests.text, "1 request");
+  assert.equal(rowOf(page, "web").pendingRequests.name, "1 request waiting on web");
+  assert.equal(rowOf(page, "db").pendingRequests.show, false);
+});
+
+test("a feed event for a request does not disturb the list or its sequence", () => {
+  const { page, gateway } = openWith([serviceDTO({ id: "1", name: "api" })]);
+  gateway.emit({ seq: 2, kind: "service_request", request: requestDTO() });
+  assert.equal(page.seq, 2);
+  assert.deepEqual(rowNames(page), ["api"]);
 });

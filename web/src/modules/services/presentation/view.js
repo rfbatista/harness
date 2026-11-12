@@ -1,5 +1,6 @@
 // What a service row binds, computed from a service (domain/service.js) and the clock.
 
+import { createdByLabel, pendingLabel } from "../domain/request.js";
 import { MAIN, hasRunIn, restartNote, runInOptions } from "../domain/runIn.js";
 import { isActive, overrideMark, portLinks, startedByView, statusView, timeFact, whereLabel } from "../domain/service.js";
 
@@ -57,6 +58,12 @@ export function serviceRow(service, now, { flight = "", runtime = { name: "docke
     where: whereLabel(run),
     time: timeFact(service, now),
     overrides: overrideMark(run),
+    createdBy: createdByLabel(service),
+    pendingRequests: {
+      show: service.pendingRequests > 0,
+      text: pendingLabel(service.pendingRequests),
+      name: `${pendingLabel(service.pendingRequests)} waiting on ${service.name}`,
+    },
     notSandboxed: service.kind === "command" && run !== null && !run.sandboxed,
     start: action("start", "Start", service, { show: !active, flight, blocked }),
     stop: action("stop", "Stop", service, { show: active, flight }),

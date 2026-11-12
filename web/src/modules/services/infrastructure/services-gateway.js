@@ -1,7 +1,7 @@
 // ServicesGateway over the harness HTTP API.
 
 import { Codes, StructuredError } from "../../../shared/domain/errors.js";
-import { toBranchList, toEvent, toLogEvent, toLogRead, toRunVariables, toRunWorktrees, toSeed, toService, toServiceList } from "./dto.js";
+import { toBranchList, toEvent, toLogEvent, toLogRead, toRunVariables, toRunWorktrees, toSeed, toService, toServiceList, toServiceRequest, toServiceRequests } from "./dto.js";
 
 /** @returns {import("../domain/ports.js").ServicesSettings} */
 export function toSettings(body) {
@@ -45,6 +45,16 @@ export function servicesGateway(api, feed) {
     },
     async listRunWorktrees(serviceId) {
       return toRunWorktrees(await api.get("/list_service_run_worktrees", { service_id: serviceId }));
+    },
+    async listRequests(projectId, { state, serviceId } = {}) {
+      const query = { project_id: projectId };
+      if (state) query.state = state;
+      if (serviceId) query.service_id = serviceId;
+      return toServiceRequests(await api.get("/service_requests", query));
+    },
+    async answerRequest(requestId, decision, note = "") {
+      const body = await api.post(`/service_requests/${encodeURIComponent(requestId)}/answer`, note === "" ? { decision } : { decision, note });
+      return toServiceRequest(body?.request);
     },
     async listBranches(serviceId, query = "") {
       return toBranchList(await api.get("/list_service_branches", query === "" ? { service_id: serviceId } : { service_id: serviceId, query }));

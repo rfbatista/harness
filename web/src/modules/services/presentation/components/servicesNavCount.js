@@ -36,7 +36,7 @@ export const servicesNavCount = ({ gateway }) => () => {
         (event) => {
           if (event.seq <= this.seq) return;
           this.seq = event.seq;
-          this.show(event.runningCount);
+          if (event.runningCount !== null) this.show(event.runningCount);
         },
         (status) => {
           if (status === FeedStatus.RESYNCED) this.reread(projectId);

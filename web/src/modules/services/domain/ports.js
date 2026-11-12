@@ -21,10 +21,33 @@
  * @property {{ ref: string, args: string[], ports: { host: number, container: number, protocol: "tcp" | "udp" }[] } | null} image
  * @property {"stopped" | "starting" | "running" | "exited" | "failed"} status
  * @property {object | null} run
+ * @property {{ kind: "person" | "session", sessionId: string, taskId: string, agent: string }} createdBy
+ * @property {number} pendingRequests  service requests waiting on the person
  */
 
 /**
  * @typedef {import("../../runs/domain/run.js").RunWorktree} RunWorktree  a run worktree of a command service (list_service_run_worktrees): key "main" or "session:<id>"
+ *
+ * @typedef {object} ServiceRequest  an agent's request to create, change, start, restart or stop a service, for the person to answer (contract section 13)
+ * @property {string} id
+ * @property {string} projectId
+ * @property {string} serviceId  "" for a create until approved
+ * @property {string} serviceName
+ * @property {"create" | "update" | "start" | "restart" | "stop"} action
+ * @property {string} sessionId
+ * @property {string} taskId
+ * @property {string} agent
+ * @property {string} reason  the agent's own words
+ * @property {string} summary  one readable line
+ * @property {object | null} proposed  create: the whole definition; update: the definition after (the API's ServiceInput)
+ * @property {{ field: string, before: string, after: string }[]} changes  update only
+ * @property {{ name: string, value: string, change: "set" | "unset", previousSet: boolean }[]} env  variables set or unset; run overrides for start and restart. `value` is "" on a feed event
+ * @property {string} worktree  start and restart: main or own
+ * @property {"pending" | "approved" | "denied" | "expired" | "done" | "failed"} state
+ * @property {string} note  the person's
+ * @property {string} resultError  failed: why the approved action failed
+ * @property {string} requestedAt
+ * @property {string} answeredAt
  *
  * @typedef {object} BranchList  a list_service_branches answer
  * @property {{ name: string, remote: boolean, sha: string, subject: string, committedAt: string }[]} branches  local first, then origin/*, newest commit first; a remote branch's name has no origin/
@@ -46,10 +69,11 @@
 /**
  * @typedef {object} ServiceEvent
  * @property {number} seq
- * @property {string} kind  service_changed | service_deleted
+ * @property {string} kind  service_changed | service_deleted | service_request
  * @property {Service | null} service
+ * @property {ServiceRequest | null} request  service_request: the request without values
  * @property {string} serviceId
- * @property {number} runningCount
+ * @property {number | null} runningCount  null for an event that carries none (service_request)
  */
 
 /**
@@ -73,6 +97,8 @@
  *           `worktree` is a run worktree key; sent only when given (the server reads none as the main checkout).
  *           Rejects with SANDBOX_UNAVAILABLE or RUNTIME_UNAVAILABLE when nothing was started, WORKTREE_NOT_AVAILABLE when the worktree is gone.
  * @property {(serviceId: string) => Promise<RunWorktree[]>} listRunWorktrees  the main checkout first, then session worktrees; [] for an image service or one with no repository
+ * @property {(projectId: string, filter?: { state?: string, serviceId?: string }) => Promise<ServiceRequest[]>} listRequests  newest first, with variable values: read when a card opens, never kept
+ * @property {(requestId: string, decision: "approve" | "deny", note?: string) => Promise<ServiceRequest>} answerRequest  rejects with REQUEST_NOT_PENDING (409) when it is not pending
  * @property {(serviceId: string, query?: string) => Promise<BranchList>} listBranches  the query filters by a case-insensitive part of the name; sent only when not empty
  * @property {(serviceId: string) => Promise<RunVariables>} getRunVariables
  * @property {(serviceId: string) => Promise<Service>} stopService

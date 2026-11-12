@@ -1,6 +1,6 @@
 import { mount } from "../../../../shared/testing/alpine.js";
 import { assert, file, test } from "../../../../shared/testing/test.js";
-import { fakeServices, listDTO, serviceDTO } from "../../testing/fakeGateway.js";
+import { fakeServices, listDTO, requestDTO, serviceDTO } from "../../testing/fakeGateway.js";
 import { servicesNavCount } from "./servicesNavCount.js";
 
 file("services/presentation/components/servicesNavCount");
@@ -68,4 +68,12 @@ test("it stops following when it goes", () => {
   const { nav, gateway } = open();
   nav.destroy();
   assert.equal(gateway.unfollowed, 1);
+});
+
+test("a service request event moves the sequence and leaves the count alone", () => {
+  const { nav, gateway } = open(2);
+  gateway.emit({ seq: 5, kind: "service_request", request: requestDTO() });
+  assert.deepEqual([nav.count, nav.seq], [2, 5]);
+  gateway.emit(changed(6, 4));
+  assert.equal(nav.count, 4);
 });
