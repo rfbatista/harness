@@ -86,7 +86,7 @@ func (h Handler) ProjectDocuments(w http.ResponseWriter, r *http.Request) error 
 			Title: titleOf(d), Href: ProjectDocumentsHref(project.ID, d.ID), Updated: updated, Project: true, Current: d.ID == openID,
 		})
 		if d.ID == openID {
-			view.Open = h.openDocument(project.ID, d, updated, ProjectDocumentViewHref(project.ID, d.ID, d.UpdatedAt), nil)
+			view.Open = h.openDocument(project.ID, d, updated, ProjectDocumentViewHref(project.ID, d.ID, d.UpdatedAt), h.projectImagePaths(ctx, project.ID))
 		}
 	}
 	if view.Open == nil && r.PathValue("document") != "" {

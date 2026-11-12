@@ -15,14 +15,26 @@ import (
 
 // imagePaths is where the files a Markdown document may show as images are
 // served from, by their path in the virtual shell (task/designs/…,
-// task/resources/…), named as the shell names them: oldest first, with
+// task/resources/…, project/designs/…), named as the shell names them: oldest first, with
 // -<short id> on a clash.
 type imagePaths map[string]string
 
-// taskImagePaths are the task's own file designs and its uploads. A list
-// that cannot be read leaves its images as written.
-func (h Handler) taskImagePaths(ctx context.Context, taskID string) imagePaths {
+// projectImagePaths are the project's file design assets. A list that
+// cannot be read leaves its images as written.
+func (h Handler) projectImagePaths(ctx context.Context, projectID string) imagePaths {
 	paths := imagePaths{}
+	if h.Artifacts != nil {
+		if list, err := h.Artifacts.ListArtifacts(ctx, ports.ArtifactFilter{ProjectID: projectID, Scope: domain.ArtifactScopeProject}); err == nil {
+			paths.addDesigns("project/designs/", list)
+		}
+	}
+	return paths
+}
+
+// taskImagePaths are the project's file design assets, the task's own file
+// designs and its uploads.
+func (h Handler) taskImagePaths(ctx context.Context, projectID, taskID string) imagePaths {
+	paths := h.projectImagePaths(ctx, projectID)
 	if h.Artifacts != nil {
 		if list, err := h.Artifacts.ListArtifacts(ctx, ports.ArtifactFilter{TicketID: taskID}); err == nil {
 			own := slices.DeleteFunc(slices.Clone(list), func(a *domain.Artifact) bool {
