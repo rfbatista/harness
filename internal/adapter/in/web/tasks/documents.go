@@ -134,9 +134,9 @@ func newestFirst(docs []*domain.Document) []*domain.Document {
 
 // openDocument builds the open document: framed from frameSrc when it is an
 // HTML page, shown as written when it is text, otherwise rendered as Markdown
-// (the legacy empty format too) with its images found in images, with the
-// tasks it is linked to.
-func (h Handler) openDocument(projectID string, d *domain.Document, updated, frameSrc string, images imagePaths) *OpenDocument {
+// (the legacy empty format too) with its images found in what images lists,
+// with the tasks it is linked to.
+func (h Handler) openDocument(projectID string, d *domain.Document, updated, frameSrc string, images func() imagePaths) *OpenDocument {
 	open := &OpenDocument{ID: d.ID, Title: titleOf(d), Updated: updated, Format: d.Format, Scope: scopeOf(d)}
 	for _, tk := range h.Docs.ListDocumentTickets(d.ID) {
 		open.Tasks = append(open.Tasks, TaskRef{Title: tk.Title, Href: DocumentsHref(projectID, tk.ID, d.ID)})
@@ -147,7 +147,7 @@ func (h Handler) openDocument(projectID string, d *domain.Document, updated, fra
 	case domain.DocumentFormatText:
 		open.Body = renderText(d.Content)
 	default:
-		open.Body = renderMarkdown(d.Content, images.resolver(documentFolder(d)))
+		open.Body = renderMarkdown(d.Content, images().resolver(documentFolder(d)))
 	}
 	return open
 }
@@ -265,7 +265,8 @@ func (h Handler) Documents(w http.ResponseWriter, r *http.Request) error {
 			Project: scopeOf(d) == domain.DocumentScopeProject, Current: d.ID == openID,
 		})
 		if d.ID == openID {
-			view.Open = h.openDocument(project.ID, d, updated, DocumentViewHref(project.ID, task.ID, d.ID, d.UpdatedAt), h.taskImagePaths(ctx, project.ID, task.ID))
+			images := func() imagePaths { return h.taskImagePaths(ctx, project.ID, task.ID) }
+			view.Open = h.openDocument(project.ID, d, updated, DocumentViewHref(project.ID, task.ID, d.ID, d.UpdatedAt), images)
 		}
 	}
 	if view.Open == nil && r.PathValue("document") != "" {

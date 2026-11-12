@@ -689,3 +689,20 @@ func TestAProjectDocumentInTheLibraryShowsProjectDesignAssets(t *testing.T) {
 		}
 	}
 }
+
+func TestAnImageResolvesUnderItsShortIDNameEvenWithoutAClash(t *testing.T) {
+	w := imagesBoard("![kept](../designs/flow-a-flow.png)\n\n![links](../resources/links-r-links.md)\n")
+	// The shell keeps a file at its -<short id> name after the older one it
+	// clashed with is gone, and never puts an upload at links.md.
+	w.resources = append(w.resources, &domain.TicketResource{ID: "r-links", TicketID: "t-feed", ProjectID: "p1", Kind: domain.ResourceKind("file"),
+		Title: "links.md", Mime: "text/markdown", CreatedAt: now, UpdatedAt: now})
+	body := get(t, newTestHandler(t, w), "/projects/p1/tasks/t-feed/documents/d-images").Body.String()
+	for _, want := range []string{
+		`<img src="/api/artifacts/a-flow/view/" alt="kept">`,
+		`<img src="/api/ticket_resources/r-links/content" alt="links">`,
+	} {
+		if !strings.Contains(body, want) {
+			t.Errorf("page lacks %q", want)
+		}
+	}
+}
