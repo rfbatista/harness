@@ -23,6 +23,9 @@ type ProjectRepository interface {
 	// SetMCPServers stores the catalog MCP servers every session of the
 	// project gets. PROJECT_NOT_FOUND for an unknown project.
 	SetMCPServers(projectID string, names []string) (*domain.Project, error)
+	// SetMCPSettings stores the project's banned MCP servers and tool
+	// overrides (ADR 0067). PROJECT_NOT_FOUND for an unknown project.
+	SetMCPSettings(projectID string, settings domain.ProjectMCPSettings) (*domain.Project, error)
 	// SetEnabledAgents stores the project's enabled agents: mode all or
 	// selected, and the selected list. PROJECT_NOT_FOUND for an unknown
 	// project.
@@ -123,6 +126,8 @@ type SettingsRepository interface {
 	All() (map[string]string, error)
 	Get(key string) (string, error)
 	Set(key, value string) error
+	// Delete removes a key; a key that is not stored is not an error.
+	Delete(key string) error
 }
 
 // MCPServerRepository persists MCP server configurations.

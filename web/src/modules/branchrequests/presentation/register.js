@@ -1,5 +1,6 @@
 // The branch requests module's Alpine components.
 
+import { branchRequestLead } from "./components/branchRequestLead.js";
 import { branchRequests } from "./components/branchRequests.js";
 
 /**
@@ -10,5 +11,8 @@ import { branchRequests } from "./components/branchRequests.js";
  * }} deps
  */
 export function registerBranchRequests(Alpine, deps) {
-  Alpine.data("branchRequests", branchRequests(deps));
+  // The task page's pending requests by session, shared by the popover and the session rows' approvals text.
+  const store = Alpine.reactive({ pendingBySession: {} });
+  Alpine.data("branchRequests", branchRequests({ ...deps, store }));
+  Alpine.data("branchRequestLead", branchRequestLead({ store }));
 }

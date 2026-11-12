@@ -68,6 +68,12 @@ test("where a run runs, in words", () => {
   assert.equal(whereLabel(null), "");
 });
 
+test("a run on a branch reads the branch and its short commit; a remote branch keeps its origin/", () => {
+  assert.equal(whereLabel(run({ where: { kind: "branch", dir: "/s", branch: "feature/x", sha: "abc1234", remote: false, session_id: "" } })), "branch @ feature/x · abc1234");
+  assert.equal(whereLabel(run({ where: { kind: "branch", dir: "/s", branch: "feature/x", sha: "abc1234", remote: true, session_id: "" } })), "branch @ origin/feature/x · abc1234");
+  assert.equal(whereLabel(run({ where: { kind: "branch", dir: "/s", branch: "feature/x", sha: "", remote: false, session_id: "" } })), "branch @ feature/x");
+});
+
 test("who started a run: you, or an agent's session", () => {
   assert.deepEqual(startedByView(run()), { text: "started by you", sessionId: "", href: "" });
   const by = (task_id) => run({ started_by: { kind: "session", session_id: "abcdef12-0000", agent: "backend", task_id } });

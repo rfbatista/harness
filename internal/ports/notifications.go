@@ -67,6 +67,47 @@ type Notifications interface {
 	FollowNotifications(ctx context.Context) (<-chan NotificationChange, error)
 }
 
+// ResumeOutcome is what Resume all interrupted did with one listed session.
+type ResumeOutcome string
+
+const (
+	ResumeResumed ResumeOutcome = "resumed"
+	// ResumeSkipped: the session no longer carries the mark, or is deleted.
+	ResumeSkipped ResumeOutcome = "skipped"
+	ResumeFailed  ResumeOutcome = "failed"
+)
+
+// ResumeResult is one session's outcome; Reason is why a resume failed.
+type ResumeResult struct {
+	SessionID string        `json:"session_id"`
+	Outcome   ResumeOutcome `json:"outcome"`
+	Reason    string        `json:"reason,omitempty"`
+}
+
+// ResumeInterruptedAnswer is the notification after Resume all interrupted,
+// and each listed session's outcome (contract "Harness server ↔ Web UI —
+// interrupted sessions and Resume all" §5).
+type ResumeInterruptedAnswer struct {
+	Notification *domain.Notification `json:"notification"`
+	Results      []ResumeResult       `json:"results"`
+}
+
+// InterruptedResumer is the Resume all interrupted action of a
+// sessions_interrupted notification.
+type InterruptedResumer interface {
+	// ResumeInterrupted resumes, one by one, each session the notification
+	// lists that still carries the interrupted mark. NOTIFICATION_NOT_FOUND
+	// when there is no such notification; INVALID_INPUT when it is of
+	// another kind.
+	ResumeInterrupted(ctx context.Context, notificationID string) (*ResumeInterruptedAnswer, error)
+}
+
+// SessionResumer resumes one stopped session the way the person's Resume
+// does, continue turn included; the orchestration implements it.
+type SessionResumer interface {
+	ResumeSession(ctx context.Context, sessionID string) error
+}
+
 // NotifyRequest is a notification an agent posts. SessionID is "" for an
 // agent outside a harness session; TaskID is optional.
 type NotifyRequest struct {
@@ -117,6 +158,9 @@ type NotificationRepository interface {
 	MarkAllRead(projectID string, at time.Time) ([]*domain.Notification, error)
 	// Resolve settles the unresolved ones with causeKey and answers them.
 	Resolve(causeKey string, at time.Time) ([]*domain.Notification, error)
+	// SetInterruptedSessions replaces the list of a sessions_interrupted
+	// notification and answers it as it now is; nil when there is none with id.
+	SetInterruptedSessions(id string, list []domain.InterruptedSession) (*domain.Notification, error)
 	// ResolveTask settles every unresolved one of the task.
 	ResolveTask(taskID string, at time.Time) ([]*domain.Notification, error)
 	// CountAgentSince counts agent notifications created after since: the

@@ -55,9 +55,14 @@ type Handler struct {
 	// BranchRequests seeds the Branch requests button and its popover with
 	// the task's pending requests; nil leaves them out.
 	BranchRequests ports.BranchRequestReader
-	Layout         shell.Layout
-	Render         shell.Renderer
-	Now            func() time.Time
+	// SessionBranches seeds the sessions' Branches lists; nil seeds none.
+	SessionBranches ports.SessionBranchLists
+	// Settings reads each mode's model for the New session form; nil leaves
+	// the built-in models.
+	Settings ports.SettingsReader
+	Layout   shell.Layout
+	Render   shell.Renderer
+	Now      func() time.Time
 }
 
 // workspaceIDs are the sessions' worktrees, each once.
@@ -112,6 +117,14 @@ func (h Handler) Project(w http.ResponseWriter, r *http.Request) error {
 	return h.Render(w, r, http.StatusOK, ProjectPage(frame, project.ID, project.Name, board, sessions.NewSessionFormFor(project, agents, repos)))
 }
 
+// withModeModels gives the form the models the settings hold for each mode.
+func (h Handler) withModeModels(form sessions.NewSessionForm) sessions.NewSessionForm {
+	if h.Settings == nil {
+		return form
+	}
+	return form.WithModeModels(h.Settings.Setting)
+}
+
 // ProjectSessions serves GET /projects/{project}/sessions: the project's
 // feature brainstorms, the sessions that run with no task (product mode).
 // The page is the task page without its task; ?session=<id> opens one.
@@ -140,6 +153,7 @@ func (h Handler) ProjectSessions(w http.ResponseWriter, r *http.Request) error {
 	}
 	frame.Live = true // sessionsPage follows the project's feed
 	view := sessions.NewPageView(frame, project, nil, list, agents, repos, h.Now())
+	view.NewSession = h.withModeModels(view.NewSession)
 	view.Seed.Interviews = h.interviews(ctx, list)
 	if h.PullRequests != nil {
 		view.PullRequests = pullrequests.NewWatchSeed(ctx, h.PullRequests, project.ID, workspaceIDs(list))
@@ -269,6 +283,7 @@ func (h Handler) task(w http.ResponseWriter, r *http.Request, codeRoute *code.Ro
 	}
 	frame.Live = true // sessionsPage follows the project's feed
 	view := sessions.NewPageView(frame, project, task, list, agents, repos, h.Now())
+	view.NewSession = h.withModeModels(view.NewSession)
 	view.Seed.Interviews = h.interviews(ctx, list)
 	if view.Seed.Artifacts, err = h.designArtifacts(ctx, ports.ArtifactFilter{TicketID: task.ID}); err != nil {
 		return err
@@ -308,6 +323,12 @@ func (h Handler) task(w http.ResponseWriter, r *http.Request, codeRoute *code.Ro
 		if pending, err := h.BranchRequests.ListBranchRequests(ctx, domain.BranchRequestFilter{TaskID: task.ID, State: domain.BranchRequestPending}); err == nil {
 			view.BranchRequests = view.Reviews
 			view.PendingBranchRequests = len(pending)
+		}
+	}
+	if h.SessionBranches != nil {
+		// Stored state only: no git runs for the first paint.
+		if lists, err := h.SessionBranches.TaskSessionBranches(ctx, task.ID); err == nil && lists != nil {
+			view.Seed.SessionBranches = lists
 		}
 	}
 	if h.PullRequests != nil {

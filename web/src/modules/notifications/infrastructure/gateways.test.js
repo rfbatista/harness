@@ -83,6 +83,31 @@ test("a notification without its optional fields reads them as empty", () => {
   assert.ok(Object.isFrozen(n));
 });
 
+test("the branch gate's notifications map; any other unknown kind is still BAD_RESPONSE", () => {
+  const dto = notificationDTO(makeNotification());
+  for (const kind of ["branch_request", "branch_finding"]) {
+    const n = toNotification({ ...dto, kind, level: "action", link: "/projects/p1/tasks/t1?session=s1#branch-request-r1" });
+    assert.equal(n.kind, kind);
+  }
+  assert.throws(() => toNotification({ ...dto, kind: "branch_gossip" }), Codes.BAD_RESPONSE);
+});
+
+test("a sessions_interrupted notification maps its list, whose entries default their optional fields", () => {
+  const dto = notificationDTO(makeNotification());
+  const n = toNotification({
+    ...dto, kind: "sessions_interrupted", level: "action", link: "/notifications",
+    interrupted_sessions: [
+      { session_id: "s1", project_id: "p1", task_id: "t1", task_title: "Ship", agent_name: "go-developer", link: "/projects/p1/tasks/t1?session=s1", state: "failed", reason: "worktree gone" },
+      { session_id: "s2", project_id: "p1", agent_name: "devops", link: "/projects/p1?session=s2", state: "interrupted" },
+    ],
+  });
+  assert.equal(n.kind, "sessions_interrupted");
+  assert.deepEqual(n.interruptedSessions.map((s) => [s.sessionId, s.state, s.reason, s.taskTitle]), [["s1", "failed", "worktree gone", "Ship"], ["s2", "interrupted", "", ""]]);
+  assert.deepEqual(toNotification(dto).interruptedSessions, []);
+  assert.throws(() => toNotification({ ...dto, interrupted_sessions: [{ session_id: "s1", link: "/p", state: "lost" }] }), Codes.BAD_RESPONSE);
+  assert.throws(() => toNotification({ ...dto, interrupted_sessions: [{ session_id: "s1", link: "https://x", state: "gone" }] }), Codes.BAD_RESPONSE);
+});
+
 test("a malformed notification or answer is BAD_RESPONSE; a link off the web UI is refused", () => {
   const dto = notificationDTO(makeNotification());
   assert.throws(() => toNotification({ ...dto, id: "" }), Codes.BAD_RESPONSE);

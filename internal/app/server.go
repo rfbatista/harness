@@ -28,6 +28,7 @@ import (
 	"operators-mcp/internal/application/archrules"
 	"operators-mcp/internal/application/artifacts"
 	"operators-mcp/internal/application/branchgate"
+	"operators-mcp/internal/application/branchwatch"
 	"operators-mcp/internal/application/execution"
 	"operators-mcp/internal/application/notifications"
 	"operators-mcp/internal/application/orchestration"
@@ -62,7 +63,7 @@ var ServerModule = fx.Module("server",
 
 // registerHTTPServer mounts the UI and JSON API on a mux and serves it,
 // shutting down gracefully when fx stops.
-func registerHTTPServer(lc fx.Lifecycle, cfg Config, cat catalog.Catalog, appRunner *apps.Service, svcs *services.Service, ts *tooling.Service, exec *execution.Service, orch *orchestration.Service, plan *planning.Service, ws *workspaces.Service, broker *approval.Broker, sessions ports.SessionRepository, art *artifacts.Service, channel *taskchannel.Service, prs *workspaces.PullRequests, merges *workspaces.Merges, branchNames *workspaces.BranchNames, code ports.CodeBrowser, worktreeGit ports.WorktreeGit, inbox optionalNotifications, creds optionalGitCredentials, shells *vfs.Service, fsys *vfs.FileSystem, usageSvc *usage.Service, indexes optionalRepositoryIndexes, sandboxStore *sandboxsettings.Store, managedClaude *managedclaude.Service, claudeBin ports.ManagedClaudeBin, agentCred optionalAgentCredential, helper *writinghelper.Service, assistant *archassistant.Service, rules *archrules.Service, gate *branchgate.Service, agentCat *agentcatalog.Catalog, persons *vshell.PersonTerminals, repoAgents *repoagents.Service, board optionalAgentBoard, asked optionalInterviews) error {
+func registerHTTPServer(lc fx.Lifecycle, cfg Config, cat catalog.Catalog, appRunner *apps.Service, svcs *services.Service, ts *tooling.Service, exec *execution.Service, orch *orchestration.Service, plan *planning.Service, ws *workspaces.Service, broker *approval.Broker, sessions ports.SessionRepository, art *artifacts.Service, channel *taskchannel.Service, prs *workspaces.PullRequests, merges *workspaces.Merges, branchNames *workspaces.BranchNames, code ports.CodeBrowser, worktreeGit ports.WorktreeGit, inbox optionalNotifications, creds optionalGitCredentials, shells *vfs.Service, fsys *vfs.FileSystem, usageSvc *usage.Service, indexes optionalRepositoryIndexes, sandboxStore *sandboxsettings.Store, managedClaude *managedclaude.Service, claudeBin ports.ManagedClaudeBin, agentCred optionalAgentCredential, helper *writinghelper.Service, assistant *archassistant.Service, rules *archrules.Service, gate *branchgate.Service, watch *branchwatch.Service, agentCat *agentcatalog.Catalog, persons *vshell.PersonTerminals, repoAgents *repoagents.Service, board optionalAgentBoard, asked optionalInterviews) error {
 	uiHandler, err := ui.SPAHandler(ui.Dist)
 	if err != nil {
 		return err
@@ -81,9 +82,10 @@ func registerHTTPServer(lc fx.Lifecycle, cfg Config, cat catalog.Catalog, appRun
 		notes      ports.Notifications
 		noteReader ports.NotificationReader
 		notifier   ports.Notifier
+		resumeAll  ports.InterruptedResumer
 	)
 	if inbox.Service != nil {
-		notes, noteReader, notifier = inbox.Service, inbox.Service, inbox.Service
+		notes, noteReader, notifier, resumeAll = inbox.Service, inbox.Service, inbox.Service, inbox.Service
 	}
 
 	// Same for the Agent board.
@@ -143,20 +145,21 @@ func registerHTTPServer(lc fx.Lifecycle, cfg Config, cat catalog.Catalog, appRun
 		Artifacts:       art,
 		TaskChannel:     channel,
 		// What a person adds to a task: files, images, audio, links, comments.
-		TaskResources:    plan,
-		TaskComments:     plan,
-		TaskArchive:      plan,
-		PullRequests:     prs,
-		PullRequestBases: prs,
-		Merges:           merges,
-		BranchNames:      branchNames,
-		Notifications:    notes,
-		AgentBoard:       agentBoard,
-		Interviews:       interviewsPort,
-		Usage:            usageSvc,
-		LiveCalls:        usageSvc,
-		Code:             code,
-		WorktreeGit:      worktreeGit,
+		TaskResources:      plan,
+		TaskComments:       plan,
+		TaskArchive:        plan,
+		PullRequests:       prs,
+		PullRequestBases:   prs,
+		Merges:             merges,
+		BranchNames:        branchNames,
+		Notifications:      notes,
+		InterruptedResumer: resumeAll,
+		AgentBoard:         agentBoard,
+		Interviews:         interviewsPort,
+		Usage:              usageSvc,
+		LiveCalls:          usageSvc,
+		Code:               code,
+		WorktreeGit:        worktreeGit,
 		// A session's virtual file system, for the Files view.
 		SessionFiles: fsys,
 		// The git credentials every remote operation authenticates with.
@@ -190,6 +193,8 @@ func registerHTTPServer(lc fx.Lifecycle, cfg Config, cat catalog.Catalog, appRun
 		ArchitectureRules: rules,
 		// What a session's git shim asks before a branch action.
 		BranchGate: gate,
+		// The Branches lists, read from stored state.
+		SessionBranches: watch,
 		// The agent catalog folder: agents, bundles, skills, MCP servers.
 		Catalog: agentCat,
 		// Which agents each repository assigns, and its repository prompts.
@@ -210,7 +215,7 @@ func registerHTTPServer(lc fx.Lifecycle, cfg Config, cat catalog.Catalog, appRun
 	// The web client owns / and its pages; anything else reaches the legacy
 	// designer SPA until it is retired.
 	mux.Handle("/", slow(web.NewHandler(web.Deps{Projects: cat.Projects, Tasks: plan, Sessions: orch, Agents: cat.Agents, Repositories: cat.Projects, EnvFiles: cat.Projects, RunCommands: cat.Projects, Documents: plan, History: ws, Code: code, Workspaces: ws, Artifacts: art, ProjectSummaries: cat.Projects, PullRequests: prs, WorktreeGit: worktreeGit,
-		DesignSystems: designSystemReader(cat), Resources: plan, Comments: plan, Notifications: noteReader, BranchRequests: gate, GitCredentials: creds.port(), Usage: usageSvc, Services: svcs, ServiceCounter: svcs, TokenSavers: cat.Capabilities,
+		DesignSystems: designSystemReader(cat), Resources: plan, Comments: plan, Notifications: noteReader, BranchRequests: gate, SessionBranches: watch, GitCredentials: creds.port(), Usage: usageSvc, Services: svcs, ServiceCounter: svcs, TokenSavers: cat.Capabilities,
 		TokenSaverInstalls: cat.Capabilities, RepositoryIndexes: indexes.port(), Settings: cat.Settings, DataPaths: dataPaths(cfg), SandboxSettings: sandboxStore, SandboxDriver: sandboxDriver(orch), SandboxBuiltin: sandboxBuiltin(orch),
 		ManagedClaude: managedClaude, ManagedClaudeBin: claudeBin, AgentCredential: agentCred.port(),
 		AgentOAuth: agentCred.oauth(), AgentAuth: agentCred.auth(), AgentHomeExposed: agentHomeExposed(cfg), AgentLogin: agentHasLogin(cfg), ArchivedTasks: plan, ArchivedList: plan,

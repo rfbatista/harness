@@ -2,6 +2,7 @@ package sqlite
 
 import (
 	"context"
+	"encoding/json"
 	"time"
 
 	"gorm.io/gorm"
@@ -27,13 +28,20 @@ type NotificationModel struct {
 	CreatedAt  int64  `gorm:"column:created_at;index:idx_notifications_created"`
 	ReadAt     int64  `gorm:"column:read_at"`
 	ResolvedAt int64  `gorm:"column:resolved_at"`
+	// Interrupted is a sessions_interrupted notification's list, as JSON.
+	Interrupted string `gorm:"column:interrupted_sessions"`
 }
 
 func (NotificationModel) TableName() string { return "notifications" }
 
 func (m *NotificationModel) ToDomain() *domain.Notification {
+	var interrupted []domain.InterruptedSession
+	if m.Interrupted != "" {
+		_ = json.Unmarshal([]byte(m.Interrupted), &interrupted)
+	}
 	return &domain.Notification{
-		ID: m.ID, ProjectID: m.ProjectID, TaskID: m.TaskID, SessionID: m.SessionID,
+		InterruptedSessions: interrupted,
+		ID:                  m.ID, ProjectID: m.ProjectID, TaskID: m.TaskID, SessionID: m.SessionID,
 		Source: domain.NotificationSource(m.Source), Kind: domain.NotificationKind(m.Kind), Level: domain.NotificationLevel(m.Level),
 		Title: m.Title, Body: m.Body, Link: m.Link, CauseKey: m.CauseKey,
 		CreatedAt: time.UnixMilli(m.CreatedAt), ReadAt: timeFromMilli(m.ReadAt), ResolvedAt: timeFromMilli(m.ResolvedAt),
@@ -60,8 +68,13 @@ func (r *NotificationRepository) Create(n *domain.Notification) (*domain.Notific
 	if created.IsZero() {
 		created = time.Now()
 	}
+	interrupted, err := interruptedJSON(n.InterruptedSessions)
+	if err != nil {
+		return nil, err
+	}
 	m := &NotificationModel{
-		ID: id, ProjectID: n.ProjectID, TaskID: n.TaskID, SessionID: n.SessionID,
+		Interrupted: interrupted,
+		ID:          id, ProjectID: n.ProjectID, TaskID: n.TaskID, SessionID: n.SessionID,
 		Source: string(n.Source), Kind: string(n.Kind), Level: string(n.Level),
 		Title: n.Title, Body: n.Body, Link: n.Link, CauseKey: n.CauseKey,
 		CreatedAt: created.UnixMilli(), ReadAt: milliOf(n.ReadAt), ResolvedAt: milliOf(n.ResolvedAt),
@@ -70,6 +83,26 @@ func (r *NotificationRepository) Create(n *domain.Notification) (*domain.Notific
 		return nil, err
 	}
 	return m.ToDomain(), nil
+}
+
+func interruptedJSON(list []domain.InterruptedSession) (string, error) {
+	if len(list) == 0 {
+		return "", nil
+	}
+	b, err := json.Marshal(list)
+	return string(b), err
+}
+
+func (r *NotificationRepository) SetInterruptedSessions(id string, list []domain.InterruptedSession) (*domain.Notification, error) {
+	raw, err := interruptedJSON(list)
+	if err != nil {
+		return nil, err
+	}
+	res := r.db.Model(&NotificationModel{}).Where("id = ?", id).Update("interrupted_sessions", raw)
+	if res.Error != nil || res.RowsAffected == 0 {
+		return nil, res.Error
+	}
+	return r.Get(id), nil
 }
 
 func (r *NotificationRepository) Get(id string) *domain.Notification {

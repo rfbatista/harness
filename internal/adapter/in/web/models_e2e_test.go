@@ -38,20 +38,25 @@ func TestSessionModelsAreSetOnTheModelsPage_EndToEnd(t *testing.T) {
 
 	const (
 		architect      = `(document.querySelector('#model-Architect')?.value ?? '')`
-		implementation = `(document.querySelector('#model-Implementation')?.value ?? '')`
+		implementation = `(document.querySelector('#model-Implement')?.value ?? '')`
 	)
 	b := newBrowser(t)
 	b.run("the top bar links to the page",
 		chromedp.Navigate(srv.URL+"/projects/new"),
 		waitUntil(`document.querySelector('header a[aria-label="Models"]')?.getAttribute('href') === '/models'`),
 	)
+	b.run("one row per session mode, in order, and no Implementation row",
+		chromedp.Navigate(srv.URL+"/models"),
+		waitUntil(`[...document.querySelectorAll('[data-setting^="models.claude.mode."]')].map((r) => r.querySelector('label').textContent).join(',') === 'Default,Architect,Implement,Design,Product,Design system'`),
+		waitUntil(`!document.querySelector('#model-Implementation')`),
+	)
 	b.run("the tiers show the built-in models",
 		chromedp.Navigate(srv.URL+"/models"),
 		waitUntil(architect+` === 'opus'`),
 		waitUntil(implementation+` === 'sonnet'`),
 	)
-	b.run("move implementation sessions to haiku",
-		chromedp.Evaluate(`(() => { const s = document.querySelector('#model-Implementation');
+	b.run("move implement-mode sessions to haiku",
+		chromedp.Evaluate(`(() => { const s = document.querySelector('#model-Implement');
 			s.value = 'haiku'; s.dispatchEvent(new Event('change', { bubbles: true })); })()`, nil),
 		waitUntil(`[...document.querySelectorAll('main [aria-live]')].some(e => e.textContent.includes('Model set to haiku'))`),
 	)
@@ -60,7 +65,7 @@ func TestSessionModelsAreSetOnTheModelsPage_EndToEnd(t *testing.T) {
 		waitUntil(implementation+` === 'haiku'`),
 		waitUntil(architect+` === 'opus'`),
 	)
-	if got := cat.Settings.Setting(domain.SettingModelImplementation); got != "haiku" {
+	if got := cat.Settings.Setting(domain.ModeModelKey(domain.SessionModeImplement)); got != "haiku" {
 		t.Errorf("stored implementation model = %q, want haiku", got)
 	}
 	if e := b.jsErrors(); len(e) > 0 {

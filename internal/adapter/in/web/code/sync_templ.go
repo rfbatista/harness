@@ -118,7 +118,15 @@ func SyncPopup() templ.Component {
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 7, "</span> <span class=\"hint\" x-text=\"upstreamHint\"></span></div><template x-if=\"refusalIsBanner\"><div class=\"banner\" data-tone=\"attention\" role=\"status\"><div class=\"[ flow ]\"><span x-text=\"refusalLead\"></span> <a x-bind:href=\"refusalHref\" x-text=\"refusalLinkText\"></a></div></div></template><p class=\"fresh\" x-bind:data-old=\"freshOldAttr\"><span x-text=\"freshLine\"></span> <button type=\"button\" class=\"[ button ]\" data-variant=\"ghost\" data-size=\"sm\" data-fetch x-bind:aria-disabled=\"fetchDisabledAttr\" x-on:click=\"fetch\" x-text=\"fetchLabel\"></button></p><template x-if=\"showsQuestion\"><div class=\"confirm-strip\" data-confirm=\"push\"><h3 x-text=\"question\"></h3><p>This publishes them to origin. It is never a force push.</p><div class=\"actions\"><button type=\"button\" class=\"[ button ]\" data-variant=\"primary\" data-size=\"sm\" data-initial-focus x-bind:aria-disabled=\"pushDisabledAttr\" x-on:click=\"confirmPush\" x-text=\"pushLabel\"></button> <button type=\"button\" class=\"[ button ]\" data-size=\"sm\" x-on:click=\"cancelPush\">Cancel</button></div></div></template><template x-if=\"refusalIsStrip\"><div class=\"confirm-strip\" data-confirm=\"push-refused\" data-tone=\"danger\"><h3 x-text=\"refusalLead\"></h3><template x-if=\"refusalReason\"><p x-text=\"refusalReason\"></p></template><span class=\"code\" x-text=\"refusalCode\"></span><div class=\"actions\"><button type=\"button\" class=\"[ button ]\" data-size=\"sm\" x-on:click=\"dismissRefusal\">Close</button></div></div></template><template x-if=\"showsPush\"><footer><button type=\"button\" class=\"[ button ]\" data-variant=\"primary\" data-size=\"sm\" data-push x-bind:aria-disabled=\"pushDisabledAttr\" x-on:click=\"askPush\" x-text=\"pushLabel\"></button></footer></template></div>")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 7, "</span> <span class=\"hint\" x-text=\"upstreamHint\"></span></div>")
+		if templ_7745c5c3_Err != nil {
+			return templ_7745c5c3_Err
+		}
+		templ_7745c5c3_Err = BranchesSection("branchRows", "branchesShown", "branchesTitle", "branchesSessionId", "branchesWorkspaceId").Render(ctx, templ_7745c5c3_Buffer)
+		if templ_7745c5c3_Err != nil {
+			return templ_7745c5c3_Err
+		}
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 8, "<template x-if=\"refusalIsBanner\"><div class=\"banner\" data-tone=\"attention\" role=\"status\"><div class=\"[ flow ]\"><span x-text=\"refusalLead\"></span> <a x-bind:href=\"refusalHref\" x-text=\"refusalLinkText\"></a></div></div></template><p class=\"fresh\" x-bind:data-old=\"freshOldAttr\"><span x-text=\"freshLine\"></span> <button type=\"button\" class=\"[ button ]\" data-variant=\"ghost\" data-size=\"sm\" data-fetch x-bind:aria-disabled=\"fetchDisabledAttr\" x-on:click=\"fetch\" x-text=\"fetchLabel\"></button></p><template x-if=\"showsQuestion\"><div class=\"confirm-strip\" data-confirm=\"push\"><h3 x-text=\"question\"></h3><p>This publishes them to origin. It is never a force push.</p><div class=\"actions\"><button type=\"button\" class=\"[ button ]\" data-variant=\"primary\" data-size=\"sm\" data-initial-focus x-bind:aria-disabled=\"pushDisabledAttr\" x-on:click=\"confirmPush\" x-text=\"pushLabel\"></button> <button type=\"button\" class=\"[ button ]\" data-size=\"sm\" x-on:click=\"cancelPush\">Cancel</button></div></div></template><template x-if=\"refusalIsStrip\"><div class=\"confirm-strip\" data-confirm=\"push-refused\" data-tone=\"danger\"><h3 x-text=\"refusalLead\"></h3><template x-if=\"refusalReason\"><p x-text=\"refusalReason\"></p></template><span class=\"code\" x-text=\"refusalCode\"></span><div class=\"actions\"><button type=\"button\" class=\"[ button ]\" data-size=\"sm\" x-on:click=\"dismissRefusal\">Close</button></div></div></template><template x-if=\"showsPush\"><footer><button type=\"button\" class=\"[ button ]\" data-variant=\"primary\" data-size=\"sm\" data-push x-bind:aria-disabled=\"pushDisabledAttr\" x-on:click=\"askPush\" x-text=\"pushLabel\"></button></footer></template></div>")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
@@ -149,7 +157,7 @@ func SyncState() templ.Component {
 			templ_7745c5c3_Var4 = templ.NopComponent
 		}
 		ctx = templ.ClearChildren(ctx)
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 8, "<span class=\"sync-state\" x-bind:data-state=\"state\" x-bind:data-loading=\"loadingAttr\" x-bind:data-old=\"oldAttr\" x-bind:title=\"title\" x-bind:aria-label=\"describe\">")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 9, "<span class=\"sync-state\" x-bind:data-state=\"state\" x-bind:data-loading=\"loadingAttr\" x-bind:data-old=\"oldAttr\" x-bind:title=\"title\" x-bind:aria-label=\"describe\">")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
@@ -157,7 +165,7 @@ func SyncState() templ.Component {
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 9, "</span>")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 10, "</span>")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
@@ -187,7 +195,7 @@ func SyncBaseState() templ.Component {
 			templ_7745c5c3_Var5 = templ.NopComponent
 		}
 		ctx = templ.ClearChildren(ctx)
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 10, "<span class=\"sync-state\" x-bind:data-state=\"baseState\" x-bind:data-loading=\"loadingAttr\" x-bind:data-old=\"oldAttr\"><template x-if=\"baseHasCounts\"><span class=\"counts\"><span class=\"ahead\"><span aria-hidden=\"true\">↑</span><span x-text=\"baseAhead\"></span><span class=\"visually-hidden\">ahead</span></span> <span class=\"behind\"><span aria-hidden=\"true\">↓</span><span x-text=\"baseBehind\"></span><span class=\"visually-hidden\">behind</span></span></span></template><template x-if=\"baseHasWord\"><span class=\"word\" x-text=\"baseWord\"></span></template></span>")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 11, "<span class=\"sync-state\" x-bind:data-state=\"baseState\" x-bind:data-loading=\"loadingAttr\" x-bind:data-old=\"oldAttr\"><template x-if=\"baseHasCounts\"><span class=\"counts\"><span class=\"ahead\"><span aria-hidden=\"true\">↑</span><span x-text=\"baseAhead\"></span><span class=\"visually-hidden\">ahead</span></span> <span class=\"behind\"><span aria-hidden=\"true\">↓</span><span x-text=\"baseBehind\"></span><span class=\"visually-hidden\">behind</span></span></span></template><template x-if=\"baseHasWord\"><span class=\"word\" x-text=\"baseWord\"></span></template></span>")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
@@ -219,12 +227,116 @@ func syncStateBody(named bool) templ.Component {
 		}
 		ctx = templ.ClearChildren(ctx)
 		if named {
-			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 11, "<template x-if=\"hasUpstream\"><span class=\"upstream\" x-text=\"upstream\"></span></template>")
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 12, "<template x-if=\"hasUpstream\"><span class=\"upstream\" x-text=\"upstream\"></span></template>")
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
 		}
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 12, "<template x-if=\"hasCounts\"><span class=\"counts\"><span class=\"ahead\"><span aria-hidden=\"true\">↑</span><span x-text=\"ahead\"></span><span class=\"visually-hidden\">ahead</span></span> <span class=\"behind\"><span aria-hidden=\"true\">↓</span><span x-text=\"behind\"></span><span class=\"visually-hidden\">behind</span></span></span></template><template x-if=\"hasWord\"><span class=\"word\" x-text=\"word\"></span></template>")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 13, "<template x-if=\"hasCounts\"><span class=\"counts\"><span class=\"ahead\"><span aria-hidden=\"true\">↑</span><span x-text=\"ahead\"></span><span class=\"visually-hidden\">ahead</span></span> <span class=\"behind\"><span aria-hidden=\"true\">↓</span><span x-text=\"behind\"></span><span class=\"visually-hidden\">behind</span></span></span></template><template x-if=\"hasWord\"><span class=\"word\" x-text=\"word\"></span></template>")
+		if templ_7745c5c3_Err != nil {
+			return templ_7745c5c3_Err
+		}
+		return nil
+	})
+}
+
+// BranchesSection is a session's Branches list (contract "Harness server ↔ Web
+// UI — branch requests and the Branches list" §6): the session branch and every
+// branch it made or touched, each with its state, its commits against the
+// branch it started from, where it was pushed and who pushed it. The four
+// arguments are Alpine expressions over the host component: the rows
+// (branchesOf's), whether any shows, the heading, the session's id and its
+// workspace's id. A branch that is unapproved carries data-flagged. A row in
+// state session or approved has Push, which asks in place with a remote picker
+// (contract §6 Push); the host has askBranchPush, pickBranchRemote,
+// confirmBranchPush and cancelBranchPush.
+func BranchesSection(rows string, shown string, title string, sessionID string, workspaceID string) templ.Component {
+	return templruntime.GeneratedTemplate(func(templ_7745c5c3_Input templruntime.GeneratedComponentInput) (templ_7745c5c3_Err error) {
+		templ_7745c5c3_W, ctx := templ_7745c5c3_Input.Writer, templ_7745c5c3_Input.Context
+		if templ_7745c5c3_CtxErr := ctx.Err(); templ_7745c5c3_CtxErr != nil {
+			return templ_7745c5c3_CtxErr
+		}
+		templ_7745c5c3_Buffer, templ_7745c5c3_IsBuffer := templruntime.GetBuffer(templ_7745c5c3_W)
+		if !templ_7745c5c3_IsBuffer {
+			defer func() {
+				templ_7745c5c3_BufErr := templruntime.ReleaseBuffer(templ_7745c5c3_Buffer)
+				if templ_7745c5c3_Err == nil {
+					templ_7745c5c3_Err = templ_7745c5c3_BufErr
+				}
+			}()
+		}
+		ctx = templ.InitializeContext(ctx)
+		templ_7745c5c3_Var7 := templ.GetChildren(ctx)
+		if templ_7745c5c3_Var7 == nil {
+			templ_7745c5c3_Var7 = templ.NopComponent
+		}
+		ctx = templ.ClearChildren(ctx)
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 14, "<section class=\"[ branches ]\" aria-label=\"Branches\" tabindex=\"-1\" x-show=\"")
+		if templ_7745c5c3_Err != nil {
+			return templ_7745c5c3_Err
+		}
+		var templ_7745c5c3_Var8 string
+		templ_7745c5c3_Var8, templ_7745c5c3_Err = templ.ResolveAttributeValue(shown)
+		if templ_7745c5c3_Err != nil {
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `code/sync.templ`, Line: 135, Col: 81}
+		}
+		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var8)
+		if templ_7745c5c3_Err != nil {
+			return templ_7745c5c3_Err
+		}
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 15, "\" x-bind:data-branches-for=\"")
+		if templ_7745c5c3_Err != nil {
+			return templ_7745c5c3_Err
+		}
+		var templ_7745c5c3_Var9 string
+		templ_7745c5c3_Var9, templ_7745c5c3_Err = templ.ResolveAttributeValue(sessionID)
+		if templ_7745c5c3_Err != nil {
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `code/sync.templ`, Line: 135, Col: 120}
+		}
+		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var9)
+		if templ_7745c5c3_Err != nil {
+			return templ_7745c5c3_Err
+		}
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 16, "\"><h4 class=\"[ title ]\" x-text=\"")
+		if templ_7745c5c3_Err != nil {
+			return templ_7745c5c3_Err
+		}
+		var templ_7745c5c3_Var10 string
+		templ_7745c5c3_Var10, templ_7745c5c3_Err = templ.ResolveAttributeValue(title)
+		if templ_7745c5c3_Err != nil {
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `code/sync.templ`, Line: 136, Col: 38}
+		}
+		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var10)
+		if templ_7745c5c3_Err != nil {
+			return templ_7745c5c3_Err
+		}
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 17, "\"></h4><ul class=\"[ list ]\"><template x-for=\"")
+		if templ_7745c5c3_Err != nil {
+			return templ_7745c5c3_Err
+		}
+		var templ_7745c5c3_Var11 string
+		templ_7745c5c3_Var11, templ_7745c5c3_Err = templ.ResolveAttributeValue("b in " + rows)
+		if templ_7745c5c3_Err != nil {
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `code/sync.templ`, Line: 138, Col: 35}
+		}
+		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var11)
+		if templ_7745c5c3_Err != nil {
+			return templ_7745c5c3_Err
+		}
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 18, "\" x-bind:key=\"b.name\"><li class=\"[ item ]\" x-bind:data-state=\"b.state\" x-bind:data-flagged=\"b.flagAttr\"><code class=\"[ name ]\" x-text=\"b.name\" x-bind:title=\"b.name\"></code> <span class=\"[ badge ]\" x-bind:data-tone=\"b.tone\" x-text=\"b.stateLabel\"></span> <span class=\"[ counts ]\" x-show=\"b.hasBase\" x-bind:title=\"b.countsLabel\"><span class=\"[ ahead ]\"><span aria-hidden=\"true\">↑</span><span x-text=\"b.ahead\"></span><span class=\"[ visually-hidden ]\">ahead of</span></span> <span class=\"[ behind ]\"><span aria-hidden=\"true\">↓</span><span x-text=\"b.behind\"></span><span class=\"[ visually-hidden ]\">behind</span></span> <span class=\"[ vs ]\" x-text=\"b.baseRef\"></span></span><template x-for=\"p in b.pushed\" x-bind:key=\"p.key\"><span class=\"[ pushed ]\" x-bind:data-by=\"p.by\" x-text=\"p.line\"></span></template><template x-if=\"b.noRemote\"><span class=\"[ hint ]\" data-no-remote>No remote is configured, so there is nowhere to push this branch.</span></template><template x-if=\"b.offersPush\"><button type=\"button\" class=\"[ button ]\" data-variant=\"ghost\" data-size=\"sm\" data-branch-push x-bind:aria-label=\"'Push ' + b.name\" x-on:click=\"")
+		if templ_7745c5c3_Err != nil {
+			return templ_7745c5c3_Err
+		}
+		var templ_7745c5c3_Var12 string
+		templ_7745c5c3_Var12, templ_7745c5c3_Err = templ.ResolveAttributeValue("askBranchPush(" + workspaceID + ", b.name)")
+		if templ_7745c5c3_Err != nil {
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `code/sync.templ`, Line: 154, Col: 194}
+		}
+		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var12)
+		if templ_7745c5c3_Err != nil {
+			return templ_7745c5c3_Err
+		}
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 19, "\">Push</button></template><template x-if=\"b.confirming\"><div class=\"[ confirm-strip ]\" data-confirm=\"branch-push\" role=\"group\" x-bind:aria-label=\"b.question\"><h3 x-text=\"b.question\"></h3><label class=\"[ remote ]\">Remote <select data-branch-remote x-on:change=\"pickBranchRemote($event.target.value)\"><template x-for=\"o in b.remoteOptions\" x-bind:key=\"o.name\"><option x-bind:value=\"o.name\" x-bind:selected=\"o.selected\" x-text=\"o.name\"></option></template></select></label><p>This publishes the branch to the remote you pick. It is never a force push.</p><div class=\"[ actions ]\"><button type=\"button\" class=\"[ button ]\" data-variant=\"primary\" data-size=\"sm\" data-branch-push-confirm x-bind:aria-disabled=\"b.previewLoading || b.pushing ? 'true' : null\" x-on:click=\"confirmBranchPush\" x-text=\"b.pushing ? 'Pushing…' : 'Push'\">Push</button> <button type=\"button\" class=\"[ button ]\" data-size=\"sm\" data-branch-push-cancel x-on:click=\"cancelBranchPush\">Cancel</button></div></div></template><template x-if=\"b.pushRefusalStrip\"><div class=\"[ confirm-strip ]\" data-tone=\"danger\" role=\"alert\" data-refusal=\"branch-push\"><h3 x-text=\"b.pushRefusal.lead\"></h3><p x-text=\"b.pushRefusal.reason\"></p><p class=\"[ code ]\" x-text=\"b.pushRefusal.code\"></p></div></template><template x-if=\"b.pushRefusalBanner\"><div class=\"[ banner ]\" data-tone=\"attention\" role=\"alert\" data-refusal=\"branch-push\"><span x-text=\"b.pushRefusal.lead\"></span> <a x-bind:href=\"b.pushRefusal.href\" x-text=\"b.pushRefusal.linkText\"></a></div></template></li></template></ul></section>")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}

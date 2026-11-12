@@ -22,6 +22,7 @@
  * @property {"off"|"edits"|"all"} autoAccept  which tool calls run without asking
  * @property {string} [baseBranch]  the branch its worktree branches off; "" means the checkout's HEAD
  * @property {string} [branchName]  the name of the session's own branch; "" lets the server generate one
+ * @property {string} [model]      the model override for this session only: a CLI alias or "default" (no --model); missing lets the server resolve the mode's model
  * @property {readonly string[]} [bringUnderSessionIds]  with mode "architect": sessions of the task to move under the new architect as it starts
  *
  * @typedef {object} Brought  what bringing sessions under the architect did
@@ -304,6 +305,10 @@
  *           SESSION_TRANSCRIPT_MISSING (no saved conversation yet),
  *           SESSION_NOT_FOUND or INVALID_INPUT (a bad cursor or limit, or
  *           both cursors).
+ * @property {(sessionId: string, since?: { afterSeq?: number }, signal?: AbortSignal) => Promise<{ events: { seq: number, type: string, at: string, payload: any }[], lastSeq: number }>} [events]
+ *           The session's event log after `afterSeq`, for the lines a
+ *           restart adds to its history (restartMarkers). Optional: without
+ *           it the History tab shows the conversation alone.
  */
 
 export {};

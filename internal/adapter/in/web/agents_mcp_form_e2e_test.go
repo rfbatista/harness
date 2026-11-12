@@ -127,7 +127,14 @@ func TestMcpServerFormCreatesATestedServerFromAPastedCommandLine_EndToEnd(t *tes
 		}
 		defer res.Body.Close()
 		raw, _ := io.ReadAll(res.Body)
-		return strings.TrimSpace(string(raw))
+		// The Added servers' names: the read also carries every server's state and tools.
+		var body struct {
+			McpServers []string `json:"mcp_servers"`
+		}
+		if err := json.Unmarshal(raw, &body); err != nil {
+			t.Fatal(err)
+		}
+		return strings.Join(body.McpServers, " ")
 	}
 
 	flat := func(sel string) string {

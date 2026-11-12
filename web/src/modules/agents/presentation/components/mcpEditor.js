@@ -22,8 +22,8 @@
 
 import { describeError } from "../../../../shared/presentation/errors.js";
 import {
-  addRow, checkMcpDraft, detectToken, hideSecrets, mcpChanges, mcpDraft, mcpFieldErrors, mcpPreviewModel, mcpRefs, mcpSave,
-  probeView, referenceName, removeRow, rename, setMode, splitCommandLine, toReference, useReference, whoGetsIt,
+  addRow, adoptTools, checkMcpDraft, detectToken, hideSecrets, mcpChanges, mcpDraft, mcpFieldErrors, mcpPreviewModel, mcpRefs, mcpSave, mcpTools,
+  probeOutcome, probeView, referenceName, removeRow, rename, setMode, splitCommandLine, toggleTool, toReference, useReference, whoGetsIt,
 } from "../../domain/mcpForm.js";
 import { openSave, saveView, savedToast } from "../../domain/savePipeline.js";
 import { returnHref, safeReturn } from "../../domain/skillForm.js";
@@ -47,7 +47,7 @@ const versionsOf = (catalog) => Object.fromEntries(FILES.filter((f) => f in cata
 
 /**
  * @param {{
- *   gateway: Pick<import("../../domain/ports.js").CatalogGateway, "saveMcpServer" | "testMcpServer" | "checkEnvVars" | "listProjects">,
+ *   gateway: Pick<import("../../domain/ports.js").CatalogGateway, "saveMcpServer" | "testMcpServer" | "refreshMcpServerTools" | "checkEnvVars" | "listProjects">,
  *   location: { pathname: string, search?: string },
  *   timers?: { setTimeout: (fn: () => void, ms: number) => any, clearTimeout: (id: any) => void },
  * }} deps
@@ -95,6 +95,9 @@ export function mcpEditor({ gateway, location, timers = globalThis }) {
     mfProbeSeconds: 0,
     /** How many edits the form had when the test started; another count means the answer is old. */
     mfProbeAt: 0,
+    mfRefreshing: false,
+    /** What the last Refresh tools found, in the words of domain/mcpForm.js probeOutcome. */
+    mfRefreshNote: { show: false, tone: "", text: "" },
     mfEdits: 0,
     mfSeq: 0,
 
@@ -142,6 +145,8 @@ export function mcpEditor({ gateway, location, timers = globalThis }) {
       this.mfProbe = null;
       this.mfProbeRunning = false;
       this.mfProbeAt = 0;
+      this.mfRefreshing = false;
+      this.mfRefreshNote = { show: false, tone: "", text: "" };
       this.mfEdits = 0;
       this.mfEnvChecking = false;
       this.reviewOpen = false;
@@ -691,6 +696,84 @@ export function mcpEditor({ gateway, location, timers = globalThis }) {
       this.mfProbeRunning = false;
     },
 
+    // Tools: the tool default (domain/mcpForm.js mcpTools).
+
+    get mfTools() {
+      return this.mfDraft ? mcpTools(this.mfDraft) : mcpTools({ knownTools: null, probedAt: "", disabledTools: [], previousName: "" });
+    },
+    get mfToolsUnknown() {
+      return this.mfTools.unknown;
+    },
+    get mfToolsKnown() {
+      return !this.mfTools.unknown;
+    },
+    get mfToolsSummary() {
+      return this.mfTools.summary;
+    },
+    get mfToolsProbed() {
+      return this.mfTools.probed;
+    },
+    get mfToolsHasProbed() {
+      return this.mfTools.probed !== "";
+    },
+    get mfToolsHint() {
+      return this.mfTools.hint;
+    },
+    get mfToolRows() {
+      return this.mfTools.rows.map((r) => ({
+        name: r.name,
+        checked: r.enabled,
+        state: r.enabled ? "enabled" : "disabled",
+        label: r.enabled ? "Enabled" : "Disabled",
+        aria: `${r.name}: ${r.enabled ? "enabled" : "disabled"} for every project that does not set it`,
+      }));
+    },
+    get mfRefreshShown() {
+      return this.mfTools.refreshable;
+    },
+    get mfRefreshDisabled() {
+      return this.mfRefreshing;
+    },
+    get mfRefreshLabel() {
+      return this.mfRefreshing ? "Refreshing…" : "Refresh tools";
+    },
+    get mfRefreshBusy() {
+      return String(this.mfRefreshing);
+    },
+    get mfRefreshNoteShown() {
+      return this.mfRefreshNote.show;
+    },
+    get mfRefreshNoteText() {
+      return this.mfRefreshNote.text;
+    },
+    get mfRefreshNoteTone() {
+      return this.mfRefreshNote.tone;
+    },
+    mfToggleTool(event) {
+      toggleTool(this.mfDraft, event.currentTarget.dataset.name);
+      this.mfChanged();
+    },
+    /** Probes the saved server and takes only its tool list: the definition and toggles being edited stay as they are. */
+    async mfRefresh() {
+      const d = this.mfDraft;
+      if (!d || d.previousName === "" || this.mfRefreshing) return;
+      const seq = this.mfSeq;
+      this.mfRefreshing = true;
+      this.mfRefreshNote = { show: false, tone: "", text: "" };
+      let note;
+      try {
+        const { server, probe } = await gateway.refreshMcpServerTools(d.previousName);
+        if (seq !== this.mfSeq) return;
+        adoptTools(d, server);
+        note = probeOutcome(probe, { tools: server.knownTools });
+      } catch (err) {
+        if (seq !== this.mfSeq) return;
+        note = { show: true, tone: "attention", text: describeError(err).message };
+      }
+      this.mfRefreshNote = note;
+      this.mfRefreshing = false;
+    },
+
     // Who gets it.
 
     get mfAgentRows() {
@@ -812,8 +895,10 @@ export function mcpEditor({ gateway, location, timers = globalThis }) {
       const name = this.mfDraft.name.trim();
       const drawer = this.mfDrawer;
       const back = this.mfBack;
-      this.showToast(savedToast({ id: result.change.id, summary: result.change.summary }));
+      const toast = savedToast({ id: result.change.id, summary: result.change.summary });
       await this.load();
+      const outcome = probeOutcome(result.probe, { tools: this.catalog?.mcpServers.find((s) => s.name === name)?.knownTools ?? null, saved: true });
+      this.showToast(outcome.show ? { ...toast, tone: outcome.tone === "" ? "" : "danger", note: `${outcome.text} ${toast.note}` } : toast);
       if (drawer) {
         // The agent gets the server when the person saves the agent: here it is only ticked.
         this.mfClose();

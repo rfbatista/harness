@@ -19,7 +19,7 @@
 
 import { describeError } from "../../../../shared/presentation/errors.js";
 import { isStaleCursor, isTranscriptMissing, TRANSCRIPT_PAGE } from "../../domain/transcript.js";
-import { chatItems, historyEntry, isWorking, matches } from "../historyView.js";
+import { chatItems, historyEntry, isWorking, matches, restartMarkers, withMarkers } from "../historyView.js";
 
 /** The catch-up interval while the session runs (T5: no more often than every 2 s). */
 export const POLL_MS = 2_000;
@@ -82,6 +82,10 @@ export const history = ({
     error: "",
     /** @type {import("../../domain/transcript.js").TranscriptEntry[]} every loaded entry, oldest first */
     entries: [],
+    /** The lines a restart added to the history, from the session's event log. */
+    markers: [],
+    /** The newest event seq read, so the next read asks only for later ones. */
+    eventSeq: 0,
     /** The rendered window, entries[start, end). */
     start: 0,
     end: 0,
@@ -105,7 +109,9 @@ export const history = ({
       return this.entries.slice(this.start, this.end).map(build);
     },
     get items() {
-      return chatItems(this.rendered, { agent: this.agent, live: this.live && this.end === this.entries.length, showTools: this.showTools });
+      const atEnd = this.end === this.entries.length;
+      const shown = withMarkers(this.rendered, this.markers, { olderPossible: this.start > 0 || this.hasOlder, atEnd });
+      return chatItems(shown, { agent: this.agent, live: this.live && this.end === this.entries.length, showTools: this.showTools });
     },
     /** The agent is between its turns, below the newest message. */
     get working() {
@@ -277,6 +283,10 @@ export const history = ({
         this.newCount = 0;
         this.error = "";
         this.state = "ready";
+        this.markers = [];
+        this.eventSeq = 0;
+        await this.readMarkers();
+        if (gone) return;
         this.repaint(() => this.scrollToEnd());
       } catch (err) {
         if (gone) return;
@@ -289,6 +299,20 @@ export const history = ({
         }
       } finally {
         busy = false;
+      }
+    },
+
+    /** The restart lines the event log gained since the last read; a failed read shows none. */
+    async readMarkers() {
+      if (!transcripts.events) return;
+      try {
+        const { events, lastSeq } = await transcripts.events(this.sessionId, { afterSeq: this.eventSeq });
+        if (gone) return;
+        this.eventSeq = lastSeq;
+        const added = restartMarkers(events);
+        if (added.length > 0) this.markers = [...this.markers, ...added];
+      } catch {
+        // The conversation reads without them.
       }
     },
 
@@ -320,6 +344,7 @@ export const history = ({
           if (page.entries.length > 0) this.append(page.entries);
           if (!page.hasNewer) break;
         }
+        await this.readMarkers();
       } catch (err) {
         if (gone) return;
         if (isStaleCursor(err)) await this.load();

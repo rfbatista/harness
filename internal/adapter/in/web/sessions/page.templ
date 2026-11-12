@@ -303,6 +303,30 @@ templ syncChip() {
 	</span>
 }
 
+// branchLink is a session row's "N branches" link, before the sync chip (which
+// stays last in the row's first line): it
+// opens the Git popover at that session's Branches section, and carries a flag
+// when one of the session's branches is unapproved (contract "Harness server ↔
+// Web UI — branch requests and the Branches list" §6). It reads the sync
+// store's Branches lists, seeded by the page and kept live by the feed, and is
+// hidden until the session's list is held.
+templ branchLink() {
+	<button
+		type="button"
+		class="[ branch-link ]"
+		x-data="syncBranchLink(row.id)"
+		x-show="shown"
+		style="display: none"
+		x-bind:data-flagged="flagAttr"
+		x-bind:aria-label="describe"
+		aria-haspopup="dialog"
+		x-on:click.stop="open"
+	>
+		<span class="[ label ]" x-text="label"></span>
+		<span class="[ flag ]" x-show="flagged"><span aria-hidden="true">⚑</span> unapproved</span>
+	</button>
+}
+
 // gitButton is the task's worktrees and where each stands against its base and
 // its remote (ADR 0043's surface, ADR 0042: nothing joins the vertical stack):
 // a ghost button in the title row, after Feature and Reviews, and the Git
@@ -316,7 +340,7 @@ templ syncChip() {
 // The open state is never stored.
 templ gitButton(v PageView) {
 	if v.GitSync {
-		<span style="display: contents" x-data="syncPopover" x-on:dialog-close.window="popoverClosed($event)">
+		<span style="display: contents" x-data="syncPopover" x-on:dialog-close.window="popoverClosed($event)" x-on:branches-show.window="showBranches($event)">
 			<button
 				type="button"
 				class="[ button ]"
@@ -383,6 +407,7 @@ templ gitButton(v PageView) {
 								</template>
 								<a x-bind:href="row.codeHref">Code</a>
 							</div>
+							@code.BranchesSection("row.branches.rows", "row.branches.shown", "row.branches.label", "row.sessionId", "row.workspaceId")
 							<template x-if="row.confirming">
 								<div class="[ confirm-strip ]" data-confirm="push" role="group" x-bind:aria-label="row.question">
 									<h3 x-text="row.question"></h3>
@@ -694,13 +719,30 @@ templ liveRows() {
 							<span class="[ badge ]" x-bind:data-tone="row.chip.tone" aria-hidden="true" x-text="row.chip.word"></span>
 						</template>
 						@pullrequests.Badge("row.workspaceId")
+						@branchLink()
 						@syncChip()
 					</span>
 					<time class="[ when ]" x-text="row.when"></time>
 					<template x-if="row.detail">
 						<span class="[ detail ]" x-bind:data-report="row.detail.kind">
 							<template x-if="row.detail.lead">
-								<span class="[ lead ]" x-text="row.detail.lead"></span>
+								<span style="display: contents" x-data="branchRequestLead(row.id)">
+									<template x-if="actionable(row.detail.kind)">
+										<button
+											type="button"
+											class="[ lead ]"
+											data-action
+											x-text="row.detail.lead"
+											x-bind:aria-label="describe(row.detail.kind, row.detail.lead)"
+											aria-haspopup="dialog"
+											x-on:click.stop="open(row.detail.kind)"
+											x-on:keydown.stop
+										></button>
+									</template>
+									<template x-if="plain(row.detail.kind)">
+										<span class="[ lead ]" x-text="row.detail.lead"></span>
+									</template>
+								</span>
 							</template>
 							<template x-if="row.detail.text">
 								<span class="[ quote ]" x-text="row.detail.text"></span>
@@ -793,6 +835,7 @@ templ newSessionForm(form NewSessionForm, lockedMode string) {
 		data-repositories={ form.RepositoriesSeed() }
 		data-agents-total={ form.AgentsTotalText() }
 		data-agents-mode={ form.AgentsMode }
+		data-mode-models={ form.ModeModelsSeed() }
 		data-project-name={ form.ProjectName }
 		data-project-id={ form.ProjectID }
 		x-on:submit.prevent="submit"
@@ -882,6 +925,22 @@ templ newSessionForm(form NewSessionForm, lockedMode string) {
 				}
 				<span class="[ hint ]" x-text="modeHint"></span>
 			</div>
+			if lockedMode != "product" {
+				<div class="[ field ]" data-model-field>
+					<label for="new-session-model">Model</label>
+					<div class="[ dropdown ]" x-data="dropdown">
+						<select id="new-session-model" x-model="model" x-on:change="pickModel">
+							for _, o := range form.ModelOptions() {
+								<option value={ o.ID }>{ o.Name }</option>
+							}
+						</select>
+					</div>
+					<span class="[ hint ]" data-model-hint x-show="modelDiffers">
+						<span x-text="modelHint"></span>
+						<button type="button" class="[ button ]" data-variant="ghost" data-size="sm" x-on:click="resetModel">Reset</button>
+					</span>
+				</div>
+			}
 			<div class="[ field ]">
 				<label for="new-session-base">Branch off</label>
 				<div class="[ cluster ]">

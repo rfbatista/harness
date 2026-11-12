@@ -131,3 +131,42 @@ type GitWorktreeReader interface {
 type GitStatusSnapshotter interface {
 	SnapshotStatus(ctx context.Context, dir string) (head, fingerprint string, st *GitWorktreeStatus, err error)
 }
+
+// GitRemoteLister reads a repository's configured remotes (driven; gitcli's
+// Code implements it next to GitBranchEvidence).
+type GitRemoteLister interface {
+	// Remotes lists the remotes of the repository at repoRoot with their URLs,
+	// as configured; none is an empty list.
+	Remotes(ctx context.Context, repoRoot string) ([]GitRemote, error)
+}
+
+// RepositoryRemoteLists answers the remotes a push can go to (driving; the
+// worktree git service implements it next to WorktreeGit).
+type RepositoryRemoteLists interface {
+	// RepositoryRemotes lists the repository's remotes, origin first and the
+	// rest by name, with no credential in a URL. Errors: REPOSITORY_NOT_FOUND,
+	// INVALID_ROOT.
+	RepositoryRemotes(ctx context.Context, repositoryID string) ([]GitRemote, error)
+}
+
+// PushPreview is what the Push confirmation shows, read offline from local
+// refs: the head of the branch to push, which the person's confirmation sends
+// back as the expected head, and the commits the remote branch lacks.
+type PushPreview struct {
+	Head string
+	// Commits is counted against the remote-tracking branch when it is known
+	// here ("remote"), else against the branch's base ("base").
+	Commits        int
+	CommitsAgainst string
+	RemoteBranch   string
+}
+
+// PushPreviews answers what a push would send (driving; the worktree git
+// service implements it next to WorktreeGit). Branch, Remote and RemoteBranch
+// default as PushTarget's do.
+//
+// Errors: PushBranchTo's checks without the push: WORKSPACE_NOT_FOUND,
+// BRANCH_NOT_PUSHABLE, BRANCH_NOT_FOUND, REMOTE_NOT_FOUND, NO_REMOTE.
+type PushPreviews interface {
+	PushPreview(ctx context.Context, t PushTarget) (*PushPreview, error)
+}

@@ -51,3 +51,7 @@ func (r *SettingsRepository) Set(key, value string) error {
 		DoUpdates: clause.AssignmentColumns([]string{"value"}),
 	}).Create(&SettingModel{Key: key, Value: value}).Error
 }
+
+func (r *SettingsRepository) Delete(key string) error {
+	return r.db.Delete(&SettingModel{}, "key = ?", key).Error
+}

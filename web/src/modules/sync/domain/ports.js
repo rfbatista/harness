@@ -13,17 +13,28 @@
  *           Rejects with WORKSPACE_NOT_FOUND, INVALID_INPUT or UNAVAILABLE.
  * @property {(taskId: string, signal?: AbortSignal) => Promise<GitState[]>} listForTask
  *           GET /api/list_worktree_git_states, in the task page's session order.
+ * @property {(sessionId: string, signal?: AbortSignal) => Promise<{ sessionId: string, branches: import("./branches.js").SessionBranch[] }>} [branchesOf]
+ *           GET /api/session_branches: the session's Branches list, from stored state.
+ * @property {(taskId: string, signal?: AbortSignal) => Promise<Array<{ sessionId: string, branches: import("./branches.js").SessionBranch[] }>>} [branchesForTask]
+ *           GET /api/list_session_branches.
  * @property {(repositoryId: string) => Promise<{ fetchedAt: Date }>} fetchRemote
  *           POST /api/fetch_remote: git fetch origin --prune with the stored
  *           credential. Rejects with REPOSITORY_NOT_FOUND, NO_REMOTE,
  *           GIT_CREDENTIAL_MISSING / _REJECTED / _STORE_LOCKED or FETCH_FAILED.
- * @property {(req: { workspaceId: string, expectedHead: string }) => Promise<GitState>} push
- *           POST /api/push_branch: never forced. Rejects with WORKSPACE_NOT_FOUND,
+ * @property {(repositoryId: string, signal?: AbortSignal) => Promise<Array<{ name: string, url: string }>>} [remotes]
+ *           GET /api/repository_remotes: the repository's remotes, origin first.
+ * @property {(req: { workspaceId: string, branch: string, remote: string, remoteBranch?: string }, signal?: AbortSignal) => Promise<{ head: string, commits: number, commitsAgainst: "remote"|"base", remoteBranch: string }>} [pushPreview]
+ *           GET /api/push_preview: what the Push confirmation shows, read offline.
+ *           Rejects with BRANCH_NOT_PUSHABLE, BRANCH_NOT_FOUND, REMOTE_NOT_FOUND or NO_REMOTE.
+ * @property {(req: { workspaceId: string, expectedHead: string, branch?: string, remote?: string, remoteBranch?: string }) => Promise<GitState>} push
+ *           POST /api/push_branch: never forced. A branch other than the workspace's is
+ *           BRANCH_NOT_PUSHABLE unless it is the session's or approved. Rejects with WORKSPACE_NOT_FOUND,
  *           WORKSPACE_MISSING, NO_REMOTE, a GIT_CREDENTIAL_* code, PUSH_REJECTED
  *           or PUSH_STALE (both carry error.details.state, a GitState) or PUSH_FAILED.
  * @property {(projectId: string,
  *             onState: (state: GitState) => void,
- *             onStatus: (status: FeedStatus) => void) => () => void} follow
+ *             onStatus: (status: FeedStatus) => void,
+ *             onBranches?: (list: { sessionId: string, branches: import("./branches.js").SessionBranch[] }) => void) => () => void} follow
  *           Every `git_state` of the project, until the returned function is
  *           called. Other feed messages are not delivered.
  * @property {(raw: unknown) => { projectId: string, states: GitState[] }} decodeSeed

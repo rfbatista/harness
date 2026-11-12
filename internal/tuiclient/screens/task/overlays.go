@@ -356,6 +356,15 @@ func (s *Screen) resume(sess *domain.Session) tea.Cmd {
 	}))
 }
 
+// statusLabel is a session's status as the list reads it: a stopped session a
+// restart interrupted says so (ADR 0082).
+func statusLabel(sess *domain.Session) string {
+	if sess.Status == domain.SessionStopped && sess.InterruptedAt != nil {
+		return "interrupted by restart"
+	}
+	return string(sess.Status)
+}
+
 func (o *sessionsOverlay) view(s *Screen, width, height int) string {
 	var b strings.Builder
 	b.WriteString(ui.Header.Render("  Sessions of this task") + "\n\n")
@@ -376,7 +385,7 @@ func (o *sessionsOverlay) view(s *Screen, width, height int) string {
 		case sess.RunsOn == domain.RunnerServer:
 			kind = "server"
 		}
-		row := "  " + mark + ui.Fit(string(sess.Status), 18) + ui.Fit(kind, 10) + ui.Fit(sess.Branch, max(10, width-60)) + " " + ui.Dim.Render(ui.Age(sess.CreatedAt))
+		row := "  " + mark + ui.Fit(statusLabel(sess), 24) + ui.Fit(kind, 10) + ui.Fit(sess.Branch, max(10, width-60)) + " " + ui.Dim.Render(ui.Age(sess.CreatedAt))
 		b.WriteString(ui.Row(row, i == o.cursor, width-2) + "\n")
 	}
 	b.WriteString("\n" + ui.Note.Render("  enter open or resume · n new · esc close"))

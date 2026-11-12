@@ -130,9 +130,13 @@ type Session struct {
 	AgentUnassigned bool `json:"agent_unassigned"`
 	// CommitCheckOff is why the session's worktree is not guarded by the commit
 	// check (ADR 0040); empty while it is guarded. Derived on read, never stored.
-	CommitCheckOff string    `json:"commit_check_off,omitempty"`
-	CreatedAt      time.Time `json:"created_at"`
-	UpdatedAt      time.Time `json:"updated_at"`
+	CommitCheckOff string `json:"commit_check_off,omitempty"`
+	// InterruptedAt is the interrupted mark (ADR 0082): when a restart found
+	// the session mid-turn. Present only while the session is stopped and a
+	// resume has not cleared it; stored, never derived.
+	InterruptedAt *time.Time `json:"interrupted_at,omitempty"`
+	CreatedAt     time.Time  `json:"created_at"`
+	UpdatedAt     time.Time  `json:"updated_at"`
 	// StatusSince is when the session entered its current status: set when
 	// it is created, moved only when the status actually changes. Rows from
 	// before it existed read as their last update. Not on the wire.

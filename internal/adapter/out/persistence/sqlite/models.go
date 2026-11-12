@@ -192,6 +192,9 @@ type ProjectModel struct {
 	// setting) reads as all.
 	EnabledAgentsMode string      `gorm:"column:enabled_agents_mode"`
 	EnabledAgents     stringSlice `gorm:"column:enabled_agents"`
+	// MCPSettings is a domain.ProjectMCPSettings as JSON: the banned servers
+	// and the tool overrides. Empty reads as none.
+	MCPSettings string `gorm:"column:mcp_settings"`
 }
 
 // TableName overrides the table name.
@@ -210,11 +213,17 @@ func (m *ProjectModel) ToDomain() *domain.Project {
 	if mode != domain.AgentsSelected {
 		mode = domain.AgentsAll
 	}
+	var mcp domain.ProjectMCPSettings
+	if m.MCPSettings != "" {
+		_ = json.Unmarshal([]byte(m.MCPSettings), &mcp)
+	}
 	return &domain.Project{
-		ID:           m.ID,
-		Name:         m.Name,
-		RootDir:      m.RootDir,
-		IgnoredPaths: paths,
+		ID:               m.ID,
+		Name:             m.Name,
+		RootDir:          m.RootDir,
+		IgnoredPaths:     paths,
+		MCPBanned:        mcp.Banned,
+		MCPToolOverrides: mcp.ToolOverrides,
 
 		AgentsReadAllRepos: m.AgentsReadAllRepos == nil || *m.AgentsReadAllRepos,
 		MCPServers:         append([]string(nil), m.MCPServers...),

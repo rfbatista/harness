@@ -2,7 +2,7 @@
 // list the test sets, the feed it drives with `emit` and `status`, and a
 // record of what was read.
 
-import { toEvent, toLogEvent, toRunVariables, toRunWorktrees, toService, toServiceList } from "../infrastructure/dto.js";
+import { toBranchList, toEvent, toLogEvent, toRunVariables, toRunWorktrees, toService, toServiceList } from "../infrastructure/dto.js";
 
 /** The API's JSON for a service; override fields with `o`. */
 export function serviceDTO(o = {}) {
@@ -25,6 +25,11 @@ export function runDTO(o = {}) {
 /** The API's JSON for a run worktree; override fields with `o`. */
 export function worktreeDTO(o = {}) {
   return { key: "main", kind: "main", branch: "main", dir: "/repo", session_id: "", agent: "", session_status: "", ...o };
+}
+
+/** The API's JSON for a branch; override fields with `o`. */
+export function branchDTO(o = {}) {
+  return { name: "feature/x", remote: false, sha: "abc1234", subject: "Add the thing", committed_at: "2026-11-07T12:00:00Z", ...o };
 }
 
 /** A list_services answer. */
@@ -99,6 +104,18 @@ export function fakeServices({ list = listDTO() } = {}) {
       fake.worktreeReads.push(id);
       if (fake.worktreesError) throw fake.worktreesError;
       return toRunWorktrees({ worktrees: fake.worktrees });
+    },
+    /** The branches on offer (the API's JSON, local first); a test sets its own. The fake filters by the query as the server does. */
+    branches: [],
+    branchesTruncated: false,
+    branchesError: null,
+    /** The queries the branch list was asked with, per call. */
+    branchQueries: [],
+    async listBranches(id, query = "") {
+      fake.branchQueries.push(query);
+      if (fake.branchesError) throw fake.branchesError;
+      const q = query.toLowerCase();
+      return toBranchList({ branches: fake.branches.filter((b) => b.name.toLowerCase().includes(q)), truncated: fake.branchesTruncated });
     },
     /** The variables read answers (the API's JSON); a test sets its own. */
     variables: { run_id: "", variables: [] },

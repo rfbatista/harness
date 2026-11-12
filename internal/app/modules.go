@@ -50,6 +50,7 @@ import (
 	"operators-mcp/internal/application/archrules"
 	"operators-mcp/internal/application/artifacts"
 	"operators-mcp/internal/application/branchgate"
+	"operators-mcp/internal/application/branchwatch"
 	"operators-mcp/internal/application/execution"
 	"operators-mcp/internal/application/gitcredentials"
 	"operators-mcp/internal/application/keychainpath"
@@ -101,6 +102,7 @@ var PersistenceModule = fx.Module("persistence",
 		asPort(sqlite.NewArchitectureRecordRepository, new(ports.ArchitectureRecordStore)),
 		asPort(sqlite.NewArchitectureRuleEventRepository, new(ports.ArchitectureRuleEventStore)),
 		asPort(sqlite.NewBranchRequestRepository, new(ports.BranchRequestStore)),
+		asPort(sqlite.NewBranchWatchRepository, new(ports.BranchWatchStore)),
 		asPort(sqlite.NewRecordedPushRepository, new(ports.PushRecords)),
 		asPort(sqlite.NewDesignSystemRepository, new(ports.DesignSystemStore)),
 		asPort(sqlite.NewDesignProposalRepository, new(ports.DesignProposalStore)),
@@ -194,6 +196,10 @@ func (p projectMCPServers) SetProjectAgents(_ context.Context, id, mode string, 
 
 func (p projectMCPServers) SetProjectMCPServers(_ context.Context, id string, names []string) (*domain.Project, error) {
 	return p.projects.SetMCPServers(id, names)
+}
+
+func (p projectMCPServers) SetProjectMCPSettings(_ context.Context, id string, s domain.ProjectMCPSettings) (*domain.Project, error) {
+	return p.projects.SetMCPSettings(id, s)
 }
 
 // newRepositoryAgents is the service that says which agents a repository
@@ -455,6 +461,7 @@ var AgentRuntimeModule = fx.Module("agentruntime",
 		newOrchestrationService,
 		newArchitectureRules,
 		newBranchGate,
+		newBranchWatch,
 		platformSandboxDriver,
 		platformSandboxViolations,
 		newSandboxSettings,
@@ -471,7 +478,7 @@ var AgentRuntimeModule = fx.Module("agentruntime",
 		newPersonTerminals,
 	),
 	fx.Invoke(registerRuntimeShutdown, registerServerSessions, bindVirtualShells, bindWorkspaceRemovals, bindFilesRootFeed, bindSandboxSettings,
-		bindAgentReadiness, func(*archrules.Service) {}, restoreBranchGate),
+		bindAgentReadiness, func(*archrules.Service) {}, restoreBranchGate, func(*branchwatch.Service) {}),
 )
 
 // TaskChannelModule wires the architect channel: its tables, the service,
@@ -680,7 +687,7 @@ func newServicesModule(lc fx.Lifecycle, cfg Config, db *gorm.DB, cat catalog.Cat
 	}
 	svc := services.New(sqlite.NewServiceRepository(db), cat.Projects, cat.Projects, services.Options{
 		Instance: instance,
-		LogDir: logDir, FolderDir: folderDir, Sandbox: sandbox, Driver: sandboxDriver(orch), LookPath: exec.LookPath,
+		LogDir:   logDir, FolderDir: folderDir, Sandbox: sandbox, Driver: sandboxDriver(orch), LookPath: exec.LookPath,
 		Allow: sandboxAllow(orch, sandbox), Checkouts: func(projectID string) []string { return projectCheckouts(cat.Projects, projectID) },
 		Runners: map[domain.ServiceKind]ports.ServiceProcessRunner{
 			domain.ServiceKindCommand: commandrunner.Runner{}, domain.ServiceKindImage: containerrunner.Runner{},
@@ -736,7 +743,9 @@ func newRuntimeConfig(cfg Config, bin ports.ManagedClaudeBin, home claudehome.Ho
 // running died with the previous server. On shutdown each is recorded as
 // stopped before the host kills it, so it does not read as failed. Its hooks
 // run inside the host's: the host was built first.
-func registerServerSessions(lc fx.Lifecycle, svc *orchestration.Service) {
+// The inbox is a parameter only so that it is built, and subscribed to the bus,
+// before the boot announces the interrupted sessions.
+func registerServerSessions(lc fx.Lifecycle, svc *orchestration.Service, _ optionalNotifications) {
 	lc.Append(fx.Hook{
 		OnStart: func(ctx context.Context) error {
 			// Every live worktree is guarded again before sessions are
@@ -748,13 +757,34 @@ func registerServerSessions(lc fx.Lifecycle, svc *orchestration.Service) {
 			if n > 0 {
 				slog.Info("stopped server sessions left running by a previous run", "count", n)
 			}
-			return err
+			if err != nil {
+				return err
+			}
+			// The inbox lists every session still marked, so the person
+			// finds them in one place (ADR 0083).
+			if err := svc.AnnounceInterrupted(ctx); err != nil {
+				slog.Warn("announce the interrupted sessions", "err", err)
+			}
+			return nil
 		},
 		OnStop: func(ctx context.Context) error {
 			svc.StopServerSessions(ctx)
 			return nil
 		},
 	})
+}
+
+// pendingBranchRequests counts a session's pending branch requests for the
+// orchestration, which records how many expire with an interrupted session.
+type pendingBranchRequests struct{ ports.BranchRequestStore }
+
+func (p pendingBranchRequests) PendingBranchRequests(ctx context.Context, sessionID string) int {
+	pending, err := p.List(ctx, domain.BranchRequestFilter{SessionID: sessionID, State: domain.BranchRequestPending})
+	if err != nil {
+		slog.Warn("count a session's pending branch requests", "session", sessionID, "err", err)
+		return 0
+	}
+	return len(pending)
 }
 
 // newClaudeManager is the headless runtime: every agent claude runs from the
@@ -914,6 +944,17 @@ func newBranchGate(cfg Config, cat catalog.Catalog, sessions ports.SessionReposi
 	return svc
 }
 
+// newBranchWatch keeps each session's Branches list and checks, after every
+// agent turn, for branches and pushes no branch request explains (ADR 0070).
+func newBranchWatch(cat catalog.Catalog, sessions ports.SessionRepository, ws ports.WorkspaceRepository, repos ports.RepositoryRepository, requests ports.BranchRequestStore, store ports.BranchWatchStore, pushes ports.PushRecords, evidence ports.GitBranchEvidence, git ports.GitWorktreeReader, orch *orchestration.Service) *branchwatch.Service {
+	svc := branchwatch.NewService(branchwatch.Deps{
+		Sessions: sessions, Workspaces: ws, Repositories: repos, Requests: requests, Store: store, Pushes: pushes,
+		Evidence: evidence, Git: git, Events: cat.Bus, Feed: orch,
+	})
+	svc.Subscribe(cat.Bus)
+	return svc
+}
+
 // restoreBranchGate rebuilds, at start, what a restart leaves of the branch
 // requests that wait on the person.
 func restoreBranchGate(lc fx.Lifecycle, svc *branchgate.Service) {
@@ -941,6 +982,8 @@ func newOrchestrationService(
 	branchNames *workspaces.BranchNames,
 	baseBranches *workspaces.BaseBranches,
 	assignments *repoagents.Service,
+	agentCatalog *agentcatalog.Catalog,
+	branchRequests ports.BranchRequestStore,
 ) *orchestration.Service {
 	orchCatalog := orchestration.Catalog{
 		Projects:     cat.Projects,
@@ -955,6 +998,7 @@ func newOrchestrationService(
 		orchCatalog.DesignSystems = cat.DesignSystems
 	}
 	svc := orchestration.NewService(manager, broker, hub, sessions, orchCatalog, tickets, ws)
+	svc.MCPToolDefaults = agentCatalog.DisabledMCPTools
 	svc.UseBranchNames(branchNames)
 	svc.UseBaseBranches(baseBranches)
 	svc.UseAssignments(assignments)
@@ -1008,6 +1052,7 @@ func newOrchestrationService(
 	svc.TranscriptReader = transcriptReader
 	svc.Terminals = terminals
 	svc.Events = cat.Bus
+	svc.BranchRequests = pendingBranchRequests{branchRequests}
 	toolsDir, _ := dataDir(cfg, "tools")
 	userHome, _ := os.UserHomeDir()
 	allow := sandboxAllowlist(allowSources{
@@ -1247,6 +1292,7 @@ var WorkspacesModule = fx.Module("workspaces",
 		asPort(githubapi.New, new(ports.CodeHost)),
 		asPort(newGitCode, new(ports.GitCode)),
 		asPort(newGitCode, new(ports.GitWorktreeReader)),
+		asPort(newGitCode, new(ports.GitBranchEvidence)),
 		asPort(filesystem.NewWorktreeFiles, new(ports.WorktreeFiles)),
 		newWorkspacesService,
 		newPullRequestsService,
@@ -1287,11 +1333,12 @@ func newOriginFetcher(git ports.BranchPublisher, creds optionalGitCredentials) *
 // newWorktreeGit reads where each session worktree's branch stands against
 // its base and its upstream, from local git only, fetches origin on request
 // and announces the states a fetch moved on the project feed.
-func newWorktreeGit(ws ports.WorkspaceRepository, repos ports.RepositoryRepository, sessions ports.SessionRepository, tickets ports.TicketRepository, git ports.GitWorktreeReader, files ports.WorktreeFiles, publisher ports.BranchPublisher, pushes ports.PushRecords, fetcher *workspaces.OriginFetcher, orch *orchestration.Service) *workspaces.WorktreeGit {
+func newWorktreeGit(ws ports.WorkspaceRepository, repos ports.RepositoryRepository, sessions ports.SessionRepository, tickets ports.TicketRepository, git ports.GitWorktreeReader, files ports.WorktreeFiles, publisher ports.BranchPublisher, pushes ports.PushRecords, watch *branchwatch.Service, fetcher *workspaces.OriginFetcher, orch *orchestration.Service) *workspaces.WorktreeGit {
 	remotes, _ := publisher.(ports.RemotePublisher)
+	lister, _ := git.(ports.GitRemoteLister)
 	return workspaces.NewWorktreeGit(workspaces.WorktreeGitDeps{
 		Workspaces: ws, Repositories: repos, Sessions: sessions, Tickets: tickets, Git: git, Files: files,
-		Publisher: publisher, Fetcher: fetcher, Feed: orch, Remotes: remotes, Pushes: pushes,
+		Publisher: publisher, Fetcher: fetcher, Feed: orch, Remotes: remotes, Pushes: pushes, Branches: watch, RemoteLister: lister,
 	})
 }
 
@@ -1384,10 +1431,11 @@ func newPullRequestsService(
 	cat catalog.Catalog,
 	creds *gitcredentials.Service,
 	fetcher *workspaces.OriginFetcher,
+	pushes ports.PushRecords,
 ) *workspaces.PullRequests {
 	svc := workspaces.NewPullRequests(workspaces.PullRequestDeps{
 		Workspaces: ws, Repositories: repos, History: history, Git: git, Host: host, Store: store,
-		Sessions: sessions, Tickets: plan, Feed: changeSinks{orch, merges}, Auth: creds, Fetcher: fetcher,
+		Sessions: sessions, Tickets: plan, Feed: changeSinks{orch, merges}, Auth: creds, Fetcher: fetcher, Pushes: pushes,
 	})
 	svc.Subscribe(cat.Bus)
 	lc.Append(fx.Hook{OnStop: func(context.Context) error {

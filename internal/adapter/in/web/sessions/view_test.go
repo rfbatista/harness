@@ -27,6 +27,7 @@ func TestStatusViewMatchesTheSharedFixture(t *testing.T) {
 			Status           domain.SessionStatus `json:"status"`
 			PendingApprovals int                  `json:"pending_approvals"`
 			OpenInterviews   int                  `json:"open_interview_count"`
+			Interrupted      bool                 `json:"interrupted"`
 			State, Word      string
 			NeedsYou         bool `json:"needs_you"`
 		} `json:"cases"`
@@ -39,6 +40,10 @@ func TestStatusViewMatchesTheSharedFixture(t *testing.T) {
 	}
 	for _, c := range fixture.Cases {
 		s := &domain.Session{Status: c.Status, PendingApprovals: c.PendingApprovals, OpenInterviewCount: c.OpenInterviews}
+		if c.Interrupted {
+			at := time.Now()
+			s.InterruptedAt = &at
+		}
 		label := fmt.Sprintf("%s+%d+%d", c.Status, c.PendingApprovals, c.OpenInterviews)
 		if got := statusOf(s); got != (StatusView{c.State, c.Word}) {
 			t.Errorf("%s: got %+v, want {%s %s}", label, got, c.State, c.Word)
@@ -108,7 +113,7 @@ func TestSeedIsNeverNull(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if string(b) != `{"project_id":"p1","ticket_id":"t1","sessions":[],"agent_names":{},"repository_names":{},"artifacts":[],"tasks":[],"git_states":[],"interviews":{}}` {
+	if string(b) != `{"project_id":"p1","ticket_id":"t1","sessions":[],"agent_names":{},"repository_names":{},"artifacts":[],"tasks":[],"git_states":[],"session_branches":[],"interviews":{}}` {
 		t.Errorf("seed = %s", b)
 	}
 	if !v.Empty() {

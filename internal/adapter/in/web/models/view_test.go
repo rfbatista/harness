@@ -33,23 +33,90 @@ func selected(t *testing.T, tier Tier) string {
 	return html[open : open+strings.Index(html[open:], `"`)]
 }
 
-func TestUnsetTiersShowTheBuiltInModels(t *testing.T) {
+func TestTheClaudeSectionHasOneRowPerSessionModeInTheContractsOrder(t *testing.T) {
 	v := NewView(settings{})
-	if got := selected(t, v.Tiers[0]); got != "opus" {
-		t.Errorf("architect selects %q, want opus", got)
+	var titles, keys []string
+	for _, tier := range v.Tiers {
+		titles = append(titles, tier.Title)
+		keys = append(keys, tier.Key)
+		if tier.Lead == "" {
+			t.Errorf("%s has no lead", tier.Title)
+		}
 	}
-	if got := selected(t, v.Tiers[1]); got != "sonnet" {
-		t.Errorf("implementation selects %q, want sonnet", got)
+	wantTitles := []string{"Default", "Architect", "Implement", "Design", "Product", "Design system"}
+	wantKeys := []string{
+		"models.claude.mode.default", "models.claude.mode.architect", "models.claude.mode.implement",
+		"models.claude.mode.design", "models.claude.mode.product", "models.claude.mode.designsystem",
+	}
+	if strings.Join(titles, ",") != strings.Join(wantTitles, ",") {
+		t.Errorf("titles = %v, want %v", titles, wantTitles)
+	}
+	if strings.Join(keys, ",") != strings.Join(wantKeys, ",") {
+		t.Errorf("keys = %v, want %v", keys, wantKeys)
+	}
+}
+
+func TestUnsetTiersShowTheBuiltInModels(t *testing.T) {
+	want := map[string]string{
+		"Default": "default", "Architect": "opus", "Implement": "sonnet",
+		"Design": "default", "Product": "default", "Design system": "default",
+	}
+	for _, tier := range NewView(settings{}).Tiers {
+		if got := selected(t, tier); got != want[tier.Title] {
+			t.Errorf("%s selects %q, want %q", tier.Title, got, want[tier.Title])
+		}
 	}
 }
 
 func TestTiersShowTheStoredModels(t *testing.T) {
-	v := NewView(settings{domain.SettingModelArchitect: "fable", domain.SettingModelImplementation: domain.ModelDefault})
-	if got := selected(t, v.Tiers[0]); got != "fable" {
-		t.Errorf("architect selects %q, want fable", got)
+	v := NewView(settings{
+		domain.ModeModelKey(domain.SessionModeArchitect): "fable",
+		domain.ModeModelKey(domain.SessionModeImplement): domain.ModelDefault,
+		domain.ModeModelKey(domain.SessionModeDesign):    "haiku",
+	})
+	want := map[string]string{"Architect": "fable", "Implement": domain.ModelDefault, "Design": "haiku", "Default": "default", "Product": "default", "Design system": "default"}
+	for _, tier := range v.Tiers {
+		if got := selected(t, tier); got != want[tier.Title] {
+			t.Errorf("%s selects %q, want %q", tier.Title, got, want[tier.Title])
+		}
 	}
-	if got := selected(t, v.Tiers[1]); got != domain.ModelDefault {
-		t.Errorf("implementation selects %q, want default", got)
+}
+
+func TestEveryModeRowOffersTheCLIDefaultAndLabelsAPinnedBuiltInModel(t *testing.T) {
+	labels := func(title string) map[string]string {
+		for _, tier := range NewView(settings{}).Tiers {
+			if tier.Title == title {
+				out := map[string]string{}
+				for _, c := range tier.Choices() {
+					out[c.Value] = c.Label
+				}
+				return out
+			}
+		}
+		t.Fatalf("no %s row", title)
+		return nil
+	}
+	for _, tier := range NewView(settings{}).Tiers {
+		if got := labels(tier.Title)["default"]; got != "default: the CLI chooses" {
+			t.Errorf("%s labels default %q", tier.Title, got)
+		}
+	}
+	if got := labels("Architect")["opus"]; got != "opus (default)" {
+		t.Errorf("Architect labels opus %q", got)
+	}
+	if got := labels("Implement")["sonnet"]; got != "sonnet (default)" {
+		t.Errorf("Implement labels sonnet %q", got)
+	}
+	if got := labels("Design")["opus"]; got != "opus" {
+		t.Errorf("Design labels opus %q", got)
+	}
+}
+
+func TestThereIsNoImplementationRow(t *testing.T) {
+	for _, tier := range NewView(settings{}).Tiers {
+		if tier.Title == "Implementation" || tier.Key == "models.claude.implementation" {
+			t.Errorf("row %+v is retired", tier)
+		}
 	}
 }
 

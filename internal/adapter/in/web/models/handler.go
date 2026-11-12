@@ -1,6 +1,6 @@
-// The Models page, /models: the model each session tier starts with. An
-// architect-mode session gets the architect model; a session another
-// session started gets the implementation model (domain.ResolveSessionModel).
+// The Models page, /models: the model each session mode starts with
+// (domain.ModeModels, ADR 0084). The two rows it still shows are the architect
+// and implement modes.
 // The server paints each select at the stored model; the browser's modelTier
 // (web/src/modules/models) saves a change through /api/update_settings.
 
@@ -61,8 +61,7 @@ type Tier struct {
 	Key, Title, Lead string
 	// Current is the stored value, or the built-in model while it is unset.
 	Current string
-	// BuiltIn is the model an unset setting takes, for the "(default)" label;
-	// "" for the session tiers.
+	// BuiltIn is the model an unset setting takes, for the "(default)" label.
 	BuiltIn string
 	// NoDefault leaves "default: the CLI chooses" out of Choices.
 	NoDefault bool
@@ -96,28 +95,25 @@ func (t Tier) Choices() []Choice {
 	return out
 }
 
-// NewView reads each tier's stored model.
+// modeRows names each session mode's row and says which sessions it covers.
+var modeRows = map[domain.SessionMode]struct{ Title, Lead string }{
+	domain.SessionModeDefault:      {"Default", "Sessions started with no mode: claude runs as the agent defines it."},
+	domain.SessionModeArchitect:    {"Architect", "Sessions started in architect mode: they plan the task and hand its parts to other sessions."},
+	domain.SessionModeImplement:    {"Implement", "Sessions started in implement mode: they carry out a part of the plan, whoever started them."},
+	domain.SessionModeDesign:       {"Design", "Sessions started in design mode: they publish components, images and videos to the Design tab."},
+	domain.SessionModeProduct:      {"Product", "Sessions started in product mode, such as feature brainstorms: they interview you and write the PRD."},
+	domain.SessionModeDesignSystem: {"Design system", "Sessions started in design-system mode: they work on the project design system."},
+}
+
+// NewView reads each session mode's model (domain.ModeModels), one row per
+// mode in the order the contract lists them.
 func NewView(settings ports.SettingsReader) View {
-	current := func(key, builtIn string) string {
-		if v := settings.Setting(key); v != "" {
-			return v
-		}
-		return builtIn
+	var tiers []Tier
+	for _, m := range domain.ModeModels(settings.Setting) {
+		row := modeRows[m.Mode]
+		tiers = append(tiers, Tier{Key: m.Key, Title: row.Title, Lead: row.Lead, Current: m.Current, BuiltIn: m.BuiltIn})
 	}
-	return View{Tiers: []Tier{
-		{
-			Key:     domain.SettingModelArchitect,
-			Title:   "Architect",
-			Lead:    "Sessions started in architect mode: they plan the task and hand its parts to other sessions.",
-			Current: current(domain.SettingModelArchitect, domain.DefaultArchitectModel),
-		},
-		{
-			Key:     domain.SettingModelImplementation,
-			Title:   "Implementation",
-			Lead:    "Sessions another session started, through start_task_session: they carry out a part of the plan.",
-			Current: current(domain.SettingModelImplementation, domain.DefaultImplementationModel),
-		},
-	}, Assistants: []Tier{{
+	return View{Tiers: tiers, Assistants: []Tier{{
 		Key:       domain.SettingModelWritingHelper,
 		Title:     "Writing helper",
 		Lead:      "The magic pen in task titles, descriptions and comments. It runs a few short turns per press, so a fast model keeps it responsive. Applies to every project.",

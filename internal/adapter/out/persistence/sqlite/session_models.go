@@ -67,6 +67,9 @@ type SessionModel struct {
 	// session's last squash into the repository's default branch.
 	MergeMethod string `gorm:"column:merge_method"`
 	SquashedTip string `gorm:"column:squashed_tip"`
+
+	// InterruptedAtMs is the interrupted mark (ms); 0 is none.
+	InterruptedAtMs int64 `gorm:"column:interrupted_at_ms"`
 }
 
 func (m *SessionModel) lastMerge() *domain.MergeResult {
@@ -139,7 +142,18 @@ func (m *SessionModel) ToDomain() *domain.Session {
 		CreatedAt:                time.UnixMilli(m.CreatedAt),
 		UpdatedAt:                time.UnixMilli(m.UpdatedAt),
 		StatusSince:              m.statusSince(),
+		InterruptedAt:            m.interruptedAt(),
 	}
+}
+
+// interruptedAt is the mark a stopped session carries. The mark is set before
+// the session is recorded stopped, so a live one is not shown as interrupted.
+func (m *SessionModel) interruptedAt() *time.Time {
+	if m.InterruptedAtMs == 0 || m.Status != string(domain.SessionStopped) {
+		return nil
+	}
+	at := time.UnixMilli(m.InterruptedAtMs)
+	return &at
 }
 
 // statusSince is when the status last changed; a row from before the column

@@ -123,6 +123,10 @@ type Service struct {
 	// ServicesServerURL returns the per-session services MCP endpoint (ADR
 	// 0075); nil serves sessions no services server.
 	ServicesServerURL func(sessionID string) string
+	// MCPToolDefaults returns each catalog MCP server's global tool default
+	// (ADR 0067): the names of the tools disabled for every project without
+	// its own setting, by server name. Nil means no tool is disabled by default.
+	MCPToolDefaults func() map[string][]string
 	// SessionHookURL returns where an interactive session's SessionStart hook
 	// reports its conversation id. Nil leaves the hook out.
 	SessionHookURL func(sessionID string) string
@@ -225,12 +229,17 @@ type Service struct {
 	// IndexBuilds says when a repository index build runs on a checkout, so
 	// a session start does not copy an index being written. Nil: never.
 	IndexBuilds ports.RepositoryIndexBuilds
-	// Settings holds the architect and implementation models a new session
+	// Settings holds the mode models (ADR 0084) a new session
 	// starts with when its start names none. Nil: the built-in ones.
 	Settings ports.SettingsReader
 	// Sandbox is the agent sandbox step of a session start (ADR 0017). Nil:
 	// sessions run unconfined.
 	Sandbox *Sandbox
+	// BranchRequests counts a session's pending branch requests, for the
+	// interrupted mark's record of what expired with it. Nil counts none.
+	BranchRequests interface {
+		PendingBranchRequests(ctx context.Context, sessionID string) int
+	}
 
 	// updates feeds the task-update turns to the courier, one at a time;
 	// deliverUpdate replaces the courier in tests.
@@ -391,6 +400,8 @@ func (s *Service) Start(ctx context.Context, req StartRequest) (*domain.Session,
 		return nil, fmt.Errorf("persist session: %w", err)
 	}
 	provisioned = nil
+	// The Branches list takes its starting snapshot before the agent acts.
+	s.announce(domain.SessionWorktreeProvisioned{SessionID: sess.ID()})
 	if s.commitCheckReason(sess.ID()) != "" {
 		s.announceCommitCheck(sess.ID(), false)
 	}
@@ -949,7 +960,13 @@ func (s *Service) sessionConfig(id, dir, model string, allowedTools []string, pe
 	}
 
 	s.applyServicesServer(&cfg, id, ag.agent, subject.project)
-	for _, m := range resolveAttachedMCPServers(ag.agent, subject.project, s.catalog.MCPServers.ListMCPServers()) {
+	var defaults map[string][]string
+	if s.MCPToolDefaults != nil {
+		defaults = s.MCPToolDefaults()
+	}
+	attached := resolveMCP(ag.agent, subject.project, s.catalog.MCPServers.ListMCPServers(), defaults)
+	withDeniedMCPTools(&cfg, attached.Denied)
+	for _, m := range attached.Servers {
 		cfg.MCPServers = append(cfg.MCPServers, llmkit.MCPServerSpec{
 			Name:      domain.Slug(m.Name),
 			Transport: m.Transport,
@@ -1443,12 +1460,27 @@ func (s *Service) publish(sessionID string, ev SessionEvent) {
 type sessionChange struct {
 	metrics *ports.SessionMetrics
 	status  domain.SessionStatus
+	// interrupted sets the interrupted mark; clearInterrupted removes it.
+	interrupted      *time.Time
+	clearInterrupted bool
 }
 
 // record sequences ev, stores it with change in one transaction, then fans
 // it out live. A store failure is logged; the live stream still gets it.
 func (s *Service) record(sessionID string, ev SessionEvent, change sessionChange) {
 	s.mu.Lock()
+	_, known := s.seq[sessionID]
+	s.mu.Unlock()
+	var stored int64
+	if !known {
+		// A session from an earlier run continues its log, so the events a
+		// restart records (interrupted, resumed) come after the ones it holds.
+		stored, _ = s.sessions.LastEventSeq(sessionID)
+	}
+	s.mu.Lock()
+	if _, known := s.seq[sessionID]; !known {
+		s.seq[sessionID] = stored
+	}
 	s.seq[sessionID]++
 	ev.Seq = s.seq[sessionID]
 	moved := ev.Status != "" && s.statuses[sessionID] != ev.Status
@@ -1467,6 +1499,7 @@ func (s *Service) record(sessionID string, ev SessionEvent, change sessionChange
 	payload, _ := json.Marshal(ev)
 	if err := s.sessions.RecordEvent(sessionID, ports.SessionEventRecord{
 		Seq: ev.Seq, Type: ev.Type, Payload: payload, Metrics: change.metrics, Status: change.status,
+		Interrupted: change.interrupted, ClearInterrupted: change.clearInterrupted,
 	}); err != nil {
 		slog.Error("session event not stored", "session", sessionID, "seq", ev.Seq, "type", ev.Type, "err", err)
 	}

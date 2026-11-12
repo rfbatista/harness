@@ -1,5 +1,7 @@
 package domain
 
+import "time"
+
 // Event is a domain event: something that happened in one bounded context that
 // another may have to react to. Events carry ids and values, never entities, so
 // a subscriber reads what it needs through its own ports.
@@ -129,6 +131,11 @@ type ReviewRequestChanged struct {
 	State          ReviewState
 }
 
+// SessionsInterrupted: the boot found these sessions carrying the interrupted
+// mark, marked by this boot or by an earlier one and never resumed. Empty when
+// it found none.
+type SessionsInterrupted struct{ SessionIDs []string }
+
 // SessionStatusChanged: a session's recorded status moved to Status. It is
 // announced on a real transition only, not on every event that restates it.
 type SessionStatusChanged struct {
@@ -144,6 +151,29 @@ type SessionStatusChanged struct {
 type BranchRequestChanged struct {
 	Request   BranchRequest
 	ProjectID string
+}
+
+// SessionWorktreeProvisioned: a session's worktree is on disk, before its
+// agent acts. The Branches list takes the session's starting snapshot then.
+type SessionWorktreeProvisioned struct{ SessionID string }
+
+// BranchFindingFound: the after-turn check found a branch or push no branch
+// request explains (ADR 0070). SessionID is "" when no evidence names one
+// session; Candidates are the sessions whose turns overlapped then.
+type BranchFindingFound struct {
+	ProjectID    string
+	TaskID       string
+	SessionID    string
+	RepositoryID string
+	Branch       string
+	// Kind says what was found; Branch is the branch, or the remote's name for
+	// a remote, and NewName the new name of a rename.
+	Kind    BranchFindingKind
+	NewName string
+	// URL is the remote's URL, redacted, for a remote finding.
+	URL        string
+	Candidates []string
+	FoundAt    time.Time
 }
 
 // TicketResourceAdded: a person added a resource to a task. Edits and
@@ -199,31 +229,34 @@ type ArtifactChanged struct {
 	ProjectID  string
 }
 
-func (ProjectDeleted) EventName() string            { return "project.deleted" }
-func (RepositoryDeleted) EventName() string         { return "repository.deleted" }
-func (RepositorySaved) EventName() string           { return "repository.saved" }
-func (RepositoryPromptsChanged) EventName() string  { return "repository.prompts_changed" }
-func (PromptDeleted) EventName() string             { return "prompt.deleted" }
-func (AgentDeleted) EventName() string              { return "agent.deleted" }
-func (SkillDeleted) EventName() string              { return "skill.deleted" }
-func (MCPServerDeleted) EventName() string          { return "mcp_server.deleted" }
-func (SettingsChanged) EventName() string           { return "settings.changed" }
-func (SessionDeleted) EventName() string            { return "session.deleted" }
-func (SessionStarted) EventName() string            { return "session.started" }
-func (SessionEnded) EventName() string              { return "session.ended" }
-func (InterviewOpened) EventName() string           { return "interview.opened" }
-func (InterviewClosed) EventName() string           { return "interview.closed" }
-func (SessionTurnEnded) EventName() string          { return "session.turn_ended" }
-func (SessionCommitCheckChanged) EventName() string { return "session.commit_check_changed" }
-func (TicketStatusChanged) EventName() string       { return "ticket.status_changed" }
-func (TicketDeleted) EventName() string             { return "ticket.deleted" }
-func (TicketResourceAdded) EventName() string       { return "ticket.resource_added" }
-func (ReviewRequestChanged) EventName() string      { return "review_request.changed" }
-func (SessionStatusChanged) EventName() string      { return "session.status_changed" }
-func (BranchRequestChanged) EventName() string      { return "branch_request.changed" }
-func (TicketCommentAdded) EventName() string        { return "ticket.comment_added" }
-func (DocumentChanged) EventName() string           { return "document.changed" }
-func (ArtifactChanged) EventName() string           { return "artifact.changed" }
+func (ProjectDeleted) EventName() string             { return "project.deleted" }
+func (RepositoryDeleted) EventName() string          { return "repository.deleted" }
+func (RepositorySaved) EventName() string            { return "repository.saved" }
+func (RepositoryPromptsChanged) EventName() string   { return "repository.prompts_changed" }
+func (PromptDeleted) EventName() string              { return "prompt.deleted" }
+func (AgentDeleted) EventName() string               { return "agent.deleted" }
+func (SkillDeleted) EventName() string               { return "skill.deleted" }
+func (MCPServerDeleted) EventName() string           { return "mcp_server.deleted" }
+func (SettingsChanged) EventName() string            { return "settings.changed" }
+func (SessionDeleted) EventName() string             { return "session.deleted" }
+func (SessionStarted) EventName() string             { return "session.started" }
+func (SessionEnded) EventName() string               { return "session.ended" }
+func (InterviewOpened) EventName() string            { return "interview.opened" }
+func (InterviewClosed) EventName() string            { return "interview.closed" }
+func (SessionTurnEnded) EventName() string           { return "session.turn_ended" }
+func (SessionCommitCheckChanged) EventName() string  { return "session.commit_check_changed" }
+func (TicketStatusChanged) EventName() string        { return "ticket.status_changed" }
+func (TicketDeleted) EventName() string              { return "ticket.deleted" }
+func (TicketResourceAdded) EventName() string        { return "ticket.resource_added" }
+func (ReviewRequestChanged) EventName() string       { return "review_request.changed" }
+func (SessionStatusChanged) EventName() string       { return "session.status_changed" }
+func (SessionsInterrupted) EventName() string        { return "sessions.interrupted" }
+func (SessionWorktreeProvisioned) EventName() string { return "session.worktree_provisioned" }
+func (BranchFindingFound) EventName() string         { return "branch.finding_found" }
+func (BranchRequestChanged) EventName() string       { return "branch_request.changed" }
+func (TicketCommentAdded) EventName() string         { return "ticket.comment_added" }
+func (DocumentChanged) EventName() string            { return "document.changed" }
+func (ArtifactChanged) EventName() string            { return "artifact.changed" }
 
 func (TokenSaverActivationChanged) EventName() string { return "token_saver.activation_changed" }
 func (TokenSaverInstallCompleted) EventName() string  { return "token_saver.install_completed" }

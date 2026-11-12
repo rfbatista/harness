@@ -16,9 +16,10 @@ const DEFAULT_LIMIT = 50;
  *   notifications?: import("../domain/notification.js").Notification[],
  *   now?: () => Date,
  *   beforeAnswer?: () => Promise<void>,  awaited after a read is streamed, before it is answered
+ *   resumeSession?: (sessionId: string) => string,  "" resumes the session; a reason fails it
  * }} [world]
  */
-export function memoryNotifications({ notifications = [], now = () => new Date(), beforeAnswer = async () => {} } = {}) {
+export function memoryNotifications({ notifications = [], now = () => new Date(), beforeAnswer = async () => {}, resumeSession = () => "" } = {}) {
   let list = upsert([], notifications);
   const followers = new Set();
   let nextId = 1;
@@ -66,6 +67,26 @@ export function memoryNotifications({ notifications = [], now = () => new Date()
       const change = commit(targets.filter(isUnread).map((n) => markedRead(n, at)));
       await beforeAnswer();
       return change;
+    },
+
+    async resumeInterrupted(id) {
+      const n = list.find((x) => x.id === id);
+      if (!n) throw new StructuredError(Codes.NOTIFICATION_NOT_FOUND, `notification ${id} not found`, 404);
+      if (n.kind !== "sessions_interrupted") throw new StructuredError(Codes.INVALID_INPUT, `notification ${id} is not a sessions_interrupted one`, 400);
+      const results = [];
+      const sessions = n.interruptedSessions.map((s) => {
+        if (s.state === "resumed" || s.state === "gone") {
+          results.push({ sessionId: s.sessionId, outcome: "skipped", reason: "" });
+          return s;
+        }
+        const reason = resumeSession(s.sessionId);
+        results.push({ sessionId: s.sessionId, outcome: reason ? "failed" : "resumed", reason });
+        return Object.freeze({ ...s, state: reason ? "failed" : "resumed", reason });
+      });
+      const settled = sessions.every((s) => s.state === "resumed" || s.state === "gone");
+      const changed = Object.freeze({ ...n, interruptedSessions: sessions, resolvedAt: settled ? now() : n.resolvedAt });
+      commit([changed]);
+      return { notification: changed, results };
     },
 
     fromSeed: toPage,

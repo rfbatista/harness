@@ -49,7 +49,9 @@ func TestTheAgentBoardFollowsTheSessionsInTheWebUI_EndToEnd(t *testing.T) {
 
 	const live = `document.querySelector('[x-data=streamStatus]')?.dataset.state === 'live'`
 	card := func(id string) string { return `document.querySelector('.agent-card[data-task="` + id + `"]')` }
-	dot := func(id string) string { return card(id) + `?.querySelector('.session-line .status .visually-hidden')?.textContent` }
+	dot := func(id string) string {
+		return card(id) + `?.querySelector('.session-line .status .visually-hidden')?.textContent`
+	}
 
 	p := newPerson(t)
 	p.run(t, "the person opens the home page, which is the board",

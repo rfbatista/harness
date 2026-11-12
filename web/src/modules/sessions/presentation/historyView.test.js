@@ -1,5 +1,5 @@
 import { assert, file, test } from "../../../shared/testing/test.js";
-import { chatItems, dayLabel, historyEntry, isWorking, LONG_TEXT, matches } from "./historyView.js";
+import { chatItems, dayLabel, historyEntry, isWorking, LONG_TEXT, matches, restartMarkers, withMarkers } from "./historyView.js";
 
 file("sessions/presentation/historyView");
 
@@ -112,4 +112,29 @@ test("the agent is working while the session runs and its newest entry is not an
   assert.equal(isWorking([entry({ kind: "assistant" })], true), false);
   assert.equal(isWorking([entry({ kind: "user" })], false), false);
   assert.equal(isWorking([], true), false);
+});
+
+test("a restart's two events read as one line each in the history", () => {
+  const at = "2026-11-10T15:00:00Z";
+  const markers = restartMarkers([
+    { seq: 4, type: "interrupted_by_restart", at, payload: { previous_status: "waiting_approval", expired_branch_requests: 1 } },
+    { seq: 5, type: "output", at, payload: {} },
+    { seq: 6, type: "resumed_with_continue_turn", at, payload: { interrupted_at: at } },
+  ]);
+  assert.deepEqual(markers.map((m) => [m.key, m.text]), [["event:4", "Interrupted by a restart while waiting approval"], ["event:6", "Resumed with a continue turn"]]);
+  assert.deepEqual(restartMarkers([{ seq: 1, type: "gossip", at, payload: {} }]), []);
+  assert.deepEqual(restartMarkers([]), []);
+});
+
+test("markers take their place among the entries by time, and a marker older than the loaded page waits for its page", () => {
+  const t = (m) => new Date(2026, 10, 10, 9, m);
+  const entries = [entry({ at: t(1), text: "a" }), entry({ at: t(10), text: "b" })];
+  const marker = (key, m) => ({ key, at: t(m), text: key });
+  const merged = withMarkers(entries, [marker("early", 0), marker("between", 5), marker("late", 20)], { olderPossible: true, atEnd: true });
+  assert.deepEqual(merged.map((e) => e.text), ["a", "between", "b", "late"]);
+  assert.equal(merged[1].kind, "system");
+  assert.deepEqual(withMarkers(entries, [marker("early", 0)], { olderPossible: false, atEnd: true }).map((e) => e.text), ["early", "a", "b"]);
+  assert.deepEqual(withMarkers(entries, [marker("late", 20)], { olderPossible: false, atEnd: false }).map((e) => e.text), ["a", "b"]);
+  assert.equal(withMarkers(entries, [], { olderPossible: false, atEnd: true }), entries);
+  assert.deepEqual(types(chatItems(withMarkers(entries, [marker("between", 5)], { olderPossible: false, atEnd: true }))), ["day", "turn", "system", "turn"]);
 });

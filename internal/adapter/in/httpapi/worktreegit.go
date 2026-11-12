@@ -79,5 +79,59 @@ func (h *Handler) handlePushBranch(c echo.Context) error {
 	if err != nil {
 		return err
 	}
-	return c.JSON(http.StatusOK, map[string]any{"state": st})
+	out := map[string]any{"state": st}
+	// The pushed branch's row, now showing where it went (web contract §2).
+	if h.sessionBranches != nil {
+		name := in.Branch
+		if name == "" {
+			name = st.Branch
+		}
+		// The push is done; a list that cannot be read now only costs the row.
+		if rows, err := h.sessionBranches.SessionBranches(c.Request().Context(), st.SessionID); err == nil {
+			for i := range rows {
+				if rows[i].Name == name {
+					out["branch"] = rows[i]
+					break
+				}
+			}
+		}
+	}
+	return c.JSON(http.StatusOK, out)
+}
+
+func (h *Handler) handleRepositoryRemotes(c echo.Context) error {
+	if err := h.worktreeGitOr503(); err != nil {
+		return err
+	}
+	lists, ok := h.worktreeGit.(ports.RepositoryRemoteLists)
+	if !ok {
+		return &domain.StructuredError{Code: "UNAVAILABLE", Message: "repository remotes are not available"}
+	}
+	got, err := lists.RepositoryRemotes(c.Request().Context(), c.QueryParam("repository_id"))
+	if err != nil {
+		return err
+	}
+	remotes := make([]map[string]string, 0, len(got))
+	for _, r := range got {
+		remotes = append(remotes, map[string]string{"name": r.Name, "url": r.URL})
+	}
+	return c.JSON(http.StatusOK, map[string]any{"remotes": remotes})
+}
+
+func (h *Handler) handlePushPreview(c echo.Context) error {
+	if err := h.worktreeGitOr503(); err != nil {
+		return err
+	}
+	previews, ok := h.worktreeGit.(ports.PushPreviews)
+	if !ok {
+		return &domain.StructuredError{Code: "UNAVAILABLE", Message: "the push preview is not available"}
+	}
+	p, err := previews.PushPreview(c.Request().Context(), ports.PushTarget{
+		WorkspaceID: c.QueryParam("workspace_id"), Branch: c.QueryParam("branch"),
+		Remote: c.QueryParam("remote"), RemoteBranch: c.QueryParam("remote_branch"),
+	})
+	if err != nil {
+		return err
+	}
+	return c.JSON(http.StatusOK, map[string]any{"head": p.Head, "commits": p.Commits, "commits_against": p.CommitsAgainst, "remote_branch": p.RemoteBranch})
 }

@@ -1,7 +1,7 @@
 // NotificationGateway over the harness HTTP API (the Web UI contract's
 // /api/notifications routes) and the global notifications stream.
 
-import { toPage, toReadAnswer, toStreamChange } from "./dto.js";
+import { toPage, toReadAnswer, toResumeAnswer, toStreamChange } from "./dto.js";
 
 /**
  * @param {import("../../../shared/infrastructure/api.js").ApiClient} api
@@ -23,6 +23,10 @@ export function notificationsGateway(api, feed) {
     async markRead(request) {
       const body = "ids" in request ? { ids: request.ids } : request.all === true ? { all: true, project_id: request.projectId || undefined } : {};
       return toReadAnswer(await api.post("/notifications/read", body));
+    },
+
+    async resumeInterrupted(id) {
+      return toResumeAnswer(await api.post(`/notifications/${encodeURIComponent(id)}/resume_interrupted`, {}));
     },
 
     fromSeed: toPage,

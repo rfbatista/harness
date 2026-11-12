@@ -1,0 +1,58 @@
+/*
+ * Branches list — a session's branches inside the git panel (.sync-panel) and
+ * each row of the task page's Git popover, and the "N branches" link on a
+ * session row. One .branches section: a heading and a list of .item, each with
+ * the branch's name, its state as a .badge (session branch, approved, denied,
+ * deleted, unapproved), the commits ahead and behind the branch it started
+ * from, and one .pushed line per push. Exceptions: .item[data-flagged] (an
+ * unapproved branch or a push around the gate: the name reads in the danger
+ * colour), .item[data-state="deleted"] (the name is struck through).
+ * <section class="branches"><h4 class="title">3 branches</h4><ul class="list">
+ *   <li class="item" data-state="approved"><code class="name">feature-x</code><span class="badge">approved</span>
+ *   <span class="counts"><span class="ahead">↑1</span><span class="behind">↓0</span><span class="vs">main</span></span>
+ *   <span class="pushed">pushed to origin/feature-x by you</span></li></ul></section>
+ * <button class="branch-link" data-flagged><span class="label">3 branches</span><span class="flag">⚑ unapproved</span></button>
+ */
+
+@layer blocks {
+  .branches {
+    grid-column: 1 / -1;
+    margin-block-start: var(--space-xs);
+    font-size: var(--text-sm);
+
+    & > .title { font-size: var(--text-xs); font-weight: var(--weight-medium); color: var(--color-ink-muted); margin-block-end: var(--space-2xs); }
+    & > .list { display: grid; gap: var(--space-2xs); list-style: none; margin: 0; padding: 0; }
+
+    & .item {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: baseline;
+      gap: var(--space-2xs) var(--space-xs);
+
+      & > .name { min-inline-size: 0; overflow: hidden; text-overflow: ellipsis; font-family: var(--font-mono); font-size: var(--text-xs); }
+      & > .counts { display: inline-flex; gap: var(--space-2xs); font-size: var(--text-xs); color: var(--color-ink-muted); font-variant-numeric: tabular-nums; }
+      & > .pushed { flex-basis: 100%; font-size: var(--text-xs); color: var(--color-ink-muted); }
+      & > .pushed[data-by="unapproved"] { color: var(--color-danger); }
+      &[data-flagged] > .name { color: var(--color-danger); }
+      &[data-state="deleted"] > .name { text-decoration: line-through; color: var(--color-ink-muted); }
+    }
+  }
+
+  .branch-link {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--space-2xs);
+    padding: 0;
+    border: 0;
+    background: none;
+    font: inherit;
+    font-size: var(--text-xs);
+    color: var(--color-ink-muted);
+    cursor: pointer;
+    text-decoration: underline;
+    text-underline-offset: 0.2em;
+
+    &:hover { color: var(--color-ink); }
+    & > .flag { color: var(--color-danger); font-weight: var(--weight-medium); text-decoration: none; }
+  }
+}

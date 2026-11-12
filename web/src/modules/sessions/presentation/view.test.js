@@ -12,7 +12,7 @@ file("sessions/presentation/view");
 
 test("status words match the shared fixture (parity with the BFF)", () => {
   for (const c of fixture.cases) {
-    const session = makeSession({ status: c.status, pendingApprovals: c.pending_approvals, openInterviewCount: c.open_interview_count ?? 0 });
+    const session = makeSession({ status: c.status, pendingApprovals: c.pending_approvals, openInterviewCount: c.open_interview_count ?? 0, interruptedAt: c.interrupted ? T0 : null });
     const label = `${c.status}+${c.pending_approvals}+${c.open_interview_count ?? 0}`;
     assert.deepEqual(statusView(session), { state: c.state, word: c.word }, label);
     assert.equal(needsYou(session), c.needs_you, `${label} needs_you`);

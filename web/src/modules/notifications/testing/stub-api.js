@@ -39,6 +39,14 @@ export function stubNotificationsApi(world) {
         const change = await gateway.markRead(request);
         return jsonResponse(200, { notifications: change.notifications.map(notificationDTO), unread_count: change.unreadCount });
       }
+      const resume = url.pathname.match(/^\/api\/notifications\/([^/]+)\/resume_interrupted$/);
+      if (method === "POST" && resume) {
+        const answer = await gateway.resumeInterrupted(decodeURIComponent(resume[1]));
+        return jsonResponse(200, {
+          notification: notificationDTO(answer.notification),
+          results: answer.results.map((r) => ({ session_id: r.sessionId, outcome: r.outcome, reason: r.reason || undefined })),
+        });
+      }
       return jsonResponse(404, { error: `no route ${method} ${url.pathname}` });
     } catch (err) {
       return fail(err);

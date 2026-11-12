@@ -41,6 +41,10 @@ var statusViews = map[domain.SessionStatus]StatusView{
 	domain.SessionFailed:          {"failed", "failed"},
 }
 
+// interruptedWord is the chip of a stopped session a restart interrupted. The
+// browser's INTERRUPTED_WORD (view.js) is the same.
+const interruptedWord = "interrupted by restart"
+
 // statusOf reads pending approvals before the status: a running session with
 // a tool call to approve is waiting on the developer. Next come open
 // interviews, whatever the status: approval, then questions, then your turn.
@@ -50,6 +54,10 @@ func statusOf(s *domain.Session) StatusView {
 		return statusViews[domain.SessionWaitingApproval]
 	}
 	if v, ok := statusViews[s.Status]; ok {
+		// A stopped session a restart interrupted says so beside its dot (ADR 0082).
+		if s.Status == domain.SessionStopped && s.InterruptedAt != nil {
+			v.Word = interruptedWord
+		}
 		// Only the word is the interview's: the dot stays the session's own, so a
 		// running agent keeps its running dot beside the chip.
 		if live && s.OpenInterviewCount > 0 {
@@ -179,6 +187,9 @@ type Seed struct {
 	// GitStates are the sessions' worktrees' git state, in the session list's
 	// order, as GET /api/list_worktree_git_states answers them. Never null.
 	GitStates []domain.GitState `json:"git_states"`
+	// SessionBranches are the sessions' Branches lists, as GET
+	// /api/list_session_branches answers them. Never null.
+	SessionBranches []domain.SessionBranches `json:"session_branches"`
 	// Interviews are the sessions' interviews, by session id, each as
 	// GET /api/sessions/{id}/interviews answers them: the seed of the
 	// interview panel. Never null; empty when they were not read.
@@ -208,6 +219,43 @@ type NewSessionForm struct {
 	// A form built with NewSessionFormOf offers every agent of the catalog.
 	ProjectID, ProjectName, AgentsMode string
 	AgentsTotal                        int
+	// ModeModels is each session mode's model (mode value → model), which the
+	// Model select starts on and follows. NewSessionFormOf fills in the
+	// built-in models; WithModeModels reads the stored ones.
+	ModeModels map[string]string
+}
+
+// WithModeModels reads every mode's model through read, which returns a
+// setting's stored value ("" while unset).
+func (f NewSessionForm) WithModeModels(read func(key string) string) NewSessionForm {
+	f.ModeModels = make(map[string]string)
+	for _, m := range domain.ModeModels(read) {
+		f.ModeModels[string(m.Mode)] = m.Current
+	}
+	return f
+}
+
+// ModeModelsSeed is ModeModels as JSON, for the form component (data-mode-models).
+func (f NewSessionForm) ModeModelsSeed() string {
+	raw, err := json.Marshal(f.ModeModels)
+	if err != nil {
+		return "{}"
+	}
+	return string(raw)
+}
+
+// ModelOptions are the models the Model select offers, in the Models page's
+// order and words.
+func (f NewSessionForm) ModelOptions() []Option {
+	out := make([]Option, 0, len(domain.ModelChoices))
+	for _, m := range domain.ModelChoices {
+		name := m
+		if m == domain.ModelDefault {
+			name = "default: the CLI chooses"
+		}
+		out = append(out, Option{ID: m, Name: name})
+	}
+	return out
 }
 
 // AgentsSeed is the enabled agents as the picker component reads them
@@ -269,7 +317,7 @@ func NewSessionFormFor(project *domain.Project, agents []*domain.Agent, repos []
 // NewSessionFormOf offers the agents and the project's repositories, in the
 // order given: the task page's form and the board's brainstorm dialog share it.
 func NewSessionFormOf(agents []*domain.Agent, repos []*domain.Repository) NewSessionForm {
-	form := NewSessionForm{}
+	form := NewSessionForm{}.WithModeModels(func(string) string { return "" })
 	for _, a := range agents {
 		form.Agents = append(form.Agents, Option{ID: a.ID, Name: a.Name, Description: a.Description})
 	}
@@ -555,7 +603,7 @@ func NewPageView(frame shell.Frame, project *domain.Project, task *domain.Ticket
 		Summary:     summary(list),
 		Groups:      views,
 		Seed: Seed{ProjectID: project.ID, Sessions: list, AgentNames: names, RepositoryNames: repoNames,
-			Artifacts: []*domain.Artifact{}, Tasks: []TaskLink{}, GitStates: []domain.GitState{}, Interviews: map[string]*domain.InterviewList{}},
+			Artifacts: []*domain.Artifact{}, Tasks: []TaskLink{}, GitStates: []domain.GitState{}, SessionBranches: []domain.SessionBranches{}, Interviews: map[string]*domain.InterviewList{}},
 		NewSession: form,
 	}
 	if task != nil {
@@ -659,7 +707,7 @@ func joinFacts(facts []string) string {
 	return strings.Join(kept, " · ")
 }
 
-var chipTones = map[string]string{"thinking": "signal", "your turn": "attention", "approval": "attention", "questions": "attention", "failed": "danger"}
+var chipTones = map[string]string{"thinking": "signal", "your turn": "attention", "approval": "attention", "questions": "attention", interruptedWord: "attention", "failed": "danger"}
 
 // chipOf is the row's status chip: nil for running and done.
 func chipOf(st StatusView) *Chip {

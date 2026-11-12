@@ -109,7 +109,13 @@ type Row struct {
 	ID, Href, Title, Body, Project, Task string
 	Level, LevelLabel, State, Age, At    string
 	Unread                               bool
+	// Sessions is a sessions_interrupted item's list; the browser adds its
+	// Resume all interrupted button.
+	Sessions []SessionLine
 }
+
+// SessionLine is one session a sessions_interrupted item lists.
+type SessionLine struct{ Label, Href, State, Reason string }
 
 // ToRow paints n as of now.
 func ToRow(n *domain.Notification, now time.Time) Row {
@@ -124,8 +130,21 @@ func ToRow(n *domain.Notification, now time.Time) Row {
 	if label == "" && n.Level == domain.NotificationAction {
 		label = "Needs you"
 	}
+	var lines []SessionLine
+	for _, s := range n.InterruptedSessions {
+		task := s.TaskTitle
+		if task == "" {
+			task = "No task"
+		}
+		label := task
+		if s.AgentName != "" {
+			label += " · " + s.AgentName
+		}
+		lines = append(lines, SessionLine{Label: label, Href: s.Link, State: string(s.State), Reason: s.Reason})
+	}
 	return Row{
-		ID: n.ID, Href: n.Link, Title: n.Title, Body: n.Body, Project: n.ProjectName, Task: n.TaskTitle,
+		Sessions: lines,
+		ID:       n.ID, Href: n.Link, Title: n.Title, Body: n.Body, Project: n.ProjectName, Task: n.TaskTitle,
 		Level: string(n.Level), LevelLabel: label, State: state, Unread: unread,
 		Age: sessions.RelativeTime(n.CreatedAt, now), At: n.CreatedAt.UTC().Format(time.RFC3339),
 	}
