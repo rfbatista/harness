@@ -127,6 +127,10 @@ type Service struct {
 	// (ADR 0067): the names of the tools disabled for every project without
 	// its own setting, by server name. Nil means no tool is disabled by default.
 	MCPToolDefaults func() map[string][]string
+	// MCPProjectOnly returns the names of the catalog MCP servers marked
+	// Project only: a session gets one only when its project has it Added.
+	// Nil means none is.
+	MCPProjectOnly func() []string
 	// SessionHookURL returns where an interactive session's SessionStart hook
 	// reports its conversation id. Nil leaves the hook out.
 	SessionHookURL func(sessionID string) string
@@ -964,7 +968,11 @@ func (s *Service) sessionConfig(id, dir, model string, allowedTools []string, pe
 	if s.MCPToolDefaults != nil {
 		defaults = s.MCPToolDefaults()
 	}
-	attached := resolveMCP(ag.agent, subject.project, s.catalog.MCPServers.ListMCPServers(), defaults)
+	var projectOnly []string
+	if s.MCPProjectOnly != nil {
+		projectOnly = s.MCPProjectOnly()
+	}
+	attached := resolveMCP(ag.agent, subject.project, s.catalog.MCPServers.ListMCPServers(), defaults, projectOnly)
 	withDeniedMCPTools(&cfg, attached.Denied)
 	for _, m := range attached.Servers {
 		cfg.MCPServers = append(cfg.MCPServers, llmkit.MCPServerSpec{

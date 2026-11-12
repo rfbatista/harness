@@ -13,6 +13,7 @@ const (
 	knownToolsKey   = "known_tools"
 	probedAtKey     = "probed_at"
 	disabledKey     = "disabled_tools"
+	projectOnlyKey  = "project_only"
 )
 
 // toolEntries is the "servers" object of mcp-tools.json in the transaction,
@@ -62,6 +63,17 @@ func (t *txn) setDisabledTools(name string, disabled []string) {
 	t.dropEmptyToolEntry(name)
 }
 
+// setProjectOnly stores Project only; off leaves no key.
+func (t *txn) setProjectOnly(name string, on bool) {
+	e := t.toolEntry(name)
+	if on {
+		e.set(projectOnlyKey, scalarOf(true))
+	} else {
+		e.remove(projectOnlyKey)
+	}
+	t.dropEmptyToolEntry(name)
+}
+
 // setKnownTools stores what a successful probe found.
 func (t *txn) setKnownTools(name string, tools []string, at time.Time) {
 	e := t.toolEntry(name)
@@ -73,6 +85,7 @@ func (t *txn) setKnownTools(name string, tools []string, at time.Time) {
 // from the tool file's entry for it.
 func withToolData(srv *domain.CatalogMCPServer, entry *node) {
 	srv.DisabledTools = nonNil(entry.get(disabledKey).strs())
+	srv.ProjectOnly = entry.get(projectOnlyKey).isTrue()
 	if known := entry.get(knownToolsKey); known != nil && known.kind == 'a' {
 		srv.KnownTools = known.strs()
 		if at := entry.get(probedAtKey).str(); at != "" {
@@ -158,6 +171,23 @@ func (c *Catalog) DisabledMCPTools() map[string][]string {
 	for _, name := range entries.keys() {
 		if disabled := entries.get(name).get(disabledKey).strs(); len(disabled) > 0 {
 			out[name] = disabled
+		}
+	}
+	return out
+}
+
+// ProjectOnlyMCPServers names the catalog servers marked Project only. A
+// catalog that does not read gives none.
+func (c *Catalog) ProjectOnlyMCPServers() []string {
+	l, err := c.load()
+	if err != nil {
+		return nil
+	}
+	var out []string
+	entries := l.tools.get(toolsServersKey)
+	for _, name := range entries.keys() {
+		if entries.get(name).get(projectOnlyKey).isTrue() {
+			out = append(out, name)
 		}
 	}
 	return out

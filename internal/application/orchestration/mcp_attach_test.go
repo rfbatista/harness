@@ -61,14 +61,44 @@ func namesOf(servers []*domain.MCPServer) []string {
 func TestResolveMCP_ABannedServerIsNotAttachedWhateverTheAgentOrProjectListsIt(t *testing.T) {
 	agent := &domain.Agent{MCPServerIDs: []string{"github", "linear"}}
 	project := &domain.Project{MCPServers: []string{"github", "notion"}, MCPBanned: []string{"github", "ghost"}}
-	got := resolveMCP(agent, project, serversNamed("github", "linear", "notion"), nil)
+	got := resolveMCP(agent, project, serversNamed("github", "linear", "notion"), nil, nil)
 	if want := []string{"linear", "notion"}; !reflect.DeepEqual(namesOf(got.Servers), want) {
 		t.Fatalf("servers = %v, want %v", namesOf(got.Servers), want)
 	}
 	// With no agent the ban still holds, and a server in no list stays out.
-	got = resolveMCP(nil, project, serversNamed("github", "linear", "notion"), nil)
+	got = resolveMCP(nil, project, serversNamed("github", "linear", "notion"), nil, nil)
 	if want := []string{"notion"}; !reflect.DeepEqual(namesOf(got.Servers), want) {
 		t.Fatalf("servers = %v, want %v", namesOf(got.Servers), want)
+	}
+}
+
+func TestResolveMCP_AProjectOnlyServerComesOnlyFromAProjectThatAddsIt(t *testing.T) {
+	agent := &domain.Agent{MCPServerIDs: []string{"github", "linear"}}
+	projectOnly := []string{"linear"}
+	cases := []struct {
+		name    string
+		project *domain.Project
+		want    []string
+	}{
+		{"agent's choice", &domain.Project{}, []string{"github"}},
+		{"no project", nil, []string{"github"}},
+		{"banned", &domain.Project{MCPBanned: []string{"linear"}}, []string{"github"}},
+		{"added", &domain.Project{MCPServers: []string{"linear"}}, []string{"github", "linear"}},
+	}
+	for _, c := range cases {
+		got := resolveMCP(agent, c.project, serversNamed("github", "linear"), nil, projectOnly)
+		if !reflect.DeepEqual(namesOf(got.Servers), c.want) {
+			t.Errorf("%s: servers = %v, want %v", c.name, namesOf(got.Servers), c.want)
+		}
+	}
+}
+
+func TestResolveMCP_AProjectOnlyServerTheAgentNamesByIDStaysOut(t *testing.T) {
+	agent := &domain.Agent{MCPServerIDs: []string{"m2"}}
+	all := []*domain.MCPServer{{ID: "m2", Name: "linear"}}
+	got := resolveMCP(agent, &domain.Project{}, all, nil, []string{"linear"})
+	if len(got.Servers) != 0 {
+		t.Fatalf("servers = %v, want none", namesOf(got.Servers))
 	}
 }
 
@@ -88,7 +118,7 @@ func TestResolveMCP_DeniesTheToolsWhoseEffectiveSettingIsDisabled(t *testing.T) 
 	}
 	for _, c := range cases {
 		project := &domain.Project{MCPToolOverrides: c.overrides}
-		got := resolveMCP(agent, project, serversNamed("github", "linear"), defaults)
+		got := resolveMCP(agent, project, serversNamed("github", "linear"), defaults, nil)
 		if !reflect.DeepEqual(append([]string{}, got.Denied...), c.want) {
 			t.Errorf("%s: denied = %v, want %v", c.name, got.Denied, c.want)
 		}
@@ -97,7 +127,7 @@ func TestResolveMCP_DeniesTheToolsWhoseEffectiveSettingIsDisabled(t *testing.T) 
 
 func TestResolveMCP_AServerWithEveryToolDisabledStaysAttached(t *testing.T) {
 	agent := &domain.Agent{MCPServerIDs: []string{"github"}}
-	got := resolveMCP(agent, &domain.Project{}, serversNamed("github"), map[string][]string{"github": {"a", "b"}})
+	got := resolveMCP(agent, &domain.Project{}, serversNamed("github"), map[string][]string{"github": {"a", "b"}}, nil)
 	if !reflect.DeepEqual(namesOf(got.Servers), []string{"github"}) || len(got.Denied) != 2 {
 		t.Fatalf("resolution = %+v", got)
 	}
@@ -108,7 +138,7 @@ func TestResolveMCP_OnlyAttachedServersAreTrimmedAndTheBuiltInOnesAreNeverNamed(
 		MCPBanned:        []string{"task", "browser", "codegraph"},
 		MCPToolOverrides: map[string]map[string]string{"task": {"x": domain.ToolDisabled}, "ghost": {"y": domain.ToolDisabled}, "linear": {"z": domain.ToolDisabled}},
 	}
-	got := resolveMCP(&domain.Agent{MCPServerIDs: []string{"ghost"}}, project, serversNamed("github", "linear"), nil)
+	got := resolveMCP(&domain.Agent{MCPServerIDs: []string{"ghost"}}, project, serversNamed("github", "linear"), nil, nil)
 	if len(got.Servers) != 0 || len(got.Denied) != 0 {
 		t.Fatalf("a server nobody lists, or one the catalog lacks, was trimmed: %+v", got)
 	}
@@ -120,7 +150,7 @@ func TestResolveMCP_TheBuiltInServicesServerIsNeverBannedOrTrimmed(t *testing.T)
 		MCPBanned:        []string{servicesServerName},
 		MCPToolOverrides: map[string]map[string]string{servicesServerName: {"stop_service": domain.ToolDisabled}},
 	}
-	got := resolveMCP(agent, project, nil, map[string][]string{servicesServerName: {"start_service"}})
+	got := resolveMCP(agent, project, nil, map[string][]string{servicesServerName: {"start_service"}}, nil)
 	if len(got.Servers) != 0 || len(got.Denied) != 0 {
 		t.Fatalf("resolution = %+v", got)
 	}

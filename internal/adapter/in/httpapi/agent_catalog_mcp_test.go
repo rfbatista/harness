@@ -278,6 +278,48 @@ func TestCatalogMCPServers_SaveProbesAndKeepsTheKnownToolsApartFromTheServerFile
 	}
 }
 
+func TestCatalogMCPServers_ProjectOnlyIsSavedReadBackAndFollowsRenameAndDelete(t *testing.T) {
+	f := catalogWithSkills(t)
+	p := f.project("Widgets")
+	projectOnly := func(name string) any {
+		return byName(t, f.get("/api/get_agent_catalog", 200)["mcp_servers"], name)["project_only"]
+	}
+	f.post("/api/save_catalog_mcp_server", map[string]any{"server": stdioServer("linear")}, 200)
+	if got := projectOnly("linear"); got != false {
+		t.Fatalf("a new server's project_only = %v, want false", got)
+	}
+
+	f.post("/api/save_catalog_mcp_server", map[string]any{"previous_name": "linear", "server": stdioServer("linear"), "project_only": true}, 200)
+	if got := projectOnly("linear"); got != true {
+		t.Fatalf("project_only = %v, want true", got)
+	}
+	if file := f.read("mcp-servers.json"); strings.Contains(file, "project_only") {
+		t.Fatalf("project_only leaked into mcp-servers.json: %s", file)
+	}
+	settings := f.get("/api/get_project_mcp_servers?project_id="+p, 200)
+	if got := byName(t, settings["servers"], "linear")["project_only"]; got != true {
+		t.Fatalf("project settings project_only = %v, want true", got)
+	}
+
+	// Absent keeps it; a rename keeps it under the new name.
+	f.post("/api/save_catalog_mcp_server", map[string]any{"previous_name": "linear", "server": stdioServer("linear-subq")}, 200)
+	if got := projectOnly("linear-subq"); got != true {
+		t.Fatalf("after a rename without project_only = %v, want true", got)
+	}
+
+	f.post("/api/save_catalog_mcp_server", map[string]any{"previous_name": "linear-subq", "server": stdioServer("linear-subq"), "project_only": false}, 200)
+	if got := projectOnly("linear-subq"); got != false {
+		t.Fatalf("project_only = %v after turning it off", got)
+	}
+
+	f.post("/api/save_catalog_mcp_server", map[string]any{"previous_name": "linear-subq", "server": stdioServer("linear-subq"), "project_only": true}, 200)
+	f.post("/api/delete_catalog_mcp_server", map[string]any{"name": "linear-subq"}, 200)
+	f.post("/api/save_catalog_mcp_server", map[string]any{"server": stdioServer("linear-subq")}, 200)
+	if got := projectOnly("linear-subq"); got != false {
+		t.Fatalf("a deleted server's project_only came back: %v", got)
+	}
+}
+
 func TestCatalogMCPServers_AFailedProbeOnSaveKeepsTheServerAndItsLastKnownTools(t *testing.T) {
 	f := catalogWithSkills(t)
 	f.env["NB_TOKEN"] = "tok-123456-secret"

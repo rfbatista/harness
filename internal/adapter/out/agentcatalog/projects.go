@@ -204,7 +204,7 @@ func (c *Catalog) projectMCPView(p *domain.Project) (*domain.CatalogProjectMCPSe
 		if s.BuiltIn {
 			continue // the harness's own servers are not the project's to ban or trim
 		}
-		srv := domain.CatalogProjectMCPServer{Name: s.Name, State: domain.MCPStateAgent, UsedByAgents: []string{}}
+		srv := domain.CatalogProjectMCPServer{Name: s.Name, State: domain.MCPStateAgent, UsedByAgents: []string{}, ProjectOnly: s.ProjectOnly}
 		switch {
 		case contains(p.MCPBanned, s.Name):
 			srv.State = domain.MCPStateBanned

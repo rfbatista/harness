@@ -28,7 +28,7 @@ type mcpAttachment struct {
 // skipped and logged: a catalog edited since never fails a session. A session
 // with no agent gets its project's only; with neither, none.
 func resolveAttachedMCPServers(agent *domain.Agent, project *domain.Project, all []*domain.MCPServer) []*domain.MCPServer {
-	return resolveMCP(agent, project, all, nil).Servers
+	return resolveMCP(agent, project, all, nil, nil).Servers
 }
 
 // resolveMCP is the one decision at session start over the agent, the project
@@ -36,15 +36,19 @@ func resolveAttachedMCPServers(agent *domain.Agent, project *domain.Project, all
 // is each server's global tool default, by name. A tool left at Default in the
 // project follows it; an override of the project wins. The built-in task,
 // browser and codegraph servers are not catalog servers, and the services server
-// is built in: none of them is ever banned or trimmed.
-func resolveMCP(agent *domain.Agent, project *domain.Project, all []*domain.MCPServer, disabledByDefault map[string][]string) mcpAttachment {
+// is built in: none of them is ever banned or trimmed. projectOnly names the
+// catalog servers that only a project's Added list brings: an agent listing one
+// does not attach it on its own.
+func resolveMCP(agent *domain.Agent, project *domain.Project, all []*domain.MCPServer, disabledByDefault map[string][]string, projectOnly []string) mcpAttachment {
 	var names []string
 	var banned []string
+	var added []string
 	if agent != nil {
 		names = append(names, agent.MCPServerIDs...)
 	}
 	if project != nil {
-		names = append(names, project.MCPServers...)
+		added = project.MCPServers
+		names = append(names, added...)
 		banned = project.MCPBanned
 	}
 	byKey := make(map[string]*domain.MCPServer, 2*len(all))
@@ -68,6 +72,9 @@ func resolveMCP(agent *domain.Agent, project *domain.Project, all []*domain.MCPS
 		}
 		if slices.Contains(banned, m.Name) || seen[m.Name] {
 			continue
+		}
+		if slices.Contains(projectOnly, m.Name) && !slices.Contains(added, n) && !slices.Contains(added, m.Name) {
+			continue // project only: an agent listing it does not bring it
 		}
 		seen[n], seen[m.Name] = true, true
 		out.Servers = append(out.Servers, m)
