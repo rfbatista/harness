@@ -58,6 +58,7 @@ import (
 	"operators-mcp/internal/application/planning"
 	"operators-mcp/internal/application/repoagents"
 	"operators-mcp/internal/application/sandboxsettings"
+	"operators-mcp/internal/application/servicerequests"
 	"operators-mcp/internal/application/services"
 	"operators-mcp/internal/application/taskchannel"
 	"operators-mcp/internal/application/tooling"
@@ -470,6 +471,7 @@ var AgentRuntimeModule = fx.Module("agentruntime",
 		newAgentReadiness,
 		newAppsService,
 		newServicesModule,
+		newServiceRequests,
 		asPort(sqlite.NewArtifactRepository, new(ports.ArtifactRepository)),
 		newArtifactsService,
 		vfs.NewRootEvents,
@@ -478,7 +480,7 @@ var AgentRuntimeModule = fx.Module("agentruntime",
 		newPersonTerminals,
 	),
 	fx.Invoke(registerRuntimeShutdown, registerServerSessions, bindVirtualShells, bindWorkspaceRemovals, bindFilesRootFeed, bindSandboxSettings,
-		bindAgentReadiness, func(*archrules.Service) {}, restoreBranchGate, func(*branchwatch.Service) {}),
+		bindAgentReadiness, func(*archrules.Service) {}, restoreBranchGate, restoreServiceRequests, func(*branchwatch.Service) {}),
 )
 
 // TaskChannelModule wires the architect channel: its tables, the service,
@@ -695,7 +697,7 @@ func newServicesModule(lc fx.Lifecycle, cfg Config, db *gorm.DB, cat catalog.Cat
 		Runtime:  services.RuntimeSetting{Settings: cat.Settings},
 		Sweeper:  containerrunner.Runner{},
 		EnvFiles: cat.Projects, Branches: git, RunWorktrees: worktrees,
-		BranchGit: gitcli.NewServiceBranches(cfg.gitOptions()...), WorktreeRoot: worktreeDir, EnvWriter: envIO, Fetcher: branchFetch,
+		Requests: sqlite.NewServiceRequestRepository(db), BranchGit: gitcli.NewServiceBranches(cfg.gitOptions()...), WorktreeRoot: worktreeDir, EnvWriter: envIO, Fetcher: branchFetch,
 	})
 	svc.Subscribe(cat.Bus)
 	// Services never outlive the server or start by themselves: boot settles
@@ -711,6 +713,18 @@ func newServicesModule(lc fx.Lifecycle, cfg Config, db *gorm.DB, cat catalog.Cat
 		},
 	})
 	return svc, nil
+}
+
+// newServiceRequests holds what agents ask of services until the person
+// answers (ADR 0083): requests are stored, the asking session shows as waiting
+// for approval, and a request expires with its session.
+func newServiceRequests(db *gorm.DB, cat catalog.Catalog, sessions ports.SessionRepository, orch *orchestration.Service, svcs *services.Service) *servicerequests.Service {
+	svc := servicerequests.NewService(servicerequests.Deps{
+		Services: svcs, Store: sqlite.NewServiceRequestRepository(db), Sessions: sessions, Agents: cat.Agents,
+		Waiter: orch, Turns: orch, Events: cat.Bus,
+	})
+	svc.Subscribe(cat.Bus)
+	return svc
 }
 
 // serviceInstance is the id of this harness's data directory, made once and
@@ -958,6 +972,13 @@ func newBranchWatch(cat catalog.Catalog, sessions ports.SessionRepository, ws po
 // restoreBranchGate rebuilds, at start, what a restart leaves of the branch
 // requests that wait on the person.
 func restoreBranchGate(lc fx.Lifecycle, svc *branchgate.Service) {
+	lc.Append(fx.Hook{OnStart: svc.Restore})
+}
+
+// restoreServiceRequests rebuilds, at start and after the branch gate's own
+// recount, what a restart leaves of the service requests that wait on the
+// person.
+func restoreServiceRequests(lc fx.Lifecycle, svc *servicerequests.Service) {
 	lc.Append(fx.Hook{OnStart: svc.Restore})
 }
 

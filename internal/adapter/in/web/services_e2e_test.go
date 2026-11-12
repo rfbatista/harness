@@ -20,6 +20,7 @@ import (
 	"operators-mcp/internal/app/catalog"
 	"operators-mcp/internal/application/orchestration"
 	"operators-mcp/internal/application/planning"
+	"operators-mcp/internal/application/servicerequests"
 	"operators-mcp/internal/application/services"
 	"operators-mcp/internal/domain"
 	"operators-mcp/internal/ports"
@@ -33,6 +34,30 @@ type servicesWorld struct {
 	project *domain.Project
 	repo    *domain.Repository
 	svc     *services.Service
+	// requests is the services' request module (ADR 0083): an agent's call is made with
+	// requests.Submit for the session "s-agent" (a go-developer's), and blocks until the page answers.
+	requests *servicerequests.Service
+}
+
+// stubAgents names the one agent the stub session runs as.
+type stubAgents struct{}
+
+func (stubAgents) ListAgents(context.Context) ([]*domain.Agent, error) {
+	return []*domain.Agent{{ID: "a-dev", Name: "go-developer"}}, nil
+}
+
+func (stubAgents) GetAgent(context.Context, string) (*domain.Agent, error) {
+	return &domain.Agent{ID: "a-dev", Name: "go-developer"}, nil
+}
+
+// stubSessions is the one session an agent's request is filed for.
+type stubSessions struct{ session *domain.Session }
+
+func (s stubSessions) Get(id string) *domain.Session {
+	if id == s.session.ID {
+		return s.session
+	}
+	return nil
 }
 
 func newServicesWorld(t *testing.T) *servicesWorld {
@@ -76,7 +101,9 @@ func newServicesWorldWith(t *testing.T, tune func(*services.Options)) *servicesW
 		t.Fatal(err)
 	}
 	t.Cleanup(func() { _ = sqlite.Close(db) })
+	requestStore := sqlite.NewServiceRequestRepository(db)
 	opts := services.Options{
+		Requests:  requestStore,
 		LogDir:    t.TempDir(),
 		FolderDir: t.TempDir(),
 		Runners:   map[domain.ServiceKind]ports.ServiceProcessRunner{domain.ServiceKindCommand: commandrunner.Runner{}},
@@ -85,6 +112,7 @@ func newServicesWorldWith(t *testing.T, tune func(*services.Options)) *servicesW
 		tune(&opts)
 	}
 	svc := services.New(sqlite.NewServiceRepository(db), cat.Projects, cat.Projects, opts)
+	svc.Subscribe(cat.Bus)
 
 	w := &servicesWorld{svc: svc}
 	if w.project, err = cat.Projects.CreateProject(ctx, "harness", root); err != nil {
@@ -93,9 +121,14 @@ func newServicesWorldWith(t *testing.T, tune func(*services.Options)) *servicesW
 	if w.repo, err = cat.Projects.CreateRepository(ctx, w.project.ID, "api", "", "file://"+root, root); err != nil {
 		t.Fatal(err)
 	}
+	w.requests = servicerequests.NewService(servicerequests.Deps{
+		Services: svc, Store: requestStore, Events: cat.Bus,
+		Agents:   stubAgents{},
+		Sessions: stubSessions{session: &domain.Session{ID: "abcdef12-agent-session", ProjectID: w.project.ID, TicketID: "t1", AgentID: "a-dev"}},
+	})
 	mux := http.NewServeMux()
 	mux.Handle("/api/", httpapi.NewRouter(httpapi.NewHandler(httpapi.Services{
-		Projects: cat.Projects, ProjectFeed: cat.Projects, Agents: cat.Agents, Sessions: orch, Planning: plan, Services: svc,
+		Projects: cat.Projects, ProjectFeed: cat.Projects, Agents: cat.Agents, Sessions: orch, Planning: plan, Services: svc, ServiceRequests: w.requests,
 	})))
 	mux.Handle("/", web.NewHandler(web.Deps{
 		Projects: cat.Projects, Tasks: plan, Sessions: orch, Agents: cat.Agents, Repositories: cat.Projects,

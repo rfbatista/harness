@@ -361,3 +361,52 @@ func TestBranchRequestsRestored_ClearsAStaleWait(t *testing.T) {
 		t.Errorf("%d pending, %s; want 0, running", got.PendingApprovals, got.Status)
 	}
 }
+
+// A pending service request shows its session as waiting for approval and
+// counts in its pending approvals, as a pending branch request does; the last
+// answer puts the session back (ADR 0083).
+func TestServiceRequests_ShowTheSessionAsWaitingAndCountThem(t *testing.T) {
+	svc := newHostedService(t, scriptAgent{script: `cat`})
+	sess := startOnServer(t, svc)
+	before := sessionOf(svc, sess.ID).Status
+
+	svc.ServiceRequestFiled(sess.ID)
+	svc.BranchRequestFiled(sess.ID)
+	got := sessionOf(svc, sess.ID)
+	if got.Status != domain.SessionWaitingApproval || got.PendingApprovals != 2 {
+		t.Fatalf("with a service and a branch request: %s, %d pending", got.Status, got.PendingApprovals)
+	}
+	svc.ServiceRequestSettled(sess.ID)
+	if got := sessionOf(svc, sess.ID); got.Status != domain.SessionWaitingApproval || got.PendingApprovals != 1 {
+		t.Fatalf("one left: %s, %d pending", got.Status, got.PendingApprovals)
+	}
+	svc.BranchRequestSettled(sess.ID)
+	if got := sessionOf(svc, sess.ID); got.Status != before || got.PendingApprovals != 0 {
+		t.Fatalf("none left: %s, %d pending, want %s, 0", got.Status, got.PendingApprovals, before)
+	}
+}
+
+// The boot's recount: the branch gate sets the count to its pending requests,
+// then the service requests add theirs, so a session with one of each counts 2
+// and settling both puts it back (ADR 0078, ADR 0083).
+func TestServiceRequestsRestored_AddToTheBranchRecount(t *testing.T) {
+	svc, _ := newInteractiveService(t)
+	tui, _ := startInteractive(t, svc, InteractiveRequest{})
+	if err := svc.sessions.UpdateStatus(tui.ID, domain.SessionWaitingApproval); err != nil {
+		t.Fatal(err)
+	}
+	svc.record(tui.ID, SessionEvent{Type: "x"}, sessionChange{metrics: &ports.SessionMetrics{PendingApprovals: 5}})
+
+	svc.BranchRequestsRestored(tui.ID, 1)
+	svc.ServiceRequestsRestored(tui.ID, 1)
+	got := sessionOf(svc, tui.ID)
+	if got.PendingApprovals != 2 || got.Status != domain.SessionWaitingApproval {
+		t.Fatalf("one branch and one service request: %d pending, %s; want 2, waiting_approval", got.PendingApprovals, got.Status)
+	}
+	svc.ServiceRequestSettled(tui.ID)
+	svc.BranchRequestSettled(tui.ID)
+	got = sessionOf(svc, tui.ID)
+	if got.PendingApprovals != 0 || got.Status != domain.SessionRunning {
+		t.Fatalf("after both answers: %d pending, %s; want 0, running", got.PendingApprovals, got.Status)
+	}
+}

@@ -148,6 +148,9 @@ type Services struct {
 	RepositoryAgents ports.RepositoryAgents
 	// Services keeps projects' services; nil answers 503.
 	Services ports.ServiceManager
+	// ServiceRequests are the changes agents ask of services, which the person
+	// answers; nil answers 503.
+	ServiceRequests ports.ServiceRequests
 }
 
 // Handler serves the application's driving ports as HTTP endpoints (the same
@@ -213,6 +216,7 @@ type Handler struct {
 	repoAgents            ports.RepositoryAgents
 
 	services ports.ServiceManager
+	serviceRequests ports.ServiceRequests
 
 	repoArch ports.RepositoryArchitectures
 	designs  ports.DesignSystems
@@ -292,6 +296,7 @@ func NewHandler(s Services) *Handler {
 		catalog:               s.Catalog,
 		repoAgents:            s.RepositoryAgents,
 		services:              s.Services,
+		serviceRequests:       s.ServiceRequests,
 	}
 }
 

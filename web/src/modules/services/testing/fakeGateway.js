@@ -2,13 +2,13 @@
 // list the test sets, the feed it drives with `emit` and `status`, and a
 // record of what was read.
 
-import { toBranchList, toEvent, toLogEvent, toRunVariables, toRunWorktrees, toService, toServiceList } from "../infrastructure/dto.js";
+import { toBranchList, toEvent, toLogEvent, toRunVariables, toRunWorktrees, toService, toServiceList, toServiceRequest, toServiceRequests } from "../infrastructure/dto.js";
 
 /** The API's JSON for a service; override fields with `o`. */
 export function serviceDTO(o = {}) {
   return {
     id: "s1", project_id: "p1", name: "api", kind: "command", repository_id: "", export_repository_env: false, env: "",
-    command: { line: "make air", subdir: "", ports: [] }, image: null, status: "stopped", run: null,
+    command: { line: "make air", subdir: "", ports: [] }, image: null, status: "stopped", run: null, created_by: { kind: "person" }, pending_requests: 0,
     created_at: "2026-11-07T10:00:00Z", updated_at: "2026-11-07T10:00:00Z", ...o,
   };
 }
@@ -30,6 +30,15 @@ export function worktreeDTO(o = {}) {
 /** The API's JSON for a branch; override fields with `o`. */
 export function branchDTO(o = {}) {
   return { name: "feature/x", remote: false, sha: "abc1234", subject: "Add the thing", committed_at: "2026-11-07T12:00:00Z", ...o };
+}
+
+/** The API's JSON for a service request; override fields with `o`. */
+export function requestDTO(o = {}) {
+  return {
+    id: "q1", project_id: "p1", service_id: "s1", service_name: "api", action: "update", session_id: "abcdef12-x", task_id: "t1", agent: "go-developer",
+    reason: "", summary: "update command service api", proposed: null, changes: [], env: [], worktree: "", state: "pending", note: "", result_error: "",
+    requested_at: "2026-11-07T15:00:00Z", answered_at: "", ...o,
+  };
 }
 
 /** A list_services answer. */
@@ -116,6 +125,28 @@ export function fakeServices({ list = listDTO() } = {}) {
       if (fake.branchesError) throw fake.branchesError;
       const q = query.toLowerCase();
       return toBranchList({ branches: fake.branches.filter((b) => b.name.toLowerCase().includes(q)), truncated: fake.branchesTruncated });
+    },
+    /** The service requests on offer (the API's JSON, newest first); the fake filters by the state and service as the server does. */
+    requests: [],
+    requestsError: null,
+    /** What each requests read was asked: [project id, filter]. */
+    requestReads: [],
+    async listRequests(projectId, filter = {}) {
+      fake.requestReads.push([projectId, filter]);
+      if (fake.requestsError) throw fake.requestsError;
+      const wanted = fake.requests.filter((r) => (!filter.state || r.state === filter.state) && (!filter.serviceId || r.service_id === filter.serviceId));
+      return toServiceRequests({ requests: wanted });
+    },
+    /** What each answer was sent: [request id, decision, note]. */
+    answered: [],
+    /** What an answer returns (the API's JSON); a test sets its own. By default the request becomes done, or denied. */
+    requestAnswer: async (id, decision, note) => {
+      const found = fake.requests.find((r) => r.id === id);
+      return { ...found, state: decision === "approve" ? "done" : "denied", note: note ?? "", answered_at: "2026-11-07T15:05:00Z" };
+    },
+    async answerRequest(id, decision, note = "") {
+      fake.answered.push([id, decision, note]);
+      return toServiceRequest(await fake.requestAnswer(id, decision, note));
     },
     /** The variables read answers (the API's JSON); a test sets its own. */
     variables: { run_id: "", variables: [] },

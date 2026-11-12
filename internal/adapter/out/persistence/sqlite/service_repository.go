@@ -29,6 +29,7 @@ type ServiceModel struct {
 	ImageJSON           string `gorm:"column:image_json"`
 	Status              string `gorm:"index:idx_services_project_status,priority:2"`
 	RunJSON             string `gorm:"column:run_json"`
+	CreatedByJSON       string `gorm:"column:created_by_json"`
 	CreatedAt           time.Time
 	UpdatedAt           time.Time
 }
@@ -78,6 +79,7 @@ func serviceToModel(s *domain.Service) ServiceModel {
 	if s.Run != nil {
 		m.RunJSON = marshalOrEmpty(s.Run)
 	}
+	m.CreatedByJSON = marshalOrEmpty(s.CreatedBy)
 	return m
 }
 
@@ -98,6 +100,12 @@ func (m *ServiceModel) toDomain() *domain.Service {
 	if m.RunJSON != "" {
 		s.Run = &domain.ServiceRun{}
 		_ = json.Unmarshal([]byte(m.RunJSON), s.Run)
+	}
+	if m.CreatedByJSON != "" {
+		_ = json.Unmarshal([]byte(m.CreatedByJSON), &s.CreatedBy)
+	}
+	if s.CreatedBy.Kind == "" {
+		s.CreatedBy.Kind = "person" // a service made before agents could create them
 	}
 	return s
 }

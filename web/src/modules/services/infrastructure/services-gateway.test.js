@@ -24,7 +24,7 @@ test("an answer without a runtime is a bad response", async () => {
   assert.equal(err.code, "BAD_RESPONSE");
 });
 
-const { serviceDTO, runDTO, listDTO } = await import("../testing/fakeGateway.js");
+const { serviceDTO, runDTO, listDTO, requestDTO } = await import("../testing/fakeGateway.js");
 
 test("the list is read from list_services with the project and mapped", async () => {
   const calls = [];
@@ -207,4 +207,53 @@ test("a branch list that is not a list, or a branch without a name, is a bad res
   assert.equal(await bad({}), "BAD_RESPONSE");
   assert.equal(await bad({ branches: [{ remote: false }] }), "BAD_RESPONSE");
   assert.deepEqual((await servicesGateway({ get: async () => ({ branches: [], truncated: false }) }, {}).listBranches("s1")).branches, []);
+});
+
+test("a service carries who created it and how many requests wait on it; without them it is the person's, with none", () => {
+  const made = toService({ ...serviceDTO(), created_by: { kind: "session", session_id: "abcdef12-x", task_id: "t1", agent: "go-developer" }, pending_requests: 2 });
+  assert.deepEqual([made.createdBy.kind, made.createdBy.agent, made.createdBy.sessionId, made.createdBy.taskId, made.pendingRequests], ["session", "go-developer", "abcdef12-x", "t1", 2]);
+  const plain = toService(serviceDTO());
+  assert.deepEqual([plain.createdBy.kind, plain.createdBy.agent, plain.pendingRequests], ["person", "", 0]);
+});
+
+test("service requests are read from service_requests, the filters only when given, and mapped", async () => {
+  const calls = [];
+  const api = { get: async (path, q) => (calls.push([path, q]), { requests: [requestDTO({ reason: "the port clashes", changes: [{ field: "command.line", before: "make dev", after: "npm run dev" }], env: [{ name: "PORT", value: "8080", change: "set", previous_set: true }] })] }) };
+  const gw = servicesGateway(api, {});
+  const list = await gw.listRequests("p1");
+  await gw.listRequests("p1", { state: "pending", serviceId: "s1" });
+  assert.deepEqual(calls, [["/service_requests", { project_id: "p1" }], ["/service_requests", { project_id: "p1", state: "pending", service_id: "s1" }]]);
+  const r = list[0];
+  assert.deepEqual([r.id, r.serviceId, r.serviceName, r.action, r.agent, r.sessionId, r.taskId, r.state, r.reason, r.summary], ["q1", "s1", "api", "update", "go-developer", "abcdef12-x", "t1", "pending", "the port clashes", "update command service api"]);
+  assert.deepEqual(r.changes, [{ field: "command.line", before: "make dev", after: "npm run dev" }]);
+  assert.deepEqual(r.env, [{ name: "PORT", value: "8080", change: "set", previousSet: true }]);
+});
+
+test("a request without an id or with an unknown action or state is a bad response", async () => {
+  const bad = (r) => servicesGateway({ get: async () => ({ requests: [r] }) }, {}).listRequests("p1").catch((e) => e.code);
+  assert.equal(await bad({ ...requestDTO(), id: "" }), "BAD_RESPONSE");
+  assert.equal(await bad(requestDTO({ action: "delete" })), "BAD_RESPONSE");
+  assert.equal(await bad(requestDTO({ state: "mystery" })), "BAD_RESPONSE");
+  assert.equal(await servicesGateway({ get: async () => ({}) }, {}).listRequests("p1").catch((e) => e.code), "BAD_RESPONSE");
+});
+
+test("an answer posts the decision, and the note only when there is one", async () => {
+  const calls = [];
+  const api = { post: async (path, body) => (calls.push([path, body]), { request: requestDTO({ state: "done" }) }) };
+  const gw = servicesGateway(api, {});
+  const done = await gw.answerRequest("q 1", "approve");
+  await gw.answerRequest("q1", "deny", "not now");
+  assert.deepEqual(calls, [["/service_requests/q%201/answer", { decision: "approve" }], ["/service_requests/q1/answer", { decision: "deny", note: "not now" }]]);
+  assert.equal(done.state, "done");
+});
+
+test("a service_request feed event carries the request without values and no running count", () => {
+  let handlers = null;
+  const feed = { follow: (path, h) => ((handlers = h), () => {}) };
+  const events = [];
+  servicesGateway({}, feed).follow("p1", (e) => events.push(e));
+  handlers.onMessage({ seq: 5, kind: "service_request", request: requestDTO({ env: [{ name: "PORT", change: "set", previous_set: false }] }) });
+  handlers.onMessage({ seq: 6, kind: "service_changed", service: serviceDTO(), running_count: 1 });
+  assert.deepEqual([events[0].kind, events[0].request.id, events[0].request.env[0].value, events[0].runningCount], ["service_request", "q1", "", null]);
+  assert.equal(events[1].runningCount, 1);
 });

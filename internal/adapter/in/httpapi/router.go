@@ -66,6 +66,8 @@ func NewRouter(h *Handler, opts ...Option) *echo.Echo {
 	g.GET("/list_service_run_worktrees", h.handleListServiceRunWorktrees)
 	g.GET("/get_run_variables", h.handleGetRunVariables)
 	g.GET("/list_service_branches", h.handleListServiceBranches)
+	g.GET("/service_requests", h.handleListServiceRequests)
+	g.POST("/service_requests/:id/answer", h.handleAnswerServiceRequest)
 	g.GET("/services/events", h.handleServiceEvents) // a project's services as they change (SSE)
 	g.GET("/services/log", h.handleServiceLogEvents) // a service's log as it grows (SSE)
 	g.POST("/start_service", h.handleStartService)

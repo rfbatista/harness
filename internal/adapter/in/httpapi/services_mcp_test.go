@@ -7,6 +7,7 @@ import (
 	"os"
 	"slices"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -18,6 +19,7 @@ import (
 	"operators-mcp/internal/adapter/out/commandrunner"
 	"operators-mcp/internal/adapter/out/containerrunner/containerrunnertest"
 	"operators-mcp/internal/adapter/out/persistence/sqlite"
+	"operators-mcp/internal/application/servicerequests"
 	"operators-mcp/internal/application/services"
 	"operators-mcp/internal/application/tooling"
 	"operators-mcp/internal/domain"
@@ -45,14 +47,29 @@ type mcpFixture struct {
 	lookup   *fakeRunWorktrees
 	mcpURL   string
 	// answers collects every text an MCP tool returned, for the secret check.
-	answers []string
+	answers   []string
+	answersMu sync.Mutex
 	// ticketID is the task the sessions made next work on.
 	ticketID string
+	// requests are the service requests agents file; waiter counts the
+	// sessions' pending ones.
+	requests *servicerequests.Service
+	waiter   *fakeRequestWaiter
 }
 
 const mcpSecret = "hunter2-secret-value"
 
+// newMCPFixture is the services MCP server with every service request
+// approved at once, as the tests of the tools themselves want. The tests of the
+// requests use newRequestsFixture.
 func newMCPFixture(t *testing.T, settle time.Duration) *mcpFixture {
+	t.Helper()
+	f := newRequestsFixture(t, settle)
+	f.autoApprove()
+	return f
+}
+
+func newMCPFixtureBase(t *testing.T, settle time.Duration, withRequests bool) *mcpFixture {
 	t.Helper()
 	fake := &containerrunnertest.Fake{}
 	lookup := &fakeRunWorktrees{}
@@ -76,9 +93,27 @@ func newMCPFixture(t *testing.T, settle time.Duration) *mcpFixture {
 	}
 	sessions := sqlite.NewSessionRepository(db)
 	agents := fakeAgents{byID: map[string]*domain.Agent{"agent-dev": {ID: "agent-dev", Name: "dev"}}}
-	srv := httptest.NewServer(mcpsession.ServicesHandler(tooling.SessionServicesTools(sessions, agents, f.svc, f.cat.Projects, tooling.WithServicesSettleTimeout(settle))))
+	toolOpts := []tooling.ServicesOption{tooling.WithServicesSettleTimeout(settle)}
+	var requests *servicerequests.Service
+	var waiter *fakeRequestWaiter
+	if withRequests {
+		waiter = &fakeRequestWaiter{}
+		requests = servicerequests.NewService(servicerequests.Deps{
+			Services: f.svc, Store: f.requestStore, Sessions: sessions, Agents: agents, Waiter: waiter, Events: f.cat.Bus,
+		})
+		requests.Subscribe(f.cat.Bus)
+		f.svc.Subscribe(f.cat.Bus)
+		toolOpts = append(toolOpts, tooling.WithServiceRequests(requests))
+		// The person's HTTP API, with the requests it answers.
+		s := servicesOf(f.cat)
+		s.Services, s.ServiceRequests = f.svc, requests
+		api := httptest.NewServer(NewRouter(NewHandler(s)))
+		t.Cleanup(api.Close)
+		f.srv = api
+	}
+	srv := httptest.NewServer(mcpsession.ServicesHandler(tooling.SessionServicesTools(sessions, agents, f.svc, f.cat.Projects, toolOpts...)))
 	t.Cleanup(srv.Close)
-	return &mcpFixture{servicesFixture: f, fake: fake, sessions: sessions, lookup: lookup, mcpURL: srv.URL + mcpsession.ServicesPathPrefix}
+	return &mcpFixture{servicesFixture: f, fake: fake, sessions: sessions, lookup: lookup, mcpURL: srv.URL + mcpsession.ServicesPathPrefix, requests: requests, waiter: waiter}
 }
 
 // session saves a session of the project and repository with worktree set
@@ -135,7 +170,9 @@ func (a mcpAgent) call(tool string, args map[string]any) (map[string]any, string
 			text = tc.Text
 		}
 	}
+	a.f.answersMu.Lock()
 	a.f.answers = append(a.f.answers, text)
+	a.f.answersMu.Unlock()
 	if res.IsError {
 		return nil, text
 	}
@@ -240,8 +277,15 @@ func TestServicesMCP_StartIsRecordedForTheSessionAndAnAlreadyRunningOneIsLeftAlo
 	if by := f.service(id)["run"].(map[string]any)["started_by"].(map[string]any); by["kind"] != "session" || by["session_id"] != "sess-12345678abc" || by["agent"] != "dev" || by["task_id"] != "task-77" {
 		t.Fatalf("the run is stored as started by the session, with its task: %v", by)
 	}
-	for _, e := range serviceChanges(t, events, id, 2) {
-		if by := e["service"].(map[string]any)["run"].(map[string]any)["started_by"].(map[string]any); by["task_id"] != "task-77" {
+	// The request's own announcements (the pending count) have no run yet.
+	for seen := 0; seen < 2; {
+		e := serviceChanges(t, events, id, 1)[0]
+		run, ok := e["service"].(map[string]any)["run"].(map[string]any)
+		if !ok {
+			continue
+		}
+		seen++
+		if by := run["started_by"].(map[string]any); by["task_id"] != "task-77" {
 			t.Fatalf("the feed carries the task: %v", by)
 		}
 	}
@@ -508,7 +552,7 @@ func TestServicesMCP_RefusalsCarryTheContractsMessages(t *testing.T) {
 	f.createID(imageInput("db"))
 	agent := f.as("sess-1")
 
-	for _, tool := range tooling.SessionServicesToolNames[1:] {
+	for _, tool := range serviceTakingTools() {
 		agent.refused(tool, named("ghost"), `no service named "ghost" in this project; call list_services`)
 	}
 	f.as("sess-orphan").refused("list_services", nil, "this session has no project")
@@ -536,7 +580,7 @@ func TestServicesMCP_ASessionSeesOnlyItsProjectsServices(t *testing.T) {
 	if got["count"] != float64(1) || got["services"].([]any)[0].(map[string]any)["name"] != "web" {
 		t.Fatalf("project 1 lists %v", got)
 	}
-	for _, tool := range tooling.SessionServicesToolNames[1:] {
+	for _, tool := range serviceTakingTools() {
 		mine.refused(tool, named("secret-job"), `no service named "secret-job" in this project; call list_services`)
 		theirs.refused(tool, named("web"), `no service named "web" in this project; call list_services`)
 	}
@@ -574,4 +618,16 @@ func TestServicesMCP_TheContainerRuntimeAndSandboxRefusalsUseTheContractsMessage
 	// The sandbox is on and this platform's driver is absent (the fixture has none).
 	agent.refused("start_service", named("web"), "the sandbox is on but this platform has no sandbox driver; command services cannot start")
 	agent.refused("restart_service", named("web"), "the sandbox is on but this platform has no sandbox driver; command services cannot start")
+}
+
+// serviceTakingTools are the tools that name an existing service: every tool
+// but the list and create_service.
+func serviceTakingTools() []string {
+	var out []string
+	for _, name := range tooling.SessionServicesToolNames[1:] {
+		if name != "create_service" {
+			out = append(out, name)
+		}
+	}
+	return out
 }

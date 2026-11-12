@@ -26,16 +26,18 @@ type fakeSandboxSwitch bool
 func (f fakeSandboxSwitch) Enabled() bool { return bool(f) }
 
 type servicesFixture struct {
-	t         *testing.T
-	srv       *httptest.Server
-	cat       catalog.Catalog
-	svc       *services.Service
-	store     ports.ServiceStore
-	logDir    string
+	t      *testing.T
+	srv    *httptest.Server
+	cat    catalog.Catalog
+	svc    *services.Service
+	store  ports.ServiceStore
+	logDir string
 	// worktreeRoot is where service worktrees are made, when the test set one.
 	worktreeRoot string
-	projectID string
-	repoID    string
+	// requestStore holds the service requests agents file.
+	requestStore ports.ServiceRequestStore
+	projectID    string
+	repoID       string
 }
 
 // newServicesFixture serves the services module over a real in-memory store,
@@ -62,6 +64,10 @@ func newServicesFixture(t *testing.T, opts services.Options) *servicesFixture {
 		opts.FolderDir = t.TempDir()
 	}
 	store := sqlite.NewServiceRepository(db)
+	requestStore := sqlite.NewServiceRequestRepository(db)
+	if opts.Requests == nil {
+		opts.Requests = requestStore
+	}
 	svc := services.New(store, cat.Projects, cat.Projects, opts)
 	s := servicesOf(cat)
 	s.Services = svc
@@ -77,7 +83,7 @@ func newServicesFixture(t *testing.T, opts services.Options) *servicesFixture {
 	if err != nil {
 		t.Fatal(err)
 	}
-	return &servicesFixture{t: t, srv: srv, cat: cat, svc: svc, store: store, logDir: opts.LogDir, worktreeRoot: opts.WorktreeRoot, projectID: p.ID, repoID: r.ID}
+	return &servicesFixture{t: t, srv: srv, cat: cat, svc: svc, store: store, logDir: opts.LogDir, worktreeRoot: opts.WorktreeRoot, requestStore: requestStore, projectID: p.ID, repoID: r.ID}
 }
 
 func (f *servicesFixture) call(method, path string, body any) (int, map[string]any) {
