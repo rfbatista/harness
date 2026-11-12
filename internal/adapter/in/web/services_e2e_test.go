@@ -20,6 +20,7 @@ import (
 	"operators-mcp/internal/app/catalog"
 	"operators-mcp/internal/application/orchestration"
 	"operators-mcp/internal/application/planning"
+	"operators-mcp/internal/application/servicerequests"
 	"operators-mcp/internal/application/services"
 	"operators-mcp/internal/domain"
 	"operators-mcp/internal/ports"
@@ -33,6 +34,19 @@ type servicesWorld struct {
 	project *domain.Project
 	repo    *domain.Repository
 	svc     *services.Service
+	// requests is the services' request module (ADR 0083): an agent's call is made with
+	// requests.Submit for the session "s-agent" (a go-developer's), and blocks until the page answers.
+	requests *servicerequests.Service
+}
+
+// stubSessions is the one session an agent's request is filed for.
+type stubSessions struct{ session *domain.Session }
+
+func (s stubSessions) Get(id string) *domain.Session {
+	if id == s.session.ID {
+		return s.session
+	}
+	return nil
 }
 
 func newServicesWorld(t *testing.T) *servicesWorld {
@@ -93,9 +107,13 @@ func newServicesWorldWith(t *testing.T, tune func(*services.Options)) *servicesW
 	if w.repo, err = cat.Projects.CreateRepository(ctx, w.project.ID, "api", "", "file://"+root, root); err != nil {
 		t.Fatal(err)
 	}
+	w.requests = servicerequests.NewService(servicerequests.Deps{
+		Services: svc, Store: sqlite.NewServiceRequestRepository(db), Events: cat.Bus,
+		Sessions: stubSessions{session: &domain.Session{ID: "abcdef12-agent-session", ProjectID: w.project.ID, TicketID: "t1"}},
+	})
 	mux := http.NewServeMux()
 	mux.Handle("/api/", httpapi.NewRouter(httpapi.NewHandler(httpapi.Services{
-		Projects: cat.Projects, ProjectFeed: cat.Projects, Agents: cat.Agents, Sessions: orch, Planning: plan, Services: svc,
+		Projects: cat.Projects, ProjectFeed: cat.Projects, Agents: cat.Agents, Sessions: orch, Planning: plan, Services: svc, ServiceRequests: w.requests,
 	})))
 	mux.Handle("/", web.NewHandler(web.Deps{
 		Projects: cat.Projects, Tasks: plan, Sessions: orch, Agents: cat.Agents, Repositories: cat.Projects,
