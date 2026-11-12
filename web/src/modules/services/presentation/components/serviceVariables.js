@@ -7,9 +7,7 @@
 //   <section x-data="serviceVariables(id)" x-effect="runChanged(logView.runId)"> …
 
 import { describeError } from "../../../../shared/presentation/errors.js";
-
-/** A fixed mask: it does not show how long a value is. */
-const MASK = "••••••••";
+import { MASK } from "../../domain/mask.js";
 
 const SOURCE_WORDS = { repository_env: "repository .env", service: "service" };
 

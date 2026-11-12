@@ -16,8 +16,43 @@ templ Page(frame shell.Frame, projectID, projectName string, seed Seed, repos []
 				<a class="[ crumb ]" href={ templ.SafeURL("/projects/" + projectID) }>{ projectName } /</a>
 				<h1>Services</h1>
 				<span class="[ badge ]" data-tone="signal" role="status" data-running-badge x-bind:hidden="!hasRunning" x-text="runningLabel"></span>
-				<span style="display: contents" x-data="serviceRequests" data-seed="services-seed">
-					<span class="[ badge ]" data-tone="attention" role="status" data-requests-badge x-bind:hidden="!shown" x-bind:aria-label="badgeName" x-text="badgeText"></span>
+				<span style="display: contents" x-data="serviceRequests" data-seed="services-seed" x-on:dialog-close.window="popoverClosed($event)">
+					<button type="button" class="[ button ]" id="services-requests-button" data-variant="ghost" data-size="sm" data-requests-badge aria-haspopup="dialog" aria-expanded="false" aria-controls="services-requests" x-show="shown" x-bind:aria-label="badgeName" x-on:click="openPopover">
+						Requests <span class="[ badge ]" data-tone="attention" x-text="countText"></span>
+					</button>
+					<div
+						class="[ popup ] [ context-popover ]"
+						role="dialog"
+						id="services-requests"
+						popover="manual"
+						data-align="auto"
+						data-kind="service-requests"
+						aria-labelledby="services-requests-title"
+						x-data="popupDialog"
+						x-on:dialog-open.window="openFrom($event)"
+						x-on:dialog-dismiss.window="dismissFrom($event)"
+					>
+						<div class="[ pop-head ]">
+							<h3 id="services-requests-title">Service requests waiting on you</h3>
+							<button type="button" class="[ button ]" data-variant="ghost" data-size="sm" data-initial-focus x-on:click="close()">Close</button>
+						</div>
+						<div class="[ pop-body ] [ reviews ]" data-attention tabindex="0" aria-labelledby="services-requests-title">
+							<template x-if="error">
+								<div class="[ banner ]" data-tone="danger" role="alert">
+									<div class="[ flow ] [ flow-space-3xs grow ]">
+										<span x-text="error.message"></span>
+										<span class="[ code ]"><span x-text="error.code"></span> · <span x-text="error.next"></span></span>
+									</div>
+									<button type="button" class="[ button ]" data-size="sm" x-on:click="retry">Try again</button>
+									<button type="button" class="[ button ]" data-variant="ghost" data-size="sm" x-on:click="dismissError">Dismiss</button>
+								</div>
+							</template>
+							<h4 class="[ visually-hidden ]" tabindex="-1" data-service-requests-heading x-text="headline"></h4>
+							<template x-for="card in cards" x-bind:key="card.id">
+								@serviceRequestCard()
+							</template>
+						</div>
+					</div>
 				</span>
 				<div class="[ actions ]">
 					<button type="button" class="[ button ]" data-variant="primary" data-size="sm" data-new-service x-on:click="openNew">New service</button>
@@ -439,4 +474,56 @@ templ repositoryField(repos []Repository, label, hint string) {
 		</div>
 		<span class="[ hint ]">{ hint }</span>
 	</div>
+}
+
+// serviceRequestCard is one pending service request, bound to serviceRequests' `card`:
+// the "Service" tag with the action and the service, who asks and when, the agent's
+// reason, the readable summary, the proposed definition (a create), each changed field
+// as before and after (an update), where it runs (a start or restart), and the variables
+// masked until revealed. It has the branch request card's look (the review card block).
+// Everything in it is the agent's text: x-text, never HTML.
+templ serviceRequestCard() {
+	<article class="[ review ]" x-bind:id="card.anchor" data-service-request x-bind:data-request-id="card.id">
+		<h3 tabindex="-1" data-service-request-heading><span class="[ badge ]" data-tone="signal" data-service-tag>Service</span> <span x-text="card.title"></span></h3>
+		<p class="[ meta ]" data-request-summary x-text="card.summary"></p>
+		<p class="[ meta ]">
+			<a data-request-session x-bind:href="card.sessionHref" x-show="card.hasSessionLink" x-text="card.agentLine"></a>
+			<span x-show="!card.hasSessionLink" x-text="card.agentLine"></span>
+			· <span x-text="card.age"></span>
+		</p>
+		<p class="[ body ]" data-request-reason x-show="card.hasReason" x-text="card.reason"></p>
+		<template x-if="card.hasDefinition">
+			<ul class="[ flow ] [ flow-space-3xs text-sm ]" data-request-definition aria-label="The proposed service">
+				<template x-for="row in card.definition" x-bind:key="row.label">
+					<li><span class="[ color-ink-muted ]" x-text="row.label"></span> <code x-text="row.value"></code></li>
+				</template>
+			</ul>
+		</template>
+		<template x-if="card.hasChanges">
+			<ul class="[ flow ] [ flow-space-3xs text-sm ]" data-request-changes aria-label="What changes">
+				<template x-for="c in card.changes" x-bind:key="c.label">
+					<li><span class="[ color-ink-muted ]" x-text="c.label"></span> from <code x-text="c.before"></code> to <code x-text="c.after"></code></li>
+				</template>
+			</ul>
+		</template>
+		<p class="[ text-sm color-ink-muted ]" data-request-worktree x-show="card.hasWorktree" x-text="card.worktreeLine"></p>
+		<template x-if="card.hasVariables">
+			<div class="[ flow ] [ flow-space-3xs ]" data-request-variables>
+				<div class="[ repel ]">
+					<h4 class="[ text-sm ]" x-text="card.variablesTitle"></h4>
+					<button type="button" class="[ button ]" data-variant="ghost" data-size="sm" data-request-all x-show="card.hasRevealable" x-bind:data-request-id="card.id" x-on:click="toggleAll" x-text="card.allLabel"></button>
+				</div>
+				<ul class="[ flow ] [ flow-space-3xs text-sm ]">
+					<template x-for="v in card.variables" x-bind:key="v.name">
+						<li class="[ cluster ] [ gutter-xs ]" data-request-variable x-bind:data-name="v.name">
+							<code x-text="v.name"></code>
+							<span class="[ color-ink-muted ]" x-text="v.changeText"></span>
+							<code data-request-value x-show="v.hasValue"><span x-bind:aria-hidden="v.masked" x-text="v.shown"></span><span class="[ visually-hidden ]" x-show="v.masked">value hidden</span></code>
+							<button type="button" class="[ button ]" data-variant="ghost" data-size="sm" data-request-toggle x-show="v.hasValue" x-bind:data-request-id="card.id" x-bind:data-name="v.name" x-bind:aria-label="v.toggleName" x-on:click="toggle" x-text="v.toggleText"></button>
+						</li>
+					</template>
+				</ul>
+			</div>
+		</template>
+	</article>
 }
