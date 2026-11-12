@@ -648,3 +648,44 @@ func TestATaskDocumentShowsItsTasksImagesByShellPath(t *testing.T) {
 		}
 	}
 }
+
+// withProjectLogos adds two project design assets that the shell would both
+// name logo.png: the newer one gets -<short id>.
+func withProjectLogos(w world) world {
+	w.artifacts = append(w.artifacts,
+		&domain.Artifact{ID: "a-logo", TicketID: "t-ship", ProjectID: "p1", Kind: domain.ArtifactImage, Title: "Logo", Path: "logo.png",
+			Revision: 1, Scope: domain.ArtifactScopeProject, CreatedAt: now.Add(-3 * time.Hour)},
+		&domain.Artifact{ID: "a-logo2", TicketID: "t-docs", ProjectID: "p1", Kind: domain.ArtifactImage, Title: "Logo", Path: "logo.png",
+			Revision: 1, Scope: domain.ArtifactScopeProject, CreatedAt: now.Add(-1 * time.Hour)},
+	)
+	return w
+}
+
+func TestATaskDocumentShowsProjectDesignAssetsByShellPath(t *testing.T) {
+	w := withProjectLogos(imagesBoard("![rel](../../project/designs/logo.png)\n\n![root](project/designs/logo.png)\n\n![second](../../project/designs/logo-a-logo2.png)\n"))
+	body := get(t, newTestHandler(t, w), "/projects/p1/tasks/t-feed/documents/d-images").Body.String()
+	for _, want := range []string{
+		`<img src="/api/artifacts/a-logo/view/" alt="rel">`,
+		`<img src="/api/artifacts/a-logo/view/" alt="root">`,
+		`<img src="/api/artifacts/a-logo2/view/" alt="second">`,
+	} {
+		if !strings.Contains(body, want) {
+			t.Errorf("page lacks %q", want)
+		}
+	}
+}
+
+func TestAProjectDocumentInTheLibraryShowsProjectDesignAssets(t *testing.T) {
+	w := withProjectLogos(imagesBoard(""))
+	w.docs["t-feed"] = append(w.docs["t-feed"], &domain.Document{ID: "d-brand", ProjectID: "p1", Title: "Brand", Format: domain.DocumentFormatMarkdown,
+		Scope: domain.DocumentScopeProject, UpdatedAt: now, Content: "![logo](../designs/logo.png)\n\n![flow](task/designs/flow.png)\n"})
+	body := get(t, newTestHandler(t, w), "/projects/p1/documents/d-brand").Body.String()
+	for _, want := range []string{
+		`<img src="/api/artifacts/a-logo/view/" alt="logo">`,
+		`<img src="task/designs/flow.png" alt="flow">`, // no task in the library
+	} {
+		if !strings.Contains(body, want) {
+			t.Errorf("library lacks %q", want)
+		}
+	}
+}

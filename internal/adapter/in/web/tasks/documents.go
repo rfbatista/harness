@@ -265,7 +265,7 @@ func (h Handler) Documents(w http.ResponseWriter, r *http.Request) error {
 			Project: scopeOf(d) == domain.DocumentScopeProject, Current: d.ID == openID,
 		})
 		if d.ID == openID {
-			view.Open = h.openDocument(project.ID, d, updated, DocumentViewHref(project.ID, task.ID, d.ID, d.UpdatedAt), h.taskImagePaths(ctx, task.ID))
+			view.Open = h.openDocument(project.ID, d, updated, DocumentViewHref(project.ID, task.ID, d.ID, d.UpdatedAt), h.taskImagePaths(ctx, project.ID, task.ID))
 		}
 	}
 	if view.Open == nil && r.PathValue("document") != "" {
