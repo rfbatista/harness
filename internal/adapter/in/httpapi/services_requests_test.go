@@ -288,3 +288,106 @@ func TestServicesRequests_ThePersonsOwnStartNeedsNoRequestAndNoValueIsInAnyAgent
 		t.Fatalf("the service holds an override value: %s", b)
 	}
 }
+
+func TestServicesRequests_ARestartFilesARequestAndRestartsWithTheRepeatedOrReplacedOverrides(t *testing.T) {
+	f, id := requestsFixtureWithService(t)
+	agent := f.as("sess-1")
+	f.operate("start_service", id)
+	first := f.awaitStatus(id, "running")["run"].(map[string]any)["id"]
+	t.Cleanup(func() { f.operate("stop_service", id) })
+
+	done := agent.callAsync("restart_service", map[string]any{"name": "web", "worktree": "own", "env": map[string]any{"D": "second"}, "reason": "new variable"})
+	r := f.awaitPending(1)[0]
+	f.stillWaiting(done)
+	if r["action"] != "restart" || r["worktree"] != "own" || r["overrides_given"] != true || r["reason"] != "new variable" {
+		t.Fatalf("request = %v", r)
+	}
+	if st := f.service(id)["run"].(map[string]any)["id"]; st != first {
+		t.Fatalf("nothing restarts before the answer")
+	}
+	f.answer(r["id"].(string), "approve", "")
+	got := f.waitingFor(done)
+	if got.msg != "" {
+		t.Fatalf("restart refused: %s", got.msg)
+	}
+	run := viewRunOf(got.out)
+	if run["where"] != "your worktree" || run["overrides"].(map[string]any)["D"] != "second" || run["started_by"] != "session sess-1 (dev)" {
+		t.Fatalf("run = %v", run)
+	}
+	if now := f.service(id)["run"].(map[string]any)["id"]; now == first {
+		t.Fatal("a new run started")
+	}
+	f.awaitLog(id, "got D=second")
+
+	// No arguments repeats the last run, and the request says so.
+	done = agent.callAsync("restart_service", named("web"))
+	r = f.awaitPending(1)[0]
+	if r["overrides_given"] != false || !strings.Contains(r["summary"].(string), "same run overrides") {
+		t.Fatalf("a bare restart = %v", r)
+	}
+	f.answer(r["id"].(string), "approve", "")
+	if run := viewRunOf(f.waitingFor(done).out); run["overrides"].(map[string]any)["D"] != "second" || run["where"] != "your worktree" {
+		t.Fatalf("repeated run = %v", run)
+	}
+
+	// env {} clears them.
+	done = agent.callAsync("restart_service", map[string]any{"name": "web", "env": map[string]any{}})
+	r = f.awaitPending(1)[0]
+	if r["overrides_given"] != true || len(r["env"].([]any)) != 0 {
+		t.Fatalf("env {} = %v", r)
+	}
+	f.answer(r["id"].(string), "approve", "")
+	if run := viewRunOf(f.waitingFor(done).out); len(run["overrides"].(map[string]any)) != 0 {
+		t.Fatalf("cleared run = %v", run)
+	}
+}
+
+func TestServicesRequests_AStopFilesARequestAndStopsOnApprovalButNotOnDenial(t *testing.T) {
+	f, id := requestsFixtureWithService(t)
+	agent := f.as("sess-1")
+
+	// A service that is not running is answered at once.
+	out := agent.ok("stop_service", named("web"))
+	if out["service"].(map[string]any)["status"] != "stopped" || len(f.pendingRequests()) != 0 {
+		t.Fatalf("a stop of a stopped service = %v", out)
+	}
+
+	f.operate("start_service", id)
+	f.awaitStatus(id, "running")
+	t.Cleanup(func() { f.operate("stop_service", id) })
+	done := agent.callAsync("stop_service", map[string]any{"name": "web", "reason": "free the port"})
+	r := f.awaitPending(1)[0]
+	if r["action"] != "stop" || r["summary"] != "stop service web" || r["reason"] != "free the port" {
+		t.Fatalf("request = %v", r)
+	}
+	f.answer(r["id"].(string), "deny", "keep it")
+	if got := f.waitingFor(done); got.msg != "the person denied this service request: keep it" {
+		t.Fatalf("denied stop = %v / %q", got.out, got.msg)
+	}
+	if st := f.status(id); st != "running" {
+		t.Fatalf("a denied stop leaves it running: %s", st)
+	}
+
+	done = agent.callAsync("stop_service", named("web"))
+	f.answer(f.awaitPending(1)[0]["id"].(string), "approve", "")
+	got := f.waitingFor(done)
+	if got.msg != "" || got.out["service"].(map[string]any)["status"] != "stopped" {
+		t.Fatalf("stop = %v / %q", got.out, got.msg)
+	}
+	if st := f.status(id); st != "stopped" {
+		t.Fatalf("status = %s", st)
+	}
+}
+
+func TestServicesRequests_ARestartRefusedBeforeFilingFilesNothing(t *testing.T) {
+	f, _ := requestsFixtureWithService(t)
+	agent := f.as("sess-1")
+	agent.refused("restart_service", map[string]any{"name": "web", "worktree": "main"}, `worktree must be "own" or omitted`)
+	agent.refused("restart_service", map[string]any{"name": "nope"}, `no service named "nope" in this project; call list_services`)
+	if _, msg := agent.call("restart_service", map[string]any{"name": "web", "env": map[string]any{"A-B": "x"}}); !strings.Contains(msg, `"A-B"`) {
+		t.Fatalf("bad env = %q", msg)
+	}
+	if n := len(f.pendingRequests()); n != 0 {
+		t.Fatalf("%d pending", n)
+	}
+}

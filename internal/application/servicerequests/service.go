@@ -263,6 +263,20 @@ func (s *Service) perform(ctx context.Context, r *domain.ServiceRequest) (*ports
 			return nil, err
 		}
 		return &ports.ServiceRequestOutcome{Service: svc, AlreadyRunning: already}, nil
+	case domain.ServiceRequestRestart:
+		opts := s.startOptions(ctx, sess, r)
+		opts.Repeat = false // the request names the worktree; an omitted env repeats the last run's
+		svc, err := s.d.Services.RestartService(ctx, r.ServiceID, opts)
+		if err != nil {
+			return nil, err
+		}
+		return &ports.ServiceRequestOutcome{Service: svc}, nil
+	case domain.ServiceRequestStop:
+		svc, err := s.d.Services.StopService(ctx, r.ServiceID)
+		if err != nil {
+			return nil, err
+		}
+		return &ports.ServiceRequestOutcome{Service: svc}, nil
 	}
 	return nil, errors.New("unsupported action " + string(r.Action))
 }
