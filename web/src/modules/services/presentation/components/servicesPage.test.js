@@ -737,3 +737,11 @@ test("a feed event for a request does not disturb the list or its sequence", () 
   assert.equal(page.seq, 2);
   assert.deepEqual(rowNames(page), ["api"]);
 });
+
+test("a row's pending-requests badge asks the requests popover to open at that service", () => {
+  const { page } = openWith([serviceDTO({ id: "1", name: "api", pending_requests: 1 })]);
+  const sent = [];
+  const scope = Object.create(page, { $dispatch: { value: (name, detail) => sent.push([name, detail]) } });
+  page.showRequestsRow.call(scope, { currentTarget: { dataset: { serviceId: "1" } } });
+  assert.deepEqual(sent, [["service-requests-show", { serviceId: "1" }]]);
+});

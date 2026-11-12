@@ -1,5 +1,5 @@
 import { assert, file, test } from "../../../shared/testing/test.js";
-import { createdByLabel, isPending, pendingCount, pendingLabel, requestCard, requestsLabel, stripValues, upsertRequest } from "./request.js";
+import { createdByLabel, isPending, pendingCount, pendingLabel, requestCard, requestIdFromHash, requestsLabel, stripValues, upsertRequest } from "./request.js";
 
 file("services/domain/request");
 
@@ -101,4 +101,12 @@ test("an answered card says what came of it: done, failed with its reason, denie
   assert.deepEqual(card({ state: "denied" }).outcome, { text: "Denied.", tone: "" });
   assert.deepEqual(card({ state: "expired" }).outcome, { text: "Expired: its session ended before you answered.", tone: "attention" });
   assert.deepEqual(card({ state: "approved" }).outcome, { text: "Approved. Doing it now…", tone: "signal" });
+});
+
+test("the inbox link names a request in the page's fragment", () => {
+  assert.equal(requestIdFromHash("#service-request-q1"), "q1");
+  assert.equal(requestIdFromHash("#service-request-a%20b"), "a b");
+  assert.equal(requestIdFromHash("#service-requests"), "");
+  assert.equal(requestIdFromHash("#branch-request-q1"), "");
+  assert.equal(requestIdFromHash(""), "");
 });

@@ -425,6 +425,11 @@ export const servicesPage = ({ gateway, clock = systemClock, timers = globalThis
       return this.restart(event.currentTarget.dataset.serviceId);
     },
 
+    /** @param {{ currentTarget: HTMLElement }} event a row's pending-requests badge: the service id is on it */
+    showRequestsRow(event) {
+      this.$dispatch("service-requests-show", { serviceId: event.currentTarget.dataset.serviceId });
+    },
+
     dismissRefusal() {
       this.refusal = null;
     },

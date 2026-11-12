@@ -11,14 +11,23 @@ import { FeedStatus } from "../../../../shared/domain/feed.js";
 import { describeError } from "../../../../shared/presentation/errors.js";
 import { readSeed } from "../../../../shared/presentation/seed.js";
 import { Codes, codeOf } from "../../../../shared/domain/errors.js";
-import { isPending, pendingCount, requestCard, requestsLabel, stripValues, upsertRequest } from "../../domain/request.js";
+import { isPending, pendingCount, requestCard, requestIdFromHash, requestsLabel, stripValues, upsertRequest } from "../../domain/request.js";
 
 const POPOVER_ID = "services-requests";
 const BUTTON_ID = "services-requests-button";
 
-/** @param {{ gateway: import("../../domain/ports.js").ServicesGateway, clock?: import("../../../../shared/infrastructure/clock.js").Clock }} deps */
-export const serviceRequests = ({ gateway, clock = systemClock }) => () => {
+/**
+ * @param {{
+ *   gateway: import("../../domain/ports.js").ServicesGateway,
+ *   clock?: import("../../../../shared/infrastructure/clock.js").Clock,
+ *   hash?: () => string,  the page's URL fragment: an inbox link names a request (#service-request-<id>)
+ * }} deps
+ */
+export const serviceRequests = ({ gateway, clock = systemClock, hash = () => globalThis.location?.hash ?? "" }) => () => {
   let unfollow = () => {};
+  /** The component's root, kept from init: a card's button is gone by the time a focus is asked for. */
+  let root = null;
+  let linkFollowed = false;
 
   return {
     projectId: "",
@@ -39,6 +48,10 @@ export const serviceRequests = ({ gateway, clock = systemClock }) => () => {
     /** The request whose answer is in flight: its echo on the feed is not someone else's. */
     answeringId: "",
     announcement: "",
+    /** The request whose card has the focus when the popover opens ("" for the list's heading). */
+    focusedId: "",
+    /** Said above the cards when an inbox link names a request that no longer waits. */
+    linkNote: "",
 
     // ── what the markup binds ────────────────────────────────────────────
     get pendingCount() {
@@ -82,6 +95,7 @@ export const serviceRequests = ({ gateway, clock = systemClock }) => () => {
 
     // ── lifecycle ────────────────────────────────────────────────────────
     init() {
+      root = this.$el;
       try {
         this.projectId = readSeed(this.$el)?.project_id ?? "";
       } catch (err) {
@@ -114,6 +128,46 @@ export const serviceRequests = ({ gateway, clock = systemClock }) => () => {
       } finally {
         this.loaded = true;
       }
+      this.followLink(hash());
+    },
+
+    /** The page was opened on an inbox link (#service-request-<id>): open the popover at that request, once. */
+    followLink(target) {
+      if (linkFollowed) return;
+      linkFollowed = true;
+      this.showLink(target);
+    },
+
+    /** The fragment changed while the page was open: an inbox link was followed again. */
+    hashChanged(target) {
+      this.showLink(typeof target === "string" ? target : hash());
+    },
+
+    showLink(target) {
+      const id = requestIdFromHash(target);
+      if (id === "") return;
+      const waiting = this.requests.some((r) => r.id === id && isPending(r));
+      this.linkNote = waiting ? "" : "That request is no longer waiting on you.";
+      return this.showRequest(waiting ? id : "");
+    },
+
+    /** A row's badge asked for its service's requests: open at the first of them. */
+    showFor(event) {
+      const serviceId = event?.detail?.serviceId ?? "";
+      const first = this.requests.find((r) => r.serviceId === serviceId && isPending(r));
+      return this.showRequest(first?.id ?? "");
+    },
+
+    /** Opens the popover and focuses the request's card (the list's heading when id is ""). */
+    async showRequest(id) {
+      this.focusedId = id;
+      await this.openPopover();
+      this.$nextTick(() => {
+        const card = [...(root?.querySelectorAll?.("article[data-service-request]") ?? [])].find((a) => a.dataset.requestId === id);
+        const heading = card?.querySelector("[data-service-request-heading]") ?? root?.querySelector?.("[data-service-requests-heading]");
+        heading?.scrollIntoView?.({ block: "nearest" });
+        heading?.focus?.();
+      });
     },
 
     /** One event of the feed: a request filed, answered, completed or expired. */
@@ -150,6 +204,8 @@ export const serviceRequests = ({ gateway, clock = systemClock }) => () => {
       this.details = {};
       this.revealed = {};
       this.outcomes = {};
+      this.linkNote = "";
+      this.focusedId = "";
       this.requests = this.requests.filter(isPending);
     },
 

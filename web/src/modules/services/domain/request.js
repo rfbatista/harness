@@ -144,3 +144,15 @@ export function requestCard(request, { now, projectId = "", revealed = {} }) {
     allLabel: withValue.length > 0 && withValue.every((v) => !v.masked) ? "Hide all" : "Reveal all",
   };
 }
+
+const LINK = "#service-request-";
+
+/** The request an inbox link names (`#service-request-<id>`); "" for any other fragment. */
+export function requestIdFromHash(hash) {
+  if (!hash.startsWith(LINK) || hash.length === LINK.length) return "";
+  try {
+    return decodeURIComponent(hash.slice(LINK.length));
+  } catch {
+    return "";
+  }
+}

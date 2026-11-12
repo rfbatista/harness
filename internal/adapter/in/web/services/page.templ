@@ -16,7 +16,7 @@ templ Page(frame shell.Frame, projectID, projectName string, seed Seed, repos []
 				<a class="[ crumb ]" href={ templ.SafeURL("/projects/" + projectID) }>{ projectName } /</a>
 				<h1>Services</h1>
 				<span class="[ badge ]" data-tone="signal" role="status" data-running-badge x-bind:hidden="!hasRunning" x-text="runningLabel"></span>
-				<span style="display: contents" x-data="serviceRequests" data-seed="services-seed" x-on:dialog-close.window="popoverClosed($event)">
+				<span style="display: contents" x-data="serviceRequests" data-seed="services-seed" x-on:dialog-close.window="popoverClosed($event)" x-on:service-requests-show.window="showFor($event)" x-on:hashchange.window="hashChanged">
 					<button type="button" class="[ button ]" id="services-requests-button" data-variant="ghost" data-size="sm" data-requests-badge aria-haspopup="dialog" aria-expanded="false" aria-controls="services-requests" x-show="shown" x-bind:aria-label="badgeName" x-on:click="openPopover">
 						Requests <span class="[ badge ]" data-tone="attention" x-text="countText"></span>
 					</button>
@@ -47,6 +47,7 @@ templ Page(frame shell.Frame, projectID, projectName string, seed Seed, repos []
 									<button type="button" class="[ button ]" data-variant="ghost" data-size="sm" x-on:click="dismissError">Dismiss</button>
 								</div>
 							</template>
+							<p class="[ banner ]" role="status" data-service-requests-link-note x-show="linkNote" x-text="linkNote"></p>
 							<h4 class="[ visually-hidden ]" tabindex="-1" data-service-requests-heading x-text="headline"></h4>
 							<p class="[ visually-hidden ]" role="status" aria-live="polite" data-service-requests-live x-text="announcement"></p>
 							<template x-for="card in cards" x-bind:key="card.id">
@@ -117,7 +118,7 @@ templ Page(frame shell.Frame, projectID, projectName string, seed Seed, repos []
 										<div class="[ head ]">
 											<span class="[ name ]" data-service-name x-text="row.name"></span>
 											<span class="[ badge ]" x-text="row.kindLabel"></span>
-											<span class="[ badge ]" data-tone="attention" data-service-requests x-bind:hidden="!row.pendingRequests.show" x-bind:aria-label="row.pendingRequests.name" x-text="row.pendingRequests.text"></span>
+											<button type="button" class="[ badge ]" data-tone="attention" data-service-requests x-bind:hidden="!row.pendingRequests.show" x-bind:data-service-id="row.id" x-bind:aria-label="row.pendingRequests.name" aria-haspopup="dialog" x-on:click="showRequestsRow" x-text="row.pendingRequests.text"></button>
 											<span class="[ badge ]" data-tone="attention" data-service-overrides title="An agent started this run with its own variables. Open the log to see them." x-bind:hidden="!row.overrides" x-text="row.overrides"></span>
 											<span class="[ badge ]" data-tone="attention" data-not-sandboxed title="The sandbox setting was off: this run is not confined" x-bind:hidden="!row.notSandboxed">not sandboxed</span>
 										</div>

@@ -287,3 +287,57 @@ test("a note is kept per request while the popover is open", async () => {
   requests.drafts.q2.note = "two";
   assert.deepEqual(requests.cards.map((c) => c.draft.note), ["one", "two"]);
 });
+
+// ── opening from a row and from the inbox link ───────────────────────────
+async function openWithHash(requests, hash) {
+  const gateway = fakeServices();
+  gateway.requests = requests;
+  const { instance } = mount(serviceRequests({ gateway, hash: () => hash }), { el: pageEl({ project_id: "p1" }) });
+  instance.init();
+  await settle();
+  return { requests: instance, gateway };
+}
+
+test("the inbox link opens the popover at that request, once the list has loaded", async () => {
+  const { requests } = await openWithHash([requestDTO({ id: "q1" }), requestDTO({ id: "q2" })], "#service-request-q2");
+  assert.deepEqual([requests.popoverOpen, requests.focusedId, requests.linkNote], [true, "q2", ""]);
+});
+
+test("a link to a request that is no longer waiting opens the list with a note, not a blank card", async () => {
+  const { requests } = await openWithHash([requestDTO({ id: "q1" })], "#service-request-gone");
+  assert.deepEqual([requests.popoverOpen, requests.focusedId, requests.linkNote], [true, "", "That request is no longer waiting on you."]);
+  const none = await openWithHash([], "#service-request-gone");
+  assert.deepEqual([none.requests.popoverOpen, none.requests.linkNote], [true, "That request is no longer waiting on you."]);
+});
+
+test("another fragment, or none, leaves the popover closed", async () => {
+  assert.equal((await openWithHash([requestDTO()], "")).requests.popoverOpen, false);
+  assert.equal((await openWithHash([requestDTO()], "#top")).requests.popoverOpen, false);
+});
+
+test("the link is followed once; a later change of the fragment follows it again", async () => {
+  const { requests } = await openWithHash([requestDTO({ id: "q1" }), requestDTO({ id: "q2" })], "#service-request-q1");
+  requests.popoverClosed({ detail: { id: "services-requests" } });
+  await requests.load();
+  assert.equal(requests.popoverOpen, false, "a reload does not open it again");
+  requests.hashChanged("#service-request-q2");
+  await settle();
+  assert.deepEqual([requests.popoverOpen, requests.focusedId], [true, "q2"]);
+});
+
+test("a row's badge opens the popover at that service's first request", async () => {
+  const { requests } = await open([requestDTO({ id: "q1", service_id: "s1" }), requestDTO({ id: "q2", service_id: "s2" }), requestDTO({ id: "q3", service_id: "s2", requested_at: "2026-11-07T14:00:00Z" })]);
+  requests.showFor({ detail: { serviceId: "s2" } });
+  await settle();
+  assert.deepEqual([requests.popoverOpen, requests.focusedId], [true, "q2"]);
+  requests.popoverClosed({ detail: { id: "services-requests" } });
+  requests.showFor({ detail: { serviceId: "nobody" } });
+  assert.equal(requests.popoverOpen, true, "it still opens, on the list");
+  assert.equal(requests.focusedId, "");
+});
+
+test("the note about a link goes when the popover closes", async () => {
+  const { requests } = await openWithHash([], "#service-request-gone");
+  requests.popoverClosed({ detail: { id: "services-requests" } });
+  assert.equal(requests.linkNote, "");
+});
