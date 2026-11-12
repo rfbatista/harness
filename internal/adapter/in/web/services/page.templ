@@ -48,6 +48,7 @@ templ Page(frame shell.Frame, projectID, projectName string, seed Seed, repos []
 								</div>
 							</template>
 							<h4 class="[ visually-hidden ]" tabindex="-1" data-service-requests-heading x-text="headline"></h4>
+							<p class="[ visually-hidden ]" role="status" aria-live="polite" data-service-requests-live x-text="announcement"></p>
 							<template x-for="card in cards" x-bind:key="card.id">
 								@serviceRequestCard()
 							</template>
@@ -523,6 +524,23 @@ templ serviceRequestCard() {
 						</li>
 					</template>
 				</ul>
+			</div>
+		</template>
+		<template x-if="card.pending">
+			<div class="[ flow ] [ flow-space-s ]">
+				<div class="[ field ]">
+					<label x-bind:for="card.noteId">Note <span class="[ color-ink-faint weight-regular ]">(the agent gets it)</span></label>
+					<textarea x-bind:id="card.noteId" rows="2" x-model="card.draft.note"></textarea>
+				</div>
+				<div class="[ actions ] [ cluster ] [ gutter-xs ]">
+					<button type="button" class="[ button ]" data-variant="primary" data-size="sm" data-action="approve" x-bind:aria-busy="card.draft.busy" x-bind:disabled="card.draft.busy" x-on:click="approve(card.id)">Approve</button>
+					<button type="button" class="[ button ]" data-size="sm" data-action="deny" x-bind:disabled="card.draft.busy" x-on:click="deny(card.id)">Deny</button>
+				</div>
+			</div>
+		</template>
+		<template x-if="card.hasOutcome">
+			<div class="[ banner ]" role="status" data-request-outcome x-bind:data-tone="card.outcomeTone">
+				<span x-text="card.outcomeText"></span>
 			</div>
 		</template>
 	</article>

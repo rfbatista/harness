@@ -10,6 +10,7 @@ import { systemClock } from "../../../../shared/infrastructure/clock.js";
 import { FeedStatus } from "../../../../shared/domain/feed.js";
 import { describeError } from "../../../../shared/presentation/errors.js";
 import { readSeed } from "../../../../shared/presentation/seed.js";
+import { Codes, codeOf } from "../../../../shared/domain/errors.js";
 import { isPending, pendingCount, requestCard, requestsLabel, stripValues, upsertRequest } from "../../domain/request.js";
 
 const POPOVER_ID = "services-requests";
@@ -31,6 +32,13 @@ export const serviceRequests = ({ gateway, clock = systemClock }) => () => {
     /** The variables shown in clear, per request: { id: { NAME: true } }. In memory only. */
     revealed: {},
     now: clock.now(),
+    /** The note written per request, and whether its answer is in flight. */
+    drafts: {},
+    /** Requests that stay as an outcome card until the popover closes: answered here or elsewhere while it was open. */
+    outcomes: {},
+    /** The request whose answer is in flight: its echo on the feed is not someone else's. */
+    answeringId: "",
+    announcement: "",
 
     // ── what the markup binds ────────────────────────────────────────────
     get pendingCount() {
@@ -48,7 +56,24 @@ export const serviceRequests = ({ gateway, clock = systemClock }) => () => {
 
     /** The cards of the pending requests, newest first; with their values once the popover has read them. */
     get cards() {
-      return this.requests.filter(isPending).map((r) => requestCard(this.details[r.id] ?? r, { now: this.now, projectId: this.projectId, revealed: this.revealed[r.id] ?? {} }));
+      return this.requests
+        .filter((r) => isPending(r) || this.outcomes[r.id] === true)
+        .map((r) => ({
+          ...requestCard(this.withValues(r), { now: this.now, projectId: this.projectId, revealed: this.revealed[r.id] ?? {} }),
+          draft: this.draftOf(r.id),
+          noteId: `service-request-note-${r.id}`,
+        }));
+    },
+    /** The request as last heard of, with the variable values the popover read (none while it is closed). */
+    withValues(request) {
+      const read = this.details[request.id];
+      return read ? { ...request, env: read.env, proposed: read.proposed ?? request.proposed } : request;
+    },
+    draftOf(id) {
+      return this.drafts[id] ?? { note: "", busy: false };
+    },
+    ensureDraft(id) {
+      if (!this.drafts[id]) this.drafts = { ...this.drafts, [id]: { note: "", busy: false } };
     },
     get headline() {
       const n = this.pendingCount;
@@ -81,6 +106,7 @@ export const serviceRequests = ({ gateway, clock = systemClock }) => () => {
     async load() {
       try {
         const list = await gateway.listRequests(this.projectId, { state: "pending" });
+        for (const r of list) this.ensureDraft(r.id);
         this.requests = list.map(stripValues).reduce(upsertRequest, []);
         this.error = null;
       } catch (err) {
@@ -93,8 +119,15 @@ export const serviceRequests = ({ gateway, clock = systemClock }) => () => {
     /** One event of the feed: a request filed, answered, completed or expired. */
     arrived(event) {
       if (event.kind !== "service_request" || !event.request) return;
+      const before = this.requests.find((r) => r.id === event.request.id);
+      this.ensureDraft(event.request.id);
       this.requests = upsertRequest(this.requests, stripValues(event.request));
+      if (event.request.id === this.answeringId) return; // the person's own answer
       if (this.popoverOpen && isPending(event.request)) this.readDetails();
+      else if (this.popoverOpen && before && isPending(before)) {
+        this.outcomes = { ...this.outcomes, [event.request.id]: true };
+        this.say("A service request was answered elsewhere");
+      }
     },
 
     // ── the popover ──────────────────────────────────────────────────────
@@ -116,6 +149,8 @@ export const serviceRequests = ({ gateway, clock = systemClock }) => () => {
       this.popoverOpen = false;
       this.details = {};
       this.revealed = {};
+      this.outcomes = {};
+      this.requests = this.requests.filter(isPending);
     },
 
     /** The list call, for the values of the pending requests. Never run in the background. */
@@ -124,6 +159,7 @@ export const serviceRequests = ({ gateway, clock = systemClock }) => () => {
         const list = await gateway.listRequests(this.projectId, { state: "pending" });
         if (!this.popoverOpen) return;
         this.details = Object.fromEntries(list.map((r) => [r.id, r]));
+        for (const r of list) this.ensureDraft(r.id);
         this.requests = list.map(stripValues).reduce(upsertRequest, this.requests.filter((r) => !isPending(r)));
         this.error = null;
       } catch (err) {
@@ -137,6 +173,39 @@ export const serviceRequests = ({ gateway, clock = systemClock }) => () => {
 
     dismissError() {
       this.error = null;
+    },
+
+    // ── the person's answer ──────────────────────────────────────────────
+    approve(id) {
+      return this.answer(id, "approve");
+    },
+    deny(id) {
+      return this.answer(id, "deny");
+    },
+
+    async answer(id, decision) {
+      const draft = this.drafts[id];
+      if (!draft || draft.busy) return;
+      draft.busy = true;
+      this.answeringId = id;
+      this.error = null;
+      try {
+        const answered = stripValues(await gateway.answerRequest(id, decision, draft.note.trim()));
+        this.requests = upsertRequest(this.requests, answered);
+        this.outcomes = { ...this.outcomes, [id]: true };
+        this.say(decision === "approve" ? "You approved the service request" : "You denied the service request");
+      } catch (err) {
+        const refusal = describeError(err);
+        if (codeOf(err) === Codes.REQUEST_NOT_PENDING) await this.readDetails();
+        this.error = refusal;
+      } finally {
+        draft.busy = false;
+        this.answeringId = "";
+      }
+    },
+
+    say(text) {
+      this.announcement = text;
     },
 
     /** @param {{ currentTarget: HTMLElement }} event a variable's Reveal or Hide: the request and variable are on it */

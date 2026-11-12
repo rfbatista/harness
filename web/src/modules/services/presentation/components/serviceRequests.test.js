@@ -180,3 +180,110 @@ test("values never reach the console or the browser's storage", async () => {
   }
   assert.deepEqual(seen, []);
 });
+
+// ── the answer ───────────────────────────────────────────────────────────
+const pendingOne = () => requestDTO({ id: "q1", reason: "why", env: [{ name: "PORT", value: "8080", change: "set", previous_set: false }] });
+const answer = (requests, id, decision) => (decision === "approve" ? requests.approve(id) : requests.deny(id));
+
+test("Approve sends the decision with the trimmed note, and the card shows what came of it", async () => {
+  const { requests, gateway } = await openPopover([pendingOne()]);
+  requests.drafts.q1.note = "  go ahead  ";
+  await requests.approve("q1");
+  assert.deepEqual(gateway.answered, [["q1", "approve", "go ahead"]]);
+  const card = requests.cards[0];
+  assert.deepEqual([card.pending, card.outcome.text], [false, "Approved and done."]);
+  assert.equal(requests.pendingCount, 0);
+  assert.equal(requests.popoverOpen, true, "the outcome stays in view until the person closes the popover");
+});
+
+test("Deny sends the note, and the card shows it denied with the note", async () => {
+  const { requests, gateway } = await openPopover([pendingOne()]);
+  requests.drafts.q1.note = "not now";
+  await requests.deny("q1");
+  assert.deepEqual(gateway.answered, [["q1", "deny", "not now"]]);
+  assert.equal(requests.cards[0].outcome.text, "Denied. Your note: not now");
+});
+
+test("an approved action that failed shows the reason", async () => {
+  const { requests, gateway } = await openPopover([pendingOne()]);
+  gateway.requestAnswer = async () => ({ ...pendingOne(), state: "failed", result_error: "port 8080 is in use" });
+  await requests.approve("q1");
+  assert.equal(requests.cards[0].outcome.text, "Approved, but it failed: port 8080 is in use");
+});
+
+test("while an answer is in flight both buttons are off and a second press sends nothing", async () => {
+  const { requests, gateway } = await openPopover([pendingOne()]);
+  let release;
+  gateway.requestAnswer = () => new Promise((resolve) => { release = () => resolve({ ...pendingOne(), state: "done" }); });
+  const first = requests.approve("q1");
+  assert.equal(requests.draftOf("q1").busy, true);
+  assert.equal(requests.cards[0].draft.busy, true);
+  await requests.deny("q1");
+  await requests.approve("q1");
+  release();
+  await first;
+  assert.equal(gateway.answered.length, 1);
+  assert.equal(requests.draftOf("q1").busy, false);
+});
+
+test("the feed's echo of my own answer can come before the answer: it is not announced as someone else's", async () => {
+  const { requests, gateway } = await openPopover([pendingOne()]);
+  let release;
+  gateway.requestAnswer = () => new Promise((resolve) => { release = () => resolve({ ...pendingOne(), state: "done" }); });
+  const pending = requests.approve("q1");
+  gateway.emit({ seq: 9, kind: "service_request", request: requestDTO({ id: "q1", state: "done" }) });
+  assert.equal(requests.announcement, "", "not announced while my answer is in flight");
+  release();
+  await pending;
+  assert.equal(requests.announcement, "You approved the service request");
+  assert.equal(requests.cards.length, 1, "one card, not two");
+});
+
+test("a request answered or expired elsewhere turns its card to that outcome while the popover is open", async () => {
+  const { requests, gateway } = await openPopover([pendingOne(), requestDTO({ id: "q2" })]);
+  gateway.emit({ seq: 9, kind: "service_request", request: requestDTO({ id: "q1", state: "done" }) });
+  gateway.emit({ seq: 10, kind: "service_request", request: requestDTO({ id: "q2", state: "expired" }) });
+  assert.deepEqual(requests.cards.map((c) => [c.id, c.outcome?.text]), [["q1", "Approved and done."], ["q2", "Expired: its session ended before you answered."]]);
+  assert.equal(requests.pendingCount, 0);
+  assert.equal(requests.announcement, "A service request was answered elsewhere");
+});
+
+test("a request answered while the popover is closed leaves no card behind", async () => {
+  const { requests, gateway } = await open([pendingOne()]);
+  gateway.emit({ seq: 9, kind: "service_request", request: requestDTO({ id: "q1", state: "done" }) });
+  assert.deepEqual([requests.cards.length, requests.pendingCount], [0, 0]);
+});
+
+test("closing the popover drops the outcomes", async () => {
+  const { requests } = await openPopover([pendingOne()]);
+  await requests.approve("q1");
+  requests.popoverClosed({ detail: { id: "services-requests" } });
+  assert.equal(requests.cards.length, 0);
+});
+
+test("an answer to a request that is no longer pending shows the server's refusal and reads the list again", async () => {
+  const { requests, gateway } = await openPopover([pendingOne()]);
+  gateway.requestAnswer = async () => { throw new StructuredError("REQUEST_NOT_PENDING", "that request was already answered"); };
+  gateway.requests = [];
+  await requests.approve("q1");
+  await settle();
+  assert.deepEqual([requests.error.code, requests.error.message], ["REQUEST_NOT_PENDING", "that request was already answered"]);
+  assert.equal(requests.draftOf("q1").busy, false);
+  assert.equal(requests.pendingCount, 0);
+});
+
+test("any other refusal shows too, and the request stays pending to answer again", async () => {
+  const { requests, gateway } = await openPopover([pendingOne()]);
+  gateway.requestAnswer = async () => { throw new StructuredError("NETWORK", "The harness server is not reachable."); };
+  await requests.approve("q1");
+  assert.equal(requests.error.code, "NETWORK");
+  assert.equal(requests.cards[0].pending, true);
+  assert.equal(requests.draftOf("q1").busy, false);
+});
+
+test("a note is kept per request while the popover is open", async () => {
+  const { requests } = await openPopover([pendingOne(), requestDTO({ id: "q2" })]);
+  requests.drafts.q1.note = "one";
+  requests.drafts.q2.note = "two";
+  assert.deepEqual(requests.cards.map((c) => c.draft.note), ["one", "two"]);
+});

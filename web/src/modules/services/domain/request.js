@@ -67,6 +67,18 @@ function definitionRows(proposed) {
   return rows;
 }
 
+/** What came of an answered request; null while it is pending. */
+function outcomeOf(request) {
+  switch (request.state) {
+    case "done": return { text: "Approved and done.", tone: "signal" };
+    case "approved": return { text: "Approved. Doing it now…", tone: "signal" };
+    case "failed": return { text: `Approved, but it failed: ${request.resultError}`, tone: "danger" };
+    case "denied": return { text: request.note ? `Denied. Your note: ${request.note}` : "Denied.", tone: "" };
+    case "expired": return { text: "Expired: its session ended before you answered.", tone: "attention" };
+    default: return null;
+  }
+}
+
 const WORKTREE_LINES = { main: "Runs in the main checkout.", own: "Runs in the agent's own worktree." };
 
 function variableRow(v, action, revealed) {
@@ -101,12 +113,18 @@ export function requestCard(request, { now, projectId = "", revealed = {} }) {
   const definition = request.action === "create" && request.proposed ? definitionRows(request.proposed) : [];
   const variables = request.env.map((v) => variableRow(v, request.action, revealed));
   const withValue = variables.filter((v) => v.hasValue);
+  const outcome = outcomeOf(request);
   const overrides = request.action === "start" || request.action === "restart";
   return {
     id: request.id,
     anchor: `service-request-${request.id}`,
     title: `${VERBS[request.action]} ${request.serviceName}`,
     summary: request.summary,
+    pending: isPending(request),
+    outcome,
+    hasOutcome: outcome !== null,
+    outcomeText: outcome?.text ?? "",
+    outcomeTone: outcome?.tone || null,
     agentLine: `${request.agent || "an agent"} · session ${session8}`,
     age: agoLabel(request.requestedAt, now),
     sessionHref,

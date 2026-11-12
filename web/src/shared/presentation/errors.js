@@ -73,6 +73,7 @@ const NEXT_STEP = {
   [Codes.SERVICE_NOT_FOUND]: "it was deleted; the list will refresh",
   [Codes.SERVICE_NAME_TAKEN]: "pick a name no other service of the project uses",
   [Codes.SERVICE_RUNNING]: "stop it first, then delete it",
+  [Codes.REQUEST_NOT_PENDING]: "it was already answered or has expired; the list now shows where it stands",
   [Codes.WRITING_HELPER_FAILED]: "try again; if it keeps failing, check the Claude login in Settings",
   [Codes.WRITING_HELPER_UNAVAILABLE]: "sign in to Claude or fix the agent setup, then reload the page",
   [Codes.BAD_RESPONSE]: "the server and the web client disagree; reload the page",

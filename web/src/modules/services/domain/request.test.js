@@ -91,3 +91,14 @@ test("variables show what changes, masked with a fixed mask until revealed", () 
   assert.equal(card.allLabel, "Reveal all");
   assert.equal(requestCard(base({ env }), { now: NOW, revealed: { PORT: true, TOKEN: true } }).allLabel, "Hide all", "every variable that has a value");
 });
+
+test("an answered card says what came of it: done, failed with its reason, denied with the note, expired", () => {
+  const card = (o) => requestCard(base(o), { now: NOW });
+  assert.deepEqual([card({}).pending, card({}).outcome], [true, null]);
+  assert.deepEqual([card({ state: "done" }).pending, card({ state: "done" }).outcome], [false, { text: "Approved and done.", tone: "signal" }]);
+  assert.deepEqual(card({ state: "failed", resultError: "port 8080 is in use" }).outcome, { text: "Approved, but it failed: port 8080 is in use", tone: "danger" });
+  assert.deepEqual(card({ state: "denied", note: "not now" }).outcome, { text: "Denied. Your note: not now", tone: "" });
+  assert.deepEqual(card({ state: "denied" }).outcome, { text: "Denied.", tone: "" });
+  assert.deepEqual(card({ state: "expired" }).outcome, { text: "Expired: its session ended before you answered.", tone: "attention" });
+  assert.deepEqual(card({ state: "approved" }).outcome, { text: "Approved. Doing it now…", tone: "signal" });
+});
