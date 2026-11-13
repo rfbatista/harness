@@ -39,21 +39,25 @@ func WorktreeReadHooks() map[claude.HookEvent][]claude.HookMatcher {
 	}
 }
 
+// canWireWorktreeReadHook says the session can be given the hook: the server
+// hands out the lookup and the shim binary, and the session has a shim dir to
+// link the hook's command in (env is its environment).
+func (s *Service) canWireWorktreeReadHook(env []string) bool {
+	return s.SessionTaskWorktreesURL != nil && s.ShimBinary != "" && sessionEnvValue(env, ports.ShimDirEnv) != ""
+}
+
 // withWorktreeReadHook gives a sandboxed architect session the hook that
 // narrows its grant of the worktrees folder to its task, and the environment
 // the hook reads: the folder and the lookup. Every other session, a session
 // with no sandbox, and a server with no shim binary or lookup URL change
 // nothing: there is no grant to narrow.
 func (s *Service) withWorktreeReadHook(cfg *llmkit.SessionConfig, id string, sb sandboxed) {
-	if sb.worktreesDir == "" || s.SessionTaskWorktreesURL == nil || s.ShimBinary == "" {
+	if sb.worktreesDir == "" || !s.canWireWorktreeReadHook(cfg.Env) {
 		return
 	}
 	// The command is one more link in the session's shim dir, which its cleanup
-	// removes; a session with no shim dir has no way to run it.
+	// removes.
 	dir := sessionEnvValue(cfg.Env, ports.ShimDirEnv)
-	if dir == "" {
-		return
-	}
 	dc, ok := withHooks(cfg.Driver, WorktreeReadHooks())
 	if !ok {
 		return

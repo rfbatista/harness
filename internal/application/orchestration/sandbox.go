@@ -568,7 +568,14 @@ func (s *Service) sandbox(ctx context.Context, in prepareInput, id string, repo 
 	if sb.WorkspacesRoot != nil {
 		sess.WorkspacesRoot = sb.WorkspacesRoot()
 		if in.Mode == domain.SessionModeArchitect && sess.WorkspacesRoot != "" {
-			sess.WorktreesDir = filepath.Join(sess.WorkspacesRoot, domain.RepositoryWorktreesDirName(repo))
+			// The grant covers every worktree of the repository, so it is made only
+			// where the worktree read hook that narrows it to the task can be given
+			// too; a hook that cannot be wired never leaves the grant wide.
+			if s.canWireWorktreeReadHook(env) {
+				sess.WorktreesDir = filepath.Join(sess.WorkspacesRoot, domain.RepositoryWorktreesDirName(repo))
+			} else {
+				slog.Warn("architect session has no worktree read hook, so its sandbox does not grant the worktrees folder", "session", id)
+			}
 		}
 	}
 	if s.commitCheckEnabled() {

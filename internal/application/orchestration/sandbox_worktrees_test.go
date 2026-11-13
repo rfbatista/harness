@@ -9,11 +9,22 @@ import (
 
 	"operators-mcp/internal/domain"
 	"operators-mcp/internal/ports"
+	"operators-mcp/internal/ports/portstest"
 )
+
+// wireHook lets the server give a session the worktree read hook: the shim
+// binary and the lookup's URL, which the grant of the worktrees folder needs.
+func (w *sandboxWorld) wireHook(t *testing.T) {
+	t.Helper()
+	w.ownTempDir()
+	w.svc.ShimBinary = filepath.Join(t.TempDir(), "harness")
+	w.svc.SessionBranchGateURL = func(id string) string { return "http://127.0.0.1:1/api/sessions/" + id + "/branch_gate" }
+	w.svc.SessionTaskWorktreesURL = func(id string) string { return "http://127.0.0.1:1/api/sessions/" + id + "/task_worktrees" }
+}
 
 func TestSandbox_AnArchitectReadsTheRepositorysWorktreesFolderAndWritesItsOwnWorktree(t *testing.T) {
 	w := newSandboxWorld(t)
-	w.ownTempDir()
+	w.wireHook(t)
 	sess, p := w.start(t, "architect")
 	folder := filepath.Join(w.wsRoot, domain.RepositoryWorktreesDirName(w.svc.catalog.Repositories.(*fakeResolver).repo))
 	if !slices.Contains(p.Readable, folder) || slices.Contains(p.Writable, folder) {
@@ -58,10 +69,7 @@ func TestBuildSandboxPolicy_AnArchitectsWorktreesFolderIsReadOnlyAroundItsOwnWor
 // server able to hand out shims and the lookup's URL, and answers its spec.
 func (w *sandboxWorld) startSpec(t *testing.T, mode string) ports.AgentSpec {
 	t.Helper()
-	w.ownTempDir()
-	w.svc.ShimBinary = filepath.Join(t.TempDir(), "harness")
-	w.svc.SessionBranchGateURL = func(id string) string { return "http://127.0.0.1:1/api/sessions/" + id + "/branch_gate" }
-	w.svc.SessionTaskWorktreesURL = func(id string) string { return "http://127.0.0.1:1/api/sessions/" + id + "/task_worktrees" }
+	w.wireHook(t)
 	req := InteractiveRequest{ProjectID: "p1", RepositoryID: "r1", Mode: mode, TicketID: "tk1", RunsOn: domain.RunnerTUI}
 	sess, spec, err := w.svc.StartInteractive(context.Background(), req)
 	if err != nil {
@@ -118,5 +126,58 @@ func TestWorktreeReadHook_NoOtherModeAndNoUnsandboxedSessionGetsIt(t *testing.T)
 	w.off = true
 	if spec := w.startSpec(t, "architect"); len(worktreeReadHooks(spec)) != 0 {
 		t.Error("an unsandboxed architect has nothing to narrow, so no hook")
+	}
+}
+
+func TestSandbox_AnArchitectThatCannotGetTheHookIsNotGrantedTheWorktreesFolder(t *testing.T) {
+	for name, unwire := range map[string]func(*sandboxWorld){
+		"no shim binary": func(w *sandboxWorld) { w.svc.ShimBinary = "" },
+		"no lookup url":  func(w *sandboxWorld) { w.svc.SessionTaskWorktreesURL = nil },
+	} {
+		t.Run(name, func(t *testing.T) {
+			w := newSandboxWorld(t)
+			w.wireHook(t)
+			unwire(w)
+			sess, p := w.start(t, "architect")
+			folder := filepath.Join(w.wsRoot, domain.RepositoryWorktreesDirName(w.svc.catalog.Repositories.(*fakeResolver).repo))
+			if slices.Contains(p.Readable, folder) || slices.Contains(p.Writable, folder) {
+				t.Errorf("the worktrees folder is granted without a hook: readable %v", p.Readable)
+			}
+			if !slices.Contains(p.Writable, sess.WorkingDir) {
+				t.Errorf("own worktree not writable: %v", p.Writable)
+			}
+		})
+	}
+}
+
+func TestResumeInteractive_KeepsTheWorktreeReadHook(t *testing.T) {
+	w := newSandboxWorld(t)
+	spec := w.startSpec(t, "architect")
+	if len(worktreeReadHooks(spec)) != 1 {
+		t.Fatal("the started architect has no hook")
+	}
+	sessions := w.svc.sessions.List(context.Background(), ports.SessionFilter{})
+	if len(sessions) != 1 {
+		t.Fatalf("%d sessions", len(sessions))
+	}
+	if _, err := w.svc.EndInteractive(context.Background(), sessions[0].ID, 0, false); err != nil {
+		t.Fatal(err)
+	}
+	w.driver = &portstest.RecordingSandboxDriver{}
+	w.svc.Sandbox.Driver = w.driver
+	_, resumed, err := w.svc.ResumeInteractive(context.Background(), ports.ResumeRequest{SessionID: sessions[0].ID})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if n := len(worktreeReadHooks(resumed)); n != 1 {
+		t.Errorf("the resumed architect has %d worktree read hooks, want 1", n)
+	}
+	env := strings.Join(resumed.Env, "\n")
+	if !strings.Contains(env, ports.WorktreesRootEnv+"=") || !strings.Contains(env, ports.TaskWorktreesURLEnv+"=") {
+		t.Errorf("the resumed architect's env lacks the hook's variables:\n%s", env)
+	}
+	folder := filepath.Join(w.wsRoot, domain.RepositoryWorktreesDirName(w.svc.catalog.Repositories.(*fakeResolver).repo))
+	if calls := w.driver.Calls(); len(calls) == 0 || !slices.Contains(calls[0].Policy.Readable, folder) {
+		t.Errorf("the resumed policy lacks the worktrees folder")
 	}
 }
