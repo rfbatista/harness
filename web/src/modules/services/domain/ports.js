@@ -42,7 +42,8 @@
  * @property {object | null} proposed  create: the whole definition; update: the definition after (the API's ServiceInput)
  * @property {{ field: string, before: string, after: string }[]} changes  update only
  * @property {{ name: string, value: string, change: "set" | "unset", previousSet: boolean }[]} env  variables set or unset; run overrides for start and restart. `value` is "" on a feed event
- * @property {string} worktree  start and restart: main or own
+ * @property {string} worktree  start and restart: main, own, branch:<name> or branch:origin/<name>
+ * @property {{ name: string, sha: string, remote: boolean } | null} branch  start and restart on a branch: the branch and its tip when filed (a remote branch's name has no origin/)
  * @property {"pending" | "approved" | "denied" | "expired" | "done" | "failed"} state
  * @property {string} note  the person's
  * @property {string} resultError  failed: why the approved action failed

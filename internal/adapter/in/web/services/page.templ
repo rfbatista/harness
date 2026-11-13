@@ -509,6 +509,7 @@ templ serviceRequestCard() {
 			</ul>
 		</template>
 		<p class="[ text-sm color-ink-muted ]" data-request-worktree x-show="card.hasWorktree" x-text="card.worktreeLine"></p>
+		<p class="[ text-sm color-ink-muted ]" data-request-branch x-show="card.hasBranch" x-text="card.branchLine"></p>
 		<template x-if="card.hasVariables">
 			<div class="[ flow ] [ flow-space-3xs ]" data-request-variables>
 				<div class="[ repel ]">
