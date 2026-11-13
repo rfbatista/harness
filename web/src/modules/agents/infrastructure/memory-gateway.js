@@ -253,10 +253,10 @@ export function memoryCatalogServer({ catalog, projects = {}, projectNames = {},
           banned[id] = without(banned[id] ?? [], server.name);
         }
       }
-      // The tool data stays with the server through a rename; disabled_tools absent keeps it, [] clears it.
+      // The tool data stays with the server through a rename; disabled_tools absent keeps it, [] clears it; project_only absent keeps it.
       const old = at < 0 ? null : c.mcp_servers[at];
-      const { disabled_tools: disabled, ...fields } = server;
-      const next = { ...fields, env_refs: [], agents: [], projects: [], problems: [], known_tools: old?.known_tools ?? null, probed_at: old?.probed_at ?? null, disabled_tools: disabled ?? old?.disabled_tools ?? [] };
+      const { disabled_tools: disabled, project_only: projectOnly, ...fields } = server;
+      const next = { ...fields, env_refs: [], agents: [], projects: [], problems: [], known_tools: old?.known_tools ?? null, probed_at: old?.probed_at ?? null, disabled_tools: disabled ?? old?.disabled_tools ?? [], project_only: projectOnly ?? old?.project_only ?? false };
       if (at < 0) c.mcp_servers.push(next);
       else c.mcp_servers[at] = next;
       // Every save probes once; a failed probe keeps the last known tools and never fails the save.
@@ -335,7 +335,7 @@ export function memoryCatalogServer({ catalog, projects = {}, projectNames = {},
         const override = overrides[id]?.[m.name]?.[name] ?? "default";
         return { name, default: def, override, effective: override === "default" ? def : override };
       });
-      return { name: m.name, state, used_by_agents: cat.agents.filter((a) => a.mcp_servers.includes(m.name)).map((a) => a.name), tools };
+      return { name: m.name, state, used_by_agents: cat.agents.filter((a) => a.mcp_servers.includes(m.name)).map((a) => a.name), tools, project_only: m.project_only === true };
     });
     return { mcp_servers: clone(projectLists[id]), servers };
   };

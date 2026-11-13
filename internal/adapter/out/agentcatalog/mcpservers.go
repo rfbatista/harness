@@ -231,6 +231,9 @@ func (c *Catalog) SaveCatalogMCPServer(ctx context.Context, in domain.SaveCatalo
 	if in.DisabledTools != nil {
 		t.setDisabledTools(s.Name, in.DisabledTools)
 	}
+	if in.Server.ProjectOnly != nil {
+		t.setProjectOnly(s.Name, *in.Server.ProjectOnly)
+	}
 	if probed {
 		t.setKnownTools(s.Name, found, time.Now())
 	}

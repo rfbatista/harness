@@ -34,6 +34,8 @@ const STATE_HINT = {
   agent: "Only sessions whose agent lists it get it.",
   banned: "No session in the project gets it.",
 };
+/** The Agent’s choice hint of a project-only server: an agent listing it does not bring it. */
+const PROJECT_ONLY_HINT = "Project only: no session gets it unless it is Added here, even if its agent lists it.";
 const CHOICES = /** @type {const} */ (["default", "enabled", "disabled"]);
 const cap = (word) => word.charAt(0).toUpperCase() + word.slice(1);
 
@@ -139,10 +141,12 @@ export function settingsPhrase(settings, kind = "saved") {
 
 /**
  * The ban warning: it names the agents that list the server and refuses nothing.
- * @param {string[]} agents
+ * A project-only server is brought by no agent, so the ban takes nothing from one.
+ * @param {string[]} agents @param {boolean} [projectOnly]
  */
-export function banWarning(agents) {
+export function banWarning(agents, projectOnly = false) {
   const head = "Banned: no session in this project gets this server, whatever its agent lists.";
+  if (projectOnly) return `${head} It is Project only, so no agent brings it here anyway.`;
   if (agents.length === 0) return `${head} No agent lists it, so no agent loses anything here.`;
   if (agents.length === 1) return `${head} The agent that lists it, ${agents[0]}, loses it in this project.`;
   return `${head} The ${agents.length} agents that list it, ${agents.join(", ")}, lose it in this project.`;
@@ -205,7 +209,8 @@ export function projectMcpRows(catalog, projectId, settings, draft) {
       builtIn: s.builtIn,
       state: mine.state,
       stateLabel: STATE_LABEL[mine.state],
-      stateHint: STATE_HINT[mine.state],
+      stateHint: server.projectOnly && mine.state === "agent" ? PROJECT_ONLY_HINT : STATE_HINT[mine.state],
+      projectOnly: server.projectOnly,
       stateAria: `${s.name} in this project`,
       choices: STATES.map((value) => ({ value, label: STATE_LABEL[value], pressed: value === mine.state })),
       vars,
@@ -213,7 +218,7 @@ export function projectMcpRows(catalog, projectId, settings, draft) {
       warning: unset ? "the server fails to start in a session until the variable is set" : "",
       warningText: unset ? " · the server fails to start in a session until the variable is set" : "",
       banned,
-      banWarning: banned ? banWarning(server.usedByAgents) : "",
+      banWarning: banned ? banWarning(server.usedByAgents, server.projectOnly) : "",
       tools,
       // A banned server is not attached, so its tools have nothing to show; its overrides stay for when it comes back.
       showTools: !banned,
@@ -253,7 +258,9 @@ export function sessionExample(catalog, settings, draft) {
   const have = new Set(catalog.mcpServers.map((s) => s.name));
   const mine = namesInState(settings, draft, "added").filter((n) => have.has(n));
   const banned = namesInState(settings, draft, "banned").filter((n) => have.has(n));
-  const own = (a ? a.mcpServers : []).filter((n) => !banned.includes(n));
+  // A project-only server comes only from the project's Added list, never from the agent alone.
+  const projectOnly = new Set(settings.servers.filter((s) => s.projectOnly).map((s) => s.name));
+  const own = (a ? a.mcpServers : []).filter((n) => !banned.includes(n) && (!projectOnly.has(n) || mine.includes(n)));
   const withAgent = [
     ...own.map((name) => ({ name, origin: mine.includes(name) ? "both, counted once" : "agent" })),
     ...mine.filter((n) => !own.includes(n)).map((name) => ({ name, origin: "project" })),

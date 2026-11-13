@@ -156,6 +156,9 @@ type CatalogMCPServer struct {
 	KnownTools    []string `json:"known_tools"`
 	ProbedAt      *string  `json:"probed_at"`
 	DisabledTools []string `json:"disabled_tools"`
+	// ProjectOnly marks a server only a project's Added list brings: an agent
+	// listing it does not attach it on its own.
+	ProjectOnly bool `json:"project_only"`
 }
 
 // CatalogBuiltInTool is a Claude built-in tool an agent may be restricted to.
@@ -398,6 +401,8 @@ type CatalogServerInput struct {
 	Env       map[string]string `json:"env"`
 	URL       string            `json:"url"`
 	Headers   map[string]string `json:"headers"`
+	// ProjectOnly sets Project only on a save: nil keeps the stored value.
+	ProjectOnly *bool `json:"project_only,omitempty"`
 }
 
 // SaveCatalogMCPServer creates, updates or renames an MCP server. Agents and
@@ -466,6 +471,7 @@ type CatalogProjectMCPServer struct {
 	State        string                  `json:"state"`
 	UsedByAgents []string                `json:"used_by_agents"`
 	Tools        []CatalogProjectMCPTool `json:"tools"`
+	ProjectOnly  bool                    `json:"project_only"`
 }
 
 // CatalogProjectMCPTool is a tool with the catalog's default, the project's

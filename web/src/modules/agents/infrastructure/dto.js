@@ -37,6 +37,7 @@ function toMcpServer(m) {
     knownTools: m?.known_tools === undefined || m?.known_tools === null ? null : strings(m.known_tools, "known_tools"),
     probedAt: typeof m?.probed_at === "string" ? m.probed_at : "",
     disabledTools: strings(m?.disabled_tools, "disabled_tools"),
+    projectOnly: m?.project_only === true,
     agents: strings(m?.agents, "agents"),
     projects: list(m?.projects, "projects").map((p) => ({ id: String(p?.id ?? ""), name: String(p?.name ?? "") })),
     problems: problems(m?.problems),
@@ -177,6 +178,7 @@ export function toProjectMcpSettings(body) {
         name: String(s?.name ?? ""),
         state: s.state,
         usedByAgents: strings(s?.used_by_agents, "used_by_agents"),
+        projectOnly: s?.project_only === true,
         tools: s?.tools === undefined || s?.tools === null ? null : list(s.tools, "tools").map((t) => ({
           name: String(t?.name ?? ""),
           default: settingOf(t?.default, "a tool's default"),
@@ -247,7 +249,8 @@ export function serverFields(s) {
 
 export function mcpServerBody(input) {
   const disabled = input.server.disabledTools === undefined ? {} : { disabled_tools: input.server.disabledTools };
-  return { ...withPrevious(input.previousName), server: { ...serverFields(input.server), ...disabled }, agents: input.agents ?? [], projects: input.projects ?? [] };
+  const projectOnly = input.server.projectOnly === undefined ? {} : { project_only: input.server.projectOnly };
+  return { ...withPrevious(input.previousName), server: { ...serverFields(input.server), ...disabled, ...projectOnly }, agents: input.agents ?? [], projects: input.projects ?? [] };
 }
 
 /** @param {unknown} body @returns {{ id: string, name: string }[]} */

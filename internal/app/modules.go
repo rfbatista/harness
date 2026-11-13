@@ -1020,6 +1020,7 @@ func newOrchestrationService(
 	}
 	svc := orchestration.NewService(manager, broker, hub, sessions, orchCatalog, tickets, ws)
 	svc.MCPToolDefaults = agentCatalog.DisabledMCPTools
+	svc.MCPProjectOnly = agentCatalog.ProjectOnlyMCPServers
 	svc.UseBranchNames(branchNames)
 	svc.UseBaseBranches(baseBranches)
 	svc.UseAssignments(assignments)

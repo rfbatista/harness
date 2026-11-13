@@ -71,6 +71,16 @@ test("http · an MCP server save carries disabled_tools only when asked, and Ref
   assert.deepEqual(refresh, ["/api/refresh_catalog_mcp_server_tools", { name: "github" }]);
 });
 
+test("http · an MCP server save carries project_only inside the server only when asked", async () => {
+  const { gateway, stub } = http(makeWorld());
+  const server = { name: "github", transport: "stdio", command: "npx" };
+  await gateway.saveMcpServer({ previousName: "github", server: { ...server, projectOnly: true }, agents: [], projects: [] });
+  await gateway.saveMcpServer({ previousName: "github", server, agents: [], projects: [] });
+  const [on, without] = stub.requests.map(([, , body]) => body);
+  assert.equal(on.server.project_only, true);
+  assert.ok(!("project_only" in without.server));
+});
+
 test("http · the project's MCP settings are read from get_project_mcp_servers and written to set_project_mcp_settings in snake_case", async () => {
   const { gateway, stub } = http(makeWorld());
   await gateway.getProjectMcpSettings("p1");

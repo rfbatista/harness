@@ -118,6 +118,11 @@ func (n *node) str() string {
 	return s
 }
 
+// isTrue is whether n is the JSON scalar true.
+func (n *node) isTrue() bool {
+	return n != nil && n.kind == 's' && string(n.raw) == "true"
+}
+
 // strs is an array of strings; non-strings are skipped.
 func (n *node) strs() []string {
 	if n == nil || n.kind != 'a' {

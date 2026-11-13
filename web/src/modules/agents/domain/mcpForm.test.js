@@ -292,13 +292,13 @@ test("the save sends the chosen transport's fields, skips empty rows and trims",
   d.projects = ["p2"];
   assert.deepEqual(mcpSave(d), {
     previousName: "github",
-    server: { name: "github2", transport: "stdio", command: "npx", args: ["-y", "gh-mcp"], env: { TOKEN: "${GITHUB_TOKEN}" }, url: "", headers: {}, disabledTools: [] },
+    server: { name: "github2", transport: "stdio", command: "npx", args: ["-y", "gh-mcp"], env: { TOKEN: "${GITHUB_TOKEN}" }, url: "", headers: {}, disabledTools: [], projectOnly: false },
     agents: ["backend"],
     projects: ["p2"],
   });
   d.transport = "http";
   d.url = " https://mcp.example.com ";
-  assert.deepEqual(mcpSave(d).server, { name: "github2", transport: "http", command: "", args: [], env: {}, url: "https://mcp.example.com", headers: { A: "b" }, disabledTools: [] });
+  assert.deepEqual(mcpSave(d).server, { name: "github2", transport: "http", command: "", args: [], env: {}, url: "https://mcp.example.com", headers: { A: "b" }, disabledTools: [], projectOnly: false });
   assert.equal(mcpSave(mcpDraft(catalog, {})).previousName, undefined);
 });
 
@@ -446,6 +446,19 @@ test("the save body carries every disabled name, the hidden one too", () => {
   toggleTool(d, "list_prs");
   assert.deepEqual(mcpSave(d).server.disabledTools, ["create_issue", "vanished", "list_prs"]);
   assert.deepEqual(mcpSave(mcpDraft(catalog, {})).server.disabledTools, []);
+});
+
+test("Project only starts from the saved server, counts as one change and goes in the save body", () => {
+  const fresh = mcpDraft(catalog, {});
+  assert.equal(fresh.projectOnly, false);
+  const d = mcpDraft(catalog, { previous: { ...probed, projectOnly: true } });
+  assert.equal(d.projectOnly, true);
+  assert.equal(mcpChanges(d), 0);
+  d.projectOnly = false;
+  assert.equal(mcpChanges(d), 1);
+  assert.equal(mcpSave(d).server.projectOnly, false);
+  d.projectOnly = true;
+  assert.equal(mcpSave(d).server.projectOnly, true);
 });
 
 test("Refresh tools adopts the new tool list and leaves the unsaved definition and toggles alone", () => {
