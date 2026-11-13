@@ -81,3 +81,13 @@ type GitBranch struct {
 	Remote bool   `json:"remote"`
 	IsHead bool   `json:"is_head"`
 }
+
+// RepositoryWorktreesDirName is the folder, under the workspaces root, that
+// holds every session worktree of the repository: keyed by name and id, so two
+// repositories of one name never share it.
+func RepositoryWorktreesDirName(repo *Repository) string {
+	if slug := Slug(repo.Name); slug != "" {
+		return slug + "-" + repo.ID
+	}
+	return repo.ID
+}

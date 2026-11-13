@@ -57,6 +57,15 @@ type ServiceRequestEnv struct {
 	PreviousSet bool   `json:"previous_set"`
 }
 
+// ServiceRequestBranch is the branch of a request to run on a branch: its name
+// (without "origin/"), the short sha of its tip at filing time, and whether it
+// is a branch of origin.
+type ServiceRequestBranch struct {
+	Name   string `json:"name"`
+	SHA    string `json:"sha"`
+	Remote bool   `json:"remote"`
+}
+
 // ServiceRequest is one request, as the person reads it.
 type ServiceRequest struct {
 	ID          string               `json:"id"`
@@ -74,8 +83,12 @@ type ServiceRequest struct {
 	Proposed *ServiceInput          `json:"proposed"`
 	Changes  []ServiceRequestChange `json:"changes"`
 	Env      []ServiceRequestEnv    `json:"env"`
-	// Worktree is main or own for a start or restart, "" for the others.
+	// Worktree is main, own, or branch:<name> / branch:origin/<name> for a
+	// start or restart, "" for the others.
 	Worktree string `json:"worktree"`
+	// Branch is the branch a start or restart on a branch runs and its tip when
+	// the request was filed (ADR 0086); nil for any other request.
+	Branch *ServiceRequestBranch `json:"branch"`
 	// OverridesGiven says a start or restart named its run overrides, even none
 	// (a restart that did not repeats the last run's).
 	OverridesGiven bool                `json:"overrides_given"`

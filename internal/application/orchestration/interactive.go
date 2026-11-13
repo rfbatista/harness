@@ -300,6 +300,7 @@ func (s *Service) ResumeInteractive(ctx context.Context, req ports.ResumeRequest
 		}
 		return nil, ports.AgentSpec{}, err
 	}
+	s.withWorktreeReadHook(&cfg, sess.ID, sb)
 	// A session a restart interrupted mid-turn is told so: its first turn is
 	// the continue turn (ADR 0082); any other resumes idle, with no turn.
 	prompt := ""

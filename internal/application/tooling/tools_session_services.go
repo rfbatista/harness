@@ -123,7 +123,7 @@ func SessionServicesTools(sessions ports.SessionRepository, agents ports.AgentLi
 	nameSchema := `"name":{"type":"string","description":"The service's name, as list_services gives it."}`
 	envSchema := `"env":{"type":"object","additionalProperties":{"type":"string"},"description":"Run overrides: environment variables for this run only, on top of the repository .env and the service's own variables; the service itself is never changed. Names match [A-Za-z_][A-Za-z0-9_]*, at most 100; an image service's values have no line break. restart_service without env repeats the last run's overrides; env {} clears them."}`
 	reasonSchema := `"reason":{"type":"string","description":"Why you ask: the person reads it when deciding."}`
-	worktreeSchema := `"worktree":{"type":"string","enum":["own"],"description":"own: run a command service of your repository in your worktree instead of the repository's main checkout. Omit for the main checkout."}`
+	worktreeSchema := `"worktree":{"type":"string","description":"own: run a command service of your repository in your worktree instead of the repository's main checkout. branch:<name>: run a command service of a repository on a local branch, in the service's own worktree, detached at the branch's tip; branch:origin/<name>: the same for a branch of origin, fetched first. Omit for the main checkout."}`
 	tools := []domain.Tool{
 		{
 			Name: "list_services",
@@ -164,7 +164,8 @@ func SessionServicesTools(sessions ports.SessionRepository, agents ports.AgentLi
 			Name: "start_service",
 			Description: "Start a service and answer once its run is running or has failed (a failed run is a normal answer: status failed, run.error). " +
 				"Without worktree a command service runs in its repository's main checkout. worktree: \"own\" runs it in your worktree, " +
-				"which only a command service of your own repository can. A service that is already starting or running is returned with " +
+				"which only a command service of your own repository can. worktree: \"branch:<name>\" (or \"branch:origin/<name>\") runs a command service on " +
+				"that branch's tip in the service's own worktree; the request shows the branch and its commit. A service that is already starting or running is returned with " +
 				"already_running true, wherever it runs and whoever started it; nothing is restarted. If the run is still starting after " +
 				"a minute the answer says starting: call service_status. env sets run overrides for this run only; with env on a running " +
 				"service nothing changes: call restart_service with the new env. Starting asks the person: the call waits, with no time limit, " +
@@ -176,11 +177,11 @@ func SessionServicesTools(sessions ports.SessionRepository, agents ports.AgentLi
 				if err != nil {
 					return nil, err
 				}
-				opts, err := t.startOptions(ctx, sess, svc, args)
+				opts, branch, err := t.startOptions(ctx, sess, svc, args)
 				if err != nil {
 					return nil, err
 				}
-				started, already, err := t.start(ctx, sess, svc, opts, args)
+				started, already, err := t.start(ctx, sess, svc, opts, branch, args)
 				if err != nil {
 					return nil, t.refusal(ctx, err, svc.Name)
 				}
@@ -222,17 +223,25 @@ func SessionServicesTools(sessions ports.SessionRepository, agents ports.AgentLi
 				if err != nil {
 					return nil, err
 				}
-				opts, err := t.startOptions(ctx, sess, svc, args)
+				opts, branch, err := t.startOptions(ctx, sess, svc, args)
 				if err != nil {
 					return nil, err
 				}
 				// Each omitted argument repeats the last run on its own (ADR 0077):
 				// no env keeps the overrides (the module does), no worktree keeps
-				// the run worktree the agent may use, else the main checkout.
-				if wt, given := args["worktree"]; (!given || wt == nil) && t.mayRepeat(ctx, sess, svc) {
-					opts.Worktree = &ports.ServiceWorktree{Dir: sess.WorkingDir, Branch: sess.Branch, SessionID: sess.ID}
+				// the run worktree the agent may use (its own, or the branch the
+				// last run was on, at its latest tip), else the main checkout.
+				if wt, given := args["worktree"]; !given || wt == nil {
+					switch {
+					case t.mayRepeat(ctx, sess, svc):
+						opts.Worktree = &ports.ServiceWorktree{Dir: sess.WorkingDir, Branch: sess.Branch, SessionID: sess.ID}
+					case svc.Run != nil && isBranchKey(svc.Run.WorktreeKey) && t.noBranch(svc) == "":
+						if opts, branch, err = t.branchRun(ctx, svc, opts, svc.Run.WorktreeKey); err != nil {
+							return nil, t.refusal(ctx, err, svc.Name)
+						}
+					}
 				}
-				restarted, err := t.restart(ctx, sess, svc, opts, args)
+				restarted, err := t.restart(ctx, sess, svc, opts, branch, args)
 				if err != nil {
 					return nil, t.refusal(ctx, err, svc.Name)
 				}
@@ -265,7 +274,7 @@ func SessionServicesTools(sessions ports.SessionRepository, agents ports.AgentLi
 // already starting or running is answered at once, a start that could not
 // happen is refused at once, and anything else files a service request and
 // waits for the person's answer. Without a request store it starts directly.
-func (t *servicesTools) start(ctx context.Context, sess *domain.Session, svc *domain.Service, opts ports.ServiceStartOptions, args map[string]any) (*domain.Service, bool, error) {
+func (t *servicesTools) start(ctx context.Context, sess *domain.Session, svc *domain.Service, opts ports.ServiceStartOptions, branch *domain.ServiceRequestBranch, args map[string]any) (*domain.Service, bool, error) {
 	if t.requests == nil {
 		return t.services.StartService(ctx, svc.ID, opts)
 	}
@@ -277,7 +286,7 @@ func (t *servicesTools) start(ctx context.Context, sess *domain.Session, svc *do
 	}
 	out, err := t.requests.Submit(ctx, ports.ServiceRequestInput{
 		SessionID: sess.ID, Action: domain.ServiceRequestStart, ServiceID: svc.ID, ServiceName: svc.Name,
-		Reason: getString(args, "reason", ""), Worktree: ownWorktree(opts), Env: opts.Env, EnvGiven: opts.Env != nil,
+		Reason: getString(args, "reason", ""), Worktree: requestWorktree(opts), Branch: branch, Env: opts.Env, EnvGiven: opts.Env != nil,
 	})
 	if err != nil {
 		return nil, false, err
@@ -288,7 +297,7 @@ func (t *servicesTools) start(ctx context.Context, sess *domain.Session, svc *do
 // restart is a restart the person approves first: one that could not happen is
 // refused at once, anything else files a service request and waits. Without a
 // request store it restarts directly.
-func (t *servicesTools) restart(ctx context.Context, sess *domain.Session, svc *domain.Service, opts ports.ServiceStartOptions, args map[string]any) (*domain.Service, error) {
+func (t *servicesTools) restart(ctx context.Context, sess *domain.Session, svc *domain.Service, opts ports.ServiceStartOptions, branch *domain.ServiceRequestBranch, args map[string]any) (*domain.Service, error) {
 	if t.requests == nil {
 		return t.services.RestartService(ctx, svc.ID, opts)
 	}
@@ -297,7 +306,7 @@ func (t *servicesTools) restart(ctx context.Context, sess *domain.Session, svc *
 	}
 	out, err := t.requests.Submit(ctx, ports.ServiceRequestInput{
 		SessionID: sess.ID, Action: domain.ServiceRequestRestart, ServiceID: svc.ID, ServiceName: svc.Name,
-		Reason: getString(args, "reason", ""), Worktree: ownWorktree(opts), Env: opts.Env, EnvGiven: opts.Env != nil,
+		Reason: getString(args, "reason", ""), Worktree: requestWorktree(opts), Branch: branch, Env: opts.Env, EnvGiven: opts.Env != nil,
 	})
 	if err != nil {
 		return nil, err
@@ -321,12 +330,22 @@ func (t *servicesTools) stop(ctx context.Context, sess *domain.Session, svc *dom
 	return out.Service, nil
 }
 
-// ownWorktree is "own" when the options run in the session's worktree.
-func ownWorktree(opts ports.ServiceStartOptions) string {
+// requestWorktree is the worktree a request names: "own" when the options run
+// in the session's worktree, the branch key for a run on a branch, "" for the
+// main checkout.
+func requestWorktree(opts ports.ServiceStartOptions) string {
 	if opts.Worktree != nil {
 		return "own"
 	}
+	if isBranchKey(opts.WorktreeKey) {
+		return opts.WorktreeKey
+	}
 	return ""
+}
+
+// isBranchKey says a worktree key names a branch run.
+func isBranchKey(key string) bool {
+	return strings.HasPrefix(key, "branch:") && len(key) > len("branch:")
 }
 
 // scope is the session's project: every tool's first step.
@@ -394,25 +413,56 @@ func (t *servicesTools) refusal(ctx context.Context, err error, name string) err
 
 // startOptions say who starts a run and where: the calling session, in its own
 // worktree when the arguments ask for it and the service can run there.
-func (t *servicesTools) startOptions(ctx context.Context, sess *domain.Session, svc *domain.Service, args map[string]any) (ports.ServiceStartOptions, error) {
+func (t *servicesTools) startOptions(ctx context.Context, sess *domain.Session, svc *domain.Service, args map[string]any) (ports.ServiceStartOptions, *domain.ServiceRequestBranch, error) {
 	opts := ports.ServiceStartOptions{StartedBy: domain.ServiceStartedBy{Kind: "session", SessionID: sess.ID, Agent: t.agentName(ctx, sess), TaskID: sess.TicketID}}
 	env, err := envArg(args)
 	if err != nil {
-		return opts, err
+		return opts, nil, err
 	}
 	opts.Env = env
 	wt, given := args["worktree"]
 	if !given || wt == nil {
-		return opts, nil
+		return opts, nil, nil
+	}
+	if key, ok := wt.(string); ok && isBranchKey(key) {
+		if reason := t.noBranch(svc); reason != "" {
+			return opts, nil, &domain.StructuredError{Code: "WORKTREE_NOT_AVAILABLE", Message: `"` + svc.Name + `" cannot run on a branch: ` + reason}
+		}
+		opts, branch, err := t.branchRun(ctx, svc, opts, key)
+		return opts, branch, t.refusal(ctx, err, svc.Name)
 	}
 	if wt != "own" {
-		return opts, invalidInput(`worktree must be "own" or omitted`)
+		return opts, nil, invalidInput(`worktree must be "own", "branch:<name>" or omitted`)
 	}
 	if reason := t.noWorktree(ctx, sess, svc); reason != "" {
-		return opts, &domain.StructuredError{Code: "WORKTREE_NOT_AVAILABLE", Message: `"` + svc.Name + `" cannot run in your worktree: ` + reason}
+		return opts, nil, &domain.StructuredError{Code: "WORKTREE_NOT_AVAILABLE", Message: `"` + svc.Name + `" cannot run in your worktree: ` + reason}
 	}
 	opts.Worktree = &ports.ServiceWorktree{Dir: sess.WorkingDir, Branch: sess.Branch, SessionID: sess.ID}
-	return opts, nil
+	return opts, nil, nil
+}
+
+// branchRun is the options of a run on the branch key names, with the branch
+// and its tip now: the person approves that state of the code. An unknown
+// branch is refused here, before anything is filed.
+func (t *servicesTools) branchRun(ctx context.Context, svc *domain.Service, opts ports.ServiceStartOptions, key string) (ports.ServiceStartOptions, *domain.ServiceRequestBranch, error) {
+	branch, err := t.services.ResolveServiceBranch(ctx, svc.ID, key)
+	if err != nil {
+		return opts, nil, err
+	}
+	opts.WorktreeKey = key
+	return opts, branch, nil
+}
+
+// noBranch is why the service cannot run on a branch, "" when it can: only a
+// command service with a repository can.
+func (t *servicesTools) noBranch(svc *domain.Service) string {
+	switch {
+	case svc.Kind == domain.ServiceKindImage:
+		return "it is an image service"
+	case svc.RepositoryID == "":
+		return "it has no repository"
+	}
+	return ""
 }
 
 // envArg reads the run overrides: nil when env is not given, an empty map for
@@ -567,7 +617,7 @@ func whereText(w domain.ServiceWhere, sessionID string) string {
 		}
 		return "worktree of session " + shortSessionID(w.SessionID)
 	case "branch":
-		return "service worktree"
+		return "branch " + w.Branch + " @ " + w.SHA
 	case "service_folder":
 		return "service folder"
 	case "container":

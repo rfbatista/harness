@@ -316,6 +316,9 @@ func NewRouter(h *Handler, opts ...Option) *echo.Echo {
 	// whether an action keeps to the repository's layers
 	g.POST(strings.TrimPrefix(ArchitectureCheckRoute, "/api"), h.handleArchitectureCheck)
 	g.POST(strings.TrimPrefix(ArchitectureCommitRoute, "/api"), h.handleArchitectureCommit)
+	// the architect's worktree read hook asks which worktrees are its task's
+	g.GET(strings.TrimPrefix(TaskWorktreesRoute, "/api"), h.handleTaskWorktrees)
+	g.POST(strings.TrimPrefix(TaskWorktreeDenialsRoute, "/api"), h.handleTaskWorktreeDenial)
 	// the branch gate: a session's git shim asks for a branch grant
 	g.POST(strings.TrimPrefix(BranchGateRoute, "/api"), h.handleBranchGateHook)
 	g.POST(strings.TrimPrefix(BranchGateGrantRoute, "/api"), h.handleBranchGateGrant)

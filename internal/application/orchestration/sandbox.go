@@ -109,6 +109,11 @@ type SandboxSession struct {
 	// WorkspacesRoot is the directory session worktrees are made under; it is
 	// hidden, the session's own worktree inside it granted.
 	WorkspacesRoot string
+	// WorktreesDir is the folder under WorkspacesRoot that holds every session
+	// worktree of the session's repository (ADR 0087). An architect reads it,
+	// read-only, whole, so worktrees made after the policy was built are
+	// covered; empty for every other mode.
+	WorktreesDir string
 	// VirtualShell is the session's shell; empty without one.
 	VirtualShell string
 	// CommitCheckDir is the session's own commit check hooks dir (ADR 0040):
@@ -208,6 +213,7 @@ func BuildSandboxPolicy(s SandboxSession) ports.SandboxPolicy {
 		add(s.Worktree, true)
 		createOnly = addGitDir(add, s)
 		addRepositories(add, s)
+		add(s.WorktreesDir, false)
 	default:
 		add(s.Worktree, true)
 		createOnly = addGitDir(add, s)
@@ -513,7 +519,10 @@ func sessionTempDir(env []string) string {
 
 // sandboxed is the outcome of the sandbox step.
 type sandboxed struct {
-	policy *ports.SandboxPolicy
+	// worktreesDir is the folder an architect's policy grants read-only (ADR
+	// 0087); empty for every other session.
+	worktreesDir string
+	policy       *ports.SandboxPolicy
 	// wrap is what llmkit runs on the session's final command: the driver's
 	// wrap under the session's policy, with the files llmkit made for the
 	// process added to it. Nil when the session is not sandboxed.
@@ -558,6 +567,16 @@ func (s *Service) sandbox(ctx context.Context, in prepareInput, id string, repo 
 	}
 	if sb.WorkspacesRoot != nil {
 		sess.WorkspacesRoot = sb.WorkspacesRoot()
+		if in.Mode == domain.SessionModeArchitect && sess.WorkspacesRoot != "" {
+			// The grant covers every worktree of the repository, so it is made only
+			// where the worktree read hook that narrows it to the task can be given
+			// too; a hook that cannot be wired never leaves the grant wide.
+			if s.canWireWorktreeReadHook(env) {
+				sess.WorktreesDir = filepath.Join(sess.WorkspacesRoot, domain.RepositoryWorktreesDirName(repo))
+			} else {
+				slog.Warn("architect session has no worktree read hook, so its sandbox does not grant the worktrees folder", "session", id)
+			}
+		}
 	}
 	if s.commitCheckEnabled() {
 		sess.CommitCheckDir = s.CommitCheckDir(id)
@@ -593,7 +612,7 @@ func (s *Service) sandbox(ctx context.Context, in prepareInput, id string, repo 
 		visibility = domain.SandboxAllReposReadOnly
 	}
 	facts := &domain.SandboxFacts{Sandboxed: true, Visibility: visibility, Driver: sb.Driver.Name()}
-	return sandboxed{policy: &policy, wrap: sandboxWrap(sb.Driver, sess), facts: facts}, nil
+	return sandboxed{policy: &policy, wrap: sandboxWrap(sb.Driver, sess), facts: facts, worktreesDir: sess.WorktreesDir}, nil
 }
 
 // skillDirGrants are the session's skill plugin dirs, read-only (ADR 0028): the

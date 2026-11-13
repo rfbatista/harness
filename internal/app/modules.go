@@ -1065,6 +1065,9 @@ func newOrchestrationService(
 	svc.SessionBranchGateURL = func(sessionID string) string {
 		return base + httpapi.SessionBranchGatePath(sessionID)
 	}
+	svc.SessionTaskWorktreesURL = func(sessionID string) string {
+		return base + httpapi.SessionTaskWorktreesPath(sessionID)
+	}
 	svc.BranchGateTimeout = cfg.ApprovalTimeout
 	svc.ShimBinary = cfg.ShimBinary
 	svc.DeveloperBin = developerdir.Bin
