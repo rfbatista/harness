@@ -140,7 +140,9 @@ The schema comes from the branch, never from you. Never hand-write a schema.
 3. No: find the repository's documented migration command (README, Makefile, docs).
    Run it against the task database, with the connection variables of step 5, from the
    task's delegate session worktree. You may read that worktree; a run does not write
-   to it. Find the path with `mcp__task__list_task_sessions`. Check the tables exist.
+   to it. Find the path with `mcp__task__list_task_sessions`. Check the tables exist. If the service had exited, call
+   `mcp__services__restart_service` with the same `worktree` and a `reason` so the
+   application comes up on the schema.
 4. No documented command, or you cannot run it from there: ask.
 5. SQLite: the application or the command line applies migrations at start. Go to step 9.
    If the application has no migration path, ask.
@@ -155,7 +157,7 @@ The schema comes from the branch, never from you. Never hand-write a schema.
 3. SQLite: save the SQL as the variable `SEED_SQL` on the task service with
    `update_service`, change the command line so it applies the seed after the migration
    step and before the run command, then `restart_service` (`ENGINES.md`).
-4. If the application caches or needs a restart to see the seed, call
+4. Only if the application caches and needs a restart to see the seed, call
    `restart_service` with the same `worktree` and a `reason`.
 
 ### 10. Verify
