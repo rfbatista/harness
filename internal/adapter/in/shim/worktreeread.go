@@ -27,6 +27,7 @@ import (
 
 const (
 	worktreeReadUnreachable = "worktree read hook: the harness could not be reached; try again"
+	worktreeReadUndecidable = "worktree read hook: the call could not be judged (unreadable hook input or no worktrees folder); try again"
 	worktreeReadADR         = "an architect reads only the worktrees of its own task's sessions (ADR 0087)"
 )
 
@@ -68,7 +69,10 @@ func worktreeReadHookMain() int {
 // the loopback lookup's URL.
 func worktreeReadMain(stdin io.Reader, stdout io.Writer, root, lookup string, client *http.Client) int {
 	var in worktreeReadInput
+	// A hook that cannot decide denies: input it cannot read, or no folder to
+	// judge by, is not a reason to let a call through.
 	if err := json.NewDecoder(stdin).Decode(&in); err != nil || root == "" {
+		deny(stdout, worktreeReadUndecidable)
 		return 0
 	}
 	for _, p := range readPaths(in, root) {

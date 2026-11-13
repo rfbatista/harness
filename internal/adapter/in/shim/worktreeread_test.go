@@ -201,3 +201,16 @@ func TestWorktreeReadHook_AGrepOrGlobOverTheWholeFolderIsDeniedAndAReadOfItsList
 		t.Errorf("listing the folder is allowed: %q", out)
 	}
 }
+
+func TestWorktreeReadHook_ACallItCannotJudgeIsDenied(t *testing.T) {
+	var out strings.Builder
+	worktreeReadMain(strings.NewReader("not json"), &out, hookRoot, "http://127.0.0.1:1", &http.Client{})
+	if _, ok := denied(out.String()); !ok {
+		t.Errorf("garbled input: %q", out.String())
+	}
+	out.Reset()
+	worktreeReadMain(strings.NewReader(toolInput("Read", "file_path", "/etc/hosts")), &out, "", "http://127.0.0.1:1", &http.Client{})
+	if _, ok := denied(out.String()); !ok {
+		t.Errorf("no folder: %q", out.String())
+	}
+}
