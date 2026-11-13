@@ -145,6 +145,10 @@ type Service struct {
 	// SessionBranchGateURL returns where a session's branch gate is asked
 	// (…/api/sessions/{id}/branch_gate). Nil: sessions get no git shim.
 	SessionBranchGateURL func(sessionID string) string
+	// SessionTaskWorktreesURL returns where an architect session's worktree read
+	// hook asks which worktrees are its task's (ADR 0087); nil gives the
+	// session no hook.
+	SessionTaskWorktreesURL func(sessionID string) string
 	// BranchGateTimeout is the branch gate hook's timeout: the approval
 	// timeout. Zero is 24 hours.
 	BranchGateTimeout time.Duration
@@ -595,6 +599,7 @@ func (s *Service) prepare(ctx context.Context, in prepareInput) (*prepared, erro
 		_ = s.workspaces.Discard(ws.ID)
 		return nil, err
 	}
+	s.withWorktreeReadHook(&cfg, id, sb)
 	if sb.wrap != nil {
 		cfg.Wrap = sb.wrap
 	}

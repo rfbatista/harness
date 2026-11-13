@@ -264,7 +264,7 @@ func TestServicesOverrides_BadEntriesAreRefusedNamingTheKeyAndStartNothing(t *te
 
 func TestServicesOverrides_AgentsAreStillRefusedEveryWorktreeButOwn(t *testing.T) {
 	f := newOverridesFixture(t)
-	f.as("sess-1").refused("start_service", map[string]any{"name": "web", "worktree": "session:other", "env": map[string]any{"A": "b"}}, `worktree must be "own" or omitted`)
+	f.as("sess-1").refused("start_service", map[string]any{"name": "web", "worktree": "session:other", "env": map[string]any{"A": "b"}}, `worktree must be "own", "branch:<name>" or omitted`)
 }
 
 func TestServicesOverrides_ARestartRepeatsEachOmittedArgumentOnItsOwn(t *testing.T) {

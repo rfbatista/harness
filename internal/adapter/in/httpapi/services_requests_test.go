@@ -248,7 +248,7 @@ func TestServicesRequests_BadArgumentsAndNoOpActionsFileNothing(t *testing.T) {
 	agent := f.as("sess-1")
 
 	agent.refused("start_service", map[string]any{"name": "nope"}, `no service named "nope" in this project; call list_services`)
-	agent.refused("start_service", map[string]any{"name": "web", "worktree": "main"}, `worktree must be "own" or omitted`)
+	agent.refused("start_service", map[string]any{"name": "web", "worktree": "main"}, `worktree must be "own", "branch:<name>" or omitted`)
 	if _, msg := agent.call("start_service", map[string]any{"name": "web", "env": map[string]any{"1BAD": "x"}}); !strings.Contains(msg, `"1BAD"`) {
 		t.Fatalf("bad env key = %q", msg)
 	}
@@ -388,7 +388,7 @@ func TestServicesRequests_AStopFilesARequestAndStopsOnApprovalButNotOnDenial(t *
 func TestServicesRequests_ARestartRefusedBeforeFilingFilesNothing(t *testing.T) {
 	f, _ := requestsFixtureWithService(t)
 	agent := f.as("sess-1")
-	agent.refused("restart_service", map[string]any{"name": "web", "worktree": "main"}, `worktree must be "own" or omitted`)
+	agent.refused("restart_service", map[string]any{"name": "web", "worktree": "main"}, `worktree must be "own", "branch:<name>" or omitted`)
 	agent.refused("restart_service", map[string]any{"name": "nope"}, `no service named "nope" in this project; call list_services`)
 	if _, msg := agent.call("restart_service", map[string]any{"name": "web", "env": map[string]any{"A-B": "x"}}); !strings.Contains(msg, `"A-B"`) {
 		t.Fatalf("bad env = %q", msg)

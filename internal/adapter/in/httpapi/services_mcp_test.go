@@ -69,16 +69,20 @@ func newMCPFixture(t *testing.T, settle time.Duration) *mcpFixture {
 	return f
 }
 
-func newMCPFixtureBase(t *testing.T, settle time.Duration, withRequests bool) *mcpFixture {
+func newMCPFixtureBase(t *testing.T, settle time.Duration, withRequests bool, extra ...func(*services.Options)) *mcpFixture {
 	t.Helper()
 	fake := &containerrunnertest.Fake{}
 	lookup := &fakeRunWorktrees{}
-	f := newServicesFixture(t, services.Options{
+	opts := services.Options{
 		RunWorktrees: lookup,
 		Runners:      map[domain.ServiceKind]ports.ServiceProcessRunner{domain.ServiceKindCommand: commandrunner.Runner{}, domain.ServiceKindImage: fake},
 		LookPath:     func(c string) (string, error) { return "/usr/bin/" + c, nil },
 		StopGrace:    5 * time.Second,
-	})
+	}
+	for _, apply := range extra {
+		apply(&opts)
+	}
+	f := newServicesFixture(t, opts)
 	t.Cleanup(func() {
 		list, _ := f.svc.ListServices(context.Background(), f.projectID)
 		if list != nil {
@@ -466,10 +470,10 @@ func TestServicesMCP_OwnWorktreeRefusals(t *testing.T) {
 	mine.refused("restart_service", own("job"), `"job" cannot run in your worktree: it has no repository`)
 	f.as("sess-docs").refused("start_service", own("web"), `"web" cannot run in your worktree: it runs from repository api, not yours`)
 	f.as("sess-bare").refused("start_service", own("web"), `"web" cannot run in your worktree: this session has no worktree`)
-	mine.refused("start_service", map[string]any{"name": "web", "worktree": "main"}, `worktree must be "own" or omitted`)
-	mine.refused("restart_service", map[string]any{"name": "web", "worktree": "main"}, `worktree must be "own" or omitted`)
-	mine.refused("start_service", map[string]any{"name": "web", "worktree": ""}, `worktree must be "own" or omitted`)
-	mine.refused("restart_service", map[string]any{"name": "web", "worktree": ""}, `worktree must be "own" or omitted`)
+	mine.refused("start_service", map[string]any{"name": "web", "worktree": "main"}, `worktree must be "own", "branch:<name>" or omitted`)
+	mine.refused("restart_service", map[string]any{"name": "web", "worktree": "main"}, `worktree must be "own", "branch:<name>" or omitted`)
+	mine.refused("start_service", map[string]any{"name": "web", "worktree": ""}, `worktree must be "own", "branch:<name>" or omitted`)
+	mine.refused("restart_service", map[string]any{"name": "web", "worktree": ""}, `worktree must be "own", "branch:<name>" or omitted`)
 	for _, name := range []string{"web", "job", "db"} {
 		if st := f.status(f.createdID(name)); st != "stopped" {
 			t.Fatalf("a refused start starts nothing: %s is %s", name, st)

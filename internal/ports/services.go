@@ -330,6 +330,11 @@ type ServiceManager interface {
 	// would before it creates a run: the sandbox and the container runtime, the
 	// run overrides and the run worktree. It starts nothing.
 	ValidateStart(ctx context.Context, serviceID string, opts ServiceStartOptions) error
+	// ResolveServiceBranch is the branch a start on a branch key (branch:<name>
+	// or branch:origin/<name>) would run and its short tip now, for the request
+	// that asks for it (ADR 0086). A branch of origin is fetched first. An unknown
+	// branch is WORKTREE_NOT_AVAILABLE, before anything is filed.
+	ResolveServiceBranch(ctx context.Context, serviceID, key string) (*domain.ServiceRequestBranch, error)
 	// StartService starts the service's run, in the repository's main checkout
 	// (or its service folder) unless opts name a worktree, and answers once the
 	// run is going (running) or could not start (failed). A service that is

@@ -36,7 +36,7 @@ import (
 // Is says whether a process started as argv0 is a shim.
 func Is(argv0 string) bool {
 	name := filepath.Base(argv0)
-	return name == ports.SecurityShimCommand || name == ports.BranchGateShimCommand || slices.Contains(ports.ShellShimCommands, name)
+	return name == ports.SecurityShimCommand || name == ports.BranchGateShimCommand || name == ports.WorktreeReadHookCommand || slices.Contains(ports.ShellShimCommands, name)
 }
 
 // Main runs the shim for os.Args and answers its exit code. It answers only
@@ -49,6 +49,9 @@ func Main() int {
 	}
 	if name == ports.BranchGateShimCommand {
 		return gitMain(args)
+	}
+	if name == ports.WorktreeReadHookCommand {
+		return worktreeReadHookMain()
 	}
 	real, err := realBinary(name)
 	if err != nil {

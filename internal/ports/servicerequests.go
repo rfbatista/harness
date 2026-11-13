@@ -34,9 +34,12 @@ type ServiceRequestInput struct {
 	ServiceID   string
 	ServiceName string
 	Reason      string
-	// Worktree is "own" for a run in the session's worktree, "" for the
+	// Worktree is "own" for a run in the session's worktree, "branch:<name>" or
+	// "branch:origin/<name>" for a run on a branch (with Branch), "" for the
 	// repository's main checkout.
 	Worktree string
+	// Branch is the branch of a run on a branch, with its tip now.
+	Branch *domain.ServiceRequestBranch
 	// Summary, Proposed, Changes and EnvChanges describe a create or an update:
 	// the readable line, the definition after it, each changed field, and the
 	// variables set or unset. Create and update are performed from Proposed.
