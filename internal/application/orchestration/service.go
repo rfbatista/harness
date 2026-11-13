@@ -957,7 +957,7 @@ func (s *Service) sessionConfig(id, dir, model string, allowedTools []string, pe
 	}
 	cfg.InstructionFiles = s.instructionFiles(context.TODO(), role, ag.agent, subject.projectID(), repositoryID)
 	if s.SessionBranchGateURL != nil {
-		cfg.InstructionFiles = append(cfg.InstructionFiles, branchGateInstructionFile())
+		cfg.InstructionFiles = append(cfg.InstructionFiles, s.branchGateInstructionFile(subject.mode))
 	}
 	if section := attachedAssetsSection(s.attachedAssets(ticket)); section != "" {
 		cfg.AppendSystem = appendSection(cfg.AppendSystem, section)

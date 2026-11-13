@@ -176,6 +176,10 @@ func TestASessionWithNoVirtualShellHasTheGitShimToo(t *testing.T) {
 	if _, err := e.cat.Settings.UpdateSettings(map[string]string{orchestration.SettingSandbox: "off"}); err != nil {
 		t.Fatal(err)
 	}
+	// This test is about the request flow, so the Default mode's block is off.
+	if _, err := e.cat.Settings.UpdateSettings(map[string]string{domain.BranchBlockKey(domain.SessionModeDefault): domain.BranchBlockOff}); err != nil {
+		t.Fatal(err)
+	}
 	// A headless session with no task has no virtual shell; its claude here
 	// runs git the way the Bash tool would.
 	out := filepath.Join(t.TempDir(), "out")
