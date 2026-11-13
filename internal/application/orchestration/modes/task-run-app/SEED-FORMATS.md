@@ -1,0 +1,49 @@
+# Seed document and task comment
+
+Both are for the person: write them in clear, complete sentences. Both are overwritten on a
+rerun. Never add a second copy.
+
+## Seed document
+
+A file in `task/docs/`, for example `seed.md`, whose first heading is exactly:
+
+```
+# Seed: <task title>
+```
+
+Then:
+
+```
+Seeded <date> into task database <name> on <host>:<port>, for the task service <service name>, branch <name> @ <sha>.
+
+## <scenario>
+- Source: <Spec user story N, or Ticket NN acceptance criterion>
+- Records: <what was seeded, with ids or names the person can recognise>
+- How to reach it: <the page, route or call, and which login to use>
+```
+
+One section per scenario, in the order of the Spec and the Tickets. A scenario with nothing
+to seed says so and why.
+
+## Task comment
+
+A file in `task/comments/`, `run-app.md`. Its content:
+
+```
+## Test credentials
+- Service: <service name>, <URL>
+- Engine: <host>:<port>, task database <name>, role <role>, password <password>
+- Application login: <user and password, or token, or claim token — or "the application has no login">
+
+## What I did
+- Engine: <found in namespace X / created namespace task-NN>, read from <files>
+- Branch: <name> @ <sha>
+- Service: <created / updated / restarted>, command <line>
+- Variables: <keys overridden>; the repository's saved .env is not exported
+
+## What I could not do
+- <each gap, or "nothing">
+```
+
+The password and the login are in clear: they are test values on a home cluster. If the run
+command reads `.env` from disk, say so here. Follow the Seed document: "See the Seed: <task title> document for each scenario".

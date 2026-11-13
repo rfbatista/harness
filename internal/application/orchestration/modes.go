@@ -24,7 +24,7 @@ var modeFS embed.FS
 // modeSkillNames lists, per mode, the skill directories under modes/ it adds.
 // The first one is the skill the mode's first message names.
 var modeSkillNames = map[domain.SessionMode][]string{
-	domain.SessionModeArchitect: {"task-architecture", "task-grill-with-docs", "task-to-spec"},
+	domain.SessionModeArchitect: {"task-architecture", "task-grill-with-docs", "task-to-spec", "task-run-app"},
 	domain.SessionModeImplement: {"task-implement-spec", "task-tdd", "task-code-review"},
 	domain.SessionModeDesign:    {"design-artifacts"},
 	domain.SessionModeProduct:   {"task-product"},
