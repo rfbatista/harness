@@ -22,6 +22,8 @@ Seeded <date> into task database <name> on <host>:<port>, for the task service <
 - How to reach it: <the page, route or call, and which login to use>
 ```
 
+Say whether the schema came from boot migrations or from a command (name it).
+
 One section per scenario, in the order of the Spec and the Tickets. A scenario with nothing
 to seed says so and why.
 

@@ -107,3 +107,29 @@ func TestTaskRunApp_RunsTheTaskServiceAndReports(t *testing.T) {
 	formats := pluginFile(t, launch, "task-run-app", "SEED-FORMATS.md")
 	requireAll(t, "SEED-FORMATS.md", formats, "Seed: <task title>", "scenario", "Test credentials", "password")
 }
+
+// The schema comes from the branch, the seed after it, SQLite through the service.
+func TestTaskRunApp_SchemaComesFromTheBranchBeforeTheSeed(t *testing.T) {
+	svc, _ := newInteractiveService(t)
+	_, launch := startInteractive(t, svc, InteractiveRequest{Mode: "architect"})
+	body := pluginSkill(t, launch, "task-run-app")
+	requireAll(t, "task-run-app SKILL.md", body,
+		"Never hand-write a schema", "boot migrations", "delegate session worktree",
+		"SEED_SQL", "Never write into the repository or any worktree.",
+		"recommending the one in namespace `default`", "in your own worktree",
+	)
+	if strings.Contains(body, "is the one exception") {
+		t.Error("task-run-app SKILL.md still lets the skill write a SQLite file into a worktree")
+	}
+	order := []string{"### 6. Create or update the task service", "### 7. Start it on the branch", "### 8. Get the schema from the branch", "### 9. Seed", "### 10. Verify"}
+	last := -1
+	for _, h := range order {
+		i := strings.Index(body, h)
+		if i < 0 || i < last {
+			t.Fatalf("heading %q missing or out of order", h)
+		}
+		last = i
+	}
+	requireAll(t, "ENGINES.md", pluginFile(t, launch, "task-run-app", "ENGINES.md"), "SEED_SQL", `sqlite3 "$DB_PATH"`)
+	requireAll(t, "SEED-FORMATS.md", pluginFile(t, launch, "task-run-app", "SEED-FORMATS.md"), "boot migrations")
+}
