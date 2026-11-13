@@ -110,3 +110,12 @@ test("the inbox link names a request in the page's fragment", () => {
   assert.equal(requestIdFromHash("#branch-request-q1"), "");
   assert.equal(requestIdFromHash(""), "");
 });
+
+test("a start or restart on a branch shows the branch and its commit as a run on a branch does", () => {
+  const local = requestCard(base({ action: "start", worktree: "branch:feature/x", branch: { name: "feature/x", sha: "abc1234", remote: false } }), { now: NOW });
+  assert.deepEqual([local.branchLine, local.hasBranch, local.hasWorktree], ["branch @ feature/x · abc1234", true, false]);
+  const remote = requestCard(base({ action: "restart", worktree: "branch:origin/feature/x", branch: { name: "feature/x", sha: "abc1234", remote: true } }), { now: NOW });
+  assert.equal(remote.branchLine, "branch @ origin/feature/x · abc1234");
+  const plain = requestCard(base({ action: "start", worktree: "main", branch: null }), { now: NOW });
+  assert.deepEqual([plain.branchLine, plain.hasBranch, plain.worktreeLine], ["", false, "Runs in the main checkout."]);
+});

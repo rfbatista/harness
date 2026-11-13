@@ -3,7 +3,7 @@
 // request shape (infrastructure/dto.js).
 
 import { MASK } from "./mask.js";
-import { agoLabel } from "./service.js";
+import { agoLabel, branchLabel } from "./service.js";
 
 export const isPending = (request) => request.state === "pending";
 
@@ -137,6 +137,8 @@ export function requestCard(request, { now, projectId = "", revealed = {} }) {
     hasChanges: changes.length > 0,
     worktreeLine: WORKTREE_LINES[request.worktree] ?? "",
     hasWorktree: (WORKTREE_LINES[request.worktree] ?? "") !== "",
+    branchLine: request.branch ? branchLabel(request.branch) : "",
+    hasBranch: Boolean(request.branch),
     variablesTitle: overrides ? "Run overrides" : "Variables",
     variables,
     hasVariables: variables.length > 0,

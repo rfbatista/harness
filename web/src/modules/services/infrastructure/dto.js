@@ -137,6 +137,7 @@ export function toServiceRequest(r) {
     changes: array(r.changes).map((c) => ({ field: String(c?.field ?? ""), before: String(c?.before ?? ""), after: String(c?.after ?? "") })),
     env: array(r.env).map((e) => ({ name: String(e?.name ?? ""), value: String(e?.value ?? ""), change: e?.change === "unset" ? "unset" : "set", previousSet: e?.previous_set === true })),
     worktree: String(r.worktree ?? ""),
+    branch: r.branch && typeof r.branch.name === "string" ? { name: r.branch.name, sha: String(r.branch.sha ?? ""), remote: r.branch.remote === true } : null,
     state: r.state,
     note: String(r.note ?? ""),
     resultError: String(r.result_error ?? ""),

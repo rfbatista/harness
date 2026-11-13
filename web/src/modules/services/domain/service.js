@@ -100,12 +100,15 @@ export function portLinks(service) {
   return (service.command?.ports ?? []).map((p) => link(p, `:${p}`));
 }
 
+/** A branch and its commit, in words: a run on a branch and a request for one read the same. */
+export const branchLabel = (b) => `branch @ ${b.remote ? "origin/" : ""}${b.name}${b.sha ? ` · ${b.sha}` : ""}`;
+
 /** Where a run runs, in words; "" with no run. */
 export function whereLabel(run) {
   switch (run?.where.kind) {
     case "main": return run.where.branch ? `main checkout @ ${run.where.branch}` : "main checkout";
     case "session": return `session worktree @ ${run.where.branch}`;
-    case "branch": return `branch @ ${run.where.remote ? "origin/" : ""}${run.where.branch}${run.where.sha ? ` · ${run.where.sha}` : ""}`;
+    case "branch": return branchLabel({ name: run.where.branch, sha: run.where.sha, remote: run.where.remote });
     case "service_folder": return "service folder";
     case "container": return "container";
     default: return "";
