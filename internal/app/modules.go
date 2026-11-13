@@ -917,7 +917,7 @@ func newBranchGate(cfg Config, cat catalog.Catalog, sessions ports.SessionReposi
 	publisher := gitcli.NewBranchPublisher()
 	probe := gitprobe.Probe{Git: cfg.GitBin}
 	svc := branchgate.NewService(branchgate.Deps{
-		Sessions: sessions, Requests: requests, Probe: probe, Waiter: orch, Turns: orch, Events: cat.Bus, Feed: orch,
+		Sessions: sessions, Requests: requests, Settings: cat.Settings, Probe: probe, Waiter: orch, Turns: orch, Events: cat.Bus, Feed: orch,
 		Pushes: pushes,
 		Commits: func(dir, branch, remote, remoteBranch, base string) (int, bool, error) {
 			return publisher.CommitsToPush(context.Background(), dir, branch, remote, remoteBranch, base)

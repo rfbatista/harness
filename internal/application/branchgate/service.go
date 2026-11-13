@@ -29,6 +29,9 @@ type Deps struct {
 		List(ctx context.Context, filter ports.SessionFilter) []*domain.Session
 	}
 	Requests ports.BranchRequestStore
+	// Settings holds the branch block of each session mode (ADR 0088), read at
+	// each action; nil blocks nothing.
+	Settings ports.SettingsReader
 	// Probe lets the classifier read git's arguments as git does.
 	Probe domain.GitProbe
 	// Pushes keeps the pushes a session's git ran under a grant (ADR 0071); nil
@@ -94,6 +97,21 @@ func (s *Service) gatedActions(sess *domain.Session, invocations []domain.GitInv
 	return out
 }
 
+// blockedMessage is the branch block's refusal of the action, or "" when the
+// block does not cover it: the action is not a create, a switch or a delete,
+// or the block is off for the session's mode. The setting is read here, at
+// each action, and never kept on the session.
+func (s *Service) blockedMessage(sess *domain.Session, a domain.BranchAction) string {
+	if s.d.Settings == nil || a.Refused != "" || !a.Kind.Blocked() {
+		return ""
+	}
+	blocked, name := domain.BranchBlockedFor(sess.Mode, s.d.Settings.Setting)
+	if !blocked {
+		return ""
+	}
+	return domain.BranchBlockedMessage(name, sess.Branch)
+}
+
 func switchesToSessionBranch(sess *domain.Session, a domain.BranchAction) bool {
 	return a.Kind == domain.BranchSwitch && a.Branch != "" && a.Branch == sess.Branch
 }
@@ -109,6 +127,9 @@ func (s *Service) Grant(ctx context.Context, sessionID string, req ports.BranchG
 	}
 	if req.Refused != "" {
 		return ports.BranchGrantAnswer{Reason: req.Refused}
+	}
+	if msg := s.blockedMessage(sess, req.BranchAction); msg != "" {
+		return ports.BranchGrantAnswer{Blocked: true, Reason: msg}
 	}
 	var changed []domain.BranchRequest
 	defer func() { s.announce(ctx, sess.ProjectID, changed...) }() // after the unlock
@@ -154,6 +175,12 @@ func (s *Service) Hook(ctx context.Context, sessionID string, in ports.BranchHoo
 	for _, a := range actions {
 		if a.Refused != "" {
 			return ports.BranchHookVerdict{Decision: "deny", Reason: a.Refused}
+		}
+	}
+	// One blocked action blocks the whole command, before any request is filed.
+	for _, a := range actions {
+		if msg := s.blockedMessage(sess, a); msg != "" {
+			return ports.BranchHookVerdict{Decision: "deny", Reason: msg}
 		}
 	}
 	var filed []filedRequest
