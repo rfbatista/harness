@@ -8,10 +8,10 @@ import (
 	"operators-mcp/internal/ports"
 )
 
-// TaskWorktreesRoute is the lookup an architect's worktree read hook asks
-// (contract "Harness server ↔ Agent sessions — architect worktree
-// visibility"). Like the other hook endpoints it is loopback-only and needs
-// no token: the session id in the path scopes it.
+// The architect's worktree read hook's endpoints (contract "Harness server ↔
+// Agent sessions — architect worktree visibility"): TaskWorktreesRoute is the
+// lookup it asks. Like the other hook endpoints they are loopback-only and need
+// no token: the session id in the path scopes them.
 const (
 	TaskWorktreesRoute = "/api/sessions/:id/task_worktrees"
 	// TaskWorktreeDenialsRoute is where the hook reports a call it denied, so
@@ -51,10 +51,12 @@ func (h *Handler) handleTaskWorktreeDenial(c echo.Context) error {
 	if err := bindJSON(c, &in); err != nil {
 		return err
 	}
-	if rec, ok := h.archRules.(ports.WorktreeReadRecorder); ok {
-		if err := rec.RecordWorktreeRead(c.Request().Context(), c.Param("id"), in.Tool, in.Path, in.Reason); err != nil {
-			return err
-		}
+	rec, ok := h.archRules.(ports.WorktreeReadRecorder)
+	if !ok {
+		return echo.NewHTTPError(http.StatusNotImplemented, "worktree read denials are not recorded here")
+	}
+	if err := rec.RecordWorktreeRead(c.Request().Context(), c.Param("id"), in.Tool, in.Path, in.Reason); err != nil {
+		return err
 	}
 	return c.NoContent(http.StatusNoContent)
 }
