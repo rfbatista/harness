@@ -121,13 +121,7 @@ func (s *Service) Create(repositoryID, name, branch, baseRef string) (*domain.Wo
 	// The directory is keyed by name *and* ID: workspace-name uniqueness is
 	// only enforced per repository, so two projects each holding a repo named
 	// e.g. "api" would otherwise share one directory under the global root.
-	repoSlug := domain.Slug(repo.Name)
-	if repoSlug == "" {
-		repoSlug = repo.ID
-	} else {
-		repoSlug += "-" + repo.ID
-	}
-	path := filepath.Join(s.root(), repoSlug, slug)
+	path := filepath.Join(s.root(), domain.RepositoryWorktreesDirName(repo), slug)
 
 	baseSHA, err := s.worktrees.Add(repo.RootDir, path, branch, baseRef)
 	if err != nil {

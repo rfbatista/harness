@@ -230,6 +230,38 @@ func (s *Service) ValidateStart(ctx context.Context, serviceID string, opts port
 	return err
 }
 
+// ResolveServiceBranch implements ports.ServiceManager.
+func (s *Service) ResolveServiceBranch(ctx context.Context, serviceID, key string) (*domain.ServiceRequestBranch, error) {
+	svc, err := s.store.GetService(serviceID)
+	if err != nil {
+		return nil, err
+	}
+	repo, err := s.repository(ctx, svc)
+	if err != nil {
+		return nil, err
+	}
+	if svc.Kind != domain.ServiceKindCommand || repo == nil {
+		return nil, &domain.StructuredError{Code: "INVALID_INPUT", Message: "worktree: only a command service of a repository runs on a branch"}
+	}
+	name, remote := branchOfKey(key)
+	if remote && s.opts.Fetcher != nil && repo.RootDir != "" && name != "" {
+		// A branch that cannot be fetched is judged by the refs as they are.
+		_ = s.opts.Fetcher.FetchServiceBranch(ctx, repo.ID, repo.RootDir, name)
+	}
+	if _, err := s.pickBranch(ctx, svc, repo, key); err != nil {
+		return nil, err
+	}
+	ref := "refs/heads/" + name
+	if remote {
+		ref = "refs/remotes/origin/" + name
+	}
+	sha, err := s.opts.BranchGit.ResolveCommit(ctx, repo.RootDir, ref)
+	if err != nil {
+		return nil, err
+	}
+	return &domain.ServiceRequestBranch{Name: name, SHA: shortSHA(sha), Remote: remote}, nil
+}
+
 // current reads the service and says whether it has a run going in this
 // instance. The read is under mu, so a run that was created is already
 // stored.

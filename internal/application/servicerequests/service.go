@@ -96,7 +96,7 @@ func (s *Service) build(ctx context.Context, sess *domain.Session, in ports.Serv
 		ProjectID: sess.ProjectID, ServiceID: in.ServiceID, ServiceName: in.ServiceName, Action: in.Action,
 		SessionID: sess.ID, TaskID: sess.TicketID, Agent: s.agentName(ctx, sess), Reason: strings.TrimSpace(in.Reason),
 		Changes: []domain.ServiceRequestChange{}, Env: []domain.ServiceRequestEnv{},
-		Worktree: in.Worktree, OverridesGiven: in.EnvGiven, State: domain.ServiceRequestPending,
+		Worktree: in.Worktree, Branch: in.Branch, OverridesGiven: in.EnvGiven, State: domain.ServiceRequestPending,
 		RequestedAt: s.d.Now().UTC().Format(time.RFC3339),
 	}
 	if in.Action == domain.ServiceRequestStart || in.Action == domain.ServiceRequestRestart {
@@ -135,6 +135,14 @@ func summary(r *domain.ServiceRequest) string {
 	case domain.ServiceRequestStart, domain.ServiceRequestRestart:
 		if r.Worktree == "own" {
 			text += " in the agent's worktree"
+		}
+		if b := r.Branch; b != nil {
+			// "start api on branch feature/x @ abc1234"
+			name := b.Name
+			if b.Remote {
+				name = "origin/" + name
+			}
+			text = string(r.Action) + " " + r.ServiceName + " on branch " + name + " @ " + b.SHA
 		}
 		if r.Action == domain.ServiceRequestRestart && !r.OverridesGiven {
 			text += " with the same run overrides"
@@ -320,6 +328,10 @@ func (s *Service) startOptions(ctx context.Context, sess *domain.Session, r *dom
 	opts := ports.ServiceStartOptions{StartedBy: domain.ServiceStartedBy{Kind: "session", SessionID: sess.ID, Agent: s.agentName(ctx, sess), TaskID: sess.TicketID}}
 	if r.Worktree == "own" {
 		opts.Worktree = &ports.ServiceWorktree{Dir: sess.WorkingDir, Branch: sess.Branch, SessionID: sess.ID}
+	}
+	if r.Branch != nil {
+		// The run resolves the branch's tip again, as the person's run does.
+		opts.WorktreeKey = r.Worktree
 	}
 	if r.OverridesGiven {
 		opts.Env = map[string]string{}
