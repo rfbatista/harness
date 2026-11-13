@@ -294,6 +294,9 @@ func (s *Service) ResumeInteractive(ctx context.Context, req ports.ResumeRequest
 		return nil, ports.AgentSpec{}, err
 	}
 	sb, err := s.resumeSandbox(ctx, sess, cfg.Env, ag.skillDirs)
+	if err == nil {
+		s.withWorktreeReadHook(&cfg, sess.ID, sb)
+	}
 	if err != nil {
 		if cleanup != nil {
 			cleanup()

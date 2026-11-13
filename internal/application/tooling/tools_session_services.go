@@ -344,7 +344,9 @@ func requestWorktree(opts ports.ServiceStartOptions) string {
 }
 
 // isBranchKey says a worktree key names a branch run.
-func isBranchKey(key string) bool { return strings.HasPrefix(key, "branch:") && len(key) > len("branch:") }
+func isBranchKey(key string) bool {
+	return strings.HasPrefix(key, "branch:") && len(key) > len("branch:")
+}
 
 // scope is the session's project: every tool's first step.
 func (t *servicesTools) scope(ctx context.Context) (*domain.Session, error) {

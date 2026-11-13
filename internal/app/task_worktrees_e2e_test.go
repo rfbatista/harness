@@ -6,8 +6,11 @@ import (
 	"encoding/json"
 	"io"
 	"net/http"
+	"net/url"
 	"path/filepath"
+	"strconv"
 	"testing"
+	"time"
 
 	"operators-mcp/internal/application/orchestration"
 	"operators-mcp/internal/domain"
@@ -118,5 +121,47 @@ func TestTheTaskWorktreesLookupAnswersNoWorktreeToASessionWithNoTaskAndNotFoundT
 	}
 	if status, _, body := e.taskWorktrees("nope"); status != http.StatusNotFound {
 		t.Errorf("unknown session = %d %s, want 404 SESSION_NOT_FOUND", status, body)
+	}
+}
+
+func TestTheLookupNamesTheOwnerOfAnotherTasksWorktreeAndADenialIsRecordedWithTheSession(t *testing.T) {
+	e := newShellE2E(t)
+	mine, other := e.task("Mine"), e.task("Other work")
+	arch := e.architect(mine)
+	stranger := e.start(other)
+
+	path := filepath.Join(stranger.worktree, "internal", "x.go")
+	res, err := http.Get(e.srv.URL + "/api/sessions/" + arch.id + "/task_worktrees?path=" + url.QueryEscape(path))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer res.Body.Close()
+	var got struct {
+		Owner struct {
+			SessionID string `json:"session_id"`
+			TaskID    string `json:"task_id"`
+			TaskTitle string `json:"task_title"`
+		} `json:"owner"`
+	}
+	if err := json.NewDecoder(res.Body).Decode(&got); err != nil {
+		t.Fatal(err)
+	}
+	if got.Owner.SessionID != stranger.id || got.Owner.TaskID != other || got.Owner.TaskTitle != "Other work" {
+		t.Errorf("owner = %+v", got.Owner)
+	}
+
+	body := `{"tool":"Read","path":` + strconv.Quote(path) + `,"reason":"worktree read hook: denied"}`
+	if status, text := postJSON(t, e.srv.URL+"/api/sessions/"+arch.id+"/task_worktrees/denials", body); status != http.StatusNoContent {
+		t.Fatalf("denial = %d %s", status, text)
+	}
+	events, err := e.rules.ListArchitectureRuleEvents(e.ctx, e.repo, time.Time{}, 10)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(events) != 1 {
+		t.Fatalf("events = %+v", events)
+	}
+	if ev := events[0]; ev.RuleID != "worktree_read" || ev.Path != path || ev.Outcome != domain.OutcomeBlocked || ev.SessionID != arch.id || ev.TaskID != mine || ev.Tool != "Read" {
+		t.Errorf("event = %+v", ev)
 	}
 }

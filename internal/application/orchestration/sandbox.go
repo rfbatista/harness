@@ -519,7 +519,10 @@ func sessionTempDir(env []string) string {
 
 // sandboxed is the outcome of the sandbox step.
 type sandboxed struct {
-	policy *ports.SandboxPolicy
+	// worktreesDir is the folder an architect's policy grants read-only (ADR
+	// 0087); empty for every other session.
+	worktreesDir string
+	policy       *ports.SandboxPolicy
 	// wrap is what llmkit runs on the session's final command: the driver's
 	// wrap under the session's policy, with the files llmkit made for the
 	// process added to it. Nil when the session is not sandboxed.
@@ -602,7 +605,7 @@ func (s *Service) sandbox(ctx context.Context, in prepareInput, id string, repo 
 		visibility = domain.SandboxAllReposReadOnly
 	}
 	facts := &domain.SandboxFacts{Sandboxed: true, Visibility: visibility, Driver: sb.Driver.Name()}
-	return sandboxed{policy: &policy, wrap: sandboxWrap(sb.Driver, sess), facts: facts}, nil
+	return sandboxed{policy: &policy, wrap: sandboxWrap(sb.Driver, sess), facts: facts, worktreesDir: sess.WorktreesDir}, nil
 }
 
 // skillDirGrants are the session's skill plugin dirs, read-only (ADR 0028): the

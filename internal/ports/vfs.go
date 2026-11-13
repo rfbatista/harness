@@ -124,6 +124,17 @@ const (
 	WorktreeEnv        = "HARNESS_WORKTREE"
 )
 
+// WorktreeReadHookCommand is the worktree read hook of an architect session, a
+// link to the shim binary in its shim dir (ADR 0087). WorktreesRootEnv names
+// the folder every session worktree of the repository is made in and
+// TaskWorktreesURLEnv the lookup (…/api/sessions/{id}/task_worktrees) the hook
+// asks which of them are the session's task's.
+const (
+	WorktreeReadHookCommand = "harness-worktree-read-hook"
+	WorktreesRootEnv        = "HARNESS_WORKTREES_ROOT"
+	TaskWorktreesURLEnv     = "HARNESS_TASK_WORKTREES_URL"
+)
+
 // BranchGateShimCommand is the git shim, a link to the shim binary in every
 // agent session's shim dir: it refuses a branch action that has no branch grant
 // (contract "Harness server ↔ Agent sessions — branch gate" §3).
