@@ -180,3 +180,15 @@ test("a skill with no problem has no problem label; no description keeps its own
   assert.equal(s.problemLabel, "");
   assert.equal(s.noDescription, false);
 });
+
+test("only a shadowed built-in skill offers a delete, and it is worded as deleting the shadow", () => {
+  const plain = skillSummary(withBuiltIns(), "task-run-app");
+  assert.equal(plain.canDelete, false);
+  const s = skillSummary(shadowed(), "task-run-app");
+  assert.equal(s.canDelete, true);
+  assert.equal(s.deleteLabel, "Delete the shadowing skill…");
+  assert.equal(s.readOnly, true);
+  const catalogSkill = skillSummary(toCatalog(catalogDTO()), "tdd");
+  assert.equal(catalogSkill.canDelete, true);
+  assert.equal(catalogSkill.deleteLabel, "Delete…");
+});

@@ -22,6 +22,9 @@ const enc = encodeURIComponent;
 /** The modes that carry a built-in skill, as one line: "architect, implement". */
 const modesLabel = (modes) => [...modes].sort().join(", ");
 
+const SHADOWED = "SHADOWED_BY_BUILT_IN";
+const isShadowed = (s) => s.problems.some((p) => p.code === SHADOWED);
+
 /** The problem badge of the detail head; "" for none. No description has its own badge there. */
 function problemLabel(problems) {
   const badge = problemBadge(problems);
@@ -85,8 +88,11 @@ export function skillSummary(catalog, name) {
     modesLabel: modesLabel(s.modes),
     unused: s.agentCount === 0,
     problemLabel: problemLabel(s.problems),
-    problemNote: s.problems.find((p) => p.code === "SHADOWED_BY_BUILT_IN")?.message ?? "",
+    problemNote: s.problems.find((p) => p.code === SHADOWED)?.message ?? "",
     readOnly: s.builtIn,
+    // A built-in skill has no delete of its own; one that a catalog folder shadows offers to delete that folder.
+    canDelete: !s.builtIn || isShadowed(s),
+    deleteLabel: s.builtIn ? "Delete the shadowing skill…" : "Delete…",
     shipsLine: s.builtIn ? shipsLine(s.modes) : "",
     path: s.builtIn ? "" : `skills/${s.name}/SKILL.md`,
     copyPath: s.builtIn ? "" : `${catalog.root}/skills/${s.name}`,

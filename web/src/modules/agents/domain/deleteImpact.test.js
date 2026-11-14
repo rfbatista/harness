@@ -1,6 +1,6 @@
 import { assert, file, test } from "../../../shared/testing/test.js";
 import { toCatalog } from "../infrastructure/dto.js";
-import { catalogDTO } from "../testing/fixtures.js";
+import { catalogDTO, withBuiltInSkills } from "../testing/fixtures.js";
 import { DELETE_UNDO_NOTE, deleteBaseVersions, deleteImpact } from "./deleteImpact.js";
 
 file("agents/domain/deleteImpact");
@@ -143,4 +143,16 @@ test("deleting an agent names the repository prompts that go with it", () => {
   match(prompts.note, /deleted with the agent/);
   const plain = deleteImpact(toCatalog(catalogDTO()), "agent", dto.agents[0].name);
   assert.equal(plain.groups.some((g) => g.key === "prompts"), false, "nothing is said about prompts when none is set");
+});
+
+test("deleting a skill that shadows a built-in one removes only the folder; the built-in skill and its references stay", () => {
+  const dto = withBuiltInSkills(catalogDTO());
+  Object.assign(dto.skills.find((s) => s.name === "task-run-app"), { agents: ["backend"], agent_count: 1, problems: [{ code: "SHADOWED_BY_BUILT_IN", message: "m" }] });
+  const d = deleteImpact(toCatalog(dto), "skill", "task-run-app");
+  assert.equal(d.title, "Delete the shadowing skill “task-run-app”?");
+  assert.equal(d.button, "Delete shadowing skill");
+  assert.equal(d.path, "skills/task-run-app/");
+  assert.ok(d.intro.includes("The built-in skill stays"));
+  assert.equal(d.groups.length, 0);
+  assert.equal(d.total, "");
 });

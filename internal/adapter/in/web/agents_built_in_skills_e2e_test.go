@@ -311,6 +311,15 @@ func showsShadowedProblem(t *testing.T, w *tokenSaverWorld, fake *builtInFake) {
 		waitUntil(detail+`.querySelector('[data-skill-problem]').textContent.trim() === 'Shadowed by built-in'`),
 		waitUntil(detail+`.querySelector('[data-skill-problem-note]').textContent.trim().length > 0`),
 	)
+	b.run("it still offers no Edit, and its Delete is worded as deleting the shadowing skill, through the usual dialog",
+		waitUntil(detail+`.querySelector('a[data-edit]')?.checkVisibility() !== true`),
+		deleteMenu(`[data-skill-detail]`),
+		waitUntil(`document.querySelector('#delete-title')?.textContent.trim() === 'Delete the shadowing skill “task-run-app”?'`),
+		waitUntil(`document.querySelector('[data-delete-confirm]').textContent.trim() === 'Delete shadowing skill'`),
+		waitUntil(`document.querySelector('[data-delete-path]').textContent.trim() === 'skills/task-run-app/'`),
+		clickButton(`document.querySelector('[data-delete-dialog]')`, "Cancel"),
+		waitUntil(`!document.querySelector('[data-delete-dialog]')`),
+	)
 	if e := b.jsErrors(); len(e) > 0 {
 		t.Errorf("JavaScript errors: %v", e)
 	}

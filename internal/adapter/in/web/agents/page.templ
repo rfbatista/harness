@@ -435,18 +435,14 @@ templ actionsMenu(what string) {
 				<hr
 					role="separator"
 					if what == "skill" {
-						x-bind:hidden="skill.readOnly"
+						x-bind:hidden="!skill.canDelete"
 					}
 				/>
-				<button
-					type="button"
-					role="menuitem"
-					data-action="delete"
-					data-tone="danger"
-					if what == "skill" {
-						x-bind:hidden="skill.readOnly"
-					}
-				>Delete…</button>
+				if what == "skill" {
+					<button type="button" role="menuitem" data-action="delete" data-tone="danger" x-bind:hidden="!skill.canDelete" x-text="skill.deleteLabel">Delete…</button>
+				} else {
+					<button type="button" role="menuitem" data-action="delete" data-tone="danger">Delete…</button>
+				}
 			</div>
 		</div>
 	</div>
