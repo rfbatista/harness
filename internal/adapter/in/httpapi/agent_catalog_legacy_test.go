@@ -103,7 +103,7 @@ func TestLegacyReads_KeepTheirShapesOverTheCatalog(t *testing.T) {
 
 	_, body = f.rawGet("/api/list_skills")
 	var skills mcp.ListSkillsOut
-	if err := json.Unmarshal(body, &skills); err != nil || len(skills.Skills) != 2 {
+	if err := json.Unmarshal(body, &skills); err != nil || len(skills.Skills) != 2+len(builtInSkillNames) {
 		t.Fatalf("list_skills = %s (%v)", body, err)
 	}
 	_, body = f.rawGet("/api/get_skill?skill_id=tdd")

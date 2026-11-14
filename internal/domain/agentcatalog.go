@@ -20,6 +20,9 @@ const (
 	CatalogProblemNoDescription    = "NO_DESCRIPTION"
 	CatalogProblemSecretNotSet     = "SECRET_NOT_SET"
 	CatalogProblemInvalidSkill     = "INVALID_SKILL"
+	// CatalogProblemShadowedByBuiltIn is a catalog skill folder that carries a
+	// built-in skill's name: the built-in one wins (ADR 0088).
+	CatalogProblemShadowedByBuiltIn = "SHADOWED_BY_BUILT_IN"
 	// CatalogProblemBuiltInName: the catalog file defines a server named like
 	// a built-in one. The built-in one wins and the file's entry is ignored.
 	CatalogProblemBuiltInName = "BUILT_IN_NAME"
@@ -116,6 +119,10 @@ type CatalogSkillSummary struct {
 	Bundles       []string         `json:"bundles"`
 	AgentCount    int              `json:"agent_count"`
 	Problems      []CatalogProblem `json:"problems"`
+	// BuiltIn marks a skill embedded in the server; Modes are the session
+	// modes that carry it (ADR 0088).
+	BuiltIn bool     `json:"built_in"`
+	Modes   []string `json:"modes"`
 }
 
 // CatalogEnvRef is a ${VAR} an MCP server names, and whether the harness
@@ -197,6 +204,8 @@ type CatalogSkill struct {
 	Agents      []string           `json:"agents"`
 	Bundles     []string           `json:"bundles"`
 	AgentCount  int                `json:"agent_count"`
+	BuiltIn     bool               `json:"built_in"`
+	Modes       []string           `json:"modes"`
 	// Markdown is SKILL.md as it is on disk, frontmatter included. It is not
 	// part of the HTTP answer.
 	Markdown string `json:"-"`
