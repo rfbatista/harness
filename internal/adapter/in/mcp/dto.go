@@ -4,6 +4,7 @@ import (
 	"time"
 
 	"operators-mcp/internal/domain"
+	"operators-mcp/internal/infra/builtinskills"
 	"operators-mcp/internal/ports"
 )
 
@@ -49,6 +50,10 @@ type SkillDTO struct {
 	AllowedTools  string                   `json:"allowed_tools,omitempty"`
 	Resources     []string                 `json:"resources,omitempty"`
 	Validation    []domain.ValidationIssue `json:"validation,omitempty"`
+	// BuiltIn marks a skill embedded in the server and Modes the session modes
+	// that carry it (ADR 0088); a catalog skill reads false and [].
+	BuiltIn bool     `json:"built_in"`
+	Modes   []string `json:"modes"`
 
 	PublishedPath string     `json:"published_path,omitempty"`
 	PublishedAt   *time.Time `json:"published_at,omitempty"`
@@ -110,7 +115,10 @@ func SkillToDTO(s *domain.Skill) *SkillDTO {
 	if len(meta) == 0 {
 		meta = nil
 	}
+	b, isBuiltIn := builtinskills.Get(s.ID)
 	return &SkillDTO{
+		BuiltIn:       isBuiltIn,
+		Modes:         nonNilModes(b.Modes),
 		ID:            s.ID,
 		Name:          s.Name,
 		Description:   s.Description,
@@ -125,6 +133,14 @@ func SkillToDTO(s *domain.Skill) *SkillDTO {
 		PublishedAt:   s.PublishedAt,
 		PublishError:  s.PublishError,
 	}
+}
+
+// nonNilModes is modes, or an empty list so the field reads [] in JSON.
+func nonNilModes(modes []string) []string {
+	if modes == nil {
+		return []string{}
+	}
+	return modes
 }
 
 // SkillsToDTO converts domain skills to DTOs.

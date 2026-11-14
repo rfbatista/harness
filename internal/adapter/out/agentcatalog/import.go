@@ -9,6 +9,7 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
+	"slices"
 	"sort"
 	"strings"
 
@@ -16,6 +17,7 @@ import (
 	"github.com/rfbatista/harnesskit/skill"
 
 	"operators-mcp/internal/domain"
+	"operators-mcp/internal/infra/builtinskills"
 )
 
 // ImportSource is what the one-time catalog import reads: the repository's
@@ -111,6 +113,18 @@ func (c *Catalog) Import(src ImportSource) (ImportReport, error) {
 	rep.Agents = len(agentsRoot.get("agents").keys())
 	rep.Bundles = len(agentsRoot.get("bundles").keys())
 	rep.Servers = len(servers.keys())
+	// A built-in skill is never copied: the server holds it (ADR 0088).
+	for p := range files {
+		if rest, ok := strings.CutPrefix(p, skillsDir+"/"); ok {
+			name, _, _ := strings.Cut(rest, "/")
+			if _, builtIn := builtinskills.Get(name); builtIn {
+				delete(files, p)
+				if !slices.Contains(rep.Clashes, "skill "+name) {
+					rep.Clashes = append(rep.Clashes, "skill "+name)
+				}
+			}
+		}
+	}
 	skillNames := map[string]bool{}
 	for p := range files {
 		if rest, ok := strings.CutPrefix(p, skillsDir+"/"); ok {

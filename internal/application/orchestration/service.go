@@ -885,7 +885,7 @@ type resolvedAgent struct {
 // brings. An empty id is plain claude.
 func (s *Service) resolveAgent(agentID string, mode domain.SessionMode) (resolvedAgent, error) {
 	var r resolvedAgent
-	skills, err := modeSkills(mode)
+	modeOnly, err := modeSkills(mode)
 	if err != nil {
 		return r, err
 	}
@@ -899,8 +899,8 @@ func (s *Service) resolveAgent(agentID string, mode domain.SessionMode) (resolve
 		if r.agent.Prompt != nil {
 			r.appendSystem = r.agent.Prompt.Content
 		}
-		skills = append(slices.Clone(r.agent.Skills), skills...)
 	}
+	skills := sessionSkills(r.agent, modeOnly)
 	if len(skills) > 0 {
 		dirs, c, err := resolveSkillDirs(skills)
 		if err != nil {

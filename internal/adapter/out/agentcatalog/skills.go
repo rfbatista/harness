@@ -15,6 +15,7 @@ import (
 	"gopkg.in/yaml.v3"
 
 	"operators-mcp/internal/domain"
+	"operators-mcp/internal/infra/builtinskills"
 )
 
 const maxSkillDescription = 1024
@@ -135,6 +136,12 @@ func (c *Catalog) SaveCatalogSkill(in domain.SaveCatalogSkill) (*domain.CatalogW
 		return nil, invalid("description", fmt.Sprintf("a skill description is at most %d characters", maxSkillDescription))
 	}
 	prev := in.PreviousName
+	if b, ok := builtinskills.Get(prev); ok {
+		return nil, skillBuiltIn(b, "edited or renamed")
+	}
+	if b, ok := builtinskills.Get(sk.Name); ok {
+		return nil, c.builtInNameTaken(b)
+	}
 	if prev != "" && !c.skillExists(prev) { // also false for a name that is not a slug
 		return nil, &domain.StructuredError{Code: "SKILL_NOT_FOUND", Message: "skill " + prev + " not found"}
 	}
@@ -337,6 +344,12 @@ func (c *Catalog) DeleteCatalogSkill(in domain.DeleteCatalogItem) (*domain.Catal
 	if err != nil {
 		return nil, err
 	}
+	if b, ok := builtinskills.Get(in.Name); ok {
+		if !c.skillExists(in.Name) {
+			return nil, skillBuiltIn(b, "deleted")
+		}
+		return c.deleteShadow(t, in)
+	}
 	if !slugRe.MatchString(in.Name) || !c.skillExists(in.Name) {
 		return nil, &domain.StructuredError{Code: "SKILL_NOT_FOUND", Message: "skill " + in.Name + " not found"}
 	}
@@ -349,4 +362,37 @@ func (c *Catalog) DeleteCatalogSkill(in domain.DeleteCatalogItem) (*domain.Catal
 	}
 	refs := t.rewriteEntries(func(e string) (string, bool) { return e, e != in.Name })
 	return t.commit(in.CatalogWriteOptions, fmt.Sprintf("Deleted skills/%s (%d references removed)", in.Name, refs))
+}
+
+// deleteShadow removes a catalog skill folder that carries a built-in name.
+// Entries that name it stay: the built-in skill answers to the name.
+func (c *Catalog) deleteShadow(t *txn, in domain.DeleteCatalogItem) (*domain.CatalogWriteResult, error) {
+	files, err := c.skillFiles(in.Name)
+	if err != nil {
+		return nil, err
+	}
+	for _, p := range sortedPaths(files) {
+		t.edits = append(t.edits, &fileEdit{path: skillsDir + "/" + in.Name + "/" + p, before: files[p]})
+	}
+	return t.commit(in.CatalogWriteOptions, fmt.Sprintf("Deleted skills/%s, which the built-in skill of that name shadowed", in.Name))
+}
+
+// skillBuiltIn refuses a change to a built-in skill, naming the modes that
+// carry it.
+func skillBuiltIn(b builtinskills.Skill, what string) error {
+	carried := "no session mode carries it"
+	if len(b.Modes) > 0 {
+		carried = "the " + strings.Join(b.Modes, ", ") + " mode carries it"
+	}
+	return &domain.StructuredError{Code: "SKILL_BUILT_IN", Message: "the skill " + b.Name + " ships with the server and cannot be " + what +
+		" (" + carried + "); name it in an agent or a bundle to use it"}
+}
+
+// builtInNameTaken refuses a catalog skill named like a built-in one.
+func (c *Catalog) builtInNameTaken(b builtinskills.Skill) error {
+	return domain.NewCatalogError("NAME_TAKEN", "the name "+b.Name+" belongs to a built-in skill; pick another name",
+		map[string]any{"field": "name", "suggestion": freeName(b.Name, func(n string) bool {
+			_, ok := builtinskills.Get(n)
+			return ok || c.skillExists(n)
+		})})
 }

@@ -2,68 +2,65 @@ package orchestration
 
 import (
 	"context"
-	"embed"
 	"fmt"
-	"io/fs"
-	"path"
 	"strings"
 	"time"
 
-	"github.com/rfbatista/harnesskit/skill"
-
 	"operators-mcp/internal/domain"
+	"operators-mcp/internal/infra/builtinskills"
 	"operators-mcp/internal/ports"
 )
 
-// modeFS holds the skills each session mode brings. They ship with the
-// server so a mode works without any skill being imported into the catalog.
-//
-//go:embed modes
-var modeFS embed.FS
-
-// modeSkillNames lists, per mode, the skill directories under modes/ it adds.
-// The first one is the skill the mode's first message names.
-var modeSkillNames = map[domain.SessionMode][]string{
-	domain.SessionModeArchitect: {"task-architecture", "task-grill-with-docs", "task-to-spec", "task-run-app"},
-	domain.SessionModeImplement: {"task-implement-spec", "task-tdd", "task-code-review"},
-	domain.SessionModeDesign:    {"design-artifacts"},
-	domain.SessionModeProduct:   {"task-product"},
-}
-
-// modeSkills returns the skills a mode adds on top of the session's agent.
+// modeSkills returns the skills a mode adds on top of the session's agent,
+// from the server's built-in set.
 func modeSkills(mode domain.SessionMode) ([]domain.Skill, error) {
-	names := modeSkillNames[mode]
-	out := make([]domain.Skill, 0, len(names))
-	for _, name := range names {
-		files, err := modeSkillFiles(name)
-		if err != nil {
-			return nil, fmt.Errorf("mode %s: skill %s: %w", mode, name, err)
-		}
-		out = append(out, domain.Skill{Name: name, Files: files})
+	if err := builtinskills.Err(); err != nil {
+		return nil, fmt.Errorf("mode %s: %w", mode, err)
 	}
-	return out, nil
+	return domainSkills(builtinskills.ForMode(mode)), nil
 }
 
-// modeSkillFiles reads every file of the skill directory modes/<name>, with
-// SKILL.md required, so a skill's reference files ship along with it.
-func modeSkillFiles(name string) ([]skill.File, error) {
-	root := "modes/" + name
-	if _, err := fs.Stat(modeFS, path.Join(root, skill.FileName)); err != nil {
-		return nil, err
+// sessionSkills is what a session's plugin dir holds: the agent's skills, then
+// the mode's. A skill the agent names that is built in comes from the embedded
+// set, so a catalog skill of the same name never wins, and one the mode also
+// carries is kept once, as the mode's copy (ADR 0088).
+func sessionSkills(agent *domain.Agent, mode []domain.Skill) []domain.Skill {
+	inMode := map[string]bool{}
+	for _, s := range mode {
+		inMode[domain.Slug(s.Name)] = true
 	}
-	var files []skill.File
-	err := fs.WalkDir(modeFS, root, func(p string, d fs.DirEntry, err error) error {
-		if err != nil || d.IsDir() {
-			return err
+	var out []domain.Skill
+	have := map[string]bool{}
+	add := func(s domain.Skill) {
+		slug := domain.Slug(s.Name)
+		if b, ok := builtinskills.Get(slug); ok {
+			s = domainSkills([]builtinskills.Skill{b})[0]
 		}
-		body, err := modeFS.ReadFile(p)
-		if err != nil {
-			return err
+		if inMode[slug] || have[slug] {
+			return
 		}
-		files = append(files, skill.File{Path: strings.TrimPrefix(p, root+"/"), Content: string(body)})
-		return nil
-	})
-	return files, err
+		have[slug] = true
+		out = append(out, s)
+	}
+	if agent != nil {
+		for _, s := range agent.Skills {
+			add(s)
+		}
+		for _, id := range agent.SkillIDs {
+			if _, ok := builtinskills.Get(id); ok {
+				add(domain.Skill{Name: id})
+			}
+		}
+	}
+	return append(out, mode...)
+}
+
+func domainSkills(in []builtinskills.Skill) []domain.Skill {
+	out := make([]domain.Skill, 0, len(in))
+	for _, s := range in {
+		out = append(out, domain.Skill{Name: s.Name, Files: s.Files})
+	}
+	return out
 }
 
 // modePrompt is the first message a mode opens the session with. typed is what
