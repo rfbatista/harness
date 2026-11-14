@@ -17,5 +17,13 @@ export function settingsGateway(api) {
       }
       return stored === "true";
     },
+    async setBranchBlock(key, on) {
+      const body = await api.post("/update_settings", { settings: { [key]: on ? "on" : "off" } });
+      const stored = body?.settings?.[key];
+      if (stored !== "on" && stored !== "off") {
+        throw new StructuredError(Codes.BAD_RESPONSE, "Unexpected settings data: no branch block.");
+      }
+      return stored === "on";
+    },
   };
 }

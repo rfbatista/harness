@@ -8,6 +8,9 @@
  *           Stores the flag under the settings key and answers it as stored.
  *           Rejects with INVALID_INPUT for a key or value the server does
  *           not take.
+ * @property {(key: string, on: boolean) => Promise<boolean>} setBranchBlock
+ *           Stores a branch block as "on" or "off" and answers whether it is
+ *           on as stored. Rejects with INVALID_INPUT when the server refuses.
  */
 
 export {};

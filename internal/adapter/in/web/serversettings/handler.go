@@ -42,9 +42,12 @@ func (h Handler) Page(w http.ResponseWriter, r *http.Request) error {
 	}
 	frame.Top.OnServer = true
 	v := NewView(h.Paths)
+	read := func(string) string { return "" }
 	if h.Settings != nil {
 		v.AgentsMoveDocuments = domain.AgentsMoveDocuments(h.Settings.Setting(domain.SettingAgentsMoveDocuments))
+		read = h.Settings.Setting
 	}
+	v.BranchBlocks = domain.BranchBlocks(read)
 	return h.Render(w, r, http.StatusOK, Page(frame, v))
 }
 
@@ -59,6 +62,8 @@ type View struct {
 	// AgentsMoveDocuments is the stored "Agents move documents to project"
 	// switch, off while unset.
 	AgentsMoveDocuments bool
+	// BranchBlocks is the branch block read: one switch per session mode.
+	BranchBlocks []domain.BranchBlock
 }
 
 // Row is one thing the data dir holds.

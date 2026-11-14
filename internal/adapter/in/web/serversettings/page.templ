@@ -64,6 +64,30 @@ templ Page(frame shell.Frame, v View) {
 							</li>
 						</ul>
 					</section>
+					<section class="[ pane ]" aria-labelledby="server-branch-block-title">
+						<header><h2 id="server-branch-block-title">Branch block</h2></header>
+						<p class="[ text-sm color-ink-muted ]">While a mode's block is on, agents of that mode cannot create, switch to or delete branches: they stay on their session branch. Renaming a branch and pushing still ask you. A change applies at once, to running sessions too. Turn a mode's block off to let its sessions ask for those branch actions again.</p>
+						<ul role="list" class="[ list ]">
+							for _, bb := range v.BranchBlocks {
+								<li class="[ flow ] [ flow-space-2xs ]" x-data="branchBlock" data-setting={ bb.Key }>
+									<p class="[ visually-hidden ]" role="status" aria-live="polite" x-text="announcement"></p>
+									<template x-if="error">
+										<div class="[ banner ]" data-tone="danger" role="alert">
+											<div class="[ flow ] [ flow-space-3xs grow ]">
+												<span x-text="error.message"></span>
+												<span class="[ code ]"><span x-text="error.code"></span> · <span x-text="error.next"></span></span>
+											</div>
+											<button type="button" class="[ button ]" data-variant="ghost" data-size="sm" x-on:click="dismissError">Dismiss</button>
+										</div>
+									</template>
+									<label class="[ row ]" style="--row-columns: 9rem auto">
+										<span class="[ title ]">{ bb.Name }</span>
+										<input type="checkbox" data-branch-block data-setting={ bb.Key } aria-label={ bb.Name + " Branch block" } checked?={ bb.Blocked } x-bind:disabled="saving" x-bind:aria-busy="saving" x-on:change="choose"/>
+									</label>
+								</li>
+							}
+						</ul>
+					</section>
 					<section class="[ pane ]" aria-labelledby="server-services-title" x-data="servicesRuntime" data-services-runtime>
 						<header><h2 id="server-services-title">Services</h2></header>
 						<ul role="list" class="[ list ]">
