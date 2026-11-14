@@ -599,3 +599,17 @@ func TestHistoryShowMoreKeepsTheOpenCommit(t *testing.T) {
 		}
 	}
 }
+
+// A session whose worktree was cleared says so, and names the branch that still
+// holds its commits, on its history page (ADR 0089).
+func TestAClearedSessionsHistoryPageSaysTheWorktreeWasCleared(t *testing.T) {
+	w := historyWorld(t)
+	cleared := w.sessions[len(w.sessions)-1]
+	at := now
+	cleared.WorkspaceID, cleared.WorktreeClearedAt = "", &at
+	h := newTestHandler(t, w)
+	rec := get(t, h, "/projects/p1/tasks/t-feed/sessions/s-agent/history")
+	if rec.Code != http.StatusConflict || !strings.Contains(rec.Body.String(), "worktree was cleared") || !strings.Contains(rec.Body.String(), "agent/add-sse-feed-1a2b") {
+		t.Errorf("status %d, body %s", rec.Code, around(rec.Body.String(), "cleared"))
+	}
+}

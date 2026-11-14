@@ -165,7 +165,20 @@ func (s *MergeStates) branches(ctx context.Context, taskIDs ...string) map[strin
 	var wsIDs []string
 	taskOf := map[string][]string{} // tasks by workspace
 	squashed := map[string]string{} // workspace -> branch tip at its newest squash into the default branch
+	out := map[string]taskBranches{}
 	for _, sess := range s.d.Sessions.List(ctx, ports.SessionFilter{TicketIDs: taskIDs}) {
+		if sess.WorktreeClearedAt != nil && sess.Branch != "" && sess.RepositoryID != "" {
+			// Its workspace is gone with its worktree; the branch stays and
+			// still counts, measured against the default branch.
+			if out[sess.TicketID] == nil {
+				out[sess.TicketID] = taskBranches{}
+			}
+			b := ports.BranchBase{Branch: sess.Branch, SquashedTip: sess.SquashedTip}
+			if !slices.Contains(out[sess.TicketID][sess.RepositoryID], b) {
+				out[sess.TicketID][sess.RepositoryID] = append(out[sess.TicketID][sess.RepositoryID], b)
+			}
+			continue
+		}
 		if sess.WorkspaceID == "" {
 			continue
 		}
@@ -177,7 +190,6 @@ func (s *MergeStates) branches(ctx context.Context, taskIDs ...string) map[strin
 		}
 		taskOf[sess.WorkspaceID] = append(taskOf[sess.WorkspaceID], sess.TicketID)
 	}
-	out := map[string]taskBranches{}
 	for _, ws := range s.d.Workspaces.ListByIDs(ctx, wsIDs) {
 		if ws.Branch == "" {
 			continue

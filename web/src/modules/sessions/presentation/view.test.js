@@ -97,6 +97,12 @@ test("the row and the detail say why the commit check is off, and nothing while 
   assert.equal(guarded.rows[0].commitCheckOff, "");
 });
 
+test("a row says its worktree was cleared, and nothing while it has one", () => {
+  const cleared = makeSession({ id: "c", worktreeClearedAt: new Date("2026-11-01T10:00:00Z") });
+  const [group] = toGroupViews([cleared, makeSession({ id: "d" })], { selectedId: null, now: T0, agentNames: {} });
+  assert.deepEqual(group.rows.map((r) => r.worktreeCleared), [true, false]);
+});
+
 test("an agent reads as its name, its id when unknown, plain claude without one", () => {
   assert.equal(agentLabel("a1", { a1: "Reviewer" }), "Reviewer");
   assert.equal(agentLabel("gone", { a1: "Reviewer" }), "gone");

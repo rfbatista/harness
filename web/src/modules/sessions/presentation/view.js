@@ -198,6 +198,8 @@ export function toRowView(session, { selectedId, now, agentNames, repositoryName
     unassigned: session.agentUnassigned === true
       ? { title: `Unassigned from ${repositoryNames[session.repositoryId] || "this repository"}`, note: "Resuming will be refused" }
       : null,
+    // Set once Clear worktrees removed the session's worktree; its branch stays.
+    worktreeCleared: session.worktreeClearedAt != null,
     // Why the commit check is off ("" while it guards the worktree).
     commitCheckOff: session.commitCheckOff ?? "",
     selected: session.id === selectedId,

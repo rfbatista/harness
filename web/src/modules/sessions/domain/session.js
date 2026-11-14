@@ -37,6 +37,7 @@
  * @property {readonly string[]} tokenSaversNotInstalled  savers on for it but not installed, so it runs without them
  * @property {{ sandboxed: boolean, visibility: string, driver: string } | null} sandbox  what its sandbox was when it started or last resumed; null for a session from before the sandbox
  * @property {MergeResult | null} lastMerge  how the newest merge of its branch ended; null when never tried
+ * @property {Date | null} worktreeClearedAt  when Clear worktrees removed its worktree (ADR 0089); null while it has one
  * @property {Date | null} interruptedAt  a restart interrupted it mid-turn and no resume has cleared it (stopped sessions only)
  * @property {Date} updatedAt
  *

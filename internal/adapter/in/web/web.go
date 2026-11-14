@@ -589,6 +589,8 @@ func (s *server) renderError(w http.ResponseWriter, r *http.Request, err error) 
 	switch {
 	case strings.HasSuffix(code, "_NOT_FOUND"):
 		status, message = http.StatusNotFound, errorMessage(err)
+	case code == "WORKTREE_CLEARED":
+		status, message = http.StatusConflict, errorMessage(err)
 	case code != "":
 		message = errorMessage(err)
 	default:
@@ -616,6 +618,8 @@ func nextStep(code string) string {
 		return "it was deleted or moved; pick a task on the rail"
 	case "SESSION_NOT_FOUND":
 		return "it was deleted; go back to the list"
+	case "WORKTREE_CLEARED":
+		return "browse the session's branch from the repository's code view"
 	case "INTERNAL":
 		return "check the server log, then reload"
 	default:

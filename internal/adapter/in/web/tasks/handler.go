@@ -454,6 +454,9 @@ func (h Handler) codePaint(ctx context.Context, rt code.Route, list []*domain.Se
 	if session == nil {
 		return nil, errs.Newf("SESSION_NOT_FOUND", "session %s is not on this task", rt.SessionID)
 	}
+	if session.WorktreeClearedAt != nil {
+		return nil, errs.Newf("WORKTREE_CLEARED", "this session's worktree was cleared, so it has no code view: its commits are on branch %s", session.Branch)
+	}
 	if session.WorkspaceID == "" {
 		return nil, errs.Newf("WORKSPACE_NOT_FOUND", "session %s has no worktree", rt.SessionID)
 	}
