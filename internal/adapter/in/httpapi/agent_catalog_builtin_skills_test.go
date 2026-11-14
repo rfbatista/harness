@@ -234,3 +234,36 @@ func TestBuiltInSkills_ANameThatIsNeitherIsStillAnUnknownReference(t *testing.T)
 		t.Errorf("body = %v", got)
 	}
 }
+
+func TestBuiltInSkills_TheLegacyReadsListThemWithBuiltInAndModes(t *testing.T) {
+	f := legacyFixture(t)
+	f.skill("mine", "Mine")
+	f.skill("task-tdd", "Shadow")
+
+	listed := f.get("/api/list_skills", 200)
+	count := 0
+	for _, s := range list(listed["skills"]) {
+		if s.(map[string]any)["name"] == "task-tdd" {
+			count++
+		}
+	}
+	if count != 1 {
+		t.Fatalf("task-tdd listed %d times", count)
+	}
+	for name, want := range map[string]struct {
+		builtIn bool
+		modes   []string
+	}{"task-run-app": {true, []string{"architect"}}, "task-tdd": {true, []string{"implement"}}, "mine": {false, []string{}}} {
+		s := byName(t, listed["skills"], name)
+		if s["built_in"] != want.builtIn || !reflect.DeepEqual(strList(s["modes"]), want.modes) || s["modes"] == nil {
+			t.Errorf("list_skills %s built_in/modes = %v %v", name, s["built_in"], s["modes"])
+		}
+	}
+	got := f.get("/api/get_skill?skill_id=task-run-app", 200)["skill"].(map[string]any)
+	if got["built_in"] != true || !reflect.DeepEqual(strList(got["modes"]), []string{"architect"}) || len(list(got["files"])) < 2 {
+		t.Errorf("get_skill task-run-app = %v %v files=%d", got["built_in"], got["modes"], len(list(got["files"])))
+	}
+	if got := f.get("/api/get_skill?skill_id=mine", 200)["skill"].(map[string]any); got["built_in"] != false {
+		t.Errorf("get_skill mine built_in = %v", got["built_in"])
+	}
+}
