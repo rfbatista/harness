@@ -151,3 +151,32 @@ test("a catalog skill's summary is editable and has no ships line", () => {
   assert.equal(s.readOnly, false);
   assert.equal(s.shipsLine, "");
 });
+
+const SHADOW_MESSAGE = "a catalog skill named task-run-app is hidden by the built-in one";
+const shadowed = () => {
+  const dto = withBuiltInSkills(catalogDTO());
+  dto.skills.find((s) => s.name === "task-run-app").problems = [{ code: "SHADOWED_BY_BUILT_IN", message: SHADOW_MESSAGE }];
+  return toCatalog(dto);
+};
+
+test("a catalog skill shadowed by a built-in name shows the SHADOWED_BY_BUILT_IN problem on its row", () => {
+  const row = skillRows(shadowed()).rows.find((r) => r.name === "task-run-app");
+  assert.equal(row.badge.label, "Shadowed by built-in");
+  assert.equal(row.badge.tone, "danger");
+  assert.equal(row.builtIn, true);
+});
+
+test("the shadowed skill's detail names the problem and carries the server's message", () => {
+  const s = skillSummary(shadowed(), "task-run-app");
+  assert.equal(s.problemLabel, "Shadowed by built-in");
+  assert.equal(s.problemNote, SHADOW_MESSAGE);
+});
+
+test("a skill with no problem has no problem label; no description keeps its own badge", () => {
+  assert.equal(skillSummary(withBuiltIns(), "task-run-app").problemLabel, "");
+  const dto = catalogDTO();
+  dto.skills[0].problems = [{ code: "NO_DESCRIPTION", message: "x" }];
+  const s = skillSummary(toCatalog(dto), "tdd");
+  assert.equal(s.problemLabel, "");
+  assert.equal(s.noDescription, false);
+});

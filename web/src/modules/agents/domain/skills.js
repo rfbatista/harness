@@ -22,6 +22,12 @@ const enc = encodeURIComponent;
 /** The modes that carry a built-in skill, as one line: "architect, implement". */
 const modesLabel = (modes) => [...modes].sort().join(", ");
 
+/** The problem badge of the detail head; "" for none. No description has its own badge there. */
+function problemLabel(problems) {
+  const badge = problemBadge(problems);
+  return badge && badge.label !== "No description" ? badge.label : "";
+}
+
 /** The line a built-in skill's detail shows: it ships with the server, read-only, and who carries it. */
 function shipsLine(modes) {
   const sorted = [...modes].sort();
@@ -78,6 +84,8 @@ export function skillSummary(catalog, name) {
     builtIn: s.builtIn,
     modesLabel: modesLabel(s.modes),
     unused: s.agentCount === 0,
+    problemLabel: problemLabel(s.problems),
+    problemNote: s.problems.find((p) => p.code === "SHADOWED_BY_BUILT_IN")?.message ?? "",
     readOnly: s.builtIn,
     shipsLine: s.builtIn ? shipsLine(s.modes) : "",
     path: s.builtIn ? "" : `skills/${s.name}/SKILL.md`,

@@ -71,6 +71,8 @@ export function describeRefusal(err, { undo = false } = {}) {
   } else if (code === "BUNDLE_CYCLE") {
     out.message = "Bundles cannot include each other, directly or through another bundle.";
     out.next = "Remove the bundle that closes the loop.";
+  } else if (code === "SKILL_BUILT_IN") {
+    out.next = "A built-in skill cannot be saved, renamed or deleted. Duplicate it to change a copy.";
   } else if (code === "CHANGE_NOT_UNDOABLE") {
     out.message = "That change can no longer be undone: only the latest change since the server started can.";
   } else if (GONE[code]) {
@@ -97,6 +99,7 @@ const PROBLEMS = [
   ["UNKNOWN_BUNDLE", "danger", (n) => plural(n, "unknown bundle", "unknown bundles")],
   ["UNKNOWN_MCP_SERVER", "danger", (n) => plural(n, "unknown MCP server", "unknown MCP servers")],
   ["INVALID_SKILL", "danger", () => "Invalid SKILL.md"],
+  ["SHADOWED_BY_BUILT_IN", "danger", () => "Shadowed by built-in"],
   ["NO_DESCRIPTION", "attention", () => "No description"],
   ["SECRET_NOT_SET", "attention", (n) => (n === 1 ? "secret not set" : `${n} secrets not set`)],
 ];

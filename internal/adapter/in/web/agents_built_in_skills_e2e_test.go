@@ -263,3 +263,98 @@ func TestTheBundleEditorOffersBuiltInSkillsFromTheFakeCatalog_EndToEnd(t *testin
 		t.Errorf("JavaScript errors: %v", e)
 	}
 }
+
+const shadowMessage = "a catalog skill named task-run-app is hidden by the built-in one"
+
+// TestAShadowedCatalogSkillShowsItsProblem_EndToEnd is W1 for story 6 of the
+// spec, against a real server: a catalog folder named like a built-in skill is
+// listed once, and its SHADOWED_BY_BUILT_IN problem shows on the row and in
+// the detail.
+func TestAShadowedCatalogSkillShowsItsProblem_EndToEnd(t *testing.T) {
+	w := newTokenSaverWorld(t)
+	skipUnlessServerListsBuiltInSkills(t, w)
+	writeCatalogFile(t, w, "skills/task-run-app/SKILL.md", "---\nname: task-run-app\ndescription: A clash.\n---\nbody\n")
+	showsShadowedProblem(t, w, nil)
+}
+
+// TestAShadowedCatalogSkillShowsItsProblemFromTheFakeCatalog_EndToEnd is the
+// same scenario against the page alone.
+func TestAShadowedCatalogSkillShowsItsProblemFromTheFakeCatalog_EndToEnd(t *testing.T) {
+	w := newTokenSaverWorld(t)
+	listed := builtInSkill("task-run-app", "Runs the task's application.", "architect")
+	listed["problems"] = []map[string]string{{"code": "SHADOWED_BY_BUILT_IN", "message": shadowMessage}}
+	showsShadowedProblem(t, w, &builtInFake{
+		catalog: func(cat map[string]any) { cat["skills"] = append(cat["skills"].([]any), listed) },
+		skills: map[string]map[string]any{
+			"task-run-app": builtInSkillBody("task-run-app", "Runs the task's application.", "# Run the app\n", "architect"),
+		},
+	})
+}
+
+func showsShadowedProblem(t *testing.T, w *tokenSaverWorld, fake *builtInFake) {
+	t.Helper()
+	const row = `document.querySelector('[data-skill-row][data-key="task-run-app"]')`
+	const detail = `document.querySelector('[data-skill-detail]')`
+	b := newTLSBrowser(t)
+	if fake != nil {
+		fake.install(t, b)
+	}
+	b.run("the skill is listed once, with the problem on its row",
+		chromedp.EmulateViewport(1280, 900),
+		chromedp.Navigate(w.srv.URL+"/agents/skills"),
+		waitUntil(`document.querySelectorAll('[data-skill-row][data-key="task-run-app"]').length === 1`),
+		waitUntil(row+`.textContent.replace(/\s+/g, ' ').includes('Shadowed by built-in')`),
+	)
+	b.run("its detail shows the problem and the server's message",
+		chromedp.Click(`[data-skill-row][data-key="task-run-app"]`, chromedp.ByQuery),
+		waitUntil(detail+`?.querySelector('[data-skill-problem]')?.checkVisibility() === true`),
+		waitUntil(detail+`.querySelector('[data-skill-problem]').textContent.trim() === 'Shadowed by built-in'`),
+		waitUntil(detail+`.querySelector('[data-skill-problem-note]').textContent.trim().length > 0`),
+	)
+	if e := b.jsErrors(); len(e) > 0 {
+		t.Errorf("JavaScript errors: %v", e)
+	}
+}
+
+// TestARefusedWriteOnABuiltInSkillShowsItsCode_EndToEnd is W1 for story 7 of
+// the spec: a save or a delete the server refuses with SKILL_BUILT_IN (one sent
+// from a stale tab, say) shows the coded error and changes nothing. The page
+// cannot cause such a write itself, so the refusal is the fake's.
+func TestARefusedWriteOnABuiltInSkillShowsItsCode_EndToEnd(t *testing.T) {
+	w := newTokenSaverWorld(t)
+	writeCatalogFile(t, w, "skills/lint/SKILL.md", "---\nname: lint\ndescription: Lint it.\n---\nbody\n")
+	refusal := fakeRefusal{status: 409, code: "SKILL_BUILT_IN", message: "lint ships with the server (architect mode)"}
+	fake := &builtInFake{refuse: map[string]fakeRefusal{"save_catalog_skill": refusal, "delete_catalog_skill": refusal}}
+	flat := func(sel string) string {
+		return `(document.querySelector(` + quote(sel) + `)?.textContent ?? '').replace(/\s+/g, ' ').trim()`
+	}
+
+	b := newTLSBrowser(t)
+	fake.install(t, b)
+	b.run("a refused delete shows the server's message and its code, and the skill stays",
+		chromedp.EmulateViewport(1280, 900),
+		chromedp.Navigate(w.srv.URL+"/agents/skills/lint"),
+		waitUntil(`document.querySelector('[data-skill-detail] a[data-edit]')?.checkVisibility() === true`),
+		deleteMenu(`[data-skill-detail]`),
+		waitUntil(flat(`#delete-title`)+` === 'Delete skill “lint”?'`),
+		chromedp.SendKeys(`#delete-name`, "lint", chromedp.ByQuery),
+		waitUntil(`document.querySelector('[data-delete-confirm]').disabled === false`),
+		chromedp.Click(`[data-delete-confirm]`, chromedp.ByQuery),
+		waitUntil(flat(`[data-delete-error]`)+`.includes('lint ships with the server (architect mode)') && `+flat(`[data-delete-error]`)+`.includes('SKILL_BUILT_IN')`),
+		clickButton(`document.querySelector('[data-delete-dialog]')`, "Cancel"),
+		waitUntil(`!document.querySelector('[data-delete-dialog]')`),
+		waitUntil(`document.querySelector('[data-skill-row][data-key="lint"]') !== null`),
+	)
+	b.run("a refused save shows the server's message and its code in the form, which stays open",
+		chromedp.Navigate(w.srv.URL+"/agents/skills/lint/edit"),
+		waitUntil(`document.querySelector('#sf-desc') !== null && document.querySelector('#sf-desc').value !== ''`),
+		setField(`#sf-desc`, "Lint it harder."),
+		waitUntil(`document.querySelector('[data-save-footer] [data-save]').disabled === false`),
+		chromedp.Click(`[data-save-footer] [data-save]`, chromedp.ByQuery),
+		waitUntil(flat(`[data-form-error]`)+`.includes('lint ships with the server (architect mode)') && `+flat(`[data-form-error]`)+`.includes('SKILL_BUILT_IN')`),
+		atPath(w.srv.URL+"/agents/skills/lint/edit"),
+	)
+	if e := b.jsErrors(); len(e) > 0 {
+		t.Errorf("JavaScript errors: %v", e)
+	}
+}

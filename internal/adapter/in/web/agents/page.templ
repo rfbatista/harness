@@ -528,11 +528,13 @@ templ skillDetail() {
 					<span class="[ badge ]" data-tone="attention" x-bind:hidden="!skill.unused">unused</span>
 					<span class="[ badge ]" data-tone="attention" x-bind:hidden="!skill.noDescription">No description</span>
 					@builtInBadge("!skill.builtIn")
+					<span class="[ badge ]" data-tone="danger" data-skill-problem x-bind:hidden="skill.problemLabel === ''" x-text="skill.problemLabel"></span>
 				</div>
 				@actionsMenu("skill")
 			</div>
 			<code class="[ library-path ]" data-path x-bind:hidden="skill.readOnly" x-text="skill.path"></code>
 			<p class="[ color-ink-muted text-sm ]" data-built-in-note x-bind:hidden="!skill.readOnly" x-text="skill.shipsLine"></p>
+			<p class="[ color-ink-muted text-sm ]" data-skill-problem-note x-bind:hidden="skill.problemNote === ''" x-text="skill.problemNote"></p>
 		</div>
 		<div class="[ banner ]" data-tone="danger" data-skill-error x-bind:hidden="noSkillError" role="alert">
 			<div class="[ grow ]" x-text="skillErrorText"></div>

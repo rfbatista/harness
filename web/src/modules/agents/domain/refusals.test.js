@@ -106,3 +106,17 @@ test("a row's badge is the most serious problem; an item without problems has no
 test("the badge for a live update that changes the open item", () => {
   assert.equal(CHANGED_ON_DISK.text, "changed on disk");
 });
+
+test("SKILL_BUILT_IN keeps the server's message and says what to do instead", () => {
+  const d = describeRefusal(refusal("SKILL_BUILT_IN", "task-run-app ships with the server (architect mode)", undefined, 409));
+  assert.equal(d.code, "SKILL_BUILT_IN");
+  assert.equal(d.message, "task-run-app ships with the server (architect mode)");
+  assert.equal(d.field, "");
+  assert.equal(d.next, "A built-in skill cannot be saved, renamed or deleted. Duplicate it to change a copy.");
+});
+
+test("SHADOWED_BY_BUILT_IN is a danger badge, like the other problems that need a fix", () => {
+  const b = rowBadge([{ code: "SHADOWED_BY_BUILT_IN", message: "m" }]);
+  assert.equal(b.text, "Shadowed by built-in");
+  assert.equal(b.tone, "danger");
+});
