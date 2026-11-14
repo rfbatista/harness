@@ -1,9 +1,13 @@
 package httpapi
 
 import (
+	"os"
+	"path/filepath"
 	"reflect"
 	"strings"
 	"testing"
+
+	"operators-mcp/internal/adapter/out/agentcatalog"
 )
 
 var builtInSkillNames = []string{
@@ -87,5 +91,104 @@ func TestBuiltInSkills_ACatalogSkillWithTheSameNameIsListedOnceAsTheBuiltInOne(t
 	one := f.get("/api/get_catalog_skill?name=task-tdd", 200)["skill"].(map[string]any)
 	if one["built_in"] != true || one["description"] == "Mine" {
 		t.Errorf("get returned the catalog one: %v", one)
+	}
+}
+
+func TestBuiltInSkills_EditingRenamingOrDeletingOneIsRefusedAndWritesNothing(t *testing.T) {
+	f := newCatalogFixture(t)
+	f.skill("mine", "Mine")
+	for _, c := range []struct {
+		name, path string
+		body       map[string]any
+	}{
+		{"edit", "/api/save_catalog_skill", map[string]any{"previous_name": "task-run-app", "skill": skillBody("task-run-app", "Mine")}},
+		{"rename from", "/api/save_catalog_skill", map[string]any{"previous_name": "task-run-app", "skill": skillBody("run-app", "Mine")}},
+		{"delete", "/api/delete_catalog_skill", map[string]any{"name": "task-run-app"}},
+	} {
+		got := f.post(c.path, c.body, 409)
+		msg, _ := got["error"].(string)
+		if got["code"] != "SKILL_BUILT_IN" || !strings.Contains(msg, "ships with the server") || !strings.Contains(msg, "architect") {
+			t.Errorf("%s: body = %v", c.name, got)
+		}
+	}
+	if _, err := os.Stat(filepath.Join(f.dir, "skills", "task-run-app")); err == nil {
+		t.Fatal("a refused write created a folder")
+	}
+}
+
+func TestBuiltInSkills_ACatalogSkillCannotTakeABuiltInName(t *testing.T) {
+	f := newCatalogFixture(t)
+	f.skill("mine", "Mine")
+	before := f.read("skills/mine/SKILL.md")
+	for name, body := range map[string]map[string]any{
+		"create": {"skill": skillBody("task-tdd", "Mine")},
+		"rename": {"previous_name": "mine", "skill": skillBody("task-tdd", "Mine")},
+	} {
+		got := f.post("/api/save_catalog_skill", body, 409)
+		msg, _ := got["error"].(string)
+		if got["code"] != "NAME_TAKEN" || got["suggestion"] != "task-tdd-2" || !strings.Contains(msg, "built-in") {
+			t.Errorf("%s: body = %v", name, got)
+		}
+	}
+	if f.read("skills/mine/SKILL.md") != before {
+		t.Fatal("a refused rename changed the skill")
+	}
+}
+
+func TestBuiltInSkills_TheLegacyWritesRefuseTheSameWay(t *testing.T) {
+	f := legacyFixture(t)
+	if got := f.post("/api/create_skill", map[string]any{"name": "task-tdd", "description": "Mine"}, 409); got["code"] != "NAME_TAKEN" {
+		t.Errorf("create: %v", got)
+	}
+	if got := f.post("/api/update_skill", map[string]any{"skill_id": "task-tdd", "description": "Mine"}, 409); got["code"] != "SKILL_BUILT_IN" {
+		t.Errorf("update: %v", got)
+	}
+	rec := f.postRaw("/api/delete_skill", map[string]any{"skill_id": "task-tdd"})
+	if rec.Code != 409 || !strings.Contains(rec.Body.String(), "SKILL_BUILT_IN") {
+		t.Errorf("delete: %d %s", rec.Code, rec.Body.String())
+	}
+}
+
+func TestBuiltInSkills_DeletingTheShadowClearsTheClashAndKeepsTheBuiltInOne(t *testing.T) {
+	f := newCatalogFixture(t)
+	f.skill("task-tdd", "Mine")
+	f.write("agents.json", `{"agents":{"a":{"description":"A","skills":["task-tdd"]}}}`)
+	f.post("/api/save_catalog_skill", map[string]any{"previous_name": "task-tdd", "skill": skillBody("task-tdd", "Mine")}, 409)
+	f.post("/api/delete_catalog_skill", map[string]any{"name": "task-tdd"}, 200)
+	if _, err := os.Stat(filepath.Join(f.dir, "skills", "task-tdd")); err == nil {
+		t.Fatal("the shadow folder is still there")
+	}
+	cat := f.get("/api/get_agent_catalog", 200)
+	tdd := byName(t, cat["skills"], "task-tdd")
+	if tdd["built_in"] != true || len(problemCodes(tdd)) != 0 {
+		t.Errorf("task-tdd = %v", tdd)
+	}
+	if got := strList(tdd["agents"]); !reflect.DeepEqual(got, []string{"a"}) {
+		t.Errorf("the agent lost its reference: %v", got)
+	}
+	// With no shadow left, a delete is refused again.
+	f.post("/api/delete_catalog_skill", map[string]any{"name": "task-tdd"}, 409)
+}
+
+func TestBuiltInSkills_TheImportCopiesNoneIntoTheCatalogFolder(t *testing.T) {
+	repo := t.TempDir()
+	for _, name := range []string{"task-tdd", "mine"} {
+		p := filepath.Join(repo, "skills", name, "SKILL.md")
+		if err := os.MkdirAll(filepath.Dir(p), 0o755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(p, []byte("---\nname: "+name+"\ndescription: D\n---\n\nbody\n"), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	f, rep := importInto(t, agentcatalog.ImportSource{RepoDir: repo})
+	if rep.Skills != 1 {
+		t.Errorf("report = %+v", rep)
+	}
+	if _, err := os.Stat(filepath.Join(f.dir, "skills", "task-tdd")); err == nil {
+		t.Error("the import copied a built-in name into the catalog")
+	}
+	if f.read("skills/mine/SKILL.md") == "" {
+		t.Error("the import lost a catalog skill")
 	}
 }

@@ -47,10 +47,7 @@ type skillInfo struct {
 // scanSkills lists every skill folder, reading only each SKILL.md's head.
 func (c *Catalog) scanSkills() map[string]*skillInfo {
 	out := map[string]*skillInfo{}
-	entries, err := os.ReadDir(filepath.Join(c.root, skillsDir))
-	if err != nil {
-		return out
-	}
+	entries, _ := os.ReadDir(filepath.Join(c.root, skillsDir)) // no folder: no catalog skills
 	for _, e := range entries {
 		if !e.IsDir() || !slugRe.MatchString(e.Name()) {
 			continue
