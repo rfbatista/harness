@@ -146,6 +146,7 @@ templ entryPicker(ns, label, placeholder, hintID, errorID, describedBy, invalid,
 					<div role="option" class="[ entry-option ]" x-bind:id="o.id" x-bind:data-key="o.key" x-bind:data-kind="o.kind" x-bind:data-active="o.active" x-bind:aria-selected="o.chosen" x-on:mousedown={ ns + "Pick" }>
 						<span aria-hidden="true" x-text="o.mark"></span>
 						<span class="[ font-mono ]" x-text="o.label"></span>
+						@builtInBadge("!o.builtIn")
 						<span class="[ text-xs color-ink-faint ]" x-text="o.hint"></span>
 					</div>
 				</template>

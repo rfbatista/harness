@@ -141,3 +141,12 @@ test("a refusal belongs to the field it is about", () => {
   assert.equal(f("CATALOG_BROKEN").form, "boom");
   assert.deepEqual(bundleFieldErrors(null), { name: "", entries: "", form: "" });
 });
+
+test("the bundle picker offers a built-in skill flagged as built in; a catalog skill is not", () => {
+  const catalog = {
+    bundles: [bundle("ux", ["lint"], ["lint"])],
+    skills: [{ name: "lint", description: "", builtIn: false }, { name: "task-run-app", description: "", builtIn: true }],
+  };
+  const { options } = bundlePickerOptions(catalog, { query: "", chosen: [], exclude: "" });
+  assert.deepEqual(options.map((o) => [o.key, o.builtIn]), [["@ux", false], ["lint", false], ["task-run-app", true]]);
+});

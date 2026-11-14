@@ -166,3 +166,21 @@ test("the built-in services server is a tickable choice marked built-in", () => 
   const row = mcpChoices(withServices, ["services"]).find((r) => r.name === "services");
   assert.deepEqual([row.checked, row.transport, row.builtIn, row.refs], [true, "built-in", true, []]);
 });
+
+const withRunApp = { ...catalog, skills: [...catalog.skills, { name: "task-run-app", description: "Runs the task's application.", builtIn: true, modes: ["architect"] }] };
+
+test("the agent picker offers a built-in skill flagged as built in; a catalog skill is not", () => {
+  const { options } = agentPickerOptions(withRunApp, { query: "run-app", entries: [] });
+  const run = options.find((o) => o.key === "task-run-app");
+  assert.equal(run.builtIn, true);
+  assert.equal(run.kind, "skill");
+  const tdd = agentPickerOptions(withRunApp, { query: "tdd", entries: [] }).options.find((o) => o.key === "tdd");
+  assert.equal(tdd.builtIn, false);
+});
+
+test("a built-in skill named in the entries is known: it resolves and is not missing", () => {
+  const got = expandEntries(withRunApp, ["tdd", "task-run-app"]);
+  assert.deepEqual(got.resolved, ["tdd", "task-run-app"]);
+  assert.deepEqual(got.missing, []);
+  assert.equal(resolvedSummary(withRunApp, ["task-run-app"]).total, 1);
+});

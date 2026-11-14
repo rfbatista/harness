@@ -8,6 +8,7 @@ import (
 	"encoding/json"
 	"net/url"
 	"strings"
+	"sync"
 	"testing"
 
 	"github.com/chromedp/cdproto/cdp"
@@ -30,8 +31,16 @@ type builtInFake struct {
 	// refuse answers a write (save_catalog_skill, delete_catalog_skill) with
 	// the coded error; it is keyed by the endpoint.
 	refuse map[string]fakeRefusal
-	// writes records every write endpoint the page called.
+	mu sync.Mutex
+	// writes records every write the page sent, as "endpoint body".
 	writes []string
+}
+
+// sent is the writes the page has sent so far.
+func (f *builtInFake) sent() []string {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return append([]string(nil), f.writes...)
 }
 
 type fakeRefusal struct {
@@ -81,6 +90,8 @@ func (f *builtInFake) install(t *testing.T, b *browser) {
 		{URLPattern: "*/api/get_agent_catalog*", RequestStage: fetch.RequestStageResponse},
 		{URLPattern: "*/api/get_catalog_skill*", RequestStage: fetch.RequestStageRequest},
 		{URLPattern: "*/api/save_catalog_skill*", RequestStage: fetch.RequestStageRequest},
+		{URLPattern: "*/api/save_catalog_agent*", RequestStage: fetch.RequestStageRequest},
+		{URLPattern: "*/api/save_catalog_bundle*", RequestStage: fetch.RequestStageRequest},
 		{URLPattern: "*/api/delete_catalog_skill*", RequestStage: fetch.RequestStageRequest},
 	}
 	if err := chromedp.Run(b.ctx, fetch.Enable().WithPatterns(patterns)); err != nil {
@@ -127,9 +138,11 @@ func (f *builtInFake) answer(ctx context.Context, e *fetch.EventRequestPaused) {
 		}
 		pass()
 	default: // a write
-		f.writes = append(f.writes, endpoint)
+		f.mu.Lock()
+		f.writes = append(f.writes, endpoint+" "+postBody(e.Request))
+		f.mu.Unlock()
 		if r, ok := f.refuse[endpoint]; ok {
-			respond(int64(r.status), map[string]any{"error": map[string]any{"code": r.code, "message": r.message}})
+			respond(int64(r.status), map[string]any{"error": r.message, "code": r.code})
 			return
 		}
 		pass()
@@ -164,4 +177,18 @@ func (f *builtInFake) answerDocument(ctx context.Context, e *fetch.EventRequestP
 	html = html[:from] + strings.ReplaceAll(string(out), "<", `\u003c`) + html[to:]
 	headers := []*fetch.HeaderEntry{{Name: "Content-Type", Value: "text/html; charset=utf-8"}}
 	_ = fetch.FulfillRequest(e.RequestID, 200).WithResponseHeaders(headers).WithBody(base64.StdEncoding.EncodeToString([]byte(html))).Do(ctx)
+}
+
+// postBody is the request's body, from its post data entries (base64 on the wire).
+func postBody(r *network.Request) string {
+	var out strings.Builder
+	for _, entry := range r.PostDataEntries {
+		raw, err := base64.StdEncoding.DecodeString(entry.Bytes)
+		if err != nil {
+			out.WriteString(entry.Bytes)
+			continue
+		}
+		out.Write(raw)
+	}
+	return out.String()
 }

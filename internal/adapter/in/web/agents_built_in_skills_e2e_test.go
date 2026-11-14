@@ -4,7 +4,9 @@ package web_test
 
 import (
 	"encoding/json"
+	"strings"
 	"testing"
+	"time"
 
 	"github.com/chromedp/chromedp"
 )
@@ -160,6 +162,102 @@ func opensReadOnly(t *testing.T, w *tokenSaverWorld, fake *builtInFake) {
 		waitUntil(`document.querySelector('#sf-name-error')?.checkVisibility() === true`),
 		setField(`#sf-name`, "my-run-app"),
 		waitUntil(`document.querySelector('#sf-name-error')?.checkVisibility() !== true`),
+	)
+	if e := b.jsErrors(); len(e) > 0 {
+		t.Errorf("JavaScript errors: %v", e)
+	}
+}
+
+// TestPickersOfferBuiltInSkillsWithTheirBadge_EndToEnd is W1 for story 5 of
+// the spec, against a real server: the agent editor's and the bundle editor's
+// pickers offer a built-in skill with the Built-in badge, and a chosen one is
+// not flagged as missing.
+func TestPickersOfferBuiltInSkillsWithTheirBadge_EndToEnd(t *testing.T) {
+	w := newTokenSaverWorld(t)
+	skipUnlessServerListsBuiltInSkills(t, w)
+	pickersOfferBuiltIns(t, w, nil)
+}
+
+// TestPickersOfferBuiltInSkillsFromTheFakeCatalog_EndToEnd is the same
+// scenario against the page alone.
+func TestPickersOfferBuiltInSkillsFromTheFakeCatalog_EndToEnd(t *testing.T) {
+	w := newTokenSaverWorld(t)
+	pickersOfferBuiltIns(t, w, &builtInFake{
+		catalog: func(cat map[string]any) {
+			cat["skills"] = append(cat["skills"].([]any), builtInSkill("task-run-app", "Runs the task's application.", "architect"))
+		},
+		// Whatever the page sends is recorded; the answer is a refusal so the page stays where it is.
+		refuse: map[string]fakeRefusal{"save_catalog_agent": {status: 409, code: "STALE_VERSION", message: "stub"}},
+	})
+}
+
+func pickersOfferBuiltIns(t *testing.T, w *tokenSaverWorld, fake *builtInFake) {
+	t.Helper()
+	writeCatalogFile(t, w, "skills/lint/SKILL.md", "---\nname: lint\ndescription: Lint it.\n---\nbody\n")
+	const option = `document.querySelector('#skillPicker-list [role=option][data-key="task-run-app"]')`
+	const chip = `document.querySelector('[data-agent-editor] [data-chip="task-run-app"]')`
+
+	b := newTLSBrowser(t)
+	if fake != nil {
+		fake.install(t, b)
+	}
+	b.run("the agent editor's picker offers a built-in skill with the badge, and a catalog skill without",
+		chromedp.EmulateViewport(1280, 900),
+		chromedp.Navigate(w.srv.URL+"/agents/new"),
+		waitUntil(`document.querySelector('[data-agent-editor]')?.checkVisibility() === true`),
+		chromedp.SendKeys(`#skillPicker-input`, "run-app", chromedp.ByQuery),
+		waitUntil(option+`?.querySelector('[data-built-in]')?.checkVisibility() === true`),
+		waitUntil(option+`.querySelector('[data-built-in]').textContent.trim() === 'Built-in'`),
+		setField(`#skillPicker-input`, "lint"),
+		waitUntil(`document.querySelector('#skillPicker-list [role=option][data-key="lint"]') !== null && document.querySelector('#skillPicker-list [data-built-in]')?.checkVisibility() !== true`),
+	)
+	b.run("choosing it makes a chip that is not missing, and the summary counts the skill",
+		setField(`#skillPicker-input`, "run-app"),
+		waitUntil(option+` !== null`),
+		pressKey("Enter", 13),
+		waitUntil(chip+` !== null && `+chip+`.getAttribute('data-missing') !== 'true'`),
+		waitUntil(`document.querySelector('[data-skills-summary]').textContent.replace(/\s+/g, ' ').trim().startsWith('1 skill after bundles are expanded')`),
+		waitUntil(`!document.querySelector('[data-skills-summary]').textContent.includes('missing')`),
+	)
+	if fake != nil {
+		b.run("saving sends the built-in name in the entries unchanged",
+			setField(`#agent-name`, "runner"),
+			setField(`#agent-desc`, "Runs the app."),
+			waitUntil(`document.querySelector('[data-save-footer] [data-save]').disabled === false`),
+			chromedp.Click(`[data-save-footer] [data-save]`, chromedp.ByQuery),
+			waitUntil(`true`),
+		)
+		var sent []string
+		for i := 0; i < 50 && len(sent) == 0; i++ {
+			time.Sleep(100 * time.Millisecond)
+			sent = fake.sent()
+		}
+		if len(sent) == 0 || !strings.Contains(sent[0], `"task-run-app"`) {
+			t.Fatalf("save_catalog_agent body = %v, want it to name task-run-app", sent)
+		}
+	}
+	if e := b.jsErrors(); len(e) > 0 {
+		t.Errorf("JavaScript errors: %v", e)
+	}
+}
+
+// TestTheBundleEditorOffersBuiltInSkillsFromTheFakeCatalog_EndToEnd covers the
+// bundle editor's picker: a built-in skill is offered with the badge. It runs
+// against the page alone.
+func TestTheBundleEditorOffersBuiltInSkillsFromTheFakeCatalog_EndToEnd(t *testing.T) {
+	w := newTokenSaverWorld(t)
+	writeCatalogFile(t, w, "agents.json", `{"bundles": {"core": []}}`)
+	fake := &builtInFake{catalog: func(cat map[string]any) {
+		cat["skills"] = append(cat["skills"].([]any), builtInSkill("task-run-app", "Runs the task's application.", "architect"))
+	}}
+	b := newTLSBrowser(t)
+	fake.install(t, b)
+	b.run("the bundle picker offers a built-in skill with the badge",
+		chromedp.EmulateViewport(1280, 900),
+		chromedp.Navigate(w.srv.URL+"/agents/bundles/core/edit"),
+		waitUntil(`document.querySelector('#bundlePicker-input') !== null`),
+		chromedp.Click(`#bundlePicker-input`, chromedp.ByQuery),
+		waitUntil(`document.querySelector('#bundlePicker-list [role=option][data-key="task-run-app"] [data-built-in]')?.checkVisibility() === true`),
 	)
 	if e := b.jsErrors(); len(e) > 0 {
 		t.Errorf("JavaScript errors: %v", e)
