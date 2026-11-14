@@ -18,6 +18,10 @@ type Archived struct {
 type ArchivedSeed struct {
 	ProjectID string           `json:"project_id"`
 	Tickets   []*domain.Ticket `json:"tickets"`
+	// Worktrees counts, by task, the sessions that still have a worktree on
+	// record: what the Clear worktrees actions are enabled by. It reads the
+	// store, never git.
+	Worktrees map[string]int `json:"worktrees"`
 }
 
 // ArchivedRow is one archived task: its link, when it was finished and
@@ -29,8 +33,13 @@ type ArchivedRow struct {
 }
 
 // BuildArchived reads the archived tasks as the view draws them.
-func BuildArchived(projectID string, list []*domain.Ticket) Archived {
-	a := Archived{Seed: ArchivedSeed{ProjectID: projectID, Tickets: list}}
+func BuildArchived(projectID string, list []*domain.Ticket, sessions []*domain.Session) Archived {
+	a := Archived{Seed: ArchivedSeed{ProjectID: projectID, Tickets: list, Worktrees: map[string]int{}}}
+	for _, s := range sessions {
+		if s.WorkspaceID != "" && s.TicketID != "" {
+			a.Seed.Worktrees[s.TicketID]++
+		}
+	}
 	if a.Seed.Tickets == nil {
 		a.Seed.Tickets = []*domain.Ticket{}
 	}

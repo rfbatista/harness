@@ -193,13 +193,23 @@ func (h Handler) Archived(w http.ResponseWriter, r *http.Request) error {
 			return err
 		}
 	}
+	var sessions []*domain.Session
+	if len(list) > 0 {
+		ids := make([]string, len(list))
+		for i, t := range list {
+			ids[i] = t.ID
+		}
+		if sessions, err = h.Sessions.List(ctx, ports.SessionFilter{ProjectID: project.ID, TicketIDs: ids}); err != nil {
+			return err
+		}
+	}
 	frame, err := h.Layout(ctx, "Archived · "+project.Name, project.ID, "")
 	if err != nil {
 		return err
 	}
 	frame.Live = true
 	frame.Rail.ReportsFeed = true
-	return h.Render(w, r, http.StatusOK, ArchivedPage(frame, project.ID, project.Name, BuildArchived(project.ID, list)))
+	return h.Render(w, r, http.StatusOK, ArchivedPage(frame, project.ID, project.Name, BuildArchived(project.ID, list, sessions)))
 }
 
 // New serves GET /projects/{project}/tasks/new: the new-task form.

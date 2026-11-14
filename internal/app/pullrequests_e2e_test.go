@@ -34,6 +34,7 @@ type prServer struct {
 	ws      *workspaces.Service
 	prs     *workspaces.PullRequests
 	merge   *workspaces.Merges
+	cleared *workspaces.ArchivedWorktrees
 	channel *taskchannel.Service
 	sess    ports.SessionRepository
 	creds   *gitcredentials.Service
@@ -67,7 +68,7 @@ func startPRServer(t *testing.T, dir, dbPath string, host *githubapitest.FakeHos
 		PersistenceModule, CatalogModule, PlanningModule, WorkspacesModule, GitCredentialsModule,
 		AgentRuntimeModule, TaskChannelModule, TextProcessingModule, ToolingModule,
 		WithCodeHost(host),
-		fx.Populate(&s.cat, &s.orch, &s.plan, &s.ws, &s.prs, &s.merge, &s.channel, &s.sess, &s.creds),
+		fx.Populate(&s.cat, &s.orch, &s.plan, &s.ws, &s.prs, &s.merge, &s.cleared, &s.channel, &s.sess, &s.creds),
 		fx.NopLogger,
 	)
 	if err := s.app.Start(context.Background()); err != nil {
