@@ -179,7 +179,79 @@ func Page(frame shell.Frame, v View) templ.Component {
 					return templ_7745c5c3_Err
 				}
 			}
-			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 16, " x-bind:disabled=\"saving\" x-bind:aria-busy=\"saving\" x-on:change=\"choose\"></label><p class=\"[ text-sm color-ink-muted ]\">While on, a session on a task moves that task's documents to project level with a plain mv in its virtual shell, with no approval and no notification. While off, only you do, with \"Move to project\". Designs are not affected.</p></li></ul></section><section class=\"[ pane ]\" aria-labelledby=\"server-services-title\" x-data=\"servicesRuntime\" data-services-runtime><header><h2 id=\"server-services-title\">Services</h2></header><ul role=\"list\" class=\"[ list ]\"><li class=\"[ flow ] [ flow-space-2xs ]\"><p class=\"[ visually-hidden ]\" role=\"status\" aria-live=\"polite\" x-text=\"announcement\"></p><template x-if=\"error\"><div class=\"[ banner ]\" data-tone=\"danger\" role=\"alert\"><div class=\"[ flow ] [ flow-space-3xs grow ]\"><span x-text=\"error.message\"></span> <span class=\"[ code ]\"><span x-text=\"error.code\"></span> · <span x-text=\"error.next\"></span></span></div><button type=\"button\" class=\"[ button ]\" data-variant=\"ghost\" data-size=\"sm\" x-on:click=\"dismissError\">Dismiss</button></div></template><label class=\"[ row ]\" style=\"--row-columns: 9rem auto\"><span class=\"[ title ]\">Container runtime</span> <select data-fit data-container-runtime x-bind:value=\"runtime\" x-bind:disabled=\"loading || saving\" x-bind:aria-busy=\"saving\" x-on:change=\"choose\"><option value=\"docker\">docker</option> <option value=\"podman\">podman</option></select></label><p class=\"[ text-sm ]\" data-runtime-status x-bind:data-found=\"found\" x-bind:hidden=\"loading\" x-text=\"status\"></p><p class=\"[ text-sm color-ink-muted ]\">Runs the image services of every project. A change applies to the next start: a running image service keeps the runtime it started with.</p></li></ul></section></div></div></main>")
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 16, " x-bind:disabled=\"saving\" x-bind:aria-busy=\"saving\" x-on:change=\"choose\"></label><p class=\"[ text-sm color-ink-muted ]\">While on, a session on a task moves that task's documents to project level with a plain mv in its virtual shell, with no approval and no notification. While off, only you do, with \"Move to project\". Designs are not affected.</p></li></ul></section><section class=\"[ pane ]\" aria-labelledby=\"server-branch-block-title\"><header><h2 id=\"server-branch-block-title\">Branch block</h2></header><p class=\"[ text-sm color-ink-muted ]\">While a mode's block is on, agents of that mode cannot create, switch to or delete branches: they stay on their session branch. Renaming a branch and pushing still ask you. A change applies at once, to running sessions too. Turn a mode's block off to let its sessions ask for those branch actions again.</p><ul role=\"list\" class=\"[ list ]\">")
+			if templ_7745c5c3_Err != nil {
+				return templ_7745c5c3_Err
+			}
+			for _, bb := range v.BranchBlocks {
+				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 17, "<li class=\"[ flow ] [ flow-space-2xs ]\" x-data=\"branchBlock\" data-setting=\"")
+				if templ_7745c5c3_Err != nil {
+					return templ_7745c5c3_Err
+				}
+				var templ_7745c5c3_Var10 string
+				templ_7745c5c3_Var10, templ_7745c5c3_Err = templ.ResolveAttributeValue(bb.Key)
+				if templ_7745c5c3_Err != nil {
+					return templ.Error{Err: templ_7745c5c3_Err, FileName: `serversettings/page.templ`, Line: 72, Col: 90}
+				}
+				_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var10)
+				if templ_7745c5c3_Err != nil {
+					return templ_7745c5c3_Err
+				}
+				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 18, "\"><p class=\"[ visually-hidden ]\" role=\"status\" aria-live=\"polite\" x-text=\"announcement\"></p><template x-if=\"error\"><div class=\"[ banner ]\" data-tone=\"danger\" role=\"alert\"><div class=\"[ flow ] [ flow-space-3xs grow ]\"><span x-text=\"error.message\"></span> <span class=\"[ code ]\"><span x-text=\"error.code\"></span> · <span x-text=\"error.next\"></span></span></div><button type=\"button\" class=\"[ button ]\" data-variant=\"ghost\" data-size=\"sm\" x-on:click=\"dismissError\">Dismiss</button></div></template><label class=\"[ row ]\" style=\"--row-columns: 9rem auto\"><span class=\"[ title ]\">")
+				if templ_7745c5c3_Err != nil {
+					return templ_7745c5c3_Err
+				}
+				var templ_7745c5c3_Var11 string
+				templ_7745c5c3_Var11, templ_7745c5c3_Err = templ.JoinStringErrs(bb.Name)
+				if templ_7745c5c3_Err != nil {
+					return templ.Error{Err: templ_7745c5c3_Err, FileName: `serversettings/page.templ`, Line: 84, Col: 43}
+				}
+				_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var11))
+				if templ_7745c5c3_Err != nil {
+					return templ_7745c5c3_Err
+				}
+				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 19, "</span> <input type=\"checkbox\" data-branch-block data-setting=\"")
+				if templ_7745c5c3_Err != nil {
+					return templ_7745c5c3_Err
+				}
+				var templ_7745c5c3_Var12 string
+				templ_7745c5c3_Var12, templ_7745c5c3_Err = templ.ResolveAttributeValue(bb.Key)
+				if templ_7745c5c3_Err != nil {
+					return templ.Error{Err: templ_7745c5c3_Err, FileName: `serversettings/page.templ`, Line: 85, Col: 72}
+				}
+				_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var12)
+				if templ_7745c5c3_Err != nil {
+					return templ_7745c5c3_Err
+				}
+				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 20, "\" aria-label=\"")
+				if templ_7745c5c3_Err != nil {
+					return templ_7745c5c3_Err
+				}
+				var templ_7745c5c3_Var13 string
+				templ_7745c5c3_Var13, templ_7745c5c3_Err = templ.ResolveAttributeValue(bb.Name + " Branch block")
+				if templ_7745c5c3_Err != nil {
+					return templ.Error{Err: templ_7745c5c3_Err, FileName: `serversettings/page.templ`, Line: 85, Col: 113}
+				}
+				_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var13)
+				if templ_7745c5c3_Err != nil {
+					return templ_7745c5c3_Err
+				}
+				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 21, "\"")
+				if templ_7745c5c3_Err != nil {
+					return templ_7745c5c3_Err
+				}
+				if bb.Blocked {
+					templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 22, " checked")
+					if templ_7745c5c3_Err != nil {
+						return templ_7745c5c3_Err
+					}
+				}
+				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 23, " x-bind:disabled=\"saving\" x-bind:aria-busy=\"saving\" x-on:change=\"choose\"></label></li>")
+				if templ_7745c5c3_Err != nil {
+					return templ_7745c5c3_Err
+				}
+			}
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 24, "</ul></section><section class=\"[ pane ]\" aria-labelledby=\"server-services-title\" x-data=\"servicesRuntime\" data-services-runtime><header><h2 id=\"server-services-title\">Services</h2></header><ul role=\"list\" class=\"[ list ]\"><li class=\"[ flow ] [ flow-space-2xs ]\"><p class=\"[ visually-hidden ]\" role=\"status\" aria-live=\"polite\" x-text=\"announcement\"></p><template x-if=\"error\"><div class=\"[ banner ]\" data-tone=\"danger\" role=\"alert\"><div class=\"[ flow ] [ flow-space-3xs grow ]\"><span x-text=\"error.message\"></span> <span class=\"[ code ]\"><span x-text=\"error.code\"></span> · <span x-text=\"error.next\"></span></span></div><button type=\"button\" class=\"[ button ]\" data-variant=\"ghost\" data-size=\"sm\" x-on:click=\"dismissError\">Dismiss</button></div></template><label class=\"[ row ]\" style=\"--row-columns: 9rem auto\"><span class=\"[ title ]\">Container runtime</span> <select data-fit data-container-runtime x-bind:value=\"runtime\" x-bind:disabled=\"loading || saving\" x-bind:aria-busy=\"saving\" x-on:change=\"choose\"><option value=\"docker\">docker</option> <option value=\"podman\">podman</option></select></label><p class=\"[ text-sm ]\" data-runtime-status x-bind:data-found=\"found\" x-bind:hidden=\"loading\" x-text=\"status\"></p><p class=\"[ text-sm color-ink-muted ]\">Runs the image services of every project. A change applies to the next start: a running image service keeps the runtime it started with.</p></li></ul></section></div></div></main>")
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}

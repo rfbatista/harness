@@ -171,6 +171,7 @@ import "../src/modules/sessions/presentation/pages/sessionsPage.test.js";
 import "../src/modules/sessions/presentation/sandboxView.test.js";
 import "../src/modules/sessions/presentation/screenPrefs.test.js";
 import "../src/modules/sessions/presentation/view.test.js";
+import "../src/modules/settings/presentation/components/branchBlock.test.js";
 import "../src/modules/settings/presentation/components/settingFlag.test.js";
 import "../src/modules/sync/domain/branches.test.js";
 import "../src/modules/sync/domain/gitState.test.js";
