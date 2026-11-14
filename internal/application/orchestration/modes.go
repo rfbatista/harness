@@ -20,6 +20,41 @@ func modeSkills(mode domain.SessionMode) ([]domain.Skill, error) {
 	return domainSkills(builtinskills.ForMode(mode)), nil
 }
 
+// sessionSkills is what a session's plugin dir holds: the agent's skills, then
+// the mode's. A skill the agent names that is built in comes from the embedded
+// set, so a catalog skill of the same name never wins, and one the mode also
+// carries is kept once, as the mode's copy (ADR 0088).
+func sessionSkills(agent *domain.Agent, mode []domain.Skill) []domain.Skill {
+	inMode := map[string]bool{}
+	for _, s := range mode {
+		inMode[domain.Slug(s.Name)] = true
+	}
+	var out []domain.Skill
+	have := map[string]bool{}
+	add := func(s domain.Skill) {
+		slug := domain.Slug(s.Name)
+		if b, ok := builtinskills.Get(slug); ok {
+			s = domainSkills([]builtinskills.Skill{b})[0]
+		}
+		if inMode[slug] || have[slug] {
+			return
+		}
+		have[slug] = true
+		out = append(out, s)
+	}
+	if agent != nil {
+		for _, s := range agent.Skills {
+			add(s)
+		}
+		for _, id := range agent.SkillIDs {
+			if _, ok := builtinskills.Get(id); ok {
+				add(domain.Skill{Name: id})
+			}
+		}
+	}
+	return append(out, mode...)
+}
+
 func domainSkills(in []builtinskills.Skill) []domain.Skill {
 	out := make([]domain.Skill, 0, len(in))
 	for _, s := range in {
