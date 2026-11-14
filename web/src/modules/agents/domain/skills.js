@@ -22,6 +22,14 @@ const enc = encodeURIComponent;
 /** The modes that carry a built-in skill, as one line: "architect, implement". */
 const modesLabel = (modes) => [...modes].sort().join(", ");
 
+/** The line a built-in skill's detail shows: it ships with the server, read-only, and who carries it. */
+function shipsLine(modes) {
+  const sorted = [...modes].sort();
+  const base = "Ships with the server and is read-only.";
+  if (sorted.length === 0) return base;
+  return `${base} Carried by the ${sorted.join(" and ")} ${sorted.length === 1 ? "mode" : "modes"}.`;
+}
+
 /**
  * @param {Catalog} catalog
  * @param {{ query?: string, filter?: string, limit?: number }} [o]
@@ -70,8 +78,10 @@ export function skillSummary(catalog, name) {
     builtIn: s.builtIn,
     modesLabel: modesLabel(s.modes),
     unused: s.agentCount === 0,
-    path: `skills/${s.name}/SKILL.md`,
-    copyPath: `${catalog.root}/skills/${s.name}`,
+    readOnly: s.builtIn,
+    shipsLine: s.builtIn ? shipsLine(s.modes) : "",
+    path: s.builtIn ? "" : `skills/${s.name}/SKILL.md`,
+    copyPath: s.builtIn ? "" : `${catalog.root}/skills/${s.name}`,
     editHref: `/agents/skills/${enc(s.name)}/edit`,
     duplicateHref: `/agents/skills/new?from=${enc(s.name)}`,
   };

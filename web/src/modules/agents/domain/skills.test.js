@@ -130,3 +130,24 @@ test("a built-in skill's summary says it is built in and names its modes", () =>
   assert.equal(s.builtIn, true);
   assert.equal(s.modesLabel, "architect");
 });
+
+test("a built-in skill's summary is read-only: it ships with the server and names its modes", () => {
+  const s = skillSummary(withBuiltIns(), "task-tdd");
+  assert.equal(s.readOnly, true);
+  assert.equal(s.shipsLine, "Ships with the server and is read-only. Carried by the architect and implement modes.");
+  assert.equal(skillSummary(withBuiltIns(), "task-run-app").shipsLine, "Ships with the server and is read-only. Carried by the architect mode.");
+  assert.equal(s.path, "");
+  assert.equal(s.duplicateHref, "/agents/skills/new?from=task-tdd");
+});
+
+test("a built-in skill that no mode carries still says it ships with the server", () => {
+  const dto = withBuiltInSkills(catalogDTO());
+  dto.skills.find((x) => x.name === "task-tdd").modes = [];
+  assert.equal(skillSummary(toCatalog(dto), "task-tdd").shipsLine, "Ships with the server and is read-only.");
+});
+
+test("a catalog skill's summary is editable and has no ships line", () => {
+  const s = skillSummary(toCatalog(catalogDTO()), "tdd");
+  assert.equal(s.readOnly, false);
+  assert.equal(s.shipsLine, "");
+});

@@ -413,6 +413,9 @@ templ actionsMenu(what string) {
 			class="[ button ]"
 			data-edit
 			x-bind:href={ what + ".editHref" }
+			if what == "skill" {
+				x-bind:hidden="skill.readOnly"
+			}
 			if what == "bundle" {
 				x-on:click="openBundleLink"
 			}
@@ -421,9 +424,29 @@ templ actionsMenu(what string) {
 			<button type="button" class="[ button ]" data-variant="ghost" aria-label="More actions">⋯</button>
 			<div class="[ popup ]" role="menu">
 				<a role="menuitem" data-duplicate x-bind:href={ what + ".duplicateHref" }>Duplicate…</a>
-				<button type="button" role="menuitem" data-action="copy-path">Copy path</button>
-				<hr role="separator"/>
-				<button type="button" role="menuitem" data-action="delete" data-tone="danger">Delete…</button>
+				<button
+					type="button"
+					role="menuitem"
+					data-action="copy-path"
+					if what == "skill" {
+						x-bind:hidden="skill.readOnly"
+					}
+				>Copy path</button>
+				<hr
+					role="separator"
+					if what == "skill" {
+						x-bind:hidden="skill.readOnly"
+					}
+				/>
+				<button
+					type="button"
+					role="menuitem"
+					data-action="delete"
+					data-tone="danger"
+					if what == "skill" {
+						x-bind:hidden="skill.readOnly"
+					}
+				>Delete…</button>
 			</div>
 		</div>
 	</div>
@@ -504,10 +527,12 @@ templ skillDetail() {
 					<h2 class="[ font-mono ]" x-text="skill.name"></h2>
 					<span class="[ badge ]" data-tone="attention" x-bind:hidden="!skill.unused">unused</span>
 					<span class="[ badge ]" data-tone="attention" x-bind:hidden="!skill.noDescription">No description</span>
+					@builtInBadge("!skill.builtIn")
 				</div>
 				@actionsMenu("skill")
 			</div>
-			<code class="[ library-path ]" data-path x-text="skill.path"></code>
+			<code class="[ library-path ]" data-path x-bind:hidden="skill.readOnly" x-text="skill.path"></code>
+			<p class="[ color-ink-muted text-sm ]" data-built-in-note x-bind:hidden="!skill.readOnly" x-text="skill.shipsLine"></p>
 		</div>
 		<div class="[ banner ]" data-tone="danger" data-skill-error x-bind:hidden="noSkillError" role="alert">
 			<div class="[ grow ]" x-text="skillErrorText"></div>
