@@ -281,9 +281,15 @@ func TestCatalog_NeverReturnsAVariableValue(t *testing.T) {
 func TestCatalog_AMissingFolderIsAnEmptyCatalog(t *testing.T) {
 	f := newCatalogFixture(t)
 	cat := f.get("/api/get_agent_catalog", 200)
-	for _, k := range []string{"agents", "bundles", "skills"} {
+	for _, k := range []string{"agents", "bundles"} {
 		if l, ok := cat[k].([]any); !ok || len(l) != 0 {
 			t.Fatalf("%s = %v, want an empty list", k, cat[k])
+		}
+	}
+	// The built-in skills are the only skills there are (ADR 0088).
+	for _, s := range list(cat["skills"]) {
+		if s.(map[string]any)["built_in"] != true {
+			t.Fatalf("skills = %v, want built-in skills alone", cat["skills"])
 		}
 	}
 	// The built-in services server is the only server there is.

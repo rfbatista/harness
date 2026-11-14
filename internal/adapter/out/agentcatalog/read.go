@@ -5,6 +5,7 @@ import (
 	"encoding/base64"
 	"io/fs"
 	"os"
+	"path"
 	"path/filepath"
 	"sort"
 	"strings"
@@ -14,6 +15,7 @@ import (
 	"github.com/rfbatista/harnesskit/skill"
 
 	"operators-mcp/internal/domain"
+	"operators-mcp/internal/infra/builtinskills"
 	"operators-mcp/internal/infra/pagetime"
 )
 
@@ -38,15 +40,14 @@ type skillInfo struct {
 	name, description string
 	files             int
 	problems          []domain.CatalogProblem
+	builtIn           bool
+	modes             []string
 }
 
 // scanSkills lists every skill folder, reading only each SKILL.md's head.
 func (c *Catalog) scanSkills() map[string]*skillInfo {
 	out := map[string]*skillInfo{}
-	entries, err := os.ReadDir(filepath.Join(c.root, skillsDir))
-	if err != nil {
-		return out
-	}
+	entries, _ := os.ReadDir(filepath.Join(c.root, skillsDir)) // no folder: no catalog skills
 	for _, e := range entries {
 		if !e.IsDir() || !slugRe.MatchString(e.Name()) {
 			continue
@@ -77,6 +78,17 @@ func (c *Catalog) scanSkills() map[string]*skillInfo {
 			}
 		}
 		out[e.Name()] = info
+	}
+	// A built-in skill wins over a catalog folder of the same name, which is
+	// reported on the entry that remains (ADR 0088).
+	for _, b := range builtinskills.All() {
+		info := &skillInfo{name: b.Name, description: b.Description, files: len(b.Files), problems: []domain.CatalogProblem{},
+			builtIn: true, modes: b.Modes}
+		if _, shadowed := out[b.Name]; shadowed {
+			info.problems = append(info.problems, domain.CatalogProblem{Code: domain.CatalogProblemShadowedByBuiltIn,
+				Message: "a catalog folder named " + b.Name + " is shadowed by the built-in skill of that name; delete the catalog one"})
+		}
+		out[b.Name] = info
 	}
 	return out
 }
@@ -304,6 +316,8 @@ func (c *Catalog) ReadCatalog() (*domain.CatalogView, error) {
 			Bundles:       nonNil(bundlesOfSkill[n]),
 			AgentCount:    reach[n],
 			Problems:      s.problems,
+			BuiltIn:       s.builtIn,
+			Modes:         nonNil(s.modes),
 		})
 	}
 
@@ -464,6 +478,9 @@ func (c *Catalog) ReadCatalogSkillContent(name string) (*domain.CatalogSkillView
 	if !slugRe.MatchString(name) {
 		return nil, domain.NewCatalogError("INVALID_INPUT", "a skill name is lower-case letters, digits and dashes", map[string]any{"field": "name"})
 	}
+	if b, ok := builtinskills.Get(name); ok {
+		return builtInSkillView(b), nil
+	}
 	dir := filepath.Join(c.root, skillsDir, name)
 	data, err := os.ReadFile(filepath.Join(dir, skillFileName))
 	if err != nil {
@@ -471,7 +488,7 @@ func (c *Catalog) ReadCatalogSkillContent(name string) (*domain.CatalogSkillView
 	}
 	doc, _ := skill.ParseDocument(data)
 	sk := domain.CatalogSkill{Name: name, Description: doc.Description, Body: doc.Body, Files: []domain.CatalogSkillFile{}, Markdown: string(data),
-		Agents: []string{}, Bundles: []string{}}
+		Agents: []string{}, Bundles: []string{}, Modes: []string{}}
 	if !strings.HasPrefix(string(data), "---") {
 		sk.Body = strings.TrimSpace(string(data))
 	}
@@ -532,4 +549,34 @@ func readSkillFolder(dir string) ([]domain.CatalogSkillFile, string, error) {
 		files = append(files, f)
 	}
 	return files, h.sum(), nil
+}
+
+// builtInSkillView is an embedded skill as the skill read answers it: its
+// files, no version (the server's build is its version).
+func builtInSkillView(b builtinskills.Skill) *domain.CatalogSkillView {
+	sk := domain.CatalogSkill{Name: b.Name, Description: b.Description, Files: []domain.CatalogSkillFile{},
+		Agents: []string{}, Bundles: []string{}, BuiltIn: true, Modes: nonNil(b.Modes)}
+	dirs := map[string]bool{}
+	for _, f := range b.Files {
+		if f.Path == skillFileName {
+			doc, _ := skill.ParseDocument([]byte(f.Content))
+			sk.Body, sk.Markdown = doc.Body, f.Content
+			continue
+		}
+		for d := path.Dir(f.Path); d != "."; d = path.Dir(d) {
+			if !dirs[d] {
+				dirs[d] = true
+				sk.Files = append(sk.Files, domain.CatalogSkillFile{Path: d, Dir: true})
+			}
+		}
+		file := domain.CatalogSkillFile{Path: f.Path, Size: int64(len(f.Content)), Encoding: "utf-8"}
+		if utf8.ValidString(f.Content) {
+			file.Content = f.Content
+		} else {
+			file.Content, file.Encoding = base64.StdEncoding.EncodeToString([]byte(f.Content)), "base64"
+		}
+		sk.Files = append(sk.Files, file)
+	}
+	sort.Slice(sk.Files, func(i, j int) bool { return sk.Files[i].Path < sk.Files[j].Path })
+	return &domain.CatalogSkillView{Skill: sk, Versions: map[string]string{}}
 }
