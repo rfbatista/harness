@@ -146,9 +146,9 @@ export const archived = ({ gateway }) => () => {
       const clear = this.clear;
       if (!clear || clear.phase !== "ready") return;
       this.clear = { ...clear, phase: "clearing" };
+      const ids = clear.scope.taskId ? clearScopeIds(this.tasks, clear.scope.taskId) : this.tasks.map((t) => t.id);
       try {
         const result = await gateway.clearArchivedWorktrees(clear.scope);
-        const ids = clear.scope.taskId ? clearScopeIds(this.tasks, clear.scope.taskId) : this.tasks.map((t) => t.id);
         this.worktrees = afterClear(this.worktrees, ids, result.skipped);
         this.clear = { ...clear, phase: "done", result };
         this.announcement = `Cleared ${result.cleared} ${result.cleared === 1 ? "worktree" : "worktrees"}.`;
