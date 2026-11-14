@@ -4,18 +4,17 @@ package web_test
 
 import (
 	"encoding/json"
-	"strings"
 	"testing"
-	"time"
 
 	"github.com/chromedp/chromedp"
 )
 
-// skipUnlessServerListsBuiltInSkills reads the catalog from the test server and
-// skips the test while its skills[] carry no built_in field: the server side of
-// ADR 0088 (spec "Harness server — built-in skills in the catalog") has not
-// landed on this branch yet.
-func skipUnlessServerListsBuiltInSkills(t *testing.T, w *tokenSaverWorld) {
+// catalogRowsWithoutBuiltIn narrows a JS list of skill rows to the catalog's own: the built-in
+// skills every server lists are the subject of this file's tests, not of the older Skills tab ones.
+const catalogRowsWithoutBuiltIn = `.filter(r => !r.querySelector('[data-built-in]')?.checkVisibility())`
+
+// builtInSkillCount is how many built-in skills the server lists in its catalog.
+func builtInSkillCount(t *testing.T, w *tokenSaverWorld) int {
 	t.Helper()
 	res, err := w.srv.Client().Get(w.srv.URL + "/api/get_agent_catalog")
 	if err != nil {
@@ -23,17 +22,20 @@ func skipUnlessServerListsBuiltInSkills(t *testing.T, w *tokenSaverWorld) {
 	}
 	defer res.Body.Close()
 	var body struct {
-		Skills []map[string]any `json:"skills"`
+		Skills []struct {
+			BuiltIn bool `json:"built_in"`
+		} `json:"skills"`
 	}
 	if err := json.NewDecoder(res.Body).Decode(&body); err != nil {
 		t.Fatal(err)
 	}
+	n := 0
 	for _, s := range body.Skills {
-		if _, ok := s["built_in"]; ok {
-			return
+		if s.BuiltIn {
+			n++
 		}
 	}
-	t.Skip("server does not list built-in skills yet (server spec: built-in skills in the catalog)")
+	return n
 }
 
 // TestSkillsTabListsBuiltInSkillsWithTheirBadgeAndModes_EndToEnd is W1 for
@@ -43,21 +45,10 @@ func skipUnlessServerListsBuiltInSkills(t *testing.T, w *tokenSaverWorld) {
 // count includes it.
 func TestSkillsTabListsBuiltInSkillsWithTheirBadgeAndModes_EndToEnd(t *testing.T) {
 	w := newTokenSaverWorld(t)
-	skipUnlessServerListsBuiltInSkills(t, w)
-	listsBuiltInSkills(t, w, nil)
+	listsBuiltInSkills(t, w)
 }
 
-// TestSkillsTabListsBuiltInSkillsFromTheFakeCatalog_EndToEnd is the same
-// scenario against the page alone: the server's catalog answer gains built-in
-// skills in the contract's wire format, so it runs before the server lists them.
-func TestSkillsTabListsBuiltInSkillsFromTheFakeCatalog_EndToEnd(t *testing.T) {
-	w := newTokenSaverWorld(t)
-	listsBuiltInSkills(t, w, &builtInFake{catalog: func(cat map[string]any) {
-		cat["skills"] = append(cat["skills"].([]any), builtInSkill("task-run-app", "Runs the task's application.", "architect"))
-	}})
-}
-
-func listsBuiltInSkills(t *testing.T, w *tokenSaverWorld, fake *builtInFake) {
+func listsBuiltInSkills(t *testing.T, w *tokenSaverWorld) {
 	t.Helper()
 	writeCatalogFile(t, w, "skills/lint/SKILL.md", "---\nname: lint\ndescription: Lint it.\n---\nbody\n")
 
@@ -66,9 +57,6 @@ func listsBuiltInSkills(t *testing.T, w *tokenSaverWorld, fake *builtInFake) {
 	const filterBox = `input[type=search][aria-label="Filter skills"]`
 
 	b := newTLSBrowser(t)
-	if fake != nil {
-		fake.install(t, b)
-	}
 	b.run("the Skills tab lists a built-in skill beside the catalog's, with its badge and modes",
 		chromedp.EmulateViewport(1280, 900),
 		chromedp.Navigate(w.srv.URL+"/agents/skills"),
@@ -95,34 +83,16 @@ func listsBuiltInSkills(t *testing.T, w *tokenSaverWorld, fake *builtInFake) {
 // says it ships with the server, and offers no Edit, Rename or Delete.
 func TestABuiltInSkillOpensReadOnly_EndToEnd(t *testing.T) {
 	w := newTokenSaverWorld(t)
-	skipUnlessServerListsBuiltInSkills(t, w)
-	opensReadOnly(t, w, nil)
+	opensReadOnly(t, w)
 }
 
-// TestABuiltInSkillOpensReadOnlyFromTheFakeCatalog_EndToEnd is the same
-// scenario against the page alone.
-func TestABuiltInSkillOpensReadOnlyFromTheFakeCatalog_EndToEnd(t *testing.T) {
-	w := newTokenSaverWorld(t)
-	listed := builtInSkill("task-run-app", "Runs the task's application.", "architect")
-	listed["agents"], listed["agent_count"] = []string{"dev"}, 1
-	body := builtInSkillBody("task-run-app", "Runs the task's application.", "# Run the app\n\nStart it.\n", "architect")
-	body["skill"].(map[string]any)["agents"], body["skill"].(map[string]any)["agent_count"] = []string{"dev"}, 1
-	opensReadOnly(t, w, &builtInFake{
-		catalog: func(cat map[string]any) { cat["skills"] = append(cat["skills"].([]any), listed) },
-		skills:  map[string]map[string]any{"task-run-app": body},
-	})
-}
-
-func opensReadOnly(t *testing.T, w *tokenSaverWorld, fake *builtInFake) {
+func opensReadOnly(t *testing.T, w *tokenSaverWorld) {
 	t.Helper()
 	writeCatalogFile(t, w, "agents.json", `{"agents": {"dev": {"description": "Builds.", "skills": ["task-run-app"]}}}`)
 	writeCatalogFile(t, w, "skills/lint/SKILL.md", "---\nname: lint\ndescription: Lint it.\n---\nbody\n")
 
 	const detail = `document.querySelector('[data-skill-detail]')`
 	b := newTLSBrowser(t)
-	if fake != nil {
-		fake.install(t, b)
-	}
 	b.run("opening a built-in skill shows its body, files and the line that it ships with the server",
 		chromedp.EmulateViewport(1280, 900),
 		chromedp.Navigate(w.srv.URL+"/agents/skills/task-run-app"),
@@ -174,35 +144,24 @@ func opensReadOnly(t *testing.T, w *tokenSaverWorld, fake *builtInFake) {
 // not flagged as missing.
 func TestPickersOfferBuiltInSkillsWithTheirBadge_EndToEnd(t *testing.T) {
 	w := newTokenSaverWorld(t)
-	skipUnlessServerListsBuiltInSkills(t, w)
-	pickersOfferBuiltIns(t, w, nil)
+	pickersOfferBuiltIns(t, w)
 }
 
-// TestPickersOfferBuiltInSkillsFromTheFakeCatalog_EndToEnd is the same
-// scenario against the page alone.
-func TestPickersOfferBuiltInSkillsFromTheFakeCatalog_EndToEnd(t *testing.T) {
-	w := newTokenSaverWorld(t)
-	pickersOfferBuiltIns(t, w, &builtInFake{
-		catalog: func(cat map[string]any) {
-			cat["skills"] = append(cat["skills"].([]any), builtInSkill("task-run-app", "Runs the task's application.", "architect"))
-		},
-		// Whatever the page sends is recorded; the answer is a refusal so the page stays where it is.
-		refuse: map[string]fakeRefusal{"save_catalog_agent": {status: 409, code: "STALE_VERSION", message: "stub"}},
-	})
-}
-
-func pickersOfferBuiltIns(t *testing.T, w *tokenSaverWorld, fake *builtInFake) {
+func pickersOfferBuiltIns(t *testing.T, w *tokenSaverWorld) {
 	t.Helper()
 	writeCatalogFile(t, w, "skills/lint/SKILL.md", "---\nname: lint\ndescription: Lint it.\n---\nbody\n")
 	const option = `document.querySelector('#skillPicker-list [role=option][data-key="task-run-app"]')`
 	const chip = `document.querySelector('[data-agent-editor] [data-chip="task-run-app"]')`
 
 	b := newTLSBrowser(t)
-	if fake != nil {
-		fake.install(t, b)
-	}
-	b.run("the agent editor's picker offers a built-in skill with the badge, and a catalog skill without",
+	b.run("the bundle editor's picker offers it with the badge too",
 		chromedp.EmulateViewport(1280, 900),
+		chromedp.Navigate(w.srv.URL+"/agents/bundles/new"),
+		waitUntil(`document.querySelector('#bundlePicker-input') !== null`),
+		chromedp.Click(`#bundlePicker-input`, chromedp.ByQuery),
+		waitUntil(`document.querySelector('#bundlePicker-list [role=option][data-key="task-run-app"] [data-built-in]')?.checkVisibility() === true`),
+	)
+	b.run("the agent editor's picker offers a built-in skill with the badge, and a catalog skill without",
 		chromedp.Navigate(w.srv.URL+"/agents/new"),
 		waitUntil(`document.querySelector('[data-agent-editor]')?.checkVisibility() === true`),
 		chromedp.SendKeys(`#skillPicker-input`, "run-app", chromedp.ByQuery),
@@ -219,52 +178,10 @@ func pickersOfferBuiltIns(t *testing.T, w *tokenSaverWorld, fake *builtInFake) {
 		waitUntil(`document.querySelector('[data-skills-summary]').textContent.replace(/\s+/g, ' ').trim().startsWith('1 skill after bundles are expanded')`),
 		waitUntil(`!document.querySelector('[data-skills-summary]').textContent.includes('missing')`),
 	)
-	if fake != nil {
-		b.run("saving sends the built-in name in the entries unchanged",
-			setField(`#agent-name`, "runner"),
-			setField(`#agent-desc`, "Runs the app."),
-			waitUntil(`document.querySelector('[data-save-footer] [data-save]').disabled === false`),
-			chromedp.Click(`[data-save-footer] [data-save]`, chromedp.ByQuery),
-			waitUntil(`true`),
-		)
-		var sent []string
-		for i := 0; i < 50 && len(sent) == 0; i++ {
-			time.Sleep(100 * time.Millisecond)
-			sent = fake.sent()
-		}
-		if len(sent) == 0 || !strings.Contains(sent[0], `"task-run-app"`) {
-			t.Fatalf("save_catalog_agent body = %v, want it to name task-run-app", sent)
-		}
-	}
 	if e := b.jsErrors(); len(e) > 0 {
 		t.Errorf("JavaScript errors: %v", e)
 	}
 }
-
-// TestTheBundleEditorOffersBuiltInSkillsFromTheFakeCatalog_EndToEnd covers the
-// bundle editor's picker: a built-in skill is offered with the badge. It runs
-// against the page alone.
-func TestTheBundleEditorOffersBuiltInSkillsFromTheFakeCatalog_EndToEnd(t *testing.T) {
-	w := newTokenSaverWorld(t)
-	writeCatalogFile(t, w, "agents.json", `{"bundles": {"core": []}}`)
-	fake := &builtInFake{catalog: func(cat map[string]any) {
-		cat["skills"] = append(cat["skills"].([]any), builtInSkill("task-run-app", "Runs the task's application.", "architect"))
-	}}
-	b := newTLSBrowser(t)
-	fake.install(t, b)
-	b.run("the bundle picker offers a built-in skill with the badge",
-		chromedp.EmulateViewport(1280, 900),
-		chromedp.Navigate(w.srv.URL+"/agents/bundles/core/edit"),
-		waitUntil(`document.querySelector('#bundlePicker-input') !== null`),
-		chromedp.Click(`#bundlePicker-input`, chromedp.ByQuery),
-		waitUntil(`document.querySelector('#bundlePicker-list [role=option][data-key="task-run-app"] [data-built-in]')?.checkVisibility() === true`),
-	)
-	if e := b.jsErrors(); len(e) > 0 {
-		t.Errorf("JavaScript errors: %v", e)
-	}
-}
-
-const shadowMessage = "a catalog skill named task-run-app is hidden by the built-in one"
 
 // TestAShadowedCatalogSkillShowsItsProblem_EndToEnd is W1 for story 6 of the
 // spec, against a real server: a catalog folder named like a built-in skill is
@@ -272,33 +189,15 @@ const shadowMessage = "a catalog skill named task-run-app is hidden by the built
 // the detail.
 func TestAShadowedCatalogSkillShowsItsProblem_EndToEnd(t *testing.T) {
 	w := newTokenSaverWorld(t)
-	skipUnlessServerListsBuiltInSkills(t, w)
 	writeCatalogFile(t, w, "skills/task-run-app/SKILL.md", "---\nname: task-run-app\ndescription: A clash.\n---\nbody\n")
-	showsShadowedProblem(t, w, nil)
+	showsShadowedProblem(t, w)
 }
 
-// TestAShadowedCatalogSkillShowsItsProblemFromTheFakeCatalog_EndToEnd is the
-// same scenario against the page alone.
-func TestAShadowedCatalogSkillShowsItsProblemFromTheFakeCatalog_EndToEnd(t *testing.T) {
-	w := newTokenSaverWorld(t)
-	listed := builtInSkill("task-run-app", "Runs the task's application.", "architect")
-	listed["problems"] = []map[string]string{{"code": "SHADOWED_BY_BUILT_IN", "message": shadowMessage}}
-	showsShadowedProblem(t, w, &builtInFake{
-		catalog: func(cat map[string]any) { cat["skills"] = append(cat["skills"].([]any), listed) },
-		skills: map[string]map[string]any{
-			"task-run-app": builtInSkillBody("task-run-app", "Runs the task's application.", "# Run the app\n", "architect"),
-		},
-	})
-}
-
-func showsShadowedProblem(t *testing.T, w *tokenSaverWorld, fake *builtInFake) {
+func showsShadowedProblem(t *testing.T, w *tokenSaverWorld) {
 	t.Helper()
 	const row = `document.querySelector('[data-skill-row][data-key="task-run-app"]')`
 	const detail = `document.querySelector('[data-skill-detail]')`
 	b := newTLSBrowser(t)
-	if fake != nil {
-		fake.install(t, b)
-	}
 	b.run("the skill is listed once, with the problem on its row",
 		chromedp.EmulateViewport(1280, 900),
 		chromedp.Navigate(w.srv.URL+"/agents/skills"),
@@ -328,18 +227,16 @@ func showsShadowedProblem(t *testing.T, w *tokenSaverWorld, fake *builtInFake) {
 // TestARefusedWriteOnABuiltInSkillShowsItsCode_EndToEnd is W1 for story 7 of
 // the spec: a save or a delete the server refuses with SKILL_BUILT_IN (one sent
 // from a stale tab, say) shows the coded error and changes nothing. The page
-// cannot cause such a write itself, so the refusal is the fake's.
+// cannot cause such a write itself, so the refusal is staged in the browser.
 func TestARefusedWriteOnABuiltInSkillShowsItsCode_EndToEnd(t *testing.T) {
 	w := newTokenSaverWorld(t)
 	writeCatalogFile(t, w, "skills/lint/SKILL.md", "---\nname: lint\ndescription: Lint it.\n---\nbody\n")
-	refusal := fakeRefusal{status: 409, code: "SKILL_BUILT_IN", message: "lint ships with the server (architect mode)"}
-	fake := &builtInFake{refuse: map[string]fakeRefusal{"save_catalog_skill": refusal, "delete_catalog_skill": refusal}}
 	flat := func(sel string) string {
 		return `(document.querySelector(` + quote(sel) + `)?.textContent ?? '').replace(/\s+/g, ' ').trim()`
 	}
 
 	b := newTLSBrowser(t)
-	fake.install(t, b)
+	refuseSkillWrites(t, b, 409, "SKILL_BUILT_IN", "lint ships with the server (architect mode)")
 	b.run("a refused delete shows the server's message and its code, and the skill stays",
 		chromedp.EmulateViewport(1280, 900),
 		chromedp.Navigate(w.srv.URL+"/agents/skills/lint"),

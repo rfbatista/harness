@@ -41,7 +41,7 @@ func TestAgentsPageShowsTheCatalogInTheBrowser_EndToEnd(t *testing.T) {
 		waitUntil(`document.querySelector('code.catalog-root').title === `+quote(catalogDir)),
 		waitUntil(`(() => { const tabs = document.querySelector('[role=tablist]'); const head = document.querySelector('main[x-data="agentsPage"] > header'); if (!tabs || !tabs.checkVisibility()) return false; const t = tabs.getBoundingClientRect(); const h = head.getBoundingClientRect(); const hit = document.elementFromPoint(t.left + 8, t.top + t.height / 2); return head.scrollHeight <= head.clientHeight + 1 && tabs.scrollHeight <= tabs.clientHeight + 1 && h.bottom <= t.top + 1 && tabs.contains(hit) && document.documentElement.scrollWidth <= innerWidth; })()`),
 		waitUntil(`document.querySelector('[data-count=agents]').textContent.trim() === '2'`),
-		waitUntil(`document.querySelector('[data-count=skills]').textContent.trim() === '1'`),
+		waitUntil(fmt.Sprintf(`document.querySelector('[data-count=skills]').textContent.trim() === '%d'`, 1+builtInSkillCount(t, w))),
 		waitUntil(`document.querySelector('[data-count=bundles]').textContent.trim() === '1'`),
 		waitUntil(`document.querySelector('[role=tab][aria-selected=true]').dataset.tab === 'skills'`),
 		waitUntil(`document.querySelector('[data-new]').textContent.trim() === 'New skill'`),
