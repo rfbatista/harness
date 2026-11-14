@@ -393,6 +393,21 @@ func (r *SessionRepository) UpdateMerge(id string, res domain.MergeResult) error
 	return nil
 }
 
+func (r *SessionRepository) UpdateWorktreeCleared(id string, at time.Time) error {
+	out := r.db.Model(&SessionModel{}).Where("id = ?", id).Updates(map[string]any{
+		"workspace_id":           "",
+		"worktree_cleared_at_ms": at.UnixMilli(),
+		"updated_at":             time.Now().UnixMilli(),
+	})
+	if out.Error != nil {
+		return out.Error
+	}
+	if out.RowsAffected == 0 {
+		return &domain.StructuredError{Code: "SESSION_NOT_FOUND", Message: "session not found"}
+	}
+	return nil
+}
+
 func (r *SessionRepository) UpdateTokenSavers(id string, active, notInstalled []domain.TokenSaver) error {
 	res := r.db.Model(&SessionModel{}).Where("id = ?", id).Updates(map[string]any{
 		"token_savers":               joinSavers(active),
