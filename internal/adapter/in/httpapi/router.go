@@ -345,6 +345,7 @@ func NewRouter(h *Handler, opts ...Option) *echo.Echo {
 	g.POST("/delete_ticket", h.handleDeleteTicket)
 	g.POST("/archive_ticket", h.handleArchiveTicket)
 	g.POST("/restore_ticket", h.handleRestoreTicket)
+	g.GET("/archived_worktrees", h.handleArchivedWorktrees)
 	g.POST("/clear_archived_worktrees", h.handleClearArchivedWorktrees)
 	g.POST("/archive_done_tickets", h.handleArchiveDoneTickets)
 	g.GET("/list_documents", h.handleListDocuments)

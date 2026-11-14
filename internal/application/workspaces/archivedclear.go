@@ -4,6 +4,8 @@ import (
 	"context"
 	"time"
 
+	"github.com/rfbatista/harnesskit/errs"
+
 	"operators-mcp/internal/domain"
 	"operators-mcp/internal/ports"
 )
@@ -21,6 +23,8 @@ type ArchivedWorktreesDeps struct {
 	Workspaces ports.WorkspaceRepository
 	// Remover is the removal session deletion uses: it keeps the branch.
 	Remover WorkspaceRemover
+	// Status reads a worktree's uncommitted changes, for the preview only.
+	Status ports.GitWorktreeReader
 	// Announce tells open pages a session changed; may be nil.
 	Announce ports.SessionChangeAnnouncer
 	// Now stamps when a worktree was cleared; nil is time.Now.
@@ -133,4 +137,47 @@ func (s *ArchivedWorktrees) clearOne(ctx context.Context, sess *domain.Session) 
 		s.d.Announce.AnnounceSession(sess.ID)
 	}
 	return nil
+}
+
+// Preview counts what a clear would remove, how much of it holds uncommitted
+// changes, and what it would skip as running. It reads git status per
+// worktree, so only the preview and never a page's first paint asks for it.
+func (s *ArchivedWorktrees) Preview(ctx context.Context, sc ports.ArchivedWorktreesScope) (*ports.ArchivedWorktreesPreview, error) {
+	found, err := s.scope(ctx, sc)
+	if err != nil {
+		return nil, err
+	}
+	out := &ports.ArchivedWorktreesPreview{}
+	for _, f := range found {
+		if !f.session.Status.IsTerminal() {
+			out.Running++
+			continue
+		}
+		out.Worktrees++
+		dirty, err := s.dirty(ctx, f.session.WorkspaceID)
+		if err != nil {
+			return nil, err
+		}
+		if dirty {
+			out.Dirty++
+		}
+	}
+	return out, nil
+}
+
+// dirty says whether the workspace's worktree holds uncommitted changes. A
+// worktree that is missing from disk holds none.
+func (s *ArchivedWorktrees) dirty(ctx context.Context, workspaceID string) (bool, error) {
+	ws := s.d.Workspaces.Get(ctx, workspaceID)
+	if ws == nil {
+		return false, nil
+	}
+	st, err := s.d.Status.WorktreeStatus(ctx, ws.Path)
+	if errs.Code(err) == "WORKSPACE_MISSING" {
+		return false, nil
+	}
+	if err != nil {
+		return false, err
+	}
+	return st.Tracked+st.Untracked+st.Staged > 0, nil
 }

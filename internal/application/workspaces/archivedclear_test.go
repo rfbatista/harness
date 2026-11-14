@@ -3,6 +3,7 @@ package workspaces_test
 import (
 	"errors"
 	"os"
+	"path/filepath"
 	"sync"
 	"testing"
 
@@ -50,7 +51,7 @@ func (f *mergeFixture) archivedWorktrees(wt ports.WorktreeManager) (*workspaces.
 	svc := workspaces.NewService(ws, repos, wt, nil)
 	return workspaces.NewArchivedWorktrees(workspaces.ArchivedWorktreesDeps{
 		Projects: sqlite.NewProjectRepository(f.db), Tickets: sqlite.NewTicketRepository(f.db),
-		Sessions: sqlite.NewSessionRepository(f.db), Workspaces: ws, Remover: svc, Announce: ann,
+		Sessions: sqlite.NewSessionRepository(f.db), Workspaces: ws, Remover: svc, Status: gitcli.NewCode(), Announce: ann,
 	}), ann
 }
 
@@ -221,5 +222,58 @@ func TestClearArchivedWorktreesRefusals(t *testing.T) {
 	}
 	if f.gone("br-open") {
 		t.Error("an unarchived task's worktree was removed")
+	}
+}
+
+func TestPreviewCountsWhatAClearWouldRemoveLoseAndSkip(t *testing.T) {
+	f := newMergeFixture(t, "main")
+	a, b := f.task(domain.TicketStatusDone), f.task(domain.TicketStatusDone)
+	f.session(a, "clean", "main", 0)
+	f.session(a, "modified", "main", 1)
+	f.session(a, "untracked", "main", 0)
+	f.session(a, "missing", "main", 0)
+	f.session(a, "running", "main", 0)
+	f.session(b, "other", "main", 0)
+	f.archive(a)
+	f.archive(b)
+	f.stop("running", domain.SessionRunning)
+	if err := os.WriteFile(filepath.Join(f.worktrees["modified"], "modified.txt"), []byte("changed"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(f.worktrees["untracked"], "new.txt"), []byte("new"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.RemoveAll(f.worktrees["missing"]); err != nil {
+		t.Fatal(err)
+	}
+	svc, _ := f.archivedWorktrees(nil)
+
+	got, err := svc.Preview(f.ctx, ports.ArchivedWorktreesScope{TaskID: a})
+	if err != nil || *got != (ports.ArchivedWorktreesPreview{Worktrees: 4, Dirty: 2, Running: 1}) {
+		t.Fatalf("task preview = %+v, %v", got, err)
+	}
+	got, err = svc.Preview(f.ctx, ports.ArchivedWorktreesScope{ProjectID: f.projectID})
+	if err != nil || *got != (ports.ArchivedWorktreesPreview{Worktrees: 5, Dirty: 2, Running: 1}) {
+		t.Fatalf("project preview = %+v, %v", got, err)
+	}
+	if f.gone("clean") || !f.hasBranch("modified") {
+		t.Error("a preview changed something")
+	}
+
+	if _, err := svc.Clear(f.ctx, ports.ArchivedWorktreesScope{ProjectID: f.projectID}); err != nil {
+		t.Fatal(err)
+	}
+	got, err = svc.Preview(f.ctx, ports.ArchivedWorktreesScope{ProjectID: f.projectID})
+	if err != nil || *got != (ports.ArchivedWorktreesPreview{Running: 1}) {
+		t.Fatalf("preview after a clear = %+v, %v", got, err)
+	}
+}
+
+func TestPreviewOfAnUnarchivedTaskIsRefused(t *testing.T) {
+	f := newMergeFixture(t, "main")
+	open := f.task(domain.TicketStatusDone)
+	svc, _ := f.archivedWorktrees(nil)
+	if _, err := svc.Preview(f.ctx, ports.ArchivedWorktreesScope{TaskID: open}); errs.Code(err) != "TASK_NOT_ARCHIVED" {
+		t.Fatalf("err = %v", err)
 	}
 }

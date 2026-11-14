@@ -28,3 +28,16 @@ func (h *Handler) handleClearArchivedWorktrees(c echo.Context) error {
 	}
 	return c.JSON(http.StatusOK, res)
 }
+
+// handleArchivedWorktrees is the preview behind the Clear worktrees confirm,
+// for ?project_id= or ?task_id=. It reads and changes nothing.
+func (h *Handler) handleArchivedWorktrees(c echo.Context) error {
+	if h.archivedTrees == nil {
+		return echo.NewHTTPError(http.StatusServiceUnavailable, "clearing worktrees is not configured")
+	}
+	res, err := h.archivedTrees.Preview(c.Request().Context(), ports.ArchivedWorktreesScope{TaskID: c.QueryParam("task_id"), ProjectID: c.QueryParam("project_id")})
+	if err != nil {
+		return err
+	}
+	return c.JSON(http.StatusOK, res)
+}

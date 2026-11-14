@@ -32,5 +32,16 @@ type ClearResult struct {
 // running session's worktree is skipped, and one failure does not stop the
 // others. A task that is not archived is TASK_NOT_ARCHIVED.
 type ArchivedWorktrees interface {
+	// Preview counts what Clear would do, changing nothing: the worktrees it
+	// would remove, how many of them hold uncommitted changes, and how many
+	// belong to running sessions and would be skipped.
+	Preview(ctx context.Context, scope ArchivedWorktreesScope) (*ArchivedWorktreesPreview, error)
 	Clear(ctx context.Context, scope ArchivedWorktreesScope) (*ClearResult, error)
+}
+
+// ArchivedWorktreesPreview is what the Clear worktrees confirm shows.
+type ArchivedWorktreesPreview struct {
+	Worktrees int `json:"worktrees"`
+	Dirty     int `json:"dirty"`
+	Running   int `json:"running"`
 }

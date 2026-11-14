@@ -19,6 +19,11 @@ type fakeArchivedWorktrees struct {
 	err   error
 }
 
+func (f *fakeArchivedWorktrees) Preview(_ context.Context, s ports.ArchivedWorktreesScope) (*ports.ArchivedWorktreesPreview, error) {
+	f.scope = s
+	return &ports.ArchivedWorktreesPreview{Worktrees: 7, Dirty: 2, Running: 1}, f.err
+}
+
 func (f *fakeArchivedWorktrees) Clear(_ context.Context, s ports.ArchivedWorktreesScope) (*ports.ClearResult, error) {
 	f.scope = s
 	return f.res, f.err
@@ -68,5 +73,21 @@ func TestHTTP_ClearArchivedWorktreesRefusals(t *testing.T) {
 	}
 	if rec := clearRequest(&Handler{}, `{"task_id":"t"}`); rec.Code != http.StatusServiceUnavailable {
 		t.Errorf("unconfigured = %d", rec.Code)
+	}
+}
+
+func TestHTTP_ArchivedWorktreesPreviewAnswersTheContractsShape(t *testing.T) {
+	f := &fakeArchivedWorktrees{}
+	req := httptest.NewRequest(http.MethodGet, "/api/archived_worktrees?project_id=p", nil)
+	rec := httptest.NewRecorder()
+	NewRouter(&Handler{archivedTrees: f}).ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK || f.scope.ProjectID != "p" || strings.TrimSpace(rec.Body.String()) != `{"worktrees":7,"dirty":2,"running":1}` {
+		t.Fatalf("%d %s scope=%+v", rec.Code, rec.Body, f.scope)
+	}
+	f.err = &domain.StructuredError{Code: "TASK_NOT_ARCHIVED", Message: "m"}
+	rec = httptest.NewRecorder()
+	NewRouter(&Handler{archivedTrees: f}).ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/api/archived_worktrees?task_id=t", nil))
+	if rec.Code != http.StatusConflict {
+		t.Fatalf("unarchived = %d", rec.Code)
 	}
 }
