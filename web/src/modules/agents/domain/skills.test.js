@@ -1,6 +1,6 @@
 import { assert, file, test } from "../../../shared/testing/test.js";
 import { toCatalog } from "../infrastructure/dto.js";
-import { catalogDTO } from "../testing/fixtures.js";
+import { catalogDTO, withBuiltInSkills } from "../testing/fixtures.js";
 import { SKILL_PAGE, skillFiles, skillRows, skillsFooter, skillSummary } from "./skills.js";
 
 file("agents/domain/skills");
@@ -86,4 +86,47 @@ test("the file tree lists folders before files, indented by depth, SKILL.md firs
 
 test("a skill with no extra files lists only SKILL.md", () => {
   assert.deepEqual(skillFiles([]).map((r) => r.name), ["SKILL.md"]);
+});
+
+const withBuiltIns = () => toCatalog(withBuiltInSkills(catalogDTO()));
+
+test("a built-in skill's row is flagged and names the modes that carry it; a catalog skill's is not", () => {
+  const rows = skillRows(withBuiltIns()).rows;
+  const run = rows.find((r) => r.name === "task-run-app");
+  assert.equal(run.builtIn, true);
+  assert.equal(run.modesLabel, "architect");
+  assert.equal(rows.find((r) => r.name === "task-tdd").modesLabel, "architect, implement");
+  const tdd = rows.find((r) => r.name === "tdd");
+  assert.equal(tdd.builtIn, false);
+  assert.equal(tdd.modesLabel, "");
+});
+
+test("a built-in skill keeps its reach line like any skill", () => {
+  const dto = withBuiltInSkills(catalogDTO());
+  Object.assign(dto.skills.find((s) => s.name === "task-tdd"), { agents: ["backend"], agent_count: 1 });
+  const rows = skillRows(toCatalog(dto)).rows;
+  assert.equal(rows.find((r) => r.name === "task-run-app").meta, "unused");
+  assert.equal(rows.find((r) => r.name === "task-tdd").meta, "reaches 1 agent");
+});
+
+test("the text filter finds a built-in skill by name and by description", () => {
+  const c = withBuiltIns();
+  assert.deepEqual(skillRows(c, { query: "run-app" }).rows.map((r) => r.name), ["task-run-app"]);
+  assert.deepEqual(skillRows(c, { query: "test first" }).rows.map((r) => r.name).sort(), ["task-tdd", "tdd"]);
+});
+
+test("the footer counts built-in skills with the catalog's", () => {
+  assert.equal(skillsFooter(withBuiltIns()), "skills/ · 4 folders");
+});
+
+test("a catalog read without the new fields means catalog skills with no modes", () => {
+  const s = toCatalog(catalogDTO()).skills[0];
+  assert.equal(s.builtIn, false);
+  assert.deepEqual(s.modes, []);
+});
+
+test("a built-in skill's summary says it is built in and names its modes", () => {
+  const s = skillSummary(withBuiltIns(), "task-run-app");
+  assert.equal(s.builtIn, true);
+  assert.equal(s.modesLabel, "architect");
 });

@@ -19,6 +19,9 @@ export const SKILL_PAGE = 60;
 const plural = (n, word) => `${n} ${word}${n === 1 ? "" : "s"}`;
 const enc = encodeURIComponent;
 
+/** The modes that carry a built-in skill, as one line: "architect, implement". */
+const modesLabel = (modes) => [...modes].sort().join(", ");
+
 /**
  * @param {Catalog} catalog
  * @param {{ query?: string, filter?: string, limit?: number }} [o]
@@ -40,6 +43,8 @@ export function skillRows(catalog, { query = "", filter = "all", limit = SKILL_P
     dim: s.description === "",
     meta: s.agentCount === 0 ? "unused" : `reaches ${plural(s.agentCount, "agent")}`,
     badge: problemBadge(s.problems),
+    builtIn: s.builtIn,
+    modesLabel: modesLabel(s.modes),
   }));
   return { rows, total: matches.length, hidden: matches.length - rows.length };
 }
@@ -62,6 +67,8 @@ export function skillSummary(catalog, name) {
     description: s.description,
     noDescription: s.description === "",
     badge: problemBadge(s.problems),
+    builtIn: s.builtIn,
+    modesLabel: modesLabel(s.modes),
     unused: s.agentCount === 0,
     path: `skills/${s.name}/SKILL.md`,
     copyPath: `${catalog.root}/skills/${s.name}`,

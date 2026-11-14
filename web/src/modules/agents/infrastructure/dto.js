@@ -90,6 +90,8 @@ export function toCatalog(body) {
       bundles: strings(s?.bundles, "bundles"),
       agentCount: Number(s?.agent_count ?? 0),
       problems: problems(s?.problems),
+      builtIn: s?.built_in === true,
+      modes: strings(s?.modes ?? [], "modes"),
     })),
     mcpServers: list(body.mcp_servers, "mcp_servers").map(toMcpServer),
     builtInTools: list(body.built_in_tools, "built_in_tools").map((t) => ({ name: String(t?.name ?? ""), description: String(t?.description ?? "") })),
@@ -115,6 +117,8 @@ export function toSkillDetail(body) {
       agents: strings(s.agents, "agents"),
       bundles: strings(s.bundles, "bundles"),
       agentCount: Number(s.agent_count ?? 0),
+      builtIn: s.built_in === true,
+      modes: strings(s.modes ?? [], "modes"),
     },
     versions: object(body.versions),
   };

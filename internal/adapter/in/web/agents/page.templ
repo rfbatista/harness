@@ -429,6 +429,13 @@ templ actionsMenu(what string) {
 	</div>
 }
 
+// builtInBadge is the one "Built-in" badge of a skill that ships with the
+// server, in the list, the skill's detail and the pickers; `hidden` is the
+// Alpine expression that hides it.
+templ builtInBadge(hidden string) {
+	<span class="[ badge ]" data-tone="signal" data-built-in x-bind:hidden={ hidden }>Built-in</span>
+}
+
 // skillsLibrary is the Skills tab: the list a page at a time, with its
 // filters and footer, and the open skill's detail.
 templ skillsLibrary() {
@@ -450,8 +457,10 @@ templ skillsLibrary() {
 							<span class="[ meta ]">
 								<span x-bind:hidden="row.hasBadge" x-text="row.meta"></span>
 								<span class="[ badge ]" x-bind:hidden="row.noBadge" x-bind:data-tone="row.badgeTone" x-text="row.badgeLabel"></span>
+								@builtInBadge("!row.builtIn")
 							</span>
 							<span class="[ desc ]" x-bind:data-dim="row.dim" x-text="row.description"></span>
+							<span class="[ text-xs color-ink-faint ]" data-modes x-bind:hidden="!row.builtIn" x-text="row.modesLabel"></span>
 						</a>
 					</li>
 				</template>

@@ -38,6 +38,8 @@
  * @property {string[]} bundles  holding it
  * @property {number} agentCount  every agent it reaches
  * @property {Problem[]} problems
+ * @property {boolean} builtIn  ships with the server: read-only, never in the catalog folder
+ * @property {string[]} modes  the session modes that carry a built-in skill; [] for a catalog skill
  *
  * @typedef {object} CatalogMcpServer
  * @property {string} name
@@ -69,7 +71,7 @@
  * @property {{ name: string, description: string }[]} builtInTools
  *
  * @typedef {object} SkillDetail
- * @property {{ name: string, description: string, body: string, files: { path: string, dir: boolean, size: number, content: string, encoding: "utf8"|"base64" }[], agents: string[], bundles: string[], agentCount: number }} skill
+ * @property {{ name: string, description: string, body: string, files: { path: string, dir: boolean, size: number, content: string, encoding: "utf8"|"base64" }[], agents: string[], bundles: string[], agentCount: number, builtIn: boolean, modes: string[] }} skill
  * @property {Record<string, string>} versions
  *
  * @typedef {object} WriteOptions
