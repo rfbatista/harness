@@ -1,16 +1,19 @@
 package orchestration
 
 import (
+	"fmt"
 	"os"
 	"regexp"
 	"slices"
 	"strings"
 	"testing"
 
+	skillpkg "github.com/rfbatista/harnesskit/skill"
 	"github.com/rfbatista/llmkit"
 
 	"operators-mcp/internal/application/tooling"
 	"operators-mcp/internal/domain"
+	"operators-mcp/internal/infra/builtinskills"
 )
 
 func TestApplyTaskContext(t *testing.T) {
@@ -310,10 +313,10 @@ func TestPrompts_NameNoRemovedTool(t *testing.T) {
 	project := &domain.Project{ID: "p1", Name: "harness"}
 	texts["brief/project"] = projectBrief(projectBriefInput{Project: project})
 	texts["prompt/project"] = modePrompt(domain.SessionModeProduct, nil, project, "")
-	for mode, names := range modeSkillNames {
+	for mode, names := range builtinskills.ModeSkillNames() {
 		texts["prompt/"+string(mode)] = modePrompt(mode, tk, nil, "")
 		for _, skill := range names {
-			files, err := modeSkillFiles(skill)
+			files, err := builtinSkillFiles(skill)
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -345,9 +348,9 @@ func TestPrompts_NameOnlyRealTaskTools(t *testing.T) {
 	for _, role := range []domain.SessionRole{domain.RolePeer, domain.RoleDelegate, domain.RoleArchitect} {
 		texts["brief/"+string(role)] = taskBrief(&domain.Ticket{ID: "tk1", Title: "Ship the thing"}, role, taskCounts{})
 	}
-	for _, names := range modeSkillNames {
+	for _, names := range builtinskills.ModeSkillNames() {
 		for _, skill := range names {
-			files, err := modeSkillFiles(skill)
+			files, err := builtinSkillFiles(skill)
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -381,9 +384,9 @@ func TestTaskBrief_ReadsAndEditsFilesInParts(t *testing.T) {
 // project level without the setting that changes it (ADR 0020).
 func TestModeSkills_MovingDocumentsFollowsTheSetting(t *testing.T) {
 	old := regexp.MustCompile(`(?i)(a person moves documents|ask the person to move)`)
-	for _, names := range modeSkillNames {
+	for _, names := range builtinskills.ModeSkillNames() {
 		for _, skill := range names {
-			files, err := modeSkillFiles(skill)
+			files, err := builtinSkillFiles(skill)
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -491,4 +494,12 @@ func TestTaskBrief_TellsTheAgentToAskThroughAskPerson(t *testing.T) {
 			t.Errorf("%s brief: ask-your-architect-first = %v", role, has)
 		}
 	}
+}
+
+func builtinSkillFiles(name string) ([]skillpkg.File, error) {
+	sk, ok := builtinskills.Get(name)
+	if !ok {
+		return nil, fmt.Errorf("skill %s is not built in", name)
+	}
+	return sk.Files, nil
 }

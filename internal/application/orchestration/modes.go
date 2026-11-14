@@ -2,68 +2,30 @@ package orchestration
 
 import (
 	"context"
-	"embed"
 	"fmt"
-	"io/fs"
-	"path"
 	"strings"
 	"time"
 
-	"github.com/rfbatista/harnesskit/skill"
-
 	"operators-mcp/internal/domain"
+	"operators-mcp/internal/infra/builtinskills"
 	"operators-mcp/internal/ports"
 )
 
-// modeFS holds the skills each session mode brings. They ship with the
-// server so a mode works without any skill being imported into the catalog.
-//
-//go:embed modes
-var modeFS embed.FS
-
-// modeSkillNames lists, per mode, the skill directories under modes/ it adds.
-// The first one is the skill the mode's first message names.
-var modeSkillNames = map[domain.SessionMode][]string{
-	domain.SessionModeArchitect: {"task-architecture", "task-grill-with-docs", "task-to-spec", "task-run-app"},
-	domain.SessionModeImplement: {"task-implement-spec", "task-tdd", "task-code-review"},
-	domain.SessionModeDesign:    {"design-artifacts"},
-	domain.SessionModeProduct:   {"task-product"},
-}
-
-// modeSkills returns the skills a mode adds on top of the session's agent.
+// modeSkills returns the skills a mode adds on top of the session's agent,
+// from the server's built-in set.
 func modeSkills(mode domain.SessionMode) ([]domain.Skill, error) {
-	names := modeSkillNames[mode]
-	out := make([]domain.Skill, 0, len(names))
-	for _, name := range names {
-		files, err := modeSkillFiles(name)
-		if err != nil {
-			return nil, fmt.Errorf("mode %s: skill %s: %w", mode, name, err)
-		}
-		out = append(out, domain.Skill{Name: name, Files: files})
+	if err := builtinskills.Err(); err != nil {
+		return nil, fmt.Errorf("mode %s: %w", mode, err)
 	}
-	return out, nil
+	return domainSkills(builtinskills.ForMode(mode)), nil
 }
 
-// modeSkillFiles reads every file of the skill directory modes/<name>, with
-// SKILL.md required, so a skill's reference files ship along with it.
-func modeSkillFiles(name string) ([]skill.File, error) {
-	root := "modes/" + name
-	if _, err := fs.Stat(modeFS, path.Join(root, skill.FileName)); err != nil {
-		return nil, err
+func domainSkills(in []builtinskills.Skill) []domain.Skill {
+	out := make([]domain.Skill, 0, len(in))
+	for _, s := range in {
+		out = append(out, domain.Skill{Name: s.Name, Files: s.Files})
 	}
-	var files []skill.File
-	err := fs.WalkDir(modeFS, root, func(p string, d fs.DirEntry, err error) error {
-		if err != nil || d.IsDir() {
-			return err
-		}
-		body, err := modeFS.ReadFile(p)
-		if err != nil {
-			return err
-		}
-		files = append(files, skill.File{Path: strings.TrimPrefix(p, root+"/"), Content: string(body)})
-		return nil
-	})
-	return files, err
+	return out
 }
 
 // modePrompt is the first message a mode opens the session with. typed is what
