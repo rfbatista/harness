@@ -35,6 +35,20 @@ export function catalogDTO() {
   };
 }
 
+/**
+ * Skills that ship with the server, in the wire format (contract revision 2, ADR 0088):
+ * `task-run-app` for the architect, `task-tdd` for the implement mode. Opt-in, so a test
+ * that does not care about them keeps the small catalog above.
+ * @param {ReturnType<typeof catalogDTO>} dto
+ */
+export function withBuiltInSkills(dto) {
+  dto.skills.push(
+    { name: "task-run-app", description: "Runs the task's application.", file_count: 1, has_extra_files: false, agents: [], bundles: [], agent_count: 0, problems: [], built_in: true, modes: ["architect"] },
+    { name: "task-tdd", description: "Builds a ticket test first.", file_count: 1, has_extra_files: false, agents: [], bundles: [], agent_count: 0, problems: [], built_in: true, modes: ["implement", "architect"] },
+  );
+  return dto;
+}
+
 /** The world for the memory gateway. */
 export function makeWorld() {
   return { catalog: catalogDTO(), projects: { p1: ["github"] }, projectNames: { p1: "harness" }, env: { GITHUB_TOKEN: false, HOME: true } };

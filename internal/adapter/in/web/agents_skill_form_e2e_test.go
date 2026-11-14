@@ -255,7 +255,7 @@ func TestSkillFormCreatesPreviewsAndEditsASkill_EndToEnd(t *testing.T) {
 		clickButton(`document.querySelector('[data-save-footer]')`, "Save skill"),
 		atPath(w.srv.URL+"/agents/skills/figma-specs"),
 		waitUntil(flat(`[data-toast]`)+`.includes('Running sessions keep what they started with')`),
-		waitUntil(`[...document.querySelectorAll('[data-skill-row]')].map(r => r.dataset.key).join() === 'figma-specs,lint,tdd'`),
+		waitUntil(`[...document.querySelectorAll('[data-skill-row]')]`+catalogRowsWithoutBuiltIn+`.map(r => r.dataset.key).join() === 'figma-specs,lint,tdd'`),
 	)
 	if _, err := os.Stat(filepath.Join(w.root, "agents", "skills", "figma-handoff")); err == nil {
 		t.Fatal("the old folder is still there after the rename")

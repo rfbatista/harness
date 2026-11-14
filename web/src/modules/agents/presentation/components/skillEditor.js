@@ -129,6 +129,12 @@ export function skillEditor({ gateway, location, timers }) {
         this.sfMissing = true;
         return;
       }
+      if (edit && this.catalog.skills.some((s) => s.name === this.item && s.builtIn)) {
+        // A built-in skill has no form: its read-only detail is where the edit address leads.
+        this.sfOpen = false;
+        this.navigateTo(`/agents/skills/${enc(this.item)}`);
+        return;
+      }
       const wanted = edit ? this.item : params.get("from") ?? "";
       let read = null;
       if (wanted && this.catalog.skills.some((s) => s.name === wanted)) {

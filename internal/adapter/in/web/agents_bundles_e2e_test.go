@@ -167,7 +167,7 @@ func TestBundleEditorRenamesPreviewsSavesUndoesAndGuardsLeaving_EndToEnd(t *test
 		chromedp.Click(`#bundlePicker-input`, chromedp.ByQuery),
 		waitUntil(visible(`#bundlePicker-list`)),
 		waitUntil(`document.querySelector('#bundlePicker-input').getAttribute('aria-expanded') === 'true' && document.querySelector('#bundlePicker-input').getAttribute('role') === 'combobox'`),
-		waitUntil(`[...document.querySelectorAll('#bundlePicker-list [role=option]')].map(o => o.dataset.key).join() === '@all,@b,@design2,lint,tdd'`),
+		waitUntil(`[...document.querySelectorAll('#bundlePicker-list [role=option]')].filter(o => !o.querySelector('[data-built-in]')?.checkVisibility()).map(o => o.dataset.key).join() === '@all,@b,@design2,lint,tdd'`),
 	)
 	b.run("typing narrows it and the keyboard adds the active option as a chip",
 		setField(`#bundlePicker-input`, "b"),

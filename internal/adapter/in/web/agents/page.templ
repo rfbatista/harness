@@ -413,6 +413,9 @@ templ actionsMenu(what string) {
 			class="[ button ]"
 			data-edit
 			x-bind:href={ what + ".editHref" }
+			if what == "skill" {
+				x-bind:hidden="skill.readOnly"
+			}
 			if what == "bundle" {
 				x-on:click="openBundleLink"
 			}
@@ -421,12 +424,35 @@ templ actionsMenu(what string) {
 			<button type="button" class="[ button ]" data-variant="ghost" aria-label="More actions">⋯</button>
 			<div class="[ popup ]" role="menu">
 				<a role="menuitem" data-duplicate x-bind:href={ what + ".duplicateHref" }>Duplicate…</a>
-				<button type="button" role="menuitem" data-action="copy-path">Copy path</button>
-				<hr role="separator"/>
-				<button type="button" role="menuitem" data-action="delete" data-tone="danger">Delete…</button>
+				<button
+					type="button"
+					role="menuitem"
+					data-action="copy-path"
+					if what == "skill" {
+						x-bind:hidden="skill.readOnly"
+					}
+				>Copy path</button>
+				<hr
+					role="separator"
+					if what == "skill" {
+						x-bind:hidden="!skill.canDelete"
+					}
+				/>
+				if what == "skill" {
+					<button type="button" role="menuitem" data-action="delete" data-tone="danger" x-bind:hidden="!skill.canDelete" x-text="skill.deleteLabel">Delete…</button>
+				} else {
+					<button type="button" role="menuitem" data-action="delete" data-tone="danger">Delete…</button>
+				}
 			</div>
 		</div>
 	</div>
+}
+
+// builtInBadge is the one "Built-in" badge of a skill that ships with the
+// server, in the list, the skill's detail and the pickers; `hidden` is the
+// Alpine expression that hides it.
+templ builtInBadge(hidden string) {
+	<span class="[ badge ]" data-tone="signal" data-built-in x-bind:hidden={ hidden }>Built-in</span>
 }
 
 // skillsLibrary is the Skills tab: the list a page at a time, with its
@@ -450,8 +476,10 @@ templ skillsLibrary() {
 							<span class="[ meta ]">
 								<span x-bind:hidden="row.hasBadge" x-text="row.meta"></span>
 								<span class="[ badge ]" x-bind:hidden="row.noBadge" x-bind:data-tone="row.badgeTone" x-text="row.badgeLabel"></span>
+								@builtInBadge("!row.builtIn")
 							</span>
 							<span class="[ desc ]" x-bind:data-dim="row.dim" x-text="row.description"></span>
+							<span class="[ text-xs color-ink-faint ]" data-modes x-bind:hidden="!row.builtIn" x-text="row.modesLabel"></span>
 						</a>
 					</li>
 				</template>
@@ -495,10 +523,14 @@ templ skillDetail() {
 					<h2 class="[ font-mono ]" x-text="skill.name"></h2>
 					<span class="[ badge ]" data-tone="attention" x-bind:hidden="!skill.unused">unused</span>
 					<span class="[ badge ]" data-tone="attention" x-bind:hidden="!skill.noDescription">No description</span>
+					@builtInBadge("!skill.builtIn")
+					<span class="[ badge ]" data-tone="danger" data-skill-problem x-bind:hidden="skill.problemLabel === ''" x-text="skill.problemLabel"></span>
 				</div>
 				@actionsMenu("skill")
 			</div>
-			<code class="[ library-path ]" data-path x-text="skill.path"></code>
+			<code class="[ library-path ]" data-path x-bind:hidden="skill.readOnly" x-text="skill.path"></code>
+			<p class="[ color-ink-muted text-sm ]" data-built-in-note x-bind:hidden="!skill.readOnly" x-text="skill.shipsLine"></p>
+			<p class="[ color-ink-muted text-sm ]" data-skill-problem-note x-bind:hidden="skill.problemNote === ''" x-text="skill.problemNote"></p>
 		</div>
 		<div class="[ banner ]" data-tone="danger" data-skill-error x-bind:hidden="noSkillError" role="alert">
 			<div class="[ grow ]" x-text="skillErrorText"></div>

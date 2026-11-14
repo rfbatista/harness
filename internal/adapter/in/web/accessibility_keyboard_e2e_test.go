@@ -200,7 +200,7 @@ func TestAccessibilityAgentIsCreatedByKeyboardAlone_EndToEnd(t *testing.T) {
 		is(attr(`#skillPicker-list`, "role"), "listbox"),
 		waitUntil(`document.querySelectorAll('#skillPicker-list [role=option]').length >= 3`),
 		a11yPress("ArrowDown", 40, 0),
-		waitUntil(`(() => { const a = document.querySelector('#skillPicker-input').getAttribute('aria-activedescendant'); const o = a && document.getElementById(a); return !!o && o.getAttribute('role') === 'option' && o.dataset.key === 'lint'; })()`),
+		waitUntil(`(() => { const a = document.querySelector('#skillPicker-input').getAttribute('aria-activedescendant'); const o = a && document.getElementById(a); return !!o && o.getAttribute('role') === 'option' && o.dataset.key === document.querySelector('#skillPicker-list [role=option][data-kind=skill]').dataset.key; })()`),
 		a11yPress("ArrowUp", 38, 0),
 		waitUntil(`document.getElementById(document.querySelector('#skillPicker-input').getAttribute('aria-activedescendant'))?.dataset.key === '@ux'`),
 		a11yPress("Enter", 13, 0),

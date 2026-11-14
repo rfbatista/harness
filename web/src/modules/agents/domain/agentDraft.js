@@ -144,12 +144,12 @@ export function agentPickerOptions(catalog, { query, entries, limit = AGENT_PICK
 
   const bundles = [...catalog.bundles].sort(byName)
     .filter((b) => !q || b.name.toLowerCase().includes(q))
-    .map((b) => ({ key: `@${b.name}`, kind: "bundle", label: `@${b.name}`, hint: plural(expandEntries(catalog, [`@${b.name}`]).resolved.length, "skill"), chosen: chosen.has(`@${b.name}`) }));
+    .map((b) => ({ key: `@${b.name}`, kind: "bundle", label: `@${b.name}`, hint: plural(expandEntries(catalog, [`@${b.name}`]).resolved.length, "skill"), chosen: chosen.has(`@${b.name}`), builtIn: false }));
   const skills = [...catalog.skills].sort(byName)
     .filter((s) => !q || s.name.toLowerCase().includes(q) || (s.description ?? "").toLowerCase().includes(q))
-    .map((s) => ({ key: s.name, kind: "skill", label: s.name, hint: via.has(s.name) ? `already in ${via.get(s.name)}` : "", chosen: chosen.has(s.name) }));
+    .map((s) => ({ key: s.name, kind: "skill", label: s.name, hint: via.has(s.name) ? `already in ${via.get(s.name)}` : "", chosen: chosen.has(s.name), builtIn: s.builtIn === true }));
   const found = [...bundles, ...skills];
-  const create = { key: CREATE_SKILL, kind: "create", label: found.length === 0 && typed ? `Create skill “${typed}”…` : "Create a new skill…", hint: "", chosen: false };
+  const create = { key: CREATE_SKILL, kind: "create", label: found.length === 0 && typed ? `Create skill “${typed}”…` : "Create a new skill…", hint: "", chosen: false, builtIn: false };
   return { options: [...found.slice(0, limit), create], hidden: Math.max(0, found.length - limit), empty: false };
 }
 

@@ -137,8 +137,8 @@ export function bundlePickerOptions(catalog, { query, chosen, exclude, limit = P
   const q = query.trim().toLowerCase().replace(/^@/, "");
   const taken = new Set(chosen);
   const byName = (a, b) => a.name.localeCompare(b.name);
-  const bundles = [...catalog.bundles].filter((b) => b.name !== exclude).sort(byName).map((b) => ({ key: `@${b.name}`, kind: "bundle", label: `@${b.name}`, hint: plural(b.resolvedSkills.length, "skill"), name: b.name }));
-  const skills = [...catalog.skills].sort(byName).map((s) => ({ key: s.name, kind: "skill", label: s.name, hint: "", name: s.name }));
+  const bundles = [...catalog.bundles].filter((b) => b.name !== exclude).sort(byName).map((b) => ({ key: `@${b.name}`, kind: "bundle", label: `@${b.name}`, hint: plural(b.resolvedSkills.length, "skill"), builtIn: false, name: b.name }));
+  const skills = [...catalog.skills].sort(byName).map((s) => ({ key: s.name, kind: "skill", label: s.name, hint: "", builtIn: s.builtIn === true, name: s.name }));
   const all = [...bundles, ...skills].filter((o) => !q || o.name.toLowerCase().includes(q)).map(({ name: _n, ...o }) => ({ ...o, chosen: taken.has(o.key) }));
   return { options: all.slice(0, limit), hidden: Math.max(0, all.length - limit), empty: all.length === 0 };
 }

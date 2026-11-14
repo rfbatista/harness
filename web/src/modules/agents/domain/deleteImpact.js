@@ -105,6 +105,19 @@ export function deleteImpact(catalog, kind, name) {
   if (kind === "skill") {
     const s = catalog.skills.find((x) => x.name === name);
     if (!s) return null;
+    if (s.builtIn) {
+      // Only a shadowed built-in skill reaches here: the delete removes the catalog folder that hides it.
+      return done({
+        ...base,
+        title: `Delete the shadowing skill “${name}”?`,
+        button: "Delete shadowing skill",
+        path: `skills/${name}/`,
+        intro: `This removes the catalog folder skills/${name}/, which the built-in skill of the same name hides. The built-in skill stays, and so does everything that names it.`,
+        nothing: "Nothing else changes.",
+        groups: [],
+        total: "",
+      });
+    }
     return done({
       ...base,
       title: `Delete skill “${name}”?`,

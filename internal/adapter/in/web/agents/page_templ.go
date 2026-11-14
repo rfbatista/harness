@@ -705,26 +705,112 @@ func actionsMenu(what string) templ.Component {
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
-		if what == "bundle" {
-			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 53, " x-on:click=\"openBundleLink\"")
+		if what == "skill" {
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 53, " x-bind:hidden=\"skill.readOnly\"")
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
 		}
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 54, ">Edit</a><div class=\"[ menu ]\" x-data=\"menu\" data-align=\"end\" x-on:menu-select=\"menuSelect\"><button type=\"button\" class=\"[ button ]\" data-variant=\"ghost\" aria-label=\"More actions\">⋯</button><div class=\"[ popup ]\" role=\"menu\"><a role=\"menuitem\" data-duplicate x-bind:href=\"")
+		if what == "bundle" {
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 54, " x-on:click=\"openBundleLink\"")
+			if templ_7745c5c3_Err != nil {
+				return templ_7745c5c3_Err
+			}
+		}
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 55, ">Edit</a><div class=\"[ menu ]\" x-data=\"menu\" data-align=\"end\" x-on:menu-select=\"menuSelect\"><button type=\"button\" class=\"[ button ]\" data-variant=\"ghost\" aria-label=\"More actions\">⋯</button><div class=\"[ popup ]\" role=\"menu\"><a role=\"menuitem\" data-duplicate x-bind:href=\"")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
 		var templ_7745c5c3_Var32 string
 		templ_7745c5c3_Var32, templ_7745c5c3_Err = templ.ResolveAttributeValue(what + ".duplicateHref")
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `agents/page.templ`, Line: 423, Col: 75}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `agents/page.templ`, Line: 426, Col: 75}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var32)
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 55, "\">Duplicate…</a> <button type=\"button\" role=\"menuitem\" data-action=\"copy-path\">Copy path</button><hr role=\"separator\"><button type=\"button\" role=\"menuitem\" data-action=\"delete\" data-tone=\"danger\">Delete…</button></div></div></div>")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 56, "\">Duplicate…</a> <button type=\"button\" role=\"menuitem\" data-action=\"copy-path\"")
+		if templ_7745c5c3_Err != nil {
+			return templ_7745c5c3_Err
+		}
+		if what == "skill" {
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 57, " x-bind:hidden=\"skill.readOnly\"")
+			if templ_7745c5c3_Err != nil {
+				return templ_7745c5c3_Err
+			}
+		}
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 58, ">Copy path</button><hr role=\"separator\"")
+		if templ_7745c5c3_Err != nil {
+			return templ_7745c5c3_Err
+		}
+		if what == "skill" {
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 59, " x-bind:hidden=\"!skill.canDelete\"")
+			if templ_7745c5c3_Err != nil {
+				return templ_7745c5c3_Err
+			}
+		}
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 60, ">")
+		if templ_7745c5c3_Err != nil {
+			return templ_7745c5c3_Err
+		}
+		if what == "skill" {
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 61, "<button type=\"button\" role=\"menuitem\" data-action=\"delete\" data-tone=\"danger\" x-bind:hidden=\"!skill.canDelete\" x-text=\"skill.deleteLabel\">Delete…</button>")
+			if templ_7745c5c3_Err != nil {
+				return templ_7745c5c3_Err
+			}
+		} else {
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 62, "<button type=\"button\" role=\"menuitem\" data-action=\"delete\" data-tone=\"danger\">Delete…</button>")
+			if templ_7745c5c3_Err != nil {
+				return templ_7745c5c3_Err
+			}
+		}
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 63, "</div></div></div>")
+		if templ_7745c5c3_Err != nil {
+			return templ_7745c5c3_Err
+		}
+		return nil
+	})
+}
+
+// builtInBadge is the one "Built-in" badge of a skill that ships with the
+// server, in the list, the skill's detail and the pickers; `hidden` is the
+// Alpine expression that hides it.
+func builtInBadge(hidden string) templ.Component {
+	return templruntime.GeneratedTemplate(func(templ_7745c5c3_Input templruntime.GeneratedComponentInput) (templ_7745c5c3_Err error) {
+		templ_7745c5c3_W, ctx := templ_7745c5c3_Input.Writer, templ_7745c5c3_Input.Context
+		if templ_7745c5c3_CtxErr := ctx.Err(); templ_7745c5c3_CtxErr != nil {
+			return templ_7745c5c3_CtxErr
+		}
+		templ_7745c5c3_Buffer, templ_7745c5c3_IsBuffer := templruntime.GetBuffer(templ_7745c5c3_W)
+		if !templ_7745c5c3_IsBuffer {
+			defer func() {
+				templ_7745c5c3_BufErr := templruntime.ReleaseBuffer(templ_7745c5c3_Buffer)
+				if templ_7745c5c3_Err == nil {
+					templ_7745c5c3_Err = templ_7745c5c3_BufErr
+				}
+			}()
+		}
+		ctx = templ.InitializeContext(ctx)
+		templ_7745c5c3_Var33 := templ.GetChildren(ctx)
+		if templ_7745c5c3_Var33 == nil {
+			templ_7745c5c3_Var33 = templ.NopComponent
+		}
+		ctx = templ.ClearChildren(ctx)
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 64, "<span class=\"[ badge ]\" data-tone=\"signal\" data-built-in x-bind:hidden=\"")
+		if templ_7745c5c3_Err != nil {
+			return templ_7745c5c3_Err
+		}
+		var templ_7745c5c3_Var34 string
+		templ_7745c5c3_Var34, templ_7745c5c3_Err = templ.ResolveAttributeValue(hidden)
+		if templ_7745c5c3_Err != nil {
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `agents/page.templ`, Line: 455, Col: 80}
+		}
+		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var34)
+		if templ_7745c5c3_Err != nil {
+			return templ_7745c5c3_Err
+		}
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 65, "\">Built-in</span>")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
@@ -750,12 +836,20 @@ func skillsLibrary() templ.Component {
 			}()
 		}
 		ctx = templ.InitializeContext(ctx)
-		templ_7745c5c3_Var33 := templ.GetChildren(ctx)
-		if templ_7745c5c3_Var33 == nil {
-			templ_7745c5c3_Var33 = templ.NopComponent
+		templ_7745c5c3_Var35 := templ.GetChildren(ctx)
+		if templ_7745c5c3_Var35 == nil {
+			templ_7745c5c3_Var35 = templ.NopComponent
 		}
 		ctx = templ.ClearChildren(ctx)
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 56, "<div class=\"[ split-view ] [ agents-split ]\" x-bind:data-detail=\"detailOpenAttr\"><div class=\"[ library-list ]\"><div class=\"[ library-tools ]\"><input type=\"search\" class=\"[ field ]\" aria-label=\"Filter skills\" placeholder=\"Filter skills by name or description\" autocomplete=\"off\" x-model=\"skillQuery\" x-on:input=\"skillQueryChanged\"><div class=\"[ cluster ]\" role=\"group\" aria-label=\"Quick filters\" data-skill-filters style=\"--gutter: var(--space-xs)\"><template x-for=\"f in skillFilters\" x-bind:key=\"f.id\"><button type=\"button\" class=\"[ button ]\" data-size=\"sm\" x-bind:data-variant=\"f.variant\" x-bind:aria-pressed=\"f.pressed\" x-bind:data-filter=\"f.id\" x-on:click=\"setSkillFilter\" x-text=\"f.label\"></button></template></div></div><ul class=\"[ library-rows ]\" aria-label=\"Skills\" data-skill-list><template x-for=\"row in skillRowsView\" x-bind:key=\"row.name\"><li><a class=\"[ library-row ]\" data-skill-row x-bind:href=\"row.href\" x-bind:data-key=\"row.name\" x-bind:aria-current=\"row.current\" x-on:click=\"openAgent\"><span class=\"[ name font-mono ]\" x-text=\"row.name\"></span> <span class=\"[ meta ]\"><span x-bind:hidden=\"row.hasBadge\" x-text=\"row.meta\"></span> <span class=\"[ badge ]\" x-bind:hidden=\"row.noBadge\" x-bind:data-tone=\"row.badgeTone\" x-text=\"row.badgeLabel\"></span></span> <span class=\"[ desc ]\" x-bind:data-dim=\"row.dim\" x-text=\"row.description\"></span></a></li></template></ul><div class=\"[ library-more ]\" data-skill-more x-bind:hidden=\"noSkillsHidden\" hidden><button type=\"button\" class=\"[ button ]\" data-variant=\"ghost\" data-size=\"sm\" x-on:click=\"showMoreSkills\" x-text=\"skillMoreLabel\"></button> <span class=\"[ text-xs color-ink-faint ]\" x-text=\"skillMoreNote\"></span></div><template x-if=\"noSkillRows\"><div class=\"[ library-empty ]\" data-skill-empty><strong x-text=\"skillEmptyTitle\"></strong> <span class=\"[ text-sm ]\">Clear the filter, or <a href=\"/agents/skills/new\">create a skill</a>.</span></div></template><p class=\"[ library-foot ]\" data-skill-foot x-text=\"skillsFoot\"></p></div><section class=\"[ library-detail ]\" aria-label=\"Skill\"><p class=\"[ visually-hidden ]\" role=\"status\" aria-live=\"polite\" x-text=\"notice\"></p><template x-if=\"unknownSkill\"><div class=\"[ library-empty ]\" data-skill-unknown><strong>That skill is not in the catalog.</strong> <a href=\"/agents/skills\" x-on:click=\"backToList\">Back to the skills</a></div></template><template x-if=\"skill\">")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 66, "<div class=\"[ split-view ] [ agents-split ]\" x-bind:data-detail=\"detailOpenAttr\"><div class=\"[ library-list ]\"><div class=\"[ library-tools ]\"><input type=\"search\" class=\"[ field ]\" aria-label=\"Filter skills\" placeholder=\"Filter skills by name or description\" autocomplete=\"off\" x-model=\"skillQuery\" x-on:input=\"skillQueryChanged\"><div class=\"[ cluster ]\" role=\"group\" aria-label=\"Quick filters\" data-skill-filters style=\"--gutter: var(--space-xs)\"><template x-for=\"f in skillFilters\" x-bind:key=\"f.id\"><button type=\"button\" class=\"[ button ]\" data-size=\"sm\" x-bind:data-variant=\"f.variant\" x-bind:aria-pressed=\"f.pressed\" x-bind:data-filter=\"f.id\" x-on:click=\"setSkillFilter\" x-text=\"f.label\"></button></template></div></div><ul class=\"[ library-rows ]\" aria-label=\"Skills\" data-skill-list><template x-for=\"row in skillRowsView\" x-bind:key=\"row.name\"><li><a class=\"[ library-row ]\" data-skill-row x-bind:href=\"row.href\" x-bind:data-key=\"row.name\" x-bind:aria-current=\"row.current\" x-on:click=\"openAgent\"><span class=\"[ name font-mono ]\" x-text=\"row.name\"></span> <span class=\"[ meta ]\"><span x-bind:hidden=\"row.hasBadge\" x-text=\"row.meta\"></span> <span class=\"[ badge ]\" x-bind:hidden=\"row.noBadge\" x-bind:data-tone=\"row.badgeTone\" x-text=\"row.badgeLabel\"></span>")
+		if templ_7745c5c3_Err != nil {
+			return templ_7745c5c3_Err
+		}
+		templ_7745c5c3_Err = builtInBadge("!row.builtIn").Render(ctx, templ_7745c5c3_Buffer)
+		if templ_7745c5c3_Err != nil {
+			return templ_7745c5c3_Err
+		}
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 67, "</span> <span class=\"[ desc ]\" x-bind:data-dim=\"row.dim\" x-text=\"row.description\"></span> <span class=\"[ text-xs color-ink-faint ]\" data-modes x-bind:hidden=\"!row.builtIn\" x-text=\"row.modesLabel\"></span></a></li></template></ul><div class=\"[ library-more ]\" data-skill-more x-bind:hidden=\"noSkillsHidden\" hidden><button type=\"button\" class=\"[ button ]\" data-variant=\"ghost\" data-size=\"sm\" x-on:click=\"showMoreSkills\" x-text=\"skillMoreLabel\"></button> <span class=\"[ text-xs color-ink-faint ]\" x-text=\"skillMoreNote\"></span></div><template x-if=\"noSkillRows\"><div class=\"[ library-empty ]\" data-skill-empty><strong x-text=\"skillEmptyTitle\"></strong> <span class=\"[ text-sm ]\">Clear the filter, or <a href=\"/agents/skills/new\">create a skill</a>.</span></div></template><p class=\"[ library-foot ]\" data-skill-foot x-text=\"skillsFoot\"></p></div><section class=\"[ library-detail ]\" aria-label=\"Skill\"><p class=\"[ visually-hidden ]\" role=\"status\" aria-live=\"polite\" x-text=\"notice\"></p><template x-if=\"unknownSkill\"><div class=\"[ library-empty ]\" data-skill-unknown><strong>That skill is not in the catalog.</strong> <a href=\"/agents/skills\" x-on:click=\"backToList\">Back to the skills</a></div></template><template x-if=\"skill\">")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
@@ -763,7 +857,7 @@ func skillsLibrary() templ.Component {
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 57, "</template></section></div>")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 68, "</template></section></div>")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
@@ -789,12 +883,12 @@ func skillDetail() templ.Component {
 			}()
 		}
 		ctx = templ.InitializeContext(ctx)
-		templ_7745c5c3_Var34 := templ.GetChildren(ctx)
-		if templ_7745c5c3_Var34 == nil {
-			templ_7745c5c3_Var34 = templ.NopComponent
+		templ_7745c5c3_Var36 := templ.GetChildren(ctx)
+		if templ_7745c5c3_Var36 == nil {
+			templ_7745c5c3_Var36 = templ.NopComponent
 		}
 		ctx = templ.ClearChildren(ctx)
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 58, "<div class=\"[ library-detail-inner ]\" data-skill-detail><a href=\"/agents/skills\" class=\"[ button ]\" data-variant=\"ghost\" data-size=\"sm\" data-split-back x-on:click=\"backToList\">All skills</a>")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 69, "<div class=\"[ library-detail-inner ]\" data-skill-detail><a href=\"/agents/skills\" class=\"[ button ]\" data-variant=\"ghost\" data-size=\"sm\" data-split-back x-on:click=\"backToList\">All skills</a>")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
@@ -802,7 +896,15 @@ func skillDetail() templ.Component {
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 59, "<div class=\"[ detail-head ]\"><div class=\"[ repel ]\"><div class=\"[ cluster ]\"><h2 class=\"[ font-mono ]\" x-text=\"skill.name\"></h2><span class=\"[ badge ]\" data-tone=\"attention\" x-bind:hidden=\"!skill.unused\">unused</span> <span class=\"[ badge ]\" data-tone=\"attention\" x-bind:hidden=\"!skill.noDescription\">No description</span></div>")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 70, "<div class=\"[ detail-head ]\"><div class=\"[ repel ]\"><div class=\"[ cluster ]\"><h2 class=\"[ font-mono ]\" x-text=\"skill.name\"></h2><span class=\"[ badge ]\" data-tone=\"attention\" x-bind:hidden=\"!skill.unused\">unused</span> <span class=\"[ badge ]\" data-tone=\"attention\" x-bind:hidden=\"!skill.noDescription\">No description</span>")
+		if templ_7745c5c3_Err != nil {
+			return templ_7745c5c3_Err
+		}
+		templ_7745c5c3_Err = builtInBadge("!skill.builtIn").Render(ctx, templ_7745c5c3_Buffer)
+		if templ_7745c5c3_Err != nil {
+			return templ_7745c5c3_Err
+		}
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 71, "<span class=\"[ badge ]\" data-tone=\"danger\" data-skill-problem x-bind:hidden=\"skill.problemLabel === ''\" x-text=\"skill.problemLabel\"></span></div>")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
@@ -810,7 +912,7 @@ func skillDetail() templ.Component {
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 60, "</div><code class=\"[ library-path ]\" data-path x-text=\"skill.path\"></code></div><div class=\"[ banner ]\" data-tone=\"danger\" data-skill-error x-bind:hidden=\"noSkillError\" role=\"alert\"><div class=\"[ grow ]\" x-text=\"skillErrorText\"></div><button type=\"button\" class=\"[ button ]\" data-size=\"sm\" x-on:click=\"loadSkill\">Try again</button></div><p class=\"[ color-ink-muted text-sm ]\" x-bind:hidden=\"!skillPending\">Loading the skill…</p><div class=\"[ skill-grid ]\" x-bind:hidden=\"!skillReady\"><div class=\"[ skill-doc ]\"><pre class=\"[ frontmatter ]\" data-frontmatter x-text=\"skillFrontmatter\"></pre><div class=\"[ prose ]\" data-skill-body x-effect=\"paintBody($el)\"></div></div><aside class=\"[ skill-side ]\"><section aria-labelledby=\"skill-files-h\"><h3 id=\"skill-files-h\" x-text=\"skillFileHeading\"></h3><ul class=\"[ file-list ]\" data-skill-files><template x-for=\"f in skillFilesView\" x-bind:key=\"f.key\"><li data-file x-bind:data-depth=\"f.depth\" x-bind:data-dir=\"f.dir\"><span x-text=\"f.name\"></span> <span class=\"[ text-xs color-ink-faint ]\" x-text=\"f.size\"></span></li></template></ul></section><section aria-labelledby=\"skill-reach-h\"><h3 id=\"skill-reach-h\">Reaches</h3><dl class=\"[ kv ]\"><dt>Directly</dt><dd data-reach=\"agents\"><template x-for=\"a in skillReach.agents\" x-bind:key=\"a.name\"><a x-bind:href=\"a.href\" x-text=\"a.name\"></a></template><span class=\"[ color-ink-faint ]\" x-bind:hidden=\"hasReachAgents\">None</span></dd><dt>Bundles</dt><dd data-reach=\"bundles\"><template x-for=\"b in skillReach.bundles\" x-bind:key=\"b.name\"><a class=\"[ chip ]\" data-kind=\"bundle\" x-bind:href=\"b.href\" x-text=\"b.name\"></a></template><span class=\"[ color-ink-faint ]\" x-bind:hidden=\"hasReachBundles\">None</span></dd><dt>Agents</dt><dd data-reach=\"total\" x-text=\"skillReach.total\"></dd></dl></section></aside></div></div>")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 72, "</div><code class=\"[ library-path ]\" data-path x-bind:hidden=\"skill.readOnly\" x-text=\"skill.path\"></code><p class=\"[ color-ink-muted text-sm ]\" data-built-in-note x-bind:hidden=\"!skill.readOnly\" x-text=\"skill.shipsLine\"></p><p class=\"[ color-ink-muted text-sm ]\" data-skill-problem-note x-bind:hidden=\"skill.problemNote === ''\" x-text=\"skill.problemNote\"></p></div><div class=\"[ banner ]\" data-tone=\"danger\" data-skill-error x-bind:hidden=\"noSkillError\" role=\"alert\"><div class=\"[ grow ]\" x-text=\"skillErrorText\"></div><button type=\"button\" class=\"[ button ]\" data-size=\"sm\" x-on:click=\"loadSkill\">Try again</button></div><p class=\"[ color-ink-muted text-sm ]\" x-bind:hidden=\"!skillPending\">Loading the skill…</p><div class=\"[ skill-grid ]\" x-bind:hidden=\"!skillReady\"><div class=\"[ skill-doc ]\"><pre class=\"[ frontmatter ]\" data-frontmatter x-text=\"skillFrontmatter\"></pre><div class=\"[ prose ]\" data-skill-body x-effect=\"paintBody($el)\"></div></div><aside class=\"[ skill-side ]\"><section aria-labelledby=\"skill-files-h\"><h3 id=\"skill-files-h\" x-text=\"skillFileHeading\"></h3><ul class=\"[ file-list ]\" data-skill-files><template x-for=\"f in skillFilesView\" x-bind:key=\"f.key\"><li data-file x-bind:data-depth=\"f.depth\" x-bind:data-dir=\"f.dir\"><span x-text=\"f.name\"></span> <span class=\"[ text-xs color-ink-faint ]\" x-text=\"f.size\"></span></li></template></ul></section><section aria-labelledby=\"skill-reach-h\"><h3 id=\"skill-reach-h\">Reaches</h3><dl class=\"[ kv ]\"><dt>Directly</dt><dd data-reach=\"agents\"><template x-for=\"a in skillReach.agents\" x-bind:key=\"a.name\"><a x-bind:href=\"a.href\" x-text=\"a.name\"></a></template><span class=\"[ color-ink-faint ]\" x-bind:hidden=\"hasReachAgents\">None</span></dd><dt>Bundles</dt><dd data-reach=\"bundles\"><template x-for=\"b in skillReach.bundles\" x-bind:key=\"b.name\"><a class=\"[ chip ]\" data-kind=\"bundle\" x-bind:href=\"b.href\" x-text=\"b.name\"></a></template><span class=\"[ color-ink-faint ]\" x-bind:hidden=\"hasReachBundles\">None</span></dd><dt>Agents</dt><dd data-reach=\"total\" x-text=\"skillReach.total\"></dd></dl></section></aside></div></div>")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
@@ -836,12 +938,12 @@ func mcpLibrary() templ.Component {
 			}()
 		}
 		ctx = templ.InitializeContext(ctx)
-		templ_7745c5c3_Var35 := templ.GetChildren(ctx)
-		if templ_7745c5c3_Var35 == nil {
-			templ_7745c5c3_Var35 = templ.NopComponent
+		templ_7745c5c3_Var37 := templ.GetChildren(ctx)
+		if templ_7745c5c3_Var37 == nil {
+			templ_7745c5c3_Var37 = templ.NopComponent
 		}
 		ctx = templ.ClearChildren(ctx)
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 61, "<div class=\"[ split-view ] [ agents-split ]\" x-bind:data-detail=\"detailOpenAttr\"><div class=\"[ library-list ]\"><div class=\"[ library-tools ]\"><input type=\"search\" class=\"[ field ]\" aria-label=\"Filter MCP servers\" placeholder=\"Filter servers by name or URL\" autocomplete=\"off\" x-model=\"mcpQuery\"><div class=\"[ cluster ]\" role=\"group\" aria-label=\"Quick filters\" data-mcp-filters style=\"--gutter: var(--space-xs)\"><template x-for=\"f in mcpFilters\" x-bind:key=\"f.id\"><button type=\"button\" class=\"[ button ]\" data-size=\"sm\" x-bind:data-variant=\"f.variant\" x-bind:aria-pressed=\"f.pressed\" x-bind:data-filter=\"f.id\" x-on:click=\"setMcpFilter\" x-text=\"f.label\"></button></template></div></div><ul class=\"[ library-rows ]\" aria-label=\"MCP servers\" data-mcp-list><template x-for=\"row in mcpRowsView\" x-bind:key=\"row.name\"><li><a class=\"[ library-row ]\" data-mcp-row x-bind:href=\"row.href\" x-bind:data-key=\"row.name\" x-bind:aria-current=\"row.current\" x-on:click=\"openAgent\"><span class=\"[ name font-mono ]\" x-text=\"row.name\"></span> <span class=\"[ meta ]\"><span class=\"[ badge ]\" data-tone=\"signal\" data-built-in x-bind:hidden=\"!row.builtIn\">Built-in</span> <span class=\"[ badge ]\" x-bind:hidden=\"row.noBadge\" x-bind:data-tone=\"row.badgeTone\" x-text=\"row.badgeLabel\"></span> <span x-text=\"row.meta\"></span></span> <span class=\"[ desc font-mono ]\" x-text=\"row.description\"></span></a></li></template></ul><template x-if=\"noMcpRows\"><div class=\"[ library-empty ]\" data-mcp-empty><strong x-text=\"mcpEmptyTitle\"></strong> <span class=\"[ text-sm ]\">Clear the filter, or <a href=\"/agents/mcp/new\">create an MCP server</a>.</span></div></template><template x-if=\"noOwnMcp\"><div class=\"[ library-empty ]\" data-mcp-own-empty><strong>No MCP servers of your own yet.</strong> <span class=\"[ text-sm ]\"><a href=\"/agents/mcp/new\">Create an MCP server</a>, then give it to agents and projects.</span></div></template><p class=\"[ library-foot ]\" data-mcp-foot x-text=\"mcpFoot\"></p></div><section class=\"[ library-detail ]\" aria-label=\"MCP server\"><p class=\"[ visually-hidden ]\" role=\"status\" aria-live=\"polite\" x-text=\"notice\"></p><template x-if=\"unknownMcp\"><div class=\"[ library-empty ]\" data-mcp-unknown><strong>That MCP server is not in the catalog.</strong> <a href=\"/agents/mcp\" x-on:click=\"backToList\">Back to the MCP servers</a></div></template><template x-if=\"mcp\">")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 73, "<div class=\"[ split-view ] [ agents-split ]\" x-bind:data-detail=\"detailOpenAttr\"><div class=\"[ library-list ]\"><div class=\"[ library-tools ]\"><input type=\"search\" class=\"[ field ]\" aria-label=\"Filter MCP servers\" placeholder=\"Filter servers by name or URL\" autocomplete=\"off\" x-model=\"mcpQuery\"><div class=\"[ cluster ]\" role=\"group\" aria-label=\"Quick filters\" data-mcp-filters style=\"--gutter: var(--space-xs)\"><template x-for=\"f in mcpFilters\" x-bind:key=\"f.id\"><button type=\"button\" class=\"[ button ]\" data-size=\"sm\" x-bind:data-variant=\"f.variant\" x-bind:aria-pressed=\"f.pressed\" x-bind:data-filter=\"f.id\" x-on:click=\"setMcpFilter\" x-text=\"f.label\"></button></template></div></div><ul class=\"[ library-rows ]\" aria-label=\"MCP servers\" data-mcp-list><template x-for=\"row in mcpRowsView\" x-bind:key=\"row.name\"><li><a class=\"[ library-row ]\" data-mcp-row x-bind:href=\"row.href\" x-bind:data-key=\"row.name\" x-bind:aria-current=\"row.current\" x-on:click=\"openAgent\"><span class=\"[ name font-mono ]\" x-text=\"row.name\"></span> <span class=\"[ meta ]\"><span class=\"[ badge ]\" data-tone=\"signal\" data-built-in x-bind:hidden=\"!row.builtIn\">Built-in</span> <span class=\"[ badge ]\" x-bind:hidden=\"row.noBadge\" x-bind:data-tone=\"row.badgeTone\" x-text=\"row.badgeLabel\"></span> <span x-text=\"row.meta\"></span></span> <span class=\"[ desc font-mono ]\" x-text=\"row.description\"></span></a></li></template></ul><template x-if=\"noMcpRows\"><div class=\"[ library-empty ]\" data-mcp-empty><strong x-text=\"mcpEmptyTitle\"></strong> <span class=\"[ text-sm ]\">Clear the filter, or <a href=\"/agents/mcp/new\">create an MCP server</a>.</span></div></template><template x-if=\"noOwnMcp\"><div class=\"[ library-empty ]\" data-mcp-own-empty><strong>No MCP servers of your own yet.</strong> <span class=\"[ text-sm ]\"><a href=\"/agents/mcp/new\">Create an MCP server</a>, then give it to agents and projects.</span></div></template><p class=\"[ library-foot ]\" data-mcp-foot x-text=\"mcpFoot\"></p></div><section class=\"[ library-detail ]\" aria-label=\"MCP server\"><p class=\"[ visually-hidden ]\" role=\"status\" aria-live=\"polite\" x-text=\"notice\"></p><template x-if=\"unknownMcp\"><div class=\"[ library-empty ]\" data-mcp-unknown><strong>That MCP server is not in the catalog.</strong> <a href=\"/agents/mcp\" x-on:click=\"backToList\">Back to the MCP servers</a></div></template><template x-if=\"mcp\">")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
@@ -849,7 +951,7 @@ func mcpLibrary() templ.Component {
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 62, "</template></section></div>")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 74, "</template></section></div>")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
@@ -875,12 +977,12 @@ func mcpDetail() templ.Component {
 			}()
 		}
 		ctx = templ.InitializeContext(ctx)
-		templ_7745c5c3_Var36 := templ.GetChildren(ctx)
-		if templ_7745c5c3_Var36 == nil {
-			templ_7745c5c3_Var36 = templ.NopComponent
+		templ_7745c5c3_Var38 := templ.GetChildren(ctx)
+		if templ_7745c5c3_Var38 == nil {
+			templ_7745c5c3_Var38 = templ.NopComponent
 		}
 		ctx = templ.ClearChildren(ctx)
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 63, "<div class=\"[ library-detail-inner ]\" data-mcp-detail><a href=\"/agents/mcp\" class=\"[ button ]\" data-variant=\"ghost\" data-size=\"sm\" data-split-back x-on:click=\"backToList\">All servers</a>")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 75, "<div class=\"[ library-detail-inner ]\" data-mcp-detail><a href=\"/agents/mcp\" class=\"[ button ]\" data-variant=\"ghost\" data-size=\"sm\" data-split-back x-on:click=\"backToList\">All servers</a>")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
@@ -888,7 +990,7 @@ func mcpDetail() templ.Component {
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 64, "<div class=\"[ detail-head ]\"><div class=\"[ repel ]\"><div class=\"[ cluster ]\"><h2 class=\"[ font-mono ]\" x-text=\"mcp.name\"></h2><span class=\"[ badge ]\" data-transport x-bind:hidden=\"mcp.builtIn\" x-text=\"mcp.transport\"></span> <span class=\"[ badge ]\" data-tone=\"signal\" data-built-in-badge x-bind:hidden=\"!mcp.builtIn\">Built-in</span> <span class=\"[ badge ]\" data-tone=\"attention\" data-unused-badge x-bind:hidden=\"!mcp.unused\">Unused</span></div><div x-bind:hidden=\"mcp.builtIn\" data-actions>")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 76, "<div class=\"[ detail-head ]\"><div class=\"[ repel ]\"><div class=\"[ cluster ]\"><h2 class=\"[ font-mono ]\" x-text=\"mcp.name\"></h2><span class=\"[ badge ]\" data-transport x-bind:hidden=\"mcp.builtIn\" x-text=\"mcp.transport\"></span> <span class=\"[ badge ]\" data-tone=\"signal\" data-built-in-badge x-bind:hidden=\"!mcp.builtIn\">Built-in</span> <span class=\"[ badge ]\" data-tone=\"attention\" data-unused-badge x-bind:hidden=\"!mcp.unused\">Unused</span></div><div x-bind:hidden=\"mcp.builtIn\" data-actions>")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
@@ -896,7 +998,7 @@ func mcpDetail() templ.Component {
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 65, "</div></div><code class=\"[ library-path ]\" data-path x-bind:hidden=\"mcp.builtIn\" x-text=\"mcp.path\"></code></div><div class=\"[ banner ]\" data-tone=\"attention\" data-unset-banner x-bind:hidden=\"mcpAllSet\"><div class=\"[ grow ]\"><strong><span x-text=\"mcp.unsetText\"></span> <span x-text=\"mcp.unsetVerb\"></span></strong> in the harness server's environment. Sessions get the server, but it fails to start. Set the variable where the harness server starts, then check again. The harness never stores its value.</div><button type=\"button\" class=\"[ button ]\" data-size=\"sm\" x-bind:disabled=\"checking\" x-on:click=\"checkAgain\" x-text=\"checkLabel\"></button></div><p class=\"[ color-ink-muted text-sm ]\" data-built-in-note x-bind:hidden=\"!mcp.builtIn\">services is built into the harness and cannot be edited or deleted. Add it to an agent or a project like any other server.</p><dl class=\"[ kv detail-card ]\"><dt x-text=\"mcp.targetLabel\"></dt><dd class=\"[ font-mono text-sm ]\" data-target x-text=\"mcp.target\"></dd><dt data-entries-label x-bind:hidden=\"!mcpHasEntries\" x-text=\"mcp.entriesLabel\"></dt><dd x-bind:hidden=\"!mcpHasEntries\"><ul class=\"[ entry-list ]\"><template x-for=\"e in mcp.entries\" x-bind:key=\"e.key\"><li data-entry x-bind:data-key=\"e.key\"><code class=\"[ font-mono text-sm ]\"><span x-text=\"e.key\"></span>: <span x-text=\"e.text\"></span></code><template x-for=\"ref in e.refs\" x-bind:key=\"ref.name\"><span class=\"[ badge ]\" x-bind:data-state=\"ref.state\" x-bind:data-tone=\"ref.tone\" x-text=\"ref.state\"></span></template></li></template></ul></dd></dl><section aria-labelledby=\"mcp-vars-h\" x-bind:hidden=\"!mcpHasRefs\"><div class=\"[ section-title ]\"><h3 id=\"mcp-vars-h\">Variables</h3></div><ul class=\"[ entry-list ]\" aria-label=\"Variables\"><template x-for=\"ref in mcp.refs\" x-bind:key=\"ref.name\"><li data-ref x-bind:data-ref=\"ref.label\" x-bind:data-state=\"ref.state\"><code class=\"[ font-mono text-sm ]\" x-text=\"ref.label\"></code> <span class=\"[ badge ]\" x-bind:data-tone=\"ref.tone\" x-text=\"ref.state\"></span></li></template></ul></section><section aria-labelledby=\"mcp-who-h\"><div class=\"[ repel ] [ section-title ]\"><h3 id=\"mcp-who-h\">Who gets it</h3></div><p class=\"[ color-ink-muted text-sm ]\" data-unused-note x-bind:hidden=\"mcpUsed\">No agent and no project gets this server. That is allowed: keep it ready, then add it from an agent's editor or a project's settings.</p><dl class=\"[ kv ]\" x-bind:hidden=\"!mcpUsed\"><dt>Agents</dt><dd data-who=\"agents\"><template x-for=\"a in mcp.agents\" x-bind:key=\"a.name\"><a x-bind:href=\"a.href\" x-text=\"a.name\"></a></template><span class=\"[ color-ink-faint ]\" x-bind:hidden=\"mcpHasAgents\">None</span></dd><dt>Projects</dt><dd data-who=\"projects\"><template x-for=\"p in mcp.projects\" x-bind:key=\"p.href\"><a x-bind:href=\"p.href\" x-text=\"p.name\"></a></template><span class=\"[ color-ink-faint ]\" x-bind:hidden=\"mcpHasProjects\">None</span></dd></dl></section></div>")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 77, "</div></div><code class=\"[ library-path ]\" data-path x-bind:hidden=\"mcp.builtIn\" x-text=\"mcp.path\"></code></div><div class=\"[ banner ]\" data-tone=\"attention\" data-unset-banner x-bind:hidden=\"mcpAllSet\"><div class=\"[ grow ]\"><strong><span x-text=\"mcp.unsetText\"></span> <span x-text=\"mcp.unsetVerb\"></span></strong> in the harness server's environment. Sessions get the server, but it fails to start. Set the variable where the harness server starts, then check again. The harness never stores its value.</div><button type=\"button\" class=\"[ button ]\" data-size=\"sm\" x-bind:disabled=\"checking\" x-on:click=\"checkAgain\" x-text=\"checkLabel\"></button></div><p class=\"[ color-ink-muted text-sm ]\" data-built-in-note x-bind:hidden=\"!mcp.builtIn\">services is built into the harness and cannot be edited or deleted. Add it to an agent or a project like any other server.</p><dl class=\"[ kv detail-card ]\"><dt x-text=\"mcp.targetLabel\"></dt><dd class=\"[ font-mono text-sm ]\" data-target x-text=\"mcp.target\"></dd><dt data-entries-label x-bind:hidden=\"!mcpHasEntries\" x-text=\"mcp.entriesLabel\"></dt><dd x-bind:hidden=\"!mcpHasEntries\"><ul class=\"[ entry-list ]\"><template x-for=\"e in mcp.entries\" x-bind:key=\"e.key\"><li data-entry x-bind:data-key=\"e.key\"><code class=\"[ font-mono text-sm ]\"><span x-text=\"e.key\"></span>: <span x-text=\"e.text\"></span></code><template x-for=\"ref in e.refs\" x-bind:key=\"ref.name\"><span class=\"[ badge ]\" x-bind:data-state=\"ref.state\" x-bind:data-tone=\"ref.tone\" x-text=\"ref.state\"></span></template></li></template></ul></dd></dl><section aria-labelledby=\"mcp-vars-h\" x-bind:hidden=\"!mcpHasRefs\"><div class=\"[ section-title ]\"><h3 id=\"mcp-vars-h\">Variables</h3></div><ul class=\"[ entry-list ]\" aria-label=\"Variables\"><template x-for=\"ref in mcp.refs\" x-bind:key=\"ref.name\"><li data-ref x-bind:data-ref=\"ref.label\" x-bind:data-state=\"ref.state\"><code class=\"[ font-mono text-sm ]\" x-text=\"ref.label\"></code> <span class=\"[ badge ]\" x-bind:data-tone=\"ref.tone\" x-text=\"ref.state\"></span></li></template></ul></section><section aria-labelledby=\"mcp-who-h\"><div class=\"[ repel ] [ section-title ]\"><h3 id=\"mcp-who-h\">Who gets it</h3></div><p class=\"[ color-ink-muted text-sm ]\" data-unused-note x-bind:hidden=\"mcpUsed\">No agent and no project gets this server. That is allowed: keep it ready, then add it from an agent's editor or a project's settings.</p><dl class=\"[ kv ]\" x-bind:hidden=\"!mcpUsed\"><dt>Agents</dt><dd data-who=\"agents\"><template x-for=\"a in mcp.agents\" x-bind:key=\"a.name\"><a x-bind:href=\"a.href\" x-text=\"a.name\"></a></template><span class=\"[ color-ink-faint ]\" x-bind:hidden=\"mcpHasAgents\">None</span></dd><dt>Projects</dt><dd data-who=\"projects\"><template x-for=\"p in mcp.projects\" x-bind:key=\"p.href\"><a x-bind:href=\"p.href\" x-text=\"p.name\"></a></template><span class=\"[ color-ink-faint ]\" x-bind:hidden=\"mcpHasProjects\">None</span></dd></dl></section></div>")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
@@ -922,12 +1024,12 @@ func toolsLibrary() templ.Component {
 			}()
 		}
 		ctx = templ.InitializeContext(ctx)
-		templ_7745c5c3_Var37 := templ.GetChildren(ctx)
-		if templ_7745c5c3_Var37 == nil {
-			templ_7745c5c3_Var37 = templ.NopComponent
+		templ_7745c5c3_Var39 := templ.GetChildren(ctx)
+		if templ_7745c5c3_Var39 == nil {
+			templ_7745c5c3_Var39 = templ.NopComponent
 		}
 		ctx = templ.ClearChildren(ctx)
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 66, "<div class=\"[ split-view ] [ agents-split ]\" x-bind:data-detail=\"detailOpenAttr\"><div class=\"[ library-list ]\"><div class=\"[ library-tools ]\"><input type=\"search\" class=\"[ field ]\" aria-label=\"Filter tools\" placeholder=\"Filter tools by name\" autocomplete=\"off\" x-model=\"toolQuery\"><div class=\"[ cluster ]\" role=\"group\" aria-label=\"Quick filters\" data-tool-filters style=\"--gutter: var(--space-xs)\"><template x-for=\"f in toolFilters\" x-bind:key=\"f.id\"><button type=\"button\" class=\"[ button ]\" data-size=\"sm\" x-bind:data-variant=\"f.variant\" x-bind:aria-pressed=\"f.pressed\" x-bind:data-filter=\"f.id\" x-on:click=\"setToolFilter\" x-text=\"f.label\"></button></template></div></div><ul class=\"[ library-rows ]\" aria-label=\"Tools\" data-tool-list><template x-for=\"row in toolRowsView\" x-bind:key=\"row.name\"><li><a class=\"[ library-row ]\" data-tool-row x-bind:href=\"row.href\" x-bind:data-key=\"row.name\" x-bind:aria-current=\"row.current\" x-on:click=\"openTool\"><span class=\"[ name font-mono ]\" x-text=\"row.name\"></span> <span class=\"[ meta ]\" x-text=\"row.meta\"></span> <span class=\"[ desc ]\" x-text=\"row.description\"></span></a></li></template></ul><template x-if=\"noToolRows\"><div class=\"[ library-empty ]\" data-tool-empty><strong>No tools match.</strong> <span class=\"[ text-sm ]\">Clear the filter.</span></div></template><p class=\"[ library-foot ]\" data-tool-foot x-text=\"toolsFoot\"></p></div><section class=\"[ library-detail ]\" aria-label=\"Tool\" data-tool-detail><div class=\"[ library-detail-inner ]\"><a href=\"/agents/tools\" class=\"[ button ]\" data-variant=\"ghost\" data-size=\"sm\" data-split-back x-on:click=\"backToList\">All tools</a><template x-if=\"tool\"><div class=\"[ detail-head ]\"><div class=\"[ cluster ]\"><h2 class=\"[ font-mono ]\" x-text=\"tool.name\"></h2><span class=\"[ badge ]\">built-in</span></div><p x-text=\"tool.description\"></p></div></template><div class=\"[ banner ]\" data-tools-explain><div class=\"[ grow text-sm ]\">Tools are Claude Code's built-in tools. Each agent lists the ones it allows, in <a href=\"/agents\">its editor</a>; an agent that lists none gets Claude's default set.</div></div><template x-if=\"tool\"><section aria-labelledby=\"tool-by-h\"><div class=\"[ section-title ]\"><h3 id=\"tool-by-h\" x-text=\"tool.heading\"></h3></div><div class=\"[ cluster ]\" data-allowed-by style=\"--gutter: var(--space-xs)\"><template x-for=\"a in tool.allowedBy\" x-bind:key=\"a.name\"><a class=\"[ chip ]\" x-bind:href=\"a.href\" x-text=\"a.name\"></a></template></div><p class=\"[ color-ink-muted text-sm ]\" x-bind:hidden=\"!tool.unused\">No agent lists it. Agents with no list still get it if it is in Claude's default set.</p></section></template></div></section></div>")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 78, "<div class=\"[ split-view ] [ agents-split ]\" x-bind:data-detail=\"detailOpenAttr\"><div class=\"[ library-list ]\"><div class=\"[ library-tools ]\"><input type=\"search\" class=\"[ field ]\" aria-label=\"Filter tools\" placeholder=\"Filter tools by name\" autocomplete=\"off\" x-model=\"toolQuery\"><div class=\"[ cluster ]\" role=\"group\" aria-label=\"Quick filters\" data-tool-filters style=\"--gutter: var(--space-xs)\"><template x-for=\"f in toolFilters\" x-bind:key=\"f.id\"><button type=\"button\" class=\"[ button ]\" data-size=\"sm\" x-bind:data-variant=\"f.variant\" x-bind:aria-pressed=\"f.pressed\" x-bind:data-filter=\"f.id\" x-on:click=\"setToolFilter\" x-text=\"f.label\"></button></template></div></div><ul class=\"[ library-rows ]\" aria-label=\"Tools\" data-tool-list><template x-for=\"row in toolRowsView\" x-bind:key=\"row.name\"><li><a class=\"[ library-row ]\" data-tool-row x-bind:href=\"row.href\" x-bind:data-key=\"row.name\" x-bind:aria-current=\"row.current\" x-on:click=\"openTool\"><span class=\"[ name font-mono ]\" x-text=\"row.name\"></span> <span class=\"[ meta ]\" x-text=\"row.meta\"></span> <span class=\"[ desc ]\" x-text=\"row.description\"></span></a></li></template></ul><template x-if=\"noToolRows\"><div class=\"[ library-empty ]\" data-tool-empty><strong>No tools match.</strong> <span class=\"[ text-sm ]\">Clear the filter.</span></div></template><p class=\"[ library-foot ]\" data-tool-foot x-text=\"toolsFoot\"></p></div><section class=\"[ library-detail ]\" aria-label=\"Tool\" data-tool-detail><div class=\"[ library-detail-inner ]\"><a href=\"/agents/tools\" class=\"[ button ]\" data-variant=\"ghost\" data-size=\"sm\" data-split-back x-on:click=\"backToList\">All tools</a><template x-if=\"tool\"><div class=\"[ detail-head ]\"><div class=\"[ cluster ]\"><h2 class=\"[ font-mono ]\" x-text=\"tool.name\"></h2><span class=\"[ badge ]\">built-in</span></div><p x-text=\"tool.description\"></p></div></template><div class=\"[ banner ]\" data-tools-explain><div class=\"[ grow text-sm ]\">Tools are Claude Code's built-in tools. Each agent lists the ones it allows, in <a href=\"/agents\">its editor</a>; an agent that lists none gets Claude's default set.</div></div><template x-if=\"tool\"><section aria-labelledby=\"tool-by-h\"><div class=\"[ section-title ]\"><h3 id=\"tool-by-h\" x-text=\"tool.heading\"></h3></div><div class=\"[ cluster ]\" data-allowed-by style=\"--gutter: var(--space-xs)\"><template x-for=\"a in tool.allowedBy\" x-bind:key=\"a.name\"><a class=\"[ chip ]\" x-bind:href=\"a.href\" x-text=\"a.name\"></a></template></div><p class=\"[ color-ink-muted text-sm ]\" x-bind:hidden=\"!tool.unused\">No agent lists it. Agents with no list still get it if it is in Claude's default set.</p></section></template></div></section></div>")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}

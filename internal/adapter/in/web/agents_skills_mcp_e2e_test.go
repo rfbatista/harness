@@ -43,7 +43,7 @@ func TestSkillsTabFiltersAndShowsASkillItsBodyFilesAndReach_EndToEnd(t *testing.
 	writeCatalogFile(t, w, "skills/lint/SKILL.md", "---\nname: lint\ndescription: Lint it.\n---\nbody\n")
 	writeCatalogFile(t, w, "skills/solo/SKILL.md", "---\nname: solo\ndescription: Alone.\n---\nbody\n")
 
-	const rows = `[...document.querySelectorAll('[data-skill-row]')].map(r => r.dataset.key).join(',')`
+	const rows = `[...document.querySelectorAll('[data-skill-row]')]` + catalogRowsWithoutBuiltIn + `.map(r => r.dataset.key).join(',')`
 	const detail = `document.querySelector('[data-skill-detail]')`
 	const filterBox = `input[type=search][aria-label="Filter skills"]`
 	const filters = `document.querySelector('[data-skill-filters]')`
@@ -53,7 +53,7 @@ func TestSkillsTabFiltersAndShowsASkillItsBodyFilesAndReach_EndToEnd(t *testing.
 		chromedp.EmulateViewport(1280, 900),
 		chromedp.Navigate(w.srv.URL+"/agents/skills"),
 		waitUntil(rows+` === 'lint,solo,tdd'`),
-		waitUntil(`document.querySelector('[data-skill-foot]').textContent.trim() === 'skills/ · 3 folders'`),
+		waitUntil(`document.querySelector('[data-skill-foot]').textContent.trim() === 'skills/ · `+fmt.Sprint(3+builtInSkillCount(t, w))+` folders'`),
 		waitUntil(`document.querySelector('[data-skill-list]').getAttribute('aria-label') === 'Skills'`),
 		waitUntil(`document.querySelector('[data-skill-row][data-key="tdd"]').textContent.replace(/\s+/g, ' ').includes('reaches 1 agent')`),
 		waitUntil(`document.querySelector('[data-skill-row][data-key="solo"]').textContent.replace(/\s+/g, ' ').includes('unused')`),
@@ -123,6 +123,7 @@ func TestSkillsTabStaysFastWith475Skills_EndToEnd(t *testing.T) {
 	for i := 0; i < 475; i++ {
 		writeCatalogFile(t, w, fmt.Sprintf("skills/skill-%03d/SKILL.md", i), fmt.Sprintf("---\nname: skill-%03d\ndescription: Number %d.\n---\nbody\n", i, i))
 	}
+	total := 475 + builtInSkillCount(t, w)
 	const mounted = `document.querySelectorAll('[data-skill-row]').length`
 
 	b := newTLSBrowser(t)
@@ -130,10 +131,10 @@ func TestSkillsTabStaysFastWith475Skills_EndToEnd(t *testing.T) {
 		chromedp.EmulateViewport(1280, 900),
 		chromedp.Navigate(w.srv.URL+"/agents/skills"),
 		waitUntil(mounted+` > 0`),
-		waitUntil(`document.querySelector('[data-skill-foot]').textContent.trim() === 'skills/ · 475 folders'`),
+		waitUntil(fmt.Sprintf(`document.querySelector('[data-skill-foot]').textContent.trim() === 'skills/ · %d folders'`, total)),
 		waitUntil(`document.querySelectorAll('[data-skill-row]').length <= 100`),
-		waitUntil(`document.querySelector('[data-skill-more]').textContent.replace(/\s+/g, ' ').includes('415 more')`),
-		waitUntil(`document.querySelector('[role=tab][data-tab=skills] [data-count]').textContent.trim() === '475'`),
+		waitUntil(fmt.Sprintf(`document.querySelector('[data-skill-more]').textContent.replace(/\s+/g, ' ').includes('%d more')`, total-60)),
+		waitUntil(fmt.Sprintf(`document.querySelector('[role=tab][data-tab=skills] [data-count]').textContent.trim() === '%d'`, total)),
 	)
 	start := time.Now()
 	b.run("the first paint lands within its bound",
@@ -143,7 +144,12 @@ func TestSkillsTabStaysFastWith475Skills_EndToEnd(t *testing.T) {
 	if took := time.Since(start); took > 3*time.Second {
 		t.Errorf("475 skills took %v to first paint, want under 3s", took)
 	}
-	for _, want := range []int{120, 180, 240, 300, 360, 420, 475} {
+	var steps []int
+	for n := 120; n < total; n += 60 {
+		steps = append(steps, n)
+	}
+	steps = append(steps, total)
+	for _, want := range steps {
 		b.run(fmt.Sprintf("Show more mounts the next page (%d rows)", want),
 			chromedp.Click(`[data-skill-more] button`, chromedp.ByQuery),
 			waitUntil(fmt.Sprintf(`%s === %d`, mounted, want)),

@@ -488,163 +488,171 @@ func entryPicker(ns, label, placeholder, hintID, errorID, describedBy, invalid, 
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 29, "\"><span aria-hidden=\"true\" x-text=\"o.mark\"></span> <span class=\"[ font-mono ]\" x-text=\"o.label\"></span> <span class=\"[ text-xs color-ink-faint ]\" x-text=\"o.hint\"></span></div></template><p class=\"[ entry-note text-xs color-ink-muted ]\" x-bind:hidden=\"")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 29, "\"><span aria-hidden=\"true\" x-text=\"o.mark\"></span> <span class=\"[ font-mono ]\" x-text=\"o.label\"></span>")
+		if templ_7745c5c3_Err != nil {
+			return templ_7745c5c3_Err
+		}
+		templ_7745c5c3_Err = builtInBadge("!o.builtIn").Render(ctx, templ_7745c5c3_Buffer)
+		if templ_7745c5c3_Err != nil {
+			return templ_7745c5c3_Err
+		}
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 30, "<span class=\"[ text-xs color-ink-faint ]\" x-text=\"o.hint\"></span></div></template><p class=\"[ entry-note text-xs color-ink-muted ]\" x-bind:hidden=\"")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
 		var templ_7745c5c3_Var28 string
 		templ_7745c5c3_Var28, templ_7745c5c3_Err = templ.ResolveAttributeValue("!" + ns + "View.empty")
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `agents/save.templ`, Line: 152, Col: 93}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `agents/save.templ`, Line: 153, Col: 93}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var28)
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 30, "\" x-text=\"")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 31, "\" x-text=\"")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
 		var templ_7745c5c3_Var29 string
 		templ_7745c5c3_Var29, templ_7745c5c3_Err = templ.ResolveAttributeValue(ns + "View.emptyNote")
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `agents/save.templ`, Line: 152, Col: 126}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `agents/save.templ`, Line: 153, Col: 126}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var29)
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 31, "\"></p><p class=\"[ entry-note text-xs color-ink-muted ]\" x-bind:hidden=\"")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 32, "\"></p><p class=\"[ entry-note text-xs color-ink-muted ]\" x-bind:hidden=\"")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
 		var templ_7745c5c3_Var30 string
 		templ_7745c5c3_Var30, templ_7745c5c3_Err = templ.ResolveAttributeValue("!" + ns + "View.hidden")
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `agents/save.templ`, Line: 153, Col: 94}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `agents/save.templ`, Line: 154, Col: 94}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var30)
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 32, "\" x-text=\"")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 33, "\" x-text=\"")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
 		var templ_7745c5c3_Var31 string
 		templ_7745c5c3_Var31, templ_7745c5c3_Err = templ.ResolveAttributeValue(ns + "View.hiddenNote")
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `agents/save.templ`, Line: 153, Col: 128}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `agents/save.templ`, Line: 154, Col: 128}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var31)
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 33, "\"></p></div></div><div class=\"[ cluster ] [ entry-chips ]\" style=\"--gutter: var(--space-xs)\" data-chips role=\"list\" aria-label=\"Chosen\"><template x-for=\"")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 34, "\"></p></div></div><div class=\"[ cluster ] [ entry-chips ]\" style=\"--gutter: var(--space-xs)\" data-chips role=\"list\" aria-label=\"Chosen\"><template x-for=\"")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
 		var templ_7745c5c3_Var32 string
 		templ_7745c5c3_Var32, templ_7745c5c3_Err = templ.ResolveAttributeValue("c in " + ns + "View.chips")
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `agents/save.templ`, Line: 157, Col: 48}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `agents/save.templ`, Line: 158, Col: 48}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var32)
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 34, "\" x-bind:key=\"c.key\"><span class=\"[ chip ]\" role=\"listitem\" x-bind:data-chip=\"c.key\" x-bind:data-kind=\"c.kind\" x-bind:data-mono=\"c.mono\" x-bind:data-missing=\"c.missing\"><span x-text=\"c.label\"></span> <button type=\"button\" x-bind:aria-label=\"c.removeLabel\" x-bind:data-key=\"c.key\" x-on:click=\"")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 35, "\" x-bind:key=\"c.key\"><span class=\"[ chip ]\" role=\"listitem\" x-bind:data-chip=\"c.key\" x-bind:data-kind=\"c.kind\" x-bind:data-mono=\"c.mono\" x-bind:data-missing=\"c.missing\"><span x-text=\"c.label\"></span> <button type=\"button\" x-bind:aria-label=\"c.removeLabel\" x-bind:data-key=\"c.key\" x-on:click=\"")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
 		var templ_7745c5c3_Var33 string
 		templ_7745c5c3_Var33, templ_7745c5c3_Err = templ.ResolveAttributeValue(ns + "Unpick")
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `agents/save.templ`, Line: 160, Col: 111}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `agents/save.templ`, Line: 161, Col: 111}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var33)
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 35, "\">×</button></span></template><span class=\"[ text-sm color-ink-muted ]\" x-bind:hidden=\"")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 36, "\">×</button></span></template><span class=\"[ text-sm color-ink-muted ]\" x-bind:hidden=\"")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
 		var templ_7745c5c3_Var34 string
 		templ_7745c5c3_Var34, templ_7745c5c3_Err = templ.ResolveAttributeValue("!" + ns + "View.noChips")
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `agents/save.templ`, Line: 163, Col: 86}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `agents/save.templ`, Line: 164, Col: 86}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var34)
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 36, "\">Nothing yet.</span></div><span class=\"[ hint ]\" id=\"")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 37, "\">Nothing yet.</span></div><span class=\"[ hint ]\" id=\"")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
 		var templ_7745c5c3_Var35 string
 		templ_7745c5c3_Var35, templ_7745c5c3_Err = templ.ResolveAttributeValue(hintID)
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `agents/save.templ`, Line: 165, Col: 36}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `agents/save.templ`, Line: 166, Col: 36}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var35)
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 37, "\">")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 38, "\">")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
 		var templ_7745c5c3_Var36 string
 		templ_7745c5c3_Var36, templ_7745c5c3_Err = templ.JoinStringErrs("Bundles are listed first. Type to search, arrows to move, Enter to add, Backspace to remove the last one.")
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `agents/save.templ`, Line: 165, Col: 148}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `agents/save.templ`, Line: 166, Col: 148}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var36))
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 38, "</span> <span class=\"[ error ]\" id=\"")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 39, "</span> <span class=\"[ error ]\" id=\"")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
 		var templ_7745c5c3_Var37 string
 		templ_7745c5c3_Var37, templ_7745c5c3_Err = templ.ResolveAttributeValue(errorID)
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `agents/save.templ`, Line: 166, Col: 38}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `agents/save.templ`, Line: 167, Col: 38}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var37)
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 39, "\" x-bind:hidden=\"")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 40, "\" x-bind:hidden=\"")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
 		var templ_7745c5c3_Var38 string
 		templ_7745c5c3_Var38, templ_7745c5c3_Err = templ.ResolveAttributeValue("!" + invalid)
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `agents/save.templ`, Line: 166, Col: 70}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `agents/save.templ`, Line: 167, Col: 70}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var38)
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 40, "\" x-text=\"")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 41, "\" x-text=\"")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
 		var templ_7745c5c3_Var39 string
 		templ_7745c5c3_Var39, templ_7745c5c3_Err = templ.ResolveAttributeValue(errorText)
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `agents/save.templ`, Line: 166, Col: 91}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `agents/save.templ`, Line: 167, Col: 91}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var39)
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 41, "\"></span></div>")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 42, "\"></span></div>")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
@@ -676,7 +684,7 @@ func diskBanner() templ.Component {
 			templ_7745c5c3_Var40 = templ.NopComponent
 		}
 		ctx = templ.ClearChildren(ctx)
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 42, "<template x-if=\"disk\"><div class=\"[ banner ]\" data-tone=\"attention\" data-disk-changed role=\"status\"><div class=\"[ flow ] [ flow-space-3xs grow ]\"><strong x-text=\"disk.sentence\"></strong><ul class=\"[ entry-list ]\" role=\"list\"><template x-for=\"l in disk.lines\" x-bind:key=\"l.text\"><li x-text=\"l.text\"></li></template></ul><span class=\"[ text-sm ]\">What is shown below is what is on disk now.</span></div><button type=\"button\" class=\"[ button ]\" data-variant=\"ghost\" data-size=\"sm\" data-disk-dismiss x-on:click=\"dismissDisk\">Dismiss</button></div></template>")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 43, "<template x-if=\"disk\"><div class=\"[ banner ]\" data-tone=\"attention\" data-disk-changed role=\"status\"><div class=\"[ flow ] [ flow-space-3xs grow ]\"><strong x-text=\"disk.sentence\"></strong><ul class=\"[ entry-list ]\" role=\"list\"><template x-for=\"l in disk.lines\" x-bind:key=\"l.text\"><li x-text=\"l.text\"></li></template></ul><span class=\"[ text-sm ]\">What is shown below is what is on disk now.</span></div><button type=\"button\" class=\"[ button ]\" data-variant=\"ghost\" data-size=\"sm\" data-disk-dismiss x-on:click=\"dismissDisk\">Dismiss</button></div></template>")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
@@ -709,7 +717,7 @@ func brokenBanner() templ.Component {
 			templ_7745c5c3_Var41 = templ.NopComponent
 		}
 		ctx = templ.ClearChildren(ctx)
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 43, "<template x-if=\"broken\"><div style=\"padding-inline: var(--space-m)\"><div class=\"[ banner ]\" data-tone=\"danger\" data-broken role=\"alert\"><div class=\"[ flow ] [ flow-space-3xs grow ]\"><strong data-broken-title x-text=\"broken.title\"></strong> <span class=\"[ font-mono text-sm ]\" data-broken-where x-text=\"broken.where\"></span> <span class=\"[ font-mono text-sm ]\" data-broken-message x-text=\"broken.message\"></span> <span class=\"[ text-sm ]\" x-text=\"broken.note\"></span></div><button type=\"button\" class=\"[ button ]\" data-size=\"sm\" data-broken-check x-bind:disabled=\"refreshing\" x-on:click=\"reloadFromDisk\" x-text=\"checkCatalogLabel\">Check again</button></div></div></template>")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 44, "<template x-if=\"broken\"><div style=\"padding-inline: var(--space-m)\"><div class=\"[ banner ]\" data-tone=\"danger\" data-broken role=\"alert\"><div class=\"[ flow ] [ flow-space-3xs grow ]\"><strong data-broken-title x-text=\"broken.title\"></strong> <span class=\"[ font-mono text-sm ]\" data-broken-where x-text=\"broken.where\"></span> <span class=\"[ font-mono text-sm ]\" data-broken-message x-text=\"broken.message\"></span> <span class=\"[ text-sm ]\" x-text=\"broken.note\"></span></div><button type=\"button\" class=\"[ button ]\" data-size=\"sm\" data-broken-check x-bind:disabled=\"refreshing\" x-on:click=\"reloadFromDisk\" x-text=\"checkCatalogLabel\">Check again</button></div></div></template>")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}

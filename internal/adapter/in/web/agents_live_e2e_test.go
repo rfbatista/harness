@@ -203,6 +203,7 @@ func TestABrokenAgentsFileShowsItsLineAndTurnsSavesOffUntilItIsFixed_EndToEnd(t 
 	)
 
 	b.run("the last lists that parsed are still there, and a delete is off too",
+		pressKey("Escape", 27), // the open picker list would cover Cancel
 		chromedp.Click(`[data-cancel]`, chromedp.ByQuery),
 		waitUntil(`document.querySelector('[data-leave]') !== null`),
 		clickButton(`document.querySelector('[data-leave]')`, "Discard changes"),

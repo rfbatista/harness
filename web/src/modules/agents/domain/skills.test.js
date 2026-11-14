@@ -1,6 +1,6 @@
 import { assert, file, test } from "../../../shared/testing/test.js";
 import { toCatalog } from "../infrastructure/dto.js";
-import { catalogDTO } from "../testing/fixtures.js";
+import { catalogDTO, withBuiltInSkills } from "../testing/fixtures.js";
 import { SKILL_PAGE, skillFiles, skillRows, skillsFooter, skillSummary } from "./skills.js";
 
 file("agents/domain/skills");
@@ -86,4 +86,109 @@ test("the file tree lists folders before files, indented by depth, SKILL.md firs
 
 test("a skill with no extra files lists only SKILL.md", () => {
   assert.deepEqual(skillFiles([]).map((r) => r.name), ["SKILL.md"]);
+});
+
+const withBuiltIns = () => toCatalog(withBuiltInSkills(catalogDTO()));
+
+test("a built-in skill's row is flagged and names the modes that carry it; a catalog skill's is not", () => {
+  const rows = skillRows(withBuiltIns()).rows;
+  const run = rows.find((r) => r.name === "task-run-app");
+  assert.equal(run.builtIn, true);
+  assert.equal(run.modesLabel, "architect");
+  assert.equal(rows.find((r) => r.name === "task-tdd").modesLabel, "architect, implement");
+  const tdd = rows.find((r) => r.name === "tdd");
+  assert.equal(tdd.builtIn, false);
+  assert.equal(tdd.modesLabel, "");
+});
+
+test("a built-in skill keeps its reach line like any skill", () => {
+  const dto = withBuiltInSkills(catalogDTO());
+  Object.assign(dto.skills.find((s) => s.name === "task-tdd"), { agents: ["backend"], agent_count: 1 });
+  const rows = skillRows(toCatalog(dto)).rows;
+  assert.equal(rows.find((r) => r.name === "task-run-app").meta, "unused");
+  assert.equal(rows.find((r) => r.name === "task-tdd").meta, "reaches 1 agent");
+});
+
+test("the text filter finds a built-in skill by name and by description", () => {
+  const c = withBuiltIns();
+  assert.deepEqual(skillRows(c, { query: "run-app" }).rows.map((r) => r.name), ["task-run-app"]);
+  assert.deepEqual(skillRows(c, { query: "test first" }).rows.map((r) => r.name).sort(), ["task-tdd", "tdd"]);
+});
+
+test("the footer counts built-in skills with the catalog's", () => {
+  assert.equal(skillsFooter(withBuiltIns()), "skills/ · 4 folders");
+});
+
+test("a catalog read without the new fields means catalog skills with no modes", () => {
+  const s = toCatalog(catalogDTO()).skills[0];
+  assert.equal(s.builtIn, false);
+  assert.deepEqual(s.modes, []);
+});
+
+test("a built-in skill's summary says it is built in and names its modes", () => {
+  const s = skillSummary(withBuiltIns(), "task-run-app");
+  assert.equal(s.builtIn, true);
+  assert.equal(s.modesLabel, "architect");
+});
+
+test("a built-in skill's summary is read-only: it ships with the server and names its modes", () => {
+  const s = skillSummary(withBuiltIns(), "task-tdd");
+  assert.equal(s.readOnly, true);
+  assert.equal(s.shipsLine, "Ships with the server and is read-only. Carried by the architect and implement modes.");
+  assert.equal(skillSummary(withBuiltIns(), "task-run-app").shipsLine, "Ships with the server and is read-only. Carried by the architect mode.");
+  assert.equal(s.path, "");
+  assert.equal(s.duplicateHref, "/agents/skills/new?from=task-tdd");
+});
+
+test("a built-in skill that no mode carries still says it ships with the server", () => {
+  const dto = withBuiltInSkills(catalogDTO());
+  dto.skills.find((x) => x.name === "task-tdd").modes = [];
+  assert.equal(skillSummary(toCatalog(dto), "task-tdd").shipsLine, "Ships with the server and is read-only.");
+});
+
+test("a catalog skill's summary is editable and has no ships line", () => {
+  const s = skillSummary(toCatalog(catalogDTO()), "tdd");
+  assert.equal(s.readOnly, false);
+  assert.equal(s.shipsLine, "");
+});
+
+const SHADOW_MESSAGE = "a catalog skill named task-run-app is hidden by the built-in one";
+const shadowed = () => {
+  const dto = withBuiltInSkills(catalogDTO());
+  dto.skills.find((s) => s.name === "task-run-app").problems = [{ code: "SHADOWED_BY_BUILT_IN", message: SHADOW_MESSAGE }];
+  return toCatalog(dto);
+};
+
+test("a catalog skill shadowed by a built-in name shows the SHADOWED_BY_BUILT_IN problem on its row", () => {
+  const row = skillRows(shadowed()).rows.find((r) => r.name === "task-run-app");
+  assert.equal(row.badge.label, "Shadowed by built-in");
+  assert.equal(row.badge.tone, "danger");
+  assert.equal(row.builtIn, true);
+});
+
+test("the shadowed skill's detail names the problem and carries the server's message", () => {
+  const s = skillSummary(shadowed(), "task-run-app");
+  assert.equal(s.problemLabel, "Shadowed by built-in");
+  assert.equal(s.problemNote, SHADOW_MESSAGE);
+});
+
+test("a skill with no problem has no problem label; no description keeps its own badge", () => {
+  assert.equal(skillSummary(withBuiltIns(), "task-run-app").problemLabel, "");
+  const dto = catalogDTO();
+  dto.skills[0].problems = [{ code: "NO_DESCRIPTION", message: "x" }];
+  const s = skillSummary(toCatalog(dto), "tdd");
+  assert.equal(s.problemLabel, "");
+  assert.equal(s.noDescription, false);
+});
+
+test("only a shadowed built-in skill offers a delete, and it is worded as deleting the shadow", () => {
+  const plain = skillSummary(withBuiltIns(), "task-run-app");
+  assert.equal(plain.canDelete, false);
+  const s = skillSummary(shadowed(), "task-run-app");
+  assert.equal(s.canDelete, true);
+  assert.equal(s.deleteLabel, "Delete the shadowing skill…");
+  assert.equal(s.readOnly, true);
+  const catalogSkill = skillSummary(toCatalog(catalogDTO()), "tdd");
+  assert.equal(catalogSkill.canDelete, true);
+  assert.equal(catalogSkill.deleteLabel, "Delete…");
 });

@@ -19,6 +19,26 @@ export const SKILL_PAGE = 60;
 const plural = (n, word) => `${n} ${word}${n === 1 ? "" : "s"}`;
 const enc = encodeURIComponent;
 
+/** The modes that carry a built-in skill, as one line: "architect, implement". */
+const modesLabel = (modes) => [...modes].sort().join(", ");
+
+const SHADOWED = "SHADOWED_BY_BUILT_IN";
+const isShadowed = (s) => s.problems.some((p) => p.code === SHADOWED);
+
+/** The problem badge of the detail head; "" for none. No description has its own badge there. */
+function problemLabel(problems) {
+  const badge = problemBadge(problems);
+  return badge && badge.label !== "No description" ? badge.label : "";
+}
+
+/** The line a built-in skill's detail shows: it ships with the server, read-only, and who carries it. */
+function shipsLine(modes) {
+  const sorted = [...modes].sort();
+  const base = "Ships with the server and is read-only.";
+  if (sorted.length === 0) return base;
+  return `${base} Carried by the ${sorted.join(" and ")} ${sorted.length === 1 ? "mode" : "modes"}.`;
+}
+
 /**
  * @param {Catalog} catalog
  * @param {{ query?: string, filter?: string, limit?: number }} [o]
@@ -40,6 +60,8 @@ export function skillRows(catalog, { query = "", filter = "all", limit = SKILL_P
     dim: s.description === "",
     meta: s.agentCount === 0 ? "unused" : `reaches ${plural(s.agentCount, "agent")}`,
     badge: problemBadge(s.problems),
+    builtIn: s.builtIn,
+    modesLabel: modesLabel(s.modes),
   }));
   return { rows, total: matches.length, hidden: matches.length - rows.length };
 }
@@ -62,9 +84,18 @@ export function skillSummary(catalog, name) {
     description: s.description,
     noDescription: s.description === "",
     badge: problemBadge(s.problems),
+    builtIn: s.builtIn,
+    modesLabel: modesLabel(s.modes),
     unused: s.agentCount === 0,
-    path: `skills/${s.name}/SKILL.md`,
-    copyPath: `${catalog.root}/skills/${s.name}`,
+    problemLabel: problemLabel(s.problems),
+    problemNote: s.problems.find((p) => p.code === SHADOWED)?.message ?? "",
+    readOnly: s.builtIn,
+    // A built-in skill has no delete of its own; one that a catalog folder shadows offers to delete that folder.
+    canDelete: !s.builtIn || isShadowed(s),
+    deleteLabel: s.builtIn ? "Delete the shadowing skill…" : "Delete…",
+    shipsLine: s.builtIn ? shipsLine(s.modes) : "",
+    path: s.builtIn ? "" : `skills/${s.name}/SKILL.md`,
+    copyPath: s.builtIn ? "" : `${catalog.root}/skills/${s.name}`,
     editHref: `/agents/skills/${enc(s.name)}/edit`,
     duplicateHref: `/agents/skills/new?from=${enc(s.name)}`,
   };
