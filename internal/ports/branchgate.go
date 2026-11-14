@@ -20,6 +20,9 @@ type BranchGrantRequest struct {
 type BranchGrantAnswer struct {
 	Allow  bool   `json:"allow"`
 	Reason string `json:"reason,omitempty"`
+	// Blocked is true when the branch block refuses the action (ADR 0088);
+	// Reason is then the blocked message the shim prints.
+	Blocked bool `json:"blocked,omitempty"`
 	// RequestID is the branch request whose grant was used; the shim hands it
 	// back when a push it let through succeeded.
 	RequestID string `json:"request_id,omitempty"`

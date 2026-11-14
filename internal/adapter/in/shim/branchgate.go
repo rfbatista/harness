@@ -70,7 +70,7 @@ func gitMain(args []string) int {
 			return 1
 		}
 		if !ans.Allow {
-			if ans.Reason != "" && strings.HasPrefix(ans.Reason, "REFUSED") {
+			if ans.Reason != "" && (ans.Blocked || strings.HasPrefix(ans.Reason, "REFUSED")) {
 				fmt.Fprintln(os.Stderr, ans.Reason)
 			} else {
 				fmt.Fprintln(os.Stderr, neededMessage(args))

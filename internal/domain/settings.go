@@ -60,6 +60,9 @@ func ValidateSetting(key, value string) error {
 		if key == ModeModelKey(mode) {
 			return validateModelSetting(key, value)
 		}
+		if key == BranchBlockKey(mode) {
+			return validateBranchBlockSetting(key, value)
+		}
 	}
 	return validateProviderSetting(key, value)
 }

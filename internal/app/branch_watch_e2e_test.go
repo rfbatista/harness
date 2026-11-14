@@ -55,6 +55,10 @@ func startWatch(t *testing.T, db string, remote bool) (*branchGate, string) {
 	t.Helper()
 	bin := buildServer(t)
 	e := newShellE2EWith(t, db)
+	// These tests follow branch requests, so the implement mode's block is off.
+	if _, err := e.cat.Settings.UpdateSettings(map[string]string{domain.BranchBlockKey(domain.SessionModeImplement): domain.BranchBlockOff}); err != nil {
+		t.Fatal(err)
+	}
 	e.orch.SessionBranchGateURL = func(id string) string { return e.srv.URL + "/api/sessions/" + id + "/branch_gate" }
 	run := func(args ...string) {
 		t.Helper()

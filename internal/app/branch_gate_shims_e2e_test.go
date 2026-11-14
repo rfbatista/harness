@@ -12,6 +12,7 @@ import (
 
 	"operators-mcp/internal/application/orchestration"
 	"operators-mcp/internal/application/vshell"
+	"operators-mcp/internal/domain"
 )
 
 // The branch gate's git shim, run as a real process the way an agent's Bash
@@ -30,11 +31,32 @@ func startBranchGate(t *testing.T) *branchGate { return startBranchGateWith(t, "
 // the requests across a restart.
 func startBranchGateWith(t *testing.T, db string) *branchGate {
 	t.Helper()
+	return startBranchGateOn(t, db, domain.SessionModeImplement, domain.BranchBlockOff)
+}
+
+// startBlockedBranchGate is startBranchGate with the implement mode's branch
+// block as it is built in: on.
+func startBlockedBranchGate(t *testing.T) *branchGate {
+	t.Helper()
+	return startBranchGateOn(t, ":memory:", domain.SessionModeImplement, "")
+}
+
+// startBranchGateOn starts the session with its mode's branch block set to
+// block ("" leaves the key unset, so the built-in applies). The tests of the
+// branch request flow turn the block off: they exercise what happens when the
+// block does not refuse.
+func startBranchGateOn(t *testing.T, db string, mode domain.SessionMode, block string) *branchGate {
+	t.Helper()
 	bin := buildServer(t)
 	e := newShellE2EWith(t, db)
+	if block != "" {
+		if _, err := e.cat.Settings.UpdateSettings(map[string]string{domain.BranchBlockKey(mode): block}); err != nil {
+			t.Fatal(err)
+		}
+	}
 	e.orch.SessionBranchGateURL = func(id string) string { return e.srv.URL + "/api/sessions/" + id + "/branch_gate" }
 	g := &branchGate{shellE2E: e}
-	g.shimSession = e.startWithShims(e.task("Branch gate"), bin)
+	g.shimSession = e.startWithShimsMode(e.task("Branch gate"), bin, mode)
 	// A second branch, a tag's commit and a file to check out.
 	g.setup("branch other", "branch to-delete", "branch to-rename")
 	return g
@@ -152,6 +174,10 @@ func TestASessionWithNoVirtualShellHasTheGitShimToo(t *testing.T) {
 	e.orch.ShimBinary = bin
 	e.orch.Sandbox = nil // the test itself may run in a sandbox, which cannot nest
 	if _, err := e.cat.Settings.UpdateSettings(map[string]string{orchestration.SettingSandbox: "off"}); err != nil {
+		t.Fatal(err)
+	}
+	// This test is about the request flow, so the Default mode's block is off.
+	if _, err := e.cat.Settings.UpdateSettings(map[string]string{domain.BranchBlockKey(domain.SessionModeDefault): domain.BranchBlockOff}); err != nil {
 		t.Fatal(err)
 	}
 	// A headless session with no task has no virtual shell; its claude here

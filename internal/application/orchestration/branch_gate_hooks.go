@@ -6,6 +6,8 @@ import (
 
 	"github.com/rfbatista/llmkit"
 	"github.com/rfbatista/llmkit/claude"
+
+	"operators-mcp/internal/domain"
 )
 
 // The branch gate's asking hook and instruction (ADR 0069, contract "Harness
@@ -49,8 +51,27 @@ const branchGateInstruction = `# Branches
 - Force pushes and remote branch deletions are refused.
 `
 
+// branchGateBlockedInstruction is the instruction of a session whose mode has
+// the branch block on when it starts (ADR 0088). A later change of the setting
+// does not rewrite it: the refusal's message is what the agent can rely on.
+const branchGateBlockedInstruction = `# Branches
+
+- Stay on your session branch. Creating, switching and deleting branches is blocked: the harness refuses it at once with BRANCH_ACTION_BLOCKED, so do not try.
+- A rename waits for the person's approval, and so does a push. Run the git command as its own Bash command, so the harness can ask the person. It waits until the person answers.
+- An approval covers that one action only. If the person denies it, their note says why.
+- A push waits for the person's approval whatever the branch or the remote, your session branch included (ADR 0071).
+- Force pushes and remote branch deletions are refused.
+`
+
 // branchGateInstructionFile is the instruction every agent session gets,
-// delivered like the repository's instruction files (ADR 0057).
-func branchGateInstructionFile() llmkit.InstructionFile {
-	return llmkit.InstructionFile{Kind: llmkit.InstructionMemory, Path: BranchGateInstructionPath, Content: []byte(branchGateInstruction)}
+// delivered like the repository's instruction files (ADR 0057). Its text
+// follows the branch block of the session's mode at start.
+func (s *Service) branchGateInstructionFile(mode domain.SessionMode) llmkit.InstructionFile {
+	text := branchGateInstruction
+	if s.Settings != nil {
+		if blocked, _ := domain.BranchBlockedFor(mode, s.Settings.Setting); blocked {
+			text = branchGateBlockedInstruction
+		}
+	}
+	return llmkit.InstructionFile{Kind: llmkit.InstructionMemory, Path: BranchGateInstructionPath, Content: []byte(text)}
 }

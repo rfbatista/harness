@@ -44,9 +44,15 @@ func buildServer(t *testing.T) string {
 
 func (e *shellE2E) startWithShims(ticketID, bin string) shimSession {
 	e.t.Helper()
+	return e.startWithShimsMode(ticketID, bin, "implement")
+}
+
+// startWithShimsMode is startWithShims for a session of the given mode.
+func (e *shellE2E) startWithShimsMode(ticketID, bin string, mode domain.SessionMode) shimSession {
+	e.t.Helper()
 	e.orch.ShimBinary = bin
 	e.orch.SessionShellURL = func(id string) string { return e.srv.URL + "/api/sessions/" + id + "/shell" }
-	sess, spec, err := e.orch.StartInteractive(e.ctx, ports.InteractiveRequest{ProjectID: e.project, RepositoryID: e.repo, TicketID: ticketID, Mode: "implement"})
+	sess, spec, err := e.orch.StartInteractive(e.ctx, ports.InteractiveRequest{ProjectID: e.project, RepositoryID: e.repo, TicketID: ticketID, Mode: string(mode)})
 	if err != nil {
 		e.t.Fatal(err)
 	}
