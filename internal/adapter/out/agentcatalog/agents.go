@@ -8,6 +8,7 @@ import (
 	"strings"
 
 	"operators-mcp/internal/domain"
+	"operators-mcp/internal/infra/builtinskills"
 )
 
 func invalid(field, message string) error {
@@ -30,6 +31,13 @@ func freeName(name string, taken func(string) bool) string {
 func nameTaken(kind, name string, taken func(string) bool) error {
 	return domain.NewCatalogError("NAME_TAKEN", "a "+kind+" named "+name+" already exists",
 		map[string]any{"field": "name", "suggestion": freeName(name, taken)})
+}
+
+// skillNamed is whether an entry may name the skill: a catalog folder or a
+// built-in skill (ADR 0088).
+func (c *Catalog) skillNamed(name string) bool {
+	_, builtIn := builtinskills.Get(name)
+	return builtIn || c.skillExists(name)
 }
 
 func (c *Catalog) skillExists(name string) bool {
@@ -57,7 +65,7 @@ func (t *txn) checkEntries(field string, entries []string, bundles *node) error 
 		if !slugRe.MatchString(e) {
 			return invalid(field, "a skill name is lower-case letters, digits and dashes: "+e)
 		}
-		if !t.c.skillExists(e) {
+		if !t.c.skillNamed(e) {
 			unknown = append(unknown, e)
 		}
 	}

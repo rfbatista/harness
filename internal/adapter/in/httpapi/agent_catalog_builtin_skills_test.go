@@ -192,3 +192,45 @@ func TestBuiltInSkills_TheImportCopiesNoneIntoTheCatalogFolder(t *testing.T) {
 		t.Error("the import lost a catalog skill")
 	}
 }
+
+func TestBuiltInSkills_AnAgentOrABundleMayNameOneAndTheyAreCounted(t *testing.T) {
+	f := newCatalogFixture(t)
+	f.post("/api/save_catalog_bundle", map[string]any{"bundle": map[string]any{"name": "ops", "entries": []string{"task-run-app"}}}, 200)
+	f.post("/api/save_catalog_agent", map[string]any{"agent": map[string]any{
+		"name": "runner", "description": "Runs apps", "entries": []string{"task-run-app"},
+	}}, 200)
+	f.post("/api/save_catalog_agent", map[string]any{"agent": map[string]any{
+		"name": "via-bundle", "description": "Runs apps too", "entries": []string{"@ops"},
+	}}, 200)
+
+	cat := f.get("/api/get_agent_catalog", 200)
+	runner := byName(t, cat["agents"], "runner")
+	if got := strList(runner["resolved_skills"]); !reflect.DeepEqual(got, []string{"task-run-app"}) {
+		t.Errorf("resolved_skills = %v", got)
+	}
+	if len(list(runner["missing_skills"])) != 0 || len(problemCodes(runner)) != 0 {
+		t.Errorf("runner missing/problems = %v %v", runner["missing_skills"], runner["problems"])
+	}
+	if got := strList(byName(t, cat["agents"], "via-bundle")["resolved_skills"]); !reflect.DeepEqual(got, []string{"task-run-app"}) {
+		t.Errorf("via-bundle resolved_skills = %v", got)
+	}
+	run := byName(t, cat["skills"], "task-run-app")
+	if !reflect.DeepEqual(strList(run["agents"]), []string{"runner"}) || !reflect.DeepEqual(strList(run["bundles"]), []string{"ops"}) ||
+		run["agent_count"] != float64(2) {
+		t.Errorf("task-run-app agents/bundles/count = %v %v %v", run["agents"], run["bundles"], run["agent_count"])
+	}
+	one := f.get("/api/get_catalog_skill?name=task-run-app", 200)["skill"].(map[string]any)
+	if !reflect.DeepEqual(strList(one["agents"]), []string{"runner"}) || one["agent_count"] != float64(2) {
+		t.Errorf("get_catalog_skill agents/count = %v %v", one["agents"], one["agent_count"])
+	}
+}
+
+func TestBuiltInSkills_ANameThatIsNeitherIsStillAnUnknownReference(t *testing.T) {
+	f := newCatalogFixture(t)
+	got := f.post("/api/save_catalog_agent", map[string]any{"agent": map[string]any{
+		"name": "x", "description": "X", "entries": []string{"task-run-app", "ghost"},
+	}}, 400)
+	if got["code"] != "UNKNOWN_REFERENCE" || !reflect.DeepEqual(strList(got["names"]), []string{"ghost"}) {
+		t.Errorf("body = %v", got)
+	}
+}
