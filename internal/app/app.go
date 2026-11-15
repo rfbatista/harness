@@ -142,6 +142,7 @@ func New(cfg Config) *fx.App {
 		slog.Info("data dir", "dir", cfg.DataDir, "set by", cfg.DataDirSource, "db", cfg.DBPath)
 	}
 	return fx.New(
+		fx.StartTimeout(30*time.Second),
 		fx.StopTimeout(stopTimeout),
 		fx.Supply(cfg),
 		PersistenceModule,
