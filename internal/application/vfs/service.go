@@ -77,6 +77,9 @@ type Sources struct {
 	// Drafts is a design session's draft of its design system, which its
 	// shell shows writable; nil gives no session a draft.
 	Drafts ports.DesignDrafts
+	// InstructionDrafts is a task's instruction draft, which its shell shows
+	// writable; nil gives no task one.
+	InstructionDrafts ports.InstructionDrafts
 	// Settings holds "Agents move documents to project"; nil reads it as off.
 	Settings ports.SettingsReader
 }

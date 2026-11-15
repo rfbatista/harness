@@ -31,6 +31,7 @@ import (
 	"operators-mcp/internal/application/architecture"
 	"operators-mcp/internal/application/capabilities"
 	"operators-mcp/internal/application/designsystem"
+	"operators-mcp/internal/application/instructionproposal"
 	"operators-mcp/internal/application/projects"
 	"operators-mcp/internal/application/repoarch"
 	"operators-mcp/internal/application/settings"
@@ -59,15 +60,17 @@ type Deps struct {
 	// DesignExports keeps each repository's last design system export; nil
 	// disables the export.
 	DesignExports ports.DesignExportStore
-	Agents        ports.AgentRepository
-	Prompts       ports.PromptRepository
-	Skills        ports.SkillRepository
-	MCPServers    ports.MCPServerRepository
-	Tools         ports.ToolRepository
-	Settings      ports.SettingsRepository
-	Publisher     ports.SkillPublisher
-	PathMatcher   ports.PathMatcher
-	TreeLister    ports.TreeLister
+	// InstructionDrafts keeps tasks' instruction drafts; nil disables them.
+	InstructionDrafts ports.InstructionDraftStore
+	Agents            ports.AgentRepository
+	Prompts           ports.PromptRepository
+	Skills            ports.SkillRepository
+	MCPServers        ports.MCPServerRepository
+	Tools             ports.ToolRepository
+	Settings          ports.SettingsRepository
+	Publisher         ports.SkillPublisher
+	PathMatcher       ports.PathMatcher
+	TreeLister        ports.TreeLister
 	// RepositoryFinder lets projects discover git checkouts; nil disables it.
 	RepositoryFinder ports.RepositoryFinder
 	// EnvFiles and EnvFileIO keep repositories' env files; nil disables them.
@@ -91,9 +94,11 @@ type Catalog struct {
 	RepositoryArchitectures *repoarch.Service
 	// DesignSystems is nil without Deps.DesignRecords.
 	DesignSystems *designsystem.Service
-	Agents        *agents.Service
-	Capabilities  *capabilities.Service
-	Settings      *settings.Service
+	// InstructionProposals is nil without Deps.InstructionDrafts.
+	InstructionProposals *instructionproposal.Service
+	Agents               *agents.Service
+	Capabilities         *capabilities.Service
+	Settings             *settings.Service
 }
 
 // New builds the contexts, subscribes each to the events it reacts to, and
@@ -178,11 +183,16 @@ func New(d Deps) Catalog {
 		})
 	}
 
+	var instructions *instructionproposal.Service
+	if d.InstructionDrafts != nil {
+		instructions = instructionproposal.NewService(instructionproposal.Deps{Drafts: d.InstructionDrafts, Repositories: pr})
+	}
+
 	arch.Subscribe(bus)
 	ag.Subscribe(bus)
 	caps.Subscribe(bus)
 
-	return Catalog{Bus: bus, Projects: pr, Architecture: arch, RepositoryArchitectures: repoArch, DesignSystems: designs, Agents: ag, Capabilities: caps, Settings: st}
+	return Catalog{Bus: bus, Projects: pr, Architecture: arch, RepositoryArchitectures: repoArch, DesignSystems: designs, InstructionProposals: instructions, Agents: ag, Capabilities: caps, Settings: st}
 }
 
 // Tooling is the catalog as the built-in tool groups need it.

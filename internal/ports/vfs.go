@@ -25,8 +25,11 @@ type ShellFile struct {
 	UpdatedAt time.Time `json:"updated_at"`
 	// Repository names the repository of an architecture file.
 	Repository string `json:"repository,omitempty"`
-	// Writable says the session may write the file: only the files of a
-	// design session's draft are, and only those the harness does not generate.
+	// Skill names the skill folder of an instruction draft file.
+	Skill string `json:"skill,omitempty"`
+	// Writable says the session may write the file: the files of a design
+	// session's draft, those the harness does not generate, and the files of
+	// an instruction draft whose skill waits on no proposal.
 	Writable bool `json:"writable,omitempty"`
 }
 
@@ -47,6 +50,8 @@ const (
 	ShellDesignSystem = "design-system"
 	// ShellInstruction is one instruction file of a repository (ADR 0057).
 	ShellInstruction = "instruction"
+	// ShellInstructionDraft is one file of a task's instruction draft (ADR 0092).
+	ShellInstructionDraft = "instruction-draft"
 	// ShellRepositoryPrompt is one agent's repository prompt (ADR 0061).
 	ShellRepositoryPrompt = "repository-prompt"
 )
