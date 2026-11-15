@@ -1,6 +1,5 @@
 // The Models page, /models: the model each session mode starts with
-// (domain.ModeModels, ADR 0084). The two rows it still shows are the architect
-// and implement modes.
+// (domain.ModeModels, ADR 0084). One row per session mode.
 // The server paints each select at the stored model; the browser's modelTier
 // (web/src/modules/models) saves a change through /api/update_settings.
 
@@ -103,6 +102,10 @@ var modeRows = map[domain.SessionMode]struct{ Title, Lead string }{
 	domain.SessionModeDesign:       {"Design", "Sessions started in design mode: they publish components, images and videos to the Design tab."},
 	domain.SessionModeProduct:      {"Product", "Sessions started in product mode, such as feature brainstorms: they interview you and write the PRD."},
 	domain.SessionModeDesignSystem: {"Design system", "Sessions started in design-system mode: they work on the project design system."},
+	domain.SessionModeReview:       {"Reviewer", "Sessions started in review mode: they review a branch or pull request and write a Review with a verdict."},
+	domain.SessionModeTest:         {"Tester", "Sessions started in test mode: they write tests for a branch, run them and write a Test report."},
+	domain.SessionModeQA:           {"QA", "Sessions started in QA mode: they walk the use cases in the running application and publish screenshots and videos."},
+	domain.SessionModeOperate:      {"Operator", "Sessions started in operate mode: they run, configure and check the task's services, each change approved by you."},
 }
 
 // NewView reads each session mode's model (domain.ModeModels), one row per

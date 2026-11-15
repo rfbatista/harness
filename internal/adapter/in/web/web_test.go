@@ -583,6 +583,30 @@ func TestProjectSessionsPageListsTheFeatureBrainstorms(t *testing.T) {
 	}
 }
 
+func TestTheNewSessionFormOffersTheFourVerificationModesAfterProduct(t *testing.T) {
+	body := get(t, newTestHandler(t, board()), "/projects/p1/tasks/t-feed").Body.String()
+	var last = -1
+	for _, want := range []string{
+		`<option value="product" `,
+		`<option value="review" data-description="Reviews the branch it starts from, or a pull request, and writes a Review with approve or request changes">Reviewer</option>`,
+		`<option value="test" data-description="Writes tests for the branch it starts from on its own branch, runs them and writes a Test report">Tester</option>`,
+		`<option value="qa" data-description="Walks the use cases in the running application and publishes screenshots and videos to the Design tab">QA</option>`,
+		`<option value="operate" data-description="Runs, configures and checks the services for the task's branch, each change approved by you">Operator</option>`,
+	} {
+		i := strings.Index(body, want)
+		if i < 0 {
+			t.Fatalf("the New session form is missing %q", want)
+		}
+		if i < last {
+			t.Errorf("%q is out of order", want)
+		}
+		last = i
+	}
+	if !regexp.MustCompile(`data-mode-models="[^"]*&#34;review&#34;:&#34;opus&#34;`).MatchString(body) {
+		t.Error("the mode-to-model map lacks review: opus")
+	}
+}
+
 func TestNewSessionNeedsARepository(t *testing.T) {
 	w := board()
 	w.repos = nil

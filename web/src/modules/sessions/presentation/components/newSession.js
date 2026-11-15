@@ -297,6 +297,18 @@ export const newSession = ({ gateway, debounceMs = 300, location = globalThis.lo
   get product() {
     return this.mode === "product";
   },
+  get reviewing() {
+    return this.mode === "review";
+  },
+  get testing() {
+    return this.mode === "test";
+  },
+  get qa() {
+    return this.mode === "qa";
+  },
+  get operate() {
+    return this.mode === "operate";
+  },
   /** The form starts an architect over sessions the page selected. */
   get bringingUnder() {
     return this.bringUnder.length > 0;
@@ -322,6 +334,10 @@ export const newSession = ({ gateway, debounceMs = 300, location = globalThis.lo
     if (this.implement) return "Adds the task-implement-spec skill: it writes tickets for the architect to review, then implements them test first on its branch.";
     if (this.design) return "Adds the design skill: the agent publishes pages, images and videos as it works; they show live in the Design tab.";
     if (this.product) return "Adds the task-product skill: it interviews you, writes the PRD as a task document and creates one child task per piece of work, each with a brief. It never writes code.";
+    if (this.reviewing) return "Adds the task-review skill: it reviews the branch it starts from, or a pull request, and writes a Review with approve or request changes. Name the branch under check in Branch off.";
+    if (this.testing) return "Adds the task-test skill: it writes tests for the branch under check on its own branch, runs them and writes a Test report. Name the branch under check in Branch off.";
+    if (this.qa) return "Adds the task-qa skill: it walks the use cases in the running application and publishes screenshots and videos to the Design tab. Name the branch under check in Branch off.";
+    if (this.operate) return "Adds the task-operate skill: it runs, configures and checks the services for the task's branch, and each change waits for your approval.";
     return "Runs the agent as it is.";
   },
 

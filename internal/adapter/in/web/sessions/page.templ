@@ -920,6 +920,10 @@ templ newSessionForm(form NewSessionForm, lockedMode string) {
 							<option value="implement" data-description="Turns a spec into reviewed tickets, then implements them test first">Implement</option>
 							<option value="design" data-description="Publishes pages, images and videos as it works">Design</option>
 							<option value="product" data-description="Interviews you, writes the PRD on this task and creates one child task per piece of work, each with a brief">Product</option>
+							<option value="review" data-description="Reviews the branch it starts from, or a pull request, and writes a Review with approve or request changes">Reviewer</option>
+							<option value="test" data-description="Writes tests for the branch it starts from on its own branch, runs them and writes a Test report">Tester</option>
+							<option value="qa" data-description="Walks the use cases in the running application and publishes screenshots and videos to the Design tab">QA</option>
+							<option value="operate" data-description="Runs, configures and checks the services for the task's branch, each change approved by you">Operator</option>
 						</select>
 					</div>
 				} else {

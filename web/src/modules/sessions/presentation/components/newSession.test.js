@@ -20,7 +20,7 @@ const DEBOUNCE = 10;
 const pause = (ms = DEBOUNCE * 4) => new Promise((resolve) => setTimeout(resolve, ms));
 
 /** Every mode's model as the page renders it (contract: mode models, §2). */
-const MODE_MODELS = { "": "default", architect: "opus", implement: "sonnet", design: "default", product: "default", designsystem: "default" };
+const MODE_MODELS = { "": "default", architect: "opus", implement: "sonnet", design: "default", product: "default", designsystem: "default", review: "opus", test: "sonnet", qa: "sonnet", operate: "sonnet" };
 
 function setup({ defaultRepository = "r1", repositories = { r1: "p1", r2: "p1" }, branches = BRANCHES, modeModels = MODE_MODELS, lockedMode = "" } = {}) {
   const memory = memoryGateway({ projects: ["p1"], repositories, branches });
@@ -83,6 +83,39 @@ test("design mode tells the agent to publish as it goes", async () => {
   assert.ok(instance.modeHint.includes("publishes"), instance.modeHint);
   await instance.submit();
   assert.equal(dispatched[0].detail.session.mode, "design");
+});
+
+test("the verification modes start in their mode and the model picker follows them", async () => {
+  const { instance, dispatched } = setup();
+  await flush();
+  for (const [mode, model] of [["review", "opus"], ["test", "sonnet"], ["qa", "sonnet"], ["operate", "sonnet"]]) {
+    instance.mode = mode;
+    instance.followMode();
+    assert.equal(instance.model, model, mode);
+    assert.equal(instance.modelOverride, undefined, `${mode}: model is sent only when changed`);
+  }
+  instance.mode = "review";
+  instance.followMode();
+  instance.model = "haiku";
+  instance.modelPicked = true;
+  instance.mode = "qa";
+  instance.followMode();
+  assert.equal(instance.model, "haiku", "a pick sticks across modes");
+  await instance.submit();
+  assert.equal(dispatched[0].detail.session.mode, "qa");
+});
+
+test("the hint of review, test and qa names the base branch picker; operate's does not", async () => {
+  const { instance } = setup();
+  await flush();
+  for (const mode of ["review", "test", "qa"]) {
+    instance.mode = mode;
+    assert.ok(instance.modeHint.includes("Branch off"), `${mode}: ${instance.modeHint}`);
+    assert.ok(instance.modeHint.includes("branch under check"), `${mode}: ${instance.modeHint}`);
+  }
+  instance.mode = "operate";
+  assert.ok(!instance.modeHint.includes("Branch off"), instance.modeHint);
+  assert.ok(instance.modeHint.includes("approval"), instance.modeHint);
 });
 
 test("a refused start shows the coded error and keeps the draft", async () => {

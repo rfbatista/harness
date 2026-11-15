@@ -21,7 +21,7 @@ import (
 	"operators-mcp/internal/domain"
 )
 
-// The "Branch block" section of the Server page, end to end: six switches,
+// The "Branch block" section of the Server page, end to end: ten switches,
 // all on while nothing is stored; the person turns Implement off, the setting
 // is stored as off, and a reload shows it still off.
 func TestBranchBlockIsSwitchedPerModeOnTheServerPage_EndToEnd(t *testing.T) {
@@ -45,9 +45,9 @@ func TestBranchBlockIsSwitchedPerModeOnTheServerPage_EndToEnd(t *testing.T) {
 	const all = `[...document.querySelectorAll('input[data-branch-block]')]`
 	implement := `document.querySelector('input[data-setting="` + domain.BranchBlockKey(domain.SessionModeImplement) + `"]')`
 	b := newBrowser(t)
-	b.run("six switches, all on while nothing is stored",
+	b.run("ten switches, all on while nothing is stored",
 		chromedp.Navigate(srv.URL+"/server"),
-		waitUntil(all+`.length === 6 && `+all+`.every(e => e.checked)`),
+		waitUntil(all+`.length === 10 && `+all+`.every(e => e.checked)`),
 		waitUntil(`document.body.textContent.includes('Branch block')`),
 		waitUntil(`document.body.textContent.includes('stay on their session branch')`),
 		waitUntil(all+`.map(e => e.dataset.setting).join() === `+jsList(branchBlockKeys())),
@@ -59,15 +59,15 @@ func TestBranchBlockIsSwitchedPerModeOnTheServerPage_EndToEnd(t *testing.T) {
 	if got := cat.Settings.Setting(domain.BranchBlockKey(domain.SessionModeImplement)); got != "off" {
 		t.Errorf("stored Implement setting = %q, want off", got)
 	}
-	for _, m := range []domain.SessionMode{domain.SessionModeDefault, domain.SessionModeArchitect, domain.SessionModeDesign, domain.SessionModeProduct, domain.SessionModeDesignSystem} {
+	for _, m := range []domain.SessionMode{domain.SessionModeDefault, domain.SessionModeArchitect, domain.SessionModeDesign, domain.SessionModeProduct, domain.SessionModeDesignSystem, domain.SessionModeReview, domain.SessionModeTest, domain.SessionModeQA, domain.SessionModeOperate} {
 		if got := cat.Settings.Setting(domain.BranchBlockKey(m)); got != "" {
 			t.Errorf("stored %s setting = %q, want unset", m, got)
 		}
 	}
 	b.run("after a reload Implement is still off and the rest on",
 		chromedp.Reload(),
-		waitUntil(all+`.length === 6`),
-		waitUntil(implement+`.checked === false && `+all+`.filter(e => e.checked).length === 5`),
+		waitUntil(all+`.length === 10`),
+		waitUntil(implement+`.checked === false && `+all+`.filter(e => e.checked).length === 9`),
 	)
 	if e := b.jsErrors(); len(e) > 0 {
 		t.Errorf("JavaScript errors:\n%s", strings.Join(e, "\n"))
@@ -124,8 +124,8 @@ func TestARefusedBranchBlockSaveRestoresTheSwitch_EndToEnd(t *testing.T) {
 	b := newBrowser(t)
 	b.run("each switch is named by its mode and Branch block",
 		chromedp.Navigate(srv.URL+"/server"),
-		waitUntil(all+`.length === 6`),
-		waitUntil(all+`.map(e => e.getAttribute('aria-label')).join() === 'Default Branch block,Architect Branch block,Implement Branch block,Design Branch block,Product Branch block,Design system Branch block'`),
+		waitUntil(all+`.length === 10`),
+		waitUntil(all+`.map(e => e.getAttribute('aria-label')).join() === 'Default Branch block,Architect Branch block,Implement Branch block,Design Branch block,Product Branch block,Design system Branch block,Reviewer Branch block,Tester Branch block,QA Branch block,Operator Branch block'`),
 	)
 	refuse.Store(true)
 	b.run("a refused save shows the server's message and restores the switch",
