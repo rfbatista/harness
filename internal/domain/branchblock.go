@@ -77,8 +77,8 @@ func BranchBlocks(read func(key string) string) []BranchBlock {
 }
 
 // BranchBlockedFor says whether the branch block is on for a session of mode,
-// and the name the refusal gives the mode. A mode that has no row
-// is Default.
+// and the name the refusal gives the mode. A mode that is not in the mode
+// list (modeModelModes) is Default.
 func BranchBlockedFor(mode SessionMode, read func(key string) string) (blocked bool, name string) {
 	if !slices.Contains(modeModelModes, mode) {
 		mode = SessionModeDefault

@@ -168,9 +168,10 @@ func modePrompt(mode domain.SessionMode, tk *domain.Ticket, project *domain.Proj
 			"(`worktree: \"branch:<name>\"`) unless your prompt names another place. Set the variables the tests need as run overrides, " +
 			"never in the repository. After each start or restart, when the architect asks, and before you report done, check the " +
 			"service: its status, the tail of its log, and a request to the URL your prompt names or the service's port; a service that " +
-			"exited or failed is reported as blocked at once, with the log's decisive line. When your prompt carries the person's " +
-			"request to seed and run the task's application, follow task-run-app. " +
-			verificationReport(role, "the service names, where each runs (branch and commit) and its URLs", "the service names, where each runs (branch and commit) and its URLs") +
+			"exited or failed is a status_report with status blocked at once (a task comment when you have no architect), with the " +
+			"log's decisive line. When your prompt carries the person's request to seed and run the task's application, follow " +
+			"task-run-app and name its Seed document in your report. " +
+			verificationReport(role, operateResult, operateResult) +
 			" Write no code. Never change the task status."
 	default:
 		return typed
@@ -187,11 +188,14 @@ func modePrompt(mode domain.SessionMode, tk *domain.Ticket, project *domain.Proj
 	return b.String()
 }
 
+// operateResult is what an Operator reports, to its architect or in a comment.
+const operateResult = "the service names, where each runs (branch and commit) and its URLs"
+
 // verificationReport is the line of a verification mode's opening that says
 // how it reports: a delegate to its architect, a peer in a task comment.
 func verificationReport(role domain.SessionRole, delegate, peer string) string {
 	if role == domain.RoleDelegate {
-		return "Report with message_architect kind status_report, status done (status blocked when you cannot go on), with " + delegate + "."
+		return "Report with message_architect kind status_report, status done, with " + delegate + "."
 	}
 	return "When you are done, sum up in a task comment (a file in task/comments/) with " + peer + "; no architect reads your report."
 }
