@@ -152,3 +152,31 @@ func TestStartInteractive_VerificationModesNeedATaskAndRefuseADesignSystem(t *te
 		}
 	}
 }
+
+// The architect's skill and brief tell it to verify the work with the four
+// modes, and the opening no longer has it run the application itself.
+func TestStartInteractive_ArchitectVerifiesWithTheFourModes(t *testing.T) {
+	svc, _ := newInteractiveService(t)
+	svc.Roles = &fakeRoles{}
+	_, launch := startInteractive(t, svc, InteractiveRequest{Mode: "architect"})
+	body := pluginSkill(t, launch, "task-architecture")
+	coordinate, verify := strings.Index(body, "**Coordinate.**"), strings.Index(body, "**Verify.**")
+	if coordinate < 0 || verify < coordinate {
+		t.Errorf("the Verify step does not follow Coordinate")
+	}
+	for _, want := range []string{"Reviewer", "Tester", "Operator", "QA", "`base_branch`", "changes_requested", "merge_session_branch",
+		"task-run-app", "Do not run services yourself", "\"Verification\"", "Review, Test report and QA documents"} {
+		if !strings.Contains(body, want) {
+			t.Errorf("task-architecture SKILL.md lacks %q", want)
+		}
+	}
+	brief := briefOf(t, launch)
+	for _, want := range []string{"review", "test", "operate", "qa", "Verify step"} {
+		if !strings.Contains(brief, want) {
+			t.Errorf("architect brief lacks %q", want)
+		}
+	}
+	if strings.Contains(launch.Spec.Prompt, "task-run-app") || strings.Contains(strings.ToLower(launch.Spec.Prompt), "run the app") {
+		t.Errorf("architect opening tells it to run the app itself: %q", launch.Spec.Prompt)
+	}
+}

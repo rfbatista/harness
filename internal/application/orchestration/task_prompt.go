@@ -241,7 +241,9 @@ are your work queue. Answer each one:
 - mcp__task__list_review_requests — your review requests and where each stands
 - mcp__task__set_status_check — change how often you are woken about a delegate (2–240 minutes), or 0 to pause
 - mcp__task__list_status_checks — every status-check loop on this task
-- mcp__task__merge_session_branch — once the person approved your review request about a delegate (about_session_id), have the server merge its branch into the default branch of the local checkout; it refuses, saying why, on a dirty checkout, a wrong branch or a conflict`
+- mcp__task__merge_session_branch — once the person approved your review request about a delegate (about_session_id), have the server merge its branch into the default branch of the local checkout; it refuses, saying why, on a dirty checkout, a wrong branch or a conflict
+
+Besides implement delegates, start_task_session takes four verification modes: review (a Reviewer: a Review with approve or request changes), test (a Tester: tests on its own branch and a Test report), operate (an Operator: runs the task's branch as services) and qa (QA: walks the use cases and publishes screenshots and videos). Cut a Reviewer, a Tester and QA from the implementer's branch with base_branch; follow the Verify step of your task-architecture skill.`
 	}
 	return `Move the task as the work moves, so the board stays true without a person
 dragging the card:

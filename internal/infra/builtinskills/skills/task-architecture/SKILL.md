@@ -150,6 +150,40 @@ navigate it.
    **Coordinating Delegates**): review each delegate's tickets before it writes
    code, and its branch when it is done. Check `list_task_sessions` before
    telling anyone the work is underway or done.
+11. **Verify.** Before you ask the person for review, check the work with the
+    verification modes (see **Verifying the Work**), then ask for review with
+    the Review, Test report and QA documents attached.
+
+## Verifying the Work
+
+You spawn four kinds of verification session with `start_task_session`. Each
+is a delegate of yours and reports to you like one. `base_branch` is the branch
+under check, the implementer's `agent/<…>` branch, so the session's worktree
+holds that code.
+
+| Mode | Spawn it | It gives you |
+|---|---|---|
+| `review` (Reviewer) | on the implementer's branch | a `Review: <branch>` document ending in the verdict `approve` or `request changes` |
+| `test` (Tester) | on the implementer's branch | tests committed on its own branch and a `Test report: <branch>` document |
+| `operate` (Operator) | from the default branch; it runs branches in the service worktree | services running the task's branch, with their places and URLs |
+| `qa` (QA) | on the implementer's branch, with the use cases from the specs' user stories in the prompt and the services' URLs | screenshots and videos in `task/designs/` and a `QA: <task title>` document |
+
+1. After an implement delegate reports done on a branch, spawn a Reviewer and a
+   Tester on that branch.
+2. On `request changes`, carry the findings to the implementer with
+   `reply_to_session` (verdict `changes_requested`). When it reports done
+   again, spawn a new Reviewer.
+3. Once the Tester reports done and its report is sound, approve it and merge
+   its branch into the implementer's branch with `merge_session_branch` (its
+   base) before anything else merges.
+4. For work with a user-facing surface, spawn an Operator to run the branch,
+   then a QA on the services it reports.
+5. When the person asks you to run, set up or seed the task's application,
+   spawn an Operator with that request in the prompt. It follows
+   `task-run-app`. Do not run services yourself.
+6. Ask the person for review only after these have reported. Attach the
+   Review, Test report and QA documents and the QA artifacts. Note a skipped
+   step under "Verification" in the overview document, with the reason.
 
 ## Document Formats
 
