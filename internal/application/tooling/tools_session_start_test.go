@@ -188,6 +188,32 @@ func TestStartTaskSession_OffersDesignMode(t *testing.T) {
 	}
 }
 
+// The architect spawns the verification modes (ADR 0090): the tool offers each
+// of the four, describes it, and passes it through.
+func TestStartTaskSession_OffersTheVerificationModes(t *testing.T) {
+	var schema string
+	for _, tl := range SessionTaskTools(nil, nil, nil, nil, PeerStarter{}, ArtifactTooling{}, nil, NotificationTooling{}) {
+		if tl.Name == "start_task_session" {
+			b, _ := json.Marshal(tl.InputSchema)
+			schema = string(b)
+		}
+	}
+	for mode, meaning := range map[string]string{
+		"review": "Reviewer", "test": "Tester", "qa": "QA", "operate": "Operator",
+	} {
+		start, starter, _ := startFixture(t, false)
+		if _, err := start(map[string]any{"prompt": "check the branch", "mode": mode}); err != nil {
+			t.Fatalf("mode %q: %v", mode, err)
+		}
+		if got := starter.got[0].Mode; got != mode {
+			t.Errorf("mode = %q, want %q", got, mode)
+		}
+		if !strings.Contains(schema, `"`+mode+`"`) || !strings.Contains(schema, meaning) {
+			t.Errorf("start_task_session schema does not offer %s as %s: %s", mode, meaning, schema)
+		}
+	}
+}
+
 // The architect hands each spec to a delegate in implement mode.
 func TestStartTaskSession_OffersImplementMode(t *testing.T) {
 	start, starter, _ := startFixture(t, false)
@@ -284,7 +310,7 @@ func TestStartTaskSession_OffersProductMode(t *testing.T) {
 // terminal host, in whatever mode: the kind a restart interrupts and a resume
 // brings back (ADR 0082).
 func TestStartTaskSession_EveryModeStartsAServerRunSession(t *testing.T) {
-	for _, mode := range []string{"", "architect", "product", "implement", "design"} {
+	for _, mode := range []string{"", "architect", "product", "implement", "design", "review", "test", "qa", "operate"} {
 		start, starter, _ := startFixture(t, false)
 		if _, err := start(map[string]any{"prompt": "go", "mode": mode}); err != nil {
 			t.Fatalf("mode %q: %v", mode, err)
