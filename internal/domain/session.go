@@ -111,6 +111,10 @@ type Session struct {
 	// moved when it is resumed (the rules it starts under); nil for sessions
 	// from before the sandbox existed.
 	Sandbox *SandboxFacts `json:"sandbox,omitempty"`
+	// WorktreeClearedAt is when Clear worktrees removed the session's worktree
+	// (ADR 0089); nil while it is on record. A cleared session keeps its
+	// Branch and has no WorkspaceID.
+	WorktreeClearedAt *time.Time `json:"worktree_cleared_at,omitempty"`
 	// LastMerge is the result of the newest attempt to merge the session's
 	// branch into its repository's default branch (the merged commit, or the
 	// refusal and its reason); nil before any attempt.

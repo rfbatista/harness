@@ -423,6 +423,8 @@ func (s *Service) resumeBlock(sess *domain.Session) error {
 		return &domain.StructuredError{Code: "SESSION_NOT_INTERACTIVE", Message: "session is not interactive"}
 	case !sess.Status.IsTerminal():
 		return &domain.StructuredError{Code: "SESSION_ALREADY_RUNNING", Message: "session is still running"}
+	case sess.WorktreeClearedAt != nil:
+		return &domain.StructuredError{Code: "WORKTREE_CLEARED", Message: "this session's worktree was cleared, so it cannot be resumed; its commits are on branch " + sess.Branch}
 	case s.Transcripts != nil:
 		return s.Transcripts.CanResume(sess.WorkingDir, claudeID(sess))
 	}

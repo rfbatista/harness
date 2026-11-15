@@ -53,6 +53,9 @@ func (h Handler) Session(w http.ResponseWriter, r *http.Request) error {
 	if task.ProjectID != project.ID || sess.ProjectID != project.ID || sess.TicketID != task.ID {
 		return errs.Newf("SESSION_NOT_FOUND", "session %s is not on this task", sess.ID)
 	}
+	if sess.WorktreeClearedAt != nil {
+		return errs.Newf("WORKTREE_CLEARED", "this session's worktree was cleared, so it has no history view: its commits are on branch %s", sess.Branch)
+	}
 	if sess.WorkspaceID == "" {
 		return errs.Newf("WORKSPACE_NOT_FOUND", "this session has no worktree: it was not started on a repository")
 	}

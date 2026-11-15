@@ -130,6 +130,18 @@ export function memoryTasks({ projects = [], tasks = [], sessions = [], document
       return restored;
     },
 
+    async previewArchivedWorktrees({ taskId }) {
+      const task = taskId ? store.get(taskId) : null;
+      if (taskId && !task) throw new StructuredError(Codes.TICKET_NOT_FOUND, "ticket not found", 404);
+      if (task && !task.archivedAt) throw new StructuredError(Codes.TASK_NOT_ARCHIVED, "task is not archived", 409);
+      return { worktrees: 0, dirty: 0, running: 0 };
+    },
+
+    async clearArchivedWorktrees(scope) {
+      await gateway.previewArchivedWorktrees(scope);
+      return { cleared: 0, skipped: [] };
+    },
+
     async deleteTask(id) {
       if (!store.delete(id)) throw new StructuredError(Codes.TICKET_NOT_FOUND, "ticket not found", 404);
     },

@@ -618,3 +618,22 @@ func TestReadingASingleTaskRunsNoGitOnTheRequest(t *testing.T) {
 	}
 	f.announced(n, tk.ID, domain.MergeState{State: domain.MergeMerged, Merged: 1, Total: 1})
 }
+
+// A session whose worktree was cleared has no workspace on record, but its
+// branch still counts: a restored task keeps its merge state (ADR 0089).
+func TestAClearedSessionsBranchStillCountsTowardTheTasksMergeState(t *testing.T) {
+	f := newMergeFixture(t, "main")
+	id := f.task(domain.TicketStatusReview)
+	f.session(id, "feat", "main", 1)
+	f.session(id, "other", "main", 1)
+	f.merge("feat")
+	for _, branch := range []string{"feat", "other"} {
+		if err := sqlite.NewWorkspaceRepository(f.db).Delete(f.wsIDs[branch]); err != nil {
+			t.Fatal(err)
+		}
+		if err := sqlite.NewSessionRepository(f.db).UpdateWorktreeCleared(f.sessIDs[branch], time.Now()); err != nil {
+			t.Fatal(err)
+		}
+	}
+	wantMerge(t, f.read(id), domain.MergeState{State: domain.MergePartial, Merged: 1, Total: 2})
+}

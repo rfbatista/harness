@@ -138,6 +138,9 @@ type SessionRepository interface {
 	UpdateSandbox(id string, facts domain.SandboxFacts) error
 	// UpdateMerge records how the newest merge of the session's branch ended.
 	UpdateMerge(id string, r domain.MergeResult) error
+	// UpdateWorktreeCleared records that the session's worktree was removed
+	// at at: it no longer has a workspace on record and keeps its branch.
+	UpdateWorktreeCleared(id string, at time.Time) error
 	// UpdateTokenSavers records the session's active savers and those on
 	// but not installed; a resume moves a saver removed since the start.
 	UpdateTokenSavers(id string, active, notInstalled []domain.TokenSaver) error

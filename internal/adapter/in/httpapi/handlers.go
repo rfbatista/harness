@@ -63,6 +63,9 @@ type Services struct {
 	// Merges merges a session's branch into its repository's default branch
 	// in the local checkout; nil answers 503.
 	Merges ports.BranchMerger
+	// ArchivedWorktrees is the Archived view's Clear worktrees action; nil
+	// answers 503.
+	ArchivedWorktrees ports.ArchivedWorktrees
 	// BranchNames checks a name typed for a session's branch; nil answers
 	// 503.
 	BranchNames ports.BranchNameChecker
@@ -185,6 +188,7 @@ type Handler struct {
 	pullRequests   ports.PullRequests
 	prBases        ports.PullRequestBases
 	merges         ports.BranchMerger
+	archivedTrees  ports.ArchivedWorktrees
 	branchNames    ports.BranchNameChecker
 	notifications  ports.Notifications
 	interrupted    ports.InterruptedResumer
@@ -259,6 +263,7 @@ func NewHandler(s Services) *Handler {
 		pullRequests:    s.PullRequests,
 		prBases:         s.PullRequestBases,
 		merges:          s.Merges,
+		archivedTrees:   s.ArchivedWorktrees,
 		branchNames:     s.BranchNames,
 		repoArch:        s.RepositoryArchitectures,
 		designs:         s.DesignSystems,

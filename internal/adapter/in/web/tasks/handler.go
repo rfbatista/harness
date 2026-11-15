@@ -193,13 +193,23 @@ func (h Handler) Archived(w http.ResponseWriter, r *http.Request) error {
 			return err
 		}
 	}
+	var sessions []*domain.Session
+	if len(list) > 0 {
+		ids := make([]string, len(list))
+		for i, t := range list {
+			ids[i] = t.ID
+		}
+		if sessions, err = h.Sessions.List(ctx, ports.SessionFilter{ProjectID: project.ID, TicketIDs: ids}); err != nil {
+			return err
+		}
+	}
 	frame, err := h.Layout(ctx, "Archived · "+project.Name, project.ID, "")
 	if err != nil {
 		return err
 	}
 	frame.Live = true
 	frame.Rail.ReportsFeed = true
-	return h.Render(w, r, http.StatusOK, ArchivedPage(frame, project.ID, project.Name, BuildArchived(project.ID, list)))
+	return h.Render(w, r, http.StatusOK, ArchivedPage(frame, project.ID, project.Name, BuildArchived(project.ID, list, sessions)))
 }
 
 // New serves GET /projects/{project}/tasks/new: the new-task form.
@@ -453,6 +463,9 @@ func (h Handler) codePaint(ctx context.Context, rt code.Route, list []*domain.Se
 	}
 	if session == nil {
 		return nil, errs.Newf("SESSION_NOT_FOUND", "session %s is not on this task", rt.SessionID)
+	}
+	if session.WorktreeClearedAt != nil {
+		return nil, errs.Newf("WORKTREE_CLEARED", "this session's worktree was cleared, so it has no code view: its commits are on branch %s", session.Branch)
 	}
 	if session.WorkspaceID == "" {
 		return nil, errs.Newf("WORKSPACE_NOT_FOUND", "session %s has no worktree", rt.SessionID)

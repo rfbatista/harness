@@ -230,3 +230,41 @@ func TestResumeInteractive_KeepsTheSession(t *testing.T) {
 		t.Fatalf("resumed %+v\nstarted %+v", got, sess)
 	}
 }
+
+// A session whose worktree was cleared is refused before its transcript is
+// looked for, naming the branch that still holds its commits (ADR 0089).
+func TestResumability_ClearedWorktree(t *testing.T) {
+	svc, _ := newInteractiveService(t)
+	tr := &countingTranscripts{}
+	svc.Transcripts = tr
+	at := time.Now()
+	err := svc.resumeBlock(&domain.Session{Interactive: true, Status: domain.SessionDone, Branch: "agent/feature", WorktreeClearedAt: &at})
+	se, ok := err.(*domain.StructuredError)
+	if !ok || se.Code != "WORKTREE_CLEARED" || !strings.Contains(se.Message, "agent/feature") {
+		t.Fatalf("resumeBlock = %v", err)
+	}
+	if tr.calls.Load() != 0 {
+		t.Error("the transcript was checked for a cleared session")
+	}
+}
+
+func TestTaskWorktrees_LeavesOutClearedSessions(t *testing.T) {
+	svc, _ := newInteractiveService(t)
+	a, _ := startInteractive(t, svc, InteractiveRequest{})
+	b, _ := startInteractive(t, svc, InteractiveRequest{})
+	if err := svc.sessions.UpdateWorktreeCleared(b.ID, time.Now()); err != nil {
+		t.Fatal(err)
+	}
+	list, err := svc.TaskWorktrees(context.Background(), a.ID, "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(list.Worktrees) != 1 || list.Worktrees[0].SessionID != a.ID {
+		t.Fatalf("worktrees = %+v, want only the live session's", list.Worktrees)
+	}
+	for _, w := range list.Worktrees {
+		if w.SessionID == b.ID {
+			t.Fatalf("a cleared session's worktree is listed: %+v", list.Worktrees)
+		}
+	}
+}

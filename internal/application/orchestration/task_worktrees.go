@@ -32,7 +32,7 @@ func (s *Service) TaskWorktrees(ctx context.Context, sessionID, path string) (*p
 		out.Owner = s.worktreeOwner(ctx, sess, out.Root, path)
 	}
 	for _, other := range s.sessions.List(ctx, ports.SessionFilter{TicketID: sess.TicketID}) {
-		if other.RepositoryID != sess.RepositoryID || other.WorkingDir == "" {
+		if other.RepositoryID != sess.RepositoryID || other.WorkingDir == "" || other.WorktreeClearedAt != nil {
 			continue
 		}
 		out.Worktrees = append(out.Worktrees, ports.TaskWorktree{

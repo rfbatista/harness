@@ -1322,6 +1322,7 @@ var WorkspacesModule = fx.Module("workspaces",
 		newWorkspacesService,
 		newPullRequestsService,
 		newMergesService,
+		newArchivedWorktrees,
 		newBranchNamesService,
 		newBaseBranches,
 		newCodeBrowser,
@@ -1482,6 +1483,13 @@ func newMergesService(
 	states *workspaces.MergeStates,
 ) *workspaces.Merges {
 	return workspaces.NewMerges(workspaces.MergeDeps{Sessions: sessions, Workspaces: ws, Repositories: repos, Git: git, Announce: orch, States: states})
+}
+
+// newArchivedWorktrees is the person's Clear worktrees action: it removes the
+// worktrees of archived tasks' sessions the way session deletion does, and
+// announces each cleared session on the orchestration's project feed.
+func newArchivedWorktrees(projects ports.ProjectRepository, tickets ports.TicketRepository, sessions ports.SessionRepository, ws ports.WorkspaceRepository, svc *workspaces.Service, status ports.GitWorktreeReader, orch *orchestration.Service) *workspaces.ArchivedWorktrees {
+	return workspaces.NewArchivedWorktrees(workspaces.ArchivedWorktreesDeps{Projects: projects, Tickets: tickets, Sessions: sessions, Workspaces: ws, Remover: svc, Status: status, Announce: orch})
 }
 
 // newBranchNamesService checks the names a person types for a session's

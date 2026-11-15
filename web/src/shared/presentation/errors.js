@@ -21,6 +21,8 @@ const NEXT_STEP = {
   [Codes.TICKET_NOT_FOUND]: "it was deleted; pick a task on the rail",
   [Codes.TASK_NOT_DONE]: "only a done task can be archived; move it to Done first",
   [Codes.TASK_ARCHIVED]: "it is archived; restore it from Archived first",
+  [Codes.TASK_NOT_ARCHIVED]: "only an archived task's worktrees can be cleared; reload the page",
+  [Codes.WORKTREE_CLEARED]: "its worktree was cleared; its commits are on its branch",
   [Codes.FEATURE_HAS_OPEN_CHILDREN]: "a feature is archived only when every task in it is done",
   [Codes.FEATURE_ARCHIVED]: "restore the feature first; its tasks come back with it",
   [Codes.TICKET_PARENT_INVALID]: "a parent is a top-level task of the same project",

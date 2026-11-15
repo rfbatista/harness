@@ -72,6 +72,18 @@ export function tasksGateway(api) {
       return { id: d.id, version: d.updated_at, scope: d.scope };
     },
 
+    async previewArchivedWorktrees({ projectId, taskId }) {
+      const body = await api.get("/archived_worktrees", taskId ? { task_id: taskId } : { project_id: projectId });
+      for (const k of ["worktrees", "dirty", "running"]) if (typeof body?.[k] !== "number") bad(`expected {worktrees, dirty, running}`);
+      return { worktrees: body.worktrees, dirty: body.dirty, running: body.running };
+    },
+
+    async clearArchivedWorktrees({ projectId, taskId }) {
+      const body = await api.post("/clear_archived_worktrees", taskId ? { task_id: taskId } : { project_id: projectId });
+      if (typeof body?.cleared !== "number" || !Array.isArray(body.skipped)) bad("expected {cleared, skipped: [...]}");
+      return { cleared: body.cleared, skipped: body.skipped };
+    },
+
     async countSessions(projectId, taskId) {
       const body = await api.get("/sessions", { project_id: projectId, ticket_id: taskId });
       const sessions = Array.isArray(body?.sessions) ? body.sessions : [];

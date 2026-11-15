@@ -108,6 +108,11 @@ test("feed lines become upserts or deletions", () => {
   assert.throws(() => toChange({ artifact: { id: "a1" }, deleted: true }), Codes.BAD_RESPONSE);
 });
 
+test("a session carries when its worktree was cleared", () => {
+  assert.equal(toSession(wire).worktreeClearedAt, null);
+  assert.equal(toSession({ ...wire, worktree_cleared_at: "2026-11-01T10:00:00Z" }).worktreeClearedAt.toISOString(), "2026-11-01T10:00:00.000Z");
+});
+
 test("a session says whether it can be resumed, and why not", () => {
   const ended = toSession({ ...wire, status: "stopped", resumable: true, resume_blocked: "" });
   assert.deepEqual([ended.resumable, ended.resumeBlocked], [true, ""]);

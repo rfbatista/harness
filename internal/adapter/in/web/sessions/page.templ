@@ -708,6 +708,9 @@ templ liveRows() {
 							<template x-if="row.unsandboxed">
 								<span class="[ tag ]" data-kind="warn">unsandboxed</span>
 							</template>
+							<template x-if="row.worktreeCleared">
+								<span class="[ tag ]" data-worktree-cleared title="Its worktree was cleared from the Archived view; its commits stay on its branch">worktree cleared</span>
+							</template>
 							<template x-if="row.commitCheckOff">
 								<span class="[ tag ]" data-kind="warn" data-commit-check-off x-bind:title="row.commitCheckOff">Commit check off</span>
 							</template>

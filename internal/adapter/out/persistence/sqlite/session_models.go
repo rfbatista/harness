@@ -68,6 +68,10 @@ type SessionModel struct {
 	MergeMethod string `gorm:"column:merge_method"`
 	SquashedTip string `gorm:"column:squashed_tip"`
 
+	// WorktreeClearedAtMs is when the session's worktree was cleared (ms); 0
+	// is never.
+	WorktreeClearedAtMs int64 `gorm:"column:worktree_cleared_at_ms"`
+
 	// InterruptedAtMs is the interrupted mark (ms); 0 is none.
 	InterruptedAtMs int64 `gorm:"column:interrupted_at_ms"`
 }
@@ -143,7 +147,16 @@ func (m *SessionModel) ToDomain() *domain.Session {
 		UpdatedAt:                time.UnixMilli(m.UpdatedAt),
 		StatusSince:              m.statusSince(),
 		InterruptedAt:            m.interruptedAt(),
+		WorktreeClearedAt:        m.worktreeClearedAt(),
 	}
+}
+
+func (m *SessionModel) worktreeClearedAt() *time.Time {
+	if m.WorktreeClearedAtMs == 0 {
+		return nil
+	}
+	at := time.UnixMilli(m.WorktreeClearedAtMs)
+	return &at
 }
 
 // interruptedAt is the mark a stopped session carries. The mark is set before

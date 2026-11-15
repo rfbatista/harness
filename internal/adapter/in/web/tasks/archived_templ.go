@@ -80,20 +80,20 @@ func ArchivedPage(f shell.Frame, projectID, projectName string, a Archived) temp
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
-			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 3, " /</a><h1>Archived</h1><div class=\"[ actions ]\"><a class=\"[ button ]\" data-variant=\"ghost\" data-size=\"sm\" href=\"")
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 3, " /</a><h1>Archived</h1><div class=\"[ actions ]\"><button type=\"button\" class=\"[ button ]\" data-variant=\"ghost\" data-size=\"sm\" data-clear-all x-bind:disabled=\"noClearable\" x-on:click=\"askClearAll\">Clear worktrees</button> <a class=\"[ button ]\" data-variant=\"ghost\" data-size=\"sm\" href=\"")
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
 			var templ_7745c5c3_Var5 templ.SafeURL
 			templ_7745c5c3_Var5, templ_7745c5c3_Err = templ.JoinURLErrs(templ.SafeURL("/projects/" + projectID))
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `tasks/archived.templ`, Line: 20, Col: 109}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `tasks/archived.templ`, Line: 21, Col: 109}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var5))
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
-			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 4, "\">Back to the board</a></div></header><p class=\"[ visually-hidden ]\" role=\"status\" aria-live=\"polite\" x-text=\"announcement\"></p><div data-scroll><div x-ignore data-ssr>")
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 4, "\">Back to the board</a></div></header><div class=\"[ confirm-strip ]\" data-confirm=\"clear-worktrees\" data-tone=\"danger\" role=\"group\" x-show=\"clearOpen\" x-on:keydown.escape=\"closeClear\"><h3 x-text=\"strip.title\"></h3><template x-for=\"line in strip.lines\"><p x-text=\"line\"></p></template><template x-if=\"stripHasError\"><p class=\"[ row-error ]\"><span x-text=\"strip.error.message\"></span><span class=\"[ code ]\"><span x-text=\"strip.error.code\"></span> · <span x-text=\"strip.error.next\"></span></span></p></template><div class=\"[ actions ]\"><button type=\"button\" class=\"[ button ]\" data-size=\"sm\" data-cancel x-on:click=\"closeClear\">Close</button> <button type=\"button\" class=\"[ button ]\" data-variant=\"danger\" data-size=\"sm\" data-confirm-clear x-bind:disabled=\"stripCannotConfirm\" x-on:click=\"confirmClear\">Clear worktrees</button></div></div><p class=\"[ visually-hidden ]\" role=\"status\" aria-live=\"polite\" x-text=\"announcement\"></p><div data-scroll><div x-ignore data-ssr>")
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
@@ -110,7 +110,7 @@ func ArchivedPage(f shell.Frame, projectID, projectName string, a Archived) temp
 				var templ_7745c5c3_Var6 string
 				templ_7745c5c3_Var6, templ_7745c5c3_Err = templ.JoinStringErrs(a.Summary())
 				if templ_7745c5c3_Err != nil {
-					return templ.Error{Err: templ_7745c5c3_Err, FileName: `tasks/archived.templ`, Line: 29, Col: 51}
+					return templ.Error{Err: templ_7745c5c3_Err, FileName: `tasks/archived.templ`, Line: 43, Col: 51}
 				}
 				_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var6))
 				if templ_7745c5c3_Err != nil {
@@ -128,7 +128,7 @@ func ArchivedPage(f shell.Frame, projectID, projectName string, a Archived) temp
 					var templ_7745c5c3_Var7 string
 					templ_7745c5c3_Var7, templ_7745c5c3_Err = templ.ResolveAttributeValue(r.TaskID)
 					if templ_7745c5c3_Err != nil {
-						return templ.Error{Err: templ_7745c5c3_Err, FileName: `tasks/archived.templ`, Line: 32, Col: 60}
+						return templ.Error{Err: templ_7745c5c3_Err, FileName: `tasks/archived.templ`, Line: 46, Col: 60}
 					}
 					_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var7)
 					if templ_7745c5c3_Err != nil {
@@ -141,7 +141,7 @@ func ArchivedPage(f shell.Frame, projectID, projectName string, a Archived) temp
 					var templ_7745c5c3_Var8 templ.SafeURL
 					templ_7745c5c3_Var8, templ_7745c5c3_Err = templ.JoinURLErrs(templ.SafeURL(r.Href))
 					if templ_7745c5c3_Err != nil {
-						return templ.Error{Err: templ_7745c5c3_Err, FileName: `tasks/archived.templ`, Line: 34, Col: 59}
+						return templ.Error{Err: templ_7745c5c3_Err, FileName: `tasks/archived.templ`, Line: 48, Col: 59}
 					}
 					_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var8))
 					if templ_7745c5c3_Err != nil {
@@ -154,7 +154,7 @@ func ArchivedPage(f shell.Frame, projectID, projectName string, a Archived) temp
 					var templ_7745c5c3_Var9 string
 					templ_7745c5c3_Var9, templ_7745c5c3_Err = templ.JoinStringErrs(r.Title)
 					if templ_7745c5c3_Err != nil {
-						return templ.Error{Err: templ_7745c5c3_Err, FileName: `tasks/archived.templ`, Line: 34, Col: 71}
+						return templ.Error{Err: templ_7745c5c3_Err, FileName: `tasks/archived.templ`, Line: 48, Col: 71}
 					}
 					_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var9))
 					if templ_7745c5c3_Err != nil {
@@ -167,7 +167,7 @@ func ArchivedPage(f shell.Frame, projectID, projectName string, a Archived) temp
 					var templ_7745c5c3_Var10 string
 					templ_7745c5c3_Var10, templ_7745c5c3_Err = templ.JoinStringErrs(r.Finished)
 					if templ_7745c5c3_Err != nil {
-						return templ.Error{Err: templ_7745c5c3_Err, FileName: `tasks/archived.templ`, Line: 36, Col: 29}
+						return templ.Error{Err: templ_7745c5c3_Err, FileName: `tasks/archived.templ`, Line: 50, Col: 29}
 					}
 					_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var10))
 					if templ_7745c5c3_Err != nil {
@@ -180,7 +180,7 @@ func ArchivedPage(f shell.Frame, projectID, projectName string, a Archived) temp
 					var templ_7745c5c3_Var11 string
 					templ_7745c5c3_Var11, templ_7745c5c3_Err = templ.JoinStringErrs(r.Archived)
 					if templ_7745c5c3_Err != nil {
-						return templ.Error{Err: templ_7745c5c3_Err, FileName: `tasks/archived.templ`, Line: 37, Col: 29}
+						return templ.Error{Err: templ_7745c5c3_Err, FileName: `tasks/archived.templ`, Line: 51, Col: 29}
 					}
 					_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var11))
 					if templ_7745c5c3_Err != nil {
@@ -198,7 +198,7 @@ func ArchivedPage(f shell.Frame, projectID, projectName string, a Archived) temp
 						var templ_7745c5c3_Var12 string
 						templ_7745c5c3_Var12, templ_7745c5c3_Err = templ.ResolveAttributeValue(r.Merge.State)
 						if templ_7745c5c3_Err != nil {
-							return templ.Error{Err: templ_7745c5c3_Err, FileName: `tasks/archived.templ`, Line: 39, Col: 74}
+							return templ.Error{Err: templ_7745c5c3_Err, FileName: `tasks/archived.templ`, Line: 53, Col: 74}
 						}
 						_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var12)
 						if templ_7745c5c3_Err != nil {
@@ -215,7 +215,7 @@ func ArchivedPage(f shell.Frame, projectID, projectName string, a Archived) temp
 						var templ_7745c5c3_Var13 string
 						templ_7745c5c3_Var13, templ_7745c5c3_Err = templ.JoinStringErrs(r.Merge.Word)
 						if templ_7745c5c3_Err != nil {
-							return templ.Error{Err: templ_7745c5c3_Err, FileName: `tasks/archived.templ`, Line: 41, Col: 27}
+							return templ.Error{Err: templ_7745c5c3_Err, FileName: `tasks/archived.templ`, Line: 55, Col: 27}
 						}
 						_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var13))
 						if templ_7745c5c3_Err != nil {
@@ -336,7 +336,7 @@ func liveArchived() templ.Component {
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 23, "<span x-text=\"row.mergeWord\"></span></span></template></p></div><div class=\"[ actions ]\"><span class=\"[ busy-note ]\" x-show=\"row.busy\" x-text=\"row.busyText\"></span> <button type=\"button\" class=\"[ button ]\" data-size=\"sm\" data-restore x-show=\"!row.busy\" x-on:click=\"restore\">Restore</button> <button type=\"button\" class=\"[ button ]\" data-variant=\"ghost\" data-size=\"sm\" data-delete x-show=\"!row.busy\" x-on:click=\"askDelete\">Delete</button></div><div class=\"[ confirm-strip ]\" data-confirm=\"delete\" data-tone=\"danger\" role=\"group\" x-show=\"row.confirming\" x-on:keydown.escape=\"cancelDelete\"><h3 x-text=\"row.confirmTitle\"></h3><p>Its sessions' history, documents, comments and resources go too. This cannot be undone. Restore keeps everything.</p><div class=\"[ actions ]\"><button type=\"button\" class=\"[ button ]\" data-size=\"sm\" data-cancel x-on:click=\"cancelDelete\">Cancel</button> <button type=\"button\" class=\"[ button ]\" data-variant=\"danger\" data-size=\"sm\" x-on:click=\"confirmDelete\">Delete forever</button></div></div><template x-if=\"row.error\"><p class=\"[ row-error ]\"><span x-text=\"row.error.message\"></span><span class=\"[ code ]\"><span x-text=\"row.error.code\"></span> · <span x-text=\"row.error.next\"></span></span><a x-show=\"row.error.featureHref\" x-bind:href=\"row.error.featureHref\">Open the feature</a></p></template></div></template></li></template></ul></div>")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 23, "<span x-text=\"row.mergeWord\"></span></span></template></p></div><div class=\"[ actions ]\"><span class=\"[ busy-note ]\" x-show=\"row.busy\" x-text=\"row.busyText\"></span> <button type=\"button\" class=\"[ button ]\" data-size=\"sm\" data-restore x-show=\"!row.busy\" x-on:click=\"restore\">Restore</button> <button type=\"button\" class=\"[ button ]\" data-variant=\"ghost\" data-size=\"sm\" data-clear x-show=\"!row.busy\" x-bind:disabled=\"row.noWorktrees\" x-bind:title=\"row.clearTitle\" x-on:click=\"askClearRow\">Clear worktrees</button> <button type=\"button\" class=\"[ button ]\" data-variant=\"ghost\" data-size=\"sm\" data-delete x-show=\"!row.busy\" x-on:click=\"askDelete\">Delete</button></div><div class=\"[ confirm-strip ]\" data-confirm=\"delete\" data-tone=\"danger\" role=\"group\" x-show=\"row.confirming\" x-on:keydown.escape=\"cancelDelete\"><h3 x-text=\"row.confirmTitle\"></h3><p>Its sessions' history, documents, comments and resources go too. This cannot be undone. Restore keeps everything.</p><div class=\"[ actions ]\"><button type=\"button\" class=\"[ button ]\" data-size=\"sm\" data-cancel x-on:click=\"cancelDelete\">Cancel</button> <button type=\"button\" class=\"[ button ]\" data-variant=\"danger\" data-size=\"sm\" x-on:click=\"confirmDelete\">Delete forever</button></div></div><template x-if=\"row.error\"><p class=\"[ row-error ]\"><span x-text=\"row.error.message\"></span><span class=\"[ code ]\"><span x-text=\"row.error.code\"></span> · <span x-text=\"row.error.next\"></span></span><a x-show=\"row.error.featureHref\" x-bind:href=\"row.error.featureHref\">Open the feature</a></p></template></div></template></li></template></ul></div>")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
