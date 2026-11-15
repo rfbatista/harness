@@ -1,6 +1,8 @@
 package orchestration
 
 import (
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 
@@ -99,5 +101,25 @@ func TestQAOpeningRequiresAVideoPerUseCase(t *testing.T) {
 	requireAll(t, "qa opening", p, "a video per use case is required", "ffmpeg", "name any missing video")
 	if strings.Contains(p, "where you can record one") {
 		t.Errorf("qa opening still makes the video optional: %q", p)
+	}
+}
+
+func TestTaskArchitecture_VerifyKeepsFourJobsWithTheArchitect(t *testing.T) {
+	svc, _ := newInteractiveService(t)
+	svc.Roles = &fakeRoles{}
+	_, launch := startInteractive(t, svc, InteractiveRequest{Mode: "architect"})
+	body := pluginSkill(t, launch, "task-architecture")
+	verify := body[strings.Index(body, "## Verifying the Work"):]
+	requireAll(t, "task-architecture Verify section", verify,
+		"Four jobs stay with you", "Gather the inputs", "Spawn the Operator", "then spawn QA", "Spawn QA only after the Operator's done report",
+		"Answer their questions and blocked reports", "Relay the results to the person",
+		"You never touch services, k3s, the browser or the task database",
+		"services running the branch's", "Spawn a new\n   Operator only when none",
+		"test or QA the application", "spawn QA the same way")
+	dir, _ := flag(launch.Args, "--plugin-dir")
+	for _, name := range []string{"task-run-app", "task-qa"} {
+		if _, err := os.Stat(filepath.Join(dir, "skills", name)); err == nil {
+			t.Errorf("architect session carries %s", name)
+		}
 	}
 }

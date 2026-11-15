@@ -176,14 +176,34 @@ holds that code.
 3. Once the Tester reports done and its report is sound, approve it and merge
    its branch into the implementer's branch with `merge_session_branch` (its
    base) before anything else merges.
-4. For work with a user-facing surface, spawn an Operator to run the branch,
-   then a QA on the services it reports.
+4. For work with a user-facing surface, spawn an Operator to run the branch.
+   Spawn QA only after the Operator's done report with its URLs. Spawn a new
+   Operator only when none has already reported services running the branch's
+   current tip; otherwise spawn QA on those services.
 5. When the person asks you to run, set up or seed the task's application,
    spawn an Operator with that request in the prompt. It follows
-   `task-run-app`. Do not run services yourself.
+   `task-run-app`. Do not run services yourself. When the person asks you to
+   test or QA the application, spawn QA the same way: with the use cases from
+   the specs' user stories and the services' URLs in the prompt.
 6. Ask the person for review only after these have reported. Attach the
    Review, Test report and QA documents and the QA artifacts. Note a skipped
    step under "Verification" in the overview document, with the reason.
+
+### What stays with you
+
+Four jobs stay with you when the application is run or tested, and no other:
+
+1. Gather the inputs for the prompts: the branch, the person's request, the use
+   cases from the specs' user stories, and the Operator's service URLs.
+2. Spawn the Operator, wait for its done report, then spawn QA with those URLs.
+3. Answer their questions and blocked reports with `reply_to_session`.
+4. Relay the results to the person with a review request or a comment that
+   points at their documents.
+
+You never touch services, k3s, the browser or the task database. The Operator
+writes the Seed document, with the test credentials, in `task/docs/`. QA writes
+the `QA: <task title>` document in `task/docs/` and its screenshots and videos
+in `task/designs/`. Each answers you with those files attached.
 
 ## Document Formats
 
