@@ -76,8 +76,8 @@ templ instructionProposalPane() {
 					</div>
 				</template>
 				<div class="[ entry-kv ]">
-					<div><span class="[ entry-label ]">Skills</span> <span><template x-for="skill in paneSkills" x-bind:key="skill"><span><code x-text="skill"></code> </span></template></span></div>
-					<div><span class="[ entry-label ]">Proposed by</span> <span><span x-text="paneSession"></span><template x-if="paneTask"><span> on <a x-bind:href="paneTaskHref" x-text="paneTask.title"></a></span></template></span></div>
+					<div><span class="[ entry-label ]">Skills</span> <span><template x-for="skill in paneSkills" x-bind:key="skill.name"><span><code x-text="skill.name"></code><span x-text="skill.sep"></span></span></template></span></div>
+					<div><span class="[ entry-label ]">Proposed by</span> <span><span x-text="paneSessionOn"></span><template x-if="paneTask"><a x-bind:href="paneTaskHref" x-text="paneTask.title"></a></template></span></div>
 					<div><span class="[ entry-label ]">When</span> <span x-text="paneProposed"></span></div>
 					<template x-if="paneIsDecided">
 						<div><span class="[ entry-label ]">Decided</span> <span x-text="paneDecided"></span></div>
@@ -94,6 +94,7 @@ templ instructionProposalPane() {
 							</ul>
 							<span class="[ code ]">INSTRUCTION_CHANGED · send it back so the session re-reads the files and submits again</span>
 						</div>
+						<button type="button" class="[ button ]" data-size="sm" data-sendback-from-refusal x-bind:disabled="cannotDecide" x-on:click="askToSendBack">Send back…</button>
 					</div>
 				</template>
 				<template x-if="staleNotice">
@@ -101,15 +102,32 @@ templ instructionProposalPane() {
 						<div class="[ flow ] [ flow-space-3xs grow ]">
 							<span><strong x-text="staleNoticeText"></strong> Approving will be refused until the session re-reads <span>them</span>. Send it back so the session rebases its draft.</span>
 						</div>
+						<button type="button" class="[ button ]" data-size="sm" data-sendback-from-notice x-bind:disabled="cannotDecide" x-on:click="askToSendBack">Send back…</button>
 					</div>
 				</template>
 				<p class="[ error ]" role="alert" data-decide-error x-show="hasDecideError"><span aria-hidden="true">✕</span> <span x-text="decideError"></span></p>
 				<template x-if="paneIsOpen">
 					<div class="decision" role="group" aria-label="Decide">
 						<button type="button" class="[ button ]" data-variant="primary" data-size="sm" data-approve x-bind:disabled="cannotDecide" x-on:click="approve" x-text="approveText"></button>
+						<button type="button" class="[ button ]" data-size="sm" data-open-reject aria-controls="proposal-ask" x-bind:aria-expanded="askRejecting" x-bind:disabled="cannotDecide" x-on:click="askToReject">Reject…</button>
+						<button type="button" class="[ button ]" data-size="sm" data-open-sendback aria-controls="proposal-ask" x-bind:aria-expanded="asksSendBack" x-bind:disabled="cannotDecide" x-on:click="askToSendBack">Send back…</button>
 						<span class="[ grow ]"></span>
 						<span class="[ text-xs color-ink-faint ]">One decision for the whole proposal</span>
 					</div>
+				</template>
+				<template x-if="isAsking">
+					<form class="[ banner ] [ instruction-ask ]" id="proposal-ask" role="group" data-ask x-bind:data-tone="askTone" x-bind:aria-label="askAria" x-on:submit.prevent="submitAsk" novalidate>
+						<p><strong x-text="askTitle"></strong> <span x-text="askBody"></span></p>
+						<div class="[ field ]">
+							<label for="proposal-note">Note <span class="[ color-ink-muted ]" x-text="askRequirement"></span></label>
+							<textarea id="proposal-note" rows="3" x-model="note" x-init="focusNote($el)" x-bind:placeholder="askPlaceholder" x-bind:aria-invalid="hasNoteError" aria-describedby="proposal-note-error"></textarea>
+							<span class="[ error ]" id="proposal-note-error" data-ask-error x-show="hasNoteError"><span aria-hidden="true">✕</span> <span x-text="noteError"></span></span>
+						</div>
+						<div class="[ cluster ]">
+							<button type="submit" class="[ button ]" data-size="sm" x-bind:data-variant="askVariant" x-bind:disabled="cannotSubmit" x-text="askButton"></button>
+							<button type="button" class="[ button ]" data-variant="ghost" data-size="sm" data-cancel-ask x-on:click="cancelAsk">Cancel</button>
+						</div>
+					</form>
 				</template>
 				<div class="files-head">
 					<h4 id="proposal-files-heading">Files</h4>

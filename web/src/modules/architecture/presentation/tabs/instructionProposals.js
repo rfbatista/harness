@@ -22,6 +22,7 @@ import {
   refusalTitle,
   refusedFiles,
   rowNote,
+  sendBackNoteError,
   sessionText,
   staleCountText,
   stateLabel,
@@ -64,6 +65,10 @@ export const instructionProposals = ({ gateway }) => () => {
     /** After an approval: the version each saved file got, by path. */
     approved: null,
     decideError: "",
+    /** The ask under the decision row: "reject", "sendback" or "" for none; the note in it and why it cannot go. */
+    asking: "",
+    note: "",
+    noteError: "",
 
     async init() {
       stops.push(
@@ -115,6 +120,7 @@ export const instructionProposals = ({ gateway }) => () => {
       this.refusal = null;
       this.approved = null;
       this.decideError = "";
+      this.cancelAsk();
       await this.readPane(id);
     },
     close() {
@@ -122,6 +128,7 @@ export const instructionProposals = ({ gateway }) => () => {
       this.pane = null;
       this.refusal = null;
       this.approved = null;
+      this.cancelAsk();
     },
     /** Reads the proposal with its files; an answer for a proposal no longer in the pane is dropped. */
     async readPane(id) {
@@ -156,12 +163,56 @@ export const instructionProposals = ({ gateway }) => () => {
       }
       await this.load();
     },
+    askToReject() {
+      this.ask("reject");
+    },
+    askToSendBack() {
+      this.ask("sendback");
+    },
+    ask(which) {
+      if (this.deciding !== "") return;
+      this.asking = which;
+      this.note = "";
+      this.noteError = "";
+    },
+    /** The note takes focus when its ask opens, so the person types at once. */
+    focusNote(el) {
+      this.$nextTick(() => el.focus());
+    },
+    cancelAsk() {
+      this.asking = "";
+      this.note = "";
+      this.noteError = "";
+    },
+    /** The ask's submit: a send back without a note says so and sends nothing. */
+    async submitAsk() {
+      if (this.deciding !== "" || this.pane === null) return;
+      const sendBack = this.asking === "sendback";
+      const note = this.note.trim();
+      this.noteError = sendBack ? sendBackNoteError(this.note) : "";
+      if (this.noteError !== "") return;
+      const id = this.viewing;
+      this.deciding = id;
+      this.decideError = "";
+      try {
+        const out = sendBack ? await proposals.sendBack(id, note) : await proposals.reject(id, note);
+        if (this.viewing === id) this.pane = { ...this.pane, proposal: out.proposal };
+        this.cancelAsk();
+      } catch (err) {
+        if (err.code === "INVALID_INPUT") this.noteError = describeError(err).message;
+        else await this.refused(id, err);
+      } finally {
+        this.deciding = "";
+      }
+      await this.load();
+    },
     /** What each refusal does: INSTRUCTION_CHANGED names the stale files (and the pane reads them again); PROPOSAL_DECIDED shows what was decided. */
     async refused(id, err) {
       if (err.code === "INSTRUCTION_CHANGED") {
         this.refusal = { paths: err.paths ?? [] };
         await this.readPane(id);
       } else if (err.code === "PROPOSAL_DECIDED") {
+        this.cancelAsk();
         await this.readPane(id);
       } else {
         this.decideError = describeError(err).message;
@@ -247,10 +298,14 @@ export const instructionProposals = ({ gateway }) => () => {
       return this.pane?.proposal.state === "open";
     },
     get paneSkills() {
-      return this.pane?.proposal.skills ?? [];
+      const skills = this.pane?.proposal.skills ?? [];
+      return skills.map((name, i) => ({ name, sep: i < skills.length - 1 ? " · " : "" }));
     },
-    get paneSession() {
-      return this.pane ? sessionText(this.pane.proposal) : "";
+    /** "software-architect · architect on" before the task's link. */
+    get paneSessionOn() {
+      if (!this.pane) return "";
+      const session = sessionText(this.pane.proposal);
+      return this.pane.proposal.task ? `${session} on ` : session;
     },
     get paneTask() {
       return this.pane?.proposal.task ?? null;
@@ -333,7 +388,48 @@ export const instructionProposals = ({ gateway }) => () => {
       return approveLabel(this.fileCount);
     },
     get cannotDecide() {
+      return this.deciding !== "" || this.asking !== "";
+    },
+    get cannotSubmit() {
       return this.deciding !== "";
+    },
+    get isAsking() {
+      return this.asking !== "";
+    },
+    get asksSendBack() {
+      return this.asking === "sendback";
+    },
+    get askTone() {
+      return this.asksSendBack ? "attention" : "danger";
+    },
+    get askTitle() {
+      return this.asksSendBack ? "Send it back to the session." : "Reject the proposal.";
+    },
+    get askBody() {
+      return this.asksSendBack
+        ? "The session gets a turn with your note, keeps its draft and can submit again."
+        : "Nothing is saved; the session is told and the proposal stays in the list as rejected.";
+    },
+    get askAria() {
+      return this.asksSendBack ? "Send the proposal back" : "Reject the proposal";
+    },
+    get askRequirement() {
+      return this.asksSendBack ? "(required)" : "(optional)";
+    },
+    get askPlaceholder() {
+      return this.asksSendBack ? "What should change before you approve it?" : "Why, if the session should know";
+    },
+    get askButton() {
+      return this.asksSendBack ? "Send back" : "Reject";
+    },
+    get askVariant() {
+      return this.asksSendBack ? "primary" : "danger";
+    },
+    get askRejecting() {
+      return this.asking === "reject";
+    },
+    get hasNoteError() {
+      return this.noteError !== "";
     },
     get hasApproved() {
       return this.approved !== null && this.paneStateIsApproved;

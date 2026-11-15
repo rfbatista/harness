@@ -175,6 +175,8 @@ func openProposal(t *testing.T, rig *archRig, id string) {
 		poll(`!!`+proposalRowJS(id, `.querySelector('[data-open-proposal]')`)),
 		chromedp.Evaluate(proposalRowJS(id, `.querySelector('[data-open-proposal]').click()`), nil),
 		poll(`!!document.querySelector('`+proposalPane+` .diff-view .file')`),
+		// x-show reveals the column a tick after its content exists.
+		poll(`document.querySelector('`+proposalPane+`').checkVisibility()`),
 	)
 }
 
@@ -298,5 +300,110 @@ func TestInstructionProposalApproveIsGuardedAgainstItsOwnEchoAndDoubleClicks(t *
 	}
 	if got := rig.proposals.approveCalls(); got != 1 {
 		t.Fatalf("approve was called %d times, want 1", got)
+	}
+}
+
+// ── reject and send back ────────────────────────────────────────────────────
+
+func openAsk(t *testing.T, rig *archRig, which string) {
+	t.Helper()
+	rig.run(t,
+		chromedp.Evaluate(`document.querySelector('`+proposalPane+` [data-open-`+which+`]').click()`, nil),
+		poll(`!!document.querySelector('`+proposalPane+` [data-ask]')`),
+	)
+}
+
+func typeNote(t *testing.T, rig *archRig, text string) {
+	t.Helper()
+	rig.run(t, chromedp.Evaluate(`(() => { const n = document.querySelector('`+proposalPane+` [data-ask] textarea'); n.value = `+jsString(text)+`; n.dispatchEvent(new Event('input', { bubbles: true })); })()`, nil))
+}
+
+func submitAsk(t *testing.T, rig *archRig) {
+	t.Helper()
+	rig.run(t, chromedp.Evaluate(`document.querySelector('`+proposalPane+` [data-ask] [type=submit]').click()`, nil))
+}
+
+// Send back asks for a note under the decision row, with focus in the note; the
+// proposal then reads sent back with the note, in the list and the pane, and
+// the badge drops.
+func TestInstructionProposalSendBackNeedsANoteAndKeepsIt(t *testing.T) {
+	rig := filesRig(t)
+	openInstructions(t, rig, "", 1280)
+	openProposal(t, rig, "p-files")
+	openAsk(t, rig, "sendback")
+	var focused, expanded bool
+	rig.run(t,
+		poll(`document.activeElement === document.querySelector('`+proposalPane+` [data-ask] textarea')`),
+		chromedp.Evaluate(`document.activeElement === document.querySelector('`+proposalPane+` [data-ask] textarea')`, &focused),
+		chromedp.Evaluate(`document.querySelector('`+proposalPane+` [data-open-sendback]').getAttribute('aria-expanded') === 'true'`, &expanded),
+	)
+	if !focused || !expanded {
+		t.Fatalf("focus in the note %v, Send back expanded %v", focused, expanded)
+	}
+
+	// No note: the field says so and nothing is sent.
+	var problem string
+	submitAsk(t, rig)
+	rig.run(t,
+		poll(`!!document.querySelector('`+proposalPane+` [data-ask-error]')`),
+		chromedp.Evaluate(`document.querySelector('`+proposalPane+` [data-ask-error]').textContent.trim()`, &problem),
+	)
+	if !strings.Contains(problem, "A note is required") {
+		t.Fatalf("error = %q", problem)
+	}
+	if n := rig.proposals.callsTo("send_back_instruction_proposal"); n != 0 {
+		t.Fatalf("send back was called %d times with no note", n)
+	}
+
+	typeNote(t, rig, "Wait for the listening line.")
+	submitAsk(t, rig)
+	var state, rowNote, paneState, decided string
+	rig.run(t,
+		poll(proposalRowJS("p-files", `.dataset.state`)+` === 'sent_back'`),
+		chromedp.Evaluate(proposalRowJS("p-files", `.querySelector('[data-proposal-note]').textContent.replace(/\s+/g, ' ').trim()`), &rowNote),
+		chromedp.Evaluate(`document.querySelector('`+proposalPane+` [data-pane-state]').textContent.trim()`, &paneState),
+		chromedp.Evaluate(`document.querySelector('`+proposalPane+` .entry-kv').textContent.replace(/\s+/g, ' ')`, &decided),
+		chromedp.Evaluate(proposalRowJS("p-files", `.dataset.state`), &state),
+		poll(tabBadge+` === ''`),
+		poll(`!document.querySelector('`+proposalPane+` [data-ask]') && !document.querySelector('`+proposalPane+` [data-approve]')`),
+	)
+	if rowNote != "Note Wait for the listening line." || paneState != "Sent back" || !strings.Contains(decided, "sent back · Wait for the listening line.") {
+		t.Fatalf("row note %q, pane state %q, decided %q", rowNote, paneState, decided)
+	}
+	if body := rig.proposals.lastBody("send_back_instruction_proposal"); body["note"] != "Wait for the listening line." || body["proposal_id"] != "p-files" {
+		t.Fatalf("send back body = %v", body)
+	}
+}
+
+// Reject needs no note; without one none is sent. A proposal already decided
+// elsewhere answers PROPOSAL_DECIDED and the pane shows what was decided.
+func TestInstructionProposalRejectNeedsNoNoteAndADecidedProposalShowsItsDecision(t *testing.T) {
+	rig := filesRig(t)
+	rig.proposals.add(fakeProposal{ID: "p-second", Summary: "Second", Skills: []string{"go-tests"}, Files: []fakeProposalFile{{Path: ".claude/skills/go-tests/SKILL.md", Op: "create", Content: "x\n"}}}, 5*time.Minute)
+	openInstructions(t, rig, "", 1280)
+
+	openProposal(t, rig, "p-files")
+	openAsk(t, rig, "reject")
+	submitAsk(t, rig)
+	var state string
+	rig.run(t, poll(proposalRowJS("p-files", `.dataset.state`)+` === 'rejected'`), chromedp.Evaluate(proposalRowJS("p-files", `.dataset.state`), &state))
+	if body := rig.proposals.lastBody("reject_instruction_proposal"); body == nil {
+		t.Fatal("reject was not called")
+	} else if _, has := body["note"]; has {
+		t.Fatalf("a reject with no note sent one: %v", body)
+	}
+
+	// Another tab approves the second one after this page opened it; this page has not heard yet.
+	rig.run(t, chromedp.Evaluate(proposalRowJS("p-second", `.querySelector('[data-open-proposal]').click()`), nil), poll(`!!document.querySelector('`+proposalPane+` [data-open-reject]') && document.querySelector('`+proposalPane+` [data-pane-state]').textContent.trim() === 'Open'`))
+	rig.proposals.setStateQuietly("p-second", "approved")
+	openAsk(t, rig, "reject")
+	submitAsk(t, rig)
+	var stillAsking bool
+	rig.run(t,
+		poll(`document.querySelector('`+proposalPane+` [data-pane-state]').textContent.trim() === 'Approved'`),
+		chromedp.Evaluate(`!!document.querySelector('`+proposalPane+` [data-ask]') || !!document.querySelector('`+proposalPane+` [data-decide-error]:not([style*="none"])')`, &stillAsking),
+	)
+	if stillAsking {
+		t.Fatal("the pane still asks, or shows an error, after the proposal turned out decided")
 	}
 }

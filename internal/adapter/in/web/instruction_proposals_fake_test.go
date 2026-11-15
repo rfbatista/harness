@@ -55,7 +55,7 @@ func newFakeInstructionProposals(feed *sseFeed, files *fakeInstructionFiles) *fa
 	return &fakeInstructionProposals{feed: feed, files: files, refusals: map[string]fakeRefusal{}}
 }
 
-var proposalRoutes = []string{"list_instruction_proposals", "get_instruction_proposal", "approve_instruction_proposal"}
+var proposalRoutes = []string{"list_instruction_proposals", "get_instruction_proposal", "approve_instruction_proposal", "reject_instruction_proposal", "send_back_instruction_proposal"}
 
 func (f *fakeInstructionProposals) register(mux *http.ServeMux) {
 	for _, r := range proposalRoutes {
@@ -138,13 +138,7 @@ func (f *fakeInstructionProposals) emitAsync(id, state string, open int) { f.emi
 
 // approveCalls is how many times approve_instruction_proposal was asked.
 func (f *fakeInstructionProposals) approveCalls() int {
-	n := 0
-	for _, c := range f.called() {
-		if c == "approve_instruction_proposal" {
-			n++
-		}
-	}
-	return n
+	return f.callsTo("approve_instruction_proposal")
 }
 
 func (f *fakeInstructionProposals) called() []string {
@@ -177,7 +171,67 @@ func (f *fakeInstructionProposals) ServeHTTP(w http.ResponseWriter, r *http.Requ
 		f.get(w, in)
 	case "approve_instruction_proposal":
 		f.approve(w, in)
+	case "reject_instruction_proposal":
+		f.decide(w, in, "rejected", false)
+	case "send_back_instruction_proposal":
+		f.decide(w, in, "sent_back", true)
 	}
+}
+
+// decide rejects or sends back; a send back needs its note.
+func (f *fakeInstructionProposals) decide(w http.ResponseWriter, in map[string]any, state string, noteRequired bool) {
+	p := f.find(in)
+	note, _ := in["note"].(string)
+	switch {
+	case p == nil:
+		f.fail(w, http.StatusNotFound, "PROPOSAL_NOT_FOUND", "no such proposal", nil)
+		return
+	case p.State != "open":
+		f.fail(w, http.StatusConflict, "PROPOSAL_DECIDED", "the proposal is already "+p.State, nil)
+		return
+	case noteRequired && strings.TrimSpace(note) == "":
+		f.fail(w, http.StatusBadRequest, "INVALID_INPUT", "a note is required", nil)
+		return
+	}
+	at := time.Now()
+	p.State, p.Decided, p.Note = state, &at, note
+	f.emit(p.ID, p.State, f.openLocked())
+	f.json(w, map[string]any{"proposal": p.shape()})
+}
+
+// setStateQuietly is a decision made elsewhere that the feed has not told this page about yet.
+func (f *fakeInstructionProposals) setStateQuietly(id, state string) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	for _, p := range f.proposals {
+		if p.ID == id {
+			at := time.Now()
+			p.State, p.Decided = state, &at
+		}
+	}
+}
+
+// callsTo is how many times an endpoint was asked.
+func (f *fakeInstructionProposals) callsTo(endpoint string) int {
+	n := 0
+	for _, c := range f.called() {
+		if c == endpoint {
+			n++
+		}
+	}
+	return n
+}
+
+// lastBody is the request body of the newest call of an endpoint, or nil.
+func (f *fakeInstructionProposals) lastBody(endpoint string) map[string]any {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	for i := len(f.calls) - 1; i >= 0; i-- {
+		if f.calls[i] == endpoint {
+			return f.bodies[i]
+		}
+	}
+	return nil
 }
 
 func (f *fakeInstructionProposals) find(in map[string]any) *fakeProposal {
