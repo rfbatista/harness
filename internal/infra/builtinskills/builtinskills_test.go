@@ -7,7 +7,7 @@ import (
 	"operators-mcp/internal/domain"
 )
 
-func TestAll_ListsTheNineBuiltInSkillsWithTheirModes(t *testing.T) {
+func TestAll_ListsTheThirteenBuiltInSkillsWithTheirModes(t *testing.T) {
 	got := map[string][]string{}
 	for _, s := range All() {
 		got[s.Name] = s.Modes
@@ -20,9 +20,10 @@ func TestAll_ListsTheNineBuiltInSkillsWithTheirModes(t *testing.T) {
 	}
 	want := map[string][]string{
 		"task-architecture": {"architect"}, "task-grill-with-docs": {"architect"}, "task-to-spec": {"architect"},
-		"task-run-app":        {"architect"},
-		"task-implement-spec": {"implement"}, "task-tdd": {"implement"}, "task-code-review": {"implement"},
+		"task-run-app":        {"operate"},
+		"task-implement-spec": {"implement"}, "task-tdd": {"implement", "test"}, "task-code-review": {"implement", "review"},
 		"design-artifacts": {"design"}, "task-product": {"product"},
+		"task-review": {"review"}, "task-test": {"test"}, "task-qa": {"qa"}, "task-operate": {"operate"},
 	}
 	if len(got) != len(want) {
 		t.Fatalf("skills = %v, want %d", got, len(want))
@@ -39,9 +40,23 @@ func TestForMode_KeepsTheModesOrder(t *testing.T) {
 	for _, s := range ForMode(domain.SessionModeArchitect) {
 		names = append(names, s.Name)
 	}
-	want := []string{"task-architecture", "task-grill-with-docs", "task-to-spec", "task-run-app"}
+	want := []string{"task-architecture", "task-grill-with-docs", "task-to-spec"}
 	if !slices.Equal(names, want) {
 		t.Fatalf("architect skills = %v, want %v", names, want)
+	}
+	for mode, want := range map[domain.SessionMode][]string{
+		domain.SessionModeReview:  {"task-review", "task-code-review"},
+		domain.SessionModeTest:    {"task-test", "task-tdd"},
+		domain.SessionModeQA:      {"task-qa"},
+		domain.SessionModeOperate: {"task-operate", "task-run-app"},
+	} {
+		var got []string
+		for _, s := range ForMode(mode) {
+			got = append(got, s.Name)
+		}
+		if !slices.Equal(got, want) {
+			t.Errorf("%s skills = %v, want %v", mode, got, want)
+		}
 	}
 	if len(ForMode(domain.SessionMode("none"))) != 0 {
 		t.Fatal("a mode with no skills yields none")

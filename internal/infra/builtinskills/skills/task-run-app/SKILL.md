@@ -1,6 +1,6 @@
 ---
 name: task-run-app
-description: Use in a harness architect session only when the person asks you to run, set up or seed the task's application for testing — seed a task database in the application's own database engine, create the task service, set its variables from .env.example, start it on the task's branch and hand the person the test credentials. The person invokes it; the architect never runs it on its own.
+description: Use in a harness operate-mode session only when the architect's prompt carries the person's request to run, set up or seed the task's application for testing — seed a task database in the application's own database engine, create the task service, set its variables from .env.example, start it on the task's branch and hand the person the test credentials. The architect spawns the Operator with that request; the Operator never runs it on its own.
 ---
 
 # Run the task's application
@@ -11,7 +11,8 @@ task's branch, and the **test credentials** handed over in a **task comment** an
 **Seed document**. Run the steps in this order. Each names the tool it uses and the
 check that it worked. Stop at the first failed check and use the Refusals table.
 
-Do not run this skill unless the person asked. Never ask the architect session or a
+Do not run this skill unless your prompt carries the person's request, which the architect
+passes on when it spawns you as the Operator. Never ask the architect session or a
 delegate to run it.
 
 Reference files, in this folder, read only when a step names them:

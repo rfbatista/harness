@@ -63,7 +63,7 @@ func listsBuiltInSkills(t *testing.T, w *tokenSaverWorld) {
 		waitUntil(rows+`.includes('lint') && `+rows+`.includes('task-run-app')`),
 		waitUntil(runApp+`.querySelector('[data-built-in]')?.checkVisibility() === true`),
 		waitUntil(runApp+`.querySelector('[data-built-in]').textContent.trim() === 'Built-in'`),
-		waitUntil(runApp+`.querySelector('[data-modes]').textContent.includes('architect')`),
+		waitUntil(runApp+`.querySelector('[data-modes]').textContent.includes('operate')`),
 		waitUntil(`document.querySelector('[data-skill-row][data-key="lint"] [data-built-in]')?.checkVisibility() !== true`),
 	)
 	b.run("the footer counts every row, built-in skills included",
@@ -100,7 +100,7 @@ func opensReadOnly(t *testing.T, w *tokenSaverWorld) {
 		waitUntil(detail+`.querySelector('[data-built-in]')?.checkVisibility() === true`),
 		waitUntil(detail+`.querySelector('[data-skill-body]')?.textContent.length > 0`),
 		waitUntil(detail+`.querySelector('[data-built-in-note]')?.checkVisibility() === true && `+detail+`.querySelector('[data-built-in-note]').textContent.includes('Ships with the server')`),
-		waitUntil(detail+`.querySelector('[data-built-in-note]').textContent.includes('architect')`),
+		waitUntil(detail+`.querySelector('[data-built-in-note]').textContent.includes('operate')`),
 		waitUntil(`document.querySelector('[data-skill-row][data-key="task-run-app"]').getAttribute('aria-current') === 'true'`),
 	)
 	b.run("it offers no Edit, no Rename and no Delete, and Duplicate stays",
