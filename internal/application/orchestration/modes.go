@@ -170,8 +170,9 @@ func modePrompt(mode domain.SessionMode, tk *domain.Ticket, project *domain.Proj
 			"service: its status, the tail of its log, and a request to the URL your prompt names or the service's port; a service that " +
 			"exited or failed is a status_report with status blocked at once (a task comment when you have no architect), with the " +
 			"log's decisive line. When your prompt carries the person's request to seed and run the task's application, follow " +
-			"task-run-app and name its Seed document in your report. " +
-			verificationReport(role, operateResult, operateResult) +
+			"task-run-app: write the results, the test credentials included, into the Seed document in task/docs/ and write no " +
+			"task comment with them. " +
+			verificationReport(role, operateResult+", and for a seeded run the Seed document attached", operateResult+", and for a seeded run the Seed document named, without the credentials") +
 			" Write no code. Never change the task status."
 	default:
 		return typed
