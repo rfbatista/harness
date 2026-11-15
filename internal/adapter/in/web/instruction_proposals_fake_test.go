@@ -16,9 +16,12 @@ import (
 // of the proposals in the Instructions tab run against it until the server
 // branch lands.
 type fakeInstructionProposals struct {
-	mu        sync.Mutex
-	feed      *sseFeed
-	proposals []*fakeProposal
+	mu    sync.Mutex
+	feed  *sseFeed
+	files *fakeInstructionFiles
+	// approveDelay holds approve's answer back after the proposal is decided and announced, as a slow server does.
+	approveDelay time.Duration
+	proposals    []*fakeProposal
 	// refusals are the errors the next call of an endpoint answers with, by endpoint name; each is used once.
 	refusals map[string]fakeRefusal
 	calls    []string
@@ -37,13 +40,22 @@ type fakeProposal struct {
 	Created                        time.Time
 	Decided                        *time.Time
 	Note                           string
+	// Files are what it would change; a proposal with none still answers a file count of one.
+	Files []fakeProposalFile
 }
 
-func newFakeInstructionProposals(feed *sseFeed) *fakeInstructionProposals {
-	return &fakeInstructionProposals{feed: feed, refusals: map[string]fakeRefusal{}}
+// fakeProposalFile is one file of a proposal: its op and the version the draft read. The base content is what the draft read; Content is the proposed text.
+type fakeProposalFile struct {
+	Path, Op             string
+	BaseVersion          int
+	BaseContent, Content string
 }
 
-var proposalRoutes = []string{"list_instruction_proposals"}
+func newFakeInstructionProposals(feed *sseFeed, files *fakeInstructionFiles) *fakeInstructionProposals {
+	return &fakeInstructionProposals{feed: feed, files: files, refusals: map[string]fakeRefusal{}}
+}
+
+var proposalRoutes = []string{"list_instruction_proposals", "get_instruction_proposal", "approve_instruction_proposal"}
 
 func (f *fakeInstructionProposals) register(mux *http.ServeMux) {
 	for _, r := range proposalRoutes {
@@ -121,6 +133,20 @@ func (f *fakeInstructionProposals) emit(id, state string, open int) {
 	}
 }
 
+// emitAsync is emit for a caller holding f.mu: the feed has its own lock, so it only names the intent.
+func (f *fakeInstructionProposals) emitAsync(id, state string, open int) { f.emit(id, state, open) }
+
+// approveCalls is how many times approve_instruction_proposal was asked.
+func (f *fakeInstructionProposals) approveCalls() int {
+	n := 0
+	for _, c := range f.called() {
+		if c == "approve_instruction_proposal" {
+			n++
+		}
+	}
+	return n
+}
+
 func (f *fakeInstructionProposals) called() []string {
 	f.mu.Lock()
 	defer f.mu.Unlock()
@@ -147,7 +173,104 @@ func (f *fakeInstructionProposals) ServeHTTP(w http.ResponseWriter, r *http.Requ
 			return
 		}
 		f.list(w)
+	case "get_instruction_proposal":
+		f.get(w, in)
+	case "approve_instruction_proposal":
+		f.approve(w, in)
 	}
+}
+
+func (f *fakeInstructionProposals) find(in map[string]any) *fakeProposal {
+	id, _ := in["proposal_id"].(string)
+	for _, p := range f.proposals {
+		if p.ID == id {
+			return p
+		}
+	}
+	return nil
+}
+
+// fileShape is a file of a proposal as get answers it: stale when the file's version moved on since the draft read it.
+func (f *fakeInstructionProposals) fileShape(pf fakeProposalFile) map[string]any {
+	current := f.files.version(pf.Path)
+	var base, content any
+	if pf.Op != "create" {
+		base = pf.BaseContent
+	}
+	if pf.Op != "remove" {
+		content = pf.Content
+	}
+	return map[string]any{
+		"path": pf.Path, "op": pf.Op, "base_version": pf.BaseVersion, "current_version": current,
+		"stale": current != pf.BaseVersion, "base_content": base, "content": content,
+	}
+}
+
+func (f *fakeInstructionProposals) get(w http.ResponseWriter, in map[string]any) {
+	p := f.find(in)
+	if p == nil {
+		f.fail(w, http.StatusNotFound, "PROPOSAL_NOT_FOUND", "no such proposal", nil)
+		return
+	}
+	files := []any{}
+	for _, pf := range p.Files {
+		files = append(files, f.fileShape(pf))
+	}
+	f.json(w, map[string]any{"proposal": p.shape(), "files": files})
+}
+
+// approve saves every file in one go, or none: a stale file refuses the whole proposal.
+func (f *fakeInstructionProposals) approve(w http.ResponseWriter, in map[string]any) {
+	p := f.find(in)
+	switch {
+	case p == nil:
+		f.fail(w, http.StatusNotFound, "PROPOSAL_NOT_FOUND", "no such proposal", nil)
+		return
+	case p.State != "open":
+		f.fail(w, http.StatusConflict, "PROPOSAL_DECIDED", "the proposal is already "+p.State, nil)
+		return
+	}
+	var stale []string
+	for _, pf := range p.Files {
+		if f.files.version(pf.Path) != pf.BaseVersion {
+			stale = append(stale, pf.Path)
+		}
+	}
+	if len(stale) > 0 {
+		f.fail(w, http.StatusConflict, "INSTRUCTION_CHANGED", "files changed since the draft read them", map[string]any{"paths": stale})
+		return
+	}
+	saved := []any{}
+	for _, pf := range p.Files {
+		if pf.Op == "remove" {
+			f.files.deleteElsewhere(pf.Path)
+			continue
+		}
+		f.files.saveElsewhereAs(pf.Path, kindOfPath(pf.Path), pf.Content)
+		saved = append(saved, f.files.metaOf(pf.Path))
+	}
+	at := time.Now()
+	p.State, p.Decided = "approved", &at
+	open := f.openLocked()
+	f.emitAsync(p.ID, p.State, open)
+	if f.approveDelay > 0 {
+		// Answer late, after the feed has told every tab: the person's own echo beats the POST's answer.
+		f.mu.Unlock()
+		time.Sleep(f.approveDelay)
+		f.mu.Lock()
+	}
+	f.json(w, map[string]any{"proposal": p.shape(), "files": saved})
+}
+
+// kindOfPath is the instruction kind a file's path implies.
+func kindOfPath(path string) string {
+	switch {
+	case strings.HasPrefix(path, ".claude/skills/"):
+		return "skill"
+	case strings.HasPrefix(path, ".claude/agents/"):
+		return "subagent"
+	}
+	return "memory"
 }
 
 // shape is a proposal as the list answers it.

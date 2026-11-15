@@ -143,3 +143,160 @@ func (r *archRig) get(t *testing.T, path string) string {
 	}
 	return string(b)
 }
+
+const (
+	proposalPane  = instructionsPanel + ` [data-proposal-pane]`
+	newSkillPath  = ".claude/skills/verify-harness/SKILL.md"
+	reviewerPath  = ".claude/agents/reviewer.md"
+	claudeMDPath  = "CLAUDE.md"
+	claudeMDRead  = "# Repository rules\n\nBe **kind** to the next reader.\n"
+	claudeMDAfter = "# Repository rules\n\nBe **kind** to the next reader.\n\nVerify before you finish.\n"
+)
+
+// filesRig is a rig with one open proposal that creates a skill, changes
+// CLAUDE.md and removes the reviewer sub-agent: the three ops.
+func filesRig(t *testing.T) *archRig {
+	t.Helper()
+	rig := instructionRig(t)
+	rig.proposals.add(fakeProposal{
+		ID: "p-files", Summary: "Verification skill", Skills: []string{"verify-harness"},
+		Files: []fakeProposalFile{
+			{Path: newSkillPath, Op: "create", Content: "---\nname: verify-harness\n---\nLaunch, drive, record.\n"},
+			{Path: claudeMDPath, Op: "change", BaseVersion: 1, BaseContent: claudeMDRead, Content: claudeMDAfter},
+			{Path: reviewerPath, Op: "remove", BaseVersion: 1, BaseContent: "You review diffs.\n"},
+		},
+	}, 10*time.Minute)
+	return rig
+}
+
+func openProposal(t *testing.T, rig *archRig, id string) {
+	t.Helper()
+	rig.run(t,
+		poll(`!!`+proposalRowJS(id, `.querySelector('[data-open-proposal]')`)),
+		chromedp.Evaluate(proposalRowJS(id, `.querySelector('[data-open-proposal]').click()`), nil),
+		poll(`!!document.querySelector('`+proposalPane+` .diff-view .file')`),
+	)
+}
+
+func fileJS(path, part string) string {
+	return `document.querySelector('` + proposalPane + ` .diff-view .file[data-path="` + path + `"]')` + part
+}
+
+func lineCount(path, kind string) string {
+	return `document.querySelectorAll('` + proposalPane + ` .diff-view .file[data-path="` + path + `"] .line[data-kind="` + kind + `"]').length`
+}
+
+// A proposal opens beside its list with each file's op and a diff of what it
+// would change; Approve saves every file and the workspace shows them.
+func TestInstructionProposalShowsEachFilesDiffAndApprovingSavesThem(t *testing.T) {
+	rig := filesRig(t)
+	openInstructions(t, rig, "", 1280)
+	openProposal(t, rig, "p-files")
+	var ops string
+	var created, changedAdd, changedDel, removed int
+	rig.run(t,
+		chromedp.Evaluate(`[...document.querySelectorAll('`+proposalPane+` .diff-view .file')].map(f => f.dataset.path + ':' + f.dataset.op).join()`, &ops),
+		chromedp.Evaluate(lineCount(newSkillPath, "add"), &created),
+		chromedp.Evaluate(lineCount(claudeMDPath, "add"), &changedAdd),
+		chromedp.Evaluate(lineCount(claudeMDPath, "del"), &changedDel),
+		chromedp.Evaluate(lineCount(reviewerPath, "del"), &removed),
+	)
+	if want := newSkillPath + ":create," + claudeMDPath + ":change," + reviewerPath + ":remove"; ops != want {
+		t.Fatalf("files = %q, want %q", ops, want)
+	}
+	if created != 4 || changedAdd != 2 || changedDel != 0 || removed != 1 {
+		t.Fatalf("diff lines: create +%d, change +%d −%d, remove −%d; want +4, +2 −0, −1", created, changedAdd, changedDel, removed)
+	}
+
+	rig.run(t, chromedp.Evaluate(`document.querySelector('`+proposalPane+` [data-approve]').click()`, nil), poll(`!!document.querySelector('`+proposalPane+` [data-approved-notice]')`))
+	var notice, state string
+	rig.run(t,
+		chromedp.Evaluate(`document.querySelector('`+proposalPane+` [data-approved-notice]').textContent.replace(/\s+/g, ' ')`, &notice),
+		chromedp.Evaluate(proposalRowJS("p-files", `.dataset.state`), &state),
+	)
+	if !strings.Contains(notice, "2 files saved as new versions, 1 removed") || state != "approved" {
+		t.Fatalf("after approve: notice %q, row state %q", notice, state)
+	}
+	if v := rig.files.version(claudeMDPath); v != 2 {
+		t.Fatalf("CLAUDE.md is at version %d, want 2", v)
+	}
+	// The files list beside follows the saves the server announced.
+	rig.run(t,
+		poll(`!!document.querySelector('`+instructionsPanel+` [data-open-file][aria-label="Open `+newSkillPath+`"]')`),
+		poll(`!document.querySelector('`+instructionsPanel+` [data-open-file][aria-label="Open `+reviewerPath+`"]')`),
+		poll(tabBadge+` === ''`),
+	)
+	if got := rig.proposals.approveCalls(); got != 1 {
+		t.Fatalf("approve was called %d times, want 1", got)
+	}
+}
+
+// A file the person saved since the draft read it is marked stale at once; approving
+// is refused with the stale paths and a suggestion, and nothing is saved.
+func TestInstructionProposalMarksAStaleFileAndRefusesTheApproval(t *testing.T) {
+	rig := filesRig(t)
+	openInstructions(t, rig, "", 1280)
+	openProposal(t, rig, "p-files")
+	var fresh bool
+	rig.run(t, chromedp.Evaluate(`!`+fileJS(claudeMDPath, `.hasAttribute('data-stale')`), &fresh))
+	if !fresh {
+		t.Fatal("a file nobody saved is marked stale")
+	}
+
+	rig.files.saveElsewhere(claudeMDPath, "Someone else wrote this.\n")
+	var head, notice, refusal, paths string
+	rig.run(t,
+		poll(`!!`+fileJS(claudeMDPath, `.matches('[data-stale="true"]')`)),
+		poll(`!!document.querySelector('`+proposalPane+` [data-stale-notice]')`),
+		chromedp.Evaluate(fileJS(claudeMDPath, `.querySelector('.head [data-stale]').textContent.trim()`), &head),
+		chromedp.Evaluate(`document.querySelector('`+proposalPane+` [data-stale-notice]').textContent.replace(/\s+/g, ' ')`, &notice),
+	)
+	if head != "stale · v1 read, v2 saved" || !strings.Contains(notice, "1 file changed since the draft read it") {
+		t.Fatalf("stale head %q, notice %q", head, notice)
+	}
+
+	rig.run(t,
+		chromedp.Evaluate(`document.querySelector('`+proposalPane+` [data-approve]').click()`, nil),
+		poll(`!!document.querySelector('`+proposalPane+` [data-refusal]')`),
+		chromedp.Evaluate(`document.querySelector('`+proposalPane+` [data-refusal]').textContent.replace(/\s+/g, ' ')`, &refusal),
+		chromedp.Evaluate(`[...document.querySelectorAll('`+proposalPane+` [data-refusal] .refused-paths li')].map(li => li.textContent.replace(/\s+/g, ' ').trim()).join('|')`, &paths),
+	)
+	for _, want := range []string{"Approval refused: 1 file was saved since the draft read it. Nothing was saved.", "INSTRUCTION_CHANGED", "send it back"} {
+		if !strings.Contains(refusal, want) {
+			t.Errorf("the refusal lacks %q: %q", want, refusal)
+		}
+	}
+	if paths != claudeMDPath+" · v1 read, v2 saved" {
+		t.Fatalf("refused paths = %q", paths)
+	}
+	if _, ok := rig.files.content(newSkillPath); ok {
+		t.Fatal("a refused approval saved the new skill")
+	}
+	var state string
+	rig.run(t, chromedp.Evaluate(proposalRowJS("p-files", `.dataset.state`), &state))
+	if state != "open" {
+		t.Fatalf("the proposal is %q after a refusal, want open", state)
+	}
+}
+
+// The stream echo of the person's own approval reaches the page before the
+// POST answers; the pane still ends approved, with one request and no error.
+func TestInstructionProposalApproveIsGuardedAgainstItsOwnEchoAndDoubleClicks(t *testing.T) {
+	rig := filesRig(t)
+	rig.proposals.approveDelay = 700 * time.Millisecond
+	openInstructions(t, rig, "", 1280)
+	openProposal(t, rig, "p-files")
+	var disabled bool
+	rig.run(t,
+		chromedp.Evaluate(`(() => { const b = document.querySelector('`+proposalPane+` [data-approve]'); b.click(); b.click(); return true })()`, nil),
+		poll(`document.querySelector('`+proposalPane+` [data-approve]')?.disabled === true || !!document.querySelector('`+proposalPane+` [data-approved-notice]')`),
+		poll(`!!document.querySelector('`+proposalPane+` [data-approved-notice]')`),
+		chromedp.Evaluate(`!!document.querySelector('`+proposalPane+` [data-refusal]') || !!document.querySelector('`+instructionsPanel+` [data-proposals-error]:not([style*="none"])')`, &disabled),
+	)
+	if disabled {
+		t.Fatal("an error showed beside a successful approval")
+	}
+	if got := rig.proposals.approveCalls(); got != 1 {
+		t.Fatalf("approve was called %d times, want 1", got)
+	}
+}

@@ -1,5 +1,23 @@
 import { assert, file, test } from "../../../shared/testing/test.js";
-import { agoText, orderProposals, proposalRow, rowNote, sessionText, stateLabel, stateTone } from "./instructionProposals.js";
+import {
+  agoText,
+  approveLabel,
+  approvedText,
+  fileDiff,
+  fileHead,
+  opSummary,
+  orderProposals,
+  proposalFile,
+  proposalRow,
+  refusalTitle,
+  refusedFiles,
+  rowNote,
+  sessionText,
+  sendBackNoteError,
+  staleCountText,
+  stateLabel,
+  stateTone,
+} from "./instructionProposals.js";
 
 file("architecture/domain/instructionProposals");
 
@@ -84,4 +102,126 @@ test("the row note names the files and when it was proposed, and when it was dec
 test("the session is its agent and mode", () => {
   assert.equal(sessionText(proposalRow(dto())), "software-architect · architect");
   assert.equal(sessionText(proposalRow({ id: "x", state: "open" })), "");
+});
+
+// ── a proposal's files and their diffs ──────────────────────────────────────
+
+const fileDto = (over = {}) => ({
+  path: ".claude/skills/verify-harness/SKILL.md",
+  op: "change",
+  base_version: 3,
+  current_version: 3,
+  stale: false,
+  base_content: "# Verify\n\nStep one.\nStep two.\n",
+  content: "# Verify\n\nStep one.\nStep 2.\nStep three.\n",
+  ...over,
+});
+
+test("a file reads the wire shape, with null contents as empty text", () => {
+  const f = proposalFile(fileDto({ op: "create", base_version: 0, current_version: 0, base_content: null }));
+  assert.equal(f.op, "create");
+  assert.equal(f.baseContent, "");
+  assert.equal(f.baseVersion, 0);
+  assert.equal(f.stale, false);
+  assert.equal(proposalFile(fileDto({ op: "remove", content: null })).content, "");
+});
+
+test("a file is stale when its current version differs from the one the draft read", () => {
+  assert.equal(proposalFile(fileDto({ current_version: 4, stale: true })).stale, true);
+  assert.equal(proposalFile(fileDto({ current_version: 4, stale: false })).stale, true, "the versions decide, not only the flag");
+  assert.equal(proposalFile(fileDto()).stale, false);
+});
+
+test("a create is all additions and a remove all deletions, whole, with no hunk rows", () => {
+  const created = fileDiff(proposalFile(fileDto({ op: "create", base_version: 0, base_content: null, content: "a\nb\n" })));
+  assert.deepEqual(created.rows.map((r) => [r.type, r.kind, r.old, r.new, r.text]), [
+    ["diff", "add", null, 1, "a"],
+    ["diff", "add", null, 2, "b"],
+  ]);
+  assert.equal(created.added, 2);
+  assert.equal(created.deleted, 0);
+  const removed = fileDiff(proposalFile(fileDto({ op: "remove", content: null, base_content: "x\n" })));
+  assert.deepEqual(removed.rows.map((r) => [r.kind, r.old, r.new, r.text]), [["del", 1, null, "x"]]);
+  assert.equal(removed.deleted, 1);
+});
+
+test("a change shows its changed lines with two lines of context, in hunks", () => {
+  const base = Array.from({ length: 20 }, (_, i) => `line ${i + 1}`).join("\n");
+  const content = base.replace("line 10", "line ten");
+  const d = fileDiff(proposalFile(fileDto({ base_content: base, content })));
+  assert.equal(d.added, 1);
+  assert.equal(d.deleted, 1);
+  const kinds = d.rows.map((r) => (r.type === "hunk" ? "hunk" : r.kind));
+  assert.deepEqual(kinds, ["hunk", "context", "context", "del", "add", "context", "context"]);
+  assert.equal(d.rows[0].range, "@@ -8,5 +8,5 @@");
+  assert.equal(d.rows[3].old, 10);
+  assert.equal(d.rows[4].new, 10);
+});
+
+test("a change with identical texts has no rows", () => {
+  const d = fileDiff(proposalFile(fileDto({ base_content: "same\n", content: "same\n" })));
+  assert.deepEqual(d.rows, []);
+});
+
+test("a file's head names its op, its stale state and its versions", () => {
+  const stale = fileHead(proposalFile(fileDto({ current_version: 4, stale: true })), "open");
+  assert.equal(stale.op, "change");
+  assert.equal(stale.staleText, "stale · v3 read, v4 saved");
+  assert.equal(stale.againstText, "");
+  const fresh = fileHead(proposalFile(fileDto()), "open");
+  assert.equal(fresh.staleText, "");
+  assert.equal(fresh.againstText, "against v3");
+  assert.equal(fileHead(proposalFile(fileDto({ op: "create", base_version: 0, base_content: null })), "open").againstText, "");
+});
+
+test("staleness only matters while the proposal is open", () => {
+  const f = proposalFile(fileDto({ current_version: 4, stale: true }));
+  assert.equal(fileHead(f, "approved").staleText, "");
+  assert.equal(fileHead(f, "approved").againstText, "against v3");
+});
+
+test("the op summary counts files by op, skipping ops with none", () => {
+  const files = [
+    proposalFile(fileDto({ op: "create" })),
+    proposalFile(fileDto({ op: "create" })),
+    proposalFile(fileDto({ op: "change" })),
+    proposalFile(fileDto({ op: "remove" })),
+  ];
+  assert.equal(opSummary(files), "2 create · 1 change · 1 remove");
+  assert.equal(opSummary([proposalFile(fileDto({ op: "change" }))]), "1 change");
+});
+
+test("stale files are counted in words, and the approve button names how many files it saves", () => {
+  assert.equal(staleCountText(0), "");
+  assert.equal(staleCountText(1), "1 file changed since the draft read it.");
+  assert.equal(staleCountText(3), "3 files changed since the draft read them.");
+  assert.equal(approveLabel(7), "Approve 7 files");
+  assert.equal(approveLabel(1), "Approve 1 file");
+});
+
+test("the refusal names the stale files with the versions read and saved", () => {
+  const files = [
+    proposalFile(fileDto({ path: "a.md", base_version: 3, current_version: 4, stale: true })),
+    proposalFile(fileDto({ path: "b.md" })),
+    proposalFile(fileDto({ path: "c.md", base_version: 2, current_version: 3, stale: true })),
+  ];
+  assert.deepEqual(refusedFiles(["a.md", "c.md"], files), [
+    { path: "a.md", text: "v3 read, v4 saved" },
+    { path: "c.md", text: "v2 read, v3 saved" },
+  ]);
+  assert.deepEqual(refusedFiles(["gone.md"], files), [{ path: "gone.md", text: "" }], "a path the pane does not know is still named");
+  assert.equal(refusalTitle(2), "Approval refused: 2 files were saved since the draft read them. Nothing was saved.");
+  assert.equal(refusalTitle(1), "Approval refused: 1 file was saved since the draft read it. Nothing was saved.");
+});
+
+test("an approval says what it saved: new versions and removals", () => {
+  const files = [proposalFile(fileDto({ op: "create" })), proposalFile(fileDto({ op: "change" })), proposalFile(fileDto({ op: "remove" }))];
+  assert.equal(approvedText(files), "2 files saved as new versions, 1 removed. Sessions you start from now on receive them.");
+  assert.equal(approvedText([proposalFile(fileDto({ op: "create" }))]), "1 file saved as a new version. Sessions you start from now on receive them.");
+});
+
+test("a send back needs a note with something in it; a reject needs none", () => {
+  assert.equal(sendBackNoteError(""), "A note is required: tell the session what to change.");
+  assert.equal(sendBackNoteError("  \n "), "A note is required: tell the session what to change.");
+  assert.equal(sendBackNoteError("Wait for the server."), "");
 });

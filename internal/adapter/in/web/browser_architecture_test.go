@@ -57,7 +57,8 @@ func newArchRigFull(t *testing.T, helper *shell.Helper, steps *fakeHelperAPI, wr
 	}
 	ctx, errs := browser(t)
 	feed := &sseFeed{}
-	proposals := newFakeInstructionProposals(feed)
+	files := newFakeInstructionFiles(feed)
+	proposals := newFakeInstructionProposals(feed, files)
 	pages := NewHandler(Deps{
 		Projects: fakeProjects{[]*domain.Project{{ID: "p1", Name: "coding_pool"}, {ID: "p2", Name: "other"}}},
 		Tasks:    fakeTickets{},
@@ -83,7 +84,6 @@ func newArchRigFull(t *testing.T, helper *shell.Helper, steps *fakeHelperAPI, wr
 		apiHandler, pageHandler = wrap(api, pages)
 	}
 	mux := http.NewServeMux()
-	files := newFakeInstructionFiles(feed)
 	mux.Handle("/api/events", feed)
 	files.register(mux)
 	proposals.register(mux)

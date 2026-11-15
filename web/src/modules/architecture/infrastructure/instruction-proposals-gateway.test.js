@@ -68,3 +68,84 @@ test("follow reads the repository's instruction_proposal_changed events and igno
   stop();
   assert.equal(followed.at(-1), "stopped");
 });
+
+const wireFile = {
+  path: ".claude/skills/verify-harness/SKILL.md",
+  op: "change",
+  base_version: 3,
+  current_version: 4,
+  stale: true,
+  base_content: "old\n",
+  content: "new\n",
+};
+
+test("get sends the proposal id and reads the proposal with its files", async () => {
+  const { gateway, sent } = rig(() => jsonResponse(200, { proposal, files: [wireFile] }));
+  const out = await gateway.get("p1");
+  assert.deepEqual(sent(), [["get_instruction_proposal", { proposal_id: "p1" }]]);
+  assert.equal(out.proposal.id, "p1");
+  assert.equal(out.files.length, 1);
+  assert.equal(out.files[0].op, "change");
+  assert.equal(out.files[0].stale, true);
+  assert.equal(out.files[0].baseContent, "old\n");
+});
+
+test("approve sends the proposal id and reads the decided proposal and the saved files", async () => {
+  const { gateway, sent } = rig(() =>
+    jsonResponse(200, { proposal: { ...proposal, state: "approved" }, files: [{ path: "CLAUDE.md", kind: "memory", version: 2, size: 4, updated_at: "2026-11-15T11:00:00Z" }] }),
+  );
+  const out = await gateway.approve("p1");
+  assert.deepEqual(sent(), [["approve_instruction_proposal", { proposal_id: "p1" }]]);
+  assert.equal(out.proposal.state, "approved");
+  assert.deepEqual(out.saved, [{ path: "CLAUDE.md", version: 2 }]);
+});
+
+test("an INSTRUCTION_CHANGED refusal keeps the stale paths", async () => {
+  const { gateway } = rig(() => jsonResponse(409, { error: "changed", code: "INSTRUCTION_CHANGED", details: { paths: ["a.md", "b.md"] } }));
+  try {
+    await gateway.approve("p1");
+    assert.ok(false, "expected a refusal");
+  } catch (err) {
+    assert.equal(err.code, "INSTRUCTION_CHANGED");
+    assert.deepEqual(err.paths, ["a.md", "b.md"]);
+  }
+});
+
+test("a get that is not a proposal is a BAD_RESPONSE", async () => {
+  const { gateway } = rig(() => jsonResponse(200, { nope: true }));
+  try {
+    await gateway.get("p1");
+    assert.ok(false, "expected a refusal");
+  } catch (err) {
+    assert.equal(err.code, "BAD_RESPONSE");
+  }
+});
+
+test("reject sends the note only when there is one", async () => {
+  const { gateway, sent } = rig(() => jsonResponse(200, { proposal: { ...proposal, state: "rejected", note: "No." } }));
+  const out = await gateway.reject("p1", "No.");
+  await gateway.reject("p1", "");
+  assert.deepEqual(sent(), [
+    ["reject_instruction_proposal", { proposal_id: "p1", note: "No." }],
+    ["reject_instruction_proposal", { proposal_id: "p1" }],
+  ]);
+  assert.equal(out.proposal.state, "rejected");
+  assert.equal(out.proposal.note, "No.");
+});
+
+test("send back sends the proposal id and the note", async () => {
+  const { gateway, sent } = rig(() => jsonResponse(200, { proposal: { ...proposal, state: "sent_back", note: "Wait for the server." } }));
+  const out = await gateway.sendBack("p1", "Wait for the server.");
+  assert.deepEqual(sent(), [["send_back_instruction_proposal", { proposal_id: "p1", note: "Wait for the server." }]]);
+  assert.equal(out.proposal.state, "sent_back");
+});
+
+test("a decided proposal's refusal arrives with its code", async () => {
+  const { gateway } = rig(() => jsonResponse(409, { error: "decided", code: "PROPOSAL_DECIDED" }));
+  try {
+    await gateway.reject("p1", "");
+    assert.ok(false, "expected a refusal");
+  } catch (err) {
+    assert.equal(err.code, "PROPOSAL_DECIDED");
+  }
+});
