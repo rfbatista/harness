@@ -7,6 +7,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"gorm.io/gorm"
 	"io"
 	"mime/multipart"
 	"net/http"
@@ -75,6 +76,8 @@ type shellE2E struct {
 	notes    *notifications.Service
 	// repoAgents is which agents each repository assigns, and its prompts.
 	repoAgents *repoagents.Service
+	// db is the server's database, for tests that make a store fail.
+	db *gorm.DB
 }
 
 // boot starts the server over e.cfg and fills e's services.
@@ -92,7 +95,7 @@ func (e *shellE2E) boot() {
 			}
 			return workspaces.NewOriginFetcher(git, gitcredentialstest.New())
 		}),
-		fx.Populate(&e.orch, &e.plan, &e.channel, &e.art, &e.cat, &e.sessions, &e.shells, &e.rules, &e.gate, &e.watch, &e.pushes, &e.wgit, &e.notes, &e.repoAgents),
+		fx.Populate(&e.orch, &e.plan, &e.channel, &e.art, &e.cat, &e.sessions, &e.shells, &e.rules, &e.gate, &e.watch, &e.pushes, &e.wgit, &e.notes, &e.repoAgents, &e.db),
 		fx.NopLogger,
 	)
 	if err := e.app.Start(e.ctx); err != nil {

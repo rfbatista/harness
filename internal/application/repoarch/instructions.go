@@ -319,7 +319,7 @@ func (s *Service) RemoveInstructionFilesFromRepository(ctx context.Context, repo
 // ApplyInstructionChanges saves a batch of instruction-file changes in one
 // transaction, validated as saves are, and announces each file and, when a
 // removal changed it, the record.
-func (s *Service) ApplyInstructionChanges(ctx context.Context, repositoryID string, changes []domain.InstructionChange) ([]domain.InstructionFile, error) {
+func (s *Service) ApplyInstructionChanges(ctx context.Context, repositoryID string, changes []domain.InstructionChange, inTx func(ctx context.Context) error) ([]domain.InstructionFile, error) {
 	repo, err := s.repos.GetRepository(ctx, repositoryID)
 	if err != nil {
 		return nil, err
@@ -333,7 +333,7 @@ func (s *Service) ApplyInstructionChanges(ctx context.Context, repositoryID stri
 			return nil, invalidInstruction(problems)
 		}
 	}
-	saved, recordVersion, err := s.store.ApplyInstructionChanges(ctx, repositoryID, repo.ProjectID, changes, domain.MaxInstructionFilesSize)
+	saved, recordVersion, err := s.store.ApplyInstructionChanges(ctx, repositoryID, repo.ProjectID, changes, domain.MaxInstructionFilesSize, inTx)
 	if err != nil {
 		return nil, tooBigAsInvalid(err)
 	}

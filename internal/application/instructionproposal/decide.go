@@ -16,7 +16,7 @@ var _ ports.InstructionProposalDecisions = (*Service)(nil)
 
 // FileApplier saves a batch of instruction-file changes in one transaction.
 type FileApplier interface {
-	ApplyInstructionChanges(ctx context.Context, repositoryID string, changes []domain.InstructionChange) ([]domain.InstructionFile, error)
+	ApplyInstructionChanges(ctx context.Context, repositoryID string, changes []domain.InstructionChange, inTx func(ctx context.Context) error) ([]domain.InstructionFile, error)
 }
 
 // UseTurns sets where a decision reaches the session that proposed.
@@ -39,13 +39,15 @@ func (s *Service) open(ctx context.Context, proposalID string) (*domain.Instruct
 }
 
 // decide stores the proposal's new state, announces it, and returns its row.
-func (s *Service) decide(ctx context.Context, p *domain.InstructionProposal, state, note string) (*ports.InstructionProposalRow, error) {
+func (s *Service) decide(ctx context.Context, p *domain.InstructionProposal, state, note string, announce bool) (*ports.InstructionProposalRow, error) {
 	now := time.Now().UTC()
 	p.State, p.Note, p.DecidedAt = state, strings.TrimSpace(note), &now
 	if err := s.proposals.UpdateInstructionProposal(ctx, p); err != nil {
 		return nil, err
 	}
-	s.announce(ctx, p)
+	if announce {
+		s.announce(ctx, p)
+	}
 	row := s.row(ctx, p)
 	return &row, nil
 }
@@ -68,14 +70,21 @@ func (s *Service) ApproveInstructionProposal(ctx context.Context, proposalID str
 	for i, f := range p.Files {
 		changes[i] = domain.InstructionChange{Path: f.Path, Kind: "skill", BaseVersion: f.BaseVersion, Content: f.Content, Remove: f.Op == domain.InstructionOpRemove}
 	}
-	saved, err := s.applier.ApplyInstructionChanges(ctx, p.RepositoryID, changes)
+	// The state change commits with the saves: both or neither.
+	// Only the store runs inside it: the database has one writer connection,
+	// so nothing else may read while the transaction is open.
+	now := time.Now().UTC()
+	p.State, p.DecidedAt = domain.InstructionProposalApproved, &now
+	saved, err := s.applier.ApplyInstructionChanges(ctx, p.RepositoryID, changes, func(txCtx context.Context) error {
+		return s.proposals.UpdateInstructionProposal(txCtx, p)
+	})
 	if err != nil {
+		p.State, p.DecidedAt = domain.InstructionProposalOpen, nil
 		return nil, nil, err
 	}
-	row, err := s.decide(ctx, p, domain.InstructionProposalApproved, "")
-	if err != nil {
-		return nil, nil, err
-	}
+	s.announce(ctx, p)
+	r := s.row(ctx, p)
+	row := &r
 	s.deliver(p, "instruction-approved:"+p.ID, approvedTurn(p, saved))
 	return row, saved, nil
 }
@@ -104,7 +113,7 @@ func (s *Service) RejectInstructionProposal(ctx context.Context, proposalID, not
 	if err != nil {
 		return nil, err
 	}
-	row, err := s.decide(ctx, p, domain.InstructionProposalRejected, note)
+	row, err := s.decide(ctx, p, domain.InstructionProposalRejected, note, true)
 	if err != nil {
 		return nil, err
 	}
@@ -123,7 +132,7 @@ func (s *Service) SendBackInstructionProposal(ctx context.Context, proposalID, n
 	if err != nil {
 		return nil, err
 	}
-	row, err := s.decide(ctx, p, domain.InstructionProposalSentBack, note)
+	row, err := s.decide(ctx, p, domain.InstructionProposalSentBack, note, true)
 	if err != nil {
 		return nil, err
 	}

@@ -223,7 +223,7 @@ func editRecordEntries(tx *gorm.DB, repositoryID string, edit func([]domain.Arch
 }
 
 // ApplyInstructionChanges implements ports.ArchitectureRecordStore.
-func (r *ArchitectureRecordRepository) ApplyInstructionChanges(ctx context.Context, repositoryID, projectID string, changes []domain.InstructionChange, totalLimit int) ([]domain.InstructionFile, int, error) {
+func (r *ArchitectureRecordRepository) ApplyInstructionChanges(ctx context.Context, repositoryID, projectID string, changes []domain.InstructionChange, totalLimit int, inTx func(ctx context.Context) error) ([]domain.InstructionFile, int, error) {
 	var saved []domain.InstructionFile
 	var recordVersion int
 	err := r.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
@@ -267,13 +267,18 @@ func (r *ArchitectureRecordRepository) ApplyInstructionChanges(ctx context.Conte
 		if total > totalLimit {
 			return ports.ErrInstructionFilesTooBig
 		}
-		if len(removed) == 0 {
+		if len(removed) > 0 {
+			recordVersion, err = editRecordEntries(tx, repositoryID, func(in []domain.ArchInstruction) []domain.ArchInstruction {
+				return slices.DeleteFunc(in, func(e domain.ArchInstruction) bool { return slices.Contains(removed, e.Path) })
+			})
+			if err != nil {
+				return err
+			}
+		}
+		if inTx == nil {
 			return nil
 		}
-		recordVersion, err = editRecordEntries(tx, repositoryID, func(in []domain.ArchInstruction) []domain.ArchInstruction {
-			return slices.DeleteFunc(in, func(e domain.ArchInstruction) bool { return slices.Contains(removed, e.Path) })
-		})
-		return err
+		return inTx(withTx(ctx, tx))
 	})
 	return saved, recordVersion, err
 }

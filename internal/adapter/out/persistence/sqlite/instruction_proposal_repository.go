@@ -128,6 +128,6 @@ func (r *InstructionProposalRepository) ListInstructionProposalsByTask(ctx conte
 
 // UpdateInstructionProposal implements ports.InstructionProposalStore.
 func (r *InstructionProposalRepository) UpdateInstructionProposal(ctx context.Context, p *domain.InstructionProposal) error {
-	return r.db.WithContext(ctx).Model(&InstructionProposalModel{}).Where("id = ?", p.ID).
+	return dbFor(ctx, r.db).Model(&InstructionProposalModel{}).Where("id = ?", p.ID).
 		Updates(map[string]any{"state": p.State, "note": p.Note, "decided_at": p.DecidedAt}).Error
 }
