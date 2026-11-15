@@ -624,3 +624,76 @@ func TestTaskPageSaysWhoMovedTheTaskAndWhy(t *testing.T) {
 		t.Errorf("JS errors: %v", e)
 	}
 }
+
+// TestAnsweringAReviewShowsNoError: an answer from the Reviews popover (an
+// approval, or a change request with its note) and from the Review requests page
+// leaves no error banner: the loops over the requests must not shadow the
+// reviewsInbox members the answer reads afterwards.
+func TestAnsweringAReviewShowsNoError(t *testing.T) {
+	now := time.Now()
+	review := func(id, subject string) *domain.ReviewRequest {
+		return &domain.ReviewRequest{ID: id, TaskID: "t1", ProjectID: "p1", ArchitectSessionID: "s-arch", Subject: subject, Body: "Look.",
+			DocumentIDs: []string{}, ArtifactIDs: []string{}, State: domain.ReviewPending, CreatedAt: now, UpdatedAt: now}
+	}
+	srv, _ := architectServer(t, nil, review("rv1", "First request"), review("rv2", "Second request"), review("rv3", "Third request"))
+	ctx, errs := browser(t)
+
+	const popover = `document.getElementById('task-reviews')`
+	const open = popover + `.matches(':popover-open')`
+	const button = `document.getElementById('task-reviews-button')`
+	// The banner is a role=alert in the inbox; it is read whether or not the popover is still open.
+	banner := `((document.querySelector('[role=alert][data-tone=danger]') || {}).textContent || '').replace(/\s+/g, ' ').trim()`
+	cards := `[...` + popover + `.querySelectorAll('.review')]`
+	card := func(subject string) string { return cards + `.find(c => c.textContent.includes('` + subject + `'))` }
+	var afterApprove, afterChanges, afterLast string
+	if err := chromedp.Run(ctx,
+		chromedp.EmulateViewport(1280, 900),
+		chromedp.Navigate(srv.URL+"/projects/p1/tasks/t1"),
+		chromedp.Poll(`!!`+button+` && !`+button+`.hidden && `+button+`.checkVisibility()`, nil, chromedp.WithPollingTimeout(10*time.Second)),
+		chromedp.Evaluate(button+`.click()`, nil),
+		chromedp.Poll(open+` && `+cards+`.length === 3`, nil, chromedp.WithPollingTimeout(5*time.Second)),
+		// Approve: the card leaves, the popover stays, no banner.
+		chromedp.Evaluate(card("First")+`.querySelectorAll('button')[0].click()`, nil),
+		chromedp.Poll(cards+`.length === 2`, nil, chromedp.WithPollingTimeout(5*time.Second)),
+		chromedp.Sleep(300*time.Millisecond),
+		chromedp.Evaluate(banner, &afterApprove),
+		// Request changes with a note, then Send.
+		chromedp.Evaluate(card("Second")+`.querySelectorAll('button')[1].click()`, nil),
+		chromedp.Poll(`!!`+popover+`.querySelector('textarea')`, nil, chromedp.WithPollingTimeout(5*time.Second)),
+		chromedp.SendKeys(`#task-reviews textarea`, "Split it in two.", chromedp.ByQuery),
+		chromedp.Evaluate(card("Second")+`.querySelectorAll('button')[1].click()`, nil),
+		chromedp.Poll(cards+`.length === 1`, nil, chromedp.WithPollingTimeout(5*time.Second)),
+		chromedp.Sleep(300*time.Millisecond),
+		chromedp.Evaluate(banner, &afterChanges),
+		// The last answer closes the popover and leaves no banner behind.
+		chromedp.Evaluate(card("Third")+`.querySelectorAll('button')[0].click()`, nil),
+		chromedp.Poll(`!`+open, nil, chromedp.WithPollingTimeout(5*time.Second)),
+		chromedp.Sleep(300*time.Millisecond),
+		chromedp.Evaluate(banner, &afterLast),
+	); err != nil {
+		t.Fatalf("%v\nJS errors: %v", err, errs.all())
+	}
+	for what, got := range map[string]string{"approving": afterApprove, "requesting changes": afterChanges, "approving the last": afterLast} {
+		if got != "" {
+			t.Errorf("after %s the popover shows %q", what, got)
+		}
+	}
+
+	// The Review requests page: the same answer, the same silence.
+	srv2, _ := architectServer(t, nil, review("rv1", "First request"), review("rv2", "Second request"))
+	var onPage string
+	pageCards := `[...document.querySelectorAll('main .review')]`
+	if err := chromedp.Run(ctx,
+		chromedp.Navigate(srv2.URL+"/projects/p1/reviews"),
+		chromedp.Poll(pageCards+`.length === 2`, nil, chromedp.WithPollingTimeout(10*time.Second)),
+		chromedp.Evaluate(pageCards+`[0].querySelector('button').click()`, nil),
+		chromedp.Poll(pageCards+`.length === 1`, nil, chromedp.WithPollingTimeout(5*time.Second)),
+		chromedp.Sleep(300*time.Millisecond),
+		chromedp.Evaluate(banner, &onPage),
+	); err != nil {
+		t.Fatalf("%v\nJS errors: %v", err, errs.all())
+	}
+	if onPage != "" {
+		t.Errorf("after an answer on the Review requests page it shows %q", onPage)
+	}
+}

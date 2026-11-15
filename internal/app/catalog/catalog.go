@@ -31,6 +31,7 @@ import (
 	"operators-mcp/internal/application/architecture"
 	"operators-mcp/internal/application/capabilities"
 	"operators-mcp/internal/application/designsystem"
+	"operators-mcp/internal/application/instructionproposal"
 	"operators-mcp/internal/application/projects"
 	"operators-mcp/internal/application/repoarch"
 	"operators-mcp/internal/application/settings"
@@ -59,6 +60,11 @@ type Deps struct {
 	// DesignExports keeps each repository's last design system export; nil
 	// disables the export.
 	DesignExports ports.DesignExportStore
+	// InstructionDrafts keeps tasks' instruction drafts; nil disables them.
+	InstructionDrafts ports.InstructionDraftStore
+	// InstructionProposals keeps instruction-file proposals; nil with
+	// InstructionDrafts or ArchRecords nil disables them.
+	InstructionProposals ports.InstructionProposalStore
 	Agents        ports.AgentRepository
 	Prompts       ports.PromptRepository
 	Skills        ports.SkillRepository
@@ -91,6 +97,8 @@ type Catalog struct {
 	RepositoryArchitectures *repoarch.Service
 	// DesignSystems is nil without Deps.DesignRecords.
 	DesignSystems *designsystem.Service
+	// InstructionProposals is nil without Deps.InstructionDrafts.
+	InstructionProposals *instructionproposal.Service
 	Agents        *agents.Service
 	Capabilities  *capabilities.Service
 	Settings      *settings.Service
@@ -178,11 +186,16 @@ func New(d Deps) Catalog {
 		})
 	}
 
+	var instructions *instructionproposal.Service
+	if d.InstructionDrafts != nil && d.InstructionProposals != nil && repoArch != nil {
+		instructions = instructionproposal.NewService(instructionproposal.Deps{Drafts: d.InstructionDrafts, Proposals: d.InstructionProposals, Repositories: pr, Files: repoArch, Applier: repoArch})
+	}
+
 	arch.Subscribe(bus)
 	ag.Subscribe(bus)
 	caps.Subscribe(bus)
 
-	return Catalog{Bus: bus, Projects: pr, Architecture: arch, RepositoryArchitectures: repoArch, DesignSystems: designs, Agents: ag, Capabilities: caps, Settings: st}
+	return Catalog{Bus: bus, Projects: pr, Architecture: arch, RepositoryArchitectures: repoArch, DesignSystems: designs, InstructionProposals: instructions, Agents: ag, Capabilities: caps, Settings: st}
 }
 
 // Tooling is the catalog as the built-in tool groups need it.

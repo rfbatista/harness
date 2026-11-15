@@ -81,12 +81,12 @@ export const reviewsInbox = ({ gateway, clock, hash = () => globalThis.location?
     get pendingCards() {
       return this.reviews
         .filter((r) => isPending(r) || this.withdrawnWhileWriting(r))
-        .map((r, i) => ({ ...this.card(r), approveVariant: i === 0 ? "primary" : null }));
+        .map((r, i) => ({ ...this.cardOf(r), approveVariant: i === 0 ? "primary" : null }));
     },
     /** On the task page: what was answered or withdrawn, newest first. */
     get settledCards() {
       if (!this.forTask) return [];
-      return this.reviews.filter((r) => !isPending(r) && !this.withdrawnWhileWriting(r)).map((r) => this.card(r));
+      return this.reviews.filter((r) => !isPending(r) && !this.withdrawnWhileWriting(r)).map((r) => this.cardOf(r));
     },
     /** The title row's Reviews button: while a request waits; until the list is read, the server's count stands. */
     get buttonShown() {
@@ -136,7 +136,9 @@ export const reviewsInbox = ({ gateway, clock, hash = () => globalThis.location?
       return [...byTask.values()];
     },
 
-    card(r) {
+    // Not named `card`: the markup's loops use that name, and a loop variable
+    // shadows a component method of the same name.
+    cardOf(r) {
       const draft = this.draftOf(r.id);
       return {
         ...toCard(r, { names: this.names, projectId: this.projectId, now: this.now }),

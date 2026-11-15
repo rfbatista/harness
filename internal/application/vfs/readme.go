@@ -32,6 +32,9 @@ stored: what others change appears here, and what you write here is stored.
     task/designs/             artifacts published on this task, file bytes
     task/designs/urls.md      dev-server URLs published on this task (read-only)
     task/designs/attached.md  project assets attached to this task: title → path here (read-only)
+    task/instruction-drafts/<repository>/<skill>/<file>
+                              skills you draft for a repository's instruction files, shared by the task's sessions;
+                              submit them with propose_instruction_files (absent until the first file is written)
     project/docs/             every project document
     project/designs/          every project design asset, file bytes
     project/designs/urls.md   project design assets that are URLs (read-only)

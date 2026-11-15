@@ -190,6 +190,9 @@ func registerHTTPServer(lc fx.Lifecycle, cfg Config, cat catalog.Catalog, appRun
 		ArchitectureAssistant: architectureAssistant,
 		// One structured record per repository: layers, access, rules.
 		RepositoryArchitectures: cat.RepositoryArchitectures,
+		// What agents proposed for a repository's instruction files.
+		InstructionProposals:         cat.InstructionProposals,
+		InstructionProposalDecisions: cat.InstructionProposals,
 		// One structured record per project: tokens, principles, components.
 		DesignSystems: cat.DesignSystems,
 		// What the architecture hooks, shims and commit check ask.
@@ -287,6 +290,9 @@ func sessionTaskTools(cat catalog.Catalog, orch *orchestration.Service, plan *pl
 	opts := append([]tooling.Option{}, extra...)
 	if cat.DesignSystems != nil {
 		opts = append(opts, tooling.WithDesignProposals(cat.DesignSystems))
+	}
+	if cat.InstructionProposals != nil {
+		opts = append(opts, tooling.WithInstructionProposals(cat.InstructionProposals))
 	}
 	return tooling.SessionTaskTools(plan, sessions, cat.Agents, cat.Architecture,
 		tooling.PeerStarter{Sessions: orch, Repositories: cat.Projects, Merger: merges},

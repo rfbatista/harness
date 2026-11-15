@@ -108,6 +108,8 @@ var PersistenceModule = fx.Module("persistence",
 		asPort(sqlite.NewDesignSystemRepository, new(ports.DesignSystemStore)),
 		asPort(sqlite.NewDesignProposalRepository, new(ports.DesignProposalStore)),
 		asPort(sqlite.NewDesignExportRepository, new(ports.DesignExportStore)),
+		asPort(sqlite.NewInstructionDraftRepository, new(ports.InstructionDraftStore)),
+		asPort(sqlite.NewInstructionProposalRepository, new(ports.InstructionProposalStore)),
 	),
 )
 
@@ -289,6 +291,8 @@ type catalogParams struct {
 	DesignRecords   ports.DesignSystemStore
 	DesignProposals ports.DesignProposalStore
 	DesignExports   ports.DesignExportStore
+	InstructionDrafts    ports.InstructionDraftStore
+	InstructionProposals ports.InstructionProposalStore
 	Agents          ports.AgentRepository
 	Prompts         ports.PromptRepository
 	Skills          ports.SkillRepository
@@ -318,6 +322,8 @@ func newCatalog(p catalogParams) catalog.Catalog {
 		DesignRecords:    p.DesignRecords,
 		DesignProposals:  p.DesignProposals,
 		DesignExports:    p.DesignExports,
+		InstructionDrafts:    p.InstructionDrafts,
+		InstructionProposals: p.InstructionProposals,
 		Agents:           p.Agents,
 		Prompts:          p.Prompts,
 		Skills:           p.Skills,
@@ -564,6 +570,9 @@ func newVirtualShells(plan *planning.Service, art *artifacts.Service, sessions p
 		src.DesignSystems, src.Repositories = cat.DesignSystems, cat.Projects
 		src.Drafts = cat.DesignSystems
 	}
+	if cat.InstructionProposals != nil {
+		src.InstructionDrafts = cat.InstructionProposals
+	}
 	shells := vfs.New(src)
 	shells.UseRootEvents(events)
 	return shells
@@ -616,6 +625,13 @@ func bindVirtualShells(orch *orchestration.Service, shells *vfs.Service, plan *p
 	// A saved architecture reaches the shells as well as the project feed.
 	if cat.RepositoryArchitectures != nil {
 		cat.RepositoryArchitectures.UseFeed(changeSinks{orch, shells})
+	}
+	// A proposal reaches open pages on the project feed and the shells, which
+	// show its skills read-only.
+	if cat.InstructionProposals != nil {
+		cat.InstructionProposals.UseFeed(changeSinks{orch, shells})
+		cat.InstructionProposals.UseTasks(plan)
+		cat.InstructionProposals.UseAgents(cat.Agents)
 	}
 	// A saved design system does too: the shells of opted-in sessions show it.
 	if cat.DesignSystems != nil {
@@ -1034,6 +1050,11 @@ func newOrchestrationService(
 		cat.DesignSystems.UseAgents(cat.Agents)
 		// A decision reaches the design session that proposed.
 		cat.DesignSystems.UseTurns(svc)
+	}
+	if cat.InstructionProposals != nil {
+		cat.InstructionProposals.UseSessions(sessions)
+		// A decision reaches the session that proposed.
+		cat.InstructionProposals.UseTurns(svc)
 	}
 	if cat.RepositoryArchitectures != nil {
 		// Saves, deletes and exports reach open pages on the project feed.

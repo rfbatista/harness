@@ -87,6 +87,13 @@ func (s *Service) contents(ctx context.Context, sh *root, tk *domain.Ticket) (*b
 	if err := b.documents(ctx, s.src.Tickets, s.src.Documents, tk.ProjectID, tk); err != nil {
 		return nil, err
 	}
+	if s.src.InstructionDrafts != nil {
+		files, err := s.src.InstructionDrafts.ListInstructionDrafts(ctx, tk.ProjectID, tk.ID)
+		if err != nil {
+			return nil, err
+		}
+		b.instructionDrafts(files, b.now)
+	}
 	if err := b.comments(ctx, s.src.Comments, tk.ID, sessionID); err != nil {
 		return nil, err
 	}

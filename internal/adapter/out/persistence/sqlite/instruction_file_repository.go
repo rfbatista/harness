@@ -221,3 +221,64 @@ func editRecordEntries(tx *gorm.DB, repositoryID string, edit func([]domain.Arch
 	}
 	return m.Version, nil
 }
+
+// ApplyInstructionChanges implements ports.ArchitectureRecordStore.
+func (r *ArchitectureRecordRepository) ApplyInstructionChanges(ctx context.Context, repositoryID, projectID string, changes []domain.InstructionChange, totalLimit int, inTx func(ctx context.Context) error) ([]domain.InstructionFile, int, error) {
+	var saved []domain.InstructionFile
+	var recordVersion int
+	err := r.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		saved, recordVersion = nil, 0
+		var removed []string
+		for _, ch := range changes {
+			m, err := findInstructionFile(tx, repositoryID, ch.Path)
+			if err != nil {
+				return err
+			}
+			switch {
+			case ch.Remove && m == nil:
+				return instructionNotFound(ch.Path)
+			case !ch.Remove && m == nil && ch.BaseVersion != 0:
+				return instructionNotFound(ch.Path)
+			case !ch.Remove && m != nil && ch.BaseVersion == 0:
+				return instructionExists(ch.Path)
+			case m != nil && m.Version != ch.BaseVersion:
+				return instructionChanged(ch.Path)
+			}
+			if ch.Remove {
+				if err := tx.Delete(m).Error; err != nil {
+					return err
+				}
+				removed = append(removed, ch.Path)
+				continue
+			}
+			if m == nil {
+				m = &InstructionFileModel{RepositoryID: repositoryID, Path: ch.Path}
+			}
+			m.ProjectID, m.Kind, m.Version, m.Content, m.UpdatedAt = projectID, ch.Kind, m.Version+1, ch.Content, time.Now()
+			if err := tx.Save(m).Error; err != nil {
+				return err
+			}
+			saved = append(saved, m.toDomain())
+		}
+		total, err := totalSize(tx, repositoryID, "")
+		if err != nil {
+			return err
+		}
+		if total > totalLimit {
+			return ports.ErrInstructionFilesTooBig
+		}
+		if len(removed) > 0 {
+			recordVersion, err = editRecordEntries(tx, repositoryID, func(in []domain.ArchInstruction) []domain.ArchInstruction {
+				return slices.DeleteFunc(in, func(e domain.ArchInstruction) bool { return slices.Contains(removed, e.Path) })
+			})
+			if err != nil {
+				return err
+			}
+		}
+		if inTx == nil {
+			return nil
+		}
+		return inTx(withTx(ctx, tx))
+	})
+	return saved, recordVersion, err
+}
