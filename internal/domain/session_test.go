@@ -22,15 +22,16 @@ func TestSessionStatusValues(t *testing.T) {
 }
 
 func TestParseSessionMode(t *testing.T) {
-	for in, want := range map[string]SessionMode{"": SessionModeDefault, "architect": SessionModeArchitect, "implement": SessionModeImplement, "design": SessionModeDesign, "product": SessionModeProduct} {
+	for in, want := range map[string]SessionMode{"": SessionModeDefault, "architect": SessionModeArchitect, "implement": SessionModeImplement, "design": SessionModeDesign, "product": SessionModeProduct, "review": SessionModeReview, "test": SessionModeTest, "qa": SessionModeQA, "operate": SessionModeOperate} {
 		got, err := ParseSessionMode(in)
 		if err != nil || got != want {
 			t.Errorf("ParseSessionMode(%q) = %q, %v; want %q", in, got, err, want)
 		}
 	}
 	_, err := ParseSessionMode("wizard")
-	if err == nil || !strings.Contains(err.Error(), `"design"`) || !strings.Contains(err.Error(), `"implement"`) || !strings.Contains(err.Error(), `"product"`) {
-		t.Fatalf("unknown mode must be refused and the message must list design, implement and product: %v", err)
+	if err == nil || !strings.Contains(err.Error(), `"design"`) || !strings.Contains(err.Error(), `"implement"`) || !strings.Contains(err.Error(), `"product"`) ||
+		!strings.Contains(err.Error(), `"review"`) || !strings.Contains(err.Error(), `"test"`) || !strings.Contains(err.Error(), `"qa"`) || !strings.Contains(err.Error(), `"operate"`) {
+		t.Fatalf("unknown mode must be refused and the message must list every mode: %v", err)
 	}
 }
 
@@ -39,10 +40,20 @@ func TestParseSessionMode(t *testing.T) {
 func TestSessionMode_NeedsTask(t *testing.T) {
 	for mode, want := range map[SessionMode]bool{
 		SessionModeDefault: true, SessionModeArchitect: true, SessionModeImplement: true, SessionModeDesign: true,
-		SessionModeProduct: false,
+		SessionModeProduct: false, SessionModeReview: true, SessionModeTest: true, SessionModeQA: true, SessionModeOperate: true,
 	} {
 		if got := mode.NeedsTask(); got != want {
 			t.Errorf("SessionMode(%q).NeedsTask() = %v, want %v", mode, got, want)
+		}
+	}
+}
+
+// The verification modes see only their own repository: the branch under
+// check is reached through the worktree the session was cut from.
+func TestSandboxVisibilityForVerificationModesIsOwnRepo(t *testing.T) {
+	for _, mode := range []SessionMode{SessionModeReview, SessionModeTest, SessionModeQA, SessionModeOperate} {
+		if got := SandboxVisibilityFor(mode); got != SandboxOwnRepo {
+			t.Errorf("SandboxVisibilityFor(%q) = %q; want %q", mode, got, SandboxOwnRepo)
 		}
 	}
 }

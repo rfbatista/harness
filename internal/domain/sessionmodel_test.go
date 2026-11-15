@@ -23,6 +23,10 @@ func TestResolveSessionModel(t *testing.T) {
 		{"design unset", SessionModeDesign, "", "", ""},
 		{"product unset", SessionModeProduct, "", "", ""},
 		{"design system unset", SessionModeDesignSystem, "", "", ""},
+		{"review unset", SessionModeReview, "", "", "opus"},
+		{"test unset", SessionModeTest, "", "", "sonnet"},
+		{"qa unset", SessionModeQA, "", "", "sonnet"},
+		{"operate unset", SessionModeOperate, "", "", "sonnet"},
 		{"stored wins over built-in", SessionModeArchitect, "", "fable", "fable"},
 		{"stored default means the CLI chooses", SessionModeImplement, "", ModelDefault, ""},
 		{"a row set on a mode without a built-in", SessionModeDesign, "", "haiku", "haiku"},
@@ -48,6 +52,10 @@ func TestModeModels(t *testing.T) {
 		{SessionModeDesign, "models.claude.mode.design", "haiku", "default"},
 		{SessionModeProduct, "models.claude.mode.product", "default", "default"},
 		{SessionModeDesignSystem, "models.claude.mode.designsystem", "default", "default"},
+		{SessionModeReview, "models.claude.mode.review", "opus", "opus"},
+		{SessionModeTest, "models.claude.mode.test", "sonnet", "sonnet"},
+		{SessionModeQA, "models.claude.mode.qa", "sonnet", "sonnet"},
+		{SessionModeOperate, "models.claude.mode.operate", "sonnet", "sonnet"},
 	}
 	if len(got) != len(want) {
 		t.Fatalf("ModeModels = %+v; want %d rows", got, len(want))

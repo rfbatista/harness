@@ -42,6 +42,14 @@ func ModeName(mode SessionMode) string {
 		return "Product"
 	case SessionModeDesignSystem:
 		return "Design system"
+	case SessionModeReview:
+		return "Reviewer"
+	case SessionModeTest:
+		return "Tester"
+	case SessionModeQA:
+		return "QA"
+	case SessionModeOperate:
+		return "Operator"
 	default:
 		return "Default"
 	}
@@ -69,7 +77,7 @@ func BranchBlocks(read func(key string) string) []BranchBlock {
 }
 
 // BranchBlockedFor says whether the branch block is on for a session of mode,
-// and the name the refusal gives the mode. A mode that is not one of the six
+// and the name the refusal gives the mode. A mode that has no row
 // is Default.
 func BranchBlockedFor(mode SessionMode, read func(key string) string) (blocked bool, name string) {
 	if !slices.Contains(modeModelModes, mode) {
