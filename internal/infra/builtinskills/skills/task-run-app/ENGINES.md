@@ -1,7 +1,7 @@
 # Engine detection
 
 Read in this order. Stop at the first source that names exactly one engine. Name every
-file you read in the task comment.
+file you read in the Seed document.
 
 | Source | What to look for | Says |
 |---|---|---|
@@ -34,7 +34,7 @@ Both are named `task_<task short id>`: letters, digits and `_` only.
 
 - postgres: as the superuser, `DROP DATABASE IF EXISTS`, `DROP ROLE IF EXISTS`, `CREATE ROLE ... LOGIN PASSWORD`, `CREATE DATABASE ... OWNER`. Drop only these two names.
 - mysql: `DROP DATABASE IF EXISTS`, `DROP USER IF EXISTS`, `CREATE DATABASE`, `CREATE USER`, `GRANT ALL ON <task database>.*` to that user only.
-- SQLite: no engine and no k3s. The skill never writes into a worktree, so it cannot create the file. The database path variable points at `task_<task short id>.db` under the service worktree's data folder. The seed SQL is saved on the task service as the variable `SEED_SQL` (command-service values may contain newlines). The service's command line applies it after the migration step and before the run command, for example `<migrate> && printf '%s' "$SEED_SQL" | sqlite3 "$DB_PATH" && <run>`. Ask when the host has no `sqlite3` client or the application has no migration path. Say in the comment that the file lives in the service worktree and is replaced when the branch tip changes.
+- SQLite: no engine and no k3s. The skill never writes into a worktree, so it cannot create the file. The database path variable points at `task_<task short id>.db` under the service worktree's data folder. The seed SQL is saved on the task service as the variable `SEED_SQL` (command-service values may contain newlines). The service's command line applies it after the migration step and before the run command, for example `<migrate> && printf '%s' "$SEED_SQL" | sqlite3 "$DB_PATH" && <run>`. Ask when the host has no `sqlite3` client or the application has no migration path. Say in the Seed document that the file lives in the service worktree and is replaced when the branch tip changes.
 
 ## Connection variable
 

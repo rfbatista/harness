@@ -52,20 +52,37 @@ func TestTaskRunApp_ResultsLiveInTheSeedDocumentAndNoCommentCarriesCredentials(t
 			t.Errorf("SEED-FORMATS.md still has %q", gone)
 		}
 	}
+	for _, f := range []string{"ENGINES.md", "K3S-SHAPES.md"} {
+		ref := pluginFile(t, launch, "task-run-app", f)
+		for _, gone := range []string{"task comment", "in the comment"} {
+			if strings.Contains(ref, gone) {
+				t.Errorf("%s still points at the comment: %q", f, gone)
+			}
+		}
+	}
 }
 
 func TestTaskOperateAndItsOpeningAgreeOnWhereResultsGo(t *testing.T) {
-	svc, _ := newInteractiveService(t)
-	svc.Roles = &fakeRoles{roles: map[string]domain.SessionRole{"arch": domain.RoleArchitect}}
-	_, launch := startInteractive(t, svc, InteractiveRequest{Mode: "operate", ParentSessionID: "arch"})
-	body := pluginSkill(t, launch, "task-operate")
-	requireAll(t, "task-operate SKILL.md", body, "Seed document", "task-run-app")
-	if strings.Contains(body, "run-app.md") {
-		t.Error("task-operate names the run-app comment")
-	}
-	requireAll(t, "operate opening", launch.Spec.Prompt, "Seed document", "Seed document attached")
-	if strings.Contains(launch.Spec.Prompt, "task comment") && strings.Contains(launch.Spec.Prompt, "credentials in a") {
-		t.Errorf("operate opening hands credentials over in a comment: %q", launch.Spec.Prompt)
+	for _, c := range []struct{ name, parent, report string }{
+		{"delegate", "arch", "Seed document attached"},
+		{"peer", "peer", "without the credentials"},
+	} {
+		t.Run(c.name, func(t *testing.T) {
+			svc, _ := newInteractiveService(t)
+			svc.Roles = &fakeRoles{roles: map[string]domain.SessionRole{"arch": domain.RoleArchitect, "peer": domain.RolePeer}}
+			_, launch := startInteractive(t, svc, InteractiveRequest{Mode: "operate", ParentSessionID: c.parent})
+			body := pluginSkill(t, launch, "task-operate")
+			requireAll(t, "task-operate SKILL.md", body, "Seed document", "task-run-app")
+			if strings.Contains(body, "run-app.md") {
+				t.Error("task-operate names the run-app comment")
+			}
+			p := launch.Spec.Prompt
+			requireAll(t, "operate opening", p, "Seed document", "write no task comment with them", c.report)
+			// The only comment an opening may name is the peer's pointer, which never holds credentials.
+			if strings.Contains(p, "credentials in a") || strings.Contains(p, "credentials in the comment") {
+				t.Errorf("operate opening hands credentials over in a comment: %q", p)
+			}
+		})
 	}
 }
 

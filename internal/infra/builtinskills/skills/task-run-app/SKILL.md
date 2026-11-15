@@ -7,8 +7,8 @@ description: Use in a harness operate-mode session only when the architect's pro
 
 The person asked to test the task in a running application. You set it up: a **task
 database** seeded with one record set per **scenario**, a **task service** running the
-task's branch, and the **test credentials** written into the **Seed document**. Run the steps in this order. Each names the tool it uses and the
-check that it worked. Stop at the first failed check and use the Refusals table.
+task's branch, and the **test credentials** written into the **Seed document**. Run the steps in this order.
+Each names the tool it uses and the check that it worked. Stop at the first failed check and use the Refusals table.
 
 ## Before you start
 
