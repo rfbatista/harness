@@ -14,6 +14,7 @@ import { count } from "../../../../shared/presentation/format.js";
 import { drawLines } from "../../../code/presentation/render/lines.js";
 import {
   agoText,
+  askCopy,
   approveLabel,
   approvedText,
   fileDiff,
@@ -201,9 +202,10 @@ export const instructionProposals = ({ gateway }) => () => {
       } catch (err) {
         await this.refused(id, err);
       } finally {
+        // Held until the list has been read too: the feed's echo of this decision must not read the pane meanwhile.
+        await this.load();
         this.deciding = "";
       }
-      await this.load();
     },
     askToReject() {
       this.ask("reject");
@@ -245,16 +247,18 @@ export const instructionProposals = ({ gateway }) => () => {
         if (err.code === "INVALID_INPUT") this.noteError = describeError(err).message;
         else await this.refused(id, err);
       } finally {
+        await this.load();
         this.deciding = "";
       }
-      await this.load();
     },
     /** What each refusal does: INSTRUCTION_CHANGED names the stale files (and the pane reads them again); PROPOSAL_DECIDED shows what was decided. */
     async refused(id, err) {
       if (err.code === "INSTRUCTION_CHANGED") {
         this.refusal = { paths: err.paths ?? [] };
-        this.say(refusalTitle(this.refusal.paths.length));
         await this.readPane(id);
+        // A refusal that named no paths falls back to the files the pane now knows to be stale.
+        if (this.refusal.paths.length === 0 && this.pane !== null) this.refusal = { paths: this.pane.files.filter((f) => f.stale).map((f) => f.path) };
+        this.say(refusalTitle(this.refusal.paths.length));
       } else if (err.code === "PROPOSAL_DECIDED") {
         this.cancelAsk();
         await this.readPane(id);
@@ -444,31 +448,9 @@ export const instructionProposals = ({ gateway }) => () => {
     get asksSendBack() {
       return this.asking === "sendback";
     },
-    get askTone() {
-      return this.asksSendBack ? "attention" : "danger";
-    },
-    get askTitle() {
-      return this.asksSendBack ? "Send it back to the session." : "Reject the proposal.";
-    },
-    get askBody() {
-      return this.asksSendBack
-        ? "The session gets a turn with your note, keeps its draft and can submit again."
-        : "Nothing is saved; the session is told and the proposal stays in the list as rejected.";
-    },
-    get askAria() {
-      return this.asksSendBack ? "Send the proposal back" : "Reject the proposal";
-    },
-    get askRequirement() {
-      return this.asksSendBack ? "(required)" : "(optional)";
-    },
-    get askPlaceholder() {
-      return this.asksSendBack ? "What should change before you approve it?" : "Why, if the session should know";
-    },
-    get askButton() {
-      return this.asksSendBack ? "Send back" : "Reject";
-    },
-    get askVariant() {
-      return this.asksSendBack ? "primary" : "danger";
+    /** The ask's words. */
+    get askView() {
+      return askCopy(this.asking);
     },
     get askRejecting() {
       return this.asking === "reject";

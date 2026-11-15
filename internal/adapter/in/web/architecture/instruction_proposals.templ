@@ -120,15 +120,15 @@ templ instructionProposalPane() {
 					</div>
 				</template>
 				<template x-if="isAsking">
-					<form class="[ banner ] [ instruction-ask ]" id="proposal-ask" role="group" data-ask x-bind:data-tone="askTone" x-bind:aria-label="askAria" x-on:submit.prevent="submitAsk" novalidate>
-						<p><strong x-text="askTitle"></strong> <span x-text="askBody"></span></p>
+					<form class="[ banner ] [ instruction-ask ]" id="proposal-ask" role="group" data-ask x-bind:data-tone="askView.tone" x-bind:aria-label="askView.aria" x-on:submit.prevent="submitAsk" novalidate>
+						<p><strong x-text="askView.title"></strong> <span x-text="askView.body"></span></p>
 						<div class="[ field ]">
-							<label for="proposal-note">Note <span class="[ color-ink-muted ]" x-text="askRequirement"></span></label>
-							<textarea id="proposal-note" rows="3" x-model="note" x-init="focusNote($el)" x-bind:placeholder="askPlaceholder" x-bind:aria-invalid="hasNoteError" aria-describedby="proposal-note-error"></textarea>
+							<label for="proposal-note">Note <span class="[ color-ink-muted ]" x-text="askView.requirement"></span></label>
+							<textarea id="proposal-note" rows="3" x-model="note" x-init="focusNote($el)" x-bind:placeholder="askView.placeholder" x-bind:aria-invalid="hasNoteError" aria-describedby="proposal-note-error"></textarea>
 							<span class="[ error ]" id="proposal-note-error" data-ask-error x-show="hasNoteError"><span aria-hidden="true">✕</span> <span x-text="noteError"></span></span>
 						</div>
 						<div class="[ cluster ]">
-							<button type="submit" class="[ button ]" data-size="sm" x-bind:data-variant="askVariant" x-bind:disabled="cannotSubmit" x-text="askButton"></button>
+							<button type="submit" class="[ button ]" data-size="sm" x-bind:data-variant="askView.variant" x-bind:disabled="cannotSubmit" x-text="askView.button"></button>
 							<button type="button" class="[ button ]" data-variant="ghost" data-size="sm" data-cancel-ask x-on:click="cancelAsk">Cancel</button>
 						</div>
 					</form>

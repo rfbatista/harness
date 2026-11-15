@@ -1,6 +1,7 @@
 import { assert, file, test } from "../../../shared/testing/test.js";
 import {
   agoText,
+  askCopy,
   approveLabel,
   approvedText,
   fileDiff,
@@ -233,4 +234,11 @@ test("a send back needs a note with something in it; a reject needs none", () =>
   assert.equal(sendBackNoteError(""), "A note is required: tell the session what to change.");
   assert.equal(sendBackNoteError("  \n "), "A note is required: tell the session what to change.");
   assert.equal(sendBackNoteError("Wait for the server."), "");
+});
+
+test("each ask has its own words: a send back needs its note, a reject does not", () => {
+  assert.equal(askCopy("sendback").requirement, "(required)");
+  assert.equal(askCopy("sendback").button, "Send back");
+  assert.equal(askCopy("reject").requirement, "(optional)");
+  assert.equal(askCopy("reject").variant, "danger");
 });

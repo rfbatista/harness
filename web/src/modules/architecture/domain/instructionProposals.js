@@ -206,3 +206,29 @@ export function approvedText(files) {
 
 /** Why a send back cannot go: it needs a note. "" when it can. */
 export const sendBackNoteError = (note) => (note.trim() === "" ? "A note is required: tell the session what to change." : "");
+
+const ASKS = {
+  sendback: {
+    tone: "attention",
+    title: "Send it back to the session.",
+    body: "The session gets a turn with your note, keeps its draft and can submit again.",
+    aria: "Send the proposal back",
+    requirement: "(required)",
+    placeholder: "What should change before you approve it?",
+    button: "Send back",
+    variant: "primary",
+  },
+  reject: {
+    tone: "danger",
+    title: "Reject the proposal.",
+    body: "Nothing is saved; the session is told and the proposal stays in the list as rejected.",
+    aria: "Reject the proposal",
+    requirement: "(optional)",
+    placeholder: "Why, if the session should know",
+    button: "Reject",
+    variant: "danger",
+  },
+};
+
+/** The words of the ask under the decision row: "reject" or "sendback". */
+export const askCopy = (which) => ASKS[which] ?? ASKS.reject;
