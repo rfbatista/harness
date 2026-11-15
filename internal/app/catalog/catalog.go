@@ -62,15 +62,18 @@ type Deps struct {
 	DesignExports ports.DesignExportStore
 	// InstructionDrafts keeps tasks' instruction drafts; nil disables them.
 	InstructionDrafts ports.InstructionDraftStore
-	Agents            ports.AgentRepository
-	Prompts           ports.PromptRepository
-	Skills            ports.SkillRepository
-	MCPServers        ports.MCPServerRepository
-	Tools             ports.ToolRepository
-	Settings          ports.SettingsRepository
-	Publisher         ports.SkillPublisher
-	PathMatcher       ports.PathMatcher
-	TreeLister        ports.TreeLister
+	// InstructionProposals keeps instruction-file proposals; nil with
+	// InstructionDrafts or ArchRecords nil disables them.
+	InstructionProposals ports.InstructionProposalStore
+	Agents               ports.AgentRepository
+	Prompts              ports.PromptRepository
+	Skills               ports.SkillRepository
+	MCPServers           ports.MCPServerRepository
+	Tools                ports.ToolRepository
+	Settings             ports.SettingsRepository
+	Publisher            ports.SkillPublisher
+	PathMatcher          ports.PathMatcher
+	TreeLister           ports.TreeLister
 	// RepositoryFinder lets projects discover git checkouts; nil disables it.
 	RepositoryFinder ports.RepositoryFinder
 	// EnvFiles and EnvFileIO keep repositories' env files; nil disables them.
@@ -184,8 +187,8 @@ func New(d Deps) Catalog {
 	}
 
 	var instructions *instructionproposal.Service
-	if d.InstructionDrafts != nil {
-		instructions = instructionproposal.NewService(instructionproposal.Deps{Drafts: d.InstructionDrafts, Repositories: pr})
+	if d.InstructionDrafts != nil && d.InstructionProposals != nil && repoArch != nil {
+		instructions = instructionproposal.NewService(instructionproposal.Deps{Drafts: d.InstructionDrafts, Proposals: d.InstructionProposals, Repositories: pr, Files: repoArch})
 	}
 
 	arch.Subscribe(bus)

@@ -109,6 +109,7 @@ var PersistenceModule = fx.Module("persistence",
 		asPort(sqlite.NewDesignProposalRepository, new(ports.DesignProposalStore)),
 		asPort(sqlite.NewDesignExportRepository, new(ports.DesignExportStore)),
 		asPort(sqlite.NewInstructionDraftRepository, new(ports.InstructionDraftStore)),
+		asPort(sqlite.NewInstructionProposalRepository, new(ports.InstructionProposalStore)),
 	),
 )
 
@@ -280,62 +281,64 @@ var CatalogModule = fx.Module("catalog",
 type catalogParams struct {
 	fx.In
 
-	Projects          ports.ProjectRepository
-	Repositories      ports.RepositoryRepository
-	Zones             ports.ZoneRepository
-	BoundedContexts   ports.BoundedContextRepository
-	ArchRecords       ports.ArchitectureRecordStore
-	ArchGit           ports.ArchitectureGit
-	ArchEvents        ports.ArchitectureRuleEventStore
-	DesignRecords     ports.DesignSystemStore
-	DesignProposals   ports.DesignProposalStore
-	DesignExports     ports.DesignExportStore
-	InstructionDrafts ports.InstructionDraftStore
-	Agents            ports.AgentRepository
-	Prompts           ports.PromptRepository
-	Skills            ports.SkillRepository
-	MCPServers        ports.MCPServerRepository
-	Tools             ports.ToolRepository
-	Settings          ports.SettingsRepository
-	Publisher         ports.SkillPublisher
-	Matcher           ports.PathMatcher
-	Lister            ports.TreeLister
-	Finder            ports.RepositoryFinder
-	EnvFiles          ports.EnvFileRepository
-	EnvFileIO         ports.EnvFileIO
-	RunCommands       ports.RunCommandRepository
-	Activations       ports.TokenSaverActivationRepository
-	Cfg               Config
+	Projects             ports.ProjectRepository
+	Repositories         ports.RepositoryRepository
+	Zones                ports.ZoneRepository
+	BoundedContexts      ports.BoundedContextRepository
+	ArchRecords          ports.ArchitectureRecordStore
+	ArchGit              ports.ArchitectureGit
+	ArchEvents           ports.ArchitectureRuleEventStore
+	DesignRecords        ports.DesignSystemStore
+	DesignProposals      ports.DesignProposalStore
+	DesignExports        ports.DesignExportStore
+	InstructionDrafts    ports.InstructionDraftStore
+	InstructionProposals ports.InstructionProposalStore
+	Agents               ports.AgentRepository
+	Prompts              ports.PromptRepository
+	Skills               ports.SkillRepository
+	MCPServers           ports.MCPServerRepository
+	Tools                ports.ToolRepository
+	Settings             ports.SettingsRepository
+	Publisher            ports.SkillPublisher
+	Matcher              ports.PathMatcher
+	Lister               ports.TreeLister
+	Finder               ports.RepositoryFinder
+	EnvFiles             ports.EnvFileRepository
+	EnvFileIO            ports.EnvFileIO
+	RunCommands          ports.RunCommandRepository
+	Activations          ports.TokenSaverActivationRepository
+	Cfg                  Config
 }
 
 func newCatalog(p catalogParams) catalog.Catalog {
 	return catalog.New(catalog.Deps{
-		Projects:          p.Projects,
-		Repositories:      p.Repositories,
-		Zones:             p.Zones,
-		BoundedContexts:   p.BoundedContexts,
-		ArchRecords:       p.ArchRecords,
-		ArchGit:           p.ArchGit,
-		ArchEvents:        p.ArchEvents,
-		DesignRecords:     p.DesignRecords,
-		DesignProposals:   p.DesignProposals,
-		DesignExports:     p.DesignExports,
-		InstructionDrafts: p.InstructionDrafts,
-		Agents:            p.Agents,
-		Prompts:           p.Prompts,
-		Skills:            p.Skills,
-		MCPServers:        p.MCPServers,
-		Tools:             p.Tools,
-		Settings:          p.Settings,
-		Publisher:         p.Publisher,
-		PathMatcher:       p.Matcher,
-		TreeLister:        p.Lister,
-		RepositoryFinder:  p.Finder,
-		EnvFiles:          p.EnvFiles,
-		EnvFileIO:         p.EnvFileIO,
-		RunCommands:       p.RunCommands,
-		Activations:       p.Activations,
-		DefaultRoot:       p.Cfg.Root,
+		Projects:             p.Projects,
+		Repositories:         p.Repositories,
+		Zones:                p.Zones,
+		BoundedContexts:      p.BoundedContexts,
+		ArchRecords:          p.ArchRecords,
+		ArchGit:              p.ArchGit,
+		ArchEvents:           p.ArchEvents,
+		DesignRecords:        p.DesignRecords,
+		DesignProposals:      p.DesignProposals,
+		DesignExports:        p.DesignExports,
+		InstructionDrafts:    p.InstructionDrafts,
+		InstructionProposals: p.InstructionProposals,
+		Agents:               p.Agents,
+		Prompts:              p.Prompts,
+		Skills:               p.Skills,
+		MCPServers:           p.MCPServers,
+		Tools:                p.Tools,
+		Settings:             p.Settings,
+		Publisher:            p.Publisher,
+		PathMatcher:          p.Matcher,
+		TreeLister:           p.Lister,
+		RepositoryFinder:     p.Finder,
+		EnvFiles:             p.EnvFiles,
+		EnvFileIO:            p.EnvFileIO,
+		RunCommands:          p.RunCommands,
+		Activations:          p.Activations,
+		DefaultRoot:          p.Cfg.Root,
 	})
 }
 
@@ -622,6 +625,11 @@ func bindVirtualShells(orch *orchestration.Service, shells *vfs.Service, plan *p
 	// A saved architecture reaches the shells as well as the project feed.
 	if cat.RepositoryArchitectures != nil {
 		cat.RepositoryArchitectures.UseFeed(changeSinks{orch, shells})
+	}
+	// A proposal reaches open pages on the project feed and the shells, which
+	// show its skills read-only.
+	if cat.InstructionProposals != nil {
+		cat.InstructionProposals.UseFeed(changeSinks{orch, shells})
 	}
 	// A saved design system does too: the shells of opted-in sessions show it.
 	if cat.DesignSystems != nil {
@@ -1040,6 +1048,9 @@ func newOrchestrationService(
 		cat.DesignSystems.UseAgents(cat.Agents)
 		// A decision reaches the design session that proposed.
 		cat.DesignSystems.UseTurns(svc)
+	}
+	if cat.InstructionProposals != nil {
+		cat.InstructionProposals.UseSessions(sessions)
 	}
 	if cat.RepositoryArchitectures != nil {
 		// Saves, deletes and exports reach open pages on the project feed.

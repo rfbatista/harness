@@ -124,6 +124,9 @@ type ProjectChange struct {
 	// DesignSystemChanged says a project's design system was created,
 	// renamed, described or deleted; clients re-read the list.
 	DesignSystemChanged *DesignSystemIdentityChange `json:"design_system_changed,omitempty"`
+	// InstructionProposalChanged says an instruction-file proposal was
+	// submitted or decided; the badge follows its open count.
+	InstructionProposalChanged *InstructionProposalChange `json:"instruction_proposal_changed,omitempty"`
 	// DesignSystemProposal says a design session's proposal reached a state:
 	// the banner, the navigation badge and the Proposals tab follow it.
 	DesignSystemProposal *DesignSystemProposalChange `json:"design_system_proposal,omitempty"`
@@ -276,6 +279,8 @@ func (c ProjectChange) ProjectID() string {
 		return c.ArchitectureChanged.ProjectID
 	case c.InstructionFileChanged != nil:
 		return c.InstructionFileChanged.ProjectID
+	case c.InstructionProposalChanged != nil:
+		return c.InstructionProposalChanged.ProjectID
 	case c.BranchRequest != nil:
 		return c.BranchRequest.ProjectID
 	case c.SessionBranches != nil:

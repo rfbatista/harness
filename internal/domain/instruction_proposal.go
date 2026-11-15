@@ -23,6 +23,9 @@ type InstructionProposalFile struct {
 	Path        string
 	Op          string
 	BaseVersion int // 0 for a create
+	// BaseContent is the instruction file at BaseVersion, empty for a create;
+	// Content is the proposed content, empty for a remove.
+	BaseContent string
 	Content     string
 }
 

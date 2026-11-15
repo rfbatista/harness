@@ -109,6 +109,10 @@ func newNotificationsService(p notificationsParams) (*notifications.Service, err
 		// A design proposal that opens is announced in the inbox.
 		p.Cat.DesignSystems.UseNotifier(svc)
 	}
+	if p.Cat.InstructionProposals != nil {
+		// An instruction-file proposal that opens is announced in the inbox.
+		p.Cat.InstructionProposals.UseNotifier(svc)
+	}
 	return svc, nil
 }
 

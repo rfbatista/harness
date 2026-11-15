@@ -417,7 +417,7 @@ func (s *Service) AnnounceChange(c ports.ProjectChange) {
 	case c.DesignSystemChanged != nil:
 		s.forgetDeletedDesignSystem(c.DesignSystemChanged.DesignSystemID)
 		s.changed(c.ProjectID(), "")
-	case c.ArchitectureChanged != nil, c.InstructionFileChanged != nil, c.DesignSystemSaved != nil, c.DesignSystemProposal != nil:
+	case c.ArchitectureChanged != nil, c.InstructionFileChanged != nil, c.InstructionProposalChanged != nil, c.DesignSystemSaved != nil, c.DesignSystemProposal != nil:
 		s.changed(c.ProjectID(), "")
 	}
 }
@@ -633,7 +633,7 @@ func (sh *root) sync(b *builder) error {
 // the same version, or, while want's version is not known before reading
 // its bytes, last changed at the same time.
 func current(cur, want ports.ShellFile) bool {
-	if cur.Kind != want.Kind || cur.ID != want.ID || cur.Scope != want.Scope || cur.Title != want.Title {
+	if cur.Kind != want.Kind || cur.ID != want.ID || cur.Scope != want.Scope || cur.Title != want.Title || cur.Writable != want.Writable {
 		return false
 	}
 	if want.Version == "" {
