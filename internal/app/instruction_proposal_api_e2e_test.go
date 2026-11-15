@@ -19,6 +19,7 @@ type proposalRow struct {
 	Summary      string   `json:"summary"`
 	Skills       []string `json:"skills"`
 	Files        int      `json:"files"`
+	StaleFiles   int      `json:"stale_files"`
 	Task         struct {
 		ID    string `json:"id"`
 		Title string `json:"title"`
@@ -77,7 +78,7 @@ func TestInstructionProposalAPI_ListsAndOpensAProposalWithEachFilesBaseAndConten
 	}
 	r := rows[0]
 	if r.ID != got.ProposalID || r.RepositoryID != e.repo || r.State != "open" || r.Summary != "Verification skill and its feature map" ||
-		strings.Join(r.Skills, ",") != "verify-harness,features-harness" || r.Files != 4 || r.Task.Title != "Verification skill" ||
+		strings.Join(r.Skills, ",") != "verify-harness,features-harness" || r.Files != 4 || r.Task.Title != "Verification skill" || r.StaleFiles != 0 ||
 		r.Session.ID != s.id || r.Session.Mode != "implement" || r.CreatedAt == "" || r.DecidedAt != nil || r.Note != nil {
 		t.Fatalf("row = %+v", r)
 	}
@@ -112,6 +113,9 @@ func TestInstructionProposalAPI_AFileThePersonSavedSinceIsStale(t *testing.T) {
 	_, got := e.submitted()
 	if _, err := e.cat.RepositoryArchitectures.SaveInstructionFile(e.ctx, e.repo, skillPrefix+"features-harness/SKILL.md", "skill", 1, featuresSkill+"The person's edit.\n"); err != nil {
 		t.Fatal(err)
+	}
+	if rows, _ := e.listProposals(""); rows[0].StaleFiles != 1 {
+		t.Errorf("stale_files = %d, want 1", rows[0].StaleFiles)
 	}
 	_, files := e.getProposal(got.ProposalID)
 	for _, f := range files {

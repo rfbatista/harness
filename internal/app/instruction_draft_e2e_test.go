@@ -148,3 +148,38 @@ func TestInstructionDraft_ASessionRemovesADraftFile(t *testing.T) {
 		t.Error("a removed draft file is still indexed")
 	}
 }
+
+func TestInstructionDraft_ASessionMovesASkillFolderAndTheNewNameIsChecked(t *testing.T) {
+	e := newShellE2E(t)
+	a := e.start(e.task("Verification skill"))
+	if ans := e.writeDraft(a, draftPath("verify-harness", "SKILL.md"), verifySkill); !ans.Allow {
+		t.Fatal(ans)
+	}
+	from := draftsDir + "/harness/verify-harness"
+	if ans, raw := e.shellCall(a, "check", "mv", from, draftsDir+"/harness/Bad_Name"); ans.Allow || ans.Code != "INSTRUCTION_INVALID" {
+		t.Fatalf("a move to a bad skill name: %s", raw)
+	}
+	to := draftsDir + "/harness/verify-app"
+	if ans, raw := e.shellCall(a, "check", "mv", from, to); !ans.Allow {
+		t.Fatalf("check refused: %s", raw)
+	}
+	moveShellFile(t, a, from, to)
+	if ans, raw := e.shellCall(a, "commit", "mv", from, to); !ans.Allow {
+		t.Fatalf("commit refused: %s", raw)
+	}
+	b := e.start(e.task("Verification skill"))
+	_ = b
+	eventually(t, "the draft is under its new name only", func() error {
+		idx, err := shellIndex(a.shell)
+		if err != nil {
+			return err
+		}
+		if _, ok := idx[draftPath("verify-app", "SKILL.md")]; !ok {
+			return fmt.Errorf("no row at the new path")
+		}
+		if _, ok := idx[draftPath("verify-harness", "SKILL.md")]; ok {
+			return fmt.Errorf("the old row stays")
+		}
+		return nil
+	})
+}

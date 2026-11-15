@@ -65,15 +65,15 @@ type Deps struct {
 	// InstructionProposals keeps instruction-file proposals; nil with
 	// InstructionDrafts or ArchRecords nil disables them.
 	InstructionProposals ports.InstructionProposalStore
-	Agents               ports.AgentRepository
-	Prompts              ports.PromptRepository
-	Skills               ports.SkillRepository
-	MCPServers           ports.MCPServerRepository
-	Tools                ports.ToolRepository
-	Settings             ports.SettingsRepository
-	Publisher            ports.SkillPublisher
-	PathMatcher          ports.PathMatcher
-	TreeLister           ports.TreeLister
+	Agents        ports.AgentRepository
+	Prompts       ports.PromptRepository
+	Skills        ports.SkillRepository
+	MCPServers    ports.MCPServerRepository
+	Tools         ports.ToolRepository
+	Settings      ports.SettingsRepository
+	Publisher     ports.SkillPublisher
+	PathMatcher   ports.PathMatcher
+	TreeLister    ports.TreeLister
 	// RepositoryFinder lets projects discover git checkouts; nil disables it.
 	RepositoryFinder ports.RepositoryFinder
 	// EnvFiles and EnvFileIO keep repositories' env files; nil disables them.
@@ -99,9 +99,9 @@ type Catalog struct {
 	DesignSystems *designsystem.Service
 	// InstructionProposals is nil without Deps.InstructionDrafts.
 	InstructionProposals *instructionproposal.Service
-	Agents               *agents.Service
-	Capabilities         *capabilities.Service
-	Settings             *settings.Service
+	Agents        *agents.Service
+	Capabilities  *capabilities.Service
+	Settings      *settings.Service
 }
 
 // New builds the contexts, subscribes each to the events it reacts to, and

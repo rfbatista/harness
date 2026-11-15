@@ -22,6 +22,9 @@ func proposalNotFound() error {
 // row names the task and the session of a proposal.
 func (s *Service) row(ctx context.Context, p *domain.InstructionProposal) ports.InstructionProposalRow {
 	row := ports.InstructionProposalRow{InstructionProposal: p}
+	if p.State == domain.InstructionProposalOpen {
+		row.StaleFiles = len(s.stalePaths(ctx, p))
+	}
 	if s.tasks != nil {
 		if tk, err := s.tasks.GetTicket(ctx, p.TaskID); err == nil && tk != nil {
 			row.TaskTitle = tk.Title

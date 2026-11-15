@@ -83,8 +83,22 @@ func (s *Service) checkInstructionDrafts(ctx context.Context, sh *root, ed edit)
 				}
 			}
 		} else {
-			if err := s.src.InstructionDrafts.CheckInstructionDraft(ctx, sh.projID, sh.ticketID, sub); err != nil {
-				return refuseErr(err)
+			// A move's destination may be a folder, whose files are what is
+			// checked, each at its new path.
+			targets := []string{sub}
+			if ed.op == "mv" {
+				targets = targets[:0]
+				for _, row := range sh.under(ed.rel[0], ports.ShellInstructionDraft) {
+					targets = append(targets, strings.TrimPrefix(moved(row.Path, ed.rel[0], rel), instructionDraftsDir+"/"))
+				}
+				if len(targets) == 0 {
+					targets = append(targets, sub) // a file from outside the shell
+				}
+			}
+			for _, target := range targets {
+				if err := s.src.InstructionDrafts.CheckInstructionDraft(ctx, sh.projID, sh.ticketID, target); err != nil {
+					return refuseErr(err)
+				}
 			}
 			if row, ok := sh.files[rel]; ok && row.Kind == ports.ShellInstructionDraft {
 				if ans := s.stale(sh, row); !ans.Allow {

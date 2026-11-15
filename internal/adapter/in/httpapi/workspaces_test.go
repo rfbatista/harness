@@ -16,8 +16,8 @@ import (
 type nopWorktree struct{}
 
 func (nopWorktree) Add(repoRoot, path, branch, baseRef string) (string, error) { return "", nil }
-func (nopWorktree) Remove(repoRoot, path string) error                         { return nil }
-func (nopWorktree) DeleteBranch(repoRoot, branch string) error                 { return nil }
+func (nopWorktree) Remove(repoRoot, path string) error               { return nil }
+func (nopWorktree) DeleteBranch(repoRoot, branch string) error       { return nil }
 func (nopWorktree) ListBranches(repoRoot string) ([]domain.GitBranch, error) {
 	return []domain.GitBranch{
 		{Name: "main", IsHead: true},

@@ -6,6 +6,7 @@ import (
 
 	"github.com/labstack/echo/v4"
 
+	"operators-mcp/internal/domain"
 	"operators-mcp/internal/ports"
 )
 
@@ -37,6 +38,7 @@ type instructionProposalBody struct {
 	Summary      string              `json:"summary"`
 	Skills       []string            `json:"skills"`
 	Files        int                 `json:"files"`
+	StaleFiles   int                 `json:"stale_files"`
 	Task         proposalTaskBody    `json:"task"`
 	Session      proposalSessionBody `json:"session"`
 	CreatedAt    time.Time           `json:"created_at"`
@@ -46,7 +48,7 @@ type instructionProposalBody struct {
 
 func instructionProposalBodyOf(r ports.InstructionProposalRow) instructionProposalBody {
 	b := instructionProposalBody{
-		ID: r.ID, RepositoryID: r.RepositoryID, State: r.State, Summary: r.Summary, Skills: r.Skills, Files: len(r.Files),
+		ID: r.ID, RepositoryID: r.RepositoryID, State: r.State, Summary: r.Summary, Skills: r.Skills, Files: len(r.Files), StaleFiles: r.StaleFiles,
 		Task:      proposalTaskBody{ID: r.TaskID, Title: r.TaskTitle},
 		Session:   proposalSessionBody{ID: r.SessionID, Agent: r.Agent, Mode: r.Mode},
 		CreatedAt: r.CreatedAt, DecidedAt: r.DecidedAt,
@@ -73,11 +75,11 @@ type instructionProposalFileBody struct {
 
 func instructionProposalFileBodyOf(f ports.InstructionProposalFileView) instructionProposalFileBody {
 	b := instructionProposalFileBody{Path: f.Path, Op: f.Op, BaseVersion: f.BaseVersion, CurrentVersion: f.CurrentVersion, Stale: f.Stale}
-	if f.Op != "create" {
+	if f.Op != domain.InstructionOpCreate {
 		base := f.BaseContent
 		b.BaseContent = &base
 	}
-	if f.Op != "remove" {
+	if f.Op != domain.InstructionOpRemove {
 		content := f.Content
 		b.Content = &content
 	}

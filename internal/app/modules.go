@@ -281,64 +281,64 @@ var CatalogModule = fx.Module("catalog",
 type catalogParams struct {
 	fx.In
 
-	Projects             ports.ProjectRepository
-	Repositories         ports.RepositoryRepository
-	Zones                ports.ZoneRepository
-	BoundedContexts      ports.BoundedContextRepository
-	ArchRecords          ports.ArchitectureRecordStore
-	ArchGit              ports.ArchitectureGit
-	ArchEvents           ports.ArchitectureRuleEventStore
-	DesignRecords        ports.DesignSystemStore
-	DesignProposals      ports.DesignProposalStore
-	DesignExports        ports.DesignExportStore
+	Projects        ports.ProjectRepository
+	Repositories    ports.RepositoryRepository
+	Zones           ports.ZoneRepository
+	BoundedContexts ports.BoundedContextRepository
+	ArchRecords     ports.ArchitectureRecordStore
+	ArchGit         ports.ArchitectureGit
+	ArchEvents      ports.ArchitectureRuleEventStore
+	DesignRecords   ports.DesignSystemStore
+	DesignProposals ports.DesignProposalStore
+	DesignExports   ports.DesignExportStore
 	InstructionDrafts    ports.InstructionDraftStore
 	InstructionProposals ports.InstructionProposalStore
-	Agents               ports.AgentRepository
-	Prompts              ports.PromptRepository
-	Skills               ports.SkillRepository
-	MCPServers           ports.MCPServerRepository
-	Tools                ports.ToolRepository
-	Settings             ports.SettingsRepository
-	Publisher            ports.SkillPublisher
-	Matcher              ports.PathMatcher
-	Lister               ports.TreeLister
-	Finder               ports.RepositoryFinder
-	EnvFiles             ports.EnvFileRepository
-	EnvFileIO            ports.EnvFileIO
-	RunCommands          ports.RunCommandRepository
-	Activations          ports.TokenSaverActivationRepository
-	Cfg                  Config
+	Agents          ports.AgentRepository
+	Prompts         ports.PromptRepository
+	Skills          ports.SkillRepository
+	MCPServers      ports.MCPServerRepository
+	Tools           ports.ToolRepository
+	Settings        ports.SettingsRepository
+	Publisher       ports.SkillPublisher
+	Matcher         ports.PathMatcher
+	Lister          ports.TreeLister
+	Finder          ports.RepositoryFinder
+	EnvFiles        ports.EnvFileRepository
+	EnvFileIO       ports.EnvFileIO
+	RunCommands     ports.RunCommandRepository
+	Activations     ports.TokenSaverActivationRepository
+	Cfg             Config
 }
 
 func newCatalog(p catalogParams) catalog.Catalog {
 	return catalog.New(catalog.Deps{
-		Projects:             p.Projects,
-		Repositories:         p.Repositories,
-		Zones:                p.Zones,
-		BoundedContexts:      p.BoundedContexts,
-		ArchRecords:          p.ArchRecords,
-		ArchGit:              p.ArchGit,
-		ArchEvents:           p.ArchEvents,
-		DesignRecords:        p.DesignRecords,
-		DesignProposals:      p.DesignProposals,
-		DesignExports:        p.DesignExports,
+		Projects:         p.Projects,
+		Repositories:     p.Repositories,
+		Zones:            p.Zones,
+		BoundedContexts:  p.BoundedContexts,
+		ArchRecords:      p.ArchRecords,
+		ArchGit:          p.ArchGit,
+		ArchEvents:       p.ArchEvents,
+		DesignRecords:    p.DesignRecords,
+		DesignProposals:  p.DesignProposals,
+		DesignExports:    p.DesignExports,
 		InstructionDrafts:    p.InstructionDrafts,
 		InstructionProposals: p.InstructionProposals,
-		Agents:               p.Agents,
-		Prompts:              p.Prompts,
-		Skills:               p.Skills,
-		MCPServers:           p.MCPServers,
-		Tools:                p.Tools,
-		Settings:             p.Settings,
-		Publisher:            p.Publisher,
-		PathMatcher:          p.Matcher,
-		TreeLister:           p.Lister,
-		RepositoryFinder:     p.Finder,
-		EnvFiles:             p.EnvFiles,
-		EnvFileIO:            p.EnvFileIO,
-		RunCommands:          p.RunCommands,
-		Activations:          p.Activations,
-		DefaultRoot:          p.Cfg.Root,
+		Agents:           p.Agents,
+		Prompts:          p.Prompts,
+		Skills:           p.Skills,
+		MCPServers:       p.MCPServers,
+		Tools:            p.Tools,
+		Settings:         p.Settings,
+		Publisher:        p.Publisher,
+		PathMatcher:      p.Matcher,
+		TreeLister:       p.Lister,
+		RepositoryFinder: p.Finder,
+		EnvFiles:         p.EnvFiles,
+		EnvFileIO:        p.EnvFileIO,
+		RunCommands:      p.RunCommands,
+		Activations:      p.Activations,
+		DefaultRoot:      p.Cfg.Root,
 	})
 }
 

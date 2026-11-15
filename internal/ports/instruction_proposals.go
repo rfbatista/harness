@@ -52,8 +52,11 @@ type InstructionProposalChange struct {
 type InstructionProposalRow struct {
 	*domain.InstructionProposal
 	TaskTitle string
-	Agent     string
-	Mode      string
+	// StaleFiles counts an open proposal's files whose saved version moved since
+	// the draft was read; 0 once it is decided.
+	StaleFiles int
+	Agent      string
+	Mode       string
 }
 
 // InstructionProposalFileView is a file of a proposal with the version of the
