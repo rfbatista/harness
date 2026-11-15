@@ -146,25 +146,28 @@ func (r *archRig) get(t *testing.T, path string) string {
 }
 
 const (
-	proposalPane  = instructionsPanel + ` [data-proposal-pane]`
-	newSkillPath  = ".claude/skills/verify-harness/SKILL.md"
-	reviewerPath  = ".claude/agents/reviewer.md"
-	claudeMDPath  = "CLAUDE.md"
-	claudeMDRead  = "# Repository rules\n\nBe **kind** to the next reader.\n"
-	claudeMDAfter = "# Repository rules\n\nBe **kind** to the next reader.\n\nVerify before you finish.\n"
+	proposalPane = instructionsPanel + ` [data-proposal-pane]`
+	newSkillPath = ".claude/skills/verify-harness/SKILL.md"
+	removedPath  = ".claude/skills/features-harness/old.md"
+	changedPath  = ".claude/skills/features-harness/README.md"
+	changedRead  = "# Features\n\nA map of the harness.\n"
+	changedAfter = "# Features\n\nA map of the harness.\n\nVerify before you finish.\n"
 )
 
-// filesRig is a rig with one open proposal that creates a skill, changes
-// CLAUDE.md and removes the reviewer sub-agent: the three ops.
+// filesRig is a rig with one open proposal that creates a skill file, changes
+// one and removes one, all under .claude/skills/<skill>/ (ADR 0092 allows only
+// skill files in a proposal): the three ops.
 func filesRig(t *testing.T) *archRig {
 	t.Helper()
 	rig := instructionRig(t)
+	rig.files.seed(changedPath, "skill", changedRead)
+	rig.files.seed(removedPath, "skill", "Superseded by README.md.\n")
 	rig.proposals.add(fakeProposal{
 		ID: "p-files", Summary: "Verification skill", Skills: []string{"verify-harness"},
 		Files: []fakeProposalFile{
 			{Path: newSkillPath, Op: "create", Content: "---\nname: verify-harness\n---\nLaunch, drive, record.\n"},
-			{Path: claudeMDPath, Op: "change", BaseVersion: 1, BaseContent: claudeMDRead, Content: claudeMDAfter},
-			{Path: reviewerPath, Op: "remove", BaseVersion: 1, BaseContent: "You review diffs.\n"},
+			{Path: changedPath, Op: "change", BaseVersion: 1, BaseContent: changedRead, Content: changedAfter},
+			{Path: removedPath, Op: "remove", BaseVersion: 1, BaseContent: "Superseded by README.md.\n"},
 		},
 	}, 10*time.Minute)
 	return rig
@@ -200,11 +203,11 @@ func TestInstructionProposalShowsEachFilesDiffAndApprovingSavesThem(t *testing.T
 	rig.run(t,
 		chromedp.Evaluate(`[...document.querySelectorAll('`+proposalPane+` .diff-view .file')].map(f => f.dataset.path + ':' + f.dataset.op).join()`, &ops),
 		chromedp.Evaluate(lineCount(newSkillPath, "add"), &created),
-		chromedp.Evaluate(lineCount(claudeMDPath, "add"), &changedAdd),
-		chromedp.Evaluate(lineCount(claudeMDPath, "del"), &changedDel),
-		chromedp.Evaluate(lineCount(reviewerPath, "del"), &removed),
+		chromedp.Evaluate(lineCount(changedPath, "add"), &changedAdd),
+		chromedp.Evaluate(lineCount(changedPath, "del"), &changedDel),
+		chromedp.Evaluate(lineCount(removedPath, "del"), &removed),
 	)
-	if want := newSkillPath + ":create," + claudeMDPath + ":change," + reviewerPath + ":remove"; ops != want {
+	if want := newSkillPath + ":create," + changedPath + ":change," + removedPath + ":remove"; ops != want {
 		t.Fatalf("files = %q, want %q", ops, want)
 	}
 	if created != 4 || changedAdd != 2 || changedDel != 0 || removed != 1 {
@@ -220,13 +223,13 @@ func TestInstructionProposalShowsEachFilesDiffAndApprovingSavesThem(t *testing.T
 	if !strings.Contains(notice, "2 files saved as new versions, 1 removed") || state != "approved" {
 		t.Fatalf("after approve: notice %q, row state %q", notice, state)
 	}
-	if v := rig.files.version(claudeMDPath); v != 2 {
-		t.Fatalf("CLAUDE.md is at version %d, want 2", v)
+	if v := rig.files.version(changedPath); v != 2 {
+		t.Fatalf("%s is at version %d, want 2", changedPath, v)
 	}
 	// The files list beside follows the saves the server announced.
 	rig.run(t,
 		poll(`!!document.querySelector('`+instructionsPanel+` [data-open-file][aria-label="Open `+newSkillPath+`"]')`),
-		poll(`!document.querySelector('`+instructionsPanel+` [data-open-file][aria-label="Open `+reviewerPath+`"]')`),
+		poll(`!document.querySelector('`+instructionsPanel+` [data-open-file][aria-label="Open `+removedPath+`"]')`),
 		poll(tabBadge+` === ''`),
 	)
 	if got := rig.proposals.approveCalls(); got != 1 {
@@ -241,17 +244,17 @@ func TestInstructionProposalMarksAStaleFileAndRefusesTheApproval(t *testing.T) {
 	openInstructions(t, rig, "", 1280)
 	openProposal(t, rig, "p-files")
 	var fresh bool
-	rig.run(t, chromedp.Evaluate(`!`+fileJS(claudeMDPath, `.hasAttribute('data-stale')`), &fresh))
+	rig.run(t, chromedp.Evaluate(`!`+fileJS(changedPath, `.hasAttribute('data-stale')`), &fresh))
 	if !fresh {
 		t.Fatal("a file nobody saved is marked stale")
 	}
 
-	rig.files.saveElsewhere(claudeMDPath, "Someone else wrote this.\n")
+	rig.files.saveElsewhere(changedPath, "Someone else wrote this.\n")
 	var head, notice, refusal, paths string
 	rig.run(t,
-		poll(`!!`+fileJS(claudeMDPath, `.matches('[data-stale="true"]')`)),
+		poll(`!!`+fileJS(changedPath, `.matches('[data-stale="true"]')`)),
 		poll(`!!document.querySelector('`+proposalPane+` [data-stale-notice]')`),
-		chromedp.Evaluate(fileJS(claudeMDPath, `.querySelector('.head [data-stale]').textContent.trim()`), &head),
+		chromedp.Evaluate(fileJS(changedPath, `.querySelector('.head [data-stale]').textContent.trim()`), &head),
 		chromedp.Evaluate(`document.querySelector('`+proposalPane+` [data-stale-notice]').textContent.replace(/\s+/g, ' ')`, &notice),
 	)
 	if head != "stale · v1 read, v2 saved" || !strings.Contains(notice, "1 file changed since the draft read it") {
@@ -277,7 +280,7 @@ func TestInstructionProposalMarksAStaleFileAndRefusesTheApproval(t *testing.T) {
 			t.Errorf("the refusal lacks %q: %q", want, refusal)
 		}
 	}
-	if paths != claudeMDPath+" · v1 read, v2 saved" {
+	if paths != changedPath+" · v1 read, v2 saved" {
 		t.Fatalf("refused paths = %q", paths)
 	}
 	if _, ok := rig.files.content(newSkillPath); ok {
