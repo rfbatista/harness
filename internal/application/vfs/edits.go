@@ -340,6 +340,11 @@ func (s *Service) CommitShellEdit(ctx context.Context, sessionID string, e ports
 				s.refreshLocked(sh)
 				return ans
 			}
+		} else if touchesInstructionDrafts(ed) {
+			ans = s.commitInstructionDrafts(ctx, sh, ed)
+			if ans.Allow {
+				return ans
+			}
 		} else if ans = s.refuseAreas(ctx, sh, ed); ans.Allow {
 			ans = s.commit(ctx, sh, ed)
 		}
@@ -505,6 +510,9 @@ func (s *Service) check(ctx context.Context, sh *root, ed edit) ports.ShellAnswe
 	if sh.touchesDraft(ed) {
 		return s.checkDraft(ctx, sh, ed)
 	}
+	if touchesInstructionDrafts(ed) {
+		return s.checkInstructionDrafts(ctx, sh, ed)
+	}
 	if ans := s.refuseAreas(ctx, sh, ed); !ans.Allow {
 		return ans
 	}
@@ -611,6 +619,8 @@ func (s *Service) storedVersion(sh *root, row ports.ShellFile) string {
 		if a := s.design(row.ID); a != nil {
 			return strconv.Itoa(a.Revision)
 		}
+	case ports.ShellInstructionDraft:
+		return s.draftVersion(sh, row)
 	default:
 		return row.Version
 	}

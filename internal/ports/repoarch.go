@@ -128,6 +128,15 @@ type ArchitectureRecordStore interface {
 	// (it has none, or has no entry for the file).
 	RenameInstructionFile(ctx context.Context, repositoryID, path, newPath string, baseVersion int) (*domain.InstructionFile, int, error)
 	DeleteInstructionFile(ctx context.Context, repositoryID, path string, baseVersion int) (int, error)
+	// ApplyInstructionChanges makes every change in one transaction, each
+	// refused as a save, rename or delete is when its base version is not
+	// the stored one, and the batch refused with ErrInstructionFilesTooBig when
+	// the files would be over totalLimit. It answers the files it saved (not
+	// the removed ones) and the record's new version, 0 when it did not change.
+	// inTx, when set, runs inside the same transaction after the files are
+	// saved, with a context that carries it for other stores of this database;
+	// its error rolls the whole batch back.
+	ApplyInstructionChanges(ctx context.Context, repositoryID, projectID string, changes []domain.InstructionChange, totalLimit int, inTx func(ctx context.Context) error) ([]domain.InstructionFile, int, error)
 	// SetExport records the last export: its version, commit, time and the
 	// SHA-256 of the YAML it wrote. It is not a new version of the record.
 	SetExport(ctx context.Context, repositoryID string, version int, commit string, at time.Time, sha string) (*StoredArchitecture, error)
