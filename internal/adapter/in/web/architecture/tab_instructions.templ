@@ -16,6 +16,7 @@ templ tabInstructions(v View) {
 			<button type="button" class="[ button ]" data-size="sm" data-add-entry x-on:click="add">Add entry</button>
 		}
 		<p class="[ text-sm color-ink-muted ]" data-delivery-note>Running sessions keep the copy they started with, so a change reaches the sessions you start after it.</p>
+		@instructionProposals()
 		<section class="[ banner ] [ repository-banner ]" data-repository-banner aria-label="Instruction files still in the repository" x-show="bannerShown">
 			<p data-repository-unreadable role="status" x-show="unreadable" x-text="unreadableNote"></p>
 			<template x-if="hasCopies">

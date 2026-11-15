@@ -2,6 +2,7 @@
 
 import { architecturePage } from "./pages/architecturePage.js";
 import { instructionsTab } from "./tabs/instructionsTab.js";
+import { instructionProposals } from "./tabs/instructionProposals.js";
 import { toolsTab } from "./tabs/toolsTab.js";
 import { sandboxesTab } from "./tabs/sandboxesTab.js";
 import { orchestrationTab } from "./tabs/orchestrationTab.js";
@@ -20,6 +21,7 @@ import { outputDiagram } from "./tabs/outputDiagram.js";
 export function registerArchitecture(Alpine, deps) {
   Alpine.data("architecturePage", architecturePage(deps));
   Alpine.data("architectureInstructionsTab", instructionsTab(deps));
+  Alpine.data("architectureInstructionProposals", instructionProposals(deps));
   Alpine.data("architectureToolsTab", toolsTab(deps));
   Alpine.data("architectureSandboxesTab", sandboxesTab(deps));
   Alpine.data("architectureOrchestrationTab", orchestrationTab(deps));

@@ -177,6 +177,10 @@ type Deps struct {
 	// for the Architecture page's seed and the Models page's row. It must not
 	// start anything; nil reads as unavailable.
 	ArchitectureAssistant ports.ArchitectureAssistantReadiness
+	// OpenInstructionProposals counts a repository's open instruction-file
+	// proposals for the Architecture page's tab badge (the first count; the
+	// feed updates it). nil counts none.
+	OpenInstructionProposals func(ctx context.Context, repositoryID string) int
 	// Now defaults to time.Now.
 	Now func() time.Time
 }
@@ -239,7 +243,7 @@ func NewHandler(deps Deps, assets *Assets, fallback http.Handler) http.Handler {
 	if deps.Workspaces != nil {
 		codePages.Branches = deps.Workspaces
 	}
-	architecturePages := architecture.Handler{Projects: deps.Projects, Repositories: deps.Repositories, Assistant: deps.ArchitectureAssistant, Layout: s.layout, Render: render}
+	architecturePages := architecture.Handler{Projects: deps.Projects, Repositories: deps.Repositories, Assistant: deps.ArchitectureAssistant, OpenProposals: deps.OpenInstructionProposals, Layout: s.layout, Render: render}
 	designSystemPage := designsystem.Handler{Projects: deps.Projects, Designs: deps.DesignSystems, Agents: deps.Agents, Layout: s.layout, Render: render}
 	toProject := func(w http.ResponseWriter, r *http.Request) {
 		http.Redirect(w, r, "/projects/"+url.PathEscape(r.PathValue("project")), http.StatusFound)

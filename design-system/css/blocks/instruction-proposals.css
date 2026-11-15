@@ -1,0 +1,75 @@
+/*
+ * Instruction-file proposals — the Proposals section of the Instructions &
+ * rules tab (ADR 0092): what an agent proposed, listed above the files, and
+ * the pane that opens one. Approved with the mockup "Instruction-file proposal
+ * review"; not published as a design-system component. Built from the
+ * existing blocks (.arch-split, .arch-entries, .entry-card, .badge, .banner,
+ * .diff-view, .empty, .instruction-ask); these rules add only what they lack.
+ * <section class="flow instruction-proposals">
+ *   <div class="head"><h3>Proposals</h3><span class="badge" data-tone="attention">2 open</span>…</div>
+ *   <ul class="arch-entries">…<p class="proposal-note"><span class="entry-label">Note</span> …</p>…</ul></section>
+ * <section class="entry-card instruction-proposal"><header>…</header><div class="content flow">
+ *   <div class="decision">…buttons…</div>
+ *   <div class="files-head"><h4>Files</h4><span class="stat">+118 −9</span></div>
+ *   <div class="diff-view"><section class="file" data-stale="true">…</section></div></div></section>
+ * A stale file is a .diff-view .file[data-stale="true"]: an amber rule beside its head.
+ */
+
+@layer blocks {
+  /* The Proposals section of the Instructions & rules tab, above the files list. */
+  .instruction-proposals {
+    & > .head {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      gap: var(--space-s);
+    }
+    & > .head > h3 { font-size: var(--text-base); }
+    & .proposal-note {
+      margin-block-start: 2px;
+      font-size: var(--text-sm);
+      color: var(--color-ink-muted);
+    }
+    & .proposal-note > .entry-label {
+      display: inline;
+      margin-inline-end: var(--space-2xs);
+    }
+  }
+
+  /* The review pane (an entry-card beside the list) holding the files' diffs. The diff view drops its own padding inside the pane. */
+  .instruction-proposal {
+    & .diff-view { padding: 0; }
+    & .diff-view .head .badge { flex: none; }
+    & .decision {
+      display: flex;
+      flex-wrap: wrap;
+      gap: var(--space-xs);
+      align-items: center;
+    }
+    & .decision > .grow { flex-basis: 0; }
+    & .files-head {
+      display: flex;
+      align-items: baseline;
+      gap: var(--space-s);
+    }
+    & .files-head > h4 {
+      font-size: var(--text-sm);
+      font-weight: var(--weight-medium);
+    }
+    & .files-head > .stat {
+      margin-inline-start: auto;
+      font-family: var(--font-mono);
+      font-size: var(--text-xs);
+      color: var(--color-ink-muted);
+    }
+    & .refused-paths {
+      margin: 0;
+      padding-inline-start: 1.25rem;
+      font-family: var(--font-mono);
+      font-size: var(--text-xs);
+    }
+  }
+
+  /* The stale file: the amber rule beside its head, so the marker is found by scrolling the list, not only by reading each badge. */
+  .diff-view > .file[data-stale="true"] > .head { box-shadow: inset 3px 0 0 var(--color-attention); }
+}

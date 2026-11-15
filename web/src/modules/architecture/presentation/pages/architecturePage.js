@@ -79,6 +79,8 @@ export const architecturePage = ({ gateway }) => () => ({
   fileCounts: null,
   /** Whether the architecture assistant can run, from the seed: "Ask the assistant" on an event needs it. */
   assistantAvailable: false,
+  /** How many instruction-file proposals wait on the person: the seed's count, then the Proposals section's (the list's, then the feed's). */
+  openProposals: 0,
   /** Whether the assistant's panel is open: the page makes room for it instead of lying under it. */
   assistantOpen: false,
   /** Whether the page was opened on a tab's deep link and has not yet scrolled to the tabs. */
@@ -158,7 +160,13 @@ export const architecturePage = ({ gateway }) => () => ({
       id: `architecture-tab-${t.slug}`,
       panelId: `architecture-panel-${t.slug}`,
       selected: t.slug === this.tab,
+      proposals: t.slug === "instructions" ? this.openProposals : 0,
     }));
+  },
+
+  /** The Proposals section learned how many proposals are open. */
+  proposalsCounted(event) {
+    this.openProposals = event.detail.open;
   },
 
   isTab(slug) {
@@ -174,6 +182,7 @@ export const architecturePage = ({ gateway }) => () => ({
       this.ignoredPaths = Array.isArray(seed.ignored_paths) ? seed.ignored_paths : [];
       this.base = seed.base;
       this.assistantAvailable = seed.assistant_available === true;
+      this.openProposals = Number.isInteger(seed.open_proposals) ? seed.open_proposals : 0;
       this.deepLinked = (seed.tab ?? "") !== "";
       this.applyPath(seed.tab ?? "");
     } catch (err) {
