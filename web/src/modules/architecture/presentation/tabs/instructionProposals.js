@@ -10,6 +10,7 @@
 //   which reads projectId and repositoryId from the page.
 
 import { describeError } from "../../../../shared/presentation/errors.js";
+import { count } from "../../../../shared/presentation/format.js";
 import { drawLines } from "../../../code/presentation/render/lines.js";
 import {
   agoText,
@@ -24,6 +25,7 @@ import {
   rowNote,
   sendBackNoteError,
   sessionText,
+  staleBadgeText,
   staleCountText,
   stateLabel,
   stateTone,
@@ -32,6 +34,9 @@ import {
 /** What the section says on the window when it learns how many proposals are open: { detail: { open } }. */
 export const PROPOSALS_COUNTED = "architecture-proposals-counted";
 
+/** The query parameter of the notification's link: the proposal to open. */
+export const PROPOSAL_PARAM = "proposal";
+
 /** A pane opens its first files expanded; the rest start collapsed, as the code view's long diffs do. */
 const EXPANDED_FILES = 3;
 
@@ -39,6 +44,8 @@ const EXPANDED_FILES = 3;
 export const instructionProposals = ({ gateway }) => () => {
   const proposals = gateway.instructionProposals;
   const stops = [];
+  /** The section, kept from init: $root is not reachable from a timer. */
+  let root = null;
   /** The open proposal's file diffs by path, prepared once per read of its files. */
   let diffs = new Map();
   return {
@@ -69,13 +76,20 @@ export const instructionProposals = ({ gateway }) => () => {
     asking: "",
     note: "",
     noteError: "",
+    /** What a screen reader hears about a change the person made or opened: one sentence in a status region. */
+    announcement: "",
+    /** Whether the next pane that appears takes focus: a person opened it, a deep link did not. */
+    focusNext: false,
 
     async init() {
+      root = this.$el;
       stops.push(
         proposals.follow(this.projectId, this.repositoryId, { onChanged: (change) => this.proposalChanged(change) }),
         gateway.instructionFiles.follow(this.projectId, this.repositoryId, { onChanged: (change) => this.fileChanged(change) }),
       );
       await this.load();
+      const linked = new URLSearchParams(window.location.search).get(PROPOSAL_PARAM) ?? "";
+      if (linked !== "") await this.open(linked);
     },
     destroy() {
       for (const stop of stops) stop();
@@ -100,8 +114,9 @@ export const instructionProposals = ({ gateway }) => () => {
       this.load();
       if (change.proposalId === this.viewing && change.proposalId !== this.deciding) this.readPane(change.proposalId);
     },
-    /** A file was saved or deleted: an open proposal's stale marks may have moved. */
+    /** A file was saved or deleted: the rows' stale counts, and an open proposal's stale marks, may have moved. */
     fileChanged(change) {
+      if (this.openCount > 0) this.load();
       if (this.pane === null || this.deciding !== "" || this.pane.proposal.state !== "open") return;
       if (this.pane.files.some((f) => f.path === change.path)) this.readPane(this.viewing);
     },
@@ -112,6 +127,11 @@ export const instructionProposals = ({ gateway }) => () => {
 
     // ── the pane ───────────────────────────────────────────────────────────
 
+    /** A person's click or Enter on a row: the pane opens and takes focus. */
+    openFromRow(id) {
+      this.focusNext = true;
+      return this.open(id);
+    },
     async open(id) {
       if (this.viewing === id) return;
       this.viewing = id;
@@ -124,11 +144,30 @@ export const instructionProposals = ({ gateway }) => () => {
       await this.readPane(id);
     },
     close() {
+      const id = this.viewing;
       this.viewing = "";
       this.pane = null;
       this.refusal = null;
       this.approved = null;
       this.cancelAsk();
+      this.focusRow(id);
+    },
+    /** Closing the pane puts focus back on the proposal's row. */
+    focusRow(id) {
+      this.later(() => root.querySelector(`[data-proposal="${CSS.escape(id)}"] [data-open-proposal]`)?.focus());
+    },
+    /** The pane's heading takes focus when a person opened the pane, so its files and decision are next in Tab order. */
+    focusHeading(el) {
+      if (!this.focusNext) return;
+      this.focusNext = false;
+      this.later(() => el.focus());
+    },
+    /** After this tick's renders, and after x-show has revealed what they changed (it does so a task later). */
+    later(fn) {
+      this.$nextTick(() => setTimeout(fn, 0));
+    },
+    say(text) {
+      this.announcement = text;
     },
     /** Reads the proposal with its files; an answer for a proposal no longer in the pane is dropped. */
     async readPane(id) {
@@ -137,8 +176,10 @@ export const instructionProposals = ({ gateway }) => () => {
         const out = await proposals.get(id);
         if (this.viewing !== id) return;
         diffs = new Map(out.files.map((f) => [f.path, fileDiff(f)]));
+        const first = this.pane === null;
         this.pane = out;
         this.paneError = "";
+        if (first) this.say(`Opened the proposal: ${out.proposal.summary}, ${count(out.files.length, "file")}.`);
       } catch (err) {
         if (this.viewing === id) this.paneError = describeError(err).message;
       } finally {
@@ -156,6 +197,7 @@ export const instructionProposals = ({ gateway }) => () => {
         const out = await proposals.approve(id);
         this.approved = Object.fromEntries(out.saved.map((s) => [s.path, s.version]));
         if (this.viewing === id) this.pane = { ...this.pane, proposal: out.proposal };
+        this.say(`Proposal approved. ${approvedText(this.pane.files)}`);
       } catch (err) {
         await this.refused(id, err);
       } finally {
@@ -177,7 +219,7 @@ export const instructionProposals = ({ gateway }) => () => {
     },
     /** The note takes focus when its ask opens, so the person types at once. */
     focusNote(el) {
-      this.$nextTick(() => el.focus());
+      this.later(() => el.focus());
     },
     cancelAsk() {
       this.asking = "";
@@ -197,6 +239,7 @@ export const instructionProposals = ({ gateway }) => () => {
       try {
         const out = sendBack ? await proposals.sendBack(id, note) : await proposals.reject(id, note);
         if (this.viewing === id) this.pane = { ...this.pane, proposal: out.proposal };
+        this.say(sendBack ? "Proposal sent back to its session." : "Proposal rejected.");
         this.cancelAsk();
       } catch (err) {
         if (err.code === "INVALID_INPUT") this.noteError = describeError(err).message;
@@ -210,6 +253,7 @@ export const instructionProposals = ({ gateway }) => () => {
     async refused(id, err) {
       if (err.code === "INSTRUCTION_CHANGED") {
         this.refusal = { paths: err.paths ?? [] };
+        this.say(refusalTitle(this.refusal.paths.length));
         await this.readPane(id);
       } else if (err.code === "PROPOSAL_DECIDED") {
         this.cancelAsk();
@@ -251,6 +295,7 @@ export const instructionProposals = ({ gateway }) => () => {
         task: p.task,
         taskHref: this.taskHref(p.task),
         session: sessionText(p),
+        staleBadge: staleBadgeText(p.staleFiles),
         hasDecisionNote: p.note !== "",
         decisionNote: p.note,
         viewing: p.id === this.viewing,

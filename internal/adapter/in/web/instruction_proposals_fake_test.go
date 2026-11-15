@@ -196,7 +196,16 @@ func (f *fakeInstructionProposals) decide(w http.ResponseWriter, in map[string]a
 	at := time.Now()
 	p.State, p.Decided, p.Note = state, &at, note
 	f.emit(p.ID, p.State, f.openLocked())
-	f.json(w, map[string]any{"proposal": p.shape()})
+	f.json(w, map[string]any{"proposal": f.shape(p)})
+}
+
+// decideElsewhere is a decision made in another tab: the state changes and the feed announces it.
+func (f *fakeInstructionProposals) decideElsewhere(id, state string) {
+	f.setStateQuietly(id, state)
+	f.mu.Lock()
+	open := f.openLocked()
+	f.mu.Unlock()
+	f.emit(id, state, open)
 }
 
 // setStateQuietly is a decision made elsewhere that the feed has not told this page about yet.
@@ -270,7 +279,7 @@ func (f *fakeInstructionProposals) get(w http.ResponseWriter, in map[string]any)
 	for _, pf := range p.Files {
 		files = append(files, f.fileShape(pf))
 	}
-	f.json(w, map[string]any{"proposal": p.shape(), "files": files})
+	f.json(w, map[string]any{"proposal": f.shape(p), "files": files})
 }
 
 // approve saves every file in one go, or none: a stale file refuses the whole proposal.
@@ -313,7 +322,7 @@ func (f *fakeInstructionProposals) approve(w http.ResponseWriter, in map[string]
 		time.Sleep(f.approveDelay)
 		f.mu.Lock()
 	}
-	f.json(w, map[string]any{"proposal": p.shape(), "files": saved})
+	f.json(w, map[string]any{"proposal": f.shape(p), "files": saved})
 }
 
 // kindOfPath is the instruction kind a file's path implies.
@@ -328,7 +337,7 @@ func kindOfPath(path string) string {
 }
 
 // shape is a proposal as the list answers it.
-func (p *fakeProposal) shape() map[string]any {
+func (f *fakeInstructionProposals) shape(p *fakeProposal) map[string]any {
 	var decided, note any
 	if p.Decided != nil {
 		decided = p.Decided.Format(time.RFC3339)
@@ -340,9 +349,22 @@ func (p *fakeProposal) shape() map[string]any {
 	if skills == nil {
 		skills = []string{}
 	}
+	// A proposal with no files still counts one; stale_files counts the files of an open proposal saved since its draft read them.
+	files := len(p.Files)
+	if files == 0 {
+		files = 1
+	}
+	stale := 0
+	if p.State == "open" {
+		for _, pf := range p.Files {
+			if f.files.version(pf.Path) != pf.BaseVersion {
+				stale++
+			}
+		}
+	}
 	return map[string]any{
 		"id": p.ID, "repository_id": "r1", "state": p.State, "summary": p.Summary, "skills": skills,
-		"files":      1,
+		"files": files, "stale_files": stale,
 		"task":       map[string]any{"id": p.TaskID, "title": p.TaskTitle},
 		"session":    map[string]any{"id": "s-" + p.ID, "agent": p.Agent, "mode": p.Mode},
 		"created_at": p.Created.Format(time.RFC3339), "decided_at": decided, "note": note,
@@ -353,7 +375,7 @@ func (p *fakeProposal) shape() map[string]any {
 func (f *fakeInstructionProposals) list(w http.ResponseWriter) {
 	out := []any{}
 	for i := len(f.proposals) - 1; i >= 0; i-- {
-		out = append(out, f.proposals[i].shape())
+		out = append(out, f.shape(f.proposals[i]))
 	}
 	f.json(w, map[string]any{"proposals": out, "open_count": f.openLocked()})
 }

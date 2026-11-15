@@ -59,18 +59,29 @@ export function instructionProposalsGateway(api, feed) {
       return { proposal: proposalOf(body) };
     },
 
-    /** Follows the project feed for one repository's proposals: { proposalId, state, openCount }. */
-    follow(projectId, repositoryId, { onChanged, onStatus }) {
+    /** Follows the project feed for every repository's proposals: { repositoryId, proposalId, state, openCount }. */
+    followProject(projectId, { onChanged, onStatus }) {
       return feed.follow(`/events?project_id=${encodeURIComponent(projectId)}`, {
         onMessage(dto) {
           const changed = dto?.instruction_proposal_changed;
-          if (changed && changed.repository_id === repositoryId) {
+          if (changed && typeof changed.repository_id === "string") {
             onChanged?.({
+              repositoryId: changed.repository_id,
               proposalId: changed.proposal_id ?? "",
               state: changed.state ?? "",
               openCount: Number.isInteger(changed.open_count) ? changed.open_count : 0,
             });
           }
+        },
+        onStatus,
+      });
+    },
+
+    /** Follows the project feed for one repository's proposals: { proposalId, state, openCount }. */
+    follow(projectId, repositoryId, { onChanged, onStatus }) {
+      return this.followProject(projectId, {
+        onChanged({ repositoryId: from, ...change }) {
+          if (from === repositoryId) onChanged?.(change);
         },
         onStatus,
       });

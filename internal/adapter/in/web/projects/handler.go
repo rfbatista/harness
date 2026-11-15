@@ -4,6 +4,7 @@
 package projects
 
 import (
+	"context"
 	"log/slog"
 	"net/http"
 	"net/url"
@@ -38,9 +39,12 @@ type Handler struct {
 	// TokenSavers paints the Token savers control on the project's and the
 	// repository's settings pages; nil leaves it out.
 	TokenSavers ports.TokenSaverActivationReader
-	Layout      shell.Layout
-	Render      shell.Renderer
-	Now         func() time.Time
+	// OpenProposals counts a repository's open instruction-file proposals for
+	// the badge beside its Architecture link; nil counts none.
+	OpenProposals func(ctx context.Context, repositoryID string) int
+	Layout        shell.Layout
+	Render        shell.Renderer
+	Now           func() time.Time
 }
 
 // List is the projects list: every project with its counts.
@@ -104,6 +108,7 @@ func (h Handler) RepositoryList(w http.ResponseWriter, r *http.Request) error {
 		return err
 	}
 	v := NewRepositoriesView(frame, project, repos)
+	v.WithOpenProposals(ctx, h.OpenProposals)
 	v.Credentials = h.credentialsSeed(r, project.ID)
 	return h.Render(w, r, http.StatusOK, RepositoriesPage(v))
 }
@@ -248,6 +253,9 @@ type Seed struct {
 	// ProjectRoot is where the page looks for checkouts not added yet.
 	ProjectRoot  string               `json:"project_root"`
 	Repositories []*domain.Repository `json:"repositories"`
+	// OpenProposals is each repository's open instruction-file proposals by
+	// repository id; the feed updates it. Repositories with none are absent.
+	OpenProposals map[string]int `json:"open_proposals"`
 }
 
 // NewRepositoriesView builds the page. It reads names and remotes the way
@@ -266,6 +274,20 @@ func NewRepositoriesView(frame shell.Frame, project *domain.Project, repos []*do
 		ProjectName: project.Name,
 		Rows:        rows,
 		Seed:        Seed{ProjectID: project.ID, ProjectRoot: project.RootDir, Repositories: repos},
+	}
+}
+
+// WithOpenProposals counts each repository's open instruction-file proposals
+// for the badge beside its Architecture link; nil counts none.
+func (v *RepositoriesView) WithOpenProposals(ctx context.Context, open func(ctx context.Context, repositoryID string) int) {
+	v.Seed.OpenProposals = map[string]int{}
+	if open == nil {
+		return
+	}
+	for _, r := range v.Rows {
+		if n := open(ctx, r.ID); n > 0 {
+			v.Seed.OpenProposals[r.ID] = n
+		}
 	}
 }
 

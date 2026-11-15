@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/chromedp/chromedp"
+	"github.com/chromedp/chromedp/kb"
 )
 
 const (
@@ -256,6 +257,14 @@ func TestInstructionProposalMarksAStaleFileAndRefusesTheApproval(t *testing.T) {
 	if head != "stale · v1 read, v2 saved" || !strings.Contains(notice, "1 file changed since the draft read it") {
 		t.Fatalf("stale head %q, notice %q", head, notice)
 	}
+	var rowBadge string
+	rig.run(t,
+		poll(`!!`+proposalRowJS("p-files", `.querySelector('[data-stale-files]')`)),
+		chromedp.Evaluate(proposalRowJS("p-files", `.querySelector('[data-stale-files]').textContent.trim()`), &rowBadge),
+	)
+	if rowBadge != "1 stale file" {
+		t.Fatalf("the row's stale badge = %q", rowBadge)
+	}
 
 	rig.run(t,
 		chromedp.Evaluate(`document.querySelector('`+proposalPane+` [data-approve]').click()`, nil),
@@ -406,4 +415,113 @@ func TestInstructionProposalRejectNeedsNoNoteAndADecidedProposalShowsItsDecision
 	if stillAsking {
 		t.Fatal("the pane still asks, or shows an error, after the proposal turned out decided")
 	}
+}
+
+// ── the notification link and the keyboard ──────────────────────────────────
+
+// tabTo presses Tab until the element matching sel has focus, or fails after a few presses.
+func tabTo(t *testing.T, rig *archRig, sel string) {
+	t.Helper()
+	for i := 0; i < 24; i++ {
+		var on bool
+		rig.run(t, chromedp.Evaluate(`document.activeElement?.matches('`+sel+`') === true`, &on))
+		if on {
+			return
+		}
+		rig.run(t, chromedp.KeyEvent(kb.Tab))
+	}
+	t.Fatalf("Tab did not reach %s in 24 presses", sel)
+}
+
+// The notification's link opens the workspace with the proposal already open.
+func TestInstructionProposalDeepLinkOpensTheProposal(t *testing.T) {
+	rig := filesRig(t)
+	openInstructions(t, rig, "?proposal=p-files", 1280)
+	var title, viewing string
+	rig.run(t,
+		poll(`!!document.querySelector('`+proposalPane+` .diff-view .file') && document.querySelector('`+proposalPane+`').checkVisibility()`),
+		chromedp.Evaluate(`document.querySelector('`+proposalPane+` header h3').textContent.trim()`, &title),
+		chromedp.Evaluate(proposalRowJS("p-files", `.dataset.viewing`), &viewing),
+	)
+	if title != "Verification skill" || viewing != "true" {
+		t.Fatalf("deep link opened %q, row viewing %q", title, viewing)
+	}
+	// A link to a proposal that is gone says so, and the list still works.
+	rig.run(t, chromedp.Navigate(rig.url("/instructions?proposal=nope")), poll(`!!document.querySelector('`+instructionsPanel+` [data-proposal-error]')`))
+}
+
+// The list, the files and the decision are reachable with Tab and Enter, and
+// what happens is announced in a status region.
+func TestInstructionProposalCanBeReviewedAndSentBackWithTheKeyboardAlone(t *testing.T) {
+	rig := filesRig(t)
+	openInstructions(t, rig, "", 1280)
+	rig.run(t,
+		poll(`!!`+proposalRowJS("p-files", `.querySelector('[data-open-proposal]')`)),
+		chromedp.Evaluate(proposalRowJS("p-files", `.querySelector('[data-open-proposal]').focus()`), nil),
+		chromedp.KeyEvent("\r"),
+		poll(`document.activeElement?.hasAttribute('data-pane-heading') === true`),
+	)
+	var live string
+	rig.run(t, chromedp.Evaluate(`document.querySelector('`+instructionsPanel+` [data-proposals-live]').textContent.trim()`, &live))
+	if live != "Opened the proposal: Verification skill, 3 files." {
+		t.Fatalf("status = %q", live)
+	}
+	var unnamed int
+	rig.run(t, chromedp.Evaluate(`[...document.querySelectorAll('`+proposalsSection+` button')].filter(b => !(b.getAttribute('aria-label') || b.textContent.trim())).length`, &unnamed))
+	if unnamed != 0 {
+		t.Fatalf("%d buttons have no name", unnamed)
+	}
+
+	tabTo(t, rig, `[data-approve]`)
+	tabTo(t, rig, `[data-open-sendback]`)
+	rig.run(t, chromedp.KeyEvent("\r"), poll(`document.activeElement === document.querySelector('`+proposalPane+` [data-ask] textarea')`), chromedp.KeyEvent("Wait for the listening line."))
+	tabTo(t, rig, `[data-ask] [type=submit]`)
+	rig.run(t, chromedp.KeyEvent("\r"), poll(proposalRowJS("p-files", `.dataset.state`)+` === 'sent_back'`))
+	rig.run(t, poll(`document.querySelector('`+instructionsPanel+` [data-proposals-live]').textContent.includes('sent back')`))
+	if body := rig.proposals.lastBody("send_back_instruction_proposal"); body["note"] != "Wait for the listening line." {
+		t.Fatalf("send back body = %v", body)
+	}
+
+	// Close returns to the proposal's row. Focus was lost with the ask; start from the pane's heading.
+	rig.run(t, chromedp.Evaluate(`document.querySelector('`+proposalPane+` [data-pane-heading]').focus()`, nil))
+	tabTo(t, rig, `[data-close-proposal]`)
+	rig.run(t, chromedp.KeyEvent("\r"), poll(`document.activeElement === `+proposalRowJS("p-files", `.querySelector('[data-open-proposal]')`)))
+}
+
+// ── the repository's entry on the project's repositories page ───────────────
+
+const repositoryBadge = `(document.querySelector('a[href$="/repositories/r1/architecture"]')?.parentElement.querySelector('[data-proposals-count]')?.textContent.trim() ?? '')`
+
+// The repository's entry carries the open-proposal count beside its Architecture
+// link: in the server's first render, changing as the feed announces, and absent
+// at zero.
+func TestInstructionProposalBadgeIsBesideTheRepositoryEntry(t *testing.T) {
+	rig := proposalRig(t)
+	res, err := http.Get(rig.srv.URL + "/projects/p1/repositories")
+	if err != nil {
+		t.Fatal(err)
+	}
+	body, _ := io.ReadAll(res.Body)
+	res.Body.Close()
+	if !strings.Contains(string(body), "data-proposals") || !strings.Contains(string(body), `"open_proposals":{"r1":1}`) {
+		t.Fatalf("the server's first render lacks the count: %s", body)
+	}
+
+	rig.run(t,
+		chromedp.EmulateViewport(1280, 900),
+		chromedp.Navigate(rig.srv.URL+"/projects/p1/repositories"),
+		poll(`!!document.querySelector('a[href$="/repositories/r1/architecture"]')`),
+		poll(repositoryBadge+` === '1'`),
+	)
+	waitFor(t, "the page's feed", func() bool { return rig.feed.followers() >= 1 })
+	var sr string
+	rig.run(t, chromedp.Evaluate(`document.querySelector('a[href$="/repositories/r1/architecture"]').parentElement.querySelector('[data-proposals]').textContent.replace(/\s+/g, ' ').trim()`, &sr))
+	if sr != "1 to review" {
+		t.Fatalf("the badge reads %q", sr)
+	}
+	rig.proposals.submit(fakeProposal{Summary: "Another", Skills: []string{"go-tests"}})
+	rig.run(t, poll(repositoryBadge+` === '2'`))
+	rig.proposals.decideElsewhere("p-open", "approved")
+	rig.proposals.decideElsewhere("p3", "rejected")
+	rig.run(t, poll(repositoryBadge+` === ''`))
 }

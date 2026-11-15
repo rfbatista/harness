@@ -14,6 +14,7 @@ import {
   rowNote,
   sessionText,
   sendBackNoteError,
+  staleBadgeText,
   staleCountText,
   stateLabel,
   stateTone,
@@ -64,6 +65,14 @@ test("a proposal row reads the wire shape", () => {
   assert.deepEqual(row.task, { id: "t1", title: "Verification Skill" });
   assert.equal(row.note, "");
   assert.equal(row.decidedAt, "");
+});
+
+test("a row reads how many of its files are stale, and says so only above zero", () => {
+  assert.equal(proposalRow(dto({ stale_files: 2 })).staleFiles, 2);
+  assert.equal(proposalRow(dto()).staleFiles, 0);
+  assert.equal(staleBadgeText(0), "");
+  assert.equal(staleBadgeText(1), "1 stale file");
+  assert.equal(staleBadgeText(3), "3 stale files");
 });
 
 test("a row tolerates missing task, session and skills", () => {

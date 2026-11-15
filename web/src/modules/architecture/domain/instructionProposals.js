@@ -18,7 +18,7 @@ const list = (xs) => (Array.isArray(xs) ? xs : []);
 
 /**
  * @param {any} dto one proposal of list_instruction_proposals
- * @returns {{ id: string, state: string, summary: string, skills: string[], files: number, task: { id: string, title: string } | null, session: { id: string, agent: string, mode: string } | null, createdAt: string, decidedAt: string, note: string }}
+ * @returns {{ id: string, state: string, summary: string, skills: string[], files: number, task: { id: string, title: string } | null, session: { id: string, agent: string, mode: string } | null, createdAt: string, decidedAt: string, note: string, staleFiles: number }}
  */
 export function proposalRow(dto) {
   return {
@@ -32,8 +32,12 @@ export function proposalRow(dto) {
     createdAt: dto.created_at ?? "",
     decidedAt: dto.decided_at ?? "",
     note: dto.note ?? "",
+    staleFiles: Number.isInteger(dto.stale_files) ? dto.stale_files : 0,
   };
 }
+
+/** The row's badge when an open proposal has files saved since its draft read them: "1 stale file", "" for none. */
+export const staleBadgeText = (n) => (n > 0 ? count(n, "stale file") : "");
 
 /** Open proposals first, then the decided ones, each group newest first. */
 export function orderProposals(rows) {

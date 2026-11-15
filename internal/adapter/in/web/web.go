@@ -230,7 +230,7 @@ func NewHandler(deps Deps, assets *Assets, fallback http.Handler) http.Handler {
 	}
 	projectPages := projects.Handler{
 		Projects: deps.Projects, Repositories: deps.Repositories, EnvFiles: deps.EnvFiles, RunCommands: deps.RunCommands, Summaries: deps.ProjectSummaries, Credentials: deps.GitCredentials,
-		TokenSavers: deps.TokenSavers, Layout: s.layout, Render: render, Now: deps.Now,
+		TokenSavers: deps.TokenSavers, OpenProposals: deps.OpenInstructionProposals, Layout: s.layout, Render: render, Now: deps.Now,
 	}
 	historyPages := history.Handler{
 		Projects: deps.Projects, Repositories: deps.Repositories, History: deps.History, Sessions: deps.Sessions, Tasks: deps.Tasks,

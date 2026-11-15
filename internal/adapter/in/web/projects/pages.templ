@@ -1,6 +1,8 @@
 package projects
 
 import (
+	"strconv"
+
 	"operators-mcp/internal/adapter/in/web/components"
 	"operators-mcp/internal/adapter/in/web/credentials"
 	"operators-mcp/internal/adapter/in/web/designsystem"
@@ -127,6 +129,9 @@ templ RepositoriesPage(v RepositoriesView) {
 										}
 									</span>
 									<a class="[ button ]" data-variant="ghost" data-size="sm" href={ templ.SafeURL(r.ArchitectureHref) }>Architecture</a>
+									if n := v.Seed.OpenProposals[r.ID]; n > 0 {
+										<span class="[ badge ]" data-tone="attention" data-proposals><span data-proposals-count>{ strconv.Itoa(n) }</span> <span class="[ visually-hidden ]">to review</span></span>
+									}
 									<a class="[ button ]" data-variant="ghost" data-size="sm" href={ templ.SafeURL(r.HistoryHref) }>History</a>
 									<a class="[ button ]" data-variant="ghost" data-size="sm" href={ templ.SafeURL(r.EnvHref) }>Settings</a>
 								</div>
@@ -143,6 +148,9 @@ templ RepositoriesPage(v RepositoriesView) {
 								</span>
 								<span class="[ cluster ] [ gutter-xs ]">
 									<a class="[ button ]" data-variant="ghost" data-size="sm" x-bind:href="r.architectureHref" x-text="r.architectureLabel">Architecture</a>
+									<template x-if="r.hasProposals">
+										<span class="[ badge ]" data-tone="attention" data-proposals><span data-proposals-count x-text="r.proposals"></span> <span class="[ visually-hidden ]">to review</span></span>
+									</template>
 									<a class="[ button ]" data-variant="ghost" data-size="sm" x-bind:href="r.historyHref">History</a>
 									<a class="[ button ]" data-variant="ghost" data-size="sm" x-bind:href="r.envHref">Settings</a>
 									<template x-if="!r.confirming">

@@ -149,3 +149,17 @@ test("a decided proposal's refusal arrives with its code", async () => {
     assert.equal(err.code, "PROPOSAL_DECIDED");
   }
 });
+
+test("followProject reads every repository's proposal events", () => {
+  const followed = [];
+  const { gateway } = rig(() => jsonResponse(200, {}), followed);
+  const seen = [];
+  gateway.followProject("proj", { onChanged: (c) => seen.push(c) });
+  const { onMessage } = followed[0].handlers;
+  onMessage({ instruction_proposal_changed: { repository_id: "r1", proposal_id: "p1", state: "open", open_count: 2 } });
+  onMessage({ instruction_proposal_changed: { repository_id: "r2", proposal_id: "p9", state: "approved", open_count: 0 } });
+  assert.deepEqual(seen, [
+    { repositoryId: "r1", proposalId: "p1", state: "open", openCount: 2 },
+    { repositoryId: "r2", proposalId: "p9", state: "approved", openCount: 0 },
+  ]);
+});

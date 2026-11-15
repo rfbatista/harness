@@ -16,6 +16,7 @@ templ instructionProposals() {
 			</template>
 			<span class="[ text-sm color-ink-muted ]">Skills an agent proposed from its task's instruction draft. Approving saves every file as a new version; new sessions get them.</span>
 		</div>
+		<p class="[ visually-hidden ]" role="status" aria-live="polite" data-proposals-live x-text="announcement"></p>
 		<p class="[ error ]" role="alert" data-proposals-error x-show="hasLoadError"><span aria-hidden="true">✕</span> <span x-text="loadError"></span></p>
 		<div class="[ arch-split ]" x-bind:data-pane="paneOpen" x-show="hasList">
 			<ul class="[ arch-entries ]" role="list" aria-label="Proposals">
@@ -24,10 +25,13 @@ templ instructionProposals() {
 						<div class="[ entry-row ]">
 							<div class="[ entry-main ]">
 								<div class="[ entry-title ]">
-									<button type="button" class="[ open-file ]" data-open-proposal x-bind:aria-label="row.openLabel" x-bind:aria-expanded="row.viewing" x-on:click="open(row.id)" x-text="row.summary"></button>
+									<button type="button" class="[ open-file ]" data-open-proposal x-bind:aria-label="row.openLabel" x-bind:aria-expanded="row.viewing" x-on:click="openFromRow(row.id)" x-text="row.summary"></button>
 									<span class="[ badge ]" data-state-badge x-bind:data-tone="row.tone" x-text="row.label"></span>
 									<template x-for="skill in row.skills" x-bind:key="skill">
 										<span class="[ badge ]"><code x-text="skill"></code></span>
+									</template>
+									<template x-if="row.staleBadge">
+										<span class="[ badge ]" data-tone="attention" data-stale-files x-text="row.staleBadge"></span>
 									</template>
 								</div>
 								<p class="[ entry-note ]" data-proposal-meta x-text="row.note"></p>
@@ -63,7 +67,7 @@ templ instructionProposalPane() {
 	<template x-if="hasPane">
 		<section class="[ entry-card ] [ instruction-proposal ]" x-bind:aria-label="paneLabel" data-proposal-pane>
 			<header>
-				<h3 class="[ grow ]" x-text="paneTitle"></h3>
+				<h3 class="[ grow ]" tabindex="-1" data-pane-heading x-init="focusHeading($el)" x-text="paneTitle"></h3>
 				<span class="[ badge ]" data-pane-state x-bind:data-tone="paneTone" x-text="paneStateLabel"></span>
 				<button type="button" class="[ button ]" data-variant="ghost" data-size="sm" data-close-proposal aria-label="Close the proposal" x-on:click="close">✕</button>
 			</header>
