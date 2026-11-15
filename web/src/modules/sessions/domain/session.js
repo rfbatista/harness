@@ -75,7 +75,7 @@ export const Status = Object.freeze({
 export const STATUSES = Object.freeze(Object.values(Status));
 
 /** The roles a session can be started in on top of its agent. */
-export const MODES = Object.freeze(["", "architect", "implement", "design", "product"]);
+export const MODES = Object.freeze(["", "architect", "implement", "design", "product", "review", "test", "qa", "operate"]);
 
 /** The one mode a session may start in with no task (ADR 0016). */
 export const PRODUCT_MODE = "product";

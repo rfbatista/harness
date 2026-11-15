@@ -43,10 +43,11 @@ func TestTheClaudeSectionHasOneRowPerSessionModeInTheContractsOrder(t *testing.T
 			t.Errorf("%s has no lead", tier.Title)
 		}
 	}
-	wantTitles := []string{"Default", "Architect", "Implement", "Design", "Product", "Design system"}
+	wantTitles := []string{"Default", "Architect", "Implement", "Design", "Product", "Design system", "Reviewer", "Tester", "QA", "Operator"}
 	wantKeys := []string{
 		"models.claude.mode.default", "models.claude.mode.architect", "models.claude.mode.implement",
 		"models.claude.mode.design", "models.claude.mode.product", "models.claude.mode.designsystem",
+		"models.claude.mode.review", "models.claude.mode.test", "models.claude.mode.qa", "models.claude.mode.operate",
 	}
 	if strings.Join(titles, ",") != strings.Join(wantTitles, ",") {
 		t.Errorf("titles = %v, want %v", titles, wantTitles)
@@ -60,6 +61,7 @@ func TestUnsetTiersShowTheBuiltInModels(t *testing.T) {
 	want := map[string]string{
 		"Default": "default", "Architect": "opus", "Implement": "sonnet",
 		"Design": "default", "Product": "default", "Design system": "default",
+		"Reviewer": "opus", "Tester": "sonnet", "QA": "sonnet", "Operator": "sonnet",
 	}
 	for _, tier := range NewView(settings{}).Tiers {
 		if got := selected(t, tier); got != want[tier.Title] {
@@ -73,8 +75,9 @@ func TestTiersShowTheStoredModels(t *testing.T) {
 		domain.ModeModelKey(domain.SessionModeArchitect): "fable",
 		domain.ModeModelKey(domain.SessionModeImplement): domain.ModelDefault,
 		domain.ModeModelKey(domain.SessionModeDesign):    "haiku",
+		domain.ModeModelKey(domain.SessionModeReview):    "haiku",
 	})
-	want := map[string]string{"Architect": "fable", "Implement": domain.ModelDefault, "Design": "haiku", "Default": "default", "Product": "default", "Design system": "default"}
+	want := map[string]string{"Architect": "fable", "Implement": domain.ModelDefault, "Design": "haiku", "Default": "default", "Product": "default", "Design system": "default", "Reviewer": "haiku", "Tester": "sonnet", "QA": "sonnet", "Operator": "sonnet"}
 	for _, tier := range v.Tiers {
 		if got := selected(t, tier); got != want[tier.Title] {
 			t.Errorf("%s selects %q, want %q", tier.Title, got, want[tier.Title])

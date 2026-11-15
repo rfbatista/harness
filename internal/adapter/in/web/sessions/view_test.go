@@ -684,3 +684,15 @@ func TestAnOpenInterviewMakesASessionReadQuestionsAndNeedThePerson(t *testing.T)
 		t.Errorf("summary = %q", v.Summary)
 	}
 }
+
+// The mode tag shows the mode value, as it does for implement or design; the
+// names Reviewer, Tester, QA and Operator belong to the form and the settings pages.
+func TestARowsModeTagReadsTheModeValueOfTheVerificationModes(t *testing.T) {
+	now := time.Now()
+	for _, mode := range []domain.SessionMode{"implement", "design", "review", "test", "qa", "operate"} {
+		s := &domain.Session{ID: "s", Mode: mode, UpdatedAt: now}
+		if got := toRow(s, "", nil, now, map[string]*domain.Session{"s": s}, 0, "").Mode; got != string(mode) {
+			t.Errorf("mode tag of a %s session = %q, want %q", mode, got, mode)
+		}
+	}
+}
