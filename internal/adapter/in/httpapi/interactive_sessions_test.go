@@ -61,6 +61,17 @@ func TestHTTP_StartInteractiveSessionMode(t *testing.T) {
 		t.Fatalf("product start = %d %+v / prompt %q", status, product.Session, product.Agent.Prompt)
 	}
 
+	for mode, skill := range map[domain.SessionMode]string{
+		domain.SessionModeReview: "task-review", domain.SessionModeTest: "task-test",
+		domain.SessionModeQA: "task-qa", domain.SessionModeOperate: "task-operate",
+	} {
+		status, verify := post(t, srv.URL+"/api/start_interactive_session",
+			`{"project_id":"p1","repository_id":"r1","ticket_id":"tk1","mode":"`+string(mode)+`"}`)
+		if status != http.StatusCreated || verify.Session.Mode != mode || !strings.Contains(verify.Agent.Prompt, skill) {
+			t.Fatalf("%s start = %d %+v / prompt %q", mode, status, verify.Session, verify.Agent.Prompt)
+		}
+	}
+
 	status, refused := post(t, srv.URL+"/api/start_interactive_session",
 		`{"project_id":"p1","repository_id":"r1","ticket_id":"tk1","mode":"wizard"}`)
 	if status != http.StatusBadRequest || refused.Code != "INVALID_INPUT" {
@@ -252,7 +263,7 @@ func TestHTTP_StartInteractiveSessionWithoutATask(t *testing.T) {
 		t.Fatalf("the project's sessions do not list %s: %v", started.Session.ID, listed.Sessions)
 	}
 
-	for _, mode := range []string{"architect", "implement", "design", ""} {
+	for _, mode := range []string{"architect", "implement", "design", "review", "test", "qa", "operate", ""} {
 		status, refused := post(t, srv.URL+"/api/start_interactive_session",
 			`{"project_id":"p1","repository_id":"r1","mode":"`+mode+`"}`)
 		if status != http.StatusBadRequest || refused.Code != "INVALID_INPUT" {

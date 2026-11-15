@@ -104,6 +104,7 @@ func (s *Service) StartInteractive(ctx context.Context, req InteractiveRequest) 
 		}
 		branch = named
 	}
+	role := s.newSessionRole(ctx, mode, req.ParentSessionID)
 	p, err := s.prepare(ctx, prepareInput{
 		ID:           id,
 		ProjectID:    req.ProjectID,
@@ -117,7 +118,7 @@ func (s *Service) StartInteractive(ctx context.Context, req InteractiveRequest) 
 		AutoAccept:   req.AutoAccept,
 		Mode:         mode,
 		DesignSystem: designSystem,
-		Role:         s.newSessionRole(ctx, mode, req.ParentSessionID),
+		Role:         role,
 
 		BranchChecked: named != "" && s.branchNames != nil,
 	})
@@ -131,7 +132,7 @@ func (s *Service) StartInteractive(ctx context.Context, req InteractiveRequest) 
 		return nil, ports.AgentSpec{}, err
 	}
 
-	opening := modePrompt(mode, ticket, project, req.Prompt)
+	opening := modePrompt(mode, ticket, project, role, req.Prompt)
 	if designSystem != nil {
 		opening = designSessionPrompt(project, designSystem, req.Prompt)
 	}

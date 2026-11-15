@@ -175,7 +175,8 @@ func TestBuildSandboxPolicy_ReadAllReposCoversRepositoriesUnderAndOutsideTheHome
 }
 
 func TestReadAllRepos_FactsOffRecordTheModesOwnVisibilityAndOnRecordAllRepos(t *testing.T) {
-	own := map[string]string{"implement": domain.SandboxOwnRepo, "design": domain.SandboxOwnRepo, "": domain.SandboxOwnRepo, "architect": domain.SandboxAllReposReadOnly, "product": domain.SandboxAllReposReadOnly}
+	own := map[string]string{"implement": domain.SandboxOwnRepo, "design": domain.SandboxOwnRepo, "": domain.SandboxOwnRepo, "architect": domain.SandboxAllReposReadOnly, "product": domain.SandboxAllReposReadOnly,
+		"review": domain.SandboxOwnRepo, "test": domain.SandboxOwnRepo, "qa": domain.SandboxOwnRepo, "operate": domain.SandboxOwnRepo}
 	for mode, want := range own {
 		w := newSandboxWorld(t)
 		sess, _ := w.startWithReadAll(t, mode, false)

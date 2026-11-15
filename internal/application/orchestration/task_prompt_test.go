@@ -312,9 +312,9 @@ func TestPrompts_NameNoRemovedTool(t *testing.T) {
 	}
 	project := &domain.Project{ID: "p1", Name: "harness"}
 	texts["brief/project"] = projectBrief(projectBriefInput{Project: project})
-	texts["prompt/project"] = modePrompt(domain.SessionModeProduct, nil, project, "")
+	texts["prompt/project"] = modePrompt(domain.SessionModeProduct, nil, project, domain.RolePeer, "")
 	for mode, names := range builtinskills.ModeSkillNames() {
-		texts["prompt/"+string(mode)] = modePrompt(mode, tk, nil, "")
+		texts["prompt/"+string(mode)] = modePrompt(mode, tk, nil, domain.RolePeer, "")
 		for _, skill := range names {
 			files, err := builtinSkillFiles(skill)
 			if err != nil {
