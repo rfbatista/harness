@@ -191,7 +191,8 @@ func registerHTTPServer(lc fx.Lifecycle, cfg Config, cat catalog.Catalog, appRun
 		// One structured record per repository: layers, access, rules.
 		RepositoryArchitectures: cat.RepositoryArchitectures,
 		// What agents proposed for a repository's instruction files.
-		InstructionProposals: cat.InstructionProposals,
+		InstructionProposals:         cat.InstructionProposals,
+		InstructionProposalDecisions: cat.InstructionProposals,
 		// One structured record per project: tokens, principles, components.
 		DesignSystems: cat.DesignSystems,
 		// What the architecture hooks, shims and commit check ask.

@@ -115,3 +115,14 @@ func instructionKindProblem(p, kind string) string {
 	}
 	return ""
 }
+
+// InstructionChange is one change of a batch applied to a repository's
+// instruction files together: a create (BaseVersion 0), a change, or, with
+// Remove, a delete. Content is empty for a remove.
+type InstructionChange struct {
+	Path        string
+	Kind        string
+	BaseVersion int
+	Content     string
+	Remove      bool
+}

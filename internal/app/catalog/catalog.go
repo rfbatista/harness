@@ -188,7 +188,7 @@ func New(d Deps) Catalog {
 
 	var instructions *instructionproposal.Service
 	if d.InstructionDrafts != nil && d.InstructionProposals != nil && repoArch != nil {
-		instructions = instructionproposal.NewService(instructionproposal.Deps{Drafts: d.InstructionDrafts, Proposals: d.InstructionProposals, Repositories: pr, Files: repoArch})
+		instructions = instructionproposal.NewService(instructionproposal.Deps{Drafts: d.InstructionDrafts, Proposals: d.InstructionProposals, Repositories: pr, Files: repoArch, Applier: repoArch})
 	}
 
 	arch.Subscribe(bus)

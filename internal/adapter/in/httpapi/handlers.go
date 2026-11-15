@@ -139,6 +139,8 @@ type Services struct {
 	// InstructionProposals are repositories' instruction-file proposals; nil
 	// answers 503.
 	InstructionProposals ports.InstructionProposals
+	// InstructionProposalDecisions decide them; nil answers 503.
+	InstructionProposalDecisions ports.InstructionProposalDecisions
 	// DesignSystems keeps projects' design systems; nil answers 503.
 	DesignSystems ports.DesignSystems
 	// ArchitectureRules checks sessions' hooks, shims and commits against
@@ -228,6 +230,7 @@ type Handler struct {
 	repoArch ports.RepositoryArchitectures
 	// instructionProposals is nil when proposals are not configured.
 	instructionProposals ports.InstructionProposals
+	instructionDecisions ports.InstructionProposalDecisions
 	designs              ports.DesignSystems
 	// imports is the design systems' import, when they offer it.
 	imports ports.DesignSystemImports
@@ -272,6 +275,7 @@ func NewHandler(s Services) *Handler {
 		branchNames:          s.BranchNames,
 		repoArch:             s.RepositoryArchitectures,
 		instructionProposals: s.InstructionProposals,
+		instructionDecisions: s.InstructionProposalDecisions,
 		designs:              s.DesignSystems,
 		imports:              designImports(s.DesignSystems),
 		exports:              designExports(s.DesignSystems),

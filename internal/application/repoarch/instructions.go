@@ -315,3 +315,37 @@ func (s *Service) RemoveInstructionFilesFromRepository(ctx context.Context, repo
 	}
 	return s.git.RemoveFiles(ctx, repo.RootDir, paths, removeMessage)
 }
+
+// ApplyInstructionChanges saves a batch of instruction-file changes in one
+// transaction, validated as saves are, and announces each file and, when a
+// removal changed it, the record.
+func (s *Service) ApplyInstructionChanges(ctx context.Context, repositoryID string, changes []domain.InstructionChange) ([]domain.InstructionFile, error) {
+	repo, err := s.repos.GetRepository(ctx, repositoryID)
+	if err != nil {
+		return nil, err
+	}
+	for i := range changes {
+		changes[i].Kind = domain.CurrentInstructionKind(changes[i].Kind)
+		if changes[i].Remove {
+			continue
+		}
+		if problems := domain.ValidateInstructionFile(changes[i].Path, changes[i].Kind, changes[i].Content); len(problems) > 0 {
+			return nil, invalidInstruction(problems)
+		}
+	}
+	saved, recordVersion, err := s.store.ApplyInstructionChanges(ctx, repositoryID, repo.ProjectID, changes, domain.MaxInstructionFilesSize)
+	if err != nil {
+		return nil, tooBigAsInvalid(err)
+	}
+	s.announceRecord(repo, recordVersion)
+	for _, ch := range changes {
+		version := 0
+		for _, f := range saved {
+			if f.Path == ch.Path {
+				version = f.Version
+			}
+		}
+		s.announceInstruction(repo.ProjectID, repositoryID, ch.Path, version)
+	}
+	return saved, nil
+}

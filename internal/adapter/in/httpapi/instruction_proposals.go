@@ -126,3 +126,67 @@ func (h *Handler) handleGetInstructionProposal(c echo.Context) error {
 	}
 	return c.JSON(http.StatusOK, map[string]any{"proposal": instructionProposalBodyOf(*row), "files": out})
 }
+
+func (h *Handler) decisionsReady() error {
+	if h.instructionDecisions == nil {
+		return echo.NewHTTPError(http.StatusServiceUnavailable, "instruction-file proposals are not configured")
+	}
+	return nil
+}
+
+func (h *Handler) handleApproveInstructionProposal(c echo.Context) error {
+	if err := h.decisionsReady(); err != nil {
+		return err
+	}
+	var in struct {
+		ProposalID string `json:"proposal_id"`
+	}
+	if err := bindJSON(c, &in); err != nil {
+		return err
+	}
+	row, saved, err := h.instructionDecisions.ApproveInstructionProposal(c.Request().Context(), in.ProposalID)
+	if err != nil {
+		return err
+	}
+	files := make([]instructionFileBody, len(saved))
+	for i, f := range saved {
+		files[i] = instructionFileBodyOf(f, false)
+	}
+	return c.JSON(http.StatusOK, map[string]any{"proposal": instructionProposalBodyOf(*row), "files": files})
+}
+
+func (h *Handler) handleRejectInstructionProposal(c echo.Context) error {
+	if err := h.decisionsReady(); err != nil {
+		return err
+	}
+	var in struct {
+		ProposalID string `json:"proposal_id"`
+		Note       string `json:"note"`
+	}
+	if err := bindJSON(c, &in); err != nil {
+		return err
+	}
+	row, err := h.instructionDecisions.RejectInstructionProposal(c.Request().Context(), in.ProposalID, in.Note)
+	if err != nil {
+		return err
+	}
+	return c.JSON(http.StatusOK, map[string]any{"proposal": instructionProposalBodyOf(*row)})
+}
+
+func (h *Handler) handleSendBackInstructionProposal(c echo.Context) error {
+	if err := h.decisionsReady(); err != nil {
+		return err
+	}
+	var in struct {
+		ProposalID string `json:"proposal_id"`
+		Note       string `json:"note"`
+	}
+	if err := bindJSON(c, &in); err != nil {
+		return err
+	}
+	row, err := h.instructionDecisions.SendBackInstructionProposal(c.Request().Context(), in.ProposalID, in.Note)
+	if err != nil {
+		return err
+	}
+	return c.JSON(http.StatusOK, map[string]any{"proposal": instructionProposalBodyOf(*row)})
+}

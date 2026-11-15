@@ -27,6 +27,8 @@ type Deps struct {
 	// Files reads the repository's saved instruction files, for the base of a
 	// proposal.
 	Files InstructionFileReader
+	// Applier saves a proposal's files together.
+	Applier FileApplier
 }
 
 // InstructionFileReader is the saved instruction files of a repository.
@@ -47,6 +49,8 @@ type Service struct {
 	agents   ports.AgentLister
 	files    InstructionFileReader
 	sessions ports.SessionRepository
+	applier  FileApplier
+	turns    ports.TurnDelivery
 
 	notifier ports.Notifier
 	feed     ports.ProjectChangeSink
@@ -55,7 +59,7 @@ type Service struct {
 
 // NewService returns a new Service.
 func NewService(d Deps) *Service {
-	return &Service{drafts: d.Drafts, proposals: d.Proposals, repos: d.Repositories, files: d.Files}
+	return &Service{drafts: d.Drafts, proposals: d.Proposals, repos: d.Repositories, files: d.Files, applier: d.Applier}
 }
 
 // UseSessions sets where the session a proposal comes from is read.

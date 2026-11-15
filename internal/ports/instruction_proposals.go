@@ -72,3 +72,16 @@ type InstructionProposals interface {
 	ListInstructionProposals(ctx context.Context, repositoryID, state string) ([]InstructionProposalRow, int, error)
 	GetInstructionProposal(ctx context.Context, proposalID string) (*InstructionProposalRow, []InstructionProposalFileView, error)
 }
+
+// InstructionProposalDecisions is what the person decides about a proposal,
+// as a whole.
+type InstructionProposalDecisions interface {
+	// ApproveInstructionProposal saves every file as a new instruction-file
+	// version in one transaction. It answers the proposal and the files it
+	// saved. A file saved since the draft was read refuses it with
+	// INSTRUCTION_CHANGED and the stale paths.
+	ApproveInstructionProposal(ctx context.Context, proposalID string) (*InstructionProposalRow, []domain.InstructionFile, error)
+	RejectInstructionProposal(ctx context.Context, proposalID, note string) (*InstructionProposalRow, error)
+	// SendBackInstructionProposal needs a note.
+	SendBackInstructionProposal(ctx context.Context, proposalID, note string) (*InstructionProposalRow, error)
+}

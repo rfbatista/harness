@@ -1053,6 +1053,8 @@ func newOrchestrationService(
 	}
 	if cat.InstructionProposals != nil {
 		cat.InstructionProposals.UseSessions(sessions)
+		// A decision reaches the session that proposed.
+		cat.InstructionProposals.UseTurns(svc)
 	}
 	if cat.RepositoryArchitectures != nil {
 		// Saves, deletes and exports reach open pages on the project feed.
