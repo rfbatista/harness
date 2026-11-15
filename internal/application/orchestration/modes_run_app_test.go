@@ -21,10 +21,10 @@ func requireAll(t *testing.T, name, body string, wants ...string) {
 	}
 }
 
-// Only an architect session carries task-run-app, with its reference files.
-func TestStartInteractive_ArchitectCarriesTaskRunApp(t *testing.T) {
+// Only an operate session carries task-run-app, with its reference files.
+func TestStartInteractive_OperateCarriesTaskRunApp(t *testing.T) {
 	svc, _ := newInteractiveService(t)
-	_, launch := startInteractive(t, svc, InteractiveRequest{Mode: "architect"})
+	_, launch := startInteractive(t, svc, InteractiveRequest{Mode: "operate"})
 	body := pluginSkill(t, launch, "task-run-app")
 	requireAll(t, "task-run-app SKILL.md", body, "name: task-run-app", "description:", "ask_person")
 	if strings.Contains(body, "AskUserQuestion") {
@@ -36,17 +36,14 @@ func TestStartInteractive_ArchitectCarriesTaskRunApp(t *testing.T) {
 			t.Errorf("task-run-app SKILL.md does not point at %s", f)
 		}
 	}
-	// The person invokes it; the architect's first message is unchanged.
+	// The architect passes the person's request on; the Operator runs it.
 	desc := body[:strings.Index(body[3:], "---")+3]
 	requireAll(t, "task-run-app description", desc, "person", "never")
-	if strings.Contains(launch.Spec.Prompt, "task-run-app") {
-		t.Errorf("first message names task-run-app: %q", launch.Spec.Prompt)
-	}
 }
 
 func TestStartInteractive_OtherModesDoNotCarryTaskRunApp(t *testing.T) {
 	svc, _ := newInteractiveService(t)
-	for _, mode := range []string{"implement", "design", "product", ""} {
+	for _, mode := range []string{"architect", "implement", "design", "product", "review", "test", "qa", ""} {
 		_, launch := startInteractive(t, svc, InteractiveRequest{Mode: mode})
 		dir, ok := flag(launch.Args, "--plugin-dir")
 		if !ok {
@@ -60,7 +57,7 @@ func TestStartInteractive_OtherModesDoNotCarryTaskRunApp(t *testing.T) {
 
 func TestResumeInteractive_KeepsTaskRunApp(t *testing.T) {
 	svc, _ := newInteractiveService(t)
-	sess, _ := startInteractive(t, svc, InteractiveRequest{Mode: "architect"})
+	sess, _ := startInteractive(t, svc, InteractiveRequest{Mode: "operate"})
 	if _, err := svc.EndInteractive(context.Background(), sess.ID, 0, false); err != nil {
 		t.Fatal(err)
 	}
@@ -74,7 +71,7 @@ func TestResumeInteractive_KeepsTaskRunApp(t *testing.T) {
 // The database half: engine, k3s, naming, and what it never touches.
 func TestTaskRunApp_PreparesTheTaskDatabase(t *testing.T) {
 	svc, _ := newInteractiveService(t)
-	_, launch := startInteractive(t, svc, InteractiveRequest{Mode: "architect"})
+	_, launch := startInteractive(t, svc, InteractiveRequest{Mode: "operate"})
 	body := pluginSkill(t, launch, "task-run-app")
 	requireAll(t, "task-run-app SKILL.md", body,
 		"grep -n", "sed -n", "never the whole",
@@ -92,7 +89,7 @@ func TestTaskRunApp_PreparesTheTaskDatabase(t *testing.T) {
 // The service half: the four outputs, both servers, the fixed tool arguments.
 func TestTaskRunApp_RunsTheTaskServiceAndReports(t *testing.T) {
 	svc, _ := newInteractiveService(t)
-	_, launch := startInteractive(t, svc, InteractiveRequest{Mode: "architect"})
+	_, launch := startInteractive(t, svc, InteractiveRequest{Mode: "operate"})
 	body := pluginSkill(t, launch, "task-run-app")
 	requireAll(t, "task-run-app SKILL.md", body,
 		"task service", "task database", "Seed document", "task comment",
@@ -111,7 +108,7 @@ func TestTaskRunApp_RunsTheTaskServiceAndReports(t *testing.T) {
 // The schema comes from the branch, the seed after it, SQLite through the service.
 func TestTaskRunApp_SchemaComesFromTheBranchBeforeTheSeed(t *testing.T) {
 	svc, _ := newInteractiveService(t)
-	_, launch := startInteractive(t, svc, InteractiveRequest{Mode: "architect"})
+	_, launch := startInteractive(t, svc, InteractiveRequest{Mode: "operate"})
 	body := pluginSkill(t, launch, "task-run-app")
 	requireAll(t, "task-run-app SKILL.md", body,
 		"Never hand-write a schema", "boot migrations", "delegate session worktree",

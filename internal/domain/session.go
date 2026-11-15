@@ -197,6 +197,20 @@ const (
 	// every repository and changes none, and edits a writable draft of that
 	// design system, its only output one proposal for the person to approve.
 	SessionModeDesignSystem SessionMode = "designsystem"
+	// SessionModeReview is the Reviewer (ADR 0090): it reviews the branch its
+	// worktree was cut from, or a pull request, and writes a Review document
+	// with the verdict approve or request changes.
+	SessionModeReview SessionMode = "review"
+	// SessionModeTest is the Tester: it writes tests for the branch its
+	// worktree was cut from, on its own branch, runs them and writes a Test
+	// report.
+	SessionModeTest SessionMode = "test"
+	// SessionModeQA walks the task's use cases in the running application and
+	// publishes screenshots and videos to the Design tab, with a QA report.
+	SessionModeQA SessionMode = "qa"
+	// SessionModeOperate is the Operator: it runs, configures and checks the
+	// services for the task's branch through service requests.
+	SessionModeOperate SessionMode = "operate"
 )
 
 // NeedsTask says a session in this mode must run on a task. Only a product
@@ -207,10 +221,11 @@ func (m SessionMode) NeedsTask() bool { return m != SessionModeProduct && m != S
 // ParseSessionMode reads a mode as clients send it; empty is the default.
 func ParseSessionMode(s string) (SessionMode, error) {
 	switch m := SessionMode(s); m {
-	case SessionModeDefault, SessionModeArchitect, SessionModeImplement, SessionModeDesign, SessionModeProduct, SessionModeDesignSystem:
+	case SessionModeDefault, SessionModeArchitect, SessionModeImplement, SessionModeDesign, SessionModeProduct, SessionModeDesignSystem,
+		SessionModeReview, SessionModeTest, SessionModeQA, SessionModeOperate:
 		return m, nil
 	default:
-		return "", &StructuredError{Code: "INVALID_INPUT", Message: "unknown session mode " + s + `: use "", "architect", "implement", "design", "product" or "designsystem"`}
+		return "", &StructuredError{Code: "INVALID_INPUT", Message: "unknown session mode " + s + `: use "", "architect", "implement", "design", "product", "designsystem", "review", "test", "qa" or "operate"`}
 	}
 }
 

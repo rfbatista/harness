@@ -209,7 +209,8 @@ func TestAGrantLeftFromBeforeTheBlockIsRefusedNotUsed(t *testing.T) {
 }
 
 func TestEveryModeFollowsItsOwnKey(t *testing.T) {
-	for _, mode := range []domain.SessionMode{domain.SessionModeDefault, domain.SessionModeArchitect, domain.SessionModeImplement, domain.SessionModeDesign} {
+	for _, mode := range []domain.SessionMode{domain.SessionModeDefault, domain.SessionModeArchitect, domain.SessionModeImplement, domain.SessionModeDesign,
+		domain.SessionModeReview, domain.SessionModeTest, domain.SessionModeQA, domain.SessionModeOperate} {
 		t.Run(domain.ModeName(mode), func(t *testing.T) {
 			g := startBranchGateOn(t, ":memory:", mode, domain.BranchBlockOff)
 			// Its own key is off: not blocked. Every other key is built-in on.
@@ -217,7 +218,8 @@ func TestEveryModeFollowsItsOwnKey(t *testing.T) {
 				t.Errorf("own key off: %+v", r)
 			}
 			// The other keys off, its own on again: blocked, naming its mode.
-			for _, other := range []domain.SessionMode{domain.SessionModeDefault, domain.SessionModeArchitect, domain.SessionModeImplement, domain.SessionModeDesign, domain.SessionModeProduct, domain.SessionModeDesignSystem} {
+			for _, other := range []domain.SessionMode{domain.SessionModeDefault, domain.SessionModeArchitect, domain.SessionModeImplement, domain.SessionModeDesign, domain.SessionModeProduct, domain.SessionModeDesignSystem,
+				domain.SessionModeReview, domain.SessionModeTest, domain.SessionModeQA, domain.SessionModeOperate} {
 				if other != mode {
 					g.setBlock(other, "off")
 				}

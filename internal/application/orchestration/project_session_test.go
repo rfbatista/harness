@@ -122,7 +122,7 @@ func TestResumeInteractive_TicketLessProductSession(t *testing.T) {
 // person typed.
 func TestModePrompt_ProductWithoutATask(t *testing.T) {
 	project := &domain.Project{ID: "p1", Name: "harness"}
-	p := modePrompt(domain.SessionModeProduct, nil, project, "Keep it to CSV.")
+	p := modePrompt(domain.SessionModeProduct, nil, project, domain.RolePeer, "Keep it to CSV.")
 	if !strings.HasPrefix(p, "Use the task-product skill on project harness") || !strings.HasSuffix(p, "Keep it to CSV.") {
 		t.Errorf("first message = %q", p)
 	}
@@ -135,15 +135,15 @@ func TestModePrompt_ProductWithoutATask(t *testing.T) {
 	if strings.Contains(p, "task/docs/") || strings.Contains(p, "defaults to this task") {
 		t.Errorf("product prompt still talks about a session task:\n%s", p)
 	}
-	if got := modePrompt(domain.SessionModeProduct, nil, project, ""); strings.HasSuffix(got, "\n") || strings.Contains(got, "\n\n\n") {
+	if got := modePrompt(domain.SessionModeProduct, nil, project, domain.RolePeer, ""); strings.HasSuffix(got, "\n") || strings.Contains(got, "\n\n\n") {
 		t.Errorf("an empty typed prompt leaves a trailing gap: %q", got)
 	}
 	for _, mode := range []domain.SessionMode{domain.SessionModeArchitect, domain.SessionModeImplement, domain.SessionModeDesign, ""} {
-		if got := modePrompt(mode, nil, project, "hi"); got != "hi" {
+		if got := modePrompt(mode, nil, project, domain.RolePeer, "hi"); got != "hi" {
 			t.Errorf("mode %q without a task opened with %q, want what was typed", mode, got)
 		}
 	}
-	if got := modePrompt(domain.SessionModeProduct, nil, nil, "hi"); got != "hi" {
+	if got := modePrompt(domain.SessionModeProduct, nil, nil, domain.RolePeer, "hi"); got != "hi" {
 		t.Errorf("product without a project opened with %q, want what was typed", got)
 	}
 }

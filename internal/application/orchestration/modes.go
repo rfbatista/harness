@@ -66,8 +66,10 @@ func domainSkills(in []builtinskills.Skill) []domain.Skill {
 // modePrompt is the first message a mode opens the session with. typed is what
 // the person wrote, if anything; it follows the mode's own instruction. With
 // no task, only a product-mode session gets an opening, on its project; any
-// other mode's first message is what the person typed.
-func modePrompt(mode domain.SessionMode, tk *domain.Ticket, project *domain.Project, typed string) string {
+// other mode's first message is what the person typed. A verification mode
+// reports to the architect when the session is its delegate, and sums up in a
+// task comment otherwise.
+func modePrompt(mode domain.SessionMode, tk *domain.Ticket, project *domain.Project, role domain.SessionRole, typed string) string {
 	if tk == nil {
 		if !mode.NeedsTask() && project != nil {
 			return projectPrompt(project, typed)
@@ -133,6 +135,44 @@ func modePrompt(mode domain.SessionMode, tk *domain.Ticket, project *domain.Proj
 			"a turn starting with [task update \u00b7 \u2026] names its file in task/resources/ or task/comments/; read it and decide whether the " +
 			"scope changes. Leave the person a comment for the summary and the decisions they should see on the task by " +
 			"writing a file in task/comments/."
+	case domain.SessionModeReview:
+		skill = "task-review"
+		closing = "Read the diff of your branch against the branch it was cut from (`git diff <base>...HEAD` in your worktree; " +
+			"branches are shared), or the pull request your prompt names. Write one document titled `Review: <branch>` in " +
+			"task/docs/: a summary of the change, the findings, and the verdict `approve` or `request changes` on its own line. " +
+			"Write no code and change no file in the repository. " +
+			verificationReport(role, "the verdict in the text and the document attached", "the verdict and the document") +
+			" Never change the task status."
+	case domain.SessionModeTest:
+		skill = "task-test"
+		closing = "Read the diff of your branch against the branch it was cut from. Write tests for it on your branch, test first " +
+			"with task-tdd, at the seams the spec names (read the Spec document in task/docs/ when there is one), run them, and commit. " +
+			"Write one document titled `Test report: <branch>` in task/docs/: the tests written, the results, and what the change " +
+			"left untested. Change no production code; a failing test that shows a defect stays failing and is named in the report. " +
+			verificationReport(role, "your branch named and the document attached", "your branch and the document") +
+			" Never change the task status."
+	case domain.SessionModeQA:
+		skill = "task-qa"
+		closing = "Walk each use case your prompt lists (or the user stories of the Spec documents in task/docs/ when it lists none) " +
+			"in the running application, through the browser tools, at the service URLs your prompt names (`list_services` shows them); " +
+			"start nothing yourself unless your prompt says you may. Publish at least one screenshot per use case into task/designs/ " +
+			"(a folder per use case is fine) and a video per flow where you can record one; name the files after the use case. " +
+			"Write one document titled `QA: <task title>` in task/docs/: one entry per use case with pass or fail, what you saw and " +
+			"its artifacts. Write no code. " +
+			verificationReport(role, "the document and the artifacts attached (ids in .index.json)", "the document and the artifacts") +
+			" Never change the task status."
+	case domain.SessionModeOperate:
+		skill = "task-operate"
+		closing = "Run the task's code for the sessions that test it. Use the services tools: every create, update, start, restart " +
+			"and stop is a service request the person approves; give a `reason` each time. Run the task's branch " +
+			"(`worktree: \"branch:<name>\"`) unless your prompt names another place. Set the variables the tests need as run overrides, " +
+			"never in the repository. After each start or restart, when the architect asks, and before you report done, check the " +
+			"service: its status, the tail of its log, and a request to the URL your prompt names or the service's port; a service that " +
+			"exited or failed is a status_report with status blocked at once (a task comment when you have no architect), with the " +
+			"log's decisive line. When your prompt carries the person's request to seed and run the task's application, follow " +
+			"task-run-app and name its Seed document in your report. " +
+			verificationReport(role, operateResult, operateResult) +
+			" Write no code. Never change the task status."
 	default:
 		return typed
 	}
@@ -146,6 +186,18 @@ func modePrompt(mode domain.SessionMode, tk *domain.Ticket, project *domain.Proj
 		b.WriteString("\n\n" + typed)
 	}
 	return b.String()
+}
+
+// operateResult is what an Operator reports, to its architect or in a comment.
+const operateResult = "the service names, where each runs (branch and commit) and its URLs"
+
+// verificationReport is the line of a verification mode's opening that says
+// how it reports: a delegate to its architect, a peer in a task comment.
+func verificationReport(role domain.SessionRole, delegate, peer string) string {
+	if role == domain.RoleDelegate {
+		return "Report with message_architect kind status_report, status done, with " + delegate + "."
+	}
+	return "When you are done, sum up in a task comment (a file in task/comments/) with " + peer + "; no architect reads your report."
 }
 
 // projectPrompt opens a product-mode session that has no task: the same

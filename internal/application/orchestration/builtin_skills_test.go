@@ -37,13 +37,13 @@ func TestStartInteractive_ASkillOfTheModeAndTheAgentIsDeliveredOnce(t *testing.T
 	svc.catalog.Agents.(*fakeResolver).agents = map[string]*domain.Agent{"a1": {
 		ID: "a1", SkillIDs: []string{"task-run-app"}, Skills: []domain.Skill{agentSkill("task-run-app", "AGENT BODY")},
 	}}
-	_, launch := startInteractive(t, svc, InteractiveRequest{ProjectID: "p1", RepositoryID: "r1", TicketID: "tk1", AgentID: "a1", Mode: "architect"})
+	_, launch := startInteractive(t, svc, InteractiveRequest{ProjectID: "p1", RepositoryID: "r1", TicketID: "tk1", AgentID: "a1", Mode: "operate"})
 
 	got := pluginSkill(t, launch, "task-run-app")
 	if !strings.Contains(got, "# Run the task's application") || strings.Contains(got, "AGENT BODY") {
 		t.Errorf("task-run-app is not the mode's copy:\n%s", got)
 	}
-	pluginSkill(t, launch, "task-architecture")
+	pluginSkill(t, launch, "task-operate")
 }
 
 // The agent's own skills keep working beside a built-in one.

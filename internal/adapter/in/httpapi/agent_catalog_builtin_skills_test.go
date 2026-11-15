@@ -12,7 +12,7 @@ import (
 
 var builtInSkillNames = []string{
 	"design-artifacts", "task-architecture", "task-code-review", "task-grill-with-docs", "task-implement-spec",
-	"task-product", "task-run-app", "task-tdd", "task-to-spec",
+	"task-operate", "task-product", "task-qa", "task-review", "task-run-app", "task-tdd", "task-test", "task-to-spec",
 }
 
 func TestBuiltInSkills_AreListedBesideTheCatalogsWithTheirModes(t *testing.T) {
@@ -31,7 +31,7 @@ func TestBuiltInSkills_AreListedBesideTheCatalogsWithTheirModes(t *testing.T) {
 		t.Fatalf("built-in skills = %v", builtIn)
 	}
 	run := byName(t, cat["skills"], "task-run-app")
-	if !reflect.DeepEqual(strList(run["modes"]), []string{"architect"}) || run["description"] == "" ||
+	if !reflect.DeepEqual(strList(run["modes"]), []string{"operate"}) || run["description"] == "" ||
 		run["has_extra_files"] != true || run["file_count"].(float64) < 2 {
 		t.Errorf("task-run-app = %v", run)
 	}
@@ -53,7 +53,7 @@ func TestBuiltInSkills_AreReadWithTheirBodyAndFilesButNoVersion(t *testing.T) {
 	f := newCatalogFixture(t)
 	got := f.get("/api/get_catalog_skill?name=task-run-app", 200)
 	sk := got["skill"].(map[string]any)
-	if sk["built_in"] != true || !reflect.DeepEqual(strList(sk["modes"]), []string{"architect"}) {
+	if sk["built_in"] != true || !reflect.DeepEqual(strList(sk["modes"]), []string{"operate"}) {
 		t.Errorf("skill = %v %v", sk["built_in"], sk["modes"])
 	}
 	if sk["body"] == "" {
@@ -107,7 +107,7 @@ func TestBuiltInSkills_EditingRenamingOrDeletingOneIsRefusedAndWritesNothing(t *
 	} {
 		got := f.post(c.path, c.body, 409)
 		msg, _ := got["error"].(string)
-		if got["code"] != "SKILL_BUILT_IN" || !strings.Contains(msg, "ships with the server") || !strings.Contains(msg, "architect") {
+		if got["code"] != "SKILL_BUILT_IN" || !strings.Contains(msg, "ships with the server") || !strings.Contains(msg, "operate") {
 			t.Errorf("%s: body = %v", c.name, got)
 		}
 	}
@@ -253,14 +253,14 @@ func TestBuiltInSkills_TheLegacyReadsListThemWithBuiltInAndModes(t *testing.T) {
 	for name, want := range map[string]struct {
 		builtIn bool
 		modes   []string
-	}{"task-run-app": {true, []string{"architect"}}, "task-tdd": {true, []string{"implement"}}, "mine": {false, []string{}}} {
+	}{"task-run-app": {true, []string{"operate"}}, "task-tdd": {true, []string{"implement", "test"}}, "task-code-review": {true, []string{"implement", "review"}}, "mine": {false, []string{}}} {
 		s := byName(t, listed["skills"], name)
 		if s["built_in"] != want.builtIn || !reflect.DeepEqual(strList(s["modes"]), want.modes) || s["modes"] == nil {
 			t.Errorf("list_skills %s built_in/modes = %v %v", name, s["built_in"], s["modes"])
 		}
 	}
 	got := f.get("/api/get_skill?skill_id=task-run-app", 200)["skill"].(map[string]any)
-	if got["built_in"] != true || !reflect.DeepEqual(strList(got["modes"]), []string{"architect"}) || len(list(got["files"])) < 2 {
+	if got["built_in"] != true || !reflect.DeepEqual(strList(got["modes"]), []string{"operate"}) || len(list(got["files"])) < 2 {
 		t.Errorf("get_skill task-run-app = %v %v files=%d", got["built_in"], got["modes"], len(list(got["files"])))
 	}
 	if got := f.get("/api/get_skill?skill_id=mine", 200)["skill"].(map[string]any); got["built_in"] != false {

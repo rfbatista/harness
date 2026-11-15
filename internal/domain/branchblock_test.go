@@ -18,6 +18,10 @@ func TestBranchBlocks(t *testing.T) {
 		{SessionModeDesign, "branches.block.mode.design", "Design", false},
 		{SessionModeProduct, "branches.block.mode.product", "Product", true},
 		{SessionModeDesignSystem, "branches.block.mode.designsystem", "Design system", true},
+		{SessionModeReview, "branches.block.mode.review", "Reviewer", true},
+		{SessionModeTest, "branches.block.mode.test", "Tester", true},
+		{SessionModeQA, "branches.block.mode.qa", "QA", true},
+		{SessionModeOperate, "branches.block.mode.operate", "Operator", true},
 	}
 	if len(got) != len(want) {
 		t.Fatalf("BranchBlocks = %+v; want %d rows", got, len(want))
@@ -46,7 +50,7 @@ func TestBranchBlockedForAnUnknownModeFollowsDefault(t *testing.T) {
 }
 
 func TestValidateBranchBlockSetting(t *testing.T) {
-	for _, mode := range []string{"default", "architect", "implement", "design", "product", "designsystem"} {
+	for _, mode := range []string{"default", "architect", "implement", "design", "product", "designsystem", "review", "test", "qa", "operate"} {
 		key := "branches.block.mode." + mode
 		for _, ok := range []string{"on", "off", ""} {
 			if err := ValidateSetting(key, ok); err != nil {
