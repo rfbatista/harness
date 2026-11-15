@@ -107,7 +107,7 @@ func (e *shellE2E) serve() {
 	mux := http.NewServeMux()
 	mux.Handle("/api/", httpapi.NewRouter(httpapi.NewHandler(httpapi.Services{
 		Sessions: e.orch, Planning: e.plan, TaskResources: e.plan, TaskComments: e.plan, Artifacts: e.art, Shells: e.shells,
-		RepositoryArchitectures: e.cat.RepositoryArchitectures, ArchitectureRules: e.rules, BranchGate: e.gate, SessionBranches: e.watch, WorktreeGit: e.wgit,
+		RepositoryArchitectures: e.cat.RepositoryArchitectures, InstructionProposals: e.cat.InstructionProposals, ArchitectureRules: e.rules, BranchGate: e.gate, SessionBranches: e.watch, WorktreeGit: e.wgit,
 		Projects: e.cat.Projects, DesignSystems: e.cat.DesignSystems, RepositoryAgents: e.repoAgents,
 		Notifications: e.notes, InterruptedResumer: e.notes, Settings: e.cat.Settings,
 	})))

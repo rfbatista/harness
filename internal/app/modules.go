@@ -630,6 +630,8 @@ func bindVirtualShells(orch *orchestration.Service, shells *vfs.Service, plan *p
 	// show its skills read-only.
 	if cat.InstructionProposals != nil {
 		cat.InstructionProposals.UseFeed(changeSinks{orch, shells})
+		cat.InstructionProposals.UseTasks(plan)
+		cat.InstructionProposals.UseAgents(cat.Agents)
 	}
 	// A saved design system does too: the shells of opted-in sessions show it.
 	if cat.DesignSystems != nil {

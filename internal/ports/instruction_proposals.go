@@ -46,3 +46,29 @@ type InstructionProposalChange struct {
 	OpenCount    int    `json:"open_count"`
 	ProjectID    string `json:"-"`
 }
+
+// InstructionProposalRow is a proposal with the names the list shows: its
+// task's title and the agent and mode of the session that submitted it.
+type InstructionProposalRow struct {
+	*domain.InstructionProposal
+	TaskTitle string
+	Agent     string
+	Mode      string
+}
+
+// InstructionProposalFileView is a file of a proposal with the version of the
+// saved instruction file now, and whether that moved since the draft was read.
+type InstructionProposalFileView struct {
+	domain.InstructionProposalFile
+	CurrentVersion int
+	Stale          bool
+}
+
+// InstructionProposals is what the web UI does with a repository's
+// instruction-file proposals (ADR 0092).
+type InstructionProposals interface {
+	// ListInstructionProposals answers the repository's proposals, newest
+	// first, those in state when it is set, and how many are open.
+	ListInstructionProposals(ctx context.Context, repositoryID, state string) ([]InstructionProposalRow, int, error)
+	GetInstructionProposal(ctx context.Context, proposalID string) (*InstructionProposalRow, []InstructionProposalFileView, error)
+}

@@ -24,7 +24,6 @@ func archivedDoneTask(t *testing.T, h *Handler, pid, title string) string {
 	return id
 }
 
-
 func TestHTTP_ArchiveTicketAndTheArchivedList(t *testing.T) {
 	h, pid := newPlanningHandler(t)
 	_, out := postTicket(t, h, "/api/create_ticket", map[string]any{"project_id": pid, "title": "Open"})

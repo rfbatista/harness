@@ -136,6 +136,9 @@ type Services struct {
 	// RepositoryArchitectures keeps repositories' architecture records; nil
 	// answers 503.
 	RepositoryArchitectures ports.RepositoryArchitectures
+	// InstructionProposals are repositories' instruction-file proposals; nil
+	// answers 503.
+	InstructionProposals ports.InstructionProposals
 	// DesignSystems keeps projects' design systems; nil answers 503.
 	DesignSystems ports.DesignSystems
 	// ArchitectureRules checks sessions' hooks, shims and commits against
@@ -219,11 +222,13 @@ type Handler struct {
 	catalog               ports.CatalogEditor
 	repoAgents            ports.RepositoryAgents
 
-	services ports.ServiceManager
+	services        ports.ServiceManager
 	serviceRequests ports.ServiceRequests
 
 	repoArch ports.RepositoryArchitectures
-	designs  ports.DesignSystems
+	// instructionProposals is nil when proposals are not configured.
+	instructionProposals ports.InstructionProposals
+	designs              ports.DesignSystems
 	// imports is the design systems' import, when they offer it.
 	imports ports.DesignSystemImports
 	// exports is the design systems' export into repositories, when they offer it.
@@ -238,51 +243,52 @@ type Handler struct {
 // NewHandler returns an HTTP handler that serves /api/list_tree, /api/list_zones, /api/list_projects, etc.
 func NewHandler(s Services) *Handler {
 	return &Handler{
-		projects:        s.Projects,
-		projectFeed:     s.ProjectFeed,
-		discovery:       s.Discovery,
-		env:             s.Env,
-		runCommands:     s.RunCommands,
-		apps:            s.Apps,
-		architecture:    s.Architecture,
-		agents:          s.Agents,
-		capabilities:    s.Capabilities,
-		tokenSavers:     s.TokenSavers,
-		settings:        s.Settings,
-		toolingSvc:      s.Tools,
-		execSvc:         s.Tasks,
-		orchSvc:         s.Sessions,
-		persons:         s.PersonTerminals,
-		planningSvc:     s.Planning,
-		workspacesSvc:   s.Workspaces,
-		artifactsSvc:    s.Artifacts,
-		channel:         s.TaskChannel,
-		resources:       s.TaskResources,
-		comments:        s.TaskComments,
-		archive:         s.TaskArchive,
-		pullRequests:    s.PullRequests,
-		prBases:         s.PullRequestBases,
-		merges:          s.Merges,
-		archivedTrees:   s.ArchivedWorktrees,
-		branchNames:     s.BranchNames,
-		repoArch:        s.RepositoryArchitectures,
-		designs:         s.DesignSystems,
-		imports:         designImports(s.DesignSystems),
-		exports:         designExports(s.DesignSystems),
-		archRules:       s.ArchitectureRules,
-		branchGate:      s.BranchGate,
-		sessionBranches: s.SessionBranches,
-		notifications:   s.Notifications,
-		interrupted:     s.InterruptedResumer,
-		agentBoard:      s.AgentBoard,
-		interviews:      s.Interviews,
-		usage:           s.Usage,
-		liveCalls:       s.LiveCalls,
-		code:            s.Code,
-		worktreeGit:     s.WorktreeGit,
-		sessionFiles:    s.SessionFiles,
-		gitCredentials:  s.GitCredentials,
-		shells:          s.Shells,
+		projects:             s.Projects,
+		projectFeed:          s.ProjectFeed,
+		discovery:            s.Discovery,
+		env:                  s.Env,
+		runCommands:          s.RunCommands,
+		apps:                 s.Apps,
+		architecture:         s.Architecture,
+		agents:               s.Agents,
+		capabilities:         s.Capabilities,
+		tokenSavers:          s.TokenSavers,
+		settings:             s.Settings,
+		toolingSvc:           s.Tools,
+		execSvc:              s.Tasks,
+		orchSvc:              s.Sessions,
+		persons:              s.PersonTerminals,
+		planningSvc:          s.Planning,
+		workspacesSvc:        s.Workspaces,
+		artifactsSvc:         s.Artifacts,
+		channel:              s.TaskChannel,
+		resources:            s.TaskResources,
+		comments:             s.TaskComments,
+		archive:              s.TaskArchive,
+		pullRequests:         s.PullRequests,
+		prBases:              s.PullRequestBases,
+		merges:               s.Merges,
+		archivedTrees:        s.ArchivedWorktrees,
+		branchNames:          s.BranchNames,
+		repoArch:             s.RepositoryArchitectures,
+		instructionProposals: s.InstructionProposals,
+		designs:              s.DesignSystems,
+		imports:              designImports(s.DesignSystems),
+		exports:              designExports(s.DesignSystems),
+		archRules:            s.ArchitectureRules,
+		branchGate:           s.BranchGate,
+		sessionBranches:      s.SessionBranches,
+		notifications:        s.Notifications,
+		interrupted:          s.InterruptedResumer,
+		agentBoard:           s.AgentBoard,
+		interviews:           s.Interviews,
+		usage:                s.Usage,
+		liveCalls:            s.LiveCalls,
+		code:                 s.Code,
+		worktreeGit:          s.WorktreeGit,
+		sessionFiles:         s.SessionFiles,
+		gitCredentials:       s.GitCredentials,
+		shells:               s.Shells,
 
 		tokenSaverInstalls: s.TokenSaverInstalls,
 		repositoryIndexes:  s.RepositoryIndexes,

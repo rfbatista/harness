@@ -20,7 +20,10 @@ var _ ports.InstructionDrafts = (*Service)(nil)
 type Deps struct {
 	Drafts       ports.InstructionDraftStore
 	Proposals    ports.InstructionProposalStore
-	Repositories ports.RepositoryLister
+	Repositories interface {
+		ports.RepositoryLister
+		ports.RepositoryReader
+	}
 	// Files reads the repository's saved instruction files, for the base of a
 	// proposal.
 	Files InstructionFileReader
@@ -36,9 +39,14 @@ type InstructionFileReader interface {
 type Service struct {
 	drafts    ports.InstructionDraftStore
 	proposals ports.InstructionProposalStore
-	repos     ports.RepositoryLister
-	files     InstructionFileReader
-	sessions  ports.SessionRepository
+	repos     interface {
+		ports.RepositoryLister
+		ports.RepositoryReader
+	}
+	tasks    ports.TicketReader
+	agents   ports.AgentLister
+	files    InstructionFileReader
+	sessions ports.SessionRepository
 
 	notifier ports.Notifier
 	feed     ports.ProjectChangeSink
