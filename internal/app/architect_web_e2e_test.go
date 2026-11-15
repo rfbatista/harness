@@ -123,7 +123,7 @@ func newArchWeb(t *testing.T) *archWeb {
 	})))
 	mux.Handle("/", web.NewHandler(web.Deps{
 		Projects: cat.Projects, Tasks: e.plan, Sessions: e.orch, Agents: cat.Agents, Repositories: cat.Projects,
-		EnvFiles: cat.Projects, Documents: e.plan, Artifacts: art,
+		EnvFiles: cat.Projects, Documents: e.plan, Artifacts: art, Settings: cat.Settings,
 	}, assets, nil))
 	// Over HTTP/2: the task page holds several event streams open, more than
 	// Chrome's six HTTP/1.1 connections per host leave room for.
