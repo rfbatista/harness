@@ -66,3 +66,38 @@ func TestTaskOperateAndItsOpeningAgreeOnWhereResultsGo(t *testing.T) {
 		t.Errorf("operate opening hands credentials over in a comment: %q", launch.Spec.Prompt)
 	}
 }
+
+func TestTaskQA_OutsideQAModeOnlySpawnsQA(t *testing.T) {
+	svc, _ := newInteractiveService(t)
+	_, launch := startInteractive(t, svc, InteractiveRequest{Mode: "qa"})
+	body := pluginSkill(t, launch, "task-qa")
+	guardBefore(t, "task-qa", body, "## Input",
+		"not in qa mode", "run no step", "start_task_session", `mode: "qa"`, "base_branch", "use cases", "service URLs",
+		"running services", "Operator", "reported", "tip", "Wait for QA")
+	desc := body[:strings.Index(body[3:], "---")+3]
+	requireAll(t, "task-qa description", desc, "outside qa mode", "only spawns")
+}
+
+func TestTaskQA_RequiresAVideoPerUseCase(t *testing.T) {
+	svc, _ := newInteractiveService(t)
+	_, launch := startInteractive(t, svc, InteractiveRequest{Mode: "qa"})
+	body := pluginSkill(t, launch, "task-qa")
+	requireAll(t, "task-qa SKILL.md", body,
+		"One video per use case is required", "ffmpeg", "screenshots", "size cap", "name the missing video", "done message",
+		"attach", "every screenshot and video", "pointer comment", "without credentials")
+	for _, gone := range []string{"best effort", "where you can"} {
+		if strings.Contains(body, gone) {
+			t.Errorf("task-qa SKILL.md still has %q", gone)
+		}
+	}
+}
+
+func TestQAOpeningRequiresAVideoPerUseCase(t *testing.T) {
+	svc, _ := newInteractiveService(t)
+	_, launch := startInteractive(t, svc, InteractiveRequest{Mode: "qa"})
+	p := launch.Spec.Prompt
+	requireAll(t, "qa opening", p, "a video per use case is required", "ffmpeg", "name any missing video")
+	if strings.Contains(p, "where you can record one") {
+		t.Errorf("qa opening still makes the video optional: %q", p)
+	}
+}
