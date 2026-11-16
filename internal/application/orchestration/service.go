@@ -968,7 +968,7 @@ func (s *Service) sessionConfig(id, dir, model string, allowedTools []string, pe
 		cfg.AppendSystem = appendSection(cfg.AppendSystem, section)
 	}
 
-	s.applyServicesServer(&cfg, id, ag.agent, subject.project)
+	s.applyServicesServer(&cfg, id, subject.mode, ag.agent, subject.project)
 	var defaults map[string][]string
 	if s.MCPToolDefaults != nil {
 		defaults = s.MCPToolDefaults()
