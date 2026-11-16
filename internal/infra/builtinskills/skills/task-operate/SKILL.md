@@ -29,10 +29,13 @@ watched, so the Tester and QA can use them.
 4. A service that exited or failed: send `message_architect` kind
    `status_report`, status `blocked` at once, with the decisive line of its log.
 5. When your prompt carries the person's request to seed and run the task's
-   application, follow the `task-run-app` skill for the seeded run.
+   application, follow the `task-run-app` skill for the seeded run. Its results,
+   the test credentials included, go in the Seed document in `task/docs/`, never
+   in a task comment.
 6. Report done: kind `status_report`, status `done`, with the service names,
-   where each runs (branch and commit) and its URLs. As a peer, sum up in a
-   task comment.
+   where each runs (branch and commit) and its URLs, and for a seeded run the Seed
+   document attached (its id from `.index.json`). As a peer, sum up in a task
+   comment that names the documents, without credentials.
 
 ## Never
 

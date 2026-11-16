@@ -156,10 +156,12 @@ func modePrompt(mode domain.SessionMode, tk *domain.Ticket, project *domain.Proj
 		closing = "Walk each use case your prompt lists (or the user stories of the Spec documents in task/docs/ when it lists none) " +
 			"in the running application, through the browser tools, at the service URLs your prompt names (`list_services` shows them); " +
 			"start nothing yourself unless your prompt says you may. Publish at least one screenshot per use case into task/designs/ " +
-			"(a folder per use case is fine) and a video per flow where you can record one; name the files after the use case. " +
+			"(a folder per use case is fine) and one video per use case: a video per use case is required, so when the browser has no " +
+			"recorder, stitch your screenshots with ffmpeg, keep each under the artifact size cap, and name any missing video in the " +
+			"document and in your report. Name the files after the use case. " +
 			"Write one document titled `QA: <task title>` in task/docs/: one entry per use case with pass or fail, what you saw and " +
 			"its artifacts. Write no code. " +
-			verificationReport(role, "the document and the artifacts attached (ids in .index.json)", "the document and the artifacts") +
+			verificationReport(role, "the document, every screenshot and every video attached (ids in .index.json)", "the document and the artifacts, without credentials") +
 			" Never change the task status."
 	case domain.SessionModeOperate:
 		skill = "task-operate"
@@ -170,8 +172,9 @@ func modePrompt(mode domain.SessionMode, tk *domain.Ticket, project *domain.Proj
 			"service: its status, the tail of its log, and a request to the URL your prompt names or the service's port; a service that " +
 			"exited or failed is a status_report with status blocked at once (a task comment when you have no architect), with the " +
 			"log's decisive line. When your prompt carries the person's request to seed and run the task's application, follow " +
-			"task-run-app and name its Seed document in your report. " +
-			verificationReport(role, operateResult, operateResult) +
+			"task-run-app: write the results, the test credentials included, into the Seed document in task/docs/ and write no " +
+			"task comment with them. " +
+			verificationReport(role, operateResult+", and for a seeded run the Seed document attached", operateResult+", and for a seeded run the Seed document named, without the credentials") +
 			" Write no code. Never change the task status."
 	default:
 		return typed
