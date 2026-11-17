@@ -11,11 +11,10 @@
 // It starts the page's store with the server's seed (#notifications-seed),
 // and keeps the panel's list as one of the store's views.
 
-import { describeError } from "../../../../shared/presentation/errors.js";
 import { defaultEnv, floating } from "../../../../shared/presentation/components/popup.js";
 import { markedRead, merge } from "../../domain/notification.js";
 import { PANEL_LIMIT } from "../store.js";
-import { badgeText, bellLabel, toRow } from "../view.js";
+import { badgeText, bellLabel, inboxError, streamNotice, toRow } from "../view.js";
 
 const SEED_ID = "notifications-seed";
 const TICK_MS = 30_000;
@@ -150,7 +149,7 @@ export const notificationsBell = ({ gateway, store, clock, env }) => () => {
         this.loaded = true;
         this.now = clock.now();
       } catch (err) {
-        if (err?.name !== "AbortError") this.error = describeError(err);
+        if (err?.name !== "AbortError") this.error = inboxError(err);
       } finally {
         this.loading = false;
       }
@@ -230,7 +229,7 @@ export const notificationsBell = ({ gateway, store, clock, env }) => () => {
       try {
         await store.markRead([n]);
       } catch (err) {
-        this.error = describeError(err);
+        this.error = inboxError(err);
       }
     },
     async markAll() {
@@ -238,11 +237,22 @@ export const notificationsBell = ({ gateway, store, clock, env }) => () => {
       try {
         await store.markAllRead();
       } catch (err) {
-        this.error = describeError(err);
+        this.error = inboxError(err);
       }
     },
     toggleAlerts() {
       store.toggleAlerts();
+    },
+    /** What a dropped stream says; "" while it is live. */
+    get streamNotice() {
+      return streamNotice(store.status);
+    },
+    get hasStreamNotice() {
+      return this.streamNotice !== "";
+    },
+    /** The banner's Reload: reads the list again. */
+    retry() {
+      return this.load();
     },
     dismissError() {
       this.error = null;

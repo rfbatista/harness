@@ -1,6 +1,8 @@
 import { assert, file, test } from "../../../shared/testing/test.js";
 import { makeNotification, N0 } from "../testing/fixtures.js";
-import { toRow } from "./view.js";
+import { Codes, StructuredError } from "../../../shared/domain/errors.js";
+import { FeedStatus } from "../../../shared/domain/feed.js";
+import { inboxError, streamNotice, toRow } from "./view.js";
 
 file("notifications/presentation/view");
 
@@ -28,4 +30,19 @@ test("Resume all interrupted is offered while the item is not settled, and other
   assert.equal(toRow(restart({ resolvedAt: N0 }), N0).canResumeAll, false);
   const plain = toRow(makeNotification(), N0);
   assert.deepEqual([plain.sessions, plain.hasSessions, plain.canResumeAll], [[], false, false]);
+});
+
+test("an inbox error says what happened in plain words, never a code or a developer message", () => {
+  const network = inboxError(new StructuredError(Codes.NETWORK, "Failed to fetch"));
+  assert.equal(network.message, "The notifications could not be loaded. The harness server did not answer.");
+  const disagree = inboxError(new StructuredError(Codes.BAD_RESPONSE, "Unexpected notification: n1 has unknown kind."));
+  assert.equal(disagree.message, "The notifications could not be read. Reload; if it stays, check the harness server log.");
+  const other = inboxError(new Error("boom: sql: no rows"));
+  assert.equal(other.message, "The notifications could not be loaded.");
+  for (const e of [network, disagree, other]) assert.equal(/BAD_RESPONSE|NETWORK|Unexpected|boom|Failed to fetch/.test(e.message), false);
+});
+
+test("a stream that dropped says so, and reads nothing while it is live", () => {
+  assert.equal(streamNotice(FeedStatus.PAUSED), "Live updates are paused. Reconnecting; Reload shows what is there now.");
+  for (const s of [FeedStatus.LIVE, FeedStatus.CONNECTING, FeedStatus.RESYNCED]) assert.equal(streamNotice(s), "");
 });

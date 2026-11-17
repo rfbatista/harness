@@ -181,7 +181,7 @@ func InboxPage(frame shell.Frame, v View) templ.Component {
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
-			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 14, " x-on:change=\"go\"> Unread</label></fieldset><noscript><button type=\"submit\" class=\"[ button ]\" data-size=\"sm\">Apply</button></noscript></form><template x-if=\"error\"><div class=\"[ banner ]\" data-tone=\"danger\" role=\"alert\"><div class=\"[ flow ] [ flow-space-3xs grow ]\"><span x-text=\"error.message\"></span> <span class=\"[ code ]\"><span x-text=\"error.code\"></span> · <span x-text=\"error.next\"></span></span></div><button type=\"button\" class=\"[ button ]\" data-variant=\"ghost\" data-size=\"sm\" x-on:click=\"dismissError\">Dismiss</button></div></template><div x-ignore data-ssr>")
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 14, " x-on:change=\"go\"> Unread</label></fieldset><noscript><button type=\"submit\" class=\"[ button ]\" data-size=\"sm\">Apply</button></noscript></form><template x-if=\"error\"><div class=\"[ banner ]\" data-tone=\"danger\" role=\"alert\"><span class=\"[ grow ]\" x-text=\"error.message\"></span> <button type=\"button\" class=\"[ button ]\" data-size=\"sm\" x-on:click=\"retry\">Reload</button> <button type=\"button\" class=\"[ button ]\" data-variant=\"ghost\" data-size=\"sm\" x-on:click=\"dismissError\">Dismiss</button></div></template><div class=\"[ banner ]\" data-tone=\"attention\" role=\"status\" x-show=\"hasStreamNotice\"><span class=\"[ grow ]\" x-text=\"streamNotice\"></span> <button type=\"button\" class=\"[ button ]\" data-size=\"sm\" x-on:click=\"retry\">Reload</button></div><div x-ignore data-ssr>")
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
@@ -216,7 +216,7 @@ func InboxPage(frame shell.Frame, v View) templ.Component {
 					var templ_7745c5c3_Var9 templ.SafeURL
 					templ_7745c5c3_Var9, templ_7745c5c3_Err = templ.JoinURLErrs(templ.SafeURL(moreHref(v.Filter, v.Seed.NextBefore)))
 					if templ_7745c5c3_Err != nil {
-						return templ.Error{Err: templ_7745c5c3_Err, FileName: `notifications/inbox.templ`, Line: 62, Col: 112}
+						return templ.Error{Err: templ_7745c5c3_Err, FileName: `notifications/inbox.templ`, Line: 64, Col: 112}
 					}
 					_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var9))
 					if templ_7745c5c3_Err != nil {
@@ -235,7 +235,7 @@ func InboxPage(frame shell.Frame, v View) templ.Component {
 				var templ_7745c5c3_Var10 string
 				templ_7745c5c3_Var10, templ_7745c5c3_Err = templ.JoinStringErrs(v.EmptyText())
 				if templ_7745c5c3_Err != nil {
-					return templ.Error{Err: templ_7745c5c3_Err, FileName: `notifications/inbox.templ`, Line: 65, Col: 47}
+					return templ.Error{Err: templ_7745c5c3_Err, FileName: `notifications/inbox.templ`, Line: 67, Col: 47}
 				}
 				_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var10))
 				if templ_7745c5c3_Err != nil {
@@ -298,7 +298,7 @@ func serverRow(row Row) templ.Component {
 		var templ_7745c5c3_Var12 string
 		templ_7745c5c3_Var12, templ_7745c5c3_Err = templ.ResolveAttributeValue(row.Level)
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `notifications/inbox.templ`, Line: 89, Col: 57}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `notifications/inbox.templ`, Line: 91, Col: 57}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var12)
 		if templ_7745c5c3_Err != nil {
@@ -311,7 +311,7 @@ func serverRow(row Row) templ.Component {
 		var templ_7745c5c3_Var13 string
 		templ_7745c5c3_Var13, templ_7745c5c3_Err = templ.ResolveAttributeValue(row.State)
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `notifications/inbox.templ`, Line: 89, Col: 82}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `notifications/inbox.templ`, Line: 91, Col: 82}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var13)
 		if templ_7745c5c3_Err != nil {
@@ -324,7 +324,7 @@ func serverRow(row Row) templ.Component {
 		var templ_7745c5c3_Var14 templ.SafeURL
 		templ_7745c5c3_Var14, templ_7745c5c3_Err = templ.JoinURLErrs(templ.SafeURL(row.Href))
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `notifications/inbox.templ`, Line: 92, Col: 54}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `notifications/inbox.templ`, Line: 94, Col: 54}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var14))
 		if templ_7745c5c3_Err != nil {
@@ -337,7 +337,7 @@ func serverRow(row Row) templ.Component {
 		var templ_7745c5c3_Var15 string
 		templ_7745c5c3_Var15, templ_7745c5c3_Err = templ.JoinStringErrs(row.Title)
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `notifications/inbox.templ`, Line: 92, Col: 68}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `notifications/inbox.templ`, Line: 94, Col: 68}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var15))
 		if templ_7745c5c3_Err != nil {
@@ -350,7 +350,7 @@ func serverRow(row Row) templ.Component {
 		var templ_7745c5c3_Var16 string
 		templ_7745c5c3_Var16, templ_7745c5c3_Err = templ.JoinStringErrs(row.Project)
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `notifications/inbox.templ`, Line: 94, Col: 23}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `notifications/inbox.templ`, Line: 96, Col: 23}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var16))
 		if templ_7745c5c3_Err != nil {
@@ -368,7 +368,7 @@ func serverRow(row Row) templ.Component {
 			var templ_7745c5c3_Var17 string
 			templ_7745c5c3_Var17, templ_7745c5c3_Err = templ.JoinStringErrs(row.Task)
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `notifications/inbox.templ`, Line: 96, Col: 38}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `notifications/inbox.templ`, Line: 98, Col: 38}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var17))
 			if templ_7745c5c3_Err != nil {
@@ -387,7 +387,7 @@ func serverRow(row Row) templ.Component {
 			var templ_7745c5c3_Var18 string
 			templ_7745c5c3_Var18, templ_7745c5c3_Err = templ.JoinStringErrs(row.LevelLabel)
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `notifications/inbox.templ`, Line: 99, Col: 45}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `notifications/inbox.templ`, Line: 101, Col: 45}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var18))
 			if templ_7745c5c3_Err != nil {
@@ -405,7 +405,7 @@ func serverRow(row Row) templ.Component {
 		var templ_7745c5c3_Var19 string
 		templ_7745c5c3_Var19, templ_7745c5c3_Err = templ.ResolveAttributeValue(row.At)
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `notifications/inbox.templ`, Line: 101, Col: 27}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `notifications/inbox.templ`, Line: 103, Col: 27}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var19)
 		if templ_7745c5c3_Err != nil {
@@ -418,7 +418,7 @@ func serverRow(row Row) templ.Component {
 		var templ_7745c5c3_Var20 string
 		templ_7745c5c3_Var20, templ_7745c5c3_Err = templ.JoinStringErrs(row.Age)
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `notifications/inbox.templ`, Line: 101, Col: 39}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `notifications/inbox.templ`, Line: 103, Col: 39}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var20))
 		if templ_7745c5c3_Err != nil {
@@ -441,7 +441,7 @@ func serverRow(row Row) templ.Component {
 				var templ_7745c5c3_Var21 string
 				templ_7745c5c3_Var21, templ_7745c5c3_Err = templ.ResolveAttributeValue(s.State)
 				if templ_7745c5c3_Err != nil {
-					return templ.Error{Err: templ_7745c5c3_Err, FileName: `notifications/inbox.templ`, Line: 106, Col: 30}
+					return templ.Error{Err: templ_7745c5c3_Err, FileName: `notifications/inbox.templ`, Line: 108, Col: 30}
 				}
 				_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var21)
 				if templ_7745c5c3_Err != nil {
@@ -454,7 +454,7 @@ func serverRow(row Row) templ.Component {
 				var templ_7745c5c3_Var22 templ.SafeURL
 				templ_7745c5c3_Var22, templ_7745c5c3_Err = templ.JoinURLErrs(templ.SafeURL(s.Href))
 				if templ_7745c5c3_Err != nil {
-					return templ.Error{Err: templ_7745c5c3_Err, FileName: `notifications/inbox.templ`, Line: 107, Col: 38}
+					return templ.Error{Err: templ_7745c5c3_Err, FileName: `notifications/inbox.templ`, Line: 109, Col: 38}
 				}
 				_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var22))
 				if templ_7745c5c3_Err != nil {
@@ -467,7 +467,7 @@ func serverRow(row Row) templ.Component {
 				var templ_7745c5c3_Var23 string
 				templ_7745c5c3_Var23, templ_7745c5c3_Err = templ.JoinStringErrs(s.Label)
 				if templ_7745c5c3_Err != nil {
-					return templ.Error{Err: templ_7745c5c3_Err, FileName: `notifications/inbox.templ`, Line: 107, Col: 50}
+					return templ.Error{Err: templ_7745c5c3_Err, FileName: `notifications/inbox.templ`, Line: 109, Col: 50}
 				}
 				_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var23))
 				if templ_7745c5c3_Err != nil {
@@ -480,7 +480,7 @@ func serverRow(row Row) templ.Component {
 				var templ_7745c5c3_Var24 string
 				templ_7745c5c3_Var24, templ_7745c5c3_Err = templ.JoinStringErrs(s.State)
 				if templ_7745c5c3_Err != nil {
-					return templ.Error{Err: templ_7745c5c3_Err, FileName: `notifications/inbox.templ`, Line: 108, Col: 40}
+					return templ.Error{Err: templ_7745c5c3_Err, FileName: `notifications/inbox.templ`, Line: 110, Col: 40}
 				}
 				_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var24))
 				if templ_7745c5c3_Err != nil {
@@ -498,7 +498,7 @@ func serverRow(row Row) templ.Component {
 					var templ_7745c5c3_Var25 string
 					templ_7745c5c3_Var25, templ_7745c5c3_Err = templ.JoinStringErrs(s.Reason)
 					if templ_7745c5c3_Err != nil {
-						return templ.Error{Err: templ_7745c5c3_Err, FileName: `notifications/inbox.templ`, Line: 110, Col: 43}
+						return templ.Error{Err: templ_7745c5c3_Err, FileName: `notifications/inbox.templ`, Line: 112, Col: 43}
 					}
 					_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var25))
 					if templ_7745c5c3_Err != nil {
@@ -526,7 +526,7 @@ func serverRow(row Row) templ.Component {
 			var templ_7745c5c3_Var26 string
 			templ_7745c5c3_Var26, templ_7745c5c3_Err = templ.JoinStringErrs(row.Body)
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `notifications/inbox.templ`, Line: 116, Col: 34}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `notifications/inbox.templ`, Line: 118, Col: 34}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var26))
 			if templ_7745c5c3_Err != nil {

@@ -6,10 +6,9 @@
 //   <main x-data="notificationsPage" data-seed="notifications-page-seed"
 //         data-project-id="p1" data-project-name="harness" data-unread>
 
-import { describeError } from "../../../../shared/presentation/errors.js";
 import { readSeed } from "../../../../shared/presentation/seed.js";
 import { markedRead, merge } from "../../domain/notification.js";
-import { toRow } from "../view.js";
+import { inboxError, streamNotice, toRow } from "../view.js";
 import { pageSeed } from "./notificationsBell.js";
 
 const PAGE_LIMIT = 50;
@@ -107,7 +106,7 @@ export const notificationsPage = ({ gateway, store, clock }) => () => {
         this.nextBefore = page.nextBefore;
         this.now = clock.now();
       } catch (err) {
-        this.error = describeError(err);
+        this.error = inboxError(err);
       }
     },
 
@@ -122,7 +121,7 @@ export const notificationsPage = ({ gateway, store, clock }) => () => {
         this.items = [...this.items, ...page.notifications.filter((n) => !this.items.some((x) => x.id === n.id))];
         this.nextBefore = page.nextBefore;
       } catch (err) {
-        this.error = describeError(err);
+        this.error = inboxError(err);
       } finally {
         this.loadingMore = false;
       }
@@ -143,7 +142,7 @@ export const notificationsPage = ({ gateway, store, clock }) => () => {
       try {
         await store.markRead([n]);
       } catch (err) {
-        this.error = describeError(err);
+        this.error = inboxError(err);
       }
     },
     async markAll() {
@@ -152,7 +151,7 @@ export const notificationsPage = ({ gateway, store, clock }) => () => {
       try {
         await store.markAllRead(this.projectId);
       } catch (err) {
-        this.error = describeError(err);
+        this.error = inboxError(err);
       } finally {
         this.marking = false;
       }
@@ -167,10 +166,22 @@ export const notificationsPage = ({ gateway, store, clock }) => () => {
         const { notification } = await gateway.resumeInterrupted(id);
         this.items = merge(this.items, [notification], this.filter);
       } catch (err) {
-        this.error = describeError(err);
+        this.error = inboxError(err);
       } finally {
         this.resuming = false;
       }
+    },
+    /** What a dropped stream says; "" while it is live. */
+    get streamNotice() {
+      return streamNotice(store.status);
+    },
+    get hasStreamNotice() {
+      return this.streamNotice !== "";
+    },
+    /** The banner's Reload: reads the first page again. */
+    async retry() {
+      this.error = null;
+      await this.reload();
     },
     dismissError() {
       this.error = null;

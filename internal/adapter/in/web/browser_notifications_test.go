@@ -33,6 +33,7 @@ type fakeInbox struct {
 	list     []*domain.Notification // newest first
 	stream   *sseFeed
 	failSeed bool
+	failGet  bool // GET /api/notifications answers 500
 	hold     chan struct{}
 	posts    []map[string]any
 	next     int
@@ -112,6 +113,11 @@ func (f *fakeInbox) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		q := r.URL.Query()
 		limit, _ := strconv.Atoi(q.Get("limit"))
 		f.mu.Lock()
+		if f.failGet {
+			f.mu.Unlock()
+			http.Error(w, "sql: no rows", http.StatusInternalServerError)
+			return
+		}
 		page := f.page(ports.NotificationQuery{ProjectID: q.Get("project_id"), UnreadOnly: q.Get("unread") == "true", Before: q.Get("before"), Limit: limit})
 		f.mu.Unlock()
 		writeJSON(w, page)
@@ -531,6 +537,32 @@ func TestNotificationsPageListsAServiceRequest(t *testing.T) {
 	h.run(t, "panel", h.openPanel(), chromedp.Evaluate(panelRows, &panel))
 	if !strings.Contains(panel, "devops wants to restart api|") {
 		t.Errorf("panel:\n%s", panel)
+	}
+	h.noErrors(t)
+}
+
+// A failed load reads in plain words, never as a code or a developer
+// message, and Reload recovers it.
+func TestNotificationsPanelSaysAFailedLoadInPlainWordsAndReloads(t *testing.T) {
+	h := newInboxHarness(t, inboxWorld())
+	const alert = `(document.querySelector('#notifications-panel [role=alert]')?.textContent ?? '').replace(/\s+/g, ' ').trim()`
+	var msg string
+	h.run(t, "ready", h.openReady("/projects/p1"))
+	h.inbox.mu.Lock()
+	h.inbox.failGet = true
+	h.inbox.mu.Unlock()
+	// The panel is seeded on the first paint; the Unread filter loads it.
+	h.run(t, "open", h.openPanel(), jsClick(`#notifications-panel .head button:last-child`), railPoll(alert+` !== ''`), chromedp.Evaluate(alert, &msg))
+	if !strings.HasPrefix(msg, "The notifications could not be") || strings.Contains(msg, "sql") || strings.Contains(msg, "500") {
+		t.Errorf("alert %q", msg)
+	}
+	h.inbox.mu.Lock()
+	h.inbox.failGet = false
+	h.inbox.mu.Unlock()
+	var panel string
+	h.run(t, "reload", jsClick(`#notifications-panel [role=alert] button`), railPoll(`!!document.querySelector('#notifications-panel .notification')`), chromedp.Evaluate(panelRows, &panel))
+	if panel == "" {
+		t.Error("Reload did not bring the rows back")
 	}
 	h.noErrors(t)
 }

@@ -3,6 +3,8 @@
 // they return (the CSP build evaluates no expressions).
 
 import { relativeTime } from "../../../shared/presentation/format.js";
+import { Codes, codeOf } from "../../../shared/domain/errors.js";
+import { FeedStatus } from "../../../shared/domain/feed.js";
 import { isSettled, isUnread } from "../domain/notification.js";
 
 /** The badge stops counting here. */
@@ -94,4 +96,26 @@ export function toRow(n, now) {
     canResumeAll: n.kind === "sessions_interrupted" && !settled,
     label: [unread ? "Unread." : "", levelLabel ? `${levelLabel}.` : "", n.title, where ? `— ${where}` : ""].filter(Boolean).join(" "),
   };
+}
+
+/**
+ * What a failed load or action reads as: a plain sentence, no code and no
+ * developer message. The banner pairs it with a Reload action.
+ * @param {unknown} err
+ * @returns {{ message: string }}
+ */
+export function inboxError(err) {
+  switch (codeOf(err)) {
+    case Codes.NETWORK:
+      return { message: "The notifications could not be loaded. The harness server did not answer." };
+    case Codes.BAD_RESPONSE:
+      return { message: "The notifications could not be read. Reload; if it stays, check the harness server log." };
+    default:
+      return { message: "The notifications could not be loaded." };
+  }
+}
+
+/** The line a dropped stream shows; "" while the stream is fine. */
+export function streamNotice(status) {
+  return status === FeedStatus.PAUSED ? "Live updates are paused. Reconnecting; Reload shows what is there now." : "";
 }
