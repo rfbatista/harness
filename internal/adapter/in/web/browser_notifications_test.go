@@ -34,10 +34,13 @@ type fakeInbox struct {
 	stream   *sseFeed
 	failSeed bool
 	failGet  bool // GET /api/notifications answers 500
-	hold     chan struct{}
-	posts    []map[string]any
-	next     int
-	resume   *interruptedResume
+	// extra holds revision 6 fields (actor, verb, object…) by notification
+	// id; the domain type does not carry them yet, so GET adds them to its JSON.
+	extra  map[string]map[string]any
+	hold   chan struct{}
+	posts  []map[string]any
+	next   int
+	resume *interruptedResume
 }
 
 func (f *fakeInbox) unread() int {
@@ -119,8 +122,9 @@ func (f *fakeInbox) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		page := f.page(ports.NotificationQuery{ProjectID: q.Get("project_id"), UnreadOnly: q.Get("unread") == "true", Before: q.Get("before"), Limit: limit})
+		extra := f.extra
 		f.mu.Unlock()
-		writeJSON(w, page)
+		writeJSON(w, withExtra(page, extra))
 	case r.Method == http.MethodPost && r.URL.Path == "/api/notifications/read":
 		var body map[string]any
 		_ = json.NewDecoder(r.Body).Decode(&body)
@@ -158,6 +162,26 @@ func (f *fakeInbox) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	default:
 		http.NotFound(w, r)
 	}
+}
+
+// withExtra is page as JSON with each notification's extra fields merged in.
+func withExtra(page any, extra map[string]map[string]any) any {
+	return withExtraAt(page, "notifications", extra)
+}
+
+// withExtraAt is v as JSON with the extra fields merged into each item of its list under key.
+func withExtraAt(v any, key string, extra map[string]map[string]any) any {
+	b, _ := json.Marshal(v)
+	var out map[string]any
+	_ = json.Unmarshal(b, &out)
+	list, _ := out[key].([]any)
+	for _, item := range list {
+		n, _ := item.(map[string]any)
+		for k, v := range extra[n["id"].(string)] {
+			n[k] = v
+		}
+	}
+	return out
 }
 
 func writeJSON(w http.ResponseWriter, v any) {
@@ -563,6 +587,43 @@ func TestNotificationsPanelSaysAFailedLoadInPlainWordsAndReloads(t *testing.T) {
 	h.run(t, "reload", jsClick(`#notifications-panel [role=alert] button`), railPoll(`!!document.querySelector('#notifications-panel .notification')`), chromedp.Evaluate(panelRows, &panel))
 	if panel == "" {
 		t.Error("Reload did not bring the rows back")
+	}
+	h.noErrors(t)
+}
+
+// A revision 6 notification reads as who, what and when: the agent's name and
+// mode, the verb and its object, where it happened and where it stands.
+func TestNotificationsPageShowsTheLedgerRow(t *testing.T) {
+	now := time.Now()
+	resolved := now.Add(-30 * time.Minute)
+	list := []*domain.Notification{
+		{ID: "n-push", ProjectID: "p1", ProjectName: "harness", TaskID: "t1", TaskTitle: "Fix malloc", Source: domain.NotificationFromAgent, Kind: domain.NotificationBranchRequest, Level: domain.NotificationAction, Title: "devops wants to push agent/x to origin/feat/y", Body: "CI is green.", Link: "/projects/p1/tasks/t1", CreatedAt: now.Add(-17 * time.Minute)},
+		{ID: "n-done", ProjectID: "p1", ProjectName: "harness", TaskID: "t1", TaskTitle: "Fix malloc", Source: domain.NotificationFromAgent, Kind: domain.NotificationServiceRequest, Level: domain.NotificationAction, Title: "devops wants to restart api", Link: "/projects/p1/services", CreatedAt: now.Add(-time.Hour), ResolvedAt: &resolved},
+	}
+	h := newInboxHarness(t, list)
+	h.inbox.extra = map[string]map[string]any{
+		"n-push": {"actor": map[string]any{"kind": "agent", "name": "devops", "mode": "operate", "session_id": "s9"}, "verb": "wants to push", "object": map[string]any{"text": "agent/x → origin/feat/y", "code": true}, "repository_name": "harness-api"},
+		"n-done": {"actor": map[string]any{"kind": "agent", "name": "devops", "mode": "operate", "session_id": "s9"}, "verb": "wants to restart", "object": map[string]any{"text": "api on main", "code": true}, "outcome": "approved"},
+	}
+	const rows = `[...document.querySelectorAll('main .notification')].map(r => [r.dataset.state, r.querySelector('.who .name').textContent, r.querySelector('.who .mode')?.textContent ?? '', r.querySelector('.title .text').textContent.replace(/\s+/g, ' ').trim(), r.querySelector('.where').innerText.replace(/\s+/g, ' ').trim(), r.querySelector('.when .standing')?.textContent ?? '', r.querySelector('.title').getAttribute('aria-label')].join('|')).join('\n')`
+	var got string
+	h.run(t, "page", h.openReady("/notifications"))
+	// The first paint carries what the domain holds today; the stream and
+	// GET carry the revision 6 fields. Send the change until the page shows it.
+	for range 10 {
+		h.inbox.stream.pushRaw(t, withExtraAt(ports.NotificationChange{Changed: list, UnreadCount: 2}, "changed", h.inbox.extra))
+		time.Sleep(200 * time.Millisecond)
+		h.run(t, "rows", chromedp.Evaluate(rows, &got))
+		if strings.Contains(got, "|operate|") {
+			break
+		}
+	}
+	lines := strings.Split(got, "\n")
+	if len(lines) != 2 || !strings.HasPrefix(lines[0], "unread|devops|operate|wants to push agent/x → origin/feat/y|harness Fix malloc harness-api|Needs you|Unread. Needs you. devops wants to push agent/x → origin/feat/y. harness › Fix malloc · harness-api.") {
+		t.Errorf("open row:\n%s", got)
+	}
+	if len(lines) == 2 && !strings.HasPrefix(lines[1], "settled|devops|operate|wants to restart api on main|harness Fix malloc|Approved ") {
+		t.Errorf("settled row:\n%s", got)
 	}
 	h.noErrors(t)
 }

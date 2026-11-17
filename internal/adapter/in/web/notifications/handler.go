@@ -182,3 +182,11 @@ func (v View) EmptyText() string {
 	}
 	return "No notifications yet."
 }
+
+// serverTone is the tone of the standing line a server-painted row shows.
+func serverTone(row Row) string {
+	if row.State == "settled" {
+		return "quiet"
+	}
+	return "attention"
+}

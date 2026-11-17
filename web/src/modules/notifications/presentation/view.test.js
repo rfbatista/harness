@@ -2,6 +2,7 @@ import { assert, file, test } from "../../../shared/testing/test.js";
 import { makeNotification, N0 } from "../testing/fixtures.js";
 import { Codes, StructuredError } from "../../../shared/domain/errors.js";
 import { FeedStatus } from "../../../shared/domain/feed.js";
+import { agentSlot } from "../../architecture/domain/layers.js";
 import { inboxError, streamNotice, toRow } from "./view.js";
 
 file("notifications/presentation/view");
@@ -45,4 +46,85 @@ test("an inbox error says what happened in plain words, never a code or a develo
 test("a stream that dropped says so, and reads nothing while it is live", () => {
   assert.equal(streamNotice(FeedStatus.PAUSED), "Live updates are paused. Reconnecting; Reload shows what is there now.");
   for (const s of [FeedStatus.LIVE, FeedStatus.CONNECTING, FeedStatus.RESYNCED]) assert.equal(streamNotice(s), "");
+});
+
+// ── the ledger row (ADR 0095) ─────────────────────────────────────────────
+
+const clock = (d) => `${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`;
+const agentPush = (fields = {}) =>
+  makeNotification({
+    source: "system",
+    kind: "branch_request",
+    title: "devops wants to push agent/x to origin/feat/y",
+    body: "CI is green.",
+    repositoryName: "harness-api",
+    actor: { kind: "agent", name: "devops", mode: "operate", sessionId: "s9" },
+    verb: "wants to push",
+    object: { text: "agent/x → origin/feat/y", code: true },
+    ...fields,
+  });
+
+test("who: an agent shows its initial, name and mode; the system shows its source and no mode", () => {
+  const row = toRow(agentPush(), N0);
+  assert.deepEqual([row.whoName, row.whoMode, row.whoInitial, row.whoIsSystem], ["devops", "operate", "d", false]);
+  assert.equal(row.whoSlot, String(agentSlot("devops")));
+  const watch = toRow(makeNotification({ kind: "branch_finding", actor: { kind: "system", name: "branch watch", mode: "", sessionId: "" } }), N0);
+  assert.deepEqual([watch.whoName, watch.whoMode, watch.whoIsSystem], ["branch watch", "", true]);
+});
+
+test("the same agent has the same colour in every row", () => {
+  assert.equal(toRow(agentPush({ id: "a" }), N0).whoSlot, toRow(agentPush({ id: "b", kind: "service_request" }), N0).whoSlot);
+});
+
+test("what: the verb and the object, code objects flagged, then project, task and repository", () => {
+  const row = toRow(agentPush(), N0);
+  assert.deepEqual([row.hasVerb, row.verb, row.objectText, row.objectIsCode], [true, "wants to push", "agent/x → origin/feat/y", true]);
+  assert.deepEqual([row.project, row.task, row.repository, row.hasRepository], ["harness", "Notification", "harness-api", true]);
+  const text = toRow(agentPush({ verb: "asks you to review", object: { text: "the tickets", code: false } }), N0);
+  assert.equal(text.objectIsCode, false);
+});
+
+test("an agent notification shows its own title as the what", () => {
+  const row = toRow(makeNotification({ kind: "agent", level: "info", title: "Release notes drafted", actor: { kind: "agent", name: "writer", mode: "session", sessionId: "s2" } }), N0);
+  assert.deepEqual([row.hasVerb, row.title, row.whoName], [false, "Release notes drafted", "writer"]);
+});
+
+test("revision 5 data reads sensibly: the title is the what and the harness is the who", () => {
+  const row = toRow(makeNotification({ title: "A session waits for approval" }), N0);
+  assert.deepEqual([row.whoName, row.whoMode, row.whoIsSystem, row.hasVerb, row.title, row.hasRepository], ["harness", "", true, false, "A session waits for approval", false]);
+});
+
+test("when: the clock time and age, the full date for the tooltip, and where it stands", () => {
+  const now = new Date(N0.getTime() + 17 * 60_000);
+  const open = toRow(agentPush(), now);
+  assert.deepEqual([open.clock, open.age, open.statusText, open.statusTone], [clock(N0), "17m", "Needs you", "attention"]);
+  assert.equal(open.fullDate.includes("2026"), true);
+  const approved = toRow(agentPush({ resolvedAt: new Date(N0.getTime() + 60_000), outcome: "approved" }), now);
+  assert.deepEqual([approved.statusText, approved.statusTone, approved.state], [`Approved ${clock(new Date(N0.getTime() + 60_000))}`, "success", "settled"]);
+  const denied = toRow(agentPush({ resolvedAt: N0, outcome: "denied" }), now);
+  assert.deepEqual([denied.statusText.startsWith("Denied "), denied.statusTone], [true, "danger"]);
+  const ack = toRow(agentPush({ kind: "branch_finding", resolvedAt: N0, outcome: "acknowledged" }), now);
+  assert.equal(ack.statusText.startsWith("Acknowledged "), true);
+  const old = toRow(agentPush({ resolvedAt: N0 }), now);
+  assert.deepEqual([old.statusText, old.statusTone], ["Settled", "quiet"]);
+});
+
+test("an information item that is not settled has no standing line, and a failed session says Failed", () => {
+  const info = toRow(makeNotification({ kind: "agent", level: "info" }), N0);
+  assert.deepEqual([info.statusText, info.hasStatus], ["", false]);
+  const failed = toRow(makeNotification({ kind: "session_failed", level: "info" }), N0);
+  assert.deepEqual([failed.statusText, failed.statusTone], ["Failed", "danger"]);
+});
+
+test("the link's accessible name reads who, what, where and when in order", () => {
+  const now = new Date(N0.getTime() + 17 * 60_000);
+  const row = toRow(agentPush(), now);
+  assert.equal(row.label, `Unread. Needs you. devops wants to push agent/x → origin/feat/y. harness › Notification · harness-api. ${row.fullDate}, 17m ago.`);
+  const read = toRow(agentPush({ readAt: N0, kind: "agent", verb: "", object: null, title: "Built" }), now);
+  assert.equal(read.label.startsWith("Needs you. devops Built."), true);
+});
+
+test("a kind's glyph and the row's kind reach the markup; the old fields stay", () => {
+  const row = toRow(agentPush(), N0);
+  assert.deepEqual([row.kind, row.href, row.unread, row.canResumeAll], ["branch_request", "/projects/p1/tasks/t1", true, false]);
 });

@@ -131,3 +131,25 @@ test("a malformed notification or answer is BAD_RESPONSE; a link off the web UI 
   assert.throws(() => toStreamChange({ notifications: [], unread_count: 0 }), Codes.BAD_RESPONSE); // the stream says changed
   assert.equal(toPage({ notifications: [], unread_count: 3 }).nextBefore, "");
 });
+
+test("revision 6 fields map: the actor, the verb and object, the repository, the outcome and the listed sessions", () => {
+  const dto = notificationDTO(makeNotification());
+  const n = toNotification({
+    ...dto, kind: "commit_check_off", level: "action", resolved_at: "2026-10-09T15:00:00Z", outcome: "repaired",
+    actor: { kind: "system", name: "harness" }, verb: "could not guard 2 sessions", object: { text: "commit checks off", code: false }, repository_name: "api",
+    listed_sessions: [{ session_id: "s1", task_id: "t1", task_title: "Ship", agent_name: "go-developer", link: "/projects/p1/tasks/t1?session=s1", state: "off" }, { session_id: "s2", agent_name: "devops", link: "/projects/p1?session=s2", state: "ended" }],
+  });
+  assert.deepEqual([n.actor.kind, n.actor.name, n.actor.mode, n.verb, n.object.text, n.object.code, n.repositoryName, n.outcome], ["system", "harness", "", "could not guard 2 sessions", "commit checks off", false, "api", "repaired"]);
+  assert.deepEqual(n.listedSessions.map((s) => [s.sessionId, s.taskTitle, s.agentName, s.state]), [["s1", "Ship", "go-developer", "off"], ["s2", "", "devops", "ended"]]);
+  const agent = toNotification({ ...dto, actor: { kind: "agent", name: "devops", mode: "operate", session_id: "s9" } });
+  assert.deepEqual([agent.actor.kind, agent.actor.mode, agent.actor.sessionId], ["agent", "operate", "s9"]);
+});
+
+test("revision 5 data has no actor, and unknown actor kinds and outcomes do not take the list down", () => {
+  const dto = notificationDTO(makeNotification());
+  const old = toNotification(dto);
+  assert.deepEqual([old.actor.name, old.actor.kind, old.verb, old.object, old.repositoryName, old.outcome, old.listedSessions], ["harness", "system", "", null, "", "", []]);
+  const odd = toNotification({ ...dto, actor: { kind: "robot", name: "x" }, outcome: "vaporised" });
+  assert.deepEqual([odd.actor.kind, odd.actor.name, odd.outcome], ["system", "x", ""]);
+  assert.throws(() => toNotification({ ...dto, listed_sessions: [{ session_id: "s", link: "https://x", state: "off" }] }), Codes.BAD_RESPONSE);
+});

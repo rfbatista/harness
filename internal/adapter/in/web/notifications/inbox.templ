@@ -86,22 +86,25 @@ templ InboxPage(frame shell.Frame, v View) {
 }
 
 // serverRow is a notification as the server paints it: a plain link, no
-// actions (they need JavaScript).
+// actions (they need JavaScript). It is the ledger row on what the server
+// holds today: no actor, so the harness is the who, and the title is the what.
 templ serverRow(row Row) {
-	<article class="[ notification ]" data-level={ row.Level } data-state={ row.State }>
+	<article class="[ notification ]" data-layout="ledger" data-kind="agent" data-level={ row.Level } data-state={ row.State }>
 		<span class="[ marker ]" aria-hidden="true"></span>
-		<div class="[ text ]">
-			<a class="[ title ]" href={ templ.SafeURL(row.Href) }>{ row.Title }</a>
-			<p class="[ meta ]">
-				<span>{ row.Project }</span>
+		<div class="[ who ]">
+			<span class="[ avatar ]" aria-hidden="true" data-who="system">h</span>
+			<span class="[ name ]">harness</span>
+		</div>
+		<div class="[ what ]">
+			<a class="[ title ]" href={ templ.SafeURL(row.Href) }><span class="[ icon ]" aria-hidden="true"></span><span class="[ text ]"><span class="[ verb ]">{ row.Title }</span></span></a>
+			<p class="[ where ]">
+				<span class="[ project ]">{ row.Project }</span>
 				if row.Task != "" {
 					<span class="[ task ]">{ row.Task }</span>
 				}
-				if row.LevelLabel != "" {
-					<span class="[ level ]">{ row.LevelLabel }</span>
-				}
-				<time datetime={ row.At }>{ row.Age }</time>
 			</p>
+		</div>
+		<div class="[ more ]">
 			if len(row.Sessions) > 0 {
 				<ul role="list" class="[ interrupted-sessions ]">
 					for _, s := range row.Sessions {
@@ -116,6 +119,12 @@ templ serverRow(row Row) {
 				</ul>
 			} else if row.Body != "" {
 				<p class="[ body ]">{ row.Body }</p>
+			}
+		</div>
+		<div class="[ when ]">
+			<time datetime={ row.At }><span class="[ age ]">{ row.Age }</span></time>
+			if row.LevelLabel != "" {
+				<span class="[ standing ]" data-tone={ serverTone(row) }>{ row.LevelLabel }</span>
 			}
 		</div>
 	</article>

@@ -219,18 +219,36 @@ templ notificationsBell(b *Bell) {
 // passes actions: a sessions_interrupted item's Resume all interrupted button
 // lives there only; the panel lists its sessions and links to the page.
 templ NotificationLiveRow(actions bool) {
-	<article class="[ notification ]" x-bind:data-level="row.level" x-bind:data-state="row.state">
+	<article class="[ notification ]" data-layout="ledger" data-compact?={ !actions } x-bind:data-kind="row.kind" x-bind:data-level="row.level" x-bind:data-state="row.state">
 		<span class="[ marker ]" aria-hidden="true"></span>
-		<div class="[ text ]">
-			<a class="[ title ]" data-item x-bind:href="row.href" x-bind:data-id="row.id" x-bind:aria-label="row.label" x-on:click="openItem" x-text="row.title"></a>
-			<p class="[ meta ]">
-				<span x-text="row.project"></span>
+		<div class="[ who ]">
+			<span class="[ avatar ]" aria-hidden="true" x-bind:data-who="row.whoKind" x-bind:data-agent="row.whoSlot" x-text="row.whoInitial"></span>
+			<span class="[ name ]" x-text="row.whoName"></span>
+			<span class="[ mode ]" x-show="row.hasWhoMode" x-text="row.whoMode"></span>
+		</div>
+		<div class="[ what ]">
+			<a class="[ title ]" data-item x-bind:href="row.href" x-bind:data-id="row.id" x-bind:aria-label="row.label" x-on:click="openItem">
+				<span class="[ icon ]" aria-hidden="true"></span>
+				<span class="[ text ]">
+					<template x-if="row.hasVerb">
+						<span><span class="[ verb ]" x-text="row.verb"></span> <span class="[ object ]" x-show="row.hasObject" x-bind:data-code="row.objectIsCode" x-text="row.objectText"></span></span>
+					</template>
+					<template x-if="!row.hasVerb">
+						<span class="[ verb ]" x-text="row.title"></span>
+					</template>
+				</span>
+			</a>
+			<p class="[ where ]">
+				<span class="[ project ]" x-text="row.project"></span>
 				<template x-if="row.hasTask">
 					<span class="[ task ]" x-text="row.task"></span>
 				</template>
-				<span class="[ level ]" x-show="row.levelLabel" x-text="row.levelLabel"></span>
-				<time x-bind:datetime="row.at" x-text="row.age"></time>
+				<template x-if="row.hasRepository">
+					<span class="[ repo ]" x-text="row.repository"></span>
+				</template>
 			</p>
+		</div>
+		<div class="[ more ]">
 			<p class="[ body ]" x-show="row.body && !row.hasSessions" x-text="row.body"></p>
 			<ul role="list" class="[ interrupted-sessions ]" x-show="row.hasSessions">
 				<template x-for="s in row.sessions" x-bind:key="s.key">
@@ -244,6 +262,10 @@ templ NotificationLiveRow(actions bool) {
 			if actions {
 				<button type="button" class="[ button ] [ resume-all ]" data-size="sm" x-show="row.canResumeAll" x-bind:data-id="row.id" x-bind:disabled="resuming" x-bind:aria-busy="resuming" x-on:click="resumeAll">Resume all interrupted</button>
 			}
+		</div>
+		<div class="[ when ]">
+			<time x-bind:datetime="row.at" x-bind:title="row.fullDate"><span x-text="row.clock"></span><span class="[ age ]" x-text="row.age"></span></time>
+			<span class="[ standing ]" x-show="row.hasStatus" x-bind:data-tone="row.statusTone" x-text="row.statusText"></span>
 		</div>
 		<button type="button" class="[ button ] [ mark ]" data-variant="ghost" data-size="sm" x-show="row.unread" x-bind:data-id="row.id" x-bind:aria-label="row.markLabel" x-on:click="markOne">Mark read</button>
 	</article>
@@ -478,7 +500,7 @@ templ railLink(l Link) {
 		if l.StatusKey != "" {
 			<span class="[ tdot ]" data-st={ l.StatusKey } aria-hidden="true"></span>
 		} else if l.LiveState() != "" {
-			<span class="[ status ]" data-state={ l.LiveState() } data-dot-only></span>
+			<span class="[ standing ]" data-state={ l.LiveState() } data-dot-only></span>
 		}
 		<span class="[ label ]">{ l.Label }</span>
 		<span class="[ visually-hidden ]">{ l.MetaLead() }</span>
@@ -612,7 +634,7 @@ templ railLiveKidLink() {
 // railLiveLink is the live copy of railLink, bound to a row of railView.js.
 templ railLiveLink() {
 	<a x-bind:href="row.href" x-bind:aria-current="row.current" x-bind:data-task-id="row.id" x-bind:data-attention="row.attention" x-bind:data-fresh="row.fresh" x-bind:data-peek="row.peek" x-on:mouseenter="tip">
-		<span class="[ status ]" data-dot-only x-show="row.hasDot" x-bind:data-state="row.state" x-bind:data-signal="row.signal"></span>
+		<span class="[ standing ]" data-dot-only x-show="row.hasDot" x-bind:data-state="row.state" x-bind:data-signal="row.signal"></span>
 		<span class="[ label ]"><span x-text="row.before"></span><mark x-show="row.hasMatch" x-text="row.match"></mark><span x-text="row.after"></span></span>
 		<span class="[ visually-hidden ]" x-text="row.lead"></span>
 		<span class="[ badge ]" data-tone="attention" x-show="row.hasReviews" x-text="row.reviewsText"></span>
@@ -631,7 +653,7 @@ templ railLiveLink() {
 templ streamBar(live bool, hints []Hint, oob bool) {
 	<footer id="stream-bar" class="[ stream-bar ]" aria-live="polite" { oobAttrs(oob)... }>
 		if live {
-			<span class="[ status ]" data-state="reconnecting" x-data="streamStatus" x-on:feed-status.window="update" x-bind:data-state="state" x-text="label">connecting</span>
+			<span class="[ standing ]" data-state="reconnecting" x-data="streamStatus" x-on:feed-status.window="update" x-bind:data-state="state" x-text="label">connecting</span>
 		}
 		<span class="[ visually-hidden ]" x-data="streamAnnouncer" x-on:rail-announce.window="say" x-text="text"></span>
 		<span class="[ keys ]" x-data="streamHints" x-on:stream-hints.window="set">

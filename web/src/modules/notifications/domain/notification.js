@@ -5,7 +5,7 @@
 
 /**
  * @typedef {"system"|"agent"} Source
- * @typedef {"review_requested"|"session_waiting"|"task_review"|"session_failed"|"commit_check_off"|"branch_request"|"branch_finding"|"sessions_interrupted"|"agent"} Kind
+ * @typedef {"review_requested"|"session_waiting"|"task_review"|"session_failed"|"commit_check_off"|"branch_request"|"branch_finding"|"service_request"|"sessions_interrupted"|"agent"} Kind
  * @typedef {"info"|"action"} Level  action: the person has to do something
  *
  * @typedef {object} Notification
@@ -25,6 +25,28 @@
  * @property {Date | null} readAt      the person read or dismissed it
  * @property {Date | null} resolvedAt  its cause was settled (system kinds only)
  * @property {InterruptedSession[]} interruptedSessions  a sessions_interrupted item's list; [] for every other kind
+ * @property {Actor} actor         who caused it; revision 5 data has none, and reads as the harness
+ * @property {string} verb         system kinds: the verb phrase in the agent's voice, lower case; "" on kind agent and on revision 5 data
+ * @property {{text: string, code: boolean} | null} object  what the verb acts on; code: shown monospace
+ * @property {string} repositoryName  "" when the kind has none
+ * @property {Outcome | ""} outcome  how it was settled; "" while open and on rows settled before outcomes were recorded
+ * @property {ListedSession[]} listedSessions  a commit_check_off item's sessions; []
+ *
+ * @typedef {"agent"|"system"|"person"} ActorKind
+ * @typedef {object} Actor
+ * @property {ActorKind} kind
+ * @property {string} name         the agent as its session row shows it; "branch watch", "restart" or "harness" for the system
+ * @property {string} mode         agent only: the session's mode word; ""
+ * @property {string} sessionId    agent only: the session that caused it; ""
+ *
+ * @typedef {"off"|"repaired"|"ended"} ListedState
+ * @typedef {object} ListedSession  one session a commit_check_off item lists
+ * @property {string} sessionId
+ * @property {string} taskId       ""
+ * @property {string} taskTitle    ""
+ * @property {string} agentName
+ * @property {string} link
+ * @property {ListedState} state
  *
  * @typedef {"interrupted"|"resumed"|"failed"|"gone"} InterruptedState
  * @typedef {object} InterruptedSession  one session a restart interrupted, as of the last change
@@ -53,6 +75,11 @@
 
 export const SOURCES = Object.freeze(["system", "agent"]);
 export const KINDS = Object.freeze(["review_requested", "session_waiting", "task_review", "session_failed", "commit_check_off", "branch_request", "branch_finding", "service_request", "sessions_interrupted", "agent"]);
+export const ACTOR_KINDS = Object.freeze(["agent", "system", "person"]);
+export const OUTCOMES = Object.freeze(["approved", "changes_requested", "denied", "expired", "withdrawn", "answered", "dismissed", "acknowledged", "repaired", "resumed", "ended", "done", "reopened"]);
+export const LISTED_STATES = Object.freeze(["off", "repaired", "ended"]);
+/** Who a notification reads as when it carries no actor (revision 5 data). */
+export const HARNESS_ACTOR = Object.freeze({ kind: "system", name: "harness", mode: "", sessionId: "" });
 export const INTERRUPTED_STATES = Object.freeze(["interrupted", "resumed", "failed", "gone"]);
 export const LEVELS = Object.freeze(["info", "action"]);
 

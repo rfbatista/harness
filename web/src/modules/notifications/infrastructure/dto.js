@@ -3,7 +3,7 @@
 // /api/notifications/events stream) and its mapping to domain notifications.
 
 import { Codes, StructuredError } from "../../../shared/domain/errors.js";
-import { INTERRUPTED_STATES, KINDS, LEVELS, SOURCES } from "../domain/notification.js";
+import { ACTOR_KINDS, HARNESS_ACTOR, INTERRUPTED_STATES, KINDS, LEVELS, LISTED_STATES, OUTCOMES, SOURCES } from "../domain/notification.js";
 
 /** @returns {import("../domain/notification.js").Notification} */
 export function toNotification(dto) {
@@ -35,6 +35,33 @@ export function toNotification(dto) {
     readAt: date(dto.read_at, `${at}: read_at`),
     resolvedAt: date(dto.resolved_at, `${at}: resolved_at`),
     interruptedSessions: (dto.interrupted_sessions ?? []).map((s) => toInterruptedSession(s, at)),
+    actor: toActor(dto.actor),
+    verb: typeof dto.verb === "string" ? dto.verb : "",
+    object: dto.object && typeof dto.object.text === "string" && dto.object.text !== "" ? Object.freeze({ text: dto.object.text, code: dto.object.code === true }) : null,
+    repositoryName: dto.repository_name ?? "",
+    // An outcome this client does not know reads as settled with none, not as an error.
+    outcome: OUTCOMES.includes(dto.outcome) ? dto.outcome : "",
+    listedSessions: (dto.listed_sessions ?? []).map((s) => toListedSession(s, at)),
+  });
+}
+
+// Revision 5 data has no actor, and a future kind of actor is still someone: both read as the harness's own.
+function toActor(dto) {
+  if (!dto || typeof dto.name !== "string" || dto.name === "") return HARNESS_ACTOR;
+  const kind = ACTOR_KINDS.includes(dto.kind) ? dto.kind : "system";
+  return Object.freeze({ kind, name: dto.name, mode: dto.mode ?? "", sessionId: dto.session_id ?? "" });
+}
+
+function toListedSession(dto, at) {
+  if (!dto || typeof dto.session_id !== "string" || dto.session_id === "") bad(`${at} lists a session without an id`);
+  if (typeof dto.link !== "string" || !dto.link.startsWith("/") || dto.link.startsWith("//")) bad(`${at} lists session ${dto.session_id} with a link off the web UI`);
+  return Object.freeze({
+    sessionId: dto.session_id,
+    taskId: dto.task_id ?? "",
+    taskTitle: dto.task_title ?? "",
+    agentName: dto.agent_name ?? "",
+    link: dto.link,
+    state: LISTED_STATES.includes(dto.state) ? dto.state : "off",
   });
 }
 

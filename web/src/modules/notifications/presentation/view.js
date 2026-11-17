@@ -2,6 +2,7 @@
 // render, and the bell's words. Plain functions; the components bind to what
 // they return (the CSP build evaluates no expressions).
 
+import { agentSlot } from "../../architecture/domain/layers.js";
 import { relativeTime } from "../../../shared/presentation/format.js";
 import { Codes, codeOf } from "../../../shared/domain/errors.js";
 import { FeedStatus } from "../../../shared/domain/feed.js";
@@ -32,6 +33,26 @@ export function bellLabel(count) {
  * @property {string} task         "" when the task is gone or there is none
  * @property {boolean} hasTask
  * @property {"info"|"action"} level
+ * @property {string} kind
+ * @property {string} repository
+ * @property {boolean} hasRepository
+ * @property {string} whoName      the agent as its session row shows it, or the harness's own source
+ * @property {string} whoMode      the session's mode word; "" for the system
+ * @property {boolean} hasWhoMode
+ * @property {string} whoInitial
+ * @property {string} whoSlot      the agent's colour slot ("0".."7"); "" for the system
+ * @property {boolean} whoIsSystem
+ * @property {"agent"|"system"} whoKind
+ * @property {boolean} hasVerb     false on kind agent and on revision 5 data: the what is the title
+ * @property {string} verb
+ * @property {string} objectText
+ * @property {boolean} hasObject
+ * @property {boolean} objectIsCode
+ * @property {string} clock        "15:40"
+ * @property {string} fullDate     "Mon 17 Nov 2026, 15:40"
+ * @property {string} statusText   "Needs you", "Approved 15:40", "Settled", "Failed" or ""
+ * @property {boolean} hasStatus
+ * @property {"attention"|"danger"|"success"|"quiet"} statusTone
  * @property {string} levelLabel   "Needs you", "Settled", or ""
  * @property {boolean} unread
  * @property {boolean} settled
@@ -65,6 +86,38 @@ function sessionLine(s) {
   };
 }
 
+const OUTCOME_WORDS = Object.freeze({
+  approved: ["Approved", "success"],
+  changes_requested: ["Changes requested", "attention"],
+  denied: ["Denied", "danger"],
+  expired: ["Expired", "quiet"],
+  withdrawn: ["Withdrawn", "quiet"],
+  answered: ["Answered", "success"],
+  dismissed: ["Dismissed", "quiet"],
+  acknowledged: ["Acknowledged", "success"],
+  repaired: ["Repaired", "success"],
+  resumed: ["Resumed", "success"],
+  ended: ["Ended", "quiet"],
+  done: ["Done", "success"],
+  reopened: ["Reopened", "attention"],
+});
+
+/** "15:40", in the person's time zone. */
+const clockTime = (d) => `${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`;
+
+/** "Mon 17 Nov 2026, 15:40": the tooltip and the accessible name. */
+const fullDate = (d) => `${d.toLocaleDateString("en-GB", { weekday: "short", day: "numeric", month: "short", year: "numeric" })}, ${clockTime(d)}`;
+
+/** Where the item stands: the words and their tone ("" for no line at all). */
+function standing(n, settled) {
+  if (!settled) {
+    if (n.kind === "session_failed") return ["Failed", "danger"];
+    return n.level === "action" ? ["Needs you", "attention"] : ["", "quiet"];
+  }
+  const word = OUTCOME_WORDS[n.outcome];
+  return word ? [`${word[0]} ${clockTime(n.resolvedAt)}`, word[1]] : ["Settled", "quiet"];
+}
+
 /**
  * @param {import("../domain/notification.js").Notification} n
  * @param {Date} now
@@ -73,28 +126,54 @@ function sessionLine(s) {
 export function toRow(n, now) {
   const unread = isUnread(n);
   const settled = isSettled(n);
-  const levelLabel = settled ? "Settled" : n.level === "action" ? "Needs you" : "";
-  const where = [n.projectName, n.taskTitle].filter(Boolean).join(" · ");
+  const [statusText, statusTone] = standing(n, settled);
+  const needsYou = !settled && n.level === "action";
+  const hasVerb = n.verb !== "";
+  const what = hasVerb ? [n.verb, n.object?.text].filter(Boolean).join(" ") : n.title;
+  const where = [[n.projectName, n.taskTitle].filter(Boolean).join(" › "), n.repositoryName].filter(Boolean).join(" · ");
+  const age = relativeTime(n.createdAt, now);
+  const when = fullDate(n.createdAt);
+  const isSystem = n.actor.kind !== "agent";
   return {
     id: n.id,
+    kind: n.kind,
     href: n.link,
     title: n.title,
     body: n.body,
     project: n.projectName,
     task: n.taskTitle,
     hasTask: n.taskTitle !== "",
+    repository: n.repositoryName,
+    hasRepository: n.repositoryName !== "",
     level: n.level,
-    levelLabel,
+    levelLabel: settled ? "Settled" : needsYou ? "Needs you" : "",
+    whoName: n.actor.name,
+    whoMode: n.actor.mode,
+    hasWhoMode: n.actor.mode !== "",
+    whoInitial: Array.from(n.actor.name)[0] ?? "",
+    whoSlot: isSystem ? "" : String(agentSlot(n.actor.name)),
+    whoIsSystem: isSystem,
+    whoKind: isSystem ? "system" : "agent",
+    hasVerb,
+    verb: n.verb,
+    objectText: n.object?.text ?? "",
+    hasObject: n.object !== null,
+    objectIsCode: n.object?.code === true,
+    clock: clockTime(n.createdAt),
+    fullDate: when,
+    statusText,
+    hasStatus: statusText !== "",
+    statusTone,
     unread,
     settled,
     state: unread ? "unread" : settled ? "settled" : "read",
-    age: relativeTime(n.createdAt, now),
+    age,
     at: n.createdAt.toISOString(),
-    markLabel: `Mark “${n.title}” read`,
+    markLabel: `Mark “${what}” read`,
     sessions: n.interruptedSessions.map(sessionLine),
     hasSessions: n.interruptedSessions.length > 0,
     canResumeAll: n.kind === "sessions_interrupted" && !settled,
-    label: [unread ? "Unread." : "", levelLabel ? `${levelLabel}.` : "", n.title, where ? `— ${where}` : ""].filter(Boolean).join(" "),
+    label: [unread ? "Unread." : "", needsYou ? "Needs you." : "", `${n.actor.name} ${what}.`, where ? `${where}.` : "", `${when}, ${age === "now" ? "just now" : `${age} ago`}.`].filter(Boolean).join(" "),
   };
 }
 
