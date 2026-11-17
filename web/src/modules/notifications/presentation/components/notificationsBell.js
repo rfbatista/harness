@@ -66,7 +66,7 @@ export const notificationsBell = ({ gateway, store, clock, env }) => () => {
       return !!store.badgeCount;
     },
     get label() {
-      return bellLabel(store.badgeCount, store.badgeCountsOpen);
+      return bellLabel(store.badgeCount, store.badgeCountsOpen, store.unreadCount ?? 0);
     },
     get expanded() {
       return this.open ? "true" : "false";

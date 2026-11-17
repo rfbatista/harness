@@ -131,6 +131,7 @@ test("a kind's glyph and the row's kind reach the markup; the old fields stay", 
 
 test("the bell's name says what its count counts", () => {
   assert.equal(bellLabel(3, true), "Notifications, 3 need you");
+  assert.equal(bellLabel(3, true, 2), "Notifications, 3 need you, 2 unread");
   assert.equal(bellLabel(3, false), "Notifications, 3 unread");
   assert.equal(bellLabel(3), "Notifications, 3 unread");
   assert.equal(bellLabel(0, true), "Notifications");

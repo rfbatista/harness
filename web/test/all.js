@@ -85,6 +85,7 @@ import "../src/modules/models/infrastructure/models-gateway.test.js";
 import "../src/modules/models/presentation/components/modelTier.test.js";
 import "../src/modules/notifications/domain/notification.test.js";
 import "../src/modules/notifications/infrastructure/gateways.test.js";
+import "../src/modules/notifications/presentation/ledger.test.js";
 import "../src/modules/notifications/presentation/store.test.js";
 import "../src/modules/notifications/presentation/view.test.js";
 import "../src/modules/projects/domain/project.test.js";

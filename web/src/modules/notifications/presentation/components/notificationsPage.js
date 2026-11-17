@@ -4,10 +4,11 @@
 // Load more. The server's rows stand in [data-ssr] until this takes over.
 //
 //   <main x-data="notificationsPage" data-seed="notifications-page-seed"
-//         data-project-id="p1" data-project-name="harness" data-unread>
+//         data-project-id="p1" data-project-name="harness" data-tab="needs|unread|all">
 
 import { readSeed } from "../../../../shared/presentation/seed.js";
-import { markedRead, merge } from "../../domain/notification.js";
+import { isOpen, markedRead, merge } from "../../domain/notification.js";
+import { filterOf, groupsFor, tabCounts, tabFrom } from "../ledger.js";
 import { inboxError, streamNotice, toRow } from "../view.js";
 import { pageSeed } from "./notificationsBell.js";
 
@@ -28,7 +29,8 @@ export const notificationsPage = ({ gateway, store, clock }) => () => {
   return {
     projectId: "",
     projectName: "",
-    unreadOnly: false,
+    /** "needs" | "unread" | "all": which notifications the page shows. */
+    tab: "all",
     /** @type {import("../../domain/notification.js").Notification[]} */
     items: [],
     nextBefore: "",
@@ -40,17 +42,44 @@ export const notificationsPage = ({ gateway, store, clock }) => () => {
     error: null,
     now: clock.now(),
 
-    get rows() {
-      return this.items.map((n) => toRow(n, this.now));
+    /** The Needs you group and the day groups, each with its rows. */
+    get groups() {
+      return groupsFor(this.items, this.tab, this.now).map((g) => ({ key: g.key, title: g.title, tone: g.tone, count: g.items.length, rows: g.items.map((n) => toRow(n, this.now)) }));
+    },
+    get counts() {
+      return tabCounts({ items: this.items, openCount: store.serverOpen, unreadCount: store.unreadCount, hasMore: this.nextBefore !== "", tab: this.tab });
+    },
+    get needsCount() {
+      return String(this.counts.needs);
+    },
+    get unreadCount() {
+      return String(this.counts.unread);
+    },
+    get allCount() {
+      return this.counts.all === null ? "" : String(this.counts.all);
+    },
+    get needsPressed() {
+      return String(this.tab === "needs");
+    },
+    get unreadPressed() {
+      return String(this.tab === "unread");
+    },
+    get allPressed() {
+      return String(this.tab === "all");
+    },
+    /** "9 need you · 2 unread", beside the title. */
+    get summary() {
+      return `${this.counts.needs} need you · ${this.counts.unread} unread`;
     },
     get hasRows() {
-      return this.items.length > 0;
+      return this.groups.length > 0;
     },
     get isEmpty() {
-      return this.live && this.items.length === 0;
+      return this.live && this.groups.length === 0;
     },
     get emptyText() {
-      if (this.unreadOnly) return this.projectName ? `Nothing unread in ${this.projectName}.` : "Nothing unread.";
+      if (this.tab === "needs") return this.projectName ? `Nothing needs you in ${this.projectName}.` : "Nothing needs you.";
+      if (this.tab === "unread") return this.projectName ? `Nothing unread in ${this.projectName}.` : "Nothing unread.";
       return this.projectName ? `No notifications in ${this.projectName} yet.` : "No notifications yet.";
     },
     get hasMore() {
@@ -63,19 +92,20 @@ export const notificationsPage = ({ gateway, store, clock }) => () => {
       return this.marking || !this.items.some((n) => n.readAt === null && n.resolvedAt === null);
     },
     get filter() {
-      return { projectId: this.projectId, unread: this.unreadOnly };
+      return filterOf(this.tab, this.projectId);
     },
 
     init() {
       const el = this.$el;
       this.projectId = el.dataset.projectId ?? "";
       this.projectName = el.dataset.projectName ?? "";
-      this.unreadOnly = el.dataset.unread !== undefined;
+      this.tab = tabFrom(el.dataset.tab) || "all";
       store.start(pageSeed(el.ownerDocument));
       try {
         const page = gateway.fromSeed(readSeed(el));
         store.listed(page, store.stamp);
-        this.items = page.notifications;
+        // The server paints the first page whole; the Needs you tab keeps the open causes of it.
+        this.items = this.tab === "needs" ? page.notifications.filter(isOpen) : page.notifications;
         this.nextBefore = page.nextBefore;
       } catch {
         // The server could not read the page (or sent no seed): read it here.

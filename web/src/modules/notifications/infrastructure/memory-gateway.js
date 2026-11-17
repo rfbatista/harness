@@ -38,9 +38,9 @@ export function memoryNotifications({ notifications = [], now = () => new Date()
 
   /** @type {import("../domain/ports.js").NotificationGateway} */
   const gateway = {
-    async list({ projectId = "", unread = false, before = "", limit = DEFAULT_LIMIT } = {}) {
+    async list({ projectId = "", unread = false, open = false, before = "", limit = DEFAULT_LIMIT } = {}) {
       if (!Number.isInteger(limit) || limit < 1 || limit > MAX_LIMIT) throw new StructuredError(Codes.INVALID_INPUT, `limit must be 1..${MAX_LIMIT}`, 400);
-      let rest = list.filter((n) => matches({ projectId, unread }, n));
+      let rest = list.filter((n) => matches({ projectId, unread, open }, n));
       if (before) {
         const at = list.findIndex((n) => n.id === before);
         if (at < 0) throw new StructuredError(Codes.INVALID_INPUT, "unknown cursor", 400);

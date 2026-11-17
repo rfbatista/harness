@@ -18,6 +18,7 @@
  * how it ended. The popover and any list narrower than 44rem use the compact
  * form: who and when on line one, what under them.
  *
+ * The page adds .inbox-tabs (Needs you / Unread / All) and .group > .ghead.
  * .notification-list stacks them; .notifications is the top bar's bell and
  * .notifications-panel the popup it discloses (a sheet on phones).
  */
@@ -373,6 +374,54 @@
       overflow: hidden;
     }
 
+    /* The tabs: a segmented control of radios, so the page works without JavaScript. */
+    & .inbox-tabs {
+      display: inline-flex;
+      margin: 0;
+      padding: 0;
+      border: 1px solid var(--color-line-control);
+      border-radius: var(--radius-sm);
+      overflow: hidden;
+
+      & > label {
+        position: relative;
+        display: inline-flex;
+        align-items: center;
+        gap: var(--space-2xs);
+        min-block-size: var(--size-control-sm);
+        padding-inline: var(--space-m);
+        background: var(--color-raised);
+        font-size: var(--text-sm);
+        cursor: pointer;
+      }
+      & > label + label { border-inline-start: 1px solid var(--color-line); }
+      & > label:has(input:checked) { background: var(--color-pressed); font-weight: var(--weight-medium); }
+      & > label:has(input:focus-visible) { outline: 2px solid var(--color-focus); outline-offset: -2px; }
+      & input { position: absolute; inline-size: 1px; block-size: 1px; opacity: 0; }
+      & .n { color: var(--color-ink-muted); font-weight: var(--weight-regular); }
+      & .n:empty { display: none; }
+    }
+
+    /* The page's groups: Needs you pinned, then the days. */
+    & .group { display: grid; gap: 0; }
+    & .group > .ghead {
+      display: flex;
+      align-items: baseline;
+      gap: var(--space-s);
+      margin: 0;
+      padding: var(--space-m) var(--space-2xs) var(--space-xs);
+      color: var(--color-ink-muted);
+      font-size: var(--text-xs);
+      font-weight: var(--weight-medium);
+      letter-spacing: 0.04em;
+      text-transform: uppercase;
+
+      &[data-tone="attention"] { color: var(--color-attention-strong); }
+      & .n { font-weight: var(--weight-regular); letter-spacing: 0; text-transform: none; }
+    }
+
     @media (width < 48rem) { padding: var(--space-m); }
   }
+
+  main[x-data="notificationsPage"] > .toolbar .sum { color: var(--color-ink-muted); font-size: var(--text-sm); }
 }

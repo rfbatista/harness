@@ -1,6 +1,10 @@
 package notifications
 
-import "operators-mcp/internal/adapter/in/web/shell"
+import (
+	"strconv"
+
+	"operators-mcp/internal/adapter/in/web/shell"
+)
 
 // InboxPage is /notifications. The filters are a GET form (a native select
 // and a radio pair), so the page works and the URL shares without
@@ -18,10 +22,11 @@ templ InboxPage(frame shell.Frame, v View) {
 			data-seed="notifications-page-seed"
 			data-project-id={ v.Filter.ProjectID }
 			data-project-name={ v.ProjectName }
-			{ unreadAttr(v.Filter.Unread)... }
+			data-tab={ v.Filter.Tab }
 		>
 			<header class="[ toolbar ]">
 				<h1>Notifications</h1>
+				<span class="[ sum ]" x-text="summary">{ v.Summary() }</span>
 				<button type="button" class="[ button ]" data-size="sm" style="display: none" x-show="live" x-bind:disabled="cannotMarkAll" x-bind:aria-busy="marking" x-on:click="markAll">{ v.MarkAllLabel() }</button>
 			</header>
 			<div class="[ inbox ]" data-scroll>
@@ -33,10 +38,11 @@ templ InboxPage(frame shell.Frame, v View) {
 							<option value={ p.ID } { selected(p.ID == v.Filter.ProjectID)... }>{ p.Name }</option>
 						}
 					</select>
-					<fieldset class="[ cluster ] [ gutter-xs ]">
+					<fieldset class="[ inbox-tabs ]">
 						<legend class="[ visually-hidden ]">Show</legend>
-						<label><input type="radio" name="unread" value="" { checked(!v.Filter.Unread)... } x-on:change="go"/> All</label>
-						<label><input type="radio" name="unread" value="1" { checked(v.Filter.Unread)... } x-on:change="go"/> Unread</label>
+						<label><input type="radio" name="tab" value="needs" { checked(v.Filter.Tab == "needs")... } x-on:change="go"/> Needs you <span class="[ n ]" x-text="needsCount">{ strconv.Itoa(v.OpenCount()) }</span></label>
+						<label><input type="radio" name="tab" value="unread" { checked(v.Filter.Tab == "unread")... } x-on:change="go"/> Unread <span class="[ n ]" x-text="unreadCount">{ strconv.Itoa(v.UnreadCount()) }</span></label>
+						<label><input type="radio" name="tab" value="all" { checked(v.Filter.Tab == "all")... } x-on:change="go"/> All <span class="[ n ]" x-text="allCount"></span></label>
 					</fieldset>
 					<noscript><button type="submit" class="[ button ]" data-size="sm">Apply</button></noscript>
 				</form>
@@ -52,14 +58,19 @@ templ InboxPage(frame shell.Frame, v View) {
 					<button type="button" class="[ button ]" data-size="sm" x-on:click="retry">Reload</button>
 				</div>
 				<div x-ignore data-ssr>
-					if rows := v.Rows(); len(rows) > 0 {
-						<ul role="list" class="[ notification-list ]">
-							for _, row := range rows {
-								<li>
-									@serverRow(row)
-								</li>
-							}
-						</ul>
+					if groups := v.Groups(); len(groups) > 0 {
+						for _, g := range groups {
+							<section class="[ group ]">
+								<h2 class="[ ghead ]" data-tone={ g.Tone }>{ g.Title } <span class="[ n ]">{ strconv.Itoa(g.Count()) }</span></h2>
+								<ul role="list" class="[ notification-list ]">
+									for _, row := range g.Rows {
+										<li>
+											@serverRow(row)
+										</li>
+									}
+								</ul>
+							</section>
+						}
 						if v.Seed.NextBefore != "" {
 							<a class="[ button ] [ more ]" data-size="sm" href={ templ.SafeURL(moreHref(v.Filter, v.Seed.NextBefore)) }>Older notifications</a>
 						}
@@ -69,13 +80,18 @@ templ InboxPage(frame shell.Frame, v View) {
 				</div>
 				<template x-if="live">
 					<div>
-						<ul role="list" class="[ notification-list ]" x-show="hasRows">
-							<template x-for="row in rows" x-bind:key="row.id">
-								<li>
-									@shell.NotificationLiveRow(true)
-								</li>
-							</template>
-						</ul>
+						<template x-for="group in groups" x-bind:key="group.key">
+							<section class="[ group ]">
+								<h2 class="[ ghead ]" x-bind:data-tone="group.tone"><span x-text="group.title"></span> <span class="[ n ]" x-text="group.count"></span></h2>
+								<ul role="list" class="[ notification-list ]">
+									<template x-for="row in group.rows" x-bind:key="row.id">
+										<li>
+											@shell.NotificationLiveRow(true)
+										</li>
+									</template>
+								</ul>
+							</section>
+						</template>
 						<p class="[ empty-line ]" x-show="isEmpty" x-text="emptyText"></p>
 						<button type="button" class="[ button ] [ more ]" data-size="sm" x-show="hasMore" x-bind:aria-busy="loadingMore" x-on:click="loadMore">Load more</button>
 					</div>

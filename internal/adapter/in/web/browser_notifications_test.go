@@ -428,7 +428,7 @@ func TestNotificationsMarkAllRead(t *testing.T) {
 
 func TestNotificationsPageFiltersByProjectAndUnread(t *testing.T) {
 	h := newInboxHarness(t, inboxWorld())
-	var ssr, all, p2, unread string
+	var ssr, needs, all, p2, unread string
 	h.run(t, "no script",
 		emulation.SetScriptExecutionDisabled(true),
 		chromedp.Navigate(h.srv.URL+"/notifications?project=p1&unread=1"),
@@ -438,15 +438,21 @@ func TestNotificationsPageFiltersByProjectAndUnread(t *testing.T) {
 	if ssr != "Review requested: the dashboard plan\nA session waits for approval" {
 		t.Errorf("server rows:\n%s", ssr)
 	}
-	h.run(t, "all", h.openReady("/notifications"), chromedp.Evaluate(pageRows, &all))
-	if want := "Review requested: the dashboard plan\nRelease notes drafted\nA session waits for approval\nA session failed\nRedesign sidebar is in review"; all != want {
+	// The default tab is Needs you while anything is open.
+	h.run(t, "needs", h.openReady("/notifications"), chromedp.Evaluate(pageRows, &needs))
+	if want := "Review requested: the dashboard plan\nA session waits for approval"; needs != want {
+		t.Errorf("needs you:\n%s", needs)
+	}
+	// All: the open causes pinned, then the rest by day.
+	h.run(t, "all", h.openReady("/notifications?tab=all"), chromedp.Evaluate(pageRows, &all))
+	if want := "Review requested: the dashboard plan\nA session waits for approval\nRelease notes drafted\nA session failed\nRedesign sidebar is in review"; all != want {
 		t.Errorf("all:\n%s", all)
 	}
 	h.run(t, "pick tui",
 		chromedp.SetValue(`#inbox-project`, "p2", chromedp.ByID),
 		chromedp.Evaluate(`setTimeout(() => document.querySelector('#inbox-project').dispatchEvent(new Event('change', { bubbles: true }))); true`, nil),
 	)
-	h.waitURL(t, "/notifications?project=p2&unread=")
+	h.waitURL(t, "/notifications?project=p2&tab=all")
 	h.run(t, "tui", chromedp.Evaluate(pageRows, &p2))
 	if p2 != "Release notes drafted" {
 		t.Errorf("tui:\n%s", p2)
@@ -470,8 +476,8 @@ func TestNotificationsPageFiltersByProjectAndUnread(t *testing.T) {
 	if live != "Build green\nRelease notes drafted" {
 		t.Errorf("live rows:\n%s", live)
 	}
-	h.run(t, "unread only", chromedp.Evaluate(`setTimeout(() => document.querySelector('input[name=unread][value="1"]').click()); true`, nil))
-	h.waitURL(t, "/notifications?project=p2&unread=1")
+	h.run(t, "unread only", chromedp.Evaluate(`setTimeout(() => document.querySelector('input[name=tab][value="unread"]').click()); true`, nil))
+	h.waitURL(t, "/notifications?project=p2&tab=unread")
 	h.run(t, "unread", chromedp.Evaluate(pageRows, &unread))
 	if unread != "Build green\nRelease notes drafted" {
 		t.Errorf("unread:\n%s", unread)
@@ -554,7 +560,7 @@ func TestNotificationsPageListsAServiceRequest(t *testing.T) {
 	const banner = `!!document.querySelector('main [role=alert]')`
 	var rows string
 	var failed bool
-	h.run(t, "page", h.openReady("/notifications"), chromedp.Evaluate(pageRows, &rows), chromedp.Evaluate(banner, &failed))
+	h.run(t, "page", h.openReady("/notifications?tab=all"), chromedp.Evaluate(pageRows, &rows), chromedp.Evaluate(banner, &failed))
 	if failed || !slices.Contains(strings.Split(rows, "\n"), "devops wants to restart api") {
 		t.Errorf("page: error banner %v, rows:\n%s", failed, rows)
 	}
@@ -608,7 +614,7 @@ func TestNotificationsPageShowsTheLedgerRow(t *testing.T) {
 	}
 	const rows = `[...document.querySelectorAll('main .notification')].map(r => [r.dataset.state, r.querySelector('.who .name').textContent, r.querySelector('.who .mode')?.textContent ?? '', r.querySelector('.title .text').textContent.replace(/\s+/g, ' ').trim(), r.querySelector('.where').innerText.replace(/\s+/g, ' ').trim(), r.querySelector('.when .standing')?.textContent ?? '', r.querySelector('.title').getAttribute('aria-label')].join('|')).join('\n')`
 	var got string
-	h.run(t, "page", h.openReady("/notifications"))
+	h.run(t, "page", h.openReady("/notifications?tab=all"))
 	// The first paint carries what the domain holds today; the stream and
 	// GET carry the revision 6 fields. Send the change until the page shows it.
 	for range 10 {
@@ -645,12 +651,36 @@ func TestNotificationsBellCountsWhatNeedsThePerson(t *testing.T) {
 		}
 	}
 	h.run(t, "read", chromedp.Title(&title), chromedp.AttributeValue(`.topbar .bell`, "aria-label", &label, nil, chromedp.ByQuery), h.openPanel(), chromedp.Evaluate(panelRows, &panel))
-	if badge != "1" || title != "(1) harness · harness" || label != "Notifications, 1 need you" {
+	if badge != "1" || title != "(1) harness · harness" || label != "Notifications, 1 need you, 3 unread" {
 		t.Errorf("badge %q, title %q, label %q", badge, title, label)
 	}
 	// Open causes lead the panel: the review and the wait, then the information, the read and the settled.
 	if want := "Review requested: the dashboard plan|unread\nA session waits for approval|unread\nRelease notes drafted|unread\nA session failed|read\nRedesign sidebar is in review|settled"; panel != want {
 		t.Errorf("panel:\n%s", panel)
+	}
+	h.noErrors(t)
+}
+
+// The page lands on Needs you while anything is open, with the tabs counted;
+// All pins the open causes above the day groups.
+func TestNotificationsPageGroupsNeedsYouAboveTheDays(t *testing.T) {
+	h := newInboxHarness(t, inboxWorld())
+	const heads = `[...document.querySelectorAll('main .group > .ghead')].map(h => h.textContent.replace(/\s+/g, ' ').trim()).join('|')`
+	const tabs = `[...document.querySelectorAll('main .inbox-tabs label')].map(l => (l.querySelector('input').checked ? '*' : '') + l.textContent.replace(/\s+/g, ' ').trim()).join('|')`
+	const summary = `document.querySelector('main .toolbar .sum').textContent.trim()`
+	var got, tabsGot, sum string
+	h.run(t, "default", h.openReady("/notifications"), chromedp.Evaluate(heads, &got), chromedp.Evaluate(tabs, &tabsGot), chromedp.Evaluate(summary, &sum))
+	if got != "Needs you 2" || tabsGot != "*Needs you 2|Unread 3|All" || sum != "2 need you · 3 unread" {
+		t.Errorf("default tab: groups %q, tabs %q, summary %q", got, tabsGot, sum)
+	}
+	h.run(t, "all", h.openReady("/notifications?tab=all"), chromedp.Evaluate(heads, &got), chromedp.Evaluate(tabs, &tabsGot))
+	if got != "Needs you 2|Today 3" || tabsGot != "Needs you 2|Unread 3|*All 5" {
+		t.Errorf("all tab: groups %q, tabs %q", got, tabsGot)
+	}
+	var ssr string
+	h.run(t, "no script", emulation.SetScriptExecutionDisabled(true), chromedp.Navigate(h.srv.URL+"/notifications?tab=all"), chromedp.Evaluate(heads, &ssr), emulation.SetScriptExecutionDisabled(false))
+	if ssr != "Needs you 2|Today 3" {
+		t.Errorf("server groups: %q", ssr)
 	}
 	h.noErrors(t)
 }

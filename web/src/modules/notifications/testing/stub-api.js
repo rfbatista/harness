@@ -27,7 +27,9 @@ export function stubNotificationsApi(world) {
         const limit = q.has("limit") ? Number(q.get("limit")) : undefined;
         const unread = q.get("unread");
         if (unread !== null && unread !== "true" && unread !== "false") return jsonResponse(400, { error: "unread is true or false", code: "INVALID_INPUT" });
-        const page = await gateway.list({ projectId: q.get("project_id") ?? "", unread: unread === "true", before: q.get("before") ?? "", limit });
+        const open = q.get("open");
+        if (open !== null && open !== "true" && open !== "false") return jsonResponse(400, { error: "open is true or false", code: "INVALID_INPUT" });
+        const page = await gateway.list({ projectId: q.get("project_id") ?? "", unread: unread === "true", open: open === "true", before: q.get("before") ?? "", limit });
         return jsonResponse(200, {
           notifications: page.notifications.map(notificationDTO),
           unread_count: page.unreadCount,

@@ -41,6 +41,8 @@ export function notificationGatewayContract(name, makeSubject) {
     const unread = await gateway.list({ unread: true });
     assert.deepEqual(ids(unread), ["new", "mid"], "read and resolved ones are not unread");
     assert.deepEqual(ids(await gateway.list({ projectId: "p1", unread: true })), ["new"]);
+    assert.deepEqual(ids(await gateway.list({ open: true })), ["new", "old"], "open causes: action and not settled, read or not");
+    assert.deepEqual(ids(await gateway.list({ open: true, projectId: "p2" })), [], "filters combine");
   });
 
   contract("a notification keeps its fields; the times are Dates and the absent ones null", async () => {

@@ -62,6 +62,7 @@
  * @typedef {object} Filter
  * @property {string} [projectId]  "" or absent: every project
  * @property {boolean} [unread]    only the unread ones
+ * @property {boolean} [open]      only the open causes (level action, not settled)
  *
  * @typedef {object} Page
  * @property {Notification[]} notifications  newest first
@@ -101,6 +102,7 @@ export const openFirst = (list) => [...list.filter(isOpen), ...list.filter((n) =
 export function matches(filter, n) {
   if (filter.projectId && n.projectId !== filter.projectId) return false;
   if (filter.unread && !isUnread(n)) return false;
+  if (filter.open && !isOpen(n)) return false;
   return true;
 }
 

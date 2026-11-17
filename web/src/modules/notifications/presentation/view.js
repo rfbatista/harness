@@ -18,9 +18,10 @@ export function badgeText(count) {
 }
 
 /** The bell's accessible name, with the exact count and what it counts. */
-export function bellLabel(count, countsOpen = false) {
+export function bellLabel(count, countsOpen = false, unread = 0) {
   if (!count) return "Notifications";
-  return `Notifications, ${count} ${countsOpen ? "need you" : "unread"}`;
+  if (!countsOpen) return `Notifications, ${count} unread`;
+  return `Notifications, ${count} need you${unread ? `, ${unread} unread` : ""}`;
 }
 
 /**
