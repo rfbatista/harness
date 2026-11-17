@@ -1,4 +1,4 @@
-package web
+package domain
 
 import (
 	"go/ast"
@@ -29,7 +29,7 @@ func TestNotificationKindsOfTheServerAndTheWebClientAreTheSame(t *testing.T) {
 // serverNotificationKinds reads the NotificationKind constants of the domain.
 func serverNotificationKinds(t *testing.T) []string {
 	t.Helper()
-	file, err := parser.ParseFile(token.NewFileSet(), "../../../domain/notification.go", nil, 0)
+	file, err := parser.ParseFile(token.NewFileSet(), "notification.go", nil, 0)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -68,7 +68,7 @@ var kindsList = regexp.MustCompile(`(?s)export const KINDS = Object\.freeze\(\[(
 // webNotificationKinds reads KINDS from the web client's notification domain.
 func webNotificationKinds(t *testing.T) []string {
 	t.Helper()
-	src, err := os.ReadFile("../../../../web/src/modules/notifications/domain/notification.js")
+	src, err := os.ReadFile("../../web/src/modules/notifications/domain/notification.js")
 	if err != nil {
 		t.Fatal(err)
 	}
