@@ -359,11 +359,11 @@ func TestNotificationsRecordTheirOutcome(t *testing.T) {
 	l.publish(domain.SessionEnded{SessionID: "s1", Status: domain.SessionStopped})
 	l.settled("session_waiting", "ended")
 
-	// Interviews: answered, dismissed (also when it expires).
+	// Interviews: answered, dismissed, and ended when it expires.
 	for i, c := range []struct {
 		state domain.InterviewState
 		want  string
-	}{{domain.InterviewSent, "answered"}, {domain.InterviewDismissed, "dismissed"}, {domain.InterviewExpired, "dismissed"}} {
+	}{{domain.InterviewSent, "answered"}, {domain.InterviewDismissed, "dismissed"}, {domain.InterviewExpired, "ended"}} {
 		id := "iv-" + string(rune('a'+i))
 		l.publish(domain.InterviewOpened{InterviewID: id, SessionID: "s1", Title: "scope", Questions: 2})
 		l.next()

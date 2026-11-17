@@ -140,7 +140,7 @@ func (s *Service) settleListed(n *domain.Notification, sessionID string, state d
 			return nil, false, nil
 		}
 		w := commitCheckWhat(len(list))
-		cur, err := tx.UpdateCommitCheck(cur.ID, list, w.verb, cur.Title, cur.Body)
+		cur, err := tx.UpdateCommitCheck(cur.ID, list, w.verb, w.title(domain.ActorHarness), cur.Body)
 		if err != nil || cur == nil {
 			return nil, false, err
 		}

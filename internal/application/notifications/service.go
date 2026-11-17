@@ -280,13 +280,16 @@ func reviewOutcome(state domain.ReviewState) domain.NotificationOutcome {
 	return domain.OutcomeApproved
 }
 
-// interviewOutcome is how an interview ended: sent is answered; dismissed and
-// expired are both the person not answering.
+// interviewOutcome is how an interview ended: sent is answered, dismissed is
+// the person's choice, and an expiry is nobody's: it ended.
 func interviewOutcome(state domain.InterviewState) domain.NotificationOutcome {
-	if state == domain.InterviewSent {
+	switch state {
+	case domain.InterviewSent:
 		return domain.OutcomeAnswered
+	case domain.InterviewDismissed:
+		return domain.OutcomeDismissed
 	}
-	return domain.OutcomeDismissed
+	return domain.OutcomeEnded
 }
 
 // requestOutcome is how a branch or service request left pending: denied and

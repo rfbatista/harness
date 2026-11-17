@@ -52,12 +52,17 @@ func reviewWhat(subject string) what {
 func approvalWhat(lastAction string) what {
 	w := what{verb: "waits for your approval to run", object: "a tool", code: true}
 	if la := strings.TrimSpace(lastAction); la != "" {
-		w.object = la
-		if tool, command, ok := strings.Cut(la, ": "); ok && tool != "" && command != "" {
-			w.object = command + " (" + tool + ")"
-		}
+		w.object = commandOf(la)
 	}
 	return w
+}
+
+// commandOf is a session's last action, "Tool: command", as "command (Tool)".
+func commandOf(lastAction string) string {
+	if tool, command, ok := strings.Cut(lastAction, ": "); ok && tool != "" && command != "" {
+		return command + " (" + tool + ")"
+	}
+	return lastAction
 }
 
 func interviewWhat(title string, questions int) what {
@@ -77,10 +82,7 @@ func taskReviewWhat(taskTitle string) what {
 func failedWhat(lastAction string) what {
 	w := what{verb: "failed"}
 	if la := strings.TrimSpace(lastAction); la != "" {
-		w.verb, w.object, w.code = "failed while running", la, true
-		if tool, command, ok := strings.Cut(la, ": "); ok && tool != "" && command != "" {
-			w.object = command + " (" + tool + ")"
-		}
+		w.verb, w.object, w.code = "failed while running", commandOf(la), true
 	}
 	return w
 }

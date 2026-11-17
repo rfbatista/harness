@@ -21,6 +21,14 @@ func TestNotificationKindsOfTheServerAndTheWebClientAreTheSame(t *testing.T) {
 	if missing := difference(server, client); len(missing) > 0 {
 		t.Errorf("the server posts kinds the web client does not know (add them to KINDS in web/src/modules/notifications/domain/notification.js and to the notifications contract): %v", missing)
 	}
+	// NotificationKinds, which the list filter validates against, holds every kind.
+	var listed []string
+	for _, k := range NotificationKinds {
+		listed = append(listed, string(k))
+	}
+	if missing, extra := difference(server, listed), difference(listed, server); len(missing)+len(extra) > 0 {
+		t.Errorf("domain.NotificationKinds differs from the NotificationKind constants: missing %v, extra %v", missing, extra)
+	}
 	if extra := difference(client, server); len(extra) > 0 {
 		t.Errorf("the web client knows kinds the server never posts (remove them from KINDS or add them to domain.NotificationKind): %v", extra)
 	}
