@@ -97,6 +97,7 @@
       text-transform: uppercase;
 
       &[data-who="system"] { --_c: var(--color-ink-muted); border-style: dashed; }
+      &[data-who="person"] { --_c: var(--color-ink); }
       &[data-agent="0"] { --_c: var(--color-agent-0); }
       &[data-agent="1"] { --_c: var(--color-agent-1); }
       &[data-agent="2"] { --_c: var(--color-agent-2); }

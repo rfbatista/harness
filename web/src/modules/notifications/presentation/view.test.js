@@ -72,6 +72,13 @@ test("who: an agent shows its initial, name and mode; the system shows its sourc
   assert.deepEqual([watch.whoName, watch.whoMode, watch.whoIsSystem], ["branch watch", "", true]);
 });
 
+test("the person is a who of their own, with no agent colour, and an item superseded by a newer boot reads as Ended", () => {
+  const row = toRow(makeNotification({ kind: "task_review", actor: { kind: "person", name: "you", mode: "", sessionId: "" }, verb: "moved the task to review", object: { text: "Ship it", code: false } }), N0);
+  assert.deepEqual([row.whoName, row.whoKind, row.whoSlot, row.whoIsSystem, row.whoMode], ["you", "person", "", false, ""]);
+  const ended = toRow(makeNotification({ kind: "sessions_interrupted", level: "action", resolvedAt: N0, outcome: "ended" }), N0);
+  assert.deepEqual([ended.state, ended.statusText.startsWith("Ended "), ended.canResumeAll], ["settled", true, false]);
+});
+
 test("the same agent has the same colour in every row", () => {
   assert.equal(toRow(agentPush({ id: "a" }), N0).whoSlot, toRow(agentPush({ id: "b", kind: "service_request" }), N0).whoSlot);
 });

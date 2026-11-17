@@ -43,7 +43,7 @@ export function bellLabel(count, countsOpen = false, unread = 0) {
  * @property {string} whoInitial
  * @property {string} whoSlot      the agent's colour slot ("0".."7"); "" for the system
  * @property {boolean} whoIsSystem
- * @property {"agent"|"system"} whoKind
+ * @property {"agent"|"system"|"person"} whoKind
  * @property {boolean} hasVerb     false on kind agent and on revision 5 data: the what is the title
  * @property {string} verb
  * @property {string} objectText
@@ -152,7 +152,7 @@ export function toRow(n, now) {
   const where = [[n.projectName, n.taskTitle].filter(Boolean).join(" › "), n.repositoryName].filter(Boolean).join(" · ");
   const age = relativeTime(n.createdAt, now);
   const when = fullDate(n.createdAt);
-  const isSystem = n.actor.kind !== "agent";
+  const isSystem = n.actor.kind === "system";
   return {
     id: n.id,
     kind: n.kind,
@@ -170,9 +170,9 @@ export function toRow(n, now) {
     whoMode: n.actor.mode,
     hasWhoMode: n.actor.mode !== "",
     whoInitial: Array.from(n.actor.name)[0] ?? "",
-    whoSlot: isSystem ? "" : String(agentSlot(n.actor.name)),
+    whoSlot: n.actor.kind === "agent" ? String(agentSlot(n.actor.name)) : "",
     whoIsSystem: isSystem,
-    whoKind: isSystem ? "system" : "agent",
+    whoKind: n.actor.kind,
     hasVerb,
     verb: n.verb,
     objectText: n.object?.text ?? "",
