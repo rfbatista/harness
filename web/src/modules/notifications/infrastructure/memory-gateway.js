@@ -72,6 +72,17 @@ export function memoryNotifications({ notifications = [], now = () => new Date()
       return change;
     },
 
+    async acknowledge(id) {
+      const n = list.find((x) => x.id === id);
+      if (!n) throw new StructuredError(Codes.NOTIFICATION_NOT_FOUND, `notification ${id} not found`, 404);
+      if (n.kind !== "branch_finding") throw new StructuredError(Codes.INVALID_INPUT, `notification ${id} is not a branch_finding one`, 400);
+      if (isSettled(n)) return n;
+      const at = now();
+      const changed = Object.freeze({ ...n, resolvedAt: at, outcome: "acknowledged", readAt: n.readAt ?? at });
+      commit([changed]);
+      return changed;
+    },
+
     async resumeInterrupted(id) {
       const n = list.find((x) => x.id === id);
       if (!n) throw new StructuredError(Codes.NOTIFICATION_NOT_FOUND, `notification ${id} not found`, 404);

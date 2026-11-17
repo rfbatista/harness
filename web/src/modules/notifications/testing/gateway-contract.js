@@ -191,4 +191,28 @@ export function notificationGatewayContract(name, makeSubject) {
     await assert.rejects(subject.gateway.resumeInterrupted("missing"), Codes.NOTIFICATION_NOT_FOUND);
     await assert.rejects(subject.gateway.resumeInterrupted("other"), Codes.INVALID_INPUT);
   });
+
+  const finding = (fields = {}) =>
+    makeNotification({ id: "find", kind: "branch_finding", level: "action", createdAt: at(5), actor: { kind: "system", name: "branch watch", mode: "", sessionId: "" }, ...fields });
+
+  contract("acknowledging a branch finding settles it as acknowledged, marks it read and streams it", async () => {
+    const subject = makeSubject({ notifications: [finding()] });
+    const changes = [];
+    const close = subject.gateway.follow((c) => changes.push(c), () => {});
+    await flush();
+    const answer = await subject.gateway.acknowledge("find");
+    await flush();
+    assert.deepEqual([answer.id, answer.outcome, answer.resolvedAt instanceof Date, answer.readAt instanceof Date], ["find", "acknowledged", true, true]);
+    assert.deepEqual(changes.map((c) => [c.notifications.map((n) => n.id), c.unreadCount, c.openCount]), [[["find"], 0, 0]]);
+    close();
+  });
+
+  contract("acknowledging again returns it unchanged; another kind is INVALID_INPUT and an unknown id NOTIFICATION_NOT_FOUND", async () => {
+    const subject = makeSubject({ notifications: [finding(), makeNotification({ id: "other" })] });
+    const first = await subject.gateway.acknowledge("find");
+    const again = await subject.gateway.acknowledge("find");
+    assert.deepEqual([again.resolvedAt.getTime(), again.outcome], [first.resolvedAt.getTime(), "acknowledged"]);
+    await assert.rejects(subject.gateway.acknowledge("other"), Codes.INVALID_INPUT);
+    await assert.rejects(subject.gateway.acknowledge("missing"), Codes.NOTIFICATION_NOT_FOUND);
+  });
 }

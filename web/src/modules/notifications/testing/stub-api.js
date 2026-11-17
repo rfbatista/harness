@@ -42,6 +42,10 @@ export function stubNotificationsApi(world) {
         const change = await gateway.markRead(request);
         return jsonResponse(200, { notifications: change.notifications.map(notificationDTO), unread_count: change.unreadCount, open_count: change.openCount });
       }
+      const ack = url.pathname.match(/^\/api\/notifications\/([^/]+)\/acknowledge$/);
+      if (method === "POST" && ack) {
+        return jsonResponse(200, { notification: notificationDTO(await gateway.acknowledge(decodeURIComponent(ack[1]))) });
+      }
       const resume = url.pathname.match(/^\/api\/notifications\/([^/]+)\/resume_interrupted$/);
       if (method === "POST" && resume) {
         const answer = await gateway.resumeInterrupted(decodeURIComponent(resume[1]));

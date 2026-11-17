@@ -303,6 +303,20 @@ export function notificationsStore({ gateway, alerts, prefs, clock, navigate, an
       navigate(n.link);
     },
 
+    /**
+     * Acknowledges a branch finding: the server settles it and marks it read.
+     * The views take the answer; the stream's echo may have come first, and
+     * applying the same settled copy twice changes nothing. The counts follow
+     * the stream.
+     * @param {import("../domain/notification.js").Notification} n
+     */
+    async acknowledge(n) {
+      const changed = await gateway.acknowledge(n.id);
+      seen.add(changed.id);
+      each((v) => v.apply([changed]));
+      return changed;
+    },
+
     /** The Desktop alerts switch: asks for permission only from the person's click. */
     async toggleAlerts() {
       if (this.alerts === "unsupported") return;

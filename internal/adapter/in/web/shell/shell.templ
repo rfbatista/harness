@@ -260,6 +260,7 @@ templ NotificationLiveRow(actions bool) {
 				</template>
 			</ul>
 			if actions {
+				<button type="button" class="[ button ] [ acknowledge ]" data-size="sm" x-show="row.canAcknowledge" x-bind:data-id="row.id" x-bind:aria-label="row.ackLabel" x-on:click="acknowledge">Acknowledge</button>
 				<button type="button" class="[ button ] [ resume-all ]" data-size="sm" x-show="row.canResumeAll" x-bind:data-id="row.id" x-bind:disabled="resuming" x-bind:aria-busy="resuming" x-on:click="resumeAll">Resume all interrupted</button>
 			}
 		</div>

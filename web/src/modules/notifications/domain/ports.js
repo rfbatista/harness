@@ -39,6 +39,11 @@
  *           outcome; a session that fails stays listed with its reason.
  *           Rejects with NOTIFICATION_NOT_FOUND, or INVALID_INPUT for a
  *           notification of another kind.
+ * @property {(id: string) => Promise<Notification>} acknowledge
+ *           Settles a branch_finding as acknowledged and marks it read;
+ *           answers the notification after. An already settled one comes
+ *           back unchanged. Rejects with NOTIFICATION_NOT_FOUND, or
+ *           INVALID_INPUT for a notification of another kind.
  * @property {(seed: unknown) => Page} fromSeed
  *           Decodes the page the server embedded for the first paint (the
  *           GET's JSON). Throws BAD_RESPONSE when it cannot be read.

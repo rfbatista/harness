@@ -12,11 +12,13 @@ file("notifications/presentation/store");
 /** A gateway the test drives: the stream, and each read's answer. */
 function scripted() {
   const reads = [];
+  const acks = [];
   const lists = [];
   let onChange = () => {};
   let onStatus = () => {};
   return {
     reads,
+    acks,
     lists,
     gateway: {
       fromSeed: toPage,
@@ -25,6 +27,9 @@ function scripted() {
       },
       markRead(request) {
         return new Promise((resolve, reject) => reads.push({ request, resolve, reject }));
+      },
+      acknowledge(id) {
+        return new Promise((resolve, reject) => acks.push({ id, resolve, reject }));
       },
       follow(change, status) {
         onChange = change;
@@ -274,4 +279,28 @@ test("a list read carries open_count too, and a server that sends none leaves th
   assert.deepEqual([old.store.badgeCount, old.store.badgeCountsOpen, old.doc.title], [3, false, "(3) Notification · harness"]);
   old.server.push([makeNotification({ id: "b" })], 4);
   assert.deepEqual([old.store.badgeCount, old.store.badgeCountsOpen], [4, false]);
+});
+
+test("acknowledging settles the item at once on the views, also when the stream echo came before the answer", async () => {
+  const finding = makeNotification({ id: "find", kind: "branch_finding", level: "action", actor: { kind: "system", name: "branch watch", mode: "", sessionId: "" } });
+  const settled = { ...finding, resolvedAt: at(11), readAt: at(11), outcome: "acknowledged" };
+  const w = world({ seed: seedOf([finding], 1, 1) });
+  const done = w.store.acknowledge(finding);
+  assert.equal(w.server.acks.length, 1);
+  // The echo first: the server committed, streamed, then answers.
+  w.server.push([settled], 0, 0);
+  assert.equal(w.store.badgeCount, 0);
+  w.server.acks[0].resolve(settled);
+  await done;
+  assert.deepEqual([w.store.badgeCount, w.view.applied.length], [0, 2]);
+  assert.deepEqual(w.view.applied.at(-1), [["find", "read"]]);
+});
+
+test("a refused acknowledge leaves the item open and says so", async () => {
+  const finding = makeNotification({ id: "find", kind: "branch_finding", level: "action" });
+  const w = world({ seed: seedOf([finding], 1, 1) });
+  const done = w.store.acknowledge(finding);
+  w.server.acks[0].reject(new StructuredError(Codes.NETWORK, "down"));
+  await assert.rejects(done, Codes.NETWORK);
+  assert.deepEqual([w.store.badgeCount, w.view.applied.length], [1, 0]);
 });

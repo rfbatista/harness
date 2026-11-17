@@ -65,6 +65,8 @@ export function bellLabel(count, countsOpen = false, unread = 0) {
  * @property {SessionLine[]} sessions  a sessions_interrupted item's list; [] for the others
  * @property {boolean} hasSessions
  * @property {boolean} canResumeAll    a sessions_interrupted item whose cause is not settled
+ * @property {boolean} canAcknowledge  a branch_finding whose cause is not settled (ADR 0098)
+ * @property {string} ackLabel         the Acknowledge button's accessible name
  *
  * @typedef {object} SessionLine
  * @property {string} key
@@ -174,6 +176,8 @@ export function toRow(n, now) {
     sessions: n.interruptedSessions.map(sessionLine),
     hasSessions: n.interruptedSessions.length > 0,
     canResumeAll: n.kind === "sessions_interrupted" && !settled,
+    canAcknowledge: n.kind === "branch_finding" && !settled,
+    ackLabel: `Acknowledge: ${n.actor.name} ${what}`,
     label: [unread ? "Unread." : "", needsYou ? "Needs you." : "", `${n.actor.name} ${what}.`, where ? `${where}.` : "", `${when}, ${age === "now" ? "just now" : `${age} ago`}.`].filter(Boolean).join(" "),
   };
 }

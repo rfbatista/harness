@@ -37,6 +37,7 @@ type fakeInbox struct {
 	// extra holds revision 6 fields (actor, verb, object…) by notification
 	// id; the domain type does not carry them yet, so GET adds them to its JSON.
 	extra  map[string]map[string]any
+	t      *testing.T
 	hold   chan struct{}
 	posts  []map[string]any
 	next   int
@@ -90,6 +91,44 @@ func (f *fakeInbox) ListNotifications(_ context.Context, q ports.NotificationQue
 		return nil, fmt.Errorf("the inbox is down")
 	}
 	return f.page(q), nil
+}
+
+// acknowledge settles a branch finding as the server does: it commits, streams
+// the change with the counts, then answers. The domain type does not carry the
+// outcome yet, so it travels in the extra fields.
+func (f *fakeInbox) acknowledge(w http.ResponseWriter, r *http.Request) {
+	f.mu.Lock()
+	var found *domain.Notification
+	for _, n := range f.list {
+		if n.ID == r.PathValue("id") {
+			found = n
+		}
+	}
+	if found == nil || found.Kind != domain.NotificationBranchFinding {
+		f.mu.Unlock()
+		http.Error(w, `{"code":"INVALID_INPUT","error":"not a branch finding"}`, http.StatusBadRequest)
+		return
+	}
+	now := time.Now()
+	found.ResolvedAt, found.ReadAt = &now, &now
+	if f.extra == nil {
+		f.extra = map[string]map[string]any{}
+	}
+	if f.extra[found.ID] == nil {
+		f.extra[found.ID] = map[string]any{}
+	}
+	f.extra[found.ID]["outcome"] = "acknowledged"
+	open := 0
+	for _, n := range f.list {
+		if n.Level == domain.NotificationAction && n.ResolvedAt == nil {
+			open++
+		}
+	}
+	change := map[string]any{"changed": []*domain.Notification{found}, "unread_count": f.unread(), "open_count": open}
+	extra := f.extra
+	f.mu.Unlock()
+	f.stream.pushRaw(f.t, withExtraAt(change, "changed", extra))
+	writeJSON(w, map[string]any{"notification": withExtraAt(map[string]any{"notifications": []*domain.Notification{found}}, "notifications", extra).(map[string]any)["notifications"].([]any)[0]})
 }
 
 // add records a notification and streams it, as the server does.
@@ -235,7 +274,7 @@ func newInboxHarnessWith(t *testing.T, list []*domain.Notification, tweak func(*
 		t.Skip("browser test: web client not built; run `make web`")
 	}
 	ctx, errs := browser(t)
-	inbox := &fakeInbox{list: list, stream: &sseFeed{}}
+	inbox := &fakeInbox{list: list, stream: &sseFeed{}, t: t}
 	deps := railWorld()
 	deps.Projects = fakeProjects{[]*domain.Project{{ID: "p1", Name: "harness"}, {ID: "p2", Name: "tui"}}}
 	deps.Notifications = inbox
@@ -248,6 +287,7 @@ func newInboxHarnessWith(t *testing.T, list []*domain.Notification, tweak func(*
 	mux.Handle("/api/notifications", inbox)
 	mux.Handle("/api/notifications/read", inbox)
 	mux.HandleFunc("POST /api/notifications/{id}/resume_interrupted", inbox.resumeInterrupted)
+	mux.HandleFunc("POST /api/notifications/{id}/acknowledge", inbox.acknowledge)
 	mux.Handle("/api/", http.NotFoundHandler())
 	mux.Handle("/", NewHandler(deps, assets, nil))
 	srv := newBrowserServer(mux)
@@ -777,6 +817,40 @@ func TestNotificationsPageFiltersByWhoAndKind(t *testing.T) {
 	h.run(t, "both", chromedp.Evaluate(pageRows, &rows))
 	if rows != "devops pushes" {
 		t.Errorf("by who and kind: %q", rows)
+	}
+	h.noErrors(t)
+}
+
+// A branch finding is acknowledged from its row: it settles as Acknowledged,
+// leaves the open count, and the other open cause stays.
+func TestNotificationsPageAcknowledgesABranchFinding(t *testing.T) {
+	now := time.Now()
+	list := []*domain.Notification{
+		{ID: "find", ProjectID: "p1", ProjectName: "harness", Source: domain.NotificationFromSystem, Kind: domain.NotificationBranchFinding, Level: domain.NotificationAction, Title: "branch watch found a push on agent/x", Link: "/projects/p1", CreatedAt: now.Add(-2 * time.Minute)},
+		{ID: "wait", ProjectID: "p1", ProjectName: "harness", Source: domain.NotificationFromAgent, Kind: domain.NotificationSessionWaiting, Level: domain.NotificationAction, Title: "go-developer waits", Link: "/projects/p1", CreatedAt: now.Add(-5 * time.Minute)},
+	}
+	h := newInboxHarness(t, list)
+	h.inbox.extra = map[string]map[string]any{
+		"find": {"actor": map[string]any{"kind": "system", "name": "branch watch"}, "verb": "found a push with no approved request on", "object": map[string]any{"text": "agent/x", "code": true}},
+		"wait": {"actor": map[string]any{"kind": "agent", "name": "go-developer", "mode": "implementing", "session_id": "s1"}, "verb": "waits for your approval to run", "object": map[string]any{"text": "go test", "code": true}},
+	}
+	const buttons = `[...document.querySelectorAll('main .notification')].map(r => r.dataset.kind + ':' + (r.querySelector('.acknowledge')?.checkVisibility() ? 'ack' : '-') + ':' + (r.querySelector('.when .standing')?.textContent ?? '')).join('|')`
+	var before, after, badge string
+	h.run(t, "ready", h.openReady("/notifications"))
+	for range 10 {
+		h.inbox.stream.pushRaw(t, withExtraAt(ports.NotificationChange{Changed: list, UnreadCount: 2}, "changed", h.inbox.extra))
+		time.Sleep(200 * time.Millisecond)
+		h.run(t, "buttons", chromedp.Evaluate(buttons, &before))
+		if strings.Contains(before, "branch_finding:ack") {
+			break
+		}
+	}
+	if before != "branch_finding:ack:Needs you|session_waiting:-:Needs you" {
+		t.Errorf("before: %q", before)
+	}
+	h.run(t, "ack", jsClick(`main .notification[data-kind=branch_finding] .acknowledge`), railPoll(`document.querySelector('main .notification[data-kind=branch_finding] .when .standing').textContent.startsWith('Acknowledged ')`), chromedp.Evaluate(buttons, &after), chromedp.Evaluate(bellBadge, &badge))
+	if !strings.HasPrefix(after, "branch_finding:-:Acknowledged ") || !strings.HasSuffix(after, "session_waiting:-:Needs you") {
+		t.Errorf("after: %q", after)
 	}
 	h.noErrors(t)
 }

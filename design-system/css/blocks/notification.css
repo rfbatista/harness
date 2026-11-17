@@ -232,7 +232,7 @@
       & > li[data-state="resumed"] .state { color: var(--color-ink-faint); }
       & .reason { flex-basis: 100%; color: var(--color-ink-muted); font-size: var(--text-xs); }
     }
-    & .resume-all { justify-self: start; margin-block-start: var(--space-2xs); }
+    & .resume-all, & .acknowledge { justify-self: start; margin-block-start: var(--space-2xs); }
 
     /* Compact: the popover, and any list narrower than 44rem. */
     &[data-compact] {

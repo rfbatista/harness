@@ -212,6 +212,17 @@ export const notificationsPage = ({ gateway, store, clock }) => () => {
         this.marking = false;
       }
     },
+    /** Acknowledge a branch finding: the server settles it, and the row follows. */
+    async acknowledge(event) {
+      const n = this.find(event);
+      if (!n) return;
+      this.error = null;
+      try {
+        await store.acknowledge(n);
+      } catch (err) {
+        this.error = inboxError(err);
+      }
+    },
     /** Resume all interrupted: the sessions the item lists, one by one; the item shows each one's outcome. */
     async resumeAll(event) {
       if (this.resuming) return;

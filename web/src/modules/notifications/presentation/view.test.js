@@ -124,6 +124,14 @@ test("the link's accessible name reads who, what, where and when in order", () =
   assert.equal(read.label.startsWith("Needs you. devops Built."), true);
 });
 
+test("only an open branch finding offers Acknowledge", () => {
+  const finding = (fields = {}) => makeNotification({ kind: "branch_finding", level: "action", actor: { kind: "system", name: "branch watch", mode: "", sessionId: "" }, verb: "found a push with no approved request on", object: { text: "agent/x", code: true }, ...fields });
+  const row = toRow(finding(), N0);
+  assert.deepEqual([row.canAcknowledge, row.ackLabel], [true, "Acknowledge: branch watch found a push with no approved request on agent/x"]);
+  assert.equal(toRow(finding({ resolvedAt: N0, outcome: "acknowledged" }), N0).canAcknowledge, false);
+  assert.equal(toRow(agentPush(), N0).canAcknowledge, false);
+});
+
 test("a kind's glyph and the row's kind reach the markup; the old fields stay", () => {
   const row = toRow(agentPush(), N0);
   assert.deepEqual([row.kind, row.href, row.unread, row.canResumeAll], ["branch_request", "/projects/p1/tasks/t1", true, false]);
