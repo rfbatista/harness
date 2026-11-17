@@ -6,9 +6,6 @@ import { isOpen, isSettled, isUnread } from "../domain/notification.js";
 
 export const TABS = Object.freeze(["needs", "unread", "all"]);
 
-/** The tab the page lands on: Needs you while anything is open, All otherwise. */
-export const defaultTab = (openCount) => (openCount > 0 ? "needs" : "all");
-
 /** A tab from the URL; anything else is no tab. */
 export const tabFrom = (value) => (TABS.includes(value) ? value : "");
 
@@ -53,12 +50,22 @@ export function groupsFor(items, tab, now) {
   const open = items.filter(isOpen);
   const groups = [];
   if (open.length) groups.push({ key: "needs", title: "Needs you", tone: "attention", items: open });
+  // An open cause between two settled items breaks their run, though it is pinned elsewhere: breakBefore holds the ids that follow one.
+  let afterOpen = false;
   for (const n of items) {
-    if (isOpen(n)) continue;
+    if (isOpen(n)) {
+      afterOpen = true;
+      continue;
+    }
     const key = dayKey(n.createdAt);
-    const last = groups.at(-1);
-    if (last && last.key === `day:${key}`) last.items.push(n);
-    else groups.push({ key: `day:${key}`, title: dayLabel(n.createdAt, now), tone: "", items: [n] });
+    let last = groups.at(-1);
+    if (!last || last.key !== `day:${key}`) {
+      last = { key: `day:${key}`, title: dayLabel(n.createdAt, now), tone: "", items: [], breakBefore: new Set() };
+      groups.push(last);
+    }
+    if (afterOpen) last.breakBefore.add(n.id);
+    afterOpen = false;
+    last.items.push(n);
   }
   return groups;
 }
@@ -80,17 +87,18 @@ export function tabCounts({ items, openCount, unreadCount, hasMore, tab }) {
 /**
  * Folds consecutive settled items with the same actor session and kind into
  * stacks (ADR 0097, contract §6). Call it on one day group's items, so the
- * day is the same. Open causes and items with no session never fold, and a
+ * day is the same; ids in breakBefore start a new run (an open cause sat
+ * between them and the item before). Open causes and items with no session never fold, and a
  * run of one stays a plain row.
  * @param {import("../domain/notification.js").Notification[]} items  newest first
  * @returns {{ key: string, folded: boolean, items: import("../domain/notification.js").Notification[] }[]}
  */
-export function foldRuns(items) {
+export function foldRuns(items, breakBefore = new Set()) {
   const runs = [];
   let last = null;
   for (const n of items) {
     const sessionId = n.actor.sessionId;
-    const joins = last && isSettled(n) && sessionId !== "" && last.sessionId === sessionId && last.kind === n.kind;
+    const joins = last && !breakBefore.has(n.id) && isSettled(n) && sessionId !== "" && last.sessionId === sessionId && last.kind === n.kind;
     if (joins) {
       last.run.items.push(n);
       last.run.folded = true;

@@ -56,7 +56,7 @@ export const notificationsPage = ({ gateway, store, clock }) => () => {
      */
     entriesOf(group) {
       if (group.key === "needs") return group.items.map((n) => ({ key: n.id, plain: [toRow(n, this.now)], stacks: [] }));
-      return foldRuns(group.items).map((run) =>
+      return foldRuns(group.items, group.breakBefore).map((run) =>
         run.folded
           ? { key: `stack:${run.key}`, plain: [], stacks: [{ key: run.key, head: [toStackRow(run.items, this.now)], rows: run.items.map((n) => toRow(n, this.now)) }] }
           : { key: run.key, plain: [toRow(run.items[0], this.now)], stacks: [] },
@@ -125,16 +125,14 @@ export const notificationsPage = ({ gateway, store, clock }) => () => {
       // The server rendered only the selected who option; the page lists everyone it has seen.
       el.querySelectorAll("select[name=actor] option[data-ssr]").forEach((o) => o.remove());
       store.start(pageSeed(el.ownerDocument));
-      try {
-        // The server filters the first page by tab and project; who and kind are read here.
-        if (this.actor || this.kind) throw new Error("filtered by who or kind: read it here");
-        const page = gateway.fromSeed(readSeed(el));
+      const page = this.actor || this.kind ? null : this.seedPage(el);
+      if (page) {
         store.listed(page, store.stamp);
         // The server paints the first page whole; the Needs you tab keeps the open causes of it.
         this.items = this.tab === "needs" ? page.notifications.filter(isOpen) : page.notifications;
         this.nextBefore = page.nextBefore;
-      } catch {
-        // The server could not read the page (or sent no seed): read it here.
+      } else {
+        // Who and kind are read here, not by the server; so is a page it could not read or sent no seed for.
         this.reload();
       }
       el.querySelector("[data-ssr]")?.remove();
@@ -145,6 +143,15 @@ export const notificationsPage = ({ gateway, store, clock }) => () => {
         reload: () => this.reload(),
       });
       ticker = setInterval(() => (this.now = clock.now()), TICK_MS);
+    },
+
+    /** The server's first page, or null when there is none to read. */
+    seedPage(el) {
+      try {
+        return gateway.fromSeed(readSeed(el));
+      } catch {
+        return null;
+      }
     },
 
     destroy() {

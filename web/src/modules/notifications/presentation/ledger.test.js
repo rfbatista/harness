@@ -1,6 +1,6 @@
 import { assert, file, test } from "../../../shared/testing/test.js";
 import { at, makeNotification } from "../testing/fixtures.js";
-import { actorOptions, dayLabel, defaultTab, filterOf, groupsFor, tabCounts, tabFrom } from "./ledger.js";
+import { actorOptions, dayLabel, filterOf, groupsFor, tabCounts, tabFrom } from "./ledger.js";
 
 file("notifications/presentation/ledger");
 
@@ -8,8 +8,7 @@ const day = (y, m, d, h = 12) => new Date(y, m - 1, d, h, 0, 0);
 const NOW = day(2026, 11, 17, 15);
 const n = (id, created, fields = {}) => makeNotification({ id, createdAt: created, ...fields });
 
-test("the default tab is Needs you while anything is open, and All otherwise", () => {
-  assert.deepEqual([defaultTab(3), defaultTab(0), defaultTab(null)], ["needs", "all", "all"]);
+test("a tab comes from the URL, and anything else is no tab", () => {
   assert.deepEqual([tabFrom("unread"), tabFrom("nope"), tabFrom(undefined)], ["unread", "", ""]);
 });
 
@@ -90,4 +89,10 @@ test("the who options are the actors the page has seen, sorted, plus the one the
   const items = [n("a", at(1), { actor: as("go-developer") }), n("b", at(2), { actor: as("devops") }), n("c", at(3), { actor: as("devops") }), n("d", at(4))];
   assert.deepEqual(actorOptions(items, "").map((o) => [o.name, o.selected]), [["devops", false], ["go-developer", false], ["harness", false]]);
   assert.deepEqual(actorOptions(items, "ghost").map((o) => [o.name, o.selected]), [["devops", false], ["ghost", true], ["go-developer", false], ["harness", false]]);
+});
+
+test("an open cause between two settled items of one session breaks their run, though it is pinned in Needs you", () => {
+  const items = [settled("a", 15), n("o", day(2026, 11, 17, 14), by("s1")), settled("b", 13), settled("c", 12)];
+  const day0 = groupsFor(items, "all", NOW).find((g) => g.key.startsWith("day:"));
+  assert.deepEqual(foldRuns(day0.items, day0.breakBefore).map((r) => r.items.map((x) => x.id)), [["a"], ["b", "c"]]);
 });

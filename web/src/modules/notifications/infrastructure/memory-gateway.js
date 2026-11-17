@@ -5,7 +5,7 @@
 
 import { Codes, StructuredError } from "../../../shared/domain/errors.js";
 import { FeedStatus } from "../../../shared/domain/feed.js";
-import { isSettled, isUnread, markedRead, matches, upsert } from "../domain/notification.js";
+import { isOpen, isSettled, isUnread, markedRead, matches, upsert } from "../domain/notification.js";
 import { toPage } from "./dto.js";
 
 const MAX_LIMIT = 200;
@@ -26,7 +26,7 @@ export function memoryNotifications({ notifications = [], now = () => new Date()
 
   const unreadCount = () => list.filter(isUnread).length;
   // The causes that need the person: level action, not settled.
-  const openCount = () => list.filter((n) => n.level === "action" && !isSettled(n)).length;
+  const openCount = () => list.filter(isOpen).length;
 
   function commit(changed) {
     if (changed.length === 0) return { notifications: [], unreadCount: unreadCount(), openCount: openCount() };

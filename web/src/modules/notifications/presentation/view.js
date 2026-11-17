@@ -2,7 +2,7 @@
 // render, and the bell's words. Plain functions; the components bind to what
 // they return (the CSP build evaluates no expressions).
 
-import { agentSlot } from "../../architecture/domain/layers.js";
+import { agentSlot } from "../../../shared/domain/agentSlot.js";
 import { relativeTime } from "../../../shared/presentation/format.js";
 import { Codes, codeOf } from "../../../shared/domain/errors.js";
 import { FeedStatus } from "../../../shared/domain/feed.js";
@@ -209,13 +209,15 @@ function pastVerb(verb) {
     .replace(/^waits for /, "waited for ");
 }
 
-/** "5 approved · 1 denied": the outcomes of a stack, in the order the outcome words are listed, and "settled" for none recorded. */
+/** "5 approved · 1 denied": the outcomes of a stack, the most frequent first, and "settled" for none recorded. */
 function tally(items) {
   const counts = new Map();
   for (const n of items) counts.set(n.outcome, (counts.get(n.outcome) ?? 0) + 1);
   const order = [...Object.keys(OUTCOME_WORDS), ""];
+  // The most frequent first; the outcome words' own order breaks ties.
   return order
     .filter((o) => counts.has(o))
+    .sort((a, b) => counts.get(b) - counts.get(a))
     .map((o) => `${counts.get(o)} ${o === "" ? "settled" : OUTCOME_WORDS[o][0].toLowerCase()}`)
     .join(" · ");
 }

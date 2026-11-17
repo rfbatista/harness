@@ -2,7 +2,7 @@ import { assert, file, test } from "../../../shared/testing/test.js";
 import { makeNotification, N0 } from "../testing/fixtures.js";
 import { Codes, StructuredError } from "../../../shared/domain/errors.js";
 import { FeedStatus } from "../../../shared/domain/feed.js";
-import { agentSlot } from "../../architecture/domain/layers.js";
+import { agentSlot } from "../../../shared/domain/agentSlot.js";
 import { badgeText, bellLabel, inboxError, streamNotice, toRow } from "./view.js";
 
 file("notifications/presentation/view");
@@ -199,4 +199,9 @@ test("a commit_check_off item lists each session with its task, agent and state;
 test("a repaired commit check item reads as settled with its outcome", () => {
   const row = toRow(makeNotification({ kind: "commit_check_off", level: "action", resolvedAt: N0, outcome: "repaired" }), N0);
   assert.deepEqual([row.state, row.statusText.startsWith("Repaired "), row.statusTone], ["settled", true, "success"]);
+});
+
+test("a stack's outcomes are counted most frequent first", () => {
+  const items = [settledPush("c", 30, "denied"), settledPush("b", 20, "approved"), settledPush("a", 10, "denied")];
+  assert.equal(toStackRow(items, N0).statusText, "2 denied · 1 approved");
 });
