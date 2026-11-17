@@ -229,7 +229,10 @@
       }
       & .state { color: var(--color-ink-muted); font-size: var(--text-xs); }
       & > li[data-state="failed"] .state { color: var(--color-danger); font-weight: var(--weight-medium); }
-      & > li[data-state="resumed"] .state { color: var(--color-ink-faint); }
+      & > li[data-state="resumed"] .state,
+      & > li[data-state="repaired"] .state,
+      & > li[data-state="ended"] .state { color: var(--color-ink-faint); }
+      & > li[data-state="off"] .state { color: var(--color-attention-strong); font-weight: var(--weight-medium); }
       & .reason { flex-basis: 100%; color: var(--color-ink-muted); font-size: var(--text-xs); }
     }
     & .resume-all, & .acknowledge { justify-self: start; margin-block-start: var(--space-2xs); }

@@ -64,6 +64,9 @@ export function bellLabel(count, countsOpen = false, unread = 0) {
  * @property {string} label        the link's accessible name
  * @property {SessionLine[]} sessions  a sessions_interrupted item's list; [] for the others
  * @property {boolean} hasSessions
+ * @property {{ key: string, label: string, href: string, state: string, stateWord: string }[]} listed  a commit_check_off item's sessions; []
+ * @property {boolean} hasListed
+ * @property {boolean} showBody    the plain-text body shows unless a list stands for it
  * @property {boolean} canResumeAll    a sessions_interrupted item whose cause is not settled
  * @property {boolean} canAcknowledge  a branch_finding whose cause is not settled (ADR 0098)
  * @property {string} ackLabel         the Acknowledge button's accessible name
@@ -121,6 +124,19 @@ function standing(n, settled) {
   return word ? [`${word[0]} ${clockTime(n.resolvedAt)}`, word[1]] : ["Settled", "quiet"];
 }
 
+const LISTED_WORDS = Object.freeze({ off: "check off", repaired: "repaired", ended: "ended" });
+
+/** One session a commit_check_off item lists: its task and agent, where it stands. */
+function listedLine(s) {
+  return {
+    key: s.sessionId,
+    label: [s.taskTitle || "No task", s.agentName].filter(Boolean).join(" · "),
+    href: s.link,
+    state: s.state,
+    stateWord: LISTED_WORDS[s.state] ?? s.state,
+  };
+}
+
 /**
  * @param {import("../domain/notification.js").Notification} n
  * @param {Date} now
@@ -175,6 +191,9 @@ export function toRow(n, now) {
     markLabel: `Mark “${what}” read`,
     sessions: n.interruptedSessions.map(sessionLine),
     hasSessions: n.interruptedSessions.length > 0,
+    listed: n.listedSessions.map(listedLine),
+    hasListed: n.listedSessions.length > 0,
+    showBody: n.body !== "" && n.interruptedSessions.length === 0 && n.listedSessions.length === 0,
     canResumeAll: n.kind === "sessions_interrupted" && !settled,
     canAcknowledge: n.kind === "branch_finding" && !settled,
     ackLabel: `Acknowledge: ${n.actor.name} ${what}`,

@@ -249,7 +249,15 @@ templ NotificationLiveRow(actions bool) {
 			</p>
 		</div>
 		<div class="[ more ]">
-			<p class="[ body ]" x-show="row.body && !row.hasSessions" x-text="row.body"></p>
+			<p class="[ body ]" x-show="row.showBody" x-text="row.body"></p>
+			<ul role="list" class="[ interrupted-sessions ]" x-show="row.hasListed">
+				<template x-for="s in row.listed" x-bind:key="s.key">
+					<li x-bind:data-state="s.state">
+						<a x-bind:href="s.href" x-text="s.label"></a>
+						<span class="[ state ]" x-text="s.stateWord"></span>
+					</li>
+				</template>
+			</ul>
 			<ul role="list" class="[ interrupted-sessions ]" x-show="row.hasSessions">
 				<template x-for="s in row.sessions" x-bind:key="s.key">
 					<li x-bind:data-state="s.state">

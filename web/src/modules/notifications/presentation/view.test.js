@@ -171,3 +171,32 @@ test("verbs read in the past: wants to, asks you to, waits for", () => {
   const verb = (v) => toStackRow([settledPush("b", 20, "approved", { verb: v }), settledPush("a", 10, "approved", { verb: v })], N0).verb;
   assert.deepEqual([verb("asks you to review"), verb("waits for your approval to run"), verb("wants to restart")], ["asked you to review 2 times", "waited for your approval to run 2 times", "asked to restart 2 times"]);
 });
+
+test("a commit_check_off item lists each session with its task, agent and state; the others have no list", () => {
+  const off = makeNotification({
+    kind: "commit_check_off",
+    level: "action",
+    actor: { kind: "system", name: "harness", mode: "", sessionId: "" },
+    verb: "could not guard 2 sessions",
+    object: { text: "commit checks off", code: false },
+    listedSessions: [
+      { sessionId: "s1", taskId: "t1", taskTitle: "Ship", agentName: "go-developer", link: "/projects/p1/tasks/t1?session=s1", state: "off" },
+      { sessionId: "s2", taskId: "", taskTitle: "", agentName: "devops", link: "/projects/p1?session=s2", state: "repaired" },
+    ],
+  });
+  const row = toRow(off, N0);
+  assert.deepEqual(row.listed.map((s) => [s.key, s.label, s.href, s.state, s.stateWord]), [
+    ["s1", "Ship · go-developer", "/projects/p1/tasks/t1?session=s1", "off", "check off"],
+    ["s2", "No task · devops", "/projects/p1?session=s2", "repaired", "repaired"],
+  ]);
+  assert.equal(row.hasListed, true);
+  assert.deepEqual([toRow(makeNotification(), N0).listed, toRow(makeNotification(), N0).hasListed], [[], false]);
+  // The body is the list's plain-text twin; with the list shown it is not repeated.
+  assert.equal(toRow(off, N0).showBody, false);
+  assert.equal(toRow(makeNotification({ body: "x" }), N0).showBody, true);
+});
+
+test("a repaired commit check item reads as settled with its outcome", () => {
+  const row = toRow(makeNotification({ kind: "commit_check_off", level: "action", resolvedAt: N0, outcome: "repaired" }), N0);
+  assert.deepEqual([row.state, row.statusText.startsWith("Repaired "), row.statusTone], ["settled", true, "success"]);
+});

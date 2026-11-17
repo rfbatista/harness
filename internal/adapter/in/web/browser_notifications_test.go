@@ -854,3 +854,36 @@ func TestNotificationsPageAcknowledgesABranchFinding(t *testing.T) {
 	}
 	h.noErrors(t)
 }
+
+// A commit check off item lists the sessions it could not guard, each with
+// its task and state, in place of its plain-text body.
+func TestNotificationsPageListsTheSessionsOfACommitCheckOff(t *testing.T) {
+	list := []*domain.Notification{
+		{ID: "off", ProjectID: "p1", ProjectName: "harness", Source: domain.NotificationFromSystem, Kind: domain.NotificationCommitCheckOff, Level: domain.NotificationAction, Title: "Commit checks are off for 2 sessions", Body: "Ship · go-developer\nNo task · devops", Link: "/projects/p1", CreatedAt: time.Now().Add(-time.Minute)},
+	}
+	h := newInboxHarness(t, list)
+	h.inbox.extra = map[string]map[string]any{"off": {
+		"actor": map[string]any{"kind": "system", "name": "harness"}, "verb": "could not guard 2 sessions", "object": map[string]any{"text": "commit checks off", "code": false},
+		"listed_sessions": []any{
+			map[string]any{"session_id": "s1", "task_id": "t1", "task_title": "Ship", "agent_name": "go-developer", "link": "/projects/p1/tasks/t1?session=s1", "state": "off"},
+			map[string]any{"session_id": "s2", "agent_name": "devops", "link": "/projects/p1?session=s2", "state": "repaired"},
+		},
+	}}
+	const lines = `[...document.querySelectorAll('main .notification .interrupted-sessions:not([style*="display: none"]) > li')].map(li => li.innerText.replace(/\s+/g, ' ').trim()).join('|')`
+	const body = `(() => { const b = document.querySelector('main .notification .body'); return !!b && b.checkVisibility(); })()`
+	var got string
+	var bodyShown bool
+	h.run(t, "ready", h.openReady("/notifications"))
+	for range 10 {
+		h.inbox.stream.pushRaw(t, withExtraAt(ports.NotificationChange{Changed: list, UnreadCount: 1}, "changed", h.inbox.extra))
+		time.Sleep(200 * time.Millisecond)
+		h.run(t, "lines", chromedp.Evaluate(lines, &got), chromedp.Evaluate(body, &bodyShown))
+		if got != "" {
+			break
+		}
+	}
+	if got != "Ship · go-developer check off|No task · devops repaired" || bodyShown {
+		t.Errorf("listed sessions %q, body shown %v", got, bodyShown)
+	}
+	h.noErrors(t)
+}
