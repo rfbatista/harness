@@ -13,8 +13,15 @@ export const defaultTab = (openCount) => (openCount > 0 ? "needs" : "all");
 export const tabFrom = (value) => (TABS.includes(value) ? value : "");
 
 /** The list filter a tab asks the server for. */
-export function filterOf(tab, projectId = "") {
-  return { projectId, unread: tab === "unread", open: tab === "needs" };
+export function filterOf(tab, projectId = "", actor = "", kind = "") {
+  return { projectId, unread: tab === "unread", open: tab === "needs", actor, kind };
+}
+
+/** The who options: every actor name in items, sorted, and the selected one even when none shows. */
+export function actorOptions(items, selected) {
+  const names = new Set(items.map((n) => n.actor.name));
+  if (selected) names.add(selected);
+  return [...names].sort((a, b) => a.localeCompare(b)).map((name) => ({ name, selected: name === selected }));
 }
 
 const sameDay = (a, b) => a.getFullYear() === b.getFullYear() && a.getMonth() === b.getMonth() && a.getDate() === b.getDate();

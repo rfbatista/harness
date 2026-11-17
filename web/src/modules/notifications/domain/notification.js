@@ -63,6 +63,8 @@
  * @property {string} [projectId]  "" or absent: every project
  * @property {boolean} [unread]    only the unread ones
  * @property {boolean} [open]      only the open causes (level action, not settled)
+ * @property {string} [actor]      only what this actor caused (actor.name)
+ * @property {string} [kind]       only this kind
  *
  * @typedef {object} Page
  * @property {Notification[]} notifications  newest first
@@ -103,6 +105,8 @@ export function matches(filter, n) {
   if (filter.projectId && n.projectId !== filter.projectId) return false;
   if (filter.unread && !isUnread(n)) return false;
   if (filter.open && !isOpen(n)) return false;
+  if (filter.actor && n.actor.name !== filter.actor) return false;
+  if (filter.kind && n.kind !== filter.kind) return false;
   return true;
 }
 

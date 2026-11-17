@@ -51,8 +51,15 @@ const (
 type Filter struct {
 	ProjectID string
 	Tab       string
-	Before    string
+	// Actor is the who filter (an actor's name) and Kind the kind filter;
+	// "" for anyone and every kind. The browser reads such a page itself.
+	Actor  string
+	Kind   string
+	Before string
 }
+
+// Filtered is whether who or kind narrows the page.
+func (f Filter) Filtered() bool { return f.Actor != "" || f.Kind != "" }
 
 // Unread is whether the page shows the unread ones only.
 func (f Filter) Unread() bool { return f.Tab == TabUnread }
@@ -68,7 +75,7 @@ func FilterFrom(r *http.Request) Filter {
 	if unread := q.Get("unread"); tab == "" && (unread == "1" || unread == "true") {
 		tab = TabUnread
 	}
-	return Filter{ProjectID: q.Get("project"), Tab: tab, Before: q.Get("before")}
+	return Filter{ProjectID: q.Get("project"), Tab: tab, Actor: q.Get("actor"), Kind: q.Get("kind"), Before: q.Get("before")}
 }
 
 // Page renders the inbox. A failed read still renders the page: the browser
@@ -89,8 +96,11 @@ func (h Handler) Page(w http.ResponseWriter, r *http.Request) error {
 	if f.ProjectID != "" && v.ProjectName == "" {
 		return errs.Newf("PROJECT_NOT_FOUND", "project %s not found", f.ProjectID)
 	}
-	page, err := h.Notifications.ListNotifications(ctx, ports.NotificationQuery{ProjectID: f.ProjectID, UnreadOnly: f.Unread(), Before: f.Before, Limit: pageLimit})
-	if err != nil {
+	// The server reads the first page by project and tab; who and kind are
+	// read by the browser, which has the actors the server does not yet carry.
+	if f.Filtered() {
+		slog.Debug("notifications page: filtered by who or kind; the browser reads it")
+	} else if page, err := h.Notifications.ListNotifications(ctx, ports.NotificationQuery{ProjectID: f.ProjectID, UnreadOnly: f.Unread(), Before: f.Before, Limit: pageLimit}); err != nil {
 		slog.Warn("notifications page: read failed; the browser reads it again", "err", err)
 	} else {
 		v.Seed = page
@@ -301,4 +311,21 @@ func serverTone(row Row) string {
 		return "quiet"
 	}
 	return "attention"
+}
+
+// KindOption is one entry of the kind filter, named as a person says it.
+type KindOption struct{ Value, Label string }
+
+// KindOptions are the notification kinds the page filters by.
+var KindOptions = []KindOption{
+	{"review_requested", "Review requests"},
+	{"session_waiting", "Approvals and questions"},
+	{"task_review", "Tasks in review"},
+	{"session_failed", "Failed sessions"},
+	{"commit_check_off", "Commit checks off"},
+	{"branch_request", "Branch requests"},
+	{"branch_finding", "Branch findings"},
+	{"service_request", "Service requests"},
+	{"sessions_interrupted", "Restarts"},
+	{"agent", "Agent messages"},
 }

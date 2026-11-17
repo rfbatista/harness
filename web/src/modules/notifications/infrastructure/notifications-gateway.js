@@ -10,11 +10,13 @@ import { toPage, toReadAnswer, toResumeAnswer, toStreamChange } from "./dto.js";
  */
 export function notificationsGateway(api, feed) {
   return {
-    async list({ projectId, unread, open, before, limit } = {}, signal) {
+    async list({ projectId, unread, open, actor, kind, before, limit } = {}, signal) {
       const query = {
         project_id: projectId,
         unread: unread ? "true" : undefined,
         open: open ? "true" : undefined,
+        actor: actor || undefined,
+        kind: kind || undefined,
         before,
         limit: limit === undefined ? undefined : String(limit),
       };

@@ -28,7 +28,7 @@ export function notificationGatewayContract(name, makeSubject) {
       makeNotification({ id: "old", createdAt: at(1), readAt: at(2) }),
       makeNotification({ id: "mid", createdAt: at(2), projectId: "p2", projectName: "tui", level: "info", kind: "session_failed" }),
       makeNotification({ id: "new", createdAt: at(3) }),
-      makeNotification({ id: "settled", createdAt: at(0), resolvedAt: at(4) }),
+      makeNotification({ id: "settled", createdAt: at(0), resolvedAt: at(4), actor: { kind: "agent", name: "devops", mode: "operate", sessionId: "s9" } }),
     ],
   });
 
@@ -43,6 +43,10 @@ export function notificationGatewayContract(name, makeSubject) {
     assert.deepEqual(ids(await gateway.list({ projectId: "p1", unread: true })), ["new"]);
     assert.deepEqual(ids(await gateway.list({ open: true })), ["new", "old"], "open causes: action and not settled, read or not");
     assert.deepEqual(ids(await gateway.list({ open: true, projectId: "p2" })), [], "filters combine");
+    assert.deepEqual(ids(await gateway.list({ kind: "session_failed" })), ["mid"], "by kind");
+    assert.deepEqual(ids(await gateway.list({ actor: "devops" })), ["settled"], "by actor name");
+    assert.deepEqual(ids(await gateway.list({ actor: "devops", kind: "session_failed" })), [], "who and kind combine");
+    assert.deepEqual(ids(await gateway.list({ actor: "devops", limit: 1, before: "new" })), ["settled"], "the cursor keeps working with them");
   });
 
   contract("a notification keeps its fields; the times are Dates and the absent ones null", async () => {

@@ -8,7 +8,7 @@
 
 import { readSeed } from "../../../../shared/presentation/seed.js";
 import { isOpen, markedRead, merge } from "../../domain/notification.js";
-import { filterOf, foldRuns, groupsFor, tabCounts, tabFrom } from "../ledger.js";
+import { actorOptions, filterOf, foldRuns, groupsFor, tabCounts, tabFrom } from "../ledger.js";
 import { inboxError, streamNotice, toRow, toStackRow } from "../view.js";
 import { pageSeed } from "./notificationsBell.js";
 
@@ -31,6 +31,9 @@ export const notificationsPage = ({ gateway, store, clock }) => () => {
     projectName: "",
     /** "needs" | "unread" | "all": which notifications the page shows. */
     tab: "all",
+    /** Only what this actor caused ("" for anyone), and only this kind ("" for every kind). */
+    actor: "",
+    kind: "",
     /** @type {import("../../domain/notification.js").Notification[]} */
     items: [],
     nextBefore: "",
@@ -58,6 +61,10 @@ export const notificationsPage = ({ gateway, store, clock }) => () => {
           ? { key: `stack:${run.key}`, plain: [], stacks: [{ key: run.key, head: [toStackRow(run.items, this.now)], rows: run.items.map((n) => toRow(n, this.now)) }] }
           : { key: run.key, plain: [toRow(run.items[0], this.now)], stacks: [] },
       );
+    },
+    /** The who select's options: the actors seen on the page, and the selected one. */
+    get actors() {
+      return actorOptions(this.items, this.actor);
     },
     get counts() {
       return tabCounts({ items: this.items, openCount: store.serverOpen, unreadCount: store.unreadCount, hasMore: this.nextBefore !== "", tab: this.tab });
@@ -105,7 +112,7 @@ export const notificationsPage = ({ gateway, store, clock }) => () => {
       return this.marking || !this.items.some((n) => n.readAt === null && n.resolvedAt === null);
     },
     get filter() {
-      return filterOf(this.tab, this.projectId);
+      return filterOf(this.tab, this.projectId, this.actor, this.kind);
     },
 
     init() {
@@ -113,8 +120,14 @@ export const notificationsPage = ({ gateway, store, clock }) => () => {
       this.projectId = el.dataset.projectId ?? "";
       this.projectName = el.dataset.projectName ?? "";
       this.tab = tabFrom(el.dataset.tab) || "all";
+      this.actor = el.dataset.actor ?? "";
+      this.kind = el.dataset.kind ?? "";
+      // The server rendered only the selected who option; the page lists everyone it has seen.
+      el.querySelectorAll("select[name=actor] option[data-ssr]").forEach((o) => o.remove());
       store.start(pageSeed(el.ownerDocument));
       try {
+        // The server filters the first page by tab and project; who and kind are read here.
+        if (this.actor || this.kind) throw new Error("filtered by who or kind: read it here");
         const page = gateway.fromSeed(readSeed(el));
         store.listed(page, store.stamp);
         // The server paints the first page whole; the Needs you tab keeps the open causes of it.

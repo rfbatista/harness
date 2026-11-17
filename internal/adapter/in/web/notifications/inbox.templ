@@ -23,6 +23,8 @@ templ InboxPage(frame shell.Frame, v View) {
 			data-project-id={ v.Filter.ProjectID }
 			data-project-name={ v.ProjectName }
 			data-tab={ v.Filter.Tab }
+			data-actor={ v.Filter.Actor }
+			data-kind={ v.Filter.Kind }
 		>
 			<header class="[ toolbar ]">
 				<h1>Notifications</h1>
@@ -44,6 +46,23 @@ templ InboxPage(frame shell.Frame, v View) {
 						<label><input type="radio" name="tab" value="unread" { checked(v.Filter.Tab == "unread")... } x-on:change="go"/> Unread <span class="[ n ]" x-text="unreadCount">{ strconv.Itoa(v.UnreadCount()) }</span></label>
 						<label><input type="radio" name="tab" value="all" { checked(v.Filter.Tab == "all")... } x-on:change="go"/> All <span class="[ n ]" x-text="allCount"></span></label>
 					</fieldset>
+					<label class="[ visually-hidden ]" for="inbox-actor">Who</label>
+					<select id="inbox-actor" name="actor" data-size="sm" data-fit x-on:change="go">
+						<option value="" { selected(v.Filter.Actor == "")... }>Anyone</option>
+						if v.Filter.Actor != "" {
+							<option value={ v.Filter.Actor } data-ssr selected>{ v.Filter.Actor }</option>
+						}
+						<template x-for="a in actors" x-bind:key="a.name">
+							<option x-bind:value="a.name" x-bind:selected="a.selected" x-text="a.name"></option>
+						</template>
+					</select>
+					<label class="[ visually-hidden ]" for="inbox-kind">Kind</label>
+					<select id="inbox-kind" name="kind" data-size="sm" data-fit x-on:change="go">
+						<option value="" { selected(v.Filter.Kind == "")... }>Every kind</option>
+						for _, k := range KindOptions {
+							<option value={ k.Value } { selected(v.Filter.Kind == k.Value)... }>{ k.Label }</option>
+						}
+					</select>
 					<noscript><button type="submit" class="[ button ]" data-size="sm">Apply</button></noscript>
 				</form>
 				<template x-if="error">

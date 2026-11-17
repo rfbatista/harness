@@ -54,6 +54,11 @@ func (f *fakeInbox) unread() int {
 }
 
 func (f *fakeInbox) page(q ports.NotificationQuery) *ports.NotificationPage {
+	return f.pageWhere(q, nil)
+}
+
+// pageWhere is page with one more condition: GET's who and kind filters.
+func (f *fakeInbox) pageWhere(q ports.NotificationQuery, also func(*domain.Notification) bool) *ports.NotificationPage {
 	limit := q.Limit
 	if limit == 0 {
 		limit = 50
@@ -65,7 +70,7 @@ func (f *fakeInbox) page(q ports.NotificationQuery) *ports.NotificationPage {
 			past = n.ID == q.Before
 			continue
 		}
-		if (q.ProjectID == "" || n.ProjectID == q.ProjectID) && (!q.UnreadOnly || n.Unread()) {
+		if (q.ProjectID == "" || n.ProjectID == q.ProjectID) && (!q.UnreadOnly || n.Unread()) && (also == nil || also(n)) {
 			rest = append(rest, n)
 		}
 	}
@@ -121,7 +126,12 @@ func (f *fakeInbox) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			http.Error(w, "sql: no rows", http.StatusInternalServerError)
 			return
 		}
-		page := f.page(ports.NotificationQuery{ProjectID: q.Get("project_id"), UnreadOnly: q.Get("unread") == "true", Before: q.Get("before"), Limit: limit})
+		actor, kind, onlyOpen := q.Get("actor"), q.Get("kind"), q.Get("open") == "true"
+		page := f.pageWhere(ports.NotificationQuery{ProjectID: q.Get("project_id"), UnreadOnly: q.Get("unread") == "true", Before: q.Get("before"), Limit: limit}, func(n *domain.Notification) bool {
+			who, _ := f.extra[n.ID]["actor"].(map[string]any)
+			name, _ := who["name"].(string)
+			return (actor == "" || name == actor) && (kind == "" || string(n.Kind) == kind) && (!onlyOpen || n.Level == domain.NotificationAction && n.ResolvedAt == nil)
+		})
 		extra := f.extra
 		f.mu.Unlock()
 		writeJSON(w, withExtra(page, extra))
@@ -452,7 +462,7 @@ func TestNotificationsPageFiltersByProjectAndUnread(t *testing.T) {
 		chromedp.SetValue(`#inbox-project`, "p2", chromedp.ByID),
 		chromedp.Evaluate(`setTimeout(() => document.querySelector('#inbox-project').dispatchEvent(new Event('change', { bubbles: true }))); true`, nil),
 	)
-	h.waitURL(t, "/notifications?project=p2&tab=all")
+	h.waitURL(t, "/notifications?project=p2&tab=all&actor=&kind=")
 	h.run(t, "tui", chromedp.Evaluate(pageRows, &p2))
 	if p2 != "Release notes drafted" {
 		t.Errorf("tui:\n%s", p2)
@@ -477,7 +487,7 @@ func TestNotificationsPageFiltersByProjectAndUnread(t *testing.T) {
 		t.Errorf("live rows:\n%s", live)
 	}
 	h.run(t, "unread only", chromedp.Evaluate(`setTimeout(() => document.querySelector('input[name=tab][value="unread"]').click()); true`, nil))
-	h.waitURL(t, "/notifications?project=p2&tab=unread")
+	h.waitURL(t, "/notifications?project=p2&tab=unread&actor=&kind=")
 	h.run(t, "unread", chromedp.Evaluate(pageRows, &unread))
 	if unread != "Build green\nRelease notes drafted" {
 		t.Errorf("unread:\n%s", unread)
@@ -721,6 +731,52 @@ func TestNotificationsPageFoldsSettledRepeatsIntoAStack(t *testing.T) {
 	h.run(t, "open", chromedp.Evaluate(`document.querySelector('main details.stack > summary').click(); true`, nil), railPoll(`document.querySelector('main details.stack').open`), chromedp.Evaluate(stack, &opened), chromedp.Evaluate(`document.querySelectorAll('main .group:first-of-type details.stack').length`, &needsStacks))
 	if !strings.HasPrefix(opened, "true|") || needsStacks != 0 {
 		t.Errorf("opened stack: %q; stacks in Needs you: %d", opened, needsStacks)
+	}
+	h.noErrors(t)
+}
+
+// Who and kind filter the page: the select lists the actors the page has
+// seen, and the URL carries the choice.
+func TestNotificationsPageFiltersByWhoAndKind(t *testing.T) {
+	now := time.Now()
+	mk := func(id string, kind domain.NotificationKind, title string, ago time.Duration) *domain.Notification {
+		return &domain.Notification{ID: id, ProjectID: "p1", ProjectName: "harness", Source: domain.NotificationFromAgent, Kind: kind, Level: domain.NotificationInfo, Title: title, Link: "/projects/p1", CreatedAt: now.Add(-ago)}
+	}
+	list := []*domain.Notification{
+		mk("a", domain.NotificationAgent, "devops built it", time.Minute),
+		mk("b", domain.NotificationBranchRequest, "go-developer pushes", 2*time.Minute),
+		mk("c", domain.NotificationBranchRequest, "devops pushes", 3*time.Minute),
+	}
+	h := newInboxHarness(t, list)
+	who := func(name string) map[string]any {
+		return map[string]any{"name": name, "kind": "agent", "session_id": "s-" + name}
+	}
+	h.inbox.extra = map[string]map[string]any{"a": {"actor": who("devops")}, "b": {"actor": who("go-developer")}, "c": {"actor": who("devops")}}
+	const options = `[...document.querySelectorAll('#inbox-actor option')].map(o => o.textContent.trim() + (o.selected ? '*' : '')).join('|')`
+	var rows, opts string
+	h.run(t, "unfiltered", h.openReady("/notifications?tab=all"))
+	for range 10 {
+		h.inbox.stream.pushRaw(t, withExtraAt(ports.NotificationChange{Changed: list, UnreadCount: 3}, "changed", h.inbox.extra))
+		time.Sleep(200 * time.Millisecond)
+		h.run(t, "options", chromedp.Evaluate(options, &opts))
+		if strings.Contains(opts, "go-developer") {
+			break
+		}
+	}
+	if opts != "Anyone*|devops|go-developer" {
+		t.Errorf("who options: %q", opts)
+	}
+	h.run(t, "pick who", chromedp.SetValue(`#inbox-actor`, "devops", chromedp.ByID), chromedp.Evaluate(`setTimeout(() => document.querySelector('#inbox-actor').dispatchEvent(new Event('change', { bubbles: true }))); true`, nil))
+	h.waitURL(t, "/notifications?project=&tab=all&actor=devops&kind=")
+	h.run(t, "who", chromedp.Evaluate(pageRows, &rows), chromedp.Evaluate(options, &opts))
+	if rows != "devops built it\ndevops pushes" || opts != "Anyone|devops*" {
+		t.Errorf("by who: rows %q, options %q", rows, opts)
+	}
+	h.run(t, "pick kind", chromedp.SetValue(`#inbox-kind`, "branch_request", chromedp.ByID), chromedp.Evaluate(`setTimeout(() => document.querySelector('#inbox-kind').dispatchEvent(new Event('change', { bubbles: true }))); true`, nil))
+	h.waitURL(t, "/notifications?project=&tab=all&actor=devops&kind=branch_request")
+	h.run(t, "both", chromedp.Evaluate(pageRows, &rows))
+	if rows != "devops pushes" {
+		t.Errorf("by who and kind: %q", rows)
 	}
 	h.noErrors(t)
 }

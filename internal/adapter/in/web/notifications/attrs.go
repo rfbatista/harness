@@ -29,6 +29,12 @@ func moreHref(f Filter, before string) string {
 	if f.Tab != "" {
 		q.Set("tab", f.Tab)
 	}
+	if f.Actor != "" {
+		q.Set("actor", f.Actor)
+	}
+	if f.Kind != "" {
+		q.Set("kind", f.Kind)
+	}
 	q.Set("before", before)
 	return Href + "?" + q.Encode()
 }

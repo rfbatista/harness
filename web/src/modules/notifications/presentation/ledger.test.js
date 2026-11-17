@@ -1,6 +1,6 @@
 import { assert, file, test } from "../../../shared/testing/test.js";
 import { at, makeNotification } from "../testing/fixtures.js";
-import { dayLabel, defaultTab, filterOf, groupsFor, tabCounts, tabFrom } from "./ledger.js";
+import { actorOptions, dayLabel, defaultTab, filterOf, groupsFor, tabCounts, tabFrom } from "./ledger.js";
 
 file("notifications/presentation/ledger");
 
@@ -14,9 +14,9 @@ test("the default tab is Needs you while anything is open, and All otherwise", (
 });
 
 test("a tab asks the server for its own filter", () => {
-  assert.deepEqual(filterOf("needs", "p1"), { projectId: "p1", unread: false, open: true });
-  assert.deepEqual(filterOf("unread"), { projectId: "", unread: true, open: false });
-  assert.deepEqual(filterOf("all"), { projectId: "", unread: false, open: false });
+  assert.deepEqual(filterOf("needs", "p1"), { projectId: "p1", unread: false, open: true, actor: "", kind: "" });
+  assert.deepEqual(filterOf("unread"), { projectId: "", unread: true, open: false, actor: "", kind: "" });
+  assert.deepEqual(filterOf("all", "", "devops", "branch_request"), { projectId: "", unread: false, open: false, actor: "devops", kind: "branch_request" });
 });
 
 test("open causes pin as Needs you above the day groups, newest first inside each, empty groups absent", () => {
@@ -81,4 +81,13 @@ test("an open cause and an item with no session never fold", () => {
   assert.deepEqual(foldRuns([open, settled("a", 13), settled("b", 12)]).map((r) => r.items.map((x) => x.id)), [["o"], ["a", "b"]]);
   assert.deepEqual(foldRuns([noSession("x", 14), noSession("y", 13)]).map((r) => r.folded), [false, false]);
   assert.deepEqual(foldRuns([open, n("p", day(2026, 11, 17, 13), by("s1"))]).map((r) => r.folded), [false, false]);
+});
+
+// ── the who and kind filters ──────────────────────────────────────────────
+
+test("the who options are the actors the page has seen, sorted, plus the one the URL selected", () => {
+  const as = (name) => ({ kind: "agent", name, mode: "", sessionId: "s" });
+  const items = [n("a", at(1), { actor: as("go-developer") }), n("b", at(2), { actor: as("devops") }), n("c", at(3), { actor: as("devops") }), n("d", at(4))];
+  assert.deepEqual(actorOptions(items, "").map((o) => [o.name, o.selected]), [["devops", false], ["go-developer", false], ["harness", false]]);
+  assert.deepEqual(actorOptions(items, "ghost").map((o) => [o.name, o.selected]), [["devops", false], ["ghost", true], ["go-developer", false], ["harness", false]]);
 });
