@@ -376,6 +376,7 @@ func NewRouter(h *Handler, opts ...Option) *echo.Echo {
 	// notifications: the person's inbox across every project
 	g.GET("/notifications", h.handleListNotifications)
 	g.POST("/notifications/read", h.handleMarkNotificationsRead)
+	g.POST("/notifications/:id/acknowledge", h.handleAcknowledgeNotification)  // a branch finding
 	g.POST("/notifications/:id/resume_interrupted", h.handleResumeInterrupted) // Resume all interrupted
 	g.GET("/notifications/events", h.handleNotificationEvents)                 // every inbox change (SSE)
 

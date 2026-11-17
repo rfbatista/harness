@@ -19,6 +19,12 @@ type NotificationQuery struct {
 	// ProjectID narrows to one project; "" is every project.
 	ProjectID  string
 	UnreadOnly bool
+	// Open limits the list to open causes (true) or to the rest (false);
+	// nil does not filter.
+	Open *bool
+	// Actor limits it to one actor name; Kind to one kind. "" does not filter.
+	Actor string
+	Kind  domain.NotificationKind
 	// Before is the opaque cursor a previous page answered as NextBefore.
 	Before string
 	// Since keeps only notifications created strictly after it; zero is no
@@ -33,7 +39,9 @@ type NotificationQuery struct {
 type NotificationPage struct {
 	Notifications []*domain.Notification `json:"notifications"`
 	UnreadCount   int                    `json:"unread_count"`
-	NextBefore    string                 `json:"next_before,omitempty"`
+	// OpenCount is the global number of open causes (ADR 0096).
+	OpenCount  int    `json:"open_count"`
+	NextBefore string `json:"next_before,omitempty"`
 }
 
 // MarkNotificationsRead marks either the given ids or, with All, every unread
@@ -50,6 +58,8 @@ type MarkNotificationsRead struct {
 type NotificationChange struct {
 	Changed     []*domain.Notification `json:"changed"`
 	UnreadCount int                    `json:"unread_count"`
+	// OpenCount is the global number of open causes as of the commit.
+	OpenCount int `json:"open_count"`
 }
 
 // NotificationReader reads the inbox. The BFF seeds every page's unread count
@@ -62,6 +72,10 @@ type NotificationReader interface {
 type Notifications interface {
 	NotificationReader
 	MarkNotificationsRead(ctx context.Context, req MarkNotificationsRead) (*NotificationChange, error)
+	// AcknowledgeNotification resolves a branch finding as acknowledged and
+	// marks it read, and answers it; one already resolved is answered as it
+	// is. Any other kind is INVALID_INPUT, an unknown id NOTIFICATION_NOT_FOUND.
+	AcknowledgeNotification(ctx context.Context, id string) (*domain.Notification, error)
 	// FollowNotifications streams every committed change, in commit order,
 	// until ctx ends. A follower that falls behind is closed and must reload.
 	FollowNotifications(ctx context.Context) (<-chan NotificationChange, error)
@@ -133,6 +147,9 @@ type Notifier interface {
 type NotificationFilter struct {
 	ProjectID  string
 	UnreadOnly bool
+	Open       *bool
+	Actor      string
+	Kind       domain.NotificationKind
 	// BeforeAt and BeforeID are the keyset cursor: only notifications older
 	// than (BeforeAt, BeforeID). Zero BeforeAt is no cursor.
 	BeforeAt time.Time
@@ -152,17 +169,19 @@ type NotificationRepository interface {
 	AnyByCause(causeKey string) bool
 	List(ctx context.Context, f NotificationFilter) ([]*domain.Notification, error)
 	CountUnread(ctx context.Context) (int, error)
+	// CountOpen counts the open causes: level action, not resolved.
+	CountOpen(ctx context.Context) (int, error)
 	// MarkRead sets read_at on those of ids not read yet and answers them.
 	MarkRead(ids []string, at time.Time) ([]*domain.Notification, error)
 	// MarkAllRead sets read_at on every unread one (of projectID, when set).
 	MarkAllRead(projectID string, at time.Time) ([]*domain.Notification, error)
 	// Resolve settles the unresolved ones with causeKey and answers them.
-	Resolve(causeKey string, at time.Time) ([]*domain.Notification, error)
+	Resolve(causeKey string, at time.Time, outcome domain.NotificationOutcome) ([]*domain.Notification, error)
 	// SetInterruptedSessions replaces the list of a sessions_interrupted
 	// notification and answers it as it now is; nil when there is none with id.
 	SetInterruptedSessions(id string, list []domain.InterruptedSession) (*domain.Notification, error)
 	// ResolveTask settles every unresolved one of the task.
-	ResolveTask(taskID string, at time.Time) ([]*domain.Notification, error)
+	ResolveTask(taskID string, at time.Time, outcome domain.NotificationOutcome) ([]*domain.Notification, error)
 	// CountAgentSince counts agent notifications created after since: the
 	// session's, or with sessionID "", the project's posted without one.
 	CountAgentSince(sessionID, projectID string, since time.Time) (int, error)

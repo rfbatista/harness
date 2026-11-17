@@ -132,8 +132,8 @@ func TestNotificationRepositoryResolvesByCauseAndTask(t *testing.T) {
 	if open := r.OpenByCause("session_waiting:s1"); open == nil || open.ID != w.ID {
 		t.Fatalf("OpenByCause = %+v", open)
 	}
-	got, _ := r.Resolve("session_waiting:s1", at)
-	if len(got) != 1 || got[0].ResolvedAt == nil {
+	got, _ := r.Resolve("session_waiting:s1", at, domain.OutcomeApproved)
+	if len(got) != 1 || got[0].ResolvedAt == nil || got[0].Outcome != domain.OutcomeApproved {
 		t.Fatalf("Resolve = %+v", got)
 	}
 	if r.OpenByCause("session_waiting:s1") != nil {
@@ -142,7 +142,7 @@ func TestNotificationRepositoryResolvesByCauseAndTask(t *testing.T) {
 	if !r.AnyByCause("session_waiting:s1") || r.AnyByCause("session_waiting:nope") {
 		t.Fatal("AnyByCause")
 	}
-	got, _ = r.ResolveTask("t1", at)
+	got, _ = r.ResolveTask("t1", at, domain.OutcomeEnded)
 	if len(got) != 1 || got[0].ID != rv.ID {
 		t.Fatalf("ResolveTask = %v (agent %s never resolves)", ids(got), ag.ID)
 	}

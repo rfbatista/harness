@@ -330,7 +330,7 @@ func (s *Service) emitReview(r *domain.ReviewRequest) {
 	s.feed(ports.ProjectChange{ReviewRequest: r})
 	if s.Events != nil {
 		ev := domain.ReviewRequestChanged{ReviewID: r.ID, TaskID: r.TaskID, ProjectID: r.ProjectID,
-			Subject: r.Subject, AboutSessionID: r.AboutSessionID, State: r.State}
+			Subject: r.Subject, AboutSessionID: r.AboutSessionID, ArchitectSessionID: r.ArchitectSessionID, State: r.State}
 		if err := s.Events.Publish(context.Background(), ev); err != nil {
 			slog.Warn("announce review request", "review", r.ID, "err", err)
 		}

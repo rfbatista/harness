@@ -77,7 +77,8 @@ func wantCode(t *testing.T, err error, code string) {
 func TestAReviewRequestIsRecordedOnceAndResolvedWhenAnswered(t *testing.T) {
 	r := newRig(t)
 	tk := r.task(t, r.ProjectA, "Ship")
-	open := domain.ReviewRequestChanged{ReviewID: "rv1", TaskID: tk.ID, ProjectID: r.ProjectA, Subject: "the plan", AboutSessionID: "s1", State: domain.ReviewPending}
+	r.session(t, "s1", r.ProjectA, tk.ID)
+	open := domain.ReviewRequestChanged{ReviewID: "rv1", TaskID: tk.ID, ProjectID: r.ProjectA, Subject: "the plan", AboutSessionID: "s1", ArchitectSessionID: "s1", State: domain.ReviewPending}
 	r.publish(t, open)
 	r.publish(t, open)
 
@@ -87,7 +88,7 @@ func TestAReviewRequestIsRecordedOnceAndResolvedWhenAnswered(t *testing.T) {
 	}
 	n := page.Notifications[0]
 	if n.Kind != domain.NotificationReviewRequested || n.Level != domain.NotificationAction || n.Source != domain.NotificationFromSystem ||
-		n.Title != "Review requested: the plan" || n.SessionID != "s1" || n.TaskTitle != "Ship" || n.ProjectName != "Alpha" ||
+		n.Title != "agent asks you to review the plan" || n.SessionID != "s1" || n.TaskTitle != "Ship" || n.ProjectName != "Alpha" ||
 		n.Link != domain.TaskLink(r.ProjectA, tk.ID) {
 		t.Fatalf("review notification = %+v", n)
 	}
@@ -242,7 +243,7 @@ func (r failingRepo) Transaction(fn func(tx ports.NotificationRepository) error)
 func (failingRepo) Create(*domain.Notification) (*domain.Notification, error) {
 	return nil, errors.New("disk full")
 }
-func (failingRepo) Resolve(string, time.Time) ([]*domain.Notification, error) {
+func (failingRepo) Resolve(string, time.Time, domain.NotificationOutcome) ([]*domain.Notification, error) {
 	return nil, errors.New("disk full")
 }
 
@@ -509,14 +510,12 @@ func TestAServiceRequestIsRecordedOnceAndResolvedWhenAnsweredWithoutAValue(t *te
 		t.Fatalf("service request notifications = %d, want 1: %+v", len(got), page.Notifications)
 	}
 	n := got[0]
-	if n.Level != domain.NotificationAction || n.Title != "Service: start service api with run overrides TOKEN" || n.SessionID != "s1" ||
+	if n.Level != domain.NotificationAction || n.Title != "agent wants to start api" || n.SessionID != "s1" ||
 		n.Link != "/projects/"+r.ProjectA+"/services#service-request-sr1" {
 		t.Fatalf("notification = %+v", n)
 	}
-	for _, want := range []string{"s1", tk.ID, "go-developer", "to try the build"} {
-		if !strings.Contains(n.Body, want) {
-			t.Fatalf("body %q lacks %q", n.Body, want)
-		}
+	if n.Body != "to try the build" || n.Verb != "wants to start" || n.Object == nil || n.Object.Text != "api" {
+		t.Fatalf("body %q verb %q object %+v, want the reason alone and no ids", n.Body, n.Verb, n.Object)
 	}
 	if strings.Contains(n.Title+n.Body+n.Link, "super-secret-value") {
 		t.Fatalf("the notification holds a value: %+v", n)

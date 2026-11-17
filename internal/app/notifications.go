@@ -78,13 +78,14 @@ func deliveryProvider(ctor any, defaults notifications.Defaults) any {
 type notificationsParams struct {
 	fx.In
 
-	DB        *gorm.DB
-	Projects  ports.ProjectRepository
-	Tickets   ports.TicketRepository
-	Sessions  ports.SessionRepository
-	Cat       catalog.Catalog
-	Channel   *taskchannel.Service
-	Providers []notifications.Provider `group:"notification_providers"`
+	DB           *gorm.DB
+	Projects     ports.ProjectRepository
+	Tickets      ports.TicketRepository
+	Sessions     ports.SessionRepository
+	Repositories ports.RepositoryRepository
+	Cat          catalog.Catalog
+	Channel      *taskchannel.Service
+	Providers    []notifications.Provider `group:"notification_providers"`
 	// Resumer resumes the sessions Resume all interrupted lists.
 	Resumer *orchestration.Service `optional:"true"`
 }
@@ -99,7 +100,8 @@ func newNotificationsService(p notificationsParams) (*notifications.Service, err
 		opts.Resumer = p.Resumer
 	}
 	svc, err := notifications.New(sqlite.NewNotificationRepository(p.DB),
-		notifications.Readers{Projects: p.Projects, Tickets: p.Tickets, Sessions: p.Sessions, Agents: p.Cat.Agents}, opts)
+		notifications.Readers{Projects: p.Projects, Tickets: p.Tickets, Sessions: p.Sessions, Agents: p.Cat.Agents,
+			Repositories: p.Repositories, Services: sqlite.NewServiceRepository(p.DB)}, opts)
 	if err != nil {
 		return nil, err
 	}

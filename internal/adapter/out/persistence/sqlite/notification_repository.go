@@ -14,20 +14,32 @@ import (
 // NotificationModel is the GORM model for domain.Notification. Names are not
 // stored: the service reads the project's and task's current ones.
 type NotificationModel struct {
-	ID         string `gorm:"primaryKey"`
-	ProjectID  string `gorm:"column:project_id;index"`
-	TaskID     string `gorm:"column:task_id;index"`
-	SessionID  string `gorm:"column:session_id;index"`
-	Source     string `gorm:"column:source"`
-	Kind       string `gorm:"column:kind"`
-	Level      string `gorm:"column:level"`
-	Title      string `gorm:"column:title"`
-	Body       string `gorm:"column:body"`
-	Link       string `gorm:"column:link"`
-	CauseKey   string `gorm:"column:cause_key;index"`
-	CreatedAt  int64  `gorm:"column:created_at;index:idx_notifications_created"`
-	ReadAt     int64  `gorm:"column:read_at"`
-	ResolvedAt int64  `gorm:"column:resolved_at"`
+	ID        string `gorm:"primaryKey"`
+	ProjectID string `gorm:"column:project_id;index"`
+	TaskID    string `gorm:"column:task_id;index"`
+	SessionID string `gorm:"column:session_id;index"`
+	Source    string `gorm:"column:source"`
+	Kind      string `gorm:"column:kind"`
+	Level     string `gorm:"column:level"`
+	Title     string `gorm:"column:title"`
+	Body      string `gorm:"column:body"`
+	Link      string `gorm:"column:link"`
+	// The actor: empty on rows from before it was recorded, which the
+	// service names when it reads them.
+	ActorKind      string `gorm:"column:actor_kind"`
+	ActorName      string `gorm:"column:actor_name"`
+	ActorMode      string `gorm:"column:actor_mode"`
+	ActorSessionID string `gorm:"column:actor_session_id"`
+	CauseKey       string `gorm:"column:cause_key;index"`
+	CreatedAt      int64  `gorm:"column:created_at;index:idx_notifications_created"`
+	ReadAt         int64  `gorm:"column:read_at"`
+	ResolvedAt     int64  `gorm:"column:resolved_at"`
+	Verb           string `gorm:"column:verb"`
+	ObjectText     string `gorm:"column:object_text"`
+	ObjectCode     bool   `gorm:"column:object_code"`
+	RepositoryID   string `gorm:"column:repository_id"`
+	// Outcome is how it ended; empty on rows resolved before it was recorded.
+	Outcome string `gorm:"column:outcome"`
 	// Interrupted is a sessions_interrupted notification's list, as JSON.
 	Interrupted string `gorm:"column:interrupted_sessions"`
 }
@@ -39,12 +51,19 @@ func (m *NotificationModel) ToDomain() *domain.Notification {
 	if m.Interrupted != "" {
 		_ = json.Unmarshal([]byte(m.Interrupted), &interrupted)
 	}
+	var object *domain.NotificationObject
+	if m.ObjectText != "" {
+		object = &domain.NotificationObject{Text: m.ObjectText, Code: m.ObjectCode}
+	}
 	return &domain.Notification{
+		Verb: m.Verb, Object: object, RepositoryID: m.RepositoryID,
 		InterruptedSessions: interrupted,
 		ID:                  m.ID, ProjectID: m.ProjectID, TaskID: m.TaskID, SessionID: m.SessionID,
 		Source: domain.NotificationSource(m.Source), Kind: domain.NotificationKind(m.Kind), Level: domain.NotificationLevel(m.Level),
 		Title: m.Title, Body: m.Body, Link: m.Link, CauseKey: m.CauseKey,
+		Actor:     domain.NotificationActor{Kind: domain.NotificationActorKind(m.ActorKind), Name: m.ActorName, Mode: m.ActorMode, SessionID: m.ActorSessionID},
 		CreatedAt: time.UnixMilli(m.CreatedAt), ReadAt: timeFromMilli(m.ReadAt), ResolvedAt: timeFromMilli(m.ResolvedAt),
+		Outcome: domain.NotificationOutcome(m.Outcome),
 	}
 }
 
@@ -57,7 +76,11 @@ func NewNotificationRepository(db *gorm.DB) *NotificationRepository {
 	return &NotificationRepository{db: db}
 }
 
-const unreadWhere = "read_at = 0 AND resolved_at = 0"
+const (
+	unreadWhere = "read_at = 0 AND resolved_at = 0"
+	// openWhere is an open cause; its one argument is the action level.
+	openWhere = "level = ? AND resolved_at = 0"
+)
 
 func (r *NotificationRepository) Create(n *domain.Notification) (*domain.Notification, error) {
 	id, err := genID()
@@ -73,11 +96,15 @@ func (r *NotificationRepository) Create(n *domain.Notification) (*domain.Notific
 		return nil, err
 	}
 	m := &NotificationModel{
-		Interrupted: interrupted,
-		ID:          id, ProjectID: n.ProjectID, TaskID: n.TaskID, SessionID: n.SessionID,
+		Interrupted: interrupted, Verb: n.Verb, RepositoryID: n.RepositoryID,
+		ID: id, ProjectID: n.ProjectID, TaskID: n.TaskID, SessionID: n.SessionID,
 		Source: string(n.Source), Kind: string(n.Kind), Level: string(n.Level),
 		Title: n.Title, Body: n.Body, Link: n.Link, CauseKey: n.CauseKey,
-		CreatedAt: created.UnixMilli(), ReadAt: milliOf(n.ReadAt), ResolvedAt: milliOf(n.ResolvedAt),
+		ActorKind: string(n.Actor.Kind), ActorName: n.Actor.Name, ActorMode: n.Actor.Mode, ActorSessionID: n.Actor.SessionID,
+		CreatedAt: created.UnixMilli(), ReadAt: milliOf(n.ReadAt), ResolvedAt: milliOf(n.ResolvedAt), Outcome: string(n.Outcome),
+	}
+	if n.Object != nil {
+		m.ObjectText, m.ObjectCode = n.Object.Text, n.Object.Code
 	}
 	if err := r.db.Create(m).Error; err != nil {
 		return nil, err
@@ -135,6 +162,19 @@ func (r *NotificationRepository) List(ctx context.Context, f ports.NotificationF
 	if f.UnreadOnly {
 		q = q.Where(unreadWhere)
 	}
+	if f.Open != nil {
+		if *f.Open {
+			q = q.Where(openWhere, string(domain.NotificationAction))
+		} else {
+			q = q.Where("NOT ("+openWhere+")", string(domain.NotificationAction))
+		}
+	}
+	if f.Actor != "" {
+		q = q.Where("actor_name = ?", f.Actor)
+	}
+	if f.Kind != "" {
+		q = q.Where("kind = ?", string(f.Kind))
+	}
 	if !f.BeforeAt.IsZero() {
 		at := f.BeforeAt.UnixMilli()
 		q = q.Where("created_at < ? OR (created_at = ? AND id < ?)", at, at, f.BeforeID)
@@ -158,11 +198,17 @@ func (r *NotificationRepository) CountUnread(ctx context.Context) (int, error) {
 	return int(n), err
 }
 
+func (r *NotificationRepository) CountOpen(ctx context.Context) (int, error) {
+	var n int64
+	err := r.db.WithContext(ctx).Model(&NotificationModel{}).Where(openWhere, string(domain.NotificationAction)).Count(&n).Error
+	return int(n), err
+}
+
 func (r *NotificationRepository) MarkRead(ids []string, at time.Time) ([]*domain.Notification, error) {
 	if len(ids) == 0 {
 		return nil, nil
 	}
-	return r.change(r.db.Where("id IN ? AND read_at = 0", ids), "read_at", at)
+	return r.change(r.db.Where("id IN ? AND read_at = 0", ids), map[string]any{"read_at": at.UnixMilli()})
 }
 
 func (r *NotificationRepository) MarkAllRead(projectID string, at time.Time) ([]*domain.Notification, error) {
@@ -170,27 +216,31 @@ func (r *NotificationRepository) MarkAllRead(projectID string, at time.Time) ([]
 	if projectID != "" {
 		q = q.Where("project_id = ?", projectID)
 	}
-	return r.change(q, "read_at", at)
+	return r.change(q, map[string]any{"read_at": at.UnixMilli()})
 }
 
-func (r *NotificationRepository) Resolve(causeKey string, at time.Time) ([]*domain.Notification, error) {
-	return r.change(r.db.Where("cause_key = ? AND resolved_at = 0", causeKey), "resolved_at", at)
+func (r *NotificationRepository) Resolve(causeKey string, at time.Time, outcome domain.NotificationOutcome) ([]*domain.Notification, error) {
+	return r.resolve(r.db.Where("cause_key = ? AND resolved_at = 0", causeKey), at, outcome)
 }
 
-func (r *NotificationRepository) ResolveTask(taskID string, at time.Time) ([]*domain.Notification, error) {
-	return r.change(r.db.Where("task_id = ? AND resolved_at = 0 AND cause_key <> ''", taskID), "resolved_at", at)
+func (r *NotificationRepository) ResolveTask(taskID string, at time.Time, outcome domain.NotificationOutcome) ([]*domain.Notification, error) {
+	return r.resolve(r.db.Where("task_id = ? AND resolved_at = 0 AND cause_key <> ''", taskID), at, outcome)
 }
 
-// change sets column to at on the rows where selects, and answers them as
-// they now are.
-func (r *NotificationRepository) change(where *gorm.DB, column string, at time.Time) ([]*domain.Notification, error) {
+func (r *NotificationRepository) resolve(where *gorm.DB, at time.Time, outcome domain.NotificationOutcome) ([]*domain.Notification, error) {
+	return r.change(where, map[string]any{"resolved_at": at.UnixMilli(), "outcome": string(outcome)})
+}
+
+// change sets the columns of set on the rows where selects, and answers them
+// as they now are.
+func (r *NotificationRepository) change(where *gorm.DB, set map[string]any) ([]*domain.Notification, error) {
 	var out []*domain.Notification
 	err := r.db.Transaction(func(tx *gorm.DB) error {
 		var ids []string
 		if err := tx.Model(&NotificationModel{}).Where(where).Pluck("id", &ids).Error; err != nil || len(ids) == 0 {
 			return err
 		}
-		if err := tx.Model(&NotificationModel{}).Where("id IN ?", ids).Update(column, at.UnixMilli()).Error; err != nil {
+		if err := tx.Model(&NotificationModel{}).Where("id IN ?", ids).Updates(set).Error; err != nil {
 			return err
 		}
 		var ms []NotificationModel

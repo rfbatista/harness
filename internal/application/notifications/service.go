@@ -20,6 +20,7 @@ import (
 	"fmt"
 	"log/slog"
 	"net/url"
+	"slices"
 	"strconv"
 	"strings"
 	"sync"
@@ -77,6 +78,17 @@ type Agents interface {
 	GetAgent(ctx context.Context, id string) (*domain.Agent, error)
 }
 
+// Repositories finds a repository; the sqlite repository store satisfies it.
+type Repositories interface {
+	Get(ctx context.Context, id string) *domain.Repository
+}
+
+// Services finds a service, for the repository a service request is about;
+// the sqlite service store satisfies it.
+type Services interface {
+	GetService(id string) (*domain.Service, error)
+}
+
 // Readers are what the service reads from other contexts. Agents may be nil:
 // a list then names no agent.
 type Readers struct {
@@ -84,6 +96,11 @@ type Readers struct {
 	Tickets  Tickets
 	Sessions Sessions
 	Agents   Agents
+	// Repositories and Services name the repository a branch or service
+	// notification is about; either may be nil, and a notification then names
+	// none.
+	Repositories Repositories
+	Services     Services
 }
 
 // Options configure delivery and time.
@@ -206,7 +223,7 @@ func (s *Service) Subscribe(bus ports.EventSubscriber) {
 		return nil
 	})
 	ports.On(bus, func(ctx context.Context, ev domain.SessionEnded) error {
-		s.resolve(sessionWaitingKey(ev.SessionID))
+		s.resolve(sessionWaitingKey(ev.SessionID), domain.OutcomeEnded)
 		if ev.Status == domain.SessionFailed {
 			s.onSessionFailed(ev.SessionID)
 		}
@@ -217,7 +234,7 @@ func (s *Service) Subscribe(bus ports.EventSubscriber) {
 		return nil
 	})
 	ports.On(bus, func(ctx context.Context, ev domain.InterviewClosed) error {
-		s.resolve(interviewKey(ev.InterviewID))
+		s.resolve(interviewKey(ev.InterviewID), interviewOutcome(ev.State))
 		return nil
 	})
 	ports.On(bus, func(ctx context.Context, ev domain.SessionCommitCheckChanged) error {
@@ -225,8 +242,8 @@ func (s *Service) Subscribe(bus ports.EventSubscriber) {
 		return nil
 	})
 	ports.On(bus, func(ctx context.Context, ev domain.SessionDeleted) error {
-		s.resolve(commitCheckKey(ev.SessionID))
-		s.resolve(sessionWaitingKey(ev.SessionID))
+		s.resolve(commitCheckKey(ev.SessionID), domain.OutcomeEnded)
+		s.resolve(sessionWaitingKey(ev.SessionID), domain.OutcomeEnded)
 		s.refreshInterrupted(ev.SessionID)
 		return nil
 	})
@@ -236,7 +253,7 @@ func (s *Service) Subscribe(bus ports.EventSubscriber) {
 	})
 	ports.On(bus, func(ctx context.Context, ev domain.TicketDeleted) error {
 		s.logged("resolve a deleted task's notifications", func(tx ports.NotificationRepository, now time.Time) ([]*domain.Notification, bool, error) {
-			changed, err := tx.ResolveTask(ev.TicketID, now)
+			changed, err := tx.ResolveTask(ev.TicketID, now, domain.OutcomeEnded)
 			return changed, len(changed) > 0, err
 		})
 		return nil
@@ -249,6 +266,39 @@ func (s *Service) Subscribe(bus ports.EventSubscriber) {
 	})
 }
 
+// reviewOutcome is how a review request ended, by the state it moved to.
+func reviewOutcome(state domain.ReviewState) domain.NotificationOutcome {
+	switch state {
+	case domain.ReviewChangesRequested:
+		return domain.OutcomeChangesRequested
+	case domain.ReviewWithdrawn:
+		return domain.OutcomeWithdrawn
+	}
+	return domain.OutcomeApproved
+}
+
+// interviewOutcome is how an interview ended: sent is answered; dismissed and
+// expired are both the person not answering.
+func interviewOutcome(state domain.InterviewState) domain.NotificationOutcome {
+	if state == domain.InterviewSent {
+		return domain.OutcomeAnswered
+	}
+	return domain.OutcomeDismissed
+}
+
+// requestOutcome is how a branch or service request left pending: denied and
+// expired as they say; every other state (approved, used, done, failed) means
+// it was approved.
+func requestOutcome(state string) domain.NotificationOutcome {
+	switch state {
+	case "denied":
+		return domain.OutcomeDenied
+	case "expired":
+		return domain.OutcomeExpired
+	}
+	return domain.OutcomeApproved
+}
+
 func reviewKey(id string) string         { return "review:" + id }
 func sessionWaitingKey(id string) string { return "session_waiting:" + id }
 func sessionFailedKey(id string) string  { return "session_failed:" + id }
@@ -258,15 +308,17 @@ func interviewKey(id string) string      { return "interview:" + id }
 
 func (s *Service) onReview(ev domain.ReviewRequestChanged) {
 	if ev.State != domain.ReviewPending {
-		s.resolve(reviewKey(ev.ReviewID))
+		s.resolve(reviewKey(ev.ReviewID), reviewOutcome(ev.State))
 		return
 	}
-	s.record(&domain.Notification{
+	n := &domain.Notification{
 		ProjectID: ev.ProjectID, TaskID: ev.TaskID, SessionID: ev.AboutSessionID,
 		Kind: domain.NotificationReviewRequested, Level: domain.NotificationAction,
-		Title: clip("Review requested: "+strings.TrimSpace(ev.Subject), domain.MaxNotificationTitleLen),
+		Actor: s.actorOfSession(ev.ArchitectSessionID),
 		Link:  domain.TaskLink(ev.ProjectID, ev.TaskID), CauseKey: reviewKey(ev.ReviewID),
-	}, false)
+	}
+	reviewWhat(ev.Subject).apply(n)
+	s.record(n, false)
 }
 
 func branchRequestKey(id string) string { return "branch_request:" + id }
@@ -277,30 +329,23 @@ func branchRequestKey(id string) string { return "branch_request:" + id }
 func (s *Service) onBranchRequest(ev domain.BranchRequestChanged) {
 	r := ev.Request
 	if r.State != domain.BranchRequestPending {
-		s.resolve(branchRequestKey(r.ID))
+		s.resolve(branchRequestKey(r.ID), requestOutcome(string(r.State)))
 		return
 	}
-	sess := s.readers.Sessions.Get(r.SessionID)
 	taskID := ""
 	if r.TaskID != nil {
 		taskID = *r.TaskID
 	}
 	link := domain.TaskLink(ev.ProjectID, taskID) + "?session=" + url.QueryEscape(r.SessionID) + "#branch-request-" + url.PathEscape(r.ID)
-	body := "Session " + r.SessionID
-	if sess != nil && sess.Task != "" {
-		body += " (" + sess.Task + ")"
-	}
-	body += ", task " + taskOrNone(taskID) + ", repository " + r.RepositoryID + "."
-	if r.Reason != "" {
-		body += " " + r.Reason
-	}
-	s.record(&domain.Notification{
+	n := &domain.Notification{
 		ProjectID: ev.ProjectID, TaskID: taskID, SessionID: r.SessionID,
 		Kind: domain.NotificationBranchRequest, Level: domain.NotificationAction,
-		Title: clip("Branch: "+r.Label(), domain.MaxNotificationTitleLen),
-		Body:  clip(body, domain.MaxNotificationBodyLen),
-		Link:  link, CauseKey: branchRequestKey(r.ID),
-	}, false)
+		Actor: s.actorOfSession(r.SessionID), RepositoryID: r.RepositoryID,
+		Body: clip(r.Reason, domain.MaxNotificationBodyLen),
+		Link: link, CauseKey: branchRequestKey(r.ID),
+	}
+	branchRequestWhat(r).apply(n)
+	s.record(n, false)
 }
 
 func serviceRequestKey(id string) string { return "service_request:" + id }
@@ -311,60 +356,45 @@ func serviceRequestKey(id string) string { return "service_request:" + id }
 func (s *Service) onServiceRequest(ev domain.ServiceRequestChanged) {
 	r := ev.Request
 	if r.State != domain.ServiceRequestPending {
-		s.resolve(serviceRequestKey(r.ID))
+		s.resolve(serviceRequestKey(r.ID), requestOutcome(string(r.State)))
 		return
 	}
-	body := "Session " + r.SessionID
-	if r.Agent != "" {
-		body += " (" + r.Agent + ")"
-	}
-	body += ", task " + taskOrNone(r.TaskID) + "."
-	if r.Reason != "" {
-		body += " " + r.Reason
-	}
-	s.record(&domain.Notification{
+	n := &domain.Notification{
 		ProjectID: ev.ProjectID, TaskID: r.TaskID, SessionID: r.SessionID,
 		Kind: domain.NotificationServiceRequest, Level: domain.NotificationAction,
-		Title: clip("Service: "+r.Summary, domain.MaxNotificationTitleLen),
-		Body:  clip(body, domain.MaxNotificationBodyLen),
-		Link:  "/projects/" + url.PathEscape(ev.ProjectID) + "/services#service-request-" + url.PathEscape(r.ID), CauseKey: serviceRequestKey(r.ID),
-	}, false)
+		Actor: s.actorOfSession(r.SessionID), RepositoryID: s.serviceRepository(r),
+		Body: clip(r.Reason, domain.MaxNotificationBodyLen),
+		Link: "/projects/" + url.PathEscape(ev.ProjectID) + "/services#service-request-" + url.PathEscape(r.ID), CauseKey: serviceRequestKey(r.ID),
+	}
+	serviceRequestWhat(r).apply(n)
+	s.record(n, false)
 }
 
 // onBranchFinding records one action notification for a branch or push that no
 // branch request explains: it names the branch, the repository and the session,
 // or the sessions whose turns overlapped when none is named (ADR 0070).
 func (s *Service) onBranchFinding(ev domain.BranchFindingFound) {
-	what := "Unapproved branch: " + ev.Branch
-	switch ev.Kind {
-	case domain.FindingPush:
-		what = "Unapproved push: " + ev.Branch
-	case domain.FindingRemote:
-		what = "Unapproved remote: " + ev.Branch + " (" + ev.URL + ")"
-	case domain.FindingDelete:
-		what = "Unapproved branch deletion: " + ev.Branch
-	case domain.FindingRename:
-		what = "Unapproved branch rename: " + ev.Branch + " → " + ev.NewName
-	}
-	who := "No agent turn was running that names a session"
+	who := "No session was named."
 	if len(ev.Candidates) > 0 {
-		who = "Sessions whose turns overlapped: " + strings.Join(ev.Candidates, ", ")
+		who = "Turns of " + joinNames(s.agentNames(ev.Candidates)) + " overlapped it."
 	}
 	link := domain.TaskLink(ev.ProjectID, ev.TaskID)
 	if ev.TaskID == "" {
 		link = domain.ProjectLink(ev.ProjectID)
 	}
 	if ev.SessionID != "" {
-		who = "Session " + ev.SessionID
+		who = "The session of " + s.actorOfSession(ev.SessionID).Name + " made it."
 		link += "?session=" + url.QueryEscape(ev.SessionID)
 	}
-	body := who + ", repository " + ev.RepositoryID + ". No approved branch request covers it."
-	s.record(&domain.Notification{
+	n := &domain.Notification{
 		ProjectID: ev.ProjectID, TaskID: ev.TaskID, SessionID: ev.SessionID,
 		Kind: domain.NotificationBranchFinding, Level: domain.NotificationAction,
-		Title: clip(what, domain.MaxNotificationTitleLen), Body: clip(body, domain.MaxNotificationBodyLen),
+		Actor: systemActor(domain.ActorBranchWatch), RepositoryID: ev.RepositoryID,
+		Body: clip(who, domain.MaxNotificationBodyLen),
 		Link: link, CauseKey: "branch_finding:" + ev.RepositoryID + ":" + string(ev.Kind) + ":" + ev.Branch + ":" + ev.FoundAt.Format(time.RFC3339Nano),
-	}, false)
+	}
+	branchFindingWhat(ev).apply(n)
+	s.record(n, false)
 }
 
 func taskOrNone(id string) string {
@@ -379,7 +409,14 @@ func (s *Service) onSessionStatus(ev domain.SessionStatusChanged) {
 		return
 	}
 	if ev.Status != domain.SessionWaitingApproval {
-		s.resolve(sessionWaitingKey(ev.SessionID))
+		outcome := domain.OutcomeApproved
+		switch {
+		case ev.ApprovalDenied:
+			outcome = domain.OutcomeDenied
+		case ev.Status.IsTerminal():
+			outcome = domain.OutcomeEnded
+		}
+		s.resolve(sessionWaitingKey(ev.SessionID), outcome)
 		return
 	}
 	sess := s.readers.Sessions.Get(ev.SessionID)
@@ -387,13 +424,14 @@ func (s *Service) onSessionStatus(ev domain.SessionStatusChanged) {
 		slog.Warn("notification for a session that is not recorded", "session", ev.SessionID)
 		return
 	}
-	s.record(&domain.Notification{
+	n := &domain.Notification{
 		ProjectID: sess.ProjectID, TaskID: sess.TicketID, SessionID: sess.ID,
 		Kind: domain.NotificationSessionWaiting, Level: domain.NotificationAction,
-		Title: "A session is waiting for your approval",
-		Body:  clip(sess.LastAction, domain.MaxNotificationBodyLen),
+		Actor: s.actorOfSession(sess.ID),
 		Link:  domain.TaskLink(sess.ProjectID, sess.TicketID), CauseKey: sessionWaitingKey(sess.ID),
-	}, false)
+	}
+	approvalWhat(sess.LastAction).apply(n)
+	s.record(n, false)
 }
 
 // onInterviewOpened records one notification per interview, which the person
@@ -405,17 +443,14 @@ func (s *Service) onInterviewOpened(ev domain.InterviewOpened) {
 		slog.Warn("notification for a session that is not recorded", "session", ev.SessionID)
 		return
 	}
-	body := strconv.Itoa(ev.Questions) + " questions"
-	if ev.Questions == 1 {
-		body = "1 question"
-	}
-	s.record(&domain.Notification{
+	n := &domain.Notification{
 		ProjectID: sess.ProjectID, TaskID: sess.TicketID, SessionID: sess.ID,
 		Kind: domain.NotificationSessionWaiting, Level: domain.NotificationAction,
-		Title: clip("A session has questions for you: "+strings.TrimSpace(ev.Title), domain.MaxNotificationTitleLen),
-		Body:  body,
+		Actor: s.actorOfSession(sess.ID),
 		Link:  domain.TaskLink(sess.ProjectID, sess.TicketID) + "?session=" + url.QueryEscape(sess.ID), CauseKey: interviewKey(ev.InterviewID),
-	}, true)
+	}
+	interviewWhat(ev.Title, ev.Questions).apply(n)
+	s.record(n, true)
 }
 
 // onCommitCheck records one notification for a session whose commit check is
@@ -423,20 +458,22 @@ func (s *Service) onInterviewOpened(ev domain.InterviewOpened) {
 // is repaired.
 func (s *Service) onCommitCheck(ev domain.SessionCommitCheckChanged) {
 	if !ev.Off {
-		s.resolve(commitCheckKey(ev.SessionID))
+		s.resolve(commitCheckKey(ev.SessionID), domain.OutcomeRepaired)
 		return
 	}
 	if ev.ProjectID == "" {
 		slog.Warn("notification for a session that is not recorded", "session", ev.SessionID)
 		return
 	}
-	s.record(&domain.Notification{
+	n := &domain.Notification{
 		ProjectID: ev.ProjectID, TaskID: ev.TicketID, SessionID: ev.SessionID,
 		Kind: domain.NotificationCommitCheckOff, Level: domain.NotificationAction,
-		Title: "A session's commit check is off",
+		Actor: systemActor(domain.ActorHarness),
 		Body:  clip(ev.Reason, domain.MaxNotificationBodyLen),
 		Link:  domain.TaskLink(ev.ProjectID, ev.TicketID), CauseKey: commitCheckKey(ev.SessionID),
-	}, false)
+	}
+	commitCheckWhat(1).apply(n)
+	s.record(n, false)
 }
 
 // onSessionsInterrupted posts the one sessions_interrupted notification of a
@@ -468,18 +505,17 @@ func (s *Service) onSessionsInterrupted(ctx context.Context, ev domain.SessionsI
 	if len(list) == 0 {
 		return
 	}
-	title := strconv.Itoa(len(list)) + " sessions interrupted by a restart"
-	if len(list) == 1 {
-		title = "1 session interrupted by a restart"
-	}
+	w, title := interruptedWhat(len(list))
 	c, err := s.write(func(tx ports.NotificationRepository, now time.Time) ([]*domain.Notification, bool, error) {
-		changed, err := tx.Resolve(domain.SessionsInterruptedCauseKey, now)
+		changed, err := tx.Resolve(domain.SessionsInterruptedCauseKey, now, domain.OutcomeEnded)
 		if err != nil {
 			return nil, false, err
 		}
 		created, err := tx.Create(&domain.Notification{
 			ProjectID: projectID, Source: domain.NotificationFromSystem,
 			Kind: domain.NotificationSessionsInterrupted, Level: domain.NotificationAction,
+			Actor: systemActor(domain.ActorRestart),
+			Verb:  w.verb, Object: &domain.NotificationObject{Text: w.object},
 			Title: title, Body: clip(strings.Join(lines, "\n"), domain.MaxNotificationBodyLen),
 			Link: "/notifications", CauseKey: domain.SessionsInterruptedCauseKey, CreatedAt: now,
 			InterruptedSessions: list,
@@ -539,7 +575,7 @@ func (s *Service) ResumeInterrupted(ctx context.Context, id string) (*ports.Resu
 			return nil, false, err
 		}
 		if !marked && cur.ResolvedAt == nil {
-			if _, err := tx.Resolve(domain.SessionsInterruptedCauseKey, now); err != nil {
+			if _, err := tx.Resolve(domain.SessionsInterruptedCauseKey, now, domain.OutcomeResumed); err != nil {
 				return nil, false, err
 			}
 			cur = tx.Get(id)
@@ -599,7 +635,7 @@ func (s *Service) reconcileInterrupted(n *domain.Notification) {
 	}
 	s.logged("refresh the sessions interrupted notification", func(tx ports.NotificationRepository, now time.Time) ([]*domain.Notification, bool, error) {
 		if !marked {
-			changed, err := tx.Resolve(domain.SessionsInterruptedCauseKey, now)
+			changed, err := tx.Resolve(domain.SessionsInterruptedCauseKey, now, domain.OutcomeResumed)
 			return changed, len(changed) > 0, err
 		}
 		if cur := tx.Get(n.ID); cur != nil && cur.ResolvedAt == nil {
@@ -624,6 +660,85 @@ func lists(n *domain.Notification, sessionID string) bool {
 	return false
 }
 
+// agentNames are the agent names of sessions, each once, in order; a session
+// that is gone is left out.
+func (s *Service) agentNames(sessionIDs []string) []string {
+	var names []string
+	for _, id := range sessionIDs {
+		if a := s.actorOfSession(id); a.Kind == domain.ActorAgent && !slices.Contains(names, a.Name) {
+			names = append(names, a.Name)
+		}
+	}
+	return names
+}
+
+// joinNames is "a", "a and b", "a, b and c"; "a session" for none.
+func joinNames(names []string) string {
+	switch len(names) {
+	case 0:
+		return "a session"
+	case 1:
+		return names[0]
+	}
+	return strings.Join(names[:len(names)-1], ", ") + " and " + names[len(names)-1]
+}
+
+// serviceRepository is the repository a service request is about: its
+// service's, or the one a create proposes. Empty when it has none.
+func (s *Service) serviceRepository(r domain.ServiceRequest) string {
+	if r.Proposed != nil && r.Proposed.RepositoryID != "" {
+		return r.Proposed.RepositoryID
+	}
+	if s.readers.Services == nil || r.ServiceID == "" {
+		return ""
+	}
+	if svc, err := s.readers.Services.GetService(r.ServiceID); err == nil && svc != nil {
+		return svc.RepositoryID
+	}
+	return ""
+}
+
+func systemActor(name string) domain.NotificationActor {
+	return domain.NotificationActor{Kind: domain.ActorSystem, Name: name}
+}
+
+// actorOfSession is the agent of a session with the session's mode word. A
+// session that is not recorded, or has no agent, is named for what it is.
+func (s *Service) actorOfSession(sessionID string) domain.NotificationActor {
+	sess := s.readers.Sessions.Get(sessionID)
+	if sessionID == "" || sess == nil {
+		return systemActor(domain.ActorHarness)
+	}
+	name := s.agentName(context.Background(), sess.AgentID)
+	if name == "" {
+		name = "agent"
+	}
+	return domain.NotificationActor{Kind: domain.ActorAgent, Name: name, Mode: domain.ModeWord(sess.Mode), SessionID: sess.ID}
+}
+
+// taskReviewActor is the session that moved a task to review, or the person
+// when no session did.
+func (s *Service) taskReviewActor(c domain.TaskStatusChange) domain.NotificationActor {
+	if c.BySessionID != "" {
+		return s.actorOfSession(c.BySessionID)
+	}
+	return domain.NotificationActor{Kind: domain.ActorPerson, Name: domain.ActorYou}
+}
+
+// legacyActor names the actor of a notification recorded before actors were
+// stored, from what it still holds.
+func (s *Service) legacyActor(n *domain.Notification) domain.NotificationActor {
+	switch n.Kind {
+	case domain.NotificationBranchFinding:
+		return systemActor(domain.ActorBranchWatch)
+	case domain.NotificationSessionsInterrupted:
+		return systemActor(domain.ActorRestart)
+	case domain.NotificationCommitCheckOff:
+		return systemActor(domain.ActorHarness)
+	}
+	return s.actorOfSession(n.SessionID)
+}
+
 // agentName is the name of agent id; empty when it has none or is unknown.
 func (s *Service) agentName(ctx context.Context, id string) string {
 	if s.readers.Agents == nil || id == "" {
@@ -646,18 +761,23 @@ func (s *Service) onSessionFailed(sessionID string) {
 		slog.Warn("notification for a session that is not recorded", "session", sessionID)
 		return
 	}
-	s.record(&domain.Notification{
+	n := &domain.Notification{
 		ProjectID: sess.ProjectID, TaskID: sess.TicketID, SessionID: sess.ID,
 		Kind: domain.NotificationSessionFailed, Level: domain.NotificationInfo,
-		Title: "A session failed",
-		Body:  clip(sess.LastAction, domain.MaxNotificationBodyLen),
+		Actor: s.actorOfSession(sess.ID),
 		Link:  domain.TaskLink(sess.ProjectID, sess.TicketID), CauseKey: sessionFailedKey(sess.ID),
-	}, true)
+	}
+	failedWhat(sess.LastAction).apply(n)
+	s.record(n, true)
 }
 
 func (s *Service) onTaskStatus(c domain.TaskStatusChange) {
 	if c.Status != domain.TicketStatusReview {
-		s.resolve(taskReviewKey(c.TaskID))
+		outcome := domain.OutcomeReopened
+		if c.Status == domain.TicketStatusDone {
+			outcome = domain.OutcomeDone
+		}
+		s.resolve(taskReviewKey(c.TaskID), outcome)
 		return
 	}
 	projectID := c.ProjectID
@@ -670,13 +790,19 @@ func (s *Service) onTaskStatus(c domain.TaskStatusChange) {
 		slog.Warn("notification for a task that is not recorded", "task", c.TaskID)
 		return
 	}
-	s.record(&domain.Notification{
+	taskTitle := ""
+	if tk := s.readers.Tickets.Get(context.Background(), c.TaskID); tk != nil {
+		taskTitle = tk.Title
+	}
+	n := &domain.Notification{
 		ProjectID: projectID, TaskID: c.TaskID, SessionID: c.BySessionID,
 		Kind: domain.NotificationTaskReview, Level: domain.NotificationAction,
-		Title: "A task is ready for your review",
+		Actor: s.taskReviewActor(c),
 		Body:  clip(strings.TrimSpace(c.Reason), domain.MaxNotificationBodyLen),
 		Link:  domain.TaskLink(projectID, c.TaskID), CauseKey: taskReviewKey(c.TaskID),
-	}, false)
+	}
+	taskReviewWhat(taskTitle).apply(n)
+	s.record(n, false)
 }
 
 // record stores a system notification unless its cause already has an
@@ -704,9 +830,9 @@ func (s *Service) record(n *domain.Notification, once bool) {
 }
 
 // resolve settles the unresolved notifications of a cause.
-func (s *Service) resolve(causeKey string) {
+func (s *Service) resolve(causeKey string, outcome domain.NotificationOutcome) {
 	s.logged("resolve a notification", func(tx ports.NotificationRepository, now time.Time) ([]*domain.Notification, bool, error) {
-		changed, err := tx.Resolve(causeKey, now)
+		changed, err := tx.Resolve(causeKey, now, outcome)
 		return changed, len(changed) > 0, err
 	})
 }
@@ -731,6 +857,7 @@ func (s *Service) write(change change) (*ports.NotificationChange, error) {
 		seq     uint64
 		changed []*domain.Notification
 		count   int
+		open    int
 		c       *ports.NotificationChange
 	)
 	// A numbered write always hands its number on, so a failed commit never
@@ -750,13 +877,16 @@ func (s *Service) write(change change) (*ports.NotificationChange, error) {
 		if count, err = tx.CountUnread(context.Background()); err != nil {
 			return err
 		}
+		if open, err = tx.CountOpen(context.Background()); err != nil {
+			return err
+		}
 		seq = s.stream.take()
 		return nil
 	})
 	if err != nil || seq == 0 {
 		return nil, err
 	}
-	c = &ports.NotificationChange{Changed: s.named(context.Background(), changed...), UnreadCount: count}
+	c = &ports.NotificationChange{Changed: s.named(context.Background(), changed...), UnreadCount: count, OpenCount: open}
 	if c.Changed == nil {
 		c.Changed = []*domain.Notification{}
 	}
@@ -807,7 +937,10 @@ func (s *Service) ListNotifications(ctx context.Context, q ports.NotificationQue
 	if limit < 1 || limit > maxLimit {
 		return nil, invalid(fmt.Sprintf("limit must be between 1 and %d", maxLimit))
 	}
-	f := ports.NotificationFilter{ProjectID: q.ProjectID, UnreadOnly: q.UnreadOnly, Since: q.Since, Limit: limit + 1}
+	if q.Kind != "" && !knownKind(q.Kind) {
+		return nil, invalid("kind is not a notification kind: " + string(q.Kind))
+	}
+	f := ports.NotificationFilter{ProjectID: q.ProjectID, UnreadOnly: q.UnreadOnly, Open: q.Open, Actor: q.Actor, Kind: q.Kind, Since: q.Since, Limit: limit + 1}
 	if q.Before != "" {
 		at, id, err := decodeCursor(q.Before)
 		if err != nil {
@@ -823,7 +956,11 @@ func (s *Service) ListNotifications(ctx context.Context, q ports.NotificationQue
 	if err != nil {
 		return nil, err
 	}
-	page := &ports.NotificationPage{UnreadCount: count}
+	open, err := s.repo.CountOpen(ctx)
+	if err != nil {
+		return nil, err
+	}
+	page := &ports.NotificationPage{UnreadCount: count, OpenCount: open}
 	if len(list) > limit {
 		list = list[:limit]
 		page.NextBefore = encodeCursor(list[limit-1])
@@ -866,9 +1003,44 @@ func (s *Service) MarkNotificationsRead(ctx context.Context, req ports.MarkNotif
 		if err != nil {
 			return nil, err
 		}
-		c = &ports.NotificationChange{Changed: []*domain.Notification{}, UnreadCount: count}
+		open, err := s.repo.CountOpen(ctx)
+		if err != nil {
+			return nil, err
+		}
+		c = &ports.NotificationChange{Changed: []*domain.Notification{}, UnreadCount: count, OpenCount: open}
 	}
 	return c, nil
+}
+
+// AcknowledgeNotification implements ports.Notifications: the person
+// acknowledges a branch finding, which resolves it and marks it read.
+func (s *Service) AcknowledgeNotification(ctx context.Context, id string) (*domain.Notification, error) {
+	var current *domain.Notification
+	c, err := s.write(func(tx ports.NotificationRepository, now time.Time) ([]*domain.Notification, bool, error) {
+		current = tx.Get(id)
+		switch {
+		case current == nil:
+			return nil, false, &domain.StructuredError{Code: "NOTIFICATION_NOT_FOUND", Message: "notification " + id + " not found"}
+		case current.Kind != domain.NotificationBranchFinding:
+			return nil, false, invalid("notification " + id + " is not a branch finding: only a branch finding is acknowledged")
+		case current.ResolvedAt != nil:
+			return nil, false, nil
+		}
+		if _, err := tx.Resolve(current.CauseKey, now, domain.OutcomeAcknowledged); err != nil {
+			return nil, false, err
+		}
+		if _, err := tx.MarkRead([]string{id}, now); err != nil {
+			return nil, false, err
+		}
+		return []*domain.Notification{tx.Get(id)}, true, nil
+	})
+	if err != nil {
+		return nil, err
+	}
+	if c == nil { // already resolved: as it is
+		return s.named(ctx, current)[0], nil
+	}
+	return c.Changed[0], nil
 }
 
 // Notify records a notification an agent posts, attributed to its session
@@ -908,6 +1080,9 @@ func (s *Service) Notify(ctx context.Context, req ports.NotifyRequest) (*domain.
 		}
 	}
 
+	// The session is read before the write: a transaction holds the
+	// database's one writer connection.
+	actor := s.actorOfSession(req.SessionID)
 	c, err := s.write(func(tx ports.NotificationRepository, now time.Time) ([]*domain.Notification, bool, error) {
 		posted, err := tx.CountAgentSince(req.SessionID, req.ProjectID, now.Add(-agentRateWindow))
 		if err != nil {
@@ -924,6 +1099,7 @@ func (s *Service) Notify(ctx context.Context, req ports.NotifyRequest) (*domain.
 		created, err := tx.Create(&domain.Notification{
 			ProjectID: req.ProjectID, TaskID: req.TaskID, SessionID: req.SessionID,
 			Source: domain.NotificationFromAgent, Kind: domain.NotificationAgent, Level: level,
+			Actor: actor,
 			Title: title, Body: body, Link: link, CreatedAt: now,
 		})
 		if err != nil {
@@ -962,7 +1138,7 @@ func (s *Service) named(ctx context.Context, list ...*domain.Notification) []*do
 	if len(list) == 0 {
 		return nil
 	}
-	projects, tasks := map[string]string{}, map[string]string{}
+	projects, tasks, repos := map[string]string{}, map[string]string{}, map[string]string{}
 	out := make([]*domain.Notification, 0, len(list))
 	for _, n := range list {
 		c := *n
@@ -974,6 +1150,19 @@ func (s *Service) named(ctx context.Context, list ...*domain.Notification) []*do
 			projects[c.ProjectID] = name
 		}
 		c.ProjectName = name
+		if c.RepositoryID != "" && s.readers.Repositories != nil {
+			name, ok := repos[c.RepositoryID]
+			if !ok {
+				if r := s.readers.Repositories.Get(ctx, c.RepositoryID); r != nil {
+					name = r.DisplayName()
+				}
+				repos[c.RepositoryID] = name
+			}
+			c.RepositoryName = name
+		}
+		if c.Actor.Kind == "" {
+			c.Actor = s.legacyActor(&c)
+		}
 		if c.TaskID != "" {
 			title, ok := tasks[c.TaskID]
 			if !ok {
@@ -1024,6 +1213,15 @@ func (s *Service) interruptedStates(ctx context.Context, list []domain.Interrupt
 		out[i] = e
 	}
 	return out
+}
+
+func knownKind(k domain.NotificationKind) bool {
+	for _, known := range domain.NotificationKinds {
+		if k == known {
+			return true
+		}
+	}
+	return false
 }
 
 func invalid(msg string) error { return &domain.StructuredError{Code: "INVALID_INPUT", Message: msg} }
