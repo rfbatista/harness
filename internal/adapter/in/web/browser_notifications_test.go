@@ -887,3 +887,31 @@ func TestNotificationsPageListsTheSessionsOfACommitCheckOff(t *testing.T) {
 	}
 	h.noErrors(t)
 }
+
+// Every kind the server records loads on the page and in the panel, with no
+// error banner (the inbox once failed on service_request), and the panel
+// shows the compact row.
+func TestNotificationsEveryKindLoadsAndThePanelIsCompact(t *testing.T) {
+	now := time.Now()
+	kinds := []domain.NotificationKind{
+		domain.NotificationReviewRequested, domain.NotificationSessionWaiting, domain.NotificationTaskReview, domain.NotificationSessionFailed,
+		domain.NotificationCommitCheckOff, domain.NotificationBranchRequest, domain.NotificationBranchFinding, domain.NotificationServiceRequest,
+		domain.NotificationSessionsInterrupted, domain.NotificationAgent,
+	}
+	var list []*domain.Notification
+	for i, k := range kinds {
+		list = append(list, &domain.Notification{ID: "k-" + string(k), ProjectID: "p1", ProjectName: "harness", Source: domain.NotificationFromSystem, Kind: k, Level: domain.NotificationAction, Title: "A " + string(k), Link: "/projects/p1", CreatedAt: now.Add(-time.Duration(i+1) * time.Minute)})
+	}
+	h := newInboxHarness(t, list)
+	var pageKinds, panelCompact string
+	var banner bool
+	h.run(t, "page", h.openReady("/notifications?tab=all"), chromedp.Evaluate(`[...document.querySelectorAll('main .notification')].map(r => r.dataset.kind).join(',')`, &pageKinds), chromedp.Evaluate(`!!document.querySelector('main [role=alert]')`, &banner))
+	if banner || len(strings.Split(pageKinds, ",")) != len(kinds) || !strings.Contains(pageKinds, "service_request") {
+		t.Errorf("page: banner %v, kinds %q", banner, pageKinds)
+	}
+	h.run(t, "panel", h.openPanel(), chromedp.Evaluate(`[...document.querySelectorAll('#notifications-panel .notification')].map(r => r.hasAttribute('data-compact')).join(',')`, &panelCompact))
+	if want := strings.TrimSuffix(strings.Repeat("true,", len(kinds)), ","); panelCompact != want {
+		t.Errorf("the panel's rows are compact: %q", panelCompact)
+	}
+	h.noErrors(t)
+}

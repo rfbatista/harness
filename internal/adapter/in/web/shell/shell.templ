@@ -248,7 +248,7 @@ templ NotificationLiveRow(actions bool) {
 				</template>
 			</p>
 		</div>
-		<div class="[ more ]">
+		<div class="[ notes ]">
 			<p class="[ body ]" x-show="row.showBody" x-text="row.body"></p>
 			<ul role="list" class="[ interrupted-sessions ]" x-show="row.hasListed">
 				<template x-for="s in row.listed" x-bind:key="s.key">
@@ -311,7 +311,7 @@ templ NotificationStack() {
 							</template>
 						</p>
 					</div>
-					<div class="[ more ]"></div>
+					<div class="[ notes ]"></div>
 					<div class="[ when ]">
 						<time x-bind:datetime="row.at" x-bind:title="row.fullDate"><span x-text="row.clock"></span><span class="[ age ]" x-text="row.age"></span></time>
 						<span class="[ standing ]" data-tone="quiet" x-text="row.statusText"></span>

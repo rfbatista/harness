@@ -9,7 +9,7 @@
  *   <div class="what"><a class="title"><span class="icon"></span><span class="text">
  *       <span class="verb"></span> <span class="object" data-code></span></span></a>
  *     <p class="where"><span class="project"></span><span class="task"></span><span class="repo"></span></p></div>
- *   <div class="more"><p class="body"></p></div>
+ *   <div class="notes"><p class="body"></p></div>
  *   <div class="when"><time><span>17:42</span><span class="age">3h</span></time>
  *     <span class="standing" data-tone="attention|danger|success|quiet">Needs you</span></div>
  *   <button class="button mark">Mark read</button></article>
@@ -168,7 +168,7 @@
       & .repo::before { content: "·"; margin-inline-end: var(--space-xs); color: var(--color-ink-faint); }
     }
 
-    & > .more { grid-area: more; min-inline-size: 0; }
+    & > .notes { grid-area: more; min-inline-size: 0; }
     & .body {
       margin: 0;
       color: var(--color-ink-muted);
