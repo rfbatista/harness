@@ -31,13 +31,14 @@ export function stubNotificationsApi(world) {
         return jsonResponse(200, {
           notifications: page.notifications.map(notificationDTO),
           unread_count: page.unreadCount,
+          open_count: page.openCount,
           next_before: page.nextBefore || undefined,
         });
       }
       if (method === "POST" && url.pathname === "/api/notifications/read") {
         const request = body.ids ? { ids: body.ids } : body.all === true ? { all: true, projectId: body.project_id } : {};
         const change = await gateway.markRead(request);
-        return jsonResponse(200, { notifications: change.notifications.map(notificationDTO), unread_count: change.unreadCount });
+        return jsonResponse(200, { notifications: change.notifications.map(notificationDTO), unread_count: change.unreadCount, open_count: change.openCount });
       }
       const resume = url.pathname.match(/^\/api\/notifications\/([^/]+)\/resume_interrupted$/);
       if (method === "POST" && resume) {
@@ -62,7 +63,7 @@ export function stubNotificationsApi(world) {
       if (url.pathname !== "/api/notifications/events") throw new Error(`no stream at ${url.pathname}`);
       sources.add(this);
       this.unfollow = gateway.follow(
-        (change) => this.send({ changed: change.notifications.map(notificationDTO), unread_count: change.unreadCount }),
+        (change) => this.send({ changed: change.notifications.map(notificationDTO), unread_count: change.unreadCount, open_count: change.openCount }),
         () => {},
       );
       queueMicrotask(() => this.onopen?.({}));

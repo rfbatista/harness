@@ -33,7 +33,7 @@ function scripted() {
       },
     },
     /** The server streams a change. */
-    push: (notifications, unreadCount) => onChange({ notifications, unreadCount }),
+    push: (notifications, unreadCount, openCount = null) => onChange({ notifications, unreadCount, openCount }),
     status: (s) => onStatus(s),
   };
 }
@@ -78,7 +78,7 @@ function world({ seed = null, permission = "default", hidden = false, pref = nul
   return { server, store, said, shown, asked, went, doc, view, stored };
 }
 
-const seedOf = (notifications, unread_count) => ({ notifications: notifications.map(notificationDTO), unread_count });
+const seedOf = (notifications, unread_count, open_count) => ({ notifications: notifications.map(notificationDTO), unread_count, open_count });
 const read = (n) => ({ ...n, readAt: at(11) });
 
 test("the seed gives the count and the title; without one, the first read does", async () => {
@@ -243,4 +243,35 @@ test("desktop alerts: asked for only from the toggle, remembered, and raised onl
 
   const denied = world({ permission: "denied", seed: seedOf([], 0) });
   assert.equal(denied.store.alerts, "denied");
+});
+
+test("the bell and the title count what needs the person (open_count), not what is unread", async () => {
+  const w = world({ seed: seedOf([makeNotification()], 5, 2) });
+  assert.deepEqual([w.store.badgeCount, w.store.badgeCountsOpen, w.store.unreadCount, w.doc.title], [2, true, 5, "(2) Notification · harness"]);
+  w.server.push([makeNotification({ id: "a" })], 6, 3);
+  assert.deepEqual([w.store.badgeCount, w.doc.title], [3, "(3) Notification · harness"]);
+  // Reading changes the unread count, never the open one.
+  const target = makeNotification({ id: "a" });
+  const done = w.store.markRead([target]);
+  assert.equal(w.store.badgeCount, 3);
+  w.server.reads[0].resolve({ notifications: [read(target)], unreadCount: 5, openCount: 3 });
+  await done;
+  assert.deepEqual([w.store.badgeCount, w.store.unreadCount], [3, 5]);
+  // A settled cause leaves the count when the server says so.
+  w.server.push([makeNotification({ id: "a", resolvedAt: at(12) })], 5, 2);
+  assert.equal(w.store.badgeCount, 2);
+  w.server.push([], 5, 0);
+  assert.deepEqual([w.store.badgeCount, w.doc.title], [0, "Notification · harness"]);
+});
+
+test("a list read carries open_count too, and a server that sends none leaves the bell counting unread", async () => {
+  const bare = world();
+  bare.server.lists[0].resolve({ notifications: [], unreadCount: 2, openCount: 1, nextBefore: "" });
+  await flush();
+  assert.deepEqual([bare.store.badgeCount, bare.store.badgeCountsOpen], [1, true]);
+
+  const old = world({ seed: seedOf([makeNotification()], 3) });
+  assert.deepEqual([old.store.badgeCount, old.store.badgeCountsOpen, old.doc.title], [3, false, "(3) Notification · harness"]);
+  old.server.push([makeNotification({ id: "b" })], 4);
+  assert.deepEqual([old.store.badgeCount, old.store.badgeCountsOpen], [4, false]);
 });

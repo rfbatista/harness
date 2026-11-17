@@ -12,7 +12,7 @@
 // and keeps the panel's list as one of the store's views.
 
 import { defaultEnv, floating } from "../../../../shared/presentation/components/popup.js";
-import { markedRead, merge } from "../../domain/notification.js";
+import { markedRead, merge, openFirst } from "../../domain/notification.js";
 import { PANEL_LIMIT } from "../store.js";
 import { badgeText, bellLabel, inboxError, streamNotice, toRow } from "../view.js";
 
@@ -60,19 +60,19 @@ export const notificationsBell = ({ gateway, store, clock, env }) => () => {
       return store.status;
     },
     get badge() {
-      return badgeText(store.unreadCount);
+      return badgeText(store.badgeCount);
     },
     get hasUnread() {
-      return !!store.unreadCount;
+      return !!store.badgeCount;
     },
     get label() {
-      return bellLabel(store.unreadCount);
+      return bellLabel(store.badgeCount, store.badgeCountsOpen);
     },
     get expanded() {
       return this.open ? "true" : "false";
     },
     get rows() {
-      return this.items.map((n) => toRow(n, this.now));
+      return openFirst(this.items).map((n) => toRow(n, this.now));
     },
     get isEmpty() {
       return this.loaded && this.items.length === 0;

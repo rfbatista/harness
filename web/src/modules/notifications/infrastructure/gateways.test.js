@@ -153,3 +153,12 @@ test("revision 5 data has no actor, and unknown actor kinds and outcomes do not 
   assert.deepEqual([odd.actor.kind, odd.actor.name, odd.outcome], ["system", "x", ""]);
   assert.throws(() => toNotification({ ...dto, listed_sessions: [{ session_id: "s", link: "https://x", state: "off" }] }), Codes.BAD_RESPONSE);
 });
+
+test("open_count maps on a page, a read answer and a stream message, and is null when the server sends none", () => {
+  assert.equal(toPage({ notifications: [], unread_count: 3, open_count: 2 }).openCount, 2);
+  assert.equal(toPage({ notifications: [], unread_count: 3 }).openCount, null);
+  assert.equal(toReadAnswer({ notifications: [], unread_count: 3, open_count: 0 }).openCount, 0);
+  assert.equal(toStreamChange({ changed: [], unread_count: 1, open_count: 4 }).openCount, 4);
+  assert.equal(toStreamChange({ changed: [], unread_count: 1 }).openCount, null);
+  assert.throws(() => toPage({ notifications: [], unread_count: 1, open_count: -1 }), Codes.BAD_RESPONSE);
+});

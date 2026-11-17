@@ -17,10 +17,10 @@ export function badgeText(count) {
   return count > BADGE_MAX ? `${BADGE_MAX}+` : String(count);
 }
 
-/** The bell's accessible name, with the exact count. */
-export function bellLabel(count) {
+/** The bell's accessible name, with the exact count and what it counts. */
+export function bellLabel(count, countsOpen = false) {
   if (!count) return "Notifications";
-  return `Notifications, ${count} unread`;
+  return `Notifications, ${count} ${countsOpen ? "need you" : "unread"}`;
 }
 
 /**

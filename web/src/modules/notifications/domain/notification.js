@@ -66,11 +66,13 @@
  * @typedef {object} Page
  * @property {Notification[]} notifications  newest first
  * @property {number} unreadCount             global, whatever the filter
+ * @property {number | null} openCount        global open causes (ADR 0096); null from a server that sends none
  * @property {string} nextBefore              the cursor of the next page; "" at the end
  *
  * @typedef {object} Change  what the stream and a mark-read answer carry
  * @property {Notification[]} notifications  the ones created, read or resolved
  * @property {number} unreadCount            global, as of that change
+ * @property {number | null} openCount        global open causes as of that change; null from a server that sends none
  */
 
 export const SOURCES = Object.freeze(["system", "agent"]);
@@ -88,6 +90,12 @@ export const isUnread = (n) => n.readAt === null && n.resolvedAt === null;
 
 /** Its cause was settled: there is nothing left to do about it. */
 export const isSettled = (n) => n.resolvedAt !== null;
+
+/** An open cause: the person has something to do about it (level action, not settled). */
+export const isOpen = (n) => n.level === "action" && n.resolvedAt === null;
+
+/** Open causes first, each group keeping its order (newest first). */
+export const openFirst = (list) => [...list.filter(isOpen), ...list.filter((n) => !isOpen(n))];
 
 /** Whether n belongs in a list with this filter. */
 export function matches(filter, n) {

@@ -72,6 +72,8 @@ export function notificationsStore({ gateway, alerts, prefs, clock, navigate, an
   return {
     /** The server's count as last heard; null until heard. */
     serverCount: /** @type {number | null} */ (null),
+    /** The open causes as last heard (ADR 0096); null until heard, and from a server that sends none. */
+    serverOpen: /** @type {number | null} */ (null),
     /** Reads in flight off the count: mirrors pendingRead, which Alpine does not watch. */
     pending: 0,
     allPending: false,
@@ -84,6 +86,19 @@ export function notificationsStore({ gateway, alerts, prefs, clock, navigate, an
       if (this.serverCount === null) return null;
       if (this.allPending) return 0;
       return Math.max(0, this.serverCount - this.pending);
+    },
+
+    /** What the bell and the title count: what needs the person, or the unread ones for a server that does not say. */
+    get badgeCount() {
+      return this.serverOpen ?? this.unreadCount;
+    },
+    get badgeCountsOpen() {
+      return this.serverOpen !== null;
+    },
+
+    /** Takes the server's open count, when it sent one. */
+    heardOpen(openCount) {
+      if (openCount !== null && openCount !== undefined) this.serverOpen = openCount;
     },
 
     /**
@@ -109,6 +124,7 @@ export function notificationsStore({ gateway, alerts, prefs, clock, navigate, an
         seedPage = seed;
         for (const n of seed.notifications) seen.add(n.id);
         this.serverCount = seed.unreadCount;
+        this.heardOpen(seed.openCount);
         this.syncTitle();
       } else {
         const since = this.stamp;
@@ -150,6 +166,7 @@ export function notificationsStore({ gateway, alerts, prefs, clock, navigate, an
       for (const n of page.notifications) seen.add(n.id);
       if (this.stamp === since) {
         this.serverCount = page.unreadCount;
+        this.heardOpen(page.openCount);
         this.syncTitle();
       }
     },
@@ -169,6 +186,7 @@ export function notificationsStore({ gateway, alerts, prefs, clock, navigate, an
       }
       this.pending = pendingRead.size;
       this.serverCount = change.unreadCount;
+      this.heardOpen(change.openCount);
       this.syncTitle();
 
       const changed = change.notifications.filter((n) => !stale(n));
@@ -261,7 +279,10 @@ export function notificationsStore({ gateway, alerts, prefs, clock, navigate, an
     answered(answer, request) {
       for (const n of answer.notifications) seen.add(n.id);
       const echoed = answer.notifications.some((n) => request.seenRead.has(n.id));
-      if (!echoed) this.serverCount = answer.unreadCount;
+      if (!echoed) {
+        this.serverCount = answer.unreadCount;
+        this.heardOpen(answer.openCount);
+      }
       if (answer.notifications.length) each((v) => v.apply(answer.notifications));
     },
 
@@ -305,14 +326,14 @@ export function notificationsStore({ gateway, alerts, prefs, clock, navigate, an
     },
 
     /**
-     * The unread count leads the document title: "(3) Notification · harness".
+     * The count the bell shows leads the document title: "(3) Notification · harness".
      * The title is read each time, minus this count only, so what a page adds
      * to it (the Agent board's trailing "· 2 need you") is kept.
      */
     syncTitle() {
       if (!doc || !started) return;
       baseTitle = doc.title.replace(/^\(\d+\+?\) /, "");
-      const n = pinned || this.unreadCount;
+      const n = pinned || this.badgeCount;
       doc.title = n ? `(${n}) ${baseTitle}` : baseTitle;
     },
 

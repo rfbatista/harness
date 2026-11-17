@@ -3,7 +3,7 @@ import { makeNotification, N0 } from "../testing/fixtures.js";
 import { Codes, StructuredError } from "../../../shared/domain/errors.js";
 import { FeedStatus } from "../../../shared/domain/feed.js";
 import { agentSlot } from "../../architecture/domain/layers.js";
-import { inboxError, streamNotice, toRow } from "./view.js";
+import { badgeText, bellLabel, inboxError, streamNotice, toRow } from "./view.js";
 
 file("notifications/presentation/view");
 
@@ -127,4 +127,12 @@ test("the link's accessible name reads who, what, where and when in order", () =
 test("a kind's glyph and the row's kind reach the markup; the old fields stay", () => {
   const row = toRow(agentPush(), N0);
   assert.deepEqual([row.kind, row.href, row.unread, row.canResumeAll], ["branch_request", "/projects/p1/tasks/t1", true, false]);
+});
+
+test("the bell's name says what its count counts", () => {
+  assert.equal(bellLabel(3, true), "Notifications, 3 need you");
+  assert.equal(bellLabel(3, false), "Notifications, 3 unread");
+  assert.equal(bellLabel(3), "Notifications, 3 unread");
+  assert.equal(bellLabel(0, true), "Notifications");
+  assert.equal(badgeText(120), "99+");
 });

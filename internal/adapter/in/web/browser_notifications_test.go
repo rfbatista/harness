@@ -522,6 +522,7 @@ func TestNotificationsPanelIsASheetOnPhones(t *testing.T) {
 func TestNotificationsPanelFromTheKeyboard(t *testing.T) {
 	h := newInboxHarness(t, inboxWorld())
 	var first, second, back, expanded string
+	// Open causes lead the panel, so the arrow goes from the review to the wait.
 	focused := `document.activeElement?.dataset?.id || document.activeElement?.className || ''`
 	h.run(t, "keys",
 		chromedp.EmulateViewport(1280, 900),
@@ -537,7 +538,7 @@ func TestNotificationsPanelFromTheKeyboard(t *testing.T) {
 		chromedp.Evaluate(focused, &back),
 		chromedp.AttributeValue(`.topbar .bell`, "aria-expanded", &expanded, nil, chromedp.ByQuery),
 	)
-	if first != "n-review" || second != "n-tui" || back != "[ button ] [ bell ]" || expanded != "false" {
+	if first != "n-review" || second != "n-wait" || back != "[ button ] [ bell ]" || expanded != "false" {
 		t.Errorf("keys: first %q, then %q, Esc back to %q, expanded %q", first, second, back, expanded)
 	}
 	h.noErrors(t)
@@ -624,6 +625,32 @@ func TestNotificationsPageShowsTheLedgerRow(t *testing.T) {
 	}
 	if len(lines) == 2 && !strings.HasPrefix(lines[1], "settled|devops|operate|wants to restart api on main|harness Fix malloc|Approved ") {
 		t.Errorf("settled row:\n%s", got)
+	}
+	h.noErrors(t)
+}
+
+// The bell and the title count what needs the person (open_count), live; the
+// panel lists the open causes first.
+func TestNotificationsBellCountsWhatNeedsThePerson(t *testing.T) {
+	h := newInboxHarness(t, inboxWorld())
+	var badge, title, label, panel string
+	h.run(t, "ready", h.openReady("/projects/p1"))
+	// A server that sends open_count: the unread count is 3, the open causes are 1.
+	for range 10 {
+		h.inbox.stream.pushRaw(t, map[string]any{"changed": []any{}, "unread_count": 3, "open_count": 1})
+		time.Sleep(200 * time.Millisecond)
+		h.run(t, "bell", chromedp.Evaluate(bellBadge, &badge))
+		if badge == "1" {
+			break
+		}
+	}
+	h.run(t, "read", chromedp.Title(&title), chromedp.AttributeValue(`.topbar .bell`, "aria-label", &label, nil, chromedp.ByQuery), h.openPanel(), chromedp.Evaluate(panelRows, &panel))
+	if badge != "1" || title != "(1) harness · harness" || label != "Notifications, 1 need you" {
+		t.Errorf("badge %q, title %q, label %q", badge, title, label)
+	}
+	// Open causes lead the panel: the review and the wait, then the information, the read and the settled.
+	if want := "Review requested: the dashboard plan|unread\nA session waits for approval|unread\nRelease notes drafted|unread\nA session failed|read\nRedesign sidebar is in review|settled"; panel != want {
+		t.Errorf("panel:\n%s", panel)
 	}
 	h.noErrors(t)
 }

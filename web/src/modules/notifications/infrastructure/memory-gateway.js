@@ -5,7 +5,7 @@
 
 import { Codes, StructuredError } from "../../../shared/domain/errors.js";
 import { FeedStatus } from "../../../shared/domain/feed.js";
-import { isUnread, markedRead, matches, upsert } from "../domain/notification.js";
+import { isSettled, isUnread, markedRead, matches, upsert } from "../domain/notification.js";
 import { toPage } from "./dto.js";
 
 const MAX_LIMIT = 200;
@@ -25,11 +25,13 @@ export function memoryNotifications({ notifications = [], now = () => new Date()
   let nextId = 1;
 
   const unreadCount = () => list.filter(isUnread).length;
+  // The causes that need the person: level action, not settled.
+  const openCount = () => list.filter((n) => n.level === "action" && !isSettled(n)).length;
 
   function commit(changed) {
-    if (changed.length === 0) return { notifications: [], unreadCount: unreadCount() };
+    if (changed.length === 0) return { notifications: [], unreadCount: unreadCount(), openCount: openCount() };
     list = upsert(list, changed);
-    const change = { notifications: changed, unreadCount: unreadCount() };
+    const change = { notifications: changed, unreadCount: unreadCount(), openCount: openCount() };
     for (const f of followers) f.onChange(change);
     return change;
   }
@@ -48,6 +50,7 @@ export function memoryNotifications({ notifications = [], now = () => new Date()
       return {
         notifications: page,
         unreadCount: unreadCount(),
+        openCount: openCount(),
         nextBefore: rest.length > limit ? page.at(-1).id : "",
       };
     },

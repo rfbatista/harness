@@ -69,6 +69,15 @@ export function notificationGatewayContract(name, makeSubject) {
     await assert.rejects(gateway.list({ before: "not-a-cursor" }), Codes.INVALID_INPUT);
   });
 
+  contract("the open count is global: level action and not resolved, whatever the filter, and reading does not change it", async () => {
+    const { gateway } = makeSubject(world());
+    const all = await gateway.list({});
+    assert.equal(all.openCount, 2);
+    assert.equal((await gateway.list({ projectId: "p2", unread: true })).openCount, 2);
+    const change = await gateway.markRead({ ids: ["new"] });
+    assert.equal(change.openCount, 2, "read is not settled");
+  });
+
   contract("marking ids read answers with the ones it changed and the new count; read ones again are no error", async () => {
     const { gateway } = makeSubject(world());
     const change = await gateway.markRead({ ids: ["new"] });

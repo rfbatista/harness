@@ -81,12 +81,13 @@ function toInterruptedSession(dto, at) {
   });
 }
 
-/** GET /api/notifications → {notifications, unread_count, next_before?} */
+/** GET /api/notifications → {notifications, unread_count, open_count?, next_before?} */
 export function toPage(body) {
   if (!body || !Array.isArray(body.notifications)) bad("expected {notifications: [...], unread_count}");
   return {
     notifications: body.notifications.map(toNotification),
     unreadCount: count(body.unread_count),
+    openCount: openCount(body.open_count),
     nextBefore: typeof body.next_before === "string" ? body.next_before : "",
   };
 }
@@ -94,13 +95,13 @@ export function toPage(body) {
 /** POST /api/notifications/read → {notifications: [changed…], unread_count} */
 export function toReadAnswer(body) {
   if (!body || !Array.isArray(body.notifications)) bad("expected {notifications: [...], unread_count}");
-  return { notifications: body.notifications.map(toNotification), unreadCount: count(body.unread_count) };
+  return { notifications: body.notifications.map(toNotification), unreadCount: count(body.unread_count), openCount: openCount(body.open_count) };
 }
 
 /** One stream message: {changed: [...], unread_count}. */
 export function toStreamChange(body) {
   if (!body || !Array.isArray(body.changed)) bad("expected {changed: [...], unread_count}");
-  return { notifications: body.changed.map(toNotification), unreadCount: count(body.unread_count) };
+  return { notifications: body.changed.map(toNotification), unreadCount: count(body.unread_count), openCount: openCount(body.open_count) };
 }
 
 /** POST /api/notifications/{id}/resume_interrupted → {notification, results: [{session_id, outcome, reason?}]} */
@@ -114,6 +115,13 @@ export function toResumeAnswer(body) {
 
 function count(v) {
   if (!Number.isInteger(v) || v < 0) bad("unread_count is not a count");
+  return v;
+}
+
+// The causes that need the person (ADR 0096); null from a server that sends none.
+function openCount(v) {
+  if (v === undefined || v === null) return null;
+  if (!Number.isInteger(v) || v < 0) bad("open_count is not a count");
   return v;
 }
 
