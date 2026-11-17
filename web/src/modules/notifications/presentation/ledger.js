@@ -2,7 +2,7 @@
 // pinned Needs you group and the day groups. Plain functions over domain
 // notifications; the page component binds to what they return.
 
-import { isOpen, isUnread } from "../domain/notification.js";
+import { isOpen, isSettled, isUnread } from "../domain/notification.js";
 
 export const TABS = Object.freeze(["needs", "unread", "all"]);
 
@@ -68,4 +68,32 @@ export function tabCounts({ items, openCount, unreadCount, hasMore, tab }) {
     unread: unreadCount ?? items.filter(isUnread).length,
     all: tab === "all" && !hasMore ? items.length : null,
   };
+}
+
+/**
+ * Folds consecutive settled items with the same actor session and kind into
+ * stacks (ADR 0097, contract §6). Call it on one day group's items, so the
+ * day is the same. Open causes and items with no session never fold, and a
+ * run of one stays a plain row.
+ * @param {import("../domain/notification.js").Notification[]} items  newest first
+ * @returns {{ key: string, folded: boolean, items: import("../domain/notification.js").Notification[] }[]}
+ */
+export function foldRuns(items) {
+  const runs = [];
+  let last = null;
+  for (const n of items) {
+    const sessionId = n.actor.sessionId;
+    const joins = last && isSettled(n) && sessionId !== "" && last.sessionId === sessionId && last.kind === n.kind;
+    if (joins) {
+      last.run.items.push(n);
+      last.run.folded = true;
+      continue;
+    }
+    const run = { key: n.id, folded: false, items: [n] };
+    runs.push(run);
+    last = isSettled(n) && sessionId !== "" ? { sessionId, kind: n.kind, run } : null;
+  }
+  // A stack's key is its oldest item: later ones join at the newest end, so the key (and an open stack) stays put.
+  for (const r of runs) r.key = r.items.at(-1).id;
+  return runs;
 }

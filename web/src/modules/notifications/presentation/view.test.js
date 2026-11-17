@@ -137,3 +137,29 @@ test("the bell's name says what its count counts", () => {
   assert.equal(bellLabel(0, true), "Notifications");
   assert.equal(badgeText(120), "99+");
 });
+
+// ── a folded stack's summary (ADR 0097) ───────────────────────────────────
+
+import { toStackRow } from "./view.js";
+
+const settledPush = (id, m, outcome, fields = {}) =>
+  agentPush({ id, createdAt: new Date(N0.getTime() + m * 60_000), resolvedAt: new Date(N0.getTime() + m * 60_000 + 30_000), outcome, ...fields });
+
+test("a stack counts its outcomes in the agent's voice, with the newest time and where it happened", () => {
+  const items = [settledPush("c", 30, "approved"), settledPush("b", 20, "denied"), settledPush("a", 10, "approved")];
+  const row = toStackRow(items, new Date(N0.getTime() + 60 * 60_000));
+  assert.deepEqual([row.count, row.whoName, row.whoMode, row.verb, row.statusText], [3, "devops", "operate", "asked to push 3 times", "2 approved · 1 denied"]);
+  assert.deepEqual([row.objectText, row.objectIsCode, row.project, row.task, row.repository], ["agent/x → origin/feat/y", true, "harness", "Notification", "harness-api"]);
+  assert.equal(row.clock, clock(new Date(N0.getTime() + 30 * 60_000)));
+  assert.equal(row.label, `2 approved · 1 denied. devops asked to push 3 times agent/x → origin/feat/y. harness › Notification · harness-api. ${row.fullDate}, 30m ago. Expand to see them.`);
+});
+
+test("the stack names the object only when every item shares it, and settled with no outcome counts as settled", () => {
+  const mixed = toStackRow([settledPush("b", 20, "approved", { object: { text: "agent/y", code: true } }), settledPush("a", 10, "")], N0);
+  assert.deepEqual([mixed.hasObject, mixed.objectText, mixed.statusText], [false, "", "1 approved · 1 settled"]);
+});
+
+test("verbs read in the past: wants to, asks you to, waits for", () => {
+  const verb = (v) => toStackRow([settledPush("b", 20, "approved", { verb: v }), settledPush("a", 10, "approved", { verb: v })], N0).verb;
+  assert.deepEqual([verb("asks you to review"), verb("waits for your approval to run"), verb("wants to restart")], ["asked you to review 2 times", "waited for your approval to run 2 times", "asked to restart 2 times"]);
+});

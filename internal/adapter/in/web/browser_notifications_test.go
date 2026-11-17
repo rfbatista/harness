@@ -684,3 +684,43 @@ func TestNotificationsPageGroupsNeedsYouAboveTheDays(t *testing.T) {
 	}
 	h.noErrors(t)
 }
+
+// Settled repeats from one session fold into a stack that opens; an open
+// cause never folds.
+func TestNotificationsPageFoldsSettledRepeatsIntoAStack(t *testing.T) {
+	now := time.Now()
+	var list []*domain.Notification
+	extra := map[string]map[string]any{}
+	agent := map[string]any{"kind": "agent", "name": "devops", "mode": "operate", "session_id": "s9"}
+	for i, outcome := range []string{"approved", "denied", "approved"} {
+		at := now.Add(-time.Duration(10+i*10) * time.Minute)
+		id := "push-" + strconv.Itoa(i)
+		list = append(list, &domain.Notification{ID: id, ProjectID: "p1", ProjectName: "harness", Source: domain.NotificationFromAgent, Kind: domain.NotificationBranchRequest, Level: domain.NotificationAction, Title: "devops wants to push", Link: "/projects/p1", CreatedAt: at, ResolvedAt: &at})
+		extra[id] = map[string]any{"actor": agent, "verb": "wants to push", "object": map[string]any{"text": "agent/x → origin/feat/y", "code": true}, "outcome": outcome}
+	}
+	open := &domain.Notification{ID: "open", ProjectID: "p1", ProjectName: "harness", Source: domain.NotificationFromAgent, Kind: domain.NotificationBranchRequest, Level: domain.NotificationAction, Title: "devops wants to push", Link: "/projects/p1", CreatedAt: now.Add(-5 * time.Minute)}
+	extra["open"] = map[string]any{"actor": agent, "verb": "wants to push", "object": map[string]any{"text": "agent/z → origin/feat/z", "code": true}}
+	list = append([]*domain.Notification{open}, list...)
+	h := newInboxHarness(t, list)
+	h.inbox.extra = extra
+	const stack = `(() => { const d = document.querySelector('main details.stack'); return d ? [d.open, d.querySelector('summary .title').innerText.replace(/\s+/g, ' ').trim(), d.querySelector('summary .standing').textContent, d.querySelectorAll(':scope > ul > li').length].join('|') : ''; })()`
+	var closed, opened string
+	var needsStacks int
+	h.run(t, "page", h.openReady("/notifications?tab=all"))
+	for range 10 {
+		h.inbox.stream.pushRaw(t, withExtraAt(ports.NotificationChange{Changed: list, UnreadCount: 1}, "changed", extra))
+		time.Sleep(200 * time.Millisecond)
+		h.run(t, "stack", chromedp.Evaluate(stack, &closed))
+		if closed != "" {
+			break
+		}
+	}
+	if closed != "false|3 asked to push 3 times agent/x → origin/feat/y|2 approved · 1 denied|3" {
+		t.Errorf("closed stack: %q", closed)
+	}
+	h.run(t, "open", chromedp.Evaluate(`document.querySelector('main details.stack > summary').click(); true`, nil), railPoll(`document.querySelector('main details.stack').open`), chromedp.Evaluate(stack, &opened), chromedp.Evaluate(`document.querySelectorAll('main .group:first-of-type details.stack').length`, &needsStacks))
+	if !strings.HasPrefix(opened, "true|") || needsStacks != 0 {
+		t.Errorf("opened stack: %q; stacks in Needs you: %d", opened, needsStacks)
+	}
+	h.noErrors(t)
+}

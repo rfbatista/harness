@@ -8,8 +8,8 @@
 
 import { readSeed } from "../../../../shared/presentation/seed.js";
 import { isOpen, markedRead, merge } from "../../domain/notification.js";
-import { filterOf, groupsFor, tabCounts, tabFrom } from "../ledger.js";
-import { inboxError, streamNotice, toRow } from "../view.js";
+import { filterOf, foldRuns, groupsFor, tabCounts, tabFrom } from "../ledger.js";
+import { inboxError, streamNotice, toRow, toStackRow } from "../view.js";
 import { pageSeed } from "./notificationsBell.js";
 
 const PAGE_LIMIT = 50;
@@ -44,7 +44,20 @@ export const notificationsPage = ({ gateway, store, clock }) => () => {
 
     /** The Needs you group and the day groups, each with its rows. */
     get groups() {
-      return groupsFor(this.items, this.tab, this.now).map((g) => ({ key: g.key, title: g.title, tone: g.tone, count: g.items.length, rows: g.items.map((n) => toRow(n, this.now)) }));
+      return groupsFor(this.items, this.tab, this.now).map((g) => ({ key: g.key, title: g.title, tone: g.tone, count: g.items.length, entries: this.entriesOf(g) }));
+    },
+    /**
+     * A group's entries: a plain row, or a folded stack of settled repeats
+     * (never the Needs you group). Alpine's x-for walks `plain` and `stacks`,
+     * one of which is empty, so the markup needs no condition.
+     */
+    entriesOf(group) {
+      if (group.key === "needs") return group.items.map((n) => ({ key: n.id, plain: [toRow(n, this.now)], stacks: [] }));
+      return foldRuns(group.items).map((run) =>
+        run.folded
+          ? { key: `stack:${run.key}`, plain: [], stacks: [{ key: run.key, head: [toStackRow(run.items, this.now)], rows: run.items.map((n) => toRow(n, this.now)) }] }
+          : { key: run.key, plain: [toRow(run.items[0], this.now)], stacks: [] },
+      );
     },
     get counts() {
       return tabCounts({ items: this.items, openCount: store.serverOpen, unreadCount: store.unreadCount, hasMore: this.nextBefore !== "", tab: this.tab });

@@ -271,6 +271,56 @@ templ NotificationLiveRow(actions bool) {
 	</article>
 }
 
+// NotificationStack is a folded stack of settled repeats (ADR 0097): a
+// native details element whose summary is the ledger row of the whole run
+// (who, "asked to push 6 times", the outcomes counted), and whose body lists
+// the notifications themselves. It lives in a notificationsPage x-for over
+// `stack`, with `head` (the summary row) and `rows` (the members).
+templ NotificationStack() {
+	<details class="[ stack ]">
+		<template x-for="row in stack.head" x-bind:key="row.key">
+			<summary x-bind:aria-label="row.label">
+				<article class="[ notification ]" data-layout="ledger" x-bind:data-kind="row.kind" data-level="action" data-state="settled">
+					<span class="[ marker ]" aria-hidden="true"></span>
+					<div class="[ who ]">
+						<span class="[ avatar ]" aria-hidden="true" x-bind:data-who="row.whoKind" x-bind:data-agent="row.whoSlot" x-text="row.whoInitial"></span>
+						<span class="[ name ]" x-text="row.whoName"></span>
+						<span class="[ mode ]" x-show="row.hasWhoMode" x-text="row.whoMode"></span>
+					</div>
+					<div class="[ what ]">
+						<span class="[ title ]">
+							<span class="[ icon ]" aria-hidden="true"></span>
+							<span class="[ text ]"><span class="[ count ]" x-text="row.count"></span> <span class="[ verb ]" x-text="row.verb"></span> <span class="[ object ]" x-show="row.hasObject" x-bind:data-code="row.objectIsCode" x-text="row.objectText"></span></span>
+						</span>
+						<p class="[ where ]">
+							<span class="[ project ]" x-text="row.project"></span>
+							<template x-if="row.hasTask">
+								<span class="[ task ]" x-text="row.task"></span>
+							</template>
+							<template x-if="row.hasRepository">
+								<span class="[ repo ]" x-text="row.repository"></span>
+							</template>
+						</p>
+					</div>
+					<div class="[ more ]"></div>
+					<div class="[ when ]">
+						<time x-bind:datetime="row.at" x-bind:title="row.fullDate"><span x-text="row.clock"></span><span class="[ age ]" x-text="row.age"></span></time>
+						<span class="[ standing ]" data-tone="quiet" x-text="row.statusText"></span>
+					</div>
+					<span class="[ chev ]" aria-hidden="true"></span>
+				</article>
+			</summary>
+		</template>
+		<ul role="list" class="[ notification-list ]">
+			<template x-for="row in stack.rows" x-bind:key="row.id">
+				<li>
+					@NotificationLiveRow(true)
+				</li>
+			</template>
+		</ul>
+	</details>
+}
+
 // tasksToggle is the phone's way to the rail: the Tasks button, with how many
 // tasks need the person.
 templ tasksToggle(r Rail) {

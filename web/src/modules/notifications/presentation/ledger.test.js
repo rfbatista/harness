@@ -55,3 +55,30 @@ test("tab counts are the server's, falling back to the items held; All counts on
   assert.deepEqual(tabCounts({ items, openCount: null, unreadCount: null, hasMore: false, tab: "all" }), { needs: 1, unread: 1, all: 2 });
   assert.equal(tabCounts({ items, openCount: null, unreadCount: null, hasMore: false, tab: "needs" }).all, null, "another tab holds a filtered list");
 });
+
+// ── folded stacks (ADR 0097) ──────────────────────────────────────────────
+
+import { foldRuns } from "./ledger.js";
+
+const by = (sessionId, kind = "branch_request") => ({ kind, actor: { kind: "agent", name: "devops", mode: "operate", sessionId } });
+const settled = (id, h, fields = {}) => n(id, day(2026, 11, 17, h), { resolvedAt: day(2026, 11, 17, h), outcome: "approved", ...by("s1"), ...fields });
+
+test("consecutive settled items of one session and kind fold into one stack; a lone one stays a row", () => {
+  const items = [settled("a", 14), settled("b", 13), settled("c", 12), settled("d", 11, by("s2")), settled("e", 10, by("s1", "service_request"))];
+  const runs = foldRuns(items);
+  assert.deepEqual(runs.map((r) => r.items.map((x) => x.id)), [["a", "b", "c"], ["d"], ["e"]]);
+  assert.deepEqual(runs.map((r) => r.folded), [true, false, false]);
+});
+
+test("a different session, kind or an interruption breaks the run, and the run starts again after it", () => {
+  const items = [settled("a", 14), settled("b", 13, by("s2")), settled("c", 12), settled("d", 11)];
+  assert.deepEqual(foldRuns(items).map((r) => r.items.map((x) => x.id)), [["a"], ["b"], ["c", "d"]]);
+});
+
+test("an open cause and an item with no session never fold", () => {
+  const open = n("o", day(2026, 11, 17, 14), by("s1"));
+  const noSession = (id, h) => settled(id, h, { actor: { kind: "system", name: "harness", mode: "", sessionId: "" } });
+  assert.deepEqual(foldRuns([open, settled("a", 13), settled("b", 12)]).map((r) => r.items.map((x) => x.id)), [["o"], ["a", "b"]]);
+  assert.deepEqual(foldRuns([noSession("x", 14), noSession("y", 13)]).map((r) => r.folded), [false, false]);
+  assert.deepEqual(foldRuns([open, n("p", day(2026, 11, 17, 13), by("s1"))]).map((r) => r.folded), [false, false]);
+});

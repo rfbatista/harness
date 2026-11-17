@@ -178,6 +178,56 @@ export function toRow(n, now) {
   };
 }
 
+/** A verb phrase in the agent's voice, in the past: "wants to push" → "asked to push". */
+function pastVerb(verb) {
+  return verb
+    .replace(/^wants to /, "asked to ")
+    .replace(/^asks you to /, "asked you to ")
+    .replace(/^waits for /, "waited for ");
+}
+
+/** "5 approved · 1 denied": the outcomes of a stack, in the order the outcome words are listed, and "settled" for none recorded. */
+function tally(items) {
+  const counts = new Map();
+  for (const n of items) counts.set(n.outcome, (counts.get(n.outcome) ?? 0) + 1);
+  const order = [...Object.keys(OUTCOME_WORDS), ""];
+  return order
+    .filter((o) => counts.has(o))
+    .map((o) => `${counts.get(o)} ${o === "" ? "settled" : OUTCOME_WORDS[o][0].toLowerCase()}`)
+    .join(" · ");
+}
+
+/**
+ * The summary row of a folded stack: the same who and where as its newest
+ * item, "asked to push 6 times", and the outcomes counted.
+ * @param {import("../domain/notification.js").Notification[]} items  newest first, two or more
+ * @param {Date} now
+ */
+export function toStackRow(items, now) {
+  const [newest] = items;
+  const row = toRow(newest, now);
+  const sameObject = items.every((n) => n.object?.text === newest.object?.text) && newest.object !== null;
+  const verb = `${pastVerb(newest.verb || newest.title)} ${items.length} times`;
+  const statusText = tally(items);
+  const where = [[newest.projectName, newest.taskTitle].filter(Boolean).join(" › "), newest.repositoryName].filter(Boolean).join(" · ");
+  return {
+    ...row,
+    key: `stack:${items.at(-1).id}`,
+    count: items.length,
+    verb,
+    hasVerb: true,
+    hasObject: sameObject,
+    objectText: sameObject ? newest.object.text : "",
+    objectIsCode: sameObject && newest.object.code,
+    statusText,
+    hasStatus: true,
+    statusTone: "quiet",
+    state: "settled",
+    unread: false,
+    label: [`${statusText}.`, `${newest.actor.name} ${verb}${sameObject ? ` ${newest.object.text}` : ""}.`, where ? `${where}.` : "", `${row.fullDate}, ${row.age === "now" ? "just now" : `${row.age} ago`}.`, "Expand to see them."].filter(Boolean).join(" "),
+  };
+}
+
 /**
  * What a failed load or action reads as: a plain sentence, no code and no
  * developer message. The banner pairs it with a Reload action.

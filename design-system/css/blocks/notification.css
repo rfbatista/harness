@@ -423,5 +423,50 @@
     @media (width < 48rem) { padding: var(--space-m); }
   }
 
+  /*
+   * A folded stack of settled repeats (ADR 0097): a details element whose
+   * summary is one ledger row for the run, and whose body lists the items.
+   */
+  details.stack {
+    & > summary { list-style: none; cursor: pointer; }
+    & > summary::-webkit-details-marker { display: none; }
+    & > summary:focus-visible { outline: 2px solid var(--color-focus); outline-offset: -2px; }
+    & > summary .notification:hover { background: var(--color-hover); }
+    & > summary .title .verb { font-weight: var(--weight-regular); color: var(--color-ink-muted); }
+    & > summary .title .count {
+      display: inline-grid;
+      place-items: center;
+      min-inline-size: 1.25rem;
+      block-size: 1.25rem;
+      padding-inline: var(--space-2xs);
+      border-radius: var(--radius-xs);
+      background: var(--color-sunken);
+      color: var(--color-ink-muted);
+      font-size: var(--text-xs);
+      font-weight: var(--weight-medium);
+    }
+    & > summary .chev {
+      grid-area: mark;
+      align-self: center;
+      justify-self: end;
+      inline-size: 1rem;
+      block-size: 1rem;
+      background: var(--color-ink-muted);
+      mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 20 20' fill='none' stroke='black' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M6 8l4 4 4-4'/%3E%3C/svg%3E") center / contain no-repeat;
+      transition: transform var(--duration-quick);
+    }
+    &[open] > summary .chev { transform: rotate(180deg); }
+    & > .notification-list {
+      border-block-start: var(--border-width) solid var(--color-line);
+      background: var(--color-panel);
+
+      & .notification { padding-inline-start: calc(var(--space-m) + 0.5rem + var(--space-m)); }
+    }
+
+    @media (prefers-reduced-motion: reduce) {
+      & > summary .chev { transition: none; }
+    }
+  }
+
   main[x-data="notificationsPage"] > .toolbar .sum { color: var(--color-ink-muted); font-size: var(--text-sm); }
 }

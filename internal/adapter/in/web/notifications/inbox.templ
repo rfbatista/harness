@@ -84,9 +84,14 @@ templ InboxPage(frame shell.Frame, v View) {
 							<section class="[ group ]">
 								<h2 class="[ ghead ]" x-bind:data-tone="group.tone"><span x-text="group.title"></span> <span class="[ n ]" x-text="group.count"></span></h2>
 								<ul role="list" class="[ notification-list ]">
-									<template x-for="row in group.rows" x-bind:key="row.id">
+									<template x-for="entry in group.entries" x-bind:key="entry.key">
 										<li>
-											@shell.NotificationLiveRow(true)
+											<template x-for="row in entry.plain" x-bind:key="row.id">
+												@shell.NotificationLiveRow(true)
+											</template>
+											<template x-for="stack in entry.stacks" x-bind:key="stack.key">
+												@shell.NotificationStack()
+											</template>
 										</li>
 									</template>
 								</ul>
