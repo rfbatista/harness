@@ -42,6 +42,8 @@ type NotificationModel struct {
 	Outcome string `gorm:"column:outcome"`
 	// Interrupted is a sessions_interrupted notification's list, as JSON.
 	Interrupted string `gorm:"column:interrupted_sessions"`
+	// Listed is a commit_check_off notification's list, as JSON.
+	Listed string `gorm:"column:listed_sessions"`
 }
 
 func (NotificationModel) TableName() string { return "notifications" }
@@ -51,12 +53,16 @@ func (m *NotificationModel) ToDomain() *domain.Notification {
 	if m.Interrupted != "" {
 		_ = json.Unmarshal([]byte(m.Interrupted), &interrupted)
 	}
+	var listed []domain.ListedSession
+	if m.Listed != "" {
+		_ = json.Unmarshal([]byte(m.Listed), &listed)
+	}
 	var object *domain.NotificationObject
 	if m.ObjectText != "" {
 		object = &domain.NotificationObject{Text: m.ObjectText, Code: m.ObjectCode}
 	}
 	return &domain.Notification{
-		Verb: m.Verb, Object: object, RepositoryID: m.RepositoryID,
+		Verb: m.Verb, Object: object, RepositoryID: m.RepositoryID, ListedSessions: listed,
 		InterruptedSessions: interrupted,
 		ID:                  m.ID, ProjectID: m.ProjectID, TaskID: m.TaskID, SessionID: m.SessionID,
 		Source: domain.NotificationSource(m.Source), Kind: domain.NotificationKind(m.Kind), Level: domain.NotificationLevel(m.Level),
@@ -95,8 +101,12 @@ func (r *NotificationRepository) Create(n *domain.Notification) (*domain.Notific
 	if err != nil {
 		return nil, err
 	}
+	listed, err := listedJSON(n.ListedSessions)
+	if err != nil {
+		return nil, err
+	}
 	m := &NotificationModel{
-		Interrupted: interrupted, Verb: n.Verb, RepositoryID: n.RepositoryID,
+		Listed: listed, Interrupted: interrupted, Verb: n.Verb, RepositoryID: n.RepositoryID,
 		ID: id, ProjectID: n.ProjectID, TaskID: n.TaskID, SessionID: n.SessionID,
 		Source: string(n.Source), Kind: string(n.Kind), Level: string(n.Level),
 		Title: n.Title, Body: n.Body, Link: n.Link, CauseKey: n.CauseKey,
@@ -118,6 +128,26 @@ func interruptedJSON(list []domain.InterruptedSession) (string, error) {
 	}
 	b, err := json.Marshal(list)
 	return string(b), err
+}
+
+func listedJSON(list []domain.ListedSession) (string, error) {
+	if len(list) == 0 {
+		return "", nil
+	}
+	b, err := json.Marshal(list)
+	return string(b), err
+}
+
+func (r *NotificationRepository) UpdateCommitCheck(id string, list []domain.ListedSession, verb, title, body string) (*domain.Notification, error) {
+	raw, err := listedJSON(list)
+	if err != nil {
+		return nil, err
+	}
+	res := r.db.Model(&NotificationModel{}).Where("id = ?", id).Updates(map[string]any{"listed_sessions": raw, "verb": verb, "title": title, "body": body})
+	if res.Error != nil || res.RowsAffected == 0 {
+		return nil, res.Error
+	}
+	return r.Get(id), nil
 }
 
 func (r *NotificationRepository) SetInterruptedSessions(id string, list []domain.InterruptedSession) (*domain.Notification, error) {

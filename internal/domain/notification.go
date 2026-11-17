@@ -102,6 +102,30 @@ type NotificationObject struct {
 	Code bool   `json:"code"`
 }
 
+// CommitCheckState is where one session listed by a commit_check_off
+// notification stands.
+type CommitCheckState string
+
+const (
+	// CommitCheckOff: the session's commit check is still off.
+	CommitCheckOff CommitCheckState = "off"
+	// CommitCheckRepaired: the check is guarded again.
+	CommitCheckRepaired CommitCheckState = "repaired"
+	// CommitCheckEnded: the session was deleted.
+	CommitCheckEnded CommitCheckState = "ended"
+)
+
+// ListedSession is one entry of a commit_check_off notification's list
+// (ADR 0098). State and TaskTitle are as of the read.
+type ListedSession struct {
+	SessionID string           `json:"session_id"`
+	TaskID    string           `json:"task_id,omitempty"`
+	TaskTitle string           `json:"task_title,omitempty"`
+	AgentName string           `json:"agent_name"`
+	Link      string           `json:"link"`
+	State     CommitCheckState `json:"state"`
+}
+
 // NotificationOutcome is how a notification's cause ended (ADR 0097). A
 // notification resolved before outcomes were recorded has none.
 type NotificationOutcome string
@@ -176,6 +200,8 @@ type Notification struct {
 	// about; RepositoryName is its name as of the read.
 	RepositoryID   string `json:"-"`
 	RepositoryName string `json:"repository_name,omitempty"`
+	// ListedSessions is the list of a commit_check_off notification.
+	ListedSessions []ListedSession `json:"listed_sessions,omitempty"`
 	// Outcome is how it ended; set with ResolvedAt, absent on rows resolved
 	// before outcomes were recorded.
 	Outcome NotificationOutcome `json:"outcome,omitempty"`

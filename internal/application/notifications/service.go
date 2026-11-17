@@ -124,6 +124,9 @@ type Service struct {
 	now      func() time.Time
 	delivery *dispatcher
 	resumer  ports.SessionResumer
+	// bootedAt is when this boot began, to the stored millisecond: a
+	// commit_check_off notification of an earlier boot is ended, not extended.
+	bootedAt time.Time
 	// resumeMu keeps two clicks of Resume all interrupted from running at
 	// once: the second waits, then retries only what is still marked.
 	resumeMu sync.Mutex
@@ -188,7 +191,7 @@ func New(repo ports.NotificationRepository, readers Readers, opts Options) (*Ser
 		return nil, err
 	}
 	return &Service{
-		repo: repo, readers: readers, now: now, delivery: d, resumer: opts.Resumer, stream: newSequencer(),
+		repo: repo, readers: readers, now: now, bootedAt: now().Truncate(time.Millisecond), delivery: d, resumer: opts.Resumer, stream: newSequencer(),
 		followers: map[chan ports.NotificationChange]struct{}{},
 	}, nil
 }
@@ -242,7 +245,7 @@ func (s *Service) Subscribe(bus ports.EventSubscriber) {
 		return nil
 	})
 	ports.On(bus, func(ctx context.Context, ev domain.SessionDeleted) error {
-		s.resolve(commitCheckKey(ev.SessionID), domain.OutcomeEnded)
+		s.settleDeleted(ev.SessionID)
 		s.resolve(sessionWaitingKey(ev.SessionID), domain.OutcomeEnded)
 		s.refreshInterrupted(ev.SessionID)
 		return nil
@@ -303,7 +306,6 @@ func reviewKey(id string) string         { return "review:" + id }
 func sessionWaitingKey(id string) string { return "session_waiting:" + id }
 func sessionFailedKey(id string) string  { return "session_failed:" + id }
 func taskReviewKey(id string) string     { return "task_review:" + id }
-func commitCheckKey(id string) string    { return "commit_check_off:" + id }
 func interviewKey(id string) string      { return "interview:" + id }
 
 func (s *Service) onReview(ev domain.ReviewRequestChanged) {
@@ -397,13 +399,6 @@ func (s *Service) onBranchFinding(ev domain.BranchFindingFound) {
 	s.record(n, false)
 }
 
-func taskOrNone(id string) string {
-	if id == "" {
-		return "none"
-	}
-	return id
-}
-
 func (s *Service) onSessionStatus(ev domain.SessionStatusChanged) {
 	if ev.ByBranchRequest {
 		return
@@ -451,29 +446,6 @@ func (s *Service) onInterviewOpened(ev domain.InterviewOpened) {
 	}
 	interviewWhat(ev.Title, ev.Questions).apply(n)
 	s.record(n, true)
-}
-
-// onCommitCheck records one notification for a session whose commit check is
-// off, however often the check finds it off, and resolves it once the check
-// is repaired.
-func (s *Service) onCommitCheck(ev domain.SessionCommitCheckChanged) {
-	if !ev.Off {
-		s.resolve(commitCheckKey(ev.SessionID), domain.OutcomeRepaired)
-		return
-	}
-	if ev.ProjectID == "" {
-		slog.Warn("notification for a session that is not recorded", "session", ev.SessionID)
-		return
-	}
-	n := &domain.Notification{
-		ProjectID: ev.ProjectID, TaskID: ev.TicketID, SessionID: ev.SessionID,
-		Kind: domain.NotificationCommitCheckOff, Level: domain.NotificationAction,
-		Actor: systemActor(domain.ActorHarness),
-		Body:  clip(ev.Reason, domain.MaxNotificationBodyLen),
-		Link:  domain.TaskLink(ev.ProjectID, ev.TicketID), CauseKey: commitCheckKey(ev.SessionID),
-	}
-	commitCheckWhat(1).apply(n)
-	s.record(n, false)
 }
 
 // onSessionsInterrupted posts the one sessions_interrupted notification of a
@@ -1172,6 +1144,9 @@ func (s *Service) named(ctx context.Context, list ...*domain.Notification) []*do
 				tasks[c.TaskID] = title
 			}
 			c.TaskTitle = title
+		}
+		if len(c.ListedSessions) > 0 {
+			c.ListedSessions = s.listedStates(ctx, c.ListedSessions, tasks)
 		}
 		if len(c.InterruptedSessions) > 0 {
 			c.InterruptedSessions = s.interruptedStates(ctx, c.InterruptedSessions, tasks)

@@ -196,7 +196,8 @@ func TestBootRepairsTheOthersWhenOneSessionsRepairFails(t *testing.T) {
 	}
 }
 
-// commitCheckNotes are the inbox notifications about a session's commit check.
+// commitCheckNotes are the inbox notifications that list a session's commit
+// check, newest first: one per boot that found it off (ADR 0098).
 func (h *archHooks) commitCheckNotes(sessionID string) []*domain.Notification {
 	h.t.Helper()
 	page, err := h.notes.ListNotifications(h.ctx, ports.NotificationQuery{Limit: 200})
@@ -205,8 +206,13 @@ func (h *archHooks) commitCheckNotes(sessionID string) []*domain.Notification {
 	}
 	var out []*domain.Notification
 	for _, n := range page.Notifications {
-		if n.Kind == domain.NotificationCommitCheckOff && n.SessionID == sessionID {
-			out = append(out, n)
+		if n.Kind != domain.NotificationCommitCheckOff {
+			continue
+		}
+		for _, e := range n.ListedSessions {
+			if e.SessionID == sessionID {
+				out = append(out, n)
+			}
 		}
 	}
 	return out
@@ -244,9 +250,11 @@ func TestAFailedRepairMarksTheSessionOffTellsThePersonOnceAndClearsWhenRepaired(
 		t.Fatalf("notifications after the boot = %d, first %+v, want one open action notification with the reason", len(notes), *notes[0])
 	}
 
-	h.restart() // still broken: no second notification
-	if notes := h.commitCheckNotes(a.id); len(notes) != 1 {
-		t.Errorf("%d notifications after a second boot while still off, want 1", len(notes))
+	// Still broken at the next boot: a new notification, and the earlier one ends.
+	h.restart()
+	notes = h.commitCheckNotes(a.id)
+	if len(notes) != 2 || notes[0].ResolvedAt != nil || notes[1].ResolvedAt == nil || notes[1].Outcome != domain.OutcomeEnded {
+		t.Errorf("notifications after a second boot while still off = %+v, want a new open one and the first ended", notes)
 	}
 
 	if err := os.Remove(hooks); err != nil {
@@ -256,8 +264,13 @@ func TestAFailedRepairMarksTheSessionOffTellsThePersonOnceAndClearsWhenRepaired(
 	if sess, _ := h.orch.Get(h.ctx, a.id); sessCommitOff(sess) != "" {
 		t.Errorf("commit check off = %q after a successful repair, want it cleared", sess.CommitCheckOff)
 	}
-	if notes := h.commitCheckNotes(a.id); len(notes) != 1 || notes[0].ResolvedAt == nil {
-		t.Errorf("notifications after the repair = %+v, want the one resolved", notes)
+	for _, n := range h.commitCheckNotes(a.id) {
+		if n.ResolvedAt == nil {
+			t.Errorf("notification %+v is still open after the repair", n)
+		}
+	}
+	if notes := h.commitCheckNotes(a.id); notes[0].Outcome != domain.OutcomeRepaired {
+		t.Errorf("the newest notification after the repair has outcome %q, want repaired", notes[0].Outcome)
 	}
 }
 

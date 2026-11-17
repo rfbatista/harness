@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"net/url"
+	"path/filepath"
 	"slices"
 	"strings"
 	"sync"
@@ -58,7 +59,7 @@ func newLedger(t *testing.T) *ledger {
 	t.Helper()
 	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
 	t.Cleanup(cancel)
-	l := &ledger{t: t, ctx: ctx, dbPath: ":memory:", root: t.TempDir()}
+	l := &ledger{t: t, ctx: ctx, dbPath: filepath.Join(t.TempDir(), "harness.db"), root: t.TempDir()}
 	l.boot()
 	var err error
 	if l.project, err = l.cat.Projects.CreateProject(ctx, "harness", t.TempDir()); err != nil {
@@ -133,8 +134,11 @@ func (l *ledger) session(id, agentName string, mode domain.SessionMode) {
 	}
 }
 
+// publish announces ev. The inbox orders by the millisecond, so each event
+// gets a millisecond of its own.
 func (l *ledger) publish(ev domain.Event) {
 	l.t.Helper()
+	time.Sleep(2 * time.Millisecond)
 	if err := l.cat.Bus.Publish(l.ctx, ev); err != nil {
 		l.t.Fatal(err)
 	}
@@ -797,5 +801,118 @@ func TestABranchFindingIsAcknowledged(t *testing.T) {
 	}
 	if status, body := l.post("/api/notifications/nope/acknowledge"); status != http.StatusNotFound {
 		t.Fatalf("acknowledge on an unknown id = %d %v, want 404", status, body)
+	}
+}
+
+// listed is the sessions a commit_check_off notification lists, by session id,
+// with their state.
+func listed(n jsonObj) map[string]string {
+	out := map[string]string{}
+	entries, _ := n["listed_sessions"].([]any)
+	for _, e := range entries {
+		entry := e.(jsonObj)
+		out[str(entry, "session_id")] = str(entry, "state")
+	}
+	return out
+}
+
+// off announces the commit check of a session of the ledger's task as off.
+func (l *ledger) off(session string) {
+	l.publish(domain.SessionCommitCheckChanged{SessionID: session, ProjectID: l.project.ID, TicketID: l.task.ID, Off: true, Reason: "the repair failed"})
+}
+
+func (l *ledger) repaired(session string) {
+	l.publish(domain.SessionCommitCheckChanged{SessionID: session, ProjectID: l.project.ID, TicketID: l.task.ID, Off: false})
+}
+
+// A boot that finds sessions with the commit check off posts one notification
+// per project, listing them all; repairing them resolves it, and the next boot
+// ends it (ticket 08, ADR 0098).
+func TestCommitCheckOffIsOneNotificationPerProjectPerBoot(t *testing.T) {
+	l := newLedger(t)
+	for _, id := range []string{"s1", "s2", "s3"} {
+		l.session(id, "agent-"+id, domain.SessionModeImplement)
+	}
+	other, err := l.cat.Projects.CreateProject(l.ctx, "tui", t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// Three sessions in one boot: one notification that grows.
+	l.off("s1")
+	first := l.next()
+	if len(first.Changed) != 1 || first.OpenCount != 1 {
+		t.Fatalf("the first session: %+v", first)
+	}
+	l.off("s2")
+	l.off("s3")
+	l.off("s1") // a check that finds it off again adds nothing
+	l.next()
+	l.next()
+	n := l.only("commit_check_off")
+	if got := listed(n); len(got) != 3 || got["s1"] != "off" || got["s2"] != "off" || got["s3"] != "off" {
+		t.Fatalf("listed sessions = %v, want s1 s2 s3 off", got)
+	}
+	if str(n, "verb") != "could not guard 3 sessions" || str(obj(n, "object"), "text") != "commit checks off" || str(obj(n, "actor"), "name") != "harness" ||
+		str(n, "title") != "harness could not guard 3 sessions: commit checks off" {
+		t.Fatalf("copy = %v", n)
+	}
+	entry := n["listed_sessions"].([]any)[0].(jsonObj)
+	if str(entry, "agent_name") != "agent-s1" || str(entry, "task_id") != l.task.ID || str(entry, "task_title") != "Notifications" ||
+		!strings.Contains(str(entry, "link"), "session=s1") {
+		t.Fatalf("listed session = %v", entry)
+	}
+	nid := str(n, "id")
+
+	// The repeat of s1 sent nothing: the next change on the stream is the next event.
+	l.repaired("s1")
+	c := l.next()
+	if len(c.Changed) != 1 || c.Changed[0].ID != nid || c.Changed[0].ResolvedAt != nil || c.OpenCount != 1 {
+		t.Fatalf("after s1 is repaired: %+v", c)
+	}
+	if got := listed(l.only("commit_check_off")); got["s1"] != "repaired" || got["s2"] != "off" {
+		t.Fatalf("listed after s1 = %v", got)
+	}
+
+	// A deleted session ends; the last one repaired resolves the notification as repaired.
+	l.publish(domain.SessionDeleted{SessionID: "s3"})
+	c = l.next()
+	if got := listed(l.only("commit_check_off")); got["s3"] != "ended" || len(c.Changed) != 1 || c.Changed[0].ResolvedAt != nil {
+		t.Fatalf("after s3 is deleted: listed %v, stream %+v", got, c)
+	}
+	l.repaired("s2")
+	l.settled("commit_check_off", "repaired")
+
+	// Another project keeps its own.
+	l.publish(domain.SessionCommitCheckChanged{SessionID: "s1", ProjectID: other.ID, Off: true, Reason: "x"})
+	l.next()
+	l.off("s1") // a new episode on the first project: a new notification
+	l.next()
+	list, page := l.list(url.Values{"kind": {"commit_check_off"}, "open": {"true"}})
+	if len(list) != 2 || count(page, "open_count") != 2 {
+		t.Fatalf("two projects: %d open commit check notifications, open_count %v", len(list), page["open_count"])
+	}
+
+	// The next boot posts a new one for the project and ends the old one.
+	l.reboot()
+	l.off("s2")
+	c = l.next()
+	if len(c.Changed) != 2 {
+		t.Fatalf("the next boot: %+v, want the ended one and the new one", c.Changed)
+	}
+	var ended, created *domain.Notification
+	for _, ch := range c.Changed {
+		if ch.ResolvedAt != nil {
+			ended = ch
+		} else {
+			created = ch
+		}
+	}
+	if ended == nil || created == nil || ended.Outcome != domain.OutcomeEnded || ended.ProjectID != l.project.ID || created.ProjectID != l.project.ID {
+		t.Fatalf("the next boot: ended %+v created %+v", ended, created)
+	}
+	list, _ = l.list(url.Values{"kind": {"commit_check_off"}, "open": {"true"}})
+	if len(list) != 2 {
+		t.Fatalf("open commit check notifications after the next boot = %d, want one per project (2)", len(list))
 	}
 }

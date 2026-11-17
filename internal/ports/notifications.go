@@ -180,6 +180,10 @@ type NotificationRepository interface {
 	// SetInterruptedSessions replaces the list of a sessions_interrupted
 	// notification and answers it as it now is; nil when there is none with id.
 	SetInterruptedSessions(id string, list []domain.InterruptedSession) (*domain.Notification, error)
+	// UpdateCommitCheck replaces the list, verb, title and body of a
+	// commit_check_off notification and answers it as it now is; nil when there
+	// is none with id.
+	UpdateCommitCheck(id string, list []domain.ListedSession, verb, title, body string) (*domain.Notification, error)
 	// ResolveTask settles every unresolved one of the task.
 	ResolveTask(taskID string, at time.Time, outcome domain.NotificationOutcome) ([]*domain.Notification, error)
 	// CountAgentSince counts agent notifications created after since: the
