@@ -52,7 +52,7 @@
  */
 
 export const SOURCES = Object.freeze(["system", "agent"]);
-export const KINDS = Object.freeze(["review_requested", "session_waiting", "task_review", "session_failed", "commit_check_off", "branch_request", "branch_finding", "sessions_interrupted", "agent"]);
+export const KINDS = Object.freeze(["review_requested", "session_waiting", "task_review", "session_failed", "commit_check_off", "branch_request", "branch_finding", "service_request", "sessions_interrupted", "agent"]);
 export const INTERRUPTED_STATES = Object.freeze(["interrupted", "resumed", "failed", "gone"]);
 export const LEVELS = Object.freeze(["info", "action"]);
 

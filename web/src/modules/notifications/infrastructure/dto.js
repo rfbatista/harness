@@ -10,7 +10,6 @@ export function toNotification(dto) {
   if (!dto || typeof dto.id !== "string" || dto.id === "") bad("notification without an id");
   const at = `notification ${dto.id}`;
   if (!SOURCES.includes(dto.source)) bad(`${at} has unknown source "${dto.source}"`);
-  if (!KINDS.includes(dto.kind)) bad(`${at} has unknown kind "${dto.kind}"`);
   if (!LEVELS.includes(dto.level)) bad(`${at} has unknown level "${dto.level}"`);
   // A path on this web UI only: "//host" is another origin.
   if (typeof dto.link !== "string" || !dto.link.startsWith("/") || dto.link.startsWith("//")) bad(`${at} has a link off the web UI`);
@@ -24,7 +23,10 @@ export function toNotification(dto) {
     taskTitle: dto.task_title ?? "",
     sessionId: dto.session_id ?? "",
     source: dto.source,
-    kind: dto.kind,
+    // A kind this client does not know still reads: as a generic notification
+    // (its title, body and link), so one new kind never empties the inbox.
+    // The drift test is what fails the build when the lists differ.
+    kind: KINDS.includes(dto.kind) ? dto.kind : "agent",
     level: dto.level,
     title: dto.title ?? "",
     body: dto.body ?? "",

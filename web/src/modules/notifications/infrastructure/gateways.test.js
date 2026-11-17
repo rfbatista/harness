@@ -83,13 +83,20 @@ test("a notification without its optional fields reads them as empty", () => {
   assert.ok(Object.isFrozen(n));
 });
 
-test("the branch gate's notifications map; any other unknown kind is still BAD_RESPONSE", () => {
+test("the branch gate's and the services' notifications map", () => {
   const dto = notificationDTO(makeNotification());
-  for (const kind of ["branch_request", "branch_finding"]) {
+  for (const kind of ["branch_request", "branch_finding", "service_request"]) {
     const n = toNotification({ ...dto, kind, level: "action", link: "/projects/p1/tasks/t1?session=s1#branch-request-r1" });
     assert.equal(n.kind, kind);
   }
-  assert.throws(() => toNotification({ ...dto, kind: "branch_gossip" }), Codes.BAD_RESPONSE);
+});
+
+test("a kind this client does not know reads as a generic notification and leaves the rest of the list whole", () => {
+  const dto = notificationDTO(makeNotification());
+  const n = toNotification({ ...dto, kind: "branch_gossip", level: "action", title: "Something new", body: "Details", link: "/projects/p1" });
+  assert.deepEqual([n.kind, n.level, n.title, n.body, n.link], ["agent", "action", "Something new", "Details", "/projects/p1"]);
+  const page = toPage({ notifications: [dto, { ...dto, id: "n2", kind: "gossip" }, { ...dto, id: "n3", kind: "service_request" }], unread_count: 3 });
+  assert.deepEqual(page.notifications.map((x) => x.kind), [dto.kind, "agent", "service_request"]);
 });
 
 test("a sessions_interrupted notification maps its list, whose entries default their optional fields", () => {
@@ -111,7 +118,6 @@ test("a sessions_interrupted notification maps its list, whose entries default t
 test("a malformed notification or answer is BAD_RESPONSE; a link off the web UI is refused", () => {
   const dto = notificationDTO(makeNotification());
   assert.throws(() => toNotification({ ...dto, id: "" }), Codes.BAD_RESPONSE);
-  assert.throws(() => toNotification({ ...dto, kind: "gossip" }), Codes.BAD_RESPONSE);
   assert.throws(() => toNotification({ ...dto, level: "urgent" }), Codes.BAD_RESPONSE);
   assert.throws(() => toNotification({ ...dto, source: "person" }), Codes.BAD_RESPONSE);
   assert.throws(() => toNotification({ ...dto, created_at: "" }), Codes.BAD_RESPONSE);

@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"slices"
 	"strconv"
+	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -508,6 +509,28 @@ func TestNotificationsPanelFromTheKeyboard(t *testing.T) {
 	)
 	if first != "n-review" || second != "n-tui" || back != "[ button ] [ bell ]" || expanded != "false" {
 		t.Errorf("keys: first %q, then %q, Esc back to %q, expanded %q", first, second, back, expanded)
+	}
+	h.noErrors(t)
+}
+
+// A service request is a kind the client once refused (BAD_RESPONSE), which
+// emptied the page and the panel behind an error banner.
+func TestNotificationsPageListsAServiceRequest(t *testing.T) {
+	list := append([]*domain.Notification{
+		{ID: "n-service", ProjectID: "p1", ProjectName: "harness", Source: domain.NotificationFromAgent, Kind: domain.NotificationServiceRequest, Level: domain.NotificationAction, Title: "devops wants to restart api", Link: "/projects/p1/services", CreatedAt: time.Now()},
+	}, inboxWorld()...)
+	h := newInboxHarness(t, list)
+	const banner = `!!document.querySelector('main [role=alert]')`
+	var rows string
+	var failed bool
+	h.run(t, "page", h.openReady("/notifications"), chromedp.Evaluate(pageRows, &rows), chromedp.Evaluate(banner, &failed))
+	if failed || !slices.Contains(strings.Split(rows, "\n"), "devops wants to restart api") {
+		t.Errorf("page: error banner %v, rows:\n%s", failed, rows)
+	}
+	var panel string
+	h.run(t, "panel", h.openPanel(), chromedp.Evaluate(panelRows, &panel))
+	if !strings.Contains(panel, "devops wants to restart api|") {
+		t.Errorf("panel:\n%s", panel)
 	}
 	h.noErrors(t)
 }
