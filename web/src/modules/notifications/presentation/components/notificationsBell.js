@@ -138,7 +138,7 @@ export const notificationsBell = ({ gateway, store, clock, env }) => () => {
     readAll(projectId, at) {
       this.items = this.items.map((n) => (!projectId || n.projectId === projectId ? markedRead(n, at) : n));
     },
-    async load() {
+    async load(again = false) {
       abort?.abort();
       abort = new AbortController();
       const since = store.stamp;
@@ -155,6 +155,11 @@ export const notificationsBell = ({ gateway, store, clock, env }) => () => {
         this.items = openFirst(upsert(page.notifications, open.notifications.filter(isOpen))).slice(0, PANEL_LIMIT);
         this.loaded = true;
         this.openLoaded = true;
+        // A change streamed while the two reads were in flight may be missing from them: read once more.
+        if (store.stamp !== since && !again) {
+          this.loading = false;
+          return this.load(true);
+        }
         this.now = clock.now();
       } catch (err) {
         if (err?.name !== "AbortError") this.error = inboxError(err);

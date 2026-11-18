@@ -400,6 +400,8 @@ func TestNotificationsArriveLive(t *testing.T) {
 	h.run(t, "arrival",
 		railPoll(bellBadge+` === '3'`),
 		railPoll(`document.title === '(3) harness · harness'`),
+		// The count moves with the store; the panel's row follows a tick later.
+		railPoll(`!!document.querySelector('#notifications-panel .notification a[data-id="new-1"]')`),
 		chromedp.Evaluate(panelRows, &rows),
 		chromedp.Title(&title),
 		railPoll(`document.querySelector('.stream-bar [x-data="streamAnnouncer"]').textContent !== ''`),
