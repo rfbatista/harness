@@ -429,7 +429,7 @@ func TestABranchTheSessionTouchedDeletedOrRenamedAroundTheGateIsAFinding(t *test
 	g.endTurnOf(g.id)
 	got := g.waitFindings(2)
 	titles := got[0].Title + " | " + got[1].Title
-	for _, want := range []string{"Unapproved branch deletion: temp", "Unapproved branch rename: feature-x → renamed-x"} {
+	for _, want := range []string{"found a branch deletion with no approved request on temp", "found a rename with no approved request on feature-x → renamed-x"} {
 		if !strings.Contains(titles, want) {
 			t.Errorf("inbox titles %q lack %q", titles, want)
 		}

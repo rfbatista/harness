@@ -110,7 +110,7 @@ func (s *Service) Change(_ context.Context, i domain.Interview) (*domain.Intervi
 	s.publish(domain.InterviewEvent{Seq: seq, Kind: domain.InterviewChanged, Interview: &i})
 	s.mu.Unlock()
 	if i.State.Closed() {
-		s.signal(domain.InterviewClosed{InterviewID: i.ID, SessionID: i.SessionID})
+		s.signal(domain.InterviewClosed{InterviewID: i.ID, SessionID: i.SessionID, State: i.State})
 		s.announce(i.SessionID)
 	}
 	return &i, nil
@@ -177,7 +177,7 @@ func (s *Service) leaveOpen(i *domain.Interview) (bool, error) {
 	}
 	s.publish(domain.InterviewEvent{Seq: seq, Kind: domain.InterviewChanged, Interview: i})
 	s.mu.Unlock()
-	s.signal(domain.InterviewClosed{InterviewID: i.ID, SessionID: i.SessionID})
+	s.signal(domain.InterviewClosed{InterviewID: i.ID, SessionID: i.SessionID, State: i.State})
 	s.announce(i.SessionID)
 	return true, nil
 }
