@@ -96,7 +96,7 @@ test("the Unread tab with a who filter asks for both, and the empty text names t
   await flush();
   await flush();
   assert.deepEqual([calls.at(-1).unread, calls.at(-1).actor], [true, "nobody"]);
-  assert.deepEqual([page.items.length, page.isEmpty, page.emptyText], [0, true, "Nothing unread."]);
+  assert.deepEqual([page.items.length, page.isEmpty, page.emptyText], [0, true, "Nothing unread from nobody."]);
   assert.deepEqual(page.actors.map((o) => [o.name, o.selected]), [["nobody", true]], "the URL's who stays selectable though none shows");
   page.destroy();
 });
@@ -291,4 +291,18 @@ test("a read open cause is still open: the Needs you tab keeps it, and Unread do
   await flush();
   assert.deepEqual([ids(page), page.counts.needs, page.counts.unread, store.badgeCount], [["o"], 1, 0, 1]);
   page.destroy();
+});
+
+test("an empty page says why: the who and kind filters are named, not just the tab", () => {
+  const { page } = app([]);
+  page.tab = "all";
+  assert.equal(page.emptyText, "No notifications yet.");
+  page.actor = "devops";
+  assert.equal(page.emptyText, "Nothing from devops.");
+  page.kind = "branch_request";
+  assert.equal(page.emptyText, "Nothing from devops of that kind.");
+  page.actor = "";
+  assert.equal(page.emptyText, "Nothing of that kind.");
+  page.tab = "needs";
+  assert.equal(page.emptyText, "Nothing of that kind needs you.");
 });

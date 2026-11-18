@@ -172,7 +172,7 @@ templ notificationsBell(b *Bell) {
 			x-on:click="toggle"
 		>
 			@icon("bell")
-			<span class="[ badge ]" data-tone="attention" aria-hidden="true" x-show="hasUnread" x-text="badge" { shownIf(b.Open() > 0)... }>{ b.BadgeText() }</span>
+			<span class="[ badge ]" data-tone="attention" aria-hidden="true" x-show="hasBadge" x-text="badge" { shownIf(b.Open() > 0)... }>{ b.BadgeText() }</span>
 		</a>
 		<section id="notifications-panel" class="[ popup ] [ notifications-panel ]" aria-labelledby="notifications-heading" x-ref="panel" x-on:keydown="panelKey">
 			<div class="[ head ]">
@@ -559,7 +559,7 @@ templ railLink(l Link) {
 		if l.StatusKey != "" {
 			<span class="[ tdot ]" data-st={ l.StatusKey } aria-hidden="true"></span>
 		} else if l.LiveState() != "" {
-			<span class="[ standing ]" data-state={ l.LiveState() } data-dot-only></span>
+			<span class="[ status ]" data-state={ l.LiveState() } data-dot-only></span>
 		}
 		<span class="[ label ]">{ l.Label }</span>
 		<span class="[ visually-hidden ]">{ l.MetaLead() }</span>
@@ -693,7 +693,7 @@ templ railLiveKidLink() {
 // railLiveLink is the live copy of railLink, bound to a row of railView.js.
 templ railLiveLink() {
 	<a x-bind:href="row.href" x-bind:aria-current="row.current" x-bind:data-task-id="row.id" x-bind:data-attention="row.attention" x-bind:data-fresh="row.fresh" x-bind:data-peek="row.peek" x-on:mouseenter="tip">
-		<span class="[ standing ]" data-dot-only x-show="row.hasDot" x-bind:data-state="row.state" x-bind:data-signal="row.signal"></span>
+		<span class="[ status ]" data-dot-only x-show="row.hasDot" x-bind:data-state="row.state" x-bind:data-signal="row.signal"></span>
 		<span class="[ label ]"><span x-text="row.before"></span><mark x-show="row.hasMatch" x-text="row.match"></mark><span x-text="row.after"></span></span>
 		<span class="[ visually-hidden ]" x-text="row.lead"></span>
 		<span class="[ badge ]" data-tone="attention" x-show="row.hasReviews" x-text="row.reviewsText"></span>
@@ -712,7 +712,7 @@ templ railLiveLink() {
 templ streamBar(live bool, hints []Hint, oob bool) {
 	<footer id="stream-bar" class="[ stream-bar ]" aria-live="polite" { oobAttrs(oob)... }>
 		if live {
-			<span class="[ standing ]" data-state="reconnecting" x-data="streamStatus" x-on:feed-status.window="update" x-bind:data-state="state" x-text="label">connecting</span>
+			<span class="[ status ]" data-state="reconnecting" x-data="streamStatus" x-on:feed-status.window="update" x-bind:data-state="state" x-text="label">connecting</span>
 		}
 		<span class="[ visually-hidden ]" x-data="streamAnnouncer" x-on:rail-announce.window="say" x-text="text"></span>
 		<span class="[ keys ]" x-data="streamHints" x-on:stream-hints.window="set">

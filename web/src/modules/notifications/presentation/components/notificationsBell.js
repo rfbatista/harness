@@ -64,7 +64,7 @@ export const notificationsBell = ({ gateway, store, clock, env }) => () => {
     get badge() {
       return badgeText(store.badgeCount);
     },
-    get hasUnread() {
+    get hasBadge() {
       return !!store.badgeCount;
     },
     get label() {

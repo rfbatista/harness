@@ -100,6 +100,11 @@ export const notificationsPage = ({ gateway, store, clock }) => () => {
       return this.live && this.loaded && this.groups.length === 0;
     },
     get emptyText() {
+      if (this.actor || this.kind) {
+        const narrowed = `${this.actor ? ` from ${this.actor}` : ""}${this.kind ? " of that kind" : ""}`;
+        if (this.tab === "needs") return `Nothing${narrowed} needs you.`;
+        return `Nothing${this.tab === "unread" ? " unread" : ""}${narrowed}.`;
+      }
       if (this.tab === "needs") return this.projectName ? `Nothing needs you in ${this.projectName}.` : "Nothing needs you.";
       if (this.tab === "unread") return this.projectName ? `Nothing unread in ${this.projectName}.` : "Nothing unread.";
       return this.projectName ? `No notifications in ${this.projectName} yet.` : "No notifications yet.";

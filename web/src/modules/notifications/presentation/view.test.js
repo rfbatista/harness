@@ -147,7 +147,8 @@ test("a kind's glyph and the row's kind reach the markup; the old fields stay", 
 test("the bell's name says what its count counts", () => {
   assert.equal(bellLabel(3), "Notifications, 3 need you");
   assert.equal(bellLabel(3, 2), "Notifications, 3 need you, 2 unread");
-  assert.equal(bellLabel(0, 5), "Notifications");
+  assert.equal(bellLabel(0, 5), "Notifications, 5 unread", "nothing open, some unread");
+  assert.equal(bellLabel(0), "Notifications");
   assert.equal(badgeText(120), "99+");
 });
 
@@ -164,7 +165,7 @@ test("a stack counts its outcomes in the agent's voice, with the newest time and
   assert.deepEqual([row.count, row.whoName, row.whoMode, row.verb, row.statusText], [3, "devops", "operate", "asked to push 3 times", "2 approved · 1 denied"]);
   assert.deepEqual([row.objectText, row.objectIsCode, row.project, row.task, row.repository], ["agent/x → origin/feat/y", true, "harness", "Notification", "harness-api"]);
   assert.equal(row.clock, clock(new Date(N0.getTime() + 30 * 60_000)));
-  assert.equal(row.label, `2 approved · 1 denied. devops asked to push 3 times agent/x → origin/feat/y. harness › Notification · harness-api. ${row.fullDate}, 30m ago. Expand to see them.`);
+  assert.equal(row.label, `devops asked to push 3 times agent/x → origin/feat/y. harness › Notification · harness-api. ${row.fullDate}, 30m ago. 2 approved · 1 denied. Expand to see them.`);
 });
 
 test("the stack names the object only when every item shares it, and settled with no outcome counts as settled", () => {

@@ -103,6 +103,9 @@ func (b *Bell) BadgeText() string {
 func (b *Bell) Label() string {
 	n := b.Open()
 	if n == 0 {
+		if u := b.Unread(); u > 0 {
+			return "Notifications, " + strconv.Itoa(u) + " unread"
+		}
 		return "Notifications"
 	}
 	label := "Notifications, " + strconv.Itoa(n) + " need you"

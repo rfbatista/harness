@@ -19,7 +19,7 @@ export function badgeText(count) {
 
 /** The bell's accessible name, with the exact count and what it counts. */
 export function bellLabel(count, unread = 0) {
-  if (!count) return "Notifications";
+  if (!count) return unread ? `Notifications, ${unread} unread` : "Notifications";
   return `Notifications, ${count} need you${unread ? `, ${unread} unread` : ""}`;
 }
 
@@ -251,7 +251,7 @@ export function toStackRow(items, now) {
     statusTone: "quiet",
     state: "settled",
     unread: false,
-    label: [`${statusText}.`, `${newest.actor.name} ${verb}${sameObject ? ` ${newest.object.text}` : ""}.`, where ? `${where}.` : "", `${row.fullDate}, ${row.age === "now" ? "just now" : `${row.age} ago`}.`, "Expand to see them."].filter(Boolean).join(" "),
+    label: [`${newest.actor.name} ${verb}${sameObject ? ` ${newest.object.text}` : ""}.`, where ? `${where}.` : "", `${row.fullDate}, ${row.age === "now" ? "just now" : `${row.age} ago`}.`, `${statusText}.`, "Expand to see them."].filter(Boolean).join(" "),
   };
 }
 

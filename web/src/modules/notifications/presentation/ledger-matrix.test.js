@@ -186,7 +186,7 @@ test("where reads project › task · repository, leaving out what is absent", (
 
 test("the badge and the bell's name: open and unread are two numbers; the badge is the open one", () => {
   assert.deepEqual([badgeText(0), badgeText(1), badgeText(99), badgeText(100)], ["", "1", "99", "99+"]);
-  assert.equal(bellLabel(0, 7), "Notifications", "unread alone puts no count on the bell");
+  assert.equal(bellLabel(0, 7), "Notifications, 7 unread", "unread alone is named, though it puts no count on the badge");
   assert.equal(bellLabel(1, 0), "Notifications, 1 need you");
   assert.equal(bellLabel(1, 4), "Notifications, 1 need you, 4 unread");
 });
