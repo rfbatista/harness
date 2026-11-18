@@ -111,7 +111,10 @@ const OUTCOME_WORDS = Object.freeze({
 const clockTime = (d) => `${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`;
 
 /** "Mon 17 Nov 2026, 15:40": the tooltip and the accessible name. */
-const fullDate = (d) => `${d.toLocaleDateString("en-GB", { weekday: "short", day: "numeric", month: "short", year: "numeric" })}, ${clockTime(d)}`;
+const fullDate = (d) => {
+  const part = (o) => d.toLocaleDateString("en-GB", o);
+  return `${part({ weekday: "short" })} ${part({ day: "numeric" })} ${part({ month: "short" })} ${d.getFullYear()}, ${clockTime(d)}`;
+};
 
 /** Where the item stands: the words and their tone ("" for no line at all). */
 function standing(n, settled) {

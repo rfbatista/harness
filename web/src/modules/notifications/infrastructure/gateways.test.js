@@ -111,8 +111,8 @@ test("a sessions_interrupted notification maps its list, whose entries default t
   assert.equal(n.kind, "sessions_interrupted");
   assert.deepEqual(n.interruptedSessions.map((s) => [s.sessionId, s.state, s.reason, s.taskTitle]), [["s1", "failed", "worktree gone", "Ship"], ["s2", "interrupted", "", ""]]);
   assert.deepEqual(toNotification(dto).interruptedSessions, []);
-  assert.throws(() => toNotification({ ...dto, interrupted_sessions: [{ session_id: "s1", link: "/p", state: "lost" }] }), Codes.BAD_RESPONSE);
-  assert.throws(() => toNotification({ ...dto, interrupted_sessions: [{ session_id: "s1", link: "https://x", state: "gone" }] }), Codes.BAD_RESPONSE);
+  assert.deepEqual(toNotification({ ...dto, interrupted_sessions: [{ session_id: "s1", link: "/p", state: "lost" }] }).interruptedSessions, [], "a bad state drops that session");
+  assert.deepEqual(toNotification({ ...dto, interrupted_sessions: [{ session_id: "s1", link: "https://x", state: "gone" }] }).interruptedSessions, [], "a link off the web UI drops it");
 });
 
 test("a malformed notification or answer is BAD_RESPONSE; a link off the web UI is refused", () => {
@@ -151,7 +151,7 @@ test("revision 5 data has no actor, and unknown actor kinds and outcomes do not 
   assert.deepEqual([old.actor.name, old.actor.kind, old.verb, old.object, old.repositoryName, old.outcome, old.listedSessions], ["harness", "system", "", null, "", "", []]);
   const odd = toNotification({ ...dto, actor: { kind: "robot", name: "x" }, outcome: "vaporised" });
   assert.deepEqual([odd.actor.kind, odd.actor.name, odd.outcome], ["system", "x", ""]);
-  assert.throws(() => toNotification({ ...dto, listed_sessions: [{ session_id: "s", link: "https://x", state: "off" }] }), Codes.BAD_RESPONSE);
+  assert.deepEqual(toNotification({ ...dto, listed_sessions: [{ session_id: "s", link: "https://x", state: "off" }] }).listedSessions, [], "a listed session with a bad link is dropped");
 });
 
 test("open_count maps on a page, a read answer and a stream message, and is null when the server sends none", () => {
@@ -161,4 +161,20 @@ test("open_count maps on a page, a read answer and a stream message, and is null
   assert.equal(toStreamChange({ changed: [], unread_count: 1, open_count: 4 }).openCount, 4);
   assert.equal(toStreamChange({ changed: [], unread_count: 1 }).openCount, null);
   assert.throws(() => toPage({ notifications: [], unread_count: 1, open_count: -1 }), Codes.BAD_RESPONSE);
+});
+
+test("one malformed listed or interrupted session is dropped; it never fails the page", () => {
+  const dto = notificationDTO(makeNotification());
+  const good = { session_id: "s1", agent_name: "devops", link: "/projects/p1?session=s1", state: "off" };
+  const page = toPage({
+    notifications: [
+      { ...dto, id: "c1", kind: "commit_check_off", listed_sessions: [good, { ...good, session_id: "s2", link: "https://evil.test/" }, { ...good, session_id: "" }] },
+      { ...dto, id: "i1", kind: "sessions_interrupted", interrupted_sessions: [{ session_id: "s3", link: "/p", state: "interrupted" }, { session_id: "s4", link: "/p", state: "lost" }, { session_id: "s5", link: "//evil", state: "failed" }] },
+      dto,
+    ],
+    unread_count: 3,
+  });
+  assert.deepEqual(page.notifications.map((n) => n.id), ["c1", "i1", dto.id]);
+  assert.deepEqual(page.notifications[0].listedSessions.map((s) => s.sessionId), ["s1"]);
+  assert.deepEqual(page.notifications[1].interruptedSessions.map((s) => s.sessionId), ["s3"]);
 });

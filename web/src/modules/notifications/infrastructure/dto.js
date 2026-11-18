@@ -34,14 +34,14 @@ export function toNotification(dto) {
     createdAt,
     readAt: date(dto.read_at, `${at}: read_at`),
     resolvedAt: date(dto.resolved_at, `${at}: resolved_at`),
-    interruptedSessions: (dto.interrupted_sessions ?? []).map((s) => toInterruptedSession(s, at)),
+    interruptedSessions: readable(dto.interrupted_sessions, (s) => toInterruptedSession(s, at)),
     actor: toActor(dto.actor),
     verb: typeof dto.verb === "string" ? dto.verb : "",
     object: dto.object && typeof dto.object.text === "string" && dto.object.text !== "" ? Object.freeze({ text: dto.object.text, code: dto.object.code === true }) : null,
     repositoryName: dto.repository_name ?? "",
     // An outcome this client does not know reads as settled with none, not as an error.
     outcome: OUTCOMES.includes(dto.outcome) ? dto.outcome : "",
-    listedSessions: (dto.listed_sessions ?? []).map((s) => toListedSession(s, at)),
+    listedSessions: readable(dto.listed_sessions, (s) => toListedSession(s, at)),
   });
 }
 
@@ -63,6 +63,19 @@ function toListedSession(dto, at) {
     link: dto.link,
     state: LISTED_STATES.includes(dto.state) ? dto.state : "off",
   });
+}
+
+// A session list reads entry by entry: one malformed entry (a bad state or a link off the web UI) is dropped, never the notification or the page.
+function readable(list, map) {
+  const out = [];
+  for (const entry of list ?? []) {
+    try {
+      out.push(map(entry));
+    } catch {
+      // dropped
+    }
+  }
+  return out;
 }
 
 function toInterruptedSession(dto, at) {
