@@ -545,13 +545,14 @@ func (s *Service) ResumeInterrupted(ctx context.Context, id string) (*ports.Resu
 	for _, e := range list {
 		marked = marked || s.stillMarked(e.SessionID)
 	}
+	outcome := s.interruptedOutcome(list)
 	c, err := s.write(func(tx ports.NotificationRepository, now time.Time) ([]*domain.Notification, bool, error) {
 		cur, err := tx.SetInterruptedSessions(id, list)
 		if err != nil || cur == nil {
 			return nil, false, err
 		}
 		if !marked && cur.ResolvedAt == nil {
-			if _, err := tx.Resolve(domain.SessionsInterruptedCauseKey, now, domain.OutcomeResumed); err != nil {
+			if _, err := tx.Resolve(domain.SessionsInterruptedCauseKey, now, outcome); err != nil {
 				return nil, false, err
 			}
 			cur = tx.Get(id)
@@ -609,9 +610,10 @@ func (s *Service) reconcileInterrupted(n *domain.Notification) {
 	for _, e := range n.InterruptedSessions {
 		marked = marked || s.stillMarked(e.SessionID)
 	}
+	outcome := s.interruptedOutcome(n.InterruptedSessions)
 	s.logged("refresh the sessions interrupted notification", func(tx ports.NotificationRepository, now time.Time) ([]*domain.Notification, bool, error) {
 		if !marked {
-			changed, err := tx.Resolve(domain.SessionsInterruptedCauseKey, now, domain.OutcomeResumed)
+			changed, err := tx.Resolve(domain.SessionsInterruptedCauseKey, now, outcome)
 			return changed, len(changed) > 0, err
 		}
 		if cur := tx.Get(n.ID); cur != nil && cur.ResolvedAt == nil {
@@ -619,6 +621,18 @@ func (s *Service) reconcileInterrupted(n *domain.Notification) {
 		}
 		return nil, false, nil
 	})
+}
+
+// interruptedOutcome is how a sessions_interrupted notification ends once no
+// listed session is marked: resumed when at least one session is back (it
+// exists and has no mark), ended when every one was deleted instead.
+func (s *Service) interruptedOutcome(list []domain.InterruptedSession) domain.NotificationOutcome {
+	for _, e := range list {
+		if sess := s.readers.Sessions.Get(e.SessionID); sess != nil && sess.InterruptedAt == nil {
+			return domain.OutcomeResumed
+		}
+	}
+	return domain.OutcomeEnded
 }
 
 // stillMarked says the session exists and carries the interrupted mark.
@@ -710,6 +724,10 @@ func (s *Service) legacyActor(n *domain.Notification) domain.NotificationActor {
 	case domain.NotificationSessionsInterrupted:
 		return systemActor(domain.ActorRestart)
 	case domain.NotificationCommitCheckOff:
+		return systemActor(domain.ActorHarness)
+	case domain.NotificationReviewRequested:
+		// The row keeps the session the review is about, not the architect
+		// that asked, and naming the wrong agent is worse than naming none.
 		return systemActor(domain.ActorHarness)
 	}
 	return s.actorOfSession(n.SessionID)

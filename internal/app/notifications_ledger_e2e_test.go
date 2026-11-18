@@ -14,6 +14,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/rfbatista/llmkit/approval"
 	"go.uber.org/fx"
 	"gorm.io/gorm"
 
@@ -22,6 +23,7 @@ import (
 	"operators-mcp/internal/adapter/out/persistence/sqlite"
 	"operators-mcp/internal/app/catalog"
 	"operators-mcp/internal/application/notifications"
+	"operators-mcp/internal/application/orchestration"
 	"operators-mcp/internal/application/planning"
 	"operators-mcp/internal/application/taskchannel"
 	"operators-mcp/internal/domain"
@@ -32,20 +34,23 @@ import (
 // server — notifications that say who, what and when): the inbox over its
 // HTTP API and its stream, driven by the events each cause publishes.
 type ledger struct {
-	t        *testing.T
-	ctx      context.Context
-	cat      catalog.Catalog
-	plan     *planning.Service
-	channel  *taskchannel.Service
-	sessions ports.SessionRepository
-	notes    *notifications.Service
-	db       *gorm.DB
-	repos    ports.RepositoryRepository
-	srv      *httptest.Server
-	changes  <-chan ports.NotificationChange
-	project  *domain.Project
-	task     *domain.Ticket
-	repo     *domain.Repository
+	t         *testing.T
+	ctx       context.Context
+	cat       catalog.Catalog
+	plan      *planning.Service
+	channel   *taskchannel.Service
+	sessions  ports.SessionRepository
+	notes     *notifications.Service
+	db        *gorm.DB
+	repos     ports.RepositoryRepository
+	orch      *orchestration.Service
+	broker    *approval.Broker
+	agentRepo ports.AgentRepository
+	srv       *httptest.Server
+	changes   <-chan ports.NotificationChange
+	project   *domain.Project
+	task      *domain.Ticket
+	repo      *domain.Repository
 	// dbPath and root are the database and data root every boot shares;
 	// stop ends the boot that is running.
 	dbPath, root string
@@ -89,7 +94,7 @@ func (l *ledger) boot() {
 		fx.Supply(Config{HTTPAddr: "127.0.0.1:0", MCPAddr: "127.0.0.1:0", DBPath: l.dbPath, Root: l.root, ClaudeBin: "/bin/true", SessionShell: "direct"}),
 		PersistenceModule, CatalogModule, PlanningModule, WorkspacesModule,
 		AgentRuntimeModule, TaskChannelModule, TextProcessingModule, NotificationsModule,
-		fx.Populate(&l.cat, &l.plan, &l.channel, &l.sessions, &l.notes, &l.db, &l.repos),
+		fx.Populate(&l.cat, &l.plan, &l.channel, &l.sessions, &l.notes, &l.db, &l.repos, &l.orch, &l.broker, &l.agentRepo),
 		fx.NopLogger,
 	)
 	if err := app.Start(ctx); err != nil {
