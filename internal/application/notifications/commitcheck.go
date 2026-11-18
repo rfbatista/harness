@@ -18,6 +18,26 @@ import (
 // again on the stream. Posting a new one, in a later boot, ends the project's
 // previous one; it resolves as repaired once no listed session is still off.
 
+// endLegacyCommitChecks resolves, as ended, the commit_check_off rows of the
+// per-session rule that earlier revisions recorded: one per session, with no
+// list. The per-project notification replaces them (contract revision 6, "Rows
+// from before revision 6"). It runs once per boot, and finds none after the
+// first.
+func (s *Service) endLegacyCommitChecks() {
+	open := true
+	list, err := s.repo.List(context.Background(), ports.NotificationFilter{Kind: domain.NotificationCommitCheckOff, Open: &open})
+	if err != nil {
+		slog.Warn("read the commit check off notifications", "err", err)
+		return
+	}
+	for _, n := range list {
+		if len(n.ListedSessions) > 0 {
+			continue
+		}
+		s.resolve(n.CauseKey, domain.OutcomeEnded)
+	}
+}
+
 // commitCheckKey is the cause of a project's commit_check_off notification:
 // only one is open at a time.
 func commitCheckKey(projectID string) string { return "commit_check_off:" + projectID }
@@ -43,20 +63,37 @@ func (s *Service) onCommitCheck(ev domain.SessionCommitCheckChanged) {
 	key := commitCheckKey(ev.ProjectID)
 	var created bool
 	c, err := s.write(func(tx ports.NotificationRepository, now time.Time) ([]*domain.Notification, bool, error) {
+		// A per-session row that outlived the first boot is ended by the
+		// project's notification, so at most one stays open.
+		openRows := true
+		old, err := tx.List(context.Background(), ports.NotificationFilter{ProjectID: ev.ProjectID, Kind: domain.NotificationCommitCheckOff, Open: &openRows})
+		if err != nil {
+			return nil, false, err
+		}
+		var legacy []*domain.Notification
+		for _, n := range old {
+			if len(n.ListedSessions) == 0 {
+				ended, err := tx.Resolve(n.CauseKey, now, domain.OutcomeEnded)
+				if err != nil {
+					return nil, false, err
+				}
+				legacy = append(legacy, ended...)
+			}
+		}
 		open := tx.OpenByCause(key)
 		if open != nil && !open.CreatedAt.Before(s.bootedAt) {
 			list, changed := withState(open.ListedSessions, entry)
 			if !changed {
-				return nil, false, nil
+				return legacy, len(legacy) > 0, nil
 			}
 			w := commitCheckWhat(len(list))
 			cur, err := tx.UpdateCommitCheck(open.ID, list, w.verb, w.title(domain.ActorHarness), joinLines(open.Body, line))
 			if err != nil || cur == nil {
 				return nil, false, err
 			}
-			return []*domain.Notification{cur}, true, nil
+			return append(legacy, cur), true, nil
 		}
-		var out []*domain.Notification
+		out := legacy
 		if open != nil { // an earlier boot's
 			ended, err := tx.Resolve(key, now, domain.OutcomeEnded)
 			if err != nil {

@@ -83,11 +83,11 @@ func (l *ledger) wantTable(why string) {
 	}
 }
 
-// Deleting a task ends what hangs on it, but only with an outcome the
-// contract table gives the kind. A session that failed and an agent's own
-// notification never resolve; a branch finding resolves only by being
-// acknowledged; a branch or service request only by the answer.
-func TestADeletedTaskEndsOnlyWhatTheContractLetsItEnd(t *testing.T) {
+// Deleting a task ends every unresolved notification of it, of any kind,
+// with the outcome ended, because its cause is gone (contract revision 6, "A
+// deleted task ends what it held": on top of the table, and including the
+// kinds the table says never resolve).
+func TestADeletedTaskEndsEveryNotificationOfIt(t *testing.T) {
 	l := newLedger(t)
 	pid, tid := l.project.ID, l.task.ID
 	l.session("arch", "architect-agent", domain.SessionModeArchitect)
@@ -111,7 +111,15 @@ func TestADeletedTaskEndsOnlyWhatTheContractLetsItEnd(t *testing.T) {
 
 	l.publish(domain.TicketDeleted{TicketID: tid, ProjectID: pid})
 	l.next()
-	l.wantTable("after the task was deleted")
+	rows := l.rows()
+	if len(rows) != 8 {
+		t.Fatalf("after the task was deleted the inbox holds %d notifications, want 8", len(rows))
+	}
+	for _, n := range rows {
+		if n["resolved_at"] == nil || str(n, "outcome") != "ended" {
+			t.Errorf("after the task was deleted: %s %q has outcome %q (resolved %v), want ended", str(n, "kind"), str(n, "title"), str(n, "outcome"), n["resolved_at"] != nil)
+		}
+	}
 }
 
 // A resolve with no outcome is impossible: the repository refuses an empty
@@ -651,10 +659,12 @@ func TestRowsFromBeforeTheChange(t *testing.T) {
 		t.Errorf("open=false lists %v, want the old settled row and the old agent note", ids(notOpen))
 	}
 
-	// The actor filter finds an old row by the name the row shows.
+	// The actor filter matches the actor stored with a row, and a row from
+	// before actors were stored has none: it shows the actor it is read with,
+	// but the filter does not find it (agreed: no backfill). A new row does.
 	byActor, _ := l.list(url.Values{"actor": {"devops"}})
-	if !slices.Contains(ids(byActor), oldAgent) {
-		t.Errorf("actor=devops lists %v: the old agent note shows actor devops but the filter misses it", ids(byActor))
+	if slices.Contains(ids(byActor), oldAgent) {
+		t.Errorf("actor=devops lists the old agent note %v: old rows are not backfilled, the filter must not match them", ids(byActor))
 	}
 
 	// An old finding is acknowledged like a new one.

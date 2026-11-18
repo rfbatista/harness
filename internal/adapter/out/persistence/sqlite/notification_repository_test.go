@@ -2,6 +2,7 @@ package sqlite_test
 
 import (
 	"context"
+	"slices"
 	"testing"
 	"time"
 
@@ -143,8 +144,8 @@ func TestNotificationRepositoryResolvesByCauseAndTask(t *testing.T) {
 		t.Fatal("AnyByCause")
 	}
 	got, _ = r.ResolveTask("t1", at, domain.OutcomeEnded)
-	if len(got) != 1 || got[0].ID != rv.ID {
-		t.Fatalf("ResolveTask = %v (agent %s never resolves)", ids(got), ag.ID)
+	if len(got) != 2 || !slices.Contains(ids(got), rv.ID) || !slices.Contains(ids(got), ag.ID) {
+		t.Fatalf("ResolveTask = %v, want the review and the agent note %s: a deleted task ends everything of it", ids(got), ag.ID)
 	}
 }
 

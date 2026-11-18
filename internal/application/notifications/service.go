@@ -200,6 +200,7 @@ func New(repo ports.NotificationRepository, readers Readers, opts Options) (*Ser
 // nil and logs what failed: recording a notification never fails the use
 // case that caused it.
 func (s *Service) Subscribe(bus ports.EventSubscriber) {
+	s.endLegacyCommitChecks()
 	ports.On(bus, func(ctx context.Context, ev domain.ReviewRequestChanged) error {
 		s.onReview(ev)
 		return nil

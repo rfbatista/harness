@@ -146,6 +146,16 @@ const (
 	OutcomeReopened         NotificationOutcome = "reopened"
 )
 
+// Valid says o is one of the outcomes above.
+func (o NotificationOutcome) Valid() bool {
+	switch o {
+	case OutcomeApproved, OutcomeChangesRequested, OutcomeDenied, OutcomeExpired, OutcomeWithdrawn, OutcomeAnswered,
+		OutcomeDismissed, OutcomeAcknowledged, OutcomeRepaired, OutcomeResumed, OutcomeEnded, OutcomeDone, OutcomeReopened:
+		return true
+	}
+	return false
+}
+
 // NotificationLevel is how much a notification asks of the person: action
 // means they have to do something.
 type NotificationLevel string

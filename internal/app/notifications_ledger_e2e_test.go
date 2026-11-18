@@ -916,3 +916,48 @@ func TestCommitCheckOffIsOneNotificationPerProjectPerBoot(t *testing.T) {
 		t.Fatalf("open commit check notifications after the next boot = %d, want one per project (2)", len(list))
 	}
 }
+
+// A commit_check_off row from the per-session rule (one per session, no list)
+// is ended the first time the server boots with the per-project rule; the
+// per-project notification is the only one left open (contract revision 6,
+// "Rows from before revision 6").
+func TestLegacyPerSessionCommitCheckRowsEndAtTheFirstBoot(t *testing.T) {
+	l := newLedger(t)
+	repo := sqlite.NewNotificationRepository(l.db)
+	pid := l.project.ID
+	mk := func(session string) string {
+		n, err := repo.Create(&domain.Notification{
+			ProjectID: pid, SessionID: session, Source: domain.NotificationFromSystem, Kind: domain.NotificationCommitCheckOff,
+			Level: domain.NotificationAction, Title: "A session's commit check is off", Link: "/", CauseKey: "commit_check_off:" + session,
+		})
+		if err != nil {
+			t.Fatal(err)
+		}
+		return n.ID
+	}
+	l.session("s3", "agent-s3", domain.SessionModeImplement)
+	l.off("s3")
+	current := l.next().Changed[0].ID
+	old1, old2 := mk("s1"), mk("s2") // as a server of the earlier revision left them
+	if _, page := l.list(nil); count(page, "open_count") != 3 {
+		t.Fatalf("before the boot: open_count %v, want 3", page["open_count"])
+	}
+
+	l.reboot()
+	open, page := l.list(url.Values{"kind": {"commit_check_off"}, "open": {"true"}})
+	if len(open) != 1 || str(open[0], "id") != current || count(page, "open_count") != 1 {
+		t.Fatalf("after the boot: open %v, open_count %v, want only the per-project notification", ids(open), page["open_count"])
+	}
+	for _, id := range []string{old1, old2} {
+		var row jsonObj
+		all, _ := l.list(url.Values{"kind": {"commit_check_off"}, "limit": {"200"}})
+		for _, n := range all {
+			if str(n, "id") == id {
+				row = n
+			}
+		}
+		if row == nil || str(row, "outcome") != "ended" || row["resolved_at"] == nil {
+			t.Fatalf("the per-session row %s after the boot = %v, want ended", id, row)
+		}
+	}
+}

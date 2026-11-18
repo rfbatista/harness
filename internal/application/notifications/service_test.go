@@ -168,7 +168,7 @@ func TestATaskInReviewIsResolvedWhenItLeavesReview(t *testing.T) {
 	}
 }
 
-func TestDeletingATaskResolvesItsSystemNotificationsAndKeepsAgentOnes(t *testing.T) {
+func TestDeletingATaskEndsEveryUnresolvedNotificationOfIt(t *testing.T) {
 	r := newRig(t)
 	tk := r.task(t, r.ProjectA, "Ship")
 	r.publish(t, domain.TicketStatusChanged{Change: domain.TaskStatusChange{TaskID: tk.ID, ProjectID: r.ProjectA, Status: domain.TicketStatusReview}})
@@ -182,12 +182,19 @@ func TestDeletingATaskResolvesItsSystemNotificationsAndKeepsAgentOnes(t *testing
 	}
 	r.publish(t, domain.TicketDeleted{TicketID: tk.ID, ProjectID: r.ProjectA})
 
-	page := r.list(t, ports.NotificationQuery{UnreadOnly: true})
-	if len(page.Notifications) != 1 || page.Notifications[0].ID != agent.ID {
-		t.Fatalf("unread after deleting the task = %+v, want only the agent's", page.Notifications)
+	// Its cause is gone, so every one ends, the agent's own included (contract
+	// revision 6: a deleted task ends what it held).
+	page := r.list(t, ports.NotificationQuery{})
+	if len(page.Notifications) != 3 || page.UnreadCount != 0 {
+		t.Fatalf("after deleting the task = %d notifications, %d unread, want 3 and none unread", len(page.Notifications), page.UnreadCount)
 	}
-	if n := page.Notifications[0]; n.TaskID != tk.ID || n.TaskTitle != "" {
-		t.Fatalf("a deleted task's notification = %+v, want its task id and no title", n)
+	for _, n := range page.Notifications {
+		if n.Outcome != domain.OutcomeEnded || n.ResolvedAt == nil || n.TaskID != tk.ID || n.TaskTitle != "" {
+			t.Fatalf("a deleted task's notification = %+v, want ended, with its task id and no title", n)
+		}
+	}
+	if agent == nil {
+		t.Fatal("no agent notification")
 	}
 }
 

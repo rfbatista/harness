@@ -3,6 +3,7 @@ package sqlite
 import (
 	"context"
 	"encoding/json"
+	"strconv"
 	"time"
 
 	"gorm.io/gorm"
@@ -254,10 +255,13 @@ func (r *NotificationRepository) Resolve(causeKey string, at time.Time, outcome 
 }
 
 func (r *NotificationRepository) ResolveTask(taskID string, at time.Time, outcome domain.NotificationOutcome) ([]*domain.Notification, error) {
-	return r.resolve(r.db.Where("task_id = ? AND resolved_at = 0 AND cause_key <> ''", taskID), at, outcome)
+	return r.resolve(r.db.Where("task_id = ? AND resolved_at = 0", taskID), at, outcome)
 }
 
 func (r *NotificationRepository) resolve(where *gorm.DB, at time.Time, outcome domain.NotificationOutcome) ([]*domain.Notification, error) {
+	if !outcome.Valid() {
+		return nil, &domain.StructuredError{Code: "INVALID_INPUT", Message: "a notification resolves with one of the known outcomes, not " + strconv.Quote(string(outcome))}
+	}
 	return r.change(where, map[string]any{"resolved_at": at.UnixMilli(), "outcome": string(outcome)})
 }
 
