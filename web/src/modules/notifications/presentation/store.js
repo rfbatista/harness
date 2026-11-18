@@ -14,7 +14,7 @@
 
 import { codeOf, Codes } from "../../../shared/domain/errors.js";
 import { FeedStatus } from "../../../shared/domain/feed.js";
-import { isUnread, markedRead } from "../domain/notification.js";
+import { isOpen, isUnread, markedRead } from "../domain/notification.js";
 
 /** How long opening a notification waits for its read before it navigates. */
 export const OPEN_WAIT_MS = 1_500;
@@ -51,6 +51,8 @@ export function notificationsStore({ gateway, alerts, prefs, clock, navigate, an
   const seen = new Set();
   /** Ids read here that the server is not yet seen to have read. */
   const pendingRead = new Set();
+  /** Ids this page has seen that are open causes: what the bell counts when the server sends no open_count. */
+  const openIds = new Set();
   /** Projects ("" for every one) with a Mark all read in flight. */
   const pendingAll = new Map();
   /** The reads in flight, each with the ids the stream showed read meanwhile. */
@@ -74,6 +76,8 @@ export function notificationsStore({ gateway, alerts, prefs, clock, navigate, an
     serverCount: /** @type {number | null} */ (null),
     /** The open causes as last heard (ADR 0096); null until heard, and from a server that sends none. */
     serverOpen: /** @type {number | null} */ (null),
+    /** How many open causes this page has seen: openIds.size, for Alpine, which does not watch a Set. */
+    seenOpen: 0,
     /** Reads in flight off the count: mirrors pendingRead, which Alpine does not watch. */
     pending: 0,
     allPending: false,
@@ -88,12 +92,18 @@ export function notificationsStore({ gateway, alerts, prefs, clock, navigate, an
       return Math.max(0, this.serverCount - this.pending);
     },
 
-    /** What the bell and the title count: what needs the person, or the unread ones for a server that does not say. */
+    /** What the bell and the title count: what needs the person (ADR 0096), as the server says, or as far as this page has seen. */
     get badgeCount() {
-      return this.serverOpen ?? this.unreadCount;
+      return this.serverOpen ?? this.seenOpen;
     },
-    get badgeCountsOpen() {
-      return this.serverOpen !== null;
+
+    /** Notes which of these are open causes. */
+    track(notifications) {
+      for (const n of notifications) {
+        if (isOpen(n)) openIds.add(n.id);
+        else openIds.delete(n.id);
+      }
+      this.seenOpen = openIds.size;
     },
 
     /** Takes the server's open count, when it sent one. */
@@ -123,6 +133,7 @@ export function notificationsStore({ gateway, alerts, prefs, clock, navigate, an
       if (seed) {
         seedPage = seed;
         for (const n of seed.notifications) seen.add(n.id);
+        this.track(seed.notifications);
         this.serverCount = seed.unreadCount;
         this.heardOpen(seed.openCount);
         this.syncTitle();
@@ -164,6 +175,7 @@ export function notificationsStore({ gateway, alerts, prefs, clock, navigate, an
      */
     listed(page, since) {
       for (const n of page.notifications) seen.add(n.id);
+      this.track(page.notifications);
       if (this.stamp === since) {
         this.serverCount = page.unreadCount;
         this.heardOpen(page.openCount);
@@ -185,6 +197,7 @@ export function notificationsStore({ gateway, alerts, prefs, clock, navigate, an
         seen.add(n.id);
       }
       this.pending = pendingRead.size;
+      this.track(change.notifications);
       this.serverCount = change.unreadCount;
       this.heardOpen(change.openCount);
       this.syncTitle();
@@ -278,6 +291,7 @@ export function notificationsStore({ gateway, alerts, prefs, clock, navigate, an
 
     answered(answer, request) {
       for (const n of answer.notifications) seen.add(n.id);
+      this.track(answer.notifications);
       const echoed = answer.notifications.some((n) => request.seenRead.has(n.id));
       if (!echoed) {
         this.serverCount = answer.unreadCount;
@@ -313,6 +327,7 @@ export function notificationsStore({ gateway, alerts, prefs, clock, navigate, an
     async acknowledge(n) {
       const changed = await gateway.acknowledge(n.id);
       seen.add(changed.id);
+      this.track([changed]);
       each((v) => v.apply([changed]));
       return changed;
     },

@@ -172,7 +172,7 @@ templ notificationsBell(b *Bell) {
 			x-on:click="toggle"
 		>
 			@icon("bell")
-			<span class="[ badge ]" data-tone="attention" aria-hidden="true" x-show="hasUnread" x-text="badge" { shownIf(b.Unread() > 0)... }>{ b.BadgeText() }</span>
+			<span class="[ badge ]" data-tone="attention" aria-hidden="true" x-show="hasUnread" x-text="badge" { shownIf(b.Open() > 0)... }>{ b.BadgeText() }</span>
 		</a>
 		<section id="notifications-panel" class="[ popup ] [ notifications-panel ]" aria-labelledby="notifications-heading" x-ref="panel" x-on:keydown="panelKey">
 			<div class="[ head ]">

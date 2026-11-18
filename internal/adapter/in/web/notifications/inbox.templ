@@ -33,6 +33,12 @@ templ InboxPage(frame shell.Frame, v View) {
 			</header>
 			<div class="[ inbox ]" data-scroll>
 				<form class="[ inbox-filters ] [ cluster ] [ gutter-s ]" method="get" action={ templ.SafeURL(Href) } x-data="projectPicker">
+					<fieldset class="[ inbox-tabs ]">
+						<legend class="[ visually-hidden ]">Show</legend>
+						<label><input type="radio" name="tab" value="needs" { checked(v.Filter.Tab == "needs")... } x-on:change="go"/> Needs you <span class="[ n ]" x-text="needsCount">{ strconv.Itoa(v.OpenCount()) }</span></label>
+						<label><input type="radio" name="tab" value="unread" { checked(v.Filter.Tab == "unread")... } x-on:change="go"/> Unread <span class="[ n ]" x-text="unreadCount">{ strconv.Itoa(v.UnreadCount()) }</span></label>
+						<label><input type="radio" name="tab" value="all" { checked(v.Filter.Tab == "all")... } x-on:change="go"/> All <span class="[ n ]" x-text="allCount"></span></label>
+					</fieldset>
 					<label class="[ visually-hidden ]" for="inbox-project">Project</label>
 					<select id="inbox-project" name="project" data-size="sm" data-fit x-on:change="go">
 						<option value="" { selected(v.Filter.ProjectID == "")... }>All projects</option>
@@ -40,12 +46,6 @@ templ InboxPage(frame shell.Frame, v View) {
 							<option value={ p.ID } { selected(p.ID == v.Filter.ProjectID)... }>{ p.Name }</option>
 						}
 					</select>
-					<fieldset class="[ inbox-tabs ]">
-						<legend class="[ visually-hidden ]">Show</legend>
-						<label><input type="radio" name="tab" value="needs" { checked(v.Filter.Tab == "needs")... } x-on:change="go"/> Needs you <span class="[ n ]" x-text="needsCount">{ strconv.Itoa(v.OpenCount()) }</span></label>
-						<label><input type="radio" name="tab" value="unread" { checked(v.Filter.Tab == "unread")... } x-on:change="go"/> Unread <span class="[ n ]" x-text="unreadCount">{ strconv.Itoa(v.UnreadCount()) }</span></label>
-						<label><input type="radio" name="tab" value="all" { checked(v.Filter.Tab == "all")... } x-on:change="go"/> All <span class="[ n ]" x-text="allCount"></span></label>
-					</fieldset>
 					<label class="[ visually-hidden ]" for="inbox-actor">Who</label>
 					<select id="inbox-actor" name="actor" data-size="sm" data-fit x-on:change="go">
 						<option value="" { selected(v.Filter.Actor == "")... }>Anyone</option>

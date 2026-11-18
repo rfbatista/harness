@@ -38,6 +38,8 @@ export const notificationsPage = ({ gateway, store, clock }) => () => {
     items: [],
     nextBefore: "",
     live: false,
+    /** The first read is in (the seed's, or the one this page made). */
+    loaded: false,
     loadingMore: false,
     marking: false,
     /** Resume all interrupted is in flight: its button waits for the answer. */
@@ -95,7 +97,7 @@ export const notificationsPage = ({ gateway, store, clock }) => () => {
       return this.groups.length > 0;
     },
     get isEmpty() {
-      return this.live && this.groups.length === 0;
+      return this.live && this.loaded && this.groups.length === 0;
     },
     get emptyText() {
       if (this.tab === "needs") return this.projectName ? `Nothing needs you in ${this.projectName}.` : "Nothing needs you.";
@@ -125,17 +127,17 @@ export const notificationsPage = ({ gateway, store, clock }) => () => {
       // The server rendered only the selected who option; the page lists everyone it has seen.
       el.querySelectorAll("select[name=actor] option[data-ssr]").forEach((o) => o.remove());
       store.start(pageSeed(el.ownerDocument));
-      const page = this.actor || this.kind ? null : this.seedPage(el);
+      const page = this.actor || this.kind || this.tab === "needs" ? null : this.seedPage(el);
       if (page) {
         store.listed(page, store.stamp);
-        // The server paints the first page whole; the Needs you tab keeps the open causes of it.
-        this.items = this.tab === "needs" ? page.notifications.filter(isOpen) : page.notifications;
+        this.items = page.notifications;
         this.nextBefore = page.nextBefore;
+        this.finishFirstRead();
       } else {
-        // Who and kind are read here, not by the server; so is a page it could not read or sent no seed for.
-        this.reload();
+        // Who and kind are read here, not by the server; so are the open causes of Needs you, however old
+        // (the server paints the first page only); so is a page it could not read or sent no seed for.
+        this.reload().finally(() => this.finishFirstRead());
       }
-      el.querySelector("[data-ssr]")?.remove();
       this.live = true;
       unwatch = store.watch({
         apply: (changed) => (this.items = merge(this.items, changed, this.filter)),
@@ -143,6 +145,17 @@ export const notificationsPage = ({ gateway, store, clock }) => () => {
         reload: () => this.reload(),
       });
       ticker = setInterval(() => (this.now = clock.now()), TICK_MS);
+    },
+
+    /** The first read is in: the server's rows give way to the live ones. */
+    finishFirstRead() {
+      this.loaded = true;
+      this.$el.querySelector("[data-ssr]")?.remove();
+    },
+
+    /** Needs you holds open causes only (a server that ignores open=true sends the rest). */
+    keep(list) {
+      return this.tab === "needs" ? list.filter(isOpen) : list;
     },
 
     /** The server's first page, or null when there is none to read. */
@@ -165,7 +178,7 @@ export const notificationsPage = ({ gateway, store, clock }) => () => {
       try {
         const page = await gateway.list({ ...this.filter, limit: PAGE_LIMIT });
         store.listed(page, since);
-        this.items = page.notifications;
+        this.items = this.keep(page.notifications);
         this.nextBefore = page.nextBefore;
         this.now = clock.now();
       } catch (err) {
@@ -181,7 +194,7 @@ export const notificationsPage = ({ gateway, store, clock }) => () => {
       try {
         const page = await gateway.list({ ...this.filter, before: this.nextBefore, limit: PAGE_LIMIT });
         store.listed(page, since);
-        this.items = [...this.items, ...page.notifications.filter((n) => !this.items.some((x) => x.id === n.id))];
+        this.items = [...this.items, ...this.keep(page.notifications).filter((n) => !this.items.some((x) => x.id === n.id))];
         this.nextBefore = page.nextBefore;
       } catch (err) {
         this.error = inboxError(err);

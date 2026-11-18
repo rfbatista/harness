@@ -12,7 +12,7 @@
 // and keeps the panel's list as one of the store's views.
 
 import { defaultEnv, floating } from "../../../../shared/presentation/components/popup.js";
-import { markedRead, merge, openFirst } from "../../domain/notification.js";
+import { isOpen, markedRead, merge, openFirst, upsert } from "../../domain/notification.js";
 import { PANEL_LIMIT } from "../store.js";
 import { badgeText, bellLabel, inboxError, streamNotice, toRow } from "../view.js";
 
@@ -50,6 +50,8 @@ export const notificationsBell = ({ gateway, store, clock, env }) => () => {
     unreadOnly: false,
     open: false,
     loaded: false,
+    /** The open causes older than the latest page have been read (the seed holds only the latest). */
+    openLoaded: false,
     loading: false,
     error: null,
     now: clock.now(),
@@ -66,7 +68,7 @@ export const notificationsBell = ({ gateway, store, clock, env }) => () => {
       return !!store.badgeCount;
     },
     get label() {
-      return bellLabel(store.badgeCount, store.badgeCountsOpen, store.unreadCount ?? 0);
+      return bellLabel(store.badgeCount, store.unreadCount ?? 0);
     },
     get expanded() {
       return this.open ? "true" : "false";
@@ -131,7 +133,7 @@ export const notificationsBell = ({ gateway, store, clock, env }) => () => {
 
     // ── the list, as one of the store's views ────────────────────────────
     apply(changed) {
-      this.items = merge(this.items, changed, { unread: this.unreadOnly }).slice(0, PANEL_LIMIT);
+      this.items = openFirst(merge(this.items, changed, { unread: this.unreadOnly })).slice(0, PANEL_LIMIT);
     },
     readAll(projectId, at) {
       this.items = this.items.map((n) => (!projectId || n.projectId === projectId ? markedRead(n, at) : n));
@@ -143,10 +145,16 @@ export const notificationsBell = ({ gateway, store, clock, env }) => () => {
       this.loading = true;
       this.error = null;
       try {
-        const page = await gateway.list({ unread: this.unreadOnly, limit: PANEL_LIMIT }, abort.signal);
+        // The latest page, and the open causes however old: Needs you leads the panel.
+        const [page, open] = await Promise.all([
+          gateway.list({ unread: this.unreadOnly, limit: PANEL_LIMIT }, abort.signal),
+          gateway.list({ unread: this.unreadOnly, open: true, limit: PANEL_LIMIT }, abort.signal),
+        ]);
         store.listed(page, since);
-        this.items = page.notifications;
+        store.track(open.notifications);
+        this.items = openFirst(upsert(page.notifications, open.notifications.filter(isOpen))).slice(0, PANEL_LIMIT);
         this.loaded = true;
+        this.openLoaded = true;
         this.now = clock.now();
       } catch (err) {
         if (err?.name !== "AbortError") this.error = inboxError(err);
@@ -165,7 +173,7 @@ export const notificationsBell = ({ gateway, store, clock, env }) => () => {
       this.open = true;
       this.now = clock.now();
       popup.open({ sheet: popup.isPhone(), tall: true });
-      if (!this.loaded) this.load();
+      if (!this.loaded || !this.openLoaded) this.load();
       ticker = setInterval(() => (this.now = clock.now()), TICK_MS);
       this.$nextTick(() => (this.$refs.panel.querySelector("[data-item]") ?? this.$refs.panel.querySelector("h2"))?.focus());
     },

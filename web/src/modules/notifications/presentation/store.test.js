@@ -88,13 +88,14 @@ const read = (n) => ({ ...n, readAt: at(11) });
 
 test("the seed gives the count and the title; without one, the first read does", async () => {
   const seeded = world({ seed: seedOf([makeNotification()], 3) });
-  assert.deepEqual([seeded.store.unreadCount, seeded.doc.title, seeded.server.lists.length], [3, "(3) Notification · harness", 0]);
+  // Three unread, one of them an open cause: the title counts what needs the person.
+  assert.deepEqual([seeded.store.unreadCount, seeded.store.badgeCount, seeded.doc.title, seeded.server.lists.length], [3, 1, "(1) Notification · harness", 0]);
 
   const bare = world();
   assert.equal(bare.store.unreadCount, null, "unknown until read");
   bare.server.lists[0].resolve({ notifications: [], unreadCount: 2, nextBefore: "" });
   await flush();
-  assert.deepEqual([bare.store.unreadCount, bare.doc.title], [2, "(2) Notification · harness"]);
+  assert.deepEqual([bare.store.unreadCount, bare.store.badgeCount, bare.doc.title], [2, 0, "Notification · harness"], "two unread, none of them an open cause");
 });
 
 test("a page can pin the count that leads the title (the open questions of the session in view); letting it go brings the unread count back", () => {
@@ -252,7 +253,7 @@ test("desktop alerts: asked for only from the toggle, remembered, and raised onl
 
 test("the bell and the title count what needs the person (open_count), not what is unread", async () => {
   const w = world({ seed: seedOf([makeNotification()], 5, 2) });
-  assert.deepEqual([w.store.badgeCount, w.store.badgeCountsOpen, w.store.unreadCount, w.doc.title], [2, true, 5, "(2) Notification · harness"]);
+  assert.deepEqual([w.store.badgeCount, w.store.unreadCount, w.doc.title], [2, 5, "(2) Notification · harness"]);
   w.server.push([makeNotification({ id: "a" })], 6, 3);
   assert.deepEqual([w.store.badgeCount, w.doc.title], [3, "(3) Notification · harness"]);
   // Reading changes the unread count, never the open one.
@@ -269,38 +270,27 @@ test("the bell and the title count what needs the person (open_count), not what 
   assert.deepEqual([w.store.badgeCount, w.doc.title], [0, "Notification · harness"]);
 });
 
-test("a list read carries open_count too, and a server that sends none leaves the bell counting unread", async () => {
+test("a list read carries open_count too", async () => {
   const bare = world();
   bare.server.lists[0].resolve({ notifications: [], unreadCount: 2, openCount: 1, nextBefore: "" });
   await flush();
-  assert.deepEqual([bare.store.badgeCount, bare.store.badgeCountsOpen], [1, true]);
-
-  const old = world({ seed: seedOf([makeNotification()], 3) });
-  assert.deepEqual([old.store.badgeCount, old.store.badgeCountsOpen, old.doc.title], [3, false, "(3) Notification · harness"]);
-  old.server.push([makeNotification({ id: "b" })], 4);
-  assert.deepEqual([old.store.badgeCount, old.store.badgeCountsOpen], [4, false]);
+  assert.equal(bare.store.badgeCount, 1);
 });
 
-test("acknowledging settles the item at once on the views, also when the stream echo came before the answer", async () => {
-  const finding = makeNotification({ id: "find", kind: "branch_finding", level: "action", actor: { kind: "system", name: "branch watch", mode: "", sessionId: "" } });
-  const settled = { ...finding, resolvedAt: at(11), readAt: at(11), outcome: "acknowledged" };
-  const w = world({ seed: seedOf([finding], 1, 1) });
-  const done = w.store.acknowledge(finding);
-  assert.equal(w.server.acks.length, 1);
-  // The echo first: the server committed, streamed, then answers.
-  w.server.push([settled], 0, 0);
-  assert.equal(w.store.badgeCount, 0);
-  w.server.acks[0].resolve(settled);
-  await done;
-  assert.deepEqual([w.store.badgeCount, w.view.applied.length], [0, 2]);
-  assert.deepEqual(w.view.applied.at(-1), [["find", "read"]]);
-});
-
-test("a refused acknowledge leaves the item open and says so", async () => {
-  const finding = makeNotification({ id: "find", kind: "branch_finding", level: "action" });
-  const w = world({ seed: seedOf([finding], 1, 1) });
-  const done = w.store.acknowledge(finding);
-  w.server.acks[0].reject(new StructuredError(Codes.NETWORK, "down"));
-  await assert.rejects(done, Codes.NETWORK);
-  assert.deepEqual([w.store.badgeCount, w.view.applied.length], [1, 0]);
+test("a server that sends no open_count: the bell counts the open causes it has seen, never the unread ones", () => {
+  const open = (id, fields = {}) => makeNotification({ id, ...fields });
+  const read = (id) => makeNotification({ id, readAt: at(1) });
+  // Five unread, of which two are open causes (info items are unread but need nothing).
+  const old = world({ seed: seedOf([open("a"), open("b"), makeNotification({ id: "c", level: "info" }), makeNotification({ id: "d", level: "info" }), makeNotification({ id: "e", level: "info" })], 5) });
+  assert.deepEqual([old.store.badgeCount, old.store.unreadCount, old.doc.title], [2, 5, "(2) Notification · harness"]);
+  old.server.push([open("f")], 6);
+  assert.equal(old.store.badgeCount, 3);
+  old.server.push([open("a", { resolvedAt: at(2) })], 6);
+  assert.deepEqual([old.store.badgeCount, old.doc.title], [2, "(2) Notification · harness"]);
+  // Reading does not settle a cause.
+  old.server.push([read("b")], 5);
+  assert.equal(old.store.badgeCount, 2);
+  // Once the server says, its count wins.
+  old.server.push([], 5, 7);
+  assert.equal(old.store.badgeCount, 7);
 });

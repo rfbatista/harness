@@ -369,11 +369,12 @@ func TestNotificationsBellIsCountedOnTheFirstPaint(t *testing.T) {
 		chromedp.AttributeValue(`.topbar .bell`, "href", &seed, nil, chromedp.ByQuery),
 		emulation.SetScriptExecutionDisabled(false),
 	)
-	if badge != "3" || title != "(3) harness · harness" || label != "Notifications, 3 unread" || seed != "/notifications" {
+	// Three are unread, two are open causes: the bell counts what needs the person (ADR 0096).
+	if badge != "2" || title != "(2) harness · harness" || label != "Notifications, 2 need you, 3 unread" || seed != "/notifications" {
 		t.Errorf("first paint: badge %q, title %q, label %q, href %q", badge, title, label, seed)
 	}
 	h.run(t, "live", h.openReady("/projects/p1"), chromedp.Evaluate(bellBadge, &badge), chromedp.Title(&title))
-	if badge != "3" || title != "(3) harness · harness" {
+	if badge != "2" || title != "(2) harness · harness" {
 		t.Errorf("after hydration: badge %q, title %q", badge, title)
 	}
 	h.noErrors(t)
@@ -383,9 +384,9 @@ func TestNotificationsBellReadsTheCountWhenTheSeedFails(t *testing.T) {
 	h := newInboxHarness(t, inboxWorld())
 	h.inbox.failSeed = true
 	var badge string
-	h.run(t, "no seed", h.openReady("/projects/p1"), railPoll(bellBadge+` === '3'`), chromedp.Evaluate(bellBadge, &badge))
-	if badge != "3" {
-		t.Errorf("badge %q, want the GET's 3", badge)
+	h.run(t, "no seed", h.openReady("/projects/p1"), railPoll(bellBadge+` === '2'`), chromedp.Evaluate(bellBadge, &badge))
+	if badge != "2" {
+		t.Errorf("badge %q, want the 2 open causes the GET holds", badge)
 	}
 	h.noErrors(t)
 }
@@ -397,8 +398,8 @@ func TestNotificationsArriveLive(t *testing.T) {
 	var rows, title, said string
 	h.waitFollowers(t, 1)
 	h.run(t, "arrival",
-		railPoll(bellBadge+` === '4'`),
-		railPoll(`document.title === '(4) harness · harness'`),
+		railPoll(bellBadge+` === '3'`),
+		railPoll(`document.title === '(3) harness · harness'`),
 		chromedp.Evaluate(panelRows, &rows),
 		chromedp.Title(&title),
 		railPoll(`document.querySelector('.stream-bar [x-data="streamAnnouncer"]').textContent !== ''`),
@@ -413,8 +414,9 @@ func TestNotificationsArriveLive(t *testing.T) {
 	h.noErrors(t)
 }
 
-// The fake streams the echo before it answers the POST: the badge drops
-// once, at the click, and never climbs back or drops twice.
+// The fake streams the echo before it answers the POST: the row reads at the
+// click and never flips back. Reading settles nothing, so the badge (what
+// needs the person) holds still the whole time.
 func TestNotificationsMarkReadSurvivesItsEchoBeforeTheAnswer(t *testing.T) {
 	h := newInboxHarness(t, inboxWorld())
 	h.inbox.hold = make(chan struct{})
@@ -423,7 +425,6 @@ func TestNotificationsMarkReadSurvivesItsEchoBeforeTheAnswer(t *testing.T) {
 		chromedp.Evaluate(`window.__badges = []; new MutationObserver(() => window.__badges.push(`+bellBadge+`)).observe(document.querySelector('.topbar .bell'), { subtree: true, childList: true, characterData: true, attributes: true }); true`, nil),
 	)
 	h.run(t, "mark read", jsClick(`#notifications-panel button[data-id="n-review"]`))
-	h.run(t, "the badge drops", railPoll(bellBadge+` === '2'`))
 	h.run(t, "the row reads", railPoll(`document.querySelector('#notifications-panel .notification:has([data-id="n-review"])')?.dataset.state === 'read'`))
 	time.Sleep(150 * time.Millisecond) // the echo is in; the answer is held
 	close(h.inbox.hold)
@@ -431,7 +432,7 @@ func TestNotificationsMarkReadSurvivesItsEchoBeforeTheAnswer(t *testing.T) {
 	time.Sleep(150 * time.Millisecond)
 	h.run(t, "after", chromedp.Evaluate(`[...new Set(window.__badges)].join(',')`, &seen))
 	if seen != "2" {
-		t.Errorf("the badge read %q while the read was in flight, want only 2", seen)
+		t.Errorf("the badge read %q while the read was in flight, want only 2 (open causes, not unread)", seen)
 	}
 	if posts := h.inbox.postsSeen(); len(posts) != 1 || fmt.Sprint(posts[0]["ids"]) != "[n-review]" {
 		t.Errorf("posts %v", posts)
@@ -451,9 +452,14 @@ func TestNotificationsMarkAllRead(t *testing.T) {
 	h.run(t, "panel",
 		h.openReady("/projects/p1"), h.openPanel(),
 		clickButton("#notifications-panel", "Mark all read"),
-		railPoll(bellBadge+` === ''`),
-		railPoll(`document.title === 'harness · harness'`),
+		railPoll(`![...document.querySelectorAll('#notifications-panel .notification')].some(r => r.dataset.state === 'unread')`),
 	)
+	// Reading does not settle a cause: the two open ones still need the person.
+	var left string
+	h.run(t, "badge", chromedp.Evaluate(bellBadge, &left))
+	if left != "2" {
+		t.Errorf("after Mark all read the badge is %q, want the 2 open causes", left)
+	}
 	if posts := h.inbox.postsSeen(); len(posts) != 1 || posts[0]["all"] != true || posts[0]["project_id"] != nil {
 		t.Errorf("posts %v", posts)
 	}
@@ -502,7 +508,7 @@ func TestNotificationsPageFiltersByProjectAndUnread(t *testing.T) {
 		chromedp.SetValue(`#inbox-project`, "p2", chromedp.ByID),
 		chromedp.Evaluate(`setTimeout(() => document.querySelector('#inbox-project').dispatchEvent(new Event('change', { bubbles: true }))); true`, nil),
 	)
-	h.waitURL(t, "/notifications?project=p2&tab=all&actor=&kind=")
+	h.waitURL(t, "/notifications?tab=all&project=p2&actor=&kind=")
 	h.run(t, "tui", chromedp.Evaluate(pageRows, &p2))
 	if p2 != "Release notes drafted" {
 		t.Errorf("tui:\n%s", p2)
@@ -527,7 +533,7 @@ func TestNotificationsPageFiltersByProjectAndUnread(t *testing.T) {
 		t.Errorf("live rows:\n%s", live)
 	}
 	h.run(t, "unread only", chromedp.Evaluate(`setTimeout(() => document.querySelector('input[name=tab][value="unread"]').click()); true`, nil))
-	h.waitURL(t, "/notifications?project=p2&tab=unread&actor=&kind=")
+	h.waitURL(t, "/notifications?tab=unread&project=p2&actor=&kind=")
 	h.run(t, "unread", chromedp.Evaluate(pageRows, &unread))
 	if unread != "Build green\nRelease notes drafted" {
 		t.Errorf("unread:\n%s", unread)
@@ -807,13 +813,13 @@ func TestNotificationsPageFiltersByWhoAndKind(t *testing.T) {
 		t.Errorf("who options: %q", opts)
 	}
 	h.run(t, "pick who", chromedp.SetValue(`#inbox-actor`, "devops", chromedp.ByID), chromedp.Evaluate(`setTimeout(() => document.querySelector('#inbox-actor').dispatchEvent(new Event('change', { bubbles: true }))); true`, nil))
-	h.waitURL(t, "/notifications?project=&tab=all&actor=devops&kind=")
+	h.waitURL(t, "/notifications?tab=all&project=&actor=devops&kind=")
 	h.run(t, "who", chromedp.Evaluate(pageRows, &rows), chromedp.Evaluate(options, &opts))
 	if rows != "devops built it\ndevops pushes" || opts != "Anyone|devops*" {
 		t.Errorf("by who: rows %q, options %q", rows, opts)
 	}
 	h.run(t, "pick kind", chromedp.SetValue(`#inbox-kind`, "branch_request", chromedp.ByID), chromedp.Evaluate(`setTimeout(() => document.querySelector('#inbox-kind').dispatchEvent(new Event('change', { bubbles: true }))); true`, nil))
-	h.waitURL(t, "/notifications?project=&tab=all&actor=devops&kind=branch_request")
+	h.waitURL(t, "/notifications?tab=all&project=&actor=devops&kind=branch_request")
 	h.run(t, "both", chromedp.Evaluate(pageRows, &rows))
 	if rows != "devops pushes" {
 		t.Errorf("by who and kind: %q", rows)
@@ -912,6 +918,33 @@ func TestNotificationsEveryKindLoadsAndThePanelIsCompact(t *testing.T) {
 	h.run(t, "panel", h.openPanel(), chromedp.Evaluate(`[...document.querySelectorAll('#notifications-panel .notification')].map(r => r.hasAttribute('data-compact')).join(',')`, &panelCompact))
 	if want := strings.TrimSuffix(strings.Repeat("true,", len(kinds)), ","); panelCompact != want {
 		t.Errorf("the panel's rows are compact: %q", panelCompact)
+	}
+	h.noErrors(t)
+}
+
+// Needs you is the point of the inbox: the open causes reach the Needs you tab
+// and the bell panel however far back the latest page ends.
+func TestNotificationsOpenCausesReachNeedsYouBeyondTheLatestPage(t *testing.T) {
+	now := time.Now()
+	var list []*domain.Notification
+	for i := range 60 { // the newest 60 are information
+		list = append(list, &domain.Notification{ID: "info-" + strconv.Itoa(i), ProjectID: "p1", ProjectName: "harness", Source: domain.NotificationFromAgent, Kind: domain.NotificationAgent, Level: domain.NotificationInfo, Title: "Info " + strconv.Itoa(i), Link: "/projects/p1", CreatedAt: now.Add(-time.Duration(i+1) * time.Minute)})
+	}
+	for i := range 3 { // three open causes, older than all of them
+		list = append(list, &domain.Notification{ID: "open-" + strconv.Itoa(i), ProjectID: "p1", ProjectName: "harness", Source: domain.NotificationFromSystem, Kind: domain.NotificationSessionWaiting, Level: domain.NotificationAction, Title: "Waiting " + strconv.Itoa(i), Link: "/projects/p1", CreatedAt: now.Add(-time.Duration(100+i) * time.Minute)})
+	}
+	h := newInboxHarness(t, list)
+	var needs, panel, badge string
+	h.run(t, "needs you", h.openReady("/notifications?tab=needs"), railPoll(`document.querySelectorAll('main .notification').length === 3`), chromedp.Evaluate(pageRows, &needs))
+	if needs != "Waiting 0\nWaiting 1\nWaiting 2" {
+		t.Errorf("Needs you:\n%s", needs)
+	}
+	h.run(t, "panel", h.openReady("/projects/p1"), h.openPanel(), railPoll(`!!document.querySelector('#notifications-panel .notification[data-kind=session_waiting]')`), railPoll(bellBadge+` === '3'`), chromedp.Evaluate(panelRows, &panel), chromedp.Evaluate(bellBadge, &badge))
+	if !strings.HasPrefix(panel, "Waiting 0|") || !strings.Contains(panel, "Waiting 2|") {
+		t.Errorf("the panel leads with the open causes older than its latest page:\n%s", panel)
+	}
+	if badge != "3" {
+		t.Errorf("badge %q, want the 3 open causes", badge)
 	}
 	h.noErrors(t)
 }
