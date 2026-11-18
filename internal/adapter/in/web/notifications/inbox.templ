@@ -129,18 +129,37 @@ templ InboxPage(frame shell.Frame, v View) {
 // actions (they need JavaScript). It is the ledger row on what the server
 // holds today: no actor, so the harness is the who, and the title is the what.
 templ serverRow(row Row) {
-	<article class="[ notification ]" data-layout="ledger" data-kind="agent" data-level={ row.Level } data-state={ row.State }>
+	<article class="[ notification ]" data-layout="ledger" data-kind={ row.Kind } data-level={ row.Level } data-state={ row.State }>
 		<span class="[ marker ]" aria-hidden="true"></span>
 		<div class="[ who ]">
-			<span class="[ avatar ]" aria-hidden="true" data-who="system">h</span>
-			<span class="[ name ]">harness</span>
+			<span class="[ avatar ]" aria-hidden="true" data-who={ row.WhoKind } data-agent={ row.WhoSlot }>{ row.WhoInitial }</span>
+			<span class="[ name ]">{ row.WhoName }</span>
+			if row.WhoMode != "" {
+				<span class="[ mode ]">{ row.WhoMode }</span>
+			}
 		</div>
 		<div class="[ what ]">
-			<a class="[ title ]" href={ templ.SafeURL(row.Href) }><span class="[ icon ]" aria-hidden="true"></span><span class="[ text ]"><span class="[ verb ]">{ row.Title }</span></span></a>
+			<a class="[ title ]" href={ templ.SafeURL(row.Href) } aria-label={ row.Label }>
+				<span class="[ icon ]" aria-hidden="true"></span>
+				<span class="[ text ]">
+					if row.Verb != "" {
+						<span class="[ verb ]">{ row.Verb }</span>
+						if row.ObjectText != "" {
+							{ " " }
+							<span class="[ object ]" data-code={ strconv.FormatBool(row.ObjectCode) }>{ row.ObjectText }</span>
+						}
+					} else {
+						<span class="[ verb ]">{ row.Title }</span>
+					}
+				</span>
+			</a>
 			<p class="[ where ]">
 				<span class="[ project ]">{ row.Project }</span>
 				if row.Task != "" {
 					<span class="[ task ]">{ row.Task }</span>
+				}
+				if row.Repository != "" {
+					<span class="[ repo ]">{ row.Repository }</span>
 				}
 			</p>
 		</div>
@@ -157,14 +176,23 @@ templ serverRow(row Row) {
 						</li>
 					}
 				</ul>
+			} else if len(row.Listed) > 0 {
+				<ul role="list" class="[ interrupted-sessions ]">
+					for _, s := range row.Listed {
+						<li data-state={ s.State }>
+							<a href={ templ.SafeURL(s.Href) }>{ s.Label }</a>
+							<span class="[ state ]">{ s.Reason }</span>
+						</li>
+					}
+				</ul>
 			} else if row.Body != "" {
 				<p class="[ body ]">{ row.Body }</p>
 			}
 		</div>
 		<div class="[ when ]">
-			<time datetime={ row.At }><span class="[ age ]">{ row.Age }</span></time>
-			if row.LevelLabel != "" {
-				<span class="[ standing ]" data-tone={ serverTone(row) }>{ row.LevelLabel }</span>
+			<time datetime={ row.At } title={ row.FullDate }>{ row.Clock }<span class="[ age ]">{ row.Age }</span></time>
+			if row.StatusText != "" {
+				<span class="[ standing ]" data-tone={ row.StatusTone }>{ row.StatusText }</span>
 			}
 		</div>
 	</article>

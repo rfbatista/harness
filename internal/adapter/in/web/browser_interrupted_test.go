@@ -75,7 +75,7 @@ func (f *fakeInbox) resumeInterrupted(w http.ResponseWriter, r *http.Request) {
 		now := time.Now()
 		n.ResolvedAt = &now
 	}
-	change := ports.NotificationChange{Changed: []*domain.Notification{n}, UnreadCount: f.unread()}
+	change := ports.NotificationChange{Changed: []*domain.Notification{n}, UnreadCount: f.unread(), OpenCount: f.open()}
 	f.mu.Unlock()
 	b, _ := json.Marshal(change)
 	f.stream.mu.Lock()

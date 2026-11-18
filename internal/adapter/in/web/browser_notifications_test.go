@@ -54,6 +54,28 @@ func (f *fakeInbox) unread() int {
 	return n
 }
 
+// openIn counts the open causes of list: level action, not settled.
+func openIn(list []*domain.Notification) int {
+	n := 0
+	for _, x := range list {
+		if x.Level == domain.NotificationAction && x.ResolvedAt == nil {
+			n++
+		}
+	}
+	return n
+}
+
+// open is the server's global count of open causes: level action, not settled.
+func (f *fakeInbox) open() int {
+	n := 0
+	for _, x := range f.list {
+		if x.Level == domain.NotificationAction && x.ResolvedAt == nil {
+			n++
+		}
+	}
+	return n
+}
+
 func (f *fakeInbox) page(q ports.NotificationQuery) *ports.NotificationPage {
 	return f.pageWhere(q, nil)
 }
@@ -75,7 +97,7 @@ func (f *fakeInbox) pageWhere(q ports.NotificationQuery, also func(*domain.Notif
 			rest = append(rest, n)
 		}
 	}
-	p := &ports.NotificationPage{Notifications: []*domain.Notification{}, UnreadCount: f.unread()}
+	p := &ports.NotificationPage{Notifications: []*domain.Notification{}, UnreadCount: f.unread(), OpenCount: f.open()}
 	if len(rest) > limit {
 		p.NextBefore = rest[limit-1].ID
 		rest = rest[:limit]
@@ -143,7 +165,7 @@ func (f *fakeInbox) add(t *testing.T, n *domain.Notification) {
 		n.CreatedAt = time.Now()
 	}
 	f.list = append([]*domain.Notification{n}, f.list...)
-	change := ports.NotificationChange{Changed: []*domain.Notification{n}, UnreadCount: f.unread()}
+	change := ports.NotificationChange{Changed: []*domain.Notification{n}, UnreadCount: f.unread(), OpenCount: f.open()}
 	f.mu.Unlock()
 	f.stream.pushRaw(t, change)
 }
@@ -193,7 +215,7 @@ func (f *fakeInbox) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 				changed = append(changed, n)
 			}
 		}
-		change := ports.NotificationChange{Changed: changed, UnreadCount: f.unread()}
+		change := ports.NotificationChange{Changed: changed, UnreadCount: f.unread(), OpenCount: f.open()}
 		hold := f.hold
 		f.mu.Unlock()
 		if len(changed) > 0 {
@@ -528,7 +550,7 @@ func TestNotificationsPageFiltersByProjectAndUnread(t *testing.T) {
 		if live == "Build green\nRelease notes drafted" {
 			break
 		}
-		h.inbox.stream.pushRaw(t, ports.NotificationChange{Changed: []*domain.Notification{other, green}, UnreadCount: 4})
+		h.inbox.stream.pushRaw(t, ports.NotificationChange{Changed: []*domain.Notification{other, green}, UnreadCount: 4, OpenCount: h.inbox.open()})
 		time.Sleep(200 * time.Millisecond)
 	}
 	if live != "Build green\nRelease notes drafted" {
@@ -676,7 +698,7 @@ func TestNotificationsPageShowsTheLedgerRow(t *testing.T) {
 	// The first paint carries what the domain holds today; the stream and
 	// GET carry the revision 6 fields. Send the change until the page shows it.
 	for range 10 {
-		h.inbox.stream.pushRaw(t, withExtraAt(ports.NotificationChange{Changed: list, UnreadCount: 2}, "changed", h.inbox.extra))
+		h.inbox.stream.pushRaw(t, withExtraAt(ports.NotificationChange{Changed: list, UnreadCount: 2, OpenCount: openIn(list)}, "changed", h.inbox.extra))
 		time.Sleep(200 * time.Millisecond)
 		h.run(t, "rows", chromedp.Evaluate(rows, &got))
 		if strings.Contains(got, "|operate|") {
@@ -699,9 +721,19 @@ func TestNotificationsBellCountsWhatNeedsThePerson(t *testing.T) {
 	h := newInboxHarness(t, inboxWorld())
 	var badge, title, label, panel string
 	h.run(t, "ready", h.openReady("/projects/p1"))
-	// A server that sends open_count: the unread count is 3, the open causes are 1.
+	// A cause settles: the open count drops from 2 to 1 and the unread count with it (2 left unread), as the server streams them.
+	h.inbox.mu.Lock()
+	var wait *domain.Notification
+	for _, n := range h.inbox.list {
+		if n.ID == "n-wait" {
+			settled := time.Now()
+			n.ResolvedAt, wait = &settled, n
+		}
+	}
+	change := ports.NotificationChange{Changed: []*domain.Notification{wait}, UnreadCount: h.inbox.unread(), OpenCount: h.inbox.open()}
+	h.inbox.mu.Unlock()
 	for range 10 {
-		h.inbox.stream.pushRaw(t, map[string]any{"changed": []any{}, "unread_count": 3, "open_count": 1})
+		h.inbox.stream.pushRaw(t, change)
 		time.Sleep(200 * time.Millisecond)
 		h.run(t, "bell", chromedp.Evaluate(bellBadge, &badge))
 		if badge == "1" {
@@ -709,11 +741,11 @@ func TestNotificationsBellCountsWhatNeedsThePerson(t *testing.T) {
 		}
 	}
 	h.run(t, "read", chromedp.Title(&title), chromedp.AttributeValue(`.topbar .bell`, "aria-label", &label, nil, chromedp.ByQuery), h.openPanel(), chromedp.Evaluate(panelRows, &panel))
-	if badge != "1" || title != "(1) harness · harness" || label != "Notifications, 1 need you, 3 unread" {
+	if badge != "1" || title != "(1) harness · harness" || label != "Notifications, 1 need you, 2 unread" {
 		t.Errorf("badge %q, title %q, label %q", badge, title, label)
 	}
-	// Open causes lead the panel: the review and the wait, then the information, the read and the settled.
-	if want := "Review requested: the dashboard plan|unread\nA session waits for approval|unread\nRelease notes drafted|unread\nA session failed|read\nRedesign sidebar is in review|settled"; panel != want {
+	// Open causes lead the panel: the review, then the rest newest first.
+	if want := "Review requested: the dashboard plan|unread\nRelease notes drafted|unread\nA session waits for approval|settled\nA session failed|read\nRedesign sidebar is in review|settled"; panel != want {
 		t.Errorf("panel:\n%s", panel)
 	}
 	h.noErrors(t)
@@ -766,7 +798,7 @@ func TestNotificationsPageFoldsSettledRepeatsIntoAStack(t *testing.T) {
 	var needsStacks int
 	h.run(t, "page", h.openReady("/notifications?tab=all"))
 	for range 10 {
-		h.inbox.stream.pushRaw(t, withExtraAt(ports.NotificationChange{Changed: list, UnreadCount: 1}, "changed", extra))
+		h.inbox.stream.pushRaw(t, withExtraAt(ports.NotificationChange{Changed: list, UnreadCount: 1, OpenCount: openIn(list)}, "changed", extra))
 		time.Sleep(200 * time.Millisecond)
 		h.run(t, "stack", chromedp.Evaluate(stack, &closed))
 		if closed != "" {
@@ -804,7 +836,7 @@ func TestNotificationsPageFiltersByWhoAndKind(t *testing.T) {
 	var rows, opts string
 	h.run(t, "unfiltered", h.openReady("/notifications?tab=all"))
 	for range 10 {
-		h.inbox.stream.pushRaw(t, withExtraAt(ports.NotificationChange{Changed: list, UnreadCount: 3}, "changed", h.inbox.extra))
+		h.inbox.stream.pushRaw(t, withExtraAt(ports.NotificationChange{Changed: list, UnreadCount: 3, OpenCount: openIn(list)}, "changed", h.inbox.extra))
 		time.Sleep(200 * time.Millisecond)
 		h.run(t, "options", chromedp.Evaluate(options, &opts))
 		if strings.Contains(opts, "go-developer") {
@@ -846,7 +878,7 @@ func TestNotificationsPageAcknowledgesABranchFinding(t *testing.T) {
 	var before, after, badge string
 	h.run(t, "ready", h.openReady("/notifications"))
 	for range 10 {
-		h.inbox.stream.pushRaw(t, withExtraAt(ports.NotificationChange{Changed: list, UnreadCount: 2}, "changed", h.inbox.extra))
+		h.inbox.stream.pushRaw(t, withExtraAt(ports.NotificationChange{Changed: list, UnreadCount: 2, OpenCount: openIn(list)}, "changed", h.inbox.extra))
 		time.Sleep(200 * time.Millisecond)
 		h.run(t, "buttons", chromedp.Evaluate(buttons, &before))
 		if strings.Contains(before, "branch_finding:ack") {
@@ -883,7 +915,7 @@ func TestNotificationsPageListsTheSessionsOfACommitCheckOff(t *testing.T) {
 	var bodyShown bool
 	h.run(t, "ready", h.openReady("/notifications"))
 	for range 10 {
-		h.inbox.stream.pushRaw(t, withExtraAt(ports.NotificationChange{Changed: list, UnreadCount: 1}, "changed", h.inbox.extra))
+		h.inbox.stream.pushRaw(t, withExtraAt(ports.NotificationChange{Changed: list, UnreadCount: 1, OpenCount: openIn(list)}, "changed", h.inbox.extra))
 		time.Sleep(200 * time.Millisecond)
 		h.run(t, "lines", chromedp.Evaluate(lines, &got), chromedp.Evaluate(body, &bodyShown))
 		if got != "" {
@@ -947,6 +979,33 @@ func TestNotificationsOpenCausesReachNeedsYouBeyondTheLatestPage(t *testing.T) {
 	}
 	if badge != "3" {
 		t.Errorf("badge %q, want the 3 open causes", badge)
+	}
+	h.noErrors(t)
+}
+
+// The page without script paints the real who and what from the domain: the
+// agent's name, mode and colour, the verb and its object, where it stands.
+func TestNotificationsFirstPaintNamesWhoAndWhatWithoutScript(t *testing.T) {
+	now := time.Now()
+	done := now.Add(-30 * time.Minute)
+	agent := domain.NotificationActor{Kind: domain.ActorAgent, Name: "devops", Mode: "operate", SessionID: "s9"}
+	list := []*domain.Notification{
+		{ID: "push", ProjectID: "p1", ProjectName: "harness", TaskTitle: "Fix malloc", Source: domain.NotificationFromAgent, Kind: domain.NotificationBranchRequest, Level: domain.NotificationAction, Title: "devops wants to push", Link: "/projects/p1", CreatedAt: now.Add(-17 * time.Minute), Actor: agent, Verb: "wants to push", Object: &domain.NotificationObject{Text: "agent/x → origin/feat/y", Code: true}, RepositoryName: "harness-api"},
+		{ID: "done", ProjectID: "p1", ProjectName: "harness", Source: domain.NotificationFromAgent, Kind: domain.NotificationServiceRequest, Level: domain.NotificationAction, Title: "devops wants to restart api", Link: "/projects/p1", CreatedAt: now.Add(-time.Hour), ResolvedAt: &done, Outcome: domain.OutcomeApproved, Actor: agent, Verb: "wants to restart", Object: &domain.NotificationObject{Text: "api on main", Code: true}},
+	}
+	h := newInboxHarness(t, list)
+	const rows = `[...document.querySelectorAll('main .notification')].map(r => [r.dataset.kind, r.querySelector('.who .name').textContent, r.querySelector('.who .mode')?.textContent ?? '', r.querySelector('.avatar').dataset.agent, r.querySelector('.title .text').innerText.replace(/\s+/g, ' ').trim(), r.querySelector('.where').innerText.replace(/\s+/g, ' ').trim(), r.querySelector('.when .standing')?.textContent ?? ''].join('|')).join('\n')`
+	var got, badge string
+	h.run(t, "no script", emulation.SetScriptExecutionDisabled(true), chromedp.Navigate(h.srv.URL+"/notifications?tab=all"), chromedp.Evaluate(rows, &got), chromedp.Evaluate(bellBadge, &badge), emulation.SetScriptExecutionDisabled(false))
+	lines := strings.Split(got, "\n")
+	if len(lines) != 2 || !strings.HasPrefix(lines[0], "branch_request|devops|operate|") || !strings.HasSuffix(lines[0], "|wants to push agent/x → origin/feat/y|harness Fix malloc harness-api|Needs you") {
+		t.Errorf("open row: %q", got)
+	}
+	if len(lines) == 2 && (!strings.HasPrefix(lines[1], "service_request|devops|operate|") || !strings.Contains(lines[1], "|Approved ")) {
+		t.Errorf("settled row: %q", got)
+	}
+	if badge != "1" {
+		t.Errorf("first paint badge %q, want the server's open count 1", badge)
 	}
 	h.noErrors(t)
 }

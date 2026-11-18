@@ -68,20 +68,13 @@ func (b *Bell) Unread() int {
 	return b.Seed.UnreadCount
 }
 
-// Open is the count to paint (ADR 0096): the causes that need the person, as
-// far as the seed shows them (level action, not settled; the browser takes
-// the server's global count over once it has one); 0 without a seed.
+// Open is the count to paint (ADR 0096): the server's global number of causes
+// that need the person; 0 without a seed.
 func (b *Bell) Open() int {
 	if b == nil || b.Seed == nil {
 		return 0
 	}
-	n := 0
-	for _, x := range b.Seed.Notifications {
-		if x.Level == domain.NotificationAction && x.ResolvedAt == nil {
-			n++
-		}
-	}
-	return n
+	return b.Seed.OpenCount
 }
 
 // badgeMax is where the badge stops counting (the browser's badgeText).

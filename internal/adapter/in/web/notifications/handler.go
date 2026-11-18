@@ -11,6 +11,7 @@ import (
 	"strconv"
 	"strings"
 	"time"
+	"unicode/utf8"
 
 	"github.com/rfbatista/harnesskit/errs"
 
@@ -108,7 +109,7 @@ func (h Handler) Page(w http.ResponseWriter, r *http.Request) error {
 	// Needs you is the default while anything is open, and All otherwise.
 	if f.Tab == "" {
 		f.Tab = TabAll
-		if v.OpenCount() > 0 {
+		if v.opensHere() {
 			f.Tab = TabNeeds
 		}
 		v.Filter = f
@@ -145,6 +146,14 @@ type Row struct {
 	ID, Href, Title, Body, Project, Task string
 	Level, LevelLabel, State, Age, At    string
 	Unread                               bool
+	// The ledger's columns: who (name, mode, kind and colour slot), what
+	// (verb and object, or the title), where, when and where it stands.
+	Kind, WhoName, WhoMode, WhoKind, WhoInitial, WhoSlot string
+	Verb, ObjectText, Repository                         string
+	ObjectCode                                           bool
+	Clock, FullDate, StatusText, StatusTone, Label       string
+	// Listed is a commit_check_off item's sessions (Reason holds the state word).
+	Listed []SessionLine
 	// Sessions is a sessions_interrupted item's list; the browser adds its
 	// Resume all interrupted button.
 	Sessions []SessionLine
@@ -153,37 +162,153 @@ type Row struct {
 // SessionLine is one session a sessions_interrupted item lists.
 type SessionLine struct{ Label, Href, State, Reason string }
 
-// ToRow paints n as of now.
+// outcomeWords are the words an outcome reads as, with their tone (the
+// browser's OUTCOME_WORDS).
+var outcomeWords = map[domain.NotificationOutcome][2]string{
+	domain.OutcomeApproved:         {"Approved", "success"},
+	domain.OutcomeChangesRequested: {"Changes requested", "attention"},
+	domain.OutcomeDenied:           {"Denied", "danger"},
+	domain.OutcomeExpired:          {"Expired", "quiet"},
+	domain.OutcomeWithdrawn:        {"Withdrawn", "quiet"},
+	domain.OutcomeAnswered:         {"Answered", "success"},
+	domain.OutcomeDismissed:        {"Dismissed", "quiet"},
+	domain.OutcomeAcknowledged:     {"Acknowledged", "success"},
+	domain.OutcomeRepaired:         {"Repaired", "success"},
+	domain.OutcomeResumed:          {"Resumed", "success"},
+	domain.OutcomeEnded:            {"Ended", "quiet"},
+	domain.OutcomeDone:             {"Done", "success"},
+	domain.OutcomeReopened:         {"Reopened", "attention"},
+}
+
+// listedWords are the words a commit_check_off session's state reads as.
+var listedWords = map[domain.CommitCheckState]string{
+	domain.CommitCheckOff:      "check off",
+	domain.CommitCheckRepaired: "repaired",
+	domain.CommitCheckEnded:    "ended",
+}
+
+// agentSlots is how many colours an agent's avatar picks from.
+const agentSlots = 8
+
+// AgentSlot is the colour slot of an agent's name, the browser's agentSlot
+// (a 31-hash over the name's code points, in 32 bits).
+func AgentSlot(name string) int {
+	var h uint32
+	for _, c := range name {
+		h = h*31 + uint32(c)
+	}
+	return int(h % agentSlots)
+}
+
+// standing is where a notification stands, in words and tone: Needs you, the
+// outcome and its time, Settled, or Failed ("" for an information item).
+func standing(n *domain.Notification, loc *time.Location) (string, string) {
+	if n.ResolvedAt == nil {
+		switch {
+		case n.Kind == domain.NotificationSessionFailed:
+			return "Failed", "danger"
+		case n.Level == domain.NotificationAction:
+			return "Needs you", "attention"
+		}
+		return "", "quiet"
+	}
+	if w, ok := outcomeWords[n.Outcome]; ok {
+		return w[0] + " " + n.ResolvedAt.In(loc).Format("15:04"), w[1]
+	}
+	return "Settled", "quiet"
+}
+
+// ToRow paints n as of now: the browser's toRow, for the page without script.
 func ToRow(n *domain.Notification, now time.Time) Row {
+	loc := now.Location()
 	unread := n.Unread()
-	state, label := "read", ""
+	state := "read"
 	switch {
 	case n.ResolvedAt != nil:
-		state, label = "settled", "Settled"
+		state = "settled"
 	case unread:
 		state = "unread"
 	}
-	if label == "" && n.Level == domain.NotificationAction {
-		label = "Needs you"
-	}
+	statusText, statusTone := standing(n, loc)
 	var lines []SessionLine
 	for _, s := range n.InterruptedSessions {
-		task := s.TaskTitle
-		if task == "" {
-			task = "No task"
-		}
-		label := task
-		if s.AgentName != "" {
-			label += " · " + s.AgentName
-		}
-		lines = append(lines, SessionLine{Label: label, Href: s.Link, State: string(s.State), Reason: s.Reason})
+		lines = append(lines, SessionLine{Label: sessionLabel(s.TaskTitle, s.AgentName), Href: s.Link, State: string(s.State), Reason: s.Reason})
 	}
+	var listed []SessionLine
+	for _, s := range n.ListedSessions {
+		word := listedWords[s.State]
+		if word == "" {
+			word = string(s.State)
+		}
+		listed = append(listed, SessionLine{Label: sessionLabel(s.TaskTitle, s.AgentName), Href: s.Link, State: string(s.State), Reason: word})
+	}
+	actor := n.Actor
+	if actor.Name == "" {
+		actor = domain.NotificationActor{Kind: domain.ActorSystem, Name: domain.ActorHarness}
+	}
+	what := n.Title
+	var objectText string
+	var objectCode bool
+	if n.Verb != "" {
+		what = n.Verb
+		if n.Object != nil {
+			objectText, objectCode = n.Object.Text, n.Object.Code
+			what += " " + objectText
+		}
+	}
+	where := n.ProjectName
+	if n.TaskTitle != "" {
+		where += " › " + n.TaskTitle
+	}
+	if n.RepositoryName != "" {
+		where += " · " + n.RepositoryName
+	}
+	at := n.CreatedAt.In(loc)
+	fullDate := at.Format("Mon 2 Jan 2006, 15:04")
+	age := sessions.RelativeTime(n.CreatedAt, now)
+	ago := age + " ago"
+	if age == "now" {
+		ago = "just now"
+	}
+	var parts []string
+	if unread {
+		parts = append(parts, "Unread.")
+	}
+	if isOpen(n) {
+		parts = append(parts, "Needs you.")
+	}
+	parts = append(parts, actor.Name+" "+what+".")
+	if where != "" {
+		parts = append(parts, where+".")
+	}
+	parts = append(parts, fullDate+", "+ago+".")
+	slot := ""
+	if actor.Kind == domain.ActorAgent {
+		slot = strconv.Itoa(AgentSlot(actor.Name))
+	}
+	initial, _ := utf8.DecodeRuneInString(actor.Name)
 	return Row{
 		Sessions: lines,
+		Listed:   listed,
 		ID:       n.ID, Href: n.Link, Title: n.Title, Body: n.Body, Project: n.ProjectName, Task: n.TaskTitle,
-		Level: string(n.Level), LevelLabel: label, State: state, Unread: unread,
-		Age: sessions.RelativeTime(n.CreatedAt, now), At: n.CreatedAt.UTC().Format(time.RFC3339),
+		Level: string(n.Level), LevelLabel: statusText, State: state, Unread: unread,
+		Age: age, At: n.CreatedAt.UTC().Format(time.RFC3339),
+		Kind: string(n.Kind), WhoName: actor.Name, WhoMode: actor.Mode, WhoKind: string(actor.Kind), WhoInitial: string(initial), WhoSlot: slot,
+		Verb: n.Verb, ObjectText: objectText, ObjectCode: objectCode, Repository: n.RepositoryName,
+		Clock: at.Format("15:04"), FullDate: fullDate, StatusText: statusText, StatusTone: statusTone,
+		Label: strings.Join(parts, " "),
 	}
+}
+
+// sessionLabel is "Ship · go-developer": a listed session's task and agent.
+func sessionLabel(task, agent string) string {
+	if task == "" {
+		task = "No task"
+	}
+	if agent != "" {
+		task += " · " + agent
+	}
+	return task
 }
 
 // isOpen is an open cause: level action and not settled.
@@ -191,18 +316,30 @@ func isOpen(n *domain.Notification) bool {
 	return n.Level == domain.NotificationAction && n.ResolvedAt == nil
 }
 
-// OpenCount is how many open causes the seed holds.
+// OpenCount is the server's global count of open causes (ADR 0096).
 func (v View) OpenCount() int {
 	if v.Seed == nil {
 		return 0
 	}
-	n := 0
-	for _, x := range v.Seed.Notifications {
-		if isOpen(x) {
-			n++
+	return v.Seed.OpenCount
+}
+
+// opensHere is whether the page lands on Needs you: the server's global open
+// count says so, but within one project only the open causes of its first
+// page can (the count is global whatever the filter).
+func (v View) opensHere() bool {
+	if v.Seed == nil {
+		return false
+	}
+	if v.Filter.ProjectID == "" {
+		return v.Seed.OpenCount > 0
+	}
+	for _, n := range v.Seed.Notifications {
+		if isOpen(n) {
+			return true
 		}
 	}
-	return n
+	return false
 }
 
 // UnreadCount is the server's global unread count.
@@ -303,14 +440,6 @@ func (v View) EmptyText() string {
 		return "No notifications in " + v.ProjectName + " yet."
 	}
 	return "No notifications yet."
-}
-
-// serverTone is the tone of the standing line a server-painted row shows.
-func serverTone(row Row) string {
-	if row.State == "settled" {
-		return "quiet"
-	}
-	return "attention"
 }
 
 // KindOption is one entry of the kind filter, named as a person says it.
