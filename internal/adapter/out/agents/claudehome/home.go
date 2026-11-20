@@ -38,6 +38,60 @@ func (h Home) Ensure() error {
 	})
 }
 
+// EnsureSharing is Ensure for a project Claude home (ADR 0102): beside the
+// seed it makes the home's projects/ folder a link to the agent home's, so the
+// transcripts claude files while it runs with this home as its config dir land
+// where History, the transcript reader and resume read them, and a session
+// either home started resumes under the other. What a projects/ folder in this
+// home already held moves to the agent home. It is repeatable.
+func (h Home) EnsureSharing(agent Home) error {
+	if err := h.Ensure(); err != nil {
+		return err
+	}
+	shared := filepath.Join(agent.dir, "projects")
+	if err := os.MkdirAll(shared, 0o700); err != nil {
+		return err
+	}
+	link := filepath.Join(h.dir, "projects")
+	fi, err := os.Lstat(link)
+	switch {
+	case errors.Is(err, fs.ErrNotExist):
+	case err != nil:
+		return err
+	case fi.Mode()&os.ModeSymlink != 0:
+		if to, err := os.Readlink(link); err == nil && to == shared {
+			return nil
+		}
+		if err := os.Remove(link); err != nil {
+			return err
+		}
+	default:
+		if err := moveInto(link, shared); err != nil {
+			return err
+		}
+	}
+	return os.Symlink(shared, link)
+}
+
+// moveInto moves what dir holds into dst, entry by entry, then removes dir; an
+// entry dst already has stays where it is.
+func moveInto(dir, dst string) error {
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		return err
+	}
+	for _, e := range entries {
+		to := filepath.Join(dst, e.Name())
+		if _, err := os.Lstat(to); err == nil {
+			continue
+		}
+		if err := os.Rename(filepath.Join(dir, e.Name()), to); err != nil {
+			return err
+		}
+	}
+	return os.RemoveAll(dir)
+}
+
 // credentialsFile is the login claude keeps in the home, plaintext.
 const credentialsFile = ".credentials.json"
 

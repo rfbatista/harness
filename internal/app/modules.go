@@ -1231,7 +1231,7 @@ func newOneShotter(cfg Config, p oneShotParts) claudetext.OneShotter {
 	bin := oneShotBin(cfg, p)
 	one := claudetext.OneShotter(oneShotClaude(bin, p.Home.Path(), cfg.llmProxyURL()))
 	if prep := oneShotPreparer(bin, p); prep != nil {
-		one = claudetext.Confined(one, prep)
+		one = claudetext.ConfinedFor(one, prep)
 	}
 	return claudetext.Gated(one, p.Ready.check())
 }
@@ -1242,7 +1242,7 @@ func newStreamOneShotter(cfg Config, p oneShotParts) claudetext.StreamOneShotter
 	bin := oneShotBin(cfg, p)
 	one := claudetext.StreamOneShotter(oneShotClaude(bin, p.Home.Path(), cfg.llmProxyURL()))
 	if prep := oneShotPreparer(bin, p); prep != nil {
-		one = claudetext.ConfinedStream(one, prep)
+		one = claudetext.ConfinedStreamFor(one, prep)
 	}
 	return claudetext.GatedStream(one, p.Ready.check())
 }
@@ -1257,11 +1257,31 @@ func oneShotBin(cfg Config, p oneShotParts) string {
 
 // oneShotPreparer prepares each one-shot for the agent isolation, nil when
 // the graph has no sandbox or credential.
-func oneShotPreparer(bin string, p oneShotParts) func() ([]string, llmkit.WrapFunc, error) {
+func oneShotPreparer(bin string, p oneShotParts) func(context.Context) (claudetext.Prepared, error) {
 	if p.Orch == nil || p.Credential == nil {
 		return nil
 	}
-	return oneShotPrep(p.Orch.Sandbox, oneShotEnv(p.Credential.Env, p.Home.HasLogin, p.KC.Path()), bin, p.KC.Path())
+	return oneShotPrepFor(p.Orch.Sandbox, p.oneShotSources(), bin, p.KC.Path())
+}
+
+// oneShotSources are the credential rules of a one-shot, read from the
+// orchestration at each call: its project rules are bound after the graph is
+// built.
+func (p oneShotParts) oneShotSources() oneShotSources {
+	return oneShotSources{
+		Pasted:     p.Credential.Env,
+		AgentLogin: p.Home.HasLogin,
+		ProjectLoginHome: func(id string) string {
+			if p.Orch.ProjectLoginHome == nil {
+				return ""
+			}
+			return p.Orch.ProjectLoginHome(id)
+		},
+		ProjectCredential: func(id string) ([]string, bool) {
+			return p.Credential.EnvFor(id), p.Credential.OwnsEnv(id)
+		},
+		ShimDir: p.KC.Path(),
+	}
 }
 
 // newWritingHelper is the writing helper over the streaming one-shot, the
@@ -1276,7 +1296,7 @@ func newWritingHelper(cat catalog.Catalog, one claudetext.StreamOneShotter, p on
 type streamer struct{ one claudetext.StreamOneShotter }
 
 func (s streamer) Stream(ctx context.Context, c writinghelper.StreamCall, onText func(string)) (string, error) {
-	res, err := s.one.OneShotStream(ctx, claude.OneShotRequest{System: c.System, Input: c.Input, Model: c.Model, Attribution: c.Attribution}, onText)
+	res, err := s.one.OneShotStream(claudetext.WithProject(ctx, c.ProjectID), claude.OneShotRequest{System: c.System, Input: c.Input, Model: c.Model, Attribution: c.Attribution}, onText)
 	return res.Text, err
 }
 
@@ -1286,11 +1306,64 @@ func oneShotClaude(bin, home, proxyURL string) *claude.Manager {
 	return claude.New(llmkit.Options{Bin: bin, ConfigDir: home, Isolated: home != "", ProxyURL: proxyURL})
 }
 
-// oneShotPrep prepares each one-shot: the env entries of the agent credential
-// and, with the sandbox on, the wrap confining it. The sandbox's policy for a
-// one-shot names no repository; claude's install dirs are the one thing
-// beyond its temp dir and the agent home it may read.
-// readable are further directories it may read, the security shim's.
+// oneShotSources are what decides the credential of a one-shot (ADR 0102): the
+// global pasted credential and whether the agent home holds a login, and the
+// project's login home and pasted credential for a call that names a project.
+// The project rules are read at each call; nil ones hold for no project.
+type oneShotSources struct {
+	Pasted            func() []string
+	AgentLogin        func() bool
+	ProjectLoginHome  func(projectID string) string
+	ProjectCredential func(projectID string) (env []string, own bool)
+	// ShimDir is the security shim's dir, put on the PATH of every one-shot.
+	ShimDir string
+}
+
+// effective is the config dir and the credential env entries a one-shot of
+// the project runs with: the project login's home and no credential env, else
+// the project's own pasted credential, else the global rule (the agent login,
+// else the global pasted credential).
+func (o oneShotSources) effective(projectID string) (configDir string, env []string) {
+	if projectID != "" && o.ProjectLoginHome != nil {
+		if home := o.ProjectLoginHome(projectID); home != "" {
+			return home, nil
+		}
+	}
+	if projectID != "" && o.ProjectCredential != nil {
+		if own, ok := o.ProjectCredential(projectID); ok {
+			return "", own
+		}
+	}
+	if o.AgentLogin != nil && o.AgentLogin() {
+		return "", nil
+	}
+	if o.Pasted != nil {
+		return "", o.Pasted()
+	}
+	return "", nil
+}
+
+// oneShotPrepFor prepares each one-shot: the env entries of its effective
+// credential, the config dir when that is a project Claude home and, with the
+// sandbox on, the wrap confining it. The sandbox's policy for a one-shot names
+// no repository; claude's install dirs are the one thing beyond its temp dir
+// and the agent home it may read, and its own project's Claude home is
+// writable. readable are further directories it may read, the security shim's.
+func oneShotPrepFor(sb *orchestration.Sandbox, src oneShotSources, bin string, readable ...string) func(context.Context) (claudetext.Prepared, error) {
+	allow := sandboxAllowlist(allowSources{ClaudeDirs: append(runtime.ClaudeInstallDirs(bin), readable...)})
+	return func(ctx context.Context) (claudetext.Prepared, error) {
+		project := claudetext.ProjectFrom(ctx)
+		wrap, err := sb.OneShotWrapFor(project, allow)
+		if err != nil {
+			return claudetext.Prepared{}, err
+		}
+		dir, env := src.effective(project)
+		return claudetext.Prepared{Env: append(env, keychainpath.Env(os.Environ(), src.ShimDir)...), Wrap: wrap, ConfigDir: dir}, nil
+	}
+}
+
+// oneShotPrep is oneShotPrepFor for a call that names no project, and the
+// global credential alone.
 func oneShotPrep(sb *orchestration.Sandbox, credential func() []string, bin string, readable ...string) func() ([]string, llmkit.WrapFunc, error) {
 	allow := sandboxAllowlist(allowSources{ClaudeDirs: append(runtime.ClaudeInstallDirs(bin), readable...)})
 	return func() ([]string, llmkit.WrapFunc, error) {

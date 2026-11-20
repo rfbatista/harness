@@ -342,6 +342,13 @@ func splitPolicy(all []ports.SandboxPath, workingDir string) ports.SandboxPolicy
 // repository: the one-shot's temp dir, the agent home and allow (claude's
 // install dirs), through the same policy builder as a session's.
 func (b *Sandbox) OneShotWrap(allow []ports.SandboxPath) (llmkit.WrapFunc, error) {
+	return b.OneShotWrapFor("", allow)
+}
+
+// OneShotWrapFor is OneShotWrap for a one-shot of a project: the project's own
+// Claude home is writable beside the agent home, and no other project's is
+// reachable (ADR 0102). The project "" is OneShotWrap.
+func (b *Sandbox) OneShotWrapFor(projectID string, allow []ports.SandboxPath) (llmkit.WrapFunc, error) {
 	if !b.on() {
 		return nil, nil
 	}
@@ -356,6 +363,7 @@ func (b *Sandbox) OneShotWrap(allow []ports.SandboxPath) (llmkit.WrapFunc, error
 	// A one-shot sees no project: it reads every checkout of the install when
 	// the setting is on for no project in particular (its default).
 	sess := SandboxSession{OneShot: true, TempDir: os.TempDir(), AgentHome: b.Home, UserHome: b.UserHome, ConfigHome: b.ConfigHome, Allow: allow, ReadAllRepos: b.readAllRepos("")}
+	sess.ProjectHome, sess.ProjectHomesRoot = b.projectHomes(projectID)
 	if b.Checkouts != nil {
 		sess.Repositories = b.Checkouts()
 	}
@@ -373,10 +381,17 @@ func (b *Sandbox) OneShotWrap(allow []ports.SandboxPath) (llmkit.WrapFunc, error
 // agent sandbox switch: it applies whenever the platform has a driver, and
 // with none it is refused, so a read-only turn never runs unconfined.
 func (b *Sandbox) ReadOnlyWrap(checkout string, allow []ports.SandboxPath) (llmkit.WrapFunc, error) {
+	return b.ReadOnlyWrapFor("", checkout, allow)
+}
+
+// ReadOnlyWrapFor is ReadOnlyWrap for a turn of a project: the project's own
+// Claude home is writable beside the agent home (ADR 0102).
+func (b *Sandbox) ReadOnlyWrapFor(projectID, checkout string, allow []ports.SandboxPath) (llmkit.WrapFunc, error) {
 	if b == nil || b.Driver == nil {
 		return nil, agentready.ReadOnlySandboxMissing()
 	}
 	sess := SandboxSession{OneShot: true, ReadOnlyDir: checkout, TempDir: os.TempDir(), AgentHome: b.Home, UserHome: b.UserHome, ConfigHome: b.ConfigHome, Allow: allow}
+	sess.ProjectHome, sess.ProjectHomesRoot = b.projectHomes(projectID)
 	if b.Checkouts != nil {
 		sess.Repositories = b.Checkouts()
 	}

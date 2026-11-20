@@ -53,6 +53,9 @@ const (
 // StreamCall is one claude turn the service asks for.
 type StreamCall struct {
 	System, Input, Model, Attribution string
+	// ProjectID is the project the call is for: it runs on that project's
+	// effective credential.
+	ProjectID string
 }
 
 // Streamer runs a tool-less one-shot and gives onText each piece of the answer
@@ -136,6 +139,7 @@ func (s *Service) Run(ctx context.Context, req Request, emit func(Event)) error 
 		Input:       input(project.Name, req),
 		Model:       domain.WritingHelperModel(s.settings.Setting(domain.SettingModelWritingHelper)),
 		Attribution: "harness:writing-helper:" + req.ProjectID,
+		ProjectID:   req.ProjectID,
 	}
 	var onText func(string)
 	if req.Step == StepDraft {

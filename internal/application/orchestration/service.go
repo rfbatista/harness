@@ -181,6 +181,11 @@ type Service struct {
 	// it does, agents use it and AgentCredential is not put in their env.
 	// Nil: no login.
 	AgentLogin func() bool
+	// ProjectLoginHome answers the project Claude home when the project holds a
+	// login of its own (ADR 0102), "" when it does not. Read at each start and
+	// resume: such a process runs with that home as its config dir. Nil: no
+	// project holds a login.
+	ProjectLoginHome func(projectID string) string
 	// ProjectAgentCredential gives each agent process of a project the env
 	// entries of the credential that project keeps for itself, and says whether
 	// it has one. A project's own credential wins over AgentLogin and
@@ -635,8 +640,17 @@ func (s *Service) ready(ctx context.Context) error {
 // withAgentCredential adds the agent credential to the agent process env,
 // unless the agent home holds a login: the login wins and the pasted
 // credential is only a fallback for a home without one. A credential the
-// project keeps for itself beats both.
+// project keeps for itself beats both: a project login runs the process in the
+// project Claude home and adds no credential env, a project pasted credential
+// adds its own env. This is the effective credential (ADR 0102), decided at
+// each start and resume.
 func (s *Service) withAgentCredential(cfg *llmkit.SessionConfig, projectID string) {
+	if s.ProjectLoginHome != nil {
+		if home := s.ProjectLoginHome(projectID); home != "" {
+			cfg.ConfigDir = home
+			return
+		}
+	}
 	if s.ProjectAgentCredential != nil {
 		if env, own := s.ProjectAgentCredential(projectID); own {
 			cfg.Env = append(slices.Clone(cfg.Env), env...)

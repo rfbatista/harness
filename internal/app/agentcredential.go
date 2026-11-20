@@ -38,13 +38,22 @@ func newAgentCredential(db *gorm.DB, box *secretbox.Box, cat catalog.Catalog) *a
 // bindAgentCredential gives sessions the credential in their env at each
 // start and resume.
 //
-// Which one agents use is decided at each start (ADR 0022): a login in the
-// agent home wins, the pasted credential is the fallback. The `security` shim
+// Which one agents use is decided at each start (ADR 0022, ADR 0102): the
+// project's own credential, then a login in the agent home, then the global
+// pasted credential. The `security` shim
 // keeps claude's login out of the person's keychain.
-func bindAgentCredential(svc *agentcredential.Service, u gitCredentialUsers, home claudehome.Home, kc *keychainshim.Dir) {
+func bindAgentCredential(svc *agentcredential.Service, u gitCredentialUsers, home claudehome.Home, kc *keychainshim.Dir, projects *agentoauth.Projects) {
 	if u.Orch != nil {
 		u.Orch.AgentCredential = svc.Env
 		u.Orch.AgentLogin = home.HasLogin
+		// A project that holds a login runs its processes in its own Claude
+		// home (ADR 0102), ahead of any pasted credential.
+		u.Orch.ProjectLoginHome = func(projectID string) string {
+			if projectID != "" && projects.HasLogin(projectID) {
+				return projects.Home(projectID)
+			}
+			return ""
+		}
 		u.Orch.ProjectAgentCredential = func(projectID string) ([]string, bool) {
 			return svc.EnvFor(projectID), svc.OwnsEnv(projectID)
 		}
@@ -139,7 +148,8 @@ func newProjectAgentOAuth(lc fx.Lifecycle, p oauthParts, cred *agentcredential.S
 		Deps: agentoauth.Deps{Bin: p.Bin, PTY: ptyunix.New(),
 			Env: func() []string { return withKeychainShim(os.Environ(), p.KC.Path()) }},
 		HomesDir: projectClaudeHomesDir(p.Home),
-		Seed:     func(dir string) error { return claudehome.NewHome(dir).Ensure() },
+		// The home holds the login; its transcripts are the agent home's.
+		Seed: func(dir string) error { return claudehome.NewHome(dir).EnsureSharing(p.Home) },
 		WrapFor: func(projectID string) agentoauth.Wrap {
 			sb := p.sandbox()
 			if sb == nil || sb.Driver == nil {
