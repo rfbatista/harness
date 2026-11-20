@@ -36,6 +36,11 @@ type Sandbox struct {
 	Bin string
 	// Home is the agent Claude home.
 	Home string
+	// ProjectHomesRoot is the folder that holds the project Claude homes, one
+	// folder per project named by its id (ADR 0102). A session may read and
+	// write its own project's home; the folder itself is hidden, so no other
+	// project's login is reachable. Empty: none.
+	ProjectHomesRoot string
 	// UserHome is the person's home directory and ConfigHome their
 	// XDG_CONFIG_HOME (empty when unset): their git config is read-only to
 	// every session, so git inside the sandbox sees their identity and
@@ -83,6 +88,27 @@ func (b *Sandbox) readAllRepos(projectID string) bool {
 	return b.ReadAllRepos == nil || b.ReadAllRepos(projectID)
 }
 
+// projectHomes answers the project's own Claude home and the folder of every
+// home, each only where it exists: a project without a login, and an install
+// without any, get the policy they get without the rule.
+func (b *Sandbox) projectHomes(projectID string) (own, root string) {
+	if b.ProjectHomesRoot == "" {
+		return "", ""
+	}
+	if _, err := os.Stat(b.ProjectHomesRoot); err != nil {
+		return "", ""
+	}
+	root = b.ProjectHomesRoot
+	own = filepath.Join(root, projectID)
+	if projectID == "" {
+		return "", root
+	}
+	if _, err := os.Stat(own); err != nil {
+		own = ""
+	}
+	return own, root
+}
+
 func (b *Sandbox) on() bool { return b != nil && (b.Enabled == nil || b.Enabled()) }
 
 // SandboxSession is what the policy builder decides a policy from.
@@ -122,6 +148,10 @@ type SandboxSession struct {
 	CommitCheckDir string
 	TempDir        string
 	AgentHome      string
+	// ProjectHome is the session's own project Claude home, read-write;
+	// ProjectHomesRoot is the folder of every project's home, hidden so no
+	// other project's is reachable (ADR 0102). Empty: none.
+	ProjectHome, ProjectHomesRoot string
 	// UserHome and ConfigHome are the person's home and XDG config home; their
 	// git config is read-only in every mode, never their ssh folder.
 	UserHome, ConfigHome string
@@ -147,7 +177,7 @@ type SandboxSession struct {
 // deny, so it stays reachable.
 func hiddenPaths(s SandboxSession, granted []ports.SandboxPath) []string {
 	var hidden []string
-	for _, p := range append(slices.Clone(s.Repositories), s.WorkspacesRoot) {
+	for _, p := range append(slices.Clone(s.Repositories), s.WorkspacesRoot, s.ProjectHomesRoot) {
 		if p == "" {
 			continue
 		}
@@ -176,6 +206,7 @@ func BuildSandboxPolicy(s SandboxSession) ports.SandboxPolicy {
 		}
 	}
 	add(s.AgentHome, true)
+	add(s.ProjectHome, true)
 	if !s.Login {
 		for _, p := range gitConfigPaths(s.UserHome, s.ConfigHome) {
 			add(p, false)
@@ -558,6 +589,7 @@ func (s *Service) sandbox(ctx context.Context, in prepareInput, id string, repo 
 		TempDir:      sessionTempDir(env),
 		ReadAllRepos: sb.readAllRepos(in.ProjectID),
 	}
+	sess.ProjectHome, sess.ProjectHomesRoot = sb.projectHomes(in.ProjectID)
 	repos, err := s.catalog.Repositories.ListRepositories(ctx, in.ProjectID)
 	if err != nil {
 		return sandboxed{}, err

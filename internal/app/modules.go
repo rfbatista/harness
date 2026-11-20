@@ -860,6 +860,13 @@ func newBroker(m llmkit.Manager) (*approval.Broker, error) {
 // agentClaudeHomeDir is the agent Claude home in the data dir.
 func agentClaudeHomeDir(cfg Config) (string, error) { return dataDir(cfg, "claude-home") }
 
+// projectClaudeHomesDir is the folder of the project Claude homes (ADR 0102),
+// one folder per project id, beside the agent Claude home and not inside it:
+// the agent sandbox grants the agent home to every session.
+func projectClaudeHomesDir(agentHome claudehome.Home) string {
+	return filepath.Join(filepath.Dir(agentHome.Path()), "claude-homes")
+}
+
 // newAgentClaudeHome creates and seeds the agent Claude home, so an
 // interactive claude started with its path as CLAUDE_CONFIG_DIR meets no
 // first-run prompt.
@@ -1110,6 +1117,8 @@ func newOrchestrationService(
 		Driver:  sandboxDriver,
 		Enabled: orchestration.SandboxSwitch(cat.Settings),
 		Home:    agentHome.Path(),
+		// A session reaches its own project's Claude home and no other's.
+		ProjectHomesRoot: projectClaudeHomesDir(agentHome),
 		// Their git config is read-only to a session; not their ssh folder.
 		UserHome:   userHome,
 		ConfigHome: os.Getenv("XDG_CONFIG_HOME"),
