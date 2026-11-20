@@ -4,7 +4,10 @@
 //
 //   <section x-data="projectAgentCredential" data-seed="project-credential-seed">
 //
-// The seed is {project_id, set, kind, updated, global: {set, kind}}. The value
+// The seed is {project_id, set, kind, updated, account, subscription,
+// effective, global: {set, kind}, oauth, can_sign_in}: kind is "login" for a
+// project login (ADR 0102), and effective is the credential the project's
+// next claude process runs with. The value
 // is typed into an uncontrolled password input, sent once, and cleared on save,
 // cancel and pagehide; it is never held in component state and never shown
 // again.
@@ -19,7 +22,7 @@ import { describeError } from "../../../../shared/presentation/errors.js";
 import { readSeed } from "../../../../shared/presentation/seed.js";
 import { clock, kindOf } from "./agentCredential.js";
 
-const KIND_NAMES = { oauth: "OAuth token", api_key: "Anthropic API key" };
+const KIND_NAMES = { oauth: "OAuth token", api_key: "Anthropic API key", login: "Claude login" };
 const ACTIVE = ["starting", "waiting_for_code", "checking"];
 /** How often the page asks the server how the flow is going, in ticks of a second. */
 const POLL_EVERY = 2;
@@ -32,6 +35,10 @@ export const projectAgentCredential = ({ gateway }) => () => ({
   updated: "",
   /** The global credential is set, so a project without its own still has one. */
   globalSet: false,
+  /** @type {import("../../domain/ports.js").EffectiveCredential} */
+  effective: { source: "none", kind: "", account: "", subscription: "" },
+  /** What the dialog asks to replace: "signin", "paste", "signout", or "". */
+  replacing: "",
   /** The kind chosen in the paste form. */
   chosen: "oauth",
   pasting: false,
@@ -61,7 +68,6 @@ export const projectAgentCredential = ({ gateway }) => () => ({
     this.globalSet = seed.global?.set === true;
     this.apply(seed);
     this.canSignIn = seed.can_sign_in === true;
-    this.setAuth(seed.auth);
     // A flow that finished before this page loaded is not news; a failure is.
     if (seed.oauth && seed.oauth.phase !== "done") this.applyOAuth(seed.oauth);
     for (const node of this.$el.querySelectorAll("[data-ssr]")) node.remove();
@@ -70,18 +76,16 @@ export const projectAgentCredential = ({ gateway }) => () => ({
     this.stopTimer();
   },
 
-  /** @param {import("../../domain/ports.js").AuthStatus | undefined} auth */
-  setAuth(auth) {
-    this.signedIn = auth?.signed_in === true;
-    this.account = auth?.account ?? "";
-    this.subscription = auth?.subscription ?? "";
-  },
 
   /** @param {import("../../domain/ports.js").CredentialStatus} status */
   apply(status) {
     this.isSet = status.set;
     this.kind = status.kind;
     this.updated = status.updated;
+    this.signedIn = status.kind === "login";
+    this.account = status.account ?? "";
+    this.subscription = status.subscription ?? "";
+    this.effective = status.effective ?? this.effective;
   },
 
   get oauthChosen() {
@@ -92,6 +96,13 @@ export const projectAgentCredential = ({ gateway }) => () => ({
   },
   get notSet() {
     return !this.isSet;
+  },
+  /** A pasted credential, which Remove takes away; a login is signed out. */
+  get isPasted() {
+    return this.isSet && !this.signedIn;
+  },
+  get signInShown() {
+    return !this.signedIn;
   },
   get chipText() {
     if (this.signedIn) return "Signed in";
@@ -139,18 +150,83 @@ export const projectAgentCredential = ({ gateway }) => () => ({
     return this.updated ? this.updated.slice(0, 10) : "";
   },
   get pasteLabel() {
-    return this.isSet ? "Replace with a pasted token or key" : "Paste a token or key";
+    return this.isPasted ? "Replace with a pasted token or key" : "Paste a token or key";
   },
   get pasteTone() {
     return this.isSet ? "" : "primary";
   },
-  /** What a session without an own credential signs in with. */
+  /** What a session without a project credential runs with. */
   get fallbackLine() {
-    return this.globalSet
-      ? "Sessions of this project use the global Agent credential, or a Claude login when the agents' home has one."
-      : "Sessions of this project use a Claude login in the agents' home. No global Agent credential is set either.";
+    const e = this.effective;
+    if (e.source === "global_login") return e.account ? `Uses the global login: ${e.account}, ${e.subscription}` : "Uses the global login.";
+    if (e.source === "global_pasted") return `Uses the global pasted ${e.kind === "api_key" ? "API key" : "OAuth token"}.`;
+    return "No credential: agents cannot start.";
+  },
+  get replaceTitle() {
+    return {
+      signin: "Replace the pasted credential with a login?",
+      paste: "Replace the login with a pasted credential?",
+      signout: "Sign this project out of Claude?",
+    }[this.replacing] ?? "";
+  },
+  get replaceText() {
+    return {
+      signin: "Signing in replaces the pasted credential: it is removed once the sign-in is done. A project holds one credential. Running sessions are not stopped.",
+      paste: "Pasting a credential signs this project out of Claude: a project holds one credential. Running sessions lose access when claude next refreshes.",
+      signout: "Running sessions lose access when claude next refreshes. Sessions started after this use the global credential again.",
+    }[this.replacing] ?? "";
+  },
+  get replaceConfirm() {
+    return { signin: "Sign in and replace", paste: "Replace login", signout: "Sign out of Claude" }[this.replacing] ?? "";
   },
 
+  /** Signing in over a pasted credential asks first. */
+  askSignIn() {
+    if (this.signInDisabled) return;
+    if (this.isPasted) this.ask("signin");
+    else this.startSignIn();
+  },
+  /** Pasting over a login asks first. */
+  askPaste() {
+    if (this.signedIn) this.ask("paste");
+    else this.startPaste();
+  },
+  askSignOut() {
+    if (!this.pasteDisabled) this.ask("signout");
+  },
+  /** @param {"signin" | "paste" | "signout"} what */
+  ask(what) {
+    this.replacing = what;
+    this.confirming = false;
+    this.pasting = false;
+    this.error = null;
+    this.$nextTick(() => this.$refs.keepreplace?.focus());
+  },
+  keepReplacing() {
+    this.replacing = "";
+  },
+  async confirmReplacing() {
+    const what = this.replacing;
+    this.replacing = "";
+    if (what === "signin") await this.startSignIn();
+    else if (what === "paste") this.startPaste();
+    else if (what === "signout") await this.signOut();
+  },
+  /** Runs `claude auth logout` in the project Claude home, then reads the status again. */
+  async signOut() {
+    if (this.busy) return;
+    this.busy = true;
+    this.error = null;
+    try {
+      await gateway.projectSignOut(this.projectId);
+      this.apply(await gateway.getForProject(this.projectId));
+      this.announcement = "Signed out of Claude. Running sessions lose access when claude next refreshes.";
+    } catch (err) {
+      this.error = describeError(err);
+    } finally {
+      this.busy = false;
+    }
+  },
   async startSignIn() {
     if (this.signInDisabled) return;
     this.error = null;
@@ -184,7 +260,7 @@ export const projectAgentCredential = ({ gateway }) => () => ({
     this.signInSaved = true;
     this.announcement = "Signed in with Claude.";
     try {
-      this.setAuth(await gateway.projectAuthStatus(this.projectId));
+      this.apply(await gateway.getForProject(this.projectId));
     } catch (err) {
       this.error = describeError(err);
     }
@@ -299,6 +375,7 @@ export const projectAgentCredential = ({ gateway }) => () => ({
 
   askRemove() {
     this.confirming = true;
+    this.replacing = "";
     this.pasting = false;
     this.$nextTick(() => this.$refs.keep?.focus());
   },

@@ -2,6 +2,7 @@ package app
 
 import (
 	"context"
+	"log/slog"
 	"os"
 
 	goruntime "runtime"
@@ -49,6 +50,13 @@ func bindAgentCredential(svc *agentcredential.Service, u gitCredentialUsers, hom
 		}
 		u.Orch.KeychainShimDir = kc.Path()
 	}
+}
+
+// bindAgentCredentialLogins tells the credential which logins it can be: each
+// project's own and the agent home's (ADR 0102), so a project's credential
+// reads as a login and as the effective one.
+func bindAgentCredentialLogins(svc *agentcredential.Service, projects *agentoauth.Projects, global *agentoauth.Service, home claudehome.Home) {
+	svc.WithLogins(projects, global, home.HasLogin)
 }
 
 // newKeychainShim makes the dir holding the `security` shim, on macOS, and
@@ -126,7 +134,7 @@ func loginWrap(sb *orchestration.Sandbox, bin ports.ManagedClaudeBin, readable .
 // the project Claude home of the project (ADR 0102), seeded on its first
 // start, under the same sandbox rule with that home writable in place of the
 // agent home.
-func newProjectAgentOAuth(lc fx.Lifecycle, p oauthParts) *agentoauth.Projects {
+func newProjectAgentOAuth(lc fx.Lifecycle, p oauthParts, cred *agentcredential.Service) *agentoauth.Projects {
 	svc := agentoauth.NewProjects(agentoauth.ProjectsDeps{
 		Deps: agentoauth.Deps{Bin: p.Bin, PTY: ptyunix.New(),
 			Env: func() []string { return withKeychainShim(os.Environ(), p.KC.Path()) }},
@@ -143,6 +151,13 @@ func newProjectAgentOAuth(lc fx.Lifecycle, p oauthParts) *agentoauth.Projects {
 			}
 		},
 		HasLoginIn: func(dir string) bool { return claudehome.NewHome(dir).HasLogin() },
+		// The login replaces the project's pasted credential: a project holds
+		// one.
+		OnDone: func(projectID string) {
+			if _, err := cred.RemoveFor(projectID); err != nil {
+				slog.Warn("project sign-in: the pasted credential was not removed", "project", projectID, "err", err)
+			}
+		},
 	})
 	lc.Append(fx.Hook{OnStop: func(context.Context) error {
 		svc.Close()

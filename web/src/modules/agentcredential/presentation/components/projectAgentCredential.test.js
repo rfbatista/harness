@@ -37,15 +37,28 @@ function setup({ seed = { project_id: "p1", set: false, kind: "", updated: "", g
   return { ...mounted, gateway, field };
 }
 
-test("starts from the seed: a project without its own credential says it falls back to the global one", () => {
-  const { instance } = setup();
+test("starts from the seed: a project without its own credential says what it falls back to", () => {
+  const { instance } = setup({ seed: { project_id: "p1", set: false, kind: "", updated: "", effective: { source: "global_pasted", kind: "oauth", account: "", subscription: "" } } });
   assert.deepEqual([instance.isSet, instance.chipText, instance.pasteLabel, instance.pasteTone], [false, "Global", "Paste a token or key", "primary"]);
-  assert.ok(/global Agent credential/.test(instance.fallbackLine), instance.fallbackLine);
+  assert.equal(instance.fallbackLine, "Uses the global pasted OAuth token.");
 });
 
-test("without a global credential the fallback line says so", () => {
-  const { instance } = setup({ seed: { project_id: "p1", set: false, kind: "", updated: "", global: { set: false, kind: "" } } });
-  assert.ok(/No global Agent credential/.test(instance.fallbackLine), instance.fallbackLine);
+test("the fallback line names the global login's account, or says agents cannot start", () => {
+  const login = setup({ seed: { project_id: "p1", set: false, kind: "", updated: "", effective: { source: "global_login", kind: "login", account: "ana@example.com", subscription: "max" } } });
+  assert.equal(login.instance.fallbackLine, "Uses the global login: ana@example.com, max");
+  const none = setup({ seed: { project_id: "p1", set: false, kind: "", updated: "", effective: { source: "none", kind: "", account: "", subscription: "" } } });
+  assert.equal(none.instance.fallbackLine, "No credential: agents cannot start.");
+});
+
+test("a project login asks before a pasted credential replaces it, and a pasted one asks before a sign-in", () => {
+  const login = setup({ seed: { project_id: "p1", set: true, kind: "login", updated: "", account: "ana@example.com", subscription: "max", can_sign_in: true } });
+  assert.deepEqual([login.instance.signedIn, login.instance.chipText, login.instance.isPasted, login.instance.signInShown], [true, "Signed in", false, false]);
+  login.instance.askPaste();
+  assert.deepEqual([login.instance.replacing, login.instance.pasting], ["paste", false]);
+  login.instance.keepReplacing();
+  const pasted = setup({ seed: { project_id: "p1", set: true, kind: "oauth", updated: "2026-11-01T00:00:00Z", can_sign_in: true } });
+  pasted.instance.askSignIn();
+  assert.equal(pasted.instance.replacing, "signin");
 });
 
 test("a pasted value is saved for this project only, the field is cleared, and the kind is shown", async () => {

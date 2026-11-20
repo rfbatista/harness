@@ -87,12 +87,12 @@ func (h Handler) Settings(w http.ResponseWriter, r *http.Request) error {
 	v.TokenSavers = tokensavers.Read(ctx, h.TokenSavers, domain.ActivationOwner{Level: domain.ActivationLevelProject, ID: project.ID})
 	// A credential that could not be read leaves the section out rather than
 	// failing the whole settings page.
-	cred, err := NewAgentCredentialView(h.AgentCredentials, h.GlobalCredential, project.ID, project.Name)
+	cred, err := NewAgentCredentialView(ctx, h.AgentCredentials, h.GlobalCredential, project.ID, project.Name)
 	if err != nil {
 		slog.Warn("project settings: agent credential not read", "err", err)
 	}
 	if cred != nil {
-		cred.WithSignIn(ctx, h.SignIn, h.ClaudeBin)
+		cred.WithSignIn(h.SignIn, h.ClaudeBin)
 	}
 	v.AgentCredential = cred
 	return h.Render(w, r, http.StatusOK, SettingsPage(v))

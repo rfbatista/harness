@@ -3,6 +3,12 @@
 
 import { Codes, StructuredError } from "../../../shared/domain/errors.js";
 
+/** @param {any} e @returns {import("../domain/ports.js").EffectiveCredential} */
+function toEffective(e) {
+  const text = (v) => (typeof v === "string" ? v : "");
+  return { source: ["project", "global_login", "global_pasted"].includes(e?.source) ? e.source : "none", kind: text(e?.kind), account: text(e?.account), subscription: text(e?.subscription) };
+}
+
 /** @param {unknown} body @returns {import("../domain/ports.js").CredentialStatus} */
 function toStatus(body) {
   const b = /** @type {any} */ (body);
@@ -11,8 +17,11 @@ function toStatus(body) {
   }
   return {
     set: b.set,
-    kind: b.set && (b.kind === "oauth" || b.kind === "api_key") ? b.kind : "",
+    kind: b.set && (b.kind === "oauth" || b.kind === "api_key" || b.kind === "login") ? b.kind : "",
     updated: b.set && typeof b.updated === "string" ? b.updated : "",
+    account: typeof b.account === "string" ? b.account : "",
+    subscription: typeof b.subscription === "string" ? b.subscription : "",
+    effective: toEffective(b.effective),
   };
 }
 
@@ -67,6 +76,7 @@ export function agentCredentialGateway(api) {
       toOAuth(await api.post("/submit_project_agent_oauth_code", { project_id: projectId, code })),
     projectOAuthCancel: async (projectId) => toOAuth(await api.post("/cancel_project_agent_oauth", { project_id: projectId })),
     projectAuthStatus: async (projectId) => toAuth(await api.get("/get_project_agent_auth_status", { project_id: projectId })),
+    projectSignOut: async (projectId) => toAuth(await api.post("/sign_out_project_agent_auth", { project_id: projectId })),
     oauthState: async () => toOAuth(await api.get("/get_agent_oauth")),
     oauthStart: async () => toOAuth(await api.post("/start_agent_oauth", {})),
     oauthSubmit: async (code) => toOAuth(await api.post("/submit_agent_oauth_code", { code })),

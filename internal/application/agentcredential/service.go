@@ -34,6 +34,12 @@ type Service struct {
 	box      ports.SecretBox
 	now      func() time.Time
 	mu       sync.Mutex
+	// logins are the project Claude homes' logins, globalAuth the agent
+	// home's, and globalLogin says whether it holds one; all nil without a
+	// sign-in (ADR 0102).
+	logins      ports.ProjectAgentOAuth
+	globalAuth  ports.AgentAuth
+	globalLogin func() bool
 }
 
 // New builds the service; a nil now is time.Now.
@@ -47,6 +53,15 @@ func New(store ports.AgentCredentialStore, box ports.SecretBox, now func() time.
 // WithProjects turns on per-project credentials and answers the service.
 func (s *Service) WithProjects(store ports.ProjectAgentCredentialStore) *Service {
 	s.projects = store
+	return s
+}
+
+// WithLogins adds the logins the credential can be: each project's own, kept in
+// its project Claude home, and the agent login in the agent home (globalLogin
+// says whether it holds one; globalAuth tells who it is signed in as). It
+// answers the service.
+func (s *Service) WithLogins(projects ports.ProjectAgentOAuth, globalAuth ports.AgentAuth, globalLogin func() bool) *Service {
+	s.logins, s.globalAuth, s.globalLogin = projects, globalAuth, globalLogin
 	return s
 }
 
@@ -162,12 +177,75 @@ func (s *Service) SetFor(projectID, kind, value string) (ports.AgentCredentialSt
 	if err != nil {
 		return ports.AgentCredentialStatus{}, err
 	}
+	// A project never holds a login and a pasted credential: the login is
+	// signed out of its home first, and a failed sign-out saves nothing.
+	if err := s.signOutLogin(projectID); err != nil {
+		return ports.AgentCredentialStatus{}, err
+	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	if err := st.PutFor(projectID, rec); err != nil {
 		return ports.AgentCredentialStatus{}, err
 	}
 	return ports.AgentCredentialStatus{Set: true, Kind: rec.Kind, Updated: rec.Updated}, nil
+}
+
+// loginTimeout bounds a `claude auth status` or `claude auth logout`.
+const loginTimeout = 30 * time.Second
+
+// signOutLogin runs `claude auth logout` in the project's Claude home when it
+// holds a login.
+func (s *Service) signOutLogin(projectID string) error {
+	if s.logins == nil || !s.logins.HasLogin(projectID) {
+		return nil
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), loginTimeout)
+	defer cancel()
+	return s.logins.For(projectID).Logout(ctx)
+}
+
+// DetailFor is the project's credential: a login when its Claude home holds
+// one, else its pasted credential, with the credential its next claude
+// process runs with.
+func (s *Service) DetailFor(ctx context.Context, projectID string) (ports.ProjectCredentialStatus, error) {
+	own, err := s.StatusFor(projectID)
+	if err != nil {
+		return ports.ProjectCredentialStatus{}, err
+	}
+	d := ports.ProjectCredentialStatus{AgentCredentialStatus: own}
+	switch {
+	case s.logins != nil && s.logins.HasLogin(projectID):
+		d.AgentCredentialStatus = ports.AgentCredentialStatus{Set: true, Kind: ports.AgentCredentialLogin}
+		d.Account, d.Subscription, d.CheckedOK = s.loginWho(ctx, s.logins.For(projectID))
+		d.Effective = ports.EffectiveCredential{Source: ports.EffectiveProject, Kind: ports.AgentCredentialLogin, Account: d.Account, Subscription: d.Subscription}
+	case own.Set:
+		d.Effective = ports.EffectiveCredential{Source: ports.EffectiveProject, Kind: own.Kind}
+	case s.globalLogin != nil && s.globalLogin():
+		who := ports.EffectiveCredential{Source: ports.EffectiveGlobalLogin, Kind: ports.AgentCredentialLogin}
+		if s.globalAuth != nil {
+			who.Account, who.Subscription, _ = s.loginWho(ctx, s.globalAuth)
+		}
+		d.Effective = who
+	default:
+		if g := s.Status(); g.Set {
+			d.Effective = ports.EffectiveCredential{Source: ports.EffectiveGlobalPasted, Kind: g.Kind}
+		} else {
+			d.Effective = ports.EffectiveCredential{Source: ports.EffectiveNone}
+		}
+	}
+	return d, nil
+}
+
+// loginWho asks `claude auth status` who a login is; ok false when it could
+// not be read.
+func (s *Service) loginWho(ctx context.Context, auth ports.AgentAuth) (account, subscription string, ok bool) {
+	ctx, cancel := context.WithTimeout(ctx, loginTimeout)
+	defer cancel()
+	st, err := auth.Status(ctx)
+	if err != nil {
+		return "", "", false
+	}
+	return st.Email, st.SubscriptionType, true
 }
 
 func (s *Service) RemoveFor(projectID string) (ports.AgentCredentialStatus, error) {

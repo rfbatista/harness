@@ -29,7 +29,7 @@ var GitCredentialsModule = fx.Module("gitcredentials",
 	fx.Provide(newAgentCredential, newKeychainShim),
 	fx.Provide(newAgentOAuth, newProjectAgentOAuth),
 	fx.Invoke(registerGitCredentials, bindGitCredentials),
-	fx.Invoke(bindAgentCredential),
+	fx.Invoke(bindAgentCredential, bindAgentCredentialLogins),
 )
 
 // gitCredentialUsers are what runs git in session worktrees, when the graph

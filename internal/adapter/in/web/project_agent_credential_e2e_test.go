@@ -85,7 +85,7 @@ func TestAProjectsOwnAgentCredentialIsPastedAndRemovedOnItsSettingsPage_EndToEnd
 		chromedp.Navigate(srv.URL+"/projects/"+alpha.ID+"/settings"),
 		waitUntil(`!document.querySelector('#project-credential [data-ssr]')`),
 		waitUntil(`document.querySelector('#project-credential-chip')?.innerText.trim() === 'Global'`),
-		waitUntil(pcText+`.includes('use the global Agent credential')`),
+		waitUntil(pcText+`.includes('Uses the global pasted OAuth token')`),
 	)
 	b.run("a pasted API key is saved for this project; the kind is shown, not the value",
 		chromedp.Evaluate(pcClick+`('Paste a token or key')`, nil),

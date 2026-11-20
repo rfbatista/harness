@@ -24,6 +24,9 @@ type ProjectsDeps struct {
 	// HasLoginIn says whether the home at dir holds a login. Nil: the login
 	// file claude keeps, .credentials.json.
 	HasLoginIn func(dir string) bool
+	// OnDone runs when a project's flow ends signed in: the login replaces the
+	// project's pasted credential. Nil: none.
+	OnDone func(projectID string)
 }
 
 // Projects is the sign-in flow of each project: the global machinery pointed
@@ -64,6 +67,9 @@ func (p *Projects) For(projectID string) ports.AgentSignIn {
 	d.ConfigDir = p.Home(projectID)
 	if p.d.WrapFor != nil {
 		d.Wrap = p.d.WrapFor(projectID)
+	}
+	if p.d.OnDone != nil {
+		d.OnDone = func() { p.d.OnDone(projectID) }
 	}
 	d.Prepare = func() error {
 		if p.d.Seed != nil {

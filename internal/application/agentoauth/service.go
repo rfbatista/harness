@@ -52,6 +52,9 @@ type Deps struct {
 	Wrap Wrap
 	// Prepare runs before each flow starts: it makes the home ready. Nil: none.
 	Prepare func() error
+	// OnDone runs when a flow ends signed in, with the lock held: it must not
+	// wait on the flow. Nil: none.
+	OnDone func()
 	// Now and After are the clock; nil are the system's.
 	Now   func() time.Time
 	After func(time.Duration) <-chan time.Time
@@ -304,6 +307,9 @@ func (s *Service) settleLocked(f *flow, exit int, signedIn bool) {
 	}
 	if exit == 0 && signedIn {
 		s.cur, s.result = nil, ports.AgentOAuthState{Phase: ports.AgentOAuthDone}
+		if s.d.OnDone != nil {
+			s.d.OnDone()
+		}
 		return
 	}
 	text := clean(f.out.String())

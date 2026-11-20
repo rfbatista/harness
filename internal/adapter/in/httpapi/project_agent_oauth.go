@@ -96,3 +96,23 @@ func (h *Handler) handleGetProjectAgentAuthStatus(c echo.Context) error {
 	}
 	return c.JSON(http.StatusOK, authAnswerOf(c, flow))
 }
+
+// handleSignOutProjectAgentAuth runs `claude auth logout` in the project
+// Claude home and answers the status read afterwards. Running sessions are
+// not stopped.
+func (h *Handler) handleSignOutProjectAgentAuth(c echo.Context) error {
+	var in struct {
+		ProjectID string `json:"project_id"`
+	}
+	if err := bindJSON(c, &in); err != nil {
+		return err
+	}
+	flow, err := h.projectSignIn(c, in.ProjectID)
+	if err != nil {
+		return err
+	}
+	if err := flow.Logout(c.Request().Context()); err != nil {
+		return err
+	}
+	return c.JSON(http.StatusOK, authAnswerOf(c, flow))
+}
