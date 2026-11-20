@@ -36,6 +36,11 @@ type Sandbox struct {
 	Bin string
 	// Home is the agent Claude home.
 	Home string
+	// ProjectHomesRoot is the folder that holds the project Claude homes, one
+	// folder per project named by its id (ADR 0102). A session may read and
+	// write its own project's home; the folder itself is hidden, so no other
+	// project's login is reachable. Empty: none.
+	ProjectHomesRoot string
 	// UserHome is the person's home directory and ConfigHome their
 	// XDG_CONFIG_HOME (empty when unset): their git config is read-only to
 	// every session, so git inside the sandbox sees their identity and
@@ -83,6 +88,27 @@ func (b *Sandbox) readAllRepos(projectID string) bool {
 	return b.ReadAllRepos == nil || b.ReadAllRepos(projectID)
 }
 
+// projectHomes answers the project's own Claude home and the folder of every
+// home, each only where it exists: a project without a login, and an install
+// without any, get the policy they get without the rule.
+func (b *Sandbox) projectHomes(projectID string) (own, root string) {
+	if b.ProjectHomesRoot == "" {
+		return "", ""
+	}
+	if _, err := os.Stat(b.ProjectHomesRoot); err != nil {
+		return "", ""
+	}
+	root = b.ProjectHomesRoot
+	own = filepath.Join(root, projectID)
+	if projectID == "" {
+		return "", root
+	}
+	if _, err := os.Stat(own); err != nil {
+		own = ""
+	}
+	return own, root
+}
+
 func (b *Sandbox) on() bool { return b != nil && (b.Enabled == nil || b.Enabled()) }
 
 // SandboxSession is what the policy builder decides a policy from.
@@ -122,6 +148,10 @@ type SandboxSession struct {
 	CommitCheckDir string
 	TempDir        string
 	AgentHome      string
+	// ProjectHome is the session's own project Claude home, read-write;
+	// ProjectHomesRoot is the folder of every project's home, hidden so no
+	// other project's is reachable (ADR 0102). Empty: none.
+	ProjectHome, ProjectHomesRoot string
 	// UserHome and ConfigHome are the person's home and XDG config home; their
 	// git config is read-only in every mode, never their ssh folder.
 	UserHome, ConfigHome string
@@ -147,7 +177,7 @@ type SandboxSession struct {
 // deny, so it stays reachable.
 func hiddenPaths(s SandboxSession, granted []ports.SandboxPath) []string {
 	var hidden []string
-	for _, p := range append(slices.Clone(s.Repositories), s.WorkspacesRoot) {
+	for _, p := range append(slices.Clone(s.Repositories), s.WorkspacesRoot, s.ProjectHomesRoot) {
 		if p == "" {
 			continue
 		}
@@ -176,6 +206,7 @@ func BuildSandboxPolicy(s SandboxSession) ports.SandboxPolicy {
 		}
 	}
 	add(s.AgentHome, true)
+	add(s.ProjectHome, true)
 	if !s.Login {
 		for _, p := range gitConfigPaths(s.UserHome, s.ConfigHome) {
 			add(p, false)
@@ -379,6 +410,27 @@ func (b *Sandbox) LoginWrap(allow []ports.SandboxPath) func(ports.SandboxCommand
 	}
 }
 
+// ProjectLoginWrap confines the sign-in's claude of one project: like
+// LoginWrap, with the project Claude home writable in place of the agent home
+// (ADR 0102), so claude keeps that project's login there and nowhere else. The
+// folder of the other homes is hidden. Nil is a platform without a driver.
+func (b *Sandbox) ProjectLoginWrap(projectID string, allow []ports.SandboxPath) func(ports.SandboxCommand) (ports.SandboxCommand, error) {
+	if b == nil || b.Driver == nil || b.ProjectHomesRoot == "" {
+		return nil
+	}
+	return func(c ports.SandboxCommand) (ports.SandboxCommand, error) {
+		sess := SandboxSession{Login: true, TempDir: sessionTempDir(c.Env), Allow: allow,
+			ProjectHome: filepath.Join(b.ProjectHomesRoot, projectID), ProjectHomesRoot: b.ProjectHomesRoot}
+		if b.Checkouts != nil {
+			sess.Repositories = b.Checkouts()
+		}
+		if b.WorkspacesRoot != nil {
+			sess.WorkspacesRoot = b.WorkspacesRoot()
+		}
+		return b.Driver.Wrap(BuildSandboxPolicy(sess), c)
+	}
+}
+
 // claudeSandboxOff is the settings value that keeps claude's own Bash sandbox
 // off: inside the agent sandbox it would nest a second Seatbelt, and a
 // repository's .claude/settings.json (project settings are read) could switch
@@ -558,6 +610,7 @@ func (s *Service) sandbox(ctx context.Context, in prepareInput, id string, repo 
 		TempDir:      sessionTempDir(env),
 		ReadAllRepos: sb.readAllRepos(in.ProjectID),
 	}
+	sess.ProjectHome, sess.ProjectHomesRoot = sb.projectHomes(in.ProjectID)
 	repos, err := s.catalog.Repositories.ListRepositories(ctx, in.ProjectID)
 	if err != nil {
 		return sandboxed{}, err

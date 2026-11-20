@@ -1,8 +1,26 @@
 package projects
 
 import (
+	"context"
+	"time"
+
 	"operators-mcp/internal/ports"
 )
+
+// StatusTimeout bounds the `claude auth status` the page waits for when it
+// paints the project login.
+const StatusTimeout = 5 * time.Second
+
+// AuthSeed is what `claude auth status` says about the project Claude home:
+// the account fields it prints, never a token or the login file's content.
+type AuthSeed struct {
+	SignedIn     bool   `json:"signed_in"`
+	Account      string `json:"account"`
+	Subscription string `json:"subscription"`
+	AuthMethod   string `json:"auth_method"`
+	// CheckedOK is false when the status could not be read in time.
+	CheckedOK bool `json:"checked_ok"`
+}
 
 // AgentCredentialSeed is what projectAgentCredential starts from: the
 // project's own credential in the body shape of GET
@@ -13,6 +31,14 @@ type AgentCredentialSeed struct {
 	ProjectID string `json:"project_id"`
 	ports.AgentCredentialStatus
 	Global ports.AgentCredentialStatus `json:"global"`
+	// OAuth is the project's sign-in flow now; never holds the token or the
+	// code. CanSignIn says the flow can run: it is wired and a claude is
+	// installed. HasLogin says the project Claude home holds a login, whose
+	// account Auth gives.
+	OAuth     ports.AgentOAuthState `json:"oauth"`
+	CanSignIn bool                  `json:"can_sign_in"`
+	HasLogin  bool                  `json:"has_login"`
+	Auth      AuthSeed              `json:"auth"`
 }
 
 // AgentCredentialView is the Agent credential section of a project's settings.
@@ -39,8 +65,40 @@ func NewAgentCredentialView(own ports.ProjectAgentCredentials, global ports.Agen
 	return v, nil
 }
 
+// WithSignIn adds the project's sign-in flow and, when its Claude home holds a
+// login, who it is signed in as (bounded by StatusTimeout). Without the flow
+// the section offers no sign-in.
+func (v *AgentCredentialView) WithSignIn(ctx context.Context, signIn ports.ProjectAgentOAuth, bin ports.ManagedClaudeBin) {
+	if signIn == nil {
+		return
+	}
+	flow := signIn.For(v.Seed.ProjectID)
+	v.Seed.OAuth = flow.State()
+	v.Seed.CanSignIn = bin != nil && bin.Installed()
+	v.Seed.HasLogin = signIn.HasLogin(v.Seed.ProjectID)
+	if !v.Seed.HasLogin || !v.Seed.CanSignIn {
+		return
+	}
+	ctx, cancel := context.WithTimeout(ctx, StatusTimeout)
+	defer cancel()
+	st, err := flow.Status(ctx)
+	if err != nil {
+		return
+	}
+	v.Seed.Auth = AuthSeed{SignedIn: st.LoggedIn, Account: st.Email, Subscription: st.SubscriptionType, AuthMethod: st.AuthMethod, CheckedOK: true}
+}
+
+// SignedIn says the project is signed in, from the status read.
+func (v AgentCredentialView) SignedIn() bool { return v.Seed.Auth.SignedIn }
+
+// SignInDisabled: no claude to run.
+func (v AgentCredentialView) SignInDisabled() bool { return !v.Seed.CanSignIn }
+
 // ChipText and ChipTone are the section's status chip.
 func (v AgentCredentialView) ChipText() string {
+	if v.SignedIn() {
+		return "Signed in"
+	}
 	if v.Seed.Set {
 		return "Own credential"
 	}
@@ -48,7 +106,7 @@ func (v AgentCredentialView) ChipText() string {
 }
 
 func (v AgentCredentialView) ChipTone() string {
-	if v.Seed.Set {
+	if v.SignedIn() || v.Seed.Set {
 		return "signal"
 	}
 	return ""

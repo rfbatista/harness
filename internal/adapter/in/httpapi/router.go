@@ -210,6 +210,11 @@ func NewRouter(h *Handler, opts ...Option) *echo.Echo {
 	g.POST("/cancel_agent_oauth", h.handleCancelAgentOAuth)
 	g.GET("/get_agent_auth_status", h.handleGetAgentAuthStatus)
 	g.POST("/sign_out_agent_auth", h.handleSignOutAgentAuth)
+	g.GET("/get_project_agent_oauth", h.handleGetProjectAgentOAuth)
+	g.POST("/start_project_agent_oauth", h.handleStartProjectAgentOAuth)
+	g.POST("/submit_project_agent_oauth_code", h.handleSubmitProjectAgentOAuthCode)
+	g.POST("/cancel_project_agent_oauth", h.handleCancelProjectAgentOAuth)
+	g.GET("/get_project_agent_auth_status", h.handleGetProjectAgentAuthStatus)
 
 	// the agent catalog
 	g.GET("/get_agent_catalog", h.handleGetAgentCatalog)

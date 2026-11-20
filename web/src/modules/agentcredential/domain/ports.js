@@ -27,6 +27,12 @@
  * @property {() => Promise<OAuthState>} oauthStart  Rejects with AGENT_OAUTH_BUSY while one runs.
  * @property {(code: string) => Promise<OAuthState>} oauthSubmit
  * @property {() => Promise<OAuthState>} oauthCancel  Kills the process and clears the state.
+ * @property {(projectId: string) => Promise<OAuthState>} projectOAuthState
+ *           The project's own sign-in flow as it is now; flows are per project.
+ * @property {(projectId: string) => Promise<OAuthState>} projectOAuthStart  Rejects with AGENT_OAUTH_BUSY while this project's runs.
+ * @property {(projectId: string, code: string) => Promise<OAuthState>} projectOAuthSubmit
+ * @property {(projectId: string) => Promise<OAuthState>} projectOAuthCancel  Kills the process and clears the state.
+ * @property {(projectId: string) => Promise<AuthStatus>} projectAuthStatus  `claude auth status` in the project Claude home.
  * @property {() => Promise<AuthStatus>} authStatus  `claude auth status` as it is now.
  * @property {() => Promise<AuthStatus>} signOut  Runs `claude auth logout`, answers the status after.
  *

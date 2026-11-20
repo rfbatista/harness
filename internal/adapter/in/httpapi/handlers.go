@@ -128,6 +128,9 @@ type Services struct {
 	// AgentAuth reads and ends the login the agent home keeps (`claude auth
 	// status` and `claude auth logout`); nil answers 503.
 	AgentAuth ports.AgentAuth
+	// ProjectAgentOAuth runs each project's own sign-in with Claude, in its
+	// project Claude home (ADR 0102); nil answers 503.
+	ProjectAgentOAuth ports.ProjectAgentOAuth
 	// WritingHelper runs the writing helper's steps; nil answers 503.
 	WritingHelper ports.WritingHelper
 	// ArchitectureAssistant runs the architecture assistant's turns; nil
@@ -223,6 +226,7 @@ type Handler struct {
 	projectAgentCredential ports.ProjectAgentCredentials
 	agentOAuth             ports.AgentOAuth
 	agentAuth              ports.AgentAuth
+	projectAgentOAuth      ports.ProjectAgentOAuth
 
 	writingHelper         ports.WritingHelper
 	architectureAssistant ports.ArchitectureAssistant
@@ -312,6 +316,7 @@ func NewHandler(s Services) *Handler {
 		projectAgentCredential: s.ProjectAgentCredentials,
 		agentOAuth:             s.AgentOAuth,
 		agentAuth:              s.AgentAuth,
+		projectAgentOAuth:      s.ProjectAgentOAuth,
 
 		writingHelper:         s.WritingHelper,
 		architectureAssistant: s.ArchitectureAssistant,

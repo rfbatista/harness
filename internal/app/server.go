@@ -186,6 +186,8 @@ func registerHTTPServer(lc fx.Lifecycle, cfg Config, cat catalog.Catalog, appRun
 		// The Sign in with Claude flow that stores it.
 		AgentOAuth: agentCred.oauth(),
 		AgentAuth:  agentCred.auth(),
+		// Each project's own Sign in with Claude.
+		ProjectAgentOAuth: agentCred.projectOAuth(),
 		// The magic pen's steps, streamed.
 		WritingHelper: helper,
 		// The architecture assistant's turns, streamed.
@@ -226,7 +228,7 @@ func registerHTTPServer(lc fx.Lifecycle, cfg Config, cat catalog.Catalog, appRun
 		DesignSystems: designSystemReader(cat), Resources: plan, Comments: plan, Notifications: noteReader, BranchRequests: gate, SessionBranches: watch, GitCredentials: creds.port(), Usage: usageSvc, Services: svcs, ServiceCounter: svcs, TokenSavers: cat.Capabilities,
 		TokenSaverInstalls: cat.Capabilities, RepositoryIndexes: indexes.port(), Settings: cat.Settings, DataPaths: dataPaths(cfg), SandboxSettings: sandboxStore, SandboxDriver: sandboxDriver(orch), SandboxBuiltin: sandboxBuiltin(orch),
 		ManagedClaude: managedClaude, ManagedClaudeBin: claudeBin, AgentCredential: agentCred.port(), ProjectAgentCredentials: agentCred.projectPort(),
-		AgentOAuth: agentCred.oauth(), AgentAuth: agentCred.auth(), AgentHomeExposed: agentHomeExposed(cfg), AgentLogin: agentHasLogin(cfg), ArchivedTasks: plan, ArchivedList: plan,
+		AgentOAuth: agentCred.oauth(), AgentAuth: agentCred.auth(), ProjectAgentOAuth: agentCred.projectOAuth(), AgentHomeExposed: agentHomeExposed(cfg), AgentLogin: agentHasLogin(cfg), ArchivedTasks: plan, ArchivedList: plan,
 		// Whether the pens work, read from the gate without starting anything.
 		WritingHelper: helperState(helper), ArchitectureAssistant: architectureAssistant, AgentCatalog: CatalogSeed(agentCat, repoAgents), AgentBoard: agentBoard, Interviews: interviewsPort}, assets, uiHandler)))
 
