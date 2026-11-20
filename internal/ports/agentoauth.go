@@ -78,3 +78,21 @@ type AgentAuth interface {
 	// CLAUDE_CLI_NOT_FOUND when there is no managed claude.
 	Logout(ctx context.Context) error
 }
+
+// AgentSignIn is one sign-in the person runs and reads: the flow that keeps a
+// login in a Claude home, and the status of that home's login.
+type AgentSignIn interface {
+	AgentOAuth
+	AgentAuth
+}
+
+// ProjectAgentOAuth gives each project its own sign-in with Claude, in the
+// project Claude home that belongs to it (ADR 0102). The flows are keyed by
+// project: one per project, independent of each other and of the global one.
+type ProjectAgentOAuth interface {
+	// For is the project's sign-in.
+	For(projectID string) AgentSignIn
+	// HasLogin says whether the project Claude home holds a login: the file is
+	// read, no process is started.
+	HasLogin(projectID string) bool
+}

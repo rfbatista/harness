@@ -122,6 +122,35 @@ func loginWrap(sb *orchestration.Sandbox, bin ports.ManagedClaudeBin, readable .
 	}
 }
 
+// newProjectAgentOAuth is each project's Sign in with Claude: the same flow, in
+// the project Claude home of the project (ADR 0102), seeded on its first
+// start, under the same sandbox rule with that home writable in place of the
+// agent home.
+func newProjectAgentOAuth(lc fx.Lifecycle, p oauthParts) *agentoauth.Projects {
+	svc := agentoauth.NewProjects(agentoauth.ProjectsDeps{
+		Deps: agentoauth.Deps{Bin: p.Bin, PTY: ptyunix.New(),
+			Env: func() []string { return withKeychainShim(os.Environ(), p.KC.Path()) }},
+		HomesDir: projectClaudeHomesDir(p.Home),
+		Seed:     func(dir string) error { return claudehome.NewHome(dir).Ensure() },
+		WrapFor: func(projectID string) agentoauth.Wrap {
+			sb := p.sandbox()
+			if sb == nil || sb.Driver == nil {
+				return nil
+			}
+			return func(c ports.SandboxCommand) (ports.SandboxCommand, error) {
+				allow := sandboxAllowlist(allowSources{ClaudeDirs: append(runtime.ClaudeInstallDirs(p.Bin.Bin()), p.KC.Path())})
+				return sb.ProjectLoginWrap(projectID, allow)(c)
+			}
+		},
+		HasLoginIn: func(dir string) bool { return claudehome.NewHome(dir).HasLogin() },
+	})
+	lc.Append(fx.Hook{OnStop: func(context.Context) error {
+		svc.Close()
+		return nil
+	}})
+	return svc
+}
+
 // optionalAgentCredential is the credential when the graph has one; graphs
 // built without it (some tests) serve none.
 type optionalAgentCredential struct {
@@ -129,6 +158,17 @@ type optionalAgentCredential struct {
 
 	Service *agentcredential.Service `optional:"true"`
 	OAuth   *agentoauth.Service      `optional:"true"`
+	// ProjectOAuth is each project's own sign-in flow.
+	ProjectOAuth *agentoauth.Projects `optional:"true"`
+}
+
+// projectOAuth is the projects' sign-in flows as the driving port, nil
+// (untyped) when absent.
+func (o optionalAgentCredential) projectOAuth() ports.ProjectAgentOAuth {
+	if o.ProjectOAuth == nil {
+		return nil
+	}
+	return o.ProjectOAuth
 }
 
 // oauth is the sign-in flow as the driving port, nil (untyped) when absent.

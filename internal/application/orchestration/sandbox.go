@@ -410,6 +410,27 @@ func (b *Sandbox) LoginWrap(allow []ports.SandboxPath) func(ports.SandboxCommand
 	}
 }
 
+// ProjectLoginWrap confines the sign-in's claude of one project: like
+// LoginWrap, with the project Claude home writable in place of the agent home
+// (ADR 0102), so claude keeps that project's login there and nowhere else. The
+// folder of the other homes is hidden. Nil is a platform without a driver.
+func (b *Sandbox) ProjectLoginWrap(projectID string, allow []ports.SandboxPath) func(ports.SandboxCommand) (ports.SandboxCommand, error) {
+	if b == nil || b.Driver == nil || b.ProjectHomesRoot == "" {
+		return nil
+	}
+	return func(c ports.SandboxCommand) (ports.SandboxCommand, error) {
+		sess := SandboxSession{Login: true, TempDir: sessionTempDir(c.Env), Allow: allow,
+			ProjectHome: filepath.Join(b.ProjectHomesRoot, projectID), ProjectHomesRoot: b.ProjectHomesRoot}
+		if b.Checkouts != nil {
+			sess.Repositories = b.Checkouts()
+		}
+		if b.WorkspacesRoot != nil {
+			sess.WorkspacesRoot = b.WorkspacesRoot()
+		}
+		return b.Driver.Wrap(BuildSandboxPolicy(sess), c)
+	}
+}
+
 // claudeSandboxOff is the settings value that keeps claude's own Bash sandbox
 // off: inside the agent sandbox it would nest a second Seatbelt, and a
 // repository's .claude/settings.json (project settings are read) could switch

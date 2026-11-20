@@ -43,9 +43,13 @@ type Handler struct {
 	// AgentCredentials leaves the section out.
 	AgentCredentials ports.ProjectAgentCredentials
 	GlobalCredential ports.AgentCredential
-	Layout           shell.Layout
-	Render           shell.Renderer
-	Now              func() time.Time
+	// SignIn runs the project's own sign in with Claude and ClaudeBin says
+	// whether there is a claude to run it; nil SignIn leaves the button out.
+	SignIn    ports.ProjectAgentOAuth
+	ClaudeBin ports.ManagedClaudeBin
+	Layout    shell.Layout
+	Render    shell.Renderer
+	Now       func() time.Time
 }
 
 // List is the projects list: every project with its counts.
@@ -86,6 +90,9 @@ func (h Handler) Settings(w http.ResponseWriter, r *http.Request) error {
 	cred, err := NewAgentCredentialView(h.AgentCredentials, h.GlobalCredential, project.ID, project.Name)
 	if err != nil {
 		slog.Warn("project settings: agent credential not read", "err", err)
+	}
+	if cred != nil {
+		cred.WithSignIn(ctx, h.SignIn, h.ClaudeBin)
 	}
 	v.AgentCredential = cred
 	return h.Render(w, r, http.StatusOK, SettingsPage(v))

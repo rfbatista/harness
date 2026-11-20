@@ -50,6 +50,8 @@ type Deps struct {
 	// Wrap confines the login and the status under the sandbox driver; nil
 	// runs them unwrapped.
 	Wrap Wrap
+	// Prepare runs before each flow starts: it makes the home ready. Nil: none.
+	Prepare func() error
 	// Now and After are the clock; nil are the system's.
 	Now   func() time.Time
 	After func(time.Duration) <-chan time.Time
@@ -137,6 +139,11 @@ func (s *Service) Start() (ports.AgentOAuthState, error) {
 	defer s.mu.Unlock()
 	if s.cur != nil || s.closed {
 		return ports.AgentOAuthState{}, &domain.StructuredError{Code: "AGENT_OAUTH_BUSY", Message: "A sign-in is already open. Finish or cancel it first."}
+	}
+	if s.d.Prepare != nil {
+		if err := s.d.Prepare(); err != nil {
+			return ports.AgentOAuthState{}, err
+		}
 	}
 	spec, cleanup, err := s.auth.spec("auth", "login", "--claudeai")
 	if err != nil {
