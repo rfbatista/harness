@@ -14,12 +14,17 @@ type fakeProjectCredentials struct {
 	own       ports.AgentCredentialStatus
 	effective ports.EffectiveCredential
 	err       error
+	// deadline, when set, takes the deadline DetailFor's context carries.
+	deadline *time.Time
 }
 
 func (f fakeProjectCredentials) StatusFor(string) (ports.AgentCredentialStatus, error) {
 	return f.own, f.err
 }
-func (f fakeProjectCredentials) DetailFor(_ context.Context, _ string) (ports.ProjectCredentialStatus, error) {
+func (f fakeProjectCredentials) DetailFor(ctx context.Context, _ string) (ports.ProjectCredentialStatus, error) {
+	if f.deadline != nil {
+		*f.deadline, _ = ctx.Deadline()
+	}
 	return ports.ProjectCredentialStatus{AgentCredentialStatus: f.own, Effective: f.effective}, f.err
 }
 func (fakeProjectCredentials) SetFor(string, string, string) (ports.AgentCredentialStatus, error) {
@@ -71,5 +76,16 @@ func TestAProjectsOwnCredentialShowsItsKindAndDayNeverAValue(t *testing.T) {
 	v, _ := NewAgentCredentialView(context.Background(), fakeProjectCredentials{own: ports.AgentCredentialStatus{Set: true, Kind: ports.AgentCredentialAPIKey, Updated: saved}}, nil, "p1", "alpha")
 	if v.ChipText() != "Own credential" || v.ChipTone() != "signal" || v.KindName() != "Anthropic API key" || v.SavedDate() != "2026-11-20" || v.PasteLabel() != "Replace with a pasted token or key" {
 		t.Fatalf("view %+v", v)
+	}
+}
+
+func TestThePageWaitsOnlyAShortWhileForTheLoginStatus(t *testing.T) {
+	var deadline time.Time
+	before := time.Now()
+	if _, err := NewAgentCredentialView(context.Background(), fakeProjectCredentials{deadline: &deadline}, nil, "p1", "alpha"); err != nil {
+		t.Fatal(err)
+	}
+	if deadline.IsZero() || deadline.After(before.Add(StatusTimeout+time.Second)) {
+		t.Errorf("the status read's deadline is %v, want within %v of the start", deadline, StatusTimeout)
 	}
 }

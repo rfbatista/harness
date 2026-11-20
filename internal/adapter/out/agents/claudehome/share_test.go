@@ -3,7 +3,9 @@ package claudehome
 import (
 	"os"
 	"path/filepath"
+	"sync"
 	"testing"
+	"time"
 
 	"operators-mcp/internal/ports"
 )
@@ -141,5 +143,60 @@ func TestASharedFileClaudeReplacedWithARegularFileIsLinkedAgainAtTheNextStart(t 
 	}
 	if b, _ := os.ReadFile(filepath.Join(agent.Path(), "settings.json")); string(b) != `{"a":2}` {
 		t.Errorf("the agent home's settings = %q, want claude's latest write", b)
+	}
+}
+
+func TestConcurrentStartsOnOneProjectHomeEndWithAValidLinkAndIntactSettings(t *testing.T) {
+	agent := NewHome(t.TempDir())
+	project := NewHome(t.TempDir())
+	const settings = `{"model":"x"}`
+	if err := os.WriteFile(filepath.Join(agent.Path(), "settings.json"), []byte(settings), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	var wg sync.WaitGroup
+	for range 16 {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			if err := project.EnsureSharing(agent); err != nil {
+				t.Error(err)
+			}
+		}()
+	}
+	wg.Wait()
+	link := filepath.Join(project.Path(), "settings.json")
+	if to, err := os.Readlink(link); err != nil || to != filepath.Join(agent.Path(), "settings.json") {
+		t.Fatalf("link = %q, %v", to, err)
+	}
+	if b, err := os.ReadFile(link); err != nil || string(b) != settings {
+		t.Errorf("settings through the link = %q, %v", b, err)
+	}
+	if fi, err := os.Lstat(filepath.Join(agent.Path(), "settings.json")); err != nil || fi.Mode()&os.ModeSymlink != 0 {
+		t.Errorf("the agent home's settings.json is not the plain file any more: %v %v", fi, err)
+	}
+}
+
+func TestAStaleCopyInAProjectHomeDoesNotOverwriteNewerAgentHomeSettings(t *testing.T) {
+	agent := NewHome(t.TempDir())
+	project := NewHome(t.TempDir())
+	if err := os.WriteFile(filepath.Join(agent.Path(), "settings.json"), []byte(`{"new":true}`), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	stale := filepath.Join(project.Path(), "settings.json")
+	if err := os.WriteFile(stale, []byte(`{"old":true}`), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	old := time.Now().Add(-time.Hour)
+	if err := os.Chtimes(stale, old, old); err != nil {
+		t.Fatal(err)
+	}
+	if err := project.EnsureSharing(agent); err != nil {
+		t.Fatal(err)
+	}
+	if b, _ := os.ReadFile(filepath.Join(agent.Path(), "settings.json")); string(b) != `{"new":true}` {
+		t.Errorf("the agent home's settings = %q, a stale copy overwrote them", b)
+	}
+	if b, err := os.ReadFile(stale); err != nil || string(b) != `{"new":true}` {
+		t.Errorf("the project home does not read the agent home's settings: %q %v", b, err)
 	}
 }

@@ -7,6 +7,7 @@ import (
 	"io/fs"
 	"os"
 	"path/filepath"
+	"sync"
 )
 
 // Home is the agent Claude home (ADR 0018): the one config directory every
@@ -50,6 +51,10 @@ func (h Home) Ensure() error {
 // repeatable, and cheap enough to run at each start: a file the agent home
 // gained since is linked then.
 func (h Home) EnsureSharing(agent Home) error {
+	// Two starts of one project run this at once; each home is done by one.
+	mu := sharingLock(h.dir)
+	mu.Lock()
+	defer mu.Unlock()
 	if err := h.Ensure(); err != nil {
 		return err
 	}
@@ -64,10 +69,28 @@ func (h Home) EnsureSharing(agent Home) error {
 	return nil
 }
 
+var (
+	sharingMu    sync.Mutex
+	sharingLocks = map[string]*sync.Mutex{}
+)
+
+// sharingLock is the lock of the home at dir, made on first use.
+func sharingLock(dir string) *sync.Mutex {
+	sharingMu.Lock()
+	defer sharingMu.Unlock()
+	if m, ok := sharingLocks[dir]; ok {
+		return m
+	}
+	m := &sync.Mutex{}
+	sharingLocks[dir] = m
+	return m
+}
+
 // shareFile links name in this home to the agent home's, when the agent home
-// has it. A regular file this home holds is claude's latest write of it (an
-// atomic rewrite replaces the link with a file): it moves onto the agent
-// home's, and the link comes back, so sharing never silently stops.
+// has it. A regular file this home holds may be claude's latest write of it
+// (an atomic rewrite replaces the link with a file): when it is newer than the
+// agent home's copy it moves onto it, otherwise it is a stale copy and is
+// dropped; the link comes back either way, so sharing never silently stops.
 func (h Home) shareFile(agent Home, name string) error {
 	target := filepath.Join(agent.dir, name)
 	link := filepath.Join(h.dir, name)
@@ -80,7 +103,7 @@ func (h Home) shareFile(agent Home, name string) error {
 			return err
 		}
 	} else if err == nil {
-		if err := os.Rename(link, target); err != nil {
+		if err := adoptOrDrop(link, target); err != nil {
 			return err
 		}
 	}
@@ -88,6 +111,20 @@ func (h Home) shareFile(agent Home, name string) error {
 		return nil
 	}
 	return os.Symlink(target, link)
+}
+
+// adoptOrDrop settles a regular file where the link belongs: it replaces the
+// agent home's copy only when it is newer than that copy, else it is dropped.
+// It looks again right before it acts, so what became a link meanwhile is left.
+func adoptOrDrop(file, target string) error {
+	fi, err := os.Lstat(file)
+	if err != nil || !fi.Mode().IsRegular() {
+		return err
+	}
+	if ti, err := os.Stat(target); err == nil && !fi.ModTime().After(ti.ModTime()) {
+		return os.Remove(file)
+	}
+	return os.Rename(file, target)
 }
 
 // shareDir makes name, a folder of this home, a link to the agent home's.

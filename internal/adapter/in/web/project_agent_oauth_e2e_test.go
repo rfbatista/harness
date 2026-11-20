@@ -43,6 +43,7 @@ if [ "$1 $2" = "auth status" ]; then
   echo '{"loggedIn": false}'
   exit 1
 fi
+if [ "$1 $2" = "auth logout" ] && [ -f "$(dirname "$0")/logout-keeps" ]; then exit 0; fi
 if [ "$1 $2" = "auth logout" ] && [ -f "$(dirname "$0")/logout-fails" ]; then echo "logout refused" >&2; exit 1; fi
 if [ "$1 $2" = "auth logout" ]; then echo "$CLAUDE_CONFIG_DIR" >> "$(dirname "$0")/logouts"; rm -f "$CLAUDE_CONFIG_DIR/.credentials.json"; exit 0; fi
 [ "$1 $2 $3" = "auth login --claudeai" ] || exit 2
@@ -472,5 +473,22 @@ func TestAFailedLogoutKeepsTheProjectLoginAndSavesNothing_EndToEnd(t *testing.T)
 	}
 	if !r.projects.HasLogin(r.alpha.ID) {
 		t.Error("the login went despite the failed logout")
+	}
+}
+
+// claude's exit code is not trusted alone: a logout that exits 0 and leaves the
+// login is a failed sign-out, at the endpoint too.
+func TestALogoutThatLeavesTheLoginIsAFailedSignOutAtTheEndpoint_EndToEnd(t *testing.T) {
+	r := newProjectSignInRig(t)
+	signInThroughTheAPI(t, r.srv, r.alpha.ID)
+	if err := os.WriteFile(filepath.Join(filepath.Dir(r.script), "logout-keeps"), nil, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	code, body := apiAnswer(t, http.MethodPost, r.srv.URL+"/api/sign_out_project_agent_auth", `{"project_id":"`+r.alpha.ID+`"}`)
+	if code < 400 || !strings.Contains(body, "AGENT_SIGN_OUT_FAILED") {
+		t.Errorf("sign-out answered %d %s, want AGENT_SIGN_OUT_FAILED", code, body)
+	}
+	if !r.projects.HasLogin(r.alpha.ID) {
+		t.Error("the login went despite the logout leaving it")
 	}
 }
