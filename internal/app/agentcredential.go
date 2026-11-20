@@ -134,7 +134,7 @@ func loginWrap(sb *orchestration.Sandbox, bin ports.ManagedClaudeBin, readable .
 // the project Claude home of the project (ADR 0102), seeded on its first
 // start, under the same sandbox rule with that home writable in place of the
 // agent home.
-func newProjectAgentOAuth(lc fx.Lifecycle, p oauthParts, cred *agentcredential.Service) *agentoauth.Projects {
+func newProjectAgentOAuth(lc fx.Lifecycle, p oauthParts, cred *agentcredential.Service, cat catalog.Catalog) *agentoauth.Projects {
 	svc := agentoauth.NewProjects(agentoauth.ProjectsDeps{
 		Deps: agentoauth.Deps{Bin: p.Bin, PTY: ptyunix.New(),
 			Env: func() []string { return withKeychainShim(os.Environ(), p.KC.Path()) }},
@@ -159,6 +159,7 @@ func newProjectAgentOAuth(lc fx.Lifecycle, p oauthParts, cred *agentcredential.S
 			}
 		},
 	})
+	svc.Subscribe(cat.Bus)
 	lc.Append(fx.Hook{OnStop: func(context.Context) error {
 		svc.Close()
 		return nil

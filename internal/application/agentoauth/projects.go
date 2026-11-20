@@ -1,10 +1,12 @@
 package agentoauth
 
 import (
+	"context"
 	"os"
 	"path/filepath"
 	"sync"
 
+	"operators-mcp/internal/domain"
 	"operators-mcp/internal/ports"
 )
 
@@ -96,6 +98,26 @@ func (p *Projects) Close() {
 	}
 	p.mu.Unlock()
 	for _, s := range flows {
+		s.Close()
+	}
+}
+
+// Subscribe removes a deleted project's flow and Claude home. No `claude auth
+// logout` runs: the login is not revoked, only forgotten (ADR 0102).
+func (p *Projects) Subscribe(sub ports.EventSubscriber) {
+	ports.On(sub, func(_ context.Context, ev domain.ProjectDeleted) error {
+		p.forget(ev.ProjectID)
+		return os.RemoveAll(p.Home(ev.ProjectID))
+	})
+}
+
+// forget ends the project's flow, if it has one, and drops it.
+func (p *Projects) forget(projectID string) {
+	p.mu.Lock()
+	s := p.flows[projectID]
+	delete(p.flows, projectID)
+	p.mu.Unlock()
+	if s != nil {
 		s.Close()
 	}
 }

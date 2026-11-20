@@ -11,6 +11,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/chromedp/chromedp"
 	"go.uber.org/fx"
@@ -42,7 +43,7 @@ if [ "$1 $2" = "auth status" ]; then
   echo '{"loggedIn": false}'
   exit 1
 fi
-if [ "$1 $2" = "auth logout" ]; then rm -f "$CLAUDE_CONFIG_DIR/.credentials.json"; exit 0; fi
+if [ "$1 $2" = "auth logout" ]; then echo "$CLAUDE_CONFIG_DIR" >> "$(dirname "$0")/logouts"; rm -f "$CLAUDE_CONFIG_DIR/.credentials.json"; exit 0; fi
 [ "$1 $2 $3" = "auth login --claudeai" ] || exit 2
 echo $$ > "$CLAUDE_CONFIG_DIR/pid"
 echo "If the browser didn't open, visit: https://claude.ai/oauth/authorize?state=project-flow"
@@ -91,6 +92,8 @@ type projectSignInRig struct {
 	alpha, beta *domain.Project
 	homes       string
 	globalHome  string
+	// script is the fake claude; a logout it is asked for is logged beside it.
+	script string
 }
 
 func newProjectSignInRig(t *testing.T) *projectSignInRig {
@@ -124,12 +127,13 @@ func newProjectSignInRig(t *testing.T) *projectSignInRig {
 	}
 	cred := agentcredential.New(sqlite.NewAgentCredentialRepository(db), box, nil).WithProjects(sqlite.NewProjectAgentCredentialRepository(db))
 	bin := fakeBin{path: script, installed: true}
-	r := &projectSignInRig{cred: cred, homes: filepath.Join(dir, "claude-homes"), globalHome: filepath.Join(dir, "home")}
+	r := &projectSignInRig{cred: cred, script: script, homes: filepath.Join(dir, "claude-homes"), globalHome: filepath.Join(dir, "home")}
 	global := agentoauth.New(agentoauth.Deps{Bin: bin, ConfigDir: r.globalHome, PTY: ptyunix.New()})
 	t.Cleanup(global.Close)
 	r.projects = agentoauth.NewProjects(agentoauth.ProjectsDeps{Deps: agentoauth.Deps{Bin: bin, PTY: ptyunix.New()}, HomesDir: r.homes,
 		OnDone: func(projectID string) { _, _ = cred.RemoveFor(projectID) }})
 	t.Cleanup(r.projects.Close)
+	r.projects.Subscribe(cat.Bus)
 	cred.WithLogins(r.projects, global, func() bool {
 		_, err := os.Stat(filepath.Join(r.globalHome, ".credentials.json"))
 		return err == nil
@@ -397,4 +401,51 @@ func TestAProjectHoldsOneCredentialAtATimeAndNamesTheOneItFallsBackTo_EndToEnd(t
 func apiBody(t *testing.T, url string) (int, string) {
 	t.Helper()
 	return apiAnswer(t, http.MethodGet, url, "")
+}
+
+// signInThroughTheAPI signs a project in with the fake claude's good code.
+func signInThroughTheAPI(t *testing.T, srv *httptest.Server, projectID string) {
+	t.Helper()
+	body := `{"project_id":"` + projectID + `"`
+	if code, out := apiAnswer(t, http.MethodPost, srv.URL+"/api/start_project_agent_oauth", body+`}`); code != http.StatusOK {
+		t.Fatalf("start: %d %s", code, out)
+	}
+	for end := time.Now().Add(5 * time.Second); time.Now().Before(end); time.Sleep(20 * time.Millisecond) {
+		if _, out := apiBody(t, srv.URL+"/api/get_project_agent_oauth?project_id="+projectID); strings.Contains(out, "waiting_for_code") {
+			break
+		}
+	}
+	if code, out := apiAnswer(t, http.MethodPost, srv.URL+"/api/submit_project_agent_oauth_code", body+`,"code":"good-code"}`); code != http.StatusOK {
+		t.Fatalf("submit: %d %s", code, out)
+	}
+	for end := time.Now().Add(5 * time.Second); time.Now().Before(end); time.Sleep(20 * time.Millisecond) {
+		if _, out := apiBody(t, srv.URL+"/api/get_project_agent_oauth?project_id="+projectID); strings.Contains(out, `"idle"`) || strings.Contains(out, `"done"`) {
+			return
+		}
+	}
+	t.Fatalf("the sign-in of %s did not finish", projectID)
+}
+
+// Deleting a project removes its project Claude home, and no other's. It does
+// not run `claude auth logout`: the login is not revoked.
+func TestDeletingAProjectRemovesItsClaudeHome_EndToEnd(t *testing.T) {
+	r := newProjectSignInRig(t)
+	signInThroughTheAPI(t, r.srv, r.alpha.ID)
+	signInThroughTheAPI(t, r.srv, r.beta.ID)
+	if !r.projects.HasLogin(r.alpha.ID) || !r.projects.HasLogin(r.beta.ID) {
+		t.Fatal("both projects should hold a login before the delete")
+	}
+
+	if code, out := apiAnswer(t, http.MethodPost, r.srv.URL+"/api/delete_project", `{"project_id":"`+r.alpha.ID+`"}`); code != http.StatusNoContent {
+		t.Fatalf("delete: %d %s", code, out)
+	}
+	if _, err := os.Stat(filepath.Join(r.homes, r.alpha.ID)); !os.IsNotExist(err) {
+		t.Errorf("the deleted project's Claude home is still there: %v", err)
+	}
+	if !r.projects.HasLogin(r.beta.ID) {
+		t.Error("another project's login went with it")
+	}
+	if _, err := os.Stat(filepath.Join(filepath.Dir(r.script), "logouts")); err == nil {
+		t.Error("deleting the project ran claude auth logout")
+	}
 }
