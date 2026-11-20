@@ -44,3 +44,35 @@ func TestTheAgentCredentialIsNotPlaintextInTheDatabase(t *testing.T) {
 		t.Fatalf("env after reading it back: %v", got)
 	}
 }
+
+func TestAProjectAgentCredentialIsSealedAtRestAndScopedToItsProject(t *testing.T) {
+	dir := t.TempDir()
+	db, err := sqlite.Open(filepath.Join(dir, "h.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	box, err := secretbox.New("", filepath.Join(dir, "secret.key"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	svc := agentcredential.New(sqlite.NewAgentCredentialRepository(db), box, nil).WithProjects(sqlite.NewProjectAgentCredentialRepository(db))
+	if _, err := svc.SetFor("p1", ports.AgentCredentialOAuth, "plainly-visible-p1"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := svc.SetFor("p1", ports.AgentCredentialAPIKey, "plainly-visible-p1-new"); err != nil {
+		t.Fatalf("replacing: %v", err)
+	}
+	var rows []map[string]any
+	if err := db.Raw("SELECT * FROM project_agent_credential").Scan(&rows).Error; err != nil || len(rows) != 1 {
+		t.Fatalf("rows %v, err %v", rows, err)
+	}
+	if strings.Contains(fmt.Sprintf("%v %s", rows[0], rows[0]["sealed"]), "plainly-visible") {
+		t.Fatalf("the stored row holds the value: %v", rows[0])
+	}
+	if got := svc.EnvFor("p1"); len(got) != 1 || got[0] != "ANTHROPIC_API_KEY=plainly-visible-p1-new" {
+		t.Fatalf("p1 env %v", got)
+	}
+	if got := svc.EnvFor("p2"); got != nil {
+		t.Fatalf("p2 env %v", got)
+	}
+}

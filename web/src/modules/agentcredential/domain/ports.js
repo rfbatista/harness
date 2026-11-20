@@ -17,6 +17,12 @@
  * @property {(kind: CredentialKind, value: string) => Promise<CredentialStatus>} set
  *           Replaces any credential. Rejects with INVALID_INPUT, whose message says why.
  * @property {() => Promise<CredentialStatus>} remove
+ * @property {(projectId: string) => Promise<CredentialStatus>} getForProject
+ *           The credential the project keeps for itself; the global one is not counted.
+ * @property {(projectId: string, kind: CredentialKind, value: string) => Promise<CredentialStatus>} setForProject
+ *           Replaces the project's own credential. Rejects with INVALID_INPUT, whose message says why.
+ * @property {(projectId: string) => Promise<CredentialStatus>} removeForProject
+ *           The project's sessions fall back to the global credential.
  * @property {() => Promise<OAuthState>} oauthState  The sign-in flow as it is now.
  * @property {() => Promise<OAuthState>} oauthStart  Rejects with AGENT_OAUTH_BUSY while one runs.
  * @property {(code: string) => Promise<OAuthState>} oauthSubmit

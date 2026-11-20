@@ -284,7 +284,7 @@ func (s *Service) ResumeInteractive(ctx context.Context, req ports.ResumeRequest
 	if err != nil {
 		return nil, ports.AgentSpec{}, err
 	}
-	s.withAgentCredential(&cfg)
+	s.withAgentCredential(&cfg, sess.ProjectID)
 	s.withKeychainShim(&cfg)
 	s.withAttribution(&cfg)
 	s.rewireTokenSavers(ctx, sess, &cfg)

@@ -181,6 +181,11 @@ type Service struct {
 	// it does, agents use it and AgentCredential is not put in their env.
 	// Nil: no login.
 	AgentLogin func() bool
+	// ProjectAgentCredential gives each agent process of a project the env
+	// entries of the credential that project keeps for itself, and says whether
+	// it has one. A project's own credential wins over AgentLogin and
+	// AgentCredential: the person chose it for that project. Nil: none.
+	ProjectAgentCredential func(projectID string) (env []string, own bool)
 	// KeychainShimDir holds the macOS `security` shim, put on every agent
 	// process's PATH right after the edit-proxy shims. Empty: none (not
 	// macOS, or no shim binary).
@@ -582,7 +587,7 @@ func (s *Service) prepare(ctx context.Context, in prepareInput) (*prepared, erro
 		_ = s.workspaces.Discard(ws.ID)
 		return nil, err
 	}
-	s.withAgentCredential(&cfg)
+	s.withAgentCredential(&cfg, in.ProjectID)
 	s.withKeychainShim(&cfg)
 	s.withAttribution(&cfg)
 	savers := s.withTokenSavers(ctx, in, repo.RootDir, ws.Path, &cfg)
@@ -629,8 +634,15 @@ func (s *Service) ready(ctx context.Context) error {
 
 // withAgentCredential adds the agent credential to the agent process env,
 // unless the agent home holds a login: the login wins and the pasted
-// credential is only a fallback for a home without one.
-func (s *Service) withAgentCredential(cfg *llmkit.SessionConfig) {
+// credential is only a fallback for a home without one. A credential the
+// project keeps for itself beats both.
+func (s *Service) withAgentCredential(cfg *llmkit.SessionConfig, projectID string) {
+	if s.ProjectAgentCredential != nil {
+		if env, own := s.ProjectAgentCredential(projectID); own {
+			cfg.Env = append(slices.Clone(cfg.Env), env...)
+			return
+		}
+	}
 	if s.AgentCredential == nil || (s.AgentLogin != nil && s.AgentLogin()) {
 		return
 	}

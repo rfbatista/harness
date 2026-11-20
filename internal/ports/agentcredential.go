@@ -43,3 +43,21 @@ type AgentCredentialStore interface {
 	Put(r AgentCredentialRecord) error
 	Delete() error
 }
+
+// ProjectAgentCredentials are the credentials agent processes of one project
+// sign in with, instead of the global one (driving). A project without its own
+// falls back to the global AgentCredential, so StatusFor answers about the
+// project's own only. An empty project id is refused with INVALID_INPUT.
+type ProjectAgentCredentials interface {
+	StatusFor(projectID string) (AgentCredentialStatus, error)
+	SetFor(projectID, kind, value string) (AgentCredentialStatus, error)
+	RemoveFor(projectID string) (AgentCredentialStatus, error)
+}
+
+// ProjectAgentCredentialStore keeps one agent credential per project (driven);
+// Get answers nil when the project has none.
+type ProjectAgentCredentialStore interface {
+	GetFor(projectID string) (*AgentCredentialRecord, error)
+	PutFor(projectID string, r AgentCredentialRecord) error
+	DeleteFor(projectID string) error
+}

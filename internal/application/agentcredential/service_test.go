@@ -1,10 +1,12 @@
 package agentcredential
 
 import (
+	"context"
 	"strings"
 	"testing"
 	"time"
 
+	"operators-mcp/internal/domain"
 	"operators-mcp/internal/ports"
 )
 
@@ -99,3 +101,81 @@ func TestAnEmptyValueOrUnknownKindIsRefused(t *testing.T) {
 }
 
 func fmtStatus(s ports.AgentCredentialStatus) string { return s.Kind + s.Updated.String() }
+
+type memProjects map[string]ports.AgentCredentialRecord
+
+func (m memProjects) GetFor(id string) (*ports.AgentCredentialRecord, error) {
+	if r, ok := m[id]; ok {
+		return &r, nil
+	}
+	return nil, nil
+}
+func (m memProjects) PutFor(id string, r ports.AgentCredentialRecord) error { m[id] = r; return nil }
+func (m memProjects) DeleteFor(id string) error                             { delete(m, id); return nil }
+
+func TestEachProjectGetsItsOwnCredentialAndOthersFallBackToTheGlobalOne(t *testing.T) {
+	svc, _ := newService()
+	svc.WithProjects(memProjects{})
+	_, _ = svc.Set(ports.AgentCredentialOAuth, "global-token")
+	if _, err := svc.SetFor("a", ports.AgentCredentialAPIKey, "key-a"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := svc.SetFor("b", ports.AgentCredentialOAuth, "tok-b"); err != nil {
+		t.Fatal(err)
+	}
+	for id, want := range map[string]string{"a": "ANTHROPIC_API_KEY=key-a", "b": "CLAUDE_CODE_OAUTH_TOKEN=tok-b", "c": "CLAUDE_CODE_OAUTH_TOKEN=global-token"} {
+		if got := svc.EnvFor(id); len(got) != 1 || got[0] != want {
+			t.Errorf("EnvFor(%s) = %v, want %s", id, got, want)
+		}
+	}
+	if svc.OwnsEnv("c") || !svc.OwnsEnv("a") {
+		t.Error("OwnsEnv should be true only for projects with their own credential")
+	}
+	if st, _ := svc.StatusFor("c"); st.Set {
+		t.Error("StatusFor counts the global credential as the project's own")
+	}
+	if _, err := svc.RemoveFor("a"); err != nil {
+		t.Fatal(err)
+	}
+	if got := svc.EnvFor("a"); len(got) != 1 || got[0] != "CLAUDE_CODE_OAUTH_TOKEN=global-token" {
+		t.Errorf("after removal EnvFor(a) = %v, want the global credential", got)
+	}
+}
+
+func TestAProjectCredentialSealedByAnotherKeyIsNotReplacedByTheGlobalOne(t *testing.T) {
+	svc, _ := newService()
+	svc.WithProjects(memProjects{"a": {Kind: ports.AgentCredentialAPIKey, Sealed: []byte("x"), KeyID: "other"}})
+	_, _ = svc.Set(ports.AgentCredentialOAuth, "global-token")
+	if got := svc.EnvFor("a"); got != nil {
+		t.Fatalf("env %v: a project must not silently run as the global identity", got)
+	}
+}
+
+func TestProjectCredentialsNeedAProjectAndTheirStore(t *testing.T) {
+	svc, _ := newService()
+	if _, err := svc.SetFor("a", ports.AgentCredentialOAuth, "t"); err == nil {
+		t.Error("accepted without a project store")
+	}
+	svc.WithProjects(memProjects{})
+	if _, err := svc.SetFor(" ", ports.AgentCredentialOAuth, "t"); err == nil {
+		t.Error("accepted an empty project id")
+	}
+}
+
+type recordingSub map[string]ports.EventHandler
+
+func (r recordingSub) Subscribe(name string, h ports.EventHandler) { r[name] = h }
+
+func TestDeletingAProjectDropsItsCredential(t *testing.T) {
+	svc, _ := newService()
+	store := memProjects{"a": {Kind: ports.AgentCredentialOAuth}}
+	svc.WithProjects(store)
+	sub := recordingSub{}
+	svc.Subscribe(sub)
+	if err := sub["project.deleted"](context.Background(), domain.ProjectDeleted{ProjectID: "a"}); err != nil {
+		t.Fatal(err)
+	}
+	if len(store) != 0 {
+		t.Fatalf("store %v", store)
+	}
+}

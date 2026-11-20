@@ -38,9 +38,14 @@ type Handler struct {
 	// TokenSavers paints the Token savers control on the project's and the
 	// repository's settings pages; nil leaves it out.
 	TokenSavers ports.TokenSaverActivationReader
-	Layout      shell.Layout
-	Render      shell.Renderer
-	Now         func() time.Time
+	// AgentCredentials paints the project's own Agent credential on its
+	// settings page and GlobalCredential the one it falls back to; nil
+	// AgentCredentials leaves the section out.
+	AgentCredentials ports.ProjectAgentCredentials
+	GlobalCredential ports.AgentCredential
+	Layout           shell.Layout
+	Render           shell.Renderer
+	Now              func() time.Time
 }
 
 // List is the projects list: every project with its counts.
@@ -76,6 +81,13 @@ func (h Handler) Settings(w http.ResponseWriter, r *http.Request) error {
 	}
 	v := NewSettingsView(frame, project, repos)
 	v.TokenSavers = tokensavers.Read(ctx, h.TokenSavers, domain.ActivationOwner{Level: domain.ActivationLevelProject, ID: project.ID})
+	// A credential that could not be read leaves the section out rather than
+	// failing the whole settings page.
+	cred, err := NewAgentCredentialView(h.AgentCredentials, h.GlobalCredential, project.ID, project.Name)
+	if err != nil {
+		slog.Warn("project settings: agent credential not read", "err", err)
+	}
+	v.AgentCredential = cred
 	return h.Render(w, r, http.StatusOK, SettingsPage(v))
 }
 

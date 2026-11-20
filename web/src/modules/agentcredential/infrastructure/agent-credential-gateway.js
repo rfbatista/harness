@@ -57,6 +57,10 @@ export function agentCredentialGateway(api) {
     get: async () => toStatus(await api.get("/get_agent_credential")),
     set: async (kind, value) => toStatus(await api.post("/set_agent_credential", { kind, value })),
     remove: async () => toStatus(await api.post("/remove_agent_credential", {})),
+    getForProject: async (projectId) => toStatus(await api.get("/get_project_agent_credential", { project_id: projectId })),
+    setForProject: async (projectId, kind, value) =>
+      toStatus(await api.post("/set_project_agent_credential", { project_id: projectId, kind, value })),
+    removeForProject: async (projectId) => toStatus(await api.post("/remove_project_agent_credential", { project_id: projectId })),
     oauthState: async () => toOAuth(await api.get("/get_agent_oauth")),
     oauthStart: async () => toOAuth(await api.post("/start_agent_oauth", {})),
     oauthSubmit: async (code) => toOAuth(await api.post("/submit_agent_oauth_code", { code })),

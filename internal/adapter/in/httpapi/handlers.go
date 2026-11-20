@@ -119,6 +119,9 @@ type Services struct {
 	// AgentCredential keeps the credential agents sign in with; nil answers
 	// 503.
 	AgentCredential ports.AgentCredential
+	// ProjectAgentCredentials keeps the credential one project's agents sign in
+	// with instead of the global one; nil answers 503.
+	ProjectAgentCredentials ports.ProjectAgentCredentials
 	// AgentOAuth runs the sign-in flow that stores the agent credential; nil
 	// answers 503.
 	AgentOAuth ports.AgentOAuth
@@ -216,22 +219,24 @@ type Handler struct {
 	managedClaude    ports.ManagedClaude
 	managedClaudeBin ports.ManagedClaudeBin
 	agentCredential  ports.AgentCredential
-	agentOAuth       ports.AgentOAuth
-	agentAuth        ports.AgentAuth
+
+	projectAgentCredential ports.ProjectAgentCredentials
+	agentOAuth             ports.AgentOAuth
+	agentAuth              ports.AgentAuth
 
 	writingHelper         ports.WritingHelper
 	architectureAssistant ports.ArchitectureAssistant
 	catalog               ports.CatalogEditor
 	repoAgents            ports.RepositoryAgents
 
-	services ports.ServiceManager
+	services        ports.ServiceManager
 	serviceRequests ports.ServiceRequests
 
 	repoArch ports.RepositoryArchitectures
 	// instructionProposals is nil when proposals are not configured.
 	instructionProposals ports.InstructionProposals
 	instructionDecisions ports.InstructionProposalDecisions
-	designs  ports.DesignSystems
+	designs              ports.DesignSystems
 	// imports is the design systems' import, when they offer it.
 	imports ports.DesignSystemImports
 	// exports is the design systems' export into repositories, when they offer it.
@@ -246,53 +251,53 @@ type Handler struct {
 // NewHandler returns an HTTP handler that serves /api/list_tree, /api/list_zones, /api/list_projects, etc.
 func NewHandler(s Services) *Handler {
 	return &Handler{
-		projects:        s.Projects,
-		projectFeed:     s.ProjectFeed,
-		discovery:       s.Discovery,
-		env:             s.Env,
-		runCommands:     s.RunCommands,
-		apps:            s.Apps,
-		architecture:    s.Architecture,
-		agents:          s.Agents,
-		capabilities:    s.Capabilities,
-		tokenSavers:     s.TokenSavers,
-		settings:        s.Settings,
-		toolingSvc:      s.Tools,
-		execSvc:         s.Tasks,
-		orchSvc:         s.Sessions,
-		persons:         s.PersonTerminals,
-		planningSvc:     s.Planning,
-		workspacesSvc:   s.Workspaces,
-		artifactsSvc:    s.Artifacts,
-		channel:         s.TaskChannel,
-		resources:       s.TaskResources,
-		comments:        s.TaskComments,
-		archive:         s.TaskArchive,
-		pullRequests:    s.PullRequests,
-		prBases:         s.PullRequestBases,
-		merges:          s.Merges,
-		archivedTrees:   s.ArchivedWorktrees,
-		branchNames:     s.BranchNames,
-		repoArch:        s.RepositoryArchitectures,
+		projects:             s.Projects,
+		projectFeed:          s.ProjectFeed,
+		discovery:            s.Discovery,
+		env:                  s.Env,
+		runCommands:          s.RunCommands,
+		apps:                 s.Apps,
+		architecture:         s.Architecture,
+		agents:               s.Agents,
+		capabilities:         s.Capabilities,
+		tokenSavers:          s.TokenSavers,
+		settings:             s.Settings,
+		toolingSvc:           s.Tools,
+		execSvc:              s.Tasks,
+		orchSvc:              s.Sessions,
+		persons:              s.PersonTerminals,
+		planningSvc:          s.Planning,
+		workspacesSvc:        s.Workspaces,
+		artifactsSvc:         s.Artifacts,
+		channel:              s.TaskChannel,
+		resources:            s.TaskResources,
+		comments:             s.TaskComments,
+		archive:              s.TaskArchive,
+		pullRequests:         s.PullRequests,
+		prBases:              s.PullRequestBases,
+		merges:               s.Merges,
+		archivedTrees:        s.ArchivedWorktrees,
+		branchNames:          s.BranchNames,
+		repoArch:             s.RepositoryArchitectures,
 		instructionProposals: s.InstructionProposals,
 		instructionDecisions: s.InstructionProposalDecisions,
-		designs:         s.DesignSystems,
-		imports:         designImports(s.DesignSystems),
-		exports:         designExports(s.DesignSystems),
-		archRules:       s.ArchitectureRules,
-		branchGate:      s.BranchGate,
-		sessionBranches: s.SessionBranches,
-		notifications:   s.Notifications,
-		interrupted:     s.InterruptedResumer,
-		agentBoard:      s.AgentBoard,
-		interviews:      s.Interviews,
-		usage:           s.Usage,
-		liveCalls:       s.LiveCalls,
-		code:            s.Code,
-		worktreeGit:     s.WorktreeGit,
-		sessionFiles:    s.SessionFiles,
-		gitCredentials:  s.GitCredentials,
-		shells:          s.Shells,
+		designs:              s.DesignSystems,
+		imports:              designImports(s.DesignSystems),
+		exports:              designExports(s.DesignSystems),
+		archRules:            s.ArchitectureRules,
+		branchGate:           s.BranchGate,
+		sessionBranches:      s.SessionBranches,
+		notifications:        s.Notifications,
+		interrupted:          s.InterruptedResumer,
+		agentBoard:           s.AgentBoard,
+		interviews:           s.Interviews,
+		usage:                s.Usage,
+		liveCalls:            s.LiveCalls,
+		code:                 s.Code,
+		worktreeGit:          s.WorktreeGit,
+		sessionFiles:         s.SessionFiles,
+		gitCredentials:       s.GitCredentials,
+		shells:               s.Shells,
 
 		tokenSaverInstalls: s.TokenSaverInstalls,
 		repositoryIndexes:  s.RepositoryIndexes,
@@ -303,8 +308,10 @@ func NewHandler(s Services) *Handler {
 		managedClaude:    s.ManagedClaude,
 		managedClaudeBin: s.ManagedClaudeBin,
 		agentCredential:  s.AgentCredential,
-		agentOAuth:       s.AgentOAuth,
-		agentAuth:        s.AgentAuth,
+
+		projectAgentCredential: s.ProjectAgentCredentials,
+		agentOAuth:             s.AgentOAuth,
+		agentAuth:              s.AgentAuth,
 
 		writingHelper:         s.WritingHelper,
 		architectureAssistant: s.ArchitectureAssistant,

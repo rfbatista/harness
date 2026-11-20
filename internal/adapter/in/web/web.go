@@ -123,6 +123,9 @@ type Deps struct {
 	// AgentCredential fills the Agent isolation page's credential section
 	// (status only, never the value); nil shows it as not set.
 	AgentCredential ports.AgentCredential
+	// ProjectAgentCredentials fills the project settings page's own Agent
+	// credential section; nil leaves it out.
+	ProjectAgentCredentials ports.ProjectAgentCredentials
 	// AgentOAuth is the credential section's Sign in with Claude flow; nil
 	// leaves the button disabled.
 	AgentOAuth ports.AgentOAuth
@@ -226,7 +229,7 @@ func NewHandler(deps Deps, assets *Assets, fallback http.Handler) http.Handler {
 	}
 	projectPages := projects.Handler{
 		Projects: deps.Projects, Repositories: deps.Repositories, EnvFiles: deps.EnvFiles, RunCommands: deps.RunCommands, Summaries: deps.ProjectSummaries, Credentials: deps.GitCredentials,
-		TokenSavers: deps.TokenSavers, Layout: s.layout, Render: render, Now: deps.Now,
+		TokenSavers: deps.TokenSavers, AgentCredentials: deps.ProjectAgentCredentials, GlobalCredential: deps.AgentCredential, Layout: s.layout, Render: render, Now: deps.Now,
 	}
 	historyPages := history.Handler{
 		Projects: deps.Projects, Repositories: deps.Repositories, History: deps.History, Sessions: deps.Sessions, Tasks: deps.Tasks,

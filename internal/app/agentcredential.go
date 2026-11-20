@@ -14,6 +14,7 @@ import (
 	"operators-mcp/internal/adapter/out/persistence/sqlite"
 	"operators-mcp/internal/adapter/out/ptyunix"
 	"operators-mcp/internal/adapter/out/secretbox"
+	"operators-mcp/internal/app/catalog"
 	"operators-mcp/internal/app/runtime"
 	"operators-mcp/internal/application/agentcredential"
 	"operators-mcp/internal/application/agentoauth"
@@ -26,8 +27,11 @@ import (
 // harness's secret box, and handed to each agent process as env. It is wired
 // beside the git credentials because both share the secret box.
 
-func newAgentCredential(db *gorm.DB, box *secretbox.Box) *agentcredential.Service {
-	return agentcredential.New(sqlite.NewAgentCredentialRepository(db), box, nil)
+func newAgentCredential(db *gorm.DB, box *secretbox.Box, cat catalog.Catalog) *agentcredential.Service {
+	svc := agentcredential.New(sqlite.NewAgentCredentialRepository(db), box, nil).
+		WithProjects(sqlite.NewProjectAgentCredentialRepository(db))
+	svc.Subscribe(cat.Bus)
+	return svc
 }
 
 // bindAgentCredential gives sessions the credential in their env at each
@@ -40,6 +44,9 @@ func bindAgentCredential(svc *agentcredential.Service, u gitCredentialUsers, hom
 	if u.Orch != nil {
 		u.Orch.AgentCredential = svc.Env
 		u.Orch.AgentLogin = home.HasLogin
+		u.Orch.ProjectAgentCredential = func(projectID string) ([]string, bool) {
+			return svc.EnvFor(projectID), svc.OwnsEnv(projectID)
+		}
 		u.Orch.KeychainShimDir = kc.Path()
 	}
 }
@@ -139,6 +146,15 @@ func (o optionalAgentCredential) auth() ports.AgentAuth {
 		return nil
 	}
 	return o.OAuth
+}
+
+// projectPort is the service as the per-project driving port, nil (untyped)
+// when absent.
+func (o optionalAgentCredential) projectPort() ports.ProjectAgentCredentials {
+	if o.Service == nil {
+		return nil
+	}
+	return o.Service
 }
 
 // port is the service as the driving port, nil (untyped) when absent.
