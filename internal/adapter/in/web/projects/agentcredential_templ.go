@@ -92,9 +92,9 @@ func agentCredentialSection(v AgentCredentialView) templ.Component {
 				return templ_7745c5c3_Err
 			}
 			var templ_7745c5c3_Var5 string
-			templ_7745c5c3_Var5, templ_7745c5c3_Err = templ.JoinStringErrs(v.Seed.Auth.Account)
+			templ_7745c5c3_Var5, templ_7745c5c3_Err = templ.JoinStringErrs(v.Seed.Account)
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `agentcredential.templ`, Line: 25, Col: 92}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `agentcredential.templ`, Line: 25, Col: 87}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var5))
 			if templ_7745c5c3_Err != nil {
@@ -105,9 +105,9 @@ func agentCredentialSection(v AgentCredentialView) templ.Component {
 				return templ_7745c5c3_Err
 			}
 			var templ_7745c5c3_Var6 string
-			templ_7745c5c3_Var6, templ_7745c5c3_Err = templ.JoinStringErrs(v.Seed.Auth.Subscription)
+			templ_7745c5c3_Var6, templ_7745c5c3_Err = templ.JoinStringErrs(v.Seed.Subscription)
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `agentcredential.templ`, Line: 26, Col: 95}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `agentcredential.templ`, Line: 26, Col: 90}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var6))
 			if templ_7745c5c3_Err != nil {
@@ -177,38 +177,58 @@ func agentCredentialSection(v AgentCredentialView) templ.Component {
 				return templ_7745c5c3_Err
 			}
 		}
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 16, " x-bind:disabled=\"signInDisabled\" x-ref=\"signin\" x-on:click=\"startSignIn\">Sign in with Claude</button> <button type=\"button\" class=\"[ button ]\" data-variant=\"")
+		templ_7745c5c3_Err = templ.RenderAttributes(ctx, templ_7745c5c3_Buffer, shownIf(!v.SignedIn()))
+		if templ_7745c5c3_Err != nil {
+			return templ_7745c5c3_Err
+		}
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 16, " x-show=\"signInShown\" x-bind:disabled=\"signInDisabled\" x-ref=\"signin\" x-on:click=\"askSignIn\">Sign in with Claude</button> <button type=\"button\" class=\"[ button ]\" data-variant=\"danger\"")
+		if templ_7745c5c3_Err != nil {
+			return templ_7745c5c3_Err
+		}
+		templ_7745c5c3_Err = templ.RenderAttributes(ctx, templ_7745c5c3_Buffer, shownIf(v.SignedIn()))
+		if templ_7745c5c3_Err != nil {
+			return templ_7745c5c3_Err
+		}
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 17, " x-ref=\"signout\" x-show=\"signedIn\" x-bind:disabled=\"pasteDisabled\" x-on:click=\"askSignOut\">Sign out</button> <button type=\"button\" class=\"[ button ]\" data-variant=\"")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
 		var templ_7745c5c3_Var10 string
 		templ_7745c5c3_Var10, templ_7745c5c3_Err = templ.ResolveAttributeValue(v.PasteTone())
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `agentcredential.templ`, Line: 54, Col: 74}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `agentcredential.templ`, Line: 55, Col: 74}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var10)
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 17, "\" x-bind:data-variant=\"pasteTone\" x-ref=\"paste\" x-text=\"pasteLabel\" x-bind:disabled=\"pasteDisabled\" x-on:click=\"startPaste\">")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 18, "\" x-bind:data-variant=\"pasteTone\" x-ref=\"paste\" x-text=\"pasteLabel\" x-bind:disabled=\"pasteDisabled\" x-on:click=\"askPaste\">")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
 		var templ_7745c5c3_Var11 string
 		templ_7745c5c3_Var11, templ_7745c5c3_Err = templ.JoinStringErrs(v.PasteLabel())
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `agentcredential.templ`, Line: 54, Col: 215}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `agentcredential.templ`, Line: 55, Col: 213}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var11))
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 18, "</button> <button type=\"button\" class=\"[ button ]\" data-variant=\"ghost\" x-ref=\"remove\" style=\"display: none\" x-show=\"isSet\" x-bind:disabled=\"busy\" x-on:click=\"askRemove\">Remove</button></div><p class=\"[ hint ]\" style=\"display: none\" x-show=\"noSignInHint\">Sign in needs the managed claude. <a href=\"/agent-isolation#claude\">Install it first.</a></p><div class=\"[ flow ] [ flow-space-s ]\" role=\"group\" aria-labelledby=\"project-credential-oauth-title\" style=\"display: none\" x-show=\"signingIn\"><h3 id=\"project-credential-oauth-title\">Sign in with Claude</h3><ol class=\"[ flow ] [ flow-space-s ]\"><li class=\"[ flow ] [ flow-space-3xs ]\"><strong>Open the sign-in page</strong><p style=\"display: none\" x-show=\"starting\"><span class=\"[ color-ink-muted ]\">Starting </span><span class=\"[ font-mono ]\">claude auth login</span><span class=\"[ color-ink-muted ]\">…</span></p><div class=\"[ flow ] [ flow-space-3xs ]\" style=\"display: none\" x-show=\"hasUrl\"><div class=\"[ cluster ] [ gutter-xs ]\"><a class=\"[ button ]\" data-variant=\"primary\" data-size=\"sm\" target=\"_blank\" rel=\"noopener noreferrer\" x-bind:href=\"oauthUrl\" x-on:click=\"opened\">Open in a new tab ↗</a> <button type=\"button\" class=\"[ button ]\" data-size=\"sm\" x-on:click=\"copyLink\">Copy link</button></div><p class=\"[ font-mono text-sm ]\" style=\"overflow-wrap: anywhere\" x-text=\"oauthUrl\"></p></div></li><li class=\"[ flow ] [ flow-space-3xs ]\"><strong>Approve access in your browser</strong><p class=\"[ color-ink-muted ]\">Sign in to Claude if asked, then choose Authorize. Claude shows a code.</p></li><li class=\"[ flow ] [ flow-space-3xs ]\"><strong>Paste the code here</strong><form class=\"[ cluster ] [ gutter-xs ]\" novalidate autocomplete=\"off\" x-on:submit.prevent=\"submitCode\"><label class=\"[ visually-hidden ]\" for=\"project-credential-oauth-code\">Code from Claude</label> <input id=\"project-credential-oauth-code\" type=\"password\" class=\"[ font-mono text-sm ]\" style=\"width: 20rem\" autocomplete=\"off\" autocapitalize=\"off\" spellcheck=\"false\" x-ref=\"code\" x-bind:disabled=\"codeDisabled\"> <button type=\"submit\" class=\"[ button ]\" data-variant=\"primary\" data-size=\"sm\" x-bind:disabled=\"codeDisabled\">Save code</button></form></li></ol><p role=\"status\" aria-live=\"polite\" class=\"[ color-ink-muted ]\" x-text=\"oauthStatusLine\"></p><div class=\"[ cluster ] [ gutter-xs ]\"><button type=\"button\" class=\"[ button ]\" data-variant=\"ghost\" data-size=\"sm\" x-on:click=\"cancelSignIn\">Cancel sign-in</button></div></div><div id=\"project-credential-oauth-failed\" class=\"[ banner ]\" data-tone=\"danger\" role=\"alert\" style=\"display: none\" x-show=\"signInFailed\"><div class=\"[ flow ] [ flow-space-3xs grow ]\"><span><strong x-text=\"oauthMessage\"></strong></span> <span class=\"[ font-mono text-sm ]\" style=\"display: none\" x-show=\"hasDetail\" x-text=\"oauthDetail\"></span><div class=\"[ cluster ] [ gutter-xs ]\"><button type=\"button\" class=\"[ button ]\" data-size=\"sm\" x-bind:disabled=\"signInDisabled\" x-on:click=\"startSignIn\">Start again</button> <button type=\"button\" class=\"[ button ]\" data-variant=\"ghost\" data-size=\"sm\" x-on:click=\"cancelSignIn\">Dismiss</button></div></div></div><div class=\"[ banner ]\" data-tone=\"signal\" role=\"status\" style=\"display: none\" x-show=\"signInSaved\"><span><strong>Signed in.</strong> Claude keeps the login in this project's own Claude home; sessions of this project started from now on use it.</span></div><div class=\"[ banner ]\" data-tone=\"attention\" role=\"alertdialog\" aria-labelledby=\"project-credential-remove-title\" aria-describedby=\"project-credential-remove-text\" style=\"display: none\" x-show=\"confirming\" x-on:keydown.escape=\"keep\"><div class=\"[ flow ] [ flow-space-xs grow ]\"><h3 id=\"project-credential-remove-title\">Remove this project's credential?</h3><p id=\"project-credential-remove-text\">Running sessions keep working until they end. Sessions started after this use the global credential again.</p><div class=\"[ cluster ] [ gutter-xs ]\"><button type=\"button\" class=\"[ button ]\" data-variant=\"danger\" data-size=\"sm\" x-on:click=\"remove\">Remove credential</button> <button type=\"button\" class=\"[ button ]\" data-size=\"sm\" x-ref=\"keep\" x-on:click=\"keep\">Keep it</button></div></div></div><form class=\"[ flow ] [ flow-space-s ]\" style=\"display: none\" novalidate autocomplete=\"off\" x-show=\"pasting\" x-on:submit.prevent=\"save\"><fieldset class=\"[ flow ] [ flow-space-3xs ]\"><legend>Kind</legend> <label><input type=\"radio\" name=\"project-credential-kind\" value=\"oauth\" checked x-bind:checked=\"oauthChosen\" x-on:change=\"chooseKind\"> OAuth token <span class=\"[ hint ]\">from <span class=\"[ font-mono ]\">claude setup-token</span>, starts with sk-ant-oat</span></label> <label><input type=\"radio\" name=\"project-credential-kind\" value=\"api_key\" x-bind:checked=\"apiKeyChosen\" x-on:change=\"chooseKind\"> Anthropic API key <span class=\"[ hint ]\">starts with sk-ant-api</span></label></fieldset><div class=\"[ field ]\"><label for=\"project-credential-value\">Token or key</label> <input id=\"project-credential-value\" type=\"password\" class=\"[ font-mono text-sm ]\" autocomplete=\"off\" autocapitalize=\"off\" spellcheck=\"false\" x-ref=\"value\" x-on:input=\"detectKind\"></div><div class=\"[ cluster ] [ gutter-xs ]\"><button type=\"submit\" class=\"[ button ]\" data-variant=\"primary\" x-bind:disabled=\"busy\">Save credential</button> <button type=\"button\" class=\"[ button ]\" data-variant=\"ghost\" x-on:click=\"cancelPaste\">Cancel</button></div></form></div></div></section>")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 19, "</button> <button type=\"button\" class=\"[ button ]\" data-variant=\"ghost\" x-ref=\"remove\" style=\"display: none\" x-show=\"isPasted\" x-bind:disabled=\"busy\" x-on:click=\"askRemove\">Remove</button></div><p class=\"[ hint ]\" style=\"display: none\" x-show=\"noSignInHint\">Sign in needs the managed claude. <a href=\"/agent-isolation#claude\">Install it first.</a></p><div class=\"[ flow ] [ flow-space-s ]\" role=\"group\" aria-labelledby=\"project-credential-oauth-title\" style=\"display: none\" x-show=\"signingIn\"><h3 id=\"project-credential-oauth-title\">Sign in with Claude</h3><ol class=\"[ flow ] [ flow-space-s ]\"><li class=\"[ flow ] [ flow-space-3xs ]\"><strong>Open the sign-in page</strong><p style=\"display: none\" x-show=\"starting\"><span class=\"[ color-ink-muted ]\">Starting </span><span class=\"[ font-mono ]\">claude auth login</span><span class=\"[ color-ink-muted ]\">…</span></p><div class=\"[ flow ] [ flow-space-3xs ]\" style=\"display: none\" x-show=\"hasUrl\"><div class=\"[ cluster ] [ gutter-xs ]\"><a class=\"[ button ]\" data-variant=\"primary\" data-size=\"sm\" target=\"_blank\" rel=\"noopener noreferrer\" x-bind:href=\"oauthUrl\" x-on:click=\"opened\">Open in a new tab ↗</a> <button type=\"button\" class=\"[ button ]\" data-size=\"sm\" x-on:click=\"copyLink\">Copy link</button></div><p class=\"[ font-mono text-sm ]\" style=\"overflow-wrap: anywhere\" x-text=\"oauthUrl\"></p></div></li><li class=\"[ flow ] [ flow-space-3xs ]\"><strong>Approve access in your browser</strong><p class=\"[ color-ink-muted ]\">Sign in to Claude if asked, then choose Authorize. Claude shows a code.</p></li><li class=\"[ flow ] [ flow-space-3xs ]\"><strong>Paste the code here</strong><form class=\"[ cluster ] [ gutter-xs ]\" novalidate autocomplete=\"off\" x-on:submit.prevent=\"submitCode\"><label class=\"[ visually-hidden ]\" for=\"project-credential-oauth-code\">Code from Claude</label> <input id=\"project-credential-oauth-code\" type=\"password\" class=\"[ font-mono text-sm ]\" style=\"width: 20rem\" autocomplete=\"off\" autocapitalize=\"off\" spellcheck=\"false\" x-ref=\"code\" x-bind:disabled=\"codeDisabled\"> <button type=\"submit\" class=\"[ button ]\" data-variant=\"primary\" data-size=\"sm\" x-bind:disabled=\"codeDisabled\">Save code</button></form></li></ol><p role=\"status\" aria-live=\"polite\" class=\"[ color-ink-muted ]\" x-text=\"oauthStatusLine\"></p><div class=\"[ cluster ] [ gutter-xs ]\"><button type=\"button\" class=\"[ button ]\" data-variant=\"ghost\" data-size=\"sm\" x-on:click=\"cancelSignIn\">Cancel sign-in</button></div></div><div id=\"project-credential-oauth-failed\" class=\"[ banner ]\" data-tone=\"danger\" role=\"alert\" style=\"display: none\" x-show=\"signInFailed\"><div class=\"[ flow ] [ flow-space-3xs grow ]\"><span><strong x-text=\"oauthMessage\"></strong></span> <span class=\"[ font-mono text-sm ]\" style=\"display: none\" x-show=\"hasDetail\" x-text=\"oauthDetail\"></span><div class=\"[ cluster ] [ gutter-xs ]\"><button type=\"button\" class=\"[ button ]\" data-size=\"sm\" x-bind:disabled=\"signInDisabled\" x-on:click=\"startSignIn\">Start again</button> <button type=\"button\" class=\"[ button ]\" data-variant=\"ghost\" data-size=\"sm\" x-on:click=\"cancelSignIn\">Dismiss</button></div></div></div><div class=\"[ banner ]\" data-tone=\"signal\" role=\"status\" style=\"display: none\" x-show=\"signInSaved\"><span><strong>Signed in.</strong> Claude keeps the login in this project's own Claude home; sessions of this project started from now on use it.</span></div><div class=\"[ banner ]\" data-tone=\"attention\" role=\"alertdialog\" aria-labelledby=\"project-credential-remove-title\" aria-describedby=\"project-credential-remove-text\" style=\"display: none\" x-show=\"confirming\" x-on:keydown.escape=\"keep\"><div class=\"[ flow ] [ flow-space-xs grow ]\"><h3 id=\"project-credential-remove-title\">Remove this project's credential?</h3><p id=\"project-credential-remove-text\">Running sessions keep working until they end. Sessions started after this use the global credential again.</p><div class=\"[ cluster ] [ gutter-xs ]\"><button type=\"button\" class=\"[ button ]\" data-variant=\"danger\" data-size=\"sm\" x-on:click=\"remove\">Remove credential</button> <button type=\"button\" class=\"[ button ]\" data-size=\"sm\" x-ref=\"keep\" x-on:click=\"keep\">Keep it</button></div></div></div><div id=\"project-credential-replace\" class=\"[ banner ]\" data-tone=\"attention\" role=\"alertdialog\" aria-labelledby=\"project-credential-replace-title\" aria-describedby=\"project-credential-replace-text\" style=\"display: none\" x-show=\"replacing !== ''\" x-on:keydown.escape=\"keepReplacing\"><div class=\"[ flow ] [ flow-space-xs grow ]\"><h3 id=\"project-credential-replace-title\" x-text=\"replaceTitle\"></h3><p id=\"project-credential-replace-text\" x-text=\"replaceText\"></p><div class=\"[ cluster ] [ gutter-xs ]\"><button type=\"button\" class=\"[ button ]\" data-variant=\"danger\" data-size=\"sm\" x-text=\"replaceConfirm\" x-on:click=\"confirmReplacing\"></button> <button type=\"button\" class=\"[ button ]\" data-size=\"sm\" x-ref=\"keepreplace\" x-on:click=\"keepReplacing\">Keep it</button></div></div></div><form class=\"[ flow ] [ flow-space-s ]\" style=\"display: none\" novalidate autocomplete=\"off\" x-show=\"pasting\" x-on:submit.prevent=\"save\"><fieldset class=\"[ flow ] [ flow-space-3xs ]\"><legend>Kind</legend> <label><input type=\"radio\" name=\"project-credential-kind\" value=\"oauth\" checked x-bind:checked=\"oauthChosen\" x-on:change=\"chooseKind\"> OAuth token <span class=\"[ hint ]\">from <span class=\"[ font-mono ]\">claude setup-token</span>, starts with sk-ant-oat</span></label> <label><input type=\"radio\" name=\"project-credential-kind\" value=\"api_key\" x-bind:checked=\"apiKeyChosen\" x-on:change=\"chooseKind\"> Anthropic API key <span class=\"[ hint ]\">starts with sk-ant-api</span></label></fieldset><div class=\"[ field ]\"><label for=\"project-credential-value\">Token or key</label> <input id=\"project-credential-value\" type=\"password\" class=\"[ font-mono text-sm ]\" autocomplete=\"off\" autocapitalize=\"off\" spellcheck=\"false\" x-ref=\"value\" x-on:input=\"detectKind\"></div><div class=\"[ cluster ] [ gutter-xs ]\"><button type=\"submit\" class=\"[ button ]\" data-variant=\"primary\" x-bind:disabled=\"busy\">Save credential</button> <button type=\"button\" class=\"[ button ]\" data-variant=\"ghost\" x-on:click=\"cancelPaste\">Cancel</button></div></form></div></div></section>")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
 		return nil
 	})
+}
+
+// shownIf hides an element the server knows is hidden until Alpine shows it.
+func shownIf(shown bool) templ.Attributes {
+	if shown {
+		return templ.Attributes{}
+	}
+	return templ.Attributes{"style": "display: none"}
 }
 
 var _ = templruntime.GeneratedTemplate

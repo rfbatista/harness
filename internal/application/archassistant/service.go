@@ -51,6 +51,9 @@ const (
 // TurnCall is one claude turn the service asks for.
 type TurnCall struct {
 	System, Input, Model, Attribution string
+	// ProjectID is the project the turn is for: it runs on that project's
+	// effective credential.
+	ProjectID string
 	// Dir is the repository's checkout, the turn's working directory.
 	Dir string
 	// ResumeID is the claude session to continue, "" to start one.
@@ -292,6 +295,7 @@ func (s *Service) turn(ctx context.Context, repo *domain.Repository, conv *conve
 		Input:       input,
 		Model:       domain.ArchitectureAssistantModel(s.Settings.Setting(domain.SettingModelArchitectureAssistant)),
 		Attribution: attribution + repo.ProjectID,
+		ProjectID:   repo.ProjectID,
 		Dir:         repo.RootDir,
 		ResumeID:    resume,
 	}, TurnCallbacks{

@@ -164,20 +164,33 @@ func Confined(inner OneShotter, prepare func() ([]string, llmkit.WrapFunc, error
 	if prepare == nil {
 		return inner
 	}
+	return ConfinedFor(inner, func(context.Context) (Prepared, error) {
+		env, wrap, err := prepare()
+		return Prepared{Env: env, Wrap: wrap}, err
+	})
+}
+
+// ConfinedFor is Confined with a preparation that knows the call's project
+// (ProjectFrom) and may name the config dir it runs with.
+func ConfinedFor(inner OneShotter, prepare func(context.Context) (Prepared, error)) OneShotter {
+	if prepare == nil {
+		return inner
+	}
 	return confined{inner: inner, prepare: prepare}
 }
 
 type confined struct {
 	inner   OneShotter
-	prepare func() ([]string, llmkit.WrapFunc, error)
+	prepare func(context.Context) (Prepared, error)
 }
 
 func (c confined) OneShot(ctx context.Context, req claude.OneShotRequest) (claude.OneShotResult, error) {
-	env, wrap, err := c.prepare()
+	p, err := c.prepare(ctx)
 	if err != nil {
 		return claude.OneShotResult{}, err
 	}
-	req.Env = append(slices.Clone(req.Env), env...)
-	req.Wrap = wrap
+	req.Env = append(slices.Clone(req.Env), p.Env...)
+	req.Wrap = p.Wrap
+	req.ConfigDir = p.ConfigDir
 	return c.inner.OneShot(ctx, req)
 }

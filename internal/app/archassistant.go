@@ -2,8 +2,8 @@ package app
 
 import (
 	"context"
+	"os"
 
-	"github.com/rfbatista/llmkit"
 	"github.com/rfbatista/llmkit/claude"
 	"go.uber.org/fx"
 
@@ -12,6 +12,7 @@ import (
 	"operators-mcp/internal/app/runtime"
 	"operators-mcp/internal/application/agentready"
 	"operators-mcp/internal/application/archassistant"
+	"operators-mcp/internal/application/keychainpath"
 	"operators-mcp/internal/application/planning"
 	"operators-mcp/internal/application/sandboxsettings"
 	"operators-mcp/internal/ports"
@@ -29,7 +30,7 @@ func newTurnStreamer(cfg Config, p oneShotParts) claudetext.TurnStreamer {
 	bin := oneShotBin(cfg, p)
 	one := claudetext.TurnStreamer(oneShotClaude(bin, p.Home.Path(), cfg.llmProxyURL()))
 	if p.Orch != nil && p.Credential != nil {
-		one = claudetext.ConfinedTurn(one, readOnlyTurnPrep(bin, p))
+		one = claudetext.ConfinedTurnFor(one, readOnlyTurnPrep(bin, p))
 	}
 	return claudetext.GatedTurn(one, requireConfinement(p.Ready.check(), turnConfined(p)))
 }
@@ -59,17 +60,20 @@ func requireConfinement(check func(context.Context) error, confined func() bool)
 	}
 }
 
-// readOnlyTurnPrep prepares each turn: the env entries of the agent credential
-// and, with the sandbox on, the deny-writes wrap for the turn's checkout.
-func readOnlyTurnPrep(bin string, p oneShotParts) func(dir string) ([]string, llmkit.WrapFunc, error) {
-	env := oneShotEnv(p.Credential.Env, p.Home.HasLogin, p.KC.Path())
+// readOnlyTurnPrep prepares each turn: the env entries of its effective
+// credential, the config dir when that is a project Claude home and, with the
+// sandbox on, the deny-writes wrap for the turn's checkout.
+func readOnlyTurnPrep(bin string, p oneShotParts) func(ctx context.Context, dir string) (claudetext.Prepared, error) {
+	src := p.oneShotSources()
 	allow := sandboxAllowlist(allowSources{ClaudeDirs: append(runtime.ClaudeInstallDirs(bin), p.KC.Path())})
-	return func(dir string) ([]string, llmkit.WrapFunc, error) {
-		wrap, err := p.Orch.Sandbox.ReadOnlyWrap(dir, allow)
+	return func(ctx context.Context, dir string) (claudetext.Prepared, error) {
+		project := claudetext.ProjectFrom(ctx)
+		wrap, err := p.Orch.Sandbox.ReadOnlyWrapFor(project, dir, allow)
 		if err != nil {
-			return nil, nil, err
+			return claudetext.Prepared{}, err
 		}
-		return env(), wrap, nil
+		configDir, env := src.effective(project)
+		return claudetext.Prepared{Env: append(env, keychainpath.Env(os.Environ(), src.ShimDir)...), Wrap: wrap, ConfigDir: configDir}, nil
 	}
 }
 
@@ -113,7 +117,7 @@ func (a assistantTurn) Run(ctx context.Context, c archassistant.TurnCall, cb arc
 		System: c.System, Input: c.Input, Model: c.Model, Attribution: c.Attribution,
 		ResumeID: c.ResumeID, Dir: c.Dir, Tools: assistantTools,
 	}
-	res, err := a.one.TurnStream(ctx, req, claude.TurnCallbacks{
+	res, err := a.one.TurnStream(claudetext.WithProject(ctx, c.ProjectID), req, claude.TurnCallbacks{
 		OnText: cb.OnText,
 		OnTool: func(name string, input []byte) {
 			cb.OnTool(name, claudetext.RelativeTo(c.Dir, claudetext.ToolTarget(name, input)))

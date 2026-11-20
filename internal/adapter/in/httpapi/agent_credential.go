@@ -5,6 +5,7 @@ import (
 
 	"github.com/labstack/echo/v4"
 
+	"operators-mcp/internal/domain"
 	"operators-mcp/internal/ports"
 )
 
@@ -60,6 +61,9 @@ func (h *Handler) projectCredential(c echo.Context, projectID string) (ports.Pro
 	if h.projectAgentCredential == nil {
 		return nil, errAgentCredentialOff
 	}
+	if projectID == "" {
+		return nil, &domain.StructuredError{Code: "INVALID_INPUT", Message: "project_id is required"}
+	}
 	if h.projects != nil {
 		if _, err := h.projects.GetProject(c.Request().Context(), projectID); err != nil {
 			return nil, err
@@ -68,17 +72,23 @@ func (h *Handler) projectCredential(c echo.Context, projectID string) (ports.Pro
 	return h.projectAgentCredential, nil
 }
 
+// answerProjectCredential answers the project's credential with its login and
+// the credential its next claude process runs with.
+func (h *Handler) answerProjectCredential(c echo.Context, svc ports.ProjectAgentCredentials, projectID string) error {
+	st, err := svc.DetailFor(c.Request().Context(), projectID)
+	if err != nil {
+		return err
+	}
+	return c.JSON(http.StatusOK, st)
+}
+
 func (h *Handler) handleGetProjectAgentCredential(c echo.Context) error {
 	id := c.QueryParam("project_id")
 	svc, err := h.projectCredential(c, id)
 	if err != nil {
 		return err
 	}
-	st, err := svc.StatusFor(id)
-	if err != nil {
-		return err
-	}
-	return c.JSON(http.StatusOK, st)
+	return h.answerProjectCredential(c, svc, id)
 }
 
 func (h *Handler) handleSetProjectAgentCredential(c echo.Context) error {
@@ -94,11 +104,10 @@ func (h *Handler) handleSetProjectAgentCredential(c echo.Context) error {
 	if err != nil {
 		return err
 	}
-	st, err := svc.SetFor(in.ProjectID, in.Kind, in.Value)
-	if err != nil {
+	if _, err := svc.SetFor(in.ProjectID, in.Kind, in.Value); err != nil {
 		return err
 	}
-	return c.JSON(http.StatusOK, st)
+	return h.answerProjectCredential(c, svc, in.ProjectID)
 }
 
 func (h *Handler) handleRemoveProjectAgentCredential(c echo.Context) error {
@@ -112,9 +121,8 @@ func (h *Handler) handleRemoveProjectAgentCredential(c echo.Context) error {
 	if err != nil {
 		return err
 	}
-	st, err := svc.RemoveFor(in.ProjectID)
-	if err != nil {
+	if _, err := svc.RemoveFor(in.ProjectID); err != nil {
 		return err
 	}
-	return c.JSON(http.StatusOK, st)
+	return h.answerProjectCredential(c, svc, in.ProjectID)
 }

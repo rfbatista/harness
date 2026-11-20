@@ -5,12 +5,21 @@
 // the status only.
 
 /**
- * @typedef {"oauth" | "api_key"} CredentialKind
+ * @typedef {"oauth" | "api_key" | "login"} CredentialKind  "login" is a project login (ADR 0102).
  *
  * @typedef {object} CredentialStatus
  * @property {boolean} set
  * @property {CredentialKind | ""} kind  "" when not set.
  * @property {string} updated  ISO time it was saved; meaningful only when set.
+ * @property {string} [account]  A login's account; "" otherwise.
+ * @property {string} [subscription]
+ * @property {EffectiveCredential} [effective]  What the project's next claude process runs with.
+ *
+ * @typedef {object} EffectiveCredential
+ * @property {"project" | "global_login" | "global_pasted" | "none"} source
+ * @property {CredentialKind | ""} kind
+ * @property {string} account  Filled for a login only.
+ * @property {string} subscription
  *
  * @typedef {object} AgentCredentialGateway
  * @property {() => Promise<CredentialStatus>} get
@@ -33,6 +42,8 @@
  * @property {(projectId: string, code: string) => Promise<OAuthState>} projectOAuthSubmit
  * @property {(projectId: string) => Promise<OAuthState>} projectOAuthCancel  Kills the process and clears the state.
  * @property {(projectId: string) => Promise<AuthStatus>} projectAuthStatus  `claude auth status` in the project Claude home.
+ * @property {(projectId: string) => Promise<AuthStatus>} projectSignOut
+ *           Runs `claude auth logout` in the project Claude home; running sessions are not stopped.
  * @property {() => Promise<AuthStatus>} authStatus  `claude auth status` as it is now.
  * @property {() => Promise<AuthStatus>} signOut  Runs `claude auth logout`, answers the status after.
  *

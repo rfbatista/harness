@@ -60,6 +60,16 @@ func (l Launcher) WithHome(h claudehome.Home) Launcher {
 	return l
 }
 
+// homeOf is the Claude home the spec's claude runs in, whose trust it needs: a
+// project Claude home when the spec names one, else the launcher's.
+func (l Launcher) homeOf(spec ports.AgentSpec) *claudehome.Home {
+	if spec.ConfigDir != "" {
+		h := claudehome.NewHome(spec.ConfigDir)
+		return &h
+	}
+	return l.home
+}
+
 func (Launcher) Kind() string { return Kind }
 
 // Launch starts spec on a terminal of size. The shell prepares the command
@@ -84,9 +94,9 @@ func (l Launcher) Launch(ctx context.Context, spec ports.AgentSpec, size ports.T
 			}
 		}
 	}
-	if l.home != nil && spec.Dir != "" {
-		if err := l.home.TrustFolder(spec.Dir); err != nil {
-			return nil, fmt.Errorf("claudecli: trust the worktree in the agent home: %w", err)
+	if home := l.homeOf(spec); home != nil && spec.Dir != "" {
+		if err := home.TrustFolder(spec.Dir); err != nil {
+			return nil, fmt.Errorf("claudecli: trust the worktree in the Claude home: %w", err)
 		}
 	}
 	cfg.Size = claude.TermSize{Cols: size.Cols, Rows: size.Rows}
@@ -155,6 +165,7 @@ func Config(spec ports.AgentSpec) (claude.InteractiveConfig, error) {
 		Dir:          spec.Dir,
 		ID:           spec.SessionID,
 		Env:          spec.Env,
+		ConfigDir:    spec.ConfigDir,
 		Conversation: spec.Conversation.ID,
 		Resume:       spec.Conversation.Resume,
 		Model:        spec.Model,

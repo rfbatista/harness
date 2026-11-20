@@ -873,6 +873,7 @@ func (s *Service) agentSpec(cfg llmkit.SessionConfig, conv ports.Conversation, p
 		AddDirs:      cfg.AddDirs,
 		Prompt:       prompt,
 		Env:          cfg.Env,
+		ConfigDir:    cfg.ConfigDir,
 		Conversation: conv,
 	}
 	switch cfg.Permission {

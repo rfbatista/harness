@@ -1,10 +1,12 @@
 package agentoauth
 
 import (
+	"context"
 	"os"
 	"path/filepath"
 	"sync"
 
+	"operators-mcp/internal/domain"
 	"operators-mcp/internal/ports"
 )
 
@@ -24,6 +26,9 @@ type ProjectsDeps struct {
 	// HasLoginIn says whether the home at dir holds a login. Nil: the login
 	// file claude keeps, .credentials.json.
 	HasLoginIn func(dir string) bool
+	// OnDone runs when a project's flow ends signed in: the login replaces the
+	// project's pasted credential. Nil: none.
+	OnDone func(projectID string)
 }
 
 // Projects is the sign-in flow of each project: the global machinery pointed
@@ -65,6 +70,9 @@ func (p *Projects) For(projectID string) ports.AgentSignIn {
 	if p.d.WrapFor != nil {
 		d.Wrap = p.d.WrapFor(projectID)
 	}
+	if p.d.OnDone != nil {
+		d.OnDone = func() { p.d.OnDone(projectID) }
+	}
 	d.Prepare = func() error {
 		if p.d.Seed != nil {
 			return p.d.Seed(d.ConfigDir)
@@ -90,6 +98,26 @@ func (p *Projects) Close() {
 	}
 	p.mu.Unlock()
 	for _, s := range flows {
+		s.Close()
+	}
+}
+
+// Subscribe removes a deleted project's flow and Claude home. No `claude auth
+// logout` runs: the login is not revoked, only forgotten (ADR 0102).
+func (p *Projects) Subscribe(sub ports.EventSubscriber) {
+	ports.On(sub, func(_ context.Context, ev domain.ProjectDeleted) error {
+		p.forget(ev.ProjectID)
+		return os.RemoveAll(p.Home(ev.ProjectID))
+	})
+}
+
+// forget ends the project's flow, if it has one, and drops it.
+func (p *Projects) forget(projectID string) {
+	p.mu.Lock()
+	s := p.flows[projectID]
+	delete(p.flows, projectID)
+	p.mu.Unlock()
+	if s != nil {
 		s.Close()
 	}
 }

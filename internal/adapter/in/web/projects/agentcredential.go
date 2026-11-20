@@ -8,19 +8,8 @@ import (
 )
 
 // StatusTimeout bounds the `claude auth status` the page waits for when it
-// paints the project login.
+// paints the project credential.
 const StatusTimeout = 5 * time.Second
-
-// AuthSeed is what `claude auth status` says about the project Claude home:
-// the account fields it prints, never a token or the login file's content.
-type AuthSeed struct {
-	SignedIn     bool   `json:"signed_in"`
-	Account      string `json:"account"`
-	Subscription string `json:"subscription"`
-	AuthMethod   string `json:"auth_method"`
-	// CheckedOK is false when the status could not be read in time.
-	CheckedOK bool `json:"checked_ok"`
-}
 
 // AgentCredentialSeed is what projectAgentCredential starts from: the
 // project's own credential in the body shape of GET
@@ -29,16 +18,13 @@ type AuthSeed struct {
 // a value.
 type AgentCredentialSeed struct {
 	ProjectID string `json:"project_id"`
-	ports.AgentCredentialStatus
+	ports.ProjectCredentialStatus
 	Global ports.AgentCredentialStatus `json:"global"`
 	// OAuth is the project's sign-in flow now; never holds the token or the
 	// code. CanSignIn says the flow can run: it is wired and a claude is
-	// installed. HasLogin says the project Claude home holds a login, whose
-	// account Auth gives.
+	// installed.
 	OAuth     ports.AgentOAuthState `json:"oauth"`
 	CanSignIn bool                  `json:"can_sign_in"`
-	HasLogin  bool                  `json:"has_login"`
-	Auth      AuthSeed              `json:"auth"`
 }
 
 // AgentCredentialView is the Agent credential section of a project's settings.
@@ -47,49 +33,41 @@ type AgentCredentialView struct {
 	Seed        AgentCredentialSeed
 }
 
-// NewAgentCredentialView reads the project's own credential and the global one;
-// nil when the project credentials are not served or could not be read (the
-// page then goes without the section).
-func NewAgentCredentialView(own ports.ProjectAgentCredentials, global ports.AgentCredential, projectID, projectName string) (*AgentCredentialView, error) {
+// NewAgentCredentialView reads the project's own credential, with its login and
+// the credential it effectively runs with (bounded by the credential service),
+// and the global one; nil when the project credentials are not served or could
+// not be read (the page then goes without the section).
+func NewAgentCredentialView(ctx context.Context, own ports.ProjectAgentCredentials, global ports.AgentCredential, projectID, projectName string) (*AgentCredentialView, error) {
 	if own == nil {
 		return nil, nil
 	}
-	st, err := own.StatusFor(projectID)
+	// The page waits only a short while for `claude auth status`; the
+	// credential endpoints give it longer.
+	ctx, cancel := context.WithTimeout(ctx, StatusTimeout)
+	defer cancel()
+	st, err := own.DetailFor(ctx, projectID)
 	if err != nil {
 		return nil, err
 	}
-	v := &AgentCredentialView{ProjectName: projectName, Seed: AgentCredentialSeed{ProjectID: projectID, AgentCredentialStatus: st}}
+	v := &AgentCredentialView{ProjectName: projectName, Seed: AgentCredentialSeed{ProjectID: projectID, ProjectCredentialStatus: st}}
 	if global != nil {
 		v.Seed.Global = global.Status()
 	}
 	return v, nil
 }
 
-// WithSignIn adds the project's sign-in flow and, when its Claude home holds a
-// login, who it is signed in as (bounded by StatusTimeout). Without the flow
-// the section offers no sign-in.
-func (v *AgentCredentialView) WithSignIn(ctx context.Context, signIn ports.ProjectAgentOAuth, bin ports.ManagedClaudeBin) {
+// WithSignIn adds the project's sign-in flow. Without the flow the section
+// offers no sign-in.
+func (v *AgentCredentialView) WithSignIn(signIn ports.ProjectAgentOAuth, bin ports.ManagedClaudeBin) {
 	if signIn == nil {
 		return
 	}
-	flow := signIn.For(v.Seed.ProjectID)
-	v.Seed.OAuth = flow.State()
+	v.Seed.OAuth = signIn.For(v.Seed.ProjectID).State()
 	v.Seed.CanSignIn = bin != nil && bin.Installed()
-	v.Seed.HasLogin = signIn.HasLogin(v.Seed.ProjectID)
-	if !v.Seed.HasLogin || !v.Seed.CanSignIn {
-		return
-	}
-	ctx, cancel := context.WithTimeout(ctx, StatusTimeout)
-	defer cancel()
-	st, err := flow.Status(ctx)
-	if err != nil {
-		return
-	}
-	v.Seed.Auth = AuthSeed{SignedIn: st.LoggedIn, Account: st.Email, Subscription: st.SubscriptionType, AuthMethod: st.AuthMethod, CheckedOK: true}
 }
 
-// SignedIn says the project is signed in, from the status read.
-func (v AgentCredentialView) SignedIn() bool { return v.Seed.Auth.SignedIn }
+// SignedIn says the project holds a project login.
+func (v AgentCredentialView) SignedIn() bool { return v.Seed.Kind == ports.AgentCredentialLogin }
 
 // SignInDisabled: no claude to run.
 func (v AgentCredentialView) SignInDisabled() bool { return !v.Seed.CanSignIn }
@@ -119,6 +97,8 @@ func (v AgentCredentialView) KindName() string {
 		return "OAuth token"
 	case ports.AgentCredentialAPIKey:
 		return "Anthropic API key"
+	case ports.AgentCredentialLogin:
+		return "Claude login"
 	}
 	return ""
 }
@@ -131,17 +111,33 @@ func (v AgentCredentialView) SavedDate() string {
 	return v.Seed.Updated.UTC().Format("2006-01-02")
 }
 
-// FallbackLine says what sessions of a project without its own credential use.
+// FallbackLine says what sessions of a project without a project credential
+// use instead.
 func (v AgentCredentialView) FallbackLine() string {
-	if v.Seed.Global.Set {
-		return "Sessions of this project use the global Agent credential, or a Claude login when the agents' home has one."
+	return FallbackText(v.Seed.Effective)
+}
+
+// FallbackText is the effective credential of a project without its own, in
+// the person's words.
+func FallbackText(e ports.EffectiveCredential) string {
+	switch e.Source {
+	case ports.EffectiveGlobalLogin:
+		if e.Account == "" {
+			return "Uses the global login."
+		}
+		return "Uses the global login: " + e.Account + ", " + e.Subscription
+	case ports.EffectiveGlobalPasted:
+		if e.Kind == ports.AgentCredentialAPIKey {
+			return "Uses the global pasted API key."
+		}
+		return "Uses the global pasted OAuth token."
 	}
-	return "Sessions of this project use a Claude login in the agents' home. No global Agent credential is set either."
+	return "No credential: agents cannot start."
 }
 
 // PasteLabel is the paste button: Replace when one is set.
 func (v AgentCredentialView) PasteLabel() string {
-	if v.Seed.Set {
+	if v.Seed.Set && !v.SignedIn() {
 		return "Replace with a pasted token or key"
 	}
 	return "Paste a token or key"

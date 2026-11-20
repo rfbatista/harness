@@ -42,20 +42,33 @@ func ConfinedStream(inner StreamOneShotter, prepare func() ([]string, llmkit.Wra
 	if prepare == nil {
 		return inner
 	}
+	return ConfinedStreamFor(inner, func(context.Context) (Prepared, error) {
+		env, wrap, err := prepare()
+		return Prepared{Env: env, Wrap: wrap}, err
+	})
+}
+
+// ConfinedStreamFor is ConfinedStream with a preparation that knows the call's
+// project (ProjectFrom) and may name the config dir it runs with.
+func ConfinedStreamFor(inner StreamOneShotter, prepare func(context.Context) (Prepared, error)) StreamOneShotter {
+	if prepare == nil {
+		return inner
+	}
 	return confinedStream{inner: inner, prepare: prepare}
 }
 
 type confinedStream struct {
 	inner   StreamOneShotter
-	prepare func() ([]string, llmkit.WrapFunc, error)
+	prepare func(context.Context) (Prepared, error)
 }
 
 func (c confinedStream) OneShotStream(ctx context.Context, req claude.OneShotRequest, onText func(string)) (claude.OneShotResult, error) {
-	env, wrap, err := c.prepare()
+	p, err := c.prepare(ctx)
 	if err != nil {
 		return claude.OneShotResult{}, err
 	}
-	req.Env = append(slices.Clone(req.Env), env...)
-	req.Wrap = wrap
+	req.Env = append(slices.Clone(req.Env), p.Env...)
+	req.Wrap = p.Wrap
+	req.ConfigDir = p.ConfigDir
 	return c.inner.OneShotStream(ctx, req, onText)
 }

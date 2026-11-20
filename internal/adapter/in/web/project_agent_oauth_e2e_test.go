@@ -11,6 +11,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/chromedp/chromedp"
 	"go.uber.org/fx"
@@ -27,6 +28,7 @@ import (
 	"operators-mcp/internal/application/agentoauth"
 	"operators-mcp/internal/application/orchestration"
 	"operators-mcp/internal/application/planning"
+	"operators-mcp/internal/domain"
 )
 
 // projectFakeClaude stands in for `claude auth login --claudeai` and `claude
@@ -41,7 +43,9 @@ if [ "$1 $2" = "auth status" ]; then
   echo '{"loggedIn": false}'
   exit 1
 fi
-if [ "$1 $2" = "auth logout" ]; then rm -f "$CLAUDE_CONFIG_DIR/.credentials.json"; exit 0; fi
+if [ "$1 $2" = "auth logout" ] && [ -f "$(dirname "$0")/logout-keeps" ]; then exit 0; fi
+if [ "$1 $2" = "auth logout" ] && [ -f "$(dirname "$0")/logout-fails" ]; then echo "logout refused" >&2; exit 1; fi
+if [ "$1 $2" = "auth logout" ]; then echo "$CLAUDE_CONFIG_DIR" >> "$(dirname "$0")/logouts"; rm -f "$CLAUDE_CONFIG_DIR/.credentials.json"; exit 0; fi
 [ "$1 $2 $3" = "auth login --claudeai" ] || exit 2
 echo $$ > "$CLAUDE_CONFIG_DIR/pid"
 echo "If the browser didn't open, visit: https://claude.ai/oauth/authorize?state=project-flow"
@@ -80,11 +84,22 @@ func apiAnswer(t *testing.T, method, url, body string) (int, string) {
 	return res.StatusCode, string(b)
 }
 
-// Sign in with Claude for one project, end to end against a fake `claude auth
-// login`: the flow keeps its login in the project Claude home, shows the
-// account it is signed in as, and runs independently of other projects' flows
-// and of the global one.
-func TestAProjectSignsInWithClaudeOnItsSettingsPage_EndToEnd(t *testing.T) {
+// projectSignInRig is the server of a project's Agent credential section with
+// two projects, a fake claude, and the global and project sign-ins beside the
+// credential service.
+type projectSignInRig struct {
+	srv         *httptest.Server
+	cred        *agentcredential.Service
+	projects    *agentoauth.Projects
+	alpha, beta *domain.Project
+	homes       string
+	globalHome  string
+	// script is the fake claude; a logout it is asked for is logged beside it.
+	script string
+}
+
+func newProjectSignInRig(t *testing.T) *projectSignInRig {
+	t.Helper()
 	ctx := context.Background()
 	dir := t.TempDir()
 	script := filepath.Join(dir, "claude")
@@ -114,29 +129,40 @@ func TestAProjectSignsInWithClaudeOnItsSettingsPage_EndToEnd(t *testing.T) {
 	}
 	cred := agentcredential.New(sqlite.NewAgentCredentialRepository(db), box, nil).WithProjects(sqlite.NewProjectAgentCredentialRepository(db))
 	bin := fakeBin{path: script, installed: true}
-	globalHome := filepath.Join(dir, "home")
-	global := agentoauth.New(agentoauth.Deps{Bin: bin, ConfigDir: globalHome, PTY: ptyunix.New()})
+	r := &projectSignInRig{cred: cred, script: script, homes: filepath.Join(dir, "claude-homes"), globalHome: filepath.Join(dir, "home")}
+	global := agentoauth.New(agentoauth.Deps{Bin: bin, ConfigDir: r.globalHome, PTY: ptyunix.New()})
 	t.Cleanup(global.Close)
-	homes := filepath.Join(dir, "claude-homes")
-	projects := agentoauth.NewProjects(agentoauth.ProjectsDeps{Deps: agentoauth.Deps{Bin: bin, PTY: ptyunix.New()}, HomesDir: homes})
-	t.Cleanup(projects.Close)
-
-	alpha, err := cat.Projects.CreateProject(ctx, "alpha", t.TempDir())
-	if err != nil {
+	r.projects = agentoauth.NewProjects(agentoauth.ProjectsDeps{Deps: agentoauth.Deps{Bin: bin, PTY: ptyunix.New()}, HomesDir: r.homes,
+		OnDone: func(projectID string) { _, _ = cred.RemoveFor(projectID) }})
+	t.Cleanup(r.projects.Close)
+	r.projects.Subscribe(cat.Bus)
+	cred.WithLogins(r.projects, global, func() bool {
+		_, err := os.Stat(filepath.Join(r.globalHome, ".credentials.json"))
+		return err == nil
+	})
+	if r.alpha, err = cat.Projects.CreateProject(ctx, "alpha", t.TempDir()); err != nil {
 		t.Fatal(err)
 	}
-	beta, err := cat.Projects.CreateProject(ctx, "beta", t.TempDir())
-	if err != nil {
+	if r.beta, err = cat.Projects.CreateProject(ctx, "beta", t.TempDir()); err != nil {
 		t.Fatal(err)
 	}
-
 	mux := http.NewServeMux()
 	mux.Handle("/api/", httpapi.NewRouter(httpapi.NewHandler(httpapi.Services{Projects: cat.Projects, ProjectFeed: cat.Projects, Agents: cat.Agents, Sessions: orch, Planning: plan, Settings: cat.Settings, AgentCredential: cred, ProjectAgentCredentials: cred,
-		AgentOAuth: global, AgentAuth: global, ProjectAgentOAuth: projects, ManagedClaudeBin: bin})))
+		AgentOAuth: global, AgentAuth: global, ProjectAgentOAuth: r.projects, ManagedClaudeBin: bin})))
 	mux.Handle("/", web.NewHandler(web.Deps{Projects: cat.Projects, Tasks: plan, Sessions: orch, Agents: cat.Agents, Repositories: cat.Projects, ProjectSummaries: cat.Projects, Settings: cat.Settings, AgentCredential: cred, ProjectAgentCredentials: cred,
-		AgentOAuth: global, AgentAuth: global, ProjectAgentOAuth: projects, ManagedClaudeBin: bin}, builtAssets(t), nil))
-	srv := httptest.NewServer(mux)
-	t.Cleanup(srv.Close)
+		AgentOAuth: global, AgentAuth: global, ProjectAgentOAuth: r.projects, ManagedClaudeBin: bin}, builtAssets(t), nil))
+	r.srv = httptest.NewServer(mux)
+	t.Cleanup(r.srv.Close)
+	return r
+}
+
+// Sign in with Claude for one project, end to end against a fake `claude auth
+// login`: the flow keeps its login in the project Claude home, shows the
+// account it is signed in as, and runs independently of other projects' flows
+// and of the global one.
+func TestAProjectSignsInWithClaudeOnItsSettingsPage_EndToEnd(t *testing.T) {
+	r := newProjectSignInRig(t)
+	srv, alpha, beta, homes, globalHome, projects := r.srv, r.alpha, r.beta, r.homes, r.globalHome, r.projects
 	b := newBrowser(t)
 
 	b.run("the Agent credential section offers Sign in with Claude beside Paste",
@@ -223,5 +249,246 @@ func TestAProjectSignsInWithClaudeOnItsSettingsPage_EndToEnd(t *testing.T) {
 	}
 	if e := b.jsErrors(); len(e) > 0 {
 		t.Errorf("JavaScript errors:\n%s", strings.Join(e, "\n"))
+	}
+}
+
+const (
+	poDialog = `document.querySelector('#project-credential-replace')`
+	poChip   = `document.querySelector('#project-credential-chip')?.innerText.trim()`
+)
+
+// poSignIn runs the project's sign-in with the right code, as a person does.
+func poSignIn() []chromedp.Action {
+	return []chromedp.Action{
+		waitUntil(`document.querySelector('#project-credential a[href*="oauth/authorize"]')?.checkVisibility() === true`),
+		poTypeCode("good-code"),
+		chromedp.Evaluate(poClick+`('Save code')`, nil),
+		waitUntil(`document.querySelector('#project-credential [role=group]')?.checkVisibility() !== true`),
+	}
+}
+
+// A project holds one project credential at most, and says what it falls back
+// to while it holds none; signing out asks first.
+func TestAProjectHoldsOneCredentialAtATimeAndNamesTheOneItFallsBackTo_EndToEnd(t *testing.T) {
+	r := newProjectSignInRig(t)
+	b := newBrowser(t)
+	page := r.srv.URL + "/projects/" + r.alpha.ID + "/settings"
+
+	b.run("with nothing set anywhere the section says agents cannot start",
+		chromedp.Navigate(page),
+		waitUntil(`!document.querySelector('#project-credential [data-ssr]')`),
+		waitUntil(poText+`.includes('No credential: agents cannot start')`),
+	)
+	if _, err := r.cred.Set("oauth", "sk-ant-oat01-global-secret"); err != nil {
+		t.Fatal(err)
+	}
+	b.run("a global pasted credential is named",
+		chromedp.Reload(),
+		waitUntil(poText+`.includes('Uses the global pasted OAuth token')`),
+	)
+	if err := os.MkdirAll(r.globalHome, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(r.globalHome, ".credentials.json"), []byte(`{}`), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	b.run("the global login comes first, with its account and subscription",
+		chromedp.Reload(),
+		waitUntil(poText+`.includes('Uses the global login: ana@example.com, max')`),
+	)
+
+	b.run("a pasted API key becomes the project credential, and the fallback line goes",
+		chromedp.Evaluate(poClick+`('Paste a token or key')`, nil),
+		waitUntil(`document.querySelector('#project-credential-value')?.checkVisibility() === true`),
+		pcPaste("sk-ant-api03-alpha-secret"),
+		chromedp.Evaluate(pcClick+`('Save credential')`, nil),
+		waitUntil(poChip+` === 'Own credential'`),
+		waitUntil(`!`+poText+`.includes('Uses the global')`),
+	)
+	b.run("signing in over it asks first; keeping it starts nothing",
+		chromedp.Evaluate(poClick+`('Sign in with Claude')`, nil),
+		waitUntil(poDialog+`?.checkVisibility() === true`),
+		waitUntil(poDialog+`.innerText.includes('replaces the pasted credential')`),
+		chromedp.Evaluate(poClick+`('Keep it')`, nil),
+		waitUntil(poDialog+`?.checkVisibility() !== true`),
+	)
+	if st, _ := r.cred.StatusFor(r.alpha.ID); !st.Set || st.Kind != "api_key" {
+		t.Errorf("declining changed the pasted credential: %+v", st)
+	}
+	if _, got := apiBody(t, r.srv.URL+"/api/get_project_agent_oauth?project_id="+r.alpha.ID); !strings.Contains(got, `"idle"`) {
+		t.Errorf("declining started a flow: %s", got)
+	}
+	b.run("confirming signs in, and the login replaces the pasted credential",
+		chromedp.Evaluate(poClick+`('Sign in with Claude')`, nil),
+		waitUntil(poDialog+`?.checkVisibility() === true`),
+		chromedp.Evaluate(poClick+`('Sign in and replace')`, nil),
+	)
+	b.run("the right code finishes it", poSignIn()...)
+	b.run("the section shows the login only",
+		waitUntil(poChip+` === 'Signed in'`),
+		waitUntil(poText+`.includes('ana@example.com')`),
+		waitUntil(`!`+poText+`.includes('Anthropic API key')`),
+	)
+	if st, _ := r.cred.StatusFor(r.alpha.ID); st.Set {
+		t.Errorf("the pasted credential outlived the sign-in: %+v", st)
+	}
+	_, body := apiBody(t, r.srv.URL+"/api/get_project_agent_credential?project_id="+r.alpha.ID)
+	for _, want := range []string{`"kind":"login"`, `"account":"ana@example.com"`, `"source":"project"`} {
+		if !strings.Contains(body, want) {
+			t.Errorf("status %s lacks %s", body, want)
+		}
+	}
+	if strings.Contains(body, "browsersecret") {
+		t.Errorf("status carries login content: %s", body)
+	}
+
+	b.run("sign out asks first and says running sessions lose access",
+		chromedp.Evaluate(poClick+`('Sign out')`, nil),
+		waitUntil(poDialog+`?.checkVisibility() === true`),
+		waitUntil(poDialog+`.innerText.includes('sessions lose access when claude next refreshes')`),
+		chromedp.Evaluate(poClick+`('Keep it')`, nil),
+		waitUntil(poChip+` === 'Signed in'`),
+	)
+	if !r.projects.HasLogin(r.alpha.ID) {
+		t.Error("declining the sign-out signed the project out")
+	}
+	b.run("confirming signs the project out: it falls back to the global login again",
+		chromedp.Evaluate(poClick+`('Sign out')`, nil),
+		waitUntil(poDialog+`?.checkVisibility() === true`),
+		chromedp.Evaluate(poClick+`('Sign out of Claude')`, nil),
+		waitUntil(poChip+` === 'Global'`),
+		waitUntil(poText+`.includes('Uses the global login: ana@example.com, max')`),
+	)
+	if r.projects.HasLogin(r.alpha.ID) {
+		t.Error("the project Claude home kept its login after the sign-out")
+	}
+
+	b.run("sign in again, then pasting over the login asks first",
+		chromedp.Evaluate(poClick+`('Sign in with Claude')`, nil),
+	)
+	b.run("", poSignIn()...)
+	b.run("pasting over the login",
+		waitUntil(poChip+` === 'Signed in'`),
+		chromedp.Evaluate(poClick+`('Paste a token or key')`, nil),
+		waitUntil(poDialog+`?.checkVisibility() === true`),
+		waitUntil(poDialog+`.innerText.includes('signs this project out')`),
+		chromedp.Evaluate(poClick+`('Keep it')`, nil),
+		waitUntil(poDialog+`?.checkVisibility() !== true`),
+	)
+	if !r.projects.HasLogin(r.alpha.ID) {
+		t.Error("declining the paste signed the project out")
+	}
+	b.run("confirming signs the login out and saves the pasted credential",
+		chromedp.Evaluate(poClick+`('Paste a token or key')`, nil),
+		waitUntil(poDialog+`?.checkVisibility() === true`),
+		chromedp.Evaluate(poClick+`('Replace login')`, nil),
+		waitUntil(`document.querySelector('#project-credential-value')?.checkVisibility() === true`),
+		pcPaste("sk-ant-api03-second-secret"),
+		chromedp.Evaluate(pcClick+`('Save credential')`, nil),
+		waitUntil(poChip+` === 'Own credential'`),
+		waitUntil(poText+`.includes('Anthropic API key')`),
+	)
+	if r.projects.HasLogin(r.alpha.ID) {
+		t.Error("the login outlived the pasted credential")
+	}
+	if st, _ := r.cred.StatusFor(r.alpha.ID); !st.Set || st.Kind != "api_key" {
+		t.Errorf("the pasted credential was not kept: %+v", st)
+	}
+	if e := b.jsErrors(); len(e) > 0 {
+		t.Errorf("JavaScript errors:\n%s", strings.Join(e, "\n"))
+	}
+}
+
+// apiBody is the body of a GET /api call.
+func apiBody(t *testing.T, url string) (int, string) {
+	t.Helper()
+	return apiAnswer(t, http.MethodGet, url, "")
+}
+
+// signInThroughTheAPI signs a project in with the fake claude's good code.
+func signInThroughTheAPI(t *testing.T, srv *httptest.Server, projectID string) {
+	t.Helper()
+	body := `{"project_id":"` + projectID + `"`
+	if code, out := apiAnswer(t, http.MethodPost, srv.URL+"/api/start_project_agent_oauth", body+`}`); code != http.StatusOK {
+		t.Fatalf("start: %d %s", code, out)
+	}
+	for end := time.Now().Add(5 * time.Second); time.Now().Before(end); time.Sleep(20 * time.Millisecond) {
+		if _, out := apiBody(t, srv.URL+"/api/get_project_agent_oauth?project_id="+projectID); strings.Contains(out, "waiting_for_code") {
+			break
+		}
+	}
+	if code, out := apiAnswer(t, http.MethodPost, srv.URL+"/api/submit_project_agent_oauth_code", body+`,"code":"good-code"}`); code != http.StatusOK {
+		t.Fatalf("submit: %d %s", code, out)
+	}
+	for end := time.Now().Add(5 * time.Second); time.Now().Before(end); time.Sleep(20 * time.Millisecond) {
+		if _, out := apiBody(t, srv.URL+"/api/get_project_agent_oauth?project_id="+projectID); strings.Contains(out, `"idle"`) || strings.Contains(out, `"done"`) {
+			return
+		}
+	}
+	t.Fatalf("the sign-in of %s did not finish", projectID)
+}
+
+// Deleting a project removes its project Claude home, and no other's. It does
+// not run `claude auth logout`: the login is not revoked.
+func TestDeletingAProjectRemovesItsClaudeHome_EndToEnd(t *testing.T) {
+	r := newProjectSignInRig(t)
+	signInThroughTheAPI(t, r.srv, r.alpha.ID)
+	signInThroughTheAPI(t, r.srv, r.beta.ID)
+	if !r.projects.HasLogin(r.alpha.ID) || !r.projects.HasLogin(r.beta.ID) {
+		t.Fatal("both projects should hold a login before the delete")
+	}
+
+	if code, out := apiAnswer(t, http.MethodPost, r.srv.URL+"/api/delete_project", `{"project_id":"`+r.alpha.ID+`"}`); code != http.StatusNoContent {
+		t.Fatalf("delete: %d %s", code, out)
+	}
+	if _, err := os.Stat(filepath.Join(r.homes, r.alpha.ID)); !os.IsNotExist(err) {
+		t.Errorf("the deleted project's Claude home is still there: %v", err)
+	}
+	if !r.projects.HasLogin(r.beta.ID) {
+		t.Error("another project's login went with it")
+	}
+	if _, err := os.Stat(filepath.Join(filepath.Dir(r.script), "logouts")); err == nil {
+		t.Error("deleting the project ran claude auth logout")
+	}
+}
+
+// A logout claude refuses is AGENT_SIGN_OUT_FAILED, and a pasted credential
+// is not saved over a login that could not be signed out.
+func TestAFailedLogoutKeepsTheProjectLoginAndSavesNothing_EndToEnd(t *testing.T) {
+	r := newProjectSignInRig(t)
+	signInThroughTheAPI(t, r.srv, r.alpha.ID)
+	if err := os.WriteFile(filepath.Join(filepath.Dir(r.script), "logout-fails"), nil, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	code, body := apiAnswer(t, http.MethodPost, r.srv.URL+"/api/sign_out_project_agent_auth", `{"project_id":"`+r.alpha.ID+`"}`)
+	if code < 400 || !strings.Contains(body, "AGENT_SIGN_OUT_FAILED") {
+		t.Errorf("sign-out answered %d %s, want AGENT_SIGN_OUT_FAILED", code, body)
+	}
+	code, body = apiAnswer(t, http.MethodPost, r.srv.URL+"/api/set_project_agent_credential", `{"project_id":"`+r.alpha.ID+`","kind":"api_key","value":"sk-ant-api03-x"}`)
+	if code < 400 || !strings.Contains(body, "AGENT_SIGN_OUT_FAILED") {
+		t.Errorf("paste over a login that stays answered %d %s", code, body)
+	}
+	if st, _ := r.cred.StatusFor(r.alpha.ID); st.Set {
+		t.Errorf("a pasted credential was saved beside the login: %+v", st)
+	}
+	if !r.projects.HasLogin(r.alpha.ID) {
+		t.Error("the login went despite the failed logout")
+	}
+}
+
+// claude's exit code is not trusted alone: a logout that exits 0 and leaves the
+// login is a failed sign-out, at the endpoint too.
+func TestALogoutThatLeavesTheLoginIsAFailedSignOutAtTheEndpoint_EndToEnd(t *testing.T) {
+	r := newProjectSignInRig(t)
+	signInThroughTheAPI(t, r.srv, r.alpha.ID)
+	if err := os.WriteFile(filepath.Join(filepath.Dir(r.script), "logout-keeps"), nil, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	code, body := apiAnswer(t, http.MethodPost, r.srv.URL+"/api/sign_out_project_agent_auth", `{"project_id":"`+r.alpha.ID+`"}`)
+	if code < 400 || !strings.Contains(body, "AGENT_SIGN_OUT_FAILED") {
+		t.Errorf("sign-out answered %d %s, want AGENT_SIGN_OUT_FAILED", code, body)
+	}
+	if !r.projects.HasLogin(r.alpha.ID) {
+		t.Error("the login went despite the logout leaving it")
 	}
 }

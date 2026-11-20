@@ -60,3 +60,21 @@ func TestSandbox_AProjectWithoutAProjectClaudeHomeGetsTheSamePolicyAsToday(t *te
 		t.Errorf("policy changed without a project Claude home: before %+v after %+v", before, after)
 	}
 }
+
+func TestSandbox_AProjectThatSignedOutGetsThePolicyItGotBefore(t *testing.T) {
+	w := newSandboxWorld(t)
+	root := w.projectHomes(t, "p1")
+	login := false
+	w.svc.Sandbox.ProjectHasLogin = func(string) bool { return login }
+	_, without := w.start(t, "implement")
+	if slices.Contains(without.Writable, filepath.Join(root, "p1")) {
+		t.Errorf("a project without a login got its Claude home: %v", without.Writable)
+	}
+	login = true
+	w = newSandboxWorld(t)
+	root = w.projectHomes(t, "p1")
+	w.svc.Sandbox.ProjectHasLogin = func(string) bool { return true }
+	if _, with := w.start(t, "implement"); !slices.Contains(with.Writable, filepath.Join(root, "p1")) {
+		t.Errorf("a project with a login lost its Claude home: %v", with.Writable)
+	}
+}

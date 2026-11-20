@@ -96,3 +96,28 @@ func (h *Handler) handleGetProjectAgentAuthStatus(c echo.Context) error {
 	}
 	return c.JSON(http.StatusOK, authAnswerOf(c, flow))
 }
+
+// handleSignOutProjectAgentAuth runs `claude auth logout` in the project
+// Claude home and answers the status read afterwards. Running sessions are
+// not stopped.
+func (h *Handler) handleSignOutProjectAgentAuth(c echo.Context) error {
+	var in struct {
+		ProjectID string `json:"project_id"`
+	}
+	if err := bindJSON(c, &in); err != nil {
+		return err
+	}
+	flow, err := h.projectSignIn(c, in.ProjectID)
+	if err != nil {
+		return err
+	}
+	if err := flow.Logout(c.Request().Context()); err != nil {
+		return err
+	}
+	// claude's exit code is not trusted alone: a login that is still there is
+	// a failed sign-out.
+	if h.projectAgentOAuth.HasLogin(in.ProjectID) {
+		return &domain.StructuredError{Code: "AGENT_SIGN_OUT_FAILED", Message: "claude signed out but the project's login is still there."}
+	}
+	return c.JSON(http.StatusOK, authAnswerOf(c, flow))
+}
