@@ -5,6 +5,7 @@ import (
 
 	"github.com/labstack/echo/v4"
 
+	"operators-mcp/internal/domain"
 	"operators-mcp/internal/ports"
 )
 
@@ -59,6 +60,9 @@ func (h *Handler) handleRemoveAgentCredential(c echo.Context) error {
 func (h *Handler) projectCredential(c echo.Context, projectID string) (ports.ProjectAgentCredentials, error) {
 	if h.projectAgentCredential == nil {
 		return nil, errAgentCredentialOff
+	}
+	if projectID == "" {
+		return nil, &domain.StructuredError{Code: "INVALID_INPUT", Message: "project_id is required"}
 	}
 	if h.projects != nil {
 		if _, err := h.projects.GetProject(c.Request().Context(), projectID); err != nil {

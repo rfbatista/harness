@@ -65,8 +65,9 @@ func (h Home) EnsureSharing(agent Home) error {
 }
 
 // shareFile links name in this home to the agent home's, when the agent home
-// has it. A file this home already holds moves to the agent home when that has
-// none; when both have one this home's stays.
+// has it. A regular file this home holds is claude's latest write of it (an
+// atomic rewrite replaces the link with a file): it moves onto the agent
+// home's, and the link comes back, so sharing never silently stops.
 func (h Home) shareFile(agent Home, name string) error {
 	target := filepath.Join(agent.dir, name)
 	link := filepath.Join(h.dir, name)
@@ -79,9 +80,6 @@ func (h Home) shareFile(agent Home, name string) error {
 			return err
 		}
 	} else if err == nil {
-		if _, err := os.Lstat(target); err == nil {
-			return nil
-		}
 		if err := os.Rename(link, target); err != nil {
 			return err
 		}

@@ -93,3 +93,22 @@ test("removing asks first, and keeping it changes nothing", async () => {
   await flush();
   assert.deepEqual([instance.isSet, gateway.calls], [false, [["remove", "p1"]]]);
 });
+
+test("a save that fails after the sign-out shows what is true now: the login is gone", async () => {
+  let status = { set: true, kind: "login", updated: "", account: "ana@example.com", subscription: "max", effective: { source: "project", kind: "login", account: "ana@example.com", subscription: "max" } };
+  const gateway = {
+    getForProject: async () => status,
+    setForProject: async () => {
+      status = { set: false, kind: "", updated: "", effective: { source: "none", kind: "", account: "", subscription: "" } };
+      throw new StructuredError("AGENT_CREDENTIAL_NOT_SAVED", "The project was signed out of Claude, but the pasted credential could not be saved: disk full");
+    },
+  };
+  const { instance, field } = setup({ gateway, seed: { project_id: "p1", ...status, can_sign_in: true } });
+  assert.equal(instance.signedIn, true);
+  instance.startPaste();
+  field.value = "sk-ant-api03-x";
+  await instance.save();
+  await flush();
+  assert.deepEqual([instance.signedIn, instance.isSet, instance.chipText, instance.fallbackLine], [false, false, "Global", "No credential: agents cannot start."]);
+  assert.ok(/signed out/.test(instance.error.message), instance.error.message);
+});

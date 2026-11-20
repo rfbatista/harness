@@ -2,9 +2,14 @@ package projects
 
 import (
 	"context"
+	"time"
 
 	"operators-mcp/internal/ports"
 )
+
+// StatusTimeout bounds the `claude auth status` the page waits for when it
+// paints the project credential.
+const StatusTimeout = 5 * time.Second
 
 // AgentCredentialSeed is what projectAgentCredential starts from: the
 // project's own credential in the body shape of GET
@@ -36,6 +41,10 @@ func NewAgentCredentialView(ctx context.Context, own ports.ProjectAgentCredentia
 	if own == nil {
 		return nil, nil
 	}
+	// The page waits only a short while for `claude auth status`; the
+	// credential endpoints give it longer.
+	ctx, cancel := context.WithTimeout(ctx, StatusTimeout)
+	defer cancel()
 	st, err := own.DetailFor(ctx, projectID)
 	if err != nil {
 		return nil, err

@@ -114,5 +114,10 @@ func (h *Handler) handleSignOutProjectAgentAuth(c echo.Context) error {
 	if err := flow.Logout(c.Request().Context()); err != nil {
 		return err
 	}
+	// claude's exit code is not trusted alone: a login that is still there is
+	// a failed sign-out.
+	if h.projectAgentOAuth.HasLogin(in.ProjectID) {
+		return &domain.StructuredError{Code: "AGENT_SIGN_OUT_FAILED", Message: "claude signed out but the project's login is still there."}
+	}
 	return c.JSON(http.StatusOK, authAnswerOf(c, flow))
 }

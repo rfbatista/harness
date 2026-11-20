@@ -179,12 +179,17 @@ func (s *Service) SetFor(projectID, kind, value string) (ports.AgentCredentialSt
 	}
 	// A project never holds a login and a pasted credential: the login is
 	// signed out of its home first, and a failed sign-out saves nothing.
-	if err := s.signOutLogin(projectID); err != nil {
+	signedOut, err := s.signOutLogin(projectID)
+	if err != nil {
 		return ports.AgentCredentialStatus{}, err
 	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	if err := st.PutFor(projectID, rec); err != nil {
+		if s.logins != nil && signedOut {
+			return ports.AgentCredentialStatus{}, &domain.StructuredError{Code: "AGENT_CREDENTIAL_NOT_SAVED",
+				Message: "The project was signed out of Claude, but the pasted credential could not be saved: " + err.Error()}
+		}
 		return ports.AgentCredentialStatus{}, err
 	}
 	return ports.AgentCredentialStatus{Set: true, Kind: rec.Kind, Updated: rec.Updated}, nil
@@ -194,14 +199,21 @@ func (s *Service) SetFor(projectID, kind, value string) (ports.AgentCredentialSt
 const loginTimeout = 30 * time.Second
 
 // signOutLogin runs `claude auth logout` in the project's Claude home when it
-// holds a login.
-func (s *Service) signOutLogin(projectID string) error {
+// holds a login, and answers whether it did. A logout that exits cleanly and
+// leaves the login is a failed sign-out: the exit code is not trusted alone.
+func (s *Service) signOutLogin(projectID string) (bool, error) {
 	if s.logins == nil || !s.logins.HasLogin(projectID) {
-		return nil
+		return false, nil
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), loginTimeout)
 	defer cancel()
-	return s.logins.For(projectID).Logout(ctx)
+	if err := s.logins.For(projectID).Logout(ctx); err != nil {
+		return false, err
+	}
+	if s.logins.HasLogin(projectID) {
+		return false, &domain.StructuredError{Code: "AGENT_SIGN_OUT_FAILED", Message: "claude signed out but the project's login is still there."}
+	}
+	return true, nil
 }
 
 // DetailFor is the project's credential: a login when its Claude home holds

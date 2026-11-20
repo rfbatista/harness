@@ -114,3 +114,32 @@ func TestTheAgentHomesSettingsAndPromptHistoryAreSharedOnceItHasThem(t *testing.
 		t.Errorf("the agent home's history = %q", b)
 	}
 }
+
+func TestASharedFileClaudeReplacedWithARegularFileIsLinkedAgainAtTheNextStart(t *testing.T) {
+	agent := NewHome(t.TempDir())
+	project := NewHome(t.TempDir())
+	if err := os.WriteFile(filepath.Join(agent.Path(), "settings.json"), []byte(`{"a":1}`), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := project.EnsureSharing(agent); err != nil {
+		t.Fatal(err)
+	}
+	// An atomic rewrite: a temp file renamed over the link.
+	link := filepath.Join(project.Path(), "settings.json")
+	tmp := link + ".tmp"
+	if err := os.WriteFile(tmp, []byte(`{"a":2}`), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Rename(tmp, link); err != nil {
+		t.Fatal(err)
+	}
+	if err := project.EnsureSharing(agent); err != nil {
+		t.Fatal(err)
+	}
+	if fi, err := os.Lstat(link); err != nil || fi.Mode()&os.ModeSymlink == 0 {
+		t.Fatalf("settings.json is not a link again: %v %v", fi, err)
+	}
+	if b, _ := os.ReadFile(filepath.Join(agent.Path(), "settings.json")); string(b) != `{"a":2}` {
+		t.Errorf("the agent home's settings = %q, want claude's latest write", b)
+	}
+}

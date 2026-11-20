@@ -358,8 +358,18 @@ export const projectAgentCredential = ({ gateway }) => () => ({
       this.$nextTick(() => this.$refs.paste?.focus());
     } catch (err) {
       this.error = describeError(err);
+      // The save may have signed the project out first: show what is true now.
+      await this.reread();
     } finally {
       this.busy = false;
+    }
+  },
+  /** Reads the project's credential again, as it is on the server now. */
+  async reread() {
+    try {
+      this.apply(await gateway.getForProject(this.projectId));
+    } catch {
+      // The error already shown stands.
     }
   },
   clearValue() {

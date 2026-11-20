@@ -81,12 +81,10 @@ func TestTheProjectSignInEndpointsAnswerTheContractsErrorCodes_EndToEnd(t *testi
 	}
 }
 
-// The contract: an empty code is INVALID_INPUT, whether or not a flow waits for
-// one. With no flow it answers AGENT_OAUTH_NOT_WAITING today, as the global
-// endpoint does. The same holds for an empty project_id on the three credential
-// endpoints, which the port documents too ("An empty project id is refused
-// with INVALID_INPUT"): they answer PROJECT_NOT_FOUND, as on main. Both are
-// contract gaps the change left, not regressions.
+// The contract: an empty code while a flow waits is INVALID_INPUT; with no
+// flow waiting it is AGENT_OAUTH_NOT_WAITING, which is checked first. An empty
+// project_id is INVALID_INPUT on every endpoint, the three credential ones
+// included.
 func TestAnEmptyCodeWhileAFlowWaitsIsInvalidInput_EndToEnd(t *testing.T) {
 	r := newProjectSignInRig(t)
 	r.post(t, "start_project_agent_oauth", `{"project_id":"`+r.alpha.ID+`"}`)
@@ -101,11 +99,13 @@ func TestAnEmptyCodeWhileAFlowWaitsIsInvalidInput_EndToEnd(t *testing.T) {
 	r.post(t, "cancel_project_agent_oauth", `{"project_id":"`+r.alpha.ID+`"}`)
 }
 
-func TestAnEmptyCodeWithNoFlowIsInvalidInput_EndToEnd(t *testing.T) {
+// With no flow waiting, AGENT_OAUTH_NOT_WAITING is checked before the empty
+// code, as on the global endpoint (the contract as amended).
+func TestAnEmptyCodeWithNoFlowIsNotWaiting_EndToEnd(t *testing.T) {
 	r := newProjectSignInRig(t)
 	code, body := r.post(t, "submit_project_agent_oauth_code", `{"project_id":"`+r.alpha.ID+`","code":""}`)
-	if code < 400 || !strings.Contains(body, "INVALID_INPUT") {
-		t.Errorf("an empty code answered %d %s, want INVALID_INPUT", code, body)
+	if code < 400 || !strings.Contains(body, "AGENT_OAUTH_NOT_WAITING") {
+		t.Errorf("an empty code with no flow answered %d %s, want AGENT_OAUTH_NOT_WAITING", code, body)
 	}
 }
 
