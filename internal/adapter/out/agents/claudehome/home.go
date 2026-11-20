@@ -43,16 +43,62 @@ func (h Home) Ensure() error {
 // transcripts claude files while it runs with this home as its config dir land
 // where History, the transcript reader and resume read them, and a session
 // either home started resumes under the other. What a projects/ folder in this
-// home already held moves to the agent home. It is repeatable.
+// home already held moves to the agent home. The user settings and the prompt
+// history (settings.json, history.jsonl) are shared the same way once the agent
+// home has them, so the project home holds the login and the account state
+// only; .claude.json (onboarding seed and folder trust) stays per home. It is
+// repeatable, and cheap enough to run at each start: a file the agent home
+// gained since is linked then.
 func (h Home) EnsureSharing(agent Home) error {
 	if err := h.Ensure(); err != nil {
 		return err
 	}
-	shared := filepath.Join(agent.dir, "projects")
+	if err := h.shareDir(agent, "projects"); err != nil {
+		return err
+	}
+	for _, name := range []string{"settings.json", "history.jsonl"} {
+		if err := h.shareFile(agent, name); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// shareFile links name in this home to the agent home's, when the agent home
+// has it. A file this home already holds moves to the agent home when that has
+// none; when both have one this home's stays.
+func (h Home) shareFile(agent Home, name string) error {
+	target := filepath.Join(agent.dir, name)
+	link := filepath.Join(h.dir, name)
+	fi, err := os.Lstat(link)
+	if err == nil && fi.Mode()&os.ModeSymlink != 0 {
+		if to, err := os.Readlink(link); err == nil && to == target {
+			return nil
+		}
+		if err := os.Remove(link); err != nil {
+			return err
+		}
+	} else if err == nil {
+		if _, err := os.Lstat(target); err == nil {
+			return nil
+		}
+		if err := os.Rename(link, target); err != nil {
+			return err
+		}
+	}
+	if _, err := os.Lstat(target); err != nil {
+		return nil
+	}
+	return os.Symlink(target, link)
+}
+
+// shareDir makes name, a folder of this home, a link to the agent home's.
+func (h Home) shareDir(agent Home, name string) error {
+	shared := filepath.Join(agent.dir, name)
 	if err := os.MkdirAll(shared, 0o700); err != nil {
 		return err
 	}
-	link := filepath.Join(h.dir, "projects")
+	link := filepath.Join(h.dir, name)
 	fi, err := os.Lstat(link)
 	switch {
 	case errors.Is(err, fs.ErrNotExist):

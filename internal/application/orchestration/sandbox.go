@@ -41,6 +41,10 @@ type Sandbox struct {
 	// write its own project's home; the folder itself is hidden, so no other
 	// project's login is reachable. Empty: none.
 	ProjectHomesRoot string
+	// ProjectHasLogin says whether a project holds a login of its own: only
+	// then does a session of it get its project Claude home, so a project that
+	// signed out gets the policy it got before. Nil: any home that exists.
+	ProjectHasLogin func(projectID string) bool
 	// UserHome is the person's home directory and ConfigHome their
 	// XDG_CONFIG_HOME (empty when unset): their git config is read-only to
 	// every session, so git inside the sandbox sees their identity and
@@ -103,7 +107,7 @@ func (b *Sandbox) projectHomes(projectID string) (own, root string) {
 	if projectID == "" {
 		return "", root
 	}
-	if _, err := os.Stat(own); err != nil {
+	if _, err := os.Stat(own); err != nil || (b.ProjectHasLogin != nil && !b.ProjectHasLogin(projectID)) {
 		own = ""
 	}
 	return own, root

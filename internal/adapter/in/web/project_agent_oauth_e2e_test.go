@@ -43,6 +43,7 @@ if [ "$1 $2" = "auth status" ]; then
   echo '{"loggedIn": false}'
   exit 1
 fi
+if [ "$1 $2" = "auth logout" ] && [ -f "$(dirname "$0")/logout-fails" ]; then echo "logout refused" >&2; exit 1; fi
 if [ "$1 $2" = "auth logout" ]; then echo "$CLAUDE_CONFIG_DIR" >> "$(dirname "$0")/logouts"; rm -f "$CLAUDE_CONFIG_DIR/.credentials.json"; exit 0; fi
 [ "$1 $2 $3" = "auth login --claudeai" ] || exit 2
 echo $$ > "$CLAUDE_CONFIG_DIR/pid"
@@ -447,5 +448,29 @@ func TestDeletingAProjectRemovesItsClaudeHome_EndToEnd(t *testing.T) {
 	}
 	if _, err := os.Stat(filepath.Join(filepath.Dir(r.script), "logouts")); err == nil {
 		t.Error("deleting the project ran claude auth logout")
+	}
+}
+
+// A logout claude refuses is AGENT_SIGN_OUT_FAILED, and a pasted credential
+// is not saved over a login that could not be signed out.
+func TestAFailedLogoutKeepsTheProjectLoginAndSavesNothing_EndToEnd(t *testing.T) {
+	r := newProjectSignInRig(t)
+	signInThroughTheAPI(t, r.srv, r.alpha.ID)
+	if err := os.WriteFile(filepath.Join(filepath.Dir(r.script), "logout-fails"), nil, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	code, body := apiAnswer(t, http.MethodPost, r.srv.URL+"/api/sign_out_project_agent_auth", `{"project_id":"`+r.alpha.ID+`"}`)
+	if code < 400 || !strings.Contains(body, "AGENT_SIGN_OUT_FAILED") {
+		t.Errorf("sign-out answered %d %s, want AGENT_SIGN_OUT_FAILED", code, body)
+	}
+	code, body = apiAnswer(t, http.MethodPost, r.srv.URL+"/api/set_project_agent_credential", `{"project_id":"`+r.alpha.ID+`","kind":"api_key","value":"sk-ant-api03-x"}`)
+	if code < 400 || !strings.Contains(body, "AGENT_SIGN_OUT_FAILED") {
+		t.Errorf("paste over a login that stays answered %d %s", code, body)
+	}
+	if st, _ := r.cred.StatusFor(r.alpha.ID); st.Set {
+		t.Errorf("a pasted credential was saved beside the login: %+v", st)
+	}
+	if !r.projects.HasLogin(r.alpha.ID) {
+		t.Error("the login went despite the failed logout")
 	}
 }

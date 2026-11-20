@@ -80,3 +80,37 @@ func TestSharingATranscriptsFolderIsRepeatableAndKeepsWhatTheProjectHomeAlreadyH
 		t.Errorf("projects link = %q, %v", got, err)
 	}
 }
+
+func TestTheAgentHomesSettingsAndPromptHistoryAreSharedOnceItHasThem(t *testing.T) {
+	agent := NewHome(t.TempDir())
+	project := NewHome(t.TempDir())
+	if err := project.EnsureSharing(agent); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := os.Lstat(filepath.Join(project.Path(), "settings.json")); err == nil {
+		t.Error("a settings.json was made up for an agent home without one")
+	}
+	// The agent home gains them later; the next start links them.
+	for name, content := range map[string]string{"settings.json": `{"model":"x"}`, "history.jsonl": "{}\n"} {
+		if err := os.WriteFile(filepath.Join(agent.Path(), name), []byte(content), 0o600); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := project.EnsureSharing(agent); err != nil {
+		t.Fatal(err)
+	}
+	got, err := os.ReadFile(filepath.Join(project.Path(), "settings.json"))
+	if err != nil || string(got) != `{"model":"x"}` {
+		t.Errorf("settings through the project home = %q, %v", got, err)
+	}
+	// claude appends to the history through the link.
+	f, err := os.OpenFile(filepath.Join(project.Path(), "history.jsonl"), os.O_APPEND|os.O_WRONLY, 0o600)
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, _ = f.WriteString("{\"a\":1}\n")
+	f.Close()
+	if b, _ := os.ReadFile(filepath.Join(agent.Path(), "history.jsonl")); string(b) != "{}\n{\"a\":1}\n" {
+		t.Errorf("the agent home's history = %q", b)
+	}
+}
