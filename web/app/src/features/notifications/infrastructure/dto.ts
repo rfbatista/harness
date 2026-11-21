@@ -91,3 +91,22 @@ function date(value: unknown, what: string): Date | null {
 function bad(detail: string): never {
   throw new NotificationsSourceError("BAD_RESPONSE", `Unexpected notification: ${detail}.`);
 }
+
+export interface BellProps {
+  /** The inbox page. */
+  readonly inboxHref: string;
+  /** The page the server read, or null when it could not (the client then reads it). */
+  readonly page: NotificationPage | null;
+}
+
+/** The top-bar model's `notifications` part, from the island props: null when the inbox is not served (no bell). */
+export function toBellProps(raw: unknown): BellProps | null {
+  if (!isRecord(raw) || typeof raw.inbox_href !== "string") return null;
+  let page: NotificationPage | null = null;
+  try {
+    page = raw.page === null || raw.page === undefined ? null : toPage(raw.page);
+  } catch {
+    // An unreadable page is no page: the first read fills the count.
+  }
+  return { inboxHref: raw.inbox_href, page };
+}

@@ -51,3 +51,12 @@ for (const [name, file, code] of ALLOWED) {
     assert.deepEqual(await refused(file, code), []);
   });
 }
+
+test("lint refuses a browser global on the server render's path, and allows it in a view", async () => {
+  const code = "export const here = window.location.href;\n";
+  const globals = async (file: string) => ((await eslint.lintText(code, { filePath: at(file) }))[0]?.messages ?? []).filter((m) => m.ruleId === "no-restricted-globals").length;
+  assert.equal(await globals("islands/top-bar.server.ts"), 1);
+  assert.equal(await globals("features/navigation/domain/a.ts"), 1);
+  assert.equal(await globals("features/navigation/presentation/presenters/a.ts"), 1);
+  assert.equal(await globals("features/navigation/presentation/views/a.ts"), 0);
+});
