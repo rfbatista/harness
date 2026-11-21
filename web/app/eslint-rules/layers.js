@@ -8,7 +8,7 @@
 //   shared/kernel   imports only shared/kernel, and no React
 //   features        never import each other, only shared
 //   composition roots (composition/, islands/, main.client.tsx) import anything: they alone build adapters
-//   tests           import anything: they wire presenters to the in-memory adapters
+//   tests, and a feature's testing/ folder (fixtures, port contract suites): import anything
 
 import path from "node:path";
 
@@ -40,6 +40,7 @@ const NO_SHARED = ["domain", "application"];
 export function refusal(importer, target, specifier) {
   const bare = !specifier.startsWith(".");
   if (importer.zone === "root" || importer.zone === "outside") return null;
+  if (importer.zone === "feature" && importer.layer === "testing") return null;
   if (bare) {
     if (importer.zone === "shared" && importer.layer === "kernel" && FRAMEWORKS.test(specifier)) return "shared/kernel imports no React";
     if (importer.zone === "feature") {
