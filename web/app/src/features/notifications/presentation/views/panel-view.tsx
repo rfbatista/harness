@@ -12,7 +12,8 @@ export function PanelView({ presenter, anchor }: { presenter: PanelPresenter; an
   const panel = useRef<HTMLElement>(null);
   usePopup(vm.open, panel, anchor, () => presenter.close());
 
-  // The ages move on while the panel is open.
+  // The ages are not in the server render: they are read once mounted, and move on while the panel is open.
+  useEffect(presenter.tick, [presenter]);
   useEffect(() => {
     if (!vm.open) return;
     const timer = setInterval(presenter.tick, TICK_MS);

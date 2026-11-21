@@ -39,7 +39,8 @@ interface State {
   unreadOnly: boolean;
   open: boolean;
   error: string | null;
-  now: Date;
+  /** Null until the view has mounted: ages are not part of the server render, which could not match them. */
+  now: Date | null;
   unreadCount: number | null;
   focus: FocusRequest | null;
 }
@@ -62,7 +63,7 @@ export class PanelPresenter extends Presenter<PanelViewModel> {
       unreadOnly: false,
       open: false,
       error: null,
-      now: new Date(clock.now()),
+      now: null,
       unreadCount: inbox.state.unreadCount,
       focus: null,
     };
@@ -132,7 +133,7 @@ export class PanelPresenter extends Presenter<PanelViewModel> {
 
   dismissError = (): void => this.#change({ error: null });
 
-  /** The ages move on while the panel is open. */
+  /** The ages are read from the clock: once the view has mounted, and again while the panel is open. */
   tick = (): void => this.#change({ now: new Date(this.#clock.now()) });
 
   #show(): void {

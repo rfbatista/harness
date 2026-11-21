@@ -26,7 +26,7 @@ export interface Row {
   readonly unread: boolean;
   /** "unread" | "read" | "settled", for data-state. */
   readonly state: string;
-  /** "5m" */
+  /** "5m"; "" until the panel knows the time (the server render and the first client render agree on it). */
   readonly age: string;
   /** ISO time, for <time datetime>. */
   readonly at: string;
@@ -38,7 +38,7 @@ export interface Row {
   readonly sessions: readonly SessionLine[];
 }
 
-export function toRow(n: Notification, now: Date): Row {
+export function toRow(n: Notification, now: Date | null): Row {
   const unread = isUnread(n);
   const settled = isSettled(n);
   const levelLabel = settled ? "Settled" : n.level === "action" ? "Needs you" : "";
@@ -54,7 +54,7 @@ export function toRow(n: Notification, now: Date): Row {
     levelLabel,
     unread,
     state: unread ? "unread" : settled ? "settled" : "read",
-    age: relativeTime(n.createdAt, now),
+    age: now ? relativeTime(n.createdAt, now) : "",
     at: n.createdAt.toISOString(),
     markLabel: `Mark “${n.title}” read`,
     sessions: n.interruptedSessions.map((s) => ({

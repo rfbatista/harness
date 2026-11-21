@@ -82,7 +82,10 @@ describe("panel: the list", () => {
 
   test("shows the row's words: level, state, age and accessible names", () => {
     const n = notification({ title: "Review wanted", level: "action", createdAt: new Date(NOW - 5 * 60_000) });
-    const [row] = setup([n]).panel.viewModel.rows;
+    const { panel } = setup([n]);
+    assert.equal(panel.viewModel.rows[0]?.age, "", "ages are read once the view has mounted");
+    panel.tick();
+    const [row] = panel.viewModel.rows;
     assert.deepEqual([row?.levelLabel, row?.state, row?.age, row?.label, row?.markLabel], ["Needs you", "unread", "5m", "Unread. Needs you. Review wanted — harness · Ship the thing", "Mark “Review wanted” read"]);
   });
 
@@ -266,6 +269,7 @@ describe("panel: live", () => {
     const n = notification({ createdAt: new Date(NOW) });
     const inbox = new Inbox(source, { navigator: memoryNavigator() });
     const panel = new PanelPresenter(inbox, source, { now: () => now }, "/notifications", { notifications: [n], unreadCount: 1, nextBefore: "" });
+    panel.tick();
     assert.equal(panel.viewModel.rows[0]?.age, "now");
     now += 2 * 60_000;
     panel.tick();

@@ -61,11 +61,16 @@ describe("the top bar follows the page", () => {
     assert.equal(picker.viewModel.selected, "p2");
   });
 
-  test("the page the top bar already shows is not asked for again", async () => {
-    const { source, signal } = setup(page("/agents", "", "agents"));
-    signal.emit("/agents");
+  test("the same page again is asked for: its state can change without its path", async () => {
+    const { source, signal, links } = setup(page("/agents", "", "agents"));
+    signal.emit("/agents"); // the swap that brought these props
     await settle();
     assert.deepEqual(source.asked, []);
+    source.serve("/agents", page("/agents", "", "agents"));
+    signal.emit("/agents");
+    await settle();
+    assert.deepEqual(source.asked, ["/agents"]);
+    assert.deepEqual(currentKeys(links), ["agents"]);
   });
 
   test("a Back that arrives as a popstate and a navigation asks once", async () => {
