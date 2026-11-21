@@ -23,3 +23,9 @@ export interface TopBarSource {
 export interface PageOpener {
   open(url: string): void;
 }
+
+/** The person moved to another page without a reload, or with Back or Forward. */
+export interface NavigationSignal {
+  /** Calls `listener` with the new page path on every change; returns its unsubscribe. */
+  subscribe(listener: (path: string) => void): () => void;
+}
