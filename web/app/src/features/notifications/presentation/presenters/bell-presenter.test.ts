@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import { Inbox } from "../../application/inbox";
 import { NotificationsSourceError } from "../../application/ports";
 import type { NotificationPage } from "../../domain/notification";
+import { memoryNavigator } from "../../infrastructure/memory-navigator";
 import { memoryNotificationsSource } from "../../infrastructure/memory-notifications-source";
 import { notification } from "../../testing/fixtures";
 import { BellPresenter } from "./bell-presenter";
@@ -12,7 +13,7 @@ const page = (unreadCount: number): NotificationPage => ({ notifications: [], un
 
 describe("bell", () => {
   test("shows the count of the props page, in the badge and in the name", () => {
-    const inbox = new Inbox(memoryNotificationsSource());
+    const inbox = new Inbox(memoryNotificationsSource(), { navigator: memoryNavigator() });
     inbox.start(page(3));
     const { viewModel } = new BellPresenter(inbox, "/notifications");
     assert.equal(viewModel.visible, true);
@@ -23,7 +24,7 @@ describe("bell", () => {
   });
 
   test("shows 99+ past 99 and names the exact count", () => {
-    const inbox = new Inbox(memoryNotificationsSource());
+    const inbox = new Inbox(memoryNotificationsSource(), { navigator: memoryNavigator() });
     inbox.start(page(120));
     const { viewModel } = new BellPresenter(inbox, "/notifications");
     assert.equal(viewModel.badge, "99+");
@@ -31,7 +32,7 @@ describe("bell", () => {
   });
 
   test("shows no badge at zero", () => {
-    const inbox = new Inbox(memoryNotificationsSource());
+    const inbox = new Inbox(memoryNotificationsSource(), { navigator: memoryNavigator() });
     inbox.start(page(0));
     const { viewModel } = new BellPresenter(inbox, "/notifications");
     assert.equal(viewModel.badge, "");
@@ -42,7 +43,7 @@ describe("bell", () => {
   test("reads the count from the source when the props carry no page", async () => {
     const source = memoryNotificationsSource();
     source.seed([notification(), notification(), notification()]);
-    const inbox = new Inbox(source);
+    const inbox = new Inbox(source, { navigator: memoryNavigator() });
     const bell = new BellPresenter(inbox, "/notifications");
     inbox.start(null);
     assert.equal(bell.viewModel.badge, "");
@@ -52,7 +53,7 @@ describe("bell", () => {
   });
 
   test("is absent when the inbox is not served", () => {
-    const inbox = new Inbox(memoryNotificationsSource());
+    const inbox = new Inbox(memoryNotificationsSource(), { navigator: memoryNavigator() });
     inbox.start(page(5));
     assert.equal(new BellPresenter(inbox, null).viewModel.visible, false);
   });
@@ -60,7 +61,7 @@ describe("bell", () => {
   test("a failed read leaves the bell without a count and says so, and does not throw", async () => {
     const source = memoryNotificationsSource();
     source.failWith(new NotificationsSourceError("NETWORK_ERROR", "offline"));
-    const inbox = new Inbox(source);
+    const inbox = new Inbox(source, { navigator: memoryNavigator() });
     const bell = new BellPresenter(inbox, "/notifications");
     inbox.start(null);
     await settle();
@@ -72,7 +73,7 @@ describe("bell", () => {
   test("starts once per page", async () => {
     const source = memoryNotificationsSource();
     source.seed([notification()]);
-    const inbox = new Inbox(source);
+    const inbox = new Inbox(source, { navigator: memoryNavigator() });
     inbox.start(page(7));
     inbox.start(null);
     await settle();

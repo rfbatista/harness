@@ -1,6 +1,7 @@
 import { describe, test } from "node:test";
 import assert from "node:assert/strict";
 import { notification, read } from "../testing/fixtures";
+import { memoryNavigator } from "../infrastructure/memory-navigator";
 import { memoryNotificationsSource } from "../infrastructure/memory-notifications-source";
 import { Inbox } from "./inbox";
 
@@ -10,7 +11,7 @@ const page = (unreadCount: number) => ({ notifications: [], unreadCount, nextBef
 describe("the inbox follows the stream", () => {
   test("an arrival, a read and a resolution each set the count to the stream's", () => {
     const source = memoryNotificationsSource();
-    const inbox = new Inbox(source);
+    const inbox = new Inbox(source, { navigator: memoryNavigator() });
     inbox.start(page(2));
     const n = notification();
     source.publish({ notifications: [n], unreadCount: 3 });
@@ -23,7 +24,7 @@ describe("the inbox follows the stream", () => {
 
   test("the same message twice leaves the same count", () => {
     const source = memoryNotificationsSource();
-    const inbox = new Inbox(source);
+    const inbox = new Inbox(source, { navigator: memoryNavigator() });
     inbox.start(page(0));
     const change = { notifications: [notification()], unreadCount: 1 };
     source.publish(change);
@@ -34,7 +35,7 @@ describe("the inbox follows the stream", () => {
   test("a stream message that arrives before the first read answers wins over it", async () => {
     const source = memoryNotificationsSource();
     source.seed([notification()]);
-    const inbox = new Inbox(source);
+    const inbox = new Inbox(source, { navigator: memoryNavigator() });
     inbox.start(null);
     source.publish({ notifications: [], unreadCount: 9 });
     await settle();
@@ -43,7 +44,7 @@ describe("the inbox follows the stream", () => {
 
   test("shows the stream's state: down is paused, up clears it", () => {
     const source = memoryNotificationsSource();
-    const inbox = new Inbox(source);
+    const inbox = new Inbox(source, { navigator: memoryNavigator() });
     inbox.start(page(1));
     assert.equal(inbox.state.feed, "connecting");
     source.setStatus("live");
@@ -58,7 +59,7 @@ describe("the inbox follows the stream", () => {
   test("after a resync with no view watching, the count is read again", async () => {
     const source = memoryNotificationsSource();
     source.seed([notification(), notification(), notification()]);
-    const inbox = new Inbox(source);
+    const inbox = new Inbox(source, { navigator: memoryNavigator() });
     inbox.start(page(1));
     source.setStatus("paused");
     source.setStatus("resynced");
@@ -68,11 +69,11 @@ describe("the inbox follows the stream", () => {
 
   test("a watching view gets the changes, and a reload on an empty change or a resync", () => {
     const source = memoryNotificationsSource();
-    const inbox = new Inbox(source);
+    const inbox = new Inbox(source, { navigator: memoryNavigator() });
     inbox.start(page(0));
     const applied: string[][] = [];
     let reloads = 0;
-    const unwatch = inbox.watch({ apply: (changed) => applied.push(changed.map((n) => n.id)), reload: () => void reloads++ });
+    const unwatch = inbox.watch({ apply: (changed) => void applied.push(changed.map((n) => n.id)), readAll: () => {}, reload: () => void reloads++ });
     const n = notification();
     source.publish({ notifications: [n], unreadCount: 1 });
     source.publish({ notifications: [], unreadCount: 0 });
@@ -86,7 +87,7 @@ describe("the inbox follows the stream", () => {
 
   test("stops following when stopped", () => {
     const source = memoryNotificationsSource();
-    const inbox = new Inbox(source);
+    const inbox = new Inbox(source, { navigator: memoryNavigator() });
     inbox.start(page(0));
     assert.equal(source.followers, 1);
     inbox.stop();

@@ -76,6 +76,48 @@ export function notificationsSourceContract(name: string, make: () => Notificati
       await assert.rejects(make().source.list({}, controller.signal), (err: unknown) => err instanceof Error && err.name === "AbortError");
     });
 
+    test("marking ids read answers the notifications it changed and the global count, and skips ids already read", async () => {
+      const h = make();
+      const [a, b, c] = [notification(), notification(), notification()] as const;
+      h.seed([a, b, read(c)]);
+      const answer = await h.source.markRead({ ids: [a.id, c.id] });
+      assert.deepEqual(answer.notifications.map((n) => n.id), [a.id]);
+      assert.notEqual(answer.notifications[0]!.readAt, null);
+      assert.equal(answer.unreadCount, 1);
+      const page = await h.source.list({ unread: true });
+      assert.deepEqual(page.notifications.map((n) => n.id), [b.id]);
+    });
+
+    test("marking all read changes every unread one, and a resolved one that was never read gets its read time too", async () => {
+      const h = make();
+      const [a, b] = [notification(), notification()] as const;
+      const resolved = { ...notification(), resolvedAt: new Date(Date.UTC(2026, 10, 21, 12, 30)) };
+      h.seed([a, b, resolved]);
+      const answer = await h.source.markRead({ all: true });
+      assert.deepEqual(answer.notifications.map((n) => n.id).sort(), [a.id, b.id, resolved.id].sort());
+      assert.equal(answer.notifications.every((n) => n.readAt !== null), true);
+      assert.equal(answer.unreadCount, 0);
+      assert.equal((await h.source.list({ unread: true })).notifications.length, 0);
+    });
+
+    test("an unknown id fails the whole call with NOTIFICATION_NOT_FOUND and marks nothing", async () => {
+      const h = make();
+      const a = notification();
+      h.seed([a]);
+      await assert.rejects(h.source.markRead({ ids: [a.id, "nope"] }), rejectsWith("NOTIFICATION_NOT_FOUND"));
+      assert.equal((await h.source.list({})).unreadCount, 1);
+    });
+
+    test("neither ids nor all is INVALID_INPUT", async () => {
+      await assert.rejects(make().source.markRead({} as never), rejectsWith("INVALID_INPUT"));
+    });
+
+    test("a network failure while marking is NETWORK_ERROR", async () => {
+      const h = make();
+      h.breakNetwork();
+      await assert.rejects(h.source.markRead({ all: true }), rejectsWith("NETWORK_ERROR"));
+    });
+
     test("follow delivers each change with the count as of it, in order, and the stream's status", () => {
       const h = make();
       const changes: Change[] = [];

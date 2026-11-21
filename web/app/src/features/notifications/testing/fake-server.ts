@@ -4,7 +4,7 @@
 import type { FetchLike } from "../../../shared/infrastructure/api-client";
 import { NotificationsSourceError } from "../application/ports";
 import type { MemoryNotificationsSource } from "../infrastructure/memory-notifications-source";
-import { pageToWire } from "./wire";
+import { pageToWire, toWire } from "./wire";
 
 const json = (status: number, body: unknown) => new Response(JSON.stringify(body), { status, headers: { "Content-Type": "application/json" } });
 
@@ -38,6 +38,11 @@ export function fakeNotificationsServer(data: MemoryNotificationsSource): FakeSe
           const limit = target.searchParams.get("limit");
           const page = await data.list({ unread: target.searchParams.get("unread") === "true", before: target.searchParams.get("before") ?? undefined, ...(limit === null ? {} : { limit: Number(limit) }) });
           return json(200, pageToWire(page));
+        }
+        if (method === "POST" && target.pathname === "/api/notifications/read") {
+          const body = (typeof init?.body === "string" ? JSON.parse(init.body) : {}) as { ids?: string[]; all?: true };
+          const answer = await data.markRead({ ...(body.ids ? { ids: body.ids } : {}), ...(body.all ? { all: true } : {}) } as never);
+          return json(200, { notifications: answer.notifications.map(toWire), unread_count: answer.unreadCount });
         }
       } catch (err) {
         return failed(err);

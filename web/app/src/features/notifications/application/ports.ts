@@ -15,6 +15,9 @@ export class NotificationsSourceError extends Error {
   }
 }
 
+/** Marks the ids read, or every unread notification (`all`). */
+export type ReadRequest = { readonly ids: readonly string[] } | { readonly all: true };
+
 export interface ListQuery {
   /** Only the unread ones. */
   readonly unread?: boolean;
@@ -30,10 +33,21 @@ export interface NotificationsSource {
   list(query: ListQuery, signal?: AbortSignal): Promise<NotificationPage>;
 
   /**
+   * Marks read. Answers with the notifications it changed and the global count; ids already read are not an
+   * error. Rejects with NOTIFICATION_NOT_FOUND for an unknown id (and marks nothing), INVALID_INPUT for neither.
+   */
+  markRead(request: ReadRequest): Promise<Change>;
+
+  /**
    * Every notification created, read or resolved, in every project, with the
    * global count as of that change, in order, until the returned function is
    * called. The person's own reads echo here. `onStatus` tells whether the
    * stream is up: "resynced" means changes were missed while it was down.
    */
   follow(onChange: (change: Change) => void, onStatus: (status: FeedStatus) => void): () => void;
+}
+
+/** Takes the person to a page (a full page load). */
+export interface Navigator {
+  open(url: string): void;
 }
