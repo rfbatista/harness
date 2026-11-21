@@ -1,6 +1,7 @@
 // What the notifications feature needs from the outside world.
 
-import type { NotificationPage } from "../domain/notification";
+import type { FeedStatus } from "../domain/feed-status";
+import type { Change, NotificationPage } from "../domain/notification";
 
 export type NotificationsSourceErrorCode = "INVALID_INPUT" | "NOTIFICATION_NOT_FOUND" | "NETWORK_ERROR" | "BAD_RESPONSE" | "UNKNOWN";
 
@@ -27,4 +28,12 @@ export interface ListQuery {
 export interface NotificationsSource {
   /** Newest first, across every project. `unreadCount` is the global count whatever the filter. */
   list(query: ListQuery, signal?: AbortSignal): Promise<NotificationPage>;
+
+  /**
+   * Every notification created, read or resolved, in every project, with the
+   * global count as of that change, in order, until the returned function is
+   * called. The person's own reads echo here. `onStatus` tells whether the
+   * stream is up: "resynced" means changes were missed while it was down.
+   */
+  follow(onChange: (change: Change) => void, onStatus: (status: FeedStatus) => void): () => void;
 }

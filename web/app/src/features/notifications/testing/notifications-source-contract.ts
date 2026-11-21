@@ -4,7 +4,8 @@
 import { describe, test } from "node:test";
 import assert from "node:assert/strict";
 import { NotificationsSourceError, type NotificationsSource } from "../application/ports";
-import type { Notification } from "../domain/notification";
+import type { FeedStatus } from "../domain/feed-status";
+import type { Change, Notification } from "../domain/notification";
 import { notification, read } from "./fixtures";
 
 export interface NotificationsSourceHarness {
@@ -13,6 +14,10 @@ export interface NotificationsSourceHarness {
   seed(notifications: readonly Notification[]): void;
   /** Every next call fails as the network does. */
   breakNetwork(): void;
+  /** The server's stream sends `change`. */
+  publish(change: Change): void;
+  /** The stream's state changes. */
+  setStatus(status: FeedStatus): void;
 }
 
 const rejectsWith = (code: string) => (err: unknown) => err instanceof NotificationsSourceError && err.code === code;
@@ -69,6 +74,48 @@ export function notificationsSourceContract(name: string, make: () => Notificati
       const controller = new AbortController();
       controller.abort();
       await assert.rejects(make().source.list({}, controller.signal), (err: unknown) => err instanceof Error && err.name === "AbortError");
+    });
+
+    test("follow delivers each change with the count as of it, in order, and the stream's status", () => {
+      const h = make();
+      const changes: Change[] = [];
+      const statuses: FeedStatus[] = [];
+      h.source.follow((c) => changes.push(c), (s) => statuses.push(s));
+      const first = notification();
+      const second = read(first);
+      h.setStatus("live");
+      h.publish({ notifications: [first], unreadCount: 1 });
+      h.publish({ notifications: [second], unreadCount: 0 });
+      assert.deepEqual(changes, [{ notifications: [first], unreadCount: 1 }, { notifications: [second], unreadCount: 0 }]);
+      assert.equal(statuses.at(-1), "live");
+      assert.equal(statuses[0], "connecting");
+    });
+
+    test("follow carries an empty change (a deleted project took its notifications along)", () => {
+      const h = make();
+      const changes: Change[] = [];
+      h.source.follow((c) => changes.push(c), () => {});
+      h.publish({ notifications: [], unreadCount: 4 });
+      assert.deepEqual(changes, [{ notifications: [], unreadCount: 4 }]);
+    });
+
+    test("follow reports a drop and the resync that follows it", () => {
+      const h = make();
+      const statuses: FeedStatus[] = [];
+      h.source.follow(() => {}, (s) => statuses.push(s));
+      h.setStatus("live");
+      h.setStatus("paused");
+      h.setStatus("resynced");
+      assert.deepEqual(statuses.slice(-3), ["live", "paused", "resynced"]);
+    });
+
+    test("follow delivers nothing after it is stopped", () => {
+      const h = make();
+      const changes: Change[] = [];
+      const stop = h.source.follow((c) => changes.push(c), () => {});
+      stop();
+      h.publish({ notifications: [], unreadCount: 1 });
+      assert.deepEqual(changes, []);
     });
   });
 }
