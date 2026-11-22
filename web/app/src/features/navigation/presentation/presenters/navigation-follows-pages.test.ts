@@ -11,13 +11,13 @@ import { linksWith, topBarJson } from "../../testing/fixtures";
 import { PageLinksPresenter } from "./page-links-presenter";
 import { ProjectPickerPresenter } from "./project-picker-presenter";
 
-const page = (path: string, project: string, current?: string) => parseTopBar(topBarJson({ path, current_project_id: project, links: linksWith(current ? { [current]: { current: true } } : {}) }));
+const page = (path: string, project: string, current?: string, attention = false) => parseTopBar(topBarJson({ path, current_project_id: project, links: linksWith({ ...(current ? { [current]: { current: true } } : {}), ...(attention ? { agent_isolation: { attention: true } } : {}) }) }));
 
-const setup = (initial = page("/", "")) => {
+const setup = (initial = page("/", ""), options: { fresh?: boolean } = {}) => {
   const current = new CurrentTopBar(initial);
   const source = memoryTopBarSource((path) => parseTopBar(topBarJson({ path })));
   const signal = memoryNavigationSignal();
-  const stop = followNavigation(signal, source, current);
+  const stop = followNavigation(signal, source, current, options);
   return { current, source, signal, stop, picker: new ProjectPickerPresenter(current, memoryPageOpener()), links: new PageLinksPresenter(current) };
 };
 const settle = () => new Promise((resolve) => setImmediate(resolve));
@@ -61,16 +61,13 @@ describe("the top bar follows the page", () => {
     assert.equal(picker.viewModel.selected, "p2");
   });
 
-  test("the same page again is asked for: its state can change without its path", async () => {
-    const { source, signal, links } = setup(page("/agents", "", "agents"));
-    signal.emit("/agents"); // the swap that brought these props
-    await settle();
-    assert.deepEqual(source.asked, []);
-    source.serve("/agents", page("/agents", "", "agents"));
+  test("a swap of <main> only, to the same path, asks again: the page's state can have changed", async () => {
+    const { source, signal, links } = setup(page("/agents", "", "agents")); // a mount of the first page load
+    source.serve("/agents", page("/agents", "", "agents", true));
     signal.emit("/agents");
     await settle();
     assert.deepEqual(source.asked, ["/agents"]);
-    assert.deepEqual(currentKeys(links), ["agents"]);
+    assert.equal(links.viewModel.links.some((l) => l.attention), true);
   });
 
   test("a Back that arrives as a popstate and a navigation asks once", async () => {
@@ -81,11 +78,14 @@ describe("the top bar follows the page", () => {
     assert.deepEqual(source.asked, ["/agents"]);
   });
 
-  test("a top bar that was swapped in with fresh props asks for nothing", async () => {
-    const { source, signal } = setup(page("/projects/p1", "p1"));
-    signal.emit("/projects/p1");
+  test("a top bar that a swap inserted with fresh props skips the event of that swap, and no other", async () => {
+    const { source, signal } = setup(page("/projects/p1", "p1"), { fresh: true });
+    signal.emit("/projects/p1"); // the navigation that brought it
     await settle();
     assert.deepEqual(source.asked, []);
+    signal.emit("/projects/p1"); // a later swap of <main> to the same path
+    await settle();
+    assert.deepEqual(source.asked, ["/projects/p1"]);
   });
 
   test("stops following when stopped", async () => {

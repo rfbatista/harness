@@ -35,7 +35,12 @@ export function apiClient(fetcher: FetchLike = (input, init) => fetch(input, ini
     }
     if (!response.ok) throw await failure(response);
     if (response.status === 204) return undefined as T;
-    return (await response.json()) as T;
+    try {
+      return (await response.json()) as T;
+    } catch {
+      // A login page or a proxy's page answered with 200.
+      throw new ApiError("BAD_RESPONSE", "The harness server answered something that is not JSON.", response.status);
+    }
   }
   return {
     get: (path, query, signal) => send(path + queryString(query), { method: "GET", headers: { Accept: "application/json" }, signal }),

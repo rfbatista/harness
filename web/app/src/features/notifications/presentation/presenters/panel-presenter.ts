@@ -76,7 +76,12 @@ export class PanelPresenter extends Presenter<PanelViewModel> {
     inbox.subscribe((s) => this.#change({ unreadCount: s.unreadCount }));
     inbox.watch({
       apply: (changed) => this.#change({ items: merge(this.#state.items, changed, { unread: this.#state.unreadOnly }).slice(0, PANEL_LIMIT) }),
-      readAll: (at) => this.#change({ items: this.#state.items.map((n) => markedRead(n, at)) }),
+      readAll: (at) => {
+        const before = new Map(this.#state.items.map((n) => [n.id, n]));
+        this.#change({ items: this.#state.items.map((n) => markedRead(n, at)) });
+        // Puts back the rows this read marked, and only those: the stream may have changed others since.
+        return () => this.#change({ items: this.#state.items.map((n) => (n.readAt === at && before.has(n.id) ? before.get(n.id)! : n)) });
+      },
       reload: () => {
         if (this.#state.loaded) void this.#load();
       },

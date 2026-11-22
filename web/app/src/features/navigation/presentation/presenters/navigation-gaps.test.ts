@@ -114,11 +114,11 @@ describe("page links: gaps", () => {
 });
 
 describe("the top bar follows the page: races and signals", () => {
-  const rig = (initial: TopBar) => {
+  const rig = (initial: TopBar, options: { fresh?: boolean } = {}) => {
     const current = new CurrentTopBar(initial);
     const source = memoryTopBarSource((path) => model({ path }));
     const signal = memoryNavigationSignal();
-    followNavigation(signal, source, current);
+    followNavigation(signal, source, current, options);
     return { current, source, signal };
   };
 
@@ -156,7 +156,7 @@ describe("the top bar follows the page: races and signals", () => {
   });
 
   test("going to a page and back to the one the bar was built for asks for it, and shows it", async () => {
-    const { current, source, signal } = rig(model({ path: "/agents", links: linksWith({ agents: { current: true } }) }));
+    const { current, source, signal } = rig(model({ path: "/agents", links: linksWith({ agents: { current: true } }) }), { fresh: true });
     signal.emit("/agents"); // the swap that brought these props
     signal.emit("/models");
     await settle();
@@ -210,7 +210,7 @@ describe("the top bar follows the page: races and signals", () => {
 
   test("a harness:navigated with a path that is not a string is ignored", async () => {
     const listeners: Array<(event: Event) => void> = [];
-    const win = { location: { pathname: "/" }, addEventListener: (_: string, fn: (event: Event) => void) => void listeners.push(fn), removeEventListener: () => {} };
+    const win = { location: { pathname: "/" }, addEventListener: (type: string, fn: (event: Event) => void) => void (type === "harness:navigated" && listeners.push(fn)), removeEventListener: () => {} };
     const source = memoryTopBarSource((path) => model({ path }));
     followNavigation(browserNavigationSignal(win as never), source, new CurrentTopBar(model({ path: "/" })));
     for (const fn of listeners) fn(Object.assign(new Event("harness:navigated"), { detail: { path: 42 } }));

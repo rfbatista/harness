@@ -19,7 +19,8 @@ import { TopBarView } from "./top-bar-view";
 type Dispose = () => void;
 
 /** Mounts the island of `mount` with its `props`; returns what takes it down. */
-type Island = (mount: Element, props: unknown) => Dispose;
+/** `fresh`: a swap inserted the mount, with its own props, after the first page load. */
+type Island = (mount: Element, props: unknown, fresh: boolean) => Dispose;
 
 /** Mounts every island on the page and every one that a swap brings later. Returns what stops it all. */
 export function mountIslands(doc: Document): Dispose {
@@ -32,9 +33,9 @@ export function mountIslands(doc: Document): Dispose {
   const notifications = httpNotificationsSource(api, feed);
 
   const islands: Record<string, Island> = {
-    "top-bar": (mount, props) => {
+    "top-bar": (mount, props, fresh) => {
       const topBar = buildTopBar(props, { pageOpener: browserPageOpener(win.location), navigator: browserNavigator(win.location), notifications });
-      const unfollow = followNavigation(browserNavigationSignal(win), topBarSource, topBar.current);
+      const unfollow = followNavigation(browserNavigationSignal(win), topBarSource, topBar.current, { fresh });
       const node = <TopBarView presenters={topBar.presenters} />;
       // Hydrate what the server rendered; render from scratch when its render failed (or left nothing).
       const failed = mount.getAttribute("data-island-rendered") === "false" || !mount.hasChildNodes();
@@ -50,14 +51,14 @@ export function mountIslands(doc: Document): Dispose {
 
   const mounted = new Map<Element, Dispose>();
 
-  function mount(el: Element): void {
+  function mount(el: Element, fresh: boolean): void {
     if (mounted.has(el) || !el.isConnected) return;
     const name = el.getAttribute("data-island") ?? "";
     const island = islands[name];
     if (!island) return;
     try {
       // The props script sits beside the mount, inside the same header.
-      mounted.set(el, island(el, readIslandProps(el.parentElement ?? doc, name)));
+      mounted.set(el, island(el, readIslandProps(el.parentElement ?? doc, name), fresh));
     } catch (err) {
       console.error(`island ${name} was not mounted`, err);
     }
@@ -72,18 +73,18 @@ export function mountIslands(doc: Document): Dispose {
     }
   }
 
-  const mountWithin = (root: ParentNode): void => {
-    for (const el of root.querySelectorAll("[data-island]")) mount(el);
+  const mountWithin = (root: ParentNode, fresh: boolean): void => {
+    for (const el of root.querySelectorAll("[data-island]")) mount(el, fresh);
   };
 
-  mountWithin(doc);
+  mountWithin(doc, false);
   const observer = new MutationObserver((records) => {
     sweep();
     for (const record of records) {
       for (const node of record.addedNodes) {
         if (!(node instanceof Element)) continue;
-        if (node.hasAttribute("data-island")) mount(node);
-        mountWithin(node);
+        if (node.hasAttribute("data-island")) mount(node, true);
+        mountWithin(node, true);
       }
     }
   });

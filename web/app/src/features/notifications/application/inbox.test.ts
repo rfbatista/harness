@@ -73,7 +73,7 @@ describe("the inbox follows the stream", () => {
     inbox.start(page(0));
     const applied: string[][] = [];
     let reloads = 0;
-    const unwatch = inbox.watch({ apply: (changed) => void applied.push(changed.map((n) => n.id)), readAll: () => {}, reload: () => void reloads++ });
+    const unwatch = inbox.watch({ apply: (changed) => void applied.push(changed.map((n) => n.id)), readAll: () => () => {}, reload: () => void reloads++ });
     const n = notification();
     source.publish({ notifications: [n], unreadCount: 1 });
     source.publish({ notifications: [], unreadCount: 0 });

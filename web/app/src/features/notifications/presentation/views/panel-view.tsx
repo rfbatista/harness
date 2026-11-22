@@ -39,7 +39,7 @@ export function PanelView({ presenter, anchor }: { presenter: PanelPresenter; an
     const links = [...(panel.current?.querySelectorAll<HTMLElement>("[data-item]") ?? [])];
     if (links.length === 0) return;
     event.preventDefault();
-    const at = links.indexOf(document.activeElement as HTMLElement);
+    const at = links.indexOf(event.currentTarget.ownerDocument.activeElement as HTMLElement);
     const next = event.key === "ArrowDown" ? (at + 1) % links.length : (at <= 0 ? links.length : at) - 1;
     links[next]?.focus();
   };

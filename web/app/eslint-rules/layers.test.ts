@@ -28,6 +28,11 @@ const REFUSED: [string, string, string][] = [
   ["a feature imports another feature's adapter", "features/navigation/infrastructure/a.ts", 'import "../../notifications/infrastructure/b";'],
   ["shared imports a feature", "shared/kernel/a.ts", 'import "../../features/navigation/domain/b";'],
   ["shared kernel imports React", "shared/kernel/a.ts", 'import "react";'],
+  ["a feature imports a file of web/src (the Alpine client)", "features/navigation/infrastructure/a.ts", 'import "../../../../../src/shared/infrastructure/api.js";'],
+  ["a view imports a file of web/src", "features/notifications/presentation/views/a.tsx", 'import "../../../../../../src/shared/presentation/components/popup.js";'],
+  ["shared kernel imports a file of web/src", "shared/kernel/a.ts", 'import "../../../../src/shared/domain/feed.js";'],
+  ["another shared file than use-popup imports popup.js", "shared/presentation/other.ts", 'import "../../../../src/shared/presentation/components/popup.js";'],
+  ["use-popup imports another file of web/src", "shared/presentation/use-popup.ts", 'import "../../../../src/shared/infrastructure/api.js";'],
   ["a feature imports a composition root", "features/navigation/infrastructure/a.ts", 'import "../../../composition/b";'],
 ];
 
@@ -42,6 +47,9 @@ const ALLOWED: [string, string, string][] = [
   ["infrastructure imports application, domain and shared", "features/navigation/infrastructure/a.ts", 'import "../application/b"; import "../domain/c"; import "../../../shared/infrastructure/api-client";'],
   ["a view imports React and its presenter", "features/navigation/presentation/views/a.tsx", 'import "react"; import "../presenters/b";'],
   ["a presenter imports the shared kernel", "features/navigation/presentation/presenters/a.ts", 'import "../../../../shared/kernel/presenter";'],
+  ["use-popup imports the Alpine-free popup module (the named exception)", "shared/presentation/use-popup.ts", 'import "../../../../src/shared/presentation/components/popup.js";'],
+  ["a composition root imports web/src", "composition/a.ts", 'import "../../../src/shared/domain/feed.js";'],
+  ["a testing folder imports web/src", "shared/testing/a.ts", 'import "../../../../src/shared/testing/doubles.js";'],
   ["a composition root imports an adapter", "composition/a.ts", 'import "../features/navigation/infrastructure/b";'],
   ["a test imports an adapter", "features/navigation/presentation/presenters/a.test.ts", 'import "../../infrastructure/b";'],
 ];
@@ -52,11 +60,12 @@ for (const [name, file, code] of ALLOWED) {
   });
 }
 
-test("lint refuses a browser global on the server render's path, and allows it in a view", async () => {
+test("lint refuses a browser global on the server render's path, and in the views and shared/presentation", async () => {
   const code = "export const here = window.location.href;\n";
   const globals = async (file: string) => ((await eslint.lintText(code, { filePath: at(file) }))[0]?.messages ?? []).filter((m) => m.ruleId === "no-restricted-globals").length;
   assert.equal(await globals("islands/top-bar.server.ts"), 1);
   assert.equal(await globals("features/navigation/domain/a.ts"), 1);
   assert.equal(await globals("features/navigation/presentation/presenters/a.ts"), 1);
-  assert.equal(await globals("features/navigation/presentation/views/a.ts"), 0);
+  assert.equal(await globals("features/navigation/presentation/views/a.ts"), 1);
+  assert.equal(await globals("shared/presentation/a.ts"), 1);
 });

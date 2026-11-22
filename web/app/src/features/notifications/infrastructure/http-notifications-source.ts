@@ -8,7 +8,7 @@ import { toPage, toReadAnswer, toStreamChange } from "./dto";
 /** The global notifications stream (GET /api/notifications/events) as the page event stream names it. */
 export const NOTIFICATIONS_STREAM = "/notifications/events";
 
-const KNOWN: readonly string[] = ["INVALID_INPUT", "NOTIFICATION_NOT_FOUND", "NETWORK_ERROR"];
+const KNOWN: readonly string[] = ["INVALID_INPUT", "NOTIFICATION_NOT_FOUND", "NETWORK_ERROR", "BAD_RESPONSE"];
 
 /** Every adapter call fails with a NotificationsSourceError. */
 export async function mapErrors<T>(call: () => Promise<T>): Promise<T> {

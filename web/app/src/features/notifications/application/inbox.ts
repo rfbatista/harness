@@ -33,8 +33,8 @@ export interface InboxState {
 export interface InboxView {
   /** Notifications created, read or resolved. */
   apply(changed: readonly Notification[]): void;
-  /** Every one it shows is read as of `at`. */
-  readAll(at: Date): void;
+  /** Every one it shows is read as of `at`. Returns what puts them back as they were, for a read that fails. */
+  readAll(at: Date): () => void;
   /** What it shows may be stale: read it again. */
   reload(): void;
 }
@@ -171,13 +171,15 @@ export class Inbox {
     const at = this.#now();
     this.#pendingAll += 1;
     this.#publish();
-    this.#each((view) => view.readAll(at));
+    const undo = [...this.#views].map((view) => view.readAll(at));
 
     const request = { seenRead: new Set<string>() };
     this.#requests.add(request);
     try {
       this.#answered(await this.#source.markRead({ all: true }), request);
     } catch (err) {
+      // Nothing was marked: the rows go back as they were, and are read again.
+      for (const restore of undo) restore();
       this.#each((view) => view.reload());
       throw err;
     } finally {
@@ -212,6 +214,8 @@ export class Inbox {
 
   #heard(change: Change): void {
     this.#stamp += 1;
+    // Judged before they count as seen: a notification that arrives while a read is in flight is news, not a copy of one read here.
+    const changed = change.notifications.filter((n) => !this.#stale(n));
     for (const n of change.notifications) {
       if (!isUnread(n)) {
         this.#pendingRead.delete(n.id);
@@ -223,7 +227,6 @@ export class Inbox {
     this.#loadFailed = false;
     this.#publish();
 
-    const changed = change.notifications.filter((n) => !this.#stale(n));
     if (changed.length > 0) this.#each((view) => view.apply(changed));
     // An empty change: a deleted project took its notifications along.
     if (change.notifications.length === 0) this.#each((view) => view.reload());
@@ -233,12 +236,10 @@ export class Inbox {
     this.#feed = feed;
     this.#publish();
     if (feed !== "resynced") return;
-    // Changes were missed while the stream was down.
-    if (this.#views.size > 0) this.#each((view) => view.reload());
-    else {
-      const since = this.#stamp;
-      this.#source.list({ limit: 1 }).then((page) => this.listed({ ...page, notifications: [] }, since), () => {});
-    }
+    // Changes were missed while the stream was down: the count is read again, and so is what the views show.
+    const since = this.#stamp;
+    this.#source.list({ limit: 1 }).then((page) => this.listed({ ...page, notifications: [] }, since), () => {});
+    this.#each((view) => view.reload());
   }
 
   #answered(answer: Change, request: { seenRead: Set<string> }): void {

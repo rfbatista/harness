@@ -2,6 +2,9 @@
 // sheet, one open at a time and light dismiss. This is the Alpine client's
 // Alpine-free popup module, reused so the React panel behaves like the
 // dropdowns beside it; it moves here when the Alpine client goes.
+//
+// The one import that leaves web/app/src, and the one exception the layer lint
+// names (eslint-rules/layers.js; ADR 0101).
 
 import { useEffect, useRef, type RefObject } from "react";
 import { defaultEnv, floating } from "../../../../src/shared/presentation/components/popup.js";
