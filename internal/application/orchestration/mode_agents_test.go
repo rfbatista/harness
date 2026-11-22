@@ -141,3 +141,12 @@ func TestSessionResume_IsNotRefusedWhenTheModeNoLongerAcceptsTheAgent(t *testing
 		t.Fatalf("resume: %v", err)
 	}
 }
+
+func TestSessionStart_ABrainstormInProductModeIsCheckedAgainstTheProductModesAgents(t *testing.T) {
+	svc, _, _, settings := modeAgentsWorld(t)
+	settings.selectMode(domain.SessionModeProduct, false, "someone-else")
+	_, _, err := svc.StartInteractive(t.Context(), InteractiveRequest{ProjectID: "p1", RepositoryID: "r1", AgentID: "a1", Mode: "product"})
+	if codeOf(err) != "AGENT_NOT_AVAILABLE_IN_MODE" || !strings.Contains(err.Error(), "Product") {
+		t.Fatalf("err = %v", err)
+	}
+}

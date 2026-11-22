@@ -206,12 +206,8 @@ func (c *Catalog) conflict(edits []*fileEdit, moved map[string]bool) error {
 			changed = append(changed, map[string]any{"path": key, "theirs": strings.Join(names, "\n")})
 			continue
 		}
-		if mode, ok := strings.CutPrefix(key, "modes/"); ok {
-			m, _ := domain.ParseSessionMode(mode)
-			if mode == "default" {
-				m = domain.SessionModeDefault
-			}
-			agents := domain.ModeAgentsEntry(m, c.readMode).Agents
+		if mode, ok := domain.ModeFromAgentsPath(key); ok {
+			agents := domain.ModeAgentsEntry(mode, c.readMode).Agents
 			current[key] = strings.Join(agents, ",")
 			changed = append(changed, map[string]any{"path": key, "theirs": strings.Join(agents, "\n")})
 			continue

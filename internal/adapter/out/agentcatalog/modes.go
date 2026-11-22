@@ -38,6 +38,9 @@ func (c *Catalog) GetModeAgents(context.Context) ([]domain.ModeAgents, error) {
 func (c *Catalog) SetModeAgents(_ context.Context, in domain.SetModeAgents) (*domain.ModeAgents, error) {
 	c.wmu.Lock()
 	defer c.wmu.Unlock()
+	if c.modes == nil {
+		return nil, &domain.StructuredError{Code: "INVALID_INPUT", Message: "mode agents are not available"}
+	}
 	mode, err := domain.ParseSessionMode(in.Mode)
 	if err != nil {
 		return nil, invalid("mode", `mode is "", "architect", "implement", "design", "product", "designsystem", "review", "test", "qa" or "operate"`)
@@ -67,9 +70,6 @@ func (c *Catalog) SetModeAgents(_ context.Context, in domain.SetModeAgents) (*do
 		}
 	default:
 		return nil, invalid("state", "state is all or selected")
-	}
-	if c.modes == nil {
-		return nil, &domain.StructuredError{Code: "INVALID_INPUT", Message: "mode agents are not available"}
 	}
 	value := domain.ModeAgentsValue(in.State, names, in.NoAgent)
 	if _, err := c.modes.UpdateSettings(map[string]string{domain.ModeAgentsKey(mode): value}); err != nil {

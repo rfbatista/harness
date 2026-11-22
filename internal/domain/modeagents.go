@@ -3,6 +3,7 @@ package domain
 import (
 	"encoding/json"
 	"slices"
+	"strings"
 )
 
 // Mode agents (ADR 0103): one server-wide setting per session mode says which
@@ -28,6 +29,20 @@ func ModeAgentsPath(mode SessionMode) string {
 		return "modes/default"
 	}
 	return "modes/" + string(mode)
+}
+
+// ModeFromAgentsPath is the mode a catalog change path "modes/<mode>" names,
+// false for any other path.
+func ModeFromAgentsPath(path string) (SessionMode, bool) {
+	value, ok := strings.CutPrefix(path, "modes/")
+	if !ok {
+		return "", false
+	}
+	if value == "default" {
+		return SessionModeDefault, true
+	}
+	mode, err := ParseSessionMode(value)
+	return mode, err == nil
 }
 
 // ModeAgents is one entry of the mode agents read.
