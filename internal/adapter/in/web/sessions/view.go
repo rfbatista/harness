@@ -223,6 +223,39 @@ type NewSessionForm struct {
 	// Model select starts on and follows. NewSessionFormOf fills in the
 	// built-in models; WithModeModels reads the stored ones.
 	ModeModels map[string]string
+	// ModeAgents is which agents each session mode accepts (mode value →
+	// entry, ADR 0103), which the form uses to offer only the agents the
+	// chosen mode takes. NewSessionFormOf fills in All agents; WithModeAgents
+	// reads the stored ones.
+	ModeAgents map[string]ModeAgentsOf
+}
+
+// ModeAgentsOf is one mode's agents as the form receives them: the state (all
+// or selected), the Selected agents by name, and whether a session with no
+// agent may start.
+type ModeAgentsOf struct {
+	State   string   `json:"state"`
+	Agents  []string `json:"agents"`
+	NoAgent bool     `json:"no_agent"`
+}
+
+// WithModeAgents reads every mode's agents through read, which returns a
+// setting's stored value ("" while unset).
+func (f NewSessionForm) WithModeAgents(read func(key string) string) NewSessionForm {
+	f.ModeAgents = make(map[string]ModeAgentsOf)
+	for _, m := range domain.ModeAgentsList(read) {
+		f.ModeAgents[string(m.Mode)] = ModeAgentsOf{State: m.State, Agents: m.Agents, NoAgent: m.NoAgent}
+	}
+	return f
+}
+
+// ModeAgentsSeed is ModeAgents as JSON, for the form component.
+func (f NewSessionForm) ModeAgentsSeed() string {
+	raw, err := json.Marshal(f.ModeAgents)
+	if err != nil {
+		return "{}"
+	}
+	return string(raw)
 }
 
 // WithModeModels reads every mode's model through read, which returns a
@@ -317,7 +350,8 @@ func NewSessionFormFor(project *domain.Project, agents []*domain.Agent, repos []
 // NewSessionFormOf offers the agents and the project's repositories, in the
 // order given: the task page's form and the board's brainstorm dialog share it.
 func NewSessionFormOf(agents []*domain.Agent, repos []*domain.Repository) NewSessionForm {
-	form := NewSessionForm{}.WithModeModels(func(string) string { return "" })
+	none := func(string) string { return "" }
+	form := NewSessionForm{}.WithModeModels(none).WithModeAgents(none)
 	for _, a := range agents {
 		form.Agents = append(form.Agents, Option{ID: a.ID, Name: a.Name, Description: a.Description})
 	}
