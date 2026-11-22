@@ -1,6 +1,6 @@
 import { assert, file, test } from "../../../shared/testing/test.js";
 import { at, makeNotification } from "../testing/fixtures.js";
-import { isSettled, isUnread, markedRead, matches, merge, upsert } from "./notification.js";
+import { isOpen, isSettled, isUnread, markedRead, matches, merge, openFirst, upsert } from "./notification.js";
 
 file("notifications/domain/notification");
 
@@ -53,4 +53,13 @@ test("markedRead stamps an unread one and leaves a read or resolved one as is", 
   assert.equal(markedRead(read, at(5)), read);
   const settled = makeNotification({ resolvedAt: at(1) });
   assert.equal(markedRead(settled, at(5)), settled);
+});
+
+test("an open cause is an action not yet settled, and the panel lists open causes first, each group newest first", () => {
+  const a = makeNotification({ id: "a", createdAt: at(5), level: "info" });
+  const b = makeNotification({ id: "b", createdAt: at(4) });
+  const c = makeNotification({ id: "c", createdAt: at(3), resolvedAt: at(6) });
+  const d = makeNotification({ id: "d", createdAt: at(2), readAt: at(3) });
+  assert.deepEqual([a, b, c, d].map(isOpen), [false, true, false, true], "read does not close a cause");
+  assert.deepEqual(openFirst([a, b, c, d]).map((n) => n.id), ["b", "d", "a", "c"]);
 });

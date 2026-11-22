@@ -118,7 +118,7 @@ func TestACrashDuringATurnAnApprovalWaitAndIdleMarksOnlyTheMidTurnSessions(t *te
 		}
 	}
 	notes := e.interruptedNotifications()
-	if len(notes) != 1 || len(notes[0].InterruptedSessions) != 2 || notes[0].Title != "2 sessions interrupted by a restart" {
+	if len(notes) != 1 || len(notes[0].InterruptedSessions) != 2 || notes[0].Title != "restart interrupted 2 sessions" {
 		t.Fatalf("notifications = %+v, want one listing the two interrupted sessions", notes)
 	}
 	for _, s := range notes[0].InterruptedSessions {

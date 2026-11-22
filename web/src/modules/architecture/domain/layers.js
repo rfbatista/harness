@@ -147,15 +147,7 @@ export function accessSentence(access) {
   return parts.join("; ");
 }
 
-/** The colour slots an agent chip picks from; the stylesheet has one colour for each. */
-export const AGENT_SLOTS = 8;
-
-/** The slot of an agent's colour, the same for the same name. */
-export function agentSlot(name) {
-  let h = 0;
-  for (const c of String(name ?? "")) h = (h * 31 + c.codePointAt(0)) >>> 0;
-  return h % AGENT_SLOTS;
-}
+export { AGENT_SLOTS, agentSlot } from "../../../shared/domain/agentSlot.js";
 
 /** The overlaps that name a layer. */
 export const overlapsOf = (overlaps, name) => (name === "" ? [] : (overlaps ?? []).filter((o) => o.layers.includes(name)));

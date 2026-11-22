@@ -11,11 +11,10 @@
 // It starts the page's store with the server's seed (#notifications-seed),
 // and keeps the panel's list as one of the store's views.
 
-import { describeError } from "../../../../shared/presentation/errors.js";
 import { defaultEnv, floating } from "../../../../shared/presentation/components/popup.js";
-import { markedRead, merge } from "../../domain/notification.js";
+import { isOpen, markedRead, merge, openFirst, upsert } from "../../domain/notification.js";
 import { PANEL_LIMIT } from "../store.js";
-import { badgeText, bellLabel, toRow } from "../view.js";
+import { badgeText, bellLabel, inboxError, streamNotice, toRow } from "../view.js";
 
 const SEED_ID = "notifications-seed";
 const TICK_MS = 30_000;
@@ -51,7 +50,11 @@ export const notificationsBell = ({ gateway, store, clock, env }) => () => {
     unreadOnly: false,
     open: false,
     loaded: false,
+    /** The open causes older than the latest page have been read (the seed holds only the latest). */
+    openLoaded: false,
     loading: false,
+    /** The changes streamed while a read is in flight, or null. */
+    inFlight: null,
     error: null,
     now: clock.now(),
 
@@ -61,19 +64,19 @@ export const notificationsBell = ({ gateway, store, clock, env }) => () => {
       return store.status;
     },
     get badge() {
-      return badgeText(store.unreadCount);
+      return badgeText(store.badgeCount);
     },
-    get hasUnread() {
-      return !!store.unreadCount;
+    get hasBadge() {
+      return !!store.badgeCount;
     },
     get label() {
-      return bellLabel(store.unreadCount);
+      return bellLabel(store.badgeCount, store.unreadCount ?? 0);
     },
     get expanded() {
       return this.open ? "true" : "false";
     },
     get rows() {
-      return this.items.map((n) => toRow(n, this.now));
+      return openFirst(this.items).map((n) => toRow(n, this.now));
     },
     get isEmpty() {
       return this.loaded && this.items.length === 0;
@@ -132,7 +135,9 @@ export const notificationsBell = ({ gateway, store, clock, env }) => () => {
 
     // ── the list, as one of the store's views ────────────────────────────
     apply(changed) {
-      this.items = merge(this.items, changed, { unread: this.unreadOnly }).slice(0, PANEL_LIMIT);
+      // Changes that stream while a read is in flight may be missing from its answer: keep them to merge over it.
+      this.inFlight?.push(changed);
+      this.items = openFirst(merge(this.items, changed, { unread: this.unreadOnly })).slice(0, PANEL_LIMIT);
     },
     readAll(projectId, at) {
       this.items = this.items.map((n) => (!projectId || n.projectId === projectId ? markedRead(n, at) : n));
@@ -140,19 +145,35 @@ export const notificationsBell = ({ gateway, store, clock, env }) => () => {
     async load() {
       abort?.abort();
       abort = new AbortController();
+      const mine = abort;
       const since = store.stamp;
       this.loading = true;
       this.error = null;
+      const buffered = [];
+      this.inFlight = buffered;
       try {
-        const page = await gateway.list({ unread: this.unreadOnly, limit: PANEL_LIMIT }, abort.signal);
+        // The latest page, and the open causes however old: Needs you leads the panel.
+        const [page, open] = await Promise.all([
+          gateway.list({ unread: this.unreadOnly, limit: PANEL_LIMIT }, mine.signal),
+          gateway.list({ unread: this.unreadOnly, open: true, limit: PANEL_LIMIT }, mine.signal),
+        ]);
         store.listed(page, since);
-        this.items = page.notifications;
+        store.track(open.notifications);
+        this.items = openFirst(upsert(page.notifications, open.notifications.filter(isOpen))).slice(0, PANEL_LIMIT);
         this.loaded = true;
+        this.openLoaded = true;
+        // Then the changes that streamed meanwhile, which the answer may predate.
+        this.inFlight = null;
+        for (const changed of buffered) this.apply(changed);
         this.now = clock.now();
       } catch (err) {
-        if (err?.name !== "AbortError") this.error = describeError(err);
+        if (err?.name !== "AbortError") this.error = inboxError(err);
       } finally {
-        this.loading = false;
+        // A read that a newer one replaced leaves the busy state to it.
+        if (abort === mine) {
+          this.inFlight = null;
+          this.loading = false;
+        }
       }
     },
 
@@ -166,7 +187,7 @@ export const notificationsBell = ({ gateway, store, clock, env }) => () => {
       this.open = true;
       this.now = clock.now();
       popup.open({ sheet: popup.isPhone(), tall: true });
-      if (!this.loaded) this.load();
+      if (!this.loaded || !this.openLoaded) this.load();
       ticker = setInterval(() => (this.now = clock.now()), TICK_MS);
       this.$nextTick(() => (this.$refs.panel.querySelector("[data-item]") ?? this.$refs.panel.querySelector("h2"))?.focus());
     },
@@ -230,7 +251,7 @@ export const notificationsBell = ({ gateway, store, clock, env }) => () => {
       try {
         await store.markRead([n]);
       } catch (err) {
-        this.error = describeError(err);
+        this.error = inboxError(err);
       }
     },
     async markAll() {
@@ -238,11 +259,22 @@ export const notificationsBell = ({ gateway, store, clock, env }) => () => {
       try {
         await store.markAllRead();
       } catch (err) {
-        this.error = describeError(err);
+        this.error = inboxError(err);
       }
     },
     toggleAlerts() {
       store.toggleAlerts();
+    },
+    /** What a dropped stream says; "" while it is live. */
+    get streamNotice() {
+      return streamNotice(store.status);
+    },
+    get hasStreamNotice() {
+      return this.streamNotice !== "";
+    },
+    /** The banner's Reload: reads the list again. */
+    retry() {
+      return this.load();
     },
     dismissError() {
       this.error = null;

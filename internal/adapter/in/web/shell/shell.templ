@@ -172,7 +172,7 @@ templ notificationsBell(b *Bell) {
 			x-on:click="toggle"
 		>
 			@icon("bell")
-			<span class="[ badge ]" data-tone="attention" aria-hidden="true" x-show="hasUnread" x-text="badge" { shownIf(b.Unread() > 0)... }>{ b.BadgeText() }</span>
+			<span class="[ badge ]" data-tone="attention" aria-hidden="true" x-show="hasBadge" x-text="badge" { shownIf(b.Open() > 0)... }>{ b.BadgeText() }</span>
 		</a>
 		<section id="notifications-panel" class="[ popup ] [ notifications-panel ]" aria-labelledby="notifications-heading" x-ref="panel" x-on:keydown="panelKey">
 			<div class="[ head ]">
@@ -185,9 +185,14 @@ templ notificationsBell(b *Bell) {
 			<template x-if="error">
 				<div class="[ message ]" data-tone="danger" role="alert">
 					<span x-text="error.message"></span>
+					<button type="button" class="[ button ]" data-size="sm" x-on:click="retry">Reload</button>
 					<button type="button" class="[ button ]" data-variant="ghost" data-size="sm" x-on:click="dismissError">Dismiss</button>
 				</div>
 			</template>
+			<div class="[ message ]" data-tone="attention" role="status" x-show="hasStreamNotice">
+				<span x-text="streamNotice"></span>
+				<button type="button" class="[ button ]" data-size="sm" x-on:click="retry">Reload</button>
+			</div>
 			<div class="[ list ]" x-bind:aria-busy="loading">
 				<ul role="list" class="[ notification-list ]">
 					<template x-for="row in rows" x-bind:key="row.id">
@@ -214,19 +219,45 @@ templ notificationsBell(b *Bell) {
 // passes actions: a sessions_interrupted item's Resume all interrupted button
 // lives there only; the panel lists its sessions and links to the page.
 templ NotificationLiveRow(actions bool) {
-	<article class="[ notification ]" x-bind:data-level="row.level" x-bind:data-state="row.state">
+	<article class="[ notification ]" data-layout="ledger" data-compact?={ !actions } x-bind:data-kind="row.kind" x-bind:data-level="row.level" x-bind:data-state="row.state">
 		<span class="[ marker ]" aria-hidden="true"></span>
-		<div class="[ text ]">
-			<a class="[ title ]" data-item x-bind:href="row.href" x-bind:data-id="row.id" x-bind:aria-label="row.label" x-on:click="openItem" x-text="row.title"></a>
-			<p class="[ meta ]">
-				<span x-text="row.project"></span>
+		<div class="[ who ]">
+			<span class="[ avatar ]" aria-hidden="true" x-bind:data-who="row.whoKind" x-bind:data-agent="row.whoSlot" x-text="row.whoInitial"></span>
+			<span class="[ name ]" x-text="row.whoName"></span>
+			<span class="[ mode ]" x-show="row.hasWhoMode" x-text="row.whoMode"></span>
+		</div>
+		<div class="[ what ]">
+			<a class="[ title ]" data-item x-bind:href="row.href" x-bind:data-id="row.id" x-bind:aria-label="row.label" x-on:click="openItem">
+				<span class="[ icon ]" aria-hidden="true"></span>
+				<span class="[ text ]">
+					<template x-if="row.hasVerb">
+						<span><span class="[ verb ]" x-text="row.verb"></span> <span class="[ object ]" x-show="row.hasObject" x-bind:data-code="row.objectIsCode" x-text="row.objectText"></span></span>
+					</template>
+					<template x-if="!row.hasVerb">
+						<span class="[ verb ]" x-text="row.title"></span>
+					</template>
+				</span>
+			</a>
+			<p class="[ where ]">
+				<span class="[ project ]" x-text="row.project"></span>
 				<template x-if="row.hasTask">
 					<span class="[ task ]" x-text="row.task"></span>
 				</template>
-				<span class="[ level ]" x-show="row.levelLabel" x-text="row.levelLabel"></span>
-				<time x-bind:datetime="row.at" x-text="row.age"></time>
+				<template x-if="row.hasRepository">
+					<span class="[ repo ]" x-text="row.repository"></span>
+				</template>
 			</p>
-			<p class="[ body ]" x-show="row.body && !row.hasSessions" x-text="row.body"></p>
+		</div>
+		<div class="[ notes ]">
+			<p class="[ body ]" x-show="row.showBody" x-text="row.body"></p>
+			<ul role="list" class="[ interrupted-sessions ]" x-show="row.hasListed">
+				<template x-for="s in row.listed" x-bind:key="s.key">
+					<li x-bind:data-state="s.state">
+						<a x-bind:href="s.href" x-text="s.label"></a>
+						<span class="[ state ]" x-text="s.stateWord"></span>
+					</li>
+				</template>
+			</ul>
 			<ul role="list" class="[ interrupted-sessions ]" x-show="row.hasSessions">
 				<template x-for="s in row.sessions" x-bind:key="s.key">
 					<li x-bind:data-state="s.state">
@@ -237,11 +268,66 @@ templ NotificationLiveRow(actions bool) {
 				</template>
 			</ul>
 			if actions {
+				<button type="button" class="[ button ] [ acknowledge ]" data-size="sm" x-show="row.canAcknowledge" x-bind:data-id="row.id" x-bind:aria-label="row.ackLabel" x-on:click="acknowledge">Acknowledge</button>
 				<button type="button" class="[ button ] [ resume-all ]" data-size="sm" x-show="row.canResumeAll" x-bind:data-id="row.id" x-bind:disabled="resuming" x-bind:aria-busy="resuming" x-on:click="resumeAll">Resume all interrupted</button>
 			}
 		</div>
+		<div class="[ when ]">
+			<time x-bind:datetime="row.at" x-bind:title="row.fullDate"><span x-text="row.clock"></span><span class="[ age ]" x-text="row.age"></span></time>
+			<span class="[ standing ]" x-show="row.hasStatus" x-bind:data-tone="row.statusTone" x-text="row.statusText"></span>
+		</div>
 		<button type="button" class="[ button ] [ mark ]" data-variant="ghost" data-size="sm" x-show="row.unread" x-bind:data-id="row.id" x-bind:aria-label="row.markLabel" x-on:click="markOne">Mark read</button>
 	</article>
+}
+
+// NotificationStack is a folded stack of settled repeats (ADR 0097): a
+// native details element whose summary is the ledger row of the whole run
+// (who, "asked to push 6 times", the outcomes counted), and whose body lists
+// the notifications themselves. It lives in a notificationsPage x-for over
+// `stack`, with `head` (the summary row) and `rows` (the members).
+templ NotificationStack() {
+	<details class="[ stack ]">
+		<template x-for="row in stack.head" x-bind:key="row.key">
+			<summary x-bind:aria-label="row.label">
+				<article class="[ notification ]" data-layout="ledger" x-bind:data-kind="row.kind" data-level="action" data-state="settled">
+					<span class="[ marker ]" aria-hidden="true"></span>
+					<div class="[ who ]">
+						<span class="[ avatar ]" aria-hidden="true" x-bind:data-who="row.whoKind" x-bind:data-agent="row.whoSlot" x-text="row.whoInitial"></span>
+						<span class="[ name ]" x-text="row.whoName"></span>
+						<span class="[ mode ]" x-show="row.hasWhoMode" x-text="row.whoMode"></span>
+					</div>
+					<div class="[ what ]">
+						<span class="[ title ]">
+							<span class="[ icon ]" aria-hidden="true"></span>
+							<span class="[ text ]"><span class="[ count ]" x-text="row.count"></span> <span class="[ verb ]" x-text="row.verb"></span> <span class="[ object ]" x-show="row.hasObject" x-bind:data-code="row.objectIsCode" x-text="row.objectText"></span></span>
+						</span>
+						<p class="[ where ]">
+							<span class="[ project ]" x-text="row.project"></span>
+							<template x-if="row.hasTask">
+								<span class="[ task ]" x-text="row.task"></span>
+							</template>
+							<template x-if="row.hasRepository">
+								<span class="[ repo ]" x-text="row.repository"></span>
+							</template>
+						</p>
+					</div>
+					<div class="[ notes ]"></div>
+					<div class="[ when ]">
+						<time x-bind:datetime="row.at" x-bind:title="row.fullDate"><span x-text="row.clock"></span><span class="[ age ]" x-text="row.age"></span></time>
+						<span class="[ standing ]" data-tone="quiet" x-text="row.statusText"></span>
+					</div>
+					<span class="[ chev ]" aria-hidden="true"></span>
+				</article>
+			</summary>
+		</template>
+		<ul role="list" class="[ notification-list ]">
+			<template x-for="row in stack.rows" x-bind:key="row.id">
+				<li>
+					@NotificationLiveRow(true)
+				</li>
+			</template>
+		</ul>
+	</details>
 }
 
 // tasksToggle is the phone's way to the rail: the Tasks button, with how many

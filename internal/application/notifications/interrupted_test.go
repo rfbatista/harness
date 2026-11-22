@@ -94,7 +94,7 @@ func TestABootThatFindsInterruptedSessionsPostsOneNotificationListingThem(t *tes
 	}
 	n := got[0]
 	if n.Level != domain.NotificationAction || n.Source != domain.NotificationFromSystem || n.Link != "/notifications" ||
-		n.Title != "2 sessions interrupted by a restart" || n.ProjectID != r.ProjectA || n.TaskID != "" || n.SessionID != "" {
+		n.Title != "restart interrupted 2 sessions" || n.ProjectID != r.ProjectA || n.TaskID != "" || n.SessionID != "" {
 		t.Errorf("notification = %+v", n)
 	}
 	if want := "Ship · go-developer\n"; !strings.HasPrefix(n.Body, want) || !strings.Contains(n.Body, "devops") {

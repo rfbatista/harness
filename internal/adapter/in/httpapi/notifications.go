@@ -21,6 +21,7 @@ var errNotificationsOff = echo.NewHTTPError(http.StatusServiceUnavailable, "noti
 type notificationsRead struct {
 	Notifications []*domain.Notification `json:"notifications"`
 	UnreadCount   int                    `json:"unread_count"`
+	OpenCount     int                    `json:"open_count"`
 }
 
 func (h *Handler) handleListNotifications(c echo.Context) error {
@@ -35,6 +36,15 @@ func (h *Handler) handleListNotifications(c echo.Context) error {
 	default:
 		return &domain.StructuredError{Code: "INVALID_INPUT", Message: "unread must be true or false"}
 	}
+	switch c.QueryParam("open") {
+	case "true", "false":
+		open := c.QueryParam("open") == "true"
+		q.Open = &open
+	case "":
+	default:
+		return &domain.StructuredError{Code: "INVALID_INPUT", Message: "open must be true or false"}
+	}
+	q.Actor, q.Kind = c.QueryParam("actor"), domain.NotificationKind(c.QueryParam("kind"))
 	if s := c.QueryParam("limit"); s != "" {
 		n, err := strconv.Atoi(s)
 		if err != nil {
@@ -64,7 +74,20 @@ func (h *Handler) handleMarkNotificationsRead(c echo.Context) error {
 	if err != nil {
 		return err
 	}
-	return c.JSON(http.StatusOK, notificationsRead{Notifications: change.Changed, UnreadCount: change.UnreadCount})
+	return c.JSON(http.StatusOK, notificationsRead{Notifications: change.Changed, UnreadCount: change.UnreadCount, OpenCount: change.OpenCount})
+}
+
+// handleAcknowledgeNotification acknowledges a branch finding: it resolves it
+// with the outcome acknowledged (contract revision 6 §3).
+func (h *Handler) handleAcknowledgeNotification(c echo.Context) error {
+	if h.notifications == nil {
+		return errNotificationsOff
+	}
+	n, err := h.notifications.AcknowledgeNotification(c.Request().Context(), c.Param("id"))
+	if err != nil {
+		return err
+	}
+	return c.JSON(http.StatusOK, map[string]*domain.Notification{"notification": n})
 }
 
 // handleResumeInterrupted is Resume all interrupted: it resumes the sessions a

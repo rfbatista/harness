@@ -114,8 +114,8 @@ func TestABranchRequestIsOneActionNotificationAndItsFeedFollowsItsLife(t *testin
 		return nil
 	})
 	n := notes[0]
-	if n.Level != domain.NotificationAction || !strings.HasPrefix(n.Title, "Branch: create feature-x") ||
-		!strings.Contains(n.Body, g.id) || !strings.Contains(n.Body, g.repo) || !strings.Contains(n.Link, "session="+g.id) || n.ResolvedAt != nil {
+	if n.Level != domain.NotificationAction || strings.HasSuffix(n.Title, "wants to create feature-x") == false ||
+		n.Actor.SessionID != g.id || strings.Contains(n.Title+n.Body, g.id) || !strings.Contains(n.Link, "session="+g.id) || n.ResolvedAt != nil {
 		t.Errorf("notification = %+v", n)
 	}
 	if _, waiting := g.notes(); waiting != 0 {

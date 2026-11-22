@@ -159,7 +159,7 @@ func TestNotifications_WiredServer(t *testing.T) {
 		t.Fatalf("change after the review request = %+v", c)
 	}
 	n := c.Changed[0]
-	if n.Kind != domain.NotificationReviewRequested || n.Level != domain.NotificationAction || n.Title != "Review requested: the plan" ||
+	if n.Kind != domain.NotificationReviewRequested || n.Level != domain.NotificationAction || n.Title != "agent asks you to review the plan" ||
 		n.ProjectName != "harness" || n.TaskTitle != "Notifications" || n.Link != domain.TaskLink(p.ID, tk.ID) {
 		t.Fatalf("review notification = %+v", n)
 	}

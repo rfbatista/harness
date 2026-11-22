@@ -452,10 +452,10 @@ func TestReviewsAreAnnouncedOnTheBus(t *testing.T) {
 		t.Fatal(err)
 	}
 	want := []domain.ReviewRequestChanged{
-		{ReviewID: r.ID, TaskID: f.ticket, ProjectID: f.project, Subject: "Server plan", AboutSessionID: "dev", State: domain.ReviewPending},
-		{ReviewID: r.ID, TaskID: f.ticket, ProjectID: f.project, Subject: "Server plan", AboutSessionID: "dev", State: domain.ReviewApproved},
-		{ReviewID: r2.ID, TaskID: f.ticket, ProjectID: f.project, Subject: "two", State: domain.ReviewPending},
-		{ReviewID: r2.ID, TaskID: f.ticket, ProjectID: f.project, Subject: "two", State: domain.ReviewWithdrawn},
+		{ReviewID: r.ID, TaskID: f.ticket, ProjectID: f.project, Subject: "Server plan", AboutSessionID: "dev", ArchitectSessionID: "arch", State: domain.ReviewPending},
+		{ReviewID: r.ID, TaskID: f.ticket, ProjectID: f.project, Subject: "Server plan", AboutSessionID: "dev", ArchitectSessionID: "arch", State: domain.ReviewApproved},
+		{ReviewID: r2.ID, TaskID: f.ticket, ProjectID: f.project, Subject: "two", ArchitectSessionID: "arch", State: domain.ReviewPending},
+		{ReviewID: r2.ID, TaskID: f.ticket, ProjectID: f.project, Subject: "two", ArchitectSessionID: "arch", State: domain.ReviewWithdrawn},
 	}
 	if !slices.Equal(got, want) {
 		t.Fatalf("announced %+v\nwant %+v", got, want)

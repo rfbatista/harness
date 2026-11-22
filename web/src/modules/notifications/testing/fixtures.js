@@ -21,6 +21,12 @@ export function makeNotification(overrides = {}) {
     readAt: null,
     resolvedAt: null,
     interruptedSessions: [],
+    actor: Object.freeze({ kind: "system", name: "harness", mode: "", sessionId: "" }),
+    verb: "",
+    object: null,
+    repositoryName: "",
+    outcome: "",
+    listedSessions: [],
     ...overrides,
   });
 }
@@ -45,6 +51,14 @@ export function notificationDTO(n) {
     resolved_at: n.resolvedAt?.toISOString(),
     interrupted_sessions: n.interruptedSessions?.length
       ? n.interruptedSessions.map((s) => ({ session_id: s.sessionId, project_id: s.projectId || undefined, task_id: s.taskId || undefined, task_title: s.taskTitle || undefined, agent_name: s.agentName, link: s.link, state: s.state, reason: s.reason || undefined }))
+      : undefined,
+    actor: n.actor && (n.actor.kind !== "system" || n.actor.name !== "harness") ? { kind: n.actor.kind, name: n.actor.name, mode: n.actor.mode || undefined, session_id: n.actor.sessionId || undefined } : undefined,
+    verb: n.verb || undefined,
+    object: n.object ? { text: n.object.text, code: n.object.code } : undefined,
+    repository_name: n.repositoryName || undefined,
+    outcome: n.outcome || undefined,
+    listed_sessions: n.listedSessions?.length
+      ? n.listedSessions.map((s) => ({ session_id: s.sessionId, task_id: s.taskId || undefined, task_title: s.taskTitle || undefined, agent_name: s.agentName, link: s.link, state: s.state }))
       : undefined,
   };
 }

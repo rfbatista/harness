@@ -5,7 +5,7 @@
 
 import { Codes, StructuredError } from "../../../shared/domain/errors.js";
 import { FeedStatus } from "../../../shared/domain/feed.js";
-import { isUnread, markedRead, matches, upsert } from "../domain/notification.js";
+import { isOpen, isSettled, isUnread, markedRead, matches, upsert } from "../domain/notification.js";
 import { toPage } from "./dto.js";
 
 const MAX_LIMIT = 200;
@@ -25,20 +25,22 @@ export function memoryNotifications({ notifications = [], now = () => new Date()
   let nextId = 1;
 
   const unreadCount = () => list.filter(isUnread).length;
+  // The causes that need the person: level action, not settled.
+  const openCount = () => list.filter(isOpen).length;
 
   function commit(changed) {
-    if (changed.length === 0) return { notifications: [], unreadCount: unreadCount() };
+    if (changed.length === 0) return { notifications: [], unreadCount: unreadCount(), openCount: openCount() };
     list = upsert(list, changed);
-    const change = { notifications: changed, unreadCount: unreadCount() };
+    const change = { notifications: changed, unreadCount: unreadCount(), openCount: openCount() };
     for (const f of followers) f.onChange(change);
     return change;
   }
 
   /** @type {import("../domain/ports.js").NotificationGateway} */
   const gateway = {
-    async list({ projectId = "", unread = false, before = "", limit = DEFAULT_LIMIT } = {}) {
+    async list({ projectId = "", unread = false, open = false, actor = "", kind = "", before = "", limit = DEFAULT_LIMIT } = {}) {
       if (!Number.isInteger(limit) || limit < 1 || limit > MAX_LIMIT) throw new StructuredError(Codes.INVALID_INPUT, `limit must be 1..${MAX_LIMIT}`, 400);
-      let rest = list.filter((n) => matches({ projectId, unread }, n));
+      let rest = list.filter((n) => matches({ projectId, unread, open, actor, kind }, n));
       if (before) {
         const at = list.findIndex((n) => n.id === before);
         if (at < 0) throw new StructuredError(Codes.INVALID_INPUT, "unknown cursor", 400);
@@ -48,6 +50,7 @@ export function memoryNotifications({ notifications = [], now = () => new Date()
       return {
         notifications: page,
         unreadCount: unreadCount(),
+        openCount: openCount(),
         nextBefore: rest.length > limit ? page.at(-1).id : "",
       };
     },
@@ -67,6 +70,17 @@ export function memoryNotifications({ notifications = [], now = () => new Date()
       const change = commit(targets.filter(isUnread).map((n) => markedRead(n, at)));
       await beforeAnswer();
       return change;
+    },
+
+    async acknowledge(id) {
+      const n = list.find((x) => x.id === id);
+      if (!n) throw new StructuredError(Codes.NOTIFICATION_NOT_FOUND, `notification ${id} not found`, 404);
+      if (n.kind !== "branch_finding") throw new StructuredError(Codes.INVALID_INPUT, `notification ${id} is not a branch_finding one`, 400);
+      if (isSettled(n)) return n;
+      const at = now();
+      const changed = Object.freeze({ ...n, resolvedAt: at, outcome: "acknowledged", readAt: n.readAt ?? at });
+      commit([changed]);
+      return changed;
     },
 
     async resumeInterrupted(id) {

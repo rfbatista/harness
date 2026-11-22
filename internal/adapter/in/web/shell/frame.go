@@ -60,7 +60,7 @@ type Bell struct {
 	Seed *ports.NotificationPage
 }
 
-// Unread is the count to paint; 0 without a seed.
+// Unread is the global unread count; 0 without a seed.
 func (b *Bell) Unread() int {
 	if b == nil || b.Seed == nil {
 		return 0
@@ -68,12 +68,21 @@ func (b *Bell) Unread() int {
 	return b.Seed.UnreadCount
 }
 
+// Open is the count to paint (ADR 0096): the server's global number of causes
+// that need the person; 0 without a seed.
+func (b *Bell) Open() int {
+	if b == nil || b.Seed == nil {
+		return 0
+	}
+	return b.Seed.OpenCount
+}
+
 // badgeMax is where the badge stops counting (the browser's badgeText).
 const badgeMax = 99
 
 // BadgeText is the bell's badge: "", "3", "99+".
 func (b *Bell) BadgeText() string {
-	n := b.Unread()
+	n := b.Open()
 	switch {
 	case n <= 0:
 		return ""
@@ -85,10 +94,18 @@ func (b *Bell) BadgeText() string {
 
 // Label is the bell's accessible name, with the exact count (bellLabel).
 func (b *Bell) Label() string {
-	if n := b.Unread(); n > 0 {
-		return "Notifications, " + strconv.Itoa(n) + " unread"
+	n := b.Open()
+	if n == 0 {
+		if u := b.Unread(); u > 0 {
+			return "Notifications, " + strconv.Itoa(u) + " unread"
+		}
+		return "Notifications"
 	}
-	return "Notifications"
+	label := "Notifications, " + strconv.Itoa(n) + " need you"
+	if u := b.Unread(); u > 0 {
+		label += ", " + strconv.Itoa(u) + " unread"
+	}
+	return label
 }
 
 // Hint is one keyboard way the stream bar names: its keys and what they do.
@@ -349,8 +366,8 @@ func (f Frame) DocumentTitle() string {
 	if f.Title != "" {
 		title = f.Title + " · harness"
 	}
-	// The unread count leads, as the browser keeps it (store.syncTitle).
-	if n := f.Notifications.Unread(); n > 0 {
+	// The count of what needs the person leads, as the browser keeps it (store.syncTitle).
+	if n := f.Notifications.Open(); n > 0 {
 		title = "(" + strconv.Itoa(n) + ") " + title
 	}
 	return title
