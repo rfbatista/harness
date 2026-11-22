@@ -56,6 +56,12 @@ type CatalogEditor interface {
 	SetProjectMCPSettings(ctx context.Context, in domain.SetCatalogProjectMCPSettings) (*domain.CatalogProjectMCPServers, error)
 	GetProjectAgents(ctx context.Context, projectID string) (*domain.CatalogProjectAgents, error)
 	SetProjectAgents(ctx context.Context, in domain.SetCatalogProjectAgents) (*domain.CatalogProjectAgents, error)
+	// GetModeAgents reads every session mode's agents (ADR 0103), in the order
+	// of the modes.
+	GetModeAgents(ctx context.Context) ([]domain.ModeAgents, error)
+	// SetModeAgents replaces one mode's agents. Each name must be a catalog
+	// agent.
+	SetModeAgents(ctx context.Context, in domain.SetModeAgents) (*domain.ModeAgents, error)
 	UndoCatalogChange(in domain.UndoCatalogChange) (*domain.CatalogWriteResult, error)
 }
 

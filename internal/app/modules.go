@@ -307,11 +307,12 @@ type catalogParams struct {
 	EnvFileIO       ports.EnvFileIO
 	RunCommands     ports.RunCommandRepository
 	Activations     ports.TokenSaverActivationRepository
+	AgentCatalog    *agentcatalog.Catalog
 	Cfg             Config
 }
 
 func newCatalog(p catalogParams) catalog.Catalog {
-	return catalog.New(catalog.Deps{
+	c := catalog.New(catalog.Deps{
 		Projects:         p.Projects,
 		Repositories:     p.Repositories,
 		Zones:            p.Zones,
@@ -340,6 +341,9 @@ func newCatalog(p catalogParams) catalog.Catalog {
 		Activations:      p.Activations,
 		DefaultRoot:      p.Cfg.Root,
 	})
+	// The mode agents live in the server settings (ADR 0103).
+	p.AgentCatalog.UseModeAgents(c.Settings)
+	return c
 }
 
 // PlanningModule provides the planning service (tickets and documents).

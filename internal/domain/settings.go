@@ -63,6 +63,9 @@ func ValidateSetting(key, value string) error {
 		if key == BranchBlockKey(mode) {
 			return validateBranchBlockSetting(key, value)
 		}
+		if key == ModeAgentsKey(mode) {
+			return validateModeAgentsSetting(key, value)
+		}
 	}
 	return validateProviderSetting(key, value)
 }

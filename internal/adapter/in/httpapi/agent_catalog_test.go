@@ -30,6 +30,7 @@ type catalogFixture struct {
 	projects *projects.Service
 	prober   *fakeProber
 	db       *gorm.DB
+	cat      *agentcatalog.Catalog
 }
 
 func newCatalogFixture(t *testing.T) *catalogFixture {
@@ -38,18 +39,27 @@ func newCatalogFixture(t *testing.T) *catalogFixture {
 	if err != nil {
 		t.Fatal(err)
 	}
-	app := catalog.New(catalog.SQLiteDeps(db))
-	f := &catalogFixture{t: t, dir: filepath.Join(t.TempDir(), "agents"), env: map[string]string{}, projects: app.Projects, prober: &fakeProber{}, db: db}
+	f := &catalogFixture{t: t, dir: filepath.Join(t.TempDir(), "agents"), env: map[string]string{}, prober: &fakeProber{}, db: db}
+	f.restart()
+	return f
+}
+
+// restart serves the catalog folder and the database again, as a restarted
+// server does: nothing is kept in memory from before.
+func (f *catalogFixture) restart() {
+	app := catalog.New(catalog.SQLiteDeps(f.db))
+	f.projects = app.Projects
 	cat := agentcatalog.New(f.dir,
 		agentcatalog.WithEnv(func(k string) (string, bool) {
 			v, ok := f.env[k]
 			return v, ok
 		}),
 		agentcatalog.WithProjects(app.Projects),
-		agentcatalog.WithUsage(sqlite.NewAgentUsageRepository(db)),
+		agentcatalog.WithModeAgents(app.Settings),
+		agentcatalog.WithUsage(sqlite.NewAgentUsageRepository(f.db)),
 		agentcatalog.WithProber(f.prober))
-	f.router = NewRouter(NewHandler(Services{Catalog: cat}))
-	return f
+	f.cat = cat
+	f.router = NewRouter(NewHandler(Services{Catalog: cat, ProjectFeed: quietProjectFeed{}}))
 }
 
 // fakeProber answers a probe with what a test set, and keeps what it was asked.
