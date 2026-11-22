@@ -38,6 +38,20 @@ export function topBarSourceContract(name: string, make: () => TopBarSourceHarne
       assert.deepEqual((await h.source.load("/x")).links.map((link) => link.key), ["board", "projects", "agents", "credentials", "token_savers", "models", "agent_isolation", "server"]);
     });
 
+    test("a path with a query-looking tail is carried whole, not split", async () => {
+      const h = make();
+      const path = "/projects/p1?tab=a&b=c d#x";
+      h.serve(topBarJson({ path, current_project_id: "p1" }));
+      assert.equal((await h.source.load(path)).path, path);
+    });
+
+    test("a model with no current project and no notifications part still loads", async () => {
+      const h = make();
+      h.serve(topBarJson({ path: "/agents", current_project_id: "", notifications: null }));
+      const topBar = await h.source.load("/agents");
+      assert.deepEqual([topBar.currentProjectId, topBar.path], ["", "/agents"]);
+    });
+
     test("a malformed path is INVALID_INPUT", async () => {
       await assert.rejects(make().source.load("not-a-path"), (err: unknown) => err instanceof TopBarSourceError && err.code === "INVALID_INPUT");
     });
