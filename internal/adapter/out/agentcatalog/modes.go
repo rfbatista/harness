@@ -80,3 +80,131 @@ func (c *Catalog) SetModeAgents(_ context.Context, in domain.SetModeAgents) (*do
 	entry := domain.ModeAgentsEntry(mode, c.readMode)
 	return &entry, nil
 }
+
+// modeEdit is the list of a Selected mode a change sets. Only the list moves:
+// the No agent flag stays as it is.
+type modeEdit struct {
+	mode          domain.SessionMode
+	before, after []string
+}
+
+func (m *modeEdit) changed() bool { return !sameNames(m.before, m.after) }
+
+// modeChanges are the edits as the answer shows them, and marks their paths
+// as touched.
+func modeChanges(edits []*modeEdit, keys map[string]bool) []domain.CatalogModeChange {
+	out := []domain.CatalogModeChange{}
+	for _, m := range edits {
+		out = append(out, domain.CatalogModeChange{Mode: m.mode, Name: domain.ModeName(m.mode), Before: nonNil(m.before), After: nonNil(m.after)})
+		keys[domain.ModeAgentsPath(m.mode)] = true
+	}
+	return out
+}
+
+// dropUnchangedModes forgets the edits that end where they began.
+func (t *txn) dropUnchangedModes() {
+	kept := t.modes[:0]
+	for _, m := range t.modes {
+		if m.changed() {
+			kept = append(kept, m)
+		}
+	}
+	t.modes = kept
+}
+
+// selectedModes are the Selected modes, as they are now.
+func (c *Catalog) selectedModes() []domain.ModeAgents {
+	var out []domain.ModeAgents
+	for _, m := range domain.ModeAgentsList(c.readMode) {
+		if m.State == domain.AgentsSelected {
+			out = append(out, m)
+		}
+	}
+	return out
+}
+
+// modeEditOf is the write's edit of a mode's list, made when there is none.
+func (t *txn) modeEditOf(m domain.ModeAgents) *modeEdit {
+	for _, e := range t.modes {
+		if e.mode == m.Mode {
+			return e
+		}
+	}
+	e := &modeEdit{mode: m.Mode, before: append([]string{}, m.Agents...), after: append([]string{}, m.Agents...)}
+	t.modes = append(t.modes, e)
+	return e
+}
+
+// moveModeAgent makes every Selected mode that lists from list to instead,
+// or drop it when to is "".
+func (t *txn) moveModeAgent(from, to string) {
+	for _, m := range t.c.selectedModes() {
+		cur := t.modeEditOf(m)
+		if !contains(cur.after, from) {
+			continue
+		}
+		if to == "" {
+			cur.after = without(cur.after, from)
+		} else {
+			cur.after = replaceName(cur.after, from, to)
+		}
+	}
+}
+
+// setAgentModes makes the Selected modes that list the agent exactly those
+// of modes (mode values).
+func (t *txn) setAgentModes(agent string, modes []string) {
+	for _, m := range t.c.selectedModes() {
+		cur := t.modeEditOf(m)
+		switch wanted := contains(modes, string(m.Mode)); {
+		case wanted && !contains(cur.after, agent):
+			cur.after = append(append([]string{}, cur.after...), agent)
+		case !wanted && contains(cur.after, agent):
+			cur.after = without(cur.after, agent)
+		}
+	}
+}
+
+// checkAgentModes refuses a save whose modes name a mode that is not Selected.
+func (c *Catalog) checkAgentModes(modes []string) error {
+	selected := map[string]bool{}
+	for _, m := range c.selectedModes() {
+		selected[string(m.Mode)] = true
+	}
+	for _, v := range modes {
+		mode, err := domain.ParseSessionMode(v)
+		if err != nil {
+			return invalid("modes", "mode "+v+" is not a session mode")
+		}
+		if !selected[string(mode)] {
+			return invalid("modes", "mode "+domain.ModeName(mode)+" accepts all agents: change it in the server settings")
+		}
+	}
+	return nil
+}
+
+// applyMode writes a mode edit's list, or puts the old one back.
+func (c *Catalog) applyMode(m *modeEdit, forward bool) error {
+	list := m.after
+	if !forward {
+		list = m.before
+	}
+	if c.modes == nil {
+		return &domain.StructuredError{Code: "INVALID_INPUT", Message: "mode agents are not available"}
+	}
+	cur := domain.ModeAgentsEntry(m.mode, c.readMode)
+	value := domain.ModeAgentsValue(domain.AgentsSelected, list, cur.NoAgent)
+	_, err := c.modes.UpdateSettings(map[string]string{domain.ModeAgentsKey(m.mode): value})
+	return err
+}
+
+// agentModes are the mode values where the agent may start.
+func (c *Catalog) agentModes(name string) []string {
+	out := []string{}
+	for _, m := range domain.ModeAgentsList(c.readMode) {
+		if m.Allows(name) {
+			out = append(out, string(m.Mode))
+		}
+	}
+	return out
+}

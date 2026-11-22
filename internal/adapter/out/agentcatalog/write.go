@@ -33,6 +33,7 @@ type storedChange struct {
 	summary  string
 	edits    []*fileEdit
 	projects []*projectEdit
+	modes    []*modeEdit
 }
 
 // projectEdit is a project's MCP server list a change sets.
@@ -84,6 +85,7 @@ type txn struct {
 	tools       *node
 	edits       []*fileEdit
 	projects    []*projectEdit
+	modes       []*modeEdit
 	// projectList is every project, read once.
 	projectList []*domain.Project
 	// renamed and deleted are the agents this write renames (from, to) and
@@ -204,6 +206,16 @@ func (c *Catalog) conflict(edits []*fileEdit, moved map[string]bool) error {
 			changed = append(changed, map[string]any{"path": key, "theirs": strings.Join(names, "\n")})
 			continue
 		}
+		if mode, ok := strings.CutPrefix(key, "modes/"); ok {
+			m, _ := domain.ParseSessionMode(mode)
+			if mode == "default" {
+				m = domain.SessionModeDefault
+			}
+			agents := domain.ModeAgentsEntry(m, c.readMode).Agents
+			current[key] = strings.Join(agents, ",")
+			changed = append(changed, map[string]any{"path": key, "theirs": strings.Join(agents, "\n")})
+			continue
+		}
 		current[key] = c.currentVersion(key)
 	}
 	for _, e := range edits {
@@ -227,6 +239,7 @@ func (t *txn) commit(opts domain.CatalogWriteOptions, summary string) (*domain.C
 		return nil, err
 	}
 	t.dropUnchangedProjects()
+	t.dropUnchangedModes()
 	keys := map[string]bool{}
 	for _, e := range t.edits {
 		keys[versionKey(e.path)] = true
@@ -259,15 +272,16 @@ func (t *txn) commit(opts domain.CatalogWriteOptions, summary string) (*domain.C
 	if change.Projects == nil {
 		change.Projects = []domain.CatalogProjectChange{}
 	}
-	if opts.DryRun || len(t.edits) == 0 && len(t.projects) == 0 {
+	change.Modes = modeChanges(t.modes, keys)
+	if opts.DryRun || len(t.edits) == 0 && len(t.projects) == 0 && len(t.modes) == 0 {
 		return &domain.CatalogWriteResult{Change: change, Versions: c.versionsAfter(t.l, keys, false)}, nil
 	}
-	if err := c.applyAll(t.edits, t.projects); err != nil {
+	if err := c.applyAll(t.edits, t.projects, t.modes); err != nil {
 		return nil, err
 	}
 	c.followAgents(t)
 	change.ID = newChangeID()
-	c.last = &storedChange{id: change.ID, summary: summary, edits: t.edits, projects: t.projects}
+	c.last = &storedChange{id: change.ID, summary: summary, edits: t.edits, projects: t.projects, modes: t.modes}
 	c.publish(sortedKeys(keys))
 	return &domain.CatalogWriteResult{Change: change, Versions: c.versionsAfter(t.l, keys, true)}, nil
 }
@@ -316,7 +330,7 @@ func (c *Catalog) versionsAfter(l *loaded, touched map[string]bool, written bool
 		return out
 	}
 	for k := range touched {
-		if strings.HasPrefix(k, "projects/") {
+		if strings.HasPrefix(k, "projects/") || strings.HasPrefix(k, "modes/") {
 			continue
 		}
 		if v := c.currentVersion(k); v != "" {
@@ -344,18 +358,30 @@ func (c *Catalog) apply(edits []*fileEdit) error {
 
 // applyAll writes the files, then the project lists. A failure puts back
 // whatever was already written.
-func (c *Catalog) applyAll(edits []*fileEdit, projects []*projectEdit) error {
+func (c *Catalog) applyAll(edits []*fileEdit, projects []*projectEdit, modes []*modeEdit) error {
 	if err := c.apply(edits); err != nil {
 		return err
 	}
+	undo := func(projectsDone, modesDone int) {
+		for j := modesDone - 1; j >= 0; j-- {
+			_ = c.applyMode(modes[j], false)
+		}
+		for j := projectsDone - 1; j >= 0; j-- {
+			_ = c.applyProject(projects[j], false)
+		}
+		for j := len(edits) - 1; j >= 0; j-- {
+			_ = c.writeFile(edits[j].path, edits[j].before)
+		}
+	}
 	for i, p := range projects {
 		if err := c.applyProject(p, true); err != nil {
-			for j := i - 1; j >= 0; j-- {
-				_ = c.applyProject(projects[j], false)
-			}
-			for j := len(edits) - 1; j >= 0; j-- {
-				_ = c.writeFile(edits[j].path, edits[j].before)
-			}
+			undo(i, 0)
+			return err
+		}
+	}
+	for i, m := range modes {
+		if err := c.applyMode(m, true); err != nil {
+			undo(len(projects), i)
 			return err
 		}
 	}
@@ -452,6 +478,14 @@ func (c *Catalog) UndoCatalogChange(in domain.UndoCatalogChange) (*domain.Catalo
 		projects = append(projects, &projectEdit{id: p.id, name: p.name, before: p.after, after: p.before, enBefore: p.enAfter, enAfter: p.enBefore,
 			banBefore: p.banAfter, banAfter: p.banBefore, ovBefore: p.ovAfter, ovAfter: p.ovBefore})
 	}
+	var modes []*modeEdit
+	for i := len(c.last.modes) - 1; i >= 0; i-- {
+		m := c.last.modes[i]
+		if !sameNames(domain.ModeAgentsEntry(m.mode, c.readMode).Agents, m.after) {
+			moved[domain.ModeAgentsPath(m.mode)] = true
+		}
+		modes = append(modes, &modeEdit{mode: m.mode, before: m.after, after: m.before})
+	}
 	if len(moved) > 0 && !in.Force {
 		return nil, c.conflict(edits, moved)
 	}
@@ -463,6 +497,7 @@ func (c *Catalog) UndoCatalogChange(in domain.UndoCatalogChange) (*domain.Catalo
 		}
 		keys["projects/"+p.id] = true
 	}
+	change.Modes = modeChanges(modes, keys)
 	for _, e := range edits {
 		keys[versionKey(e.path)] = true
 		change.Writes = append(change.Writes, fileWrite(e))
@@ -470,11 +505,11 @@ func (c *Catalog) UndoCatalogChange(in domain.UndoCatalogChange) (*domain.Catalo
 	if in.DryRun {
 		return &domain.CatalogWriteResult{Change: change, Versions: c.versionsAfter(l, keys, false)}, nil
 	}
-	if err := c.applyAll(edits, projects); err != nil {
+	if err := c.applyAll(edits, projects, modes); err != nil {
 		return nil, err
 	}
 	change.ID = newChangeID()
-	c.last = &storedChange{id: change.ID, summary: change.Summary, edits: edits, projects: projects}
+	c.last = &storedChange{id: change.ID, summary: change.Summary, edits: edits, projects: projects, modes: modes}
 	c.publish(sortedKeys(keys))
 	return &domain.CatalogWriteResult{Change: change, Versions: c.versionsAfter(l, keys, true)}, nil
 }

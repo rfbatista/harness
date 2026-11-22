@@ -72,6 +72,10 @@ type CatalogAgent struct {
 	AllowedTools      []string `json:"allowed_tools"`
 	// EnabledIn are the projects where the agent is enabled (ADR 0038).
 	EnabledIn []CatalogEnabledIn `json:"enabled_in"`
+	// AvailableInModes are the session mode values where the agent may start
+	// (ADR 0103): each mode that accepts all agents and each Selected mode
+	// that lists it, in the order of the modes.
+	AvailableInModes []string `json:"available_in_modes"`
 	// Repositories are, for each project that enables the agent, its
 	// repositories with where the agent is unassigned and has a repository
 	// prompt (ADR 0061). Filled by the repository agents, not the catalog
@@ -265,6 +269,17 @@ type CatalogChange struct {
 	Writes  []CatalogFileWrite `json:"writes"`
 	// Projects are the project MCP server lists the change sets.
 	Projects []CatalogProjectChange `json:"projects"`
+	// Modes are the mode agent lists the change sets (an agent saved, renamed
+	// or deleted).
+	Modes []CatalogModeChange `json:"modes"`
+}
+
+// CatalogModeChange is the Selected agents of one session mode a change sets.
+type CatalogModeChange struct {
+	Mode   SessionMode `json:"mode"`
+	Name   string      `json:"name"`
+	Before []string    `json:"before"`
+	After  []string    `json:"after"`
 }
 
 // CatalogWriteResult is the answer of every catalog write.
@@ -321,6 +336,9 @@ type SaveCatalogAgent struct {
 	// Projects is the full set of selected-mode projects that list the agent
 	// after the save. Nil leaves the lists as they are.
 	Projects []string `json:"projects"`
+	// Modes is the full set of Selected modes (mode values) that list the
+	// agent after the save. Nil leaves the lists as they are.
+	Modes []string `json:"modes"`
 	// AllowNoDescription lets an agent be saved without a description: the
 	// legacy create_agent never required one. The agent then shows a
 	// NO_DESCRIPTION problem. Not part of the HTTP body.
