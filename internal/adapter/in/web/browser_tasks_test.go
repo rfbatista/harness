@@ -42,7 +42,7 @@ func (f *fakeTicketsAPI) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		_ = json.NewEncoder(w).Encode(map[string]any{"sessions": f.sessions[r.URL.Query().Get("ticket_id")]})
 		return
 	}
-	if r.URL.Path == "/api/events" {
+	if r.URL.Path == "/api/events" || r.URL.Path == "/api/project_events" {
 		http.NotFound(w, r)
 		return
 	}

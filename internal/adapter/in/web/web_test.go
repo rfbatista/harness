@@ -310,9 +310,6 @@ func TestProjectPagePutsItsTasksOnTheRailAndTheProjectInThePicker(t *testing.T) 
 		t.Fatalf("got %d:\n%s", rec.Code, body)
 	}
 	for _, want := range []string{
-		`<option value="p1" selected>coding_pool</option>`,
-		`<option value="p2">other</option>`,
-		`action="/switch-project"`,
 		`<span class="[ name ]">In progress</span>`,
 		`href="/projects/p1/tasks/t-feed"`,
 		`<span class="[ label ]">Add SSE feed</span>`,
@@ -345,6 +342,11 @@ func TestProjectPagePutsItsTasksOnTheRailAndTheProjectInThePicker(t *testing.T) 
 	}
 	if strings.Contains(body, "Elsewhere") {
 		t.Error("another project's task is on the board or the rail")
+	}
+	// The picker is the top bar island's: its projects, the current one and where a switch goes.
+	if bar := topBarOf(t, body); bar.CurrentProjectID != "p1" || bar.SwitchProjectHref != "/switch-project" ||
+		len(bar.Projects) != 2 || bar.Projects[0].Name != "coding_pool" || bar.Projects[1].ID != "p2" || bar.Projects[1].Name != "other" {
+		t.Errorf("the project picker props: %+v", bar)
 	}
 	if strings.Contains(body, "Pick a task") {
 		t.Error("the board replaced the pick-a-task empty state")
@@ -627,11 +629,13 @@ func TestNewProjectPageOffersTheForm(t *testing.T) {
 		`id="project-root"`,
 		`x-on:click="search"`, // finds the repositories inside the directory
 		`x-for="f in found"`,
-		`<option value="" selected disabled>Choose a project…</option>`, // no project selected on this page
 	} {
 		if !strings.Contains(body, want) {
 			t.Errorf("new project page is missing %q", want)
 		}
+	}
+	if bar := topBarOf(t, body); bar.CurrentProjectID != "" { // no project selected on this page
+		t.Errorf("the picker selects %q on the new project page", bar.CurrentProjectID)
 	}
 }
 
@@ -665,8 +669,9 @@ func TestRepositoriesPageListsAndSeedsThem(t *testing.T) {
 
 func TestPagesLinkToProjectCreationAndRepositories(t *testing.T) {
 	h := newTestHandler(t, board())
-	if body := get(t, h, "/projects/p1").Body.String(); !strings.Contains(body, `href="/projects/new"`) || !strings.Contains(body, `href="/projects/p1/repositories"`) {
-		t.Error("the project page links to New project and Repositories")
+	body := get(t, h, "/projects/p1").Body.String()
+	if l, ok := topBarLink(t, body, "new_project"); !ok || l.Href != "/projects/new" || !strings.Contains(body, `href="/projects/p1/repositories"`) {
+		t.Errorf("the project page links to New project (%+v) and Repositories", l)
 	}
 	if body := get(t, newTestHandler(t, world{}), "/").Body.String(); !strings.Contains(body, `href="/projects/new"`) {
 		t.Error("the first-run page links to New project")
@@ -698,13 +703,17 @@ func TestProjectsPageListsEveryProjectWithItsCounts(t *testing.T) {
 		`data-state="running">2 running<`,
 		`4 repos · 7 open tasks · active 2m ago`,
 		`2 projects · 2 sessions running`,
-		`href="/projects/new"`,                                          // New project, from the toolbar
-		`href="/projects" aria-current="page">Projects</a>`,             // the top bar marks the page
-		`<option value="" selected disabled>Choose a project…</option>`, // no project selected here
+		`href="/projects/new"`, // New project, from the toolbar
 	} {
 		if !strings.Contains(body, want) {
 			t.Errorf("projects page is missing %q", want)
 		}
+	}
+	if l, _ := topBarLink(t, body, "projects"); !l.Current || l.Href != "/projects" { // the top bar marks the page
+		t.Errorf("the top bar does not mark the projects page: %+v", l)
+	}
+	if bar := topBarOf(t, body); bar.CurrentProjectID != "" { // no project selected here
+		t.Errorf("the picker selects %q on the projects page", bar.CurrentProjectID)
 	}
 	empty := world{summaries: fakeSummaries{}}
 	if body := get(t, newTestHandler(t, empty), "/projects").Body.String(); !strings.Contains(body, "No projects yet") || !strings.Contains(body, `{"summaries":[]}`) {
