@@ -30,13 +30,13 @@ func (s *Service) SyncContextUsage(ctx context.Context, id string) (bool, error)
 	if sess == nil {
 		return false, nil
 	}
-	s.contextMu.Lock()
-	defer s.contextMu.Unlock()
-	c, err := s.Contexts.Load(ctx, id)
-	if err != nil || c == nil || len(c.Entries) == 0 {
+	cursor, ok, err := s.usageCursor(ctx, id)
+	if err != nil || !ok {
 		return false, err
 	}
-	entries, last, err := s.transcriptSince(sess, c.Cursor)
+	// The transcript is read outside the lock: a slow read must not hold up
+	// the recording of an entry or an init report.
+	entries, last, err := s.transcriptSince(sess, cursor)
 	if err != nil {
 		var se *domain.StructuredError
 		if errors.As(err, &se) && se.Code == "SESSION_TRANSCRIPT_MISSING" {
@@ -47,6 +47,12 @@ func (s *Service) SyncContextUsage(ctx context.Context, id string) (bool, error)
 	if len(entries) == 0 {
 		return false, nil
 	}
+	s.contextMu.Lock()
+	defer s.contextMu.Unlock()
+	c, err := s.Contexts.Load(ctx, id)
+	if err != nil || c == nil || c.Cursor != cursor {
+		return false, err // gone, or another pass got there first
+	}
 	changed := addUse(c, entries)
 	c.Cursor = last
 	if err := s.Contexts.Save(ctx, c); err != nil {
@@ -56,6 +62,18 @@ func (s *Service) SyncContextUsage(ctx context.Context, id string) (bool, error)
 		s.contextChanged(id, ports.ContextUsage)
 	}
 	return changed, nil
+}
+
+// usageCursor is where the session's usage has read its transcript up to; ok
+// is false for a session with no recorded context.
+func (s *Service) usageCursor(ctx context.Context, id string) (cursor string, ok bool, err error) {
+	s.contextMu.Lock()
+	defer s.contextMu.Unlock()
+	c, err := s.Contexts.Load(ctx, id)
+	if err != nil || c == nil || len(c.Entries) == 0 {
+		return "", false, err
+	}
+	return c.Cursor, true, nil
 }
 
 // transcriptSince is the transcript's entries after cursor, oldest first, and

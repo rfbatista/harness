@@ -52,10 +52,10 @@ func (s *Service) applyInitReport(ctx context.Context, id string, raw json.RawMe
 		return false, err
 	}
 	entry := &c.Entries[len(c.Entries)-1]
-	changed := false
+	changed, kept := false, false
 	if report.Version != "" && entry.Facts.ClaudeVersion != report.Version {
 		entry.Facts.ClaudeVersion = report.Version
-		changed = true
+		kept = true
 	}
 	for _, reported := range report.MCPServers {
 		i := slices.IndexFunc(entry.MCPServers, func(sv domain.ContextServer) bool { return sv.Name == reported.Name })
@@ -63,13 +63,19 @@ func (s *Service) applyInitReport(ctx context.Context, id string, raw json.RawMe
 			continue
 		}
 		server := &entry.MCPServers[i]
+		reason := ""
+		if reported.Status == domain.MCPFailed {
+			reason = statusReason(reported.Error, redact)
+		}
+		if server.Status == reported.Status && server.StatusReason == reason {
+			continue // said before: a repeated report adds no change
+		}
 		switch reported.Status {
 		case domain.MCPConnected:
 			server.Status, server.StatusReason = domain.MCPConnected, ""
 			c.Changes = append(c.Changes, domain.ContextChange{At: at, Kind: domain.ContextChangeMCPConnected,
 				Subject: server.Name, Detail: "claude connected to " + server.Name})
 		case domain.MCPFailed:
-			reason := statusReason(reported.Error, redact)
 			server.Status, server.StatusReason = domain.MCPFailed, reason
 			detail := "claude could not connect to " + server.Name
 			if reason != "" {
@@ -82,14 +88,16 @@ func (s *Service) applyInitReport(ctx context.Context, id string, raw json.RawMe
 		}
 		changed = true
 	}
-	if !changed {
+	if !changed && !kept {
 		return false, nil
 	}
 	if err := s.Contexts.Save(ctx, c); err != nil {
 		return false, err
 	}
-	s.contextChanged(id, ports.ContextMCPStatus)
-	return true, nil
+	if changed {
+		s.contextChanged(id, ports.ContextMCPStatus)
+	}
+	return changed, nil
 }
 
 // statusReason is claude's error text for a failed server, cut to one bounded
@@ -167,4 +175,11 @@ func (s *Service) onInit(id string, ce llmkit.Event) {
 	if _, err := s.applyInitReport(context.Background(), id, ce.Raw, redact, at); err != nil {
 		slog.Warn("keep a session's init report", "session", id, "err", err)
 	}
+}
+
+// dropRedactor forgets a session's secret values.
+func (s *Service) dropRedactor(id string) {
+	s.contextMu.Lock()
+	defer s.contextMu.Unlock()
+	delete(s.redactors, id)
 }

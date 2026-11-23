@@ -162,3 +162,24 @@ func TestSessionContextInit_KnownToolsNeverGiveAServerAStatus(t *testing.T) {
 		}
 	}
 }
+
+func TestSessionContextInit_ARepeatedReportAddsNoChange(t *testing.T) {
+	svc := contextService(t)
+	storeEntry(t, svc, serversEntry())
+	report := `{"mcp_servers":[{"name":"task","status":"connected"}]}`
+	if !applyInit(t, svc, report, nil) {
+		t.Fatal("the first report reported no change")
+	}
+	if applyInit(t, svc, report, nil) {
+		t.Error("the same report again reported a change")
+	}
+	n := 0
+	for _, c := range contextOf(t, svc, "s1").Changes {
+		if c.Kind == domain.ContextChangeMCPConnected {
+			n++
+		}
+	}
+	if n != 1 {
+		t.Errorf("mcp_connected changes = %d, want 1", n)
+	}
+}
