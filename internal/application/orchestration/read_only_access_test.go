@@ -118,3 +118,19 @@ func TestAResumeOfAReadOnlySessionRebuildsTheSameReadOnlyPolicyAndEnvironment(t 
 		t.Error("a resumed read-only session lost its environment or brief")
 	}
 }
+
+func TestASessionThatCutsItsOwnWorktreeWritesItWhateverItsModesPreset(t *testing.T) {
+	svc, _ := newInteractiveService(t)
+	for _, mode := range []string{"review", "qa"} {
+		sess, err := startOn(t, svc, InteractiveRequest{Mode: mode})
+		if err != nil {
+			t.Fatalf("%s: %v", mode, err)
+		}
+		if sess.Access != domain.AccessWrite || sess.Joined {
+			t.Errorf("%s cut its own worktree and recorded access %q joined %v", mode, sess.Access, sess.Joined)
+		}
+	}
+	if _, err := startOn(t, svc, InteractiveRequest{Mode: "review", Access: "read_only"}); err == nil {
+		t.Error("read-only was accepted with no worktree to join")
+	}
+}

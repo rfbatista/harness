@@ -1049,17 +1049,20 @@ func joinRefusal(code, message string, details map[string]string) error {
 func (s *Service) joinTarget(ctx context.Context, req InteractiveRequest, mode domain.SessionMode) (domain.SessionAccess, *domain.Workspace, error) {
 	access := domain.SessionAccess(req.Access)
 	switch access {
-	case "":
-		access = defaultAccess(mode)
-	case domain.AccessWrite, domain.AccessReadOnly:
+	case "", domain.AccessWrite, domain.AccessReadOnly:
 	default:
 		return "", nil, joinRefusal("ACCESS_INVALID", "access must be write or read_only", map[string]string{"access": req.Access})
 	}
 	if req.WorktreeID == "" {
+		// A session that cuts its own worktree writes it, whatever its mode's
+		// preset: only a join can be read-only.
 		if access == domain.AccessReadOnly {
 			return "", nil, joinRefusal("ACCESS_INVALID", "a session that cuts its own worktree writes it: read-only access needs a worktree to join", nil)
 		}
-		return access, nil, nil
+		return domain.AccessWrite, nil, nil
+	}
+	if access == "" {
+		access = defaultAccess(mode)
 	}
 	if strings.TrimSpace(req.BaseBranch) != "" || strings.TrimSpace(req.BranchName) != "" {
 		return "", nil, joinRefusal("WORKTREE_WITH_BASE_BRANCH", "a session that joins a worktree runs on its branch: leave the base branch and the branch name empty", nil)
