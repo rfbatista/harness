@@ -6,12 +6,14 @@ import { ApiErrorDto } from "./dto/api-error-dto";
 export class ApiError extends Error {
   readonly code: string;
   readonly status: number;
+  readonly fixUrl: string | undefined;
 
-  constructor(code: string, message: string, status: number) {
+  constructor(code: string, message: string, status: number, fixUrl?: string) {
     super(message);
     this.name = "ApiError";
     this.code = code;
     this.status = status;
+    this.fixUrl = fixUrl;
   }
 }
 
@@ -71,7 +73,7 @@ function queryString(query?: Record<string, string>): string {
 async function failure(response: Response): Promise<ApiError> {
   try {
     const body = ApiErrorDto.fromJSON(await response.json());
-    return new ApiError(body.code, body.error, response.status);
+    return new ApiError(body.code, body.error, response.status, body.fixUrl);
   } catch {
     return new ApiError(`HTTP_${response.status}`, response.statusText, response.status);
   }
