@@ -1,6 +1,7 @@
 // A BoardSource in memory, for tests and for development without a server.
 
 import type { BoardEvent, BoardFollower, BoardSource, LiveStatus } from "../application/ports";
+import type { SessionBranches } from "../domain/branches";
 import type { ReviewRequest, TaskMessage } from "../domain/message";
 import type { BoardSession } from "../domain/session";
 
@@ -9,6 +10,7 @@ export interface MemoryBoardSource extends BoardSource {
   setSessions(sessions: BoardSession[]): void;
   setMessages(messages: TaskMessage[]): void;
   setReviews(reviews: ReviewRequest[]): void;
+  setBranches(branches: SessionBranches[]): void;
   /** The feed sends `event`. */
   emit(event: BoardEvent): void;
   /** The feed's state changes. */
@@ -20,6 +22,7 @@ export function memoryBoardSource(initial: BoardSession[] = []): MemoryBoardSour
   let sessions = initial;
   let messages: TaskMessage[] = [];
   let reviews: ReviewRequest[] = [];
+  let branches: SessionBranches[] = [];
   const followers = new Set<BoardFollower>();
   let status: LiveStatus = "connecting";
   return {
@@ -31,6 +34,10 @@ export function memoryBoardSource(initial: BoardSession[] = []): MemoryBoardSour
     },
     setMessages(next) {
       messages = next;
+    },
+    branches: async () => branches,
+    setBranches(next) {
+      branches = next;
     },
     setReviews(next) {
       reviews = next;

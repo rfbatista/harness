@@ -62,6 +62,21 @@ describe("a session arrives", () => {
     assert.equal(card(presenter, qa.id)?.ringed, false);
   });
 
+  test("a session that opens a column does not shift the cards after it: they stay where they were drawn until Tidy", async () => {
+    const sub = session({ role: "delegate", mode: "test", parentSessionId: impl.id });
+    const { presenter, source } = await board([architect, impl, sub]);
+    const drawn = presenter.viewModel.cards.map((c) => [c.id, c.rect] as const);
+    const qa = session({ role: "delegate", mode: "qa", parentSessionId: architect.id });
+    source.emit({ kind: "session", session: qa });
+    for (const [id, rect] of drawn) assert.deepEqual(card(presenter, id)?.rect, rect);
+    // The new column's slot is where the held card sits: the arrival takes the first free spot below it.
+    const held = card(presenter, sub.id)!.rect;
+    const landed = card(presenter, qa.id)!.rect;
+    assert.ok(landed.y >= held.y + held.h || landed.x >= held.x + held.w || landed.x + landed.w <= held.x);
+    presenter.tidy();
+    assert.notDeepEqual(card(presenter, sub.id)?.rect, drawn.find(([id]) => id === sub.id)?.[1]);
+  });
+
   test("an event for another task changes nothing", async () => {
     const { presenter, source } = await board();
     source.emit({ kind: "session", session: session({ ticketId: "other" }) });

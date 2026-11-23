@@ -13,6 +13,10 @@ export interface CardViewModel {
   mode: string;
   model: string;
   branch: string;
+  /** Where the session's own branch stands: "pushed", "not pushed", or "" when it has none. */
+  pushState: "" | "pushed" | "not pushed";
+  /** Branches nobody approved: the row flags them. */
+  unapproved: number;
   /** "architect" on the architect's card. */
   badge: string;
   state: string;

@@ -4,7 +4,8 @@ import { ApiError, type ApiClient } from "../../../shared/infrastructure/api-cli
 import { DtoError } from "../../../shared/infrastructure/dto/dto-error";
 import type { Feed } from "../../../shared/kernel/feed";
 import { BoardSourceError, type BoardSource } from "../application/ports";
-import { toEvent, toMessage, toReview, toSession } from "./board-mapper";
+import { toBranches, toEvent, toMessage, toReview, toSession } from "./board-mapper";
+import { TaskBranchesDto } from "./dto/branches-dto";
 import { BoardEventDto } from "./dto/event-dto";
 import { ReviewRequestListDto, TaskMessageListDto } from "./dto/message-dto";
 import { BoardSessionListDto } from "./dto/session-dto";
@@ -29,6 +30,7 @@ export function httpBoardSource(api: ApiClient, feed: Feed): BoardSource {
     messages: (ticketId, signal) => mapErrors(async () => TaskMessageListDto.fromJSON(await api.get("/task_messages", { ticket_id: ticketId }, signal)).messages.map(toMessage)),
     pendingReviews: (ticketId, signal) =>
       mapErrors(async () => ReviewRequestListDto.fromJSON(await api.get("/review_requests", { ticket_id: ticketId, state: "pending" }, signal)).review_requests.map(toReview)),
+    branches: (ticketId, signal) => mapErrors(async () => TaskBranchesDto.fromJSON(await api.get("/list_session_branches", { task_id: ticketId }, signal)).sessions.map(toBranches)),
     follow: (projectId, follower) =>
       feed.follow(projectFeedPath(projectId), {
         onMessage(data) {

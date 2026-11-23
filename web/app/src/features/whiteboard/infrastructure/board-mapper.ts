@@ -2,6 +2,8 @@
 
 import type { ReviewRequest, TaskMessage } from "../domain/message";
 import type { BoardSession } from "../domain/session";
+import type { SessionBranches } from "../domain/branches";
+import type { SessionBranchesDto } from "./dto/branches-dto";
 import type { BoardEvent } from "../application/ports";
 import type { BoardEventDto } from "./dto/event-dto";
 import type { ReviewRequestDto, TaskMessageDto } from "./dto/message-dto";
@@ -46,9 +48,14 @@ export function toReview(dto: ReviewRequestDto): ReviewRequest {
   return { id: dto.id, taskId: dto.task_id ?? "", architectSessionId: dto.architect_session_id ?? "", aboutSessionId: dto.about_session_id ?? "", state: dto.state, createdAt: dto.created_at };
 }
 
+export function toBranches(dto: SessionBranchesDto): SessionBranches {
+  return { sessionId: dto.session_id, branches: dto.branches.map((b) => ({ name: b.name, isSessionBranch: b.is_session_branch, state: b.state ?? "", pushes: b.pushed.length })) };
+}
+
 /** The board's event for a feed message, or null for one it does not draw. */
 export function toEvent(dto: BoardEventDto): BoardEvent | null {
   if (dto.task_message) return { kind: "message", message: toMessage(dto.task_message) };
+  if (dto.session_branches) return { kind: "branches", branches: toBranches(dto.session_branches) };
   if (dto.review_request) return { kind: "review", review: toReview(dto.review_request) };
   if (dto.session) return { kind: "session", session: toSession(dto.session) };
   if (dto.deleted && dto.deleted_id) return { kind: "session-deleted", id: dto.deleted_id };

@@ -93,6 +93,8 @@ export function CardView({ card, presenter }: { card: CardViewModel; presenter: 
         <span className="name" title={card.branch}>
           <bdi>{card.branch}</bdi>
         </span>
+        {card.pushState && <span className="badge">{card.pushState}</span>}
+        {card.unapproved > 0 && <span className="badge" data-tone="attention">⚑ {card.unapproved} unapproved</span>}
       </span>
       {card.line && (
         <span className="detail">

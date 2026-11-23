@@ -11,6 +11,7 @@ import { centerOn, fit, isVisible, panBy, zoomAt, type Camera } from "../../doma
 import { agentLabel, chipOf, detailOf, needsYou, statusView } from "../../domain/card";
 import { startedEdges, YOU_ID } from "../../domain/graph";
 import { MARGIN, computeLayout, edgeGeometry, sizeOf, type Point, type Rect } from "../../domain/layout";
+import { pushStateOf, unapprovedCount, upsertBranches, type SessionBranches } from "../../domain/branches";
 import { upsertMessage, upsertReview, type ReviewRequest, type TaskMessage } from "../../domain/message";
 import { freeSpot } from "../../domain/placement";
 import { allEnded } from "../../domain/graph";
@@ -54,12 +55,15 @@ export class BoardPresenter extends Presenter<BoardViewModel> {
   #sessions: BoardSession[] = [];
   #messages: TaskMessage[] = [];
   #reviews: ReviewRequest[] = [];
+  #branches: SessionBranches[] = [];
   /** The page is narrower than 64rem. */
   #narrow = false;
   #selectedId: string | null = null;
   #focusedId: string | null = null;
   /** The positions the person gave, by session id; kept in the browser per task. */
   #placed: Record<string, Point> = {};
+  /** Cards a new session would have moved, held where they were drawn until Tidy; not kept in the browser. */
+  #pinned: Record<string, Point> = {};
   #drag: { id: string; from: Point } | null = null;
   #camera: Camera = { x: 0, y: 0, scale: 1 };
   /** The person has not moved the camera (and none was stored): the board is framed whole once it has a viewport. */
@@ -318,6 +322,7 @@ export class BoardPresenter extends Presenter<BoardViewModel> {
   /** Drops every placed position: the computed layout again. */
   tidy(): void {
     this.#placed = {};
+    this.#pinned = {};
     this.#deps.preferences.savePositions(this.#deps.ticketId, {});
     this.set(this.#build());
   }
@@ -327,7 +332,13 @@ export class BoardPresenter extends Presenter<BoardViewModel> {
   /** Reads the task again. The first read just fills the board; a resync diffs against it. */
   async #read(resync: boolean): Promise<void> {
     const { source, ticketId } = this.#deps;
-    const [sessions, messages, reviews] = await Promise.all([source.sessions(ticketId), source.messages(ticketId), source.pendingReviews(ticketId)]);
+    // A card can do without its push state: a Branches list that does not read leaves it out.
+    const branchLists = source.branches(ticketId).catch((err: unknown) => {
+      if (err instanceof BoardSourceError) return [];
+      throw err;
+    });
+    const [sessions, messages, reviews, branches] = await Promise.all([source.sessions(ticketId), source.messages(ticketId), source.pendingReviews(ticketId), branchLists]);
+    this.#branches = branches;
     if (!resync) {
       [this.#sessions, this.#messages, this.#reviews] = [sessions, messages, reviews];
       return;
@@ -377,13 +388,18 @@ export class BoardPresenter extends Presenter<BoardViewModel> {
       case "review":
         if (event.review.taskId === this.#deps.ticketId) this.#onReview(event.review);
         break;
+      case "branches":
+        if (this.#sessions.some((s) => s.id === event.branches.sessionId)) this.#branches = upsertBranches(this.#branches, event.branches);
+        break;
     }
     this.set(this.#build());
   }
 
   #onSession(s: BoardSession): void {
     const before = this.#sessions.find((b) => b.id === s.id);
+    const drawn = before ? null : this.#geometry().rects;
     this.#sessions = upsertSession(this.#sessions, s);
+    if (drawn) this.#pinWhatMoved(drawn);
     const name = this.#nameOf(s.id);
     if (!before) {
       this.#arrive(s, true);
@@ -392,6 +408,15 @@ export class BoardPresenter extends Presenter<BoardViewModel> {
     if (visibleState(before) === visibleState(s)) return;
     this.#ring(s.id);
     this.#announce(isTerminal(before) && !isTerminal(s) ? `${name} resumed` : `${name}: ${statusView(s).word}`);
+  }
+
+  /** A new session can open a column and shift the ones after it: no card moves on its own, so those stay where they were drawn. */
+  #pinWhatMoved(drawn: Record<string, Rect>): void {
+    const now = this.#geometry().rects;
+    for (const [id, was] of Object.entries(drawn)) {
+      const at = now[id];
+      if (at && (at.x !== was.x || at.y !== was.y)) this.#pinned = { ...this.#pinned, [id]: { x: was.x, y: was.y } };
+    }
   }
 
   /** A session joined the task: its computed slot, or the first free spot below when a placed card covers it. */
@@ -470,8 +495,9 @@ export class BoardPresenter extends Presenter<BoardViewModel> {
     const layout = computeLayout(this.#sessions, this.#compact);
     const known = new Set(this.#sessions.map((s) => s.id));
     const placed = Object.fromEntries(Object.entries(this.#placed).filter(([id]) => known.has(id)));
+    const pinned = Object.fromEntries(Object.entries(this.#pinned).filter(([id]) => known.has(id)));
     const rects: Record<string, Rect> = {};
-    for (const [id, p] of Object.entries({ ...layout.positions, ...placed })) rects[id] = { ...p, ...sizeOf(id === YOU_ID, this.#compact) };
+    for (const [id, p] of Object.entries({ ...layout.positions, ...pinned, ...placed })) rects[id] = { ...p, ...sizeOf(id === YOU_ID, this.#compact) };
     const canvas = {
       w: Math.max(layout.size.w, ...Object.values(rects).map((r) => r.x + r.w + MARGIN)),
       h: Math.max(layout.size.h, ...Object.values(rects).map((r) => r.y + r.h + MARGIN)),
@@ -549,7 +575,7 @@ export class BoardPresenter extends Presenter<BoardViewModel> {
 
   #you(rect: Rect, waiting: number): CardViewModel {
     return {
-      id: YOU_ID, kind: "you", rect, agent: "You", mode: "", model: "", branch: "", badge: "", state: waiting > 0 ? "waiting" : "idle",
+      id: YOU_ID, kind: "you", rect, agent: "You", mode: "", model: "", branch: "", pushState: "", unapproved: 0, badge: "", state: waiting > 0 ? "waiting" : "idle",
       word: waiting > 0 ? "waiting on you" : "nothing waiting", chip: "", line: null, dimmed: false, tone: "", dragging: false, ringed: false, when: "", attention: waiting > 0,
       name: waiting > 0 ? `You, ${waiting} review request${waiting === 1 ? "" : "s"} waiting on you` : "You, nothing waiting on you",
       selected: false,
@@ -560,6 +586,8 @@ export class BoardPresenter extends Presenter<BoardViewModel> {
   #card(s: BoardSession, rect: Rect, pendingKind: string): CardViewModel {
     const status = statusView(s);
     const { agentNames, taskTitle } = this.#deps;
+    const branches = this.#branches.find((b) => b.sessionId === s.id);
+    const ended = isTerminal(s) && s.status !== "failed";
     return {
       id: s.id,
       kind: "session",
@@ -568,18 +596,20 @@ export class BoardPresenter extends Presenter<BoardViewModel> {
       mode: s.role === "architect" ? "" : s.mode,
       model: s.model,
       branch: s.branch,
+      pushState: pushStateOf(branches),
+      unapproved: unapprovedCount(branches),
       badge: s.role === "architect" ? "architect" : "",
       state: status.state,
       word: status.word,
       chip: chipOf(status),
       line: detailOf(s, { taskTitle, agentNames, others: this.#sessions, report: lastReportOf(this.#messages, s.id), messagesLoaded: true }),
-      dimmed: isTerminal(s) && s.status !== "failed",
+      dimmed: ended,
       tone: s.status === "failed" ? "danger" : "",
       dragging: this.#drag?.id === s.id,
       ringed: this.#ringed.has(s.id),
       when: relativeTime(s.updatedAt, this.#deps.now()),
       attention: needsYou(s),
-      name: [agentLabel(s.agentId, agentNames), s.role === "architect" ? "architect" : s.mode, status.word, pendingKind ? `${pendingKind} waiting on the architect` : "", isTerminal(s) && s.status !== "failed" ? "ended" : ""].filter(Boolean).join(", "),
+      name: [agentLabel(s.agentId, agentNames), s.role === "architect" ? "architect" : s.mode, status.word, pendingKind ? `${pendingKind} waiting on the architect` : "", ended ? "ended" : ""].filter(Boolean).join(", "),
       selected: this.#selectedId === s.id,
       focused: this.#focusedId === s.id,
     };

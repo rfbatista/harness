@@ -1,5 +1,6 @@
 // What the whiteboard needs from outside: the task's sessions, and the person's host page.
 
+import type { SessionBranches } from "../domain/branches";
 import type { ReviewRequest, TaskMessage } from "../domain/message";
 import type { BoardSession } from "../domain/session";
 
@@ -21,6 +22,8 @@ export interface BoardSource {
   messages(ticketId: string, signal?: AbortSignal): Promise<TaskMessage[]>;
   /** The review requests of a task that wait on the person. */
   pendingReviews(ticketId: string, signal?: AbortSignal): Promise<ReviewRequest[]>;
+  /** The Branches list of each session of a task: where its own branch stands (pushed or not). */
+  branches(ticketId: string, signal?: AbortSignal): Promise<SessionBranches[]>;
   /** Follows the live feed of a project; returns the function that stops it. */
   follow(projectId: string, follower: BoardFollower): () => void;
 }
@@ -30,7 +33,8 @@ export type BoardEvent =
   | { kind: "session"; session: BoardSession }
   | { kind: "session-deleted"; id: string }
   | { kind: "message"; message: TaskMessage }
-  | { kind: "review"; review: ReviewRequest };
+  | { kind: "review"; review: ReviewRequest }
+  | { kind: "branches"; branches: SessionBranches };
 
 /** "paused": dropped and retrying; "resynced": back after a drop, so changes may have been missed. */
 export type LiveStatus = "connecting" | "live" | "paused" | "resynced";

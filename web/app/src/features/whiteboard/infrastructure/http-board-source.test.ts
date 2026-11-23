@@ -103,3 +103,24 @@ describe("HTTP board source: the project feed", () => {
     assert.deepEqual(statuses, ["connecting", "paused"]);
   });
 });
+
+describe("HTTP board source: branches", () => {
+  const wire = { sessions: [{ session_id: "s1", branches: [{ name: "agent/x", is_session_branch: true, state: "session", pushed: [{ remote: "origin" }] }, { name: "y", state: "unapproved", pushed: null }] }] };
+
+  test("reads the Branches list of each session of the task", async () => {
+    const urls: string[] = [];
+    const source = httpBoardSource(apiClient((async (url: string) => (urls.push(url), Response.json(wire))) as FetchLike), memoryFeed());
+    const [list] = await source.branches("t1");
+    assert.deepEqual(urls, ["/api/list_session_branches?task_id=t1"]);
+    assert.deepEqual(list?.branches.map((b) => [b.name, b.isSessionBranch, b.pushes]), [["agent/x", true, 1], ["y", false, 0]]);
+  });
+
+  test("an answer that is not a list is BAD_RESPONSE, and the feed's session_branches message reads", async () => {
+    await assert.rejects(answering(() => Response.json({ nope: 1 })).branches("t1"), failsWith("BAD_RESPONSE"));
+    const feed = memoryFeed();
+    const events: { kind: string }[] = [];
+    httpBoardSource(apiClient((async () => Response.json({})) as FetchLike), feed).follow("p1", { onEvent: (e) => events.push(e), onStatus: () => {} });
+    feed.emit("/events?project_id=p1", { session_branches: wire.sessions[0] });
+    assert.deepEqual(events.map((e) => e.kind), ["branches"]);
+  });
+});
