@@ -8,6 +8,7 @@ export type ReportStatus = (typeof REPORT_STATUSES)[number];
 
 export interface TaskMessage {
   id: string;
+  taskId: string;
   fromSessionId: string;
   toSessionId: string;
   kind: MessageKind;
@@ -22,6 +23,7 @@ export type ReviewState = (typeof REVIEW_STATES)[number];
 
 export interface ReviewRequest {
   id: string;
+  taskId: string;
   architectSessionId: string;
   aboutSessionId: string;
   state: ReviewState;

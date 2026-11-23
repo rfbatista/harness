@@ -12,6 +12,7 @@ const REVIEW = "ReviewRequestDto";
 export class TaskMessageDto {
   constructor(
     readonly id: string,
+    readonly task_id: string | undefined,
     readonly from_session_id: string | undefined,
     readonly to_session_id: string | undefined,
     readonly kind: MessageKind,
@@ -27,6 +28,7 @@ export class TaskMessageDto {
     if (!(REPORT_STATUSES as readonly string[]).includes(status)) throw new DtoError(MESSAGE, at === "" ? "status" : `${at}.status`, "expected a report status");
     return new TaskMessageDto(
       string(MESSAGE, from, "id", at),
+      optionalString(MESSAGE, from, "task_id", at),
       optionalString(MESSAGE, from, "from_session_id", at),
       optionalString(MESSAGE, from, "to_session_id", at),
       oneOf(MESSAGE, from, "kind", MESSAGE_KINDS, at),
@@ -38,7 +40,7 @@ export class TaskMessageDto {
   }
 
   toJSON(): Wire {
-    return { id: this.id, from_session_id: this.from_session_id, to_session_id: this.to_session_id, kind: this.kind, status: this.status, body: this.body, in_reply_to: this.in_reply_to, created_at: this.created_at.toISOString() };
+    return { id: this.id, task_id: this.task_id, from_session_id: this.from_session_id, to_session_id: this.to_session_id, kind: this.kind, status: this.status, body: this.body, in_reply_to: this.in_reply_to, created_at: this.created_at.toISOString() };
   }
 }
 
@@ -59,6 +61,7 @@ export class TaskMessageListDto {
 export class ReviewRequestDto {
   constructor(
     readonly id: string,
+    readonly task_id: string | undefined,
     readonly architect_session_id: string | undefined,
     readonly about_session_id: string | undefined,
     readonly state: ReviewState,
@@ -69,6 +72,7 @@ export class ReviewRequestDto {
     const from = object(REVIEW, raw, at);
     return new ReviewRequestDto(
       string(REVIEW, from, "id", at),
+      optionalString(REVIEW, from, "task_id", at),
       optionalString(REVIEW, from, "architect_session_id", at),
       optionalString(REVIEW, from, "about_session_id", at),
       oneOf(REVIEW, from, "state", REVIEW_STATES, at),
@@ -77,7 +81,7 @@ export class ReviewRequestDto {
   }
 
   toJSON(): Wire {
-    return { id: this.id, architect_session_id: this.architect_session_id, about_session_id: this.about_session_id, state: this.state, created_at: this.created_at.toISOString() };
+    return { id: this.id, task_id: this.task_id, architect_session_id: this.architect_session_id, about_session_id: this.about_session_id, state: this.state, created_at: this.created_at.toISOString() };
   }
 }
 

@@ -8,6 +8,7 @@ export type Role = (typeof ROLES)[number];
 
 export interface BoardSession {
   id: string;
+  ticketId: string;
   agentId: string;
   mode: string;
   model: string;

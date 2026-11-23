@@ -2,12 +2,15 @@
 
 import type { ReviewRequest, TaskMessage } from "../domain/message";
 import type { BoardSession } from "../domain/session";
+import type { BoardEvent } from "../application/ports";
+import type { BoardEventDto } from "./dto/event-dto";
 import type { ReviewRequestDto, TaskMessageDto } from "./dto/message-dto";
 import type { BoardSessionDto } from "./dto/session-dto";
 
 export function toSession(dto: BoardSessionDto): BoardSession {
   return {
     id: dto.id,
+    ticketId: dto.ticket_id ?? "",
     agentId: dto.agent_id ?? "",
     mode: dto.mode ?? "",
     model: dto.model ?? "",
@@ -28,6 +31,7 @@ export function toSession(dto: BoardSessionDto): BoardSession {
 export function toMessage(dto: TaskMessageDto): TaskMessage {
   return {
     id: dto.id,
+    taskId: dto.task_id ?? "",
     fromSessionId: dto.from_session_id ?? "",
     toSessionId: dto.to_session_id ?? "",
     kind: dto.kind,
@@ -39,5 +43,14 @@ export function toMessage(dto: TaskMessageDto): TaskMessage {
 }
 
 export function toReview(dto: ReviewRequestDto): ReviewRequest {
-  return { id: dto.id, architectSessionId: dto.architect_session_id ?? "", aboutSessionId: dto.about_session_id ?? "", state: dto.state, createdAt: dto.created_at };
+  return { id: dto.id, taskId: dto.task_id ?? "", architectSessionId: dto.architect_session_id ?? "", aboutSessionId: dto.about_session_id ?? "", state: dto.state, createdAt: dto.created_at };
+}
+
+/** The board's event for a feed message, or null for one it does not draw. */
+export function toEvent(dto: BoardEventDto): BoardEvent | null {
+  if (dto.task_message) return { kind: "message", message: toMessage(dto.task_message) };
+  if (dto.review_request) return { kind: "review", review: toReview(dto.review_request) };
+  if (dto.session) return { kind: "session", session: toSession(dto.session) };
+  if (dto.deleted && dto.deleted_id) return { kind: "session-deleted", id: dto.deleted_id };
+  return null;
 }

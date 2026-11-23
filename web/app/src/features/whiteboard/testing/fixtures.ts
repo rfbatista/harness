@@ -10,6 +10,7 @@ export function session(fields: Partial<BoardSession> = {}): BoardSession {
   const at = new Date(T0 + sequence * 60_000);
   return {
     id: `s${sequence}`,
+    ticketId: "t1",
     agentId: "a1",
     mode: "",
     model: "",
@@ -35,12 +36,12 @@ let messages = 0;
 /** A message between two sessions; each call is one minute after the one before. */
 export function message(from: string, to: string, fields: Partial<TaskMessage> = {}): TaskMessage {
   messages += 1;
-  return { id: `m${messages}`, fromSessionId: from, toSessionId: to, kind: "status_report", status: "working", body: "", inReplyTo: "", createdAt: new Date(T0 + 1_800_000 + messages * 60_000), ...fields };
+  return { id: `m${messages}`, taskId: "t1", fromSessionId: from, toSessionId: to, kind: "status_report", status: "working", body: "", inReplyTo: "", createdAt: new Date(T0 + 1_800_000 + messages * 60_000), ...fields };
 }
 
 let reviews = 0;
 
 export function review(architectSessionId: string, fields: Partial<ReviewRequest> = {}): ReviewRequest {
   reviews += 1;
-  return { id: `r${reviews}`, architectSessionId, aboutSessionId: "", state: "pending", createdAt: new Date(T0 + 1_800_000 + reviews * 60_000), ...fields };
+  return { id: `r${reviews}`, taskId: "t1", architectSessionId, aboutSessionId: "", state: "pending", createdAt: new Date(T0 + 1_800_000 + reviews * 60_000), ...fields };
 }

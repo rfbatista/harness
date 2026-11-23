@@ -21,4 +21,21 @@ export interface BoardSource {
   messages(ticketId: string, signal?: AbortSignal): Promise<TaskMessage[]>;
   /** The review requests of a task that wait on the person. */
   pendingReviews(ticketId: string, signal?: AbortSignal): Promise<ReviewRequest[]>;
+  /** Follows the live feed of a project; returns the function that stops it. */
+  follow(projectId: string, follower: BoardFollower): () => void;
+}
+
+/** What the project's live feed tells the board. */
+export type BoardEvent =
+  | { kind: "session"; session: BoardSession }
+  | { kind: "session-deleted"; id: string }
+  | { kind: "message"; message: TaskMessage }
+  | { kind: "review"; review: ReviewRequest };
+
+/** "paused": dropped and retrying; "resynced": back after a drop, so changes may have been missed. */
+export type LiveStatus = "connecting" | "live" | "paused" | "resynced";
+
+export interface BoardFollower {
+  onEvent(event: BoardEvent): void;
+  onStatus(status: LiveStatus): void;
 }

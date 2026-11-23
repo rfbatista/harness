@@ -54,6 +54,7 @@ export function CardView({ card, presenter }: { card: CardViewModel; presenter: 
       data-role={card.badge === "architect" ? "architect" : undefined}
       data-ended={card.dimmed ? "" : undefined}
       data-attention={card.attention ? "" : undefined}
+      data-fresh={card.ringed ? "" : undefined}
       data-dragging={card.dragging ? "" : undefined}
       aria-label={card.name}
       style={style}

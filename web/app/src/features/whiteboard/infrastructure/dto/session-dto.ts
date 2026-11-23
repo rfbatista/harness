@@ -17,6 +17,7 @@ const optionalCount = (from: Wire, key: string, at: string): number => {
 export class BoardSessionDto {
   constructor(
     readonly id: string,
+    readonly ticket_id: string | undefined,
     readonly agent_id: string | undefined,
     readonly mode: string | undefined,
     readonly model: string | undefined,
@@ -39,6 +40,7 @@ export class BoardSessionDto {
     if (!(ROLES as readonly string[]).includes(role)) throw new DtoError(DTO, at === "" ? "role" : `${at}.role`, "expected one of architect, delegate");
     return new BoardSessionDto(
       string(DTO, from, "id", at),
+      optionalString(DTO, from, "ticket_id", at),
       optionalString(DTO, from, "agent_id", at),
       optionalString(DTO, from, "mode", at),
       optionalString(DTO, from, "model", at),
@@ -59,6 +61,7 @@ export class BoardSessionDto {
   toJSON(): Wire {
     return {
       id: this.id,
+      ticket_id: this.ticket_id,
       agent_id: this.agent_id,
       mode: this.mode,
       model: this.model,

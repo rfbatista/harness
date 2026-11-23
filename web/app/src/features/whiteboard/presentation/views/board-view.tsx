@@ -50,6 +50,16 @@ export function BoardView({ presenter }: { presenter: BoardPresenter }) {
   return (
     <section className="whiteboard" aria-label="Agents whiteboard" data-layout="rank" onKeyDown={key}>
       <div className="wb-bar">
+        {vm.arrival && (
+          <span className="wb-live">
+            {vm.arrival.text.replace(" · Show", " · ")}
+            <button type="button" className="button" data-variant="ghost" data-size="sm" data-arrival-show onClick={() => presenter.showArrival()}>
+              Show
+            </button>
+          </span>
+        )}
+        {vm.feed === "paused" && <span className="wb-live">Reconnecting · the picture stays as it was</span>}
+        {vm.feed === "resynced" && <span className="wb-live">Back online · updated</span>}
         <div className="wb-tools">
           <button type="button" className="button" data-variant="ghost" data-size="sm" data-tidy disabled={!vm.tidyEnabled} title="Tidy (T): put every card back in its computed place" onClick={() => presenter.tidy()}>
             Tidy
@@ -110,7 +120,7 @@ export function BoardView({ presenter }: { presenter: BoardPresenter }) {
           ))}
           <svg className="wb-edges" width={width} height={height} aria-hidden="true">
             {vm.edges.map((e) => (
-              <path key={e.id} d={e.d} data-kind={KIND[e.tone]} data-dim={e.dimmed ? "" : undefined} />
+              <path key={e.id} d={e.d} data-kind={KIND[e.tone]} data-dim={e.dimmed ? "" : undefined} data-pulse={e.pulsing ? "" : undefined} />
             ))}
           </svg>
           {vm.edges.map((e) =>
@@ -126,6 +136,9 @@ export function BoardView({ presenter }: { presenter: BoardPresenter }) {
           ))}
         </div>
       </div>
+      <p className="visually-hidden" aria-live="polite" data-announce>
+        {vm.announcement}
+      </p>
     </section>
   );
 }

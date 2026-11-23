@@ -48,7 +48,7 @@ export function mountIslands(doc: Document): Dispose {
         root.unmount();
       };
     },
-    "agents-whiteboard": (mount, props) => mountWhiteboard(mount, props, api),
+    "agents-whiteboard": (mount, props) => mountWhiteboard(mount, props, api, feed),
   };
 
   const mounted = new Map<Element, Dispose>();
