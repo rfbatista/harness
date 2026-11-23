@@ -79,7 +79,7 @@ func TestAnAppShellSwapBringsAFreshlyRenderedTopBar(t *testing.T) {
 		t.Errorf("outside a project the picker asks to choose, got %q", picker)
 	}
 	var badge string
-	h.run(t, "the bell is live", railPoll(bellBadge+` === '3'`), chromedp.Evaluate(bellBadge, &badge))
+	h.run(t, "the bell is live", railPoll(bellBadge+` === '2'`), chromedp.Evaluate(bellBadge, &badge))
 
 	h.run(t, "into another project through the picker",
 		chromedp.Evaluate(`(() => { const s = document.querySelector('.topbar #project-picker'); s.value = 'p2'; s.dispatchEvent(new Event('change', { bubbles: true })); return true; })()`, nil),

@@ -143,7 +143,7 @@ func TestBackAndForwardAcrossAnAppShellSwapKeepTheBarRight(t *testing.T) {
 	h.waitURL(t, "/projects/p1")
 	h.waitBar(t, "")
 	h.run(t, "picker follows Back", railPoll(barPicker+` === 'p1'`))
-	h.run(t, "bell is live after Back", railPoll(bellBadge+` === '3'`))
+	h.run(t, "bell is live after Back", railPoll(bellBadge+` === '2'`))
 
 	h.run(t, "forward out of it", chromedp.Evaluate(`history.forward()`, nil))
 	h.waitURL(t, "/projects")
@@ -153,7 +153,7 @@ func TestBackAndForwardAcrossAnAppShellSwapKeepTheBarRight(t *testing.T) {
 	if choose != "Choose a project…" {
 		t.Errorf("after Forward out of the project the picker asks to choose, got %q", choose)
 	}
-	h.run(t, "bell is live after Forward", railPoll(bellBadge+` === '3'`))
+	h.run(t, "bell is live after Forward", railPoll(bellBadge+` === '2'`))
 
 	var bars int
 	h.eval(t, `document.querySelectorAll('.topbar [data-island="top-bar"]').length`, &bars)

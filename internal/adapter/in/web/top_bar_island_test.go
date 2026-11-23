@@ -41,10 +41,10 @@ func TestTheTopBarIsPaintedByTheServerBeforeAnyScriptRuns(t *testing.T) {
 	if !hasMountContent || rendered != "" {
 		t.Errorf("the server must render the mount: content %v, data-island-rendered %q", hasMountContent, rendered)
 	}
-	if !strings.Contains(links, "harness>/ ") || !strings.Contains(links, "Agents>/agents") || !strings.Contains(links, "Notifications, 3 unread>/notifications") {
+	if !strings.Contains(links, "harness>/ ") || !strings.Contains(links, "Agents>/agents") || !strings.Contains(links, "Notifications, 2 need you, 3 unread>/notifications") {
 		t.Errorf("links without script: %s", links)
 	}
-	if picker != "p1" || label != "Notifications, 3 unread" || current {
+	if picker != "p1" || label != "Notifications, 2 need you, 3 unread" || current {
 		t.Errorf("picker %q, bell %q, a current link on a project page: %v", picker, label, current)
 	}
 	h.noErrors(t)
@@ -108,7 +108,7 @@ func TestAFailedServerRenderStillLoadsTheTopBarAndTheBrowserDrawsIt(t *testing.T
 		chromedp.Evaluate(barLinks, &links),
 		chromedp.Evaluate(bellBadge, &badge),
 	)
-	if !strings.Contains(links, "harness>/ ") || !strings.Contains(links, "Agents>/agents") || badge != "3" {
+	if !strings.Contains(links, "harness>/ ") || !strings.Contains(links, "Agents>/agents") || badge != "2" {
 		t.Errorf("the browser must draw the bar: links %q, badge %q", links, badge)
 	}
 	if out := logs.String(); !strings.Contains(out, "kind=render_failed") {
