@@ -33,6 +33,7 @@ import (
 	"operators-mcp/internal/application/execution"
 	"operators-mcp/internal/application/notifications"
 	"operators-mcp/internal/application/orchestration"
+	"operators-mcp/internal/application/productowner"
 	"operators-mcp/internal/application/planning"
 	"operators-mcp/internal/application/repoagents"
 	"operators-mcp/internal/application/servicerequests"
@@ -65,7 +66,7 @@ var ServerModule = fx.Module("server",
 
 // registerHTTPServer mounts the UI and JSON API on a mux and serves it,
 // shutting down gracefully when fx stops.
-func registerHTTPServer(lc fx.Lifecycle, cfg Config, cat catalog.Catalog, appRunner *apps.Service, svcs *services.Service, svcRequests *servicerequests.Service, ts *tooling.Service, exec *execution.Service, orch *orchestration.Service, plan *planning.Service, ws *workspaces.Service, broker *approval.Broker, sessions ports.SessionRepository, art *artifacts.Service, channel *taskchannel.Service, prs *workspaces.PullRequests, merges *workspaces.Merges, archivedWorktrees *workspaces.ArchivedWorktrees, branchNames *workspaces.BranchNames, code ports.CodeBrowser, worktreeGit ports.WorktreeGit, inbox optionalNotifications, creds optionalGitCredentials, shells *vfs.Service, fsys *vfs.FileSystem, usageSvc *usage.Service, indexes optionalRepositoryIndexes, sandboxStore *sandboxsettings.Store, managedClaude *managedclaude.Service, claudeBin ports.ManagedClaudeBin, agentCred optionalAgentCredential, helper *writinghelper.Service, assistant *archassistant.Service, rules *archrules.Service, gate *branchgate.Service, watch *branchwatch.Service, agentCat *agentcatalog.Catalog, persons *vshell.PersonTerminals, repoAgents *repoagents.Service, board optionalAgentBoard, asked optionalInterviews) error {
+func registerHTTPServer(lc fx.Lifecycle, cfg Config, cat catalog.Catalog, appRunner *apps.Service, svcs *services.Service, svcRequests *servicerequests.Service, ts *tooling.Service, exec *execution.Service, orch *orchestration.Service, plan *planning.Service, ws *workspaces.Service, broker *approval.Broker, sessions ports.SessionRepository, art *artifacts.Service, channel *taskchannel.Service, prs *workspaces.PullRequests, merges *workspaces.Merges, archivedWorktrees *workspaces.ArchivedWorktrees, branchNames *workspaces.BranchNames, code ports.CodeBrowser, worktreeGit ports.WorktreeGit, inbox optionalNotifications, creds optionalGitCredentials, shells *vfs.Service, fsys *vfs.FileSystem, usageSvc *usage.Service, indexes optionalRepositoryIndexes, sandboxStore *sandboxsettings.Store, managedClaude *managedclaude.Service, claudeBin ports.ManagedClaudeBin, agentCred optionalAgentCredential, helper *writinghelper.Service, assistant *archassistant.Service, rules *archrules.Service, gate *branchgate.Service, watch *branchwatch.Service, agentCat *agentcatalog.Catalog, persons *vshell.PersonTerminals, repoAgents *repoagents.Service, board optionalAgentBoard, asked optionalInterviews, owner optionalProductOwner) error {
 	uiHandler, err := ui.SPAHandler(ui.Dist)
 	if err != nil {
 		return err
@@ -94,6 +95,12 @@ func registerHTTPServer(lc fx.Lifecycle, cfg Config, cat catalog.Catalog, appRun
 	var agentBoard ports.AgentBoard
 	if board.Service != nil {
 		agentBoard = board.Service
+	}
+
+	// Same for the product owner.
+	var productOwner ports.ProductOwner
+	if owner.Service != nil {
+		productOwner = owner.Service
 	}
 
 	// Same for the interviews.
@@ -208,6 +215,8 @@ func registerHTTPServer(lc fx.Lifecycle, cfg Config, cat catalog.Catalog, appRun
 		ArchitectureRules: rules,
 		// What a session's git shim asks before a branch action.
 		BranchGate: gate,
+		// The projects' product owners: settings and threads.
+		ProductOwner: productOwner,
 		// The Branches lists, read from stored state.
 		SessionBranches: watch,
 		// The agent catalog folder: agents, bundles, skills, MCP servers.
@@ -285,6 +294,14 @@ type optionalAgentBoard struct {
 	fx.In
 
 	Service *agentboard.Service `optional:"true"`
+}
+
+// optionalProductOwner is the product owner when ProductOwnerModule is in the
+// graph; graphs built without it (some tests) serve none.
+type optionalProductOwner struct {
+	fx.In
+
+	Service *productowner.Service `optional:"true"`
 }
 
 // optionalNotifications is the inbox when NotificationsModule is in the

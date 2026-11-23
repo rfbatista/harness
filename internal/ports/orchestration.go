@@ -136,6 +136,9 @@ type ProjectChange struct {
 	// SessionFilesRoot says a root of a session's virtual file system went away
 	// or came back; the Files view follows it.
 	SessionFilesRoot *SessionFilesRootChange `json:"session_files_root,omitempty"`
+	// ProductOwnerSettings is a project's product owner settings after a
+	// change.
+	ProductOwnerSettings *ProductOwnerSettingsChange `json:"product_owner_settings,omitempty"`
 	Deleted          bool                    `json:"deleted,omitempty"`
 }
 
@@ -291,6 +294,8 @@ func (c ProjectChange) ProjectID() string {
 		return c.ArchitectureRuleEvent.ProjectID
 	case c.SessionFilesRoot != nil:
 		return c.SessionFilesRoot.ProjectID
+	case c.ProductOwnerSettings != nil:
+		return c.ProductOwnerSettings.ProjectID
 	case c.DesignSystemSaved != nil:
 		return c.DesignSystemSaved.ProjectID
 	case c.DesignSystemChanged != nil:

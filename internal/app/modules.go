@@ -55,6 +55,7 @@ import (
 	"operators-mcp/internal/application/gitcredentials"
 	"operators-mcp/internal/application/keychainpath"
 	"operators-mcp/internal/application/orchestration"
+	"operators-mcp/internal/application/productowner"
 	"operators-mcp/internal/application/planning"
 	"operators-mcp/internal/application/repoagents"
 	"operators-mcp/internal/application/sandboxsettings"
@@ -110,6 +111,7 @@ var PersistenceModule = fx.Module("persistence",
 		asPort(sqlite.NewDesignExportRepository, new(ports.DesignExportStore)),
 		asPort(sqlite.NewInstructionDraftRepository, new(ports.InstructionDraftStore)),
 		asPort(sqlite.NewInstructionProposalRepository, new(ports.InstructionProposalStore)),
+		asPort(sqlite.NewProductOwnerRepository, new(ports.ProductOwnerStore)),
 	),
 )
 
@@ -1647,4 +1649,14 @@ func sessionTempPrefix(base, id string) string {
 func commitCheckDirs(cfg Config) func(workspaceID string) string {
 	root, _ := dataDir(cfg, "githooks")
 	return func(workspaceID string) string { return filepath.Join(root, workspaceID) }
+}
+
+// ProductOwnerModule is each project's product owner (ADR 0109): its settings
+// and the threads in which the person talks to it.
+var ProductOwnerModule = fx.Module("productowner",
+	fx.Provide(newProductOwner),
+)
+
+func newProductOwner(store ports.ProductOwnerStore, cat catalog.Catalog, orch *orchestration.Service) *productowner.Service {
+	return productowner.New(store, cat.Projects, cat.Agents, orch)
 }

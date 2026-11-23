@@ -144,6 +144,9 @@ type Services struct {
 	// RepositoryArchitectures keeps repositories' architecture records; nil
 	// answers 503.
 	RepositoryArchitectures ports.RepositoryArchitectures
+	// ProductOwner is the projects' product owners: settings and threads; nil
+	// answers 503.
+	ProductOwner ports.ProductOwner
 	// InstructionProposals are repositories' instruction-file proposals; nil
 	// answers 503.
 	InstructionProposals ports.InstructionProposals
@@ -240,6 +243,7 @@ type Handler struct {
 	serviceRequests ports.ServiceRequests
 
 	repoArch ports.RepositoryArchitectures
+	productOwner ports.ProductOwner
 	// instructionProposals is nil when proposals are not configured.
 	instructionProposals ports.InstructionProposals
 	instructionDecisions ports.InstructionProposalDecisions
@@ -286,6 +290,7 @@ func NewHandler(s Services) *Handler {
 		archivedTrees:        s.ArchivedWorktrees,
 		branchNames:          s.BranchNames,
 		repoArch:             s.RepositoryArchitectures,
+		productOwner:         s.ProductOwner,
 		instructionProposals: s.InstructionProposals,
 		instructionDecisions: s.InstructionProposalDecisions,
 		designs:              s.DesignSystems,
