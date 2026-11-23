@@ -1,13 +1,16 @@
 package orchestration
 
 import (
+	"errors"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/rfbatista/llmkit"
 
 	"operators-mcp/internal/domain"
 	"operators-mcp/internal/ports"
+	"operators-mcp/internal/ports/portstest"
 )
 
 // The opening of a session on a shared worktree names who else is there
@@ -70,7 +73,7 @@ func TestSharedWorktreeOpening_AJoinerIsToldWhoIsThereAndALoneCreatorIsNot(t *te
 	if strings.Contains(sys, sess.ID) {
 		t.Errorf("the session lists itself:\n%s", sys)
 	}
-	if strings.Contains(sys, "read-only access: you cannot write") {
+	if strings.Contains(sys, "You cannot write this worktree") {
 		t.Errorf("a writer was told it cannot write:\n%s", sys)
 	}
 }
@@ -294,5 +297,72 @@ func TestWorktreeLeft_EndedSessionsAndASessionAloneAreToldNothing(t *testing.T) 
 	}
 	if len(d.list()) != before {
 		t.Errorf("a session alone sent turns: %q", d.list()[before:])
+	}
+}
+
+func TestSharedWorktreeOpening_PeersAreListedOldestFirst(t *testing.T) {
+	svc, creator, _ := joinTurns(t)
+	joinAs(t, svc, creator, "test", "")
+	joinAs(t, svc, creator, "review", "")
+	_, spec := joinAs(t, svc, creator, "qa", "")
+	sys := spec.AppendSystem
+	implement, test, review := strings.Index(sys, "(mode implement"), strings.Index(sys, "(mode test"), strings.Index(sys, "(mode review")
+	if implement < 0 || !(implement < test && test < review) {
+		t.Errorf("peers out of order (implement %d, test %d, review %d):\n%s", implement, test, review, sys)
+	}
+}
+
+func TestWorktreeLeft_AFailedResumeDoesNotRearmTheLeaveAnnouncement(t *testing.T) {
+	svc := newHostedService(t, scriptAgent{err: errors.New("no claude")})
+	svc.Sandbox = &Sandbox{Driver: &portstest.RecordingSandboxDriver{}, Home: t.TempDir()}
+	d := &recordingDelivery{}
+	svc.deliverUpdate = d.deliver
+	creator, err := startOn(t, svc, InteractiveRequest{Mode: "implement"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	joiner, err := startOn(t, svc, InteractiveRequest{Mode: "implement", WorktreeID: creator.WorkspaceID})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := svc.EndInteractive(t.Context(), joiner.ID, 0, true); err != nil {
+		t.Fatal(err)
+	}
+	if got := leftTurnsTo(d, creator.ID); len(got) != 1 {
+		t.Fatalf("turns after the end = %q, want one", got)
+	}
+	if _, _, err := svc.ResumeInteractive(t.Context(), ports.ResumeRequest{SessionID: joiner.ID, RunsOn: domain.RunnerServer}); err == nil {
+		t.Fatal("the resume did not fail")
+	}
+	if got := leftTurnsTo(d, creator.ID); len(got) != 1 {
+		t.Errorf("turns after the failed resume = %q, want still one", got)
+	}
+}
+
+func TestWorktreeLeft_AProcessThatExitsRightAfterAResumeIsAnnounced(t *testing.T) {
+	svc := newHostedService(t, scriptAgent{script: "exit 0"})
+	svc.Sandbox = &Sandbox{Driver: &portstest.RecordingSandboxDriver{}, Home: t.TempDir()}
+	d := &recordingDelivery{}
+	svc.deliverUpdate = d.deliver
+	creator, err := startOn(t, svc, InteractiveRequest{Mode: "implement"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	joiner, err := startOn(t, svc, InteractiveRequest{Mode: "implement", WorktreeID: creator.WorkspaceID})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := svc.EndInteractive(t.Context(), joiner.ID, 0, true); err != nil {
+		t.Fatal(err)
+	}
+	if _, _, err := svc.ResumeInteractive(t.Context(), ports.ResumeRequest{SessionID: joiner.ID, RunsOn: domain.RunnerServer}); err != nil {
+		t.Fatal(err)
+	}
+	deadline := time.Now().Add(5 * time.Second)
+	for len(leftTurnsTo(d, creator.ID)) < 2 && time.Now().Before(deadline) {
+		time.Sleep(20 * time.Millisecond)
+	}
+	if got := leftTurnsTo(d, creator.ID); len(got) != 2 {
+		t.Errorf("turns = %q, want the first end and the exit after the resume", got)
 	}
 }

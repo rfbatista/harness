@@ -355,13 +355,18 @@ func (s *Service) ResumeInteractive(ctx context.Context, req ports.ResumeRequest
 		s.courier.setTurn(sess.ID, turnIdle) // a resumed conversation waits for its next prompt
 	}
 	s.publish(sess.ID, SessionEvent{Type: "status", Status: domain.SessionRunning, Text: "resumed" + strings.TrimPrefix(startedText(runsOn), "started"), At: time.Now()})
+	// Armed before the spawn, so a process that exits at once is announced.
+	s.rearmLeaveAnnouncement(sess.ID)
 	if runsOn == domain.RunnerServer {
-		if err := s.spawn(ctx, sess.ID, spec, req.Size); err != nil {
+		if err := s.spawnTerminal(ctx, sess.ID, spec, req.Size); err != nil {
+			// The resume failed: the session never ran again, and the sessions
+			// on its worktree were told nothing of it, so its end says nothing.
+			s.markLeaveAnnounced(sess.ID)
+			_, _ = s.end(sess.ID, 127, false)
 			s.restoreInterruption(sess)
 			return nil, ports.AgentSpec{}, err
 		}
 	}
-	s.rearmLeaveAnnouncement(sess.ID)
 	return s.withResumability(ctx, s.sessions.Get(sess.ID)), spec, nil
 }
 
@@ -521,6 +526,17 @@ func startedText(r domain.Runner) string {
 // host's exit callback ends it; if it cannot start, it is ended as failed so
 // it does not linger as running.
 func (s *Service) spawn(ctx context.Context, id string, spec ports.AgentSpec, size ports.TermSize) error {
+	if err := s.spawnTerminal(ctx, id, spec, size); err != nil {
+		_, _ = s.end(id, 127, false)
+		return err
+	}
+	return nil
+}
+
+// spawnTerminal runs the session in the server's terminal host and ends it
+// when its process exits; a failure to start is returned and the session is
+// left for the caller to end.
+func (s *Service) spawnTerminal(ctx context.Context, id string, spec ports.AgentSpec, size ports.TermSize) error {
 	if size.Cols <= 0 || size.Rows <= 0 {
 		size = ports.TermSize{Cols: 120, Rows: 40}
 	}
@@ -528,7 +544,6 @@ func (s *Service) spawn(ctx context.Context, id string, spec ports.AgentSpec, si
 		_, _ = s.end(id, code, false)
 	})
 	if err != nil {
-		_, _ = s.end(id, 127, false)
 		return fmt.Errorf("run the session on the server: %w", err)
 	}
 	return nil

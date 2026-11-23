@@ -23,7 +23,7 @@ type sharedPeer struct {
 }
 
 // sharedWorktreePeers lists the sessions other than id on the worktree,
-// running or ended, oldest first.
+// running or ended, oldest first (the repository answers newest first).
 func (s *Service) sharedWorktreePeers(ctx context.Context, id, workspaceID string) []sharedPeer {
 	if workspaceID == "" {
 		return nil
@@ -34,6 +34,7 @@ func (s *Service) sharedWorktreePeers(ctx context.Context, id, workspaceID strin
 			peers = append(peers, s.sharedPeerOf(ctx, o))
 		}
 	}
+	slices.Reverse(peers)
 	return peers
 }
 
