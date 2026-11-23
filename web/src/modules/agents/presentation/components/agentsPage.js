@@ -126,9 +126,9 @@ export const agentsPage = ({ gateway: raw, repositories, history, location, clip
     await this.loadSkill();
   },
 
-  /** An agent's detail or editor is open: read the project list, once (the page's first paint needs no request for it). */
+  /** An agent's detail or editor (a new agent's too) is open: read the project list and the modes' states, once (the page's first paint needs no request for them). */
   wantProjects() {
-    if (this.catalog === null || this.tab !== "agents" || this.item === "" || this.projectsRead) return;
+    if (this.catalog === null || this.tab !== "agents" || (this.item === "" && this.mode !== "new") || this.projectsRead) return;
     void this.loadProjects();
   },
   /** The catalog was read again: the projects the page already reads are read again too. */
@@ -150,6 +150,8 @@ export const agentsPage = ({ gateway: raw, repositories, history, location, clip
       if (JSON.stringify(states) !== JSON.stringify(this.modeStates)) this.modeStates = states;
       this.modeStatesFailed = false;
     } catch {
+      // What was read before may be stale: show none of it.
+      this.modeStates = null;
       this.modeStatesFailed = true;
     }
   },

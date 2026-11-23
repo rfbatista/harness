@@ -467,3 +467,40 @@ func TestTheEditorSaysWhenTheModesCannotBeRead_EndToEnd(t *testing.T) {
 		t.Logf("JavaScript errors (the failed read logs one): %v", errs)
 	}
 }
+
+// TestANewAgentCanBeAddedToSelectedModes_EndToEnd: the editor of a new agent (and
+// of a copy, Duplicate) reads the modes too, so its Modes section offers the
+// Selected modes and a saved agent lands on the lists ticked.
+func TestANewAgentCanBeAddedToSelectedModes_EndToEnd(t *testing.T) {
+	w := newTokenSaverWorld(t)
+	writeCatalogFile(t, w, "agents.json", maCatalog)
+	maSetMode(t, w, `{"mode":"review","state":"selected","agents":["reviewer"],"no_agent":false}`)
+	row := func(mode string) string { return `[data-mode-row][data-mode="` + mode + `"] input` }
+	b := newTLSBrowser(t)
+	b.run("/agents/new offers the Selected mode and fixes the All agents ones",
+		chromedp.EmulateViewport(1280, 1200),
+		chromedp.Navigate(w.srv.URL+"/agents/new#modes"),
+		waitUntil(`document.querySelectorAll('[data-mode-row]').length === 10`),
+		waitUntil(`document.querySelector('`+row("architect")+`').disabled && document.querySelector('`+row("architect")+`').checked`),
+		waitUntil(`!document.querySelector('`+row("review")+`').disabled && !document.querySelector('`+row("review")+`').checked`),
+	)
+	b.run("a copy starts on no Selected mode, as a new agent does",
+		chromedp.Navigate(w.srv.URL+"/agents/new?from=reviewer#modes"),
+		waitUntil(`document.querySelectorAll('[data-mode-row]').length === 10`),
+		waitUntil(`document.querySelector('`+row("review")+`').checked === false`),
+	)
+	b.run("tick the Selected mode on a new agent, fill it in and save",
+		chromedp.Navigate(w.srv.URL+"/agents/new#modes"),
+		waitUntil(`document.querySelectorAll('[data-mode-row]').length === 10`),
+		waitUntil(`(() => { const i = document.querySelector('`+row("review")+`'); if (!i || i.disabled) return false; i.click(); return true; })()`),
+		waitUntil(`document.querySelector('#agent-name') !== null && document.querySelector('#agent-desc') !== null`),
+		setField(`#agent-name`, "scribe"),
+		setField(`#agent-desc`, "Writes things."),
+		waitUntil(`document.querySelector('[data-save-footer] [data-save]').disabled === false`),
+		clickButton(`document.querySelector('[data-save-footer]')`, "Create agent"),
+		atPath(w.srv.URL+"/agents/scribe"),
+	)
+	if got := maGet(t, w, "review"); !strings.Contains(got, `"scribe"`) {
+		t.Errorf("review mode after the save = %s, want scribe on its list", got)
+	}
+}
