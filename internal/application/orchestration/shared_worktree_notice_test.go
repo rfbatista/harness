@@ -209,3 +209,90 @@ func TestWorktreeJoined_ASessionThatCutsItsOwnWorktreeSendsNothing(t *testing.T)
 		t.Errorf("turns = %v", got)
 	}
 }
+
+// A session that ends or is stopped is announced once to every other running
+// session on its worktree.
+
+func leftTurnsTo(d *recordingDelivery, id string) []string {
+	var out []string
+	for _, g := range d.list() {
+		if strings.HasPrefix(g, id+"|worktree-left:") {
+			out = append(out, g)
+		}
+	}
+	return out
+}
+
+func TestWorktreeLeft_ASessionThatEndsOrIsStoppedIsAnnouncedOnceToTheOthers(t *testing.T) {
+	for name, closedByUser := range map[string]bool{"ended": false, "stopped": true} {
+		t.Run(name, func(t *testing.T) {
+			svc, creator, d := joinTurns(t)
+			joiner, _ := joinAs(t, svc, creator, "review", "")
+			if _, err := svc.EndInteractive(t.Context(), joiner.ID, 0, closedByUser); err != nil {
+				t.Fatal(err)
+			}
+			got := leftTurnsTo(d, creator.ID)
+			want := creator.ID + "|worktree-left:" + joiner.ID + "|[worktree · left] claude (mode review) left your worktree on " + creator.Branch + "."
+			if len(got) != 1 || got[0] != want {
+				t.Errorf("turns = %q\nwant one: %q", got, want)
+			}
+			if own := leftTurnsTo(d, joiner.ID); len(own) != 0 {
+				t.Errorf("the session that left was told: %q", own)
+			}
+		})
+	}
+}
+
+func TestWorktreeLeft_ASessionThatLeavesTwoWaysIsAnnouncedOnce(t *testing.T) {
+	svc, creator, d := joinTurns(t)
+	joiner, _ := joinAs(t, svc, creator, "review", "")
+	if _, err := svc.EndInteractive(t.Context(), joiner.ID, 0, true); err != nil {
+		t.Fatal(err)
+	}
+	if err := svc.endHeadless(joiner.ID); err != nil {
+		t.Fatal(err)
+	}
+	if got := leftTurnsTo(d, creator.ID); len(got) != 1 {
+		t.Errorf("turns = %q, want one", got)
+	}
+}
+
+func TestWorktreeLeft_ASessionThatResumedAndLeavesAgainIsAnnouncedAgain(t *testing.T) {
+	svc, creator, d := joinTurns(t)
+	joiner, _ := joinAs(t, svc, creator, "review", "")
+	if _, err := svc.EndInteractive(t.Context(), joiner.ID, 0, true); err != nil {
+		t.Fatal(err)
+	}
+	if _, _, err := svc.ResumeInteractive(t.Context(), ports.ResumeRequest{SessionID: joiner.ID}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := svc.EndInteractive(t.Context(), joiner.ID, 0, true); err != nil {
+		t.Fatal(err)
+	}
+	if got := leftTurnsTo(d, creator.ID); len(got) != 2 {
+		t.Errorf("turns = %q, want two", got)
+	}
+}
+
+func TestWorktreeLeft_EndedSessionsAndASessionAloneAreToldNothing(t *testing.T) {
+	svc, creator, d := joinTurns(t)
+	ended, _ := joinAs(t, svc, creator, "test", "")
+	if _, err := svc.EndInteractive(t.Context(), ended.ID, 0, false); err != nil {
+		t.Fatal(err)
+	}
+	joiner, _ := joinAs(t, svc, creator, "review", "")
+	if _, err := svc.EndInteractive(t.Context(), joiner.ID, 0, false); err != nil {
+		t.Fatal(err)
+	}
+	if got := leftTurnsTo(d, ended.ID); len(got) != 0 {
+		t.Errorf("an ended session was told: %q", got)
+	}
+	// The creator is now alone: its own end tells no one.
+	before := len(d.list())
+	if _, err := svc.EndInteractive(t.Context(), creator.ID, 0, false); err != nil {
+		t.Fatal(err)
+	}
+	if len(d.list()) != before {
+		t.Errorf("a session alone sent turns: %q", d.list()[before:])
+	}
+}

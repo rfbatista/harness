@@ -278,6 +278,9 @@ type Service struct {
 
 	mu  sync.Mutex
 	seq map[string]int64
+	// leftTold marks the sessions whose leaving their worktree's other
+	// sessions were told of, until they resume.
+	leftTold map[string]bool
 	// statuses is the last status announced per session, so a status is
 	// announced on the bus only when it actually changes.
 	statuses map[string]domain.SessionStatus
@@ -1116,7 +1119,7 @@ func (s *Service) pump(sess llmkit.Session) {
 	s.runCleanup(id)
 	if sess := s.sessions.Get(id); sess != nil && sess.Status.IsTerminal() {
 		s.hub.End(id)
-		s.announce(domain.SessionEnded{SessionID: id, Status: sess.Status})
+		s.announceEnded(id, sess.Status)
 	}
 }
 

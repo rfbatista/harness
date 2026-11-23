@@ -257,6 +257,9 @@ func (s *Service) ResumeInteractive(ctx context.Context, req ports.ResumeRequest
 	if err := s.resumeBlock(sess); err != nil {
 		return nil, ports.AgentSpec{}, err
 	}
+	s.mu.Lock()
+	delete(s.leftTold, sess.ID)
+	s.mu.Unlock()
 
 	subject := sessionSubject{mode: sess.Mode}
 	if sess.TicketID != "" && s.tickets != nil {
@@ -572,7 +575,7 @@ func (s *Service) end(id string, exitCode int, closedByUser bool) (*domain.Sessi
 	}
 	s.publish(id, SessionEvent{Type: "done", Status: status, Text: text, At: time.Now()})
 	s.hub.End(id)
-	s.announce(domain.SessionEnded{SessionID: id, Status: status})
+	s.announceEnded(id, status)
 	return s.withResumability(context.Background(), s.sessions.Get(id)), nil
 }
 
@@ -821,7 +824,7 @@ func (s *Service) endHeadless(id string) error {
 	}
 	s.publish(id, SessionEvent{Type: "done", Status: domain.SessionStopped, Text: "stopped", At: time.Now()})
 	s.hub.End(id)
-	s.announce(domain.SessionEnded{SessionID: id, Status: domain.SessionStopped})
+	s.announceEnded(id, domain.SessionStopped)
 	return nil
 }
 

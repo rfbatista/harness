@@ -159,3 +159,35 @@ func (s *Service) sessionsOnWorktree(ctx context.Context, workspaceID string) []
 	}
 	return others
 }
+
+// announceEnded publishes the end of a session and tells the other running
+// sessions on its worktree it left. A session leaves once, whichever way its
+// end is recorded and however many times; resuming it lets it leave again.
+func (s *Service) announceEnded(id string, status domain.SessionStatus) {
+	s.announce(domain.SessionEnded{SessionID: id, Status: status})
+	s.mu.Lock()
+	if s.leftTold == nil {
+		s.leftTold = map[string]bool{}
+	}
+	told := s.leftTold[id]
+	s.leftTold[id] = true
+	s.mu.Unlock()
+	if told {
+		return
+	}
+	sess := s.sessions.Get(id)
+	if sess == nil {
+		return
+	}
+	ctx := context.Background()
+	deliver := s.turnSink()
+	who := s.sharedPeerOf(ctx, sess)
+	for _, o := range s.sessionsOnWorktree(ctx, sess.WorkspaceID) {
+		if o.ID == id || o.Status.IsTerminal() {
+			continue
+		}
+		if err := deliver(o.ID, "worktree-left:"+id, worktreeLeftTurn(who, sess.Branch)); err != nil && errs.Code(err) != "SESSION_NOT_RUNNING" {
+			slog.Warn("deliver a worktree left turn", "session", o.ID, "err", err)
+		}
+	}
+}
