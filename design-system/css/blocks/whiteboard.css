@@ -190,5 +190,10 @@
     grid-template-columns: minmax(0, 1fr) minmax(24rem, 44%);
     &[data-no-detail] { grid-template-columns: minmax(0, 1fr); & > :last-child { display: none; } }
     @media (width < 64rem) { grid-template-columns: minmax(0, 1fr); }
+
+    /* The pane beside the board is narrow: its head keeps the state, the title, the sandbox chip and the actions, and drops the rest (the Context and Sandbox tabs hold them). */
+    & .session-head > .meta > :is(.usage-total, .token-savers, .who, .sandbox-chips > [data-sandbox-visibility]) { display: none; }
+    & .session-head > .actions { min-inline-size: 0; }
+    & .session-head > .actions .check-button > .next { display: none; }
   }
 }

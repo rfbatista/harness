@@ -119,3 +119,21 @@ describe("the facts grid", () => {
     assert.equal(fact(presenter, "Approximate size"), "≈640 tokens");
   });
 });
+
+describe("empty parts of a fact", () => {
+  test("leave no dangling separator", async () => {
+    const { presenter } = setup(contextJson({ entries: [entryJson({ facts: factsJson({ model: "", mode: "design", sandbox: "off", repository_visibility: "", worktree: "", branch: "main" }) })] }));
+    presenter.open();
+    await flush();
+    assert.equal(fact(presenter, "Mode & model"), "design");
+    assert.equal(fact(presenter, "Sandbox & visibility"), "off");
+    assert.equal(fact(presenter, "Worktree & branch"), "main");
+  });
+
+  test("no mode and no model reads as no mode", async () => {
+    const { presenter } = setup(contextJson({ entries: [entryJson({ facts: factsJson({ model: "", mode: "" }) })] }));
+    presenter.open();
+    await flush();
+    assert.equal(fact(presenter, "Mode & model"), "No mode");
+  });
+});

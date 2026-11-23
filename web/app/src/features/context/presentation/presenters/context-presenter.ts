@@ -72,14 +72,17 @@ export interface ContextDeps {
 
 const idle = (ended: boolean): ContextViewModel => ({ status: "idle", message: "", facts: [], groups: null, search: NO_SEARCH, picker: null, whiteboard: null, links: [], reveal: null, ended, live: null });
 
+/** The parts that are there, with a separator between them only: an empty part leaves none dangling. */
+const joined = (...parts: string[]): string => parts.filter((p) => p !== "").join(" · ");
+
 export function factRows(f: Facts): FactRow[] {
   return [
     { label: "Agent", value: f.agent === "" ? "Plain claude" : f.role === "" ? f.agent : `${f.agent} · ${f.role}` },
-    { label: "Mode & model", value: `${f.mode === "" ? "No mode" : f.mode} · ${f.model}` },
+    { label: "Mode & model", value: joined(f.mode === "" ? "No mode" : f.mode, f.model) },
     { label: "Session", value: f.headless ? "Headless session" : "Terminal session" },
     { label: "Permissions", value: f.permissionMode },
-    { label: "Sandbox & visibility", value: `${f.sandbox} · ${f.repositoryVisibility}` },
-    { label: "Worktree & branch", value: `${f.worktree} · ${f.branch}` },
+    { label: "Sandbox & visibility", value: joined(f.sandbox, f.repositoryVisibility) },
+    { label: "Worktree & branch", value: joined(f.worktree, f.branch) },
     { label: "Token savers", value: f.tokenSavers.length === 0 ? "none" : f.tokenSavers.join(", ") },
     { label: "Claude version", value: f.claudeVersion === "" ? "unknown" : f.claudeVersion },
     { label: "Approximate size", value: `≈${tokens(f.approxTokens)} tokens` },

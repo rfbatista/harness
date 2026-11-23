@@ -74,6 +74,8 @@ export const sessionsPage = ({
     contextGroup: "",
     /** Alt+Shift+C opened the Context tab: its search box takes the focus, once. */
     contextFocus: false,
+    /** Rises with each focus request, so the panel's key changes and the island mounts again to honour it. */
+    contextFocusNonce: 0,
     ticketId: "",
     /** @type {import("../../domain/session.js").Session[]} */
     sessions: [],
@@ -247,12 +249,21 @@ export const sessionsPage = ({
      */
     get contextPanels() {
       if (!this.showingContext) return [];
-      return [{ key: `${this.selected.id}:${this.selected.stoppable ? "live" : "ended"}`, props: this.contextProps() }];
+      return [{ key: `${this.selected.id}:${this.selected.stoppable ? "live" : "ended"}:${this.contextFocusNonce}`, props: this.contextProps() }];
     },
     /** The dot island on the Context tab's button: it watches the selected session while another tab is in front. */
     get contextDots() {
       if (!this.showingSession) return [];
       return [{ key: `${this.selected.id}:${this.selected.stoppable ? "live" : "ended"}`, props: this.contextProps() }];
+    },
+    /**
+     * The tab row scrolls when its tabs do not fit; the tab the person chose
+     * (Context and Sandbox sit at the far end) is brought into view whole.
+     * @param {string} _tab  read so the effect runs when the tab changes
+     */
+    revealSelectedTab(_tab) {
+      const row = this.$el;
+      this.$nextTick(() => row.querySelector("[role=tab][aria-selected=true]")?.scrollIntoView?.({ block: "nearest", inline: "nearest" }));
     },
     /**
      * Writes an island's props into the script beside its mount. The CSP build
@@ -809,6 +820,8 @@ export const sessionsPage = ({
       this.contextGroup = "";
       // One-shot (F6): the panel written on this flush carries the request, and the next flush must not, or a remount (another session, live to ended) would take the focus again. A click passes its event, which is no request.
       this.contextFocus = focus === true;
+      // A request while the tab is already in front must reach the island, which reads its props only when it mounts: a new key remounts it.
+      if (this.contextFocus) this.contextFocusNonce += 1;
       if (this.contextFocus) {
         this.$nextTick(() => {
           this.contextFocus = false;

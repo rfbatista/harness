@@ -38,6 +38,9 @@
       border-radius: var(--radius-md);
     }
 
+    /* A list item is capped to a reading measure elsewhere; the rows fill the pane. */
+    & .rows, & .rows > .row { max-inline-size: none; inline-size: 100%; }
+
     & .row {
       display: flex;
       flex-wrap: wrap;
@@ -50,6 +53,7 @@
       &[data-ring] { outline: 2px solid var(--color-signal); outline-offset: -2px; }
       &[data-tone="danger"] { background: color-mix(in oklch, var(--color-danger) 8%, transparent); & .status { color: var(--color-danger); } }
 
+      & .meaning { flex: 1 1 20rem; min-inline-size: 0; }
       & .name { font-weight: var(--weight-medium); overflow-wrap: anywhere; }
       & .status, & .used, & .muted { color: var(--color-ink-muted); font-size: var(--text-sm); }
       & .reason { flex-basis: 100%; margin: 0; color: var(--color-ink-muted); font-size: var(--text-sm); overflow-wrap: anywhere; }

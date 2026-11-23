@@ -222,7 +222,7 @@ templ paneTabs() {
 		<template x-if="focusActive">
 			<span class="[ lead ]"><span class="[ status ]" x-bind:data-state="selected.state" data-dot-only x-bind:aria-label="selected.word"></span><span x-text="selected.title"></span></span>
 		</template>
-		<div class="[ tabs ]" role="tablist" aria-label="Session views">
+		<div class="[ tabs ]" role="tablist" aria-label="Session views" x-effect="revealSelectedTab(detailTab)">
 			<button type="button" role="tab" x-bind:aria-selected="agentTabSelected" x-on:click="showAgent">
 				Agent
 				<template x-if="attentionDot">
