@@ -14,14 +14,16 @@ export class ContextPropsDto {
     readonly group: string,
     /** The agent of the session that started this one; "" when a person did. */
     readonly parent: string,
+    /** The person asked for the tab by key: its search box takes the focus. */
+    readonly focus: boolean,
   ) {}
 
   static fromJSON(raw: unknown): ContextPropsDto {
     const from = object(NAME, raw);
-    return new ContextPropsDto(string(NAME, from, "session_id"), string(NAME, from, "project_id"), boolean(NAME, from, "live"), optionalString(NAME, from, "group") ?? "", optionalString(NAME, from, "parent") ?? "");
+    return new ContextPropsDto(string(NAME, from, "session_id"), string(NAME, from, "project_id"), boolean(NAME, from, "live"), optionalString(NAME, from, "group") ?? "", optionalString(NAME, from, "parent") ?? "", from.focus === true);
   }
 
   toJSON(): Wire {
-    return { session_id: this.session_id, project_id: this.project_id, live: this.live, group: this.group, parent: this.parent };
+    return { session_id: this.session_id, project_id: this.project_id, live: this.live, group: this.group, parent: this.parent, focus: this.focus };
   }
 }

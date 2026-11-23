@@ -65,7 +65,7 @@ func contextPanel() templ.Component {
 			templ_7745c5c3_Var2 = templ.NopComponent
 		}
 		ctx = templ.ClearChildren(ctx)
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 2, "<section class=\"[ frame ]\" aria-label=\"Context\"><div data-island=\"session-context\" x-ignore></div><script type=\"application/json\" data-island-props=\"session-context\" x-text=\"panel.props\"></script></section>")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 2, "<section class=\"[ frame ]\" aria-label=\"Context\" x-effect=\"writeContextProps(panel)\"><div data-island=\"session-context\" x-ignore></div><script type=\"application/json\" data-island-props=\"session-context\"></script></section>")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}

@@ -158,8 +158,8 @@ templ sandboxPanel() {
 // web/app (the "session-context" island) while the tab is in front. Alpine does
 // not walk into it; its props are the session and its project.
 templ contextPanel() {
-	<section class="[ frame ]" aria-label="Context">
+	<section class="[ frame ]" aria-label="Context" x-effect="writeContextProps(panel)">
 		<div data-island="session-context" x-ignore></div>
-		<script type="application/json" data-island-props="session-context" x-text="panel.props"></script>
+		<script type="application/json" data-island-props="session-context"></script>
 	</section>
 }

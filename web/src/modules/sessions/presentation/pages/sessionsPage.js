@@ -72,6 +72,8 @@ export const sessionsPage = ({
     projectId: "",
     /** The Context tab group a link asked to open; "" for none. */
     contextGroup: "",
+    /** Alt+Shift+C opened the Context tab: its search box takes the focus. */
+    contextFocus: false,
     ticketId: "",
     /** @type {import("../../domain/session.js").Session[]} */
     sessions: [],
@@ -248,8 +250,18 @@ export const sessionsPage = ({
       if (!this.showingSession) return [];
       return [{ key: `${this.selected.id}:${this.selected.stoppable ? "live" : "ended"}`, props: this.contextProps() }];
     },
+    /**
+     * Writes an island's props into the script beside its mount. The CSP build
+     * evaluates nothing on a <script>, so the directive sits on the element
+     * around it and this method (this.$el is that element) fills the script.
+     * @param {{ props: string }} panel
+     */
+    writeContextProps(panel) {
+      const script = this.$el.querySelector("script[data-island-props]");
+      if (script) script.textContent = panel.props;
+    },
     contextProps() {
-      return JSON.stringify({ session_id: this.selected.id, project_id: this.projectId, live: this.selected.stoppable, group: this.contextGroup, parent: startedBy(this.sessions.find((s) => s.id === this.selectedId), this.sessions, this.agentNames) });
+      return JSON.stringify({ session_id: this.selected.id, project_id: this.projectId, live: this.selected.stoppable, group: this.contextGroup, focus: this.contextFocus, parent: startedBy(this.sessions.find((s) => s.id === this.selectedId), this.sessions, this.agentNames) });
     },
     /**
      * Alt+Shift+C opens the Context tab: the page's, never the agent's, so it is
@@ -262,7 +274,13 @@ export const sessionsPage = ({
       event.preventDefault();
       event.stopPropagation();
       if (event.repeat) return;
+      // A second press gives the focus back to the terminal.
+      if (this.detailTab === "context") {
+        this.showAgent();
+        return;
+      }
       this.showContext();
+      this.contextFocus = true;
     },
     /** A session with a branch has a Merge tab, where a merge into the default branch is offered when it applies. */
     get hasMergeTab() {
@@ -784,6 +802,7 @@ export const sessionsPage = ({
       this.leaveCode();
       this.detailTab = "context";
       this.contextGroup = "";
+      this.contextFocus = false;
     },
     /** The Merge tab: merge the branch into the repository's default branch. */
     showMerge() {

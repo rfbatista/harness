@@ -61,11 +61,12 @@ export function mountIslands(doc: Document): Dispose {
     },
     // The Context tab of the session pane: client-rendered, mounted while the tab is shown.
     "session-context": (mount, props) => {
-      const { session_id, project_id, live, group, parent } = ContextPropsDto.fromJSON(props);
+      const { session_id, project_id, live, group, parent, focus } = ContextPropsDto.fromJSON(props);
       const presenter = new ContextPresenter(contextSource, session_id, { clipboard: browserClipboard(win.navigator), feed: contextFeed, projectId: project_id, live, parent });
       const root = createRoot(mount);
       root.render(<ContextView presenter={presenter} />);
       if (isGroupKey(group)) presenter.openAt(group);
+      if (focus) presenter.focusSearch();
       presenter.open();
       return () => {
         presenter.close();

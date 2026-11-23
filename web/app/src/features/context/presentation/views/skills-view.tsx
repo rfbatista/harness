@@ -27,7 +27,7 @@ export function HooksView({ group, presenter }: { group: HooksGroup; presenter: 
           <li key={i} className="[ row ]">
             <span className="[ name ] [ mono ]">{row.event}</span>
             {row.matcher !== "" && <span className="[ badge ] [ mono ]">{row.matcher}</span>}
-            <span className="[ muted meaning ]">{row.rule}</span>
+            <span className="[ muted ]">{row.rule}</span>
           </li>
         ))}
       </ul>
