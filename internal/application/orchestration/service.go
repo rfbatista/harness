@@ -475,6 +475,10 @@ type prepareInput struct {
 	// WorkspaceID is the worktree the session runs in, set by prepare once it
 	// is provisioned, or by a resume.
 	WorkspaceID string
+	// Join is the existing worktree the session runs in instead of a new one;
+	// nil provisions its own. Access is what the session may do there.
+	Join   *domain.Workspace
+	Access domain.SessionAccess
 	// BranchChecked: Branch was a person's own name, already checked against
 	// git's rules, so the stricter generated-name check is skipped.
 	BranchChecked bool
@@ -531,14 +535,15 @@ func (s *Service) prepare(ctx context.Context, in prepareInput) (*prepared, erro
 	if s.workspaces == nil {
 		return nil, &domain.StructuredError{Code: "INVALID_INPUT", Message: "workspaces are not available"}
 	}
-	if !in.BranchChecked {
+	if !in.BranchChecked && in.Join == nil {
 		if err := validateBranchName(in.Branch); err != nil {
 			return nil, err
 		}
 	}
 	// A base that is refused (not a branch, gone from origin, a fetch that
-	// fails) is refused here: nothing exists yet to clean up.
-	if s.baseBranches != nil {
+	// fails) is refused here: nothing exists yet to clean up. A join has no
+	// base.
+	if s.baseBranches != nil && in.Join == nil {
 		if err := s.baseBranches.PrepareBase(ctx, in.RepositoryID, repo.RootDir, in.BaseBranch); err != nil {
 			return nil, err
 		}
@@ -574,12 +579,22 @@ func (s *Service) prepare(ctx context.Context, in prepareInput) (*prepared, erro
 		return nil, err
 	}
 
-	ws, err := s.workspaces.Create(in.RepositoryID, domain.Slug(in.Branch), in.Branch, in.BaseBranch)
-	if err != nil {
-		if ag.cleanup != nil {
-			ag.cleanup()
+	ws := in.Join
+	if ws == nil {
+		var err error
+		if ws, err = s.workspaces.Create(in.RepositoryID, domain.Slug(in.Branch), in.Branch, in.BaseBranch); err != nil {
+			if ag.cleanup != nil {
+				ag.cleanup()
+			}
+			return nil, err
 		}
-		return nil, err
+	}
+	// What this start provisioned it takes back when it fails; a joined
+	// worktree is another session's and stays.
+	discard := func() {
+		if in.Join == nil {
+			_ = s.workspaces.Discard(ws.ID)
+		}
 	}
 
 	id := in.ID
@@ -593,12 +608,12 @@ func (s *Service) prepare(ctx context.Context, in prepareInput) (*prepared, erro
 		cleanup = s.withCommitCheck(id, ws.ID, ws.Path, &cfg, false, cleanup)
 	}
 	if err != nil {
-		_ = s.workspaces.Discard(ws.ID)
+		discard()
 		return nil, err
 	}
 	envFile, cleanup, err := s.withGit(id, in.RepositoryID, &cfg, cleanup)
 	if err != nil {
-		_ = s.workspaces.Discard(ws.ID)
+		discard()
 		return nil, err
 	}
 	s.withAgentCredential(&cfg, in.ProjectID)
@@ -607,7 +622,7 @@ func (s *Service) prepare(ctx context.Context, in prepareInput) (*prepared, erro
 	savers := s.withTokenSavers(ctx, in, repo.RootDir, ws.Path, &cfg)
 	cleanup, err = s.withTempDir(id, &cfg, cleanup)
 	if err != nil {
-		_ = s.workspaces.Discard(ws.ID)
+		discard()
 		return nil, err
 	}
 	in.WorkspaceID = ws.ID
@@ -616,7 +631,7 @@ func (s *Service) prepare(ctx context.Context, in prepareInput) (*prepared, erro
 		if cleanup != nil {
 			cleanup()
 		}
-		_ = s.workspaces.Discard(ws.ID)
+		discard()
 		return nil, err
 	}
 	s.withWorktreeReadHook(&cfg, id, sb)
@@ -1450,7 +1465,8 @@ func (s *Service) Delete(ctx context.Context, id string) error {
 	// A worktree that will not go away must not make the session undeletable:
 	// the workspace row survives and stays retryable through delete_workspace.
 	// The branch is never deleted, so committed work outlives the session.
-	if workspaceID != "" && s.workspaces != nil {
+	// A worktree another session is still on stays: it goes with the last one.
+	if workspaceID != "" && s.workspaces != nil && len(s.sessionsOn(workspaceID, id)) == 0 {
 		if err := s.workspaces.Delete(workspaceID); err != nil {
 			slog.Warn("remove session worktree failed", "session", id, "workspace", workspaceID, "err", err)
 		}

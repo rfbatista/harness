@@ -6,6 +6,8 @@ import (
 	"fmt"
 	"log/slog"
 	"maps"
+	"os"
+	"slices"
 	"strings"
 	"time"
 
@@ -75,6 +77,13 @@ func (s *Service) StartInteractive(ctx context.Context, req InteractiveRequest) 
 		}
 	}
 
+	// A worktree to join is judged here, with the access: a refusal leaves
+	// nothing to clean up, and the branch check below never runs for it.
+	access, join, err := s.joinTarget(ctx, req, mode)
+	if err != nil {
+		return nil, ports.AgentSpec{}, err
+	}
+
 	// A selection to bring under the new architect is judged before anything
 	// is created: nothing exists yet to clean up when it is refused.
 	var plan *ports.BringUnderPlan
@@ -98,7 +107,9 @@ func (s *Service) StartInteractive(ctx context.Context, req InteractiveRequest) 
 	}
 	branch += "-" + id[:8]
 	named := strings.TrimSpace(req.BranchName)
-	if named != "" {
+	if join != nil {
+		branch = join.Branch
+	} else if named != "" {
 		if err := s.checkNamedBranch(ctx, req.RepositoryID, named, req.TicketID); err != nil {
 			return nil, ports.AgentSpec{}, err
 		}
@@ -121,6 +132,8 @@ func (s *Service) StartInteractive(ctx context.Context, req InteractiveRequest) 
 		Role:         role,
 
 		BranchChecked: named != "" && s.branchNames != nil,
+		Join:          join,
+		Access:        access,
 	})
 	if err != nil {
 		if named != "" && errs.Code(err) == domain.BranchExists {
@@ -148,6 +161,8 @@ func (s *Service) StartInteractive(ctx context.Context, req InteractiveRequest) 
 		RepositoryID:    req.RepositoryID,
 		WorkspaceID:     p.ws.ID,
 		Branch:          p.branch,
+		Access:          access,
+		Joined:          join != nil,
 		AgentID:         req.AgentID,
 		ZoneID:          req.ZoneID,
 		TicketID:        req.TicketID,
@@ -199,11 +214,14 @@ func (s *Service) StartInteractive(ctx context.Context, req InteractiveRequest) 
 		return s.withResumability(ctx, created), spec, nil
 	}
 	// Not recorded: nothing will ever run in this worktree, and its branch is
-	// seconds old with no commits, so Discard (not Delete) is safe.
+	// seconds old with no commits, so Discard (not Delete) is safe. A joined
+	// worktree is not this start's to take back.
 	if p.cleanup != nil {
 		p.cleanup()
 	}
-	_ = s.workspaces.Discard(p.ws.ID)
+	if join == nil {
+		_ = s.workspaces.Discard(p.ws.ID)
+	}
 	return nil, ports.AgentSpec{}, fmt.Errorf("start interactive session: %w", err)
 }
 
@@ -1006,3 +1024,72 @@ func (s *Service) checkNamedBranch(ctx context.Context, repositoryID, name, tick
 	}
 	return nil
 }
+
+// worktreeLookup is what joining needs of the workspaces service beyond
+// provisioning: a worktree by id.
+type worktreeLookup interface {
+	Get(ctx context.Context, id string) *domain.Workspace
+}
+
+// joinRefusal is a refusal of a join that the form shows in place: the code
+// leads the message, which MCP clients see alone.
+func joinRefusal(code, message string, details map[string]string) error {
+	return &domain.DetailedError{
+		StructuredError: &domain.StructuredError{Code: code, Message: code + ": " + message},
+		Details:         details,
+	}
+}
+
+// joinTarget reads the access a start asks for and the worktree it joins, nil
+// when it cuts its own. Every refusal is decided here, before anything is
+// created: a session that cut its own worktree has write access, so read-only
+// needs a worktree to join; an unknown, cleared, vanished or foreign worktree
+// is refused; and a join takes neither a base branch nor a branch name.
+func (s *Service) joinTarget(ctx context.Context, req InteractiveRequest, mode domain.SessionMode) (domain.SessionAccess, *domain.Workspace, error) {
+	access := domain.SessionAccess(req.Access)
+	switch access {
+	case "":
+		access = defaultAccess(mode)
+	case domain.AccessWrite, domain.AccessReadOnly:
+	default:
+		return "", nil, joinRefusal("ACCESS_INVALID", "access must be write or read_only", map[string]string{"access": req.Access})
+	}
+	if req.WorktreeID == "" {
+		if access == domain.AccessReadOnly {
+			return "", nil, joinRefusal("ACCESS_INVALID", "a session that cuts its own worktree writes it: read-only access needs a worktree to join", nil)
+		}
+		return access, nil, nil
+	}
+	if strings.TrimSpace(req.BaseBranch) != "" || strings.TrimSpace(req.BranchName) != "" {
+		return "", nil, joinRefusal("WORKTREE_WITH_BASE_BRANCH", "a session that joins a worktree runs on its branch: leave the base branch and the branch name empty", nil)
+	}
+	switch mode {
+	case domain.SessionModeArchitect, domain.SessionModeProduct, domain.SessionModeDesignSystem:
+		return "", nil, &domain.StructuredError{Code: "INVALID_INPUT", Message: "an architect, product or design system session cannot join a worktree"}
+	}
+	gone := func() error {
+		return joinRefusal("WORKTREE_NOT_FOUND", "that worktree is no longer there: pick another or start on a new branch", map[string]string{"worktree_id": req.WorktreeID})
+	}
+	lookup, ok := s.workspaces.(worktreeLookup)
+	if !ok {
+		return "", nil, &domain.StructuredError{Code: "INVALID_INPUT", Message: "joining a worktree is not available"}
+	}
+	ws := lookup.Get(ctx, req.WorktreeID)
+	if ws == nil || ws.RepositoryID != req.RepositoryID {
+		return "", nil, gone()
+	}
+	if _, err := os.Stat(ws.Path); err != nil {
+		return "", nil, gone()
+	}
+	on := s.sessions.List(ctx, ports.SessionFilter{WorkspaceID: ws.ID})
+	if len(on) == 0 {
+		return "", nil, gone()
+	}
+	if !slices.ContainsFunc(on, func(o *domain.Session) bool { return o.TicketID == req.TicketID }) {
+		return "", nil, joinRefusal("WORKTREE_NOT_ON_TASK", "that worktree belongs to a session of another task", map[string]string{"worktree_id": req.WorktreeID})
+	}
+	return access, ws, nil
+}
+
+// defaultAccess is the access a mode gets when the start names none.
+func defaultAccess(domain.SessionMode) domain.SessionAccess { return domain.AccessWrite }
