@@ -20,6 +20,7 @@ notificationsSourceContract("HTTP adapter against a fake server on the wire", ()
     publish: (change) => feed.emit(NOTIFICATIONS_STREAM, { changed: change.notifications.map(toWire), unread_count: change.unreadCount, ...(change.openCount == null ? {} : { open_count: change.openCount }) }),
     setStatus: (status) => feed.setStatus(NOTIFICATIONS_STREAM, status),
     answerMalformed: server.answerWith,
+    answerWith: server.answerWith,
     publishMalformed: (raw) => feed.emit(NOTIFICATIONS_STREAM, raw),
   };
 });
@@ -43,16 +44,16 @@ test("the HTTP adapter follows the notifications stream, and drops a message it 
   assert.equal(feed.followers(NOTIFICATIONS_STREAM), 0);
 });
 
-test("the HTTP adapter reads a notification of a kind it does not know as a generic one, and an outcome or actor kind it does not know leniently", async () => {
+test("the HTTP adapter reads an outcome or an actor kind it does not know leniently", async () => {
   const data = memoryNotificationsSource();
   const server = fakeNotificationsServer(data);
   server.answerWith({
-    notifications: [{ id: "n1", project_id: "p", project_name: "harness", source: "system", kind: "mystery", level: "action", title: "T", link: "/x", created_at: "2026-11-21T12:00:00Z", outcome: "levitated", actor: { kind: "robot", name: "devops" } }],
+    notifications: [{ id: "n1", project_id: "p", project_name: "harness", source: "system", kind: "task_review", level: "action", title: "T", link: "/x", created_at: "2026-11-21T12:00:00Z", outcome: "levitated", actor: { kind: "robot", name: "devops" } }],
     unread_count: 1,
   });
   const page = await httpNotificationsSource(apiClient(server.fetch), memoryFeed()).list({});
   const [n] = page.notifications;
-  assert.deepEqual([n?.kind, n?.outcome, n?.actor.kind, n?.actor.name], ["agent", "", "system", "devops"]);
+  assert.deepEqual([n?.kind, n?.outcome, n?.actor.kind, n?.actor.name], ["task_review", "", "system", "devops"]);
   assert.equal(page.openCount, null, "a server that sends no open_count");
 });
 

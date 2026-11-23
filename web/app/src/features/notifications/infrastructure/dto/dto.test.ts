@@ -1,6 +1,6 @@
 import { describe, test } from "node:test";
 import assert from "node:assert/strict";
-import { DtoError } from "../../../../shared/infrastructure/dto/dto-error";
+import { DtoError, UnknownValueError } from "../../../../shared/infrastructure/dto/dto-error";
 import { notification, read } from "../../testing/fixtures";
 import { toWire } from "../../testing/wire";
 import { BellPropsDto } from "./bell-props-dto";
@@ -68,7 +68,7 @@ describe("page, answer and change event DTOs", () => {
   });
 
   test("name the path of a bad notification and of a bad count", () => {
-    assert.throws(() => NotificationPageDto.fromJSON({ notifications: [wire(), { ...wire(), level: "x" }], unread_count: 1 }), failsAt("NotificationDto", "notifications[1].level"));
+    assert.throws(() => NotificationPageDto.fromJSON({ notifications: [wire(), { ...wire(), level: 3 }], unread_count: 1 }), failsAt("NotificationDto", "notifications[1].level"));
     assert.throws(() => NotificationPageDto.fromJSON({ notifications: [], unread_count: 1, open_count: -2 }), failsAt("NotificationPageDto", "open_count"));
     assert.throws(() => NotificationPageDto.fromJSON({ notifications: [], unread_count: -1 }), failsAt("NotificationPageDto", "unread_count"));
     assert.throws(() => NotificationPageDto.fromJSON({ notifications: [], unread_count: 1.5 }), failsAt("NotificationPageDto", "unread_count"));
@@ -119,6 +119,27 @@ describe("the ledger fields", () => {
     assert.equal(ReadAnswerDto.fromJSON({ notifications: [], unread_count: 0, open_count: 4 }).open_count, 4);
     assert.equal(ChangeEventDto.fromJSON({ changed: [], unread_count: 0, open_count: 1 }).open_count, 1);
     assert.throws(() => ChangeEventDto.fromJSON({ changed: [], unread_count: 0, open_count: "1" }), failsAt("ChangeEventDto", "open_count"));
+  });
+});
+
+describe("a value the client does not know", () => {
+  test("a notification of an unknown kind, source or level throws an UnknownValueError naming the field", () => {
+    for (const change of [{ kind: "from_the_future" }, { source: "robot" }, { level: "urgent" }]) {
+      assert.throws(() => NotificationDto.fromJSON({ ...wire(), ...change }), (err: unknown) => err instanceof UnknownValueError && err.dto === "NotificationDto" && err.path === Object.keys(change)[0]);
+    }
+  });
+
+  test("a page, an answer and a change event drop that one row and keep the rest and the counts", () => {
+    const [keep, future] = [wire(), { ...wire(), kind: "from_the_future" }];
+    const page = NotificationPageDto.fromJSON({ notifications: [keep, future], unread_count: 5, open_count: 3 });
+    assert.deepEqual([page.notifications.map((n) => n.id), page.unread_count, page.open_count], [[keep.id], 5, 3]);
+    assert.deepEqual(ReadAnswerDto.fromJSON({ notifications: [future, keep], unread_count: 1 }).notifications.map((n) => n.id), [keep.id]);
+    assert.deepEqual(ChangeEventDto.fromJSON({ changed: [future], unread_count: 0 }).changed, []);
+    assert.deepEqual(BellPropsDto.fromJSON({ inbox_href: "/n", page: { notifications: [future, keep], unread_count: 2 } }).page?.notifications.map((n) => n.id), [keep.id]);
+  });
+
+  test("a notification that is malformed, not just new, still fails the whole page", () => {
+    assert.throws(() => NotificationPageDto.fromJSON({ notifications: [wire(), { ...wire(), kind: 5 }], unread_count: 1 }), failsAt("NotificationDto", "notifications[1].kind"));
   });
 });
 

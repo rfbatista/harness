@@ -1,7 +1,7 @@
 // The notification DTOs as domain values, and the domain's requests as DTOs.
 
 import type { ReadRequest } from "../application/ports";
-import { ACTOR_KINDS, HARNESS_ACTOR, KINDS, LISTED_STATES, OUTCOMES, type Actor, type Change, type Notification, type NotificationPage } from "../domain/notification";
+import { ACTOR_KINDS, HARNESS_ACTOR, LISTED_STATES, OUTCOMES, type Actor, type Change, type Notification, type NotificationPage } from "../domain/notification";
 import type { NotificationDto } from "./dto/notification-dto";
 import type { ChangeEventDto, NotificationPageDto, ReadAnswerDto } from "./dto/notification-page-dto";
 import { ReadRequestDto } from "./dto/read-request-dto";
@@ -23,8 +23,7 @@ export function toNotification(dto: NotificationDto): Notification {
     taskTitle: dto.task_title ?? "",
     sessionId: dto.session_id ?? "",
     source: dto.source,
-    // A kind this client does not know reads as a generic notification (its title, body and link), so one new kind never empties the inbox.
-    kind: oneOf(KINDS, dto.kind) ?? "agent",
+    kind: dto.kind,
     level: dto.level,
     title: dto.title ?? "",
     body: dto.body ?? "",

@@ -20,6 +20,8 @@ export interface NotificationsSourceHarness {
   setStatus(status: FeedStatus): void;
   /** The server answers `raw` (not valid) to every request. Adapters that read no wire have none. */
   answerMalformed?(raw: unknown): void;
+  /** The server answers `raw` (well formed) to every request. Adapters that read no wire have none. */
+  answerWith?(raw: unknown): void;
   /** The stream sends `raw` (not a valid change event). */
   publishMalformed?(raw: unknown): void;
 }
@@ -161,6 +163,28 @@ export function notificationsSourceContract(name: string, make: () => Notificati
         await assert.rejects(h.source.markRead({ all: true }), rejectsWith("BAD_RESPONSE"));
       });
     }
+
+    const known = { ...wireNotification, id: "known" };
+    const futureKind = { ...wireNotification, id: "future", kind: "from_the_future" };
+
+    test("a notification of a kind the client does not know is dropped from a list and from a mark-read answer: its own row, never the page", async (t) => {
+      const h = make();
+      if (!h.answerWith) return t.skip("the adapter reads no wire");
+      h.answerWith({ notifications: [known, futureKind], unread_count: 2, open_count: 2 });
+      const page = await h.source.list({});
+      assert.deepEqual([page.notifications.map((n) => n.id), page.unreadCount, page.openCount], [["known"], 2, 2], "the counts stay the server's");
+      const answer = await h.source.markRead({ all: true });
+      assert.deepEqual(answer.notifications.map((n) => n.id), ["known"]);
+    });
+
+    test("a change event that carries a notification of an unknown kind delivers the rest, with its counts", (t) => {
+      const h = make();
+      if (!h.publishMalformed) return t.skip("the adapter reads no wire");
+      const changes: Change[] = [];
+      h.source.follow((c) => changes.push(c), () => {});
+      h.publishMalformed({ changed: [known, futureKind], unread_count: 2, open_count: 2 });
+      assert.deepEqual(changes.map((c) => [c.notifications.map((n) => n.id), c.unreadCount, c.openCount]), [[["known"], 2, 2]]);
+    });
 
     for (const [what, raw] of [["without its count", { changed: [] }], ["whose changed is not a list", { changed: 3, unread_count: 1 }], ["with an unreadable notification", { changed: [{ id: 5 }], unread_count: 1 }], ["that is a string", "garbage"]] as [string, unknown][]) {
       test(`a change event ${what} is dropped, and the next valid one is delivered`, (t) => {

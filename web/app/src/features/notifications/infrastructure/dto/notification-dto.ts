@@ -4,7 +4,7 @@
 
 import { DtoError } from "../../../../shared/infrastructure/dto/dto-error";
 import { lenient, lenientArray, localPath, object, oneOf, optionalString, optionalTime, string, time, type Wire } from "../../../../shared/infrastructure/dto/fields";
-import { INTERRUPTED_STATES, LEVELS, SOURCES } from "../../domain/notification";
+import { INTERRUPTED_STATES, KINDS, LEVELS, SOURCES } from "../../domain/notification";
 import { ActorDto, ListedSessionDto, ObjectDto } from "./ledger-dto";
 
 const SESSION = "InterruptedSessionDto";
@@ -54,8 +54,7 @@ export class NotificationDto {
     readonly task_title: string | undefined,
     readonly session_id: string | undefined,
     readonly source: (typeof SOURCES)[number],
-    /** A kind this client does not know still reads (as a generic one): the mapper decides. */
-    readonly kind: string,
+    readonly kind: (typeof KINDS)[number],
     readonly level: (typeof LEVELS)[number],
     readonly title: string | undefined,
     readonly body: string | undefined,
@@ -85,7 +84,7 @@ export class NotificationDto {
       optionalString(NOTIFICATION, from, "task_title", at),
       optionalString(NOTIFICATION, from, "session_id", at),
       oneOf(NOTIFICATION, from, "source", SOURCES, at),
-      string(NOTIFICATION, from, "kind", at),
+      oneOf(NOTIFICATION, from, "kind", KINDS, at),
       oneOf(NOTIFICATION, from, "level", LEVELS, at),
       optionalString(NOTIFICATION, from, "title", at),
       optionalString(NOTIFICATION, from, "body", at),
