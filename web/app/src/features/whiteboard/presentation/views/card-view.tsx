@@ -49,7 +49,7 @@ export function CardView({ card, presenter }: { card: CardViewModel; presenter: 
       grab.current = null;
     },
   };
-  const style = { left: rect.x, top: rect.y, inlineSize: rect.w, blockSize: rect.h };
+  const style = { left: rect.x, top: rect.y, inlineSize: rect.w, minBlockSize: rect.h };
   if (card.kind === "you") {
     return (
       <button type="button" className="wb-node" role="listitem" data-id="you" data-role="person" data-attention={card.attention ? "" : undefined} aria-label={card.name} style={style} {...nav}>

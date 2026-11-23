@@ -9,7 +9,8 @@ export interface Camera {
   scale: number;
 }
 
-export const MIN_SCALE = 0.3;
+/** Low enough that a board of many columns still fits a phone; the cards are compact there. */
+export const MIN_SCALE = 0.15;
 export const MAX_SCALE = 2;
 const FIT_MARGIN = 16;
 

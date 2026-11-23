@@ -14,14 +14,15 @@ export interface Size {
 }
 
 /** A card's size in px: the session row as a tile (15.5rem), its compact form (11rem), and the You card. */
-export const FULL: Size = { w: 248, h: 112 };
+export const FULL: Size = { w: 248, h: 140 };
 export const COMPACT: Size = { w: 176, h: 58 };
 export const YOU: Size = { w: 176, h: 40 };
 export const YOU_COMPACT: Size = { w: 120, h: 40 };
 
 export const sizeOf = (you: boolean, compact: boolean): Size => (you ? (compact ? YOU_COMPACT : YOU) : compact ? COMPACT : FULL);
 
-export const COLUMN_GAP = 72;
+/** The room between columns holds the edges and their thread badges, which are up to 13rem wide (their latest message is hidden on compact cards). */
+export const columnGap = (compact: boolean): number => (compact ? 112 : 224);
 export const ROW_GAP = 24;
 export const MARGIN = 24;
 /** The band above the cards that holds a column's heading. */
@@ -81,7 +82,8 @@ export function computeLayout(sessions: readonly BoardSession[], compact: boolea
   const positions: Record<string, Point> = { [YOU_ID]: { x: MARGIN, y: MARGIN + HEADING } };
   const columns: Column[] = [];
   const slots: Record<string, string[]> = {};
-  let x = MARGIN + you.w + COLUMN_GAP;
+  const gap = columnGap(compact);
+  let x = MARGIN + you.w + gap;
   let bottom = MARGIN + HEADING + you.h;
   for (const key of keys) {
     const { label, ids } = members.get(key)!;
@@ -91,9 +93,9 @@ export function computeLayout(sessions: readonly BoardSession[], compact: boolea
       positions[id] = { x, y: MARGIN + HEADING + row * (card.h + ROW_GAP) };
     });
     bottom = Math.max(bottom, MARGIN + HEADING + ids.length * card.h + (ids.length - 1) * ROW_GAP);
-    x += card.w + COLUMN_GAP;
+    x += card.w + gap;
   }
-  return { positions, columns, slots, size: { w: Math.max(x - COLUMN_GAP + MARGIN, MARGIN * 2 + you.w), h: bottom + MARGIN } };
+  return { positions, columns, slots, size: { w: Math.max(x - gap + MARGIN, MARGIN * 2 + you.w), h: bottom + MARGIN } };
 }
 
 export interface Rect extends Point, Size {}
@@ -101,22 +103,32 @@ export interface Rect extends Point, Size {}
 export interface EdgeGeometry {
   /** The SVG path from the right side of the source to the left side of the target. */
   d: string;
-  /** Where a thread badge sits: near the target's end of the line. */
+  /** Where a thread badge sits: on the line, in the room just before the target card, clear of the cards the line passes. */
   badge: Point;
 }
 
-/** A smooth path between two cards, with horizontal handles. */
-export function edgeGeometry(from: Rect, to: Rect): EdgeGeometry {
+/** A smooth path between two cards, with horizontal handles; the badge `room` px before the target. */
+export function edgeGeometry(from: Rect, to: Rect, room: number): EdgeGeometry {
   const a = { x: from.x + from.w, y: from.y + from.h / 2 };
   const b = { x: to.x, y: to.y + to.h / 2 };
   const dx = Math.max(32, Math.abs(b.x - a.x) / 2);
   const c1 = { x: a.x + dx, y: a.y };
   const c2 = { x: b.x - dx, y: b.y };
-  const t = 0.78;
-  const u = 1 - t;
-  const at = (p0: number, p1: number, p2: number, p3: number) => u * u * u * p0 + 3 * u * u * t * p1 + 3 * u * t * t * p2 + t * t * t * p3;
+  const at = (t: number, p0: number, p1: number, p2: number, p3: number) => {
+    const u = 1 - t;
+    return u * u * u * p0 + 3 * u * u * t * p1 + 3 * u * t * t * p2 + t * t * t * p3;
+  };
+  // The curve runs left to right, so x is monotonic in t: bisect for the point `room` before the target.
+  const wanted = Math.max(a.x, b.x - room);
+  let lo = 0;
+  let hi = 1;
+  for (let i = 0; i < 24; i++) {
+    const mid = (lo + hi) / 2;
+    if (at(mid, a.x, c1.x, c2.x, b.x) < wanted) lo = mid;
+    else hi = mid;
+  }
   return {
     d: `M${a.x},${a.y} C${c1.x},${c1.y} ${c2.x},${c2.y} ${b.x},${b.y}`,
-    badge: { x: at(a.x, c1.x, c2.x, b.x), y: at(a.y, c1.y, c2.y, b.y) },
+    badge: { x: at(hi, a.x, c1.x, c2.x, b.x), y: at(hi, a.y, c1.y, c2.y, b.y) },
   };
 }
