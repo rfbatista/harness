@@ -60,13 +60,13 @@ func startPeer(ctx context.Context, scope *taskScope, sessions ports.SessionRepo
 		return nil, err
 	}
 	repoWant := stringArg(args, "repository")
-	caller := scope.session
+	repoOwner := scope.session
 	if join != nil {
 		// The new session runs where the joined one does: its repository is
 		// the default, and naming another is refused.
-		caller = join.session
+		repoOwner = join.session
 	}
-	repo, err := findRepository(ctx, start.Repositories, caller, repoWant)
+	repo, err := findRepository(ctx, start.Repositories, repoOwner, repoWant)
 	if err != nil {
 		return nil, err
 	}

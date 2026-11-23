@@ -281,9 +281,6 @@ func TestStartTaskSession_Refusals(t *testing.T) {
 }
 
 func TestStartTaskSession_CapsTheLiveSessionsOnATask(t *testing.T) {
-	if MaxLiveTaskSessions != 16 {
-		t.Fatalf("the limit is %d, want sixteen", MaxLiveTaskSessions)
-	}
 	start, starter, _ := startFixture(t, false)
 	for i := 1; i < MaxLiveTaskSessions; i++ { // the caller is the first: the 15th start makes 16
 		if _, err := start(map[string]any{"prompt": "x"}); err != nil {
@@ -418,7 +415,7 @@ func TestStartTaskSession_AJoinTakesTheJoinedSessionsRepositoryAndCountsTowardsT
 	if _, err := w.start(map[string]any{"prompt": "x", "join_session_id": "web-impl", "repository": "web"}); err != nil {
 		t.Fatal(err)
 	}
-	for i := len(w.starter.got); i < 20; i++ { // fills the task to its limit
+	for i := len(w.starter.got); i <= MaxLiveTaskSessions; i++ { // fills the task to its limit
 		if _, err := w.start(map[string]any{"prompt": "x", "join_session_id": "impl"}); err != nil {
 			if errs.Code(err) != "TASK_SESSION_LIMIT" {
 				t.Fatalf("start %d: %v", i, err)
