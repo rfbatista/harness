@@ -1,4 +1,4 @@
-import type { Notification } from "../domain/notification";
+import { HARNESS_ACTOR, type Notification } from "../domain/notification";
 
 let sequence = 0;
 
@@ -22,6 +22,12 @@ export function notification(fields: Partial<Notification> = {}): Notification {
     readAt: null,
     resolvedAt: null,
     interruptedSessions: [],
+    actor: HARNESS_ACTOR,
+    verb: "",
+    object: null,
+    repositoryName: "",
+    outcome: "",
+    listedSessions: [],
     ...fields,
   };
 }

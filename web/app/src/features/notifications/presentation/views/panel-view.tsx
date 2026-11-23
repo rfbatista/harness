@@ -62,11 +62,20 @@ export function PanelView({ presenter, anchor }: { presenter: PanelPresenter; an
       {vm.error !== null && (
         <div className="[ message ]" data-tone="danger" role="alert">
           <span>{vm.error}</span>
+          <button type="button" className="[ button ]" data-size="sm" onClick={presenter.retry}>
+            Reload
+          </button>
           <button type="button" className="[ button ]" data-variant="ghost" data-size="sm" onClick={presenter.dismissError}>
             Dismiss
           </button>
         </div>
       )}
+      <div className="[ message ]" data-tone="attention" role="status" style={vm.streamNotice === "" ? { display: "none" } : undefined}>
+        <span>{vm.streamNotice}</span>
+        <button type="button" className="[ button ]" data-size="sm" onClick={presenter.retry}>
+          Reload
+        </button>
+      </div>
       <div className="[ list ]" aria-busy={vm.loading}>
         <ul role="list" className="[ notification-list ]">
           {vm.rows.map((row) => (
@@ -99,19 +108,51 @@ function NotificationRow({ row, presenter }: { row: Row; presenter: PanelPresent
     void presenter.openItem(row.id, newTab);
   };
   return (
-    <article className="[ notification ]" data-level={row.level} data-state={row.state}>
+    <article className="[ notification ]" data-layout="ledger" data-compact="" data-kind={row.kind} data-level={row.level} data-state={row.state}>
       <span className="[ marker ]" aria-hidden="true"></span>
-      <div className="[ text ]">
+      <div className="[ who ]">
+        <span className="[ avatar ]" aria-hidden="true" data-who={row.whoKind} data-agent={row.whoSlot}>
+          {row.whoInitial}
+        </span>
+        <span className="[ name ]">{row.whoName}</span>
+        {row.whoMode !== "" && <span className="[ mode ]">{row.whoMode}</span>}
+      </div>
+      <div className="[ what ]">
         <a className="[ title ]" data-item="" href={row.href} data-id={row.id} aria-label={row.label} onClick={open}>
-          {row.title}
+          <span className="[ icon ]" aria-hidden="true"></span>
+          <span className="[ text ]">
+            {row.hasVerb ? (
+              <span>
+                <span className="[ verb ]">{row.verb}</span>{" "}
+                {row.hasObject && (
+                  <span className="[ object ]" data-code={row.objectIsCode ? "true" : undefined}>
+                    {row.objectText}
+                  </span>
+                )}
+              </span>
+            ) : (
+              <span className="[ verb ]">{row.title}</span>
+            )}
+          </span>
         </a>
-        <p className="[ meta ]">
-          <span>{row.project}</span>
+        <p className="[ where ]">
+          <span className="[ project ]">{row.project}</span>
           {row.task !== "" && <span className="[ task ]">{row.task}</span>}
-          {row.levelLabel !== "" && <span className="[ level ]">{row.levelLabel}</span>}
-          <time dateTime={row.at}>{row.age}</time>
+          {row.repository !== "" && <span className="[ repo ]">{row.repository}</span>}
         </p>
-        {row.body !== "" && row.sessions.length === 0 && <p className="[ body ]">{row.body}</p>}
+      </div>
+      <div className="[ notes ]">
+        {row.showBody && <p className="[ body ]">{row.body}</p>}
+        {row.listed.length > 0 && (
+          <ul role="list" className="[ interrupted-sessions ]">
+            {row.listed.map((session) => (
+              <li key={session.key} data-state={session.state}>
+                <a href={session.href}>{session.label}</a>
+                <span className="[ state ]">{session.stateWord}</span>
+              </li>
+            ))}
+          </ul>
+        )}
         {row.sessions.length > 0 && (
           <ul role="list" className="[ interrupted-sessions ]">
             {row.sessions.map((session) => (
@@ -122,6 +163,17 @@ function NotificationRow({ row, presenter }: { row: Row; presenter: PanelPresent
               </li>
             ))}
           </ul>
+        )}
+      </div>
+      <div className="[ when ]">
+        <time dateTime={row.at} title={row.fullDate === "" ? undefined : row.fullDate}>
+          <span>{row.clock}</span>
+          <span className="[ age ]">{row.age}</span>
+        </time>
+        {row.statusText !== "" && (
+          <span className="[ standing ]" data-tone={row.statusTone}>
+            {row.statusText}
+          </span>
         )}
       </div>
       {row.unread && (

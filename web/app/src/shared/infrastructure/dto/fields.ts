@@ -73,3 +73,30 @@ export function optionalTime(dto: string, from: Wire, key: string, at = ""): Dat
   if (value === undefined || value === null || value === "") return null;
   return time(dto, from, key, at);
 }
+
+/**
+ * A part of a DTO that the client can do without: when it does not read, it reads
+ * as absent, so one malformed extra never empties a list. Only a DtoError is
+ * swallowed.
+ */
+export function lenient<T>(read: () => T): T | undefined {
+  try {
+    return read();
+  } catch (err) {
+    if (err instanceof DtoError) return undefined;
+    throw err;
+  }
+}
+
+/** The entries of an optional array that read, each with its own path; the ones that do not are dropped. A field that is present but not an array is a DtoError. */
+export function lenientArray<T>(dto: string, from: Wire, key: string, read: (item: unknown, at: string) => T, at = ""): T[] {
+  if (from[key] === undefined || from[key] === null) return [];
+  const out: T[] = [];
+  for (const entry of array(dto, from, key, (item, path) => lenient(() => read(item, path)), at)) if (entry !== undefined) out.push(entry);
+  return out;
+}
+
+export function optionalCount(dto: string, from: Wire, key: string, at = ""): number | undefined {
+  if (from[key] === undefined || from[key] === null) return undefined;
+  return count(dto, from, key, at);
+}

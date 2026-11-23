@@ -3,12 +3,14 @@
 // when absent.
 
 import { DtoError } from "../../../../shared/infrastructure/dto/dto-error";
-import { array, localPath, object, oneOf, optionalString, optionalTime, string, time, type Wire } from "../../../../shared/infrastructure/dto/fields";
-import { INTERRUPTED_STATES, KINDS, LEVELS, SOURCES } from "../../domain/notification";
+import { lenient, lenientArray, localPath, object, oneOf, optionalString, optionalTime, string, time, type Wire } from "../../../../shared/infrastructure/dto/fields";
+import { INTERRUPTED_STATES, LEVELS, SOURCES } from "../../domain/notification";
+import { ActorDto, ListedSessionDto, ObjectDto } from "./ledger-dto";
 
 const SESSION = "InterruptedSessionDto";
 const NOTIFICATION = "NotificationDto";
 
+const join = (at: string, key: string): string => (at === "" ? key : `${at}.${key}`);
 const iso = (date: Date | null): string | undefined => date?.toISOString();
 
 /** One session a restart interrupted (a sessions_interrupted notification's list). */
@@ -52,7 +54,8 @@ export class NotificationDto {
     readonly task_title: string | undefined,
     readonly session_id: string | undefined,
     readonly source: (typeof SOURCES)[number],
-    readonly kind: (typeof KINDS)[number],
+    /** A kind this client does not know still reads (as a generic one): the mapper decides. */
+    readonly kind: string,
     readonly level: (typeof LEVELS)[number],
     readonly title: string | undefined,
     readonly body: string | undefined,
@@ -61,6 +64,13 @@ export class NotificationDto {
     readonly read_at: Date | null,
     readonly resolved_at: Date | null,
     readonly interrupted_sessions: readonly InterruptedSessionDto[],
+    readonly actor: ActorDto | undefined,
+    readonly verb: string | undefined,
+    readonly object: ObjectDto | undefined,
+    readonly repository_name: string | undefined,
+    /** An outcome this client does not know reads as none: the mapper decides. */
+    readonly outcome: string | undefined,
+    readonly listed_sessions: readonly ListedSessionDto[],
   ) {}
 
   static fromJSON(raw: unknown, at = ""): NotificationDto {
@@ -75,7 +85,7 @@ export class NotificationDto {
       optionalString(NOTIFICATION, from, "task_title", at),
       optionalString(NOTIFICATION, from, "session_id", at),
       oneOf(NOTIFICATION, from, "source", SOURCES, at),
-      oneOf(NOTIFICATION, from, "kind", KINDS, at),
+      string(NOTIFICATION, from, "kind", at),
       oneOf(NOTIFICATION, from, "level", LEVELS, at),
       optionalString(NOTIFICATION, from, "title", at),
       optionalString(NOTIFICATION, from, "body", at),
@@ -83,7 +93,15 @@ export class NotificationDto {
       time(NOTIFICATION, from, "created_at", at),
       optionalTime(NOTIFICATION, from, "read_at", at),
       optionalTime(NOTIFICATION, from, "resolved_at", at),
-      from.interrupted_sessions === undefined ? [] : array(NOTIFICATION, from, "interrupted_sessions", (item, path) => InterruptedSessionDto.fromJSON(item, path), at),
+      // One malformed entry of a session list is dropped, never the notification or the page.
+      lenientArray(NOTIFICATION, from, "interrupted_sessions", (item, path) => InterruptedSessionDto.fromJSON(item, path), at),
+      // The ledger fields are extras: one that does not read reads as absent (actor: the harness's own).
+      from.actor === undefined || from.actor === null ? undefined : lenient(() => ActorDto.fromJSON(from.actor, join(at, "actor"))),
+      optionalString(NOTIFICATION, from, "verb", at),
+      from.object === undefined || from.object === null ? undefined : lenient(() => ObjectDto.fromJSON(from.object, join(at, "object"))),
+      optionalString(NOTIFICATION, from, "repository_name", at),
+      lenient(() => optionalString(NOTIFICATION, from, "outcome", at)),
+      lenientArray(NOTIFICATION, from, "listed_sessions", (item, path) => ListedSessionDto.fromJSON(item, path), at),
     );
   }
 
@@ -105,6 +123,12 @@ export class NotificationDto {
       read_at: iso(this.read_at),
       resolved_at: iso(this.resolved_at),
       interrupted_sessions: this.interrupted_sessions.length > 0 ? this.interrupted_sessions.map((s) => s.toJSON()) : undefined,
+      actor: this.actor?.toJSON(),
+      verb: this.verb,
+      object: this.object?.toJSON(),
+      repository_name: this.repository_name,
+      outcome: this.outcome,
+      listed_sessions: this.listed_sessions.length > 0 ? this.listed_sessions.map((s) => s.toJSON()) : undefined,
     };
   }
 }

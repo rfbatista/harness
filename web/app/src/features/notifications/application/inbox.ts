@@ -13,7 +13,7 @@
 // echo the stream's count is the later one.
 
 import type { FeedStatus } from "../domain/feed-status";
-import { isUnread, markedRead, type Change, type Notification, type NotificationPage } from "../domain/notification";
+import { isOpen, isUnread, markedRead, type Change, type Notification, type NotificationPage } from "../domain/notification";
 import { NotificationsSourceError, type Navigator, type NotificationsSource } from "./ports";
 
 /** The latest notifications the top bar's panel shows. */
@@ -24,6 +24,8 @@ export const OPEN_WAIT_MS = 1_500;
 export interface InboxState {
   /** The unread count to show; null while unknown. */
   readonly unreadCount: number | null;
+  /** What the bell and its name count: the causes that need the person (ADR 0096), as the server says, or as far as this page has seen. */
+  readonly badgeCount: number;
   /** The first read of the count failed, so it is not known. */
   readonly loadFailed: boolean;
   readonly feed: FeedStatus;
@@ -60,12 +62,16 @@ export class Inbox {
   #pendingAll = 0;
   /** The reads in flight, each with the ids the stream showed read meanwhile. */
   readonly #requests = new Set<{ seenRead: Set<string> }>();
+  /** Ids this page has seen that are open causes: what the bell counts when the server sends no open_count. */
+  readonly #openIds = new Set<string>();
   #serverCount: number | null = null;
+  /** The open causes as last heard; null until heard, and from a server that sends none. */
+  #serverOpen: number | null = null;
   #loadFailed = false;
   #feed: FeedStatus = "connecting";
   /** Counts stream messages, so an answer can tell whether one came meanwhile. */
   #stamp = 0;
-  #state: InboxState = { unreadCount: null, loadFailed: false, feed: "connecting" };
+  #state: InboxState = { unreadCount: null, badgeCount: 0, loadFailed: false, feed: "connecting" };
   #started = false;
   #unfollow: (() => void) | null = null;
 
@@ -104,6 +110,8 @@ export class Inbox {
     this.#started = true;
     if (seed) {
       for (const n of seed.notifications) this.#seen.add(n.id);
+      this.track(seed.notifications);
+      this.#heardOpen(seed.openCount);
       this.#serverCount = seed.unreadCount;
       this.#publish();
     } else {
@@ -134,8 +142,10 @@ export class Inbox {
    */
   listed(page: NotificationPage, since: number): void {
     for (const n of page.notifications) this.#seen.add(n.id);
+    this.track(page.notifications);
     if (this.#stamp !== since) return;
     this.#serverCount = page.unreadCount;
+    this.#heardOpen(page.openCount);
     this.#loadFailed = false;
     this.#publish();
   }
@@ -203,6 +213,20 @@ export class Inbox {
     this.#navigator.open(n.link);
   }
 
+  /** Notes which of these are open causes. */
+  track(notifications: readonly Notification[]): void {
+    for (const n of notifications) {
+      if (isOpen(n)) this.#openIds.add(n.id);
+      else this.#openIds.delete(n.id);
+    }
+    this.#publish();
+  }
+
+  /** Takes the server's open count, when it sent one. */
+  #heardOpen(openCount: number | null | undefined): void {
+    if (openCount !== null && openCount !== undefined) this.#serverOpen = openCount;
+  }
+
   #each(fn: (view: InboxView) => void): void {
     for (const view of [...this.#views]) fn(view);
   }
@@ -223,7 +247,9 @@ export class Inbox {
       }
       this.#seen.add(n.id);
     }
+    this.track(change.notifications);
     this.#serverCount = change.unreadCount;
+    this.#heardOpen(change.openCount);
     this.#loadFailed = false;
     this.#publish();
 
@@ -244,15 +270,19 @@ export class Inbox {
 
   #answered(answer: Change, request: { seenRead: Set<string> }): void {
     for (const n of answer.notifications) this.#seen.add(n.id);
+    this.track(answer.notifications);
     const echoed = answer.notifications.some((n) => request.seenRead.has(n.id));
-    if (!echoed) this.#serverCount = answer.unreadCount;
+    if (!echoed) {
+      this.#serverCount = answer.unreadCount;
+      this.#heardOpen(answer.openCount);
+    }
     if (answer.notifications.length > 0) this.#each((view) => view.apply(answer.notifications));
   }
 
   /** The state to show: reads in flight are already off the count. */
   #publish(): void {
     const unreadCount = this.#serverCount === null ? null : this.#pendingAll > 0 ? 0 : Math.max(0, this.#serverCount - this.#pendingRead.size);
-    this.#state = { unreadCount, loadFailed: this.#loadFailed, feed: this.#feed };
+    this.#state = { unreadCount, badgeCount: this.#serverOpen ?? this.#openIds.size, loadFailed: this.#loadFailed, feed: this.#feed };
     for (const listener of [...this.#listeners]) listener(this.#state);
   }
 }

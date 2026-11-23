@@ -17,7 +17,7 @@ notificationsSourceContract("HTTP adapter against a fake server on the wire", ()
     source: httpNotificationsSource(apiClient(server.fetch), feed),
     seed: data.seed,
     breakNetwork: server.breakNetwork,
-    publish: (change) => feed.emit(NOTIFICATIONS_STREAM, { changed: change.notifications.map(toWire), unread_count: change.unreadCount }),
+    publish: (change) => feed.emit(NOTIFICATIONS_STREAM, { changed: change.notifications.map(toWire), unread_count: change.unreadCount, ...(change.openCount == null ? {} : { open_count: change.openCount }) }),
     setStatus: (status) => feed.setStatus(NOTIFICATIONS_STREAM, status),
     answerMalformed: server.answerWith,
     publishMalformed: (raw) => feed.emit(NOTIFICATIONS_STREAM, raw),
@@ -41,4 +41,37 @@ test("the HTTP adapter follows the notifications stream, and drops a message it 
   assert.deepEqual(counts, [2]);
   stop();
   assert.equal(feed.followers(NOTIFICATIONS_STREAM), 0);
+});
+
+test("the HTTP adapter reads a notification of a kind it does not know as a generic one, and an outcome or actor kind it does not know leniently", async () => {
+  const data = memoryNotificationsSource();
+  const server = fakeNotificationsServer(data);
+  server.answerWith({
+    notifications: [{ id: "n1", project_id: "p", project_name: "harness", source: "system", kind: "mystery", level: "action", title: "T", link: "/x", created_at: "2026-11-21T12:00:00Z", outcome: "levitated", actor: { kind: "robot", name: "devops" } }],
+    unread_count: 1,
+  });
+  const page = await httpNotificationsSource(apiClient(server.fetch), memoryFeed()).list({});
+  const [n] = page.notifications;
+  assert.deepEqual([n?.kind, n?.outcome, n?.actor.kind, n?.actor.name], ["agent", "", "system", "devops"]);
+  assert.equal(page.openCount, null, "a server that sends no open_count");
+});
+
+test("the HTTP adapter drops a malformed session entry and keeps the notification, and reads a malformed actor as the harness", async () => {
+  const data = memoryNotificationsSource();
+  const server = fakeNotificationsServer(data);
+  server.answerWith({
+    notifications: [
+      {
+        id: "n1", project_id: "p", project_name: "harness", source: "system", kind: "sessions_interrupted", level: "action", title: "T", link: "/x", created_at: "2026-11-21T12:00:00Z",
+        actor: { kind: "agent" },
+        interrupted_sessions: [{ session_id: "s1", link: "/s1", state: "failed" }, { session_id: "s2", link: "//evil", state: "failed" }, { session_id: "s3", link: "/s3", state: "lost" }],
+        listed_sessions: [{ session_id: "l1", link: "/l1", state: "off" }, { link: "/l2" }],
+      },
+    ],
+    unread_count: 1,
+    open_count: 1,
+  });
+  const page = await httpNotificationsSource(apiClient(server.fetch), memoryFeed()).list({});
+  const [n] = page.notifications;
+  assert.deepEqual([n?.interruptedSessions.map((s) => s.sessionId), n?.listedSessions.map((s) => s.sessionId), n?.actor.name, page.openCount], [["s1"], ["l1"], "harness", 1]);
 });

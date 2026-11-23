@@ -3,7 +3,10 @@
 // Alpine client's notifications domain, which it does not import. No I/O, no DOM.
 
 export const SOURCES = ["system", "agent"] as const;
-export const KINDS = ["review_requested", "session_waiting", "task_review", "session_failed", "commit_check_off", "branch_request", "branch_finding", "sessions_interrupted", "agent"] as const;
+export const KINDS = ["review_requested", "session_waiting", "task_review", "session_failed", "commit_check_off", "branch_request", "branch_finding", "service_request", "sessions_interrupted", "agent"] as const;
+export const ACTOR_KINDS = ["agent", "system", "person"] as const;
+export const OUTCOMES = ["approved", "changes_requested", "denied", "expired", "withdrawn", "answered", "dismissed", "acknowledged", "repaired", "resumed", "ended", "done", "reopened"] as const;
+export const LISTED_STATES = ["off", "repaired", "ended"] as const;
 export const INTERRUPTED_STATES = ["interrupted", "resumed", "failed", "gone"] as const;
 export const LEVELS = ["info", "action"] as const;
 
@@ -12,6 +15,39 @@ export type Kind = (typeof KINDS)[number];
 export type InterruptedState = (typeof INTERRUPTED_STATES)[number];
 /** "action": the person has to do something. */
 export type Level = (typeof LEVELS)[number];
+export type ActorKind = (typeof ACTOR_KINDS)[number];
+export type Outcome = (typeof OUTCOMES)[number];
+export type ListedState = (typeof LISTED_STATES)[number];
+
+/** Who caused a notification. */
+export interface Actor {
+  readonly kind: ActorKind;
+  /** The agent as its session row shows it; "branch watch", "restart" or "harness" for the system. */
+  readonly name: string;
+  /** Agent only: the session's mode word; "". */
+  readonly mode: string;
+  /** Agent only: the session that caused it; "". */
+  readonly sessionId: string;
+}
+
+/** Who a notification reads as when it carries no actor (revision 5 data). */
+export const HARNESS_ACTOR: Actor = { kind: "system", name: "harness", mode: "", sessionId: "" };
+
+/** What a verb acts on; `code` shows it monospace. */
+export interface NotificationObject {
+  readonly text: string;
+  readonly code: boolean;
+}
+
+/** One session a commit_check_off item lists. */
+export interface ListedSession {
+  readonly sessionId: string;
+  readonly taskId: string;
+  readonly taskTitle: string;
+  readonly agentName: string;
+  readonly link: string;
+  readonly state: ListedState;
+}
 
 /** One session a restart interrupted, as of the last change. */
 export interface InterruptedSession {
@@ -49,6 +85,17 @@ export interface Notification {
   /** Its cause was settled (system kinds only). */
   readonly resolvedAt: Date | null;
   readonly interruptedSessions: readonly InterruptedSession[];
+  /** Who caused it; data without one reads as the harness. */
+  readonly actor: Actor;
+  /** System kinds: the verb phrase in the agent's voice, lower case; "" on kind agent and on data without one. */
+  readonly verb: string;
+  /** What the verb acts on. */
+  readonly object: NotificationObject | null;
+  /** "" when the kind has none. */
+  readonly repositoryName: string;
+  /** How it was settled; "" while open and on rows settled before outcomes were recorded. */
+  readonly outcome: Outcome | "";
+  readonly listedSessions: readonly ListedSession[];
 }
 
 export interface NotificationPage {
@@ -56,6 +103,8 @@ export interface NotificationPage {
   readonly notifications: readonly Notification[];
   /** Global, whatever the filter. */
   readonly unreadCount: number;
+  /** Global open causes (ADR 0096); null from a server that sends none. */
+  readonly openCount?: number | null;
   /** The cursor of the next page; "" at the end. */
   readonly nextBefore: string;
 }
@@ -64,11 +113,15 @@ export interface NotificationPage {
 export interface Change {
   readonly notifications: readonly Notification[];
   readonly unreadCount: number;
+  /** Global open causes as of that change; null from a server that sends none. */
+  readonly openCount?: number | null;
 }
 
 export interface Filter {
   /** Only the unread ones. */
   readonly unread?: boolean;
+  /** Only the open causes (level action, not settled). */
+  readonly open?: boolean;
 }
 
 /** Unread: neither read nor resolved. */
@@ -77,8 +130,14 @@ export const isUnread = (n: Notification): boolean => n.readAt === null && n.res
 /** Its cause was settled: there is nothing left to do about it. */
 export const isSettled = (n: Notification): boolean => n.resolvedAt !== null;
 
+/** An open cause: the person has something to do about it (level action, not settled). */
+export const isOpen = (n: Notification): boolean => n.level === "action" && n.resolvedAt === null;
+
+/** Open causes first, each group keeping its order (newest first). */
+export const openFirst = (list: readonly Notification[]): Notification[] => [...list.filter(isOpen), ...list.filter((n) => !isOpen(n))];
+
 /** Whether n belongs in a list with this filter. */
-export const matches = (filter: Filter, n: Notification): boolean => !(filter.unread && !isUnread(n));
+export const matches = (filter: Filter, n: Notification): boolean => !(filter.unread && !isUnread(n)) && !(filter.open && !isOpen(n));
 
 /** n as read at `at`; one already read or resolved is returned as is. */
 export const markedRead = (n: Notification, at: Date): Notification => (isUnread(n) ? { ...n, readAt: at } : n);

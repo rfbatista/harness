@@ -32,7 +32,7 @@ export function BellView({ presenter, panel }: { presenter: BellPresenter; panel
     <div className="[ notifications ]" data-feed={vm.feed} onBlur={focusLeft}>
       <a ref={trigger} className="[ button ] [ bell ]" data-variant="ghost" data-icon="" href={vm.href} aria-label={vm.label} aria-controls="notifications-panel" aria-expanded={panelVm.open} onClick={toggle}>
         <Icon name="bell" />
-        <span className="[ badge ]" data-tone="attention" aria-hidden="true" style={vm.hasUnread ? undefined : { display: "none" }}>
+        <span className="[ badge ]" data-tone="attention" aria-hidden="true" style={vm.hasBadge ? undefined : { display: "none" }}>
           {vm.badge}
         </span>
       </a>

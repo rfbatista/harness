@@ -41,13 +41,13 @@ export function fakeNotificationsServer(data: MemoryNotificationsSource): FakeSe
       try {
         if (method === "GET" && target.pathname === "/api/notifications") {
           const limit = target.searchParams.get("limit");
-          const page = await data.list({ unread: target.searchParams.get("unread") === "true", before: target.searchParams.get("before") ?? undefined, ...(limit === null ? {} : { limit: Number(limit) }) });
+          const page = await data.list({ unread: target.searchParams.get("unread") === "true", open: target.searchParams.get("open") === "true", before: target.searchParams.get("before") ?? undefined, ...(limit === null ? {} : { limit: Number(limit) }) });
           return json(200, pageToWire(page));
         }
         if (method === "POST" && target.pathname === "/api/notifications/read") {
           const body = (typeof init?.body === "string" ? JSON.parse(init.body) : {}) as { ids?: string[]; all?: true };
           const answer = await data.markRead({ ...(body.ids ? { ids: body.ids } : {}), ...(body.all ? { all: true } : {}) } as never);
-          return json(200, { notifications: answer.notifications.map(toWire), unread_count: answer.unreadCount });
+          return json(200, { notifications: answer.notifications.map(toWire), unread_count: answer.unreadCount, ...(answer.openCount == null ? {} : { open_count: answer.openCount }) });
         }
       } catch (err) {
         return failed(err);

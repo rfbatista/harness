@@ -4,6 +4,7 @@ import { DtoError } from "../../../../shared/infrastructure/dto/dto-error";
 import { notification, read } from "../../testing/fixtures";
 import { toWire } from "../../testing/wire";
 import { BellPropsDto } from "./bell-props-dto";
+import { ActorDto, ListedSessionDto, ObjectDto } from "./ledger-dto";
 import { NotificationDto } from "./notification-dto";
 import { ChangeEventDto, NotificationPageDto, ReadAnswerDto } from "./notification-page-dto";
 import { ReadRequestDto } from "./read-request-dto";
@@ -35,7 +36,7 @@ describe("NotificationDto", () => {
     const bad = (change: Record<string, unknown>) => () => NotificationDto.fromJSON({ ...wire(), ...change });
     assert.throws(bad({ id: undefined }), failsAt("NotificationDto", "id"));
     assert.throws(bad({ id: "" }), failsAt("NotificationDto", "id"));
-    assert.throws(bad({ kind: "mystery" }), failsAt("NotificationDto", "kind"));
+    assert.throws(bad({ kind: 3 }), failsAt("NotificationDto", "kind"));
     assert.throws(bad({ level: 3 }), failsAt("NotificationDto", "level"));
     assert.throws(bad({ source: "robot" }), failsAt("NotificationDto", "source"));
     assert.throws(bad({ link: "//evil.example" }), failsAt("NotificationDto", "link"));
@@ -43,8 +44,9 @@ describe("NotificationDto", () => {
     assert.throws(bad({ created_at: "yesterday" }), failsAt("NotificationDto", "created_at"));
     assert.throws(bad({ created_at: undefined }), failsAt("NotificationDto", "created_at"));
     assert.throws(bad({ title: 5 }), failsAt("NotificationDto", "title"));
-    assert.throws(bad({ interrupted_sessions: [{ session_id: "s", link: "/s", state: "lost" }] }), failsAt("InterruptedSessionDto", "interrupted_sessions[0].state"));
     assert.throws(bad({ interrupted_sessions: "none" }), failsAt("NotificationDto", "interrupted_sessions"));
+    assert.throws(bad({ verb: 7 }), failsAt("NotificationDto", "verb"));
+    assert.throws(bad({ repository_name: {} }), failsAt("NotificationDto", "repository_name"));
   });
 
   test("refuses what is not an object", () => {
@@ -66,12 +68,57 @@ describe("page, answer and change event DTOs", () => {
   });
 
   test("name the path of a bad notification and of a bad count", () => {
-    assert.throws(() => NotificationPageDto.fromJSON({ notifications: [wire(), { ...wire(), kind: "x" }], unread_count: 1 }), failsAt("NotificationDto", "notifications[1].kind"));
+    assert.throws(() => NotificationPageDto.fromJSON({ notifications: [wire(), { ...wire(), level: "x" }], unread_count: 1 }), failsAt("NotificationDto", "notifications[1].level"));
+    assert.throws(() => NotificationPageDto.fromJSON({ notifications: [], unread_count: 1, open_count: -2 }), failsAt("NotificationPageDto", "open_count"));
     assert.throws(() => NotificationPageDto.fromJSON({ notifications: [], unread_count: -1 }), failsAt("NotificationPageDto", "unread_count"));
     assert.throws(() => NotificationPageDto.fromJSON({ notifications: [], unread_count: 1.5 }), failsAt("NotificationPageDto", "unread_count"));
     assert.throws(() => ReadAnswerDto.fromJSON({ notifications: [] }), failsAt("ReadAnswerDto", "unread_count"));
     assert.throws(() => ChangeEventDto.fromJSON({ changed: {}, unread_count: 0 }), failsAt("ChangeEventDto", "changed"));
     assert.throws(() => ChangeEventDto.fromJSON("garbage"), failsAt("ChangeEventDto", ""));
+  });
+});
+
+describe("the ledger fields", () => {
+  const ledger = {
+    actor: { kind: "agent", name: "devops", mode: "operate", session_id: "s9" },
+    verb: "wants to push",
+    object: { text: "agent/x → origin/feat/y", code: true },
+    repository_name: "harness-api",
+    outcome: "approved",
+    listed_sessions: [{ session_id: "l1", task_id: "t1", task_title: "T", agent_name: "go", link: "/l1", state: "repaired" }],
+  };
+
+  test("read with their wire names and round-trip", () => {
+    const json = { ...wire(), ...ledger };
+    const dto = NotificationDto.fromJSON(json);
+    assert.deepEqual([dto.actor?.name, dto.actor?.session_id, dto.verb, dto.object?.code, dto.repository_name, dto.outcome, dto.listed_sessions[0]?.state], ["devops", "s9", "wants to push", true, "harness-api", "approved", "repaired"]);
+    assert.deepEqual(JSON.parse(JSON.stringify(dto)), json);
+  });
+
+  test("a notification without them reads as having none", () => {
+    const dto = NotificationDto.fromJSON(wire());
+    assert.deepEqual([dto.actor, dto.verb, dto.object, dto.repository_name, dto.outcome, dto.listed_sessions.length], [undefined, undefined, undefined, undefined, undefined, 0]);
+  });
+
+  test("an actor, an object or a session entry that does not read is absent, never a failed notification", () => {
+    const dto = NotificationDto.fromJSON({ ...wire(), actor: { kind: "agent" }, object: { code: true }, listed_sessions: [{ session_id: "ok", link: "/ok", state: "off" }, { link: "/x" }, "junk"], interrupted_sessions: [{ session_id: "s", link: "//evil", state: "failed" }] });
+    assert.deepEqual([dto.actor, dto.object, dto.listed_sessions.map((s) => s.session_id), dto.interrupted_sessions.length], [undefined, undefined, ["ok"], 0]);
+  });
+
+  test("the parts name their own fields when read alone", () => {
+    assert.throws(() => ActorDto.fromJSON({ kind: "agent" }), failsAt("ActorDto", "name"));
+    assert.throws(() => ObjectDto.fromJSON({ code: true }), failsAt("ObjectDto", "text"));
+    assert.throws(() => ListedSessionDto.fromJSON({ session_id: "s", link: "/l" }), failsAt("ListedSessionDto", "state"));
+    assert.equal(ObjectDto.fromJSON({ text: "t" }).code, false);
+  });
+
+  test("the page, the answer and the change event carry open_count, and it is absent from a server that sends none", () => {
+    const n = wire();
+    assert.equal(NotificationPageDto.fromJSON({ notifications: [n], unread_count: 3, open_count: 2 }).open_count, 2);
+    assert.equal(NotificationPageDto.fromJSON({ notifications: [n], unread_count: 3 }).open_count, undefined);
+    assert.equal(ReadAnswerDto.fromJSON({ notifications: [], unread_count: 0, open_count: 4 }).open_count, 4);
+    assert.equal(ChangeEventDto.fromJSON({ changed: [], unread_count: 0, open_count: 1 }).open_count, 1);
+    assert.throws(() => ChangeEventDto.fromJSON({ changed: [], unread_count: 0, open_count: "1" }), failsAt("ChangeEventDto", "open_count"));
   });
 });
 

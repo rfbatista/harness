@@ -21,6 +21,8 @@ export type ReadRequest = { readonly ids: readonly string[] } | { readonly all: 
 export interface ListQuery {
   /** Only the unread ones. */
   readonly unread?: boolean;
+  /** Only the open causes (level action, not settled), however old. */
+  readonly open?: boolean;
   /** A page's nextBefore. */
   readonly before?: string;
   /** 1..200; the server's default is 50. */

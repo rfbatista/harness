@@ -61,6 +61,25 @@ export function notificationsSourceContract(name: string, make: () => Notificati
       assert.equal(last.nextBefore, "");
     });
 
+    test("the open count is global: level action and not settled, whatever the filter, and reading does not change it", async () => {
+      const h = make();
+      const [open, info, settled] = [notification(), notification({ level: "info" }), notification({ resolvedAt: new Date(Date.UTC(2026, 10, 21, 12, 30)) })] as const;
+      h.seed([open, info, settled]);
+      assert.equal((await h.source.list({})).openCount, 1);
+      assert.equal((await h.source.list({ unread: true })).openCount, 1);
+      assert.equal((await h.source.markRead({ ids: [open.id] })).openCount, 1, "read is not settled");
+    });
+
+    test("open lists only the open causes, however old, and combines with unread", async () => {
+      const h = make();
+      const older = notification();
+      const infos = [notification({ level: "info" }), notification({ level: "info" })];
+      h.seed([older, ...infos, read(notification())]);
+      const page = await h.source.list({ open: true });
+      assert.deepEqual(page.notifications.map((n) => n.id).sort(), [older.id, page.notifications.find((n) => n.readAt !== null)!.id].sort());
+      assert.deepEqual((await h.source.list({ open: true, unread: true })).notifications.map((n) => n.id), [older.id]);
+    });
+
     test("a bad limit or cursor is INVALID_INPUT", async () => {
       const h = make();
       await assert.rejects(h.source.list({ limit: 0 }), rejectsWith("INVALID_INPUT"));
@@ -128,7 +147,7 @@ export function notificationsSourceContract(name: string, make: () => Notificati
       ["a count that is not a number", { notifications: [], unread_count: "3" }],
       ["a notification list that is not a list", { notifications: {}, unread_count: 1 }],
       ["a notification without an id", { notifications: [{ ...wireNotification, id: undefined }], unread_count: 1 }],
-      ["a notification of an unknown kind", { notifications: [{ ...wireNotification, kind: "mystery" }], unread_count: 1 }],
+      ["an open_count that is not a count", { notifications: [], unread_count: 1, open_count: "2" }],
       ["a notification with a link off the web UI", { notifications: [{ ...wireNotification, link: "//evil.example/x" }], unread_count: 1 }],
       ["a notification with a time that is not a time", { notifications: [{ ...wireNotification, created_at: "yesterday" }], unread_count: 1 }],
       ["not an object", [1, 2]],
@@ -163,9 +182,9 @@ export function notificationsSourceContract(name: string, make: () => Notificati
       const first = notification();
       const second = read(first);
       h.setStatus("live");
-      h.publish({ notifications: [first], unreadCount: 1 });
-      h.publish({ notifications: [second], unreadCount: 0 });
-      assert.deepEqual(changes, [{ notifications: [first], unreadCount: 1 }, { notifications: [second], unreadCount: 0 }]);
+      h.publish({ notifications: [first], unreadCount: 1, openCount: 1 });
+      h.publish({ notifications: [second], unreadCount: 0, openCount: 1 });
+      assert.deepEqual(changes, [{ notifications: [first], unreadCount: 1, openCount: 1 }, { notifications: [second], unreadCount: 0, openCount: 1 }]);
       assert.equal(statuses.at(-1), "live");
       assert.equal(statuses[0], "connecting");
     });
@@ -174,8 +193,8 @@ export function notificationsSourceContract(name: string, make: () => Notificati
       const h = make();
       const changes: Change[] = [];
       h.source.follow((c) => changes.push(c), () => {});
-      h.publish({ notifications: [], unreadCount: 4 });
-      assert.deepEqual(changes, [{ notifications: [], unreadCount: 4 }]);
+      h.publish({ notifications: [], unreadCount: 4, openCount: 3 });
+      assert.deepEqual(changes, [{ notifications: [], unreadCount: 4, openCount: 3 }]);
     });
 
     test("follow reports a drop and the resync that follows it", () => {

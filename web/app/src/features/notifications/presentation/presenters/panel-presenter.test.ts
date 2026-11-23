@@ -86,7 +86,8 @@ describe("panel: the list", () => {
     assert.equal(panel.viewModel.rows[0]?.age, "", "ages are read once the view has mounted");
     panel.tick();
     const [row] = panel.viewModel.rows;
-    assert.deepEqual([row?.levelLabel, row?.state, row?.age, row?.label, row?.markLabel], ["Needs you", "unread", "5m", "Unread. Needs you. Review wanted — harness · Ship the thing", "Mark “Review wanted” read"]);
+    assert.deepEqual([row?.statusText, row?.state, row?.age, row?.markLabel], ["Needs you", "unread", "5m", "Mark “Review wanted” read"]);
+    assert.match(row!.label, /^Unread\. Needs you\. harness Review wanted\. harness › Ship the thing\. .*, 5m ago\.$/);
   });
 
   test("switches between All and Unread, which reads the list again", async () => {
@@ -114,30 +115,31 @@ describe("panel: the list", () => {
     source.failWith(new NotificationsSourceError("NETWORK_ERROR", "The harness server is not reachable."));
     panel.toggle();
     await settle();
-    assert.equal(panel.viewModel.error, "The harness server is not reachable.");
+    assert.equal(panel.viewModel.error, "The notifications could not be loaded. The harness server did not answer.");
     panel.dismissError();
     assert.equal(panel.viewModel.error, null);
   });
 });
 
 describe("panel: marking read", () => {
-  test("mark all read zeroes the count and marks the rows at once, and the server agrees", async () => {
+  test("mark all read marks the rows at once and the server agrees; reading does not settle a cause, so the badge stays", async () => {
     const { panel, bell, source } = setup([notification(), notification()]);
-    assert.equal(bell.viewModel.badge, "2");
+    assert.deepEqual([bell.viewModel.badge, bell.viewModel.label], ["2", "Notifications, 2 need you, 2 unread"]);
     const done = panel.markAll();
-    assert.equal(bell.viewModel.badge, "");
+    assert.deepEqual([bell.viewModel.badge, bell.viewModel.label], ["2", "Notifications, 2 need you"]);
     assert.equal(panel.viewModel.canMarkAll, false);
     assert.deepEqual(panel.viewModel.rows.map((r) => r.state), ["read", "read"]);
     await done;
     assert.equal(source.unreadCount, 0);
-    assert.equal(bell.viewModel.badge, "");
+    assert.equal(source.openCount, 2);
+    assert.deepEqual([bell.viewModel.badge, bell.viewModel.label], ["2", "Notifications, 2 need you"]);
   });
 
   test("a failed mark all read shows an error, keeps the count, and Dismiss clears it", async () => {
     const { panel, bell, source } = setup([notification(), notification()]);
     source.failWith(new NotificationsSourceError("NETWORK_ERROR", "offline"));
     await panel.markAll();
-    assert.equal(panel.viewModel.error, "offline");
+    assert.equal(panel.viewModel.error, "The notifications could not be loaded. The harness server did not answer.");
     assert.equal(bell.viewModel.badge, "2");
     source.heal();
     panel.showUnread(); // the list is read again, and shows what the server still holds unread
@@ -147,11 +149,11 @@ describe("panel: marking read", () => {
     assert.equal(panel.viewModel.error, null);
   });
 
-  test("marking one read drops the count by one", async () => {
+  test("marking one read drops the unread count by one and leaves what needs the person alone", async () => {
     const [a, b] = [notification(), notification()] as const;
     const { panel, bell, source } = setup([a, b]);
     await panel.markOne(a.id);
-    assert.equal(bell.viewModel.badge, "1");
+    assert.deepEqual([bell.viewModel.badge, bell.viewModel.label], ["2", "Notifications, 2 need you, 1 unread"]);
     assert.equal(source.unreadCount, 1);
     assert.equal(panel.viewModel.rows.find((r) => r.id === a.id)?.state, "read");
   });
@@ -162,8 +164,8 @@ describe("panel: marking read", () => {
       const { panel, bell, source } = setup([a, b, c]);
       source.echo = echo;
       await panel.markOne(a.id);
-      assert.equal(bell.viewModel.badge, "2");
-      assert.equal(bell.viewModel.label, "Notifications, 2 unread");
+      assert.equal(bell.viewModel.badge, "3");
+      assert.equal(bell.viewModel.label, "Notifications, 3 need you, 2 unread");
     });
   }
 
@@ -181,7 +183,7 @@ describe("panel: marking read", () => {
     const { panel, source } = setup([a]);
     source.failWith(new NotificationsSourceError("NETWORK_ERROR", "offline"));
     await panel.markOne(a.id);
-    assert.deepEqual([panel.viewModel.rows[0]?.state, panel.viewModel.error], ["unread", "offline"]);
+    assert.deepEqual([panel.viewModel.rows[0]?.state, panel.viewModel.error], ["unread", "The notifications could not be loaded. The harness server did not answer."]);
   });
 });
 
@@ -212,13 +214,15 @@ describe("panel: live", () => {
     assert.equal(bell.viewModel.badge, "2");
   });
 
-  test("a read arriving from another tab and a resolution update the rows and the count", () => {
+  test("a read arriving from another tab leaves the badge alone, and a resolution lowers it", () => {
     const [a, b] = [notification(), notification()] as const;
     const { panel, bell, source } = setup([a, b]);
-    source.publish({ notifications: [read(a)], unreadCount: 1 });
-    source.publish({ notifications: [{ ...b, resolvedAt: new Date(NOW) }], unreadCount: 0 });
+    source.publish({ notifications: [read(a)], unreadCount: 1, openCount: 2 });
+    assert.equal(bell.viewModel.badge, "2");
+    source.publish({ notifications: [{ ...b, resolvedAt: new Date(NOW) }], unreadCount: 0, openCount: 1 });
+    // Open causes lead: the one read but still open, then the settled one.
     assert.deepEqual(panel.viewModel.rows.map((r) => r.state), ["read", "settled"]);
-    assert.equal(bell.viewModel.badge, "");
+    assert.deepEqual([bell.viewModel.badge, bell.viewModel.label], ["1", "Notifications, 1 need you"]);
   });
 
   test("in the Unread list an arrival that is already read stays out, and a row read meanwhile stays until the next read", async () => {

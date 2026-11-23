@@ -9,7 +9,7 @@ import { notification } from "../../testing/fixtures";
 import { BellPresenter } from "./bell-presenter";
 
 const settle = () => new Promise((resolve) => setImmediate(resolve));
-const page = (unreadCount: number): NotificationPage => ({ notifications: [], unreadCount, nextBefore: "" });
+const page = (unreadCount: number): NotificationPage => ({ notifications: [], unreadCount, openCount: unreadCount, nextBefore: "" });
 
 describe("bell", () => {
   test("shows the count of the props page, in the badge and in the name", () => {
@@ -19,8 +19,8 @@ describe("bell", () => {
     assert.equal(viewModel.visible, true);
     assert.equal(viewModel.href, "/notifications");
     assert.equal(viewModel.badge, "3");
-    assert.equal(viewModel.hasUnread, true);
-    assert.equal(viewModel.label, "Notifications, 3 unread");
+    assert.equal(viewModel.hasBadge, true);
+    assert.equal(viewModel.label, "Notifications, 3 need you, 3 unread");
   });
 
   test("shows 99+ past 99 and names the exact count", () => {
@@ -28,7 +28,7 @@ describe("bell", () => {
     inbox.start(page(120));
     const { viewModel } = new BellPresenter(inbox, "/notifications");
     assert.equal(viewModel.badge, "99+");
-    assert.equal(viewModel.label, "Notifications, 120 unread");
+    assert.equal(viewModel.label, "Notifications, 120 need you, 120 unread");
   });
 
   test("shows no badge at zero", () => {
@@ -36,7 +36,7 @@ describe("bell", () => {
     inbox.start(page(0));
     const { viewModel } = new BellPresenter(inbox, "/notifications");
     assert.equal(viewModel.badge, "");
-    assert.equal(viewModel.hasUnread, false);
+    assert.equal(viewModel.hasBadge, false);
     assert.equal(viewModel.label, "Notifications");
   });
 

@@ -7,8 +7,8 @@ export function badgeText(count: number | null): string {
   return count > BADGE_MAX ? `${BADGE_MAX}+` : String(count);
 }
 
-/** The bell's accessible name, with the exact count. */
-export function bellLabel(count: number | null): string {
-  if (!count) return "Notifications";
-  return `Notifications, ${count} unread`;
+/** The bell's accessible name, with the exact count and what it counts: the causes that need the person, and what is unread. */
+export function bellLabel(count: number | null, unread = 0): string {
+  if (!count) return unread ? `Notifications, ${unread} unread` : "Notifications";
+  return `Notifications, ${count} need you${unread ? `, ${unread} unread` : ""}`;
 }

@@ -5,7 +5,7 @@
 
 import { NotificationsSourceError, type NotificationsSource, type ReadRequest } from "../application/ports";
 import type { FeedStatus } from "../domain/feed-status";
-import { isUnread, markedRead, type Change, type Notification, type NotificationPage } from "../domain/notification";
+import { isOpen, isUnread, markedRead, type Change, type Notification, type NotificationPage } from "../domain/notification";
 
 const DEFAULT_LIMIT = 50;
 const MAX_LIMIT = 200;
@@ -18,6 +18,8 @@ export interface MemoryNotificationsSource extends NotificationsSource {
   heal(): void;
   /** The server's unread count now. */
   readonly unreadCount: number;
+  /** The server's open count now: level action and not settled, whatever is read (ADR 0096). */
+  readonly openCount: number;
   /** The stream delivers `change` to every follower. */
   publish(change: Change): void;
   /** The stream's state changes. */
@@ -37,6 +39,7 @@ export function memoryNotificationsSource(): MemoryNotificationsSource {
   let status: FeedStatus = "connecting";
   const newestFirst = () => [...all].sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime() || (a.id < b.id ? 1 : -1));
   const unreadCount = () => all.filter(isUnread).length;
+  const openCount = () => all.filter(isOpen).length;
   const send = (change: Change) => {
     for (const f of [...followers]) f.onChange(change);
   };
@@ -49,6 +52,9 @@ export function memoryNotificationsSource(): MemoryNotificationsSource {
     heal: () => void (failure = null),
     get unreadCount() {
       return unreadCount();
+    },
+    get openCount() {
+      return openCount();
     },
     publish: send,
     setStatus: (next) => {
@@ -66,7 +72,7 @@ export function memoryNotificationsSource(): MemoryNotificationsSource {
       return () => void followers.delete(follower);
     },
 
-    async list({ unread, before, limit } = {}, signal) {
+    async list({ unread, open, before, limit } = {}, signal) {
       signal?.throwIfAborted();
       if (failure) throw failure;
       const size = limit ?? DEFAULT_LIMIT;
@@ -76,9 +82,9 @@ export function memoryNotificationsSource(): MemoryNotificationsSource {
         start = Number(before);
         if (!Number.isInteger(start) || start < 0) throw new NotificationsSourceError("INVALID_INPUT", "before is not a cursor");
       }
-      const matching = newestFirst().filter((n) => !unread || isUnread(n));
+      const matching = newestFirst().filter((n) => (!unread || isUnread(n)) && (!open || isOpen(n)));
       const end = start + size;
-      const page: NotificationPage = { notifications: matching.slice(start, end), unreadCount: unreadCount(), nextBefore: end < matching.length ? String(end) : "" };
+      const page: NotificationPage = { notifications: matching.slice(start, end), unreadCount: unreadCount(), openCount: openCount(), nextBefore: end < matching.length ? String(end) : "" };
       return page;
     },
 
@@ -99,7 +105,7 @@ export function memoryNotificationsSource(): MemoryNotificationsSource {
         changed.push(done);
         return done;
       });
-      const answer: Change = { notifications: changed, unreadCount: unreadCount() };
+      const answer: Change = { notifications: changed, unreadCount: unreadCount(), openCount: openCount() };
       if (source.echo === "before") send(answer);
       await Promise.resolve();
       if (source.echo === "after") send(answer);

@@ -25,9 +25,10 @@ export async function mapErrors<T>(call: () => Promise<T>): Promise<T> {
 
 export function httpNotificationsSource(api: ApiClient, feed: Feed): NotificationsSource {
   return {
-    list: ({ unread, before, limit } = {}, signal) => {
+    list: ({ unread, open, before, limit } = {}, signal) => {
       const query: Record<string, string> = {};
       if (unread) query.unread = "true";
+      if (open) query.open = "true";
       if (before) query.before = before;
       if (limit !== undefined) query.limit = String(limit);
       return mapErrors(async () => toPage(NotificationPageDto.fromJSON(await api.get("/notifications", query, signal))));

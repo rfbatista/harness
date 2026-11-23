@@ -15,7 +15,7 @@ import { PanelPresenter } from "./panel-presenter";
 const settle = () => new Promise((resolve) => setImmediate(resolve));
 const NOW = Date.UTC(2026, 10, 21, 12, 30);
 const clock = { now: () => NOW };
-const page = (unreadCount: number, notifications: NotificationPage["notifications"] = []): NotificationPage => ({ notifications, unreadCount, nextBefore: "" });
+const page = (unreadCount: number, notifications: NotificationPage["notifications"] = []): NotificationPage => ({ notifications, unreadCount, openCount: unreadCount, nextBefore: "" });
 
 function setup(source: NotificationsSource, seed: NotificationPage | null) {
   const inbox = new Inbox(source, { navigator: memoryNavigator(), now: () => new Date(NOW), wait: () => new Promise(() => {}) });
@@ -29,11 +29,11 @@ describe("bell: the count's edges", () => {
   test("99 shows 99 and 100 shows 99+, both naming the exact count, as the stream moves the count", () => {
     const source = memoryNotificationsSource();
     const { bell } = setup(source, page(98));
-    source.publish({ notifications: [notification()], unreadCount: 99 });
-    assert.deepEqual([bell.viewModel.badge, bell.viewModel.label], ["99", "Notifications, 99 unread"]);
-    source.publish({ notifications: [notification()], unreadCount: 100 });
-    assert.deepEqual([bell.viewModel.badge, bell.viewModel.label], ["99+", "Notifications, 100 unread"]);
-    source.publish({ notifications: [], unreadCount: 99 });
+    source.publish({ notifications: [notification()], unreadCount: 99, openCount: 99 });
+    assert.deepEqual([bell.viewModel.badge, bell.viewModel.label], ["99", "Notifications, 99 need you, 99 unread"]);
+    source.publish({ notifications: [notification()], unreadCount: 100, openCount: 100 });
+    assert.deepEqual([bell.viewModel.badge, bell.viewModel.label], ["99+", "Notifications, 100 need you, 100 unread"]);
+    source.publish({ notifications: [], unreadCount: 99, openCount: 99 });
     assert.equal(bell.viewModel.badge, "99");
   });
 
@@ -41,9 +41,9 @@ describe("bell: the count's edges", () => {
     const source = memoryNotificationsSource();
     const n = notification();
     const { bell } = setup(source, page(1, [n]));
-    assert.equal(bell.viewModel.label, "Notifications, 1 unread");
-    source.publish({ notifications: [read(n)], unreadCount: 0 });
-    assert.deepEqual([bell.viewModel.badge, bell.viewModel.hasUnread, bell.viewModel.label], ["", false, "Notifications"]);
+    assert.equal(bell.viewModel.label, "Notifications, 1 need you, 1 unread");
+    source.publish({ notifications: [{ ...read(n), resolvedAt: new Date(NOW) }], unreadCount: 0, openCount: 0 });
+    assert.deepEqual([bell.viewModel.badge, bell.viewModel.hasBadge, bell.viewModel.label], ["", false, "Notifications"]);
   });
 
   test("a page the server could not read and a read that fails: no count, no badge, and it says so; the stream then fills the count in", async () => {
@@ -52,7 +52,7 @@ describe("bell: the count's edges", () => {
     const { bell } = setup(source, null);
     await settle();
     assert.deepEqual([bell.viewModel.badge, bell.viewModel.label, bell.viewModel.loadFailed], ["", "Notifications", true]);
-    source.publish({ notifications: [notification()], unreadCount: 4 });
+    source.publish({ notifications: [notification()], unreadCount: 4, openCount: 4 });
     assert.deepEqual([bell.viewModel.badge, bell.viewModel.loadFailed], ["4", false]);
   });
 
@@ -82,20 +82,25 @@ describe("panel: the live list, gaps", () => {
     const source = memoryNotificationsSource();
     const n = notification();
     const { panel, bell } = setup(source, page(1, [n]));
-    source.publish({ notifications: [{ ...n, resolvedAt: new Date(NOW) }], unreadCount: 0 });
-    assert.deepEqual([panel.viewModel.rows[0]!.state, panel.viewModel.rows[0]!.levelLabel, bell.viewModel.badge], ["settled", "Settled", ""]);
+    source.publish({ notifications: [{ ...n, resolvedAt: new Date(NOW) }], unreadCount: 0, openCount: 0 });
+    assert.deepEqual([panel.viewModel.rows[0]!.state, panel.viewModel.rows[0]!.statusText, bell.viewModel.badge], ["settled", "Settled", ""]);
   });
 
-  test("an arrival while the panel is closed is there when it opens, without reading again", () => {
+  test("an arrival while the panel is closed is there when it opens, before the open causes are read", async () => {
     const source = memoryNotificationsSource();
     const { panel } = setup(source, page(0));
     const n = notification({ title: "Fresh" });
-    source.publish({ notifications: [n], unreadCount: 1 });
+    source.seed([n]);
+    source.publish({ notifications: [n], unreadCount: 1, openCount: 1 });
     panel.toggle();
     assert.deepEqual(
       panel.viewModel.rows.map((r) => r.title),
       ["Fresh"],
     );
+    // The seed holds only the latest page: opening reads the open causes too (Needs you leads).
+    assert.equal(panel.viewModel.loading, true);
+    await settle();
+    assert.deepEqual(panel.viewModel.rows.map((r) => r.title), ["Fresh"]);
     assert.equal(panel.viewModel.loading, false);
   });
 
@@ -131,7 +136,7 @@ describe("panel: mark all read, gaps", () => {
     const { panel, bell } = setup(refusing, page(2, rows));
     await panel.markAll();
     await settle();
-    assert.equal(panel.viewModel.error, "the server is unwell");
+    assert.equal(panel.viewModel.error, "The notifications could not be loaded.", "plain words, not the server's");
     assert.equal(bell.viewModel.badge, "2", "the count is back");
     assert.deepEqual(panel.viewModel.rows.map((r) => r.unread), [true, true], "the rows are back");
     assert.equal(panel.viewModel.canMarkAll, true);
@@ -147,7 +152,7 @@ describe("panel: mark all read, gaps", () => {
     source.failWith(new NotificationsSourceError("NETWORK_ERROR", "offline"));
     await panel.markAll();
     await settle();
-    assert.equal(panel.viewModel.error, "offline");
+    assert.equal(panel.viewModel.error, "The notifications could not be loaded. The harness server did not answer.");
     assert.equal(bell.viewModel.badge, "2");
     assert.deepEqual(panel.viewModel.rows.map((r) => r.unread), [true, true], "the server read nothing: the rows must not say read");
   });
@@ -164,7 +169,7 @@ describe("panel: mark all read, gaps", () => {
     await panel.markAll();
     await settle();
     assert.equal(panel.viewModel.error, null);
-    assert.equal(bell.viewModel.badge, "");
+    assert.equal(bell.viewModel.badge, "2", "reading does not settle a cause: the two still need the person");
     assert.deepEqual(panel.viewModel.rows.map((r) => r.unread), [false, false]);
   });
 
@@ -175,7 +180,7 @@ describe("panel: mark all read, gaps", () => {
     const broken: NotificationsSource = { ...source, markRead: () => Promise.reject(new SyntaxError("Unexpected token < in JSON")), follow: source.follow, list: source.list };
     const { panel } = setup(broken, page(1, rows));
     await panel.markAll();
-    assert.equal(panel.viewModel.error, "Unexpected token < in JSON");
+    assert.equal(panel.viewModel.error, "The notifications could not be loaded.", "no developer message");
   });
 
   test("while it is in flight the count is zero, the button is off, and a notification that arrives meanwhile is shown, unread", async () => {
@@ -195,7 +200,7 @@ describe("panel: mark all read, gaps", () => {
     };
     const { panel, bell } = setup(slow, page(1, rows));
     const pending = panel.markAll();
-    assert.deepEqual([bell.viewModel.badge, panel.viewModel.canMarkAll], ["", false]);
+    assert.deepEqual([bell.viewModel.badge, panel.viewModel.canMarkAll], ["1", false], "the cause still needs the person; the button is off");
     const arrival = notification({ title: "Arrived meanwhile" });
     source.publish({ notifications: [arrival], unreadCount: 1 });
     assert.ok(panel.viewModel.rows.some((r) => r.title === "Arrived meanwhile" && r.unread));
@@ -224,9 +229,12 @@ describe("panel: switching All and Unread under slow answers", () => {
     const { panel } = setup(slow, page(1, [unread, done]));
     panel.showUnread(); // asks for Unread
     panel.showAll(); // the person changes their mind: asks for All
-    releases[1]!(); // All answers first
+    // Each read asks twice (the latest page, and the open causes).
+    releases[2]!();
+    releases[3]!(); // All answers first
     await settle();
-    releases[0]!(); // the stale Unread answer arrives last
+    releases[0]!();
+    releases[1]!(); // the stale Unread answer arrives last
     await settle();
     assert.equal(panel.viewModel.unreadOnly, false);
     assert.deepEqual(panel.viewModel.rows.map((r) => r.title).sort(), ["Read one", "Unread one"]);
