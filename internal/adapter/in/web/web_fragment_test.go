@@ -160,16 +160,19 @@ func TestTheCodePagesAnswerTheirFragmentAndTheirFullPage(t *testing.T) {
 	}
 }
 
-// A page outside any project answers a fragment too, and marks its top bar
-// link open through the frame state.
-func TestAPageOutsideAnyProjectNamesItsTopBarLinkInTheFrameState(t *testing.T) {
+// A fragment swaps only <main>: the top bar island stays in the document, so
+// the fragment carries no island, no props and no bundle. The island follows
+// the new page through GET /api/top_bar.
+func TestAFragmentCarriesNoTopBarIsland(t *testing.T) {
 	h := newTestHandler(t, fragmentWorld(t))
 	frag := fragment(h, "/projects", "/projects/new")
 	if frag.Code != http.StatusOK {
 		t.Fatalf("status %d", frag.Code)
 	}
-	if !strings.Contains(frag.Body.String(), `data-top="/projects"`) {
-		t.Errorf("frame state does not name the projects link:\n%s", frag.Body)
+	for _, absent := range []string{"data-island", "data-island-props", `type="module"`} {
+		if strings.Contains(frag.Body.String(), absent) {
+			t.Errorf("a main-only fragment holds %q:\n%.300s", absent, frag.Body)
+		}
 	}
 }
 
@@ -204,8 +207,12 @@ func TestAClickAcrossFramesAnswersTheAppShellOfTheNewFrame(t *testing.T) {
 					t.Errorf("app shell holds %q: it is no document and no fragment", absent)
 				}
 			}
-			if c.project != "" && !strings.Contains(body, `<option value="p1" selected>`+c.project) {
-				t.Errorf("the picker does not show the new project %q", c.project)
+			// The new app shell carries a fresh island: its props name the new project.
+			if c.project != "" && !strings.Contains(body, `"current_project_id":"p1"`) {
+				t.Errorf("the island's props do not name the new project %q", c.project)
+			}
+			if !strings.Contains(body, `data-island="top-bar"`) || !strings.Contains(body, `data-island-props="top-bar"`) {
+				t.Errorf("an app shell carries its own top bar island")
 			}
 		})
 	}
