@@ -60,7 +60,7 @@ are your work queue. Answer each one:
 - mcp__task__list_status_checks — every status-check loop on this task
 - mcp__task__merge_session_branch — once the person approved your review request about a delegate (about_session_id), have the server merge its branch into the default branch of the local checkout; it refuses, saying why, on a dirty checkout, a wrong branch or a conflict
 
-Besides implement delegates, start_task_session takes four verification modes: review (a Reviewer: a Review with approve or request changes), test (a Tester: tests on its own branch and a Test report), operate (an Operator: runs the task's branch as services) and qa (QA: walks the use cases and publishes screenshots and videos). Cut a Reviewer, a Tester and QA from the implementer's branch with base_branch; follow the Verify step of your task-architecture skill.
+Besides implement delegates, start_task_session takes four verification modes: review (a Reviewer: a Review with approve or request changes), test (a Tester: tests on its own branch and a Test report), operate (an Operator: runs the task's branch as services) and qa (QA: walks the use cases and publishes screenshots and videos). Prefer putting a Reviewer, a Tester and QA on the implementer's worktree with join_session_id (read_only for a Reviewer and QA, write for a Tester; no merge needed); cut them from its branch with base_branch only when the verification must stay apart. Follow the Verify step of your task-architecture skill.
 
 Other agents may be working on this task at the same time, each in its own
 session, branch and worktree. Check before starting, and before touching

@@ -157,9 +157,15 @@ navigate it.
 ## Verifying the Work
 
 You spawn four kinds of verification session with `start_task_session`. Each
-is a delegate of yours and reports to you like one. `base_branch` is the branch
-under check, the implementer's `agent/<…>` branch, so the session's worktree
-holds that code.
+is a delegate of yours and reports to you like one. Put a Reviewer, a Tester or
+QA on the implementer's worktree with `join_session_id`, the implementer's
+session id (running or ended): it sees the live work on the implementer's
+`agent/<…>` branch and nothing needs merging. Prefer this to cutting a branch.
+`access` defaults to `read_only` for `review` and `qa` and to `write` for
+`test`, so a Tester's tests are committed on the implementer's branch itself.
+Cut from the branch with `base_branch` instead when the verification must stay
+apart from the implementer's branch, for example the implementer is still
+changing it, or the Tester's tests are to be reviewed before they merge.
 
 | Mode | Spawn it | It gives you |
 |---|---|---|
@@ -173,9 +179,11 @@ holds that code.
 2. On `request changes`, carry the findings to the implementer with
    `reply_to_session` (verdict `changes_requested`). When it reports done
    again, spawn a new Reviewer.
-3. Once the Tester reports done and its report is sound, approve it and merge
-   its branch into the implementer's branch with `merge_session_branch` (its
-   base) before anything else merges.
+3. A Tester cut from the branch reports on its own branch: once its report is
+   sound, approve it and merge its branch into the implementer's branch with
+   `merge_session_branch` (its base) before anything else merges. A Tester that
+   joined the implementer's worktree committed on that branch already: nothing
+   to merge.
 4. For work with a user-facing surface, spawn an Operator to run the branch.
    Spawn QA only after the Operator's done report with its URLs. Spawn a new
    Operator only when none has already reported services running the branch's
