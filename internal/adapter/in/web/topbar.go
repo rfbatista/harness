@@ -61,34 +61,33 @@ func (s *server) TopBar(ctx context.Context, path string) (*ports.TopBar, error)
 // blocked.
 func (s *server) topBarLinks(path string) []ports.TopBarLink {
 	var links []ports.TopBarLink
-	add := func(key, href string, current bool) *ports.TopBarLink {
-		links = append(links, ports.TopBarLink{Key: key, Href: href, Current: current})
-		return &links[len(links)-1]
+	add := func(key, href string, current, attention bool) {
+		links = append(links, ports.TopBarLink{Key: key, Href: href, Current: current, Attention: attention})
 	}
 	if s.deps.AgentBoard != nil {
-		add("board", home.BoardHref, path == home.BoardHref)
+		add("board", home.BoardHref, path == home.BoardHref, false)
 	}
 	if s.deps.ProjectSummaries != nil {
-		add("projects", projects.ListHref, path == projects.ListHref)
+		add("projects", projects.ListHref, path == projects.ListHref, false)
 	} else {
-		add("new_project", "/projects/new", false)
+		add("new_project", "/projects/new", false, false)
 	}
-	add("agents", agents.Href, path == agents.Href || strings.HasPrefix(path, agents.Href+"/"))
+	add("agents", agents.Href, path == agents.Href || strings.HasPrefix(path, agents.Href+"/"), false)
 	if s.deps.GitCredentials != nil {
-		add("credentials", credentials.Href, path == credentials.Href)
+		add("credentials", credentials.Href, path == credentials.Href, false)
 	}
 	if s.deps.TokenSaverInstalls != nil {
-		add("token_savers", tokensavers.Href, path == tokensavers.Href)
+		add("token_savers", tokensavers.Href, path == tokensavers.Href, false)
 	}
 	if s.deps.Settings != nil {
-		add("models", models.Href, path == models.Href)
+		add("models", models.Href, path == models.Href, false)
 	}
 	if s.deps.SandboxSettings != nil {
-		l := add("agent_isolation", agentisolation.Href, path == agentisolation.Href)
-		l.Attention = agentisolation.Blocks(s.deps.SandboxSettings, s.deps.SandboxDriver, s.deps.AgentCredential, s.deps.AgentLogin, s.deps.ManagedClaudeBin)
+		blocked := agentisolation.Blocks(s.deps.SandboxSettings, s.deps.SandboxDriver, s.deps.AgentCredential, s.deps.AgentLogin, s.deps.ManagedClaudeBin)
+		add("agent_isolation", agentisolation.Href, path == agentisolation.Href, blocked)
 	}
 	if s.deps.DataPaths != nil {
-		add("server", serversettings.Href, path == serversettings.Href)
+		add("server", serversettings.Href, path == serversettings.Href, false)
 	}
 	return links
 }

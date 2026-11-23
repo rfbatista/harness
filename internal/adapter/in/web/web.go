@@ -564,7 +564,10 @@ func (s *server) renderError(w http.ResponseWriter, r *http.Request, err error) 
 	}
 	frame := s.bareFrame("Error")
 	if bar, err := s.TopBar(r.Context(), r.URL.EscapedPath()); err == nil {
-		frame.Island, _ = s.island(r.Context(), bar)
+		// A failed model leaves the error page without its top bar.
+		if isl, err := s.island(r.Context(), bar); err == nil {
+			frame.Island = isl
+		}
 	}
 	if renderErr := render(w, r, status, errorPage(frame, message, code, nextStep(code))); renderErr != nil {
 		slog.Error("web error page failed", "path", r.URL.Path, "err", renderErr)

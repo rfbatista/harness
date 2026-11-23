@@ -2,6 +2,7 @@ package app
 
 import (
 	"context"
+	"errors"
 	"io/fs"
 	"log/slog"
 	"net"
@@ -415,6 +416,13 @@ func dataPaths(cfg Config) *serversettings.Paths {
 
 // lateTopBars is the API's top bar reader before the web adapter's
 // dependencies exist: set once, while the server is assembled.
-type lateTopBars struct{ ports.TopBars }
+type lateTopBars struct{ next ports.TopBars }
 
-func (l *lateTopBars) set(t ports.TopBars) { l.TopBars = t }
+func (l *lateTopBars) set(t ports.TopBars) { l.next = t }
+
+func (l *lateTopBars) TopBar(ctx context.Context, path string) (*ports.TopBar, error) {
+	if l.next == nil {
+		return nil, errors.New("the top bar is not assembled yet")
+	}
+	return l.next.TopBar(ctx, path)
+}
