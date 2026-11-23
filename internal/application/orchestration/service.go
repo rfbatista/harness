@@ -134,6 +134,9 @@ type Service struct {
 	// Project only: a session gets one only when its project has it Added.
 	// Nil means none is.
 	MCPProjectOnly func() []string
+	// MCPKnownTools returns each catalog MCP server's tool names, from its last
+	// probe, by server name, for a session's context. Nil knows none.
+	MCPKnownTools func() map[string][]string
 	// SessionHookURL returns where an interactive session's SessionStart hook
 	// reports its conversation id. Nil leaves the hook out.
 	SessionHookURL func(sessionID string) string
@@ -620,7 +623,7 @@ func (s *Service) prepare(ctx context.Context, in prepareInput) (*prepared, erro
 	}
 	permission := parseAutoAccept(in.AutoAccept)
 	trail := &pieceTrail{}
-	cfg, versions := s.sessionConfigTrail(trail, id, ws.Path, in.Model, in.AllowedTools, permission, ag, subject, in.ZoneID, in.Role, in.RepositoryID)
+	cfg, res := s.sessionConfigTrail(trail, id, ws.Path, in.Model, in.AllowedTools, permission, ag, subject, in.ZoneID, in.Role, in.RepositoryID)
 	withReadOnlyAccess(&cfg, in.Access, in.Branch)
 	trail.mark(&cfg, domain.PieceOther, "Read-only access", "Harness")
 	cleanup, err := s.withShell(id, in.RepositoryID, subject, &cfg, ag.cleanup)
@@ -669,8 +672,10 @@ func (s *Service) prepare(ctx context.Context, in prepareInput) (*prepared, erro
 	trail.mark(&cfg, domain.PieceOther, "Sandbox and Chrome", "Harness")
 	return &prepared{
 		context: contextInput{
-			Cfg: cfg, System: trail.pieces, Versions: versions, Repository: repo.Name,
-			Facts: s.contextFacts(in, ag, cfg, ws, savers, sb, permission),
+			Cfg: cfg, System: trail.pieces, Versions: res.versions, Repository: repo.Name,
+			Role: in.Role, Agent: ag.agent, Project: subject.project, Attached: res.attached, KnownTools: res.known,
+			Skills: ag.contextSkills,
+			Facts:  s.contextFacts(in, ag, cfg, ws, savers, sb, permission),
 		},
 		sandbox:    sb,
 		cfg:        cfg,
@@ -959,6 +964,9 @@ type resolvedAgent struct {
 	appendSystem string
 	skillDirs    []string
 	cleanup      func() // removes skillDirs; nil if none
+	// contextSkills are the mode's and the agent's skills, with where each
+	// comes from, for the session's context.
+	contextSkills []domain.ContextSkill
 }
 
 // resolveAgent loads the agent a session runs as, plus the skills its mode
@@ -981,6 +989,7 @@ func (s *Service) resolveAgent(agentID string, mode domain.SessionMode) (resolve
 		}
 	}
 	skills := sessionSkills(r.agent, modeOnly)
+	r.contextSkills = classifySkills(skills, modeOnly)
 	if len(skills) > 0 {
 		dirs, c, err := resolveSkillDirs(skills)
 		if err != nil {
@@ -1004,7 +1013,7 @@ func (s *Service) sessionConfig(id, dir, model string, allowedTools []string, pe
 
 // sessionConfigTrail is sessionConfig that also marks each system-prompt
 // section on trail, and says the version of each instruction file it delivers.
-func (s *Service) sessionConfigTrail(trail *pieceTrail, id, dir, model string, allowedTools []string, permission llmkit.PermissionMode, ag resolvedAgent, subject sessionSubject, zoneID string, role domain.SessionRole, repositoryID string) (llmkit.SessionConfig, map[string]string) {
+func (s *Service) sessionConfigTrail(trail *pieceTrail, id, dir, model string, allowedTools []string, permission llmkit.PermissionMode, ag resolvedAgent, subject sessionSubject, zoneID string, role domain.SessionRole, repositoryID string) (llmkit.SessionConfig, configResolution) {
 	ticket := subject.ticket
 	cfg := llmkit.SessionConfig{
 		ID:           id,
@@ -1051,8 +1060,8 @@ func (s *Service) sessionConfigTrail(trail *pieceTrail, id, dir, model string, a
 		cfg.AppendSystem = appendSection(cfg.AppendSystem, section)
 	}
 	trail.mark(&cfg, domain.PieceOther, "Design system", "Harness")
-	var versions map[string]string
-	cfg.InstructionFiles, versions = s.deliveredFiles(context.TODO(), role, ag.agent, subject.projectID(), repositoryID)
+	res := configResolution{}
+	cfg.InstructionFiles, res.versions = s.deliveredFiles(context.TODO(), role, ag.agent, subject.projectID(), repositoryID)
 	if s.SessionBranchGateURL != nil {
 		cfg.InstructionFiles = append(cfg.InstructionFiles, s.branchGateInstructionFile(subject.mode))
 	}
@@ -1072,6 +1081,10 @@ func (s *Service) sessionConfigTrail(trail *pieceTrail, id, dir, model string, a
 		projectOnly = s.MCPProjectOnly()
 	}
 	attached := resolveMCP(ag.agent, subject.project, s.catalog.MCPServers.ListMCPServers(), defaults, projectOnly)
+	res.attached = attached
+	if s.MCPKnownTools != nil {
+		res.known = s.MCPKnownTools()
+	}
 	withDeniedMCPTools(&cfg, attached.Denied)
 	for _, m := range attached.Servers {
 		cfg.MCPServers = append(cfg.MCPServers, llmkit.MCPServerSpec{
@@ -1090,7 +1103,7 @@ func (s *Service) sessionConfigTrail(trail *pieceTrail, id, dir, model string, a
 			cfg.AddDirs = append(cfg.AddDirs, z.ExplicitPaths...)
 		}
 	}
-	return cfg, versions
+	return cfg, res
 }
 
 func (s *Service) pump(sess llmkit.Session) {

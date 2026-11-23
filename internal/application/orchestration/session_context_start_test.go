@@ -103,3 +103,17 @@ func TestSessionContext_AStartThatFailsBeforeClaudeRunsStoresNothing(t *testing.
 		t.Errorf("a failed start stored %d contexts", store.saves)
 	}
 }
+
+func TestSessionContext_AStartStoresItsServersSkillsAndHooks(t *testing.T) {
+	svc, _ := newInteractiveService(t)
+	svc.Contexts = memory.NewSessionContextStore()
+	sess, _ := startInteractive(t, svc, InteractiveRequest{})
+	e := contextOf(t, svc, sess.ID).Entries[0]
+	task, ok := serverByName(e, "task")
+	if !ok || task.Attached != domain.AttachedBuiltIn || task.Status != domain.MCPUnknown {
+		t.Errorf("task server = %+v (found %v)", task, ok)
+	}
+	if e.Skills == nil || e.Hooks == nil || e.Tools == nil {
+		t.Errorf("lists must be [] not null: %+v", e)
+	}
+}

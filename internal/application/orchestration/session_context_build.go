@@ -76,6 +76,14 @@ type contextInput struct {
 	Versions   map[string]string // instruction file path -> version
 	Repository string            // the repository's name, for the pieces' source
 	Opening    string
+
+	// What the tools, servers, skills and hooks are worked out from.
+	Role       domain.SessionRole
+	Agent      *domain.Agent
+	Project    *domain.Project
+	Attached   mcpAttachment         // the catalog servers the session got, and the tools it hides
+	KnownTools map[string][]string   // each catalog server's tool names, by server name
+	Skills     []domain.ContextSkill // the mode's and the agent's skills
 }
 
 // buildContextEntry builds the entry for one start or resume. Pieces go in
@@ -106,6 +114,9 @@ func buildContextEntry(in contextInput) domain.ContextEntry {
 		e.Instructions = append(e.Instructions,
 			domain.NewContextPiece("opening-message", domain.PieceOpeningMessage, "Opening message", "Harness", "", "", in.Opening))
 	}
+	e.Tools, e.MCPServers = contextToolsAndServers(in)
+	e.Skills = contextSkills(in)
+	e.Hooks = contextHooks(in.Cfg)
 	e.Facts.ApproxTokens = 0
 	for _, p := range e.Instructions {
 		e.Facts.ApproxTokens += p.ApproxTokens

@@ -46,6 +46,15 @@ const (
 	ToolRefused  = "refused"
 )
 
+// How an MCP server was attached to a session.
+const (
+	AttachedBuiltIn    = "built_in"
+	AttachedTokenSaver = "token_saver"
+	AttachedAgent      = "agent"
+	AttachedProject    = "project"
+	AttachedMode       = "mode"
+)
+
 // MCP server statuses. Only claude reports connected or failed; the harness
 // never probes a server (ADR 0099).
 const (
