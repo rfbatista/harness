@@ -115,6 +115,7 @@ export class ContextPresenter extends Presenter<ContextViewModel> {
   #reveal: { group: GroupKey; request: number } | null = null;
   readonly #running: boolean;
   #unfollow: (() => void) | null = null;
+  #closed = false;
   #refreshing = false;
   #again = false;
   /** Rows that changed since the last change was dismissed: "tool:Bash", "skill:x", "server:y". */
@@ -143,12 +144,13 @@ export class ContextPresenter extends Presenter<ContextViewModel> {
 
   /** Stops following the project feed. */
   close(): void {
+    this.#closed = true;
     this.#unfollow?.();
     this.#unfollow = null;
   }
 
   #follow(): void {
-    if (!this.#running || !this.#feed || this.#unfollow || this.viewModel.status !== "ready") return;
+    if (this.#closed || !this.#running || !this.#feed || this.#unfollow || this.viewModel.status !== "ready") return;
     this.#unfollow = this.#feed.follow(this.#projectId, (change) => {
       if (change.sessionId === this.#sessionId) void this.refresh();
     });
@@ -161,7 +163,7 @@ export class ContextPresenter extends Presenter<ContextViewModel> {
   /** Loads again after a failed load. */
   retry(): void {
     if (this.viewModel.status !== "error") return;
-    void this.#load();
+    void this.#load().then(() => this.#follow());
   }
 
   /** Reads the context again without a loading state: what is on screen stays until the new answer replaces it. */
