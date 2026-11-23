@@ -56,7 +56,32 @@ export interface ToolsGroup extends GroupHeading {
   readonly sections: readonly ToolSection[];
 }
 
+export interface ServerRow {
+  readonly name: string;
+  /** "Built in", "Token saver", "Agent", "Project" or "Mode". */
+  readonly attached: string;
+  /** Why it was attached, one line. */
+  readonly attachedReason: string;
+  readonly status: "connected" | "failed" | "unknown";
+  /** "connected", "failed" or "status unknown". */
+  readonly statusLabel: string;
+  /** Claude's error for a failed server; for an unknown one, why the harness does not know. */
+  readonly reason: string;
+  /** The row is a failure: the only place the tab uses the danger tone. */
+  readonly failed: boolean;
+  /** Copy is offered, for a failed server's error. */
+  readonly canCopy: boolean;
+  readonly copied: boolean;
+}
+
+export interface ServersGroup extends GroupHeading {
+  /** The count is in the danger tone: some server failed. */
+  readonly danger: boolean;
+  readonly rows: readonly ServerRow[];
+}
+
 export interface ContextGroups {
   readonly instructions: InstructionsGroup;
   readonly tools: ToolsGroup;
+  readonly servers: ServersGroup;
 }

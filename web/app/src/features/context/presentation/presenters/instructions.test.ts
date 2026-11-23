@@ -1,6 +1,7 @@
 import { describe, test } from "node:test";
 import assert from "node:assert/strict";
 import { ContextSourceError } from "../../application/ports";
+import { memoryClipboard } from "../../infrastructure/memory-clipboard";
 import { memoryContextSource } from "../../infrastructure/memory-context-source";
 import { contextFromJson, contextJson, entryJson, pieceJson } from "../../testing/fixtures";
 import { ContextPresenter } from "./context-presenter";
@@ -11,7 +12,7 @@ const setup = async (pieces = [pieceJson()]) => {
   const json = contextJson({ entries: [entryJson({ id: "e1", instructions: pieces })] });
   const source = memoryContextSource();
   source.serve(contextFromJson(json));
-  const presenter = new ContextPresenter(source, "s1");
+  const presenter = new ContextPresenter(source, "s1", { clipboard: memoryClipboard() });
   presenter.open();
   await flush();
   return { source, presenter };
@@ -103,7 +104,7 @@ describe("Instructions", () => {
   test("a group asked to open before the context has loaded is open once it has", async () => {
     const source = memoryContextSource();
     source.serve(contextFromJson(contextJson()));
-    const presenter = new ContextPresenter(source, "s1");
+    const presenter = new ContextPresenter(source, "s1", { clipboard: memoryClipboard() });
     presenter.toggleGroup("instructions");
     presenter.openGroup("instructions");
     presenter.open();

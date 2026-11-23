@@ -1,5 +1,6 @@
 import { describe, test } from "node:test";
 import assert from "node:assert/strict";
+import { memoryClipboard } from "../../infrastructure/memory-clipboard";
 import { memoryContextSource } from "../../infrastructure/memory-context-source";
 import { contextFromJson, contextJson, entryJson, serverJson, toolJson, type SessionContextJson, type ToolJson } from "../../testing/fixtures";
 import { ContextPresenter } from "./context-presenter";
@@ -9,7 +10,7 @@ const flush = () => new Promise<void>((resolve) => setTimeout(resolve, 0));
 const setup = async (tools: ToolJson[], servers = [serverJson()], usage: SessionContextJson["usage"] = { tools: {}, skills: {} }) => {
   const source = memoryContextSource();
   source.serve(contextFromJson(contextJson({ entries: [entryJson({ tools, mcp_servers: servers })], usage })));
-  const presenter = new ContextPresenter(source, "s1");
+  const presenter = new ContextPresenter(source, "s1", { clipboard: memoryClipboard() });
   presenter.open();
   await flush();
   return presenter;

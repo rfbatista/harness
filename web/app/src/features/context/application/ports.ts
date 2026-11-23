@@ -20,3 +20,8 @@ export interface ContextSource {
   /** The full text of one piece of one entry. */
   piece(sessionId: string, entryId: string, pieceId: string, signal?: AbortSignal): Promise<string>;
 }
+
+/** The person's clipboard: Copy on a failed server puts claude's error there. */
+export interface Clipboard {
+  copy(text: string): Promise<void>;
+}

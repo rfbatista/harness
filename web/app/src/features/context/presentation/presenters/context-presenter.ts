@@ -3,8 +3,9 @@
 
 import { Presenter } from "../../../../shared/kernel/presenter";
 import { loadContext } from "../../application/load-context";
-import { ContextSourceError, type ContextSource } from "../../application/ports";
+import { ContextSourceError, type Clipboard, type ContextSource } from "../../application/ports";
 import type { Entry, Facts, SessionContext } from "../../domain/session-context";
+import { serversGroup } from "./servers-group";
 import { toolsGroup } from "./tools-group";
 import type { ContextGroups, GroupKey } from "./context-view-model";
 import { closedPiece, instructionsGroup, type PieceState } from "./instructions-group";
@@ -58,9 +59,13 @@ export class ContextPresenter extends Presenter<ContextViewModel> {
   /** Groups the person closed (every group starts open but Hooks). */
   readonly #toggled = new Set<GroupKey>();
   readonly #pieces = new Map<string, PieceState>();
+  readonly #copied = new Set<string>();
 
-  constructor(source: ContextSource, sessionId: string) {
+  readonly #clipboard: Clipboard;
+
+  constructor(source: ContextSource, sessionId: string, { clipboard }: { clipboard: Clipboard }) {
     super(idle);
+    this.#clipboard = clipboard;
     this.#source = source;
     this.#sessionId = sessionId;
   }
@@ -117,6 +122,7 @@ export class ContextPresenter extends Presenter<ContextViewModel> {
       groups: {
         instructions: instructionsGroup(this.#heading("instructions", "Instructions", entry.instructions.length), entry.instructions, this.#pieces),
         tools: toolsGroup(this.#heading("tools", "Tools", 0), entry.tools, entry.servers, this.#context!.usage),
+        servers: serversGroup(this.#heading("servers", "MCP servers", entry.servers.length), entry.servers, this.#copied),
       },
     });
   }
@@ -137,6 +143,15 @@ export class ContextPresenter extends Presenter<ContextViewModel> {
   togglePiece(id: string): void {
     const state = this.#pieces.get(id) ?? closedPiece;
     this.#pieces.set(id, { ...state, open: !state.open });
+    this.#render();
+  }
+
+  /** Copy on a failed server: claude's error goes to the clipboard. */
+  async copyError(serverName: string): Promise<void> {
+    const server = this.#entry()?.servers.find((s) => s.name === serverName);
+    if (!server || server.status !== "failed") return;
+    await this.#clipboard.copy(server.statusReason);
+    this.#copied.add(serverName);
     this.#render();
   }
 

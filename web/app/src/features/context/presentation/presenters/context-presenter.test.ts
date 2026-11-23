@@ -1,6 +1,7 @@
 import { describe, test } from "node:test";
 import assert from "node:assert/strict";
 import { ContextSourceError } from "../../application/ports";
+import { memoryClipboard } from "../../infrastructure/memory-clipboard";
 import { memoryContextSource } from "../../infrastructure/memory-context-source";
 import { contextFromJson, contextJson, entryJson, factsJson } from "../../testing/fixtures";
 import { ContextPresenter } from "./context-presenter";
@@ -8,7 +9,7 @@ import { ContextPresenter } from "./context-presenter";
 const setup = (json = contextJson()) => {
   const source = memoryContextSource();
   source.serve(contextFromJson(json));
-  return { source, presenter: new ContextPresenter(source, json.session_id) };
+  return { source, presenter: new ContextPresenter(source, json.session_id, { clipboard: memoryClipboard() }) };
 };
 
 const flush = () => new Promise<void>((resolve) => setTimeout(resolve, 0));
@@ -46,7 +47,7 @@ describe("the Context tab's load", () => {
 
   test("a session the server does not know is its own state", async () => {
     const source = memoryContextSource();
-    const presenter = new ContextPresenter(source, "gone");
+    const presenter = new ContextPresenter(source, "gone", { clipboard: memoryClipboard() });
     presenter.open();
     await flush();
     assert.equal(presenter.viewModel.status, "not_found");

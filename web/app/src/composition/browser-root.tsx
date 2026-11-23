@@ -13,6 +13,7 @@ import { browserPageOpener } from "../features/navigation/infrastructure/browser
 import { httpTopBarSource } from "../features/navigation/infrastructure/http-top-bar-source";
 import { browserNavigator } from "../features/notifications/infrastructure/browser-navigator";
 import { httpNotificationsSource } from "../features/notifications/infrastructure/http-notifications-source";
+import { browserClipboard } from "../features/context/infrastructure/browser-clipboard";
 import { httpContextSource } from "../features/context/infrastructure/http-context-source";
 import { ContextPropsDto } from "../features/context/infrastructure/dto/context-props-dto";
 import { ContextPresenter } from "../features/context/presentation/presenters/context-presenter";
@@ -54,7 +55,7 @@ export function mountIslands(doc: Document): Dispose {
     },
     // The Context tab of the session pane: client-rendered, mounted while the tab is shown.
     "session-context": (mount, props) => {
-      const presenter = new ContextPresenter(contextSource, ContextPropsDto.fromJSON(props).session_id);
+      const presenter = new ContextPresenter(contextSource, ContextPropsDto.fromJSON(props).session_id, { clipboard: browserClipboard(win.navigator) });
       const root = createRoot(mount);
       root.render(<ContextView presenter={presenter} />);
       presenter.open();
