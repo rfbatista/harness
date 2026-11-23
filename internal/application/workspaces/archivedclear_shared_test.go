@@ -246,8 +246,8 @@ func TestThePreviewDecidesAsTheClearDoesAndCountsEachWorktreeOnce(t *testing.T) 
 	if err != nil {
 		t.Fatal(err)
 	}
-	if preview.Worktrees != 1 || preview.Running != 2 || preview.Shared != 1 {
-		t.Fatalf("preview = %+v, want 1 worktree to remove, 2 sessions skipped as running (the running one and the ended one on its worktree), 1 as shared", preview)
+	if preview.Worktrees != 1 || preview.Running != 1 || preview.Shared != 1 {
+		t.Fatalf("preview = %+v, want 1 worktree to remove, 1 worktree kept because a session on it runs (counted once, though two sessions are on it), 1 session kept as shared", preview)
 	}
 
 	res, err := w.clear.Clear(w.ctx, scope)
@@ -261,7 +261,7 @@ func TestThePreviewDecidesAsTheClearDoesAndCountsEachWorktreeOnce(t *testing.T) 
 	for _, s := range res.Skipped {
 		reasons[s.Reason]++
 	}
-	if reasons["running"] != preview.Running || reasons["shared"] != preview.Shared {
-		t.Errorf("the clear skipped %v, the preview said %d running and %d shared", reasons, preview.Running, preview.Shared)
+	if reasons["running"] != 2 || reasons["shared"] != preview.Shared {
+		t.Errorf("the clear skipped %v, want the 2 sessions on the running worktree and %d shared", reasons, preview.Shared)
 	}
 }

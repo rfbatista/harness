@@ -104,12 +104,12 @@ export function toClearStrip(clear) {
   const sharedLine = `${plural(shared, "session shares", "sessions share")} a worktree with a task that is not being cleared; ${shared === 1 ? "its worktree stays" : "their worktrees stay"}.`;
   if (worktrees === 0) {
     const lines = [];
-    if (running > 0) lines.push(`${plural(running, "running session keeps", "running sessions keep")} its worktree until it ends.`);
+    if (running > 0) lines.push(`${plural(running, "worktree with a running session stays", "worktrees with a running session stay")} until it ends.`);
     if (shared > 0) lines.push(sharedLine);
     return { ...base, title: `Nothing to clear in ${clear.label}`, lines: lines.length ? lines : ["Their worktrees are already cleared."], closes: true };
   }
   const lines = [dirty > 0 ? `${plural(dirty, "holds", "hold")} uncommitted changes that will be lost.` : "None hold uncommitted changes."];
-  if (running > 0) lines.push(`${plural(running, "running session", "running sessions")} will be skipped.`);
+  if (running > 0) lines.push(`${plural(running, "worktree with a running session", "worktrees with a running session")} will be skipped.`);
   if (shared > 0) lines.push(sharedLine);
   lines.push("Branches, sessions and transcripts stay. Restoring a task does not bring its worktrees back.");
   return { ...base, title: `Clear ${plural(worktrees, "worktree", "worktrees")} of ${clear.label}?`, lines, canConfirm: clear.phase === "ready", busy: clear.phase === "clearing" };

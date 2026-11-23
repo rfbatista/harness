@@ -190,12 +190,15 @@ func (s *ArchivedWorktrees) Preview(ctx context.Context, sc ports.ArchivedWorktr
 		return nil, err
 	}
 	out := &ports.ArchivedWorktreesPreview{}
-	counted := map[string]bool{}
+	counted, running := map[string]bool{}, map[string]bool{}
 	for _, f := range found {
 		block, blockErr := s.blockOf(ctx, f.session, found)
 		switch block {
 		case "running":
-			out.Running++
+			if !running[f.session.WorkspaceID] {
+				running[f.session.WorkspaceID] = true
+				out.Running++
+			}
 		case "shared":
 			out.Shared++
 		case "error":

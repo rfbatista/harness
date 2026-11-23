@@ -46,7 +46,9 @@ type ArchivedWorktrees interface {
 type ArchivedWorktreesPreview struct {
 	Worktrees int `json:"worktrees"`
 	Dirty     int `json:"dirty"`
-	Running   int `json:"running"`
+	// Running counts the worktrees that stay because a session on them runs,
+	// each once however many sessions are on it.
+	Running int `json:"running"`
 	// Shared counts the sessions whose worktree stays because a session of a
 	// task outside the clear is on it.
 	Shared int `json:"shared"`

@@ -173,3 +173,35 @@ func TestReadOnlyAccessIsRefusedWhileTheAgentSandboxIsOff(t *testing.T) {
 		}
 	}
 }
+
+func TestAResumeOfAReadOnlySessionIsRefusedWhileTheSandboxIsOffAsAStartIs(t *testing.T) {
+	w := newSandboxWorld(t)
+	w.svc.Transcripts = fakeTranscripts{}
+	creator, _ := w.start(t, "implement")
+	reader, _ := joinAs(t, w.svc, creator, "review", "")
+	writer, _ := joinAs(t, w.svc, creator, "test", "")
+	for _, id := range []string{reader.ID, writer.ID} {
+		if err := w.svc.sessions.UpdateStatus(id, domain.SessionStopped); err != nil {
+			t.Fatal(err)
+		}
+	}
+	w.off = true
+
+	_, _, err := w.svc.ResumeInteractive(context.Background(), ports.ResumeRequest{SessionID: reader.ID, RunsOn: domain.RunnerTUI})
+	if errs.Code(err) != "ACCESS_INVALID" || err == nil || !strings.Contains(err.Error(), "Read-only access needs the agent sandbox; it is off for this session.") {
+		t.Fatalf("resume of a read-only session with the sandbox off: %v, want the start's refusal", err)
+	}
+	if got := w.svc.sessions.Get(reader.ID); got.Status != domain.SessionStopped {
+		t.Errorf("a refused resume moved the session to %s", got.Status)
+	}
+	if got, _ := w.svc.Get(context.Background(), reader.ID); got == nil || got.Resumable || got.ResumeBlocked != "ACCESS_INVALID" {
+		t.Errorf("the session reads as resumable (%+v), want it blocked with ACCESS_INVALID", got)
+	}
+	if _, _, err := w.svc.ResumeInteractive(context.Background(), ports.ResumeRequest{SessionID: writer.ID, RunsOn: domain.RunnerTUI}); err != nil {
+		t.Errorf("a write session cannot resume with the sandbox off: %v", err)
+	}
+	w.off = false
+	if _, _, err := w.svc.ResumeInteractive(context.Background(), ports.ResumeRequest{SessionID: reader.ID, RunsOn: domain.RunnerTUI}); err != nil {
+		t.Errorf("the read-only session cannot resume once the sandbox is back on: %v", err)
+	}
+}

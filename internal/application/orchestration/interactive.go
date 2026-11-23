@@ -443,6 +443,8 @@ func (s *Service) resumeBlock(sess *domain.Session) error {
 		return &domain.StructuredError{Code: "SESSION_NOT_INTERACTIVE", Message: "session is not interactive"}
 	case !sess.Status.IsTerminal():
 		return &domain.StructuredError{Code: "SESSION_ALREADY_RUNNING", Message: "session is still running"}
+	case !sess.Access.Writes() && !s.Sandbox.on():
+		return &domain.StructuredError{Code: "ACCESS_INVALID", Message: "ACCESS_INVALID: " + readOnlyNeedsSandbox}
 	case sess.WorktreeClearedAt != nil:
 		return &domain.StructuredError{Code: "WORKTREE_CLEARED", Message: "this session's worktree was cleared, so it cannot be resumed; its commits are on branch " + sess.Branch}
 	case s.Transcripts != nil:
@@ -1048,6 +1050,10 @@ func (s *Service) checkNamedBranch(ctx context.Context, repositoryID, name, tick
 	return nil
 }
 
+// readOnlyNeedsSandbox is why a read-only session is refused while the agent
+// sandbox is off: the OS is what keeps it from writing.
+const readOnlyNeedsSandbox = "Read-only access needs the agent sandbox; it is off for this session."
+
 // worktreeLookup is what joining needs of the workspaces service beyond
 // provisioning: a worktree by id.
 type worktreeLookup interface {
@@ -1089,7 +1095,7 @@ func (s *Service) joinTarget(ctx context.Context, req InteractiveRequest, mode d
 	// The OS is what keeps a read-only session from writing: with the sandbox
 	// off nothing does, so the start is refused rather than promised.
 	if access == domain.AccessReadOnly && !s.Sandbox.on() {
-		return "", nil, joinRefusal("ACCESS_INVALID", "Read-only access needs the agent sandbox; it is off for this session.", nil)
+		return "", nil, joinRefusal("ACCESS_INVALID", readOnlyNeedsSandbox, nil)
 	}
 	if strings.TrimSpace(req.BaseBranch) != "" || strings.TrimSpace(req.BranchName) != "" {
 		return "", nil, joinRefusal("WORKTREE_WITH_BASE_BRANCH", "a session that joins a worktree runs on its branch: leave the base branch and the branch name empty", nil)
@@ -1099,7 +1105,7 @@ func (s *Service) joinTarget(ctx context.Context, req InteractiveRequest, mode d
 		return "", nil, &domain.StructuredError{Code: "INVALID_INPUT", Message: "an architect, product or design system session cannot join a worktree"}
 	}
 	gone := func() error {
-		return joinRefusal("WORKTREE_NOT_FOUND", "that worktree is no longer there: pick another or start on a new branch", map[string]string{"worktree_id": req.WorktreeID})
+		return joinRefusal("WORKTREE_NOT_FOUND", "That worktree is gone from disk since the list was read. Nothing was started. Pick another or start on a new branch.", map[string]string{"worktree_id": req.WorktreeID})
 	}
 	lookup, ok := s.workspaces.(worktreeLookup)
 	if !ok {

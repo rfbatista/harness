@@ -67,6 +67,12 @@ func TestAReadOnlySessionsWritesAndCommitsAreDeniedWithAReasonThatNamesReadOnlyA
 		}
 	}
 
+	// A commit with no session environment is the person's (or the server's),
+	// in a worktree a read-only session is on: it is never refused as the agent.
+	if v := check("ro", ports.ArchitectureCheck{Point: domain.PointBeforeCommit, Tool: "git commit", Paths: []string{"a.go"}, Person: true}); v.Deny != "" {
+		t.Errorf("the person's commit was refused: %q", v.Deny)
+	}
+
 	// A write session is not touched by the read-only rule.
 	for _, c := range []ports.ArchitectureCheck{
 		{Point: domain.PointBeforeTool, Tool: "Write", Paths: []string{wt + "/a.go"}},

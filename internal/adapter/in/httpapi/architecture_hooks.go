@@ -130,14 +130,18 @@ func (h *Handler) handleWorktreeArchitectureCommit(c echo.Context) error {
 	if err != nil {
 		return err
 	}
+	// A commit that reaches this endpoint carries no session environment, so it
+	// is the person's (or the server's): checked as the session it is attributed
+	// to, but never refused for that session's read-only access.
+	check := ports.ArchitectureCheck{Person: true}
 	if attributed.SessionID == "" {
 		c.Response().Header().Set("X-Harness-Attributed-To", "worktree")
-		return h.checkCommitAs(c, ports.ArchitectureCheck{Worktree: &ports.CheckedWorktree{
-			RepositoryID: attributed.RepositoryID, ProjectID: attributed.ProjectID, Dir: attributed.Dir,
-		}})
+		check.Worktree = &ports.CheckedWorktree{RepositoryID: attributed.RepositoryID, ProjectID: attributed.ProjectID, Dir: attributed.Dir}
+	} else {
+		c.Response().Header().Set("X-Harness-Attributed-To", attributed.SessionID)
+		check.SessionID = attributed.SessionID
 	}
-	c.Response().Header().Set("X-Harness-Attributed-To", attributed.SessionID)
-	return h.checkCommit(c, attributed.SessionID)
+	return h.checkCommitAs(c, check)
 }
 
 // checkCommit runs the commit check for sessionID on the staged paths in the

@@ -60,6 +60,9 @@ func TestAWorktreesCommitEndpointChecksTheCommitAsTheSessionItAttributesItTo(t *
 		strings.Join(rules.checks[0].Paths, ",") != "a.go,b.go" {
 		t.Errorf("checks = %+v", rules.checks)
 	}
+	if !rules.checks[0].Person {
+		t.Error("a commit with no session environment is not marked as the person's, so a read-only session would refuse it")
+	}
 	if got := rec.Header().Get("X-Harness-Attributed-To"); got != "sess-a" {
 		t.Errorf("attributed to %q", got)
 	}
@@ -77,7 +80,7 @@ func TestAWorktreesCommitEndpointFailsTheCommitOnABlockingRuleAndRefusesAWorktre
 	who.session, who.worktree = "", &ports.CheckedWorktree{RepositoryID: "r1", ProjectID: "p1", Dir: "/w"}
 	rules.verdict, rules.checks = ports.ArchitectureVerdict{}, nil
 	if rec := postCommit(t, h, WorktreeArchitecturePath("ws1")+"/commit", "a.go"); rec.Code != http.StatusOK ||
-		len(rules.checks) != 1 || rules.checks[0].SessionID != "" || rules.checks[0].Worktree == nil || rules.checks[0].Worktree.Dir != "/w" {
+		len(rules.checks) != 1 || rules.checks[0].SessionID != "" || rules.checks[0].Worktree == nil || rules.checks[0].Worktree.Dir != "/w" || !rules.checks[0].Person {
 		t.Errorf("no session: %d %s, checks %+v; want one check carrying the worktree", rec.Code, rec.Body, rules.checks)
 	}
 

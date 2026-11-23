@@ -144,7 +144,7 @@ func (s *Service) CheckArchitecture(ctx context.Context, c ports.ArchitectureChe
 // a test are not refused. refused is false for a session that may write.
 func (s *Service) readOnlyRefusal(c ports.ArchitectureCheck) (ports.ArchitectureVerdict, bool) {
 	sess := s.d.Sessions.Get(c.SessionID)
-	if sess == nil || sess.Access.Writes() {
+	if sess == nil || sess.Access.Writes() || c.Person {
 		return ports.ArchitectureVerdict{}, false
 	}
 	why := "This session has read-only access to the worktree on branch " + sess.Branch + ": it can read, build and run tests there, but it cannot write files or commit. Ask the person to start a session with write access for that."

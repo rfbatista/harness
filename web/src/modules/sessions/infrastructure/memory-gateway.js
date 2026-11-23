@@ -142,7 +142,7 @@ export function memoryGateway({ projects = [], sessions = [], repositories = {},
         }
         const target = worktrees.find((w) => w.worktreeId === worktreeId);
         if (!target) {
-          throw new StructuredError(Codes.WORKTREE_NOT_FOUND, "WORKTREE_NOT_FOUND: that worktree is no longer there: pick another or start on a new branch", 404, { worktree_id: worktreeId });
+          throw new StructuredError(Codes.WORKTREE_NOT_FOUND, "WORKTREE_NOT_FOUND: That worktree is gone from disk since the list was read. Nothing was started. Pick another or start on a new branch.", 404, { worktree_id: worktreeId });
         }
         if (target.ticketId !== ticketId) {
           throw new StructuredError(Codes.WORKTREE_NOT_ON_TASK, "WORKTREE_NOT_ON_TASK: that worktree belongs to a session of another task", 403, { worktree_id: worktreeId });

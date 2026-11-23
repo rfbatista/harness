@@ -1093,7 +1093,7 @@ test("a worktree that vanished is refused in place: the sentence shows, the form
 
   assert.deepEqual(dispatched, [], "nothing started");
   const started = memory.starts.length;
-  assert.ok(instance.worktreeError.startsWith("that worktree is no longer there"), instance.worktreeError);
+  assert.equal(instance.worktreeError, "That worktree is gone from disk since the list was read. Nothing was started. Pick another or start on a new branch.");
   assert.ok(!instance.worktreeError.includes("WORKTREE_NOT_FOUND"), "the sentence is shown without its code");
   assert.equal(instance.worktreeErrorCode, "WORKTREE_NOT_FOUND", "the code is shown small under it");
   assert.equal(instance.hasWorktreeError, true);

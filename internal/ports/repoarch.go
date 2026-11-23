@@ -200,6 +200,11 @@ type ArchitectureCheck struct {
 	Paths []string
 	// Command is the Bash command line of a before-tool check of Bash.
 	Command string
+	// Person marks a commit made with no session environment: the person's own
+	// terminal, or the server. It is checked against the layers as the session it
+	// is attributed to, as a commit in a session worktree always was, but the
+	// read-only rule of a session on the worktree never refuses it.
+	Person bool
 	// Worktree stands for the session when SessionID is empty: a commit in a
 	// worktree no session is on is checked as a plain agent in its repository.
 	Worktree *CheckedWorktree
