@@ -221,9 +221,20 @@ func (s *Service) StopTurn(ctx context.Context, threadID string) error {
 		r.mu.Unlock()
 		s.dropRun(r)
 		_ = s.sessions.Stop(ctx, t.SessionID)
+		s.waitProcessEnd(ctx, t.SessionID)
 	}
 	s.finishTurn(t.ID)
 	return nil
+}
+
+// waitProcessEnd waits for a stopped process to be gone, so that the next
+// message resumes the conversation instead of meeting the old process. The
+// runtime kills a process that outlives its stop grace, so the wait is short.
+func (s *Service) waitProcessEnd(ctx context.Context, sessionID string) {
+	deadline := time.Now().Add(7 * time.Second)
+	for s.sessions.ProductOwnerRunning(sessionID) && time.Now().Before(deadline) && ctx.Err() == nil {
+		time.Sleep(20 * time.Millisecond)
+	}
 }
 
 func (s *Service) runOf(threadID string) *run {

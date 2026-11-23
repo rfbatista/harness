@@ -804,3 +804,178 @@ func TestWhatTheProductOwnerReadsLeavesAnActivityLineBeforeItsAnswer(t *testing.
 		t.Errorf("kinds = %v, want the person's message, the activity, the answer", kinds)
 	}
 }
+
+// hold keeps the stand-in claude in the middle of each turn, after its first
+// delta, until release.
+func (e *poE2E) hold() {
+	e.t.Helper()
+	if err := os.WriteFile(filepath.Join(e.fakeDir, "hold"), nil, 0o644); err != nil {
+		e.t.Fatal(err)
+	}
+}
+
+func (e *poE2E) release() { _ = os.Remove(filepath.Join(e.fakeDir, "hold")) }
+
+func (e *poE2E) messages(id string) []poItem {
+	var out []poItem
+	for _, it := range e.thread(id).Items {
+		if it.Kind == "message" {
+			out = append(out, it)
+		}
+	}
+	return out
+}
+
+func TestAMessageAfterTheProcessEndedResumesTheSameSessionAndKeepsTheConversation(t *testing.T) {
+	e := newPOE2E(t)
+	e.po.SetIdle(300 * time.Millisecond)
+
+	id, _ := e.startThread("first")
+	th := e.waitTurn(id, "idle")
+	eventuallyPO(t, "the idle process to end", func() string {
+		if e.orch.ProductOwnerRunning(th.Thread.SessionID) {
+			return "the process still runs"
+		}
+		return ""
+	})
+
+	if status, code := e.send(id, "second"); status != 200 {
+		t.Fatalf("send = %d %s", status, code)
+	}
+	e.waitTurn(id, "idle")
+	msgs := e.messages(id)
+	var texts []string
+	for _, m := range msgs {
+		texts = append(texts, m.Text)
+	}
+	want := "first|answer to: first|second|answer to: second"
+	if strings.Join(texts, "|") != want {
+		t.Errorf("messages = %q, want %q", strings.Join(texts, "|"), want)
+	}
+	launches := e.launches()
+	if len(launches) != 2 || !strings.Contains(launches[1], "--resume "+th.Thread.SessionID) || strings.Contains(launches[1], "--session-id") {
+		t.Errorf("launches = %q, want a second one resuming session %s", launches, th.Thread.SessionID)
+	}
+	if got := e.thread(id).Thread.SessionID; got != th.Thread.SessionID {
+		t.Errorf("the thread moved to session %s", got)
+	}
+}
+
+func TestAMessageDuringATurnIsRefusedAndAStopKeepsThePartialAnswer(t *testing.T) {
+	e := newPOE2E(t)
+	e.hold()
+	id, _ := e.startThread("slow question")
+	eventuallyPO(t, "a partial answer", func() string {
+		for _, m := range e.messages(id) {
+			if m.Author == "product_owner" && m.Text == "answer to: " && m.Streaming != nil && *m.Streaming {
+				return ""
+			}
+		}
+		return "no streaming answer yet"
+	})
+	if got := e.thread(id).Thread.Turn; got != "running" {
+		t.Fatalf("turn = %s, want running", got)
+	}
+	if status, code := e.send(id, "and another"); status != 409 || code != "THREAD_BUSY" {
+		t.Errorf("a message during the turn = %d %s, want 409 THREAD_BUSY", status, code)
+	}
+	if n := len(e.messages(id)); n != 2 {
+		t.Errorf("the refused message was stored: %d messages", n)
+	}
+
+	// The stand-in ends once it is let go of; a real claude ends on its stdin closing.
+	time.AfterFunc(200*time.Millisecond, e.release)
+	if status, code := e.post("stop_product_owner_turn", map[string]any{"thread_id": id}, nil); status != 200 {
+		t.Fatalf("stop = %d %s", status, code)
+	}
+	got := e.waitTurn(id, "idle")
+	answer := e.messages(id)[1]
+	if answer.Text != "answer to: " || answer.Streaming == nil || *answer.Streaming || !answer.Stopped {
+		t.Errorf("the stopped answer = %+v, want its partial text, streaming false, stopped", answer)
+	}
+	_ = got
+
+	// The thread takes a new message; the process is resumed.
+	if status, code := e.send(id, "after the stop"); status != 200 {
+		t.Fatalf("send after the stop = %d %s", status, code)
+	}
+	e.waitTurn(id, "idle")
+	if n := len(e.messages(id)); n != 4 {
+		t.Errorf("messages = %d, want 4", n)
+	}
+	if status, code := e.post("stop_product_owner_turn", map[string]any{"thread_id": "nope"}, nil); status != 404 || code != "THREAD_NOT_FOUND" {
+		t.Errorf("stop of an unknown thread = %d %s", status, code)
+	}
+}
+
+func TestSwitchingTheProductOwnerOffRefusesMessagesAndLetsARunningTurnFinish(t *testing.T) {
+	e := newPOE2E(t)
+	e.hold()
+	id, _ := e.startThread("question")
+	eventuallyPO(t, "the turn to run", func() string {
+		if e.thread(id).Thread.Turn != "running" {
+			return "not running"
+		}
+		return ""
+	})
+	if status, _ := e.post("update_product_owner", map[string]any{"project_id": e.project, "enabled": false}, nil); status != 200 {
+		t.Fatal("switch off failed")
+	}
+	if status, code := e.send(id, "more"); status != 409 || code != "PRODUCT_OWNER_OFF" {
+		t.Errorf("send while off = %d %s, want 409 PRODUCT_OWNER_OFF", status, code)
+	}
+	e.release()
+	e.waitTurn(id, "idle")
+	if m := e.messages(id); len(m) != 2 || m[1].Text != "answer to: question" {
+		t.Errorf("the running turn did not finish: %+v", m)
+	}
+
+	if status, _ := e.post("update_product_owner", map[string]any{"project_id": e.project, "enabled": true}, nil); status != 200 {
+		t.Fatal("switch on failed")
+	}
+	if status, code := e.send(id, "back on"); status != 200 {
+		t.Errorf("send after switching on = %d %s", status, code)
+	}
+	e.waitTurn(id, "idle")
+}
+
+func TestAMessageIsRefusedWhenItIsEmptyTooLongOrCarriesTooManyAttachments(t *testing.T) {
+	e := newPOE2E(t)
+	id, _ := e.startThread("q")
+	e.waitTurn(id, "idle")
+	for name, body := range map[string]map[string]any{
+		"empty":       {"thread_id": id, "message": ""},
+		"too long":    {"thread_id": id, "message": strings.Repeat("x", 20001)},
+		"attachments": {"thread_id": id, "message": "hi", "attachment_ids": []string{"a", "b", "c", "d", "e", "f"}},
+	} {
+		if status, code := e.post("send_product_owner_message", body, nil); status != 400 || code != "INVALID_INPUT" {
+			t.Errorf("%s = %d %s, want 400 INVALID_INPUT", name, status, code)
+		}
+	}
+	if status, code := e.send("nope", "hi"); status != 404 || code != "THREAD_NOT_FOUND" {
+		t.Errorf("unknown thread = %d %s", status, code)
+	}
+}
+
+func TestTwoTabsFollowingAThreadSeeTheSameItemsInTheSameOrder(t *testing.T) {
+	e := newPOE2E(t)
+	second := followPOFeed(t, e.srv.URL, e.project)
+	id, _ := e.startThread("both of you")
+	e.waitTurn(id, "idle")
+
+	items := func(f *poFeed) string {
+		var seen []string
+		for _, c := range f.of("product_owner_thread_item") {
+			it, _ := c["item"].(map[string]any)
+			seen = append(seen, fmt.Sprintf("%v:%v:%v", it["item_id"], it["streaming"], it["text"]))
+		}
+		return strings.Join(seen, "\n")
+	}
+	eventuallyPO(t, "both tabs to have the items", func() string {
+		a, b := items(e.feed), items(second)
+		if a == "" || a != b {
+			return "first tab:\n" + a + "\nsecond tab:\n" + b
+		}
+		return ""
+	})
+}
