@@ -460,5 +460,5 @@ func readOnlySection(branch string) string {
 	return "## Read-only access\n\nThis session has read-only access to its worktree, on branch " + branch + ". " +
 		"You can read files and run builds and tests there. You cannot write or delete a file in the worktree, stage, commit or change the branch: " +
 		"the sandbox refuses it, and an \"Operation not permitted\" from a write is that refusal, not a fault to work around. " +
-		"Another session shares this worktree and may be writing in it. Report what you find in your reply; if a change is needed, say so and leave it to a session with write access."
+		"Another session shares this worktree and may be writing in it. Report what you find in task documents or comments; if a change is needed, say so and leave it to a session with write access."
 }

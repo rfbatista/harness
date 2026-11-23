@@ -294,6 +294,7 @@ func (s *Service) ResumeInteractive(ctx context.Context, req ports.ResumeRequest
 	}
 	cfg := s.sessionConfig(sess.ID, sess.WorkingDir, sess.Model, nil, permission, ag, subject, sess.ZoneID, s.sessionRole(ctx, sess.ID), sess.RepositoryID)
 	withReadOnlyAccess(&cfg, sess.Access, sess.Branch)
+	s.withSharedWorktree(ctx, &cfg, sess.ID, sess.WorkspaceID, sess.Access, sess.Branch, sess.WorkingDir)
 	cleanup, err := s.withShell(sess.ID, sess.RepositoryID, subject, &cfg, ag.cleanup)
 	if err != nil {
 		return nil, ports.AgentSpec{}, err
