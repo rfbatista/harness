@@ -1,10 +1,11 @@
 import type { Server, Tool, ToolState, Usage } from "../../domain/session-context";
-import type { GroupHeading, ToolRow, ToolSection, ToolsGroup } from "./context-view-model";
+import type { HeadingBase, ToolRow, ToolSection, ToolsGroup } from "./context-view-model";
+import { countLabel, matches } from "./search";
 
 const STATE_LABEL: Record<ToolState, string> = { allowed: "allowed", on_demand: "on demand", hidden: "hidden", refused: "refused" };
 
 /** Claude Code's tools first, then each MCP server's, in the order the servers were attached. */
-export function toolsGroup(heading: GroupHeading, tools: readonly Tool[], servers: readonly Server[], usage: Usage): ToolsGroup {
+export function toolsGroup(heading: HeadingBase, tools: readonly Tool[], servers: readonly Server[], usage: Usage, query: string): ToolsGroup {
   const builtIn = tools.filter((t) => t.source === "claude_code");
   const names = [...servers.map((s) => s.name), ...tools.filter((t) => t.source === "mcp").map((t) => t.server)];
   const sections: ToolSection[] = [];
@@ -16,7 +17,11 @@ export function toolsGroup(heading: GroupHeading, tools: readonly Tool[], server
     const rows = [...own.map((t) => row(t, short(t.name, name), usage)), ...hidden.map((n) => row({ name: n, source: "mcp", server: name, state: "hidden" }, short(n, name), usage))];
     if (rows.length > 0) sections.push(section(name, rows));
   }
-  return { ...heading, count: String(sections.reduce((n, s) => n + s.rows.length, 0)), sections };
+  const all = sections.flatMap((s) => s.rows).length;
+  // A section is searched by its rows and by the server's name, so "github" shows all of github's tools.
+  const shown = sections.map((s) => (matches(query, s.title) ? s : { ...s, rows: s.rows.filter((r) => matches(query, r.name, r.fullName, r.stateLabel)) })).filter((s) => s.rows.length > 0);
+  const total = shown.reduce((n, s) => n + s.rows.length, 0);
+  return { ...heading, count: countLabel(query, total, all), noMatch: query !== "" && total === 0, sections: shown.map((s) => ({ ...s, count: countLabel(query, s.rows.length, sections.find((x) => x.title === s.title)!.rows.length) })) };
 }
 
 const section = (title: string, rows: ToolRow[]): ToolSection => ({ title, count: String(rows.length), rows });

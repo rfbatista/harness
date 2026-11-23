@@ -11,6 +11,7 @@ export function InstructionsView({ group, presenter }: { group: InstructionsGrou
             <button type="button" className="[ summary-row ]" aria-expanded={row.open} onClick={() => presenter.togglePiece(row.id)}>
               <span className="[ name ]">{row.title}</span>
               <span className="[ muted ]">{row.source}</span>
+              {row.matchedInText && <span className="[ badge ]">matches in text</span>}
               {row.version !== "" && <span className="[ badge ]">{row.version}</span>}
               <span className="[ muted ]">{row.size}</span>
             </button>

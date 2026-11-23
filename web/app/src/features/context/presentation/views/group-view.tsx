@@ -13,7 +13,7 @@ export function GroupView({ heading, danger = false, onToggle, children }: { hea
           </span>
         </button>
       </h3>
-      {heading.open && <div id={id}>{children}</div>}
+      {heading.open && <div id={id}>{heading.noMatch ? <p className="[ no-match ]">No match</p> : children}</div>}
     </section>
   );
 }

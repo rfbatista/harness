@@ -2,12 +2,18 @@
 
 export type GroupKey = "instructions" | "tools" | "servers" | "skills" | "hooks" | "changes";
 
-export interface GroupHeading {
+/** What a group's builder is given: the group's own identity and whether it is open. */
+export interface HeadingBase {
   readonly key: GroupKey;
   readonly title: string;
-  /** The count on the heading, e.g. "5". */
-  readonly count: string;
   readonly open: boolean;
+}
+
+export interface GroupHeading extends HeadingBase {
+  /** The count on the heading: "5", or "2 of 5" while a search filters the rows. */
+  readonly count: string;
+  /** A search is on and nothing in the group matches it. */
+  readonly noMatch: boolean;
 }
 
 export type FullTextState = "idle" | "loading" | "failed" | "done";
@@ -22,6 +28,8 @@ export interface InstructionRow {
   /** "1.2 KB · ≈300 tokens". */
   readonly size: string;
   readonly open: boolean;
+  /** The search matched only inside the piece's text. */
+  readonly matchedInText: boolean;
   /** The text on show: the first 4 KB, or all of it once fetched. */
   readonly text: string;
   /** "Show all" is offered: the text is cut and the rest is not loaded yet. */
@@ -101,6 +109,12 @@ export interface HookRow {
 
 export interface HooksGroup extends GroupHeading {
   readonly rows: readonly HookRow[];
+}
+
+export interface SearchViewModel {
+  readonly query: string;
+  /** Rises each time the person asks for the search box ("/"): the view focuses it on a change. */
+  readonly focusRequest: number;
 }
 
 export interface ContextGroups {

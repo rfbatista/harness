@@ -8,7 +8,8 @@ import type { Entry, Facts, SessionContext } from "../../domain/session-context"
 import { hooksGroup, skillOrder, skillsGroup } from "./skills-group";
 import { serversGroup } from "./servers-group";
 import { toolsGroup } from "./tools-group";
-import type { ContextGroups, GroupKey } from "./context-view-model";
+import { normalize } from "./search";
+import type { ContextGroups, GroupKey, SearchViewModel } from "./context-view-model";
 import { closedPiece, instructionsGroup, type PieceState } from "./instructions-group";
 
 export type ContextStatus = "idle" | "loading" | "ready" | "unrecorded" | "not_found" | "error";
@@ -23,6 +24,7 @@ export interface ContextViewModel {
   /** What to tell the person in the unrecorded, not-found and error states. */
   readonly message: string;
   readonly facts: readonly FactRow[];
+  readonly search: SearchViewModel;
   /** The groups below the facts; null until the context is ready. */
   readonly groups: ContextGroups | null;
 }
@@ -32,7 +34,9 @@ const UNRECORDED = "This session started before the harness recorded its context
 /** Hooks start collapsed; every other group starts open. */
 const DEFAULT_OPEN: Record<GroupKey, boolean> = { instructions: true, tools: true, servers: true, skills: true, hooks: false, changes: true };
 
-const idle: ContextViewModel = { status: "idle", message: "", facts: [], groups: null };
+const NO_SEARCH: SearchViewModel = { query: "", focusRequest: 0 };
+
+const idle: ContextViewModel = { status: "idle", message: "", facts: [], groups: null, search: NO_SEARCH };
 
 export function factRows(f: Facts): FactRow[] {
   return [
@@ -61,6 +65,8 @@ export class ContextPresenter extends Presenter<ContextViewModel> {
   readonly #toggled = new Set<GroupKey>();
   readonly #pieces = new Map<string, PieceState>();
   readonly #copied = new Set<string>();
+  #query = "";
+  #focusRequest = 0;
   /** Each entry's skill order, fixed the first time it is shown. */
   readonly #skillOrders = new Map<string, string[]>();
 
@@ -99,18 +105,18 @@ export class ContextPresenter extends Presenter<ContextViewModel> {
   }
 
   async #load(): Promise<void> {
-    this.set({ status: "loading", message: "", facts: [], groups: null });
+    this.set({ status: "loading", message: "", facts: [], groups: null, search: NO_SEARCH });
     try {
       this.#context = await loadContext(this.#source, this.#sessionId);
     } catch (err) {
       if (!(err instanceof ContextSourceError)) throw err;
-      if (err.code === "SESSION_NOT_FOUND") this.set({ status: "not_found", message: "This session no longer exists.", facts: [], groups: null });
-      else if (err.code === "BAD_RESPONSE") this.set({ status: "error", message: "The harness server sent an unexpected answer for this session's context.", facts: [], groups: null });
-      else this.set({ status: "error", message: "The context could not be loaded.", facts: [], groups: null });
+      if (err.code === "SESSION_NOT_FOUND") this.set({ status: "not_found", message: "This session no longer exists.", facts: [], groups: null, search: NO_SEARCH });
+      else if (err.code === "BAD_RESPONSE") this.set({ status: "error", message: "The harness server sent an unexpected answer for this session's context.", facts: [], groups: null, search: NO_SEARCH });
+      else this.set({ status: "error", message: "The context could not be loaded.", facts: [], groups: null, search: NO_SEARCH });
       return;
     }
     const latest = this.#context.entries.at(-1);
-    if (!this.#context.recorded || !latest) this.set({ status: "unrecorded", message: UNRECORDED, facts: [], groups: null });
+    if (!this.#context.recorded || !latest) this.set({ status: "unrecorded", message: UNRECORDED, facts: [], groups: null, search: NO_SEARCH });
     else this.#render();
   }
 
@@ -132,25 +138,44 @@ export class ContextPresenter extends Presenter<ContextViewModel> {
     return DEFAULT_OPEN[key] !== this.#toggled.has(key);
   }
 
-  #heading(key: GroupKey, title: string, count: number) {
-    return { key, title, count: String(count), open: this.#isOpen(key) };
+  #heading(key: GroupKey, title: string) {
+    return { key, title, open: this.#isOpen(key) };
   }
 
   #render(): void {
     const entry = this.#entry();
     if (!entry) return;
+    const query = normalize(this.#query);
     this.set({
       status: "ready",
       message: "",
       facts: factRows(entry.facts),
+      search: { query: this.#query, focusRequest: this.#focusRequest },
       groups: {
-        instructions: instructionsGroup(this.#heading("instructions", "Instructions", entry.instructions.length), entry.instructions, this.#pieces),
-        tools: toolsGroup(this.#heading("tools", "Tools", 0), entry.tools, entry.servers, this.#context!.usage),
-        servers: serversGroup(this.#heading("servers", "MCP servers", entry.servers.length), entry.servers, this.#copied),
-        skills: skillsGroup(this.#heading("skills", "Skills", entry.skills.length), entry.skills, this.#skillOrderOf(entry), this.#context!.usage),
-        hooks: hooksGroup(this.#heading("hooks", "Hooks", entry.hooks.length), entry.hooks),
+        instructions: instructionsGroup(this.#heading("instructions", "Instructions"), entry.instructions, this.#pieces, query),
+        tools: toolsGroup(this.#heading("tools", "Tools"), entry.tools, entry.servers, this.#context!.usage, query),
+        servers: serversGroup(this.#heading("servers", "MCP servers"), entry.servers, this.#copied, query),
+        skills: skillsGroup(this.#heading("skills", "Skills"), entry.skills, this.#skillOrderOf(entry), this.#context!.usage, query),
+        hooks: hooksGroup(this.#heading("hooks", "Hooks"), entry.hooks, query),
       },
     });
+  }
+
+  /** The person types in the search box. */
+  search(query: string): void {
+    this.#query = query;
+    if (this.viewModel.status === "ready") this.#render();
+  }
+
+  /** Esc in the search box. */
+  clearSearch(): void {
+    this.search("");
+  }
+
+  /** "/": asks the view to focus the search box. */
+  focusSearch(): void {
+    this.#focusRequest += 1;
+    if (this.viewModel.status === "ready") this.#render();
   }
 
   /** The person flips a group open or closed. */

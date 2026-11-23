@@ -1,10 +1,11 @@
 import type { Attached, Server } from "../../domain/session-context";
-import type { GroupHeading, ServerRow, ServersGroup } from "./context-view-model";
+import type { HeadingBase, ServerRow, ServersGroup } from "./context-view-model";
+import { countLabel, matches } from "./search";
 
 const ATTACHED_LABEL: Record<Attached, string> = { built_in: "Built in", token_saver: "Token saver", agent: "Agent", project: "Project", mode: "Mode" };
 const STATUS_LABEL = { connected: "connected", failed: "failed", unknown: "status unknown" } as const;
 
-export function serversGroup(heading: GroupHeading, servers: readonly Server[], copied: ReadonlySet<string>): ServersGroup {
+export function serversGroup(heading: HeadingBase, servers: readonly Server[], copied: ReadonlySet<string>, query: string): ServersGroup {
   const rows = servers.map((s): ServerRow => {
     const failed = s.status === "failed";
     return {
@@ -19,5 +20,7 @@ export function serversGroup(heading: GroupHeading, servers: readonly Server[], 
       copied: copied.has(s.name),
     };
   });
-  return { ...heading, danger: rows.some((r) => r.failed), rows };
+  const shown = rows.filter((r) => matches(query, r.name, r.attached, r.attachedReason, r.statusLabel));
+  // The failure count stays the group's, whatever the search hides.
+  return { ...heading, count: countLabel(query, shown.length, rows.length), noMatch: query !== "" && shown.length === 0, danger: rows.some((r) => r.failed), rows: shown };
 }

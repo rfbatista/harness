@@ -1,5 +1,6 @@
 import type { Skill, SkillSource, Usage } from "../../domain/session-context";
-import type { GroupHeading, HookRow, HooksGroup, SkillRow, SkillsGroup } from "./context-view-model";
+import type { HeadingBase, HookRow, HooksGroup, SkillRow, SkillsGroup } from "./context-view-model";
+import { countLabel, matches } from "./search";
 
 const SOURCE_LABEL: Record<SkillSource, string> = { mode: "Mode", repository: "Repository", agent: "Agent", built_in: "Built in" };
 
@@ -15,7 +16,7 @@ export function skillOrder(skills: readonly Skill[], usage: Usage): string[] {
   return [...invoked, ...skills.filter((s) => used(s) === 0)].map((s) => s.name);
 }
 
-export function skillsGroup(heading: GroupHeading, skills: readonly Skill[], order: readonly string[], usage: Usage): SkillsGroup {
+export function skillsGroup(heading: HeadingBase, skills: readonly Skill[], order: readonly string[], usage: Usage, query: string): SkillsGroup {
   const byName = new Map(skills.map((s) => [s.name, s]));
   const rank = new Map(order.map((name, i) => [name, i]));
   // A skill the order has not seen (none today) goes last.
@@ -24,9 +25,12 @@ export function skillsGroup(heading: GroupHeading, skills: readonly Skill[], ord
     const use = usage.skills.get(s.name);
     return { name: s.name, source: SOURCE_LABEL[s.source], description: s.description, invoked: use ? `invoked ×${use.count}` : "" };
   });
-  return { ...heading, rows };
+  const shown = rows.filter((r) => matches(query, r.name, r.source, r.description));
+  return { ...heading, count: countLabel(query, shown.length, rows.length), noMatch: query !== "" && shown.length === 0, rows: shown };
 }
 
-export function hooksGroup(heading: GroupHeading, hooks: readonly { event: string; matcher: string; rule: string }[]): HooksGroup {
-  return { ...heading, rows: hooks.map((h): HookRow => ({ event: h.event, matcher: h.matcher, rule: h.rule })) };
+export function hooksGroup(heading: HeadingBase, hooks: readonly { event: string; matcher: string; rule: string }[], query: string): HooksGroup {
+  const rows = hooks.map((h): HookRow => ({ event: h.event, matcher: h.matcher, rule: h.rule }));
+  const shown = rows.filter((r) => matches(query, r.event, r.matcher, r.rule));
+  return { ...heading, count: countLabel(query, shown.length, rows.length), noMatch: query !== "" && shown.length === 0, rows: shown };
 }
