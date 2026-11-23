@@ -67,3 +67,23 @@ func TestCodeWorkerIsBuiltBesideTheApp(t *testing.T) {
 		t.Fatalf("worker entry missing: %v", err)
 	}
 }
+
+// The React client builds through gohydrate: one island, the top bar, and the
+// browser's composition root, written beside the other bundles.
+func TestIslandsAreBuiltThroughGohydrate(t *testing.T) {
+	opts := islandOptions("/repo", false)
+	if len(opts.Islands) != 1 || opts.Islands[0].Name != "top-bar" || opts.Islands[0].ServerEntry != "/repo/web/app/src/islands/top-bar.server.tsx" {
+		t.Fatalf("islands = %+v", opts.Islands)
+	}
+	if opts.ClientEntry != "/repo/web/app/src/main.client.tsx" || opts.ResolveDir != "/repo/web/app" || opts.OutDir != "/repo/"+outDir {
+		t.Fatalf("island build options = %+v", opts)
+	}
+	if !opts.Minify || islandOptions("/repo", true).Minify {
+		t.Fatal("production minifies; dev does not")
+	}
+	for _, p := range []string{opts.Islands[0].ServerEntry, opts.ClientEntry} {
+		if _, err := os.Stat("../.." + strings.TrimPrefix(p, "/repo")); err != nil {
+			t.Fatalf("island entry missing: %v", err)
+		}
+	}
+}

@@ -32,7 +32,7 @@ The Go server serves it (templ pages in `internal/adapter/in/web`):
 
 ```bash
 make air                  # builds the web client first, then http://127.0.0.1:8080/
-make web                  # templ generate + bundle (go run ./cmd/webbuild)
+make web                  # templ generate + npm ci in web/app + bundle (go run ./cmd/webbuild); needs Node and npm
 make web-watch            # rebundle on every change, beside `make air`
 go test ./internal/adapter/in/web/   # page tests + browser suite + page boot in headless Chrome
 ```

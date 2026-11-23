@@ -4,6 +4,7 @@ import (
 	"crypto/sha256"
 	"embed"
 	"encoding/hex"
+	"encoding/json"
 	"io/fs"
 	"net/http"
 	"strings"
@@ -21,6 +22,9 @@ var static embed.FS
 type Assets struct {
 	files  fs.FS
 	hashes map[string]string
+	// client is the React islands' browser bundle, from the manifest gohydrate
+	// wrote; "" when `make web` has not built it.
+	client string
 }
 
 // NewAssets reads the embedded bundles.
@@ -42,7 +46,44 @@ func newAssets(files fs.FS) (*Assets, error) {
 		sum := sha256.Sum256(data)
 		a.hashes[name] = hex.EncodeToString(sum[:6])
 	}
+	a.readManifest()
 	return a, nil
+}
+
+// readManifest names the island client bundle. A missing manifest, or one that
+// names a file that is not there, leaves the islands unbuilt.
+func (a *Assets) readManifest() {
+	data, err := fs.ReadFile(a.files, "manifest.json")
+	if err != nil {
+		return
+	}
+	var m struct {
+		Client struct {
+			JS string `json:"js"`
+		} `json:"client"`
+	}
+	if json.Unmarshal(data, &m) != nil || m.Client.JS == "" {
+		return
+	}
+	bundle, err := fs.ReadFile(a.files, m.Client.JS)
+	if err != nil {
+		return
+	}
+	sum := sha256.Sum256(bundle)
+	a.hashes[m.Client.JS] = hex.EncodeToString(sum[:6])
+	a.client = m.Client.JS
+}
+
+// IslandsBuilt reports whether the React islands' client bundle is present.
+func (a *Assets) IslandsBuilt() bool { return a.client != "" }
+
+// ClientBundleURL is the cache-busting URL of the islands' client bundle, ""
+// when it is not built.
+func (a *Assets) ClientBundleURL() string {
+	if a.client == "" {
+		return ""
+	}
+	return a.URL(a.client)
 }
 
 // Built reports whether the app bundles are present. The document

@@ -5,6 +5,8 @@
 //	web/src/app.css       → internal/adapter/in/web/static/app.css (design system + xterm.css)
 //	web/src/document.css  → internal/adapter/in/web/static/document.css (what an HTML task document may link)
 //	web/src/code-worker.js → internal/adapter/in/web/static/code-worker.js (the code view's worker, a classic script)
+//	web/app (React)       → internal/adapter/in/web/static/islands.server.js, islands-<hash>.js and manifest.json,
+//	                        built by gohydrate (run `npm ci` in web/app first; `make web` does)
 //
 // Bare imports resolve to the vendored files in web/vendor (vendors). It also writes
 // web/test/all.js, the list of every *.test.js the browser test page runs.
@@ -29,6 +31,7 @@ import (
 	"syscall"
 
 	"github.com/evanw/esbuild/pkg/api"
+	"github.com/rfbatista/gohydrate"
 )
 
 const (
@@ -90,7 +93,14 @@ func run(watch, dev bool) error {
 		if err := report(api.Build(docOpts)); err != nil {
 			return err
 		}
-		return report(api.Build(workerOpts))
+		if err := report(api.Build(workerOpts)); err != nil {
+			return err
+		}
+		return buildIslands(root, dev)
+	}
+	// The islands are built once; rerun webbuild after changing web/app.
+	if err := buildIslands(root, dev); err != nil {
+		return err
 	}
 
 	for _, o := range []api.BuildOptions{opts, docOpts, workerOpts} {
@@ -156,6 +166,32 @@ func workerOptions(root string, dev bool) api.BuildOptions {
 	o.EntryNames = "code-worker"
 	o.Format = api.FormatIIFE
 	return o
+}
+
+// islandOptions builds the React client through gohydrate: the top bar's server
+// entry, which the server renders in goja, and the browser's composition root.
+// The bundles land beside the Alpine ones, under their own names.
+func islandOptions(root string, dev bool) gohydrate.IslandBuildOptions {
+	app := filepath.Join(root, "web", "app")
+	return gohydrate.IslandBuildOptions{
+		Islands:     []gohydrate.Island{{Name: "top-bar", ServerEntry: filepath.Join(app, "src", "islands", "top-bar.server.tsx")}},
+		ClientEntry: filepath.Join(app, "src", "main.client.tsx"),
+		ResolveDir:  app,
+		OutDir:      filepath.Join(root, outDir),
+		Minify:      !dev,
+	}
+}
+
+func buildIslands(root string, dev bool) error {
+	if _, err := os.Stat(filepath.Join(root, "web", "app", "node_modules")); err != nil {
+		return errors.New("web/app has no node_modules; run `npm ci` in web/app (make web does)")
+	}
+	manifest, err := gohydrate.BuildIslands(islandOptions(root, dev))
+	if err != nil {
+		return fmt.Errorf("islands: %w", err)
+	}
+	fmt.Println("wrote", outDir+"/"+manifest.Client.JS, "and the island server bundle")
+	return nil
 }
 
 // report fails the build on any error or warning: a warning in a bundle we

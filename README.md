@@ -1,8 +1,12 @@
 # Harness
 
+## Build dependencies
+
+Go, plus Node and npm for the React web client in `web/app`. `make web` runs `npm ci` there and bundles the React islands through gohydrate (a `replace` in `go.mod` points to the local checkout); Node runs only at build time, never when the server serves a request.
+
 ## Checks
 
-`make check` builds, vets and runs the tests with the race detector. It is what to run before calling work done.
+`make check` builds, vets and runs the tests with the race detector, then runs the React client's type check, lint and tests (`npm run typecheck`, `npm run lint`, `npm test` in `web/app`). It is what to run before calling work done.
 
 ### Page time
 
