@@ -13,14 +13,19 @@ import (
 
 type fakeAttribution struct {
 	ports.Orchestration
-	session string
-	err     error
-	asked   string
+	session  string
+	worktree *ports.CheckedWorktree
+	err      error
+	asked    string
 }
 
-func (f *fakeAttribution) CommitAttribution(_ context.Context, ws string) (string, error) {
+func (f *fakeAttribution) CommitAttribution(_ context.Context, ws string) (ports.CommitAttribution, error) {
 	f.asked = ws
-	return f.session, f.err
+	out := ports.CommitAttribution{SessionID: f.session}
+	if f.worktree != nil {
+		out.RepositoryID, out.ProjectID, out.Dir = f.worktree.RepositoryID, f.worktree.ProjectID, f.worktree.Dir
+	}
+	return out, f.err
 }
 
 type recordingRules struct {
@@ -68,10 +73,19 @@ func TestAWorktreesCommitEndpointFailsTheCommitOnABlockingRuleAndRefusesAWorktre
 		t.Errorf("blocking rule: %d %s", rec.Code, rec.Body)
 	}
 
-	who.err = &domain.StructuredError{Code: "SESSION_NOT_FOUND", Message: "no session with write access is on this worktree"}
+	// A worktree no session is on is still checked, as itself.
+	who.session, who.worktree = "", &ports.CheckedWorktree{RepositoryID: "r1", ProjectID: "p1", Dir: "/w"}
+	rules.verdict, rules.checks = ports.ArchitectureVerdict{}, nil
+	if rec := postCommit(t, h, WorktreeArchitecturePath("ws1")+"/commit", "a.go"); rec.Code != http.StatusOK ||
+		len(rules.checks) != 1 || rules.checks[0].SessionID != "" || rules.checks[0].Worktree == nil || rules.checks[0].Worktree.Dir != "/w" {
+		t.Errorf("no session: %d %s, checks %+v; want one check carrying the worktree", rec.Code, rec.Body, rules.checks)
+	}
+
+	// An unknown worktree is the one thing that is refused.
+	who.err = &domain.StructuredError{Code: "WORKTREE_NOT_FOUND", Message: "no such worktree"}
 	rules.checks = nil
 	if rec := postCommit(t, h, WorktreeArchitecturePath("ws1")+"/commit", "a.go"); rec.Code != http.StatusNotFound || len(rules.checks) != 0 {
-		t.Errorf("no session: %d %s, checks %v", rec.Code, rec.Body, rules.checks)
+		t.Errorf("unknown worktree: %d %s, checks %v", rec.Code, rec.Body, rules.checks)
 	}
 }
 

@@ -120,17 +120,29 @@ func (h *Handler) handleWorktreeArchitectureCommit(c echo.Context) error {
 	if !ok {
 		return echo.NewHTTPError(http.StatusNotImplemented, "commit attribution is not available")
 	}
-	sessionID, err := who.CommitAttribution(c.Request().Context(), c.Param("id"))
+	attributed, err := who.CommitAttribution(c.Request().Context(), c.Param("id"))
 	if err != nil {
 		return err
 	}
-	c.Response().Header().Set("X-Harness-Attributed-To", sessionID)
-	return h.checkCommit(c, sessionID)
+	if attributed.SessionID == "" {
+		c.Response().Header().Set("X-Harness-Attributed-To", "worktree")
+		return h.checkCommitAs(c, ports.ArchitectureCheck{Worktree: &ports.CheckedWorktree{
+			RepositoryID: attributed.RepositoryID, ProjectID: attributed.ProjectID, Dir: attributed.Dir,
+		}})
+	}
+	c.Response().Header().Set("X-Harness-Attributed-To", attributed.SessionID)
+	return h.checkCommit(c, attributed.SessionID)
 }
 
 // checkCommit runs the commit check for sessionID on the staged paths in the
 // body.
 func (h *Handler) checkCommit(c echo.Context, sessionID string) error {
+	return h.checkCommitAs(c, ports.ArchitectureCheck{SessionID: sessionID})
+}
+
+// checkCommitAs runs the commit check described by check, whose commit fields
+// it fills from the staged paths in the body.
+func (h *Handler) checkCommitAs(c echo.Context, check ports.ArchitectureCheck) error {
 	if !isLoopback(c.Request().RemoteAddr) {
 		return echo.NewHTTPError(http.StatusForbidden, "loopback only")
 	}
@@ -147,9 +159,8 @@ func (h *Handler) checkCommit(c echo.Context, sessionID string) error {
 	if h.archRules == nil {
 		return c.NoContent(http.StatusOK)
 	}
-	v := h.archRules.CheckArchitecture(c.Request().Context(), ports.ArchitectureCheck{
-		SessionID: sessionID, Point: domain.PointBeforeCommit, Tool: "git commit", Paths: paths,
-	})
+	check.Point, check.Tool, check.Paths = domain.PointBeforeCommit, "git commit", paths
+	v := h.archRules.CheckArchitecture(c.Request().Context(), check)
 	if v.Deny != "" {
 		text := v.Deny
 		if v.Context != "" {

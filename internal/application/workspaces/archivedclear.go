@@ -100,60 +100,69 @@ func (s *ArchivedWorktrees) scope(ctx context.Context, sc ports.ArchivedWorktree
 }
 
 // Clear removes the worktrees in scope. A worktree whose workspace row or
-// folder is already gone counts as cleared.
+// folder is already gone counts as cleared. A worktree several sessions share
+// is removed once and counted once; one that must stay is skipped (see
+// blockOf).
 func (s *ArchivedWorktrees) Clear(ctx context.Context, sc ports.ArchivedWorktreesScope) (*ports.ClearResult, error) {
 	found, err := s.scope(ctx, sc)
 	if err != nil {
 		return nil, err
 	}
 	res := &ports.ClearResult{Skipped: []ports.ClearSkip{}}
+	removed := map[string]bool{}
 	for _, f := range found {
 		skip := ports.ClearSkip{SessionID: f.session.ID, TaskID: f.task.ID, TaskTitle: f.task.Title}
-		if !f.session.Status.IsTerminal() {
-			skip.Reason = "running"
+		block, blockErr := s.blockOf(ctx, f.session, found)
+		if block != "" {
+			skip.Reason = block
+			if blockErr != nil {
+				skip.Message = blockErr.Error()
+			}
 			res.Skipped = append(res.Skipped, skip)
 			continue
 		}
-		if reason := s.sharedBlock(ctx, f.session, found); reason != "" {
-			skip.Reason = reason
-			res.Skipped = append(res.Skipped, skip)
-			continue
-		}
+		workspaceID := f.session.WorkspaceID
 		if err := s.clearOne(ctx, f.session); err != nil {
 			skip.Reason, skip.Message = "failed", err.Error()
 			res.Skipped = append(res.Skipped, skip)
 			continue
 		}
-		res.Cleared++
+		if !removed[workspaceID] {
+			removed[workspaceID] = true
+			res.Cleared++
+		}
 	}
 	return res, nil
 }
 
-// sharedBlock says why the session's worktree must stay: "running" while any
-// other session on it runs, "shared" while a session that is not in the clear
-// (another task's) is on it. A worktree no one else is on, the usual case, is
-// not blocked. Sessions in the clear that end up here later find the worktree
-// already cleared and count as cleared.
-func (s *ArchivedWorktrees) sharedBlock(ctx context.Context, sess *domain.Session, found []inScope) string {
+// blockOf says why the session's worktree must stay, "" when it may go: "running"
+// while the session or any other session on the worktree runs, "shared" while a
+// session that is not in the clear (another task's) is on it, and "error" (with
+// the cause) when who is on it cannot be told: the worktree is never removed on
+// a guess. A worktree no one else is on, the usual case, is not blocked.
+func (s *ArchivedWorktrees) blockOf(ctx context.Context, sess *domain.Session, found []inScope) (string, error) {
+	if !sess.Status.IsTerminal() {
+		return "running", nil
+	}
 	cleared := make(map[string]bool, len(found))
 	for _, f := range found {
 		cleared[f.session.ID] = true
 	}
 	others, err := s.d.Sessions.Query(ctx, ports.SessionFilter{WorkspaceID: sess.WorkspaceID})
 	if err != nil {
-		return ""
+		return "error", err
 	}
 	reason := ""
 	for _, o := range others {
 		switch {
 		case o.ID == sess.ID:
 		case !o.Status.IsTerminal():
-			return "running"
+			return "running", nil
 		case !cleared[o.ID]:
 			reason = "shared"
 		}
 	}
-	return reason
+	return reason, nil
 }
 
 func (s *ArchivedWorktrees) clearOne(ctx context.Context, sess *domain.Session) error {
@@ -171,8 +180,9 @@ func (s *ArchivedWorktrees) clearOne(ctx context.Context, sess *domain.Session) 
 	return nil
 }
 
-// Preview counts what a clear would remove, how much of it holds uncommitted
-// changes, and what it would skip as running. It reads git status per
+// Preview counts what a clear would remove (each worktree once), how much of
+// it holds uncommitted changes, and what it would skip as running or shared. It
+// decides as Clear does, so the two cannot disagree. It reads git status per
 // worktree, so only the preview and never a page's first paint asks for it.
 func (s *ArchivedWorktrees) Preview(ctx context.Context, sc ports.ArchivedWorktreesScope) (*ports.ArchivedWorktreesPreview, error) {
 	found, err := s.scope(ctx, sc)
@@ -180,18 +190,29 @@ func (s *ArchivedWorktrees) Preview(ctx context.Context, sc ports.ArchivedWorktr
 		return nil, err
 	}
 	out := &ports.ArchivedWorktreesPreview{}
+	counted := map[string]bool{}
 	for _, f := range found {
-		if !f.session.Status.IsTerminal() {
+		block, blockErr := s.blockOf(ctx, f.session, found)
+		switch block {
+		case "running":
 			out.Running++
-			continue
-		}
-		out.Worktrees++
-		dirty, err := s.dirty(ctx, f.session.WorkspaceID)
-		if err != nil {
-			return nil, err
-		}
-		if dirty {
-			out.Dirty++
+		case "shared":
+			out.Shared++
+		case "error":
+			return nil, blockErr
+		default:
+			if counted[f.session.WorkspaceID] {
+				continue
+			}
+			counted[f.session.WorkspaceID] = true
+			out.Worktrees++
+			dirty, err := s.dirty(ctx, f.session.WorkspaceID)
+			if err != nil {
+				return nil, err
+			}
+			if dirty {
+				out.Dirty++
+			}
 		}
 	}
 	return out, nil

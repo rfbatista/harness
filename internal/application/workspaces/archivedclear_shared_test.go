@@ -2,8 +2,11 @@ package workspaces_test
 
 import (
 	"context"
+	"errors"
 	"os"
 	"testing"
+
+	"gorm.io/gorm"
 
 	"operators-mcp/internal/adapter/out/persistence/sqlite"
 	"operators-mcp/internal/application/planning"
@@ -27,6 +30,13 @@ func (r *recordingRemover) Delete(id string) error {
 	return r.rows.Delete(id)
 }
 
+// cleanStatus reads every worktree as holding no uncommitted change.
+type cleanStatus struct{ ports.GitWorktreeReader }
+
+func (cleanStatus) WorktreeStatus(context.Context, string) (*ports.GitWorktreeStatus, error) {
+	return &ports.GitWorktreeStatus{}, nil
+}
+
 type sharedClearWorld struct {
 	t       *testing.T
 	ctx     context.Context
@@ -37,6 +47,7 @@ type sharedClearWorld struct {
 	ws      *sqlite.WorkspaceRepository
 	remover *recordingRemover
 	clear   *workspaces.ArchivedWorktrees
+	db      *gorm.DB
 }
 
 func newSharedClearWorld(t *testing.T) *sharedClearWorld {
@@ -54,11 +65,11 @@ func newSharedClearWorld(t *testing.T) *sharedClearWorld {
 	if err != nil {
 		t.Fatal(err)
 	}
-	w := &sharedClearWorld{t: t, ctx: context.Background(), project: p.ID, repo: repo.ID, sess: sqlite.NewSessionRepository(db), ws: sqlite.NewWorkspaceRepository(db),
+	w := &sharedClearWorld{db: db, t: t, ctx: context.Background(), project: p.ID, repo: repo.ID, sess: sqlite.NewSessionRepository(db), ws: sqlite.NewWorkspaceRepository(db),
 		plan: planning.NewService(sqlite.NewTicketRepository(db), sqlite.NewDocumentRepository(db), projects)}
 	w.remover = &recordingRemover{rows: w.ws}
 	w.clear = workspaces.NewArchivedWorktrees(workspaces.ArchivedWorktreesDeps{
-		Projects: projects, Tickets: sqlite.NewTicketRepository(db), Sessions: w.sess, Workspaces: w.ws, Remover: w.remover,
+		Projects: projects, Tickets: sqlite.NewTicketRepository(db), Sessions: w.sess, Workspaces: w.ws, Remover: w.remover, Status: cleanStatus{},
 	})
 	return w
 }
@@ -124,8 +135,13 @@ func TestAClearLeavesASharedWorktreeWhileAnySessionOnItIsRunning(t *testing.T) {
 		t.Fatal(err)
 	}
 	res, err = w.clear.Clear(w.ctx, ports.ArchivedWorktreesScope{TaskID: task})
-	if err != nil || res.Cleared != 2 || len(res.Skipped) != 0 {
-		t.Fatalf("clear after both ended: %+v, %v", res, err)
+	if err != nil || res.Cleared != 1 || len(res.Skipped) != 0 {
+		t.Fatalf("clear after both ended: %+v, %v; want the worktree counted once", res, err)
+	}
+	for _, id := range []string{ended, running} {
+		if got := w.sess.Get(id); got.WorktreeClearedAt == nil || got.WorkspaceID != "" {
+			t.Errorf("session %s after the clear: %+v", id, got)
+		}
 	}
 	if len(w.remover.removed) != 1 || w.remover.removed[0] != ws.ID {
 		t.Errorf("removed %v, want the shared worktree once", w.remover.removed)
@@ -169,5 +185,83 @@ func TestAClearOfAWorktreeNoOtherSessionIsOnWorksAsBefore(t *testing.T) {
 	}
 	if got := w.sess.Get(id); got.WorktreeClearedAt == nil || got.WorkspaceID != "" {
 		t.Errorf("session after the clear: %+v", got)
+	}
+}
+
+// failingQuery fails the per-worktree session query the guard makes.
+type failingQuery struct {
+	ports.SessionRepository
+}
+
+func (f failingQuery) Query(ctx context.Context, filter ports.SessionFilter) ([]*domain.Session, error) {
+	if filter.WorkspaceID != "" {
+		return nil, errors.New("the store is down")
+	}
+	return f.SessionRepository.Query(ctx, filter)
+}
+
+func TestAClearThatCannotTellWhoIsOnAWorktreeLeavesItAndSaysSo(t *testing.T) {
+	w := newSharedClearWorld(t)
+	task := w.task("unsure")
+	ws := w.worktree("agent/unsure")
+	id := w.session(task, ws, domain.SessionDone)
+	clear := workspaces.NewArchivedWorktrees(workspaces.ArchivedWorktreesDeps{
+		Projects: sqlite.NewProjectRepository(w.db), Tickets: sqlite.NewTicketRepository(w.db),
+		Sessions: failingQuery{w.sess}, Workspaces: w.ws, Remover: w.remover,
+	})
+
+	res, err := clear.Clear(w.ctx, ports.ArchivedWorktreesScope{TaskID: task})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(w.remover.removed) != 0 || res.Cleared != 0 {
+		t.Fatalf("removed %v, cleared %d; an unanswered question never removes", w.remover.removed, res.Cleared)
+	}
+	if len(res.Skipped) != 1 || res.Skipped[0].SessionID != id || res.Skipped[0].Reason != "error" || res.Skipped[0].Message == "" {
+		t.Errorf("skipped = %+v, want the session skipped as error, with the reason", res.Skipped)
+	}
+}
+
+func TestThePreviewDecidesAsTheClearDoesAndCountsEachWorktreeOnce(t *testing.T) {
+	w := newSharedClearWorld(t)
+	task := w.task("preview")
+	other, err := w.plan.CreateTicket(w.ctx, w.project, "other task", "", domain.TicketStatusDone, "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	// One worktree two ended sessions of the clear share: one removal.
+	both := w.worktree("agent/both")
+	w.session(task, both, domain.SessionDone)
+	w.session(task, both, domain.SessionDone)
+	// One a running session of the clear is on, and one a task outside the clear is on.
+	busy := w.worktree("agent/busy")
+	w.session(task, busy, domain.SessionDone)
+	w.session(task, busy, domain.SessionRunning)
+	mixed := w.worktree("agent/mixed")
+	w.session(task, mixed, domain.SessionDone)
+	w.session(other.ID, mixed, domain.SessionDone)
+
+	scope := ports.ArchivedWorktreesScope{TaskID: task}
+	preview, err := w.clear.Preview(w.ctx, scope)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if preview.Worktrees != 1 || preview.Running != 2 || preview.Shared != 1 {
+		t.Fatalf("preview = %+v, want 1 worktree to remove, 2 sessions skipped as running (the running one and the ended one on its worktree), 1 as shared", preview)
+	}
+
+	res, err := w.clear.Clear(w.ctx, scope)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if res.Cleared != preview.Worktrees || len(w.remover.removed) != preview.Worktrees {
+		t.Errorf("the clear removed %d (cleared %d), the preview said %d", len(w.remover.removed), res.Cleared, preview.Worktrees)
+	}
+	reasons := map[string]int{}
+	for _, s := range res.Skipped {
+		reasons[s.Reason]++
+	}
+	if reasons["running"] != preview.Running || reasons["shared"] != preview.Shared {
+		t.Errorf("the clear skipped %v, the preview said %d running and %d shared", reasons, preview.Running, preview.Shared)
 	}
 }

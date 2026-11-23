@@ -252,23 +252,48 @@ func (s *Service) sessionsOn(workspaceID, except string) []*domain.Session {
 	return out
 }
 
-// CommitAttribution is the session a commit made on the worktree with no
-// session environment (the person's own terminal) is attributed to: the
-// session that cut the worktree while it is recorded, otherwise the newest
-// session with write access. It refuses a worktree with neither.
-func (s *Service) CommitAttribution(ctx context.Context, workspaceID string) (string, error) {
+// CommitAttribution is who a commit made on the worktree with no session
+// environment (the person's own terminal) is checked as, and it never lets one
+// pass unchecked: the session that cut the worktree, whatever its state, while
+// it is recorded; otherwise the newest session with write access; otherwise
+// the newest session at all (a read-only one refuses the commit); and with no
+// session on the worktree, the worktree itself, as a plain agent. Only a
+// worktree no one knows is refused.
+func (s *Service) CommitAttribution(ctx context.Context, workspaceID string) (ports.CommitAttribution, error) {
 	sessions := s.sessionsOn(workspaceID, "")
+	pick := func(of func(*domain.Session) bool) string {
+		for i := len(sessions) - 1; i >= 0; i-- { // newest first
+			if of(sessions[i]) {
+				return sessions[i].ID
+			}
+		}
+		return ""
+	}
+	// The creator is the oldest session that did not join.
 	for _, o := range sessions {
-		if !o.Joined && o.Access.Writes() {
-			return o.ID, nil
+		if !o.Joined {
+			return ports.CommitAttribution{SessionID: o.ID}, nil
 		}
 	}
-	for i := len(sessions) - 1; i >= 0; i-- {
-		if sessions[i].Access.Writes() {
-			return sessions[i].ID, nil
-		}
+	if id := pick(func(o *domain.Session) bool { return o.Access.Writes() }); id != "" {
+		return ports.CommitAttribution{SessionID: id}, nil
 	}
-	return "", &domain.StructuredError{Code: "SESSION_NOT_FOUND", Message: "no session with write access is on this worktree"}
+	if id := pick(func(*domain.Session) bool { return true }); id != "" {
+		return ports.CommitAttribution{SessionID: id}, nil
+	}
+	lookup, _ := s.workspaces.(worktreeLookup)
+	if lookup == nil {
+		return ports.CommitAttribution{}, &domain.StructuredError{Code: "WORKTREE_NOT_FOUND", Message: "no such worktree"}
+	}
+	ws := lookup.Get(ctx, workspaceID)
+	if ws == nil {
+		return ports.CommitAttribution{}, &domain.StructuredError{Code: "WORKTREE_NOT_FOUND", Message: "no such worktree"}
+	}
+	out := ports.CommitAttribution{RepositoryID: ws.RepositoryID, Dir: ws.Path}
+	if repo, err := s.catalog.Repositories.GetRepository(ctx, ws.RepositoryID); err == nil && repo != nil {
+		out.ProjectID = repo.ProjectID
+	}
+	return out, nil
 }
 
 // repairParallelism bounds the git calls a boot repair makes at once.
@@ -310,6 +335,9 @@ func (s *Service) RepairCommitChecks(ctx context.Context) (map[string]error, err
 			continue
 		}
 		live[sess.WorkspaceID] = true
+		// The worktree may still point at the old dir named after the session
+		// (ADR 0040): it stays until the worktree is re-pointed.
+		live[sess.ID] = true
 		if _, ok := groups[sess.WorkspaceID]; !ok {
 			order = append(order, sess.WorkspaceID)
 		}
@@ -334,6 +362,13 @@ func (s *Service) RepairCommitChecks(ctx context.Context) (map[string]error, err
 					bad[sess.ID] = err
 				}
 				mu.Unlock()
+				return
+			}
+			// Pointed at the worktree's dir now: the old per-session dirs go.
+			for _, sess := range group {
+				if sess.ID != ws {
+					_ = os.RemoveAll(s.CommitCheckDir(sess.ID))
+				}
 			}
 		}()
 	}

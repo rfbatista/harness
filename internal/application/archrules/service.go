@@ -78,8 +78,7 @@ type who struct {
 // resolve answers the session's record, or false when no rule applies to it:
 // no such session, no repository or worktree, or no saved record. An error
 // says the record could not be read.
-func (s *Service) resolve(ctx context.Context, sessionID string) (who, bool, error) {
-	sess := s.d.Sessions.Get(sessionID)
+func (s *Service) resolve(ctx context.Context, sess *domain.Session) (who, bool, error) {
 	if sess == nil || sess.RepositoryID == "" || sess.WorkingDir == "" {
 		return who{}, false, nil
 	}
@@ -109,7 +108,13 @@ func (s *Service) CheckArchitecture(ctx context.Context, c ports.ArchitectureChe
 	if v, refused := s.readOnlyRefusal(c); refused {
 		return v
 	}
-	w, ok, err := s.resolve(ctx, c.SessionID)
+	sess := s.d.Sessions.Get(c.SessionID)
+	if sess == nil && c.Worktree != nil {
+		// No session is on the worktree: it is checked as a plain agent, which
+		// has the narrowest rights.
+		sess = &domain.Session{RepositoryID: c.Worktree.RepositoryID, ProjectID: c.Worktree.ProjectID, WorkingDir: c.Worktree.Dir}
+	}
+	w, ok, err := s.resolve(ctx, sess)
 	if err != nil {
 		return ports.ArchitectureVerdict{Context: "Architecture rules could not be checked: the saved architecture could not be read."}
 	}

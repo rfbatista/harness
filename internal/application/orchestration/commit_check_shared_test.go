@@ -2,15 +2,16 @@ package orchestration
 
 import (
 	"context"
+	"errors"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"slices"
 	"strings"
 	"testing"
-	"time"
 
 	"operators-mcp/internal/domain"
+	"operators-mcp/internal/ports"
 )
 
 // The commit check of a shared worktree (ADR 0105): one hooks dir per
@@ -218,29 +219,48 @@ func TestTheHookPostsToTheCommittingSessionsEndpointAndFallsBackToTheWorktrees(t
 	}
 }
 
-func TestACommitWithNoSessionEnvironmentIsAttributedToTheCreatorElseTheNewestWriteSession(t *testing.T) {
+func TestACommitWithNoSessionEnvironmentIsAlwaysCheckedAsSomeone(t *testing.T) {
 	w := newSharedWorld(t)
 	dir := w.worktree(t, "ws1")
-	base := time.Now().Add(-time.Hour)
-	w.record(t, "creator", "ws1", dir, func(s *domain.Session) { s.CreatedAt = base })
+	prov := w.svc.workspaces.(*fakeProvisioner)
+	prov.created = append(prov.created, &domain.Workspace{ID: "ws1", RepositoryID: "r1", Path: dir})
+	w.record(t, "creator", "ws1", dir, func(s *domain.Session) { s.Status = domain.SessionStopped })
 	w.record(t, "joiner", "ws1", dir, func(s *domain.Session) { s.Joined = true })
 	w.record(t, "reader", "ws1", dir, func(s *domain.Session) { s.Joined, s.Access = true, domain.AccessReadOnly })
+	ctx := context.Background()
+	asked := func() ports.CommitAttribution {
+		t.Helper()
+		got, err := w.svc.CommitAttribution(ctx, "ws1")
+		if err != nil {
+			t.Fatal(err)
+		}
+		return got
+	}
 
-	got, err := w.svc.CommitAttribution(context.Background(), "ws1")
-	if err != nil || got != "creator" {
-		t.Fatalf("attribution = %q, %v; want the creator", got, err)
+	if got := asked(); got.SessionID != "creator" {
+		t.Fatalf("attributed to %+v, want the creator, which still counts once it has ended", got)
 	}
 	if err := w.svc.sessions.Delete("creator"); err != nil {
 		t.Fatal(err)
 	}
-	if got, err = w.svc.CommitAttribution(context.Background(), "ws1"); err != nil || got != "joiner" {
-		t.Fatalf("attribution = %q, %v; want the newest write session, never the read-only one", got, err)
+	if got := asked(); got.SessionID != "joiner" {
+		t.Fatalf("attributed to %+v, want the newest write session, never the read-only one", got)
 	}
-	for _, id := range []string{"joiner", "reader"} {
-		_ = w.svc.sessions.Delete(id)
+	if err := w.svc.sessions.Delete("joiner"); err != nil {
+		t.Fatal(err)
 	}
-	if _, err := w.svc.CommitAttribution(context.Background(), "ws1"); err == nil {
-		t.Error("a worktree with no session was attributed to someone")
+	if got := asked(); got.SessionID != "reader" {
+		t.Fatalf("attributed to %+v, want the read-only session: its check refuses the commit, so it never passes unchecked", got)
+	}
+	if err := w.svc.sessions.Delete("reader"); err != nil {
+		t.Fatal(err)
+	}
+	got := asked()
+	if got.SessionID != "" || got.RepositoryID != "r1" || got.Dir != dir {
+		t.Fatalf("with no session on the worktree the answer is %+v, want the worktree itself, checked with no agent rights", got)
+	}
+	if _, err := w.svc.CommitAttribution(ctx, "ws-unknown"); err == nil {
+		t.Error("a worktree nobody knows was answered")
 	}
 }
 
@@ -251,7 +271,7 @@ func TestBootRepairGuardsEachWorktreeOnceAndSweepsWhatNoSessionRecords(t *testin
 	w.record(t, "a2", "ws1", d1, func(s *domain.Session) { s.Joined = true })
 	w.record(t, "b1", "ws2", d2, nil)
 	stale := filepath.Join(w.root, "ws-gone")
-	oldLayout := filepath.Join(w.root, "a1-old-session-dir")
+	oldLayout := filepath.Join(w.root, "a1") // the old layout named it after the session
 	for _, d := range []string{stale, oldLayout} {
 		if err := os.MkdirAll(d, 0o755); err != nil {
 			t.Fatal(err)
@@ -279,6 +299,47 @@ func TestBootRepairGuardsEachWorktreeOnceAndSweepsWhatNoSessionRecords(t *testin
 		if r := w.svc.commitCheckReason(id); r != "" {
 			t.Errorf("%s unguarded after repair: %s", id, r)
 		}
+	}
+}
+
+// failingInstall refuses to point one worktree at its hooks dir.
+type failingInstall struct {
+	*recordingGuard
+	worktree string
+}
+
+func (f failingInstall) Install(ctx context.Context, worktree, hooksDir string) (string, error) {
+	if worktree == f.worktree {
+		return "", errors.New("git config is read-only")
+	}
+	return f.recordingGuard.Install(ctx, worktree, hooksDir)
+}
+
+func TestAnOldPerSessionHooksDirGoesOnlyOnceItsWorktreeIsPointedAtTheNewOne(t *testing.T) {
+	w := newSharedWorld(t)
+	good, bad := w.worktree(t, "ws-good"), w.worktree(t, "ws-bad")
+	w.record(t, "s-good", "ws-good", good, nil)
+	w.record(t, "s-bad", "ws-bad", bad, nil)
+	w.svc.CommitGuard = failingInstall{w.guard, bad}
+	for _, id := range []string{"s-good", "s-bad", "s-gone"} {
+		if err := os.MkdirAll(filepath.Join(w.root, id), 0o755); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	failed, err := w.svc.RepairCommitChecks(context.Background())
+	if err != nil || failed["s-bad"] == nil || failed["s-good"] != nil {
+		t.Fatalf("repair: %v %v; want only the bad worktree to fail", failed, err)
+	}
+	exists := func(name string) bool { _, err := os.Stat(filepath.Join(w.root, name)); return err == nil }
+	if exists("s-good") {
+		t.Error("the old dir of a session whose worktree was re-pointed is still there")
+	}
+	if !exists("s-bad") {
+		t.Error("the old dir of a session whose worktree could not be re-pointed was removed: its commits would pass unchecked")
+	}
+	if exists("s-gone") {
+		t.Error("the dir of a session with no worktree is still there")
 	}
 }
 

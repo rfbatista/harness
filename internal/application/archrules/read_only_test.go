@@ -66,3 +66,28 @@ func TestAReadOnlySessionsWritesAndCommitsAreDeniedWithAReasonThatNamesReadOnlyA
 		}
 	}
 }
+
+// askedRecords remembers which repository's record the check read.
+type askedRecords struct{ repositories []string }
+
+func (a *askedRecords) Current(_ context.Context, repositoryID string) (*repoarch.Current, error) {
+	a.repositories = append(a.repositories, repositoryID)
+	return nil, nil
+}
+
+func TestACommitInAWorktreeNoSessionIsOnIsCheckedAgainstItsRepositorysRecord(t *testing.T) {
+	records := &askedRecords{}
+	s := NewService(Deps{Records: records, Sessions: sessionsByID{}})
+	v := s.CheckArchitecture(context.Background(), ports.ArchitectureCheck{
+		Point: domain.PointBeforeCommit, Tool: "git commit", Paths: []string{"a.go"},
+		Worktree: &ports.CheckedWorktree{RepositoryID: "r9", ProjectID: "p1", Dir: t.TempDir()},
+	})
+	if v.Deny != "" || len(records.repositories) != 1 || records.repositories[0] != "r9" {
+		t.Errorf("verdict %+v, records read %v; want the worktree's repository read once", v, records.repositories)
+	}
+	records.repositories = nil
+	s.CheckArchitecture(context.Background(), ports.ArchitectureCheck{Point: domain.PointBeforeCommit, Tool: "git commit", Paths: []string{"a.go"}})
+	if len(records.repositories) != 0 {
+		t.Errorf("a check naming no session and no worktree read %v", records.repositories)
+	}
+}
