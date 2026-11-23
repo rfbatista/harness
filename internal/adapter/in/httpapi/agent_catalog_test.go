@@ -59,7 +59,7 @@ func (f *catalogFixture) restart() {
 		agentcatalog.WithUsage(sqlite.NewAgentUsageRepository(f.db)),
 		agentcatalog.WithProber(f.prober))
 	f.cat = cat
-	f.router = NewRouter(NewHandler(Services{Catalog: cat, ProjectFeed: quietProjectFeed{}}))
+	f.router = NewRouter(NewHandler(Services{Catalog: cat, Settings: app.Settings, ProjectFeed: quietProjectFeed{}}))
 }
 
 // fakeProber answers a probe with what a test set, and keeps what it was asked.

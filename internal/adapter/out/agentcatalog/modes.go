@@ -10,7 +10,7 @@ import (
 // the server's settings, one key per session mode.
 type ModeAgentSettings interface {
 	Setting(key string) string
-	UpdateSettings(values map[string]string) (map[string]string, error)
+	UpdateModeAgentSettings(values map[string]string) (map[string]string, error)
 }
 
 // WithModeAgents gives the catalog the settings that hold the mode agents.
@@ -72,7 +72,7 @@ func (c *Catalog) SetModeAgents(_ context.Context, in domain.SetModeAgents) (*do
 		return nil, invalid("state", "state is all or selected")
 	}
 	value := domain.ModeAgentsValue(in.State, names, in.NoAgent)
-	if _, err := c.modes.UpdateSettings(map[string]string{domain.ModeAgentsKey(mode): value}); err != nil {
+	if _, err := c.modes.UpdateModeAgentSettings(map[string]string{domain.ModeAgentsKey(mode): value}); err != nil {
 		return nil, err
 	}
 	c.last = nil // the latest change is no longer the latest write
@@ -194,7 +194,7 @@ func (c *Catalog) applyMode(m *modeEdit, forward bool) error {
 	}
 	cur := domain.ModeAgentsEntry(m.mode, c.readMode)
 	value := domain.ModeAgentsValue(domain.AgentsSelected, list, cur.NoAgent)
-	_, err := c.modes.UpdateSettings(map[string]string{domain.ModeAgentsKey(m.mode): value})
+	_, err := c.modes.UpdateModeAgentSettings(map[string]string{domain.ModeAgentsKey(m.mode): value})
 	return err
 }
 

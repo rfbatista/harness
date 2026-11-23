@@ -140,7 +140,9 @@ func ModeAgentNotAvailableMessage(modeName, agent string) string {
 		" sessions. Only the person can change which agents a mode accepts, in the server settings."
 }
 
-func validateModeAgentsSetting(key, value string) error {
+// ValidateModeAgentsSetting checks the value of a mode agents settings key
+// before the catalog stores it.
+func ValidateModeAgentsSetting(key, value string) error {
 	if value == "" {
 		return nil
 	}

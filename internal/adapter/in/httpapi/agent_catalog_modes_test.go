@@ -323,3 +323,22 @@ func TestAgentSave_AWriteThatTouchesModeListsPublishesTheirPaths(t *testing.T) {
 		t.Fatalf("event = %s", got)
 	}
 }
+
+func TestModeAgents_TheGenericSettingsWriteRefusesTheirKeysAndPointsToSetModeAgents(t *testing.T) {
+	f := catalogWithSkills(t)
+	for _, key := range []string{"agents.mode.review", "agents.mode.default"} {
+		got := f.post("/api/update_settings", map[string]any{"settings": map[string]string{key: `{"agents":["ghost"],"no_agent":true}`}}, 400)
+		if got["code"] != "INVALID_INPUT" || !strings.Contains(got["error"].(string), "set_mode_agents") {
+			t.Fatalf("%s: body = %v", key, got)
+		}
+	}
+	// A clear is refused too: the write that resets the setting is set_mode_agents.
+	f.post("/api/update_settings", map[string]any{"settings": map[string]string{"agents.mode.qa": ""}}, 400)
+	for _, e := range modeEntries(t, f) {
+		if e["state"] != "all" {
+			t.Fatalf("a refused write changed %v", e)
+		}
+	}
+	// The dedicated write still works.
+	setMode(f, "review", "selected", false, "zeta")
+}

@@ -64,7 +64,9 @@ func ValidateSetting(key, value string) error {
 			return validateBranchBlockSetting(key, value)
 		}
 		if key == ModeAgentsKey(mode) {
-			return validateModeAgentsSetting(key, value)
+			// Only set_mode_agents writes it: it checks the names, drops
+			// duplicates, announces the change and takes the catalog's lock.
+			return &StructuredError{Code: "INVALID_INPUT", Message: key + " is set with set_mode_agents, not with update_settings"}
 		}
 	}
 	return validateProviderSetting(key, value)
