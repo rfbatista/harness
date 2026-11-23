@@ -145,6 +145,12 @@ export interface EntryPicker {
   readonly selected: string;
 }
 
+/** A link to where a setting that shaped this context lives. */
+export interface ContextLink {
+  readonly label: string;
+  readonly href: string;
+}
+
 /** The link from a delegate's context to the agents whiteboard with this session selected. */
 export interface WhiteboardLink {
   readonly label: string;

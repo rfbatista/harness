@@ -2,7 +2,7 @@ import { describe, test } from "node:test";
 import assert from "node:assert/strict";
 import { memoryClipboard } from "../../infrastructure/memory-clipboard";
 import { memoryContextSource } from "../../infrastructure/memory-context-source";
-import { contextFromJson, contextJson, entryJson, factsJson } from "../../testing/fixtures";
+import { contextFromJson, contextJson, entryJson, factsJson, serverJson } from "../../testing/fixtures";
 import { ContextPresenter } from "./context-presenter";
 
 const flush = () => new Promise<void>((resolve) => setTimeout(resolve, 0));
@@ -16,7 +16,49 @@ const setup = async (role: string, whiteboardHref?: string) => {
   return presenter;
 };
 
+describe("settings links", () => {
+  const withEntry = async (entry: ReturnType<typeof entryJson>, projectId = "p1") => {
+    const source = memoryContextSource();
+    source.serve(contextFromJson(contextJson({ session_id: "s 1", entries: [entry] })));
+    const p = new ContextPresenter(source, "s 1", { clipboard: memoryClipboard(), projectId });
+    p.open();
+    await flush();
+    return p.viewModel.links.map((l) => [l.label, l.href]);
+  };
+
+  test("point at the pages where the agent, its servers and the project's MCP settings are changed", async () => {
+    const links = await withEntry(
+      entryJson({
+        facts: factsJson({ agent: "react developer" }),
+        mcp_servers: [serverJson({ name: "github", attached: "agent" }), serverJson({ name: "postgres", attached: "project" }), serverJson({ name: "rtk", attached: "token_saver" }), serverJson({ name: "task", attached: "built_in" })],
+      }),
+    );
+    assert.deepEqual(links, [
+      ["Agent react developer in the catalog", "/agents/react%20developer"],
+      ["MCP server github in the catalog", "/agents/mcp/github"],
+      ["Project MCP settings", "/projects/p1/settings"],
+      ["Token savers", "/token-savers"],
+      ["Sandbox tab", "?session=s%201&tab=sandbox"],
+      ["History", "?session=s%201&tab=history"],
+    ]);
+  });
+
+  test("a target with no page has no link: no agent, no project, no such server", async () => {
+    const links = await withEntry(entryJson({ facts: factsJson({ agent: "" }), mcp_servers: [serverJson({ attached: "project" }), serverJson({ attached: "mode" })] }), "");
+    assert.deepEqual(links.map(([label]) => label), ["Sandbox tab", "History"]);
+  });
+});
+
 describe("links", () => {
+  test("names the parent agent on the whiteboard link", async () => {
+    const source = memoryContextSource();
+    source.serve(contextFromJson(contextJson({ entries: [entryJson({ facts: factsJson({ role: "delegate" }) })] })));
+    const p = new ContextPresenter(source, "s1", { clipboard: memoryClipboard(), whiteboardHref: "/w", parent: "software-architect" });
+    p.open();
+    await flush();
+    assert.equal(p.viewModel.whiteboard?.label, "Delegate of software-architect · see on the whiteboard");
+  });
+
   test("a delegate links to the whiteboard with itself selected, once the whiteboard's address is known", async () => {
     const p = await setup("delegate", "/projects/p1/tasks/t1?view=whiteboard&session=s1");
     assert.deepEqual(p.viewModel.whiteboard, { label: "Delegate · see on the whiteboard", href: "/projects/p1/tasks/t1?view=whiteboard&session=s1" });

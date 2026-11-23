@@ -12,14 +12,16 @@ export class ContextPropsDto {
     readonly live: boolean,
     /** The group a link asked to open ("instructions"), "" for none. */
     readonly group: string,
+    /** The agent of the session that started this one; "" when a person did. */
+    readonly parent: string,
   ) {}
 
   static fromJSON(raw: unknown): ContextPropsDto {
     const from = object(NAME, raw);
-    return new ContextPropsDto(string(NAME, from, "session_id"), string(NAME, from, "project_id"), boolean(NAME, from, "live"), optionalString(NAME, from, "group") ?? "");
+    return new ContextPropsDto(string(NAME, from, "session_id"), string(NAME, from, "project_id"), boolean(NAME, from, "live"), optionalString(NAME, from, "group") ?? "", optionalString(NAME, from, "parent") ?? "");
   }
 
   toJSON(): Wire {
-    return { session_id: this.session_id, project_id: this.project_id, live: this.live, group: this.group };
+    return { session_id: this.session_id, project_id: this.project_id, live: this.live, group: this.group, parent: this.parent };
   }
 }

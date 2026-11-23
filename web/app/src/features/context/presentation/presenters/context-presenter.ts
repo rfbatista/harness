@@ -9,8 +9,9 @@ import { hooksGroup, skillOrder, skillsGroup } from "./skills-group";
 import { serversGroup } from "./servers-group";
 import { toolsGroup } from "./tools-group";
 import { changesGroup, changeText, clockTime } from "./changes-group";
+import { contextLinks } from "./context-links";
 import { normalize } from "./search";
-import type { ContextGroups, EntryPicker, GroupKey, SearchViewModel, WhiteboardLink } from "./context-view-model";
+import type { ContextGroups, EntryPicker, GroupKey, SearchViewModel, WhiteboardLink, ContextLink } from "./context-view-model";
 import { closedPiece, instructionsGroup, type PieceState } from "./instructions-group";
 
 export type ContextStatus = "idle" | "loading" | "ready" | "unrecorded" | "not_found" | "error";
@@ -35,6 +36,8 @@ export interface ContextViewModel {
   readonly picker: EntryPicker | null;
   /** Present for a delegate when the whiteboard's address is known; hidden otherwise. */
   readonly whiteboard: WhiteboardLink | null;
+  /** Where to change what shaped this context; a fix reaches the next session. Targets with no page are left out. */
+  readonly links: readonly ContextLink[];
   /** A group a link asked for: the view brings it into sight. Rises with each ask. */
   readonly reveal: { readonly group: GroupKey; readonly request: number } | null;
   /** The session has ended: nothing here changes any more. */
@@ -63,9 +66,11 @@ export interface ContextDeps {
   readonly timeZone?: string;
   /** Where the task page shows the agents whiteboard with this session selected. Unset until the whiteboard exists: the link stays hidden. */
   readonly whiteboardHref?: string;
+  /** The agent of the session that started this one; "" when a person did. */
+  readonly parent?: string;
 }
 
-const idle = (ended: boolean): ContextViewModel => ({ status: "idle", message: "", facts: [], groups: null, search: NO_SEARCH, picker: null, whiteboard: null, reveal: null, ended, live: null });
+const idle = (ended: boolean): ContextViewModel => ({ status: "idle", message: "", facts: [], groups: null, search: NO_SEARCH, picker: null, whiteboard: null, links: [], reveal: null, ended, live: null });
 
 export function factRows(f: Facts): FactRow[] {
   return [
@@ -106,6 +111,7 @@ export class ContextPresenter extends Presenter<ContextViewModel> {
   readonly #projectId: string;
   readonly #timeZone: string | undefined;
   readonly #whiteboardHref: string | undefined;
+  readonly #parent: string;
   #reveal: { group: GroupKey; request: number } | null = null;
   readonly #running: boolean;
   #unfollow: (() => void) | null = null;
@@ -115,13 +121,14 @@ export class ContextPresenter extends Presenter<ContextViewModel> {
   #rings: ReadonlySet<string> = new Set();
   #liveLine: LiveLine | null = null;
 
-  constructor(source: ContextSource, sessionId: string, { clipboard, feed, projectId = "", live = true, timeZone, whiteboardHref }: ContextDeps) {
+  constructor(source: ContextSource, sessionId: string, { clipboard, feed, projectId = "", live = true, timeZone, whiteboardHref, parent = "" }: ContextDeps) {
     super(idle(!live));
     this.#running = live;
     this.#feed = feed;
     this.#projectId = projectId;
     this.#timeZone = timeZone;
     this.#whiteboardHref = whiteboardHref;
+    this.#parent = parent;
     this.#clipboard = clipboard;
     this.#source = source;
     this.#sessionId = sessionId;
@@ -148,7 +155,7 @@ export class ContextPresenter extends Presenter<ContextViewModel> {
   }
 
   #show(status: ContextStatus, message: string): void {
-    this.set({ status, message, facts: [], groups: null, search: NO_SEARCH, picker: null, whiteboard: null, reveal: null, ended: !this.#running, live: null });
+    this.set({ status, message, facts: [], groups: null, search: NO_SEARCH, picker: null, whiteboard: null, links: [], reveal: null, ended: !this.#running, live: null });
   }
 
   /** Loads again after a failed load. */
@@ -273,7 +280,8 @@ export class ContextPresenter extends Presenter<ContextViewModel> {
       facts: factRows(entry.facts),
       search: { query: this.#query, focusRequest: this.#focusRequest },
       picker: this.#picker(),
-      whiteboard: entry.facts.role === "delegate" && this.#whiteboardHref ? { label: "Delegate · see on the whiteboard", href: this.#whiteboardHref } : null,
+      whiteboard: entry.facts.role === "delegate" && this.#whiteboardHref ? { label: this.#parent === "" ? "Delegate · see on the whiteboard" : `Delegate of ${this.#parent} · see on the whiteboard`, href: this.#whiteboardHref } : null,
+      links: contextLinks(entry, this.#sessionId, this.#projectId),
       reveal: this.#reveal,
       ended: !this.#running,
       live: this.#liveLine,

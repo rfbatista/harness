@@ -249,7 +249,7 @@ export const sessionsPage = ({
       return [{ key: `${this.selected.id}:${this.selected.stoppable ? "live" : "ended"}`, props: this.contextProps() }];
     },
     contextProps() {
-      return JSON.stringify({ session_id: this.selected.id, project_id: this.projectId, live: this.selected.stoppable, group: this.contextGroup });
+      return JSON.stringify({ session_id: this.selected.id, project_id: this.projectId, live: this.selected.stoppable, group: this.contextGroup, parent: startedBy(this.sessions.find((s) => s.id === this.selectedId), this.sessions, this.agentNames) });
     },
     /**
      * Alt+Shift+C opens the Context tab: the page's, never the agent's, so it is
@@ -624,7 +624,9 @@ export const sessionsPage = ({
       if (openCode) this.detailTab = "code";
       // ?session=<id>&tab=context[&group=instructions] opens the Context tab (ADR 0085's "Instructions it started with" link lands on its Instructions group).
       const query = new URLSearchParams(location?.search ?? "");
-      if (!openCode && query.get("tab") === "context") {
+      const tab = query.get("tab");
+      if (!openCode && ["sandbox", "history"].includes(tab ?? "")) this.detailTab = /** @type {string} */ (tab);
+      if (!openCode && tab === "context") {
         this.detailTab = "context";
         this.contextGroup = query.get("group") ?? "";
       }

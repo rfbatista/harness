@@ -65,7 +65,19 @@ export function ContextView({ presenter }: { presenter: ContextPresenter }) {
         {vm.status === "ready" && vm.groups && <ServersView group={vm.groups.servers} presenter={presenter} />}
         {vm.status === "ready" && vm.groups && <SkillsView group={vm.groups.skills} presenter={presenter} />}
         {vm.status === "ready" && vm.groups && <HooksView group={vm.groups.hooks} presenter={presenter} />}
-        {vm.status === "ready" && <p className="[ muted ]">Nothing here changes the session. A setting you change reaches the next session.</p>}
+        {vm.status === "ready" && (
+          <section className="[ part ]" aria-labelledby="context-links-title">
+            <h3 id="context-links-title">Where to change it</h3>
+            <p className="[ muted ]">Nothing here changes the session. A setting you change reaches the next session.</p>
+            <ul className="[ links ]">
+              {vm.links.map((link) => (
+                <li key={link.href}>
+                  <a href={link.href}>{link.label}</a>
+                </li>
+              ))}
+            </ul>
+          </section>
+        )}
         {vm.status === "ready" && vm.groups && <ChangesView group={vm.groups.changes} presenter={presenter} />}
     </div>
   );
