@@ -5,8 +5,8 @@ import { ContextPropsDto } from "./context-props-dto";
 
 describe("ContextPropsDto", () => {
   test("reads the session, its project, whether it runs and the group to open", () => {
-    const dto = ContextPropsDto.fromJSON({ session_id: "s1", project_id: "p1", live: true, group: "instructions", parent: "architect", extra: 1 });
-    assert.deepEqual(dto.toJSON(), { session_id: "s1", project_id: "p1", live: true, group: "instructions", parent: "architect", focus: false });
+    const dto = ContextPropsDto.fromJSON({ session_id: "s1", project_id: "p1", live: true, group: "instructions", parent: "architect", whiteboard_href: "?view=whiteboard&session=s1", extra: 1 });
+    assert.deepEqual(dto.toJSON(), { session_id: "s1", project_id: "p1", live: true, group: "instructions", parent: "architect", focus: false, whiteboard_href: "?view=whiteboard&session=s1" });
   });
 
   test("a missing group is none", () => {

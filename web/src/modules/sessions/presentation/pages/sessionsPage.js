@@ -92,6 +92,10 @@ export const sessionsPage = ({
     creating: false,
     /** On a narrow screen, the detail is shown in place of the list. */
     detailOpen: false,
+    /** The task's view of its sessions (ADR 0108): "list" or "whiteboard". The agents-view island (React) announces it and keeps the choice per task. */
+    view: "list",
+    /** The board has a session's pane open beside it; with none, the board takes the whole width. */
+    boardPane: false,
     deleting: false,
     /** What each mounted agent terminal last said about itself (terminal-status), by session id. */
     terminalStatuses: {},
@@ -261,7 +265,7 @@ export const sessionsPage = ({
       if (script) script.textContent = panel.props;
     },
     contextProps() {
-      return JSON.stringify({ session_id: this.selected.id, project_id: this.projectId, live: this.selected.stoppable, group: this.contextGroup, focus: this.contextFocus, parent: startedBy(this.sessions.find((s) => s.id === this.selectedId), this.sessions, this.agentNames) });
+      return JSON.stringify({ session_id: this.selected.id, project_id: this.projectId, live: this.selected.stoppable, group: this.contextGroup, focus: this.contextFocus, whiteboard_href: this.hasTask ? `?view=whiteboard&session=${encodeURIComponent(this.selected.id)}` : "", parent: startedBy(this.sessions.find((s) => s.id === this.selectedId), this.sessions, this.agentNames) });
     },
     /**
      * Alt+Shift+C opens the Context tab: the page's, never the agent's, so it is
@@ -279,12 +283,7 @@ export const sessionsPage = ({
         this.showAgent();
         return;
       }
-      this.showContext();
-      // One-shot: the panel written on this flush carries the request; the next flush must not, or a remount (another session, live to ended) would take the focus again.
-      this.contextFocus = true;
-      this.$nextTick(() => {
-        this.contextFocus = false;
-      });
+      this.showContext(true);
     },
     /** A session with a branch has a Merge tab, where a merge into the default branch is offered when it applies. */
     get hasMergeTab() {
@@ -677,6 +676,8 @@ export const sessionsPage = ({
 
       // Alpine has rendered the live list; drop the server-rendered copy.
       this.$nextTick(() => {
+        // The agents whiteboard's view island may have announced the view before this page listened: it says it again.
+        this.$dispatch("whiteboard-page-ready", {});
         for (const node of this.$el.querySelectorAll("[data-ssr]")) node.remove();
         this.ready = true;
       });
@@ -802,11 +803,17 @@ export const sessionsPage = ({
       this.detailTab = "sandbox";
     },
     /** The Context tab: what the session was given, and how it used it. */
-    showContext() {
+    showContext(focus = false) {
       this.leaveCode();
       this.detailTab = "context";
       this.contextGroup = "";
-      this.contextFocus = false;
+      // One-shot (F6): the panel written on this flush carries the request, and the next flush must not, or a remount (another session, live to ended) would take the focus again. A click passes its event, which is no request.
+      this.contextFocus = focus === true;
+      if (this.contextFocus) {
+        this.$nextTick(() => {
+          this.contextFocus = false;
+        });
+      }
     },
     /** The Merge tab: merge the branch into the repository's default branch. */
     showMerge() {
@@ -960,6 +967,10 @@ export const sessionsPage = ({
     },
     /** Back to the list, which takes the focus the Sessions button had. */
     closeDetail() {
+      if (this.view === "whiteboard") {
+        this.boardPane = false;
+        this.$dispatch("whiteboard-select", { session_id: "" });
+      }
       this.detailOpen = false;
       this.$nextTick(() => this.$refs.list?.focus());
     },
@@ -967,6 +978,66 @@ export const sessionsPage = ({
     get expandedAttr() {
       return this.codeExpanded && this.showingCode ? "" : null;
     },
+    /** data-board on the split view: the board is the first side. */
+    get boardAttr() {
+      return this.view === "whiteboard" ? "" : null;
+    },
+    /** data-no-detail on the split view: the board has the whole width until a card opens a pane. */
+    get noPaneAttr() {
+      return this.view === "whiteboard" && !this.boardPane ? "" : null;
+    },
+
+    // ── the agents whiteboard (ADR 0108): the React island and this page talk by events ──
+    /** The island says which view to show, and which session to select in it (the Context tab's "see on the whiteboard" link). */
+    whiteboardView(event) {
+      const { view, session_id: sessionId } = event.detail;
+      this.view = view === "whiteboard" ? "whiteboard" : "list";
+      if (this.view === "list") this.forgetBoardLink();
+      if (this.view === "whiteboard" && sessionId && this.sessions.some((s) => s.id === sessionId)) return this.whiteboardOpen({ detail: { session_id: sessionId, tab: "" } });
+      this.boardPane = false;
+      if (this.view === "whiteboard") this.detailOpen = false;
+    },
+    /** Back on the list: a reload must not reopen the board, so the link's view and session leave the address. */
+    forgetBoardLink() {
+      const query = new URLSearchParams(location?.search ?? "");
+      if (!query.has("view")) return;
+      query.delete("view");
+      query.delete("session");
+      const search = query.toString();
+      history?.replaceState?.(history.state, "", `${location.pathname ?? ""}${search ? `?${search}` : ""}${location.hash ?? ""}`);
+    },
+    /** A card, its Context action or its message pill: the session's pane opens beside the board, on the tab asked for. */
+    whiteboardOpen(event) {
+      const { session_id: id, tab } = event.detail;
+      this.select(id);
+      this.boardPane = true;
+      this.detailOpen = true;
+      if (tab === "context") this.showContext(true);
+      else if (tab === "conversation" && this.selectedRole() !== "") this.showConversation();
+    },
+    /** Esc on the board: the pane closes and the board takes the width. */
+    whiteboardClose() {
+      this.boardPane = false;
+      this.detailOpen = false;
+    },
+    /** The You card, or its edge's pill: the Reviews popover, where a request is answered. */
+    whiteboardReviews() {
+      this.$dispatch("dialog-open", { id: "task-reviews", anchor: globalThis.document?.getElementById("task-reviews-button") });
+    },
+    /** The empty board's New session. */
+    whiteboardNewSession() {
+      this.boardPane = true;
+      this.startCreating();
+    },
+    /** The empty board's Show the list. */
+    whiteboardShowList() {
+      this.$dispatch("whiteboard-set-view", { view: "list" });
+    },
+    /** The board has mounted: tell it which session this page has open beside it. */
+    whiteboardReady() {
+      this.$dispatch("whiteboard-select", { session_id: this.view === "whiteboard" && this.boardPane ? (this.selectedId ?? "") : "" });
+    },
+
     /** data-detail on the split view: present while the detail is open. */
     get detailOpenAttr() {
       return this.detailOpen ? "" : null;

@@ -16,14 +16,16 @@ export class ContextPropsDto {
     readonly parent: string,
     /** The person asked for the tab by key: its search box takes the focus. */
     readonly focus: boolean,
+    /** Where the task page shows the agents whiteboard with this session selected; "" off a task page. */
+    readonly whiteboard_href: string,
   ) {}
 
   static fromJSON(raw: unknown): ContextPropsDto {
     const from = object(NAME, raw);
-    return new ContextPropsDto(string(NAME, from, "session_id"), string(NAME, from, "project_id"), boolean(NAME, from, "live"), optionalString(NAME, from, "group") ?? "", optionalString(NAME, from, "parent") ?? "", from.focus === true);
+    return new ContextPropsDto(string(NAME, from, "session_id"), string(NAME, from, "project_id"), boolean(NAME, from, "live"), optionalString(NAME, from, "group") ?? "", optionalString(NAME, from, "parent") ?? "", from.focus === true, optionalString(NAME, from, "whiteboard_href") ?? "");
   }
 
   toJSON(): Wire {
-    return { session_id: this.session_id, project_id: this.project_id, live: this.live, group: this.group, parent: this.parent, focus: this.focus };
+    return { session_id: this.session_id, project_id: this.project_id, live: this.live, group: this.group, parent: this.parent, focus: this.focus, whiteboard_href: this.whiteboard_href };
   }
 }

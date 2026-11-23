@@ -25,8 +25,12 @@ import { isGroupKey } from "../features/context/presentation/presenters/context-
 import { ContextView } from "../features/context/presentation/views/context-view";
 import { buildTopBar } from "./top-bar-presenters";
 import { TopBarView } from "./top-bar-view";
+import { mountAgentsView, mountWhiteboard } from "./whiteboard-island";
 
 type Dispose = () => void;
+
+/** Islands that read their props themselves, from the page they sit in. */
+const OWN_PROPS = new Set(["agents-view", "agents-whiteboard"]);
 
 /** Mounts the island of `mount` with its `props`; returns what takes it down. */
 /** `fresh`: a swap inserted the mount, with its own props, after the first page load. */
@@ -61,8 +65,8 @@ export function mountIslands(doc: Document): Dispose {
     },
     // The Context tab of the session pane: client-rendered, mounted while the tab is shown.
     "session-context": (mount, props) => {
-      const { session_id, project_id, live, group, parent, focus } = ContextPropsDto.fromJSON(props);
-      const presenter = new ContextPresenter(contextSource, session_id, { clipboard: browserClipboard(win.navigator), feed: contextFeed, projectId: project_id, live, parent });
+      const { session_id, project_id, live, group, parent, focus, whiteboard_href } = ContextPropsDto.fromJSON(props);
+      const presenter = new ContextPresenter(contextSource, session_id, { clipboard: browserClipboard(win.navigator), feed: contextFeed, projectId: project_id, live, parent, whiteboardHref: whiteboard_href === "" ? undefined : whiteboard_href });
       const root = createRoot(mount);
       root.render(<ContextView presenter={presenter} />);
       if (isGroupKey(group)) presenter.openAt(group);
@@ -84,6 +88,8 @@ export function mountIslands(doc: Document): Dispose {
         root.unmount();
       };
     },
+    "agents-view": () => mountAgentsView(win),
+    "agents-whiteboard": (mount) => mountWhiteboard(mount, win, api, feed),
   };
 
   const mounted = new Map<Element, Dispose>();
@@ -94,8 +100,9 @@ export function mountIslands(doc: Document): Dispose {
     const island = islands[name];
     if (!island) return;
     try {
-      // The props script sits beside the mount, inside the same header.
-      mounted.set(el, island(el, readIslandProps(el.parentElement ?? doc, name), fresh));
+      // The props script sits beside the mount, inside the same header; the agents whiteboard islands read the task page's own seed.
+      const props = OWN_PROPS.has(name) ? undefined : readIslandProps(el.parentElement ?? doc, name);
+      mounted.set(el, island(el, props, fresh));
     } catch (err) {
       console.error(`island ${name} was not mounted`, err);
     }
