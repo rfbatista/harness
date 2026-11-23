@@ -1,6 +1,7 @@
 package domain
 
 import (
+	"sort"
 	"time"
 	"unicode/utf8"
 )
@@ -275,8 +276,25 @@ func (c *SessionContext) View(sessionID string) SessionContextView {
 	for skill, u := range c.Usage.Skills {
 		v.Usage.Skills[skill] = u
 	}
+	// Newest first: stored in the order they were found, which is not always
+	// the order they happened (a transcript is read after the fact), so the
+	// reversed list is sorted by time, equal times keeping the later-found first.
 	for i := len(c.Changes) - 1; i >= 0; i-- {
 		v.Changes = append(v.Changes, c.Changes[i])
 	}
+	sort.SliceStable(v.Changes, func(i, j int) bool { return v.Changes[i].At.After(v.Changes[j].At) })
 	return v
+}
+
+// OnDemandTools are the names of the tools any entry says were on demand.
+func (c *SessionContext) OnDemandTools() map[string]bool {
+	out := map[string]bool{}
+	for _, e := range c.Entries {
+		for _, t := range e.Tools {
+			if t.State == ToolOnDemand {
+				out[t.Name] = true
+			}
+		}
+	}
+	return out
 }
