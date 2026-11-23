@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"log/slog"
+	"net/url"
 	"regexp"
 	"slices"
 	"strings"
@@ -132,6 +133,13 @@ func secretRedactor(cfg llmkit.SessionConfig) func(string) string {
 		}
 	}
 	for _, m := range cfg.MCPServers {
+		for _, a := range m.Args {
+			add(a)
+			if _, v, ok := strings.Cut(a, "="); ok { // --token=value
+				add(v)
+			}
+		}
+		addURLSecrets(m.URL, add)
 		for _, v := range m.Env {
 			add(v)
 		}
@@ -182,4 +190,24 @@ func (s *Service) dropRedactor(id string) {
 	s.contextMu.Lock()
 	defer s.contextMu.Unlock()
 	delete(s.redactors, id)
+}
+
+// addURLSecrets adds the parts of a server URL that can carry a credential:
+// its userinfo and its query values.
+func addURLSecrets(raw string, add func(string)) {
+	u, err := url.Parse(raw)
+	if err != nil {
+		return
+	}
+	if u.User != nil {
+		add(u.User.Username())
+		if pw, ok := u.User.Password(); ok {
+			add(pw)
+		}
+	}
+	for _, values := range u.Query() {
+		for _, v := range values {
+			add(v)
+		}
+	}
 }

@@ -183,3 +183,19 @@ func TestSessionContextInit_ARepeatedReportAddsNoChange(t *testing.T) {
 		t.Errorf("mcp_connected changes = %d, want 1", n)
 	}
 }
+
+func TestSessionContextInit_ArgsAndURLSecretsInAnErrorAreStoredWithoutThem(t *testing.T) {
+	svc := contextService(t)
+	storeEntry(t, svc, serversEntry())
+	redact := secretRedactor(llmkit.SessionConfig{MCPServers: []llmkit.MCPServerSpec{{
+		Name: "github", Args: []string{"--token", "arg-secret-1", "--key=arg-secret-2"},
+		URL: "https://user:url-pass-3@host/mcp?access_token=query-secret-4&x=1234",
+	}}})
+	applyInit(t, svc, `{"mcp_servers":[{"name":"github","status":"failed","error":"bad arg-secret-1 arg-secret-2 url-pass-3 query-secret-4"}]}`, redact)
+	b, _ := json.Marshal(contextOf(t, svc, "s1"))
+	for _, leak := range []string{"arg-secret-1", "arg-secret-2", "url-pass-3", "query-secret-4"} {
+		if strings.Contains(string(b), leak) {
+			t.Errorf("stored %q: %s", leak, b)
+		}
+	}
+}

@@ -235,6 +235,7 @@ type Service struct {
 	// (ADR 0099); nil stores nothing.
 	Contexts  ports.SessionContextStore
 	contextMu sync.Mutex
+	loopOnce  sync.Once // starts contextLoop once the service is wired and somebody follows
 	// contextNotes puts a session's context changes on the feed, coalesced.
 	contextNotes *contextNotifier
 	redactors    map[string]func(string) string // by session id: scrubs a headless session's init report
@@ -332,7 +333,6 @@ func NewService(runtime llmkit.Manager, broker *approval.Broker, hub *Hub, sessi
 	s.contextNotes = newContextNotifier(time.Now, func(d time.Duration, f func()) { time.AfterFunc(d, f) }, s.sendContextChange)
 	go s.approvalLoop()
 	go s.expiryLoop()
-	go s.contextLoop()
 	return s
 }
 
