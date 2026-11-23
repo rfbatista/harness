@@ -7,6 +7,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"fmt"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -46,6 +47,7 @@ type poE2E struct {
 	cat     catalog.Catalog
 	po      *productowner.Service
 	sess    ports.SessionRepository
+	store   ports.ProductOwnerStore
 	project string
 	repo    string
 	// fakeDir holds the stand-in claude, its launch log and its gates.
@@ -70,6 +72,7 @@ while IFS= read -r line; do
   n=$((n+1))
   text=$(printf '%s' "$line" | sed -n 's/.*"text":"\([^"]*\)".*/\1/p')
   echo "$text" >> "$dir/received"
+  case "$text" in read:*) printf '%s\n' '{"type":"assistant","session_id":"fake","message":{"role":"assistant","content":[{"type":"tool_use","id":"t1","name":"Read","input":{"file_path":"project/docs/prd.md"}}]}}';; esac
   printf '%s\n' '{"type":"stream_event","session_id":"fake","event":{"type":"content_block_delta","index":0,"delta":{"type":"text_delta","text":"answer to: "}}}'
   while [ -f "$dir/hold" ]; do sleep 0.05; done
   printf '%s\n' '{"type":"stream_event","session_id":"fake","event":{"type":"content_block_delta","index":0,"delta":{"type":"text_delta","text":"'"$text"'"}}}'
@@ -129,7 +132,7 @@ func (e *poE2E) boot() {
 		fx.Supply(e.cfg),
 		PersistenceModule, CatalogModule, PlanningModule, WorkspacesModule,
 		AgentRuntimeModule, TaskChannelModule, TextProcessingModule, ProductOwnerModule,
-		fx.Populate(&e.orch, &e.plan, &e.cat, &e.po, &e.sess),
+		fx.Populate(&e.orch, &e.plan, &e.cat, &e.po, &e.sess, &e.store),
 		fx.NopLogger,
 	)
 	if err := e.app.Start(e.ctx); err != nil {
@@ -664,5 +667,140 @@ func TestAStartWhenClaudeCannotRunIsProductOwnerUnavailableAndNamesWhereToFixIt(
 	_ = json.NewDecoder(res.Body).Decode(&body)
 	if res.StatusCode != 503 || body.Code != "PRODUCT_OWNER_UNAVAILABLE" || body.FixURL == "" {
 		t.Errorf("answer = %d %+v, want 503 PRODUCT_OWNER_UNAVAILABLE with a fix_url", res.StatusCode, body)
+	}
+}
+
+// seedThread stores a thread of n messages directly, the way the service
+// would have: nothing runs for it.
+func (e *poE2E) seedThread(title string, activity time.Time, n int) string {
+	e.t.Helper()
+	id := fmt.Sprintf("seed-%s", title)
+	err := e.store.CreateThread(e.ctx, domain.ProductOwnerThread{ID: id, ProjectID: e.project, SessionID: "none-" + id, Title: title,
+		Turn: domain.ProductOwnerTurnIdle, StartedAt: activity, LastActivityAt: activity})
+	if err != nil {
+		e.t.Fatal(err)
+	}
+	for i := 1; i <= n; i++ {
+		if _, err := e.store.AppendItem(e.ctx, domain.ProductOwnerItem{ThreadID: id, Kind: domain.ProductOwnerItemMessage, At: activity,
+			Author: domain.ProductOwnerAuthorPerson, Text: fmt.Sprintf("message %d", i)}); err != nil {
+			e.t.Fatal(err)
+		}
+	}
+	return id
+}
+
+func TestThreadsListTheMostRecentlyActiveFirstAndKeepTheirTitlesAcrossARestart(t *testing.T) {
+	e := newPOE2E(t)
+	now := time.Now()
+	e.seedThread("oldest", now.Add(-3*time.Hour), 1)
+	e.seedThread("newest", now.Add(-1*time.Minute), 1)
+	e.seedThread("middle", now.Add(-1*time.Hour), 1)
+
+	read := func() []string {
+		var out struct {
+			Threads []struct {
+				ThreadID           string `json:"thread_id"`
+				Title              string `json:"title"`
+				StartedAt          string `json:"started_at"`
+				LastActivityAt     string `json:"last_activity_at"`
+				Turn               string `json:"turn"`
+				PendingHeldActions *int   `json:"pending_held_actions"`
+			} `json:"threads"`
+		}
+		if status, code := e.get("product_owner_threads?project_id="+e.project, &out); status != 200 {
+			t.Fatalf("list = %d %s", status, code)
+		}
+		var titles []string
+		for _, th := range out.Threads {
+			if th.Turn != "idle" || th.StartedAt == "" || th.LastActivityAt == "" || th.PendingHeldActions == nil || *th.PendingHeldActions != 0 {
+				t.Errorf("row = %+v", th)
+			}
+			titles = append(titles, th.Title)
+		}
+		return titles
+	}
+	want := "newest,middle,oldest"
+	if got := strings.Join(read(), ","); got != want {
+		t.Errorf("order = %s, want %s", got, want)
+	}
+	e.restart()
+	if got := strings.Join(read(), ","); got != want {
+		t.Errorf("order after the restart = %s, want %s", got, want)
+	}
+	if status, code := e.get("product_owner_threads?project_id=nope", nil); status != 404 || code != "PROJECT_NOT_FOUND" {
+		t.Errorf("unknown project = %d %s", status, code)
+	}
+}
+
+func TestAThreadOfTwoHundredFiftyItemsIsReadInPagesWithNoGapAndNoRepeat(t *testing.T) {
+	e := newPOE2E(t)
+	id := e.seedThread("long", time.Now(), 250)
+
+	var texts []string
+	before := ""
+	for pages := 0; ; pages++ {
+		var page poThread
+		path := "product_owner_thread?thread_id=" + id
+		if before != "" {
+			path += "&before=" + before
+		}
+		if status, code := e.get(path, &page); status != 200 {
+			t.Fatalf("read = %d %s", status, code)
+		}
+		if len(page.Items) > 100 || len(page.Items) == 0 {
+			t.Fatalf("page %d has %d items", pages, len(page.Items))
+		}
+		if pages == 0 && (!page.HasEarlier || page.Items[len(page.Items)-1].Text != "message 250") {
+			t.Fatalf("the first page = %d items, has_earlier %v, last %q; want the newest 100", len(page.Items), page.HasEarlier, page.Items[len(page.Items)-1].Text)
+		}
+		var texts2 []string
+		for _, it := range page.Items {
+			texts2 = append(texts2, it.Text)
+		}
+		texts = append(texts2, texts...)
+		before = page.Items[0].ItemID
+		if !page.HasEarlier {
+			break
+		}
+		if pages > 5 {
+			t.Fatal("paging does not end")
+		}
+		e.restartIf(pages == 0)
+	}
+	if len(texts) != 250 {
+		t.Fatalf("read %d items in all", len(texts))
+	}
+	for i, text := range texts {
+		if want := fmt.Sprintf("message %d", i+1); text != want {
+			t.Fatalf("item %d = %q, want %q", i, text, want)
+		}
+	}
+	if status, code := e.get("product_owner_thread?thread_id="+id+"&before=nope", nil); status != 400 || code != "INVALID_INPUT" {
+		t.Errorf("a before of no item = %d %s, want 400 INVALID_INPUT", status, code)
+	}
+}
+
+// restartIf restarts the server when cond holds, so a read is taken up again
+// over the stored thread.
+func (e *poE2E) restartIf(cond bool) {
+	e.t.Helper()
+	if cond {
+		e.restart()
+	}
+}
+
+func TestWhatTheProductOwnerReadsLeavesAnActivityLineBeforeItsAnswer(t *testing.T) {
+	e := newPOE2E(t)
+	id, _ := e.startThread("read: the PRD")
+	got := e.waitTurn(id, "idle")
+	var kinds []string
+	for _, it := range got.Items {
+		kinds = append(kinds, it.Kind)
+		if it.Kind == "activity" && it.Text != "Reading project/docs/prd.md" {
+			t.Errorf("activity = %q", it.Text)
+		}
+	}
+	if strings.Join(kinds, ",") != "message,activity,message" {
+		t.Errorf("kinds = %v, want the person's message, the activity, the answer", kinds)
 	}
 }
