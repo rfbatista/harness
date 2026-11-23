@@ -1179,3 +1179,18 @@ test("the You card opens the Reviews popover; the empty board's actions open the
   assert.deepEqual(dispatched.at(-1), { name: "whiteboard-set-view", detail: { view: "list" } });
   instance.destroy();
 });
+
+test("back on the list, the board link's view and session leave the address so a reload does not reopen the board", () => {
+  const replaced = [];
+  const memory = memoryGateway({ projects: ["p1"], sessions: [makeSession({ id: "run" })], now: () => T0 });
+  const el = seededElement({ project_id: "p1", ticket_id: "t1", sessions: [toDTO(makeSession({ id: "run" }))], agent_names: {}, repository_names: {} });
+  const location = { search: "?view=whiteboard&session=run&x=1", pathname: "/projects/p1/tasks/t1", hash: "" };
+  const history = { state: null, replaceState: (state, title, url) => replaced.push(url) };
+  const { instance } = mount(sessionsPage({ gateway: memory.gateway, clock: fixedClock(T0), location, history }), { el });
+  instance.init();
+  board(instance, "whiteboardView", { view: "whiteboard", session_id: "run" });
+  assert.deepEqual(replaced, [], "the board keeps its link while it shows");
+  board(instance, "whiteboardView", { view: "list", session_id: "" });
+  assert.deepEqual(replaced, ["/projects/p1/tasks/t1?x=1"]);
+  instance.destroy();
+});

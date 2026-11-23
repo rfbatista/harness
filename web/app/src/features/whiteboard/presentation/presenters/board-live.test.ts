@@ -77,6 +77,25 @@ describe("a session arrives", () => {
     assert.notDeepEqual(card(presenter, sub.id)?.rect, drawn.find(([id]) => id === sub.id)?.[1]);
   });
 
+  test("a resync that brings a new column does not shift the cards after it", async () => {
+    const sub = session({ role: "delegate", mode: "test", parentSessionId: impl.id });
+    const { presenter, source } = await board([architect, impl, sub]);
+    const drawn = presenter.viewModel.cards.map((c) => [c.id, c.rect] as const);
+    source.setSessions([architect, impl, sub, session({ role: "delegate", mode: "qa", parentSessionId: architect.id })]);
+    source.setStatus("resynced");
+    await settle();
+    for (const [id, rect] of drawn) assert.deepEqual(card(presenter, id)?.rect, rect);
+  });
+
+  test("a deleted session does not shift the cards after it", async () => {
+    const first = session({ role: "delegate", mode: "implement", parentSessionId: architect.id });
+    const second = session({ role: "delegate", mode: "implement", parentSessionId: architect.id });
+    const { presenter, source } = await board([architect, first, second]);
+    const drawn = card(presenter, second.id)!.rect;
+    source.emit({ kind: "session-deleted", id: first.id });
+    assert.deepEqual(card(presenter, second.id)?.rect, drawn);
+  });
+
   test("an event for another task changes nothing", async () => {
     const { presenter, source } = await board();
     source.emit({ kind: "session", session: session({ ticketId: "other" }) });

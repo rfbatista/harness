@@ -362,17 +362,14 @@ export class BoardPresenter extends Presenter<BoardViewModel> {
       return;
     }
     // What changed rings, what is new arrives, nothing moves.
+    const drawn = this.#geometry().rects;
     const known = new Map(this.#sessions.map((s) => [s.id, s]));
-    this.#sessions = sessions.filter((s) => known.has(s.id));
+    this.#sessions = sessions;
+    this.#pinWhatMoved(drawn);
     for (const s of sessions) {
       const before = known.get(s.id);
-      if (before) {
-        this.#sessions = upsertSession(this.#sessions, s);
-        if (visibleState(before) !== visibleState(s)) this.#ring(s.id);
-      } else {
-        this.#sessions = upsertSession(this.#sessions, s);
-        this.#arrive(s, false);
-      }
+      if (!before) this.#arrive(s, false);
+      else if (visibleState(before) !== visibleState(s)) this.#ring(s.id);
     }
     this.#messages = messages;
     this.#reviews = reviews;
@@ -397,9 +394,12 @@ export class BoardPresenter extends Presenter<BoardViewModel> {
       case "session":
         if (event.session.ticketId === this.#deps.ticketId) this.#onSession(event.session);
         break;
-      case "session-deleted":
+      case "session-deleted": {
+        const drawn = this.#geometry().rects;
         this.#sessions = this.#sessions.filter((s) => s.id !== event.id);
+        this.#pinWhatMoved(drawn);
         break;
+      }
       case "message":
         if (event.message.taskId === this.#deps.ticketId) this.#onMessage(event.message);
         break;

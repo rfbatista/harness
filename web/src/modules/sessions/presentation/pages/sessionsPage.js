@@ -916,9 +916,19 @@ export const sessionsPage = ({
     whiteboardView(event) {
       const { view, session_id: sessionId } = event.detail;
       this.view = view === "whiteboard" ? "whiteboard" : "list";
+      if (this.view === "list") this.forgetBoardLink();
       if (this.view === "whiteboard" && sessionId && this.sessions.some((s) => s.id === sessionId)) return this.whiteboardOpen({ detail: { session_id: sessionId, tab: "" } });
       this.boardPane = false;
       if (this.view === "whiteboard") this.detailOpen = false;
+    },
+    /** Back on the list: a reload must not reopen the board, so the link's view and session leave the address. */
+    forgetBoardLink() {
+      const query = new URLSearchParams(location?.search ?? "");
+      if (!query.has("view")) return;
+      query.delete("view");
+      query.delete("session");
+      const search = query.toString();
+      history?.replaceState?.(history.state, "", `${location.pathname ?? ""}${search ? `?${search}` : ""}${location.hash ?? ""}`);
     },
     /** A card, its Context action or its message pill: the session's pane opens beside the board, on the tab asked for. */
     whiteboardOpen(event) {
