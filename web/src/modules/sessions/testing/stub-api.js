@@ -68,7 +68,7 @@ export function stubApi(world) {
             branch: w.branch,
             on_disk: w.onDisk,
             created_by_session_id: w.createdBySessionId,
-            sessions: w.sessions.map((s) => ({ session_id: s.sessionId, agent: s.agent, mode: s.mode, access: s.access, running: s.running })),
+            sessions: w.sessions.map((s) => ({ session_id: s.sessionId, agent: s.agent, mode: s.mode, access: s.access, running: s.running, ended_at: s.endedAt ? s.endedAt.toISOString() : null })),
           })),
         });
       }

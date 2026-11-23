@@ -71,6 +71,14 @@ func TestTheWorktreePickerListsOnlyTheTasksLiveWorktreesWithTheirSessions(t *tes
 	if bySession[creator.ID] != "write/implement" || bySession[joiner.ID] != "read_only/review" {
 		t.Errorf("sessions = %v", bySession)
 	}
+	for _, s := range shared.Sessions {
+		switch {
+		case s.Running && s.EndedAt != nil:
+			t.Errorf("%s runs and has an end time %v", s.SessionID, s.EndedAt)
+		case !s.Running && (s.EndedAt == nil || s.EndedAt.IsZero()):
+			t.Errorf("%s ended and has no end time", s.SessionID)
+		}
+	}
 	if !running[creator.ID] && running[joiner.ID] {
 		t.Errorf("running = %v, want the ended joiner marked ended", running)
 	}

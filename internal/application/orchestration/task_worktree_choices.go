@@ -71,9 +71,14 @@ func (s *Service) TaskWorktreeChoices(ctx context.Context, taskID, repositoryID 
 		if access == "" {
 			access = string(domain.AccessWrite)
 		}
-		w.Sessions = append(w.Sessions, ports.TaskWorktreeSession{
+		entry := ports.TaskWorktreeSession{
 			SessionID: o.ID, Agent: s.agentName(ctx, o.AgentID), Mode: string(o.Mode), Access: access, Running: !o.Status.IsTerminal(),
-		})
+		}
+		if !entry.Running {
+			ended := o.StatusSince
+			entry.EndedAt = &ended
+		}
+		w.Sessions = append(w.Sessions, entry)
 	}
 	slices.Reverse(order)
 	for _, id := range order {

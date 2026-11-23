@@ -5,6 +5,7 @@ import (
 	"net/http"
 	"strings"
 	"testing"
+	"time"
 
 	"operators-mcp/internal/domain"
 	"operators-mcp/internal/ports"
@@ -36,13 +37,14 @@ func (f *fakeLister) TaskWorktreeChoices(_ context.Context, task, repo string) (
 }
 
 func TestHTTP_TaskWorktrees_AnswersThePickersListAsIs(t *testing.T) {
+	ended := time.Date(2026, 11, 22, 20, 0, 0, 0, time.UTC)
 	f := &fakeLister{view: &ports.TaskWorktreeChoices{
 		Policy: ports.TaskWorktreePolicy{TaskOverride: "project"},
 		Worktrees: []ports.TaskWorktreeChoice{{
 			WorktreeID: "ws1", Branch: "agent/work", OnDisk: true, CreatedBySessionID: "s1",
 			Sessions: []ports.TaskWorktreeSession{
 				{SessionID: "s1", Agent: "go-developer", Mode: "implement", Access: "write", Running: true},
-				{SessionID: "s2", Agent: "reviewer", Mode: "review", Access: "read_only"},
+				{SessionID: "s2", Agent: "reviewer", Mode: "review", Access: "read_only", EndedAt: &ended},
 			},
 		}},
 	}}
@@ -63,6 +65,9 @@ func TestHTTP_TaskWorktrees_AnswersThePickersListAsIs(t *testing.T) {
 	}
 	sessions := w["sessions"].([]any)
 	second := sessions[1].(map[string]any)
+	if first := sessions[0].(map[string]any); first["ended_at"] != nil || second["ended_at"] != "2026-11-22T20:00:00Z" {
+		t.Errorf("ended_at = %v and %v, want null while it runs and RFC 3339 once it ended", first["ended_at"], second["ended_at"])
+	}
 	if len(sessions) != 2 || second["access"] != "read_only" || second["running"] != false || second["agent"] != "reviewer" || second["mode"] != "review" {
 		t.Errorf("sessions = %v", sessions)
 	}

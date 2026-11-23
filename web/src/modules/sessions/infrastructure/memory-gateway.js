@@ -120,7 +120,7 @@ export function memoryGateway({ projects = [], sessions = [], repositories = {},
             branch: w.branch,
             onDisk: true,
             createdBySessionId: w.createdBySessionId ?? w.sessions[0]?.sessionId ?? "",
-            sessions: Object.freeze(w.sessions.map((s) => Object.freeze({ ...s }))),
+            sessions: Object.freeze(w.sessions.map((s) => Object.freeze({ endedAt: null, ...s }))),
           }),
         ),
       });

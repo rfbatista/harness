@@ -2309,7 +2309,7 @@ func newSessionForm(form NewSessionForm, lockedMode string) templ.Component {
 			return templ_7745c5c3_Err
 		}
 		if lockedMode == "" {
-			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 191, "<span class=\"[ hint ]\">claude starts in a terminal on the server, on this task's branch.</span>")
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 191, "<span class=\"[ hint ]\" data-join-outcome x-show=\"joining\" x-text=\"joinOutcome\"></span> <span class=\"[ hint ]\" x-show=\"!joining\">claude starts in a terminal on the server, on this task's branch.</span>")
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
@@ -2334,7 +2334,7 @@ func newSessionForm(form NewSessionForm, lockedMode string) templ.Component {
 		var templ_7745c5c3_Var100 templ.SafeURL
 		templ_7745c5c3_Var100, templ_7745c5c3_Err = templ.JoinURLErrs(templ.SafeURL(form.AgentsSettingsHref()))
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `page.templ`, Line: 891, Col: 88}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `page.templ`, Line: 892, Col: 88}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var100))
 		if templ_7745c5c3_Err != nil {
@@ -2372,7 +2372,7 @@ func newSessionForm(form NewSessionForm, lockedMode string) templ.Component {
 				var templ_7745c5c3_Var101 string
 				templ_7745c5c3_Var101, templ_7745c5c3_Err = templ.ResolveAttributeValue(o.ID)
 				if templ_7745c5c3_Err != nil {
-					return templ.Error{Err: templ_7745c5c3_Err, FileName: `page.templ`, Line: 941, Col: 28}
+					return templ.Error{Err: templ_7745c5c3_Err, FileName: `page.templ`, Line: 942, Col: 28}
 				}
 				_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var101)
 				if templ_7745c5c3_Err != nil {
@@ -2385,7 +2385,7 @@ func newSessionForm(form NewSessionForm, lockedMode string) templ.Component {
 				var templ_7745c5c3_Var102 string
 				templ_7745c5c3_Var102, templ_7745c5c3_Err = templ.JoinStringErrs(o.Name)
 				if templ_7745c5c3_Err != nil {
-					return templ.Error{Err: templ_7745c5c3_Err, FileName: `page.templ`, Line: 941, Col: 39}
+					return templ.Error{Err: templ_7745c5c3_Err, FileName: `page.templ`, Line: 942, Col: 39}
 				}
 				_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var102))
 				if templ_7745c5c3_Err != nil {
@@ -2401,7 +2401,7 @@ func newSessionForm(form NewSessionForm, lockedMode string) templ.Component {
 				return templ_7745c5c3_Err
 			}
 		}
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 204, "<div class=\"[ field ]\" data-worktree-field x-show=\"showWorktreePicker\"><label for=\"new-session-worktree\">Run on</label><div class=\"[ dropdown ]\" x-data=\"combobox\"><select id=\"new-session-worktree\" x-model=\"worktreeId\" x-on:change=\"worktreePicked\" aria-describedby=\"new-session-worktree-status new-session-worktree-hint\"><option value=\"\" data-pinned>A new branch</option><template x-for=\"o in worktreeOptions\" x-bind:key=\"o.id\"><option x-bind:value=\"o.id\" x-text=\"o.label\"></option></template></select></div><span class=\"[ error ]\" id=\"new-session-worktree-status\" aria-live=\"polite\" data-worktree-error x-show=\"hasWorktreeError\" x-text=\"worktreeError\"></span> <span class=\"[ hint ]\" id=\"new-session-worktree-hint\" data-worktree-empty x-show=\"noWorktrees\" x-text=\"noWorktreesText\"></span></div><fieldset class=\"[ field ]\" data-access-field x-show=\"joining\"><legend>Access to the worktree</legend><div class=\"[ field ]\" data-inline><input type=\"radio\" id=\"new-session-access-write\" name=\"new-session-access\" value=\"write\" x-bind:checked=\"writeAccess\" x-on:change=\"accessChosen\"> <label for=\"new-session-access-write\">Write</label></div><div class=\"[ field ]\" data-inline><input type=\"radio\" id=\"new-session-access-read-only\" name=\"new-session-access\" value=\"read_only\" x-bind:checked=\"readOnlyAccess\" x-on:change=\"accessChosen\"> <label for=\"new-session-access-read-only\">Read-only</label></div><span class=\"[ hint ]\" x-text=\"accessHint\"></span></fieldset><div class=\"[ field ]\" x-show=\"showBranchFields\"><label for=\"new-session-base\">Branch off</label><div class=\"[ cluster ]\"><div class=\"[ dropdown ]\" x-data=\"combobox\" x-bind:aria-busy=\"branchBusy\" x-bind:data-error=\"branchError\" x-on:dropdown-retry=\"retryBranches\"><select id=\"new-session-base\" x-model=\"baseBranch\" x-bind:disabled=\"branchBusy\" x-bind:aria-invalid=\"baseInvalid\" aria-describedby=\"new-session-base-status new-session-base-hint\"><option value=\"\" data-pinned>The checked-out branch</option> <optgroup label=\"Branches\"><template x-for=\"b in localBranches\" x-bind:key=\"b.name\"><option x-bind:value=\"b.name\" x-text=\"b.name\"></option></template></optgroup><template x-if=\"hasRemoteBranches\"><optgroup label=\"Remote branches\"><template x-for=\"b in remoteBranches\" x-bind:key=\"b.name\"><option x-bind:value=\"b.name\" x-text=\"b.name\"></option></template></optgroup></template></select></div><button type=\"button\" class=\"[ button ]\" data-variant=\"ghost\" data-size=\"sm\" data-fetch-origin x-on:click=\"fetchOrigin\" x-bind:aria-busy=\"fetching\">Fetch from origin</button></div><span class=\"[ error ]\" id=\"new-session-base-status\" aria-live=\"polite\" data-branch-base-status x-show=\"hasBaseStatus\" x-text=\"baseStatus\"></span> <span class=\"[ hint ]\" id=\"new-session-base-hint\" aria-live=\"polite\" x-text=\"baseHint\"></span></div><div class=\"[ field ]\" x-show=\"showBranchFields\"><label for=\"new-session-branch-name\">Branch name</label> <input type=\"text\" id=\"new-session-branch-name\" class=\"[ font-mono text-sm ]\" spellcheck=\"false\" autocomplete=\"off\" x-model=\"branchName\" x-on:input=\"nameTyped\" x-on:focus=\"selectName\" x-bind:aria-invalid=\"nameInvalid\" aria-describedby=\"new-session-branch-name-status new-session-branch-name-hint\"><div class=\"[ cluster ]\" id=\"new-session-branch-name-status\" aria-live=\"polite\" data-branch-name-status x-bind:data-state=\"nameState\"><span x-bind:class=\"nameMessageClass\" x-text=\"nameMessage\"></span><template x-if=\"nameSuggestion\"><button type=\"button\" class=\"[ button ]\" data-variant=\"ghost\" data-size=\"sm\" data-branch-name-suggestion x-on:click=\"useSuggestion\">Use <code x-text=\"nameSuggestion\"></code></button></template></div><span class=\"[ hint ]\" id=\"new-session-branch-name-hint\" x-text=\"nameHint\"></span></div><fieldset class=\"[ field ]\"><legend>Permissions</legend><div class=\"[ field ]\" data-inline><input type=\"radio\" id=\"new-session-permissions-off\" name=\"new-session-permissions\" value=\"off\" x-model=\"autoAccept\"> <label for=\"new-session-permissions-off\">Ask me in the terminal</label></div><div class=\"[ field ]\" data-inline><input type=\"radio\" id=\"new-session-permissions-edits\" name=\"new-session-permissions\" value=\"edits\" x-model=\"autoAccept\"> <label for=\"new-session-permissions-edits\">Accept file edits</label></div><div class=\"[ field ]\" data-inline><input type=\"radio\" id=\"new-session-permissions-all\" name=\"new-session-permissions\" value=\"all\" x-model=\"autoAccept\" aria-describedby=\"new-session-permissions-all-hint\"> <label for=\"new-session-permissions-all\">Accept everything</label></div><span class=\"[ hint ]\" id=\"new-session-permissions-all-hint\">Accept everything runs every command and edit without asking you.</span></fieldset></div><template x-if=\"error\"><div class=\"[ banner ]\" data-tone=\"danger\" role=\"alert\"><div class=\"[ flow ] [ flow-space-3xs ]\"><span x-text=\"error.message\"></span> <span class=\"[ code ]\"><span x-text=\"error.code\"></span> · <span x-text=\"error.next\"></span></span><template x-for=\"link in error.links\"><a href=\"/agent-isolation\" x-bind:href=\"link.href\" x-text=\"link.text\" data-refusal-link></a></template></div></div></template><div class=\"[ cluster ]\"><button type=\"submit\" class=\"[ button ]\" data-variant=\"primary\" x-bind:disabled=\"cannotSubmit\" x-bind:aria-busy=\"submitting\">Start session</button> <span class=\"[ hint ]\" data-start-reason x-show=\"problem\" x-text=\"problem\"></span> <button type=\"button\" class=\"[ button ]\" data-variant=\"ghost\" x-on:click=\"cancel\">Cancel</button></div></form>")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 204, "<template x-if=\"showWorktreePicker\"><fieldset class=\"[ field ]\" data-where-field><legend>Where it works</legend><div class=\"[ where-choice ]\"><label><input type=\"radio\" name=\"new-session-where\" value=\"branch\" x-bind:checked=\"newBranchChosen\" x-on:change=\"whereChosen\"> <span><span class=\"[ t ]\">A new branch</span><br><span class=\"[ d ]\">Cut from a base branch into its own worktree.</span></span></label> <label><input type=\"radio\" name=\"new-session-where\" value=\"worktree\" x-bind:checked=\"existingChosen\" x-bind:disabled=\"noWorktrees\" x-on:change=\"whereChosen\"> <span><span class=\"[ t ]\">An existing worktree</span><br><span class=\"[ d ]\" data-join-card-text x-text=\"joinCardText\"></span></span></label></div></fieldset></template><div class=\"[ field ]\" data-worktree-field x-show=\"joining\"><label for=\"new-session-worktree\">Worktree</label><div class=\"[ dropdown ]\" x-data=\"dropdown\" data-footer=\"Worktrees of this task in this repository, still on disk\"><select id=\"new-session-worktree\" x-model=\"worktreeId\" x-on:change=\"worktreePicked\" aria-describedby=\"new-session-worktree-status new-session-worktree-hint\"><template x-for=\"o in worktreeOptions\" x-bind:key=\"o.id\"><option x-bind:value=\"o.id\" x-bind:data-description=\"o.description\" x-bind:data-meta=\"o.meta\" x-bind:data-tone=\"o.tone\" x-bind:title=\"o.title\" x-text=\"o.label\"></option></template></select></div><span class=\"[ error ]\" id=\"new-session-worktree-status\" aria-live=\"polite\" data-worktree-error x-show=\"hasWorktreeError\" x-text=\"worktreeError\"></span> <span class=\"[ hint ]\" id=\"new-session-worktree-hint\" data-worktree-hint x-text=\"worktreeHint\"></span></div><fieldset class=\"[ field ]\" data-access-field x-show=\"joining\"><legend>Access</legend><div class=\"[ access-choice ]\"><div class=\"[ field ]\" data-inline><input type=\"radio\" id=\"new-session-access-write\" name=\"new-session-access\" value=\"write\" x-bind:checked=\"writeAccess\" x-on:change=\"accessChosen\"> <label for=\"new-session-access-write\">Write <span class=\"[ color-ink-faint weight-regular ]\">· edit and commit on the branch</span></label></div><div class=\"[ field ]\" data-inline><input type=\"radio\" id=\"new-session-access-read-only\" name=\"new-session-access\" value=\"read_only\" x-bind:checked=\"readOnlyAccess\" x-on:change=\"accessChosen\"> <label for=\"new-session-access-read-only\">Read-only <span class=\"[ color-ink-faint weight-regular ]\">· read, build and test; no write</span></label></div></div><span class=\"[ hint cluster ]\" data-access-hint><span x-text=\"accessHint\"></span> <button type=\"button\" class=\"[ button ]\" data-variant=\"ghost\" data-size=\"sm\" data-access-reset x-show=\"accessPicked\" x-on:click=\"resetAccess\">Reset</button></span></fieldset><div class=\"[ field ]\" x-show=\"showBranchFields\"><label for=\"new-session-base\">Branch off</label><div class=\"[ cluster ]\"><div class=\"[ dropdown ]\" x-data=\"combobox\" x-bind:aria-busy=\"branchBusy\" x-bind:data-error=\"branchError\" x-on:dropdown-retry=\"retryBranches\"><select id=\"new-session-base\" x-model=\"baseBranch\" x-bind:disabled=\"branchBusy\" x-bind:aria-invalid=\"baseInvalid\" aria-describedby=\"new-session-base-status new-session-base-hint\"><option value=\"\" data-pinned>The checked-out branch</option> <optgroup label=\"Branches\"><template x-for=\"b in localBranches\" x-bind:key=\"b.name\"><option x-bind:value=\"b.name\" x-text=\"b.name\"></option></template></optgroup><template x-if=\"hasRemoteBranches\"><optgroup label=\"Remote branches\"><template x-for=\"b in remoteBranches\" x-bind:key=\"b.name\"><option x-bind:value=\"b.name\" x-text=\"b.name\"></option></template></optgroup></template></select></div><button type=\"button\" class=\"[ button ]\" data-variant=\"ghost\" data-size=\"sm\" data-fetch-origin x-on:click=\"fetchOrigin\" x-bind:aria-busy=\"fetching\">Fetch from origin</button></div><span class=\"[ error ]\" id=\"new-session-base-status\" aria-live=\"polite\" data-branch-base-status x-show=\"hasBaseStatus\" x-text=\"baseStatus\"></span> <span class=\"[ hint ]\" id=\"new-session-base-hint\" aria-live=\"polite\" x-text=\"baseHint\"></span></div><div class=\"[ field ]\" x-show=\"showBranchFields\"><label for=\"new-session-branch-name\">Branch name</label> <input type=\"text\" id=\"new-session-branch-name\" class=\"[ font-mono text-sm ]\" spellcheck=\"false\" autocomplete=\"off\" x-model=\"branchName\" x-on:input=\"nameTyped\" x-on:focus=\"selectName\" x-bind:aria-invalid=\"nameInvalid\" aria-describedby=\"new-session-branch-name-status new-session-branch-name-hint\"><div class=\"[ cluster ]\" id=\"new-session-branch-name-status\" aria-live=\"polite\" data-branch-name-status x-bind:data-state=\"nameState\"><span x-bind:class=\"nameMessageClass\" x-text=\"nameMessage\"></span><template x-if=\"nameSuggestion\"><button type=\"button\" class=\"[ button ]\" data-variant=\"ghost\" data-size=\"sm\" data-branch-name-suggestion x-on:click=\"useSuggestion\">Use <code x-text=\"nameSuggestion\"></code></button></template></div><span class=\"[ hint ]\" id=\"new-session-branch-name-hint\" x-text=\"nameHint\"></span></div><fieldset class=\"[ field ]\"><legend>Permissions</legend><div class=\"[ field ]\" data-inline><input type=\"radio\" id=\"new-session-permissions-off\" name=\"new-session-permissions\" value=\"off\" x-model=\"autoAccept\"> <label for=\"new-session-permissions-off\">Ask me in the terminal</label></div><div class=\"[ field ]\" data-inline><input type=\"radio\" id=\"new-session-permissions-edits\" name=\"new-session-permissions\" value=\"edits\" x-model=\"autoAccept\"> <label for=\"new-session-permissions-edits\">Accept file edits</label></div><div class=\"[ field ]\" data-inline><input type=\"radio\" id=\"new-session-permissions-all\" name=\"new-session-permissions\" value=\"all\" x-model=\"autoAccept\" aria-describedby=\"new-session-permissions-all-hint\"> <label for=\"new-session-permissions-all\">Accept everything</label></div><span class=\"[ hint ]\" id=\"new-session-permissions-all-hint\">Accept everything runs every command and edit without asking you.</span></fieldset></div><template x-if=\"error\"><div class=\"[ banner ]\" data-tone=\"danger\" role=\"alert\"><div class=\"[ flow ] [ flow-space-3xs ]\"><span x-text=\"error.message\"></span> <span class=\"[ code ]\"><span x-text=\"error.code\"></span> · <span x-text=\"error.next\"></span></span><template x-for=\"link in error.links\"><a href=\"/agent-isolation\" x-bind:href=\"link.href\" x-text=\"link.text\" data-refusal-link></a></template></div></div></template><div class=\"[ cluster ]\"><button type=\"submit\" class=\"[ button ]\" data-variant=\"primary\" x-bind:disabled=\"cannotSubmit\" x-bind:aria-busy=\"submitting\">Start session</button> <span class=\"[ hint ]\" data-start-reason x-show=\"problem\" x-text=\"problem\"></span> <button type=\"button\" class=\"[ button ]\" data-variant=\"ghost\" x-on:click=\"cancel\">Cancel</button></div></form>")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
@@ -2438,7 +2438,7 @@ func NoAgentEnabled(settingsHref, projectName string) templ.Component {
 		var templ_7745c5c3_Var104 templ.SafeURL
 		templ_7745c5c3_Var104, templ_7745c5c3_Err = templ.JoinURLErrs(templ.SafeURL(settingsHref))
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `page.templ`, Line: 1051, Col: 73}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `page.templ`, Line: 1071, Col: 73}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var104))
 		if templ_7745c5c3_Err != nil {
@@ -2451,7 +2451,7 @@ func NoAgentEnabled(settingsHref, projectName string) templ.Component {
 		var templ_7745c5c3_Var105 string
 		templ_7745c5c3_Var105, templ_7745c5c3_Err = templ.JoinStringErrs(projectName)
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `page.templ`, Line: 1051, Col: 120}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `page.templ`, Line: 1071, Col: 120}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var105))
 		if templ_7745c5c3_Err != nil {
@@ -2606,7 +2606,7 @@ func appPanel() templ.Component {
 		var templ_7745c5c3_Var110 string
 		templ_7745c5c3_Var110, templ_7745c5c3_Err = templ.JoinStringErrs(" ")
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `page.templ`, Line: 1111, Col: 57}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `page.templ`, Line: 1131, Col: 57}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var110))
 		if templ_7745c5c3_Err != nil {
@@ -2619,7 +2619,7 @@ func appPanel() templ.Component {
 		var templ_7745c5c3_Var111 string
 		templ_7745c5c3_Var111, templ_7745c5c3_Err = templ.JoinStringErrs(" ")
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `page.templ`, Line: 1113, Col: 60}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `page.templ`, Line: 1133, Col: 60}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var111))
 		if templ_7745c5c3_Err != nil {
@@ -2632,7 +2632,7 @@ func appPanel() templ.Component {
 		var templ_7745c5c3_Var112 string
 		templ_7745c5c3_Var112, templ_7745c5c3_Err = templ.JoinStringErrs(" ")
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `page.templ`, Line: 1151, Col: 130}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `page.templ`, Line: 1171, Col: 130}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var112))
 		if templ_7745c5c3_Err != nil {
@@ -2645,7 +2645,7 @@ func appPanel() templ.Component {
 		var templ_7745c5c3_Var113 string
 		templ_7745c5c3_Var113, templ_7745c5c3_Err = templ.JoinStringErrs(" ")
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `page.templ`, Line: 1156, Col: 57}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `page.templ`, Line: 1176, Col: 57}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var113))
 		if templ_7745c5c3_Err != nil {
@@ -2896,7 +2896,7 @@ func taskNote(v PageView) templ.Component {
 		var templ_7745c5c3_Var120 string
 		templ_7745c5c3_Var120, templ_7745c5c3_Err = templ.JoinStringErrs(" ")
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `page.templ`, Line: 1322, Col: 64}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `page.templ`, Line: 1342, Col: 64}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var120))
 		if templ_7745c5c3_Err != nil {
@@ -2909,7 +2909,7 @@ func taskNote(v PageView) templ.Component {
 		var templ_7745c5c3_Var121 string
 		templ_7745c5c3_Var121, templ_7745c5c3_Err = templ.JoinStringErrs(v.TaskDescription)
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `page.templ`, Line: 1334, Col: 81}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `page.templ`, Line: 1354, Col: 81}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var121))
 		if templ_7745c5c3_Err != nil {
@@ -3028,7 +3028,7 @@ func taskSaversSection(seed tokensavers.Seed) templ.Component {
 		var templ_7745c5c3_Var125 string
 		templ_7745c5c3_Var125, templ_7745c5c3_Err = templ.JoinStringErrs(seed.Lead())
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `page.templ`, Line: 1420, Col: 54}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `page.templ`, Line: 1440, Col: 54}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var125))
 		if templ_7745c5c3_Err != nil {
@@ -3046,7 +3046,7 @@ func taskSaversSection(seed tokensavers.Seed) templ.Component {
 			var templ_7745c5c3_Var126 string
 			templ_7745c5c3_Var126, templ_7745c5c3_Err = templ.ResolveAttributeValue(c.Value)
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `page.templ`, Line: 1434, Col: 29}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `page.templ`, Line: 1454, Col: 29}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var126)
 			if templ_7745c5c3_Err != nil {
@@ -3059,7 +3059,7 @@ func taskSaversSection(seed tokensavers.Seed) templ.Component {
 			var templ_7745c5c3_Var127 string
 			templ_7745c5c3_Var127, templ_7745c5c3_Err = templ.JoinStringErrs(c.Label)
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `page.templ`, Line: 1434, Col: 41}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `page.templ`, Line: 1454, Col: 41}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var127))
 			if templ_7745c5c3_Err != nil {
@@ -3118,7 +3118,7 @@ func taskMenu(v PageView) templ.Component {
 		var templ_7745c5c3_Var129 templ.SafeURL
 		templ_7745c5c3_Var129, templ_7745c5c3_Err = templ.JoinURLErrs(templ.SafeURL(taskDesignHref(v.ProjectID, v.Seed.TicketID)))
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `page.templ`, Line: 1455, Col: 70}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `page.templ`, Line: 1475, Col: 70}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var129))
 		if templ_7745c5c3_Err != nil {
@@ -3131,7 +3131,7 @@ func taskMenu(v PageView) templ.Component {
 		var templ_7745c5c3_Var130 string
 		templ_7745c5c3_Var130, templ_7745c5c3_Err = templ.JoinStringErrs(strconv.Itoa(len(v.Seed.Artifacts)))
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `page.templ`, Line: 1460, Col: 93}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `page.templ`, Line: 1480, Col: 93}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var130))
 		if templ_7745c5c3_Err != nil {
@@ -3149,7 +3149,7 @@ func taskMenu(v PageView) templ.Component {
 			var templ_7745c5c3_Var131 string
 			templ_7745c5c3_Var131, templ_7745c5c3_Err = templ.ResolveAttributeValue(v.Resources.ProjectID)
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `page.templ`, Line: 1466, Col: 44}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `page.templ`, Line: 1486, Col: 44}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var131)
 			if templ_7745c5c3_Err != nil {
@@ -3162,7 +3162,7 @@ func taskMenu(v PageView) templ.Component {
 			var templ_7745c5c3_Var132 string
 			templ_7745c5c3_Var132, templ_7745c5c3_Err = templ.ResolveAttributeValue(v.Resources.TicketID)
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `page.templ`, Line: 1467, Col: 42}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `page.templ`, Line: 1487, Col: 42}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var132)
 			if templ_7745c5c3_Err != nil {
@@ -3175,7 +3175,7 @@ func taskMenu(v PageView) templ.Component {
 			var templ_7745c5c3_Var133 string
 			templ_7745c5c3_Var133, templ_7745c5c3_Err = templ.ResolveAttributeValue(v.Resources.ResourceIDs)
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `page.templ`, Line: 1468, Col: 48}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `page.templ`, Line: 1488, Col: 48}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var133)
 			if templ_7745c5c3_Err != nil {
@@ -3188,7 +3188,7 @@ func taskMenu(v PageView) templ.Component {
 			var templ_7745c5c3_Var134 string
 			templ_7745c5c3_Var134, templ_7745c5c3_Err = templ.ResolveAttributeValue(v.Resources.CommentIDs)
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `page.templ`, Line: 1469, Col: 46}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `page.templ`, Line: 1489, Col: 46}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var134)
 			if templ_7745c5c3_Err != nil {
@@ -3201,7 +3201,7 @@ func taskMenu(v PageView) templ.Component {
 			var templ_7745c5c3_Var135 templ.SafeURL
 			templ_7745c5c3_Var135, templ_7745c5c3_Err = templ.JoinURLErrs(templ.SafeURL(v.Resources.Href))
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `page.templ`, Line: 1471, Col: 62}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `page.templ`, Line: 1491, Col: 62}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var135))
 			if templ_7745c5c3_Err != nil {
@@ -3214,7 +3214,7 @@ func taskMenu(v PageView) templ.Component {
 			var templ_7745c5c3_Var136 string
 			templ_7745c5c3_Var136, templ_7745c5c3_Err = templ.JoinStringErrs(strconv.Itoa(v.Resources.Resources))
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `page.templ`, Line: 1472, Col: 99}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `page.templ`, Line: 1492, Col: 99}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var136))
 			if templ_7745c5c3_Err != nil {

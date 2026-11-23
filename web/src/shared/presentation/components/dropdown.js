@@ -87,6 +87,14 @@ export class ListboxSelect {
     listbox.tabIndex = -1;
     listbox.setAttribute("aria-labelledby", labelId);
     popup.append(listbox);
+    // data-footer on the root: a line under the options that says what the list is.
+    if (root.dataset.footer) {
+      const footer = doc.createElement("footer");
+      const text = doc.createElement("span");
+      text.textContent = root.dataset.footer;
+      footer.append(text);
+      popup.append(footer);
+    }
     this.popup = popup;
     this.listbox = listbox;
     root.append(trigger, popup);

@@ -9,7 +9,7 @@
  */
 
 /** data-tone on an option → the .status dot's data-state. */
-const TONE_STATE = { signal: "running", attention: "waiting", danger: "failed" };
+const TONE_STATE = { signal: "running", attention: "waiting", danger: "failed", done: "done" };
 
 /**
  * The select's options in document order, with their option data.

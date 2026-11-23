@@ -33,6 +33,7 @@
  * @property {string} mode
  * @property {"write"|"read_only"} access
  * @property {boolean} running  false once it ended
+ * @property {Date|null} endedAt  when it ended; null while it runs
  *
  * @typedef {object} TaskWorktree  a worktree the harness made for a session of the task, still on disk
  * @property {string} worktreeId

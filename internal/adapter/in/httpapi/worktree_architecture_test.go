@@ -74,3 +74,15 @@ func TestAWorktreesCommitEndpointFailsTheCommitOnABlockingRuleAndRefusesAWorktre
 		t.Errorf("no session: %d %s, checks %v", rec.Code, rec.Body, rules.checks)
 	}
 }
+
+func TestAWorktreesCommitEndpointAnswersOnlyTheLoopbackAndNamesNothingToOthers(t *testing.T) {
+	who := &fakeAttribution{session: "sess-a"}
+	h := NewHandler(Services{Sessions: who, ArchitectureRules: &recordingRules{}})
+	req := httptest.NewRequest(http.MethodPost, WorktreeArchitecturePath("ws1")+"/commit", strings.NewReader("a.go"))
+	req.RemoteAddr = "203.0.113.9:4000"
+	rec := httptest.NewRecorder()
+	NewRouter(h).ServeHTTP(rec, req)
+	if rec.Code != http.StatusForbidden || who.asked != "" || rec.Header().Get("X-Harness-Attributed-To") != "" {
+		t.Errorf("%d, asked %q, header %q", rec.Code, who.asked, rec.Header().Get("X-Harness-Attributed-To"))
+	}
+}

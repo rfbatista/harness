@@ -36,8 +36,26 @@ const READ_ONLY_MODES = new Set(["review", "qa"]);
 /** The modes that take no worktree of their own to join: an architect and the product brainstorm. */
 const NO_JOIN_MODES = new Set(["architect", "product"]);
 
+/** How each mode is named in the access hint. */
+const MODE_WORDS = { review: "a Reviewer", qa: "QA", test: "a Tester", operate: "an Operator", implement: "an implementer" };
+
+/** What an access allows, in the words the picker uses. */
+const accessWord = (access) => (access === "read_only" ? "read-only" : "write");
+
+/** "ended 2h ago" from the end time; "ended" when the server sent none. */
+export function endedText(endedAt, at) {
+  if (!(endedAt instanceof Date)) return "ended";
+  const minutes = Math.floor((at - endedAt) / 60000);
+  if (minutes < 1) return "ended just now";
+  if (minutes < 60) return `ended ${minutes}m ago`;
+  const hours = Math.floor(minutes / 60);
+  if (hours < 24) return `ended ${hours}h ago`;
+  const days = Math.floor(hours / 24);
+  return days === 1 ? "ended yesterday" : `ended ${days}d ago`;
+}
+
 /** @param {{ gateway: import("../../domain/ports.js").SessionGateway }} deps */
-export const newSession = ({ gateway, debounceMs = 300, location = globalThis.location }) => (projectId = "", ticketId = "", lockedMode = "", bringUnder = []) => withAgentPicker({
+export const newSession = ({ gateway, debounceMs = 300, location = globalThis.location, now = () => new Date() }) => (projectId = "", ticketId = "", lockedMode = "", bringUnder = []) => withAgentPicker({
   projectId,
   ticketId,
   prompt: "",
@@ -86,6 +104,8 @@ export const newSession = ({ gateway, debounceMs = 300, location = globalThis.lo
   /** The pending check's timer, and the id of the newest question put to the server. */
   nameTimer: 0,
   nameAsked: 0,
+  /** "Where it works": "branch" cuts a new branch, "worktree" joins one of the task's worktrees. */
+  where: "branch",
   /** The task's worktrees in this repository, newest first, as the server lists them. */
   worktrees: [],
   /** The worktree picked to join; "" cuts a new branch. */
@@ -365,8 +385,7 @@ export const newSession = ({ gateway, debounceMs = 300, location = globalThis.lo
   },
 
   repositoryChanged() {
-    this.worktreeId = "";
-    this.worktreeError = "";
+    this.pickWorktree("");
     this.loadBranches();
     this.loadWorktrees();
     this.checkNameNow();
@@ -383,6 +402,8 @@ export const newSession = ({ gateway, debounceMs = 300, location = globalThis.lo
       const listed = await gateway.taskWorktrees({ ticketId: this.ticketId, repositoryId });
       if (asked !== this.worktreesAsked) return;
       this.worktrees = listed.worktrees;
+      // A pick that is not on the new list, or an empty list, falls back to a new branch.
+      if (this.worktreeId !== "" && !this.worktrees.some((w) => w.worktreeId === this.worktreeId)) this.pickWorktree("");
     } catch {
       if (asked === this.worktreesAsked) this.worktrees = [];
     }
@@ -391,64 +412,94 @@ export const newSession = ({ gateway, debounceMs = 300, location = globalThis.lo
   get presetAccess() {
     return READ_ONLY_MODES.has(this.mode) ? "read_only" : "write";
   },
-  /** The picker is offered where a join can happen: on a task, in a mode that takes a worktree. */
+  /** "Where it works" is offered where a join can happen: on a task, in a mode that takes a worktree. */
   get showWorktreePicker() {
     return this.ticketId !== "" && !NO_JOIN_MODES.has(this.mode);
   },
-  /** A worktree is picked and the mode can join it: the start joins instead of cutting a branch. */
+  /** "An existing worktree" is chosen and one is picked: the start joins instead of cutting a branch. */
   get joining() {
-    return this.showWorktreePicker && this.worktreeId !== "";
+    return this.showWorktreePicker && this.where === "worktree" && this.worktreeId !== "";
   },
   /** The base branch and the branch name apply only to a session that cuts its own branch. */
   get showBranchFields() {
     return !this.joining;
   },
-  /** The picker's options: each worktree by the agent that cut it, its branch and a session, running or ended. */
+  get newBranchChosen() {
+    return !this.joining;
+  },
+  get existingChosen() {
+    return this.joining;
+  },
+  /** The radio card "An existing worktree" has nothing to offer. */
+  get noWorktrees() {
+    return this.worktrees.length === 0;
+  },
+  /** The second card's description: what it does and how many there are, or why it is disabled. */
+  get joinCardText() {
+    if (this.noWorktrees) return "No session of this task has a worktree in this repository yet. Start one on a new branch first.";
+    return `Join a session of this task on its branch. ${this.worktrees.length} to choose from.`;
+  },
+  /** The picker's options: one row per worktree: the creator's agent and mode, the branch and who else is on it, running or when it ended. */
   get worktreeOptions() {
     return this.worktrees.map((w) => {
-      const first = w.sessions.find((x) => x.sessionId === w.createdBySessionId) ?? w.sessions[0];
-      const ended = !w.sessions.some((x) => x.running);
-      const more = w.sessions.length > 1 ? ` · ${w.sessions.length} sessions` : "";
-      const session = first ? ` · session ${first.sessionId.slice(0, 8)}` : "";
-      return { id: w.worktreeId, ended, label: `${first?.agent || "agent"} on ${w.branch}${session}${more} · ${ended ? "ended" : "running"}` };
+      const creator = w.sessions.find((x) => x.sessionId === w.createdBySessionId) ?? w.sessions[0];
+      const others = w.sessions.filter((x) => x !== creator);
+      const withText = others.length ? `with ${others.map((x) => `${x.agent || "claude"} (${accessWord(x.access)})`).join(", ")}` : "nobody else";
+      const running = creator?.running === true;
+      return {
+        id: w.worktreeId,
+        label: `${creator?.agent || "claude"} · ${creator?.mode || "default"}`,
+        description: `${w.branch} · ${withText}`,
+        meta: running ? "running" : endedText(creator?.endedAt, now()),
+        tone: running ? "signal" : "done",
+        title: creator ? `session ${creator.sessionId}` : "",
+      };
     });
   },
-  /** Said where the picker would be when the task has no worktree in this repository. */
-  get noWorktreesText() {
-    return "No session worktree of this task in this repository yet: the session gets a new branch.";
+  /** The chosen worktree, as a picker row. */
+  get pickedWorktree() {
+    return this.worktrees.find((w) => w.worktreeId === this.worktreeId) ?? null;
+  },
+  /** Under the picker: who is on the chosen worktree now and their access; informational, nothing is locked. */
+  get worktreeHint() {
+    const w = this.pickedWorktree;
+    if (!w) return "Worktrees of this task in this repository, still on disk.";
+    const who = w.sessions.map((x) => `${x.agent || "claude"} (${x.mode || "default"}) is ${x.running ? "running" : "ended"} on it with ${accessWord(x.access)} access`).join("; ");
+    return `${who}. Each running session is told who shares its worktree. They coordinate through commits; nothing is locked.`;
+  },
+  /** The prompt's hint when joining: the outcome in one sentence. */
+  get joinOutcome() {
+    const w = this.pickedWorktree;
+    const owner = w?.sessions.find((x) => x.sessionId === w.createdBySessionId)?.agent || "claude";
+    const how = this.access === "read_only" ? "read-only" : "with write access";
+    return `claude starts in a terminal on the server, ${how} on ${owner}'s worktree, branch ${w?.branch ?? ""}.`;
+  },
+  /** The radio cards' change event. */
+  whereChosen(event) {
+    this.chooseWhere(event.target.value);
+  },
+  /** "branch" cuts a new branch; "worktree" joins the newest worktree of the task until the person picks another. */
+  chooseWhere(where) {
+    if (where === "worktree" && !this.noWorktrees) {
+      this.pickWorktree(this.worktreeId || this.worktrees[0].worktreeId);
+    } else {
+      this.pickWorktree("");
+    }
   },
   /** The picker's change event. */
   worktreePicked(event) {
     this.pickWorktree(event.target.value);
   },
-  /** The access radios' change event. */
-  accessChosen(event) {
-    this.pickAccess(event.target.value);
-  },
-  get hasWorktreeError() {
-    return this.worktreeError !== "";
-  },
-  /** The task has no worktree to join in this repository. */
-  get noWorktrees() {
-    return this.worktrees.length === 0;
-  },
-  get writeAccess() {
-    return this.access === "write";
-  },
-  get readOnlyAccess() {
-    return this.access === "read_only";
-  },
-  /** What the chosen access lets the session do in the shared worktree. */
-  get accessHint() {
-    return this.readOnlyAccess
-      ? "Reads the worktree and runs builds and tests there; every write and commit is denied."
-      : "Edits files and commits on the worktree's branch. The other sessions on it see the same files.";
-  },
   /** Picks a worktree to join, or "" for a new branch; the access follows the mode until the person flips it. */
   pickWorktree(id) {
     this.worktreeId = id;
+    this.where = id === "" ? "branch" : "worktree";
     this.worktreeError = "";
     if (!this.accessPicked) this.access = this.presetAccess;
+  },
+  /** The access radios' change event. */
+  accessChosen(event) {
+    this.pickAccess(event.target.value);
   },
   /** @param {"write"|"read_only"} access */
   pickAccess(access) {
@@ -456,15 +507,38 @@ export const newSession = ({ gateway, debounceMs = 300, location = globalThis.lo
     this.accessPicked = true;
     this.worktreeError = "";
   },
+  /** Back to the mode's access, which follows the mode again. */
+  resetAccess() {
+    this.accessPicked = false;
+    this.access = this.presetAccess;
+  },
+  get hasWorktreeError() {
+    return this.worktreeError !== "";
+  },
+  get writeAccess() {
+    return this.access === "write";
+  },
+  get readOnlyAccess() {
+    return this.access === "read_only";
+  },
+  /** The hint under the Access radios: the mode's default, and what it means. */
+  get accessHint() {
+    const word = MODE_WORDS[this.mode];
+    if (this.presetAccess === "read_only") {
+      return `Read-only is the default for ${word}. Builds and tests still run in the worktree; every write is denied.`;
+    }
+    return word ? `Write is the default for ${word}: it commits on the shared branch.` : "Write is the default: it edits and commits on the shared branch.";
+  },
   /** A refusal about the worktree lands beside the picker, not in the banner; a vanished one is dropped from it. */
   worktreeRefusal(err) {
     if (!WORKTREE_CODES.has(err?.code)) return false;
-    this.worktreeError = String(err.message ?? "").replace(/^[A-Z_]+: /, "");
+    const sentence = String(err.message ?? "").replace(/^[A-Z_]+: /, "");
     if (err.code === Codes.WORKTREE_NOT_FOUND || err.code === Codes.WORKTREE_NOT_ON_TASK) {
       const gone = err.details?.worktree_id ?? this.worktreeId;
       this.worktrees = this.worktrees.filter((w) => w.worktreeId !== gone);
-      if (this.worktreeId === gone) this.worktreeId = "";
+      if (this.worktreeId === gone) this.pickWorktree("");
     }
+    this.worktreeError = sentence;
     return true;
   },
 

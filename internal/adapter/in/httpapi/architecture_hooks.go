@@ -109,8 +109,10 @@ func (h *Handler) handleArchitectureCommit(c echo.Context) error {
 
 // handleWorktreeArchitectureCommit answers a pre-commit hook that ran with no
 // session environment: the commit is checked as the session the worktree
-// attributes it to, and the answer names that session on its first line.
+// attributes it to, and the answer names that session in X-Harness-Attributed-To.
 func (h *Handler) handleWorktreeArchitectureCommit(c echo.Context) error {
+	// Checked here as well as in checkCommit: the attribution is looked up, and
+	// named in a header, before checkCommit runs.
 	if !isLoopback(c.Request().RemoteAddr) {
 		return echo.NewHTTPError(http.StatusForbidden, "loopback only")
 	}

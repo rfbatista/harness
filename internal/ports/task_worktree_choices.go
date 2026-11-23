@@ -1,6 +1,9 @@
 package ports
 
-import "context"
+import (
+	"context"
+	"time"
+)
 
 // The worktrees the New session form's picker offers for a task in a
 // repository (contract "Harness server ↔ Web UI — joining a worktree and the
@@ -24,6 +27,8 @@ type TaskWorktreeSession struct {
 	// worktrees is write.
 	Access  string `json:"access"`
 	Running bool   `json:"running"`
+	// EndedAt is when the session ended, for "ended 2h ago"; nil while it runs.
+	EndedAt *time.Time `json:"ended_at"`
 }
 
 // TaskWorktreeChoice is one worktree of the task.

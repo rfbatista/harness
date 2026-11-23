@@ -221,7 +221,7 @@ export function toTaskWorktrees(dto) {
         createdBySessionId: w.created_by_session_id ?? "",
         sessions: Object.freeze(
           w.sessions.map((s) =>
-            Object.freeze({ sessionId: s.session_id, agent: s.agent ?? "", mode: s.mode ?? "", access: s.access === "read_only" ? "read_only" : "write", running: s.running === true }),
+            Object.freeze({ sessionId: s.session_id, agent: s.agent ?? "", mode: s.mode ?? "", access: s.access === "read_only" ? "read_only" : "write", running: s.running === true, endedAt: s.ended_at ? new Date(s.ended_at) : null }),
           ),
         ),
       });
