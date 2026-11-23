@@ -4,7 +4,9 @@
 import { Presenter } from "../../../../shared/kernel/presenter";
 import { loadContext } from "../../application/load-context";
 import { ContextSourceError, type ContextSource } from "../../application/ports";
-import type { Facts, SessionContext } from "../../domain/session-context";
+import type { Entry, Facts, SessionContext } from "../../domain/session-context";
+import type { ContextGroups, GroupKey } from "./context-view-model";
+import { closedPiece, instructionsGroup, type PieceState } from "./instructions-group";
 
 export type ContextStatus = "idle" | "loading" | "ready" | "unrecorded" | "not_found" | "error";
 
@@ -18,11 +20,16 @@ export interface ContextViewModel {
   /** What to tell the person in the unrecorded, not-found and error states. */
   readonly message: string;
   readonly facts: readonly FactRow[];
+  /** The groups below the facts; null until the context is ready. */
+  readonly groups: ContextGroups | null;
 }
 
 const UNRECORDED = "This session started before the harness recorded its context";
 
-const idle: ContextViewModel = { status: "idle", message: "", facts: [] };
+/** Hooks start collapsed; every other group starts open. */
+const DEFAULT_OPEN: Record<GroupKey, boolean> = { instructions: true, tools: true, servers: true, skills: true, hooks: false, changes: true };
+
+const idle: ContextViewModel = { status: "idle", message: "", facts: [], groups: null };
 
 export function factRows(f: Facts): FactRow[] {
   return [
@@ -47,6 +54,9 @@ export class ContextPresenter extends Presenter<ContextViewModel> {
   readonly #sessionId: string;
   #started = false;
   #context: SessionContext | null = null;
+  /** Groups the person closed (every group starts open but Hooks). */
+  readonly #toggled = new Set<GroupKey>();
+  readonly #pieces = new Map<string, PieceState>();
 
   constructor(source: ContextSource, sessionId: string) {
     super(idle);
@@ -68,18 +78,78 @@ export class ContextPresenter extends Presenter<ContextViewModel> {
   }
 
   async #load(): Promise<void> {
-    this.set({ status: "loading", message: "", facts: [] });
+    this.set({ status: "loading", message: "", facts: [], groups: null });
     try {
       this.#context = await loadContext(this.#source, this.#sessionId);
     } catch (err) {
       if (!(err instanceof ContextSourceError)) throw err;
-      if (err.code === "SESSION_NOT_FOUND") this.set({ status: "not_found", message: "This session no longer exists.", facts: [] });
-      else if (err.code === "BAD_RESPONSE") this.set({ status: "error", message: "The harness server sent an unexpected answer for this session's context.", facts: [] });
-      else this.set({ status: "error", message: "The context could not be loaded.", facts: [] });
+      if (err.code === "SESSION_NOT_FOUND") this.set({ status: "not_found", message: "This session no longer exists.", facts: [], groups: null });
+      else if (err.code === "BAD_RESPONSE") this.set({ status: "error", message: "The harness server sent an unexpected answer for this session's context.", facts: [], groups: null });
+      else this.set({ status: "error", message: "The context could not be loaded.", facts: [], groups: null });
       return;
     }
     const latest = this.#context.entries.at(-1);
-    if (!this.#context.recorded || !latest) this.set({ status: "unrecorded", message: UNRECORDED, facts: [] });
-    else this.set({ status: "ready", message: "", facts: factRows(latest.facts) });
+    if (!this.#context.recorded || !latest) this.set({ status: "unrecorded", message: UNRECORDED, facts: [], groups: null });
+    else this.#render();
+  }
+
+  /** The entry on show: the latest. */
+  #entry(): Entry | undefined {
+    return this.#context?.entries.at(-1);
+  }
+
+  #isOpen(key: GroupKey): boolean {
+    return DEFAULT_OPEN[key] !== this.#toggled.has(key);
+  }
+
+  #heading(key: GroupKey, title: string, count: number) {
+    return { key, title, count: String(count), open: this.#isOpen(key) };
+  }
+
+  #render(): void {
+    const entry = this.#entry();
+    if (!entry) return;
+    this.set({
+      status: "ready",
+      message: "",
+      facts: factRows(entry.facts),
+      groups: { instructions: instructionsGroup(this.#heading("instructions", "Instructions", entry.instructions.length), entry.instructions, this.#pieces) },
+    });
+  }
+
+  /** The person flips a group open or closed. */
+  toggleGroup(key: GroupKey): void {
+    if (this.#toggled.has(key)) this.#toggled.delete(key);
+    else this.#toggled.add(key);
+    if (this.viewModel.status === "ready") this.#render();
+  }
+
+  /** Opens a group (the ADR 0085 link lands on Instructions); an open one stays open. */
+  openGroup(key: GroupKey): void {
+    if (!this.#isOpen(key)) this.toggleGroup(key);
+  }
+
+  /** A piece's text opens or closes in place. */
+  togglePiece(id: string): void {
+    const state = this.#pieces.get(id) ?? closedPiece;
+    this.#pieces.set(id, { ...state, open: !state.open });
+    this.#render();
+  }
+
+  /** "Show all": fetches the piece's full text, once. A failure marks that piece only. */
+  async showAll(id: string): Promise<void> {
+    const entry = this.#entry();
+    const state = this.#pieces.get(id) ?? closedPiece;
+    if (!entry || state.fullText === "loading" || state.fullText === "done") return;
+    this.#pieces.set(id, { ...state, fullText: "loading" });
+    this.#render();
+    try {
+      const full = await this.#source.piece(this.#sessionId, entry.id, id);
+      this.#pieces.set(id, { ...(this.#pieces.get(id) ?? closedPiece), fullText: "done", full });
+    } catch (err) {
+      if (!(err instanceof ContextSourceError)) throw err;
+      this.#pieces.set(id, { ...(this.#pieces.get(id) ?? closedPiece), fullText: "failed" });
+    }
+    this.#render();
   }
 }
