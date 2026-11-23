@@ -16,6 +16,10 @@ import { httpNotificationsSource } from "../features/notifications/infrastructur
 import { browserClipboard } from "../features/context/infrastructure/browser-clipboard";
 import { httpContextSource } from "../features/context/infrastructure/http-context-source";
 import { ContextPropsDto } from "../features/context/infrastructure/dto/context-props-dto";
+import { browserTabFront } from "../features/context/infrastructure/browser-tab-front";
+import { httpContextFeed } from "../features/context/infrastructure/http-context-feed";
+import { ContextDotPresenter } from "../features/context/presentation/presenters/context-dot-presenter";
+import { ContextDotView } from "../features/context/presentation/views/context-dot-view";
 import { ContextPresenter } from "../features/context/presentation/presenters/context-presenter";
 import { ContextView } from "../features/context/presentation/views/context-view";
 import { buildTopBar } from "./top-bar-presenters";
@@ -37,6 +41,7 @@ export function mountIslands(doc: Document): Dispose {
   const topBarSource = httpTopBarSource(api);
   const notifications = httpNotificationsSource(api, feed);
   const contextSource = httpContextSource(api);
+  const contextFeed = httpContextFeed(feed);
 
   const islands: Record<string, Island> = {
     "top-bar": (mount, props, fresh) => {
@@ -55,11 +60,26 @@ export function mountIslands(doc: Document): Dispose {
     },
     // The Context tab of the session pane: client-rendered, mounted while the tab is shown.
     "session-context": (mount, props) => {
-      const presenter = new ContextPresenter(contextSource, ContextPropsDto.fromJSON(props).session_id, { clipboard: browserClipboard(win.navigator) });
+      const { session_id, project_id, live } = ContextPropsDto.fromJSON(props);
+      const presenter = new ContextPresenter(contextSource, session_id, { clipboard: browserClipboard(win.navigator), feed: contextFeed, projectId: project_id, live });
       const root = createRoot(mount);
       root.render(<ContextView presenter={presenter} />);
       presenter.open();
-      return () => root.unmount();
+      return () => {
+        presenter.close();
+        root.unmount();
+      };
+    },
+    // The dot inside the Context tab's button: watches the session while another tab is in front.
+    "session-context-dot": (mount, props) => {
+      const { session_id, project_id, live } = ContextPropsDto.fromJSON(props);
+      const presenter = new ContextDotPresenter(contextFeed, browserTabFront(mount), { sessionId: session_id, projectId: project_id, live });
+      const root = createRoot(mount);
+      root.render(<ContextDotView presenter={presenter} />);
+      return () => {
+        presenter.close();
+        root.unmount();
+      };
     },
   };
 

@@ -27,7 +27,7 @@ describe("Skills", () => {
   test("shows each skill with its source and description, with the count on the heading", async () => {
     const { presenter } = await setup([skillJson({ name: "task-tdd", source: "mode", description: "Build a ticket test first." })]);
     const g = presenter.viewModel.groups!.skills;
-    assert.deepEqual(g.rows[0], { name: "task-tdd", source: "Mode", description: "Build a ticket test first.", invoked: "" });
+    assert.deepEqual(g.rows[0], { name: "task-tdd", source: "Mode", description: "Build a ticket test first.", invoked: "", ringing: false });
     assert.equal(g.count, "1");
     assert.deepEqual([A, B, C].map((s) => s.source), ["repository", "agent", "built_in"]);
   });

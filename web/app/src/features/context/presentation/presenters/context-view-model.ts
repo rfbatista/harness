@@ -51,6 +51,8 @@ export interface ToolRow {
   readonly stateLabel: string;
   /** "used ×3", or "" when the session has not used it. */
   readonly used: string;
+  /** Changed just now: the view rings the row in place. */
+  readonly ringing: boolean;
 }
 
 export interface ToolSection {
@@ -80,6 +82,7 @@ export interface ServerRow {
   /** Copy is offered, for a failed server's error. */
   readonly canCopy: boolean;
   readonly copied: boolean;
+  readonly ringing: boolean;
 }
 
 export interface ServersGroup extends GroupHeading {
@@ -95,6 +98,7 @@ export interface SkillRow {
   readonly description: string;
   /** "invoked ×2", or "" when the session has not invoked it. */
   readonly invoked: string;
+  readonly ringing: boolean;
 }
 
 export interface SkillsGroup extends GroupHeading {
@@ -111,6 +115,18 @@ export interface HooksGroup extends GroupHeading {
   readonly rows: readonly HookRow[];
 }
 
+export interface ChangeRow {
+  /** "21:05". */
+  readonly time: string;
+  /** "Skill beta invoked". */
+  readonly text: string;
+  readonly note: string;
+}
+
+export interface ChangesGroup extends GroupHeading {
+  readonly rows: readonly ChangeRow[];
+}
+
 export interface SearchViewModel {
   readonly query: string;
   /** Rises each time the person asks for the search box ("/"): the view focuses it on a change. */
@@ -123,4 +139,5 @@ export interface ContextGroups {
   readonly servers: ServersGroup;
   readonly skills: SkillsGroup;
   readonly hooks: HooksGroup;
+  readonly changes: ChangesGroup;
 }

@@ -12,7 +12,7 @@ export function ToolsView({ group, presenter }: { group: ToolsGroup; presenter: 
           </h4>
           <ul className="[ rows ]">
             {section.rows.map((row) => (
-              <li key={row.fullName} className="[ row ]" data-state={row.state} title={row.fullName}>
+              <li key={row.fullName} className="[ row ]" data-state={row.state} data-ring={row.ringing ? "true" : undefined} title={row.fullName}>
                 <span className="[ name ] [ mono ]">{row.name}</span>
                 <span className="[ status ]">{row.stateLabel}</span>
                 {row.used !== "" && <span className="[ used ]">{row.used}</span>}

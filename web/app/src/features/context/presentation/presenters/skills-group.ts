@@ -16,14 +16,14 @@ export function skillOrder(skills: readonly Skill[], usage: Usage): string[] {
   return [...invoked, ...skills.filter((s) => used(s) === 0)].map((s) => s.name);
 }
 
-export function skillsGroup(heading: HeadingBase, skills: readonly Skill[], order: readonly string[], usage: Usage, query: string): SkillsGroup {
+export function skillsGroup(heading: HeadingBase, skills: readonly Skill[], order: readonly string[], usage: Usage, query: string, rings: ReadonlySet<string>): SkillsGroup {
   const byName = new Map(skills.map((s) => [s.name, s]));
   const rank = new Map(order.map((name, i) => [name, i]));
   // A skill the order has not seen (none today) goes last.
   const sorted = [...byName.values()].sort((a, b) => (rank.get(a.name) ?? order.length) - (rank.get(b.name) ?? order.length));
   const rows = sorted.map((s): SkillRow => {
     const use = usage.skills.get(s.name);
-    return { name: s.name, source: SOURCE_LABEL[s.source], description: s.description, invoked: use ? `invoked ×${use.count}` : "" };
+    return { name: s.name, source: SOURCE_LABEL[s.source], description: s.description, invoked: use ? `invoked ×${use.count}` : "", ringing: rings.has(`skill:${s.name}`) };
   });
   const shown = rows.filter((r) => matches(query, r.name, r.source, r.description));
   return { ...heading, count: countLabel(query, shown.length, rows.length), noMatch: query !== "" && shown.length === 0, rows: shown };

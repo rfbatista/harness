@@ -7,7 +7,7 @@ export function ServersView({ group, presenter }: { group: ServersGroup; present
     <GroupView heading={group} danger={group.danger} onToggle={() => presenter.toggleGroup("servers")}>
       <ul className="[ rows ]">
         {group.rows.map((row) => (
-          <li key={row.name} className="[ row ]" data-state={row.status} data-tone={row.failed ? "danger" : undefined}>
+          <li key={row.name} className="[ row ]" data-state={row.status} data-ring={row.ringing ? "true" : undefined} data-tone={row.failed ? "danger" : undefined}>
             <span className="[ name ] [ mono ]">{row.name}</span>
             <span className="[ status ]">{row.statusLabel}</span>
             <span className="[ badge ]">{row.attached}</span>

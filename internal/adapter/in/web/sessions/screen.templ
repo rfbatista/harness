@@ -267,7 +267,15 @@ templ paneTabs() {
 				<button type="button" role="tab" x-bind:aria-selected="mergeTabSelected" x-on:click="showMerge">Merge</button>
 			</template>
 			<button type="button" role="tab" data-quiet x-bind:aria-selected="sandboxTabSelected" x-on:click="showSandbox">Sandbox</button>
-			<button type="button" role="tab" data-quiet x-bind:aria-selected="contextTabSelected" x-on:click="showContext">Context</button>
+			<button type="button" role="tab" data-quiet x-bind:aria-selected="contextTabSelected" x-on:click="showContext">
+				Context
+				<template x-for="dot in contextDots" x-bind:key="dot.key">
+					<span x-bind:data-front="contextTabSelected">
+						<span data-island="session-context-dot" x-ignore></span>
+						<script type="application/json" data-island-props="session-context-dot" x-text="dot.props"></script>
+					</span>
+				</template>
+			</button>
 		</div>
 		<template x-if="paneTools">
 			@paneTools()

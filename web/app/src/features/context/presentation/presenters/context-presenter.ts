@@ -3,16 +3,22 @@
 
 import { Presenter } from "../../../../shared/kernel/presenter";
 import { loadContext } from "../../application/load-context";
-import { ContextSourceError, type Clipboard, type ContextSource } from "../../application/ports";
-import type { Entry, Facts, SessionContext } from "../../domain/session-context";
+import { ContextSourceError, type Clipboard, type ContextFeed, type ContextSource } from "../../application/ports";
+import type { Change, Entry, Facts, SessionContext } from "../../domain/session-context";
 import { hooksGroup, skillOrder, skillsGroup } from "./skills-group";
 import { serversGroup } from "./servers-group";
 import { toolsGroup } from "./tools-group";
+import { changesGroup, changeText, clockTime } from "./changes-group";
 import { normalize } from "./search";
 import type { ContextGroups, GroupKey, SearchViewModel } from "./context-view-model";
 import { closedPiece, instructionsGroup, type PieceState } from "./instructions-group";
 
 export type ContextStatus = "idle" | "loading" | "ready" | "unrecorded" | "not_found" | "error";
+
+export interface LiveLine {
+  readonly text: string;
+  readonly time: string;
+}
 
 export interface FactRow {
   readonly label: string;
@@ -25,6 +31,10 @@ export interface ContextViewModel {
   readonly message: string;
   readonly facts: readonly FactRow[];
   readonly search: SearchViewModel;
+  /** The session has ended: nothing here changes any more. */
+  readonly ended: boolean;
+  /** The one line at the top that names the latest change; null when none is on show. */
+  readonly live: LiveLine | null;
   /** The groups below the facts; null until the context is ready. */
   readonly groups: ContextGroups | null;
 }
@@ -36,7 +46,18 @@ const DEFAULT_OPEN: Record<GroupKey, boolean> = { instructions: true, tools: tru
 
 const NO_SEARCH: SearchViewModel = { query: "", focusRequest: 0 };
 
-const idle: ContextViewModel = { status: "idle", message: "", facts: [], groups: null, search: NO_SEARCH };
+export interface ContextDeps {
+  readonly clipboard: Clipboard;
+  /** With a project, the tab follows the project feed while the session runs. */
+  readonly feed?: ContextFeed;
+  readonly projectId?: string;
+  /** The session is running. Default true. */
+  readonly live?: boolean;
+  /** The time zone times are shown in; the person's own by default. */
+  readonly timeZone?: string;
+}
+
+const idle = (ended: boolean): ContextViewModel => ({ status: "idle", message: "", facts: [], groups: null, search: NO_SEARCH, ended, live: null });
 
 export function factRows(f: Facts): FactRow[] {
   return [
@@ -71,9 +92,23 @@ export class ContextPresenter extends Presenter<ContextViewModel> {
   readonly #skillOrders = new Map<string, string[]>();
 
   readonly #clipboard: Clipboard;
+  readonly #feed: ContextFeed | undefined;
+  readonly #projectId: string;
+  readonly #timeZone: string | undefined;
+  readonly #running: boolean;
+  #unfollow: (() => void) | null = null;
+  #refreshing = false;
+  #again = false;
+  /** Rows that changed since the last change was dismissed: "tool:Bash", "skill:x", "server:y". */
+  #rings: ReadonlySet<string> = new Set();
+  #liveLine: LiveLine | null = null;
 
-  constructor(source: ContextSource, sessionId: string, { clipboard }: { clipboard: Clipboard }) {
-    super(idle);
+  constructor(source: ContextSource, sessionId: string, { clipboard, feed, projectId = "", live = true, timeZone }: ContextDeps) {
+    super(idle(!live));
+    this.#running = live;
+    this.#feed = feed;
+    this.#projectId = projectId;
+    this.#timeZone = timeZone;
     this.#clipboard = clipboard;
     this.#source = source;
     this.#sessionId = sessionId;
@@ -83,7 +118,24 @@ export class ContextPresenter extends Presenter<ContextViewModel> {
   open(): void {
     if (this.#started) return;
     this.#started = true;
-    void this.#load();
+    void this.#load().then(() => this.#follow());
+  }
+
+  /** Stops following the project feed. */
+  close(): void {
+    this.#unfollow?.();
+    this.#unfollow = null;
+  }
+
+  #follow(): void {
+    if (!this.#running || !this.#feed || this.#unfollow || this.viewModel.status !== "ready") return;
+    this.#unfollow = this.#feed.follow(this.#projectId, (change) => {
+      if (change.sessionId === this.#sessionId) void this.refresh();
+    });
+  }
+
+  #show(status: ContextStatus, message: string): void {
+    this.set({ status, message, facts: [], groups: null, search: NO_SEARCH, ended: !this.#running, live: null });
   }
 
   /** Loads again after a failed load. */
@@ -95,28 +147,65 @@ export class ContextPresenter extends Presenter<ContextViewModel> {
   /** Reads the context again without a loading state: what is on screen stays until the new answer replaces it. */
   async refresh(): Promise<void> {
     if (this.viewModel.status !== "ready") return;
-    try {
-      this.#context = await loadContext(this.#source, this.#sessionId);
-    } catch (err) {
-      if (!(err instanceof ContextSourceError)) throw err;
-      return; // the next change tries again
+    // Announcements that arrive during a fetch coalesce into one more fetch.
+    if (this.#refreshing) {
+      this.#again = true;
+      return;
     }
-    this.#render();
+    this.#refreshing = true;
+    try {
+      do {
+        this.#again = false;
+        const before = this.#context;
+        let next: SessionContext;
+        try {
+          next = await loadContext(this.#source, this.#sessionId);
+        } catch (err) {
+          if (!(err instanceof ContextSourceError)) throw err;
+          continue; // what is on screen stays; the next change tries again
+        }
+        this.#context = next;
+        if (before) this.#noteChanges(before, next);
+        this.#render();
+      } while (this.#again);
+    } finally {
+      this.#refreshing = false;
+    }
+  }
+
+  /** What changed between two reads: the rows to ring and the line that names the newest change. */
+  #noteChanges(before: SessionContext, next: SessionContext): void {
+    const rings = new Set<string>();
+    for (const [name, use] of next.usage.tools) if (use.count !== before.usage.tools.get(name)?.count) rings.add(`tool:${name}`);
+    for (const [name, use] of next.usage.skills) if (use.count !== before.usage.skills.get(name)?.count) rings.add(`skill:${name}`);
+    const statuses = new Map((before.entries.at(-1)?.servers ?? []).map((s) => [s.name, s.status]));
+    for (const s of next.entries.at(-1)?.servers ?? []) if (statuses.has(s.name) && statuses.get(s.name) !== s.status) rings.add(`server:${s.name}`);
+    const added: Change | undefined = next.changes.length > before.changes.length ? next.changes[0] : undefined;
+    if (rings.size === 0 && !added) return;
+    this.#rings = rings;
+    this.#liveLine = added ? { text: changeText(added), time: clockTime(added.at, this.#timeZone) } : this.#liveLine;
+  }
+
+  /** The live line and the rings go: the person has seen them. */
+  dismissLive(): void {
+    this.#rings = new Set();
+    this.#liveLine = null;
+    if (this.viewModel.status === "ready") this.#render();
   }
 
   async #load(): Promise<void> {
-    this.set({ status: "loading", message: "", facts: [], groups: null, search: NO_SEARCH });
+    this.#show("loading", "");
     try {
       this.#context = await loadContext(this.#source, this.#sessionId);
     } catch (err) {
       if (!(err instanceof ContextSourceError)) throw err;
-      if (err.code === "SESSION_NOT_FOUND") this.set({ status: "not_found", message: "This session no longer exists.", facts: [], groups: null, search: NO_SEARCH });
-      else if (err.code === "BAD_RESPONSE") this.set({ status: "error", message: "The harness server sent an unexpected answer for this session's context.", facts: [], groups: null, search: NO_SEARCH });
-      else this.set({ status: "error", message: "The context could not be loaded.", facts: [], groups: null, search: NO_SEARCH });
+      if (err.code === "SESSION_NOT_FOUND") this.#show("not_found", "This session no longer exists.");
+      else if (err.code === "BAD_RESPONSE") this.#show("error", "The harness server sent an unexpected answer for this session's context.");
+      else this.#show("error", "The context could not be loaded.");
       return;
     }
     const latest = this.#context.entries.at(-1);
-    if (!this.#context.recorded || !latest) this.set({ status: "unrecorded", message: UNRECORDED, facts: [], groups: null, search: NO_SEARCH });
+    if (!this.#context.recorded || !latest) this.#show("unrecorded", UNRECORDED);
     else this.#render();
   }
 
@@ -151,12 +240,15 @@ export class ContextPresenter extends Presenter<ContextViewModel> {
       message: "",
       facts: factRows(entry.facts),
       search: { query: this.#query, focusRequest: this.#focusRequest },
+      ended: !this.#running,
+      live: this.#liveLine,
       groups: {
         instructions: instructionsGroup(this.#heading("instructions", "Instructions"), entry.instructions, this.#pieces, query),
-        tools: toolsGroup(this.#heading("tools", "Tools"), entry.tools, entry.servers, this.#context!.usage, query),
-        servers: serversGroup(this.#heading("servers", "MCP servers"), entry.servers, this.#copied, query),
-        skills: skillsGroup(this.#heading("skills", "Skills"), entry.skills, this.#skillOrderOf(entry), this.#context!.usage, query),
+        tools: toolsGroup(this.#heading("tools", "Tools"), entry.tools, entry.servers, this.#context!.usage, query, this.#rings),
+        servers: serversGroup(this.#heading("servers", "MCP servers"), entry.servers, this.#copied, query, this.#rings),
+        skills: skillsGroup(this.#heading("skills", "Skills"), entry.skills, this.#skillOrderOf(entry), this.#context!.usage, query, this.#rings),
         hooks: hooksGroup(this.#heading("hooks", "Hooks"), entry.hooks, query),
+        changes: changesGroup(this.#heading("changes", "Changes while running"), this.#context!.changes, query, this.#timeZone),
       },
     });
   }

@@ -5,7 +5,7 @@ import { countLabel, matches } from "./search";
 const ATTACHED_LABEL: Record<Attached, string> = { built_in: "Built in", token_saver: "Token saver", agent: "Agent", project: "Project", mode: "Mode" };
 const STATUS_LABEL = { connected: "connected", failed: "failed", unknown: "status unknown" } as const;
 
-export function serversGroup(heading: HeadingBase, servers: readonly Server[], copied: ReadonlySet<string>, query: string): ServersGroup {
+export function serversGroup(heading: HeadingBase, servers: readonly Server[], copied: ReadonlySet<string>, query: string, rings: ReadonlySet<string>): ServersGroup {
   const rows = servers.map((s): ServerRow => {
     const failed = s.status === "failed";
     return {
@@ -18,6 +18,7 @@ export function serversGroup(heading: HeadingBase, servers: readonly Server[], c
       failed,
       canCopy: failed && s.statusReason !== "",
       copied: copied.has(s.name),
+      ringing: rings.has(`server:${s.name}`),
     };
   });
   const shown = rows.filter((r) => matches(query, r.name, r.attached, r.attachedReason, r.statusLabel));

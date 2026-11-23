@@ -344,7 +344,7 @@ func paneTabs() templ.Component {
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 22, "<template x-if=\"hasMergeTab\"><button type=\"button\" role=\"tab\" x-bind:aria-selected=\"mergeTabSelected\" x-on:click=\"showMerge\">Merge</button></template><button type=\"button\" role=\"tab\" data-quiet x-bind:aria-selected=\"sandboxTabSelected\" x-on:click=\"showSandbox\">Sandbox</button> <button type=\"button\" role=\"tab\" data-quiet x-bind:aria-selected=\"contextTabSelected\" x-on:click=\"showContext\">Context</button></div><template x-if=\"paneTools\">")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 22, "<template x-if=\"hasMergeTab\"><button type=\"button\" role=\"tab\" x-bind:aria-selected=\"mergeTabSelected\" x-on:click=\"showMerge\">Merge</button></template><button type=\"button\" role=\"tab\" data-quiet x-bind:aria-selected=\"sandboxTabSelected\" x-on:click=\"showSandbox\">Sandbox</button> <button type=\"button\" role=\"tab\" data-quiet x-bind:aria-selected=\"contextTabSelected\" x-on:click=\"showContext\">Context<template x-for=\"dot in contextDots\" x-bind:key=\"dot.key\"><span x-bind:data-front=\"contextTabSelected\"><span data-island=\"session-context-dot\" x-ignore></span><script type=\"application/json\" data-island-props=\"session-context-dot\" x-text=\"dot.props\"></script></span></template></button></div><template x-if=\"paneTools\">")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}

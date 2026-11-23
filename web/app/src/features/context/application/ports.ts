@@ -1,6 +1,6 @@
 // What the context feature needs from the outside world.
 
-import type { SessionContext } from "../domain/session-context";
+import type { ContextChanged, SessionContext } from "../domain/session-context";
 
 export type ContextSourceErrorCode = "SESSION_NOT_FOUND" | "CONTEXT_ENTRY_NOT_FOUND" | "CONTEXT_PIECE_NOT_FOUND" | "NETWORK_ERROR" | "BAD_RESPONSE" | "UNKNOWN";
 
@@ -24,4 +24,16 @@ export interface ContextSource {
 /** The person's clipboard: Copy on a failed server puts claude's error there. */
 export interface Clipboard {
   copy(text: string): Promise<void>;
+}
+
+/** The server's `context.changed` announcements for a project's sessions. */
+export interface ContextFeed {
+  /** Calls `onChanged` for every announcement; returns its unsubscribe. */
+  follow(projectId: string, onChanged: (change: ContextChanged) => void): () => void;
+}
+
+/** Whether the Context tab is the tab in front of its pane. */
+export interface TabFront {
+  /** Calls `listener` with the current answer and with every change; returns its unsubscribe. */
+  subscribe(listener: (front: boolean) => void): () => void;
 }

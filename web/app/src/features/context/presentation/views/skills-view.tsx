@@ -7,7 +7,7 @@ export function SkillsView({ group, presenter }: { group: SkillsGroup; presenter
     <GroupView heading={group} onToggle={() => presenter.toggleGroup("skills")}>
       <ul className="[ rows ]">
         {group.rows.map((row) => (
-          <li key={row.name} className="[ row ]">
+          <li key={row.name} className="[ row ]" data-ring={row.ringing ? "true" : undefined}>
             <span className="[ name ] [ mono ]">{row.name}</span>
             <span className="[ badge ]">{row.source}</span>
             {row.invoked !== "" && <span className="[ used ]">{row.invoked}</span>}

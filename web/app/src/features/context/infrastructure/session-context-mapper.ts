@@ -59,7 +59,7 @@ const uses = (m: Readonly<Record<string, UseDto>>): Map<string, Use> => new Map(
 
 const usage = (d: UsageDto): Usage => ({ tools: uses(d.tools), skills: uses(d.skills) });
 
-const change = (d: ChangeDto): Change => ({ at: new Date(d.at), kind: d.kind, subject: d.subject, detail: d.line });
+const change = (d: ChangeDto): Change => ({ at: new Date(d.at), kind: d.kind, subject: d.subject, note: d.line });
 
 export const toSessionContext = (d: SessionContextDto): SessionContext => ({
   sessionId: d.session_id,

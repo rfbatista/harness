@@ -1,7 +1,7 @@
 // The Context tab island's props: the session it shows and its project (whose
-// feed announces changes), written into the page by the session pane.
+// feed announces changes) and whether it is running, written into the page by the session pane.
 
-import { object, string, type Wire } from "../../../../shared/infrastructure/dto/fields";
+import { boolean, object, string, type Wire } from "../../../../shared/infrastructure/dto/fields";
 
 const NAME = "ContextPropsDto";
 
@@ -9,14 +9,15 @@ export class ContextPropsDto {
   constructor(
     readonly session_id: string,
     readonly project_id: string,
+    readonly live: boolean,
   ) {}
 
   static fromJSON(raw: unknown): ContextPropsDto {
     const from = object(NAME, raw);
-    return new ContextPropsDto(string(NAME, from, "session_id"), string(NAME, from, "project_id"));
+    return new ContextPropsDto(string(NAME, from, "session_id"), string(NAME, from, "project_id"), boolean(NAME, from, "live"));
   }
 
   toJSON(): Wire {
-    return { session_id: this.session_id, project_id: this.project_id };
+    return { session_id: this.session_id, project_id: this.project_id, live: this.live };
   }
 }

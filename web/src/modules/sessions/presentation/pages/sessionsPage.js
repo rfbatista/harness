@@ -239,7 +239,15 @@ export const sessionsPage = ({
      */
     get contextPanels() {
       if (!this.showingContext) return [];
-      return [{ key: this.selected.id, props: JSON.stringify({ session_id: this.selected.id, project_id: this.projectId }) }];
+      return [{ key: `${this.selected.id}:${this.selected.stoppable ? "live" : "ended"}`, props: this.contextProps() }];
+    },
+    /** The dot island on the Context tab's button: it watches the selected session while another tab is in front. */
+    get contextDots() {
+      if (!this.showingSession) return [];
+      return [{ key: `${this.selected.id}:${this.selected.stoppable ? "live" : "ended"}`, props: this.contextProps() }];
+    },
+    contextProps() {
+      return JSON.stringify({ session_id: this.selected.id, project_id: this.projectId, live: this.selected.stoppable });
     },
     /** A session with a branch has a Merge tab, where a merge into the default branch is offered when it applies. */
     get hasMergeTab() {

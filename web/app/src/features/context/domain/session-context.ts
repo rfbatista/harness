@@ -101,7 +101,7 @@ export interface Change {
   readonly at: Date;
   readonly kind: ChangeKind;
   readonly subject: string;
-  readonly detail: string;
+  readonly note: string;
 }
 
 export interface SessionContext {
@@ -113,4 +113,12 @@ export interface SessionContext {
   readonly usage: Usage;
   /** Newest first. */
   readonly changes: readonly Change[];
+}
+
+export type ChangedReason = "entry_added" | "usage" | "mcp_status";
+
+/** The server says a session's context changed: the tab reads it again. */
+export interface ContextChanged {
+  readonly sessionId: string;
+  readonly reason: ChangedReason;
 }
