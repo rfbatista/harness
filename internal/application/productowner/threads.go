@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"log/slog"
 	"strings"
 	"sync"
 	"time"
@@ -409,6 +410,106 @@ func (s *Service) finishTurn(threadID string) {
 		return
 	}
 	s.announceThread(*t)
+}
+
+// Recover resumes the turns a restart cut off (ADR 0080, after ADR 0078's
+// boot handling): each thread that was mid-turn reads interrupted until its
+// session is resumed, then continues with a notice in the thread and a turn
+// that tells claude what happened. A thread whose resume fails stays
+// interrupted, for the next boot. The product owner being switched off does not
+// stop a turn that was already running.
+func (s *Service) Recover(ctx context.Context) {
+	cut := map[string]domain.ProductOwnerThread{}
+	for _, turn := range []string{domain.ProductOwnerTurnRunning, domain.ProductOwnerTurnInterrupted} {
+		threads, err := s.store.ThreadsWithTurn(ctx, turn)
+		if err != nil {
+			slog.Warn("read the product owner threads a restart cut off", "err", err)
+			continue
+		}
+		for _, t := range threads {
+			cut[t.ID] = t
+		}
+	}
+	for _, t := range cut {
+		t.Turn = domain.ProductOwnerTurnInterrupted
+		if err := s.store.SaveThread(ctx, t); err != nil {
+			slog.Warn("mark a product owner thread interrupted", "thread", t.ID, "err", err)
+			continue
+		}
+		s.announceThread(t)
+	}
+	for _, t := range cut {
+		t.Turn = domain.ProductOwnerTurnInterrupted
+		if err := s.resumeInterrupted(ctx, t); err != nil {
+			slog.Warn("resume a product owner thread a restart cut off", "thread", t.ID, "err", err)
+		}
+	}
+}
+
+func (s *Service) resumeInterrupted(ctx context.Context, t domain.ProductOwnerThread) error {
+	if s.sessions == nil {
+		return nil
+	}
+	lock := s.threadLock(t.ID)
+	lock.Lock()
+	defer lock.Unlock()
+	spec := ports.ProductOwnerSessionSpec{ProjectID: t.ProjectID, AgentID: t.AgentID, Prompt: t.Prompt}
+	if err := s.sessions.ResumeProductOwnerSession(ctx, t.SessionID, spec); err != nil {
+		return err
+	}
+	s.finishPartialAnswers(ctx, &t)
+	r := s.attach(t)
+	now := time.Now()
+	notice, err := s.store.AppendItem(ctx, domain.ProductOwnerItem{ThreadID: t.ID, Kind: domain.ProductOwnerItemNotice, At: now, Text: "Continued after a restart"})
+	if err != nil {
+		return err
+	}
+	t.Turn, t.LastActivityAt = domain.ProductOwnerTurnRunning, now
+	if err := s.store.SaveThread(ctx, t); err != nil {
+		return err
+	}
+	s.announceItem(&t, notice)
+	s.announceThread(t)
+	s.resetIdle(r, false)
+	if err := s.sessions.Send(ctx, t.SessionID, s.continueTurn(ctx, t)); err != nil {
+		s.finishTurn(t.ID)
+		return err
+	}
+	return nil
+}
+
+// finishPartialAnswers ends the answers the cut left streaming: what arrived
+// of each is kept, marked stopped.
+func (s *Service) finishPartialAnswers(ctx context.Context, t *domain.ProductOwnerThread) {
+	items, _, err := s.store.Items(ctx, t.ID, "", 20)
+	if err != nil {
+		return
+	}
+	for _, it := range items {
+		if it.Kind == domain.ProductOwnerItemMessage && it.Streaming {
+			it.Streaming, it.Stopped = false, true
+			if err := s.store.SaveItem(ctx, it); err == nil {
+				s.announceItem(t, it)
+			}
+		}
+	}
+}
+
+// continueTurn is the turn that wakes a resumed thread: what happened, and
+// the person's last message, so that a message the cut came before claude read
+// it is answered too.
+func (s *Service) continueTurn(ctx context.Context, t domain.ProductOwnerThread) string {
+	text := "The harness restarted during your turn, so it was interrupted. Before you redo anything, check what you already said in this conversation, then continue where you were."
+	items, _, err := s.store.Items(ctx, t.ID, "", 20)
+	if err != nil {
+		return text
+	}
+	for i := len(items) - 1; i >= 0; i-- {
+		if it := items[i]; it.Kind == domain.ProductOwnerItemMessage && it.Author == domain.ProductOwnerAuthorPerson {
+			return text + "\n\nThe person's last message was:\n\n" + it.Text + "\n\nIf you have not answered it in full, answer it now."
+		}
+	}
+	return text
 }
 
 // Close tells the service the server is stopping: the processes that end with

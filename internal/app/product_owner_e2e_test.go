@@ -979,3 +979,147 @@ func TestTwoTabsFollowingAThreadSeeTheSameItemsInTheSameOrder(t *testing.T) {
 		return ""
 	})
 }
+
+func (e *poE2E) streamingPartial(id string) bool {
+	for _, m := range e.messages(id) {
+		if m.Author == "product_owner" && m.Streaming != nil && *m.Streaming && m.Text != "" {
+			return true
+		}
+	}
+	return false
+}
+
+func countItems(items []poItem, kind, text string) int {
+	n := 0
+	for _, it := range items {
+		if it.Kind == kind && (text == "" || strings.Contains(it.Text, text)) {
+			n++
+		}
+	}
+	return n
+}
+
+func TestARestartInTheMiddleOfATurnResumesItWithANoticeAndLosesNoMessage(t *testing.T) {
+	e := newPOE2E(t)
+	e.hold()
+	id, _ := e.startThread("what is in progress?")
+	eventuallyPO(t, "a partial answer", func() string {
+		if !e.streamingPartial(id) {
+			return "no partial answer"
+		}
+		return ""
+	})
+
+	e.restart()
+	e.release()
+	got := e.waitTurn(id, "idle")
+
+	if n := countItems(got.Items, "message", "what is in progress?"); n < 1 {
+		t.Fatalf("the person's message is gone: %+v", got.Items)
+	}
+	var persons int
+	for _, it := range got.Items {
+		if it.Kind == "message" && it.Author == "person" {
+			persons++
+		}
+	}
+	if persons != 1 {
+		t.Errorf("%d person messages, want the one that was sent", persons)
+	}
+	if n := countItems(got.Items, "notice", "Continued after a restart"); n != 1 {
+		t.Errorf("%d notices, want 1: %+v", n, got.Items)
+	}
+	var answers []poItem
+	for _, it := range got.Items {
+		if it.Kind == "message" && it.Author == "product_owner" {
+			answers = append(answers, it)
+		}
+		if it.Streaming != nil && *it.Streaming {
+			t.Errorf("an item is still streaming: %+v", it)
+		}
+	}
+	if len(answers) < 2 || !answers[0].Stopped || answers[len(answers)-1].Stopped || !strings.Contains(answers[len(answers)-1].Text, "what is in progress?") {
+		t.Errorf("answers = %+v, want the cut one kept as stopped and the continued one whole, answering the message", answers)
+	}
+	if l := e.launches(); len(l) != 2 || !strings.Contains(l[1], "--resume "+got.Thread.SessionID) {
+		t.Errorf("launches = %q, want the session resumed once", l)
+	}
+	eventuallyPO(t, "the turn change on the feed", func() string {
+		for _, c := range e.feed.of("product_owner_thread") {
+			if th, _ := c["thread"].(map[string]any); th["thread_id"] == id && th["turn"] == "idle" {
+				return ""
+			}
+		}
+		return "no idle turn event after the restart"
+	})
+}
+
+func TestAnIdleThreadStaysIdleThroughARestartWithNoNoticeAndNoProcess(t *testing.T) {
+	e := newPOE2E(t)
+	id, _ := e.startThread("hello")
+	before := e.waitTurn(id, "idle")
+	e.restart()
+	time.Sleep(500 * time.Millisecond)
+	after := e.thread(id)
+	if after.Thread.Turn != "idle" || len(after.Items) != len(before.Items) || countItems(after.Items, "notice", "") != 0 {
+		t.Errorf("after the restart = %+v, want the thread as it was", after)
+	}
+	if len(e.launches()) != 1 || e.orch.ProductOwnerRunning(before.Thread.SessionID) {
+		t.Errorf("a restart started claude for an idle thread: %q", e.launches())
+	}
+}
+
+func TestAThreadWhoseResumeFailsStaysInterruptedUntilTheNextBootResumesIt(t *testing.T) {
+	e := newPOE2E(t)
+	e.hold()
+	id, _ := e.startThread("cut off")
+	eventuallyPO(t, "a partial answer", func() string {
+		if !e.streamingPartial(id) {
+			return "no partial answer"
+		}
+		return ""
+	})
+
+	good := e.cfg.ClaudeBin
+	e.cfg.ClaudeBin = "claude-is-not-installed-here"
+	e.restart()
+	time.Sleep(300 * time.Millisecond)
+	if got := e.thread(id).Thread.Turn; got != "interrupted" {
+		t.Fatalf("turn = %s, want interrupted while it cannot resume", got)
+	}
+	if status, code := e.send(id, "meanwhile"); status != 409 || code != "THREAD_BUSY" {
+		t.Errorf("a message to an interrupted thread = %d %s, want 409 THREAD_BUSY", status, code)
+	}
+
+	e.cfg.ClaudeBin = good
+	e.restart()
+	e.release()
+	got := e.waitTurn(id, "idle")
+	if countItems(got.Items, "notice", "Continued after a restart") != 1 {
+		t.Errorf("items = %+v, want one notice", got.Items)
+	}
+}
+
+func TestATurnRunningWhenTheProductOwnerIsSwitchedOffStillResumesAfterARestart(t *testing.T) {
+	e := newPOE2E(t)
+	e.hold()
+	id, _ := e.startThread("question")
+	eventuallyPO(t, "a partial answer", func() string {
+		if !e.streamingPartial(id) {
+			return "no partial answer"
+		}
+		return ""
+	})
+	if status, _ := e.post("update_product_owner", map[string]any{"project_id": e.project, "enabled": false}, nil); status != 200 {
+		t.Fatal("switch off failed")
+	}
+	e.restart()
+	e.release()
+	got := e.waitTurn(id, "idle")
+	if last := e.messages(id); !strings.Contains(last[len(last)-1].Text, "question") || countItems(got.Items, "notice", "") != 1 {
+		t.Errorf("the turn did not finish after the restart: %+v", got.Items)
+	}
+	if status, code := e.send(id, "more"); status != 409 || code != "PRODUCT_OWNER_OFF" {
+		t.Errorf("a new message = %d %s, want 409 PRODUCT_OWNER_OFF", status, code)
+	}
+}

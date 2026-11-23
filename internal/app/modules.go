@@ -1655,15 +1655,24 @@ func commitCheckDirs(cfg Config) func(workspaceID string) string {
 // and the threads in which the person talks to it.
 var ProductOwnerModule = fx.Module("productowner",
 	fx.Provide(newProductOwner),
+	// Built at boot, so the threads a restart cut off are resumed.
+	fx.Invoke(func(*productowner.Service) {}),
 )
 
 func newProductOwner(lc fx.Lifecycle, store ports.ProductOwnerStore, cat catalog.Catalog, orch *orchestration.Service) *productowner.Service {
 	svc := productowner.New(store, cat.Projects, cat.Agents, orch, orch)
-	lc.Append(fx.Hook{OnStop: func(context.Context) error {
-		// The processes die with the server: their threads stay as they are,
-		// for the next boot to resume.
-		svc.Close()
-		return nil
-	}})
+	lc.Append(fx.Hook{
+		OnStart: func(context.Context) error {
+			// Behind the boot: a resume starts claude, which holds nothing back.
+			go svc.Recover(context.Background())
+			return nil
+		},
+		OnStop: func(context.Context) error {
+			// The processes die with the server: their threads stay as they are,
+			// for the next boot to resume.
+			svc.Close()
+			return nil
+		},
+	})
 	return svc
 }
