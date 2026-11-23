@@ -3,6 +3,7 @@ package orchestration
 import (
 	"context"
 	"log/slog"
+	"slices"
 	"strings"
 
 	"github.com/rfbatista/harnesskit/errs"
@@ -131,20 +132,25 @@ func (s *Service) turnSink() func(id, key, text string) error {
 	}
 }
 
+// tellRunningPeers puts one turn, under key, into every other running session
+// on sess's worktree that skip does not name.
+func (s *Service) tellRunningPeers(ctx context.Context, sess *domain.Session, key, text string, skip ...string) {
+	deliver := s.turnSink()
+	for _, o := range s.sessionsOnWorktree(ctx, sess.WorkspaceID) {
+		if o.ID == sess.ID || slices.Contains(skip, o.ID) || o.Status.IsTerminal() {
+			continue
+		}
+		if err := deliver(o.ID, key, text); err != nil && errs.Code(err) != "SESSION_NOT_RUNNING" {
+			slog.Warn("deliver a worktree turn", "session", o.ID, "key", key, "err", err)
+		}
+	}
+}
+
 // announceJoined gives every other running session on the worktree the one
 // turn that says sess joined it. A session's own architect is not told: it
 // started the session and knows.
 func (s *Service) announceJoined(ctx context.Context, sess *domain.Session) {
-	deliver := s.turnSink()
-	who := s.sharedPeerOf(ctx, sess)
-	for _, o := range s.sessionsOnWorktree(ctx, sess.WorkspaceID) {
-		if o.ID == sess.ID || o.ID == sess.ParentSessionID || o.Status.IsTerminal() {
-			continue
-		}
-		if err := deliver(o.ID, "worktree-joined:"+sess.ID, worktreeJoinedTurn(who, sess.Branch)); err != nil && errs.Code(err) != "SESSION_NOT_RUNNING" {
-			slog.Warn("deliver a worktree joined turn", "session", o.ID, "err", err)
-		}
-	}
+	s.tellRunningPeers(ctx, sess, "worktree-joined:"+sess.ID, worktreeJoinedTurn(s.sharedPeerOf(ctx, sess), sess.Branch), sess.ParentSessionID)
 }
 
 // sessionsOnWorktree is every session recorded on the worktree.
@@ -165,14 +171,7 @@ func (s *Service) sessionsOnWorktree(ctx context.Context, workspaceID string) []
 // end is recorded and however many times; resuming it lets it leave again.
 func (s *Service) announceEnded(id string, status domain.SessionStatus) {
 	s.announce(domain.SessionEnded{SessionID: id, Status: status})
-	s.mu.Lock()
-	if s.leftTold == nil {
-		s.leftTold = map[string]bool{}
-	}
-	told := s.leftTold[id]
-	s.leftTold[id] = true
-	s.mu.Unlock()
-	if told {
+	if !s.markLeaveAnnounced(id) {
 		return
 	}
 	sess := s.sessions.Get(id)
@@ -180,14 +179,28 @@ func (s *Service) announceEnded(id string, status domain.SessionStatus) {
 		return
 	}
 	ctx := context.Background()
-	deliver := s.turnSink()
-	who := s.sharedPeerOf(ctx, sess)
-	for _, o := range s.sessionsOnWorktree(ctx, sess.WorkspaceID) {
-		if o.ID == id || o.Status.IsTerminal() {
-			continue
-		}
-		if err := deliver(o.ID, "worktree-left:"+id, worktreeLeftTurn(who, sess.Branch)); err != nil && errs.Code(err) != "SESSION_NOT_RUNNING" {
-			slog.Warn("deliver a worktree left turn", "session", o.ID, "err", err)
-		}
+	s.tellRunningPeers(ctx, sess, "worktree-left:"+id, worktreeLeftTurn(s.sharedPeerOf(ctx, sess), sess.Branch))
+}
+
+// markLeaveAnnounced records that id's leaving is being announced; false when
+// it already was since the session last ran.
+func (s *Service) markLeaveAnnounced(id string) bool {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.leaveAnnounced == nil {
+		s.leaveAnnounced = map[string]bool{}
 	}
+	if s.leaveAnnounced[id] {
+		return false
+	}
+	s.leaveAnnounced[id] = true
+	return true
+}
+
+// rearmLeaveAnnouncement lets a session that runs again be announced when it
+// leaves again.
+func (s *Service) rearmLeaveAnnouncement(id string) {
+	s.mu.Lock()
+	delete(s.leaveAnnounced, id)
+	s.mu.Unlock()
 }

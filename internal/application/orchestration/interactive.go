@@ -257,9 +257,6 @@ func (s *Service) ResumeInteractive(ctx context.Context, req ports.ResumeRequest
 	if err := s.resumeBlock(sess); err != nil {
 		return nil, ports.AgentSpec{}, err
 	}
-	s.mu.Lock()
-	delete(s.leftTold, sess.ID)
-	s.mu.Unlock()
 
 	subject := sessionSubject{mode: sess.Mode}
 	if sess.TicketID != "" && s.tickets != nil {
@@ -364,6 +361,7 @@ func (s *Service) ResumeInteractive(ctx context.Context, req ports.ResumeRequest
 			return nil, ports.AgentSpec{}, err
 		}
 	}
+	s.rearmLeaveAnnouncement(sess.ID)
 	return s.withResumability(ctx, s.sessions.Get(sess.ID)), spec, nil
 }
 

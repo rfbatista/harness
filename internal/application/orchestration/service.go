@@ -278,9 +278,9 @@ type Service struct {
 
 	mu  sync.Mutex
 	seq map[string]int64
-	// leftTold marks the sessions whose leaving their worktree's other
+	// leaveAnnounced marks the sessions whose leaving their worktree's other
 	// sessions were told of, until they resume.
-	leftTold map[string]bool
+	leaveAnnounced map[string]bool
 	// statuses is the last status announced per session, so a status is
 	// announced on the bus only when it actually changes.
 	statuses map[string]domain.SessionStatus
