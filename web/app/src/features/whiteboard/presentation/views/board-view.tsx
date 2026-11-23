@@ -39,8 +39,19 @@ export function BoardView({ presenter }: { presenter: BoardPresenter }) {
     };
   }, [presenter]);
 
+  // Escape returns focus to the canvas.
+  useEffect(() => {
+    const el = canvas.current;
+    if (vm.focusedId === null && el && el.ownerDocument.activeElement?.closest(".wb-node") && el.contains(el.ownerDocument.activeElement)) el.focus();
+  }, [vm.focusedId]);
+
   const key = (event: React.KeyboardEvent) => {
     if (event.metaKey || event.ctrlKey || event.altKey) return;
+    // Tools in the bar keep their own keys; the canvas and its cards are the board's.
+    if ((event.target as HTMLElement).closest(".wb-canvas") && presenter.key({ key: event.key })) {
+      event.preventDefault();
+      return;
+    }
     const handled = { t: () => presenter.tidy(), "1": () => presenter.fit(), "0": () => presenter.actualSize(), "+": () => presenter.zoomBy(ZOOM_STEP), "=": () => presenter.zoomBy(ZOOM_STEP), "-": () => presenter.zoomBy(1 / ZOOM_STEP) }[event.key.toLowerCase()];
     if (!handled) return;
     event.preventDefault();
@@ -58,6 +69,7 @@ export function BoardView({ presenter }: { presenter: BoardPresenter }) {
             </button>
           </span>
         )}
+        {vm.state === "ended" && <span className="wb-live">{vm.endedNote}</span>}
         {vm.feed === "paused" && <span className="wb-live">Reconnecting · the picture stays as it was</span>}
         {vm.feed === "resynced" && <span className="wb-live">Back online · updated</span>}
         <div className="wb-tools">
@@ -89,7 +101,7 @@ export function BoardView({ presenter }: { presenter: BoardPresenter }) {
         tabIndex={0}
         role="group"
         aria-roledescription="whiteboard"
-        aria-label={`${vm.cards.length - 1} sessions as a graph.`}
+        aria-label={vm.canvasLabel}
         onPointerDown={(event) => {
           if (event.button !== 0 || (event.target as HTMLElement).closest(".wb-node, .wb-pill")) return;
           pan.current = { x: event.clientX, y: event.clientY };
@@ -125,7 +137,7 @@ export function BoardView({ presenter }: { presenter: BoardPresenter }) {
           </svg>
           {vm.edges.map((e) =>
             e.badge ? (
-              <button key={e.id} type="button" className="wb-pill" data-edge={e.id} data-tone={e.badge.tone || undefined} style={{ left: e.badge.x, top: e.badge.y }} title={e.badge.name} aria-label={e.badge.name}>
+              <button key={e.id} type="button" className="wb-pill" data-edge={e.id} onClick={() => presenter.openThread(e.id)} data-tone={e.badge.tone || undefined} style={{ left: e.badge.x, top: e.badge.y }} title={e.badge.name} aria-label={e.badge.name}>
                 <span className="n">{e.badge.count}</span>
                 <span className="latest">{e.badge.text}</span>
               </button>
@@ -135,6 +147,20 @@ export function BoardView({ presenter }: { presenter: BoardPresenter }) {
             <CardView key={card.id} card={card} presenter={presenter} />
           ))}
         </div>
+        {vm.state === "empty" && (
+          <div className="wb-empty">
+            <h2>No agents on this task yet</h2>
+            <p>Start a session and it appears here. An architect you start draws its delegates under it as it spawns them.</p>
+            <div className="actions">
+              <button type="button" className="button" data-variant="primary" data-size="sm" onClick={() => presenter.newSession()}>
+                New session
+              </button>
+              <button type="button" className="button" data-variant="ghost" data-size="sm" onClick={() => presenter.showList()}>
+                Show the list
+              </button>
+            </div>
+          </div>
+        )}
       </div>
       <p className="visually-hidden" aria-live="polite" data-announce>
         {vm.announcement}

@@ -4,6 +4,7 @@
 import { relativeTime } from "../../../../shared/kernel/format";
 import { Presenter } from "../../../../shared/kernel/presenter";
 import { BoardSourceError, type BoardEvent, type BoardSource, type LiveStatus } from "../../application/ports";
+import { noHost, type BoardHost } from "../../application/host";
 import type { BoardPreferences } from "../../application/preferences";
 import { centerOn, fit, isVisible, panBy, zoomAt, type Camera } from "../../domain/camera";
 import { agentLabel, chipOf, detailOf, needsYou, statusView } from "../../domain/card";
@@ -11,7 +12,8 @@ import { startedEdges, YOU_ID } from "../../domain/graph";
 import { MARGIN, computeLayout, edgeGeometry, sizeOf, type Point, type Rect } from "../../domain/layout";
 import { upsertMessage, upsertReview, type ReviewRequest, type TaskMessage } from "../../domain/message";
 import { freeSpot } from "../../domain/placement";
-import { inStartOrder, isTerminal, upsertSession, type BoardSession } from "../../domain/session";
+import { allEnded } from "../../domain/graph";
+import { isTerminal, upsertSession, type BoardSession } from "../../domain/session";
 import { KIND_WORD, ageWords, lastReportOf, pairKey, pendingMessages, reviewWaits, threadsOf } from "../../domain/threads";
 import { LOADING, type BadgeViewModel, type BoardViewModel, type CardViewModel, type EdgeViewModel } from "./board-view-model";
 
@@ -20,6 +22,8 @@ export type { BadgeViewModel, BoardViewModel, CardViewModel, EdgeViewModel } fro
 export interface BoardDeps {
   source: BoardSource;
   preferences: BoardPreferences;
+  /** The page the board sits in; none: the board asks nothing of it. */
+  host?: BoardHost;
   ticketId: string;
   projectId: string;
   agentNames: Readonly<Record<string, string>>;
@@ -47,7 +51,10 @@ export class BoardPresenter extends Presenter<BoardViewModel> {
   #sessions: BoardSession[] = [];
   #messages: TaskMessage[] = [];
   #reviews: ReviewRequest[] = [];
-  #compact = false;
+  /** The page is narrower than 64rem. */
+  #narrow = false;
+  #selectedId: string | null = null;
+  #focusedId: string | null = null;
   /** The positions the person gave, by session id; kept in the browser per task. */
   #placed: Record<string, Point> = {};
   #drag: { id: string; from: Point } | null = null;
@@ -157,11 +164,120 @@ export class BoardPresenter extends Presenter<BoardViewModel> {
     this.set(this.#build());
   }
 
-  /** The pane opens or the page narrows: cards take their compact form. */
-  setCompact(compact: boolean): void {
-    if (compact === this.#compact) return;
-    this.#compact = compact;
+  /** The page is narrower than 64rem: cards take their compact form. */
+  setNarrow(narrow: boolean): void {
+    if (narrow === this.#narrow) return;
+    this.#narrow = narrow;
     if (this.viewModel.phase === "ready") this.set(this.#build());
+  }
+
+  /** Cards are compact while the pane is open beside the board, or on a narrow page. */
+  get #compact(): boolean {
+    return this.#narrow || this.#selectedId !== null;
+  }
+
+  // ── selection and keys ─────────────────────────────────────────────────
+
+  get #host(): BoardHost {
+    return this.#deps.host ?? noHost;
+  }
+
+  /** The person picks a card: its pane opens beside the board. */
+  select(id: string, tab?: "context" | "conversation"): void {
+    if (id === YOU_ID || !this.#sessions.some((s) => s.id === id)) return;
+    this.#selectedId = id;
+    this.#focusedId = id;
+    this.#host.openSession(id, tab);
+    this.set(this.#build());
+  }
+
+  /** The page selected a session itself (the list, the URL, the pane's Back): the board shows it. */
+  selectFromPage(id: string | null): void {
+    this.#selectedId = id !== null && this.#sessions.some((s) => s.id === id) ? id : null;
+    if (this.viewModel.phase === "ready") this.set(this.#build());
+  }
+
+  focus(id: string | null): void {
+    if (id === this.#focusedId) return;
+    this.#focusedId = id;
+    const rect = id && this.viewModel.cards.find((c) => c.id === id)?.rect;
+    // The focused card is panned into view, never zoomed.
+    if (rect && this.#viewport.w > 0 && !isVisible(this.#camera, rect, this.#viewport)) this.#moveCamera(centerOn(this.#camera, rect, this.#viewport));
+    else this.set(this.#build());
+  }
+
+  /** A click or Enter on a card: a session opens its pane; You opens the Reviews popover while a review waits. */
+  open(id: string): void {
+    if (id !== YOU_ID) this.select(id);
+    else if (this.viewModel.cards[0]?.attention) this.#host.openReviews();
+  }
+
+  /** A message pill: the You pill opens Reviews, any other the delegate's Conversation tab. */
+  openThread(edgeId: string): void {
+    const edge = startedEdges(this.#sessions).find((e) => e.id === edgeId);
+    if (!edge) return;
+    if (edge.from === YOU_ID) this.#host.openReviews();
+    else this.select(edge.to, "conversation");
+  }
+
+  newSession(): void {
+    this.#host.newSession();
+  }
+
+  showList(): void {
+    this.#host.showList();
+  }
+
+  /** A key on the canvas. Returns whether the board used it. */
+  key({ key }: { key: string }): boolean {
+    const focused = this.#focusedId;
+    if (key === "Escape") {
+      if (this.#selectedId !== null) this.#host.closePane();
+      this.#selectedId = null;
+      this.#focusedId = null;
+      this.set(this.#build());
+      return true;
+    }
+    if (focused === null) {
+      const step = 40;
+      const pan: Record<string, [number, number]> = { ArrowLeft: [step, 0], ArrowRight: [-step, 0], ArrowUp: [0, step], ArrowDown: [0, -step] };
+      const by = pan[key];
+      if (!by) return false;
+      this.panBy(...by);
+      return true;
+    }
+    if (key === "Enter") {
+      this.open(focused);
+      return true;
+    }
+    if (key.toLowerCase() === "c") {
+      if (focused !== YOU_ID) this.select(focused, "context");
+      return true;
+    }
+    const next = this.#neighbour(focused, key);
+    if (next === undefined) return false;
+    this.focus(next);
+    return true;
+  }
+
+  /** Where an arrow key leads from `id`: the card below or above in its column, its first child, or its parent; itself at an end. */
+  #neighbour(id: string, key: string): string | undefined {
+    const { layout } = this.#geometry();
+    const edges = startedEdges(this.#sessions);
+    if (key === "ArrowDown" || key === "ArrowUp") {
+      const column = layout.columns.map((c) => layout.slots[c.key]!).find((ids) => ids.includes(id));
+      if (!column) return id;
+      return column[column.indexOf(id) + (key === "ArrowDown" ? 1 : -1)] ?? id;
+    }
+    if (key === "ArrowRight") return this.#rank().find((r) => edges.some((e) => e.from === id && e.to === r)) ?? id;
+    if (key === "ArrowLeft") return edges.find((e) => e.to === id)?.from ?? id;
+    return undefined;
+  }
+
+  /** You, the architect, then column by column, top to bottom. */
+  #rank(): string[] {
+    const { layout } = this.#geometry();
+    return [YOU_ID, ...layout.columns.flatMap((c) => layout.slots[c.key]!)];
   }
 
   // ── dragging ───────────────────────────────────────────────────────────
@@ -366,10 +482,10 @@ export class BoardPresenter extends Presenter<BoardViewModel> {
     const waitingOnArchitect = new Map<string, string>();
     for (const m of pendingMessages(this.#messages)) if (m.toSessionId === architectId && !waitingOnArchitect.has(m.fromSessionId)) waitingOnArchitect.set(m.fromSessionId, KIND_WORD[m.kind]);
     const reviewsWaiting = [...waits.values()].reduce((n, w) => n + w.count, 0);
-    const cards: CardViewModel[] = [
-      this.#you(rects[YOU_ID]!, reviewsWaiting),
-      ...inStartOrder(sessions).map((s) => this.#card(s, rects[s.id]!, waitingOnArchitect.get(s.id) ?? "")),
-    ];
+    const byId = new Map(sessions.map((s) => [s.id, s]));
+    const cards: CardViewModel[] = this.#rank().map((id) =>
+      id === YOU_ID ? this.#you(rects[YOU_ID]!, reviewsWaiting) : this.#card(byId.get(id)!, rects[id]!, waitingOnArchitect.get(id) ?? ""),
+    );
     const nameOf = (id: string) => (id === YOU_ID ? "You" : this.#nameOf(id));
     const edges = startedEdges(sessions).map((e): EdgeViewModel => {
       const geometry = edgeGeometry(rects[e.from]!, rects[e.to]!);
@@ -413,6 +529,11 @@ export class BoardPresenter extends Presenter<BoardViewModel> {
       feed: this.#feed,
       announcement: this.#announcement,
       arrival: this.#arrival,
+      selectedId: this.#selectedId,
+      focusedId: this.#focusedId,
+      state: sessions.length === 0 ? "empty" : allEnded(sessions) ? "ended" : "live",
+      endedNote: allEnded(sessions) ? `All ${sessions.length} sessions ended · the picture stays as it was` : "",
+      canvasLabel: `${sessions.length} session${sessions.length === 1 ? "" : "s"} as a graph. Tab moves between agents, arrows walk the tree, Enter opens a session, C opens its Context tab.`,
     };
   }
 
@@ -421,6 +542,8 @@ export class BoardPresenter extends Presenter<BoardViewModel> {
       id: YOU_ID, kind: "you", rect, agent: "You", mode: "", model: "", branch: "", badge: "", state: waiting > 0 ? "waiting" : "idle",
       word: waiting > 0 ? "waiting on you" : "nothing waiting", chip: "", line: null, dimmed: false, tone: "", dragging: false, ringed: false, when: "", attention: waiting > 0,
       name: waiting > 0 ? `You, ${waiting} review request${waiting === 1 ? "" : "s"} waiting on you` : "You, nothing waiting on you",
+      selected: false,
+      focused: this.#focusedId === YOU_ID,
     };
   }
 
@@ -447,6 +570,8 @@ export class BoardPresenter extends Presenter<BoardViewModel> {
       when: relativeTime(s.updatedAt, this.#deps.now()),
       attention: needsYou(s),
       name: [agentLabel(s.agentId, agentNames), s.role === "architect" ? "architect" : s.mode, status.word, pendingKind ? `${pendingKind} waiting on the architect` : "", isTerminal(s) && s.status !== "failed" ? "ended" : ""].filter(Boolean).join(", "),
+      selected: this.#selectedId === s.id,
+      focused: this.#focusedId === s.id,
     };
   }
 }

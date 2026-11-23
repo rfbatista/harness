@@ -1,6 +1,6 @@
 // One card: the session row turned into a tile.
 
-import { useRef } from "react";
+import { useEffect, useRef } from "react";
 import type { BoardPresenter, CardViewModel } from "../presenters/board-presenter";
 
 /** Pixels the pointer must travel before a press is a drag and not a click. */
@@ -9,6 +9,25 @@ const DRAG_SLOP = 4;
 export function CardView({ card, presenter }: { card: CardViewModel; presenter: BoardPresenter }) {
   const { rect } = card;
   const grab = useRef<{ x: number; y: number; moved: boolean } | null>(null);
+  const node = useRef<HTMLButtonElement>(null);
+  /** The press that just ended a drag also clicks: that click selects nothing. */
+  const dragged = useRef(false);
+
+  // Keyboard focus follows the presenter's, but only once focus is already on the board: loading never steals it.
+  useEffect(() => {
+    const el = node.current;
+    if (card.focused && el && el.ownerDocument.activeElement !== el && el.closest(".wb-canvas")?.contains(el.ownerDocument.activeElement)) el.focus({ preventScroll: true });
+  }, [card.focused]);
+  const nav = {
+    ref: node,
+    tabIndex: 0,
+    onFocus: () => presenter.focus(card.id),
+    onClick: () => {
+      if (dragged.current) dragged.current = false;
+      else presenter.open(card.id);
+    },
+    onDoubleClick: () => card.kind === "session" && presenter.select(card.id, "context"),
+  };
   const drag = {
     onPointerDown: (event: React.PointerEvent<HTMLButtonElement>) => {
       if (card.kind === "you" || event.button !== 0) return;
@@ -26,7 +45,10 @@ export function CardView({ card, presenter }: { card: CardViewModel; presenter: 
       presenter.dragTo(card.id, dx, dy);
     },
     onPointerUp: () => {
-      if (grab.current?.moved) presenter.endDrag(card.id);
+      if (grab.current?.moved) {
+        dragged.current = true;
+        presenter.endDrag(card.id);
+      }
       grab.current = null;
     },
     onPointerCancel: () => {
@@ -37,7 +59,7 @@ export function CardView({ card, presenter }: { card: CardViewModel; presenter: 
   const style = { left: rect.x, top: rect.y, inlineSize: rect.w, blockSize: rect.h };
   if (card.kind === "you") {
     return (
-      <button type="button" className="wb-node" role="listitem" data-id="you" data-role="person" data-attention={card.attention ? "" : undefined} aria-label={card.name} style={style}>
+      <button type="button" className="wb-node" role="listitem" data-id="you" data-role="person" data-attention={card.attention ? "" : undefined} aria-label={card.name} style={style} {...nav}>
         <span className="status" data-state={card.state} data-dot-only />
         <span className="who">
           <span className="agent">You</span>
@@ -54,10 +76,13 @@ export function CardView({ card, presenter }: { card: CardViewModel; presenter: 
       data-role={card.badge === "architect" ? "architect" : undefined}
       data-ended={card.dimmed ? "" : undefined}
       data-attention={card.attention ? "" : undefined}
+      data-selected={card.selected ? "" : undefined}
+      aria-current={card.selected ? "true" : undefined}
       data-fresh={card.ringed ? "" : undefined}
       data-dragging={card.dragging ? "" : undefined}
       aria-label={card.name}
       style={style}
+      {...nav}
       {...drag}
     >
       <span className="status" data-state={card.state} data-dot-only>

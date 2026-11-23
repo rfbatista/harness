@@ -10,7 +10,7 @@ import { BoardPresenter } from "./board-presenter";
 async function board(sessions: BoardSession[], compact = false) {
   const presenter = new BoardPresenter({ source: memoryBoardSource(sessions), preferences: storageBoardPreferences(memoryStorage()), ticketId: "t1", projectId: "p1", agentNames: AGENT_NAMES, taskTitle: "Ship it", now: () => new Date(T0 + 3_600_000) });
   await presenter.start();
-  if (compact) presenter.setCompact(true);
+  if (compact) presenter.setNarrow(true);
   return presenter;
 }
 

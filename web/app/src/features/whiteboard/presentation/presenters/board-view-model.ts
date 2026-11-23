@@ -30,6 +30,8 @@ export interface CardViewModel {
   attention: boolean;
   /** The accessible name, which reads like the row's tooltip. */
   name: string;
+  selected: boolean;
+  focused: boolean;
 }
 
 export interface BadgeViewModel {
@@ -91,6 +93,14 @@ export interface BoardViewModel {
   feed: LiveStatus;
   announcement: string;
   arrival: ArrivalViewModel | null;
+  /** The session whose pane is open beside the board. */
+  selectedId: string | null;
+  /** The card with keyboard focus; null: the canvas itself. */
+  focusedId: string | null;
+  /** "empty": no session yet; "ended": every session has ended; otherwise "live". */
+  state: "empty" | "ended" | "live";
+  endedNote: string;
+  canvasLabel: string;
 }
 
 export const LOADING: BoardViewModel = {
@@ -108,4 +118,9 @@ export const LOADING: BoardViewModel = {
   feed: "connecting",
   announcement: "",
   arrival: null,
+  selectedId: null,
+  focusedId: null,
+  state: "empty",
+  endedNote: "",
+  canvasLabel: "",
 };
