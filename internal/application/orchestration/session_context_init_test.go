@@ -144,3 +144,21 @@ func TestSessionContextInit_AHeadlessStartKeepsClaudesInitReport(t *testing.T) {
 		time.Sleep(20 * time.Millisecond)
 	}
 }
+
+func TestSessionContextInit_KnownToolsNeverGiveAServerAStatus(t *testing.T) {
+	svc, _ := newInteractiveService(t)
+	svc.Contexts = contextService(t).Contexts
+	svc.MCPKnownTools = func() map[string][]string {
+		return map[string][]string{"task": {"get_task", "message_architect"}}
+	}
+	sess, _ := startInteractive(t, svc, InteractiveRequest{})
+	e := contextOf(t, svc, sess.ID).Entries[0]
+	if _, ok := toolByName(e, "mcp__task__get_task"); !ok {
+		t.Fatal("the known tool is not in the entry")
+	}
+	for _, s := range e.MCPServers {
+		if s.Status != domain.MCPUnknown || s.StatusReason != domain.MCPStatusUnknownReason {
+			t.Errorf("%s = status %q (%q) in a terminal session with known tools", s.Name, s.Status, s.StatusReason)
+		}
+	}
+}
