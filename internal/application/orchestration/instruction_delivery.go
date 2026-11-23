@@ -5,6 +5,7 @@ import (
 	"log/slog"
 	"path"
 	"slices"
+	"strconv"
 	"strings"
 
 	"github.com/rfbatista/llmkit"
@@ -21,20 +22,29 @@ import (
 // A repository with no record has no summary; a session with no repository
 // (an architect) gets the summary of the project's records and no files.
 func (s *Service) instructionFiles(ctx context.Context, role domain.SessionRole, agent *domain.Agent, projectID, repositoryID string) []llmkit.InstructionFile {
+	files, _ := s.deliveredFiles(ctx, role, agent, projectID, repositoryID)
+	return files
+}
+
+// deliveredFiles is instructionFiles with the version of each stored file it
+// delivers, by path (ADR 0085's delivered set). The architecture summary is
+// not a stored file and has none.
+func (s *Service) deliveredFiles(ctx context.Context, role domain.SessionRole, agent *domain.Agent, projectID, repositoryID string) ([]llmkit.InstructionFile, map[string]string) {
 	if s.Architectures == nil || projectID == "" {
-		return nil
+		return nil, nil
 	}
+	versions := map[string]string{}
 	var out []llmkit.InstructionFile
 	if summary := s.architectureSummary(ctx, role, agent, projectID, repositoryID); summary != "" {
 		out = append(out, llmkit.InstructionFile{Kind: llmkit.InstructionMemory, Path: "ARCHITECTURE.md", Content: []byte(summary)})
 	}
 	if repositoryID == "" || role == domain.RoleArchitect {
-		return out
+		return out, versions
 	}
 	files, err := s.Architectures.InstructionFilesOf(ctx, repositoryID)
 	if err != nil {
 		slog.Warn("list a repository's instruction files for a session", "repository", repositoryID, "err", err)
-		return out
+		return out, versions
 	}
 	rec, err := s.Architectures.SavedArchitecture(ctx, repositoryID)
 	if err != nil {
@@ -60,8 +70,9 @@ func (s *Service) instructionFiles(ctx context.Context, role domain.SessionRole,
 			continue
 		}
 		out = append(out, llmkit.InstructionFile{Kind: kind, Path: f.Path, Content: []byte(f.Content)})
+		versions[f.Path] = strconv.Itoa(f.Version)
 	}
-	return out
+	return out, versions
 }
 
 func deliveryKind(kind string) (llmkit.InstructionKind, bool) {

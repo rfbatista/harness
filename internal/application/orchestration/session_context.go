@@ -2,6 +2,12 @@ package orchestration
 
 import (
 	"context"
+	"crypto/rand"
+	"encoding/hex"
+	"log/slog"
+	"time"
+
+	"github.com/rfbatista/llmkit"
 
 	"operators-mcp/internal/domain"
 )
@@ -74,4 +80,50 @@ func (s *Service) recordEntry(ctx context.Context, id string, e domain.ContextEn
 	}
 	c.Entries = append(c.Entries, e)
 	return s.Contexts.Save(ctx, c)
+}
+
+// contextFacts are the session's setup at a glance, from what prepare
+// resolved.
+func (s *Service) contextFacts(in prepareInput, ag resolvedAgent, cfg llmkit.SessionConfig, ws *domain.Workspace, savers sessionSavers, sb sandboxed, permission llmkit.PermissionMode) domain.ContextFacts {
+	f := domain.ContextFacts{
+		Role:           string(in.Role),
+		Mode:           string(in.Mode),
+		Model:          cfg.Model,
+		Headless:       in.Headless,
+		PermissionMode: string(permission),
+		Sandbox:        "off",
+		Worktree:       ws.Path,
+		Branch:         in.Branch,
+		TokenSavers:    []string{},
+	}
+	if ag.agent != nil {
+		f.Agent = ag.agent.Name
+	}
+	if sb.facts != nil {
+		f.RepositoryVisibility = sb.facts.Visibility
+		if sb.facts.Sandboxed && sb.facts.Driver != "" {
+			f.Sandbox = sb.facts.Driver
+		}
+	}
+	for _, t := range savers.active {
+		f.TokenSavers = append(f.TokenSavers, string(t))
+	}
+	return f
+}
+
+// recordStart stores the context entry of a session that has just been
+// recorded, from what prepare resolved and the opening message it was given.
+// A failure to store is logged: it must not fail a start that already ran.
+func (s *Service) recordStart(ctx context.Context, id string, p *prepared, opening string) {
+	in := p.context
+	in.ID, in.Kind, in.At, in.Opening = newContextEntryID(), domain.ContextEntryStart, time.Now(), opening
+	if err := s.recordEntry(ctx, id, buildContextEntry(in)); err != nil {
+		slog.Warn("store a session's context", "session", id, "err", err)
+	}
+}
+
+func newContextEntryID() string {
+	var b [8]byte
+	_, _ = rand.Read(b[:])
+	return hex.EncodeToString(b[:])
 }

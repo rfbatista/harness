@@ -431,6 +431,7 @@ func (s *Service) Start(ctx context.Context, req StartRequest) (*domain.Session,
 		return nil, fmt.Errorf("persist session: %w", err)
 	}
 	provisioned = nil
+	s.recordStart(ctx, sess.ID(), p, req.Task)
 	// The Branches list takes its starting snapshot before the agent acts.
 	s.announce(domain.SessionWorktreeProvisioned{SessionID: sess.ID()})
 	if s.commitCheckReason(sess.ID()) != "" {
@@ -503,6 +504,9 @@ type prepared struct {
 	envFile    string // the session's git env file, for login shells; "" without GitAuth
 	savers     sessionSavers
 	sandbox    sandboxed
+	// context is what the session's context entry is built from, once the
+	// start has recorded the session and knows the opening message.
+	context contextInput
 }
 
 // prepare validates a start request, provisions the session's worktree and
@@ -615,11 +619,15 @@ func (s *Service) prepare(ctx context.Context, in prepareInput) (*prepared, erro
 		id = llmkit.NewSessionID()
 	}
 	permission := parseAutoAccept(in.AutoAccept)
-	cfg := s.sessionConfig(id, ws.Path, in.Model, in.AllowedTools, permission, ag, subject, in.ZoneID, in.Role, in.RepositoryID)
+	trail := &pieceTrail{}
+	cfg, versions := s.sessionConfigTrail(trail, id, ws.Path, in.Model, in.AllowedTools, permission, ag, subject, in.ZoneID, in.Role, in.RepositoryID)
 	withReadOnlyAccess(&cfg, in.Access, in.Branch)
+	trail.mark(&cfg, domain.PieceOther, "Read-only access", "Harness")
 	cleanup, err := s.withShell(id, in.RepositoryID, subject, &cfg, ag.cleanup)
+	trail.mark(&cfg, domain.PieceOther, "Virtual shell", "Harness")
 	if err == nil {
 		cleanup = s.withCommitCheck(id, ws.ID, ws.Path, &cfg, false, cleanup)
+		trail.mark(&cfg, domain.PieceOther, "Commit check", "Harness")
 	}
 	if err != nil {
 		discard()
@@ -630,10 +638,12 @@ func (s *Service) prepare(ctx context.Context, in prepareInput) (*prepared, erro
 		discard()
 		return nil, err
 	}
+	trail.mark(&cfg, domain.PieceOther, "Git authentication", "Harness")
 	s.withAgentCredential(&cfg, in.ProjectID)
 	s.withKeychainShim(&cfg)
 	s.withAttribution(&cfg)
 	savers := s.withTokenSavers(ctx, in, repo.RootDir, ws.Path, &cfg)
+	trail.mark(&cfg, domain.PieceRuleset, "Token saver rules", "Token savers")
 	cleanup, err = s.withTempDir(id, &cfg, cleanup)
 	if err != nil {
 		discard()
@@ -656,7 +666,12 @@ func (s *Service) prepare(ctx context.Context, in prepareInput) (*prepared, erro
 		withClaudeSandboxOff(&cfg)
 	}
 	withChromeEnvPinned(&cfg)
+	trail.mark(&cfg, domain.PieceOther, "Sandbox and Chrome", "Harness")
 	return &prepared{
+		context: contextInput{
+			Cfg: cfg, System: trail.pieces, Versions: versions, Repository: repo.Name,
+			Facts: s.contextFacts(in, ag, cfg, ws, savers, sb, permission),
+		},
 		sandbox:    sb,
 		cfg:        cfg,
 		ws:         ws,
@@ -983,6 +998,13 @@ func (s *Service) resolveAgent(agentID string, mode domain.SessionMode) (resolve
 // a project-level session's project brief) and task MCP server, the
 // agent's MCP servers and the zone's extra dirs.
 func (s *Service) sessionConfig(id, dir, model string, allowedTools []string, permission llmkit.PermissionMode, ag resolvedAgent, subject sessionSubject, zoneID string, role domain.SessionRole, repositoryID string) llmkit.SessionConfig {
+	cfg, _ := s.sessionConfigTrail(nil, id, dir, model, allowedTools, permission, ag, subject, zoneID, role, repositoryID)
+	return cfg
+}
+
+// sessionConfigTrail is sessionConfig that also marks each system-prompt
+// section on trail, and says the version of each instruction file it delivers.
+func (s *Service) sessionConfigTrail(trail *pieceTrail, id, dir, model string, allowedTools []string, permission llmkit.PermissionMode, ag resolvedAgent, subject sessionSubject, zoneID string, role domain.SessionRole, repositoryID string) (llmkit.SessionConfig, map[string]string) {
 	ticket := subject.ticket
 	cfg := llmkit.SessionConfig{
 		ID:           id,
@@ -997,6 +1019,7 @@ func (s *Service) sessionConfig(id, dir, model string, allowedTools []string, pe
 		Attribution: id,
 		Driver:      claude.Config{SkillDirs: ag.skillDirs},
 	}
+	trail.mark(&cfg, domain.PieceRepositoryPrompt, "Repository prompt", "Agent and repository prompts")
 
 	// After the agent's own prompt, so the task brief lands at the end of the
 	// system prompt rather than being overwritten by it. The id is minted
@@ -1019,13 +1042,17 @@ func (s *Service) sessionConfig(id, dir, model string, allowedTools []string, pe
 		counts.structure = s.taskStructure(ticket)
 		applyTaskContext(&cfg, ticket, taskURL, role, counts)
 	}
+	trail.mark(&cfg, domain.PieceBrief, subject.briefTitle(), "Harness")
 	if section := s.architectureSection(context.TODO(), role, ag.agent, subject.projectID(), repositoryID); section != "" {
 		cfg.AppendSystem = appendSection(cfg.AppendSystem, section)
 	}
+	trail.mark(&cfg, domain.PieceArchitecture, "Repository architecture", "Harness")
 	if section := s.designSystemBrief(context.TODO(), repositoryID); section != "" && subject.designSystem == nil {
 		cfg.AppendSystem = appendSection(cfg.AppendSystem, section)
 	}
-	cfg.InstructionFiles = s.instructionFiles(context.TODO(), role, ag.agent, subject.projectID(), repositoryID)
+	trail.mark(&cfg, domain.PieceOther, "Design system", "Harness")
+	var versions map[string]string
+	cfg.InstructionFiles, versions = s.deliveredFiles(context.TODO(), role, ag.agent, subject.projectID(), repositoryID)
 	if s.SessionBranchGateURL != nil {
 		cfg.InstructionFiles = append(cfg.InstructionFiles, s.branchGateInstructionFile(subject.mode))
 	}
@@ -1033,7 +1060,9 @@ func (s *Service) sessionConfig(id, dir, model string, allowedTools []string, pe
 		cfg.AppendSystem = appendSection(cfg.AppendSystem, section)
 	}
 
+	trail.mark(&cfg, domain.PieceOther, "Attached assets", "Harness")
 	s.applyServicesServer(&cfg, id, subject.mode, ag.agent, subject.project)
+	trail.mark(&cfg, domain.PieceOther, "Services", "Harness")
 	var defaults map[string][]string
 	if s.MCPToolDefaults != nil {
 		defaults = s.MCPToolDefaults()
@@ -1061,7 +1090,7 @@ func (s *Service) sessionConfig(id, dir, model string, allowedTools []string, pe
 			cfg.AddDirs = append(cfg.AddDirs, z.ExplicitPaths...)
 		}
 	}
-	return cfg
+	return cfg, versions
 }
 
 func (s *Service) pump(sess llmkit.Session) {
