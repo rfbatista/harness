@@ -38,6 +38,15 @@ func TestAReadOnlySessionsWritesAndCommitsAreDeniedWithAReasonThatNamesReadOnlyA
 		"a commit":     {Point: domain.PointBeforeCommit, Tool: "git commit", Paths: []string{"a.go"}},
 		"git commit":   {Point: domain.PointBeforeTool, Tool: "Bash", Command: "git commit -m x"},
 		"git add":      {Point: domain.PointBeforeTool, Tool: "Bash", Command: "cd sub && git add -A"},
+		"a notebook":   {Point: domain.PointBeforeTool, Tool: "NotebookEdit", Paths: []string{wt + "/n.ipynb"}},
+		"update-ref":   {Point: domain.PointBeforeTool, Tool: "Bash", Command: "git update-ref refs/heads/x HEAD"},
+		"update-index": {Point: domain.PointBeforeTool, Tool: "Bash", Command: "git update-index --add f"},
+		"commit-tree":  {Point: domain.PointBeforeTool, Tool: "Bash", Command: "git commit-tree HEAD^{tree} -m x"},
+		"revert":       {Point: domain.PointBeforeTool, Tool: "Bash", Command: "git revert HEAD"},
+		"pull":         {Point: domain.PointBeforeTool, Tool: "Bash", Command: "git pull"},
+		"notes":        {Point: domain.PointBeforeTool, Tool: "Bash", Command: "git notes add -m x"},
+		"config set":   {Point: domain.PointBeforeTool, Tool: "Bash", Command: "git config user.name x"},
+		"config unset": {Point: domain.PointBeforeTool, Tool: "Bash", Command: "git -C sub config --unset core.hooksPath"},
 	} {
 		v := check("ro", c)
 		if !strings.Contains(v.Deny, "read-only access") || !strings.Contains(v.Deny, "agent/work") {
@@ -46,6 +55,8 @@ func TestAReadOnlySessionsWritesAndCommitsAreDeniedWithAReasonThatNamesReadOnlyA
 	}
 
 	for name, c := range map[string]ports.ArchitectureCheck{
+		"config get":       {Point: domain.PointBeforeTool, Tool: "Bash", Command: "git config --get user.name"},
+		"config list":      {Point: domain.PointBeforeTool, Tool: "Bash", Command: "git config --list"},
 		"go test":          {Point: domain.PointBeforeTool, Tool: "Bash", Command: "go test ./..."},
 		"git status":       {Point: domain.PointBeforeTool, Tool: "Bash", Command: "git status && git log --oneline -3 && git diff"},
 		"a write outside":  {Point: domain.PointBeforeTool, Tool: "Write", Paths: []string{t.TempDir() + "/scratch.txt"}},

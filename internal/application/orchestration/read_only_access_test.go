@@ -6,6 +6,9 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/rfbatista/harnesskit/errs"
+	"github.com/rfbatista/llmkit/claude"
+
 	"operators-mcp/internal/domain"
 	"operators-mcp/internal/ports"
 )
@@ -132,5 +135,41 @@ func TestASessionThatCutsItsOwnWorktreeWritesItWhateverItsModesPreset(t *testing
 	}
 	if _, err := startOn(t, svc, InteractiveRequest{Mode: "review", Access: "read_only"}); err == nil {
 		t.Error("read-only was accepted with no worktree to join")
+	}
+}
+
+func TestTheArchitectureHookFiresBeforeNotebookEditToo(t *testing.T) {
+	groups := ArchitectureHooks("http://harness.test/api/sessions/s1/architecture")[claude.HookPreToolUse]
+	if len(groups) != 1 || !strings.Contains(groups[0].Matcher, "NotebookEdit") {
+		t.Errorf("matcher %+v lacks NotebookEdit, so a read-only session's notebook write is refused only by the OS", groups)
+	}
+}
+
+func TestReadOnlyAccessIsRefusedWhileTheAgentSandboxIsOff(t *testing.T) {
+	svc, _, creator := joinWorld(t)
+	svc.Sandbox = &Sandbox{Enabled: func() bool { return false }}
+	sessions := len(svc.sessions.List(context.Background(), ports.SessionFilter{}))
+	const sentence = "Read-only access needs the agent sandbox; it is off for this session."
+
+	for name, req := range map[string]InteractiveRequest{
+		"an explicit read_only":                    {Mode: "implement", Access: "read_only"},
+		"the Reviewer's default":                   {Mode: "review"},
+		"the QA default":                           {Mode: "qa"},
+		"an explicit read_only on a write default": {Mode: "test", Access: "read_only"},
+	} {
+		req.WorktreeID = creator.WorkspaceID
+		_, err := startOn(t, svc, req)
+		if errs.Code(err) != "ACCESS_INVALID" || err == nil || !strings.Contains(err.Error(), sentence) {
+			t.Errorf("%s: %v, want ACCESS_INVALID saying %q", name, err, sentence)
+		}
+	}
+	if got := len(svc.sessions.List(context.Background(), ports.SessionFilter{})); got != sessions {
+		t.Errorf("a refusal recorded sessions: %d → %d", sessions, got)
+	}
+	for _, req := range []InteractiveRequest{{Mode: "review", Access: "write"}, {Mode: "implement"}} {
+		req.WorktreeID = creator.WorkspaceID
+		if sess, err := startOn(t, svc, req); err != nil || sess.Access != domain.AccessWrite {
+			t.Errorf("%+v: %v %v; write access needs no sandbox", req, sess, err)
+		}
 	}
 }

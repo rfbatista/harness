@@ -100,3 +100,13 @@ func TestAWorktreesCommitEndpointAnswersOnlyTheLoopbackAndNamesNothingToOthers(t
 		t.Errorf("%d, asked %q, header %q", rec.Code, who.asked, rec.Header().Get("X-Harness-Attributed-To"))
 	}
 }
+
+func TestAHookCheckOfANotebookEditReadsItsNotebookPath(t *testing.T) {
+	rules := &recordingRules{}
+	h := NewHandler(Services{ArchitectureRules: rules})
+	rec := postCommit(t, h, "/api/sessions/s1/architecture/check?hook=PreToolUse",
+		`{"cwd":"/w","tool_name":"NotebookEdit","tool_input":{"notebook_path":"n.ipynb"}}`)
+	if rec.Code != http.StatusOK || len(rules.checks) != 1 || len(rules.checks[0].Paths) != 1 || rules.checks[0].Paths[0] != "/w/n.ipynb" || rules.checks[0].Tool != "NotebookEdit" {
+		t.Errorf("%d, checks %+v; want the notebook's path checked", rec.Code, rules.checks)
+	}
+}

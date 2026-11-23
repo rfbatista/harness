@@ -1064,6 +1064,11 @@ func (s *Service) joinTarget(ctx context.Context, req InteractiveRequest, mode d
 	if access == "" {
 		access = defaultAccess(mode)
 	}
+	// The OS is what keeps a read-only session from writing: with the sandbox
+	// off nothing does, so the start is refused rather than promised.
+	if access == domain.AccessReadOnly && !s.Sandbox.on() {
+		return "", nil, joinRefusal("ACCESS_INVALID", "Read-only access needs the agent sandbox; it is off for this session.", nil)
+	}
 	if strings.TrimSpace(req.BaseBranch) != "" || strings.TrimSpace(req.BranchName) != "" {
 		return "", nil, joinRefusal("WORKTREE_WITH_BASE_BRANCH", "a session that joins a worktree runs on its branch: leave the base branch and the branch name empty", nil)
 	}

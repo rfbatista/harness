@@ -51,7 +51,9 @@ type architectureHookInput struct {
 	ToolName  string `json:"tool_name"`
 	ToolInput struct {
 		FilePath string `json:"file_path"`
-		Command  string `json:"command"`
+		// NotebookPath is the notebook NotebookEdit writes.
+		NotebookPath string `json:"notebook_path"`
+		Command      string `json:"command"`
 	} `json:"tool_input"`
 }
 
@@ -76,7 +78,11 @@ func (h *Handler) handleArchitectureCheck(c echo.Context) error {
 		if event == "PostToolUse" {
 			check.Point = domain.PointAfterEdit
 		}
-		if p := in.ToolInput.FilePath; p != "" {
+		p := in.ToolInput.FilePath
+		if p == "" {
+			p = in.ToolInput.NotebookPath
+		}
+		if p != "" {
 			if !filepath.IsAbs(p) {
 				p = filepath.Join(in.Cwd, p)
 			}

@@ -10,6 +10,7 @@ import (
 
 	"operators-mcp/internal/domain"
 	"operators-mcp/internal/ports"
+	"operators-mcp/internal/ports/portstest"
 )
 
 // A session started on another session's worktree (Glossary: joined session):
@@ -61,6 +62,8 @@ func startOn(t *testing.T, svc *Service, req InteractiveRequest) (*domain.Sessio
 func joinWorld(t *testing.T) (*Service, *fakeProvisioner, *domain.Session) {
 	t.Helper()
 	svc, prov := newInteractiveService(t)
+	// The agent sandbox is on: read-only access is only enforced under it.
+	svc.Sandbox = &Sandbox{Driver: &portstest.RecordingSandboxDriver{}, Home: t.TempDir()}
 	creator, err := startOn(t, svc, InteractiveRequest{Mode: "implement"})
 	if err != nil {
 		t.Fatal(err)

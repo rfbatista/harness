@@ -99,10 +99,15 @@ func TestHTTP_StartInteractiveSession_OnAnExistingWorktree(t *testing.T) {
 	}
 	ws := creator["worktree_id"].(string)
 
-	code, body = startWith(t, env.srv.URL, `{"project_id":"p1","repository_id":"r1","ticket_id":"tk1","mode":"review","worktree_id":"`+ws+`"}`)
+	code, body = startWith(t, env.srv.URL, `{"project_id":"p1","repository_id":"r1","ticket_id":"tk1","mode":"test","worktree_id":"`+ws+`"}`)
 	joined, _ := body["session"].(map[string]any)
-	if code != http.StatusCreated || joined["joined"] != true || joined["access"] != "read_only" || joined["worktree_id"] != ws || joined["branch"] != creator["branch"] {
+	if code != http.StatusCreated || joined["joined"] != true || joined["access"] != "write" || joined["worktree_id"] != ws || joined["branch"] != creator["branch"] {
 		t.Fatalf("a join: %d %v", code, body)
+	}
+	// This server runs with no agent sandbox, so a Reviewer's read-only default is refused.
+	code, body = startWith(t, env.srv.URL, `{"project_id":"p1","repository_id":"r1","ticket_id":"tk1","mode":"review","worktree_id":"`+ws+`"}`)
+	if code != http.StatusBadRequest || body["code"] != "ACCESS_INVALID" || !strings.Contains(body["error"].(string), "Read-only access needs the agent sandbox; it is off for this session.") {
+		t.Fatalf("a read-only join without the sandbox: %d %v", code, body)
 	}
 	if got := len(env.prov.created); got != 1 {
 		t.Errorf("%d worktrees created, want the one the creator cut", got)

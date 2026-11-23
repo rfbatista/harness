@@ -310,6 +310,13 @@ var gitWriteVerbs = map[string]bool{
 	"commit": true, "push": true, "merge": true, "rebase": true, "reset": true, "cherry-pick": true, "apply": true, "am": true,
 	"stash": true, "tag": true, "add": true, "rm": true, "mv": true, "checkout": true, "switch": true, "restore": true,
 	"clean": true, "branch": true,
+	"update-ref": true, "update-index": true, "commit-tree": true, "revert": true, "pull": true, "notes": true,
+}
+
+// gitConfigReads are the options that make `git config` only read.
+var gitConfigReads = map[string]bool{
+	"--get": true, "--get-all": true, "--get-regexp": true, "--get-urlmatch": true, "--list": true, "-l": true,
+	"--show-origin": true, "--show-scope": true, "--name-only": true,
 }
 
 // gitWrites says a shell command line runs a git command that writes: the
@@ -328,7 +335,7 @@ func gitWrites(command string) bool {
 					i++ // the option's argument
 				case strings.HasPrefix(w, "-"):
 				default:
-					if gitWriteVerbs[w] {
+					if gitWriteVerbs[w] || (w == "config" && !slices.ContainsFunc(words[i+1:], func(o string) bool { return gitConfigReads[o] })) {
 						return true
 					}
 					i = len(words)
