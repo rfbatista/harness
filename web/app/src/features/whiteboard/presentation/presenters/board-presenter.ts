@@ -3,9 +3,10 @@
 
 import { Presenter } from "../../../../shared/kernel/presenter";
 import { BoardSourceError, type BoardSource } from "../../application/ports";
+import type { BoardPreferences } from "../../application/preferences";
 import { agentLabel, chipOf, detailOf, statusView, type Detail } from "../../domain/card";
 import { startedEdges, YOU_ID } from "../../domain/graph";
-import { computeLayout, edgeGeometry, sizeOf, type Rect } from "../../domain/layout";
+import { MARGIN, computeLayout, edgeGeometry, sizeOf, type Point, type Rect } from "../../domain/layout";
 import { inStartOrder, isTerminal, type BoardSession } from "../../domain/session";
 import type { ReviewRequest, TaskMessage } from "../../domain/message";
 import { KIND_WORD, ageWords, lastReportOf, pairKey, pendingMessages, reviewWaits, threadsOf } from "../../domain/threads";
@@ -28,6 +29,8 @@ export interface CardViewModel {
   line: Detail | null;
   dimmed: boolean;
   tone: "" | "danger";
+  /** The person is dragging it. */
+  dragging: boolean;
   when: string;
   /** Waiting on the person: the card takes the attention wash. */
   attention: boolean;
@@ -72,6 +75,9 @@ export interface BoardViewModel {
   /** Compact cards: the pane is open, or the page is narrow. */
   compact: boolean;
   columns: ColumnViewModel[];
+  /** How many cards the person placed, and whether Tidy has anything to do. */
+  placedCount: number;
+  tidyEnabled: boolean;
   /** The extent of the board in board px. */
   canvas: { w: number; h: number };
   cards: CardViewModel[];
@@ -80,6 +86,7 @@ export interface BoardViewModel {
 
 export interface BoardDeps {
   source: BoardSource;
+  preferences: BoardPreferences;
   ticketId: string;
   projectId: string;
   agentNames: Readonly<Record<string, string>>;
@@ -87,7 +94,7 @@ export interface BoardDeps {
   now: () => Date;
 }
 
-const LOADING: BoardViewModel = { phase: "loading", error: "", compact: false, columns: [], canvas: { w: 0, h: 0 }, cards: [], edges: [] };
+const LOADING: BoardViewModel = { phase: "loading", error: "", compact: false, placedCount: 0, tidyEnabled: false, columns: [], canvas: { w: 0, h: 0 }, cards: [], edges: [] };
 
 export class BoardPresenter extends Presenter<BoardViewModel> {
   readonly #deps: BoardDeps;
@@ -95,6 +102,10 @@ export class BoardPresenter extends Presenter<BoardViewModel> {
   #messages: TaskMessage[] = [];
   #reviews: ReviewRequest[] = [];
   #compact = false;
+  /** The positions the person gave, by session id; kept in the browser per task. */
+  #placed: Record<string, Point> = {};
+  #drag: { id: string; from: Point } | null = null;
+  #scale = 1;
 
   constructor(deps: BoardDeps) {
     super(LOADING);
@@ -110,6 +121,37 @@ export class BoardPresenter extends Presenter<BoardViewModel> {
       this.set({ ...LOADING, phase: "error", error: err.message });
       return;
     }
+    this.#placed = this.#deps.preferences.positions(this.#deps.ticketId);
+    this.set(this.#build());
+  }
+
+  /** The person takes hold of a card; the You card is not movable. */
+  beginDrag(id: string): void {
+    const card = this.viewModel.cards.find((c) => c.id === id);
+    if (!card || card.kind === "you") return;
+    this.#drag = { id, from: { x: card.rect.x, y: card.rect.y } };
+    this.set(this.#build());
+  }
+
+  /** The pointer has travelled (dx, dy) screen px since the grab. */
+  dragTo(id: string, dx: number, dy: number): void {
+    const drag = this.#drag;
+    if (!drag || drag.id !== id) return;
+    this.#placed = { ...this.#placed, [id]: { x: Math.max(0, drag.from.x + dx / this.#scale), y: Math.max(0, drag.from.y + dy / this.#scale) } };
+    this.set(this.#build());
+  }
+
+  endDrag(id: string): void {
+    if (this.#drag?.id !== id) return;
+    this.#drag = null;
+    this.#deps.preferences.savePositions(this.#deps.ticketId, this.#placed);
+    this.set(this.#build());
+  }
+
+  /** Drops every placed position: the computed layout again. */
+  tidy(): void {
+    this.#placed = {};
+    this.#deps.preferences.savePositions(this.#deps.ticketId, {});
     this.set(this.#build());
   }
 
@@ -124,8 +166,14 @@ export class BoardPresenter extends Presenter<BoardViewModel> {
     const sessions = this.#sessions;
     const compact = this.#compact;
     const layout = computeLayout(sessions, compact);
+    const known = new Set(sessions.map((s) => s.id));
+    const placed = Object.fromEntries(Object.entries(this.#placed).filter(([id]) => known.has(id)));
     const rects: Record<string, Rect> = {};
-    for (const [id, p] of Object.entries(layout.positions)) rects[id] = { ...p, ...sizeOf(id === YOU_ID, compact) };
+    for (const [id, p] of Object.entries({ ...layout.positions, ...placed })) rects[id] = { ...p, ...sizeOf(id === YOU_ID, compact) };
+    const canvas = {
+      w: Math.max(layout.size.w, ...Object.values(rects).map((r) => r.x + r.w + MARGIN)),
+      h: Math.max(layout.size.h, ...Object.values(rects).map((r) => r.y + r.h + MARGIN)),
+    };
     const ended = new Set(sessions.filter(isTerminal).map((s) => s.id));
     const threads = threadsOf(this.#messages);
     const waits = reviewWaits(this.#reviews);
@@ -165,13 +213,14 @@ export class BoardPresenter extends Presenter<BoardViewModel> {
         : { count: thread.count, text: `${KIND_WORD[latest.kind]} ${relativeTime(latest.createdAt, now)}`, name: `${between}, latest ${KIND_WORD[latest.kind]} ${ageWords(latest.createdAt, now)} ago`, tone: "", ...geometry.badge };
       return { ...base, tone: waiting ? "signal" : "started", badge };
     });
-    return { phase: "ready", error: "", compact, columns: layout.columns, canvas: layout.size, cards, edges };
+    const placedCount = Object.keys(placed).length;
+    return { phase: "ready", error: "", compact, placedCount, tidyEnabled: placedCount > 0, columns: layout.columns, canvas, cards, edges };
   }
 
   #you(rect: Rect, waiting: number): CardViewModel {
     return {
       id: YOU_ID, kind: "you", rect, agent: "You", mode: "", model: "", branch: "", badge: "", state: waiting > 0 ? "waiting" : "idle",
-      word: waiting > 0 ? "waiting on you" : "nothing waiting", chip: "", line: null, dimmed: false, tone: "", when: "", attention: waiting > 0,
+      word: waiting > 0 ? "waiting on you" : "nothing waiting", chip: "", line: null, dimmed: false, tone: "", dragging: false, when: "", attention: waiting > 0,
       name: waiting > 0 ? `You, ${waiting} review request${waiting === 1 ? "" : "s"} waiting on you` : "You, nothing waiting on you",
     };
   }
@@ -194,6 +243,7 @@ export class BoardPresenter extends Presenter<BoardViewModel> {
       line: detailOf(s, { taskTitle, agentNames, others: this.#sessions, report: lastReportOf(this.#messages, s.id), messagesLoaded: true }),
       dimmed: isTerminal(s) && s.status !== "failed",
       tone: s.status === "failed" ? "danger" : "",
+      dragging: this.#drag?.id === s.id,
       when: relativeTime(s.updatedAt, this.#deps.now()),
       attention: needsYou(s),
       name: [agentLabel(s.agentId, agentNames), s.role === "architect" ? "architect" : s.mode, status.word, pendingKind ? `${pendingKind} waiting on the architect` : "", isTerminal(s) && s.status !== "failed" ? "ended" : ""].filter(Boolean).join(", "),

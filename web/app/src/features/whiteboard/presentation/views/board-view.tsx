@@ -13,7 +13,15 @@ export function BoardView({ presenter }: { presenter: BoardPresenter }) {
   const vm = usePresenter(presenter);
   const { w: width, h: height } = vm.canvas;
   return (
-    <section className="whiteboard" aria-label="Agents whiteboard" data-layout="rank">
+    <section className="whiteboard" aria-label="Agents whiteboard" data-layout="rank" onKeyDown={(event) => event.key.toLowerCase() === "t" && !event.metaKey && !event.ctrlKey && presenter.tidy()}>
+      <div className="wb-bar">
+        <div className="wb-tools">
+          <button type="button" className="button" data-variant="ghost" data-size="sm" data-tidy disabled={!vm.tidyEnabled} title="Tidy (T): put every card back in its computed place" onClick={presenter.tidy}>
+            Tidy
+            {vm.placedCount > 0 && <span className="badge">{vm.placedCount} placed</span>}
+          </button>
+        </div>
+      </div>
       <div className="wb-canvas" tabIndex={0} role="group" aria-roledescription="whiteboard" aria-label={`${vm.cards.length - 1} sessions as a graph.`}>
         <div className="wb-world" role="list" data-compact={vm.compact ? "" : undefined} style={{ inlineSize: width, blockSize: height }}>
           {vm.columns.map((column) => (
@@ -35,7 +43,7 @@ export function BoardView({ presenter }: { presenter: BoardPresenter }) {
             ) : null,
           )}
           {vm.cards.map((card) => (
-            <CardView key={card.id} card={card} />
+            <CardView key={card.id} card={card} presenter={presenter} />
           ))}
         </div>
       </div>

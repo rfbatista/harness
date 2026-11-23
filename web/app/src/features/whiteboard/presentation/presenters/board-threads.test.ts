@@ -1,6 +1,8 @@
 import { describe, test } from "node:test";
 import assert from "node:assert/strict";
 import { memoryBoardSource } from "../../infrastructure/memory-board-source";
+import { storageBoardPreferences } from "../../infrastructure/storage-board-preferences";
+import { memoryStorage } from "../../testing/memory-storage";
 import type { ReviewRequest, TaskMessage } from "../../domain/message";
 import type { BoardSession } from "../../domain/session";
 import { AGENT_NAMES, T0, message, review, session } from "../../testing/fixtures";
@@ -13,7 +15,7 @@ async function board(sessions: BoardSession[], messages: TaskMessage[] = [], rev
   const source = memoryBoardSource(sessions);
   source.setMessages(messages);
   source.setReviews(reviews);
-  const presenter = new BoardPresenter({ source, ticketId: "t1", projectId: "p1", agentNames: AGENT_NAMES, taskTitle: "Ship it", now: () => NOW });
+  const presenter = new BoardPresenter({ source, preferences: storageBoardPreferences(memoryStorage()), ticketId: "t1", projectId: "p1", agentNames: AGENT_NAMES, taskTitle: "Ship it", now: () => NOW });
   await presenter.start();
   return presenter.viewModel;
 }

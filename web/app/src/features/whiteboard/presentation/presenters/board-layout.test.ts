@@ -1,12 +1,14 @@
 import { describe, test } from "node:test";
 import assert from "node:assert/strict";
 import { memoryBoardSource } from "../../infrastructure/memory-board-source";
+import { storageBoardPreferences } from "../../infrastructure/storage-board-preferences";
+import { memoryStorage } from "../../testing/memory-storage";
 import { AGENT_NAMES, T0, session } from "../../testing/fixtures";
 import type { BoardSession } from "../../domain/session";
 import { BoardPresenter } from "./board-presenter";
 
 async function board(sessions: BoardSession[], compact = false) {
-  const presenter = new BoardPresenter({ source: memoryBoardSource(sessions), ticketId: "t1", projectId: "p1", agentNames: AGENT_NAMES, taskTitle: "Ship it", now: () => new Date(T0 + 3_600_000) });
+  const presenter = new BoardPresenter({ source: memoryBoardSource(sessions), preferences: storageBoardPreferences(memoryStorage()), ticketId: "t1", projectId: "p1", agentNames: AGENT_NAMES, taskTitle: "Ship it", now: () => new Date(T0 + 3_600_000) });
   await presenter.start();
   if (compact) presenter.setCompact(true);
   return presenter;
@@ -62,7 +64,7 @@ describe("computed layout", () => {
   test("a status change moves no card", async () => {
     const f = fleet();
     const source = memoryBoardSource([f.architect, f.impl1, f.review]);
-    const presenter = new BoardPresenter({ source, ticketId: "t1", projectId: "p1", agentNames: AGENT_NAMES, taskTitle: "", now: () => new Date(T0) });
+    const presenter = new BoardPresenter({ source, preferences: storageBoardPreferences(memoryStorage()), ticketId: "t1", projectId: "p1", agentNames: AGENT_NAMES, taskTitle: "", now: () => new Date(T0) });
     await presenter.start();
     const before = presenter.viewModel.cards.map((c) => c.rect);
     source.setSessions([f.architect, { ...f.impl1, status: "done" }, f.review]);

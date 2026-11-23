@@ -1,9 +1,39 @@
 // One card: the session row turned into a tile.
 
-import type { CardViewModel } from "../presenters/board-presenter";
+import { useRef } from "react";
+import type { BoardPresenter, CardViewModel } from "../presenters/board-presenter";
 
-export function CardView({ card }: { card: CardViewModel }) {
+/** Pixels the pointer must travel before a press is a drag and not a click. */
+const DRAG_SLOP = 4;
+
+export function CardView({ card, presenter }: { card: CardViewModel; presenter: BoardPresenter }) {
   const { rect } = card;
+  const grab = useRef<{ x: number; y: number; moved: boolean } | null>(null);
+  const drag = {
+    onPointerDown: (event: React.PointerEvent<HTMLButtonElement>) => {
+      if (card.kind === "you" || event.button !== 0) return;
+      grab.current = { x: event.clientX, y: event.clientY, moved: false };
+      event.currentTarget.setPointerCapture(event.pointerId);
+    },
+    onPointerMove: (event: React.PointerEvent<HTMLButtonElement>) => {
+      const g = grab.current;
+      if (!g) return;
+      const dx = event.clientX - g.x;
+      const dy = event.clientY - g.y;
+      if (!g.moved && Math.hypot(dx, dy) < DRAG_SLOP) return;
+      if (!g.moved) presenter.beginDrag(card.id);
+      g.moved = true;
+      presenter.dragTo(card.id, dx, dy);
+    },
+    onPointerUp: () => {
+      if (grab.current?.moved) presenter.endDrag(card.id);
+      grab.current = null;
+    },
+    onPointerCancel: () => {
+      if (grab.current?.moved) presenter.endDrag(card.id);
+      grab.current = null;
+    },
+  };
   const style = { left: rect.x, top: rect.y, inlineSize: rect.w, blockSize: rect.h };
   if (card.kind === "you") {
     return (
@@ -24,8 +54,10 @@ export function CardView({ card }: { card: CardViewModel }) {
       data-role={card.badge === "architect" ? "architect" : undefined}
       data-ended={card.dimmed ? "" : undefined}
       data-attention={card.attention ? "" : undefined}
+      data-dragging={card.dragging ? "" : undefined}
       aria-label={card.name}
       style={style}
+      {...drag}
     >
       <span className="status" data-state={card.state} data-dot-only>
         <span className="visually-hidden">{card.word}</span>

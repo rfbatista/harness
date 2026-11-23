@@ -1,13 +1,15 @@
 import { describe, test } from "node:test";
 import assert from "node:assert/strict";
 import { memoryBoardSource } from "../../infrastructure/memory-board-source";
+import { storageBoardPreferences } from "../../infrastructure/storage-board-preferences";
+import { memoryStorage } from "../../testing/memory-storage";
 import { AGENT_NAMES, T0, session } from "../../testing/fixtures";
 import { BoardPresenter } from "./board-presenter";
 
 const NOW = new Date(T0 + 3_600_000);
 
 async function board(sessions = [session()]) {
-  const presenter = new BoardPresenter({ source: memoryBoardSource(sessions), ticketId: "t1", projectId: "p1", agentNames: AGENT_NAMES, taskTitle: "Ship it", now: () => NOW });
+  const presenter = new BoardPresenter({ source: memoryBoardSource(sessions), preferences: storageBoardPreferences(memoryStorage()), ticketId: "t1", projectId: "p1", agentNames: AGENT_NAMES, taskTitle: "Ship it", now: () => NOW });
   await presenter.start();
   return presenter.viewModel;
 }
