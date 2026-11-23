@@ -41,9 +41,6 @@ func TestThePageShowsTheDataDirAndWhatItHolds(t *testing.T) {
 			t.Errorf("the page lacks %q", want)
 		}
 	}
-	if !strings.Contains(html, `href="/server" aria-label="Server" title="Server" aria-current="page"`) {
-		t.Errorf("the top bar does not mark the Server page as current:\n%s", html)
-	}
 }
 
 func TestAnInMemoryServerHasNoDataDir(t *testing.T) {

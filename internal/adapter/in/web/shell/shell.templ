@@ -15,6 +15,9 @@ templ Document(f Frame) {
 			<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Atkinson+Hyperlegible+Mono:wght@400;500;700&family=Atkinson+Hyperlegible+Next:wght@400;500;700&display=swap"/>
 			<link rel="stylesheet" href={ f.CSS }/>
 			<script type="module" src={ f.JS }></script>
+			if f.ClientJS != "" {
+				<script type="module" src={ f.ClientJS }></script>
+			}
 		</head>
 		<body>
 			if !f.Built {
@@ -81,71 +84,20 @@ templ shellBody(f Frame) {
 	</div>
 }
 
-// topBar holds the project picker and the way to every project: the
-// projects list, where New project lives, or New project itself where the
-// list is not served. The picker is
-// a GET form, so it works without JavaScript; projectPicker submits it as
-// soon as the choice changes. Below 48rem it starts with the Tasks button
-// that opens the rail as a drawer (a link to the board without JavaScript).
+// topBar is the header: the Tasks button, then the React top bar island, which
+// the server rendered (the brand, the project picker, the pages, the bell). The
+// Tasks button stays here: below 48rem it opens the rail as a drawer (a link to
+// the board without JavaScript).
 templ topBar(f Frame) {
 	<header class="[ topbar ]">
 		if f.Rail.Seed != nil && !f.NoRail {
 			@tasksToggle(f.Rail)
 		}
-		<a class="[ brand ]" href="/">harness</a>
-		if len(f.Top.Projects) > 0 {
-			<form class="[ cluster ] [ gutter-xs ]" method="get" action="/switch-project" x-data="projectPicker">
-				<label class="[ visually-hidden ]" for="project-picker">Project</label>
-				<select id="project-picker" name="project" data-size="sm" data-fit x-on:change="go">
-					if f.Top.Current == "" {
-						<option value="" selected disabled>Choose a project…</option>
-					}
-					for _, p := range f.Top.Projects {
-						<option value={ p.ID } { selectedAttrs(p.ID == f.Top.Current)... }>{ p.Name }</option>
-					}
-				</select>
-				<noscript><button type="submit" class="[ button ]" data-size="sm">Open</button></noscript>
-			</form>
-		}
-		if f.Top.BoardHref != "" {
-			<a class="[ button ]" data-variant="ghost" data-size="sm" href={ templ.SafeURL(f.Top.BoardHref) } { currentAttrs(f.Top.OnBoard)... }>Agent board</a>
-		}
-		if f.Top.ProjectsHref != "" {
-			<a class="[ button ]" data-variant="ghost" data-size="sm" href={ templ.SafeURL(f.Top.ProjectsHref) } { currentAttrs(f.Top.OnProjects)... }>Projects</a>
-		} else {
-			<a class="[ button ]" data-variant="ghost" data-size="sm" href="/projects/new">New project</a>
-		}
-		if f.Top.AgentsHref != "" {
-			<a class="[ button ]" data-variant="ghost" data-size="sm" href={ templ.SafeURL(f.Top.AgentsHref) } title="Agents are shared by every project" aria-describedby="agents-link-note" { currentAttrs(f.Top.OnAgents)... }>Agents</a>
-			<span id="agents-link-note" class="[ visually-hidden ]">Agents are shared by every project</span>
-		}
-		if f.Top.CredentialsHref != "" {
-			<a class="[ button ]" data-variant="ghost" data-icon href={ templ.SafeURL(f.Top.CredentialsHref) } aria-label="Git credentials" title="Git credentials" { currentAttrs(f.Top.OnCredentials)... }>
-				@icon("key")
-			</a>
-		}
-		if f.Top.TokenSaversHref != "" {
-			<a class="[ button ]" data-variant="ghost" data-icon href={ templ.SafeURL(f.Top.TokenSaversHref) } aria-label="Token savers" title="Token savers" { currentAttrs(f.Top.OnTokenSavers)... }>
-				@icon("saver")
-			</a>
-		}
-		if f.Top.ModelsHref != "" {
-			<a class="[ button ]" data-variant="ghost" data-icon href={ templ.SafeURL(f.Top.ModelsHref) } aria-label="Models" title="Models" { currentAttrs(f.Top.OnModels)... }>
-				@icon("model")
-			</a>
-		}
-		if f.Top.AgentIsolationHref != "" {
-			<a class="[ button ]" data-variant="ghost" data-icon href={ templ.SafeURL(f.Top.AgentIsolationHref) } aria-label="Agent isolation" title="Agent isolation" { currentAttrs(f.Top.OnAgentIsolation)... } { blockingAttrs(f.Top.AgentIsolationAttention)... }>
-				@icon("shield")
-			</a>
-		}
-		if f.Top.ServerHref != "" {
-			<a class="[ button ]" data-variant="ghost" data-icon href={ templ.SafeURL(f.Top.ServerHref) } aria-label="Server" title="Server" { currentAttrs(f.Top.OnServer)... }>
-				@icon("server")
-			</a>
-		}
-		if f.Notifications != nil {
-			@notificationsBell(f.Notifications)
+		if f.Island != nil {
+			<div data-island="top-bar" { islandRenderedAttrs(f.Island.Failed)... }>
+				@templ.Raw(f.Island.HTML)
+			</div>
+			@propsScript("top-bar", f.Island.Props)
 		}
 	</header>
 }

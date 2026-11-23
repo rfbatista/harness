@@ -14,22 +14,11 @@
 import { describeError } from "../../../../shared/presentation/errors.js";
 import { defaultEnv, floating } from "../../../../shared/presentation/components/popup.js";
 import { markedRead, merge } from "../../domain/notification.js";
+import { pageSeed } from "../page-seed.js";
 import { PANEL_LIMIT } from "../store.js";
 import { badgeText, bellLabel, toRow } from "../view.js";
 
-const SEED_ID = "notifications-seed";
 const TICK_MS = 30_000;
-
-/** The server's first paint, or null when the page has none. */
-export function pageSeed(doc) {
-  const el = doc.getElementById(SEED_ID);
-  if (!el) return null;
-  try {
-    return JSON.parse(el.textContent ?? "null");
-  } catch {
-    return null;
-  }
-}
 
 /**
  * @param {{

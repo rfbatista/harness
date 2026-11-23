@@ -25,6 +25,7 @@ type Timing struct {
 	git      atomic.Int64
 	gitCalls atomic.Int64
 	frame    atomic.Int64
+	island   atomic.Int64
 	catalog  atomic.Int64
 	reads    atomic.Int64
 }
@@ -62,6 +63,14 @@ func AddGit(ctx context.Context, d time.Duration) {
 func AddFrame(ctx context.Context, d time.Duration) {
 	if t := From(ctx); t != nil {
 		t.frame.Add(int64(d))
+	}
+}
+
+// AddIsland counts d as time spent rendering the React islands on the server.
+// It is part of the page's time and, within it, of the frame's.
+func AddIsland(ctx context.Context, d time.Duration) {
+	if t := From(ctx); t != nil {
+		t.island.Add(int64(d))
 	}
 }
 
@@ -114,8 +123,8 @@ func goroutineID() uint64 {
 
 // Report is a finished request's numbers.
 type Report struct {
-	Total, DB, Git, Render, Frame, Catalog time.Duration
-	GitCalls, CatalogReads                 int64
+	Total, DB, Git, Render, Frame, Island, Catalog time.Duration
+	GitCalls, CatalogReads                         int64
 }
 
 // Report is the numbers so far, with render as the time the page took to
@@ -123,7 +132,7 @@ type Report struct {
 func (t *Timing) Report(render time.Duration) Report {
 	return Report{
 		Total: time.Since(t.start), DB: time.Duration(t.db.Load()), Git: time.Duration(t.git.Load()),
-		GitCalls: t.gitCalls.Load(), Render: render, Frame: time.Duration(t.frame.Load()),
+		GitCalls: t.gitCalls.Load(), Render: render, Frame: time.Duration(t.frame.Load()), Island: time.Duration(t.island.Load()),
 		Catalog: time.Duration(t.catalog.Load()), CatalogReads: t.reads.Load(),
 	}
 }
@@ -133,7 +142,7 @@ func (t *Timing) Report(render time.Duration) Report {
 func (r Report) Header() string {
 	ms := func(d time.Duration) string { return fmt.Sprintf("%.2f", float64(d)/float64(time.Millisecond)) }
 	var b strings.Builder
-	fmt.Fprintf(&b, "total;dur=%s, db;dur=%s, git;desc=\"%d calls\";dur=%s, render;dur=%s, frame;dur=%s, catalog;desc=\"%d reads\";dur=%s",
-		ms(r.Total), ms(r.DB), r.GitCalls, ms(r.Git), ms(r.Render), ms(r.Frame), r.CatalogReads, ms(r.Catalog))
+	fmt.Fprintf(&b, "total;dur=%s, db;dur=%s, git;desc=\"%d calls\";dur=%s, render;dur=%s, frame;dur=%s, island;dur=%s, catalog;desc=\"%d reads\";dur=%s",
+		ms(r.Total), ms(r.DB), r.GitCalls, ms(r.Git), ms(r.Render), ms(r.Frame), ms(r.Island), r.CatalogReads, ms(r.Catalog))
 	return b.String()
 }

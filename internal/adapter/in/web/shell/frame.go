@@ -22,8 +22,11 @@ type Frame struct {
 	// NoRail renders the page full width with the top bar only: no task rail,
 	// no Tasks toggle. For pages that belong to no project (the Agents page).
 	NoRail bool
-	// Asset URLs, content-hashed (web.Assets.URL).
-	CSS, JS string
+	// Asset URLs, content-hashed (web.Assets.URL). ClientJS is the React
+	// islands' browser bundle; "" when it is not built.
+	CSS, JS, ClientJS string
+	// Island is the React top bar the header carries; nil leaves it out.
+	Island *TopBarIsland
 	// Built is false when `make web` has not produced the bundles yet.
 	Built bool
 	// Live: the page follows the session feed, so the stream bar shows the

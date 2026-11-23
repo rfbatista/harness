@@ -8,6 +8,8 @@ import (
 	"io/fs"
 	"net/http"
 	"strings"
+
+	"github.com/rfbatista/gohydrate"
 )
 
 // static holds the bundles `go run ./cmd/webbuild` writes (app.js, app.css,
@@ -24,7 +26,8 @@ type Assets struct {
 	hashes map[string]string
 	// client is the React islands' browser bundle, from the manifest gohydrate
 	// wrote; "" when `make web` has not built it.
-	client string
+	client   string
+	manifest gohydrate.Manifest
 }
 
 // NewAssets reads the embedded bundles.
@@ -57,11 +60,7 @@ func (a *Assets) readManifest() {
 	if err != nil {
 		return
 	}
-	var m struct {
-		Client struct {
-			JS string `json:"js"`
-		} `json:"client"`
-	}
+	var m gohydrate.Manifest
 	if json.Unmarshal(data, &m) != nil || m.Client.JS == "" {
 		return
 	}
@@ -72,6 +71,7 @@ func (a *Assets) readManifest() {
 	sum := sha256.Sum256(bundle)
 	a.hashes[m.Client.JS] = hex.EncodeToString(sum[:6])
 	a.client = m.Client.JS
+	a.manifest = m
 }
 
 // IslandsBuilt reports whether the React islands' client bundle is present.

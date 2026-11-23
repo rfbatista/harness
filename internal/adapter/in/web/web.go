@@ -5,14 +5,12 @@ package web
 
 import (
 	"bytes"
-	"cmp"
 	"context"
 	"encoding/json"
 	"errors"
 	"log/slog"
 	"net/http"
 	"net/url"
-	"slices"
 	"strings"
 	"time"
 
@@ -183,6 +181,9 @@ type Deps struct {
 	// for the Architecture page's seed and the Models page's row. It must not
 	// start anything; nil reads as unavailable.
 	ArchitectureAssistant ports.ArchitectureAssistantReadiness
+	// IslandRenderer renders the React islands on the server; nil builds one
+	// from the embedded bundles (none when they are not built).
+	IslandRenderer IslandRenderer
 	// Now defaults to time.Now.
 	Now func() time.Time
 }
@@ -218,7 +219,10 @@ func NewHandler(deps Deps, assets *Assets, fallback http.Handler) http.Handler {
 	if deps.Sessions != nil {
 		deps.Sessions = sharedSessions{deps.Sessions}
 	}
-	s := &server{deps: deps, assets: assets}
+	s := &server{deps: deps, assets: assets, renderer: deps.IslandRenderer}
+	if s.renderer == nil {
+		s.renderer = assets.newIslandRenderer()
+	}
 
 	homePage := home.Handler{Projects: deps.Projects, Board: deps.AgentBoard, Layout: s.layout, Render: render, Now: deps.Now}
 	taskPages := tasks.Handler{
@@ -347,12 +351,15 @@ func NewHandler(deps Deps, assets *Assets, fallback http.Handler) http.Handler {
 type server struct {
 	deps   Deps
 	assets *Assets
+	// renderer renders the React islands; nil when they are not built.
+	renderer IslandRenderer
 }
 
 // page adapts a page handler: an error becomes the error page for its code.
 func (s *server) page(h shell.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		ctx := shell.WithCollapsed(r.Context(), r) // the rail's folded groups, for the layout
+		ctx := shell.WithCollapsed(r.Context(), r)     // the rail's folded groups, for the layout
+		ctx = shell.WithPath(ctx, r.URL.EscapedPath()) // the page the top bar models
 		shell.VaryOnPage(w.Header())
 		if shell.PageRequest(r) {
 			if shell.SameFrame(r) {
@@ -399,20 +406,23 @@ func (s *server) layout(ctx context.Context, title, projectID, taskID string) (s
 	started := time.Now()
 	defer func() { pagetime.AddFrame(ctx, time.Since(started)) }()
 	frame := s.bareFrame(title)
-	frame.Notifications = s.bell(ctx)
 	frame.Helper = s.helper(ctx)
-	all, err := s.deps.Projects.ListProjects(ctx)
+	bar, err := s.TopBar(ctx, shell.PathOf(ctx))
 	if err != nil {
 		return shell.Frame{}, err
 	}
-	slices.SortFunc(all, func(a, b *domain.Project) int {
-		return cmp.Compare(strings.ToLower(a.Name), strings.ToLower(b.Name))
-	})
+	if frame.Island, err = s.island(ctx, bar); err != nil {
+		return shell.Frame{}, err
+	}
+	if bar.Notifications != nil {
+		// The title's unread count is painted by the server too.
+		frame.Notifications = &shell.Bell{Href: bar.Notifications.InboxHref, Seed: bar.Notifications.Page}
+	}
 	frame.Top.Current = projectID
 	if s.deps.ProjectSummaries != nil {
 		frame.Top.ProjectsHref = projects.ListHref
 	}
-	for _, p := range all {
+	for _, p := range bar.Projects {
 		frame.Top.Projects = append(frame.Top.Projects, shell.Option{ID: p.ID, Name: p.Name})
 	}
 	if projectID == "" {
@@ -568,10 +578,11 @@ func (s *server) topLinks(top *shell.TopBar) {
 // bareFrame is a frame without the rail, for when the rail cannot be read.
 func (s *server) bareFrame(title string) shell.Frame {
 	f := shell.Frame{
-		Title: title,
-		CSS:   s.assets.URL("app.css"),
-		JS:    s.assets.URL("app.js"),
-		Built: s.assets.Built(),
+		Title:    title,
+		CSS:      s.assets.URL("app.css"),
+		JS:       s.assets.URL("app.js"),
+		ClientJS: s.assets.ClientBundleURL(),
+		Built:    s.assets.Built(),
 	}
 	f.Helper = s.helper(context.Background())
 	s.topLinks(&f.Top)
@@ -603,7 +614,11 @@ func (s *server) renderError(w http.ResponseWriter, r *http.Request, err error) 
 		code = "INTERNAL"
 		slog.Error("web page failed", "path", r.URL.Path, "err", err)
 	}
-	if renderErr := render(w, r, status, errorPage(s.bareFrame("Error"), message, code, nextStep(code))); renderErr != nil {
+	frame := s.bareFrame("Error")
+	if bar, err := s.TopBar(r.Context(), r.URL.EscapedPath()); err == nil {
+		frame.Island, _ = s.island(r.Context(), bar)
+	}
+	if renderErr := render(w, r, status, errorPage(frame, message, code, nextStep(code))); renderErr != nil {
 		slog.Error("web error page failed", "path", r.URL.Path, "err", renderErr)
 	}
 }

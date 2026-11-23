@@ -10,7 +10,7 @@ import { describeError } from "../../../../shared/presentation/errors.js";
 import { readSeed } from "../../../../shared/presentation/seed.js";
 import { markedRead, merge } from "../../domain/notification.js";
 import { toRow } from "../view.js";
-import { pageSeed } from "./notificationsBell.js";
+import { pageSeed } from "../page-seed.js";
 
 const PAGE_LIMIT = 50;
 const TICK_MS = 30_000;

@@ -16,6 +16,10 @@
     background: var(--color-panel);
     border-block-end: var(--border-width) solid var(--color-line);
 
+    /* The React island's mount is not a box of its own: what it renders (the
+       brand, the picker, the pages, the bell) lays out as the bar's children. */
+    & > [data-island] { display: contents; }
+
     & .brand {
       color: var(--color-ink);
       font-weight: var(--weight-bold);
@@ -45,8 +49,10 @@
        picker wraps below. */
     @media (width < 48rem) {
       & > .tasks-toggle,
-      & > .brand { order: -2; }
-      & > .notifications > .bell { order: -1; }
+      & > .brand,
+      & > [data-island] > .brand { order: -2; }
+      & > .notifications > .bell,
+      & > [data-island] > .notifications > .bell { order: -1; }
     }
   }
 }
