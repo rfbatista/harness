@@ -2,9 +2,10 @@
 // composition root chose. The server root and the browser root differ only in
 // the adapters they pass.
 
+import { TopBarDto } from "../features/navigation/infrastructure/dto/top-bar-dto";
+import { toTopBar } from "../features/navigation/infrastructure/top-bar-mapper";
 import { CurrentTopBar } from "../features/navigation/application/current-top-bar";
 import type { PageOpener } from "../features/navigation/application/ports";
-import { parseTopBar } from "../features/navigation/domain/top-bar";
 import { PageLinksPresenter } from "../features/navigation/presentation/presenters/page-links-presenter";
 import { ProjectPickerPresenter } from "../features/navigation/presentation/presenters/project-picker-presenter";
 import { Inbox } from "../features/notifications/application/inbox";
@@ -29,7 +30,7 @@ export interface TopBarModel {
 
 /** `props` is the top-bar model as the server sends it. Throws when its navigation part cannot be read. */
 export function buildTopBar(props: unknown, adapters: TopBarAdapters): TopBarModel {
-  const current = new CurrentTopBar(parseTopBar(props));
+  const current = new CurrentTopBar(toTopBar(TopBarDto.fromJSON(props)));
   const bellProps = toBellProps((props as { notifications?: unknown } | null)?.notifications);
   let inbox: Inbox | null = null;
   let bell: TopBarPresenters["bell"] = null;

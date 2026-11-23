@@ -1,3 +1,7 @@
+import type { TopBar } from "../domain/top-bar";
+import { TopBarDto } from "../infrastructure/dto/top-bar-dto";
+import { toTopBar } from "../infrastructure/top-bar-mapper";
+
 // The top-bar model as the server sends it (the contract's JSON), for tests.
 
 export interface TopBarJson {
@@ -41,4 +45,9 @@ export function topBarJson(overrides: Partial<TopBarJson> = {}): TopBarJson {
 /** The served links with the given key marked current and/or attention. */
 export function linksWith(marks: Record<string, { current?: boolean; attention?: boolean }>): TopBarJson["links"] {
   return SERVED_LINKS.map((link) => ({ ...link, ...marks[link.key] }));
+}
+
+/** The domain top bar for the contract's JSON, as the HTTP adapter reads it. */
+export function topBarFromJson(json: unknown): TopBar {
+  return toTopBar(TopBarDto.fromJSON(json));
 }

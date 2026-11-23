@@ -3,6 +3,7 @@
 // "popstate" (the path of the entry landed on).
 
 import type { NavigationSignal } from "../application/ports";
+import { NavigatedDto } from "./dto/navigated-dto";
 
 export const NAVIGATED_EVENT = "harness:navigated";
 
@@ -12,8 +13,11 @@ export function browserNavigationSignal(win: Target = globalThis as unknown as T
   return {
     subscribe(listener) {
       const navigated = (event: Event) => {
-        const path = (event as CustomEvent<{ path?: unknown }>).detail?.path;
-        if (typeof path === "string") listener(path);
+        try {
+          listener(NavigatedDto.fromJSON((event as CustomEvent<unknown>).detail).path);
+        } catch {
+          // A detail that is not a path is ignored.
+        }
       };
       const popped = () => listener(win.location.pathname);
       win.addEventListener(NAVIGATED_EVENT, navigated);
