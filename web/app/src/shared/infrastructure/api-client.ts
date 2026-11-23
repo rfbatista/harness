@@ -1,6 +1,8 @@
 // A typed client over fetch for the harness API. A non-2xx answer carries the
 // API's error body, { error: message, code }, and becomes an ApiError.
 
+import { ApiErrorDto } from "./dto/api-error-dto";
+
 export class ApiError extends Error {
   readonly code: string;
   readonly status: number;
@@ -62,8 +64,8 @@ function queryString(query?: Record<string, string>): string {
 
 async function failure(response: Response): Promise<ApiError> {
   try {
-    const body = (await response.json()) as { error?: string; code?: string };
-    return new ApiError(body.code ?? `HTTP_${response.status}`, body.error ?? response.statusText, response.status);
+    const body = ApiErrorDto.fromJSON(await response.json());
+    return new ApiError(body.code, body.error, response.status);
   } catch {
     return new ApiError(`HTTP_${response.status}`, response.statusText, response.status);
   }

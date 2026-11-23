@@ -27,6 +27,7 @@ feedContract("shared-stream adapter in one tab", async () => {
       b.timers.tick();
       await flush();
     },
+    sendMalformed: () => b.openStreams()[0]?.message("{not json"),
   };
 });
 
@@ -60,6 +61,22 @@ describe("shared-stream protocol", () => {
       await flush();
       assert.deepEqual(statuses, ["connecting", "live"]);
     }
+  });
+
+  test("a stream message and a channel message that are not the protocol's are ignored, and the follows go on", async () => {
+    const b = browserProfile();
+    const [one, two] = [b.open(), b.open()];
+    const a = one.follow(INBOX);
+    const c = two.follow(INBOX);
+    await flush();
+    b.hello();
+    await flush();
+    for (const garbage of ["not json", "42", "[]", "{}", '{"path":7}', '{"stream":""}']) b.stream().message(garbage);
+    for (const bad of [null, "ping", 3, {}, { type: "teleport", from: "x" }, { type: "follow", from: "x" }, { type: "status", from: "x", path: INBOX, status: "asleep" }]) b.broadcast(bad);
+    b.stream().message({ path: INBOX, data: { n: 1 } });
+    assert.deepEqual(a.messages, [{ n: 1 }]);
+    assert.deepEqual(c.messages, [{ n: 1 }]);
+    assert.deepEqual(a.statuses, ["connecting", "live"]);
   });
 
   for (const [name, clients] of [

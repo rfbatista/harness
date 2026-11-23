@@ -7,6 +7,7 @@
 
 import type { Feed, FeedHandlers, FeedStatus } from "../kernel/feed";
 import type { ApiClient } from "./api-client";
+import { FollowRequestDto, StreamMessageDto } from "./dto/stream-dto";
 
 const FIRST_RETRY_MS = 1_000;
 const MAX_RETRY_MS = 30_000;
@@ -38,13 +39,6 @@ interface Topic {
   drop(): void;
   report(status: FeedStatus): void;
   stop(): void;
-}
-
-interface StreamMessage {
-  stream?: string;
-  path?: string;
-  data?: unknown;
-  end?: boolean;
 }
 
 export function streamFeed({ base, api, EventSource = globalThis.EventSource, setTimeout = systemTimers.setTimeout, clearTimeout = systemTimers.clearTimeout }: StreamFeedOptions): Feed {
@@ -80,7 +74,8 @@ export function streamFeed({ base, api, EventSource = globalThis.EventSource, se
 
     function subscribe() {
       const id = streamId;
-      api.post("/stream/follow", { stream: id, path }).then(
+      if (id === null) return;
+      api.post("/stream/follow", new FollowRequestDto(id, path)).then(
         () => {
           if (!current() || streamId !== id) return;
           topicDelay = FIRST_RETRY_MS;
@@ -133,13 +128,13 @@ export function streamFeed({ base, api, EventSource = globalThis.EventSource, se
     const opened = new EventSource(base + "/stream");
     source = opened;
     opened.onmessage = (event) => {
-      let msg: StreamMessage;
+      let msg: StreamMessageDto;
       try {
-        msg = JSON.parse(event.data as string) as StreamMessage;
+        msg = StreamMessageDto.fromJSON(JSON.parse(event.data as string));
       } catch {
         return; // a malformed line is skipped, not fatal
       }
-      if (msg.stream) {
+      if (msg.stream !== undefined) {
         streamId = msg.stream;
         delay = FIRST_RETRY_MS;
         for (const t of topics.values()) t.subscribe();
@@ -198,7 +193,7 @@ export function streamFeed({ base, api, EventSource = globalThis.EventSource, se
         joined.stop();
         topics.delete(path);
         if (topics.size === 0) close();
-        else if (streamId) api.post("/stream/unfollow", { stream: streamId, path }).catch(() => {});
+        else if (streamId) api.post("/stream/unfollow", new FollowRequestDto(streamId, path)).catch(() => {});
       };
     },
   };

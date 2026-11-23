@@ -37,3 +37,13 @@ test("a post sends its JSON body", async () => {
   assert.equal(seen?.method, "POST");
   assert.equal(seen?.body, '{"a":1}');
 });
+
+test("an error body that is not the API's still becomes an ApiError, by status", async () => {
+  const fetcher: FetchLike = async () => new Response(JSON.stringify({ message: "nope" }), { status: 500, statusText: "Server Error" });
+  await assert.rejects(apiClient(fetcher).get("/x"), (err: unknown) => err instanceof ApiError && err.code === "HTTP_500" && err.message === "Server Error");
+});
+
+test("a 200 whose body is not JSON is BAD_RESPONSE", async () => {
+  const fetcher: FetchLike = async () => new Response("<html>sign in</html>", { status: 200 });
+  await assert.rejects(apiClient(fetcher).get("/x"), (err: unknown) => err instanceof ApiError && err.code === "BAD_RESPONSE");
+});
