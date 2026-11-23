@@ -20,16 +20,16 @@ const SERVER_SYNTAX = [
 // low-level transport, no code touches the network, storage or a raw payload.
 //
 // What this does not catch, and review must: a key computed at run time (x[key]),
-// a global reached through a spread, Object.assign or a function argument, other
-// transports (XMLHttpRequest, WebSocket, EventSource, sendBeacon) and anything
-// behind `any`. Aliasing a banned name by destructuring, an alias of JSON, template
-// literal keys, Reflect, an uncalled dispatchEvent or postMessage, eval and
-// new Function are caught here.
-const RAW_DATA_GLOBALS = ["fetch", "localStorage", "sessionStorage", "indexedDB"].map((name) => ({
+// a global reached through a spread, Object.assign or a function argument, and
+// anything behind `any`. Aliasing a banned name by destructuring, an alias of JSON,
+// template literal keys, Reflect, an uncalled dispatchEvent or postMessage, eval,
+// new Function, and the other transports (XMLHttpRequest, WebSocket, EventSource,
+// sendBeacon) are caught here.
+const RAW_DATA_GLOBALS = ["fetch", "localStorage", "sessionStorage", "indexedDB", "XMLHttpRequest", "WebSocket", "EventSource"].map((name) => ({
   name,
   message: "Outside data crosses as a DTO (ADR 0106): only a DTO and the transport touch it.",
 }));
-const NETWORK_AND_STORAGE = "fetch|localStorage|sessionStorage|indexedDB|cookie";
+const NETWORK_AND_STORAGE = "fetch|localStorage|sessionStorage|indexedDB|cookie|XMLHttpRequest|WebSocket|EventSource|sendBeacon";
 const NETWORK_MESSAGE = "Outside data crosses as a DTO (ADR 0106): only the transport touches the network, storage and the channels.";
 // Banned in a DTO too: a DTO only reads and writes its own payload.
 const NETWORK_SYNTAX = [
