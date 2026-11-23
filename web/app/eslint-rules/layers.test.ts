@@ -83,7 +83,7 @@ test("lint refuses a browser global on the server render's path, and in the view
 
 // ADR 0106: outside the DTOs and the transport, no raw payload is touched.
 describe("raw data rules", () => {
-  const raw = async (file: string, code: string) => ((await eslint.lintText(code, { filePath: at(file) }))[0]?.messages ?? []).filter((m) => ["no-restricted-globals", "no-restricted-properties", "no-restricted-syntax"].includes(m.ruleId ?? "")).length;
+  const raw = async (file: string, code: string) => ((await eslint.lintText(code, { filePath: at(file) }))[0]?.messages ?? []).filter((m) => ["no-restricted-globals", "no-restricted-properties", "no-restricted-syntax", "no-eval", "no-new-func"].includes(m.ruleId ?? "")).length;
 
   const REFUSED_CALLS: [string, string, string][] = [
     ["a presenter calls JSON.parse", "features/navigation/presentation/presenters/a.ts", "export const a = JSON.parse('{}');"],
@@ -110,6 +110,36 @@ describe("raw data rules", () => {
     ["an adapter reads .data through a cast", "features/navigation/infrastructure/a.ts", "export const a = (m: unknown) => (m as MessageEvent).data;"],
     ["a presenter destructures data in a parameter", "features/notifications/presentation/presenters/a.ts", "export function a({ data }: { data: unknown }) { return data; }"],
     ["a presenter destructures detail in a declaration", "features/notifications/presentation/presenters/a.ts", "export const a = (e: unknown) => { const { detail } = e as CustomEvent; return detail; };"],
+    // E1: a DTO keeps the network, storage and channel bans.
+    ["a DTO calls globalThis.fetch", "features/navigation/infrastructure/dto/a.ts", "export const a = () => globalThis.fetch('/x');"],
+    ["a shared DTO calls window.fetch", "shared/infrastructure/dto/a.ts", "export const a = () => window.fetch('/x');"],
+    ["a DTO reads a storage member", "features/notifications/infrastructure/dto/a.ts", "export const a = (w: Window) => w.localStorage;"],
+    ["a DTO posts a message", "features/notifications/infrastructure/dto/a.ts", "export const a = (c: BroadcastChannel) => c.postMessage({});"],
+    ["a DTO dispatches an event", "shared/infrastructure/dto/a.ts", "export const a = (w: Window) => w.dispatchEvent(new Event('x'));"],
+    ["a DTO reads a response body", "shared/infrastructure/dto/a.ts", "export const a = (r: Response) => r.json();"],
+    // E2: destructured out of any object.
+    ["an adapter destructures fetch from globalThis", "features/navigation/infrastructure/a.ts", "export const { fetch } = globalThis;"],
+    ["an adapter destructures a renamed localStorage", "features/navigation/infrastructure/a.ts", "export const { localStorage: store } = window;"],
+    ["an adapter destructures sessionStorage from self", "features/navigation/infrastructure/a.ts", "export const { sessionStorage } = self;"],
+    ["an adapter destructures indexedDB in a parameter", "features/navigation/infrastructure/a.ts", "export const a = ({ indexedDB }: Window) => indexedDB;"],
+    ["a view destructures cookie", "features/notifications/presentation/views/a.tsx", "export const a = ({ cookie }: Document) => cookie;"],
+    // E3: Reflect and an uncalled dispatchEvent.
+    ["an adapter uses Reflect.get", "features/navigation/infrastructure/a.ts", "export const a = (w: object) => Reflect.get(w, 'fetch');"],
+    ["an adapter keeps Reflect", "features/navigation/infrastructure/a.ts", "export const a = Reflect;"],
+    ["an adapter passes dispatchEvent to apply", "features/navigation/infrastructure/a.ts", "export const a = (w: Window, e: Event) => w.dispatchEvent.apply(w, [e]);"],
+    ["an adapter keeps dispatchEvent in a variable", "features/navigation/infrastructure/a.ts", "export const a = (w: Window) => w.dispatchEvent;"],
+    ["an adapter keeps postMessage in a variable", "features/notifications/infrastructure/a.ts", "export const a = (c: BroadcastChannel) => c.postMessage;"],
+    ["an adapter calls a bare dispatchEvent", "features/navigation/infrastructure/a.ts", "export const a = (e: Event) => dispatchEvent(e);"],
+    // E4: aliases and keys.
+    ["an adapter aliases JSON", "features/notifications/infrastructure/a.ts", "const J = JSON; export const a = J.parse('{}');"],
+    ["an adapter reaches JSON through globalThis", "features/notifications/infrastructure/a.ts", "export const a = globalThis.JSON.parse('{}');"],
+    ["an adapter reads data by a template-literal key", "features/notifications/infrastructure/a.ts", "export const a = (e: { data: unknown }) => e[`data`];"],
+    ["an adapter reads storage by a template-literal key", "features/notifications/infrastructure/a.ts", "export const a = (w: Window) => w[`localStorage`];"],
+    ["a domain file reaches document through globalThis", "features/navigation/domain/a.ts", "export const a = globalThis.document;"],
+    ["a presenter reaches process through global", "features/navigation/presentation/presenters/a.ts", "export const a = global.process;"],
+    ["a use case reads a response body", "features/navigation/application/a.ts", "export const a = (r: Response) => r.json();"],
+    ["an adapter calls eval", "features/navigation/infrastructure/a.ts", "export const a = () => eval('1');"],
+    ["an adapter builds a function from a string", "features/navigation/infrastructure/a.ts", "export const a = () => new Function('return 1');"],
     ["a use case destructures a renamed data", "features/navigation/application/a.ts", "export const a = (e: MessageEvent) => { const { data: raw } = e; return raw; };"],
   ];
   for (const [name, file, code] of REFUSED_CALLS) {
@@ -142,6 +172,10 @@ describe("raw data rules", () => {
     ["a testing helper dispatches an event", "features/navigation/testing/a.ts", "export const a = (w: Window) => w.dispatchEvent(new Event('x'));"],
     ["the shared feed reads .data and destructures it", "shared/infrastructure/shared-feed.ts", "export const a = (m: MessageEvent) => { const { data } = m; return [data, m.data, (m as MessageEvent).data]; };"],
     ["a DTO reads .data and .detail of its own", "features/navigation/infrastructure/dto/a.ts", "export const a = (m: { data: unknown; detail: unknown }) => [m.data, m.detail];"],
+    ["a DTO reads a destructured data and parses JSON", "shared/infrastructure/dto/a.ts", "export const a = ({ data }: { data: string }) => JSON.parse(data);"],
+    ["the API client reads a response body", "shared/infrastructure/api-client.ts", "export const a = (r: Response) => r.json();"],
+    ["the shared feed posts a message and keeps a reference", "shared/infrastructure/shared-feed.ts", "export const a = (c: BroadcastChannel) => [c.postMessage({}), c.postMessage];"],
+    ["a view uses an object with a method named like a key", "features/notifications/presentation/views/a.tsx", "export const a = { fetchAll: () => 1, key: 2 };"],
     ["a view reads an event's other fields", "features/notifications/presentation/views/a.tsx", "export const a = (event: KeyboardEvent) => event.key;"],
   ];
   for (const [name, file, code] of ALLOWED_CALLS) {
