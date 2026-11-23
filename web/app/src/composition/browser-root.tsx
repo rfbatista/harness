@@ -15,6 +15,7 @@ import { browserNavigator } from "../features/notifications/infrastructure/brows
 import { httpNotificationsSource } from "../features/notifications/infrastructure/http-notifications-source";
 import { buildTopBar } from "./top-bar-presenters";
 import { TopBarView } from "./top-bar-view";
+import { mountWhiteboard } from "./whiteboard-island";
 
 type Dispose = () => void;
 
@@ -47,6 +48,7 @@ export function mountIslands(doc: Document): Dispose {
         root.unmount();
       };
     },
+    "agents-whiteboard": (mount, props) => mountWhiteboard(mount, props, api),
   };
 
   const mounted = new Map<Element, Dispose>();
