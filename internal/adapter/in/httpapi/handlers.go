@@ -72,6 +72,8 @@ type Services struct {
 	// Notifications is the person's inbox across every project; nil answers
 	// 503.
 	Notifications ports.Notifications
+	// TopBars is the top bar's model for a page path; nil answers 503.
+	TopBars ports.TopBars
 	// InterruptedResumer is Resume all interrupted, the action of the inbox's
 	// sessions_interrupted item; nil answers 503.
 	InterruptedResumer ports.InterruptedResumer
@@ -202,6 +204,7 @@ type Handler struct {
 	archivedTrees  ports.ArchivedWorktrees
 	branchNames    ports.BranchNameChecker
 	notifications  ports.Notifications
+	topBars        ports.TopBars
 	interrupted    ports.InterruptedResumer
 	agentBoard     ports.AgentBoard
 	interviews     ports.Interviews
@@ -292,6 +295,7 @@ func NewHandler(s Services) *Handler {
 		branchGate:           s.BranchGate,
 		sessionBranches:      s.SessionBranches,
 		notifications:        s.Notifications,
+		topBars:              s.TopBars,
 		interrupted:          s.InterruptedResumer,
 		agentBoard:           s.AgentBoard,
 		interviews:           s.Interviews,
