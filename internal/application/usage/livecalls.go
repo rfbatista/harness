@@ -123,6 +123,9 @@ func (s *Service) resolveCall(ctx context.Context, attribution string) callOwner
 	case attribution == architectureAssistantAttribution || strings.HasPrefix(attribution, architectureAssistantAttribution+":"):
 		o.kind = "architecture-assistant"
 		o.projectID = strings.TrimPrefix(strings.TrimPrefix(attribution, architectureAssistantAttribution), ":")
+	case attribution == ports.UsageProductOwnerAttribution || strings.HasPrefix(attribution, ports.UsageProductOwnerAttribution+":"):
+		o.kind = "product-owner"
+		o.projectID = strings.TrimPrefix(strings.TrimPrefix(attribution, ports.UsageProductOwnerAttribution), ":")
 	default:
 		if sess := s.readers.Sessions.Get(attribution); sess != nil {
 			o.session, o.projectID, o.kind = sess, sess.ProjectID, "session"

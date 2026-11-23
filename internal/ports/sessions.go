@@ -23,6 +23,10 @@ type SessionFilter struct {
 	// list because one UI state covers several backend ones — a session the
 	// user sees as "running" is `running`, `idle` or `thinking` underneath.
 	Statuses []domain.SessionStatus
+	// IncludeProductOwner lists the product-owner threads' sessions too. They
+	// are left out of every list by default: a thread shows in the product
+	// owner's surface only (ADR 0109).
+	IncludeProductOwner bool
 }
 
 // StoredEvent is one persisted session event.

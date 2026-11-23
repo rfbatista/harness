@@ -166,6 +166,8 @@ func (s *Service) productOwnerPrepare(ctx context.Context, id string, spec ports
 	// sandbox and the tools hold what it may not do.
 	permission := llmkit.PermissionBypass
 	cfg := s.sessionConfig(id, dir, model, nil, permission, ag, subject, "", "", "")
+	// Its LLM calls are counted for the product owner and its project (ADR 0006).
+	cfg.Attribution = ports.UsageProductOwnerAttribution + ":" + proj.ID
 	cleanup, err := s.withShell(id, "", subject, &cfg, ag.cleanup)
 	if err != nil {
 		return nil, err
@@ -262,3 +264,23 @@ const productOwnerBehaviours = `How you answer:
 - You cannot change anything yet: no task, document, status or file. When the person asks for a change, explain that you cannot change anything yet, and say what you would change so they can do it.
 - Keep answers short and in the language the person writes in.`
 
+
+// isProductOwnerEvent says ev is about the session of a product-owner thread:
+// the inbox, the agent board and the architect channel hear nothing of it.
+func (s *Service) isProductOwnerEvent(ev domain.Event) bool {
+	var id string
+	switch e := ev.(type) {
+	case domain.SessionStatusChanged:
+		id = e.SessionID
+	case domain.SessionTurnEnded:
+		id = e.SessionID
+	case domain.SessionEnded:
+		id = e.SessionID
+	case domain.SessionWorktreeProvisioned:
+		id = e.SessionID
+	default:
+		return false
+	}
+	sess := s.sessions.Get(id)
+	return sess != nil && sess.Mode == domain.SessionModeProductOwner
+}

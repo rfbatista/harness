@@ -112,6 +112,8 @@ func (s *Service) Record(ctx context.Context, r ports.UsageRequest) {
 		rec.ProjectID, rec.Attribution = project, writingHelperAttribution
 	} else if project, ok := strings.CutPrefix(r.Attribution, architectureAssistantAttribution+":"); ok {
 		rec.ProjectID, rec.Attribution = project, architectureAssistantAttribution
+	} else if project, ok := strings.CutPrefix(r.Attribution, ports.UsageProductOwnerAttribution+":"); ok {
+		rec.ProjectID, rec.Attribution = project, ports.UsageProductOwnerAttribution
 	} else if r.Attribution != "" && r.Attribution != ports.UsageSystemAttribution {
 		if sess := s.readers.Sessions.Get(r.Attribution); sess != nil {
 			rec.SessionID, rec.TaskID, rec.ProjectID = sess.ID, sess.TicketID, sess.ProjectID

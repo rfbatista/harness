@@ -1136,6 +1136,9 @@ func (s *Service) announce(ev domain.Event) {
 	if s.Events == nil {
 		return
 	}
+	if s.isProductOwnerEvent(ev) {
+		return // a thread shows in the product owner's surface only (ADR 0109)
+	}
 	if err := s.Events.Publish(context.Background(), ev); err != nil {
 		slog.Warn("announce session event", "event", ev.EventName(), "err", err)
 	}

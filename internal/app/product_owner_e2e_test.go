@@ -14,18 +14,30 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"slices"
 	"strings"
 	"sync"
 	"testing"
 	"time"
 
+	"github.com/mark3labs/mcp-go/client"
+	"github.com/mark3labs/mcp-go/client/transport"
+	mcplib "github.com/mark3labs/mcp-go/mcp"
 	"go.uber.org/fx"
 
 	"operators-mcp/internal/adapter/in/httpapi"
+	"operators-mcp/internal/adapter/in/mcpsession"
 	"operators-mcp/internal/app/catalog"
+	"operators-mcp/internal/application/agentboard"
+	"operators-mcp/internal/application/artifacts"
+	"operators-mcp/internal/application/notifications"
 	"operators-mcp/internal/application/orchestration"
 	"operators-mcp/internal/application/planning"
 	"operators-mcp/internal/application/productowner"
+	"operators-mcp/internal/application/taskchannel"
+	"operators-mcp/internal/application/tooling"
+	"operators-mcp/internal/application/usage"
+	"operators-mcp/internal/application/vfs"
 	"operators-mcp/internal/domain"
 	"operators-mcp/internal/ports"
 	"operators-mcp/internal/ports/portstest"
@@ -48,6 +60,12 @@ type poE2E struct {
 	po      *productowner.Service
 	sess    ports.SessionRepository
 	store   ports.ProductOwnerStore
+	shells  *vfs.Service
+	board   *agentboard.Service
+	usage   *usage.Service
+	notes   *notifications.Service
+	channel *taskchannel.Service
+	art     *artifacts.Service
 	project string
 	repo    string
 	// fakeDir holds the stand-in claude, its launch log and its gates.
@@ -66,6 +84,7 @@ type poE2E struct {
 const fakeHeadlessClaude = `#!/bin/sh
 dir=$(dirname "$0")
 echo "$*" >> "$dir/launches"
+echo "$ANTHROPIC_CUSTOM_HEADERS" >> "$dir/headers"
 printf '%s\n' '{"type":"system","subtype":"init","session_id":"fake"}'
 n=0
 while IFS= read -r line; do
@@ -131,8 +150,8 @@ func (e *poE2E) boot() {
 	e.app = fx.New(
 		fx.Supply(e.cfg),
 		PersistenceModule, CatalogModule, PlanningModule, WorkspacesModule,
-		AgentRuntimeModule, TaskChannelModule, TextProcessingModule, ProductOwnerModule,
-		fx.Populate(&e.orch, &e.plan, &e.cat, &e.po, &e.sess, &e.store),
+		AgentRuntimeModule, TaskChannelModule, TextProcessingModule, NotificationsModule, AgentBoardModule, UsageModule, ProductOwnerModule,
+		fx.Populate(&e.orch, &e.plan, &e.cat, &e.po, &e.sess, &e.store, &e.shells, &e.channel, &e.art, &e.board, &e.usage, &e.notes),
 		fx.NopLogger,
 	)
 	if err := e.app.Start(e.ctx); err != nil {
@@ -150,8 +169,9 @@ func (e *poE2E) serve() {
 	e.t.Helper()
 	mux := http.NewServeMux()
 	mux.Handle("/api/", httpapi.NewRouter(httpapi.NewHandler(httpapi.Services{
-		Sessions: e.orch, Planning: e.plan, Projects: e.cat.Projects, Settings: e.cat.Settings, ProductOwner: e.po,
+		Sessions: e.orch, Planning: e.plan, Projects: e.cat.Projects, Settings: e.cat.Settings, ProductOwner: e.po, AgentBoard: e.board, Usage: e.usage,
 	})))
+	mux.Handle(mcpsession.PathPrefix, sessionTaskHandler(sessionTaskTools(e.cat, e.orch, e.plan, e.sess, e.art, e.channel, nil, nil), e.plan, e.sess))
 	e.srv = httptest.NewServer(mux)
 	e.t.Cleanup(e.srv.Close)
 	e.feed = followPOFeed(e.t, e.srv.URL, e.project)
@@ -246,6 +266,19 @@ func followPOFeed(t *testing.T, base, project string) *poFeed {
 		}
 	}()
 	return f
+}
+
+// changesOf lists, as text, the changes under key seen so far.
+func (f *poFeed) changesOf(key string) []string {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	var out []string
+	for _, c := range f.changes {
+		if raw, ok := c[key]; ok {
+			out = append(out, string(raw))
+		}
+	}
+	return out
 }
 
 // of lists the changes under key seen so far, each decoded as a generic object.
@@ -1121,5 +1154,268 @@ func TestATurnRunningWhenTheProductOwnerIsSwitchedOffStillResumesAfterARestart(t
 	}
 	if status, code := e.send(id, "more"); status != 409 || code != "PRODUCT_OWNER_OFF" {
 		t.Errorf("a new message = %d %s, want 409 PRODUCT_OWNER_OFF", status, code)
+	}
+}
+
+// dialSession is an MCP client on a session's own task endpoint, as its claude
+// would be.
+func (e *poE2E) dialSession(sessionID string) *client.Client {
+	e.t.Helper()
+	trans, err := transport.NewStreamableHTTP(e.srv.URL + mcpsession.PathPrefix + sessionID)
+	if err != nil {
+		e.t.Fatal(err)
+	}
+	c := client.NewClient(trans)
+	e.t.Cleanup(func() { _ = trans.Close() })
+	var req mcplib.InitializeRequest
+	req.Params.ProtocolVersion = mcplib.LATEST_PROTOCOL_VERSION
+	req.Params.ClientInfo = mcplib.Implementation{Name: "test", Version: "0.0.1"}
+	if _, err := c.Initialize(e.ctx, req); err != nil {
+		e.t.Fatal(err)
+	}
+	return c
+}
+
+func (e *poE2E) toolNames(c *client.Client) []string {
+	e.t.Helper()
+	listed, err := c.ListTools(e.ctx, mcplib.ListToolsRequest{})
+	if err != nil {
+		e.t.Fatal(err)
+	}
+	var names []string
+	for _, tool := range listed.Tools {
+		names = append(names, tool.Name)
+	}
+	slices.Sort(names)
+	return names
+}
+
+// call runs a tool and answers its text and whether it was refused: an
+// unknown tool is an error of the call, a refused one a tool error.
+func (e *poE2E) call(c *client.Client, name string, args map[string]any) (text string, refused bool) {
+	e.t.Helper()
+	var req mcplib.CallToolRequest
+	req.Params.Name, req.Params.Arguments = name, args
+	res, err := c.CallTool(e.ctx, req)
+	if err != nil {
+		return err.Error(), true
+	}
+	for _, c := range res.Content {
+		if tc, ok := c.(mcplib.TextContent); ok {
+			text += tc.Text
+		}
+	}
+	return text, res.IsError
+}
+
+func TestAProductOwnerSessionIsServedItsReadToolsAndNoWriteStartOrMergeTool(t *testing.T) {
+	e := newPOE2E(t)
+	id, _ := e.startThread("hello")
+	owner := e.dialSession(e.thread(id).Thread.SessionID)
+
+	want := append([]string(nil), tooling.ProductOwnerToolNames...)
+	slices.Sort(want)
+	got := e.toolNames(owner)
+	if !slices.Equal(got, want) {
+		t.Fatalf("tools = %v, want exactly %v", got, want)
+	}
+	for _, banned := range []string{"start_task_session", "create_task", "update_task_status", "merge_session_branch", "push_branch",
+		"publish_artifact", "attach_artifact_to_task", "message_architect", "reply_to_session", "request_user_review", "notify",
+		"propose_instruction_files", "set_status_check"} {
+		if slices.Contains(got, banned) {
+			t.Errorf("the product owner is served %s", banned)
+		}
+		// A call is refused whatever the prompt says.
+		if text, refused := e.call(owner, banned, map[string]any{"title": "x", "prompt": "x", "status": "done"}); !refused {
+			t.Errorf("a call to %s was answered: %s", banned, text)
+		}
+	}
+	if tasks, _ := e.plan.ListTickets(e.ctx, e.project, ports.TicketFilter{}); len(tasks) != 0 {
+		t.Error("a refused create_task made a task")
+	}
+
+	// Every other session keeps its tools: the line is the mode's.
+	if _, err := e.sess.Create(&domain.Session{ID: "plain", ProjectID: e.project, Task: "a task session", Status: domain.SessionRunning, Mode: domain.SessionModeImplement}); err != nil {
+		t.Fatal(err)
+	}
+	if general := e.toolNames(e.dialSession("plain")); !slices.Contains(general, "start_task_session") || len(general) <= len(want) {
+		t.Errorf("a task session is served %v", general)
+	}
+}
+
+func TestTheProductOwnerReadsTasksWithTheirHistoryAndOnlyTheStatusOutcomeAndSummaryOfOtherSessions(t *testing.T) {
+	e := newPOE2E(t)
+	feature, err := e.plan.CreateTicket(e.ctx, e.project, "Product owner", "talk to your project", domain.TicketStatusInProgress, "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	child, err := e.plan.CreateTicket(e.ctx, e.project, "Mode and settings", "", domain.TicketStatusReview, feature.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := e.plan.StatusHistory.Append(&domain.TaskStatusChange{TaskID: child.ID, Status: domain.TicketStatusReview, Reason: "ready for review", By: domain.ChangedByArchitect, At: time.Now()}); err != nil {
+		t.Fatal(err)
+	}
+	merged := &domain.MergeResult{At: time.Now(), Merged: true, Into: "main", Method: "merge"}
+	if _, err := e.sess.Create(&domain.Session{ID: "other", ProjectID: e.project, TicketID: child.ID, Task: "implement the mode", WorkingDir: "/secret/worktrees/other",
+		WorkspaceID: "ws-secret", Branch: "agent/mode-1", Status: domain.SessionDone, Mode: domain.SessionModeImplement}); err != nil {
+		t.Fatal(err)
+	}
+	if err := e.sess.UpdateMerge("other", *merged); err != nil {
+		t.Fatal(err)
+	}
+
+	id, _ := e.startThread("what is in progress?")
+	owner := e.dialSession(e.thread(id).Thread.SessionID)
+
+	text, refused := e.call(owner, "get_project_task", map[string]any{"task_id": feature.ID})
+	if refused || !strings.Contains(text, "Mode and settings") || !strings.Contains(text, `"children"`) {
+		t.Errorf("get_project_task(feature) = %s (refused %v), want its children", text, refused)
+	}
+	text, refused = e.call(owner, "get_project_task", map[string]any{"task_id": child.ID})
+	if refused || !strings.Contains(text, "ready for review") || !strings.Contains(text, "architect") {
+		t.Errorf("get_project_task(child) = %s (refused %v), want its status history", text, refused)
+	}
+	if text, refused := e.call(owner, "get_project_task", map[string]any{"task_id": "nope"}); !refused || !strings.Contains(text, "TASK_NOT_FOUND") {
+		t.Errorf("an unknown task = %s", text)
+	}
+
+	text, _ = e.call(owner, "list_project_sessions", map[string]any{"include_ended": true})
+	for _, want := range []string{"implement the mode", `"done"`, `"merge"`, "other"} {
+		if !strings.Contains(text, want) {
+			t.Errorf("list_project_sessions lacks %q: %s", want, text)
+		}
+	}
+	for _, secret := range []string{"/secret", "ws-secret", "working_dir", "workspace", "transcript", "worktree"} {
+		if strings.Contains(text, secret) {
+			t.Errorf("list_project_sessions shows %q: %s", secret, text)
+		}
+	}
+	if strings.Contains(text, e.thread(id).Thread.SessionID) {
+		t.Error("the product owner's own thread is listed among the sessions")
+	}
+	text, _ = e.call(owner, "list_project_branches", nil)
+	if !strings.Contains(text, "agent/mode-1") || !strings.Contains(text, `"merged":true`) || strings.Contains(text, "/secret") {
+		t.Errorf("list_project_branches = %s", text)
+	}
+}
+
+func TestTheProductOwnersSandboxReachesNoOtherSessionsWorktreeAndItsShellRefusesEveryWrite(t *testing.T) {
+	e := newPOE2E(t)
+	id, _ := e.startThread("hello")
+	th := e.waitTurn(id, "idle")
+
+	calls := e.sandbox.Calls()
+	policy := calls[len(calls)-1].Policy
+	worktrees := filepath.Join(filepath.Dir(e.cfg.DBPath), "worktrees")
+	for _, p := range append(append([]string(nil), policy.Readable...), policy.Writable...) {
+		if strings.HasPrefix(p, worktrees) {
+			t.Errorf("the sandbox grants %s, a path of the session worktrees", p)
+		}
+	}
+
+	dir, ok := e.shells.RootDir(th.Thread.SessionID)
+	if !ok {
+		t.Fatal("the product owner has no virtual shell")
+	}
+	for _, edit := range []ports.ShellEdit{
+		{Op: "write", Paths: []string{filepath.Join(dir, "project/docs/new.md")}, Tool: "Write"},
+		{Op: "rm", Paths: []string{filepath.Join(dir, "project/docs/prd.md")}},
+		{Op: "mkdir", Paths: []string{filepath.Join(dir, "tasks/x")}},
+	} {
+		if ans := e.shells.CheckShellEdit(e.ctx, th.Thread.SessionID, edit); ans.Allow || ans.Code != "PRODUCT_OWNER_READ_ONLY" {
+			t.Errorf("check %+v = %+v, want PRODUCT_OWNER_READ_ONLY", edit, ans)
+		}
+		if ans := e.shells.CommitShellEdit(e.ctx, th.Thread.SessionID, edit); ans.Allow || ans.Code != "PRODUCT_OWNER_READ_ONLY" {
+			t.Errorf("commit %+v = %+v, want PRODUCT_OWNER_READ_ONLY", edit, ans)
+		}
+	}
+	// What is outside its shell is no concern of the proxy.
+	if ans := e.shells.CheckShellEdit(e.ctx, th.Thread.SessionID, ports.ShellEdit{Op: "write", Paths: []string{"/tmp/elsewhere"}}); !ans.Allow {
+		t.Errorf("a path outside the shell = %+v", ans)
+	}
+}
+
+func TestAThreadsSessionIsInNoSessionListTheBoardTheFeedOrTheInbox(t *testing.T) {
+	e := newPOE2E(t)
+	// Another session, to show the surfaces still list what they list.
+	if _, err := e.sess.Create(&domain.Session{ID: "task-session", ProjectID: e.project, Task: "a task session", Status: domain.SessionRunning, Mode: domain.SessionModeImplement}); err != nil {
+		t.Fatal(err)
+	}
+	id, _ := e.startThread("hello")
+	th := e.waitTurn(id, "idle")
+	sid := th.Thread.SessionID
+
+	var list struct {
+		Sessions []struct {
+			ID string `json:"id"`
+		} `json:"sessions"`
+	}
+	if status, code := e.get("sessions?project_id="+e.project, &list); status != 200 {
+		t.Fatalf("list sessions = %d %s", status, code)
+	}
+	var ids []string
+	for _, s := range list.Sessions {
+		ids = append(ids, s.ID)
+	}
+	if slices.Contains(ids, sid) || !slices.Contains(ids, "task-session") {
+		t.Errorf("the project's sessions = %v, want the task session and not the thread's %s", ids, sid)
+	}
+	if live := e.sess.List(e.ctx, ports.SessionFilter{ProjectID: e.project, Statuses: domain.LiveSessionStatuses}); len(live) != 1 || live[0].ID != "task-session" {
+		t.Errorf("live sessions = %+v", live)
+	}
+	if act, _ := e.sess.ActivityByProject(); act[e.project].LiveCount != 1 {
+		t.Errorf("the project counts %d live sessions, want only the task session", act[e.project].LiveCount)
+	}
+
+	res, err := http.Get(e.srv.URL + "/api/agent_board")
+	if err != nil {
+		t.Fatal(err)
+	}
+	board, _ := io.ReadAll(res.Body)
+	res.Body.Close()
+	if strings.Contains(string(board), sid) {
+		t.Errorf("the agent board shows the thread's session")
+	}
+	for _, c := range e.feed.changesOf("session") {
+		if strings.Contains(c, sid) {
+			t.Errorf("the project feed announced the thread's session: %s", c)
+		}
+	}
+	notes, err := e.notes.ListNotifications(e.ctx, ports.NotificationQuery{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if b, _ := json.Marshal(notes); strings.Contains(string(b), sid) {
+		t.Errorf("the inbox mentions the thread's session: %s", b)
+	}
+}
+
+func TestAThreadsCallsAreAttributedToTheProductOwnerAndItsProject(t *testing.T) {
+	e := newPOE2E(t)
+	id, _ := e.startThread("hello")
+	e.waitTurn(id, "idle")
+
+	b, _ := os.ReadFile(filepath.Join(e.fakeDir, "headers"))
+	want := "harness:product-owner:" + e.project
+	if !strings.Contains(string(b), want) {
+		t.Fatalf("claude was given the headers %q, want the attribution %s", b, want)
+	}
+	// The proxy records each call under that attribution.
+	now := time.Now()
+	e.usage.Record(e.ctx, ports.UsageRequest{ID: "call-1", Attribution: want, Method: "POST", Path: "/v1/messages", Model: "sonnet", Status: 200, StartedAt: now, EndedAt: now, InputTokens: 10, OutputTokens: 5})
+	recs, err := e.usage.ListRecentUsage(e.ctx, ports.UsageQuery{ProjectID: e.project})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(recs.Records) != 1 || recs.Records[0].ProjectID != e.project || recs.Records[0].Attribution != "harness:product-owner" || recs.Records[0].SessionID != "" {
+		t.Errorf("records = %+v, want one for the product owner in the project", recs.Records)
+	}
+	sum, err := e.usage.UsageSummary(e.ctx, e.project, ports.UsageRange("30d"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if sum.Totals.Requests != 1 {
+		t.Errorf("the project's usage counts %d requests, want the product owner's one", sum.Totals.Requests)
 	}
 }

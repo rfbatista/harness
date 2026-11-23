@@ -380,6 +380,9 @@ func (s *Service) withShell(sessionID string, e ports.ShellEdit, do func(*root, 
 	if ed.op == "redirect" {
 		return refuseRedirect()
 	}
+	if s.isProductOwner(sessionID) {
+		return refuse("PRODUCT_OWNER_READ_ONLY", "the product owner cannot change anything yet: nothing was written")
+	}
 	return do(sh, ed)
 }
 
@@ -937,3 +940,13 @@ var (
 	htmlTitle = regexp.MustCompile(`(?is)<title\b[^>]*>(.*?)</title>`)
 	tags      = regexp.MustCompile(`<[^>]*>`)
 )
+
+// isProductOwner says the session is a product-owner thread's, whose shell is
+// read-only: it reads the project's documents and designs and changes none.
+func (s *Service) isProductOwner(sessionID string) bool {
+	if s.src.Sessions == nil {
+		return false
+	}
+	sess := s.src.Sessions.Get(sessionID)
+	return sess != nil && sess.Mode == domain.SessionModeProductOwner
+}

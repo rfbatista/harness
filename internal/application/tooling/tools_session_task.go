@@ -43,17 +43,6 @@ var SessionTaskToolNames = []string{
 	"propose_instruction_files",
 }
 
-// ProductOwnerToolNames are the task tools a product-owner thread may call: a
-// mode allow-list (ADR 0109). It has no tool that starts a session, moves a
-// branch, pushes, merges or writes; the server holds that line in the tools
-// themselves, not only here.
-var ProductOwnerToolNames = []string{
-	"list_project_tasks",
-	"list_project_repositories",
-	"list_bounded_contexts",
-	"list_notifications",
-}
-
 // MaxLiveTaskSessions caps the sessions running on one task at once, so agents
 // starting peers cannot fan out without bound.
 const MaxLiveTaskSessions = 16

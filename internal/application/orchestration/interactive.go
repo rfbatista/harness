@@ -679,7 +679,7 @@ func ranByServer(sess *domain.Session) bool {
 // liveServerSessions are the sessions the server runs that are stored with a
 // live status, whatever it is (ADR 0078).
 func (s *Service) liveServerSessions(ctx context.Context) ([]*domain.Session, error) {
-	live, err := s.List(ctx, ports.SessionFilter{Statuses: domain.LiveSessionStatuses})
+	live, err := s.List(ctx, ports.SessionFilter{Statuses: domain.LiveSessionStatuses, IncludeProductOwner: true})
 	if err != nil {
 		return nil, err
 	}

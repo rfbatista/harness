@@ -4,6 +4,7 @@
 package mcpsession
 
 import (
+	"strings"
 	"net/http"
 
 	"github.com/rfbatista/harnesskit/mcpbridge"
@@ -26,4 +27,23 @@ func TaskHandler(tools []domain.Tool) http.Handler {
 		tools,
 		PathPrefix,
 	)
+}
+
+// ModeTaskHandler is TaskHandler for a server whose sessions do not all get
+// the same tools: a session for which isProductOwner says so is served
+// productOwnerTools and nothing else, so a tool outside the mode is unknown to
+// it and a call to it is refused. It reads the session from the request path,
+// as the tools do.
+func ModeTaskHandler(tools, productOwnerTools []domain.Tool, isProductOwner func(sessionID string) bool) http.Handler {
+	general := TaskHandler(tools)
+	owner := TaskHandler(productOwnerTools)
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		id := strings.TrimPrefix(r.URL.Path, PathPrefix)
+		id, _, _ = strings.Cut(id, "/")
+		if id != "" && isProductOwner(id) {
+			owner.ServeHTTP(w, r)
+			return
+		}
+		general.ServeHTTP(w, r)
+	})
 }
