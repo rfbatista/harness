@@ -18,6 +18,8 @@ export interface FeedHarness {
   endFeed(path: string): void;
   /** The dropped feed is followed again. */
   reconnect(): Promise<void>;
+  /** The stream sends something that is not a message of the protocol. Adapters that read no wire have none. */
+  sendMalformed?(): void;
 }
 
 export function feedContract(name: string, make: () => Promise<FeedHarness>): void {
@@ -43,6 +45,17 @@ export function feedContract(name: string, make: () => Promise<FeedHarness>): vo
       assert.equal(statuses.at(-1), "paused");
       await h.reconnect();
       assert.deepEqual(statuses.slice(-3), ["paused", "resynced", "live"]);
+    });
+
+    test("a message that is not the protocol's is ignored, and the follow goes on", async (t) => {
+      const h = await make();
+      if (!h.sendMalformed) return t.skip("the adapter reads no wire");
+      const messages: unknown[] = [];
+      h.feed.follow(INBOX, { onMessage: (m) => messages.push(m) });
+      await h.connect();
+      h.sendMalformed();
+      h.send(INBOX, { a: 1 });
+      assert.deepEqual(messages, [{ a: 1 }]);
     });
 
     test("a follower that stopped hears nothing", async () => {

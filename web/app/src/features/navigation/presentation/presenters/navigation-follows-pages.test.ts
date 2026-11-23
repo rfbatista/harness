@@ -3,19 +3,18 @@ import assert from "node:assert/strict";
 import { CurrentTopBar } from "../../application/current-top-bar";
 import { followNavigation } from "../../application/follow-navigation";
 import { TopBarSourceError } from "../../application/ports";
-import { parseTopBar } from "../../domain/top-bar";
 import { memoryNavigationSignal } from "../../infrastructure/memory-navigation-signal";
 import { memoryPageOpener } from "../../infrastructure/memory-page-opener";
 import { memoryTopBarSource } from "../../infrastructure/memory-top-bar-source";
-import { linksWith, topBarJson } from "../../testing/fixtures";
+import { linksWith, topBarJson, topBarFromJson } from "../../testing/fixtures";
 import { PageLinksPresenter } from "./page-links-presenter";
 import { ProjectPickerPresenter } from "./project-picker-presenter";
 
-const page = (path: string, project: string, current?: string, attention = false) => parseTopBar(topBarJson({ path, current_project_id: project, links: linksWith({ ...(current ? { [current]: { current: true } } : {}), ...(attention ? { agent_isolation: { attention: true } } : {}) }) }));
+const page = (path: string, project: string, current?: string, attention = false) => topBarFromJson(topBarJson({ path, current_project_id: project, links: linksWith({ ...(current ? { [current]: { current: true } } : {}), ...(attention ? { agent_isolation: { attention: true } } : {}) }) }));
 
 const setup = (initial = page("/", ""), options: { fresh?: boolean } = {}) => {
   const current = new CurrentTopBar(initial);
-  const source = memoryTopBarSource((path) => parseTopBar(topBarJson({ path })));
+  const source = memoryTopBarSource((path) => topBarFromJson(topBarJson({ path })));
   const signal = memoryNavigationSignal();
   const stop = followNavigation(signal, source, current, options);
   return { current, source, signal, stop, picker: new ProjectPickerPresenter(current, memoryPageOpener()), links: new PageLinksPresenter(current) };

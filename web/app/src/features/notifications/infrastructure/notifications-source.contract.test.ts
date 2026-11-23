@@ -19,6 +19,8 @@ notificationsSourceContract("HTTP adapter against a fake server on the wire", ()
     breakNetwork: server.breakNetwork,
     publish: (change) => feed.emit(NOTIFICATIONS_STREAM, { changed: change.notifications.map(toWire), unread_count: change.unreadCount }),
     setStatus: (status) => feed.setStatus(NOTIFICATIONS_STREAM, status),
+    answerMalformed: server.answerWith,
+    publishMalformed: (raw) => feed.emit(NOTIFICATIONS_STREAM, raw),
   };
 });
 

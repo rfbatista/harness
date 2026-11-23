@@ -5,8 +5,7 @@ import { describe, test } from "node:test";
 import assert from "node:assert/strict";
 import type { TopBarSource } from "../application/ports";
 import { TopBarSourceError } from "../application/ports";
-import { parseTopBar } from "../domain/top-bar";
-import { linksWith, topBarJson, type TopBarJson } from "./fixtures";
+import { linksWith, topBarFromJson, topBarJson, type TopBarJson } from "./fixtures";
 
 export interface TopBarSourceHarness {
   source: TopBarSource;
@@ -14,6 +13,8 @@ export interface TopBarSourceHarness {
   serve(model: TopBarJson): void;
   /** Every next call fails as the network does. */
   breakNetwork(): void;
+  /** The server answers `raw` (not a valid model) for every path. Adapters that read no wire have none. */
+  serveMalformed?(raw: unknown): void;
 }
 
 export function topBarSourceContract(name: string, make: () => TopBarSourceHarness): void {
@@ -22,7 +23,7 @@ export function topBarSourceContract(name: string, make: () => TopBarSourceHarne
       const h = make();
       const model = topBarJson({ path: "/projects/p1/tasks/t1", current_project_id: "p1", links: linksWith({ board: { current: true }, agent_isolation: { attention: true } }) });
       h.serve(model);
-      assert.deepEqual(await h.source.load("/projects/p1/tasks/t1"), parseTopBar(model));
+      assert.deepEqual(await h.source.load("/projects/p1/tasks/t1"), topBarFromJson(model));
     });
 
     test("a path that matches no page is not an error: no current project, no current link", async () => {
@@ -61,6 +62,21 @@ export function topBarSourceContract(name: string, make: () => TopBarSourceHarne
       h.breakNetwork();
       await assert.rejects(h.source.load("/"), (err: unknown) => err instanceof TopBarSourceError && err.code === "NETWORK_ERROR");
     });
+
+    const MALFORMED: [string, unknown][] = [
+      ["a missing field", { ...topBarJson(), path: undefined }],
+      ["a wrong type", topBarJson({ projects: "none" as never })],
+      ["a wrong type in a link", topBarJson({ links: [{ key: "board", href: 3, current: false, attention: false }] as never })],
+      ["not an object", ["a", "b"]],
+    ];
+    for (const [what, raw] of MALFORMED) {
+      test(`${what} in the answer is BAD_RESPONSE`, async (t) => {
+        const h = make();
+        if (!h.serveMalformed) return t.skip("the adapter reads no wire");
+        h.serveMalformed(raw);
+        await assert.rejects(h.source.load("/"), (err: unknown) => err instanceof TopBarSourceError && err.code === "BAD_RESPONSE");
+      });
+    }
 
     test("an aborted call rejects with AbortError", async () => {
       const controller = new AbortController();

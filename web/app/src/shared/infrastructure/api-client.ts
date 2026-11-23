@@ -1,6 +1,8 @@
 // A typed client over fetch for the harness API. A non-2xx answer carries the
 // API's error body, { error: message, code }, and becomes an ApiError.
 
+import { ApiErrorDto } from "./dto/api-error-dto";
+
 export class ApiError extends Error {
   readonly code: string;
   readonly status: number;
@@ -15,15 +17,21 @@ export class ApiError extends Error {
 
 export type FetchLike = (input: string, init?: RequestInit) => Promise<Response>;
 
+/** What may be sent: a DTO, which the client stringifies through its toJSON(). */
+export interface Sendable {
+  toJSON(): unknown;
+}
+
+/** Answers are raw: a caller reads them through a DTO's fromJSON, and sends a DTO. */
 export interface ApiClient {
-  get<T>(path: string, query?: Record<string, string>, signal?: AbortSignal): Promise<T>;
-  post<T>(path: string, body?: unknown, signal?: AbortSignal): Promise<T>;
+  get(path: string, query?: Record<string, string>, signal?: AbortSignal): Promise<unknown>;
+  post(path: string, body?: Sendable, signal?: AbortSignal): Promise<unknown>;
 }
 
 const NETWORK_ERROR = "NETWORK_ERROR";
 
 export function apiClient(fetcher: FetchLike = (input, init) => fetch(input, init), base = "/api"): ApiClient {
-  async function send<T>(path: string, init: RequestInit): Promise<T> {
+  async function send(path: string, init: RequestInit): Promise<unknown> {
     let response: Response;
     // A write is about to change what a page shows: what was prefetched is read before it (web/src/prefetch.js).
     if (init.method !== "GET") globalThis.dispatchEvent?.(new Event("api-write"));
@@ -34,9 +42,9 @@ export function apiClient(fetcher: FetchLike = (input, init) => fetch(input, ini
       throw new ApiError(NETWORK_ERROR, cause instanceof Error ? cause.message : "network error", 0);
     }
     if (!response.ok) throw await failure(response);
-    if (response.status === 204) return undefined as T;
+    if (response.status === 204) return undefined;
     try {
-      return (await response.json()) as T;
+      return (await response.json()) as unknown;
     } catch {
       // A login page or a proxy's page answered with 200.
       throw new ApiError("BAD_RESPONSE", "The harness server answered something that is not JSON.", response.status);
@@ -62,8 +70,8 @@ function queryString(query?: Record<string, string>): string {
 
 async function failure(response: Response): Promise<ApiError> {
   try {
-    const body = (await response.json()) as { error?: string; code?: string };
-    return new ApiError(body.code ?? `HTTP_${response.status}`, body.error ?? response.statusText, response.status);
+    const body = ApiErrorDto.fromJSON(await response.json());
+    return new ApiError(body.code, body.error, response.status);
   } catch {
     return new ApiError(`HTTP_${response.status}`, response.statusText, response.status);
   }

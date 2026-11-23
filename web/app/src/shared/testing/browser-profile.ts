@@ -57,6 +57,11 @@ export function browserProfile() {
     clock += ms;
   };
 
+  // A tab that is not one of ours, saying whatever it likes on the channel.
+  const rogueTab = cross.tab();
+  const rogue = new rogueTab.BroadcastChannel("harness-page-event-stream");
+  const broadcast = (raw: unknown) => rogue.postMessage(raw);
+
   const tabs: Tab[] = [];
   function open(client: Client = "react"): Tab {
     const t = cross.tab();
@@ -119,5 +124,5 @@ export function browserProfile() {
     return live[0];
   };
   const hello = (id = "st1") => stream().message({ stream: id });
-  return { open, tabs, es, timers, api, posts, openStreams, stream, hello, beat, later };
+  return { open, broadcast, tabs, es, timers, api, posts, openStreams, stream, hello, beat, later };
 }

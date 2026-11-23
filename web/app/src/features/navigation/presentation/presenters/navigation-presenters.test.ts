@@ -1,14 +1,13 @@
 import { describe, test } from "node:test";
 import assert from "node:assert/strict";
 import { CurrentTopBar } from "../../application/current-top-bar";
-import { parseTopBar } from "../../domain/top-bar";
 import { memoryPageOpener } from "../../infrastructure/memory-page-opener";
-import { linksWith, topBarJson, type TopBarJson } from "../../testing/fixtures";
+import { linksWith, topBarJson, type TopBarJson, topBarFromJson } from "../../testing/fixtures";
 import { PageLinksPresenter } from "./page-links-presenter";
 import { ProjectPickerPresenter } from "./project-picker-presenter";
 
 const setup = (json: Partial<TopBarJson> = {}) => {
-  const current = new CurrentTopBar(parseTopBar(topBarJson(json)));
+  const current = new CurrentTopBar(topBarFromJson(topBarJson(json)));
   const opener = memoryPageOpener();
   return { current, opener, picker: new ProjectPickerPresenter(current, opener), links: new PageLinksPresenter(current) };
 };

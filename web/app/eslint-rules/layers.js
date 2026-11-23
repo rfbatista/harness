@@ -7,6 +7,7 @@
 //                   presenters import no React and no view, never an adapter
 //   shared/kernel   imports only shared/kernel, and no React
 //   features        never import each other, only shared
+//   a DTO (infrastructure/dto/) is imported by infrastructure and the composition roots only (ADR 0106)
 //   composition roots (composition/, islands/, main.client.tsx) import anything: they alone build adapters
 //   tests, and the testing/ folders (fixtures, port contract suites): import anything
 //   nothing else imports from outside web/app/src, but use-popup.ts's one named exception
@@ -29,8 +30,9 @@ export function classify(file) {
   const relative = path.relative(SRC, file);
   if (relative.startsWith("..") || path.isAbsolute(relative)) return { zone: "elsewhere" };
   const rest = relative.split(path.sep);
-  if (rest[0] === "features" && rest.length > 3) return { zone: "feature", feature: rest[1], layer: rest[2], sub: rest[3] };
-  if (rest[0] === "shared" && rest.length > 2) return { zone: "shared", layer: rest[1] };
+  // A DTO (ADR 0106) lives in infrastructure/dto/, in a feature or in shared.
+  if (rest[0] === "features" && rest.length > 3) return { zone: "feature", feature: rest[1], layer: rest[2], sub: rest[3], dto: rest[2] === "infrastructure" && rest[3] === "dto" };
+  if (rest[0] === "shared" && rest.length > 2) return { zone: "shared", layer: rest[1], dto: rest[1] === "infrastructure" && rest[2] === "dto" };
   if (rest[0] === "composition" || rest[0] === "islands" || rest[0]?.startsWith("main.")) return { zone: "root" };
   return { zone: "outside" };
 }
@@ -49,6 +51,8 @@ export function refusal(importer, target, specifier, files = {}) {
   const bare = !specifier.startsWith(".");
   if (importer.zone === "root" || importer.zone === "outside" || importer.zone === "elsewhere") return null;
   if (importer.layer === "testing") return null;
+  const mayImportDto = importer.layer === "infrastructure";
+  if (!bare && target.dto && !mayImportDto) return "only infrastructure and the composition roots import a DTO";
   if (!bare && target.zone === "elsewhere") {
     const allowed = files.importer === OUTSIDE_EXCEPTION.importer && files.target === OUTSIDE_EXCEPTION.target;
     return allowed ? null : "nothing leaves web/app/src, but the composition roots and testing";

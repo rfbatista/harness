@@ -20,6 +20,7 @@
 
 import type { Feed, FeedHandlers, FeedStatus } from "../kernel/feed";
 import type { ApiClient } from "./api-client";
+import { ChannelMessageDto, type ChannelMessageType } from "./dto/channel-message-dto";
 import { streamFeed, systemTimers, type Timers } from "./stream-feed";
 
 /** The lock's and the channel's name: the Alpine client's, so both interoperate. */
@@ -68,11 +69,11 @@ interface Holding {
   ready: boolean;
 }
 
-interface Message {
-  type: string;
-  from: string;
+/** What a tab says on the channel, before it names itself as the sender. */
+interface Outgoing {
+  type: ChannelMessageType;
   path?: string;
-  paths?: string[];
+  paths?: readonly string[];
   data?: unknown;
   status?: FeedStatus;
   to?: string;
@@ -97,7 +98,7 @@ export function sharedFeed({
 
   const me = Math.random().toString(36).slice(2) + Date.now().toString(36);
   const channel = new BroadcastChannel(NAME);
-  const post = (msg: Omit<Message, "from">) => channel.postMessage({ ...msg, from: me });
+  const post = (msg: Outgoing) => channel.postMessage(new ChannelMessageDto(msg.type, me, msg.path, msg.paths, msg.data, msg.status, msg.to, msg.delay).toJSON());
 
   /** What this tab follows: path -> its followers and last status. */
   const local = new Map<string, Entry>();
@@ -346,8 +347,14 @@ export function sharedFeed({
     for (const tab of tabs) if (tab !== me && !alive.has(`${NAME}/tab/${tab}`)) relayAll(tab, []);
   }
 
-  channel.onmessage = ({ data: msg }: MessageEvent<Message | null>) => {
-    if (!msg || msg.from === me) return;
+  channel.onmessage = ({ data: raw }: MessageEvent<unknown>) => {
+    let msg: ChannelMessageDto;
+    try {
+      msg = ChannelMessageDto.fromJSON(raw);
+    } catch {
+      return; // a message that is not the protocol's is ignored
+    }
+    if (msg.from === me) return;
     if (msg.type === "holder") {
       handedOverAt = now();
       handoverDelay = msg.delay ?? 0;

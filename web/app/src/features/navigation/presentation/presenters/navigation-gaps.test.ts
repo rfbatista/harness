@@ -7,17 +7,17 @@ import assert from "node:assert/strict";
 import { CurrentTopBar } from "../../application/current-top-bar";
 import { followNavigation } from "../../application/follow-navigation";
 import { TopBarSourceError, type TopBarSource } from "../../application/ports";
-import { parseTopBar, type TopBar } from "../../domain/top-bar";
+import type { TopBar } from "../../domain/top-bar";
 import { browserNavigationSignal } from "../../infrastructure/browser-navigation-signal";
 import { memoryNavigationSignal } from "../../infrastructure/memory-navigation-signal";
 import { memoryPageOpener } from "../../infrastructure/memory-page-opener";
 import { memoryTopBarSource } from "../../infrastructure/memory-top-bar-source";
-import { linksWith, topBarJson, type TopBarJson } from "../../testing/fixtures";
+import { linksWith, topBarJson, type TopBarJson, topBarFromJson } from "../../testing/fixtures";
 import { PageLinksPresenter } from "./page-links-presenter";
 import { ProjectPickerPresenter } from "./project-picker-presenter";
 
 const settle = () => new Promise((resolve) => setImmediate(resolve));
-const model = (json: Partial<TopBarJson>): TopBar => parseTopBar(topBarJson(json));
+const model = (json: Partial<TopBarJson>): TopBar => topBarFromJson(topBarJson(json));
 const keys = (links: PageLinksPresenter, flag: "current" | "attention") => links.viewModel.links.filter((l) => l[flag]).map((l) => l.key);
 
 function setup(initial: TopBar) {
@@ -180,7 +180,7 @@ describe("the top bar follows the page: races and signals", () => {
   });
 
   test("a malformed answer keeps the last model and does not throw out of the listener", async () => {
-    const source: TopBarSource = { load: async () => parseTopBar({ path: 3 }) };
+    const source: TopBarSource = { load: async () => topBarFromJson({ path: 3 }) };
     const current = new CurrentTopBar(model({ path: "/" }));
     const signal = memoryNavigationSignal();
     followNavigation(signal, source, current);

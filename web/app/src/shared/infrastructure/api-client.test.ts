@@ -10,7 +10,7 @@ test("a 200 gives the body, and the query goes in the URL", async () => {
     urls.push(url);
     return json(200, { ok: true });
   };
-  const body = await apiClient(fetcher).get<{ ok: boolean }>("/top_bar", { path: "/projects/p 1" });
+  const body = await apiClient(fetcher).get("/top_bar", { path: "/projects/p 1" });
   assert.deepEqual(body, { ok: true });
   assert.deepEqual(urls, ["/api/top_bar?path=%2Fprojects%2Fp+1"]);
 });
@@ -33,7 +33,17 @@ test("a post sends its JSON body", async () => {
     seen = init;
     return new Response(null, { status: 204 });
   };
-  await apiClient(fetcher).post("/notifications/read_all", { a: 1 });
+  await apiClient(fetcher).post("/notifications/read_all", { toJSON: () => ({ a: 1 }) });
   assert.equal(seen?.method, "POST");
   assert.equal(seen?.body, '{"a":1}');
+});
+
+test("an error body that is not the API's still becomes an ApiError, by status", async () => {
+  const fetcher: FetchLike = async () => new Response(JSON.stringify({ message: "nope" }), { status: 500, statusText: "Server Error" });
+  await assert.rejects(apiClient(fetcher).get("/x"), (err: unknown) => err instanceof ApiError && err.code === "HTTP_500" && err.message === "Server Error");
+});
+
+test("a 200 whose body is not JSON is BAD_RESPONSE", async () => {
+  const fetcher: FetchLike = async () => new Response("<html>sign in</html>", { status: 200 });
+  await assert.rejects(apiClient(fetcher).get("/x"), (err: unknown) => err instanceof ApiError && err.code === "BAD_RESPONSE");
 });

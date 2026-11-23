@@ -30,10 +30,10 @@ test("the browser adapter delivers the location's path on popstate", () => {
   assert.deepEqual(seen, ["/agents"]);
 });
 
-test("the browser adapter ignores a harness:navigated event without a path", () => {
+test("the browser adapter ignores a harness:navigated event whose detail is missing, not an object, or has no string path", () => {
   const win = stubWindow();
   const seen: string[] = [];
   browserNavigationSignal(win).subscribe((path) => seen.push(path));
-  win.dispatchEvent(new CustomEvent(NAVIGATED_EVENT, { detail: {} }));
+  for (const detail of [undefined, null, "/agents", {}, { path: 42 }, ["/agents"]]) win.dispatchEvent(new CustomEvent(NAVIGATED_EVENT, { detail }));
   assert.deepEqual(seen, []);
 });
