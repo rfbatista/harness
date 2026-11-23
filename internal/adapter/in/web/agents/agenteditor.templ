@@ -171,6 +171,22 @@ templ agentEditorPage(v View) {
 							<span class="[ error ]" id="agent-projects-error" x-bind:hidden="!agentProjectsInvalid" x-text="agentErrors.projects" hidden></span>
 							<p class="[ summary-line ]" data-projects-summary role="status" x-text="projectsSummary"></p>
 						</section>
+						<section id="modes" aria-labelledby="agent-modes-h">
+							<h2 id="agent-modes-h">Modes</h2>
+							<p class="[ text-sm color-ink-muted ]">The session modes this agent may start in. A mode in <strong>Selected agents</strong> lists its agents: tick it to add this agent to its list. A mode in <strong>All agents</strong> already allows every agent, so it shows as included.</p>
+							<div class="[ pick-list ]" role="group" aria-label="Modes this agent may start in" tabindex="-1" x-bind:aria-describedby="agentModesDescribedBy" x-bind:aria-invalid="agentModesInvalid" data-mode-list>
+								<template x-for="r in modeRowsChoice" x-bind:key="r.inputId">
+									<label class="[ pick-row ]" data-mode-row x-bind:data-mode="r.value" x-bind:data-fixed="r.fixed">
+										<input type="checkbox" x-bind:checked="r.checked" x-bind:disabled="r.fixed" x-bind:data-mode="r.value" x-bind:aria-label="r.name" x-on:change="toggleMode"/>
+										<span class="[ text-sm ]" x-text="r.name"></span>
+										<span class="[ badge ]" x-bind:data-tone="r.tone" x-text="r.badge"></span>
+									</label>
+								</template>
+							</div>
+							<span class="[ hint ]" id="agent-modes-hint" data-modes-hint>Saved with the agent. A new agent starts with nothing ticked, so it is available only in All agents modes until you tick one. A mode's All agents or Selected agents choice is changed on the <a href="/models">Models page</a>.</span>
+							<span class="[ error ]" id="agent-modes-error" x-bind:hidden="!agentModesInvalid" x-text="agentErrors.modes" hidden></span>
+							<p class="[ summary-line ]" data-modes-summary role="status" x-text="modesSummary"></p>
+						</section>
 						<template x-if="mfNotDrawer">
 							@reviewPanel()
 						</template>

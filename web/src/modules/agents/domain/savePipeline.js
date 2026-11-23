@@ -14,6 +14,7 @@
 // reloads. The page never computes file bytes: the preview is the dry run.
 
 import { conflictModel, diffModel } from "./diff.js";
+import { modeChangeFiles } from "./agentModes.js";
 import { projectChangeFiles } from "./enabledIn.js";
 
 /**
@@ -24,7 +25,7 @@ import { projectChangeFiles } from "./enabledIn.js";
  * @property {"clean"|"dirty"|"previewing"|"conflict"|"saved"|"error"} phase
  * @property {Record<string, string>} baseVersions
  * @property {number} seq  counts edits; a preview answer for an older one is dropped
- * @property {{ writes: WriteResult["change"]["writes"], summary: string, projects: WriteResult["change"]["projects"] } | null} preview
+ * @property {{ writes: WriteResult["change"]["writes"], summary: string, projects: WriteResult["change"]["projects"], modes: NonNullable<WriteResult["change"]["modes"]> } | null} preview
  * @property {Record<string, string | null>} seen  the text each file had when last previewed
  * @property {Refusal | null} refusal
  * @property {{ changed: Refusal["changed"], currentVersions: Record<string, string> } | null} conflict
@@ -61,10 +62,10 @@ export function reduceSave(s, e) {
       return { ...s, phase: "previewing" };
     case "preview-done": {
       if (e.seq !== s.seq) return s;
-      const { writes, summary, projects = [] } = e.result.change;
+      const { writes, summary, projects = [], modes = [] } = e.result.change;
       const seen = { ...s.seen };
       for (const w of writes) seen[w.path] = w.before;
-      return { ...s, phase: s.phase === "conflict" ? "conflict" : "dirty", preview: { writes, summary, projects }, seen, refusal: null };
+      return { ...s, phase: s.phase === "conflict" ? "conflict" : "dirty", preview: { writes, summary, projects, modes }, seen, refusal: null };
     }
     case "preview-failed":
       if (e.seq !== s.seq) return s;
@@ -127,7 +128,7 @@ const plural = (n, one, many) => `${n} ${n === 1 ? one : many}`;
 export function saveView(s, form) {
   const paths = s.preview ? s.preview.writes.map((w) => w.path) : form.writes;
   // A change that sets only project lists writes no catalog file: the dry run says so.
-  const writes = paths.join(", ") || (s.preview && s.preview.projects.length ? "the project lists" : "");
+  const writes = paths.join(", ") || (s.preview && (s.preview.projects.length || s.preview.modes.length) ? "the project and mode lists" : "");
   const dirty = s.phase !== "clean" && s.phase !== "saved";
   let footer;
   if (form.blocked) footer = `Saving is off · ${form.blocked}`;
@@ -145,7 +146,7 @@ export function saveView(s, form) {
     review: s.preview !== null,
     files: s.preview ? memo(s.preview, () => diffModel(s.preview.writes)) : [],
     // The project lists the change sets (enabled agents), drawn under the files in Review change.
-    projects: s.preview ? memo(s.preview.projects, () => projectChangeFiles(s.preview.projects)) : [],
+    projects: s.preview ? memo(s.preview.projects, () => [...projectChangeFiles(s.preview.projects), ...modeChangeFiles(s.preview.modes)]) : [],
     conflict,
     conflictTitle: conflict ? `${s.conflict.changed.map((c) => c.path).join(", ") || "A file"} changed on disk while you were editing.` : "",
     conflictFiles: conflict ? memo(s.conflict, () => conflictModel(s.conflict.changed, s.seen)) : [],

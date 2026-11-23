@@ -215,3 +215,71 @@ func TestTheModelsPageSetsEachModesAgents_EndToEnd(t *testing.T) {
 		t.Errorf("JavaScript errors: %v", errs)
 	}
 }
+
+// TestAnAgentShowsAndEditsTheModesItStartsIn_EndToEnd covers stories 7 and 8:
+// the detail's "Available in modes" lists the modes the agent may start in;
+// the editor ticks the Selected modes that list it, shows the All agents modes
+// as included and fixed with a pointer to the Models page, and saving puts the
+// agent on exactly those lists.
+func TestAnAgentShowsAndEditsTheModesItStartsIn_EndToEnd(t *testing.T) {
+	w := newTokenSaverWorld(t)
+	writeCatalogFile(t, w, "agents.json", maCatalog)
+	// Reviewer mode lists reviewer only; Design mode lists designer only.
+	maSetMode(t, w, `{"mode":"review","state":"selected","agents":["reviewer"],"no_agent":false}`)
+	maSetMode(t, w, `{"mode":"design","state":"selected","agents":["designer"],"no_agent":false}`)
+
+	flat := func(sel string) string {
+		return `(document.querySelector(` + quote(sel) + `)?.textContent ?? '').replace(/\s+/g, ' ').trim()`
+	}
+	chips := `[...document.querySelectorAll('[data-available-in-modes] [data-mode-chip]')].map(c => c.textContent.trim()).join(',')`
+	row := func(mode string) string { return `[data-mode-row][data-mode="` + mode + `"]` }
+	checked := func(mode string) string { return `document.querySelector('` + row(mode) + ` input').checked` }
+	disabled := func(mode string) string { return `document.querySelector('` + row(mode) + ` input').disabled` }
+	save := `document.querySelector('[data-save-footer] [data-save]')`
+
+	b := newTLSBrowser(t)
+	b.run("the detail lists the modes the agent may start in",
+		chromedp.EmulateViewport(1280, 1200),
+		chromedp.Navigate(w.srv.URL+"/agents/designer"),
+		waitUntil(flat(`[data-available-in-modes] h3`)+` === 'Available in modes'`),
+		waitUntil(chips+` === 'Default,Architect,Implement,Design,Product,Design system,Tester,QA,Operator'`),
+		waitUntil(`document.querySelector('[data-change=modes]').getAttribute('href') === '/agents/designer/edit#modes'`),
+		bothSchemes("agent-available-in-modes"),
+	)
+	b.run("an agent a Selected mode lists shows that mode",
+		chromedp.Navigate(w.srv.URL+"/agents/reviewer"),
+		waitUntil(chips+` === 'Default,Architect,Implement,Product,Design system,Reviewer,Tester,QA,Operator'`),
+	)
+	b.run("the editor fixes the All agents modes, ticks the Selected one that lists the agent and leaves the other free",
+		chromedp.Navigate(w.srv.URL+"/agents/designer/edit#modes"),
+		waitUntil(`document.querySelectorAll('[data-mode-row]').length === 10`),
+		waitUntil(`document.querySelector('[data-section=modes]') !== null`),
+		waitUntil(checked("architect")+` && `+disabled("architect")),
+		waitUntil(checked("design")+` && !`+disabled("design")),
+		waitUntil(`!`+checked("review")+` && !`+disabled("review")),
+		waitUntil(`document.querySelector('[data-modes-hint] a').getAttribute('href') === '/models'`),
+		waitUntil(save+`.disabled === true`),
+		bothSchemes("agent-editor-modes"),
+	)
+	b.run("an All agents mode cannot be unticked",
+		chromedp.Evaluate(`document.querySelector('`+row("architect")+` input').click()`, nil),
+		waitUntil(checked("architect")+` && `+save+`.disabled === true`),
+	)
+	b.run("tick Reviewer and untick Design, then save",
+		waitUntil(`(() => { const i = document.querySelector('`+row("review")+` input'); if (!i || i.disabled) return false; i.click(); return true; })()`),
+		waitUntil(`(() => { const i = document.querySelector('`+row("design")+` input'); if (!i || i.disabled) return false; i.click(); return true; })()`),
+		waitUntil(save+`.disabled === false`),
+		clickButton(`document.querySelector('[data-save-footer]')`, "Save agent"),
+		atPath(w.srv.URL+"/agents/designer"),
+		waitUntil(chips+` === 'Default,Architect,Implement,Product,Design system,Reviewer,Tester,QA,Operator'`),
+	)
+	if got := maGet(t, w, "review"); !strings.Contains(got, `"agents":["reviewer","designer"]`) && !strings.Contains(got, `"agents":["designer","reviewer"]`) {
+		t.Errorf("review mode after the save = %s, want reviewer and designer", got)
+	}
+	if got := maGet(t, w, "design"); !strings.Contains(got, `"state":"selected","agents":[]`) {
+		t.Errorf("design mode after the save = %s, want an empty Selected list", got)
+	}
+	if errs := b.jsErrors(); len(errs) > 0 {
+		t.Errorf("JavaScript errors: %v", errs)
+	}
+}

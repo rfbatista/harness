@@ -8,6 +8,7 @@
  * @typedef {{ label: string, tone: "attention" | "danger" }} Badge
  */
 
+import { availableModesView } from "./agentModes.js";
 import { allProjects, enabledInView } from "./enabledIn.js";
 import { detectToken, HIDDEN } from "./tokens.js";
 
@@ -175,8 +176,9 @@ export function agentDetail(catalog, key, projects = []) {
     tools: a.allowedTools,
     toolsDefault: a.allowedTools.length === 0,
     enabled: enabledInView(catalog, a, projects),
+    modes: availableModesView(a),
     editHref: edit,
     duplicateHref: `/agents/new?from=${enc(a.name)}`,
-    change: { identity: `${edit}#identity`, skills: `${edit}#skills`, mcp: `${edit}#mcp`, tools: `${edit}#tools`, projects: `${edit}#projects` },
+    change: { identity: `${edit}#identity`, skills: `${edit}#skills`, mcp: `${edit}#mcp`, tools: `${edit}#tools`, projects: `${edit}#projects`, modes: `${edit}#modes` },
   };
 }

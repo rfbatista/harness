@@ -79,6 +79,8 @@ export const agentsPage = ({ gateway: raw, repositories, history, location, clip
    */
   projectList: [],
   projectsRead: false,
+  /** Each session mode's state, All agents or Selected agents, for the editor's Modes section. */
+  modeStates: /** @type {import("../../domain/agentModes.js").ModeStates} */ ({}),
   /** @type {Record<string, "all" | "selected">} */
   projectModesKnown: {},
 
@@ -132,13 +134,17 @@ export const agentsPage = ({ gateway: raw, repositories, history, location, clip
     if (this.projectsRead) await this.loadProjects();
   },
 
-  /** Reads the project list (and, with no agent in the catalog, each project's mode); a failed read keeps what the page had. */
+  /** Reads the project list and the modes' states (and, with no agent in the catalog, each project's mode); a failed read keeps what the page had. */
   async loadProjects() {
     if (!gateway.listProjects) return;
     this.projectsRead = true;
     try {
       const list = await gateway.listProjects();
       if (JSON.stringify(list) !== JSON.stringify(this.projectList)) this.projectList = list;
+      if (gateway.getModeStates) {
+        const states = await gateway.getModeStates();
+        if (JSON.stringify(states) !== JSON.stringify(this.modeStates)) this.modeStates = states;
+      }
       if (this.catalog && this.catalog.agents.length === 0 && gateway.getProjectAgents) {
         const known = {};
         for (const p of list) known[p.id] = (await gateway.getProjectAgents(p.id)).mode;

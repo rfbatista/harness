@@ -333,6 +333,23 @@ templ agentDetail() {
 				</template>
 			</div>
 		</section>
+		<section aria-labelledby="agent-modes-h" data-available-in-modes>
+			<div class="[ repel ] [ section-title ]">
+				<h3 id="agent-modes-h" x-text="detail.modes.heading">Available in modes</h3>
+				<a class="[ text-sm ]" data-change="modes" x-bind:href="detail.change.modes">Change</a>
+			</div>
+			<div class="[ banner ]" data-tone="attention" data-modes-nowhere x-bind:hidden="!detail.modes.nowhere" hidden>
+				<div class="[ grow text-sm ]">
+					<strong>Not available in any mode.</strong>
+					<span x-text="detail.modes.nowhereText"></span>
+				</div>
+			</div>
+			<div class="[ cluster ]" style="--gutter: var(--space-xs)">
+				<template x-for="m in detail.modes.chips" x-bind:key="m.value">
+					<span class="[ chip ]" data-mode-chip x-text="m.name"></span>
+				</template>
+			</div>
+		</section>
 		<section aria-labelledby="agent-enabled-h" data-enabled-in>
 			<div class="[ repel ] [ section-title ]">
 				<h3 id="agent-enabled-h" data-enabled-heading x-text="detail.enabled.heading"></h3>
