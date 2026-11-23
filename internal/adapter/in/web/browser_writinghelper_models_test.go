@@ -160,7 +160,7 @@ func TestModelsPageSessionModeRowsInTheBrowser(t *testing.T) {
 	if err != nil {
 		t.Fatalf("models: %v\nJS errors: %v", err, errs.all())
 	}
-	if want := "default=default,architect=opus,implement=sonnet,design=haiku,product=default,designsystem=default"; rows != want {
+	if want := "default=default,architect=opus,implement=sonnet,design=haiku,product=default,designsystem=default,review=opus,test=sonnet,qa=sonnet,operate=sonnet"; rows != want {
 		t.Errorf("rows %q, want %q", rows, want)
 	}
 	if !strings.Contains(lead, "design mode") || !strings.Contains(lead, "Design tab") {
