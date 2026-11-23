@@ -30,18 +30,19 @@ export function httpNotificationsSource(api: ApiClient, feed: Feed): Notificatio
       if (unread) query.unread = "true";
       if (before) query.before = before;
       if (limit !== undefined) query.limit = String(limit);
-      return mapErrors(async () => toPage(NotificationPageDto.fromJSON(await api.get<unknown>("/notifications", query, signal))));
+      return mapErrors(async () => toPage(NotificationPageDto.fromJSON(await api.get("/notifications", query, signal))));
     },
 
-    markRead: (request) => mapErrors(async () => toChange(ReadAnswerDto.fromJSON(await api.post<unknown>("/notifications/read", toReadRequestDto(request))))),
+    markRead: (request) => mapErrors(async () => toChange(ReadAnswerDto.fromJSON(await api.post("/notifications/read", toReadRequestDto(request))))),
 
     follow: (onChange, onStatus) =>
       feed.follow(NOTIFICATIONS_STREAM, {
         onMessage(data) {
           try {
             onChange(toChange(ChangeEventDto.fromJSON(data)));
-          } catch {
-            // A message that cannot be read is dropped; the next resync corrects the list.
+          } catch (err) {
+            // A message that is not a valid change event is dropped; the next resync corrects the list. Anything else is a bug.
+            if (!(err instanceof DtoError)) throw err;
           }
         },
         onStatus,

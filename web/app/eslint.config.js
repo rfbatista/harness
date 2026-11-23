@@ -11,16 +11,24 @@ const NOT_ON_THE_SERVER = ["window", "document", "navigator", "location", "histo
 // ADR 0106: data from outside crosses as a DTO. Outside the DTO classes and the
 // low-level transport, no code touches a raw payload: it calls none of these, and
 // reads no `event.data` or `event.detail`.
-const RAW_DATA_GLOBALS = ["fetch", "localStorage", "sessionStorage"].map((name) => ({
+const RAW_DATA_GLOBALS = ["fetch", "localStorage", "sessionStorage", "indexedDB"].map((name) => ({
   name,
   message: "Outside data crosses as a DTO (ADR 0106): only a DTO and the transport touch it.",
 }));
+const RAW_DATA = "is raw data: read it in the transport and hand it to a DTO (ADR 0106).";
 const RAW_DATA_SYNTAX = [
   { selector: "CallExpression[callee.property.name='postMessage']", message: "postMessage carries a DTO's toJSON(), and only the transport calls it (ADR 0106)." },
   { selector: "CallExpression[callee.property.name='dispatchEvent']", message: "dispatchEvent with a payload is the transport's (ADR 0106)." },
   { selector: "CallExpression[callee.name='dispatchEvent']", message: "dispatchEvent with a payload is the transport's (ADR 0106)." },
-  { selector: "MemberExpression[object.name=/^(event|evt|ev|e)$/][property.name=/^(data|detail)$/]", message: "event.data and event.detail are raw data: read them in the transport and hand them to a DTO (ADR 0106)." },
-  { selector: "ArrowFunctionExpression > ObjectPattern.params > Property[key.name=/^(data|detail)$/]", message: "event.data and event.detail are raw data: read them in the transport and hand them to a DTO (ADR 0106)." },
+  // The same globals through an object that holds them (globalThis.fetch, window.localStorage, self.fetch, document.cookie).
+  { selector: "MemberExpression[property.name=/^(fetch|localStorage|sessionStorage|indexedDB|cookie)$/]", message: "Outside data crosses as a DTO (ADR 0106): only a DTO and the transport touch the network and storage." },
+  { selector: "MemberExpression[computed=true][property.value=/^(fetch|localStorage|sessionStorage|indexedDB|cookie)$/]", message: "Outside data crosses as a DTO (ADR 0106): only a DTO and the transport touch the network and storage." },
+  // `.data` and `.detail` of anything, through a cast too: (m as MessageEvent).data.
+  { selector: "MemberExpression[property.name=/^(data|detail)$/]", message: `\`.data\` and \`.detail\` ${RAW_DATA}` },
+  { selector: "MemberExpression[computed=true][property.value=/^(data|detail)$/]", message: `\`.data\` and \`.detail\` ${RAW_DATA}` },
+  // Destructured, in parameters and in declarations.
+  { selector: "ObjectPattern > Property[key.name=/^(data|detail)$/]", message: `A destructured \`data\` or \`detail\` ${RAW_DATA}` },
+  { selector: "ObjectPattern > Property[key.value=/^(data|detail)$/]", message: `A destructured \`data\` or \`detail\` ${RAW_DATA}` },
 ];
 
 // The DTO classes, and the low-level transport that feeds them: each touches only the raw
@@ -64,12 +72,20 @@ export default tseslint.config(
       "src/features/*/presentation/**",
       "src/shared/kernel/**",
       "src/shared/presentation/**",
+      // DTOs run in the server render too (the props DTO reads the island props there).
+      ...DTO_FILES,
     ],
     ignores: TEST_FILES,
     rules: { "no-restricted-globals": ["error", ...RAW_DATA_GLOBALS, ...NOT_ON_THE_SERVER] },
   },
   {
-    files: [...DTO_FILES, ...TRANSPORT_FILES, ...TEST_FILES],
+    // A DTO's own fromJSON and toJSON touch the raw payload, but never a global.
+    files: DTO_FILES,
+    ignores: TEST_FILES,
+    rules: { "no-restricted-properties": "off", "no-restricted-syntax": "off" },
+  },
+  {
+    files: [...TRANSPORT_FILES, ...TEST_FILES],
     rules: { "no-restricted-globals": "off", "no-restricted-properties": "off", "no-restricted-syntax": "off" },
   },
 );
