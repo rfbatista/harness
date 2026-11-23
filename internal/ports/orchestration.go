@@ -359,6 +359,7 @@ type Orchestration interface {
 	TurnHooks
 	TerminalAccess
 	SessionTranscripts
+	SessionContexts
 	SessionSandboxViolations
 }
 
@@ -534,4 +535,17 @@ type Question struct {
 	Question    string           `json:"question"`
 	MultiSelect bool             `json:"multi_select,omitempty"`
 	Options     []QuestionOption `json:"options"`
+}
+
+// SessionContexts reads what a session's context was when claude started and
+// resumed it (ADR 0099).
+type SessionContexts interface {
+	// SessionContext answers entries oldest first, usage and changes newest
+	// first; a session with none recorded reads as not recorded. Errors are
+	// StructuredErrors coded SESSION_NOT_FOUND.
+	SessionContext(ctx context.Context, id string) (domain.SessionContextView, error)
+	// SessionContextPiece answers the whole text of one piece of one entry;
+	// errors are coded SESSION_NOT_FOUND, CONTEXT_ENTRY_NOT_FOUND or
+	// CONTEXT_PIECE_NOT_FOUND.
+	SessionContextPiece(ctx context.Context, id, entryID, pieceID string) (string, error)
 }

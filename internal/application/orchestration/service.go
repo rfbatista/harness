@@ -228,6 +228,10 @@ type Service struct {
 	// TranscriptReader reads a session's saved conversation. Nil: no session
 	// has one to show.
 	TranscriptReader ports.ClaudeTranscriptReader
+	// Contexts stores what each session's context was at its start and resumes
+	// (ADR 0099); nil stores nothing.
+	Contexts  ports.SessionContextStore
+	contextMu sync.Mutex
 	// Artifacts lists the project assets attached to a session's task, for
 	// its brief. Nil leaves them out.
 	Artifacts ports.ArtifactReader
@@ -1451,6 +1455,9 @@ func (s *Service) Delete(ctx context.Context, id string) error {
 		}
 	}
 	s.runCleanup(id)
+	if s.Contexts != nil {
+		_ = s.Contexts.Delete(ctx, id)
+	}
 	// Deleting ends the session for good: its commit check goes with it.
 	if sess := s.sessions.Get(id); sess != nil {
 		s.RemoveCommitCheck(id, sess.WorkspaceID, sess.WorkingDir)
