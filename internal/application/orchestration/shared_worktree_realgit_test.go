@@ -76,6 +76,9 @@ type commitCall struct {
 	denied              bool
 }
 
+// The endpoint behind it is a stand-in for the architecture check, and it does
+// not cover everything the real hook does: it never sends Person:true, and its
+// worktree route checks only the session CommitAttribution names.
 type realWorld struct {
 	*sharedWorld
 	git   realGit

@@ -348,11 +348,10 @@ func TestStartTaskSession_EveryModeStartsAServerRunSession(t *testing.T) {
 func joinWorld(t *testing.T) startWorld {
 	t.Helper()
 	w := startWorldWith(t, false, true)
-	cleared := time.Now()
 	for _, s := range []*domain.Session{
 		{ID: "impl", Status: domain.SessionRunning, WorkspaceID: "w-impl", Branch: "task/impl", TicketID: w.taskID},
 		{ID: "ended", Status: domain.SessionDone, WorkspaceID: "w-ended", Branch: "task/ended", TicketID: w.taskID},
-		{ID: "cleared", Status: domain.SessionDone, Branch: "task/cleared", TicketID: w.taskID, WorktreeClearedAt: &cleared},
+		{ID: "cleared", Status: domain.SessionDone, WorkspaceID: "w-cleared", Branch: "task/cleared", TicketID: w.taskID},
 		{ID: "other-task", Status: domain.SessionRunning, WorkspaceID: "w-other", Branch: "task/other", TicketID: "another-task"},
 		{ID: "web-impl", Status: domain.SessionRunning, WorkspaceID: "w-web", Branch: "task/web", TicketID: w.taskID, RepositoryID: "r-web"},
 	} {
@@ -363,6 +362,11 @@ func joinWorld(t *testing.T) startWorld {
 		if _, err := w.sessions.Create(s); err != nil {
 			t.Fatal(err)
 		}
+	}
+	// Clearing a worktree records when and blanks the session's workspace, as
+	// the store does for real.
+	if err := w.sessions.UpdateWorktreeCleared("cleared", time.Now()); err != nil {
+		t.Fatal(err)
 	}
 	return w
 }
@@ -461,14 +465,59 @@ func TestStartTaskSession_AJoinRefusalNamesTheSessionAndTheReasonAndStartsNothin
 	}
 }
 
-// The start path's own refusals (a worktree gone from disk, read-only with the
-// sandbox off) are the architect's to read, whole.
-func TestStartTaskSession_TheStartPathsJoinRefusalReachesTheArchitectIntact(t *testing.T) {
-	w := joinWorld(t)
-	w.starter.err = fmt.Errorf("ACCESS_INVALID: read-only needs the sandbox")
-	_, err := w.start(map[string]any{"prompt": "x", "mode": "review", "join_session_id": "impl"})
-	if err == nil || !strings.Contains(err.Error(), "read-only needs the sandbox") {
-		t.Fatalf("got %v", err)
+// The start path's own refusals of a join, as orchestration raises them (a
+// coded error with the form's wording), reach the architect naming the session
+// and the reason, not in the form's words.
+func TestStartTaskSession_TheStartPathsJoinRefusalsNameTheSessionAndTheReason(t *testing.T) {
+	refusal := func(code, message string) error {
+		return &domain.DetailedError{StructuredError: &domain.StructuredError{Code: code, Message: code + ": " + message}}
+	}
+	for _, c := range []struct {
+		name    string
+		mode    string
+		refused error
+		want    []string
+		not     []string
+	}{
+		{"gone from disk", "implement",
+			refusal("WORKTREE_NOT_FOUND", "That worktree is gone from disk since the list was read. Nothing was started. Pick another or start on a new branch."),
+			[]string{"impl", "gone from disk"}, []string{"since the list was read", "Pick another"}},
+		{"read-only with the sandbox off", "review",
+			refusal("ACCESS_INVALID", "Read-only access needs the agent sandbox; it is off for this session."),
+			[]string{"impl", "sandbox", "pass access: write to join with write access"}, nil},
+	} {
+		w := joinWorld(t)
+		w.starter.err = c.refused
+		_, err := w.start(map[string]any{"prompt": "x", "mode": c.mode, "join_session_id": "impl"})
+		if err == nil {
+			t.Fatalf("%s: not refused", c.name)
+		}
+		for _, part := range c.want {
+			if !strings.Contains(err.Error(), part) {
+				t.Errorf("%s: message %q lacks %q", c.name, err.Error(), part)
+			}
+		}
+		for _, part := range c.not {
+			if strings.Contains(err.Error(), part) {
+				t.Errorf("%s: message %q still says %q", c.name, err.Error(), part)
+			}
+		}
+		if errs.Code(err) != errs.Code(c.refused) {
+			t.Errorf("%s: code %q, want %q", c.name, errs.Code(err), errs.Code(c.refused))
+		}
+	}
+}
+
+func TestStartTaskSession_AnArchitectProductOrDesignSystemSessionCannotJoinAndTheMessageSaysWho(t *testing.T) {
+	for _, mode := range []string{"architect", "product"} {
+		w := joinWorld(t)
+		_, err := w.start(map[string]any{"prompt": "x", "mode": mode, "join_session_id": "impl"})
+		if err == nil || !strings.Contains(err.Error(), "impl") || !strings.Contains(err.Error(), mode) || !strings.Contains(err.Error(), "cannot join") {
+			t.Errorf("%s: got %v", mode, err)
+		}
+		if len(w.starter.got) != 0 {
+			t.Errorf("%s: started %+v", mode, w.starter.got)
+		}
 	}
 }
 

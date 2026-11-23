@@ -5,6 +5,8 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/rfbatista/harnesskit/errs"
+
 	"operators-mcp/internal/domain"
 	"operators-mcp/internal/ports"
 )
@@ -100,6 +102,9 @@ func startPeer(ctx context.Context, scope *taskScope, sessions ports.SessionRepo
 	}
 	sess, _, err := start.Sessions.StartInteractive(ctx, req)
 	if err != nil {
+		if join != nil {
+			err = joinStartRefusal(err, join.session.ID)
+		}
 		return nil, err
 	}
 
@@ -151,6 +156,10 @@ func resolveJoin(ctx context.Context, scope *taskScope, sessions ports.SessionRe
 	if strings.TrimSpace(stringArg(args, "base_branch")) != "" {
 		return nil, invalidInput("join_session_id " + id + " and base_branch cannot be combined: a session that joins a worktree runs on that session's branch")
 	}
+	switch domain.SessionMode(mode) {
+	case domain.SessionModeArchitect, domain.SessionModeProduct, domain.SessionModeDesignSystem:
+		return nil, invalidInput("a session in mode " + mode + " cannot join the worktree of session " + id + ": it plans and delegates, it does not work in a worktree")
+	}
 	joined, err := sessions.Find(ctx, id)
 	if err != nil {
 		return nil, err
@@ -168,6 +177,22 @@ func resolveJoin(ctx context.Context, scope *taskScope, sessions ports.SessionRe
 		access = domain.DefaultAccess(domain.SessionMode(mode))
 	}
 	return &joinTarget{session: joined, access: access}, nil
+}
+
+// joinStartRefusal puts the session in the start path's refusals of a join. The
+// start path words them for the New session form, which is no help to an
+// architect; the code stays, only the message changes.
+func joinStartRefusal(err error, sessionID string) error {
+	switch errs.Code(err) {
+	case "WORKTREE_NOT_FOUND":
+		return &domain.StructuredError{Code: "WORKTREE_NOT_FOUND", Message: "the worktree of session " + sessionID +
+			" is gone from disk: nothing was started; start on a new branch instead"}
+	case "ACCESS_INVALID":
+		return &domain.StructuredError{Code: "ACCESS_INVALID", Message: "session " + sessionID + "'s worktree cannot be joined read-only, " +
+			"because the agent sandbox is off for this session and the sandbox is what keeps a read-only session from writing; " +
+			"pass access: write to join with write access"}
+	}
+	return err
 }
 
 // statusCheckOf is the loop the server started on a new delegate, or nil when

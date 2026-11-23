@@ -169,10 +169,10 @@ changing it, or the Tester's tests are to be reviewed before they merge.
 
 | Mode | Spawn it | It gives you |
 |---|---|---|
-| `review` (Reviewer) | on the implementer's branch | a `Review: <branch>` document ending in the verdict `approve` or `request changes` |
-| `test` (Tester) | on the implementer's branch | tests committed on its own branch and a `Test report: <branch>` document |
+| `review` (Reviewer) | on the implementer's worktree (`join_session_id`), or cut from its branch | a `Review: <branch>` document ending in the verdict `approve` or `request changes` |
+| `test` (Tester) | on the implementer's worktree (`join_session_id`), or cut from its branch | tests committed on the shared branch when it joined, on its own branch when cut, and a `Test report: <branch>` document |
 | `operate` (Operator) | from the default branch; it runs branches in the service worktree | services running the task's branch, with their places and URLs |
-| `qa` (QA) | on the implementer's branch, with the use cases from the specs' user stories in the prompt and the services' URLs | screenshots and videos in `task/designs/` and a `QA: <task title>` document |
+| `qa` (QA) | on the implementer's worktree (`join_session_id`), or cut from its branch, with the use cases from the specs' user stories in the prompt and the services' URLs | screenshots and videos in `task/designs/` and a `QA: <task title>` document |
 
 1. After an implement delegate reports done on a branch, spawn a Reviewer and a
    Tester on that branch.
