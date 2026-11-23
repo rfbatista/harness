@@ -14,11 +14,14 @@ export interface FakeServer {
   fetch: FetchLike;
   /** Every next request fails as the network does. */
   breakNetwork(): void;
+  /** Every next request is answered 200 with `raw`, whatever it asked. */
+  answerWith(raw: unknown): void;
   readonly requests: readonly { method: string; url: string; body: unknown }[];
 }
 
 export function fakeNotificationsServer(data: MemoryNotificationsSource): FakeServer {
   let down = false;
+  let fixed: { raw: unknown } | null = null;
   const requests: { method: string; url: string; body: unknown }[] = [];
   const failed = (err: unknown) => {
     if (err instanceof NotificationsSourceError) return json(STATUS[err.code] ?? 500, { error: err.message, code: err.code });
@@ -27,9 +30,11 @@ export function fakeNotificationsServer(data: MemoryNotificationsSource): FakeSe
   return {
     requests,
     breakNetwork: () => void (down = true),
+    answerWith: (raw) => void (fixed = { raw }),
     fetch: async (url, init) => {
       if (init?.signal?.aborted) throw new DOMException("aborted", "AbortError");
       if (down) throw new TypeError("offline");
+      if (fixed) return json(200, fixed.raw);
       const method = init?.method ?? "GET";
       requests.push({ method, url, body: typeof init?.body === "string" ? JSON.parse(init.body) : undefined });
       const target = new URL(url, "http://harness.test");

@@ -10,7 +10,7 @@ import { PageLinksPresenter } from "../features/navigation/presentation/presente
 import { ProjectPickerPresenter } from "../features/navigation/presentation/presenters/project-picker-presenter";
 import { Inbox } from "../features/notifications/application/inbox";
 import type { Navigator, NotificationsSource } from "../features/notifications/application/ports";
-import { toBellProps } from "../features/notifications/infrastructure/dto";
+import { toBellProps } from "../features/notifications/infrastructure/bell-props";
 import { BellPresenter } from "../features/notifications/presentation/presenters/bell-presenter";
 import { PanelPresenter } from "../features/notifications/presentation/presenters/panel-presenter";
 import { systemClock } from "../shared/kernel/clock";

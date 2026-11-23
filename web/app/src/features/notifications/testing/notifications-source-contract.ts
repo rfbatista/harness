@@ -18,6 +18,10 @@ export interface NotificationsSourceHarness {
   publish(change: Change): void;
   /** The stream's state changes. */
   setStatus(status: FeedStatus): void;
+  /** The server answers `raw` (not valid) to every request. Adapters that read no wire have none. */
+  answerMalformed?(raw: unknown): void;
+  /** The stream sends `raw` (not a valid change event). */
+  publishMalformed?(raw: unknown): void;
 }
 
 const rejectsWith = (code: string) => (err: unknown) => err instanceof NotificationsSourceError && err.code === code;
@@ -117,6 +121,39 @@ export function notificationsSourceContract(name: string, make: () => Notificati
       h.breakNetwork();
       await assert.rejects(h.source.markRead({ all: true }), rejectsWith("NETWORK_ERROR"));
     });
+
+    const wireNotification = { id: "n1", project_id: "p1", project_name: "harness", source: "system", kind: "task_review", level: "action", title: "T", link: "/x", created_at: "2026-11-21T12:00:00Z" };
+    const MALFORMED: [string, unknown][] = [
+      ["a page without its count", { notifications: [] }],
+      ["a count that is not a number", { notifications: [], unread_count: "3" }],
+      ["a notification list that is not a list", { notifications: {}, unread_count: 1 }],
+      ["a notification without an id", { notifications: [{ ...wireNotification, id: undefined }], unread_count: 1 }],
+      ["a notification of an unknown kind", { notifications: [{ ...wireNotification, kind: "mystery" }], unread_count: 1 }],
+      ["a notification with a link off the web UI", { notifications: [{ ...wireNotification, link: "//evil.example/x" }], unread_count: 1 }],
+      ["a notification with a time that is not a time", { notifications: [{ ...wireNotification, created_at: "yesterday" }], unread_count: 1 }],
+      ["not an object", [1, 2]],
+    ];
+    for (const [what, raw] of MALFORMED) {
+      test(`${what} in a list or a mark-read answer is BAD_RESPONSE`, async (t) => {
+        const h = make();
+        if (!h.answerMalformed) return t.skip("the adapter reads no wire");
+        h.answerMalformed(raw);
+        await assert.rejects(h.source.list({}), rejectsWith("BAD_RESPONSE"));
+        await assert.rejects(h.source.markRead({ all: true }), rejectsWith("BAD_RESPONSE"));
+      });
+    }
+
+    for (const [what, raw] of [["without its count", { changed: [] }], ["whose changed is not a list", { changed: 3, unread_count: 1 }], ["with an unreadable notification", { changed: [{ id: 5 }], unread_count: 1 }], ["that is a string", "garbage"]] as [string, unknown][]) {
+      test(`a change event ${what} is dropped, and the next valid one is delivered`, (t) => {
+        const h = make();
+        if (!h.publishMalformed) return t.skip("the adapter reads no wire");
+        const counts: number[] = [];
+        h.source.follow((c) => counts.push(c.unreadCount), () => {});
+        h.publishMalformed(raw);
+        h.publish({ notifications: [], unreadCount: 7 });
+        assert.deepEqual(counts, [7]);
+      });
+    }
 
     test("follow delivers each change with the count as of it, in order, and the stream's status", () => {
       const h = make();

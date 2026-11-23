@@ -9,8 +9,9 @@ const failsAt = (path: string, dto: string) => (err: unknown) => err instanceof 
 
 describe("TopBarDto", () => {
   test("reads the contract's JSON, keeping the wire names, and round-trips through toJSON", () => {
-    const json = { ...topBarJson({ path: "/agents", current_project_id: "p1" }), notifications: undefined };
-    const { notifications: _ignored, ...wire } = json;
+    const json = topBarJson({ path: "/agents", current_project_id: "p1" });
+    const wire: Record<string, unknown> = { ...json };
+    delete wire.notifications;
     const dto = TopBarDto.fromJSON(wire);
     assert.equal(dto.current_project_id, "p1");
     assert.equal(dto.links[0] instanceof LinkDto && dto.projects[0] instanceof ProjectDto, true);
@@ -23,7 +24,8 @@ describe("TopBarDto", () => {
   });
 
   test("names the DTO and the field for a missing field", () => {
-    const { path: _p, ...missing } = topBarJson();
+    const missing: Record<string, unknown> = { ...topBarJson() };
+    delete missing.path;
     assert.throws(() => TopBarDto.fromJSON(missing), failsAt("path", "TopBarDto"));
   });
 

@@ -3,7 +3,9 @@
 import { ApiError, type ApiClient } from "../../../shared/infrastructure/api-client";
 import { NotificationsSourceError, type NotificationsSource, type NotificationsSourceErrorCode } from "../application/ports";
 import type { Feed } from "../../../shared/kernel/feed";
-import { toPage, toReadAnswer, toStreamChange } from "./dto";
+import { DtoError } from "../../../shared/infrastructure/dto/dto-error";
+import { ChangeEventDto, NotificationPageDto, ReadAnswerDto } from "./dto/notification-page-dto";
+import { toChange, toPage, toReadRequestDto } from "./notification-mapper";
 
 /** The global notifications stream (GET /api/notifications/events) as the page event stream names it. */
 export const NOTIFICATIONS_STREAM = "/notifications/events";
@@ -15,6 +17,7 @@ export async function mapErrors<T>(call: () => Promise<T>): Promise<T> {
   try {
     return await call();
   } catch (err) {
+    if (err instanceof DtoError) throw new NotificationsSourceError("BAD_RESPONSE", err.message);
     if (err instanceof ApiError) throw new NotificationsSourceError(KNOWN.includes(err.code) ? (err.code as NotificationsSourceErrorCode) : "UNKNOWN", err.message);
     throw err;
   }
@@ -27,16 +30,16 @@ export function httpNotificationsSource(api: ApiClient, feed: Feed): Notificatio
       if (unread) query.unread = "true";
       if (before) query.before = before;
       if (limit !== undefined) query.limit = String(limit);
-      return mapErrors(async () => toPage(await api.get<unknown>("/notifications", query, signal)));
+      return mapErrors(async () => toPage(NotificationPageDto.fromJSON(await api.get<unknown>("/notifications", query, signal))));
     },
 
-    markRead: (request) => mapErrors(async () => toReadAnswer(await api.post<unknown>("/notifications/read", "ids" in request ? { ids: request.ids } : "all" in request ? { all: true } : {}))),
+    markRead: (request) => mapErrors(async () => toChange(ReadAnswerDto.fromJSON(await api.post<unknown>("/notifications/read", toReadRequestDto(request))))),
 
     follow: (onChange, onStatus) =>
       feed.follow(NOTIFICATIONS_STREAM, {
         onMessage(data) {
           try {
-            onChange(toStreamChange(data));
+            onChange(toChange(ChangeEventDto.fromJSON(data)));
           } catch {
             // A message that cannot be read is dropped; the next resync corrects the list.
           }
