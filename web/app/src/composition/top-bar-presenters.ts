@@ -2,7 +2,6 @@
 // composition root chose. The server root and the browser root differ only in
 // the adapters they pass.
 
-import { TopBarDto } from "../features/navigation/infrastructure/dto/top-bar-dto";
 import { toTopBar } from "../features/navigation/infrastructure/top-bar-mapper";
 import { CurrentTopBar } from "../features/navigation/application/current-top-bar";
 import type { PageOpener } from "../features/navigation/application/ports";
@@ -11,6 +10,7 @@ import { ProjectPickerPresenter } from "../features/navigation/presentation/pres
 import { Inbox } from "../features/notifications/application/inbox";
 import type { Navigator, NotificationsSource } from "../features/notifications/application/ports";
 import { toBellProps } from "../features/notifications/infrastructure/bell-props";
+import { TopBarPropsDto } from "./top-bar-props-dto";
 import { BellPresenter } from "../features/notifications/presentation/presenters/bell-presenter";
 import { PanelPresenter } from "../features/notifications/presentation/presenters/panel-presenter";
 import { systemClock } from "../shared/kernel/clock";
@@ -28,10 +28,11 @@ export interface TopBarModel {
   readonly presenters: TopBarPresenters;
 }
 
-/** `props` is the top-bar model as the server sends it. Throws when its navigation part cannot be read. */
+/** `props` is the top-bar model as the server sends it. Throws a DtoError when its navigation part cannot be read. */
 export function buildTopBar(props: unknown, adapters: TopBarAdapters): TopBarModel {
-  const current = new CurrentTopBar(toTopBar(TopBarDto.fromJSON(props)));
-  const bellProps = toBellProps((props as { notifications?: unknown } | null)?.notifications);
+  const dto = TopBarPropsDto.fromJSON(props);
+  const current = new CurrentTopBar(toTopBar(dto.topBar));
+  const bellProps = dto.notifications && toBellProps(dto.notifications);
   let inbox: Inbox | null = null;
   let bell: TopBarPresenters["bell"] = null;
   if (bellProps) {
