@@ -118,3 +118,94 @@ func TestSharedWorktreeOpening_AResumeListsWhoIsThereNowNotAtTheFirstStart(t *te
 		t.Errorf("resumed opening:\n%s", spec.AppendSystem)
 	}
 }
+
+// Turns: a session that starts on a worktree is announced once to every other
+// running session on it.
+
+func joinTurns(t *testing.T) (*Service, *domain.Session, *recordingDelivery) {
+	t.Helper()
+	svc, _, creator := joinWorld(t)
+	d := &recordingDelivery{}
+	svc.deliverUpdate = d.deliver
+	return svc, creator, d
+}
+
+func TestWorktreeJoined_TheSessionAlreadyThereGetsOneTurnNamingWhoJoinedAndWithWhatAccess(t *testing.T) {
+	svc, creator, d := joinTurns(t)
+	joiner, _ := joinAs(t, svc, creator, "review", "")
+	got := d.list()
+	if len(got) != 1 {
+		t.Fatalf("turns = %v, want one", got)
+	}
+	want := creator.ID + "|worktree-joined:" + joiner.ID + "|[worktree · joined] claude (mode review, access read-only) joined your worktree on " + creator.Branch + ". It only reads: nothing changes in the worktree because of it."
+	if got[0] != want {
+		t.Errorf("turn = %q\nwant   %q", got[0], want)
+	}
+}
+
+func TestWorktreeJoined_AWriterJoinsAndTheTurnSaysFilesMayChange(t *testing.T) {
+	svc, creator, d := joinTurns(t)
+	joinAs(t, svc, creator, "implement", "")
+	got := d.list()
+	if len(got) != 1 || !strings.Contains(got[0], "(mode implement, access write)") || !strings.Contains(got[0], "expect them to change under you") {
+		t.Errorf("turns = %v", got)
+	}
+}
+
+func TestWorktreeJoined_EveryOtherRunningSessionGetsOneAndAnEndedSessionNone(t *testing.T) {
+	svc, creator, d := joinTurns(t)
+	second, _ := joinAs(t, svc, creator, "implement", "")
+	ended, _ := joinAs(t, svc, creator, "test", "")
+	if _, err := svc.EndInteractive(t.Context(), ended.ID, 0, false); err != nil {
+		t.Fatal(err)
+	}
+	third, _ := joinAs(t, svc, creator, "review", "")
+	var toCreator, toSecond, toEnded, toThird int
+	for _, g := range d.list() {
+		if !strings.Contains(g, "|worktree-joined:"+third.ID+"|") {
+			continue
+		}
+		switch strings.SplitN(g, "|", 2)[0] {
+		case creator.ID:
+			toCreator++
+		case second.ID:
+			toSecond++
+		case ended.ID:
+			toEnded++
+		case third.ID:
+			toThird++
+		}
+	}
+	if toCreator != 1 || toSecond != 1 || toEnded != 0 || toThird != 0 {
+		t.Errorf("turns for the third join: creator %d second %d ended %d joiner %d, want 1 1 0 0", toCreator, toSecond, toEnded, toThird)
+	}
+}
+
+func TestWorktreeJoined_ADelegateJoiningItsArchitectsWorktreeSendsNothingToTheArchitect(t *testing.T) {
+	svc, creator, d := joinTurns(t)
+	other, _ := joinAs(t, svc, creator, "implement", "")
+	d.mu.Lock()
+	d.got = nil
+	d.mu.Unlock()
+	_, _, err := svc.StartInteractive(t.Context(), InteractiveRequest{
+		ProjectID: "p1", RepositoryID: "r1", TicketID: "tk1", Mode: "implement",
+		RunsOn: domain.RunnerTUI, WorktreeID: creator.WorkspaceID, ParentSessionID: creator.ID,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	got := d.list()
+	if len(got) != 1 || !strings.HasPrefix(got[0], other.ID+"|") {
+		t.Errorf("turns = %v, want one, to the other session only", got)
+	}
+}
+
+func TestWorktreeJoined_ASessionThatCutsItsOwnWorktreeSendsNothing(t *testing.T) {
+	svc, _, d := joinTurns(t)
+	if _, _, err := svc.StartInteractive(t.Context(), InteractiveRequest{ProjectID: "p1", RepositoryID: "r1", TicketID: "tk1", Mode: "implement", RunsOn: domain.RunnerTUI}); err != nil {
+		t.Fatal(err)
+	}
+	if got := d.list(); len(got) != 0 {
+		t.Errorf("turns = %v", got)
+	}
+}

@@ -193,6 +193,9 @@ func (s *Service) StartInteractive(ctx context.Context, req InteractiveRequest) 
 		// session's status-check loop in place when the start returns.
 		s.announce(domain.SessionStarted{SessionID: id, ProjectID: req.ProjectID, TicketID: req.TicketID,
 			ParentSessionID: req.ParentSessionID, Mode: mode, StatusCheckMinutes: req.StatusCheckMinutes})
+		if join != nil {
+			s.announceJoined(context.WithoutCancel(ctx), created)
+		}
 		// A guard that could not be put in at start is announced now that the
 		// session is recorded.
 		if s.commitCheckReason(id) != "" {
