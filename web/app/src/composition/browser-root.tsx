@@ -13,6 +13,10 @@ import { browserPageOpener } from "../features/navigation/infrastructure/browser
 import { httpTopBarSource } from "../features/navigation/infrastructure/http-top-bar-source";
 import { browserNavigator } from "../features/notifications/infrastructure/browser-navigator";
 import { httpNotificationsSource } from "../features/notifications/infrastructure/http-notifications-source";
+import { httpContextSource } from "../features/context/infrastructure/http-context-source";
+import { ContextPropsDto } from "../features/context/infrastructure/dto/context-props-dto";
+import { ContextPresenter } from "../features/context/presentation/presenters/context-presenter";
+import { ContextView } from "../features/context/presentation/views/context-view";
 import { buildTopBar } from "./top-bar-presenters";
 import { TopBarView } from "./top-bar-view";
 
@@ -31,6 +35,7 @@ export function mountIslands(doc: Document): Dispose {
   const feed = sharedFeed({ base: "/api", api });
   const topBarSource = httpTopBarSource(api);
   const notifications = httpNotificationsSource(api, feed);
+  const contextSource = httpContextSource(api);
 
   const islands: Record<string, Island> = {
     "top-bar": (mount, props, fresh) => {
@@ -46,6 +51,14 @@ export function mountIslands(doc: Document): Dispose {
         topBar.inbox?.stop();
         root.unmount();
       };
+    },
+    // The Context tab of the session pane: client-rendered, mounted while the tab is shown.
+    "session-context": (mount, props) => {
+      const presenter = new ContextPresenter(contextSource, ContextPropsDto.fromJSON(props).session_id);
+      const root = createRoot(mount);
+      root.render(<ContextView presenter={presenter} />);
+      presenter.open();
+      return () => root.unmount();
     },
   };
 

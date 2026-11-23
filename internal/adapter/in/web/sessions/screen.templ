@@ -267,6 +267,7 @@ templ paneTabs() {
 				<button type="button" role="tab" x-bind:aria-selected="mergeTabSelected" x-on:click="showMerge">Merge</button>
 			</template>
 			<button type="button" role="tab" data-quiet x-bind:aria-selected="sandboxTabSelected" x-on:click="showSandbox">Sandbox</button>
+			<button type="button" role="tab" data-quiet x-bind:aria-selected="contextTabSelected" x-on:click="showContext">Context</button>
 		</div>
 		<template x-if="paneTools">
 			@paneTools()

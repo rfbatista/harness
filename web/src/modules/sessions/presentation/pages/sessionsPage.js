@@ -227,6 +227,20 @@ export const sessionsPage = ({
       const live = this.selected.stoppable;
       return [{ key: `${this.selected.id}:${live ? "live" : "ended"}`, sessionId: this.selected.id, live, facts: this.selected.sandboxFacts }];
     },
+    get showingContext() {
+      return this.showingSession && this.detailTab === "context";
+    },
+    get contextTabSelected() {
+      return this.detailTab === "context";
+    },
+    /**
+     * The Context tab's panel: a React island (web/app) keyed on the session, which
+     * lives while the tab is in front. Its props are the session and its project.
+     */
+    get contextPanels() {
+      if (!this.showingContext) return [];
+      return [{ key: this.selected.id, props: JSON.stringify({ session_id: this.selected.id, project_id: this.projectId }) }];
+    },
     /** A session with a branch has a Merge tab, where a merge into the default branch is offered when it applies. */
     get hasMergeTab() {
       return merge !== null && this.showingSession && this.selected.branch !== "";
@@ -733,6 +747,11 @@ export const sessionsPage = ({
     showSandbox() {
       this.leaveCode();
       this.detailTab = "sandbox";
+    },
+    /** The Context tab: what the session was given, and how it used it. */
+    showContext() {
+      this.leaveCode();
+      this.detailTab = "context";
     },
     /** The Merge tab: merge the branch into the repository's default branch. */
     showMerge() {
