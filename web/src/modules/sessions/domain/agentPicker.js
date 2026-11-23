@@ -115,3 +115,45 @@ export function notAssignedRefusal(err, { agent, repository, repositoryId, proje
     href: repositoryAgentsHref(projectId, id),
   };
 }
+
+/** The session modes' names, as the Models page and the mode select say them. */
+const MODE_NAMES = { "": "Default", architect: "Architect", implement: "Implement", design: "Design", product: "Product", designsystem: "Design system", review: "Reviewer", test: "Tester", qa: "QA", operate: "Operator" };
+
+/** @param {string} mode a session mode's value, "" for Default */
+export const modeName = (mode) => MODE_NAMES[mode] ?? mode;
+
+/**
+ * @typedef {{ state: "all" | "selected", agents: string[], no_agent: boolean }} ModeAgentsEntry  one mode's agents, as the server paints them (ADR 0103)
+ */
+
+/** A mode not in the map is All agents. @param {Record<string, ModeAgentsEntry>} modeAgents @param {string} mode @returns {ModeAgentsEntry} */
+export const modeEntry = (modeAgents, mode) => modeAgents[mode] ?? { state: "all", agents: [], no_agent: true };
+
+/** Whether the mode lets a session run as the agent. @param {ModeAgentsEntry} entry @param {string} name */
+export const modeAllowsAgent = (entry, name) => entry.state !== "selected" || entry.agents.includes(name);
+
+/** Whether the mode lets a session run with no agent (Plain claude). @param {ModeAgentsEntry} entry */
+export const modeAllowsNoAgent = (entry) => entry.state !== "selected" || entry.no_agent;
+
+/** A mode that allows nothing: Selected, no agent listed and no "No agent". @param {ModeAgentsEntry} entry */
+export const modeAllowsNothing = (entry) => entry.state === "selected" && entry.agents.length === 0 && !entry.no_agent;
+
+/** Where the mode's agents are changed. */
+export const MODELS_HREF = "/models";
+
+/**
+ * The banner for a start the server refused because the mode does not allow
+ * the agent (or no agent); null for any other error. It carries the server's
+ * own message.
+ * @param {unknown} err
+ */
+export function notAvailableInModeRefusal(err) {
+  if (codeOf(err) !== Codes.AGENT_NOT_AVAILABLE_IN_MODE) return null;
+  return {
+    message: /** @type {any} */ (err).message,
+    code: Codes.AGENT_NOT_AVAILABLE_IN_MODE,
+    explanation: "Pick another agent or mode, or change the mode's agents on the Models page. Your prompt is kept.",
+    linkText: "Open the Models page",
+    href: MODELS_HREF,
+  };
+}

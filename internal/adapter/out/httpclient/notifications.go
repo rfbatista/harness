@@ -25,6 +25,15 @@ func (n *Notifications) ListNotifications(ctx context.Context, q ports.Notificat
 	if q.UnreadOnly {
 		v.Set("unread", "true")
 	}
+	if q.Open != nil {
+		v.Set("open", strconv.FormatBool(*q.Open))
+	}
+	if q.Actor != "" {
+		v.Set("actor", q.Actor)
+	}
+	if q.Kind != "" {
+		v.Set("kind", string(q.Kind))
+	}
 	if q.Before != "" {
 		v.Set("before", q.Before)
 	}
@@ -42,11 +51,23 @@ func (n *Notifications) MarkNotificationsRead(ctx context.Context, req ports.Mar
 	var out struct {
 		Notifications []*domain.Notification `json:"notifications"`
 		UnreadCount   int                    `json:"unread_count"`
+		OpenCount     int                    `json:"open_count"`
 	}
 	if err := n.c.post(ctx, "/api/notifications/read", req, &out); err != nil {
 		return nil, err
 	}
-	return &ports.NotificationChange{Changed: out.Notifications, UnreadCount: out.UnreadCount}, nil
+	return &ports.NotificationChange{Changed: out.Notifications, UnreadCount: out.UnreadCount, OpenCount: out.OpenCount}, nil
+}
+
+// AcknowledgeNotification acknowledges a branch finding.
+func (n *Notifications) AcknowledgeNotification(ctx context.Context, id string) (*domain.Notification, error) {
+	var out struct {
+		Notification *domain.Notification `json:"notification"`
+	}
+	if err := n.c.post(ctx, "/api/notifications/"+url.PathEscape(id)+"/acknowledge", struct{}{}, &out); err != nil {
+		return nil, err
+	}
+	return out.Notification, nil
 }
 
 // FollowNotifications follows every inbox change until ctx ends or the

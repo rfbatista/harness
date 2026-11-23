@@ -236,6 +236,8 @@ func NewRouter(h *Handler, opts ...Option) *echo.Echo {
 	g.POST("/set_project_mcp_settings", h.handleSetProjectMCPSettings)
 	g.GET("/get_project_agents", h.handleGetProjectAgents)
 	g.POST("/set_project_agents", h.handleSetProjectAgents)
+	g.GET("/get_mode_agents", h.handleGetModeAgents)
+	g.POST("/set_mode_agents", h.handleSetModeAgents)
 	g.GET("/get_repository_agents", h.handleGetRepositoryAgents)
 	g.GET("/get_repository_prompt", h.handleGetRepositoryPrompt)
 	g.POST("/save_repository_prompt", h.handleSaveRepositoryPrompt)
@@ -385,6 +387,7 @@ func NewRouter(h *Handler, opts ...Option) *echo.Echo {
 	// notifications: the person's inbox across every project
 	g.GET("/notifications", h.handleListNotifications)
 	g.POST("/notifications/read", h.handleMarkNotificationsRead)
+	g.POST("/notifications/:id/acknowledge", h.handleAcknowledgeNotification)  // a branch finding
 	g.POST("/notifications/:id/resume_interrupted", h.handleResumeInterrupted) // Resume all interrupted
 	g.GET("/notifications/events", h.handleNotificationEvents)                 // every inbox change (SSE)
 

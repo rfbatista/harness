@@ -3,6 +3,8 @@ package tooling
 import (
 	"context"
 	"encoding/json"
+	"reflect"
+	"strings"
 	"testing"
 
 	"github.com/rfbatista/harnesskit/errs"
@@ -244,5 +246,100 @@ func TestListAgents_NamesTheRepositoriesEachIsUnassignedFrom(t *testing.T) {
 	}
 	if got, ok := designer["unassigned_from"].([]any); !ok || len(got) != 0 {
 		t.Errorf("designer unassigned_from = %v, want an empty list", designer["unassigned_from"])
+	}
+}
+
+// fakeModeSettings are the server settings the mode agents live in.
+type fakeModeSettings map[string]string
+
+func (f fakeModeSettings) Setting(key string) string { return f[key] }
+
+func listAgentsWithModes(t *testing.T, settings fakeModeSettings) map[string]any {
+	t.Helper()
+	db, err := sqlite.Open(":memory:")
+	if err != nil {
+		t.Fatal(err)
+	}
+	projects := sqlite.NewProjectRepository(db)
+	sessions := sqlite.NewSessionRepository(db)
+	plan := planning.NewService(sqlite.NewTicketRepository(db), sqlite.NewDocumentRepository(db), projects)
+	proj, _ := projects.Create("p", t.TempDir())
+	task, _ := plan.CreateTicket(context.Background(), proj.ID, "Export CSV", "", domain.TicketStatusInProgress, "")
+	if _, err := sessions.Create(&domain.Session{ID: "me", ProjectID: proj.ID, TicketID: task.ID, RepositoryID: "r-api", Status: domain.SessionRunning}); err != nil {
+		t.Fatal(err)
+	}
+	agents := agentList{{ID: "a1", Name: "reviewer"}, {ID: "a2", Name: "designer"}}
+	for _, tl := range SessionTaskTools(plan, sessions, agents, nil, PeerStarter{}, ArtifactTooling{}, nil, NotificationTooling{}, WithModeAgents(settings)) {
+		if tl.Name != "list_agents" {
+			continue
+		}
+		out, err := tl.Handler(WithSessionID(context.Background(), "me"), map[string]any{})
+		if err != nil {
+			t.Fatal(err)
+		}
+		b, _ := json.Marshal(out)
+		var m map[string]any
+		_ = json.Unmarshal(b, &m)
+		if !strings.Contains(tl.Description, "AGENT_NOT_AVAILABLE_IN_MODE") || !strings.Contains(tl.Description, "only the person") {
+			t.Errorf("description does not say the refusal and who changes it: %s", tl.Description)
+		}
+		return m
+	}
+	t.Fatal("list_agents not built")
+	return nil
+}
+
+func modeValuesOf(v any) []string {
+	out := []string{}
+	for _, m := range v.([]any) {
+		out = append(out, m.(string))
+	}
+	return out
+}
+
+func TestListAgents_NamesTheModesEachAgentCannotStartIn(t *testing.T) {
+	// Nothing set: every mode accepts everything.
+	m := listAgentsWithModes(t, fakeModeSettings{})
+	for _, a := range m["agents"].([]any) {
+		if got := modeValuesOf(a.(map[string]any)["unavailable_in_modes"]); len(got) != 0 {
+			t.Errorf("unavailable_in_modes = %v, want none", got)
+		}
+	}
+	if got := modeValuesOf(m["no_agent_unavailable_in_modes"]); len(got) != 0 {
+		t.Errorf("no_agent_unavailable_in_modes = %v, want none", got)
+	}
+
+	// Review takes only the reviewer and no plain session; the default mode is closed.
+	m = listAgentsWithModes(t, fakeModeSettings{
+		domain.ModeAgentsKey(domain.SessionModeReview):  domain.ModeAgentsValue("selected", []string{"reviewer"}, false),
+		domain.ModeAgentsKey(domain.SessionModeDefault): domain.ModeAgentsValue("selected", nil, true),
+	})
+	agents := m["agents"].([]any)
+	reviewer, designer := agents[0].(map[string]any), agents[1].(map[string]any)
+	if got, want := modeValuesOf(reviewer["unavailable_in_modes"]), []string{""}; !reflect.DeepEqual(got, want) {
+		t.Errorf("reviewer unavailable_in_modes = %v, want %v", got, want)
+	}
+	if got, want := modeValuesOf(designer["unavailable_in_modes"]), []string{"", "review"}; !reflect.DeepEqual(got, want) {
+		t.Errorf("designer unavailable_in_modes = %v, want %v", got, want)
+	}
+	if got, want := modeValuesOf(m["no_agent_unavailable_in_modes"]), []string{"review"}; !reflect.DeepEqual(got, want) {
+		t.Errorf("no_agent_unavailable_in_modes = %v, want %v", got, want)
+	}
+	if reviewer["name"] != "reviewer" || reviewer["id"] != "a1" || m["count"] != float64(2) {
+		t.Errorf("the rest of the answer changed: %v", m)
+	}
+}
+
+func TestStartTaskSession_AModeRefusalReachesTheArchitectAsItsOwnMessage(t *testing.T) {
+	start, starter, _ := startFixture(t, false)
+	starter.err = &domain.StructuredError{Code: "AGENT_NOT_AVAILABLE_IN_MODE", Message: domain.ModeAgentNotAvailableMessage("Reviewer", "designer")}
+	_, err := start(map[string]any{"prompt": "x", "agent": "reviewer", "mode": "review"})
+	if err == nil {
+		t.Fatal("the refusal was swallowed")
+	}
+	for _, want := range []string{"AGENT_NOT_AVAILABLE_IN_MODE", "Reviewer", "designer", "Only the person", "server settings"} {
+		if !strings.Contains(err.Error(), want) {
+			t.Errorf("message %q lacks %q", err.Error(), want)
+		}
 	}
 }

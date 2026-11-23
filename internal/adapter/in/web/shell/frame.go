@@ -35,9 +35,9 @@ type Frame struct {
 	Live bool
 	// Hints are the keys the stream bar names; nil names the list keys (J K move).
 	Hints []Hint
-	// Unread is the inbox's unread count, which leads the document title;
-	// 0 when the inbox is not served or could not be read.
-	Unread int
+	// Open is the inbox's count of open causes (ADR 0096), which leads the
+	// document title; 0 when the inbox is not served or could not be read.
+	Open int
 	// Helper says whether the writing helper can run. Every page that renders
 	// a magic pen paints it as attributes, and the browser disables the pens
 	// when it is unavailable.
@@ -254,8 +254,8 @@ func (f Frame) DocumentTitle() string {
 	if f.Title != "" {
 		title = f.Title + " · harness"
 	}
-	// The unread count leads, as the browser keeps it (store.syncTitle).
-	if n := f.Unread; n > 0 {
+	// The count of what needs the person leads, as the browser keeps it (store.syncTitle).
+	if n := f.Open; n > 0 {
 		title = "(" + strconv.Itoa(n) + ") " + title
 	}
 	return title

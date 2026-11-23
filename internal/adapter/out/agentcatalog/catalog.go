@@ -50,6 +50,7 @@ type Catalog struct {
 	usage     Usage
 	renames   ports.AgentRenames
 	prober    mcpserver.Prober
+	modes     ModeAgentSettings
 
 	// wmu serializes writes: one change is built and applied at a time.
 	wmu sync.Mutex

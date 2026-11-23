@@ -83,7 +83,7 @@ test("the detail names MCP servers with transport and what is set, tools, and th
   assert.deepEqual([d.servers[1].name, d.servers[1].found], ["gone", false]);
   assert.deepEqual(d.tools, ["Read"]);
   assert.equal(d.toolsDefault, false);
-  assert.deepEqual(d.change, { identity: "/agents/ux-designer/edit#identity", skills: "/agents/ux-designer/edit#skills", mcp: "/agents/ux-designer/edit#mcp", tools: "/agents/ux-designer/edit#tools", projects: "/agents/ux-designer/edit#projects" });
+  assert.deepEqual(d.change, { identity: "/agents/ux-designer/edit#identity", skills: "/agents/ux-designer/edit#skills", mcp: "/agents/ux-designer/edit#mcp", tools: "/agents/ux-designer/edit#tools", projects: "/agents/ux-designer/edit#projects", modes: "/agents/ux-designer/edit#modes" });
   assert.equal(d.editHref, "/agents/ux-designer/edit");
   assert.equal(d.duplicateHref, "/agents/new?from=ux-designer");
   assert.equal(d.path, "agents.json › agents.ux-designer");

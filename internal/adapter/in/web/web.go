@@ -415,8 +415,8 @@ func (s *server) layout(ctx context.Context, title, projectID, taskID string) (s
 		return shell.Frame{}, err
 	}
 	if bar.Notifications != nil && bar.Notifications.Page != nil {
-		// The title's unread count is painted by the server too.
-		frame.Unread = bar.Notifications.Page.UnreadCount
+		// The title's open count is painted by the server too.
+		frame.Open = bar.Notifications.Page.OpenCount
 	}
 	frame.Top.Current = projectID
 	for _, p := range bar.Projects {

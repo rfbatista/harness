@@ -1,4 +1,4 @@
-package web
+package domain
 
 import (
 	"go/ast"
@@ -21,6 +21,14 @@ func TestNotificationKindsOfTheServerAndTheWebClientAreTheSame(t *testing.T) {
 	if missing := difference(server, client); len(missing) > 0 {
 		t.Errorf("the server posts kinds the web client does not know (add them to KINDS in web/src/modules/notifications/domain/notification.js and to the notifications contract): %v", missing)
 	}
+	// NotificationKinds, which the list filter validates against, holds every kind.
+	var listed []string
+	for _, k := range NotificationKinds {
+		listed = append(listed, string(k))
+	}
+	if missing, extra := difference(server, listed), difference(listed, server); len(missing)+len(extra) > 0 {
+		t.Errorf("domain.NotificationKinds differs from the NotificationKind constants: missing %v, extra %v", missing, extra)
+	}
 	if extra := difference(client, server); len(extra) > 0 {
 		t.Errorf("the web client knows kinds the server never posts (remove them from KINDS or add them to domain.NotificationKind): %v", extra)
 	}
@@ -29,7 +37,7 @@ func TestNotificationKindsOfTheServerAndTheWebClientAreTheSame(t *testing.T) {
 // serverNotificationKinds reads the NotificationKind constants of the domain.
 func serverNotificationKinds(t *testing.T) []string {
 	t.Helper()
-	file, err := parser.ParseFile(token.NewFileSet(), "../../../domain/notification.go", nil, 0)
+	file, err := parser.ParseFile(token.NewFileSet(), "notification.go", nil, 0)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -68,7 +76,7 @@ var kindsList = regexp.MustCompile(`(?s)export const KINDS = Object\.freeze\(\[(
 // webNotificationKinds reads KINDS from the web client's notification domain.
 func webNotificationKinds(t *testing.T) []string {
 	t.Helper()
-	src, err := os.ReadFile("../../../../web/src/modules/notifications/domain/notification.js")
+	src, err := os.ReadFile("../../web/src/modules/notifications/domain/notification.js")
 	if err != nil {
 		t.Fatal(err)
 	}

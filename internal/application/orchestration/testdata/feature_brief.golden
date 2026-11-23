@@ -64,7 +64,7 @@ To see the project around the task, and who to hand work to:
 
 - mcp__task__list_project_repositories — the project's repositories: its applications
 - mcp__task__list_bounded_contexts — its bounded contexts, with their language and zones
-- mcp__task__list_agents — the agents a session can run as, and what each is for
+- mcp__task__list_agents — the agents a session can run as, what each is for, and where it cannot start (unassigned_from, unavailable_in_modes)
 
 The project's tasks, to shape the work around this one:
 

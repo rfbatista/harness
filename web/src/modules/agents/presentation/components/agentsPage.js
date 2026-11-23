@@ -79,6 +79,10 @@ export const agentsPage = ({ gateway: raw, repositories, history, location, clip
    */
   projectList: [],
   projectsRead: false,
+  /** Each session mode's state, All agents or Selected agents, for the editor's Modes section. */
+  modeStates: /** @type {import("../../domain/agentModes.js").ModeStates | null} */ (null),
+  /** The modes' states could not be read: the editor's Modes section says so and offers no change. */
+  modeStatesFailed: false,
   /** @type {Record<string, "all" | "selected">} */
   projectModesKnown: {},
 
@@ -122,9 +126,9 @@ export const agentsPage = ({ gateway: raw, repositories, history, location, clip
     await this.loadSkill();
   },
 
-  /** An agent's detail or editor is open: read the project list, once (the page's first paint needs no request for it). */
+  /** An agent's detail or editor (a new agent's too) is open: read the project list and the modes' states, once (the page's first paint needs no request for them). */
   wantProjects() {
-    if (this.catalog === null || this.tab !== "agents" || this.item === "" || this.projectsRead) return;
+    if (this.catalog === null || this.tab !== "agents" || (this.item === "" && this.mode !== "new") || this.projectsRead) return;
     void this.loadProjects();
   },
   /** The catalog was read again: the projects the page already reads are read again too. */
@@ -132,10 +136,28 @@ export const agentsPage = ({ gateway: raw, repositories, history, location, clip
     if (this.projectsRead) await this.loadProjects();
   },
 
-  /** Reads the project list (and, with no agent in the catalog, each project's mode); a failed read keeps what the page had. */
+  /** Reads the project list and the modes' states, each on its own (and, with no agent in the catalog, each project's mode); a failed read keeps what the page had. */
   async loadProjects() {
-    if (!gateway.listProjects) return;
     this.projectsRead = true;
+    await Promise.all([this.loadProjectList(), this.loadModeStates()]);
+  },
+
+  /** Reads each mode's state; a failed read says so instead of showing every mode as All agents. */
+  async loadModeStates() {
+    if (!gateway.getModeStates) return;
+    try {
+      const states = await gateway.getModeStates();
+      if (JSON.stringify(states) !== JSON.stringify(this.modeStates)) this.modeStates = states;
+      this.modeStatesFailed = false;
+    } catch {
+      // What was read before may be stale: show none of it.
+      this.modeStates = null;
+      this.modeStatesFailed = true;
+    }
+  },
+
+  async loadProjectList() {
+    if (!gateway.listProjects) return;
     try {
       const list = await gateway.listProjects();
       if (JSON.stringify(list) !== JSON.stringify(this.projectList)) this.projectList = list;

@@ -47,7 +47,7 @@ func TestSessionModelsAreSetOnTheModelsPage_EndToEnd(t *testing.T) {
 	)
 	b.run("one row per session mode, in order, and no Implementation row",
 		chromedp.Navigate(srv.URL+"/models"),
-		waitUntil(`[...document.querySelectorAll('[data-setting^="models.claude.mode."]')].map((r) => r.querySelector('label').textContent).join(',') === 'Default,Architect,Implement,Design,Product,Design system'`),
+		waitUntil(`[...document.querySelectorAll('[data-setting^="models.claude.mode."]')].map((r) => r.querySelector('label').textContent).join(',') === 'Default,Architect,Implement,Design,Product,Design system,Reviewer,Tester,QA,Operator'`),
 		waitUntil(`!document.querySelector('#model-Implementation')`),
 	)
 	b.run("the tiers show the built-in models",

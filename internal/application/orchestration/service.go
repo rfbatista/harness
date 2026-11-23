@@ -112,6 +112,9 @@ type Service struct {
 	// assignments says which agents a repository assigns (ADR 0061); nil
 	// assigns every agent everywhere.
 	assignments ports.AgentAssignments
+	// modeAgents says which agents each session mode accepts (ADR 0103); nil
+	// accepts all.
+	modeAgents ports.SettingsReader
 	// repoPrompts gives the text an agent adds in a repository; nil adds none.
 	repoPrompts ports.RepositoryPromptSections
 
@@ -540,6 +543,12 @@ func (s *Service) prepare(ctx context.Context, in prepareInput) (*prepared, erro
 	// fail cheaply instead of creating (and then rolling back) a worktree.
 	ag, err := s.resolveAgent(in.AgentID, in.Mode)
 	if err != nil {
+		return nil, err
+	}
+	if err := s.checkModeAgents(in.Mode, ag.agent); err != nil {
+		if ag.cleanup != nil {
+			ag.cleanup()
+		}
 		return nil, err
 	}
 	if ag.agent != nil && !proj.AgentEnabled(ag.agent.Name) {
@@ -1186,7 +1195,7 @@ func (s *Service) handleExpiry(e approval.Expiry) {
 		Text:     e.Reason,
 		Approval: &ApprovalInfo{ReqID: e.ReqID, ToolName: e.ToolName},
 		At:       time.Now(),
-	}, s.releaseApproval(e.SessionID))
+	}, s.deniedApproval(e.SessionID))
 }
 
 func (s *Service) handleApproval(req approval.Request) {
@@ -1324,7 +1333,7 @@ func (s *Service) decide(id, reqID string, d approval.Decision, text string) err
 		Text:     text,
 		Approval: &ApprovalInfo{ReqID: reqID},
 		At:       time.Now(),
-	}, s.releaseApproval(id))
+	}, s.releasedApproval(id, d.Allow))
 	return nil
 }
 
@@ -1340,6 +1349,16 @@ func (s *Service) releaseApproval(id string) sessionChange {
 		}
 		change.metrics = m
 	}
+	return change
+}
+
+// deniedApproval is releaseApproval for an approval that expired.
+func (s *Service) deniedApproval(id string) sessionChange { return s.releasedApproval(id, false) }
+
+// releasedApproval is releaseApproval for an approval decided as allow says.
+func (s *Service) releasedApproval(id string, allow bool) sessionChange {
+	change := s.releaseApproval(id)
+	change.approvalDenied = !allow
 	return change
 }
 
@@ -1502,6 +1521,9 @@ type sessionChange struct {
 	// interrupted sets the interrupted mark; clearInterrupted removes it.
 	interrupted      *time.Time
 	clearInterrupted bool
+	// approvalDenied says an approval ended denied or expired, not allowed;
+	// the inbox settles its notification with that outcome.
+	approvalDenied bool
 }
 
 // record sequences ev, stores it with change in one transaction, then fans
@@ -1545,7 +1567,7 @@ func (s *Service) record(sessionID string, ev SessionEvent, change sessionChange
 	s.hub.Publish(sessionID, ev)
 	s.notify(sessionID, ev.Type)
 	if moved {
-		s.announce(domain.SessionStatusChanged{SessionID: sessionID, Status: ev.Status, ByBranchRequest: ev.Type == "branch_request_needed"})
+		s.announce(domain.SessionStatusChanged{SessionID: sessionID, Status: ev.Status, ByBranchRequest: ev.Type == "branch_request_needed", ApprovalDenied: change.approvalDenied})
 	}
 }
 

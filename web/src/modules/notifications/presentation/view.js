@@ -2,7 +2,10 @@
 // render, and the bell's words. Plain functions; the components bind to what
 // they return (the CSP build evaluates no expressions).
 
+import { agentSlot } from "../../../shared/domain/agentSlot.js";
 import { relativeTime } from "../../../shared/presentation/format.js";
+import { Codes, codeOf } from "../../../shared/domain/errors.js";
+import { FeedStatus } from "../../../shared/domain/feed.js";
 import { isSettled, isUnread } from "../domain/notification.js";
 
 /** The badge stops counting here. */
@@ -14,10 +17,10 @@ export function badgeText(count) {
   return count > BADGE_MAX ? `${BADGE_MAX}+` : String(count);
 }
 
-/** The bell's accessible name, with the exact count. */
-export function bellLabel(count) {
-  if (!count) return "Notifications";
-  return `Notifications, ${count} unread`;
+/** The bell's accessible name, with the exact count and what it counts. */
+export function bellLabel(count, unread = 0) {
+  if (!count) return unread ? `Notifications, ${unread} unread` : "Notifications";
+  return `Notifications, ${count} need you${unread ? `, ${unread} unread` : ""}`;
 }
 
 /**
@@ -30,6 +33,26 @@ export function bellLabel(count) {
  * @property {string} task         "" when the task is gone or there is none
  * @property {boolean} hasTask
  * @property {"info"|"action"} level
+ * @property {string} kind
+ * @property {string} repository
+ * @property {boolean} hasRepository
+ * @property {string} whoName      the agent as its session row shows it, or the harness's own source
+ * @property {string} whoMode      the session's mode word; "" for the system
+ * @property {boolean} hasWhoMode
+ * @property {string} whoInitial
+ * @property {string} whoSlot      the agent's colour slot ("0".."7"); "" for the system
+ * @property {boolean} whoIsSystem
+ * @property {"agent"|"system"|"person"} whoKind
+ * @property {boolean} hasVerb     false on kind agent and on revision 5 data: the what is the title
+ * @property {string} verb
+ * @property {string} objectText
+ * @property {boolean} hasObject
+ * @property {boolean} objectIsCode
+ * @property {string} clock        "15:40"
+ * @property {string} fullDate     "Mon 17 Nov 2026, 15:40"
+ * @property {string} statusText   "Needs you", "Approved 15:40", "Settled", "Failed" or ""
+ * @property {boolean} hasStatus
+ * @property {"attention"|"danger"|"success"|"quiet"} statusTone
  * @property {string} levelLabel   "Needs you", "Settled", or ""
  * @property {boolean} unread
  * @property {boolean} settled
@@ -40,7 +63,12 @@ export function bellLabel(count) {
  * @property {string} label        the link's accessible name
  * @property {SessionLine[]} sessions  a sessions_interrupted item's list; [] for the others
  * @property {boolean} hasSessions
+ * @property {{ key: string, label: string, href: string, state: string, stateWord: string }[]} listed  a commit_check_off item's sessions; []
+ * @property {boolean} hasListed
+ * @property {boolean} showBody    the plain-text body shows unless a list stands for it
  * @property {boolean} canResumeAll    a sessions_interrupted item whose cause is not settled
+ * @property {boolean} canAcknowledge  a branch_finding whose cause is not settled (ADR 0098)
+ * @property {string} ackLabel         the Acknowledge button's accessible name
  *
  * @typedef {object} SessionLine
  * @property {string} key
@@ -63,6 +91,54 @@ function sessionLine(s) {
   };
 }
 
+const OUTCOME_WORDS = Object.freeze({
+  approved: ["Approved", "success"],
+  changes_requested: ["Changes requested", "attention"],
+  denied: ["Denied", "danger"],
+  expired: ["Expired", "quiet"],
+  withdrawn: ["Withdrawn", "quiet"],
+  answered: ["Answered", "success"],
+  dismissed: ["Dismissed", "quiet"],
+  acknowledged: ["Acknowledged", "success"],
+  repaired: ["Repaired", "success"],
+  resumed: ["Resumed", "success"],
+  ended: ["Ended", "quiet"],
+  done: ["Done", "success"],
+  reopened: ["Reopened", "attention"],
+});
+
+/** "15:40", in the person's time zone. */
+const clockTime = (d) => `${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`;
+
+/** "Mon 17 Nov 2026, 15:40": the tooltip and the accessible name. */
+const fullDate = (d) => {
+  const part = (o) => d.toLocaleDateString("en-GB", o);
+  return `${part({ weekday: "short" })} ${part({ day: "numeric" })} ${part({ month: "short" })} ${d.getFullYear()}, ${clockTime(d)}`;
+};
+
+/** Where the item stands: the words and their tone ("" for no line at all). */
+function standing(n, settled) {
+  if (!settled) {
+    if (n.kind === "session_failed") return ["Failed", "danger"];
+    return n.level === "action" ? ["Needs you", "attention"] : ["", "quiet"];
+  }
+  const word = OUTCOME_WORDS[n.outcome];
+  return word ? [`${word[0]} ${clockTime(n.resolvedAt)}`, word[1]] : ["Settled", "quiet"];
+}
+
+const LISTED_WORDS = Object.freeze({ off: "check off", repaired: "repaired", ended: "ended" });
+
+/** One session a commit_check_off item lists: its task and agent, where it stands. */
+function listedLine(s) {
+  return {
+    key: s.sessionId,
+    label: [s.taskTitle || "No task", s.agentName].filter(Boolean).join(" · "),
+    href: s.link,
+    state: s.state,
+    stateWord: LISTED_WORDS[s.state] ?? s.state,
+  };
+}
+
 /**
  * @param {import("../domain/notification.js").Notification} n
  * @param {Date} now
@@ -71,27 +147,132 @@ function sessionLine(s) {
 export function toRow(n, now) {
   const unread = isUnread(n);
   const settled = isSettled(n);
-  const levelLabel = settled ? "Settled" : n.level === "action" ? "Needs you" : "";
-  const where = [n.projectName, n.taskTitle].filter(Boolean).join(" · ");
+  const [statusText, statusTone] = standing(n, settled);
+  const needsYou = !settled && n.level === "action";
+  const hasVerb = n.verb !== "";
+  const what = hasVerb ? [n.verb, n.object?.text].filter(Boolean).join(" ") : n.title;
+  const where = [[n.projectName, n.taskTitle].filter(Boolean).join(" › "), n.repositoryName].filter(Boolean).join(" · ");
+  const age = relativeTime(n.createdAt, now);
+  const when = fullDate(n.createdAt);
+  const isSystem = n.actor.kind === "system";
   return {
     id: n.id,
+    kind: n.kind,
     href: n.link,
     title: n.title,
     body: n.body,
     project: n.projectName,
     task: n.taskTitle,
     hasTask: n.taskTitle !== "",
+    repository: n.repositoryName,
+    hasRepository: n.repositoryName !== "",
     level: n.level,
-    levelLabel,
+    levelLabel: settled ? "Settled" : needsYou ? "Needs you" : "",
+    whoName: n.actor.name,
+    whoMode: n.actor.mode,
+    hasWhoMode: n.actor.mode !== "",
+    whoInitial: Array.from(n.actor.name)[0] ?? "",
+    whoSlot: n.actor.kind === "agent" ? String(agentSlot(n.actor.name)) : "",
+    whoIsSystem: isSystem,
+    whoKind: n.actor.kind,
+    hasVerb,
+    verb: n.verb,
+    objectText: n.object?.text ?? "",
+    hasObject: n.object !== null,
+    objectIsCode: n.object?.code === true,
+    clock: clockTime(n.createdAt),
+    fullDate: when,
+    statusText,
+    hasStatus: statusText !== "",
+    statusTone,
     unread,
     settled,
     state: unread ? "unread" : settled ? "settled" : "read",
-    age: relativeTime(n.createdAt, now),
+    age,
     at: n.createdAt.toISOString(),
-    markLabel: `Mark “${n.title}” read`,
+    markLabel: `Mark “${what}” read`,
     sessions: n.interruptedSessions.map(sessionLine),
     hasSessions: n.interruptedSessions.length > 0,
+    listed: n.listedSessions.map(listedLine),
+    hasListed: n.listedSessions.length > 0,
+    showBody: n.body !== "" && n.interruptedSessions.length === 0 && n.listedSessions.length === 0,
     canResumeAll: n.kind === "sessions_interrupted" && !settled,
-    label: [unread ? "Unread." : "", levelLabel ? `${levelLabel}.` : "", n.title, where ? `— ${where}` : ""].filter(Boolean).join(" "),
+    canAcknowledge: n.kind === "branch_finding" && !settled,
+    ackLabel: `Acknowledge: ${n.actor.name} ${what}`,
+    label: [unread ? "Unread." : "", needsYou ? "Needs you." : "", `${n.actor.name} ${what}.`, where ? `${where}.` : "", `${when}, ${age === "now" ? "just now" : `${age} ago`}.`].filter(Boolean).join(" "),
   };
+}
+
+/** A verb phrase in the agent's voice, in the past: "wants to push" → "asked to push". */
+function pastVerb(verb) {
+  return verb
+    .replace(/^wants to /, "asked to ")
+    .replace(/^asks you to /, "asked you to ")
+    .replace(/^waits for /, "waited for ");
+}
+
+/** "5 approved · 1 denied": the outcomes of a stack, the most frequent first, and "settled" for none recorded. */
+function tally(items) {
+  const counts = new Map();
+  for (const n of items) counts.set(n.outcome, (counts.get(n.outcome) ?? 0) + 1);
+  const order = [...Object.keys(OUTCOME_WORDS), ""];
+  // The most frequent first; the outcome words' own order breaks ties.
+  return order
+    .filter((o) => counts.has(o))
+    .sort((a, b) => counts.get(b) - counts.get(a))
+    .map((o) => `${counts.get(o)} ${o === "" ? "settled" : OUTCOME_WORDS[o][0].toLowerCase()}`)
+    .join(" · ");
+}
+
+/**
+ * The summary row of a folded stack: the same who and where as its newest
+ * item, "asked to push 6 times", and the outcomes counted.
+ * @param {import("../domain/notification.js").Notification[]} items  newest first, two or more
+ * @param {Date} now
+ */
+export function toStackRow(items, now) {
+  const [newest] = items;
+  const row = toRow(newest, now);
+  const sameObject = items.every((n) => n.object?.text === newest.object?.text) && newest.object !== null;
+  const verb = `${pastVerb(newest.verb || newest.title)} ${items.length} times`;
+  const statusText = tally(items);
+  const where = [[newest.projectName, newest.taskTitle].filter(Boolean).join(" › "), newest.repositoryName].filter(Boolean).join(" · ");
+  return {
+    ...row,
+    key: `stack:${items.at(-1).id}`,
+    count: items.length,
+    verb,
+    hasVerb: true,
+    hasObject: sameObject,
+    objectText: sameObject ? newest.object.text : "",
+    objectIsCode: sameObject && newest.object.code,
+    statusText,
+    hasStatus: true,
+    statusTone: "quiet",
+    state: "settled",
+    unread: false,
+    label: [`${newest.actor.name} ${verb}${sameObject ? ` ${newest.object.text}` : ""}.`, where ? `${where}.` : "", `${row.fullDate}, ${row.age === "now" ? "just now" : `${row.age} ago`}.`, `${statusText}.`, "Expand to see them."].filter(Boolean).join(" "),
+  };
+}
+
+/**
+ * What a failed load or action reads as: a plain sentence, no code and no
+ * developer message. The banner pairs it with a Reload action.
+ * @param {unknown} err
+ * @returns {{ message: string }}
+ */
+export function inboxError(err) {
+  switch (codeOf(err)) {
+    case Codes.NETWORK:
+      return { message: "The notifications could not be loaded. The harness server did not answer." };
+    case Codes.BAD_RESPONSE:
+      return { message: "The notifications could not be read. Reload; if it stays, check the harness server log." };
+    default:
+      return { message: "The notifications could not be loaded." };
+  }
+}
+
+/** The line a dropped stream shows; "" while the stream is fine. */
+export function streamNotice(status) {
+  return status === FeedStatus.PAUSED ? "Live updates are paused. Reconnecting; Reload shows what is there now." : "";
 }

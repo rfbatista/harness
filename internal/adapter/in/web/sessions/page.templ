@@ -839,6 +839,7 @@ templ newSessionForm(form NewSessionForm, lockedMode string) {
 		data-agents-total={ form.AgentsTotalText() }
 		data-agents-mode={ form.AgentsMode }
 		data-mode-models={ form.ModeModelsSeed() }
+		data-mode-agents={ form.ModeAgentsSeed() }
 		data-project-name={ form.ProjectName }
 		data-project-id={ form.ProjectID }
 		x-on:submit.prevent="submit"
@@ -875,18 +876,20 @@ templ newSessionForm(form NewSessionForm, lockedMode string) {
 					<label for="new-session-agent">Agent</label>
 					<span class="[ hint ]" data-agents-count x-text="agentCount"></span>
 				</div>
-				<div class="[ dropdown ]" x-data="dropdown" x-show="!noAgentEnabled">
+				<div class="[ dropdown ]" x-data="dropdown" x-show="!noAgentEnabled && !modeAllowsNothing">
 					<select id="new-session-agent" x-model="agentId">
-						<option value="" data-description="claude with no agent definition">Plain claude</option>
-						<template x-for="a in agentOptions" x-bind:key="a.id">
-							<option x-bind:value="a.id" x-bind:data-description="a.description" x-text="a.name"></option>
+						<template x-for="a in agentSelectOptions" x-bind:key="a.name">
+							<option x-bind:value="a.id" x-bind:data-description="a.description" x-bind:disabled="a.placeholder" x-text="a.name"></option>
 						</template>
 					</select>
 				</div>
 				<template x-if="noAgentEnabled">
 					@NoAgentEnabled(form.AgentsSettingsHref(), form.ProjectName)
 				</template>
-				<span class="[ hint ]" data-agents-hint x-show="!noAgentEnabled">
+				<template x-if="modeAllowsNothing">
+					@ModeAllowsNothing()
+				</template>
+				<span class="[ hint ]" data-agents-hint x-show="!noAgentEnabled && !modeAllowsNothing">
 					<span x-text="agentHint"></span>
 					<a x-bind:href="agentHintLink.href" href={ templ.SafeURL(form.AgentsSettingsHref()) } data-agents-settings-link x-text="agentHintLink.text">Change in project settings</a>
 				</span>
@@ -1016,6 +1019,15 @@ templ newSessionForm(form NewSessionForm, lockedMode string) {
 			<button type="button" class="[ button ]" data-variant="ghost" x-on:click="cancel">Cancel</button>
 		</div>
 	</form>
+}
+
+// ModeAllowsNothing replaces the picker when the chosen mode lists no agent and
+// does not allow a session with no agent (ADR 0103).
+templ ModeAllowsNothing() {
+	<div class="[ banner ]" data-tone="attention" role="alert" data-mode-allows-nothing>
+		<svg aria-hidden="true" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><path d="M8 2l6.5 11.5h-13z"></path><path d="M8 6.5v3M8 11.6v.1"></path></svg>
+		<span class="[ grow text-sm ]"><span x-text="modeAllowsNothingText"></span> <a x-bind:href="modesSettingsLink" href="/models">Change it on the Models page</a>, or pick another mode.</span>
+	</div>
 }
 
 // NoAgentEnabled replaces the picker when the project's Selected list is empty.
