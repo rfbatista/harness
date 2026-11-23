@@ -157,6 +157,9 @@ func (s *Service) contextFacts(in prepareInput, ag resolvedAgent, cfg llmkit.Ses
 func (s *Service) recordStart(ctx context.Context, id string, p *prepared, opening string) {
 	in := p.context
 	in.ID, in.Kind, in.At, in.Opening = newContextEntryID(), domain.ContextEntryStart, time.Now(), opening
+	if in.Facts.Headless {
+		s.keepRedactor(id, in.Cfg)
+	}
 	if err := s.recordEntry(ctx, id, buildContextEntry(in)); err != nil {
 		slog.Warn("store a session's context", "session", id, "err", err)
 	}

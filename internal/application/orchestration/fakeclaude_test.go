@@ -59,7 +59,11 @@ func runFakeClaude() {
 	}
 	out := bufio.NewWriter(os.Stdout)
 	defer out.Flush()
-	fmt.Fprintln(out, `{"type":"system","subtype":"init","session_id":"fake"}`)
+	if init := os.Getenv("CLAUDE_FAKE_INIT"); init != "" {
+		fmt.Fprintln(out, init)
+	} else {
+		fmt.Fprintln(out, `{"type":"system","subtype":"init","session_id":"fake"}`)
+	}
 	out.Flush()
 	sc := bufio.NewScanner(os.Stdin)
 	sc.Buffer(make([]byte, 1024*1024), 1024*1024)

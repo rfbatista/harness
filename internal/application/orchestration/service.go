@@ -235,6 +235,7 @@ type Service struct {
 	// (ADR 0099); nil stores nothing.
 	Contexts  ports.SessionContextStore
 	contextMu sync.Mutex
+	redactors map[string]func(string) string // by session id: scrubs a headless session's init report
 	// Artifacts lists the project assets attached to a session's task, for
 	// its brief. Nil leaves them out.
 	Artifacts ports.ArtifactReader
@@ -1116,6 +1117,9 @@ func (s *Service) pump(sess llmkit.Session) {
 		}
 
 		logSessionEvent(id, ev)
+		if ce.Type == llmkit.EventSystem && ce.Subtype == "init" {
+			s.onInit(id, ce)
+		}
 
 		if ev.Type == "output_delta" {
 			s.publishDelta(id, ev)
