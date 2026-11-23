@@ -96,6 +96,43 @@ describe("thread badges", () => {
   });
 });
 
+describe("badge placement", () => {
+  /** The pill's box: its text at about 7px a character, 28px for the count and padding, 22px high, centred on (x, y). */
+  const pill = (b: { x: number; y: number; text: string }, narrow: boolean) => {
+    // On compact cards the pill shows its count only.
+    const w = narrow ? 34 : 28 + b.text.length * 7;
+    return { x: b.x - w / 2, y: b.y - 11, w, h: 22 };
+  };
+  const touches = (a: { x: number; y: number; w: number; h: number }, b: { x: number; y: number; w: number; h: number }) => a.x < b.x + b.w && b.x < a.x + a.w && a.y < b.y + b.h && b.y < a.y + a.h;
+
+  test("every badge sits clear of every card, whatever its text, in both card sizes", async () => {
+    const { architect, reviewer } = team();
+    const other = session({ role: "delegate", mode: "implement", parentSessionId: architect.id });
+    const messages = [
+      message(reviewer.id, architect.id, { kind: "review_request", createdAt: ago(20) }),
+      message(architect.id, other.id, { kind: "status_report", createdAt: ago(6) }),
+    ];
+    for (const narrow of [false, true]) {
+      const source = memoryBoardSource([architect, reviewer, other]);
+      source.setMessages(messages);
+      source.setReviews([review(architect.id, { createdAt: ago(20) })]);
+      const presenter = new BoardPresenter({ source, preferences: storageBoardPreferences(memoryStorage()), ticketId: "t1", projectId: "p1", agentNames: AGENT_NAMES, taskTitle: "", now: () => NOW });
+      await presenter.start();
+      presenter.setNarrow(narrow);
+      const vm = presenter.viewModel;
+      const badges = vm.edges.flatMap((e) => (e.badge ? [e.badge] : []));
+      assert.equal(badges.length, 3);
+      for (const b of badges) for (const c of vm.cards) assert.equal(touches(pill(b, narrow), c.rect), false, `a badge "${b.text}" covers ${c.name} (narrow ${narrow})`);
+    }
+  });
+
+  test("a card's detail line is not clipped: the card is as tall as its content needs", async () => {
+    const { architect, reviewer } = team();
+    const vm = await board([architect, reviewer], [message(reviewer.id, architect.id, { kind: "status_report", body: "x ".repeat(200), createdAt: ago(1) })]);
+    assert.ok(vm.cards.find((c) => c.id === reviewer.id)!.rect.h >= 132);
+  });
+});
+
 describe("the You card", () => {
   test("its edge to the architect is the grey started edge until a review request waits on the person", async () => {
     const { architect, reviewer } = team();

@@ -60,13 +60,26 @@ describe("camera", () => {
     assert.ok(Math.abs(boardPoint.y * next.scale + next.y - at.y) < 1e-6);
   });
 
-  test("zoom is held between 30 and 200 percent and shown as a percentage", async () => {
+  test("fits a wide board in a narrow viewport at a readable zoom of 15 percent or more, never clipping it", async () => {
+    const wide = [architect, ...["implement", "review", "test", "qa", "operate", "design", "product"].map((mode) => session({ role: "delegate", mode, parentSessionId: architect.id }))];
+    const source = memoryBoardSource(wide);
+    const presenter = new BoardPresenter({ source, preferences: storageBoardPreferences(memoryStorage()), ticketId: "t1", projectId: "p1", agentNames: AGENT_NAMES, taskTitle: "", now: () => new Date(T0), schedule: timers.schedule });
+    await presenter.start();
+    presenter.setNarrow(true);
+    presenter.setViewport(384, 600);
+    presenter.fit();
+    const { camera, canvas } = presenter.viewModel;
+    assert.ok(camera.scale >= 0.15 && camera.scale < 0.3, `fitted at ${camera.scale}`);
+    assert.ok(canvas.w * camera.scale <= 384);
+  });
+
+  test("zoom is held between 15 and 200 percent and shown as a percentage", async () => {
     const p = await board();
     for (let i = 0; i < 20; i++) p.zoomAt(2, 0, 0);
     assert.equal(p.viewModel.camera.scale, 2);
     assert.equal(p.viewModel.zoomPercent, 200);
     for (let i = 0; i < 20; i++) p.zoomAt(0.5, 0, 0);
-    assert.equal(p.viewModel.zoomPercent, 30);
+    assert.equal(p.viewModel.zoomPercent, 15);
   });
 
   test("100 percent gives scale 1 and Fit frames the board again", async () => {

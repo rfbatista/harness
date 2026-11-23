@@ -10,7 +10,7 @@ import type { BoardPreferences } from "../../application/preferences";
 import { centerOn, fit, isVisible, panBy, zoomAt, type Camera } from "../../domain/camera";
 import { agentLabel, chipOf, detailOf, needsYou, statusView } from "../../domain/card";
 import { startedEdges, YOU_ID } from "../../domain/graph";
-import { MARGIN, computeLayout, edgeGeometry, sizeOf, type Point, type Rect } from "../../domain/layout";
+import { MARGIN, columnGap, computeLayout, edgeGeometry, sizeOf, type Point, type Rect } from "../../domain/layout";
 import { pushStateOf, unapprovedCount, upsertBranches, type SessionBranches } from "../../domain/branches";
 import { upsertMessage, upsertReview, type ReviewRequest, type TaskMessage } from "../../domain/message";
 import { freeSpot } from "../../domain/placement";
@@ -542,7 +542,7 @@ export class BoardPresenter extends Presenter<BoardViewModel> {
     );
     const nameOf = (id: string) => (id === YOU_ID ? "You" : this.#nameOf(id));
     const edges = startedEdges(sessions).map((e): EdgeViewModel => {
-      const geometry = edgeGeometry(rects[e.from]!, rects[e.to]!);
+      const geometry = edgeGeometry(rects[e.from]!, rects[e.to]!, columnGap(compact) / 2);
       const base = { id: e.id, from: e.from, to: e.to, d: geometry.d, dimmed: ended.has(e.to), pulsing: this.#pulsing.has(e.id) };
       const wait = e.from === YOU_ID ? waits.get(e.to) : undefined;
       if (wait) {
