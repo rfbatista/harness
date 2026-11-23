@@ -80,8 +80,33 @@ export interface ServersGroup extends GroupHeading {
   readonly rows: readonly ServerRow[];
 }
 
+export interface SkillRow {
+  readonly name: string;
+  /** "Mode", "Repository", "Agent" or "Built in". */
+  readonly source: string;
+  readonly description: string;
+  /** "invoked ×2", or "" when the session has not invoked it. */
+  readonly invoked: string;
+}
+
+export interface SkillsGroup extends GroupHeading {
+  readonly rows: readonly SkillRow[];
+}
+
+export interface HookRow {
+  readonly event: string;
+  readonly matcher: string;
+  readonly rule: string;
+}
+
+export interface HooksGroup extends GroupHeading {
+  readonly rows: readonly HookRow[];
+}
+
 export interface ContextGroups {
   readonly instructions: InstructionsGroup;
   readonly tools: ToolsGroup;
   readonly servers: ServersGroup;
+  readonly skills: SkillsGroup;
+  readonly hooks: HooksGroup;
 }

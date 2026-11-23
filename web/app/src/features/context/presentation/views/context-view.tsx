@@ -1,6 +1,7 @@
 import { usePresenter } from "../../../../shared/presentation/use-presenter";
 import type { ContextPresenter } from "../presenters/context-presenter";
 import { InstructionsView } from "./instructions-view";
+import { HooksView, SkillsView } from "./skills-view";
 import { ServersView } from "./servers-view";
 import { ToolsView } from "./tools-view";
 
@@ -41,6 +42,8 @@ export function ContextView({ presenter }: { presenter: ContextPresenter }) {
         {vm.status === "ready" && vm.groups && <InstructionsView group={vm.groups.instructions} presenter={presenter} />}
         {vm.status === "ready" && vm.groups && <ToolsView group={vm.groups.tools} presenter={presenter} />}
         {vm.status === "ready" && vm.groups && <ServersView group={vm.groups.servers} presenter={presenter} />}
+        {vm.status === "ready" && vm.groups && <SkillsView group={vm.groups.skills} presenter={presenter} />}
+        {vm.status === "ready" && vm.groups && <HooksView group={vm.groups.hooks} presenter={presenter} />}
     </div>
   );
 }

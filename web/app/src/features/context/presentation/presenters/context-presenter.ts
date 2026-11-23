@@ -5,6 +5,7 @@ import { Presenter } from "../../../../shared/kernel/presenter";
 import { loadContext } from "../../application/load-context";
 import { ContextSourceError, type Clipboard, type ContextSource } from "../../application/ports";
 import type { Entry, Facts, SessionContext } from "../../domain/session-context";
+import { hooksGroup, skillOrder, skillsGroup } from "./skills-group";
 import { serversGroup } from "./servers-group";
 import { toolsGroup } from "./tools-group";
 import type { ContextGroups, GroupKey } from "./context-view-model";
@@ -60,6 +61,8 @@ export class ContextPresenter extends Presenter<ContextViewModel> {
   readonly #toggled = new Set<GroupKey>();
   readonly #pieces = new Map<string, PieceState>();
   readonly #copied = new Set<string>();
+  /** Each entry's skill order, fixed the first time it is shown. */
+  readonly #skillOrders = new Map<string, string[]>();
 
   readonly #clipboard: Clipboard;
 
@@ -83,6 +86,18 @@ export class ContextPresenter extends Presenter<ContextViewModel> {
     void this.#load();
   }
 
+  /** Reads the context again without a loading state: what is on screen stays until the new answer replaces it. */
+  async refresh(): Promise<void> {
+    if (this.viewModel.status !== "ready") return;
+    try {
+      this.#context = await loadContext(this.#source, this.#sessionId);
+    } catch (err) {
+      if (!(err instanceof ContextSourceError)) throw err;
+      return; // the next change tries again
+    }
+    this.#render();
+  }
+
   async #load(): Promise<void> {
     this.set({ status: "loading", message: "", facts: [], groups: null });
     try {
@@ -104,6 +119,15 @@ export class ContextPresenter extends Presenter<ContextViewModel> {
     return this.#context?.entries.at(-1);
   }
 
+  #skillOrderOf(entry: Entry): string[] {
+    let order = this.#skillOrders.get(entry.id);
+    if (!order) {
+      order = skillOrder(entry.skills, this.#context!.usage);
+      this.#skillOrders.set(entry.id, order);
+    }
+    return order;
+  }
+
   #isOpen(key: GroupKey): boolean {
     return DEFAULT_OPEN[key] !== this.#toggled.has(key);
   }
@@ -123,6 +147,8 @@ export class ContextPresenter extends Presenter<ContextViewModel> {
         instructions: instructionsGroup(this.#heading("instructions", "Instructions", entry.instructions.length), entry.instructions, this.#pieces),
         tools: toolsGroup(this.#heading("tools", "Tools", 0), entry.tools, entry.servers, this.#context!.usage),
         servers: serversGroup(this.#heading("servers", "MCP servers", entry.servers.length), entry.servers, this.#copied),
+        skills: skillsGroup(this.#heading("skills", "Skills", entry.skills.length), entry.skills, this.#skillOrderOf(entry), this.#context!.usage),
+        hooks: hooksGroup(this.#heading("hooks", "Hooks", entry.hooks.length), entry.hooks),
       },
     });
   }
