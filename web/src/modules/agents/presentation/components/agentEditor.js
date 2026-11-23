@@ -17,6 +17,7 @@ import {
   CREATE_SKILL, agentChanges, agentDraft, agentFieldErrors, agentPickerOptions, checkAgentDraft, createSkillHref,
   mcpChoices, resolvedSummary, tocCounts, toolChoices,
 } from "../../domain/agentDraft.js";
+import { modeChoices, modesToSend, toggleMode } from "../../domain/agentModes.js";
 import { projectChoices, projectsToSend, toggleProject } from "../../domain/enabledIn.js";
 import { isMcpName, isSlug } from "../../domain/names.js";
 import { openSave, saveView, savedToast } from "../../domain/savePipeline.js";
@@ -95,7 +96,7 @@ export function agentEditor({ gateway, location, history, storage = globalThis.s
     setupEditor() {
       page = this;
       saver = saveController({
-        run: (options) => gateway.saveAgent({ previousName: page.agentDraft.previousName || undefined, agent: { name: page.agentDraft.name, description: page.agentDraft.description.trim(), aliases: [...page.agentDraft.aliases], entries: [...page.agentDraft.entries], mcpServers: [...page.agentDraft.mcpServers], allowedTools: [...page.agentDraft.allowedTools] }, projects: projectsToSend(page.catalog, page.agentDraft) }, options),
+        run: (options) => gateway.saveAgent({ previousName: page.agentDraft.previousName || undefined, agent: { name: page.agentDraft.name, description: page.agentDraft.description.trim(), aliases: [...page.agentDraft.aliases], entries: [...page.agentDraft.entries], mcpServers: [...page.agentDraft.mcpServers], allowedTools: [...page.agentDraft.allowedTools] }, projects: projectsToSend(page.catalog, page.agentDraft), modes: page.modeStates ? modesToSend(page.catalog, page.agentDraft, page.modeStates) : undefined }, options),
         onState: (state) => { page.agentSave = state; },
         blocked: () => page.brokenWhy !== "",
         timers,
@@ -245,7 +246,7 @@ export function agentEditor({ gateway, location, history, storage = globalThis.s
       return this.agentDraft ? checkAgentDraft(this.agentDraft, { touched: this.agentTouched || this.agentDraft.previousName !== "" }) : { valid: false, nameProblem: "", descriptionProblem: "" };
     },
     get agentChangeCount() {
-      return this.agentDraft && this.catalog ? agentChanges(this.catalog, this.agentDraft) : 0;
+      return this.agentDraft && this.catalog ? agentChanges(this.catalog, this.agentDraft, this.modeStates ?? {}) : 0;
     },
     get sv() {
       const view = saveView(this.agentSave, { valid: this.agentCheck.valid, changes: this.agentChangeCount, writes: FILES, blocked: this.brokenWhy });
@@ -262,7 +263,7 @@ export function agentEditor({ gateway, location, history, storage = globalThis.s
 
     /** The editor's own errors: the MCP drawer, open over it, has its own, and the markup here must not show those. */
     get agentErrors() {
-      const server = this.agentDraft ? agentFieldErrors(this.agentSave.refusal, this.agentDraft) : { name: "", description: "", aliases: "", entries: "", mcp: "", tools: "", projects: "", form: "" };
+      const server = this.agentDraft ? agentFieldErrors(this.agentSave.refusal, this.agentDraft) : { name: "", description: "", aliases: "", entries: "", mcp: "", tools: "", projects: "", modes: "", form: "" };
       return {
         name: this.agentCheck.nameProblem || server.name,
         description: this.agentCheck.descriptionProblem || server.description,
@@ -271,6 +272,7 @@ export function agentEditor({ gateway, location, history, storage = globalThis.s
         mcp: server.mcp,
         tools: server.tools,
         projects: server.projects,
+        modes: server.modes,
         form: server.form,
       };
     },
@@ -310,6 +312,12 @@ export function agentEditor({ gateway, location, history, storage = globalThis.s
     },
     get agentProjectsDescribedBy() {
       return this.agentProjectsInvalid ? "agent-projects-hint agent-projects-error" : "agent-projects-hint";
+    },
+    get agentModesInvalid() {
+      return this.agentErrors.modes !== "";
+    },
+    get agentModesDescribedBy() {
+      return this.agentModesInvalid ? "agent-modes-hint agent-modes-error" : "agent-modes-hint";
     },
     get agentNameDescribedBy() {
       return this.agentNameInvalid ? "agent-name-hint agent-name-error" : "agent-name-hint";
@@ -432,15 +440,39 @@ export function agentEditor({ gateway, location, history, storage = globalThis.s
       this.agentChanged();
     },
 
+    // Modes: the session modes the agent may start in (agentModes.js).
+
+    get modesChoice() {
+      return this.catalog && this.agentDraft && this.modeStates ? modeChoices(this.catalog, this.agentDraft, this.modeStates) : { rows: [], summary: "", tocCount: "" };
+    },
+    /** The modes' states are read, so the section can show and change them. */
+    get modesKnown() {
+      return this.modeStates !== null;
+    },
+    get modesLoading() {
+      return this.modeStates === null && !this.modeStatesFailed;
+    },
+    get modeRowsChoice() {
+      return this.modesChoice.rows;
+    },
+    get modesSummary() {
+      return this.modesChoice.summary;
+    },
+    toggleMode(event) {
+      this.agentDraft.modes = toggleMode(this.catalog, this.agentDraft, this.modeStates ?? {}, event.currentTarget.dataset.mode);
+      this.agentChanged();
+    },
+
     /** The contents list, with what each section holds. */
     get toc() {
-      const counts = this.agentDraft && this.catalog ? tocCounts(this.catalog, this.agentDraft, this.projectsChoice.tocCount) : { skills: "", mcp: "", tools: "", projects: "" };
+      const counts = this.agentDraft && this.catalog ? tocCounts(this.catalog, this.agentDraft, this.projectsChoice.tocCount, this.modesChoice.tocCount) : { skills: "", mcp: "", tools: "", projects: "", modes: "" };
       return [
         { id: "identity", label: "Identity", count: "" },
         { id: "skills", label: "Skills", count: counts.skills },
         { id: "mcp", label: "MCP servers", count: counts.mcp },
         { id: "tools", label: "Allowed tools", count: counts.tools },
         { id: "projects", label: "Projects", count: counts.projects },
+        { id: "modes", label: "Modes", count: counts.modes },
       ].map((s) => ({ ...s, href: `#${s.id}`, current: s.id === this.tocOn ? "true" : null, hasCount: s.count !== "" }));
     },
     /** A click on the contents list: scroll there and say where we are. */

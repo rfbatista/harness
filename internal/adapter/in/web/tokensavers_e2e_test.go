@@ -79,7 +79,7 @@ func newTokenSaverWorld(t *testing.T, opts ...agentcatalog.Option) *tokenSaverWo
 	w.repo = w.addRepository()
 	w.task = w.addTask()
 
-	w.agentCat = agentcatalog.New(filepath.Join(w.root, "agents"), append([]agentcatalog.Option{agentcatalog.WithProjects(w.cat.Projects)}, opts...)...)
+	w.agentCat = agentcatalog.New(filepath.Join(w.root, "agents"), append([]agentcatalog.Option{agentcatalog.WithProjects(w.cat.Projects), agentcatalog.WithModeAgents(w.cat.Settings)}, opts...)...)
 	mux := http.NewServeMux()
 	mux.Handle("/api/", httpapi.NewRouter(httpapi.NewHandler(httpapi.Services{
 		Projects: w.cat.Projects, ProjectFeed: w.cat.Projects, Agents: w.cat.Agents, Sessions: orch, Planning: w.plan,
@@ -88,7 +88,7 @@ func newTokenSaverWorld(t *testing.T, opts ...agentcatalog.Option) *tokenSaverWo
 	mux.Handle("/", web.NewHandler(web.Deps{
 		Projects: w.cat.Projects, Tasks: w.plan, Sessions: orch, Agents: w.cat.Agents, Repositories: w.cat.Projects,
 		EnvFiles: w.cat.Projects, ProjectSummaries: w.cat.Projects, TokenSavers: w.cat.Capabilities,
-		AgentCatalog: app.CatalogSeed(w.agentCat, w.repoAg),
+		AgentCatalog: app.CatalogSeed(w.agentCat, w.repoAg), Settings: w.cat.Settings,
 	}, assets, nil))
 	// Over HTTP/2: each page keeps an event stream open, and HTTP/1.1's six
 	// connections per host run out across the navigations.

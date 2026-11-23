@@ -148,7 +148,7 @@ registerCredentials(Alpine, { gateway: credentialsGateway(api, events), clock: s
 registerUsage(Alpine, { gateway: usageGateway(api, events) });
 registerAgents(Alpine, { gateway: catalogGateway(api, events), repositories: repositoryAgents, history: window.history, location: window.location, clipboard: navigator.clipboard });
 registerTokenSavers(Alpine, { gateway: tokenSavers, clock: systemClock });
-registerModels(Alpine, { gateway: modelsGateway(api) });
+registerModels(Alpine, { gateway: modelsGateway(api, events) });
 registerSandbox(Alpine, { gateway: sandboxGateway(api) });
 registerClaude(Alpine, { gateway: claudeGateway(api) });
 registerAttribution(Alpine, { gateway: attributionGateway(api) });

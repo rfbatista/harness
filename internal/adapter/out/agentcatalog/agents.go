@@ -144,6 +144,12 @@ func (c *Catalog) SaveCatalogAgent(in domain.SaveCatalogAgent) (*domain.CatalogW
 		}
 	}
 
+	if in.Modes != nil {
+		if err := c.checkAgentModes(in.Modes); err != nil {
+			return nil, err
+		}
+	}
+
 	verb := "Saved"
 	obj := agents.get(prev)
 	switch {
@@ -154,6 +160,7 @@ func (c *Catalog) SaveCatalogAgent(in domain.SaveCatalogAgent) (*domain.CatalogW
 	case prev != a.Name:
 		agents.rename(prev, a.Name)
 		t.renamed = append(t.renamed, [2]string{prev, a.Name})
+		t.moveModeAgent(prev, a.Name)
 		for _, p := range t.projectLists() {
 			if p.EnabledAgentsMode == domain.AgentsSelected {
 				if cur := t.enabledAgents(p); contains(cur, prev) {
@@ -188,6 +195,9 @@ func (c *Catalog) SaveCatalogAgent(in domain.SaveCatalogAgent) (*domain.CatalogW
 			}
 		}
 	}
+	if in.Modes != nil {
+		t.setAgentModes(a.Name, in.Modes)
+	}
 	summary := fmt.Sprintf("%s %s — %s now has %d skills", verb, agentsFile, a.Name, t.resolveCount(a.Entries))
 	return t.commit(in.CatalogWriteOptions, summary)
 }
@@ -205,6 +215,7 @@ func (c *Catalog) DeleteCatalogAgent(in domain.DeleteCatalogItem) (*domain.Catal
 	}
 	t.agentsMap().remove(in.Name)
 	t.deleted = append(t.deleted, in.Name)
+	t.moveModeAgent(in.Name, "")
 	for _, p := range t.projectLists() {
 		if p.EnabledAgentsMode == domain.AgentsSelected {
 			if cur := t.enabledAgents(p); contains(cur, in.Name) {

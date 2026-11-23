@@ -62,6 +62,7 @@ const NEXT_STEP = {
   [Codes.GIT_CREDENTIAL_STORE_LOCKED]: "give the server its key (HARNESS_SECRET_KEY or secret.key in its data directory), then retry",
   [Codes.AGENT_CREDENTIAL_MISSING]: "add the credential in Agent isolation, then start again",
   [Codes.AGENT_NOT_ENABLED]: "pick another agent, or enable this one in the project's settings",
+  [Codes.AGENT_NOT_AVAILABLE_IN_MODE]: "pick another agent or mode, or change the mode's agents on the Models page",
   [Codes.AGENT_NOT_ASSIGNED]: "pick another agent, or assign this one in the repository's Agents settings",
   [Codes.REPOSITORY_AGENTS_CHANGED]: "the list changed since you loaded it; it now shows the current state",
   [Codes.REPOSITORY_PROMPT_CHANGED]: "someone saved this prompt since you loaded it; your draft is kept",

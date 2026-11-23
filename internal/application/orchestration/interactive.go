@@ -928,6 +928,28 @@ func (s *Service) UseBranchNames(c ports.BranchNameChecker) { s.branchNames = c 
 // to the repository, and a session read say when it is not (ADR 0061).
 func (s *Service) UseAssignments(a ports.AgentAssignments) { s.assignments = a }
 
+// UseModeAgents makes a new start check that the agent, or no agent, may
+// start in the session's mode (ADR 0103). A resume is not checked.
+func (s *Service) UseModeAgents(r ports.SettingsReader) { s.modeAgents = r }
+
+// checkModeAgents is AGENT_NOT_AVAILABLE_IN_MODE when the mode's agents leave
+// out the agent, or leave out a session with no agent (agent nil). A server
+// with no mode agents is never refused.
+func (s *Service) checkModeAgents(mode domain.SessionMode, agent *domain.Agent) error {
+	if s.modeAgents == nil {
+		return nil
+	}
+	entry := domain.ModeAgentsEntry(mode, s.modeAgents.Setting)
+	name := ""
+	if agent != nil {
+		name = agent.Name
+	}
+	if entry.Allows(name) {
+		return nil
+	}
+	return &domain.StructuredError{Code: "AGENT_NOT_AVAILABLE_IN_MODE", Message: domain.ModeAgentNotAvailableMessage(entry.Name, name)}
+}
+
 // checkAssigned is AGENT_NOT_ASSIGNED when the agent is unassigned from the
 // repository. A session with no agent, or a server with no assignments, is
 // never refused.

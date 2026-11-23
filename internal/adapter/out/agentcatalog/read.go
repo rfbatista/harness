@@ -329,6 +329,7 @@ func (c *Catalog) ReadCatalog() (*domain.CatalogView, error) {
 	for i := range v.Agents {
 		v.Agents[i].Usage = usage[v.Agents[i].Name]
 		v.Agents[i].EnabledIn = []domain.CatalogEnabledIn{}
+		v.Agents[i].AvailableInModes = c.agentModes(v.Agents[i].Name)
 		for _, p := range projects {
 			if p.AgentEnabled(v.Agents[i].Name) {
 				mode := domain.AgentsAll

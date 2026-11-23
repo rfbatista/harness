@@ -232,6 +232,32 @@ func (h *Handler) handleSetProjectAgents(c echo.Context) error {
 	return c.JSON(http.StatusOK, out)
 }
 
+func (h *Handler) handleGetModeAgents(c echo.Context) error {
+	if err := h.catalogOrUnavailable(); err != nil {
+		return err
+	}
+	modes, err := h.catalog.GetModeAgents(c.Request().Context())
+	if err != nil {
+		return err
+	}
+	return c.JSON(http.StatusOK, map[string]any{"modes": modes})
+}
+
+func (h *Handler) handleSetModeAgents(c echo.Context) error {
+	if err := h.catalogOrUnavailable(); err != nil {
+		return err
+	}
+	var in domain.SetModeAgents
+	if err := bindJSON(c, &in); err != nil {
+		return err
+	}
+	out, err := h.catalog.SetModeAgents(c.Request().Context(), in)
+	if err != nil {
+		return err
+	}
+	return c.JSON(http.StatusOK, out)
+}
+
 func (h *Handler) repoAgentsOrUnavailable() error {
 	if h.repoAgents == nil {
 		return echo.NewHTTPError(http.StatusServiceUnavailable, "repository agents not configured")
