@@ -52,6 +52,9 @@ func (s *Service) SyncContextUsage(ctx context.Context, id string) (bool, error)
 	if err := s.Contexts.Save(ctx, c); err != nil {
 		return false, err
 	}
+	if changed {
+		s.contextChanged(id, ports.ContextUsage)
+	}
 	return changed, nil
 }
 

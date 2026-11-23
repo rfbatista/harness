@@ -235,7 +235,9 @@ type Service struct {
 	// (ADR 0099); nil stores nothing.
 	Contexts  ports.SessionContextStore
 	contextMu sync.Mutex
-	redactors map[string]func(string) string // by session id: scrubs a headless session's init report
+	// contextNotes puts a session's context changes on the feed, coalesced.
+	contextNotes *contextNotifier
+	redactors    map[string]func(string) string // by session id: scrubs a headless session's init report
 	// Artifacts lists the project assets attached to a session's task, for
 	// its brief. Nil leaves them out.
 	Artifacts ports.ArtifactReader
@@ -327,8 +329,10 @@ func NewService(runtime llmkit.Manager, broker *approval.Broker, hub *Hub, sessi
 		seq:        map[string]int64{}, cleanups: map[string]func(){}, busy: map[string]bool{},
 		resuming: map[string]bool{}, commitOff: map[string]string{}, branchWaits: map[string]*branchWait{}, statuses: map[string]domain.SessionStatus{},
 	}
+	s.contextNotes = newContextNotifier(time.Now, func(d time.Duration, f func()) { time.AfterFunc(d, f) }, s.sendContextChange)
 	go s.approvalLoop()
 	go s.expiryLoop()
+	go s.contextLoop()
 	return s
 }
 

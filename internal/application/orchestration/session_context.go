@@ -11,6 +11,7 @@ import (
 	"github.com/rfbatista/llmkit"
 
 	"operators-mcp/internal/domain"
+	"operators-mcp/internal/ports"
 )
 
 // SessionContext reads what session id's context was when claude started and
@@ -86,7 +87,11 @@ func (s *Service) recordEntry(ctx context.Context, id string, e domain.ContextEn
 	c.Changes = append(c.Changes, domain.ContextChange{
 		At: e.At, Kind: domain.ContextChangeEntryAdded, Subject: e.ID, Detail: entryAddedDetail(e),
 	})
-	return s.Contexts.Save(ctx, c)
+	if err := s.Contexts.Save(ctx, c); err != nil {
+		return err
+	}
+	s.contextChanged(id, ports.ContextEntryAdded)
+	return nil
 }
 
 func entryAddedDetail(e domain.ContextEntry) string {

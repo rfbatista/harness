@@ -12,6 +12,7 @@ import (
 	"github.com/rfbatista/llmkit"
 
 	"operators-mcp/internal/domain"
+	"operators-mcp/internal/ports"
 )
 
 // initReport is what claude says about itself at the start of a headless
@@ -84,7 +85,11 @@ func (s *Service) applyInitReport(ctx context.Context, id string, raw json.RawMe
 	if !changed {
 		return false, nil
 	}
-	return true, s.Contexts.Save(ctx, c)
+	if err := s.Contexts.Save(ctx, c); err != nil {
+		return false, err
+	}
+	s.contextChanged(id, ports.ContextMCPStatus)
+	return true, nil
 }
 
 // statusReason is claude's error text for a failed server, cut to one bounded

@@ -136,7 +136,32 @@ type ProjectChange struct {
 	// SessionFilesRoot says a root of a session's virtual file system went away
 	// or came back; the Files view follows it.
 	SessionFilesRoot *SessionFilesRootChange `json:"session_files_root,omitempty"`
-	Deleted          bool                    `json:"deleted,omitempty"`
+	// ContextChange says a session's context changed (contract "Harness server
+	// ↔ Web UI — session context", C5). Embedded, so its three fields are the
+	// whole message: {"kind":"context.changed","session_id":…,"reason":…}.
+	*ContextChange
+	Deleted bool `json:"deleted,omitempty"`
+}
+
+// ContextChangeKind is the kind of a ContextChange on the wire.
+const ContextChangeKind = "context.changed"
+
+// Reasons a session's context changed.
+const (
+	ContextEntryAdded = "entry_added"
+	ContextUsage      = "usage"
+	ContextMCPStatus  = "mcp_status"
+)
+
+// ContextChange is a session whose context changed: a new entry, new use of its
+// tools and skills, or an MCP status claude reported. Clients refetch the
+// context. ProjectID routes it to the project's followers and is not on the
+// wire.
+type ContextChange struct {
+	Kind      string `json:"kind"`
+	SessionID string `json:"session_id"`
+	Reason    string `json:"reason"`
+	ProjectID string `json:"-"`
 }
 
 // BranchRequestChange is a branch request on the feed; ProjectID routes it to
@@ -299,6 +324,8 @@ func (c ProjectChange) ProjectID() string {
 		return c.DesignSystemProposal.ProjectID
 	case c.DesignSystemExport != nil:
 		return c.DesignSystemExport.ProjectID
+	case c.ContextChange != nil:
+		return c.ContextChange.ProjectID
 	}
 	return ""
 }
