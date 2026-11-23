@@ -459,14 +459,22 @@ func (s *Service) onSessionsInterrupted(ctx context.Context, ev domain.SessionsI
 	var list []domain.InterruptedSession
 	var lines []string
 	projectID := ""
+	// Each agent is looked up once: a lookup reads the whole catalog, and a
+	// boot can find hundreds of sessions run by a handful of agents.
+	names := map[string]string{}
 	for _, id := range ev.SessionIDs {
 		sess := s.readers.Sessions.Get(id)
 		if sess == nil || sess.InterruptedAt == nil {
 			continue
 		}
+		name, ok := names[sess.AgentID]
+		if !ok {
+			name = s.agentName(ctx, sess.AgentID)
+			names[sess.AgentID] = name
+		}
 		entry := domain.InterruptedSession{
 			SessionID: sess.ID, ProjectID: sess.ProjectID, TaskID: sess.TicketID,
-			AgentName: s.agentName(ctx, sess.AgentID), Link: sessionLink(sess),
+			AgentName: name, Link: sessionLink(sess),
 		}
 		title := "(no task)"
 		if tk := s.readers.Tickets.Get(ctx, sess.TicketID); sess.TicketID != "" && tk != nil {

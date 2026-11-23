@@ -782,11 +782,18 @@ func newRuntimeConfig(cfg Config, bin ports.ManagedClaudeBin, home claudehome.Ho
 func registerServerSessions(lc fx.Lifecycle, svc *orchestration.Service, _ optionalNotifications) {
 	lc.Append(fx.Hook{
 		OnStart: func(ctx context.Context) error {
-			// Every live worktree is guarded again before sessions are
-			// reported running: the commit check (ADR 0040).
-			if _, err := svc.RepairCommitChecks(ctx); err != nil {
-				slog.Warn("repair the commit checks at boot", "err", err)
-			}
+			// Every live worktree is guarded again: the commit check (ADR
+			// 0040). The pass grows with the worktrees on disk (hundreds take
+			// longer than fx's start budget), so it runs behind the boot
+			// instead of holding it.
+			go func() {
+				began := time.Now()
+				if _, err := svc.RepairCommitChecks(context.Background()); err != nil {
+					slog.Warn("repair the commit checks at boot", "err", err)
+					return
+				}
+				slog.Info("repaired the commit checks", "took", time.Since(began).Round(time.Millisecond))
+			}()
 			n, err := svc.StopOrphanedServerSessions(ctx)
 			if n > 0 {
 				slog.Info("stopped server sessions left running by a previous run", "count", n)

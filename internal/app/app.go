@@ -193,4 +193,4 @@ func Validate(cfg Config) error {
 }
 
 // stopTimeout bounds graceful shutdown: servers drain, sessions stop, DB closes.
-const stopTimeout = 15 * time.Second
+const stopTimeout = 25 * time.Second
