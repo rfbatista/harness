@@ -1090,7 +1090,7 @@ func (s *Service) joinTarget(ctx context.Context, req InteractiveRequest, mode d
 		return domain.AccessWrite, nil, nil
 	}
 	if access == "" {
-		access = defaultAccess(mode)
+		access = domain.DefaultAccess(mode)
 	}
 	// The OS is what keeps a read-only session from writing: with the sandbox
 	// off nothing does, so the start is refused rather than promised.
@@ -1126,13 +1126,4 @@ func (s *Service) joinTarget(ctx context.Context, req InteractiveRequest, mode d
 		return "", nil, joinRefusal("WORKTREE_NOT_ON_TASK", "that worktree belongs to a session of another task", map[string]string{"worktree_id": req.WorktreeID})
 	}
 	return access, ws, nil
-}
-
-// defaultAccess is the access a mode gets when the start names none: a
-// Reviewer and QA read the work, every other mode writes it.
-func defaultAccess(mode domain.SessionMode) domain.SessionAccess {
-	if mode == domain.SessionModeReview || mode == domain.SessionModeQA {
-		return domain.AccessReadOnly
-	}
-	return domain.AccessWrite
 }
