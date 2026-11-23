@@ -72,7 +72,15 @@ type Session struct {
 	// that worktree holds. Both are empty for sessions created before worktree
 	// isolation.
 	WorkspaceID string `json:"workspace_id,omitempty"`
-	Branch      string `json:"branch,omitempty"`
+	// WorktreeID is WorkspaceID under the name the shared worktree contract
+	// uses; the store fills it, nothing else sets it.
+	WorktreeID string `json:"worktree_id,omitempty"`
+	Branch     string `json:"branch,omitempty"`
+	// Access is what the session may do in its worktree; empty reads as
+	// write, what every session from before shared worktrees had. Joined says
+	// the session started on a worktree another session cut.
+	Access SessionAccess `json:"access,omitempty"`
+	Joined bool          `json:"joined"`
 	// Interactive sessions run claude in a terminal a person types into,
 	// rather than being driven by the server over stream-json: the server
 	// cannot send to or approve for them.
@@ -168,6 +176,21 @@ const (
 
 // Valid reports whether r names a runner.
 func (r Runner) Valid() bool { return r == RunnerServer || r == RunnerTUI }
+
+// SessionAccess is what a session may do in the worktree it runs in
+// (Glossary: Access).
+type SessionAccess string
+
+const (
+	// AccessWrite edits files and commits on the worktree's branch.
+	AccessWrite SessionAccess = "write"
+	// AccessReadOnly reads, builds and tests; every write is denied.
+	AccessReadOnly SessionAccess = "read_only"
+)
+
+// Writes tells whether the access may change the worktree; the empty access
+// of an older session does.
+func (a SessionAccess) Writes() bool { return a != AccessReadOnly }
 
 // SessionMode is a way of starting a task session that layers a role on top
 // of whichever agent it runs: its own skills and its own first message.

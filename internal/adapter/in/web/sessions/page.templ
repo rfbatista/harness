@@ -865,7 +865,8 @@ templ newSessionForm(form NewSessionForm, lockedMode string) {
 			<label for="new-session-prompt">First message <span class="[ color-ink-faint weight-regular ]">(optional)</span></label>
 			<textarea id="new-session-prompt" class="[ font-mono text-sm ]" x-bind:placeholder="promptPlaceholder" x-model="prompt" x-ref="prompt"></textarea>
 			if lockedMode == "" {
-				<span class="[ hint ]">claude starts in a terminal on the server, on this task's branch.</span>
+				<span class="[ hint ]" data-join-outcome x-show="joining" x-text="joinOutcome"></span>
+				<span class="[ hint ]" x-show="!joining">claude starts in a terminal on the server, on this task's branch.</span>
 			} else {
 				<span class="[ hint ]">claude starts in a terminal on the server, on its own branch of the repository.</span>
 			}
@@ -951,7 +952,55 @@ templ newSessionForm(form NewSessionForm, lockedMode string) {
 					</span>
 				</div>
 			}
-			<div class="[ field ]">
+			<template x-if="showWorktreePicker">
+				<fieldset class="[ field ]" data-where-field>
+					<legend>Where it works</legend>
+					<div class="[ where-choice ]">
+						<label>
+							<input type="radio" name="new-session-where" value="branch" x-bind:checked="newBranchChosen" x-on:change="whereChosen"/>
+							<span><span class="[ t ]">A new branch</span><br/><span class="[ d ]">Cut from a base branch into its own worktree.</span></span>
+						</label>
+						<label>
+							<input type="radio" name="new-session-where" value="worktree" x-bind:checked="existingChosen" x-bind:disabled="noWorktrees" x-on:change="whereChosen"/>
+							<span><span class="[ t ]">An existing worktree</span><br/><span class="[ d ]" data-join-card-text x-text="joinCardText"></span></span>
+						</label>
+					</div>
+				</fieldset>
+			</template>
+			<div class="[ field ]" data-worktree-field x-show="existingChosen">
+				<label for="new-session-worktree">Worktree</label>
+				<div class="[ dropdown ]" x-data="dropdown" data-footer="Worktrees of this task, still on disk">
+					<select id="new-session-worktree" x-model="worktreeId" x-on:change="worktreePicked" aria-describedby="new-session-worktree-status new-session-worktree-hint">
+						<option value="" data-pinned>Pick a worktree</option>
+						<template x-for="o in worktreeOptions" x-bind:key="o.id">
+							<option x-bind:value="o.id" x-bind:data-description="o.description" x-bind:data-meta="o.meta" x-bind:data-tone="o.tone" x-bind:title="o.title" x-text="o.label"></option>
+						</template>
+					</select>
+				</div>
+				<span class="[ error ]" id="new-session-worktree-status" aria-live="polite" data-worktree-error x-show="hasWorktreeError">
+					<span x-text="worktreeError"></span>
+					<span class="[ code ]" data-worktree-error-code x-text="worktreeErrorCode"></span>
+				</span>
+				<span class="[ hint ]" id="new-session-worktree-hint" data-worktree-hint x-text="worktreeHint"></span>
+			</div>
+			<fieldset class="[ field ]" data-access-field x-show="joining">
+				<legend>Access</legend>
+				<div class="[ access-choice ]">
+					<div class="[ field ]" data-inline>
+						<input type="radio" id="new-session-access-write" name="new-session-access" value="write" x-bind:checked="writeAccess" x-on:change="accessChosen"/>
+						<label for="new-session-access-write">Write <span class="[ color-ink-faint weight-regular ]">· edit and commit on the branch</span></label>
+					</div>
+					<div class="[ field ]" data-inline>
+						<input type="radio" id="new-session-access-read-only" name="new-session-access" value="read_only" x-bind:checked="readOnlyAccess" x-on:change="accessChosen"/>
+						<label for="new-session-access-read-only">Read-only <span class="[ color-ink-faint weight-regular ]">· read, build and test; no write</span></label>
+					</div>
+				</div>
+				<span class="[ hint cluster ]" data-access-hint>
+					<span x-text="accessHint"></span>
+					<button type="button" class="[ button ]" data-variant="ghost" data-size="sm" data-access-reset x-show="accessPicked" x-on:click="resetAccess">Reset</button>
+				</span>
+			</fieldset>
+			<div class="[ field ]" x-show="showBranchFields">
 				<label for="new-session-base">Branch off</label>
 				<div class="[ cluster ]">
 					<div class="[ dropdown ]" x-data="combobox" x-bind:aria-busy="branchBusy" x-bind:data-error="branchError" x-on:dropdown-retry="retryBranches">
@@ -976,7 +1025,7 @@ templ newSessionForm(form NewSessionForm, lockedMode string) {
 				<span class="[ error ]" id="new-session-base-status" aria-live="polite" data-branch-base-status x-show="hasBaseStatus" x-text="baseStatus"></span>
 				<span class="[ hint ]" id="new-session-base-hint" aria-live="polite" x-text="baseHint"></span>
 			</div>
-			<div class="[ field ]">
+			<div class="[ field ]" x-show="showBranchFields">
 				<label for="new-session-branch-name">Branch name</label>
 				<input type="text" id="new-session-branch-name" class="[ font-mono text-sm ]" spellcheck="false" autocomplete="off" x-model="branchName" x-on:input="nameTyped" x-on:focus="selectName" x-bind:aria-invalid="nameInvalid" aria-describedby="new-session-branch-name-status new-session-branch-name-hint"/>
 				<div class="[ cluster ]" id="new-session-branch-name-status" aria-live="polite" data-branch-name-status x-bind:data-state="nameState">

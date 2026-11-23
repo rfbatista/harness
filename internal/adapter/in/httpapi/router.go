@@ -104,6 +104,7 @@ func NewRouter(h *Handler, opts ...Option) *echo.Echo {
 	g.GET("/list_workspaces", h.handleListWorkspaces)
 	g.GET("/list_branches", h.handleListBranches)
 	g.GET("/check_branch_name", h.handleCheckBranchName)
+	g.GET("/task_worktrees", h.handleListTaskWorktrees)
 	g.POST("/create_workspace", h.handleCreateWorkspace)
 	g.POST("/delete_workspace", h.handleDeleteWorkspace)
 	// a workspace's branch as a pull request on its origin
@@ -327,6 +328,7 @@ func NewRouter(h *Handler, opts ...Option) *echo.Echo {
 	// whether an action keeps to the repository's layers
 	g.POST(strings.TrimPrefix(ArchitectureCheckRoute, "/api"), h.handleArchitectureCheck)
 	g.POST(strings.TrimPrefix(ArchitectureCommitRoute, "/api"), h.handleArchitectureCommit)
+	g.POST(strings.TrimPrefix(WorktreeArchitectureCommitRoute, "/api"), h.handleWorktreeArchitectureCommit)
 	// the architect's worktree read hook asks which worktrees are its task's
 	g.GET(strings.TrimPrefix(TaskWorktreesRoute, "/api"), h.handleTaskWorktrees)
 	g.POST(strings.TrimPrefix(TaskWorktreeDenialsRoute, "/api"), h.handleTaskWorktreeDenial)

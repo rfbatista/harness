@@ -161,9 +161,15 @@ type Service struct {
 	// CommitGuard puts the architecture commit check into a session's
 	// worktree; nil installs none.
 	CommitGuard ports.CommitGuard
-	// CommitCheckDir returns the session's commit check hooks dir: a stable
-	// folder in the data directory (ADR 0040).
-	CommitCheckDir func(sessionID string) string
+	// CommitCheckDir returns the worktree's commit check hooks dir: a stable
+	// folder in the data directory, shared by the sessions on the worktree
+	// (ADR 0040, ADR 0105).
+	CommitCheckDir func(workspaceID string) string
+	// WorktreeArchitectureURL returns the worktree's own architecture endpoint
+	// base (…/api/worktrees/{id}/architecture), which a commit made with no
+	// session environment posts to (ADR 0105). Nil: the installing session's
+	// endpoint stands in.
+	WorktreeArchitectureURL func(workspaceID string) string
 	// Terminals hosts RunnerServer interactive sessions. Nil means this
 	// server does not run agents itself; such sessions answer
 	// SERVER_HOSTING_UNAVAILABLE.
@@ -469,6 +475,13 @@ type prepareInput struct {
 	// Headless is a session llmkit runs itself, wrapping its command with the
 	// session's sandbox; false is one a terminal runs.
 	Headless bool
+	// WorkspaceID is the worktree the session runs in, set by prepare once it
+	// is provisioned, or by a resume.
+	WorkspaceID string
+	// Join is the existing worktree the session runs in instead of a new one;
+	// nil provisions its own. Access is what the session may do there.
+	Join   *domain.Workspace
+	Access domain.SessionAccess
 	// BranchChecked: Branch was a person's own name, already checked against
 	// git's rules, so the stricter generated-name check is skipped.
 	BranchChecked bool
@@ -525,14 +538,15 @@ func (s *Service) prepare(ctx context.Context, in prepareInput) (*prepared, erro
 	if s.workspaces == nil {
 		return nil, &domain.StructuredError{Code: "INVALID_INPUT", Message: "workspaces are not available"}
 	}
-	if !in.BranchChecked {
+	if !in.BranchChecked && in.Join == nil {
 		if err := validateBranchName(in.Branch); err != nil {
 			return nil, err
 		}
 	}
 	// A base that is refused (not a branch, gone from origin, a fetch that
-	// fails) is refused here: nothing exists yet to clean up.
-	if s.baseBranches != nil {
+	// fails) is refused here: nothing exists yet to clean up. A join has no
+	// base.
+	if s.baseBranches != nil && in.Join == nil {
 		if err := s.baseBranches.PrepareBase(ctx, in.RepositoryID, repo.RootDir, in.BaseBranch); err != nil {
 			return nil, err
 		}
@@ -574,12 +588,22 @@ func (s *Service) prepare(ctx context.Context, in prepareInput) (*prepared, erro
 		return nil, err
 	}
 
-	ws, err := s.workspaces.Create(in.RepositoryID, domain.Slug(in.Branch), in.Branch, in.BaseBranch)
-	if err != nil {
-		if ag.cleanup != nil {
-			ag.cleanup()
+	ws := in.Join
+	if ws == nil {
+		var err error
+		if ws, err = s.workspaces.Create(in.RepositoryID, domain.Slug(in.Branch), in.Branch, in.BaseBranch); err != nil {
+			if ag.cleanup != nil {
+				ag.cleanup()
+			}
+			return nil, err
 		}
-		return nil, err
+	}
+	// What this start provisioned it takes back when it fails; a joined
+	// worktree is another session's and stays.
+	discard := func() {
+		if in.Join == nil {
+			_ = s.workspaces.Discard(ws.ID)
+		}
 	}
 
 	id := in.ID
@@ -588,17 +612,18 @@ func (s *Service) prepare(ctx context.Context, in prepareInput) (*prepared, erro
 	}
 	permission := parseAutoAccept(in.AutoAccept)
 	cfg := s.sessionConfig(id, ws.Path, in.Model, in.AllowedTools, permission, ag, subject, in.ZoneID, in.Role, in.RepositoryID)
+	withReadOnlyAccess(&cfg, in.Access, in.Branch)
 	cleanup, err := s.withShell(id, in.RepositoryID, subject, &cfg, ag.cleanup)
 	if err == nil {
-		cleanup = s.withCommitCheck(id, ws.Path, &cfg, false, cleanup)
+		cleanup = s.withCommitCheck(id, ws.ID, ws.Path, &cfg, false, cleanup)
 	}
 	if err != nil {
-		_ = s.workspaces.Discard(ws.ID)
+		discard()
 		return nil, err
 	}
 	envFile, cleanup, err := s.withGit(id, in.RepositoryID, &cfg, cleanup)
 	if err != nil {
-		_ = s.workspaces.Discard(ws.ID)
+		discard()
 		return nil, err
 	}
 	s.withAgentCredential(&cfg, in.ProjectID)
@@ -607,15 +632,16 @@ func (s *Service) prepare(ctx context.Context, in prepareInput) (*prepared, erro
 	savers := s.withTokenSavers(ctx, in, repo.RootDir, ws.Path, &cfg)
 	cleanup, err = s.withTempDir(id, &cfg, cleanup)
 	if err != nil {
-		_ = s.workspaces.Discard(ws.ID)
+		discard()
 		return nil, err
 	}
+	in.WorkspaceID = ws.ID
 	sb, err := s.sandbox(ctx, in, id, repo, ws.Path, cfg.Env, ag.skillDirs)
 	if err != nil {
 		if cleanup != nil {
 			cleanup()
 		}
-		_ = s.workspaces.Discard(ws.ID)
+		discard()
 		return nil, err
 	}
 	s.withWorktreeReadHook(&cfg, id, sb)
@@ -1427,7 +1453,7 @@ func (s *Service) Delete(ctx context.Context, id string) error {
 	s.runCleanup(id)
 	// Deleting ends the session for good: its commit check goes with it.
 	if sess := s.sessions.Get(id); sess != nil {
-		s.RemoveCommitCheck(id, sess.WorkingDir)
+		s.RemoveCommitCheck(id, sess.WorkspaceID, sess.WorkingDir)
 	}
 	if s.Events != nil {
 		// What else runs in the worktree stops before it is removed; a failure
@@ -1449,7 +1475,8 @@ func (s *Service) Delete(ctx context.Context, id string) error {
 	// A worktree that will not go away must not make the session undeletable:
 	// the workspace row survives and stays retryable through delete_workspace.
 	// The branch is never deleted, so committed work outlives the session.
-	if workspaceID != "" && s.workspaces != nil {
+	// A worktree another session is still on stays: it goes with the last one.
+	if workspaceID != "" && s.workspaces != nil && len(s.sessionsOn(workspaceID, id)) == 0 {
 		if err := s.workspaces.Delete(workspaceID); err != nil {
 			slog.Warn("remove session worktree failed", "session", id, "workspace", workspaceID, "err", err)
 		}

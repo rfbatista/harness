@@ -118,6 +118,10 @@ func (b *Sandbox) on() bool { return b != nil && (b.Enabled == nil || b.Enabled(
 // SandboxSession is what the policy builder decides a policy from.
 type SandboxSession struct {
 	Mode domain.SessionMode
+	// Access is what the session may do in its worktree; empty is write. A
+	// read-only session gets the worktree and the git dir read-only, so
+	// nothing in them can change, a commit included.
+	Access domain.SessionAccess
 	// Worktree is the session's own worktree, GitCommonDir the git directory
 	// it commits into.
 	Worktree     string
@@ -146,9 +150,10 @@ type SandboxSession struct {
 	WorktreesDir string
 	// VirtualShell is the session's shell; empty without one.
 	VirtualShell string
-	// CommitCheckDir is the session's own commit check hooks dir (ADR 0040):
-	// read-only and executable, so `git commit` runs the check inside the
-	// sandbox. Another session's dir is never granted. Empty: none.
+	// CommitCheckDir is the commit check hooks dir of the worktree the session
+	// is on (ADR 0040, ADR 0105): read-only and executable, so `git commit`
+	// runs the check inside the sandbox. Another worktree's dir is never
+	// granted. Empty: none.
 	CommitCheckDir string
 	TempDir        string
 	AgentHome      string
@@ -250,8 +255,13 @@ func BuildSandboxPolicy(s SandboxSession) ports.SandboxPolicy {
 		addRepositories(add, s)
 		add(s.WorktreesDir, false)
 	default:
-		add(s.Worktree, true)
-		createOnly = addGitDir(add, s)
+		if s.Access.Writes() {
+			add(s.Worktree, true)
+			createOnly = addGitDir(add, s)
+		} else {
+			add(s.Worktree, false)
+			add(s.GitCommonDir, false)
+		}
 		if s.ReadAllRepos {
 			addRepositories(add, s)
 		}
@@ -620,6 +630,7 @@ func (s *Service) sandbox(ctx context.Context, in prepareInput, id string, repo 
 	}
 	sess := SandboxSession{
 		Mode:         in.Mode,
+		Access:       in.Access,
 		Worktree:     worktree,
 		GitCommonDir: gitCommonDir(worktree, repo.RootDir),
 		OwnGitDir:    ownGitDir(worktree),
@@ -650,8 +661,8 @@ func (s *Service) sandbox(ctx context.Context, in prepareInput, id string, repo 
 			}
 		}
 	}
-	if s.commitCheckEnabled() {
-		sess.CommitCheckDir = s.CommitCheckDir(id)
+	if s.commitCheckEnabled() && in.WorkspaceID != "" {
+		sess.CommitCheckDir = s.CommitCheckDir(in.WorkspaceID)
 	}
 	for _, e := range env {
 		if v, ok := strings.CutPrefix(e, ports.ShellDirEnv+"="); ok {

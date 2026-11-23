@@ -26,7 +26,17 @@ import (
 const (
 	ArchitectureCheckRoute  = "/api/sessions/:id/architecture/check"
 	ArchitectureCommitRoute = "/api/sessions/:id/architecture/commit"
+	// WorktreeArchitectureCommitRoute is where a commit made with no session
+	// environment is checked: the worktree's own endpoint, which attributes it
+	// to a session on the worktree (ADR 0105).
+	WorktreeArchitectureCommitRoute = "/api/worktrees/:id/architecture/commit"
 )
+
+// WorktreeArchitecturePath is the path the worktree's commit endpoint is
+// under: …/commit.
+func WorktreeArchitecturePath(workspaceID string) string {
+	return "/api/worktrees/" + workspaceID + "/architecture"
+}
 
 // SessionArchitecturePath is the path the session's architecture endpoints
 // are under: …/check and …/commit.
@@ -41,7 +51,9 @@ type architectureHookInput struct {
 	ToolName  string `json:"tool_name"`
 	ToolInput struct {
 		FilePath string `json:"file_path"`
-		Command  string `json:"command"`
+		// NotebookPath is the notebook NotebookEdit writes.
+		NotebookPath string `json:"notebook_path"`
+		Command      string `json:"command"`
 	} `json:"tool_input"`
 }
 
@@ -66,7 +78,11 @@ func (h *Handler) handleArchitectureCheck(c echo.Context) error {
 		if event == "PostToolUse" {
 			check.Point = domain.PointAfterEdit
 		}
-		if p := in.ToolInput.FilePath; p != "" {
+		p := in.ToolInput.FilePath
+		if p == "" {
+			p = in.ToolInput.NotebookPath
+		}
+		if p != "" {
 			if !filepath.IsAbs(p) {
 				p = filepath.Join(in.Cwd, p)
 			}
@@ -94,6 +110,49 @@ func (h *Handler) handleArchitectureCheck(c echo.Context) error {
 // staged paths, NUL separated, and the answer is text for git to print: 409
 // when a blocking rule fails the commit, 200 with the warnings (or nothing).
 func (h *Handler) handleArchitectureCommit(c echo.Context) error {
+	return h.checkCommit(c, c.Param("id"))
+}
+
+// handleWorktreeArchitectureCommit answers a pre-commit hook that ran with no
+// session environment: the commit is checked as the session the worktree
+// attributes it to, and the answer names that session in X-Harness-Attributed-To.
+func (h *Handler) handleWorktreeArchitectureCommit(c echo.Context) error {
+	// Checked here as well as in checkCommit: the attribution is looked up, and
+	// named in a header, before checkCommit runs.
+	if !isLoopback(c.Request().RemoteAddr) {
+		return echo.NewHTTPError(http.StatusForbidden, "loopback only")
+	}
+	who, ok := h.orchSvc.(ports.CommitAttributor)
+	if !ok {
+		return echo.NewHTTPError(http.StatusNotImplemented, "commit attribution is not available")
+	}
+	attributed, err := who.CommitAttribution(c.Request().Context(), c.Param("id"))
+	if err != nil {
+		return err
+	}
+	// A commit that reaches this endpoint carries no session environment, so it
+	// is the person's (or the server's): checked as the session it is attributed
+	// to, but never refused for that session's read-only access.
+	check := ports.ArchitectureCheck{Person: true}
+	if attributed.SessionID == "" {
+		c.Response().Header().Set("X-Harness-Attributed-To", "worktree")
+		check.Worktree = &ports.CheckedWorktree{RepositoryID: attributed.RepositoryID, ProjectID: attributed.ProjectID, Dir: attributed.Dir}
+	} else {
+		c.Response().Header().Set("X-Harness-Attributed-To", attributed.SessionID)
+		check.SessionID = attributed.SessionID
+	}
+	return h.checkCommitAs(c, check)
+}
+
+// checkCommit runs the commit check for sessionID on the staged paths in the
+// body.
+func (h *Handler) checkCommit(c echo.Context, sessionID string) error {
+	return h.checkCommitAs(c, ports.ArchitectureCheck{SessionID: sessionID})
+}
+
+// checkCommitAs runs the commit check described by check, whose commit fields
+// it fills from the staged paths in the body.
+func (h *Handler) checkCommitAs(c echo.Context, check ports.ArchitectureCheck) error {
 	if !isLoopback(c.Request().RemoteAddr) {
 		return echo.NewHTTPError(http.StatusForbidden, "loopback only")
 	}
@@ -110,9 +169,8 @@ func (h *Handler) handleArchitectureCommit(c echo.Context) error {
 	if h.archRules == nil {
 		return c.NoContent(http.StatusOK)
 	}
-	v := h.archRules.CheckArchitecture(c.Request().Context(), ports.ArchitectureCheck{
-		SessionID: c.Param("id"), Point: domain.PointBeforeCommit, Tool: "git commit", Paths: paths,
-	})
+	check.Point, check.Tool, check.Paths = domain.PointBeforeCommit, "git commit", paths
+	v := h.archRules.CheckArchitecture(c.Request().Context(), check)
 	if v.Deny != "" {
 		text := v.Deny
 		if v.Context != "" {

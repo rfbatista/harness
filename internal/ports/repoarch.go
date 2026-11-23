@@ -200,10 +200,25 @@ type ArchitectureCheck struct {
 	Paths []string
 	// Command is the Bash command line of a before-tool check of Bash.
 	Command string
+	// Person marks a commit made with no session environment: the person's own
+	// terminal, or the server. It is checked against the layers as the session it
+	// is attributed to, as a commit in a session worktree always was, but the
+	// read-only rule of a session on the worktree never refuses it.
+	Person bool
+	// Worktree stands for the session when SessionID is empty: a commit in a
+	// worktree no session is on is checked as a plain agent in its repository.
+	Worktree *CheckedWorktree
 	// Shim says a PATH shim asked, about the file it is about to write. The
 	// Bash tool's own hook has already run the command rules that name no
 	// paths, so only those with a paths filter run again.
 	Shim bool
+}
+
+// CheckedWorktree is a worktree checked with no session behind it.
+type CheckedWorktree struct {
+	RepositoryID string
+	ProjectID    string
+	Dir          string
 }
 
 // ArchitectureVerdict is the answer: Deny is the text of a blocking rule that
@@ -242,6 +257,27 @@ type ArchitectureBriefSource interface {
 	// InstructionFilesOf is the repository's instruction files with their
 	// content, which a session gets delivered (ADR 0057).
 	InstructionFilesOf(ctx context.Context, repositoryID string) ([]domain.InstructionFile, error)
+}
+
+// CommitAttribution is who a commit made in a worktree with no session
+// environment is checked as (ADR 0105). SessionID is the session; it is empty
+// only when no session is on the worktree at all, and the commit is then
+// checked at worktree level with no agent rights, from RepositoryID,
+// ProjectID and Dir.
+type CommitAttribution struct {
+	SessionID    string
+	RepositoryID string
+	ProjectID    string
+	Dir          string
+}
+
+// CommitAttributor attributes a commit made in a worktree with no session
+// environment (ADR 0105); the pre-commit hook of a shared worktree asks it. It
+// never lets a commit go unchecked: it answers a session whenever one is on
+// the worktree, ended or read-only included, and the worktree itself when none
+// is. An unknown worktree is the only error.
+type CommitAttributor interface {
+	CommitAttribution(ctx context.Context, workspaceID string) (CommitAttribution, error)
 }
 
 // CommitGuard installs and removes a git hooks directory for one worktree

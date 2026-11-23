@@ -1,0 +1,69 @@
+/*
+ * Where it works — the New session form's choice between cutting a new branch
+ * and joining a worktree of the task: two radio cards with a description line
+ * each (UX study: shared worktrees). A disabled card reads as inert and says why
+ * in its description.
+ * <fieldset class="field"><legend>Where it works</legend>
+ *   <div class="where-choice">
+ *     <label><input type="radio" name="where" checked>
+ *       <span><span class="t">A new branch</span><br><span class="d">Cut from…</span></span></label>
+ *     <label><input type="radio" name="where" disabled>…</label>
+ *   </div></fieldset>
+ * The Access radios beside it sit on one line: <div class="access-choice">.
+ */
+
+@layer blocks {
+  .where-choice {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: var(--space-s);
+
+    & > label {
+      display: grid;
+      grid-template-columns: auto minmax(0, 1fr);
+      column-gap: var(--space-s);
+      align-items: start;
+      padding: var(--space-s) var(--space-m);
+      border: var(--border-width) solid var(--color-line-control);
+      border-radius: var(--radius-sm);
+      background: var(--color-raised);
+      font-weight: var(--weight-regular);
+      cursor: pointer;
+
+      & input {
+        margin-block-start: 0.2rem;
+      }
+
+      & .t {
+        font-weight: var(--weight-medium);
+      }
+
+      & .d {
+        font-size: var(--text-xs);
+        color: var(--color-ink-faint);
+      }
+
+      &:has(input:checked) {
+        border-color: var(--color-signal);
+        box-shadow: 0 0 0 1px var(--color-signal);
+        background: var(--color-selected);
+      }
+
+      &:has(input:disabled) {
+        background: var(--color-panel);
+        color: var(--color-ink-faint);
+        cursor: not-allowed;
+
+        & .t {
+          color: var(--color-ink-faint);
+        }
+      }
+    }
+  }
+
+  .access-choice {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--space-l);
+  }
+}

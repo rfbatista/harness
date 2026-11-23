@@ -112,6 +112,7 @@ type sessionTestEnv struct {
 	sessions  *sqlite.SessionRepository
 	orch      *orchestration.Service
 	artifacts *artifacts.Service
+	prov      *stubProvisioner
 }
 
 func newSessionTestServerWithBroker(t *testing.T) (*httptest.Server, *approval.Broker) {
@@ -138,16 +139,17 @@ func newSessionTestEnv(t *testing.T) *sessionTestEnv {
 	hub := orchestration.NewHub(64)
 	res := &stubResolver{proj: &domain.Project{ID: "p1", RootDir: t.TempDir()}}
 	sessions := sqlite.NewSessionRepository(db)
+	prov := &stubProvisioner{dir: t.TempDir()}
 	svc := orchestration.NewService(mgr, broker, hub, sessions,
 		orchestration.Catalog{Projects: res, Repositories: res, Agents: res, MCPServers: res, Zones: res},
 		stubTickets{"tk1": {ID: "tk1", ProjectID: "p1", Title: "Ship the thing"}},
-		&stubProvisioner{dir: t.TempDir()})
+		prov)
 	svc.DefaultEnv = []string{"CLAUDE_FAKE=1"}
 
 	art := artifacts.NewService(sqlite.NewArtifactRepository(db), sessions, svc)
 	art.StoreDir = t.TempDir()
 	h := &Handler{orchSvc: svc, artifactsSvc: art}
-	return &sessionTestEnv{srv: httptest.NewServer(NewRouter(h)), broker: broker, sessions: sessions, orch: svc, artifacts: art}
+	return &sessionTestEnv{srv: httptest.NewServer(NewRouter(h)), broker: broker, sessions: sessions, orch: svc, artifacts: art, prov: prov}
 }
 
 func TestHTTP_CreateAndStreamSession(t *testing.T) {

@@ -44,6 +44,8 @@ func (r *SessionRepository) Create(s *domain.Session) (*domain.Session, error) {
 		AutoRun:         s.AutoRun,
 		WorkspaceID:     s.WorkspaceID,
 		Branch:          s.Branch,
+		Access:          string(s.Access),
+		Joined:          s.Joined,
 		Interactive:     s.Interactive,
 		ClaudeSessionID: s.ClaudeSessionID,
 		RunsOn:          string(s.RunsOn),

@@ -56,7 +56,9 @@ func errorHandler(err error, c echo.Context) {
 			"BASE_BRANCH_NOT_FOUND", "REMOTE_BRANCH_NOT_FOUND", "CONVERSATION_NOT_FOUND", "BRANCH_NOT_FOUND",
 			// A design system, or one of its versions, that does not exist.
 			"VERSION_NOT_FOUND", "DESIGN_SYSTEM_NOT_FOUND", "PROPOSAL_NOT_FOUND", "INTERVIEW_NOT_FOUND",
-			"SERVICE_NOT_FOUND", "SERVICE_REQUEST_NOT_FOUND":
+			"SERVICE_NOT_FOUND", "SERVICE_REQUEST_NOT_FOUND",
+			// A worktree to join that is unknown, cleared or gone from disk.
+			"WORKTREE_NOT_FOUND":
 			writeCoded(c, http.StatusNotFound, err, se)
 			return
 		case "INVALID_PATTERN", "INVALID_NAME", "INVALID_ROOT", "INVALID_PATH",
@@ -68,6 +70,7 @@ func errorHandler(err error, c echo.Context) {
 			"ARTIFACT_NOT_PROMOTABLE", "PROJECT_ROOT_INVALID",
 			"PR_NO_REMOTE", "NO_REMOTE", "REMOTE_NOT_FOUND", "PR_BASE_NOT_FOUND", "BRANCH_NAME_INVALID", "TASK_NOT_ON_PROJECT",
 			"GIT_CREDENTIAL_INVALID_KEY", "GIT_CREDENTIAL_HOST_MISMATCH", "GIT_CREDENTIAL_KIND_MISMATCH",
+			"WORKTREE_WITH_BASE_BRANCH", "ACCESS_INVALID",
 			"GIT_CREDENTIAL_MISSING", "ARCHITECTURE_INVALID", "INSTRUCTION_INVALID", "DESIGN_SYSTEM_INVALID", "IMPORT_UNREADABLE", "REPOSITORY_PROMPT_TOO_LONG", "UNKNOWN_REFERENCE", "BUNDLE_CYCLE", "INTERVIEW_ANSWERS_INVALID":
 			writeCoded(c, http.StatusBadRequest, err, se)
 			return
@@ -75,7 +78,8 @@ func errorHandler(err error, c echo.Context) {
 			// A person's terminal is off for where the request comes from (ADR 0051).
 			writeCoded(c, http.StatusForbidden, err, se)
 			return
-		case "ARTIFACT_NOT_YOURS", "ARCHITECT_ONLY", "TASK_STATUS_OWNED_BY_ARCHITECT", "TASK_DONE_IS_THE_PERSONS", "SESSION_NOT_ON_TASK",
+		case "WORKTREE_NOT_ON_TASK", // a worktree of another task's session
+			"ARTIFACT_NOT_YOURS", "ARCHITECT_ONLY", "TASK_STATUS_OWNED_BY_ARCHITECT", "TASK_DONE_IS_THE_PERSONS", "SESSION_NOT_ON_TASK",
 			"COMMENT_NOT_YOURS",
 			"RESOURCE_NOT_ON_TASK", "COMMENT_NOT_ON_TASK": // MCP only; no route answers them
 			writeCoded(c, http.StatusForbidden, err, se)

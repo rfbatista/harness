@@ -41,6 +41,12 @@ test("renders rows under group headings, with description, dot and match", () =>
   assert.equal(group.getAttribute("aria-labelledby"), group.querySelector(".group").id);
 });
 
+test("a done tone draws the done dot, for an option whose session ended", () => {
+  const listbox = document.createElement("div");
+  const rows = renderOptions(listbox, [{ value: "w", label: "worktree", tone: "done", meta: "ended 2h ago" }], { idPrefix: "t", selected: new Set() });
+  assert.equal(rows[0].querySelector(".status").dataset.state, "done");
+});
+
 test("step clamps or wraps and skips disabled entries", () => {
   const items = [{}, { disabled: true }, {}, {}];
   assert.equal(step(items, 0, 1), 2);

@@ -78,8 +78,7 @@ type who struct {
 // resolve answers the session's record, or false when no rule applies to it:
 // no such session, no repository or worktree, or no saved record. An error
 // says the record could not be read.
-func (s *Service) resolve(ctx context.Context, sessionID string) (who, bool, error) {
-	sess := s.d.Sessions.Get(sessionID)
+func (s *Service) resolve(ctx context.Context, sess *domain.Session) (who, bool, error) {
 	if sess == nil || sess.RepositoryID == "" || sess.WorkingDir == "" {
 		return who{}, false, nil
 	}
@@ -106,7 +105,16 @@ func (s *Service) CheckArchitecture(ctx context.Context, c ports.ArchitectureChe
 	if v, refused := s.designSessionRefusal(c); refused {
 		return v
 	}
-	w, ok, err := s.resolve(ctx, c.SessionID)
+	if v, refused := s.readOnlyRefusal(c); refused {
+		return v
+	}
+	sess := s.d.Sessions.Get(c.SessionID)
+	if sess == nil && c.Worktree != nil {
+		// No session is on the worktree: it is checked as a plain agent, which
+		// has the narrowest rights.
+		sess = &domain.Session{RepositoryID: c.Worktree.RepositoryID, ProjectID: c.Worktree.ProjectID, WorkingDir: c.Worktree.Dir}
+	}
+	w, ok, err := s.resolve(ctx, sess)
 	if err != nil {
 		return ports.ArchitectureVerdict{Context: "Architecture rules could not be checked: the saved architecture could not be read."}
 	}
@@ -126,6 +134,31 @@ func (s *Service) CheckArchitecture(ctx context.Context, c ports.ArchitectureChe
 		s.commandRules(ctx, w, c, paths, &v)
 	}
 	return v.out()
+}
+
+// readOnlyRefusal denies what changes the worktree of a session that has
+// read-only access to it (Glossary: Access): a file tool's write into the
+// worktree, a git command that writes, and a commit. No rule of any record is
+// consulted. The sandbox refuses the same writes at the OS, bare; this is the
+// refusal that says why. A write outside the worktree, a read and a build or
+// a test are not refused. refused is false for a session that may write.
+func (s *Service) readOnlyRefusal(c ports.ArchitectureCheck) (ports.ArchitectureVerdict, bool) {
+	sess := s.d.Sessions.Get(c.SessionID)
+	if sess == nil || sess.Access.Writes() || c.Person {
+		return ports.ArchitectureVerdict{}, false
+	}
+	why := "This session has read-only access to the worktree on branch " + sess.Branch + ": it can read, build and run tests there, but it cannot write files or commit. Ask the person to start a session with write access for that."
+	switch {
+	case c.Point == domain.PointBeforeCommit:
+		return ports.ArchitectureVerdict{Deny: why + " Nothing is committed."}, true
+	case c.Point == domain.PointAfterEdit:
+		return ports.ArchitectureVerdict{}, false
+	case c.Command != "" && gitWrites(c.Command):
+		return ports.ArchitectureVerdict{Deny: why + " This git command is refused."}, true
+	case sess.WorkingDir != "" && len(inside(sess.WorkingDir, c.Paths)) > 0:
+		return ports.ArchitectureVerdict{Deny: why + " This path is in the worktree."}, true
+	}
+	return ports.ArchitectureVerdict{}, false
 }
 
 // ListArchitectureRuleEvents implements ports.ArchitectureRuleEvents.
@@ -277,6 +310,13 @@ var gitWriteVerbs = map[string]bool{
 	"commit": true, "push": true, "merge": true, "rebase": true, "reset": true, "cherry-pick": true, "apply": true, "am": true,
 	"stash": true, "tag": true, "add": true, "rm": true, "mv": true, "checkout": true, "switch": true, "restore": true,
 	"clean": true, "branch": true,
+	"update-ref": true, "update-index": true, "commit-tree": true, "revert": true, "pull": true, "notes": true,
+}
+
+// gitConfigReads are the options that make `git config` only read.
+var gitConfigReads = map[string]bool{
+	"--get": true, "--get-all": true, "--get-regexp": true, "--get-urlmatch": true, "--list": true, "-l": true,
+	"--show-origin": true, "--show-scope": true, "--name-only": true,
 }
 
 // gitWrites says a shell command line runs a git command that writes: the
@@ -295,7 +335,7 @@ func gitWrites(command string) bool {
 					i++ // the option's argument
 				case strings.HasPrefix(w, "-"):
 				default:
-					if gitWriteVerbs[w] {
+					if gitWriteVerbs[w] || (w == "config" && !slices.ContainsFunc(words[i+1:], func(o string) bool { return gitConfigReads[o] })) {
 						return true
 					}
 					i = len(words)

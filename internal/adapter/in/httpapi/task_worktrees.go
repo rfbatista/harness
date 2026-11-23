@@ -60,3 +60,19 @@ func (h *Handler) handleTaskWorktreeDenial(c echo.Context) error {
 	}
 	return c.NoContent(http.StatusNoContent)
 }
+
+// handleListTaskWorktrees answers the New session form's worktree picker: the
+// worktrees on disk of the task's sessions in a repository, with the sessions
+// on each (contract "Harness server ↔ Web UI — joining a worktree and the task
+// worktree setting", §1).
+func (h *Handler) handleListTaskWorktrees(c echo.Context) error {
+	lister, ok := h.orchSvc.(ports.TaskWorktreeLister)
+	if !ok {
+		return echo.NewHTTPError(http.StatusServiceUnavailable, "task worktrees are not available")
+	}
+	view, err := lister.TaskWorktreeChoices(c.Request().Context(), c.QueryParam("task_id"), c.QueryParam("repository_id"))
+	if err != nil {
+		return err
+	}
+	return c.JSON(http.StatusOK, view)
+}

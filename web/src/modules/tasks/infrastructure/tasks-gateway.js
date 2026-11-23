@@ -75,7 +75,7 @@ export function tasksGateway(api) {
     async previewArchivedWorktrees({ projectId, taskId }) {
       const body = await api.get("/archived_worktrees", taskId ? { task_id: taskId } : { project_id: projectId });
       for (const k of ["worktrees", "dirty", "running"]) if (typeof body?.[k] !== "number") bad(`expected {worktrees, dirty, running}`);
-      return { worktrees: body.worktrees, dirty: body.dirty, running: body.running };
+      return { worktrees: body.worktrees, dirty: body.dirty, running: body.running, shared: typeof body.shared === "number" ? body.shared : 0 };
     },
 
     async clearArchivedWorktrees({ projectId, taskId }) {

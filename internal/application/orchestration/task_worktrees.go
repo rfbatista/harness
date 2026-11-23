@@ -3,6 +3,7 @@ package orchestration
 import (
 	"context"
 	"path/filepath"
+	"slices"
 	"strings"
 
 	"operators-mcp/internal/domain"
@@ -31,10 +32,9 @@ func (s *Service) TaskWorktrees(ctx context.Context, sessionID, path string) (*p
 	if path != "" {
 		out.Owner = s.worktreeOwner(ctx, sess, out.Root, path)
 	}
-	for _, other := range s.sessions.List(ctx, ports.SessionFilter{TicketID: sess.TicketID}) {
-		if other.RepositoryID != sess.RepositoryID || other.WorkingDir == "" || other.WorktreeClearedAt != nil {
-			continue
-		}
+	sessions := s.taskSessionsIn(ctx, sess.TicketID, sess.RepositoryID)
+	slices.Reverse(sessions) // newest first
+	for _, other := range sessions {
 		out.Worktrees = append(out.Worktrees, ports.TaskWorktree{
 			SessionID: other.ID, Dir: other.WorkingDir, Branch: other.Branch,
 			Agent: s.agentName(ctx, other.AgentID), Status: string(other.Status),

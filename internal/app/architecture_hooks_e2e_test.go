@@ -20,7 +20,7 @@ import (
 // "Harness server ↔ Agent sessions — repository architecture record").
 
 const (
-	archPreMatcher  = "Edit|Write|MultiEdit|Bash"
+	archPreMatcher  = "Edit|Write|MultiEdit|NotebookEdit|Bash"
 	archPostMatcher = "Edit|Write|MultiEdit"
 )
 

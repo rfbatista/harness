@@ -441,6 +441,12 @@ type InteractiveRequest struct {
 	// sessions of the task: they are moved under it as it starts (ADR 0045).
 	// Empty is a plain start.
 	BringUnderSessionIDs []string `json:"bring_under_session_ids,omitempty"`
+	// WorktreeID starts the session on this existing worktree of its task, on
+	// the worktree's branch, instead of cutting a branch and a worktree; it
+	// excludes BaseBranch and BranchName. Access is what the session may do
+	// there, "write" or "read_only"; empty takes the mode's default.
+	WorktreeID string `json:"worktree_id,omitempty"`
+	Access     string `json:"access,omitempty"`
 }
 
 // ResumeRequest reopens an ended interactive session, on RunsOn — which need
