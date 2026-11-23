@@ -1,6 +1,6 @@
 // One card: the session row turned into a tile.
 
-import { useEffect, useRef } from "react";
+import { useRef } from "react";
 import type { BoardPresenter, CardViewModel } from "../presenters/board-presenter";
 
 /** Pixels the pointer must travel before a press is a drag and not a click. */
@@ -9,17 +9,10 @@ const DRAG_SLOP = 4;
 export function CardView({ card, presenter }: { card: CardViewModel; presenter: BoardPresenter }) {
   const { rect } = card;
   const grab = useRef<{ x: number; y: number; moved: boolean } | null>(null);
-  const node = useRef<HTMLButtonElement>(null);
   /** The press that just ended a drag also clicks: that click selects nothing. */
   const dragged = useRef(false);
 
-  // Keyboard focus follows the presenter's, but only once focus is already on the board: loading never steals it.
-  useEffect(() => {
-    const el = node.current;
-    if (card.focused && el && el.ownerDocument.activeElement !== el && el.closest(".wb-canvas")?.contains(el.ownerDocument.activeElement)) el.focus({ preventScroll: true });
-  }, [card.focused]);
   const nav = {
-    ref: node,
     tabIndex: 0,
     onFocus: () => presenter.focus(card.id),
     onClick: () => {

@@ -5,7 +5,7 @@
 
 import type { BoardPreferences } from "../application/preferences";
 import { DtoError } from "../../../shared/infrastructure/dto/dto-error";
-import { CameraDto, PositionsDto } from "./dto/preferences-dto";
+import { AgentsViewDto, CameraDto, PositionsDto } from "./dto/preferences-dto";
 
 /** The part of Web Storage this adapter uses. */
 export interface KeyValueStorage {
@@ -15,6 +15,7 @@ export interface KeyValueStorage {
 }
 
 const PREFIX = "harness:";
+export const viewKey = (ticketId: string): string => `${PREFIX}agents-view:${ticketId}`;
 export const cameraKey = (ticketId: string): string => `${PREFIX}whiteboard-camera:${ticketId}`;
 export const positionsKey = (ticketId: string): string => `${PREFIX}whiteboard-positions:${ticketId}`;
 
@@ -67,6 +68,19 @@ export function storageBoardPreferences(storage: KeyValueStorage | null): BoardP
         if (err instanceof DtoError) return null;
         throw err;
       }
+    },
+    view(ticketId) {
+      const text = read(viewKey(ticketId));
+      if (text === null) return null;
+      try {
+        return AgentsViewDto.fromStored(text).view;
+      } catch (err) {
+        if (err instanceof DtoError) return null;
+        throw err;
+      }
+    },
+    saveView(ticketId, view) {
+      write(viewKey(ticketId), new AgentsViewDto(view).toStored());
     },
     saveCamera(ticketId, camera) {
       write(cameraKey(ticketId), new CameraDto(camera.x, camera.y, camera.scale).toStored());

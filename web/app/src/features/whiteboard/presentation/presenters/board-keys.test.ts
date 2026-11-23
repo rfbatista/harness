@@ -5,6 +5,7 @@ import { storageBoardPreferences } from "../../infrastructure/storage-board-pref
 import { memoryStorage } from "../../testing/memory-storage";
 import { recordingHost } from "../../testing/recording-host";
 import type { BoardSession } from "../../domain/session";
+import { memoryPage } from "../../testing/memory-page";
 import { AGENT_NAMES, T0, message, review, session } from "../../testing/fixtures";
 import { BoardPresenter } from "./board-presenter";
 
@@ -177,5 +178,24 @@ describe("names and states", () => {
     presenter.newSession();
     presenter.showList();
     assert.deepEqual(host.calls, ["new", "list"]);
+  });
+});
+
+describe("following the page", () => {
+  test("shows the session the page selects and clears it when the page does, and asks for the page's selection once", async () => {
+    const page = memoryPage();
+    const host = recordingHost();
+    const source = memoryBoardSource([architect, impl1]);
+    const presenter = new BoardPresenter({ source, preferences: storageBoardPreferences(memoryStorage()), host, signals: page.signals, ticketId: "t1", projectId: "p1", agentNames: AGENT_NAMES, taskTitle: "", now: () => NOW });
+    await presenter.start();
+    presenter.follow();
+    assert.deepEqual(host.calls, ["ready"]);
+    page.select(impl1.id);
+    assert.equal(presenter.viewModel.selectedId, impl1.id);
+    assert.equal(presenter.viewModel.compact, true);
+    page.select(null);
+    assert.equal(presenter.viewModel.selectedId, null);
+    presenter.stop();
+    assert.equal(page.followers(), 0);
   });
 });

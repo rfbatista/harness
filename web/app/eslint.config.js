@@ -77,6 +77,7 @@ const TRANSPORT_FILES = [
   "src/shared/infrastructure/island-props.ts",
   "src/features/navigation/infrastructure/browser-navigation-signal.ts",
   "src/features/whiteboard/infrastructure/storage-board-preferences.ts",
+  "src/features/whiteboard/infrastructure/browser-page-bridge.ts",
 ];
 // Tests and their helpers build raw data on purpose.
 const TEST_FILES = ["**/*.test.ts", "**/testing/**"];

@@ -1089,3 +1089,93 @@ test("the page follows the selected session's interviews whichever tab is in fro
   instance.destroy();
   assert.equal(feeds[1].stopped, true);
 });
+
+// ── the agents whiteboard (ADR 0108): the React island and the page talk by events ──
+
+const board = (instance, name, detail = {}) => instance[name]({ detail });
+
+test("the list is the view until the whiteboard island announces another; the board has the whole width until a card opens a pane", () => {
+  const { instance } = setup();
+  assert.equal(instance.view, "list");
+  assert.equal(instance.boardAttr, null);
+  assert.equal(instance.noPaneAttr, null);
+  board(instance, "whiteboardView", { view: "whiteboard", session_id: "" });
+  assert.equal(instance.view, "whiteboard");
+  assert.equal(instance.boardAttr, "");
+  assert.equal(instance.noPaneAttr, "");
+  assert.equal(instance.detailOpenAttr, null);
+  board(instance, "whiteboardView", { view: "list", session_id: "" });
+  assert.equal(instance.view, "list");
+  assert.equal(instance.noPaneAttr, null);
+  instance.destroy();
+});
+
+test("a card opens its session's pane beside the board; Esc closes it", () => {
+  const { instance } = setup();
+  board(instance, "whiteboardView", { view: "whiteboard", session_id: "" });
+  board(instance, "whiteboardOpen", { session_id: "run", tab: "" });
+  assert.equal(instance.selectedId, "run");
+  assert.equal(instance.noPaneAttr, null, "the pane shows beside the board");
+  assert.equal(instance.detailOpenAttr, "", "on a narrow page the pane replaces the board, with Back");
+  instance.whiteboardClose();
+  assert.equal(instance.noPaneAttr, "");
+  assert.equal(instance.detailOpenAttr, null);
+  instance.destroy();
+});
+
+test("view=whiteboard&session=<id> opens the board with that session selected; an unknown session selects none", () => {
+  const { instance } = setup();
+  board(instance, "whiteboardView", { view: "whiteboard", session_id: "run" });
+  assert.equal(instance.selectedId, "run");
+  assert.equal(instance.noPaneAttr, null);
+  const other = setup();
+  board(other.instance, "whiteboardView", { view: "whiteboard", session_id: "s-gone" });
+  assert.equal(other.instance.noPaneAttr, "");
+  instance.destroy();
+  other.instance.destroy();
+});
+
+test("a card's Conversation tab opens on the conversation of a delegate only", () => {
+  const sessions = [makeSession({ id: "arch", role: "architect" }), makeSession({ id: "del", role: "delegate", parentSessionId: "arch" }), makeSession({ id: "peer" })];
+  const { instance } = setup(sessions);
+  board(instance, "whiteboardOpen", { session_id: "del", tab: "conversation" });
+  assert.equal(instance.detailTab, "conversation");
+  board(instance, "whiteboardOpen", { session_id: "peer", tab: "conversation" });
+  assert.equal(instance.detailTab === "conversation", false, "a peer has no conversation: its terminal shows");
+  instance.destroy();
+});
+
+test("the Back button on a narrow page closes the board's pane and tells the board", () => {
+  const { instance, dispatched } = setup();
+  board(instance, "whiteboardView", { view: "whiteboard", session_id: "" });
+  board(instance, "whiteboardOpen", { session_id: "run", tab: "" });
+  instance.closeDetail();
+  assert.deepEqual(dispatched.filter((d) => d.name === "whiteboard-select"), [{ name: "whiteboard-select", detail: { session_id: "" } }]);
+  assert.equal(instance.noPaneAttr, "");
+  instance.destroy();
+});
+
+test("a board that mounts is told the session open beside it, and none while no pane is open", () => {
+  const { instance, dispatched } = setup();
+  board(instance, "whiteboardView", { view: "whiteboard", session_id: "" });
+  instance.whiteboardReady();
+  board(instance, "whiteboardOpen", { session_id: "run", tab: "" });
+  instance.whiteboardReady();
+  assert.deepEqual(dispatched.filter((d) => d.name === "whiteboard-select").map((d) => d.detail), [{ session_id: "" }, { session_id: "run" }]);
+  instance.destroy();
+});
+
+test("the You card opens the Reviews popover; the empty board's actions open the new-session form or go back to the list", () => {
+  const { instance, dispatched, tick } = setup();
+  tick();
+  instance.whiteboardReviews();
+  const opened = dispatched.find((d) => d.name === "dialog-open");
+  assert.equal(opened.detail.id, "task-reviews");
+  board(instance, "whiteboardView", { view: "whiteboard", session_id: "" });
+  instance.whiteboardNewSession();
+  assert.equal(instance.creating, true);
+  assert.equal(instance.noPaneAttr, null, "the form shows in the pane");
+  instance.whiteboardShowList();
+  assert.deepEqual(dispatched.at(-1), { name: "whiteboard-set-view", detail: { view: "list" } });
+  instance.destroy();
+});

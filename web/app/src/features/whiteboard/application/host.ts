@@ -12,7 +12,9 @@ export interface BoardHost {
   openReviews(): void;
   newSession(): void;
   showList(): void;
+  /** The board is up and following: tell it which session the page has selected. */
+  boardReady(): void;
 }
 
 /** A host that does nothing: the board before a page is wired to it. */
-export const noHost: BoardHost = { openSession() {}, closePane() {}, openReviews() {}, newSession() {}, showList() {} };
+export const noHost: BoardHost = { openSession() {}, closePane() {}, openReviews() {}, newSession() {}, showList() {}, boardReady() {} };

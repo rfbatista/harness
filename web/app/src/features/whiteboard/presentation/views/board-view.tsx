@@ -2,7 +2,7 @@
 // forwards the person's actions to it (ADR 0108). Classes come from the
 // design system's whiteboard block.
 
-import { useEffect, useRef } from "react";
+import { useCallback, useRef } from "react";
 import { usePresenter } from "../../../../shared/presentation/use-presenter";
 import type { BoardPresenter } from "../presenters/board-presenter";
 import { CardView } from "./card-view";
@@ -14,42 +14,50 @@ const ZOOM_STEP = 1.2;
 
 export function BoardView({ presenter }: { presenter: BoardPresenter }) {
   const vm = usePresenter(presenter);
-  const canvas = useRef<HTMLDivElement>(null);
+  const canvas = useRef<HTMLDivElement | null>(null);
   const pan = useRef<{ x: number; y: number } | null>(null);
   const { w: width, h: height } = vm.canvas;
 
   // The canvas size is the camera's viewport; the wheel is a non-passive listener so it can keep the page still.
-  useEffect(() => {
+  // A ref callback (not an effect): React calls it with the element when it mounts and runs what it returns when it unmounts.
+  const attach = useCallback(
+    (el: HTMLDivElement | null) => {
+      if (!el) return;
+      canvas.current = el;
+      const measure = () => presenter.setViewport(el.clientWidth, el.clientHeight);
+      measure();
+      const observer = new ResizeObserver(measure);
+      observer.observe(el);
+      const wheel = (event: WheelEvent) => {
+        event.preventDefault();
+        const box = el.getBoundingClientRect();
+        if (event.ctrlKey || event.metaKey) presenter.zoomAt(Math.exp(-event.deltaY * 0.01), event.clientX - box.left, event.clientY - box.top);
+        else presenter.panBy(-event.deltaX, -event.deltaY);
+      };
+      el.addEventListener("wheel", wheel, { passive: false });
+      return () => {
+        observer.disconnect();
+        el.removeEventListener("wheel", wheel);
+      };
+    },
+    [presenter],
+  );
+
+  /** Keyboard focus follows the presenter's: the card it walked to, or the canvas after Escape. */
+  const followFocus = () => {
     const el = canvas.current;
     if (!el) return;
-    const measure = () => presenter.setViewport(el.clientWidth, el.clientHeight);
-    measure();
-    const observer = new ResizeObserver(measure);
-    observer.observe(el);
-    const wheel = (event: WheelEvent) => {
-      event.preventDefault();
-      const box = el.getBoundingClientRect();
-      if (event.ctrlKey || event.metaKey) presenter.zoomAt(Math.exp(-event.deltaY * 0.01), event.clientX - box.left, event.clientY - box.top);
-      else presenter.panBy(-event.deltaX, -event.deltaY);
-    };
-    el.addEventListener("wheel", wheel, { passive: false });
-    return () => {
-      observer.disconnect();
-      el.removeEventListener("wheel", wheel);
-    };
-  }, [presenter]);
-
-  // Escape returns focus to the canvas.
-  useEffect(() => {
-    const el = canvas.current;
-    if (vm.focusedId === null && el && el.ownerDocument.activeElement?.closest(".wb-node") && el.contains(el.ownerDocument.activeElement)) el.focus();
-  }, [vm.focusedId]);
+    const id = presenter.viewModel.focusedId;
+    const target = id === null ? el : [...el.querySelectorAll<HTMLElement>(".wb-node")].find((n) => n.dataset.id === id);
+    target?.focus({ preventScroll: true });
+  };
 
   const key = (event: React.KeyboardEvent) => {
     if (event.metaKey || event.ctrlKey || event.altKey) return;
     // Tools in the bar keep their own keys; the canvas and its cards are the board's.
     if ((event.target as HTMLElement).closest(".wb-canvas") && presenter.key({ key: event.key })) {
       event.preventDefault();
+      followFocus();
       return;
     }
     const handled = { t: () => presenter.tidy(), "1": () => presenter.fit(), "0": () => presenter.actualSize(), "+": () => presenter.zoomBy(ZOOM_STEP), "=": () => presenter.zoomBy(ZOOM_STEP), "-": () => presenter.zoomBy(1 / ZOOM_STEP) }[event.key.toLowerCase()];
@@ -96,7 +104,7 @@ export function BoardView({ presenter }: { presenter: BoardPresenter }) {
         </div>
       </div>
       <div
-        ref={canvas}
+        ref={attach}
         className="wb-canvas"
         tabIndex={0}
         role="group"

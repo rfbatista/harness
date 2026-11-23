@@ -5,6 +5,7 @@ import { relativeTime } from "../../../../shared/kernel/format";
 import { Presenter } from "../../../../shared/kernel/presenter";
 import { BoardSourceError, type BoardEvent, type BoardSource, type LiveStatus } from "../../application/ports";
 import { noHost, type BoardHost } from "../../application/host";
+import type { PageSignals } from "../../application/page-bridge";
 import type { BoardPreferences } from "../../application/preferences";
 import { centerOn, fit, isVisible, panBy, zoomAt, type Camera } from "../../domain/camera";
 import { agentLabel, chipOf, detailOf, needsYou, statusView } from "../../domain/card";
@@ -24,6 +25,8 @@ export interface BoardDeps {
   preferences: BoardPreferences;
   /** The page the board sits in; none: the board asks nothing of it. */
   host?: BoardHost;
+  /** What the page tells the board: the session it selected. */
+  signals?: PageSignals;
   ticketId: string;
   projectId: string;
   agentNames: Readonly<Record<string, string>>;
@@ -96,11 +99,18 @@ export class BoardPresenter extends Presenter<BoardViewModel> {
 
   /** Follows the project's live feed until `stop`. */
   follow(): void {
-    if (this.#stopped) return;
-    this.#stop ??= this.#deps.source.follow(this.#deps.projectId, {
+    if (this.#stopped || this.#stop) return;
+    const feed = this.#deps.source.follow(this.#deps.projectId, {
       onEvent: (event) => this.#onEvent(event),
       onStatus: (status) => this.#onStatus(status),
     });
+    const page = this.#deps.signals?.followSelection((id) => this.selectFromPage(id));
+    this.#stop = () => {
+      feed();
+      page?.();
+    };
+    // The page answers with the session it has selected.
+    this.#host.boardReady();
   }
 
   stop(): void {

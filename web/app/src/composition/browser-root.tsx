@@ -15,9 +15,12 @@ import { browserNavigator } from "../features/notifications/infrastructure/brows
 import { httpNotificationsSource } from "../features/notifications/infrastructure/http-notifications-source";
 import { buildTopBar } from "./top-bar-presenters";
 import { TopBarView } from "./top-bar-view";
-import { mountWhiteboard } from "./whiteboard-island";
+import { mountAgentsView, mountWhiteboard } from "./whiteboard-island";
 
 type Dispose = () => void;
+
+/** Islands that read their props themselves, from the page they sit in. */
+const OWN_PROPS = new Set(["agents-view", "agents-whiteboard"]);
 
 /** Mounts the island of `mount` with its `props`; returns what takes it down. */
 /** `fresh`: a swap inserted the mount, with its own props, after the first page load. */
@@ -48,7 +51,8 @@ export function mountIslands(doc: Document): Dispose {
         root.unmount();
       };
     },
-    "agents-whiteboard": (mount, props) => mountWhiteboard(mount, props, api, feed),
+    "agents-view": () => mountAgentsView(win),
+    "agents-whiteboard": (mount) => mountWhiteboard(mount, win, api, feed),
   };
 
   const mounted = new Map<Element, Dispose>();
@@ -59,8 +63,9 @@ export function mountIslands(doc: Document): Dispose {
     const island = islands[name];
     if (!island) return;
     try {
-      // The props script sits beside the mount, inside the same header.
-      mounted.set(el, island(el, readIslandProps(el.parentElement ?? doc, name), fresh));
+      // The props script sits beside the mount, inside the same header; the agents whiteboard islands read the task page's own seed.
+      const props = OWN_PROPS.has(name) ? undefined : readIslandProps(el.parentElement ?? doc, name);
+      mounted.set(el, island(el, props, fresh));
     } catch (err) {
       console.error(`island ${name} was not mounted`, err);
     }

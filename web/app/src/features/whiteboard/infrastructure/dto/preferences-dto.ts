@@ -5,6 +5,7 @@
 import { DtoError } from "../../../../shared/infrastructure/dto/dto-error";
 import { object, type Wire } from "../../../../shared/infrastructure/dto/fields";
 import { MAX_SCALE, MIN_SCALE } from "../../domain/camera";
+import { AGENTS_VIEWS, type AgentsView } from "../../domain/view";
 
 const number = (dto: string, from: Wire, key: string, at = ""): number => {
   const value = from[key];
@@ -74,5 +75,27 @@ export class CameraDto {
 
   toStored(): string {
     return JSON.stringify(this);
+  }
+}
+
+/** The view the person left a task on, stored as its plain name: "list" or "whiteboard". */
+export class AgentsViewDto {
+  constructor(readonly view: AgentsView) {}
+
+  static fromJSON(raw: unknown): AgentsViewDto {
+    if (typeof raw !== "string" || !(AGENTS_VIEWS as readonly string[]).includes(raw)) throw new DtoError("AgentsViewDto", "", "expected list or whiteboard");
+    return new AgentsViewDto(raw as AgentsView);
+  }
+
+  static fromStored(text: string): AgentsViewDto {
+    return AgentsViewDto.fromJSON(text);
+  }
+
+  toJSON(): AgentsView {
+    return this.view;
+  }
+
+  toStored(): string {
+    return this.view;
   }
 }

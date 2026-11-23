@@ -10,5 +10,6 @@ export function recordingHost(): BoardHost & { readonly calls: string[] } {
     openReviews: () => void calls.push("reviews"),
     newSession: () => void calls.push("new"),
     showList: () => void calls.push("list"),
+    boardReady: () => void calls.push("ready"),
   };
 }
