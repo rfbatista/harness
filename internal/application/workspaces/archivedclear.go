@@ -114,6 +114,11 @@ func (s *ArchivedWorktrees) Clear(ctx context.Context, sc ports.ArchivedWorktree
 			res.Skipped = append(res.Skipped, skip)
 			continue
 		}
+		if reason := s.sharedBlock(ctx, f.session, found); reason != "" {
+			skip.Reason = reason
+			res.Skipped = append(res.Skipped, skip)
+			continue
+		}
 		if err := s.clearOne(ctx, f.session); err != nil {
 			skip.Reason, skip.Message = "failed", err.Error()
 			res.Skipped = append(res.Skipped, skip)
@@ -122,6 +127,33 @@ func (s *ArchivedWorktrees) Clear(ctx context.Context, sc ports.ArchivedWorktree
 		res.Cleared++
 	}
 	return res, nil
+}
+
+// sharedBlock says why the session's worktree must stay: "running" while any
+// other session on it runs, "shared" while a session that is not in the clear
+// (another task's) is on it. A worktree no one else is on, the usual case, is
+// not blocked. Sessions in the clear that end up here later find the worktree
+// already cleared and count as cleared.
+func (s *ArchivedWorktrees) sharedBlock(ctx context.Context, sess *domain.Session, found []inScope) string {
+	cleared := make(map[string]bool, len(found))
+	for _, f := range found {
+		cleared[f.session.ID] = true
+	}
+	others, err := s.d.Sessions.Query(ctx, ports.SessionFilter{WorkspaceID: sess.WorkspaceID})
+	if err != nil {
+		return ""
+	}
+	reason := ""
+	for _, o := range others {
+		switch {
+		case o.ID == sess.ID:
+		case !o.Status.IsTerminal():
+			return "running"
+		case !cleared[o.ID]:
+			reason = "shared"
+		}
+	}
+	return reason
 }
 
 func (s *ArchivedWorktrees) clearOne(ctx context.Context, sess *domain.Session) error {

@@ -10,8 +10,10 @@ type ArchivedWorktreesScope struct {
 	ProjectID string
 }
 
-// ClearSkip is a worktree a clear left in place: Reason is "running" or
-// "failed", and Message says why only for a failure.
+// ClearSkip is a worktree a clear left in place: Reason is "running" (the
+// session, or another session on the same worktree, runs), "shared" (a session
+// of a task not in the clear is on the worktree) or "failed", and Message says
+// why only for a failure.
 type ClearSkip struct {
 	SessionID string `json:"session_id"`
 	TaskID    string `json:"task_id"`
