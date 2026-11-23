@@ -88,6 +88,7 @@
 @import url("./blocks/source.css");
 @import url("./blocks/history.css");
 @import url("./blocks/sandbox-tab.css");
+@import url("./blocks/context-tab.css");
 @import url("./blocks/merge-tab.css");
 @import url("./blocks/code-fullscreen.css");
 @import url("./blocks/code-layout.css");

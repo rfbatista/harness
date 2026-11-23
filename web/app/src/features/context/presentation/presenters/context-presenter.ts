@@ -10,7 +10,7 @@ import { serversGroup } from "./servers-group";
 import { toolsGroup } from "./tools-group";
 import { changesGroup, changeText, clockTime } from "./changes-group";
 import { normalize } from "./search";
-import type { ContextGroups, EntryPicker, GroupKey, SearchViewModel } from "./context-view-model";
+import type { ContextGroups, EntryPicker, GroupKey, SearchViewModel, WhiteboardLink } from "./context-view-model";
 import { closedPiece, instructionsGroup, type PieceState } from "./instructions-group";
 
 export type ContextStatus = "idle" | "loading" | "ready" | "unrecorded" | "not_found" | "error";
@@ -33,6 +33,10 @@ export interface ContextViewModel {
   readonly search: SearchViewModel;
   /** Present when the session has more than one entry (it was resumed). */
   readonly picker: EntryPicker | null;
+  /** Present for a delegate when the whiteboard's address is known; hidden otherwise. */
+  readonly whiteboard: WhiteboardLink | null;
+  /** A group a link asked for: the view brings it into sight. Rises with each ask. */
+  readonly reveal: { readonly group: GroupKey; readonly request: number } | null;
   /** The session has ended: nothing here changes any more. */
   readonly ended: boolean;
   /** The one line at the top that names the latest change; null when none is on show. */
@@ -57,9 +61,11 @@ export interface ContextDeps {
   readonly live?: boolean;
   /** The time zone times are shown in; the person's own by default. */
   readonly timeZone?: string;
+  /** Where the task page shows the agents whiteboard with this session selected. Unset until the whiteboard exists: the link stays hidden. */
+  readonly whiteboardHref?: string;
 }
 
-const idle = (ended: boolean): ContextViewModel => ({ status: "idle", message: "", facts: [], groups: null, search: NO_SEARCH, picker: null, ended, live: null });
+const idle = (ended: boolean): ContextViewModel => ({ status: "idle", message: "", facts: [], groups: null, search: NO_SEARCH, picker: null, whiteboard: null, reveal: null, ended, live: null });
 
 export function factRows(f: Facts): FactRow[] {
   return [
@@ -99,6 +105,8 @@ export class ContextPresenter extends Presenter<ContextViewModel> {
   readonly #feed: ContextFeed | undefined;
   readonly #projectId: string;
   readonly #timeZone: string | undefined;
+  readonly #whiteboardHref: string | undefined;
+  #reveal: { group: GroupKey; request: number } | null = null;
   readonly #running: boolean;
   #unfollow: (() => void) | null = null;
   #refreshing = false;
@@ -107,12 +115,13 @@ export class ContextPresenter extends Presenter<ContextViewModel> {
   #rings: ReadonlySet<string> = new Set();
   #liveLine: LiveLine | null = null;
 
-  constructor(source: ContextSource, sessionId: string, { clipboard, feed, projectId = "", live = true, timeZone }: ContextDeps) {
+  constructor(source: ContextSource, sessionId: string, { clipboard, feed, projectId = "", live = true, timeZone, whiteboardHref }: ContextDeps) {
     super(idle(!live));
     this.#running = live;
     this.#feed = feed;
     this.#projectId = projectId;
     this.#timeZone = timeZone;
+    this.#whiteboardHref = whiteboardHref;
     this.#clipboard = clipboard;
     this.#source = source;
     this.#sessionId = sessionId;
@@ -139,7 +148,7 @@ export class ContextPresenter extends Presenter<ContextViewModel> {
   }
 
   #show(status: ContextStatus, message: string): void {
-    this.set({ status, message, facts: [], groups: null, search: NO_SEARCH, picker: null, ended: !this.#running, live: null });
+    this.set({ status, message, facts: [], groups: null, search: NO_SEARCH, picker: null, whiteboard: null, reveal: null, ended: !this.#running, live: null });
   }
 
   /** Loads again after a failed load. */
@@ -264,6 +273,8 @@ export class ContextPresenter extends Presenter<ContextViewModel> {
       facts: factRows(entry.facts),
       search: { query: this.#query, focusRequest: this.#focusRequest },
       picker: this.#picker(),
+      whiteboard: entry.facts.role === "delegate" && this.#whiteboardHref ? { label: "Delegate · see on the whiteboard", href: this.#whiteboardHref } : null,
+      reveal: this.#reveal,
       ended: !this.#running,
       live: this.#liveLine,
       groups: {
@@ -305,6 +316,13 @@ export class ContextPresenter extends Presenter<ContextViewModel> {
   toggleGroup(key: GroupKey): void {
     if (this.#toggled.has(key)) this.#toggled.delete(key);
     else this.#toggled.add(key);
+    if (this.viewModel.status === "ready") this.#render();
+  }
+
+  /** A link lands on a group: it opens and the view brings it into sight. Before the context has loaded it waits. */
+  openAt(key: GroupKey): void {
+    this.openGroup(key);
+    this.#reveal = { group: key, request: (this.#reveal?.request ?? 0) + 1 };
     if (this.viewModel.status === "ready") this.#render();
   }
 

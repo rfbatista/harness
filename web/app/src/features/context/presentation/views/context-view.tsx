@@ -1,4 +1,5 @@
 import { usePresenter } from "../../../../shared/presentation/use-presenter";
+import { useEffect, useRef } from "react";
 import type { ContextPresenter } from "../presenters/context-presenter";
 import { ChangesView } from "./changes-view";
 import { EntryPickerView } from "./entry-picker-view";
@@ -12,13 +13,20 @@ import { ToolsView } from "./tools-view";
 /** The Context tab: a passive view of what its presenter says (the Sandbox tab's shape). */
 export function ContextView({ presenter }: { presenter: ContextPresenter }) {
   const vm = usePresenter(presenter);
+  // A link to a group (ADR 0085's) brings it into sight once it is on the page.
+  const root = useRef<HTMLDivElement>(null);
+  const reveal = vm.reveal;
+  useEffect(() => {
+    if (!reveal || vm.status !== "ready") return;
+    root.current?.querySelector(`[data-group="${reveal.group}"]`)?.scrollIntoView({ block: "start" });
+  }, [reveal?.request, vm.status]);
   return (
-    <div className="[ sandbox-tab ]" data-scroll data-context-tab>
+    <div ref={root} className="[ sandbox-tab ]" data-scroll data-context-tab>
         {(vm.status === "idle" || vm.status === "loading") && (
           <div className="[ skeletons ]" aria-busy="true">
-            <span />
-            <span />
-            <span />
+            <span data-skeleton />
+            <span data-skeleton />
+            <span data-skeleton />
           </div>
         )}
         {(vm.status === "unrecorded" || vm.status === "not_found") && <p className="[ note ]">{vm.message}</p>}
@@ -42,6 +50,11 @@ export function ContextView({ presenter }: { presenter: ContextPresenter }) {
               ))}
             </dl>
           </section>
+        )}
+        {vm.status === "ready" && vm.whiteboard && (
+          <p>
+            <a href={vm.whiteboard.href}>{vm.whiteboard.label}</a>
+          </p>
         )}
         {vm.status === "ready" && vm.picker && <EntryPickerView picker={vm.picker} presenter={presenter} />}
         {vm.status === "ready" && vm.ended && <p className="[ note ]">This session has ended. What it was given is below; nothing here changes any more.</p>}

@@ -29,6 +29,7 @@ templ Page(v PageView) {
 			id="main"
 			class="[ frame ]"
 			x-data="sessionsPage"
+			x-on:keydown.window.capture="claimContextKey"
 			data-seed="sessions-seed"
 			x-on:session-created="sessionCreated"
 			x-on:new-session-cancelled="cancelCreating"

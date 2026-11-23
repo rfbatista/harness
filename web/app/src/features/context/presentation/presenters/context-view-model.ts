@@ -2,6 +2,10 @@
 
 export type GroupKey = "instructions" | "tools" | "servers" | "skills" | "hooks" | "changes";
 
+const GROUP_KEYS: readonly string[] = ["instructions", "tools", "servers", "skills", "hooks", "changes"];
+
+export const isGroupKey = (value: string): value is GroupKey => GROUP_KEYS.includes(value);
+
 /** What a group's builder is given: the group's own identity and whether it is open. */
 export interface HeadingBase {
   readonly key: GroupKey;
@@ -139,6 +143,12 @@ export interface EntryOption {
 export interface EntryPicker {
   readonly options: readonly EntryOption[];
   readonly selected: string;
+}
+
+/** The link from a delegate's context to the agents whiteboard with this session selected. */
+export interface WhiteboardLink {
+  readonly label: string;
+  readonly href: string;
 }
 
 export interface SearchViewModel {

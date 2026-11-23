@@ -70,6 +70,8 @@ export const sessionsPage = ({
 
   return {
     projectId: "",
+    /** The Context tab group a link asked to open; "" for none. */
+    contextGroup: "",
     ticketId: "",
     /** @type {import("../../domain/session.js").Session[]} */
     sessions: [],
@@ -247,7 +249,20 @@ export const sessionsPage = ({
       return [{ key: `${this.selected.id}:${this.selected.stoppable ? "live" : "ended"}`, props: this.contextProps() }];
     },
     contextProps() {
-      return JSON.stringify({ session_id: this.selected.id, project_id: this.projectId, live: this.selected.stoppable });
+      return JSON.stringify({ session_id: this.selected.id, project_id: this.projectId, live: this.selected.stoppable, group: this.contextGroup });
+    },
+    /**
+     * Alt+Shift+C opens the Context tab: the page's, never the agent's, so it is
+     * heard in the capture phase before the terminal (as Alt+Shift+Q is).
+     * @param {KeyboardEvent} event
+     */
+    claimContextKey(event) {
+      if (!event.altKey || !event.shiftKey || event.ctrlKey || event.metaKey || event.code !== "KeyC") return;
+      if (!this.showingSession) return;
+      event.preventDefault();
+      event.stopPropagation();
+      if (event.repeat) return;
+      this.showContext();
     },
     /** A session with a branch has a Merge tab, where a merge into the default branch is offered when it applies. */
     get hasMergeTab() {
@@ -607,6 +622,12 @@ export const sessionsPage = ({
       // A code URL opens its session on the Code tab; ?session= opens one on its terminal.
       const asked = openCode || new URLSearchParams(location?.search ?? "").get("session");
       if (openCode) this.detailTab = "code";
+      // ?session=<id>&tab=context[&group=instructions] opens the Context tab (ADR 0085's "Instructions it started with" link lands on its Instructions group).
+      const query = new URLSearchParams(location?.search ?? "");
+      if (!openCode && query.get("tab") === "context") {
+        this.detailTab = "context";
+        this.contextGroup = query.get("group") ?? "";
+      }
       // A link to a session opens it: on a narrow screen its detail, not the list.
       this.detailOpen = this.sessions.some((s) => s.id === asked);
       this.selectedId = this.detailOpen ? asked : (group(this.sessions)[0]?.sessions[0]?.id ?? null);
@@ -760,6 +781,7 @@ export const sessionsPage = ({
     showContext() {
       this.leaveCode();
       this.detailTab = "context";
+      this.contextGroup = "";
     },
     /** The Merge tab: merge the branch into the repository's default branch. */
     showMerge() {

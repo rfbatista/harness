@@ -21,6 +21,7 @@ import { httpContextFeed } from "../features/context/infrastructure/http-context
 import { ContextDotPresenter } from "../features/context/presentation/presenters/context-dot-presenter";
 import { ContextDotView } from "../features/context/presentation/views/context-dot-view";
 import { ContextPresenter } from "../features/context/presentation/presenters/context-presenter";
+import { isGroupKey } from "../features/context/presentation/presenters/context-view-model";
 import { ContextView } from "../features/context/presentation/views/context-view";
 import { buildTopBar } from "./top-bar-presenters";
 import { TopBarView } from "./top-bar-view";
@@ -60,10 +61,11 @@ export function mountIslands(doc: Document): Dispose {
     },
     // The Context tab of the session pane: client-rendered, mounted while the tab is shown.
     "session-context": (mount, props) => {
-      const { session_id, project_id, live } = ContextPropsDto.fromJSON(props);
+      const { session_id, project_id, live, group } = ContextPropsDto.fromJSON(props);
       const presenter = new ContextPresenter(contextSource, session_id, { clipboard: browserClipboard(win.navigator), feed: contextFeed, projectId: project_id, live });
       const root = createRoot(mount);
       root.render(<ContextView presenter={presenter} />);
+      if (isGroupKey(group)) presenter.openAt(group);
       presenter.open();
       return () => {
         presenter.close();
