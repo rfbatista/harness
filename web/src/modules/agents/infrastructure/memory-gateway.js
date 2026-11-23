@@ -76,6 +76,8 @@ export function memoryCatalogServer({ catalog, projects = {}, projectNames = {},
         .filter((id) => (enabledAgents[id]?.mode ?? "all") === "all" || enabledAgents[id].agents.includes(a.name))
         .map((id) => ({ id, name: projectNames[id] ?? id, mode: enabledAgents[id]?.mode ?? "all" }));
     }
+    // Every mode is All agents here: the in-memory server keeps no mode agents.
+    for (const a of c.agents) a.available_in_modes = ["", "architect", "implement", "design", "product", "designsystem", "review", "test", "qa", "operate"];
     for (const b of c.bundles) {
       b.resolved_skills = [...new Set(expand(b.entries, new Set([b.name])))].filter((s) => skillNames.has(s));
       b.used_by_agents = c.agents.filter((a) => a.entries.includes(`@${b.name}`)).map((a) => a.name);
@@ -346,6 +348,7 @@ export function memoryCatalogServer({ catalog, projects = {}, projectNames = {},
       const s = cat.skills.find((x) => x.name === name) ?? fail("SKILL_NOT_FOUND", `no skill ${name}`, 404);
       return { skill: { name, description: s.description, body: `# ${name}\n`, files: [], agents: s.agents, bundles: s.bundles, agent_count: s.agent_count }, versions: clone(cat.versions) };
     },
+    "GET get_mode_agents": () => ({ modes: ["", "architect", "implement", "design", "product", "designsystem", "review", "test", "qa", "operate"].map((mode) => ({ mode, name: mode, state: "all", agents: [], no_agent: true })) }),
     "GET list_projects": () => ({ projects: Object.keys(projectLists).map((id) => ({ id, name: projectNames[id] ?? id })) }),
     "GET check_env_vars": ({ names }) => Object.fromEntries(String(names ?? "").split(",").filter(Boolean).map((n) => [n, env[n] === true])),
     "POST undo_catalog_change": ({ change_id: id }) => {

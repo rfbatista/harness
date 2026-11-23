@@ -112,6 +112,9 @@ type Service struct {
 	// assignments says which agents a repository assigns (ADR 0061); nil
 	// assigns every agent everywhere.
 	assignments ports.AgentAssignments
+	// modeAgents says which agents each session mode accepts (ADR 0103); nil
+	// accepts all.
+	modeAgents ports.SettingsReader
 	// repoPrompts gives the text an agent adds in a repository; nil adds none.
 	repoPrompts ports.RepositoryPromptSections
 
@@ -554,6 +557,12 @@ func (s *Service) prepare(ctx context.Context, in prepareInput) (*prepared, erro
 	// fail cheaply instead of creating (and then rolling back) a worktree.
 	ag, err := s.resolveAgent(in.AgentID, in.Mode)
 	if err != nil {
+		return nil, err
+	}
+	if err := s.checkModeAgents(in.Mode, ag.agent); err != nil {
+		if ag.cleanup != nil {
+			ag.cleanup()
+		}
 		return nil, err
 	}
 	if ag.agent != nil && !proj.AgentEnabled(ag.agent.Name) {

@@ -22,6 +22,7 @@ templ Page(frame shell.Frame, v View) {
 							}
 						</ul>
 					</section>
+					@modeAgentsSection()
 					if len(v.Assistants) > 0 {
 						<section class="[ pane ]" aria-labelledby="models-assistants-title">
 							<header><h2 id="models-assistants-title">Assistants</h2></header>
@@ -70,4 +71,71 @@ templ tierRow(t Tier) {
 			</div>
 		}
 	</li>
+}
+
+// modeAgentsSection is the Mode agents section: which agents each session mode
+// may start (ADR 0103). The modeAgents component
+// (web/src/modules/models/presentation/components/modeAgents.js) reads the
+// setting and the catalog and draws one row per mode.
+templ modeAgentsSection() {
+	<section class="[ pane ]" aria-labelledby="models-mode-agents-title" x-data="modeAgents" data-mode-agents x-bind:data-feed="feedStatus">
+		<header><h2 id="models-mode-agents-title">Mode agents</h2></header>
+		<div class="[ flow ] [ flow-space-s ]">
+			<p class="[ text-sm color-ink-muted ]">Which agents a session may run as, by its mode. All agents is the default: every agent in the catalog, agents created later, and a session with no agent. Selected agents allows only the ones ticked. A change reaches sessions started afterwards; running sessions are not touched.</p>
+			<template x-if="error">
+				<div class="[ banner ]" data-tone="danger" role="alert" data-mode-agents-error>
+					<div class="[ flow ] [ flow-space-3xs grow ]">
+						<span x-text="error.message"></span>
+						<span class="[ code ]"><span x-text="error.code"></span> · <span x-text="error.next"></span></span>
+					</div>
+					<button type="button" class="[ button ]" data-variant="ghost" data-size="sm" x-on:click="dismissError">Dismiss</button>
+				</div>
+			</template>
+			<ul role="list" class="[ list ]">
+				<template x-for="v in views" x-bind:key="v.mode">
+					<li class="[ flow ] [ flow-space-2xs ]" data-mode-agents-row x-bind:data-mode-agents-row="v.mode">
+						<div class="[ row ]" style="--row-columns: 9rem auto">
+							<span class="[ title ]" data-mode-agents-name x-text="v.name"></span>
+							<div class="[ segmented ]" role="group" x-bind:aria-label="v.legend" style="justify-self: start">
+								<button type="button" data-state="all" x-bind:aria-pressed="v.isAll" x-bind:disabled="v.saving" x-on:click="chooseAll(v.mode)">All agents</button>
+								<button type="button" data-state="selected" x-bind:aria-pressed="v.isSelected" x-bind:disabled="v.saving" x-on:click="chooseSelected(v.mode)">Selected agents</button>
+							</div>
+						</div>
+						<template x-if="v.isSelected">
+							<fieldset class="[ targets ]" x-bind:aria-label="v.legend" style="border: 0; padding: 0; margin: 0; min-inline-size: 0">
+								<template x-for="a in v.agentRows" x-bind:key="a.name">
+									<label class="[ target ]" data-agent-row x-bind:data-agent="a.name">
+										<input type="checkbox" x-bind:checked="a.checked" x-bind:disabled="v.saving" x-on:change="toggleAgent(v.mode, a.name)"/>
+										<div class="[ flow ] [ flow-space-3xs ]">
+											<span class="[ font-mono text-sm ]" x-text="a.name"></span>
+											<span class="[ text-xs color-ink-faint ]" x-text="a.description"></span>
+										</div>
+									</label>
+								</template>
+								<label class="[ target ]" data-no-agent>
+									<input type="checkbox" x-bind:checked="v.noAgentChecked" x-bind:disabled="v.saving" x-on:change="toggleNoAgent(v.mode)"/>
+									<div class="[ flow ] [ flow-space-3xs ]">
+										<span class="[ text-sm ]">No agent</span>
+										<span class="[ text-xs color-ink-faint ]">A session that runs as no agent.</span>
+									</div>
+								</label>
+							</fieldset>
+						</template>
+						<div role="status" aria-live="polite">
+							<template x-if="v.empty">
+								<div class="[ banner ]" data-tone="attention" data-mode-agents-empty>
+									<svg aria-hidden="true" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><path d="M8 2l6.5 11.5h-13z"></path><path d="M8 6.5v3M8 11.6v.1"></path></svg>
+									<span x-text="v.emptyText"></span>
+								</div>
+							</template>
+						</div>
+						<div class="[ cluster ]" style="--gutter: var(--space-xs)">
+							<button type="button" class="[ button ]" data-variant="primary" data-size="sm" x-bind:disabled="!v.dirty || v.saving" x-bind:aria-busy="v.saving" x-on:click="save(v.mode)" x-text="v.saveLabel">Save</button>
+							<span class="[ text-sm color-ink-muted ]" role="status" aria-live="polite" x-text="v.notice"></span>
+						</div>
+					</li>
+				</template>
+			</ul>
+		</div>
+	</section>
 }

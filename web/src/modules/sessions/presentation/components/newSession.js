@@ -161,7 +161,7 @@ export const newSession = ({ gateway, debounceMs = 300, location = globalThis.lo
   /** Selects the wanted agent when the project's enabled list has it; any other name is ignored. */
   chooseWantedAgent() {
     if (!this.wantedAgent) return;
-    const match = this.agents.find((a) => a.name === this.wantedAgent);
+    const match = this.offeredAgents.find((a) => a.name === this.wantedAgent);
     if (!match) return;
     this.agentId = match.id;
     this.wantedAgent = "";
@@ -302,6 +302,7 @@ export const newSession = ({ gateway, debounceMs = 300, location = globalThis.lo
   followMode() {
     if (!this.modelPicked) this.model = this.modeModel;
     if (!this.accessPicked) this.access = this.presetAccess;
+    this.followAgentToMode();
   },
   /** @param {{ target: { value: string } }} event the select's change */
   pickModel(event) {
@@ -675,6 +676,7 @@ export const newSession = ({ gateway, debounceMs = 300, location = globalThis.lo
   get problem() {
     if (this.repositoryId === "") return "Pick a repository.";
     if (this.noAgentEnabled) return this.noAgentLine;
+    if (this.modeProblem) return this.modeProblem;
     if (this.ticketId === "") return noTaskProblem(this.mode);
     if (this.existingChosen && this.worktreeId === "") return "Pick a worktree.";
     if (this.joining) return "";

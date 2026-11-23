@@ -60,6 +60,10 @@ func Page(frame shell.Frame, v View) templ.Component {
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
+			templ_7745c5c3_Err = modeAgentsSection().Render(ctx, templ_7745c5c3_Buffer)
+			if templ_7745c5c3_Err != nil {
+				return templ_7745c5c3_Err
+			}
 			if len(v.Assistants) > 0 {
 				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 3, "<section class=\"[ pane ]\" aria-labelledby=\"models-assistants-title\"><header><h2 id=\"models-assistants-title\">Assistants</h2></header><ul role=\"list\" class=\"[ list ]\">")
 				if templ_7745c5c3_Err != nil {
@@ -118,7 +122,7 @@ func tierRow(t Tier) templ.Component {
 		var templ_7745c5c3_Var4 string
 		templ_7745c5c3_Var4, templ_7745c5c3_Err = templ.ResolveAttributeValue(t.Key)
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `models/page.templ`, Line: 42, Col: 80}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `models/page.templ`, Line: 43, Col: 80}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var4)
 		if templ_7745c5c3_Err != nil {
@@ -131,7 +135,7 @@ func tierRow(t Tier) templ.Component {
 		var templ_7745c5c3_Var5 string
 		templ_7745c5c3_Var5, templ_7745c5c3_Err = templ.ResolveAttributeValue("model-" + t.Title)
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `models/page.templ`, Line: 54, Col: 52}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `models/page.templ`, Line: 55, Col: 52}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var5)
 		if templ_7745c5c3_Err != nil {
@@ -144,7 +148,7 @@ func tierRow(t Tier) templ.Component {
 		var templ_7745c5c3_Var6 string
 		templ_7745c5c3_Var6, templ_7745c5c3_Err = templ.JoinStringErrs(t.Title)
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `models/page.templ`, Line: 54, Col: 64}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `models/page.templ`, Line: 55, Col: 64}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var6))
 		if templ_7745c5c3_Err != nil {
@@ -157,7 +161,7 @@ func tierRow(t Tier) templ.Component {
 		var templ_7745c5c3_Var7 string
 		templ_7745c5c3_Var7, templ_7745c5c3_Err = templ.ResolveAttributeValue("model-" + t.Title)
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `models/page.templ`, Line: 55, Col: 34}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `models/page.templ`, Line: 56, Col: 34}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var7)
 		if templ_7745c5c3_Err != nil {
@@ -175,7 +179,7 @@ func tierRow(t Tier) templ.Component {
 			var templ_7745c5c3_Var8 string
 			templ_7745c5c3_Var8, templ_7745c5c3_Err = templ.ResolveAttributeValue(c.Value)
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `models/page.templ`, Line: 57, Col: 28}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `models/page.templ`, Line: 58, Col: 28}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var8)
 			if templ_7745c5c3_Err != nil {
@@ -198,7 +202,7 @@ func tierRow(t Tier) templ.Component {
 			var templ_7745c5c3_Var9 string
 			templ_7745c5c3_Var9, templ_7745c5c3_Err = templ.JoinStringErrs(c.Label)
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `models/page.templ`, Line: 57, Col: 75}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `models/page.templ`, Line: 58, Col: 75}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var9))
 			if templ_7745c5c3_Err != nil {
@@ -216,7 +220,7 @@ func tierRow(t Tier) templ.Component {
 		var templ_7745c5c3_Var10 string
 		templ_7745c5c3_Var10, templ_7745c5c3_Err = templ.JoinStringErrs(t.Lead)
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `models/page.templ`, Line: 61, Col: 49}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `models/page.templ`, Line: 62, Col: 49}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var10))
 		if templ_7745c5c3_Err != nil {
@@ -234,7 +238,7 @@ func tierRow(t Tier) templ.Component {
 			var templ_7745c5c3_Var11 string
 			templ_7745c5c3_Var11, templ_7745c5c3_Err = templ.JoinStringErrs(t.UnavailableReason)
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `models/page.templ`, Line: 65, Col: 50}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `models/page.templ`, Line: 66, Col: 50}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var11))
 			if templ_7745c5c3_Err != nil {
@@ -252,7 +256,7 @@ func tierRow(t Tier) templ.Component {
 				var templ_7745c5c3_Var12 templ.SafeURL
 				templ_7745c5c3_Var12, templ_7745c5c3_Err = templ.JoinURLErrs(templ.SafeURL(t.FixURL))
 				if templ_7745c5c3_Err != nil {
-					return templ.Error{Err: templ_7745c5c3_Err, FileName: `models/page.templ`, Line: 67, Col: 39}
+					return templ.Error{Err: templ_7745c5c3_Err, FileName: `models/page.templ`, Line: 68, Col: 39}
 				}
 				_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var12))
 				if templ_7745c5c3_Err != nil {
@@ -269,6 +273,39 @@ func tierRow(t Tier) templ.Component {
 			}
 		}
 		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 23, "</li>")
+		if templ_7745c5c3_Err != nil {
+			return templ_7745c5c3_Err
+		}
+		return nil
+	})
+}
+
+// modeAgentsSection is the Mode agents section: which agents each session mode
+// may start (ADR 0103). The modeAgents component
+// (web/src/modules/models/presentation/components/modeAgents.js) reads the
+// setting and the catalog and draws one row per mode.
+func modeAgentsSection() templ.Component {
+	return templruntime.GeneratedTemplate(func(templ_7745c5c3_Input templruntime.GeneratedComponentInput) (templ_7745c5c3_Err error) {
+		templ_7745c5c3_W, ctx := templ_7745c5c3_Input.Writer, templ_7745c5c3_Input.Context
+		if templ_7745c5c3_CtxErr := ctx.Err(); templ_7745c5c3_CtxErr != nil {
+			return templ_7745c5c3_CtxErr
+		}
+		templ_7745c5c3_Buffer, templ_7745c5c3_IsBuffer := templruntime.GetBuffer(templ_7745c5c3_W)
+		if !templ_7745c5c3_IsBuffer {
+			defer func() {
+				templ_7745c5c3_BufErr := templruntime.ReleaseBuffer(templ_7745c5c3_Buffer)
+				if templ_7745c5c3_Err == nil {
+					templ_7745c5c3_Err = templ_7745c5c3_BufErr
+				}
+			}()
+		}
+		ctx = templ.InitializeContext(ctx)
+		templ_7745c5c3_Var13 := templ.GetChildren(ctx)
+		if templ_7745c5c3_Var13 == nil {
+			templ_7745c5c3_Var13 = templ.NopComponent
+		}
+		ctx = templ.ClearChildren(ctx)
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 24, "<section class=\"[ pane ]\" aria-labelledby=\"models-mode-agents-title\" x-data=\"modeAgents\" data-mode-agents x-bind:data-feed=\"feedStatus\"><header><h2 id=\"models-mode-agents-title\">Mode agents</h2></header><div class=\"[ flow ] [ flow-space-s ]\"><p class=\"[ text-sm color-ink-muted ]\">Which agents a session may run as, by its mode. All agents is the default: every agent in the catalog, agents created later, and a session with no agent. Selected agents allows only the ones ticked. A change reaches sessions started afterwards; running sessions are not touched.</p><template x-if=\"error\"><div class=\"[ banner ]\" data-tone=\"danger\" role=\"alert\" data-mode-agents-error><div class=\"[ flow ] [ flow-space-3xs grow ]\"><span x-text=\"error.message\"></span> <span class=\"[ code ]\"><span x-text=\"error.code\"></span> · <span x-text=\"error.next\"></span></span></div><button type=\"button\" class=\"[ button ]\" data-variant=\"ghost\" data-size=\"sm\" x-on:click=\"dismissError\">Dismiss</button></div></template><ul role=\"list\" class=\"[ list ]\"><template x-for=\"v in views\" x-bind:key=\"v.mode\"><li class=\"[ flow ] [ flow-space-2xs ]\" data-mode-agents-row x-bind:data-mode-agents-row=\"v.mode\"><div class=\"[ row ]\" style=\"--row-columns: 9rem auto\"><span class=\"[ title ]\" data-mode-agents-name x-text=\"v.name\"></span><div class=\"[ segmented ]\" role=\"group\" x-bind:aria-label=\"v.legend\" style=\"justify-self: start\"><button type=\"button\" data-state=\"all\" x-bind:aria-pressed=\"v.isAll\" x-bind:disabled=\"v.saving\" x-on:click=\"chooseAll(v.mode)\">All agents</button> <button type=\"button\" data-state=\"selected\" x-bind:aria-pressed=\"v.isSelected\" x-bind:disabled=\"v.saving\" x-on:click=\"chooseSelected(v.mode)\">Selected agents</button></div></div><template x-if=\"v.isSelected\"><fieldset class=\"[ targets ]\" x-bind:aria-label=\"v.legend\" style=\"border: 0; padding: 0; margin: 0; min-inline-size: 0\"><template x-for=\"a in v.agentRows\" x-bind:key=\"a.name\"><label class=\"[ target ]\" data-agent-row x-bind:data-agent=\"a.name\"><input type=\"checkbox\" x-bind:checked=\"a.checked\" x-bind:disabled=\"v.saving\" x-on:change=\"toggleAgent(v.mode, a.name)\"><div class=\"[ flow ] [ flow-space-3xs ]\"><span class=\"[ font-mono text-sm ]\" x-text=\"a.name\"></span> <span class=\"[ text-xs color-ink-faint ]\" x-text=\"a.description\"></span></div></label></template><label class=\"[ target ]\" data-no-agent><input type=\"checkbox\" x-bind:checked=\"v.noAgentChecked\" x-bind:disabled=\"v.saving\" x-on:change=\"toggleNoAgent(v.mode)\"><div class=\"[ flow ] [ flow-space-3xs ]\"><span class=\"[ text-sm ]\">No agent</span> <span class=\"[ text-xs color-ink-faint ]\">A session that runs as no agent.</span></div></label></fieldset></template><div role=\"status\" aria-live=\"polite\"><template x-if=\"v.empty\"><div class=\"[ banner ]\" data-tone=\"attention\" data-mode-agents-empty><svg aria-hidden=\"true\" viewBox=\"0 0 16 16\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.5\" stroke-linecap=\"round\"><path d=\"M8 2l6.5 11.5h-13z\"></path><path d=\"M8 6.5v3M8 11.6v.1\"></path></svg> <span x-text=\"v.emptyText\"></span></div></template></div><div class=\"[ cluster ]\" style=\"--gutter: var(--space-xs)\"><button type=\"button\" class=\"[ button ]\" data-variant=\"primary\" data-size=\"sm\" x-bind:disabled=\"!v.dirty || v.saving\" x-bind:aria-busy=\"v.saving\" x-on:click=\"save(v.mode)\" x-text=\"v.saveLabel\">Save</button> <span class=\"[ text-sm color-ink-muted ]\" role=\"status\" aria-live=\"polite\" x-text=\"v.notice\"></span></div></li></template></ul></div></section>")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}

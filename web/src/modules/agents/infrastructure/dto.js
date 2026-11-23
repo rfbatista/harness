@@ -62,6 +62,7 @@ export function toCatalog(body) {
       missingSkills: strings(a?.missing_skills, "missing_skills"),
       mcpServers: strings(a?.mcp_servers, "mcp_servers"),
       allowedTools: strings(a?.allowed_tools, "allowed_tools"),
+      availableInModes: strings(a?.available_in_modes ?? [], "available_in_modes"),
       enabledIn: list(a?.enabled_in, "enabled_in").map((e) => ({ id: String(e?.id ?? ""), name: String(e?.name ?? ""), mode: e?.mode === "selected" ? "selected" : "all" })),
       repositories: list(a?.repositories, "repositories").map((r) => ({
         projectId: String(r?.project_id ?? ""),
@@ -134,6 +135,7 @@ export function toWriteResult(body) {
       summary: String(c.summary ?? ""),
       writes: list(c.writes, "writes").map((w) => ({ path: String(w?.path ?? ""), before: w?.before ?? null, after: w?.after ?? null, ...(w?.encoding === "base64" ? { encoding: "base64" } : {}) })),
       projects: (Array.isArray(c.projects) ? c.projects : []).map((p) => ({ id: String(p?.id ?? ""), name: String(p?.name ?? ""), before: strings(p?.before ?? [], "before"), after: strings(p?.after ?? [], "after"), enabledAgentsBefore: strings(p?.enabled_agents_before ?? [], "enabled_agents_before"), enabledAgentsAfter: strings(p?.enabled_agents_after ?? [], "enabled_agents_after") })),
+      modes: (Array.isArray(c.modes) ? c.modes : []).map((m) => ({ mode: String(m?.mode ?? ""), name: String(m?.name ?? ""), before: strings(m?.before ?? [], "before"), after: strings(m?.after ?? [], "after") })),
     },
     versions: object(body.versions),
     probe: body.probe ? toProbeOutcome(body.probe) : null,
@@ -219,11 +221,12 @@ const withPrevious = (previousName) => (previousName ? { previous_name: previous
 
 export function agentBody(input) {
   const a = input.agent;
-  // `projects` is the full set of Selected projects that list the agent; left out, the lists stay as they are.
+  // `projects` and `modes` are the full set of Selected projects and modes that list the agent; left out, the lists stay as they are.
   return {
     ...withPrevious(input.previousName),
     agent: { name: a.name, description: a.description, aliases: a.aliases ?? [], entries: a.entries ?? [], mcp_servers: a.mcpServers ?? [], allowed_tools: a.allowedTools ?? [] },
     ...(input.projects === undefined ? {} : { projects: input.projects }),
+    ...(input.modes === undefined ? {} : { modes: input.modes }),
   };
 }
 
@@ -260,4 +263,11 @@ export function mcpServerBody(input) {
 /** @param {unknown} body @returns {{ id: string, name: string }[]} */
 export function toProjectList(body) {
   return list(/** @type {any} */ (body)?.projects, "projects").map((p) => ({ id: String(p?.id ?? ""), name: String(p?.name ?? "") }));
+}
+
+/** Each session mode's state from get_mode_agents. @param {unknown} body @returns {import("../domain/agentModes.js").ModeStates} */
+export function toModeStates(body) {
+  const out = {};
+  for (const m of list(/** @type {any} */ (body)?.modes, "modes")) out[String(m?.mode ?? "")] = m?.state === "selected" ? "selected" : "all";
+  return out;
 }

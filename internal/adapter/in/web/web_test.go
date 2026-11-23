@@ -427,7 +427,7 @@ func TestTaskPageListsItsSessionsBesideTheDetail(t *testing.T) {
 		`x-on:click="startCreating"`,
 		`x-data="sessionsNewSession(projectId, ticketId, formLockedMode, bringUnderIds)"`,
 		`data-default-repository="r-harness"`,
-		`<option value="" data-description="claude with no agent definition">Plain claude</option>`,
+		`<template x-for="a in agentSelectOptions" x-bind:key="a.name">`, // Plain claude is the first option the mode allows
 		// The agent options are drawn in the browser from the enabled agents the server seeds.
 		`data-agents="[{&#34;description&#34;:&#34;&#34;,&#34;id&#34;:&#34;reviewer&#34;,&#34;name&#34;:&#34;Reviewer&#34;},{&#34;description&#34;:&#34;&#34;,&#34;id&#34;:&#34;backend&#34;,&#34;name&#34;:&#34;Backend dev&#34;}]"`,
 		`<option value="r-kit">harnesskit</option>`,
@@ -521,7 +521,7 @@ func TestProjectBoardOffersToBrainstormAFeature(t *testing.T) {
 		`id="brainstorm-open" aria-haspopup="dialog" aria-controls="brainstorm" x-on:click="open">Brainstorm a feature</button>`,
 		`role="dialog" id="brainstorm" popover="manual" data-trap aria-labelledby="brainstorm-title" x-data="popupDialog"`,
 		`x-on:submit.prevent="start"`,
-		`<option value="" data-description="claude with no agent definition">Plain claude</option>`,
+		`<template x-for="a in agentSelectOptions" x-bind:key="a.name">`, // Plain claude is the first option the mode allows
 		// The agent options are drawn in the browser from the enabled agents the server seeds.
 		`data-agents="[{&#34;description&#34;:&#34;&#34;,&#34;id&#34;:&#34;reviewer&#34;,&#34;name&#34;:&#34;Reviewer&#34;},{&#34;description&#34;:&#34;&#34;,&#34;id&#34;:&#34;backend&#34;,&#34;name&#34;:&#34;Backend dev&#34;}]"`,
 		`<option value="r-kit">harnesskit</option>`,

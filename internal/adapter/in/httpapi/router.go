@@ -237,6 +237,8 @@ func NewRouter(h *Handler, opts ...Option) *echo.Echo {
 	g.POST("/set_project_mcp_settings", h.handleSetProjectMCPSettings)
 	g.GET("/get_project_agents", h.handleGetProjectAgents)
 	g.POST("/set_project_agents", h.handleSetProjectAgents)
+	g.GET("/get_mode_agents", h.handleGetModeAgents)
+	g.POST("/set_mode_agents", h.handleSetModeAgents)
 	g.GET("/get_repository_agents", h.handleGetRepositoryAgents)
 	g.GET("/get_repository_prompt", h.handleGetRepositoryPrompt)
 	g.POST("/save_repository_prompt", h.handleSaveRepositoryPrompt)

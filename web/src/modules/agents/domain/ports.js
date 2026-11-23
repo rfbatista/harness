@@ -19,6 +19,7 @@
  * @property {string[]} allowedTools  empty: Claude's default tool set
  * @property {{ sessions: number, zones: number } | null} usage  sessions that ever ran as the agent, and zones (architecture records) that assign it; null when the server does not say
  * @property {{ projectId: string, repositoryId: string, repositoryName: string, unassigned: boolean, promptSet: boolean, listVersion: string }[]} [repositories]  for each project that enables the agent, its repositories: where it is assigned and whether it has a repository prompt (repository agents contract, section 2)
+ * @property {string[]} availableInModes  the session modes (values, "" for Default) the agent may start in: each All agents mode and each Selected mode that lists it
  * @property {{ id: string, name: string, mode: "all" | "selected" }[]} enabledIn  every project the agent is enabled in: each All project, and each Selected project that lists it
  * @property {Problem[]} problems
  *
@@ -80,7 +81,7 @@
  * @property {boolean} [dryRun]  write nothing; answer what would be written
  *
  * @typedef {object} WriteResult
- * @property {{ id: string, summary: string, writes: { path: string, before: string | null, after: string | null, encoding?: "base64" }[], projects: { id: string, name: string, before: string[], after: string[], enabledAgentsBefore: string[], enabledAgentsAfter: string[] }[] }} change
+ * @property {{ id: string, summary: string, writes: { path: string, before: string | null, after: string | null, encoding?: "base64" }[], projects: { id: string, name: string, before: string[], after: string[], enabledAgentsBefore: string[], enabledAgentsAfter: string[] }[], modes?: { mode: string, name: string, before: string[], after: string[] }[] }} change
  *           id is "" for a dry run; before is null for a new file, after for a deleted one;
  *           projects are the project lists the change sets: MCP servers (before, after) and enabled agents (enabledAgentsBefore, enabledAgentsAfter)
  * @property {Record<string, string>} versions
@@ -120,7 +121,7 @@
  * @property {() => Promise<Catalog>} getCatalog
  * @property {(name: string) => Promise<SkillDetail>} getSkill  rejects SKILL_NOT_FOUND
  * @property {(names: string[]) => Promise<Record<string, boolean>>} checkEnvVars  whether each is set on the server; never a value
- * @property {(input: { previousName?: string, agent: { name: string, description: string, aliases: string[], entries: string[], mcpServers: string[], allowedTools: string[] }, projects?: string[] }, options?: WriteOptions) => Promise<WriteResult>} saveAgent
+ * @property {(input: { previousName?: string, agent: { name: string, description: string, aliases: string[], entries: string[], mcpServers: string[], allowedTools: string[] }, projects?: string[], modes?: string[] }, options?: WriteOptions) => Promise<WriteResult>} saveAgent
  * @property {(name: string, options?: WriteOptions) => Promise<WriteResult>} deleteAgent
  * @property {(input: { previousName?: string, bundle: { name: string, entries: string[] } }, options?: WriteOptions) => Promise<WriteResult>} saveBundle
  * @property {(name: string, options?: WriteOptions) => Promise<WriteResult>} deleteBundle
@@ -132,6 +133,7 @@
  * @property {(server: object) => Promise<Probe>} testMcpServer  an unsaved server; stores nothing
  * @property {(name: string) => Promise<{ server: CatalogMcpServer, probe: ProbeOutcome }>} refreshMcpServerTools  probes a saved server and stores only its tool data; rejects UNKNOWN_REFERENCE
  * @property {() => Promise<{ id: string, name: string }[]>} listProjects  every project, for Who gets it
+ * @property {() => Promise<import("./agentModes.js").ModeStates>} getModeStates  each session mode's state, All agents or Selected agents (get_mode_agents)
  * @property {(projectId: string) => Promise<string[]>} getProjectMcpServers
  * @property {(projectId: string, names: string[]) => Promise<string[]>} setProjectMcpServers  the Added servers only; bans and overrides stay
  * @property {(projectId: string) => Promise<ProjectMcpSettings>} getProjectMcpSettings  every server's state and tools

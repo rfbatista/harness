@@ -11,7 +11,7 @@ import (
 // repositories (its applications), how the code is carved into bounded
 // contexts and zones, and the agents it can hand work to. They are read-only
 // and, like the task tools, scoped by the session id, never by arguments.
-func sessionProjectTools(sessions ports.SessionRepository, agents ports.AgentLister, arch ports.ArchitectureMap, repos ports.RepositoryLister, placements ports.AgentPlacements) []domain.Tool {
+func sessionProjectTools(sessions ports.SessionRepository, agents ports.AgentLister, arch ports.ArchitectureMap, repos ports.RepositoryLister, placements ports.AgentPlacements, modeAgents ports.SettingsReader) []domain.Tool {
 	noArgs := schemaFromJSON(`{"type":"object","properties":{}}`)
 	return []domain.Tool{
 		{
@@ -66,6 +66,8 @@ func sessionProjectTools(sessions ports.SessionRepository, agents ports.AgentLis
 			Name: "list_agents",
 			Description: "List the agents a session can run as — name, what each is for, and its skills. " +
 				"Each also names the repositories it is unassigned from (unassigned_from): start_task_session is refused there with AGENT_NOT_ASSIGNED, and only the person can assign it again. " +
+				"Each also names the session modes it cannot start in (unavailable_in_modes, mode values; \"\" is the default mode), and no_agent_unavailable_in_modes the modes that refuse a session with no agent: " +
+				"start_task_session is refused in those modes with AGENT_NOT_AVAILABLE_IN_MODE, and only the person changes them. " +
 				"Pick one by its description and pass its name as start_task_session's agent.",
 			InputSchema: noArgs,
 			Source:      "code",
@@ -87,6 +89,10 @@ func sessionProjectTools(sessions ports.SessionRepository, agents ports.AgentLis
 						return nil, err
 					}
 				}
+				var modes []domain.ModeAgents
+				if modeAgents != nil {
+					modes = domain.ModeAgentsList(modeAgents.Setting)
+				}
 				out := make([]map[string]any, 0, len(list))
 				for _, a := range list {
 					skills := make([]string, 0, len(a.Skills))
@@ -102,12 +108,31 @@ func sessionProjectTools(sessions ports.SessionRepository, agents ports.AgentLis
 					if placements != nil {
 						entry["unassigned_from"] = append([]domain.RepositoryRef{}, unassigned[a.Name]...)
 					}
+					if modeAgents != nil {
+						entry["unavailable_in_modes"] = unavailableModes(modes, a.Name)
+					}
 					out = append(out, entry)
 				}
-				return map[string]any{"count": len(out), "agents": out}, nil
+				answer := map[string]any{"count": len(out), "agents": out}
+				if modeAgents != nil {
+					answer["no_agent_unavailable_in_modes"] = unavailableModes(modes, "")
+				}
+				return answer, nil
 			},
 		},
 	}
+}
+
+// unavailableModes are the mode values of the modes that refuse the agent
+// (a session with no agent when agent is ""), in the order of the modes.
+func unavailableModes(modes []domain.ModeAgents, agent string) []string {
+	out := []string{}
+	for _, m := range modes {
+		if !m.Allows(agent) {
+			out = append(out, string(m.Mode))
+		}
+	}
+	return out
 }
 
 type zoneSummary struct {

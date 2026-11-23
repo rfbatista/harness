@@ -212,7 +212,7 @@ func SessionTaskTools(planningSvc ports.Planning, sessions ports.SessionReposito
 	for _, opt := range opts {
 		opt(&o)
 	}
-	tools = append(tools, sessionProjectTools(sessions, agents, arch, start.Repositories, o.placements)...)
+	tools = append(tools, sessionProjectTools(sessions, agents, arch, start.Repositories, o.placements, o.modeAgents)...)
 	tools = append(tools, sessionTasksTools(planningSvc, sessions)...)
 	tools = append(tools, sessionNotificationTools(sessions, notes)...)
 	tools = append(tools, sessionPushTools(sessions, o.pushes)...)
