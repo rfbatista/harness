@@ -4,6 +4,7 @@
 
 import { DtoError } from "../../../../shared/infrastructure/dto/dto-error";
 import { object, type Wire } from "../../../../shared/infrastructure/dto/fields";
+import { MAX_SCALE, MIN_SCALE } from "../../domain/camera";
 
 const number = (dto: string, from: Wire, key: string, at = ""): number => {
   const value = from[key];
@@ -41,6 +42,34 @@ export class PositionsDto {
 
   toJSON(): Wire {
     return { positions: this.positions };
+  }
+
+  toStored(): string {
+    return JSON.stringify(this);
+  }
+}
+
+/** The camera of a task's board: { x, y, scale }, the scale between the zoom limits. */
+export class CameraDto {
+  constructor(
+    readonly x: number,
+    readonly y: number,
+    readonly scale: number,
+  ) {}
+
+  static fromJSON(raw: unknown): CameraDto {
+    const from = object("CameraDto", raw);
+    const scale = number("CameraDto", from, "scale");
+    if (scale < MIN_SCALE || scale > MAX_SCALE) throw new DtoError("CameraDto", "scale", "expected a scale within the zoom limits");
+    return new CameraDto(number("CameraDto", from, "x"), number("CameraDto", from, "y"), scale);
+  }
+
+  static fromStored(text: string): CameraDto {
+    return CameraDto.fromJSON(parse("CameraDto", text));
+  }
+
+  toJSON(): Wire {
+    return { x: this.x, y: this.y, scale: this.scale };
   }
 
   toStored(): string {

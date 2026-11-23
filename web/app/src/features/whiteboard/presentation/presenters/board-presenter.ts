@@ -6,6 +6,7 @@ import { BoardSourceError, type BoardSource } from "../../application/ports";
 import type { BoardPreferences } from "../../application/preferences";
 import { agentLabel, chipOf, detailOf, statusView, type Detail } from "../../domain/card";
 import { startedEdges, YOU_ID } from "../../domain/graph";
+import { fit, panBy, zoomAt, type Camera } from "../../domain/camera";
 import { MARGIN, computeLayout, edgeGeometry, sizeOf, type Point, type Rect } from "../../domain/layout";
 import { inStartOrder, isTerminal, type BoardSession } from "../../domain/session";
 import type { ReviewRequest, TaskMessage } from "../../domain/message";
@@ -78,6 +79,9 @@ export interface BoardViewModel {
   /** How many cards the person placed, and whether Tidy has anything to do. */
   placedCount: number;
   tidyEnabled: boolean;
+  camera: Camera;
+  /** The zoom as a whole percentage. */
+  zoomPercent: number;
   /** The extent of the board in board px. */
   canvas: { w: number; h: number };
   cards: CardViewModel[];
@@ -94,7 +98,7 @@ export interface BoardDeps {
   now: () => Date;
 }
 
-const LOADING: BoardViewModel = { phase: "loading", error: "", compact: false, placedCount: 0, tidyEnabled: false, columns: [], canvas: { w: 0, h: 0 }, cards: [], edges: [] };
+const LOADING: BoardViewModel = { phase: "loading", error: "", compact: false, placedCount: 0, tidyEnabled: false, camera: { x: 0, y: 0, scale: 1 }, zoomPercent: 100, columns: [], canvas: { w: 0, h: 0 }, cards: [], edges: [] };
 
 export class BoardPresenter extends Presenter<BoardViewModel> {
   readonly #deps: BoardDeps;
@@ -105,7 +109,10 @@ export class BoardPresenter extends Presenter<BoardViewModel> {
   /** The positions the person gave, by session id; kept in the browser per task. */
   #placed: Record<string, Point> = {};
   #drag: { id: string; from: Point } | null = null;
-  #scale = 1;
+  #camera: Camera = { x: 0, y: 0, scale: 1 };
+  /** The person has not moved the camera (and none was stored): the board is framed whole once it has a viewport. */
+  #framed = false;
+  #viewport = { w: 0, h: 0 };
 
   constructor(deps: BoardDeps) {
     super(LOADING);
@@ -122,6 +129,55 @@ export class BoardPresenter extends Presenter<BoardViewModel> {
       return;
     }
     this.#placed = this.#deps.preferences.positions(this.#deps.ticketId);
+    const stored = this.#deps.preferences.camera(this.#deps.ticketId);
+    if (stored) {
+      this.#camera = stored;
+      this.#framed = true;
+    }
+    this.set(this.#build());
+    this.#frame();
+  }
+
+  /** The canvas has this size in px. */
+  setViewport(w: number, h: number): void {
+    this.#viewport = { w, h };
+    this.#frame();
+  }
+
+  panBy(dx: number, dy: number): void {
+    this.#moveCamera(panBy(this.#camera, dx, dy));
+  }
+
+  /** Zoom by `factor` around the viewport point (x, y). */
+  zoomAt(factor: number, x: number, y: number): void {
+    this.#moveCamera(zoomAt(this.#camera, factor, { x, y }));
+  }
+
+  /** Zoom by `factor` around the middle of the viewport. */
+  zoomBy(factor: number): void {
+    this.zoomAt(factor, this.#viewport.w / 2, this.#viewport.h / 2);
+  }
+
+  fit(): void {
+    if (this.#viewport.w > 0) this.#moveCamera(fit(this.viewModel.canvas, this.#viewport));
+  }
+
+  actualSize(): void {
+    this.zoomAt(1 / this.#camera.scale, this.#viewport.w / 2, this.#viewport.h / 2);
+  }
+
+  /** Frames the board whole, once, unless the person's camera was restored. */
+  #frame(): void {
+    if (this.#framed || this.viewModel.phase !== "ready" || this.#viewport.w <= 0) return;
+    this.#framed = true;
+    this.#camera = fit(this.viewModel.canvas, this.#viewport);
+    this.set(this.#build());
+  }
+
+  #moveCamera(camera: Camera): void {
+    this.#camera = camera;
+    this.#framed = true;
+    this.#deps.preferences.saveCamera(this.#deps.ticketId, camera);
     this.set(this.#build());
   }
 
@@ -137,7 +193,7 @@ export class BoardPresenter extends Presenter<BoardViewModel> {
   dragTo(id: string, dx: number, dy: number): void {
     const drag = this.#drag;
     if (!drag || drag.id !== id) return;
-    this.#placed = { ...this.#placed, [id]: { x: Math.max(0, drag.from.x + dx / this.#scale), y: Math.max(0, drag.from.y + dy / this.#scale) } };
+    this.#placed = { ...this.#placed, [id]: { x: Math.max(0, drag.from.x + dx / this.#camera.scale), y: Math.max(0, drag.from.y + dy / this.#camera.scale) } };
     this.set(this.#build());
   }
 
@@ -214,7 +270,7 @@ export class BoardPresenter extends Presenter<BoardViewModel> {
       return { ...base, tone: waiting ? "signal" : "started", badge };
     });
     const placedCount = Object.keys(placed).length;
-    return { phase: "ready", error: "", compact, placedCount, tidyEnabled: placedCount > 0, columns: layout.columns, canvas, cards, edges };
+    return { phase: "ready", error: "", compact, placedCount, tidyEnabled: placedCount > 0, camera: this.#camera, zoomPercent: Math.round(this.#camera.scale * 100), columns: layout.columns, canvas, cards, edges };
   }
 
   #you(rect: Rect, waiting: number): CardViewModel {

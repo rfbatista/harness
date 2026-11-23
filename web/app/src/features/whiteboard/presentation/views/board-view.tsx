@@ -2,6 +2,7 @@
 // forwards the person's actions to it (ADR 0108). Classes come from the
 // design system's whiteboard block.
 
+import { useEffect, useRef } from "react";
 import { usePresenter } from "../../../../shared/presentation/use-presenter";
 import type { BoardPresenter } from "../presenters/board-presenter";
 import { CardView } from "./card-view";
@@ -9,21 +10,99 @@ import { CardView } from "./card-view";
 /** The stroke each edge tone takes from the design system block. */
 const KIND = { started: "started", signal: "messages", amber: "review" } as const;
 
+const ZOOM_STEP = 1.2;
+
 export function BoardView({ presenter }: { presenter: BoardPresenter }) {
   const vm = usePresenter(presenter);
+  const canvas = useRef<HTMLDivElement>(null);
+  const pan = useRef<{ x: number; y: number } | null>(null);
   const { w: width, h: height } = vm.canvas;
+
+  // The canvas size is the camera's viewport; the wheel is a non-passive listener so it can keep the page still.
+  useEffect(() => {
+    const el = canvas.current;
+    if (!el) return;
+    const measure = () => presenter.setViewport(el.clientWidth, el.clientHeight);
+    measure();
+    const observer = new ResizeObserver(measure);
+    observer.observe(el);
+    const wheel = (event: WheelEvent) => {
+      event.preventDefault();
+      const box = el.getBoundingClientRect();
+      if (event.ctrlKey || event.metaKey) presenter.zoomAt(Math.exp(-event.deltaY * 0.01), event.clientX - box.left, event.clientY - box.top);
+      else presenter.panBy(-event.deltaX, -event.deltaY);
+    };
+    el.addEventListener("wheel", wheel, { passive: false });
+    return () => {
+      observer.disconnect();
+      el.removeEventListener("wheel", wheel);
+    };
+  }, [presenter]);
+
+  const key = (event: React.KeyboardEvent) => {
+    if (event.metaKey || event.ctrlKey || event.altKey) return;
+    const handled = { t: () => presenter.tidy(), "1": () => presenter.fit(), "0": () => presenter.actualSize(), "+": () => presenter.zoomBy(ZOOM_STEP), "=": () => presenter.zoomBy(ZOOM_STEP), "-": () => presenter.zoomBy(1 / ZOOM_STEP) }[event.key.toLowerCase()];
+    if (!handled) return;
+    event.preventDefault();
+    handled();
+  };
+
   return (
-    <section className="whiteboard" aria-label="Agents whiteboard" data-layout="rank" onKeyDown={(event) => event.key.toLowerCase() === "t" && !event.metaKey && !event.ctrlKey && presenter.tidy()}>
+    <section className="whiteboard" aria-label="Agents whiteboard" data-layout="rank" onKeyDown={key}>
       <div className="wb-bar">
         <div className="wb-tools">
-          <button type="button" className="button" data-variant="ghost" data-size="sm" data-tidy disabled={!vm.tidyEnabled} title="Tidy (T): put every card back in its computed place" onClick={presenter.tidy}>
+          <button type="button" className="button" data-variant="ghost" data-size="sm" data-tidy disabled={!vm.tidyEnabled} title="Tidy (T): put every card back in its computed place" onClick={() => presenter.tidy()}>
             Tidy
             {vm.placedCount > 0 && <span className="badge">{vm.placedCount} placed</span>}
           </button>
+          <span className="sep" />
+          <button type="button" className="button" data-variant="ghost" data-size="sm" data-fit title="Fit (1)" onClick={() => presenter.fit()}>
+            Fit
+          </button>
+          <button type="button" className="button" data-variant="ghost" data-size="sm" data-icon aria-label="Zoom out (−)" onClick={() => presenter.zoomBy(1 / ZOOM_STEP)}>
+            −
+          </button>
+          <span className="zoom" data-zoom>
+            {vm.zoomPercent}%
+          </span>
+          <button type="button" className="button" data-variant="ghost" data-size="sm" data-icon aria-label="Zoom in (+)" onClick={() => presenter.zoomBy(ZOOM_STEP)}>
+            +
+          </button>
+          <button type="button" className="button" data-variant="ghost" data-size="sm" data-zoom-reset title="Actual size (0)" onClick={() => presenter.actualSize()}>
+            100%
+          </button>
         </div>
       </div>
-      <div className="wb-canvas" tabIndex={0} role="group" aria-roledescription="whiteboard" aria-label={`${vm.cards.length - 1} sessions as a graph.`}>
-        <div className="wb-world" role="list" data-compact={vm.compact ? "" : undefined} style={{ inlineSize: width, blockSize: height }}>
+      <div
+        ref={canvas}
+        className="wb-canvas"
+        tabIndex={0}
+        role="group"
+        aria-roledescription="whiteboard"
+        aria-label={`${vm.cards.length - 1} sessions as a graph.`}
+        onPointerDown={(event) => {
+          if (event.button !== 0 || (event.target as HTMLElement).closest(".wb-node, .wb-pill")) return;
+          pan.current = { x: event.clientX, y: event.clientY };
+          event.currentTarget.setPointerCapture(event.pointerId);
+          event.currentTarget.setAttribute("data-panning", "");
+        }}
+        onPointerMove={(event) => {
+          const from = pan.current;
+          if (!from) return;
+          presenter.panBy(event.clientX - from.x, event.clientY - from.y);
+          pan.current = { x: event.clientX, y: event.clientY };
+        }}
+        onPointerUp={(event) => {
+          pan.current = null;
+          event.currentTarget.removeAttribute("data-panning");
+        }}
+      >
+        <div
+          className="wb-world"
+          role="list"
+          data-compact={vm.compact ? "" : undefined}
+          style={{ inlineSize: width, blockSize: height, transform: `translate(${vm.camera.x}px, ${vm.camera.y}px) scale(${vm.camera.scale})` }}
+        >
           {vm.columns.map((column) => (
             <div key={column.key} className="wb-lane" aria-hidden="true" style={{ left: column.x, top: column.y, inlineSize: column.w }}>
               {column.label} <span className="count">{column.count}</span>
