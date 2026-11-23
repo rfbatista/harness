@@ -8,6 +8,7 @@ import (
 	"log/slog"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"sync"
 
@@ -23,14 +24,18 @@ import (
 // configuration, so the repository's tracked files and the person's commits in
 // the main checkout are untouched.
 
-// preCommitHook is the hook's script. It sends the staged paths, NUL
-// separated (as the hook's own index sees them, so `git commit <paths>` is
-// checked too), to the session's commit endpoint: 409 fails the commit with
+// preCommitHook is the hook's script, shared by every session on the
+// worktree (ADR 0105). It sends the staged paths, NUL separated (as the hook's
+// own index sees them, so `git commit <paths>` is checked too), to the
+// committing session's own commit endpoint, which git's environment names; a
+// commit made with no session environment goes to the worktree's endpoint,
+// which attributes it. 409 fails the commit with
 // the rule's text, 200 prints the warnings. A harness that cannot be reached
 // lets the commit go and says so. The repository's own pre-commit hook runs
 // after the check.
 const preCommitHook = `#!/bin/sh
-resp=$(git diff --cached --name-only -z --no-renames | curl -sS -m 330 -w '\n%{http_code}' -X POST --data-binary @- '{{URL}}' 2>/dev/null) || resp='
+base="${HARNESS_ARCHITECTURE_URL:-{{FALLBACK}}}"
+resp=$(git diff --cached --name-only -z --no-renames | curl -sS -m 330 -w '\n%{http_code}' -X POST --data-binary @- "$base/commit" 2>/dev/null) || resp='
 000'
 code=$(printf '%s\n' "$resp" | tail -n 1)
 body=$(printf '%s\n' "$resp" | sed '$d')
@@ -54,8 +59,8 @@ exit 0
 // marked "Commit check off" and its agent is told not to bypass hooks. A
 // resume first looks at the guard it finds, so a folder lost while the session
 // was stopped is reported.
-func (s *Service) withCommitCheck(id, dir string, cfg *llmkit.SessionConfig, resume bool, cleanup func()) func() {
-	_ = s.EnsureCommitCheck(id, dir, resume)
+func (s *Service) withCommitCheck(id, workspaceID, dir string, cfg *llmkit.SessionConfig, resume bool, cleanup func()) func() {
+	_ = s.EnsureCommitCheck(id, workspaceID, dir, resume)
 	if reason := s.commitCheckReason(id); reason != "" {
 		cfg.AppendSystem = appendSection(cfg.AppendSystem, commitCheckOffSection(reason))
 	}
@@ -79,16 +84,18 @@ func (s *Service) commitCheckEnabled() bool {
 // folder or hook, or none at all, is a session going off, announced before the
 // repair); then the hooks dir is rewritten and the worktree pointed at it. The
 // state clears when that succeeds and stays off, with the error, when it
-// fails. A service with no guard installs nothing.
-func (s *Service) EnsureCommitCheck(id, dir string, probe bool) error {
-	if !s.commitCheckEnabled() || dir == "" {
+// fails. A service with no guard installs nothing. The hooks dir is the
+// worktree's, named after workspaceID, and shared by every session on it
+// (ADR 0105); the state is the session's own.
+func (s *Service) EnsureCommitCheck(id, workspaceID, dir string, probe bool) error {
+	if !s.commitCheckEnabled() || dir == "" || workspaceID == "" {
 		return nil
 	}
 	found := ""
 	if probe {
 		found = s.commitCheckProblem(dir)
 	}
-	if err := s.InstallCommitCheck(id, dir); err != nil {
+	if err := s.InstallCommitCheck(id, workspaceID, dir); err != nil {
 		slog.Warn("install the session's commit check", "session", id, "err", err)
 		reason := "the repair failed: " + err.Error()
 		if found != "" {
@@ -178,15 +185,18 @@ func (s *Service) commitCheckReason(id string) string {
 	return s.commitOff[id]
 }
 
-// InstallCommitCheck (re)writes the session's commit check hooks dir in place
+// InstallCommitCheck (re)writes the worktree's commit check hooks dir in place
 // and points the worktree at dir to it. It runs at every start, resume and
-// server start, so it is safe to run again over its own earlier result. A
+// server start, by whichever session is on the worktree, so it is safe to run
+// again over its own earlier result. The hook does not depend on the session
+// that installs it: the committing session names itself at commit time, and
+// id only supplies the fallback endpoint where no worktree endpoint is set. A
 // service without a guard, an endpoint or a hooks location installs nothing.
-func (s *Service) InstallCommitCheck(id, dir string) error {
-	if !s.commitCheckEnabled() || dir == "" {
+func (s *Service) InstallCommitCheck(id, workspaceID, dir string) error {
+	if !s.commitCheckEnabled() || dir == "" || workspaceID == "" {
 		return nil
 	}
-	hooks := s.CommitCheckDir(id)
+	hooks := s.CommitCheckDir(workspaceID)
 	if err := os.MkdirAll(hooks, 0o755); err != nil {
 		return fmt.Errorf("make the commit check hooks dir: %w", err)
 	}
@@ -196,7 +206,11 @@ func (s *Service) InstallCommitCheck(id, dir string) error {
 	if err != nil {
 		return fmt.Errorf("point the worktree at the commit check hooks dir: %w", err)
 	}
-	script := strings.NewReplacer("{{URL}}", s.SessionArchitectureURL(id)+"/commit", "{{OWN}}", strings.ReplaceAll(own, "'", `'\''`)).Replace(preCommitHook)
+	fallback := s.SessionArchitectureURL(id)
+	if s.WorktreeArchitectureURL != nil {
+		fallback = s.WorktreeArchitectureURL(workspaceID)
+	}
+	script := strings.NewReplacer("{{FALLBACK}}", fallback, "{{OWN}}", strings.ReplaceAll(own, "'", `'\''`)).Replace(preCommitHook)
 	if err := writeFileAtomically(filepath.Join(hooks, "pre-commit"), []byte(script), 0o755); err != nil {
 		return fmt.Errorf("write the commit check: %w", err)
 	}
@@ -204,19 +218,57 @@ func (s *Service) InstallCommitCheck(id, dir string) error {
 	return nil
 }
 
-// RemoveCommitCheck takes the commit check away for good: the worktree's hooks
-// path goes back to the repository's own and the hooks dir is deleted.
-func (s *Service) RemoveCommitCheck(id, dir string) {
+// RemoveCommitCheck ends the session's part in the commit check for good. The
+// worktree's hooks path goes back to the repository's own and the hooks dir is
+// deleted only when no other session is recorded on the worktree: the check
+// belongs to the worktree, so the end or archive of one session never strips
+// it from the others (ADR 0105).
+func (s *Service) RemoveCommitCheck(id, workspaceID, dir string) {
 	if !s.commitCheckEnabled() {
+		return
+	}
+	s.mu.Lock()
+	delete(s.commitOff, id)
+	s.mu.Unlock()
+	if workspaceID == "" || len(s.sessionsOn(workspaceID, id)) > 0 {
 		return
 	}
 	if dir != "" {
 		_ = s.CommitGuard.Remove(context.TODO(), dir)
 	}
-	_ = os.RemoveAll(s.CommitCheckDir(id))
-	s.mu.Lock()
-	delete(s.commitOff, id)
-	s.mu.Unlock()
+	_ = os.RemoveAll(s.CommitCheckDir(workspaceID))
+}
+
+// sessionsOn is the sessions recorded on a worktree other than except, oldest
+// first.
+func (s *Service) sessionsOn(workspaceID, except string) []*domain.Session {
+	var out []*domain.Session
+	for _, o := range s.sessions.List(context.Background(), ports.SessionFilter{WorkspaceID: workspaceID}) {
+		if o.ID != except {
+			out = append(out, o)
+		}
+	}
+	slices.SortStableFunc(out, func(a, b *domain.Session) int { return a.CreatedAt.Compare(b.CreatedAt) })
+	return out
+}
+
+// CommitAttribution is the session a commit made on the worktree with no
+// session environment (the person's own terminal) is attributed to: the
+// session that cut the worktree while it is recorded, otherwise the newest
+// session with write access. It refuses a worktree with neither.
+func (s *Service) CommitAttribution(ctx context.Context, workspaceID string) (string, error) {
+	sessions := s.sessionsOn(workspaceID, "")
+	for _, o := range sessions {
+		if !o.Joined && o.Access.Writes() {
+			return o.ID, nil
+		}
+	}
+	for i := len(sessions) - 1; i >= 0; i-- {
+		if sessions[i].Access.Writes() {
+			return sessions[i].ID, nil
+		}
+	}
+	return "", &domain.StructuredError{Code: "SESSION_NOT_FOUND", Message: "no session with write access is on this worktree"}
 }
 
 // repairParallelism bounds the git calls a boot repair makes at once.
@@ -226,8 +278,9 @@ const repairParallelism = 8
 // has a worktree, whatever runs it, it rewrites the commit check hooks dir and
 // points the worktree at it, which also moves worktrees off an old temporary
 // folder. A session whose repair fails does not stop the others; it is
-// answered in failed, by session id. Hooks dirs of sessions that no longer have
-// a worktree are removed.
+// answered in failed, by session id. A worktree is repaired once, however many
+// sessions are on it. Hooks dirs of worktrees no session has any more are
+// removed, and so are the per-session dirs of the layout before ADR 0105.
 func (s *Service) RepairCommitChecks(ctx context.Context) (map[string]error, error) {
 	if !s.commitCheckEnabled() {
 		return nil, nil
@@ -243,25 +296,43 @@ func (s *Service) RepairCommitChecks(ctx context.Context) (map[string]error, err
 		live = map[string]bool{}
 		bad  = map[string]error{}
 	)
+	// Sessions are grouped by worktree: one repair per worktree, whose outcome
+	// every session on it shares.
+	groups := map[string][]*domain.Session{}
+	var order []string
 	for _, sess := range all {
-		repair := sess.WorkspaceID != "" && sess.WorkingDir != ""
-		if repair {
-			if _, err := os.Stat(sess.WorkingDir); err != nil {
-				continue // its worktree is gone: the sweep removes its hooks dir
-			}
+		// Not a session worktree: left as it is, never the main checkout. A
+		// worktree that is gone is not repaired; the sweep removes its hooks dir.
+		if sess.WorkspaceID == "" || sess.WorkingDir == "" {
+			continue
 		}
-		live[sess.ID] = true
-		if !repair {
-			continue // not a session worktree: left as it is, never the main checkout
+		if _, err := os.Stat(sess.WorkingDir); err != nil {
+			continue
 		}
+		live[sess.WorkspaceID] = true
+		if _, ok := groups[sess.WorkspaceID]; !ok {
+			order = append(order, sess.WorkspaceID)
+		}
+		groups[sess.WorkspaceID] = append(groups[sess.WorkspaceID], sess)
+	}
+	for _, ws := range order {
+		group := groups[ws]
 		wg.Add(1)
 		gate <- struct{}{}
 		go func() {
 			defer wg.Done()
 			defer func() { <-gate }()
-			if err := s.EnsureCommitCheck(sess.ID, sess.WorkingDir, true); err != nil {
+			first := group[0]
+			err := s.EnsureCommitCheck(first.ID, ws, first.WorkingDir, true)
+			reason := s.commitCheckReason(first.ID)
+			for _, other := range group[1:] {
+				s.setCommitCheck(other.ID, reason)
+			}
+			if err != nil {
 				mu.Lock()
-				bad[sess.ID] = err
+				for _, sess := range group {
+					bad[sess.ID] = err
+				}
 				mu.Unlock()
 			}
 		}()
@@ -271,7 +342,9 @@ func (s *Service) RepairCommitChecks(ctx context.Context) (map[string]error, err
 	return bad, nil
 }
 
-// sweepCommitCheckDirs removes the hooks dirs of sessions that are gone.
+// sweepCommitCheckDirs removes the hooks dirs of worktrees no session has any
+// more, and every folder of the old per-session layout (their names are not
+// workspace ids, so they are never live).
 func (s *Service) sweepCommitCheckDirs(live map[string]bool) {
 	// Only a root laid out as <root>/<session id> is swept: any other layout
 	// could make a sibling folder look like a stale hooks dir.

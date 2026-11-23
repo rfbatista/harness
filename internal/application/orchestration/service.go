@@ -158,9 +158,15 @@ type Service struct {
 	// CommitGuard puts the architecture commit check into a session's
 	// worktree; nil installs none.
 	CommitGuard ports.CommitGuard
-	// CommitCheckDir returns the session's commit check hooks dir: a stable
-	// folder in the data directory (ADR 0040).
-	CommitCheckDir func(sessionID string) string
+	// CommitCheckDir returns the worktree's commit check hooks dir: a stable
+	// folder in the data directory, shared by the sessions on the worktree
+	// (ADR 0040, ADR 0105).
+	CommitCheckDir func(workspaceID string) string
+	// WorktreeArchitectureURL returns the worktree's own architecture endpoint
+	// base (…/api/worktrees/{id}/architecture), which a commit made with no
+	// session environment posts to (ADR 0105). Nil: the installing session's
+	// endpoint stands in.
+	WorktreeArchitectureURL func(workspaceID string) string
 	// Terminals hosts RunnerServer interactive sessions. Nil means this
 	// server does not run agents itself; such sessions answer
 	// SERVER_HOSTING_UNAVAILABLE.
@@ -466,6 +472,9 @@ type prepareInput struct {
 	// Headless is a session llmkit runs itself, wrapping its command with the
 	// session's sandbox; false is one a terminal runs.
 	Headless bool
+	// WorkspaceID is the worktree the session runs in, set by prepare once it
+	// is provisioned, or by a resume.
+	WorkspaceID string
 	// BranchChecked: Branch was a person's own name, already checked against
 	// git's rules, so the stricter generated-name check is skipped.
 	BranchChecked bool
@@ -581,7 +590,7 @@ func (s *Service) prepare(ctx context.Context, in prepareInput) (*prepared, erro
 	cfg := s.sessionConfig(id, ws.Path, in.Model, in.AllowedTools, permission, ag, subject, in.ZoneID, in.Role, in.RepositoryID)
 	cleanup, err := s.withShell(id, in.RepositoryID, subject, &cfg, ag.cleanup)
 	if err == nil {
-		cleanup = s.withCommitCheck(id, ws.Path, &cfg, false, cleanup)
+		cleanup = s.withCommitCheck(id, ws.ID, ws.Path, &cfg, false, cleanup)
 	}
 	if err != nil {
 		_ = s.workspaces.Discard(ws.ID)
@@ -601,6 +610,7 @@ func (s *Service) prepare(ctx context.Context, in prepareInput) (*prepared, erro
 		_ = s.workspaces.Discard(ws.ID)
 		return nil, err
 	}
+	in.WorkspaceID = ws.ID
 	sb, err := s.sandbox(ctx, in, id, repo, ws.Path, cfg.Env, ag.skillDirs)
 	if err != nil {
 		if cleanup != nil {
@@ -1418,7 +1428,7 @@ func (s *Service) Delete(ctx context.Context, id string) error {
 	s.runCleanup(id)
 	// Deleting ends the session for good: its commit check goes with it.
 	if sess := s.sessions.Get(id); sess != nil {
-		s.RemoveCommitCheck(id, sess.WorkingDir)
+		s.RemoveCommitCheck(id, sess.WorkspaceID, sess.WorkingDir)
 	}
 	if s.Events != nil {
 		// What else runs in the worktree stops before it is removed; a failure

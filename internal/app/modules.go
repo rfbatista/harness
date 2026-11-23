@@ -1090,6 +1090,9 @@ func newOrchestrationService(
 	svc.SessionArchitectureURL = func(sessionID string) string {
 		return base + httpapi.SessionArchitecturePath(sessionID)
 	}
+	svc.WorktreeArchitectureURL = func(workspaceID string) string {
+		return base + httpapi.WorktreeArchitecturePath(workspaceID)
+	}
 	svc.SessionBranchGateURL = func(sessionID string) string {
 		return base + httpapi.SessionBranchGatePath(sessionID)
 	}
@@ -1626,9 +1629,10 @@ func sessionTempPrefix(base, id string) string {
 	return filepath.Join(base, "hs-"+id[:min(len(id), 8)])
 }
 
-// commitCheckDirs answers where each session's commit check hooks dir is:
-// githooks/<session id> in the data dir, the same on every start (ADR 0040).
-func commitCheckDirs(cfg Config) func(sessionID string) string {
+// commitCheckDirs answers where each worktree's commit check hooks dir is:
+// githooks/<workspace id> in the data dir, the same on every start and shared
+// by the sessions on the worktree (ADR 0040, ADR 0105).
+func commitCheckDirs(cfg Config) func(workspaceID string) string {
 	root, _ := dataDir(cfg, "githooks")
-	return func(sessionID string) string { return filepath.Join(root, sessionID) }
+	return func(workspaceID string) string { return filepath.Join(root, workspaceID) }
 }

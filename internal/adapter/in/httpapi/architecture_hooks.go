@@ -26,7 +26,17 @@ import (
 const (
 	ArchitectureCheckRoute  = "/api/sessions/:id/architecture/check"
 	ArchitectureCommitRoute = "/api/sessions/:id/architecture/commit"
+	// WorktreeArchitectureCommitRoute is where a commit made with no session
+	// environment is checked: the worktree's own endpoint, which attributes it
+	// to a session on the worktree (ADR 0105).
+	WorktreeArchitectureCommitRoute = "/api/worktrees/:id/architecture/commit"
 )
+
+// WorktreeArchitecturePath is the path the worktree's commit endpoint is
+// under: …/commit.
+func WorktreeArchitecturePath(workspaceID string) string {
+	return "/api/worktrees/" + workspaceID + "/architecture"
+}
 
 // SessionArchitecturePath is the path the session's architecture endpoints
 // are under: …/check and …/commit.
@@ -94,6 +104,31 @@ func (h *Handler) handleArchitectureCheck(c echo.Context) error {
 // staged paths, NUL separated, and the answer is text for git to print: 409
 // when a blocking rule fails the commit, 200 with the warnings (or nothing).
 func (h *Handler) handleArchitectureCommit(c echo.Context) error {
+	return h.checkCommit(c, c.Param("id"))
+}
+
+// handleWorktreeArchitectureCommit answers a pre-commit hook that ran with no
+// session environment: the commit is checked as the session the worktree
+// attributes it to, and the answer names that session on its first line.
+func (h *Handler) handleWorktreeArchitectureCommit(c echo.Context) error {
+	if !isLoopback(c.Request().RemoteAddr) {
+		return echo.NewHTTPError(http.StatusForbidden, "loopback only")
+	}
+	who, ok := h.orchSvc.(ports.CommitAttributor)
+	if !ok {
+		return echo.NewHTTPError(http.StatusNotImplemented, "commit attribution is not available")
+	}
+	sessionID, err := who.CommitAttribution(c.Request().Context(), c.Param("id"))
+	if err != nil {
+		return err
+	}
+	c.Response().Header().Set("X-Harness-Attributed-To", sessionID)
+	return h.checkCommit(c, sessionID)
+}
+
+// checkCommit runs the commit check for sessionID on the staged paths in the
+// body.
+func (h *Handler) checkCommit(c echo.Context, sessionID string) error {
 	if !isLoopback(c.Request().RemoteAddr) {
 		return echo.NewHTTPError(http.StatusForbidden, "loopback only")
 	}
@@ -111,7 +146,7 @@ func (h *Handler) handleArchitectureCommit(c echo.Context) error {
 		return c.NoContent(http.StatusOK)
 	}
 	v := h.archRules.CheckArchitecture(c.Request().Context(), ports.ArchitectureCheck{
-		SessionID: c.Param("id"), Point: domain.PointBeforeCommit, Tool: "git commit", Paths: paths,
+		SessionID: sessionID, Point: domain.PointBeforeCommit, Tool: "git commit", Paths: paths,
 	})
 	if v.Deny != "" {
 		text := v.Deny

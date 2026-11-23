@@ -244,6 +244,13 @@ type ArchitectureBriefSource interface {
 	InstructionFilesOf(ctx context.Context, repositoryID string) ([]domain.InstructionFile, error)
 }
 
+// CommitAttributor names the session a commit made in a worktree with no
+// session environment is attributed to (ADR 0105); the pre-commit hook of a
+// shared worktree asks it. An error means no session can be answered for.
+type CommitAttributor interface {
+	CommitAttribution(ctx context.Context, workspaceID string) (sessionID string, err error)
+}
+
 // CommitGuard installs and removes a git hooks directory for one worktree
 // (driven; gitcli implements it): through the worktree's own git
 // configuration, never the repository's tracked files and never the main

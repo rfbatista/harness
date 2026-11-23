@@ -279,7 +279,7 @@ func (s *Service) ResumeInteractive(ctx context.Context, req ports.ResumeRequest
 	if err != nil {
 		return nil, ports.AgentSpec{}, err
 	}
-	cleanup = s.withCommitCheck(sess.ID, sess.WorkingDir, &cfg, true, cleanup)
+	cleanup = s.withCommitCheck(sess.ID, sess.WorkspaceID, sess.WorkingDir, &cfg, true, cleanup)
 	envFile, cleanup, err := s.withGit(sess.ID, sess.RepositoryID, &cfg, cleanup)
 	if err != nil {
 		return nil, ports.AgentSpec{}, err
@@ -395,7 +395,7 @@ func (s *Service) resumeSandbox(ctx context.Context, sess *domain.Session, env, 
 		}
 		repo = r
 	}
-	return s.sandbox(ctx, prepareInput{ProjectID: sess.ProjectID, Mode: sess.Mode}, sess.ID, repo, sess.WorkingDir, env, skillDirs)
+	return s.sandbox(ctx, prepareInput{ProjectID: sess.ProjectID, Mode: sess.Mode, WorkspaceID: sess.WorkspaceID}, sess.ID, repo, sess.WorkingDir, env, skillDirs)
 }
 
 // claimResume marks id as being resumed; false when another call already is.

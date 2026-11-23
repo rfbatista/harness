@@ -146,9 +146,10 @@ type SandboxSession struct {
 	WorktreesDir string
 	// VirtualShell is the session's shell; empty without one.
 	VirtualShell string
-	// CommitCheckDir is the session's own commit check hooks dir (ADR 0040):
-	// read-only and executable, so `git commit` runs the check inside the
-	// sandbox. Another session's dir is never granted. Empty: none.
+	// CommitCheckDir is the commit check hooks dir of the worktree the session
+	// is on (ADR 0040, ADR 0105): read-only and executable, so `git commit`
+	// runs the check inside the sandbox. Another worktree's dir is never
+	// granted. Empty: none.
 	CommitCheckDir string
 	TempDir        string
 	AgentHome      string
@@ -650,8 +651,8 @@ func (s *Service) sandbox(ctx context.Context, in prepareInput, id string, repo 
 			}
 		}
 	}
-	if s.commitCheckEnabled() {
-		sess.CommitCheckDir = s.CommitCheckDir(id)
+	if s.commitCheckEnabled() && in.WorkspaceID != "" {
+		sess.CommitCheckDir = s.CommitCheckDir(in.WorkspaceID)
 	}
 	for _, e := range env {
 		if v, ok := strings.CutPrefix(e, ports.ShellDirEnv+"="); ok {
