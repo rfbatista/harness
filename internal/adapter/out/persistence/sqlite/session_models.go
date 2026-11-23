@@ -130,6 +130,7 @@ func (m *SessionModel) ToDomain() *domain.Session {
 		PendingApprovals:         m.PendingApprovals,
 		AutoRun:                  m.AutoRun,
 		WorkspaceID:              m.WorkspaceID,
+		WorktreeID:               m.WorkspaceID,
 		Branch:                   m.Branch,
 		Access:                   domain.SessionAccess(m.Access),
 		Joined:                   m.Joined,

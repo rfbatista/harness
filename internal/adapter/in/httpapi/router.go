@@ -104,6 +104,7 @@ func NewRouter(h *Handler, opts ...Option) *echo.Echo {
 	g.GET("/list_workspaces", h.handleListWorkspaces)
 	g.GET("/list_branches", h.handleListBranches)
 	g.GET("/check_branch_name", h.handleCheckBranchName)
+	g.GET("/task_worktrees", h.handleListTaskWorktrees)
 	g.POST("/create_workspace", h.handleCreateWorkspace)
 	g.POST("/delete_workspace", h.handleDeleteWorkspace)
 	// a workspace's branch as a pull request on its origin
