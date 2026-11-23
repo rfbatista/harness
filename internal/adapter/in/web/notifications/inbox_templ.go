@@ -113,7 +113,7 @@ func InboxPage(frame shell.Frame, v View) templ.Component {
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
-			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 6, "\" x-data=\"projectPicker\"><label class=\"[ visually-hidden ]\" for=\"inbox-project\">Project</label> <select id=\"inbox-project\" name=\"project\" data-size=\"sm\" data-fit x-on:change=\"go\"><option value=\"\"")
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 6, "\" x-data=\"inboxFilters\"><label class=\"[ visually-hidden ]\" for=\"inbox-project\">Project</label> <select id=\"inbox-project\" name=\"project\" data-size=\"sm\" data-fit x-on:change=\"go\"><option value=\"\"")
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}

@@ -40,7 +40,6 @@ func (h Handler) Page(w http.ResponseWriter, r *http.Request) error {
 	if err != nil {
 		return err
 	}
-	frame.Top.OnServer = true
 	v := NewView(h.Paths)
 	read := func(string) string { return "" }
 	if h.Settings != nil {

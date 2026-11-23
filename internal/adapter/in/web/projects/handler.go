@@ -63,7 +63,6 @@ func (h Handler) List(w http.ResponseWriter, r *http.Request) error {
 	if err != nil {
 		return err
 	}
-	frame.Top.OnProjects = true
 	frame.Live = true // projectsListPage follows the project catalog feed
 	return h.Render(w, r, http.StatusOK, ListPage(NewListView(frame, summaries, h.Now())))
 }

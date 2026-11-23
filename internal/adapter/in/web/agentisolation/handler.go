@@ -74,7 +74,6 @@ func (h Handler) Page(w http.ResponseWriter, r *http.Request) error {
 	if err != nil {
 		return err
 	}
-	frame.Top.OnAgentIsolation = true
 	v := h.View(r.Context())
 	// An "Allow this path" link from a session's Sandbox tab brings the path
 	// to put in the add-path field. It is only shown, never saved.

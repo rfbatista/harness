@@ -11,7 +11,6 @@ import (
 	"github.com/a-h/templ"
 
 	"operators-mcp/internal/domain"
-	"operators-mcp/internal/ports"
 )
 
 // Frame is what the shell needs from a page.
@@ -35,9 +34,9 @@ type Frame struct {
 	Live bool
 	// Hints are the keys the stream bar names; nil names the list keys (J K move).
 	Hints []Hint
-	// Notifications is the top bar's bell; nil leaves it out (the inbox is
-	// not served).
-	Notifications *Bell
+	// Unread is the inbox's unread count, which leads the document title;
+	// 0 when the inbox is not served or could not be read.
+	Unread int
 	// Helper says whether the writing helper can run. Every page that renders
 	// a magic pen paints it as attributes, and the browser disables the pens
 	// when it is unavailable.
@@ -53,92 +52,17 @@ type Helper struct {
 	Reason, FixURL string
 }
 
-// Bell is the top bar's way to the inbox: the global unread count, painted
-// before any script runs, and the latest notifications the panel opens on.
-type Bell struct {
-	// Href is the inbox page.
-	Href string
-	// Seed is the latest page (the API's JSON), or nil when it could not be
-	// read: the browser's first read then fills in the count.
-	Seed *ports.NotificationPage
-}
-
-// Unread is the count to paint; 0 without a seed.
-func (b *Bell) Unread() int {
-	if b == nil || b.Seed == nil {
-		return 0
-	}
-	return b.Seed.UnreadCount
-}
-
-// badgeMax is where the badge stops counting (the browser's badgeText).
-const badgeMax = 99
-
-// BadgeText is the bell's badge: "", "3", "99+".
-func (b *Bell) BadgeText() string {
-	n := b.Unread()
-	switch {
-	case n <= 0:
-		return ""
-	case n > badgeMax:
-		return strconv.Itoa(badgeMax) + "+"
-	}
-	return strconv.Itoa(n)
-}
-
-// Label is the bell's accessible name, with the exact count (bellLabel).
-func (b *Bell) Label() string {
-	if n := b.Unread(); n > 0 {
-		return "Notifications, " + strconv.Itoa(n) + " unread"
-	}
-	return "Notifications"
-}
-
 // Hint is one keyboard way the stream bar names: its keys and what they do.
 type Hint struct {
 	Keys  []string
 	Label string
 }
 
-// TopBar holds the project picker.
+// TopBar is what the rail needs of the project picker: the projects and the
+// open one. The top bar itself is a React island (Frame.Island).
 type TopBar struct {
 	Projects []Option
 	Current  string // project ID; "" when none is selected
-	// BoardHref is the Agent board (the home page); "" when it is not served.
-	BoardHref string
-	// OnBoard marks the Agent board as the current page.
-	OnBoard bool
-	// ProjectsHref is the projects list; "" when it is not served.
-	ProjectsHref string
-	// OnProjects marks the projects list as the current page.
-	OnProjects bool
-	// AgentsHref is the Agents page; "" when it is not served.
-	AgentsHref string
-	// OnAgents marks the Agents page as the current page.
-	OnAgents bool
-	// CredentialsHref is the Git credentials page; "" when it is not served.
-	CredentialsHref string
-	// OnCredentials marks the Git credentials page as the current page.
-	OnCredentials bool
-	// TokenSaversHref is the Token savers page; "" when it is not served.
-	TokenSaversHref string
-	// OnTokenSavers marks the Token savers page as the current page.
-	OnTokenSavers bool
-	// ModelsHref is the Models page; "" when it is not served.
-	ModelsHref string
-	// OnModels marks the Models page as the current page.
-	OnModels bool
-	// AgentIsolationHref is the Agent isolation page; "" when it is not served.
-	AgentIsolationHref string
-	// OnAgentIsolation marks the Agent isolation page as the current page.
-	OnAgentIsolation bool
-	// AgentIsolationAttention puts the amber mark on its link: something
-	// there blocks agents from starting.
-	AgentIsolationAttention bool
-	// ServerHref is the Server page; "" when it is not served.
-	ServerHref string
-	// OnServer marks the Server page as the current page.
-	OnServer bool
 }
 
 // Option is one project in the picker.
@@ -330,7 +254,7 @@ func (f Frame) DocumentTitle() string {
 		title = f.Title + " · harness"
 	}
 	// The unread count leads, as the browser keeps it (store.syncTitle).
-	if n := f.Notifications.Unread(); n > 0 {
+	if n := f.Unread; n > 0 {
 		title = "(" + strconv.Itoa(n) + ") " + title
 	}
 	return title
@@ -381,28 +305,11 @@ type Handler func(w http.ResponseWriter, r *http.Request) error
 // Renderer writes a page with a status code.
 type Renderer func(w http.ResponseWriter, r *http.Request, status int, page templ.Component) error
 
-// blockingAttrs marks a top bar link whose page has something that blocks
-// agents from starting.
-func blockingAttrs(blocking bool) templ.Attributes {
-	if blocking {
-		return templ.Attributes{"data-blocking": "true"}
-	}
-	return templ.Attributes{}
-}
-
 // currentAttrs marks the current link with aria-current="page" and adds
 // nothing to the others.
 func currentAttrs(current bool) templ.Attributes {
 	if current {
 		return templ.Attributes{"aria-current": "page"}
-	}
-	return templ.Attributes{}
-}
-
-// selectedAttrs marks the picker's current option.
-func selectedAttrs(selected bool) templ.Attributes {
-	if selected {
-		return templ.Attributes{"selected": true}
 	}
 	return templ.Attributes{}
 }

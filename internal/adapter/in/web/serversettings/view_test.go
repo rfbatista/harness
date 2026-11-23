@@ -17,7 +17,6 @@ import (
 func render(t *testing.T, p Paths) string {
 	t.Helper()
 	frame := shell.Frame{Title: "Server"}
-	frame.Top.ServerHref, frame.Top.OnServer = Href, true
 	var b bytes.Buffer
 	if err := Page(frame, NewView(p)).Render(context.Background(), &b); err != nil {
 		t.Fatal(err)

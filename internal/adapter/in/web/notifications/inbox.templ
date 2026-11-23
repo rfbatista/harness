@@ -25,7 +25,7 @@ templ InboxPage(frame shell.Frame, v View) {
 				<button type="button" class="[ button ]" data-size="sm" style="display: none" x-show="live" x-bind:disabled="cannotMarkAll" x-bind:aria-busy="marking" x-on:click="markAll">{ v.MarkAllLabel() }</button>
 			</header>
 			<div class="[ inbox ]" data-scroll>
-				<form class="[ inbox-filters ] [ cluster ] [ gutter-s ]" method="get" action={ templ.SafeURL(Href) } x-data="projectPicker">
+				<form class="[ inbox-filters ] [ cluster ] [ gutter-s ]" method="get" action={ templ.SafeURL(Href) } x-data="inboxFilters">
 					<label class="[ visually-hidden ]" for="inbox-project">Project</label>
 					<select id="inbox-project" name="project" data-size="sm" data-fit x-on:change="go">
 						<option value="" { selected(v.Filter.ProjectID == "")... }>All projects</option>

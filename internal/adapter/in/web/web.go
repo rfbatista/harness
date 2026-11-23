@@ -414,14 +414,11 @@ func (s *server) layout(ctx context.Context, title, projectID, taskID string) (s
 	if frame.Island, err = s.island(ctx, bar); err != nil {
 		return shell.Frame{}, err
 	}
-	if bar.Notifications != nil {
+	if bar.Notifications != nil && bar.Notifications.Page != nil {
 		// The title's unread count is painted by the server too.
-		frame.Notifications = &shell.Bell{Href: bar.Notifications.InboxHref, Seed: bar.Notifications.Page}
+		frame.Unread = bar.Notifications.Page.UnreadCount
 	}
 	frame.Top.Current = projectID
-	if s.deps.ProjectSummaries != nil {
-		frame.Top.ProjectsHref = projects.ListHref
-	}
 	for _, p := range bar.Projects {
 		frame.Top.Projects = append(frame.Top.Projects, shell.Option{ID: p.ID, Name: p.Name})
 	}
@@ -471,12 +468,7 @@ func (s *server) fragmentFrame(ctx context.Context, title, projectID, taskID str
 	frame := shell.Frame{Title: title, Built: true}
 	frame.Helper = s.helper(ctx)
 	frame.Rail.Current = taskID
-	// The top bar stays in the document; which of its pages is open is named
-	// by its href, so the browser can mark it.
-	s.topLinks(&frame.Top)
-	if s.deps.ProjectSummaries != nil {
-		frame.Top.ProjectsHref = projects.ListHref
-	}
+	// The top bar island stays in the document and follows the new page itself.
 	if s.deps.ArchivedTasks != nil && projectID != "" {
 		// The board paints the archived count from the rail's seed.
 		n, err := s.deps.ArchivedTasks.ArchivedTaskCount(ctx, projectID)
@@ -517,23 +509,6 @@ func (s *server) openDesignProposals(ctx context.Context, projectID string) int 
 	return n
 }
 
-// bell is the top bar's way to the inbox, with the unread count and the
-// panel's latest notifications; nil when the inbox is not served. A failed
-// read still shows the bell: the browser reads the count itself.
-func (s *server) bell(ctx context.Context) *shell.Bell {
-	if s.deps.Notifications == nil {
-		return nil
-	}
-	b := &shell.Bell{Href: notifications.Href}
-	page, err := s.deps.Notifications.ListNotifications(ctx, ports.NotificationQuery{Limit: notifications.PanelLimit})
-	if err != nil {
-		slog.Warn("web: notifications seed not read; the browser reads it", "err", err)
-		return b
-	}
-	b.Seed = page
-	return b
-}
-
 // helper is the writing helper's readiness: unavailable without a reader.
 func (s *server) helper(ctx context.Context) shell.Helper {
 	if s.deps.WritingHelper == nil {
@@ -552,29 +527,6 @@ func (s *server) architectureAssistant(ctx context.Context) shell.Helper {
 	return shell.Helper{Available: a.Available, Reason: a.Reason, FixURL: a.FixURL}
 }
 
-// topLinks names the top bar's pages that this server serves.
-func (s *server) topLinks(top *shell.TopBar) {
-	if s.deps.AgentBoard != nil {
-		top.BoardHref = home.BoardHref
-	}
-	top.AgentsHref = agents.Href
-	if s.deps.GitCredentials != nil {
-		top.CredentialsHref = credentials.Href
-	}
-	if s.deps.TokenSaverInstalls != nil {
-		top.TokenSaversHref = tokensavers.Href
-	}
-	if s.deps.Settings != nil {
-		top.ModelsHref = models.Href
-	}
-	if s.deps.SandboxSettings != nil {
-		top.AgentIsolationHref = agentisolation.Href
-	}
-	if s.deps.DataPaths != nil {
-		top.ServerHref = serversettings.Href
-	}
-}
-
 // bareFrame is a frame without the rail, for when the rail cannot be read.
 func (s *server) bareFrame(title string) shell.Frame {
 	f := shell.Frame{
@@ -585,10 +537,6 @@ func (s *server) bareFrame(title string) shell.Frame {
 		Built:    s.assets.Built(),
 	}
 	f.Helper = s.helper(context.Background())
-	s.topLinks(&f.Top)
-	if s.deps.SandboxSettings != nil {
-		f.Top.AgentIsolationAttention = agentisolation.Blocks(s.deps.SandboxSettings, s.deps.SandboxDriver, s.deps.AgentCredential, s.deps.AgentLogin, s.deps.ManagedClaudeBin)
-	}
 	return f
 }
 

@@ -46,7 +46,6 @@ func (h Handler) Page(w http.ResponseWriter, r *http.Request) error {
 	if err != nil {
 		return err
 	}
-	frame.Top.OnTokenSavers = true
 	return h.Render(w, r, http.StatusOK, Page(frame, v))
 }
 

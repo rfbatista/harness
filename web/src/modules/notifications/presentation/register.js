@@ -1,6 +1,6 @@
 // The notifications module's Alpine components.
 
-import { notificationsBell } from "./components/notificationsBell.js";
+import { inboxFilters } from "./components/inboxFilters.js";
 import { notificationsPage } from "./components/notificationsPage.js";
 import { pageSeed } from "./page-seed.js";
 import { notificationsStore } from "./store.js";
@@ -23,6 +23,6 @@ export function registerNotifications(Alpine, deps) {
   // The store follows the inbox on every page, for the title's count and what is said in the stream
   // bar: the top bar is a React island now, so it is not the bell that starts it.
   store.start(pageSeed(document));
-  Alpine.data("notificationsBell", notificationsBell({ ...deps, store }));
+  Alpine.data("inboxFilters", inboxFilters());
   Alpine.data("notificationsPage", notificationsPage({ ...deps, store }));
 }
