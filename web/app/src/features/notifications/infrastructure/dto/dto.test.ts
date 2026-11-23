@@ -38,7 +38,7 @@ describe("NotificationDto", () => {
     assert.throws(bad({ id: "" }), failsAt("NotificationDto", "id"));
     assert.throws(bad({ kind: 3 }), failsAt("NotificationDto", "kind"));
     assert.throws(bad({ level: 3 }), failsAt("NotificationDto", "level"));
-    assert.throws(bad({ source: "robot" }), failsAt("NotificationDto", "source"));
+    assert.throws(bad({ source: 5 }), failsAt("NotificationDto", "source"));
     assert.throws(bad({ link: "//evil.example" }), failsAt("NotificationDto", "link"));
     assert.throws(bad({ link: "x" }), failsAt("NotificationDto", "link"));
     assert.throws(bad({ created_at: "yesterday" }), failsAt("NotificationDto", "created_at"));
@@ -68,7 +68,7 @@ describe("page, answer and change event DTOs", () => {
   });
 
   test("name the path of a bad notification and of a bad count", () => {
-    assert.throws(() => NotificationPageDto.fromJSON({ notifications: [wire(), { ...wire(), level: "x" }], unread_count: 1 }), failsAt("NotificationDto", "notifications[1].level"));
+    assert.throws(() => NotificationPageDto.fromJSON({ notifications: [wire(), { ...wire(), level: 3 }], unread_count: 1 }), failsAt("NotificationDto", "notifications[1].level"));
     assert.throws(() => NotificationPageDto.fromJSON({ notifications: [], unread_count: 1, open_count: -2 }), failsAt("NotificationPageDto", "open_count"));
     assert.throws(() => NotificationPageDto.fromJSON({ notifications: [], unread_count: -1 }), failsAt("NotificationPageDto", "unread_count"));
     assert.throws(() => NotificationPageDto.fromJSON({ notifications: [], unread_count: 1.5 }), failsAt("NotificationPageDto", "unread_count"));
@@ -119,6 +119,19 @@ describe("the ledger fields", () => {
     assert.equal(ReadAnswerDto.fromJSON({ notifications: [], unread_count: 0, open_count: 4 }).open_count, 4);
     assert.equal(ChangeEventDto.fromJSON({ changed: [], unread_count: 0, open_count: 1 }).open_count, 1);
     assert.throws(() => ChangeEventDto.fromJSON({ changed: [], unread_count: 0, open_count: "1" }), failsAt("ChangeEventDto", "open_count"));
+  });
+});
+
+describe("a value the client does not know", () => {
+  test("a kind, a source or a level it does not know still reads: the DTO holds the string, the mapper decides", () => {
+    const dto = NotificationDto.fromJSON({ ...wire(), kind: "from_the_future", source: "robot", level: "urgent" });
+    assert.deepEqual([dto.kind, dto.source, dto.level], ["from_the_future", "robot", "urgent"]);
+  });
+
+  test("a page keeps every row, and a malformed one, not just new, still fails the whole page", () => {
+    const page = NotificationPageDto.fromJSON({ notifications: [wire(), { ...wire(), kind: "from_the_future" }], unread_count: 2, open_count: 2 });
+    assert.equal(page.notifications.length, 2);
+    assert.throws(() => NotificationPageDto.fromJSON({ notifications: [wire(), { ...wire(), kind: 5 }], unread_count: 1 }), failsAt("NotificationDto", "notifications[1].kind"));
   });
 });
 

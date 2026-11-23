@@ -20,6 +20,8 @@ export interface NotificationsSourceHarness {
   setStatus(status: FeedStatus): void;
   /** The server answers `raw` (not valid) to every request. Adapters that read no wire have none. */
   answerMalformed?(raw: unknown): void;
+  /** The server answers `raw` (well formed) to every request. Adapters that read no wire have none. */
+  answerWith?(raw: unknown): void;
   /** The stream sends `raw` (not a valid change event). */
   publishMalformed?(raw: unknown): void;
 }
@@ -161,6 +163,29 @@ export function notificationsSourceContract(name: string, make: () => Notificati
         await assert.rejects(h.source.markRead({ all: true }), rejectsWith("BAD_RESPONSE"));
       });
     }
+
+    const known = { ...wireNotification, id: "known" };
+    const future = { ...wireNotification, id: "future", kind: "from_the_future", source: "robot", level: "urgent" };
+
+    test("a notification of a kind, source or level the client does not know reads as a generic one in a list and in a mark-read answer, with the same counts", async (t) => {
+      const h = make();
+      if (!h.answerWith) return t.skip("the adapter reads no wire");
+      h.answerWith({ notifications: [known, future], unread_count: 2, open_count: 2 });
+      const page = await h.source.list({});
+      assert.deepEqual([page.notifications.map((n) => n.id), page.unreadCount, page.openCount], [["known", "future"], 2, 2], "no row is hidden, and the counts stay the server's");
+      const generic = page.notifications[1]!;
+      assert.deepEqual([generic.kind, generic.source, generic.level, generic.title, generic.link], ["agent", "system", "info", "T", "/x"], "its title, body and link make it visible and openable");
+      assert.deepEqual((await h.source.markRead({ all: true })).notifications.map((n) => n.id), ["known", "future"]);
+    });
+
+    test("a change event that carries such a notification delivers it as a generic one, with its counts", (t) => {
+      const h = make();
+      if (!h.publishMalformed) return t.skip("the adapter reads no wire");
+      const changes: Change[] = [];
+      h.source.follow((c) => changes.push(c), () => {});
+      h.publishMalformed({ changed: [known, future], unread_count: 2, open_count: 2 });
+      assert.deepEqual(changes.map((c) => [c.notifications.map((n) => `${n.id}:${n.kind}`), c.unreadCount, c.openCount]), [[["known:task_review", "future:agent"], 2, 2]]);
+    });
 
     for (const [what, raw] of [["without its count", { changed: [] }], ["whose changed is not a list", { changed: 3, unread_count: 1 }], ["with an unreadable notification", { changed: [{ id: 5 }], unread_count: 1 }], ["that is a string", "garbage"]] as [string, unknown][]) {
       test(`a change event ${what} is dropped, and the next valid one is delivered`, (t) => {

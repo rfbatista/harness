@@ -1,7 +1,7 @@
 // The notification DTOs as domain values, and the domain's requests as DTOs.
 
 import type { ReadRequest } from "../application/ports";
-import { ACTOR_KINDS, HARNESS_ACTOR, KINDS, LISTED_STATES, OUTCOMES, type Actor, type Change, type Notification, type NotificationPage } from "../domain/notification";
+import { ACTOR_KINDS, HARNESS_ACTOR, KINDS, LEVELS, LISTED_STATES, OUTCOMES, SOURCES, type Actor, type Change, type Notification, type NotificationPage } from "../domain/notification";
 import type { NotificationDto } from "./dto/notification-dto";
 import type { ChangeEventDto, NotificationPageDto, ReadAnswerDto } from "./dto/notification-page-dto";
 import { ReadRequestDto } from "./dto/read-request-dto";
@@ -22,10 +22,11 @@ export function toNotification(dto: NotificationDto): Notification {
     taskId: dto.task_id ?? "",
     taskTitle: dto.task_title ?? "",
     sessionId: dto.session_id ?? "",
-    source: dto.source,
+    // A source or a level this client does not know reads as the harness's own information, so one new value never hides a notification.
+    source: oneOf(SOURCES, dto.source) ?? "system",
     // A kind this client does not know reads as a generic notification (its title, body and link), so one new kind never empties the inbox.
     kind: oneOf(KINDS, dto.kind) ?? "agent",
-    level: dto.level,
+    level: oneOf(LEVELS, dto.level) ?? "info",
     title: dto.title ?? "",
     body: dto.body ?? "",
     link: dto.link,

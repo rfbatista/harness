@@ -20,6 +20,7 @@ notificationsSourceContract("HTTP adapter against a fake server on the wire", ()
     publish: (change) => feed.emit(NOTIFICATIONS_STREAM, { changed: change.notifications.map(toWire), unread_count: change.unreadCount, ...(change.openCount == null ? {} : { open_count: change.openCount }) }),
     setStatus: (status) => feed.setStatus(NOTIFICATIONS_STREAM, status),
     answerMalformed: server.answerWith,
+    answerWith: server.answerWith,
     publishMalformed: (raw) => feed.emit(NOTIFICATIONS_STREAM, raw),
   };
 });
