@@ -84,6 +84,7 @@ type contextInput struct {
 	Attached   mcpAttachment         // the catalog servers the session got, and the tools it hides
 	KnownTools map[string][]string   // each catalog server's tool names, by server name
 	Skills     []domain.ContextSkill // the mode's and the agent's skills
+	BuiltIn    []string              // Claude's built-in tools: what a session with no allow-list can use
 }
 
 // buildContextEntry builds the entry for one start or resume. Pieces go in

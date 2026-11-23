@@ -1,6 +1,7 @@
 package orchestration
 
 import (
+	"encoding/json"
 	"slices"
 	"strings"
 
@@ -43,6 +44,25 @@ func contextToolsAndServers(in contextInput) ([]domain.ContextTool, []domain.Con
 
 	for _, name := range in.Cfg.AllowedTools {
 		add(name, domain.ToolAllowed)
+	}
+	// A session whose configuration names no Claude Code tool gets Claude's
+	// default set; one a deny rule names is refused.
+	if !slices.ContainsFunc(tools, func(t domain.ContextTool) bool { return t.Source == "claude_code" }) {
+		for _, name := range in.BuiltIn {
+			add(name, domain.ToolAllowed)
+		}
+	}
+	for _, rule := range deniedRules(in.Cfg) {
+		base, _, _ := strings.Cut(rule, "(")
+		if !slices.Contains(in.BuiltIn, base) {
+			continue
+		}
+		if i := slices.IndexFunc(tools, func(t domain.ContextTool) bool { return t.Name == rule }); i >= 0 {
+			tools[i].State = domain.ToolRefused
+		} else {
+			seen[rule] = false
+			add(rule, domain.ToolRefused)
+		}
 	}
 	var servers []domain.ContextServer
 	for _, spec := range in.Cfg.MCPServers {
@@ -240,4 +260,19 @@ func unknownReason(headless bool) string {
 		return "claude did not report it"
 	}
 	return domain.MCPStatusUnknownReason
+}
+
+// deniedRules are the permission deny rules of the session's claude settings.
+func deniedRules(cfg llmkit.SessionConfig) []string {
+	dc, ok := cfg.Driver.(claude.Config)
+	if !ok || dc.Settings == nil {
+		return nil
+	}
+	var permissions struct {
+		Deny []string `json:"deny"`
+	}
+	if raw, ok := dc.Settings.Extra["permissions"]; ok {
+		_ = json.Unmarshal(raw, &permissions)
+	}
+	return permissions.Deny
 }

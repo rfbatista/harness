@@ -355,7 +355,7 @@ func (s *Service) ResumeInteractive(ctx context.Context, req ports.ResumeRequest
 	s.adoptCleanup(sess.ID, withViolations(cleanup, s.collectViolations(sess.ID, sess.WorkingDir, sb.facts)))
 	s.recordResume(ctx, sess, contextInput{
 		Cfg: cfg, System: trail.pieces, Versions: res.versions, Repository: s.repositoryName(ctx, sess.RepositoryID),
-		Role: role, Agent: ag.agent, Project: subject.project, Attached: res.attached, KnownTools: res.known, Skills: ag.contextSkills,
+		Role: role, Agent: ag.agent, Project: subject.project, Attached: res.attached, KnownTools: res.known, Skills: ag.contextSkills, BuiltIn: s.builtInTools(),
 		Facts: s.resumeFacts(sess, ag, cfg, permission, sb),
 	}, prompt)
 	if sess.InterruptedAt != nil {
