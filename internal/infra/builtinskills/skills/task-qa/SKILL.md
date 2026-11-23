@@ -17,8 +17,9 @@ Instead:
 1. QA needs running services. Spawn QA only after an Operator reported running services
    with their URLs at the branch's current tip. If none did, spawn an Operator first
    (`task-run-app` for a seeded run) and wait for its done report.
-2. Call `mcp__task__start_task_session` with `mode: "qa"` and `base_branch` the
-   implementer's branch. Put the use cases (the user stories of the Spec documents) and the
+2. Call `mcp__task__start_task_session` with `mode: "qa"` and `join_session_id` the
+   implementer's session id (preferred: QA joins its worktree read-only and needs no merge), or
+   `base_branch` the implementer's branch to cut QA from it instead. Put the use cases (the user stories of the Spec documents) and the
    service URLs in its prompt.
 3. Wait for QA's done report, or answer its questions and blocked reports. Point the person
    at the QA document and the designs it attached.

@@ -45,7 +45,7 @@ var SessionTaskToolNames = []string{
 
 // MaxLiveTaskSessions caps the sessions running on one task at once, so agents
 // starting peers cannot fan out without bound.
-const MaxLiveTaskSessions = 8
+const MaxLiveTaskSessions = 16
 
 // PeerStarter is what start_task_session needs to start a session: the
 // interactive sessions port and the project's repositories. The zero value
@@ -95,6 +95,12 @@ func SessionTaskTools(planningSvc ports.Planning, sessions ports.SessionReposito
 				"(default the repository's default branch; pass your own branch to build on what you have committed; " +
 				"pass origin/<name> to start from a branch on origin, which is fetched first so it starts at origin's current tip, " +
 				"and is refused with the reason if that branch is gone from origin or the fetch fails). " +
+				"Or have it join a session's worktree and branch instead of cutting its own: pass join_session_id, the id of a session of " +
+				"this task, running or ended (see list_task_sessions). No branch or worktree is created and no merge is needed; " +
+				"base_branch cannot be combined with it and repository is that session's. Join for the verification of live work (a Reviewer, " +
+				"Tester or QA on the implementer's worktree) or to put a second implementer on the same branch; cut a branch when " +
+				"the work must stay apart. access is write or read_only; by default review and qa are read_only and every other mode writes. " +
+				"Read-only is refused when the sandbox is off. " +
 				"It gets your permission mode. At most " + strconv.Itoa(MaxLiveTaskSessions) + " sessions run on a task at once. " +
 				"If you are the task's architect, a status-check loop wakes you every status_check_minutes (default 10, 0 for " +
 				"none) to check on the new session. A session you start while you are the architect or one of its delegates " +
@@ -104,7 +110,9 @@ func SessionTaskTools(planningSvc ports.Planning, sessions ports.SessionReposito
 				`"agent":{"type":"string","description":"The agent to run, by name or id. Default: none (plain claude)."},` +
 				`"repository":{"type":"string","description":"The repository to work in, by name or id. Default: yours."},` +
 				`"base_branch":{"type":"string","description":"The branch its worktree branches off: a local branch, or origin/<name> for a branch on origin, which is fetched first. Default: the repository's default branch."},` +
-				`"mode":{"type":"string","enum":["","architect","implement","design","product","review","test","qa","operate"],"description":"architect: the session grills the person on its prompt, shapes it into per-application specs and delegates them. implement: the session turns a Spec task document into tickets, has the architect review them, then implements them test first on its branch. design: the session produces components, images and videos and publishes each to the Design tab. product: the session interviews the person on a feature, writes its PRD on the task, creates one child task per piece of work with a brief each, and asks for review; it never writes code. review: the Reviewer reviews the branch its worktree was cut from (pass the implementer's branch as base_branch), or the pull request the prompt names, and writes a Review document with the verdict approve or request changes. test: the Tester writes tests for the branch its worktree was cut from (base_branch the implementer's branch) on its own branch, runs them and writes a Test report. qa: QA walks the use cases the prompt lists in the running application, publishes screenshots and videos to the Design tab and writes a QA report (base_branch the implementer's branch). operate: the Operator runs, configures and checks the services for the task's branch through service requests (cut from the default branch). Default: none."},` +
+				`"join_session_id":{"type":"string","description":"The full id of a session of this task, running or ended, whose worktree and branch the new session joins instead of cutting its own. Excludes base_branch."},` +
+				`"access":{"type":"string","enum":["","write","read_only"],"description":"What the new session may do in the worktree it joins: write, or read_only. Default: read_only for review and qa, write for every other mode. read_only needs join_session_id."},` +
+				`"mode":{"type":"string","enum":["","architect","implement","design","product","review","test","qa","operate"],"description":"architect: the session grills the person on its prompt, shapes it into per-application specs and delegates them. implement: the session turns a Spec task document into tickets, has the architect review them, then implements them test first on its branch. design: the session produces components, images and videos and publishes each to the Design tab. product: the session interviews the person on a feature, writes its PRD on the task, creates one child task per piece of work with a brief each, and asks for review; it never writes code. review: the Reviewer reviews the branch its worktree holds (join the implementer's session with join_session_id, or cut from its branch with base_branch), or the pull request the prompt names, and writes a Review document with the verdict approve or request changes. test: the Tester writes tests for the implementer's branch (join its session with join_session_id and commit there, or cut from it with base_branch and commit on its own branch), runs them and writes a Test report. qa: QA walks the use cases the prompt lists in the running application, publishes screenshots and videos to the Design tab and writes a QA report (join_session_id the implementer's session, or base_branch its branch). operate: the Operator runs, configures and checks the services for the task's branch through service requests (cut from the default branch). Default: none."},` +
 				`"status_check_minutes":{"type":"integer","minimum":0,"maximum":240,"description":"Architect only: minutes between the checks that wake you about this session, 2–240; 0 for no loop. Default: 10."}}}`),
 			Source: "code",
 			Handler: func(ctx context.Context, args map[string]any) (any, error) {

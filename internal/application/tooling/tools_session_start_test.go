@@ -7,6 +7,7 @@ import (
 	"reflect"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/rfbatista/harnesskit/errs"
 
@@ -54,6 +55,22 @@ func startFixture(t *testing.T, autoRun bool) (start func(args map[string]any) (
 
 func startFixtureWith(t *testing.T, autoRun, canStart bool) (start func(args map[string]any) (map[string]any, error), starter *fakeStarter, taskID string) {
 	t.Helper()
+	w := startWorldWith(t, autoRun, canStart)
+	return w.start, w.starter, w.taskID
+}
+
+// startWorld is startFixture with the session store, so a test can seed the
+// sessions a start joins.
+type startWorld struct {
+	start     func(args map[string]any) (map[string]any, error)
+	starter   *fakeStarter
+	sessions  ports.SessionRepository
+	taskID    string
+	projectID string
+}
+
+func startWorldWith(t *testing.T, autoRun, canStart bool) startWorld {
+	t.Helper()
 	db, err := sqlite.Open(":memory:")
 	if err != nil {
 		t.Fatal(err)
@@ -67,7 +84,7 @@ func startFixtureWith(t *testing.T, autoRun, canStart bool) (start func(args map
 		Status: domain.SessionRunning, AutoRun: autoRun}); err != nil {
 		t.Fatal(err)
 	}
-	starter = &fakeStarter{sessions: sessions}
+	starter := &fakeStarter{sessions: sessions}
 	peers := PeerStarter{Sessions: starter, Repositories: repoList{{ID: "r-api", Name: "api"}, {ID: "r-web", Name: "web"}}}
 	if !canStart {
 		peers = PeerStarter{}
@@ -81,13 +98,13 @@ func startFixtureWith(t *testing.T, autoRun, canStart bool) (start func(args map
 	if tool.Handler == nil {
 		t.Fatal("start_task_session not built")
 	}
-	return func(args map[string]any) (map[string]any, error) {
+	return startWorld{start: func(args map[string]any) (map[string]any, error) {
 		out, err := tool.Handler(WithSessionID(context.Background(), "me"), args)
 		if err != nil {
 			return nil, err
 		}
 		return out.(map[string]any), nil
-	}, starter, task.ID
+	}, starter: starter, sessions: sessions, taskID: task.ID, projectID: proj.ID}
 }
 
 func TestStartTaskSession_StartsAPeerOnTheCallersTask(t *testing.T) {
@@ -265,13 +282,17 @@ func TestStartTaskSession_Refusals(t *testing.T) {
 
 func TestStartTaskSession_CapsTheLiveSessionsOnATask(t *testing.T) {
 	start, starter, _ := startFixture(t, false)
-	for i := 1; i < MaxLiveTaskSessions; i++ { // the caller is the first
+	for i := 1; i < MaxLiveTaskSessions; i++ { // the caller is the first: the 15th start makes 16
 		if _, err := start(map[string]any{"prompt": "x"}); err != nil {
 			t.Fatalf("start %d: %v", i, err)
 		}
 	}
-	if _, err := start(map[string]any{"prompt": "one too many"}); errs.Code(err) != "TASK_SESSION_LIMIT" {
+	_, err := start(map[string]any{"prompt": "one too many"})
+	if errs.Code(err) != "TASK_SESSION_LIMIT" {
 		t.Fatalf("over the limit: %v", err)
+	}
+	if msg := err.Error(); !strings.Contains(msg, "16 sessions already run") || !strings.Contains(msg, "the limit is 16") {
+		t.Fatalf("the refusal names neither the count nor the limit: %q", msg)
 	}
 	if len(starter.got) != MaxLiveTaskSessions-1 {
 		t.Fatalf("started %d", len(starter.got))
@@ -317,6 +338,199 @@ func TestStartTaskSession_EveryModeStartsAServerRunSession(t *testing.T) {
 		}
 		if got := starter.got[0].RunsOn; got != domain.RunnerServer {
 			t.Errorf("mode %q starts on %q, want the server", mode, got)
+		}
+	}
+}
+
+// joinWorld seeds the sessions a delegate can join: an implementer running in
+// worktree w-impl of the caller's task, an ended one, one with its worktree
+// cleared, and one on another task.
+func joinWorld(t *testing.T) startWorld {
+	t.Helper()
+	w := startWorldWith(t, false, true)
+	for _, s := range []*domain.Session{
+		{ID: "impl", Status: domain.SessionRunning, WorkspaceID: "w-impl", Branch: "task/impl", TicketID: w.taskID},
+		{ID: "ended", Status: domain.SessionDone, WorkspaceID: "w-ended", Branch: "task/ended", TicketID: w.taskID},
+		{ID: "cleared", Status: domain.SessionDone, WorkspaceID: "w-cleared", Branch: "task/cleared", TicketID: w.taskID},
+		{ID: "other-task", Status: domain.SessionRunning, WorkspaceID: "w-other", Branch: "task/other", TicketID: "another-task"},
+		{ID: "web-impl", Status: domain.SessionRunning, WorkspaceID: "w-web", Branch: "task/web", TicketID: w.taskID, RepositoryID: "r-web"},
+	} {
+		s.ProjectID = w.projectID
+		if s.RepositoryID == "" {
+			s.RepositoryID = "r-api"
+		}
+		if _, err := w.sessions.Create(s); err != nil {
+			t.Fatal(err)
+		}
+	}
+	// Clearing a worktree records when and blanks the session's workspace, as
+	// the store does for real.
+	if err := w.sessions.UpdateWorktreeCleared("cleared", time.Now()); err != nil {
+		t.Fatal(err)
+	}
+	return w
+}
+
+func TestStartTaskSession_JoinsTheNamedSessionsWorktreeWithTheModesDefaultAccess(t *testing.T) {
+	for _, c := range []struct {
+		mode   string
+		access string
+		want   domain.SessionAccess
+	}{
+		{"review", "", domain.AccessReadOnly},
+		{"qa", "", domain.AccessReadOnly},
+		{"implement", "", domain.AccessWrite},
+		{"test", "", domain.AccessWrite},
+		{"operate", "", domain.AccessWrite},
+		{"", "", domain.AccessWrite},
+		{"review", "write", domain.AccessWrite},
+		{"implement", "read_only", domain.AccessReadOnly},
+	} {
+		w := joinWorld(t)
+		if _, err := w.start(map[string]any{"prompt": "x", "mode": c.mode, "access": c.access, "join_session_id": "impl"}); err != nil {
+			t.Fatalf("%+v: %v", c, err)
+		}
+		req := w.starter.got[0]
+		if req.WorktreeID != "w-impl" || req.Access != string(c.want) || req.BaseBranch != "" || req.BranchName != "" {
+			t.Errorf("%+v: request = %+v", c, req)
+		}
+	}
+}
+
+func TestStartTaskSession_JoinsAnEndedSessionsWorktree(t *testing.T) {
+	w := joinWorld(t)
+	if _, err := w.start(map[string]any{"prompt": "x", "mode": "review", "join_session_id": "ended"}); err != nil {
+		t.Fatal(err)
+	}
+	if req := w.starter.got[0]; req.WorktreeID != "w-ended" {
+		t.Fatalf("request = %+v", req)
+	}
+}
+
+func TestStartTaskSession_AJoinTakesTheJoinedSessionsRepositoryAndCountsTowardsTheLimit(t *testing.T) {
+	w := joinWorld(t)
+	if _, err := w.start(map[string]any{"prompt": "x", "join_session_id": "web-impl"}); err != nil {
+		t.Fatal(err)
+	}
+	if req := w.starter.got[0]; req.RepositoryID != "r-web" {
+		t.Fatalf("the join did not take the joined session's repository: %+v", req)
+	}
+	// "web" names the joined session's own repository: fine.
+	if _, err := w.start(map[string]any{"prompt": "x", "join_session_id": "web-impl", "repository": "web"}); err != nil {
+		t.Fatal(err)
+	}
+	for i := len(w.starter.got); i <= MaxLiveTaskSessions; i++ { // fills the task to its limit
+		if _, err := w.start(map[string]any{"prompt": "x", "join_session_id": "impl"}); err != nil {
+			if errs.Code(err) != "TASK_SESSION_LIMIT" {
+				t.Fatalf("start %d: %v", i, err)
+			}
+			return
+		}
+	}
+	t.Fatal("joined sessions did not count towards the limit")
+}
+
+func TestStartTaskSession_AJoinRefusalNamesTheSessionAndTheReasonAndStartsNothing(t *testing.T) {
+	for _, c := range []struct {
+		name string
+		args map[string]any
+		want []string // all must appear in the message
+	}{
+		{"another task", map[string]any{"join_session_id": "other-task"}, []string{"other-task", "another task"}},
+		{"unknown session", map[string]any{"join_session_id": "nope"}, []string{"nope", "no session"}},
+		{"cleared worktree", map[string]any{"join_session_id": "cleared"}, []string{"cleared", "worktree", "cleared or is gone"}},
+		{"with a base branch", map[string]any{"join_session_id": "impl", "base_branch": "main"}, []string{"impl", "base_branch", "cannot be combined"}},
+		{"bad access", map[string]any{"join_session_id": "impl", "access": "admin"}, []string{"admin", "write", "read_only"}},
+		{"other repository", map[string]any{"join_session_id": "impl", "repository": "web"}, []string{"impl", "web", "api"}},
+		{"access without a join", map[string]any{"access": "read_only"}, []string{"access", "join_session_id"}},
+	} {
+		w := joinWorld(t)
+		args := map[string]any{"prompt": "x"}
+		for k, v := range c.args {
+			args[k] = v
+		}
+		_, err := w.start(args)
+		if err == nil {
+			t.Errorf("%s: not refused", c.name)
+			continue
+		}
+		for _, part := range c.want {
+			if !strings.Contains(err.Error(), part) {
+				t.Errorf("%s: message %q lacks %q", c.name, err.Error(), part)
+			}
+		}
+		if len(w.starter.got) != 0 {
+			t.Errorf("%s: a refused call started something: %+v", c.name, w.starter.got)
+		}
+	}
+}
+
+// The start path's own refusals of a join, as orchestration raises them (a
+// coded error with the form's wording), reach the architect naming the session
+// and the reason, not in the form's words.
+func TestStartTaskSession_TheStartPathsJoinRefusalsNameTheSessionAndTheReason(t *testing.T) {
+	refusal := func(code, message string) error {
+		return &domain.DetailedError{StructuredError: &domain.StructuredError{Code: code, Message: code + ": " + message}}
+	}
+	for _, c := range []struct {
+		name    string
+		mode    string
+		refused error
+		want    []string
+		not     []string
+	}{
+		{"gone from disk", "implement",
+			refusal("WORKTREE_NOT_FOUND", "That worktree is gone from disk since the list was read. Nothing was started. Pick another or start on a new branch."),
+			[]string{"impl", "gone from disk"}, []string{"since the list was read", "Pick another"}},
+		{"read-only with the sandbox off", "review",
+			refusal("ACCESS_INVALID", "Read-only access needs the agent sandbox; it is off for this session."),
+			[]string{"impl", "sandbox", "pass access: write to join with write access"}, nil},
+	} {
+		w := joinWorld(t)
+		w.starter.err = c.refused
+		_, err := w.start(map[string]any{"prompt": "x", "mode": c.mode, "join_session_id": "impl"})
+		if err == nil {
+			t.Fatalf("%s: not refused", c.name)
+		}
+		for _, part := range c.want {
+			if !strings.Contains(err.Error(), part) {
+				t.Errorf("%s: message %q lacks %q", c.name, err.Error(), part)
+			}
+		}
+		for _, part := range c.not {
+			if strings.Contains(err.Error(), part) {
+				t.Errorf("%s: message %q still says %q", c.name, err.Error(), part)
+			}
+		}
+		if errs.Code(err) != errs.Code(c.refused) {
+			t.Errorf("%s: code %q, want %q", c.name, errs.Code(err), errs.Code(c.refused))
+		}
+	}
+}
+
+func TestStartTaskSession_AnArchitectProductOrDesignSystemSessionCannotJoinAndTheMessageSaysWho(t *testing.T) {
+	for _, mode := range []string{"architect", "product"} {
+		w := joinWorld(t)
+		_, err := w.start(map[string]any{"prompt": "x", "mode": mode, "join_session_id": "impl"})
+		if err == nil || !strings.Contains(err.Error(), "impl") || !strings.Contains(err.Error(), mode) || !strings.Contains(err.Error(), "cannot join") {
+			t.Errorf("%s: got %v", mode, err)
+		}
+		if len(w.starter.got) != 0 {
+			t.Errorf("%s: started %+v", mode, w.starter.got)
+		}
+	}
+}
+
+func TestStartTaskSession_TheDescriptionNamesTheJoinOptionItsAccessAndTheLimit(t *testing.T) {
+	var tool domain.Tool
+	for _, tl := range SessionTaskTools(nil, nil, nil, nil, PeerStarter{}, ArtifactTooling{}, nil, NotificationTooling{}) {
+		if tl.Name == "start_task_session" {
+			tool = tl
+		}
+	}
+	for _, want := range []string{"join_session_id", "access", "read_only", "16", "second implementer", "verification"} {
+		if !strings.Contains(tool.Description+string(mustJSON(t, tool.InputSchema)), want) {
+			t.Errorf("the tool does not say %q", want)
 		}
 	}
 }
