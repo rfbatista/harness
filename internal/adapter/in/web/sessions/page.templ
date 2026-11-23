@@ -964,16 +964,20 @@ templ newSessionForm(form NewSessionForm, lockedMode string) {
 					</div>
 				</fieldset>
 			</template>
-			<div class="[ field ]" data-worktree-field x-show="joining">
+			<div class="[ field ]" data-worktree-field x-show="existingChosen">
 				<label for="new-session-worktree">Worktree</label>
-				<div class="[ dropdown ]" x-data="dropdown" data-footer="Worktrees of this task in this repository, still on disk">
+				<div class="[ dropdown ]" x-data="dropdown" data-footer="Worktrees of this task, still on disk">
 					<select id="new-session-worktree" x-model="worktreeId" x-on:change="worktreePicked" aria-describedby="new-session-worktree-status new-session-worktree-hint">
+						<option value="" data-pinned>Pick a worktree</option>
 						<template x-for="o in worktreeOptions" x-bind:key="o.id">
 							<option x-bind:value="o.id" x-bind:data-description="o.description" x-bind:data-meta="o.meta" x-bind:data-tone="o.tone" x-bind:title="o.title" x-text="o.label"></option>
 						</template>
 					</select>
 				</div>
-				<span class="[ error ]" id="new-session-worktree-status" aria-live="polite" data-worktree-error x-show="hasWorktreeError" x-text="worktreeError"></span>
+				<span class="[ error ]" id="new-session-worktree-status" aria-live="polite" data-worktree-error x-show="hasWorktreeError">
+					<span x-text="worktreeError"></span>
+					<span class="[ code ]" data-worktree-error-code x-text="worktreeErrorCode"></span>
+				</span>
 				<span class="[ hint ]" id="new-session-worktree-hint" data-worktree-hint x-text="worktreeHint"></span>
 			</div>
 			<fieldset class="[ field ]" data-access-field x-show="joining">

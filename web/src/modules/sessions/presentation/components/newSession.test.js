@@ -28,6 +28,7 @@ function setup({ defaultRepository = "r1", repositories = { r1: "p1", r2: "p1" }
   const form = document.createElement("form");
   if (defaultRepository !== null) form.dataset.defaultRepository = defaultRepository;
   form.dataset.modeModels = JSON.stringify(modeModels);
+  form.dataset.repositories = JSON.stringify([{ id: "r1", name: "harness" }, { id: "r2", name: "llmkit" }]);
   if (lockedMode) form.dataset.lockedMode = lockedMode;
   const mounted = mount(() => newSession({ gateway: memory.gateway, debounceMs: DEBOUNCE, now: () => NOW })("p1", "t1", lockedMode), { el: form });
   mounted.instance.init();
@@ -951,6 +952,7 @@ test("Where it works offers a new branch, preselected, and an existing worktree 
   assert.equal(instance.showBranchFields, true);
   assert.equal(instance.noWorktrees, false);
   assert.equal(instance.joinCardText, "Join a session of this task on its branch. 2 to choose from.");
+  assert.equal(instance.worktreeHint, "Worktrees of this task in harness, still on disk.", "the hint names the repository");
 });
 
 test("the worktree picker has one row per worktree: the creator, the branch with who else is on it, and running or ended", async () => {
@@ -989,6 +991,7 @@ test("choosing an existing worktree picks the newest, shows who is on it, and sa
   assert.ok(instance.worktreeHint.includes("reviewer (review) is running on it with read-only access"), instance.worktreeHint);
   assert.ok(instance.worktreeHint.includes("go-developer (implement) is running on it with write access"), instance.worktreeHint);
   assert.ok(instance.worktreeHint.includes("nothing is locked"), instance.worktreeHint);
+  assert.ok(!instance.worktreeHint.includes("told"), "the hint does not say agents are told who shares: that waits for its own task");
   assert.equal(instance.joinOutcome, "claude starts in a terminal on the server, read-only on go-developer's worktree, branch agent/ship-1.");
   instance.pickWorktree("w-old");
   assert.equal(instance.worktreeId, "w-old", "another row can be picked");
@@ -1004,7 +1007,7 @@ test("with no worktree on the task the second card is disabled with its reason a
   tick();
   assert.deepEqual(instance.worktreeOptions, []);
   assert.equal(instance.noWorktrees, true, "the card is disabled");
-  assert.ok(instance.joinCardText.startsWith("No session of this task has a worktree"), instance.joinCardText);
+  assert.equal(instance.joinCardText, "No session of this task has a worktree in harness yet. Start one on a new branch first.");
   assert.ok(instance.joinCardText.includes("Start one on a new branch first"), instance.joinCardText);
   instance.chooseWhere("worktree");
   assert.equal(instance.joining, false, "nothing to join");
@@ -1079,7 +1082,7 @@ test("a taken branch name does not stop a join, and going back to a new branch b
   assert.ok(instance.problem.includes("taken"));
 });
 
-test("a worktree that vanished is refused in place, dropped from the picker, and the draft is kept", async () => {
+test("a worktree that vanished is refused in place: the sentence shows, the form stays on the existing worktree with no pick, and Start never cuts a branch", async () => {
   const { instance, memory, dispatched } = setup({ worktrees: WORKTREES });
   await flush();
   instance.prompt = "review the work";
@@ -1089,15 +1092,31 @@ test("a worktree that vanished is refused in place, dropped from the picker, and
   await instance.submit();
 
   assert.deepEqual(dispatched, [], "nothing started");
+  const started = memory.starts.length;
   assert.ok(instance.worktreeError.startsWith("that worktree is no longer there"), instance.worktreeError);
   assert.ok(!instance.worktreeError.includes("WORKTREE_NOT_FOUND"), "the sentence is shown without its code");
+  assert.equal(instance.worktreeErrorCode, "WORKTREE_NOT_FOUND", "the code is shown small under it");
+  assert.equal(instance.hasWorktreeError, true);
+  assert.equal(instance.existingChosen, true, "the field that shows the sentence stays on screen");
+  assert.equal(instance.where, "worktree", "still on An existing worktree");
+  assert.equal(instance.worktreeId, "", "with no pick");
+  assert.equal(instance.joining, false);
+  assert.equal(instance.showBranchFields, false, "the branch fields do not come back on their own");
+  assert.equal(instance.cannotSubmit, true, "Start is disabled until a pick");
+  assert.equal(instance.problem, "Pick a worktree.");
+  await instance.submit();
+  assert.equal(memory.starts.length, started, "a Start with no pick sends nothing, so it never cuts a new branch");
   assert.equal(instance.error, null, "the refusal is in place, not in the banner");
   assert.equal(instance.prompt, "review the work");
   assert.equal(instance.mode, "review");
-  assert.equal(instance.worktreeId, "", "the vanished worktree is no longer picked");
-  assert.equal(instance.where, "branch", "the form falls back to a new branch");
-  assert.deepEqual(instance.worktreeOptions.map((o) => o.id), ["w-old"], "nor offered");
-  assert.equal(instance.submitting, false);
+  assert.deepEqual(instance.worktreeOptions.map((o) => o.id), ["w-old"], "the vanished worktree is not offered");
+
+  instance.pickWorktree("w-old");
+  assert.equal(instance.hasWorktreeError, false, "picking again clears the sentence");
+  assert.equal(instance.cannotSubmit, false);
+  instance.chooseWhere("branch");
+  assert.equal(instance.showBranchFields, true, "switching cards on purpose brings the branch fields back");
+  assert.equal(instance.worktreeError, "");
 });
 
 test("an invalid access is refused in place too and flipping it clears the sentence", async () => {
@@ -1107,6 +1126,7 @@ test("an invalid access is refused in place too and flipping it clears the sente
   memory.refuseStart(new StructuredError(Codes.ACCESS_INVALID, "ACCESS_INVALID: access must be write or read_only", 400));
   await instance.submit();
   assert.equal(instance.worktreeError, "access must be write or read_only");
+  assert.equal(instance.worktreeErrorCode, "ACCESS_INVALID");
   assert.equal(instance.worktreeId, "w-old", "a refusal that is not about the worktree keeps the pick");
   instance.pickAccess("write");
   assert.equal(instance.worktreeError, "");

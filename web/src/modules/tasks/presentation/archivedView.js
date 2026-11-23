@@ -78,7 +78,7 @@ export function afterClear(worktrees, ids, skipped) {
 /**
  * The confirm strip of Clear worktrees: what it asks, what it says it will
  * lose, and afterwards what it did and what it skipped.
- * @param {{ label: string, phase: "loading" | "ready" | "clearing" | "done" | "error", preview: { worktrees: number, dirty: number, running: number } | null, result: { cleared: number, skipped: { task_title: string, reason: string, message?: string }[] } | null, error: { message: string, code: string, next: string } | null }} clear
+ * @param {{ label: string, phase: "loading" | "ready" | "clearing" | "done" | "error", preview: { worktrees: number, dirty: number, running: number, shared?: number } | null, result: { cleared: number, skipped: { task_title: string, reason: string, message?: string }[] } | null, error: { message: string, code: string, next: string } | null }} clear
  */
 export function toClearStrip(clear) {
   const base = { title: "", lines: [], canConfirm: false, busy: false, closes: false, error: null };
@@ -86,15 +86,31 @@ export function toClearStrip(clear) {
   if (clear.phase === "loading") return { ...base, title: `Clear worktrees of ${clear.label}?`, lines: ["Counting worktrees…"], busy: true };
   if (clear.phase === "done") {
     const { cleared, skipped } = clear.result;
-    const why = (s) => (s.reason === "running" ? "still running, so its worktree stays" : `could not be removed: ${s.message ?? "unknown error"}`);
+    const why = (s) => {
+      switch (s.reason) {
+        case "running":
+          return "still running, so its worktree stays";
+        case "shared":
+          return "its worktree is shared with a task that is not being cleared, so it stays";
+        case "error":
+          return `could not tell who is on its worktree (${s.message || "no reason given"}), so it stays`;
+        default:
+          return `could not be removed: ${s.message ?? "unknown error"}`;
+      }
+    };
     return { ...base, title: `Cleared ${plural(cleared, "worktree", "worktrees")}`, lines: skipped.map((s) => `${s.task_title}: ${why(s)}.`), closes: true, error: clear.error };
   }
-  const { worktrees, dirty, running } = clear.preview;
+  const { worktrees, dirty, running, shared = 0 } = clear.preview;
+  const sharedLine = `${plural(shared, "session shares", "sessions share")} a worktree with a task that is not being cleared; ${shared === 1 ? "its worktree stays" : "their worktrees stay"}.`;
   if (worktrees === 0) {
-    return { ...base, title: `Nothing to clear in ${clear.label}`, lines: [running > 0 ? `${plural(running, "running session keeps", "running sessions keep")} its worktree until it ends.` : "Their worktrees are already cleared."], closes: true };
+    const lines = [];
+    if (running > 0) lines.push(`${plural(running, "running session keeps", "running sessions keep")} its worktree until it ends.`);
+    if (shared > 0) lines.push(sharedLine);
+    return { ...base, title: `Nothing to clear in ${clear.label}`, lines: lines.length ? lines : ["Their worktrees are already cleared."], closes: true };
   }
   const lines = [dirty > 0 ? `${plural(dirty, "holds", "hold")} uncommitted changes that will be lost.` : "None hold uncommitted changes."];
   if (running > 0) lines.push(`${plural(running, "running session", "running sessions")} will be skipped.`);
+  if (shared > 0) lines.push(sharedLine);
   lines.push("Branches, sessions and transcripts stay. Restoring a task does not bring its worktrees back.");
   return { ...base, title: `Clear ${plural(worktrees, "worktree", "worktrees")} of ${clear.label}?`, lines, canConfirm: clear.phase === "ready", busy: clear.phase === "clearing" };
 }
