@@ -21,8 +21,8 @@ export function contextFeedContract(name: string, make: () => ContextFeedHarness
       const h = make();
       const heard: ContextChanged[] = [];
       h.feed.follow("p1", (c) => heard.push(c));
-      h.announce("p1", { session_id: "s1", reason: "usage" });
-      h.announce("p1", { session_id: "s2", reason: "entry_added" });
+      h.announce("p1", { kind: "context.changed", session_id: "s1", reason: "usage" });
+      h.announce("p1", { kind: "context.changed", session_id: "s2", reason: "entry_added" });
       assert.deepEqual(heard, [
         { sessionId: "s1", reason: "usage" },
         { sessionId: "s2", reason: "entry_added" },
@@ -34,7 +34,8 @@ export function contextFeedContract(name: string, make: () => ContextFeedHarness
       const heard: ContextChanged[] = [];
       h.feed.follow("p1", (c) => heard.push(c));
       h.announce("p1", { type: "task_updated", task_id: "t1" });
-      h.announce("p1", { session_id: "s1", reason: "something_new" });
+      h.announce("p1", { kind: "context.changed", session_id: "s1", reason: "something_new" });
+      h.announce("p1", { session_id: "s1", reason: "usage" }); // no kind: not this event
       h.announce("p1", "text");
       assert.deepEqual(heard, []);
     });
@@ -46,7 +47,7 @@ export function contextFeedContract(name: string, make: () => ContextFeedHarness
       assert.equal(h.followers("p1"), 1);
       stop();
       assert.equal(h.followers("p1"), 0);
-      h.announce("p1", { session_id: "s1", reason: "usage" });
+      h.announce("p1", { kind: "context.changed", session_id: "s1", reason: "usage" });
       assert.deepEqual(heard, []);
     });
   });

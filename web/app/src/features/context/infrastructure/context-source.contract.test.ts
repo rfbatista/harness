@@ -17,13 +17,13 @@ contextSourceContract("HTTP adapter over a stubbed fetch", () => {
     const piece = /^\/api\/sessions\/([^/]+)\/context\/entries\/([^/]+)\/pieces\/([^/]+)$/.exec(path);
     if (piece) {
       const text = pieces.get(`${piece[1]}/${piece[2]}/${piece[3]}`);
-      return text === undefined ? json(404, { code: "CONTEXT_PIECE_NOT_FOUND", message: "no such piece" }) : json(200, { text });
+      return text === undefined ? json(404, { error: "no such piece", code: "CONTEXT_PIECE_NOT_FOUND" }) : json(200, { text });
     }
     const context = /^\/api\/sessions\/([^/]+)\/context$/.exec(path);
-    if (!context) return json(404, { code: "NOT_FOUND", message: "no route" });
+    if (!context) return json(404, { error: "no route", code: "NOT_FOUND" });
     if (malformed) return json(200, malformed.raw);
     const served = contexts.get(context[1]!);
-    return served ? json(200, served) : json(404, { code: "SESSION_NOT_FOUND", message: "no such session" });
+    return served ? json(200, served) : json(404, { error: "no such session", code: "SESSION_NOT_FOUND" });
   };
   return {
     source: httpContextSource(apiClient(fetcher)),

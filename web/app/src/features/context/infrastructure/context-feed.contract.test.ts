@@ -18,8 +18,8 @@ contextFeedContract("in-memory adapter", () => {
     feed,
     announce: (_projectId, data) => {
       // The memory feed carries only valid changes; the stream's filtering is the adapter above.
-      const d = data as { session_id?: unknown; reason?: unknown };
-      if (typeof d?.session_id === "string" && (d.reason === "usage" || d.reason === "entry_added" || d.reason === "mcp_status")) feed.emit({ sessionId: d.session_id, reason: d.reason });
+      const d = data as { kind?: unknown; session_id?: unknown; reason?: unknown };
+      if (d?.kind === "context.changed" && typeof d?.session_id === "string" && (d.reason === "usage" || d.reason === "entry_added" || d.reason === "mcp_status")) feed.emit({ sessionId: d.session_id, reason: d.reason });
     },
     followers: (projectId) => feed.followers(projectId),
   };
