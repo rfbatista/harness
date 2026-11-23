@@ -8,12 +8,16 @@ import { CardView } from "./card-view";
 
 export function BoardView({ presenter }: { presenter: BoardPresenter }) {
   const vm = usePresenter(presenter);
-  const width = Math.max(0, ...vm.cards.map((c) => c.rect.x + c.rect.w)) + 48;
-  const height = Math.max(0, ...vm.cards.map((c) => c.rect.y + c.rect.h)) + 48;
+  const { w: width, h: height } = vm.canvas;
   return (
     <section className="whiteboard" aria-label="Agents whiteboard" data-layout="rank">
       <div className="wb-canvas" tabIndex={0} role="group" aria-roledescription="whiteboard" aria-label={`${vm.cards.length - 1} sessions as a graph.`}>
-        <div className="wb-world" role="list">
+        <div className="wb-world" role="list" data-compact={vm.compact ? "" : undefined} style={{ inlineSize: width, blockSize: height }}>
+          {vm.columns.map((column) => (
+            <div key={column.key} className="wb-lane" aria-hidden="true" style={{ left: column.x, top: column.y, inlineSize: column.w }}>
+              {column.label} <span className="count">{column.count}</span>
+            </div>
+          ))}
           <svg className="wb-edges" width={width} height={height} aria-hidden="true">
             {vm.edges.map((e) => (
               <path key={e.id} d={e.d} data-kind="started" data-dim={e.dimmed ? "" : undefined} />

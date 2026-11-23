@@ -41,9 +41,23 @@ export interface EdgeViewModel {
   dimmed: boolean;
 }
 
+export interface ColumnViewModel {
+  key: string;
+  label: string;
+  count: number;
+  x: number;
+  y: number;
+  w: number;
+}
+
 export interface BoardViewModel {
   phase: "loading" | "ready" | "error";
   error: string;
+  /** Compact cards: the pane is open, or the page is narrow. */
+  compact: boolean;
+  columns: ColumnViewModel[];
+  /** The extent of the board in board px. */
+  canvas: { w: number; h: number };
   cards: CardViewModel[];
   edges: EdgeViewModel[];
 }
@@ -57,11 +71,12 @@ export interface BoardDeps {
   now: () => Date;
 }
 
-const LOADING: BoardViewModel = { phase: "loading", error: "", cards: [], edges: [] };
+const LOADING: BoardViewModel = { phase: "loading", error: "", compact: false, columns: [], canvas: { w: 0, h: 0 }, cards: [], edges: [] };
 
 export class BoardPresenter extends Presenter<BoardViewModel> {
   readonly #deps: BoardDeps;
   #sessions: BoardSession[] = [];
+  #compact = false;
 
   constructor(deps: BoardDeps) {
     super(LOADING);
@@ -79,10 +94,17 @@ export class BoardPresenter extends Presenter<BoardViewModel> {
     this.set(this.#build());
   }
 
+  /** The pane opens or the page narrows: cards take their compact form. */
+  setCompact(compact: boolean): void {
+    if (compact === this.#compact) return;
+    this.#compact = compact;
+    if (this.viewModel.phase === "ready") this.set(this.#build());
+  }
+
   #build(): BoardViewModel {
     const sessions = this.#sessions;
-    const compact = false;
-    const layout = computeLayout(sessions, sizeOf(false, compact));
+    const compact = this.#compact;
+    const layout = computeLayout(sessions, compact);
     const rects: Record<string, Rect> = {};
     for (const [id, p] of Object.entries(layout.positions)) rects[id] = { ...p, ...sizeOf(id === YOU_ID, compact) };
     const cards: CardViewModel[] = [
@@ -97,7 +119,7 @@ export class BoardPresenter extends Presenter<BoardViewModel> {
       d: edgeGeometry(rects[e.from]!, rects[e.to]!).d,
       dimmed: ended.has(e.to),
     }));
-    return { phase: "ready", error: "", cards, edges };
+    return { phase: "ready", error: "", compact, columns: layout.columns, canvas: layout.size, cards, edges };
   }
 
   #card(s: BoardSession, rect: Rect): CardViewModel {
