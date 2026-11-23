@@ -12,14 +12,26 @@ import (
 	"operators-mcp/internal/ports"
 )
 
-// The commit check hooks dir (ADR 0040): one stable folder per session in the
-// data directory, named by the worktree's core.hooksPath, kept while the
-// session may resume and removed when it ends for good.
+// The commit check hooks dir (ADR 0040, ADR 0105): one stable folder per
+// worktree in the data directory, named by the worktree's core.hooksPath, kept
+// while a session may resume and removed when the last session on the worktree
+// ends for good.
 
 // transcriptsThatResume lets every ended session resume.
 type transcriptsThatResume struct{}
 
 func (transcriptsThatResume) CanResume(string, string) error { return nil }
+
+// hooksDirOf is the data dir's hooks folder of the worktree a session runs in:
+// it is named after the worktree, not the session.
+func hooksDirOf(t *testing.T, h *archHooks, sessionID string) string {
+	t.Helper()
+	sess, err := h.orch.Get(h.ctx, sessionID)
+	if err != nil || sess == nil || sess.WorkspaceID == "" {
+		t.Fatalf("session %s has no worktree: %v", sessionID, err)
+	}
+	return filepath.Join(h.dataDir, "githooks", sess.WorkspaceID)
+}
 
 func hooksPathOf(t *testing.T, worktree string) string {
 	t.Helper()
@@ -34,7 +46,7 @@ func TestASessionStartPointsItsWorktreeIntoTheCommitCheckHooksDirInTheDataDir(t 
 	h := newArchHooks(t, "blocking")
 	a := h.as("go-developer")
 
-	want := filepath.Join(h.dataDir, "githooks", a.id)
+	want := hooksDirOf(t, h, a.id)
 	if got := hooksPathOf(t, a.worktree); got != want {
 		t.Fatalf("core.hooksPath = %q, want %q", got, want)
 	}
@@ -136,13 +148,13 @@ func TestAWorktreeLeftOnADeletedTemporaryFolderIsRepairedWhenTheServerBoots(t *t
 	if out, err := gitIn(a.worktree, "config", "--worktree", "core.hooksPath", gone); err != nil {
 		t.Fatalf("%v %s", err, out)
 	}
-	if err := os.RemoveAll(filepath.Join(h.dataDir, "githooks", a.id)); err != nil {
+	if err := os.RemoveAll(hooksDirOf(t, h, a.id)); err != nil {
 		t.Fatal(err)
 	}
 
 	h.restart()
 
-	want := filepath.Join(h.dataDir, "githooks", a.id)
+	want := hooksDirOf(t, h, a.id)
 	if got := hooksPathOf(t, a.worktree); got != want {
 		t.Fatalf("core.hooksPath after the boot = %q, want %q", got, want)
 	}
@@ -166,7 +178,7 @@ func TestBootRepairsASessionTheServerDoesNotRunItself(t *testing.T) {
 
 	h.restart()
 
-	if got, want := hooksPathOf(t, worktree), filepath.Join(h.dataDir, "githooks", sess.ID); got != want {
+	if got, want := hooksPathOf(t, worktree), hooksDirOf(t, h, sess.ID); got != want {
 		t.Fatalf("core.hooksPath of a terminal client session = %q, want %q", got, want)
 	}
 }
@@ -181,7 +193,7 @@ func TestBootRepairsTheOthersWhenOneSessionsRepairFails(t *testing.T) {
 		}
 	}
 	// A file where the folder belongs makes this session's repair fail.
-	githooks := filepath.Join(h.dataDir, "githooks", broken.id)
+	githooks := hooksDirOf(t, h, broken.id)
 	if err := os.RemoveAll(githooks); err != nil {
 		t.Fatal(err)
 	}
@@ -191,7 +203,7 @@ func TestBootRepairsTheOthersWhenOneSessionsRepairFails(t *testing.T) {
 
 	h.restart()
 
-	if got, want := hooksPathOf(t, fine.worktree), filepath.Join(h.dataDir, "githooks", fine.id); got != want {
+	if got, want := hooksPathOf(t, fine.worktree), hooksDirOf(t, h, fine.id); got != want {
 		t.Errorf("the other session's core.hooksPath = %q, want %q", got, want)
 	}
 }
@@ -225,7 +237,7 @@ func breakRepair(t *testing.T, h *archHooks, a runningSession) string {
 	if out, err := gitIn(a.worktree, "config", "--worktree", "core.hooksPath", "/nonexistent/harness-githooks-3"); err != nil {
 		t.Fatalf("%v %s", err, out)
 	}
-	hooks := filepath.Join(h.dataDir, "githooks", a.id)
+	hooks := hooksDirOf(t, h, a.id)
 	if err := os.RemoveAll(hooks); err != nil {
 		t.Fatal(err)
 	}
