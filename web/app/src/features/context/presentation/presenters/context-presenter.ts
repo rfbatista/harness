@@ -5,6 +5,7 @@ import { Presenter } from "../../../../shared/kernel/presenter";
 import { loadContext } from "../../application/load-context";
 import { ContextSourceError, type ContextSource } from "../../application/ports";
 import type { Entry, Facts, SessionContext } from "../../domain/session-context";
+import { toolsGroup } from "./tools-group";
 import type { ContextGroups, GroupKey } from "./context-view-model";
 import { closedPiece, instructionsGroup, type PieceState } from "./instructions-group";
 
@@ -113,7 +114,10 @@ export class ContextPresenter extends Presenter<ContextViewModel> {
       status: "ready",
       message: "",
       facts: factRows(entry.facts),
-      groups: { instructions: instructionsGroup(this.#heading("instructions", "Instructions", entry.instructions.length), entry.instructions, this.#pieces) },
+      groups: {
+        instructions: instructionsGroup(this.#heading("instructions", "Instructions", entry.instructions.length), entry.instructions, this.#pieces),
+        tools: toolsGroup(this.#heading("tools", "Tools", 0), entry.tools, entry.servers, this.#context!.usage),
+      },
     });
   }
 

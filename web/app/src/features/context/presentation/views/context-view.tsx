@@ -1,6 +1,7 @@
 import { usePresenter } from "../../../../shared/presentation/use-presenter";
 import type { ContextPresenter } from "../presenters/context-presenter";
 import { InstructionsView } from "./instructions-view";
+import { ToolsView } from "./tools-view";
 
 /** The Context tab: a passive view of what its presenter says (the Sandbox tab's shape). */
 export function ContextView({ presenter }: { presenter: ContextPresenter }) {
@@ -37,6 +38,7 @@ export function ContextView({ presenter }: { presenter: ContextPresenter }) {
           </section>
         )}
         {vm.status === "ready" && vm.groups && <InstructionsView group={vm.groups.instructions} presenter={presenter} />}
+        {vm.status === "ready" && vm.groups && <ToolsView group={vm.groups.tools} presenter={presenter} />}
     </div>
   );
 }

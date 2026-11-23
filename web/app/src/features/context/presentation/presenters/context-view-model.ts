@@ -33,6 +33,30 @@ export interface InstructionsGroup extends GroupHeading {
   readonly rows: readonly InstructionRow[];
 }
 
+export interface ToolRow {
+  /** The name on the row: an MCP tool without its "mcp__<server>__" prefix. */
+  readonly name: string;
+  /** The tool's full name, for the title and for search. */
+  readonly fullName: string;
+  readonly state: "allowed" | "on_demand" | "hidden" | "refused";
+  /** "allowed", "on demand", "hidden" or "refused": text, never only colour. */
+  readonly stateLabel: string;
+  /** "used ×3", or "" when the session has not used it. */
+  readonly used: string;
+}
+
+export interface ToolSection {
+  /** "Claude Code", or the MCP server's name. */
+  readonly title: string;
+  readonly count: string;
+  readonly rows: readonly ToolRow[];
+}
+
+export interface ToolsGroup extends GroupHeading {
+  readonly sections: readonly ToolSection[];
+}
+
 export interface ContextGroups {
   readonly instructions: InstructionsGroup;
+  readonly tools: ToolsGroup;
 }
