@@ -45,7 +45,7 @@ var SessionTaskToolNames = []string{
 
 // MaxLiveTaskSessions caps the sessions running on one task at once, so agents
 // starting peers cannot fan out without bound.
-const MaxLiveTaskSessions = 8
+const MaxLiveTaskSessions = 16
 
 // PeerStarter is what start_task_session needs to start a session: the
 // interactive sessions port and the project's repositories. The zero value

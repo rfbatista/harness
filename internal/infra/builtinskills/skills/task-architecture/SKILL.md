@@ -291,7 +291,7 @@ For each spec whose dependencies are stable, call `start_task_session`:
 
 Then update the overview's table with the returned `session_id` and branch.
 
-At most 8 sessions run on a task at once (yours included). If you hit the
+At most 16 sessions run on a task at once (yours included). If you hit the
 limit, delegate the rest later and note it in the overview.
 
 ## Coordinating Delegates
