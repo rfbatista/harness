@@ -127,8 +127,9 @@ const plural = (n, one, many) => `${n} ${n === 1 ? one : many}`;
  */
 export function saveView(s, form) {
   const paths = s.preview ? s.preview.writes.map((w) => w.path) : form.writes;
-  // A change that sets only project lists writes no catalog file: the dry run says so.
-  const writes = paths.join(", ") || (s.preview && (s.preview.projects.length || s.preview.modes.length) ? "the project and mode lists" : "");
+  // A change that sets only project or mode lists writes no catalog file: the dry run says so, naming the lists it sets.
+  const lists = s.preview ? [s.preview.projects.length > 0 ? "project" : "", s.preview.modes.length > 0 ? "mode" : ""].filter(Boolean) : [];
+  const writes = paths.join(", ") || (lists.length > 0 ? `the ${lists.join(" and ")} lists` : "");
   const dirty = s.phase !== "clean" && s.phase !== "saved";
   let footer;
   if (form.blocked) footer = `Saving is off · ${form.blocked}`;

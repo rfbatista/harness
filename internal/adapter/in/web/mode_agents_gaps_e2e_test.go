@@ -164,7 +164,7 @@ func TestTheAgentEditorsModesWorkFromTheKeyboardAndAreLabelled_EndToEnd(t *testi
 		chromedp.Evaluate(boxes+`.map(i => i.getAttribute('aria-label') || i.closest('label')?.textContent.trim() || '').join(',')`, &names),
 		chromedp.Evaluate(`document.querySelector('[data-mode-list]').getAttribute('role') === 'group' && !!document.querySelector('[data-mode-list]').getAttribute('aria-label')`, &grouped),
 	)
-	if want := "Default,Architect,Implement,Design,Product,Design system,Reviewer,Tester,QA,Operator"; names != want {
+	if want := "Default, All agents,Architect, All agents,Implement, All agents,Design, Selected agents,Product, All agents,Design system, All agents,Reviewer, Selected agents,Tester, All agents,QA, All agents,Operator, All agents"; names != want {
 		t.Errorf("checkbox names = %q, want %q", names, want)
 	}
 	if !grouped {

@@ -70,7 +70,10 @@ func maState(mode string) string {
 
 // maRefuseSaves answers every set_mode_agents of the page with a 422 and body,
 // as a server that refuses the write would; other requests go through.
-func maRefuseSaves(body string) chromedp.Action {
+func maRefuseSaves(body string) chromedp.Action { return maFail("set_mode_agents", 422, body) }
+
+// maFail answers every request of the page whose URL has path with status and body; other requests go through.
+func maFail(path string, status int64, body string) chromedp.Action {
 	return chromedp.ActionFunc(func(ctx context.Context) error {
 		chromedp.ListenTarget(ctx, func(ev any) {
 			p, ok := ev.(*fetch.EventRequestPaused)
@@ -80,8 +83,8 @@ func maRefuseSaves(body string) chromedp.Action {
 			go func() {
 				c := chromedp.FromContext(ctx)
 				ec := cdp.WithExecutor(ctx, c.Target)
-				if strings.Contains(p.Request.URL, "set_mode_agents") {
-					_ = fetch.FulfillRequest(p.RequestID, 422).WithResponseHeaders([]*fetch.HeaderEntry{{Name: "Content-Type", Value: "application/json"}}).WithBody(base64.StdEncoding.EncodeToString([]byte(body))).Do(ec)
+				if strings.Contains(p.Request.URL, path) {
+					_ = fetch.FulfillRequest(p.RequestID, status).WithResponseHeaders([]*fetch.HeaderEntry{{Name: "Content-Type", Value: "application/json"}}).WithBody(base64.StdEncoding.EncodeToString([]byte(body))).Do(ec)
 					return
 				}
 				_ = fetch.ContinueRequest(p.RequestID).Do(ec)
@@ -441,5 +444,26 @@ func TestTheBrainstormDialogOffersTheProductModesAgents_EndToEnd(t *testing.T) {
 	}
 	if errs := b.jsErrors(); len(errs) > 0 {
 		t.Errorf("JavaScript errors: %v", errs)
+	}
+}
+
+// TestTheEditorSaysWhenTheModesCannotBeRead_EndToEnd: when the modes' states
+// cannot be read, the editor's Modes section says so and offers no change
+// instead of showing every mode as All agents, and the rest of the editor works.
+func TestTheEditorSaysWhenTheModesCannotBeRead_EndToEnd(t *testing.T) {
+	w := newTokenSaverWorld(t)
+	writeCatalogFile(t, w, "agents.json", maCatalog)
+	b := newTLSBrowser(t)
+	b.run("the read fails",
+		chromedp.EmulateViewport(1280, 1200),
+		maFail("get_mode_agents", 500, `{"error":"boom","code":"INTERNAL"}`),
+		chromedp.Navigate(w.srv.URL+"/agents/designer/edit#modes"),
+		waitUntil(`document.querySelector('[data-modes-unavailable]')?.checkVisibility() === true`),
+		waitUntil(`document.querySelector('[data-mode-list]')?.checkVisibility() !== true`),
+		waitUntil(`document.querySelectorAll('[data-mode-row] input:not(:disabled)').length === 0`),
+		waitUntil(`document.querySelector('[data-agent-editor] #agent-name') !== null`),
+	)
+	if errs := b.jsErrors(); len(errs) > 0 {
+		t.Logf("JavaScript errors (the failed read logs one): %v", errs)
 	}
 }

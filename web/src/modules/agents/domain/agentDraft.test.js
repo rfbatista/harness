@@ -86,9 +86,9 @@ test("the create links carry the editor to come back to, and the name typed", ()
 
 test("an agent opens as the catalog read it, a new one empty, and Duplicate starts from a copy", () => {
   assert.deepEqual(agentDraft(catalog, "ux-designer"), {
-    previousName: "ux-designer", name: "ux-designer", description: "Designs.", aliases: ["ux"], entries: ["@ux", "tdd"], mcpServers: ["github"], allowedTools: ["Read"], projects: null,
+    previousName: "ux-designer", name: "ux-designer", description: "Designs.", aliases: ["ux"], entries: ["@ux", "tdd"], mcpServers: ["github"], allowedTools: ["Read"], projects: null, modes: null,
   });
-  assert.deepEqual(agentDraft(catalog, ""), { previousName: "", name: "", description: "", aliases: [], entries: [], mcpServers: [], allowedTools: [], projects: null });
+  assert.deepEqual(agentDraft(catalog, ""), { previousName: "", name: "", description: "", aliases: [], entries: [], mcpServers: [], allowedTools: [], projects: null, modes: null });
   assert.equal(agentDraft(catalog, "nobody"), null);
   const copy = agentDraft(catalog, "", "ux-designer");
   assert.equal(copy.previousName, "");
@@ -144,7 +144,7 @@ test("allowed tools list the built-in ones with what they do; none ticked means 
 });
 
 test("the contents list counts what each section holds", () => {
-  assert.deepEqual(tocCounts(catalog, { ...agentDraft(catalog, "ux-designer"), allowedTools: [] }), { skills: "4", mcp: "1", tools: "default", projects: "" });
+  assert.deepEqual(tocCounts(catalog, { ...agentDraft(catalog, "ux-designer"), allowedTools: [] }), { skills: "4", mcp: "1", tools: "default", projects: "", modes: "" });
   assert.equal(tocCounts(catalog, agentDraft(catalog, "ux-designer"), "3").projects, "3", "the Projects count is the section's own");
 });
 
@@ -158,7 +158,7 @@ test("a refusal lands on the field it names; unknown names split between skills 
   assert.equal(agentFieldErrors(refuse("INVALID_INPUT", "Description is required", { field: "description" }), draft).description, "Description is required");
   assert.equal(agentFieldErrors(refuse("BUNDLE_CYCLE", "cycle", {}), draft).form, "Bundles cannot include each other, directly or through another bundle.");
   assert.equal(agentFieldErrors(refuse("INVALID_INPUT", "harness enables every agent", { field: "projects" }), draft).projects, "harness enables every agent", "a refusal about `projects` shows at the Projects section");
-  assert.deepEqual(agentFieldErrors(null, draft), { name: "", description: "", aliases: "", entries: "", mcp: "", tools: "", projects: "", form: "" });
+  assert.deepEqual(agentFieldErrors(null, draft), { name: "", description: "", aliases: "", entries: "", mcp: "", tools: "", projects: "", modes: "", form: "" });
 });
 
 test("the built-in services server is a tickable choice marked built-in", () => {

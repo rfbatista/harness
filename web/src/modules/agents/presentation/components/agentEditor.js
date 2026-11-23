@@ -96,7 +96,7 @@ export function agentEditor({ gateway, location, history, storage = globalThis.s
     setupEditor() {
       page = this;
       saver = saveController({
-        run: (options) => gateway.saveAgent({ previousName: page.agentDraft.previousName || undefined, agent: { name: page.agentDraft.name, description: page.agentDraft.description.trim(), aliases: [...page.agentDraft.aliases], entries: [...page.agentDraft.entries], mcpServers: [...page.agentDraft.mcpServers], allowedTools: [...page.agentDraft.allowedTools] }, projects: projectsToSend(page.catalog, page.agentDraft), modes: modesToSend(page.catalog, page.agentDraft, page.modeStates) }, options),
+        run: (options) => gateway.saveAgent({ previousName: page.agentDraft.previousName || undefined, agent: { name: page.agentDraft.name, description: page.agentDraft.description.trim(), aliases: [...page.agentDraft.aliases], entries: [...page.agentDraft.entries], mcpServers: [...page.agentDraft.mcpServers], allowedTools: [...page.agentDraft.allowedTools] }, projects: projectsToSend(page.catalog, page.agentDraft), modes: page.modeStates ? modesToSend(page.catalog, page.agentDraft, page.modeStates) : undefined }, options),
         onState: (state) => { page.agentSave = state; },
         blocked: () => page.brokenWhy !== "",
         timers,
@@ -246,7 +246,7 @@ export function agentEditor({ gateway, location, history, storage = globalThis.s
       return this.agentDraft ? checkAgentDraft(this.agentDraft, { touched: this.agentTouched || this.agentDraft.previousName !== "" }) : { valid: false, nameProblem: "", descriptionProblem: "" };
     },
     get agentChangeCount() {
-      return this.agentDraft && this.catalog ? agentChanges(this.catalog, this.agentDraft, this.modeStates) : 0;
+      return this.agentDraft && this.catalog ? agentChanges(this.catalog, this.agentDraft, this.modeStates ?? {}) : 0;
     },
     get sv() {
       const view = saveView(this.agentSave, { valid: this.agentCheck.valid, changes: this.agentChangeCount, writes: FILES, blocked: this.brokenWhy });
@@ -443,7 +443,14 @@ export function agentEditor({ gateway, location, history, storage = globalThis.s
     // Modes: the session modes the agent may start in (agentModes.js).
 
     get modesChoice() {
-      return this.catalog && this.agentDraft ? modeChoices(this.catalog, this.agentDraft, this.modeStates) : { rows: [], summary: "", tocCount: "" };
+      return this.catalog && this.agentDraft && this.modeStates ? modeChoices(this.catalog, this.agentDraft, this.modeStates) : { rows: [], summary: "", tocCount: "" };
+    },
+    /** The modes' states are read, so the section can show and change them. */
+    get modesKnown() {
+      return this.modeStates !== null;
+    },
+    get modesLoading() {
+      return this.modeStates === null && !this.modeStatesFailed;
     },
     get modeRowsChoice() {
       return this.modesChoice.rows;
@@ -452,7 +459,7 @@ export function agentEditor({ gateway, location, history, storage = globalThis.s
       return this.modesChoice.summary;
     },
     toggleMode(event) {
-      this.agentDraft.modes = toggleMode(this.catalog, this.agentDraft, this.modeStates, event.currentTarget.dataset.mode);
+      this.agentDraft.modes = toggleMode(this.catalog, this.agentDraft, this.modeStates ?? {}, event.currentTarget.dataset.mode);
       this.agentChanged();
     },
 

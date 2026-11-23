@@ -174,10 +174,14 @@ templ agentEditorPage(v View) {
 						<section id="modes" aria-labelledby="agent-modes-h">
 							<h2 id="agent-modes-h">Modes</h2>
 							<p class="[ text-sm color-ink-muted ]">The session modes this agent may start in. A mode in <strong>Selected agents</strong> lists its agents: tick it to add this agent to its list. A mode in <strong>All agents</strong> already allows every agent, so it shows as included.</p>
-							<div class="[ pick-list ]" role="group" aria-label="Modes this agent may start in" tabindex="-1" x-bind:aria-describedby="agentModesDescribedBy" x-bind:aria-invalid="agentModesInvalid" data-mode-list>
+							<div class="[ banner ]" data-tone="attention" role="alert" data-modes-unavailable x-bind:hidden="!modeStatesFailed" hidden>
+								<span class="[ grow text-sm ]">The modes' settings could not be read, so the modes cannot be changed here. Reload the page to try again, or change them on the <a href="/models">Models page</a>.</span>
+							</div>
+							<p class="[ text-sm color-ink-muted ]" data-modes-loading x-bind:hidden="!modesLoading">Reading the modes…</p>
+							<div class="[ pick-list ]" x-bind:hidden="!modesKnown" hidden role="group" aria-label="Modes this agent may start in" tabindex="-1" x-bind:aria-describedby="agentModesDescribedBy" x-bind:aria-invalid="agentModesInvalid" data-mode-list>
 								<template x-for="r in modeRowsChoice" x-bind:key="r.inputId">
 									<label class="[ pick-row ]" data-mode-row x-bind:data-mode="r.value" x-bind:data-fixed="r.fixed">
-										<input type="checkbox" x-bind:checked="r.checked" x-bind:disabled="r.fixed" x-bind:data-mode="r.value" x-bind:aria-label="r.name" x-on:change="toggleMode"/>
+										<input type="checkbox" x-bind:checked="r.checked" x-bind:disabled="r.fixed" x-bind:data-mode="r.value" x-bind:aria-label="r.label" x-on:change="toggleMode"/>
 										<span class="[ text-sm ]" x-text="r.name"></span>
 										<span class="[ badge ]" x-bind:data-tone="r.tone" x-text="r.badge"></span>
 									</label>

@@ -61,6 +61,7 @@ export function modeChoices(catalog, draft, states) {
       fixed,
       checked: fixed || on.has(m.value),
       badge: fixed ? "All agents" : "Selected agents",
+      label: `${m.name}, ${fixed ? "All agents" : "Selected agents"}`,
       tone: fixed ? "" : "signal",
       inputId: `agent-mode-${modeId(m.value)}`,
     };
