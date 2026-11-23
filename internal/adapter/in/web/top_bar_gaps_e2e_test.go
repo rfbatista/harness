@@ -3,6 +3,7 @@ package web
 import (
 	"net/http"
 	"strings"
+	"sync"
 	"testing"
 	"testing/fstest"
 	"time"
@@ -219,5 +220,58 @@ func TestWithNoBundlesBuiltThePageStillLoadsWithAnEmptyMarkedMountAndItsProps(t 
 	}
 	if strings.Contains(scripts, "islands-") {
 		t.Errorf("no client bundle exists to load, scripts: %s", scripts)
+	}
+}
+
+// A server that does not serve the inbox renders no bell, and the page must
+// not go looking for notifications either (the Alpine page asked for none).
+func TestWithTheInboxNotServedNoBellShowsAndNoNotificationsAreRequested(t *testing.T) {
+	assets, err := NewAssets()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !assets.Built() {
+		t.Skip("browser test: web client not built; run `make web`")
+	}
+	ctx, errs := browser(t)
+	deps := railWorld()
+	deps.Notifications = nil
+	var mu sync.Mutex
+	var asked []string
+	mux := http.NewServeMux()
+	mux.Handle("/api/events", &sseFeed{})
+	mux.HandleFunc("/api/", func(w http.ResponseWriter, r *http.Request) {
+		mu.Lock()
+		asked = append(asked, r.Method+" "+r.URL.Path)
+		mu.Unlock()
+		http.NotFound(w, r)
+	})
+	mux.Handle("/", NewHandler(deps, assets, nil))
+	srv := newBrowserServer(mux)
+	t.Cleanup(func() { srv.CloseClientConnections(); srv.Close() })
+
+	var bell, mount bool
+	var props string
+	err = chromedp.Run(ctx,
+		chromedp.Navigate(srv.URL+"/projects/p1"),
+		chromedp.Poll(`!!document.querySelector('.topbar a[href="/agents"]')`, nil, chromedp.WithPollingTimeout(8*time.Second)),
+		chromedp.Sleep(1500*time.Millisecond),
+		chromedp.Evaluate(`!!document.querySelector('.topbar .bell, .topbar .notifications')`, &bell),
+		chromedp.Evaluate(`!!document.querySelector('.topbar [data-island="top-bar"]')`, &mount),
+		chromedp.Evaluate(`document.querySelector('script[data-island-props="top-bar"]').textContent`, &props),
+	)
+	if err != nil {
+		t.Fatalf("%v\nJS errors: %v", err, errs.all())
+	}
+	if bell || !mount || !strings.Contains(props, `"notifications":null`) {
+		t.Errorf("no bell expected: bell %v, mount %v, props %s", bell, mount, props)
+	}
+	mu.Lock()
+	defer mu.Unlock()
+	for _, a := range asked {
+		if strings.Contains(a, "/api/notifications") {
+			t.Errorf("the page asked for notifications though the inbox is not served: %v", asked)
+			break
+		}
 	}
 }
