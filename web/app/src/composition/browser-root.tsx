@@ -13,6 +13,11 @@ import { browserPageOpener } from "../features/navigation/infrastructure/browser
 import { httpTopBarSource } from "../features/navigation/infrastructure/http-top-bar-source";
 import { browserNavigator } from "../features/notifications/infrastructure/browser-navigator";
 import { httpNotificationsSource } from "../features/notifications/infrastructure/http-notifications-source";
+import { OwnerDock } from "../features/product-owner/application/owner-dock";
+import { browserDockMemory, browserPageNavigator, browserScreen, browserStorage } from "../features/product-owner/infrastructure/browser-dock";
+import { httpProductOwner } from "../features/product-owner/infrastructure/http-product-owner";
+import { PanelPresenter } from "../features/product-owner/presentation/presenters/panel-presenter";
+import { PanelView } from "../features/product-owner/presentation/views/panel-view";
 import { buildTopBar } from "./top-bar-presenters";
 import { TopBarView } from "./top-bar-view";
 
@@ -31,10 +36,13 @@ export function mountIslands(doc: Document): Dispose {
   const feed = sharedFeed({ base: "/api", api });
   const topBarSource = httpTopBarSource(api);
   const notifications = httpNotificationsSource(api, feed);
+  const owner = httpProductOwner(api, feed);
+  // The product owner's dock is the document's: the toggle in the top bar and the panel beside #main share it, and it outlives a swap.
+  const dock = new OwnerDock({ gateway: owner, events: owner, memory: browserDockMemory(browserStorage(win)), screen: browserScreen(win), navigator: browserPageNavigator(win.location) });
 
   const islands: Record<string, Island> = {
     "top-bar": (mount, props, fresh) => {
-      const topBar = buildTopBar(props, { pageOpener: browserPageOpener(win.location), navigator: browserNavigator(win.location), notifications });
+      const topBar = buildTopBar(props, { pageOpener: browserPageOpener(win.location), navigator: browserNavigator(win.location), notifications, dock });
       const unfollow = followNavigation(browserNavigationSignal(win), topBarSource, topBar.current, { fresh });
       const node = <TopBarView presenters={topBar.presenters} />;
       // Hydrate what the server rendered; render from scratch when its render failed (or left nothing).
@@ -44,8 +52,15 @@ export function mountIslands(doc: Document): Dispose {
       return () => {
         unfollow();
         topBar.inbox?.stop();
+        topBar.release();
         root.unmount();
       };
+    },
+    // The panel: a client-rendered island beside #main, on every project page.
+    "owner-panel": (mount) => {
+      const root = createRoot(mount);
+      root.render(<PanelView presenter={new PanelPresenter(dock)} />);
+      return () => root.unmount();
     },
   };
 

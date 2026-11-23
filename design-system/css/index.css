@@ -43,6 +43,7 @@
 
 /* Blocks */
 @import url("./blocks/app-shell.css");
+@import url("./blocks/product-owner.css");
 @import url("./blocks/topbar.css");
 @import url("./blocks/switch.css");
 @import url("./blocks/rail.css");

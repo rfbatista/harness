@@ -8,9 +8,13 @@ import type { ProjectPickerPresenter } from "../features/navigation/presentation
 import { BellView } from "../features/notifications/presentation/views/bell-view";
 import type { BellPresenter } from "../features/notifications/presentation/presenters/bell-presenter";
 import type { PanelPresenter } from "../features/notifications/presentation/presenters/panel-presenter";
+import type { TogglePresenter } from "../features/product-owner/presentation/presenters/toggle-presenter";
+import { ToggleView } from "../features/product-owner/presentation/views/toggle-view";
 
 export interface TopBarPresenters {
   readonly picker: ProjectPickerPresenter;
+  /** The product owner's toggle, right after the project picker. */
+  readonly owner: TogglePresenter;
   readonly links: PageLinksPresenter;
   /** Absent when the server does not serve the inbox. */
   readonly bell: { readonly presenter: BellPresenter; readonly panel: PanelPresenter } | null;
@@ -23,6 +27,7 @@ export function TopBarView({ presenters }: { presenters: TopBarPresenters }) {
         harness
       </a>
       <ProjectPickerView presenter={presenters.picker} />
+      <ToggleView presenter={presenters.owner} />
       <PageLinksView presenter={presenters.links} />
       {presenters.bell && <BellView presenter={presenters.bell.presenter} panel={presenters.bell.panel} />}
     </>

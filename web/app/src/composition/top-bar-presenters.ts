@@ -13,6 +13,8 @@ import { toBellProps } from "../features/notifications/infrastructure/bell-props
 import { TopBarPropsDto } from "./top-bar-props-dto";
 import { BellPresenter } from "../features/notifications/presentation/presenters/bell-presenter";
 import { PanelPresenter } from "../features/notifications/presentation/presenters/panel-presenter";
+import type { OwnerDock } from "../features/product-owner/application/owner-dock";
+import { TogglePresenter } from "../features/product-owner/presentation/presenters/toggle-presenter";
 import { systemClock } from "../shared/kernel/clock";
 import type { TopBarPresenters } from "./top-bar-view";
 
@@ -20,11 +22,15 @@ export interface TopBarAdapters {
   readonly pageOpener: PageOpener;
   readonly navigator: Navigator;
   readonly notifications: NotificationsSource;
+  /** The document's product-owner dock: the toggle and the panel share it. */
+  readonly dock: OwnerDock;
 }
 
 export interface TopBarModel {
   readonly current: CurrentTopBar;
   readonly inbox: Inbox | null;
+  /** Releases the dock from this top bar's project. */
+  readonly release: () => void;
   readonly presenters: TopBarPresenters;
 }
 
@@ -43,9 +49,23 @@ export function buildTopBar(props: unknown, adapters: TopBarAdapters): TopBarMod
     };
     inbox.start(bellProps.page);
   }
+  // The dock follows the project the top bar is on: another frame brings a new top bar with its own project.
+  let bound: string | null = null;
+  let release = (): void => {};
+  const bindDock = (projectId: string): void => {
+    if (projectId === bound) return;
+    release();
+    bound = projectId;
+    release = projectId === "" ? () => {} : adapters.dock.bind(projectId);
+  };
+  const stopFollowing = current.subscribe((topBar) => bindDock(topBar.currentProjectId));
   return {
     current,
     inbox,
-    presenters: { picker: new ProjectPickerPresenter(current, adapters.pageOpener), links: new PageLinksPresenter(current), bell },
+    release: () => {
+      stopFollowing();
+      release();
+    },
+    presenters: { picker: new ProjectPickerPresenter(current, adapters.pageOpener), owner: new TogglePresenter(adapters.dock), links: new PageLinksPresenter(current), bell },
   };
 }

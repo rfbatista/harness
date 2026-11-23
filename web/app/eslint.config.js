@@ -76,6 +76,7 @@ const TRANSPORT_FILES = [
   "src/shared/infrastructure/shared-feed.ts",
   "src/shared/infrastructure/island-props.ts",
   "src/features/navigation/infrastructure/browser-navigation-signal.ts",
+  "src/features/product-owner/infrastructure/browser-dock.ts",
 ];
 // Tests and their helpers build raw data on purpose.
 const TEST_FILES = ["**/*.test.ts", "**/testing/**"];

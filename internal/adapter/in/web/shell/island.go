@@ -2,6 +2,7 @@ package shell
 
 import (
 	"context"
+	"encoding/json"
 
 	"github.com/a-h/templ"
 )
@@ -42,4 +43,13 @@ func WithPath(ctx context.Context, path string) context.Context {
 func PathOf(ctx context.Context) string {
 	p, _ := ctx.Value(pathKey{}).(string)
 	return p
+}
+
+// OwnerPanelProps are the product owner panel island's props: the project it
+// belongs to, as JSON that is safe inside a script.
+func (f Frame) OwnerPanelProps() string {
+	props, _ := json.Marshal(struct {
+		ProjectID string `json:"project_id"`
+	}{f.Top.Current})
+	return string(props)
 }

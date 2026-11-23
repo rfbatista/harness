@@ -47,3 +47,28 @@ export interface ProductOwnerEvents {
   /** Returns what stops following. `onStatus` says when what is on screen may be stale. */
   follow(projectId: string, onEvent: (event: ProductOwnerEvent) => void, onStatus: (status: FeedStatus) => void): () => void;
 }
+
+/** What the panel remembers in the browser: open or closed and the width, for the whole browser; the open thread, per project. */
+export interface DockMemory {
+  load(projectId: string): RememberedDock;
+  save(projectId: string, state: RememberedDock): void;
+}
+
+export interface RememberedDock {
+  readonly open: boolean;
+  /** In rem. */
+  readonly width: number;
+  readonly threadId: string | null;
+}
+
+/** The screen the panel docks on: under 64 rem there is no room for a third column. */
+export interface Screen {
+  narrow(): boolean;
+  /** Returns what stops listening. */
+  onChange(listener: () => void): () => void;
+}
+
+/** Opens a page of the web UI. */
+export interface PageNavigator {
+  open(href: string): void;
+}
