@@ -56,7 +56,7 @@ func errorHandler(err error, c echo.Context) {
 			"BASE_BRANCH_NOT_FOUND", "REMOTE_BRANCH_NOT_FOUND", "CONVERSATION_NOT_FOUND", "BRANCH_NOT_FOUND",
 			// A design system, or one of its versions, that does not exist.
 			"VERSION_NOT_FOUND", "DESIGN_SYSTEM_NOT_FOUND", "PROPOSAL_NOT_FOUND", "INTERVIEW_NOT_FOUND",
-			"SERVICE_NOT_FOUND", "SERVICE_REQUEST_NOT_FOUND",
+			"SERVICE_NOT_FOUND", "SERVICE_REQUEST_NOT_FOUND", "CONTEXT_ENTRY_NOT_FOUND", "CONTEXT_PIECE_NOT_FOUND",
 			// A worktree to join that is unknown, cleared or gone from disk.
 			"WORKTREE_NOT_FOUND":
 			writeCoded(c, http.StatusNotFound, err, se)

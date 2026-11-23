@@ -185,6 +185,7 @@ func (s *Service) StartInteractive(ctx context.Context, req InteractiveRequest) 
 		Sandbox:                 p.sandbox.facts,
 	})
 	if err == nil {
+		s.recordStart(ctx, id, p, opening)
 		s.adoptCleanup(id, withViolations(p.cleanup, s.collectViolations(id, p.cfg.WorkingDir, p.sandbox.facts)))
 		s.courier.setTurn(id, startTurn(spec))
 		s.publish(id, SessionEvent{Type: "status", Status: domain.SessionRunning, Text: startedText(runsOn), At: time.Now()})
@@ -292,21 +293,28 @@ func (s *Service) ResumeInteractive(ctx context.Context, req ports.ResumeRequest
 	if sess.AutoRun {
 		permission = llmkit.PermissionBypass
 	}
-	cfg := s.sessionConfig(sess.ID, sess.WorkingDir, sess.Model, nil, permission, ag, subject, sess.ZoneID, s.sessionRole(ctx, sess.ID), sess.RepositoryID)
+	role := s.sessionRole(ctx, sess.ID)
+	trail := &pieceTrail{}
+	cfg, res := s.sessionConfigTrail(trail, sess.ID, sess.WorkingDir, sess.Model, nil, permission, ag, subject, sess.ZoneID, role, sess.RepositoryID)
 	withReadOnlyAccess(&cfg, sess.Access, sess.Branch)
+	trail.mark(&cfg, domain.PieceOther, "Read-only access", "Harness")
 	cleanup, err := s.withShell(sess.ID, sess.RepositoryID, subject, &cfg, ag.cleanup)
+	trail.mark(&cfg, domain.PieceOther, "Virtual shell", "Harness")
 	if err != nil {
 		return nil, ports.AgentSpec{}, err
 	}
 	cleanup = s.withCommitCheck(sess.ID, sess.WorkspaceID, sess.WorkingDir, &cfg, true, cleanup)
+	trail.mark(&cfg, domain.PieceOther, "Commit check", "Harness")
 	envFile, cleanup, err := s.withGit(sess.ID, sess.RepositoryID, &cfg, cleanup)
 	if err != nil {
 		return nil, ports.AgentSpec{}, err
 	}
+	trail.mark(&cfg, domain.PieceOther, "Git authentication", "Harness")
 	s.withAgentCredential(&cfg, sess.ProjectID)
 	s.withKeychainShim(&cfg)
 	s.withAttribution(&cfg)
 	s.rewireTokenSavers(ctx, sess, &cfg)
+	trail.mark(&cfg, domain.PieceRuleset, "Token saver rules", "Token savers")
 	// A resume starts under the rules now in force, not the ones it started
 	// under, and records them.
 	cleanup, err = s.withTempDir(sess.ID, &cfg, cleanup)
@@ -321,6 +329,7 @@ func (s *Service) ResumeInteractive(ctx context.Context, req ports.ResumeRequest
 		return nil, ports.AgentSpec{}, err
 	}
 	s.withWorktreeReadHook(&cfg, sess.ID, sb)
+	trail.mark(&cfg, domain.PieceOther, "Sandbox and Chrome", "Harness")
 	// A session a restart interrupted mid-turn is told so: its first turn is
 	// the continue turn (ADR 0082); any other resumes idle, with no turn.
 	prompt := ""
@@ -344,6 +353,11 @@ func (s *Service) ResumeInteractive(ctx context.Context, req ports.ResumeRequest
 		return nil, ports.AgentSpec{}, err
 	}
 	s.adoptCleanup(sess.ID, withViolations(cleanup, s.collectViolations(sess.ID, sess.WorkingDir, sb.facts)))
+	s.recordResume(ctx, sess, contextInput{
+		Cfg: cfg, System: trail.pieces, Versions: res.versions, Repository: s.repositoryName(ctx, sess.RepositoryID),
+		Role: role, Agent: ag.agent, Project: subject.project, Attached: res.attached, KnownTools: res.known, Skills: ag.contextSkills,
+		Facts: s.resumeFacts(sess, ag, cfg, permission, sb),
+	}, prompt)
 	if sess.InterruptedAt != nil {
 		s.record(sess.ID, SessionEvent{Type: eventResumed, InterruptedAt: sess.InterruptedAt, At: time.Now()}, sessionChange{clearInterrupted: true})
 		s.courier.setTurn(sess.ID, turnBusy) // the continue turn is its first
