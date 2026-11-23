@@ -10,7 +10,7 @@ import { readSeed } from "../../../../shared/presentation/seed.js";
 import { isOpen, markedRead, merge } from "../../domain/notification.js";
 import { actorOptions, filterOf, foldRuns, groupsFor, tabCounts, tabFrom } from "../ledger.js";
 import { inboxError, streamNotice, toRow, toStackRow } from "../view.js";
-import { pageSeed } from "./notificationsBell.js";
+import { pageSeed } from "../page-seed.js";
 
 const PAGE_LIMIT = 50;
 const TICK_MS = 30_000;

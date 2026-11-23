@@ -39,7 +39,7 @@ function app(notifications, dataset = {}) {
     wait: () => new Promise(() => {}),
   });
   store.start(null);
-  const el = { dataset, querySelectorAll: () => ({ forEach() {} }), querySelector: () => null, ownerDocument: { getElementById: () => null } };
+  const el = { dataset, querySelectorAll: () => ({ forEach() {} }), querySelector: () => null, ownerDocument: { querySelector: () => null } };
   const page = notificationsPage({ gateway, store, clock: fixedClock(NOW) })();
   page.$el = el;
   return { mem, store, page, failures, calls, doc, gateway };

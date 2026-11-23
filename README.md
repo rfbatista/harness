@@ -1,12 +1,16 @@
 # Harness
 
+## Build dependencies
+
+Go, plus Node and npm for the React web client in `web/app`. `make web` runs `npm ci` there and bundles the React islands through gohydrate (a `replace` in `go.mod` points to the local checkout); Node runs only at build time, never when the server serves a request.
+
 ## Checks
 
-`make check` builds, vets and runs the tests with the race detector. It is what to run before calling work done.
+`make check` builds, vets and runs the tests with the race detector, then runs the React client's type check, lint and tests (`npm run typecheck`, `npm run lint`, `npm test` in `web/app`). It is what to run before calling work done.
 
 ### Page time
 
-Every project page (the board, the task page, settings, documents, code, design, design system, usage and reviews) answers with its page server time and where it went, in a `Server-Timing` response header and in one `page time` line of the server log. The metrics are `total`, `db`, `git` (its description is the number of git calls), `render` and `frame` (the part of the page that is the shared project frame). Read them in the browser's devtools, Network tab, Timing.
+Every project page (the board, the task page, settings, documents, code, design, design system, usage and reviews) answers with its page server time and where it went, in a `Server-Timing` response header and in one `page time` line of the server log. The metrics are `total`, `db`, `git` (its description is the number of git calls), `render`, `frame` (the part of the page that is the shared project frame) and `island` (the server render of the React top bar, which is part of the frame). Read them in the browser's devtools, Network tab, Timing.
 
 `make page-bench` is the page benchmark. It requests every project page several times and prints each page's median and worst page server time with its breakdown. It only sends GET requests.
 

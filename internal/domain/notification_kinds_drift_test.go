@@ -103,3 +103,31 @@ func difference(a, b []string) []string {
 	}
 	return out
 }
+
+var reactKindsList = regexp.MustCompile(`(?s)export const KINDS = \[(.*?)\] as const`)
+
+// The React client's island reads the same kinds; one it does not know must
+// not empty the bell's panel, but the lists still have to hold the same kinds.
+func TestNotificationKindsOfTheServerAndTheReactClientAreTheSame(t *testing.T) {
+	src, err := os.ReadFile("../../web/app/src/features/notifications/domain/notification.ts")
+	if err != nil {
+		t.Fatal(err)
+	}
+	m := reactKindsList.FindSubmatch(src)
+	if m == nil {
+		t.Fatal("found no `export const KINDS = [...] as const` in the React notification domain")
+	}
+	var client []string
+	for _, part := range strings.Split(string(m[1]), ",") {
+		if s := strings.Trim(strings.TrimSpace(part), `"`); s != "" {
+			client = append(client, s)
+		}
+	}
+	server := serverNotificationKinds(t)
+	if missing := difference(server, client); len(missing) > 0 {
+		t.Errorf("the server posts kinds the React client does not know (add them to KINDS in web/app/src/features/notifications/domain/notification.ts): %v", missing)
+	}
+	if extra := difference(client, server); len(extra) > 0 {
+		t.Errorf("the React client knows kinds the server never posts: %v", extra)
+	}
+}

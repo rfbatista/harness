@@ -32,7 +32,7 @@ templ InboxPage(frame shell.Frame, v View) {
 				<button type="button" class="[ button ]" data-size="sm" style="display: none" x-show="live" x-bind:disabled="cannotMarkAll" x-bind:aria-busy="marking" x-on:click="markAll">{ v.MarkAllLabel() }</button>
 			</header>
 			<div class="[ inbox ]" data-scroll>
-				<form class="[ inbox-filters ] [ cluster ] [ gutter-s ]" method="get" action={ templ.SafeURL(Href) } x-data="projectPicker">
+				<form class="[ inbox-filters ] [ cluster ] [ gutter-s ]" method="get" action={ templ.SafeURL(Href) } x-data="inboxFilters">
 					<fieldset class="[ inbox-tabs ]">
 						<legend class="[ visually-hidden ]">Show</legend>
 						<label><input type="radio" name="tab" value="needs" { checked(v.Filter.Tab == "needs")... } x-on:change="go"/> Needs you <span class="[ n ]" x-text="needsCount">{ strconv.Itoa(v.OpenCount()) }</span></label>

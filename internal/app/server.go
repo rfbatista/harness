@@ -2,6 +2,7 @@ package app
 
 import (
 	"context"
+	"errors"
 	"io/fs"
 	"log/slog"
 	"net"
@@ -123,7 +124,11 @@ func registerHTTPServer(lc fx.Lifecycle, cfg Config, cat catalog.Catalog, appRun
 	}
 
 	mux := http.NewServeMux()
+	// The top bar's model is built by the web adapter from the pages' own
+	// dependencies, which are assembled below, after the API.
+	topBars := &lateTopBars{}
 	apiRouter := httpapi.NewRouter(httpapi.NewHandler(httpapi.Services{
+		TopBars:         topBars,
 		Projects:        cat.Projects,
 		ProjectFeed:     cat.Projects,
 		Discovery:       cat.Projects,
@@ -224,13 +229,15 @@ func registerHTTPServer(lc fx.Lifecycle, cfg Config, cat catalog.Catalog, appRun
 	mux.Handle(mcpsession.ServicesPathPrefix, slow(mcpsession.ServicesHandler(tooling.SessionServicesTools(sessions, cat.Agents, svcs, cat.Projects, tooling.WithServiceRequests(svcRequests)))))
 	// The web client owns / and its pages; anything else reaches the legacy
 	// designer SPA until it is retired.
-	mux.Handle("/", slow(web.NewHandler(web.Deps{Projects: cat.Projects, Tasks: plan, Sessions: orch, Agents: cat.Agents, Repositories: cat.Projects, EnvFiles: cat.Projects, RunCommands: cat.Projects, Documents: plan, History: ws, Code: code, Workspaces: ws, Artifacts: art, ProjectSummaries: cat.Projects, PullRequests: prs, WorktreeGit: worktreeGit,
+	webDeps := web.Deps{Projects: cat.Projects, Tasks: plan, Sessions: orch, Agents: cat.Agents, Repositories: cat.Projects, EnvFiles: cat.Projects, RunCommands: cat.Projects, Documents: plan, History: ws, Code: code, Workspaces: ws, Artifacts: art, ProjectSummaries: cat.Projects, PullRequests: prs, WorktreeGit: worktreeGit,
 		DesignSystems: designSystemReader(cat), Resources: plan, Comments: plan, Notifications: noteReader, BranchRequests: gate, SessionBranches: watch, GitCredentials: creds.port(), Usage: usageSvc, Services: svcs, ServiceCounter: svcs, TokenSavers: cat.Capabilities,
 		TokenSaverInstalls: cat.Capabilities, RepositoryIndexes: indexes.port(), Settings: cat.Settings, DataPaths: dataPaths(cfg), SandboxSettings: sandboxStore, SandboxDriver: sandboxDriver(orch), SandboxBuiltin: sandboxBuiltin(orch),
 		ManagedClaude: managedClaude, ManagedClaudeBin: claudeBin, AgentCredential: agentCred.port(), ProjectAgentCredentials: agentCred.projectPort(),
 		AgentOAuth: agentCred.oauth(), AgentAuth: agentCred.auth(), ProjectAgentOAuth: agentCred.projectOAuth(), AgentHomeExposed: agentHomeExposed(cfg), AgentLogin: agentHasLogin(cfg), ArchivedTasks: plan, ArchivedList: plan,
 		// Whether the pens work, read from the gate without starting anything.
-		WritingHelper: helperState(helper), ArchitectureAssistant: architectureAssistant, AgentCatalog: CatalogSeed(agentCat, repoAgents), AgentBoard: agentBoard, Interviews: interviewsPort}, assets, uiHandler)))
+		WritingHelper: helperState(helper), ArchitectureAssistant: architectureAssistant, AgentCatalog: CatalogSeed(agentCat, repoAgents), AgentBoard: agentBoard, Interviews: interviewsPort}
+	topBars.set(web.NewTopBars(webDeps))
+	mux.Handle("/", slow(web.NewHandler(webDeps, assets, uiHandler)))
 
 	// The LLM proxy every claude process calls through (ADR 0006): loopback
 	// only, outside the API token and CORS, so its responses come back as
@@ -405,4 +412,17 @@ func dataPaths(cfg Config) *serversettings.Paths {
 		p.Source = "the database path"
 	}
 	return p
+}
+
+// lateTopBars is the API's top bar reader before the web adapter's
+// dependencies exist: set once, while the server is assembled.
+type lateTopBars struct{ next ports.TopBars }
+
+func (l *lateTopBars) set(t ports.TopBars) { l.next = t }
+
+func (l *lateTopBars) TopBar(ctx context.Context, path string) (*ports.TopBar, error) {
+	if l.next == nil {
+		return nil, errors.New("the top bar is not assembled yet")
+	}
+	return l.next.TopBar(ctx, path)
 }

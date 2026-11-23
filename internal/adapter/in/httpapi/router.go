@@ -391,6 +391,9 @@ func NewRouter(h *Handler, opts ...Option) *echo.Echo {
 	g.POST("/notifications/:id/resume_interrupted", h.handleResumeInterrupted) // Resume all interrupted
 	g.GET("/notifications/events", h.handleNotificationEvents)                 // every inbox change (SSE)
 
+	// the top bar's model for a page path (the island's props, read fresh)
+	g.GET("/top_bar", h.handleTopBar)
+
 	// usage: the token usage the LLM proxy measured, per project
 	// (_harness is the harness's own spend)
 	g.GET("/projects/:project/usage", h.handleUsageSummary) // ?range=today|7d|30d

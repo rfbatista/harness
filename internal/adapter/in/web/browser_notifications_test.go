@@ -16,6 +16,7 @@ import (
 	"github.com/chromedp/chromedp"
 	"github.com/chromedp/chromedp/kb"
 
+	"operators-mcp/internal/adapter/in/httpapi"
 	"operators-mcp/internal/domain"
 	"operators-mcp/internal/ports"
 )
@@ -309,6 +310,8 @@ func newInboxHarnessWith(t *testing.T, list []*domain.Notification, tweak func(*
 	mux.Handle("/api/notifications", inbox)
 	mux.Handle("/api/notifications/read", inbox)
 	mux.HandleFunc("POST /api/notifications/{id}/resume_interrupted", inbox.resumeInterrupted)
+	// The top bar island follows an in-place navigation through this endpoint.
+	mux.Handle("GET /api/top_bar", httpapi.NewRouter(httpapi.NewHandler(httpapi.Services{TopBars: NewTopBars(deps)})))
 	mux.HandleFunc("POST /api/notifications/{id}/acknowledge", inbox.acknowledge)
 	mux.Handle("/api/", http.NotFoundHandler())
 	mux.Handle("/", NewHandler(deps, assets, nil))

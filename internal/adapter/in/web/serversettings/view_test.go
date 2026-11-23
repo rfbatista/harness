@@ -17,7 +17,6 @@ import (
 func render(t *testing.T, p Paths) string {
 	t.Helper()
 	frame := shell.Frame{Title: "Server"}
-	frame.Top.ServerHref, frame.Top.OnServer = Href, true
 	var b bytes.Buffer
 	if err := Page(frame, NewView(p)).Render(context.Background(), &b); err != nil {
 		t.Fatal(err)
@@ -40,9 +39,6 @@ func TestThePageShowsTheDataDirAndWhatItHolds(t *testing.T) {
 		if !strings.Contains(html, want) {
 			t.Errorf("the page lacks %q", want)
 		}
-	}
-	if !strings.Contains(html, `href="/server" aria-label="Server" title="Server" aria-current="page"`) {
-		t.Errorf("the top bar does not mark the Server page as current:\n%s", html)
 	}
 }
 

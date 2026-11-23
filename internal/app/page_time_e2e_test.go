@@ -56,7 +56,7 @@ func TestEveryProjectPageReportsItsPageServerTime(t *testing.T) {
 				t.Errorf("render %v and frame %v must each be within total %v", m["render"], m["frame"], m["total"])
 			}
 			line := logs.String()
-			for _, want := range []string{"page time", "route=", "project=" + b.project, "total=", "db=", "git=", "git_calls=", "render=", "frame=", "catalog=", "catalog_reads="} {
+			for _, want := range []string{"page time", "route=", "project=" + b.project, "total=", "db=", "git=", "git_calls=", "render=", "frame=", "island=", "catalog=", "catalog_reads="} {
 				if !strings.Contains(line, want) {
 					t.Errorf("log line lacks %q:\n%s", want, line)
 				}

@@ -37,7 +37,6 @@ func (h Handler) Page(w http.ResponseWriter, r *http.Request) error {
 	if err != nil {
 		return err
 	}
-	frame.Top.OnModels = true
 	view := NewView(h.Settings)
 	if h.Helper != nil {
 		view = view.WithWritingHelper(h.Helper(ctx))

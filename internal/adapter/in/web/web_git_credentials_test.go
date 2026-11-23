@@ -123,15 +123,15 @@ func TestGitCredentialsPageOpensTheAddFormForAHost(t *testing.T) {
 func TestTopBarLeadsToGitCredentialsOnceTheyAreServed(t *testing.T) {
 	w, _ := credentialsWorld(t)
 	h := newTestHandler(t, w)
-	link := tagWith(get(t, h, "/projects/p1").Body.String(), `aria-label="Git credentials"`)
-	if !strings.Contains(link, `href="/git-credentials"`) || strings.Contains(link, "aria-current") {
-		t.Errorf("the top bar links to Git credentials: %s", link)
+	link, ok := topBarLink(t, get(t, h, "/projects/p1").Body.String(), "credentials")
+	if !ok || link.Href != "/git-credentials" || link.Current {
+		t.Errorf("the top bar links to Git credentials: %+v (served %v)", link, ok)
 	}
-	if link := tagWith(get(t, h, "/git-credentials").Body.String(), `aria-label="Git credentials"`); !strings.Contains(link, `aria-current="page"`) {
-		t.Errorf("the link is current on its page: %s", link)
+	if link, _ := topBarLink(t, get(t, h, "/git-credentials").Body.String(), "credentials"); !link.Current {
+		t.Errorf("the link is current on its page: %+v", link)
 	}
 	without := newTestHandler(t, board())
-	if strings.Contains(get(t, without, "/projects/p1").Body.String(), `aria-label="Git credentials"`) {
+	if _, ok := topBarLink(t, get(t, without, "/projects/p1").Body.String(), "credentials"); ok {
 		t.Error("no link when credentials are not served")
 	}
 	if body := get(t, without, "/git-credentials").Body.String(); body != "legacy designer" {
