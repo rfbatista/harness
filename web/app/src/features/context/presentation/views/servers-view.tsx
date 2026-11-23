@@ -11,7 +11,7 @@ export function ServersView({ group, presenter }: { group: ServersGroup; present
             <span className="[ name ] [ mono ]">{row.name}</span>
             <span className="[ status ]">{row.statusLabel}</span>
             <span className="[ badge ]">{row.attached}</span>
-            <span className="[ muted ]">{row.attachedReason}</span>
+            <span className="[ muted meaning ]">{row.attachedReason}</span>
             {row.reason !== "" && <p className="[ reason ]">{row.reason}</p>}
             {row.canCopy && (
               <button type="button" className="[ button ]" data-size="sm" onClick={() => void presenter.copyError(row.name)}>

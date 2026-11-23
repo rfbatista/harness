@@ -55,7 +55,7 @@
       & .reason { flex-basis: 100%; margin: 0; color: var(--color-ink-muted); font-size: var(--text-sm); overflow-wrap: anywhere; }
 
       /* The meaning column goes first on a narrow pane. */
-      @container (inline-size < 34rem) { & .muted { display: none; } }
+      @container (inline-size <= 34rem) { & .meaning { display: none; } }
     }
 
     & .summary-row {

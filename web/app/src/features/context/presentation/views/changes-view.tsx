@@ -13,7 +13,7 @@ export function ChangesView({ group, presenter }: { group: ChangesGroup; present
             <li key={i} className="[ row ]">
               <time className="[ muted ]">{row.time}</time>
               <span className="[ name ]">{row.text}</span>
-              <span className="[ muted ]">{row.note}</span>
+              <span className="[ muted meaning ]">{row.note}</span>
             </li>
           ))}
         </ul>

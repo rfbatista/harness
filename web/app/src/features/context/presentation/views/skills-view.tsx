@@ -11,7 +11,7 @@ export function SkillsView({ group, presenter }: { group: SkillsGroup; presenter
             <span className="[ name ] [ mono ]">{row.name}</span>
             <span className="[ badge ]">{row.source}</span>
             {row.invoked !== "" && <span className="[ used ]">{row.invoked}</span>}
-            <span className="[ muted ]">{row.description}</span>
+            <span className="[ muted meaning ]">{row.description}</span>
           </li>
         ))}
       </ul>
@@ -27,7 +27,7 @@ export function HooksView({ group, presenter }: { group: HooksGroup; presenter: 
           <li key={i} className="[ row ]">
             <span className="[ name ] [ mono ]">{row.event}</span>
             {row.matcher !== "" && <span className="[ badge ] [ mono ]">{row.matcher}</span>}
-            <span className="[ muted ]">{row.rule}</span>
+            <span className="[ muted meaning ]">{row.rule}</span>
           </li>
         ))}
       </ul>
