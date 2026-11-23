@@ -44,8 +44,7 @@ export const brainstorm = ({ gateway, navigate }) => () => withAgentPicker({
 
   get problem() {
     if (this.noAgentEnabled) return this.noAgentLine;
-    if (this.modeAllowsNothing) return this.modeAllowsNothingText;
-    if (this.agentId === "" && !this.noAgentAllowed) return "Pick an agent.";
+    if (this.modeProblem) return this.modeProblem;
     return brainstormProblem({ repositoryId: this.repositoryId });
   },
   get cannotStart() {

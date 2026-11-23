@@ -176,6 +176,11 @@ export function withAgentPicker(component, { gateway }) {
     get modeAllowsNothingText() {
       return `No agent can start in ${modeName(this.currentMode)} mode. The mode lists no agent and does not allow a session with no agent.`;
     },
+    /** Why the mode keeps a session from starting yet, or "": it allows nothing, or the person has not picked the agent it needs. */
+    get modeProblem() {
+      if (this.modeAllowsNothing) return this.modeAllowsNothingText;
+      return this.agentId === "" && !this.noAgentAllowed ? "Pick an agent." : "";
+    },
     get modesSettingsLink() {
       return MODELS_HREF;
     },

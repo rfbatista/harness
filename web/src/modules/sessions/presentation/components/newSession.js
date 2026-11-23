@@ -460,8 +460,7 @@ export const newSession = ({ gateway, debounceMs = 300, location = globalThis.lo
   get problem() {
     if (this.repositoryId === "") return "Pick a repository.";
     if (this.noAgentEnabled) return this.noAgentLine;
-    if (this.modeAllowsNothing) return this.modeAllowsNothingText;
-    if (this.agentId === "" && !this.noAgentAllowed) return "Pick an agent.";
+    if (this.modeProblem) return this.modeProblem;
     if (this.ticketId === "") return noTaskProblem(this.mode);
     if (this.nameState === "checking") return "Checking the branch name…";
     if (this.nameState === "taken") return "The branch name is taken. Pick another.";
