@@ -197,6 +197,27 @@ export function sessionGatewayContract(name, makeSubject, makeSession) {
     await assert.rejects(gateway.checkBranchName({ repositoryId: "ghost", name: "" }), Codes.REPOSITORY_NOT_FOUND);
   });
 
+  contract("taskWorktrees lists the task's worktrees and a start joins one or is refused before anything starts", async () => {
+    const worktrees = [
+      { ticketId: "t1", repositoryId: "r1", worktreeId: "w1", branch: "agent/x-1", sessions: [{ sessionId: "s1", agent: "dev", mode: "implement", access: "write", running: true }] },
+      { ticketId: "t2", repositoryId: "r1", worktreeId: "w2", branch: "agent/y-1", sessions: [{ sessionId: "s2", agent: "dev", mode: "implement", access: "write", running: false }] },
+    ];
+    const subject = makeSubject({ projects: ["p1"], sessions: [], repositories: { r1: "p1" }, branches: { r1: [{ name: "main", remote: false, isHead: true }] }, worktrees });
+    const { gateway } = subject;
+    const listed = await gateway.taskWorktrees({ ticketId: "t1", repositoryId: "r1" });
+    assert.deepEqual(listed.worktrees.map((w) => [w.worktreeId, w.branch, w.onDisk, w.createdBySessionId]), [["w1", "agent/x-1", true, "s1"]]);
+    assert.deepEqual(listed.worktrees[0].sessions.map((s) => [s.sessionId, s.agent, s.mode, s.access, s.running]), [["s1", "dev", "implement", "write", true]]);
+    assert.deepEqual((await gateway.taskWorktrees({ ticketId: "t1", repositoryId: "r9" })).worktrees, []);
+
+    const base = { projectId: "p1", ticketId: "t1", repositoryId: "r1", agentId: "", prompt: "", autoAccept: "off", size: { cols: 120, rows: 32 } };
+    const joined = await gateway.start({ ...base, mode: "review", worktreeId: "w1" });
+    assert.ok(joined.id, "a join starts a session");
+    await assert.rejects(gateway.start({ ...base, worktreeId: "ghost" }), Codes.WORKTREE_NOT_FOUND);
+    await assert.rejects(gateway.start({ ...base, worktreeId: "w2" }), Codes.WORKTREE_NOT_ON_TASK);
+    await assert.rejects(gateway.start({ ...base, worktreeId: "w1", branchName: "mine" }), Codes.WORKTREE_WITH_BASE_BRANCH);
+    await assert.rejects(gateway.start({ ...base, worktreeId: "w1", access: "admin" }), Codes.ACCESS_INVALID);
+  });
+
   contract("start cuts the branch on the name it was given and refuses a taken or invalid one", async () => {
     const branches = { r1: [{ name: "main", remote: false, isHead: true }, { name: "feature/login", remote: false, isHead: false }] };
     const { gateway } = makeSubject({ projects: ["p1"], sessions: [], repositories: { r1: "p1" }, branches });

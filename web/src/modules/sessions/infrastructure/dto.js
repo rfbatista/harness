@@ -173,6 +173,8 @@ export function toStartBody(req) {
     model: req.model || undefined,
     base_branch: req.baseBranch || undefined,
     branch_name: req.branchName?.trim() || undefined,
+    worktree_id: req.worktreeId || undefined,
+    access: req.worktreeId ? req.access || undefined : undefined,
     bring_under_session_ids: req.bringUnderSessionIds?.length ? req.bringUnderSessionIds : undefined,
   };
 }
@@ -203,6 +205,27 @@ export function toBranchNameCheck(dto) {
     code: dto.code ?? "",
     reason: dto.reason ?? "",
     suggestion: dto.suggestion ?? "",
+  });
+}
+
+/** GET /api/task_worktrees → TaskWorktrees. */
+export function toTaskWorktrees(dto) {
+  if (!Array.isArray(dto?.worktrees)) bad("expected {worktrees: [...]}");
+  return Object.freeze({
+    worktrees: dto.worktrees.map((w) => {
+      if (typeof w?.worktree_id !== "string" || w.worktree_id === "" || !Array.isArray(w.sessions)) bad("a worktree without an id and its sessions");
+      return Object.freeze({
+        worktreeId: w.worktree_id,
+        branch: w.branch ?? "",
+        onDisk: w.on_disk !== false,
+        createdBySessionId: w.created_by_session_id ?? "",
+        sessions: Object.freeze(
+          w.sessions.map((s) =>
+            Object.freeze({ sessionId: s.session_id, agent: s.agent ?? "", mode: s.mode ?? "", access: s.access === "read_only" ? "read_only" : "write", running: s.running === true }),
+          ),
+        ),
+      });
+    }),
   });
 }
 

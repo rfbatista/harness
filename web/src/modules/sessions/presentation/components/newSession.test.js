@@ -22,8 +22,8 @@ const pause = (ms = DEBOUNCE * 4) => new Promise((resolve) => setTimeout(resolve
 /** Every mode's model as the page renders it (contract: mode models, §2). */
 const MODE_MODELS = { "": "default", architect: "opus", implement: "sonnet", design: "default", product: "default", designsystem: "default", review: "opus", test: "sonnet", qa: "sonnet", operate: "sonnet" };
 
-function setup({ defaultRepository = "r1", repositories = { r1: "p1", r2: "p1" }, branches = BRANCHES, modeModels = MODE_MODELS, lockedMode = "" } = {}) {
-  const memory = memoryGateway({ projects: ["p1"], repositories, branches });
+function setup({ defaultRepository = "r1", repositories = { r1: "p1", r2: "p1" }, branches = BRANCHES, modeModels = MODE_MODELS, lockedMode = "", worktrees = [] } = {}) {
+  const memory = memoryGateway({ projects: ["p1"], repositories, branches, worktrees });
   const form = document.createElement("form");
   if (defaultRepository !== null) form.dataset.defaultRepository = defaultRepository;
   form.dataset.modeModels = JSON.stringify(modeModels);
@@ -926,4 +926,167 @@ test("a start refused for its model shows in the error row and the form stays us
   assert.equal(instance.submitting, false);
   assert.equal(instance.cannotSubmit, false);
   assert.equal(dispatched.length, 0);
+});
+
+
+// ── joining another session's worktree ───────────────────────────────────
+
+const OLD = { sessionId: "s-old-0001", agent: "go-developer", mode: "implement", access: "write", running: false };
+const LIVE = { sessionId: "s-live-0002", agent: "reviewer", mode: "review", access: "read_only", running: true };
+const WORKTREES = [
+  { ticketId: "t1", repositoryId: "r1", worktreeId: "w-live", branch: "agent/ship-1", createdBySessionId: "s-old-0003", sessions: [LIVE, { ...OLD, sessionId: "s-old-0003", running: true }] },
+  { ticketId: "t1", repositoryId: "r1", worktreeId: "w-old", branch: "agent/ship-0", sessions: [OLD] },
+  { ticketId: "t2", repositoryId: "r1", worktreeId: "w-other-task", branch: "agent/other-1", sessions: [OLD] },
+  { ticketId: "t1", repositoryId: "r2", worktreeId: "w-r2", branch: "agent/ship-r2", sessions: [LIVE] },
+];
+
+test("the worktree picker lists the task's worktrees by agent, branch and session, running or ended", async () => {
+  const { instance } = setup({ worktrees: WORKTREES });
+  await flush();
+  assert.deepEqual(
+    instance.worktreeOptions.map((o) => o.id),
+    ["w-live", "w-old"],
+    "this task's worktrees in this repository; another task's and another repository's are not offered",
+  );
+  const [live, old] = instance.worktreeOptions;
+  for (const part of ["go-developer", "agent/ship-1", "s-old-00", "2 sessions"]) assert.ok(live.label.includes(part), `${part} in ${live.label}`);
+  assert.equal(live.ended, false, "a worktree with a running session is not ended");
+  assert.ok(old.label.includes("agent/ship-0") && old.label.includes("go-developer") && old.label.includes("s-old-00"), old.label);
+  assert.equal(old.ended, true);
+  assert.ok(old.label.includes("ended"), old.label);
+  assert.equal(instance.showWorktreePicker, true);
+  assert.equal(instance.worktreeId, "", "a new branch is the default");
+});
+
+test("with no worktree on the task the picker says so and the form works as today", async () => {
+  const { instance, memory, dispatched, tick } = setup({ worktrees: [] });
+  await flush();
+  tick();
+  assert.deepEqual(instance.worktreeOptions, []);
+  assert.ok(instance.noWorktreesText.includes("new branch"), instance.noWorktreesText);
+  assert.equal(instance.joining, false);
+  await instance.submit();
+  assert.equal(dispatched[0].name, "session-created");
+  assert.equal(memory.starts[0].worktreeId, undefined);
+  assert.ok(memory.starts[0].baseBranch, "it still cuts a branch off the base");
+});
+
+test("the access is preset by the mode when a worktree is picked, and flipping it sticks", async () => {
+  const { instance } = setup({ worktrees: WORKTREES });
+  await flush();
+  instance.mode = "review";
+  instance.pickWorktree("w-live");
+  assert.equal(instance.access, "read_only");
+  instance.mode = "qa";
+  instance.followMode();
+  assert.equal(instance.access, "read_only");
+  instance.mode = "implement";
+  instance.followMode();
+  assert.equal(instance.access, "write", "the preset follows the mode until the person flips it");
+  instance.mode = "test";
+  instance.followMode();
+  assert.equal(instance.access, "write");
+  instance.mode = "operate";
+  instance.followMode();
+  assert.equal(instance.access, "write");
+
+  instance.pickAccess("read_only");
+  instance.mode = "implement";
+  instance.followMode();
+  assert.equal(instance.access, "read_only", "a flipped access sticks across modes");
+  instance.mode = "review";
+  instance.pickWorktree("w-old");
+  assert.equal(instance.access, "read_only");
+});
+
+test("with a worktree picked the branch fields are hidden and the start names the worktree and the access", async () => {
+  const { instance, memory, dispatched } = setup({ worktrees: WORKTREES });
+  await flush();
+  assert.equal(instance.showBranchFields, true);
+  instance.mode = "review";
+  instance.pickWorktree("w-live");
+  assert.equal(instance.showBranchFields, false, "the base branch and the branch name do not apply to a join");
+  assert.equal(instance.joining, true);
+  instance.branchName = "typed/before";
+  await instance.submit();
+
+  const sent = memory.starts.at(-1);
+  assert.equal(sent.worktreeId, "w-live");
+  assert.equal(sent.access, "read_only");
+  assert.equal(sent.baseBranch, undefined, "no base branch is sent for a join");
+  assert.equal(sent.branchName, undefined, "no branch name is sent for a join");
+  assert.equal(dispatched[0].detail.session.worktreeId, "w-live");
+  assert.equal(dispatched[0].detail.session.joined, true);
+});
+
+test("a taken branch name does not stop a join, and un-picking the worktree brings the fields back", async () => {
+  const { instance } = setup({ worktrees: WORKTREES });
+  await flush();
+  instance.branchName = "main";
+  instance.branchNameEdited = true;
+  await instance.checkNameNow();
+  assert.equal(instance.nameState, "taken");
+  assert.ok(instance.problem.includes("taken"));
+  instance.pickWorktree("w-live");
+  assert.equal(instance.problem, "", "the name is not used by a join");
+  instance.pickWorktree("");
+  assert.equal(instance.showBranchFields, true);
+  assert.ok(instance.problem.includes("taken"));
+});
+
+test("a worktree that vanished is refused in place, dropped from the picker, and the draft is kept", async () => {
+  const { instance, memory, dispatched } = setup({ worktrees: WORKTREES });
+  await flush();
+  instance.prompt = "review the work";
+  instance.mode = "review";
+  instance.pickWorktree("w-live");
+  memory.vanish("w-live");
+  await instance.submit();
+
+  assert.deepEqual(dispatched, [], "nothing started");
+  assert.ok(instance.worktreeError.startsWith("that worktree is no longer there"), instance.worktreeError);
+  assert.ok(!instance.worktreeError.includes("WORKTREE_NOT_FOUND"), "the sentence is shown without its code");
+  assert.equal(instance.error, null, "the refusal is in place, not in the banner");
+  assert.equal(instance.prompt, "review the work");
+  assert.equal(instance.mode, "review");
+  assert.equal(instance.worktreeId, "", "the vanished worktree is no longer picked");
+  assert.deepEqual(instance.worktreeOptions.map((o) => o.id), ["w-old"], "nor offered");
+  assert.equal(instance.submitting, false);
+});
+
+test("an invalid access is refused in place too and picking again clears the sentence", async () => {
+  const { instance, memory } = setup({ worktrees: WORKTREES });
+  await flush();
+  instance.pickWorktree("w-old");
+  memory.refuseStart(new StructuredError(Codes.ACCESS_INVALID, "ACCESS_INVALID: access must be write or read_only", 400));
+  await instance.submit();
+  assert.equal(instance.worktreeError, "access must be write or read_only");
+  assert.equal(instance.worktreeId, "w-old", "a refusal that is not about the worktree keeps the pick");
+  instance.pickAccess("write");
+  assert.equal(instance.worktreeError, "");
+});
+
+test("changing the repository clears the picked worktree and loads that repository's list", async () => {
+  const { instance } = setup({ worktrees: WORKTREES });
+  await flush();
+  instance.pickWorktree("w-live");
+  instance.repositoryId = "r2";
+  instance.repositoryChanged();
+  assert.equal(instance.worktreeId, "");
+  assert.equal(instance.joining, false);
+  await flush();
+  assert.deepEqual(instance.worktreeOptions.map((o) => o.id), ["w-r2"]);
+});
+
+test("a mode that cannot join offers no picker", async () => {
+  const { instance } = setup({ worktrees: WORKTREES });
+  await flush();
+  instance.pickWorktree("w-live");
+  instance.mode = "architect";
+  instance.followMode();
+  assert.equal(instance.showWorktreePicker, false, "an architect takes no worktree");
+  assert.equal(instance.joining, false, "and a join picked before the mode changed is not sent");
+  const product = setup({ worktrees: WORKTREES, lockedMode: "product" });
+  await flush();
+  assert.equal(product.instance.showWorktreePicker, false);
 });

@@ -21,6 +21,10 @@ const STATUS = {
   CROSS_PROJECT_ACCESS: 400,
   BRANCH_NAME_INVALID: 400,
   BRANCH_EXISTS: 409,
+  WORKTREE_NOT_FOUND: 404,
+  WORKTREE_NOT_ON_TASK: 403,
+  WORKTREE_WITH_BASE_BRANCH: 400,
+  ACCESS_INVALID: 400,
 };
 
 export function stubApi(world) {
@@ -53,6 +57,21 @@ export function stubApi(world) {
         const q = url.searchParams;
         return jsonResponse(200, await gateway.checkBranchName({ repositoryId: q.get("repository_id") ?? "", name: q.get("name") ?? "", baseBranch: q.get("base_branch") ?? "", ticketId: q.get("ticket_id") ?? "" }));
       }
+      if (method === "GET" && url.pathname === "/api/task_worktrees") {
+        const list = await gateway.taskWorktrees({ ticketId: url.searchParams.get("task_id") ?? "", repositoryId: url.searchParams.get("repository_id") ?? "" });
+        return jsonResponse(200, {
+          policy: { project: false, task_override: "project", effective: false },
+          task_worktree_id: null,
+          choice_needed: false,
+          worktrees: list.worktrees.map((w) => ({
+            worktree_id: w.worktreeId,
+            branch: w.branch,
+            on_disk: w.onDisk,
+            created_by_session_id: w.createdBySessionId,
+            sessions: w.sessions.map((s) => ({ session_id: s.sessionId, agent: s.agent, mode: s.mode, access: s.access, running: s.running })),
+          })),
+        });
+      }
       if (method === "POST" && url.pathname === "/api/start_interactive_session") {
         if (body.runs_on !== "server") return jsonResponse(400, { error: "the web client runs sessions on the server", code: "INVALID_INPUT" });
         const session = await gateway.start({
@@ -63,7 +82,10 @@ export function stubApi(world) {
           mode: body.mode,
           prompt: body.prompt,
           autoAccept: body.auto_accept,
+          baseBranch: body.base_branch,
           branchName: body.branch_name,
+          worktreeId: body.worktree_id,
+          access: body.access,
           size: body.size,
         });
         return jsonResponse(201, { session: toDTO(session), agent: {} });

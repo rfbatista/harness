@@ -24,6 +24,25 @@
  * @property {string} [branchName]  the name of the session's own branch; "" lets the server generate one
  * @property {string} [model]      the model override for this session only: a CLI alias or "default" (no --model); missing lets the server resolve the mode's model
  * @property {readonly string[]} [bringUnderSessionIds]  with mode "architect": sessions of the task to move under the new architect as it starts
+ * @property {string} [worktreeId]  start on this existing worktree of the task, on its branch, instead of cutting a branch; excludes baseBranch and branchName
+ * @property {"write"|"read_only"} [access]  what the session may do in a joined worktree; missing takes the mode's default (read_only for review and qa)
+ *
+ * @typedef {object} TaskWorktreeSession  a session on one of the task's worktrees
+ * @property {string} sessionId
+ * @property {string} agent
+ * @property {string} mode
+ * @property {"write"|"read_only"} access
+ * @property {boolean} running  false once it ended
+ *
+ * @typedef {object} TaskWorktree  a worktree the harness made for a session of the task, still on disk
+ * @property {string} worktreeId
+ * @property {string} branch
+ * @property {boolean} onDisk
+ * @property {string} createdBySessionId
+ * @property {readonly TaskWorktreeSession[]} sessions
+ *
+ * @typedef {object} TaskWorktrees  what the New session form's picker offers
+ * @property {readonly TaskWorktree[]} worktrees  newest first
  *
  * @typedef {object} Brought  what bringing sessions under the architect did
  * @property {Session} architect
@@ -68,6 +87,11 @@
  *           The branches a new session can branch off: local ones, then
  *           remote ones. Rejects with REPOSITORY_NOT_FOUND.
  * @property {(query: { repositoryId: string, name: string, baseBranch?: string, ticketId?: string }, signal?: AbortSignal) => Promise<BranchNameCheck>} checkBranchName
+ * @property {(query: { ticketId: string, repositoryId: string }, signal?: AbortSignal) => Promise<TaskWorktrees>} taskWorktrees
+ *           The task's worktrees in a repository, running or ended and still
+ *           on disk, newest first: what a new session can join instead of
+ *           cutting a branch. A start on one rejects WORKTREE_NOT_FOUND,
+ *           WORKTREE_NOT_ON_TASK, WORKTREE_WITH_BASE_BRANCH or ACCESS_INVALID.
  *           Reads git only: suggests the generated name and says whether a
  *           name is valid and free. Rejects with REPOSITORY_NOT_FOUND.
  * @property {(request: { ticketId: string, sessionIds: readonly string[] }) => Promise<Brought>} bringUnder

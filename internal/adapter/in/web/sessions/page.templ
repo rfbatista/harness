@@ -948,7 +948,32 @@ templ newSessionForm(form NewSessionForm, lockedMode string) {
 					</span>
 				</div>
 			}
-			<div class="[ field ]">
+			<div class="[ field ]" data-worktree-field x-show="showWorktreePicker">
+				<label for="new-session-worktree">Run on</label>
+				<div class="[ dropdown ]" x-data="combobox">
+					<select id="new-session-worktree" x-model="worktreeId" x-on:change="worktreePicked" aria-describedby="new-session-worktree-status new-session-worktree-hint">
+						<option value="" data-pinned>A new branch</option>
+						<template x-for="o in worktreeOptions" x-bind:key="o.id">
+							<option x-bind:value="o.id" x-text="o.label"></option>
+						</template>
+					</select>
+				</div>
+				<span class="[ error ]" id="new-session-worktree-status" aria-live="polite" data-worktree-error x-show="hasWorktreeError" x-text="worktreeError"></span>
+				<span class="[ hint ]" id="new-session-worktree-hint" data-worktree-empty x-show="noWorktrees" x-text="noWorktreesText"></span>
+			</div>
+			<fieldset class="[ field ]" data-access-field x-show="joining">
+				<legend>Access to the worktree</legend>
+				<div class="[ field ]" data-inline>
+					<input type="radio" id="new-session-access-write" name="new-session-access" value="write" x-bind:checked="writeAccess" x-on:change="accessChosen"/>
+					<label for="new-session-access-write">Write</label>
+				</div>
+				<div class="[ field ]" data-inline>
+					<input type="radio" id="new-session-access-read-only" name="new-session-access" value="read_only" x-bind:checked="readOnlyAccess" x-on:change="accessChosen"/>
+					<label for="new-session-access-read-only">Read-only</label>
+				</div>
+				<span class="[ hint ]" x-text="accessHint"></span>
+			</fieldset>
+			<div class="[ field ]" x-show="showBranchFields">
 				<label for="new-session-base">Branch off</label>
 				<div class="[ cluster ]">
 					<div class="[ dropdown ]" x-data="combobox" x-bind:aria-busy="branchBusy" x-bind:data-error="branchError" x-on:dropdown-retry="retryBranches">
@@ -973,7 +998,7 @@ templ newSessionForm(form NewSessionForm, lockedMode string) {
 				<span class="[ error ]" id="new-session-base-status" aria-live="polite" data-branch-base-status x-show="hasBaseStatus" x-text="baseStatus"></span>
 				<span class="[ hint ]" id="new-session-base-hint" aria-live="polite" x-text="baseHint"></span>
 			</div>
-			<div class="[ field ]">
+			<div class="[ field ]" x-show="showBranchFields">
 				<label for="new-session-branch-name">Branch name</label>
 				<input type="text" id="new-session-branch-name" class="[ font-mono text-sm ]" spellcheck="false" autocomplete="off" x-model="branchName" x-on:input="nameTyped" x-on:focus="selectName" x-bind:aria-invalid="nameInvalid" aria-describedby="new-session-branch-name-status new-session-branch-name-hint"/>
 				<div class="[ cluster ]" id="new-session-branch-name-status" aria-live="polite" data-branch-name-status x-bind:data-state="nameState">
