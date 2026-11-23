@@ -139,6 +139,12 @@ type ProjectChange struct {
 	// ProductOwnerSettings is a project's product owner settings after a
 	// change.
 	ProductOwnerSettings *ProductOwnerSettingsChange `json:"product_owner_settings,omitempty"`
+	// ProductOwnerThreadItem is a thread item new or changed, ProductOwnerDelta
+	// the next piece of a streaming answer, ProductOwnerThread a thread
+	// started or changed.
+	ProductOwnerThreadItem *ProductOwnerThreadItemChange `json:"product_owner_thread_item,omitempty"`
+	ProductOwnerDelta      *ProductOwnerDeltaChange      `json:"product_owner_delta,omitempty"`
+	ProductOwnerThread     *ProductOwnerThreadChange     `json:"product_owner_thread,omitempty"`
 	Deleted          bool                    `json:"deleted,omitempty"`
 }
 
@@ -296,6 +302,12 @@ func (c ProjectChange) ProjectID() string {
 		return c.SessionFilesRoot.ProjectID
 	case c.ProductOwnerSettings != nil:
 		return c.ProductOwnerSettings.ProjectID
+	case c.ProductOwnerThreadItem != nil:
+		return c.ProductOwnerThreadItem.ProjectID
+	case c.ProductOwnerDelta != nil:
+		return c.ProductOwnerDelta.ProjectID
+	case c.ProductOwnerThread != nil:
+		return c.ProductOwnerThread.ProjectID
 	case c.DesignSystemSaved != nil:
 		return c.DesignSystemSaved.ProjectID
 	case c.DesignSystemChanged != nil:

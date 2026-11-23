@@ -6,6 +6,9 @@ package productowner
 
 import (
 	"context"
+	"crypto/rand"
+	"encoding/hex"
+	"sync"
 	"time"
 
 	"operators-mcp/internal/domain"
@@ -28,12 +31,36 @@ type Service struct {
 	projects Projects
 	agents   Agents
 	feed     ports.ProjectChangeSink
+	sessions ports.ProductOwnerSessions
+
+	// idle is how long a thread's process waits for the next message before
+	// it ends.
+	idle time.Duration
+
+	mu      sync.Mutex
+	runs    map[string]*run // by thread id: the threads whose process this server follows
+	locks   map[string]*sync.Mutex
+	closing bool
 }
+
+// DefaultIdle is how long a thread's process stays after its last turn.
+const DefaultIdle = 10 * time.Minute
 
 // New returns the product owner service. feed puts each change on its
 // project's feed, where the page stream follows it; nil announces nothing.
-func New(store ports.ProductOwnerStore, projects Projects, agents Agents, feed ports.ProjectChangeSink) *Service {
-	return &Service{store: store, projects: projects, agents: agents, feed: feed}
+// sessions starts and drives the threads' sessions; nil leaves threads
+// unavailable.
+func New(store ports.ProductOwnerStore, projects Projects, agents Agents, feed ports.ProjectChangeSink, sessions ports.ProductOwnerSessions) *Service {
+	return &Service{store: store, projects: projects, agents: agents, feed: feed, sessions: sessions, idle: DefaultIdle,
+		runs: map[string]*run{}, locks: map[string]*sync.Mutex{}}
+}
+
+// SetIdle changes how long an idle thread's process stays; it applies to the
+// processes that start after.
+func (s *Service) SetIdle(d time.Duration) {
+	s.mu.Lock()
+	s.idle = d
+	s.mu.Unlock()
 }
 
 var _ ports.ProductOwner = (*Service)(nil)
@@ -122,4 +149,12 @@ func (s *Service) announce(c ports.ProjectChange) {
 	if s.feed != nil {
 		s.feed.AnnounceChange(c)
 	}
+}
+
+func newID() (string, error) {
+	var b [8]byte
+	if _, err := rand.Read(b[:]); err != nil {
+		return "", err
+	}
+	return hex.EncodeToString(b[:]), nil
 }

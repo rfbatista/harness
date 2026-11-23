@@ -1657,6 +1657,13 @@ var ProductOwnerModule = fx.Module("productowner",
 	fx.Provide(newProductOwner),
 )
 
-func newProductOwner(store ports.ProductOwnerStore, cat catalog.Catalog, orch *orchestration.Service) *productowner.Service {
-	return productowner.New(store, cat.Projects, cat.Agents, orch)
+func newProductOwner(lc fx.Lifecycle, store ports.ProductOwnerStore, cat catalog.Catalog, orch *orchestration.Service) *productowner.Service {
+	svc := productowner.New(store, cat.Projects, cat.Agents, orch, orch)
+	lc.Append(fx.Hook{OnStop: func(context.Context) error {
+		// The processes die with the server: their threads stay as they are,
+		// for the next boot to resume.
+		svc.Close()
+		return nil
+	}})
+	return svc
 }

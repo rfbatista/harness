@@ -76,13 +76,64 @@ type ProductOwnerThreadPage struct {
 type ProductOwner interface {
 	Settings(ctx context.Context, projectID string) (*ProductOwnerSettingsView, error)
 	UpdateSettings(ctx context.Context, u ProductOwnerSettingsUpdate) (*ProductOwnerSettingsView, error)
+
+	Threads(ctx context.Context, projectID string) ([]domain.ProductOwnerThread, error)
+	// Thread reads a thread and a page of its items; before pages toward the
+	// start (an item id, empty for the newest).
+	Thread(ctx context.Context, threadID, before string) (*ProductOwnerThreadPage, error)
+	StartThread(ctx context.Context, projectID, message string, attachmentIDs []string) (threadID, itemID string, err error)
+	SendMessage(ctx context.Context, threadID, message string, attachmentIDs []string) (itemID string, err error)
+	StopTurn(ctx context.Context, threadID string) error
 }
 
 // The product owner's events on the project feed (the page stream): each
 // names its project, which routes it.
 
+// ProductOwnerThreadItemChange is a thread item, new or changed.
+type ProductOwnerThreadItemChange struct {
+	ProjectID string                  `json:"project_id"`
+	ThreadID  string                  `json:"thread_id"`
+	Item      domain.ProductOwnerItem `json:"item"`
+}
+
+// ProductOwnerDeltaChange is the next piece of a streaming answer; the final
+// thread item is authoritative over the deltas.
+type ProductOwnerDeltaChange struct {
+	ProjectID string `json:"project_id"`
+	ThreadID  string `json:"thread_id"`
+	ItemID    string `json:"item_id"`
+	Text      string `json:"text"`
+}
+
+// ProductOwnerThreadChange is a thread started or changed.
+type ProductOwnerThreadChange struct {
+	ProjectID string                    `json:"project_id"`
+	Thread    domain.ProductOwnerThread `json:"thread"`
+}
+
 // ProductOwnerSettingsChange is a project's settings as they are now.
 type ProductOwnerSettingsChange struct {
 	ProjectID string                    `json:"project_id"`
 	Settings  *ProductOwnerSettingsView `json:"settings"`
+}
+
+// ProductOwnerSessionSpec is what a thread's session starts with: the
+// project's product owner settings at that time (ADR 0099). A resume passes
+// the spec the thread started with.
+type ProductOwnerSessionSpec struct {
+	ProjectID string
+	AgentID   string
+	Prompt    string
+}
+
+// ProductOwnerSessions is how the product owner starts, resumes and drives the
+// headless sessions of its threads; the orchestration implements it.
+type ProductOwnerSessions interface {
+	StartProductOwnerSession(ctx context.Context, spec ProductOwnerSessionSpec) (sessionID string, err error)
+	ResumeProductOwnerSession(ctx context.Context, sessionID string, spec ProductOwnerSessionSpec) error
+	ProductOwnerRunning(sessionID string) bool
+	Send(ctx context.Context, id, text string) error
+	Stop(ctx context.Context, id string) error
+	// Subscribe follows a session's events live.
+	Subscribe(id string) (<-chan SessionEvent, []SessionEvent, func())
 }

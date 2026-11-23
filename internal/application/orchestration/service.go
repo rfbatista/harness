@@ -69,6 +69,9 @@ type sessionSubject struct {
 	mode    domain.SessionMode
 	// designSystem is the design system a design session is bound to.
 	designSystem *domain.DesignSystem
+	// productOwnerPrompt is the project prompt a product-owner thread starts
+	// with, "" for none.
+	productOwnerPrompt string
 }
 
 // projectID is the project the session works in.
@@ -1009,6 +1012,10 @@ func (s *Service) sessionConfig(id, dir, model string, allowedTools []string, pe
 		in := s.briefProject(subject.project)
 		applyDesignSessionContext(&cfg, designSessionBriefInput{Project: in.Project, DesignSystem: subject.designSystem.Name,
 			Repositories: in.Repositories, Contexts: in.Contexts, AgentsMove: s.agentsMoveDocuments()}, taskURL)
+	} else if subject.mode == domain.SessionModeProductOwner && subject.project != nil {
+		in := s.briefProject(subject.project)
+		in.AgentsMove = s.agentsMoveDocuments()
+		applyProductOwnerContext(&cfg, in, taskURL, subject.productOwnerPrompt)
 	} else if subject.projectLevel() {
 		in := s.briefProject(subject.project)
 		in.AgentsMove = s.agentsMoveDocuments()

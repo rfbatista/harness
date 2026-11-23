@@ -1,6 +1,7 @@
 package domain
 
 import (
+	"encoding/json"
 	"regexp"
 	"strings"
 	"time"
@@ -69,6 +70,10 @@ type ProductOwnerThread struct {
 	LastActivityAt time.Time `json:"last_activity_at"`
 	// PendingHeldActions counts the held actions waiting on the person.
 	PendingHeldActions int `json:"pending_held_actions"`
+	// AgentID and Prompt are what the thread started with: a running thread
+	// keeps them while the project's settings change (ADR 0099).
+	AgentID string `json:"-"`
+	Prompt  string `json:"-"`
 }
 
 // Kinds of thread item. Later pieces add kinds; the thread store keeps each
@@ -99,6 +104,21 @@ type ProductOwnerItem struct {
 	Streaming bool   `json:"streaming,omitempty"`
 	// Stopped marks a message the person stopped while it streamed.
 	Stopped bool `json:"stopped,omitempty"`
+}
+
+// MarshalJSON writes the item as the contract shapes it: a message always
+// carries its attachments and its streaming flag.
+func (i ProductOwnerItem) MarshalJSON() ([]byte, error) {
+	type plain ProductOwnerItem
+	if i.Kind != ProductOwnerItemMessage {
+		return json.Marshal(plain(i))
+	}
+	return json.Marshal(struct {
+		plain
+		Attachments []any `json:"attachments"`
+		Streaming   bool  `json:"streaming"`
+		Stopped     bool  `json:"stopped"`
+	}{plain: plain(i), Attachments: []any{}, Streaming: i.Streaming, Stopped: i.Stopped})
 }
 
 // ProductOwnerThreadTitle is a thread's title until the product owner names

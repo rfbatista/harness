@@ -52,3 +52,102 @@ func (h *Handler) handleUpdateProductOwner(c echo.Context) error {
 	}
 	return c.JSON(http.StatusOK, v)
 }
+
+// productOwnerThreadRow is a thread in the project's list.
+type productOwnerThreadRow struct {
+	ThreadID           string `json:"thread_id"`
+	Title              string `json:"title"`
+	StartedAt          any    `json:"started_at"`
+	LastActivityAt     any    `json:"last_activity_at"`
+	Turn               string `json:"turn"`
+	PendingHeldActions int    `json:"pending_held_actions"`
+}
+
+func (h *Handler) handleListProductOwnerThreads(c echo.Context) error {
+	if err := h.productOwnerReady(); err != nil {
+		return err
+	}
+	threads, err := h.productOwner.Threads(c.Request().Context(), c.QueryParam("project_id"))
+	if err != nil {
+		return err
+	}
+	rows := make([]productOwnerThreadRow, len(threads))
+	for i, t := range threads {
+		rows[i] = productOwnerThreadRow{t.ID, t.Title, t.StartedAt, t.LastActivityAt, t.Turn, t.PendingHeldActions}
+	}
+	return c.JSON(http.StatusOK, map[string]any{"threads": rows})
+}
+
+func (h *Handler) handleGetProductOwnerThread(c echo.Context) error {
+	if err := h.productOwnerReady(); err != nil {
+		return err
+	}
+	page, err := h.productOwner.Thread(c.Request().Context(), c.QueryParam("thread_id"), c.QueryParam("before"))
+	if err != nil {
+		return err
+	}
+	t := page.Thread
+	items := page.Items
+	if items == nil {
+		items = []domain.ProductOwnerItem{}
+	}
+	return c.JSON(http.StatusOK, map[string]any{
+		"thread":      map[string]any{"thread_id": t.ID, "project_id": t.ProjectID, "title": t.Title, "turn": t.Turn, "session_id": t.SessionID},
+		"items":       items,
+		"has_earlier": page.HasEarlier,
+	})
+}
+
+func (h *Handler) handleStartProductOwnerThread(c echo.Context) error {
+	if err := h.productOwnerReady(); err != nil {
+		return err
+	}
+	var in struct {
+		ProjectID     string   `json:"project_id"`
+		Message       string   `json:"message"`
+		AttachmentIDs []string `json:"attachment_ids"`
+	}
+	if err := bindJSON(c, &in); err != nil {
+		return err
+	}
+	threadID, itemID, err := h.productOwner.StartThread(c.Request().Context(), in.ProjectID, in.Message, in.AttachmentIDs)
+	if err != nil {
+		return err
+	}
+	return c.JSON(http.StatusOK, map[string]string{"thread_id": threadID, "item_id": itemID})
+}
+
+func (h *Handler) handleSendProductOwnerMessage(c echo.Context) error {
+	if err := h.productOwnerReady(); err != nil {
+		return err
+	}
+	var in struct {
+		ThreadID      string   `json:"thread_id"`
+		Message       string   `json:"message"`
+		AttachmentIDs []string `json:"attachment_ids"`
+	}
+	if err := bindJSON(c, &in); err != nil {
+		return err
+	}
+	itemID, err := h.productOwner.SendMessage(c.Request().Context(), in.ThreadID, in.Message, in.AttachmentIDs)
+	if err != nil {
+		return err
+	}
+	return c.JSON(http.StatusOK, map[string]string{"item_id": itemID})
+}
+
+func (h *Handler) handleStopProductOwnerTurn(c echo.Context) error {
+	if err := h.productOwnerReady(); err != nil {
+		return err
+	}
+	var in struct {
+		ThreadID string `json:"thread_id"`
+	}
+	if err := bindJSON(c, &in); err != nil {
+		return err
+	}
+	if err := h.productOwner.StopTurn(c.Request().Context(), in.ThreadID); err != nil {
+		return err
+	}
+	return c.JSON(http.StatusOK, map[string]any{})
+}

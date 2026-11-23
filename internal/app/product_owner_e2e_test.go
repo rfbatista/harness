@@ -27,6 +27,7 @@ import (
 	"operators-mcp/internal/application/productowner"
 	"operators-mcp/internal/domain"
 	"operators-mcp/internal/ports"
+	"operators-mcp/internal/ports/portstest"
 )
 
 // poE2E is the server wired as it runs, with the product owner's HTTP API on a
@@ -50,7 +51,8 @@ type poE2E struct {
 	// fakeDir holds the stand-in claude, its launch log and its gates.
 	fakeDir string
 
-	feed *poFeed
+	feed    *poFeed
+	sandbox *portstest.RecordingSandboxDriver
 }
 
 // fakeHeadlessClaude is the stand-in claude. It speaks stream-json on stdin
@@ -78,7 +80,11 @@ done
 
 // newPOE2E starts the server over a database file, with a project of one
 // repository.
-func newPOE2E(t *testing.T) *poE2E {
+func newPOE2E(t *testing.T) *poE2E { return newPOE2EWith(t, nil) }
+
+// newPOE2EWith is newPOE2E with tweak applied to the server's configuration
+// before it boots.
+func newPOE2EWith(t *testing.T, tweak func(*Config)) *poE2E {
 	t.Helper()
 	if _, err := exec.LookPath("git"); err != nil {
 		t.Skip("git is required")
@@ -96,6 +102,9 @@ func newPOE2E(t *testing.T) *poE2E {
 	}
 	e := &poE2E{t: t, ctx: context.Background(), fakeDir: fakeDir}
 	e.cfg = Config{HTTPAddr: "127.0.0.1:0", MCPAddr: "127.0.0.1:0", DBPath: filepath.Join(dir, "po.db"), DataDir: filepath.Join(dir, "data"), Root: dir, ClaudeBin: fake, SessionShell: "direct"}
+	if tweak != nil {
+		tweak(&e.cfg)
+	}
 	e.boot()
 	t.Cleanup(func() { _ = e.app.Stop(context.Background()) })
 	if _, err := e.cat.Settings.UpdateSettings(map[string]string{domain.SettingWorkspacesRoot: filepath.Join(dir, "worktrees")}); err != nil {
@@ -125,6 +134,12 @@ func (e *poE2E) boot() {
 	)
 	if err := e.app.Start(e.ctx); err != nil {
 		e.t.Fatal(err)
+	}
+	// The host's sandbox cannot nest in the one the tests run under: a driver
+	// that records each policy and confines nothing stands in.
+	e.sandbox = &portstest.RecordingSandboxDriver{}
+	if e.orch.Sandbox != nil {
+		e.orch.Sandbox.Driver = e.sandbox
 	}
 }
 
@@ -389,5 +404,265 @@ func TestTheSettingsSurviveARestartAndEveryUpdateReachesTheProjectsFeed(t *testi
 	time.Sleep(100 * time.Millisecond)
 	if got := otherFeed.of("product_owner_settings"); len(got) != 0 {
 		t.Errorf("another project's feed got %v", got)
+	}
+}
+
+type poItem struct {
+	ItemID      string `json:"item_id"`
+	Kind        string `json:"kind"`
+	Author      string `json:"author"`
+	Text        string `json:"text"`
+	Streaming   *bool  `json:"streaming"`
+	Stopped     bool   `json:"stopped"`
+	Attachments []any  `json:"attachments"`
+}
+
+type poThread struct {
+	Thread struct {
+		ThreadID  string `json:"thread_id"`
+		ProjectID string `json:"project_id"`
+		Title     string `json:"title"`
+		Turn      string `json:"turn"`
+		SessionID string `json:"session_id"`
+	} `json:"thread"`
+	Items      []poItem `json:"items"`
+	HasEarlier bool     `json:"has_earlier"`
+}
+
+func (e *poE2E) startThread(message string) (threadID, itemID string) {
+	e.t.Helper()
+	var out struct {
+		ThreadID string `json:"thread_id"`
+		ItemID   string `json:"item_id"`
+	}
+	if status, code := e.post("start_product_owner_thread", map[string]any{"project_id": e.project, "message": message}, &out); status != 200 {
+		e.t.Fatalf("start = %d %s", status, code)
+	}
+	return out.ThreadID, out.ItemID
+}
+
+func (e *poE2E) send(threadID, message string) (status int, code string) {
+	e.t.Helper()
+	return e.post("send_product_owner_message", map[string]any{"thread_id": threadID, "message": message}, nil)
+}
+
+func (e *poE2E) thread(id string) poThread {
+	e.t.Helper()
+	var out poThread
+	if status, code := e.get("product_owner_thread?thread_id="+id, &out); status != 200 {
+		e.t.Fatalf("GET thread = %d %s", status, code)
+	}
+	return out
+}
+
+// waitTurn waits until the thread's turn is want.
+func (e *poE2E) waitTurn(id, want string) poThread {
+	e.t.Helper()
+	var got poThread
+	eventuallyPO(e.t, "the turn to be "+want, func() string {
+		got = e.thread(id)
+		if got.Thread.Turn != want {
+			return "turn is " + got.Thread.Turn
+		}
+		return ""
+	})
+	return got
+}
+
+// launches are the command lines the stand-in claude was started with, one
+// entry per start or resume; an argument may span lines.
+func (e *poE2E) launches() []string {
+	e.t.Helper()
+	b, _ := os.ReadFile(filepath.Join(e.fakeDir, "launches"))
+	var out []string
+	for _, l := range strings.Split(string(b), "\n") {
+		if strings.HasPrefix(l, "--output-format") {
+			out = append(out, l)
+		} else if len(out) > 0 {
+			out[len(out)-1] += "\n" + l
+		}
+	}
+	return out
+}
+
+func TestAThreadStartsWithAMessageAndStreamsTheProductOwnersAnswer(t *testing.T) {
+	e := newPOE2E(t)
+
+	threadID, itemID := e.startThread("What was done this week?")
+	if threadID == "" || itemID == "" {
+		t.Fatalf("start answered thread %q item %q", threadID, itemID)
+	}
+	got := e.waitTurn(threadID, "idle")
+	if got.Thread.ProjectID != e.project || got.Thread.Title != "What was done this week?" || got.Thread.SessionID == "" || got.HasEarlier {
+		t.Errorf("thread = %+v", got.Thread)
+	}
+	var messages []poItem
+	for _, it := range got.Items {
+		if it.Kind == "message" {
+			messages = append(messages, it)
+		}
+	}
+	if len(messages) != 2 {
+		t.Fatalf("items = %+v, want the person's message then the answer", got.Items)
+	}
+	person, answer := messages[0], messages[1]
+	if person.ItemID != itemID || person.Author != "person" || person.Text != "What was done this week?" || person.Attachments == nil {
+		t.Errorf("first message = %+v", person)
+	}
+	if answer.Author != "product_owner" || answer.Text != "answer to: What was done this week?" || answer.Streaming == nil || *answer.Streaming {
+		t.Errorf("answer = %+v, want the whole text and streaming false", answer)
+	}
+
+	// The feed carried the deltas, then the final item, and the turn's
+	// changes.
+	eventuallyPO(t, "the stream of the answer", func() string {
+		var deltas string
+		for _, d := range e.feed.of("product_owner_delta") {
+			if d["thread_id"] == threadID && d["item_id"] == answer.ItemID {
+				deltas += d["text"].(string)
+			}
+		}
+		if deltas != "answer to: What was done this week?" {
+			return "deltas = " + deltas
+		}
+		final := false
+		for _, c := range e.feed.of("product_owner_thread_item") {
+			it, _ := c["item"].(map[string]any)
+			if it["item_id"] == answer.ItemID && it["streaming"] == false && it["text"] == answer.Text {
+				final = true
+			}
+		}
+		if !final {
+			return "no final thread item"
+		}
+		var turns []string
+		for _, c := range e.feed.of("product_owner_thread") {
+			th, _ := c["thread"].(map[string]any)
+			if th["thread_id"] == threadID {
+				turns = append(turns, th["turn"].(string))
+			}
+		}
+		if len(turns) < 2 || turns[0] != "running" || turns[len(turns)-1] != "idle" {
+			return "turns = " + strings.Join(turns, ",")
+		}
+		return ""
+	})
+}
+
+func TestAThreadsSessionRunsInProductOwnerModeOnItsProjectWithTheBriefItsModelAndNoTask(t *testing.T) {
+	e := newPOE2E(t)
+	threadID, _ := e.startThread("hello")
+	th := e.waitTurn(threadID, "idle")
+
+	sess := e.sess.Get(th.Thread.SessionID)
+	if sess == nil {
+		t.Fatal("the thread has no session")
+	}
+	if sess.Mode != domain.SessionModeProductOwner || sess.ProjectID != e.project || sess.TicketID != "" || sess.Interactive {
+		t.Errorf("session = mode %q project %q task %q interactive %v", sess.Mode, sess.ProjectID, sess.TicketID, sess.Interactive)
+	}
+	launches := e.launches()
+	if len(launches) != 1 {
+		t.Fatalf("launches = %q", launches)
+	}
+	args := launches[0]
+	if !strings.Contains(args, "--model sonnet") || !strings.Contains(args, "--session-id "+sess.ID) {
+		t.Errorf("launch = %.300s, want the built-in model sonnet and the session id", args)
+	}
+	for _, want := range []string{
+		"product owner of project harness", "Say where you looked", "Say so when you cannot know", "has none and offer to shape its first feature",
+		"cannot change anything yet", "read another session's transcript or worktree, even when asked",
+	} {
+		if !strings.Contains(args, want) {
+			t.Errorf("the brief lacks %q", want)
+		}
+	}
+	// The sandbox lets it read every repository of the project and write none.
+	calls := e.sandbox.Calls()
+	if len(calls) == 0 {
+		t.Fatal("the session was not put under the sandbox")
+	}
+	policy := calls[len(calls)-1].Policy
+	repoDir := filepath.Join(filepath.Dir(e.cfg.DBPath), "repo")
+	inAny := func(list []string) bool {
+		for _, p := range list {
+			if strings.HasSuffix(p, "/repo") || p == repoDir {
+				return true
+			}
+		}
+		return false
+	}
+	if !inAny(policy.Readable) || inAny(policy.Writable) {
+		t.Errorf("sandbox readable %v writable %v: want the repository read-only", policy.Readable, policy.Writable)
+	}
+	if strings.Contains(args, "create the feature task") {
+		t.Error("the brief is the product session's")
+	}
+
+	// A model set for the mode is the model of every new thread.
+	if _, err := e.cat.Settings.UpdateSettings(map[string]string{domain.ModeModelKey(domain.SessionModeProductOwner): "haiku"}); err != nil {
+		t.Fatal(err)
+	}
+	e.startThread("again")
+	eventuallyPO(t, "the second launch", func() string {
+		if l := e.launches(); len(l) != 2 || !strings.Contains(l[1], "--model haiku") {
+			return "launches = " + strings.Join(l, "|")
+		}
+		return ""
+	})
+}
+
+func TestAStartIsRefusedForABadMessageAnUnknownProjectAndASwitchedOffProductOwner(t *testing.T) {
+	e := newPOE2E(t)
+	five := []string{"a", "b", "c", "d", "e", "f"}
+	for _, c := range []struct {
+		name   string
+		body   map[string]any
+		status int
+		code   string
+	}{
+		{"unknown project", map[string]any{"project_id": "nope", "message": "hi"}, 404, "PROJECT_NOT_FOUND"},
+		{"empty message", map[string]any{"project_id": e.project, "message": "  "}, 400, "INVALID_INPUT"},
+		{"message too long", map[string]any{"project_id": e.project, "message": strings.Repeat("x", 20001)}, 400, "INVALID_INPUT"},
+		{"too many attachments", map[string]any{"project_id": e.project, "message": "hi", "attachment_ids": five}, 400, "INVALID_INPUT"},
+		{"an attachment of no project", map[string]any{"project_id": e.project, "message": "hi", "attachment_ids": []string{"a"}}, 400, "INVALID_INPUT"},
+	} {
+		if status, code := e.post("start_product_owner_thread", c.body, nil); status != c.status || code != c.code {
+			t.Errorf("%s = %d %s, want %d %s", c.name, status, code, c.status, c.code)
+		}
+	}
+	if status, _ := e.post("update_product_owner", map[string]any{"project_id": e.project, "enabled": false}, nil); status != 200 {
+		t.Fatal("switch off failed")
+	}
+	if status, code := e.post("start_product_owner_thread", map[string]any{"project_id": e.project, "message": "hi"}, nil); status != 409 || code != "PRODUCT_OWNER_OFF" {
+		t.Errorf("off = %d %s, want 409 PRODUCT_OWNER_OFF", status, code)
+	}
+	var list struct {
+		Threads []any `json:"threads"`
+	}
+	e.get("product_owner_threads?project_id="+e.project, &list)
+	if len(list.Threads) != 0 || len(e.launches()) != 0 {
+		t.Errorf("a refused start left %d threads and %d launches", len(list.Threads), len(e.launches()))
+	}
+	if status, code := e.get("product_owner_thread?thread_id=nope", nil); status != 404 || code != "THREAD_NOT_FOUND" {
+		t.Errorf("unknown thread = %d %s, want 404 THREAD_NOT_FOUND", status, code)
+	}
+}
+
+func TestAStartWhenClaudeCannotRunIsProductOwnerUnavailableAndNamesWhereToFixIt(t *testing.T) {
+	e := newPOE2EWith(t, func(c *Config) { c.ClaudeBin = "claude-is-not-installed-here" })
+	b, _ := json.Marshal(map[string]any{"project_id": e.project, "message": "hi"})
+	res, err := http.Post(e.srv.URL+"/api/start_product_owner_thread", "application/json", bytes.NewReader(b))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer res.Body.Close()
+	var body struct {
+		Code   string `json:"code"`
+		FixURL string `json:"fix_url"`
+	}
+	_ = json.NewDecoder(res.Body).Decode(&body)
+	if res.StatusCode != 503 || body.Code != "PRODUCT_OWNER_UNAVAILABLE" || body.FixURL == "" {
+		t.Errorf("answer = %d %+v, want 503 PRODUCT_OWNER_UNAVAILABLE with a fix_url", res.StatusCode, body)
 	}
 }
