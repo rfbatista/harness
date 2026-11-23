@@ -283,3 +283,110 @@ func TestAnAgentShowsAndEditsTheModesItStartsIn_EndToEnd(t *testing.T) {
 		t.Errorf("JavaScript errors: %v", errs)
 	}
 }
+
+// TestTheNewSessionFormOffersOnlyTheModesAgents_EndToEnd covers stories 9 to
+// 13: the agent picker offers the agents the chosen mode allows (within the
+// project's), Plain claude only when the mode allows no agent, a picked agent
+// the new mode does not allow is cleared with the reason, a mode that allows
+// nothing says so instead of showing an empty picker, and a start the server
+// refuses for the mode shows its message.
+func TestTheNewSessionFormOffersOnlyTheModesAgents_EndToEnd(t *testing.T) {
+	w := newTokenSaverWorld(t)
+	writeCatalogFile(t, w, "agents.json", nsAgentsCatalog)
+	nsAddCatalogAgents(t, w)
+	maSetMode(t, w, `{"mode":"review","state":"selected","agents":["reviewer"],"no_agent":false}`)
+	maSetMode(t, w, `{"mode":"test","state":"selected","agents":["backend"],"no_agent":true}`)
+	maSetMode(t, w, `{"mode":"qa","state":"selected","agents":[],"no_agent":false}`)
+
+	const (
+		picker    = `[...document.querySelectorAll('#new-session-agent option')].map(o => o.textContent.trim()).sort().join('|')`
+		agentNote = `(document.querySelector(` + "`" + nsForm + ` [data-agent-note]` + "`" + `)?.textContent ?? '').replace(/\s+/g, ' ').trim()`
+		nothing   = nsForm + ` [data-mode-allows-nothing]`
+	)
+	setMode := func(mode string) chromedp.Action {
+		return chromedp.Evaluate(`(() => { const s = document.querySelector('#new-session-mode'); s.value = `+quote(mode)+`; s.dispatchEvent(new Event('change', { bubbles: true })); })()`, nil)
+	}
+	pick := func(agent string) chromedp.Action {
+		return chromedp.Evaluate(`(() => { const s = document.querySelector('#new-session-agent'); s.value = [...s.options].find(o => o.textContent.trim() === `+quote(agent)+`).value; s.dispatchEvent(new Event('change', { bubbles: true })); })()`, nil)
+	}
+	b := newTLSBrowser(t)
+	var got string
+	b.run("a mode on All agents offers every enabled agent and Plain claude",
+		chromedp.EmulateViewport(1280, 1100),
+		chromedp.Navigate(w.taskURL()),
+		nsClick(`main header`, "New session"),
+		waitUntil(`document.querySelectorAll('#new-session-agent option').length > 1`),
+		waitUntil(nsLive),
+		chromedp.Evaluate(picker, &got),
+	)
+	if want := "Plain claude|backend|designer|reviewer|writer"; got != want {
+		t.Errorf("default mode picker = %q, want %q", got, want)
+	}
+
+	b.run("a Selected mode offers only its agents, and no Plain claude without No agent",
+		setMode("review"),
+		waitUntil(`(`+picker+`) === 'Pick an agent|reviewer'`),
+		bothSchemes("new-session-mode-selected"),
+	)
+	b.run("a Selected mode with No agent offers its agents and Plain claude",
+		setMode("test"),
+		waitUntil(`(`+picker+`) === 'Plain claude|backend'`),
+	)
+
+	b.run("a picked agent the new mode does not allow is cleared, with the reason",
+		setMode(""),
+		waitUntil(`document.querySelectorAll('#new-session-agent option').length === 5`),
+		pick("designer"),
+		setMode("review"),
+		waitUntil(`document.querySelector('#new-session-agent').value === ''`),
+		waitUntil(`!!document.querySelector(`+quote(nsForm+` [data-agent-note]`)+`)`),
+		chromedp.Evaluate(agentNote, &got),
+		bothSchemes("new-session-mode-cleared"),
+	)
+	if !strings.Contains(got, "designer cannot start in Reviewer mode") {
+		t.Errorf("note = %q", got)
+	}
+
+	var startDisabled bool
+	b.run("a mode that allows nothing says so, with no empty picker, and Start is off",
+		setMode("qa"),
+		waitUntil(`!!document.querySelector(`+quote(nothing)+`)`),
+		waitUntil(`document.querySelector('`+nsForm+` .dropdown')?.checkVisibility() === false`),
+		chromedp.Evaluate(`document.querySelector('`+nsForm+` button[type=submit]').disabled`, &startDisabled),
+		chromedp.Evaluate(`document.querySelector(`+quote(nothing)+`).innerText.replace(/\s+/g, ' ').trim()`, &got),
+		bothSchemes("new-session-mode-nothing"),
+	)
+	if !startDisabled {
+		t.Error("Start is enabled in a mode that allows nothing")
+	}
+	if !strings.Contains(got, "No agent can start in QA mode") {
+		t.Errorf("warning = %q", got)
+	}
+
+	// The mode's list changes after the form was painted: the server refuses the start.
+	const refusal = `(document.querySelector('` + nsForm + ` [data-agent-refusal]')?.innerText ?? '').replace(/\s+/g, ' ').trim()`
+	var prompt string
+	b.run("choose reviewer in Reviewer mode and type a prompt",
+		setMode("review"),
+		waitUntil(`(`+picker+`) === 'Pick an agent|reviewer'`),
+		setField(`#new-session-prompt`, "Review the branch"),
+		pick("reviewer"),
+	)
+	maSetMode(t, w, `{"mode":"review","state":"selected","agents":["backend"],"no_agent":false}`)
+	b.run("the refusal shows its message and keeps the form",
+		nsClick(`main form`, "Start session"),
+		waitUntil(`!!document.querySelector('`+nsForm+` [data-agent-refusal]')`),
+		chromedp.Evaluate(refusal, &got),
+		chromedp.Evaluate(`document.querySelector('#new-session-prompt').value`, &prompt),
+		bothSchemes("new-session-mode-refused"),
+	)
+	if !strings.Contains(got, "AGENT_NOT_AVAILABLE_IN_MODE") || !strings.Contains(got, "reviewer") || !strings.Contains(got, "Reviewer") {
+		t.Errorf("banner = %q", got)
+	}
+	if prompt != "Review the branch" {
+		t.Errorf("the prompt was not kept: %q", prompt)
+	}
+	if errs := b.jsErrors(); len(errs) > 0 {
+		t.Errorf("JavaScript errors: %v", errs)
+	}
+}
