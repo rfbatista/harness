@@ -275,7 +275,7 @@ templ paneTabs() {
 					</span>
 				</template>
 			</button>
-			<button type="button" role="tab" x-bind:aria-selected="sandboxTabSelected" x-on:click="showSandbox">Sandbox</button>
+			<button type="button" role="tab" data-quiet x-bind:aria-selected="sandboxTabSelected" x-on:click="showSandbox">Sandbox</button>
 		</div>
 		<template x-if="paneTools">
 			@paneTools()

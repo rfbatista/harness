@@ -72,7 +72,7 @@ export const sessionsPage = ({
     projectId: "",
     /** The Context tab group a link asked to open; "" for none. */
     contextGroup: "",
-    /** Alt+Shift+C opened the Context tab: its search box takes the focus. */
+    /** Alt+Shift+C opened the Context tab: its search box takes the focus, once. */
     contextFocus: false,
     ticketId: "",
     /** @type {import("../../domain/session.js").Session[]} */
@@ -280,7 +280,11 @@ export const sessionsPage = ({
         return;
       }
       this.showContext();
+      // One-shot: the panel written on this flush carries the request; the next flush must not, or a remount (another session, live to ended) would take the focus again.
       this.contextFocus = true;
+      this.$nextTick(() => {
+        this.contextFocus = false;
+      });
     },
     /** A session with a branch has a Merge tab, where a merge into the default branch is offered when it applies. */
     get hasMergeTab() {
@@ -929,6 +933,7 @@ export const sessionsPage = ({
     },
 
     select(id) {
+      this.contextFocus = false;
       if (id !== this.selectedId) {
         this.unseenArtifacts = 0;
         this.unseenMessages = 0;

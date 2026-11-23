@@ -92,3 +92,21 @@ describe("links", () => {
     assert.equal(p.viewModel.reveal?.group, "hooks");
   });
 });
+
+describe("the focus request", () => {
+  test("is asked for once per ask, and a presenter made later asks for none", async () => {
+    const source = memoryContextSource();
+    source.serve(contextFromJson(contextJson()));
+    const first = new ContextPresenter(source, "s1", { clipboard: memoryClipboard() });
+    first.open();
+    await flush();
+    assert.equal(first.viewModel.search.focusRequest, 0);
+    first.focusSearch();
+    assert.equal(first.viewModel.search.focusRequest, 1);
+    // The pane remounts the island (another session, live to ended): a new presenter does not inherit the ask.
+    const second = new ContextPresenter(source, "s1", { clipboard: memoryClipboard() });
+    second.open();
+    await flush();
+    assert.equal(second.viewModel.search.focusRequest, 0);
+  });
+});
