@@ -12,6 +12,8 @@ import (
 	"github.com/chromedp/cdproto/cdp"
 	"github.com/chromedp/cdproto/fetch"
 	"github.com/chromedp/chromedp"
+
+	"operators-mcp/internal/domain"
 )
 
 const maCatalog = `{"agents": {
@@ -385,6 +387,57 @@ func TestTheNewSessionFormOffersOnlyTheModesAgents_EndToEnd(t *testing.T) {
 	}
 	if prompt != "Review the branch" {
 		t.Errorf("the prompt was not kept: %q", prompt)
+	}
+	if errs := b.jsErrors(); len(errs) > 0 {
+		t.Errorf("JavaScript errors: %v", errs)
+	}
+}
+
+// TestTheBrainstormDialogOffersTheProductModesAgents_EndToEnd covers story 14:
+// the board's brainstorm dialog (product mode) gets the mode models and the mode
+// agents like the New session form: it offers only the agents Product mode
+// allows, and shows the server's message when a start is refused for the mode.
+func TestTheBrainstormDialogOffersTheProductModesAgents_EndToEnd(t *testing.T) {
+	w := newTokenSaverWorld(t)
+	writeCatalogFile(t, w, "agents.json", nsAgentsCatalog)
+	nsAddCatalogAgents(t, w)
+	if _, err := w.cat.Settings.UpdateSettings(map[string]string{domain.ModeModelKey(domain.SessionModeProduct): "haiku"}); err != nil {
+		t.Fatal(err)
+	}
+	maSetMode(t, w, `{"mode":"product","state":"selected","agents":["designer","reviewer"],"no_agent":false}`)
+
+	const (
+		options = `[...document.querySelectorAll('#brainstorm-agent option')].map(o => o.textContent.trim()).sort().join('|')`
+		models  = `JSON.parse(document.querySelector('[data-project-id][data-mode-models]').dataset.modeModels).product`
+	)
+	var got, banner string
+	b := newTLSBrowser(t)
+	b.run("the dialog carries the mode models and offers only Product mode's agents",
+		chromedp.EmulateViewport(1280, 900),
+		chromedp.Navigate(w.srv.URL+"/projects/"+w.project.ID),
+		waitUntil(`document.querySelectorAll('#brainstorm-agent option').length === 3`),
+		waitUntil(`(`+models+`) === 'haiku'`),
+		waitUntil(nsLive),
+		chromedp.Evaluate(options, &got),
+	)
+	if want := "Pick an agent|designer|reviewer"; got != want {
+		t.Errorf("options = %q, want %q", got, want)
+	}
+
+	b.run("choose designer, then take it off Product mode's list",
+		nsClick(`body`, "Brainstorm a feature"),
+		waitUntil(`document.querySelector('#brainstorm').matches(':popover-open')`),
+		chromedp.Evaluate(`(() => { const s = document.querySelector('#brainstorm-agent'); s.value = [...s.options].find(o => o.textContent.trim() === 'designer').value; s.dispatchEvent(new Event('change', { bubbles: true })); })()`, nil),
+	)
+	maSetMode(t, w, `{"mode":"product","state":"selected","agents":["reviewer"],"no_agent":false}`)
+	b.run("the refusal shows the server's message in the dialog",
+		nsClick(`#brainstorm form`, "Start brainstorm"),
+		waitUntil(`!!document.querySelector('#brainstorm [data-agent-refusal]')`),
+		chromedp.Evaluate(`document.querySelector('#brainstorm [data-agent-refusal]').innerText.replace(/\s+/g, ' ').trim()`, &banner),
+		bothSchemes("brainstorm-mode-refused"),
+	)
+	if !strings.Contains(banner, "AGENT_NOT_AVAILABLE_IN_MODE") || !strings.Contains(banner, "designer") {
+		t.Errorf("banner = %q", banner)
 	}
 	if errs := b.jsErrors(); len(errs) > 0 {
 		t.Errorf("JavaScript errors: %v", errs)

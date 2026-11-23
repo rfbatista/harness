@@ -114,7 +114,7 @@ func (h Handler) Project(w http.ResponseWriter, r *http.Request) error {
 	if frame.Rail.Seed != nil {
 		board.ArchivedCount = frame.Rail.Seed.ArchivedCount
 	}
-	return h.Render(w, r, http.StatusOK, ProjectPage(frame, project.ID, project.Name, board, sessions.NewSessionFormFor(project, agents, repos)))
+	return h.Render(w, r, http.StatusOK, ProjectPage(frame, project.ID, project.Name, board, h.withModeModels(sessions.NewSessionFormFor(project, agents, repos))))
 }
 
 // withModeModels gives the form the models and the agents the settings hold

@@ -10,6 +10,7 @@
 
 import { describeError } from "../../../../shared/presentation/errors.js";
 import { brainstormProblem, brainstormRequest } from "../../domain/brainstorm.js";
+import { PRODUCT_MODE } from "../../domain/session.js";
 import { projectSessionsHref } from "../view.js";
 import { withAgentPicker } from "./agentPicker.js";
 
@@ -20,6 +21,8 @@ export const BRAINSTORM_DIALOG = "brainstorm";
 export const brainstorm = ({ gateway, navigate }) => () => withAgentPicker({
   projectId: "",
   agentId: "",
+  /** A brainstorm is a product-mode session: the picker offers what Product mode allows. */
+  mode: PRODUCT_MODE,
   repositoryId: "",
   starting: false,
   error: null,
@@ -41,6 +44,8 @@ export const brainstorm = ({ gateway, navigate }) => () => withAgentPicker({
 
   get problem() {
     if (this.noAgentEnabled) return this.noAgentLine;
+    if (this.modeAllowsNothing) return this.modeAllowsNothingText;
+    if (this.agentId === "" && !this.noAgentAllowed) return "Pick an agent.";
     return brainstormProblem({ repositoryId: this.repositoryId });
   },
   get cannotStart() {
