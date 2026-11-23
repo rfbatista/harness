@@ -29,6 +29,7 @@ function row(piece: Piece, state: PieceState, query: string): InstructionRow | n
     version: piece.version,
     size: `${bytes(piece.bytes)} · ≈${piece.approxTokens} tokens`,
     open: state.open,
+    changed: piece.changed ? `changed in this entry · ${piece.changed.from} → ${piece.changed.to}` : "",
     matchedInText: query !== "" && !inHeading,
     text,
     canShowAll: piece.truncated && !done,

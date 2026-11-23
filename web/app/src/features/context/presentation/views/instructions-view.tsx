@@ -12,6 +12,7 @@ export function InstructionsView({ group, presenter }: { group: InstructionsGrou
               <span className="[ name ]">{row.title}</span>
               <span className="[ muted ]">{row.source}</span>
               {row.matchedInText && <span className="[ badge ]">matches in text</span>}
+              {row.changed !== "" && <span className="[ badge ]">{row.changed}</span>}
               {row.version !== "" && <span className="[ badge ]">{row.version}</span>}
               <span className="[ muted ]">{row.size}</span>
             </button>

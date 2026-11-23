@@ -10,7 +10,7 @@ import { serversGroup } from "./servers-group";
 import { toolsGroup } from "./tools-group";
 import { changesGroup, changeText, clockTime } from "./changes-group";
 import { normalize } from "./search";
-import type { ContextGroups, GroupKey, SearchViewModel } from "./context-view-model";
+import type { ContextGroups, EntryPicker, GroupKey, SearchViewModel } from "./context-view-model";
 import { closedPiece, instructionsGroup, type PieceState } from "./instructions-group";
 
 export type ContextStatus = "idle" | "loading" | "ready" | "unrecorded" | "not_found" | "error";
@@ -31,6 +31,8 @@ export interface ContextViewModel {
   readonly message: string;
   readonly facts: readonly FactRow[];
   readonly search: SearchViewModel;
+  /** Present when the session has more than one entry (it was resumed). */
+  readonly picker: EntryPicker | null;
   /** The session has ended: nothing here changes any more. */
   readonly ended: boolean;
   /** The one line at the top that names the latest change; null when none is on show. */
@@ -57,7 +59,7 @@ export interface ContextDeps {
   readonly timeZone?: string;
 }
 
-const idle = (ended: boolean): ContextViewModel => ({ status: "idle", message: "", facts: [], groups: null, search: NO_SEARCH, ended, live: null });
+const idle = (ended: boolean): ContextViewModel => ({ status: "idle", message: "", facts: [], groups: null, search: NO_SEARCH, picker: null, ended, live: null });
 
 export function factRows(f: Facts): FactRow[] {
   return [
@@ -87,6 +89,8 @@ export class ContextPresenter extends Presenter<ContextViewModel> {
   readonly #pieces = new Map<string, PieceState>();
   readonly #copied = new Set<string>();
   #query = "";
+  /** The entry the person picked; null follows the latest. */
+  #pickedEntry: string | null = null;
   #focusRequest = 0;
   /** Each entry's skill order, fixed the first time it is shown. */
   readonly #skillOrders = new Map<string, string[]>();
@@ -135,7 +139,7 @@ export class ContextPresenter extends Presenter<ContextViewModel> {
   }
 
   #show(status: ContextStatus, message: string): void {
-    this.set({ status, message, facts: [], groups: null, search: NO_SEARCH, ended: !this.#running, live: null });
+    this.set({ status, message, facts: [], groups: null, search: NO_SEARCH, picker: null, ended: !this.#running, live: null });
   }
 
   /** Loads again after a failed load. */
@@ -209,9 +213,28 @@ export class ContextPresenter extends Presenter<ContextViewModel> {
     else this.#render();
   }
 
-  /** The entry on show: the latest. */
+  /** The entry on show: the one the person picked, else the latest. */
   #entry(): Entry | undefined {
-    return this.#context?.entries.at(-1);
+    const entries = this.#context?.entries ?? [];
+    return entries.find((e) => e.id === this.#pickedEntry) ?? entries.at(-1);
+  }
+
+  /** The person picks an entry to look at; picking the latest goes back to following it. */
+  selectEntry(id: string): void {
+    const entries = this.#context?.entries ?? [];
+    if (!entries.some((e) => e.id === id)) return;
+    this.#pickedEntry = id === entries.at(-1)?.id ? null : id;
+    if (this.viewModel.status === "ready") this.#render();
+  }
+
+  /** Per-entry piece state: the same piece id can carry another text in another entry. */
+  #pieceStates(entry: Entry): Map<string, PieceState> {
+    const out = new Map<string, PieceState>();
+    for (const piece of entry.instructions) {
+      const state = this.#pieces.get(`${entry.id}/${piece.id}`);
+      if (state) out.set(piece.id, state);
+    }
+    return out;
   }
 
   #skillOrderOf(entry: Entry): string[] {
@@ -240,10 +263,11 @@ export class ContextPresenter extends Presenter<ContextViewModel> {
       message: "",
       facts: factRows(entry.facts),
       search: { query: this.#query, focusRequest: this.#focusRequest },
+      picker: this.#picker(),
       ended: !this.#running,
       live: this.#liveLine,
       groups: {
-        instructions: instructionsGroup(this.#heading("instructions", "Instructions"), entry.instructions, this.#pieces, query),
+        instructions: instructionsGroup(this.#heading("instructions", "Instructions"), entry.instructions, this.#pieceStates(entry), query),
         tools: toolsGroup(this.#heading("tools", "Tools"), entry.tools, entry.servers, this.#context!.usage, query, this.#rings),
         servers: serversGroup(this.#heading("servers", "MCP servers"), entry.servers, this.#copied, query, this.#rings),
         skills: skillsGroup(this.#heading("skills", "Skills"), entry.skills, this.#skillOrderOf(entry), this.#context!.usage, query, this.#rings),
@@ -270,6 +294,13 @@ export class ContextPresenter extends Presenter<ContextViewModel> {
     if (this.viewModel.status === "ready") this.#render();
   }
 
+  #picker(): EntryPicker | null {
+    const entries = this.#context?.entries ?? [];
+    if (entries.length < 2) return null;
+    const label = (e: Entry) => `${e.kind === "start" ? "Started" : "Resumed"} ${clockTime(e.at, this.#timeZone)}`;
+    return { options: entries.map((e) => ({ id: e.id, label: label(e) })), selected: this.#entry()!.id };
+  }
+
   /** The person flips a group open or closed. */
   toggleGroup(key: GroupKey): void {
     if (this.#toggled.has(key)) this.#toggled.delete(key);
@@ -284,8 +315,10 @@ export class ContextPresenter extends Presenter<ContextViewModel> {
 
   /** A piece's text opens or closes in place. */
   togglePiece(id: string): void {
-    const state = this.#pieces.get(id) ?? closedPiece;
-    this.#pieces.set(id, { ...state, open: !state.open });
+    const entry = this.#entry();
+    if (!entry) return;
+    const key = `${entry.id}/${id}`;
+    this.#pieces.set(key, { ...(this.#pieces.get(key) ?? closedPiece), open: !(this.#pieces.get(key) ?? closedPiece).open });
     this.#render();
   }
 
@@ -301,16 +334,18 @@ export class ContextPresenter extends Presenter<ContextViewModel> {
   /** "Show all": fetches the piece's full text, once. A failure marks that piece only. */
   async showAll(id: string): Promise<void> {
     const entry = this.#entry();
-    const state = this.#pieces.get(id) ?? closedPiece;
-    if (!entry || state.fullText === "loading" || state.fullText === "done") return;
-    this.#pieces.set(id, { ...state, fullText: "loading" });
+    if (!entry) return;
+    const key = `${entry.id}/${id}`;
+    const state = this.#pieces.get(key) ?? closedPiece;
+    if (state.fullText === "loading" || state.fullText === "done") return;
+    this.#pieces.set(key, { ...state, fullText: "loading" });
     this.#render();
     try {
       const full = await this.#source.piece(this.#sessionId, entry.id, id);
-      this.#pieces.set(id, { ...(this.#pieces.get(id) ?? closedPiece), fullText: "done", full });
+      this.#pieces.set(key, { ...(this.#pieces.get(key) ?? closedPiece), fullText: "done", full });
     } catch (err) {
       if (!(err instanceof ContextSourceError)) throw err;
-      this.#pieces.set(id, { ...(this.#pieces.get(id) ?? closedPiece), fullText: "failed" });
+      this.#pieces.set(key, { ...(this.#pieces.get(key) ?? closedPiece), fullText: "failed" });
     }
     this.#render();
   }

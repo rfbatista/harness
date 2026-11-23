@@ -28,6 +28,8 @@ export interface InstructionRow {
   /** "1.2 KB · ≈300 tokens". */
   readonly size: string;
   readonly open: boolean;
+  /** "changed in this entry · v12 → v13" on a resume entry's piece that differs from the one before; "" otherwise. */
+  readonly changed: string;
   /** The search matched only inside the piece's text. */
   readonly matchedInText: boolean;
   /** The text on show: the first 4 KB, or all of it once fetched. */
@@ -125,6 +127,18 @@ export interface ChangeRow {
 
 export interface ChangesGroup extends GroupHeading {
   readonly rows: readonly ChangeRow[];
+}
+
+export interface EntryOption {
+  readonly id: string;
+  /** "Started 20:49" or "Resumed 09:12". */
+  readonly label: string;
+}
+
+/** The small picker of a session with more than one entry. */
+export interface EntryPicker {
+  readonly options: readonly EntryOption[];
+  readonly selected: string;
 }
 
 export interface SearchViewModel {

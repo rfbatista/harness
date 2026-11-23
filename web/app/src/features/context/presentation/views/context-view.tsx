@@ -1,6 +1,7 @@
 import { usePresenter } from "../../../../shared/presentation/use-presenter";
 import type { ContextPresenter } from "../presenters/context-presenter";
 import { ChangesView } from "./changes-view";
+import { EntryPickerView } from "./entry-picker-view";
 import { LiveLineView } from "./live-line-view";
 import { SearchView } from "./search-view";
 import { InstructionsView } from "./instructions-view";
@@ -42,6 +43,7 @@ export function ContextView({ presenter }: { presenter: ContextPresenter }) {
             </dl>
           </section>
         )}
+        {vm.status === "ready" && vm.picker && <EntryPickerView picker={vm.picker} presenter={presenter} />}
         {vm.status === "ready" && vm.ended && <p className="[ note ]">This session has ended. What it was given is below; nothing here changes any more.</p>}
         {vm.status === "ready" && <LiveLineView live={vm.live} presenter={presenter} />}
         {vm.status === "ready" && <SearchView search={vm.search} presenter={presenter} />}
