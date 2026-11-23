@@ -173,3 +173,45 @@ func TestBuildContextEntry_HooksAreRulesNeverCommands(t *testing.T) {
 		t.Errorf("entry leaks a secret: %s", b)
 	}
 }
+
+var testBuiltIn = []string{"Read", "Write", "Edit", "Bash", "WebFetch"}
+
+func TestBuildContextEntry_ASessionWithNoAllowListGetsClaudesDefaultToolsAllowed(t *testing.T) {
+	in := inventoryInput()
+	in.Cfg.AllowedTools = []string{"mcp__task"} // MCP only: no Claude Code tool named
+	in.BuiltIn = testBuiltIn
+	e := buildContextEntry(in)
+	for _, name := range testBuiltIn {
+		if tool, ok := toolByName(e, name); !ok || tool.State != domain.ToolAllowed || tool.Source != "claude_code" || tool.Server != "" {
+			t.Errorf("%s = %+v (found %v)", name, tool, ok)
+		}
+	}
+}
+
+func TestBuildContextEntry_AnAllowListOfClaudeCodeToolsIsNotAddedTo(t *testing.T) {
+	in := inventoryInput() // allows "Bash(git status)"
+	in.BuiltIn = testBuiltIn
+	e := buildContextEntry(in)
+	if _, ok := toolByName(e, "WebFetch"); ok {
+		t.Error("the default set was added to an explicit allow-list")
+	}
+}
+
+func TestBuildContextEntry_ABuiltInToolTheSessionDeniesIsRefused(t *testing.T) {
+	in := inventoryInput()
+	in.Cfg.AllowedTools = nil
+	in.BuiltIn = testBuiltIn
+	in.Cfg.Driver = claude.Config{Settings: &claude.Settings{Extra: map[string]json.RawMessage{
+		"permissions": json.RawMessage(`{"deny":["WebFetch","Bash(rm -rf:*)","mcp__github__push_files"]}`),
+	}}}
+	e := buildContextEntry(in)
+	if tool, _ := toolByName(e, "WebFetch"); tool.State != domain.ToolRefused {
+		t.Errorf("WebFetch = %+v", tool)
+	}
+	if tool, ok := toolByName(e, "Bash(rm -rf:*)"); !ok || tool.State != domain.ToolRefused || tool.Source != "claude_code" {
+		t.Errorf("Bash(rm -rf:*) = %+v (found %v)", tool, ok)
+	}
+	if tool, _ := toolByName(e, "Read"); tool.State != domain.ToolAllowed {
+		t.Errorf("Read = %+v", tool)
+	}
+}

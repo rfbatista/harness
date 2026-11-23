@@ -203,3 +203,10 @@ func (s *Service) resumeFacts(sess *domain.Session, ag resolvedAgent, cfg llmkit
 	in := prepareInput{Role: s.sessionRole(context.TODO(), sess.ID), Mode: sess.Mode, Branch: sess.Branch, Headless: false}
 	return s.contextFacts(in, ag, cfg, &domain.Workspace{Path: sess.WorkingDir}, sessionSavers{active: sess.TokenSavers}, sb, permission)
 }
+
+func (s *Service) builtInTools() []string {
+	if s.ClaudeBuiltInTools == nil {
+		return nil
+	}
+	return s.ClaudeBuiltInTools()
+}

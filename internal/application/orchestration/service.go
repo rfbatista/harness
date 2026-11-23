@@ -137,6 +137,9 @@ type Service struct {
 	// MCPKnownTools returns each catalog MCP server's tool names, from its last
 	// probe, by server name, for a session's context. Nil knows none.
 	MCPKnownTools func() map[string][]string
+	// ClaudeBuiltInTools names Claude's built-in tools, for a session's context.
+	// Nil lists none.
+	ClaudeBuiltInTools func() []string
 	// SessionHookURL returns where an interactive session's SessionStart hook
 	// reports its conversation id. Nil leaves the hook out.
 	SessionHookURL func(sessionID string) string
@@ -679,8 +682,8 @@ func (s *Service) prepare(ctx context.Context, in prepareInput) (*prepared, erro
 		context: contextInput{
 			Cfg: cfg, System: trail.pieces, Versions: res.versions, Repository: repo.Name,
 			Role: in.Role, Agent: ag.agent, Project: subject.project, Attached: res.attached, KnownTools: res.known,
-			Skills: ag.contextSkills,
-			Facts:  s.contextFacts(in, ag, cfg, ws, savers, sb, permission),
+			Skills: ag.contextSkills, BuiltIn: s.builtInTools(),
+			Facts: s.contextFacts(in, ag, cfg, ws, savers, sb, permission),
 		},
 		sandbox:    sb,
 		cfg:        cfg,
