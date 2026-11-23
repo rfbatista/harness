@@ -1,7 +1,7 @@
 // The readers DTOs share: each checks one field's type and names the field's
 // path in the DtoError it throws. Unknown extra fields are never looked at.
 
-import { DtoError, UnknownValueError } from "./dto-error";
+import { DtoError } from "./dto-error";
 
 export type Wire = Record<string, unknown>;
 
@@ -50,7 +50,7 @@ export function array<T>(dto: string, from: Wire, key: string, read: (item: unkn
 /** A field that is one of `allowed`. */
 export function oneOf<T extends string>(dto: string, from: Wire, key: string, allowed: readonly T[], at = ""): T {
   const value = string(dto, from, key, at);
-  if (!(allowed as readonly string[]).includes(value)) throw new UnknownValueError(dto, join(at, key), `expected one of ${allowed.join(", ")}`);
+  if (!(allowed as readonly string[]).includes(value)) throw new DtoError(dto, join(at, key), `expected one of ${allowed.join(", ")}`);
   return value as T;
 }
 
@@ -99,23 +99,4 @@ export function lenientArray<T>(dto: string, from: Wire, key: string, read: (ite
 export function optionalCount(dto: string, from: Wire, key: string, at = ""): number | undefined {
   if (from[key] === undefined || from[key] === null) return undefined;
   return count(dto, from, key, at);
-}
-
-/**
- * The notifications of a list, each read by `read`: one that holds a value the
- * client does not know (an UnknownValueError) is dropped, and the rest are kept.
- * Anything else malformed is still a DtoError for the whole list.
- */
-export function rowsKnown<T>(dto: string, from: Wire, key: string, read: (item: unknown, at: string) => T, at = ""): T[] {
-  const out: T[] = [];
-  const rows = array(dto, from, key, (item, path) => {
-    try {
-      return { row: read(item, path) };
-    } catch (err) {
-      if (err instanceof UnknownValueError) return null;
-      throw err;
-    }
-  }, at);
-  for (const entry of rows) if (entry) out.push(entry.row);
-  return out;
 }

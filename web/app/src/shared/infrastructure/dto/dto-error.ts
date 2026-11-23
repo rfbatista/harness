@@ -14,15 +14,3 @@ export class DtoError extends Error {
     this.path = path;
   }
 }
-
-/**
- * A field holds a value the client does not know (a new kind, say). The data is
- * well formed: the server may add values, so a caller can drop the one row that
- * carries it and keep the rest (the top bar contract's rule for new values).
- */
-export class UnknownValueError extends DtoError {
-  constructor(dto: string, path: string, problem: string) {
-    super(dto, path, problem);
-    this.name = "UnknownValueError";
-  }
-}

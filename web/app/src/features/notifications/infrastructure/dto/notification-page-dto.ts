@@ -2,7 +2,7 @@
 // notifications (GET /api/notifications), the notifications a read changed
 // (POST /api/notifications/read) and one stream message (a change event).
 
-import { count, rowsKnown, object, optionalCount, optionalString, type Wire } from "../../../../shared/infrastructure/dto/fields";
+import { array, count, object, optionalCount, optionalString, type Wire } from "../../../../shared/infrastructure/dto/fields";
 import { NotificationDto } from "./notification-dto";
 
 const PAGE = "NotificationPageDto";
@@ -22,7 +22,7 @@ export class NotificationPageDto {
   static fromJSON(raw: unknown, at = ""): NotificationPageDto {
     const from = object(PAGE, raw, at);
     return new NotificationPageDto(
-      rowsKnown(PAGE, from, "notifications", (item, path) => NotificationDto.fromJSON(item, path), at),
+      array(PAGE, from, "notifications", (item, path) => NotificationDto.fromJSON(item, path), at),
       count(PAGE, from, "unread_count", at),
       optionalCount(PAGE, from, "open_count", at),
       optionalString(PAGE, from, "next_before", at),
@@ -45,7 +45,7 @@ export class ReadAnswerDto {
   static fromJSON(raw: unknown): ReadAnswerDto {
     const from = object(READ_ANSWER, raw);
     return new ReadAnswerDto(
-      rowsKnown(READ_ANSWER, from, "notifications", (item, path) => NotificationDto.fromJSON(item, path)),
+      array(READ_ANSWER, from, "notifications", (item, path) => NotificationDto.fromJSON(item, path)),
       count(READ_ANSWER, from, "unread_count"),
       optionalCount(READ_ANSWER, from, "open_count"),
     );
@@ -67,7 +67,7 @@ export class ChangeEventDto {
   static fromJSON(raw: unknown): ChangeEventDto {
     const from = object(CHANGE, raw);
     return new ChangeEventDto(
-      rowsKnown(CHANGE, from, "changed", (item, path) => NotificationDto.fromJSON(item, path)),
+      array(CHANGE, from, "changed", (item, path) => NotificationDto.fromJSON(item, path)),
       count(CHANGE, from, "unread_count"),
       optionalCount(CHANGE, from, "open_count"),
     );

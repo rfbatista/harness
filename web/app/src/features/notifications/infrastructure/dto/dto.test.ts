@@ -1,6 +1,6 @@
 import { describe, test } from "node:test";
 import assert from "node:assert/strict";
-import { DtoError, UnknownValueError } from "../../../../shared/infrastructure/dto/dto-error";
+import { DtoError } from "../../../../shared/infrastructure/dto/dto-error";
 import { notification, read } from "../../testing/fixtures";
 import { toWire } from "../../testing/wire";
 import { BellPropsDto } from "./bell-props-dto";
@@ -38,7 +38,7 @@ describe("NotificationDto", () => {
     assert.throws(bad({ id: "" }), failsAt("NotificationDto", "id"));
     assert.throws(bad({ kind: 3 }), failsAt("NotificationDto", "kind"));
     assert.throws(bad({ level: 3 }), failsAt("NotificationDto", "level"));
-    assert.throws(bad({ source: "robot" }), failsAt("NotificationDto", "source"));
+    assert.throws(bad({ source: 5 }), failsAt("NotificationDto", "source"));
     assert.throws(bad({ link: "//evil.example" }), failsAt("NotificationDto", "link"));
     assert.throws(bad({ link: "x" }), failsAt("NotificationDto", "link"));
     assert.throws(bad({ created_at: "yesterday" }), failsAt("NotificationDto", "created_at"));
@@ -123,22 +123,14 @@ describe("the ledger fields", () => {
 });
 
 describe("a value the client does not know", () => {
-  test("a notification of an unknown kind, source or level throws an UnknownValueError naming the field", () => {
-    for (const change of [{ kind: "from_the_future" }, { source: "robot" }, { level: "urgent" }]) {
-      assert.throws(() => NotificationDto.fromJSON({ ...wire(), ...change }), (err: unknown) => err instanceof UnknownValueError && err.dto === "NotificationDto" && err.path === Object.keys(change)[0]);
-    }
+  test("a kind, a source or a level it does not know still reads: the DTO holds the string, the mapper decides", () => {
+    const dto = NotificationDto.fromJSON({ ...wire(), kind: "from_the_future", source: "robot", level: "urgent" });
+    assert.deepEqual([dto.kind, dto.source, dto.level], ["from_the_future", "robot", "urgent"]);
   });
 
-  test("a page, an answer and a change event drop that one row and keep the rest and the counts", () => {
-    const [keep, future] = [wire(), { ...wire(), kind: "from_the_future" }];
-    const page = NotificationPageDto.fromJSON({ notifications: [keep, future], unread_count: 5, open_count: 3 });
-    assert.deepEqual([page.notifications.map((n) => n.id), page.unread_count, page.open_count], [[keep.id], 5, 3]);
-    assert.deepEqual(ReadAnswerDto.fromJSON({ notifications: [future, keep], unread_count: 1 }).notifications.map((n) => n.id), [keep.id]);
-    assert.deepEqual(ChangeEventDto.fromJSON({ changed: [future], unread_count: 0 }).changed, []);
-    assert.deepEqual(BellPropsDto.fromJSON({ inbox_href: "/n", page: { notifications: [future, keep], unread_count: 2 } }).page?.notifications.map((n) => n.id), [keep.id]);
-  });
-
-  test("a notification that is malformed, not just new, still fails the whole page", () => {
+  test("a page keeps every row, and a malformed one, not just new, still fails the whole page", () => {
+    const page = NotificationPageDto.fromJSON({ notifications: [wire(), { ...wire(), kind: "from_the_future" }], unread_count: 2, open_count: 2 });
+    assert.equal(page.notifications.length, 2);
     assert.throws(() => NotificationPageDto.fromJSON({ notifications: [wire(), { ...wire(), kind: 5 }], unread_count: 1 }), failsAt("NotificationDto", "notifications[1].kind"));
   });
 });
