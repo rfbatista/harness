@@ -104,6 +104,7 @@ var modeRows = map[domain.SessionMode]struct{ Title, Lead string }{
 	domain.SessionModeReview:       {"Reviewer", "Sessions started in review mode: they review a branch or pull request and write a Review with a verdict."},
 	domain.SessionModeTest:         {"Tester", "Sessions started in test mode: they write tests for a branch, run them and write a Test report."},
 	domain.SessionModeQA:           {"QA", "Sessions started in QA mode: they walk the use cases in the running application and publish screenshots and videos."},
+	domain.SessionModeProductOwner: {"Product owner", "Threads with the project's product owner: it answers what was done, what is in progress and what comes next."},
 	domain.SessionModeOperate:      {"Operator", "Sessions started in operate mode: they run, configure and check the task's services, each change approved by you."},
 }
 

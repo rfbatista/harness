@@ -33,6 +33,7 @@ var modeModelModes = []SessionMode{
 	SessionModeDefault, SessionModeArchitect, SessionModeImplement,
 	SessionModeDesign, SessionModeProduct, SessionModeDesignSystem,
 	SessionModeReview, SessionModeTest, SessionModeQA, SessionModeOperate,
+	SessionModeProductOwner,
 }
 
 // ModeModelKey is the settings key holding a mode's model.
@@ -44,13 +45,14 @@ func ModeModelKey(mode SessionMode) string {
 }
 
 // ModeBuiltInModel is the model a mode takes while its setting is unset: opus
-// for architect and review, sonnet for implement, test, qa and operate, and
+// for architect and review, sonnet for implement, test, qa, operate and the
+// product owner, and
 // ModelDefault (the CLI chooses) for the rest.
 func ModeBuiltInModel(mode SessionMode) string {
 	switch mode {
 	case SessionModeArchitect, SessionModeReview:
 		return "opus"
-	case SessionModeImplement, SessionModeTest, SessionModeQA, SessionModeOperate:
+	case SessionModeImplement, SessionModeTest, SessionModeQA, SessionModeOperate, SessionModeProductOwner:
 		return "sonnet"
 	default:
 		return ModelDefault
