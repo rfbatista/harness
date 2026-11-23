@@ -24,6 +24,8 @@ export interface ViewDeps {
 export class ViewPresenter extends Presenter<ViewModel> {
   readonly #deps: ViewDeps;
   #unfollow: (() => void) | null = null;
+  /** What the page was last told, to tell it again when it says it is ready. */
+  #shown = { view: "list" as AgentsView, session: "" };
 
   constructor(deps: ViewDeps) {
     super({ view: "list" });
@@ -38,7 +40,12 @@ export class ViewPresenter extends Presenter<ViewModel> {
     // A link opens the board with its session selected; it does not change what the person chose for next time.
     const view = linked ?? this.#deps.preferences.view(this.#deps.ticketId) ?? "list";
     this.#show(view, view === "whiteboard" && linked ? (query.get("session") ?? "") : "");
-    this.#unfollow ??= this.#deps.signals.followViewChoice((chosen) => this.choose(chosen));
+    const unfollowChoice = this.#deps.signals.followViewChoice((chosen) => this.choose(chosen));
+    const unfollowReady = this.#deps.signals.followPageReady(() => this.#deps.host.showView(this.#shown.view, this.#shown.session));
+    this.#unfollow ??= () => {
+      unfollowChoice();
+      unfollowReady();
+    };
   }
 
   /** The person chose a view: it is kept for this task in this browser. */
@@ -53,6 +60,7 @@ export class ViewPresenter extends Presenter<ViewModel> {
   }
 
   #show(view: AgentsView, sessionId: string): void {
+    this.#shown = { view, session: sessionId };
     this.set({ view });
     this.#deps.host.showView(view, sessionId);
   }

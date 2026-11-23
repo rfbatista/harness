@@ -3,7 +3,7 @@
 //   board → page   whiteboard-view {view, session_id}, whiteboard-open {session_id, tab},
 //                  whiteboard-close, whiteboard-reviews, whiteboard-new-session,
 //                  whiteboard-show-list, whiteboard-ready
-//   page → board   whiteboard-set-view {view}, whiteboard-select {session_id}
+//   page → board   whiteboard-page-ready, whiteboard-set-view {view}, whiteboard-select {session_id}
 
 import type { BoardHost } from "../application/host";
 import type { PageSignals, ViewHost } from "../application/page-bridge";
@@ -37,6 +37,7 @@ export function browserPageBridge(win: Window): { viewHost: ViewHost; boardHost:
       boardReady: () => send("whiteboard-ready", new NoticeDto()),
     },
     signals: {
+      followPageReady: (on) => follow("whiteboard-page-ready", NoticeDto.fromJSON, on),
       followViewChoice: (on) => follow("whiteboard-set-view", ViewChosenDto.fromJSON, (dto) => on(dto.view)),
       followSelection: (on) => follow("whiteboard-select", SessionSelectedDto.fromJSON, (dto) => on(dto.session_id === "" ? null : dto.session_id)),
     },

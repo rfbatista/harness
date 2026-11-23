@@ -12,6 +12,8 @@ export interface ViewHost {
 export interface PageSignals {
   /** The person chose a view with the toggle in the page. */
   followViewChoice(onChoice: (view: AgentsView) => void): () => void;
+  /** The page has started and listens: say again which view to show (it may have missed the first announcement). */
+  followPageReady(onReady: () => void): () => void;
   /** The page selected a session (or none): its list, its Back button, a feed change. */
   followSelection(onSelect: (sessionId: string | null) => void): () => void;
 }

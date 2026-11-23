@@ -614,6 +614,8 @@ export const sessionsPage = ({
 
       // Alpine has rendered the live list; drop the server-rendered copy.
       this.$nextTick(() => {
+        // The agents whiteboard's view island may have announced the view before this page listened: it says it again.
+        this.$dispatch("whiteboard-page-ready", {});
         for (const node of this.$el.querySelectorAll("[data-ssr]")) node.remove();
         this.ready = true;
       });

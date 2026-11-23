@@ -66,6 +66,15 @@ describe("the view of a task's sessions", () => {
     assert.deepEqual(page("?view=timeline&session=s1").memory.shown, [{ view: "list", session: "" }]);
   });
 
+  test("tells a page that starts after it which view to show, with the linked session", () => {
+    const { memory } = page("?view=whiteboard&session=s7");
+    memory.pageReady();
+    assert.deepEqual(memory.shown.at(-1), { view: "whiteboard", session: "s7" });
+    memory.choose("list");
+    memory.pageReady();
+    assert.deepEqual(memory.shown.at(-1), { view: "list", session: "" });
+  });
+
   test("stop stops listening", () => {
     const { presenter, memory } = page();
     presenter.stop();
