@@ -6,6 +6,9 @@ import { usePresenter } from "../../../../shared/presentation/use-presenter";
 import type { BoardPresenter } from "../presenters/board-presenter";
 import { CardView } from "./card-view";
 
+/** The stroke each edge tone takes from the design system block. */
+const KIND = { started: "started", signal: "messages", amber: "review" } as const;
+
 export function BoardView({ presenter }: { presenter: BoardPresenter }) {
   const vm = usePresenter(presenter);
   const { w: width, h: height } = vm.canvas;
@@ -20,9 +23,17 @@ export function BoardView({ presenter }: { presenter: BoardPresenter }) {
           ))}
           <svg className="wb-edges" width={width} height={height} aria-hidden="true">
             {vm.edges.map((e) => (
-              <path key={e.id} d={e.d} data-kind="started" data-dim={e.dimmed ? "" : undefined} />
+              <path key={e.id} d={e.d} data-kind={KIND[e.tone]} data-dim={e.dimmed ? "" : undefined} />
             ))}
           </svg>
+          {vm.edges.map((e) =>
+            e.badge ? (
+              <button key={e.id} type="button" className="wb-pill" data-edge={e.id} data-tone={e.badge.tone || undefined} style={{ left: e.badge.x, top: e.badge.y }} title={e.badge.name} aria-label={e.badge.name}>
+                <span className="n">{e.badge.count}</span>
+                <span className="latest">{e.badge.text}</span>
+              </button>
+            ) : null,
+          )}
           {vm.cards.map((card) => (
             <CardView key={card.id} card={card} />
           ))}

@@ -7,6 +7,8 @@ import { agentLabel, chipOf, detailOf, statusView, type Detail } from "../../dom
 import { startedEdges, YOU_ID } from "../../domain/graph";
 import { computeLayout, edgeGeometry, sizeOf, type Rect } from "../../domain/layout";
 import { inStartOrder, isTerminal, type BoardSession } from "../../domain/session";
+import type { ReviewRequest, TaskMessage } from "../../domain/message";
+import { KIND_WORD, ageWords, lastReportOf, pairKey, pendingMessages, reviewWaits, threadsOf } from "../../domain/threads";
 import { needsYou } from "../../domain/card";
 import { relativeTime } from "../../../../shared/kernel/format";
 
@@ -33,12 +35,26 @@ export interface CardViewModel {
   name: string;
 }
 
+export interface BadgeViewModel {
+  count: number;
+  /** The latest message and its age, or what waits: "review request 11m", "question · waits 4m". */
+  text: string;
+  /** The full sentence, for the pill's accessible name. */
+  name: string;
+  tone: "" | "signal" | "attention";
+  x: number;
+  y: number;
+}
+
 export interface EdgeViewModel {
   id: string;
   from: string;
   to: string;
   d: string;
   dimmed: boolean;
+  /** "started": grey; "signal": a message waits on the architect; "amber": a review request waits on the person. */
+  tone: "started" | "signal" | "amber";
+  badge: BadgeViewModel | null;
 }
 
 export interface ColumnViewModel {
@@ -76,6 +92,8 @@ const LOADING: BoardViewModel = { phase: "loading", error: "", compact: false, c
 export class BoardPresenter extends Presenter<BoardViewModel> {
   readonly #deps: BoardDeps;
   #sessions: BoardSession[] = [];
+  #messages: TaskMessage[] = [];
+  #reviews: ReviewRequest[] = [];
   #compact = false;
 
   constructor(deps: BoardDeps) {
@@ -85,7 +103,8 @@ export class BoardPresenter extends Presenter<BoardViewModel> {
 
   async start(): Promise<void> {
     try {
-      this.#sessions = await this.#deps.source.sessions(this.#deps.ticketId);
+      const { source, ticketId } = this.#deps;
+      [this.#sessions, this.#messages, this.#reviews] = await Promise.all([source.sessions(ticketId), source.messages(ticketId), source.pendingReviews(ticketId)]);
     } catch (err) {
       if (!(err instanceof BoardSourceError)) throw err;
       this.set({ ...LOADING, phase: "error", error: err.message });
@@ -107,22 +126,57 @@ export class BoardPresenter extends Presenter<BoardViewModel> {
     const layout = computeLayout(sessions, compact);
     const rects: Record<string, Rect> = {};
     for (const [id, p] of Object.entries(layout.positions)) rects[id] = { ...p, ...sizeOf(id === YOU_ID, compact) };
-    const cards: CardViewModel[] = [
-      { id: YOU_ID, kind: "you", rect: rects[YOU_ID]!, agent: "You", mode: "", model: "", branch: "", badge: "", state: "", word: "", chip: "", line: null, dimmed: false, tone: "", when: "", attention: false, name: "You" },
-      ...inStartOrder(sessions).map((s) => this.#card(s, rects[s.id]!)),
-    ];
     const ended = new Set(sessions.filter(isTerminal).map((s) => s.id));
-    const edges = startedEdges(sessions).map((e) => ({
-      id: e.id,
-      from: e.from,
-      to: e.to,
-      d: edgeGeometry(rects[e.from]!, rects[e.to]!).d,
-      dimmed: ended.has(e.to),
-    }));
+    const threads = threadsOf(this.#messages);
+    const waits = reviewWaits(this.#reviews);
+    const now = this.#deps.now();
+    const architectId = sessions.find((s) => s.role === "architect")?.id ?? "";
+    // What waits on the architect: a question or review request sent to it with no reply yet.
+    const waitingOnArchitect = new Map<string, string>();
+    for (const m of pendingMessages(this.#messages)) if (m.toSessionId === architectId && !waitingOnArchitect.has(m.fromSessionId)) waitingOnArchitect.set(m.fromSessionId, KIND_WORD[m.kind]);
+    const reviewsWaiting = [...waits.values()].reduce((n, w) => n + w.count, 0);
+    const cards: CardViewModel[] = [
+      this.#you(rects[YOU_ID]!, reviewsWaiting),
+      ...inStartOrder(sessions).map((s) => this.#card(s, rects[s.id]!, waitingOnArchitect.get(s.id) ?? "")),
+    ];
+    const nameOf = (id: string) => (id === YOU_ID ? "You" : agentLabel(sessions.find((s) => s.id === id)?.agentId ?? "", this.#deps.agentNames));
+    const edges = startedEdges(sessions).map((e): EdgeViewModel => {
+      const geometry = edgeGeometry(rects[e.from]!, rects[e.to]!);
+      const base = { id: e.id, from: e.from, to: e.to, d: geometry.d, dimmed: ended.has(e.to) };
+      const wait = e.from === YOU_ID ? waits.get(e.to) : undefined;
+      if (wait) {
+        const age = relativeTime(wait.oldest, now);
+        const badge: BadgeViewModel = {
+          count: wait.count,
+          text: `review request · waits ${age}`,
+          name: `${wait.count} review request${wait.count === 1 ? "" : "s"} ${wait.count === 1 ? "waits" : "wait"} on you, ${ageWords(wait.oldest, now)}`,
+          tone: "attention",
+          ...geometry.badge,
+        };
+        return { ...base, tone: "amber", badge };
+      }
+      const thread = e.from === YOU_ID ? undefined : threads.get(pairKey(e.from, e.to));
+      if (!thread?.latest) return { ...base, tone: "started", badge: null };
+      const waiting = thread.pending;
+      const latest = thread.latest;
+      const between = `${thread.count} message${thread.count === 1 ? "" : "s"} between ${nameOf(e.from)} and ${nameOf(e.to)}`;
+      const badge: BadgeViewModel = waiting
+        ? { count: thread.count, text: `${KIND_WORD[waiting.kind]} · waits ${relativeTime(waiting.createdAt, now)}`, name: `${between}, ${KIND_WORD[waiting.kind]} waits ${ageWords(waiting.createdAt, now)}`, tone: "signal", ...geometry.badge }
+        : { count: thread.count, text: `${KIND_WORD[latest.kind]} ${relativeTime(latest.createdAt, now)}`, name: `${between}, latest ${KIND_WORD[latest.kind]} ${ageWords(latest.createdAt, now)} ago`, tone: "", ...geometry.badge };
+      return { ...base, tone: waiting ? "signal" : "started", badge };
+    });
     return { phase: "ready", error: "", compact, columns: layout.columns, canvas: layout.size, cards, edges };
   }
 
-  #card(s: BoardSession, rect: Rect): CardViewModel {
+  #you(rect: Rect, waiting: number): CardViewModel {
+    return {
+      id: YOU_ID, kind: "you", rect, agent: "You", mode: "", model: "", branch: "", badge: "", state: waiting > 0 ? "waiting" : "idle",
+      word: waiting > 0 ? "waiting on you" : "nothing waiting", chip: "", line: null, dimmed: false, tone: "", when: "", attention: waiting > 0,
+      name: waiting > 0 ? `You, ${waiting} review request${waiting === 1 ? "" : "s"} waiting on you` : "You, nothing waiting on you",
+    };
+  }
+
+  #card(s: BoardSession, rect: Rect, pendingKind: string): CardViewModel {
     const status = statusView(s);
     const { agentNames, taskTitle } = this.#deps;
     return {
@@ -137,12 +191,12 @@ export class BoardPresenter extends Presenter<BoardViewModel> {
       state: status.state,
       word: status.word,
       chip: chipOf(status),
-      line: detailOf(s, { taskTitle, agentNames, others: this.#sessions, report: null, messagesLoaded: false }),
+      line: detailOf(s, { taskTitle, agentNames, others: this.#sessions, report: lastReportOf(this.#messages, s.id), messagesLoaded: true }),
       dimmed: isTerminal(s) && s.status !== "failed",
       tone: s.status === "failed" ? "danger" : "",
       when: relativeTime(s.updatedAt, this.#deps.now()),
       attention: needsYou(s),
-      name: [agentLabel(s.agentId, agentNames), s.role === "architect" ? "architect" : s.mode, status.word, isTerminal(s) && s.status !== "failed" ? "ended" : ""].filter(Boolean).join(", "),
+      name: [agentLabel(s.agentId, agentNames), s.role === "architect" ? "architect" : s.mode, status.word, pendingKind ? `${pendingKind} waiting on the architect` : "", isTerminal(s) && s.status !== "failed" ? "ended" : ""].filter(Boolean).join(", "),
     };
   }
 }

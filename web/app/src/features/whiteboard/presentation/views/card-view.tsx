@@ -7,8 +7,8 @@ export function CardView({ card }: { card: CardViewModel }) {
   const style = { left: rect.x, top: rect.y, inlineSize: rect.w, blockSize: rect.h };
   if (card.kind === "you") {
     return (
-      <button type="button" className="wb-node" role="listitem" data-id="you" data-role="person" aria-label={card.name} style={style}>
-        <span className="status" data-state="idle" data-dot-only />
+      <button type="button" className="wb-node" role="listitem" data-id="you" data-role="person" data-attention={card.attention ? "" : undefined} aria-label={card.name} style={style}>
+        <span className="status" data-state={card.state} data-dot-only />
         <span className="who">
           <span className="agent">You</span>
         </span>

@@ -36,3 +36,25 @@ describe("HTTP board source: sessions", () => {
     await assert.rejects(down.sessions("t1"), failsWith("NETWORK_ERROR"));
   });
 });
+
+describe("HTTP board source: messages and review requests", () => {
+  const message = { id: "m1", kind: "question", from_session_id: "s1", to_session_id: "s0", created_at: "2026-11-23T12:00:00Z", status: "", delivered: true };
+  const review = { id: "r1", state: "pending", architect_session_id: "s0", created_at: "2026-11-23T12:00:00Z" };
+
+  test("reads the task's messages and its pending review requests", async () => {
+    const urls: string[] = [];
+    const source = httpBoardSource(apiClient((async (url: string) => (urls.push(url), Response.json(url.includes("task_messages") ? { messages: [message] } : { review_requests: [review] }))) as FetchLike));
+    const [m] = await source.messages("t1");
+    const [r] = await source.pendingReviews("t1");
+    assert.deepEqual(urls, ["/api/task_messages?ticket_id=t1", "/api/review_requests?ticket_id=t1&state=pending"]);
+    assert.equal(m?.kind, "question");
+    assert.equal(m?.fromSessionId, "s1");
+    assert.equal(r?.architectSessionId, "s0");
+  });
+
+  test("a message of an unknown kind, or a review of an unknown state, is BAD_RESPONSE", async () => {
+    await assert.rejects(answering(() => Response.json({ messages: [{ ...message, kind: "shout" }] })).messages("t1"), failsWith("BAD_RESPONSE"));
+    await assert.rejects(answering(() => Response.json({ review_requests: [{ ...review, state: "maybe" }] })).pendingReviews("t1"), failsWith("BAD_RESPONSE"));
+    await assert.rejects(answering(() => Response.json({})).messages("t1"), failsWith("BAD_RESPONSE"));
+  });
+});
