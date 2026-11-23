@@ -39,6 +39,8 @@ export interface BoardDeps {
 
 const RING_MS = 2400;
 const PULSE_MS = 1600;
+/** A pan or zoom is kept once the camera has been still this long. */
+const CAMERA_SAVE_MS = 250;
 
 const setTimer = (fn: () => void, ms: number): (() => void) => {
   const id = setTimeout(fn, ms);
@@ -77,6 +79,7 @@ export class BoardPresenter extends Presenter<BoardViewModel> {
   #stop: (() => void) | null = null;
   #stopped = false;
   readonly #cancels = new Set<() => void>();
+  #cancelCameraSave: (() => void) | null = null;
 
   constructor(deps: BoardDeps) {
     super(LOADING);
@@ -119,6 +122,12 @@ export class BoardPresenter extends Presenter<BoardViewModel> {
 
   stop(): void {
     this.#stopped = true;
+    // A camera still moving when the board goes away is kept as it was.
+    if (this.#cancelCameraSave) {
+      this.#cancelCameraSave();
+      this.#cancelCameraSave = null;
+      this.#deps.preferences.saveCamera(this.#deps.ticketId, this.#camera);
+    }
     this.#stop?.();
     this.#stop = null;
     for (const cancel of this.#cancels) cancel();
@@ -174,8 +183,17 @@ export class BoardPresenter extends Presenter<BoardViewModel> {
   #moveCamera(camera: Camera): void {
     this.#camera = camera;
     this.#framed = true;
-    this.#deps.preferences.saveCamera(this.#deps.ticketId, camera);
+    this.#saveCameraSoon();
     this.set(this.#build());
+  }
+
+  /** Keeps the camera in the browser once it has stopped moving: a drag or a wheel is many steps. */
+  #saveCameraSoon(): void {
+    this.#cancelCameraSave?.();
+    this.#cancelCameraSave = (this.#deps.schedule ?? setTimer)(() => {
+      this.#cancelCameraSave = null;
+      this.#deps.preferences.saveCamera(this.#deps.ticketId, this.#camera);
+    }, CAMERA_SAVE_MS);
   }
 
   /** The page is narrower than 64rem: cards take their compact form. */

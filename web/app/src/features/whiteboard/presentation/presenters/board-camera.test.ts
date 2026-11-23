@@ -10,8 +10,22 @@ const architect = session({ role: "architect" });
 const a = session({ role: "delegate", mode: "implement", parentSessionId: architect.id });
 const sessions = [architect, a];
 
+/** A scheduler the test runs by hand. */
+function manualTimers() {
+  const timers: { fn: () => void; live: boolean }[] = [];
+  return {
+    schedule: (fn: () => void) => {
+      const timer = { fn, live: true };
+      timers.push(timer);
+      return () => void (timer.live = false);
+    },
+    elapse: () => timers.splice(0).forEach((t) => t.live && t.fn()),
+  };
+}
+const timers = manualTimers();
+
 async function board(storage = memoryStorage(), viewport: [number, number] | null = [1000, 600]) {
-  const presenter = new BoardPresenter({ source: memoryBoardSource(sessions), preferences: storageBoardPreferences(storage), ticketId: "t1", projectId: "p1", agentNames: AGENT_NAMES, taskTitle: "", now: () => new Date(T0) });
+  const presenter = new BoardPresenter({ source: memoryBoardSource(sessions), preferences: storageBoardPreferences(storage), ticketId: "t1", projectId: "p1", agentNames: AGENT_NAMES, taskTitle: "", now: () => new Date(T0), schedule: timers.schedule });
   await presenter.start();
   if (viewport) presenter.setViewport(viewport[0], viewport[1]);
   return presenter;
@@ -71,9 +85,27 @@ describe("camera", () => {
     p.zoomAt(0.5, 0, 0);
     p.panBy(20, 20);
     const kept = p.viewModel.camera;
+    timers.elapse();
     assert.ok(storage.entries.has(cameraKey("t1")));
     assert.deepEqual((await board(storage)).viewModel.camera, kept);
     assert.equal(storage.entries.has(cameraKey("t2")), false);
+  });
+
+  test("is kept once it has been still, not on every step of a pan or a wheel", async () => {
+    const storage = memoryStorage();
+    const p = await board(storage);
+    for (let i = 0; i < 20; i++) p.panBy(5, 0);
+    assert.equal(storage.entries.has(cameraKey("t1")), false);
+    timers.elapse();
+    assert.equal(storage.entries.has(cameraKey("t1")), true);
+  });
+
+  test("a camera still moving when the board stops is kept", async () => {
+    const storage = memoryStorage();
+    const p = await board(storage);
+    p.panBy(30, 0);
+    p.stop();
+    assert.equal(storage.entries.has(cameraKey("t1")), true);
   });
 
   test("malformed stored data falls back to Fit", async () => {
