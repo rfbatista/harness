@@ -3,6 +3,7 @@ package orchestration
 import (
 	"context"
 	"crypto/rand"
+	"crypto/sha256"
 	"encoding/hex"
 	"log/slog"
 	"time"
@@ -78,8 +79,47 @@ func (s *Service) recordEntry(ctx context.Context, id string, e domain.ContextEn
 	if c == nil {
 		c = &domain.SessionContext{SessionID: id}
 	}
+	if e.Kind == domain.ContextEntryResume && len(c.Entries) > 0 {
+		markChanged(&e, c.Entries[len(c.Entries)-1])
+	}
 	c.Entries = append(c.Entries, e)
+	c.Changes = append(c.Changes, domain.ContextChange{
+		At: e.At, Kind: domain.ContextChangeEntryAdded, Subject: e.ID, Detail: entryAddedDetail(e),
+	})
 	return s.Contexts.Save(ctx, c)
+}
+
+func entryAddedDetail(e domain.ContextEntry) string {
+	if e.Kind == domain.ContextEntryResume {
+		return "Resumed: the context was handed to claude again"
+	}
+	return "Started: the context was handed to claude"
+}
+
+// markChanged marks each piece of e that differs from the piece of the same id
+// in prev: a version change, or for a piece with no version a change of text,
+// told by short content hashes. A piece prev did not have is not marked.
+func markChanged(e *domain.ContextEntry, prev domain.ContextEntry) {
+	for i, p := range e.Instructions {
+		before, ok := prev.Piece(p.ID)
+		if !ok {
+			continue
+		}
+		switch {
+		case p.Version != "" || before.Version != "":
+			if p.Version != before.Version {
+				e.Instructions[i].Changed = &domain.ContextPieceChange{FromVersion: before.Version, ToVersion: p.Version}
+			}
+		case p.Text != before.Text:
+			e.Instructions[i].Changed = &domain.ContextPieceChange{FromVersion: shortHash(before.Text), ToVersion: shortHash(p.Text)}
+		}
+	}
+}
+
+// shortHash is the first 8 hex digits of text's SHA-256.
+func shortHash(text string) string {
+	sum := sha256.Sum256([]byte(text))
+	return hex.EncodeToString(sum[:4])
 }
 
 // contextFacts are the session's setup at a glance, from what prepare
@@ -126,4 +166,32 @@ func newContextEntryID() string {
 	var b [8]byte
 	_, _ = rand.Read(b[:])
 	return hex.EncodeToString(b[:])
+}
+
+// recordResume stores the context entry of a session that has just been
+// resumed, from what the resume resolved and the first message it was given.
+func (s *Service) recordResume(ctx context.Context, sess *domain.Session, in contextInput, opening string) {
+	in.ID, in.Kind, in.At, in.Opening = newContextEntryID(), domain.ContextEntryResume, time.Now(), opening
+	if err := s.recordEntry(ctx, sess.ID, buildContextEntry(in)); err != nil {
+		slog.Warn("store a session's context", "session", sess.ID, "err", err)
+	}
+}
+
+// repositoryName is the name of repository id, for a piece's source; "" when
+// it cannot be read.
+func (s *Service) repositoryName(ctx context.Context, id string) string {
+	if id == "" {
+		return ""
+	}
+	repo, err := s.catalog.Repositories.GetRepository(context.WithoutCancel(ctx), id)
+	if err != nil || repo == nil {
+		return ""
+	}
+	return repo.Name
+}
+
+// resumeFacts are a resumed session's setup at a glance.
+func (s *Service) resumeFacts(sess *domain.Session, ag resolvedAgent, cfg llmkit.SessionConfig, permission llmkit.PermissionMode, sb sandboxed) domain.ContextFacts {
+	in := prepareInput{Role: s.sessionRole(context.TODO(), sess.ID), Mode: sess.Mode, Branch: sess.Branch, Headless: false}
+	return s.contextFacts(in, ag, cfg, &domain.Workspace{Path: sess.WorkingDir}, sessionSavers{active: sess.TokenSavers}, sb, permission)
 }
