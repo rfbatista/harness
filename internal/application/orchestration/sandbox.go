@@ -118,6 +118,10 @@ func (b *Sandbox) on() bool { return b != nil && (b.Enabled == nil || b.Enabled(
 // SandboxSession is what the policy builder decides a policy from.
 type SandboxSession struct {
 	Mode domain.SessionMode
+	// Access is what the session may do in its worktree; empty is write. A
+	// read-only session gets the worktree and the git dir read-only, so
+	// nothing in them can change, a commit included.
+	Access domain.SessionAccess
 	// Worktree is the session's own worktree, GitCommonDir the git directory
 	// it commits into.
 	Worktree     string
@@ -251,8 +255,13 @@ func BuildSandboxPolicy(s SandboxSession) ports.SandboxPolicy {
 		addRepositories(add, s)
 		add(s.WorktreesDir, false)
 	default:
-		add(s.Worktree, true)
-		createOnly = addGitDir(add, s)
+		if s.Access.Writes() {
+			add(s.Worktree, true)
+			createOnly = addGitDir(add, s)
+		} else {
+			add(s.Worktree, false)
+			add(s.GitCommonDir, false)
+		}
 		if s.ReadAllRepos {
 			addRepositories(add, s)
 		}
@@ -621,6 +630,7 @@ func (s *Service) sandbox(ctx context.Context, in prepareInput, id string, repo 
 	}
 	sess := SandboxSession{
 		Mode:         in.Mode,
+		Access:       in.Access,
 		Worktree:     worktree,
 		GitCommonDir: gitCommonDir(worktree, repo.RootDir),
 		OwnGitDir:    ownGitDir(worktree),

@@ -407,3 +407,23 @@ func chainOtherHooks(own, hooks string) {
 		_ = os.Symlink(filepath.Join(own, name), filepath.Join(hooks, name))
 	}
 }
+
+// withReadOnlyAccess tells a read-only session what it is, and lets its git
+// read a worktree it cannot write: GIT_OPTIONAL_LOCKS=0 stops status, log and
+// diff from trying to refresh the index, which takes a lock in the read-only
+// git dir. A session that may write is left as it is.
+func withReadOnlyAccess(cfg *llmkit.SessionConfig, access domain.SessionAccess, branch string) {
+	if access.Writes() {
+		return
+	}
+	cfg.Env = append(cfg.Env, "GIT_OPTIONAL_LOCKS=0")
+	cfg.AppendSystem = appendSection(cfg.AppendSystem, readOnlySection(branch))
+}
+
+// readOnlySection is the brief's section for a session with read-only access.
+func readOnlySection(branch string) string {
+	return "## Read-only access\n\nThis session has read-only access to its worktree, on branch " + branch + ". " +
+		"You can read files and run builds and tests there. You cannot write or delete a file in the worktree, stage, commit or change the branch: " +
+		"the sandbox refuses it, and an \"Operation not permitted\" from a write is that refusal, not a fault to work around. " +
+		"Another session shares this worktree and may be writing in it. Report what you find in your reply; if a change is needed, say so and leave it to a session with write access."
+}

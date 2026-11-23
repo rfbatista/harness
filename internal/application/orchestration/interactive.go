@@ -293,6 +293,7 @@ func (s *Service) ResumeInteractive(ctx context.Context, req ports.ResumeRequest
 		permission = llmkit.PermissionBypass
 	}
 	cfg := s.sessionConfig(sess.ID, sess.WorkingDir, sess.Model, nil, permission, ag, subject, sess.ZoneID, s.sessionRole(ctx, sess.ID), sess.RepositoryID)
+	withReadOnlyAccess(&cfg, sess.Access, sess.Branch)
 	cleanup, err := s.withShell(sess.ID, sess.RepositoryID, subject, &cfg, ag.cleanup)
 	if err != nil {
 		return nil, ports.AgentSpec{}, err
@@ -413,7 +414,7 @@ func (s *Service) resumeSandbox(ctx context.Context, sess *domain.Session, env, 
 		}
 		repo = r
 	}
-	return s.sandbox(ctx, prepareInput{ProjectID: sess.ProjectID, Mode: sess.Mode, WorkspaceID: sess.WorkspaceID}, sess.ID, repo, sess.WorkingDir, env, skillDirs)
+	return s.sandbox(ctx, prepareInput{ProjectID: sess.ProjectID, Mode: sess.Mode, WorkspaceID: sess.WorkspaceID, Access: sess.Access}, sess.ID, repo, sess.WorkingDir, env, skillDirs)
 }
 
 // claimResume marks id as being resumed; false when another call already is.
@@ -1091,5 +1092,11 @@ func (s *Service) joinTarget(ctx context.Context, req InteractiveRequest, mode d
 	return access, ws, nil
 }
 
-// defaultAccess is the access a mode gets when the start names none.
-func defaultAccess(domain.SessionMode) domain.SessionAccess { return domain.AccessWrite }
+// defaultAccess is the access a mode gets when the start names none: a
+// Reviewer and QA read the work, every other mode writes it.
+func defaultAccess(mode domain.SessionMode) domain.SessionAccess {
+	if mode == domain.SessionModeReview || mode == domain.SessionModeQA {
+		return domain.AccessReadOnly
+	}
+	return domain.AccessWrite
+}

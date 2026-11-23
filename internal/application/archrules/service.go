@@ -106,6 +106,9 @@ func (s *Service) CheckArchitecture(ctx context.Context, c ports.ArchitectureChe
 	if v, refused := s.designSessionRefusal(c); refused {
 		return v
 	}
+	if v, refused := s.readOnlyRefusal(c); refused {
+		return v
+	}
 	w, ok, err := s.resolve(ctx, c.SessionID)
 	if err != nil {
 		return ports.ArchitectureVerdict{Context: "Architecture rules could not be checked: the saved architecture could not be read."}
@@ -126,6 +129,31 @@ func (s *Service) CheckArchitecture(ctx context.Context, c ports.ArchitectureChe
 		s.commandRules(ctx, w, c, paths, &v)
 	}
 	return v.out()
+}
+
+// readOnlyRefusal denies what changes the worktree of a session that has
+// read-only access to it (Glossary: Access): a file tool's write into the
+// worktree, a git command that writes, and a commit. No rule of any record is
+// consulted. The sandbox refuses the same writes at the OS, bare; this is the
+// refusal that says why. A write outside the worktree, a read and a build or
+// a test are not refused. refused is false for a session that may write.
+func (s *Service) readOnlyRefusal(c ports.ArchitectureCheck) (ports.ArchitectureVerdict, bool) {
+	sess := s.d.Sessions.Get(c.SessionID)
+	if sess == nil || sess.Access.Writes() {
+		return ports.ArchitectureVerdict{}, false
+	}
+	why := "This session has read-only access to the worktree on branch " + sess.Branch + ": it can read, build and run tests there, but it cannot write files or commit. Ask the person to start a session with write access for that."
+	switch {
+	case c.Point == domain.PointBeforeCommit:
+		return ports.ArchitectureVerdict{Deny: why + " Nothing is committed."}, true
+	case c.Point == domain.PointAfterEdit:
+		return ports.ArchitectureVerdict{}, false
+	case c.Command != "" && gitWrites(c.Command):
+		return ports.ArchitectureVerdict{Deny: why + " This git command is refused."}, true
+	case sess.WorkingDir != "" && len(inside(sess.WorkingDir, c.Paths)) > 0:
+		return ports.ArchitectureVerdict{Deny: why + " This path is in the worktree."}, true
+	}
+	return ports.ArchitectureVerdict{}, false
 }
 
 // ListArchitectureRuleEvents implements ports.ArchitectureRuleEvents.

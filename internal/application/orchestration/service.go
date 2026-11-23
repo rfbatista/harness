@@ -603,6 +603,7 @@ func (s *Service) prepare(ctx context.Context, in prepareInput) (*prepared, erro
 	}
 	permission := parseAutoAccept(in.AutoAccept)
 	cfg := s.sessionConfig(id, ws.Path, in.Model, in.AllowedTools, permission, ag, subject, in.ZoneID, in.Role, in.RepositoryID)
+	withReadOnlyAccess(&cfg, in.Access, in.Branch)
 	cleanup, err := s.withShell(id, in.RepositoryID, subject, &cfg, ag.cleanup)
 	if err == nil {
 		cleanup = s.withCommitCheck(id, ws.ID, ws.Path, &cfg, false, cleanup)
