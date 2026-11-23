@@ -716,8 +716,10 @@ func TestTopBarLeadsToTheProjectsListOnceItIsServed(t *testing.T) {
 	w := board()
 	w.summaries = fakeSummaries{}
 	body := get(t, newTestHandler(t, w), "/projects/p1").Body.String()
-	if !strings.Contains(body, `href="/projects">Projects</a>`) || strings.Contains(body, `href="/projects/new">New project</a>`) {
-		t.Error("the top bar links to the projects list, where New project lives, in place of New project")
+	list, hasList := topBarLink(t, body, "projects")
+	_, hasNew := topBarLink(t, body, "new_project")
+	if !hasList || list.Href != "/projects" || hasNew {
+		t.Errorf("the top bar links to the projects list, where New project lives, in place of New project: list %+v, new project link %v", list, hasNew)
 	}
 	if !strings.Contains(body, `href="/projects/p1/settings"`) {
 		t.Error("the project page links to its settings")

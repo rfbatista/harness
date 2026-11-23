@@ -530,11 +530,12 @@ func (s *server) architectureAssistant(ctx context.Context) shell.Helper {
 // bareFrame is a frame without the rail, for when the rail cannot be read.
 func (s *server) bareFrame(title string) shell.Frame {
 	f := shell.Frame{
-		Title:    title,
-		CSS:      s.assets.URL("app.css"),
-		JS:       s.assets.URL("app.js"),
-		ClientJS: s.assets.ClientBundleURL(),
-		Built:    s.assets.Built(),
+		Title:     title,
+		CSS:       s.assets.URL("app.css"),
+		JS:        s.assets.URL("app.js"),
+		ClientJS:  s.assets.ClientBundleURL(),
+		ClientCSS: s.assets.ClientCSSURL(),
+		Built:     s.assets.Built(),
 	}
 	f.Helper = s.helper(context.Background())
 	return f
@@ -628,5 +629,5 @@ func render(w http.ResponseWriter, r *http.Request, status int, page templ.Compo
 func logPageTime(r *http.Request, t *pagetime.Timing) {
 	rep := t.Report(0)
 	slog.Info("page time", "route", r.Pattern, "project", r.PathValue("project"),
-		"total", rep.Total, "db", rep.DB, "git", rep.Git, "git_calls", rep.GitCalls, "render", rep.Render, "frame", rep.Frame, "catalog", rep.Catalog, "catalog_reads", rep.CatalogReads)
+		"total", rep.Total, "db", rep.DB, "git", rep.Git, "git_calls", rep.GitCalls, "render", rep.Render, "frame", rep.Frame, "island", rep.Island, "catalog", rep.Catalog, "catalog_reads", rep.CatalogReads)
 }

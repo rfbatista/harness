@@ -23,7 +23,8 @@ type Frame struct {
 	NoRail bool
 	// Asset URLs, content-hashed (web.Assets.URL). ClientJS is the React
 	// islands' browser bundle; "" when it is not built.
-	CSS, JS, ClientJS string
+	// ClientCSS is the stylesheet that bundle imports; "" when it imports none.
+	CSS, JS, ClientJS, ClientCSS string
 	// Island is the React top bar the header carries; nil leaves it out.
 	Island *TopBarIsland
 	// Built is false when `make web` has not produced the bundles yet.

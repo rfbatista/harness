@@ -191,6 +191,34 @@ func buildIslands(root string, dev bool) error {
 		return fmt.Errorf("islands: %w", err)
 	}
 	fmt.Println("wrote", outDir+"/"+manifest.Client.JS, "and the island server bundle")
+	return pruneStaleIslands(filepath.Join(root, outDir), manifest)
+}
+
+// pruneStaleIslands removes the islands-<hash> files an earlier build left
+// behind: every one stays embedded in the binary and served, so they would
+// pile up with each rebuild. It keeps the client bundle and stylesheet the
+// manifest names, and their source maps.
+func pruneStaleIslands(dir string, m gohydrate.Manifest) error {
+	keep := map[string]bool{}
+	for _, name := range []string{m.Client.JS, m.Client.CSS} {
+		if name != "" {
+			keep[name] = true
+			keep[name+".map"] = true
+		}
+	}
+	stale, err := filepath.Glob(filepath.Join(dir, "islands-*"))
+	if err != nil {
+		return err
+	}
+	for _, path := range stale {
+		if keep[filepath.Base(path)] {
+			continue
+		}
+		if err := os.Remove(path); err != nil {
+			return fmt.Errorf("removing the stale island bundle: %w", err)
+		}
+		fmt.Println("removed", outDir+"/"+filepath.Base(path))
+	}
 	return nil
 }
 

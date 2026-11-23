@@ -26,8 +26,10 @@ type Assets struct {
 	hashes map[string]string
 	// client is the React islands' browser bundle, from the manifest gohydrate
 	// wrote; "" when `make web` has not built it.
-	client   string
-	manifest gohydrate.Manifest
+	client string
+	// clientCSS is the stylesheet the client bundle imports, "" when it imports none.
+	clientCSS string
+	manifest  gohydrate.Manifest
 }
 
 // NewAssets reads the embedded bundles.
@@ -71,6 +73,13 @@ func (a *Assets) readManifest() {
 	sum := sha256.Sum256(bundle)
 	a.hashes[m.Client.JS] = hex.EncodeToString(sum[:6])
 	a.client = m.Client.JS
+	if m.Client.CSS != "" {
+		if css, err := fs.ReadFile(a.files, m.Client.CSS); err == nil {
+			sum := sha256.Sum256(css)
+			a.hashes[m.Client.CSS] = hex.EncodeToString(sum[:6])
+			a.clientCSS = m.Client.CSS
+		}
+	}
 	a.manifest = m
 }
 
@@ -84,6 +93,15 @@ func (a *Assets) ClientBundleURL() string {
 		return ""
 	}
 	return a.URL(a.client)
+}
+
+// ClientCSSURL is the cache-busting URL of the stylesheet the islands' client
+// bundle imports, "" when it imports none or the file is missing.
+func (a *Assets) ClientCSSURL() string {
+	if a.clientCSS == "" {
+		return ""
+	}
+	return a.URL(a.clientCSS)
 }
 
 // Built reports whether the app bundles are present. The document
