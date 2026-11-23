@@ -1168,6 +1168,7 @@ func (s *Service) pump(sess llmkit.Session) {
 	}
 	s.runCleanup(id)
 	s.dropRedactor(id)
+	s.contextNotes.drop(id)
 	if sess := s.sessions.Get(id); sess != nil && sess.Status.IsTerminal() {
 		s.hub.End(id)
 		s.announce(domain.SessionEnded{SessionID: id, Status: sess.Status})
@@ -1509,6 +1510,7 @@ func (s *Service) Delete(ctx context.Context, id string) error {
 	if s.Contexts != nil {
 		_ = s.Contexts.Delete(ctx, id)
 		s.dropRedactor(id)
+		s.contextNotes.drop(id)
 	}
 	// Deleting ends the session for good: its commit check goes with it.
 	if sess := s.sessions.Get(id); sess != nil {

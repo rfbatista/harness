@@ -49,7 +49,7 @@ func contextToolsAndServers(in contextInput) ([]domain.ContextTool, []domain.Con
 		attached, reason := attributeServer(spec.Name, in)
 		servers = append(servers, domain.ContextServer{
 			Name: spec.Name, Attached: attached, AttachedReason: reason,
-			Status: domain.MCPUnknown, StatusReason: domain.MCPStatusUnknownReason,
+			Status: domain.MCPUnknown, StatusReason: unknownReason(in.Facts.Headless),
 			HiddenTools: orEmptyStrings(hidden[spec.Name]),
 		})
 		for _, tool := range hidden[spec.Name] {
@@ -230,4 +230,14 @@ func classifySkills(skills, mode []domain.Skill) []domain.ContextSkill {
 		out = append(out, domain.ContextSkill{Name: s.Name, Source: source, Description: description})
 	}
 	return out
+}
+
+// unknownReason says why a server has no status: a terminal session's claude
+// reports none (the contract's words); a headless session's claude reports it
+// at start, and until it has the status is just not reported.
+func unknownReason(headless bool) string {
+	if headless {
+		return "claude did not report it"
+	}
+	return domain.MCPStatusUnknownReason
 }

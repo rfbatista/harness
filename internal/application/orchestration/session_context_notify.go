@@ -66,6 +66,10 @@ func (n *contextNotifier) changed(sessionID, reason string) {
 func (n *contextNotifier) flush(sessionID string) {
 	n.mu.Lock()
 	st := n.sessions[sessionID]
+	if st == nil {
+		n.mu.Unlock()
+		return // the session ended while the window ran
+	}
 	reason := st.pending
 	st.pending, st.waiting = "", false
 	if reason != "" {
@@ -75,6 +79,16 @@ func (n *contextNotifier) flush(sessionID string) {
 	if reason != "" {
 		n.send(sessionID, reason)
 	}
+}
+
+// drop forgets a session that has ended or been deleted.
+func (n *contextNotifier) drop(sessionID string) {
+	if n == nil {
+		return
+	}
+	n.mu.Lock()
+	defer n.mu.Unlock()
+	delete(n.sessions, sessionID)
 }
 
 // contextChanged says a session's context changed, for the project feed.

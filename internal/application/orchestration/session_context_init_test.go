@@ -199,3 +199,29 @@ func TestSessionContextInit_ArgsAndURLSecretsInAnErrorAreStoredWithoutThem(t *te
 		}
 	}
 }
+
+func TestSessionContextInit_EscapedAndPathSecretsInAnErrorAreStoredWithoutThem(t *testing.T) {
+	svc := contextService(t)
+	storeEntry(t, svc, serversEntry())
+	redact := secretRedactor(llmkit.SessionConfig{MCPServers: []llmkit.MCPServerSpec{{
+		Name: "github",
+		URL:  "https://us%3Aer:p%2Fass%2Bword9@host/mcp/abcdefghijklmnopqrstuvwxyz0123/sse?key=abc%2Fdef%2Bghi",
+	}}})
+	applyInit(t, svc, `{"mcp_servers":[{"name":"github","status":"failed","error":"GET https://us%3Aer:p%2Fass%2Bword9@host/mcp/abcdefghijklmnopqrstuvwxyz0123/sse?key=abc%2Fdef%2Bghi failed; key abc%2Fdef%2Bghi; token abc/def+ghi; seg abcdefghijklmnopqrstuvwxyz0123; pw p%2Fass%2Bword9"}]}`, redact)
+	b, _ := json.Marshal(contextOf(t, svc, "s1"))
+	for _, leak := range []string{"abc%2Fdef", "abc/def", "abcdefghijklmnopqrstuvwxyz0123", "p%2Fass", "p/ass+word9"} {
+		if strings.Contains(string(b), leak) {
+			t.Errorf("stored %q: %s", leak, b)
+		}
+	}
+}
+
+func TestBuildContextEntry_AHeadlessServerWithNoStatusSaysClaudeDidNotReportIt(t *testing.T) {
+	in := inventoryInput()
+	in.Facts.Headless = true
+	for _, s := range buildContextEntry(in).MCPServers {
+		if s.Status != domain.MCPUnknown || s.StatusReason != "claude did not report it" {
+			t.Errorf("%s = %q %q", s.Name, s.Status, s.StatusReason)
+		}
+	}
+}

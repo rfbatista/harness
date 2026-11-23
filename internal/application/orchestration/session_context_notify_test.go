@@ -195,3 +195,15 @@ func TestSessionContext_EachKindOfChangeNamesItsReason(t *testing.T) {
 		t.Errorf("usage: %q", got)
 	}
 }
+
+func TestContextNotifier_ADroppedSessionIsForgottenAndItsWaitingWindowIsHarmless(t *testing.T) {
+	clock := newFakeClock()
+	n, sent := notifierWith(clock)
+	n.changed("s1", "usage")
+	n.changed("s1", "usage") // waits for the window's end
+	n.drop("s1")
+	clock.Advance(3 * time.Second) // must not panic or send
+	if len(*sent) != 1 || len(n.sessions) != 0 {
+		t.Errorf("sent = %v, tracked = %d", *sent, len(n.sessions))
+	}
+}

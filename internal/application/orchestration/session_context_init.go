@@ -192,22 +192,40 @@ func (s *Service) dropRedactor(id string) {
 	delete(s.redactors, id)
 }
 
-// addURLSecrets adds the parts of a server URL that can carry a credential:
-// its userinfo and its query values.
+// addURLSecrets adds the parts of a server URL that can carry a credential, in
+// the forms an error text may repeat: the whole URL, its userinfo and query
+// values decoded and as written (percent-escaped), and its long path segments,
+// which can hold a key.
 func addURLSecrets(raw string, add func(string)) {
 	u, err := url.Parse(raw)
 	if err != nil {
 		return
 	}
+	add(raw)
 	if u.User != nil {
 		add(u.User.Username())
 		if pw, ok := u.User.Password(); ok {
 			add(pw)
 		}
+		if info, _, ok := strings.Cut(raw[strings.Index(raw, "//")+2:], "@"); ok {
+			for _, part := range strings.Split(info, ":") {
+				add(part) // as written
+			}
+		}
 	}
 	for _, values := range u.Query() {
 		for _, v := range values {
 			add(v)
+		}
+	}
+	for _, pair := range strings.FieldsFunc(u.RawQuery, func(r rune) bool { return r == '&' || r == ';' }) {
+		if _, v, ok := strings.Cut(pair, "="); ok {
+			add(v) // as written
+		}
+	}
+	for _, seg := range strings.Split(u.EscapedPath(), "/") {
+		if len(seg) > 16 {
+			add(seg)
 		}
 	}
 }
