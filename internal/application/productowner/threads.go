@@ -340,13 +340,17 @@ func (s *Service) StopTurn(ctx context.Context, threadID string) error {
 	if err := s.available(); err != nil {
 		return err
 	}
+	if _, err := s.store.Thread(ctx, threadID); err != nil {
+		return err
+	}
+	lock := s.threadLock(threadID)
+	lock.Lock()
+	defer lock.Unlock()
+	// Read under the lock: a wake-up or a recovery may have moved the turn.
 	t, err := s.store.Thread(ctx, threadID)
 	if err != nil {
 		return err
 	}
-	lock := s.threadLock(t.ID)
-	lock.Lock()
-	defer lock.Unlock()
 	if r := s.runOf(t.ID); r != nil {
 		r.mu.Lock()
 		r.retired = true
@@ -355,18 +359,21 @@ func (s *Service) StopTurn(ctx context.Context, threadID string) error {
 			_ = s.store.SaveItem(ctx, *r.cur)
 			s.announceItem(t, *r.cur)
 			r.cur = nil
-		} else if t.Turn == domain.ProductOwnerTurnRunning {
-			// A stop before the first word still answers the person's message with
-			// a stopped one, so that nothing later reads it as unanswered.
-			if item, err := s.store.AppendItem(ctx, domain.ProductOwnerItem{ThreadID: t.ID, Kind: domain.ProductOwnerItemMessage, At: time.Now(),
-				Author: domain.ProductOwnerAuthorProductOwner, Stopped: true}); err == nil {
-				s.announceItem(t, item)
-			}
 		}
 		r.mu.Unlock()
 		s.dropRun(r)
 		_ = s.sessions.Stop(ctx, t.SessionID)
 		s.waitProcessEnd(ctx, t.SessionID)
+	}
+	// A stop that came before the first word, or while the session was waking
+	// or queued for recovery, still answers the person's message with an empty
+	// stopped one, so that nothing later reads it as unanswered. A message
+	// already answered is left alone.
+	if s.unanswered(ctx, t.ID) {
+		if item, err := s.store.AppendItem(ctx, domain.ProductOwnerItem{ThreadID: t.ID, Kind: domain.ProductOwnerItemMessage, At: time.Now(),
+			Author: domain.ProductOwnerAuthorProductOwner, Stopped: true}); err == nil {
+			s.announceItem(t, item)
+		}
 	}
 	s.finishTurn(t.ID)
 	return nil

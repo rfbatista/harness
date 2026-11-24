@@ -1663,7 +1663,8 @@ func newProductOwner(lc fx.Lifecycle, store ports.ProductOwnerStore, cat catalog
 	svc := productowner.New(store, cat.Projects, cat.Agents, orch, orch)
 	lc.Append(fx.Hook{
 		OnStart: func(context.Context) error {
-			// Behind the boot: a resume starts claude, which holds nothing back.
+			// The threads to recover are decided and marked busy here, before the
+			// server listens; their resumes then run behind the boot.
 			svc.Recover(context.Background())
 			return nil
 		},

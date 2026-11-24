@@ -1912,3 +1912,134 @@ func TestALiveSendDuringBootRecoveryIsResumedOnceWithNoFailureAndARecoveredThrea
 		t.Errorf("%d launches since the restart, want one resume for each thread", got)
 	}
 }
+
+func (e *poE2E) lastItem(id string) poItem {
+	items := e.thread(id).Items
+	return items[len(items)-1]
+}
+
+func (e *poE2E) assertStoppedLast(id string) {
+	e.t.Helper()
+	if last := e.lastItem(id); last.Kind != "message" || last.Author != "product_owner" || !last.Stopped || last.Text != "" {
+		e.t.Errorf("thread %s: last item = %+v, want the empty stopped product-owner message", id, last)
+	}
+}
+
+func TestAStopDuringAWakeUpIsAnsweredByAStoppedMessageAndNoBootResumesIt(t *testing.T) {
+	e := newPOE2E(t)
+	e.po.SetIdle(150 * time.Millisecond)
+	id, _ := e.startThread("first")
+	th := e.waitTurn(id, "idle")
+	eventuallyPO(t, "the idle process to end", func() string {
+		if e.orch.ProductOwnerRunning(th.Thread.SessionID) {
+			return "still running"
+		}
+		return ""
+	})
+
+	prehold := filepath.Join(e.fakeDir, "prehold")
+	if err := os.WriteFile(prehold, nil, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	e.slow(true)
+	woken := make(chan int, 1)
+	go func() { status, _ := e.send(id, "woken then stopped"); woken <- status }()
+	eventuallyPO(t, "the thread to read resuming", func() string {
+		if e.thread(id).Thread.Turn != "resuming" {
+			return "not resuming"
+		}
+		return ""
+	})
+	stopped := make(chan int, 1)
+	go func() {
+		status, _ := e.post("stop_product_owner_turn", map[string]any{"thread_id": id}, nil)
+		stopped <- status
+	}()
+	time.Sleep(300 * time.Millisecond)
+	e.slow(false)
+	time.AfterFunc(300*time.Millisecond, func() { _ = os.Remove(prehold) })
+	if status := <-woken; status != 200 {
+		t.Fatalf("the send = %d", status)
+	}
+	if status := <-stopped; status != 200 {
+		t.Fatalf("the stop = %d", status)
+	}
+	e.waitTurn(id, "idle")
+	e.assertStoppedLast(id)
+
+	launched := len(e.launches())
+	e.restart()
+	time.Sleep(500 * time.Millisecond)
+	if after := e.thread(id); after.Thread.Turn != "idle" || len(e.launches()) != launched || countItems(after.Items, "notice", "") != 0 {
+		t.Errorf("a boot resumed a stopped turn: turn %s, %d launches (was %d)", after.Thread.Turn, len(e.launches()), launched)
+	}
+	e.assertStoppedLast(id)
+}
+
+func TestAStopOnAThreadQueuedForRecoveryIsAnsweredAndTheRecoverySkipsIt(t *testing.T) {
+	e := newPOE2E(t)
+	e.po.SetIdle(150 * time.Millisecond)
+	ids := []string{}
+	for _, title := range []string{"queued a", "queued b"} {
+		id, _ := e.startThread(title)
+		e.waitTurn(id, "idle")
+		ids = append(ids, id)
+	}
+	eventuallyPO(t, "both processes to end", func() string {
+		for _, id := range ids {
+			if e.orch.ProductOwnerRunning(e.thread(id).Thread.SessionID) {
+				return "still running"
+			}
+		}
+		return ""
+	})
+	for _, id := range ids {
+		if _, err := e.store.AppendItem(e.ctx, domain.ProductOwnerItem{ThreadID: id, Kind: domain.ProductOwnerItemMessage, At: time.Now(),
+			Author: domain.ProductOwnerAuthorPerson, Text: "unanswered at the crash"}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	prehold := filepath.Join(e.fakeDir, "prehold")
+	if err := os.WriteFile(prehold, nil, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	e.slow(true) // the first recovery is held at its start; the second waits behind it
+	e.restart()
+	for _, id := range ids {
+		if got := e.thread(id).Thread.Turn; got != "interrupted" {
+			t.Fatalf("thread %s reads %s, want interrupted", id, got)
+		}
+	}
+	done := make(chan int, 2)
+	for _, id := range ids {
+		go func() {
+			status, _ := e.post("stop_product_owner_turn", map[string]any{"thread_id": id}, nil)
+			done <- status
+		}()
+	}
+	time.Sleep(400 * time.Millisecond)
+	e.slow(false)
+	time.AfterFunc(300*time.Millisecond, func() { _ = os.Remove(prehold) })
+	for range ids {
+		if status := <-done; status != 200 {
+			t.Fatalf("a stop = %d", status)
+		}
+	}
+	for _, id := range ids {
+		e.waitTurn(id, "idle")
+		e.assertStoppedLast(id)
+	}
+
+	launched := len(e.launches())
+	e.restart()
+	time.Sleep(500 * time.Millisecond)
+	for _, id := range ids {
+		if e.thread(id).Thread.Turn != "idle" {
+			t.Errorf("thread %s was not left idle by the boot", id)
+		}
+		e.assertStoppedLast(id)
+	}
+	if len(e.launches()) != launched {
+		t.Errorf("a boot resumed a stopped turn: %d launches, was %d", len(e.launches()), launched)
+	}
+}
