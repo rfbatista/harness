@@ -12,7 +12,10 @@ import (
 // threads. The product owner reaches them through tools, each call made from
 // a thread's session.
 
-var _ ports.ProductOwnerMemoryTools = (*Service)(nil)
+var (
+	_ ports.ProductOwnerMemoryTools = (*Service)(nil)
+	_ ports.ProductOwnerMemory      = (*Service)(nil)
+)
 
 // threadOfSession is the thread a tool call comes from.
 func (s *Service) threadOfSession(ctx context.Context, sessionID string) (*domain.ProductOwnerThread, error) {
@@ -150,4 +153,62 @@ func (s *Service) applyByProductOwnerLocked(ctx context.Context, t *domain.Produ
 
 func (s *Service) announceMemory(projectID, entryID, op string) {
 	s.announce(ports.ProjectChange{ProductOwnerMemory: &ports.ProductOwnerMemoryChange{ProjectID: projectID, EntryID: entryID, Op: op}})
+}
+
+// Memory implements ports.ProductOwnerMemory.
+func (s *Service) Memory(ctx context.Context, projectID string) ([]ports.MemoryEntryView, error) {
+	if _, err := s.projects.GetProject(ctx, projectID); err != nil {
+		return nil, err
+	}
+	entries, err := s.store.MemoryEntries(ctx, projectID)
+	if err != nil {
+		return nil, err
+	}
+	out := make([]ports.MemoryEntryView, len(entries))
+	for i, e := range entries {
+		out[i] = s.memoryView(ctx, e)
+	}
+	return out, nil
+}
+
+// UpdateMemoryEntry implements ports.ProductOwnerMemory. A refused update
+// changes nothing.
+func (s *Service) UpdateMemoryEntry(ctx context.Context, entryID, text string) (*ports.MemoryEntryView, error) {
+	text, err := domain.ValidMemoryText(text)
+	if err != nil {
+		return nil, err
+	}
+	s.memMu.Lock()
+	defer s.memMu.Unlock()
+	e, err := s.store.MemoryEntry(ctx, entryID)
+	if err != nil {
+		return nil, err
+	}
+	now := time.Now()
+	e.Text, e.ChangedAt, e.ChangedBy = text, &now, domain.MemoryByPerson
+	return s.applyByPerson(ctx, *e, domain.MemoryOpChanged)
+}
+
+// DeleteMemoryEntry implements ports.ProductOwnerMemory.
+func (s *Service) DeleteMemoryEntry(ctx context.Context, entryID string) error {
+	s.memMu.Lock()
+	defer s.memMu.Unlock()
+	e, err := s.store.MemoryEntry(ctx, entryID)
+	if err != nil {
+		return err
+	}
+	_, err = s.applyByPerson(ctx, *e, domain.MemoryOpDropped)
+	return err
+}
+
+// applyByPerson stores the person's change and tells the feed. It adds no
+// thread item: a thread learns of it from the note on its next message.
+func (s *Service) applyByPerson(ctx context.Context, e domain.MemoryEntry, op string) (*ports.MemoryEntryView, error) {
+	change := domain.MemoryChange{ProjectID: e.ProjectID, EntryID: e.ID, Op: op, Text: e.Text, By: domain.MemoryByPerson, At: time.Now()}
+	if _, err := s.store.ApplyMemoryChange(ctx, e, change); err != nil {
+		return nil, err
+	}
+	s.announceMemory(e.ProjectID, e.ID, op)
+	v := s.memoryView(ctx, e)
+	return &v, nil
 }

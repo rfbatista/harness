@@ -35,3 +35,13 @@ type ProductOwnerMemoryTools interface {
 	ChangeMemory(ctx context.Context, sessionID, entryID, text string) (*MemoryEntryView, error)
 	DropMemory(ctx context.Context, sessionID, entryID string) error
 }
+
+// ProductOwnerMemory is what the person does with a project's memory in the
+// web UI: read the entries, edit one, delete one (ADR 0111).
+type ProductOwnerMemory interface {
+	// Memory answers the project's entries, the newest first.
+	Memory(ctx context.Context, projectID string) ([]MemoryEntryView, error)
+	// UpdateMemoryEntry answers MEMORY_ENTRY_NOT_FOUND and INVALID_INPUT.
+	UpdateMemoryEntry(ctx context.Context, entryID, text string) (*MemoryEntryView, error)
+	DeleteMemoryEntry(ctx context.Context, entryID string) error
+}

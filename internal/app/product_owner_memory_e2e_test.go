@@ -271,3 +271,133 @@ func TestTheProductOwnerIsServedTheMemoryToolsAndTheBriefTellsHowToUseThem(t *te
 		}
 	}
 }
+
+// memoryList reads the project's entries through the endpoint.
+func (e *poE2E) memoryList(project string) []memoryEntry {
+	e.t.Helper()
+	var out struct {
+		Entries []memoryEntry `json:"entries"`
+	}
+	if status, code := e.get("product_owner_memory?project_id="+project, &out); status != 200 {
+		e.t.Fatalf("GET memory = %d %s", status, code)
+	}
+	return out.Entries
+}
+
+func TestThePersonReadsTheEntriesNewestFirstWithTheirThreadAndTheyKeepTheirOrderAcrossARestart(t *testing.T) {
+	e := newPOE2E(t)
+	id, owner := e.ownerOf("what did we agree")
+	e.saveMemory(owner, "First.")
+	e.saveMemory(owner, "Second.")
+
+	list := e.memoryList(e.project)
+	if len(list) != 2 || list[0].Text != "Second." || list[1].Text != "First." {
+		t.Fatalf("entries = %+v", list)
+	}
+	if list[0].ThreadID != id || list[0].ThreadTitle != e.thread(id).Thread.Title || list[0].ChangedAt != nil || list[0].ChangedBy != nil || list[0].SavedAt == "" {
+		t.Errorf("entry = %+v", list[0])
+	}
+	e.restart()
+	if after := e.memoryList(e.project); len(after) != 2 || after[0] != list[0] && after[0].EntryID != list[0].EntryID {
+		t.Errorf("entries after the restart = %+v", after)
+	}
+	if status, code := e.get("product_owner_memory?project_id=nope", nil); status != 404 {
+		t.Errorf("an unknown project = %d %s, want 404", status, code)
+	}
+}
+
+func TestThePersonEditsAnEntryAndTheProductOwnerSeesTheNewText(t *testing.T) {
+	e := newPOE2E(t)
+	id, owner := e.ownerOf("hello")
+	saved := e.saveMemory(owner, "Ship on Fridays.")
+
+	var edited memoryEntry
+	if status, code := e.post("update_memory_entry", map[string]any{"entry_id": saved.EntryID, "text": "  Ship on Thursdays.  "}, &edited); status != 200 {
+		t.Fatalf("update = %d %s", status, code)
+	}
+	if edited.Text != "Ship on Thursdays." || edited.ChangedBy == nil || *edited.ChangedBy != "person" || edited.ChangedAt == nil || edited.SavedAt != saved.SavedAt || edited.ThreadID != id {
+		t.Fatalf("edited = %+v", edited)
+	}
+	if list := e.memoryList(e.project); len(list) != 1 || list[0].Text != "Ship on Thursdays." {
+		t.Errorf("list = %+v", list)
+	}
+	if out, _ := e.call(owner, "list_memory", nil); !strings.Contains(out, "Ship on Thursdays.") {
+		t.Errorf("the product owner reads %s", out)
+	}
+	// The person's edit leaves no item in the thread: only the product owner's calls do.
+	if n := len(e.memoryNotes(id)); n != 1 {
+		t.Errorf("notes = %d, want only the one the save left", n)
+	}
+	eventuallyPO(t, "one changed event", func() string {
+		evs := e.feed.of("product_owner_memory")
+		if len(evs) != 2 || evs[1]["op"] != "changed" || evs[1]["entry_id"] != saved.EntryID {
+			return "events = " + strings.Join(e.feed.changesOf("product_owner_memory"), ",")
+		}
+		return ""
+	})
+}
+
+func TestThePersonDeletesAnEntry(t *testing.T) {
+	e := newPOE2E(t)
+	_, owner := e.ownerOf("hello")
+	saved := e.saveMemory(owner, "Gone soon.")
+
+	var out map[string]any
+	if status, code := e.post("delete_memory_entry", map[string]any{"entry_id": saved.EntryID}, &out); status != 200 || len(out) != 0 {
+		t.Fatalf("delete = %d %s %v", status, code, out)
+	}
+	if list := e.memoryList(e.project); len(list) != 0 {
+		t.Errorf("list = %+v", list)
+	}
+	if text, _ := e.call(owner, "list_memory", nil); strings.Contains(text, "Gone soon.") {
+		t.Errorf("the product owner still lists it: %s", text)
+	}
+	eventuallyPO(t, "a dropped event", func() string {
+		evs := e.feed.of("product_owner_memory")
+		if len(evs) != 2 || evs[1]["op"] != "dropped" {
+			return "events = " + strings.Join(e.feed.changesOf("product_owner_memory"), ",")
+		}
+		return ""
+	})
+}
+
+func TestTheMemoryEndpointsRefuseWhatTheContractSays(t *testing.T) {
+	e := newPOE2E(t)
+	_, owner := e.ownerOf("hello")
+	saved := e.saveMemory(owner, "Kept.")
+
+	for name, c := range map[string]struct {
+		path       string
+		body       map[string]any
+		wantStatus int
+		wantCode   string
+	}{
+		"update unknown":  {"update_memory_entry", map[string]any{"entry_id": "nope", "text": "x"}, 404, "MEMORY_ENTRY_NOT_FOUND"},
+		"delete unknown":  {"delete_memory_entry", map[string]any{"entry_id": "nope"}, 404, "MEMORY_ENTRY_NOT_FOUND"},
+		"update empty":    {"update_memory_entry", map[string]any{"entry_id": saved.EntryID, "text": " "}, 400, "INVALID_INPUT"},
+		"update too long": {"update_memory_entry", map[string]any{"entry_id": saved.EntryID, "text": strings.Repeat("x", 4001)}, 400, "INVALID_INPUT"},
+	} {
+		if status, code := e.post(c.path, c.body, nil); status != c.wantStatus || code != c.wantCode {
+			t.Errorf("%s = %d %s, want %d %s", name, status, code, c.wantStatus, c.wantCode)
+		}
+	}
+	if list := e.memoryList(e.project); len(list) != 1 || list[0].Text != "Kept." || list[0].ChangedAt != nil {
+		t.Errorf("a refusal changed the entry: %+v", list)
+	}
+	if n := len(e.feed.of("product_owner_memory")); n != 1 {
+		t.Errorf("events = %d, a refusal announced one", n)
+	}
+}
+
+func TestAnotherProjectsListHoldsNoEntryOfThisOne(t *testing.T) {
+	e := newPOE2E(t)
+	_, owner := e.ownerOf("hello")
+	e.saveMemory(owner, "Private.")
+	other, err := e.cat.Projects.CreateProject(e.ctx, "other", e.t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if list := e.memoryList(other.ID); len(list) != 0 {
+		t.Errorf("the other project lists %+v", list)
+	}
+}
