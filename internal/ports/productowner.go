@@ -84,6 +84,9 @@ type ProductOwner interface {
 	StartThread(ctx context.Context, projectID, message string, attachmentIDs []string) (threadID, itemID string, err error)
 	SendMessage(ctx context.Context, threadID, message string, attachmentIDs []string) (itemID string, err error)
 	StopTurn(ctx context.Context, threadID string) error
+	// RenameThread sets the title the person chose; the product owner never
+	// replaces it.
+	RenameThread(ctx context.Context, threadID, title string) (*domain.ProductOwnerThread, error)
 }
 
 // The product owner's events on the project feed (the page stream): each

@@ -435,6 +435,7 @@ func NewRouter(h *Handler, opts ...Option) *echo.Echo {
 	g.POST("/start_product_owner_thread", h.handleStartProductOwnerThread)
 	g.POST("/send_product_owner_message", h.handleSendProductOwnerMessage)
 	g.POST("/stop_product_owner_turn", h.handleStopProductOwnerTurn)
+	g.POST("/rename_product_owner_thread", h.handleRenameProductOwnerThread)
 	g.POST("/get_instruction_proposal", h.handleGetInstructionProposal)
 	g.POST("/approve_instruction_proposal", h.handleApproveInstructionProposal)
 	g.POST("/reject_instruction_proposal", h.handleRejectInstructionProposal)

@@ -40,6 +40,8 @@ type ProductOwnerThreadModel struct {
 	PendingHeldActions int    `gorm:"column:pending_held_actions"`
 	AgentID            string `gorm:"column:agent_id"`
 	Prompt             string
+	LastMessageExcerpt string `gorm:"column:last_message_excerpt"`
+	TitleSetByPerson   bool   `gorm:"column:title_set_by_person"`
 }
 
 // TableName overrides the table name.
@@ -87,12 +89,14 @@ func (r *ProductOwnerRepository) SaveSettings(ctx context.Context, s domain.Prod
 
 func threadModel(t domain.ProductOwnerThread) ProductOwnerThreadModel {
 	return ProductOwnerThreadModel{ID: t.ID, ProjectID: t.ProjectID, SessionID: t.SessionID, Title: t.Title, Turn: t.Turn,
-		StartedAt: t.StartedAt, LastActivityAt: t.LastActivityAt, PendingHeldActions: t.PendingHeldActions, AgentID: t.AgentID, Prompt: t.Prompt}
+		StartedAt: t.StartedAt, LastActivityAt: t.LastActivityAt, PendingHeldActions: t.PendingHeldActions, AgentID: t.AgentID, Prompt: t.Prompt,
+		LastMessageExcerpt: t.LastMessageExcerpt, TitleSetByPerson: t.TitleSetByPerson}
 }
 
 func (m ProductOwnerThreadModel) domain() domain.ProductOwnerThread {
 	return domain.ProductOwnerThread{ID: m.ID, ProjectID: m.ProjectID, SessionID: m.SessionID, Title: m.Title, Turn: m.Turn,
-		StartedAt: m.StartedAt, LastActivityAt: m.LastActivityAt, PendingHeldActions: m.PendingHeldActions, AgentID: m.AgentID, Prompt: m.Prompt}
+		StartedAt: m.StartedAt, LastActivityAt: m.LastActivityAt, PendingHeldActions: m.PendingHeldActions, AgentID: m.AgentID, Prompt: m.Prompt,
+		LastMessageExcerpt: m.LastMessageExcerpt, TitleSetByPerson: m.TitleSetByPerson}
 }
 
 // CreateThread implements ports.ProductOwnerStore.

@@ -53,7 +53,10 @@ func ValidDigestTime(s string) error {
 
 // Turn states of a product-owner thread.
 const (
-	ProductOwnerTurnIdle        = "idle"
+	ProductOwnerTurnIdle = "idle"
+	// ProductOwnerTurnResuming is a thread whose session is waking up before
+	// its turn starts.
+	ProductOwnerTurnResuming    = "resuming"
 	ProductOwnerTurnRunning     = "running"
 	ProductOwnerTurnInterrupted = "interrupted"
 )
@@ -68,6 +71,10 @@ type ProductOwnerThread struct {
 	Turn           string    `json:"turn"`
 	StartedAt      time.Time `json:"started_at"`
 	LastActivityAt time.Time `json:"last_activity_at"`
+	// LastMessageExcerpt is the first line of the thread's last message, at
+	// most 160 characters; TitleSetByPerson says the person renamed the thread.
+	LastMessageExcerpt string `json:"last_message_excerpt"`
+	TitleSetByPerson   bool   `json:"title_set_by_person"`
 	// PendingHeldActions counts the held actions waiting on the person.
 	PendingHeldActions int `json:"pending_held_actions"`
 	// AgentID and Prompt are what the thread started with: a running thread
@@ -82,6 +89,7 @@ const (
 	ProductOwnerItemMessage  = "message"
 	ProductOwnerItemActivity = "activity"
 	ProductOwnerItemNotice   = "notice"
+	ProductOwnerItemFailure  = "failure"
 )
 
 // Authors of a message item.
@@ -104,6 +112,23 @@ type ProductOwnerItem struct {
 	Streaming bool   `json:"streaming,omitempty"`
 	// Stopped marks a message the person stopped while it streamed.
 	Stopped bool `json:"stopped,omitempty"`
+	// A failure's fields: Text says what happened, RetryItemID is the person's
+	// message to send again.
+	Code        string `json:"code,omitempty"`
+	RetryItemID string `json:"retry_item_id,omitempty"`
+}
+
+// ProductOwnerMaxTitle bounds a thread title the person sets, in characters.
+const ProductOwnerMaxTitle = 200
+
+// ProductOwnerExcerpt is the first line of a message, at most 160 characters.
+func ProductOwnerExcerpt(message string) string {
+	line, _, _ := strings.Cut(strings.TrimSpace(message), "\n")
+	line = strings.TrimSpace(line)
+	if r := []rune(line); len(r) > 160 {
+		line = strings.TrimSpace(string(r[:159])) + "…"
+	}
+	return line
 }
 
 // MarshalJSON writes the item as the contract shapes it: a message always

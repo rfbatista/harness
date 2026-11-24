@@ -1071,8 +1071,8 @@ func TestARestartInTheMiddleOfATurnResumesItWithANoticeAndLosesNoMessage(t *test
 			t.Errorf("an item is still streaming: %+v", it)
 		}
 	}
-	if len(answers) < 2 || !answers[0].Stopped || answers[len(answers)-1].Stopped || !strings.Contains(answers[len(answers)-1].Text, "what is in progress?") {
-		t.Errorf("answers = %+v, want the cut one kept as stopped and the continued one whole, answering the message", answers)
+	if len(answers) < 2 || answers[0].Text != "answer to: " || answers[0].Stopped || answers[len(answers)-1].Stopped || !strings.Contains(answers[len(answers)-1].Text, "what is in progress?") {
+		t.Errorf("answers = %+v, want the cut one kept as it arrived and the continued one whole, answering the message", answers)
 	}
 	if l := e.launches(); len(l) != 2 || !strings.Contains(l[1], "--resume "+got.Thread.SessionID) {
 		t.Errorf("launches = %q, want the session resumed once", l)
@@ -1417,5 +1417,177 @@ func TestAThreadsCallsAreAttributedToTheProductOwnerAndItsProject(t *testing.T) 
 	}
 	if sum.Totals.Requests != 1 {
 		t.Errorf("the project's usage counts %d requests, want the product owner's one", sum.Totals.Requests)
+	}
+}
+
+func TestTheThreadListCarriesTheLastMessageExcerptAndWhetherThePersonNamedIt(t *testing.T) {
+	e := newPOE2E(t)
+	id, _ := e.startThread("What was done this week?")
+	e.waitTurn(id, "idle")
+
+	type row struct {
+		ThreadID         string `json:"thread_id"`
+		Title            string `json:"title"`
+		Excerpt          string `json:"last_message_excerpt"`
+		TitleSetByPerson *bool  `json:"title_set_by_person"`
+	}
+	read := func() row {
+		var out struct {
+			Threads []row `json:"threads"`
+		}
+		e.get("product_owner_threads?project_id="+e.project, &out)
+		if len(out.Threads) != 1 {
+			t.Fatalf("threads = %+v", out.Threads)
+		}
+		return out.Threads[0]
+	}
+	got := read()
+	if got.Excerpt != "answer to: What was done this week?" || got.TitleSetByPerson == nil || *got.TitleSetByPerson {
+		t.Errorf("row = %+v, want the answer's first line as the excerpt and the title not set by the person", got)
+	}
+	long := strings.Repeat("y", 200) + "\nsecond line"
+	if status, code := e.send(id, long); status != 200 {
+		t.Fatalf("send = %d %s", status, code)
+	}
+	e.waitTurn(id, "idle")
+	if ex := read().Excerpt; len([]rune(ex)) > 160 || !strings.HasPrefix(ex, "answer to: yyy") {
+		t.Errorf("excerpt = %q, want one line of at most 160 characters", ex)
+	}
+}
+
+func TestThePersonRenamesAThreadAndTheNewTitleIsKeptAndAnnounced(t *testing.T) {
+	e := newPOE2E(t)
+	id, _ := e.startThread("first words")
+	e.waitTurn(id, "idle")
+
+	var renamed struct {
+		ThreadID         string `json:"thread_id"`
+		Title            string `json:"title"`
+		TitleSetByPerson bool   `json:"title_set_by_person"`
+	}
+	if status, code := e.post("rename_product_owner_thread", map[string]any{"thread_id": id, "title": "  Weekly review  "}, &renamed); status != 200 {
+		t.Fatalf("rename = %d %s", status, code)
+	}
+	if renamed.ThreadID != id || renamed.Title != "Weekly review" || !renamed.TitleSetByPerson {
+		t.Errorf("answer = %+v", renamed)
+	}
+	for name, title := range map[string]string{"empty": "   ", "too long": strings.Repeat("x", 201)} {
+		if status, code := e.post("rename_product_owner_thread", map[string]any{"thread_id": id, "title": title}, nil); status != 400 || code != "INVALID_INPUT" {
+			t.Errorf("%s title = %d %s, want 400 INVALID_INPUT", name, status, code)
+		}
+	}
+	if status, code := e.post("rename_product_owner_thread", map[string]any{"thread_id": "nope", "title": "x"}, nil); status != 404 || code != "THREAD_NOT_FOUND" {
+		t.Errorf("unknown thread = %d %s", status, code)
+	}
+
+	eventuallyPO(t, "the rename on the feed", func() string {
+		for _, c := range e.feed.of("product_owner_thread") {
+			if th, _ := c["thread"].(map[string]any); th["title"] == "Weekly review" && th["title_set_by_person"] == true {
+				return ""
+			}
+		}
+		return "no product_owner_thread event with the new title"
+	})
+
+	// Later turns do not replace it, and the restart keeps it.
+	e.send(id, "more")
+	e.waitTurn(id, "idle")
+	e.restart()
+	if got := e.thread(id).Thread.Title; got != "Weekly review" {
+		t.Errorf("title = %q after more turns and a restart", got)
+	}
+}
+
+func TestAResumeThatFailsKeepsThePersonsMessageAndLeavesAFailureItemToRetryFrom(t *testing.T) {
+	e := newPOE2E(t)
+	e.po.SetIdle(200 * time.Millisecond)
+	id, _ := e.startThread("first")
+	th := e.waitTurn(id, "idle")
+	eventuallyPO(t, "the idle process to end", func() string {
+		if e.orch.ProductOwnerRunning(th.Thread.SessionID) {
+			return "still running"
+		}
+		return ""
+	})
+
+	// claude can no longer be started: the next message cannot wake the session.
+	e.cfg.ClaudeBin = "claude-is-not-installed-here"
+	e.restart()
+	time.Sleep(200 * time.Millisecond)
+	var kept struct {
+		Code string `json:"code"`
+	}
+	b, _ := json.Marshal(map[string]any{"thread_id": id, "message": "second"})
+	res, err := http.Post(e.srv.URL+"/api/send_product_owner_message", "application/json", bytes.NewReader(b))
+	if err != nil {
+		t.Fatal(err)
+	}
+	_ = json.NewDecoder(res.Body).Decode(&kept)
+	res.Body.Close()
+	if res.StatusCode != 503 || kept.Code != "PRODUCT_OWNER_UNAVAILABLE" {
+		t.Fatalf("send = %d %s, want 503 PRODUCT_OWNER_UNAVAILABLE", res.StatusCode, kept.Code)
+	}
+
+	got := e.thread(id)
+	if got.Thread.Turn != "idle" {
+		t.Errorf("turn = %s, want idle", got.Thread.Turn)
+	}
+	var second, failure *poItem
+	for i, it := range got.Items {
+		if it.Kind == "message" && it.Text == "second" {
+			second = &got.Items[i]
+		}
+		if it.Kind == "failure" {
+			failure = &got.Items[i]
+		}
+	}
+	if second == nil || failure == nil {
+		t.Fatalf("items = %+v, want the person's message and a failure item", got.Items)
+	}
+	raw, _ := json.Marshal(failure)
+	_ = raw
+	var generic struct {
+		Items []map[string]any `json:"items"`
+	}
+	e.get("product_owner_thread?thread_id="+id, &generic)
+	for _, it := range generic.Items {
+		if it["kind"] == "failure" && (it["code"] != "SESSION_RESUME_FAILED" || it["retry_item_id"] != second.ItemID || it["text"] == "") {
+			t.Errorf("failure = %+v, want code SESSION_RESUME_FAILED, a text and retry_item_id %s", it, second.ItemID)
+		}
+	}
+
+	// Once claude can run again, sending the same text again works.
+	e.cfg.ClaudeBin = filepath.Join(e.fakeDir, "claude")
+	e.restart()
+	if status, code := e.send(id, "second"); status != 200 {
+		t.Fatalf("retry = %d %s", status, code)
+	}
+	e.waitTurn(id, "idle")
+}
+
+func TestAThreadReadsResumingWhileItsSessionWakesBeforeTheTurnRuns(t *testing.T) {
+	e := newPOE2E(t)
+	e.po.SetIdle(200 * time.Millisecond)
+	id, _ := e.startThread("first")
+	th := e.waitTurn(id, "idle")
+	eventuallyPO(t, "the idle process to end", func() string {
+		if e.orch.ProductOwnerRunning(th.Thread.SessionID) {
+			return "still running"
+		}
+		return ""
+	})
+	if status, code := e.send(id, "second"); status != 200 {
+		t.Fatalf("send = %d %s", status, code)
+	}
+	e.waitTurn(id, "idle")
+	var turns []string
+	for _, c := range e.feed.of("product_owner_thread") {
+		if th, _ := c["thread"].(map[string]any); th["thread_id"] == id {
+			turns = append(turns, th["turn"].(string))
+		}
+	}
+	got := strings.Join(turns, ",")
+	if !strings.Contains(got, "idle,resuming,running,idle") {
+		t.Errorf("turns = %s, want the second turn to go resuming, running, idle", got)
 	}
 }

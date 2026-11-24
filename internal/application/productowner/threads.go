@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"log/slog"
 	"strings"
 	"sync"
@@ -21,6 +22,7 @@ type run struct {
 	projectID string
 	sessionID string
 	unsub     func()
+	idleMu    sync.Mutex
 	idle      *time.Timer
 
 	mu sync.Mutex
@@ -77,13 +79,13 @@ func checkMessage(message string, attachmentIDs []string) (string, error) {
 	message = strings.TrimSpace(message)
 	switch {
 	case len(attachmentIDs) > domain.ProductOwnerMaxAttachments:
-		return "", invalidInput("a message takes at most 5 attachments")
+		return "", invalidInput(fmt.Sprintf("a message takes at most %d attachments", domain.ProductOwnerMaxAttachments))
 	case len(attachmentIDs) > 0:
 		return "", invalidInput("attachments are not available yet: " + attachmentIDs[0] + " is not an attachment of this project")
 	case message == "":
 		return "", invalidInput("message is empty")
 	case len([]rune(message)) > domain.ProductOwnerMaxMessage:
-		return "", invalidInput("message is over 20,000 characters")
+		return "", invalidInput(fmt.Sprintf("message is over %d characters", domain.ProductOwnerMaxMessage))
 	}
 	return message, nil
 }
@@ -118,7 +120,8 @@ func (s *Service) StartThread(ctx context.Context, projectID, message string, at
 		return "", "", err
 	}
 	t := domain.ProductOwnerThread{ID: id, ProjectID: projectID, SessionID: sessionID, Title: domain.ProductOwnerThreadTitle(message),
-		Turn: domain.ProductOwnerTurnIdle, StartedAt: now, LastActivityAt: now, AgentID: st.AgentID, Prompt: st.Prompt}
+		Turn: domain.ProductOwnerTurnIdle, StartedAt: now, LastActivityAt: now, AgentID: st.AgentID, Prompt: st.Prompt,
+		LastMessageExcerpt: domain.ProductOwnerExcerpt(message)}
 	if err := s.store.CreateThread(ctx, t); err != nil {
 		_ = s.sessions.Stop(ctx, sessionID)
 		return "", "", err
@@ -129,6 +132,8 @@ func (s *Service) StartThread(ctx context.Context, projectID, message string, at
 	r := s.attach(t)
 	itemID, err := s.deliver(ctx, &t, r, message)
 	if err != nil {
+		s.dropRun(r)
+		_ = s.sessions.Stop(ctx, sessionID)
 		return "", "", err
 	}
 	return t.ID, itemID, nil
@@ -165,37 +170,106 @@ func (s *Service) SendMessage(ctx context.Context, threadID, message string, att
 		return "", &domain.StructuredError{Code: "THREAD_BUSY", Message: "THREAD_BUSY: a turn of this thread is running; wait for the answer or stop it"}
 	}
 	r := s.runOf(t.ID)
-	if r == nil || !s.sessions.ProductOwnerRunning(t.SessionID) {
-		spec := ports.ProductOwnerSessionSpec{ProjectID: t.ProjectID, AgentID: t.AgentID, Prompt: t.Prompt}
-		if err := s.sessions.ResumeProductOwnerSession(ctx, t.SessionID, spec); err != nil {
-			return "", unavailableOr(err)
-		}
-		r = s.attach(*t)
+	if r != nil && s.sessions.ProductOwnerRunning(t.SessionID) {
+		return s.deliver(ctx, t, r, message)
 	}
-	return s.deliver(ctx, t, r, message)
+	// The person's message is stored first and kept whatever happens next; the
+	// thread reads resuming while its session wakes up.
+	item, err := s.storeMessage(ctx, t, message)
+	if err != nil {
+		return "", err
+	}
+	t.Turn = domain.ProductOwnerTurnResuming
+	if err := s.store.SaveThread(ctx, *t); err != nil {
+		return "", err
+	}
+	s.announceThread(*t)
+	spec := ports.ProductOwnerSessionSpec{ProjectID: t.ProjectID, AgentID: t.AgentID, Prompt: t.Prompt}
+	if err := s.sessions.ResumeProductOwnerSession(ctx, t.SessionID, spec); err != nil {
+		s.fail(ctx, t, item.ID, "SESSION_RESUME_FAILED", "The product owner's session could not be resumed: "+err.Error())
+		if wrapped := unavailableOr(err); wrapped != err {
+			return "", wrapped
+		}
+		return item.ID, nil
+	}
+	r = s.attach(*t)
+	if err := s.send(ctx, t, r, item.ID, message); err != nil {
+		return "", err
+	}
+	return item.ID, nil
+}
+
+// storeMessage stores the person's message as the thread's next item.
+func (s *Service) storeMessage(ctx context.Context, t *domain.ProductOwnerThread, message string) (domain.ProductOwnerItem, error) {
+	item, err := s.store.AppendItem(ctx, domain.ProductOwnerItem{ThreadID: t.ID, Kind: domain.ProductOwnerItemMessage, At: time.Now(),
+		Author: domain.ProductOwnerAuthorPerson, Text: message})
+	if err != nil {
+		return item, err
+	}
+	t.LastMessageExcerpt, t.LastActivityAt = domain.ProductOwnerExcerpt(message), item.At
+	s.announceItem(t, item)
+	return item, nil
+}
+
+// fail ends a turn that could not begin: a failure item names what happened
+// and which message to send again, and the thread is idle. Nothing else
+// changes.
+func (s *Service) fail(ctx context.Context, t *domain.ProductOwnerThread, retryItemID, code, text string) {
+	item, err := s.store.AppendItem(ctx, domain.ProductOwnerItem{ThreadID: t.ID, Kind: domain.ProductOwnerItemFailure, At: time.Now(),
+		Code: code, Text: text, RetryItemID: retryItemID})
+	if err == nil {
+		s.announceItem(t, item)
+	}
+	t.Turn, t.LastActivityAt = domain.ProductOwnerTurnIdle, time.Now()
+	if err := s.store.SaveThread(ctx, *t); err == nil {
+		s.announceThread(*t)
+	}
 }
 
 // deliver stores the person's message as the thread's next item, marks the
 // turn running and hands the message to the thread's process.
 func (s *Service) deliver(ctx context.Context, t *domain.ProductOwnerThread, r *run, message string) (string, error) {
-	now := time.Now()
-	item, err := s.store.AppendItem(ctx, domain.ProductOwnerItem{ThreadID: t.ID, Kind: domain.ProductOwnerItemMessage, At: now,
-		Author: domain.ProductOwnerAuthorPerson, Text: message})
+	item, err := s.storeMessage(ctx, t, message)
 	if err != nil {
 		return "", err
 	}
-	t.Turn, t.LastActivityAt = domain.ProductOwnerTurnRunning, now
-	if err := s.store.SaveThread(ctx, *t); err != nil {
-		return "", err
-	}
-	s.announceItem(t, item)
-	s.announceThread(*t)
-	s.resetIdle(r, false)
-	if err := s.sessions.Send(ctx, t.SessionID, message); err != nil {
-		s.finishTurn(t.ID)
+	if err := s.send(ctx, t, r, item.ID, message); err != nil {
 		return "", err
 	}
 	return item.ID, nil
+}
+
+// send marks the turn running and hands the stored message to the thread's
+// process. A process that cannot take it fails the turn.
+func (s *Service) send(ctx context.Context, t *domain.ProductOwnerThread, r *run, itemID, message string) error {
+	t.Turn = domain.ProductOwnerTurnRunning
+	if err := s.store.SaveThread(ctx, *t); err != nil {
+		return err
+	}
+	s.announceThread(*t)
+	s.resetIdle(r, false)
+	if err := s.sessions.Send(ctx, t.SessionID, message); err != nil {
+		s.fail(ctx, t, itemID, "SESSION_SEND_FAILED", "The message did not reach the product owner's session: "+err.Error())
+	}
+	return nil
+}
+
+// RenameThread implements ports.ProductOwner.
+func (s *Service) RenameThread(ctx context.Context, threadID, title string) (*domain.ProductOwnerThread, error) {
+	t, err := s.store.Thread(ctx, threadID)
+	if err != nil {
+		return nil, err
+	}
+	title = strings.TrimSpace(title)
+	if title == "" || len([]rune(title)) > domain.ProductOwnerMaxTitle {
+		return nil, invalidInput("title must be 1 to 200 characters")
+	}
+	t.Title, t.TitleSetByPerson = title, true
+	if err := s.store.SaveThread(ctx, *t); err != nil {
+		return nil, err
+	}
+	s.announceThread(*t)
+	return t, nil
 }
 
 // StopTurn implements ports.ProductOwner.
@@ -250,9 +324,7 @@ func (s *Service) dropRun(r *run) {
 		delete(s.runs, r.threadID)
 	}
 	s.mu.Unlock()
-	if r.idle != nil {
-		r.idle.Stop()
-	}
+	r.stopIdle()
 	r.unsub()
 }
 
@@ -262,8 +334,18 @@ func (s *Service) attach(t domain.ProductOwnerThread) *run {
 	ch, _, unsub := s.sessions.Subscribe(t.SessionID)
 	r := &run{threadID: t.ID, projectID: t.ProjectID, sessionID: t.SessionID, unsub: unsub}
 	s.mu.Lock()
+	old := s.runs[t.ID]
 	s.runs[t.ID] = r
 	s.mu.Unlock()
+	if old != nil {
+		// A process that is on its way out: what it still says is not the new
+		// turn's.
+		old.mu.Lock()
+		old.retired = true
+		old.mu.Unlock()
+		old.stopIdle()
+		old.unsub()
+	}
 	go s.consume(r, ch)
 	return r
 }
@@ -274,6 +356,8 @@ func (s *Service) resetIdle(r *run, armed bool) {
 	s.mu.Lock()
 	d := s.idle
 	s.mu.Unlock()
+	r.idleMu.Lock()
+	defer r.idleMu.Unlock()
 	if r.idle != nil {
 		r.idle.Stop()
 		r.idle = nil
@@ -287,6 +371,15 @@ func (s *Service) resetIdle(r *run, armed bool) {
 		}
 		_ = s.sessions.Stop(context.Background(), r.sessionID)
 	})
+}
+
+func (r *run) stopIdle() {
+	r.idleMu.Lock()
+	defer r.idleMu.Unlock()
+	if r.idle != nil {
+		r.idle.Stop()
+		r.idle = nil
+	}
 }
 
 // consume turns a process's events into the thread's items, until the
@@ -337,12 +430,14 @@ func (s *Service) handle(r *run, ev ports.SessionEvent) {
 		if r.cur != nil {
 			r.cur.Text, r.cur.Streaming = ev.Text, false
 			_ = s.store.SaveItem(ctx, *r.cur)
+			s.setExcerpt(ctx, t.ID, ev.Text)
 			s.announceItem(t, *r.cur)
 			r.cur = nil
 		} else if strings.TrimSpace(ev.Text) != "" {
 			item, err := s.store.AppendItem(ctx, domain.ProductOwnerItem{ThreadID: t.ID, Kind: domain.ProductOwnerItemMessage, At: time.Now(),
 				Author: domain.ProductOwnerAuthorProductOwner, Text: ev.Text})
 			if err == nil {
+				s.setExcerpt(ctx, t.ID, ev.Text)
 				s.announceItem(t, item)
 			}
 		}
@@ -357,6 +452,7 @@ func (s *Service) handle(r *run, ev ports.SessionEvent) {
 		if r.cur != nil {
 			r.cur.Text, r.cur.Streaming = r.text.String(), false
 			_ = s.store.SaveItem(ctx, *r.cur)
+			s.setExcerpt(ctx, t.ID, r.cur.Text)
 			s.announceItem(t, *r.cur)
 			r.cur = nil
 		}
@@ -371,9 +467,7 @@ func (s *Service) ended(r *run) {
 	s.mu.Lock()
 	closing := s.closing
 	s.mu.Unlock()
-	if r.idle != nil {
-		r.idle.Stop()
-	}
+	r.stopIdle()
 	if closing {
 		return
 	}
@@ -382,12 +476,17 @@ func (s *Service) ended(r *run) {
 	if r.retired {
 		return
 	}
+	ctx := context.Background()
+	t, err := s.store.Thread(ctx, r.threadID)
+	if err != nil {
+		return
+	}
+	cut := r.cur != nil || t.Turn == domain.ProductOwnerTurnRunning
 	if r.cur != nil {
-		r.cur.Text, r.cur.Streaming, r.cur.Stopped = r.text.String(), false, true
-		_ = s.store.SaveItem(context.Background(), *r.cur)
-		if t, err := s.store.Thread(context.Background(), r.threadID); err == nil {
-			s.announceItem(t, *r.cur)
-		}
+		// The process ended in the middle of an answer: what arrived is kept.
+		r.cur.Text, r.cur.Streaming = r.text.String(), false
+		_ = s.store.SaveItem(ctx, *r.cur)
+		s.announceItem(t, *r.cur)
 		r.cur = nil
 	}
 	s.mu.Lock()
@@ -395,7 +494,42 @@ func (s *Service) ended(r *run) {
 		delete(s.runs, r.threadID)
 	}
 	s.mu.Unlock()
+	if cut {
+		s.fail(ctx, t, s.lastPersonMessage(ctx, t.ID), "SESSION_ENDED", "The product owner's session ended before it finished its answer.")
+		return
+	}
 	s.finishTurn(r.threadID)
+}
+
+// lastPersonMessage is the id of the person's newest message in the thread, ""
+// when there is none.
+func (s *Service) lastPersonMessage(ctx context.Context, threadID string) string {
+	items, _, err := s.store.Items(ctx, threadID, "", recentItems)
+	if err != nil {
+		return ""
+	}
+	for i := len(items) - 1; i >= 0; i-- {
+		if it := items[i]; it.Kind == domain.ProductOwnerItemMessage && it.Author == domain.ProductOwnerAuthorPerson {
+			return it.ID
+		}
+	}
+	return ""
+}
+
+// recentItems is how many of a thread's newest items the service looks through
+// for the last of a kind.
+const recentItems = 20
+
+// setExcerpt keeps the first line of the thread's last message.
+func (s *Service) setExcerpt(ctx context.Context, threadID, text string) {
+	t, err := s.store.Thread(ctx, threadID)
+	if err != nil {
+		return
+	}
+	if ex := domain.ProductOwnerExcerpt(text); ex != "" && ex != t.LastMessageExcerpt {
+		t.LastMessageExcerpt = ex
+		_ = s.store.SaveThread(ctx, *t)
+	}
 }
 
 // finishTurn marks the thread idle.
@@ -481,13 +615,13 @@ func (s *Service) resumeInterrupted(ctx context.Context, t domain.ProductOwnerTh
 // finishPartialAnswers ends the answers the cut left streaming: what arrived
 // of each is kept, marked stopped.
 func (s *Service) finishPartialAnswers(ctx context.Context, t *domain.ProductOwnerThread) {
-	items, _, err := s.store.Items(ctx, t.ID, "", 20)
+	items, _, err := s.store.Items(ctx, t.ID, "", recentItems)
 	if err != nil {
 		return
 	}
 	for _, it := range items {
 		if it.Kind == domain.ProductOwnerItemMessage && it.Streaming {
-			it.Streaming, it.Stopped = false, true
+			it.Streaming = false
 			if err := s.store.SaveItem(ctx, it); err == nil {
 				s.announceItem(t, it)
 			}
@@ -500,7 +634,7 @@ func (s *Service) finishPartialAnswers(ctx context.Context, t *domain.ProductOwn
 // it is answered too.
 func (s *Service) continueTurn(ctx context.Context, t domain.ProductOwnerThread) string {
 	text := "The harness restarted during your turn, so it was interrupted. Before you redo anything, check what you already said in this conversation, then continue where you were."
-	items, _, err := s.store.Items(ctx, t.ID, "", 20)
+	items, _, err := s.store.Items(ctx, t.ID, "", recentItems)
 	if err != nil {
 		return text
 	}

@@ -59,6 +59,8 @@ type productOwnerThreadRow struct {
 	Title              string `json:"title"`
 	StartedAt          any    `json:"started_at"`
 	LastActivityAt     any    `json:"last_activity_at"`
+	LastMessageExcerpt string `json:"last_message_excerpt"`
+	TitleSetByPerson   bool   `json:"title_set_by_person"`
 	Turn               string `json:"turn"`
 	PendingHeldActions int    `json:"pending_held_actions"`
 }
@@ -73,7 +75,7 @@ func (h *Handler) handleListProductOwnerThreads(c echo.Context) error {
 	}
 	rows := make([]productOwnerThreadRow, len(threads))
 	for i, t := range threads {
-		rows[i] = productOwnerThreadRow{t.ID, t.Title, t.StartedAt, t.LastActivityAt, t.Turn, t.PendingHeldActions}
+		rows[i] = productOwnerThreadRow{t.ID, t.Title, t.StartedAt, t.LastActivityAt, t.LastMessageExcerpt, t.TitleSetByPerson, t.Turn, t.PendingHeldActions}
 	}
 	return c.JSON(http.StatusOK, map[string]any{"threads": rows})
 }
@@ -150,4 +152,22 @@ func (h *Handler) handleStopProductOwnerTurn(c echo.Context) error {
 		return err
 	}
 	return c.JSON(http.StatusOK, map[string]any{})
+}
+
+func (h *Handler) handleRenameProductOwnerThread(c echo.Context) error {
+	if err := h.productOwnerReady(); err != nil {
+		return err
+	}
+	var in struct {
+		ThreadID string `json:"thread_id"`
+		Title    string `json:"title"`
+	}
+	if err := bindJSON(c, &in); err != nil {
+		return err
+	}
+	t, err := h.productOwner.RenameThread(c.Request().Context(), in.ThreadID, in.Title)
+	if err != nil {
+		return err
+	}
+	return c.JSON(http.StatusOK, t)
 }
