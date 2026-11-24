@@ -394,3 +394,167 @@ func TestTheDigestListsTheSessionsThatEndedOrFailedAndWhatWaitsOnThePerson(t *te
 		t.Errorf("%d digests after a day with nothing but a waiting item, want 1", n)
 	}
 }
+
+func (e *poE2E) setEnabled(on bool) {
+	e.t.Helper()
+	if status, code := e.post("update_product_owner", map[string]any{"project_id": e.project, "enabled": on}, nil); status != 200 {
+		e.t.Fatalf("set enabled %v = %d %s", on, status, code)
+	}
+}
+
+// settle gives the scheduler time to tick, for a test that expects nothing.
+func settle() { time.Sleep(300 * time.Millisecond) }
+
+func TestAQuietDayRecordsNothingAndRunsNoModel(t *testing.T) {
+	e, clk := newDigestE2E(t)
+	e.setDigestTime("08:30")
+	// A product-owner thread is busy all day: it is not a change.
+	id, _ := e.startThread("hello")
+	e.waitTurn(id, "idle")
+	launches := len(e.launches())
+
+	clk.set(clk.at(1, 9, 0))
+	settle()
+	if n := len(e.digests("").Digests); n != 0 {
+		t.Fatalf("%d digests on a quiet day", n)
+	}
+	if n := len(e.launches()); n != launches {
+		t.Errorf("claude ran %d more times on a quiet day", n-launches)
+	}
+	if ev := e.feed.of("product_owner_digest"); len(ev) != 0 {
+		t.Errorf("digest events on a quiet day: %v", ev)
+	}
+
+	// A change that comes later in the day waits for the next day.
+	e.moveTask("Late change", domain.TicketStatusReview, clk.at(0, 15, 0))
+	clk.set(clk.at(0, 16, 0))
+	settle()
+	if n := len(e.digests("").Digests); n != 0 {
+		t.Fatalf("the quiet day was digested again the same day")
+	}
+	clk.set(clk.at(1, 9, 0))
+	if d := e.waitDigests(1).Digests[0]; len(d.Items) != 1 || d.Items[0].Title != "Late change" {
+		t.Errorf("items = %+v, want the late change", d.Items)
+	}
+}
+
+func TestAProductOwnerThatIsOffRecordsNothingAndCatchesUpWhenSwitchedOn(t *testing.T) {
+	e, clk := newDigestE2E(t)
+	e.setDigestTime("08:30")
+	e.setEnabled(false)
+	e.moveTask("Moved while off", domain.TicketStatusReview, clk.at(1, 6, 0))
+
+	clk.set(clk.at(1, 9, 0))
+	settle()
+	if n := len(e.digests("").Digests); n != 0 {
+		t.Fatalf("%d digests while the product owner is off", n)
+	}
+	if n := len(e.launches()); n != 0 {
+		t.Fatalf("claude ran %d times while the product owner is off", n)
+	}
+
+	e.setEnabled(true)
+	d := e.waitDigests(1).Digests[0]
+	if len(d.Items) != 1 || d.Items[0].Title != "Moved while off" {
+		t.Errorf("items = %+v, want what moved while it was off", d.Items)
+	}
+}
+
+func TestAProjectWithNoDigestTimeRecordsNothing(t *testing.T) {
+	e, clk := newDigestE2E(t)
+	e.moveTask("A change", domain.TicketStatusReview, clk.at(1, 6, 0))
+	clk.set(clk.at(1, 9, 0))
+	settle()
+	if n := len(e.digests("").Digests); n != 0 {
+		t.Fatalf("%d digests with no digest time", n)
+	}
+
+	e.setDigestTime("08:30")
+	e.setDigestTime("")
+	clk.set(clk.at(2, 9, 0))
+	settle()
+	if n := len(e.digests("").Digests); n != 0 || len(e.launches()) != 0 {
+		t.Errorf("%d digests and %d runs after the digest time was cleared", n, len(e.launches()))
+	}
+}
+
+func TestChangingTheDigestTimeTakesEffectAtOnce(t *testing.T) {
+	e, clk := newDigestE2E(t)
+	e.setDigestTime("10:00")
+	e.moveTask("A change", domain.TicketStatusReview, clk.at(1, 6, 0))
+
+	clk.set(clk.at(1, 9, 0))
+	settle()
+	if n := len(e.digests("").Digests); n != 0 {
+		t.Fatalf("%d digests before 10:00", n)
+	}
+	// An earlier time that has passed records now, once.
+	e.setDigestTime("08:30")
+	e.waitDigests(1)
+	// A later time, set after the day was digested, records nothing more today.
+	e.setDigestTime("09:30")
+	settle()
+	if n := len(e.digests("").Digests); n != 1 {
+		t.Errorf("%d digests after the time moved on the same day, want 1", n)
+	}
+	if n := len(e.launches()); n != 1 {
+		t.Errorf("claude ran %d times, want one", n)
+	}
+}
+
+func TestADigestTimeMissedWhileTheServerWasDownIsRecordedOnceAfterBootCoveringTheGap(t *testing.T) {
+	e, clk := newDigestE2E(t)
+	e.setDigestTime("08:30")
+	tk := e.moveTask("Day one", domain.TicketStatusReview, clk.at(1, 6, 0))
+	clk.set(clk.at(1, 9, 0))
+	first := e.waitDigests(1).Digests[0]
+
+	// Changes on three later days, then the server goes down over all of them.
+	e.moveExisting(tk, domain.TicketStatusInProgress, clk.at(2, 6, 0))
+	e.moveTask("Day three", domain.TicketStatusReview, clk.at(3, 7, 0))
+	e.moveTask("Day four", domain.TicketStatusReview, clk.at(4, 5, 0))
+	end := clk.at(4, 6, 0)
+	e.feed.stop()
+	e.srv.Close()
+	if err := e.app.Stop(e.ctx); err != nil {
+		t.Fatal(err)
+	}
+
+	// Booting before that day's digest time records nothing yet.
+	clk.set(clk.at(4, 7, 0))
+	e.boot()
+	e.serve()
+	settle()
+	if n := len(e.digests("").Digests); n != 1 {
+		t.Fatalf("%d digests after a boot before the digest time, want 1", n)
+	}
+
+	clk.set(end.Add(3 * time.Hour))
+	page := e.waitDigests(2)
+	gap := page.Digests[0]
+	if !gap.PeriodStart.Equal(first.PeriodEnd) || !gap.PeriodEnd.Equal(clk.Now()) {
+		t.Errorf("period = %s to %s, want %s to now", gap.PeriodStart, gap.PeriodEnd, first.PeriodEnd)
+	}
+	titles := map[string]bool{}
+	for _, it := range gap.Items {
+		titles[it.Title] = true
+	}
+	if len(gap.Items) != 3 || !titles["Day one"] || !titles["Day three"] || !titles["Day four"] {
+		t.Errorf("items = %+v, want the three tasks that moved in the gap", gap.Items)
+	}
+
+	// A restart the same day records nothing more.
+	e.restart()
+	settle()
+	if n := len(e.digests("").Digests); n != 2 {
+		t.Errorf("%d digests after a restart the same day, want 2", n)
+	}
+
+	// A gap with no change records nothing.
+	clk.set(clk.at(3, 9, 0))
+	e.restart()
+	settle()
+	if n := len(e.digests("").Digests); n != 2 {
+		t.Errorf("%d digests after a gap with no change, want 2", n)
+	}
+}
