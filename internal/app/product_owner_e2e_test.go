@@ -83,7 +83,7 @@ type poE2E struct {
 // every turn.
 const fakeHeadlessClaude = `#!/bin/sh
 dir=$(dirname "$0")
-echo "$*" >> "$dir/launches"
+echo "$*" > "$dir/launch.$$"
 echo "$ANTHROPIC_CUSTOM_HEADERS" >> "$dir/headers"
 prev=""
 for a in "$@"; do
@@ -517,17 +517,34 @@ func (e *poE2E) waitTurn(id, want string) poThread {
 }
 
 // launches are the command lines the stand-in claude was started with, one
-// entry per start or resume; an argument may span lines.
+// entry per start or resume, oldest first. Each process writes a file of its
+// own: two started together would interleave in one file.
 func (e *poE2E) launches() []string {
 	e.t.Helper()
-	b, _ := os.ReadFile(filepath.Join(e.fakeDir, "launches"))
-	var out []string
-	for _, l := range strings.Split(string(b), "\n") {
-		if strings.HasPrefix(l, "--output-format") {
-			out = append(out, l)
-		} else if len(out) > 0 {
-			out[len(out)-1] += "\n" + l
+	files, _ := filepath.Glob(filepath.Join(e.fakeDir, "launch.*"))
+	type launch struct {
+		at   time.Time
+		name string
+		text string
+	}
+	var all []launch
+	for _, f := range files {
+		info, err := os.Stat(f)
+		if err != nil {
+			continue
 		}
+		b, _ := os.ReadFile(f)
+		all = append(all, launch{info.ModTime(), f, strings.TrimRight(string(b), "\n")})
+	}
+	slices.SortFunc(all, func(x, y launch) int {
+		if c := x.at.Compare(y.at); c != 0 {
+			return c
+		}
+		return strings.Compare(x.name, y.name)
+	})
+	out := make([]string, len(all))
+	for i, l := range all {
+		out[i] = l.text
 	}
 	return out
 }
