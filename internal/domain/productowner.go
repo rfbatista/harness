@@ -90,6 +90,9 @@ const (
 	ProductOwnerItemActivity = "activity"
 	ProductOwnerItemNotice   = "notice"
 	ProductOwnerItemFailure  = "failure"
+	// ProductOwnerItemMemoryNote says the product owner saved, changed or
+	// dropped a memory entry (ADR 0111).
+	ProductOwnerItemMemoryNote = "memory_note"
 )
 
 // Authors of a message item.
@@ -116,6 +119,10 @@ type ProductOwnerItem struct {
 	// message to send again.
 	Code        string `json:"code,omitempty"`
 	RetryItemID string `json:"retry_item_id,omitempty"`
+	// A memory note's fields (its text is the entry's): Op is saved, changed or
+	// dropped.
+	Op      string `json:"op,omitempty"`
+	EntryID string `json:"entry_id,omitempty"`
 }
 
 // ProductOwnerMaxTitle bounds a thread title the person sets, in characters.
