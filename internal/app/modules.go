@@ -113,6 +113,7 @@ var PersistenceModule = fx.Module("persistence",
 		asPort(sqlite.NewInstructionDraftRepository, new(ports.InstructionDraftStore)),
 		asPort(sqlite.NewInstructionProposalRepository, new(ports.InstructionProposalStore)),
 		asPort(sqlite.NewProductOwnerRepository, new(ports.ProductOwnerStore)),
+		asPort(sqlite.NewProductOwnerDigestRepository, new(ports.ProductOwnerDigestStore)),
 	),
 )
 
@@ -1662,7 +1663,19 @@ var ProductOwnerModule = fx.Module("productowner",
 	fx.Provide(newProductOwner),
 	// Built at boot, so the threads a restart cut off are resumed.
 	fx.Invoke(func(*productowner.Service) {}),
+	// The daily digest (ADR 0113): its scheduler runs while the server does.
+	fx.Invoke(startProductOwnerDigests),
 )
+
+func startProductOwnerDigests(lc fx.Lifecycle, cfg Config, svc *productowner.Service, store ports.ProductOwnerDigestStore, owner ports.ProductOwnerStore, cat catalog.Catalog, orch *orchestration.Service, plan *planning.Service) {
+	d := productowner.NewDigests(store, owner, cat.Projects, svc, orch,
+		productowner.DigestSources{Tasks: plan, Changes: plan.StatusHistory}, cfg.DigestClock, cfg.DigestEvery)
+	svc.AttachDigests(d)
+	lc.Append(fx.Hook{
+		OnStart: func(context.Context) error { d.Start(); return nil },
+		OnStop:  func(context.Context) error { d.Stop(); return nil },
+	})
+}
 
 func newProductOwner(lc fx.Lifecycle, store ports.ProductOwnerStore, cat catalog.Catalog, orch *orchestration.Service) *productowner.Service {
 	svc := productowner.New(store, cat.Projects, cat.Agents, orch, orch)

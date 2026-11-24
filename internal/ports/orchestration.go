@@ -145,6 +145,8 @@ type ProjectChange struct {
 	ProductOwnerThreadItem *ProductOwnerThreadItemChange `json:"product_owner_thread_item,omitempty"`
 	ProductOwnerDelta      *ProductOwnerDeltaChange      `json:"product_owner_delta,omitempty"`
 	ProductOwnerThread     *ProductOwnerThreadChange     `json:"product_owner_thread,omitempty"`
+	// ProductOwnerDigest is a digest recorded.
+	ProductOwnerDigest *ProductOwnerDigestChange `json:"product_owner_digest,omitempty"`
 	// ContextChange says a session's context changed (contract "Harness server
 	// ↔ Web UI — session context", C5). Embedded, so its three fields are the
 	// whole message: {"kind":"context.changed","session_id":…,"reason":…}.
@@ -333,6 +335,8 @@ func (c ProjectChange) ProjectID() string {
 		return c.ProductOwnerDelta.ProjectID
 	case c.ProductOwnerThread != nil:
 		return c.ProductOwnerThread.ProjectID
+	case c.ProductOwnerDigest != nil:
+		return c.ProductOwnerDigest.ProjectID
 	case c.DesignSystemSaved != nil:
 		return c.DesignSystemSaved.ProjectID
 	case c.DesignSystemChanged != nil:

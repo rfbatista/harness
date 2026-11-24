@@ -47,6 +47,15 @@ type Service struct {
 	recovering map[string]bool
 	// waking holds the threads whose session a message is waking up.
 	waking map[string]bool
+	// digestTimeChanged is told when a project's digest time changes (ADR 0113).
+	digestTimeChanged func(ctx context.Context, projectID, before, after string)
+	// digests are the project digests the web UI's API reads through here.
+	digests *Digests
+}
+
+// OnDigestTimeChanged sets who is told when a project's digest time changes.
+func (s *Service) OnDigestTimeChanged(fn func(ctx context.Context, projectID, before, after string)) {
+	s.digestTimeChanged = fn
 }
 
 // DefaultIdle is how long a thread's process stays after its last turn.
@@ -134,6 +143,7 @@ func (s *Service) UpdateSettings(ctx context.Context, u ports.ProductOwnerSettin
 		}
 		st.Prompt = *u.Prompt
 	}
+	digestBefore := st.DigestTime
 	if u.DigestTime != nil {
 		if err := domain.ValidDigestTime(*u.DigestTime); err != nil {
 			return nil, err
@@ -142,6 +152,9 @@ func (s *Service) UpdateSettings(ctx context.Context, u ports.ProductOwnerSettin
 	}
 	if err := s.store.SaveSettings(ctx, st); err != nil {
 		return nil, err
+	}
+	if s.digestTimeChanged != nil && st.DigestTime != digestBefore {
+		s.digestTimeChanged(ctx, u.ProjectID, digestBefore, st.DigestTime)
 	}
 	v, err := s.view(ctx, u.ProjectID)
 	if err != nil {
