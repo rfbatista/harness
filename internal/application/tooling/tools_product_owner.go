@@ -87,8 +87,8 @@ func productOwnerReads(src ProductOwnerSources) []domain.Tool {
 		},
 		{
 			Name: "list_project_sessions",
-			Description: "List the other agent sessions of this project: for each, what it was asked (summary), its status and " +
-				"last action, its outcome (how it ended, and what became of its branch), the task it works on and its agent. " +
+			Description: "List the other agent sessions of this project: for each, what it was asked (summary), its status, " +
+				"its outcome (how it ended, and what became of its branch), the task it works on and its agent. " +
 				"That is all you can see of a session: its transcript and its worktree are not available to you.",
 			InputSchema: schemaFromJSON(`{"type":"object","properties":{"task_id":{"type":"string","description":"Only the sessions of this task."},"include_ended":{"type":"boolean","description":"Also list sessions that finished, failed or were stopped. Default: only the live ones."}}}`),
 			Source:      "code",
@@ -106,7 +106,7 @@ func productOwnerReads(src ProductOwnerSources) []domain.Tool {
 					}
 					rows = append(rows, map[string]any{
 						"id": s.ID, "agent_id": s.AgentID, "mode": s.Mode, "task_id": s.TicketID,
-						"summary": s.Task, "status": s.Status, "last_action": s.LastAction,
+						"summary": s.Task, "status": s.Status,
 						"outcome": sessionOutcome(s),
 					})
 				}

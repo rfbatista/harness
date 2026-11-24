@@ -85,6 +85,11 @@ const fakeHeadlessClaude = `#!/bin/sh
 dir=$(dirname "$0")
 echo "$*" >> "$dir/launches"
 echo "$ANTHROPIC_CUSTOM_HEADERS" >> "$dir/headers"
+prev=""
+for a in "$@"; do
+  if [ "$prev" = "--mcp-config" ]; then cat "$a" >> "$dir/mcpconfig" 2>/dev/null; echo >> "$dir/mcpconfig"; fi
+  prev="$a"
+done
 printf '%s\n' '{"type":"system","subtype":"init","session_id":"fake"}'
 n=0
 while IFS= read -r line; do
@@ -147,21 +152,25 @@ func newPOE2EWith(t *testing.T, tweak func(*Config)) *poE2E {
 
 func (e *poE2E) boot() {
 	e.t.Helper()
+	// The host's sandbox cannot nest in the one the tests run under: a driver
+	// that records each policy and confines nothing stands in. It is put in
+	// before the boot's recovery can start a session.
+	e.sandbox = &portstest.RecordingSandboxDriver{}
 	e.app = fx.New(
 		fx.Supply(e.cfg),
 		PersistenceModule, CatalogModule, PlanningModule, WorkspacesModule,
-		AgentRuntimeModule, TaskChannelModule, TextProcessingModule, NotificationsModule, AgentBoardModule, UsageModule, ProductOwnerModule,
+		AgentRuntimeModule, TaskChannelModule, TextProcessingModule, NotificationsModule, AgentBoardModule, UsageModule,
+		fx.Invoke(func(orch *orchestration.Service) {
+			if orch.Sandbox != nil {
+				orch.Sandbox.Driver = e.sandbox
+			}
+		}),
+		ProductOwnerModule,
 		fx.Populate(&e.orch, &e.plan, &e.cat, &e.po, &e.sess, &e.store, &e.shells, &e.channel, &e.art, &e.board, &e.usage, &e.notes),
 		fx.NopLogger,
 	)
 	if err := e.app.Start(e.ctx); err != nil {
 		e.t.Fatal(err)
-	}
-	// The host's sandbox cannot nest in the one the tests run under: a driver
-	// that records each policy and confines nothing stands in.
-	e.sandbox = &portstest.RecordingSandboxDriver{}
-	if e.orch.Sandbox != nil {
-		e.orch.Sandbox.Driver = e.sandbox
 	}
 }
 
@@ -714,8 +723,14 @@ func (e *poE2E) seedThread(title string, activity time.Time, n int) string {
 		e.t.Fatal(err)
 	}
 	for i := 1; i <= n; i++ {
+		// The last message is the product owner's, so a restart finds nothing
+		// unanswered to resume.
+		author := domain.ProductOwnerAuthorPerson
+		if i == n {
+			author = domain.ProductOwnerAuthorProductOwner
+		}
 		if _, err := e.store.AppendItem(e.ctx, domain.ProductOwnerItem{ThreadID: id, Kind: domain.ProductOwnerItemMessage, At: activity,
-			Author: domain.ProductOwnerAuthorPerson, Text: fmt.Sprintf("message %d", i)}); err != nil {
+			Author: author, Text: fmt.Sprintf("message %d", i)}); err != nil {
 			e.t.Fatal(err)
 		}
 	}
@@ -1102,7 +1117,7 @@ func TestAnIdleThreadStaysIdleThroughARestartWithNoNoticeAndNoProcess(t *testing
 	}
 }
 
-func TestAThreadWhoseResumeFailsStaysInterruptedUntilTheNextBootResumesIt(t *testing.T) {
+func TestAThreadWhoseResumeFailsAtBootGetsAFailureItemAndTakesAMessageNeverStuckBusy(t *testing.T) {
 	e := newPOE2E(t)
 	e.hold()
 	id, _ := e.startThread("cut off")
@@ -1116,20 +1131,160 @@ func TestAThreadWhoseResumeFailsStaysInterruptedUntilTheNextBootResumesIt(t *tes
 	good := e.cfg.ClaudeBin
 	e.cfg.ClaudeBin = "claude-is-not-installed-here"
 	e.restart()
-	time.Sleep(300 * time.Millisecond)
-	if got := e.thread(id).Thread.Turn; got != "interrupted" {
-		t.Fatalf("turn = %s, want interrupted while it cannot resume", got)
+	got := e.waitTurn(id, "idle")
+	var failure map[string]any
+	var generic struct {
+		Items []map[string]any `json:"items"`
 	}
-	if status, code := e.send(id, "meanwhile"); status != 409 || code != "THREAD_BUSY" {
-		t.Errorf("a message to an interrupted thread = %d %s, want 409 THREAD_BUSY", status, code)
+	e.get("product_owner_thread?thread_id="+id, &generic)
+	for _, it := range generic.Items {
+		if it["kind"] == "failure" {
+			failure = it
+		}
+	}
+	if failure == nil || failure["code"] != "SESSION_RESUME_FAILED" || failure["retry_item_id"] == "" || countItems(got.Items, "notice", "") != 0 {
+		t.Fatalf("items = %v, want a SESSION_RESUME_FAILED failure to retry from and no notice", generic.Items)
 	}
 
+	// Claude can run again: the thread takes the message, never THREAD_BUSY.
 	e.cfg.ClaudeBin = good
 	e.restart()
 	e.release()
+	if status, code := e.send(id, "again"); status != 200 {
+		t.Fatalf("send = %d %s, want it taken", status, code)
+	}
+	e.waitTurn(id, "idle")
+}
+
+func TestARestartDuringResumingOrBetweenStoringAMessageAndItsTurnIsRecoveredAndAnswered(t *testing.T) {
+	e := newPOE2E(t)
+	id, _ := e.startThread("first")
+	th := e.waitTurn(id, "idle")
+
+	// Cut off while the session was waking up.
+	cutOff, err := e.store.Thread(e.ctx, id)
+	if err != nil {
+		t.Fatal(err)
+	}
+	cutOff.Turn = domain.ProductOwnerTurnResuming
+	if err := e.store.SaveThread(e.ctx, *cutOff); err != nil {
+		t.Fatal(err)
+	}
+	e.restart()
+	e.waitTurn(id, "idle")
+	if n := countItems(e.thread(id).Items, "notice", "Continued after a restart"); n != 1 {
+		t.Errorf("%d notices after a restart during resuming, want 1", n)
+	}
+	before := len(e.messages(id))
+
+	// A message stored, and the crash before its turn ever started: the thread
+	// is idle with the person's message last.
+	if _, err := e.store.AppendItem(e.ctx, domain.ProductOwnerItem{ThreadID: id, Kind: domain.ProductOwnerItemMessage, At: time.Now(),
+		Author: domain.ProductOwnerAuthorPerson, Text: "stored but never delivered"}); err != nil {
+		t.Fatal(err)
+	}
+	e.restart()
+	eventuallyPO(t, "the unanswered message to be answered", func() string {
+		m := e.messages(id)
+		if e.thread(id).Thread.Turn != "idle" || len(m) < before+2 || !strings.Contains(m[len(m)-1].Text, "stored but never delivered") {
+			return "not answered yet"
+		}
+		return ""
+	})
+	_ = th
+}
+
+func TestAMessageAtTheIdleBoundaryIsDeliveredByAFreshResumeNeverFailed(t *testing.T) {
+	e := newPOE2E(t)
+	e.po.SetIdle(150 * time.Millisecond)
+	id, _ := e.startThread("first")
+	e.waitTurn(id, "idle")
+	for i, delay := range []time.Duration{100, 120, 135, 145, 150, 155, 165, 190} {
+		time.Sleep(delay * time.Millisecond)
+		if status, code := e.send(id, fmt.Sprintf("m%d", i)); status != 200 {
+			t.Fatalf("send %d after %dms = %d %s", i, delay, status, code)
+		}
+		e.waitTurn(id, "idle")
+	}
+	items := e.thread(id).Items
+	if n := countItems(items, "failure", ""); n != 0 {
+		t.Errorf("%d failure items: %+v", n, items)
+	}
+	for i := 0; i < 8; i++ {
+		if countItems(items, "message", fmt.Sprintf("answer to: m%d", i)) != 1 {
+			t.Errorf("message m%d has no answer: %+v", i, items)
+		}
+	}
+}
+
+func TestARenameDuringATurnIsNotLostWhenTheTurnEnds(t *testing.T) {
+	e := newPOE2E(t)
+	e.hold()
+	id, _ := e.startThread("a title the product owner would keep")
+	eventuallyPO(t, "the turn to run", func() string {
+		if e.thread(id).Thread.Turn != "running" {
+			return "not running"
+		}
+		return ""
+	})
+	if status, code := e.post("rename_product_owner_thread", map[string]any{"thread_id": id, "title": "Mine"}, nil); status != 200 {
+		t.Fatalf("rename = %d %s", status, code)
+	}
+	e.release()
 	got := e.waitTurn(id, "idle")
-	if countItems(got.Items, "notice", "Continued after a restart") != 1 {
-		t.Errorf("items = %+v, want one notice", got.Items)
+	if got.Thread.Title != "Mine" {
+		t.Errorf("title = %q after the turn, want the person's", got.Thread.Title)
+	}
+	var list struct {
+		Threads []struct {
+			TitleSetByPerson bool   `json:"title_set_by_person"`
+			Excerpt          string `json:"last_message_excerpt"`
+		} `json:"threads"`
+	}
+	e.get("product_owner_threads?project_id="+e.project, &list)
+	if len(list.Threads) != 1 || !list.Threads[0].TitleSetByPerson || list.Threads[0].Excerpt != "answer to: a title the product owner would keep" {
+		t.Errorf("list = %+v, want the rename and the answer's excerpt both kept", list.Threads)
+	}
+}
+
+func TestAStreamingMessageItemAlwaysCarriesItsTextKey(t *testing.T) {
+	e := newPOE2E(t)
+	e.hold()
+	id, _ := e.startThread("q")
+	eventuallyPO(t, "a streaming item on the feed", func() string {
+		for _, c := range e.feed.changesOf("product_owner_thread_item") {
+			if strings.Contains(c, `"streaming":true`) {
+				if !strings.Contains(c, `"text":`) {
+					return "a streaming item has no text key: " + c
+				}
+				return ""
+			}
+		}
+		return "none yet"
+	})
+	e.release()
+	e.waitTurn(id, "idle")
+}
+
+func TestTheProductOwnerIsNeverGivenTheServicesServerEvenWhenTheProjectAddsIt(t *testing.T) {
+	e := newPOE2E(t)
+	if e.orch.ServicesServerURL == nil {
+		t.Fatal("the host serves no services server: the test would prove nothing")
+	}
+	if _, err := e.cat.Projects.SetProjectMCPServers(e.ctx, e.project, []string{"services"}); err != nil {
+		t.Fatal(err)
+	}
+	id, _ := e.startThread("hello")
+	e.waitTurn(id, "idle")
+	cfg, _ := os.ReadFile(filepath.Join(e.fakeDir, "mcpconfig"))
+	if !strings.Contains(string(cfg), "task") {
+		t.Fatalf("the MCP config has no task server: %q", cfg)
+	}
+	if strings.Contains(string(cfg), "services") {
+		t.Errorf("the product owner was given the services server: %s", cfg)
+	}
+	if l := e.launches(); len(l) != 1 || strings.Contains(l[0], "mcp__services__") {
+		t.Errorf("the services tools are allowed: %q", l)
 	}
 }
 
@@ -1305,7 +1460,7 @@ func TestTheProductOwnerReadsTasksWithTheirHistoryAndOnlyTheStatusOutcomeAndSumm
 			t.Errorf("list_project_sessions lacks %q: %s", want, text)
 		}
 	}
-	for _, secret := range []string{"/secret", "ws-secret", "working_dir", "workspace", "transcript", "worktree"} {
+	for _, secret := range []string{"/secret", "ws-secret", "working_dir", "workspace", "transcript", "worktree", "last_action"} {
 		if strings.Contains(text, secret) {
 			t.Errorf("list_project_sessions shows %q: %s", secret, text)
 		}

@@ -140,10 +140,11 @@ func (i ProductOwnerItem) MarshalJSON() ([]byte, error) {
 	}
 	return json.Marshal(struct {
 		plain
-		Attachments []any `json:"attachments"`
-		Streaming   bool  `json:"streaming"`
-		Stopped     bool  `json:"stopped"`
-	}{plain: plain(i), Attachments: []any{}, Streaming: i.Streaming, Stopped: i.Stopped})
+		Text        string `json:"text"`
+		Attachments []any  `json:"attachments"`
+		Streaming   bool   `json:"streaming"`
+		Stopped     bool   `json:"stopped"`
+	}{plain: plain(i), Text: i.Text, Attachments: []any{}, Streaming: i.Streaming, Stopped: i.Stopped})
 }
 
 // ProductOwnerThreadTitle is a thread's title until the product owner names

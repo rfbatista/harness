@@ -46,6 +46,29 @@ func (s *Service) threadLock(id string) *sync.Mutex {
 	return l
 }
 
+// update changes a thread's row in one step: fn is applied to the row as it is
+// stored now, and the answer says whether it changed anything to save. Every
+// write of a thread goes through it, so none saves a stale copy of the whole
+// row over another's change, a rename in particular. t, when set, is
+// refreshed with the stored row.
+func (s *Service) update(ctx context.Context, threadID string, t *domain.ProductOwnerThread, fn func(*domain.ProductOwnerThread) bool) (*domain.ProductOwnerThread, error) {
+	s.rowMu.Lock()
+	defer s.rowMu.Unlock()
+	cur, err := s.store.Thread(ctx, threadID)
+	if err != nil {
+		return nil, err
+	}
+	if fn(cur) {
+		if err := s.store.SaveThread(ctx, *cur); err != nil {
+			return nil, err
+		}
+	}
+	if t != nil {
+		*t = *cur
+	}
+	return cur, nil
+}
+
 func (s *Service) available() error {
 	if s.sessions == nil {
 		return &domain.StructuredError{Code: "UNAVAILABLE", Message: "product owner threads are not available on this server"}
@@ -166,7 +189,9 @@ func (s *Service) SendMessage(ctx context.Context, threadID, message string, att
 	if t, err = s.store.Thread(ctx, threadID); err != nil {
 		return "", err
 	}
-	if t.Turn != domain.ProductOwnerTurnIdle {
+	// A turn state with no process behind it is stale (a crash left it): it
+	// never keeps the thread from taking a message.
+	if t.Turn != domain.ProductOwnerTurnIdle && (s.runOf(t.ID) != nil || s.isRecovering(t.ID)) {
 		return "", &domain.StructuredError{Code: "THREAD_BUSY", Message: "THREAD_BUSY: a turn of this thread is running; wait for the answer or stop it"}
 	}
 	r := s.runOf(t.ID)
@@ -179,8 +204,7 @@ func (s *Service) SendMessage(ctx context.Context, threadID, message string, att
 	if err != nil {
 		return "", err
 	}
-	t.Turn = domain.ProductOwnerTurnResuming
-	if err := s.store.SaveThread(ctx, *t); err != nil {
+	if _, err := s.update(ctx, t.ID, t, func(th *domain.ProductOwnerThread) bool { th.Turn = domain.ProductOwnerTurnResuming; return true }); err != nil {
 		return "", err
 	}
 	s.announceThread(*t)
@@ -206,7 +230,12 @@ func (s *Service) storeMessage(ctx context.Context, t *domain.ProductOwnerThread
 	if err != nil {
 		return item, err
 	}
-	t.LastMessageExcerpt, t.LastActivityAt = domain.ProductOwnerExcerpt(message), item.At
+	if _, err := s.update(ctx, t.ID, t, func(th *domain.ProductOwnerThread) bool {
+		th.LastMessageExcerpt, th.LastActivityAt = domain.ProductOwnerExcerpt(message), item.At
+		return true
+	}); err != nil {
+		return item, err
+	}
 	s.announceItem(t, item)
 	return item, nil
 }
@@ -220,8 +249,10 @@ func (s *Service) fail(ctx context.Context, t *domain.ProductOwnerThread, retryI
 	if err == nil {
 		s.announceItem(t, item)
 	}
-	t.Turn, t.LastActivityAt = domain.ProductOwnerTurnIdle, time.Now()
-	if err := s.store.SaveThread(ctx, *t); err == nil {
+	if _, err := s.update(ctx, t.ID, t, func(th *domain.ProductOwnerThread) bool {
+		th.Turn, th.LastActivityAt = domain.ProductOwnerTurnIdle, time.Now()
+		return true
+	}); err == nil {
 		s.announceThread(*t)
 	}
 }
@@ -242,8 +273,7 @@ func (s *Service) deliver(ctx context.Context, t *domain.ProductOwnerThread, r *
 // send marks the turn running and hands the stored message to the thread's
 // process. A process that cannot take it fails the turn.
 func (s *Service) send(ctx context.Context, t *domain.ProductOwnerThread, r *run, itemID, message string) error {
-	t.Turn = domain.ProductOwnerTurnRunning
-	if err := s.store.SaveThread(ctx, *t); err != nil {
+	if _, err := s.update(ctx, t.ID, t, func(th *domain.ProductOwnerThread) bool { th.Turn = domain.ProductOwnerTurnRunning; return true }); err != nil {
 		return err
 	}
 	s.announceThread(*t)
@@ -256,16 +286,18 @@ func (s *Service) send(ctx context.Context, t *domain.ProductOwnerThread, r *run
 
 // RenameThread implements ports.ProductOwner.
 func (s *Service) RenameThread(ctx context.Context, threadID, title string) (*domain.ProductOwnerThread, error) {
-	t, err := s.store.Thread(ctx, threadID)
-	if err != nil {
-		return nil, err
-	}
 	title = strings.TrimSpace(title)
 	if title == "" || len([]rune(title)) > domain.ProductOwnerMaxTitle {
+		if _, err := s.store.Thread(ctx, threadID); err != nil {
+			return nil, err
+		}
 		return nil, invalidInput("title must be 1 to 200 characters")
 	}
-	t.Title, t.TitleSetByPerson = title, true
-	if err := s.store.SaveThread(ctx, *t); err != nil {
+	t, err := s.update(ctx, threadID, nil, func(th *domain.ProductOwnerThread) bool {
+		th.Title, th.TitleSetByPerson = title, true
+		return true
+	})
+	if err != nil {
 		return nil, err
 	}
 	s.announceThread(*t)
@@ -365,12 +397,28 @@ func (s *Service) resetIdle(r *run, armed bool) {
 	if !armed || d <= 0 {
 		return
 	}
-	r.idle = time.AfterFunc(d, func() {
-		if s.runOf(r.threadID) != r {
-			return
-		}
-		_ = s.sessions.Stop(context.Background(), r.sessionID)
-	})
+	r.idle = time.AfterFunc(d, func() { s.stopIdle(r) })
+}
+
+// stopIdle ends the process of a thread that has waited for its next message.
+// It takes the thread's lock and checks the turn, so a message that arrives
+// now is either delivered to the process before this, which then leaves it
+// alone, or finds no run after it and wakes the session with a fresh resume.
+func (s *Service) stopIdle(r *run) {
+	lock := s.threadLock(r.threadID)
+	lock.Lock()
+	defer lock.Unlock()
+	ctx := context.Background()
+	t, err := s.store.Thread(ctx, r.threadID)
+	if err != nil || t.Turn != domain.ProductOwnerTurnIdle || s.runOf(r.threadID) != r {
+		return
+	}
+	r.mu.Lock()
+	r.retired = true
+	r.mu.Unlock()
+	s.dropRun(r)
+	_ = s.sessions.Stop(ctx, r.sessionID)
+	s.waitProcessEnd(ctx, r.sessionID)
 }
 
 func (r *run) stopIdle() {
@@ -522,28 +570,30 @@ const recentItems = 20
 
 // setExcerpt keeps the first line of the thread's last message.
 func (s *Service) setExcerpt(ctx context.Context, threadID, text string) {
-	t, err := s.store.Thread(ctx, threadID)
-	if err != nil {
-		return
-	}
-	if ex := domain.ProductOwnerExcerpt(text); ex != "" && ex != t.LastMessageExcerpt {
-		t.LastMessageExcerpt = ex
-		_ = s.store.SaveThread(ctx, *t)
-	}
+	ex := domain.ProductOwnerExcerpt(text)
+	_, _ = s.update(ctx, threadID, nil, func(th *domain.ProductOwnerThread) bool {
+		if ex == "" || ex == th.LastMessageExcerpt {
+			return false
+		}
+		th.LastMessageExcerpt = ex
+		return true
+	})
 }
 
 // finishTurn marks the thread idle.
 func (s *Service) finishTurn(threadID string) {
-	ctx := context.Background()
-	t, err := s.store.Thread(ctx, threadID)
-	if err != nil || t.Turn == domain.ProductOwnerTurnIdle {
-		return
+	changed := false
+	t, err := s.update(context.Background(), threadID, nil, func(th *domain.ProductOwnerThread) bool {
+		if th.Turn == domain.ProductOwnerTurnIdle {
+			return false
+		}
+		th.Turn, th.LastActivityAt = domain.ProductOwnerTurnIdle, time.Now()
+		changed = true
+		return true
+	})
+	if err == nil && changed {
+		s.announceThread(*t)
 	}
-	t.Turn, t.LastActivityAt = domain.ProductOwnerTurnIdle, time.Now()
-	if err := s.store.SaveThread(ctx, *t); err != nil {
-		return
-	}
-	s.announceThread(*t)
 }
 
 // Recover resumes the turns a restart cut off (ADR 0080, after ADR 0078's
@@ -554,7 +604,7 @@ func (s *Service) finishTurn(threadID string) {
 // stop a turn that was already running.
 func (s *Service) Recover(ctx context.Context) {
 	cut := map[string]domain.ProductOwnerThread{}
-	for _, turn := range []string{domain.ProductOwnerTurnRunning, domain.ProductOwnerTurnInterrupted} {
+	for _, turn := range []string{domain.ProductOwnerTurnRunning, domain.ProductOwnerTurnResuming, domain.ProductOwnerTurnInterrupted} {
 		threads, err := s.store.ThreadsWithTurn(ctx, turn)
 		if err != nil {
 			slog.Warn("read the product owner threads a restart cut off", "err", err)
@@ -564,22 +614,70 @@ func (s *Service) Recover(ctx context.Context) {
 			cut[t.ID] = t
 		}
 	}
-	for _, t := range cut {
-		t.Turn = domain.ProductOwnerTurnInterrupted
-		if err := s.store.SaveThread(ctx, t); err != nil {
-			slog.Warn("mark a product owner thread interrupted", "thread", t.ID, "err", err)
+	// A thread idle with the person's message unanswered was cut off between
+	// storing the message and starting the turn.
+	if idle, err := s.store.ThreadsWithTurn(ctx, domain.ProductOwnerTurnIdle); err == nil {
+		for _, t := range idle {
+			if s.unanswered(ctx, t.ID) {
+				cut[t.ID] = t
+			}
+		}
+	}
+	s.mu.Lock()
+	for id := range cut {
+		s.recovering[id] = true
+	}
+	s.mu.Unlock()
+	for id, t := range cut {
+		cur, err := s.update(ctx, id, nil, func(th *domain.ProductOwnerThread) bool {
+			th.Turn = domain.ProductOwnerTurnInterrupted
+			return true
+		})
+		if err != nil {
+			slog.Warn("mark a product owner thread interrupted", "thread", id, "err", err)
 			continue
 		}
-		s.announceThread(t)
-	}
-	for _, t := range cut {
+		s.announceThread(*cur)
 		t.Turn = domain.ProductOwnerTurnInterrupted
+		cut[id] = t
+	}
+	for id, t := range cut {
 		if err := s.resumeInterrupted(ctx, t); err != nil {
-			slog.Warn("resume a product owner thread a restart cut off", "thread", t.ID, "err", err)
+			slog.Warn("resume a product owner thread a restart cut off", "thread", id, "err", err)
 		}
+		s.mu.Lock()
+		delete(s.recovering, id)
+		s.mu.Unlock()
 	}
 }
 
+func (s *Service) isRecovering(threadID string) bool {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.recovering[threadID]
+}
+
+// unanswered says the newest message or failure in the thread is the person's
+// message: nothing answered it.
+func (s *Service) unanswered(ctx context.Context, threadID string) bool {
+	items, _, err := s.store.Items(ctx, threadID, "", recentItems)
+	if err != nil {
+		return false
+	}
+	for i := len(items) - 1; i >= 0; i-- {
+		switch it := items[i]; {
+		case it.Kind == domain.ProductOwnerItemMessage:
+			return it.Author == domain.ProductOwnerAuthorPerson
+		case it.Kind == domain.ProductOwnerItemFailure:
+			return false
+		}
+	}
+	return false
+}
+
+// resumeInterrupted wakes a cut-off thread's session and continues the turn.
+// A session that cannot be woken fails the turn: the person's message is kept,
+// the thread goes idle, and sending again is the retry.
 func (s *Service) resumeInterrupted(ctx context.Context, t domain.ProductOwnerThread) error {
 	if s.sessions == nil {
 		return nil
@@ -589,24 +687,26 @@ func (s *Service) resumeInterrupted(ctx context.Context, t domain.ProductOwnerTh
 	defer lock.Unlock()
 	spec := ports.ProductOwnerSessionSpec{ProjectID: t.ProjectID, AgentID: t.AgentID, Prompt: t.Prompt}
 	if err := s.sessions.ResumeProductOwnerSession(ctx, t.SessionID, spec); err != nil {
+		s.fail(ctx, &t, s.lastPersonMessage(ctx, t.ID), "SESSION_RESUME_FAILED", "The product owner's session could not be resumed after the restart: "+err.Error())
 		return err
 	}
 	s.finishPartialAnswers(ctx, &t)
 	r := s.attach(t)
-	now := time.Now()
-	notice, err := s.store.AppendItem(ctx, domain.ProductOwnerItem{ThreadID: t.ID, Kind: domain.ProductOwnerItemNotice, At: now, Text: "Continued after a restart"})
+	notice, err := s.store.AppendItem(ctx, domain.ProductOwnerItem{ThreadID: t.ID, Kind: domain.ProductOwnerItemNotice, At: time.Now(), Text: "Continued after a restart"})
 	if err != nil {
 		return err
 	}
-	t.Turn, t.LastActivityAt = domain.ProductOwnerTurnRunning, now
-	if err := s.store.SaveThread(ctx, t); err != nil {
+	if _, err := s.update(ctx, t.ID, &t, func(th *domain.ProductOwnerThread) bool {
+		th.Turn, th.LastActivityAt = domain.ProductOwnerTurnRunning, notice.At
+		return true
+	}); err != nil {
 		return err
 	}
 	s.announceItem(&t, notice)
 	s.announceThread(t)
 	s.resetIdle(r, false)
 	if err := s.sessions.Send(ctx, t.SessionID, s.continueTurn(ctx, t)); err != nil {
-		s.finishTurn(t.ID)
+		s.fail(ctx, &t, s.lastPersonMessage(ctx, t.ID), "SESSION_SEND_FAILED", "The product owner's session did not take the turn after the restart: "+err.Error())
 		return err
 	}
 	return nil

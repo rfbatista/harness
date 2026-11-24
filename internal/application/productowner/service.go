@@ -41,6 +41,10 @@ type Service struct {
 	runs    map[string]*run // by thread id: the threads whose process this server follows
 	locks   map[string]*sync.Mutex
 	closing bool
+	// rowMu serialises the writes of a thread row; recovering holds the threads
+	// the boot is resuming.
+	rowMu      sync.Mutex
+	recovering map[string]bool
 }
 
 // DefaultIdle is how long a thread's process stays after its last turn.
@@ -52,7 +56,7 @@ const DefaultIdle = 10 * time.Minute
 // unavailable.
 func New(store ports.ProductOwnerStore, projects Projects, agents Agents, feed ports.ProjectChangeSink, sessions ports.ProductOwnerSessions) *Service {
 	return &Service{store: store, projects: projects, agents: agents, feed: feed, sessions: sessions, idle: DefaultIdle,
-		runs: map[string]*run{}, locks: map[string]*sync.Mutex{}}
+		runs: map[string]*run{}, locks: map[string]*sync.Mutex{}, recovering: map[string]bool{}}
 }
 
 // SetIdle changes how long an idle thread's process stays; it applies to the
