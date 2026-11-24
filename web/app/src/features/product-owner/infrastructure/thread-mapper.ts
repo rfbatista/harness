@@ -41,7 +41,7 @@ export const toPage = (dto: ThreadPageDto): ThreadPage => ({ head: toHead(dto.th
 
 /** The event as the domain says it, or null for one whose parts are missing. */
 export function toEvent(dto: ProductOwnerEventDto): ProductOwnerEvent | null {
-  switch (dto.type) {
+  switch (dto.key) {
     case "product_owner_thread_item":
       return dto.thread_id !== undefined && dto.item ? { type: "item", threadId: dto.thread_id, item: toItem(dto.item) } : null;
     case "product_owner_delta":

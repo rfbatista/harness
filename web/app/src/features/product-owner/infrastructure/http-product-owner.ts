@@ -10,8 +10,8 @@ import { SettingsDto, UpdateSettingsRequestDto } from "./dto/settings-dto";
 import { ThreadListDto, ThreadPageDto, ThreadSummaryDto } from "./dto/thread-dto";
 import { toEvent, toPage, toSettings, toSummary } from "./thread-mapper";
 
-/** The page-stream path a project's product-owner events come on. */
-export const eventsPath = (projectId: string): string => `/product_owner/events?project_id=${encodeURIComponent(projectId)}`;
+/** The project's event feed on the page stream: the product owner's events are some of what it carries. */
+export const eventsPath = (projectId: string): string => `/events?project_id=${encodeURIComponent(projectId)}`;
 
 const KNOWN: readonly string[] = ["PRODUCT_OWNER_OFF", "THREAD_BUSY", "INVALID_INPUT", "PRODUCT_OWNER_UNAVAILABLE", "PROJECT_NOT_FOUND", "THREAD_NOT_FOUND", "NETWORK_ERROR", "BAD_RESPONSE"];
 
@@ -45,8 +45,8 @@ export function httpProductOwner(api: ApiClient, feed: Feed): ProductOwnerGatewa
         onMessage(data) {
           try {
             const dto = ProductOwnerEventDto.fromJSON(data);
-            // The stream is project-scoped; a message of another project is not for this follower.
-            if (dto.project_id !== projectId) return;
+            // The feed carries tasks and sessions too; and it is project-scoped, so another project's message is not for this follower.
+            if (dto === null || dto.project_id !== projectId) return;
             const event = toEvent(dto);
             if (event) onEvent(event);
           } catch (err) {

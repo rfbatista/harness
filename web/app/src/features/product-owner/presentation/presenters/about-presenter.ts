@@ -57,7 +57,7 @@ function about(state: ConversationState, list: ThreadList): AboutViewModel {
     started: summary ? startedText(summary.startedAt) : "",
     messages: `${count}${state.hasEarlier ? "+" : ""} ${count === 1 && !state.hasEarlier ? "message" : "messages"}`,
     link: state.threadId === null ? "" : threadHref(state.projectId, state.threadId),
-    contextHref: state.threadId !== null && state.sessionId !== "" ? contextHref(state.projectId, state.sessionId) : null,
+    contextHref: contextHref(),
     error: state.error?.code === "INVALID_INPUT" ? state.error.text : "",
   };
 }

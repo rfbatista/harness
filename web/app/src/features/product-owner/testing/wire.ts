@@ -25,19 +25,18 @@ export function itemWire(i: ThreadItem): unknown {
   }
 }
 
-/** The page-stream message for `event` of `projectId`. */
+/** The project feed's message for `event` of `projectId`: the feed's event object with one key set. */
 export function eventWire(projectId: string, e: ProductOwnerEvent): unknown {
-  const raw = { project_id: projectId } as Record<string, unknown>;
   switch (e.type) {
     case "item":
-      return { ...raw, type: "product_owner_thread_item", thread_id: e.threadId, item: itemWire(e.item) };
+      return { product_owner_thread_item: { project_id: projectId, thread_id: e.threadId, item: itemWire(e.item) } };
     case "delta":
-      return { ...raw, type: "product_owner_delta", thread_id: e.threadId, item_id: e.itemId, text: e.text };
+      return { product_owner_delta: { project_id: projectId, thread_id: e.threadId, item_id: e.itemId, text: e.text } };
     case "thread":
-      return { ...raw, type: "product_owner_thread", thread: summaryWire(e.thread) };
+      return { product_owner_thread: { project_id: projectId, thread: summaryWire(e.thread) } };
     case "settings":
-      return { ...raw, type: "product_owner_settings", settings: settingsWire(e.settings) };
+      return { product_owner_settings: { project_id: projectId, settings: settingsWire(e.settings) } };
   }
 }
 
-export const parseEvent = (raw: unknown): ProductOwnerEventDto => ProductOwnerEventDto.fromJSON(raw);
+export const parseEvent = (raw: unknown): ProductOwnerEventDto | null => ProductOwnerEventDto.fromJSON(raw);

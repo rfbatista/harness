@@ -73,17 +73,18 @@ test("the HTTP adapter sends the contract's bodies", async () => {
   ]);
 });
 
-test("the HTTP adapter drops a stream message it cannot read, and follows the project's path only", () => {
+test("the HTTP adapter follows the project's event feed, ignores what the feed carries that is not the product owner's, and drops a message it cannot read", () => {
   const { gateway, feed } = http();
   const seen: string[] = [];
   const stop = gateway.follow("p1", (e) => seen.push(e.type), () => {});
   const path = eventsPath("p1");
+  assert.equal(path, "/events?project_id=p1");
   assert.equal(feed.followers(path), 1);
   feed.emit(path, "garbage");
-  feed.emit(path, { type: "product_owner_delta", project_id: "p1", thread_id: "t1" });
-  feed.emit(path, { type: "product_owner_what", project_id: "p1" });
-  feed.emit(path, { type: "product_owner_delta", project_id: "p2", thread_id: "t9", item_id: "i9", text: "not mine" });
-  feed.emit(path, { type: "product_owner_delta", project_id: "p1", thread_id: "t1", item_id: "i1", text: "ok" });
+  feed.emit(path, { session: { id: "s1" }, ticket: { id: "t1" } });
+  feed.emit(path, { product_owner_delta: { project_id: "p1", thread_id: "t1" } });
+  feed.emit(path, { product_owner_delta: { project_id: "p2", thread_id: "t9", item_id: "i9", text: "not mine" } });
+  feed.emit(path, { product_owner_delta: { project_id: "p1", thread_id: "t1", item_id: "i1", text: "ok" } });
   assert.deepEqual(seen, ["delta"]);
   stop();
   assert.equal(feed.followers(path), 0);

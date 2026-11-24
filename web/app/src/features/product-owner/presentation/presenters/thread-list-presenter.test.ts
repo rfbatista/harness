@@ -93,7 +93,7 @@ describe("the thread list", () => {
 });
 
 describe("about this thread", () => {
-  test("tells its title, when it started, how many messages, its link and its Context tab", async () => {
+  test("tells its title, when it started, how many messages, and its link; the Context tab has no page to link to yet", async () => {
     const { about } = await setup();
     assert.deepEqual({ ...about.viewModel }, {
       available: true,
@@ -101,7 +101,7 @@ describe("about this thread", () => {
       started: startedText(at(23, 8)),
       messages: "1 message",
       link: "/projects/p1/product-owner/threads/a",
-      contextHref: "/projects/p1/sessions/sess-a?tab=context",
+      contextHref: null,
       error: "",
     });
   });

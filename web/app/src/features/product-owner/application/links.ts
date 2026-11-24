@@ -11,5 +11,9 @@ export const threadHref = (projectId: string, threadId: string): string => `${pa
 /** The project's Settings page at its product owner section. */
 export const settingsHref = (projectId: string): string => `${project(projectId)}/settings#product-owner`;
 
-/** The Context tab of the thread's session: the agent, prompt and model the thread started with (ADR 0099). */
-export const contextHref = (projectId: string, sessionId: string): string => `${project(projectId)}/sessions/${encodeURIComponent(sessionId)}?tab=context`;
+/**
+ * The Context tab of the thread's session (ADR 0099): where the agent, prompt and model a thread
+ * started with are read. The tab is not served for a session that has no task, so there is no link
+ * to give yet; this is the one place that will build it.
+ */
+export const contextHref = (): string | null => null;
