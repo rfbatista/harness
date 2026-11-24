@@ -3,6 +3,7 @@ package productowner
 import (
 	"context"
 	"fmt"
+	"net/url"
 	"sort"
 	"strings"
 	"sync"
@@ -29,8 +30,12 @@ type OneOff interface {
 
 // DigestSources are what the collection reads of the project.
 type DigestSources struct {
-	Tasks   ports.TicketReader
-	Changes ports.TaskStatusChangeRepository
+	Tasks    ports.TicketReader
+	Changes  ports.TaskStatusChangeRepository
+	Sessions ports.SessionRepository
+	// Notes is the person's inbox, the source of what waits on them; nil
+	// leaves that out.
+	Notes ports.NotificationReader
 }
 
 // Digests collects, writes and keeps the daily digests of every project whose
@@ -212,8 +217,71 @@ func (d *Digests) dueToday(digestTime string, now time.Time) bool {
 }
 
 // collect is what changed in the project in (since, until], with no model.
+// What waits on the person is listed when something changed, and is never a
+// change by itself: a thing that keeps waiting would else be a digest a day.
 func (d *Digests) collect(ctx context.Context, p *domain.Project, since, until time.Time) []domain.ProductOwnerDigestItem {
-	return d.collectTaskMoves(ctx, p, since, until)
+	items := append(d.collectTaskMoves(ctx, p, since, until), d.collectSessions(p, since, until)...)
+	if len(items) == 0 {
+		return nil
+	}
+	return append(items, d.collectWaiting(ctx, p, items)...)
+}
+
+// collectSessions has the project's sessions that finished or failed in the
+// period. Product-owner sessions are not listed: the repository leaves them out
+// of its lists. A session the person stopped is neither.
+func (d *Digests) collectSessions(p *domain.Project, since, until time.Time) []domain.ProductOwnerDigestItem {
+	if d.src.Sessions == nil {
+		return nil
+	}
+	var out []domain.ProductOwnerDigestItem
+	for _, s := range d.src.Sessions.List(context.Background(), ports.SessionFilter{ProjectID: p.ID}) {
+		if s.StatusSince.After(until) || !s.StatusSince.After(since) {
+			continue
+		}
+		kind := ""
+		switch s.Status {
+		case domain.SessionDone:
+			kind = domain.DigestItemSessionEnded
+		case domain.SessionFailed:
+			kind = domain.DigestItemSessionFailed
+		default:
+			continue
+		}
+		out = append(out, domain.ProductOwnerDigestItem{Kind: kind, Title: s.Task, URL: sessionLink(p.ID, s.TicketID, s.ID)})
+	}
+	return out
+}
+
+// sessionLink is the page of a session: its task's, or its project's.
+func sessionLink(projectID, taskID, sessionID string) string {
+	return domain.TaskLink(projectID, taskID) + "?session=" + url.QueryEscape(sessionID)
+}
+
+// collectWaiting is what waits on the person now: the open items of the inbox
+// (reviews, approvals, tasks in review, failed sessions), apart from a failed
+// session the digest already lists.
+func (d *Digests) collectWaiting(ctx context.Context, p *domain.Project, listed []domain.ProductOwnerDigestItem) []domain.ProductOwnerDigestItem {
+	if d.src.Notes == nil {
+		return nil
+	}
+	open := true
+	page, err := d.src.Notes.ListNotifications(ctx, ports.NotificationQuery{ProjectID: p.ID, Open: &open, Limit: 50})
+	if err != nil {
+		return nil
+	}
+	seen := map[string]bool{}
+	for _, it := range listed {
+		seen[it.URL] = true
+	}
+	var out []domain.ProductOwnerDigestItem
+	for _, n := range page.Notifications {
+		if n.Kind == domain.NotificationSessionFailed && seen[sessionLink(p.ID, n.TaskID, n.SessionID)] {
+			continue
+		}
+		out = append(out, domain.ProductOwnerDigestItem{Kind: domain.DigestItemWaitingOnPerson, Title: n.Title, URL: n.Link})
+	}
+	return out
 }
 
 // collectTaskMoves has one item per task that moved: from where it was when

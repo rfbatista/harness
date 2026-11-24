@@ -54,6 +54,7 @@ import (
 	"operators-mcp/internal/application/execution"
 	"operators-mcp/internal/application/gitcredentials"
 	"operators-mcp/internal/application/keychainpath"
+	"operators-mcp/internal/application/notifications"
 	"operators-mcp/internal/application/orchestration"
 	"operators-mcp/internal/application/planning"
 	"operators-mcp/internal/application/productowner"
@@ -1667,9 +1668,19 @@ var ProductOwnerModule = fx.Module("productowner",
 	fx.Invoke(startProductOwnerDigests),
 )
 
-func startProductOwnerDigests(lc fx.Lifecycle, cfg Config, svc *productowner.Service, store ports.ProductOwnerDigestStore, owner ports.ProductOwnerStore, cat catalog.Catalog, orch *orchestration.Service, plan *planning.Service) {
-	d := productowner.NewDigests(store, owner, cat.Projects, svc, orch,
-		productowner.DigestSources{Tasks: plan, Changes: plan.StatusHistory}, cfg.DigestClock, cfg.DigestEvery)
+// digestInbox is the inbox when NotificationsModule is in the graph.
+type digestInbox struct {
+	fx.In
+
+	Service *notifications.Service `optional:"true"`
+}
+
+func startProductOwnerDigests(lc fx.Lifecycle, cfg Config, svc *productowner.Service, store ports.ProductOwnerDigestStore, owner ports.ProductOwnerStore, cat catalog.Catalog, orch *orchestration.Service, plan *planning.Service, sessions ports.SessionRepository, inbox digestInbox) {
+	src := productowner.DigestSources{Tasks: plan, Changes: plan.StatusHistory, Sessions: sessions}
+	if inbox.Service != nil {
+		src.Notes = inbox.Service
+	}
+	d := productowner.NewDigests(store, owner, cat.Projects, svc, orch, src, cfg.DigestClock, cfg.DigestEvery)
 	svc.AttachDigests(d)
 	lc.Append(fx.Hook{
 		OnStart: func(context.Context) error { d.Start(); return nil },

@@ -40,7 +40,7 @@ func (r *SessionRepository) Create(s *domain.Session) (*domain.Session, error) {
 		WorkingDir:      s.WorkingDir,
 		Model:           s.Model,
 		Status:          string(s.Status),
-		StatusSinceMs:   time.Now().UnixMilli(),
+		StatusSinceMs:   statusSince(s),
 		AutoRun:         s.AutoRun,
 		WorkspaceID:     s.WorkspaceID,
 		Branch:          s.Branch,
@@ -470,4 +470,13 @@ func (r *SessionRepository) ActivityByProject() (map[string]ports.SessionActivit
 		out[row.ProjectID] = ports.SessionActivity{LiveCount: row.Live, LastActivityAt: time.UnixMilli(row.Last)}
 	}
 	return out, nil
+}
+
+// statusSince is when a new session entered its status: now, unless the
+// caller says otherwise.
+func statusSince(s *domain.Session) int64 {
+	if !s.StatusSince.IsZero() {
+		return s.StatusSince.UnixMilli()
+	}
+	return time.Now().UnixMilli()
 }

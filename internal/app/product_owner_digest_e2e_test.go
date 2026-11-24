@@ -329,3 +329,68 @@ func TestDigestsPageNewestFirstThirtyAtATime(t *testing.T) {
 		t.Errorf("unknown project = %d %s, want 404 PROJECT_NOT_FOUND", status, code)
 	}
 }
+
+// endSession records a session of the project that is over, as of at.
+func (e *poE2E) endSession(id, task string, status domain.SessionStatus, mode domain.SessionMode, taskID string, at time.Time) {
+	e.t.Helper()
+	if _, err := e.sess.Create(&domain.Session{ID: id, ProjectID: e.project, TicketID: taskID, Task: task, Status: status, Mode: mode, StatusSince: at}); err != nil {
+		e.t.Fatal(err)
+	}
+}
+
+func TestTheDigestListsTheSessionsThatEndedOrFailedAndWhatWaitsOnThePerson(t *testing.T) {
+	e, clk := newDigestE2E(t)
+	e.setDigestTime("08:30")
+	tk := e.moveTask("A task with sessions", domain.TicketStatusReview, clk.at(1, 5, 0))
+	e.endSession("ended-1", "Build the export", domain.SessionDone, domain.SessionModeImplement, tk.ID, clk.at(1, 5, 30))
+	e.endSession("failed-1", "Migrate the schema", domain.SessionFailed, domain.SessionModeImplement, tk.ID, clk.at(1, 6, 0))
+	// A stopped session, a product-owner session and a session that ended
+	// before the period are not reported.
+	e.endSession("stopped-1", "Stopped by the person", domain.SessionStopped, domain.SessionModeImplement, tk.ID, clk.at(1, 6, 30))
+	e.endSession("po-1", "Product owner: harness", domain.SessionDone, domain.SessionModeProductOwner, "", clk.at(1, 7, 0))
+	e.endSession("old-1", "Ended long ago", domain.SessionDone, domain.SessionModeImplement, tk.ID, clk.at(0, 19, 0))
+	if _, err := e.notes.Notify(e.ctx, ports.NotifyRequest{ProjectID: e.project, TaskID: tk.ID, Title: "Review the export", Level: domain.NotificationAction}); err != nil {
+		t.Fatal(err)
+	}
+
+	clk.set(clk.at(1, 8, 31))
+	d := e.waitDigests(1).Digests[0]
+	byKind := map[string][]poDigestItem{}
+	for _, it := range d.Items {
+		byKind[it.Kind] = append(byKind[it.Kind], it)
+	}
+	wantSession := func(kind, title, id string) {
+		t.Helper()
+		got := byKind[kind]
+		if len(got) != 1 || got[0].Title != title || got[0].URL != "/projects/"+e.project+"/tasks/"+tk.ID+"?session="+id {
+			t.Errorf("%s items = %+v, want %q at the session's page", kind, got, title)
+		}
+	}
+	wantSession("session_ended", "Build the export", "ended-1")
+	wantSession("session_failed", "Migrate the schema", "failed-1")
+	if got := byKind["task_moved"]; len(got) != 1 {
+		t.Errorf("task_moved items = %+v", got)
+	}
+	if got := byKind["waiting_on_person"]; len(got) != 1 || got[0].Title != "Review the export" || got[0].URL != "/projects/"+e.project+"/tasks/"+tk.ID {
+		t.Errorf("waiting_on_person items = %+v, want the open review", got)
+	}
+	if len(d.Items) != 4 {
+		t.Errorf("items = %+v, want four", d.Items)
+	}
+
+	// What the one-off run is given is the collected items, each with its title and url.
+	prompt, _ := os.ReadFile(filepath.Join(e.fakeDir, "received"))
+	for _, it := range d.Items {
+		if !strings.Contains(string(prompt), it.Title) || !strings.Contains(string(prompt), it.URL) {
+			t.Errorf("the digest prompt lacks %q or %q: %s", it.Title, it.URL, prompt)
+		}
+	}
+
+	// The next day only the thing still waiting is left: it is not a change,
+	// so the day is quiet and nothing is recorded.
+	clk.set(clk.at(1, 9, 0))
+	time.Sleep(300 * time.Millisecond)
+	if n := len(e.digests("").Digests); n != 1 {
+		t.Errorf("%d digests after a day with nothing but a waiting item, want 1", n)
+	}
+}
