@@ -96,6 +96,7 @@ while IFS= read -r line; do
   n=$((n+1))
   text=$(printf '%s' "$line" | sed -n 's/.*"text":"\([^"]*\)".*/\1/p')
   echo "$text" >> "$dir/received"
+  while [ -f "$dir/prehold" ]; do sleep 0.05; done
   case "$text" in read:*) printf '%s\n' '{"type":"assistant","session_id":"fake","message":{"role":"assistant","content":[{"type":"tool_use","id":"t1","name":"Read","input":{"file_path":"project/docs/prd.md"}}]}}';; esac
   printf '%s\n' '{"type":"stream_event","session_id":"fake","event":{"type":"content_block_delta","index":0,"delta":{"type":"text_delta","text":"answer to: "}}}'
   while [ -f "$dir/hold" ]; do sleep 0.05; done
@@ -162,7 +163,8 @@ func (e *poE2E) boot() {
 		AgentRuntimeModule, TaskChannelModule, TextProcessingModule, NotificationsModule, AgentBoardModule, UsageModule,
 		fx.Invoke(func(orch *orchestration.Service) {
 			if orch.Sandbox != nil {
-				orch.Sandbox.Driver = e.sandbox
+				// The gate holds a start only while the file "slowstart" exists.
+				orch.Sandbox.Driver = gatedSandbox{SandboxDriver: e.sandbox, gate: filepath.Join(e.fakeDir, "slowstart")}
 			}
 		}),
 		ProductOwnerModule,
@@ -1822,4 +1824,91 @@ func TestASecondMessageDuringAWakeUpIsRefusedAtOnceNotAfterTheWakeUp(t *testing.
 		t.Errorf("the message that woke the thread = %d", status)
 	}
 	e.waitTurn(id, "idle")
+}
+
+func TestAStopBeforeTheFirstWordIsAnsweredByAStoppedMessageAndNoBootResumesIt(t *testing.T) {
+	e := newPOE2E(t)
+	prehold := filepath.Join(e.fakeDir, "prehold")
+	if err := os.WriteFile(prehold, nil, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	id, _ := e.startThread("stopped before any word")
+	eventuallyPO(t, "the process to hold the message", func() string {
+		if b, _ := os.ReadFile(filepath.Join(e.fakeDir, "received")); !strings.Contains(string(b), "stopped before any word") {
+			return "not received yet"
+		}
+		return ""
+	})
+	time.AfterFunc(200*time.Millisecond, func() { _ = os.Remove(prehold) })
+	if status, code := e.post("stop_product_owner_turn", map[string]any{"thread_id": id}, nil); status != 200 {
+		t.Fatalf("stop = %d %s", status, code)
+	}
+	got := e.waitTurn(id, "idle")
+	last := got.Items[len(got.Items)-1]
+	if last.Kind != "message" || last.Author != "product_owner" || !last.Stopped || last.Text != "" {
+		t.Fatalf("last item = %+v, want an empty product-owner message with stopped set", last)
+	}
+
+	e.restart()
+	time.Sleep(500 * time.Millisecond)
+	after := e.thread(id)
+	if after.Thread.Turn != "idle" || len(after.Items) != len(got.Items) || len(e.launches()) != 1 {
+		t.Errorf("a boot answered a stopped turn: turn %s, %d items (was %d), %d launches", after.Thread.Turn, len(after.Items), len(got.Items), len(e.launches()))
+	}
+}
+
+func TestALiveSendDuringBootRecoveryIsResumedOnceWithNoFailureAndARecoveredThreadIsBusy(t *testing.T) {
+	e := newPOE2E(t)
+	e.po.SetIdle(150 * time.Millisecond)
+	a, _ := e.startThread("thread a")
+	b, _ := e.startThread("thread b")
+	e.waitTurn(a, "idle")
+	thB := e.waitTurn(b, "idle")
+	eventuallyPO(t, "both processes to end", func() string {
+		if e.orch.ProductOwnerRunning(thB.Thread.SessionID) || e.orch.ProductOwnerRunning(e.thread(a).Thread.SessionID) {
+			return "still running"
+		}
+		return ""
+	})
+	// Thread a was cut off with its message stored and never answered.
+	if _, err := e.store.AppendItem(e.ctx, domain.ProductOwnerItem{ThreadID: a, Kind: domain.ProductOwnerItemMessage, At: time.Now(),
+		Author: domain.ProductOwnerAuthorPerson, Text: "unanswered at the crash"}); err != nil {
+		t.Fatal(err)
+	}
+
+	e.slow(true) // the boot's resume of thread a is held at its start
+	launched := len(e.launches())
+	e.restart()
+	// Thread a is decided at boot, before any request: it is busy while recovered.
+	if got := e.thread(a).Thread.Turn; got != "interrupted" {
+		t.Fatalf("thread a reads %s, want interrupted while its recovery is held", got)
+	}
+	if status, code := e.send(a, "live to a"); status != 409 || code != "THREAD_BUSY" {
+		t.Errorf("a send to the thread being recovered = %d %s, want 409 THREAD_BUSY", status, code)
+	}
+	// Thread b was not cut off: a live send is its own resume, once, and the
+	// recovery never touches it.
+	sent := make(chan int, 1)
+	go func() { status, _ := e.send(b, "live to b"); sent <- status }()
+	time.Sleep(300 * time.Millisecond)
+	e.slow(false)
+	if status := <-sent; status != 200 {
+		t.Fatalf("the live send to b = %d", status)
+	}
+	e.waitTurn(a, "idle")
+	e.waitTurn(b, "idle")
+	for _, id := range []string{a, b} {
+		if n := countItems(e.thread(id).Items, "failure", ""); n != 0 {
+			t.Errorf("thread %s has %d failure items", id, n)
+		}
+	}
+	if n := countItems(e.thread(b).Items, "notice", ""); n != 0 {
+		t.Errorf("thread b was recovered too: %d notices", n)
+	}
+	if n := countItems(e.thread(a).Items, "notice", "Continued after a restart"); n != 1 {
+		t.Errorf("thread a has %d notices, want 1", n)
+	}
+	if got := len(e.launches()) - launched; got != 2 {
+		t.Errorf("%d launches since the restart, want one resume for each thread", got)
+	}
 }

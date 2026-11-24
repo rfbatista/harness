@@ -355,6 +355,13 @@ func (s *Service) StopTurn(ctx context.Context, threadID string) error {
 			_ = s.store.SaveItem(ctx, *r.cur)
 			s.announceItem(t, *r.cur)
 			r.cur = nil
+		} else if t.Turn == domain.ProductOwnerTurnRunning {
+			// A stop before the first word still answers the person's message with
+			// a stopped one, so that nothing later reads it as unanswered.
+			if item, err := s.store.AppendItem(ctx, domain.ProductOwnerItem{ThreadID: t.ID, Kind: domain.ProductOwnerItemMessage, At: time.Now(),
+				Author: domain.ProductOwnerAuthorProductOwner, Stopped: true}); err == nil {
+				s.announceItem(t, item)
+			}
 		}
 		r.mu.Unlock()
 		s.dropRun(r)
@@ -550,6 +557,14 @@ func (s *Service) ended(r *run) {
 	if closing {
 		return
 	}
+	// A run another has replaced, or that was dropped, is not this thread's
+	// process any more: its end changes nothing.
+	s.mu.Lock()
+	current := s.runs[r.threadID] == r
+	s.mu.Unlock()
+	if !current {
+		return
+	}
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	if r.retired {
@@ -633,7 +648,18 @@ func (s *Service) finishTurn(threadID string) {
 // that tells claude what happened. A thread whose resume fails stays
 // interrupted, for the next boot. The product owner being switched off does not
 // stop a turn that was already running.
+//
+// Which threads to recover is decided here, before the server takes a request:
+// each is marked interrupted and counts as busy, so a message cannot meet a
+// thread half way through its recovery. The resumes then run behind the boot,
+// each under its thread's lock.
 func (s *Service) Recover(ctx context.Context) {
+	if cut := s.decideRecovery(ctx); len(cut) > 0 {
+		go s.resumeAll(ctx, cut)
+	}
+}
+
+func (s *Service) decideRecovery(ctx context.Context) map[string]domain.ProductOwnerThread {
 	cut := map[string]domain.ProductOwnerThread{}
 	for _, turn := range []string{domain.ProductOwnerTurnRunning, domain.ProductOwnerTurnResuming, domain.ProductOwnerTurnInterrupted} {
 		threads, err := s.store.ThreadsWithTurn(ctx, turn)
@@ -672,6 +698,10 @@ func (s *Service) Recover(ctx context.Context) {
 		t.Turn = domain.ProductOwnerTurnInterrupted
 		cut[id] = t
 	}
+	return cut
+}
+
+func (s *Service) resumeAll(ctx context.Context, cut map[string]domain.ProductOwnerThread) {
 	for id, t := range cut {
 		if err := s.resumeInterrupted(ctx, t); err != nil {
 			slog.Warn("resume a product owner thread a restart cut off", "thread", id, "err", err)
@@ -710,6 +740,12 @@ func (s *Service) resumeInterrupted(ctx context.Context, t domain.ProductOwnerTh
 	lock := s.threadLock(t.ID)
 	lock.Lock()
 	defer lock.Unlock()
+	// Read again under the lock: only a thread still interrupted is resumed.
+	cur, err := s.store.Thread(ctx, t.ID)
+	if err != nil || cur.Turn != domain.ProductOwnerTurnInterrupted {
+		return err
+	}
+	t = *cur
 	spec := ports.ProductOwnerSessionSpec{ProjectID: t.ProjectID, AgentID: t.AgentID, Prompt: t.Prompt}
 	if err := s.sessions.ResumeProductOwnerSession(ctx, t.SessionID, spec); err != nil {
 		s.fail(ctx, &t, s.lastPersonMessage(ctx, t.ID), "SESSION_RESUME_FAILED", "The product owner's session could not be resumed after the restart: "+err.Error())

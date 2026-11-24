@@ -1664,7 +1664,7 @@ func newProductOwner(lc fx.Lifecycle, store ports.ProductOwnerStore, cat catalog
 	lc.Append(fx.Hook{
 		OnStart: func(context.Context) error {
 			// Behind the boot: a resume starts claude, which holds nothing back.
-			go svc.Recover(context.Background())
+			svc.Recover(context.Background())
 			return nil
 		},
 		OnStop: func(context.Context) error {
