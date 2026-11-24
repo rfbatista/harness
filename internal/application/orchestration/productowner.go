@@ -113,6 +113,16 @@ func (s *Service) ProductOwnerRunning(sessionID string) bool {
 	return ok
 }
 
+// ProductOwnerContextWindow is the context window of the model a thread's
+// session runs on.
+func (s *Service) ProductOwnerContextWindow(sessionID string) int {
+	model := ""
+	if sess := s.sessions.Get(sessionID); sess != nil {
+		model = sess.Model
+	}
+	return domain.ContextWindow(model)
+}
+
 // startFailure turns the runtime's refusal to start into the code clients
 // branch on, as a headless start does.
 func startFailure(err error) error {
@@ -165,7 +175,7 @@ func (s *Service) productOwnerPrepare(ctx context.Context, id string, spec ports
 		repo = repos[0]
 		dir = repo.RootDir
 	}
-	subject := sessionSubject{project: proj, mode: mode, productOwnerPrompt: spec.Prompt}
+	subject := sessionSubject{project: proj, mode: mode, productOwnerPrompt: spec.Prompt, productOwnerCheckpoint: spec.Checkpoint}
 	model := s.sessionModel(mode, "")
 	// Its tools read; nothing it runs needs a person's approval, and the
 	// sandbox and the tools hold what it may not do.
@@ -218,7 +228,7 @@ func (s *Service) productOwnerPrepare(ctx context.Context, id string, spec ports
 // applyProductOwnerContext is applyProjectContext for a product-owner thread:
 // the per-session task MCP server with the mode's allow-list, and the product
 // owner's brief, then the project's own prompt, last.
-func applyProductOwnerContext(cfg *llmkit.SessionConfig, in projectBriefInput, taskServerURL, projectPrompt string) {
+func applyProductOwnerContext(cfg *llmkit.SessionConfig, in projectBriefInput, taskServerURL, projectPrompt, checkpoint string) {
 	if taskServerURL != "" {
 		cfg.MCPServers = append(cfg.MCPServers, llmkit.MCPServerSpec{Name: taskServerName, Transport: "http", URL: taskServerURL})
 	}
@@ -226,6 +236,9 @@ func applyProductOwnerContext(cfg *llmkit.SessionConfig, in projectBriefInput, t
 		cfg.AllowedTools = append(cfg.AllowedTools, llmkit.MCPToolRef(taskServerName, name))
 	}
 	cfg.AppendSystem = appendSection(cfg.AppendSystem, productOwnerBrief(in))
+	if c := strings.TrimSpace(checkpoint); c != "" {
+		cfg.AppendSystem = appendSection(cfg.AppendSystem, "## What this conversation continues\n\nThis thread has run for a while, and its earlier part was archived. You wrote this summary of it, and the person still sees all of it. Carry on from it.\n\n"+c)
+	}
 	if p := strings.TrimSpace(projectPrompt); p != "" {
 		cfg.AppendSystem = appendSection(cfg.AppendSystem, "## Instructions from the person for this project\n\n"+p)
 	}

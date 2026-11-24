@@ -72,6 +72,9 @@ type sessionSubject struct {
 	// productOwnerPrompt is the project prompt a product-owner thread starts
 	// with, "" for none.
 	productOwnerPrompt string
+	// productOwnerCheckpoint is the summary of the thread's archived part,
+	// "" before its first checkpoint.
+	productOwnerCheckpoint string
 }
 
 // projectID is the project the session works in.
@@ -1060,7 +1063,7 @@ func (s *Service) sessionConfigTrail(trail *pieceTrail, id, dir, model string, a
 	} else if subject.mode == domain.SessionModeProductOwner && subject.project != nil {
 		in := s.briefProject(subject.project)
 		in.AgentsMove = s.agentsMoveDocuments()
-		applyProductOwnerContext(&cfg, in, taskURL, subject.productOwnerPrompt)
+		applyProductOwnerContext(&cfg, in, taskURL, subject.productOwnerPrompt, subject.productOwnerCheckpoint)
 	} else if subject.projectLevel() {
 		in := s.briefProject(subject.project)
 		in.AgentsMove = s.agentsMoveDocuments()

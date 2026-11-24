@@ -96,13 +96,15 @@ while IFS= read -r line; do
   n=$((n+1))
   text=$(printf '%s' "$line" | sed -n 's/.*"text":"\([^"]*\)".*/\1/p')
   echo "$text" >> "$dir/received"
+  inp=$(cat "$dir/usage" 2>/dev/null || echo 5)
+  case "$text" in Checkpoint:*) while [ -f "$dir/summaryhold" ]; do sleep 0.05; done; [ -f "$dir/summaryfail" ] && exit 1;; esac
   while [ -f "$dir/prehold" ]; do sleep 0.05; done
   case "$text" in read:*) printf '%s\n' '{"type":"assistant","session_id":"fake","message":{"role":"assistant","content":[{"type":"tool_use","id":"t1","name":"Read","input":{"file_path":"project/docs/prd.md"}}]}}';; esac
   printf '%s\n' '{"type":"stream_event","session_id":"fake","event":{"type":"content_block_delta","index":0,"delta":{"type":"text_delta","text":"answer to: "}}}'
   while [ -f "$dir/hold" ]; do sleep 0.05; done
   printf '%s\n' '{"type":"stream_event","session_id":"fake","event":{"type":"content_block_delta","index":0,"delta":{"type":"text_delta","text":"'"$text"'"}}}'
   printf '%s\n' '{"type":"assistant","session_id":"fake","message":{"role":"assistant","content":[{"type":"text","text":"answer to: '"$text"'"}]}}'
-  printf '%s\n' '{"type":"result","subtype":"success","session_id":"fake","result":"ok","total_cost_usd":0.02,"usage":{"input_tokens":5,"output_tokens":9}}'
+  printf '%s\n' '{"type":"result","subtype":"success","session_id":"fake","result":"ok","total_cost_usd":0.02,"usage":{"input_tokens":'"$inp"',"output_tokens":9}}'
 done
 `
 
@@ -462,6 +464,7 @@ type poItem struct {
 	Streaming   *bool  `json:"streaming"`
 	Stopped     bool   `json:"stopped"`
 	Attachments []any  `json:"attachments"`
+	Summary     string `json:"summary"`
 }
 
 type poThread struct {

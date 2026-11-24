@@ -77,6 +77,14 @@ type ProductOwnerThread struct {
 	TitleSetByPerson   bool   `json:"title_set_by_person"`
 	// PendingHeldActions counts the held actions waiting on the person.
 	PendingHeldActions int `json:"pending_held_actions"`
+	// Checkpoints counts the checkpoints the thread has made (ADR 0112).
+	Checkpoints int `json:"checkpoints"`
+	// CheckpointPhase says a checkpoint is under way: the summary is being
+	// written, or stored and the thread is moving to its new conversation.
+	CheckpointPhase string `json:"-"`
+	// CheckpointSummary is the summary of the thread's latest checkpoint, ""
+	// before its first.
+	CheckpointSummary string `json:"-"`
 	// AgentID and Prompt are what the thread started with: a running thread
 	// keeps them while the project's settings change (ADR 0099).
 	AgentID string `json:"-"`
@@ -90,6 +98,9 @@ const (
 	ProductOwnerItemActivity = "activity"
 	ProductOwnerItemNotice   = "notice"
 	ProductOwnerItemFailure  = "failure"
+	// ProductOwnerItemCheckpoint marks where a thread checkpointed: the items
+	// before it are its archived segment and Summary stands for them.
+	ProductOwnerItemCheckpoint = "checkpoint"
 )
 
 // Authors of a message item.
@@ -116,6 +127,8 @@ type ProductOwnerItem struct {
 	// message to send again.
 	Code        string `json:"code,omitempty"`
 	RetryItemID string `json:"retry_item_id,omitempty"`
+	// A checkpoint's summary.
+	Summary string `json:"summary,omitempty"`
 }
 
 // ProductOwnerMaxTitle bounds a thread title the person sets, in characters.
@@ -157,4 +170,28 @@ func ProductOwnerThreadTitle(message string) string {
 		line = strings.TrimSpace(string(r[:max-1])) + "…"
 	}
 	return line
+}
+
+// Phases of a checkpoint (ADR 0112), kept on the thread so that a restart
+// finishes it.
+const (
+	// ProductOwnerCheckpointSummarizing is the summary turn: the product owner
+	// is writing the summary of what is archived.
+	ProductOwnerCheckpointSummarizing = "summarizing"
+	// ProductOwnerCheckpointMoving is the summary stored with its checkpoint
+	// item, the thread not yet in its new conversation.
+	ProductOwnerCheckpointMoving = "moving"
+)
+
+// ProductOwnerCheckpointShare is how much of its model's window a thread's
+// context may fill before the thread checkpoints.
+const ProductOwnerCheckpointShare = 0.6
+
+// ContextWindow is the size in tokens of a model's context window: a model
+// named with the 1M suffix has a million, any other 200,000.
+func ContextWindow(model string) int {
+	if strings.Contains(strings.ToLower(model), "[1m]") {
+		return 1_000_000
+	}
+	return 200_000
 }

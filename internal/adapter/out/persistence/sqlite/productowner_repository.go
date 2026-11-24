@@ -42,6 +42,9 @@ type ProductOwnerThreadModel struct {
 	Prompt             string
 	LastMessageExcerpt string `gorm:"column:last_message_excerpt"`
 	TitleSetByPerson   bool   `gorm:"column:title_set_by_person"`
+	Checkpoints        int    `gorm:"column:checkpoints"`
+	CheckpointPhase    string `gorm:"column:checkpoint_phase"`
+	CheckpointSummary  string `gorm:"column:checkpoint_summary"`
 }
 
 // TableName overrides the table name.
@@ -90,13 +93,15 @@ func (r *ProductOwnerRepository) SaveSettings(ctx context.Context, s domain.Prod
 func threadModel(t domain.ProductOwnerThread) ProductOwnerThreadModel {
 	return ProductOwnerThreadModel{ID: t.ID, ProjectID: t.ProjectID, SessionID: t.SessionID, Title: t.Title, Turn: t.Turn,
 		StartedAt: t.StartedAt, LastActivityAt: t.LastActivityAt, PendingHeldActions: t.PendingHeldActions, AgentID: t.AgentID, Prompt: t.Prompt,
-		LastMessageExcerpt: t.LastMessageExcerpt, TitleSetByPerson: t.TitleSetByPerson}
+		LastMessageExcerpt: t.LastMessageExcerpt, TitleSetByPerson: t.TitleSetByPerson,
+		Checkpoints: t.Checkpoints, CheckpointPhase: t.CheckpointPhase, CheckpointSummary: t.CheckpointSummary}
 }
 
 func (m ProductOwnerThreadModel) domain() domain.ProductOwnerThread {
 	return domain.ProductOwnerThread{ID: m.ID, ProjectID: m.ProjectID, SessionID: m.SessionID, Title: m.Title, Turn: m.Turn,
 		StartedAt: m.StartedAt, LastActivityAt: m.LastActivityAt, PendingHeldActions: m.PendingHeldActions, AgentID: m.AgentID, Prompt: m.Prompt,
-		LastMessageExcerpt: m.LastMessageExcerpt, TitleSetByPerson: m.TitleSetByPerson}
+		LastMessageExcerpt: m.LastMessageExcerpt, TitleSetByPerson: m.TitleSetByPerson,
+		Checkpoints: m.Checkpoints, CheckpointPhase: m.CheckpointPhase, CheckpointSummary: m.CheckpointSummary}
 }
 
 // CreateThread implements ports.ProductOwnerStore.
@@ -194,6 +199,34 @@ func (r *ProductOwnerRepository) AppendItem(ctx context.Context, item domain.Pro
 		return item, err
 	}
 	if err := r.db.WithContext(ctx).Create(&m).Error; err != nil {
+		return item, err
+	}
+	item.Seq = m.Seq
+	return item, nil
+}
+
+// AppendCheckpoint implements ports.ProductOwnerStore.
+func (r *ProductOwnerRepository) AppendCheckpoint(ctx context.Context, item domain.ProductOwnerItem) (domain.ProductOwnerItem, error) {
+	id, err := genID()
+	if err != nil {
+		return item, err
+	}
+	item.ID, item.Seq = id, 0
+	m, err := itemModel(item)
+	if err != nil {
+		return item, err
+	}
+	err = r.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		if err := tx.Create(&m).Error; err != nil {
+			return err
+		}
+		return tx.Model(&ProductOwnerThreadModel{}).Where("id = ?", item.ThreadID).Updates(map[string]any{
+			"checkpoints":        gorm.Expr("checkpoints + 1"),
+			"checkpoint_phase":   domain.ProductOwnerCheckpointMoving,
+			"checkpoint_summary": item.Summary,
+		}).Error
+	})
+	if err != nil {
 		return item, err
 	}
 	item.Seq = m.Seq

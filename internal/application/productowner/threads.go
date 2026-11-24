@@ -33,6 +33,9 @@ type run struct {
 	// retired is a run the person stopped: what its process still says is
 	// dropped.
 	retired bool
+	// summary is what the summary turn of a checkpoint has said so far; the
+	// turn's text is not an item of the thread (ADR 0112).
+	summary strings.Builder
 }
 
 func (s *Service) threadLock(id string) *sync.Mutex {
@@ -212,7 +215,7 @@ func (s *Service) SendMessage(ctx context.Context, threadID, message string, att
 		return "", err
 	}
 	s.announceThread(*t)
-	spec := ports.ProductOwnerSessionSpec{ProjectID: t.ProjectID, AgentID: t.AgentID, Prompt: t.Prompt}
+	spec := specOf(t)
 	if err := s.sessions.ResumeProductOwnerSession(ctx, t.SessionID, spec); err != nil {
 		s.fail(ctx, t, item.ID, "SESSION_RESUME_FAILED", "The product owner's session could not be resumed: "+err.Error())
 		if wrapped := unavailableOr(err); wrapped != err {
@@ -282,6 +285,7 @@ func (s *Service) fail(ctx context.Context, t *domain.ProductOwnerThread, retryI
 	}
 	if _, err := s.update(ctx, t.ID, t, func(th *domain.ProductOwnerThread) bool {
 		th.Turn, th.LastActivityAt = domain.ProductOwnerTurnIdle, time.Now()
+		clearSummarizing(th)
 		return true
 	}); err == nil {
 		s.announceThread(*t)
@@ -495,6 +499,9 @@ func (s *Service) handle(r *run, ev ports.SessionEvent) {
 	if err != nil {
 		return
 	}
+	if s.summarizing(r, t, ev) {
+		return
+	}
 	switch ev.Type {
 	case "output_delta":
 		if ev.DeltaKind != "text" || ev.Text == "" {
@@ -548,6 +555,9 @@ func (s *Service) handle(r *run, ev ports.SessionEvent) {
 			s.setExcerpt(ctx, t.ID, r.cur.Text)
 			s.announceItem(t, *r.cur)
 			r.cur = nil
+		}
+		if s.beginCheckpoint(r, t, ev) {
+			return
 		}
 		s.finishTurn(t.ID)
 		s.resetIdle(r, true)
@@ -641,6 +651,7 @@ func (s *Service) finishTurn(threadID string) {
 			return false
 		}
 		th.Turn, th.LastActivityAt = domain.ProductOwnerTurnIdle, time.Now()
+		clearSummarizing(th)
 		changed = true
 		return true
 	})
@@ -753,7 +764,7 @@ func (s *Service) resumeInterrupted(ctx context.Context, t domain.ProductOwnerTh
 		return err
 	}
 	t = *cur
-	spec := ports.ProductOwnerSessionSpec{ProjectID: t.ProjectID, AgentID: t.AgentID, Prompt: t.Prompt}
+	spec := specOf(&t)
 	if err := s.sessions.ResumeProductOwnerSession(ctx, t.SessionID, spec); err != nil {
 		s.fail(ctx, &t, s.lastPersonMessage(ctx, t.ID), "SESSION_RESUME_FAILED", "The product owner's session could not be resumed after the restart: "+err.Error())
 		return err

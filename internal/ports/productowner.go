@@ -30,6 +30,10 @@ type ProductOwnerStore interface {
 	// sequence number, and answers it.
 	AppendItem(ctx context.Context, item domain.ProductOwnerItem) (domain.ProductOwnerItem, error)
 	SaveItem(ctx context.Context, item domain.ProductOwnerItem) error
+	// AppendCheckpoint stores a checkpoint item last in its thread and, in the
+	// same step, counts it on the thread and moves the thread's checkpoint
+	// phase to moving: a restart never sees one without the other.
+	AppendCheckpoint(ctx context.Context, item domain.ProductOwnerItem) (domain.ProductOwnerItem, error)
 	// Items are a thread's items, oldest first: at most limit, the newest
 	// ones before the item beforeID (the thread's end when empty). hasEarlier
 	// says items exist before the first one answered.
@@ -127,6 +131,10 @@ type ProductOwnerSessionSpec struct {
 	ProjectID string
 	AgentID   string
 	Prompt    string
+	// Checkpoint is the summary of the thread's archived part, "" before the
+	// thread's first checkpoint: the brief of a new or resumed conversation
+	// of the thread carries it (ADR 0112).
+	Checkpoint string
 }
 
 // ProductOwnerSessions is how the product owner starts, resumes and drives the
@@ -135,6 +143,9 @@ type ProductOwnerSessions interface {
 	StartProductOwnerSession(ctx context.Context, spec ProductOwnerSessionSpec) (sessionID string, err error)
 	ResumeProductOwnerSession(ctx context.Context, sessionID string, spec ProductOwnerSessionSpec) error
 	ProductOwnerRunning(sessionID string) bool
+	// ProductOwnerContextWindow is the context window, in tokens, of the model
+	// a thread's session runs on.
+	ProductOwnerContextWindow(sessionID string) int
 	Send(ctx context.Context, id, text string) error
 	Stop(ctx context.Context, id string) error
 	// Subscribe follows a session's events live.
