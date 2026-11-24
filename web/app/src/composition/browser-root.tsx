@@ -20,6 +20,9 @@ import { ThreadList } from "../features/product-owner/application/thread-list";
 import { AboutPresenter } from "../features/product-owner/presentation/presenters/about-presenter";
 import { ThreadListPresenter } from "../features/product-owner/presentation/presenters/thread-list-presenter";
 import { systemClock } from "../shared/kernel/clock";
+import { OwnerPagePropsDto } from "./owner-page-props-dto";
+import { OwnerPagePresenter } from "../features/product-owner/presentation/presenters/owner-page-presenter";
+import { OwnerPageView } from "../features/product-owner/presentation/views/owner-page-view";
 import { OwnerPanelPropsDto } from "./owner-panel-props-dto";
 import { Conversation } from "../features/product-owner/application/conversation";
 import { browserTaskCatalog } from "../features/product-owner/infrastructure/browser-task-catalog";
@@ -46,7 +49,8 @@ export function mountIslands(doc: Document): Dispose {
   const notifications = httpNotificationsSource(api, feed);
   const owner = httpProductOwner(api, feed);
   // The product owner's dock is the document's: the toggle in the top bar and the panel beside #main share it, and it outlives a swap.
-  const dock = new OwnerDock({ gateway: owner, events: owner, memory: browserDockMemory(browserStorage(win)), screen: browserScreen(win), navigator: browserPageNavigator(win.location) });
+  const navigator = browserPageNavigator(win);
+  const dock = new OwnerDock({ gateway: owner, events: owner, memory: browserDockMemory(browserStorage(win)), screen: browserScreen(win), navigator });
 
   const islands: Record<string, Island> = {
     "top-bar": (mount, props, fresh) => {
@@ -76,6 +80,32 @@ export function mountIslands(doc: Document): Dispose {
       return () => {
         panel.destroy();
         root.unmount();
+      };
+    },
+    // The full page: the same thread component beside the thread list. The panel steps aside while it is open.
+    "owner-page": (mount, props) => {
+      const { project_id, project_name, thread_id } = OwnerPagePropsDto.fromJSON(props);
+      const noTasks = browserTaskCatalog(doc).count() === 0;
+      const conversation = new Conversation({ gateway: owner, events: owner });
+      const list = new ThreadList({ gateway: owner, events: owner });
+      const thread = new ThreadPresenter(conversation, { projectName: project_name, noTasks }, browserTaskCatalog(doc), dock.state.enabled === false);
+      const threads = new ThreadListPresenter(list, conversation, systemClock);
+      const about = new AboutPresenter(conversation, list);
+      const page = new OwnerPagePresenter({ projectId: project_id, projectName: project_name, threadId: thread_id }, dock, conversation, list, navigator);
+      // The product owner is switched off or on: the composer follows.
+      const stopDock = dock.subscribe((state) => thread.setOff(state.enabled === false));
+      const stopList = list.attach(project_id);
+      const stopConversation = conversation.attach(project_id, thread_id === "" ? null : thread_id);
+      const root = createRoot(mount);
+      root.render(<OwnerPageView page={page} thread={thread} threads={threads} about={about} />);
+      return () => {
+        root.unmount();
+        stopConversation();
+        stopList();
+        stopDock();
+        threads.destroy();
+        about.destroy();
+        page.destroy();
       };
     },
   };

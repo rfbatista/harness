@@ -27,6 +27,7 @@ import (
 	"operators-mcp/internal/adapter/in/web/home"
 	"operators-mcp/internal/adapter/in/web/models"
 	"operators-mcp/internal/adapter/in/web/notifications"
+	"operators-mcp/internal/adapter/in/web/productowner"
 	"operators-mcp/internal/adapter/in/web/projects"
 	"operators-mcp/internal/adapter/in/web/serversettings"
 	"operators-mcp/internal/adapter/in/web/services"
@@ -326,6 +327,9 @@ func NewHandler(deps Deps, assets *Assets, fallback http.Handler) http.Handler {
 		usagePage := usage.Handler{Projects: deps.Projects, Usage: deps.Usage, Layout: s.layout, Render: render}
 		mux.Handle("GET /projects/{project}/usage", s.page(usagePage.Page))
 	}
+	ownerPage := productowner.Handler{Projects: deps.Projects, Layout: s.layout, Render: render}
+	mux.Handle("GET /projects/{project}/product-owner", s.page(ownerPage.Page))
+	mux.Handle("GET /projects/{project}/product-owner/threads/{thread}", s.page(ownerPage.Page))
 	if deps.Services != nil {
 		servicesPage := services.Handler{Projects: deps.Projects, Services: deps.Services, Repositories: deps.Repositories, Layout: s.layout, Render: render}
 		mux.Handle("GET /projects/{project}/services", s.page(servicesPage.Page))
@@ -458,6 +462,7 @@ func (s *server) layout(ctx context.Context, title, projectID, taskID string) (s
 	if s.deps.Usage != nil {
 		frame.Rail.UsageHref = usage.Href(projectID)
 	}
+	frame.Rail.ProductOwnerHref = productowner.Href(projectID)
 	return frame, nil
 }
 

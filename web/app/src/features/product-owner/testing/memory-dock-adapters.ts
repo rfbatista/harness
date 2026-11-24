@@ -26,13 +26,15 @@ export function memoryDockMemory(initial: RememberedDock = { open: false, width:
 
 export interface MemoryScreen extends Screen {
   setNarrow(narrow: boolean): void;
+  setPhone(phone: boolean): void;
   readonly listeners: number;
 }
 
-export function memoryScreen(narrow = false): MemoryScreen {
+export function memoryScreen(narrow = false, phone = false): MemoryScreen {
   const listeners = new Set<() => void>();
   return {
     narrow: () => narrow,
+    phone: () => phone,
     onChange(listener) {
       listeners.add(listener);
       return () => void listeners.delete(listener);
@@ -41,13 +43,18 @@ export function memoryScreen(narrow = false): MemoryScreen {
       narrow = next;
       for (const l of [...listeners]) l();
     },
+    setPhone(next) {
+      phone = next;
+      for (const l of [...listeners]) l();
+    },
     get listeners() {
       return listeners.size;
     },
   };
 }
 
-export function memoryNavigator(): PageNavigator & { readonly opened: readonly string[] } {
+export function memoryNavigator(): PageNavigator & { readonly opened: readonly string[]; readonly replaced: readonly string[] } {
   const opened: string[] = [];
-  return { opened, open: (href) => void opened.push(href) };
+  const replaced: string[] = [];
+  return { opened, replaced, open: (href) => void opened.push(href), replace: (href) => void replaced.push(href) };
 }

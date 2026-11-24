@@ -206,6 +206,16 @@
   .owner-split > .conversation > .composer > * { inline-size: min(100%, 52rem); justify-self: center; }
   .owner-split > .conversation > .thread > .thread-empty { inline-size: min(100%, 52rem); align-self: center; }
   @media (width < 64rem) { .owner-split { grid-template-columns: minmax(0, 1fr); } .owner-split > .threads { display: none; } }
+  /* The page's island mounts without a box: its parts are the page's grid items. */
+  .owner-page > [data-island="owner-page"] { display: contents; }
+  /* The Threads button is for where the column folds away. */
+  @media (width >= 64rem) { .owner-split .threads-button { display: none; } }
+  /* A phone: the thread list is the first screen, and a thread opens in place of it with Back. */
+  @media (width < 48rem) {
+    .owner-split[data-phone="list"] > .threads { display: flex; border-inline-end: 0; }
+    .owner-split[data-phone="list"] > .conversation { display: none; }
+    .owner-split[data-phone="thread"] > .threads { display: none; }
+  }
 
   /* About this thread (a popup from the head's info button). */
   .about { inline-size: 22rem; padding: var(--space-m); display: grid; gap: var(--space-s); font-size: var(--text-sm); }

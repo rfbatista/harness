@@ -71,6 +71,9 @@ export function PanelView({ presenter }: { presenter: PanelPresenter }) {
           <button ref={aboutButton} type="button" className="[ button ]" data-variant="ghost" data-size="sm" data-icon="" aria-label="About this thread" title="About this thread" aria-haspopup="dialog" aria-expanded={popup === "about"} onClick={() => setPopup(popup === "about" ? null : "about")}>
             <OwnerIcon name="info" />
           </button>
+          <button type="button" className="[ button ]" data-variant="ghost" data-size="sm" data-icon="" aria-label="Open as a page" title="Open as a page" onClick={presenter.openAsPage}>
+            <OwnerIcon name="expand" />
+          </button>
           <button type="button" className="[ button ]" data-variant="ghost" data-size="sm" data-icon="" aria-label="Close" title="Close" onClick={presenter.close}>
             <OwnerIcon name="close" />
           </button>

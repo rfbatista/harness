@@ -11,7 +11,7 @@ const setup = (context = { projectName: "harness", noTasks: false }) => {
   const server = memoryProductOwner();
   server.seedProject("p1", true);
   const conversation = new Conversation({ gateway: server, events: server });
-  const presenter = new ThreadPresenter(conversation, context, { find: (id) => (id === "t9" ? { state: "waiting" } : null) });
+  const presenter = new ThreadPresenter(conversation, context, { count: () => 1, find: (id) => (id === "t9" ? { state: "waiting" } : null) });
   return { server, conversation, presenter };
 };
 

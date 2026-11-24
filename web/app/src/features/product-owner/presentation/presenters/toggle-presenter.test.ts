@@ -16,7 +16,7 @@ const panelOf = (dock: OwnerDock, server: ReturnType<typeof memoryProductOwner>)
   const list = new ThreadList({ gateway: server, events: server });
   const clock = { now: () => Date.now() };
   const parts = { list, threads: new ThreadListPresenter(list, conversation, clock), about: new AboutPresenter(conversation, list) };
-  return new PanelPresenter(dock, conversation, new ThreadPresenter(conversation, { projectName: "harness", noTasks: false }, { find: () => null }), parts);
+  return new PanelPresenter(dock, conversation, new ThreadPresenter(conversation, { projectName: "harness", noTasks: false }, { count: () => 0, find: () => null }), parts);
 };
 
 const setup = () => {

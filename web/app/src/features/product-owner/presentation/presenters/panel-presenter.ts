@@ -105,6 +105,9 @@ export class PanelPresenter extends Presenter<PanelViewModel> {
 
   turnOn = (): Promise<void> => this.#dock.turnOn();
 
+  /** "Open as a page": the thread moves to the full page. */
+  openAsPage = (): void => this.#dock.openAsPage();
+
   resize = (rem: number): void => this.#dock.setWidth(rem);
 
   /** Esc inside the panel; true when the key was this one. */

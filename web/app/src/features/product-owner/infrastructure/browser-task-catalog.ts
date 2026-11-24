@@ -10,6 +10,7 @@ const STATE: Readonly<Record<string, State>> = { in_progress: "running", review:
 
 export function browserTaskCatalog(doc: Document): TaskCatalog {
   return {
+    count: () => RailTasksDto.fromText(doc.getElementById("rail-seed")?.textContent ?? "").tasks.length,
     find(taskId) {
       const seed = doc.getElementById("rail-seed");
       const task = RailTasksDto.fromText(seed?.textContent ?? "").tasks.find((t) => t.id === taskId);
@@ -18,4 +19,4 @@ export function browserTaskCatalog(doc: Document): TaskCatalog {
   };
 }
 
-export const noTasks: TaskCatalog = { find: () => null };
+export const noTasks: TaskCatalog = { count: () => 0, find: () => null };

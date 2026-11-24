@@ -64,6 +64,8 @@ export interface RememberedDock {
 /** The screen the panel docks on: under 64 rem there is no room for a third column. */
 export interface Screen {
   narrow(): boolean;
+  /** Under 48 rem: the page shows the thread list first and a thread in place of it. */
+  phone(): boolean;
   /** Returns what stops listening. */
   onChange(listener: () => void): () => void;
 }
@@ -71,10 +73,14 @@ export interface Screen {
 /** Opens a page of the web UI. */
 export interface PageNavigator {
   open(href: string): void;
+  /** Changes the address to `href` without leaving the page: a thread opened in place keeps its own URL. */
+  replace(href: string): void;
 }
 
 /** What the page knows of a project's tasks, so a task named in an answer shows its status. */
 export interface TaskCatalog {
+  /** How many tasks the project has, as the page knows. */
+  count(): number;
   /** null for a task the page does not know. */
   find(taskId: string): { readonly state: "running" | "waiting" | "done" | "idle" } | null;
 }

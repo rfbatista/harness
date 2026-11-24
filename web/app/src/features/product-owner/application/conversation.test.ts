@@ -168,7 +168,10 @@ describe("reading a thread", () => {
     await settled();
     assert.equal(conversation.state.threadId, null);
     assert.equal(conversation.state.fresh, true);
+    assert.equal(conversation.state.notFound, true);
     assert.equal(threadIds.at(-1), null);
+    conversation.newThread();
+    assert.equal(conversation.state.notFound, false);
   });
 
   test("detaching stops following", async () => {

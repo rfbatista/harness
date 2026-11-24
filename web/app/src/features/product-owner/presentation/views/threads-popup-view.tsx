@@ -25,7 +25,7 @@ export function ThreadsPopupView({ presenter, open, anchor, onClose, allHref }: 
 }
 
 /** The list itself: New thread, a filter, and threads grouped by day. */
-export function ThreadListView({ presenter, inPopup = false, onPicked, footer }: { presenter: ThreadListPresenter; inPopup?: boolean; onPicked?: () => void; footer?: React.ReactNode }) {
+export function ThreadListView({ presenter, inPopup = false, onPicked, onOpen, onNew, footer }: { presenter: ThreadListPresenter; inPopup?: boolean; onPicked?: () => void; onOpen?: (threadId: string) => void; onNew?: () => void; footer?: React.ReactNode }) {
   const vm = usePresenter(presenter);
   return (
     <div className="[ threads ]">
@@ -35,7 +35,7 @@ export function ThreadListView({ presenter, inPopup = false, onPicked, footer }:
           className="[ button ]"
           data-size="sm"
           onClick={() => {
-            presenter.newThread();
+            (onNew ?? presenter.newThread)();
             onPicked?.();
           }}
         >
@@ -71,7 +71,7 @@ export function ThreadListView({ presenter, inPopup = false, onPicked, footer }:
                   // A plain click opens the thread here; a modified one keeps its link's own way.
                   if (event.metaKey || event.ctrlKey || event.shiftKey || event.button !== 0) return;
                   event.preventDefault();
-                  presenter.open(row.threadId);
+                  (onOpen ?? presenter.open)(row.threadId);
                   onPicked?.();
                 }}
               >

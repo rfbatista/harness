@@ -79,6 +79,7 @@ const (
 	PageDesign       = "design"
 	PageDesignSystem = "design-system"
 	PageUsage        = "usage"
+	PageProductOwner = "product-owner"
 )
 
 // Rail is the current project's tasks, in kanban groups, and the ways to its
@@ -113,6 +114,9 @@ type Rail struct {
 	Reviews     int
 	// UsageHref is the project's token usage; "" when usage is not served.
 	UsageHref string
+	// ProductOwnerHref is the project's product owner page: the only row of the
+	// navigation that leads to threads (ADR 0109). "" leaves it out.
+	ProductOwnerHref string
 	Groups    []RailGroup
 	// Empty is shown when a project is selected but has no tasks.
 	Empty string

@@ -29,6 +29,11 @@ func islandRenderedAttrs(failed bool) templ.Attributes {
 // browser reads (never run). Props is json.Marshal's output, which escapes
 // <, > and & so it cannot close the script.
 func propsScript(name, props string) templ.Component {
+	return PropsScript(name, props)
+}
+
+// PropsScript is an island's props, in the page, for the pages that carry an island of their own.
+func PropsScript(name, props string) templ.Component {
 	return templ.Raw(`<script type="application/json" data-island-props="` + name + `">` + props + `</script>`)
 }
 

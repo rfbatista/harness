@@ -377,6 +377,14 @@ templ projectNav(r Rail) {
 					</a>
 				</li>
 			}
+			if r.ProductOwnerHref != "" {
+				<li data-page="product-owner">
+					<a href={ templ.SafeURL(r.ProductOwnerHref) } { currentAttrs(r.Page == PageProductOwner)... }>
+						@icon("owner")
+						<span class="[ label ]">Product owner</span>
+					</a>
+				</li>
+			}
 		</ul>
 	</nav>
 }

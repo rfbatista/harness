@@ -39,6 +39,8 @@ export interface ConversationState {
   readonly error: ConversationError | null;
   /** The thread's session, for the link to its Context tab. */
   readonly sessionId: string;
+  /** The thread that was asked for is not a thread of this project (a link that went stale, or another project's). */
+  readonly notFound: boolean;
 }
 
 export interface ConversationDeps {
@@ -48,7 +50,7 @@ export interface ConversationDeps {
   readonly onThread?: (threadId: string | null) => void;
 }
 
-const EMPTY: ConversationState = { projectId: "", threadId: null, title: "", items: [], turn: "idle", hasEarlier: false, loading: false, fresh: true, draft: "", error: null, sessionId: "" };
+const EMPTY: ConversationState = { projectId: "", threadId: null, title: "", items: [], turn: "idle", hasEarlier: false, loading: false, fresh: true, draft: "", error: null, sessionId: "", notFound: false };
 
 export class Conversation {
   readonly #deps: ConversationDeps;
@@ -216,7 +218,7 @@ export class Conversation {
       if (!(err instanceof ProductOwnerError)) throw err;
       if (generation !== this.#generation) return;
       // A thread that is gone (or cannot be read) leaves a fresh one, and says so when it was not gone.
-      this.#set({ loading: false, fresh: true, threadId: null, error: err.code === "THREAD_NOT_FOUND" ? null : { code: err.code, text: err.message } });
+      this.#set({ loading: false, fresh: true, threadId: null, notFound: err.code === "THREAD_NOT_FOUND", error: err.code === "THREAD_NOT_FOUND" ? null : { code: err.code, text: err.message } });
       this.#deps.onThread?.(null);
     }
   }

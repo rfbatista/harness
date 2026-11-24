@@ -6,7 +6,7 @@
 
 import type { FeedStatus } from "../domain/feed-status";
 import type { ProductOwnerEvents, ProductOwnerGateway, DockMemory, PageNavigator, Screen } from "./ports";
-import { pageHref } from "./links";
+import { pageHref, threadHref } from "./links";
 import { ProductOwnerError } from "./ports";
 
 export const MIN_WIDTH = 22;
@@ -19,6 +19,8 @@ export interface DockState {
   readonly open: boolean;
   /** Open, on a screen wide enough: the panel is beside the page. */
   readonly docked: boolean;
+  /** The full page is open: the panel is hidden while it is. */
+  readonly suspended: boolean;
   /** In rem. */
   readonly width: number;
   /** The thread the panel shows, from what was remembered; null for a fresh one. */
@@ -51,11 +53,12 @@ export class OwnerDock {
   #follow: (() => void) | null = null;
   #watchScreen: (() => void) | null = null;
   #open = false;
+  #suspensions = 0;
   #threadId: string | null = null;
 
   constructor(deps: DockDeps) {
     this.#deps = deps;
-    this.#state = this.#derive({ projectId: "", width: DEFAULT_WIDTH, threadId: null, enabled: null, focusComposer: 0, focusToggle: 0, error: "" });
+    this.#state = this.#derive({ projectId: "", suspended: false, width: DEFAULT_WIDTH, threadId: null, enabled: null, focusComposer: 0, focusToggle: 0, error: "" });
   }
 
   get state(): DockState {
@@ -96,10 +99,48 @@ export class OwnerDock {
     };
   }
 
-  /** The toggle: opens or closes the panel, or on a narrow screen opens the page. */
+  /** The screen is a phone: the page shows its thread list first. */
+  get phone(): boolean {
+    return this.#deps.screen.phone();
+  }
+
+  /** The full page is open: the panel hides until the returned function is called. */
+  suspend(): () => void {
+    this.#suspensions++;
+    this.#set({ suspended: true });
+    let released = false;
+    return () => {
+      if (released) return;
+      released = true;
+      this.#suspensions--;
+      this.#set({ suspended: this.#suspensions > 0 });
+    };
+  }
+
+  /** "Open as a page": the panel closes and the page opens the thread (a fresh thread opens the page itself). */
+  openAsPage(): void {
+    const { projectId } = this.#state;
+    if (projectId === "") return;
+    this.close();
+    this.#deps.navigator.open(this.#threadId === null ? pageHref(projectId) : threadHref(projectId, this.#threadId));
+  }
+
+  /** "Dock beside the page": the thread opens in the panel, beside the project's board. */
+  dockBeside(): void {
+    const { projectId } = this.#state;
+    if (projectId === "") return;
+    this.open();
+    this.#deps.navigator.open(`/projects/${encodeURIComponent(projectId)}`);
+  }
+
+  /** The toggle: opens or closes the panel, or on a narrow screen opens the page; on the page itself it docks the thread. */
   toggle(): void {
     const { projectId } = this.#state;
     if (projectId === "") return;
+    if (this.#state.suspended) {
+      this.dockBeside();
+      return;
+    }
     if (this.#deps.screen.narrow()) {
       this.#deps.navigator.open(pageHref(projectId));
       return;
@@ -169,12 +210,12 @@ export class OwnerDock {
 
   #derive(partial: Omit<DockState, "open" | "docked" | "narrow">): DockState {
     const narrow = this.#deps.screen.narrow();
-    return { ...partial, open: this.#open, docked: this.#open && !narrow && partial.projectId !== "", narrow };
+    return { ...partial, open: this.#open, docked: this.#open && !narrow && partial.projectId !== "" && !partial.suspended, narrow };
   }
 
   #set(patch: Partial<DockState>): void {
-    const { projectId, width, threadId, enabled, focusComposer, focusToggle, error } = this.#state;
-    this.#state = this.#derive({ projectId, width, threadId, enabled, focusComposer, focusToggle, error, ...patch });
+    const { projectId, width, threadId, enabled, focusComposer, focusToggle, error, suspended } = this.#state;
+    this.#state = this.#derive({ projectId, width, threadId, enabled, focusComposer, focusToggle, error, suspended, ...patch });
     for (const listener of [...this.#listeners]) listener(this.#state);
   }
 }

@@ -20,7 +20,7 @@ const settled = () => new Promise((resolve) => setImmediate(resolve));
 describe("the dock", () => {
   test("starts closed, with the switch not yet known, and has no project until one is bound", () => {
     const { dock } = setup();
-    assert.deepEqual({ ...dock.state }, { projectId: "", open: false, docked: false, width: 27, threadId: null, enabled: null, narrow: false, focusComposer: 0, focusToggle: 0, error: "" });
+    assert.deepEqual({ ...dock.state }, { projectId: "", open: false, docked: false, suspended: false, width: 27, threadId: null, enabled: null, narrow: false, focusComposer: 0, focusToggle: 0, error: "" });
   });
 
   test("binding a project reads its switch, and follows it", async () => {
@@ -156,5 +156,48 @@ describe("the dock", () => {
     dock.bind("p1");
     await settled();
     assert.equal(dock.state.enabled, true);
+  });
+
+  test("moves a thread to the page and back: the panel closes and the page opens the thread, then it docks on the board", () => {
+    const { dock, navigator, memory } = setup();
+    dock.bind("p1");
+    dock.open();
+    dock.setThreadId("t1");
+    dock.openAsPage();
+    assert.equal(dock.state.open, false);
+    assert.deepEqual(navigator.opened, ["/projects/p1/product-owner/threads/t1"]);
+    dock.setThreadId("t1");
+    dock.dockBeside();
+    assert.equal(dock.state.open, true);
+    assert.deepEqual(navigator.opened.at(-1), "/projects/p1");
+    assert.equal(memory.load("p1").threadId, "t1");
+  });
+
+  test("a fresh thread opens as the page itself", () => {
+    const { dock, navigator } = setup();
+    dock.bind("p1");
+    dock.openAsPage();
+    assert.deepEqual(navigator.opened, ["/projects/p1/product-owner"]);
+  });
+
+  test("while the page is open the panel is hidden, and the toggle docks the thread beside the board instead", () => {
+    const { dock, navigator } = setup();
+    dock.bind("p1");
+    dock.open();
+    const release = dock.suspend();
+    assert.equal(dock.state.docked, false);
+    assert.equal(dock.state.suspended, true);
+    dock.toggle();
+    assert.equal(dock.state.open, true);
+    assert.equal(navigator.opened.at(-1), "/projects/p1");
+    release();
+    assert.equal(dock.state.suspended, false);
+    assert.equal(dock.state.docked, true);
+  });
+
+  test("a phone is known to the dock", () => {
+    const { dock, screen } = setup();
+    screen.setPhone(true);
+    assert.equal(dock.phone, true);
   });
 });
