@@ -3,6 +3,9 @@
 package app
 
 import (
+	"io"
+	"net/http"
+	"net/http/httptest"
 	"os"
 	"path/filepath"
 	"slices"
@@ -10,6 +13,8 @@ import (
 	"testing"
 	"time"
 
+	"operators-mcp/internal/adapter/in/httpapi"
+	"operators-mcp/internal/adapter/in/web"
 	"operators-mcp/internal/application/tooling"
 	"operators-mcp/internal/domain"
 )
@@ -472,6 +477,115 @@ func TestAHostilePromptChangesNeitherWhatTheLaunchAllowsNorWhatTheServerServes(t
 	for _, w := range policy.Writable {
 		if strings.HasSuffix(w, "/repo") {
 			t.Errorf("the repository is writable: %v", policy.Writable)
+		}
+	}
+}
+
+// webServer serves the web client's pages beside the API, over the same wiring.
+func (e *poE2E) webServer() *httptest.Server {
+	e.t.Helper()
+	assets, err := web.NewAssets()
+	if err != nil {
+		e.t.Fatal(err)
+	}
+	if !assets.Built() {
+		e.t.Skip("web client not built; run `make web`")
+	}
+	mux := http.NewServeMux()
+	mux.Handle("/api/", httpapi.NewRouter(httpapi.NewHandler(httpapi.Services{
+		Sessions: e.orch, Planning: e.plan, Projects: e.cat.Projects, Settings: e.cat.Settings, ProductOwner: e.po,
+	})))
+	mux.Handle("/", web.NewHandler(web.Deps{
+		Projects: e.cat.Projects, Tasks: e.plan, Sessions: e.orch, Agents: e.cat.Agents, Repositories: e.cat.Projects, ProductOwnerThreads: e.po,
+	}, assets, nil))
+	srv := httptest.NewServer(mux)
+	e.t.Cleanup(srv.Close)
+	return srv
+}
+
+func pageAt(t *testing.T, url string, headers ...string) (int, string) {
+	t.Helper()
+	req, _ := http.NewRequest(http.MethodGet, url, nil)
+	for i := 0; i+1 < len(headers); i += 2 {
+		req.Header.Set(headers[i], headers[i+1])
+	}
+	res, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer res.Body.Close()
+	b, _ := io.ReadAll(res.Body)
+	return res.StatusCode, string(b)
+}
+
+func TestAThreadsContextPageShowsTheContextOfItsSessionWhileItIsInNoSessionPage(t *testing.T) {
+	e := newExtensionE2E(t)
+	e.po.SetIdle(150 * time.Millisecond)
+	srv := e.webServer()
+	other := e.otherProject("other")
+	id, _ := e.startedWith(e.project, 0)
+	sid := e.thread(id).Thread.SessionID
+	page := srv.URL + "/projects/" + e.project + "/product-owner/threads/" + id + "/context"
+
+	status, body := pageAt(t, page)
+	props := `"session_id":"` + sid + `","project_id":"` + e.project + `"`
+	if status != 200 || !strings.Contains(body, `data-island="session-context"`) || !strings.Contains(body, props) {
+		t.Fatalf("page = %d, want the Context island for session %s:\n%.600s", status, sid, body)
+	}
+	if !strings.Contains(body, `<html`) || !strings.Contains(body, `id="app-shell"`) {
+		t.Error("the full page is not the app shell")
+	}
+
+	// Clicked from another page of the project, it answers the page fragment.
+	status, frag := pageAt(t, page, "HX-Request", "true", "HX-Boosted", "true", "HX-Target", "app-shell", "HX-Current-URL", srv.URL+"/projects/"+e.project+"/documents")
+	if status != 200 || strings.Contains(frag, "<html") || !strings.Contains(frag, `data-island="session-context"`) {
+		t.Errorf("fragment = %d:\n%.400s", status, frag)
+	}
+
+	// The island's data: the thread's start entry, then its resume.
+	eventuallyPO(t, "the idle process to end", func() string {
+		if e.orch.ProductOwnerRunning(sid) {
+			return "still running"
+		}
+		return ""
+	})
+	if status, code := e.send(id, "again"); status != 200 {
+		t.Fatalf("send = %d %s", status, code)
+	}
+	e.waitTurn(id, "idle")
+	var view struct {
+		Entries []struct {
+			Kind string `json:"kind"`
+		} `json:"entries"`
+	}
+	if status, code := e.get("sessions/"+sid+"/context", &view); status != 200 || len(view.Entries) != 2 || view.Entries[0].Kind != "start" || view.Entries[1].Kind != "resume" {
+		t.Fatalf("context = %d %s %+v, want start then resume", status, code, view.Entries)
+	}
+
+	// A thread of another project, an unknown thread and an unknown project have no page.
+	for name, path := range map[string]string{
+		"another project's": "/projects/" + other + "/product-owner/threads/" + id + "/context",
+		"unknown thread":    "/projects/" + e.project + "/product-owner/threads/nope/context",
+		"unknown project":   "/projects/nope/product-owner/threads/" + id + "/context",
+	} {
+		if status, _ := pageAt(t, srv.URL+path); status != 404 {
+			t.Errorf("%s: status %d, want 404", name, status)
+		}
+	}
+
+	// The session is still in no session page of the project.
+	if status, sessions := pageAt(t, srv.URL+"/projects/"+e.project+"/sessions"); status != 200 || strings.Contains(sessions, sid) {
+		t.Errorf("the project's sessions page (%d) holds the thread's session", status)
+	}
+	var list struct {
+		Sessions []struct {
+			ID string `json:"id"`
+		} `json:"sessions"`
+	}
+	e.get("sessions?project_id="+e.project, &list)
+	for _, s := range list.Sessions {
+		if s.ID == sid {
+			t.Error("GET /api/sessions lists the thread's session")
 		}
 	}
 }
