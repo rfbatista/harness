@@ -130,8 +130,8 @@ function RowView({ row, presenter }: { row: RowViewModel; presenter: ThreadPrese
             {row.fromOtherTab && <span>· from another tab</span>}
           </div>
           <div className="[ body ]">
-            <MarkdownView blocks={row.blocks} taskState={presenter.taskState} />
-            {row.streaming && <span className="[ caret ]" aria-hidden="true" />}
+            <MarkdownView blocks={row.blocks} taskState={presenter.taskState} caret={row.streaming} />
+            {row.streaming && row.blocks.length === 0 && <span className="[ caret ]" aria-hidden="true" />}
           </div>
         </article>
       );
