@@ -157,7 +157,7 @@ func resolveJoin(ctx context.Context, scope *taskScope, sessions ports.SessionRe
 		return nil, invalidInput("join_session_id " + id + " and base_branch cannot be combined: a session that joins a worktree runs on that session's branch")
 	}
 	switch domain.SessionMode(mode) {
-	case domain.SessionModeArchitect, domain.SessionModeProduct, domain.SessionModeDesignSystem:
+	case domain.SessionModeArchitect, domain.SessionModeProduct, domain.SessionModeDesignSystem, domain.SessionModeProductOwner:
 		return nil, invalidInput("a session in mode " + mode + " cannot join the worktree of session " + id + ": it plans and delegates, it does not work in a worktree")
 	}
 	joined, err := sessions.Find(ctx, id)

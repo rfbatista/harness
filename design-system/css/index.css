@@ -89,10 +89,12 @@
 @import url("./blocks/source.css");
 @import url("./blocks/history.css");
 @import url("./blocks/sandbox-tab.css");
+@import url("./blocks/context-tab.css");
 @import url("./blocks/merge-tab.css");
 @import url("./blocks/code-fullscreen.css");
 @import url("./blocks/code-layout.css");
 @import url("./blocks/segmented.css");
+@import url("./blocks/whiteboard.css");
 @import url("./blocks/crumbs.css");
 @import url("./blocks/change-mark.css");
 @import url("./blocks/zone-tag.css");

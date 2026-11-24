@@ -69,6 +69,9 @@ type sessionSubject struct {
 	mode    domain.SessionMode
 	// designSystem is the design system a design session is bound to.
 	designSystem *domain.DesignSystem
+	// productOwnerPrompt is the project prompt a product-owner thread starts
+	// with, "" for none.
+	productOwnerPrompt string
 }
 
 // projectID is the project the session works in.
@@ -134,6 +137,12 @@ type Service struct {
 	// Project only: a session gets one only when its project has it Added.
 	// Nil means none is.
 	MCPProjectOnly func() []string
+	// MCPKnownTools returns each catalog MCP server's tool names, from its last
+	// probe, by server name, for a session's context. Nil knows none.
+	MCPKnownTools func() map[string][]string
+	// ClaudeBuiltInTools names Claude's built-in tools, for a session's context.
+	// Nil lists none.
+	ClaudeBuiltInTools func() []string
 	// SessionHookURL returns where an interactive session's SessionStart hook
 	// reports its conversation id. Nil leaves the hook out.
 	SessionHookURL func(sessionID string) string
@@ -228,6 +237,14 @@ type Service struct {
 	// TranscriptReader reads a session's saved conversation. Nil: no session
 	// has one to show.
 	TranscriptReader ports.ClaudeTranscriptReader
+	// Contexts stores what each session's context was at its start and resumes
+	// (ADR 0099); nil stores nothing.
+	Contexts  ports.SessionContextStore
+	contextMu sync.Mutex
+	loopOnce  sync.Once // starts contextLoop once the service is wired and somebody follows
+	// contextNotes puts a session's context changes on the feed, coalesced.
+	contextNotes *contextNotifier
+	redactors    map[string]func(string) string // by session id: scrubs a headless session's init report
 	// Artifacts lists the project assets attached to a session's task, for
 	// its brief. Nil leaves them out.
 	Artifacts ports.ArtifactReader
@@ -322,6 +339,7 @@ func NewService(runtime llmkit.Manager, broker *approval.Broker, hub *Hub, sessi
 		seq:        map[string]int64{}, cleanups: map[string]func(){}, busy: map[string]bool{},
 		resuming: map[string]bool{}, commitOff: map[string]string{}, branchWaits: map[string]*branchWait{}, statuses: map[string]domain.SessionStatus{},
 	}
+	s.contextNotes = newContextNotifier(time.Now, func(d time.Duration, f func()) { time.AfterFunc(d, f) }, s.sendContextChange)
 	go s.approvalLoop()
 	go s.expiryLoop()
 	return s
@@ -430,6 +448,7 @@ func (s *Service) Start(ctx context.Context, req StartRequest) (*domain.Session,
 		return nil, fmt.Errorf("persist session: %w", err)
 	}
 	provisioned = nil
+	s.recordStart(ctx, sess.ID(), p, req.Task)
 	// The Branches list takes its starting snapshot before the agent acts.
 	s.announce(domain.SessionWorktreeProvisioned{SessionID: sess.ID()})
 	if s.commitCheckReason(sess.ID()) != "" {
@@ -502,6 +521,9 @@ type prepared struct {
 	envFile    string // the session's git env file, for login shells; "" without GitAuth
 	savers     sessionSavers
 	sandbox    sandboxed
+	// context is what the session's context entry is built from, once the
+	// start has recorded the session and knows the opening message.
+	context contextInput
 }
 
 // prepare validates a start request, provisions the session's worktree and
@@ -614,12 +636,17 @@ func (s *Service) prepare(ctx context.Context, in prepareInput) (*prepared, erro
 		id = llmkit.NewSessionID()
 	}
 	permission := parseAutoAccept(in.AutoAccept)
-	cfg := s.sessionConfig(id, ws.Path, in.Model, in.AllowedTools, permission, ag, subject, in.ZoneID, in.Role, in.RepositoryID)
+	trail := &pieceTrail{}
+	cfg, res := s.sessionConfigTrail(trail, id, ws.Path, in.Model, in.AllowedTools, permission, ag, subject, in.ZoneID, in.Role, in.RepositoryID)
 	withReadOnlyAccess(&cfg, in.Access, in.Branch)
+	trail.mark(&cfg, domain.PieceOther, "Read-only access", "Harness")
 	s.withSharedWorktree(ctx, &cfg, id, ws.ID, in.Access, ws.Branch, ws.Path)
+	trail.mark(&cfg, domain.PieceOther, "Shared worktree", "Harness")
 	cleanup, err := s.withShell(id, in.RepositoryID, subject, &cfg, ag.cleanup)
+	trail.mark(&cfg, domain.PieceOther, "Virtual shell", "Harness")
 	if err == nil {
 		cleanup = s.withCommitCheck(id, ws.ID, ws.Path, &cfg, false, cleanup)
+		trail.mark(&cfg, domain.PieceOther, "Commit check", "Harness")
 	}
 	if err != nil {
 		discard()
@@ -630,10 +657,12 @@ func (s *Service) prepare(ctx context.Context, in prepareInput) (*prepared, erro
 		discard()
 		return nil, err
 	}
+	trail.mark(&cfg, domain.PieceOther, "Git authentication", "Harness")
 	s.withAgentCredential(&cfg, in.ProjectID)
 	s.withKeychainShim(&cfg)
 	s.withAttribution(&cfg)
 	savers := s.withTokenSavers(ctx, in, repo.RootDir, ws.Path, &cfg)
+	trail.mark(&cfg, domain.PieceRuleset, "Token saver rules", "Token savers")
 	cleanup, err = s.withTempDir(id, &cfg, cleanup)
 	if err != nil {
 		discard()
@@ -656,7 +685,14 @@ func (s *Service) prepare(ctx context.Context, in prepareInput) (*prepared, erro
 		withClaudeSandboxOff(&cfg)
 	}
 	withChromeEnvPinned(&cfg)
+	trail.mark(&cfg, domain.PieceOther, "Sandbox and Chrome", "Harness")
 	return &prepared{
+		context: contextInput{
+			Cfg: cfg, System: trail.pieces, Versions: res.versions, Repository: repo.Name,
+			Role: in.Role, Agent: ag.agent, Project: subject.project, Attached: res.attached, KnownTools: res.known,
+			Skills: ag.contextSkills, BuiltIn: s.builtInTools(),
+			Facts: s.contextFacts(in, ag, cfg, ws, savers, sb, permission),
+		},
 		sandbox:    sb,
 		cfg:        cfg,
 		ws:         ws,
@@ -944,6 +980,9 @@ type resolvedAgent struct {
 	appendSystem string
 	skillDirs    []string
 	cleanup      func() // removes skillDirs; nil if none
+	// contextSkills are the mode's and the agent's skills, with where each
+	// comes from, for the session's context.
+	contextSkills []domain.ContextSkill
 }
 
 // resolveAgent loads the agent a session runs as, plus the skills its mode
@@ -966,6 +1005,7 @@ func (s *Service) resolveAgent(agentID string, mode domain.SessionMode) (resolve
 		}
 	}
 	skills := sessionSkills(r.agent, modeOnly)
+	r.contextSkills = classifySkills(skills, modeOnly)
 	if len(skills) > 0 {
 		dirs, c, err := resolveSkillDirs(skills)
 		if err != nil {
@@ -983,6 +1023,13 @@ func (s *Service) resolveAgent(agentID string, mode domain.SessionMode) (resolve
 // a project-level session's project brief) and task MCP server, the
 // agent's MCP servers and the zone's extra dirs.
 func (s *Service) sessionConfig(id, dir, model string, allowedTools []string, permission llmkit.PermissionMode, ag resolvedAgent, subject sessionSubject, zoneID string, role domain.SessionRole, repositoryID string) llmkit.SessionConfig {
+	cfg, _ := s.sessionConfigTrail(nil, id, dir, model, allowedTools, permission, ag, subject, zoneID, role, repositoryID)
+	return cfg
+}
+
+// sessionConfigTrail is sessionConfig that also marks each system-prompt
+// section on trail, and says the version of each instruction file it delivers.
+func (s *Service) sessionConfigTrail(trail *pieceTrail, id, dir, model string, allowedTools []string, permission llmkit.PermissionMode, ag resolvedAgent, subject sessionSubject, zoneID string, role domain.SessionRole, repositoryID string) (llmkit.SessionConfig, configResolution) {
 	ticket := subject.ticket
 	cfg := llmkit.SessionConfig{
 		ID:           id,
@@ -997,6 +1044,7 @@ func (s *Service) sessionConfig(id, dir, model string, allowedTools []string, pe
 		Attribution: id,
 		Driver:      claude.Config{SkillDirs: ag.skillDirs},
 	}
+	trail.mark(&cfg, domain.PieceRepositoryPrompt, "Repository prompt", "Agent and repository prompts")
 
 	// After the agent's own prompt, so the task brief lands at the end of the
 	// system prompt rather than being overwritten by it. The id is minted
@@ -1009,6 +1057,10 @@ func (s *Service) sessionConfig(id, dir, model string, allowedTools []string, pe
 		in := s.briefProject(subject.project)
 		applyDesignSessionContext(&cfg, designSessionBriefInput{Project: in.Project, DesignSystem: subject.designSystem.Name,
 			Repositories: in.Repositories, Contexts: in.Contexts, AgentsMove: s.agentsMoveDocuments()}, taskURL)
+	} else if subject.mode == domain.SessionModeProductOwner && subject.project != nil {
+		in := s.briefProject(subject.project)
+		in.AgentsMove = s.agentsMoveDocuments()
+		applyProductOwnerContext(&cfg, in, taskURL, subject.productOwnerPrompt)
 	} else if subject.projectLevel() {
 		in := s.briefProject(subject.project)
 		in.AgentsMove = s.agentsMoveDocuments()
@@ -1019,13 +1071,17 @@ func (s *Service) sessionConfig(id, dir, model string, allowedTools []string, pe
 		counts.structure = s.taskStructure(ticket)
 		applyTaskContext(&cfg, ticket, taskURL, role, counts)
 	}
+	trail.mark(&cfg, domain.PieceBrief, subject.briefTitle(), "Harness")
 	if section := s.architectureSection(context.TODO(), role, ag.agent, subject.projectID(), repositoryID); section != "" {
 		cfg.AppendSystem = appendSection(cfg.AppendSystem, section)
 	}
+	trail.mark(&cfg, domain.PieceArchitecture, "Repository architecture", "Harness")
 	if section := s.designSystemBrief(context.TODO(), repositoryID); section != "" && subject.designSystem == nil {
 		cfg.AppendSystem = appendSection(cfg.AppendSystem, section)
 	}
-	cfg.InstructionFiles = s.instructionFiles(context.TODO(), role, ag.agent, subject.projectID(), repositoryID)
+	trail.mark(&cfg, domain.PieceOther, "Design system", "Harness")
+	res := configResolution{}
+	cfg.InstructionFiles, res.versions = s.deliveredFiles(context.TODO(), role, ag.agent, subject.projectID(), repositoryID)
 	if s.SessionBranchGateURL != nil {
 		cfg.InstructionFiles = append(cfg.InstructionFiles, s.branchGateInstructionFile(subject.mode))
 	}
@@ -1033,7 +1089,9 @@ func (s *Service) sessionConfig(id, dir, model string, allowedTools []string, pe
 		cfg.AppendSystem = appendSection(cfg.AppendSystem, section)
 	}
 
+	trail.mark(&cfg, domain.PieceOther, "Attached assets", "Harness")
 	s.applyServicesServer(&cfg, id, subject.mode, ag.agent, subject.project)
+	trail.mark(&cfg, domain.PieceOther, "Services", "Harness")
 	var defaults map[string][]string
 	if s.MCPToolDefaults != nil {
 		defaults = s.MCPToolDefaults()
@@ -1043,6 +1101,10 @@ func (s *Service) sessionConfig(id, dir, model string, allowedTools []string, pe
 		projectOnly = s.MCPProjectOnly()
 	}
 	attached := resolveMCP(ag.agent, subject.project, s.catalog.MCPServers.ListMCPServers(), defaults, projectOnly)
+	res.attached = attached
+	if s.MCPKnownTools != nil {
+		res.known = s.MCPKnownTools()
+	}
 	withDeniedMCPTools(&cfg, attached.Denied)
 	for _, m := range attached.Servers {
 		cfg.MCPServers = append(cfg.MCPServers, llmkit.MCPServerSpec{
@@ -1061,7 +1123,7 @@ func (s *Service) sessionConfig(id, dir, model string, allowedTools []string, pe
 			cfg.AddDirs = append(cfg.AddDirs, z.ExplicitPaths...)
 		}
 	}
-	return cfg
+	return cfg, res
 }
 
 func (s *Service) pump(sess llmkit.Session) {
@@ -1074,6 +1136,9 @@ func (s *Service) pump(sess llmkit.Session) {
 		}
 
 		logSessionEvent(id, ev)
+		if ce.Type == llmkit.EventSystem && ce.Subtype == "init" {
+			s.onInit(id, ce)
+		}
 
 		if ev.Type == "output_delta" {
 			s.publishDelta(id, ev)
@@ -1117,6 +1182,8 @@ func (s *Service) pump(sess llmkit.Session) {
 		}
 	}
 	s.runCleanup(id)
+	s.dropRedactor(id)
+	s.contextNotes.drop(id)
 	if sess := s.sessions.Get(id); sess != nil && sess.Status.IsTerminal() {
 		s.hub.End(id)
 		s.announceEnded(id, sess.Status)
@@ -1128,6 +1195,9 @@ func (s *Service) pump(sess llmkit.Session) {
 func (s *Service) announce(ev domain.Event) {
 	if s.Events == nil {
 		return
+	}
+	if s.isProductOwnerEvent(ev) {
+		return // a thread shows in the product owner's surface only (ADR 0109)
 	}
 	if err := s.Events.Publish(context.Background(), ev); err != nil {
 		slog.Warn("announce session event", "event", ev.EventName(), "err", err)
@@ -1455,6 +1525,11 @@ func (s *Service) Delete(ctx context.Context, id string) error {
 		}
 	}
 	s.runCleanup(id)
+	if s.Contexts != nil {
+		_ = s.Contexts.Delete(ctx, id)
+		s.dropRedactor(id)
+		s.contextNotes.drop(id)
+	}
 	// Deleting ends the session for good: its commit check goes with it.
 	if sess := s.sessions.Get(id); sess != nil {
 		s.RemoveCommitCheck(id, sess.WorkspaceID, sess.WorkingDir)

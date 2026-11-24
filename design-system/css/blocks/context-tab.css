@@ -1,0 +1,101 @@
+/*
+ * Context tab — what a session was given and how it used it (ADR 0099), in the
+ * Sandbox tab's frame (.sandbox-tab, .part, .facts, .note, .skeletons). Quiet:
+ * red is only for a failed MCP server, on its row and on its group count.
+ * <div class="sandbox-tab" data-context-tab>
+ *   <p class="live-line" role="status">…</p>  <div class="toolbar"><div class="search"><input></div></div>
+ *   <section class="part" data-group="tools"><h3><button class="group-toggle" aria-expanded>Tools <span class="summary">· 128</span></button></h3>
+ *     <ul class="rows"><li class="row" data-state data-ring data-tone><span class="name"/><span class="status"/><span class="used"/><span class="badge"/><span class="muted"/>
+ *       <p class="reason"/></li></ul></section></div>
+ * A changed row carries data-ring: an outline in place, never a move.
+ */
+
+@layer blocks {
+  [data-context-tab] {
+    container-type: inline-size;
+
+    & .group-toggle {
+      all: unset;
+      cursor: pointer;
+      font: inherit;
+      font-weight: var(--weight-medium);
+
+      &:focus-visible { outline: 2px solid var(--color-signal); outline-offset: 2px; }
+      &[aria-expanded="false"]::before { content: "▸ "; }
+      &[aria-expanded="true"]::before { content: "▾ "; }
+    }
+
+    & .summary[data-tone="danger"] { color: var(--color-danger); }
+
+    & .sub { display: grid; gap: var(--space-2xs); & h4 { font-size: var(--text-sm); color: var(--color-ink-muted); } }
+
+    & .rows {
+      display: grid;
+      list-style: none;
+      margin: 0;
+      padding: 0;
+      border: var(--border-width) solid var(--color-line);
+      border-radius: var(--radius-md);
+    }
+
+    /* A list item is capped to a reading measure elsewhere; the rows fill the pane. */
+    & .rows, & .rows > .row { max-inline-size: none; inline-size: 100%; }
+
+    & .row {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: baseline;
+      gap: var(--space-2xs) var(--space-s);
+      padding: var(--space-xs) var(--space-s);
+      border-block-end: var(--border-width) solid var(--color-line);
+
+      &:last-child { border-block-end: 0; }
+      &[data-ring] { outline: 2px solid var(--color-signal); outline-offset: -2px; }
+      &[data-tone="danger"] { background: color-mix(in oklch, var(--color-danger) 8%, transparent); & .status { color: var(--color-danger); } }
+
+      & .meaning { flex: 1 1 20rem; min-inline-size: 0; }
+      & .name { font-weight: var(--weight-medium); overflow-wrap: anywhere; }
+      & .status, & .used, & .muted { color: var(--color-ink-muted); font-size: var(--text-sm); }
+      & .reason { flex-basis: 100%; margin: 0; color: var(--color-ink-muted); font-size: var(--text-sm); overflow-wrap: anywhere; }
+
+      /* The meaning column goes first on a narrow pane. */
+      @container (inline-size <= 34rem) { & .meaning { display: none; } }
+    }
+
+    & .summary-row {
+      all: unset;
+      display: flex;
+      flex-wrap: wrap;
+      align-items: baseline;
+      gap: var(--space-2xs) var(--space-s);
+      inline-size: 100%;
+      cursor: pointer;
+      &:focus-visible { outline: 2px solid var(--color-signal); outline-offset: 2px; }
+    }
+
+    & .detail { display: grid; gap: var(--space-xs); flex-basis: 100%; }
+    & .text { margin: 0; max-block-size: 24rem; overflow: auto; white-space: pre-wrap; overflow-wrap: anywhere; font-family: var(--font-mono); font-size: var(--text-xs); }
+
+    & .live-line {
+      margin: 0;
+      padding: var(--space-xs) var(--space-s);
+      border: var(--border-width) solid var(--color-signal);
+      border-radius: var(--radius-md);
+      background: var(--color-signal-wash);
+    }
+
+    & .toolbar .search input { inline-size: 16rem; max-inline-size: 100%; }
+    & .no-match { color: var(--color-ink-muted); }
+  }
+
+  /* The dot on the tab's button while the context changed behind another tab. */
+  .tabs [role="tab"] [data-dot] {
+    display: inline-block;
+    inline-size: 0.5rem;
+    block-size: 0.5rem;
+    padding: 0;
+    margin-inline-start: var(--space-2xs);
+    border-radius: 50%;
+    background: var(--color-signal);
+  }
+}

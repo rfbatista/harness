@@ -56,6 +56,7 @@ import (
 	"operators-mcp/internal/application/keychainpath"
 	"operators-mcp/internal/application/orchestration"
 	"operators-mcp/internal/application/planning"
+	"operators-mcp/internal/application/productowner"
 	"operators-mcp/internal/application/repoagents"
 	"operators-mcp/internal/application/sandboxsettings"
 	"operators-mcp/internal/application/servicerequests"
@@ -104,12 +105,14 @@ var PersistenceModule = fx.Module("persistence",
 		asPort(sqlite.NewArchitectureRuleEventRepository, new(ports.ArchitectureRuleEventStore)),
 		asPort(sqlite.NewBranchRequestRepository, new(ports.BranchRequestStore)),
 		asPort(sqlite.NewBranchWatchRepository, new(ports.BranchWatchStore)),
+		asPort(sqlite.NewSessionContextRepository, new(ports.SessionContextStore)),
 		asPort(sqlite.NewRecordedPushRepository, new(ports.PushRecords)),
 		asPort(sqlite.NewDesignSystemRepository, new(ports.DesignSystemStore)),
 		asPort(sqlite.NewDesignProposalRepository, new(ports.DesignProposalStore)),
 		asPort(sqlite.NewDesignExportRepository, new(ports.DesignExportStore)),
 		asPort(sqlite.NewInstructionDraftRepository, new(ports.InstructionDraftStore)),
 		asPort(sqlite.NewInstructionProposalRepository, new(ports.InstructionProposalStore)),
+		asPort(sqlite.NewProductOwnerRepository, new(ports.ProductOwnerStore)),
 	),
 )
 
@@ -1028,6 +1031,7 @@ func newOrchestrationService(
 	ws *workspaces.Service,
 	transcripts ports.ClaudeTranscripts,
 	transcriptReader ports.ClaudeTranscriptReader,
+	contexts ports.SessionContextStore,
 	terminals ports.TerminalHost,
 	sandboxDriver ports.SandboxDriver,
 	violations ports.SandboxViolationSource,
@@ -1054,6 +1058,8 @@ func newOrchestrationService(
 	}
 	svc := orchestration.NewService(manager, broker, hub, sessions, orchCatalog, tickets, ws)
 	svc.MCPToolDefaults = agentCatalog.DisabledMCPTools
+	svc.MCPKnownTools = agentCatalog.KnownMCPTools
+	svc.ClaudeBuiltInTools = agentcatalog.BuiltInToolNames
 	svc.MCPProjectOnly = agentCatalog.ProjectOnlyMCPServers
 	svc.UseBranchNames(branchNames)
 	svc.UseBaseBranches(baseBranches)
@@ -1118,6 +1124,7 @@ func newOrchestrationService(
 	svc.Settings = cat.Settings
 	svc.Transcripts = transcripts
 	svc.TranscriptReader = transcriptReader
+	svc.Contexts = contexts
 	svc.Terminals = terminals
 	svc.Events = cat.Bus
 	svc.BranchRequests = pendingBranchRequests{branchRequests}
@@ -1647,4 +1654,31 @@ func sessionTempPrefix(base, id string) string {
 func commitCheckDirs(cfg Config) func(workspaceID string) string {
 	root, _ := dataDir(cfg, "githooks")
 	return func(workspaceID string) string { return filepath.Join(root, workspaceID) }
+}
+
+// ProductOwnerModule is each project's product owner (ADR 0109): its settings
+// and the threads in which the person talks to it.
+var ProductOwnerModule = fx.Module("productowner",
+	fx.Provide(newProductOwner),
+	// Built at boot, so the threads a restart cut off are resumed.
+	fx.Invoke(func(*productowner.Service) {}),
+)
+
+func newProductOwner(lc fx.Lifecycle, store ports.ProductOwnerStore, cat catalog.Catalog, orch *orchestration.Service) *productowner.Service {
+	svc := productowner.New(store, cat.Projects, cat.Agents, orch, orch)
+	lc.Append(fx.Hook{
+		OnStart: func(context.Context) error {
+			// The threads to recover are decided and marked busy here, before the
+			// server listens; their resumes then run behind the boot.
+			svc.Recover(context.Background())
+			return nil
+		},
+		OnStop: func(context.Context) error {
+			// The processes die with the server: their threads stay as they are,
+			// for the next boot to resume.
+			svc.Close()
+			return nil
+		},
+	})
+	return svc
 }

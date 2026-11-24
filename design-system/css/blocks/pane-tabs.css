@@ -42,6 +42,15 @@
       mask-image: linear-gradient(to left, transparent, #000 var(--space-l));
     }
 
+    /* A narrow pane: the tabs sit closer so the quiet pair at the end (Context, Sandbox) stays readable, and the fade no longer covers the last one. */
+    @container session (width <= 34rem) {
+      & > .tabs {
+        gap: var(--space-s);
+        padding-inline: var(--space-s) var(--space-2xs);
+        mask-image: none;
+      }
+    }
+
     & > .lead {
       display: flex;
       align-items: center;

@@ -91,6 +91,8 @@ func ModeWord(m SessionMode) string {
 		return "QA"
 	case SessionModeOperate:
 		return "operate"
+	case SessionModeProductOwner:
+		return "product owner"
 	}
 	return "session"
 }

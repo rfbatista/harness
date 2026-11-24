@@ -83,9 +83,9 @@ func branchBlockSwitches(t *testing.T, stored settings) []string {
 	return out
 }
 
-func TestTheBranchBlockSectionHasTenSwitchesInTheContractsOrderOnByDefault(t *testing.T) {
+func TestTheBranchBlockSectionHasElevenSwitchesInTheContractsOrderOnByDefault(t *testing.T) {
 	var want []string
-	for _, m := range []string{"default", "architect", "implement", "design", "product", "designsystem", "review", "test", "qa", "operate"} {
+	for _, m := range []string{"default", "architect", "implement", "design", "product", "designsystem", "review", "test", "qa", "operate", "productowner"} {
 		want = append(want, "branches.block.mode."+m+"=on")
 	}
 	if got := branchBlockSwitches(t, settings{}); strings.Join(got, ",") != strings.Join(want, ",") {
@@ -95,7 +95,7 @@ func TestTheBranchBlockSectionHasTenSwitchesInTheContractsOrderOnByDefault(t *te
 
 func TestAStoredOffTurnsOneNewModesSwitchOff(t *testing.T) {
 	got := branchBlockSwitches(t, settings{"branches.block.mode.qa": "off"})
-	if len(got) != 10 || got[8] != "branches.block.mode.qa=off" || got[7] != "branches.block.mode.test=on" {
+	if len(got) != 11 || got[8] != "branches.block.mode.qa=off" || got[7] != "branches.block.mode.test=on" {
 		t.Errorf("switches = %v", got)
 	}
 }

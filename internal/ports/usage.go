@@ -187,6 +187,10 @@ const (
 	// UsageSystemAttribution is the attribution of the harness's own
 	// one-shots (summarize, generate, translate).
 	UsageSystemAttribution = "harness:system"
+	// UsageProductOwnerAttribution starts the attribution of a product-owner
+	// thread's calls, with ":<project id>" appended: they are counted for the
+	// product owner and its project, not as a task session's.
+	UsageProductOwnerAttribution = "harness:product-owner"
 	// UsageSystemProject is the project key the API reads the harness's own
 	// spend under: records attributed to no project.
 	UsageSystemProject = "_harness"

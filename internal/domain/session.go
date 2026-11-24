@@ -224,6 +224,11 @@ const (
 	// creates one child task per piece of work with a brief each, and asks for
 	// review. It never writes code.
 	SessionModeProduct SessionMode = "product"
+	// SessionModeProductOwner is a product-owner thread (ADR 0109): a headless
+	// session on its project with no task, in which the person talks to the
+	// project's product owner. It reads every repository and the whole
+	// project, and changes nothing.
+	SessionModeProductOwner SessionMode = "productowner"
 	// SessionModeDesignSystem is a design session (ADR 0055): it runs on its
 	// project with no task, bound to one design system (ADR 0060), reads
 	// every repository and changes none, and edits a writable draft of that
@@ -248,7 +253,9 @@ const (
 // NeedsTask says a session in this mode must run on a task. Only a product
 // session (ADR 0016: it creates the feature task itself) and a design session
 // may run on their project alone.
-func (m SessionMode) NeedsTask() bool { return m != SessionModeProduct && m != SessionModeDesignSystem }
+func (m SessionMode) NeedsTask() bool {
+	return m != SessionModeProduct && m != SessionModeDesignSystem && m != SessionModeProductOwner
+}
 
 // ParseSessionMode reads a mode as clients send it; empty is the default.
 func ParseSessionMode(s string) (SessionMode, error) {
@@ -286,7 +293,7 @@ type SandboxFacts struct {
 // SandboxVisibilityFor is the repository visibility a sandbox gives a session
 // of mode: architect and product see every repository of the project.
 func SandboxVisibilityFor(mode SessionMode) string {
-	if mode == SessionModeArchitect || mode == SessionModeProduct || mode == SessionModeDesignSystem {
+	if mode == SessionModeArchitect || mode == SessionModeProduct || mode == SessionModeDesignSystem || mode == SessionModeProductOwner {
 		return SandboxAllReposReadOnly
 	}
 	return SandboxOwnRepo
