@@ -130,6 +130,8 @@ func (s sessionSubject) briefTitle() string {
 	switch {
 	case s.designSystem != nil:
 		return "Design session brief"
+	case s.mode == domain.SessionModeProductOwner && s.project != nil:
+		return "Product owner brief"
 	case s.projectLevel():
 		return "Project brief"
 	}

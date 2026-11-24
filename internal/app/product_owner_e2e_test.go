@@ -2043,3 +2043,78 @@ func TestAStopOnAThreadQueuedForRecoveryIsAnsweredAndTheRecoverySkipsIt(t *testi
 		t.Errorf("a boot resumed a stopped turn: %d launches, was %d", len(e.launches()), launched)
 	}
 }
+
+func TestAThreadsSessionHasAContextEntryAtItsStartAndANewOneAtEachResume(t *testing.T) {
+	e := newPOE2E(t)
+	if _, err := e.cat.Projects.SetProjectMCPServers(e.ctx, e.project, []string{"services"}); err != nil {
+		t.Fatal(err)
+	}
+	e.po.SetIdle(150 * time.Millisecond)
+	id, _ := e.startThread("first")
+	th := e.waitTurn(id, "idle")
+	sid := th.Thread.SessionID
+
+	view, err := e.orch.SessionContext(e.ctx, sid)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(view.Entries) != 1 || view.Entries[0].Kind != "start" {
+		t.Fatalf("after the start: %d entries %+v, want the start entry", len(view.Entries), view.Entries)
+	}
+	eventuallyPO(t, "the idle process to end", func() string {
+		if e.orch.ProductOwnerRunning(sid) {
+			return "still running"
+		}
+		return ""
+	})
+	if status, code := e.send(id, "second"); status != 200 {
+		t.Fatalf("send = %d %s", status, code)
+	}
+	e.waitTurn(id, "idle")
+
+	view, err = e.orch.SessionContext(e.ctx, sid)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(view.Entries) != 2 || view.Entries[0].Kind != "start" || view.Entries[1].Kind != "resume" {
+		t.Fatalf("after the resume: entries %+v, want start then resume", view.Entries)
+	}
+	for _, entry := range view.Entries {
+		if entry.Facts.Mode != "productowner" || entry.Facts.Model != "sonnet" || !entry.Facts.Headless || entry.Facts.RepositoryVisibility == "" {
+			t.Errorf("%s facts = %+v", entry.Kind, entry.Facts)
+		}
+		var brief bool
+		for _, p := range entry.Instructions {
+			if p.Title == "Product owner brief" && strings.Contains(p.Text, "cannot change anything yet") {
+				brief = true
+			}
+		}
+		if !brief {
+			t.Errorf("%s entry has no product owner brief piece: %+v", entry.Kind, entry.Instructions)
+		}
+		var names []string
+		for _, tool := range entry.Tools {
+			names = append(names, tool.Name)
+			if strings.Contains(tool.Name, "services") || strings.Contains(tool.Server, "services") {
+				t.Errorf("%s entry lists a services tool: %+v", entry.Kind, tool)
+			}
+		}
+		for _, want := range tooling.ProductOwnerToolNames {
+			if !slices.Contains(names, "mcp__task__"+want) {
+				t.Errorf("%s entry lacks the tool %s: %v", entry.Kind, want, names)
+			}
+		}
+		for _, server := range entry.MCPServers {
+			if server.Name == "services" {
+				t.Errorf("%s entry lists the services server", entry.Kind)
+			}
+		}
+	}
+	// What the entries hold is names and texts, never an environment's values.
+	raw, _ := json.Marshal(view)
+	for _, secret := range []string{"CLAUDE_CODE_OAUTH_TOKEN", "ANTHROPIC_API_KEY", "sk-ant-"} {
+		if strings.Contains(string(raw), secret) {
+			t.Errorf("the context holds %q", secret)
+		}
+	}
+}

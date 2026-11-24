@@ -24,9 +24,6 @@ var _ ports.ProductOwnerSessions = (*Service)(nil)
 // (read only for this mode) with the whole project readable.
 func (s *Service) StartProductOwnerSession(ctx context.Context, spec ports.ProductOwnerSessionSpec) (string, error) {
 	id := llmkit.NewSessionID()
-	// ADR 0099: the session context entries (what the thread started with, for
-	// the Context tab) are recorded here once that store is on main, and at the
-	// resume below.
 	p, err := s.productOwnerPrepare(ctx, id, spec)
 	if err != nil {
 		return "", err
@@ -59,6 +56,9 @@ func (s *Service) StartProductOwnerSession(ctx context.Context, spec ports.Produ
 	if p.cleanup != nil {
 		s.adoptCleanup(id, p.cleanup)
 	}
+	// ADR 0099: what the thread started with, for its Context tab. The first
+	// message is the thread's own and not part of the entry.
+	s.recordStart(ctx, id, p.prepared, "")
 	go s.pump(sess)
 	return id, nil
 }
@@ -83,7 +83,6 @@ func (s *Service) ResumeProductOwnerSession(ctx context.Context, sessionID strin
 		return &domain.StructuredError{Code: "UNAVAILABLE", Message: "this agent runtime cannot resume a conversation"}
 	}
 	spec.ProjectID = sess.ProjectID
-	// ADR 0099: the resume's context entry goes here too.
 	p, err := s.productOwnerPrepare(ctx, sessionID, spec)
 	if err != nil {
 		return err
@@ -98,6 +97,8 @@ func (s *Service) ResumeProductOwnerSession(ctx context.Context, sessionID strin
 	if p.sandbox.facts != nil {
 		_ = s.sessions.UpdateSandbox(sessionID, *p.sandbox.facts)
 	}
+	// ADR 0099: a new entry at each resume, from what this resume handed to claude.
+	s.recordResume(ctx, sess, p.context, "")
 	_ = s.sessions.UpdateStatus(sessionID, domain.SessionStarting)
 	if p.cleanup != nil {
 		s.adoptCleanup(sessionID, p.cleanup)
@@ -169,13 +170,15 @@ func (s *Service) productOwnerPrepare(ctx context.Context, id string, spec ports
 	// Its tools read; nothing it runs needs a person's approval, and the
 	// sandbox and the tools hold what it may not do.
 	permission := llmkit.PermissionBypass
-	cfg := s.sessionConfig(id, dir, model, nil, permission, ag, subject, "", "", "")
+	trail := &pieceTrail{}
+	cfg, res := s.sessionConfigTrail(trail, id, dir, model, nil, permission, ag, subject, "", "", "")
 	// Its LLM calls are counted for the product owner and its project (ADR 0006).
 	cfg.Attribution = ports.UsageProductOwnerAttribution + ":" + proj.ID
 	cleanup, err := s.withShell(id, "", subject, &cfg, ag.cleanup)
 	if err != nil {
 		return nil, err
 	}
+	trail.mark(&cfg, domain.PieceOther, "Virtual shell", "Harness")
 	s.withAgentCredential(&cfg, proj.ID)
 	s.withKeychainShim(&cfg)
 	s.withAttribution(&cfg)
@@ -197,9 +200,18 @@ func (s *Service) productOwnerPrepare(ctx context.Context, id string, spec ports
 		withClaudeSandboxOff(&cfg)
 	}
 	withChromeEnvPinned(&cfg)
+	trail.mark(&cfg, domain.PieceOther, "Sandbox and Chrome", "Harness")
+	facts := s.contextFacts(prepareInput{Mode: mode, Headless: true}, ag, cfg, &domain.Workspace{Path: dir}, sessionSavers{}, sb, permission)
 	return &productOwnerPrepared{
-		prepared: &prepared{cfg: cfg, permission: permission, cleanup: cleanup, sandbox: sb},
-		project:  proj,
+		prepared: &prepared{
+			cfg: cfg, permission: permission, cleanup: cleanup, sandbox: sb,
+			context: contextInput{
+				Cfg: cfg, System: trail.pieces, Versions: res.versions, Repository: repo.Name,
+				Agent: ag.agent, Project: proj, Attached: res.attached, KnownTools: res.known,
+				Skills: ag.contextSkills, BuiltIn: s.builtInTools(), Facts: facts,
+			},
+		},
+		project: proj,
 	}, nil
 }
 
