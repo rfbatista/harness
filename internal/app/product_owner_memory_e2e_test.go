@@ -511,3 +511,151 @@ func TestOnlyTheFirstMessageOfAThreadCarriesTheWholeMemory(t *testing.T) {
 		t.Errorf("the second message arrived as %q", last)
 	}
 }
+
+// sendAndWait sends a message to an idle thread and answers what the
+// stand-in claude received for it.
+func (e *poE2E) sendAndWait(threadID, message string) string {
+	e.t.Helper()
+	before := len(e.received())
+	if status, code := e.send(threadID, message); status != 200 {
+		e.t.Fatalf("send = %d %s", status, code)
+	}
+	e.waitTurn(threadID, "idle")
+	got := e.received()
+	if len(got) != before+1 {
+		e.t.Fatalf("received %d lines, want %d", len(got), before+1)
+	}
+	return got[len(got)-1]
+}
+
+// idleThreadWith starts a thread on the project, with no memory call of its own.
+func (e *poE2E) idleThread(message string) string {
+	e.t.Helper()
+	id, _ := e.startThread(message)
+	e.waitTurn(id, "idle")
+	return id
+}
+
+func TestAnEditThePersonMakesReachesAnOpenThreadAsANoteOnceAndNeverAsTheWholeMemory(t *testing.T) {
+	e := newPOE2E(t)
+	_, first := e.ownerOf("first")
+	edited := e.saveMemory(first, "Ship on Fridays.")
+	e.saveMemory(first, "Unchanged fact stays out of the note.")
+	id := e.idleThread("open thread")
+
+	if status, code := e.post("update_memory_entry", map[string]any{"entry_id": edited.EntryID, "text": "Ship on Thursdays."}, nil); status != 200 {
+		t.Fatalf("update = %d %s", status, code)
+	}
+	got := e.sendAndWait(id, "next question")
+	if !strings.Contains(got, "Ship on Thursdays.") || !strings.Contains(got, edited.EntryID) || strings.Contains(got, "Unchanged fact") || !strings.HasSuffix(got, "next question") {
+		t.Errorf("the message with the note = %q", got)
+	}
+	if again := e.sendAndWait(id, "and another"); again != "and another" {
+		t.Errorf("the next message carried a note: %q", again)
+	}
+	for _, it := range e.thread(id).Items {
+		if it.Kind == "message" && it.Author == "person" && strings.Contains(it.Text, "Thursdays") {
+			t.Errorf("the note is in the stored message: %q", it.Text)
+		}
+	}
+}
+
+func TestADeleteReachesAnOpenThreadAsANoteThatNamesTheEntryDeleted(t *testing.T) {
+	e := newPOE2E(t)
+	_, first := e.ownerOf("first")
+	gone := e.saveMemory(first, "Rely on this no more.")
+	id := e.idleThread("open thread")
+
+	if status, code := e.post("delete_memory_entry", map[string]any{"entry_id": gone.EntryID}, nil); status != 200 {
+		t.Fatalf("delete = %d %s", status, code)
+	}
+	got := e.sendAndWait(id, "question")
+	if !strings.Contains(got, gone.EntryID) || !strings.Contains(got, "deleted") || !strings.Contains(got, "do not rely") {
+		t.Errorf("the note = %q", got)
+	}
+}
+
+func TestTwoOpenThreadsEachGetTheNoteOnceOnTheirOwnNextMessage(t *testing.T) {
+	e := newPOE2E(t)
+	_, first := e.ownerOf("first")
+	entry := e.saveMemory(first, "Old.")
+	a, b := e.idleThread("thread a"), e.idleThread("thread b")
+	if status, code := e.post("update_memory_entry", map[string]any{"entry_id": entry.EntryID, "text": "Newer."}, nil); status != 200 {
+		t.Fatalf("update = %d %s", status, code)
+	}
+	for _, id := range []string{a, b} {
+		if got := e.sendAndWait(id, "q1"); !strings.Contains(got, "Newer.") {
+			t.Errorf("thread %s: %q", id, got)
+		}
+		if got := e.sendAndWait(id, "q2"); got != "q2" {
+			t.Errorf("thread %s second message: %q", id, got)
+		}
+	}
+}
+
+func TestAThreadLearnsWhatTheProductOwnerSavedInAnotherThreadButNotItsOwnSaves(t *testing.T) {
+	e := newPOE2E(t)
+	a, ownerA := e.ownerOf("thread a")
+	b := e.idleThread("thread b")
+
+	e.saveMemory(ownerA, "Saved in thread a.")
+	if got := e.sendAndWait(a, "back in a"); got != "back in a" {
+		t.Errorf("thread a was told of its own save: %q", got)
+	}
+	if got := e.sendAndWait(b, "now in b"); !strings.Contains(got, "Saved in thread a.") {
+		t.Errorf("thread b was not told of the save: %q", got)
+	}
+}
+
+func TestNoNoteWhenNothingChangedOrTheChangeIsInAnotherProject(t *testing.T) {
+	e := newPOE2E(t)
+	id := e.idleThread("open thread")
+	if got := e.sendAndWait(id, "plain"); got != "plain" {
+		t.Errorf("a note with nothing changed: %q", got)
+	}
+	other, err := e.cat.Projects.CreateProject(e.ctx, "other", e.t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := e.cat.Projects.CreateRepository(e.ctx, other.ID, "other", "", "https://example.com/other.git", e.t.TempDir()); err != nil {
+		t.Fatal(err)
+	}
+	var started struct {
+		ThreadID string `json:"thread_id"`
+	}
+	if status, code := e.post("start_product_owner_thread", map[string]any{"project_id": other.ID, "message": "hi"}, &started); status != 200 {
+		t.Fatalf("start = %d %s", status, code)
+	}
+	foreign := e.dialSession(e.waitTurn(started.ThreadID, "idle").Thread.SessionID)
+	e.saveMemory(foreign, "Belongs to the other project.")
+	if got := e.sendAndWait(id, "still plain"); got != "still plain" {
+		t.Errorf("a change of another project reached this thread: %q", got)
+	}
+}
+
+func TestAnEntrySavedAndDroppedWhileAThreadWasAwayLeavesNoNote(t *testing.T) {
+	e := newPOE2E(t)
+	id := e.idleThread("open thread")
+	_, other := e.ownerOf("other thread")
+	entry := e.saveMemory(other, "Fleeting.")
+	if out, refused := e.call(other, "drop_memory", map[string]any{"entry_id": entry.EntryID}); refused {
+		t.Fatalf("drop = %s", out)
+	}
+	if got := e.sendAndWait(id, "plain"); got != "plain" {
+		t.Errorf("a note for an entry the thread never knew: %q", got)
+	}
+}
+
+func TestTheNoteSurvivesARestartOfTheServer(t *testing.T) {
+	e := newPOE2E(t)
+	_, first := e.ownerOf("first")
+	entry := e.saveMemory(first, "Before.")
+	id := e.idleThread("open thread")
+	if status, code := e.post("update_memory_entry", map[string]any{"entry_id": entry.EntryID, "text": "After the restart."}, nil); status != 200 {
+		t.Fatalf("update = %d %s", status, code)
+	}
+	e.restart()
+	if got := e.sendAndWait(id, "question"); !strings.Contains(got, "After the restart.") {
+		t.Errorf("the message after the restart = %q", got)
+	}
+}

@@ -257,7 +257,60 @@ func (s *Service) withMemory(ctx context.Context, t *domain.ProductOwnerThread, 
 		}
 		return message, v
 	}
-	return message, t.MemorySeen
+	note, v, err := s.memoryNote(ctx, t)
+	if err != nil {
+		return message, t.MemorySeen
+	}
+	if note != "" {
+		message = note + "\n\n" + message
+	}
+	return message, v
+}
+
+// memoryNote tells a thread what changed in its project's memory since it
+// last saw it: the person's edits and deletes, and what the product owner
+// saved in other threads. It never repeats an entry that did not change, and
+// says nothing of a thread's own tool calls. version is what the thread has
+// seen once the note is delivered.
+func (s *Service) memoryNote(ctx context.Context, t *domain.ProductOwnerThread) (note string, version int64, err error) {
+	version = t.MemorySeen
+	changes, err := s.store.MemoryChangesSince(ctx, t.ProjectID, t.MemorySeen)
+	if err != nil || len(changes) == 0 {
+		return "", version, err
+	}
+	version = changes[len(changes)-1].Version
+	type net struct{ first, last domain.MemoryChange }
+	var order []string
+	byEntry := map[string]*net{}
+	for _, c := range changes {
+		if c.By == domain.MemoryByProductOwner && c.ThreadID == t.ID {
+			continue
+		}
+		if n := byEntry[c.EntryID]; n != nil {
+			n.last = c
+			continue
+		}
+		byEntry[c.EntryID] = &net{first: c, last: c}
+		order = append(order, c.EntryID)
+	}
+	var lines []string
+	for _, id := range order {
+		n := byEntry[id]
+		switch {
+		case n.last.Op == domain.MemoryOpDropped && n.first.Op == domain.MemoryOpSaved:
+			// Saved and dropped while the thread was away: it never knew it.
+		case n.last.Op == domain.MemoryOpDropped:
+			lines = append(lines, fmt.Sprintf("- (%s) was deleted; do not rely on it any more: %s", id, n.last.Text))
+		case n.first.Op == domain.MemoryOpSaved:
+			lines = append(lines, fmt.Sprintf("- (%s) is a new entry: %s", id, n.last.Text))
+		default:
+			lines = append(lines, fmt.Sprintf("- (%s) now reads: %s", id, n.last.Text))
+		}
+	}
+	if len(lines) == 0 {
+		return "", version, nil
+	}
+	return "[Memory changed since you last looked. Entries not listed are as you know them.]\n" + strings.Join(lines, "\n") + "\n[End of changes]", version, nil
 }
 
 // sawMemory records the memory version a thread was handed.
