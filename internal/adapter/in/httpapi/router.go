@@ -291,6 +291,8 @@ func NewRouter(h *Handler, opts ...Option) *echo.Echo {
 	g.GET("/sessions/:id/files/entries", h.handleSessionFilesEntries)
 	g.GET("/sessions/:id/files/file", h.handleSessionFilesFile)
 	g.GET("/sessions/:id/transcript", h.handleSessionTranscript)
+	g.GET("/sessions/:id/context", h.handleSessionContext)
+	g.GET("/sessions/:id/context/entries/:entry_id/pieces/:piece_id", h.handleSessionContextPiece)
 	g.GET("/sessions/:id/sandbox/violations", h.handleSessionSandboxViolations)
 	// merging a session's branch into its repository's default branch, in the local checkout
 	g.GET("/sessions/:id/merge", h.handleSessionMergeOffer)

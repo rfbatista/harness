@@ -519,3 +519,28 @@ func (h *Handler) handleSessionSandboxViolations(c echo.Context) error {
 	}
 	return c.JSON(http.StatusOK, log)
 }
+
+// handleSessionContext serves what a session's context was when claude
+// started and resumed it, with its use and changes (ADR 0099).
+func (h *Handler) handleSessionContext(c echo.Context) error {
+	if h.orchSvc == nil {
+		return echo.NewHTTPError(http.StatusServiceUnavailable, "orchestration not configured")
+	}
+	v, err := h.orchSvc.SessionContext(c.Request().Context(), c.Param("id"))
+	if err != nil {
+		return err
+	}
+	return c.JSON(http.StatusOK, v)
+}
+
+// handleSessionContextPiece serves the whole text of one piece of one entry.
+func (h *Handler) handleSessionContextPiece(c echo.Context) error {
+	if h.orchSvc == nil {
+		return echo.NewHTTPError(http.StatusServiceUnavailable, "orchestration not configured")
+	}
+	text, err := h.orchSvc.SessionContextPiece(c.Request().Context(), c.Param("id"), c.Param("entry_id"), c.Param("piece_id"))
+	if err != nil {
+		return err
+	}
+	return c.JSON(http.StatusOK, map[string]string{"text": text})
+}
