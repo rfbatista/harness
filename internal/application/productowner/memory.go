@@ -2,6 +2,8 @@ package productowner
 
 import (
 	"context"
+	"fmt"
+	"strings"
 	"time"
 
 	"operators-mcp/internal/domain"
@@ -211,4 +213,60 @@ func (s *Service) applyByPerson(ctx context.Context, e domain.MemoryEntry, op st
 	s.announceMemory(e.ProjectID, e.ID, op)
 	v := s.memoryView(ctx, e)
 	return &v, nil
+}
+
+// OpeningMemory is the text that hands a project's whole memory to a thread:
+// a thread's first message, and a thread continuing after a checkpoint, start
+// with it (ADR 0111). It answers the memory version it describes, and no text
+// when the project has no entries.
+func (s *Service) OpeningMemory(ctx context.Context, projectID string) (text string, version int64, err error) {
+	// The version is read first: a change that lands after it is told by the
+	// next message's note, so none is missed.
+	if version, err = s.store.MemoryVersion(ctx, projectID); err != nil {
+		return "", 0, err
+	}
+	entries, err := s.store.MemoryEntries(ctx, projectID)
+	if err != nil || len(entries) == 0 {
+		return "", version, err
+	}
+	var b strings.Builder
+	noun := "entries"
+	if len(entries) == 1 {
+		noun = "entry"
+	}
+	fmt.Fprintf(&b, "[Memory of this project: %d %s that you and the person agreed on. Rely on them, and say that you remember when it helps. Each starts with its id, which change_memory and drop_memory take.]\n", len(entries), noun)
+	// Oldest first, so the list reads in the order things were agreed.
+	for i := len(entries) - 1; i >= 0; i-- {
+		fmt.Fprintf(&b, "- (%s) %s\n", entries[i].ID, entries[i].Text)
+	}
+	b.WriteString("[End of memory]")
+	return b.String(), version, nil
+}
+
+// withMemory is what claude is handed for the person's message: the message
+// itself, led by the whole memory when the thread has not been given it.
+// version is what the thread has seen once the message is delivered.
+func (s *Service) withMemory(ctx context.Context, t *domain.ProductOwnerThread, message string) (input string, version int64) {
+	if !t.MemoryOpened {
+		text, v, err := s.OpeningMemory(ctx, t.ProjectID)
+		if err != nil {
+			return message, t.MemorySeen
+		}
+		if text != "" {
+			message = text + "\n\n" + message
+		}
+		return message, v
+	}
+	return message, t.MemorySeen
+}
+
+// sawMemory records the memory version a thread was handed.
+func (s *Service) sawMemory(ctx context.Context, t *domain.ProductOwnerThread, version int64) {
+	_, _ = s.update(ctx, t.ID, t, func(th *domain.ProductOwnerThread) bool {
+		if th.MemoryOpened && th.MemorySeen >= version {
+			return false
+		}
+		th.MemoryOpened, th.MemorySeen = true, version
+		return true
+	})
 }

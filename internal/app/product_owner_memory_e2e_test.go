@@ -2,6 +2,8 @@ package app
 
 import (
 	"encoding/json"
+	"os"
+	"path/filepath"
 	"slices"
 	"strings"
 	"testing"
@@ -399,5 +401,113 @@ func TestAnotherProjectsListHoldsNoEntryOfThisOne(t *testing.T) {
 	}
 	if list := e.memoryList(other.ID); len(list) != 0 {
 		t.Errorf("the other project lists %+v", list)
+	}
+}
+
+// received are the messages the stand-in claude was handed, one per line, in
+// the order they arrived.
+func (e *poE2E) received() []string {
+	e.t.Helper()
+	b, _ := os.ReadFile(filepath.Join(e.fakeDir, "received"))
+	return strings.Split(strings.TrimRight(string(b), "\n"), "\n")
+}
+
+func TestANewThreadReceivesTheWholeMemoryBeforeTheFirstMessageAndStoresOnlyTheMessage(t *testing.T) {
+	e := newPOE2E(t)
+	_, owner := e.ownerOf("first thread")
+	e.saveMemory(owner, "Ship on Fridays.")
+	e.saveMemory(owner, "The person prefers short answers.")
+	before := len(e.received())
+
+	id, _ := e.startThread("what do you remember")
+	e.waitTurn(id, "idle")
+	got := e.received()
+	if len(got) != before+1 {
+		t.Fatalf("received %d lines, want %d", len(got), before+1)
+	}
+	opening := got[len(got)-1]
+	i1, i2, im := strings.Index(opening, "Ship on Fridays."), strings.Index(opening, "The person prefers short answers."), strings.Index(opening, "what do you remember")
+	if i1 < 0 || i2 < 0 || im < 0 || im < i1 || im < i2 || !strings.Contains(opening, "2 entries") {
+		t.Errorf("the opening input = %q", opening)
+	}
+	for _, it := range e.thread(id).Items {
+		if it.Kind == "message" && it.Author == "person" && it.Text != "what do you remember" {
+			t.Errorf("the stored message holds %q", it.Text)
+		}
+	}
+}
+
+func TestAThreadOfAProjectWithNoEntriesSendsTheMessageUnchanged(t *testing.T) {
+	e := newPOE2E(t)
+	id, _ := e.startThread("plain question")
+	e.waitTurn(id, "idle")
+	if got := e.received(); len(got) != 1 || got[0] != "plain question" {
+		t.Errorf("received = %q", got)
+	}
+}
+
+func TestTheOpeningMemoryHoldsTheEntriesAsTheyAreNowAndNeverAnotherProjects(t *testing.T) {
+	e := newPOE2E(t)
+	_, owner := e.ownerOf("first")
+	kept := e.saveMemory(owner, "Old wording.")
+	gone := e.saveMemory(owner, "Deleted fact.")
+	if status, code := e.post("update_memory_entry", map[string]any{"entry_id": kept.EntryID, "text": "New wording."}, nil); status != 200 {
+		t.Fatalf("update = %d %s", status, code)
+	}
+	if status, code := e.post("delete_memory_entry", map[string]any{"entry_id": gone.EntryID}, nil); status != 200 {
+		t.Fatalf("delete = %d %s", status, code)
+	}
+	other, err := e.cat.Projects.CreateProject(e.ctx, "other", e.t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := e.cat.Projects.CreateRepository(e.ctx, other.ID, "other", "", "https://example.com/other.git", e.t.TempDir()); err != nil {
+		t.Fatal(err)
+	}
+	var started struct {
+		ThreadID string `json:"thread_id"`
+	}
+	if status, code := e.post("start_product_owner_thread", map[string]any{"project_id": other.ID, "message": "other project"}, &started); status != 200 {
+		t.Fatalf("start = %d %s", status, code)
+	}
+	e.waitTurn(started.ThreadID, "idle")
+	if got := e.received(); got[len(got)-1] != "other project" {
+		t.Errorf("another project's thread received %q", got[len(got)-1])
+	}
+
+	id, _ := e.startThread("fresh")
+	e.waitTurn(id, "idle")
+	got := e.received()
+	opening := got[len(got)-1]
+	if !strings.Contains(opening, "New wording.") || strings.Contains(opening, "Old wording.") || strings.Contains(opening, "Deleted fact.") || !strings.Contains(opening, "1 entry") {
+		t.Errorf("the opening input = %q", opening)
+	}
+}
+
+func TestAThreadStartedAfterARestartStillReceivesTheMemory(t *testing.T) {
+	e := newPOE2E(t)
+	_, owner := e.ownerOf("first")
+	e.saveMemory(owner, "Survives.")
+	e.restart()
+	id, _ := e.startThread("after the restart")
+	e.waitTurn(id, "idle")
+	if got := e.received(); !strings.Contains(got[len(got)-1], "Survives.") {
+		t.Errorf("received %q", got[len(got)-1])
+	}
+}
+
+func TestOnlyTheFirstMessageOfAThreadCarriesTheWholeMemory(t *testing.T) {
+	e := newPOE2E(t)
+	_, owner := e.ownerOf("first")
+	e.saveMemory(owner, "Once only.")
+	id, _ := e.startThread("opening")
+	e.waitTurn(id, "idle")
+	if status, code := e.send(id, "second message"); status != 200 {
+		t.Fatalf("send = %d %s", status, code)
+	}
+	e.waitTurn(id, "idle")
+	got := e.received()
+	if last := got[len(got)-1]; last != "second message" {
+		t.Errorf("the second message arrived as %q", last)
 	}
 }

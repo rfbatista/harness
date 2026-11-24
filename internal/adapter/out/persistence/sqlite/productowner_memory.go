@@ -101,3 +101,23 @@ func (r *ProductOwnerRepository) ApplyMemoryChange(ctx context.Context, entry do
 	change.Version = line.Version
 	return change, nil
 }
+
+// MemoryVersion implements ports.ProductOwnerStore.
+func (r *ProductOwnerRepository) MemoryVersion(ctx context.Context, projectID string) (int64, error) {
+	var v int64
+	err := r.db.WithContext(ctx).Model(&ProductOwnerMemoryLogModel{}).Where("project_id = ?", projectID).Select("COALESCE(MAX(version), 0)").Scan(&v).Error
+	return v, err
+}
+
+// MemoryChangesSince implements ports.ProductOwnerStore.
+func (r *ProductOwnerRepository) MemoryChangesSince(ctx context.Context, projectID string, version int64) ([]domain.MemoryChange, error) {
+	var ms []ProductOwnerMemoryLogModel
+	if err := r.db.WithContext(ctx).Where("project_id = ? AND version > ?", projectID, version).Order("version").Find(&ms).Error; err != nil {
+		return nil, err
+	}
+	out := make([]domain.MemoryChange, len(ms))
+	for i, m := range ms {
+		out[i] = domain.MemoryChange{Version: m.Version, ProjectID: m.ProjectID, EntryID: m.EntryID, Op: m.Op, Text: m.Text, By: m.By, ThreadID: m.ThreadID, At: m.At}
+	}
+	return out, nil
+}

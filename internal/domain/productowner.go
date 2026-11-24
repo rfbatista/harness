@@ -81,6 +81,10 @@ type ProductOwnerThread struct {
 	// keeps them while the project's settings change (ADR 0099).
 	AgentID string `json:"-"`
 	Prompt  string `json:"-"`
+	// MemoryOpened says the thread has been handed the project's memory (ADR
+	// 0111); MemorySeen is the memory version it was handed or last told of.
+	MemoryOpened bool  `json:"-"`
+	MemorySeen   int64 `json:"-"`
 }
 
 // Kinds of thread item. Later pieces add kinds; the thread store keeps each

@@ -95,7 +95,7 @@ n=0
 while IFS= read -r line; do
   n=$((n+1))
   text=$(printf '%s' "$line" | sed -n 's/.*"text":"\([^"]*\)".*/\1/p')
-  echo "$text" >> "$dir/received"
+  printf '%s\n' "$text" >> "$dir/received"
   while [ -f "$dir/prehold" ]; do sleep 0.05; done
   case "$text" in read:*) printf '%s\n' '{"type":"assistant","session_id":"fake","message":{"role":"assistant","content":[{"type":"tool_use","id":"t1","name":"Read","input":{"file_path":"project/docs/prd.md"}}]}}';; esac
   printf '%s\n' '{"type":"stream_event","session_id":"fake","event":{"type":"content_block_delta","index":0,"delta":{"type":"text_delta","text":"answer to: "}}}'

@@ -44,6 +44,12 @@ type ProductOwnerStore interface {
 	// new; for a change it replaces the stored one; for a drop it is removed.
 	// It answers the log line, with its version.
 	ApplyMemoryChange(ctx context.Context, entry domain.MemoryEntry, change domain.MemoryChange) (domain.MemoryChange, error)
+	// MemoryVersion is the version of the project's last memory change, 0 when
+	// it has none.
+	MemoryVersion(ctx context.Context, projectID string) (int64, error)
+	// MemoryChangesSince are the project's memory log lines after version,
+	// oldest first.
+	MemoryChangesSince(ctx context.Context, projectID string, version int64) ([]domain.MemoryChange, error)
 }
 
 // ProductOwnerSettingsView are a project's settings as the person reads them.
