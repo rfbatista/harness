@@ -207,6 +207,11 @@ templ SettingsPage(v SettingsView) {
 					if v.TokenSavers != nil {
 						@tokensavers.Section(*v.TokenSavers)
 					}
+					<section id="product-owner" class="[ flow ] [ flow-space-s ]" aria-labelledby="settings-product-owner">
+						<h2 id="settings-product-owner">Product owner</h2>
+						<div data-island="owner-settings" data-island-rendered="false"></div>
+						@shell.PropsScript("owner-settings", ownerSettingsProps(v.Project.ID))
+					</section>
 					<section class="[ flow ] [ flow-space-s ]" aria-labelledby="settings-repositories">
 						<h2 id="settings-repositories">Repositories and their settings</h2>
 						<div class="[ pane ]">

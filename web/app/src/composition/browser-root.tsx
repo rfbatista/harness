@@ -20,6 +20,10 @@ import { ThreadList } from "../features/product-owner/application/thread-list";
 import { AboutPresenter } from "../features/product-owner/presentation/presenters/about-presenter";
 import { ThreadListPresenter } from "../features/product-owner/presentation/presenters/thread-list-presenter";
 import { systemClock } from "../shared/kernel/clock";
+import { OwnerSettingsPropsDto } from "./owner-settings-props-dto";
+import { OwnerSwitch } from "../features/product-owner/application/owner-switch";
+import { SettingsSectionPresenter } from "../features/product-owner/presentation/presenters/settings-section-presenter";
+import { SettingsSectionView } from "../features/product-owner/presentation/views/settings-section-view";
 import { OwnerPagePropsDto } from "./owner-page-props-dto";
 import { OwnerPagePresenter } from "../features/product-owner/presentation/presenters/owner-page-presenter";
 import { OwnerPageView } from "../features/product-owner/presentation/views/owner-page-view";
@@ -80,6 +84,20 @@ export function mountIslands(doc: Document): Dispose {
       return () => {
         panel.destroy();
         root.unmount();
+      };
+    },
+    // The Settings page's Product owner section: the switch.
+    "owner-settings": (mount, props) => {
+      const { project_id } = OwnerSettingsPropsDto.fromJSON(props);
+      const ownerSwitch = new OwnerSwitch({ gateway: owner, events: owner });
+      const section = new SettingsSectionPresenter(ownerSwitch, project_id);
+      const stop = ownerSwitch.attach(project_id);
+      const root = createRoot(mount);
+      root.render(<SettingsSectionView presenter={section} />);
+      return () => {
+        root.unmount();
+        stop();
+        section.destroy();
       };
     },
     // The full page: the same thread component beside the thread list. The panel steps aside while it is open.
