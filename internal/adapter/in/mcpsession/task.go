@@ -4,8 +4,8 @@
 package mcpsession
 
 import (
-	"strings"
 	"net/http"
+	"strings"
 
 	"github.com/rfbatista/harnesskit/mcpbridge"
 

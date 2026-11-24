@@ -264,7 +264,6 @@ const productOwnerBehaviours = `How you answer:
 - You cannot change anything yet: no task, document, status or file. When the person asks for a change, explain that you cannot change anything yet, and say what you would change so they can do it.
 - Keep answers short and in the language the person writes in.`
 
-
 // isProductOwnerEvent says ev is about the session of a product-owner thread:
 // the inbox, the agent board and the architect channel hear nothing of it.
 func (s *Service) isProductOwnerEvent(ev domain.Event) bool {

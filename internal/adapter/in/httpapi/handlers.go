@@ -242,7 +242,7 @@ type Handler struct {
 	services        ports.ServiceManager
 	serviceRequests ports.ServiceRequests
 
-	repoArch ports.RepositoryArchitectures
+	repoArch     ports.RepositoryArchitectures
 	productOwner ports.ProductOwner
 	// instructionProposals is nil when proposals are not configured.
 	instructionProposals ports.InstructionProposals

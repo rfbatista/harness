@@ -145,7 +145,7 @@ type ProjectChange struct {
 	ProductOwnerThreadItem *ProductOwnerThreadItemChange `json:"product_owner_thread_item,omitempty"`
 	ProductOwnerDelta      *ProductOwnerDeltaChange      `json:"product_owner_delta,omitempty"`
 	ProductOwnerThread     *ProductOwnerThreadChange     `json:"product_owner_thread,omitempty"`
-	Deleted          bool                    `json:"deleted,omitempty"`
+	Deleted                bool                          `json:"deleted,omitempty"`
 }
 
 // BranchRequestChange is a branch request on the feed; ProjectID routes it to

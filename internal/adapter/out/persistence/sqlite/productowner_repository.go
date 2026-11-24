@@ -37,7 +37,7 @@ type ProductOwnerThreadModel struct {
 	Turn               string `gorm:"index"`
 	StartedAt          time.Time
 	LastActivityAt     time.Time
-	PendingHeldActions int `gorm:"column:pending_held_actions"`
+	PendingHeldActions int    `gorm:"column:pending_held_actions"`
 	AgentID            string `gorm:"column:agent_id"`
 	Prompt             string
 }
