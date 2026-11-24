@@ -6,6 +6,7 @@
 
 import type { FeedStatus } from "../domain/feed-status";
 import type { ProductOwnerEvents, ProductOwnerGateway, DockMemory, PageNavigator, Screen } from "./ports";
+import { pageHref } from "./links";
 import { ProductOwnerError } from "./ports";
 
 export const MIN_WIDTH = 22;
@@ -31,8 +32,6 @@ export interface DockState {
   readonly focusToggle: number;
   readonly error: string;
 }
-
-export const pageHref = (projectId: string): string => `/projects/${encodeURIComponent(projectId)}/product-owner`;
 
 export interface DockDeps {
   readonly gateway: ProductOwnerGateway;

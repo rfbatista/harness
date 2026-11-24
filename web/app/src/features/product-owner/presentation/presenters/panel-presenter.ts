@@ -2,8 +2,12 @@
 // off. The thread inside it is the thread component's (a later ticket).
 
 import { Presenter } from "../../../../shared/kernel/presenter";
+import { settingsHref } from "../../application/links";
 import type { Conversation } from "../../application/conversation";
 import { type DockState, type OwnerDock } from "../../application/owner-dock";
+import type { ThreadList } from "../../application/thread-list";
+import type { AboutPresenter } from "./about-presenter";
+import type { ThreadListPresenter } from "./thread-list-presenter";
 import type { ThreadPresenter } from "./thread-presenter";
 
 export interface PanelViewModel {
@@ -34,7 +38,7 @@ export const panelViewModel = (dock: DockState): PanelViewModel => {
     state,
     composerDisabled: state === "off",
     composerPlaceholder: state === "off" ? OFF_PLACEHOLDER : PLACEHOLDER,
-    settingsHref: `/projects/${encodeURIComponent(dock.projectId)}/settings#product-owner`,
+    settingsHref: settingsHref(dock.projectId),
     error: dock.error,
     focusRequest: dock.focusComposer,
   };
@@ -44,15 +48,21 @@ export class PanelPresenter extends Presenter<PanelViewModel> {
   readonly #dock: OwnerDock;
   readonly #conversation: Conversation;
   readonly thread: ThreadPresenter;
+  readonly threads: ThreadListPresenter;
+  readonly about: AboutPresenter;
+  readonly #list: ThreadList;
   #attached = "";
   #detach: (() => void) | null = null;
 
-  /** The conversation follows the panel: it is read while the panel is docked, and let go when it closes. */
-  constructor(dock: OwnerDock, conversation: Conversation, thread: ThreadPresenter) {
+  /** The conversation and the thread list follow the panel: they are read while it is docked, and let go when it closes. */
+  constructor(dock: OwnerDock, conversation: Conversation, thread: ThreadPresenter, parts: { list: ThreadList; threads: ThreadListPresenter; about: AboutPresenter }) {
     super(panelViewModel(dock.state));
     this.#dock = dock;
     this.#conversation = conversation;
     this.thread = thread;
+    this.#list = parts.list;
+    this.threads = parts.threads;
+    this.about = parts.about;
     this.#unsubscribe = dock.subscribe((state) => {
       this.set(panelViewModel(state));
       this.thread.setOff(state.enabled === false);
@@ -68,6 +78,8 @@ export class PanelPresenter extends Presenter<PanelViewModel> {
     this.#detach?.();
     this.#detach = null;
     this.#attached = "";
+    this.threads.destroy();
+    this.about.destroy();
   }
 
   #follow(state: DockState): void {
@@ -76,7 +88,16 @@ export class PanelPresenter extends Presenter<PanelViewModel> {
     this.#detach?.();
     // Marked first: attaching tells the dock the thread, and the dock tells us.
     this.#attached = wanted;
-    this.#detach = wanted === "" ? null : this.#conversation.attach(wanted, state.threadId);
+    if (wanted === "") {
+      this.#detach = null;
+      return;
+    }
+    const stopList = this.#list.attach(wanted);
+    const stopConversation = this.#conversation.attach(wanted, state.threadId);
+    this.#detach = () => {
+      stopConversation();
+      stopList();
+    };
   }
 
   /** The person closed the panel from inside: focus goes back to the toggle. */

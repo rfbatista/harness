@@ -294,3 +294,23 @@ describe("a long thread", () => {
     assert.equal(conversation.state.items.length, 200);
   });
 });
+
+describe("renaming", () => {
+  test("shows the new title, and says why when the server refuses it, keeping the old one", async () => {
+    const { conversation, server } = setup();
+    server.seedThread("p1", { threadId: "t1", title: "Old" });
+    conversation.attach("p1", "t1");
+    await settled();
+    assert.equal(await conversation.rename("  Roadmap "), true);
+    assert.equal(conversation.state.title, "Roadmap");
+    assert.equal(await conversation.rename(""), false);
+    assert.equal(conversation.state.title, "Roadmap");
+    assert.equal(conversation.state.error?.code, "INVALID_INPUT");
+  });
+
+  test("has nothing to rename on a fresh thread", async () => {
+    const { conversation } = setup();
+    conversation.attach("p1", null);
+    assert.equal(await conversation.rename("x"), false);
+  });
+});

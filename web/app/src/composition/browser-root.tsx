@@ -16,6 +16,10 @@ import { httpNotificationsSource } from "../features/notifications/infrastructur
 import { OwnerDock } from "../features/product-owner/application/owner-dock";
 import { browserDockMemory, browserPageNavigator, browserScreen, browserStorage } from "../features/product-owner/infrastructure/browser-dock";
 import { httpProductOwner } from "../features/product-owner/infrastructure/http-product-owner";
+import { ThreadList } from "../features/product-owner/application/thread-list";
+import { AboutPresenter } from "../features/product-owner/presentation/presenters/about-presenter";
+import { ThreadListPresenter } from "../features/product-owner/presentation/presenters/thread-list-presenter";
+import { systemClock } from "../shared/kernel/clock";
 import { OwnerPanelPropsDto } from "./owner-panel-props-dto";
 import { Conversation } from "../features/product-owner/application/conversation";
 import { browserTaskCatalog } from "../features/product-owner/infrastructure/browser-task-catalog";
@@ -65,7 +69,8 @@ export function mountIslands(doc: Document): Dispose {
       const { project_name, no_tasks } = OwnerPanelPropsDto.fromJSON(props);
       const conversation = new Conversation({ gateway: owner, events: owner, onThread: (id) => dock.setThreadId(id) });
       const thread = new ThreadPresenter(conversation, { projectName: project_name, noTasks: no_tasks }, browserTaskCatalog(doc));
-      const panel = new PanelPresenter(dock, conversation, thread);
+      const list = new ThreadList({ gateway: owner, events: owner });
+      const panel = new PanelPresenter(dock, conversation, thread, { list, threads: new ThreadListPresenter(list, conversation, systemClock), about: new AboutPresenter(conversation, list) });
       const root = createRoot(mount);
       root.render(<PanelView presenter={panel} />);
       return () => {

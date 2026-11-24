@@ -1,8 +1,11 @@
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import { usePresenter } from "../../../../shared/presentation/use-presenter";
+import { pageHref as pageHrefOf } from "../../application/links";
 import { MAX_WIDTH, MIN_WIDTH } from "../../application/owner-dock";
 import type { PanelPresenter } from "../presenters/panel-presenter";
+import { AboutPopupView } from "./about-popup-view";
 import { ThreadView } from "./thread-view";
+import { ThreadsPopupView } from "./threads-popup-view";
 import { OwnerIcon, OwnerMark } from "./owner-icon";
 
 /** The docked panel. It reaches out of its island once: it gives the app shell the column it sits in. */
@@ -11,6 +14,11 @@ export function PanelView({ presenter }: { presenter: PanelPresenter }) {
   const aside = useRef<HTMLElement>(null);
   const composer = useRef<HTMLTextAreaElement>(null);
   const seenFocus = useRef(vm.focusRequest);
+  const about = usePresenter(presenter.about);
+  const [popup, setPopup] = useState<"threads" | "about" | null>(null);
+  const threadsButton = useRef<HTMLButtonElement>(null);
+  const aboutButton = useRef<HTMLButtonElement>(null);
+  const closePopup = () => setPopup(null);
 
   // The shell gets its third column while the panel is docked, and gives it back when it goes.
   useEffect(() => {
@@ -47,8 +55,22 @@ export function PanelView({ presenter }: { presenter: PanelPresenter }) {
           <h2 className="[ name ]" style={{ fontSize: "var(--text-base)" }}>
             Product owner
           </h2>
+          {about.title !== "" && (
+            <span className="[ thread ]" title={about.title}>
+              {about.title}
+            </span>
+          )}
         </div>
         <div className="[ actions ]">
+          <button type="button" className="[ button ]" data-variant="ghost" data-size="sm" data-icon="" aria-label="New thread" title="New thread" onClick={presenter.threads.newThread}>
+            <OwnerIcon name="plus" />
+          </button>
+          <button ref={threadsButton} type="button" className="[ button ]" data-variant="ghost" data-size="sm" data-icon="" aria-label="Threads" title="Threads" aria-haspopup="listbox" aria-expanded={popup === "threads"} onClick={() => setPopup(popup === "threads" ? null : "threads")}>
+            <OwnerIcon name="history" />
+          </button>
+          <button ref={aboutButton} type="button" className="[ button ]" data-variant="ghost" data-size="sm" data-icon="" aria-label="About this thread" title="About this thread" aria-haspopup="dialog" aria-expanded={popup === "about"} onClick={() => setPopup(popup === "about" ? null : "about")}>
+            <OwnerIcon name="info" />
+          </button>
           <button type="button" className="[ button ]" data-variant="ghost" data-size="sm" data-icon="" aria-label="Close" title="Close" onClick={presenter.close}>
             <OwnerIcon name="close" />
           </button>
@@ -69,6 +91,8 @@ export function PanelView({ presenter }: { presenter: PanelPresenter }) {
         </div>
       )}
       <ThreadView presenter={presenter.thread} textarea={composer} />
+      <ThreadsPopupView presenter={presenter.threads} open={popup === "threads"} anchor={threadsButton} onClose={closePopup} allHref={pageHrefOf(vm.projectId)} />
+      <AboutPopupView presenter={presenter.about} open={popup === "about"} anchor={aboutButton} onClose={closePopup} />
     </aside>
   );
 }

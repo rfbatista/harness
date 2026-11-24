@@ -5,12 +5,18 @@ import { memoryProductOwner } from "../../infrastructure/memory-product-owner";
 import { memoryDockMemory, memoryNavigator, memoryScreen } from "../../testing/memory-dock-adapters";
 import { TogglePresenter } from "./toggle-presenter";
 import { Conversation } from "../../application/conversation";
+import { ThreadList } from "../../application/thread-list";
+import { AboutPresenter } from "./about-presenter";
 import { PanelPresenter } from "./panel-presenter";
+import { ThreadListPresenter } from "./thread-list-presenter";
 import { ThreadPresenter } from "./thread-presenter";
 
 const panelOf = (dock: OwnerDock, server: ReturnType<typeof memoryProductOwner>) => {
   const conversation = new Conversation({ gateway: server, events: server, onThread: (id) => dock.setThreadId(id) });
-  return new PanelPresenter(dock, conversation, new ThreadPresenter(conversation, { projectName: "harness", noTasks: false }, { find: () => null }));
+  const list = new ThreadList({ gateway: server, events: server });
+  const clock = { now: () => Date.now() };
+  const parts = { list, threads: new ThreadListPresenter(list, conversation, clock), about: new AboutPresenter(conversation, list) };
+  return new PanelPresenter(dock, conversation, new ThreadPresenter(conversation, { projectName: "harness", noTasks: false }, { find: () => null }), parts);
 };
 
 const setup = () => {
@@ -151,7 +157,7 @@ describe("the panel's conversation", () => {
     assert.equal(server.followers, 1, "the dock's own follower only while the panel is closed");
     dock.open();
     await settled();
-    assert.equal(server.followers, 2);
+    assert.equal(server.followers, 3, "the dock, the conversation and the thread list");
     assert.equal(panel.thread.viewModel.rows.length, 1);
     panel.close();
     assert.equal(server.followers, 1);

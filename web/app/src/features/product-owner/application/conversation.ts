@@ -182,6 +182,21 @@ export class Conversation {
     }
   }
 
+  /** Renames the thread as the person's. Resolves true when the server accepted the title; a refusal is shown and the title stays. */
+  async rename(title: string): Promise<boolean> {
+    const { threadId } = this.#state;
+    if (threadId === null) return false;
+    try {
+      const renamed = await this.#deps.gateway.renameThread(threadId, title.trim());
+      if (this.#state.threadId === threadId) this.#set({ title: renamed.title, error: null });
+      return true;
+    } catch (err) {
+      if (!(err instanceof ProductOwnerError)) throw err;
+      this.#set({ error: { code: err.code, text: err.message } });
+      return false;
+    }
+  }
+
   dismissError(): void {
     this.#set({ error: null });
   }
