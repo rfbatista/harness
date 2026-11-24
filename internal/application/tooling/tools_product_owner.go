@@ -22,6 +22,11 @@ var ProductOwnerToolNames = []string{
 	"get_project_task",
 	"list_project_sessions",
 	"list_project_branches",
+	// Its writes to tasks: create_task is the session tool every product
+	// session has; update_task is its own. Neither moves a task to done,
+	// deletes or starts a session, and the tools hold that, not the prompt.
+	"create_task",
+	"update_task",
 }
 
 // ProductOwnerSources is what the product owner's own reads come from.
@@ -29,6 +34,9 @@ type ProductOwnerSources struct {
 	Tasks    ports.TicketReader
 	Changes  ports.TaskStatusChangeRepository
 	Sessions ports.SessionRepository
+	// Patcher changes a task; the product owner's writes go through it, so
+	// a session's rules (no move to done) and its attribution apply.
+	Patcher ports.TicketPatcher
 }
 
 // ProductOwnerTools are the tools the product-owner session endpoint serves:
@@ -42,7 +50,52 @@ func ProductOwnerTools(all []domain.Tool, src ProductOwnerSources) []domain.Tool
 			out = append(out, all[i])
 		}
 	}
-	return append(out, productOwnerReads(src)...)
+	out = append(out, productOwnerReads(src)...)
+	return append(out, productOwnerWrites(src)...)
+}
+
+func productOwnerWrites(src ProductOwnerSources) []domain.Tool {
+	return []domain.Tool{
+		{
+			Name: "update_task",
+			Description: "Change a task of this project: its title, its description or its status. Pass only what changes. " +
+				"Only the person moves a task to done: asking for done fails with TASK_DONE_IS_THE_PERSONS, so tell the " +
+				"person to do it. The change is recorded as yours, with this thread.",
+			InputSchema: schemaFromJSON(`{"type":"object","required":["task_id"],"properties":{` +
+				`"task_id":{"type":"string","description":"The task's id, from list_project_tasks."},` +
+				`"title":{"type":"string"},` +
+				`"description":{"type":"string"},` +
+				`"status":{"type":"string","enum":["backlog","todo","in_progress","review","done"],"description":"The task's new status. done is refused."}}}`),
+			Source: "code",
+			Handler: func(ctx context.Context, args map[string]any) (any, error) {
+				sess, err := resolveProjectScope(ctx, src.Sessions)
+				if err != nil {
+					return nil, err
+				}
+				id := getString(args, "task_id", "")
+				tk, err := src.Tasks.GetTicket(ctx, id)
+				if err != nil || tk == nil || tk.ProjectID != sess.ProjectID {
+					return nil, &domain.StructuredError{Code: "TASK_NOT_FOUND", Message: "TASK_NOT_FOUND: no task " + id + " in this project: use an id from list_project_tasks"}
+				}
+				var patch ports.TicketPatch
+				if v, ok := args["title"].(string); ok {
+					patch.Title = &v
+				}
+				if v, ok := args["description"].(string); ok {
+					patch.Description = &v
+				}
+				if v, ok := args["status"].(string); ok && v != "" {
+					st := domain.TicketStatus(v)
+					patch.Status = &st
+				}
+				changed, err := src.Patcher.PatchTicket(ctx, id, patch)
+				if err != nil {
+					return nil, err
+				}
+				return map[string]any{"task": changed}, nil
+			},
+		},
+	}
 }
 
 func productOwnerReads(src ProductOwnerSources) []domain.Tool {

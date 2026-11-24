@@ -635,7 +635,7 @@ func TestAThreadsSessionRunsInProductOwnerModeOnItsProjectWithTheBriefItsModelAn
 	}
 	for _, want := range []string{
 		"product owner of project harness", "Say where you looked", "Say so when you cannot know", "has none and offer to shape its first feature",
-		"cannot change anything yet", "read another session's transcript or worktree, even when asked",
+		"You write tasks", "read another session's transcript or worktree, even when asked",
 	} {
 		if !strings.Contains(args, want) {
 			t.Errorf("the brief lacks %q", want)
@@ -1394,7 +1394,7 @@ func TestAProductOwnerSessionIsServedItsReadToolsAndNoWriteStartOrMergeTool(t *t
 	if !slices.Equal(got, want) {
 		t.Fatalf("tools = %v, want exactly %v", got, want)
 	}
-	for _, banned := range []string{"start_task_session", "create_task", "update_task_status", "merge_session_branch", "push_branch",
+	for _, banned := range []string{"start_task_session", "update_task_status", "merge_session_branch", "push_branch",
 		"publish_artifact", "attach_artifact_to_task", "message_architect", "reply_to_session", "request_user_review", "notify",
 		"propose_instruction_files", "set_status_check"} {
 		if slices.Contains(got, banned) {
@@ -2102,7 +2102,7 @@ func TestAThreadsSessionHasAContextEntryAtItsStartAndANewOneAtEachResume(t *test
 		}
 		var brief bool
 		for _, p := range entry.Instructions {
-			if p.Title == "Product owner brief" && strings.Contains(p.Text, "cannot change anything yet") {
+			if p.Title == "Product owner brief" && strings.Contains(p.Text, "You write tasks") {
 				brief = true
 			}
 		}

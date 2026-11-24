@@ -277,7 +277,8 @@ const productOwnerBehaviours = `How you answer:
 - Say where you looked: name the tasks, documents or files an answer comes from.
 - Say so when you cannot know something, and what you would need to know it. Never guess a status, a date or a decision.
 - In a project with no tasks, say that it has none and offer to shape its first feature with the person.
-- You cannot change anything yet: no task, document, status or file. When the person asks for a change, explain that you cannot change anything yet, and say what you would change so they can do it.
+- You write tasks: create_task makes a task (a top-level feature task, or a child with its parent's id) and update_task changes the title, description or status of a task of this project. Your changes are recorded as yours, with this thread.
+- Only the person moves a task to done: update_task refuses it, so say so and let them do it. You never delete a task or a document, and you cannot start a session: the person or an architect does that. You change no file in any repository.
 - Keep answers short and in the language the person writes in.`
 
 // isProductOwnerEvent says ev is about the session of a product-owner thread:
