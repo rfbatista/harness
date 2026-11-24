@@ -44,6 +44,8 @@
   .owner-head .who .thread { min-inline-size: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--color-ink-muted); font-size: var(--text-sm); }
   .owner-head .who .thread::before { content: "·"; margin-inline-end: var(--space-xs); color: var(--color-line-strong); }
   .owner-head .actions { display: flex; gap: var(--space-3xs); flex: none; }
+  /* A button's busy ring (::before, invisible at rest) reaches 1.4rem to its left through a negative margin; on icon buttons this close it would take the click of the neighbour on its left. */
+  .owner-head .actions > .button::before { pointer-events: none; }
   .owner-head[data-page] { background: var(--color-canvas); }
 
   /* The transcript: a log, not bubbles. */
