@@ -194,6 +194,9 @@ func (s *Service) StartInteractive(ctx context.Context, req InteractiveRequest) 
 		// session's status-check loop in place when the start returns.
 		s.announce(domain.SessionStarted{SessionID: id, ProjectID: req.ProjectID, TicketID: req.TicketID,
 			ParentSessionID: req.ParentSessionID, Mode: mode, StatusCheckMinutes: req.StatusCheckMinutes})
+		if join != nil {
+			s.announceJoined(context.WithoutCancel(ctx), created)
+		}
 		// A guard that could not be put in at start is announced now that the
 		// session is recorded.
 		if s.commitCheckReason(id) != "" {
@@ -298,6 +301,8 @@ func (s *Service) ResumeInteractive(ctx context.Context, req ports.ResumeRequest
 	cfg, res := s.sessionConfigTrail(trail, sess.ID, sess.WorkingDir, sess.Model, nil, permission, ag, subject, sess.ZoneID, role, sess.RepositoryID)
 	withReadOnlyAccess(&cfg, sess.Access, sess.Branch)
 	trail.mark(&cfg, domain.PieceOther, "Read-only access", "Harness")
+	s.withSharedWorktree(ctx, &cfg, sess.ID, sess.WorkspaceID, sess.Access, sess.Branch, sess.WorkingDir)
+	trail.mark(&cfg, domain.PieceOther, "Shared worktree", "Harness")
 	cleanup, err := s.withShell(sess.ID, sess.RepositoryID, subject, &cfg, ag.cleanup)
 	trail.mark(&cfg, domain.PieceOther, "Virtual shell", "Harness")
 	if err != nil {
@@ -365,8 +370,14 @@ func (s *Service) ResumeInteractive(ctx context.Context, req ports.ResumeRequest
 		s.courier.setTurn(sess.ID, turnIdle) // a resumed conversation waits for its next prompt
 	}
 	s.publish(sess.ID, SessionEvent{Type: "status", Status: domain.SessionRunning, Text: "resumed" + strings.TrimPrefix(startedText(runsOn), "started"), At: time.Now()})
+	// Armed before the spawn, so a process that exits at once is announced.
+	s.rearmLeaveAnnouncement(sess.ID)
 	if runsOn == domain.RunnerServer {
-		if err := s.spawn(ctx, sess.ID, spec, req.Size); err != nil {
+		if err := s.spawnTerminal(ctx, sess.ID, spec, req.Size); err != nil {
+			// The resume failed: the session never ran again, and the sessions
+			// on its worktree were told nothing of it, so its end says nothing.
+			s.markLeaveAnnounced(sess.ID)
+			_, _ = s.end(sess.ID, 127, false)
 			s.restoreInterruption(sess)
 			return nil, ports.AgentSpec{}, err
 		}
@@ -530,6 +541,17 @@ func startedText(r domain.Runner) string {
 // host's exit callback ends it; if it cannot start, it is ended as failed so
 // it does not linger as running.
 func (s *Service) spawn(ctx context.Context, id string, spec ports.AgentSpec, size ports.TermSize) error {
+	if err := s.spawnTerminal(ctx, id, spec, size); err != nil {
+		_, _ = s.end(id, 127, false)
+		return err
+	}
+	return nil
+}
+
+// spawnTerminal runs the session in the server's terminal host and ends it
+// when its process exits; a failure to start is returned and the session is
+// left for the caller to end.
+func (s *Service) spawnTerminal(ctx context.Context, id string, spec ports.AgentSpec, size ports.TermSize) error {
 	if size.Cols <= 0 || size.Rows <= 0 {
 		size = ports.TermSize{Cols: 120, Rows: 40}
 	}
@@ -537,7 +559,6 @@ func (s *Service) spawn(ctx context.Context, id string, spec ports.AgentSpec, si
 		_, _ = s.end(id, code, false)
 	})
 	if err != nil {
-		_, _ = s.end(id, 127, false)
 		return fmt.Errorf("run the session on the server: %w", err)
 	}
 	return nil
@@ -582,7 +603,7 @@ func (s *Service) end(id string, exitCode int, closedByUser bool) (*domain.Sessi
 	}
 	s.publish(id, SessionEvent{Type: "done", Status: status, Text: text, At: time.Now()})
 	s.hub.End(id)
-	s.announce(domain.SessionEnded{SessionID: id, Status: status})
+	s.announceEnded(id, status)
 	return s.withResumability(context.Background(), s.sessions.Get(id)), nil
 }
 
@@ -831,7 +852,7 @@ func (s *Service) endHeadless(id string) error {
 	}
 	s.publish(id, SessionEvent{Type: "done", Status: domain.SessionStopped, Text: "stopped", At: time.Now()})
 	s.hub.End(id)
-	s.announce(domain.SessionEnded{SessionID: id, Status: domain.SessionStopped})
+	s.announceEnded(id, domain.SessionStopped)
 	return nil
 }
 
@@ -1104,7 +1125,7 @@ func (s *Service) joinTarget(ctx context.Context, req InteractiveRequest, mode d
 		return domain.AccessWrite, nil, nil
 	}
 	if access == "" {
-		access = defaultAccess(mode)
+		access = domain.DefaultAccess(mode)
 	}
 	// The OS is what keeps a read-only session from writing: with the sandbox
 	// off nothing does, so the start is refused rather than promised.
@@ -1140,13 +1161,4 @@ func (s *Service) joinTarget(ctx context.Context, req InteractiveRequest, mode d
 		return "", nil, joinRefusal("WORKTREE_NOT_ON_TASK", "that worktree belongs to a session of another task", map[string]string{"worktree_id": req.WorktreeID})
 	}
 	return access, ws, nil
-}
-
-// defaultAccess is the access a mode gets when the start names none: a
-// Reviewer and QA read the work, every other mode writes it.
-func defaultAccess(mode domain.SessionMode) domain.SessionAccess {
-	if mode == domain.SessionModeReview || mode == domain.SessionModeQA {
-		return domain.AccessReadOnly
-	}
-	return domain.AccessWrite
 }

@@ -192,6 +192,15 @@ const (
 // of an older session does.
 func (a SessionAccess) Writes() bool { return a != AccessReadOnly }
 
+// DefaultAccess is the access a mode gets when a start names none: a Reviewer
+// and QA read the work, every other mode writes it.
+func DefaultAccess(mode SessionMode) SessionAccess {
+	if mode == SessionModeReview || mode == SessionModeQA {
+		return AccessReadOnly
+	}
+	return AccessWrite
+}
+
 // SessionMode is a way of starting a task session that layers a role on top
 // of whichever agent it runs: its own skills and its own first message.
 type SessionMode string

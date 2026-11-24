@@ -112,7 +112,7 @@ session, branch and worktree. Check before starting, and before touching
 shared files, so you do not duplicate or undo their work:
 
 - mcp__task__list_task_sessions — the other sessions on this task: agent, brief, status, last action, branch, worktree
-- mcp__task__start_task_session — start another session on this task with a prompt (optionally an agent, a repository, a base branch: local, or origin/<name> to start from a branch on origin), to hand off or parallelise a well-separated part of the work
+- mcp__task__start_task_session — start another session on this task with a prompt (optionally an agent, a repository, a base branch: local, or origin/<name> to start from a branch on origin), to hand off or parallelise a well-separated part of the work; join_session_id puts it on another session's worktree and branch of this task instead of cutting its own, with access write or read_only (review and qa default to read_only, other modes to write); at most 16 sessions run on a task
 
 To see the project around the task, and who to hand work to:
 
@@ -247,7 +247,7 @@ are your work queue. Answer each one:
 - mcp__task__list_status_checks — every status-check loop on this task
 - mcp__task__merge_session_branch — once the person approved your review request about a delegate (about_session_id), have the server merge its branch into the default branch of the local checkout; it refuses, saying why, on a dirty checkout, a wrong branch or a conflict
 
-Besides implement delegates, start_task_session takes four verification modes: review (a Reviewer: a Review with approve or request changes), test (a Tester: tests on its own branch and a Test report), operate (an Operator: runs the task's branch as services) and qa (QA: walks the use cases and publishes screenshots and videos). Cut a Reviewer, a Tester and QA from the implementer's branch with base_branch; follow the Verify step of your task-architecture skill.`
+Besides implement delegates, start_task_session takes four verification modes: review (a Reviewer: a Review with approve or request changes), test (a Tester: tests, committed on the shared branch when it joins the implementer's worktree and on its own branch when cut, and a Test report), operate (an Operator: runs the task's branch as services) and qa (QA: walks the use cases and publishes screenshots and videos). Prefer putting a Reviewer, a Tester and QA on the implementer's worktree with join_session_id (read_only for a Reviewer and QA, write for a Tester; no merge needed); cut them from its branch with base_branch only when the verification must stay apart. Follow the Verify step of your task-architecture skill.`
 	}
 	return `Move the task as the work moves, so the board stays true without a person
 dragging the card:

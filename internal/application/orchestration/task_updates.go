@@ -105,13 +105,7 @@ func (s *Service) drainUpdates() {
 // running. One that stopped in the meantime is skipped: nothing is queued
 // for a session that is not running.
 func (s *Service) deliverTaskUpdate(u taskUpdate) {
-	deliver := s.deliverUpdate
-	if deliver == nil {
-		deliver = func(id, key, text string) error {
-			_, err := s.Deliver(id, key, text, nil)
-			return err
-		}
-	}
+	deliver := s.turnSink()
 	// One wait for the shells per update, shared by its sessions, so the
 	// courier is held at most shellPathWait whatever their number.
 	deadline := time.Now().Add(shellPathWait)

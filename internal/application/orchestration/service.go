@@ -292,6 +292,9 @@ type Service struct {
 
 	mu  sync.Mutex
 	seq map[string]int64
+	// leaveAnnounced marks the sessions whose leaving their worktree's other
+	// sessions were told of, until they resume.
+	leaveAnnounced map[string]bool
 	// statuses is the last status announced per session, so a status is
 	// announced on the bus only when it actually changes.
 	statuses map[string]domain.SessionStatus
@@ -634,6 +637,8 @@ func (s *Service) prepare(ctx context.Context, in prepareInput) (*prepared, erro
 	cfg, res := s.sessionConfigTrail(trail, id, ws.Path, in.Model, in.AllowedTools, permission, ag, subject, in.ZoneID, in.Role, in.RepositoryID)
 	withReadOnlyAccess(&cfg, in.Access, in.Branch)
 	trail.mark(&cfg, domain.PieceOther, "Read-only access", "Harness")
+	s.withSharedWorktree(ctx, &cfg, id, ws.ID, in.Access, ws.Branch, ws.Path)
+	trail.mark(&cfg, domain.PieceOther, "Shared worktree", "Harness")
 	cleanup, err := s.withShell(id, in.RepositoryID, subject, &cfg, ag.cleanup)
 	trail.mark(&cfg, domain.PieceOther, "Virtual shell", "Harness")
 	if err == nil {
@@ -1174,7 +1179,7 @@ func (s *Service) pump(sess llmkit.Session) {
 	s.contextNotes.drop(id)
 	if sess := s.sessions.Get(id); sess != nil && sess.Status.IsTerminal() {
 		s.hub.End(id)
-		s.announce(domain.SessionEnded{SessionID: id, Status: sess.Status})
+		s.announceEnded(id, sess.Status)
 	}
 }
 

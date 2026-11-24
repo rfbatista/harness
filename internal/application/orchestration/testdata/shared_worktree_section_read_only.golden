@@ -1,0 +1,10 @@
+## Shared worktree
+
+Your worktree /work/export, on branch agent/export-1a2b, is shared with these other sessions:
+
+- go-developer (mode implement, access write, running)
+- reviewer (mode review, access read-only, ended)
+
+The harness does not lock files. Coordinate through commits: commit small and often, never reset, rebase or rewrite the shared branch, expect files to change under you, and pull in nothing.
+
+You cannot write this worktree: put your findings in task documents or comments.
