@@ -47,6 +47,11 @@ type Ticket struct {
 	CreatedAt time.Time `json:"created_at"`
 	UpdatedAt time.Time `json:"updated_at"`
 
+	// CreatedBy is who made the task, and ChangedBy who last changed it, nil
+	// until a first change. A task made before attribution reads as unknown.
+	CreatedBy *Author `json:"created_by"`
+	ChangedBy *Author `json:"changed_by"`
+
 	// ArchitectSessionID, PendingReviews and ChildrenCount are derived when
 	// a ticket is read, never stored: the task's architect session, how many
 	// review requests it has waiting on the person, and how many child tasks

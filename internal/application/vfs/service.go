@@ -24,6 +24,8 @@ import (
 	"sync"
 	"time"
 
+	"github.com/rfbatista/harnesskit/tool"
+
 	"operators-mcp/internal/domain"
 	"operators-mcp/internal/ports"
 )
@@ -730,4 +732,10 @@ func firstErr(errs ...error) error {
 func cleanRel(p string) string {
 	c := path.Clean("/" + filepath.ToSlash(p))
 	return c[1:]
+}
+
+// ctx is the context a write of this session's shell runs in: tagged with the
+// session, so a document it stores is attributed to it.
+func (sh *root) ctx() context.Context {
+	return tool.WithSessionID(context.Background(), sh.sessionID)
 }

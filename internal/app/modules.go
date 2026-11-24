@@ -378,9 +378,12 @@ func newPlanningService(
 	projects ports.ProjectRepository,
 	orch *orchestration.Service,
 	cat catalog.Catalog,
+	sessions ports.SessionRepository,
+	owners ports.ProductOwnerStore,
 ) (*planning.Service, error) {
 	svc := planning.NewService(tickets, documents, projects)
 	svc.Announcer, svc.Feed, svc.Events = orch, orch, cat.Bus
+	svc.SessionActor = sessionAuthor(sessions, owners)
 	dir, err := dataDir(cfg, "task-resources")
 	if err != nil {
 		return nil, err
@@ -1681,4 +1684,19 @@ func newProductOwner(lc fx.Lifecycle, store ports.ProductOwnerStore, cat catalog
 		},
 	})
 	return svc
+}
+
+// sessionAuthor says who a session's writes are attributed to: the product
+// owner and its thread for a product-owner session, else the session.
+func sessionAuthor(sessions ports.SessionRepository, owners ports.ProductOwnerStore) func(string) domain.Author {
+	return func(id string) domain.Author {
+		by := domain.Author{Kind: domain.AuthorSession, SessionID: id}
+		if sess := sessions.Get(id); sess != nil && sess.Mode == domain.SessionModeProductOwner {
+			by.Kind = domain.AuthorProductOwner
+			if th, err := owners.ThreadOfSession(context.Background(), id); err == nil && th != nil {
+				by.ThreadID = th.ID
+			}
+		}
+		return by
+	}
 }

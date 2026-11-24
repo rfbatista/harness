@@ -717,7 +717,7 @@ func (s *Service) commitDocWrite(sh *root, rel string) ports.ShellAnswer {
 	if version == row.Version && d.Format == format {
 		return allow
 	}
-	d, err = s.src.Writes.WriteDocumentIfVersion(row.ID, row.Version, d.Title, string(content), format)
+	d, err = s.src.Writes.WriteDocumentIfVersion(sh.ctx(), row.ID, row.Version, d.Title, string(content), format)
 	if errs.HasCode(err, "DOCUMENT_CHANGED") || errs.HasCode(err, "DOCUMENT_NOT_FOUND") {
 		return s.stale(sh, row)
 	}
@@ -728,7 +728,7 @@ func (s *Service) commitDocWrite(sh *root, rel string) ports.ShellAnswer {
 }
 
 func (s *Service) createDocument(sh *root, rel, content string) ports.ShellAnswer {
-	d, err := s.src.Writes.CreateDocument(sh.projID, TitleOf(rel, content), content, DocumentFormatOf(rel), classify(rel).scope())
+	d, err := s.src.Writes.CreateDocument(sh.ctx(), sh.projID, TitleOf(rel, content), content, DocumentFormatOf(rel), classify(rel).scope())
 	if err != nil {
 		return refuseErr(err)
 	}
@@ -804,13 +804,13 @@ func (s *Service) commitMove(ctx context.Context, sh *root, src, dst string) por
 				return refuseNotOnTask(row.Path, to)
 			}
 			var err error
-			if d, err = s.src.Writes.SetDocumentScope(d.ID, scope); err != nil {
+			if d, err = s.src.Writes.SetDocumentScope(sh.ctx(), d.ID, scope); err != nil {
 				return refuseErr(err)
 			}
 		}
 		if format := DocumentFormatOf(to); format != d.Format {
 			var err error
-			if d, err = s.src.Writes.WriteDocumentIfVersion(d.ID, row.Version, d.Title, d.Content, format); err != nil {
+			if d, err = s.src.Writes.WriteDocumentIfVersion(sh.ctx(), d.ID, row.Version, d.Title, d.Content, format); err != nil {
 				return refuseErr(err)
 			}
 		}

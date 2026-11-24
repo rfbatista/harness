@@ -47,6 +47,7 @@ func DocumentTools(planningSvc ports.DocumentLibrary) []domain.Tool {
 			Source:      "code",
 			Handler: func(ctx context.Context, args map[string]any) (any, error) {
 				doc, err := planningSvc.CreateDocument(
+					ctx,
 					getString(args, "project_id", ""),
 					getString(args, "title", ""),
 					getString(args, "content", ""),
@@ -66,6 +67,7 @@ func DocumentTools(planningSvc ports.DocumentLibrary) []domain.Tool {
 			Source:      "code",
 			Handler: func(ctx context.Context, args map[string]any) (any, error) {
 				doc, err := planningSvc.UpdateDocument(
+					ctx,
 					getString(args, "document_id", ""),
 					getString(args, "title", ""),
 					getString(args, "content", ""),
@@ -83,7 +85,7 @@ func DocumentTools(planningSvc ports.DocumentLibrary) []domain.Tool {
 			InputSchema: schemaFromJSON(`{"type":"object","properties":{"document_id":{"type":"string","description":"Document ID"},"scope":{"type":"string","enum":["task","project"],"description":"The scope to move it to."}},"required":["document_id","scope"]}`),
 			Source:      "code",
 			Handler: func(ctx context.Context, args map[string]any) (any, error) {
-				doc, err := planningSvc.SetDocumentScope(getString(args, "document_id", ""), domain.DocumentScope(getString(args, "scope", "")))
+				doc, err := planningSvc.SetDocumentScope(ctx, getString(args, "document_id", ""), domain.DocumentScope(getString(args, "scope", "")))
 				if err != nil {
 					return nil, err
 				}

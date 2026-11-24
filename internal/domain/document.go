@@ -57,6 +57,11 @@ type Document struct {
 	Content   string         `json:"content,omitempty"` // in Format
 	CreatedAt time.Time      `json:"created_at"`
 	UpdatedAt time.Time      `json:"updated_at"`
+	// CreatedBy is who made the document, and ChangedBy who last changed it,
+	// nil until a first change. A document made before attribution reads as
+	// unknown.
+	CreatedBy *Author `json:"created_by"`
+	ChangedBy *Author `json:"changed_by"`
 }
 
 // DocumentVersion names a document's content: the first 12 hex characters of
