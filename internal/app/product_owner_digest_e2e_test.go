@@ -3,11 +3,13 @@
 package app
 
 import (
+	"encoding/json"
 	"fmt"
 	"io"
 	"net/http"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"sync"
 	"testing"
@@ -556,5 +558,88 @@ func TestADigestTimeMissedWhileTheServerWasDownIsRecordedOnceAfterBootCoveringTh
 	settle()
 	if n := len(e.digests("").Digests); n != 2 {
 		t.Errorf("%d digests after a gap with no change, want 2", n)
+	}
+}
+
+// seedDigest stores a digest of a project straight into the database, for a
+// test that reads digests and has no need to run the scheduler.
+func (e *poE2E) seedDigest(project, date, summary string, items ...domain.ProductOwnerDigestItem) {
+	e.t.Helper()
+	db, err := sqlite.Open(e.cfg.DBPath)
+	if err != nil {
+		e.t.Fatal(err)
+	}
+	day, _ := time.ParseInLocation("2006-01-02", date, time.Local)
+	d := domain.ProductOwnerDigest{ID: "seed-" + project + "-" + date, ProjectID: project, Date: date, PeriodStart: day.Add(-24 * time.Hour), PeriodEnd: day.Add(8 * time.Hour), Summary: summary, Items: items}
+	if d.Items == nil {
+		d.Items = []domain.ProductOwnerDigestItem{}
+	}
+	if err := sqlite.NewProductOwnerDigestRepository(db).SaveDigest(e.ctx, d); err != nil {
+		e.t.Fatal(err)
+	}
+}
+
+func TestTheProductOwnerReadsPastDigestsWithAToolOfItsOwnProjectOnly(t *testing.T) {
+	e := newPOE2E(t)
+	other, err := e.cat.Projects.CreateProject(e.ctx, "other", e.cfg.Root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	move := domain.ProductOwnerDigestItem{Kind: domain.DigestItemTaskMoved, Title: "Ship it", URL: "/projects/p/tasks/t", From: "review", To: "done"}
+	e.seedDigest(e.project, "2030-01-07", "Tuesday: shipped it.", move)
+	e.seedDigest(e.project, "2030-01-08", "Wednesday: quiet-ish.")
+	e.seedDigest(e.project, "2030-01-10", "Friday.")
+	e.seedDigest(other.ID, "2030-01-07", "SECRET of the other project")
+
+	id, _ := e.startThread("hello")
+	e.waitTurn(id, "idle")
+	owner := e.dialSession(e.thread(id).Thread.SessionID)
+	if names := e.toolNames(owner); !slices.Contains(names, "list_product_owner_digests") || slices.Contains(names, "start_task_session") {
+		t.Fatalf("tools = %v, want the digest tool and no start tool", names)
+	}
+
+	type answer struct {
+		Count   int `json:"count"`
+		Digests []struct {
+			Date    string         `json:"date"`
+			Summary string         `json:"summary"`
+			Items   []poDigestItem `json:"items"`
+		} `json:"digests"`
+	}
+	read := func(args map[string]any) answer {
+		t.Helper()
+		text, refused := e.call(owner, "list_product_owner_digests", args)
+		if refused {
+			t.Fatalf("the tool refused %v: %s", args, text)
+		}
+		if strings.Contains(text, "SECRET") {
+			t.Fatalf("the tool answered another project's digest: %s", text)
+		}
+		var a answer
+		if err := json.Unmarshal([]byte(text), &a); err != nil {
+			t.Fatalf("answer %s: %v", text, err)
+		}
+		return a
+	}
+	if a := read(map[string]any{"date": "2030-01-07"}); a.Count != 1 || a.Digests[0].Summary != "Tuesday: shipped it." || len(a.Digests[0].Items) != 1 || a.Digests[0].Items[0].To != "done" {
+		t.Errorf("one day = %+v, want that day's digest", a)
+	}
+	if a := read(map[string]any{"date": "2030-01-09"}); a.Count != 0 || len(a.Digests) != 0 {
+		t.Errorf("a day with no digest = %+v, want an empty list", a)
+	}
+	if a := read(map[string]any{"from": "2030-01-07", "to": "2030-01-09"}); a.Count != 2 || a.Digests[0].Date != "2030-01-08" || a.Digests[1].Date != "2030-01-07" {
+		t.Errorf("a range = %+v, want the two digests of it, newest first", a)
+	}
+	if a := read(map[string]any{}); a.Count != 3 || a.Digests[0].Date != "2030-01-10" {
+		t.Errorf("no arguments = %+v, want the newest digests", a)
+	}
+	if text, refused := e.call(owner, "list_product_owner_digests", map[string]any{"date": "last tuesday"}); !refused || !strings.Contains(text, "YYYY-MM-DD") {
+		t.Errorf("a bad date = %q refused %v, want a refusal naming the format", text, refused)
+	}
+
+	// The opening brief tells the product owner to answer from digests and say so.
+	l := e.launches()
+	if len(l) == 0 || !strings.Contains(l[0], "list_product_owner_digests") || !strings.Contains(l[0], "digest") {
+		t.Errorf("the brief does not name the digest tool")
 	}
 }

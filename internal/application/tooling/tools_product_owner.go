@@ -22,6 +22,7 @@ var ProductOwnerToolNames = []string{
 	"get_project_task",
 	"list_project_sessions",
 	"list_project_branches",
+	"list_product_owner_digests",
 }
 
 // ProductOwnerSources is what the product owner's own reads come from.
@@ -29,20 +30,25 @@ type ProductOwnerSources struct {
 	Tasks    ports.TicketReader
 	Changes  ports.TaskStatusChangeRepository
 	Sessions ports.SessionRepository
+	// Digests are the project's daily digests; nil leaves the tool out.
+	Digests ports.ProductOwnerDigests
 }
 
 // ProductOwnerTools are the tools the product-owner session endpoint serves:
 // of the session task tools in all, those in the allow-list, and the
 // product owner's reads of tasks with their status history, of other
 // sessions' status, outcome and summary, and of branches and merges.
-func ProductOwnerTools(all []domain.Tool, src ProductOwnerSources) []domain.Tool {
+func ProductOwnerTools(all []domain.Tool, src ProductOwnerSources, with ...ProductOwnerSource) []domain.Tool {
+	for _, w := range with {
+		w(&src)
+	}
 	var out []domain.Tool
 	for _, name := range ProductOwnerToolNames {
 		if i := slices.IndexFunc(all, func(t domain.Tool) bool { return t.Name == name }); i >= 0 {
 			out = append(out, all[i])
 		}
 	}
-	return append(out, productOwnerReads(src)...)
+	return append(append(out, productOwnerReads(src)...), productOwnerDigestReads(src)...)
 }
 
 func productOwnerReads(src ProductOwnerSources) []domain.Tool {
