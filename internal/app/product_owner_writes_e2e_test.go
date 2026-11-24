@@ -4,6 +4,8 @@ package app
 
 import (
 	"encoding/json"
+	"os"
+	"path/filepath"
 	"slices"
 	"strings"
 	"testing"
@@ -11,6 +13,7 @@ import (
 	"github.com/mark3labs/mcp-go/client"
 
 	"operators-mcp/internal/domain"
+	"operators-mcp/internal/ports"
 )
 
 // ownerSession starts a thread and dials its session's tools, as the claude
@@ -176,5 +179,113 @@ func TestTheOpeningBriefNamesTheProductOwnersTaskWritesAndTheLinesItNeverCrosses
 		if !strings.Contains(strings.ToLower(l[0]), strings.ToLower(want)) {
 			t.Errorf("the opening brief does not say %q", want)
 		}
+	}
+}
+
+// ownerShellWrite writes a file in the product owner's shell the way its Write
+// tool does: the file lands on disk, then the harness is asked to commit it.
+func (e *poE2E) ownerShellWrite(threadID, rel, content string) ports.ShellAnswer {
+	e.t.Helper()
+	dir, ok := e.shells.RootDir(e.thread(threadID).Thread.SessionID)
+	if !ok {
+		e.t.Fatal("the product owner has no virtual shell")
+	}
+	path := filepath.Join(dir, rel)
+	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+		e.t.Fatal(err)
+	}
+	edit := ports.ShellEdit{Op: "write", Paths: []string{path}, Tool: "Write"}
+	if ans := e.shells.CheckShellEdit(e.ctx, e.thread(threadID).Thread.SessionID, edit); !ans.Allow {
+		return ans
+	}
+	if err := os.WriteFile(path, []byte(content), 0o644); err != nil {
+		e.t.Fatal(err)
+	}
+	return e.shells.CommitShellEdit(e.ctx, e.thread(threadID).Thread.SessionID, edit)
+}
+
+func (e *poE2E) documentByTitle(title string) *domain.Document {
+	for _, d := range e.plan.ListDocuments(e.project, "") {
+		if d.Title == title {
+			return d
+		}
+	}
+	return nil
+}
+
+func TestTheProductOwnerWritesAPrdOnAFeatureAndABriefOnAChildAndEditsAProjectDocument(t *testing.T) {
+	e := newPOE2E(t)
+	threadID, owner := e.ownerSession()
+	feature := e.madeTask(owner, "create_task", map[string]any{"title": "Feature", "parent_id": ""})
+	child := e.madeTask(owner, "create_task", map[string]any{"title": "Child", "parent_id": feature.ID})
+
+	if ans := e.ownerShellWrite(threadID, "tasks/"+feature.ID+"/docs/prd.md", "# PRD: Feature\n\n## Goal\n"); !ans.Allow {
+		t.Fatalf("the PRD write = %+v", ans)
+	}
+	if ans := e.ownerShellWrite(threadID, "tasks/"+child.ID+"/docs/brief.md", "# Brief: Child\n"); !ans.Allow {
+		t.Fatalf("the brief write = %+v", ans)
+	}
+	if ans := e.ownerShellWrite(threadID, "project/docs/conventions.md", "# Conventions\n\nOne\n"); !ans.Allow {
+		t.Fatalf("the project document write = %+v", ans)
+	}
+
+	prd := e.documentByTitle("PRD: Feature")
+	if prd == nil || prd.Scope != domain.DocumentScopeTask || prd.CreatedBy == nil || prd.CreatedBy.Kind != domain.AuthorProductOwner || prd.CreatedBy.ThreadID != threadID {
+		t.Fatalf("the PRD = %+v, want a task document made by the product owner's thread", prd)
+	}
+	if links := e.plan.ListTicketDocuments(e.ctx, feature.ID); len(links) != 1 || links[0].ID != prd.ID {
+		t.Errorf("the feature's documents = %v, want its PRD", links)
+	}
+	if brief := e.documentByTitle("Brief: Child"); brief == nil || len(e.plan.ListTicketDocuments(e.ctx, child.ID)) != 1 {
+		t.Errorf("the child's brief = %+v", brief)
+	}
+	conv := e.documentByTitle("Conventions")
+	if conv == nil || conv.Scope != domain.DocumentScopeProject || conv.CreatedBy == nil || conv.CreatedBy.Kind != domain.AuthorProductOwner {
+		t.Fatalf("the project document = %+v", conv)
+	}
+
+	// An edit of it is stored against the version the shell had, and is the product owner's.
+	if ans := e.ownerShellWrite(threadID, "project/docs/conventions.md", "# Conventions\n\nTwo\n"); !ans.Allow {
+		t.Fatalf("the edit = %+v", ans)
+	}
+	if edited := e.documentByTitle("Conventions"); edited == nil || !strings.Contains(edited.Content, "Two") || edited.ChangedBy == nil || edited.ChangedBy.Kind != domain.AuthorProductOwner || edited.ChangedBy.ThreadID != threadID {
+		t.Fatalf("the edited document = %+v", edited)
+	}
+}
+
+func TestTheProductOwnersShellRefusesEveryDeleteAndEveryWriteBeyondDocuments(t *testing.T) {
+	e := newPOE2E(t)
+	threadID, _ := e.ownerSession()
+	sid := e.thread(threadID).Thread.SessionID
+	if ans := e.ownerShellWrite(threadID, "project/docs/keep.md", "# Keep\n"); !ans.Allow {
+		t.Fatalf("the write = %+v", ans)
+	}
+	dir, _ := e.shells.RootDir(sid)
+	keep := filepath.Join(dir, "project/docs/keep.md")
+
+	rm := ports.ShellEdit{Op: "rm", Paths: []string{keep}}
+	if err := os.Remove(keep); err != nil {
+		t.Fatal(err)
+	}
+	if ans := e.shells.CommitShellEdit(e.ctx, sid, rm); ans.Allow || ans.Code != "PRODUCT_OWNER_NO_DELETE" {
+		t.Errorf("rm = %+v, want PRODUCT_OWNER_NO_DELETE", ans)
+	}
+	if ans := e.shells.CheckShellEdit(e.ctx, sid, rm); ans.Allow || ans.Code != "PRODUCT_OWNER_NO_DELETE" {
+		t.Errorf("rm check = %+v, want PRODUCT_OWNER_NO_DELETE", ans)
+	}
+	if e.documentByTitle("Keep") == nil {
+		t.Error("an rm removed the document")
+	}
+	if _, err := os.Stat(keep); err != nil {
+		t.Errorf("the refused rm left no file in the shell: %v", err)
+	}
+
+	for _, rel := range []string{"task/docs/x.md", "task/comments/c.md", "project/designs/d.html", "README.md", "elsewhere.md"} {
+		if ans := e.ownerShellWrite(threadID, rel, "# X\n"); ans.Allow {
+			t.Errorf("a write to %s = %+v, want it refused", rel, ans)
+		}
+	}
+	if ans := e.shells.CheckShellEdit(e.ctx, sid, ports.ShellEdit{Op: "write", Paths: []string{"/tmp/elsewhere"}}); !ans.Allow {
+		t.Errorf("a path outside the shell = %+v", ans)
 	}
 }

@@ -1493,7 +1493,7 @@ func TestTheProductOwnerReadsTasksWithTheirHistoryAndOnlyTheStatusOutcomeAndSumm
 	}
 }
 
-func TestTheProductOwnersSandboxReachesNoOtherSessionsWorktreeAndItsShellRefusesEveryWrite(t *testing.T) {
+func TestTheProductOwnersSandboxReachesNoOtherSessionsWorktreeAndItsShellRefusesWhatIsNotADocumentWrite(t *testing.T) {
 	e := newPOE2E(t)
 	id, _ := e.startThread("hello")
 	th := e.waitTurn(id, "idle")
@@ -1511,16 +1511,16 @@ func TestTheProductOwnersSandboxReachesNoOtherSessionsWorktreeAndItsShellRefuses
 	if !ok {
 		t.Fatal("the product owner has no virtual shell")
 	}
-	for _, edit := range []ports.ShellEdit{
-		{Op: "write", Paths: []string{filepath.Join(dir, "project/docs/new.md")}, Tool: "Write"},
-		{Op: "rm", Paths: []string{filepath.Join(dir, "project/docs/prd.md")}},
-		{Op: "mkdir", Paths: []string{filepath.Join(dir, "tasks/x")}},
-	} {
-		if ans := e.shells.CheckShellEdit(e.ctx, th.Thread.SessionID, edit); ans.Allow || ans.Code != "PRODUCT_OWNER_READ_ONLY" {
-			t.Errorf("check %+v = %+v, want PRODUCT_OWNER_READ_ONLY", edit, ans)
+	for edit, code := range map[string]string{"write": "PRODUCT_OWNER_READ_ONLY", "rm": "PRODUCT_OWNER_NO_DELETE"} {
+		edit := ports.ShellEdit{Op: edit, Paths: []string{filepath.Join(dir, "project/designs/new.html")}, Tool: "Write"}
+		if edit.Op == "rm" {
+			edit.Paths = []string{filepath.Join(dir, "project/docs/prd.md")}
 		}
-		if ans := e.shells.CommitShellEdit(e.ctx, th.Thread.SessionID, edit); ans.Allow || ans.Code != "PRODUCT_OWNER_READ_ONLY" {
-			t.Errorf("commit %+v = %+v, want PRODUCT_OWNER_READ_ONLY", edit, ans)
+		if ans := e.shells.CheckShellEdit(e.ctx, th.Thread.SessionID, edit); ans.Allow || ans.Code != code {
+			t.Errorf("check %+v = %+v, want %s", edit, ans, code)
+		}
+		if ans := e.shells.CommitShellEdit(e.ctx, th.Thread.SessionID, edit); ans.Allow || ans.Code != code {
+			t.Errorf("commit %+v = %+v, want %s", edit, ans, code)
 		}
 	}
 	// What is outside its shell is no concern of the proxy.
