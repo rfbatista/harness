@@ -145,6 +145,9 @@ func (s *Service) notify(sessionID, eventType string) {
 		return
 	}
 	if sess := s.sessions.Get(sessionID); sess != nil {
+		if sess.Mode == domain.SessionModeProductOwner {
+			return // a thread shows in the product owner's surface only (ADR 0109)
+		}
 		s.feed.send(ports.SessionChange{Session: s.withResumability(context.Background(), sess)})
 	}
 }

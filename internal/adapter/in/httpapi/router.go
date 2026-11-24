@@ -428,6 +428,16 @@ func NewRouter(h *Handler, opts ...Option) *echo.Echo {
 	g.POST("/discover_repository_architecture", h.handleDiscoverRepositoryArchitecture)
 	g.POST("/list_instruction_files", h.handleListInstructionFiles)
 	g.POST("/list_instruction_proposals", h.handleListInstructionProposals)
+
+	// product owner: one per project, and the threads the person has with it
+	g.GET("/product_owner", h.handleGetProductOwner)
+	g.POST("/update_product_owner", h.handleUpdateProductOwner)
+	g.GET("/product_owner_threads", h.handleListProductOwnerThreads)
+	g.GET("/product_owner_thread", h.handleGetProductOwnerThread)
+	g.POST("/start_product_owner_thread", h.handleStartProductOwnerThread)
+	g.POST("/send_product_owner_message", h.handleSendProductOwnerMessage)
+	g.POST("/stop_product_owner_turn", h.handleStopProductOwnerTurn)
+	g.POST("/rename_product_owner_thread", h.handleRenameProductOwnerThread)
 	g.POST("/get_instruction_proposal", h.handleGetInstructionProposal)
 	g.POST("/approve_instruction_proposal", h.handleApproveInstructionProposal)
 	g.POST("/reject_instruction_proposal", h.handleRejectInstructionProposal)

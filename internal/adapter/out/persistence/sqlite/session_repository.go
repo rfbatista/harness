@@ -125,6 +125,9 @@ func (r *SessionRepository) Query(ctx context.Context, filter ports.SessionFilte
 		}
 		q = q.Where("status IN ?", values)
 	}
+	if !filter.IncludeProductOwner {
+		q = q.Where("(mode IS NULL OR mode <> ?)", string(domain.SessionModeProductOwner))
+	}
 	q = q.Order("created_at DESC")
 	var models []SessionModel
 	if err := q.Find(&models).Error; err != nil {
@@ -455,6 +458,7 @@ func (r *SessionRepository) ActivityByProject() (map[string]ports.SessionActivit
 		Last      int64
 	}
 	err := r.db.Model(&SessionModel{}).
+		Where("(mode IS NULL OR mode <> ?)", string(domain.SessionModeProductOwner)).
 		Select("project_id, SUM(CASE WHEN status NOT IN ? THEN 1 ELSE 0 END) AS live, MAX(updated_at) AS last",
 			[]string{string(domain.SessionDone), string(domain.SessionFailed), string(domain.SessionStopped)}).
 		Group("project_id").Scan(&rows).Error

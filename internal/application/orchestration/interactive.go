@@ -694,7 +694,7 @@ func ranByServer(sess *domain.Session) bool {
 // liveServerSessions are the sessions the server runs that are stored with a
 // live status, whatever it is (ADR 0078).
 func (s *Service) liveServerSessions(ctx context.Context) ([]*domain.Session, error) {
-	live, err := s.List(ctx, ports.SessionFilter{Statuses: domain.LiveSessionStatuses})
+	live, err := s.List(ctx, ports.SessionFilter{Statuses: domain.LiveSessionStatuses, IncludeProductOwner: true})
 	if err != nil {
 		return nil, err
 	}
@@ -1136,7 +1136,7 @@ func (s *Service) joinTarget(ctx context.Context, req InteractiveRequest, mode d
 		return "", nil, joinRefusal("WORKTREE_WITH_BASE_BRANCH", "a session that joins a worktree runs on its branch: leave the base branch and the branch name empty", nil)
 	}
 	switch mode {
-	case domain.SessionModeArchitect, domain.SessionModeProduct, domain.SessionModeDesignSystem:
+	case domain.SessionModeArchitect, domain.SessionModeProduct, domain.SessionModeDesignSystem, domain.SessionModeProductOwner:
 		return "", nil, &domain.StructuredError{Code: "INVALID_INPUT", Message: "an architect, product or design system session cannot join a worktree"}
 	}
 	gone := func() error {

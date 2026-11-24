@@ -246,7 +246,7 @@ func BuildSandboxPolicy(s SandboxSession) ports.SandboxPolicy {
 	add(s.TempDir, true)
 	var createOnly string
 	switch s.Mode {
-	case domain.SessionModeProduct, domain.SessionModeDesignSystem:
+	case domain.SessionModeProduct, domain.SessionModeDesignSystem, domain.SessionModeProductOwner:
 		add(s.Worktree, false)
 		addRepositories(add, s)
 	case domain.SessionModeArchitect:

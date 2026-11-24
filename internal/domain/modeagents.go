@@ -98,6 +98,9 @@ func ModeAgentsEntry(mode SessionMode, read func(key string) string) ModeAgents 
 func ModeAgentsList(read func(key string) string) []ModeAgents {
 	out := make([]ModeAgents, 0, len(modeModelModes))
 	for _, mode := range modeModelModes {
+		if mode == SessionModeProductOwner {
+			continue // its agent is a project setting, not a mode's list
+		}
 		out = append(out, ModeAgentsEntry(mode, read))
 	}
 	return out
