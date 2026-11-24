@@ -2,7 +2,7 @@ import { useEffect, useRef } from "react";
 import { usePresenter } from "../../../../shared/presentation/use-presenter";
 import { MAX_WIDTH, MIN_WIDTH } from "../../application/owner-dock";
 import type { PanelPresenter } from "../presenters/panel-presenter";
-import { ComposerView } from "./composer-view";
+import { ThreadView } from "./thread-view";
 import { OwnerIcon, OwnerMark } from "./owner-icon";
 
 /** The docked panel. It reaches out of its island once: it gives the app shell the column it sits in. */
@@ -54,30 +54,21 @@ export function PanelView({ presenter }: { presenter: PanelPresenter }) {
           </button>
         </div>
       </header>
-      {vm.state === "off" ? (
-        <div className="[ thread ]">
-          <div className="[ thread-empty ]">
-            <h2>The product owner is off</h2>
-            <p>Nobody can message it and no digest is recorded. Threads and memory are kept.</p>
-            {vm.error !== "" && (
-              <p role="alert" style={{ color: "var(--color-danger)" }}>
-                {vm.error}
-              </p>
-            )}
-            <div className="[ cluster ] [ gutter-xs ]">
-              <button type="button" className="[ button ]" data-variant="primary" data-size="sm" onClick={() => void presenter.turnOn()}>
-                Turn it on
-              </button>
-              <a className="[ button ]" data-size="sm" href={vm.settingsHref}>
-                Settings
-              </a>
-            </div>
-          </div>
+      {vm.state === "off" && (
+        <div className="[ banner ]" data-tone="attention" role="status" style={{ margin: "var(--space-m)" }}>
+          <span>
+            <strong>The product owner is off.</strong> Nobody can message it and no digest is recorded. Threads and memory are kept.
+            {vm.error !== "" && <span role="alert"> {vm.error}</span>}
+          </span>
+          <button type="button" className="[ button ]" data-variant="primary" data-size="sm" onClick={() => void presenter.turnOn()}>
+            Turn it on
+          </button>
+          <a className="[ button ]" data-size="sm" href={vm.settingsHref}>
+            Settings
+          </a>
         </div>
-      ) : (
-        <div className="[ thread ]" role="log" aria-live="off" />
       )}
-      <ComposerView textarea={composer} placeholder={vm.composerPlaceholder} disabled={vm.composerDisabled} />
+      <ThreadView presenter={presenter.thread} textarea={composer} />
     </aside>
   );
 }

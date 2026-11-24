@@ -18,10 +18,10 @@ func renderShellBody(t *testing.T, f Frame) string {
 // A project page carries the mount of the product owner's panel, beside <main>, with its
 // project in the island props; the browser fills it (ADR 0115).
 func TestAProjectPageCarriesTheProductOwnerPanelMount(t *testing.T) {
-	got := renderShellBody(t, Frame{Top: TopBar{Current: "p1"}, Island: &TopBarIsland{HTML: "<b>bar</b>", Props: "{}"}})
+	got := renderShellBody(t, Frame{Top: TopBar{Current: "p1", Projects: []Option{{ID: "p1", Name: "harness"}}}, Rail: Rail{Empty: "No tasks yet."}, Island: &TopBarIsland{HTML: "<b>bar</b>", Props: "{}"}})
 	for _, want := range []string{
 		`<div data-island="owner-panel" data-island-rendered="false"></div>`,
-		`<script type="application/json" data-island-props="owner-panel">{"project_id":"p1"}</script>`,
+		`<script type="application/json" data-island-props="owner-panel">{"project_id":"p1","project_name":"harness","no_tasks":true}</script>`,
 	} {
 		if !strings.Contains(got, want) {
 			t.Errorf("shell lacks %q:\n%s", want, got)

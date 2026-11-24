@@ -2,7 +2,9 @@
 // off. The thread inside it is the thread component's (a later ticket).
 
 import { Presenter } from "../../../../shared/kernel/presenter";
+import type { Conversation } from "../../application/conversation";
 import { type DockState, type OwnerDock } from "../../application/owner-dock";
+import type { ThreadPresenter } from "./thread-presenter";
 
 export interface PanelViewModel {
   readonly docked: boolean;
@@ -40,11 +42,41 @@ export const panelViewModel = (dock: DockState): PanelViewModel => {
 
 export class PanelPresenter extends Presenter<PanelViewModel> {
   readonly #dock: OwnerDock;
+  readonly #conversation: Conversation;
+  readonly thread: ThreadPresenter;
+  #attached = "";
+  #detach: (() => void) | null = null;
 
-  constructor(dock: OwnerDock) {
+  /** The conversation follows the panel: it is read while the panel is docked, and let go when it closes. */
+  constructor(dock: OwnerDock, conversation: Conversation, thread: ThreadPresenter) {
     super(panelViewModel(dock.state));
     this.#dock = dock;
-    dock.subscribe((state) => this.set(panelViewModel(state)));
+    this.#conversation = conversation;
+    this.thread = thread;
+    this.#unsubscribe = dock.subscribe((state) => {
+      this.set(panelViewModel(state));
+      this.thread.setOff(state.enabled === false);
+      this.#follow(state);
+    });
+  }
+
+  readonly #unsubscribe: () => void;
+
+  /** The panel's island goes away: nothing of it stays on the stream. */
+  destroy(): void {
+    this.#unsubscribe();
+    this.#detach?.();
+    this.#detach = null;
+    this.#attached = "";
+  }
+
+  #follow(state: DockState): void {
+    const wanted = state.docked ? state.projectId : "";
+    if (wanted === this.#attached) return;
+    this.#detach?.();
+    // Marked first: attaching tells the dock the thread, and the dock tells us.
+    this.#attached = wanted;
+    this.#detach = wanted === "" ? null : this.#conversation.attach(wanted, state.threadId);
   }
 
   /** The person closed the panel from inside: focus goes back to the toggle. */

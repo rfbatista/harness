@@ -30,6 +30,8 @@ export interface MemoryProductOwner extends ProductOwnerGateway, ProductOwnerEve
   setStatus(status: FeedStatus): void;
   /** Every next call fails with `error` until `null`. */
   failWith(error: ProductOwnerError | null): void;
+  /** While silent, the server does not send the echo of the person's message on the stream. */
+  silenceEchoes(silent: boolean): void;
   /** The next send or start answers late: the call returns when the returned function is called. */
   holdNextSend(): () => void;
   readonly followers: number;
@@ -52,6 +54,7 @@ export function memoryProductOwner(): MemoryProductOwner {
   let status: FeedStatus = "live";
   let failure: ProductOwnerError | null = null;
   let hold: Promise<void> | null = null;
+  let silent = false;
   let counter = 0;
   const next = (prefix: string): string => `${prefix}${++counter}`;
   const now = (): Date => new Date(Date.UTC(2026, 10, 23, 12, 0, counter));
@@ -83,7 +86,7 @@ export function memoryProductOwner(): MemoryProductOwner {
     const item: MessageItem = { kind: "message", itemId: next("i"), at: now(), author: "person", text, streaming: false, stopped: false };
     t.items.push(item);
     touch(t, { lastActivityAt: item.at, lastMessageExcerpt: text.split("\n")[0]!.slice(0, 160), turn: "resuming" });
-    send(t.projectId, { type: "item", threadId: t.summary.threadId, item });
+    if (!silent) send(t.projectId, { type: "item", threadId: t.summary.threadId, item });
     return item;
   };
   const late = async (): Promise<void> => {
@@ -122,6 +125,7 @@ export function memoryProductOwner(): MemoryProductOwner {
       for (const f of [...followers]) f.onStatus(next);
     },
     failWith: (error) => void (failure = error),
+    silenceEchoes: (value) => void (silent = value),
     holdNextSend() {
       let release = (): void => {};
       hold = new Promise<void>((resolve) => (release = resolve));

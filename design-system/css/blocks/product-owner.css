@@ -47,7 +47,8 @@
   .owner-head[data-page] { background: var(--color-canvas); }
 
   /* The transcript: a log, not bubbles. */
-  .thread { flex: 1 1 auto; min-block-size: 0; overflow: auto; padding: var(--space-m) var(--space-l) var(--space-l); display: flex; flex-direction: column; gap: var(--space-l); overflow-anchor: none; }
+  /* Scoped: the comment block already has a .thread. */
+  :is(.owner-panel, .conversation) > .thread { flex: 1 1 auto; min-block-size: 0; overflow: auto; padding: var(--space-m) var(--space-l) var(--space-l); display: flex; flex-direction: column; gap: var(--space-l); overflow-anchor: none; }
   .thread > .day { align-self: center; font-size: var(--text-xs); color: var(--color-ink-faint); padding-block: var(--space-2xs); }
   .msg { display: grid; grid-template-columns: 1.25rem minmax(0, 1fr); column-gap: var(--space-s); row-gap: var(--space-2xs); }
   .msg > .avatar { grid-row: 1 / span 2; align-self: start; margin-block-start: 0.1rem; }

@@ -16,6 +16,10 @@ import { httpNotificationsSource } from "../features/notifications/infrastructur
 import { OwnerDock } from "../features/product-owner/application/owner-dock";
 import { browserDockMemory, browserPageNavigator, browserScreen, browserStorage } from "../features/product-owner/infrastructure/browser-dock";
 import { httpProductOwner } from "../features/product-owner/infrastructure/http-product-owner";
+import { OwnerPanelPropsDto } from "./owner-panel-props-dto";
+import { Conversation } from "../features/product-owner/application/conversation";
+import { browserTaskCatalog } from "../features/product-owner/infrastructure/browser-task-catalog";
+import { ThreadPresenter } from "../features/product-owner/presentation/presenters/thread-presenter";
 import { PanelPresenter } from "../features/product-owner/presentation/presenters/panel-presenter";
 import { PanelView } from "../features/product-owner/presentation/views/panel-view";
 import { buildTopBar } from "./top-bar-presenters";
@@ -57,10 +61,17 @@ export function mountIslands(doc: Document): Dispose {
       };
     },
     // The panel: a client-rendered island beside #main, on every project page.
-    "owner-panel": (mount) => {
+    "owner-panel": (mount, props) => {
+      const { project_name, no_tasks } = OwnerPanelPropsDto.fromJSON(props);
+      const conversation = new Conversation({ gateway: owner, events: owner, onThread: (id) => dock.setThreadId(id) });
+      const thread = new ThreadPresenter(conversation, { projectName: project_name, noTasks: no_tasks }, browserTaskCatalog(doc));
+      const panel = new PanelPresenter(dock, conversation, thread);
       const root = createRoot(mount);
-      root.render(<PanelView presenter={new PanelPresenter(dock)} />);
-      return () => root.unmount();
+      root.render(<PanelView presenter={panel} />);
+      return () => {
+        panel.destroy();
+        root.unmount();
+      };
     },
   };
 

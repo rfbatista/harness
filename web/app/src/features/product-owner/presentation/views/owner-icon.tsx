@@ -1,7 +1,7 @@
 // The product owner's line icons, drawn on a 20-unit grid as the design study's sprite has them.
 // Decorative: the words beside them, or the button's accessible name, carry the meaning.
 
-export type OwnerIconName = "owner" | "plus" | "history" | "info" | "expand" | "collapse" | "close" | "send" | "stop" | "back" | "gear" | "search";
+export type OwnerIconName = "owner" | "plus" | "history" | "info" | "expand" | "collapse" | "close" | "send" | "stop" | "back" | "gear" | "search" | "warn" | "tasks";
 
 const PATHS: Record<OwnerIconName, readonly string[]> = {
   owner: ["M4 4.5h12a1 1 0 0 1 1 1v7a1 1 0 0 1-1 1H9l-4 3v-3H4a1 1 0 0 1-1-1v-7a1 1 0 0 1 1-1Z", "M7 8h6M7 10.5h4"],
@@ -15,6 +15,8 @@ const PATHS: Record<OwnerIconName, readonly string[]> = {
   stop: ["M7 5.5h6a1.5 1.5 0 0 1 1.5 1.5v6a1.5 1.5 0 0 1-1.5 1.5H7A1.5 1.5 0 0 1 5.5 13V7A1.5 1.5 0 0 1 7 5.5Z"],
   back: ["M12.5 5 7.5 10l5 5"],
   gear: ["M10 7.5a2.5 2.5 0 1 0 0 5 2.5 2.5 0 0 0 0-5Z", "M10 2.5v2M10 15.5v2M2.5 10h2M15.5 10h2M4.7 4.7l1.4 1.4M13.9 13.9l1.4 1.4M4.7 15.3l1.4-1.4M13.9 6.1l1.4-1.4"],
+  warn: ["M10 3.5 17 16H3z", "M10 8v4M10 14.2v.2"],
+  tasks: ["M4 6h12M4 10h12M4 14h8"],
   search: ["M8.5 3.5a5 5 0 1 0 0 10 5 5 0 0 0 0-10Z", "m12.5 12.5 4 4"],
 };
 

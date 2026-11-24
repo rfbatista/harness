@@ -46,10 +46,19 @@ func PathOf(ctx context.Context) string {
 }
 
 // OwnerPanelProps are the product owner panel island's props: the project it
-// belongs to, as JSON that is safe inside a script.
+// belongs to, its name, and whether it has no tasks yet (the thread's empty
+// state says so), as JSON that is safe inside a script.
 func (f Frame) OwnerPanelProps() string {
+	name := f.Top.Current
+	for _, p := range f.Top.Projects {
+		if p.ID == f.Top.Current {
+			name = p.Name
+		}
+	}
 	props, _ := json.Marshal(struct {
-		ProjectID string `json:"project_id"`
-	}{f.Top.Current})
+		ProjectID   string `json:"project_id"`
+		ProjectName string `json:"project_name"`
+		NoTasks     bool   `json:"no_tasks"`
+	}{f.Top.Current, name, f.Rail.Empty != ""})
 	return string(props)
 }

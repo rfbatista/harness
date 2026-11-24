@@ -72,3 +72,9 @@ export interface Screen {
 export interface PageNavigator {
   open(href: string): void;
 }
+
+/** What the page knows of a project's tasks, so a task named in an answer shows its status. */
+export interface TaskCatalog {
+  /** null for a task the page does not know. */
+  find(taskId: string): { readonly state: "running" | "waiting" | "done" | "idle" } | null;
+}

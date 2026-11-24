@@ -4,7 +4,14 @@ import { OwnerDock } from "../../application/owner-dock";
 import { memoryProductOwner } from "../../infrastructure/memory-product-owner";
 import { memoryDockMemory, memoryNavigator, memoryScreen } from "../../testing/memory-dock-adapters";
 import { TogglePresenter } from "./toggle-presenter";
+import { Conversation } from "../../application/conversation";
 import { PanelPresenter } from "./panel-presenter";
+import { ThreadPresenter } from "./thread-presenter";
+
+const panelOf = (dock: OwnerDock, server: ReturnType<typeof memoryProductOwner>) => {
+  const conversation = new Conversation({ gateway: server, events: server, onThread: (id) => dock.setThreadId(id) });
+  return new PanelPresenter(dock, conversation, new ThreadPresenter(conversation, { projectName: "harness", noTasks: false }, { find: () => null }));
+};
 
 const setup = () => {
   const server = memoryProductOwner();
@@ -13,7 +20,7 @@ const setup = () => {
   const screen = memoryScreen();
   const navigator = memoryNavigator();
   const dock = new OwnerDock({ gateway: server, events: server, memory: memoryDockMemory(), screen, navigator });
-  return { server, screen, navigator, dock, toggle: new TogglePresenter(dock), panel: new PanelPresenter(dock) };
+  return { server, screen, navigator, dock, toggle: new TogglePresenter(dock), panel: panelOf(dock, server) };
 };
 const settled = () => new Promise((resolve) => setImmediate(resolve));
 
@@ -132,5 +139,52 @@ describe("the panel", () => {
     assert.equal(panel.handleResizerKey({ key: "ArrowRight" }), true);
     assert.equal(panel.viewModel.width, 22);
     assert.equal(panel.handleResizerKey({ key: "a" }), false);
+  });
+});
+
+describe("the panel's conversation", () => {
+  test("is read while the panel is docked, on the thread the browser remembered, and let go when it closes", async () => {
+    const { dock, panel, server } = setup();
+    server.seedThread("p1", { threadId: "t1" }, [{ kind: "message", itemId: "m1", at: new Date(), author: "person", text: "Q", streaming: false, stopped: false }]);
+    dock.bind("p1");
+    dock.setThreadId("t1");
+    assert.equal(server.followers, 1, "the dock's own follower only while the panel is closed");
+    dock.open();
+    await settled();
+    assert.equal(server.followers, 2);
+    assert.equal(panel.thread.viewModel.rows.length, 1);
+    panel.close();
+    assert.equal(server.followers, 1);
+  });
+
+  test("remembers the thread a first message starts", async () => {
+    const { dock, panel, server } = setup();
+    dock.bind("p1");
+    dock.open();
+    panel.thread.setDraft("Hello");
+    await panel.thread.send();
+    assert.ok(dock.state.threadId);
+    assert.equal(dock.state.threadId, server.itemsOf(dock.state.threadId!) && dock.state.threadId);
+  });
+
+  test("a closed panel, and a destroyed one, leave nothing on the stream", async () => {
+    const { dock, panel, server } = setup();
+    dock.bind("p1");
+    dock.open();
+    panel.destroy();
+    assert.equal(server.followers, 1);
+    dock.open();
+    dock.close();
+    assert.equal(server.followers, 1);
+  });
+
+  test("follows the switch: the composer is disabled while it is off", async () => {
+    const { dock, panel } = setup();
+    dock.bind("off");
+    dock.open();
+    await settled();
+    assert.equal(panel.thread.viewModel.composer.disabled, true);
+    await panel.turnOn();
+    assert.equal(panel.thread.viewModel.composer.disabled, false);
   });
 });
