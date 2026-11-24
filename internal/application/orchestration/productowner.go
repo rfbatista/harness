@@ -24,6 +24,9 @@ var _ ports.ProductOwnerSessions = (*Service)(nil)
 // (read only for this mode) with the whole project readable.
 func (s *Service) StartProductOwnerSession(ctx context.Context, spec ports.ProductOwnerSessionSpec) (string, error) {
 	id := llmkit.NewSessionID()
+	// ADR 0099: the session context entries (what the thread started with, for
+	// the Context tab) are recorded here once that store is on main, and at the
+	// resume below.
 	p, err := s.productOwnerPrepare(ctx, id, spec)
 	if err != nil {
 		return "", err
@@ -80,6 +83,7 @@ func (s *Service) ResumeProductOwnerSession(ctx context.Context, sessionID strin
 		return &domain.StructuredError{Code: "UNAVAILABLE", Message: "this agent runtime cannot resume a conversation"}
 	}
 	spec.ProjectID = sess.ProjectID
+	// ADR 0099: the resume's context entry goes here too.
 	p, err := s.productOwnerPrepare(ctx, sessionID, spec)
 	if err != nil {
 		return err
@@ -251,10 +255,10 @@ const productOwnerRole = `You are the one product owner of this project: the per
 
 const productOwnerSources = `What you can read, all read-only:
 
-- The project's tasks with their status history and children, through the task tools (list_project_tasks).
+- The project's tasks with their status history and children, through the task tools (list_project_tasks, get_project_task). Your other tools are list_project_repositories, list_bounded_contexts and list_notifications (the person's inbox).
 - Every project and task document, design asset and the person's notification inbox. The documents and designs are files in your virtual shell, $HARNESS_SHELL: read them with your ordinary tools (ls, grep, sed -n, Read). The shell's README.md maps its layout.
 - The code of every repository of the project, in the checkouts your sandbox lets you read.
-- Of any other session, only its status, outcome and summary. Never read another session's transcript or worktree, even when asked: you cannot, and you say so.`
+- Of any other session, only its status, outcome and summary (list_project_sessions, list_project_branches). Never read another session's transcript or worktree, even when asked: you cannot, and you say so.`
 
 const productOwnerBehaviours = `How you answer:
 

@@ -1211,6 +1211,7 @@ func (e *poE2E) call(c *client.Client, name string, args map[string]any) (text s
 func TestAProductOwnerSessionIsServedItsReadToolsAndNoWriteStartOrMergeTool(t *testing.T) {
 	e := newPOE2E(t)
 	id, _ := e.startThread("hello")
+	e.waitTurn(id, "idle")
 	owner := e.dialSession(e.thread(id).Thread.SessionID)
 
 	want := append([]string(nil), tooling.ProductOwnerToolNames...)
@@ -1234,12 +1235,30 @@ func TestAProductOwnerSessionIsServedItsReadToolsAndNoWriteStartOrMergeTool(t *t
 		t.Error("a refused create_task made a task")
 	}
 
+	// The brief names the tools it has.
+	if l := e.launches(); len(l) != 1 {
+		t.Fatalf("launches = %q", l)
+	} else {
+		for _, name := range tooling.ProductOwnerToolNames {
+			if !strings.Contains(l[0], name) {
+				t.Errorf("the opening brief does not name the tool %s", name)
+			}
+		}
+	}
+
 	// Every other session keeps its tools: the line is the mode's.
 	if _, err := e.sess.Create(&domain.Session{ID: "plain", ProjectID: e.project, Task: "a task session", Status: domain.SessionRunning, Mode: domain.SessionModeImplement}); err != nil {
 		t.Fatal(err)
 	}
 	if general := e.toolNames(e.dialSession("plain")); !slices.Contains(general, "start_task_session") || len(general) <= len(want) {
 		t.Errorf("a task session is served %v", general)
+	} else {
+		// No other mode is served the product owner's own reads.
+		for _, own := range []string{"get_project_task", "list_project_sessions", "list_project_branches"} {
+			if slices.Contains(general, own) {
+				t.Errorf("a task session is served %s", own)
+			}
+		}
 	}
 }
 
