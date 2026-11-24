@@ -190,3 +190,107 @@ describe("reading a thread", () => {
     assert.equal(threadIds.at(-1), null);
   });
 });
+
+describe("two tabs on one thread", () => {
+  const twoTabs = async () => {
+    const server = memoryProductOwner();
+    server.seedProject("p1", true);
+    server.seedThread("p1", { threadId: "t1" }, [person("Q")]);
+    const make = () => new Conversation({ gateway: server, events: server });
+    const [a, b] = [make(), make()];
+    a.attach("p1", "t1");
+    b.attach("p1", "t1");
+    await settled();
+    return { server, a, b };
+  };
+
+  test("show the same messages, and the other tab's message arrives marked as from another tab", async () => {
+    const { a, b } = await twoTabs();
+    await a.send("From tab A");
+    const mine = a.state.items.at(-1)!;
+    const theirs = b.state.items.at(-1)!;
+    assert.equal(mine.itemId, theirs.itemId);
+    assert.equal(mine.kind === "message" && mine.fromOtherTab, undefined, "my own message is not from another tab");
+    assert.equal(theirs.kind === "message" && theirs.fromOtherTab, true);
+    assert.deepEqual(a.state.items.map((i) => i.itemId), b.state.items.map((i) => i.itemId));
+  });
+
+  test("see the same answer as it streams", async () => {
+    const { server, a, b } = await twoTabs();
+    server.publish("p1", { type: "delta", threadId: "t1", itemId: "a1", text: "Hello" });
+    server.publish("p1", { type: "item", threadId: "t1", item: message({ itemId: "a1", text: "Hello there." }) });
+    assert.deepEqual(texts(a), texts(b));
+    assert.equal(texts(a).at(-1), "product_owner:Hello there.");
+  });
+});
+
+describe("a stream that drops", () => {
+  test("is read again when it comes back, and what was missed shows, without a doubled message", async () => {
+    const { conversation, server } = setup();
+    server.seedThread("p1", { threadId: "t1" }, [person("Q", { itemId: "m1" })]);
+    conversation.attach("p1", "t1");
+    await settled();
+    server.setStatus("paused");
+    // Missed while paused: the server holds an answer the stream never delivered.
+    server.seedThread("p1", { threadId: "t1" }, [person("Q", { itemId: "m1" }), message({ itemId: "a1", text: "Missed answer" })]);
+    server.setStatus("resynced");
+    await settled();
+    assert.deepEqual(texts(conversation), ["person:Q", "product_owner:Missed answer"]);
+  });
+
+  test("keeps the message that is still sending when it is read again", async () => {
+    const { conversation, server } = setup();
+    server.seedThread("p1", { threadId: "t1" });
+    conversation.attach("p1", "t1");
+    await settled();
+    server.silenceEchoes(true);
+    const release = server.holdNextSend();
+    const sending = conversation.send("Hi");
+    server.setStatus("resynced");
+    await settled();
+    assert.deepEqual(texts(conversation), ["person:Hi"], "the server already stored it: shown once, and no longer sending");
+    release();
+    await sending;
+  });
+});
+
+describe("a restart", () => {
+  test("shows its notice and keeps streaming", async () => {
+    const { conversation, server } = setup();
+    server.seedThread("p1", { threadId: "t1", turn: "interrupted" }, [person("Q")]);
+    conversation.attach("p1", "t1");
+    await settled();
+    server.publish("p1", { type: "item", threadId: "t1", item: { kind: "notice", itemId: "n1", at: new Date(), text: "Continued after a restart" } });
+    server.publish("p1", { type: "delta", threadId: "t1", itemId: "a1", text: "Back" });
+    assert.deepEqual(texts(conversation), ["person:Q", "notice", "product_owner:Back"]);
+    assert.equal(conversation.state.turn, "interrupted");
+  });
+});
+
+describe("a long thread", () => {
+  const long = async () => {
+    const { conversation, server } = setup();
+    const items = Array.from({ length: 230 }, (_, i) => message({ itemId: `x${String(i).padStart(3, "0")}`, text: `n${i}` }));
+    server.seedThread("p1", { threadId: "t1" }, items);
+    conversation.attach("p1", "t1");
+    await settled();
+    return { conversation, items };
+  };
+
+  test("loads the last hundred and pages back a hundred at a time, in order, without a repeat", async () => {
+    const { conversation, items } = await long();
+    assert.equal(conversation.state.items.length, 100);
+    assert.equal(conversation.state.hasEarlier, true);
+    await conversation.loadEarlier();
+    assert.equal(conversation.state.items.length, 200);
+    await conversation.loadEarlier();
+    assert.equal(conversation.state.hasEarlier, false);
+    assert.deepEqual(conversation.state.items.map((i) => i.itemId), items.map((i) => i.itemId));
+  });
+
+  test("a page that arrives twice adds nothing", async () => {
+    const { conversation } = await long();
+    await Promise.all([conversation.loadEarlier(), conversation.loadEarlier()]);
+    assert.equal(conversation.state.items.length, 200);
+  });
+});

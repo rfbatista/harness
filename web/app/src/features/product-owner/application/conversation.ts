@@ -61,6 +61,7 @@ export class Conversation {
   /** What this tab sent: its ids are not "from another tab". */
   readonly #own = new Set<string>();
   #generation = 0;
+  #loadingEarlier = false;
 
   constructor(deps: ConversationDeps) {
     this.#deps = deps;
@@ -161,6 +162,26 @@ export class Conversation {
     }
   }
 
+  /** Reads the hundred items before the first one on screen. A second call while one is under way does nothing. */
+  async loadEarlier(): Promise<void> {
+    const { threadId, items, hasEarlier } = this.#state;
+    const first = items.find((i) => !i.sending);
+    if (threadId === null || !hasEarlier || this.#loadingEarlier || first === undefined) return;
+    this.#loadingEarlier = true;
+    const generation = this.#generation;
+    try {
+      const page = await this.#deps.gateway.thread(threadId, first.itemId);
+      if (generation !== this.#generation) return;
+      const known = new Set(this.#state.items.map((i) => i.itemId));
+      this.#set({ items: [...page.items.filter((i) => !known.has(i.itemId)), ...this.#state.items], hasEarlier: page.hasEarlier });
+    } catch (err) {
+      if (!(err instanceof ProductOwnerError)) throw err;
+      this.#set({ error: { code: err.code, text: err.message } });
+    } finally {
+      this.#loadingEarlier = false;
+    }
+  }
+
   dismissError(): void {
     this.#set({ error: null });
   }
@@ -194,7 +215,10 @@ export class Conversation {
         .thread(threadId)
         .then((page) => {
           if (generation !== this.#generation) return;
-          const sending = this.#state.items.filter((i) => i.sending);
+          // A message still sending may already be stored: the page then holds it, and it is not shown twice.
+          const known = new Set(this.#state.items.map((i) => i.itemId));
+          const stored = (text: string) => page.items.some((i) => i.kind === "message" && i.author === "person" && i.text.trim() === text && !known.has(i.itemId));
+          const sending = this.#state.items.filter((i) => i.sending && !(i.kind === "message" && stored(i.text.trim())));
           this.#set({ title: page.head.title, turn: page.head.turn, items: [...page.items, ...sending], hasEarlier: page.hasEarlier });
         })
         .catch((err: unknown) => {

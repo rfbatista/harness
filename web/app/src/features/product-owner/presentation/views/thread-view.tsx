@@ -1,4 +1,4 @@
-import { useEffect, useRef } from "react";
+import { useEffect, useLayoutEffect, useRef } from "react";
 import { usePresenter } from "../../../../shared/presentation/use-presenter";
 import type { RowViewModel, ThreadPresenter } from "../presenters/thread-presenter";
 import { ComposerView } from "./composer-view";
@@ -15,6 +15,15 @@ export function ThreadView({ presenter, textarea }: { presenter: ThreadPresenter
   const vm = usePresenter(presenter);
   const log = useRef<HTMLDivElement>(null);
   const stuck = useRef(true);
+
+  // Earlier items arrive above what is read: the view stays where it was.
+  const heightBefore = useRef<number | null>(null);
+  const firstKey = vm.rows[0]?.key;
+  useLayoutEffect(() => {
+    const box = log.current;
+    if (box && heightBefore.current !== null) box.scrollTop += box.scrollHeight - heightBefore.current;
+    heightBefore.current = null;
+  }, [firstKey]);
 
   // Follow the answer while the person is at the foot; leave them be once they scrolled up.
   useEffect(() => {
@@ -36,6 +45,19 @@ export function ThreadView({ presenter, textarea }: { presenter: ThreadPresenter
           stuck.current = box.scrollHeight - box.scrollTop - box.clientHeight < 48;
         }}
       >
+        {vm.hasEarlier && (
+          <button
+            type="button"
+            className="[ button ] [ older ]"
+            data-size="sm"
+            onClick={() => {
+              heightBefore.current = log.current?.scrollHeight ?? null;
+              void presenter.loadEarlier();
+            }}
+          >
+            Earlier messages
+          </button>
+        )}
         {vm.empty && (
           <div className="[ thread-empty ]">
             <h2>{vm.empty.heading}</h2>

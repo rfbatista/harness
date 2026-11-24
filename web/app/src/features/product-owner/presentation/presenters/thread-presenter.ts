@@ -53,6 +53,8 @@ export interface ThreadViewModel {
   /** For a screen reader: "Product owner is answering", then "Answer finished". */
   readonly announcement: string;
   readonly loading: boolean;
+  /** Earlier items wait on the server: "Earlier messages" is offered. */
+  readonly hasEarlier: boolean;
   readonly composer: {
     readonly draft: string;
     readonly placeholder: string;
@@ -98,6 +100,7 @@ export class ThreadPresenter extends Presenter<ThreadViewModel> {
     const item = this.#conversation.state.items.find((i) => i.itemId === itemId);
     return item?.kind === "message" ? this.#conversation.send(item.text) : Promise.resolve();
   };
+  loadEarlier = (): Promise<void> => this.#conversation.loadEarlier();
   dismissError = (): void => this.#conversation.dismissError();
 
   /** The status of a task named in an answer; "idle" for one the page does not know. */
@@ -122,6 +125,7 @@ export class ThreadPresenter extends Presenter<ThreadViewModel> {
       live: answering ? liveLine(state) : null,
       announcement: this.#announcement,
       loading: state.loading,
+      hasEarlier: state.hasEarlier,
       composer: {
         draft,
         placeholder: this.#off ? OFF_PLACEHOLDER : state.fresh ? PLACEHOLDER_FRESH : PLACEHOLDER_CONTINUE,
@@ -141,7 +145,7 @@ export class ThreadPresenter extends Presenter<ThreadViewModel> {
 }
 
 function emptyViewModel(): ThreadViewModel {
-  return { revision: 0, empty: null, rows: [], live: null, announcement: "", loading: false, composer: { draft: "", placeholder: PLACEHOLDER_FRESH, disabled: false, mode: "send", canSend: false }, error: null };
+  return { revision: 0, empty: null, rows: [], live: null, announcement: "", loading: false, hasEarlier: false, composer: { draft: "", placeholder: PLACEHOLDER_FRESH, disabled: false, mode: "send", canSend: false }, error: null };
 }
 
 function row(item: ConversationItem, n: number, all: readonly ConversationItem[]): RowViewModel[] {
