@@ -187,6 +187,24 @@ func (c *Catalog) DisabledMCPTools() map[string][]string {
 	return out
 }
 
+// KnownMCPTools is the tool names of the last successful probe of every
+// catalog server that has one, by server name. A catalog that does not read
+// gives none.
+func (c *Catalog) KnownMCPTools() map[string][]string {
+	l, err := c.load()
+	if err != nil {
+		return nil
+	}
+	out := map[string][]string{}
+	entries := l.tools.get(toolsServersKey)
+	for _, name := range entries.keys() {
+		if known := entries.get(name).get(knownToolsKey); known != nil && known.kind == 'a' {
+			out[name] = known.strs()
+		}
+	}
+	return out
+}
+
 // ProjectOnlyMCPServers names the catalog servers marked Project only. A
 // catalog that does not read gives none.
 func (c *Catalog) ProjectOnlyMCPServers() []string {

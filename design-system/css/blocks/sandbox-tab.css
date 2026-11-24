@@ -24,6 +24,9 @@
     &[aria-selected="true"] { color: var(--color-ink); }
   }
 
+  /* Context and Sandbox are both quiet: only the first is pushed to the end of the row. */
+  .tabs [role="tab"][data-quiet] ~ [role="tab"][data-quiet] { margin-inline-start: 0; }
+
   .sandbox-tab {
     display: grid;
     align-content: start;

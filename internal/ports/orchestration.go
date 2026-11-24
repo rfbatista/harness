@@ -145,7 +145,32 @@ type ProjectChange struct {
 	ProductOwnerThreadItem *ProductOwnerThreadItemChange `json:"product_owner_thread_item,omitempty"`
 	ProductOwnerDelta      *ProductOwnerDeltaChange      `json:"product_owner_delta,omitempty"`
 	ProductOwnerThread     *ProductOwnerThreadChange     `json:"product_owner_thread,omitempty"`
-	Deleted                bool                          `json:"deleted,omitempty"`
+	// ContextChange says a session's context changed (contract "Harness server
+	// ↔ Web UI — session context", C5). Embedded, so its three fields are the
+	// whole message: {"kind":"context.changed","session_id":…,"reason":…}.
+	*ContextChange
+	Deleted bool `json:"deleted,omitempty"`
+}
+
+// ContextChangeKind is the kind of a ContextChange on the wire.
+const ContextChangeKind = "context.changed"
+
+// Reasons a session's context changed.
+const (
+	ContextEntryAdded = "entry_added"
+	ContextUsage      = "usage"
+	ContextMCPStatus  = "mcp_status"
+)
+
+// ContextChange is a session whose context changed: a new entry, new use of its
+// tools and skills, or an MCP status claude reported. Clients refetch the
+// context. ProjectID routes it to the project's followers and is not on the
+// wire.
+type ContextChange struct {
+	Kind      string `json:"kind"`
+	SessionID string `json:"session_id"`
+	Reason    string `json:"reason"`
+	ProjectID string `json:"-"`
 }
 
 // BranchRequestChange is a branch request on the feed; ProjectID routes it to
@@ -316,6 +341,8 @@ func (c ProjectChange) ProjectID() string {
 		return c.DesignSystemProposal.ProjectID
 	case c.DesignSystemExport != nil:
 		return c.DesignSystemExport.ProjectID
+	case c.ContextChange != nil:
+		return c.ContextChange.ProjectID
 	}
 	return ""
 }
@@ -376,6 +403,7 @@ type Orchestration interface {
 	TurnHooks
 	TerminalAccess
 	SessionTranscripts
+	SessionContexts
 	SessionSandboxViolations
 }
 
@@ -551,4 +579,17 @@ type Question struct {
 	Question    string           `json:"question"`
 	MultiSelect bool             `json:"multi_select,omitempty"`
 	Options     []QuestionOption `json:"options"`
+}
+
+// SessionContexts reads what a session's context was when claude started and
+// resumed it (ADR 0099).
+type SessionContexts interface {
+	// SessionContext answers entries oldest first, usage and changes newest
+	// first; a session with none recorded reads as not recorded. Errors are
+	// StructuredErrors coded SESSION_NOT_FOUND.
+	SessionContext(ctx context.Context, id string) (domain.SessionContextView, error)
+	// SessionContextPiece answers the whole text of one piece of one entry;
+	// errors are coded SESSION_NOT_FOUND, CONTEXT_ENTRY_NOT_FOUND or
+	// CONTEXT_PIECE_NOT_FOUND.
+	SessionContextPiece(ctx context.Context, id, entryID, pieceID string) (string, error)
 }

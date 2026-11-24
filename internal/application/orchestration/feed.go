@@ -50,6 +50,19 @@ func (s *Service) ObserveFeedFollowers(o ports.FeedFollowersObserver) {
 	}
 }
 
+// followedProjects are the projects that have a follower now.
+func (f *feed) followedProjects() []string {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	var out []string
+	for id, subs := range f.subs {
+		if len(subs) > 0 {
+			out = append(out, id)
+		}
+	}
+	return out
+}
+
 // followersChanged reports projectID's followers to the observer. Called with
 // mu held, so the reports come in the order the changes happened.
 func (f *feed) followersChanged(projectID string) {
@@ -60,6 +73,7 @@ func (f *feed) followersChanged(projectID string) {
 
 // FollowProject follows projectID's sessions and tickets until ctx ends.
 func (s *Service) FollowProject(ctx context.Context, projectID string) (<-chan ports.SessionChange, error) {
+	s.loopOnce.Do(func() { go s.contextLoop() }) // after wiring: Contexts and TranscriptReader are set
 	if projectID == "" {
 		return nil, &domain.StructuredError{Code: "INVALID_INPUT", Message: "project_id is required"}
 	}

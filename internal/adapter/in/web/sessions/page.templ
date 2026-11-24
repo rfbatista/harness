@@ -29,6 +29,7 @@ templ Page(v PageView) {
 			id="main"
 			class="[ frame ]"
 			x-data="sessionsPage"
+			x-on:keydown.window.capture="claimContextKey"
 			data-seed="sessions-seed"
 			x-on:session-created="sessionCreated"
 			x-on:new-session-cancelled="cancelCreating"
@@ -46,6 +47,13 @@ templ Page(v PageView) {
 			x-on:run-shown="runShown"
 			x-on:menu-select="menuSelect"
 			x-on:dialog-action="dialogAction"
+			x-on:whiteboard-view.window="whiteboardView($event)"
+			x-on:whiteboard-open.window="whiteboardOpen($event)"
+			x-on:whiteboard-close.window="whiteboardClose"
+			x-on:whiteboard-reviews.window="whiteboardReviews"
+			x-on:whiteboard-new-session.window="whiteboardNewSession"
+			x-on:whiteboard-show-list.window="whiteboardShowList"
+			x-on:whiteboard-ready.window="whiteboardReady"
 			x-effect="applyFocus()"
 		>
 			<span hidden x-effect="syncInterviews()"></span>
@@ -166,30 +174,65 @@ templ Page(v PageView) {
 				</div>
 			</template>
 			<p class="[ visually-hidden ]" role="status" aria-live="polite" x-text="announcement"></p>
-			<div class="[ split-view ]" data-scroll x-bind:data-detail="detailOpenAttr" x-bind:data-expanded="expandedAttr">
-				<div
-					class="[ list ] [ divide-end ]"
-					role="listbox"
-					aria-label={ v.ListLabel() }
-					tabindex="0"
-					x-ref="list"
-					x-on:keydown.enter.self.prevent="openSelected"
-					x-on:keydown.j.prevent="next"
-					x-on:keydown.down.prevent="next"
-					x-on:keydown.k.prevent="previous"
-					x-on:keydown.up.prevent="previous"
-				>
-					@pickBar()
-					@ssrRows(v)
-					@liveRows()
-					<template x-if="isEmpty">
-						@emptyList(v)
-					</template>
+			<div class="[ split-view ]" data-scroll x-bind:data-detail="detailOpenAttr" x-bind:data-expanded="expandedAttr" x-bind:data-board="boardAttr" x-bind:data-no-detail="noPaneAttr">
+				<div class="[ session-views ]">
+					if v.Task != nil {
+						@viewHead()
+					}
+					<div
+						class="[ list ] [ divide-end ]"
+						role="listbox"
+						aria-label={ v.ListLabel() }
+						tabindex="0"
+						x-ref="list"
+						x-show="view === 'list'"
+						x-on:keydown.enter.self.prevent="openSelected"
+						x-on:keydown.j.prevent="next"
+						x-on:keydown.down.prevent="next"
+						x-on:keydown.k.prevent="previous"
+						x-on:keydown.up.prevent="previous"
+					>
+						@pickBar()
+						@ssrRows(v)
+						@liveRows()
+						<template x-if="isEmpty">
+							@emptyList(v)
+						</template>
+					</div>
+					if v.Task != nil {
+						@agentsWhiteboard()
+					}
 				</div>
 				@detail(v.NewSession, v.Code, v.Usage != nil, v.LockedMode())
 			</div>
 		</main>
 	}
+}
+
+// viewHead is the session list's heading row: the count and the List /
+// Whiteboard toggle (ADR 0108). It stays above whichever view the task shows.
+// The agents-view island answers a click by announcing the view (and keeping
+// the choice); sessionsPage shows it. The list is the default.
+templ viewHead() {
+	<div class="[ list-head ]">
+		<span>Sessions <span class="[ count ]" x-text="sessions.length"></span></span>
+		<div hidden data-island="agents-view"></div>
+		<nav class="[ segmented ]" data-size="sm" aria-label="Agents view" data-view-toggle>
+			<button type="button" aria-pressed="true" x-bind:aria-pressed="view === 'list'" x-on:click="$dispatch('whiteboard-set-view', { view: 'list' })">List</button>
+			<button type="button" aria-pressed="false" x-bind:aria-pressed="view === 'whiteboard'" x-on:click="$dispatch('whiteboard-set-view', { view: 'whiteboard' })">Whiteboard</button>
+		</nav>
+	</div>
+}
+
+// agentsWhiteboard is where the board (a React island that reads this page's
+// seed) is mounted, only while the task shows it: the island starts reading
+// and following the feed when it is inserted, and stops when it is removed.
+templ agentsWhiteboard() {
+	<template x-if="view === 'whiteboard'">
+		<div class="[ board-column ] [ divide-end ]">
+			<div data-island="agents-whiteboard"></div>
+		</div>
+	</template>
 }
 
 // reviewsButton is the requests the task's architect raised for the person
@@ -793,6 +836,9 @@ templ detail(form NewSessionForm, paint *code.View, usage bool, lockedMode strin
 				</template>
 				<template x-for="panel in sandboxPanels" x-bind:key="panel.key">
 					@sandboxPanel()
+				</template>
+				<template x-for="panel in contextPanels" x-bind:key="panel.key">
+					@contextPanel()
 				</template>
 				<template x-for="panel in mergePanels" x-bind:key="panel.key">
 					@mergePanel()

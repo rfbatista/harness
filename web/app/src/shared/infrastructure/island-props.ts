@@ -16,3 +16,14 @@ export function readIslandProps(root: ParentNode, name: string): unknown {
     throw new IslandPropsError(`the props of island ${name} are not JSON`);
   }
 }
+
+/** The JSON of the `<script type="application/json" id="…">` a page embeds for its own components (a seed). */
+export function readScriptJson(doc: Document, id: string): unknown {
+  const script = doc.getElementById(id);
+  if (!script) throw new IslandPropsError(`no script with the id ${id}`);
+  try {
+    return JSON.parse(script.textContent ?? "") as unknown;
+  } catch {
+    throw new IslandPropsError(`the script ${id} is not JSON`);
+  }
+}

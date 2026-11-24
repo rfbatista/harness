@@ -105,6 +105,7 @@ var PersistenceModule = fx.Module("persistence",
 		asPort(sqlite.NewArchitectureRuleEventRepository, new(ports.ArchitectureRuleEventStore)),
 		asPort(sqlite.NewBranchRequestRepository, new(ports.BranchRequestStore)),
 		asPort(sqlite.NewBranchWatchRepository, new(ports.BranchWatchStore)),
+		asPort(sqlite.NewSessionContextRepository, new(ports.SessionContextStore)),
 		asPort(sqlite.NewRecordedPushRepository, new(ports.PushRecords)),
 		asPort(sqlite.NewDesignSystemRepository, new(ports.DesignSystemStore)),
 		asPort(sqlite.NewDesignProposalRepository, new(ports.DesignProposalStore)),
@@ -1030,6 +1031,7 @@ func newOrchestrationService(
 	ws *workspaces.Service,
 	transcripts ports.ClaudeTranscripts,
 	transcriptReader ports.ClaudeTranscriptReader,
+	contexts ports.SessionContextStore,
 	terminals ports.TerminalHost,
 	sandboxDriver ports.SandboxDriver,
 	violations ports.SandboxViolationSource,
@@ -1056,6 +1058,8 @@ func newOrchestrationService(
 	}
 	svc := orchestration.NewService(manager, broker, hub, sessions, orchCatalog, tickets, ws)
 	svc.MCPToolDefaults = agentCatalog.DisabledMCPTools
+	svc.MCPKnownTools = agentCatalog.KnownMCPTools
+	svc.ClaudeBuiltInTools = agentcatalog.BuiltInToolNames
 	svc.MCPProjectOnly = agentCatalog.ProjectOnlyMCPServers
 	svc.UseBranchNames(branchNames)
 	svc.UseBaseBranches(baseBranches)
@@ -1120,6 +1124,7 @@ func newOrchestrationService(
 	svc.Settings = cat.Settings
 	svc.Transcripts = transcripts
 	svc.TranscriptReader = transcriptReader
+	svc.Contexts = contexts
 	svc.Terminals = terminals
 	svc.Events = cat.Bus
 	svc.BranchRequests = pendingBranchRequests{branchRequests}

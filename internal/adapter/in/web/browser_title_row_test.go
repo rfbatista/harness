@@ -75,8 +75,8 @@ const (
 	fontsLoaded = `document.fonts.status === 'loaded'`
 )
 
-// listGap is how far the agent list starts below the title row.
-const listGap = `(document.querySelector('[role=listbox]').getBoundingClientRect().top - document.querySelector('.toolbar').getBoundingClientRect().bottom)`
+// listGap is how far the agents column (the list and its heading row) starts below the title row.
+const listGap = `(document.querySelector('.session-views, [role=listbox]').getBoundingClientRect().top - document.querySelector('.toolbar').getBoundingClientRect().bottom)`
 
 // A task with no request, no children and no token savers shows a title row
 // with no Reviews or Feature button, and nothing between it and the agents:
