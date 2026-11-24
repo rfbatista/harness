@@ -1765,3 +1765,61 @@ func TestAThreadReadsResumingWhileItsSessionWakesBeforeTheTurnRuns(t *testing.T)
 		t.Errorf("turns = %s, want the second turn to go resuming, running, idle", got)
 	}
 }
+
+func TestASecondMessageDuringAWakeUpIsRefusedAtOnceNotAfterTheWakeUp(t *testing.T) {
+	e := newPOE2E(t)
+	e.po.SetIdle(200 * time.Millisecond)
+	id, _ := e.startThread("first")
+	th := e.waitTurn(id, "idle")
+	eventuallyPO(t, "the idle process to end", func() string {
+		if e.orch.ProductOwnerRunning(th.Thread.SessionID) {
+			return "still running"
+		}
+		return ""
+	})
+
+	// The wake-up is held for good until released: only a refusal that does not
+	// wait for it can come back while it lasts.
+	e.gateStart()
+	e.slow(true)
+	woken := make(chan int, 1)
+	go func() {
+		status, _ := e.send(id, "second")
+		woken <- status
+	}()
+	eventuallyPO(t, "the thread to read resuming", func() string {
+		if got := e.thread(id).Thread.Turn; got != "resuming" {
+			return "turn is " + got
+		}
+		return ""
+	})
+	began := time.Now()
+	refused := make(chan [2]any, 1)
+	go func() {
+		status, code := e.send(id, "third")
+		refused <- [2]any{status, code}
+	}()
+	select {
+	case r := <-refused:
+		if r[0] != 409 || r[1] != "THREAD_BUSY" {
+			t.Errorf("a message during the wake-up = %v, want 409 THREAD_BUSY", r)
+		}
+		if took := time.Since(began); took > time.Second {
+			t.Errorf("the refusal took %s", took)
+		}
+	case <-time.After(2 * time.Second):
+		t.Error("the message was not refused within 2s: it waits on the wake-up")
+		e.slow(false)
+		<-refused
+	}
+	select {
+	case <-woken:
+		t.Error("the wake-up ended while it was held")
+	default:
+	}
+	e.slow(false)
+	if status := <-woken; status != 200 {
+		t.Errorf("the message that woke the thread = %d", status)
+	}
+	e.waitTurn(id, "idle")
+}

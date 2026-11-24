@@ -182,6 +182,10 @@ func (s *Service) SendMessage(ctx context.Context, threadID, message string, att
 	if err != nil {
 		return "", err
 	}
+	// Refused at once, before waiting on the lock a wake-up holds.
+	if s.busy(t) {
+		return "", busyError()
+	}
 	lock := s.threadLock(t.ID)
 	lock.Lock()
 	defer lock.Unlock()
@@ -189,10 +193,8 @@ func (s *Service) SendMessage(ctx context.Context, threadID, message string, att
 	if t, err = s.store.Thread(ctx, threadID); err != nil {
 		return "", err
 	}
-	// A turn state with no process behind it is stale (a crash left it): it
-	// never keeps the thread from taking a message.
-	if t.Turn != domain.ProductOwnerTurnIdle && (s.runOf(t.ID) != nil || s.isRecovering(t.ID)) {
-		return "", &domain.StructuredError{Code: "THREAD_BUSY", Message: "THREAD_BUSY: a turn of this thread is running; wait for the answer or stop it"}
+	if s.busy(t) {
+		return "", busyError()
 	}
 	r := s.runOf(t.ID)
 	if r != nil && s.sessions.ProductOwnerRunning(t.SessionID) {
@@ -200,6 +202,8 @@ func (s *Service) SendMessage(ctx context.Context, threadID, message string, att
 	}
 	// The person's message is stored first and kept whatever happens next; the
 	// thread reads resuming while its session wakes up.
+	s.setWaking(t.ID, true)
+	defer s.setWaking(t.ID, false)
 	item, err := s.storeMessage(ctx, t, message)
 	if err != nil {
 		return "", err
@@ -221,6 +225,33 @@ func (s *Service) SendMessage(ctx context.Context, threadID, message string, att
 		return "", err
 	}
 	return item.ID, nil
+}
+
+// busy says a turn of the thread is under way: it reads running, resuming or
+// interrupted with a process, a wake-up or the boot's recovery behind it. A turn
+// state with nothing behind it is stale (a crash left it) and never keeps the
+// thread from taking a message.
+func (s *Service) busy(t *domain.ProductOwnerThread) bool {
+	if t.Turn == domain.ProductOwnerTurnIdle {
+		return false
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.runs[t.ID] != nil || s.recovering[t.ID] || s.waking[t.ID]
+}
+
+func (s *Service) setWaking(threadID string, on bool) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if on {
+		s.waking[threadID] = true
+		return
+	}
+	delete(s.waking, threadID)
+}
+
+func busyError() error {
+	return &domain.StructuredError{Code: "THREAD_BUSY", Message: "THREAD_BUSY: a turn of this thread is running; wait for the answer or stop it"}
 }
 
 // storeMessage stores the person's message as the thread's next item.
@@ -649,12 +680,6 @@ func (s *Service) Recover(ctx context.Context) {
 		delete(s.recovering, id)
 		s.mu.Unlock()
 	}
-}
-
-func (s *Service) isRecovering(threadID string) bool {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	return s.recovering[threadID]
 }
 
 // unanswered says the newest message or failure in the thread is the person's
