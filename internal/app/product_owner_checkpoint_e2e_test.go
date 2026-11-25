@@ -208,6 +208,10 @@ func TestAFailedSummaryTurnLeavesTheThreadAsItWasAndTheCheckpointIsTriedAfterThe
 	if n := e.checkpointsListed(threadID); n != 0 {
 		t.Errorf("checkpoints = %d, want 0", n)
 	}
+	// The person's message is answered already, so there is nothing to send again.
+	if f := th.Items[2]; f.Code != "CHECKPOINT_FAILED" || f.RetryItemID != "" {
+		t.Errorf("failure = %+v, want CHECKPOINT_FAILED with no retry item", f)
+	}
 	sessionBefore := th.Thread.SessionID
 
 	e.gate("summaryfail", false)

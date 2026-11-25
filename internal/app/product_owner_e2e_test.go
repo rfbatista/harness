@@ -473,6 +473,8 @@ type poItem struct {
 	Stopped     bool   `json:"stopped"`
 	Attachments []any  `json:"attachments"`
 	Summary     string `json:"summary"`
+	RetryItemID string `json:"retry_item_id"`
+	Code        string `json:"code"`
 }
 
 type poThread struct {

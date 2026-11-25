@@ -116,7 +116,8 @@ func (s *Service) completeCheckpoint(r *run, t *domain.ProductOwnerThread) {
 // failCheckpoint ends a checkpoint that could not be made: the thread is as it
 // was, idle, with a failure item, and the next turn tries again.
 func (s *Service) failCheckpoint(ctx context.Context, t *domain.ProductOwnerThread, r *run, text string) {
-	s.fail(ctx, t, s.lastPersonMessage(ctx, t.ID), "CHECKPOINT_FAILED", text)
+	// The person's last message is answered already: there is nothing to send again.
+	s.fail(ctx, t, "", "CHECKPOINT_FAILED", text)
 	s.resetIdle(r, true)
 }
 

@@ -37,24 +37,19 @@ func (r *ProductOwnerRepository) prepareSearch() bool {
 		return false
 	}
 	// Items stored before the table existed, or by a build without FTS5, are
-	// indexed now: a table with fewer rows than there are searchable items
-	// lacks some.
-	var indexed, searchable int64
-	r.db.Raw("SELECT COUNT(*) FROM " + searchTable).Scan(&indexed)
-	r.db.Raw("SELECT COUNT(*) FROM "+ProductOwnerItemModel{}.TableName()+
-		" WHERE (json_extract(body, '$.kind') = ? AND COALESCE(json_extract(body, '$.text'), '') <> '' AND COALESCE(json_extract(body, '$.streaming'), 0) = 0)"+
-		" OR (json_extract(body, '$.kind') = ? AND COALESCE(json_extract(body, '$.summary'), '') <> '')",
-		domain.ProductOwnerItemMessage, domain.ProductOwnerItemCheckpoint).Scan(&searchable)
-	if indexed < searchable {
-		r.backfillSearch()
-	}
+	// indexed now: every searchable item the table has no row for, by id.
+	r.search = true // indexItem is a no-op until it is set
+	r.backfillSearch()
 	return true
 }
 
-// backfillSearch indexes the items the search table lacks.
+// backfillSearch indexes the searchable items the search table lacks.
 func (r *ProductOwnerRepository) backfillSearch() {
 	var ms []ProductOwnerItemModel
-	if err := r.db.Where("id NOT IN (SELECT item_id FROM " + searchTable + ")").Find(&ms).Error; err != nil {
+	if err := r.db.Where("id NOT IN (SELECT item_id FROM "+searchTable+") AND "+
+		"((json_extract(body, '$.kind') = ? AND COALESCE(json_extract(body, '$.text'), '') <> '' AND COALESCE(json_extract(body, '$.streaming'), 0) = 0) OR "+
+		"(json_extract(body, '$.kind') = ? AND COALESCE(json_extract(body, '$.summary'), '') <> ''))",
+		domain.ProductOwnerItemMessage, domain.ProductOwnerItemCheckpoint).Find(&ms).Error; err != nil {
 		slog.Warn("index the stored thread items for search", "err", err)
 		return
 	}

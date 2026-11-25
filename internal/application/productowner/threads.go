@@ -617,6 +617,10 @@ func (s *Service) ended(r *run) {
 		delete(s.runs, r.threadID)
 	}
 	s.mu.Unlock()
+	if cut && t.CheckpointPhase == domain.ProductOwnerCheckpointSummarizing {
+		s.fail(ctx, t, "", "CHECKPOINT_FAILED", "The checkpoint could not be made: the product owner's session ended while it wrote its summary. The thread is as it was, and the next turn tries again.")
+		return
+	}
 	if cut {
 		s.fail(ctx, t, s.lastPersonMessage(ctx, t.ID), "SESSION_ENDED", "The product owner's session ended before it finished its answer.")
 		return
