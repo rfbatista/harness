@@ -29,7 +29,7 @@ export interface TopBarAdapters {
 export interface TopBarModel {
   readonly current: CurrentTopBar;
   readonly inbox: Inbox | null;
-  /** Releases the dock from this top bar's project. */
+  /** Releases the dock from this top bar's project and stops the toggle following it. */
   readonly release: () => void;
   readonly presenters: TopBarPresenters;
 }
@@ -59,13 +59,15 @@ export function buildTopBar(props: unknown, adapters: TopBarAdapters): TopBarMod
     release = projectId === "" ? () => {} : adapters.dock.bind(projectId);
   };
   const stopFollowing = current.subscribe((topBar) => bindDock(topBar.currentProjectId));
+  const presenters = { picker: new ProjectPickerPresenter(current, adapters.pageOpener), owner: new TogglePresenter(adapters.dock), links: new PageLinksPresenter(current), bell };
   return {
     current,
     inbox,
     release: () => {
       stopFollowing();
       release();
+      presenters.owner.destroy();
     },
-    presenters: { picker: new ProjectPickerPresenter(current, adapters.pageOpener), owner: new TogglePresenter(adapters.dock), links: new PageLinksPresenter(current), bell },
+    presenters,
   };
 }

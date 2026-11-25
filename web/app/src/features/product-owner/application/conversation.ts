@@ -212,6 +212,8 @@ export class Conversation {
     try {
       const page = await this.#deps.gateway.thread(threadId);
       if (generation !== this.#generation) return;
+      // A thread of another project is not one of this project's: it is shown as not found.
+      if (page.head.projectId !== this.#state.projectId) throw new ProductOwnerError("THREAD_NOT_FOUND", "not a thread of this project");
       this.#set({ threadId, title: page.head.title, turn: page.head.turn, sessionId: page.head.sessionId, items: page.items, hasEarlier: page.hasEarlier, loading: false, fresh: false });
       this.#deps.onThread?.(threadId);
     } catch (err) {

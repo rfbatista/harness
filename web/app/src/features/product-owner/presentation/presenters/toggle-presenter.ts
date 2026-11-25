@@ -36,19 +36,24 @@ export interface KeyLike {
 
 export class TogglePresenter extends Presenter<ToggleViewModel> {
   readonly #dock: OwnerDock;
+  readonly #unsubscribe: () => void;
 
   constructor(dock: OwnerDock) {
     super(toggleViewModel(dock.state));
     this.#dock = dock;
-    dock.subscribe((state) => this.set(toggleViewModel(state)));
+    this.#unsubscribe = dock.subscribe((state) => this.set(toggleViewModel(state)));
   }
+
+  /** Stops following the dock: the top bar is gone. */
+  destroy = (): void => this.#unsubscribe();
 
   toggle = (): void => this.#dock.toggle();
 
   /** ⌥⇧O from anywhere; true when the key was this one. (The key's code, not its character: ⌥ changes the character on a Mac.) */
   handleKey = (key: KeyLike): boolean => {
     if (key.code !== "KeyO" || !key.altKey || !key.shiftKey || key.ctrlKey || key.metaKey) return false;
-    this.#dock.toggle();
+    // Closing the panel with the key from inside it gives focus back to the toggle, as Esc does.
+    this.#dock.toggle({ returnFocus: true });
     return true;
   };
 }

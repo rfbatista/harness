@@ -18,8 +18,28 @@ export type Block =
 
 const TASK_PAGE = /^\/projects\/[^/]+\/tasks\/([^/?#]+)$/;
 
-/** A link target the page may follow. */
-export const isSafeHref = (href: string): boolean => /^https?:\/\//i.test(href) || (href.startsWith("/") && !href.startsWith("//"));
+// Links resolve against a stand-in origin: a path stays on the page's own origin exactly when it stays on this one,
+// whatever the page's real origin is (so this code reads no browser global).
+const SITE = "https://site.invalid";
+
+/** The address a link goes to, as the browser resolves it; null when it cannot be parsed. */
+const resolveHref = (href: string): URL | null => {
+  try {
+    return new URL(href, SITE);
+  } catch {
+    return null;
+  }
+};
+
+/** A link to this site: it stays on the page's origin once the browser has resolved it ("/\\evil.com" does not). */
+export const isSiteHref = (href: string): boolean => href.startsWith("/") && resolveHref(href)?.origin === SITE;
+
+/** A link target the page may follow: an http(s) address, or a path that stays on this site. */
+export const isSafeHref = (href: string): boolean => {
+  const url = resolveHref(href);
+  if (url === null || (url.protocol !== "http:" && url.protocol !== "https:")) return false;
+  return /^https?:\/\//i.test(href) || isSiteHref(href);
+};
 
 export function parseMarkdown(source: string): Block[] {
   const blocks: Block[] = [];

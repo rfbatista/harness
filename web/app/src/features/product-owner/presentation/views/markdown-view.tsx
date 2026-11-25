@@ -1,4 +1,4 @@
-import type { Block, Inline } from "../../domain/markdown";
+import { isSiteHref, type Block, type Inline } from "../../domain/markdown";
 
 type TaskState = "running" | "waiting" | "done" | "idle";
 
@@ -47,7 +47,7 @@ function inline(nodes: readonly Inline[], taskState: (taskId: string) => TaskSta
         return <code key={i}>{node.text}</code>;
       case "link":
         return (
-          <a key={i} href={node.href} {...(node.href.startsWith("/") ? {} : { target: "_blank", rel: "noopener noreferrer" })}>
+          <a key={i} href={node.href} {...(isSiteHref(node.href) ? {} : { target: "_blank", rel: "noopener noreferrer" })}>
             {inline(node.inline, taskState)}
           </a>
         );

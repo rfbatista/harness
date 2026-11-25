@@ -134,7 +134,7 @@ export class OwnerDock {
   }
 
   /** The toggle: opens or closes the panel, or on a narrow screen opens the page; on the page itself it docks the thread. */
-  toggle(): void {
+  toggle(options: { returnFocus?: boolean } = {}): void {
     const { projectId } = this.#state;
     if (projectId === "") return;
     if (this.#state.suspended) {
@@ -145,7 +145,7 @@ export class OwnerDock {
       this.#deps.navigator.open(pageHref(projectId));
       return;
     }
-    if (this.#open) this.close();
+    if (this.#open) this.close(options);
     else this.open();
   }
 

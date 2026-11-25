@@ -52,6 +52,24 @@ describe("the toggle", () => {
     assert.equal(toggle.viewModel.accessibleName, "Product owner (off)");
   });
 
+  test("⌥⇧O closes the open panel and hands focus back to the toggle, as Esc does", () => {
+    const { dock, toggle } = setup();
+    dock.bind("p1");
+    dock.open();
+    const before = toggle.viewModel.focusRequest;
+    assert.equal(toggle.handleKey({ code: "KeyO", altKey: true, shiftKey: true, ctrlKey: false, metaKey: false }), true);
+    assert.equal(toggle.viewModel.pressed, false);
+    assert.equal(toggle.viewModel.focusRequest, before + 1);
+  });
+
+  test("a destroyed toggle no longer follows the dock", () => {
+    const { dock, toggle } = setup();
+    dock.bind("p1");
+    toggle.destroy();
+    dock.open();
+    assert.equal(toggle.viewModel.pressed, false);
+  });
+
   test("on a narrow screen it is not pressed: it opens the page", () => {
     const { dock, toggle, screen, navigator } = setup();
     screen.setNarrow(true);
