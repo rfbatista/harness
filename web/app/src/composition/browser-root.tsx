@@ -28,6 +28,8 @@ import { OwnerPagePropsDto } from "./owner-page-props-dto";
 import { OwnerPagePresenter } from "../features/product-owner/presentation/presenters/owner-page-presenter";
 import { OwnerPageView } from "../features/product-owner/presentation/views/owner-page-view";
 import { OwnerPanelPropsDto } from "./owner-panel-props-dto";
+import { ProjectDigests } from "../features/product-owner/application/project-digests";
+import { DigestsTabPresenter } from "../features/product-owner/presentation/presenters/digests-tab-presenter";
 import { Conversation } from "../features/product-owner/application/conversation";
 import { browserTaskCatalog } from "../features/product-owner/infrastructure/browser-task-catalog";
 import { ThreadPresenter } from "../features/product-owner/presentation/presenters/thread-presenter";
@@ -48,6 +50,12 @@ import { TopBarView } from "./top-bar-view";
 import { mountAgentsView, mountWhiteboard } from "./whiteboard-island";
 
 type Dispose = () => void;
+
+/** `#digests` or `#digests/<date>`: the Digests tab, at a date when the address names one. */
+function digestsAddress(hash: string): { tab: "digests"; date: string } | undefined {
+  const match = /^#digests(?:\/(\d{4}-\d{2}-\d{2}))?$/.exec(hash);
+  return match ? { tab: "digests", date: match[1] ?? "" } : undefined;
+}
 
 /** Islands that read their props themselves, from the page they sit in. */
 const OWN_PROPS = new Set(["agents-view", "agents-whiteboard"]);
@@ -125,17 +133,23 @@ export function mountIslands(doc: Document): Dispose {
       const thread = new ThreadPresenter(conversation, { projectName: project_name, noTasks }, browserTaskCatalog(doc), dock.state.enabled === false);
       const threads = new ThreadListPresenter(list, conversation, systemClock);
       const about = new AboutPresenter(conversation, list);
-      const page = new OwnerPagePresenter({ projectId: project_id, projectName: project_name, threadId: thread_id }, dock, conversation, list, navigator);
+      const initial = digestsAddress(win.location.hash);
+      const page = new OwnerPagePresenter({ projectId: project_id, projectName: project_name, threadId: thread_id, initial }, dock, conversation, list, navigator);
+      const projectDigests = new ProjectDigests({ gateway: owner, events: owner });
+      const digests = new DigestsTabPresenter(projectDigests, project_id, systemClock, initial?.date, (date) => page.showDigests(date));
       // The product owner is switched off or on: the composer follows.
       const stopDock = dock.subscribe((state) => thread.setOff(state.enabled === false));
       const stopList = list.attach(project_id);
+      const stopDigests = projectDigests.attach(project_id);
       const stopConversation = conversation.attach(project_id, thread_id === "" ? null : thread_id);
       const root = createRoot(mount);
-      root.render(<OwnerPageView page={page} thread={thread} threads={threads} about={about} />);
+      root.render(<OwnerPageView page={page} thread={thread} threads={threads} about={about} digests={digests} />);
       return () => {
         root.unmount();
         stopConversation();
         stopList();
+        stopDigests();
+        digests.destroy();
         stopDock();
         threads.destroy();
         about.destroy();

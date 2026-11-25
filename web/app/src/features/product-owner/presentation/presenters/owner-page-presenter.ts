@@ -15,6 +15,7 @@ export interface OwnerPageViewModel {
   readonly settingsHref: string;
   /** The Threads tab's count; null until the list is read. */
   readonly threadCount: number | null;
+  readonly tab: "threads" | "digests";
   /** Under 48 rem: which of the list and the thread shows; null on a wider screen. */
   readonly phone: "list" | "thread" | null;
   /** The thread the address names is not a thread of this project. */
@@ -26,6 +27,8 @@ export interface OwnerPageProps {
   readonly projectName: string;
   /** The thread the address names; "" on the page itself. */
   readonly threadId: string;
+  /** The Digests tab, as the address names it (`#digests`). */
+  readonly initial?: { readonly tab: "digests" } | undefined;
 }
 
 export class OwnerPagePresenter extends Presenter<OwnerPageViewModel> {
@@ -36,15 +39,17 @@ export class OwnerPagePresenter extends Presenter<OwnerPageViewModel> {
   readonly #navigator: PageNavigator;
   readonly #stops: Array<() => void> = [];
   #showList: boolean;
+  #tab: "threads" | "digests";
   #address: string;
 
   constructor(props: OwnerPageProps, dock: OwnerDock, conversation: Conversation, list: ThreadList, navigator: PageNavigator) {
-    super({ projectName: props.projectName, crumbHref: "", settingsHref: "", threadCount: null, phone: null, notFound: false });
+    super({ projectName: props.projectName, crumbHref: "", settingsHref: "", threadCount: null, tab: props.initial?.tab ?? "threads", phone: null, notFound: false });
     this.#props = props;
     this.#dock = dock;
     this.#conversation = conversation;
     this.#list = list;
     this.#navigator = navigator;
+    this.#tab = props.initial?.tab ?? "threads";
     this.#showList = props.threadId === "";
     this.#address = props.threadId === "" ? pageHref(props.projectId) : threadHref(props.projectId, props.threadId);
     // The page is open: the panel steps aside, and everything of the page lets go when it is destroyed.
@@ -65,14 +70,30 @@ export class OwnerPagePresenter extends Presenter<OwnerPageViewModel> {
 
   /** A thread of the list: on a phone it opens in place of the list. */
   openThread = (threadId: string): void => {
+    this.#tab = "threads";
     this.#showList = false;
     this.#conversation.openThread(threadId);
     this.#rebuild();
   };
 
   newThread = (): void => {
+    this.#tab = "threads";
     this.#showList = false;
     this.#conversation.newThread();
+    this.#rebuild();
+  };
+
+  showThreads = (): void => {
+    this.#tab = "threads";
+    const threadId = this.#conversation.state.threadId;
+    this.#goTo(threadId === null ? pageHref(this.#props.projectId) : threadHref(this.#props.projectId, threadId));
+    this.#rebuild();
+  };
+
+  /** The Digests tab, at `date` when one is chosen; the address names it, so it can be shared. */
+  showDigests = (date = ""): void => {
+    this.#tab = "digests";
+    this.#goTo(`${pageHref(this.#props.projectId)}#digests${date === "" ? "" : `/${date}`}`);
     this.#rebuild();
   };
 
@@ -88,13 +109,17 @@ export class OwnerPagePresenter extends Presenter<OwnerPageViewModel> {
     this.#dock.dockBeside();
   };
 
-  /** The thread on screen has its own address; the page keeps the address in step with it. */
-  #follow(threadId: string | null): void {
-    if (this.#conversation.state.loading && threadId === null) return;
-    const address = threadId === null ? pageHref(this.#props.projectId) : threadHref(this.#props.projectId, threadId);
+  #goTo(address: string): void {
     if (address === this.#address) return;
     this.#address = address;
     this.#navigator.replace(address);
+  }
+
+  /** The thread on screen has its own address; the page keeps the address in step with it. */
+  #follow(threadId: string | null): void {
+    if (this.#conversation.state.loading && threadId === null) return;
+    if (this.#tab === "digests") return;
+    this.#goTo(threadId === null ? pageHref(this.#props.projectId) : threadHref(this.#props.projectId, threadId));
   }
 
   #rebuild(): void {
@@ -104,6 +129,7 @@ export class OwnerPagePresenter extends Presenter<OwnerPageViewModel> {
       crumbHref: `/projects/${encodeURIComponent(projectId)}`,
       settingsHref: settingsHref(projectId),
       threadCount: this.#list.state.loading ? null : this.#list.state.threads.length,
+      tab: this.#tab,
       phone: this.#dock.phone ? (this.#showList ? "list" : "thread") : null,
       notFound: this.#conversation.state.notFound,
     });

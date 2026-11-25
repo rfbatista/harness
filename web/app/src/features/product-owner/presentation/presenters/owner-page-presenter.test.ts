@@ -31,7 +31,7 @@ const setup = async (opts: { threadId?: string; phone?: boolean } = {}) => {
 describe("the page", () => {
   test("names its project, links back to it and to Settings, and counts the threads", async () => {
     const { page } = await setup();
-    assert.deepEqual({ ...page.viewModel }, { projectName: "harness", crumbHref: "/projects/p1", settingsHref: "/projects/p1/settings#product-owner", threadCount: 2, phone: null, notFound: false });
+    assert.deepEqual({ ...page.viewModel }, { projectName: "harness", crumbHref: "/projects/p1", settingsHref: "/projects/p1/settings#product-owner", threadCount: 2, tab: "threads", phone: null, notFound: false });
   });
 
   test("hides the panel while it is open, and gives it back when it goes", async () => {
@@ -80,5 +80,33 @@ describe("on a phone", () => {
   test("a link to a thread opens the thread", async () => {
     const { page } = await setup({ phone: true, threadId: "t1" });
     assert.equal(page.viewModel.phone, "thread");
+  });
+
+  test("shows the Digests tab with its own address, and the Threads tab again at the thread's address", async () => {
+    const { page, navigator } = await setup({ threadId: "t1" });
+    page.showDigests();
+    assert.equal(page.viewModel.tab, "digests");
+    assert.equal(navigator.replaced.at(-1), "/projects/p1/product-owner#digests");
+    page.showDigests("2026-11-20");
+    assert.equal(navigator.replaced.at(-1), "/projects/p1/product-owner#digests/2026-11-20");
+    page.showThreads();
+    assert.equal(page.viewModel.tab, "threads");
+    assert.equal(navigator.replaced.at(-1), "/projects/p1/product-owner/threads/t1");
+  });
+
+  test("opening a thread or starting one leaves the Digests tab", async () => {
+    const { page } = await setup();
+    page.showDigests();
+    page.openThread("t2");
+    assert.equal(page.viewModel.tab, "threads");
+    page.showDigests();
+    page.newThread();
+    assert.equal(page.viewModel.tab, "threads");
+  });
+
+  test("starts on the Digests tab when the address names it", async () => {
+    const { navigator, dock, conversation, list } = await setup();
+    const page = new OwnerPagePresenter({ projectId: "p1", projectName: "harness", threadId: "", initial: { tab: "digests" } }, dock, conversation, list, navigator);
+    assert.equal(page.viewModel.tab, "digests");
   });
 });
