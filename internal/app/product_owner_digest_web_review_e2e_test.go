@@ -115,3 +115,44 @@ func TestClearTimeRightAfterTypingClearsTheDigestTimeInTheWebUI_EndToEnd(t *test
 		t.Errorf("the server holds the digest time %s after Clear time, want none", *got)
 	}
 }
+
+// The page's three tabs and its address, after the merge of the Memory tab.
+// The Memory tab chosen from the Digests tab must not keep "#digests" in the
+// address: a reload would open the Digests tab again. An address that names
+// the Memory tab while the Digests tab is open must open the Memory tab, not
+// the Threads tab.
+func TestTheMemoryTabAndTheDigestsTabKeepTheAddressInStepInTheWebUI_EndToEnd(t *testing.T) {
+	w, _ := newPODigestWeb(t)
+	p := newPerson(t)
+	page := w.url + "/projects/" + w.project + "/product-owner"
+	selected := `(document.querySelector('[role=tab][aria-selected=true]')?.textContent ?? '')`
+	tab := func(name string) string {
+		return `[...document.querySelectorAll('[role=tab]')].find(t => t.textContent.trim().startsWith('` + name + `'))`
+	}
+	var at []float64
+
+	p.run(t, "the person opens the Digests tab and reads the Memory tab's place",
+		chromedp.EmulateViewport(1440, 900),
+		chromedp.Navigate(page+"#digests"),
+		waitFor(selected+`.trim() === 'Digests'`),
+		chromedp.Evaluate(`(() => { const r = `+tab("Memory")+`.getBoundingClientRect(); return [r.left + r.width / 2, r.top + r.height / 2]; })()`, &at),
+	)
+	p.run(t, "a click on the Memory tab opens it",
+		chromedp.MouseClickXY(at[0], at[1]),
+		waitFor(selected+`.trim().startsWith('Memory')`),
+	)
+	if got := p.text(t, `location.hash`); strings.HasPrefix(got, "#digests") {
+		t.Errorf("the Memory tab is open and the address still names the Digests tab (%s): a reload opens the Digests tab", got)
+	}
+
+	p.run(t, "back on the Digests tab, the address comes to name the Memory tab",
+		chromedp.Navigate("about:blank"),
+		chromedp.Navigate(page+"#digests"),
+		waitFor(selected+`.trim() === 'Digests'`),
+		chromedp.Evaluate(`location.hash = '#memory'`, nil),
+		chromedp.Sleep(500*time.Millisecond),
+	)
+	if got := p.text(t, selected); !strings.HasPrefix(strings.TrimSpace(got), "Memory") {
+		t.Errorf("the address names the Memory tab and the %q tab is open", strings.TrimSpace(got))
+	}
+}

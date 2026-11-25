@@ -167,11 +167,16 @@ export function mountIslands(doc: Document): Dispose {
       const stopDigests = projectDigests.attach(project_id);
       // The address names the Digests tab and its date: where the page opens, and where Back, Forward and an edit of the address take it.
       const followAddress = () => {
+        // Each tab switch writes its own address, and each address opens its own tab.
         const address = digestsAddress(win.location.hash);
+        const memoryAt = memoryAddress(win.location.hash);
         if (address !== undefined) {
           page.showDigests(address.date);
           void digests.show(address.date);
-        } else if (page.viewModel.tab === "digests") page.showThreads();
+        } else if (memoryAt !== undefined) {
+          page.showMemory(memoryAt.entryId);
+          memoryTab.showEntry(memoryAt.entryId);
+        } else if (page.viewModel.tab !== "threads") page.showThreads();
       };
       if (opened?.tab === "digests") void digests.show(opened.date);
       win.addEventListener("hashchange", followAddress);

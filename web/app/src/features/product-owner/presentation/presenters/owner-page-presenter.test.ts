@@ -147,4 +147,16 @@ describe("on a phone", () => {
     assert.equal(page.viewModel.tab, "digests");
     assert.equal(page.viewModel.focusEntry, "");
   });
+
+  test("each tab switch writes its own address", async () => {
+    const { page, navigator } = await setup({ threadId: "t1" });
+    page.showDigests("2026-11-20");
+    assert.equal(navigator.replaced.at(-1), "/projects/p1/product-owner#digests/2026-11-20");
+    page.showMemory();
+    assert.equal(navigator.replaced.at(-1), "/projects/p1/product-owner#memory");
+    page.showMemory("e 2");
+    assert.equal(navigator.replaced.at(-1), "/projects/p1/product-owner#memory/e%202");
+    page.showThreads();
+    assert.equal(navigator.replaced.at(-1), "/projects/p1/product-owner/threads/t1");
+  });
 });

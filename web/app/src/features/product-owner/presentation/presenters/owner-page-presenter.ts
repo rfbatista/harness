@@ -114,6 +114,7 @@ export class OwnerPagePresenter extends Presenter<OwnerPageViewModel> {
   showMemory = (entryId = ""): void => {
     this.#tab = "memory";
     this.#focusEntry = entryId;
+    this.#goTo(`${pageHref(this.#props.projectId)}#memory${entryId === "" ? "" : `/${encodeURIComponent(entryId)}`}`);
     this.#rebuild();
   };
 
