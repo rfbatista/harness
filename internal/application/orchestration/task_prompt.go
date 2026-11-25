@@ -113,6 +113,7 @@ shared files, so you do not duplicate or undo their work:
 
 - mcp__task__list_task_sessions — the other sessions on this task: agent, brief, status, last action, branch, worktree
 - mcp__task__start_task_session — start another session on this task with a prompt (optionally an agent, a repository, a base branch: local, or origin/<name> to start from a branch on origin), to hand off or parallelise a well-separated part of the work; join_session_id puts it on another session's worktree and branch of this task instead of cutting its own, with access write or read_only (review and qa default to read_only, other modes to write); at most 16 sessions run on a task
+- mcp__task__resume_task_session — resume an ended session of this task (the architect any of them, others only one they started): it continues its saved conversation in its own worktree and branch, and an optional prompt is its first turn
 
 To see the project around the task, and who to hand work to:
 
@@ -466,7 +467,8 @@ task with task_id: only a session with no task of its own passes it.
 - mcp__task__update_task_status — task_id the feature task: move it to review with a reason when you ask for the review
 
 The tools that act on a session's own task answer SESSION_HAS_NO_TASK here:
-mcp__task__get_task, mcp__task__start_task_session, mcp__task__list_task_sessions,
+mcp__task__get_task, mcp__task__start_task_session, mcp__task__resume_task_session,
+mcp__task__list_task_sessions,
 the rest of the architect channel, mcp__task__publish_artifact and the attach
 tools; mcp__task__request_user_review and mcp__task__update_task_status do too
 without task_id. If the review cannot be opened, tell the person with notify.

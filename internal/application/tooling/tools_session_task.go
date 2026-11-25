@@ -20,6 +20,7 @@ var SessionTaskToolNames = []string{
 	"update_task_status",
 	"list_task_sessions",
 	"start_task_session",
+	"resume_task_session",
 	"list_project_repositories",
 	"list_bounded_contexts",
 	"list_agents",
@@ -216,6 +217,7 @@ func SessionTaskTools(planningSvc ports.Planning, sessions ports.SessionReposito
 	}
 	tools = append(tools, sessionChannelTools(planningSvc, sessions, channel)...)
 	tools = append(tools, sessionMergeTools(planningSvc, sessions, channel, start.Merger)...)
+	tools = append(tools, sessionResumeTools(planningSvc, sessions, start, channel)...)
 	var o options
 	for _, opt := range opts {
 		opt(&o)
