@@ -234,3 +234,23 @@ func (h *Handler) handleDeleteMemoryEntry(c echo.Context) error {
 	}
 	return c.JSON(http.StatusOK, map[string]any{})
 }
+
+// handleAnswerHeldAction confirms or declines a held action of a thread
+// (contract, Held actions). Only this answer applies one.
+func (h *Handler) handleAnswerHeldAction(c echo.Context) error {
+	if err := h.productOwnerReady(); err != nil {
+		return err
+	}
+	var in struct {
+		HeldActionID string `json:"held_action_id"`
+		Answer       string `json:"answer"`
+	}
+	if err := bindJSON(c, &in); err != nil {
+		return err
+	}
+	res, err := h.productOwner.AnswerHeldAction(c.Request().Context(), in.HeldActionID, in.Answer)
+	if err != nil {
+		return err
+	}
+	return c.JSON(http.StatusOK, res)
+}

@@ -539,6 +539,10 @@ type TicketModel struct {
 	UpdatedAt int64  `gorm:"autoUpdateTime:milli"`
 	// ArchivedAt is in milliseconds; nil while the task is on the board.
 	ArchivedAt *int64 `gorm:"column:archived_at"`
+	// CreatedBy and ChangedBy are the actors as JSON; "" for a row made before
+	// attribution (unknown) and for a task never changed.
+	CreatedBy string `gorm:"column:created_by"`
+	ChangedBy string `gorm:"column:changed_by"`
 }
 
 func (TicketModel) TableName() string { return "tickets" }
@@ -558,6 +562,7 @@ func (m *TicketModel) ToDomain() *domain.Ticket {
 		UpdatedAt:   time.UnixMilli(m.UpdatedAt),
 		StatusSince: time.UnixMilli(m.CreatedAt),
 	}
+	t.CreatedBy, t.ChangedBy = actorsOf(m.CreatedBy, m.ChangedBy, t.CreatedAt)
 	if m.ArchivedAt != nil {
 		at := time.UnixMilli(*m.ArchivedAt)
 		t.ArchivedAt = &at
@@ -580,6 +585,9 @@ type DocumentModel struct {
 	Content   string
 	CreatedAt int64 `gorm:"autoCreateTime:milli"`
 	UpdatedAt int64 `gorm:"autoUpdateTime:milli"`
+	// CreatedBy and ChangedBy are the actors as JSON, as on a ticket.
+	CreatedBy string `gorm:"column:created_by"`
+	ChangedBy string `gorm:"column:changed_by"`
 }
 
 func (DocumentModel) TableName() string { return "documents" }
@@ -596,7 +604,7 @@ func (m *DocumentModel) ToDomain() *domain.Document {
 	if scope == "" {
 		scope = domain.DocumentScopeTask
 	}
-	return &domain.Document{
+	d := &domain.Document{
 		ID:        m.ID,
 		ProjectID: m.ProjectID,
 		Title:     m.Title,
@@ -606,6 +614,36 @@ func (m *DocumentModel) ToDomain() *domain.Document {
 		CreatedAt: time.UnixMilli(m.CreatedAt),
 		UpdatedAt: time.UnixMilli(m.UpdatedAt),
 	}
+	d.CreatedBy, d.ChangedBy = actorsOf(m.CreatedBy, m.ChangedBy, d.CreatedAt)
+	return d
+}
+
+// actorsOf reads a row's two stored actors. A row with no creator was made
+// before attribution: its creator is unknown, at its creation time.
+func actorsOf(created, changed string, createdAt time.Time) (*domain.Author, *domain.Author) {
+	by := &domain.Author{Kind: domain.AuthorUnknown, At: createdAt}
+	if created != "" {
+		var a domain.Author
+		if json.Unmarshal([]byte(created), &a) == nil && a.Kind != "" {
+			by = &a
+		}
+	}
+	var last *domain.Author
+	if changed != "" {
+		var a domain.Author
+		if json.Unmarshal([]byte(changed), &a) == nil && a.Kind != "" {
+			last = &a
+		}
+	}
+	return by, last
+}
+
+func actorJSON(a *domain.Author) string {
+	if a == nil {
+		return ""
+	}
+	b, _ := json.Marshal(a)
+	return string(b)
 }
 
 // TicketDocumentModel is the join table linking tickets and documents (many-to-many).

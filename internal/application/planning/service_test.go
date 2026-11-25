@@ -117,7 +117,7 @@ func TestLinkDocument_CrossProjectRejected(t *testing.T) {
 	svc, pid := newService(t)
 
 	tk, _ := svc.CreateTicket(context.Background(), pid, "T", "", "", "")
-	doc, _ := svc.CreateDocument(pid, "D", "body", domain.DocumentFormatMarkdown, "")
+	doc, _ := svc.CreateDocument(context.Background(), pid, "D", "body", domain.DocumentFormatMarkdown, "")
 	if err := svc.LinkDocument(tk.ID, doc.ID); err != nil {
 		t.Fatalf("same-project link should succeed: %v", err)
 	}
@@ -126,7 +126,7 @@ func TestLinkDocument_CrossProjectRejected(t *testing.T) {
 	}
 
 	// A document in a different project must be rejected.
-	otherDoc, err := svc.CreateDocument("nope", "X", "", domain.DocumentFormatMarkdown, "")
+	otherDoc, err := svc.CreateDocument(context.Background(), "nope", "X", "", domain.DocumentFormatMarkdown, "")
 	if code(err) != "PROJECT_NOT_FOUND" {
 		t.Fatalf("want PROJECT_NOT_FOUND creating doc in missing project, got %v", err)
 	}
@@ -149,7 +149,7 @@ func TestLinkDocument_CrossProjectRejected(t *testing.T) {
 	if err != nil {
 		t.Fatalf("failed to create ticket in project 1: %v", err)
 	}
-	doc2, err := svc2.CreateDocument(p2.ID, "D2", "body2", domain.DocumentFormatMarkdown, "")
+	doc2, err := svc2.CreateDocument(context.Background(), p2.ID, "D2", "body2", domain.DocumentFormatMarkdown, "")
 	if err != nil {
 		t.Fatalf("failed to create document in project 2: %v", err)
 	}
@@ -376,22 +376,22 @@ func TestTickets_ConcurrentPatchesAnnounceInOrder(t *testing.T) {
 func TestDocumentFormat_DefaultsRefusesAndKeeps(t *testing.T) {
 	svc, pid := newService(t)
 
-	d, err := svc.CreateDocument(pid, "D", "body", "", "")
+	d, err := svc.CreateDocument(context.Background(), pid, "D", "body", "", "")
 	if err != nil || d.Format != domain.DocumentFormatMarkdown {
 		t.Fatalf("default format: %+v, %v", d, err)
 	}
-	if _, err := svc.CreateDocument(pid, "D", "body", "pdf", ""); code(err) != "INVALID_INPUT" {
+	if _, err := svc.CreateDocument(context.Background(), pid, "D", "body", "pdf", ""); code(err) != "INVALID_INPUT" {
 		t.Fatalf("unknown format on create: %v", err)
 	}
-	page, err := svc.CreateDocument(pid, "P", "<!doctype html><html><body></body></html>", domain.DocumentFormatHTML, "")
+	page, err := svc.CreateDocument(context.Background(), pid, "P", "<!doctype html><html><body></body></html>", domain.DocumentFormatHTML, "")
 	if err != nil || page.Format != domain.DocumentFormatHTML {
 		t.Fatalf("html create: %+v, %v", page, err)
 	}
-	kept, err := svc.UpdateDocument(page.ID, "P2", page.Content, "")
+	kept, err := svc.UpdateDocument(context.Background(), page.ID, "P2", page.Content, "")
 	if err != nil || kept.Format != domain.DocumentFormatHTML {
 		t.Fatalf("update without format: %+v, %v", kept, err)
 	}
-	if _, err := svc.UpdateDocument(page.ID, "P2", page.Content, "docx"); code(err) != "INVALID_INPUT" {
+	if _, err := svc.UpdateDocument(context.Background(), page.ID, "P2", page.Content, "docx"); code(err) != "INVALID_INPUT" {
 		t.Fatalf("unknown format on update: %v", err)
 	}
 }
@@ -400,15 +400,15 @@ func TestDocumentFormat_DefaultsRefusesAndKeeps(t *testing.T) {
 // API's default); a caller that wants a task document says so.
 func TestDocumentScope_DefaultsValidatesAndLists(t *testing.T) {
 	svc, pid := newService(t)
-	d, err := svc.CreateDocument(pid, "D", "body", "", "")
+	d, err := svc.CreateDocument(context.Background(), pid, "D", "body", "", "")
 	if err != nil || d.Scope != domain.DocumentScopeProject {
 		t.Fatalf("default scope: %+v, %v", d, err)
 	}
-	tdoc, err := svc.CreateDocument(pid, "T", "body", "", domain.DocumentScopeTask)
+	tdoc, err := svc.CreateDocument(context.Background(), pid, "T", "body", "", domain.DocumentScopeTask)
 	if err != nil || tdoc.Scope != domain.DocumentScopeTask {
 		t.Fatalf("task scope: %+v, %v", tdoc, err)
 	}
-	if _, err := svc.CreateDocument(pid, "X", "", "", "global"); code(err) != "INVALID_INPUT" {
+	if _, err := svc.CreateDocument(context.Background(), pid, "X", "", "", "global"); code(err) != "INVALID_INPUT" {
 		t.Fatalf("unknown scope: %v", err)
 	}
 	if got := svc.ListDocuments(pid, ""); len(got) != 2 {
@@ -426,12 +426,12 @@ func TestSetDocumentScope_MovesKeepsLinksAndIsIdempotent(t *testing.T) {
 	svc, pid := newService(t)
 	ctx := context.Background()
 	tk, _ := svc.CreateTicket(ctx, pid, "Ship it", "", "", "")
-	d, _ := svc.CreateDocument(pid, "Plan", "body", "", domain.DocumentScopeTask)
+	d, _ := svc.CreateDocument(context.Background(), pid, "Plan", "body", "", domain.DocumentScopeTask)
 	if err := svc.LinkDocument(tk.ID, d.ID); err != nil {
 		t.Fatal(err)
 	}
 	time.Sleep(2 * time.Millisecond)
-	moved, err := svc.SetDocumentScope(d.ID, domain.DocumentScopeProject)
+	moved, err := svc.SetDocumentScope(context.Background(), d.ID, domain.DocumentScopeProject)
 	if err != nil || moved.Scope != domain.DocumentScopeProject || !moved.UpdatedAt.After(d.UpdatedAt) {
 		t.Fatalf("move: %+v, %v", moved, err)
 	}
@@ -444,21 +444,21 @@ func TestSetDocumentScope_MovesKeepsLinksAndIsIdempotent(t *testing.T) {
 	if got := svc.ListDocumentTickets("missing"); len(got) != 0 {
 		t.Fatalf("a missing document has tickets: %+v", got)
 	}
-	again, err := svc.SetDocumentScope(d.ID, domain.DocumentScopeProject)
+	again, err := svc.SetDocumentScope(context.Background(), d.ID, domain.DocumentScopeProject)
 	if err != nil || !again.UpdatedAt.Equal(moved.UpdatedAt) {
 		t.Fatalf("the same scope again wrote: %+v, %v", again, err)
 	}
-	back, err := svc.SetDocumentScope(d.ID, domain.DocumentScopeTask)
+	back, err := svc.SetDocumentScope(context.Background(), d.ID, domain.DocumentScopeTask)
 	if err != nil || back.Scope != domain.DocumentScopeTask {
 		t.Fatalf("move back: %+v, %v", back, err)
 	}
-	if _, err := svc.SetDocumentScope(d.ID, ""); code(err) != "INVALID_INPUT" {
+	if _, err := svc.SetDocumentScope(context.Background(), d.ID, ""); code(err) != "INVALID_INPUT" {
 		t.Fatalf("empty scope: %v", err)
 	}
-	if _, err := svc.SetDocumentScope(d.ID, "global"); code(err) != "INVALID_INPUT" {
+	if _, err := svc.SetDocumentScope(context.Background(), d.ID, "global"); code(err) != "INVALID_INPUT" {
 		t.Fatalf("unknown scope: %v", err)
 	}
-	if _, err := svc.SetDocumentScope("missing", domain.DocumentScopeTask); code(err) != "DOCUMENT_NOT_FOUND" {
+	if _, err := svc.SetDocumentScope(context.Background(), "missing", domain.DocumentScopeTask); code(err) != "DOCUMENT_NOT_FOUND" {
 		t.Fatalf("missing: %v", err)
 	}
 	// A deleted ticket drops out of the document's tickets.

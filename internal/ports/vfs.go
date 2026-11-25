@@ -197,9 +197,9 @@ type ShellEdits interface {
 // version, and is DOCUMENT_CHANGED otherwise.
 type ShellDocumentWriter interface {
 	GetDocument(id string) *domain.Document
-	CreateDocument(projectID, title, content string, format domain.DocumentFormat, scope domain.DocumentScope) (*domain.Document, error)
-	WriteDocumentIfVersion(id, version, title, content string, format domain.DocumentFormat) (*domain.Document, error)
-	SetDocumentScope(id string, scope domain.DocumentScope) (*domain.Document, error)
+	CreateDocument(ctx context.Context, projectID, title, content string, format domain.DocumentFormat, scope domain.DocumentScope) (*domain.Document, error)
+	WriteDocumentIfVersion(ctx context.Context, id, version, title, content string, format domain.DocumentFormat) (*domain.Document, error)
+	SetDocumentScope(ctx context.Context, id string, scope domain.DocumentScope) (*domain.Document, error)
 	DeleteDocument(id string) error
 	LinkDocument(ticketID, documentID string) error
 }

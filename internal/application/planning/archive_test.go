@@ -65,7 +65,7 @@ func TestADoneTaskArchivesAndRestoresLosingNothing(t *testing.T) {
 	f := newArchiveFixture(t)
 	ctx := context.Background()
 	tk := f.doneTask(t, "Ship it")
-	doc, err := f.svc.CreateDocument(f.pid, "Spec", "body", "", domain.DocumentScopeTask)
+	doc, err := f.svc.CreateDocument(context.Background(), f.pid, "Spec", "body", "", domain.DocumentScopeTask)
 	if err != nil {
 		t.Fatal(err)
 	}

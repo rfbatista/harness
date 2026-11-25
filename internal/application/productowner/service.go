@@ -53,6 +53,8 @@ type Service struct {
 	digests *Digests
 	// memMu serialises the writes of memory entries.
 	memMu sync.Mutex
+	// held is what the held actions share (held.go).
+	held heldState
 }
 
 // OnDigestTimeChanged sets who is told when a project's digest time changes.
