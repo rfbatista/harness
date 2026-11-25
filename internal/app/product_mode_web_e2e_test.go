@@ -137,7 +137,7 @@ func TestProductModeWeb_EndToEnd(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	prd, err := plan.CreateDocument(p.ID, "PRD: Exports", "# Exports\n\nGoal, users, scope.", domain.DocumentFormatMarkdown, domain.DocumentScopeTask)
+	prd, err := plan.CreateDocument(context.Background(), p.ID, "PRD: Exports", "# Exports\n\nGoal, users, scope.", domain.DocumentFormatMarkdown, domain.DocumentScopeTask)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -148,7 +148,7 @@ func TestProductModeWeb_EndToEnd(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	brief, err := plan.CreateDocument(p.ID, "Brief: CSV export", "# Brief\n\nWhat to build.", domain.DocumentFormatMarkdown, domain.DocumentScopeTask)
+	brief, err := plan.CreateDocument(context.Background(), p.ID, "Brief: CSV export", "# Brief\n\nWhat to build.", domain.DocumentFormatMarkdown, domain.DocumentScopeTask)
 	if err != nil {
 		t.Fatal(err)
 	}

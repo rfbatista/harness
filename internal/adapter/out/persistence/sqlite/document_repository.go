@@ -198,3 +198,9 @@ func documentsToDomain(models []DocumentModel) []*domain.Document {
 	}
 	return out
 }
+
+// SetActors records who created the document (when created is set) and who
+// last changed it (when changed is set), leaving its updated_at as it is.
+func (r *DocumentRepository) SetActors(id string, created, changed *domain.Author) error {
+	return setActors(r.db.Model(&DocumentModel{}).Where("id = ?", id), created, changed)
+}

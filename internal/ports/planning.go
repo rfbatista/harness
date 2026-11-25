@@ -29,6 +29,9 @@ type TicketRepository interface {
 	// at the same instant, and answers them in the order of ids.
 	SetArchivedMany(ids []string, at *time.Time) ([]*domain.Ticket, error)
 	Delete(id string) error
+	// SetActors records who created the ticket (when created is set) and who
+	// last changed it (when changed is set).
+	SetActors(id string, created, changed *domain.Author) error
 	// ActivityByProject answers each project's open and archived task
 	// counts and newest update, for every project that has tasks.
 	ActivityByProject() (map[string]TaskActivity, error)
@@ -56,6 +59,9 @@ type DocumentRepository interface {
 	UpdateIfContent(id, expectedContent, title, content string, format domain.DocumentFormat) (*domain.Document, error)
 	SetScope(id string, scope domain.DocumentScope) (*domain.Document, error)
 	Delete(id string) error
+	// SetActors records who created the document (when created is set) and
+	// who last changed it (when changed is set), leaving updated_at alone.
+	SetActors(id string, created, changed *domain.Author) error
 	Link(ticketID, documentID string) error
 	Unlink(ticketID, documentID string) error
 }
@@ -205,11 +211,11 @@ type MergeStateRefresher interface {
 // and project scope without touching its ticket links; the same scope again
 // changes nothing. ListDocumentTickets is the tickets a document is linked to.
 type DocumentLibrary interface {
-	CreateDocument(projectID, title, content string, format domain.DocumentFormat, scope domain.DocumentScope) (*domain.Document, error)
+	CreateDocument(ctx context.Context, projectID, title, content string, format domain.DocumentFormat, scope domain.DocumentScope) (*domain.Document, error)
 	GetDocument(id string) *domain.Document
 	ListDocuments(projectID string, scope domain.DocumentScope) []*domain.Document
-	UpdateDocument(id, title, content string, format domain.DocumentFormat) (*domain.Document, error)
-	SetDocumentScope(id string, scope domain.DocumentScope) (*domain.Document, error)
+	UpdateDocument(ctx context.Context, id, title, content string, format domain.DocumentFormat) (*domain.Document, error)
+	SetDocumentScope(ctx context.Context, id string, scope domain.DocumentScope) (*domain.Document, error)
 	DeleteDocument(id string) error
 	LinkDocument(ticketID, documentID string) error
 	UnlinkDocument(ticketID, documentID string) error

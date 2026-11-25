@@ -177,3 +177,23 @@ func (r *TicketRepository) ActivityByProject() (map[string]ports.TaskActivity, e
 	}
 	return out, nil
 }
+
+// SetActors records who created the ticket (when created is set) and who last
+// changed it (when changed is set).
+func (r *TicketRepository) SetActors(id string, created, changed *domain.Author) error {
+	return setActors(r.db.Model(&TicketModel{}).Where("id = ?", id), created, changed)
+}
+
+func setActors(q *gorm.DB, created, changed *domain.Author) error {
+	updates := map[string]interface{}{}
+	if created != nil {
+		updates["created_by"] = actorJSON(created)
+	}
+	if changed != nil {
+		updates["changed_by"] = actorJSON(changed)
+	}
+	if len(updates) == 0 {
+		return nil
+	}
+	return q.UpdateColumns(updates).Error
+}

@@ -381,7 +381,10 @@ func (s *Service) withShell(sessionID string, e ports.ShellEdit, do func(*root, 
 		return refuseRedirect()
 	}
 	if s.isProductOwner(sessionID) {
-		return refuse("PRODUCT_OWNER_READ_ONLY", "the product owner cannot change anything yet: nothing was written")
+		if ans := refuseProductOwner(sh, ed); !ans.Allow {
+			s.restore(sh, ed)
+			return ans
+		}
 	}
 	return do(sh, ed)
 }
@@ -717,7 +720,7 @@ func (s *Service) commitDocWrite(sh *root, rel string) ports.ShellAnswer {
 	if version == row.Version && d.Format == format {
 		return allow
 	}
-	d, err = s.src.Writes.WriteDocumentIfVersion(row.ID, row.Version, d.Title, string(content), format)
+	d, err = s.src.Writes.WriteDocumentIfVersion(sh.ctx(), row.ID, row.Version, d.Title, string(content), format)
 	if errs.HasCode(err, "DOCUMENT_CHANGED") || errs.HasCode(err, "DOCUMENT_NOT_FOUND") {
 		return s.stale(sh, row)
 	}
@@ -728,12 +731,15 @@ func (s *Service) commitDocWrite(sh *root, rel string) ports.ShellAnswer {
 }
 
 func (s *Service) createDocument(sh *root, rel, content string) ports.ShellAnswer {
-	d, err := s.src.Writes.CreateDocument(sh.projID, TitleOf(rel, content), content, DocumentFormatOf(rel), classify(rel).scope())
+	d, err := s.src.Writes.CreateDocument(sh.ctx(), sh.projID, TitleOf(rel, content), content, DocumentFormatOf(rel), classify(rel).scope())
 	if err != nil {
 		return refuseErr(err)
 	}
-	if err := s.src.Writes.LinkDocument(sh.taskAt(rel), d.ID); err != nil {
-		return refuseErr(err)
+	// A project document written from a shell with no task links to none.
+	if id := sh.taskAt(rel); id != "" {
+		if err := s.src.Writes.LinkDocument(id, d.ID); err != nil {
+			return refuseErr(err)
+		}
 	}
 	return sh.record(rel, d)
 }
@@ -804,13 +810,13 @@ func (s *Service) commitMove(ctx context.Context, sh *root, src, dst string) por
 				return refuseNotOnTask(row.Path, to)
 			}
 			var err error
-			if d, err = s.src.Writes.SetDocumentScope(d.ID, scope); err != nil {
+			if d, err = s.src.Writes.SetDocumentScope(sh.ctx(), d.ID, scope); err != nil {
 				return refuseErr(err)
 			}
 		}
 		if format := DocumentFormatOf(to); format != d.Format {
 			var err error
-			if d, err = s.src.Writes.WriteDocumentIfVersion(d.ID, row.Version, d.Title, d.Content, format); err != nil {
+			if d, err = s.src.Writes.WriteDocumentIfVersion(sh.ctx(), d.ID, row.Version, d.Title, d.Content, format); err != nil {
 				return refuseErr(err)
 			}
 		}
@@ -941,8 +947,9 @@ var (
 	tags      = regexp.MustCompile(`<[^>]*>`)
 )
 
-// isProductOwner says the session is a product-owner thread's, whose shell is
-// read-only: it reads the project's documents and designs and changes none.
+// isProductOwner says the session is a product-owner thread's, whose shell
+// reads everything of the project and writes only its documents, never
+// deleting one (refuseProductOwner).
 func (s *Service) isProductOwner(sessionID string) bool {
 	if s.src.Sessions == nil {
 		return false
