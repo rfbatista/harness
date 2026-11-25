@@ -48,35 +48,11 @@ func sessionResumeTools(planningSvc ports.Planning, sessions ports.SessionReposi
 }
 
 func resumePeer(ctx context.Context, scope *taskScope, sessions ports.SessionRepository, resumer ports.InteractiveSessions, channel ports.TaskChannel, args map[string]any) (any, error) {
-	id := strings.TrimSpace(stringArg(args, "session_id"))
-	if id == "" {
-		return nil, invalidInput("session_id is required: the ended session to resume, from list_task_sessions with include_ended")
-	}
-	if id == scope.session.ID {
-		return nil, invalidInput("session " + id + " is your own session: a session cannot resume itself")
-	}
-	target, err := sessions.Find(ctx, id)
+	target, architect, err := ownTaskSession(ctx, scope, sessions, channel, args, "resume", ResumeNotAllowed)
 	if err != nil {
 		return nil, err
 	}
-	if target == nil || target.ProjectID != scope.session.ProjectID {
-		return nil, &domain.StructuredError{Code: "SESSION_NOT_FOUND", Message: "there is no session " + id + ": name one from list_task_sessions with include_ended"}
-	}
-	if target.TicketID != scope.ticket.ID {
-		return nil, &domain.StructuredError{Code: "SESSION_NOT_ON_TASK", Message: "session " + id + " belongs to another task, so it cannot be resumed from this one"}
-	}
-	architect := false
-	if channel != nil {
-		role, err := channel.SessionRole(ctx, scope.session.ID)
-		if err != nil {
-			return nil, err
-		}
-		architect = role == domain.RoleArchitect
-	}
-	if !architect && target.ParentSessionID != scope.session.ID {
-		return nil, &domain.StructuredError{Code: ResumeNotAllowed, Message: "session " + id + " was not started by you, and only the task's " +
-			"architect resumes a session it did not start: ask the architect with message_architect"}
-	}
+	id := target.ID
 	// A running session is refused as orchestration would refuse it, before
 	// the limit it counts toward.
 	if !target.Status.IsTerminal() {
@@ -91,7 +67,7 @@ func resumePeer(ctx context.Context, scope *taskScope, sessions ports.SessionRep
 		Prompt: strings.TrimSpace(stringArg(args, "prompt")),
 	})
 	if err != nil {
-		return nil, resumeRefusal(err, id)
+		return nil, refusalNaming(err, id, "resumed")
 	}
 
 	out := map[string]any{
@@ -107,12 +83,49 @@ func resumePeer(ctx context.Context, scope *taskScope, sessions ports.SessionRep
 	return out, nil
 }
 
-// resumeRefusal names the session in orchestration's refusal of a resume,
-// which speaks of "the session" for the person's Resume button. The code stays.
-func resumeRefusal(err error, id string) error {
+// ownTaskSession is the session of the caller's task that session_id names,
+// when the caller may act on it: the task's architect on any of them, any
+// other session on one it started; architect says which. verb words the
+// refusals ("resume", "stop"); notAllowed is the code of the refusal for a
+// session the caller did not start.
+func ownTaskSession(ctx context.Context, scope *taskScope, sessions ports.SessionRepository, channel ports.TaskChannel, args map[string]any, verb, notAllowed string) (target *domain.Session, architect bool, err error) {
+	id := strings.TrimSpace(stringArg(args, "session_id"))
+	if id == "" {
+		return nil, false, invalidInput("session_id is required: the session to " + verb + ", from list_task_sessions")
+	}
+	if id == scope.session.ID {
+		return nil, false, invalidInput("session " + id + " is your own session: a session cannot " + verb + " itself")
+	}
+	target, err = sessions.Find(ctx, id)
+	if err != nil {
+		return nil, false, err
+	}
+	if target == nil || target.ProjectID != scope.session.ProjectID {
+		return nil, false, &domain.StructuredError{Code: "SESSION_NOT_FOUND", Message: "there is no session " + id + ": name one from list_task_sessions"}
+	}
+	if target.TicketID != scope.ticket.ID {
+		return nil, false, &domain.StructuredError{Code: "SESSION_NOT_ON_TASK", Message: "session " + id + " belongs to another task, so you cannot " + verb + " it from this one"}
+	}
+	if channel != nil {
+		role, err := channel.SessionRole(ctx, scope.session.ID)
+		if err != nil {
+			return nil, false, err
+		}
+		architect = role == domain.RoleArchitect
+	}
+	if !architect && target.ParentSessionID != scope.session.ID {
+		return nil, false, &domain.StructuredError{Code: notAllowed, Message: "session " + id + " was not started by you, and only the task's " +
+			"architect can " + verb + " a session it did not start: ask the architect with message_architect"}
+	}
+	return target, architect, nil
+}
+
+// refusalNaming puts the session in orchestration's refusal, which speaks of
+// "the session" for the person's buttons. The code stays.
+func refusalNaming(err error, id, what string) error {
 	var se *domain.StructuredError
 	if !errors.As(err, &se) {
 		return err
 	}
-	return &domain.StructuredError{Code: se.Code, Message: "session " + id + " was not resumed: " + se.Message}
+	return &domain.StructuredError{Code: se.Code, Message: "session " + id + " was not " + what + ": " + se.Message}
 }

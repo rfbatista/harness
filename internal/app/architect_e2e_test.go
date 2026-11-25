@@ -114,7 +114,7 @@ func newArchE2E(t *testing.T) *archE2E {
 	t.Cleanup(e.srv.Close)
 	e.tools = map[string]domain.Tool{}
 	for _, tool := range tooling.SessionTaskTools(e.plan, sessions, cat.Agents, cat.Architecture,
-		tooling.PeerStarter{Sessions: e.orch, Repositories: cat.Projects}, tooling.ArtifactTooling{}, e.channel, tooling.NotificationTooling{}) {
+		tooling.PeerStarter{Sessions: e.orch, Stopper: e.orch, Repositories: cat.Projects}, tooling.ArtifactTooling{}, e.channel, tooling.NotificationTooling{}) {
 		e.tools[tool.Name] = tool
 	}
 	e.follow()
@@ -368,9 +368,10 @@ func TestArchitectChannel_EndToEnd(t *testing.T) {
 		t.Fatalf("ticket JSON: %+v", tk)
 	}
 
-	// The delegate ends: its loop ends, and the architect is told how.
-	if err := e.orch.Stop(e.ctx, dev); err != nil {
-		t.Fatal(err)
+	// The architect stops the delegate: its loop ends, and the architect is
+	// told how.
+	if stopped := e.mustTool(arch.ID, "stop_task_session", map[string]any{"session_id": dev}); stopped["session_id"] != dev {
+		t.Fatalf("stop_task_session: %+v", stopped)
 	}
 	e.sawOnFeed("status_check", `"delegate_session_id":"`+dev+`"`, `"state":"ended"`)
 	if reason := e.stop(arch.ID); !strings.Contains(reason, "· status ended: stopped ·") {

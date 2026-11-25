@@ -21,6 +21,7 @@ var SessionTaskToolNames = []string{
 	"list_task_sessions",
 	"start_task_session",
 	"resume_task_session",
+	"stop_task_session",
 	"list_project_repositories",
 	"list_bounded_contexts",
 	"list_agents",
@@ -57,6 +58,9 @@ type PeerStarter struct {
 	// Merger merges a delegate's branch for merge_session_branch; nil leaves
 	// that tool answering that it is unavailable.
 	Merger ports.BranchMerger
+	// Stopper stops a session for stop_task_session; nil leaves that tool
+	// answering that it is unavailable.
+	Stopper ports.SessionStopper
 }
 
 // ArtifactTooling is what the artifact tools need: the publisher, and how to
@@ -218,6 +222,7 @@ func SessionTaskTools(planningSvc ports.Planning, sessions ports.SessionReposito
 	tools = append(tools, sessionChannelTools(planningSvc, sessions, channel)...)
 	tools = append(tools, sessionMergeTools(planningSvc, sessions, channel, start.Merger)...)
 	tools = append(tools, sessionResumeTools(planningSvc, sessions, channel, start.Sessions)...)
+	tools = append(tools, sessionStopTools(planningSvc, sessions, channel, start.Stopper)...)
 	var o options
 	for _, opt := range opts {
 		opt(&o)
