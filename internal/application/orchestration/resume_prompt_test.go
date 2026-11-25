@@ -7,6 +7,7 @@ import (
 	"strings"
 	"testing"
 
+	"operators-mcp/internal/adapter/out/eventbus"
 	"operators-mcp/internal/domain"
 	"operators-mcp/internal/ports"
 )
@@ -79,5 +80,23 @@ func TestResume_WithoutAPromptStaysIdle(t *testing.T) {
 	}
 	if got := svc.courier.turn("s1"); got != turnIdle {
 		t.Errorf("turn = %v, want idle", got)
+	}
+}
+
+// A resume is announced, so the architect channel can bring back the loop
+// that ended with the session.
+func TestResume_IsAnnounced(t *testing.T) {
+	svc, _ := newInteractiveService(t)
+	bus := eventbus.New()
+	svc.Events = bus
+	var resumed []domain.SessionResumed
+	ports.On(bus, func(_ context.Context, ev domain.SessionResumed) error { resumed = append(resumed, ev); return nil })
+	stoppedIdle(t, svc, "s1")
+
+	if _, _, err := svc.ResumeInteractive(context.Background(), ports.ResumeRequest{SessionID: "s1"}); err != nil {
+		t.Fatal(err)
+	}
+	if len(resumed) != 1 || resumed[0].SessionID != "s1" || resumed[0].TicketID != "tk1" || resumed[0].ProjectID != "p1" {
+		t.Fatalf("resumed: %+v", resumed)
 	}
 }

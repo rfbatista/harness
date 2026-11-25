@@ -123,9 +123,11 @@ func (s *Service) pushBack(delegateID string) {
 
 // Subscribe follows the session lifecycle: loops start with a delegate the
 // architect starts, end with the delegate or when another architect takes
-// over, and task status moves are announced.
+// over, come back when the delegate is resumed, and task status moves are
+// announced.
 func (s *Service) Subscribe(sub ports.EventSubscriber) {
 	ports.On(sub, func(_ context.Context, ev domain.SessionStarted) error { return s.sessionStarted(ev) })
+	ports.On(sub, func(_ context.Context, ev domain.SessionResumed) error { s.sessionResumed(ev); return nil })
 	ports.On(sub, func(_ context.Context, ev domain.SessionEnded) error {
 		s.endLoop(ev.SessionID, ev.Status, true)
 		return nil
@@ -170,6 +172,29 @@ func (s *Service) sessionStarted(ev domain.SessionStarted) error {
 	}
 	s.emitCheck(c, nil, nil)
 	return nil
+}
+
+// sessionResumed brings back the loop that ended with a delegate, at the
+// interval it had (paused if it was), as long as the architect it reports to
+// is still the task's. A session that had no loop gets none.
+func (s *Service) sessionResumed(ev domain.SessionResumed) {
+	if ev.TicketID == "" {
+		return
+	}
+	arch := domain.TaskArchitect(s.taskSessions(context.Background(), ev.TicketID))
+	s.mu.Lock()
+	c := s.checks.Get(ev.SessionID)
+	if c == nil || c.State != domain.StatusCheckEnded || arch == nil || arch.ID != c.ArchitectSessionID {
+		s.mu.Unlock()
+		return
+	}
+	c.State = domain.StatusCheckPaused // retune leaves an ended loop alone
+	c, err := s.retune(c, c.EveryMinutes)
+	s.mu.Unlock()
+	if err != nil {
+		return
+	}
+	s.emitCheck(c, nil, nil)
 }
 
 // startLoop stores an active loop of everyMinutes on a delegate of the

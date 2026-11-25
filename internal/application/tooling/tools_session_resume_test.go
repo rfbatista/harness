@@ -177,6 +177,10 @@ func TestResumeTaskSession_IsHeldToTheTasksSessionLimit(t *testing.T) {
 	if _, err := w.resume(map[string]any{"session_id": "d1"}); errs.Code(err) != "TASK_SESSION_LIMIT" {
 		t.Fatalf("err = %v, want TASK_SESSION_LIMIT", err)
 	}
+	// A running session is refused for running, not for the limit.
+	if _, err := w.resume(map[string]any{"session_id": "live-1"}); errs.Code(err) != "SESSION_ALREADY_RUNNING" {
+		t.Fatalf("resume of a running session at the limit = %v, want SESSION_ALREADY_RUNNING", err)
+	}
 	if len(w.starter.resumed) != 0 {
 		t.Error("a resume over the limit reached orchestration")
 	}

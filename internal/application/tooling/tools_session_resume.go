@@ -20,7 +20,7 @@ const ResumeNotAllowed = "RESUME_NOT_ALLOWED"
 // claude conversation, the way the person's Resume brings it back. A prompt,
 // when given, is its first turn. Unlike the person's Resume, it is held to the
 // task's session limit, like every session an agent starts.
-func sessionResumeTools(planningSvc ports.Planning, sessions ports.SessionRepository, start PeerStarter, channel ports.TaskChannel) []domain.Tool {
+func sessionResumeTools(planningSvc ports.Planning, sessions ports.SessionRepository, channel ports.TaskChannel, resumer ports.InteractiveSessions) []domain.Tool {
 	return []domain.Tool{{
 		Name: "resume_task_session",
 		Description: "Resume an ended agent session of this session's task: it comes back on the server in its own worktree " +
@@ -39,10 +39,10 @@ func sessionResumeTools(planningSvc ports.Planning, sessions ports.SessionReposi
 			if err != nil {
 				return nil, err
 			}
-			if start.Sessions == nil {
+			if resumer == nil {
 				return nil, &domain.StructuredError{Code: "UNAVAILABLE", Message: "resuming sessions is not available on this server"}
 			}
-			return resumePeer(ctx, scope, sessions, start.Sessions, channel, args)
+			return resumePeer(ctx, scope, sessions, resumer, channel, args)
 		},
 	}}
 }
@@ -76,6 +76,11 @@ func resumePeer(ctx context.Context, scope *taskScope, sessions ports.SessionRep
 	if !architect && target.ParentSessionID != scope.session.ID {
 		return nil, &domain.StructuredError{Code: ResumeNotAllowed, Message: "session " + id + " was not started by you, and only the task's " +
 			"architect resumes a session it did not start: ask the architect with message_architect"}
+	}
+	// A running session is refused as orchestration would refuse it, before
+	// the limit it counts toward.
+	if !target.Status.IsTerminal() {
+		return nil, &domain.StructuredError{Code: "SESSION_ALREADY_RUNNING", Message: "session " + id + " is still running, so it cannot be resumed: send it a message instead"}
 	}
 	if err := checkTaskSessionLimit(ctx, scope, sessions); err != nil {
 		return nil, err

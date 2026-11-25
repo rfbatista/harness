@@ -68,7 +68,7 @@ func newArchE2E(t *testing.T) *archE2E {
 	// The stand-in claude records its arguments (whole, by a rename), then
 	// keeps its terminal open and echoes what is typed.
 	fake := filepath.Join(dir, "claude")
-	if err := os.WriteFile(fake, []byte("#!/bin/sh\nprintf '%s\\n' \"$@\" > "+dir+"/.launch-$$ && mv "+dir+"/.launch-$$ "+dir+"/launch-$$\nexec cat\n"), 0o755); err != nil {
+	if err := os.WriteFile(fake, []byte("#!/bin/sh\nprintf '%s\\n' \"$@\" > '"+dir+"/.launch-'$$ && mv '"+dir+"/.launch-'$$ '"+dir+"/launch-'$$\nexec cat\n"), 0o755); err != nil {
 		t.Fatal(err)
 	}
 
@@ -387,7 +387,9 @@ func TestArchitectChannel_EndToEnd(t *testing.T) {
 	e.saveConversation(before)
 	launched := len(e.launches())
 	resumed := e.mustTool(arch.ID, "resume_task_session", map[string]any{"session_id": dev, "prompt": "Pick up where you stopped."})
-	if resumed["session_id"] != dev || resumed["status"] != string(domain.SessionRunning) || resumed["branch"] != before.Branch {
+	loop, _ := resumed["status_check"].(map[string]any)
+	if resumed["session_id"] != dev || resumed["status"] != string(domain.SessionRunning) || resumed["branch"] != before.Branch ||
+		loop == nil || loop["state"] != "paused" || loop["every_minutes"] != float64(0) { // the person paused it above; it comes back as it was
 		t.Fatalf("resume_task_session: %+v", resumed)
 	}
 	after, err := e.orch.Get(e.ctx, dev)

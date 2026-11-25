@@ -217,7 +217,7 @@ func SessionTaskTools(planningSvc ports.Planning, sessions ports.SessionReposito
 	}
 	tools = append(tools, sessionChannelTools(planningSvc, sessions, channel)...)
 	tools = append(tools, sessionMergeTools(planningSvc, sessions, channel, start.Merger)...)
-	tools = append(tools, sessionResumeTools(planningSvc, sessions, start, channel)...)
+	tools = append(tools, sessionResumeTools(planningSvc, sessions, channel, start.Sessions)...)
 	var o options
 	for _, opt := range opts {
 		opt(&o)
