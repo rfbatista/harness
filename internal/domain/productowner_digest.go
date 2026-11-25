@@ -28,8 +28,9 @@ type ProductOwnerDigestItem struct {
 	To    string `json:"to,omitempty"`
 }
 
-// ProductOwnerDigest is one digest of a project. Date is the local day it was
-// recorded on, "2006-01-02".
+// ProductOwnerDigest is one digest of a project. Date is the local day of the
+// digest time it covers, "2006-01-02": a digest recorded late for a missed time
+// is dated that time's day, and a project has at most one digest per date.
 type ProductOwnerDigest struct {
 	ID          string                   `json:"digest_id"`
 	ProjectID   string                   `json:"-"`

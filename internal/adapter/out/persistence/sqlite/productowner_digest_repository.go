@@ -56,7 +56,13 @@ func (r *ProductOwnerDigestRepository) SaveDigest(ctx context.Context, d domain.
 		return err
 	}
 	m := ProductOwnerDigestModel{ID: d.ID, ProjectID: d.ProjectID, Date: d.Date, PeriodStart: d.PeriodStart, PeriodEnd: d.PeriodEnd, Summary: d.Summary, Items: string(items)}
-	return r.db.WithContext(ctx).Save(&m).Error
+	// A project has one digest per date: a new one replaces the one of its date.
+	return r.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		if err := tx.Where("project_id = ? AND date = ? AND id <> ?", d.ProjectID, d.Date, d.ID).Delete(&ProductOwnerDigestModel{}).Error; err != nil {
+			return err
+		}
+		return tx.Save(&m).Error
+	})
 }
 
 // Digests implements ports.ProductOwnerDigestStore.

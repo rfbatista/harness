@@ -170,7 +170,6 @@ func (d *Digests) tickProject(ctx context.Context, p *domain.Project) {
 		return
 	}
 	now := d.clock().Local()
-	today := now.Format("2006-01-02")
 	due, ok := lastDue(st.DigestTime, now)
 	if !ok {
 		return
@@ -228,7 +227,7 @@ func (d *Digests) tickProject(ctx context.Context, p *domain.Project) {
 	if err != nil {
 		return
 	}
-	dig := domain.ProductOwnerDigest{ID: id, ProjectID: p.ID, Date: today, PeriodStart: state.SinceAt, PeriodEnd: now, Summary: summary, Items: items}
+	dig := domain.ProductOwnerDigest{ID: id, ProjectID: p.ID, Date: dueDate, PeriodStart: state.SinceAt, PeriodEnd: now, Summary: summary, Items: items}
 	if err := d.store.SaveDigest(ctx, dig); err != nil {
 		slog.Warn("product owner digest not saved", "project", p.ID, "error", err)
 		return
@@ -239,7 +238,7 @@ func (d *Digests) tickProject(ctx context.Context, p *domain.Project) {
 		slog.Warn("product owner digest state not saved", "project", p.ID, "error", err)
 	}
 	if d.feed != nil {
-		d.feed.AnnounceChange(ports.ProjectChange{ProductOwnerDigest: &ports.ProductOwnerDigestChange{ProjectID: p.ID, DigestID: id, Date: today}})
+		d.feed.AnnounceChange(ports.ProjectChange{ProductOwnerDigest: &ports.ProductOwnerDigestChange{ProjectID: p.ID, DigestID: id, Date: dueDate}})
 	}
 }
 
