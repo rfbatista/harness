@@ -40,6 +40,27 @@ describe("the next run of a digest time", () => {
   });
 });
 
+describe("a zone the server names as its clock does", () => {
+  test("a numeric offset is a fixed offset", () => {
+    const now = new Date("2026-11-24T10:00:00Z"); // 07:00 at -03
+    assert.equal(nextRun(now, "09:00", "-03")?.toISOString(), "2026-11-24T12:00:00.000Z");
+    assert.equal(nextRun(now, "09:00", "+05:30")?.toISOString(), "2026-11-25T03:30:00.000Z");
+    assert.equal(nextRun(now, "09:00", "+0530")?.toISOString(), "2026-11-25T03:30:00.000Z");
+    assert.equal(clockOf(new Date("2026-11-23T12:00:00Z"), "-03"), "09:00");
+  });
+
+  test("UTC and a common abbreviation are fixed offsets", () => {
+    const now = new Date("2026-11-24T10:00:00Z");
+    assert.equal(nextRun(now, "12:00", "UTC")?.toISOString(), "2026-11-24T12:00:00.000Z");
+    assert.equal(nextRun(now, "12:00", "CET")?.toISOString(), "2026-11-24T11:00:00.000Z");
+  });
+
+  test("a name it does not know has no next run, and every other date still reads", () => {
+    assert.equal(nextRun(new Date(), "09:00", "Mars/Olympus"), null);
+    assert.match(clockOf(new Date("2026-11-23T12:00:00Z"), "Mars/Olympus"), /^\d\d:\d\d$/);
+  });
+});
+
 describe("the dates of the digests", () => {
   test("name a day, a month and the clock in the zone", () => {
     assert.equal(shortDay("2026-11-23"), "Mon 23 Nov");
