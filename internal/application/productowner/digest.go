@@ -3,6 +3,7 @@ package productowner
 import (
 	"context"
 	"fmt"
+	"log/slog"
 	"net/url"
 	"sort"
 	"strings"
@@ -22,6 +23,12 @@ const DefaultDigestEvery = time.Minute
 
 // digestRetry is how long a project waits after a digest run that failed.
 const digestRetry = 10 * time.Minute
+
+// DigestProjects is what the digests read of the project catalog.
+type DigestProjects interface {
+	ListProjects(ctx context.Context) ([]*domain.Project, error)
+	GetProject(ctx context.Context, projectID string) (*domain.Project, error)
+}
 
 // OneOff is the product owner's one-off run.
 type OneOff interface {
@@ -43,15 +50,12 @@ type DigestSources struct {
 type Digests struct {
 	store    ports.ProductOwnerDigestStore
 	settings ports.ProductOwnerStore
-	projects interface {
-		ListProjects(ctx context.Context) ([]*domain.Project, error)
-		GetProject(ctx context.Context, projectID string) (*domain.Project, error)
-	}
-	run   OneOff
-	feed  ports.ProjectChangeSink
-	src   DigestSources
-	clock func() time.Time
-	every time.Duration
+	projects DigestProjects
+	run      OneOff
+	feed     ports.ProjectChangeSink
+	src      DigestSources
+	clock    func() time.Time
+	every    time.Duration
 
 	mu      sync.Mutex
 	running map[string]bool
@@ -62,10 +66,7 @@ type Digests struct {
 
 // NewDigests returns the digests of every project. A nil clock reads the real
 // time; a zero every ticks once a minute.
-func NewDigests(store ports.ProductOwnerDigestStore, settings ports.ProductOwnerStore, projects interface {
-	ListProjects(ctx context.Context) ([]*domain.Project, error)
-	GetProject(ctx context.Context, projectID string) (*domain.Project, error)
-}, run OneOff, feed ports.ProjectChangeSink, src DigestSources, clock func() time.Time, every time.Duration) *Digests {
+func NewDigests(store ports.ProductOwnerDigestStore, settings ports.ProductOwnerStore, projects DigestProjects, run OneOff, feed ports.ProjectChangeSink, src DigestSources, clock func() time.Time, every time.Duration) *Digests {
 	if clock == nil {
 		clock = time.Now
 	}
@@ -187,6 +188,7 @@ func (d *Digests) tickProject(ctx context.Context, p *domain.Project) {
 	}
 	summary, err := d.run.RunOnce(ctx, p.ID, digestPrompt(p, state.SinceAt, now, items))
 	if err != nil {
+		slog.Warn("product owner digest run failed; retrying later", "project", p.ID, "error", err)
 		d.mu.Lock()
 		d.retryAt[p.ID] = now.Add(digestRetry)
 		d.mu.Unlock()
@@ -198,10 +200,13 @@ func (d *Digests) tickProject(ctx context.Context, p *domain.Project) {
 	}
 	dig := domain.ProductOwnerDigest{ID: id, ProjectID: p.ID, Date: today, PeriodStart: state.SinceAt, PeriodEnd: now, Summary: summary, Items: items}
 	if err := d.store.SaveDigest(ctx, dig); err != nil {
+		slog.Warn("product owner digest not saved", "project", p.ID, "error", err)
 		return
 	}
 	state.SinceAt, state.CheckedDate = now, today
-	_ = d.store.SaveDigestState(ctx, *state)
+	if err := d.store.SaveDigestState(ctx, *state); err != nil {
+		slog.Warn("product owner digest state not saved", "project", p.ID, "error", err)
+	}
 	if d.feed != nil {
 		d.feed.AnnounceChange(ports.ProjectChange{ProductOwnerDigest: &ports.ProductOwnerDigestChange{ProjectID: p.ID, DigestID: id, Date: today}})
 	}
@@ -220,7 +225,7 @@ func (d *Digests) dueToday(digestTime string, now time.Time) bool {
 // What waits on the person is listed when something changed, and is never a
 // change by itself: a thing that keeps waiting would else be a digest a day.
 func (d *Digests) collect(ctx context.Context, p *domain.Project, since, until time.Time) []domain.ProductOwnerDigestItem {
-	items := append(d.collectTaskMoves(ctx, p, since, until), d.collectSessions(p, since, until)...)
+	items := append(d.collectTaskMoves(ctx, p, since, until), d.collectSessions(ctx, p, since, until)...)
 	if len(items) == 0 {
 		return nil
 	}
@@ -230,12 +235,12 @@ func (d *Digests) collect(ctx context.Context, p *domain.Project, since, until t
 // collectSessions has the project's sessions that finished or failed in the
 // period. Product-owner sessions are not listed: the repository leaves them out
 // of its lists. A session the person stopped is neither.
-func (d *Digests) collectSessions(p *domain.Project, since, until time.Time) []domain.ProductOwnerDigestItem {
+func (d *Digests) collectSessions(ctx context.Context, p *domain.Project, since, until time.Time) []domain.ProductOwnerDigestItem {
 	if d.src.Sessions == nil {
 		return nil
 	}
 	var out []domain.ProductOwnerDigestItem
-	for _, s := range d.src.Sessions.List(context.Background(), ports.SessionFilter{ProjectID: p.ID}) {
+	for _, s := range d.src.Sessions.List(ctx, ports.SessionFilter{ProjectID: p.ID}) {
 		if s.StatusSince.After(until) || !s.StatusSince.After(since) {
 			continue
 		}
