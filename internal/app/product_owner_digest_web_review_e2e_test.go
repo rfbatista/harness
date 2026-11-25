@@ -6,6 +6,7 @@ import (
 	"context"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/chromedp/cdproto/page"
 	"github.com/chromedp/chromedp"
@@ -69,5 +70,48 @@ func TestTypingATimeOverTheDigestTimeSavesOnlyTheTimeTypedInTheWebUI_EndToEnd(t 
 	}
 	if got := p.text(t, `window.__digestTimes.join(',')`); got != "10:45" {
 		t.Errorf("the web UI sent the digest times %s, want only 10:45: each one is a time the scheduler may act on", strings.ReplaceAll(got, ",", ", "))
+	}
+}
+
+// A person types a time and then clicks Clear time, without leaving the
+// input first. The mousedown blurs the input, and the blur saves the typed
+// time. While that save is on its way the button is disabled, so the click
+// that follows is lost. The person asked for no time, and the server ends up
+// holding the one they typed.
+func TestClearTimeRightAfterTypingClearsTheDigestTimeInTheWebUI_EndToEnd(t *testing.T) {
+	w, _ := newPODigestWeb(t)
+	w.setDigestTime("09:00")
+	p := newPerson(t)
+	project := w.url + "/projects/" + w.project
+
+	p.run(t, "the person opens the Settings page with 09:00 set",
+		chromedp.EmulateViewport(1440, 900),
+		chromedp.Navigate(project+"/settings"),
+		waitFor(`!!`+digestInput+` && !`+digestInput+`.disabled && `+digestInput+`.value === '09:00'`),
+	)
+	var box []float64
+	p.run(t, "read the input's box",
+		chromedp.ScrollIntoView(`#digest-time`, chromedp.ByQuery),
+		chromedp.Evaluate(`(() => { const r = `+digestInput+`.getBoundingClientRect(); return [r.left, r.top, r.height]; })()`, &box),
+	)
+	clear := `[...document.querySelectorAll('#product-owner .digest-time button')].find(b => b.textContent.trim() === 'Clear time')`
+	var at []float64
+	p.run(t, "the person types 10:45, then clicks Clear time with the mouse",
+		chromedp.MouseClickXY(box[0]+10, box[1]+box[2]/2),
+		chromedp.KeyEvent("1045"),
+		waitFor(digestInput+`.value === '10:45'`),
+		chromedp.Evaluate(`(() => { const r = `+clear+`.getBoundingClientRect(); return [r.left + r.width / 2, r.top + r.height / 2]; })()`, &at),
+	)
+	p.run(t, "Clear time is clicked",
+		chromedp.MouseClickXY(at[0], at[1]),
+		waitFor(`/no digest is recorded until a time is set|next: /.test(`+digestNote+`) && !`+clear+`?.disabled`),
+	)
+	// The blur's save and the clear answer within this time on the loopback server.
+	p.run(t, "the answers settle",
+		chromedp.Sleep(1500*time.Millisecond),
+		waitFor(`!document.querySelector('#digest-time[aria-busy=true]')`),
+	)
+	if got := w.settings().DigestTime; got != nil {
+		t.Errorf("the server holds the digest time %s after Clear time, want none", *got)
 	}
 }
