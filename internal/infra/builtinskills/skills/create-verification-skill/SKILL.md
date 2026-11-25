@@ -144,21 +144,32 @@ others.
 ## 4. Prove the draft before you propose it
 
 A draft that was never run is a draft, not a deliverable. You prove it with two sessions
-of your own, never by running the application yourself:
+of your own, never by running the application yourself. While you prove, the skill is
+still a draft: no loader prints a base directory for it. So both prompts name the draft
+by its paths, `task/instruction-drafts/<repository>/verify-<app>/` and
+`task/instruction-drafts/<repository>/features-<app>/`, and tell the session to follow
+those files, not any delivered copy. For the proof, `<skill folder>` in a helper command
+is the draft's folder in the virtual shell: the session reads the helper from there and
+runs it through its interpreter.
 
 1. Spawn an **Operator** with `mcp__task__start_task_session`, `mode: "operate"` and
-   the default branch as `base_branch`; it runs the task's branch in the service
-   worktree. Its prompt names the draft's Launch and Doctor
-   sections by path and asks it to launch the application through service requests, run
-   the doctor and report what failed, with the URLs.
-2. Wait for its done report. Fix the draft from what it reports and spawn a new
-   Operator if the launch changed. Answer its questions with `reply_to_session`.
+   the default branch as `base_branch`. Its prompt names the task's branch (the
+   Operator runs that branch in the service worktree), the draft's Launch and Doctor
+   sections by path, and asks it to launch the application through service requests,
+   run the doctor and report what failed, with the URLs.
+2. Wait for its done report. Fix the draft from what it reports. After a failed
+   iteration, have the Operator stop the services it started, by the ids it recorded,
+   before you spawn the next one, so no broken attempt strands a service or a port.
+   Spawn a new Operator if the launch changed. Answer its questions with
+   `reply_to_session`.
 3. Spawn a **QA** with `mode: "qa"` once the Operator reports the application running.
-   Its prompt names `verify-<app>`, one mapped feature file, and the URLs. It drives
-   that one feature, publishes the evidence in `task/designs/` and reports.
+   Its prompt names the draft's `verify-<app>` and one mapped feature file by their
+   draft paths, and the URLs. It drives that one feature from the draft, publishes the
+   evidence in `task/designs/` and reports.
 4. Fix the draft from the QA's report, including every step the QA had to guess.
    Confirm from the report that the evidence still exists after cleanup. Repeat from
-   step 3 until one feature passes by the draft alone.
+   step 3 until one feature passes by the draft alone, then have the Operator stop the
+   services it started.
 
 If you proved the draft in a stand-in for the real target (a local stack in place of a
 remote one), list in the proposal's summary every setup step the stand-in did that the

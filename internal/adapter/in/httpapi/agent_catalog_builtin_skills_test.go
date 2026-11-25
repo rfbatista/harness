@@ -35,6 +35,11 @@ func TestBuiltInSkills_AreListedBesideTheCatalogsWithTheirModes(t *testing.T) {
 		run["has_extra_files"] != true || run["file_count"].(float64) < 2 {
 		t.Errorf("task-run-app = %v", run)
 	}
+	for _, name := range []string{"create-verification-skill", "maintain-verification-skill"} {
+		if got := strList(byName(t, cat["skills"], name)["modes"]); !reflect.DeepEqual(got, []string{"architect"}) {
+			t.Errorf("%s modes = %v, want [architect]", name, got)
+		}
+	}
 	if len(list(run["problems"])) != 0 || run["problems"] == nil {
 		t.Errorf("a built-in skill has no problems: %v", run["problems"])
 	}

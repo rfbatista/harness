@@ -73,8 +73,14 @@ Run the steps in this order.
 4. **Live pass.** Required even when the source looks clean. Spawn an **Operator**
    (`mcp__task__start_task_session`, `mode: "operate"`, default branch as `base_branch`)
    to follow `verify-<app>`'s Launch and Doctor sections, and a **QA** (`mode: "qa"`)
-   once the Operator reports the application running with its URLs. You own the plan;
-   they own all driving. Follow the skill's own launch model: one long-lived instance
+   once the Operator reports the application running with its URLs. Both prompts name
+   the task's branch (the Operator runs it in the service worktree) and the corrected
+   draft's files by their `task/instruction-drafts/<repository>/…` paths. Tell each
+   to follow the draft, never the approved copy llmkit delivered to its own session:
+   the delivered copy is the old one, so a re-driven fix would silently run the old
+   helper. While you prove, `<skill folder>` in a helper command is the draft's folder
+   in the virtual shell, and the session runs the helper from there through its
+   interpreter. You own the plan; they own all driving. Follow the skill's own launch model: one long-lived instance
    driven serially for servers and UIs, or a fresh isolated session per drive for
    short-lived CLIs. The QA exercises every feature at least once, and three things hold
    the whole pass, whatever fails:

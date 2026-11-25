@@ -4,6 +4,7 @@ import (
 	"context"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 
@@ -67,6 +68,24 @@ func TestStartInteractive_ArchitectMode(t *testing.T) {
 	}
 	if strings.Contains(body, "<title>Spec: ") {
 		t.Error("task-architecture SKILL.md carries the Spec template; it belongs to task-to-spec")
+	}
+	// The architect's plugin dir holds exactly these skills, in the mode's order.
+	dir, _ := flag(launch.Args, "--plugin-dir")
+	entries, err := os.ReadDir(filepath.Join(dir, "skills"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	var gotSkills []string
+	for _, e := range entries {
+		gotSkills = append(gotSkills, e.Name())
+	}
+	slices.Sort(gotSkills)
+	wantSkills := []string{"create-verification-skill", "maintain-verification-skill", "task-architecture", "task-grill-with-docs", "task-to-spec"}
+	if !slices.Equal(gotSkills, wantSkills) {
+		t.Errorf("architect plugin-dir skills = %v, want %v", gotSkills, wantSkills)
+	}
+	if sk := pluginSkill(t, launch, "maintain-verification-skill"); !strings.Contains(sk, "name: maintain-verification-skill") {
+		t.Error("an architect session lacks maintain-verification-skill")
 	}
 	// The architect also gets the verification skill with its reference files.
 	if sk := pluginSkill(t, launch, "create-verification-skill"); !strings.Contains(sk, "name: create-verification-skill") {
