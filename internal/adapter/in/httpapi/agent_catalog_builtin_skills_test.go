@@ -11,7 +11,7 @@ import (
 )
 
 var builtInSkillNames = []string{
-	"create-verification-skill", "design-artifacts", "task-architecture", "task-code-review", "task-grill-with-docs", "task-implement-spec",
+	"create-verification-skill", "design-artifacts", "maintain-verification-skill", "task-architecture", "task-code-review", "task-grill-with-docs", "task-implement-spec",
 	"task-operate", "task-product", "task-qa", "task-review", "task-run-app", "task-tdd", "task-test", "task-to-spec",
 }
 

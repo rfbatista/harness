@@ -73,6 +73,7 @@ func TestStartInteractive_ArchitectMode(t *testing.T) {
 		t.Error("an architect session lacks create-verification-skill")
 	}
 	pluginFile(t, launch, "create-verification-skill", "LICENSE")
+	pluginFile(t, launch, "maintain-verification-skill", "LICENSE")
 	pluginFile(t, launch, "create-verification-skill", "references/feature-map-example/search.md")
 	prompt := launch.Spec.Prompt
 	for _, want := range []string{"task-architecture skill", "tk1: Ship the thing", "Users export their data as CSV.", "task/comments/",
