@@ -280,4 +280,20 @@ describe("the Digests tab", () => {
     await settled();
     assert.equal(tab.viewModel.rows.filter((r) => r.kind === "digest").length, 1);
   });
+
+  test("a digest recorded moves the next run: the settings are read again with the digests", async () => {
+    const server = memoryProductOwner();
+    server.seedProject("p1", true);
+    await server.updateSettings("p1", { digestTime: "09:00" });
+    const events = { follow: (projectId: string, onEvent: Parameters<typeof server.follow>[1], onStatus: Parameters<typeof server.follow>[2]) => server.follow(projectId, (e) => e.type !== "settings" && onEvent(e), onStatus) };
+    const digests = new ProjectDigests({ gateway: server, events });
+    const tab = new DigestsTabPresenter(digests, "p1", { now: () => NOW });
+    digests.attach("p1");
+    await settled();
+    assert.equal(tab.viewModel.head, "Next: Tue 24 Nov, 09:00");
+    await server.updateSettings("p1", { digestTime: "10:00" });
+    server.recordDigest("p1", digest("2026-11-23"));
+    await settled();
+    assert.equal(tab.viewModel.head, "Next: Tue 24 Nov, 10:00");
+  });
 });

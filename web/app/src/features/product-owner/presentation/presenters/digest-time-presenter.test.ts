@@ -125,4 +125,22 @@ describe("the Daily digest block", () => {
     await settled();
     assert.equal(block.viewModel.state, "ready");
   });
+
+  test("reads the settings again when a digest is recorded, as no settings event says the next run moved", async () => {
+    const server = memoryProductOwner();
+    server.seedProject("p1", true);
+    await server.updateSettings("p1", { digestTime: "09:00" });
+    // The page hears no settings event: the server's settings change on their own, and only a digest event tells the page to look.
+    const events = { follow: (projectId: string, onEvent: Parameters<typeof server.follow>[1], onStatus: Parameters<typeof server.follow>[2]) => server.follow(projectId, (e) => e.type !== "settings" && onEvent(e), onStatus) };
+    const digestTime = new DigestTime({ gateway: server, events });
+    const block = new DigestTimePresenter(digestTime, "p1", { now: () => MORNING });
+    digestTime.attach("p1");
+    await settled();
+    await server.updateSettings("p1", { digestTime: "10:00" });
+    await settled();
+    assert.equal(block.viewModel.value, "09:00");
+    server.recordDigest("p1", { digestId: "d", date: "2026-11-23", periodStart: new Date(), periodEnd: new Date(), summary: "", items: [] });
+    await settled();
+    assert.equal(block.viewModel.value, "10:00");
+  });
 });

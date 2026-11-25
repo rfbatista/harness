@@ -130,9 +130,10 @@ export class ProjectDigests {
   /** Reads the newest page again, for a digest that was recorded: it joins or replaces the digests held, and nothing held moves. */
   async #refresh(generation: number): Promise<void> {
     try {
-      const page = await this.#deps.gateway.digests(this.#projectId);
+      // The settings too: the next run moves when a digest is recorded, and no settings event says so.
+      const [settings, page] = await Promise.all([this.#deps.gateway.settings(this.#projectId), this.#deps.gateway.digests(this.#projectId)]);
       // Earlier digests exist beyond the oldest held exactly when they did before: a new digest is only ever newer.
-      if (generation === this.#generation) this.#set({ digests: merge(this.#state.digests, page.digests), hasEarlier: this.#state.loaded ? this.#state.hasEarlier : page.hasEarlier });
+      if (generation === this.#generation) this.#set({ enabled: settings.enabled, digestTime: settings.digestTime, timeZone: settings.timeZone, digests: merge(this.#state.digests, page.digests), hasEarlier: this.#state.loaded ? this.#state.hasEarlier : page.hasEarlier });
     } catch (err) {
       if (!(err instanceof ProductOwnerError)) throw err;
     }

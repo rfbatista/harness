@@ -57,6 +57,8 @@ export class DigestTime {
       projectId,
       (event) => {
         if (event.type === "settings") this.#set({ loaded: true, enabled: event.settings.enabled, digestTime: event.settings.digestTime, timeZone: event.settings.timeZone });
+        // The next run moves when a digest is recorded, and no settings event says so.
+        else if (event.type === "digest") void this.#read(generation);
       },
       (status: FeedStatus) => {
         if (status === "resynced") void this.#read(generation);
