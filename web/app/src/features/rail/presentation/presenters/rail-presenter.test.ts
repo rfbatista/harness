@@ -265,6 +265,14 @@ describe("the project navigation", () => {
     assert.equal(vm().newTaskHref, "/projects/p1/tasks/new");
   });
 
+  test("Product owner is the last row, after Usage, and current on its page; a page the server does not serve has no row", () => {
+    const { presenter, vm } = setup();
+    assert.equal(vm().nav.at(-1)?.label, "Product owner");
+    presenter.setPage("product-owner");
+    assert.deepEqual(vm().nav.filter((i) => i.current).map((i) => i.key), ["product-owner"]);
+    assert.equal(vm().nav.some((i) => i.label === "Usage"), false, "usageHref is empty in this project");
+  });
+
   test("the Review requests badge follows the feed", () => {
     const { feed, vm } = setup({ tasks: [task()] });
     assert.equal(vm().nav.find((i) => i.key === "reviews")?.badge, "");

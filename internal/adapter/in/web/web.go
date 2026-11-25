@@ -450,7 +450,7 @@ func (s *server) layout(ctx context.Context, title, projectID, taskID string) (s
 	if err != nil {
 		return shell.Frame{}, err
 	}
-	frame.Rail = tasks.BuildRail(projectID, list, live, taskID, shell.CollapsedFrom(ctx))
+	frame.Rail = tasks.BuildRail(projectID, list, live, taskID)
 	if s.deps.ArchivedTasks != nil {
 		if frame.Rail.Seed.ArchivedCount, err = s.deps.ArchivedTasks.ArchivedTaskCount(ctx, projectID); err != nil {
 			return shell.Frame{}, err

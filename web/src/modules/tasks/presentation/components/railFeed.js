@@ -3,9 +3,8 @@
 // per-task activity, the archived count and the latest status moves. The
 // board, the archived and feature pages and the task editor read that store,
 // and the page hears the feed through the `task-changed`, `feed-change` and
-// `feed-status` window events. It draws nothing: the rail is drawn from the
-// server's seed and the feed by the React island, which does not read this
-// store (ADR 0002).
+// `feed-status` window events. It draws nothing: the rail is a React island
+// that follows the same feed on its own and does not read this store (ADR 0002).
 //
 //   <div hidden x-data="tasksRailFeed" data-seed="rail-seed" data-reports-feed></div>
 //
@@ -25,10 +24,8 @@ import { applyTaskChange, onBoard } from "../../domain/board.js";
  *   tasks: import("../../domain/task.js").Task[],
  *   seeded: boolean,
  *   projectId?: string,
- *   drawerOpen: boolean,  the phone drawer is open (the old rail's; the island keeps its own)
  *   statusChanges?: Record<string, import("../../domain/board.js").StatusChange>,  the latest move per task seen over the feed
  *   archivedCount?: number,  the project's archived tasks, for "Archived (N)"
- *   observer?: { before(change: object): void, after(change: object, previous: object | null): void },  the old rail's view of each change, until the island replaces it
  * }} RailStore
  */
 
@@ -92,11 +89,9 @@ export const railFeed = ({ gateway, store }) => () => {
         store.statusChanges = { ...store.statusChanges, [change.change.taskId]: change.change };
         return;
       }
-      store.observer?.before(change);
-      let previous = null;
       if (change.kind === "task-upsert" || change.kind === "task-deleted") {
         const id = change.kind === "task-deleted" ? change.id : change.task.id;
-        previous = store.tasks.find((t) => t.id === id) ?? null;
+        const previous = store.tasks.find((t) => t.id === id) ?? null;
         store.tasks = applyTaskChange(store.tasks, change);
         this.countArchived(change, previous);
         this.$dispatch("task-changed", { change, previous });
@@ -104,7 +99,6 @@ export const railFeed = ({ gateway, store }) => () => {
         sessions = applyRailChange(sessions, change);
         this.recount();
       }
-      store.observer?.after(change, previous);
     },
 
     /**
@@ -170,7 +164,6 @@ export const railFeed = ({ gateway, store }) => () => {
       store.seeded = false;
       store.statusChanges = {};
       store.archivedCount = 0;
-      store.drawerOpen = false;
     },
   };
 };

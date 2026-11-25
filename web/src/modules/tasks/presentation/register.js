@@ -6,7 +6,6 @@ import { documentScope } from "./components/documentScope.js";
 import { documentWatch } from "./components/documentWatch.js";
 import { feature } from "./components/feature.js";
 import { newTask } from "./components/newTask.js";
-import { rail, railToggle } from "./components/rail.js";
 import { railFeed } from "./components/railFeed.js";
 import { resourceWatch } from "./components/resourceWatch.js";
 import { taskEditor } from "./components/taskEditor.js";
@@ -17,7 +16,6 @@ import { taskResources } from "./components/taskResources.js";
  * @param {{
  *   gateway: import("../domain/ports.js").TaskGateway,
  *   rail: import("../domain/ports.js").RailGateway,
- *   railPrefs: import("../domain/ports.js").RailPrefs,
  *   prefs: import("../../../shared/infrastructure/storage.js").Preferences,  the browser's own choices (localStorage)
  *   navigate: (url: string) => void,
  *   reload: () => void,
@@ -33,13 +31,11 @@ export function registerTasks(Alpine, deps) {
   Alpine.data("tasksResources", taskResources(deps));
   Alpine.data("tasksResourceWatch", resourceWatch(deps));
 
-  // The project's live model, shared by the rail, its links and the board.
-  Alpine.store("tasksRail", { byTask: {}, tasks: [], seeded: false, drawerOpen: false, statusChanges: {}, archivedCount: 0 });
+  // The project's live model, kept by the headless feed owner and read by the board, the archived and feature pages and the task editor.
+  Alpine.store("tasksRail", { byTask: {}, tasks: [], seeded: false, statusChanges: {}, archivedCount: 0 });
   const store = Alpine.store("tasksRail");
   Alpine.data("tasksTaskEditor", taskEditor({ ...deps, store }));
   Alpine.data("tasksRailFeed", railFeed({ gateway: deps.rail, store }));
-  Alpine.data("tasksRail", rail({ store, prefs: deps.railPrefs, browserPrefs: deps.prefs, navigate: deps.navigate }));
-  Alpine.data("tasksRailToggle", railToggle({ store }));
   Alpine.data("tasksBoard", board({ gateway: deps.gateway, store, prefs: deps.prefs, clock: deps.clock }));
   Alpine.data("tasksArchived", archived({ gateway: deps.gateway }));
   Alpine.data("tasksFeature", feature({ store }));

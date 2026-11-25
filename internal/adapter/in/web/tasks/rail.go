@@ -1,30 +1,15 @@
-// Package tasks serves the project and task pages, and builds the rail: the
-// selected project's tasks (tickets) in kanban order, each with its live
+// Package tasks serves the project and task pages, and builds what the rail
+// island starts from: the selected project's tasks (tickets) and their live
 // sessions. A task can run several sessions at once.
 package tasks
 
 import (
 	"net/url"
-	"slices"
 
 	"operators-mcp/internal/adapter/in/web/sessions"
 	"operators-mcp/internal/adapter/in/web/shell"
 	"operators-mcp/internal/domain"
 )
-
-// kanban is the rail's group order: what is moving first, done last (as the
-// TUI's tasks screen orders them).
-var kanban = []domain.TicketStatus{
-	domain.TicketStatusInProgress,
-	domain.TicketStatusReview,
-	domain.TicketStatusTodo,
-	domain.TicketStatusBacklog,
-	domain.TicketStatusDone,
-}
-
-// DoneCap is how many done tasks the rail shows before "Show N more"; the
-// browser's is DONE_CAP in web/src/modules/tasks/domain/rail.js.
-const DoneCap = 5
 
 // BoardHref is the project's board.
 func BoardHref(projectID string) string {
@@ -90,121 +75,22 @@ func seed(projectID string, tasks []*domain.Ticket, list []*domain.Session) *she
 	return s
 }
 
-// BuildRail groups a project's tasks by status and marks, per task, how many
-// sessions are live and whether one waits on the developer. Sessions without a
-// task are not on the rail. Every known status has its group, empty or not;
-// collapsed holds the groups the person folded (shell.ParseCollapsed). The
-// seed is always there, so the browser follows the project even before its
-// first task. Archived tasks are not on the rail. Its seed carries them only
-// as a child archived on its own, which the board lists inside its feature's
-// card. A feature task's children are nested under its row (ADR 0058), not in
-// groups of their own.
-func BuildRail(projectID string, tasks []*domain.Ticket, list []*domain.Session, currentTaskID string, collapsed map[string]bool) shell.Rail {
+// BuildRail is what the rail island starts from: the seed (the project's
+// sessions on tasks and its tasks) and the open task. The island groups the
+// tasks itself (web/app/src/features/rail), by the rules the board's first paint
+// shares. The seed is always there, so the browser follows the project even
+// before its first task. Archived tasks are not on the rail: the seed carries
+// them only as a child archived on its own, which the board lists inside its
+// feature's card. Empty says the project has no task yet.
+func BuildRail(projectID string, tasks []*domain.Ticket, list []*domain.Session, currentTaskID string) shell.Rail {
 	rail := shell.Rail{Seed: seed(projectID, onBoard(tasks), list), Current: currentTaskID}
-	tasks = unarchived(tasks)
-	if len(tasks) == 0 {
+	if len(unarchived(tasks)) == 0 {
 		rail.Empty = "No tasks yet."
-		return rail
-	}
-	for _, t := range tasks {
-		rail.Reviews += t.PendingReviews
-	}
-	byTask := activityByTask(list)
-	listed := map[string]bool{}
-	for _, t := range tasks {
-		listed[t.ID] = true
-	}
-	kids := map[string][]*domain.Ticket{}
-	byStatus := map[domain.TicketStatus][]*domain.Ticket{}
-	var other []*domain.Ticket
-	for _, t := range tasks {
-		if t.ParentID != "" && listed[t.ParentID] {
-			kids[t.ParentID] = append(kids[t.ParentID], t)
-			continue
-		}
-		if known(t.Status) {
-			byStatus[t.Status] = append(byStatus[t.Status], t)
-		} else {
-			other = append(other, t)
-		}
-	}
-	links := func(ts []*domain.Ticket) []shell.Link {
-		out := make([]shell.Link, 0, len(ts))
-		for _, t := range ts {
-			out = append(out, railRow(projectID, t, kids[t.ID], byTask, currentTaskID))
-		}
-		return out
-	}
-	for _, st := range kanban {
-		g := shell.RailGroup{Label: statusLabel(st), Key: string(st), Total: len(byStatus[st])}
-		if st == domain.TicketStatusDone {
-			g.Links, g.More = capDone(links(byDoneOrder(byStatus[st])))
-		} else {
-			g.Links = links(byStatus[st])
-		}
-		g.Collapsed = collapsed[g.Key] && g.Total > 0
-		rail.Groups = append(rail.Groups, g)
-	}
-	if len(other) > 0 {
-		rail.Groups = append(rail.Groups, shell.RailGroup{Label: "Other", Key: "other", Total: len(other), Collapsed: collapsed["other"], Links: links(other)})
 	}
 	return rail
 }
 
-// byDoneOrder is the most recently updated first; ties keep creation order.
-func byDoneOrder(ts []*domain.Ticket) []*domain.Ticket {
-	out := slices.Clone(ts)
-	slices.SortStableFunc(out, func(a, b *domain.Ticket) int { return b.UpdatedAt.Compare(a.UpdatedAt) })
-	return out
-}
-
-// capDone splits Done at DoneCap. The open task and the tasks that need the
-// person stay shown whatever their age: the rail never hides them.
-func capDone(all []shell.Link) (shown, more []shell.Link) {
-	for i, l := range all {
-		if i < DoneCap || l.Current || l.Attention {
-			shown = append(shown, l)
-		} else {
-			more = append(more, l)
-		}
-	}
-	return shown, more
-}
-
-func statusLabel(st domain.TicketStatus) string {
-	for _, s := range Statuses {
-		if s.Value == string(st) {
-			return s.Label
-		}
-	}
-	return string(st)
-}
-
-// railRow is a task's row. A feature task's carries its children, nested,
-// and its signals cover it and all of them, as the browser's toRow
-// (railView.js) draws a folded feature.
-func railRow(projectID string, t *domain.Ticket, kids []*domain.Ticket, byTask map[string]activity, currentTaskID string) shell.Link {
-	l := card(projectID, t, byTask, currentTaskID)
-	slices.SortStableFunc(kids, func(a, b *domain.Ticket) int {
-		if d := childRank(string(a.Status)) - childRank(string(b.Status)); d != 0 {
-			return d
-		}
-		return b.StatusSince.Compare(a.StatusSince)
-	})
-	for _, k := range kids {
-		kl := card(projectID, k, byTask, currentTaskID)
-		// A child has no merge badge on the rail: its status takes the slot.
-		kl.Merge, kl.MergeText = "", ""
-		kl.StatusWord, kl.StatusKey = statusLabel(k.Status), string(k.Status)
-		l.Kids = append(l.Kids, kl)
-		l.Live += kl.Live
-		l.Reviews += kl.Reviews
-		l.Attention = l.Attention || kl.Attention
-	}
-	return l
-}
-
-// card is a task as the rail links it and the board draws it.
+// card is a task as the board draws it.
 func card(projectID string, t *domain.Ticket, byTask map[string]activity, currentTaskID string) shell.Link {
 	a := byTask[t.ID]
 	l := shell.Link{
@@ -222,11 +108,11 @@ func card(projectID string, t *domain.Ticket, byTask map[string]activity, curren
 	return l
 }
 
-func known(s domain.TicketStatus) bool {
-	for _, k := range kanban {
-		if k == s {
-			return true
+func statusLabel(st domain.TicketStatus) string {
+	for _, s := range Statuses {
+		if s.Value == string(st) {
+			return s.Label
 		}
 	}
-	return false
+	return string(st)
 }
