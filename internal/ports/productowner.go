@@ -34,6 +34,22 @@ type ProductOwnerStore interface {
 	// ones before the item beforeID (the thread's end when empty). hasEarlier
 	// says items exist before the first one answered.
 	Items(ctx context.Context, threadID, beforeID string, limit int) (items []domain.ProductOwnerItem, hasEarlier bool, err error)
+
+	// MemoryEntries are a project's entries, the newest saved first.
+	MemoryEntries(ctx context.Context, projectID string) ([]domain.MemoryEntry, error)
+	// MemoryEntry answers MEMORY_ENTRY_NOT_FOUND for an unknown id.
+	MemoryEntry(ctx context.Context, id string) (*domain.MemoryEntry, error)
+	// ApplyMemoryChange stores a change to the project's entries and appends it
+	// to the project's memory log, in one transaction. For a save the entry is
+	// new; for a change it replaces the stored one; for a drop it is removed.
+	// It answers the log line, with its version.
+	ApplyMemoryChange(ctx context.Context, entry domain.MemoryEntry, change domain.MemoryChange) (domain.MemoryChange, error)
+	// MemoryVersion is the version of the project's last memory change, 0 when
+	// it has none.
+	MemoryVersion(ctx context.Context, projectID string) (int64, error)
+	// MemoryChangesSince are the project's memory log lines after version,
+	// oldest first.
+	MemoryChangesSince(ctx context.Context, projectID string, version int64) ([]domain.MemoryChange, error)
 }
 
 // ProductOwnerSettingsView are a project's settings as the person reads them.

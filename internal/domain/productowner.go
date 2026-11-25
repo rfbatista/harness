@@ -81,6 +81,10 @@ type ProductOwnerThread struct {
 	// keeps them while the project's settings change (ADR 0099).
 	AgentID string `json:"-"`
 	Prompt  string `json:"-"`
+	// MemoryOpened says the thread has been handed the project's memory (ADR
+	// 0111); MemorySeen is the memory version it was handed or last told of.
+	MemoryOpened bool  `json:"-"`
+	MemorySeen   int64 `json:"-"`
 }
 
 // Kinds of thread item. Later pieces add kinds; the thread store keeps each
@@ -90,6 +94,9 @@ const (
 	ProductOwnerItemActivity = "activity"
 	ProductOwnerItemNotice   = "notice"
 	ProductOwnerItemFailure  = "failure"
+	// ProductOwnerItemMemoryNote says the product owner saved, changed or
+	// dropped a memory entry (ADR 0111).
+	ProductOwnerItemMemoryNote = "memory_note"
 )
 
 // Authors of a message item.
@@ -116,6 +123,10 @@ type ProductOwnerItem struct {
 	// message to send again.
 	Code        string `json:"code,omitempty"`
 	RetryItemID string `json:"retry_item_id,omitempty"`
+	// A memory note's fields (its text is the entry's): Op is saved, changed or
+	// dropped.
+	Op      string `json:"op,omitempty"`
+	EntryID string `json:"entry_id,omitempty"`
 }
 
 // ProductOwnerMaxTitle bounds a thread title the person sets, in characters.
