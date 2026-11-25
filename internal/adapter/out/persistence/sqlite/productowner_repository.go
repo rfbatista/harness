@@ -231,6 +231,26 @@ func (r *ProductOwnerRepository) PendingHeldActions(ctx context.Context) ([]doma
 	return out, nil
 }
 
+// AnsweredHeldActions implements ports.ProductOwnerStore.
+func (r *ProductOwnerRepository) AnsweredHeldActions(ctx context.Context, threadID string) ([]domain.ProductOwnerItem, error) {
+	var ms []ProductOwnerItemModel
+	err := r.db.WithContext(ctx).Where(`thread_id = ? AND body LIKE '%"kind":"held_action"%' AND body NOT LIKE '%"state":"pending"%' AND body NOT LIKE '%"told":true%'`, threadID).Order("seq").Find(&ms).Error
+	if err != nil {
+		return nil, err
+	}
+	out := make([]domain.ProductOwnerItem, 0, len(ms))
+	for _, m := range ms {
+		item, err := m.domain()
+		if err != nil {
+			return nil, err
+		}
+		if item.Kind == domain.ProductOwnerItemHeldAction && item.State != domain.HeldActionPending && item.Held != nil && !item.Held.Told {
+			out = append(out, item)
+		}
+	}
+	return out, nil
+}
+
 // Item implements ports.ProductOwnerStore.
 func (r *ProductOwnerRepository) Item(ctx context.Context, id string) (*domain.ProductOwnerItem, error) {
 	var m ProductOwnerItemModel

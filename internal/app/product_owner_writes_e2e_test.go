@@ -640,3 +640,18 @@ func TestAConfirmAfterThePersonChangedTheTaskDoesNotOverwriteItAndReadsExpired(t
 		t.Errorf("after a stale confirm: %+v pending %d", held, e.pendingHeld(threadID))
 	}
 }
+
+func TestAnArchiveOfAFeatureNamesItsChildrenInTheCard(t *testing.T) {
+	e := newPOE2E(t)
+	threadID, owner := e.ownerSession()
+	feature := e.doneTask("Feature")
+	for _, title := range []string{"One", "Two", "Three"} {
+		if _, err := e.plan.CreateTicket(e.ctx, e.project, title, "", domain.TicketStatusBacklog, feature.ID); err != nil {
+			t.Fatal(err)
+		}
+	}
+	e.call(owner, "archive_task", map[string]any{"task_id": feature.ID})
+	if held := e.heldActions(threadID); len(held) != 1 || !strings.Contains(held[0].Summary, "and its 3 child tasks") {
+		t.Fatalf("the card = %+v, want it to name the 3 children", held)
+	}
+}

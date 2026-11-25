@@ -14,6 +14,10 @@ func refuseProductOwner(sh *root, ed edit) ports.ShellAnswer {
 			}
 		}
 	}
+	// A move from inside to outside takes the document away: a delete.
+	if ed.op == "mv" && len(ed.rel) == 2 && ed.in[0] && !ed.in[1] {
+		return refuse("PRODUCT_OWNER_NO_DELETE", "the product owner never deletes a document: moving "+ed.rel[0]+" out of the shell would remove it; it was kept")
+	}
 	for i, rel := range ed.rel {
 		if !ed.in[i] {
 			continue

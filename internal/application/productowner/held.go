@@ -218,17 +218,12 @@ func (s *Service) WatchHeldActions(ctx context.Context) {
 // heldAnswers are the lines that tell the product owner what the person
 // answered since its last turn, and the items they come from.
 func (s *Service) heldAnswers(ctx context.Context, threadID string) (string, []domain.ProductOwnerItem) {
-	items, _, err := s.store.Items(ctx, threadID, "", domain.ProductOwnerThreadPage)
+	told, err := s.store.AnsweredHeldActions(ctx, threadID)
 	if err != nil {
 		return "", nil
 	}
-	var told []domain.ProductOwnerItem
 	var b strings.Builder
-	for _, it := range items {
-		if it.Kind != domain.ProductOwnerItemHeldAction || it.State == domain.HeldActionPending || it.Held == nil || it.Held.Told {
-			continue
-		}
-		told = append(told, it)
+	for _, it := range told {
 		b.WriteString("- " + strings.ReplaceAll(it.Summary, `"`, "'") + ": the person " + heldOutcome[it.State] + "\n")
 	}
 	if told == nil {

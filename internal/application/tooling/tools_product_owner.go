@@ -3,6 +3,7 @@ package tooling
 import (
 	"context"
 	"slices"
+	"strconv"
 	"strings"
 
 	"operators-mcp/internal/domain"
@@ -11,10 +12,11 @@ import (
 
 // ProductOwnerToolNames are the tools a product-owner thread may call, in
 // order: a mode allow-list (ADR 0109). The first four are task tools every
-// session has; the rest are the product owner's own reads. None starts a
-// session, moves a branch, pushes, merges or writes, and the endpoint serves
-// a product-owner session no other tool, so the line is held by the server,
-// not by the prompt.
+// session has; then the product owner's own reads, its memory tools, and its
+// task writes (create_task, update_task, archive_task). None starts a
+// session, moves a branch, pushes, merges, moves a task to done or deletes,
+// and the endpoint serves a product-owner session no other tool, so the line
+// is held by the server, not by the prompt.
 var ProductOwnerToolNames = []string{
 	"list_project_tasks",
 	"list_project_repositories",
@@ -95,8 +97,12 @@ func productOwnerWrites(src ProductOwnerSources) []domain.Tool {
 				if tk.ArchivedAt != nil {
 					return nil, &domain.StructuredError{Code: "TASK_ARCHIVED", Message: "TASK_ARCHIVED: the task is archived already"}
 				}
+				summary := "Archive the task \"" + tk.Title + "\""
+				if kids, err := src.Tasks.ListTickets(ctx, sess.ProjectID, ports.TicketFilter{ParentID: &id}); err == nil && len(kids) > 0 {
+					summary += " and its " + strconv.Itoa(len(kids)) + " child tasks"
+				}
 				item, err := src.Holds.HoldAction(ctx, sess.ID, domain.HeldAction{Kind: domain.HeldActionArchiveTask, TaskID: id},
-					"Archive the task \""+tk.Title+"\"", domain.HeldTarget{Kind: "task", ID: id, Title: tk.Title, URL: "/projects/" + tk.ProjectID + "/tasks/" + id})
+					summary, domain.HeldTarget{Kind: "task", ID: id, Title: tk.Title, URL: "/projects/" + tk.ProjectID + "/tasks/" + id})
 				if err != nil {
 					return nil, err
 				}

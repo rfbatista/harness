@@ -1,8 +1,8 @@
 package ports
 
 import (
-	"errors"
 	"context"
+	"errors"
 
 	"operators-mcp/internal/domain"
 )
@@ -34,6 +34,10 @@ type ProductOwnerStore interface {
 	// PendingHeldActions are the held action items still waiting, in every
 	// thread, oldest first.
 	PendingHeldActions(ctx context.Context) ([]domain.ProductOwnerItem, error)
+	// AnsweredHeldActions are the held action items of a thread the person
+	// answered (or that expired) and the product owner was not yet told of,
+	// whatever their place in the thread, oldest first.
+	AnsweredHeldActions(ctx context.Context, threadID string) ([]domain.ProductOwnerItem, error)
 	// Item answers one item by id, nil when there is none.
 	Item(ctx context.Context, id string) (*domain.ProductOwnerItem, error)
 	// Items are a thread's items, oldest first: at most limit, the newest
