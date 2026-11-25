@@ -3,9 +3,16 @@
 import { ProductOwnerEventDto } from "../infrastructure/dto/event-dto";
 import { SettingsDto } from "../infrastructure/dto/settings-dto";
 import { ThreadHeadDto, ThreadItemDto, ThreadSummaryDto } from "../infrastructure/dto/thread-dto";
+import type { Digest, DigestPage } from "../domain/digest";
+import { DigestDto, DigestItemDto } from "../infrastructure/dto/digest-dto";
 import type { ProductOwnerEvent, Settings, ThreadItem, ThreadSummary } from "../domain/thread";
 
-export const settingsWire = (s: Settings): unknown => new SettingsDto(s.projectId, s.enabled).toJSON();
+export const settingsWire = (s: Settings): unknown => new SettingsDto(s.projectId, s.enabled, s.digestTime, s.timeZone).toJSON();
+
+export const digestWire = (d: Digest): unknown =>
+  new DigestDto(d.digestId, d.date, d.periodStart, d.periodEnd, d.summary, d.items.map((i) => new DigestItemDto(i.kind, i.title, i.url, i.from ?? undefined, i.to ?? undefined))).toJSON();
+
+export const digestPageWire = (p: DigestPage): unknown => ({ digests: p.digests.map(digestWire), has_earlier: p.hasEarlier });
 
 export const summaryWire = (t: ThreadSummary): unknown => new ThreadSummaryDto(t.threadId, t.title, t.startedAt, t.lastActivityAt, t.lastMessageExcerpt, t.titleSetByPerson, t.turn, t.pendingHeldActions).toJSON();
 
@@ -36,6 +43,8 @@ export function eventWire(projectId: string, e: ProductOwnerEvent): unknown {
       return { product_owner_thread: { project_id: projectId, thread: summaryWire(e.thread) } };
     case "settings":
       return { product_owner_settings: { project_id: projectId, settings: settingsWire(e.settings) } };
+    case "digest":
+      return { product_owner_digest: { project_id: projectId, digest_id: e.digestId, date: e.date } };
   }
 }
 

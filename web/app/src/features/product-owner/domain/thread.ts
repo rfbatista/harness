@@ -11,6 +11,10 @@ export const isAnswering = (turn: Turn): boolean => turn !== "idle";
 export interface Settings {
   readonly projectId: string;
   readonly enabled: boolean;
+  /** "HH:MM" in the server's time zone; null while no digest time is set: no digest is then recorded. */
+  readonly digestTime: string | null;
+  /** The server's time zone, read-only. */
+  readonly timeZone: string;
 }
 
 export interface ThreadSummary {
@@ -95,4 +99,6 @@ export type ProductOwnerEvent =
   | { readonly type: "item"; readonly threadId: string; readonly item: ThreadItem }
   | { readonly type: "delta"; readonly threadId: string; readonly itemId: string; readonly text: string }
   | { readonly type: "thread"; readonly thread: ThreadSummary }
-  | { readonly type: "settings"; readonly settings: Settings };
+  | { readonly type: "settings"; readonly settings: Settings }
+  /** A digest was recorded, or changed, for `date`. */
+  | { readonly type: "digest"; readonly digestId: string; readonly date: string };

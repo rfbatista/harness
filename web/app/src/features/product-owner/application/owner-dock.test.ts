@@ -29,9 +29,9 @@ describe("the dock", () => {
     await settled();
     assert.equal(dock.state.projectId, "p1");
     assert.equal(dock.state.enabled, true);
-    server.publish("p1", { type: "settings", settings: { projectId: "p1", enabled: false } });
+    server.publish("p1", { type: "settings", settings: { projectId: "p1", enabled: false, digestTime: null, timeZone: "UTC" } });
     assert.equal(dock.state.enabled, false);
-    server.publish("p2", { type: "settings", settings: { projectId: "p2", enabled: true } });
+    server.publish("p2", { type: "settings", settings: { projectId: "p2", enabled: true, digestTime: null, timeZone: "UTC" } });
     assert.equal(dock.state.enabled, false);
   });
 
@@ -128,7 +128,7 @@ describe("the dock", () => {
     const { dock, server } = setup();
     dock.bind("p1");
     await settled();
-    server.publish("p1", { type: "settings", settings: { projectId: "p1", enabled: false } });
+    server.publish("p1", { type: "settings", settings: { projectId: "p1", enabled: false, digestTime: null, timeZone: "UTC" } });
     server.setStatus("paused");
     await server.setEnabled("p1", true).then(() => {});
     server.setStatus("resynced");

@@ -4,7 +4,7 @@
 import type { FetchLike } from "../../../shared/infrastructure/api-client";
 import { ProductOwnerError } from "../application/ports";
 import type { MemoryProductOwner } from "../infrastructure/memory-product-owner";
-import { headWire, itemWire, settingsWire, summaryWire } from "./wire";
+import { digestPageWire, headWire, itemWire, settingsWire, summaryWire } from "./wire";
 
 const json = (status: number, body: unknown) => new Response(JSON.stringify(body), { status, headers: { "Content-Type": "application/json" } });
 
@@ -45,7 +45,15 @@ export function fakeProductOwnerServer(data: MemoryProductOwner): FakeServer {
           case "GET /api/product_owner":
             return json(200, settingsWire(await data.settings(q("project_id"))));
           case "POST /api/update_product_owner":
-            return json(200, settingsWire(await data.setEnabled(String(body.project_id), body.enabled === true)));
+          {
+            // Only the fields sent change.
+            const projectId = String(body.project_id);
+            if (body.enabled !== undefined) await data.setEnabled(projectId, body.enabled === true);
+            if (body.digest_time !== undefined) await data.updateSettings(projectId, { digestTime: String(body.digest_time) });
+            return json(200, settingsWire(await data.settings(projectId)));
+          }
+          case "GET /api/product_owner_digests":
+            return json(200, digestPageWire(await data.digests(q("project_id"), target.searchParams.get("before") ?? undefined)));
           case "GET /api/product_owner_threads":
             return json(200, { threads: (await data.threads(q("project_id"))).map(summaryWire) });
           case "GET /api/product_owner_thread": {

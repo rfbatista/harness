@@ -5,6 +5,7 @@ import { memoryFeed } from "../../../shared/infrastructure/memory-feed";
 import { ProductOwnerError } from "../application/ports";
 import { fakeProductOwnerServer } from "../testing/fake-server";
 import { message, person } from "../testing/fixtures";
+import { digestContract } from "../testing/digest-contract";
 import { productOwnerContract } from "../testing/product-owner-contract";
 import { eventWire, itemWire } from "../testing/wire";
 import { eventsPath, httpProductOwner } from "./http-product-owner";
@@ -32,6 +33,16 @@ productOwnerContract("HTTP adapter against a fake server on the wire", () => {
 });
 
 productOwnerContract("in-memory adapter", () => {
+  const server = memoryProductOwner();
+  return { server, gateway: server, events: server };
+});
+
+digestContract("HTTP adapter against a fake server on the wire", () => {
+  const { server, gateway, events } = http();
+  return { server, gateway, events };
+});
+
+digestContract("in-memory adapter", () => {
   const server = memoryProductOwner();
   return { server, gateway: server, events: server };
 });

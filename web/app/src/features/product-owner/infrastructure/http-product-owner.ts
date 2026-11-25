@@ -4,11 +4,12 @@ import { ApiError, type ApiClient } from "../../../shared/infrastructure/api-cli
 import { DtoError } from "../../../shared/infrastructure/dto/dto-error";
 import type { Feed } from "../../../shared/kernel/feed";
 import { ProductOwnerError, type ProductOwnerErrorCode, type ProductOwnerEvents, type ProductOwnerGateway } from "../application/ports";
+import { DigestListDto } from "./dto/digest-dto";
 import { ProductOwnerEventDto } from "./dto/event-dto";
 import { RenameThreadRequestDto, SendMessageRequestDto, SentDto, StartedDto, StartThreadRequestDto, ThreadRequestDto } from "./dto/request-dto";
 import { SettingsDto, UpdateSettingsRequestDto } from "./dto/settings-dto";
 import { ThreadListDto, ThreadPageDto, ThreadSummaryDto } from "./dto/thread-dto";
-import { toEvent, toPage, toSettings, toSummary } from "./thread-mapper";
+import { toDigestPage, toEvent, toPage, toSettings, toSummary } from "./thread-mapper";
 
 /** The project's event feed on the page stream: the product owner's events are some of what it carries. */
 export const eventsPath = (projectId: string): string => `/events?project_id=${encodeURIComponent(projectId)}`;
@@ -29,6 +30,8 @@ export function httpProductOwner(api: ApiClient, feed: Feed): ProductOwnerGatewa
   return {
     settings: (projectId, signal) => mapErrors(async () => toSettings(SettingsDto.fromJSON(await api.get("/product_owner", { project_id: projectId }, signal)))),
     setEnabled: (projectId, enabled) => mapErrors(async () => toSettings(SettingsDto.fromJSON(await api.post("/update_product_owner", new UpdateSettingsRequestDto(projectId, enabled))))),
+    updateSettings: (projectId, patch) => mapErrors(async () => toSettings(SettingsDto.fromJSON(await api.post("/update_product_owner", new UpdateSettingsRequestDto(projectId, undefined, patch.digestTime))))),
+    digests: (projectId, before, signal) => mapErrors(async () => toDigestPage(DigestListDto.fromJSON(await api.get("/product_owner_digests", { project_id: projectId, ...(before === undefined ? {} : { before }) }, signal)))),
     threads: (projectId, signal) => mapErrors(async () => ThreadListDto.fromJSON(await api.get("/product_owner_threads", { project_id: projectId }, signal)).threads.map(toSummary)),
     thread: (threadId, before, signal) => mapErrors(async () => toPage(ThreadPageDto.fromJSON(await api.get("/product_owner_thread", { thread_id: threadId, ...(before === undefined ? {} : { before }) }, signal)))),
     startThread: (projectId, message) =>
