@@ -32,7 +32,7 @@ function cardMenu(taskId) {
   return menu;
 }
 
-/** The task-changed event tasksRail dispatches after applying a feed change. */
+/** The task-changed event tasksRailFeed dispatches after applying a feed change. */
 const changed = (change, previous) => ({ detail: { change, previous } });
 
 test("renders the store's tasks as columns once seeded, and drops the server's copy", () => {
