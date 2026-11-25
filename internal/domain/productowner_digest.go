@@ -47,7 +47,12 @@ type ProductOwnerDigestState struct {
 	// SinceAt is when the digest time was first set, or where the last digest
 	// ended.
 	SinceAt time.Time
-	// CheckedDate is the last local day the collection ran, empty before the
-	// first one. A quiet day is checked as a busy one is.
+	// CheckedDate is the local day of the last digest time the scheduler
+	// handled, empty before the first one. A quiet day is checked as a busy
+	// one is, and a time given up on after its failed tries is handled too.
 	CheckedDate string
+	// Attempts is how many digest runs failed for the digest time of
+	// AttemptsFor (a local day); it is kept so a restart does not reset it.
+	Attempts    int
+	AttemptsFor string
 }

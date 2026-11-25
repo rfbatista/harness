@@ -24,6 +24,11 @@ const DefaultDigestEvery = time.Minute
 // digestRetry is how long a project waits after a digest run that failed.
 const digestRetry = 10 * time.Minute
 
+// digestAttempts is how many times a digest run is tried for one digest time.
+// After the last failure the project waits for the next digest time, whose
+// digest covers the whole period.
+const digestAttempts = 3
+
 // DigestProjects is what the digests read of the project catalog.
 type DigestProjects interface {
 	ListProjects(ctx context.Context) ([]*domain.Project, error)
@@ -113,6 +118,11 @@ func (d *Digests) Stop() {
 
 // Digests implements ports.ProductOwnerDigests.
 func (d *Digests) Digests(ctx context.Context, projectID, before string) ([]domain.ProductOwnerDigest, bool, error) {
+	if before != "" {
+		if day, err := time.Parse("2006-01-02", before); err != nil || day.Format("2006-01-02") != before {
+			return nil, false, &domain.StructuredError{Code: "INVALID_INPUT", Message: "before must be a date, YYYY-MM-DD"}
+		}
+	}
 	if _, err := d.projects.GetProject(ctx, projectID); err != nil {
 		return nil, false, err
 	}
@@ -126,10 +136,16 @@ func (d *Digests) DigestTimeChanged(ctx context.Context, projectID, before, afte
 		return
 	}
 	st, err := d.store.DigestState(ctx, projectID)
-	if err != nil || st != nil {
+	if err != nil {
+		slog.Warn("product owner digest state not read after the digest time changed", "project", projectID, "error", err)
 		return
 	}
-	_ = d.store.SaveDigestState(ctx, domain.ProductOwnerDigestState{ProjectID: projectID, SinceAt: d.clock()})
+	if st != nil {
+		return
+	}
+	if err := d.store.SaveDigestState(ctx, domain.ProductOwnerDigestState{ProjectID: projectID, SinceAt: d.clock()}); err != nil {
+		slog.Warn("product owner digest state not saved after the digest time changed", "project", projectID, "error", err)
+	}
 }
 
 // Tick looks at every project once: one whose digest time has passed today and
@@ -155,9 +171,11 @@ func (d *Digests) tickProject(ctx context.Context, p *domain.Project) {
 	}
 	now := d.clock().Local()
 	today := now.Format("2006-01-02")
-	if !d.dueToday(st.DigestTime, now) {
+	due, ok := lastDue(st.DigestTime, now)
+	if !ok {
 		return
 	}
+	dueDate := due.Format("2006-01-02")
 	d.mu.Lock()
 	if d.running[p.ID] || now.Before(d.retryAt[p.ID]) {
 		d.mu.Unlock()
@@ -179,24 +197,31 @@ func (d *Digests) tickProject(ctx context.Context, p *domain.Project) {
 		// A digest time set before the digests existed: they start now.
 		state = &domain.ProductOwnerDigestState{ProjectID: p.ID, SinceAt: now}
 		if err := d.store.SaveDigestState(ctx, *state); err != nil {
+			slog.Warn("product owner digest state not saved", "project", p.ID, "error", err)
 			return
 		}
 	}
-	if state.CheckedDate == today {
+	// The latest digest time is covered when a digest or a quiet check was made
+	// for it, or the period began after it. One that passed while the server
+	// was down is not, and is recorded at the first tick after boot.
+	if state.CheckedDate >= dueDate || !state.SinceAt.Before(due) {
 		return
 	}
 	items := d.collect(ctx, p, state.SinceAt, now)
 	if len(items) == 0 {
-		state.CheckedDate = today
-		_ = d.store.SaveDigestState(ctx, *state)
+		state.CheckedDate = dueDate
+		if err := d.store.SaveDigestState(ctx, *state); err != nil {
+			slog.Warn("product owner digest quiet day not saved", "project", p.ID, "error", err)
+		}
 		return
 	}
 	summary, err := d.run.RunOnce(ctx, p.ID, digestPrompt(p, state.SinceAt, now, items))
 	if err != nil {
-		slog.Warn("product owner digest run failed; retrying later", "project", p.ID, "error", err)
-		d.mu.Lock()
-		d.retryAt[p.ID] = now.Add(digestRetry)
-		d.mu.Unlock()
+		if ctx.Err() != nil {
+			// A shutdown cut the run: it is no failed try.
+			return
+		}
+		d.runFailed(ctx, p, state, dueDate, now, err)
 		return
 	}
 	id, err := newID()
@@ -208,7 +233,8 @@ func (d *Digests) tickProject(ctx context.Context, p *domain.Project) {
 		slog.Warn("product owner digest not saved", "project", p.ID, "error", err)
 		return
 	}
-	state.SinceAt, state.CheckedDate = now, today
+	state.SinceAt, state.CheckedDate = now, dueDate
+	state.Attempts, state.AttemptsFor = 0, ""
 	if err := d.store.SaveDigestState(ctx, *state); err != nil {
 		slog.Warn("product owner digest state not saved", "project", p.ID, "error", err)
 	}
@@ -217,13 +243,41 @@ func (d *Digests) tickProject(ctx context.Context, p *domain.Project) {
 	}
 }
 
-// dueToday says now is at or after the digest time of its own day.
-func (d *Digests) dueToday(digestTime string, now time.Time) bool {
+// runFailed counts a failed digest run against its digest time. The count is
+// kept in the store, so a restart does not reset it. The last try ends the
+// time: it is logged once and the next digest time covers the whole period.
+func (d *Digests) runFailed(ctx context.Context, p *domain.Project, state *domain.ProductOwnerDigestState, dueDate string, now time.Time, runErr error) {
+	if state.AttemptsFor != dueDate {
+		state.Attempts, state.AttemptsFor = 0, dueDate
+	}
+	state.Attempts++
+	if state.Attempts >= digestAttempts {
+		slog.Warn("product owner digest gave up for this digest time; the next one covers the period", "project", p.ID, "due", dueDate, "attempts", state.Attempts, "error", runErr)
+		state.CheckedDate = dueDate
+		state.Attempts, state.AttemptsFor = 0, ""
+	} else {
+		slog.Warn("product owner digest run failed; retrying later", "project", p.ID, "attempt", state.Attempts, "error", runErr)
+		d.mu.Lock()
+		d.retryAt[p.ID] = now.Add(digestRetry)
+		d.mu.Unlock()
+	}
+	if err := d.store.SaveDigestState(ctx, *state); err != nil {
+		slog.Warn("product owner digest attempts not saved", "project", p.ID, "error", err)
+	}
+}
+
+// lastDue is the latest digest time at or before now: today's, or yesterday's
+// before today's has come. It is false for a digest time that does not parse.
+func lastDue(digestTime string, now time.Time) (time.Time, bool) {
 	var h, m int
 	if _, err := fmt.Sscanf(digestTime, "%d:%d", &h, &m); err != nil {
-		return false
+		return time.Time{}, false
 	}
-	return !now.Before(time.Date(now.Year(), now.Month(), now.Day(), h, m, 0, 0, now.Location()))
+	due := time.Date(now.Year(), now.Month(), now.Day(), h, m, 0, 0, now.Location())
+	if now.Before(due) {
+		due = time.Date(now.Year(), now.Month(), now.Day()-1, h, m, 0, 0, now.Location())
+	}
+	return due, true
 }
 
 // collect is what changed in the project in (since, until], with no model.

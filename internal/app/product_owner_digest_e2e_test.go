@@ -515,23 +515,17 @@ func TestADigestTimeMissedWhileTheServerWasDownIsRecordedOnceAfterBootCoveringTh
 	e.moveExisting(tk, domain.TicketStatusInProgress, clk.at(2, 6, 0))
 	e.moveTask("Day three", domain.TicketStatusReview, clk.at(3, 7, 0))
 	e.moveTask("Day four", domain.TicketStatusReview, clk.at(4, 5, 0))
-	end := clk.at(4, 6, 0)
 	e.feed.stop()
 	e.srv.Close()
 	if err := e.app.Stop(e.ctx); err != nil {
 		t.Fatal(err)
 	}
 
-	// Booting before that day's digest time records nothing yet.
+	// Booting before that day's digest time, the time of the day before was
+	// missed: one digest covers the whole gap at the first tick.
 	clk.set(clk.at(4, 7, 0))
 	e.boot()
 	e.serve()
-	settle()
-	if n := len(e.digests("").Digests); n != 1 {
-		t.Fatalf("%d digests after a boot before the digest time, want 1", n)
-	}
-
-	clk.set(end.Add(3 * time.Hour))
 	page := e.waitDigests(2)
 	gap := page.Digests[0]
 	if !gap.PeriodStart.Equal(first.PeriodEnd) || !gap.PeriodEnd.Equal(clk.Now()) {
@@ -545,11 +539,14 @@ func TestADigestTimeMissedWhileTheServerWasDownIsRecordedOnceAfterBootCoveringTh
 		t.Errorf("items = %+v, want the three tasks that moved in the gap", gap.Items)
 	}
 
-	// A restart the same day records nothing more.
+	// The digest time of the same day passes with nothing new, and a restart
+	// records nothing more: the gap was recorded once.
+	clk.set(clk.at(0, 9, 0))
+	settle()
 	e.restart()
 	settle()
 	if n := len(e.digests("").Digests); n != 2 {
-		t.Errorf("%d digests after a restart the same day, want 2", n)
+		t.Errorf("%d digests after the day's digest time and a restart, want 2", n)
 	}
 
 	// A gap with no change records nothing.

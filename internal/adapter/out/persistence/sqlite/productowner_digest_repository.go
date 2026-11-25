@@ -34,6 +34,8 @@ type ProductOwnerDigestStateModel struct {
 	ProjectID   string `gorm:"primaryKey;column:project_id"`
 	SinceAt     time.Time
 	CheckedDate string `gorm:"column:checked_date"`
+	Attempts    int    `gorm:"column:attempts"`
+	AttemptsFor string `gorm:"column:attempts_for"`
 }
 
 // TableName overrides the table name.
@@ -92,11 +94,11 @@ func (r *ProductOwnerDigestRepository) DigestState(ctx context.Context, projectI
 	if err != nil {
 		return nil, err
 	}
-	return &domain.ProductOwnerDigestState{ProjectID: m.ProjectID, SinceAt: m.SinceAt, CheckedDate: m.CheckedDate}, nil
+	return &domain.ProductOwnerDigestState{ProjectID: m.ProjectID, SinceAt: m.SinceAt, CheckedDate: m.CheckedDate, Attempts: m.Attempts, AttemptsFor: m.AttemptsFor}, nil
 }
 
 // SaveDigestState implements ports.ProductOwnerDigestStore.
 func (r *ProductOwnerDigestRepository) SaveDigestState(ctx context.Context, s domain.ProductOwnerDigestState) error {
-	m := ProductOwnerDigestStateModel{ProjectID: s.ProjectID, SinceAt: s.SinceAt, CheckedDate: s.CheckedDate}
+	m := ProductOwnerDigestStateModel{ProjectID: s.ProjectID, SinceAt: s.SinceAt, CheckedDate: s.CheckedDate, Attempts: s.Attempts, AttemptsFor: s.AttemptsFor}
 	return r.db.WithContext(ctx).Save(&m).Error
 }
