@@ -643,3 +643,31 @@ func TestTheProductOwnerReadsPastDigestsWithAToolOfItsOwnProjectOnly(t *testing.
 		t.Errorf("the brief does not name the digest tool")
 	}
 }
+
+func TestSomethingThatOnlyWaitsOnThePersonDoesNotMakeAQuietDayCount(t *testing.T) {
+	e, clk := newDigestE2E(t)
+	e.setDigestTime("08:30")
+	if _, err := e.notes.Notify(e.ctx, ports.NotifyRequest{ProjectID: e.project, Title: "Review the export", Level: domain.NotificationAction}); err != nil {
+		t.Fatal(err)
+	}
+	clk.set(clk.at(1, 9, 0))
+	settle()
+	if n := len(e.digests("").Digests); n != 0 {
+		t.Fatalf("%d digests for a day with nothing but a waiting item", n)
+	}
+	if n := len(e.launches()); n != 0 {
+		t.Errorf("claude ran %d times for a quiet day", n)
+	}
+
+	// The next day something moves: the digest lists the waiting item too.
+	e.moveTask("Moved", domain.TicketStatusReview, clk.at(1, 6, 0))
+	clk.set(clk.at(1, 9, 0))
+	d := e.waitDigests(1).Digests[0]
+	kinds := map[string]int{}
+	for _, it := range d.Items {
+		kinds[it.Kind]++
+	}
+	if kinds["task_moved"] != 1 || kinds["waiting_on_person"] != 1 {
+		t.Errorf("items = %+v, want the moved task and the waiting item", d.Items)
+	}
+}

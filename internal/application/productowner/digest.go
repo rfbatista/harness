@@ -47,6 +47,11 @@ type DigestSources struct {
 
 // Digests collects, writes and keeps the daily digests of every project whose
 // product owner is on and has a digest time.
+//
+// What waits on the person is listed in a digest only when something else
+// changed in its period (a task moved, a session ended or failed). It never
+// makes a quiet day count: a review that keeps waiting would else be a digest
+// every day.
 type Digests struct {
 	store    ports.ProductOwnerDigestStore
 	settings ports.ProductOwnerStore
