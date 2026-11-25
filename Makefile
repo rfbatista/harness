@@ -9,6 +9,10 @@
 # imports the agents/ folder of a dotfiles checkout into it, once: set
 # DOTFILES_AGENTS_DIR in .env or the shell to name it.
 export
+# The product owner's conversation search is SQLite FTS5, which the SQLite
+# driver builds only with this tag (ADR 0112). Every recipe that builds the
+# server, or runs its tests, carries it.
+GOTAGS := -tags sqlite_fts5
 
 .DEFAULT_GOAL := help
 
@@ -52,7 +56,7 @@ air: ## run the server with hot reload (Air); start here
 	air
 
 server: web ## run the server from source, without hot reload
-	go run ./cmd/server $(ARGS)
+	go run $(GOTAGS) ./cmd/server $(ARGS)
 
 run: build-server ## build the server binary and run it
 	./$(BIN)/server $(ARGS)
@@ -110,10 +114,10 @@ uninstall-tui-client: ## remove the installed tui-client
 build: build-server build-tui-client ## build the server and tui-client into bin/
 
 build-server: web ## build bin/server
-	go build -o $(BIN)/server ./cmd/server
+	go build $(GOTAGS) -o $(BIN)/server ./cmd/server
 
 build-tui-client: ## build bin/tui-client
-	go build -o $(BIN)/tui-client ./cmd/tui-client
+	go build $(GOTAGS) -o $(BIN)/tui-client ./cmd/tui-client
 
 # --- Quality -----------------------------------------------------------------
 
@@ -121,21 +125,21 @@ build-tui-client: ## build bin/tui-client
 PKGS := ./cmd/... ./internal/... ./tests/...
 
 test: ## run the tests
-	go test $(PKGS)
+	go test $(GOTAGS) $(PKGS)
 
 test-race: ## run the tests with the race detector
-	go test -race $(PKGS)
+	go test $(GOTAGS) -race $(PKGS)
 
 test-design-system: ## run the design system's CSS invariant tests
 	node --test design-system/session-row.test.mjs design-system/sync-blocks.test.mjs design-system/git-extensions.test.mjs design-system/preview-parity.test.mjs design-system/interview-blocks.test.mjs design-system/services-blocks.test.mjs
 
 vet: ## run go vet
-	go vet $(PKGS)
+	go vet $(GOTAGS) $(PKGS)
 
 check: web ## what to run before calling work done: build, vet, race tests
-	go build $(PKGS)
-	go vet $(PKGS)
-	go test -race $(PKGS)
+	go build $(GOTAGS) $(PKGS)
+	go vet $(GOTAGS) $(PKGS)
+	go test $(GOTAGS) -race $(PKGS)
 	$(MAKE) test-design-system
 	npm run typecheck --prefix web/app
 	npm run lint --prefix web/app
@@ -144,12 +148,12 @@ check: web ## what to run before calling work done: build, vet, race tests
 # The page benchmark requests every project page and prints its median and worst page
 # server time with the breakdown (see "Page time" in the README).
 page-bench: ## time every project page; PAGEBENCH_URL=http://127.0.0.1:8080 [PAGEBENCH_PROJECT=harness] for a live server, else the seeded four-times project
-	go test ./internal/app -run 'TestPageBenchmark$$' -count=1 -v -timeout 20m -pagebench $(if $(PAGEBENCH_URL),-pagebench.url=$(PAGEBENCH_URL) -pagebench.project=$(or $(PAGEBENCH_PROJECT),harness))
+	go test $(GOTAGS) ./internal/app -run 'TestPageBenchmark$$' -count=1 -v -timeout 20m -pagebench $(if $(PAGEBENCH_URL),-pagebench.url=$(PAGEBENCH_URL) -pagebench.project=$(or $(PAGEBENCH_PROJECT),harness))
 
 # The budgets are in internal/app/testdata/page-budgets.json; each fix task lowers its pages'.
 # Its times depend on the machine, so it is not part of make check.
 perf-budget: ## fail when a project page is over its page-time budget, on the seeded four-times project
-	go test ./internal/app -run 'TestPageBenchmark$$' -count=1 -v -timeout 20m -pagebench -pagebench.budgets=testdata/page-budgets.json
+	go test $(GOTAGS) ./internal/app -run 'TestPageBenchmark$$' -count=1 -v -timeout 20m -pagebench -pagebench.budgets=testdata/page-budgets.json
 
 deps: ## download Go modules
 	go mod download

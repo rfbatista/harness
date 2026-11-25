@@ -9,7 +9,7 @@ tmp_dir = "tmp"
 
 [build]
 pre_cmd = ["./scripts/dev/kill-stale-api.sh", "make --no-print-directory web"]
-cmd = "go build -o ./tmp/main ./cmd/server"
+cmd = "go build -tags sqlite_fts5 -o ./tmp/main ./cmd/server"
 entrypoint = "./scripts/dev/air-entrypoint.sh"
 args_bin = []
 include_ext = ["go", "mod", "sum", "toml", "templ", "js", "css", "json"]

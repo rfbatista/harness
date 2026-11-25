@@ -4,6 +4,10 @@
 
 Go, plus Node and npm for the React web client in `web/app`. `make web` runs `npm ci` there and bundles the React islands through gohydrate (a `replace` in `go.mod` points to the local checkout); Node runs only at build time, never when the server serves a request.
 
+## Build tags
+
+The server's conversation search uses SQLite FTS5, which the driver compiles in only with the `sqlite_fts5` build tag. The Makefile and `.air.toml` pass it. For `go build`, `go run` and `go test` typed by hand, run `go env -w GOFLAGS=-tags=sqlite_fts5` once. A server built without the tag still runs: search then answers `SEARCH_UNAVAILABLE`.
+
 ## Checks
 
 `make check` builds, vets and runs the tests with the race detector, then runs the React client's type check, lint and tests (`npm run typecheck`, `npm run lint`, `npm test` in `web/app`). It is what to run before calling work done.
