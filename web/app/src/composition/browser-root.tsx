@@ -28,6 +28,9 @@ import { OwnerPagePropsDto } from "./owner-page-props-dto";
 import { OwnerPagePresenter } from "../features/product-owner/presentation/presenters/owner-page-presenter";
 import { OwnerPageView } from "../features/product-owner/presentation/views/owner-page-view";
 import { OwnerPanelPropsDto } from "./owner-panel-props-dto";
+import { DigestTime } from "../features/product-owner/application/digest-time";
+import { DigestTimePresenter } from "../features/product-owner/presentation/presenters/digest-time-presenter";
+import { DigestTimeView } from "../features/product-owner/presentation/views/digest-time-view";
 import { ProjectDigests } from "../features/product-owner/application/project-digests";
 import { DigestsTabPresenter } from "../features/product-owner/presentation/presenters/digests-tab-presenter";
 import { Conversation } from "../features/product-owner/application/conversation";
@@ -116,11 +119,21 @@ export function mountIslands(doc: Document): Dispose {
       const ownerSwitch = new OwnerSwitch({ gateway: owner, events: owner });
       const section = new SettingsSectionPresenter(ownerSwitch, project_id);
       const stop = ownerSwitch.attach(project_id);
+      const digestTime = new DigestTime({ gateway: owner, events: owner });
+      const digest = new DigestTimePresenter(digestTime, project_id, systemClock);
+      const stopDigestTime = digestTime.attach(project_id);
       const root = createRoot(mount);
-      root.render(<SettingsSectionView presenter={section} />);
+      root.render(
+        <div className="[ flow ]">
+          <SettingsSectionView presenter={section} />
+          <DigestTimeView presenter={digest} />
+        </div>,
+      );
       return () => {
         root.unmount();
         stop();
+        stopDigestTime();
+        digest.destroy();
         section.destroy();
       };
     },

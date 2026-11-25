@@ -225,6 +225,13 @@
   .about dl { display: grid; grid-template-columns: auto 1fr; gap: var(--space-2xs) var(--space-m); margin: 0; }
   .about dt { color: var(--color-ink-faint); font-size: var(--text-xs); padding-block-start: 0.1rem; } .about dd { margin: 0; min-inline-size: 0; overflow-wrap: anywhere; }
   .about .prompt-peek { color: var(--color-ink-muted); font-size: var(--text-xs); display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; overflow: hidden; }
+  /* The digest time on the Settings page. */
+  .digest-time { display: grid; gap: var(--space-s); }
+  .digest-time .field { display: grid; gap: var(--space-xs); max-inline-size: 36rem; }
+  .digest-time .timegrid { display: grid; grid-template-columns: 8rem 1fr; gap: var(--space-s); align-items: center; }
+  .digest-time .hint { color: var(--color-ink-faint); font-size: var(--text-xs); }
+  .digest-time[data-dimmed] .field { opacity: 0.55; }
+
   /* The Digests tab: the dates beside the selected digest. */
   .owner-split[hidden] { display: none; }
   .digests { display: grid; grid-template-columns: 16rem minmax(0, 1fr); min-block-size: 0; }
