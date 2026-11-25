@@ -437,3 +437,38 @@ func TestAThreadIdleWithAMoveStillOwedMakesItBeforeItAnswersTheNextMessage(t *te
 		t.Errorf("the message did not reach the new conversation: %q", got)
 	}
 }
+
+// setWindow makes the stand-in report this context window for its model.
+func (e *poE2E) setWindow(tokens int) {
+	e.t.Helper()
+	if err := os.WriteFile(filepath.Join(e.fakeDir, "window"), []byte(strconv.Itoa(tokens)), 0o644); err != nil {
+		e.t.Fatal(err)
+	}
+}
+
+func TestTheWindowClaudeReportsDecidesWhenAThreadCheckpointsNotAGuessFromTheModelName(t *testing.T) {
+	// 130,000 tokens is past 60% of the 200,000 a name would suggest, and under
+	// 60% of the million claude reports: no checkpoint.
+	e := newPOE2E(t)
+	e.setContext(contextPastCheckpoint)
+	e.setWindow(1_000_000)
+	id, _ := e.startThread("first")
+	th := e.waitTurn(id, "idle")
+	if len(checkpointsOf(th.Items)) != 0 {
+		t.Errorf("items = %v, want no checkpoint under a reported window of a million", kinds(th.Items))
+	}
+
+	// 13,000 tokens is nothing against 200,000 and past 60% of a reported
+	// 20,000: checkpoint.
+	e2 := newPOE2E(t)
+	e2.setContext(13000)
+	e2.setWindow(20000)
+	id, _ = e2.startThread("first")
+	eventuallyPO(t, "the checkpoint", func() string {
+		th := e2.thread(id)
+		if th.Thread.Turn != "idle" || len(checkpointsOf(th.Items)) != 1 {
+			return "items " + strings.Join(kinds(th.Items), " ")
+		}
+		return ""
+	})
+}

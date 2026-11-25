@@ -534,6 +534,12 @@ type SessionEvent struct {
 	Approval  *ApprovalInfo        `json:"approval,omitempty"`
 	Usage     *Usage               `json:"usage,omitempty"`
 	CostUSD   float64              `json:"cost_usd,omitempty"`
+	// CallUsage is, on an "output" or "tool_use" event, the usage of that
+	// message's own API call, never a sum: the context size of a call is its
+	// input and cache tokens. ContextWindows is, on a "usage" event, the context
+	// window in tokens claude reports per model name; nil when it reported none.
+	CallUsage      *Usage         `json:"call_usage,omitempty"`
+	ContextWindows map[string]int `json:"context_windows,omitempty"`
 	// AutoRun carries the new gate state on an "auto_run" event. A pointer, not
 	// a bool: omitempty would erase the switched-off event, and a client folding
 	// the log would then never see the gate close.

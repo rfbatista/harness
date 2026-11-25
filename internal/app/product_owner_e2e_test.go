@@ -99,6 +99,7 @@ while IFS= read -r line; do
   text=$(printf '%s' "$line" | sed -n 's/.*"text":"\([^"]*\)".*/\1/p')
   printf '%s\n' "$text" >> "$dir/received"
   inp=$(cat "$dir/usage" 2>/dev/null || echo 5)
+  win=$(cat "$dir/window" 2>/dev/null || echo 0)
   case "$text" in Checkpoint:*) while [ -f "$dir/summaryhold" ]; do sleep 0.05; done; [ -f "$dir/summaryfail" ] && exit 1;; esac
   while [ -f "$dir/prehold" ]; do sleep 0.05; done
   case "$text" in read:*) printf '%s\n' '{"type":"assistant","session_id":"fake","message":{"role":"assistant","content":[{"type":"tool_use","id":"t1","name":"Read","input":{"file_path":"project/docs/prd.md"}}]}}';; esac
@@ -106,7 +107,7 @@ while IFS= read -r line; do
   while [ -f "$dir/hold" ]; do sleep 0.05; done
   printf '%s\n' '{"type":"stream_event","session_id":"fake","event":{"type":"content_block_delta","index":0,"delta":{"type":"text_delta","text":"'"$text"'"}}}'
   printf '%s\n' '{"type":"assistant","session_id":"fake","message":{"role":"assistant","content":[{"type":"text","text":"answer to: '"$text"'"}],"usage":{"input_tokens":'"$inp"',"output_tokens":9}}}'
-  printf '%s\n' '{"type":"result","subtype":"success","session_id":"fake","result":"ok","total_cost_usd":0.02,"usage":{"input_tokens":'"$inp"',"output_tokens":9}}'
+  printf '%s\n' '{"type":"result","subtype":"success","session_id":"fake","result":"ok","total_cost_usd":0.02,"usage":{"input_tokens":'"$inp"',"output_tokens":9},"modelUsage":{"claude-sonnet-fake":{"contextWindow":'"$win"'}}}'
 done
 `
 

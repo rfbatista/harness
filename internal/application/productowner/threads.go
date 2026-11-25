@@ -36,6 +36,9 @@ type run struct {
 	// summary is what the summary turn of a checkpoint has said so far; the
 	// turn's text is not an item of the thread (ADR 0112).
 	summary strings.Builder
+	// lastCall is the usage of the latest API call the turn has reported: its
+	// input and cache tokens are the thread's context (ADR 0112).
+	lastCall *ports.Usage
 }
 
 func (s *Service) threadLock(id string) *sync.Mutex {
@@ -510,6 +513,9 @@ func (s *Service) handle(r *run, ev ports.SessionEvent) {
 	t, err := s.store.Thread(ctx, r.threadID)
 	if err != nil {
 		return
+	}
+	if ev.CallUsage != nil {
+		r.lastCall = ev.CallUsage
 	}
 	if s.summarizing(r, t, ev) {
 		return

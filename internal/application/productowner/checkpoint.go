@@ -36,33 +36,58 @@ func clearSummarizing(th *domain.ProductOwnerThread) {
 	}
 }
 
-// contextSizeOf is the tokens the thread's context holds when a turn ends: what
-// its last API call read. The turn's result carries the usage summed over every
-// call of the turn, so it over-counts a turn that used tools; this is the one
-// place that changes when llmkit reports the last call's usage.
-func contextSizeOf(ev ports.SessionEvent) int {
-	u := ev.Usage
+// callContext is the tokens one API call read: its input and its cache tokens.
+func callContext(u *ports.Usage) int {
 	if u == nil {
 		return 0
 	}
 	return u.InputTokens + u.CacheCreationInputTokens + u.CacheReadInputTokens
 }
 
+// contextSizeOf is the tokens the thread's context holds when a turn ends:
+// what its last API call read, which claude reports on that call's message.
+// The turn's result carries the usage summed over every call, which over-counts
+// a turn that used tools, so it stands in only for a turn that reported no call
+// usage.
+func contextSizeOf(lastCall *ports.Usage, ev ports.SessionEvent) int {
+	if lastCall != nil {
+		return callContext(lastCall)
+	}
+	return callContext(ev.Usage)
+}
+
 // windowOf is the context window of the model a thread runs on: the one claude
 // reported, and only while none was reported, a guess from the model's name.
-func windowOf(model string, reported int) int {
-	if reported > 0 {
-		return reported
+func windowOf(model string, reported map[string]int) int {
+	if w := reportedWindow(model, reported); w > 0 {
+		return w
 	}
 	return domain.ContextWindow(model)
+}
+
+// reportedWindow picks the window of the thread's own model from what claude
+// reported per model name. The thread names its model by an alias ("sonnet")
+// and claude by the full name, so the entry whose name holds the alias is the
+// thread's; a lone entry is the thread's whatever its name, and with several
+// the largest stands for the main model, whose context is the one measured.
+func reportedWindow(model string, reported map[string]int) int {
+	best := 0
+	for name, w := range reported {
+		if model != "" && strings.Contains(name, model) && w > 0 {
+			return w
+		}
+		best = max(best, w)
+	}
+	return best
 }
 
 // beginCheckpoint is called when a turn ends, with r.mu held. It starts the
 // summary turn when the context is past the share, and says it did: the turn
 // is not over then.
 func (s *Service) beginCheckpoint(r *run, t *domain.ProductOwnerThread, ev ports.SessionEvent) bool {
-	window := windowOf(s.sessions.ProductOwnerModel(t.SessionID), 0)
-	if float64(contextSizeOf(ev)) < float64(window)*domain.ProductOwnerCheckpointShare {
+	defer func() { r.lastCall = nil }() // the next turn measures its own calls
+	window := windowOf(s.sessions.ProductOwnerModel(t.SessionID), ev.ContextWindows)
+	if float64(contextSizeOf(r.lastCall, ev)) < float64(window)*domain.ProductOwnerCheckpointShare {
 		return false
 	}
 	ctx := context.Background()
@@ -99,6 +124,7 @@ func (s *Service) summarizing(r *run, t *domain.ProductOwnerThread, ev ports.Ses
 			r.summary.WriteString(ev.Text)
 		}
 	case "usage":
+		r.lastCall = nil
 		s.completeCheckpoint(r, t)
 	}
 	return true
