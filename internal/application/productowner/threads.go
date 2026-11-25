@@ -764,6 +764,9 @@ func (s *Service) resumeInterrupted(ctx context.Context, t domain.ProductOwnerTh
 		return err
 	}
 	t = *cur
+	if t.CheckpointPhase == domain.ProductOwnerCheckpointMoving {
+		return s.resumeMove(ctx, &t)
+	}
 	spec := specOf(&t)
 	if err := s.sessions.ResumeProductOwnerSession(ctx, t.SessionID, spec); err != nil {
 		s.fail(ctx, &t, s.lastPersonMessage(ctx, t.ID), "SESSION_RESUME_FAILED", "The product owner's session could not be resumed after the restart: "+err.Error())
@@ -784,7 +787,12 @@ func (s *Service) resumeInterrupted(ctx context.Context, t domain.ProductOwnerTh
 	s.announceItem(&t, notice)
 	s.announceThread(t)
 	s.resetIdle(r, false)
-	if err := s.sessions.Send(ctx, t.SessionID, s.continueTurn(ctx, t)); err != nil {
+	turn := s.continueTurn(ctx, t)
+	if t.CheckpointPhase == domain.ProductOwnerCheckpointSummarizing {
+		// The summary turn was cut off: it is asked again, not the person's turn.
+		turn = summaryPrompt
+	}
+	if err := s.sessions.Send(ctx, t.SessionID, turn); err != nil {
 		s.fail(ctx, &t, s.lastPersonMessage(ctx, t.ID), "SESSION_SEND_FAILED", "The product owner's session did not take the turn after the restart: "+err.Error())
 		return err
 	}

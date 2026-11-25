@@ -139,14 +139,24 @@ func (s *Service) moveToNewConversation(old *run) {
 		return
 	}
 	s.dropRun(old)
-	_ = s.sessions.Stop(ctx, t.SessionID)
-	s.waitProcessEnd(ctx, t.SessionID)
+	_ = s.finishMove(ctx, t)
+}
+
+// finishMove ends the thread's old process, if one runs, and starts its new
+// session with the stored summary in its brief. The caller holds the thread's
+// lock. A start that fails leaves the thread idle on its old session, which the
+// next message resumes with the same summary, and says so in the thread.
+func (s *Service) finishMove(ctx context.Context, t *domain.ProductOwnerThread) error {
+	if s.sessions.ProductOwnerRunning(t.SessionID) {
+		_ = s.sessions.Stop(ctx, t.SessionID)
+		s.waitProcessEnd(ctx, t.SessionID)
+	}
 	sessionID, err := s.sessions.StartProductOwnerSession(ctx, specOf(t))
 	if err != nil {
 		slog.Warn("start a product owner thread's new conversation", "thread", t.ID, "err", err)
 		s.fail(ctx, t, "", "SESSION_RESUME_FAILED", "The product owner could not start its new conversation: "+err.Error())
 		_, _ = s.update(ctx, t.ID, t, func(th *domain.ProductOwnerThread) bool { th.CheckpointPhase = ""; return true })
-		return
+		return err
 	}
 	cur, err := s.update(ctx, t.ID, t, func(th *domain.ProductOwnerThread) bool {
 		th.SessionID, th.CheckpointPhase = sessionID, ""
@@ -155,8 +165,20 @@ func (s *Service) moveToNewConversation(old *run) {
 	})
 	if err != nil {
 		_ = s.sessions.Stop(ctx, sessionID)
-		return
+		return err
 	}
 	s.announceThread(*cur)
 	s.resetIdle(s.attach(*cur), true)
+	return nil
+}
+
+// resumeMove finishes a checkpoint a restart cut off after its summary was
+// stored: the thread only has to move to its new conversation. The caller holds
+// the thread's lock.
+func (s *Service) resumeMove(ctx context.Context, t *domain.ProductOwnerThread) error {
+	notice, err := s.store.AppendItem(ctx, domain.ProductOwnerItem{ThreadID: t.ID, Kind: domain.ProductOwnerItemNotice, At: time.Now(), Text: "Continued after a restart"})
+	if err == nil {
+		s.announceItem(t, notice)
+	}
+	return s.finishMove(ctx, t)
 }
