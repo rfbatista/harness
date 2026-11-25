@@ -124,7 +124,7 @@ export function mountIslands(doc: Document): Dispose {
       const section = new SettingsSectionPresenter(ownerSwitch, project_id);
       const stop = ownerSwitch.attach(project_id);
       const digestTime = new DigestTime({ gateway: owner, events: owner });
-      const digest = new DigestTimePresenter(digestTime, project_id, systemClock);
+      const digest = new DigestTimePresenter(digestTime, project_id);
       const stopDigestTime = digestTime.attach(project_id);
       const root = createRoot(mount);
       root.render(
@@ -163,7 +163,7 @@ export function mountIslands(doc: Document): Dispose {
       const stopList = list.attach(project_id);
       const stopMemory = memory.attach(project_id);
       const projectDigests = new ProjectDigests({ gateway: owner, events: owner });
-      const digests = new DigestsTabPresenter(projectDigests, project_id, systemClock, "", (date) => page.showDigests(date));
+      const digests = new DigestsTabPresenter(projectDigests, project_id, "", (date) => page.showDigests(date));
       const stopDigests = projectDigests.attach(project_id);
       // The address names the Digests tab and its date: where the page opens, and where Back, Forward and an edit of the address take it.
       const followAddress = () => {

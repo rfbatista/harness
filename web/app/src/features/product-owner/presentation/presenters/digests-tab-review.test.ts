@@ -8,7 +8,6 @@ import { digest, digestItem } from "../../testing/digest-fixtures";
 import { DigestsTabPresenter } from "./digests-tab-presenter";
 
 const settled = () => new Promise((resolve) => setImmediate(resolve));
-const NOW = Date.parse("2026-11-24T10:00:00Z");
 
 const setup = async (opts: { enabled?: boolean; digests?: ReturnType<typeof digest>[] } = {}) => {
   const server = memoryProductOwner();
@@ -16,7 +15,7 @@ const setup = async (opts: { enabled?: boolean; digests?: ReturnType<typeof dige
   await server.updateSettings("p1", { digestTime: "09:00" });
   for (const d of opts.digests ?? []) server.seedDigest("p1", d);
   const digests = new ProjectDigests({ gateway: server, events: server });
-  const tab = new DigestsTabPresenter(digests, "p1", { now: () => NOW });
+  const tab = new DigestsTabPresenter(digests, "p1");
   digests.attach("p1");
   await settled();
   return { server, digests, tab };

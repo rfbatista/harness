@@ -21,6 +21,8 @@ interface Stored {
 export interface MemoryProductOwner extends ProductOwnerGateway, ProductOwnerEvents {
   /** The server holds this project, with its product owner on or off. */
   seedProject(projectId: string, enabled: boolean): void;
+  /** The server's next digest is at `at` (null for none), whatever the digest time says: the scheduler moved on. Followers hear nothing, as the contract says. */
+  setNextDigest(projectId: string, at: Date | null): void;
   /** The server holds this digest, without telling anyone. */
   seedDigest(projectId: string, digest: Digest): void;
   /** The server recorded this digest, for its date: it replaces the one of that date and tells every follower of the project. */
@@ -93,6 +95,12 @@ export function memoryProductOwner(): MemoryProductOwner {
     if (!s) throw new ProductOwnerError("PROJECT_NOT_FOUND", `no project ${projectId}`);
     return s;
   };
+  /** What the server computes: the next digest time after "now" (2026-11-24 07:00 at -03:00), none while no time is set or the owner is off. */
+  const withNext = (s: Settings): Settings => {
+    if (!s.enabled || s.digestTime === null) return { ...s, nextDigestAt: null };
+    const today = new Date(`2026-11-24T${s.digestTime}:00-03:00`);
+    return { ...s, nextDigestAt: today.getTime() > Date.parse("2026-11-24T10:00:00Z") ? today : new Date(today.getTime() + 24 * 3600 * 1000) };
+  };
   /** A project has at most one digest per date. */
   const keep = (projectId: string, digest: Digest): void => {
     const held = (digests.get(projectId) ?? []).filter((d) => d.date !== digest.date);
@@ -119,7 +127,10 @@ export function memoryProductOwner(): MemoryProductOwner {
   };
 
   return {
-    seedProject: (projectId, enabled) => void settings.set(projectId, { projectId, enabled, digestTime: null, timeZone: "America/Sao_Paulo" }),
+    seedProject: (projectId, enabled) => void settings.set(projectId, { projectId, enabled, digestTime: null, timeZone: "America/Sao_Paulo", nextDigestAt: null }),
+    setNextDigest(projectId, at) {
+      settings.set(projectId, { ...known(projectId), nextDigestAt: at });
+    },
     seedDigest(projectId, digest) {
       known(projectId);
       keep(projectId, digest);
@@ -197,7 +208,7 @@ export function memoryProductOwner(): MemoryProductOwner {
     async setEnabled(projectId, enabled) {
       check();
       known(projectId);
-      const updated: Settings = { ...known(projectId), enabled };
+      const updated: Settings = withNext({ ...known(projectId), enabled });
       settings.set(projectId, updated);
       send(projectId, { type: "settings", settings: updated });
       return updated;
@@ -207,7 +218,7 @@ export function memoryProductOwner(): MemoryProductOwner {
       let updated = known(projectId);
       if (patch.digestTime !== undefined) {
         if (patch.digestTime !== "" && !/^([01]\d|2[0-3]):[0-5]\d$/.test(patch.digestTime)) throw new ProductOwnerError("INVALID_INPUT", "the digest time is not an HH:MM time");
-        updated = { ...updated, digestTime: patch.digestTime === "" ? null : patch.digestTime };
+        updated = withNext({ ...updated, digestTime: patch.digestTime === "" ? null : patch.digestTime });
       }
       settings.set(projectId, updated);
       send(projectId, { type: "settings", settings: updated });

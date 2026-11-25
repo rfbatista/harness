@@ -8,7 +8,7 @@ import type { Digest, DigestPage } from "../domain/digest";
 import { DigestDto, DigestItemDto } from "../infrastructure/dto/digest-dto";
 import type { MemoryEntry, ProductOwnerEvent, Settings, ThreadItem, ThreadSummary } from "../domain/thread";
 
-export const settingsWire = (s: Settings): unknown => new SettingsDto(s.projectId, s.enabled, s.digestTime, s.timeZone).toJSON();
+export const settingsWire = (s: Settings): unknown => new SettingsDto(s.projectId, s.enabled, s.digestTime, s.timeZone, s.nextDigestAt).toJSON();
 
 export const digestWire = (d: Digest): unknown =>
   new DigestDto(d.digestId, d.date, d.periodStart, d.periodEnd, d.summary, d.items.map((i) => new DigestItemDto(i.kind, i.title, i.url, i.from ?? undefined, i.to ?? undefined))).toJSON();

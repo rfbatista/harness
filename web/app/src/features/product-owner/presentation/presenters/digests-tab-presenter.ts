@@ -1,11 +1,10 @@
 // The Digests tab of the product owner's page: the dates in a column, newest first, with a grey
 // row for a stretch of quiet days, and the selected digest beside them with its sections.
 
-import type { Clock } from "../../../../shared/kernel/clock";
 import { Presenter } from "../../../../shared/kernel/presenter";
 import type { ProjectDigests, ProjectDigestsState } from "../../application/project-digests";
 import { settingsHref } from "../../application/links";
-import { addDays, clockOf, daysBetween, longDay, monthOf, nextRun, shortDay, stampOf, whenOf } from "../../domain/calendar";
+import { addDays, clockOf, daysBetween, longDay, monthOf, shortDay, stampOf, whenOf } from "../../domain/calendar";
 import type { Digest, DigestItem } from "../../domain/digest";
 import { isSiteHref, parseMarkdown, type Block } from "../../domain/markdown";
 
@@ -105,24 +104,22 @@ const status = (value: string | null): string => (value === null || value === ""
 export class DigestsTabPresenter extends Presenter<DigestsTabViewModel> {
   readonly #digests: ProjectDigests;
   readonly #projectId: string;
-  readonly #clock: Clock;
   readonly #stop: () => void;
   readonly #onSelect: (date: string) => void;
   #selected: string;
   #missing = "";
 
   /** `select`: the date the address names, "" for the newest. `onSelect` hears the dates the person chooses. */
-  constructor(digests: ProjectDigests, projectId: string, clock: Clock, select = "", onSelect: (date: string) => void = () => {}) {
-    super(build(digests.state, projectId, clock, select, ""));
+  constructor(digests: ProjectDigests, projectId: string, select = "", onSelect: (date: string) => void = () => {}) {
+    super(build(digests.state, projectId, select, ""));
     this.#digests = digests;
     this.#projectId = projectId;
-    this.#clock = clock;
     this.#onSelect = onSelect;
     this.#selected = select;
     this.#stop = digests.subscribe((state) => {
       // The digest the person finds first stays the one on screen: a newer one arriving does not take its place.
       if (this.#selected === "" && state.digests[0]) this.#selected = state.digests[0].date;
-      this.set(build(state, this.#projectId, this.#clock, this.#selected, this.#missing));
+      this.set(build(state, this.#projectId, this.#selected, this.#missing));
     });
   }
 
@@ -136,17 +133,17 @@ export class DigestsTabPresenter extends Presenter<DigestsTabViewModel> {
     this.#selected = date;
     this.#missing = "";
     this.#onSelect(date);
-    this.set(build(this.#digests.state, this.#projectId, this.#clock, date, ""));
+    this.set(build(this.#digests.state, this.#projectId, date, ""));
   };
 
   /** The date an address names: earlier pages are read until it is found, and when there is none the tab says so. */
   show = async (date: string): Promise<void> => {
     this.#selected = date;
     this.#missing = "";
-    this.set(build(this.#digests.state, this.#projectId, this.#clock, date, ""));
+    this.set(build(this.#digests.state, this.#projectId, date, ""));
     if (date === "" || (await this.#digests.reveal(date)) || this.#selected !== date) return;
     this.#missing = `There is no digest for ${shortDay(date)}.`;
-    this.set(build(this.#digests.state, this.#projectId, this.#clock, "", this.#missing));
+    this.set(build(this.#digests.state, this.#projectId, "", this.#missing));
   };
 
   retry = (): void => this.#digests.retry();
@@ -156,12 +153,11 @@ export class DigestsTabPresenter extends Presenter<DigestsTabViewModel> {
   turnOn = (): Promise<void> => this.#digests.turnOn();
 }
 
-function build(s: ProjectDigestsState, projectId: string, clock: Clock, select: string, missing: string): DigestsTabViewModel {
-  const now = new Date(clock.now());
+function build(s: ProjectDigestsState, projectId: string, select: string, missing: string): DigestsTabViewModel {
   const held = s.digests;
   const chosen = held.find((d) => d.date === select) ?? held[0] ?? null;
   const off = s.enabled === false;
-  const next = !off && s.digestTime !== null ? nextRun(now, s.digestTime, s.timeZone) : null;
+  const next = off ? null : s.nextDigestAt;
   const head = off ? "Paused while the product owner is off" : s.digestTime === null ? "No digest time set" : next === null ? `Digest time ${s.digestTime}` : `Next: ${whenOf(next, s.timeZone)}`;
   const state = s.error !== "" ? "error" : !s.loaded ? "loading" : held.length === 0 ? "empty" : "ready";
   return {

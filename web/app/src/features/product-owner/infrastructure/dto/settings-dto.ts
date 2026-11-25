@@ -2,7 +2,7 @@
 // The digest time and the time zone are read; the agent and prompt are for another piece.
 
 import { DtoError } from "../../../../shared/infrastructure/dto/dto-error";
-import { boolean, object, string, type Wire } from "../../../../shared/infrastructure/dto/fields";
+import { boolean, object, optionalTime, string, type Wire } from "../../../../shared/infrastructure/dto/fields";
 
 const SETTINGS = "SettingsDto";
 const UPDATE = "UpdateSettingsRequestDto";
@@ -15,17 +15,19 @@ export class SettingsDto {
     readonly digest_time: string | null,
     /** The server's time zone. */
     readonly time_zone: string,
+    /** null while no digest time is set or the product owner is off. */
+    readonly next_digest_at: Date | null,
   ) {}
 
   static fromJSON(raw: unknown, at = ""): SettingsDto {
     const from = object(SETTINGS, raw, at);
     const time = from.digest_time;
     if (time !== undefined && time !== null && typeof time !== "string") throw new DtoError(SETTINGS, at === "" ? "digest_time" : `${at}.digest_time`, "expected a string or null");
-    return new SettingsDto(string(SETTINGS, from, "project_id", at), boolean(SETTINGS, from, "enabled", at), time === undefined || time === "" ? null : time, string(SETTINGS, from, "time_zone", at));
+    return new SettingsDto(string(SETTINGS, from, "project_id", at), boolean(SETTINGS, from, "enabled", at), time === undefined || time === "" ? null : time, string(SETTINGS, from, "time_zone", at), optionalTime(SETTINGS, from, "next_digest_at", at));
   }
 
   toJSON(): Wire {
-    return { project_id: this.project_id, enabled: this.enabled, digest_time: this.digest_time, time_zone: this.time_zone };
+    return { project_id: this.project_id, enabled: this.enabled, digest_time: this.digest_time, time_zone: this.time_zone, next_digest_at: this.next_digest_at === null ? null : this.next_digest_at.toISOString() };
   }
 }
 

@@ -13,6 +13,8 @@ export interface DigestTimeState {
   /** "HH:MM" in the server's time zone; null while none is set. */
   readonly digestTime: string | null;
   readonly timeZone: string;
+  /** When the next digest is recorded, as the server says; null for none. */
+  readonly nextDigestAt: Date | null;
   /** A change is on its way. */
   readonly busy: boolean;
   /** Why the last change was refused; "" otherwise. */
@@ -21,7 +23,7 @@ export interface DigestTimeState {
   readonly refusals: number;
 }
 
-const INITIAL: DigestTimeState = { loaded: false, error: "", enabled: null, digestTime: null, timeZone: "", busy: false, saveError: "", refusals: 0 };
+const INITIAL: DigestTimeState = { loaded: false, error: "", enabled: null, digestTime: null, timeZone: "", nextDigestAt: null, busy: false, saveError: "", refusals: 0 };
 
 export class DigestTime {
   readonly #deps: { gateway: ProductOwnerGateway; events: ProductOwnerEvents };
@@ -56,7 +58,7 @@ export class DigestTime {
     this.#unfollow = this.#deps.events.follow(
       projectId,
       (event) => {
-        if (event.type === "settings") this.#set({ loaded: true, enabled: event.settings.enabled, digestTime: event.settings.digestTime, timeZone: event.settings.timeZone });
+        if (event.type === "settings") this.#set({ loaded: true, enabled: event.settings.enabled, digestTime: event.settings.digestTime, timeZone: event.settings.timeZone, nextDigestAt: event.settings.nextDigestAt });
         // The next run moves when a digest is recorded, and no settings event says so.
         else if (event.type === "digest") void this.#read(generation);
       },
@@ -86,7 +88,7 @@ export class DigestTime {
     this.#set({ busy: true, saveError: "" });
     try {
       const settings = await this.#deps.gateway.updateSettings(this.#projectId, { digestTime: time });
-      if (generation === this.#generation) this.#set({ busy: false, digestTime: settings.digestTime, timeZone: settings.timeZone, enabled: settings.enabled });
+      if (generation === this.#generation) this.#set({ busy: false, digestTime: settings.digestTime, timeZone: settings.timeZone, nextDigestAt: settings.nextDigestAt, enabled: settings.enabled });
     } catch (err) {
       if (!(err instanceof ProductOwnerError)) throw err;
       if (generation === this.#generation) this.#set({ busy: false, saveError: err.message, refusals: this.#state.refusals + 1 });
@@ -99,7 +101,7 @@ export class DigestTime {
   async #read(generation: number): Promise<void> {
     try {
       const settings = await this.#deps.gateway.settings(this.#projectId);
-      if (generation === this.#generation) this.#set({ loaded: true, error: "", enabled: settings.enabled, digestTime: settings.digestTime, timeZone: settings.timeZone });
+      if (generation === this.#generation) this.#set({ loaded: true, error: "", enabled: settings.enabled, digestTime: settings.digestTime, timeZone: settings.timeZone, nextDigestAt: settings.nextDigestAt });
     } catch (err) {
       if (!(err instanceof ProductOwnerError)) throw err;
       if (generation === this.#generation && !this.#state.loaded) this.#set({ error: err.message });

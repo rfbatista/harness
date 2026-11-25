@@ -1,11 +1,10 @@
 // The "Daily digest" block of the Settings section: the time, the server's time zone, the next
 // run, and what a quiet day and downtime mean.
 
-import type { Clock } from "../../../../shared/kernel/clock";
 import { Presenter } from "../../../../shared/kernel/presenter";
 import type { DigestTime, DigestTimeState } from "../../application/digest-time";
 import { digestsHref } from "../../application/links";
-import { nextRun, whenOf } from "../../domain/calendar";
+import { whenOf } from "../../domain/calendar";
 
 export interface DigestTimeViewModel {
   readonly state: "loading" | "ready" | "error";
@@ -32,15 +31,13 @@ const COMPLETE = /^([01]\d|2[0-3]):[0-5]\d$/;
 export class DigestTimePresenter extends Presenter<DigestTimeViewModel> {
   readonly #time: DigestTime;
   readonly #projectId: string;
-  readonly #clock: Clock;
   readonly #stop: () => void;
 
-  constructor(time: DigestTime, projectId: string, clock: Clock) {
-    super(build(time.state, projectId, clock));
+  constructor(time: DigestTime, projectId: string) {
+    super(build(time.state, projectId));
     this.#time = time;
     this.#projectId = projectId;
-    this.#clock = clock;
-    this.#stop = time.subscribe((state) => this.set(build(state, this.#projectId, this.#clock)));
+    this.#stop = time.subscribe((state) => this.set(build(state, this.#projectId)));
   }
 
   destroy(): void {
@@ -55,13 +52,13 @@ export class DigestTimePresenter extends Presenter<DigestTimeViewModel> {
   retry = (): void => this.#time.retry();
 }
 
-function build(s: DigestTimeState, projectId: string, clock: Clock): DigestTimeViewModel {
+function build(s: DigestTimeState, projectId: string): DigestTimeViewModel {
   return {
     state: s.error !== "" && !s.loaded ? "error" : s.loaded ? "ready" : "loading",
     error: s.error,
     value: s.digestTime ?? "",
     revision: s.refusals,
-    note: note(s, clock),
+    note: note(s),
     hint: HINT,
     browseHref: digestsHref(projectId),
     canClear: s.digestTime !== null,
@@ -71,10 +68,10 @@ function build(s: DigestTimeState, projectId: string, clock: Clock): DigestTimeV
   };
 }
 
-function note(s: DigestTimeState, clock: Clock): string {
+function note(s: DigestTimeState): string {
   const zone = `${s.timeZone}, the server's time zone`;
   if (s.enabled === false) return `${zone} · paused while the product owner is off`;
   if (s.digestTime === null) return `${zone} · no digest is recorded until a time is set`;
-  const next = nextRun(new Date(clock.now()), s.digestTime, s.timeZone);
+  const next = s.nextDigestAt;
   return next === null ? zone : `${zone} · next: ${whenOf(next, s.timeZone)}`;
 }

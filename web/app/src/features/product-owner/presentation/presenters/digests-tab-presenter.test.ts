@@ -8,8 +8,6 @@ import { digest, digestItem, digestRun } from "../../testing/digest-fixtures";
 import { DigestsTabPresenter } from "./digests-tab-presenter";
 
 const settled = () => new Promise((resolve) => setImmediate(resolve));
-// 2026-11-24 07:00 in São Paulo.
-const NOW = Date.parse("2026-11-24T10:00:00Z");
 
 const setup = async (opts: { enabled?: boolean; digestTime?: string; digests?: ReturnType<typeof digest>[]; select?: string } = {}) => {
   const server = memoryProductOwner();
@@ -17,7 +15,7 @@ const setup = async (opts: { enabled?: boolean; digestTime?: string; digests?: R
   if (opts.digestTime !== undefined) await server.updateSettings("p1", { digestTime: opts.digestTime });
   for (const d of opts.digests ?? []) server.seedDigest("p1", d);
   const digests = new ProjectDigests({ gateway: server, events: server });
-  const tab = new DigestsTabPresenter(digests, "p1", { now: () => NOW }, opts.select);
+  const tab = new DigestsTabPresenter(digests, "p1", opts.select);
   digests.attach("p1");
   await settled();
   return { server, digests, tab };
@@ -33,7 +31,7 @@ describe("the Digests tab", () => {
     const server = memoryProductOwner();
     server.seedProject("p1", true);
     const digests = new ProjectDigests({ gateway: server, events: server });
-    const tab = new DigestsTabPresenter(digests, "p1", { now: () => NOW });
+    const tab = new DigestsTabPresenter(digests, "p1");
     digests.attach("p1");
     assert.equal(tab.viewModel.state, "loading");
     await settled();
@@ -110,7 +108,7 @@ describe("the Digests tab", () => {
     server.seedDigest("p1", digest("2026-11-23"));
     server.seedDigest("p1", digest("2026-11-20"));
     const digests = new ProjectDigests({ gateway: server, events: server });
-    const tab = new DigestsTabPresenter(digests, "p1", { now: () => NOW }, "", (date) => chosen.push(date));
+    const tab = new DigestsTabPresenter(digests, "p1", "", (date) => chosen.push(date));
     digests.attach("p1");
     await settled();
     tab.select("2026-11-20");
@@ -175,7 +173,7 @@ describe("the Digests tab", () => {
     server.seedDigest("p1", digest("2026-11-23"));
     server.failWith(new ProductOwnerError("NETWORK_ERROR", "offline"));
     const digests = new ProjectDigests({ gateway: server, events: server });
-    const tab = new DigestsTabPresenter(digests, "p1", { now: () => NOW });
+    const tab = new DigestsTabPresenter(digests, "p1");
     digests.attach("p1");
     await settled();
     assert.deepEqual([tab.viewModel.state, tab.viewModel.error], ["error", "offline"]);
@@ -224,7 +222,7 @@ describe("the Digests tab", () => {
     const asked: (string | undefined)[] = [];
     const gateway = { ...server, digests: (projectId: string, before?: string) => (asked.push(before), server.digests(projectId, before)) };
     const digests = new ProjectDigests({ gateway, events: server });
-    const tab = new DigestsTabPresenter(digests, "p1", { now: () => NOW });
+    const tab = new DigestsTabPresenter(digests, "p1");
     digests.attach("p1");
     await settled();
     await Promise.all([tab.loadEarlier(), tab.loadEarlier()]);
@@ -287,7 +285,7 @@ describe("the Digests tab", () => {
     await server.updateSettings("p1", { digestTime: "09:00" });
     const events = { follow: (projectId: string, onEvent: Parameters<typeof server.follow>[1], onStatus: Parameters<typeof server.follow>[2]) => server.follow(projectId, (e) => e.type !== "settings" && onEvent(e), onStatus) };
     const digests = new ProjectDigests({ gateway: server, events });
-    const tab = new DigestsTabPresenter(digests, "p1", { now: () => NOW });
+    const tab = new DigestsTabPresenter(digests, "p1");
     digests.attach("p1");
     await settled();
     assert.equal(tab.viewModel.head, "Next: Tue 24 Nov, 09:00");
@@ -320,7 +318,7 @@ describe("the Digests tab", () => {
     server.seedProject("p1", true);
     for (const d of digestRun("2026-11-23", 40)) server.seedDigest("p1", d);
     const digests = new ProjectDigests({ gateway: server, events: server });
-    const tab = new DigestsTabPresenter(digests, "p1", { now: () => NOW });
+    const tab = new DigestsTabPresenter(digests, "p1");
     digests.attach("p1");
     await tab.show("2026-10-20");
     assert.equal(tab.viewModel.selected?.date, "2026-10-20");

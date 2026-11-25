@@ -1,62 +1,24 @@
 import { describe, test } from "node:test";
 import assert from "node:assert/strict";
-import { addDays, clockOf, daysBetween, longDay, monthOf, nextRun, shortDay, stampOf, whenOf } from "./calendar";
+import { addDays, clockOf, daysBetween, longDay, monthOf, shortDay, stampOf, whenOf } from "./calendar";
 
 const SP = "America/Sao_Paulo"; // UTC-3 all year since 2019
 
-describe("the next run of a digest time", () => {
-  test("is today when the time is still ahead in the server's zone", () => {
-    // 2026-11-24 10:00 in São Paulo is 13:00Z.
-    const next = nextRun(new Date("2026-11-24T10:00:00Z"), "08:30", SP);
-    assert.equal(next?.toISOString(), "2026-11-24T11:30:00.000Z");
+describe("a moment shown in the server's zone", () => {
+  test("goes by the zone named, whatever the browser's own is", () => {
+    const at = new Date("2026-11-24T02:00:00Z");
+    assert.equal(whenOf(at, SP), "Mon 23 Nov, 23:00");
+    assert.equal(whenOf(at, "Asia/Tokyo"), "Tue 24 Nov, 11:00");
   });
 
-  test("is tomorrow when the time has passed, and when it is this very minute", () => {
-    assert.equal(nextRun(new Date("2026-11-24T13:00:00Z"), "09:00", SP)?.toISOString(), "2026-11-25T12:00:00.000Z");
-    assert.equal(nextRun(new Date("2026-11-24T12:00:00Z"), "09:00", SP)?.toISOString(), "2026-11-25T12:00:00.000Z");
+  test("a zone named by its offset is a fixed offset", () => {
+    const at = new Date("2026-11-24T10:00:00Z");
+    assert.equal(whenOf(at, "-03:00"), "Tue 24 Nov, 07:00");
+    assert.equal(whenOf(at, "+05:30"), "Tue 24 Nov, 15:30");
+    assert.equal(clockOf(new Date("2026-11-23T12:00:00Z"), "-0300"), "09:00");
   });
 
-  test("goes by the server's zone, not by the zone of whoever computes it", () => {
-    // 02:00Z is 23:00 on the 23rd in São Paulo, so 09:00 is ten hours away; in Tokyo it is 11:00 on the 24th, so 09:00 is tomorrow.
-    const now = new Date("2026-11-24T02:00:00Z");
-    assert.equal(whenOf(nextRun(now, "09:00", SP)!, SP), "Tue 24 Nov, 09:00");
-    assert.equal(whenOf(nextRun(now, "09:00", "Asia/Tokyo")!, "Asia/Tokyo"), "Wed 25 Nov, 09:00");
-  });
-
-  test("moves across a month and a year end", () => {
-    assert.equal(whenOf(nextRun(new Date("2026-11-30T20:00:00Z"), "09:00", SP)!, SP), "Tue 1 Dec, 09:00");
-    assert.equal(whenOf(nextRun(new Date("2026-12-31T20:00:00Z"), "09:00", SP)!, SP), "Fri 1 Jan, 09:00");
-  });
-
-  test("keeps the wall clock across a change of offset", () => {
-    // Europe/Berlin leaves summer time on 2026-10-25: 09:00 stays 09:00 on the clock.
-    assert.equal(nextRun(new Date("2026-10-24T12:00:00Z"), "09:00", "Europe/Berlin")?.toISOString(), "2026-10-25T08:00:00.000Z");
-    assert.equal(nextRun(new Date("2026-10-25T09:00:00Z"), "09:00", "Europe/Berlin")?.toISOString(), "2026-10-26T08:00:00.000Z");
-  });
-
-  test("is nothing for a time or a zone it cannot read", () => {
-    assert.equal(nextRun(new Date(), "9:00", SP), null);
-    assert.equal(nextRun(new Date(), "09:00", "Not/AZone"), null);
-  });
-});
-
-describe("a zone the server names as its clock does", () => {
-  test("a numeric offset is a fixed offset", () => {
-    const now = new Date("2026-11-24T10:00:00Z"); // 07:00 at -03
-    assert.equal(nextRun(now, "09:00", "-03")?.toISOString(), "2026-11-24T12:00:00.000Z");
-    assert.equal(nextRun(now, "09:00", "+05:30")?.toISOString(), "2026-11-25T03:30:00.000Z");
-    assert.equal(nextRun(now, "09:00", "+0530")?.toISOString(), "2026-11-25T03:30:00.000Z");
-    assert.equal(clockOf(new Date("2026-11-23T12:00:00Z"), "-03"), "09:00");
-  });
-
-  test("UTC and a common abbreviation are fixed offsets", () => {
-    const now = new Date("2026-11-24T10:00:00Z");
-    assert.equal(nextRun(now, "12:00", "UTC")?.toISOString(), "2026-11-24T12:00:00.000Z");
-    assert.equal(nextRun(now, "12:00", "CET")?.toISOString(), "2026-11-24T11:00:00.000Z");
-  });
-
-  test("a name it does not know has no next run, and every other date still reads", () => {
-    assert.equal(nextRun(new Date(), "09:00", "Mars/Olympus"), null);
+  test("a name the browser does not know reads as the browser's own zone, and never throws", () => {
     assert.match(clockOf(new Date("2026-11-23T12:00:00Z"), "Mars/Olympus"), /^\d\d:\d\d$/);
   });
 });

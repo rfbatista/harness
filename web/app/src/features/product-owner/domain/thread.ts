@@ -32,8 +32,10 @@ export interface Settings {
   readonly enabled: boolean;
   /** "HH:MM" in the server's time zone; null while no digest time is set: no digest is then recorded. */
   readonly digestTime: string | null;
-  /** The server's time zone, read-only. */
+  /** The server's time zone for display: an IANA name, or its offset such as "-03:00". Read-only. */
   readonly timeZone: string;
+  /** When the next digest will be recorded, as the server computes it; null while no digest time is set or the product owner is off. */
+  readonly nextDigestAt: Date | null;
 }
 
 export interface ThreadSummary {

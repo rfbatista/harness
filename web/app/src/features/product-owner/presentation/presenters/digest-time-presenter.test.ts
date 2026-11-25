@@ -6,15 +6,13 @@ import { memoryProductOwner } from "../../infrastructure/memory-product-owner";
 import { DigestTimePresenter, HINT } from "./digest-time-presenter";
 
 const settled = () => new Promise((resolve) => setImmediate(resolve));
-// 2026-11-24 07:00 in São Paulo.
-const MORNING = Date.parse("2026-11-24T10:00:00Z");
 
 const setup = async (opts: { enabled?: boolean; time?: string; now?: number } = {}) => {
   const server = memoryProductOwner();
   server.seedProject("p1", opts.enabled ?? true);
   if (opts.time !== undefined) await server.updateSettings("p1", { digestTime: opts.time });
   const digestTime = new DigestTime({ gateway: server, events: server });
-  const block = new DigestTimePresenter(digestTime, "p1", { now: () => opts.now ?? MORNING });
+  const block = new DigestTimePresenter(digestTime, "p1");
   digestTime.attach("p1");
   await settled();
   return { server, block };
@@ -25,7 +23,7 @@ describe("the Daily digest block", () => {
     const server = memoryProductOwner();
     server.seedProject("p1", true);
     const digestTime = new DigestTime({ gateway: server, events: server });
-    const block = new DigestTimePresenter(digestTime, "p1", { now: () => MORNING });
+    const block = new DigestTimePresenter(digestTime, "p1");
     digestTime.attach("p1");
     assert.equal(block.viewModel.state, "loading");
     await settled();
@@ -40,9 +38,15 @@ describe("the Daily digest block", () => {
     assert.equal(block.viewModel.browseHref, "/projects/p1/product-owner#digests");
   });
 
-  test("the next run is tomorrow when the time has passed in the server's zone", async () => {
-    const { block } = await setup({ time: "09:00", now: Date.parse("2026-11-24T13:00:00Z") });
-    assert.match(block.viewModel.note, /next: Wed 25 Nov, 09:00$/);
+  test("shows the next run as the server sends it, and computes none of its own", async () => {
+    const { block, server } = await setup({ time: "09:00" });
+    // The server says the digest is owed now (missed while it was down): the page does not argue with it.
+    server.setNextDigest("p1", new Date("2026-11-24T10:00:00Z"));
+    server.publish("p1", { type: "settings", settings: { ...(await server.settings("p1")) } });
+    assert.match(block.viewModel.note, /next: Tue 24 Nov, 07:00$/);
+    server.setNextDigest("p1", null);
+    server.publish("p1", { type: "settings", settings: { ...(await server.settings("p1")) } });
+    assert.equal(block.viewModel.note, "America/Sao_Paulo, the server's time zone");
   });
 
   test("with no time set, says no digest is recorded", async () => {
@@ -67,7 +71,7 @@ describe("the Daily digest block", () => {
     const sent: (string | undefined)[] = [];
     const gateway = { ...server, updateSettings: (projectId: string, patch: { digestTime?: string }) => (sent.push(patch.digestTime), server.updateSettings(projectId, patch)) };
     const digestTime = new DigestTime({ gateway, events: server });
-    const block = new DigestTimePresenter(digestTime, "p1", { now: () => MORNING });
+    const block = new DigestTimePresenter(digestTime, "p1");
     digestTime.attach("p1");
     await settled();
     await block.change("09:00");
@@ -122,7 +126,7 @@ describe("the Daily digest block", () => {
 
   test("follows the settings event: another tab's change shows at once", async () => {
     const { block, server } = await setup({ time: "09:00" });
-    server.publish("p1", { type: "settings", settings: { projectId: "p1", enabled: false, digestTime: "10:30", timeZone: "America/Sao_Paulo" } });
+    server.publish("p1", { type: "settings", settings: { projectId: "p1", enabled: false, digestTime: "10:30", timeZone: "America/Sao_Paulo", nextDigestAt: null } });
     assert.deepEqual([block.viewModel.value, block.viewModel.dimmed], ["10:30", true]);
   });
 
@@ -131,7 +135,7 @@ describe("the Daily digest block", () => {
     server.seedProject("p1", true);
     server.failWith(new ProductOwnerError("NETWORK_ERROR", "offline"));
     const digestTime = new DigestTime({ gateway: server, events: server });
-    const block = new DigestTimePresenter(digestTime, "p1", { now: () => MORNING });
+    const block = new DigestTimePresenter(digestTime, "p1");
     digestTime.attach("p1");
     await settled();
     assert.deepEqual([block.viewModel.state, block.viewModel.error], ["error", "offline"]);
@@ -148,7 +152,7 @@ describe("the Daily digest block", () => {
     // The page hears no settings event: the server's settings change on their own, and only a digest event tells the page to look.
     const events = { follow: (projectId: string, onEvent: Parameters<typeof server.follow>[1], onStatus: Parameters<typeof server.follow>[2]) => server.follow(projectId, (e) => e.type !== "settings" && onEvent(e), onStatus) };
     const digestTime = new DigestTime({ gateway: server, events });
-    const block = new DigestTimePresenter(digestTime, "p1", { now: () => MORNING });
+    const block = new DigestTimePresenter(digestTime, "p1");
     digestTime.attach("p1");
     await settled();
     await server.updateSettings("p1", { digestTime: "10:00" });

@@ -13,6 +13,8 @@ export interface ProjectDigestsState {
   readonly enabled: boolean | null;
   readonly digestTime: string | null;
   readonly timeZone: string;
+  /** When the next digest is recorded, as the server says; null for none. */
+  readonly nextDigestAt: Date | null;
   /** The newest first, one per date. */
   readonly digests: readonly Digest[];
   readonly hasEarlier: boolean;
@@ -32,7 +34,7 @@ function merge(held: readonly Digest[], fresh: readonly Digest[]): Digest[] {
   return [...fresh, ...held.filter((d) => !dates.has(d.date))].sort((a, b) => b.date.localeCompare(a.date));
 }
 
-const INITIAL: ProjectDigestsState = { loaded: false, error: "", enabled: null, digestTime: null, timeZone: "", digests: [], hasEarlier: false, loadingEarlier: false, earlierError: "", turningOn: false, turnOnError: "" };
+const INITIAL: ProjectDigestsState = { loaded: false, error: "", enabled: null, digestTime: null, timeZone: "", nextDigestAt: null, digests: [], hasEarlier: false, loadingEarlier: false, earlierError: "", turningOn: false, turnOnError: "" };
 
 export class ProjectDigests {
   readonly #deps: { gateway: ProductOwnerGateway; events: ProductOwnerEvents };
@@ -65,7 +67,7 @@ export class ProjectDigests {
     this.#unfollow = this.#deps.events.follow(
       projectId,
       (event) => {
-        if (event.type === "settings") this.#set({ enabled: event.settings.enabled, digestTime: event.settings.digestTime, timeZone: event.settings.timeZone });
+        if (event.type === "settings") this.#set({ enabled: event.settings.enabled, digestTime: event.settings.digestTime, timeZone: event.settings.timeZone, nextDigestAt: event.settings.nextDigestAt });
         else if (event.type === "digest") void this.#refresh(generation);
       },
       (status) => {
@@ -147,7 +149,7 @@ export class ProjectDigests {
     try {
       const [settings, page] = await Promise.all([this.#deps.gateway.settings(this.#projectId), this.#deps.gateway.digests(this.#projectId)]);
       if (generation !== this.#generation) return;
-      this.#set({ loaded: true, error: "", enabled: settings.enabled, digestTime: settings.digestTime, timeZone: settings.timeZone, digests: page.digests, hasEarlier: page.hasEarlier });
+      this.#set({ loaded: true, error: "", enabled: settings.enabled, digestTime: settings.digestTime, timeZone: settings.timeZone, nextDigestAt: settings.nextDigestAt, digests: page.digests, hasEarlier: page.hasEarlier });
     } catch (err) {
       if (!(err instanceof ProductOwnerError)) throw err;
       if (generation === this.#generation) this.#set({ error: err.message });
@@ -160,7 +162,7 @@ export class ProjectDigests {
       // The settings too: the next run moves when a digest is recorded, and no settings event says so.
       const [settings, page] = await Promise.all([this.#deps.gateway.settings(this.#projectId), this.#deps.gateway.digests(this.#projectId)]);
       // Earlier digests exist beyond the oldest held exactly when they did before: a new digest is only ever newer.
-      if (generation === this.#generation) this.#set({ enabled: settings.enabled, digestTime: settings.digestTime, timeZone: settings.timeZone, digests: merge(this.#state.digests, page.digests), hasEarlier: this.#state.loaded ? this.#state.hasEarlier : page.hasEarlier });
+      if (generation === this.#generation) this.#set({ enabled: settings.enabled, digestTime: settings.digestTime, timeZone: settings.timeZone, nextDigestAt: settings.nextDigestAt, digests: merge(this.#state.digests, page.digests), hasEarlier: this.#state.loaded ? this.#state.hasEarlier : page.hasEarlier });
     } catch (err) {
       if (!(err instanceof ProductOwnerError)) throw err;
     }

@@ -9,7 +9,7 @@ import type { SettingsDto } from "./dto/settings-dto";
 import type { ThreadItemDto, ThreadPageDto, ThreadSummaryDto } from "./dto/thread-dto";
 import type { ThreadHeadDto } from "./dto/thread-dto";
 
-export const toSettings = (dto: SettingsDto): Settings => ({ projectId: dto.project_id, enabled: dto.enabled, digestTime: dto.digest_time, timeZone: dto.time_zone });
+export const toSettings = (dto: SettingsDto): Settings => ({ projectId: dto.project_id, enabled: dto.enabled, digestTime: dto.digest_time, timeZone: dto.time_zone, nextDigestAt: dto.next_digest_at });
 
 export const toDigest = (dto: DigestDto): Digest => ({
   digestId: dto.digest_id,
