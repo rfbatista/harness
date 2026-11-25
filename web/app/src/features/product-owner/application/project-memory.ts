@@ -38,6 +38,7 @@ export interface ProjectMemoryDeps {
 
 export class ProjectMemory {
   readonly #deps: ProjectMemoryDeps;
+  readonly #clock: () => Date;
   readonly #listeners = new Set<(state: ProjectMemoryState) => void>();
   #state: ProjectMemoryState = EMPTY;
   #unfollow: (() => void) | null = null;
@@ -45,6 +46,7 @@ export class ProjectMemory {
 
   constructor(deps: ProjectMemoryDeps) {
     this.#deps = deps;
+    this.#clock = deps.clock ?? (() => new Date());
   }
 
   get state(): ProjectMemoryState {
@@ -111,10 +113,9 @@ export class ProjectMemory {
       if (!(err instanceof ProductOwnerError && err.code === "MEMORY_ENTRY_NOT_FOUND")) throw err;
     }
     if (generation !== this.#generation) return;
-    const clock = this.#deps.clock ?? (() => new Date());
     this.#set({
       entries: this.#state.entries.filter((e) => e.entryId !== entryId),
-      receipts: gone === undefined ? this.#state.receipts : [...this.#state.receipts, { entryId, text: gone.text, at: clock(), index }],
+      receipts: gone === undefined ? this.#state.receipts : [...this.#state.receipts, { entryId, text: gone.text, at: this.#clock(), index }],
     });
   }
 
@@ -136,7 +137,6 @@ export class ProjectMemory {
           if (old === undefined || old.changedAt?.getTime() !== e.changedAt?.getTime() || old.text !== e.text) fresh.add(e.entryId);
         }
       }
-      // A receipt stays only until the list no longer holds the entry (it never does again).
       this.#set({ entries: read, loaded: true, loading: false, error: "", fresh });
     } catch (err) {
       if (!(err instanceof ProductOwnerError)) throw err;

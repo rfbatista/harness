@@ -6,7 +6,7 @@ import { OwnerIcon } from "./owner-icon";
 const idOf = (entryId: string): string => `memory-entry-${entryId}`;
 
 /** The Memory tab: the entries, each edited where it stands or deleted after a danger confirm. */
-export function MemoryTabView({ presenter, onOpenThread }: { presenter: MemoryTabPresenter; onOpenThread: (threadId: string) => void }) {
+export function MemoryTabView({ presenter, onOpenThread, onStartThread }: { presenter: MemoryTabPresenter; onOpenThread: (threadId: string) => void; onStartThread: () => void }) {
   const vm = usePresenter(presenter);
   const list = useRef<HTMLDivElement>(null);
   const seen = useRef(0);
@@ -51,6 +51,10 @@ export function MemoryTabView({ presenter, onOpenThread }: { presenter: MemoryTa
           <div className="[ memory-empty ]">
             <h2>Nothing remembered yet</h2>
             <p>When you tell the product owner what you decided, what you prefer or what you agreed, it saves one entry for each, and they appear here.</p>
+            <button type="button" className="[ button ]" data-size="sm" onClick={onStartThread}>
+              <OwnerIcon name="plus" />
+              Start a thread
+            </button>
           </div>
         )}
         {vm.noMatch && <p className="[ memory-empty ]">No entry matches “{vm.filter}”.</p>}
@@ -92,7 +96,7 @@ function EntryView({ row, presenter, onOpenThread }: { row: EntryRow; presenter:
           <label className="[ visually-hidden ]" htmlFor={`${idOf(row.entryId)}-text`}>
             Entry text
           </label>
-          <textarea id={`${idOf(row.entryId)}-text`} value={row.edit!.draft} aria-invalid={row.edit!.over || undefined} aria-describedby={`${idOf(row.entryId)}-hint`} onChange={(event) => presenter.setDraft(event.currentTarget.value)} />
+          <textarea id={`${idOf(row.entryId)}-text`} value={row.edit!.draft} readOnly={row.edit!.saving} aria-invalid={row.edit!.over || undefined} aria-describedby={`${idOf(row.entryId)}-hint`} onChange={(event) => presenter.setDraft(event.currentTarget.value)} />
           <div className="[ edit-acts ]">
             <button type="submit" className="[ button ]" data-variant="primary" data-size="sm" disabled={!row.edit!.canSave}>
               Save

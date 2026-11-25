@@ -28,6 +28,7 @@ import { OwnerPagePropsDto } from "./owner-page-props-dto";
 import { OwnerPagePresenter } from "../features/product-owner/presentation/presenters/owner-page-presenter";
 import { OwnerPageView } from "../features/product-owner/presentation/views/owner-page-view";
 import { OwnerPanelPropsDto } from "./owner-panel-props-dto";
+import { memoryAddress } from "../features/product-owner/application/links";
 import { ProjectMemory } from "../features/product-owner/application/project-memory";
 import { MemoryTabPresenter } from "../features/product-owner/presentation/presenters/memory-tab-presenter";
 import { Conversation } from "../features/product-owner/application/conversation";
@@ -50,12 +51,6 @@ import { TopBarView } from "./top-bar-view";
 import { mountAgentsView, mountWhiteboard } from "./whiteboard-island";
 
 type Dispose = () => void;
-
-/** `#memory` or `#memory/<entry>`: a link from a note in a thread opens the Memory tab. */
-function memoryAddress(hash: string): { tab: "memory"; entryId: string } | undefined {
-  const match = /^#memory(?:\/(.+))?$/.exec(hash);
-  return match ? { tab: "memory", entryId: match[1] === undefined ? "" : decodeURIComponent(match[1]) } : undefined;
-}
 
 /** Islands that read their props themselves, from the page they sit in. */
 const OWN_PROPS = new Set(["agents-view", "agents-whiteboard"]);

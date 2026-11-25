@@ -73,7 +73,7 @@ export function OwnerPageView({ page, thread, threads, about, memory }: OwnerPag
           Memory {vm.memoryCount !== null && <span className="[ badge ]">{vm.memoryCount}</span>}
         </a>
       </div>
-      {vm.tab === "memory" && <MemoryTabView presenter={memory} onOpenThread={page.openThread} />}
+      {vm.tab === "memory" && <MemoryTabView presenter={memory} onOpenThread={page.openThread} onStartThread={page.newThread} />}
       <div className="[ owner-split ]" data-phone={vm.phone ?? undefined} hidden={vm.tab !== "threads"}>
         <ThreadListView presenter={threads} onOpen={page.openThread} onNew={page.newThread} />
         <section className="[ conversation ]" aria-label={aboutVm.title === "" ? "New thread" : aboutVm.title}>

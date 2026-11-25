@@ -3,7 +3,7 @@
 
 import { Presenter } from "../../../../shared/kernel/presenter";
 import type { Conversation, ConversationItem, ConversationState } from "../../application/conversation";
-import { pageHref } from "../../application/links";
+import { memoryHref } from "../../application/links";
 import type { TaskCatalog } from "../../application/ports";
 import type { ProjectMemory } from "../../application/project-memory";
 import { parseMarkdown, type Block } from "../../domain/markdown";
@@ -183,7 +183,7 @@ export class ThreadPresenter extends Presenter<ThreadViewModel> {
     if (item.kind !== "memory_note") return row(item, n, state.items);
     const mem = this.#memory?.memory.state;
     const there = item.op !== "dropped" && mem !== undefined && mem.loaded && mem.entries.some((e) => e.entryId === item.entryId);
-    return [{ kind: "memory_note", key: item.itemId, op: item.op, label: NOTE_LABEL[item.op], text: item.text, entryId: item.entryId, editHref: there ? `${pageHref(state.projectId)}#memory/${encodeURIComponent(item.entryId)}` : null }];
+    return [{ kind: "memory_note", key: item.itemId, op: item.op, label: NOTE_LABEL[item.op], text: item.text, entryId: item.entryId, editHref: there ? memoryHref(state.projectId, item.entryId) : null }];
   }
 
   /** "I remember 14 things we agreed": the thread starts informed. Nothing while none, or while unread. */

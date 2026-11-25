@@ -240,4 +240,16 @@ describe("the Memory tab", () => {
     assert.equal(presenter.viewModel.focus.target, "");
     assert.equal(presenter.viewModel.focus.seq, seq);
   });
+
+  test("a delete confirm of an entry that left the list meanwhile closes, leaving no receipt and asking for no focus", async () => {
+    const { server, presenter } = await setup();
+    presenter.askDelete("a");
+    const seq = presenter.viewModel.focus.seq;
+    server.seedMemory("p1", [entry({ entryId: "b", text: "Beta decision", savedAt: at(22, 11, 32) })]);
+    server.forget("b");
+    await settled();
+    await presenter.confirmDelete();
+    assert.equal(presenter.viewModel.rows.some((r) => r.kind === "receipt"), false);
+    assert.equal(presenter.viewModel.focus.seq, seq);
+  });
 });

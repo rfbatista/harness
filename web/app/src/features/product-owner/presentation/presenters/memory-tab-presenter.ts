@@ -14,7 +14,7 @@ export interface EntryRow {
   readonly text: string;
   /** "Saved Wed 18 Nov, 09:20". */
   readonly saved: string;
-  /** The thread it came from; null when the entry has none. */
+  /** The thread it came from; "" when the entry has none. */
   readonly threadId: string;
   readonly threadTitle: string;
   readonly threadHref: string | null;
@@ -180,7 +180,9 @@ export class MemoryTabPresenter extends Presenter<MemoryTabViewModel> {
     if (deleting === null) return;
     try {
       await this.#memory.remove(deleting.entryId);
-      this.#update({ deleting: null, focus: this.#focus(deleting.entryId, "receipt") });
+      // A receipt stands only for an entry the list still held; with none there is nothing to focus.
+      const receipt = this.#memory.state.receipts.some((r) => r.entryId === deleting.entryId);
+      this.#update({ deleting: null, ...(receipt ? { focus: this.#focus(deleting.entryId, "receipt") } : {}) });
     } catch (err) {
       if (!(err instanceof ProductOwnerError)) throw err;
       this.#update({ deleting: { entryId: deleting.entryId, error: err.message } });
