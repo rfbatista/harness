@@ -3,6 +3,8 @@ package tooling
 import (
 	"context"
 	"slices"
+	"strconv"
+	"strings"
 
 	"operators-mcp/internal/domain"
 	"operators-mcp/internal/ports"
@@ -22,6 +24,7 @@ var ProductOwnerToolNames = []string{
 	"get_project_task",
 	"list_project_sessions",
 	"list_project_branches",
+	"search_past_conversations",
 }
 
 // ProductOwnerSources is what the product owner's own reads come from.
@@ -29,6 +32,23 @@ type ProductOwnerSources struct {
 	Tasks    ports.TicketReader
 	Changes  ports.TaskStatusChangeRepository
 	Sessions ports.SessionRepository
+	// Conversations searches the project's past threads; nil leaves the search
+	// tool answering SEARCH_UNAVAILABLE.
+	Conversations ConversationSearcher
+}
+
+// ConversationSearcher is a full-text search of a project's product-owner
+// threads, archived parts included.
+type ConversationSearcher interface {
+	SearchConversations(ctx context.Context, projectID, query string) ([]domain.ProductOwnerSearchMatch, error)
+}
+
+// ProductOwnerOption sets one more source of the product owner's reads.
+type ProductOwnerOption func(*ProductOwnerSources)
+
+// WithConversationSearch gives the product owner its search of past threads.
+func WithConversationSearch(s ConversationSearcher) ProductOwnerOption {
+	return func(src *ProductOwnerSources) { src.Conversations = s }
 }
 
 // ProductOwnerTools are the tools the product-owner session endpoint serves:
@@ -111,6 +131,41 @@ func productOwnerReads(src ProductOwnerSources) []domain.Tool {
 					})
 				}
 				return map[string]any{"count": len(rows), "sessions": rows}, nil
+			},
+		},
+		{
+			Name: "search_past_conversations",
+			Description: "Search the earlier conversations of this project's product owner, the archived parts of long threads " +
+				"included, with a full-text search. It matches words (with stemming, so export finds exports), not meaning: " +
+				"try synonyms and several phrasings, for example export, download, csv and spreadsheet for one idea. Join " +
+				"phrasings with OR to search them together. It answers passages, each with its thread, the thread's title, " +
+				"its date and whether it lies in an archived part: name the thread and the date when you use one. Only this " +
+				"project's conversations are searched.",
+			InputSchema: schemaFromJSON(`{"type":"object","required":["query"],"properties":{"query":{"type":"string","description":"Words to find, at most 200 characters. Join several phrasings of one idea with OR."}}}`),
+			Source:      "code",
+			Handler: func(ctx context.Context, args map[string]any) (any, error) {
+				sess, err := resolveProjectScope(ctx, src.Sessions)
+				if err != nil {
+					return nil, err
+				}
+				if src.Conversations == nil {
+					return nil, &domain.StructuredError{Code: "SEARCH_UNAVAILABLE", Message: "SEARCH_UNAVAILABLE: conversations cannot be searched on this server"}
+				}
+				query := strings.TrimSpace(getString(args, "query", ""))
+				matches, err := src.Conversations.SearchConversations(ctx, sess.ProjectID, query)
+				if err != nil {
+					return nil, err
+				}
+				rows := make([]map[string]any, 0, len(matches))
+				for _, m := range matches {
+					rows = append(rows, map[string]any{"thread_id": m.ThreadID, "thread_title": m.ThreadTitle, "item_id": m.ItemID,
+						"at": m.At, "archived": m.Archived, "passage": m.Snippet})
+				}
+				out := map[string]any{"count": len(rows), "matches": rows}
+				if len(rows) == 0 {
+					out["note"] = "Searched this project's conversations for " + strconv.Quote(query) + ": nothing found. Try other words or phrasings, and say so if you still find nothing."
+				}
+				return out, nil
 			},
 		},
 		{
