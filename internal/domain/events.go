@@ -74,6 +74,16 @@ type SessionStarted struct {
 	StatusCheckMinutes *int
 }
 
+// SessionResumed: an ended session was brought back and is running again,
+// in its own worktree and conversation.
+type SessionResumed struct {
+	SessionID       string
+	ProjectID       string
+	TicketID        string
+	ParentSessionID string
+	Mode            SessionMode
+}
+
 // SessionEnded: a session's process is gone, with Status (done, failed or
 // stopped).
 type SessionEnded struct {
@@ -246,6 +256,7 @@ func (MCPServerDeleted) EventName() string           { return "mcp_server.delete
 func (SettingsChanged) EventName() string            { return "settings.changed" }
 func (SessionDeleted) EventName() string             { return "session.deleted" }
 func (SessionStarted) EventName() string             { return "session.started" }
+func (SessionResumed) EventName() string             { return "session.resumed" }
 func (SessionEnded) EventName() string               { return "session.ended" }
 func (InterviewOpened) EventName() string            { return "interview.opened" }
 func (InterviewClosed) EventName() string            { return "interview.closed" }

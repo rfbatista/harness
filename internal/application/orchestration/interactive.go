@@ -240,8 +240,9 @@ func (s *Service) StartInteractive(ctx context.Context, req InteractiveRequest) 
 // Concurrent calls for one session resume it once; the others answer
 // SESSION_ALREADY_RUNNING. A resume is not held to the task's session limit
 // (TASK_SESSION_LIMIT): like starting one from the TUI or the web, it is a
-// person's action, and the limit only bounds the sessions agents start. Once
-// running, it counts toward that limit again.
+// person's action, and the limit only bounds the sessions agents start (the
+// agents' resume_task_session checks it before it calls here). Once running,
+// it counts toward that limit again.
 func (s *Service) ResumeInteractive(ctx context.Context, req ports.ResumeRequest) (*domain.Session, ports.AgentSpec, error) {
 	runsOn, err := s.runner(req.RunsOn)
 	if err != nil {
@@ -336,10 +337,11 @@ func (s *Service) ResumeInteractive(ctx context.Context, req ports.ResumeRequest
 	s.withWorktreeReadHook(&cfg, sess.ID, sb)
 	trail.mark(&cfg, domain.PieceOther, "Sandbox and Chrome", "Harness")
 	// A session a restart interrupted mid-turn is told so: its first turn is
-	// the continue turn (ADR 0082); any other resumes idle, with no turn.
-	prompt := ""
+	// the continue turn (ADR 0082). The request's prompt follows it, or is the
+	// first turn on its own; with neither, the session resumes idle.
+	prompt := strings.TrimSpace(req.Prompt)
 	if sess.InterruptedAt != nil {
-		prompt = continueTurn(s.interruption(sess.ID))
+		prompt = strings.TrimSpace(continueTurn(s.interruption(sess.ID)) + "\n\n" + prompt)
 	}
 	spec := s.agentSpec(cfg, ports.Conversation{ID: claudeID(sess), Resume: true}, prompt)
 	spec.EnvFile = envFile
@@ -365,11 +367,17 @@ func (s *Service) ResumeInteractive(ctx context.Context, req ports.ResumeRequest
 	}, prompt)
 	if sess.InterruptedAt != nil {
 		s.record(sess.ID, SessionEvent{Type: eventResumed, InterruptedAt: sess.InterruptedAt, At: time.Now()}, sessionChange{clearInterrupted: true})
-		s.courier.setTurn(sess.ID, turnBusy) // the continue turn is its first
+	}
+	if prompt != "" {
+		s.courier.setTurn(sess.ID, turnBusy) // the continue turn or the prompt is its first
 	} else {
 		s.courier.setTurn(sess.ID, turnIdle) // a resumed conversation waits for its next prompt
 	}
 	s.publish(sess.ID, SessionEvent{Type: "status", Status: domain.SessionRunning, Text: "resumed" + strings.TrimPrefix(startedText(runsOn), "started"), At: time.Now()})
+	// Announced before the CLI runs, so the architect channel has brought back
+	// the session's status-check loop when the resume returns.
+	s.announce(domain.SessionResumed{SessionID: sess.ID, ProjectID: sess.ProjectID, TicketID: sess.TicketID,
+		ParentSessionID: sess.ParentSessionID, Mode: sess.Mode})
 	// Armed before the spawn, so a process that exits at once is announced.
 	s.rearmLeaveAnnouncement(sess.ID)
 	if runsOn == domain.RunnerServer {
