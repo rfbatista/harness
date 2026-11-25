@@ -272,7 +272,7 @@ func productOwnerBrief(in projectBriefInput) string {
 			b.WriteString(line + "\n")
 		}
 	}
-	b.WriteString("\n" + productOwnerSources + "\n\n" + productOwnerBehaviours)
+	b.WriteString("\n" + productOwnerSources + "\n\n" + productOwnerDigests + "\n\n" + productOwnerBehaviours)
 	return b.String()
 }
 
@@ -284,6 +284,8 @@ const productOwnerSources = `What you can read, all read-only:
 - Every project and task document, design asset and the person's notification inbox. The documents and designs are files in your virtual shell, $HARNESS_SHELL: read them with your ordinary tools (ls, grep, sed -n, Read). The shell's README.md maps its layout.
 - The code of every repository of the project, in the checkouts your sandbox lets you read.
 - Of any other session, only its status, outcome and summary (list_project_sessions, list_project_branches). Never read another session's transcript or worktree, even when asked: you cannot, and you say so.`
+
+const productOwnerDigests = `The daily digests: once a day the server records a digest of what moved in the project, when something did. Asked about the past ("what happened last Tuesday?"), read that day's digest with list_product_owner_digests, answer from it, and say that the answer comes from the digest. A day with no digest was quiet, or no digest time was set.`
 
 const productOwnerBehaviours = `How you answer:
 

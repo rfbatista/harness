@@ -190,7 +190,7 @@ func (e *poE2E) serve() {
 	mux.Handle("/api/", httpapi.NewRouter(httpapi.NewHandler(httpapi.Services{
 		Sessions: e.orch, Planning: e.plan, Projects: e.cat.Projects, Settings: e.cat.Settings, ProductOwner: e.po, AgentBoard: e.board, Usage: e.usage,
 	})))
-	mux.Handle(mcpsession.PathPrefix, sessionTaskHandler(sessionTaskTools(e.cat, e.orch, e.plan, e.sess, e.art, e.channel, nil, nil), e.plan, e.sess, e.po))
+	mux.Handle(mcpsession.PathPrefix, sessionTaskHandler(sessionTaskTools(e.cat, e.orch, e.plan, e.sess, e.art, e.channel, nil, nil), e.plan, e.sess, e.po, tooling.WithDigests(e.po)))
 	e.srv = httptest.NewServer(mux)
 	e.t.Cleanup(e.srv.Close)
 	e.feed = followPOFeed(e.t, e.srv.URL, e.project)
