@@ -32,6 +32,7 @@ func fromAgentEvent(ce llmkit.Event) (ev SessionEvent, status domain.SessionStat
 	case llmkit.EventAssistant:
 		ev.Type = "output"
 		ev.Text = ce.Text
+		ev.CallUsage = fromCallUsage(ce.CallUsage)
 		return ev, domain.SessionThinking, true
 	case llmkit.EventDelta:
 		// Ephemeral live-streaming fragment; routed past persistence/status.
@@ -45,6 +46,7 @@ func fromAgentEvent(ce llmkit.Event) (ev SessionEvent, status domain.SessionStat
 		ev.Type = "tool_use"
 		ev.ToolName = ce.ToolName
 		ev.ToolInput = ce.ToolInput
+		ev.CallUsage = fromCallUsage(ce.CallUsage)
 		return ev, domain.SessionThinking, true
 	case llmkit.EventToolResult:
 		ev.Type = "tool_result"
@@ -57,6 +59,7 @@ func fromAgentEvent(ce llmkit.Event) (ev SessionEvent, status domain.SessionStat
 		ev.Type = "usage"
 		ev.Text = ce.Text
 		ev.CostUSD = ce.CostUSD
+		ev.ContextWindows = ce.ContextWindows
 		if ce.Usage != nil {
 			ev.Usage = &Usage{InputTokens: ce.Usage.InputTokens, OutputTokens: ce.Usage.OutputTokens,
 				CacheCreationInputTokens: ce.Usage.CacheCreationInputTokens, CacheReadInputTokens: ce.Usage.CacheReadInputTokens}
@@ -82,4 +85,13 @@ func fromAgentEvent(ce llmkit.Event) (ev SessionEvent, status domain.SessionStat
 		ev.Type = "status"
 		return ev, "", false
 	}
+}
+
+// fromCallUsage is one API call's usage as the session event carries it.
+func fromCallUsage(u *llmkit.Usage) *Usage {
+	if u == nil {
+		return nil
+	}
+	return &Usage{InputTokens: u.InputTokens, OutputTokens: u.OutputTokens,
+		CacheCreationInputTokens: u.CacheCreationInputTokens, CacheReadInputTokens: u.CacheReadInputTokens}
 }

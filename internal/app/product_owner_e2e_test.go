@@ -98,13 +98,16 @@ while IFS= read -r line; do
   n=$((n+1))
   text=$(printf '%s' "$line" | sed -n 's/.*"text":"\([^"]*\)".*/\1/p')
   printf '%s\n' "$text" >> "$dir/received"
+  inp=$(cat "$dir/usage" 2>/dev/null || echo 5)
+  win=$(cat "$dir/window" 2>/dev/null || echo 0)
+  case "$text" in Checkpoint:*) while [ -f "$dir/summaryhold" ]; do sleep 0.05; done; [ -f "$dir/summaryfail" ] && exit 1;; esac
   while [ -f "$dir/prehold" ]; do sleep 0.05; done
   case "$text" in read:*) printf '%s\n' '{"type":"assistant","session_id":"fake","message":{"role":"assistant","content":[{"type":"tool_use","id":"t1","name":"Read","input":{"file_path":"project/docs/prd.md"}}]}}';; esac
   printf '%s\n' '{"type":"stream_event","session_id":"fake","event":{"type":"content_block_delta","index":0,"delta":{"type":"text_delta","text":"answer to: "}}}'
   while [ -f "$dir/hold" ]; do sleep 0.05; done
   printf '%s\n' '{"type":"stream_event","session_id":"fake","event":{"type":"content_block_delta","index":0,"delta":{"type":"text_delta","text":"'"$text"'"}}}'
-  printf '%s\n' '{"type":"assistant","session_id":"fake","message":{"role":"assistant","content":[{"type":"text","text":"answer to: '"$text"'"}]}}'
-  printf '%s\n' '{"type":"result","subtype":"success","session_id":"fake","result":"ok","total_cost_usd":0.02,"usage":{"input_tokens":5,"output_tokens":9}}'
+  printf '%s\n' '{"type":"assistant","session_id":"fake","message":{"role":"assistant","content":[{"type":"text","text":"answer to: '"$text"'"}],"usage":{"input_tokens":'"$inp"',"output_tokens":9}}}'
+  printf '%s\n' '{"type":"result","subtype":"success","session_id":"fake","result":"ok","total_cost_usd":0.02,"usage":{"input_tokens":'"$inp"',"output_tokens":9},"modelUsage":{"claude-sonnet-fake":{"contextWindow":'"$win"'}}}'
 done
 `
 
@@ -190,7 +193,7 @@ func (e *poE2E) serve() {
 	mux.Handle("/api/", httpapi.NewRouter(httpapi.NewHandler(httpapi.Services{
 		Sessions: e.orch, Planning: e.plan, Projects: e.cat.Projects, Settings: e.cat.Settings, ProductOwner: e.po, AgentBoard: e.board, Usage: e.usage,
 	})))
-	mux.Handle(mcpsession.PathPrefix, sessionTaskHandler(sessionTaskTools(e.cat, e.orch, e.plan, e.sess, e.art, e.channel, nil, nil), e.plan, e.sess, e.po, tooling.WithDigests(e.po), tooling.WithHolds(e.po)))
+	mux.Handle(mcpsession.PathPrefix, sessionTaskHandler(sessionTaskTools(e.cat, e.orch, e.plan, e.sess, e.art, e.channel, nil, nil), e.plan, e.sess, e.po, tooling.WithDigests(e.po), tooling.WithHolds(e.po), tooling.WithConversationSearch(e.po)))
 	e.srv = httptest.NewServer(mux)
 	e.t.Cleanup(e.srv.Close)
 	e.feed = followPOFeed(e.t, e.srv.URL, e.project)
@@ -471,6 +474,9 @@ type poItem struct {
 	Streaming   *bool  `json:"streaming"`
 	Stopped     bool   `json:"stopped"`
 	Attachments []any  `json:"attachments"`
+	Summary     string `json:"summary"`
+	RetryItemID string `json:"retry_item_id"`
+	Code        string `json:"code"`
 }
 
 type poThread struct {

@@ -438,6 +438,7 @@ func NewRouter(h *Handler, opts ...Option) *echo.Echo {
 	g.POST("/send_product_owner_message", h.handleSendProductOwnerMessage)
 	g.POST("/stop_product_owner_turn", h.handleStopProductOwnerTurn)
 	g.POST("/rename_product_owner_thread", h.handleRenameProductOwnerThread)
+	g.GET("/search_product_owner_conversations", h.handleSearchProductOwnerConversations)
 	g.POST("/answer_held_action", h.handleAnswerHeldAction)
 	g.GET("/product_owner_digests", h.handleListProductOwnerDigests)
 	g.GET("/product_owner_memory", h.handleGetProductOwnerMemory)

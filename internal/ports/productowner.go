@@ -32,6 +32,14 @@ type ProductOwnerStore interface {
 	// sequence number, and answers it.
 	AppendItem(ctx context.Context, item domain.ProductOwnerItem) (domain.ProductOwnerItem, error)
 	SaveItem(ctx context.Context, item domain.ProductOwnerItem) error
+	// SearchConversations is a full-text search, with stemming, of one
+	// project's message and checkpoint items, the best match first. It answers
+	// SEARCH_UNAVAILABLE on a build without FTS5.
+	SearchConversations(ctx context.Context, projectID, query string, limit int) ([]domain.ProductOwnerSearchMatch, error)
+	// AppendCheckpoint stores a checkpoint item last in its thread and, in the
+	// same step, counts it on the thread and moves the thread's checkpoint
+	// phase to moving: a restart never sees one without the other.
+	AppendCheckpoint(ctx context.Context, item domain.ProductOwnerItem) (domain.ProductOwnerItem, error)
 	// PendingHeldActions are the held action items still waiting, in every
 	// thread, oldest first.
 	PendingHeldActions(ctx context.Context) ([]domain.ProductOwnerItem, error)
@@ -120,6 +128,9 @@ type ProductOwner interface {
 	// AnswerHeldAction confirms or declines a held action (ADR 0110). Only
 	// the person's click applies it; it starts no turn.
 	AnswerHeldAction(ctx context.Context, heldActionID, answer string) (*HeldActionAnswer, error)
+	// SearchConversations finds passages in every thread of the project, the
+	// archived parts included, best first (at most 30).
+	SearchConversations(ctx context.Context, projectID, query string) ([]domain.ProductOwnerSearchMatch, error)
 }
 
 // HeldActionAnswer is a held action after the person answered it: its new
@@ -182,6 +193,10 @@ type ProductOwnerSessionSpec struct {
 	ProjectID string
 	AgentID   string
 	Prompt    string
+	// Checkpoint is the summary of the thread's archived part, "" before the
+	// thread's first checkpoint: the brief of a new or resumed conversation
+	// of the thread carries it (ADR 0112).
+	Checkpoint string
 }
 
 // ProductOwnerSessions is how the product owner starts, resumes and drives the
@@ -190,6 +205,9 @@ type ProductOwnerSessions interface {
 	StartProductOwnerSession(ctx context.Context, spec ProductOwnerSessionSpec) (sessionID string, err error)
 	ResumeProductOwnerSession(ctx context.Context, sessionID string, spec ProductOwnerSessionSpec) error
 	ProductOwnerRunning(sessionID string) bool
+	// ProductOwnerModel is the model a thread's session runs on, "" when it
+	// runs on the CLI's default.
+	ProductOwnerModel(sessionID string) string
 	Send(ctx context.Context, id, text string) error
 	Stop(ctx context.Context, id string) error
 	// Subscribe follows a session's events live.

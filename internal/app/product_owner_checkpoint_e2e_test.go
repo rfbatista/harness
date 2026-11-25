@@ -1,0 +1,519 @@
+//go:build !windows
+
+package app
+
+import (
+	"os"
+	"path/filepath"
+	"strconv"
+	"strings"
+	"testing"
+	"time"
+
+	"operators-mcp/internal/domain"
+)
+
+// A checkpoint (ADR 0112) runs over the stand-in claude of product_owner_e2e_test.go.
+// It reports as input tokens whatever the file "usage" beside it holds, which the
+// server reads as the size of the thread's context; the mode's model (sonnet)
+// has a window of 200,000 tokens, so 130,000 is past 60% of it.
+
+const (
+	contextBelowCheckpoint = 1000
+	contextPastCheckpoint  = 130000
+)
+
+// setContext makes the stand-in report this many tokens of context from now on.
+func (e *poE2E) setContext(tokens int) {
+	e.t.Helper()
+	if err := os.WriteFile(filepath.Join(e.fakeDir, "usage"), []byte(strconv.Itoa(tokens)), 0o644); err != nil {
+		e.t.Fatal(err)
+	}
+}
+
+// gate creates (on) or removes (off) a file of the stand-in that holds or fails
+// its summary turn.
+func (e *poE2E) gate(name string, on bool) {
+	e.t.Helper()
+	path := filepath.Join(e.fakeDir, name)
+	if on {
+		if err := os.WriteFile(path, nil, 0o644); err != nil {
+			e.t.Fatal(err)
+		}
+		return
+	}
+	_ = os.Remove(path)
+}
+
+func kinds(items []poItem) []string {
+	out := make([]string, len(items))
+	for i, it := range items {
+		out[i] = it.Kind
+	}
+	return out
+}
+
+func checkpointsOf(items []poItem) []poItem {
+	var out []poItem
+	for _, it := range items {
+		if it.Kind == "checkpoint" {
+			out = append(out, it)
+		}
+	}
+	return out
+}
+
+type poListed struct {
+	Threads []struct {
+		ThreadID    string `json:"thread_id"`
+		Checkpoints int    `json:"checkpoints"`
+	} `json:"threads"`
+}
+
+func (e *poE2E) checkpointsListed(threadID string) int {
+	e.t.Helper()
+	var out poListed
+	if status, code := e.get("product_owner_threads?project_id="+e.project, &out); status != 200 {
+		e.t.Fatalf("GET threads = %d %s", status, code)
+	}
+	for _, th := range out.Threads {
+		if th.ThreadID == threadID {
+			return th.Checkpoints
+		}
+	}
+	e.t.Fatalf("thread %s is not listed", threadID)
+	return 0
+}
+
+func TestATurnThatEndsBelowTheCheckpointSizeDoesNotCheckpoint(t *testing.T) {
+	e := newPOE2E(t)
+	e.setContext(contextBelowCheckpoint)
+	threadID, _ := e.startThread("hello")
+	th := e.waitTurn(threadID, "idle")
+	if got := checkpointsOf(th.Items); len(got) != 0 {
+		t.Errorf("items = %v, want no checkpoint", kinds(th.Items))
+	}
+	if n := e.checkpointsListed(threadID); n != 0 {
+		t.Errorf("checkpoints = %d, want 0", n)
+	}
+	if l := e.launches(); len(l) != 1 {
+		t.Errorf("launches = %q, want the one", l)
+	}
+}
+
+func TestAThreadPastTheCheckpointSizeCheckpointsAfterItsAnswerAndGoesOnInANewConversation(t *testing.T) {
+	e := newPOE2E(t)
+	e.setContext(contextPastCheckpoint)
+	threadID, _ := e.startThread("we decided to export tasks as csv")
+	th := e.waitTurn(threadID, "idle")
+
+	// The answer, then the checkpoint carrying the summary; the summary turn's
+	// own text is not an item of the thread.
+	if got, want := kinds(th.Items), "message message checkpoint"; strings.Join(got, " ") != want {
+		t.Fatalf("items = %v, want %s", got, want)
+	}
+	cp := th.Items[2]
+	if !strings.Contains(cp.Summary, "answer to: Checkpoint:") {
+		t.Errorf("the checkpoint's summary = %q, want the product owner's answer to the summary turn", cp.Text)
+	}
+	if n := e.checkpointsListed(threadID); n != 1 {
+		t.Errorf("checkpoints = %d, want 1", n)
+	}
+
+	// The thread moved to a new session, a fresh claude conversation.
+	newSession := th.Thread.SessionID
+	eventuallyPO(t, "the second conversation to start", func() string {
+		if l := e.launches(); len(l) != 2 {
+			return "launches = " + strings.Join(l, "|")
+		}
+		return ""
+	})
+	launches := e.launches()
+	if strings.Contains(launches[1], "--resume") || !strings.Contains(launches[1], "--session-id "+newSession) {
+		t.Errorf("second launch = %.300s, want a fresh conversation %s", launches[1], newSession)
+	}
+	if strings.Contains(launches[0], "--session-id "+newSession) {
+		t.Errorf("the thread still runs in its first conversation")
+	}
+	if !strings.Contains(launches[1], "answer to: Checkpoint:") {
+		t.Errorf("the new conversation's brief lacks the summary: %.300s", launches[1])
+	}
+	sess := e.sess.Get(newSession)
+	if sess == nil || sess.ProjectID != e.project || sess.Mode != domain.SessionModeProductOwner {
+		t.Fatalf("new session = %+v", sess)
+	}
+
+	// The person's next message is answered by the new conversation, and the
+	// whole thread reads on from the checkpoint.
+	e.setContext(contextBelowCheckpoint)
+	if status, code := e.send(threadID, "and what next"); status != 200 {
+		t.Fatalf("send = %d %s", status, code)
+	}
+	th = e.waitTurn(threadID, "idle")
+	if got, want := kinds(th.Items), "message message checkpoint message message"; strings.Join(got, " ") != want {
+		t.Errorf("items = %v, want %s", got, want)
+	}
+	if th.Thread.SessionID != newSession {
+		t.Errorf("session = %s, want it to stay %s", th.Thread.SessionID, newSession)
+	}
+	if l := e.launches(); len(l) != 2 {
+		t.Errorf("launches = %q, want the new process kept for the next message", l)
+	}
+}
+
+func TestAMessageSentWhileTheThreadCheckpointsIsRefusedBusyAndNothingIsLost(t *testing.T) {
+	e := newPOE2E(t)
+	e.setContext(contextPastCheckpoint)
+	e.gate("summaryhold", true)
+	threadID, _ := e.startThread("first")
+	eventuallyPO(t, "the summary turn to be under way", func() string {
+		b, _ := os.ReadFile(filepath.Join(e.fakeDir, "received"))
+		if !strings.Contains(string(b), "Checkpoint:") {
+			return "received = " + string(b)
+		}
+		return ""
+	})
+	if status, code := e.send(threadID, "too soon"); status != 409 || code != "THREAD_BUSY" {
+		t.Errorf("send during the checkpoint = %d %s, want 409 THREAD_BUSY", status, code)
+	}
+	if got := e.thread(threadID).Thread.Turn; got != "running" {
+		t.Errorf("turn = %s, want running", got)
+	}
+	e.gate("summaryhold", false)
+	th := e.waitTurn(threadID, "idle")
+	if len(checkpointsOf(th.Items)) != 1 {
+		t.Errorf("items = %v, want one checkpoint", kinds(th.Items))
+	}
+	for _, it := range th.Items {
+		if strings.Contains(it.Text, "too soon") {
+			t.Errorf("a refused message was stored: %v", it)
+		}
+	}
+	e.setContext(contextBelowCheckpoint)
+	if status, code := e.send(threadID, "now"); status != 200 {
+		t.Fatalf("send after the checkpoint = %d %s", status, code)
+	}
+	e.waitTurn(threadID, "idle")
+}
+
+func TestAFailedSummaryTurnLeavesTheThreadAsItWasAndTheCheckpointIsTriedAfterTheNextTurn(t *testing.T) {
+	e := newPOE2E(t)
+	e.setContext(contextPastCheckpoint)
+	e.gate("summaryfail", true)
+	threadID, _ := e.startThread("first")
+	th := e.waitTurn(threadID, "idle")
+	if got, want := kinds(th.Items), "message message failure"; strings.Join(got, " ") != want {
+		t.Fatalf("items = %v, want %s", got, want)
+	}
+	if n := e.checkpointsListed(threadID); n != 0 {
+		t.Errorf("checkpoints = %d, want 0", n)
+	}
+	// The person's message is answered already, so there is nothing to send again.
+	if f := th.Items[2]; f.Code != "CHECKPOINT_FAILED" || f.RetryItemID != "" {
+		t.Errorf("failure = %+v, want CHECKPOINT_FAILED with no retry item", f)
+	}
+	sessionBefore := th.Thread.SessionID
+
+	e.gate("summaryfail", false)
+	if status, code := e.send(threadID, "second"); status != 200 {
+		t.Fatalf("send = %d %s", status, code)
+	}
+	deadline := time.Now().Add(20 * time.Second)
+	for time.Now().Before(deadline) {
+		th = e.thread(threadID)
+		if th.Thread.Turn == "idle" && len(checkpointsOf(th.Items)) == 1 {
+			break
+		}
+		time.Sleep(50 * time.Millisecond)
+	}
+	if len(checkpointsOf(th.Items)) != 1 || th.Thread.Turn != "idle" {
+		t.Fatalf("turn %s items %v, want the checkpoint made after the next turn", th.Thread.Turn, kinds(th.Items))
+	}
+	if th.Thread.SessionID == sessionBefore {
+		t.Errorf("the thread did not move to a new conversation")
+	}
+}
+
+func TestACheckpointedThreadReadsTheSameAfterARestartAndItsNextMessageGoesToTheNewConversation(t *testing.T) {
+	e := newPOE2E(t)
+	e.setContext(contextPastCheckpoint)
+	threadID, _ := e.startThread("first")
+	before := e.waitTurn(threadID, "idle")
+	if len(checkpointsOf(before.Items)) != 1 {
+		t.Fatalf("items = %v, want one checkpoint", kinds(before.Items))
+	}
+
+	e.restart()
+	time.Sleep(500 * time.Millisecond)
+	after := e.thread(threadID)
+	if strings.Join(kinds(after.Items), " ") != strings.Join(kinds(before.Items), " ") || after.Thread.SessionID != before.Thread.SessionID || after.Thread.Turn != "idle" {
+		t.Errorf("after the restart: items %v session %s turn %s, want %v %s idle", kinds(after.Items), after.Thread.SessionID, after.Thread.Turn, kinds(before.Items), before.Thread.SessionID)
+	}
+	if n := e.checkpointsListed(threadID); n != 1 {
+		t.Errorf("checkpoints = %d, want 1", n)
+	}
+
+	e.setContext(contextBelowCheckpoint)
+	if status, code := e.send(threadID, "second"); status != 200 {
+		t.Fatalf("send = %d %s", status, code)
+	}
+	th := e.waitTurn(threadID, "idle")
+	l := e.launches()
+	last := l[len(l)-1]
+	if !strings.Contains(last, "--resume "+before.Thread.SessionID) || !strings.Contains(last, "answer to: Checkpoint:") {
+		t.Errorf("last launch = %.300s, want the new conversation resumed with the summary in its brief", last)
+	}
+	if len(checkpointsOf(th.Items)) != 1 {
+		t.Errorf("items = %v, want the one checkpoint", kinds(th.Items))
+	}
+}
+
+func TestARestartInTheMiddleOfTheSummaryTurnFinishesTheCheckpointOnceAndLosesNoMessage(t *testing.T) {
+	e := newPOE2E(t)
+	e.setContext(contextPastCheckpoint)
+	e.gate("summaryhold", true)
+	threadID, _ := e.startThread("first")
+	eventuallyPO(t, "the summary turn to be under way", func() string {
+		b, _ := os.ReadFile(filepath.Join(e.fakeDir, "received"))
+		if !strings.Contains(string(b), "Checkpoint:") {
+			return "received = " + string(b)
+		}
+		return ""
+	})
+	old := e.thread(threadID).Thread.SessionID
+
+	e.restart()
+	e.gate("summaryhold", false)
+	th := e.waitTurn(threadID, "idle")
+	eventuallyPO(t, "the checkpoint", func() string {
+		th = e.thread(threadID)
+		if th.Thread.Turn != "idle" || len(checkpointsOf(th.Items)) != 1 {
+			return "items " + strings.Join(kinds(th.Items), " ")
+		}
+		return ""
+	})
+	if n := countItems(th.Items, "notice", "Continued after a restart"); n != 1 {
+		t.Errorf("%d notices, want 1: %v", n, kinds(th.Items))
+	}
+	if th.Thread.SessionID == old {
+		t.Errorf("the thread did not move to its new conversation")
+	}
+	if cp := checkpointsOf(th.Items); len(cp) == 1 && !strings.Contains(cp[0].Summary, "answer to: Checkpoint:") {
+		t.Errorf("summary = %q, want the answer to the summary turn, asked again", cp[0].Summary)
+	}
+	if n := e.checkpointsListed(threadID); n != 1 {
+		t.Errorf("checkpoints = %d, want 1", n)
+	}
+	persons := 0
+	for _, it := range th.Items {
+		if it.Kind == "message" && it.Author == "person" {
+			persons++
+		}
+	}
+	if persons != 1 {
+		t.Errorf("%d person messages, want the one sent", persons)
+	}
+}
+
+func TestARestartBetweenTheArchiveAndTheNewConversationFinishesTheMoveWithNoSecondCheckpoint(t *testing.T) {
+	e := newPOE2E(t)
+	e.setContext(contextBelowCheckpoint)
+	threadID, _ := e.startThread("first")
+	before := e.waitTurn(threadID, "idle")
+
+	// The state a crash leaves: the checkpoint item stored, the thread still on
+	// its old session and in its turn.
+	if _, err := e.store.AppendCheckpoint(e.ctx, domain.ProductOwnerItem{ThreadID: threadID, Kind: domain.ProductOwnerItemCheckpoint, At: time.Now(), Summary: "the summary kept"}); err != nil {
+		t.Fatal(err)
+	}
+	cut, err := e.store.Thread(e.ctx, threadID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	cut.Turn = domain.ProductOwnerTurnRunning
+	if err := e.store.SaveThread(e.ctx, *cut); err != nil {
+		t.Fatal(err)
+	}
+
+	e.restart()
+	th := e.waitTurn(threadID, "idle")
+	if len(checkpointsOf(th.Items)) != 1 || e.checkpointsListed(threadID) != 1 {
+		t.Errorf("items = %v, want the one checkpoint, no second", kinds(th.Items))
+	}
+	if th.Thread.SessionID == before.Thread.SessionID {
+		t.Errorf("the thread did not move to its new conversation")
+	}
+	// The stand-in writes its launch line a moment after it starts.
+	eventuallyPO(t, "the new conversation's launch", func() string {
+		l := e.launches()
+		if len(l) == 0 {
+			return "no launch"
+		}
+		if last := l[len(l)-1]; !strings.Contains(last, "--session-id "+th.Thread.SessionID) || !strings.Contains(last, "the summary kept") {
+			return "last launch = " + last
+		}
+		return ""
+	})
+}
+
+func TestStoppingAThreadDuringItsCheckpointLeavesItIdleWithItsItemsKept(t *testing.T) {
+	e := newPOE2E(t)
+	e.setContext(contextPastCheckpoint)
+	e.gate("summaryhold", true)
+	threadID, _ := e.startThread("first")
+	eventuallyPO(t, "the summary turn to be under way", func() string {
+		b, _ := os.ReadFile(filepath.Join(e.fakeDir, "received"))
+		if !strings.Contains(string(b), "Checkpoint:") {
+			return "received = " + string(b)
+		}
+		return ""
+	})
+	if status, code := e.post("stop_product_owner_turn", map[string]any{"thread_id": threadID}, nil); status != 200 {
+		t.Fatalf("stop = %d %s", status, code)
+	}
+	th := e.waitTurn(threadID, "idle")
+	if got, want := strings.Join(kinds(th.Items), " "), "message message"; got != want {
+		t.Errorf("items = %s, want %s", got, want)
+	}
+	e.gate("summaryhold", false)
+	e.setContext(contextBelowCheckpoint)
+	if status, code := e.send(threadID, "after the stop"); status != 200 {
+		t.Fatalf("send = %d %s", status, code)
+	}
+	e.waitTurn(threadID, "idle")
+}
+
+func TestAThreadsFirstMessageAfterACheckpointIsHandedTheWholeMemoryAgainAndOnlyThatOne(t *testing.T) {
+	e := newPOE2E(t)
+	_, owner := e.ownerOf("another thread")
+	e.saveMemory(owner, "Ship on Fridays.")
+
+	e.setContext(contextPastCheckpoint)
+	threadID, _ := e.startThread("first")
+	e.waitTurn(threadID, "idle")
+	if got := e.received(); !strings.Contains(strings.Join(got, "\n"), "Ship on Fridays.") {
+		t.Fatalf("the thread's first message lacked the memory: %q", got)
+	}
+
+	// The new conversation has not seen the memory: its first message carries
+	// it, the one after does not.
+	e.setContext(contextBelowCheckpoint)
+	first := e.sendAndWait(threadID, "after the checkpoint")
+	if !strings.Contains(first, "Ship on Fridays.") || !strings.Contains(first, "Memory of this project") || !strings.HasSuffix(first, "after the checkpoint") {
+		t.Errorf("the first message after the checkpoint = %q, want the whole memory before it", first)
+	}
+	if again := e.sendAndWait(threadID, "and again"); again != "and again" {
+		t.Errorf("the memory came again: %q", again)
+	}
+	if th, err := e.store.Thread(e.ctx, threadID); err != nil || !th.MemoryOpened || th.MemorySeen == 0 {
+		t.Errorf("the thread did not record seeing the memory: %+v %v", th, err)
+	}
+}
+
+func TestAThreadIdleWithAMoveStillOwedMakesItBeforeItAnswersTheNextMessage(t *testing.T) {
+	e := newPOE2E(t)
+	e.setContext(contextBelowCheckpoint)
+	threadID, _ := e.startThread("first")
+	before := e.waitTurn(threadID, "idle")
+	// The summary is stored and the move failed: the thread is idle, owing it.
+	if _, err := e.store.AppendCheckpoint(e.ctx, domain.ProductOwnerItem{ThreadID: threadID, Kind: domain.ProductOwnerItemCheckpoint, At: time.Now(), Summary: "the summary owed"}); err != nil {
+		t.Fatal(err)
+	}
+	if status, code := e.send(threadID, "second"); status != 200 {
+		t.Fatalf("send = %d %s", status, code)
+	}
+	th := e.waitTurn(threadID, "idle")
+	if th.Thread.SessionID == before.Thread.SessionID || len(checkpointsOf(th.Items)) != 1 {
+		t.Errorf("session %s items %v, want the new conversation and the one checkpoint", th.Thread.SessionID, kinds(th.Items))
+	}
+	eventuallyPO(t, "the new conversation's launch", func() string {
+		l := e.launches()
+		if last := l[len(l)-1]; !strings.Contains(last, "--session-id "+th.Thread.SessionID) || !strings.Contains(last, "the summary owed") {
+			return "last launch = " + last
+		}
+		return ""
+	})
+	if got := e.received(); !strings.HasSuffix(got[len(got)-1], "second") {
+		t.Errorf("the message did not reach the new conversation: %q", got)
+	}
+}
+
+// setWindow makes the stand-in report this context window for its model.
+func (e *poE2E) setWindow(tokens int) {
+	e.t.Helper()
+	if err := os.WriteFile(filepath.Join(e.fakeDir, "window"), []byte(strconv.Itoa(tokens)), 0o644); err != nil {
+		e.t.Fatal(err)
+	}
+}
+
+func TestTheWindowClaudeReportsDecidesWhenAThreadCheckpointsNotAGuessFromTheModelName(t *testing.T) {
+	// 130,000 tokens is past 60% of the 200,000 a name would suggest, and under
+	// 60% of the million claude reports: no checkpoint.
+	e := newPOE2E(t)
+	e.setContext(contextPastCheckpoint)
+	e.setWindow(1_000_000)
+	id, _ := e.startThread("first")
+	th := e.waitTurn(id, "idle")
+	if len(checkpointsOf(th.Items)) != 0 {
+		t.Errorf("items = %v, want no checkpoint under a reported window of a million", kinds(th.Items))
+	}
+
+	// 13,000 tokens is nothing against 200,000 and past 60% of a reported
+	// 20,000: checkpoint.
+	e2 := newPOE2E(t)
+	e2.setContext(13000)
+	e2.setWindow(20000)
+	id, _ = e2.startThread("first")
+	eventuallyPO(t, "the checkpoint", func() string {
+		th := e2.thread(id)
+		if th.Thread.Turn != "idle" || len(checkpointsOf(th.Items)) != 1 {
+			return "items " + strings.Join(kinds(th.Items), " ")
+		}
+		return ""
+	})
+}
+
+func TestAHeldActionStillPendingAtACheckpointReadsExpiredAndTheNextTurnLearnsIt(t *testing.T) {
+	e := newPOE2E(t)
+	threadID, owner := e.ownerSession()
+	task := e.doneTask("Asked before the checkpoint")
+	e.call(owner, "archive_task", map[string]any{"task_id": task.ID})
+	if e.pendingHeld(threadID) != 1 {
+		t.Fatalf("pending = %d, want the one asked", e.pendingHeld(threadID))
+	}
+
+	// A turn that ends past the checkpoint size archives the part the action
+	// was asked in.
+	e.setContext(contextPastCheckpoint)
+	if status, code := e.send(threadID, "go on"); status != 200 {
+		t.Fatalf("send = %d %s", status, code)
+	}
+	eventuallyPO(t, "the checkpoint", func() string {
+		th := e.thread(threadID)
+		if th.Thread.Turn != "idle" || len(checkpointsOf(th.Items)) != 1 {
+			return "items " + strings.Join(kinds(th.Items), " ")
+		}
+		return ""
+	})
+	held := e.heldActions(threadID)
+	if len(held) != 1 || held[0].State != "expired" || e.pendingHeld(threadID) != 0 {
+		t.Fatalf("held = %+v pending %d, want it expired and nothing pending", held, e.pendingHeld(threadID))
+	}
+	if status, code := e.post("answer_held_action", map[string]any{"held_action_id": held[0].HeldActionID, "answer": "confirm"}, nil); status != 409 || code != "HELD_ACTION_EXPIRED" {
+		t.Errorf("confirm after the checkpoint = %d %s, want 409 HELD_ACTION_EXPIRED", status, code)
+	}
+	if again, _ := e.plan.GetTicket(e.ctx, task.ID); again.ArchivedAt != nil {
+		t.Error("an expired action archived the task")
+	}
+
+	// The next turn, in the new conversation, is told that it expired.
+	e.setContext(contextBelowCheckpoint)
+	if status, code := e.send(threadID, "and now?"); status != 200 {
+		t.Fatalf("send = %d %s", status, code)
+	}
+	e.waitTurn(threadID, "idle")
+	got := e.receivedText()
+	if !strings.Contains(got, "did not answer in time, so nothing changed.") {
+		t.Errorf("the next turn was not told the action expired: %q", got)
+	}
+}

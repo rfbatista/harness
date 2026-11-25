@@ -63,6 +63,7 @@ type productOwnerThreadRow struct {
 	TitleSetByPerson   bool   `json:"title_set_by_person"`
 	Turn               string `json:"turn"`
 	PendingHeldActions int    `json:"pending_held_actions"`
+	Checkpoints        int    `json:"checkpoints"`
 }
 
 func (h *Handler) handleListProductOwnerThreads(c echo.Context) error {
@@ -75,7 +76,7 @@ func (h *Handler) handleListProductOwnerThreads(c echo.Context) error {
 	}
 	rows := make([]productOwnerThreadRow, len(threads))
 	for i, t := range threads {
-		rows[i] = productOwnerThreadRow{t.ID, t.Title, t.StartedAt, t.LastActivityAt, t.LastMessageExcerpt, t.TitleSetByPerson, t.Turn, t.PendingHeldActions}
+		rows[i] = productOwnerThreadRow{t.ID, t.Title, t.StartedAt, t.LastActivityAt, t.LastMessageExcerpt, t.TitleSetByPerson, t.Turn, t.PendingHeldActions, t.Checkpoints}
 	}
 	return c.JSON(http.StatusOK, map[string]any{"threads": rows})
 }
@@ -170,6 +171,17 @@ func (h *Handler) handleRenameProductOwnerThread(c echo.Context) error {
 		return err
 	}
 	return c.JSON(http.StatusOK, t)
+}
+
+func (h *Handler) handleSearchProductOwnerConversations(c echo.Context) error {
+	if err := h.productOwnerReady(); err != nil {
+		return err
+	}
+	matches, err := h.productOwner.SearchConversations(c.Request().Context(), c.QueryParam("project_id"), c.QueryParam("q"))
+	if err != nil {
+		return err
+	}
+	return c.JSON(http.StatusOK, map[string]any{"matches": matches})
 }
 
 // productOwnerMemory is the product owner's memory, when it offers one.

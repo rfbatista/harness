@@ -113,6 +113,14 @@ func (s *Service) ProductOwnerRunning(sessionID string) bool {
 	return ok
 }
 
+// ProductOwnerModel is the model a thread's session runs on.
+func (s *Service) ProductOwnerModel(sessionID string) string {
+	if sess := s.sessions.Get(sessionID); sess != nil {
+		return sess.Model
+	}
+	return ""
+}
+
 // startFailure turns the runtime's refusal to start into the code clients
 // branch on, as a headless start does.
 func startFailure(err error) error {
@@ -165,7 +173,7 @@ func (s *Service) productOwnerPrepare(ctx context.Context, id string, spec ports
 		repo = repos[0]
 		dir = repo.RootDir
 	}
-	subject := sessionSubject{project: proj, mode: mode, productOwnerPrompt: spec.Prompt}
+	subject := sessionSubject{project: proj, mode: mode, productOwnerPrompt: spec.Prompt, productOwnerCheckpoint: spec.Checkpoint}
 	model := s.sessionModel(mode, "")
 	// Its tools read; nothing it runs needs a person's approval, and the
 	// sandbox and the tools hold what it may not do.
@@ -244,6 +252,19 @@ func projectPromptSection(prompt string) string {
 	return projectPromptHeading + p
 }
 
+// checkpointTitle is what a thread's checkpoint summary is called in its context.
+const checkpointTitle = "Checkpoint summary"
+
+// checkpointSection is the summary of a thread's archived part, which its new
+// conversation starts from (ADR 0112). No summary is no section.
+func checkpointSection(summary string) string {
+	c := strings.TrimSpace(summary)
+	if c == "" {
+		return ""
+	}
+	return "## What this conversation continues\n\nThis thread has run for a while, and its earlier part was archived. You wrote this summary of it, and the person still sees all of it. Carry on from it.\n\n" + c
+}
+
 // productOwnerBrief is the product owner's opening instructions: what it is,
 // the project, and how it answers. Each later piece of the product owner adds
 // its own section here (writes, memory, search, digests) beside these.
@@ -272,7 +293,7 @@ func productOwnerBrief(in projectBriefInput) string {
 			b.WriteString(line + "\n")
 		}
 	}
-	b.WriteString("\n" + productOwnerSources + "\n\n" + productOwnerDigests + "\n\n" + productOwnerBehaviours)
+	b.WriteString("\n" + productOwnerSources + "\n\n" + productOwnerSearch + "\n\n" + productOwnerDigests + "\n\n" + productOwnerBehaviours)
 	return b.String()
 }
 
@@ -285,6 +306,7 @@ const productOwnerSources = `What you can read, all read-only:
 - The code of every repository of the project, in the checkouts your sandbox lets you read.
 - Of any other session, only its status, outcome and summary (list_project_sessions, list_project_branches). Never read another session's transcript or worktree, even when asked: you cannot, and you say so.`
 
+const productOwnerSearch = `Past conversations: search_past_conversations searches this project's earlier threads, the archived parts of long ones included. Search before you say you do not remember something. It matches words, not meaning, so try synonyms and several phrasings. When an answer rests on a passage, name the thread and the date it came from. When a search finds nothing, say that you searched.`
 const productOwnerDigests = `The daily digests: once a day the server records a digest of what moved in the project, when something did. Asked about the past ("what happened last Tuesday?"), read that day's digest with list_product_owner_digests, answer from it, and say that the answer comes from the digest. A day with no digest was quiet, or no digest time was set.`
 
 const productOwnerBehaviours = `How you answer:

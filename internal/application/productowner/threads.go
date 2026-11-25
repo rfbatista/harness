@@ -33,6 +33,12 @@ type run struct {
 	// retired is a run the person stopped: what its process still says is
 	// dropped.
 	retired bool
+	// summary is what the summary turn of a checkpoint has said so far; the
+	// turn's text is not an item of the thread (ADR 0112).
+	summary strings.Builder
+	// lastCall is the usage of the latest API call the turn has reported: its
+	// input and cache tokens are the thread's context (ADR 0112).
+	lastCall *ports.Usage
 }
 
 func (s *Service) threadLock(id string) *sync.Mutex {
@@ -214,6 +220,13 @@ func (s *Service) SendMessage(ctx context.Context, threadID, message string, att
 	if s.busy(t) {
 		return "", busyError()
 	}
+	if t.CheckpointPhase == domain.ProductOwnerCheckpointMoving {
+		// A checkpoint whose move did not finish: the thread goes to its new
+		// conversation before this message.
+		if err := s.finishMove(ctx, t); err != nil {
+			return "", unavailableOr(err)
+		}
+	}
 	r := s.runOf(t.ID)
 	if r != nil && s.sessions.ProductOwnerRunning(t.SessionID) {
 		return s.deliver(ctx, t, r, message)
@@ -230,7 +243,7 @@ func (s *Service) SendMessage(ctx context.Context, threadID, message string, att
 		return "", err
 	}
 	s.announceThread(*t)
-	spec := ports.ProductOwnerSessionSpec{ProjectID: t.ProjectID, AgentID: t.AgentID, Prompt: t.Prompt}
+	spec := specOf(t)
 	if err := s.sessions.ResumeProductOwnerSession(ctx, t.SessionID, spec); err != nil {
 		s.fail(ctx, t, item.ID, "SESSION_RESUME_FAILED", "The product owner's session could not be resumed: "+err.Error())
 		if wrapped := unavailableOr(err); wrapped != err {
@@ -300,6 +313,7 @@ func (s *Service) fail(ctx context.Context, t *domain.ProductOwnerThread, retryI
 	}
 	if _, err := s.update(ctx, t.ID, t, func(th *domain.ProductOwnerThread) bool {
 		th.Turn, th.LastActivityAt = domain.ProductOwnerTurnIdle, time.Now()
+		clearSummarizing(th)
 		return true
 	}); err == nil {
 		s.announceThread(*t)
@@ -523,6 +537,12 @@ func (s *Service) handle(r *run, ev ports.SessionEvent) {
 	if err != nil {
 		return
 	}
+	if ev.CallUsage != nil {
+		r.lastCall = ev.CallUsage
+	}
+	if s.summarizing(r, t, ev) {
+		return
+	}
 	switch ev.Type {
 	case "output_delta":
 		if ev.DeltaKind != "text" || ev.Text == "" {
@@ -577,6 +597,9 @@ func (s *Service) handle(r *run, ev ports.SessionEvent) {
 			s.announceItem(t, *r.cur)
 			r.cur = nil
 		}
+		if s.beginCheckpoint(r, t, ev) {
+			return
+		}
 		s.finishTurn(t.ID)
 		s.resetIdle(r, true)
 	}
@@ -623,6 +646,10 @@ func (s *Service) ended(r *run) {
 		delete(s.runs, r.threadID)
 	}
 	s.mu.Unlock()
+	if cut && t.CheckpointPhase == domain.ProductOwnerCheckpointSummarizing {
+		s.fail(ctx, t, "", "CHECKPOINT_FAILED", "The checkpoint could not be made: the product owner's session ended while it wrote its summary. The thread is as it was, and the next turn tries again.")
+		return
+	}
 	if cut {
 		s.fail(ctx, t, s.lastPersonMessage(ctx, t.ID), "SESSION_ENDED", "The product owner's session ended before it finished its answer.")
 		return
@@ -669,6 +696,7 @@ func (s *Service) finishTurn(threadID string) {
 			return false
 		}
 		th.Turn, th.LastActivityAt = domain.ProductOwnerTurnIdle, time.Now()
+		clearSummarizing(th)
 		changed = true
 		return true
 	})
@@ -781,7 +809,10 @@ func (s *Service) resumeInterrupted(ctx context.Context, t domain.ProductOwnerTh
 		return err
 	}
 	t = *cur
-	spec := ports.ProductOwnerSessionSpec{ProjectID: t.ProjectID, AgentID: t.AgentID, Prompt: t.Prompt}
+	if t.CheckpointPhase == domain.ProductOwnerCheckpointMoving {
+		return s.resumeMove(ctx, &t)
+	}
+	spec := specOf(&t)
 	if err := s.sessions.ResumeProductOwnerSession(ctx, t.SessionID, spec); err != nil {
 		s.fail(ctx, &t, s.lastPersonMessage(ctx, t.ID), "SESSION_RESUME_FAILED", "The product owner's session could not be resumed after the restart: "+err.Error())
 		return err
@@ -801,7 +832,12 @@ func (s *Service) resumeInterrupted(ctx context.Context, t domain.ProductOwnerTh
 	s.announceItem(&t, notice)
 	s.announceThread(t)
 	s.resetIdle(r, false)
-	if err := s.sessions.Send(ctx, t.SessionID, s.continueTurn(ctx, t)); err != nil {
+	turn := s.continueTurn(ctx, t)
+	if t.CheckpointPhase == domain.ProductOwnerCheckpointSummarizing {
+		// The summary turn was cut off: it is asked again, not the person's turn.
+		turn = summaryPrompt
+	}
+	if err := s.sessions.Send(ctx, t.SessionID, turn); err != nil {
 		s.fail(ctx, &t, s.lastPersonMessage(ctx, t.ID), "SESSION_SEND_FAILED", "The product owner's session did not take the turn after the restart: "+err.Error())
 		return err
 	}

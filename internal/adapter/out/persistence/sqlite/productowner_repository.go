@@ -42,6 +42,9 @@ type ProductOwnerThreadModel struct {
 	Prompt             string
 	LastMessageExcerpt string `gorm:"column:last_message_excerpt"`
 	TitleSetByPerson   bool   `gorm:"column:title_set_by_person"`
+	Checkpoints        int    `gorm:"column:checkpoints"`
+	CheckpointPhase    string `gorm:"column:checkpoint_phase"`
+	CheckpointSummary  string `gorm:"column:checkpoint_summary"`
 	MemoryOpened       bool   `gorm:"column:memory_opened"`
 	MemorySeen         int64  `gorm:"column:memory_seen"`
 }
@@ -63,11 +66,18 @@ func (ProductOwnerItemModel) TableName() string { return "product_owner_items" }
 
 // ProductOwnerRepository persists product owner settings, threads and thread
 // items in SQLite via GORM.
-type ProductOwnerRepository struct{ db *gorm.DB }
+type ProductOwnerRepository struct {
+	db *gorm.DB
+	// search says conversation search works on this build (see
+	// productowner_search.go).
+	search bool
+}
 
 // NewProductOwnerRepository returns a new product owner repository.
 func NewProductOwnerRepository(db *gorm.DB) *ProductOwnerRepository {
-	return &ProductOwnerRepository{db: db}
+	r := &ProductOwnerRepository{db: db}
+	r.search = r.prepareSearch()
+	return r
 }
 
 // Settings implements ports.ProductOwnerStore.
@@ -92,13 +102,15 @@ func (r *ProductOwnerRepository) SaveSettings(ctx context.Context, s domain.Prod
 func threadModel(t domain.ProductOwnerThread) ProductOwnerThreadModel {
 	return ProductOwnerThreadModel{ID: t.ID, ProjectID: t.ProjectID, SessionID: t.SessionID, Title: t.Title, Turn: t.Turn,
 		StartedAt: t.StartedAt, LastActivityAt: t.LastActivityAt, PendingHeldActions: t.PendingHeldActions, AgentID: t.AgentID, Prompt: t.Prompt,
-		LastMessageExcerpt: t.LastMessageExcerpt, TitleSetByPerson: t.TitleSetByPerson, MemoryOpened: t.MemoryOpened, MemorySeen: t.MemorySeen}
+		LastMessageExcerpt: t.LastMessageExcerpt, TitleSetByPerson: t.TitleSetByPerson, MemoryOpened: t.MemoryOpened, MemorySeen: t.MemorySeen,
+		Checkpoints: t.Checkpoints, CheckpointPhase: t.CheckpointPhase, CheckpointSummary: t.CheckpointSummary}
 }
 
 func (m ProductOwnerThreadModel) domain() domain.ProductOwnerThread {
 	return domain.ProductOwnerThread{ID: m.ID, ProjectID: m.ProjectID, SessionID: m.SessionID, Title: m.Title, Turn: m.Turn,
 		StartedAt: m.StartedAt, LastActivityAt: m.LastActivityAt, PendingHeldActions: m.PendingHeldActions, AgentID: m.AgentID, Prompt: m.Prompt,
-		LastMessageExcerpt: m.LastMessageExcerpt, TitleSetByPerson: m.TitleSetByPerson, MemoryOpened: m.MemoryOpened, MemorySeen: m.MemorySeen}
+		LastMessageExcerpt: m.LastMessageExcerpt, TitleSetByPerson: m.TitleSetByPerson, MemoryOpened: m.MemoryOpened, MemorySeen: m.MemorySeen,
+		Checkpoints: m.Checkpoints, CheckpointPhase: m.CheckpointPhase, CheckpointSummary: m.CheckpointSummary}
 }
 
 // CreateThread implements ports.ProductOwnerStore.
@@ -199,6 +211,36 @@ func (r *ProductOwnerRepository) AppendItem(ctx context.Context, item domain.Pro
 		return item, err
 	}
 	item.Seq = m.Seq
+	r.indexItem(ctx, item)
+	return item, nil
+}
+
+// AppendCheckpoint implements ports.ProductOwnerStore.
+func (r *ProductOwnerRepository) AppendCheckpoint(ctx context.Context, item domain.ProductOwnerItem) (domain.ProductOwnerItem, error) {
+	id, err := genID()
+	if err != nil {
+		return item, err
+	}
+	item.ID, item.Seq = id, 0
+	m, err := itemModel(item)
+	if err != nil {
+		return item, err
+	}
+	err = r.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		if err := tx.Create(&m).Error; err != nil {
+			return err
+		}
+		return tx.Model(&ProductOwnerThreadModel{}).Where("id = ?", item.ThreadID).Updates(map[string]any{
+			"checkpoints":        gorm.Expr("checkpoints + 1"),
+			"checkpoint_phase":   domain.ProductOwnerCheckpointMoving,
+			"checkpoint_summary": item.Summary,
+		}).Error
+	})
+	if err != nil {
+		return item, err
+	}
+	item.Seq = m.Seq
+	r.indexItem(ctx, item)
 	return item, nil
 }
 
@@ -208,7 +250,11 @@ func (r *ProductOwnerRepository) SaveItem(ctx context.Context, item domain.Produ
 	if err != nil {
 		return err
 	}
-	return r.db.WithContext(ctx).Model(&ProductOwnerItemModel{}).Where("id = ?", item.ID).Update("body", m.Body).Error
+	if err := r.db.WithContext(ctx).Model(&ProductOwnerItemModel{}).Where("id = ?", item.ID).Update("body", m.Body).Error; err != nil {
+		return err
+	}
+	r.indexItem(ctx, item)
+	return nil
 }
 
 // PendingHeldActions implements ports.ProductOwnerStore.

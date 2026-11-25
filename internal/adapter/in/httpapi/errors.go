@@ -122,7 +122,7 @@ func errorHandler(err error, c echo.Context) {
 			"AGENT_CREDENTIAL_MISSING", "MANAGED_CLAUDE_MISSING", "MANAGED_CLAUDE_INSTALLING",
 			"MANAGED_CLAUDE_INSTALL_FAILED", "SANDBOX_DRIVER_MISSING",
 			// A service cannot start: no sandbox driver, or no container runtime.
-			"SANDBOX_UNAVAILABLE", "RUNTIME_UNAVAILABLE", "PRODUCT_OWNER_UNAVAILABLE":
+			"SANDBOX_UNAVAILABLE", "RUNTIME_UNAVAILABLE", "PRODUCT_OWNER_UNAVAILABLE", "SEARCH_UNAVAILABLE":
 			// The request is well-formed; the machine just cannot run agents
 			// or token savers, or reach the code host as the person.
 			writeCoded(c, http.StatusServiceUnavailable, err, se)
