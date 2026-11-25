@@ -3,8 +3,7 @@
 // Fields keep the wire names. Unknown fields are never looked at.
 
 import { DtoError } from "../../../../shared/infrastructure/dto/dto-error";
-import { lenient, object, oneOf, optionalCount, optionalString, string, type Wire } from "../../../../shared/infrastructure/dto/fields";
-import { TASK_STATUSES } from "../../domain/task";
+import { lenient, object, optionalCount, optionalString, string, type Wire } from "../../../../shared/infrastructure/dto/fields";
 
 const TASK = "TaskDto";
 const MERGE = "MergeStateDto";
@@ -31,7 +30,7 @@ export class TaskDto {
     readonly id: string,
     readonly project_id: string,
     readonly title: string,
-    readonly status: (typeof TASK_STATUSES)[number],
+    readonly status: string,
     readonly parent_id: string,
     readonly pending_reviews: number,
     readonly created_at: string,
@@ -49,7 +48,7 @@ export class TaskDto {
       id,
       optionalString(TASK, from, "project_id", at) ?? "",
       optionalString(TASK, from, "title", at) ?? "",
-      oneOf(TASK, from, "status", TASK_STATUSES, at),
+      string(TASK, from, "status", at),
       optionalString(TASK, from, "parent_id", at) ?? "",
       optionalCount(TASK, from, "pending_reviews", at) ?? 0,
       optionalString(TASK, from, "created_at", at) ?? "",

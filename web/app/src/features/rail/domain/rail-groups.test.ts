@@ -55,6 +55,14 @@ describe("railGroups", () => {
     assert.equal(railGroups(tasks, { byTask, needsYouOnly: true, query: "flaky" })[2]?.matched, 0);
   });
 
+  test("a task of a status the client does not know goes to an Other group, last, only when there is one", () => {
+    assert.equal(railGroups([task()]).length, 5);
+    const groups = railGroups([task(), task({ id: "x", title: "Odd", status: "someday" })]);
+    const last = groups.at(-1);
+    assert.deepEqual([groups.length, last?.key, last?.label, last?.rows.map((t) => t.id)], [6, "other", "Other", ["x"]]);
+    assert.equal(railGroups([task({ id: "x", status: "someday" })], { collapsed: ["other"] }).at(-1)?.collapsed, true);
+  });
+
   test("a feature task nests its children, in review-first order; an archived child and a child with its own row are not drawn twice", () => {
     const tasks = [
       task({ id: "f", title: "Files tab", status: "in_progress" }),

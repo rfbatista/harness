@@ -3,13 +3,13 @@
 // the same rules (BuildRail in internal/adapter/in/web/tasks/rail.go).
 
 import type { Activity } from "./activity";
-import { RAIL_ORDER, STATUSES, type Task, type TaskStatus } from "./task";
+import { RAIL_ORDER, STATUSES, type Task } from "./task";
 
 /** How many done tasks show before "Show N more"; the server's DoneCap. */
 export const DONE_CAP = 5;
 
 export interface RailGroup {
-  readonly key: TaskStatus;
+  readonly key: string;
   readonly label: string;
   /** The group's tasks. */
   readonly total: number;
@@ -38,7 +38,7 @@ export const needsYou = (task: Task, activity: Activity = QUIET): boolean => act
 export const childrenOf = (tasks: readonly Task[], task: Task): Task[] => (task.id ? tasks.filter((t) => t.parentId === task.id) : []);
 
 /** The order a feature lists its children: what waits on the person first, done last. */
-const CHILD_ORDER: readonly TaskStatus[] = ["review", "in_progress", "todo", "backlog", "done"];
+const CHILD_ORDER: readonly string[] = ["review", "in_progress", "todo", "backlog", "done"];
 
 /** A feature task's children, archived-alone ones included: Review, In progress, Todo, Backlog, Done; the newest move first within a status. */
 export const cardChildren = (tasks: readonly Task[], task: Task): Task[] => childrenOf(tasks, task).sort((a, b) => CHILD_ORDER.indexOf(a.status) - CHILD_ORDER.indexOf(b.status) || (b.statusSince || 0) - (a.statusSince || 0));
@@ -46,7 +46,7 @@ export const cardChildren = (tasks: readonly Task[], task: Task): Task[] => chil
 /** True when the task has no row of its own: an archived task, or a child whose feature is on the list. */
 export const isInsideCard = (tasks: readonly Task[], task: Task): boolean => task.archivedAt !== 0 || (task.parentId !== "" && tasks.some((t) => t.id === task.parentId && !t.archivedAt));
 
-const MERGE_STATUSES = new Set<TaskStatus>(["review", "done"]);
+const MERGE_STATUSES = new Set<string>(["review", "done"]);
 
 const MERGE_WORDS: Record<string, (m: { merged: number; total: number }) => string> = {
   merged: () => "merged",
@@ -122,10 +122,12 @@ export function railGroups(tasks: readonly Task[], { byTask = {}, currentId = ""
   };
   const keeps = (t: Task): boolean => (matches(t) && (!needsYouOnly || waits(t))) || (t.parentId === "" && filtering && kidsOf(t).length > 0);
 
-  return RAIL_ORDER.map((key) => {
-    let list = tasks.filter((t) => t.status === key && !isInsideCard(tasks, t));
+  const known = new Set<string>(RAIL_ORDER);
+  const keys = [...RAIL_ORDER, ...(tasks.some((t) => !known.has(t.status) && !isInsideCard(tasks, t)) ? ["other"] : [])];
+  return keys.map((key) => {
+    let list = tasks.filter((t) => (key === "other" ? !known.has(t.status) : t.status === key) && !isInsideCard(tasks, t));
     if (key === "done") list = byLatest(list);
-    const base = { key, label: STATUSES.find((s) => s.value === key)!.label, total: list.length, empty: list.length === 0, filtering };
+    const base = { key, label: key === "other" ? "Other" : STATUSES.find((s) => s.value === key)!.label, total: list.length, empty: list.length === 0, filtering };
     const nest = (rows: readonly Task[]) => ({
       kids: Object.fromEntries(rows.map((t) => [t.id, kidsOf(t)] as const).filter(([, kids]) => kids.length > 0)),
       kidTotals: Object.fromEntries(rows.map((t) => [t.id, allKids(t).length] as const).filter(([, n]) => n > 0)),

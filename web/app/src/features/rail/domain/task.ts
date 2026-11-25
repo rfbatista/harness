@@ -29,7 +29,8 @@ export interface Task {
   readonly id: string;
   readonly projectId: string;
   readonly title: string;
-  readonly status: TaskStatus;
+  /** One of STATUSES; a status this client does not know goes to the rail's "other" group. */
+  readonly status: TaskStatus | (string & {});
   /** The feature task it belongs to; "" when top-level (one level deep). */
   readonly parentId: string;
   /** Review requests the architect raised that wait on the person. */

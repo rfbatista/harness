@@ -20,9 +20,9 @@ describe("the rail seed", () => {
     assert.deepEqual([t?.pendingReviews, t?.updatedAt, t?.statusSince, t?.archivedAt, t?.mergeState], [2, 1000, Date.parse("2026-01-02T00:00:00Z"), 0, { state: "partial", merged: 1, total: 2 }]);
   });
 
-  test("leaves out a task of a status it does not know, reads the rest, and does not throw on missing optional fields", () => {
-    const seed = toSeed(RailSeedDto.fromJSON({ project_id: "p1", tasks: [{ id: "x", status: "someday" }, { id: "t2", status: "todo" }], sessions: [] }));
-    assert.deepEqual(seed.tasks.map((t) => t.id), ["t2"]);
+  test("keeps a task of a status it does not know (the rail's Other group), leaves out one without an id, and does not throw on missing optional fields", () => {
+    const seed = toSeed(RailSeedDto.fromJSON({ project_id: "p1", tasks: [{ id: "x", status: "someday" }, { status: "todo" }, { id: "t2", status: "todo" }], sessions: [] }));
+    assert.deepEqual(seed.tasks.map((t) => `${t.id}:${t.status}`), ["x:someday", "t2:todo"]);
     assert.equal(seed.archivedCount, 0);
   });
 
@@ -49,7 +49,7 @@ describe("the project feed's changes", () => {
   test("a task_status, an unknown kind or a change that does not read is not the rail's", () => {
     assert.equal(read({ task_status: { task_id: "t1", by: "person" } }), null);
     assert.equal(read({ context: 1 }), null);
-    assert.equal(read({ ticket: { id: "t1", status: "someday" } }), null);
+    assert.equal(read({ ticket: { status: "todo" } }), null);
     assert.equal(read("text"), null);
     assert.equal(read(null), null);
   });
