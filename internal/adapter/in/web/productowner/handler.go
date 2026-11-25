@@ -70,6 +70,8 @@ func (h Handler) Context(w http.ResponseWriter, r *http.Request) error {
 	if t.ProjectID != project.ID || t.SessionID == "" {
 		return errs.Newf("THREAD_NOT_FOUND", "thread %s is not in project %s", t.ID, project.Name)
 	}
+	// A session that cannot be read shows as not running: the island still
+	// reads its stored context.
 	live := false
 	if sess, err := h.Sessions.Get(ctx, t.SessionID); err == nil {
 		live = sessions.IsLive(sess)

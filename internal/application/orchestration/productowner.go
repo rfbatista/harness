@@ -231,6 +231,9 @@ func applyProductOwnerContext(cfg *llmkit.SessionConfig, in projectBriefInput, t
 // projectPromptTitle is what the project prompt is called in a thread's context.
 const projectPromptTitle = "Project prompt"
 
+// projectPromptHeading opens the project prompt's section.
+const projectPromptHeading = "## Instructions from the person for this project\n\n"
+
 // projectPromptSection is the person's prompt for the project, placed after the
 // product owner's own rules, which it never overrides. A blank prompt is none.
 func projectPromptSection(prompt string) string {
@@ -238,7 +241,7 @@ func projectPromptSection(prompt string) string {
 	if p == "" {
 		return ""
 	}
-	return "## Instructions from the person for this project\n\n" + p
+	return projectPromptHeading + p
 }
 
 // productOwnerBrief is the product owner's opening instructions: what it is,

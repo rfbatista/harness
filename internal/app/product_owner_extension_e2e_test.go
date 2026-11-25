@@ -3,6 +3,7 @@
 package app
 
 import (
+	"context"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -35,7 +36,11 @@ for a in "$@"; do
   prev="$a"
 done
 `
-	return strings.Replace(fakeHeadlessClaude, `echo "$*" > "$dir/launch.$$"`+"\n", hook, 1)
+	marker := `echo "$*" > "$dir/launch.$$"` + "\n"
+	if !strings.Contains(fakeHeadlessClaude, marker) {
+		panic("the stand-in claude no longer writes its launch line the way fakeRecordingClaude patches it")
+	}
+	return strings.Replace(fakeHeadlessClaude, marker, hook, 1)
 }
 
 // newExtensionE2E is newPOE2E over the recording stand-in claude.
@@ -45,6 +50,13 @@ func newExtensionE2E(t *testing.T) *poE2E {
 	if err := os.WriteFile(filepath.Join(e.fakeDir, "claude"), []byte(fakeRecordingClaude()), 0o755); err != nil {
 		t.Fatal(err)
 	}
+	// The stand-in processes of a thread that is still idle write into the
+	// test's directory until the server stops them: stop it, and give them a
+	// moment, before the directory is removed.
+	t.Cleanup(func() {
+		_ = e.app.Stop(context.Background())
+		time.Sleep(300 * time.Millisecond)
+	})
 	return e
 }
 
@@ -528,7 +540,7 @@ func TestAThreadsContextPageShowsTheContextOfItsSessionWhileItIsInNoSessionPage(
 	page := srv.URL + "/projects/" + e.project + "/product-owner/threads/" + id + "/context"
 
 	status, body := pageAt(t, page)
-	props := `"session_id":"` + sid + `","project_id":"` + e.project + `"`
+	props := `"session_id":"` + sid + `","project_id":"` + e.project + `","live":true`
 	if status != 200 || !strings.Contains(body, `data-island="session-context"`) || !strings.Contains(body, props) {
 		t.Fatalf("page = %d, want the Context island for session %s:\n%.600s", status, sid, body)
 	}
