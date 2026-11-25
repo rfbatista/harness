@@ -45,6 +45,14 @@ func (s *Service) memoryView(ctx context.Context, e domain.MemoryEntry) ports.Me
 	return v
 }
 
+func (s *Service) memoryViews(ctx context.Context, entries []domain.MemoryEntry) []ports.MemoryEntryView {
+	out := make([]ports.MemoryEntryView, len(entries))
+	for i, e := range entries {
+		out[i] = s.memoryView(ctx, e)
+	}
+	return out
+}
+
 // ownEntry is the project's entry id, or MEMORY_ENTRY_NOT_FOUND when the id
 // is unknown or belongs to another project.
 func (s *Service) ownEntry(ctx context.Context, projectID, id string) (*domain.MemoryEntry, error) {
@@ -68,11 +76,7 @@ func (s *Service) ListMemory(ctx context.Context, sessionID string) ([]ports.Mem
 	if err != nil {
 		return nil, err
 	}
-	out := make([]ports.MemoryEntryView, len(entries))
-	for i, e := range entries {
-		out[i] = s.memoryView(ctx, e)
-	}
-	return out, nil
+	return s.memoryViews(ctx, entries), nil
 }
 
 // SaveMemory implements ports.ProductOwnerMemoryTools.
@@ -166,11 +170,7 @@ func (s *Service) Memory(ctx context.Context, projectID string) ([]ports.MemoryE
 	if err != nil {
 		return nil, err
 	}
-	out := make([]ports.MemoryEntryView, len(entries))
-	for i, e := range entries {
-		out[i] = s.memoryView(ctx, e)
-	}
-	return out, nil
+	return s.memoryViews(ctx, entries), nil
 }
 
 // UpdateMemoryEntry implements ports.ProductOwnerMemory. A refused update
@@ -279,18 +279,19 @@ func (s *Service) memoryNote(ctx context.Context, t *domain.ProductOwnerThread) 
 		return "", version, err
 	}
 	version = changes[len(changes)-1].Version
-	type net struct{ first, last domain.MemoryChange }
+	type span struct{ first, last domain.MemoryChange }
 	var order []string
-	byEntry := map[string]*net{}
+	byEntry := map[string]*span{}
 	for _, c := range changes {
-		if c.By == domain.MemoryByProductOwner && c.ThreadID == t.ID {
-			continue
-		}
 		if n := byEntry[c.EntryID]; n != nil {
+			// The thread's own later change still decides what the entry reads now.
 			n.last = c
 			continue
 		}
-		byEntry[c.EntryID] = &net{first: c, last: c}
+		if c.By == domain.MemoryByProductOwner && c.ThreadID == t.ID {
+			continue
+		}
+		byEntry[c.EntryID] = &span{first: c, last: c}
 		order = append(order, c.EntryID)
 	}
 	var lines []string

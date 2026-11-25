@@ -659,3 +659,19 @@ func TestTheNoteSurvivesARestartOfTheServer(t *testing.T) {
 		t.Errorf("the message after the restart = %q", got)
 	}
 }
+
+func TestTheNoteGivesWhatAnEntryReadsNowWhenTheThreadChangedItAfterThePerson(t *testing.T) {
+	e := newPOE2E(t)
+	id, owner := e.ownerOf("open thread")
+	entry := e.saveMemory(owner, "Start.")
+	e.sendAndWait(id, "settle") // the thread has seen the save
+	if status, code := e.post("update_memory_entry", map[string]any{"entry_id": entry.EntryID, "text": "Person's text."}, nil); status != 200 {
+		t.Fatalf("update = %d %s", status, code)
+	}
+	if out, refused := e.call(owner, "change_memory", map[string]any{"entry_id": entry.EntryID, "text": "Thread's later text."}); refused {
+		t.Fatalf("change = %s", out)
+	}
+	if got := e.sendAndWait(id, "question"); strings.Contains(got, "Person's text.") {
+		t.Errorf("the note carries a stale text: %q", got)
+	}
+}

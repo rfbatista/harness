@@ -7,9 +7,6 @@ import (
 	"operators-mcp/internal/ports"
 )
 
-// ProductOwnerMemoryToolNames are the product owner's memory tools (ADR 0111).
-var ProductOwnerMemoryToolNames = []string{"list_memory", "save_memory", "change_memory", "drop_memory"}
-
 // productOwnerMemoryTools are the tools with which the product owner lists,
 // saves, changes and drops the entries of its project's memory. Each acts on
 // the project of the thread its session answers for.
