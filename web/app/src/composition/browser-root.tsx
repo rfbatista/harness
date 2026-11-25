@@ -13,6 +13,26 @@ import { browserPageOpener } from "../features/navigation/infrastructure/browser
 import { httpTopBarSource } from "../features/navigation/infrastructure/http-top-bar-source";
 import { browserNavigator } from "../features/notifications/infrastructure/browser-navigator";
 import { httpNotificationsSource } from "../features/notifications/infrastructure/http-notifications-source";
+import { OwnerDock } from "../features/product-owner/application/owner-dock";
+import { browserDockMemory, browserPageNavigator, browserScreen, browserStorage } from "../features/product-owner/infrastructure/browser-dock";
+import { httpProductOwner } from "../features/product-owner/infrastructure/http-product-owner";
+import { ThreadList } from "../features/product-owner/application/thread-list";
+import { AboutPresenter } from "../features/product-owner/presentation/presenters/about-presenter";
+import { ThreadListPresenter } from "../features/product-owner/presentation/presenters/thread-list-presenter";
+import { systemClock } from "../shared/kernel/clock";
+import { OwnerSettingsPropsDto } from "./owner-settings-props-dto";
+import { OwnerSwitch } from "../features/product-owner/application/owner-switch";
+import { SettingsSectionPresenter } from "../features/product-owner/presentation/presenters/settings-section-presenter";
+import { SettingsSectionView } from "../features/product-owner/presentation/views/settings-section-view";
+import { OwnerPagePropsDto } from "./owner-page-props-dto";
+import { OwnerPagePresenter } from "../features/product-owner/presentation/presenters/owner-page-presenter";
+import { OwnerPageView } from "../features/product-owner/presentation/views/owner-page-view";
+import { OwnerPanelPropsDto } from "./owner-panel-props-dto";
+import { Conversation } from "../features/product-owner/application/conversation";
+import { browserTaskCatalog } from "../features/product-owner/infrastructure/browser-task-catalog";
+import { ThreadPresenter } from "../features/product-owner/presentation/presenters/thread-presenter";
+import { PanelPresenter } from "../features/product-owner/presentation/presenters/panel-presenter";
+import { PanelView } from "../features/product-owner/presentation/views/panel-view";
 import { browserClipboard } from "../features/context/infrastructure/browser-clipboard";
 import { httpContextSource } from "../features/context/infrastructure/http-context-source";
 import { ContextPropsDto } from "../features/context/infrastructure/dto/context-props-dto";
@@ -45,12 +65,16 @@ export function mountIslands(doc: Document): Dispose {
   const feed = sharedFeed({ base: "/api", api });
   const topBarSource = httpTopBarSource(api);
   const notifications = httpNotificationsSource(api, feed);
+  const owner = httpProductOwner(api, feed);
+  // The product owner's dock is the document's: the toggle in the top bar and the panel beside #main share it, and it outlives a swap.
+  const navigator = browserPageNavigator(win);
+  const dock = new OwnerDock({ gateway: owner, events: owner, memory: browserDockMemory(browserStorage(win)), screen: browserScreen(win), navigator });
   const contextSource = httpContextSource(api);
   const contextFeed = httpContextFeed(feed);
 
   const islands: Record<string, Island> = {
     "top-bar": (mount, props, fresh) => {
-      const topBar = buildTopBar(props, { pageOpener: browserPageOpener(win.location), navigator: browserNavigator(win.location), notifications });
+      const topBar = buildTopBar(props, { pageOpener: browserPageOpener(win.location), navigator: browserNavigator(win.location), notifications, dock });
       const unfollow = followNavigation(browserNavigationSignal(win), topBarSource, topBar.current, { fresh });
       const node = <TopBarView presenters={topBar.presenters} />;
       // Hydrate what the server rendered; render from scratch when its render failed (or left nothing).
@@ -60,7 +84,62 @@ export function mountIslands(doc: Document): Dispose {
       return () => {
         unfollow();
         topBar.inbox?.stop();
+        topBar.release();
         root.unmount();
+      };
+    },
+    // The panel: a client-rendered island beside #main, on every project page.
+    "owner-panel": (mount, props) => {
+      const { project_name, no_tasks } = OwnerPanelPropsDto.fromJSON(props);
+      const conversation = new Conversation({ gateway: owner, events: owner, onThread: (id) => dock.setThreadId(id) });
+      const thread = new ThreadPresenter(conversation, { projectName: project_name, noTasks: no_tasks }, browserTaskCatalog(doc));
+      const list = new ThreadList({ gateway: owner, events: owner });
+      const panel = new PanelPresenter(dock, conversation, thread, { list, threads: new ThreadListPresenter(list, conversation, systemClock), about: new AboutPresenter(conversation, list) });
+      const root = createRoot(mount);
+      root.render(<PanelView presenter={panel} />);
+      return () => {
+        panel.destroy();
+        root.unmount();
+      };
+    },
+    // The Settings page's Product owner section: the switch.
+    "owner-settings": (mount, props) => {
+      const { project_id } = OwnerSettingsPropsDto.fromJSON(props);
+      const ownerSwitch = new OwnerSwitch({ gateway: owner, events: owner });
+      const section = new SettingsSectionPresenter(ownerSwitch, project_id);
+      const stop = ownerSwitch.attach(project_id);
+      const root = createRoot(mount);
+      root.render(<SettingsSectionView presenter={section} />);
+      return () => {
+        root.unmount();
+        stop();
+        section.destroy();
+      };
+    },
+    // The full page: the same thread component beside the thread list. The panel steps aside while it is open.
+    "owner-page": (mount, props) => {
+      const { project_id, project_name, thread_id } = OwnerPagePropsDto.fromJSON(props);
+      const noTasks = browserTaskCatalog(doc).count() === 0;
+      const conversation = new Conversation({ gateway: owner, events: owner });
+      const list = new ThreadList({ gateway: owner, events: owner });
+      const thread = new ThreadPresenter(conversation, { projectName: project_name, noTasks }, browserTaskCatalog(doc), dock.state.enabled === false);
+      const threads = new ThreadListPresenter(list, conversation, systemClock);
+      const about = new AboutPresenter(conversation, list);
+      const page = new OwnerPagePresenter({ projectId: project_id, projectName: project_name, threadId: thread_id }, dock, conversation, list, navigator);
+      // The product owner is switched off or on: the composer follows.
+      const stopDock = dock.subscribe((state) => thread.setOff(state.enabled === false));
+      const stopList = list.attach(project_id);
+      const stopConversation = conversation.attach(project_id, thread_id === "" ? null : thread_id);
+      const root = createRoot(mount);
+      root.render(<OwnerPageView page={page} thread={thread} threads={threads} about={about} />);
+      return () => {
+        root.unmount();
+        stopConversation();
+        stopList();
+        stopDock();
+        threads.destroy();
+        about.destroy();
+        page.destroy();
       };
     },
     // The Context tab of the session pane: client-rendered, mounted while the tab is shown.

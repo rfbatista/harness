@@ -56,6 +56,8 @@ var fragmentPages = map[string]fragmentPage{
 	`/projects/{project}/design-systems/{slug}`:                   {"/projects/p1/design-systems/app", inProject},
 	`/projects/{project}/product-owner/threads/{thread}/context`:  {"/projects/p1/product-owner/threads/th-1/context", inProject},
 	`/projects/{project}/usage`:                                   {"/projects/p1/usage", inProject},
+	`/projects/{project}/product-owner`:                           {"/projects/p1/product-owner", inProject},
+	`/projects/{project}/product-owner/threads/{thread}`:          {"/projects/p1/product-owner/threads/t1", inProject},
 	`/projects/{project}/repositories/{repository}/history`:       {"/projects/p1/repositories/r1/history", inProject},
 	`/projects/{project}/tasks/{task}/sessions/{session}/history`: {"/projects/p1/tasks/t-feed/sessions/s-agent/history", inProject},
 	`/projects/{project}/settings`:                                {"/projects/p1/settings", inProject},

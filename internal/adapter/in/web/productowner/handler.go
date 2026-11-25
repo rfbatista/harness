@@ -9,19 +9,12 @@ import (
 	"context"
 	"encoding/json"
 	"net/http"
-	"net/url"
 
 	"github.com/rfbatista/harnesskit/errs"
 
 	"operators-mcp/internal/adapter/in/web/sessions"
-	"operators-mcp/internal/adapter/in/web/shell"
 	"operators-mcp/internal/ports"
 )
-
-// ThreadHref is a thread's page, which the React web client serves.
-func ThreadHref(projectID, threadID string) string {
-	return "/projects/" + url.PathEscape(projectID) + "/product-owner/threads/" + url.PathEscape(threadID)
-}
 
 // ContextHref is a thread's Context page.
 func ContextHref(projectID, threadID string) string {
@@ -31,15 +24,6 @@ func ContextHref(projectID, threadID string) string {
 // Threads reads one thread, as ports.ProductOwner does.
 type Threads interface {
 	Thread(ctx context.Context, threadID, before string) (*ports.ProductOwnerThreadPage, error)
-}
-
-// Handler serves the Context page.
-type Handler struct {
-	Projects ports.ProjectReader
-	Threads  Threads
-	Sessions ports.SessionReader
-	Layout   shell.Layout
-	Render   shell.Renderer
 }
 
 // contextProps are the Context island's props: the session it shows, its
@@ -85,5 +69,5 @@ func (h Handler) Context(w http.ResponseWriter, r *http.Request) error {
 		return err
 	}
 	frame.Live = true
-	return h.Render(w, r, http.StatusOK, Page(frame, project.ID, project.Name, t.Title, ThreadHref(project.ID, t.ID), string(props)))
+	return h.Render(w, r, http.StatusOK, ContextPage(frame, project.ID, project.Name, t.Title, ThreadHref(project.ID, t.ID), string(props)))
 }

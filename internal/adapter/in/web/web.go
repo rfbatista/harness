@@ -330,9 +330,11 @@ func NewHandler(deps Deps, assets *Assets, fallback http.Handler) http.Handler {
 		usagePage := usage.Handler{Projects: deps.Projects, Usage: deps.Usage, Layout: s.layout, Render: render}
 		mux.Handle("GET /projects/{project}/usage", s.page(usagePage.Page))
 	}
+	ownerPage := productowner.Handler{Projects: deps.Projects, Threads: deps.ProductOwnerThreads, Sessions: deps.Sessions, Layout: s.layout, Render: render}
+	mux.Handle("GET /projects/{project}/product-owner", s.page(ownerPage.Page))
+	mux.Handle("GET /projects/{project}/product-owner/threads/{thread}", s.page(ownerPage.Page))
 	if deps.ProductOwnerThreads != nil && deps.Sessions != nil {
-		threadPages := productowner.Handler{Projects: deps.Projects, Threads: deps.ProductOwnerThreads, Sessions: deps.Sessions, Layout: s.layout, Render: render}
-		mux.Handle("GET /projects/{project}/product-owner/threads/{thread}/context", s.page(threadPages.Context))
+		mux.Handle("GET /projects/{project}/product-owner/threads/{thread}/context", s.page(ownerPage.Context))
 	}
 	if deps.Services != nil {
 		servicesPage := services.Handler{Projects: deps.Projects, Services: deps.Services, Repositories: deps.Repositories, Layout: s.layout, Render: render}
@@ -466,6 +468,7 @@ func (s *server) layout(ctx context.Context, title, projectID, taskID string) (s
 	if s.deps.Usage != nil {
 		frame.Rail.UsageHref = usage.Href(projectID)
 	}
+	frame.Rail.ProductOwnerHref = productowner.Href(projectID)
 	return frame, nil
 }
 

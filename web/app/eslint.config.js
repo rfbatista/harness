@@ -76,6 +76,7 @@ const TRANSPORT_FILES = [
   "src/shared/infrastructure/shared-feed.ts",
   "src/shared/infrastructure/island-props.ts",
   "src/features/navigation/infrastructure/browser-navigation-signal.ts",
+  "src/features/product-owner/infrastructure/browser-dock.ts",
   "src/features/whiteboard/infrastructure/storage-board-preferences.ts",
   "src/features/whiteboard/infrastructure/browser-page-bridge.ts",
 ];

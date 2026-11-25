@@ -2,11 +2,22 @@ package productowner
 
 import "operators-mcp/internal/adapter/in/web/shell"
 
-// Page is a thread's Context page: the Context island of ADR 0099, mounted by
+// Page is the product owner's page: <main> holds the island's mount, which the browser
+// draws (toolbar, tabs, thread list and conversation are its grid items).
+templ Page(frame shell.Frame, props Props) {
+	@shell.AppShell(frame) {
+		<main id="main" class="[ owner-page ]">
+			<div data-island="owner-page" data-island-rendered="false"></div>
+			@shell.PropsScript("owner-page", props.JSON())
+		</main>
+	}
+}
+
+// ContextPage is a thread's Context page: the Context island of ADR 0099, mounted by
 // the web client for the thread's session, under a heading that names the
 // thread and links back to it. props is json.Marshal's output, which cannot
 // close the script.
-templ Page(frame shell.Frame, projectID, projectName, title, threadHref, props string) {
+templ ContextPage(frame shell.Frame, projectID, projectName, title, threadHref, props string) {
 	@shell.AppShell(frame) {
 		<main id="main" class="[ frame ]">
 			<header class="[ toolbar ]">

@@ -94,7 +94,7 @@ func ListPage(v ListView) templ.Component {
 				var templ_7745c5c3_Var3 string
 				templ_7745c5c3_Var3, templ_7745c5c3_Err = templ.JoinStringErrs(v.Total)
 				if templ_7745c5c3_Err != nil {
-					return templ.Error{Err: templ_7745c5c3_Err, FileName: `projects/manage.templ`, Line: 35, Col: 55}
+					return templ.Error{Err: templ_7745c5c3_Err, FileName: `manage.templ`, Line: 35, Col: 55}
 				}
 				_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var3))
 				if templ_7745c5c3_Err != nil {
@@ -186,7 +186,7 @@ func summaryRow(r SummaryRow) templ.Component {
 		var templ_7745c5c3_Var6 string
 		templ_7745c5c3_Var6, templ_7745c5c3_Err = templ.ResolveAttributeValue(r.ID)
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `projects/manage.templ`, Line: 81, Col: 87}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `manage.templ`, Line: 81, Col: 87}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var6)
 		if templ_7745c5c3_Err != nil {
@@ -199,7 +199,7 @@ func summaryRow(r SummaryRow) templ.Component {
 		var templ_7745c5c3_Var7 templ.SafeURL
 		templ_7745c5c3_Var7, templ_7745c5c3_Err = templ.JoinURLErrs(templ.SafeURL(r.Href))
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `projects/manage.templ`, Line: 84, Col: 71}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `manage.templ`, Line: 84, Col: 71}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var7))
 		if templ_7745c5c3_Err != nil {
@@ -212,7 +212,7 @@ func summaryRow(r SummaryRow) templ.Component {
 		var templ_7745c5c3_Var8 string
 		templ_7745c5c3_Var8, templ_7745c5c3_Err = templ.JoinStringErrs(r.Name)
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `projects/manage.templ`, Line: 84, Col: 82}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `manage.templ`, Line: 84, Col: 82}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var8))
 		if templ_7745c5c3_Err != nil {
@@ -225,7 +225,7 @@ func summaryRow(r SummaryRow) templ.Component {
 		var templ_7745c5c3_Var9 string
 		templ_7745c5c3_Var9, templ_7745c5c3_Err = templ.ResolveAttributeValue(r.State)
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `projects/manage.templ`, Line: 85, Col: 49}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `manage.templ`, Line: 85, Col: 49}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var9)
 		if templ_7745c5c3_Err != nil {
@@ -238,7 +238,7 @@ func summaryRow(r SummaryRow) templ.Component {
 		var templ_7745c5c3_Var10 string
 		templ_7745c5c3_Var10, templ_7745c5c3_Err = templ.JoinStringErrs(r.Word)
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `projects/manage.templ`, Line: 85, Col: 60}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `manage.templ`, Line: 85, Col: 60}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var10))
 		if templ_7745c5c3_Err != nil {
@@ -251,7 +251,7 @@ func summaryRow(r SummaryRow) templ.Component {
 		var templ_7745c5c3_Var11 string
 		templ_7745c5c3_Var11, templ_7745c5c3_Err = templ.JoinStringErrs(r.Meta)
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `projects/manage.templ`, Line: 87, Col: 53}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `manage.templ`, Line: 87, Col: 53}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var11))
 		if templ_7745c5c3_Err != nil {
@@ -264,7 +264,7 @@ func summaryRow(r SummaryRow) templ.Component {
 		var templ_7745c5c3_Var12 string
 		templ_7745c5c3_Var12, templ_7745c5c3_Err = templ.JoinStringErrs(r.RootDir)
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `projects/manage.templ`, Line: 88, Col: 79}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `manage.templ`, Line: 88, Col: 79}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var12))
 		if templ_7745c5c3_Err != nil {
@@ -277,7 +277,7 @@ func summaryRow(r SummaryRow) templ.Component {
 		var templ_7745c5c3_Var13 templ.SafeURL
 		templ_7745c5c3_Var13, templ_7745c5c3_Err = templ.JoinURLErrs(templ.SafeURL(r.SettingsHref))
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `projects/manage.templ`, Line: 90, Col: 96}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `manage.templ`, Line: 90, Col: 96}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var13))
 		if templ_7745c5c3_Err != nil {
@@ -290,7 +290,7 @@ func summaryRow(r SummaryRow) templ.Component {
 		var templ_7745c5c3_Var14 string
 		templ_7745c5c3_Var14, templ_7745c5c3_Err = templ.ResolveAttributeValue("Settings of " + r.Name)
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `projects/manage.templ`, Line: 90, Col: 135}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `manage.templ`, Line: 90, Col: 135}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var14)
 		if templ_7745c5c3_Err != nil {
@@ -364,7 +364,7 @@ func fieldError(id, prop string) templ.Component {
 		var templ_7745c5c3_Var17 string
 		templ_7745c5c3_Var17, templ_7745c5c3_Err = templ.ResolveAttributeValue(prop)
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `projects/manage.templ`, Line: 110, Col: 22}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `manage.templ`, Line: 110, Col: 22}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var17)
 		if templ_7745c5c3_Err != nil {
@@ -377,7 +377,7 @@ func fieldError(id, prop string) templ.Component {
 		var templ_7745c5c3_Var18 string
 		templ_7745c5c3_Var18, templ_7745c5c3_Err = templ.ResolveAttributeValue(id)
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `projects/manage.templ`, Line: 111, Col: 33}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `manage.templ`, Line: 111, Col: 33}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var18)
 		if templ_7745c5c3_Err != nil {
@@ -390,7 +390,7 @@ func fieldError(id, prop string) templ.Component {
 		var templ_7745c5c3_Var19 string
 		templ_7745c5c3_Var19, templ_7745c5c3_Err = templ.ResolveAttributeValue(prop + ".message")
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `projects/manage.templ`, Line: 111, Col: 68}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `manage.templ`, Line: 111, Col: 68}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var19)
 		if templ_7745c5c3_Err != nil {
@@ -403,7 +403,7 @@ func fieldError(id, prop string) templ.Component {
 		var templ_7745c5c3_Var20 string
 		templ_7745c5c3_Var20, templ_7745c5c3_Err = templ.ResolveAttributeValue(prop + ".code")
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `projects/manage.templ`, Line: 111, Col: 130}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `manage.templ`, Line: 111, Col: 130}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var20)
 		if templ_7745c5c3_Err != nil {
@@ -416,7 +416,7 @@ func fieldError(id, prop string) templ.Component {
 		var templ_7745c5c3_Var21 string
 		templ_7745c5c3_Var21, templ_7745c5c3_Err = templ.ResolveAttributeValue(prop + ".next")
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `projects/manage.templ`, Line: 111, Col: 173}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `manage.templ`, Line: 111, Col: 173}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var21)
 		if templ_7745c5c3_Err != nil {
@@ -480,7 +480,7 @@ func SettingsPage(v SettingsView) templ.Component {
 			var templ_7745c5c3_Var24 templ.SafeURL
 			templ_7745c5c3_Var24, templ_7745c5c3_Err = templ.JoinURLErrs(templ.SafeURL("/projects/" + v.Project.ID))
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `projects/manage.templ`, Line: 122, Col: 74}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `manage.templ`, Line: 122, Col: 74}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var24))
 			if templ_7745c5c3_Err != nil {
@@ -493,7 +493,7 @@ func SettingsPage(v SettingsView) templ.Component {
 			var templ_7745c5c3_Var25 string
 			templ_7745c5c3_Var25, templ_7745c5c3_Err = templ.JoinStringErrs(v.Project.Name)
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `projects/manage.templ`, Line: 122, Col: 108}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `manage.templ`, Line: 122, Col: 108}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var25))
 			if templ_7745c5c3_Err != nil {
@@ -514,7 +514,7 @@ func SettingsPage(v SettingsView) templ.Component {
 			var templ_7745c5c3_Var26 string
 			templ_7745c5c3_Var26, templ_7745c5c3_Err = templ.ResolveAttributeValue(v.Project.Name)
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `projects/manage.templ`, Line: 137, Col: 85}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `manage.templ`, Line: 137, Col: 85}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var26)
 			if templ_7745c5c3_Err != nil {
@@ -535,7 +535,7 @@ func SettingsPage(v SettingsView) templ.Component {
 			var templ_7745c5c3_Var27 string
 			templ_7745c5c3_Var27, templ_7745c5c3_Err = templ.ResolveAttributeValue(v.Project.RootDir)
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `projects/manage.templ`, Line: 142, Col: 122}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `manage.templ`, Line: 142, Col: 122}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var27)
 			if templ_7745c5c3_Err != nil {
@@ -571,7 +571,7 @@ func SettingsPage(v SettingsView) templ.Component {
 					var templ_7745c5c3_Var28 string
 					templ_7745c5c3_Var28, templ_7745c5c3_Err = templ.JoinStringErrs(p)
 					if templ_7745c5c3_Err != nil {
-						return templ.Error{Err: templ_7745c5c3_Err, FileName: `projects/manage.templ`, Line: 165, Col: 60}
+						return templ.Error{Err: templ_7745c5c3_Err, FileName: `manage.templ`, Line: 165, Col: 60}
 					}
 					_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var28))
 					if templ_7745c5c3_Err != nil {
@@ -617,69 +617,77 @@ func SettingsPage(v SettingsView) templ.Component {
 					return templ_7745c5c3_Err
 				}
 			}
-			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 43, "<section class=\"[ flow ] [ flow-space-s ]\" aria-labelledby=\"settings-repositories\"><h2 id=\"settings-repositories\">Repositories and their settings</h2><div class=\"[ pane ]\"><a class=\"[ row ]\" href=\"")
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 43, "<section id=\"product-owner\" class=\"[ flow ] [ flow-space-s ]\" aria-labelledby=\"settings-product-owner\"><h2 id=\"settings-product-owner\">Product owner</h2><div data-island=\"owner-settings\" data-island-rendered=\"false\"></div>")
+			if templ_7745c5c3_Err != nil {
+				return templ_7745c5c3_Err
+			}
+			templ_7745c5c3_Err = shell.PropsScript("owner-settings", ownerSettingsProps(v.Project.ID)).Render(ctx, templ_7745c5c3_Buffer)
+			if templ_7745c5c3_Err != nil {
+				return templ_7745c5c3_Err
+			}
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 44, "</section><section class=\"[ flow ] [ flow-space-s ]\" aria-labelledby=\"settings-repositories\"><h2 id=\"settings-repositories\">Repositories and their settings</h2><div class=\"[ pane ]\"><a class=\"[ row ]\" href=\"")
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
 			var templ_7745c5c3_Var29 templ.SafeURL
 			templ_7745c5c3_Var29, templ_7745c5c3_Err = templ.JoinURLErrs(templ.SafeURL(v.RepositoriesHref))
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `projects/manage.templ`, Line: 213, Col: 66}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `manage.templ`, Line: 218, Col: 66}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var29))
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
-			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 44, "\" style=\"--row-columns: minmax(0, 1fr) auto\"><span class=\"[ title ]\">Repositories</span> <span class=\"[ meta ]\">")
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 45, "\" style=\"--row-columns: minmax(0, 1fr) auto\"><span class=\"[ title ]\">Repositories</span> <span class=\"[ meta ]\">")
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
 			var templ_7745c5c3_Var30 string
 			templ_7745c5c3_Var30, templ_7745c5c3_Err = templ.JoinStringErrs(countOrNone(len(v.Repositories), "repository", "repositories"))
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `projects/manage.templ`, Line: 215, Col: 95}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `manage.templ`, Line: 220, Col: 95}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var30))
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
-			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 45, " →</span></a> ")
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 46, " →</span></a> ")
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
 			for _, r := range v.Repositories {
-				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 46, "<a class=\"[ row ]\" href=\"")
+				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 47, "<a class=\"[ row ]\" href=\"")
 				if templ_7745c5c3_Err != nil {
 					return templ_7745c5c3_Err
 				}
 				var templ_7745c5c3_Var31 templ.SafeURL
 				templ_7745c5c3_Var31, templ_7745c5c3_Err = templ.JoinURLErrs(templ.SafeURL(r.EnvHref))
 				if templ_7745c5c3_Err != nil {
-					return templ.Error{Err: templ_7745c5c3_Err, FileName: `projects/manage.templ`, Line: 218, Col: 58}
+					return templ.Error{Err: templ_7745c5c3_Err, FileName: `manage.templ`, Line: 223, Col: 58}
 				}
 				_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var31))
 				if templ_7745c5c3_Err != nil {
 					return templ_7745c5c3_Err
 				}
-				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 47, "\" style=\"--row-columns: minmax(0, 1fr) auto\"><span class=\"[ title ]\">Settings of ")
+				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 48, "\" style=\"--row-columns: minmax(0, 1fr) auto\"><span class=\"[ title ]\">Settings of ")
 				if templ_7745c5c3_Err != nil {
 					return templ_7745c5c3_Err
 				}
 				var templ_7745c5c3_Var32 string
 				templ_7745c5c3_Var32, templ_7745c5c3_Err = templ.JoinStringErrs(r.Name)
 				if templ_7745c5c3_Err != nil {
-					return templ.Error{Err: templ_7745c5c3_Err, FileName: `projects/manage.templ`, Line: 219, Col: 53}
+					return templ.Error{Err: templ_7745c5c3_Err, FileName: `manage.templ`, Line: 224, Col: 53}
 				}
 				_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var32))
 				if templ_7745c5c3_Err != nil {
 					return templ_7745c5c3_Err
 				}
-				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 48, "</span> <span class=\"[ meta ]\">→</span></a>")
+				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 49, "</span> <span class=\"[ meta ]\">→</span></a>")
 				if templ_7745c5c3_Err != nil {
 					return templ_7745c5c3_Err
 				}
 			}
-			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 49, "</div></section>")
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 50, "</div></section>")
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
@@ -687,7 +695,7 @@ func SettingsPage(v SettingsView) templ.Component {
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
-			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 50, "</div></div></main>")
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 51, "</div></div></main>")
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
@@ -724,20 +732,20 @@ func dangerZone(v SettingsView) templ.Component {
 			templ_7745c5c3_Var33 = templ.NopComponent
 		}
 		ctx = templ.ClearChildren(ctx)
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 51, "<section class=\"[ pane ]\" data-tone=\"danger\" aria-labelledby=\"settings-danger\"><header><span id=\"settings-danger\">Danger zone</span></header><div class=\"[ flow ] [ flow-space-s ]\" style=\"padding: var(--space-l)\"><p class=\"[ text-sm ]\">Deleting <b x-text=\"project.name\">")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 52, "<section class=\"[ pane ]\" data-tone=\"danger\" aria-labelledby=\"settings-danger\"><header><span id=\"settings-danger\">Danger zone</span></header><div class=\"[ flow ] [ flow-space-s ]\" style=\"padding: var(--space-l)\"><p class=\"[ text-sm ]\">Deleting <b x-text=\"project.name\">")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
 		var templ_7745c5c3_Var34 string
 		templ_7745c5c3_Var34, templ_7745c5c3_Err = templ.JoinStringErrs(v.Project.Name)
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `projects/manage.templ`, Line: 238, Col: 76}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `manage.templ`, Line: 243, Col: 76}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var34))
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 52, "</b> removes its tasks, documents, design assets and session history from the harness. Files on disk stay. This cannot be undone.</p><template x-if=\"refusal\"><div class=\"[ banner ]\" data-tone=\"danger\" role=\"alert\"><div class=\"[ flow ] [ flow-space-2xs grow ]\"><span x-text=\"refusal.message\"></span> <span class=\"[ code ]\"><span x-text=\"refusal.code\"></span> · <span x-text=\"refusal.next\"></span></span><ul class=\"[ flow ] [ flow-space-3xs ]\" style=\"padding-inline-start: 1rem\"><template x-for=\"s in refusal.sessions\" x-bind:key=\"s.id\"><li><template x-if=\"s.href\"><a x-bind:href=\"s.href\" x-text=\"s.label\"></a></template><template x-if=\"!s.href\"><span x-text=\"s.label\"></span></template><span class=\"[ color-ink-faint ]\" x-text=\"s.detail\"></span></li></template></ul></div></div></template><template x-if=\"!confirmingDelete\"><div><button type=\"button\" class=\"[ button ]\" data-variant=\"danger\" disabled x-bind:disabled=\"cannotAskDelete\" x-on:click=\"askDelete\">Delete project…</button></div></template><template x-if=\"confirmingDelete\"><form class=\"[ flow ] [ flow-space-s ]\" x-on:submit.prevent=\"deleteProject\" x-on:keydown.escape=\"cancelDelete\"><div class=\"[ field ]\"><label for=\"confirm-name\">Type <span class=\"[ font-mono ]\" x-text=\"project.name\"></span> to confirm</label> <input id=\"confirm-name\" class=\"[ font-mono text-sm ]\" autocomplete=\"off\" spellcheck=\"false\" x-ref=\"confirmName\" x-model=\"typedName\"></div><div class=\"[ cluster ]\"><button type=\"submit\" class=\"[ button ]\" data-variant=\"danger\" x-bind:disabled=\"!canDelete\" x-bind:aria-busy=\"deleting\">Delete <span x-text=\"project.name\"></span></button> <button type=\"button\" class=\"[ button ]\" data-variant=\"ghost\" x-on:click=\"cancelDelete\">Keep it</button></div></form></template></div></section>")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 53, "</b> removes its tasks, documents, design assets and session history from the harness. Files on disk stay. This cannot be undone.</p><template x-if=\"refusal\"><div class=\"[ banner ]\" data-tone=\"danger\" role=\"alert\"><div class=\"[ flow ] [ flow-space-2xs grow ]\"><span x-text=\"refusal.message\"></span> <span class=\"[ code ]\"><span x-text=\"refusal.code\"></span> · <span x-text=\"refusal.next\"></span></span><ul class=\"[ flow ] [ flow-space-3xs ]\" style=\"padding-inline-start: 1rem\"><template x-for=\"s in refusal.sessions\" x-bind:key=\"s.id\"><li><template x-if=\"s.href\"><a x-bind:href=\"s.href\" x-text=\"s.label\"></a></template><template x-if=\"!s.href\"><span x-text=\"s.label\"></span></template><span class=\"[ color-ink-faint ]\" x-text=\"s.detail\"></span></li></template></ul></div></div></template><template x-if=\"!confirmingDelete\"><div><button type=\"button\" class=\"[ button ]\" data-variant=\"danger\" disabled x-bind:disabled=\"cannotAskDelete\" x-on:click=\"askDelete\">Delete project…</button></div></template><template x-if=\"confirmingDelete\"><form class=\"[ flow ] [ flow-space-s ]\" x-on:submit.prevent=\"deleteProject\" x-on:keydown.escape=\"cancelDelete\"><div class=\"[ field ]\"><label for=\"confirm-name\">Type <span class=\"[ font-mono ]\" x-text=\"project.name\"></span> to confirm</label> <input id=\"confirm-name\" class=\"[ font-mono text-sm ]\" autocomplete=\"off\" spellcheck=\"false\" x-ref=\"confirmName\" x-model=\"typedName\"></div><div class=\"[ cluster ]\"><button type=\"submit\" class=\"[ button ]\" data-variant=\"danger\" x-bind:disabled=\"!canDelete\" x-bind:aria-busy=\"deleting\">Delete <span x-text=\"project.name\"></span></button> <button type=\"button\" class=\"[ button ]\" data-variant=\"ghost\" x-on:click=\"cancelDelete\">Keep it</button></div></form></template></div></section>")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
