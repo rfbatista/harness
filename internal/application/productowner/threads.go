@@ -199,6 +199,13 @@ func (s *Service) SendMessage(ctx context.Context, threadID, message string, att
 	if s.busy(t) {
 		return "", busyError()
 	}
+	if t.CheckpointPhase == domain.ProductOwnerCheckpointMoving {
+		// A checkpoint whose move did not finish: the thread goes to its new
+		// conversation before this message.
+		if err := s.finishMove(ctx, t); err != nil {
+			return "", unavailableOr(err)
+		}
+	}
 	r := s.runOf(t.ID)
 	if r != nil && s.sessions.ProductOwnerRunning(t.SessionID) {
 		return s.deliver(ctx, t, r, message)

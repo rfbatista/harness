@@ -126,8 +126,8 @@ func (s *Service) expireHeldActionsAtCheckpoint(ctx context.Context, t *domain.P
 
 // moveToNewConversation ends the thread's old process and starts its new
 // session, with the summary in its brief. It runs under the thread's lock, so
-// a stop waits for it. A start that fails leaves the thread on its old
-// session, which the next message resumes with the same summary.
+// a stop waits for it. A start that fails leaves the move to be done again
+// by the thread's next message.
 func (s *Service) moveToNewConversation(old *run) {
 	defer s.setWaking(old.threadID, false)
 	lock := s.threadLock(old.threadID)
@@ -144,8 +144,8 @@ func (s *Service) moveToNewConversation(old *run) {
 
 // finishMove ends the thread's old process, if one runs, and starts its new
 // session with the stored summary in its brief. The caller holds the thread's
-// lock. A start that fails leaves the thread idle on its old session, which the
-// next message resumes with the same summary, and says so in the thread.
+// lock. A start that fails says so in the thread and leaves the thread idle,
+// still owing its move: the next message does it first.
 func (s *Service) finishMove(ctx context.Context, t *domain.ProductOwnerThread) error {
 	if s.sessions.ProductOwnerRunning(t.SessionID) {
 		_ = s.sessions.Stop(ctx, t.SessionID)
@@ -155,7 +155,6 @@ func (s *Service) finishMove(ctx context.Context, t *domain.ProductOwnerThread) 
 	if err != nil {
 		slog.Warn("start a product owner thread's new conversation", "thread", t.ID, "err", err)
 		s.fail(ctx, t, "", "SESSION_RESUME_FAILED", "The product owner could not start its new conversation: "+err.Error())
-		_, _ = s.update(ctx, t.ID, t, func(th *domain.ProductOwnerThread) bool { th.CheckpointPhase = ""; return true })
 		return err
 	}
 	cur, err := s.update(ctx, t.ID, t, func(th *domain.ProductOwnerThread) bool {

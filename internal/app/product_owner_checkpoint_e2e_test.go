@@ -405,3 +405,31 @@ func TestAThreadsFirstMessageAfterACheckpointIsHandedTheWholeMemoryAgainAndOnlyT
 		t.Errorf("the thread did not record seeing the memory: %+v %v", th, err)
 	}
 }
+
+func TestAThreadIdleWithAMoveStillOwedMakesItBeforeItAnswersTheNextMessage(t *testing.T) {
+	e := newPOE2E(t)
+	e.setContext(contextBelowCheckpoint)
+	threadID, _ := e.startThread("first")
+	before := e.waitTurn(threadID, "idle")
+	// The summary is stored and the move failed: the thread is idle, owing it.
+	if _, err := e.store.AppendCheckpoint(e.ctx, domain.ProductOwnerItem{ThreadID: threadID, Kind: domain.ProductOwnerItemCheckpoint, At: time.Now(), Summary: "the summary owed"}); err != nil {
+		t.Fatal(err)
+	}
+	if status, code := e.send(threadID, "second"); status != 200 {
+		t.Fatalf("send = %d %s", status, code)
+	}
+	th := e.waitTurn(threadID, "idle")
+	if th.Thread.SessionID == before.Thread.SessionID || len(checkpointsOf(th.Items)) != 1 {
+		t.Errorf("session %s items %v, want the new conversation and the one checkpoint", th.Thread.SessionID, kinds(th.Items))
+	}
+	eventuallyPO(t, "the new conversation's launch", func() string {
+		l := e.launches()
+		if last := l[len(l)-1]; !strings.Contains(last, "--session-id "+th.Thread.SessionID) || !strings.Contains(last, "the summary owed") {
+			return "last launch = " + last
+		}
+		return ""
+	})
+	if got := e.received(); !strings.HasSuffix(got[len(got)-1], "second") {
+		t.Errorf("the message did not reach the new conversation: %q", got)
+	}
+}

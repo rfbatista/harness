@@ -36,18 +36,25 @@ func (r *ProductOwnerRepository) prepareSearch() bool {
 		slog.Warn("conversation search is off: this build has no SQLite FTS5 (build with -tags sqlite_fts5)", "err", err)
 		return false
 	}
-	var indexed, stored int64
+	// Items stored before the table existed, or by a build without FTS5, are
+	// indexed now: a table with fewer rows than there are searchable items
+	// lacks some.
+	var indexed, searchable int64
 	r.db.Raw("SELECT COUNT(*) FROM " + searchTable).Scan(&indexed)
-	r.db.Raw("SELECT COUNT(*) FROM " + ProductOwnerItemModel{}.TableName()).Scan(&stored)
-	if indexed == 0 && stored > 0 {
+	r.db.Raw("SELECT COUNT(*) FROM "+ProductOwnerItemModel{}.TableName()+
+		" WHERE (json_extract(body, '$.kind') = ? AND COALESCE(json_extract(body, '$.text'), '') <> '' AND COALESCE(json_extract(body, '$.streaming'), 0) = 0)"+
+		" OR (json_extract(body, '$.kind') = ? AND COALESCE(json_extract(body, '$.summary'), '') <> '')",
+		domain.ProductOwnerItemMessage, domain.ProductOwnerItemCheckpoint).Scan(&searchable)
+	if indexed < searchable {
 		r.backfillSearch()
 	}
 	return true
 }
 
+// backfillSearch indexes the items the search table lacks.
 func (r *ProductOwnerRepository) backfillSearch() {
 	var ms []ProductOwnerItemModel
-	if err := r.db.Find(&ms).Error; err != nil {
+	if err := r.db.Where("id NOT IN (SELECT item_id FROM " + searchTable + ")").Find(&ms).Error; err != nil {
 		slog.Warn("index the stored thread items for search", "err", err)
 		return
 	}
@@ -100,8 +107,11 @@ func (r *ProductOwnerRepository) indexItem(ctx context.Context, item domain.Prod
 func ftsQuery(q string) string {
 	var parts []string
 	for _, w := range strings.FieldsFunc(q, func(r rune) bool { return !unicode.IsLetter(r) && !unicode.IsDigit(r) }) {
-		if w == "OR" && len(parts) > 0 && parts[len(parts)-1] != "OR" {
-			parts = append(parts, "OR")
+		if w == "OR" {
+			// An OR joins two words; one with nothing before it is dropped.
+			if len(parts) > 0 && parts[len(parts)-1] != "OR" {
+				parts = append(parts, "OR")
+			}
 			continue
 		}
 		parts = append(parts, `"`+w+`"`)
