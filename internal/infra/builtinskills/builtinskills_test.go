@@ -2,12 +2,13 @@ package builtinskills
 
 import (
 	"slices"
+	"strings"
 	"testing"
 
 	"operators-mcp/internal/domain"
 )
 
-func TestAll_ListsTheThirteenBuiltInSkillsWithTheirModes(t *testing.T) {
+func TestAll_ListsTheBuiltInSkillsWithTheirModes(t *testing.T) {
 	got := map[string][]string{}
 	for _, s := range All() {
 		got[s.Name] = s.Modes
@@ -24,6 +25,7 @@ func TestAll_ListsTheThirteenBuiltInSkillsWithTheirModes(t *testing.T) {
 		"task-implement-spec": {"implement"}, "task-tdd": {"implement", "test"}, "task-code-review": {"implement", "review"},
 		"design-artifacts": {"design"}, "task-product": {"product"},
 		"task-review": {"review"}, "task-test": {"test"}, "task-qa": {"qa"}, "task-operate": {"operate"},
+		"create-verification-skill": {"architect"}, "maintain-verification-skill": {"architect"},
 	}
 	if len(got) != len(want) {
 		t.Fatalf("skills = %v, want %d", got, len(want))
@@ -40,7 +42,7 @@ func TestForMode_KeepsTheModesOrder(t *testing.T) {
 	for _, s := range ForMode(domain.SessionModeArchitect) {
 		names = append(names, s.Name)
 	}
-	want := []string{"task-architecture", "task-grill-with-docs", "task-to-spec"}
+	want := []string{"task-architecture", "task-grill-with-docs", "task-to-spec", "create-verification-skill", "maintain-verification-skill"}
 	if !slices.Equal(names, want) {
 		t.Fatalf("architect skills = %v, want %v", names, want)
 	}
@@ -74,5 +76,65 @@ func TestGet_ServesTheSameSetEveryTime(t *testing.T) {
 	}
 	if _, ok := Get("nope"); ok {
 		t.Fatal("unknown name must not be built in")
+	}
+}
+
+// Every upstream file of the skill is embedded with it, the MIT notice sits in
+// its folder, and the person's decision holds: no disable-model-invocation.
+func TestGet_CreateVerificationSkillShipsEveryUpstreamFileAndTheLicence(t *testing.T) {
+	s, ok := Get("create-verification-skill")
+	if !ok {
+		t.Fatal("create-verification-skill is built in")
+	}
+	files := map[string]string{}
+	for _, f := range s.Files {
+		files[f.Path] = f.Content
+	}
+	for _, p := range []string{
+		"SKILL.md", "LICENSE",
+		"references/feature-map-example/README.md",
+		"references/feature-map-example/create-note.md",
+		"references/feature-map-example/search.md",
+	} {
+		if files[p] == "" {
+			t.Errorf("%s is not embedded", p)
+		}
+	}
+	if !strings.Contains(files["LICENSE"], "MIT License") || !strings.Contains(files["LICENSE"], "Lauren Tan") {
+		t.Error("LICENSE is not the upstream MIT notice")
+	}
+	body := files["SKILL.md"]
+	if !strings.Contains(body, "name: create-verification-skill") || s.Description == "" {
+		t.Error("SKILL.md lacks frontmatter name and description")
+	}
+	if strings.Contains(body, "disable-model-invocation") {
+		t.Error("the architect may load the skill after the person agrees: no disable-model-invocation")
+	}
+	if !strings.Contains(body, "bf0c7cd80abdbf7fe47b634978a7d1b4071f71a7") || !strings.Contains(body, "cursor/plugins") {
+		t.Error("SKILL.md does not name the upstream repository and commit")
+	}
+}
+
+func TestGet_MaintainVerificationSkillShipsWithTheLicenceAndTheUpstreamSource(t *testing.T) {
+	s, ok := Get("maintain-verification-skill")
+	if !ok {
+		t.Fatal("maintain-verification-skill is built in")
+	}
+	files := map[string]string{}
+	for _, f := range s.Files {
+		files[f.Path] = f.Content
+	}
+	if !strings.Contains(files["LICENSE"], "MIT License") {
+		t.Error("LICENSE is not the upstream MIT notice")
+	}
+	body := files["SKILL.md"]
+	if !strings.Contains(body, "name: maintain-verification-skill") || s.Description == "" {
+		t.Error("SKILL.md lacks frontmatter name and description")
+	}
+	if strings.Contains(body, "disable-model-invocation") {
+		t.Error("no disable-model-invocation")
+	}
+	if !strings.Contains(body, "bf0c7cd80abdbf7fe47b634978a7d1b4071f71a7") || !strings.Contains(body, "propose_instruction_files") {
+		t.Error("SKILL.md lacks the upstream commit or the update proposal")
 	}
 }

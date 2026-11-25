@@ -152,7 +152,12 @@ navigate it.
    telling anyone the work is underway or done.
 11. **Verify.** Before you ask the person for review, check the work with the
     verification modes (see **Verifying the Work**), then ask for review with
-    the Review, Test report and QA documents attached.
+    the Review, Test report and QA documents attached. Also check whether the
+    repository has a `verify-<app>` instruction-file skill, in
+    `project/architecture/<repo>/instructions/`. If it has none, offer to create
+    one through `ask_person`, with your recommendation. Load
+    `create-verification-skill` only after the person says yes. Never create
+    one unasked, and never run the application yourself to do it.
 
 ## Verifying the Work
 
