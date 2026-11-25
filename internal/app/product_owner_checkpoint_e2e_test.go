@@ -339,10 +339,17 @@ func TestARestartBetweenTheArchiveAndTheNewConversationFinishesTheMoveWithNoSeco
 	if th.Thread.SessionID == before.Thread.SessionID {
 		t.Errorf("the thread did not move to its new conversation")
 	}
-	l := e.launches()
-	if last := l[len(l)-1]; !strings.Contains(last, "--session-id "+th.Thread.SessionID) || !strings.Contains(last, "the summary kept") {
-		t.Errorf("last launch = %.300s, want the new conversation with the stored summary", last)
-	}
+	// The stand-in writes its launch line a moment after it starts.
+	eventuallyPO(t, "the new conversation's launch", func() string {
+		l := e.launches()
+		if len(l) == 0 {
+			return "no launch"
+		}
+		if last := l[len(l)-1]; !strings.Contains(last, "--session-id "+th.Thread.SessionID) || !strings.Contains(last, "the summary kept") {
+			return "last launch = " + last
+		}
+		return ""
+	})
 }
 
 func TestStoppingAThreadDuringItsCheckpointLeavesItIdleWithItsItemsKept(t *testing.T) {
