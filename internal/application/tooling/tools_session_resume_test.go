@@ -19,7 +19,9 @@ import (
 // store to seed the ones it resumes, and the resume tool as "me" calls it.
 type resumeWorld struct {
 	resume    func(args map[string]any) (map[string]any, error)
+	stop      func(args map[string]any) (map[string]any, error)
 	starter   *fakeStarter
+	stopper   *fakeStopper
 	sessions  ports.SessionRepository
 	taskID    string
 	otherTask string
@@ -45,34 +47,49 @@ func resumeWorldWith(t *testing.T, channel *fakeChannel) resumeWorld {
 		t.Fatal(err)
 	}
 	starter := &fakeStarter{sessions: sessions}
+	stopper := &fakeStopper{sessions: sessions}
 	var ch ports.TaskChannel
 	if channel != nil {
 		ch = channel
 	}
-	var tool domain.Tool
-	for _, tl := range SessionTaskTools(plan, sessions, agentList{}, nil, PeerStarter{Sessions: starter, Repositories: repoList{{ID: "r-api", Name: "api"}}},
+	tools := map[string]domain.Tool{}
+	for _, tl := range SessionTaskTools(plan, sessions, agentList{}, nil, PeerStarter{Sessions: starter, Stopper: stopper, Repositories: repoList{{ID: "r-api", Name: "api"}}},
 		ArtifactTooling{}, ch, NotificationTooling{}) {
-		if tl.Name == "resume_task_session" {
-			tool = tl
+		tools[tl.Name] = tl
+	}
+	call := func(name string) func(args map[string]any) (map[string]any, error) {
+		tool, ok := tools[name]
+		if !ok {
+			t.Fatal(name + " not built")
+		}
+		return func(args map[string]any) (map[string]any, error) {
+			out, err := tool.Handler(WithSessionID(context.Background(), "me"), args)
+			if err != nil {
+				return nil, err
+			}
+			return out.(map[string]any), nil
 		}
 	}
-	if tool.Handler == nil {
-		t.Fatal("resume_task_session not built")
-	}
-	return resumeWorld{resume: func(args map[string]any) (map[string]any, error) {
-		out, err := tool.Handler(WithSessionID(context.Background(), "me"), args)
-		if err != nil {
-			return nil, err
-		}
-		return out.(map[string]any), nil
-	}, starter: starter, sessions: sessions, taskID: task.ID, otherTask: other.ID, projectID: proj.ID}
+	return resumeWorld{resume: call("resume_task_session"), stop: call("stop_task_session"), starter: starter, stopper: stopper,
+		sessions: sessions, taskID: task.ID, otherTask: other.ID, projectID: proj.ID}
 }
 
 // ended seeds an ended interactive session of the task that parent started.
 func (w resumeWorld) ended(t *testing.T, id, parent string) {
 	t.Helper()
+	w.seed(t, id, parent, domain.SessionStopped)
+}
+
+// running seeds a running interactive session of the task that parent started.
+func (w resumeWorld) running(t *testing.T, id, parent string) {
+	t.Helper()
+	w.seed(t, id, parent, domain.SessionRunning)
+}
+
+func (w resumeWorld) seed(t *testing.T, id, parent string, status domain.SessionStatus) {
+	t.Helper()
 	if _, err := w.sessions.Create(&domain.Session{ID: id, ProjectID: w.projectID, TicketID: w.taskID, RepositoryID: "r-api",
-		Status: domain.SessionStopped, Interactive: true, Branch: "task/" + id, ParentSessionID: parent}); err != nil {
+		Status: status, Interactive: true, Branch: "task/" + id, ParentSessionID: parent}); err != nil {
 		t.Fatal(err)
 	}
 }

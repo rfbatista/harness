@@ -325,7 +325,7 @@ func sessionTaskTools(cat catalog.Catalog, orch *orchestration.Service, plan *pl
 		opts = append(opts, tooling.WithInstructionProposals(cat.InstructionProposals))
 	}
 	return tooling.SessionTaskTools(plan, sessions, cat.Agents, cat.Architecture,
-		tooling.PeerStarter{Sessions: orch, Repositories: cat.Projects, Merger: merges},
+		tooling.PeerStarter{Sessions: orch, Stopper: orch, Repositories: cat.Projects, Merger: merges},
 		tooling.ArtifactTooling{Publisher: art, Attachments: art, ViewURL: httpapi.ArtifactViewPath}, channel,
 		tooling.NotificationTooling{Notifier: notifier}, opts...)
 }

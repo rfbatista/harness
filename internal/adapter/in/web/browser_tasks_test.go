@@ -46,6 +46,11 @@ func (f *fakeTicketsAPI) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		http.NotFound(w, r)
 		return
 	}
+	// The product owner's toggle reads its project's switch on every project page; no test here is about it, so it is not a call.
+	if r.URL.Path == "/api/product_owner" {
+		_, _ = w.Write([]byte(`{"project_id":"` + r.URL.Query().Get("project_id") + `","enabled":true}`))
+		return
+	}
 	// A live terminal's interview panel reads and follows its session's interviews: none here.
 	if strings.HasPrefix(r.URL.Path, "/api/sessions/") && strings.Contains(r.URL.Path, "/interviews") {
 		if strings.HasSuffix(r.URL.Path, "/events") {
