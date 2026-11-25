@@ -2,7 +2,7 @@
 
 import {
   agentBody, bundleBody, mcpServerBody, projectMcpSettingsBody, serverFields, skillBody,
-  toCatalog, toProbe, toProjectAgents, toProjectMcpSettings, toRefreshedTools, toProjectList, toServerNames, toSkillDetail, toWriteResult, writeFields,
+  toCatalog, toModeStates, toProbe, toProjectAgents, toProjectMcpSettings, toRefreshedTools, toProjectList, toServerNames, toSkillDetail, toWriteResult, writeFields,
 } from "./dto.js";
 
 /**
@@ -59,6 +59,9 @@ export function catalogGateway(api, events) {
     },
     async setProjectMcpSettings(projectId, servers) {
       return toProjectMcpSettings(await api.post("/set_project_mcp_settings", projectMcpSettingsBody(projectId, servers)));
+    },
+    async getModeStates() {
+      return toModeStates(await api.get("/get_mode_agents"));
     },
     async getProjectAgents(projectId) {
       return toProjectAgents(await api.get("/get_project_agents", { project_id: projectId }));

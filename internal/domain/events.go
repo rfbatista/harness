@@ -74,6 +74,16 @@ type SessionStarted struct {
 	StatusCheckMinutes *int
 }
 
+// SessionResumed: an ended session was brought back and is running again,
+// in its own worktree and conversation.
+type SessionResumed struct {
+	SessionID       string
+	ProjectID       string
+	TicketID        string
+	ParentSessionID string
+	Mode            SessionMode
+}
+
 // SessionEnded: a session's process is gone, with Status (done, failed or
 // stopped).
 type SessionEnded struct {
@@ -94,6 +104,7 @@ type InterviewOpened struct {
 type InterviewClosed struct {
 	InterviewID string
 	SessionID   string
+	State       InterviewState
 }
 
 // SessionCommitCheckChanged: a session's commit check went off (Off, with the
@@ -128,7 +139,9 @@ type ReviewRequestChanged struct {
 	ProjectID      string
 	Subject        string
 	AboutSessionID string
-	State          ReviewState
+	// ArchitectSessionID is the session that asked.
+	ArchitectSessionID string
+	State              ReviewState
 }
 
 // SessionsInterrupted: the boot found these sessions carrying the interrupted
@@ -144,6 +157,9 @@ type SessionStatusChanged struct {
 	// ByBranchRequest says the status moved because a branch request is
 	// pending: the inbox has its own notification for that.
 	ByBranchRequest bool
+	// ApprovalDenied says the status left waiting_approval because the
+	// approval was denied or expired, not allowed.
+	ApprovalDenied bool
 }
 
 // BranchRequestChanged: a branch request was filed, answered, used or expired;
@@ -240,6 +256,7 @@ func (MCPServerDeleted) EventName() string           { return "mcp_server.delete
 func (SettingsChanged) EventName() string            { return "settings.changed" }
 func (SessionDeleted) EventName() string             { return "session.deleted" }
 func (SessionStarted) EventName() string             { return "session.started" }
+func (SessionResumed) EventName() string             { return "session.resumed" }
 func (SessionEnded) EventName() string               { return "session.ended" }
 func (InterviewOpened) EventName() string            { return "interview.opened" }
 func (InterviewClosed) EventName() string            { return "interview.closed" }

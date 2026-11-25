@@ -23,10 +23,13 @@ function invalidReason(name) {
  *   sessions?: import("../domain/session.js").Session[],
  *   repositories?: Record<string, string>,  repository id → project id
  *   branches?: Record<string, { name: string, remote: boolean, isHead: boolean }[]>,  repository id → its branches
+ *   worktrees?: { ticketId: string, repositoryId: string, worktreeId: string, branch: string, createdBySessionId?: string, sessions: import("../domain/ports.js").TaskWorktreeSession[] }[],  the worktrees the picker offers, per task and repository
  *   now?: () => Date,
  * }} [seed]
  */
-export function memoryGateway({ projects = [], sessions = [], repositories = {}, branches = {}, now = () => new Date() } = {}) {
+export function memoryGateway({ projects = [], sessions = [], repositories = {}, branches = {}, worktrees = [], now = () => new Date() } = {}) {
+  /** The worktrees a start can join; one that vanished is dropped. */
+  worktrees = [...worktrees];
   // Fetching swaps a repository's list; the caller's seed stays as it was.
   branches = { ...branches };
   /** repository id → the remote branches origin has; unset means origin has what the checkout lists. */
@@ -108,13 +111,43 @@ export function memoryGateway({ projects = [], sessions = [], repositories = {},
       return Object.freeze(check(query));
     },
 
-    async start({ projectId, ticketId, repositoryId, agentId, prompt, mode, branchName, model }) {
+    async taskWorktrees({ ticketId, repositoryId }) {
+      const mine = worktrees.filter((w) => w.ticketId === ticketId && w.repositoryId === repositoryId);
+      return Object.freeze({
+        worktrees: mine.map((w) =>
+          Object.freeze({
+            worktreeId: w.worktreeId,
+            branch: w.branch,
+            onDisk: true,
+            createdBySessionId: w.createdBySessionId ?? w.sessions[0]?.sessionId ?? "",
+            sessions: Object.freeze(w.sessions.map((s) => Object.freeze({ endedAt: null, ...s }))),
+          }),
+        ),
+      });
+    },
+
+    async start({ projectId, ticketId, repositoryId, agentId, prompt, mode, baseBranch, branchName, model, worktreeId, access }) {
       if (startRefusal) {
         const refusal = startRefusal;
         startRefusal = null;
         throw refusal;
       }
-      starts.push({ projectId, ticketId, repositoryId, agentId, prompt, mode, branchName, model });
+      starts.push({ projectId, ticketId, repositoryId, agentId, prompt, mode, baseBranch, branchName, model, worktreeId, access });
+      if (access && access !== "write" && access !== "read_only") {
+        throw new StructuredError(Codes.ACCESS_INVALID, "ACCESS_INVALID: access must be write or read_only", 400);
+      }
+      if (worktreeId) {
+        if (baseBranch || branchName?.trim()) {
+          throw new StructuredError(Codes.WORKTREE_WITH_BASE_BRANCH, "WORKTREE_WITH_BASE_BRANCH: a session that joins a worktree runs on its branch: leave the base branch and the branch name empty", 400);
+        }
+        const target = worktrees.find((w) => w.worktreeId === worktreeId);
+        if (!target) {
+          throw new StructuredError(Codes.WORKTREE_NOT_FOUND, "WORKTREE_NOT_FOUND: That worktree is gone from disk since the list was read. Nothing was started. Pick another or start on a new branch.", 404, { worktree_id: worktreeId });
+        }
+        if (target.ticketId !== ticketId) {
+          throw new StructuredError(Codes.WORKTREE_NOT_ON_TASK, "WORKTREE_NOT_ON_TASK: that worktree belongs to a session of another task", 403, { worktree_id: worktreeId });
+        }
+      }
       if (!knownProjects.has(projectId)) {
         throw new StructuredError(Codes.PROJECT_NOT_FOUND, `project ${projectId} not found`, 404);
       }
@@ -152,6 +185,9 @@ export function memoryGateway({ projects = [], sessions = [], repositories = {},
         task: prompt?.trim() ?? "",
         agentId: agentId ?? "",
         mode: mode ?? "",
+        worktreeId: worktreeId || undefined,
+        access: worktreeId ? access || (mode === "review" || mode === "qa" ? "read_only" : "write") : "write",
+        joined: Boolean(worktreeId),
         status: Status.RUNNING,
         pendingApprovals: 0,
         openInterviewCount: 0,
@@ -298,6 +334,10 @@ export function memoryGateway({ projects = [], sessions = [], repositories = {},
     /** What origin has for a repository, as the remote-tracking names a fetch brings (`origin/x`). */
     setOrigin(repositoryId, names) {
       origin[repositoryId] = names;
+    },
+    /** A worktree is gone from disk: the picker no longer offers it, and a start on it is refused. */
+    vanish(worktreeId) {
+      worktrees = worktrees.filter((w) => w.worktreeId !== worktreeId);
     },
     /** The next start is refused with `error`, as the server refuses a base. */
     refuseStart(error) {

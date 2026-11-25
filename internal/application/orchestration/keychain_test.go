@@ -230,3 +230,45 @@ func TestALoginShellKeepsTheSecurityShimAfterTheEditProxyShims(t *testing.T) {
 		t.Fatal(err)
 	}
 }
+
+func TestAProjectsOwnAgentCredentialWinsOverALoginAndTheGlobalCredential(t *testing.T) {
+	own := map[string][]string{"p1": {"ANTHROPIC_API_KEY=project-key"}}
+	for name, login := range map[string]bool{"with a login": true, "without a login": false} {
+		t.Run(name, func(t *testing.T) {
+			svc, _ := newInteractiveService(t)
+			svc.AgentCredential = func() []string { return []string{"CLAUDE_CODE_OAUTH_TOKEN=global"} }
+			svc.AgentLogin = loginFixture(t, login)
+			svc.ProjectAgentCredential = func(id string) ([]string, bool) { env, ok := own[id]; return env, ok }
+
+			sess, launch := startInteractive(t, svc, InteractiveRequest{ProjectID: "p1", RepositoryID: "r1", TicketID: "tk1"})
+			if !slices.Contains(launch.Spec.Env, "ANTHROPIC_API_KEY=project-key") || slices.Contains(launch.Spec.Env, "CLAUDE_CODE_OAUTH_TOKEN=global") {
+				t.Fatalf("start env %v: want the project's credential only", launch.Spec.Env)
+			}
+			if _, err := svc.EndInteractive(context.Background(), sess.ID, 0, false); err != nil {
+				t.Fatal(err)
+			}
+			_, spec, err := svc.ResumeInteractive(context.Background(), ports.ResumeRequest{SessionID: sess.ID})
+			if err != nil {
+				t.Fatal(err)
+			}
+			if !slices.Contains(spec.Env, "ANTHROPIC_API_KEY=project-key") {
+				t.Fatalf("resume env %v lacks the project's credential", spec.Env)
+			}
+		})
+	}
+}
+
+func TestAProjectWithoutItsOwnAgentCredentialFallsBackToTheGlobalRules(t *testing.T) {
+	svc, _ := newInteractiveService(t)
+	svc.AgentCredential = func() []string { return []string{"CLAUDE_CODE_OAUTH_TOKEN=global"} }
+	svc.ProjectAgentCredential = func(string) ([]string, bool) { return nil, false }
+	_, launch := startInteractive(t, svc, InteractiveRequest{ProjectID: "p1", RepositoryID: "r1", TicketID: "tk1"})
+	if !slices.Contains(launch.Spec.Env, "CLAUDE_CODE_OAUTH_TOKEN=global") {
+		t.Fatalf("env %v lacks the global credential", launch.Spec.Env)
+	}
+	svc.AgentLogin = loginFixture(t, true)
+	_, launch = startInteractive(t, svc, InteractiveRequest{ProjectID: "p1", RepositoryID: "r1", TicketID: "tk1"})
+	if got := hasCredentialEnv(launch.Spec.Env); len(got) != 0 {
+		t.Fatalf("a login still beats the global credential: %v", got)
+	}
+}

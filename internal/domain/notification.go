@@ -34,6 +34,130 @@ const (
 	NotificationAgent               NotificationKind = "agent"
 )
 
+// NotificationKinds is every kind, for filtering by one.
+var NotificationKinds = []NotificationKind{
+	NotificationReviewRequested, NotificationSessionWaiting, NotificationTaskReview, NotificationSessionFailed,
+	NotificationCommitCheckOff, NotificationBranchRequest, NotificationBranchFinding, NotificationServiceRequest,
+	NotificationSessionsInterrupted, NotificationAgent,
+}
+
+// NotificationActorKind says what kind of party caused a notification.
+type NotificationActorKind string
+
+const (
+	ActorAgent  NotificationActorKind = "agent"
+	ActorSystem NotificationActorKind = "system"
+	ActorPerson NotificationActorKind = "person"
+)
+
+// The names of the harness's own sources, the actor name of a notification no
+// session caused.
+const (
+	ActorBranchWatch = "branch watch"
+	ActorRestart     = "restart"
+	ActorHarness     = "harness"
+	// ActorYou names the person: the harness keeps no display name for them.
+	ActorYou = "you"
+)
+
+// NotificationActor is who caused a notification (ADR 0095): an agent with
+// its session's mode word and session, or one of the harness's own sources.
+type NotificationActor struct {
+	Kind      NotificationActorKind `json:"kind"`
+	Name      string                `json:"name"`
+	Mode      string                `json:"mode,omitempty"`
+	SessionID string                `json:"session_id,omitempty"`
+}
+
+// ModeWord is the session mode as a person says it: "architect",
+// "implementing", "QA"; a session started with no mode is just a "session".
+func ModeWord(m SessionMode) string {
+	switch m {
+	case SessionModeArchitect:
+		return "architect"
+	case SessionModeImplement:
+		return "implementing"
+	case SessionModeDesign:
+		return "design"
+	case SessionModeProduct:
+		return "product"
+	case SessionModeDesignSystem:
+		return "design system"
+	case SessionModeReview:
+		return "review"
+	case SessionModeTest:
+		return "test"
+	case SessionModeQA:
+		return "QA"
+	case SessionModeOperate:
+		return "operate"
+	case SessionModeProductOwner:
+		return "product owner"
+	}
+	return "session"
+}
+
+// NotificationObject is what a notification's verb acts on: a branch, a
+// command, a service (Code, shown monospace), a review subject, a task title.
+type NotificationObject struct {
+	Text string `json:"text"`
+	Code bool   `json:"code"`
+}
+
+// CommitCheckState is where one session listed by a commit_check_off
+// notification stands.
+type CommitCheckState string
+
+const (
+	// CommitCheckOff: the session's commit check is still off.
+	CommitCheckOff CommitCheckState = "off"
+	// CommitCheckRepaired: the check is guarded again.
+	CommitCheckRepaired CommitCheckState = "repaired"
+	// CommitCheckEnded: the session was deleted.
+	CommitCheckEnded CommitCheckState = "ended"
+)
+
+// ListedSession is one entry of a commit_check_off notification's list
+// (ADR 0098). State and TaskTitle are as of the read.
+type ListedSession struct {
+	SessionID string           `json:"session_id"`
+	TaskID    string           `json:"task_id,omitempty"`
+	TaskTitle string           `json:"task_title,omitempty"`
+	AgentName string           `json:"agent_name"`
+	Link      string           `json:"link"`
+	State     CommitCheckState `json:"state"`
+}
+
+// NotificationOutcome is how a notification's cause ended (ADR 0097). A
+// notification resolved before outcomes were recorded has none.
+type NotificationOutcome string
+
+const (
+	OutcomeApproved         NotificationOutcome = "approved"
+	OutcomeChangesRequested NotificationOutcome = "changes_requested"
+	OutcomeDenied           NotificationOutcome = "denied"
+	OutcomeExpired          NotificationOutcome = "expired"
+	OutcomeWithdrawn        NotificationOutcome = "withdrawn"
+	OutcomeAnswered         NotificationOutcome = "answered"
+	OutcomeDismissed        NotificationOutcome = "dismissed"
+	OutcomeAcknowledged     NotificationOutcome = "acknowledged"
+	OutcomeRepaired         NotificationOutcome = "repaired"
+	OutcomeResumed          NotificationOutcome = "resumed"
+	OutcomeEnded            NotificationOutcome = "ended"
+	OutcomeDone             NotificationOutcome = "done"
+	OutcomeReopened         NotificationOutcome = "reopened"
+)
+
+// Valid says o is one of the outcomes above.
+func (o NotificationOutcome) Valid() bool {
+	switch o {
+	case OutcomeApproved, OutcomeChangesRequested, OutcomeDenied, OutcomeExpired, OutcomeWithdrawn, OutcomeAnswered,
+		OutcomeDismissed, OutcomeAcknowledged, OutcomeRepaired, OutcomeResumed, OutcomeEnded, OutcomeDone, OutcomeReopened:
+		return true
+	}
+	return false
+}
+
 // NotificationLevel is how much a notification asks of the person: action
 // means they have to do something.
 type NotificationLevel string
@@ -73,9 +197,26 @@ type Notification struct {
 	Title       string             `json:"title"`
 	Body        string             `json:"body,omitempty"`
 	Link        string             `json:"link"`
-	CreatedAt   time.Time          `json:"created_at"`
-	ReadAt      *time.Time         `json:"read_at,omitempty"`
-	ResolvedAt  *time.Time         `json:"resolved_at,omitempty"`
+	// Actor is who caused it: always set when the notification is read.
+	Actor      NotificationActor `json:"actor"`
+	CreatedAt  time.Time         `json:"created_at"`
+	ReadAt     *time.Time        `json:"read_at,omitempty"`
+	ResolvedAt *time.Time        `json:"resolved_at,omitempty"`
+	// Verb and Object are what a system notification says, in the agent's
+	// voice (ADR 0095); an agent's own notification has neither and its Title
+	// is the what. Title still reads as the actor, the verb and the object in
+	// plain text, for delivery providers.
+	Verb   string              `json:"verb,omitempty"`
+	Object *NotificationObject `json:"object,omitempty"`
+	// RepositoryID is the repository a branch or service notification is
+	// about; RepositoryName is its name as of the read.
+	RepositoryID   string `json:"-"`
+	RepositoryName string `json:"repository_name,omitempty"`
+	// ListedSessions is the list of a commit_check_off notification.
+	ListedSessions []ListedSession `json:"listed_sessions,omitempty"`
+	// Outcome is how it ended; set with ResolvedAt, absent on rows resolved
+	// before outcomes were recorded.
+	Outcome NotificationOutcome `json:"outcome,omitempty"`
 	// CauseKey names what caused it ("review:<id>", "session_waiting:<id>"…),
 	// so a cause that repeats while unresolved adds nothing. Agent
 	// notifications have none.

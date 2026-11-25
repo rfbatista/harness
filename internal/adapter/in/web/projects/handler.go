@@ -42,9 +42,18 @@ type Handler struct {
 	// OpenProposals counts a repository's open instruction-file proposals for
 	// the badge beside its Architecture link; nil counts none.
 	OpenProposals func(ctx context.Context, repositoryID string) int
-	Layout        shell.Layout
-	Render        shell.Renderer
-	Now           func() time.Time
+	// AgentCredentials paints the project's own Agent credential on its
+	// settings page and GlobalCredential the one it falls back to; nil
+	// AgentCredentials leaves the section out.
+	AgentCredentials ports.ProjectAgentCredentials
+	GlobalCredential ports.AgentCredential
+	// SignIn runs the project's own sign in with Claude and ClaudeBin says
+	// whether there is a claude to run it; nil SignIn leaves the button out.
+	SignIn    ports.ProjectAgentOAuth
+	ClaudeBin ports.ManagedClaudeBin
+	Layout    shell.Layout
+	Render    shell.Renderer
+	Now       func() time.Time
 }
 
 // List is the projects list: every project with its counts.
@@ -58,7 +67,6 @@ func (h Handler) List(w http.ResponseWriter, r *http.Request) error {
 	if err != nil {
 		return err
 	}
-	frame.Top.OnProjects = true
 	frame.Live = true // projectsListPage follows the project catalog feed
 	return h.Render(w, r, http.StatusOK, ListPage(NewListView(frame, summaries, h.Now())))
 }
@@ -80,6 +88,16 @@ func (h Handler) Settings(w http.ResponseWriter, r *http.Request) error {
 	}
 	v := NewSettingsView(frame, project, repos)
 	v.TokenSavers = tokensavers.Read(ctx, h.TokenSavers, domain.ActivationOwner{Level: domain.ActivationLevelProject, ID: project.ID})
+	// A credential that could not be read leaves the section out rather than
+	// failing the whole settings page.
+	cred, err := NewAgentCredentialView(ctx, h.AgentCredentials, h.GlobalCredential, project.ID, project.Name)
+	if err != nil {
+		slog.Warn("project settings: agent credential not read", "err", err)
+	}
+	if cred != nil {
+		cred.WithSignIn(h.SignIn, h.ClaudeBin)
+	}
+	v.AgentCredential = cred
 	return h.Render(w, r, http.StatusOK, SettingsPage(v))
 }
 

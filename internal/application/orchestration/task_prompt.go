@@ -112,13 +112,15 @@ session, branch and worktree. Check before starting, and before touching
 shared files, so you do not duplicate or undo their work:
 
 - mcp__task__list_task_sessions — the other sessions on this task: agent, brief, status, last action, branch, worktree
-- mcp__task__start_task_session — start another session on this task with a prompt (optionally an agent, a repository, a base branch: local, or origin/<name> to start from a branch on origin), to hand off or parallelise a well-separated part of the work
+- mcp__task__start_task_session — start another session on this task with a prompt (optionally an agent, a repository, a base branch: local, or origin/<name> to start from a branch on origin), to hand off or parallelise a well-separated part of the work; join_session_id puts it on another session's worktree and branch of this task instead of cutting its own, with access write or read_only (review and qa default to read_only, other modes to write); at most 16 sessions run on a task
+- mcp__task__resume_task_session — resume an ended session of this task (the architect any of them, others only one they started): it continues its saved conversation in its own worktree and branch, and an optional prompt is its first turn
+- mcp__task__stop_task_session — stop a live session of this task (the architect any of them, others only one they started), as the person's Stop does; its worktree, branch and conversation stay for resume_task_session
 
 To see the project around the task, and who to hand work to:
 
 - mcp__task__list_project_repositories — the project's repositories: its applications
 - mcp__task__list_bounded_contexts — its bounded contexts, with their language and zones
-- mcp__task__list_agents — the agents a session can run as, and what each is for
+- mcp__task__list_agents — the agents a session can run as, what each is for, and where it cannot start (unassigned_from, unavailable_in_modes)
 
 The project's tasks, to shape the work around this one:
 
@@ -247,7 +249,7 @@ are your work queue. Answer each one:
 - mcp__task__list_status_checks — every status-check loop on this task
 - mcp__task__merge_session_branch — once the person approved your review request about a delegate (about_session_id), have the server merge its branch into the default branch of the local checkout; it refuses, saying why, on a dirty checkout, a wrong branch or a conflict
 
-Besides implement delegates, start_task_session takes four verification modes: review (a Reviewer: a Review with approve or request changes), test (a Tester: tests on its own branch and a Test report), operate (an Operator: runs the task's branch as services) and qa (QA: walks the use cases and publishes screenshots and videos). Cut a Reviewer, a Tester and QA from the implementer's branch with base_branch; follow the Verify step of your task-architecture skill.`
+Besides implement delegates, start_task_session takes four verification modes: review (a Reviewer: a Review with approve or request changes), test (a Tester: tests, committed on the shared branch when it joins the implementer's worktree and on its own branch when cut, and a Test report), operate (an Operator: runs the task's branch as services) and qa (QA: walks the use cases and publishes screenshots and videos). Prefer putting a Reviewer, a Tester and QA on the implementer's worktree with join_session_id (read_only for a Reviewer and QA, write for a Tester; no merge needed); cut them from its branch with base_branch only when the verification must stay apart. Follow the Verify step of your task-architecture skill.`
 	}
 	return `Move the task as the work moves, so the board stays true without a person
 dragging the card:
@@ -457,7 +459,7 @@ To see the project around the feature, and who will implement it:
 
 - mcp__task__list_project_repositories — the project's repositories: its applications
 - mcp__task__list_bounded_contexts — its bounded contexts, with their language and zones
-- mcp__task__list_agents — the agents a session can run as, and what each is for
+- mcp__task__list_agents — the agents a session can run as, what each is for, and where it cannot start (unassigned_from, unavailable_in_modes)
 
 To ask for review once the PRD and the briefs are written, name the feature
 task with task_id: only a session with no task of its own passes it.
@@ -466,7 +468,8 @@ task with task_id: only a session with no task of its own passes it.
 - mcp__task__update_task_status — task_id the feature task: move it to review with a reason when you ask for the review
 
 The tools that act on a session's own task answer SESSION_HAS_NO_TASK here:
-mcp__task__get_task, mcp__task__start_task_session, mcp__task__list_task_sessions,
+mcp__task__get_task, mcp__task__start_task_session, mcp__task__resume_task_session,
+mcp__task__stop_task_session, mcp__task__list_task_sessions,
 the rest of the architect channel, mcp__task__publish_artifact and the attach
 tools; mcp__task__request_user_review and mcp__task__update_task_status do too
 without task_id. If the review cannot be opened, tell the person with notify.

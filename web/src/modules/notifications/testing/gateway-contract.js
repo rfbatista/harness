@@ -28,7 +28,7 @@ export function notificationGatewayContract(name, makeSubject) {
       makeNotification({ id: "old", createdAt: at(1), readAt: at(2) }),
       makeNotification({ id: "mid", createdAt: at(2), projectId: "p2", projectName: "tui", level: "info", kind: "session_failed" }),
       makeNotification({ id: "new", createdAt: at(3) }),
-      makeNotification({ id: "settled", createdAt: at(0), resolvedAt: at(4) }),
+      makeNotification({ id: "settled", createdAt: at(0), resolvedAt: at(4), actor: { kind: "agent", name: "devops", mode: "operate", sessionId: "s9" } }),
     ],
   });
 
@@ -41,6 +41,12 @@ export function notificationGatewayContract(name, makeSubject) {
     const unread = await gateway.list({ unread: true });
     assert.deepEqual(ids(unread), ["new", "mid"], "read and resolved ones are not unread");
     assert.deepEqual(ids(await gateway.list({ projectId: "p1", unread: true })), ["new"]);
+    assert.deepEqual(ids(await gateway.list({ open: true })), ["new", "old"], "open causes: action and not settled, read or not");
+    assert.deepEqual(ids(await gateway.list({ open: true, projectId: "p2" })), [], "filters combine");
+    assert.deepEqual(ids(await gateway.list({ kind: "session_failed" })), ["mid"], "by kind");
+    assert.deepEqual(ids(await gateway.list({ actor: "devops" })), ["settled"], "by actor name");
+    assert.deepEqual(ids(await gateway.list({ actor: "devops", kind: "session_failed" })), [], "who and kind combine");
+    assert.deepEqual(ids(await gateway.list({ actor: "devops", limit: 1, before: "new" })), ["settled"], "the cursor keeps working with them");
   });
 
   contract("a notification keeps its fields; the times are Dates and the absent ones null", async () => {
@@ -67,6 +73,15 @@ export function notificationGatewayContract(name, makeSubject) {
     await assert.rejects(gateway.list({ limit: 0 }), Codes.INVALID_INPUT);
     await assert.rejects(gateway.list({ limit: 201 }), Codes.INVALID_INPUT);
     await assert.rejects(gateway.list({ before: "not-a-cursor" }), Codes.INVALID_INPUT);
+  });
+
+  contract("the open count is global: level action and not resolved, whatever the filter, and reading does not change it", async () => {
+    const { gateway } = makeSubject(world());
+    const all = await gateway.list({});
+    assert.equal(all.openCount, 2);
+    assert.equal((await gateway.list({ projectId: "p2", unread: true })).openCount, 2);
+    const change = await gateway.markRead({ ids: ["new"] });
+    assert.equal(change.openCount, 2, "read is not settled");
   });
 
   contract("marking ids read answers with the ones it changed and the new count; read ones again are no error", async () => {
@@ -175,5 +190,29 @@ export function notificationGatewayContract(name, makeSubject) {
     close();
     await assert.rejects(subject.gateway.resumeInterrupted("missing"), Codes.NOTIFICATION_NOT_FOUND);
     await assert.rejects(subject.gateway.resumeInterrupted("other"), Codes.INVALID_INPUT);
+  });
+
+  const finding = (fields = {}) =>
+    makeNotification({ id: "find", kind: "branch_finding", level: "action", createdAt: at(5), actor: { kind: "system", name: "branch watch", mode: "", sessionId: "" }, ...fields });
+
+  contract("acknowledging a branch finding settles it as acknowledged, marks it read and streams it", async () => {
+    const subject = makeSubject({ notifications: [finding()] });
+    const changes = [];
+    const close = subject.gateway.follow((c) => changes.push(c), () => {});
+    await flush();
+    const answer = await subject.gateway.acknowledge("find");
+    await flush();
+    assert.deepEqual([answer.id, answer.outcome, answer.resolvedAt instanceof Date, answer.readAt instanceof Date], ["find", "acknowledged", true, true]);
+    assert.deepEqual(changes.map((c) => [c.notifications.map((n) => n.id), c.unreadCount, c.openCount]), [[["find"], 0, 0]]);
+    close();
+  });
+
+  contract("acknowledging again returns it unchanged; another kind is INVALID_INPUT and an unknown id NOTIFICATION_NOT_FOUND", async () => {
+    const subject = makeSubject({ notifications: [finding(), makeNotification({ id: "other" })] });
+    const first = await subject.gateway.acknowledge("find");
+    const again = await subject.gateway.acknowledge("find");
+    assert.deepEqual([again.resolvedAt.getTime(), again.outcome], [first.resolvedAt.getTime(), "acknowledged"]);
+    await assert.rejects(subject.gateway.acknowledge("other"), Codes.INVALID_INPUT);
+    await assert.rejects(subject.gateway.acknowledge("missing"), Codes.NOTIFICATION_NOT_FOUND);
   });
 }

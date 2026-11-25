@@ -1,7 +1,8 @@
 // The notifications module's Alpine components.
 
-import { notificationsBell } from "./components/notificationsBell.js";
+import { inboxFilters } from "./components/inboxFilters.js";
 import { notificationsPage } from "./components/notificationsPage.js";
+import { inboxServed, pageSeed } from "./page-seed.js";
 import { notificationsStore } from "./store.js";
 
 /**
@@ -19,6 +20,10 @@ export function registerNotifications(Alpine, deps) {
   const announce = (text) => window.dispatchEvent(new CustomEvent("rail-announce", { detail: text }));
   Alpine.store("notifications", notificationsStore({ ...deps, announce }));
   const store = Alpine.store("notifications");
-  Alpine.data("notificationsBell", notificationsBell({ ...deps, store }));
+  // The store follows the inbox on every page that serves it, for the title's count and what is said
+  // in the stream bar: the top bar is a React island now, so it is not the bell that starts it. A page
+  // whose island carries no inbox (notifications: null) asks for no notifications at all.
+  if (inboxServed(document)) store.start(pageSeed(document));
+  Alpine.data("inboxFilters", inboxFilters());
   Alpine.data("notificationsPage", notificationsPage({ ...deps, store }));
 }

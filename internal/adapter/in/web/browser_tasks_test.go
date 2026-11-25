@@ -42,8 +42,13 @@ func (f *fakeTicketsAPI) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		_ = json.NewEncoder(w).Encode(map[string]any{"sessions": f.sessions[r.URL.Query().Get("ticket_id")]})
 		return
 	}
-	if r.URL.Path == "/api/events" {
+	if r.URL.Path == "/api/events" || r.URL.Path == "/api/project_events" {
 		http.NotFound(w, r)
+		return
+	}
+	// The product owner's toggle reads its project's switch on every project page; no test here is about it, so it is not a call.
+	if r.URL.Path == "/api/product_owner" {
+		_, _ = w.Write([]byte(`{"project_id":"` + r.URL.Query().Get("project_id") + `","enabled":true}`))
 		return
 	}
 	// A live terminal's interview panel reads and follows its session's interviews: none here.

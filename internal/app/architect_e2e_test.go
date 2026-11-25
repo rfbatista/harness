@@ -12,6 +12,8 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"regexp"
+	"slices"
 	"strings"
 	"sync"
 	"testing"
@@ -21,6 +23,7 @@ import (
 	"go.uber.org/fx"
 
 	"operators-mcp/internal/adapter/in/httpapi"
+	"operators-mcp/internal/adapter/out/agents/claudehome"
 	"operators-mcp/internal/app/catalog"
 	"operators-mcp/internal/application/orchestration"
 	"operators-mcp/internal/application/planning"
@@ -28,6 +31,7 @@ import (
 	"operators-mcp/internal/application/tooling"
 	"operators-mcp/internal/domain"
 	"operators-mcp/internal/ports"
+	"operators-mcp/internal/ports/portstest"
 )
 
 // archE2E is the server wired as it runs, with a shell standing in for claude
@@ -44,6 +48,10 @@ type archE2E struct {
 	project string
 	repo    string
 	ticket  string
+	// dir holds one launch-<pid> file per claude the stand-in ran: its
+	// arguments, one per line.
+	dir  string
+	home claudehome.Home
 
 	mu   sync.Mutex
 	feed []map[string]json.RawMessage
@@ -57,13 +65,14 @@ func newArchE2E(t *testing.T) *archE2E {
 	dir := t.TempDir()
 	repoDir := filepath.Join(dir, "repo")
 	gitInit(t, repoDir)
-	// The stand-in claude keeps its terminal open and echoes what is typed.
+	// The stand-in claude records its arguments (whole, by a rename), then
+	// keeps its terminal open and echoes what is typed.
 	fake := filepath.Join(dir, "claude")
-	if err := os.WriteFile(fake, []byte("#!/bin/sh\nexec cat\n"), 0o755); err != nil {
+	if err := os.WriteFile(fake, []byte("#!/bin/sh\nprintf '%s\\n' \"$@\" > '"+dir+"/.launch-'$$ && mv '"+dir+"/.launch-'$$ '"+dir+"/launch-'$$\nexec cat\n"), 0o755); err != nil {
 		t.Fatal(err)
 	}
 
-	e := &archE2E{t: t, ctx: context.Background()}
+	e := &archE2E{t: t, ctx: context.Background(), dir: dir}
 	var (
 		cat      catalog.Catalog
 		sessions ports.SessionRepository
@@ -72,7 +81,11 @@ func newArchE2E(t *testing.T) *archE2E {
 		fx.Supply(Config{HTTPAddr: "127.0.0.1:0", MCPAddr: "127.0.0.1:0", DBPath: ":memory:", Root: dir, ClaudeBin: fake, SessionShell: "direct"}),
 		PersistenceModule, CatalogModule, PlanningModule, WorkspacesModule, ExecutionModule,
 		AgentRuntimeModule, TaskChannelModule, TextProcessingModule, ToolingModule,
-		fx.Populate(&e.orch, &e.plan, &e.channel, &cat, &sessions),
+		fx.Populate(&e.orch, &e.plan, &e.channel, &cat, &sessions, &e.home),
+		// The sandbox is not under test, and seatbelt cannot nest inside an
+		// agent session's sandbox: a driver that confines nothing runs claude
+		// as it is.
+		fx.Decorate(func(ports.SandboxDriver) ports.SandboxDriver { return &portstest.RecordingSandboxDriver{} }),
 		fx.NopLogger,
 	)
 	if err := app.Start(e.ctx); err != nil {
@@ -101,7 +114,7 @@ func newArchE2E(t *testing.T) *archE2E {
 	t.Cleanup(e.srv.Close)
 	e.tools = map[string]domain.Tool{}
 	for _, tool := range tooling.SessionTaskTools(e.plan, sessions, cat.Agents, cat.Architecture,
-		tooling.PeerStarter{Sessions: e.orch, Repositories: cat.Projects}, tooling.ArtifactTooling{}, e.channel, tooling.NotificationTooling{}) {
+		tooling.PeerStarter{Sessions: e.orch, Stopper: e.orch, Repositories: cat.Projects}, tooling.ArtifactTooling{}, e.channel, tooling.NotificationTooling{}) {
 		e.tools[tool.Name] = tool
 	}
 	e.follow()
@@ -355,12 +368,88 @@ func TestArchitectChannel_EndToEnd(t *testing.T) {
 		t.Fatalf("ticket JSON: %+v", tk)
 	}
 
-	// The delegate ends: its loop ends, and the architect is told how.
-	if err := e.orch.Stop(e.ctx, dev); err != nil {
-		t.Fatal(err)
+	// The architect stops the delegate: its loop ends, and the architect is
+	// told how.
+	if stopped := e.mustTool(arch.ID, "stop_task_session", map[string]any{"session_id": dev}); stopped["session_id"] != dev {
+		t.Fatalf("stop_task_session: %+v", stopped)
 	}
 	e.sawOnFeed("status_check", `"delegate_session_id":"`+dev+`"`, `"state":"ended"`)
 	if reason := e.stop(arch.ID); !strings.Contains(reason, "· status ended: stopped ·") {
 		t.Fatalf("last status check: %q", reason)
+	}
+
+	// The architect resumes the ended delegate with a prompt: it comes back
+	// in its own worktree and branch, and the relaunched claude continues the
+	// saved conversation with the prompt as its first turn.
+	before, err := e.orch.Get(e.ctx, dev)
+	if err != nil {
+		t.Fatal(err)
+	}
+	e.saveConversation(before)
+	launched := len(e.launches())
+	resumed := e.mustTool(arch.ID, "resume_task_session", map[string]any{"session_id": dev, "prompt": "Pick up where you stopped."})
+	loop, _ := resumed["status_check"].(map[string]any)
+	if resumed["session_id"] != dev || resumed["status"] != string(domain.SessionRunning) || resumed["branch"] != before.Branch ||
+		loop == nil || loop["state"] != "paused" || loop["every_minutes"] != float64(0) { // the person paused it above; it comes back as it was
+		t.Fatalf("resume_task_session: %+v", resumed)
+	}
+	after, err := e.orch.Get(e.ctx, dev)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if after.Status.IsTerminal() || after.WorkingDir != before.WorkingDir || after.Branch != before.Branch {
+		t.Fatalf("resumed delegate: %+v, was %+v", after, before)
+	}
+	e.sawOnFeed("session", `"id":"`+dev+`"`, `"status":"running"`)
+	var args []string
+	for deadline := time.Now().Add(5 * time.Second); args == nil && time.Now().Before(deadline); time.Sleep(20 * time.Millisecond) {
+		if all := e.launches(); len(all) > launched {
+			for _, a := range all {
+				if slices.Contains(a, "--resume") {
+					args = a
+				}
+			}
+		}
+	}
+	if i := slices.Index(args, "--resume"); i < 0 || i+1 >= len(args) || args[i+1] != dev || args[len(args)-1] != "Pick up where you stopped." {
+		t.Fatalf("resumed claude's arguments: %q", args)
+	}
+	if _, err := e.tool(arch.ID, "resume_task_session", map[string]any{"session_id": dev}); errs.Code(err) != "SESSION_ALREADY_RUNNING" {
+		t.Fatalf("a second resume = %v, want SESSION_ALREADY_RUNNING", err)
+	}
+}
+
+// launches are the argument lists of every claude the stand-in ran.
+func (e *archE2E) launches() [][]string {
+	e.t.Helper()
+	files, err := filepath.Glob(filepath.Join(e.dir, "launch-*"))
+	if err != nil {
+		e.t.Fatal(err)
+	}
+	var out [][]string
+	for _, f := range files {
+		b, err := os.ReadFile(f)
+		if err != nil {
+			e.t.Fatal(err)
+		}
+		out = append(out, strings.Split(strings.TrimSuffix(string(b), "\n"), "\n"))
+	}
+	return out
+}
+
+// saveConversation writes the transcript claude keeps for a session's
+// conversation, so the session can be resumed.
+func (e *archE2E) saveConversation(sess *domain.Session) {
+	e.t.Helper()
+	id := sess.ClaudeSessionID
+	if id == "" {
+		id = sess.ID
+	}
+	dir := filepath.Join(e.home.Path(), "projects", regexp.MustCompile(`[^A-Za-z0-9]`).ReplaceAllString(sess.WorkingDir, "-"))
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		e.t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, id+".jsonl"), []byte("{}\n"), 0o644); err != nil {
+		e.t.Fatal(err)
 	}
 }

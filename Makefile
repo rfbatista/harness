@@ -67,8 +67,9 @@ stop-api: ## stop stale server processes and free ports 8080/8081
 
 # --- Web client (served by the server at http://127.0.0.1:8080) ---------------
 
-web: ## generate templ code and bundle the web client (JS + CSS) into the server
+web: ## generate templ code and bundle the web client (Alpine + the React islands) into the server; needs Node and npm
 	go tool templ generate -path internal/adapter/in/web
+	npm ci --prefix web/app
 	go run ./cmd/webbuild
 
 web-watch: ## rebuild the web bundle on every change (use beside `make air`)
@@ -136,6 +137,9 @@ check: web ## what to run before calling work done: build, vet, race tests
 	go vet $(PKGS)
 	go test -race $(PKGS)
 	$(MAKE) test-design-system
+	npm run typecheck --prefix web/app
+	npm run lint --prefix web/app
+	npm test --prefix web/app
 
 # The page benchmark requests every project page and prints its median and worst page
 # server time with the breakdown (see "Page time" in the README).

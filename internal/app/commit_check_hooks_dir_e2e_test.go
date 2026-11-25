@@ -12,14 +12,26 @@ import (
 	"operators-mcp/internal/ports"
 )
 
-// The commit check hooks dir (ADR 0040): one stable folder per session in the
-// data directory, named by the worktree's core.hooksPath, kept while the
-// session may resume and removed when it ends for good.
+// The commit check hooks dir (ADR 0040, ADR 0105): one stable folder per
+// worktree in the data directory, named by the worktree's core.hooksPath, kept
+// while a session may resume and removed when the last session on the worktree
+// ends for good.
 
 // transcriptsThatResume lets every ended session resume.
 type transcriptsThatResume struct{}
 
 func (transcriptsThatResume) CanResume(string, string) error { return nil }
+
+// hooksDirOf is the data dir's hooks folder of the worktree a session runs in:
+// it is named after the worktree, not the session.
+func hooksDirOf(t *testing.T, h *archHooks, sessionID string) string {
+	t.Helper()
+	sess, err := h.orch.Get(h.ctx, sessionID)
+	if err != nil || sess == nil || sess.WorkspaceID == "" {
+		t.Fatalf("session %s has no worktree: %v", sessionID, err)
+	}
+	return filepath.Join(h.dataDir, "githooks", sess.WorkspaceID)
+}
 
 func hooksPathOf(t *testing.T, worktree string) string {
 	t.Helper()
@@ -34,7 +46,7 @@ func TestASessionStartPointsItsWorktreeIntoTheCommitCheckHooksDirInTheDataDir(t 
 	h := newArchHooks(t, "blocking")
 	a := h.as("go-developer")
 
-	want := filepath.Join(h.dataDir, "githooks", a.id)
+	want := hooksDirOf(t, h, a.id)
 	if got := hooksPathOf(t, a.worktree); got != want {
 		t.Fatalf("core.hooksPath = %q, want %q", got, want)
 	}
@@ -136,13 +148,13 @@ func TestAWorktreeLeftOnADeletedTemporaryFolderIsRepairedWhenTheServerBoots(t *t
 	if out, err := gitIn(a.worktree, "config", "--worktree", "core.hooksPath", gone); err != nil {
 		t.Fatalf("%v %s", err, out)
 	}
-	if err := os.RemoveAll(filepath.Join(h.dataDir, "githooks", a.id)); err != nil {
+	if err := os.RemoveAll(hooksDirOf(t, h, a.id)); err != nil {
 		t.Fatal(err)
 	}
 
 	h.restart()
 
-	want := filepath.Join(h.dataDir, "githooks", a.id)
+	want := hooksDirOf(t, h, a.id)
 	if got := hooksPathOf(t, a.worktree); got != want {
 		t.Fatalf("core.hooksPath after the boot = %q, want %q", got, want)
 	}
@@ -166,7 +178,7 @@ func TestBootRepairsASessionTheServerDoesNotRunItself(t *testing.T) {
 
 	h.restart()
 
-	if got, want := hooksPathOf(t, worktree), filepath.Join(h.dataDir, "githooks", sess.ID); got != want {
+	if got, want := hooksPathOf(t, worktree), hooksDirOf(t, h, sess.ID); got != want {
 		t.Fatalf("core.hooksPath of a terminal client session = %q, want %q", got, want)
 	}
 }
@@ -181,7 +193,7 @@ func TestBootRepairsTheOthersWhenOneSessionsRepairFails(t *testing.T) {
 		}
 	}
 	// A file where the folder belongs makes this session's repair fail.
-	githooks := filepath.Join(h.dataDir, "githooks", broken.id)
+	githooks := hooksDirOf(t, h, broken.id)
 	if err := os.RemoveAll(githooks); err != nil {
 		t.Fatal(err)
 	}
@@ -191,12 +203,13 @@ func TestBootRepairsTheOthersWhenOneSessionsRepairFails(t *testing.T) {
 
 	h.restart()
 
-	if got, want := hooksPathOf(t, fine.worktree), filepath.Join(h.dataDir, "githooks", fine.id); got != want {
+	if got, want := hooksPathOf(t, fine.worktree), hooksDirOf(t, h, fine.id); got != want {
 		t.Errorf("the other session's core.hooksPath = %q, want %q", got, want)
 	}
 }
 
-// commitCheckNotes are the inbox notifications about a session's commit check.
+// commitCheckNotes are the inbox notifications that list a session's commit
+// check, newest first: one per boot that found it off (ADR 0098).
 func (h *archHooks) commitCheckNotes(sessionID string) []*domain.Notification {
 	h.t.Helper()
 	page, err := h.notes.ListNotifications(h.ctx, ports.NotificationQuery{Limit: 200})
@@ -205,8 +218,13 @@ func (h *archHooks) commitCheckNotes(sessionID string) []*domain.Notification {
 	}
 	var out []*domain.Notification
 	for _, n := range page.Notifications {
-		if n.Kind == domain.NotificationCommitCheckOff && n.SessionID == sessionID {
-			out = append(out, n)
+		if n.Kind != domain.NotificationCommitCheckOff {
+			continue
+		}
+		for _, e := range n.ListedSessions {
+			if e.SessionID == sessionID {
+				out = append(out, n)
+			}
 		}
 	}
 	return out
@@ -219,7 +237,7 @@ func breakRepair(t *testing.T, h *archHooks, a runningSession) string {
 	if out, err := gitIn(a.worktree, "config", "--worktree", "core.hooksPath", "/nonexistent/harness-githooks-3"); err != nil {
 		t.Fatalf("%v %s", err, out)
 	}
-	hooks := filepath.Join(h.dataDir, "githooks", a.id)
+	hooks := hooksDirOf(t, h, a.id)
 	if err := os.RemoveAll(hooks); err != nil {
 		t.Fatal(err)
 	}
@@ -244,9 +262,11 @@ func TestAFailedRepairMarksTheSessionOffTellsThePersonOnceAndClearsWhenRepaired(
 		t.Fatalf("notifications after the boot = %d, first %+v, want one open action notification with the reason", len(notes), *notes[0])
 	}
 
-	h.restart() // still broken: no second notification
-	if notes := h.commitCheckNotes(a.id); len(notes) != 1 {
-		t.Errorf("%d notifications after a second boot while still off, want 1", len(notes))
+	// Still broken at the next boot: a new notification, and the earlier one ends.
+	h.restart()
+	notes = h.commitCheckNotes(a.id)
+	if len(notes) != 2 || notes[0].ResolvedAt != nil || notes[1].ResolvedAt == nil || notes[1].Outcome != domain.OutcomeEnded {
+		t.Errorf("notifications after a second boot while still off = %+v, want a new open one and the first ended", notes)
 	}
 
 	if err := os.Remove(hooks); err != nil {
@@ -256,8 +276,13 @@ func TestAFailedRepairMarksTheSessionOffTellsThePersonOnceAndClearsWhenRepaired(
 	if sess, _ := h.orch.Get(h.ctx, a.id); sessCommitOff(sess) != "" {
 		t.Errorf("commit check off = %q after a successful repair, want it cleared", sess.CommitCheckOff)
 	}
-	if notes := h.commitCheckNotes(a.id); len(notes) != 1 || notes[0].ResolvedAt == nil {
-		t.Errorf("notifications after the repair = %+v, want the one resolved", notes)
+	for _, n := range h.commitCheckNotes(a.id) {
+		if n.ResolvedAt == nil {
+			t.Errorf("notification %+v is still open after the repair", n)
+		}
+	}
+	if notes := h.commitCheckNotes(a.id); notes[0].Outcome != domain.OutcomeRepaired {
+		t.Errorf("the newest notification after the repair has outcome %q, want repaired", notes[0].Outcome)
 	}
 }
 

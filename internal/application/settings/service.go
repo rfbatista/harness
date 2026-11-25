@@ -58,11 +58,22 @@ func (s *Service) Setting(key string) string {
 // SettingsChanged for each value that actually changed. A subscriber's failure
 // is returned after the values are stored: the setting did change.
 func (s *Service) UpdateSettings(values map[string]string) (map[string]string, error) {
+	return s.update(values, domain.ValidateSetting)
+}
+
+// UpdateModeAgentSettings stores mode agents values (ADR 0103). They are the
+// one settings keys UpdateSettings refuses: the agent catalog writes them, so
+// names are checked and a change is announced on its feed.
+func (s *Service) UpdateModeAgentSettings(values map[string]string) (map[string]string, error) {
+	return s.update(values, domain.ValidateModeAgentsSetting)
+}
+
+func (s *Service) update(values map[string]string, validate func(key, value string) error) (map[string]string, error) {
 	if s.repo == nil {
 		return nil, &domain.StructuredError{Code: "INVALID_INPUT", Message: "settings are not available"}
 	}
 	for key, value := range values {
-		if err := domain.ValidateSetting(key, value); err != nil {
+		if err := validate(key, value); err != nil {
 			return nil, err
 		}
 	}

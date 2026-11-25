@@ -49,7 +49,9 @@ func TestHomeRendersTheAgentBoardFromTheSeed(t *testing.T) {
 	for _, want := range []string{
 		`x-data="agentBoardPage"`, `id="agent-board-seed"`, `Branch guardrails`, `Fast project pages`,
 		`href="/projects/p1/tasks/t1?session=s2"`, `data-needs-you`, "Needs you", `Run: git push origin agent/x`,
-		"1 need you", "2 quiet projects have no live session.", `aria-current="page"`, `>Agent board</a>`,
+		"1 need you", "2 quiet projects have no live session.",
+		// The top bar island's props name the Agent board as the current page.
+		`"key":"board","href":"/","current":true`,
 	} {
 		if !strings.Contains(body, want) {
 			t.Errorf("the board lacks %q", want)

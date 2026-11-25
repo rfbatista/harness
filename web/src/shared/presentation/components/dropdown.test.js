@@ -14,9 +14,10 @@ const env = (overrides = {}) => ({
 });
 
 /** A wrapped select in the page; returns the component and a cleanup. */
-function fixture(inner, { attrs = "", label = "Agent", e = env() } = {}) {
+function fixture(inner, { attrs = "", label = "Agent", e = env(), footer = "" } = {}) {
   const root = document.createElement("div");
   root.className = "dropdown";
+  if (footer) root.dataset.footer = footer;
   root.innerHTML = `<label for="dd-${++n}">${label}</label><select id="dd-${n}" ${attrs}>${inner}</select>`;
   const wrapper = document.createElement("div");
   wrapper.append(root);
@@ -40,6 +41,21 @@ const key = (el, k, init = {}) => {
 };
 const activeLabel = (c) => c.rows[c.active]?.querySelector(".label").textContent;
 const flush = () => new Promise((r) => setTimeout(r, 0));
+
+test("data-footer on the root puts a footer line under the options, and none without it", () => {
+  const withFooter = fixture(AGENTS, { footer: "Worktrees of this task, still on disk" });
+  try {
+    assert.equal(withFooter.c.popup.querySelector(":scope > footer span").textContent, "Worktrees of this task, still on disk");
+  } finally {
+    withFooter.done();
+  }
+  const plain = fixture(AGENTS);
+  try {
+    assert.equal(plain.c.popup.querySelector(":scope > footer"), null);
+  } finally {
+    plain.done();
+  }
+});
 
 test("hides the select and draws a trigger named by the label and the value", () => {
   const f = fixture(AGENTS);

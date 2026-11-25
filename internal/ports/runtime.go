@@ -76,6 +76,10 @@ type AgentSpec struct {
 	// Prompt is the optional first message.
 	Prompt string   `json:"prompt,omitempty"`
 	Env    []string `json:"env,omitempty"`
+	// ConfigDir, when set, is the project Claude home the session runs with as
+	// its config dir (ADR 0102), in place of the agent Claude home. Empty: the
+	// agent home.
+	ConfigDir string `json:"config_dir,omitempty"`
 	// EnvFile is an sh file a login shell sources after the person's
 	// profile, so the profile cannot override Env's git credentials (see
 	// "Contract: Harness server ↔ Agent sessions — git credentials").

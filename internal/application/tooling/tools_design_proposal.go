@@ -19,6 +19,7 @@ type Option func(*options)
 type options struct {
 	proposals  ports.DesignProposalSubmitter
 	placements ports.AgentPlacements
+	modeAgents ports.SettingsReader
 	pushes     ports.BranchPusher
 	instructions ports.InstructionProposalSubmitter
 }
@@ -34,6 +35,12 @@ func WithDesignProposals(p ports.DesignProposalSubmitter) Option {
 // it is unassigned from (ADR 0061). Without it the answer leaves that out.
 func WithAgentPlacements(p ports.AgentPlacements) Option {
 	return func(o *options) { o.placements = p }
+}
+
+// WithModeAgents makes list_agents name, for each agent, the session modes it
+// cannot start in (ADR 0103). Without it the answer leaves that out.
+func WithModeAgents(r ports.SettingsReader) Option {
+	return func(o *options) { o.modeAgents = r }
 }
 
 // sessionDesignProposalTools is submit_design_system_proposal: the one way a

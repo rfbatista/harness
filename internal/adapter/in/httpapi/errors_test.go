@@ -41,3 +41,15 @@ func TestErrorHandler_ResumeCodes(t *testing.T) {
 		}
 	}
 }
+
+// A start refused by the mode's agents answers 409, whichever start surface
+// asked.
+func TestErrorHandler_AgentNotAvailableInModeIsAConflict(t *testing.T) {
+	rec := httptest.NewRecorder()
+	c := echo.New().NewContext(httptest.NewRequest(http.MethodPost, "/", nil), rec)
+	msg := domain.ModeAgentNotAvailableMessage("Reviewer", "backend")
+	errorHandler(&domain.StructuredError{Code: "AGENT_NOT_AVAILABLE_IN_MODE", Message: msg}, c)
+	if rec.Code != http.StatusConflict || !strings.Contains(rec.Body.String(), `"code":"AGENT_NOT_AVAILABLE_IN_MODE"`) || !strings.Contains(rec.Body.String(), "Reviewer") {
+		t.Fatalf("answer = %d %s", rec.Code, rec.Body)
+	}
+}

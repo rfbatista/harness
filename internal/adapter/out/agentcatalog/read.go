@@ -34,6 +34,16 @@ var builtInTools = []domain.CatalogBuiltInTool{
 	{Name: "Task", Description: "Start a sub-agent"},
 }
 
+// BuiltInToolNames are the names of Claude's built-in tools, the ones the
+// Agents > Tools page lists: what a session with no allow-list can use.
+func BuiltInToolNames() []string {
+	names := make([]string, len(builtInTools))
+	for i, t := range builtInTools {
+		names[i] = t.Name
+	}
+	return names
+}
+
 // skillInfo is what the whole-catalog read keeps of a skill: its frontmatter
 // and the size of its folder, never its content.
 type skillInfo struct {
@@ -329,6 +339,7 @@ func (c *Catalog) ReadCatalog() (*domain.CatalogView, error) {
 	for i := range v.Agents {
 		v.Agents[i].Usage = usage[v.Agents[i].Name]
 		v.Agents[i].EnabledIn = []domain.CatalogEnabledIn{}
+		v.Agents[i].AvailableInModes = c.agentModes(v.Agents[i].Name)
 		for _, p := range projects {
 			if p.AgentEnabled(v.Agents[i].Name) {
 				mode := domain.AgentsAll

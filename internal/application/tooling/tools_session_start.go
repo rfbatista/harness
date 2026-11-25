@@ -5,6 +5,8 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/rfbatista/harnesskit/errs"
+
 	"operators-mcp/internal/domain"
 	"operators-mcp/internal/ports"
 )
@@ -20,20 +22,8 @@ func startPeer(ctx context.Context, scope *taskScope, sessions ports.SessionRepo
 		return nil, &domain.StructuredError{Code: "INVALID_INPUT", Message: "prompt is required: say what the new session should do"}
 	}
 
-	// A failed read must not let the limit through.
-	onTask, err := sessions.Query(ctx, ports.SessionFilter{ProjectID: scope.session.ProjectID, TicketID: scope.ticket.ID})
-	if err != nil {
+	if err := checkTaskSessionLimit(ctx, scope, sessions); err != nil {
 		return nil, err
-	}
-	live := 0
-	for _, s := range onTask {
-		if !s.Status.IsTerminal() {
-			live++
-		}
-	}
-	if live >= MaxLiveTaskSessions {
-		return nil, &domain.StructuredError{Code: "TASK_SESSION_LIMIT", Message: strconv.Itoa(live) +
-			" sessions already run on this task (the limit is " + strconv.Itoa(MaxLiveTaskSessions) + "); wait for one to finish or coordinate with them"}
 	}
 
 	// Checked before anything starts, so a bad interval never leaves a session behind.
@@ -49,13 +39,30 @@ func startPeer(ctx context.Context, scope *taskScope, sessions ports.SessionRepo
 		statusCheckMinutes = &n
 	}
 
+	mode := strings.TrimSpace(stringArg(args, "mode"))
+	join, err := resolveJoin(ctx, scope, sessions, args, mode)
+	if err != nil {
+		return nil, err
+	}
+
 	agent, err := findAgent(ctx, agents, stringArg(args, "agent"))
 	if err != nil {
 		return nil, err
 	}
-	repo, err := findRepository(ctx, start.Repositories, scope.session, stringArg(args, "repository"))
+	repoWant := stringArg(args, "repository")
+	repoOwner := scope.session
+	if join != nil {
+		// The new session runs where the joined one does: its repository is
+		// the default, and naming another is refused.
+		repoOwner = join.session
+	}
+	repo, err := findRepository(ctx, start.Repositories, repoOwner, repoWant)
 	if err != nil {
 		return nil, err
+	}
+	if join != nil && strings.TrimSpace(repoWant) != "" && repo.id != join.session.RepositoryID {
+		return nil, invalidInput("session " + join.session.ID + " works in repository " + join.session.RepositoryID +
+			", so a session joining its worktree cannot run in " + repo.name + ": leave repository empty or name its own")
 	}
 
 	req := ports.InteractiveRequest{
@@ -66,7 +73,7 @@ func startPeer(ctx context.Context, scope *taskScope, sessions ports.SessionRepo
 		BaseBranch:      strings.TrimSpace(stringArg(args, "base_branch")),
 		RunsOn:          domain.RunnerServer,
 		ParentSessionID: scope.session.ID,
-		Mode:            strings.TrimSpace(stringArg(args, "mode")),
+		Mode:            mode,
 		// A peer gets no more than its parent: unattended only if the parent is.
 		AutoAccept:         "off",
 		StatusCheckMinutes: statusCheckMinutes,
@@ -74,11 +81,18 @@ func startPeer(ctx context.Context, scope *taskScope, sessions ports.SessionRepo
 	if scope.session.AutoRun {
 		req.AutoAccept = "all"
 	}
+	if join != nil {
+		req.WorktreeID = join.session.WorkspaceID
+		req.Access = string(join.access)
+	}
 	if agent != nil {
 		req.AgentID = agent.ID
 	}
 	sess, _, err := start.Sessions.StartInteractive(ctx, req)
 	if err != nil {
+		if join != nil {
+			err = joinStartRefusal(err, join.session.ID)
+		}
 		return nil, err
 	}
 
@@ -100,6 +114,94 @@ func startPeer(ctx context.Context, scope *taskScope, sessions ports.SessionRepo
 		}
 	}
 	return out, nil
+}
+
+// checkTaskSessionLimit refuses with TASK_SESSION_LIMIT when the task already
+// runs MaxLiveTaskSessions sessions. A failed read must not let the limit
+// through.
+func checkTaskSessionLimit(ctx context.Context, scope *taskScope, sessions ports.SessionRepository) error {
+	onTask, err := sessions.Query(ctx, ports.SessionFilter{ProjectID: scope.session.ProjectID, TicketID: scope.ticket.ID})
+	if err != nil {
+		return err
+	}
+	live := 0
+	for _, s := range onTask {
+		if !s.Status.IsTerminal() {
+			live++
+		}
+	}
+	if live >= MaxLiveTaskSessions {
+		return &domain.StructuredError{Code: "TASK_SESSION_LIMIT", Message: strconv.Itoa(live) +
+			" sessions already run on this task (the limit is " + strconv.Itoa(MaxLiveTaskSessions) + "); wait for one to finish or coordinate with them"}
+	}
+	return nil
+}
+
+// joinTarget is the worktree a start joins: the session whose worktree it is,
+// and the access the new session gets there.
+type joinTarget struct {
+	session *domain.Session
+	access  domain.SessionAccess
+}
+
+// resolveJoin reads join_session_id and access. It returns nil when the start
+// cuts its own worktree. Every refusal is a message that names the session and
+// the reason, since the MCP bridge drops codes, and it is decided before
+// anything starts. The worktree's being on disk is checked by the start itself.
+func resolveJoin(ctx context.Context, scope *taskScope, sessions ports.SessionRepository, args map[string]any, mode string) (*joinTarget, error) {
+	access := domain.SessionAccess(strings.TrimSpace(stringArg(args, "access")))
+	switch access {
+	case "", domain.AccessWrite, domain.AccessReadOnly:
+	default:
+		return nil, invalidInput("access " + string(access) + " is not valid: use write or read_only")
+	}
+	id := strings.TrimSpace(stringArg(args, "join_session_id"))
+	if id == "" {
+		if access == domain.AccessReadOnly {
+			return nil, invalidInput("access read_only needs join_session_id: a session that cuts its own worktree writes it")
+		}
+		return nil, nil
+	}
+	if strings.TrimSpace(stringArg(args, "base_branch")) != "" {
+		return nil, invalidInput("join_session_id " + id + " and base_branch cannot be combined: a session that joins a worktree runs on that session's branch")
+	}
+	switch domain.SessionMode(mode) {
+	case domain.SessionModeArchitect, domain.SessionModeProduct, domain.SessionModeDesignSystem, domain.SessionModeProductOwner:
+		return nil, invalidInput("a session in mode " + mode + " cannot join the worktree of session " + id + ": it plans and delegates, it does not work in a worktree")
+	}
+	joined, err := sessions.Find(ctx, id)
+	if err != nil {
+		return nil, err
+	}
+	if joined == nil || joined.ProjectID != scope.session.ProjectID {
+		return nil, &domain.StructuredError{Code: "SESSION_NOT_FOUND", Message: "there is no session " + id + " on this task: name one from list_task_sessions"}
+	}
+	if joined.TicketID != scope.ticket.ID {
+		return nil, &domain.StructuredError{Code: "WORKTREE_NOT_ON_TASK", Message: "session " + id + " belongs to another task, so its worktree cannot be joined from this one"}
+	}
+	if joined.WorkspaceID == "" || joined.WorktreeClearedAt != nil {
+		return nil, &domain.StructuredError{Code: "WORKTREE_NOT_FOUND", Message: "the worktree of session " + id + " was cleared or is gone: start on a new branch instead"}
+	}
+	if access == "" {
+		access = domain.DefaultAccess(domain.SessionMode(mode))
+	}
+	return &joinTarget{session: joined, access: access}, nil
+}
+
+// joinStartRefusal puts the session in the start path's refusals of a join. The
+// start path words them for the New session form, which is no help to an
+// architect; the code stays, only the message changes.
+func joinStartRefusal(err error, sessionID string) error {
+	switch errs.Code(err) {
+	case "WORKTREE_NOT_FOUND":
+		return &domain.StructuredError{Code: "WORKTREE_NOT_FOUND", Message: "the worktree of session " + sessionID +
+			" is gone from disk: nothing was started; start on a new branch instead"}
+	case "ACCESS_INVALID":
+		return &domain.StructuredError{Code: "ACCESS_INVALID", Message: "session " + sessionID + "'s worktree cannot be joined read-only, " +
+			"because the agent sandbox is off for this session and the sandbox is what keeps a read-only session from writing; " +
+			"pass access: write to join with write access"}
+	}
+	return err
 }
 
 // statusCheckOf is the loop the server started on a new delegate, or nil when

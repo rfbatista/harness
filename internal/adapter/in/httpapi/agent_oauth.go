@@ -6,6 +6,8 @@ import (
 	"time"
 
 	"github.com/labstack/echo/v4"
+
+	"operators-mcp/internal/ports"
 )
 
 // The agent OAuth flow (ADR 0018): `claude setup-token` run for the person.
@@ -73,9 +75,14 @@ type agentAuthAnswer struct {
 // authAnswer asks `claude auth status`; a status that cannot be read is
 // signed out and not checked.
 func (h *Handler) authAnswer(c echo.Context) agentAuthAnswer {
+	return authAnswerOf(c, h.agentAuth)
+}
+
+// authAnswerOf is the answer for the login auth reads.
+func authAnswerOf(c echo.Context, auth ports.AgentAuth) agentAuthAnswer {
 	ctx, cancel := context.WithTimeout(c.Request().Context(), agentAuthTimeout)
 	defer cancel()
-	st, err := h.agentAuth.Status(ctx)
+	st, err := auth.Status(ctx)
 	if err != nil {
 		return agentAuthAnswer{}
 	}

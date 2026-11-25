@@ -134,7 +134,7 @@ export function memoryTasks({ projects = [], tasks = [], sessions = [], document
       const task = taskId ? store.get(taskId) : null;
       if (taskId && !task) throw new StructuredError(Codes.TICKET_NOT_FOUND, "ticket not found", 404);
       if (task && !task.archivedAt) throw new StructuredError(Codes.TASK_NOT_ARCHIVED, "task is not archived", 409);
-      return { worktrees: 0, dirty: 0, running: 0 };
+      return { worktrees: 0, dirty: 0, running: 0, shared: 0 };
     },
 
     async clearArchivedWorktrees(scope) {

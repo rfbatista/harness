@@ -28,7 +28,7 @@ type fakeLaunch struct {
 }
 
 // fakeLaunchEnv are the variables fakeLaunch.Env records.
-var fakeLaunchEnv = []string{"RTK_TELEMETRY_DISABLED", "DO_NOT_TRACK", "CODEGRAPH_TELEMETRY", "ANTHROPIC_BASE_URL", "PATH", "CLAUDE_CODE_OAUTH_TOKEN", "ANTHROPIC_API_KEY"}
+var fakeLaunchEnv = []string{"RTK_TELEMETRY_DISABLED", "DO_NOT_TRACK", "CODEGRAPH_TELEMETRY", "ANTHROPIC_BASE_URL", "PATH", "CLAUDE_CODE_OAUTH_TOKEN", "ANTHROPIC_API_KEY", "CLAUDE_CONFIG_DIR"}
 
 func TestMain(m *testing.M) {
 	if os.Getenv("CLAUDE_FAKE") == "1" {
@@ -59,7 +59,11 @@ func runFakeClaude() {
 	}
 	out := bufio.NewWriter(os.Stdout)
 	defer out.Flush()
-	fmt.Fprintln(out, `{"type":"system","subtype":"init","session_id":"fake"}`)
+	if init := os.Getenv("CLAUDE_FAKE_INIT"); init != "" {
+		fmt.Fprintln(out, init)
+	} else {
+		fmt.Fprintln(out, `{"type":"system","subtype":"init","session_id":"fake"}`)
+	}
 	out.Flush()
 	sc := bufio.NewScanner(os.Stdin)
 	sc.Buffer(make([]byte, 1024*1024), 1024*1024)

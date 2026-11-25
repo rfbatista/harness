@@ -130,6 +130,9 @@ type SettingsView struct {
 	Seed             SettingsSeed
 	// TokenSavers seeds the Token savers section; nil leaves it out.
 	TokenSavers *tokensavers.Seed
+	// AgentCredential seeds the project's own Agent credential section; nil
+	// leaves it out.
+	AgentCredential *AgentCredentialView
 }
 
 // SettingsRepository is a repository, as a link to its env files.

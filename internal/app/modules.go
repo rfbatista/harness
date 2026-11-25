@@ -54,8 +54,10 @@ import (
 	"operators-mcp/internal/application/execution"
 	"operators-mcp/internal/application/gitcredentials"
 	"operators-mcp/internal/application/keychainpath"
+	"operators-mcp/internal/application/notifications"
 	"operators-mcp/internal/application/orchestration"
 	"operators-mcp/internal/application/planning"
+	"operators-mcp/internal/application/productowner"
 	"operators-mcp/internal/application/repoagents"
 	"operators-mcp/internal/application/sandboxsettings"
 	"operators-mcp/internal/application/servicerequests"
@@ -104,12 +106,15 @@ var PersistenceModule = fx.Module("persistence",
 		asPort(sqlite.NewArchitectureRuleEventRepository, new(ports.ArchitectureRuleEventStore)),
 		asPort(sqlite.NewBranchRequestRepository, new(ports.BranchRequestStore)),
 		asPort(sqlite.NewBranchWatchRepository, new(ports.BranchWatchStore)),
+		asPort(sqlite.NewSessionContextRepository, new(ports.SessionContextStore)),
 		asPort(sqlite.NewRecordedPushRepository, new(ports.PushRecords)),
 		asPort(sqlite.NewDesignSystemRepository, new(ports.DesignSystemStore)),
 		asPort(sqlite.NewDesignProposalRepository, new(ports.DesignProposalStore)),
 		asPort(sqlite.NewDesignExportRepository, new(ports.DesignExportStore)),
 		asPort(sqlite.NewInstructionDraftRepository, new(ports.InstructionDraftStore)),
 		asPort(sqlite.NewInstructionProposalRepository, new(ports.InstructionProposalStore)),
+		asPort(sqlite.NewProductOwnerRepository, new(ports.ProductOwnerStore)),
+		asPort(sqlite.NewProductOwnerDigestRepository, new(ports.ProductOwnerDigestStore)),
 	),
 )
 
@@ -307,11 +312,12 @@ type catalogParams struct {
 	EnvFileIO       ports.EnvFileIO
 	RunCommands     ports.RunCommandRepository
 	Activations     ports.TokenSaverActivationRepository
+	AgentCatalog    *agentcatalog.Catalog
 	Cfg             Config
 }
 
 func newCatalog(p catalogParams) catalog.Catalog {
-	return catalog.New(catalog.Deps{
+	c := catalog.New(catalog.Deps{
 		Projects:         p.Projects,
 		Repositories:     p.Repositories,
 		Zones:            p.Zones,
@@ -340,6 +346,9 @@ func newCatalog(p catalogParams) catalog.Catalog {
 		Activations:      p.Activations,
 		DefaultRoot:      p.Cfg.Root,
 	})
+	// The mode agents live in the server settings (ADR 0103).
+	p.AgentCatalog.UseModeAgents(c.Settings)
+	return c
 }
 
 // PlanningModule provides the planning service (tickets and documents).
@@ -371,9 +380,12 @@ func newPlanningService(
 	projects ports.ProjectRepository,
 	orch *orchestration.Service,
 	cat catalog.Catalog,
+	sessions ports.SessionRepository,
+	owners ports.ProductOwnerStore,
 ) (*planning.Service, error) {
 	svc := planning.NewService(tickets, documents, projects)
 	svc.Announcer, svc.Feed, svc.Events = orch, orch, cat.Bus
+	svc.SessionActor = sessionAuthor(sessions, owners)
 	dir, err := dataDir(cfg, "task-resources")
 	if err != nil {
 		return nil, err
@@ -721,7 +733,19 @@ func newServicesModule(lc fx.Lifecycle, cfg Config, db *gorm.DB, cat catalog.Cat
 	// every run, bounded so the server's exit waits for the escalation and
 	// no longer.
 	lc.Append(fx.Hook{
-		OnStart: func(ctx context.Context) error { return svc.Recover(ctx) },
+		OnStart: func(context.Context) error {
+			// Recover walks every container the runtime knows about to sweep
+			// what a dead server left; a runtime that is starting up or a
+			// container stuck mid-removal can stall past fx's start budget
+			// (registerServerSessions's commit-check pass hit the same
+			// shape), so it runs behind the boot instead of holding it.
+			go func() {
+				if err := svc.Recover(context.Background()); err != nil {
+					slog.Warn("recover services at boot", "err", err)
+				}
+			}()
+			return nil
+		},
 		OnStop: func(ctx context.Context) error {
 			stopCtx, cancel := context.WithTimeout(ctx, services.DefaultStopGrace+3*time.Second)
 			defer cancel()
@@ -778,11 +802,18 @@ func newRuntimeConfig(cfg Config, bin ports.ManagedClaudeBin, home claudehome.Ho
 func registerServerSessions(lc fx.Lifecycle, svc *orchestration.Service, _ optionalNotifications) {
 	lc.Append(fx.Hook{
 		OnStart: func(ctx context.Context) error {
-			// Every live worktree is guarded again before sessions are
-			// reported running: the commit check (ADR 0040).
-			if _, err := svc.RepairCommitChecks(ctx); err != nil {
-				slog.Warn("repair the commit checks at boot", "err", err)
-			}
+			// Every live worktree is guarded again: the commit check (ADR
+			// 0040). The pass grows with the worktrees on disk (hundreds take
+			// longer than fx's start budget), so it runs behind the boot
+			// instead of holding it.
+			go func() {
+				began := time.Now()
+				if _, err := svc.RepairCommitChecks(context.Background()); err != nil {
+					slog.Warn("repair the commit checks at boot", "err", err)
+					return
+				}
+				slog.Info("repaired the commit checks", "took", time.Since(began).Round(time.Millisecond))
+			}()
 			n, err := svc.StopOrphanedServerSessions(ctx)
 			if n > 0 {
 				slog.Info("stopped server sessions left running by a previous run", "count", n)
@@ -859,6 +890,13 @@ func newBroker(m llmkit.Manager) (*approval.Broker, error) {
 
 // agentClaudeHomeDir is the agent Claude home in the data dir.
 func agentClaudeHomeDir(cfg Config) (string, error) { return dataDir(cfg, "claude-home") }
+
+// projectClaudeHomesDir is the folder of the project Claude homes (ADR 0102),
+// one folder per project id, beside the agent Claude home and not inside it:
+// the agent sandbox grants the agent home to every session.
+func projectClaudeHomesDir(agentHome claudehome.Home) string {
+	return filepath.Join(filepath.Dir(agentHome.Path()), "claude-homes")
+}
 
 // newAgentClaudeHome creates and seeds the agent Claude home, so an
 // interactive claude started with its path as CLAUDE_CONFIG_DIR meets no
@@ -1010,6 +1048,7 @@ func newOrchestrationService(
 	ws *workspaces.Service,
 	transcripts ports.ClaudeTranscripts,
 	transcriptReader ports.ClaudeTranscriptReader,
+	contexts ports.SessionContextStore,
 	terminals ports.TerminalHost,
 	sandboxDriver ports.SandboxDriver,
 	violations ports.SandboxViolationSource,
@@ -1036,10 +1075,13 @@ func newOrchestrationService(
 	}
 	svc := orchestration.NewService(manager, broker, hub, sessions, orchCatalog, tickets, ws)
 	svc.MCPToolDefaults = agentCatalog.DisabledMCPTools
+	svc.MCPKnownTools = agentCatalog.KnownMCPTools
+	svc.ClaudeBuiltInTools = agentcatalog.BuiltInToolNames
 	svc.MCPProjectOnly = agentCatalog.ProjectOnlyMCPServers
 	svc.UseBranchNames(branchNames)
 	svc.UseBaseBranches(baseBranches)
 	svc.UseAssignments(assignments)
+	svc.UseModeAgents(cat.Settings)
 	svc.UseRepositoryPrompts(assignments)
 	if cat.DesignSystems != nil {
 		// Saves reach open pages on the project feed.
@@ -1083,6 +1125,9 @@ func newOrchestrationService(
 	svc.SessionArchitectureURL = func(sessionID string) string {
 		return base + httpapi.SessionArchitecturePath(sessionID)
 	}
+	svc.WorktreeArchitectureURL = func(workspaceID string) string {
+		return base + httpapi.WorktreeArchitecturePath(workspaceID)
+	}
 	svc.SessionBranchGateURL = func(sessionID string) string {
 		return base + httpapi.SessionBranchGatePath(sessionID)
 	}
@@ -1096,6 +1141,7 @@ func newOrchestrationService(
 	svc.Settings = cat.Settings
 	svc.Transcripts = transcripts
 	svc.TranscriptReader = transcriptReader
+	svc.Contexts = contexts
 	svc.Terminals = terminals
 	svc.Events = cat.Bus
 	svc.BranchRequests = pendingBranchRequests{branchRequests}
@@ -1110,6 +1156,8 @@ func newOrchestrationService(
 		Driver:  sandboxDriver,
 		Enabled: orchestration.SandboxSwitch(cat.Settings),
 		Home:    agentHome.Path(),
+		// A session reaches its own project's Claude home and no other's.
+		ProjectHomesRoot: projectClaudeHomesDir(agentHome),
 		// Their git config is read-only to a session; not their ssh folder.
 		UserHome:   userHome,
 		ConfigHome: os.Getenv("XDG_CONFIG_HOME"),
@@ -1222,7 +1270,7 @@ func newOneShotter(cfg Config, p oneShotParts) claudetext.OneShotter {
 	bin := oneShotBin(cfg, p)
 	one := claudetext.OneShotter(oneShotClaude(bin, p.Home.Path(), cfg.llmProxyURL()))
 	if prep := oneShotPreparer(bin, p); prep != nil {
-		one = claudetext.Confined(one, prep)
+		one = claudetext.ConfinedFor(one, prep)
 	}
 	return claudetext.Gated(one, p.Ready.check())
 }
@@ -1233,7 +1281,7 @@ func newStreamOneShotter(cfg Config, p oneShotParts) claudetext.StreamOneShotter
 	bin := oneShotBin(cfg, p)
 	one := claudetext.StreamOneShotter(oneShotClaude(bin, p.Home.Path(), cfg.llmProxyURL()))
 	if prep := oneShotPreparer(bin, p); prep != nil {
-		one = claudetext.ConfinedStream(one, prep)
+		one = claudetext.ConfinedStreamFor(one, prep)
 	}
 	return claudetext.GatedStream(one, p.Ready.check())
 }
@@ -1248,11 +1296,31 @@ func oneShotBin(cfg Config, p oneShotParts) string {
 
 // oneShotPreparer prepares each one-shot for the agent isolation, nil when
 // the graph has no sandbox or credential.
-func oneShotPreparer(bin string, p oneShotParts) func() ([]string, llmkit.WrapFunc, error) {
+func oneShotPreparer(bin string, p oneShotParts) func(context.Context) (claudetext.Prepared, error) {
 	if p.Orch == nil || p.Credential == nil {
 		return nil
 	}
-	return oneShotPrep(p.Orch.Sandbox, oneShotEnv(p.Credential.Env, p.Home.HasLogin, p.KC.Path()), bin, p.KC.Path())
+	return oneShotPrepFor(p.Orch.Sandbox, p.oneShotSources(), bin, p.KC.Path())
+}
+
+// oneShotSources are the credential rules of a one-shot, read from the
+// orchestration at each call: its project rules are bound after the graph is
+// built.
+func (p oneShotParts) oneShotSources() oneShotSources {
+	return oneShotSources{
+		Pasted:     p.Credential.Env,
+		AgentLogin: p.Home.HasLogin,
+		ProjectLoginHome: func(id string) string {
+			if p.Orch.ProjectLoginHome == nil {
+				return ""
+			}
+			return p.Orch.ProjectLoginHome(id)
+		},
+		ProjectCredential: func(id string) ([]string, bool) {
+			return p.Credential.EnvFor(id), p.Credential.OwnsEnv(id)
+		},
+		ShimDir: p.KC.Path(),
+	}
 }
 
 // newWritingHelper is the writing helper over the streaming one-shot, the
@@ -1267,7 +1335,7 @@ func newWritingHelper(cat catalog.Catalog, one claudetext.StreamOneShotter, p on
 type streamer struct{ one claudetext.StreamOneShotter }
 
 func (s streamer) Stream(ctx context.Context, c writinghelper.StreamCall, onText func(string)) (string, error) {
-	res, err := s.one.OneShotStream(ctx, claude.OneShotRequest{System: c.System, Input: c.Input, Model: c.Model, Attribution: c.Attribution}, onText)
+	res, err := s.one.OneShotStream(claudetext.WithProject(ctx, c.ProjectID), claude.OneShotRequest{System: c.System, Input: c.Input, Model: c.Model, Attribution: c.Attribution}, onText)
 	return res.Text, err
 }
 
@@ -1277,11 +1345,64 @@ func oneShotClaude(bin, home, proxyURL string) *claude.Manager {
 	return claude.New(llmkit.Options{Bin: bin, ConfigDir: home, Isolated: home != "", ProxyURL: proxyURL})
 }
 
-// oneShotPrep prepares each one-shot: the env entries of the agent credential
-// and, with the sandbox on, the wrap confining it. The sandbox's policy for a
-// one-shot names no repository; claude's install dirs are the one thing
-// beyond its temp dir and the agent home it may read.
-// readable are further directories it may read, the security shim's.
+// oneShotSources are what decides the credential of a one-shot (ADR 0102): the
+// global pasted credential and whether the agent home holds a login, and the
+// project's login home and pasted credential for a call that names a project.
+// The project rules are read at each call; nil ones hold for no project.
+type oneShotSources struct {
+	Pasted            func() []string
+	AgentLogin        func() bool
+	ProjectLoginHome  func(projectID string) string
+	ProjectCredential func(projectID string) (env []string, own bool)
+	// ShimDir is the security shim's dir, put on the PATH of every one-shot.
+	ShimDir string
+}
+
+// effective is the config dir and the credential env entries a one-shot of
+// the project runs with: the project login's home and no credential env, else
+// the project's own pasted credential, else the global rule (the agent login,
+// else the global pasted credential).
+func (o oneShotSources) effective(projectID string) (configDir string, env []string) {
+	if projectID != "" && o.ProjectLoginHome != nil {
+		if home := o.ProjectLoginHome(projectID); home != "" {
+			return home, nil
+		}
+	}
+	if projectID != "" && o.ProjectCredential != nil {
+		if own, ok := o.ProjectCredential(projectID); ok {
+			return "", own
+		}
+	}
+	if o.AgentLogin != nil && o.AgentLogin() {
+		return "", nil
+	}
+	if o.Pasted != nil {
+		return "", o.Pasted()
+	}
+	return "", nil
+}
+
+// oneShotPrepFor prepares each one-shot: the env entries of its effective
+// credential, the config dir when that is a project Claude home and, with the
+// sandbox on, the wrap confining it. The sandbox's policy for a one-shot names
+// no repository; claude's install dirs are the one thing beyond its temp dir
+// and the agent home it may read, and its own project's Claude home is
+// writable. readable are further directories it may read, the security shim's.
+func oneShotPrepFor(sb *orchestration.Sandbox, src oneShotSources, bin string, readable ...string) func(context.Context) (claudetext.Prepared, error) {
+	allow := sandboxAllowlist(allowSources{ClaudeDirs: append(runtime.ClaudeInstallDirs(bin), readable...)})
+	return func(ctx context.Context) (claudetext.Prepared, error) {
+		project := claudetext.ProjectFrom(ctx)
+		wrap, err := sb.OneShotWrapFor(project, allow)
+		if err != nil {
+			return claudetext.Prepared{}, err
+		}
+		dir, env := src.effective(project)
+		return claudetext.Prepared{Env: append(env, keychainpath.Env(os.Environ(), src.ShimDir)...), Wrap: wrap, ConfigDir: dir}, nil
+	}
+}
+
+// oneShotPrep is oneShotPrepFor for a call that names no project, and the
+// global credential alone.
 func oneShotPrep(sb *orchestration.Sandbox, credential func() []string, bin string, readable ...string) func() ([]string, llmkit.WrapFunc, error) {
 	allow := sandboxAllowlist(allowSources{ClaudeDirs: append(runtime.ClaudeInstallDirs(bin), readable...)})
 	return func() ([]string, llmkit.WrapFunc, error) {
@@ -1544,9 +1665,78 @@ func sessionTempPrefix(base, id string) string {
 	return filepath.Join(base, "hs-"+id[:min(len(id), 8)])
 }
 
-// commitCheckDirs answers where each session's commit check hooks dir is:
-// githooks/<session id> in the data dir, the same on every start (ADR 0040).
-func commitCheckDirs(cfg Config) func(sessionID string) string {
+// commitCheckDirs answers where each worktree's commit check hooks dir is:
+// githooks/<workspace id> in the data dir, the same on every start and shared
+// by the sessions on the worktree (ADR 0040, ADR 0105).
+func commitCheckDirs(cfg Config) func(workspaceID string) string {
 	root, _ := dataDir(cfg, "githooks")
-	return func(sessionID string) string { return filepath.Join(root, sessionID) }
+	return func(workspaceID string) string { return filepath.Join(root, workspaceID) }
+}
+
+// ProductOwnerModule is each project's product owner (ADR 0109): its settings
+// and the threads in which the person talks to it.
+var ProductOwnerModule = fx.Module("productowner",
+	fx.Provide(newProductOwner),
+	// Built at boot, so the threads a restart cut off are resumed.
+	fx.Invoke(func(*productowner.Service) {}),
+	// The daily digest (ADR 0113): its scheduler runs while the server does.
+	fx.Invoke(startProductOwnerDigests),
+)
+
+// digestInbox is the inbox when NotificationsModule is in the graph.
+type digestInbox struct {
+	fx.In
+
+	Service *notifications.Service `optional:"true"`
+}
+
+func startProductOwnerDigests(lc fx.Lifecycle, cfg Config, svc *productowner.Service, store ports.ProductOwnerDigestStore, owner ports.ProductOwnerStore, cat catalog.Catalog, orch *orchestration.Service, plan *planning.Service, sessions ports.SessionRepository, inbox digestInbox) {
+	src := productowner.DigestSources{Tasks: plan, Changes: plan.StatusHistory, Sessions: sessions}
+	if inbox.Service != nil {
+		src.Notes = inbox.Service
+	}
+	d := productowner.NewDigests(store, owner, cat.Projects, svc, orch, src, cfg.DigestClock, cfg.DigestEvery)
+	svc.AttachDigests(d)
+	lc.Append(fx.Hook{
+		OnStart: func(context.Context) error { d.Start(); return nil },
+		OnStop:  func(context.Context) error { d.Stop(); return nil },
+	})
+}
+
+func newProductOwner(lc fx.Lifecycle, store ports.ProductOwnerStore, cat catalog.Catalog, orch *orchestration.Service, plan *planning.Service) *productowner.Service {
+	svc := productowner.New(store, cat.Projects, cat.Agents, orch, orch)
+	svc.SetHeldActionApplier(heldActionApplier{plan})
+	watch, stopWatch := context.WithCancel(context.Background())
+	lc.Append(fx.Hook{
+		OnStart: func(context.Context) error {
+			// The threads to recover are decided and marked busy here, before the
+			// server listens; their resumes then run behind the boot.
+			svc.Recover(context.Background())
+			svc.WatchHeldActions(watch)
+			return nil
+		},
+		OnStop: func(context.Context) error {
+			stopWatch()
+			// The processes die with the server: their threads stay as they are,
+			// for the next boot to resume.
+			svc.Close()
+			return nil
+		},
+	})
+	return svc
+}
+
+// sessionAuthor says who a session's writes are attributed to: the product
+// owner and its thread for a product-owner session, else the session.
+func sessionAuthor(sessions ports.SessionRepository, owners ports.ProductOwnerStore) func(string) domain.Author {
+	return func(id string) domain.Author {
+		by := domain.Author{Kind: domain.AuthorSession, SessionID: id}
+		if sess := sessions.Get(id); sess != nil && sess.Mode == domain.SessionModeProductOwner {
+			by.Kind = domain.AuthorProductOwner
+			if th, err := owners.ThreadOfSession(context.Background(), id); err == nil && th != nil {
+				by.ThreadID = th.ID
+			}
+		}
+		return by
+	}
 }

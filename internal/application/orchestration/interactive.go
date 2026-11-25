@@ -6,6 +6,8 @@ import (
 	"fmt"
 	"log/slog"
 	"maps"
+	"os"
+	"slices"
 	"strings"
 	"time"
 
@@ -75,6 +77,13 @@ func (s *Service) StartInteractive(ctx context.Context, req InteractiveRequest) 
 		}
 	}
 
+	// A worktree to join is judged here, with the access: a refusal leaves
+	// nothing to clean up, and the branch check below never runs for it.
+	access, join, err := s.joinTarget(ctx, req, mode)
+	if err != nil {
+		return nil, ports.AgentSpec{}, err
+	}
+
 	// A selection to bring under the new architect is judged before anything
 	// is created: nothing exists yet to clean up when it is refused.
 	var plan *ports.BringUnderPlan
@@ -98,7 +107,9 @@ func (s *Service) StartInteractive(ctx context.Context, req InteractiveRequest) 
 	}
 	branch += "-" + id[:8]
 	named := strings.TrimSpace(req.BranchName)
-	if named != "" {
+	if join != nil {
+		branch = join.Branch
+	} else if named != "" {
 		if err := s.checkNamedBranch(ctx, req.RepositoryID, named, req.TicketID); err != nil {
 			return nil, ports.AgentSpec{}, err
 		}
@@ -121,6 +132,8 @@ func (s *Service) StartInteractive(ctx context.Context, req InteractiveRequest) 
 		Role:         role,
 
 		BranchChecked: named != "" && s.branchNames != nil,
+		Join:          join,
+		Access:        access,
 	})
 	if err != nil {
 		if named != "" && errs.Code(err) == domain.BranchExists {
@@ -148,6 +161,8 @@ func (s *Service) StartInteractive(ctx context.Context, req InteractiveRequest) 
 		RepositoryID:    req.RepositoryID,
 		WorkspaceID:     p.ws.ID,
 		Branch:          p.branch,
+		Access:          access,
+		Joined:          join != nil,
 		AgentID:         req.AgentID,
 		ZoneID:          req.ZoneID,
 		TicketID:        req.TicketID,
@@ -170,6 +185,7 @@ func (s *Service) StartInteractive(ctx context.Context, req InteractiveRequest) 
 		Sandbox:                 p.sandbox.facts,
 	})
 	if err == nil {
+		s.recordStart(ctx, id, p, opening)
 		s.adoptCleanup(id, withViolations(p.cleanup, s.collectViolations(id, p.cfg.WorkingDir, p.sandbox.facts)))
 		s.courier.setTurn(id, startTurn(spec))
 		s.publish(id, SessionEvent{Type: "status", Status: domain.SessionRunning, Text: startedText(runsOn), At: time.Now()})
@@ -178,6 +194,9 @@ func (s *Service) StartInteractive(ctx context.Context, req InteractiveRequest) 
 		// session's status-check loop in place when the start returns.
 		s.announce(domain.SessionStarted{SessionID: id, ProjectID: req.ProjectID, TicketID: req.TicketID,
 			ParentSessionID: req.ParentSessionID, Mode: mode, StatusCheckMinutes: req.StatusCheckMinutes})
+		if join != nil {
+			s.announceJoined(context.WithoutCancel(ctx), created)
+		}
 		// A guard that could not be put in at start is announced now that the
 		// session is recorded.
 		if s.commitCheckReason(id) != "" {
@@ -199,11 +218,14 @@ func (s *Service) StartInteractive(ctx context.Context, req InteractiveRequest) 
 		return s.withResumability(ctx, created), spec, nil
 	}
 	// Not recorded: nothing will ever run in this worktree, and its branch is
-	// seconds old with no commits, so Discard (not Delete) is safe.
+	// seconds old with no commits, so Discard (not Delete) is safe. A joined
+	// worktree is not this start's to take back.
 	if p.cleanup != nil {
 		p.cleanup()
 	}
-	_ = s.workspaces.Discard(p.ws.ID)
+	if join == nil {
+		_ = s.workspaces.Discard(p.ws.ID)
+	}
 	return nil, ports.AgentSpec{}, fmt.Errorf("start interactive session: %w", err)
 }
 
@@ -218,8 +240,9 @@ func (s *Service) StartInteractive(ctx context.Context, req InteractiveRequest) 
 // Concurrent calls for one session resume it once; the others answer
 // SESSION_ALREADY_RUNNING. A resume is not held to the task's session limit
 // (TASK_SESSION_LIMIT): like starting one from the TUI or the web, it is a
-// person's action, and the limit only bounds the sessions agents start. Once
-// running, it counts toward that limit again.
+// person's action, and the limit only bounds the sessions agents start (the
+// agents' resume_task_session checks it before it calls here). Once running,
+// it counts toward that limit again.
 func (s *Service) ResumeInteractive(ctx context.Context, req ports.ResumeRequest) (*domain.Session, ports.AgentSpec, error) {
 	runsOn, err := s.runner(req.RunsOn)
 	if err != nil {
@@ -274,20 +297,30 @@ func (s *Service) ResumeInteractive(ctx context.Context, req ports.ResumeRequest
 	if sess.AutoRun {
 		permission = llmkit.PermissionBypass
 	}
-	cfg := s.sessionConfig(sess.ID, sess.WorkingDir, sess.Model, nil, permission, ag, subject, sess.ZoneID, s.sessionRole(ctx, sess.ID), sess.RepositoryID)
+	role := s.sessionRole(ctx, sess.ID)
+	trail := &pieceTrail{}
+	cfg, res := s.sessionConfigTrail(trail, sess.ID, sess.WorkingDir, sess.Model, nil, permission, ag, subject, sess.ZoneID, role, sess.RepositoryID)
+	withReadOnlyAccess(&cfg, sess.Access, sess.Branch)
+	trail.mark(&cfg, domain.PieceOther, "Read-only access", "Harness")
+	s.withSharedWorktree(ctx, &cfg, sess.ID, sess.WorkspaceID, sess.Access, sess.Branch, sess.WorkingDir)
+	trail.mark(&cfg, domain.PieceOther, "Shared worktree", "Harness")
 	cleanup, err := s.withShell(sess.ID, sess.RepositoryID, subject, &cfg, ag.cleanup)
+	trail.mark(&cfg, domain.PieceOther, "Virtual shell", "Harness")
 	if err != nil {
 		return nil, ports.AgentSpec{}, err
 	}
-	cleanup = s.withCommitCheck(sess.ID, sess.WorkingDir, &cfg, true, cleanup)
+	cleanup = s.withCommitCheck(sess.ID, sess.WorkspaceID, sess.WorkingDir, &cfg, true, cleanup)
+	trail.mark(&cfg, domain.PieceOther, "Commit check", "Harness")
 	envFile, cleanup, err := s.withGit(sess.ID, sess.RepositoryID, &cfg, cleanup)
 	if err != nil {
 		return nil, ports.AgentSpec{}, err
 	}
-	s.withAgentCredential(&cfg)
+	trail.mark(&cfg, domain.PieceOther, "Git authentication", "Harness")
+	s.withAgentCredential(&cfg, sess.ProjectID)
 	s.withKeychainShim(&cfg)
 	s.withAttribution(&cfg)
 	s.rewireTokenSavers(ctx, sess, &cfg)
+	trail.mark(&cfg, domain.PieceRuleset, "Token saver rules", "Token savers")
 	// A resume starts under the rules now in force, not the ones it started
 	// under, and records them.
 	cleanup, err = s.withTempDir(sess.ID, &cfg, cleanup)
@@ -302,11 +335,13 @@ func (s *Service) ResumeInteractive(ctx context.Context, req ports.ResumeRequest
 		return nil, ports.AgentSpec{}, err
 	}
 	s.withWorktreeReadHook(&cfg, sess.ID, sb)
+	trail.mark(&cfg, domain.PieceOther, "Sandbox and Chrome", "Harness")
 	// A session a restart interrupted mid-turn is told so: its first turn is
-	// the continue turn (ADR 0082); any other resumes idle, with no turn.
-	prompt := ""
+	// the continue turn (ADR 0082). The request's prompt follows it, or is the
+	// first turn on its own; with neither, the session resumes idle.
+	prompt := strings.TrimSpace(req.Prompt)
 	if sess.InterruptedAt != nil {
-		prompt = continueTurn(s.interruption(sess.ID))
+		prompt = strings.TrimSpace(continueTurn(s.interruption(sess.ID)) + "\n\n" + prompt)
 	}
 	spec := s.agentSpec(cfg, ports.Conversation{ID: claudeID(sess), Resume: true}, prompt)
 	spec.EnvFile = envFile
@@ -325,15 +360,32 @@ func (s *Service) ResumeInteractive(ctx context.Context, req ports.ResumeRequest
 		return nil, ports.AgentSpec{}, err
 	}
 	s.adoptCleanup(sess.ID, withViolations(cleanup, s.collectViolations(sess.ID, sess.WorkingDir, sb.facts)))
+	s.recordResume(ctx, sess, contextInput{
+		Cfg: cfg, System: trail.pieces, Versions: res.versions, Repository: s.repositoryName(ctx, sess.RepositoryID),
+		Role: role, Agent: ag.agent, Project: subject.project, Attached: res.attached, KnownTools: res.known, Skills: ag.contextSkills, BuiltIn: s.builtInTools(),
+		Facts: s.resumeFacts(sess, ag, cfg, permission, sb),
+	}, prompt)
 	if sess.InterruptedAt != nil {
 		s.record(sess.ID, SessionEvent{Type: eventResumed, InterruptedAt: sess.InterruptedAt, At: time.Now()}, sessionChange{clearInterrupted: true})
-		s.courier.setTurn(sess.ID, turnBusy) // the continue turn is its first
+	}
+	if prompt != "" {
+		s.courier.setTurn(sess.ID, turnBusy) // the continue turn or the prompt is its first
 	} else {
 		s.courier.setTurn(sess.ID, turnIdle) // a resumed conversation waits for its next prompt
 	}
 	s.publish(sess.ID, SessionEvent{Type: "status", Status: domain.SessionRunning, Text: "resumed" + strings.TrimPrefix(startedText(runsOn), "started"), At: time.Now()})
+	// Announced before the CLI runs, so the architect channel has brought back
+	// the session's status-check loop when the resume returns.
+	s.announce(domain.SessionResumed{SessionID: sess.ID, ProjectID: sess.ProjectID, TicketID: sess.TicketID,
+		ParentSessionID: sess.ParentSessionID, Mode: sess.Mode})
+	// Armed before the spawn, so a process that exits at once is announced.
+	s.rearmLeaveAnnouncement(sess.ID)
 	if runsOn == domain.RunnerServer {
-		if err := s.spawn(ctx, sess.ID, spec, req.Size); err != nil {
+		if err := s.spawnTerminal(ctx, sess.ID, spec, req.Size); err != nil {
+			// The resume failed: the session never ran again, and the sessions
+			// on its worktree were told nothing of it, so its end says nothing.
+			s.markLeaveAnnounced(sess.ID)
+			_, _ = s.end(sess.ID, 127, false)
 			s.restoreInterruption(sess)
 			return nil, ports.AgentSpec{}, err
 		}
@@ -395,7 +447,7 @@ func (s *Service) resumeSandbox(ctx context.Context, sess *domain.Session, env, 
 		}
 		repo = r
 	}
-	return s.sandbox(ctx, prepareInput{ProjectID: sess.ProjectID, Mode: sess.Mode}, sess.ID, repo, sess.WorkingDir, env, skillDirs)
+	return s.sandbox(ctx, prepareInput{ProjectID: sess.ProjectID, Mode: sess.Mode, WorkspaceID: sess.WorkspaceID, Access: sess.Access}, sess.ID, repo, sess.WorkingDir, env, skillDirs)
 }
 
 // claimResume marks id as being resumed; false when another call already is.
@@ -424,6 +476,8 @@ func (s *Service) resumeBlock(sess *domain.Session) error {
 		return &domain.StructuredError{Code: "SESSION_NOT_INTERACTIVE", Message: "session is not interactive"}
 	case !sess.Status.IsTerminal():
 		return &domain.StructuredError{Code: "SESSION_ALREADY_RUNNING", Message: "session is still running"}
+	case !sess.Access.Writes() && !s.Sandbox.on():
+		return &domain.StructuredError{Code: "ACCESS_INVALID", Message: "ACCESS_INVALID: " + readOnlyNeedsSandbox}
 	case sess.WorktreeClearedAt != nil:
 		return &domain.StructuredError{Code: "WORKTREE_CLEARED", Message: "this session's worktree was cleared, so it cannot be resumed; its commits are on branch " + sess.Branch}
 	case s.Transcripts != nil:
@@ -495,6 +549,17 @@ func startedText(r domain.Runner) string {
 // host's exit callback ends it; if it cannot start, it is ended as failed so
 // it does not linger as running.
 func (s *Service) spawn(ctx context.Context, id string, spec ports.AgentSpec, size ports.TermSize) error {
+	if err := s.spawnTerminal(ctx, id, spec, size); err != nil {
+		_, _ = s.end(id, 127, false)
+		return err
+	}
+	return nil
+}
+
+// spawnTerminal runs the session in the server's terminal host and ends it
+// when its process exits; a failure to start is returned and the session is
+// left for the caller to end.
+func (s *Service) spawnTerminal(ctx context.Context, id string, spec ports.AgentSpec, size ports.TermSize) error {
 	if size.Cols <= 0 || size.Rows <= 0 {
 		size = ports.TermSize{Cols: 120, Rows: 40}
 	}
@@ -502,7 +567,6 @@ func (s *Service) spawn(ctx context.Context, id string, spec ports.AgentSpec, si
 		_, _ = s.end(id, code, false)
 	})
 	if err != nil {
-		_, _ = s.end(id, 127, false)
 		return fmt.Errorf("run the session on the server: %w", err)
 	}
 	return nil
@@ -547,7 +611,7 @@ func (s *Service) end(id string, exitCode int, closedByUser bool) (*domain.Sessi
 	}
 	s.publish(id, SessionEvent{Type: "done", Status: status, Text: text, At: time.Now()})
 	s.hub.End(id)
-	s.announce(domain.SessionEnded{SessionID: id, Status: status})
+	s.announceEnded(id, status)
 	return s.withResumability(context.Background(), s.sessions.Get(id)), nil
 }
 
@@ -638,7 +702,7 @@ func ranByServer(sess *domain.Session) bool {
 // liveServerSessions are the sessions the server runs that are stored with a
 // live status, whatever it is (ADR 0078).
 func (s *Service) liveServerSessions(ctx context.Context) ([]*domain.Session, error) {
-	live, err := s.List(ctx, ports.SessionFilter{Statuses: domain.LiveSessionStatuses})
+	live, err := s.List(ctx, ports.SessionFilter{Statuses: domain.LiveSessionStatuses, IncludeProductOwner: true})
 	if err != nil {
 		return nil, err
 	}
@@ -796,7 +860,7 @@ func (s *Service) endHeadless(id string) error {
 	}
 	s.publish(id, SessionEvent{Type: "done", Status: domain.SessionStopped, Text: "stopped", At: time.Now()})
 	s.hub.End(id)
-	s.announce(domain.SessionEnded{SessionID: id, Status: domain.SessionStopped})
+	s.announceEnded(id, domain.SessionStopped)
 	return nil
 }
 
@@ -873,6 +937,7 @@ func (s *Service) agentSpec(cfg llmkit.SessionConfig, conv ports.Conversation, p
 		AddDirs:      cfg.AddDirs,
 		Prompt:       prompt,
 		Env:          cfg.Env,
+		ConfigDir:    cfg.ConfigDir,
 		Conversation: conv,
 	}
 	switch cfg.Permission {
@@ -926,6 +991,28 @@ func (s *Service) UseBranchNames(c ports.BranchNameChecker) { s.branchNames = c 
 // UseAssignments makes a start or a resume check that the agent is assigned
 // to the repository, and a session read say when it is not (ADR 0061).
 func (s *Service) UseAssignments(a ports.AgentAssignments) { s.assignments = a }
+
+// UseModeAgents makes a new start check that the agent, or no agent, may
+// start in the session's mode (ADR 0103). A resume is not checked.
+func (s *Service) UseModeAgents(r ports.SettingsReader) { s.modeAgents = r }
+
+// checkModeAgents is AGENT_NOT_AVAILABLE_IN_MODE when the mode's agents leave
+// out the agent, or leave out a session with no agent (agent nil). A server
+// with no mode agents is never refused.
+func (s *Service) checkModeAgents(mode domain.SessionMode, agent *domain.Agent) error {
+	if s.modeAgents == nil {
+		return nil
+	}
+	entry := domain.ModeAgentsEntry(mode, s.modeAgents.Setting)
+	name := ""
+	if agent != nil {
+		name = agent.Name
+	}
+	if entry.Allows(name) {
+		return nil
+	}
+	return &domain.StructuredError{Code: "AGENT_NOT_AVAILABLE_IN_MODE", Message: domain.ModeAgentNotAvailableMessage(entry.Name, name)}
+}
 
 // checkAssigned is AGENT_NOT_ASSIGNED when the agent is unassigned from the
 // repository. A session with no agent, or a server with no assignments, is
@@ -1004,4 +1091,82 @@ func (s *Service) checkNamedBranch(ctx context.Context, repositoryID, name, tick
 		}
 	}
 	return nil
+}
+
+// readOnlyNeedsSandbox is why a read-only session is refused while the agent
+// sandbox is off: the OS is what keeps it from writing.
+const readOnlyNeedsSandbox = "Read-only access needs the agent sandbox; it is off for this session."
+
+// worktreeLookup is what joining needs of the workspaces service beyond
+// provisioning: a worktree by id.
+type worktreeLookup interface {
+	Get(ctx context.Context, id string) *domain.Workspace
+}
+
+// joinRefusal is a refusal of a join that the form shows in place: the code
+// leads the message, which MCP clients see alone.
+func joinRefusal(code, message string, details map[string]string) error {
+	return &domain.DetailedError{
+		StructuredError: &domain.StructuredError{Code: code, Message: code + ": " + message},
+		Details:         details,
+	}
+}
+
+// joinTarget reads the access a start asks for and the worktree it joins, nil
+// when it cuts its own. Every refusal is decided here, before anything is
+// created: a session that cut its own worktree has write access, so read-only
+// needs a worktree to join; an unknown, cleared, vanished or foreign worktree
+// is refused; and a join takes neither a base branch nor a branch name.
+func (s *Service) joinTarget(ctx context.Context, req InteractiveRequest, mode domain.SessionMode) (domain.SessionAccess, *domain.Workspace, error) {
+	access := domain.SessionAccess(req.Access)
+	switch access {
+	case "", domain.AccessWrite, domain.AccessReadOnly:
+	default:
+		return "", nil, joinRefusal("ACCESS_INVALID", "access must be write or read_only", map[string]string{"access": req.Access})
+	}
+	if req.WorktreeID == "" {
+		// A session that cuts its own worktree writes it, whatever its mode's
+		// preset: only a join can be read-only.
+		if access == domain.AccessReadOnly {
+			return "", nil, joinRefusal("ACCESS_INVALID", "a session that cuts its own worktree writes it: read-only access needs a worktree to join", nil)
+		}
+		return domain.AccessWrite, nil, nil
+	}
+	if access == "" {
+		access = domain.DefaultAccess(mode)
+	}
+	// The OS is what keeps a read-only session from writing: with the sandbox
+	// off nothing does, so the start is refused rather than promised.
+	if access == domain.AccessReadOnly && !s.Sandbox.on() {
+		return "", nil, joinRefusal("ACCESS_INVALID", readOnlyNeedsSandbox, nil)
+	}
+	if strings.TrimSpace(req.BaseBranch) != "" || strings.TrimSpace(req.BranchName) != "" {
+		return "", nil, joinRefusal("WORKTREE_WITH_BASE_BRANCH", "a session that joins a worktree runs on its branch: leave the base branch and the branch name empty", nil)
+	}
+	switch mode {
+	case domain.SessionModeArchitect, domain.SessionModeProduct, domain.SessionModeDesignSystem, domain.SessionModeProductOwner:
+		return "", nil, &domain.StructuredError{Code: "INVALID_INPUT", Message: "an architect, product or design system session cannot join a worktree"}
+	}
+	gone := func() error {
+		return joinRefusal("WORKTREE_NOT_FOUND", "That worktree is gone from disk since the list was read. Nothing was started. Pick another or start on a new branch.", map[string]string{"worktree_id": req.WorktreeID})
+	}
+	lookup, ok := s.workspaces.(worktreeLookup)
+	if !ok {
+		return "", nil, &domain.StructuredError{Code: "INVALID_INPUT", Message: "joining a worktree is not available"}
+	}
+	ws := lookup.Get(ctx, req.WorktreeID)
+	if ws == nil || ws.RepositoryID != req.RepositoryID {
+		return "", nil, gone()
+	}
+	if _, err := os.Stat(ws.Path); err != nil {
+		return "", nil, gone()
+	}
+	on := s.sessions.List(ctx, ports.SessionFilter{WorkspaceID: ws.ID})
+	if len(on) == 0 {
+		return "", nil, gone()
+	}
+	if !slices.ContainsFunc(on, func(o *domain.Session) bool { return o.TicketID == req.TicketID }) {
+		return "", nil, joinRefusal("WORKTREE_NOT_ON_TASK", "that worktree belongs to a session of another task", map[string]string{"worktree_id": req.WorktreeID})
+	}
+	return access, ws, nil
 }

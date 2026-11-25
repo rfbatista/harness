@@ -30,6 +30,15 @@ require (
 
 require github.com/coder/websocket v1.8.15
 
+require github.com/rfbatista/gohydrate v0.6.0
+
+require (
+	github.com/dop251/goja v0.0.0-20250309171923-bcd7cc6bf64c // indirect
+	github.com/go-sourcemap/sourcemap v2.1.3+incompatible // indirect
+	github.com/google/pprof v0.0.0-20230207041349-798e818bf904 // indirect
+	github.com/rfbatista/logger v0.2.0 // indirect
+)
+
 require (
 	github.com/a-h/parse v0.0.0-20250122154542-74294addb73e // indirect
 	github.com/a-h/templ v0.3.1020
@@ -69,7 +78,7 @@ require (
 	github.com/charmbracelet/x/windows v0.2.2 // indirect
 	github.com/clipperhouse/displaywidth v0.11.0 // indirect
 	github.com/clipperhouse/uax29/v2 v2.7.0 // indirect
-	github.com/dlclark/regexp2 v1.11.0 // indirect
+	github.com/dlclark/regexp2 v1.11.4 // indirect
 	github.com/go-logr/logr v1.4.3 // indirect
 	github.com/go-logr/stdr v1.2.2 // indirect
 	github.com/go-rod/rod v0.116.2
@@ -120,7 +129,7 @@ require (
 	go.opentelemetry.io/otel/trace v1.36.0 // indirect
 	go.uber.org/dig v1.19.0 // indirect
 	go.uber.org/multierr v1.10.0 // indirect
-	go.uber.org/zap v1.26.0 // indirect
+	go.uber.org/zap v1.27.0 // indirect
 	golang.org/x/sync v0.22.0 // indirect
 	golang.org/x/sys v0.47.0 // indirect
 	golang.org/x/text v0.41.0 // indirect
@@ -134,3 +143,5 @@ tool github.com/a-h/templ/cmd/templ
 replace github.com/rfbatista/spillway => /Users/renandonatofernandesbatista/projetos/pessoal/personal_projects/llm-proxy
 
 replace github.com/rfbatista/llmkit => /Users/renandonatofernandesbatista/projetos/pessoal/personal_projects/llmkit
+
+replace github.com/rfbatista/gohydrate => /Users/renandonatofernandesbatista/projetos/pessoal/personal_projects/gohydrate

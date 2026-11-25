@@ -22,6 +22,8 @@ func fragmentWorld(t *testing.T) world {
 	w.artifacts = designBoard().artifacts
 	w.designs = savedDesignSystem()
 	w.summaries = fakeSummaries{{Project: w.projects[0]}, {Project: w.projects[1]}}
+	w.sessions = append(w.sessions, &domain.Session{ID: "s-po", ProjectID: "p1", Mode: domain.SessionModeProductOwner, Status: domain.SessionIdle})
+	w.poThreads = fakeThreads{{ID: "th-1", ProjectID: "p1", SessionID: "s-po", Title: "What was done"}, {ID: "th-2", ProjectID: "p2", SessionID: "s-po", Title: "Elsewhere"}}
 	return w
 }
 
@@ -52,7 +54,10 @@ var fragmentPages = map[string]fragmentPage{
 	`/projects/{project}/tasks/{task}/documents/{document}`:       {"/projects/p1/tasks/t-feed/documents/d-plan", inProject},
 	`/projects/{project}/design-systems`:                          {"/projects/p1/design-systems", inProject},
 	`/projects/{project}/design-systems/{slug}`:                   {"/projects/p1/design-systems/app", inProject},
+	`/projects/{project}/product-owner/threads/{thread}/context`:  {"/projects/p1/product-owner/threads/th-1/context", inProject},
 	`/projects/{project}/usage`:                                   {"/projects/p1/usage", inProject},
+	`/projects/{project}/product-owner`:                           {"/projects/p1/product-owner", inProject},
+	`/projects/{project}/product-owner/threads/{thread}`:          {"/projects/p1/product-owner/threads/t1", inProject},
 	`/projects/{project}/repositories/{repository}/history`:       {"/projects/p1/repositories/r1/history", inProject},
 	`/projects/{project}/tasks/{task}/sessions/{session}/history`: {"/projects/p1/tasks/t-feed/sessions/s-agent/history", inProject},
 	`/projects/{project}/settings`:                                {"/projects/p1/settings", inProject},
@@ -160,16 +165,19 @@ func TestTheCodePagesAnswerTheirFragmentAndTheirFullPage(t *testing.T) {
 	}
 }
 
-// A page outside any project answers a fragment too, and marks its top bar
-// link open through the frame state.
-func TestAPageOutsideAnyProjectNamesItsTopBarLinkInTheFrameState(t *testing.T) {
+// A fragment swaps only <main>: the top bar island stays in the document, so
+// the fragment carries no island, no props and no bundle. The island follows
+// the new page through GET /api/top_bar.
+func TestAFragmentCarriesNoTopBarIsland(t *testing.T) {
 	h := newTestHandler(t, fragmentWorld(t))
 	frag := fragment(h, "/projects", "/projects/new")
 	if frag.Code != http.StatusOK {
 		t.Fatalf("status %d", frag.Code)
 	}
-	if !strings.Contains(frag.Body.String(), `data-top="/projects"`) {
-		t.Errorf("frame state does not name the projects link:\n%s", frag.Body)
+	for _, absent := range []string{"data-island", "data-island-props", `type="module"`} {
+		if strings.Contains(frag.Body.String(), absent) {
+			t.Errorf("a main-only fragment holds %q:\n%.300s", absent, frag.Body)
+		}
 	}
 }
 
@@ -204,8 +212,12 @@ func TestAClickAcrossFramesAnswersTheAppShellOfTheNewFrame(t *testing.T) {
 					t.Errorf("app shell holds %q: it is no document and no fragment", absent)
 				}
 			}
-			if c.project != "" && !strings.Contains(body, `<option value="p1" selected>`+c.project) {
-				t.Errorf("the picker does not show the new project %q", c.project)
+			// The new app shell carries a fresh island: its props name the new project.
+			if c.project != "" && !strings.Contains(body, `"current_project_id":"p1"`) {
+				t.Errorf("the island's props do not name the new project %q", c.project)
+			}
+			if !strings.Contains(body, `data-island="top-bar"`) || !strings.Contains(body, `data-island-props="top-bar"`) {
+				t.Errorf("an app shell carries its own top bar island")
 			}
 		})
 	}

@@ -156,6 +156,53 @@ func TestLoops_EndWithTheDelegate(t *testing.T) {
 	}
 }
 
+// resume puts an ended session back to running and announces it, as the
+// orchestration does.
+func (f *fixture) resume(t *testing.T, id string) {
+	t.Helper()
+	_ = f.sessions.UpdateStatus(id, domain.SessionRunning)
+	s := f.sessions.Get(id)
+	if err := f.bus.Publish(ctx, domain.SessionResumed{SessionID: id, ProjectID: s.ProjectID, TicketID: s.TicketID, ParentSessionID: s.ParentSessionID, Mode: s.Mode}); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestLoops_ComeBackWithAResumedDelegate(t *testing.T) {
+	f := newFixture(t)
+	f.start(t, "arch", "", domain.SessionModeArchitect, nil)
+	f.start(t, "dev", "arch", "", intp(5))
+	f.start(t, "peer", "dev", "", nil)
+	f.end(t, "dev", domain.SessionStopped)
+	f.end(t, "peer", domain.SessionStopped)
+
+	f.resume(t, "dev")
+	if c := f.check(t, "dev"); c == nil || c.State != domain.StatusCheckActive || c.EveryMinutes != 5 || c.NextAt == nil || !c.NextAt.Equal(f.clock.Add(5*time.Minute)) {
+		t.Fatalf("the resumed delegate's loop: %+v, want active again every 5 minutes", c)
+	}
+	f.resume(t, "peer")
+	if c := f.check(t, "peer"); c != nil {
+		t.Fatalf("a resumed peer of a delegate gets no loop: %+v", c)
+	}
+	f.advance(6 * time.Minute)
+	f.svc.FireDue()
+	if turns := f.del.got("arch"); len(turns) < 2 || !strings.Contains(turns[len(turns)-1], "session dev") {
+		t.Fatalf("the loop fires again: %q", turns)
+	}
+}
+
+func TestLoops_StayEndedWhenAnotherArchitectTookOver(t *testing.T) {
+	f := newFixture(t)
+	f.start(t, "arch", "", domain.SessionModeArchitect, nil)
+	f.start(t, "dev", "arch", "", nil)
+	f.end(t, "dev", domain.SessionStopped)
+	f.start(t, "arch2", "", domain.SessionModeArchitect, nil)
+
+	f.resume(t, "dev")
+	if c := f.check(t, "dev"); c.State != domain.StatusCheckEnded {
+		t.Fatalf("a loop of a former architect stays ended: %+v", c)
+	}
+}
+
 func TestLoops_EndWhenAnotherArchitectTakesOver(t *testing.T) {
 	f := newFixture(t)
 	f.start(t, "arch", "", domain.SessionModeArchitect, nil)

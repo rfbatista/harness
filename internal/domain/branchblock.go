@@ -50,6 +50,8 @@ func ModeName(mode SessionMode) string {
 		return "QA"
 	case SessionModeOperate:
 		return "Operator"
+	case SessionModeProductOwner:
+		return "Product owner"
 	default:
 		return "Default"
 	}

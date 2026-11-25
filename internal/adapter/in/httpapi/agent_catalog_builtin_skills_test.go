@@ -11,7 +11,7 @@ import (
 )
 
 var builtInSkillNames = []string{
-	"design-artifacts", "task-architecture", "task-code-review", "task-grill-with-docs", "task-implement-spec",
+	"create-verification-skill", "design-artifacts", "maintain-verification-skill", "task-architecture", "task-code-review", "task-grill-with-docs", "task-implement-spec",
 	"task-operate", "task-product", "task-qa", "task-review", "task-run-app", "task-tdd", "task-test", "task-to-spec",
 }
 
@@ -34,6 +34,11 @@ func TestBuiltInSkills_AreListedBesideTheCatalogsWithTheirModes(t *testing.T) {
 	if !reflect.DeepEqual(strList(run["modes"]), []string{"operate"}) || run["description"] == "" ||
 		run["has_extra_files"] != true || run["file_count"].(float64) < 2 {
 		t.Errorf("task-run-app = %v", run)
+	}
+	for _, name := range []string{"create-verification-skill", "maintain-verification-skill"} {
+		if got := strList(byName(t, cat["skills"], name)["modes"]); !reflect.DeepEqual(got, []string{"architect"}) {
+			t.Errorf("%s modes = %v, want [architect]", name, got)
+		}
 	}
 	if len(list(run["problems"])) != 0 || run["problems"] == nil {
 		t.Errorf("a built-in skill has no problems: %v", run["problems"])

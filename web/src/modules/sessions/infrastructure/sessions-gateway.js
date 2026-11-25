@@ -1,6 +1,6 @@
 // SessionGateway over the harness HTTP API and its SSE feed.
 
-import { toAgentChoices, toBranches, toBringUnderBody, toBrought, toBranchNameCheck, toChange, toCreated, toFetched, toResumeBody, toSeed, toSessionList, toStartBody } from "./dto.js";
+import { toAgentChoices, toBranches, toBringUnderBody, toBrought, toBranchNameCheck, toChange, toCreated, toFetched, toResumeBody, toSeed, toSessionList, toStartBody, toTaskWorktrees } from "./dto.js";
 
 /**
  * @param {import("../../../shared/infrastructure/api.js").ApiClient} api
@@ -39,6 +39,10 @@ export function sessionsGateway(api, feed) {
       return toBranchNameCheck(
         await api.get("/check_branch_name", { repository_id: repositoryId, name, base_branch: baseBranch || undefined, ticket_id: ticketId || undefined }, signal),
       );
+    },
+
+    async taskWorktrees({ ticketId, repositoryId }, signal) {
+      return toTaskWorktrees(await api.get("/task_worktrees", { task_id: ticketId, repository_id: repositoryId }, signal));
     },
 
     async agentChoices(projectId, repositoryId = "") {

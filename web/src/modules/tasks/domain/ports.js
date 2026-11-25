@@ -35,11 +35,11 @@
  *           Rejects with TICKET_NOT_FOUND.
  * @property {(id: string) => Promise<void>} deleteTask
  *           Rejects with TICKET_NOT_FOUND.
- * @property {(scope: { projectId?: string, taskId?: string }) => Promise<{ worktrees: number, dirty: number, running: number }>} previewArchivedWorktrees
+ * @property {(scope: { projectId?: string, taskId?: string }) => Promise<{ worktrees: number, dirty: number, running: number, shared: number }>} previewArchivedWorktrees
  *           What Clear worktrees would do, changing nothing: the worktrees it
  *           removes, how many hold uncommitted changes and how many belong to
  *           running sessions it skips. Rejects with TASK_NOT_ARCHIVED.
- * @property {(scope: { projectId?: string, taskId?: string }) => Promise<{ cleared: number, skipped: { session_id: string, task_id: string, task_title: string, reason: "running" | "failed", message?: string }[] }>} clearArchivedWorktrees
+ * @property {(scope: { projectId?: string, taskId?: string }) => Promise<{ cleared: number, skipped: { session_id: string, task_id: string, task_title: string, reason: "running" | "shared" | "error" | "failed", message?: string }[] }>} clearArchivedWorktrees
  *           Removes the worktrees of an archived task, or of every archived
  *           task of the project, keeping branches and sessions. Rejects with
  *           TASK_NOT_ARCHIVED.

@@ -5,7 +5,6 @@ import { popupDialog } from "./components/dialog.js";
 import { dropdown } from "./components/dropdown.js";
 import { listbox } from "./components/listbox.js";
 import { menu } from "./components/menu.js";
-import { projectPicker } from "./components/projectPicker.js";
 import { streamAnnouncer } from "./components/streamAnnouncer.js";
 import { streamHints } from "./components/streamHints.js";
 import { streamStatus } from "./components/streamStatus.js";
@@ -21,7 +20,6 @@ export function registerShared(Alpine, { prefs }) {
   Alpine.data("listbox", listbox());
   Alpine.data("menu", menu());
   Alpine.data("popupDialog", popupDialog());
-  Alpine.data("projectPicker", projectPicker());
   Alpine.data("streamStatus", streamStatus());
   Alpine.data("streamAnnouncer", streamAnnouncer());
   Alpine.data("streamHints", streamHints());

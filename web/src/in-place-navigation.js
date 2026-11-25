@@ -8,7 +8,9 @@
 // HX-Retarget), or the app shell of another frame, which replaces the shell;
 // the out-of-band items bring the title, the frame state and the stream bar.
 // The rail, the top bar, the bell, the writing helper, the stores and the one
-// event stream stay in the document through a fragment.
+// event stream stay in the document through a fragment. After each swap,
+// Back and Forward included, window gets a "harness:navigated" event with the
+// new path in detail, for the islands that stay.
 //
 // A navigation is a request that names the app shell as its target. Anything
 // the server answers without the X-Harness-Fragment mark (a redirect to a
@@ -122,6 +124,8 @@ export function startInPlaceNavigation(htmx, { Alpine, navigate, doc = document 
     Alpine.store("notifications")?.retitle?.();
     // The phone's drawer closes on a click, as the page load it replaced did.
     doc.defaultView?.dispatchEvent(new CustomEvent("rail-close"));
+    // The islands (the React top bar) follow the page: the swap kept them, so they ask for the new page's state.
+    doc.defaultView?.dispatchEvent(new CustomEvent("harness:navigated", { detail: { path: doc.location.pathname } }));
     const main = doc.getElementById("main");
     if (!main) return;
     // A link to an anchor of the page puts the anchor in view, as the browser would.
@@ -141,7 +145,8 @@ export function startInPlaceNavigation(htmx, { Alpine, navigate, doc = document 
 
   /**
    * The rail shows the page and the task that are open: the project page's
-   * link is current, and the live rail marks the task. The page's rail reports
+   * link is current, and the live rail marks the task. The top bar is a React
+   * island: it marks its own current link. The page's rail reports
    * the connection to the stream bar only on the pages that follow its feed.
    * @param {HTMLElement} state
    */
@@ -154,11 +159,6 @@ export function startInPlaceNavigation(htmx, { Alpine, navigate, doc = document 
       const link = item.querySelector("a");
       if (item.dataset.page === page) link?.setAttribute("aria-current", "page");
       else link?.removeAttribute("aria-current");
-    }
-    const top = state.dataset.top ?? "";
-    for (const link of doc.querySelectorAll("header.topbar a[href]")) {
-      if (link.getAttribute("href") === top) link.setAttribute("aria-current", "page");
-      else link.removeAttribute("aria-current");
     }
     rail.dataset.currentTask = task;
     if (state.dataset.reportsFeed !== undefined) rail.setAttribute("data-reports-feed", "");

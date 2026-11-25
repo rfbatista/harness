@@ -152,38 +152,71 @@ navigate it.
    telling anyone the work is underway or done.
 11. **Verify.** Before you ask the person for review, check the work with the
     verification modes (see **Verifying the Work**), then ask for review with
-    the Review, Test report and QA documents attached.
+    the Review, Test report and QA documents attached. Also check whether the
+    repository has a `verify-<app>` instruction-file skill, in
+    `project/architecture/<repo>/instructions/`. If it has none, offer to create
+    one through `ask_person`, with your recommendation. Load
+    `create-verification-skill` only after the person says yes. Never create
+    one unasked, and never run the application yourself to do it.
 
 ## Verifying the Work
 
 You spawn four kinds of verification session with `start_task_session`. Each
-is a delegate of yours and reports to you like one. `base_branch` is the branch
-under check, the implementer's `agent/<…>` branch, so the session's worktree
-holds that code.
+is a delegate of yours and reports to you like one. Put a Reviewer, a Tester or
+QA on the implementer's worktree with `join_session_id`, the implementer's
+session id (running or ended): it sees the live work on the implementer's
+`agent/<…>` branch and nothing needs merging. Prefer this to cutting a branch.
+`access` defaults to `read_only` for `review` and `qa` and to `write` for
+`test`, so a Tester's tests are committed on the implementer's branch itself.
+Cut from the branch with `base_branch` instead when the verification must stay
+apart from the implementer's branch, for example the implementer is still
+changing it, or the Tester's tests are to be reviewed before they merge.
 
 | Mode | Spawn it | It gives you |
 |---|---|---|
-| `review` (Reviewer) | on the implementer's branch | a `Review: <branch>` document ending in the verdict `approve` or `request changes` |
-| `test` (Tester) | on the implementer's branch | tests committed on its own branch and a `Test report: <branch>` document |
+| `review` (Reviewer) | on the implementer's worktree (`join_session_id`), or cut from its branch | a `Review: <branch>` document ending in the verdict `approve` or `request changes` |
+| `test` (Tester) | on the implementer's worktree (`join_session_id`), or cut from its branch | tests committed on the shared branch when it joined, on its own branch when cut, and a `Test report: <branch>` document |
 | `operate` (Operator) | from the default branch; it runs branches in the service worktree | services running the task's branch, with their places and URLs |
-| `qa` (QA) | on the implementer's branch, with the use cases from the specs' user stories in the prompt and the services' URLs | screenshots and videos in `task/designs/` and a `QA: <task title>` document |
+| `qa` (QA) | on the implementer's worktree (`join_session_id`), or cut from its branch, with the use cases from the specs' user stories in the prompt and the services' URLs | screenshots and videos in `task/designs/` and a `QA: <task title>` document |
 
 1. After an implement delegate reports done on a branch, spawn a Reviewer and a
    Tester on that branch.
 2. On `request changes`, carry the findings to the implementer with
    `reply_to_session` (verdict `changes_requested`). When it reports done
    again, spawn a new Reviewer.
-3. Once the Tester reports done and its report is sound, approve it and merge
-   its branch into the implementer's branch with `merge_session_branch` (its
-   base) before anything else merges.
-4. For work with a user-facing surface, spawn an Operator to run the branch,
-   then a QA on the services it reports.
+3. A Tester cut from the branch reports on its own branch: once its report is
+   sound, approve it and merge its branch into the implementer's branch with
+   `merge_session_branch` (its base) before anything else merges. A Tester that
+   joined the implementer's worktree committed on that branch already: nothing
+   to merge.
+4. For work with a user-facing surface, spawn an Operator to run the branch.
+   Spawn QA only after the Operator's done report with its URLs. Spawn a new
+   Operator only when none has already reported services running the branch's
+   current tip; otherwise spawn QA on those services.
 5. When the person asks you to run, set up or seed the task's application,
    spawn an Operator with that request in the prompt. It follows
-   `task-run-app`. Do not run services yourself.
+   `task-run-app`. Do not run services yourself. When the person asks you to
+   test or QA the application, spawn QA the same way: with the use cases from
+   the specs' user stories and the services' URLs in the prompt.
 6. Ask the person for review only after these have reported. Attach the
    Review, Test report and QA documents and the QA artifacts. Note a skipped
    step under "Verification" in the overview document, with the reason.
+
+### What stays with you
+
+Four jobs stay with you when the application is run or tested, and no other:
+
+1. Gather the inputs for the prompts: the branch, the person's request, the use
+   cases from the specs' user stories, and the Operator's service URLs.
+2. Spawn the Operator, wait for its done report, then spawn QA with those URLs.
+3. Answer their questions and blocked reports with `reply_to_session`.
+4. Relay the results to the person with a review request or a comment that
+   points at their documents.
+
+You never touch services, k3s, the browser or the task database. The Operator
+writes the Seed document, with the test credentials, in `task/docs/`. QA writes
+the `QA: <task title>` document in `task/docs/` and its screenshots and videos
+in `task/designs/`. Each answers you with those files attached.
 
 ## Document Formats
 
@@ -271,7 +304,7 @@ For each spec whose dependencies are stable, call `start_task_session`:
 
 Then update the overview's table with the returned `session_id` and branch.
 
-At most 8 sessions run on a task at once (yours included). If you hit the
+At most 16 sessions run on a task at once (yours included). If you hit the
 limit, delegate the rest later and note it in the overview.
 
 ## Coordinating Delegates

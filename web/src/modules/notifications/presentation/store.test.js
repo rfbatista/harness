@@ -12,11 +12,13 @@ file("notifications/presentation/store");
 /** A gateway the test drives: the stream, and each read's answer. */
 function scripted() {
   const reads = [];
+  const acks = [];
   const lists = [];
   let onChange = () => {};
   let onStatus = () => {};
   return {
     reads,
+    acks,
     lists,
     gateway: {
       fromSeed: toPage,
@@ -26,6 +28,9 @@ function scripted() {
       markRead(request) {
         return new Promise((resolve, reject) => reads.push({ request, resolve, reject }));
       },
+      acknowledge(id) {
+        return new Promise((resolve, reject) => acks.push({ id, resolve, reject }));
+      },
       follow(change, status) {
         onChange = change;
         onStatus = status;
@@ -33,7 +38,7 @@ function scripted() {
       },
     },
     /** The server streams a change. */
-    push: (notifications, unreadCount) => onChange({ notifications, unreadCount }),
+    push: (notifications, unreadCount, openCount = null) => onChange({ notifications, unreadCount, openCount }),
     status: (s) => onStatus(s),
   };
 }
@@ -78,18 +83,19 @@ function world({ seed = null, permission = "default", hidden = false, pref = nul
   return { server, store, said, shown, asked, went, doc, view, stored };
 }
 
-const seedOf = (notifications, unread_count) => ({ notifications: notifications.map(notificationDTO), unread_count });
+const seedOf = (notifications, unread_count, open_count) => ({ notifications: notifications.map(notificationDTO), unread_count, open_count });
 const read = (n) => ({ ...n, readAt: at(11) });
 
 test("the seed gives the count and the title; without one, the first read does", async () => {
   const seeded = world({ seed: seedOf([makeNotification()], 3) });
-  assert.deepEqual([seeded.store.unreadCount, seeded.doc.title, seeded.server.lists.length], [3, "(3) Notification · harness", 0]);
+  // Three unread, one of them an open cause: the title counts what needs the person.
+  assert.deepEqual([seeded.store.unreadCount, seeded.store.badgeCount, seeded.doc.title, seeded.server.lists.length], [3, 1, "(1) Notification · harness", 0]);
 
   const bare = world();
   assert.equal(bare.store.unreadCount, null, "unknown until read");
   bare.server.lists[0].resolve({ notifications: [], unreadCount: 2, nextBefore: "" });
   await flush();
-  assert.deepEqual([bare.store.unreadCount, bare.doc.title], [2, "(2) Notification · harness"]);
+  assert.deepEqual([bare.store.unreadCount, bare.store.badgeCount, bare.doc.title], [2, 0, "Notification · harness"], "two unread, none of them an open cause");
 });
 
 test("a page can pin the count that leads the title (the open questions of the session in view); letting it go brings the unread count back", () => {
@@ -243,4 +249,48 @@ test("desktop alerts: asked for only from the toggle, remembered, and raised onl
 
   const denied = world({ permission: "denied", seed: seedOf([], 0) });
   assert.equal(denied.store.alerts, "denied");
+});
+
+test("the bell and the title count what needs the person (open_count), not what is unread", async () => {
+  const w = world({ seed: seedOf([makeNotification()], 5, 2) });
+  assert.deepEqual([w.store.badgeCount, w.store.unreadCount, w.doc.title], [2, 5, "(2) Notification · harness"]);
+  w.server.push([makeNotification({ id: "a" })], 6, 3);
+  assert.deepEqual([w.store.badgeCount, w.doc.title], [3, "(3) Notification · harness"]);
+  // Reading changes the unread count, never the open one.
+  const target = makeNotification({ id: "a" });
+  const done = w.store.markRead([target]);
+  assert.equal(w.store.badgeCount, 3);
+  w.server.reads[0].resolve({ notifications: [read(target)], unreadCount: 5, openCount: 3 });
+  await done;
+  assert.deepEqual([w.store.badgeCount, w.store.unreadCount], [3, 5]);
+  // A settled cause leaves the count when the server says so.
+  w.server.push([makeNotification({ id: "a", resolvedAt: at(12) })], 5, 2);
+  assert.equal(w.store.badgeCount, 2);
+  w.server.push([], 5, 0);
+  assert.deepEqual([w.store.badgeCount, w.doc.title], [0, "Notification · harness"]);
+});
+
+test("a list read carries open_count too", async () => {
+  const bare = world();
+  bare.server.lists[0].resolve({ notifications: [], unreadCount: 2, openCount: 1, nextBefore: "" });
+  await flush();
+  assert.equal(bare.store.badgeCount, 1);
+});
+
+test("a server that sends no open_count: the bell counts the open causes it has seen, never the unread ones", () => {
+  const open = (id, fields = {}) => makeNotification({ id, ...fields });
+  const read = (id) => makeNotification({ id, readAt: at(1) });
+  // Five unread, of which two are open causes (info items are unread but need nothing).
+  const old = world({ seed: seedOf([open("a"), open("b"), makeNotification({ id: "c", level: "info" }), makeNotification({ id: "d", level: "info" }), makeNotification({ id: "e", level: "info" })], 5) });
+  assert.deepEqual([old.store.badgeCount, old.store.unreadCount, old.doc.title], [2, 5, "(2) Notification · harness"]);
+  old.server.push([open("f")], 6);
+  assert.equal(old.store.badgeCount, 3);
+  old.server.push([open("a", { resolvedAt: at(2) })], 6);
+  assert.deepEqual([old.store.badgeCount, old.doc.title], [2, "(2) Notification · harness"]);
+  // Reading does not settle a cause.
+  old.server.push([read("b")], 5);
+  assert.equal(old.store.badgeCount, 2);
+  // Once the server says, its count wins.
+  old.server.push([], 5, 7);
+  assert.equal(old.store.badgeCount, 7);
 });

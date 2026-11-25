@@ -72,6 +72,8 @@ type Services struct {
 	// Notifications is the person's inbox across every project; nil answers
 	// 503.
 	Notifications ports.Notifications
+	// TopBars is the top bar's model for a page path; nil answers 503.
+	TopBars ports.TopBars
 	// InterruptedResumer is Resume all interrupted, the action of the inbox's
 	// sessions_interrupted item; nil answers 503.
 	InterruptedResumer ports.InterruptedResumer
@@ -119,12 +121,18 @@ type Services struct {
 	// AgentCredential keeps the credential agents sign in with; nil answers
 	// 503.
 	AgentCredential ports.AgentCredential
+	// ProjectAgentCredentials keeps the credential one project's agents sign in
+	// with instead of the global one; nil answers 503.
+	ProjectAgentCredentials ports.ProjectAgentCredentials
 	// AgentOAuth runs the sign-in flow that stores the agent credential; nil
 	// answers 503.
 	AgentOAuth ports.AgentOAuth
 	// AgentAuth reads and ends the login the agent home keeps (`claude auth
 	// status` and `claude auth logout`); nil answers 503.
 	AgentAuth ports.AgentAuth
+	// ProjectAgentOAuth runs each project's own sign-in with Claude, in its
+	// project Claude home (ADR 0102); nil answers 503.
+	ProjectAgentOAuth ports.ProjectAgentOAuth
 	// WritingHelper runs the writing helper's steps; nil answers 503.
 	WritingHelper ports.WritingHelper
 	// ArchitectureAssistant runs the architecture assistant's turns; nil
@@ -136,6 +144,9 @@ type Services struct {
 	// RepositoryArchitectures keeps repositories' architecture records; nil
 	// answers 503.
 	RepositoryArchitectures ports.RepositoryArchitectures
+	// ProductOwner is the projects' product owners: settings and threads; nil
+	// answers 503.
+	ProductOwner ports.ProductOwner
 	// InstructionProposals are repositories' instruction-file proposals; nil
 	// answers 503.
 	InstructionProposals ports.InstructionProposals
@@ -196,6 +207,7 @@ type Handler struct {
 	archivedTrees  ports.ArchivedWorktrees
 	branchNames    ports.BranchNameChecker
 	notifications  ports.Notifications
+	topBars        ports.TopBars
 	interrupted    ports.InterruptedResumer
 	agentBoard     ports.AgentBoard
 	interviews     ports.Interviews
@@ -216,22 +228,26 @@ type Handler struct {
 	managedClaude    ports.ManagedClaude
 	managedClaudeBin ports.ManagedClaudeBin
 	agentCredential  ports.AgentCredential
-	agentOAuth       ports.AgentOAuth
-	agentAuth        ports.AgentAuth
+
+	projectAgentCredential ports.ProjectAgentCredentials
+	agentOAuth             ports.AgentOAuth
+	agentAuth              ports.AgentAuth
+	projectAgentOAuth      ports.ProjectAgentOAuth
 
 	writingHelper         ports.WritingHelper
 	architectureAssistant ports.ArchitectureAssistant
 	catalog               ports.CatalogEditor
 	repoAgents            ports.RepositoryAgents
 
-	services ports.ServiceManager
+	services        ports.ServiceManager
 	serviceRequests ports.ServiceRequests
 
-	repoArch ports.RepositoryArchitectures
+	repoArch     ports.RepositoryArchitectures
+	productOwner ports.ProductOwner
 	// instructionProposals is nil when proposals are not configured.
 	instructionProposals ports.InstructionProposals
 	instructionDecisions ports.InstructionProposalDecisions
-	designs  ports.DesignSystems
+	designs              ports.DesignSystems
 	// imports is the design systems' import, when they offer it.
 	imports ports.DesignSystemImports
 	// exports is the design systems' export into repositories, when they offer it.
@@ -246,53 +262,55 @@ type Handler struct {
 // NewHandler returns an HTTP handler that serves /api/list_tree, /api/list_zones, /api/list_projects, etc.
 func NewHandler(s Services) *Handler {
 	return &Handler{
-		projects:        s.Projects,
-		projectFeed:     s.ProjectFeed,
-		discovery:       s.Discovery,
-		env:             s.Env,
-		runCommands:     s.RunCommands,
-		apps:            s.Apps,
-		architecture:    s.Architecture,
-		agents:          s.Agents,
-		capabilities:    s.Capabilities,
-		tokenSavers:     s.TokenSavers,
-		settings:        s.Settings,
-		toolingSvc:      s.Tools,
-		execSvc:         s.Tasks,
-		orchSvc:         s.Sessions,
-		persons:         s.PersonTerminals,
-		planningSvc:     s.Planning,
-		workspacesSvc:   s.Workspaces,
-		artifactsSvc:    s.Artifacts,
-		channel:         s.TaskChannel,
-		resources:       s.TaskResources,
-		comments:        s.TaskComments,
-		archive:         s.TaskArchive,
-		pullRequests:    s.PullRequests,
-		prBases:         s.PullRequestBases,
-		merges:          s.Merges,
-		archivedTrees:   s.ArchivedWorktrees,
-		branchNames:     s.BranchNames,
-		repoArch:        s.RepositoryArchitectures,
+		projects:             s.Projects,
+		projectFeed:          s.ProjectFeed,
+		discovery:            s.Discovery,
+		env:                  s.Env,
+		runCommands:          s.RunCommands,
+		apps:                 s.Apps,
+		architecture:         s.Architecture,
+		agents:               s.Agents,
+		capabilities:         s.Capabilities,
+		tokenSavers:          s.TokenSavers,
+		settings:             s.Settings,
+		toolingSvc:           s.Tools,
+		execSvc:              s.Tasks,
+		orchSvc:              s.Sessions,
+		persons:              s.PersonTerminals,
+		planningSvc:          s.Planning,
+		workspacesSvc:        s.Workspaces,
+		artifactsSvc:         s.Artifacts,
+		channel:              s.TaskChannel,
+		resources:            s.TaskResources,
+		comments:             s.TaskComments,
+		archive:              s.TaskArchive,
+		pullRequests:         s.PullRequests,
+		prBases:              s.PullRequestBases,
+		merges:               s.Merges,
+		archivedTrees:        s.ArchivedWorktrees,
+		branchNames:          s.BranchNames,
+		repoArch:             s.RepositoryArchitectures,
+		productOwner:         s.ProductOwner,
 		instructionProposals: s.InstructionProposals,
 		instructionDecisions: s.InstructionProposalDecisions,
-		designs:         s.DesignSystems,
-		imports:         designImports(s.DesignSystems),
-		exports:         designExports(s.DesignSystems),
-		archRules:       s.ArchitectureRules,
-		branchGate:      s.BranchGate,
-		sessionBranches: s.SessionBranches,
-		notifications:   s.Notifications,
-		interrupted:     s.InterruptedResumer,
-		agentBoard:      s.AgentBoard,
-		interviews:      s.Interviews,
-		usage:           s.Usage,
-		liveCalls:       s.LiveCalls,
-		code:            s.Code,
-		worktreeGit:     s.WorktreeGit,
-		sessionFiles:    s.SessionFiles,
-		gitCredentials:  s.GitCredentials,
-		shells:          s.Shells,
+		designs:              s.DesignSystems,
+		imports:              designImports(s.DesignSystems),
+		exports:              designExports(s.DesignSystems),
+		archRules:            s.ArchitectureRules,
+		branchGate:           s.BranchGate,
+		sessionBranches:      s.SessionBranches,
+		notifications:        s.Notifications,
+		topBars:              s.TopBars,
+		interrupted:          s.InterruptedResumer,
+		agentBoard:           s.AgentBoard,
+		interviews:           s.Interviews,
+		usage:                s.Usage,
+		liveCalls:            s.LiveCalls,
+		code:                 s.Code,
+		worktreeGit:          s.WorktreeGit,
+		sessionFiles:         s.SessionFiles,
+		gitCredentials:       s.GitCredentials,
+		shells:               s.Shells,
 
 		tokenSaverInstalls: s.TokenSaverInstalls,
 		repositoryIndexes:  s.RepositoryIndexes,
@@ -303,8 +321,11 @@ func NewHandler(s Services) *Handler {
 		managedClaude:    s.ManagedClaude,
 		managedClaudeBin: s.ManagedClaudeBin,
 		agentCredential:  s.AgentCredential,
-		agentOAuth:       s.AgentOAuth,
-		agentAuth:        s.AgentAuth,
+
+		projectAgentCredential: s.ProjectAgentCredentials,
+		agentOAuth:             s.AgentOAuth,
+		agentAuth:              s.AgentAuth,
+		projectAgentOAuth:      s.ProjectAgentOAuth,
 
 		writingHelper:         s.WritingHelper,
 		architectureAssistant: s.ArchitectureAssistant,

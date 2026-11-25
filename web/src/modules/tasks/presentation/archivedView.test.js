@@ -55,7 +55,7 @@ test("the confirm states the dirty count before it is confirmed, and what is ski
   const preview = { worktrees: 7, dirty: 2, running: 1 };
   const ready = toClearStrip({ label: "all archived tasks", phase: "ready", preview, result: null, error: null });
   assert.equal(ready.title, "Clear 7 worktrees of all archived tasks?");
-  assert.deepEqual(ready.lines.slice(0, 2), ["2 hold uncommitted changes that will be lost.", "1 running session will be skipped."]);
+  assert.deepEqual(ready.lines.slice(0, 2), ["2 hold uncommitted changes that will be lost.", "1 worktree with a running session will be skipped."]);
   assert.equal(ready.canConfirm, true);
   const one = toClearStrip({ label: "Ship it", phase: "ready", preview: { worktrees: 1, dirty: 0, running: 0 }, result: null, error: null });
   assert.deepEqual([one.title, one.lines[0]], ["Clear 1 worktree of Ship it?", "None hold uncommitted changes."]);
@@ -63,10 +63,18 @@ test("the confirm states the dirty count before it is confirmed, and what is ski
   assert.equal(toClearStrip({ label: "Ship it", phase: "clearing", preview: one && { worktrees: 1, dirty: 0, running: 0 }, result: null, error: null }).busy, true);
 });
 
+test("the confirm says how many sessions stay because another task's session shares their worktree", () => {
+  const ready = toClearStrip({ label: "Ship it", phase: "ready", preview: { worktrees: 2, dirty: 0, running: 0, shared: 3 }, result: null, error: null });
+  assert.ok(ready.lines.includes("3 sessions share a worktree with a task that is not being cleared; their worktrees stay."), JSON.stringify(ready.lines));
+  const none = toClearStrip({ label: "Ship it", phase: "ready", preview: { worktrees: 0, dirty: 0, running: 0, shared: 1 }, result: null, error: null });
+  assert.equal(none.title, "Nothing to clear in Ship it");
+  assert.ok(none.lines[0].includes("1 session shares a worktree with a task that is not being cleared"), none.lines[0]);
+});
+
 test("a preview with nothing to remove says so instead of offering an empty confirm", () => {
   const none = toClearStrip({ label: "Ship it", phase: "ready", preview: { worktrees: 0, dirty: 0, running: 2 }, result: null, error: null });
   assert.deepEqual([none.title, none.canConfirm, none.closes], ["Nothing to clear in Ship it", false, true]);
-  assert.match(none.lines[0], /2 running sessions keep its worktree until it ends/);
+  assert.equal(none.lines[0], "2 worktrees with a running session stay until it ends.");
 });
 
 test("the result says how many were cleared and which were skipped and why", () => {
@@ -79,4 +87,19 @@ test("the result says how many were cleared and which were skipped and why", () 
   });
   assert.equal(done.title, "Cleared 6 worktrees");
   assert.deepEqual(done.lines, ["Feed: still running, so its worktree stays.", "Docs: could not be removed: device busy."]);
+});
+
+test("a shared worktree and an unreadable one are skipped with their own words, never as an unknown error", () => {
+  const done = toClearStrip({
+    label: "x",
+    phase: "done",
+    preview: null,
+    result: { cleared: 1, skipped: [{ task_title: "Feed", reason: "shared" }, { task_title: "Docs", reason: "error", message: "the store is down" }] },
+    error: null,
+  });
+  assert.deepEqual(done.lines, [
+    "Feed: its worktree is shared with a task that is not being cleared, so it stays.",
+    "Docs: could not tell who is on its worktree (the store is down), so it stays.",
+  ]);
+  assert.ok(!done.lines.join(" ").includes("unknown error"));
 });

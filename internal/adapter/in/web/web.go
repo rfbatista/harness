@@ -5,14 +5,12 @@ package web
 
 import (
 	"bytes"
-	"cmp"
 	"context"
 	"encoding/json"
 	"errors"
 	"log/slog"
 	"net/http"
 	"net/url"
-	"slices"
 	"strings"
 	"time"
 
@@ -29,6 +27,7 @@ import (
 	"operators-mcp/internal/adapter/in/web/home"
 	"operators-mcp/internal/adapter/in/web/models"
 	"operators-mcp/internal/adapter/in/web/notifications"
+	"operators-mcp/internal/adapter/in/web/productowner"
 	"operators-mcp/internal/adapter/in/web/projects"
 	"operators-mcp/internal/adapter/in/web/serversettings"
 	"operators-mcp/internal/adapter/in/web/services"
@@ -123,6 +122,12 @@ type Deps struct {
 	// AgentCredential fills the Agent isolation page's credential section
 	// (status only, never the value); nil shows it as not set.
 	AgentCredential ports.AgentCredential
+	// ProjectAgentCredentials fills the project settings page's own Agent
+	// credential section; nil leaves it out.
+	ProjectAgentCredentials ports.ProjectAgentCredentials
+	// ProjectAgentOAuth is that section's Sign in with Claude flow; nil leaves
+	// the button out.
+	ProjectAgentOAuth ports.ProjectAgentOAuth
 	// AgentOAuth is the credential section's Sign in with Claude flow; nil
 	// leaves the button disabled.
 	AgentOAuth ports.AgentOAuth
@@ -153,6 +158,9 @@ type Deps struct {
 	// Interviews seeds each session's interviews on the task page; nil
 	// seeds none.
 	Interviews ports.InterviewReader
+	// ProductOwnerThreads reads a product-owner thread for its Context page;
+	// nil leaves the page out.
+	ProductOwnerThreads productowner.Threads
 	// Usage reads token usage for a project's Usage page and the task
 	// page's totals; nil leaves the page, its rail link and the totals out.
 	Usage ports.UsageDashboard
@@ -181,6 +189,9 @@ type Deps struct {
 	// proposals for the Architecture page's tab badge (the first count; the
 	// feed updates it). nil counts none.
 	OpenInstructionProposals func(ctx context.Context, repositoryID string) int
+	// IslandRenderer renders the React islands on the server; nil builds one
+	// from the embedded bundles (none when they are not built).
+	IslandRenderer IslandRenderer
 	// Now defaults to time.Now.
 	Now func() time.Time
 }
@@ -216,7 +227,10 @@ func NewHandler(deps Deps, assets *Assets, fallback http.Handler) http.Handler {
 	if deps.Sessions != nil {
 		deps.Sessions = sharedSessions{deps.Sessions}
 	}
-	s := &server{deps: deps, assets: assets}
+	s := &server{deps: deps, assets: assets, renderer: deps.IslandRenderer}
+	if s.renderer == nil {
+		s.renderer = assets.newIslandRenderer()
+	}
 
 	homePage := home.Handler{Projects: deps.Projects, Board: deps.AgentBoard, Layout: s.layout, Render: render, Now: deps.Now}
 	taskPages := tasks.Handler{
@@ -230,7 +244,7 @@ func NewHandler(deps Deps, assets *Assets, fallback http.Handler) http.Handler {
 	}
 	projectPages := projects.Handler{
 		Projects: deps.Projects, Repositories: deps.Repositories, EnvFiles: deps.EnvFiles, RunCommands: deps.RunCommands, Summaries: deps.ProjectSummaries, Credentials: deps.GitCredentials,
-		TokenSavers: deps.TokenSavers, OpenProposals: deps.OpenInstructionProposals, Layout: s.layout, Render: render, Now: deps.Now,
+		TokenSavers: deps.TokenSavers, AgentCredentials: deps.ProjectAgentCredentials, GlobalCredential: deps.AgentCredential, SignIn: deps.ProjectAgentOAuth, ClaudeBin: deps.ManagedClaudeBin, OpenProposals: deps.OpenInstructionProposals, Layout: s.layout, Render: render, Now: deps.Now,
 	}
 	historyPages := history.Handler{
 		Projects: deps.Projects, Repositories: deps.Repositories, History: deps.History, Sessions: deps.Sessions, Tasks: deps.Tasks,
@@ -320,6 +334,12 @@ func NewHandler(deps Deps, assets *Assets, fallback http.Handler) http.Handler {
 		usagePage := usage.Handler{Projects: deps.Projects, Usage: deps.Usage, Layout: s.layout, Render: render}
 		mux.Handle("GET /projects/{project}/usage", s.page(usagePage.Page))
 	}
+	ownerPage := productowner.Handler{Projects: deps.Projects, Threads: deps.ProductOwnerThreads, Sessions: deps.Sessions, Layout: s.layout, Render: render}
+	mux.Handle("GET /projects/{project}/product-owner", s.page(ownerPage.Page))
+	mux.Handle("GET /projects/{project}/product-owner/threads/{thread}", s.page(ownerPage.Page))
+	if deps.ProductOwnerThreads != nil && deps.Sessions != nil {
+		mux.Handle("GET /projects/{project}/product-owner/threads/{thread}/context", s.page(ownerPage.Context))
+	}
 	if deps.Services != nil {
 		servicesPage := services.Handler{Projects: deps.Projects, Services: deps.Services, Repositories: deps.Repositories, Layout: s.layout, Render: render}
 		mux.Handle("GET /projects/{project}/services", s.page(servicesPage.Page))
@@ -345,12 +365,15 @@ func NewHandler(deps Deps, assets *Assets, fallback http.Handler) http.Handler {
 type server struct {
 	deps   Deps
 	assets *Assets
+	// renderer renders the React islands; nil when they are not built.
+	renderer IslandRenderer
 }
 
 // page adapts a page handler: an error becomes the error page for its code.
 func (s *server) page(h shell.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		ctx := shell.WithCollapsed(r.Context(), r) // the rail's folded groups, for the layout
+		ctx := shell.WithCollapsed(r.Context(), r)     // the rail's folded groups, for the layout
+		ctx = shell.WithPath(ctx, r.URL.EscapedPath()) // the page the top bar models
 		shell.VaryOnPage(w.Header())
 		if shell.PageRequest(r) {
 			if shell.SameFrame(r) {
@@ -397,20 +420,20 @@ func (s *server) layout(ctx context.Context, title, projectID, taskID string) (s
 	started := time.Now()
 	defer func() { pagetime.AddFrame(ctx, time.Since(started)) }()
 	frame := s.bareFrame(title)
-	frame.Notifications = s.bell(ctx)
 	frame.Helper = s.helper(ctx)
-	all, err := s.deps.Projects.ListProjects(ctx)
+	bar, err := s.TopBar(ctx, shell.PathOf(ctx))
 	if err != nil {
 		return shell.Frame{}, err
 	}
-	slices.SortFunc(all, func(a, b *domain.Project) int {
-		return cmp.Compare(strings.ToLower(a.Name), strings.ToLower(b.Name))
-	})
-	frame.Top.Current = projectID
-	if s.deps.ProjectSummaries != nil {
-		frame.Top.ProjectsHref = projects.ListHref
+	if frame.Island, err = s.island(ctx, bar); err != nil {
+		return shell.Frame{}, err
 	}
-	for _, p := range all {
+	if bar.Notifications != nil && bar.Notifications.Page != nil {
+		// The title's open count is painted by the server too.
+		frame.Open = bar.Notifications.Page.OpenCount
+	}
+	frame.Top.Current = projectID
+	for _, p := range bar.Projects {
 		frame.Top.Projects = append(frame.Top.Projects, shell.Option{ID: p.ID, Name: p.Name})
 	}
 	if projectID == "" {
@@ -449,6 +472,7 @@ func (s *server) layout(ctx context.Context, title, projectID, taskID string) (s
 	if s.deps.Usage != nil {
 		frame.Rail.UsageHref = usage.Href(projectID)
 	}
+	frame.Rail.ProductOwnerHref = productowner.Href(projectID)
 	return frame, nil
 }
 
@@ -459,12 +483,7 @@ func (s *server) fragmentFrame(ctx context.Context, title, projectID, taskID str
 	frame := shell.Frame{Title: title, Built: true}
 	frame.Helper = s.helper(ctx)
 	frame.Rail.Current = taskID
-	// The top bar stays in the document; which of its pages is open is named
-	// by its href, so the browser can mark it.
-	s.topLinks(&frame.Top)
-	if s.deps.ProjectSummaries != nil {
-		frame.Top.ProjectsHref = projects.ListHref
-	}
+	// The top bar island stays in the document and follows the new page itself.
 	if s.deps.ArchivedTasks != nil && projectID != "" {
 		// The board paints the archived count from the rail's seed.
 		n, err := s.deps.ArchivedTasks.ArchivedTaskCount(ctx, projectID)
@@ -505,23 +524,6 @@ func (s *server) openDesignProposals(ctx context.Context, projectID string) int 
 	return n
 }
 
-// bell is the top bar's way to the inbox, with the unread count and the
-// panel's latest notifications; nil when the inbox is not served. A failed
-// read still shows the bell: the browser reads the count itself.
-func (s *server) bell(ctx context.Context) *shell.Bell {
-	if s.deps.Notifications == nil {
-		return nil
-	}
-	b := &shell.Bell{Href: notifications.Href}
-	page, err := s.deps.Notifications.ListNotifications(ctx, ports.NotificationQuery{Limit: notifications.PanelLimit})
-	if err != nil {
-		slog.Warn("web: notifications seed not read; the browser reads it", "err", err)
-		return b
-	}
-	b.Seed = page
-	return b
-}
-
 // helper is the writing helper's readiness: unavailable without a reader.
 func (s *server) helper(ctx context.Context) shell.Helper {
 	if s.deps.WritingHelper == nil {
@@ -540,42 +542,17 @@ func (s *server) architectureAssistant(ctx context.Context) shell.Helper {
 	return shell.Helper{Available: a.Available, Reason: a.Reason, FixURL: a.FixURL}
 }
 
-// topLinks names the top bar's pages that this server serves.
-func (s *server) topLinks(top *shell.TopBar) {
-	if s.deps.AgentBoard != nil {
-		top.BoardHref = home.BoardHref
-	}
-	top.AgentsHref = agents.Href
-	if s.deps.GitCredentials != nil {
-		top.CredentialsHref = credentials.Href
-	}
-	if s.deps.TokenSaverInstalls != nil {
-		top.TokenSaversHref = tokensavers.Href
-	}
-	if s.deps.Settings != nil {
-		top.ModelsHref = models.Href
-	}
-	if s.deps.SandboxSettings != nil {
-		top.AgentIsolationHref = agentisolation.Href
-	}
-	if s.deps.DataPaths != nil {
-		top.ServerHref = serversettings.Href
-	}
-}
-
 // bareFrame is a frame without the rail, for when the rail cannot be read.
 func (s *server) bareFrame(title string) shell.Frame {
 	f := shell.Frame{
-		Title: title,
-		CSS:   s.assets.URL("app.css"),
-		JS:    s.assets.URL("app.js"),
-		Built: s.assets.Built(),
+		Title:     title,
+		CSS:       s.assets.URL("app.css"),
+		JS:        s.assets.URL("app.js"),
+		ClientJS:  s.assets.ClientBundleURL(),
+		ClientCSS: s.assets.ClientCSSURL(),
+		Built:     s.assets.Built(),
 	}
 	f.Helper = s.helper(context.Background())
-	s.topLinks(&f.Top)
-	if s.deps.SandboxSettings != nil {
-		f.Top.AgentIsolationAttention = agentisolation.Blocks(s.deps.SandboxSettings, s.deps.SandboxDriver, s.deps.AgentCredential, s.deps.AgentLogin, s.deps.ManagedClaudeBin)
-	}
 	return f
 }
 
@@ -601,7 +578,14 @@ func (s *server) renderError(w http.ResponseWriter, r *http.Request, err error) 
 		code = "INTERNAL"
 		slog.Error("web page failed", "path", r.URL.Path, "err", err)
 	}
-	if renderErr := render(w, r, status, errorPage(s.bareFrame("Error"), message, code, nextStep(code))); renderErr != nil {
+	frame := s.bareFrame("Error")
+	if bar, err := s.TopBar(r.Context(), r.URL.EscapedPath()); err == nil {
+		// A failed model leaves the error page without its top bar.
+		if isl, err := s.island(r.Context(), bar); err == nil {
+			frame.Island = isl
+		}
+	}
+	if renderErr := render(w, r, status, errorPage(frame, message, code, nextStep(code))); renderErr != nil {
 		slog.Error("web error page failed", "path", r.URL.Path, "err", renderErr)
 	}
 }
@@ -660,5 +644,5 @@ func render(w http.ResponseWriter, r *http.Request, status int, page templ.Compo
 func logPageTime(r *http.Request, t *pagetime.Timing) {
 	rep := t.Report(0)
 	slog.Info("page time", "route", r.Pattern, "project", r.PathValue("project"),
-		"total", rep.Total, "db", rep.DB, "git", rep.Git, "git_calls", rep.GitCalls, "render", rep.Render, "frame", rep.Frame, "catalog", rep.Catalog, "catalog_reads", rep.CatalogReads)
+		"total", rep.Total, "db", rep.DB, "git", rep.Git, "git_calls", rep.GitCalls, "render", rep.Render, "frame", rep.Frame, "island", rep.Island, "catalog", rep.Catalog, "catalog_reads", rep.CatalogReads)
 }

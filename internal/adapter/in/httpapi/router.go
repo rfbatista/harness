@@ -104,6 +104,7 @@ func NewRouter(h *Handler, opts ...Option) *echo.Echo {
 	g.GET("/list_workspaces", h.handleListWorkspaces)
 	g.GET("/list_branches", h.handleListBranches)
 	g.GET("/check_branch_name", h.handleCheckBranchName)
+	g.GET("/task_worktrees", h.handleListTaskWorktrees)
 	g.POST("/create_workspace", h.handleCreateWorkspace)
 	g.POST("/delete_workspace", h.handleDeleteWorkspace)
 	// a workspace's branch as a pull request on its origin
@@ -201,12 +202,21 @@ func NewRouter(h *Handler, opts ...Option) *echo.Echo {
 	g.GET("/get_agent_credential", h.handleGetAgentCredential)
 	g.POST("/set_agent_credential", h.handleSetAgentCredential)
 	g.POST("/remove_agent_credential", h.handleRemoveAgentCredential)
+	g.GET("/get_project_agent_credential", h.handleGetProjectAgentCredential)
+	g.POST("/set_project_agent_credential", h.handleSetProjectAgentCredential)
+	g.POST("/remove_project_agent_credential", h.handleRemoveProjectAgentCredential)
 	g.GET("/get_agent_oauth", h.handleGetAgentOAuth)
 	g.POST("/start_agent_oauth", h.handleStartAgentOAuth)
 	g.POST("/submit_agent_oauth_code", h.handleSubmitAgentOAuthCode)
 	g.POST("/cancel_agent_oauth", h.handleCancelAgentOAuth)
 	g.GET("/get_agent_auth_status", h.handleGetAgentAuthStatus)
 	g.POST("/sign_out_agent_auth", h.handleSignOutAgentAuth)
+	g.GET("/get_project_agent_oauth", h.handleGetProjectAgentOAuth)
+	g.POST("/start_project_agent_oauth", h.handleStartProjectAgentOAuth)
+	g.POST("/submit_project_agent_oauth_code", h.handleSubmitProjectAgentOAuthCode)
+	g.POST("/cancel_project_agent_oauth", h.handleCancelProjectAgentOAuth)
+	g.GET("/get_project_agent_auth_status", h.handleGetProjectAgentAuthStatus)
+	g.POST("/sign_out_project_agent_auth", h.handleSignOutProjectAgentAuth)
 
 	// the agent catalog
 	g.GET("/get_agent_catalog", h.handleGetAgentCatalog)
@@ -227,6 +237,8 @@ func NewRouter(h *Handler, opts ...Option) *echo.Echo {
 	g.POST("/set_project_mcp_settings", h.handleSetProjectMCPSettings)
 	g.GET("/get_project_agents", h.handleGetProjectAgents)
 	g.POST("/set_project_agents", h.handleSetProjectAgents)
+	g.GET("/get_mode_agents", h.handleGetModeAgents)
+	g.POST("/set_mode_agents", h.handleSetModeAgents)
 	g.GET("/get_repository_agents", h.handleGetRepositoryAgents)
 	g.GET("/get_repository_prompt", h.handleGetRepositoryPrompt)
 	g.POST("/save_repository_prompt", h.handleSaveRepositoryPrompt)
@@ -279,6 +291,8 @@ func NewRouter(h *Handler, opts ...Option) *echo.Echo {
 	g.GET("/sessions/:id/files/entries", h.handleSessionFilesEntries)
 	g.GET("/sessions/:id/files/file", h.handleSessionFilesFile)
 	g.GET("/sessions/:id/transcript", h.handleSessionTranscript)
+	g.GET("/sessions/:id/context", h.handleSessionContext)
+	g.GET("/sessions/:id/context/entries/:entry_id/pieces/:piece_id", h.handleSessionContextPiece)
 	g.GET("/sessions/:id/sandbox/violations", h.handleSessionSandboxViolations)
 	// merging a session's branch into its repository's default branch, in the local checkout
 	g.GET("/sessions/:id/merge", h.handleSessionMergeOffer)
@@ -316,6 +330,7 @@ func NewRouter(h *Handler, opts ...Option) *echo.Echo {
 	// whether an action keeps to the repository's layers
 	g.POST(strings.TrimPrefix(ArchitectureCheckRoute, "/api"), h.handleArchitectureCheck)
 	g.POST(strings.TrimPrefix(ArchitectureCommitRoute, "/api"), h.handleArchitectureCommit)
+	g.POST(strings.TrimPrefix(WorktreeArchitectureCommitRoute, "/api"), h.handleWorktreeArchitectureCommit)
 	// the architect's worktree read hook asks which worktrees are its task's
 	g.GET(strings.TrimPrefix(TaskWorktreesRoute, "/api"), h.handleTaskWorktrees)
 	g.POST(strings.TrimPrefix(TaskWorktreeDenialsRoute, "/api"), h.handleTaskWorktreeDenial)
@@ -376,8 +391,12 @@ func NewRouter(h *Handler, opts ...Option) *echo.Echo {
 	// notifications: the person's inbox across every project
 	g.GET("/notifications", h.handleListNotifications)
 	g.POST("/notifications/read", h.handleMarkNotificationsRead)
+	g.POST("/notifications/:id/acknowledge", h.handleAcknowledgeNotification)  // a branch finding
 	g.POST("/notifications/:id/resume_interrupted", h.handleResumeInterrupted) // Resume all interrupted
 	g.GET("/notifications/events", h.handleNotificationEvents)                 // every inbox change (SSE)
+
+	// the top bar's model for a page path (the island's props, read fresh)
+	g.GET("/top_bar", h.handleTopBar)
 
 	// usage: the token usage the LLM proxy measured, per project
 	// (_harness is the harness's own spend)
@@ -409,6 +428,21 @@ func NewRouter(h *Handler, opts ...Option) *echo.Echo {
 	g.POST("/discover_repository_architecture", h.handleDiscoverRepositoryArchitecture)
 	g.POST("/list_instruction_files", h.handleListInstructionFiles)
 	g.POST("/list_instruction_proposals", h.handleListInstructionProposals)
+
+	// product owner: one per project, and the threads the person has with it
+	g.GET("/product_owner", h.handleGetProductOwner)
+	g.POST("/update_product_owner", h.handleUpdateProductOwner)
+	g.GET("/product_owner_threads", h.handleListProductOwnerThreads)
+	g.GET("/product_owner_thread", h.handleGetProductOwnerThread)
+	g.POST("/start_product_owner_thread", h.handleStartProductOwnerThread)
+	g.POST("/send_product_owner_message", h.handleSendProductOwnerMessage)
+	g.POST("/stop_product_owner_turn", h.handleStopProductOwnerTurn)
+	g.POST("/rename_product_owner_thread", h.handleRenameProductOwnerThread)
+	g.POST("/answer_held_action", h.handleAnswerHeldAction)
+	g.GET("/product_owner_digests", h.handleListProductOwnerDigests)
+	g.GET("/product_owner_memory", h.handleGetProductOwnerMemory)
+	g.POST("/update_memory_entry", h.handleUpdateMemoryEntry)
+	g.POST("/delete_memory_entry", h.handleDeleteMemoryEntry)
 	g.POST("/get_instruction_proposal", h.handleGetInstructionProposal)
 	g.POST("/approve_instruction_proposal", h.handleApproveInstructionProposal)
 	g.POST("/reject_instruction_proposal", h.handleRejectInstructionProposal)

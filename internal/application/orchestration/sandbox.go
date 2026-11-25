@@ -36,6 +36,15 @@ type Sandbox struct {
 	Bin string
 	// Home is the agent Claude home.
 	Home string
+	// ProjectHomesRoot is the folder that holds the project Claude homes, one
+	// folder per project named by its id (ADR 0102). A session may read and
+	// write its own project's home; the folder itself is hidden, so no other
+	// project's login is reachable. Empty: none.
+	ProjectHomesRoot string
+	// ProjectHasLogin says whether a project holds a login of its own: only
+	// then does a session of it get its project Claude home, so a project that
+	// signed out gets the policy it got before. Nil: any home that exists.
+	ProjectHasLogin func(projectID string) bool
 	// UserHome is the person's home directory and ConfigHome their
 	// XDG_CONFIG_HOME (empty when unset): their git config is read-only to
 	// every session, so git inside the sandbox sees their identity and
@@ -83,11 +92,36 @@ func (b *Sandbox) readAllRepos(projectID string) bool {
 	return b.ReadAllRepos == nil || b.ReadAllRepos(projectID)
 }
 
+// projectHomes answers the project's own Claude home and the folder of every
+// home, each only where it exists: a project without a login, and an install
+// without any, get the policy they get without the rule.
+func (b *Sandbox) projectHomes(projectID string) (own, root string) {
+	if b.ProjectHomesRoot == "" {
+		return "", ""
+	}
+	if _, err := os.Stat(b.ProjectHomesRoot); err != nil {
+		return "", ""
+	}
+	root = b.ProjectHomesRoot
+	own = filepath.Join(root, projectID)
+	if projectID == "" {
+		return "", root
+	}
+	if _, err := os.Stat(own); err != nil || (b.ProjectHasLogin != nil && !b.ProjectHasLogin(projectID)) {
+		own = ""
+	}
+	return own, root
+}
+
 func (b *Sandbox) on() bool { return b != nil && (b.Enabled == nil || b.Enabled()) }
 
 // SandboxSession is what the policy builder decides a policy from.
 type SandboxSession struct {
 	Mode domain.SessionMode
+	// Access is what the session may do in its worktree; empty is write. A
+	// read-only session gets the worktree and the git dir read-only, so
+	// nothing in them can change, a commit included.
+	Access domain.SessionAccess
 	// Worktree is the session's own worktree, GitCommonDir the git directory
 	// it commits into.
 	Worktree     string
@@ -116,12 +150,17 @@ type SandboxSession struct {
 	WorktreesDir string
 	// VirtualShell is the session's shell; empty without one.
 	VirtualShell string
-	// CommitCheckDir is the session's own commit check hooks dir (ADR 0040):
-	// read-only and executable, so `git commit` runs the check inside the
-	// sandbox. Another session's dir is never granted. Empty: none.
+	// CommitCheckDir is the commit check hooks dir of the worktree the session
+	// is on (ADR 0040, ADR 0105): read-only and executable, so `git commit`
+	// runs the check inside the sandbox. Another worktree's dir is never
+	// granted. Empty: none.
 	CommitCheckDir string
 	TempDir        string
 	AgentHome      string
+	// ProjectHome is the session's own project Claude home, read-write;
+	// ProjectHomesRoot is the folder of every project's home, hidden so no
+	// other project's is reachable (ADR 0102). Empty: none.
+	ProjectHome, ProjectHomesRoot string
 	// UserHome and ConfigHome are the person's home and XDG config home; their
 	// git config is read-only in every mode, never their ssh folder.
 	UserHome, ConfigHome string
@@ -147,7 +186,7 @@ type SandboxSession struct {
 // deny, so it stays reachable.
 func hiddenPaths(s SandboxSession, granted []ports.SandboxPath) []string {
 	var hidden []string
-	for _, p := range append(slices.Clone(s.Repositories), s.WorkspacesRoot) {
+	for _, p := range append(slices.Clone(s.Repositories), s.WorkspacesRoot, s.ProjectHomesRoot) {
 		if p == "" {
 			continue
 		}
@@ -176,6 +215,7 @@ func BuildSandboxPolicy(s SandboxSession) ports.SandboxPolicy {
 		}
 	}
 	add(s.AgentHome, true)
+	add(s.ProjectHome, true)
 	if !s.Login {
 		for _, p := range gitConfigPaths(s.UserHome, s.ConfigHome) {
 			add(p, false)
@@ -206,7 +246,7 @@ func BuildSandboxPolicy(s SandboxSession) ports.SandboxPolicy {
 	add(s.TempDir, true)
 	var createOnly string
 	switch s.Mode {
-	case domain.SessionModeProduct, domain.SessionModeDesignSystem:
+	case domain.SessionModeProduct, domain.SessionModeDesignSystem, domain.SessionModeProductOwner:
 		add(s.Worktree, false)
 		addRepositories(add, s)
 	case domain.SessionModeArchitect:
@@ -215,8 +255,13 @@ func BuildSandboxPolicy(s SandboxSession) ports.SandboxPolicy {
 		addRepositories(add, s)
 		add(s.WorktreesDir, false)
 	default:
-		add(s.Worktree, true)
-		createOnly = addGitDir(add, s)
+		if s.Access.Writes() {
+			add(s.Worktree, true)
+			createOnly = addGitDir(add, s)
+		} else {
+			add(s.Worktree, false)
+			add(s.GitCommonDir, false)
+		}
 		if s.ReadAllRepos {
 			addRepositories(add, s)
 		}
@@ -311,6 +356,13 @@ func splitPolicy(all []ports.SandboxPath, workingDir string) ports.SandboxPolicy
 // repository: the one-shot's temp dir, the agent home and allow (claude's
 // install dirs), through the same policy builder as a session's.
 func (b *Sandbox) OneShotWrap(allow []ports.SandboxPath) (llmkit.WrapFunc, error) {
+	return b.OneShotWrapFor("", allow)
+}
+
+// OneShotWrapFor is OneShotWrap for a one-shot of a project: the project's own
+// Claude home is writable beside the agent home, and no other project's is
+// reachable (ADR 0102). The project "" is OneShotWrap.
+func (b *Sandbox) OneShotWrapFor(projectID string, allow []ports.SandboxPath) (llmkit.WrapFunc, error) {
 	if !b.on() {
 		return nil, nil
 	}
@@ -325,6 +377,7 @@ func (b *Sandbox) OneShotWrap(allow []ports.SandboxPath) (llmkit.WrapFunc, error
 	// A one-shot sees no project: it reads every checkout of the install when
 	// the setting is on for no project in particular (its default).
 	sess := SandboxSession{OneShot: true, TempDir: os.TempDir(), AgentHome: b.Home, UserHome: b.UserHome, ConfigHome: b.ConfigHome, Allow: allow, ReadAllRepos: b.readAllRepos("")}
+	sess.ProjectHome, sess.ProjectHomesRoot = b.projectHomes(projectID)
 	if b.Checkouts != nil {
 		sess.Repositories = b.Checkouts()
 	}
@@ -342,10 +395,17 @@ func (b *Sandbox) OneShotWrap(allow []ports.SandboxPath) (llmkit.WrapFunc, error
 // agent sandbox switch: it applies whenever the platform has a driver, and
 // with none it is refused, so a read-only turn never runs unconfined.
 func (b *Sandbox) ReadOnlyWrap(checkout string, allow []ports.SandboxPath) (llmkit.WrapFunc, error) {
+	return b.ReadOnlyWrapFor("", checkout, allow)
+}
+
+// ReadOnlyWrapFor is ReadOnlyWrap for a turn of a project: the project's own
+// Claude home is writable beside the agent home (ADR 0102).
+func (b *Sandbox) ReadOnlyWrapFor(projectID, checkout string, allow []ports.SandboxPath) (llmkit.WrapFunc, error) {
 	if b == nil || b.Driver == nil {
 		return nil, agentready.ReadOnlySandboxMissing()
 	}
 	sess := SandboxSession{OneShot: true, ReadOnlyDir: checkout, TempDir: os.TempDir(), AgentHome: b.Home, UserHome: b.UserHome, ConfigHome: b.ConfigHome, Allow: allow}
+	sess.ProjectHome, sess.ProjectHomesRoot = b.projectHomes(projectID)
 	if b.Checkouts != nil {
 		sess.Repositories = b.Checkouts()
 	}
@@ -369,6 +429,27 @@ func (b *Sandbox) LoginWrap(allow []ports.SandboxPath) func(ports.SandboxCommand
 	}
 	return func(c ports.SandboxCommand) (ports.SandboxCommand, error) {
 		sess := SandboxSession{Login: true, TempDir: sessionTempDir(c.Env), AgentHome: b.Home, Allow: allow}
+		if b.Checkouts != nil {
+			sess.Repositories = b.Checkouts()
+		}
+		if b.WorkspacesRoot != nil {
+			sess.WorkspacesRoot = b.WorkspacesRoot()
+		}
+		return b.Driver.Wrap(BuildSandboxPolicy(sess), c)
+	}
+}
+
+// ProjectLoginWrap confines the sign-in's claude of one project: like
+// LoginWrap, with the project Claude home writable in place of the agent home
+// (ADR 0102), so claude keeps that project's login there and nowhere else. The
+// folder of the other homes is hidden. Nil is a platform without a driver.
+func (b *Sandbox) ProjectLoginWrap(projectID string, allow []ports.SandboxPath) func(ports.SandboxCommand) (ports.SandboxCommand, error) {
+	if b == nil || b.Driver == nil || b.ProjectHomesRoot == "" {
+		return nil
+	}
+	return func(c ports.SandboxCommand) (ports.SandboxCommand, error) {
+		sess := SandboxSession{Login: true, TempDir: sessionTempDir(c.Env), Allow: allow,
+			ProjectHome: filepath.Join(b.ProjectHomesRoot, projectID), ProjectHomesRoot: b.ProjectHomesRoot}
 		if b.Checkouts != nil {
 			sess.Repositories = b.Checkouts()
 		}
@@ -549,6 +630,7 @@ func (s *Service) sandbox(ctx context.Context, in prepareInput, id string, repo 
 	}
 	sess := SandboxSession{
 		Mode:         in.Mode,
+		Access:       in.Access,
 		Worktree:     worktree,
 		GitCommonDir: gitCommonDir(worktree, repo.RootDir),
 		OwnGitDir:    ownGitDir(worktree),
@@ -558,6 +640,7 @@ func (s *Service) sandbox(ctx context.Context, in prepareInput, id string, repo 
 		TempDir:      sessionTempDir(env),
 		ReadAllRepos: sb.readAllRepos(in.ProjectID),
 	}
+	sess.ProjectHome, sess.ProjectHomesRoot = sb.projectHomes(in.ProjectID)
 	repos, err := s.catalog.Repositories.ListRepositories(ctx, in.ProjectID)
 	if err != nil {
 		return sandboxed{}, err
@@ -578,8 +661,8 @@ func (s *Service) sandbox(ctx context.Context, in prepareInput, id string, repo 
 			}
 		}
 	}
-	if s.commitCheckEnabled() {
-		sess.CommitCheckDir = s.CommitCheckDir(id)
+	if s.commitCheckEnabled() && in.WorkspaceID != "" {
+		sess.CommitCheckDir = s.CommitCheckDir(in.WorkspaceID)
 	}
 	for _, e := range env {
 		if v, ok := strings.CutPrefix(e, ports.ShellDirEnv+"="); ok {

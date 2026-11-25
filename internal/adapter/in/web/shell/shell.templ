@@ -14,7 +14,13 @@ templ Document(f Frame) {
 			<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
 			<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Atkinson+Hyperlegible+Mono:wght@400;500;700&family=Atkinson+Hyperlegible+Next:wght@400;500;700&display=swap"/>
 			<link rel="stylesheet" href={ f.CSS }/>
+			if f.ClientCSS != "" {
+				<link rel="stylesheet" href={ f.ClientCSS }/>
+			}
 			<script type="module" src={ f.JS }></script>
+			if f.ClientJS != "" {
+				<script type="module" src={ f.ClientJS }></script>
+			}
 		</head>
 		<body>
 			if !f.Built {
@@ -62,7 +68,7 @@ templ pageFragment(f Frame) {
 // frameState carries what the frame shows for the current page and that the
 // browser applies to the rail: the open project page and the open task.
 templ frameState(f Frame, oob bool) {
-	<div id="frame-state" hidden data-page={ f.Rail.Page } data-task={ f.Rail.Current } data-top={ f.Top.CurrentHref() } { reportsFeedAttrs(f.Rail.ReportsFeed)... } { oobAttrs(oob)... }></div>
+	<div id="frame-state" hidden data-page={ f.Rail.Page } data-task={ f.Rail.Current } { reportsFeedAttrs(f.Rail.ReportsFeed)... } { oobAttrs(oob)... }></div>
 }
 
 // shellBody is the app layout: the top bar, the task rail, the page's main
@@ -76,157 +82,87 @@ templ shellBody(f Frame) {
 			@taskRail(f)
 		}
 		{ children... }
+		@ownerPanelMount(f)
 		@frameState(f, false)
 		@streamBar(f.Live, f.Hints, false)
 	</div>
 }
 
-// topBar holds the project picker and the way to every project: the
-// projects list, where New project lives, or New project itself where the
-// list is not served. The picker is
-// a GET form, so it works without JavaScript; projectPicker submits it as
-// soon as the choice changes. Below 48rem it starts with the Tasks button
-// that opens the rail as a drawer (a link to the board without JavaScript).
+// ownerPanelMount is where the product owner's docked panel opens, beside
+// <main> (ADR 0115). The browser draws it (a client-rendered island, so there is
+// nothing for the server to render) and keeps it across a click within the
+// project, since only <main> swaps. It is left out where there is no project, or
+// where the islands are not built.
+templ ownerPanelMount(f Frame) {
+	if f.Island != nil && f.Top.Current != "" {
+		<div data-island="owner-panel" data-island-rendered="false"></div>
+		@propsScript("owner-panel", f.OwnerPanelProps())
+	}
+}
+
+// topBar is the header: the Tasks button, then the React top bar island, which
+// the server rendered (the brand, the project picker, the pages, the bell). The
+// Tasks button stays here: below 48rem it opens the rail as a drawer (a link to
+// the board without JavaScript).
 templ topBar(f Frame) {
 	<header class="[ topbar ]">
 		if f.Rail.Seed != nil && !f.NoRail {
 			@tasksToggle(f.Rail)
 		}
-		<a class="[ brand ]" href="/">harness</a>
-		if len(f.Top.Projects) > 0 {
-			<form class="[ cluster ] [ gutter-xs ]" method="get" action="/switch-project" x-data="projectPicker">
-				<label class="[ visually-hidden ]" for="project-picker">Project</label>
-				<select id="project-picker" name="project" data-size="sm" data-fit x-on:change="go">
-					if f.Top.Current == "" {
-						<option value="" selected disabled>Choose a project…</option>
-					}
-					for _, p := range f.Top.Projects {
-						<option value={ p.ID } { selectedAttrs(p.ID == f.Top.Current)... }>{ p.Name }</option>
-					}
-				</select>
-				<noscript><button type="submit" class="[ button ]" data-size="sm">Open</button></noscript>
-			</form>
-		}
-		if f.Top.BoardHref != "" {
-			<a class="[ button ]" data-variant="ghost" data-size="sm" href={ templ.SafeURL(f.Top.BoardHref) } { currentAttrs(f.Top.OnBoard)... }>Agent board</a>
-		}
-		if f.Top.ProjectsHref != "" {
-			<a class="[ button ]" data-variant="ghost" data-size="sm" href={ templ.SafeURL(f.Top.ProjectsHref) } { currentAttrs(f.Top.OnProjects)... }>Projects</a>
-		} else {
-			<a class="[ button ]" data-variant="ghost" data-size="sm" href="/projects/new">New project</a>
-		}
-		if f.Top.AgentsHref != "" {
-			<a class="[ button ]" data-variant="ghost" data-size="sm" href={ templ.SafeURL(f.Top.AgentsHref) } title="Agents are shared by every project" aria-describedby="agents-link-note" { currentAttrs(f.Top.OnAgents)... }>Agents</a>
-			<span id="agents-link-note" class="[ visually-hidden ]">Agents are shared by every project</span>
-		}
-		if f.Top.CredentialsHref != "" {
-			<a class="[ button ]" data-variant="ghost" data-icon href={ templ.SafeURL(f.Top.CredentialsHref) } aria-label="Git credentials" title="Git credentials" { currentAttrs(f.Top.OnCredentials)... }>
-				@icon("key")
-			</a>
-		}
-		if f.Top.TokenSaversHref != "" {
-			<a class="[ button ]" data-variant="ghost" data-icon href={ templ.SafeURL(f.Top.TokenSaversHref) } aria-label="Token savers" title="Token savers" { currentAttrs(f.Top.OnTokenSavers)... }>
-				@icon("saver")
-			</a>
-		}
-		if f.Top.ModelsHref != "" {
-			<a class="[ button ]" data-variant="ghost" data-icon href={ templ.SafeURL(f.Top.ModelsHref) } aria-label="Models" title="Models" { currentAttrs(f.Top.OnModels)... }>
-				@icon("model")
-			</a>
-		}
-		if f.Top.AgentIsolationHref != "" {
-			<a class="[ button ]" data-variant="ghost" data-icon href={ templ.SafeURL(f.Top.AgentIsolationHref) } aria-label="Agent isolation" title="Agent isolation" { currentAttrs(f.Top.OnAgentIsolation)... } { blockingAttrs(f.Top.AgentIsolationAttention)... }>
-				@icon("shield")
-			</a>
-		}
-		if f.Top.ServerHref != "" {
-			<a class="[ button ]" data-variant="ghost" data-icon href={ templ.SafeURL(f.Top.ServerHref) } aria-label="Server" title="Server" { currentAttrs(f.Top.OnServer)... }>
-				@icon("server")
-			</a>
-		}
-		if f.Notifications != nil {
-			@notificationsBell(f.Notifications)
+		if f.Island != nil {
+			<div data-island="top-bar" { islandRenderedAttrs(f.Island.Failed)... }>
+				@templ.Raw(f.Island.HTML)
+			</div>
+			@propsScript("top-bar", f.Island.Props)
 		}
 	</header>
 }
 
-// notificationsBell is the unread count on every page and the panel with
-// the latest notifications across projects (notificationsBell in web/src).
-// Without JavaScript it is a link to the inbox; the count and its badge are
-// painted here, so they are right before any script runs.
-templ notificationsBell(b *Bell) {
-	if b.Seed != nil {
-		@templ.JSONScript("notifications-seed", b.Seed)
-	}
-	<div class="[ notifications ]" x-data="notificationsBell" x-bind:data-feed="feedStatus" x-on:focusout="focusLeft">
-		<a
-			class="[ button ] [ bell ]"
-			data-variant="ghost"
-			data-icon
-			href={ templ.SafeURL(b.Href) }
-			aria-label={ b.Label() }
-			x-bind:aria-label="label"
-			aria-controls="notifications-panel"
-			x-bind:aria-expanded="expanded"
-			x-ref="trigger"
-			x-on:click="toggle"
-		>
-			@icon("bell")
-			<span class="[ badge ]" data-tone="attention" aria-hidden="true" x-show="hasUnread" x-text="badge" { shownIf(b.Unread() > 0)... }>{ b.BadgeText() }</span>
-		</a>
-		<section id="notifications-panel" class="[ popup ] [ notifications-panel ]" aria-labelledby="notifications-heading" x-ref="panel" x-on:keydown="panelKey">
-			<div class="[ head ]">
-				<h2 id="notifications-heading" tabindex="-1">Notifications</h2>
-				<div class="[ cluster ] [ gutter-2xs ]" role="group" aria-label="Show">
-					<button type="button" class="[ button ]" data-variant="ghost" data-size="sm" x-bind:aria-pressed="showsAll" x-on:click="showAll">All</button>
-					<button type="button" class="[ button ]" data-variant="ghost" data-size="sm" x-bind:aria-pressed="showsUnread" x-on:click="showUnread">Unread</button>
-				</div>
-			</div>
-			<template x-if="error">
-				<div class="[ message ]" data-tone="danger" role="alert">
-					<span x-text="error.message"></span>
-					<button type="button" class="[ button ]" data-variant="ghost" data-size="sm" x-on:click="dismissError">Dismiss</button>
-				</div>
-			</template>
-			<div class="[ list ]" x-bind:aria-busy="loading">
-				<ul role="list" class="[ notification-list ]">
-					<template x-for="row in rows" x-bind:key="row.id">
-						<li>
-							@NotificationLiveRow(false)
-						</li>
-					</template>
-				</ul>
-				<p class="[ message ]" x-show="isEmpty" x-text="emptyText"></p>
-			</div>
-			<footer class="[ foot ]">
-				<button type="button" class="[ button ]" data-variant="ghost" data-size="sm" x-bind:disabled="!canMarkAll" x-on:click="markAll">Mark all read</button>
-				<button type="button" class="[ button ]" data-variant="ghost" data-size="sm" x-bind:aria-pressed="alertsPressed" x-bind:disabled="alertsUnavailable" aria-describedby="notifications-alerts-note" x-on:click="toggleAlerts">Desktop alerts</button>
-				<span id="notifications-alerts-note" class="[ note ]" x-text="alertsNote"></span>
-				<a class="[ all ]" href={ templ.SafeURL(b.Href) }>See all notifications</a>
-			</footer>
-		</section>
-	</div>
-}
-
 // NotificationLiveRow is one notification as the browser renders it, in an
-// x-for over `rows` (the bell's panel, the inbox page): its fields are
+// x-for over `rows` (the inbox page): its fields are
 // web/src/modules/notifications/presentation/view.js's Row. The inbox page
 // passes actions: a sessions_interrupted item's Resume all interrupted button
-// lives there only; the panel lists its sessions and links to the page.
+// lives there only.
 templ NotificationLiveRow(actions bool) {
-	<article class="[ notification ]" x-bind:data-level="row.level" x-bind:data-state="row.state">
+	<article class="[ notification ]" data-layout="ledger" data-compact?={ !actions } x-bind:data-kind="row.kind" x-bind:data-level="row.level" x-bind:data-state="row.state">
 		<span class="[ marker ]" aria-hidden="true"></span>
-		<div class="[ text ]">
-			<a class="[ title ]" data-item x-bind:href="row.href" x-bind:data-id="row.id" x-bind:aria-label="row.label" x-on:click="openItem" x-text="row.title"></a>
-			<p class="[ meta ]">
-				<span x-text="row.project"></span>
+		<div class="[ who ]">
+			<span class="[ avatar ]" aria-hidden="true" x-bind:data-who="row.whoKind" x-bind:data-agent="row.whoSlot" x-text="row.whoInitial"></span>
+			<span class="[ name ]" x-text="row.whoName"></span>
+			<span class="[ mode ]" x-show="row.hasWhoMode" x-text="row.whoMode"></span>
+		</div>
+		<div class="[ what ]">
+			<a class="[ title ]" data-item x-bind:href="row.href" x-bind:data-id="row.id" x-bind:aria-label="row.label" x-on:click="openItem">
+				<span class="[ icon ]" aria-hidden="true"></span>
+				<span class="[ text ]">
+					<template x-if="row.hasVerb">
+						<span><span class="[ verb ]" x-text="row.verb"></span> <span class="[ object ]" x-show="row.hasObject" x-bind:data-code="row.objectIsCode" x-text="row.objectText"></span></span>
+					</template>
+					<template x-if="!row.hasVerb">
+						<span class="[ verb ]" x-text="row.title"></span>
+					</template>
+				</span>
+			</a>
+			<p class="[ where ]">
+				<span class="[ project ]" x-text="row.project"></span>
 				<template x-if="row.hasTask">
 					<span class="[ task ]" x-text="row.task"></span>
 				</template>
-				<span class="[ level ]" x-show="row.levelLabel" x-text="row.levelLabel"></span>
-				<time x-bind:datetime="row.at" x-text="row.age"></time>
+				<template x-if="row.hasRepository">
+					<span class="[ repo ]" x-text="row.repository"></span>
+				</template>
 			</p>
-			<p class="[ body ]" x-show="row.body && !row.hasSessions" x-text="row.body"></p>
+		</div>
+		<div class="[ notes ]">
+			<p class="[ body ]" x-show="row.showBody" x-text="row.body"></p>
+			<ul role="list" class="[ interrupted-sessions ]" x-show="row.hasListed">
+				<template x-for="s in row.listed" x-bind:key="s.key">
+					<li x-bind:data-state="s.state">
+						<a x-bind:href="s.href" x-text="s.label"></a>
+						<span class="[ state ]" x-text="s.stateWord"></span>
+					</li>
+				</template>
+			</ul>
 			<ul role="list" class="[ interrupted-sessions ]" x-show="row.hasSessions">
 				<template x-for="s in row.sessions" x-bind:key="s.key">
 					<li x-bind:data-state="s.state">
@@ -237,11 +173,66 @@ templ NotificationLiveRow(actions bool) {
 				</template>
 			</ul>
 			if actions {
+				<button type="button" class="[ button ] [ acknowledge ]" data-size="sm" x-show="row.canAcknowledge" x-bind:data-id="row.id" x-bind:aria-label="row.ackLabel" x-on:click="acknowledge">Acknowledge</button>
 				<button type="button" class="[ button ] [ resume-all ]" data-size="sm" x-show="row.canResumeAll" x-bind:data-id="row.id" x-bind:disabled="resuming" x-bind:aria-busy="resuming" x-on:click="resumeAll">Resume all interrupted</button>
 			}
 		</div>
+		<div class="[ when ]">
+			<time x-bind:datetime="row.at" x-bind:title="row.fullDate"><span x-text="row.clock"></span><span class="[ age ]" x-text="row.age"></span></time>
+			<span class="[ standing ]" x-show="row.hasStatus" x-bind:data-tone="row.statusTone" x-text="row.statusText"></span>
+		</div>
 		<button type="button" class="[ button ] [ mark ]" data-variant="ghost" data-size="sm" x-show="row.unread" x-bind:data-id="row.id" x-bind:aria-label="row.markLabel" x-on:click="markOne">Mark read</button>
 	</article>
+}
+
+// NotificationStack is a folded stack of settled repeats (ADR 0097): a
+// native details element whose summary is the ledger row of the whole run
+// (who, "asked to push 6 times", the outcomes counted), and whose body lists
+// the notifications themselves. It lives in a notificationsPage x-for over
+// `stack`, with `head` (the summary row) and `rows` (the members).
+templ NotificationStack() {
+	<details class="[ stack ]">
+		<template x-for="row in stack.head" x-bind:key="row.key">
+			<summary x-bind:aria-label="row.label">
+				<article class="[ notification ]" data-layout="ledger" x-bind:data-kind="row.kind" data-level="action" data-state="settled">
+					<span class="[ marker ]" aria-hidden="true"></span>
+					<div class="[ who ]">
+						<span class="[ avatar ]" aria-hidden="true" x-bind:data-who="row.whoKind" x-bind:data-agent="row.whoSlot" x-text="row.whoInitial"></span>
+						<span class="[ name ]" x-text="row.whoName"></span>
+						<span class="[ mode ]" x-show="row.hasWhoMode" x-text="row.whoMode"></span>
+					</div>
+					<div class="[ what ]">
+						<span class="[ title ]">
+							<span class="[ icon ]" aria-hidden="true"></span>
+							<span class="[ text ]"><span class="[ count ]" x-text="row.count"></span> <span class="[ verb ]" x-text="row.verb"></span> <span class="[ object ]" x-show="row.hasObject" x-bind:data-code="row.objectIsCode" x-text="row.objectText"></span></span>
+						</span>
+						<p class="[ where ]">
+							<span class="[ project ]" x-text="row.project"></span>
+							<template x-if="row.hasTask">
+								<span class="[ task ]" x-text="row.task"></span>
+							</template>
+							<template x-if="row.hasRepository">
+								<span class="[ repo ]" x-text="row.repository"></span>
+							</template>
+						</p>
+					</div>
+					<div class="[ notes ]"></div>
+					<div class="[ when ]">
+						<time x-bind:datetime="row.at" x-bind:title="row.fullDate"><span x-text="row.clock"></span><span class="[ age ]" x-text="row.age"></span></time>
+						<span class="[ standing ]" data-tone="quiet" x-text="row.statusText"></span>
+					</div>
+					<span class="[ chev ]" aria-hidden="true"></span>
+				</article>
+			</summary>
+		</template>
+		<ul role="list" class="[ notification-list ]">
+			<template x-for="row in stack.rows" x-bind:key="row.id">
+				<li>
+					@NotificationLiveRow(true)
+				</li>
+			</template>
+		</ul>
+	</details>
 }
 
 // tasksToggle is the phone's way to the rail: the Tasks button, with how many
@@ -383,6 +374,14 @@ templ projectNav(r Rail) {
 					<a href={ templ.SafeURL(r.UsageHref) } { currentAttrs(r.Page == PageUsage)... }>
 						@icon("usage")
 						<span class="[ label ]">Usage</span>
+					</a>
+				</li>
+			}
+			if r.ProductOwnerHref != "" {
+				<li data-page="product-owner">
+					<a href={ templ.SafeURL(r.ProductOwnerHref) } { currentAttrs(r.Page == PageProductOwner)... }>
+						@icon("owner")
+						<span class="[ label ]">Product owner</span>
 					</a>
 				</li>
 			}

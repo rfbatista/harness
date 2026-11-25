@@ -1,7 +1,8 @@
-# Seed document and task comment
+# Seed document
 
-Both are for the person: write them in clear, complete sentences. Both are overwritten on a
-rerun. Never add a second copy.
+The Seed document is for the person: write it in clear, complete sentences. It is the only
+file you write, and it is overwritten on a rerun. Never add a second copy and write no task
+comment.
 
 ## Seed document
 
@@ -27,9 +28,9 @@ Say whether the schema came from boot migrations or from a command (name it).
 One section per scenario, in the order of the Spec and the Tickets. A scenario with nothing
 to seed says so and why.
 
-## Task comment
+## Test credentials
 
-A file in `task/comments/`, `run-app.md`. Its content:
+The last section of the Seed document:
 
 ```
 ## Test credentials
@@ -48,4 +49,9 @@ A file in `task/comments/`, `run-app.md`. Its content:
 ```
 
 The password and the login are in clear: they are test values on a home cluster. If the run
-command reads `.env` from disk, say so here. Follow the Seed document: "See the Seed: <task title> document for each scenario".
+command reads `.env` from disk, say so here.
+
+## Pointer comment
+
+Only when the task has no architect: one short file in `task/comments/` that names the Seed
+document. It never holds the credentials.

@@ -605,75 +605,89 @@ func SettingsPage(v SettingsView) templ.Component {
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
+			if v.AgentCredential != nil {
+				templ_7745c5c3_Err = agentCredentialSection(*v.AgentCredential).Render(ctx, templ_7745c5c3_Buffer)
+				if templ_7745c5c3_Err != nil {
+					return templ_7745c5c3_Err
+				}
+			}
 			if v.TokenSavers != nil {
 				templ_7745c5c3_Err = tokensavers.Section(*v.TokenSavers).Render(ctx, templ_7745c5c3_Buffer)
 				if templ_7745c5c3_Err != nil {
 					return templ_7745c5c3_Err
 				}
 			}
-			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 43, "<section class=\"[ flow ] [ flow-space-s ]\" aria-labelledby=\"settings-repositories\"><h2 id=\"settings-repositories\">Repositories and their settings</h2><div class=\"[ pane ]\"><a class=\"[ row ]\" href=\"")
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 43, "<section id=\"product-owner\" class=\"[ flow ] [ flow-space-s ]\" aria-labelledby=\"settings-product-owner\"><h2 id=\"settings-product-owner\">Product owner</h2><div data-island=\"owner-settings\" data-island-rendered=\"false\"></div>")
+			if templ_7745c5c3_Err != nil {
+				return templ_7745c5c3_Err
+			}
+			templ_7745c5c3_Err = shell.PropsScript("owner-settings", ownerSettingsProps(v.Project.ID)).Render(ctx, templ_7745c5c3_Buffer)
+			if templ_7745c5c3_Err != nil {
+				return templ_7745c5c3_Err
+			}
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 44, "</section><section class=\"[ flow ] [ flow-space-s ]\" aria-labelledby=\"settings-repositories\"><h2 id=\"settings-repositories\">Repositories and their settings</h2><div class=\"[ pane ]\"><a class=\"[ row ]\" href=\"")
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
 			var templ_7745c5c3_Var29 templ.SafeURL
 			templ_7745c5c3_Var29, templ_7745c5c3_Err = templ.JoinURLErrs(templ.SafeURL(v.RepositoriesHref))
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `projects/manage.templ`, Line: 210, Col: 66}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `projects/manage.templ`, Line: 218, Col: 66}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var29))
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
-			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 44, "\" style=\"--row-columns: minmax(0, 1fr) auto\"><span class=\"[ title ]\">Repositories</span> <span class=\"[ meta ]\">")
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 45, "\" style=\"--row-columns: minmax(0, 1fr) auto\"><span class=\"[ title ]\">Repositories</span> <span class=\"[ meta ]\">")
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
 			var templ_7745c5c3_Var30 string
 			templ_7745c5c3_Var30, templ_7745c5c3_Err = templ.JoinStringErrs(countOrNone(len(v.Repositories), "repository", "repositories"))
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `projects/manage.templ`, Line: 212, Col: 95}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `projects/manage.templ`, Line: 220, Col: 95}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var30))
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
-			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 45, " →</span></a> ")
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 46, " →</span></a> ")
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
 			for _, r := range v.Repositories {
-				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 46, "<a class=\"[ row ]\" href=\"")
+				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 47, "<a class=\"[ row ]\" href=\"")
 				if templ_7745c5c3_Err != nil {
 					return templ_7745c5c3_Err
 				}
 				var templ_7745c5c3_Var31 templ.SafeURL
 				templ_7745c5c3_Var31, templ_7745c5c3_Err = templ.JoinURLErrs(templ.SafeURL(r.EnvHref))
 				if templ_7745c5c3_Err != nil {
-					return templ.Error{Err: templ_7745c5c3_Err, FileName: `projects/manage.templ`, Line: 215, Col: 58}
+					return templ.Error{Err: templ_7745c5c3_Err, FileName: `projects/manage.templ`, Line: 223, Col: 58}
 				}
 				_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var31))
 				if templ_7745c5c3_Err != nil {
 					return templ_7745c5c3_Err
 				}
-				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 47, "\" style=\"--row-columns: minmax(0, 1fr) auto\"><span class=\"[ title ]\">Settings of ")
+				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 48, "\" style=\"--row-columns: minmax(0, 1fr) auto\"><span class=\"[ title ]\">Settings of ")
 				if templ_7745c5c3_Err != nil {
 					return templ_7745c5c3_Err
 				}
 				var templ_7745c5c3_Var32 string
 				templ_7745c5c3_Var32, templ_7745c5c3_Err = templ.JoinStringErrs(r.Name)
 				if templ_7745c5c3_Err != nil {
-					return templ.Error{Err: templ_7745c5c3_Err, FileName: `projects/manage.templ`, Line: 216, Col: 53}
+					return templ.Error{Err: templ_7745c5c3_Err, FileName: `projects/manage.templ`, Line: 224, Col: 53}
 				}
 				_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var32))
 				if templ_7745c5c3_Err != nil {
 					return templ_7745c5c3_Err
 				}
-				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 48, "</span> <span class=\"[ meta ]\">→</span></a>")
+				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 49, "</span> <span class=\"[ meta ]\">→</span></a>")
 				if templ_7745c5c3_Err != nil {
 					return templ_7745c5c3_Err
 				}
 			}
-			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 49, "</div></section>")
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 50, "</div></section>")
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
@@ -681,7 +695,7 @@ func SettingsPage(v SettingsView) templ.Component {
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
-			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 50, "</div></div></main>")
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 51, "</div></div></main>")
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
@@ -718,20 +732,20 @@ func dangerZone(v SettingsView) templ.Component {
 			templ_7745c5c3_Var33 = templ.NopComponent
 		}
 		ctx = templ.ClearChildren(ctx)
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 51, "<section class=\"[ pane ]\" data-tone=\"danger\" aria-labelledby=\"settings-danger\"><header><span id=\"settings-danger\">Danger zone</span></header><div class=\"[ flow ] [ flow-space-s ]\" style=\"padding: var(--space-l)\"><p class=\"[ text-sm ]\">Deleting <b x-text=\"project.name\">")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 52, "<section class=\"[ pane ]\" data-tone=\"danger\" aria-labelledby=\"settings-danger\"><header><span id=\"settings-danger\">Danger zone</span></header><div class=\"[ flow ] [ flow-space-s ]\" style=\"padding: var(--space-l)\"><p class=\"[ text-sm ]\">Deleting <b x-text=\"project.name\">")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
 		var templ_7745c5c3_Var34 string
 		templ_7745c5c3_Var34, templ_7745c5c3_Err = templ.JoinStringErrs(v.Project.Name)
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `projects/manage.templ`, Line: 235, Col: 76}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `projects/manage.templ`, Line: 243, Col: 76}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var34))
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 52, "</b> removes its tasks, documents, design assets and session history from the harness. Files on disk stay. This cannot be undone.</p><template x-if=\"refusal\"><div class=\"[ banner ]\" data-tone=\"danger\" role=\"alert\"><div class=\"[ flow ] [ flow-space-2xs grow ]\"><span x-text=\"refusal.message\"></span> <span class=\"[ code ]\"><span x-text=\"refusal.code\"></span> · <span x-text=\"refusal.next\"></span></span><ul class=\"[ flow ] [ flow-space-3xs ]\" style=\"padding-inline-start: 1rem\"><template x-for=\"s in refusal.sessions\" x-bind:key=\"s.id\"><li><template x-if=\"s.href\"><a x-bind:href=\"s.href\" x-text=\"s.label\"></a></template><template x-if=\"!s.href\"><span x-text=\"s.label\"></span></template><span class=\"[ color-ink-faint ]\" x-text=\"s.detail\"></span></li></template></ul></div></div></template><template x-if=\"!confirmingDelete\"><div><button type=\"button\" class=\"[ button ]\" data-variant=\"danger\" disabled x-bind:disabled=\"cannotAskDelete\" x-on:click=\"askDelete\">Delete project…</button></div></template><template x-if=\"confirmingDelete\"><form class=\"[ flow ] [ flow-space-s ]\" x-on:submit.prevent=\"deleteProject\" x-on:keydown.escape=\"cancelDelete\"><div class=\"[ field ]\"><label for=\"confirm-name\">Type <span class=\"[ font-mono ]\" x-text=\"project.name\"></span> to confirm</label> <input id=\"confirm-name\" class=\"[ font-mono text-sm ]\" autocomplete=\"off\" spellcheck=\"false\" x-ref=\"confirmName\" x-model=\"typedName\"></div><div class=\"[ cluster ]\"><button type=\"submit\" class=\"[ button ]\" data-variant=\"danger\" x-bind:disabled=\"!canDelete\" x-bind:aria-busy=\"deleting\">Delete <span x-text=\"project.name\"></span></button> <button type=\"button\" class=\"[ button ]\" data-variant=\"ghost\" x-on:click=\"cancelDelete\">Keep it</button></div></form></template></div></section>")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 53, "</b> removes its tasks, documents, design assets and session history from the harness. Files on disk stay. This cannot be undone.</p><template x-if=\"refusal\"><div class=\"[ banner ]\" data-tone=\"danger\" role=\"alert\"><div class=\"[ flow ] [ flow-space-2xs grow ]\"><span x-text=\"refusal.message\"></span> <span class=\"[ code ]\"><span x-text=\"refusal.code\"></span> · <span x-text=\"refusal.next\"></span></span><ul class=\"[ flow ] [ flow-space-3xs ]\" style=\"padding-inline-start: 1rem\"><template x-for=\"s in refusal.sessions\" x-bind:key=\"s.id\"><li><template x-if=\"s.href\"><a x-bind:href=\"s.href\" x-text=\"s.label\"></a></template><template x-if=\"!s.href\"><span x-text=\"s.label\"></span></template><span class=\"[ color-ink-faint ]\" x-text=\"s.detail\"></span></li></template></ul></div></div></template><template x-if=\"!confirmingDelete\"><div><button type=\"button\" class=\"[ button ]\" data-variant=\"danger\" disabled x-bind:disabled=\"cannotAskDelete\" x-on:click=\"askDelete\">Delete project…</button></div></template><template x-if=\"confirmingDelete\"><form class=\"[ flow ] [ flow-space-s ]\" x-on:submit.prevent=\"deleteProject\" x-on:keydown.escape=\"cancelDelete\"><div class=\"[ field ]\"><label for=\"confirm-name\">Type <span class=\"[ font-mono ]\" x-text=\"project.name\"></span> to confirm</label> <input id=\"confirm-name\" class=\"[ font-mono text-sm ]\" autocomplete=\"off\" spellcheck=\"false\" x-ref=\"confirmName\" x-model=\"typedName\"></div><div class=\"[ cluster ]\"><button type=\"submit\" class=\"[ button ]\" data-variant=\"danger\" x-bind:disabled=\"!canDelete\" x-bind:aria-busy=\"deleting\">Delete <span x-text=\"project.name\"></span></button> <button type=\"button\" class=\"[ button ]\" data-variant=\"ghost\" x-on:click=\"cancelDelete\">Keep it</button></div></form></template></div></section>")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}

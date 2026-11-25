@@ -81,7 +81,7 @@ func TestHTTP_ArchivedWorktreesPreviewAnswersTheContractsShape(t *testing.T) {
 	req := httptest.NewRequest(http.MethodGet, "/api/archived_worktrees?project_id=p", nil)
 	rec := httptest.NewRecorder()
 	NewRouter(&Handler{archivedTrees: f}).ServeHTTP(rec, req)
-	if rec.Code != http.StatusOK || f.scope.ProjectID != "p" || strings.TrimSpace(rec.Body.String()) != `{"worktrees":7,"dirty":2,"running":1}` {
+	if rec.Code != http.StatusOK || f.scope.ProjectID != "p" || strings.TrimSpace(rec.Body.String()) != `{"worktrees":7,"dirty":2,"running":1,"shared":0}` {
 		t.Fatalf("%d %s scope=%+v", rec.Code, rec.Body, f.scope)
 	}
 	f.err = &domain.StructuredError{Code: "TASK_NOT_ARCHIVED", Message: "m"}

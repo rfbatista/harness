@@ -35,12 +35,13 @@ func TestParseSessionMode(t *testing.T) {
 	}
 }
 
-// Product is the only mode that runs without a task: every other mode,
-// the default included, needs one.
+// Product, design system and product owner run without a task: every other
+// mode, the default included, needs one.
 func TestSessionMode_NeedsTask(t *testing.T) {
 	for mode, want := range map[SessionMode]bool{
 		SessionModeDefault: true, SessionModeArchitect: true, SessionModeImplement: true, SessionModeDesign: true,
 		SessionModeProduct: false, SessionModeReview: true, SessionModeTest: true, SessionModeQA: true, SessionModeOperate: true,
+		SessionModeProductOwner: false,
 	} {
 		if got := mode.NeedsTask(); got != want {
 			t.Errorf("SessionMode(%q).NeedsTask() = %v, want %v", mode, got, want)
@@ -55,5 +56,16 @@ func TestSandboxVisibilityForVerificationModesIsOwnRepo(t *testing.T) {
 		if got := SandboxVisibilityFor(mode); got != SandboxOwnRepo {
 			t.Errorf("SandboxVisibilityFor(%q) = %q; want %q", mode, got, SandboxOwnRepo)
 		}
+	}
+}
+
+// A product-owner thread reads every repository of its project, and a client
+// cannot start one as a session mode of its own.
+func TestProductOwnerModeSeesEveryRepositoryAndIsNotStartedByAClient(t *testing.T) {
+	if got := SandboxVisibilityFor(SessionModeProductOwner); got != SandboxAllReposReadOnly {
+		t.Errorf("SandboxVisibilityFor(productowner) = %q; want %q", got, SandboxAllReposReadOnly)
+	}
+	if _, err := ParseSessionMode("productowner"); err == nil {
+		t.Error("ParseSessionMode accepted productowner: only the product owner service starts its threads")
 	}
 }

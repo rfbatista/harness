@@ -83,13 +83,20 @@ test("a notification without its optional fields reads them as empty", () => {
   assert.ok(Object.isFrozen(n));
 });
 
-test("the branch gate's notifications map; any other unknown kind is still BAD_RESPONSE", () => {
+test("the branch gate's and the services' notifications map", () => {
   const dto = notificationDTO(makeNotification());
-  for (const kind of ["branch_request", "branch_finding"]) {
+  for (const kind of ["branch_request", "branch_finding", "service_request"]) {
     const n = toNotification({ ...dto, kind, level: "action", link: "/projects/p1/tasks/t1?session=s1#branch-request-r1" });
     assert.equal(n.kind, kind);
   }
-  assert.throws(() => toNotification({ ...dto, kind: "branch_gossip" }), Codes.BAD_RESPONSE);
+});
+
+test("a kind this client does not know reads as a generic notification and leaves the rest of the list whole", () => {
+  const dto = notificationDTO(makeNotification());
+  const n = toNotification({ ...dto, kind: "branch_gossip", level: "action", title: "Something new", body: "Details", link: "/projects/p1" });
+  assert.deepEqual([n.kind, n.level, n.title, n.body, n.link], ["agent", "action", "Something new", "Details", "/projects/p1"]);
+  const page = toPage({ notifications: [dto, { ...dto, id: "n2", kind: "gossip" }, { ...dto, id: "n3", kind: "service_request" }], unread_count: 3 });
+  assert.deepEqual(page.notifications.map((x) => x.kind), [dto.kind, "agent", "service_request"]);
 });
 
 test("a sessions_interrupted notification maps its list, whose entries default their optional fields", () => {
@@ -104,14 +111,13 @@ test("a sessions_interrupted notification maps its list, whose entries default t
   assert.equal(n.kind, "sessions_interrupted");
   assert.deepEqual(n.interruptedSessions.map((s) => [s.sessionId, s.state, s.reason, s.taskTitle]), [["s1", "failed", "worktree gone", "Ship"], ["s2", "interrupted", "", ""]]);
   assert.deepEqual(toNotification(dto).interruptedSessions, []);
-  assert.throws(() => toNotification({ ...dto, interrupted_sessions: [{ session_id: "s1", link: "/p", state: "lost" }] }), Codes.BAD_RESPONSE);
-  assert.throws(() => toNotification({ ...dto, interrupted_sessions: [{ session_id: "s1", link: "https://x", state: "gone" }] }), Codes.BAD_RESPONSE);
+  assert.deepEqual(toNotification({ ...dto, interrupted_sessions: [{ session_id: "s1", link: "/p", state: "lost" }] }).interruptedSessions, [], "a bad state drops that session");
+  assert.deepEqual(toNotification({ ...dto, interrupted_sessions: [{ session_id: "s1", link: "https://x", state: "gone" }] }).interruptedSessions, [], "a link off the web UI drops it");
 });
 
 test("a malformed notification or answer is BAD_RESPONSE; a link off the web UI is refused", () => {
   const dto = notificationDTO(makeNotification());
   assert.throws(() => toNotification({ ...dto, id: "" }), Codes.BAD_RESPONSE);
-  assert.throws(() => toNotification({ ...dto, kind: "gossip" }), Codes.BAD_RESPONSE);
   assert.throws(() => toNotification({ ...dto, level: "urgent" }), Codes.BAD_RESPONSE);
   assert.throws(() => toNotification({ ...dto, source: "person" }), Codes.BAD_RESPONSE);
   assert.throws(() => toNotification({ ...dto, created_at: "" }), Codes.BAD_RESPONSE);
@@ -124,4 +130,51 @@ test("a malformed notification or answer is BAD_RESPONSE; a link off the web UI 
   assert.throws(() => toReadAnswer({ notifications: [] }), Codes.BAD_RESPONSE);
   assert.throws(() => toStreamChange({ notifications: [], unread_count: 0 }), Codes.BAD_RESPONSE); // the stream says changed
   assert.equal(toPage({ notifications: [], unread_count: 3 }).nextBefore, "");
+});
+
+test("revision 6 fields map: the actor, the verb and object, the repository, the outcome and the listed sessions", () => {
+  const dto = notificationDTO(makeNotification());
+  const n = toNotification({
+    ...dto, kind: "commit_check_off", level: "action", resolved_at: "2026-10-09T15:00:00Z", outcome: "repaired",
+    actor: { kind: "system", name: "harness" }, verb: "could not guard 2 sessions", object: { text: "commit checks off", code: false }, repository_name: "api",
+    listed_sessions: [{ session_id: "s1", task_id: "t1", task_title: "Ship", agent_name: "go-developer", link: "/projects/p1/tasks/t1?session=s1", state: "off" }, { session_id: "s2", agent_name: "devops", link: "/projects/p1?session=s2", state: "ended" }],
+  });
+  assert.deepEqual([n.actor.kind, n.actor.name, n.actor.mode, n.verb, n.object.text, n.object.code, n.repositoryName, n.outcome], ["system", "harness", "", "could not guard 2 sessions", "commit checks off", false, "api", "repaired"]);
+  assert.deepEqual(n.listedSessions.map((s) => [s.sessionId, s.taskTitle, s.agentName, s.state]), [["s1", "Ship", "go-developer", "off"], ["s2", "", "devops", "ended"]]);
+  const agent = toNotification({ ...dto, actor: { kind: "agent", name: "devops", mode: "operate", session_id: "s9" } });
+  assert.deepEqual([agent.actor.kind, agent.actor.mode, agent.actor.sessionId], ["agent", "operate", "s9"]);
+});
+
+test("revision 5 data has no actor, and unknown actor kinds and outcomes do not take the list down", () => {
+  const dto = notificationDTO(makeNotification());
+  const old = toNotification(dto);
+  assert.deepEqual([old.actor.name, old.actor.kind, old.verb, old.object, old.repositoryName, old.outcome, old.listedSessions], ["harness", "system", "", null, "", "", []]);
+  const odd = toNotification({ ...dto, actor: { kind: "robot", name: "x" }, outcome: "vaporised" });
+  assert.deepEqual([odd.actor.kind, odd.actor.name, odd.outcome], ["system", "x", ""]);
+  assert.deepEqual(toNotification({ ...dto, listed_sessions: [{ session_id: "s", link: "https://x", state: "off" }] }).listedSessions, [], "a listed session with a bad link is dropped");
+});
+
+test("open_count maps on a page, a read answer and a stream message, and is null when the server sends none", () => {
+  assert.equal(toPage({ notifications: [], unread_count: 3, open_count: 2 }).openCount, 2);
+  assert.equal(toPage({ notifications: [], unread_count: 3 }).openCount, null);
+  assert.equal(toReadAnswer({ notifications: [], unread_count: 3, open_count: 0 }).openCount, 0);
+  assert.equal(toStreamChange({ changed: [], unread_count: 1, open_count: 4 }).openCount, 4);
+  assert.equal(toStreamChange({ changed: [], unread_count: 1 }).openCount, null);
+  assert.throws(() => toPage({ notifications: [], unread_count: 1, open_count: -1 }), Codes.BAD_RESPONSE);
+});
+
+test("one malformed listed or interrupted session is dropped; it never fails the page", () => {
+  const dto = notificationDTO(makeNotification());
+  const good = { session_id: "s1", agent_name: "devops", link: "/projects/p1?session=s1", state: "off" };
+  const page = toPage({
+    notifications: [
+      { ...dto, id: "c1", kind: "commit_check_off", listed_sessions: [good, { ...good, session_id: "s2", link: "https://evil.test/" }, { ...good, session_id: "" }] },
+      { ...dto, id: "i1", kind: "sessions_interrupted", interrupted_sessions: [{ session_id: "s3", link: "/p", state: "interrupted" }, { session_id: "s4", link: "/p", state: "lost" }, { session_id: "s5", link: "//evil", state: "failed" }] },
+      dto,
+    ],
+    unread_count: 3,
+  });
+  assert.deepEqual(page.notifications.map((n) => n.id), ["c1", "i1", dto.id]);
+  assert.deepEqual(page.notifications[0].listedSessions.map((s) => s.sessionId), ["s1"]);
+  assert.deepEqual(page.notifications[1].interruptedSessions.map((s) => s.sessionId), ["s3"]);
 });

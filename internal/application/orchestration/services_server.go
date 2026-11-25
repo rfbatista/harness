@@ -22,10 +22,15 @@ func namesServicesServer(agent *domain.Agent, project *domain.Project) bool {
 }
 
 // applyServicesServer gives the session the services server with its tools
-// allowed, when its agent or project names it and the host serves one. A
-// session keeps what it started with.
-func (s *Service) applyServicesServer(cfg *llmkit.SessionConfig, sessionID string, agent *domain.Agent, project *domain.Project) {
-	if s.ServicesServerURL == nil || !namesServicesServer(agent, project) {
+// allowed, when its mode is operate or qa (ADR 0094) or its agent or project
+// names it, and the host serves one. A session keeps what it started with.
+func (s *Service) applyServicesServer(cfg *llmkit.SessionConfig, sessionID string, mode domain.SessionMode, agent *domain.Agent, project *domain.Project) {
+	// Service requests are writes, and the product owner changes nothing yet
+	// (ADR 0109): no agent or project setting gives it the services server.
+	if mode == domain.SessionModeProductOwner {
+		return
+	}
+	if s.ServicesServerURL == nil || !(mode == domain.SessionModeOperate || mode == domain.SessionModeQA || namesServicesServer(agent, project)) {
 		return
 	}
 	cfg.MCPServers = append(cfg.MCPServers, llmkit.MCPServerSpec{

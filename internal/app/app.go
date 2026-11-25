@@ -100,6 +100,11 @@ type Config struct {
 	// ProfilerOff stops the HTTP server serving Go's profiler under
 	// /debug/pprof/. Left false, the profiler answers loopback peers only.
 	ProfilerOff bool
+	// DigestClock is the clock the product owner's daily digest reads, and
+	// DigestEvery how often its scheduler looks at the projects; a test sets
+	// them. Zero values read the real time and tick once a minute.
+	DigestClock func() time.Time
+	DigestEvery time.Duration
 }
 
 // inMemory reports whether the database lives in memory only.
@@ -160,6 +165,7 @@ func New(cfg Config) *fx.App {
 		TextProcessingModule,
 		ToolingModule,
 		TokenSaversModule,
+		ProductOwnerModule,
 		ServerModule,
 		fx.WithLogger(func() fxevent.Logger {
 			return &fxevent.SlogLogger{Logger: slog.Default()}
@@ -188,9 +194,10 @@ func Validate(cfg Config) error {
 		TextProcessingModule,
 		ToolingModule,
 		TokenSaversModule,
+		ProductOwnerModule,
 		ServerModule,
 	)
 }
 
 // stopTimeout bounds graceful shutdown: servers drain, sessions stop, DB closes.
-const stopTimeout = 15 * time.Second
+const stopTimeout = 25 * time.Second

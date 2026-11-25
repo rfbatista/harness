@@ -22,6 +22,7 @@ func TestBranchBlocks(t *testing.T) {
 		{SessionModeTest, "branches.block.mode.test", "Tester", true},
 		{SessionModeQA, "branches.block.mode.qa", "QA", true},
 		{SessionModeOperate, "branches.block.mode.operate", "Operator", true},
+		{SessionModeProductOwner, "branches.block.mode.productowner", "Product owner", true},
 	}
 	if len(got) != len(want) {
 		t.Fatalf("BranchBlocks = %+v; want %d rows", got, len(want))

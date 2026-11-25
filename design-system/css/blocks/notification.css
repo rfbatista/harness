@@ -1,17 +1,24 @@
 /*
  * Notification — one item of the inbox, in the top bar's panel and on the
- * notifications page: a marker, the title (a link to where it points), the
- * project · task, the level, the age, the plain-text body, and Mark read.
- * <article class="notification" data-level="action" data-state="unread">
+ * notifications page, as a ledger row (ADR 0095): who | what | when.
+ * <article class="notification" data-layout="ledger" data-kind data-level="action|info"
+ *          data-state="unread|read|settled" data-compact?>
  *   <span class="marker"></span>
- *   <div class="text"><a class="title" href>…</a>
- *     <p class="meta"><span>harness</span><span class="task">…</span><span class="level">Needs you</span><time>5m</time></p>
- *     <p class="body">…</p></div>
+ *   <div class="who"><span class="avatar" data-agent="0..7" | data-who="system">f</span>
+ *     <span class="name"></span><span class="mode"></span></div>
+ *   <div class="what"><a class="title"><span class="icon"></span><span class="text">
+ *       <span class="verb"></span> <span class="object" data-code></span></span></a>
+ *     <p class="where"><span class="project"></span><span class="task"></span><span class="repo"></span></p></div>
+ *   <div class="notes"><p class="body"></p></div>
+ *   <div class="when"><time><span>17:42</span><span class="age">3h</span></time>
+ *     <span class="standing" data-tone="attention|danger|success|quiet">Needs you</span></div>
  *   <button class="button mark">Mark read</button></article>
- * Exceptions: data-level="action|info"; data-state="unread|read|settled".
- * Unread is a filled dot (a shape, not only a colour); action adds the amber
- * rule and the "Needs you" label; settled is muted and says "Settled".
+ * Unread is a filled dot (a shape, not only a colour); an open cause adds the
+ * amber edge and wash and says "Needs you"; a settled one is quiet and says
+ * how it ended. The popover and any list narrower than 44rem use the compact
+ * form: who and when on line one, what under them.
  *
+ * The page adds .inbox-tabs (Needs you / Unread / All) and .group > .ghead.
  * .notification-list stacks them; .notifications is the top bar's bell and
  * .notifications-panel the popup it discloses (a sheet on phones).
  */
@@ -22,6 +29,7 @@
     margin: 0;
     padding: 0;
     list-style: none;
+    container-type: inline-size;
 
     & > li { max-inline-size: none; }
     & > li + li { border-block-start: var(--border-width) solid var(--color-line); }
@@ -30,10 +38,13 @@
   .notification {
     --_rule: transparent;
 
+    position: relative;
     display: grid;
-    grid-template-columns: 0.5rem minmax(0, 1fr) auto;
     align-items: start;
-    gap: var(--space-s);
+    column-gap: var(--space-m);
+    row-gap: var(--space-3xs);
+    grid-template-columns: 0.5rem 10.5rem minmax(0, 1fr) 8rem 6rem;
+    grid-template-areas: "dot who what when mark" "dot who more when mark";
     padding: var(--space-s) var(--space-m);
     box-shadow: inset 3px 0 0 var(--_rule);
 
@@ -42,63 +53,170 @@
       background: var(--color-attention-wash);
     }
 
-    & .marker {
+    & > .marker {
+      grid-area: dot;
       inline-size: 0.5rem;
       block-size: 0.5rem;
-      margin-block-start: 0.45em;
+      margin-block-start: 0.5em;
       border: var(--border-icon-width) solid transparent;
       border-radius: 50%;
     }
-    &[data-state="unread"] .marker {
+    &[data-state="unread"] > .marker {
       border-color: var(--color-signal);
       background: var(--color-signal);
     }
-    &[data-state="unread"][data-level="action"] .marker {
+    &[data-state="unread"][data-level="action"] > .marker {
       border-color: var(--color-attention-strong);
       background: var(--color-attention-strong);
     }
 
-    & .text { display: grid; gap: var(--space-3xs); min-inline-size: 0; }
-
-    & .title {
-      color: var(--color-ink);
-      font-weight: var(--weight-medium);
-      text-decoration: none;
-      overflow-wrap: anywhere;
-      &:hover { text-decoration: underline; }
+    /* WHO: the agent's initial in its colour, its name, the session's mode under it. */
+    & > .who {
+      grid-area: who;
+      display: grid;
+      grid-template-columns: 1.5rem minmax(0, 1fr);
+      column-gap: var(--space-xs);
+      align-items: center;
+      min-inline-size: 0;
     }
-    &[data-state="unread"] .title { font-weight: var(--weight-bold); }
+    & .avatar {
+      --_c: var(--color-agent-6);
 
-    & .meta {
+      grid-row: span 2;
+      display: inline-grid;
+      place-items: center;
+      inline-size: 1.5rem;
+      block-size: 1.5rem;
+      border-radius: 50%;
+      background: color-mix(in oklch, var(--_c) 18%, transparent);
+      color: var(--_c);
+      border: 1px solid color-mix(in oklch, var(--_c) 45%, transparent);
+      font-size: var(--text-xs);
+      font-weight: var(--weight-bold);
+      line-height: 1;
+      text-transform: uppercase;
+
+      &[data-who="system"] { --_c: var(--color-ink-muted); border-style: dashed; }
+      &[data-who="person"] { --_c: var(--color-ink); }
+      &[data-agent="0"] { --_c: var(--color-agent-0); }
+      &[data-agent="1"] { --_c: var(--color-agent-1); }
+      &[data-agent="2"] { --_c: var(--color-agent-2); }
+      &[data-agent="3"] { --_c: var(--color-agent-3); }
+      &[data-agent="4"] { --_c: var(--color-agent-4); }
+      &[data-agent="5"] { --_c: var(--color-agent-5); }
+      &[data-agent="6"] { --_c: var(--color-agent-6); }
+      &[data-agent="7"] { --_c: var(--color-agent-7); }
+    }
+    & .who .name {
+      font-weight: var(--weight-medium);
+      font-size: var(--text-sm);
+      line-height: var(--leading-tight);
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+    & .who .mode {
+      color: var(--color-ink-faint);
+      font-size: var(--text-xs);
+      line-height: var(--leading-tight);
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    /* WHAT: the kind's glyph, the verb and the object, then where. */
+    & > .what { grid-area: what; min-inline-size: 0; display: grid; gap: var(--space-3xs); }
+    & .title {
+      display: flex;
+      gap: var(--space-xs);
+      align-items: baseline;
+      color: var(--color-ink);
+      text-decoration: none;
+      font-weight: var(--weight-regular);
+      line-height: var(--leading-snug);
+
+      & .icon {
+        align-self: center;
+        flex: none;
+        inline-size: 1rem;
+        block-size: 1rem;
+        background: var(--color-ink-muted);
+        mask: var(--_glyph, var(--glyph-agent)) center / contain no-repeat;
+      }
+      & .text { min-inline-size: 0; overflow-wrap: anywhere; }
+      &:hover .verb { text-decoration: underline; }
+      & .verb, & .object { font-weight: var(--weight-medium); }
+      & .object[data-code="true"] {
+        font-family: var(--font-mono);
+        font-weight: var(--weight-regular);
+        font-size: 0.92em;
+      }
+    }
+    &[data-state="unread"] .title .verb,
+    &[data-state="unread"] .title .object { font-weight: var(--weight-bold); }
+    &[data-state="read"]:not([data-level="action"]) .title .verb { font-weight: var(--weight-regular); }
+
+    & .where {
       display: flex;
       flex-wrap: wrap;
-      align-items: baseline;
       gap: 0 var(--space-xs);
       max-inline-size: none;
       margin: 0;
       color: var(--color-ink-muted);
       font-size: var(--text-xs);
 
-      & > .task::before { content: "· "; }
-      & > .level { color: var(--color-attention-strong); font-weight: var(--weight-medium); }
-      & > time { margin-inline-start: auto; color: var(--color-ink-faint); }
+      & .task::before { content: "›"; margin-inline-end: var(--space-xs); color: var(--color-ink-faint); }
+      & .repo::before { content: "·"; margin-inline-end: var(--space-xs); color: var(--color-ink-faint); }
     }
 
+    & > .notes { grid-area: more; min-inline-size: 0; }
     & .body {
       margin: 0;
       color: var(--color-ink-muted);
       font-size: var(--text-sm);
       white-space: pre-line;
       overflow-wrap: anywhere;
+      display: -webkit-box;
+      -webkit-box-orient: vertical;
+      -webkit-line-clamp: 2;
+      overflow: hidden;
+    }
+    &[data-state="unread"] .body { color: var(--color-ink); }
+
+    /* WHEN: the clock and the age, and where it stands under them. */
+    & > .when {
+      grid-area: when;
+      display: grid;
+      justify-items: end;
+      gap: var(--space-3xs);
+      text-align: end;
+      font-size: var(--text-xs);
+      color: var(--color-ink-muted);
+
+      & time { color: var(--color-ink); font-weight: var(--weight-medium); font-variant-numeric: tabular-nums; }
+      & time .age { color: var(--color-ink-faint); font-weight: var(--weight-regular); margin-inline-start: var(--space-2xs); }
+      & .standing { font-weight: var(--weight-medium); }
+      & .standing[data-tone="attention"] { color: var(--color-attention-strong); }
+      & .standing[data-tone="danger"] { color: var(--color-danger); }
+      & .standing[data-tone="success"] { color: var(--color-success); }
+      & .standing[data-tone="quiet"] { color: var(--color-ink-faint); font-weight: var(--weight-regular); }
     }
 
-    & > .mark { align-self: center; }
+    & > .mark { grid-area: mark; align-self: center; justify-self: end; opacity: 0; }
+    &:hover > .mark, &:focus-within > .mark { opacity: 1; }
+
+    /* Settled: quiet. */
+    &[data-state="settled"] {
+      & .title .verb, & .title .object, & .who .name { color: var(--color-ink-muted); font-weight: var(--weight-regular); }
+      & > .when time { color: var(--color-ink-muted); font-weight: var(--weight-regular); }
+      & .avatar { opacity: 0.6; }
+    }
 
     /* A sessions_interrupted item: the sessions a restart interrupted, each with where it stands. */
     & .interrupted-sessions {
       display: grid;
       gap: var(--space-3xs);
-      margin: 0;
+      margin: var(--space-2xs) 0 0;
       padding: 0;
       list-style: none;
       font-size: var(--text-sm);
@@ -112,28 +230,69 @@
       }
       & .state { color: var(--color-ink-muted); font-size: var(--text-xs); }
       & > li[data-state="failed"] .state { color: var(--color-danger); font-weight: var(--weight-medium); }
-      & > li[data-state="resumed"] .state { color: var(--color-ink-faint); }
+      & > li[data-state="resumed"] .state,
+      & > li[data-state="repaired"] .state,
+      & > li[data-state="ended"] .state { color: var(--color-ink-faint); }
+      & > li[data-state="off"] .state { color: var(--color-attention-strong); font-weight: var(--weight-medium); }
       & .reason { flex-basis: 100%; color: var(--color-ink-muted); font-size: var(--text-xs); }
     }
-    & .resume-all { justify-self: start; margin-block-start: var(--space-2xs); }
+    & .resume-all, & .acknowledge { justify-self: start; margin-block-start: var(--space-2xs); }
 
-    &[data-state="settled"] {
-      & .title { color: var(--color-ink-muted); font-weight: var(--weight-regular); }
-      & .meta > .level { color: var(--color-ink-faint); }
+    /* Compact: the popover, and any list narrower than 44rem. */
+    &[data-compact] {
+      grid-template-columns: 0.5rem minmax(0, 1fr) auto;
+      grid-template-areas: "dot who when" "dot what what" "dot more more" "dot mark mark";
+      column-gap: var(--space-s);
+
+      & > .who { display: flex; align-items: center; gap: var(--space-xs); }
+      & .avatar { inline-size: 1.25rem; block-size: 1.25rem; font-size: 0.625rem; flex: none; }
+      & .who .name { flex: none; }
+      & .who .mode { min-inline-size: 0; }
+      & .who .mode::before { content: "· "; }
+      & > .when { grid-auto-flow: column; gap: var(--space-xs); align-items: baseline; }
+      & .body { -webkit-line-clamp: 1; }
     }
 
     @media (forced-colors: active) {
-      &[data-state="unread"] .marker { background: CanvasText; border-color: CanvasText; }
+      &[data-state="unread"] > .marker { background: CanvasText; border-color: CanvasText; }
       &[data-level="action"]:not([data-state="settled"]) { box-shadow: inset 3px 0 0 Highlight; }
+      & .title .icon { background: CanvasText; }
     }
   }
 
-  /* The panel clamps bodies to two lines; the page shows them whole. */
-  .notifications-panel .notification .body {
-    display: -webkit-box;
-    -webkit-box-orient: vertical;
-    -webkit-line-clamp: 2;
-    overflow: hidden;
+  @container (width < 44rem) {
+    .notification {
+      grid-template-columns: 0.5rem minmax(0, 1fr) auto;
+      grid-template-areas: "dot who when" "dot what what" "dot more more" "dot mark mark";
+      column-gap: var(--space-s);
+
+      & > .who { display: flex; align-items: center; gap: var(--space-xs); }
+      & .avatar { inline-size: 1.25rem; block-size: 1.25rem; font-size: 0.625rem; flex: none; }
+      & .who .name { flex: none; }
+      & .who .mode { min-inline-size: 0; }
+      & .who .mode::before { content: "· "; }
+      & > .when { grid-auto-flow: column; gap: var(--space-xs); align-items: baseline; }
+    }
+  }
+
+  /* The kind's glyph, drawn as a mask so the row's ink colour tints it. */
+  .notification {
+    --glyph-agent: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 20 20' fill='none' stroke='black' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M4 5h12v8H9l-3 3v-3H4z'/%3E%3Cpath d='M7.5 9h.01M10 9h.01M12.5 9h.01'/%3E%3C/svg%3E");
+    --glyph-review: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 20 20' fill='none' stroke='black' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M3 4.5h14v8H9l-4 3v-3H3z'/%3E%3Cpath d='M6.5 7.5h7M6.5 10h4'/%3E%3C/svg%3E");
+    --glyph-check: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 20 20' fill='none' stroke='black' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M4 10.5 8 14l8-8'/%3E%3C/svg%3E");
+    --glyph-task: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 20 20' fill='none' stroke='black' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Crect x='3.5' y='3.5' width='13' height='13' rx='1.5'/%3E%3Cpath d='M7 10l2 2 4-4'/%3E%3C/svg%3E");
+    --glyph-failed: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 20 20' fill='none' stroke='black' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Ccircle cx='10' cy='10' r='7'/%3E%3Cpath d='M7.5 7.5l5 5M12.5 7.5l-5 5'/%3E%3C/svg%3E");
+    --glyph-branch: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 20 20' fill='none' stroke='black' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Ccircle cx='5.5' cy='4.5' r='1.75'/%3E%3Ccircle cx='5.5' cy='15.5' r='1.75'/%3E%3Ccircle cx='14.5' cy='7' r='1.75'/%3E%3Cpath d='M5.5 6.25v7.5M14.5 8.75c0 3-9 2-9 5'/%3E%3C/svg%3E");
+    --glyph-list: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 20 20' fill='none' stroke='black' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M4 6h12M4 10h12M4 14h8'/%3E%3C/svg%3E");
+    --glyph-service: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 20 20' fill='none' stroke='black' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Crect x='3' y='3.5' width='14' height='5' rx='1'/%3E%3Crect x='3' y='11.5' width='14' height='5' rx='1'/%3E%3Cpath d='M6 6h.01M6 14h.01'/%3E%3C/svg%3E");
+
+    &[data-kind="review_requested"] { --_glyph: var(--glyph-review); }
+    &[data-kind="session_waiting"] { --_glyph: var(--glyph-check); }
+    &[data-kind="task_review"] { --_glyph: var(--glyph-task); }
+    &[data-kind="session_failed"] { --_glyph: var(--glyph-failed); }
+    &[data-kind="branch_request"] { --_glyph: var(--glyph-branch); }
+    &[data-kind="branch_finding"], &[data-kind="commit_check_off"], &[data-kind="sessions_interrupted"] { --_glyph: var(--glyph-list); }
+    &[data-kind="service_request"] { --_glyph: var(--glyph-service); }
   }
 
   .notifications {
@@ -219,6 +378,99 @@
       overflow: hidden;
     }
 
+    /* The tabs: a segmented control of radios, so the page works without JavaScript. */
+    & .inbox-tabs {
+      display: inline-flex;
+      margin: 0;
+      padding: 0;
+      border: 1px solid var(--color-line-control);
+      border-radius: var(--radius-sm);
+      overflow: hidden;
+
+      & > label {
+        position: relative;
+        display: inline-flex;
+        align-items: center;
+        gap: var(--space-2xs);
+        min-block-size: var(--size-control-sm);
+        padding-inline: var(--space-m);
+        background: var(--color-raised);
+        font-size: var(--text-sm);
+        cursor: pointer;
+      }
+      & > label + label { border-inline-start: 1px solid var(--color-line); }
+      & > label:has(input:checked) { background: var(--color-pressed); font-weight: var(--weight-medium); }
+      & > label:has(input:focus-visible) { outline: 2px solid var(--color-focus); outline-offset: -2px; }
+      & input { position: absolute; inline-size: 1px; block-size: 1px; opacity: 0; }
+      & .n { color: var(--color-ink-muted); font-weight: var(--weight-regular); }
+      & .n:empty { display: none; }
+    }
+
+    /* The page's groups: Needs you pinned, then the days. */
+    & .group { display: grid; gap: 0; }
+    & .group > .ghead {
+      display: flex;
+      align-items: baseline;
+      gap: var(--space-s);
+      margin: 0;
+      padding: var(--space-m) var(--space-2xs) var(--space-xs);
+      color: var(--color-ink-muted);
+      font-size: var(--text-xs);
+      font-weight: var(--weight-medium);
+      letter-spacing: 0.04em;
+      text-transform: uppercase;
+
+      &[data-tone="attention"] { color: var(--color-attention-strong); }
+      & .n { font-weight: var(--weight-regular); letter-spacing: 0; text-transform: none; }
+    }
+
     @media (width < 48rem) { padding: var(--space-m); }
   }
+
+  /*
+   * A folded stack of settled repeats (ADR 0097): a details element whose
+   * summary is one ledger row for the run, and whose body lists the items.
+   */
+  details.stack {
+    & > summary { list-style: none; cursor: pointer; }
+    & > summary::-webkit-details-marker { display: none; }
+    & > summary:focus-visible { outline: 2px solid var(--color-focus); outline-offset: -2px; }
+    & > summary .notification:hover { background: var(--color-hover); }
+    & > summary .title .verb { font-weight: var(--weight-regular); color: var(--color-ink-muted); }
+    & > summary .title .count {
+      display: inline-grid;
+      place-items: center;
+      min-inline-size: 1.25rem;
+      block-size: 1.25rem;
+      padding-inline: var(--space-2xs);
+      border-radius: var(--radius-xs);
+      background: var(--color-sunken);
+      color: var(--color-ink-muted);
+      font-size: var(--text-xs);
+      font-weight: var(--weight-medium);
+    }
+    & > summary .chev {
+      grid-area: mark;
+      align-self: center;
+      justify-self: end;
+      inline-size: 1rem;
+      block-size: 1rem;
+      background: var(--color-ink-muted);
+      mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 20 20' fill='none' stroke='black' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M6 8l4 4 4-4'/%3E%3C/svg%3E") center / contain no-repeat;
+      transition: transform var(--duration-quick);
+    }
+    &[open] > summary .chev { transform: rotate(180deg); }
+    & > .notification-list {
+      border-block-start: var(--border-width) solid var(--color-line);
+      background: var(--color-panel);
+
+      & .notification { padding-inline-start: calc(var(--space-m) + 0.5rem + var(--space-m)); }
+    }
+
+    @media (prefers-reduced-motion: reduce) {
+      & > summary .chev { transition: none; }
+    }
+  }
+
+  main[x-data="notificationsPage"] > .toolbar .sum { color: var(--color-ink-muted); font-size: var(--text-sm); }
 }

@@ -5,6 +5,15 @@ component is registered with `Alpine.data()`. The architecture (modules,
 layers, the SSR contract with the templ BFF) is in [`docs/WEB.md`](../docs/WEB.md);
 the CSS is [`design-system/`](../design-system/README.md).
 
+The top bar is not part of this client: it is a React island (see
+[`app/`](app/README.md)). The server renders it into every page, and the
+browser hydrates it with the bundle that `make web` builds through gohydrate,
+which needs Node and npm. It follows an in-place navigation on the
+`harness:navigated` event this client dispatches. The notifications store here
+still counts the unread notifications into the document title and announces
+new ones in the stream bar; it takes its first page from the island's props
+(`notifications/presentation/page-seed.js`).
+
 ```
 src/
   main.js                       composition root (real infrastructure)
@@ -32,7 +41,7 @@ The Go server serves it (templ pages in `internal/adapter/in/web`):
 
 ```bash
 make air                  # builds the web client first, then http://127.0.0.1:8080/
-make web                  # templ generate + bundle (go run ./cmd/webbuild)
+make web                  # templ generate + npm ci in web/app + bundle (go run ./cmd/webbuild); needs Node and npm
 make web-watch            # rebundle on every change, beside `make air`
 go test ./internal/adapter/in/web/   # page tests + browser suite + page boot in headless Chrome
 ```

@@ -9,7 +9,7 @@ import (
 const (
 	// ArchitectureBeforeTools are the tools whose use the rules check
 	// before it runs: the file tools, and Bash for command rules.
-	ArchitectureBeforeTools = "Edit|Write|MultiEdit|Bash"
+	ArchitectureBeforeTools = "Edit|Write|MultiEdit|NotebookEdit|Bash"
 	// ArchitectureAfterTools are the tools whose edit the rules look at once
 	// it landed.
 	ArchitectureAfterTools = "Edit|Write|MultiEdit"

@@ -66,8 +66,6 @@ func (h Handler) Index(w http.ResponseWriter, r *http.Request) error {
 	frame.NoRail = true
 	frame.Live = true // agentBoardPage follows the live session feed
 	frame.Hints = boardHints
-	frame.Top.OnBoard = true
-	frame.Top.BoardHref = BoardHref
 	now := time.Now
 	if h.Now != nil {
 		now = h.Now

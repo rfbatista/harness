@@ -14,18 +14,37 @@
 //
 //   data-repositories='[{"id":"r1","name":"atlas-api"}]'
 //
+// The session mode narrows the list further (ADR 0103): the server paints each
+// mode's agents, and the picker offers only the agents the component's `mode`
+// allows, "Plain claude" only when it allows no agent, and says so when the
+// mode allows nothing:
+//
+//   data-mode-agents='{"review":{"state":"selected","agents":["reviewer"],"no_agent":false}}'
+//
 // Mixed into a component with withAgentPicker; the component calls
 // startAgentPicker(this.$el.dataset) from init and stopAgentPicker from destroy,
 // and hands a refused start to refuseAgent. A component may define
 // agentsChanged(), called after the list was read again.
 
 import { FeedStatus } from "../../../../shared/domain/feed.js";
-import { agentsSettingsHref, catalogChangeTouches, hintLink, notAssignedRefusal, notEnabledRefusal, notOfferedRows, pickerCount, pickerHint, repositoryAgentsHref, unassignedCount } from "../../domain/agentPicker.js";
+import {
+  MODELS_HREF, agentsSettingsHref, catalogChangeTouches, hintLink, modeAllowsAgent, modeAllowsNoAgent, modeAllowsNothing, modeEntry, modeName,
+  notAssignedRefusal, notAvailableInModeRefusal, notEnabledRefusal, notOfferedRows, pickerCount, pickerHint, repositoryAgentsHref, unassignedCount,
+} from "../../domain/agentPicker.js";
 
 function readNames(raw) {
   try {
     const list = JSON.parse(raw ?? "[]");
     return Array.isArray(list) ? Object.fromEntries(list.filter((r) => typeof r?.id === "string" && typeof r?.name === "string").map((r) => [r.id, r.name])) : {};
+  } catch {
+    return {};
+  }
+}
+
+function readModeAgents(raw) {
+  try {
+    const map = JSON.parse(raw ?? "{}");
+    return map !== null && typeof map === "object" && !Array.isArray(map) ? map : {};
   } catch {
     return {};
   }
@@ -65,6 +84,8 @@ export function withAgentPicker(component, { gateway }) {
     notOffered: [],
     /** Repository id → its name, painted by the server. */
     repositoryNames: {},
+    /** Every mode's agents, painted by the server: mode value → { state, agents, no_agent }. */
+    modeAgents: {},
     /** Why the agent field went back to Plain claude after the repository changed; "" when it did not. */
     agentNote: "",
 
@@ -75,6 +96,7 @@ export function withAgentPicker(component, { gateway }) {
       this.projectName = dataset.projectName ?? "";
       this.noteAgentNames(this.agents);
       this.repositoryNames = readNames(dataset.repositories);
+      this.modeAgents = readModeAgents(dataset.modeAgents);
       if (!this.projectId) this.projectId = dataset.projectId ?? "";
       // Another repository offers other agents: read the list again, and drop a choice it does not offer.
       this.$watch?.("repositoryId", () => void this.refreshAgents({ resetChoice: true }));
@@ -131,9 +153,40 @@ export function withAgentPicker(component, { gateway }) {
     get chosenAgentName() {
       return this.agentId === "" ? "" : (this.agentNames[this.agentId] ?? this.agentId);
     },
+    /** The component's mode ("" when it has none), and what it allows. */
+    get currentMode() {
+      return this.mode ?? "";
+    },
+    get currentModeEntry() {
+      return modeEntry(this.modeAgents, this.currentMode);
+    },
+    /** The project's agents, less the ones the mode does not allow. */
+    get offeredAgents() {
+      const entry = this.currentModeEntry;
+      return this.agents.filter((a) => modeAllowsAgent(entry, a.name));
+    },
+    /** Plain claude is offered when the mode allows a session with no agent. */
+    get noAgentAllowed() {
+      return modeAllowsNoAgent(this.currentModeEntry);
+    },
+    /** The mode allows nothing: nothing can be picked, so Start is off. */
+    get modeAllowsNothing() {
+      return modeAllowsNothing(this.currentModeEntry);
+    },
+    get modeAllowsNothingText() {
+      return `No agent can start in ${modeName(this.currentMode)} mode. The mode lists no agent and does not allow a session with no agent.`;
+    },
+    /** Why the mode keeps a session from starting yet, or "": it allows nothing, or the person has not picked the agent it needs. */
+    get modeProblem() {
+      if (this.modeAllowsNothing) return this.modeAllowsNothingText;
+      return this.agentId === "" && !this.noAgentAllowed ? "Pick an agent." : "";
+    },
+    get modesSettingsLink() {
+      return MODELS_HREF;
+    },
     /** What the select offers: the enabled agents, and the choice that was taken off the list while the form was open, marked. */
     get agentChoices() {
-      const listed = this.agents.map((a) => ({ id: a.id, name: a.name, description: a.description }));
+      const listed = this.offeredAgents.map((a) => ({ id: a.id, name: a.name, description: a.description }));
       if (this.agentId === "" || listed.some((a) => a.id === this.agentId)) return listed;
       return [...listed, { id: this.agentId, name: `${this.chosenAgentName} (no longer enabled)`, description: "Start will be refused: this agent is not enabled in the project" }];
     },
@@ -144,14 +197,21 @@ export function withAgentPicker(component, { gateway }) {
         return { ...a, description: set ? [a.description, "repository prompt set"].filter(Boolean).join(" · ") : a.description };
       });
     },
+    /** The whole select: the first option (Plain claude, or a disabled "Pick an agent" when the mode allows no session without an agent), then the agents. */
+    get agentSelectOptions() {
+      const first = this.noAgentAllowed
+        ? { id: "", name: "Plain claude", description: "claude with no agent definition", placeholder: false }
+        : { id: "", name: "Pick an agent", description: `${modeName(this.currentMode)} mode does not allow a session with no agent`, placeholder: true };
+      return [first, ...this.agentOptions.map((a) => ({ ...a, placeholder: false }))];
+    },
     get repositoryName() {
       return this.repositoryNames[this.repositoryId] ?? "";
     },
     get agentCount() {
-      return pickerCount(this.agents.length, this.repositoryName ? unassignedCount(this.notOffered) : 0);
+      return pickerCount(this.offeredAgents.length, this.repositoryName ? unassignedCount(this.notOffered) : 0);
     },
     get agentHint() {
-      return pickerHint({ count: this.agents.length, total: this.agentTotal, mode: this.agentMode, project: this.projectName, repository: this.repositoryName, unassigned: unassignedCount(this.notOffered) });
+      return pickerHint({ count: this.offeredAgents.length, total: this.agentTotal, mode: this.agentMode, project: this.projectName, repository: this.repositoryName, unassigned: unassignedCount(this.notOffered) });
     },
     /** "Not offered in <repository> (N)": the missing agents, each with its reason and the link that fixes it. */
     get notOfferedList() {
@@ -174,6 +234,14 @@ export function withAgentPicker(component, { gateway }) {
     get noAgentEnabled() {
       return this.agents.length === 0 && this.agentMode === "selected";
     },
+    /** The mode changed: a picked agent it does not allow goes back to the field's start, and the form says why. */
+    followAgentToMode() {
+      this.agentNote = "";
+      if (this.agentId === "" || modeAllowsAgent(this.currentModeEntry, this.chosenAgentName)) return;
+      const name = this.chosenAgentName;
+      this.agentId = "";
+      this.agentNote = `${name} cannot start in ${modeName(this.currentMode)} mode, so the agent is back on ${this.noAgentAllowed ? "Plain claude" : "nothing picked"}.`;
+    },
     get hasAgentRefusal() {
       return this.agentRefusal !== null;
     },
@@ -192,7 +260,8 @@ export function withAgentPicker(component, { gateway }) {
     refuseAgent(err) {
       const refusal =
         notEnabledRefusal(err, { agent: this.chosenAgentName, project: this.projectName, projectId: this.projectId }) ??
-        notAssignedRefusal(err, { agent: this.chosenAgentName, repository: this.repositoryName, repositoryId: this.repositoryId, projectId: this.projectId });
+        notAssignedRefusal(err, { agent: this.chosenAgentName, repository: this.repositoryName, repositoryId: this.repositoryId, projectId: this.projectId }) ??
+        notAvailableInModeRefusal(err);
       if (refusal === null) return false;
       this.agentNote = "";
       this.agentRefusal = refusal;

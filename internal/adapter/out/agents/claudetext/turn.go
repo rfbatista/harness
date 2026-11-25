@@ -48,21 +48,34 @@ func ConfinedTurn(inner TurnStreamer, prepare func(dir string) ([]string, llmkit
 	if prepare == nil {
 		return inner
 	}
+	return ConfinedTurnFor(inner, func(_ context.Context, dir string) (Prepared, error) {
+		env, wrap, err := prepare(dir)
+		return Prepared{Env: env, Wrap: wrap}, err
+	})
+}
+
+// ConfinedTurnFor is ConfinedTurn with a preparation that knows the call's
+// project (ProjectFrom) and may name the config dir it runs with.
+func ConfinedTurnFor(inner TurnStreamer, prepare func(ctx context.Context, dir string) (Prepared, error)) TurnStreamer {
+	if prepare == nil {
+		return inner
+	}
 	return confinedTurn{inner: inner, prepare: prepare}
 }
 
 type confinedTurn struct {
 	inner   TurnStreamer
-	prepare func(dir string) ([]string, llmkit.WrapFunc, error)
+	prepare func(ctx context.Context, dir string) (Prepared, error)
 }
 
 func (c confinedTurn) TurnStream(ctx context.Context, req claude.TurnRequest, on claude.TurnCallbacks) (claude.TurnResult, error) {
-	env, wrap, err := c.prepare(req.Dir)
+	p, err := c.prepare(ctx, req.Dir)
 	if err != nil {
 		return claude.TurnResult{}, err
 	}
-	req.Env = append(slices.Clone(req.Env), env...)
-	req.Wrap = wrap
+	req.Env = append(slices.Clone(req.Env), p.Env...)
+	req.Wrap = p.Wrap
+	req.ConfigDir = p.ConfigDir
 	return c.inner.TurnStream(ctx, req, on)
 }
 

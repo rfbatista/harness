@@ -4,6 +4,9 @@ import (
 	"net/http"
 
 	"github.com/labstack/echo/v4"
+
+	"operators-mcp/internal/domain"
+	"operators-mcp/internal/ports"
 )
 
 // The agent credential (ADR 0018). Every endpoint answers the status only:
@@ -46,4 +49,80 @@ func (h *Handler) handleRemoveAgentCredential(c echo.Context) error {
 		return err
 	}
 	return c.JSON(http.StatusOK, st)
+}
+
+// The credential one project's agents sign in with, instead of the global one
+// (ADR 0018). Same rule: status only, the value never comes back out. Status
+// is about the project's own credential; without one its agents use the global.
+
+// projectCredential answers the port and the project id every route needs; the
+// project must exist, so a credential is never kept for nothing.
+func (h *Handler) projectCredential(c echo.Context, projectID string) (ports.ProjectAgentCredentials, error) {
+	if h.projectAgentCredential == nil {
+		return nil, errAgentCredentialOff
+	}
+	if projectID == "" {
+		return nil, &domain.StructuredError{Code: "INVALID_INPUT", Message: "project_id is required"}
+	}
+	if h.projects != nil {
+		if _, err := h.projects.GetProject(c.Request().Context(), projectID); err != nil {
+			return nil, err
+		}
+	}
+	return h.projectAgentCredential, nil
+}
+
+// answerProjectCredential answers the project's credential with its login and
+// the credential its next claude process runs with.
+func (h *Handler) answerProjectCredential(c echo.Context, svc ports.ProjectAgentCredentials, projectID string) error {
+	st, err := svc.DetailFor(c.Request().Context(), projectID)
+	if err != nil {
+		return err
+	}
+	return c.JSON(http.StatusOK, st)
+}
+
+func (h *Handler) handleGetProjectAgentCredential(c echo.Context) error {
+	id := c.QueryParam("project_id")
+	svc, err := h.projectCredential(c, id)
+	if err != nil {
+		return err
+	}
+	return h.answerProjectCredential(c, svc, id)
+}
+
+func (h *Handler) handleSetProjectAgentCredential(c echo.Context) error {
+	var in struct {
+		ProjectID string `json:"project_id"`
+		Kind      string `json:"kind"`
+		Value     string `json:"value"`
+	}
+	if err := bindJSON(c, &in); err != nil {
+		return err
+	}
+	svc, err := h.projectCredential(c, in.ProjectID)
+	if err != nil {
+		return err
+	}
+	if _, err := svc.SetFor(in.ProjectID, in.Kind, in.Value); err != nil {
+		return err
+	}
+	return h.answerProjectCredential(c, svc, in.ProjectID)
+}
+
+func (h *Handler) handleRemoveProjectAgentCredential(c echo.Context) error {
+	var in struct {
+		ProjectID string `json:"project_id"`
+	}
+	if err := bindJSON(c, &in); err != nil {
+		return err
+	}
+	svc, err := h.projectCredential(c, in.ProjectID)
+	if err != nil {
+		return err
+	}
+	if _, err := svc.RemoveFor(in.ProjectID); err != nil {
+		return err
+	}
+	return h.answerProjectCredential(c, svc, in.ProjectID)
 }

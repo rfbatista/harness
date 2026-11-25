@@ -72,7 +72,15 @@ type Session struct {
 	// that worktree holds. Both are empty for sessions created before worktree
 	// isolation.
 	WorkspaceID string `json:"workspace_id,omitempty"`
-	Branch      string `json:"branch,omitempty"`
+	// WorktreeID is WorkspaceID under the name the shared worktree contract
+	// uses; the store fills it, nothing else sets it.
+	WorktreeID string `json:"worktree_id,omitempty"`
+	Branch     string `json:"branch,omitempty"`
+	// Access is what the session may do in its worktree; empty reads as
+	// write, what every session from before shared worktrees had. Joined says
+	// the session started on a worktree another session cut.
+	Access SessionAccess `json:"access,omitempty"`
+	Joined bool          `json:"joined"`
 	// Interactive sessions run claude in a terminal a person types into,
 	// rather than being driven by the server over stream-json: the server
 	// cannot send to or approve for them.
@@ -169,6 +177,30 @@ const (
 // Valid reports whether r names a runner.
 func (r Runner) Valid() bool { return r == RunnerServer || r == RunnerTUI }
 
+// SessionAccess is what a session may do in the worktree it runs in
+// (Glossary: Access).
+type SessionAccess string
+
+const (
+	// AccessWrite edits files and commits on the worktree's branch.
+	AccessWrite SessionAccess = "write"
+	// AccessReadOnly reads, builds and tests; every write is denied.
+	AccessReadOnly SessionAccess = "read_only"
+)
+
+// Writes tells whether the access may change the worktree; the empty access
+// of an older session does.
+func (a SessionAccess) Writes() bool { return a != AccessReadOnly }
+
+// DefaultAccess is the access a mode gets when a start names none: a Reviewer
+// and QA read the work, every other mode writes it.
+func DefaultAccess(mode SessionMode) SessionAccess {
+	if mode == SessionModeReview || mode == SessionModeQA {
+		return AccessReadOnly
+	}
+	return AccessWrite
+}
+
 // SessionMode is a way of starting a task session that layers a role on top
 // of whichever agent it runs: its own skills and its own first message.
 type SessionMode string
@@ -192,6 +224,11 @@ const (
 	// creates one child task per piece of work with a brief each, and asks for
 	// review. It never writes code.
 	SessionModeProduct SessionMode = "product"
+	// SessionModeProductOwner is a product-owner thread (ADR 0109): a headless
+	// session on its project with no task, in which the person talks to the
+	// project's product owner. It reads every repository and the whole
+	// project, and changes nothing.
+	SessionModeProductOwner SessionMode = "productowner"
 	// SessionModeDesignSystem is a design session (ADR 0055): it runs on its
 	// project with no task, bound to one design system (ADR 0060), reads
 	// every repository and changes none, and edits a writable draft of that
@@ -216,7 +253,9 @@ const (
 // NeedsTask says a session in this mode must run on a task. Only a product
 // session (ADR 0016: it creates the feature task itself) and a design session
 // may run on their project alone.
-func (m SessionMode) NeedsTask() bool { return m != SessionModeProduct && m != SessionModeDesignSystem }
+func (m SessionMode) NeedsTask() bool {
+	return m != SessionModeProduct && m != SessionModeDesignSystem && m != SessionModeProductOwner
+}
 
 // ParseSessionMode reads a mode as clients send it; empty is the default.
 func ParseSessionMode(s string) (SessionMode, error) {
@@ -254,7 +293,7 @@ type SandboxFacts struct {
 // SandboxVisibilityFor is the repository visibility a sandbox gives a session
 // of mode: architect and product see every repository of the project.
 func SandboxVisibilityFor(mode SessionMode) string {
-	if mode == SessionModeArchitect || mode == SessionModeProduct || mode == SessionModeDesignSystem {
+	if mode == SessionModeArchitect || mode == SessionModeProduct || mode == SessionModeDesignSystem || mode == SessionModeProductOwner {
 		return SandboxAllReposReadOnly
 	}
 	return SandboxOwnRepo

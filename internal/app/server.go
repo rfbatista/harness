@@ -2,6 +2,7 @@ package app
 
 import (
 	"context"
+	"errors"
 	"io/fs"
 	"log/slog"
 	"net"
@@ -33,6 +34,7 @@ import (
 	"operators-mcp/internal/application/notifications"
 	"operators-mcp/internal/application/orchestration"
 	"operators-mcp/internal/application/planning"
+	"operators-mcp/internal/application/productowner"
 	"operators-mcp/internal/application/repoagents"
 	"operators-mcp/internal/application/servicerequests"
 	"operators-mcp/internal/application/services"
@@ -64,7 +66,7 @@ var ServerModule = fx.Module("server",
 
 // registerHTTPServer mounts the UI and JSON API on a mux and serves it,
 // shutting down gracefully when fx stops.
-func registerHTTPServer(lc fx.Lifecycle, cfg Config, cat catalog.Catalog, appRunner *apps.Service, svcs *services.Service, svcRequests *servicerequests.Service, ts *tooling.Service, exec *execution.Service, orch *orchestration.Service, plan *planning.Service, ws *workspaces.Service, broker *approval.Broker, sessions ports.SessionRepository, art *artifacts.Service, channel *taskchannel.Service, prs *workspaces.PullRequests, merges *workspaces.Merges, archivedWorktrees *workspaces.ArchivedWorktrees, branchNames *workspaces.BranchNames, code ports.CodeBrowser, worktreeGit ports.WorktreeGit, inbox optionalNotifications, creds optionalGitCredentials, shells *vfs.Service, fsys *vfs.FileSystem, usageSvc *usage.Service, indexes optionalRepositoryIndexes, sandboxStore *sandboxsettings.Store, managedClaude *managedclaude.Service, claudeBin ports.ManagedClaudeBin, agentCred optionalAgentCredential, helper *writinghelper.Service, assistant *archassistant.Service, rules *archrules.Service, gate *branchgate.Service, watch *branchwatch.Service, agentCat *agentcatalog.Catalog, persons *vshell.PersonTerminals, repoAgents *repoagents.Service, board optionalAgentBoard, asked optionalInterviews) error {
+func registerHTTPServer(lc fx.Lifecycle, cfg Config, cat catalog.Catalog, appRunner *apps.Service, svcs *services.Service, svcRequests *servicerequests.Service, ts *tooling.Service, exec *execution.Service, orch *orchestration.Service, plan *planning.Service, ws *workspaces.Service, broker *approval.Broker, sessions ports.SessionRepository, art *artifacts.Service, channel *taskchannel.Service, prs *workspaces.PullRequests, merges *workspaces.Merges, archivedWorktrees *workspaces.ArchivedWorktrees, branchNames *workspaces.BranchNames, code ports.CodeBrowser, worktreeGit ports.WorktreeGit, inbox optionalNotifications, creds optionalGitCredentials, shells *vfs.Service, fsys *vfs.FileSystem, usageSvc *usage.Service, indexes optionalRepositoryIndexes, sandboxStore *sandboxsettings.Store, managedClaude *managedclaude.Service, claudeBin ports.ManagedClaudeBin, agentCred optionalAgentCredential, helper *writinghelper.Service, assistant *archassistant.Service, rules *archrules.Service, gate *branchgate.Service, watch *branchwatch.Service, agentCat *agentcatalog.Catalog, persons *vshell.PersonTerminals, repoAgents *repoagents.Service, board optionalAgentBoard, asked optionalInterviews, owner optionalProductOwner) error {
 	uiHandler, err := ui.SPAHandler(ui.Dist)
 	if err != nil {
 		return err
@@ -95,6 +97,14 @@ func registerHTTPServer(lc fx.Lifecycle, cfg Config, cat catalog.Catalog, appRun
 		agentBoard = board.Service
 	}
 
+	// Same for the product owner.
+	var productOwner ports.ProductOwner
+	var productOwnerMemory ports.ProductOwnerMemoryTools
+	if owner.Service != nil {
+		productOwner = owner.Service
+		productOwnerMemory = owner.Service
+	}
+
 	// Same for the interviews.
 	var interviewsPort ports.Interviews
 	if asked.Service != nil {
@@ -123,7 +133,11 @@ func registerHTTPServer(lc fx.Lifecycle, cfg Config, cat catalog.Catalog, appRun
 	}
 
 	mux := http.NewServeMux()
+	// The top bar's model is built by the web adapter from the pages' own
+	// dependencies, which are assembled below, after the API.
+	topBars := &lateTopBars{}
 	apiRouter := httpapi.NewRouter(httpapi.NewHandler(httpapi.Services{
+		TopBars:         topBars,
 		Projects:        cat.Projects,
 		ProjectFeed:     cat.Projects,
 		Discovery:       cat.Projects,
@@ -181,9 +195,13 @@ func registerHTTPServer(lc fx.Lifecycle, cfg Config, cat catalog.Catalog, appRun
 		ManagedClaudeBin: claudeBin,
 		// The credential agents sign in with: status only.
 		AgentCredential: agentCred.port(),
+		// The credential one project's agents use instead.
+		ProjectAgentCredentials: agentCred.projectPort(),
 		// The Sign in with Claude flow that stores it.
 		AgentOAuth: agentCred.oauth(),
 		AgentAuth:  agentCred.auth(),
+		// Each project's own Sign in with Claude.
+		ProjectAgentOAuth: agentCred.projectOAuth(),
 		// The magic pen's steps, streamed.
 		WritingHelper: helper,
 		// The architecture assistant's turns, streamed.
@@ -199,6 +217,8 @@ func registerHTTPServer(lc fx.Lifecycle, cfg Config, cat catalog.Catalog, appRun
 		ArchitectureRules: rules,
 		// What a session's git shim asks before a branch action.
 		BranchGate: gate,
+		// The projects' product owners: settings and threads.
+		ProductOwner: productOwner,
 		// The Branches lists, read from stored state.
 		SessionBranches: watch,
 		// The agent catalog folder: agents, bundles, skills, MCP servers.
@@ -216,17 +236,19 @@ func registerHTTPServer(lc fx.Lifecycle, cfg Config, cat catalog.Catalog, appRun
 	if asked.Service != nil {
 		mux.Handle(llminterview.PathPrefix, interviewHandler(asked.Service))
 	}
-	mux.Handle(mcpsession.PathPrefix, slow(mcpsession.TaskHandler(sessionTaskTools(cat, orch, plan, sessions, art, channel, notifier, merges, tooling.WithAgentPlacements(repoAgents), tooling.WithBranchPush(gate)))))
+	mux.Handle(mcpsession.PathPrefix, slow(sessionTaskHandler(sessionTaskTools(cat, orch, plan, sessions, art, channel, notifier, merges, tooling.WithAgentPlacements(repoAgents), tooling.WithModeAgents(cat.Settings), tooling.WithBranchPush(gate)), plan, sessions, productOwnerMemory, ownerSources(owner.Service)...)))
 	mux.Handle(mcpsession.ServicesPathPrefix, slow(mcpsession.ServicesHandler(tooling.SessionServicesTools(sessions, cat.Agents, svcs, cat.Projects, tooling.WithServiceRequests(svcRequests)))))
 	// The web client owns / and its pages; anything else reaches the legacy
 	// designer SPA until it is retired.
-	mux.Handle("/", slow(web.NewHandler(web.Deps{Projects: cat.Projects, Tasks: plan, Sessions: orch, Agents: cat.Agents, Repositories: cat.Projects, EnvFiles: cat.Projects, RunCommands: cat.Projects, Documents: plan, History: ws, Code: code, Workspaces: ws, Artifacts: art, ProjectSummaries: cat.Projects, PullRequests: prs, WorktreeGit: worktreeGit,
+	webDeps := web.Deps{Projects: cat.Projects, Tasks: plan, Sessions: orch, Agents: cat.Agents, Repositories: cat.Projects, EnvFiles: cat.Projects, RunCommands: cat.Projects, Documents: plan, History: ws, Code: code, Workspaces: ws, Artifacts: art, ProjectSummaries: cat.Projects, PullRequests: prs, WorktreeGit: worktreeGit,
 		DesignSystems: designSystemReader(cat), Resources: plan, Comments: plan, Notifications: noteReader, BranchRequests: gate, SessionBranches: watch, GitCredentials: creds.port(), Usage: usageSvc, Services: svcs, ServiceCounter: svcs, TokenSavers: cat.Capabilities,
 		TokenSaverInstalls: cat.Capabilities, RepositoryIndexes: indexes.port(), Settings: cat.Settings, DataPaths: dataPaths(cfg), SandboxSettings: sandboxStore, SandboxDriver: sandboxDriver(orch), SandboxBuiltin: sandboxBuiltin(orch),
-		ManagedClaude: managedClaude, ManagedClaudeBin: claudeBin, AgentCredential: agentCred.port(),
-		AgentOAuth: agentCred.oauth(), AgentAuth: agentCred.auth(), AgentHomeExposed: agentHomeExposed(cfg), AgentLogin: agentHasLogin(cfg), ArchivedTasks: plan, ArchivedList: plan,
+		ManagedClaude: managedClaude, ManagedClaudeBin: claudeBin, AgentCredential: agentCred.port(), ProjectAgentCredentials: agentCred.projectPort(),
+		AgentOAuth: agentCred.oauth(), AgentAuth: agentCred.auth(), ProjectAgentOAuth: agentCred.projectOAuth(), AgentHomeExposed: agentHomeExposed(cfg), AgentLogin: agentHasLogin(cfg), ArchivedTasks: plan, ArchivedList: plan,
 		// Whether the pens work, read from the gate without starting anything.
-		WritingHelper: helperState(helper), ArchitectureAssistant: architectureAssistant, OpenInstructionProposals: openProposals(cat.InstructionProposals), AgentCatalog: CatalogSeed(agentCat, repoAgents), AgentBoard: agentBoard, Interviews: interviewsPort}, assets, uiHandler)))
+		WritingHelper: helperState(helper), ArchitectureAssistant: architectureAssistant, OpenInstructionProposals: openProposals(cat.InstructionProposals), AgentCatalog: CatalogSeed(agentCat, repoAgents), AgentBoard: agentBoard, Interviews: interviewsPort, ProductOwnerThreads: productOwner}
+	topBars.set(web.NewTopBars(webDeps))
+	mux.Handle("/", slow(web.NewHandler(webDeps, assets, uiHandler)))
 
 	// The LLM proxy every claude process calls through (ADR 0006): loopback
 	// only, outside the API token and CORS, so its responses come back as
@@ -276,6 +298,14 @@ type optionalAgentBoard struct {
 	Service *agentboard.Service `optional:"true"`
 }
 
+// optionalProductOwner is the product owner when ProductOwnerModule is in the
+// graph; graphs built without it (some tests) serve none.
+type optionalProductOwner struct {
+	fx.In
+
+	Service *productowner.Service `optional:"true"`
+}
+
 // optionalNotifications is the inbox when NotificationsModule is in the
 // graph; graphs built without it (some tests) serve no notifications.
 type optionalNotifications struct {
@@ -295,7 +325,7 @@ func sessionTaskTools(cat catalog.Catalog, orch *orchestration.Service, plan *pl
 		opts = append(opts, tooling.WithInstructionProposals(cat.InstructionProposals))
 	}
 	return tooling.SessionTaskTools(plan, sessions, cat.Agents, cat.Architecture,
-		tooling.PeerStarter{Sessions: orch, Repositories: cat.Projects, Merger: merges},
+		tooling.PeerStarter{Sessions: orch, Stopper: orch, Repositories: cat.Projects, Merger: merges},
 		tooling.ArtifactTooling{Publisher: art, Attachments: art, ViewURL: httpapi.ArtifactViewPath}, channel,
 		tooling.NotificationTooling{Notifier: notifier}, opts...)
 }
@@ -401,4 +431,17 @@ func dataPaths(cfg Config) *serversettings.Paths {
 		p.Source = "the database path"
 	}
 	return p
+}
+
+// lateTopBars is the API's top bar reader before the web adapter's
+// dependencies exist: set once, while the server is assembled.
+type lateTopBars struct{ next ports.TopBars }
+
+func (l *lateTopBars) set(t ports.TopBars) { l.next = t }
+
+func (l *lateTopBars) TopBar(ctx context.Context, path string) (*ports.TopBar, error) {
+	if l.next == nil {
+		return nil, errors.New("the top bar is not assembled yet")
+	}
+	return l.next.TopBar(ctx, path)
 }

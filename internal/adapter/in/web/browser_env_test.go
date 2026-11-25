@@ -24,6 +24,11 @@ func (f *fakeEnvAPI) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		http.NotFound(w, r) // the rail's feed is not under test
 		return
 	}
+	// The product owner's toggle reads its project's switch on every project page; no test here is about it.
+	if r.URL.Path == "/api/product_owner" {
+		_, _ = w.Write([]byte(`{"project_id":"` + r.URL.Query().Get("project_id") + `","enabled":true}`))
+		return
+	}
 	var in map[string]string
 	_ = json.NewDecoder(r.Body).Decode(&in)
 	f.mu.Lock()

@@ -27,17 +27,24 @@ export function stubNotificationsApi(world) {
         const limit = q.has("limit") ? Number(q.get("limit")) : undefined;
         const unread = q.get("unread");
         if (unread !== null && unread !== "true" && unread !== "false") return jsonResponse(400, { error: "unread is true or false", code: "INVALID_INPUT" });
-        const page = await gateway.list({ projectId: q.get("project_id") ?? "", unread: unread === "true", before: q.get("before") ?? "", limit });
+        const open = q.get("open");
+        if (open !== null && open !== "true" && open !== "false") return jsonResponse(400, { error: "open is true or false", code: "INVALID_INPUT" });
+        const page = await gateway.list({ projectId: q.get("project_id") ?? "", unread: unread === "true", open: open === "true", actor: q.get("actor") ?? "", kind: q.get("kind") ?? "", before: q.get("before") ?? "", limit });
         return jsonResponse(200, {
           notifications: page.notifications.map(notificationDTO),
           unread_count: page.unreadCount,
+          open_count: page.openCount,
           next_before: page.nextBefore || undefined,
         });
       }
       if (method === "POST" && url.pathname === "/api/notifications/read") {
         const request = body.ids ? { ids: body.ids } : body.all === true ? { all: true, projectId: body.project_id } : {};
         const change = await gateway.markRead(request);
-        return jsonResponse(200, { notifications: change.notifications.map(notificationDTO), unread_count: change.unreadCount });
+        return jsonResponse(200, { notifications: change.notifications.map(notificationDTO), unread_count: change.unreadCount, open_count: change.openCount });
+      }
+      const ack = url.pathname.match(/^\/api\/notifications\/([^/]+)\/acknowledge$/);
+      if (method === "POST" && ack) {
+        return jsonResponse(200, { notification: notificationDTO(await gateway.acknowledge(decodeURIComponent(ack[1]))) });
       }
       const resume = url.pathname.match(/^\/api\/notifications\/([^/]+)\/resume_interrupted$/);
       if (method === "POST" && resume) {
@@ -62,7 +69,7 @@ export function stubNotificationsApi(world) {
       if (url.pathname !== "/api/notifications/events") throw new Error(`no stream at ${url.pathname}`);
       sources.add(this);
       this.unfollow = gateway.follow(
-        (change) => this.send({ changed: change.notifications.map(notificationDTO), unread_count: change.unreadCount }),
+        (change) => this.send({ changed: change.notifications.map(notificationDTO), unread_count: change.unreadCount, open_count: change.openCount }),
         () => {},
       );
       queueMicrotask(() => this.onopen?.({}));

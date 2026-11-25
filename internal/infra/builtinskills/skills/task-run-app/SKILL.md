@@ -1,25 +1,34 @@
 ---
 name: task-run-app
-description: Use in a harness operate-mode session only when the architect's prompt carries the person's request to run, set up or seed the task's application for testing — seed a task database in the application's own database engine, create the task service, set its variables from .env.example, start it on the task's branch and hand the person the test credentials. The architect spawns the Operator with that request; the Operator never runs it on its own.
+description: Use in a harness operate-mode session only when the architect's prompt carries the person's request to run, set up or seed the task's application for testing — seed a task database in the application's own database engine, create the task service, set its variables from .env.example, start it on the task's branch and write the test credentials into the Seed document. Outside operate mode the skill only spawns: a session in any other mode, an architect included, never runs a step and spawns an Operator with that request.
 ---
 
 # Run the task's application
 
 The person asked to test the task in a running application. You set it up: a **task
 database** seeded with one record set per **scenario**, a **task service** running the
-task's branch, and the **test credentials** handed over in a **task comment** and a
-**Seed document**. Run the steps in this order. Each names the tool it uses and the
-check that it worked. Stop at the first failed check and use the Refusals table.
+task's branch, and the **test credentials** written into the **Seed document**. Run the steps in this order.
+Each names the tool it uses and the check that it worked. Stop at the first failed check and use the Refusals table.
 
-Do not run this skill unless your prompt carries the person's request, which the architect
-passes on when it spawns you as the Operator. Never ask the architect session or a
-delegate to run it.
+## Before you start
+
+Check your session's mode first. If you are not in operate mode, whatever your role
+(architect, implementer or peer), you are not the Operator: run no step of this skill, run
+no service, touch no k3s resource and seed no database. Instead:
+
+1. Call `mcp__task__start_task_session` with `mode: "operate"` and the default branch as
+   `base_branch`. Put the person's request in its prompt.
+2. Wait for the Operator's done report, or answer its questions and blocked reports.
+3. Point the person at the Seed document it attached.
+
+In operate mode, run this skill only when your prompt carries the person's request, which
+the session that spawned you passes on. Then the steps below are yours.
 
 Reference files, in this folder, read only when a step names them:
 
 - `ENGINES.md` — how to detect the engine, and the seed command for each.
 - `K3S-SHAPES.md` — names and shapes of the k3s resources you create.
-- `SEED-FORMATS.md` — the Seed document and the task comment.
+- `SEED-FORMATS.md` — the Seed document, with the test credentials.
 
 Read large files in parts: `grep -n` for the heading, then `sed -n` that range, never the whole
 file. Change a file with Edit, not by rewriting it. A write refused with
@@ -104,7 +113,7 @@ If there is no `k3s` server, no `services` server or no task, stop and say which
 5. Check the run command: does it read `.env` from disk itself (a Makefile with
    `-include .env`, a dotenv library)? The repository's saved env files are written into
    the service worktree before each run and could override the service's variables. If
-   so, say so in the comment and prefer a run command that takes the environment over the
+   so, say so in the Seed document and prefer a run command that takes the environment over the
    file. Cannot find one: ask.
 
 ### 6. Create or update the task service
@@ -167,20 +176,21 @@ The schema comes from the branch, never from you. Never hand-write a schema.
    line and for errors. Follow with `offset` if it is still starting.
 2. Request the service's URL (its port, on the harness host) and check the application
    answers. Try the login you created.
-3. Failed: put the log's last decisive lines in the comment, and say what did not work.
+3. Failed: put the log's last decisive lines in the Seed document, and say what did not work.
 
-### 11. Write the Seed document and the comment
+### 11. Write the Seed document and report
 
 Follow `SEED-FORMATS.md`.
 
-1. Write `task/docs/` a document titled exactly `Seed: <task title>`: each scenario, the
-   records seeded for it, how to reach it in the application. Overwrite it on a rerun.
-   Say whether the schema came from boot migrations or from a command.
-   Do not add another file.
-2. Write the **task comment** in `task/comments/` as `run-app.md`, with the **test
-   credentials** in clear, what you read to find the engine, what you did and what you
-   could not do. Overwrite it on a rerun.
-3. Tell the person in one line where to find both.
+1. Write `task/docs/` a document titled exactly `Seed: <task title>`: the test credentials
+   in clear, each scenario, the records seeded for it, how to reach it in the application,
+   what you read to find the engine, what you did and what you could not do. Say whether the
+   schema came from boot migrations or from a command. Overwrite it on a rerun. Write no task comment
+   and no other file.
+2. Report. With an architect, send `message_architect` kind `status_report`, status `done`,
+   with the Seed document attached (its id from `.index.json`) and the service names, where
+   each runs and its URLs. With no architect, leave one short pointer comment in
+   `task/comments/` that names the Seed document, without the credentials.
 
 ## Rerun
 
@@ -190,8 +200,8 @@ When the task database or the task service already exists:
    role, and seed again from the current Spec and Ticket documents.
 2. `update_service` only if the variables differ. `restart_service` on the branch so it
    runs the new tip.
-3. Overwrite the comment and the Seed document. Overwrite, never add: a rerun overwrites
-   its own files and creates no new ones.
+3. Overwrite the Seed document and write no comment. Overwrite, never add: a rerun
+   overwrites its own file and creates no new file.
 
 ## Refusals
 
@@ -205,10 +215,10 @@ When the task database or the task service already exists:
 | No documented run command, or several | Ask which command. |
 | Default port used by another service | Ask for a free port. |
 | Variable not in `.env.example`, value unknown | Ask. Never invent it. |
-| Run command reads `.env` from disk and it cannot be avoided | Say so in the comment and ask. |
+| Run command reads `.env` from disk and it cannot be avoided | Say so in the Seed document and ask. |
 | `SERVICE_REQUEST_DENIED` | Do not retry. Read the note; change the request or ask. |
 | `SERVICE_REQUEST_EXPIRED` | Say it expired and ask whether to file it again. |
 | `SERVICE_NAME_TAKEN` | `list_services`; the name is in use by a service not yours: ask. |
-| `WORKTREE_NOT_AVAILABLE`, `SANDBOX_UNAVAILABLE` | Stop. Quote the message in the comment. |
-| Service `failed`, or the application does not answer | Put the log lines in the comment, say what failed. Do not stop the engine or drop anything. |
+| `WORKTREE_NOT_AVAILABLE`, `SANDBOX_UNAVAILABLE` | Stop. Quote the message in the Seed document. |
+| Service `failed`, or the application does not answer | Put the log lines in the Seed document, say what failed. Do not stop the engine or drop anything. |
 | An existing k3s resource would be replaced or deleted | Do not. Create a task-named resource beside it. |
