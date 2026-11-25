@@ -121,7 +121,7 @@ func TestTheMemoryTabAndTheNoteInTheThreadFollowTheProductOwnersMemoryInTheWebUI
 		chromedp.Evaluate(entry("Reviews are on Mondays.")+`.querySelector('[data-act=delete]').click()`, nil),
 		chromedp.Click(`.memory-entry .confirm-strip [data-variant=danger]`, chromedp.ByQuery),
 		waitFor(`document.querySelectorAll('.memory-entry[data-receipt]').length === 2`),
-		chromedp.Navigate(page+"#memory"),
+		// The Memory tab wrote its own address when the Edit link opened it, so the page is already at #memory.
 		chromedp.Reload(),
 		waitFor(`document.querySelector('.memory-empty h2')?.textContent === 'Nothing remembered yet'`),
 	)

@@ -3,6 +3,7 @@
 // lets a test play the server's side of a turn.
 
 import { ProductOwnerError, type ProductOwnerEvents, type ProductOwnerGateway } from "../application/ports";
+import { DIGEST_PAGE_SIZE, type Digest, type DigestPage } from "../domain/digest";
 import type { FeedStatus } from "../domain/feed-status";
 import { MAX_ENTRY, entryLength, type MemoryEntry, type MessageItem, type ProductOwnerEvent, type Settings, type ThreadHead, type ThreadItem, type ThreadPage, type ThreadSummary, type Turn } from "../domain/thread";
 
@@ -20,6 +21,12 @@ interface Stored {
 export interface MemoryProductOwner extends ProductOwnerGateway, ProductOwnerEvents {
   /** The server holds this project, with its product owner on or off. */
   seedProject(projectId: string, enabled: boolean): void;
+  /** The server's next digest is at `at` (null for none), whatever the digest time says: the scheduler moved on. Followers hear nothing, as the contract says. */
+  setNextDigest(projectId: string, at: Date | null): void;
+  /** The server holds this digest, without telling anyone. */
+  seedDigest(projectId: string, digest: Digest): void;
+  /** The server recorded this digest, for its date: it replaces the one of that date and tells every follower of the project. */
+  recordDigest(projectId: string, digest: Digest): void;
   /** The server holds this thread of `projectId`, with these items. */
   seedThread(projectId: string, thread: Partial<ThreadSummary> & { threadId: string }, items?: readonly ThreadItem[], sessionId?: string): void;
   /** The server holds these entries of `projectId` (no event is sent). */
@@ -55,6 +62,7 @@ const upsert = (items: ThreadItem[], item: ThreadItem): void => {
 export function memoryProductOwner(): MemoryProductOwner {
   const settings = new Map<string, Settings>();
   const threads = new Map<string, Stored>();
+  const digests = new Map<string, Digest[]>();
   const followers = new Set<{ projectId: string; onEvent: (e: ProductOwnerEvent) => void; onStatus: (s: FeedStatus) => void }>();
   const stops: string[] = [];
   const memories = new Map<string, MemoryEntry[]>();
@@ -87,6 +95,17 @@ export function memoryProductOwner(): MemoryProductOwner {
     if (!s) throw new ProductOwnerError("PROJECT_NOT_FOUND", `no project ${projectId}`);
     return s;
   };
+  /** What the server computes: the next digest time after "now" (2026-11-24 07:00 at -03:00), none while no time is set or the owner is off. */
+  const withNext = (s: Settings): Settings => {
+    if (!s.enabled || s.digestTime === null) return { ...s, nextDigestAt: null };
+    const today = new Date(`2026-11-24T${s.digestTime}:00-03:00`);
+    return { ...s, nextDigestAt: today.getTime() > Date.parse("2026-11-24T10:00:00Z") ? today : new Date(today.getTime() + 24 * 3600 * 1000) };
+  };
+  /** A project has at most one digest per date. */
+  const keep = (projectId: string, digest: Digest): void => {
+    const held = (digests.get(projectId) ?? []).filter((d) => d.date !== digest.date);
+    digests.set(projectId, [...held, digest].sort((a, b) => b.date.localeCompare(a.date)));
+  };
   const validate = (message: string): void => {
     if (message.trim() === "" || message.length > MAX_MESSAGE) throw new ProductOwnerError("INVALID_INPUT", "the message is empty or too long");
   };
@@ -108,6 +127,19 @@ export function memoryProductOwner(): MemoryProductOwner {
   };
 
   return {
+    seedProject: (projectId, enabled) => void settings.set(projectId, { projectId, enabled, digestTime: null, timeZone: "America/Sao_Paulo", nextDigestAt: null }),
+    setNextDigest(projectId, at) {
+      settings.set(projectId, { ...known(projectId), nextDigestAt: at });
+    },
+    seedDigest(projectId, digest) {
+      known(projectId);
+      keep(projectId, digest);
+    },
+    recordDigest(projectId, digest) {
+      known(projectId);
+      keep(projectId, digest);
+      send(projectId, { type: "digest", digestId: digest.digestId, date: digest.date });
+    },
     seedMemory: (projectId, entries) => void memories.set(projectId, [...entries]),
     remember(projectId, entry, op) {
       const entries = (memories.get(projectId) ?? []).filter((e) => e.entryId !== entry.entryId);
@@ -119,7 +151,6 @@ export function memoryProductOwner(): MemoryProductOwner {
       memories.set(projectId, entries.filter((e) => e.entryId !== entryId));
       send(projectId, { type: "memory", entryId, op: "dropped" });
     },
-    seedProject: (projectId, enabled) => void settings.set(projectId, { projectId, enabled }),
     seedThread(projectId, thread, items = [], sessionId = `s-${thread.threadId}`) {
       const at = new Date(Date.UTC(2026, 10, 23, 9, 0, 0));
       const summary: ThreadSummary = { title: thread.threadId, startedAt: at, lastActivityAt: at, lastMessageExcerpt: "", titleSetByPerson: false, turn: "idle", pendingHeldActions: 0, ...thread };
@@ -177,10 +208,28 @@ export function memoryProductOwner(): MemoryProductOwner {
     async setEnabled(projectId, enabled) {
       check();
       known(projectId);
-      const updated: Settings = { projectId, enabled };
+      const updated: Settings = withNext({ ...known(projectId), enabled });
       settings.set(projectId, updated);
       send(projectId, { type: "settings", settings: updated });
       return updated;
+    },
+    async updateSettings(projectId, patch) {
+      check();
+      let updated = known(projectId);
+      if (patch.digestTime !== undefined) {
+        if (patch.digestTime !== "" && !/^([01]\d|2[0-3]):[0-5]\d$/.test(patch.digestTime)) throw new ProductOwnerError("INVALID_INPUT", "the digest time is not an HH:MM time");
+        updated = withNext({ ...updated, digestTime: patch.digestTime === "" ? null : patch.digestTime });
+      }
+      settings.set(projectId, updated);
+      send(projectId, { type: "settings", settings: updated });
+      return updated;
+    },
+    async digests(projectId, before, signal): Promise<DigestPage> {
+      signal?.throwIfAborted();
+      check();
+      known(projectId);
+      const older = (digests.get(projectId) ?? []).filter((d) => before === undefined || d.date < before);
+      return { digests: older.slice(0, DIGEST_PAGE_SIZE), hasEarlier: older.length > DIGEST_PAGE_SIZE };
     },
     async threads(projectId, signal) {
       signal?.throwIfAborted();

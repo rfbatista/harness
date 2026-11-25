@@ -1,6 +1,7 @@
 // What the product owner feature needs from the outside world.
 
 import type { FeedStatus } from "../domain/feed-status";
+import type { DigestPage } from "../domain/digest";
 import type { MemoryEntry, ProductOwnerEvent, Settings, ThreadPage, ThreadSummary } from "../domain/thread";
 
 export type ProductOwnerErrorCode =
@@ -28,10 +29,20 @@ export class ProductOwnerError extends Error {
   }
 }
 
+/** What `updateSettings` changes: only what is given. */
+export interface SettingsPatch {
+  /** "HH:MM" in the server's time zone; "" clears it. */
+  readonly digestTime?: string;
+}
+
 /** One project's product owner over the harness API. Every call rejects with a ProductOwnerError. */
 export interface ProductOwnerGateway {
   settings(projectId: string, signal?: AbortSignal): Promise<Settings>;
   setEnabled(projectId: string, enabled: boolean): Promise<Settings>;
+  /** Changes only the settings given; answers the settings as they are then. */
+  updateSettings(projectId: string, patch: SettingsPatch): Promise<Settings>;
+  /** At most 30 digests, the newest first; `before` is a date and pages towards the start. */
+  digests(projectId: string, before?: string, signal?: AbortSignal): Promise<DigestPage>;
   /** The most recently active first. */
   threads(projectId: string, signal?: AbortSignal): Promise<readonly ThreadSummary[]>;
   /** A page of the thread, oldest first; `before` pages towards the start. */

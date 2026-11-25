@@ -11,7 +11,7 @@ import { OwnerPagePresenter } from "./owner-page-presenter";
 
 const settled = () => new Promise((resolve) => setImmediate(resolve));
 
-const setup = async (opts: { threadId?: string; phone?: boolean; initial?: { tab: "memory"; entryId: string } } = {}) => {
+const setup = async (opts: { threadId?: string; phone?: boolean; initial?: { tab: "memory"; entryId: string } | { tab: "digests" } } = {}) => {
   const server = memoryProductOwner();
   server.seedProject("p1", true);
   server.seedThread("p1", summary({ threadId: "t1", title: "One" }), [person("Q")]);
@@ -118,5 +118,57 @@ describe("on a phone", () => {
     const memory = new ProjectMemory({ gateway: server, events: server });
     const page = new OwnerPagePresenter({ projectId: "p1", projectName: "harness", threadId: "" }, dock, conversation, list, navigator, memory);
     assert.equal(page.viewModel.memoryCount, null);
+  });
+
+  test("shows the Digests tab with its own address, and the Threads tab again at the thread's address", async () => {
+    const { page, navigator } = await setup({ threadId: "t1" });
+    page.showDigests();
+    assert.equal(page.viewModel.tab, "digests");
+    assert.equal(navigator.replaced.at(-1), "/projects/p1/product-owner#digests");
+    page.showDigests("2026-11-20");
+    assert.equal(navigator.replaced.at(-1), "/projects/p1/product-owner#digests/2026-11-20");
+    page.showThreads();
+    assert.equal(page.viewModel.tab, "threads");
+    assert.equal(navigator.replaced.at(-1), "/projects/p1/product-owner/threads/t1");
+  });
+
+  test("opening a thread or starting one leaves the Digests tab", async () => {
+    const { page } = await setup();
+    page.showDigests();
+    page.openThread("t2");
+    assert.equal(page.viewModel.tab, "threads");
+    page.showDigests();
+    page.newThread();
+    assert.equal(page.viewModel.tab, "threads");
+  });
+
+  test("starts on the Digests tab when the address names it", async () => {
+    const { page } = await setup({ initial: { tab: "digests" } });
+    assert.equal(page.viewModel.tab, "digests");
+    assert.equal(page.viewModel.focusEntry, "");
+  });
+
+  test("each tab switch writes its own address", async () => {
+    const { page, navigator } = await setup({ threadId: "t1" });
+    page.showDigests("2026-11-20");
+    assert.equal(navigator.replaced.at(-1), "/projects/p1/product-owner#digests/2026-11-20");
+    page.showMemory();
+    assert.equal(navigator.replaced.at(-1), "/projects/p1/product-owner#memory");
+    page.showMemory("e 2");
+    assert.equal(navigator.replaced.at(-1), "/projects/p1/product-owner#memory/e%202");
+    page.showThreads();
+    assert.equal(navigator.replaced.at(-1), "/projects/p1/product-owner/threads/t1");
+  });
+
+  test("a thread changing while the Memory or Digests tab shows does not write its address over the tab's", async () => {
+    const { page, navigator, server } = await setup({ threadId: "t1" });
+    page.showMemory();
+    server.publish("p1", { type: "thread", thread: summary({ threadId: "t1", title: "Renamed" }) });
+    await settled();
+    assert.equal(navigator.replaced.at(-1), "/projects/p1/product-owner#memory");
+    page.showDigests();
+    server.publish("p1", { type: "thread", thread: summary({ threadId: "t1", title: "Again" }) });
+    await settled();
+    assert.equal(navigator.replaced.at(-1), "/projects/p1/product-owner#digests");
   });
 });

@@ -43,7 +43,7 @@ describe("the Settings section", () => {
   test("follows the settings event: a change from another tab shows at once", async () => {
     const { section, server, settle } = setup(true);
     await settle();
-    server.publish("p1", { type: "settings", settings: { projectId: "p1", enabled: false } });
+    server.publish("p1", { type: "settings", settings: { projectId: "p1", enabled: false, digestTime: null, timeZone: "UTC", nextDigestAt: null } });
     assert.equal(section.viewModel.state, "off");
   });
 });

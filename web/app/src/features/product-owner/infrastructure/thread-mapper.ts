@@ -1,5 +1,7 @@
 // DTOs to the domain's values, and the other way for what the web UI sends.
 
+import type { Digest, DigestPage } from "../domain/digest";
+import type { DigestDto, DigestListDto } from "./dto/digest-dto";
 import type { MemoryEntry, ProductOwnerEvent, Settings, ThreadHead, ThreadItem, ThreadPage, ThreadSummary } from "../domain/thread";
 import type { ProductOwnerEventDto } from "./dto/event-dto";
 import type { MemoryEntryDto } from "./dto/memory-dto";
@@ -7,7 +9,18 @@ import type { SettingsDto } from "./dto/settings-dto";
 import type { ThreadItemDto, ThreadPageDto, ThreadSummaryDto } from "./dto/thread-dto";
 import type { ThreadHeadDto } from "./dto/thread-dto";
 
-export const toSettings = (dto: SettingsDto): Settings => ({ projectId: dto.project_id, enabled: dto.enabled });
+export const toSettings = (dto: SettingsDto): Settings => ({ projectId: dto.project_id, enabled: dto.enabled, digestTime: dto.digest_time, timeZone: dto.time_zone, nextDigestAt: dto.next_digest_at });
+
+export const toDigest = (dto: DigestDto): Digest => ({
+  digestId: dto.digest_id,
+  date: dto.date,
+  periodStart: dto.period_start,
+  periodEnd: dto.period_end,
+  summary: dto.summary,
+  items: dto.items.map((i) => ({ kind: i.kind, title: i.title, url: i.url, from: i.from ?? null, to: i.to ?? null })),
+});
+
+export const toDigestPage = (dto: DigestListDto): DigestPage => ({ digests: dto.digests.map(toDigest), hasEarlier: dto.has_earlier });
 
 export const toSummary = (dto: ThreadSummaryDto): ThreadSummary => ({
   threadId: dto.thread_id,
@@ -55,6 +68,8 @@ export function toEvent(dto: ProductOwnerEventDto): ProductOwnerEvent | null {
       return dto.thread ? { type: "thread", thread: toSummary(dto.thread) } : null;
     case "product_owner_settings":
       return dto.settings ? { type: "settings", settings: toSettings(dto.settings) } : null;
+    case "product_owner_digest":
+      return dto.digest_id !== undefined && dto.date !== undefined ? { type: "digest", digestId: dto.digest_id, date: dto.date } : null;
     case "product_owner_memory":
       return dto.entry_id !== undefined && dto.op !== undefined ? { type: "memory", entryId: dto.entry_id, op: dto.op } : null;
   }

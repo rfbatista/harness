@@ -18,7 +18,7 @@ export interface OwnerPageViewModel {
   readonly threadCount: number | null;
   /** The Memory tab's count; null until the memory is read. */
   readonly memoryCount: number | null;
-  readonly tab: "threads" | "memory";
+  readonly tab: "threads" | "memory" | "digests";
   /** The entry the Memory tab brings into view; "" for none. */
   readonly focusEntry: string;
   /** Under 48 rem: which of the list and the thread shows; null on a wider screen. */
@@ -32,8 +32,8 @@ export interface OwnerPageProps {
   readonly projectName: string;
   /** The thread the address names; "" on the page itself. */
   readonly threadId: string;
-  /** The Memory tab at an entry, as a note in a thread links to it. */
-  readonly initial?: { readonly tab: "memory"; readonly entryId: string } | undefined;
+  /** The Memory tab at an entry, as a note in a thread links to it; or the Digests tab (`#digests`). */
+  readonly initial?: { readonly tab: "memory"; readonly entryId: string } | { readonly tab: "digests" } | undefined;
 }
 
 export class OwnerPagePresenter extends Presenter<OwnerPageViewModel> {
@@ -45,12 +45,12 @@ export class OwnerPagePresenter extends Presenter<OwnerPageViewModel> {
   readonly #memory: ProjectMemory;
   readonly #stops: Array<() => void> = [];
   #showList: boolean;
-  #tab: "threads" | "memory";
+  #tab: "threads" | "memory" | "digests";
   #focusEntry: string;
   #address: string;
 
   constructor(props: OwnerPageProps, dock: OwnerDock, conversation: Conversation, list: ThreadList, navigator: PageNavigator, memory: ProjectMemory) {
-    super({ projectName: props.projectName, crumbHref: "", settingsHref: "", threadCount: null, memoryCount: null, tab: props.initial?.tab ?? "threads", focusEntry: props.initial?.entryId ?? "", phone: null, notFound: false });
+    super({ projectName: props.projectName, crumbHref: "", settingsHref: "", threadCount: null, memoryCount: null, tab: props.initial?.tab ?? "threads", focusEntry: props.initial?.tab === "memory" ? props.initial.entryId : "", phone: null, notFound: false });
     this.#props = props;
     this.#dock = dock;
     this.#conversation = conversation;
@@ -58,7 +58,7 @@ export class OwnerPagePresenter extends Presenter<OwnerPageViewModel> {
     this.#navigator = navigator;
     this.#memory = memory;
     this.#tab = props.initial?.tab ?? "threads";
-    this.#focusEntry = props.initial?.entryId ?? "";
+    this.#focusEntry = props.initial?.tab === "memory" ? props.initial.entryId : "";
     this.#showList = props.threadId === "";
     this.#address = props.threadId === "" ? pageHref(props.projectId) : threadHref(props.projectId, props.threadId);
     // The page is open: the panel steps aside, and everything of the page lets go when it is destroyed.
@@ -97,6 +97,16 @@ export class OwnerPagePresenter extends Presenter<OwnerPageViewModel> {
   showThreads = (): void => {
     this.#tab = "threads";
     this.#focusEntry = "";
+    const threadId = this.#conversation.state.threadId;
+    this.#goTo(threadId === null ? pageHref(this.#props.projectId) : threadHref(this.#props.projectId, threadId));
+    this.#rebuild();
+  };
+
+  /** The Digests tab, at `date` when one is chosen; the address names it, so it can be shared. */
+  showDigests = (date = ""): void => {
+    this.#tab = "digests";
+    this.#focusEntry = "";
+    this.#goTo(`${pageHref(this.#props.projectId)}#digests${date === "" ? "" : `/${date}`}`);
     this.#rebuild();
   };
 
@@ -104,6 +114,7 @@ export class OwnerPagePresenter extends Presenter<OwnerPageViewModel> {
   showMemory = (entryId = ""): void => {
     this.#tab = "memory";
     this.#focusEntry = entryId;
+    this.#goTo(`${pageHref(this.#props.projectId)}#memory${entryId === "" ? "" : `/${encodeURIComponent(entryId)}`}`);
     this.#rebuild();
   };
 
@@ -119,13 +130,17 @@ export class OwnerPagePresenter extends Presenter<OwnerPageViewModel> {
     this.#dock.dockBeside();
   };
 
-  /** The thread on screen has its own address; the page keeps the address in step with it. */
-  #follow(threadId: string | null): void {
-    if (this.#conversation.state.loading && threadId === null) return;
-    const address = threadId === null ? pageHref(this.#props.projectId) : threadHref(this.#props.projectId, threadId);
+  #goTo(address: string): void {
     if (address === this.#address) return;
     this.#address = address;
     this.#navigator.replace(address);
+  }
+
+  /** The thread on screen has its own address; the page keeps the address in step with it. */
+  #follow(threadId: string | null): void {
+    if (this.#conversation.state.loading && threadId === null) return;
+    if (this.#tab !== "threads") return;
+    this.#goTo(threadId === null ? pageHref(this.#props.projectId) : threadHref(this.#props.projectId, threadId));
   }
 
   #rebuild(): void {

@@ -30,6 +30,12 @@ export const entryLength = (text: string): number => [...text].length;
 export interface Settings {
   readonly projectId: string;
   readonly enabled: boolean;
+  /** "HH:MM" in the server's time zone; null while no digest time is set: no digest is then recorded. */
+  readonly digestTime: string | null;
+  /** The server's time zone for display: an IANA name, or its offset such as "-03:00". Read-only. */
+  readonly timeZone: string;
+  /** When the next digest will be recorded, as the server computes it; null while no digest time is set or the product owner is off. */
+  readonly nextDigestAt: Date | null;
 }
 
 export interface ThreadSummary {
@@ -125,4 +131,6 @@ export type ProductOwnerEvent =
   | { readonly type: "delta"; readonly threadId: string; readonly itemId: string; readonly text: string }
   | { readonly type: "thread"; readonly thread: ThreadSummary }
   | { readonly type: "settings"; readonly settings: Settings }
-  | { readonly type: "memory"; readonly entryId: string; readonly op: MemoryOp };
+  | { readonly type: "memory"; readonly entryId: string; readonly op: MemoryOp }
+  /** A digest was recorded, or changed, for `date`. */
+  | { readonly type: "digest"; readonly digestId: string; readonly date: string };

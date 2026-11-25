@@ -6,6 +6,7 @@ import assert from "node:assert/strict";
 import { ProductOwnerError, type ProductOwnerEvents, type ProductOwnerGateway } from "../application/ports";
 import type { ProductOwnerEvent } from "../domain/thread";
 import type { MemoryProductOwner } from "../infrastructure/memory-product-owner";
+import { TIME_ZONE } from "./digest-fixtures";
 import { entry, failure, memoryNote, message, person, summary } from "./fixtures";
 
 export interface ProductOwnerHarness {
@@ -28,8 +29,8 @@ export function productOwnerContract(name: string, make: () => ProductOwnerHarne
 
     test("reads and changes a project's switch", async () => {
       const h = setup();
-      assert.deepEqual(await h.gateway.settings("p1"), { projectId: "p1", enabled: true });
-      assert.deepEqual(await h.gateway.setEnabled("p1", false), { projectId: "p1", enabled: false });
+      assert.deepEqual(await h.gateway.settings("p1"), { projectId: "p1", enabled: true, digestTime: null, timeZone: TIME_ZONE, nextDigestAt: null });
+      assert.deepEqual(await h.gateway.setEnabled("p1", false), { projectId: "p1", enabled: false, digestTime: null, timeZone: TIME_ZONE, nextDigestAt: null });
       assert.equal((await h.gateway.settings("p1")).enabled, false);
       await assert.rejects(h.gateway.settings("nope"), rejectsWith("PROJECT_NOT_FOUND"));
     });
@@ -176,11 +177,11 @@ export function productOwnerContract(name: string, make: () => ProductOwnerHarne
       h.server.publish("p1", { type: "item", threadId: "t1", item });
       h.server.publish("p2", { type: "delta", threadId: "t2", itemId: "m1", text: "no" });
       h.server.publish("p1", { type: "delta", threadId: "t1", itemId: "m1", text: " more" });
-      h.server.publish("p1", { type: "settings", settings: { projectId: "p1", enabled: false } });
+      h.server.publish("p1", { type: "settings", settings: { projectId: "p1", enabled: false, digestTime: null, timeZone: TIME_ZONE, nextDigestAt: null } });
       assert.deepEqual(seen.map((e) => e.type), ["item", "delta", "settings"]);
       assert.deepEqual(seen[1], { type: "delta", threadId: "t1", itemId: "m1", text: " more" });
       stop();
-      h.server.publish("p1", { type: "settings", settings: { projectId: "p1", enabled: true } });
+      h.server.publish("p1", { type: "settings", settings: { projectId: "p1", enabled: true, digestTime: null, timeZone: TIME_ZONE, nextDigestAt: null } });
       assert.equal(seen.length, 3);
     });
 

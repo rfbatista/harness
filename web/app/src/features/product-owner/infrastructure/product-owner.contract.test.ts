@@ -5,6 +5,7 @@ import { memoryFeed } from "../../../shared/infrastructure/memory-feed";
 import { ProductOwnerError } from "../application/ports";
 import { fakeProductOwnerServer } from "../testing/fake-server";
 import { message, person } from "../testing/fixtures";
+import { digestContract } from "../testing/digest-contract";
 import { productOwnerContract } from "../testing/product-owner-contract";
 import { eventWire, itemWire } from "../testing/wire";
 import { eventsPath, httpProductOwner } from "./http-product-owner";
@@ -32,6 +33,16 @@ productOwnerContract("HTTP adapter against a fake server on the wire", () => {
 });
 
 productOwnerContract("in-memory adapter", () => {
+  const server = memoryProductOwner();
+  return { server, gateway: server, events: server };
+});
+
+digestContract("HTTP adapter against a fake server on the wire", () => {
+  const { server, gateway, events } = http();
+  return { server, gateway, events };
+});
+
+digestContract("in-memory adapter", () => {
   const server = memoryProductOwner();
   return { server, gateway: server, events: server };
 });
@@ -96,4 +107,18 @@ test("a thread item of a kind the web UI does not know is a BAD_RESPONSE, not a 
   server.seedThread("p1", { threadId: "t1" }, [person("hi")]);
   fake.answerWith({ thread: { thread_id: "t1", project_id: "p1", title: "x", turn: "idle", session_id: "s" }, items: [{ ...(itemWire(message()) as object), kind: "hologram" }], has_earlier: false });
   await assert.rejects(gateway.thread("t1"), (err: unknown) => err instanceof ProductOwnerError && err.code === "BAD_RESPONSE" && err.message.includes("items[0].kind"));
+});
+
+test("the HTTP adapter reads a digest whose date is not YYYY-MM-DD as BAD_RESPONSE, naming the field", async () => {
+  const { gateway, fake } = http();
+  const bad = { digest_id: "d", date: "23/11/2026", period_start: "2026-11-23T00:00:00Z", period_end: "2026-11-23T09:00:00Z", summary: "s", items: [] };
+  fake.answerWith({ digests: [bad], has_earlier: false });
+  await assert.rejects(gateway.digests("p1"), (err: unknown) => err instanceof ProductOwnerError && err.code === "BAD_RESPONSE" && err.message.includes("date"));
+});
+
+test("the HTTP adapter refuses a digest date that is not on the calendar", async () => {
+  const { gateway, fake } = http();
+  const bad = { digest_id: "d", date: "2026-02-30", period_start: "2026-02-28T00:00:00Z", period_end: "2026-03-02T09:00:00Z", summary: "s", items: [] };
+  fake.answerWith({ digests: [bad], has_earlier: false });
+  await assert.rejects(gateway.digests("p1"), (err: unknown) => err instanceof ProductOwnerError && err.code === "BAD_RESPONSE");
 });

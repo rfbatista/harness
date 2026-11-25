@@ -5,6 +5,9 @@ const project = (projectId: string): string => `/projects/${encodeURIComponent(p
 /** The full page, with its thread list. */
 export const pageHref = (projectId: string): string => `${project(projectId)}/product-owner`;
 
+/** The Digests tab of the full page. */
+export const digestsHref = (projectId: string): string => `${pageHref(projectId)}#digests`;
+
 /** A thread's own URL: it can be reopened from the address bar and shared. */
 export const threadHref = (projectId: string, threadId: string): string => `${pageHref(projectId)}/threads/${encodeURIComponent(threadId)}`;
 

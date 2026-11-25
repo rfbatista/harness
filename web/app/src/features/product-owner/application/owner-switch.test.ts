@@ -41,7 +41,7 @@ describe("the product owner's switch", () => {
 
   test("follows a change made in another tab", async () => {
     const { sw, server } = await setup(true);
-    server.publish("p1", { type: "settings", settings: { projectId: "p1", enabled: false } });
+    server.publish("p1", { type: "settings", settings: { projectId: "p1", enabled: false, digestTime: null, timeZone: "UTC", nextDigestAt: null } });
     assert.equal(sw.state.enabled, false);
   });
 
