@@ -1,5 +1,4 @@
 // Gaps the review of the Memory tab found (Review: agent/project-product-owner-c62995bd).
-// The tests marked todo state what the spec asks and the branch does not do yet.
 
 import { describe, test } from "node:test";
 import assert from "node:assert/strict";
@@ -30,7 +29,7 @@ describe("the memory address of a page", () => {
     assert.equal(memoryAddress("#threads"), undefined);
   });
 
-  test("a malformed escape in the address does not throw, so the page island still mounts", { todo: "memoryAddress calls decodeURIComponent unguarded: #memory/% throws URIError and the owner-page island is not mounted" }, () => {
+  test("a malformed escape in the address does not throw, so the page island still mounts", () => {
     assert.doesNotThrow(() => memoryAddress("#memory/%E0%A4%A"));
     assert.equal(memoryAddress("#memory/%")?.tab, "memory");
   });
@@ -82,7 +81,7 @@ describe("the in-thread note's Edit link", () => {
 });
 
 describe("the Memory tab under concurrency", () => {
-  test("a second click on Delete entry while the first is under way leaves one receipt", { todo: "confirmDelete has no in-flight guard: two deletes run and two receipts with the same React key stand" }, async () => {
+  test("a second click on Delete entry while the first is under way leaves one receipt", async () => {
     const server = memoryProductOwner();
     server.seedProject("p1", true);
     server.seedMemory("p1", [entry({ entryId: "a", text: "Alpha" }), entry({ entryId: "b", text: "Beta" })]);
@@ -98,7 +97,7 @@ describe("the Memory tab under concurrency", () => {
     assert.equal(new Set(presenter.viewModel.rows.map((r) => r.key)).size, presenter.viewModel.rows.length, "every row key is unique");
   });
 
-  test("an older read that answers after a newer one does not bring back a dropped entry", { todo: "ProjectMemory.#read applies whichever read answers last; reads are not ordered" }, async () => {
+  test("an older read that answers after a newer one does not bring back a dropped entry", async () => {
     const server = memoryProductOwner();
     server.seedProject("p1", true);
     const a = entry({ entryId: "a", text: "Alpha" });

@@ -43,6 +43,8 @@ export class ProjectMemory {
   #state: ProjectMemoryState = EMPTY;
   #unfollow: (() => void) | null = null;
   #generation = 0;
+  /** Counts the reads started: only the newest one that answers is applied. */
+  #reads = 0;
 
   constructor(deps: ProjectMemoryDeps) {
     this.#deps = deps;
@@ -125,9 +127,11 @@ export class ProjectMemory {
 
   async #read(generation: number): Promise<void> {
     const projectId = this.#state.projectId;
+    const sequence = ++this.#reads;
     try {
       const read = [...(await this.#deps.gateway.memory(projectId))];
-      if (generation !== this.#generation) return;
+      // An older answer that comes after a newer one would bring back what the newer one dropped.
+      if (generation !== this.#generation || sequence !== this.#reads) return;
       const before = this.#state;
       const known = new Map(before.entries.map((e) => [e.entryId, e]));
       const fresh = new Set(before.fresh);
@@ -140,7 +144,7 @@ export class ProjectMemory {
       this.#set({ entries: read, loaded: true, loading: false, error: "", fresh });
     } catch (err) {
       if (!(err instanceof ProductOwnerError)) throw err;
-      if (generation === this.#generation) this.#set({ loading: false, error: err.message });
+      if (generation === this.#generation && sequence === this.#reads) this.#set({ loading: false, error: err.message });
     }
   }
 

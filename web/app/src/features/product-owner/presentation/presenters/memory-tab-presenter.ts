@@ -103,6 +103,8 @@ export class MemoryTabPresenter extends Presenter<MemoryTabViewModel> {
   readonly #projectId: string;
   readonly #stop: () => void;
   #ui: Ui;
+  /** Entries whose delete is under way: a second click on Delete entry does not send another. */
+  readonly #deleting = new Set<string>();
 
   /** `focusEntry`: the page was opened at this entry, and brings it into view. */
   constructor(memory: ProjectMemory, projectId: string, focusEntry = "") {
@@ -177,7 +179,8 @@ export class MemoryTabPresenter extends Presenter<MemoryTabViewModel> {
 
   confirmDelete = async (): Promise<void> => {
     const deleting = this.#ui.deleting;
-    if (deleting === null) return;
+    if (deleting === null || this.#deleting.has(deleting.entryId)) return;
+    this.#deleting.add(deleting.entryId);
     try {
       await this.#memory.remove(deleting.entryId);
       // A receipt stands only for an entry the list still held; with none there is nothing to focus.
@@ -186,6 +189,8 @@ export class MemoryTabPresenter extends Presenter<MemoryTabViewModel> {
     } catch (err) {
       if (!(err instanceof ProductOwnerError)) throw err;
       this.#update({ deleting: { entryId: deleting.entryId, error: err.message } });
+    } finally {
+      this.#deleting.delete(deleting.entryId);
     }
   };
 

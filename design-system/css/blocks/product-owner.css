@@ -46,6 +46,8 @@
   .owner-head .actions { display: flex; gap: var(--space-3xs); flex: none; }
   /* A button's busy ring (::before, invisible at rest) reaches 1.4rem to its left through a negative margin; on icon buttons this close it would take the click of the neighbour on its left. */
   .owner-head .actions > .button::before { pointer-events: none; }
+  /* The busy ring of a button reaches past it: in a group of neighbours it must not take their clicks (the memory entry's Edit and Delete, the page toolbar, the composer bar, confirm strips). */
+  :is(.owner-panel, .owner-page) .button::before { pointer-events: none; }
   .owner-head[data-page] { background: var(--color-canvas); }
 
   /* The transcript: a log, not bubbles. */

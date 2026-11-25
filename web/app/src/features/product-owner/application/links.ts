@@ -24,5 +24,11 @@ export const memoryHref = (projectId: string, entryId = ""): string => `${pageHr
 /** `#memory` or `#memory/<entry>` of a page address: the Memory tab, and the entry it opens at. */
 export function memoryAddress(hash: string): { readonly tab: "memory"; readonly entryId: string } | undefined {
   const match = /^#memory(?:\/(.+))?$/.exec(hash);
-  return match ? { tab: "memory", entryId: match[1] === undefined ? "" : decodeURIComponent(match[1]) } : undefined;
+  if (!match) return undefined;
+  try {
+    return { tab: "memory", entryId: match[1] === undefined ? "" : decodeURIComponent(match[1]) };
+  } catch {
+    // A malformed escape names no entry: the tab opens, at none.
+    return { tab: "memory", entryId: "" };
+  }
 }
