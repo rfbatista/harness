@@ -501,6 +501,10 @@ type ResumeRequest struct {
 	RunsOn     domain.Runner `json:"runs_on,omitempty"`
 	RunnerHost string        `json:"runner_host,omitempty"`
 	Size       TermSize      `json:"size,omitempty"`
+	// Prompt, when set, is the resumed conversation's first turn, after the
+	// continue turn of a session a restart interrupted. Empty resumes as the
+	// person's Resume does.
+	Prompt string `json:"prompt,omitempty"`
 }
 
 // SessionEvent is the unified wire + persistence event.

@@ -336,10 +336,11 @@ func (s *Service) ResumeInteractive(ctx context.Context, req ports.ResumeRequest
 	s.withWorktreeReadHook(&cfg, sess.ID, sb)
 	trail.mark(&cfg, domain.PieceOther, "Sandbox and Chrome", "Harness")
 	// A session a restart interrupted mid-turn is told so: its first turn is
-	// the continue turn (ADR 0082); any other resumes idle, with no turn.
-	prompt := ""
+	// the continue turn (ADR 0082). The request's prompt follows it, or is the
+	// first turn on its own; with neither, the session resumes idle.
+	prompt := strings.TrimSpace(req.Prompt)
 	if sess.InterruptedAt != nil {
-		prompt = continueTurn(s.interruption(sess.ID))
+		prompt = strings.TrimSpace(continueTurn(s.interruption(sess.ID)) + "\n\n" + prompt)
 	}
 	spec := s.agentSpec(cfg, ports.Conversation{ID: claudeID(sess), Resume: true}, prompt)
 	spec.EnvFile = envFile
@@ -365,7 +366,9 @@ func (s *Service) ResumeInteractive(ctx context.Context, req ports.ResumeRequest
 	}, prompt)
 	if sess.InterruptedAt != nil {
 		s.record(sess.ID, SessionEvent{Type: eventResumed, InterruptedAt: sess.InterruptedAt, At: time.Now()}, sessionChange{clearInterrupted: true})
-		s.courier.setTurn(sess.ID, turnBusy) // the continue turn is its first
+	}
+	if prompt != "" {
+		s.courier.setTurn(sess.ID, turnBusy) // the continue turn or the prompt is its first
 	} else {
 		s.courier.setTurn(sess.ID, turnIdle) // a resumed conversation waits for its next prompt
 	}
