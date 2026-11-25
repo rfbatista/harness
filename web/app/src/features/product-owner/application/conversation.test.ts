@@ -317,3 +317,56 @@ describe("renaming", () => {
     assert.equal(await conversation.rename("x"), false);
   });
 });
+
+describe("a send while the product owner is off", () => {
+  test("is refused as PRODUCT_OWNER_OFF on a thread: the draft stays and nothing is shown as sent", async () => {
+    const { conversation, server } = setup();
+    server.seedThread("p1", { threadId: "t1" }, [person("Q")]);
+    conversation.attach("p1", "t1");
+    await settled();
+    await server.setEnabled("p1", false);
+    conversation.setDraft("more");
+    await conversation.send();
+    assert.equal(conversation.state.error?.code, "PRODUCT_OWNER_OFF");
+    assert.equal(conversation.state.draft, "more");
+    assert.deepEqual(texts(conversation), ["person:Q"]);
+  });
+
+  test("is refused as PRODUCT_OWNER_OFF on a fresh conversation too, and starts no thread", async () => {
+    const { conversation, threadIds } = setup({ enabled: false });
+    conversation.attach("p1", null);
+    await conversation.send("hello");
+    assert.equal(conversation.state.error?.code, "PRODUCT_OWNER_OFF");
+    assert.equal(conversation.state.draft, "hello");
+    assert.deepEqual(conversation.state.items, []);
+    assert.equal(conversation.state.threadId, null);
+    assert.ok(!threadIds.some((id) => id !== null));
+  });
+});
+
+describe("a rename and the next answer", () => {
+  test("the title the person gave stays when a new answer arrives", async () => {
+    const { conversation, server } = setup();
+    server.seedThread("p1", { threadId: "t1", title: "Old" }, [person("Q")]);
+    conversation.attach("p1", "t1");
+    await settled();
+    assert.equal(await conversation.rename("Roadmap"), true);
+    await conversation.send("and next?");
+    server.publish("p1", { type: "item", threadId: "t1", item: message({ itemId: "a1", text: "Next is child 2." }) });
+    assert.equal(conversation.state.title, "Roadmap");
+    assert.equal((await server.threads("p1")).find((t) => t.threadId === "t1")?.title, "Roadmap");
+  });
+});
+
+describe("a thread of another project", () => {
+  test("is not shown under this project: it says the thread is not found and starts fresh", async () => {
+    const { conversation, server } = setup();
+    server.seedProject("p2", true);
+    server.seedThread("p2", { threadId: "other", title: "Not yours" }, [person("secret")]);
+    conversation.attach("p1", "other");
+    await settled();
+    assert.equal(conversation.state.notFound, true);
+    assert.equal(conversation.state.threadId, null);
+    assert.deepEqual(conversation.state.items, []);
+  });
+});
