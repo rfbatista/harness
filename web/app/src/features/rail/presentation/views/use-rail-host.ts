@@ -63,10 +63,18 @@ export function useRailHost(host: HTMLElement | null, presenter: RailPresenter, 
   const latest = useRef({ hasTasks, drawerOpen });
   latest.current = { hasTasks, drawerOpen };
 
-  // The drawer is the host's data-open; the first paint is closed.
+  // The drawer is the host's data-open, and the scrim behind it (the page dimmed; a click on it closes the drawer). The first paint is closed.
   useLayoutEffect(() => {
     host?.toggleAttribute("data-open", drawerOpen);
+    host?.ownerDocument.querySelector(".scrim")?.toggleAttribute("data-open", drawerOpen);
   }, [host, drawerOpen]);
+  useEffect(() => {
+    const scrim = host?.ownerDocument.querySelector(".scrim");
+    if (!scrim) return;
+    const close = () => presenter.closeDrawer();
+    scrim.addEventListener("click", close);
+    return () => scrim.removeEventListener("click", close);
+  }, [host, presenter]);
 
   // The drawer opens on the Tasks button's rail-open and closes on rail-close.
   useEffect(() => {

@@ -51,10 +51,15 @@ import { ContextDotView } from "../features/context/presentation/views/context-d
 import { ContextPresenter } from "../features/context/presentation/presenters/context-presenter";
 import { isGroupKey } from "../features/context/presentation/presenters/context-view-model";
 import { ContextView } from "../features/context/presentation/views/context-view";
-import { browserFeaturePrefs, cookieRailPrefs, timeoutScheduler, windowAnnouncer, windowPageOpener } from "../features/rail/infrastructure/browser-rail";
+import { browserFeaturePrefs, cookieRailPrefs, timeoutScheduler, windowAnnouncer, windowPageOpener, windowRailOpener } from "../features/rail/infrastructure/browser-rail";
 import { httpRailFeed } from "../features/rail/infrastructure/http-rail-feed";
+import { httpServicesCount } from "../features/rail/infrastructure/http-services-count";
 import { httpRailSource } from "../features/rail/infrastructure/http-rail-source";
+import type { RailPresenter } from "../features/rail/presentation/presenters/rail-presenter";
+import { TasksTogglePresenter } from "../features/rail/presentation/presenters/tasks-toggle-presenter";
 import { RailView } from "../features/rail/presentation/views/rail-view";
+import { TasksToggleView } from "../features/rail/presentation/views/tasks-toggle-view";
+import { TasksToggleDto } from "./rail-props-dto";
 import { buildRail } from "./rail-presenters";
 import { buildTopBar } from "./top-bar-presenters";
 import { TopBarView } from "./top-bar-view";
@@ -93,12 +98,20 @@ export function mountIslands(doc: Document): Dispose {
 
   const railSource = httpRailSource(api);
   const railFeed = httpRailFeed(feed);
+  const servicesCount = httpServicesCount(api, feed);
+  // The header's Tasks button and the rail are two islands that share the rail's state: the button follows the rail once it is mounted.
+  let currentRail: RailPresenter | null = null;
+  const railWatchers = new Set<(rail: RailPresenter | null) => void>();
+  const shareRail = (rail: RailPresenter | null): void => {
+    currentRail = rail;
+    for (const watch of [...railWatchers]) watch(rail);
+  };
 
   const islands: Record<string, Island> = {
     // The rail beside <main>: the mount is the rail's own element (.rail), the server drew it and the browser takes over.
     rail: (mount, props) => {
       const features = browserFeaturePrefs(win);
-      const rail = buildRail(props, { source: railSource, feed: railFeed, prefs: cookieRailPrefs(doc), features, announcer: windowAnnouncer(win), opener: windowPageOpener(win.location), scheduler: timeoutScheduler(win) });
+      const rail = buildRail(props, { source: railSource, feed: railFeed, prefs: cookieRailPrefs(doc), features, announcer: windowAnnouncer(win), opener: windowPageOpener(win.location), scheduler: timeoutScheduler(win), services: servicesCount });
       // In-place navigation keeps the rail in the document: it follows the page and the task that are open (the frame state the swap wrote).
       const follow = () => {
         const state = doc.getElementById("frame-state");
@@ -111,9 +124,30 @@ export function mountIslands(doc: Document): Dispose {
       const failed = mount.getAttribute("data-island-rendered") === "false" || !mount.hasChildNodes();
       const root = failed ? createRoot(mount) : hydrateRoot(mount, node);
       if (failed) root.render(node);
+      shareRail(rail.presenter);
       return () => {
+        shareRail(null);
         win.removeEventListener("harness:navigated", follow);
         rail.stop();
+        root.unmount();
+      };
+    },
+    // The header's Tasks button: the mount is the link itself; it opens the rail's drawer and counts what needs the person.
+    "tasks-toggle": (mount, props) => {
+      const toggle = new TasksTogglePresenter(TasksToggleDto.fromJSON(props).needs_you);
+      const follow = (rail: RailPresenter | null): void => {
+        if (rail) toggle.follow(rail);
+        else toggle.stop();
+      };
+      railWatchers.add(follow);
+      if (currentRail) follow(currentRail);
+      const node = <TasksToggleView presenter={toggle} host={mount as HTMLElement} onOpen={windowRailOpener(win)} />;
+      const failed = mount.getAttribute("data-island-rendered") === "false" || !mount.hasChildNodes();
+      const root = failed ? createRoot(mount) : hydrateRoot(mount, node);
+      if (failed) root.render(node);
+      return () => {
+        railWatchers.delete(follow);
+        toggle.stop();
         root.unmount();
       };
     },

@@ -157,12 +157,23 @@ export function toRow(task: Task, ctx: RowContext, nesting: Nesting): RowViewMod
   };
 }
 
-/** A group as the view binds it: its heading, its rows and Done's rest. */
-export function toGroup(g: RailGroup, ctx: RowContext): GroupViewModel {
+/** A task, or a folded feature's children, waits on the person: what a row's attention says, without drawing the row. */
+function waitsOn(task: Task, ctx: RowContext, nesting: Nesting): boolean {
+  const kids = nesting.kids[task.id] ?? [];
+  const open = kids.length > 0 && (nesting.filtering || ctx.open(task.id));
+  return (kids.length > 0 && !open ? [task, ...kids] : [task]).some((t) => needsYou(t, ctx.byTask[t.id]));
+}
+
+/**
+ * A group as the view binds it: its heading, its rows and Done's rest.
+ * `withMore` draws the rest: the server leaves it out of its paint (it is behind
+ * a closed disclosure, and every row costs the page its render time).
+ */
+export function toGroup(g: RailGroup, ctx: RowContext, withMore: boolean): GroupViewModel {
   const nesting: Nesting = { kids: g.kids, kidTotals: g.kidTotals, filtering: g.filtering, isKid: false };
   const rows = g.rows.map((t) => toRow(t, ctx, nesting));
-  const more = g.more.map((t) => toRow(t, ctx, nesting));
-  const waiting = [...rows, ...more].filter((r) => r.attention).length;
+  const more = withMore ? g.more.map((t) => toRow(t, ctx, nesting)) : [];
+  const waiting = rows.filter((r) => r.attention).length + g.more.filter((t) => waitsOn(t, ctx, nesting)).length;
   let countText = String(g.total);
   let countWords = g.total === 1 ? " task" : " tasks";
   if (g.filtering && !g.empty) {
@@ -184,8 +195,8 @@ export function toGroup(g: RailGroup, ctx: RowContext): GroupViewModel {
     countWords,
     rows,
     more,
-    hasRows: rows.length + more.length > 0,
-    hasMore: more.length > 0,
-    moreText: `Show ${more.length} more`,
+    hasRows: rows.length + g.more.length > 0,
+    hasMore: g.more.length > 0,
+    moreText: `Show ${g.more.length} more`,
   };
 }

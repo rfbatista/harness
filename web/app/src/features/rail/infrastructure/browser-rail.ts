@@ -55,3 +55,8 @@ export function timeoutScheduler(win: Pick<Window, "setTimeout" | "clearTimeout"
     },
   };
 }
+
+/** The Tasks button opens the rail's drawer: the window's `rail-open`, which the rail also hears from anyone else. */
+export function windowRailOpener(win: Pick<Window, "dispatchEvent">): () => void {
+  return () => void win.dispatchEvent(new CustomEvent("rail-open"));
+}

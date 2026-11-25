@@ -96,3 +96,16 @@ export class RailPropsDto {
     return { ...this.seed.toJSON(), project_name: this.project_name, current_task: this.current_task, page: this.page, collapsed: this.collapsed, reports_feed: this.reports_feed, nav: this.nav.toJSON() };
   }
 }
+
+/** The Tasks button's island props (shell.TasksToggleProps): what the server counted as needing the person. */
+export class TasksToggleDto {
+  constructor(readonly needs_you: number) {}
+
+  static fromJSON(raw: unknown): TasksToggleDto {
+    return new TasksToggleDto(count("TasksToggleDto", object("TasksToggleDto", raw), "needs_you"));
+  }
+
+  toJSON(): Wire {
+    return { needs_you: this.needs_you };
+  }
+}

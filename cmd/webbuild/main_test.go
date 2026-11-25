@@ -69,12 +69,19 @@ func TestCodeWorkerIsBuiltBesideTheApp(t *testing.T) {
 	}
 }
 
-// The React client builds through gohydrate: one island, the top bar, and the
-// browser's composition root, written beside the other bundles.
+// The React client builds through gohydrate: the server-rendered islands (the top
+// bar, the rail and the header's Tasks button) and the browser's composition
+// root, written beside the other bundles.
 func TestIslandsAreBuiltThroughGohydrate(t *testing.T) {
 	opts := islandOptions("/repo", false)
-	if len(opts.Islands) != 1 || opts.Islands[0].Name != "top-bar" || opts.Islands[0].ServerEntry != "/repo/web/app/src/islands/top-bar.server.tsx" {
+	want := map[string]string{"top-bar": "top-bar.server.tsx", "rail": "rail.server.tsx", "tasks-toggle": "tasks-toggle.server.tsx"}
+	if len(opts.Islands) != len(want) {
 		t.Fatalf("islands = %+v", opts.Islands)
+	}
+	for _, isl := range opts.Islands {
+		if file, ok := want[isl.Name]; !ok || isl.ServerEntry != "/repo/web/app/src/islands/"+file {
+			t.Fatalf("island %q: server entry %q", isl.Name, isl.ServerEntry)
+		}
 	}
 	if opts.ClientEntry != "/repo/web/app/src/main.client.tsx" || opts.ResolveDir != "/repo/web/app" || opts.OutDir != "/repo/"+outDir {
 		t.Fatalf("island build options = %+v", opts)

@@ -13,7 +13,7 @@ function ProjectNavView({ vm }: { vm: RailViewModel }) {
     <nav className="[ nav ]" aria-label="Project">
       <ul role="list">
         {vm.nav.map((item) => (
-          <li key={item.key} data-page={item.key}>
+          <li key={item.key} data-page={item.key} data-project-id={item.running !== null ? vm.projectId : undefined} data-running-services={item.running ?? undefined}>
             <a href={item.href} aria-current={item.current ? "page" : undefined}>
               <RailIcon name={item.icon} />
               <span className="[ label ]">{item.label}</span>

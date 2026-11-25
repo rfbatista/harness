@@ -79,6 +79,7 @@ export const normalize = (s: string): string => s.normalize("NFD").replace(/\p{M
 /** The title around the query's first match, for <mark>; match is "" when there is none. */
 export function matchParts(title: string, query: string): { before: string; match: string; after: string } {
   const q = normalize(query.trim());
+  if (q === "") return { before: title, match: "", after: "" };
   const chars = [...title];
   const folded = chars.map((ch) => normalize(ch));
   const at = q ? folded.join("").indexOf(q) : -1;
@@ -103,15 +104,38 @@ export interface RailGroupOptions {
 /** The most recently updated first; ties keep the list's order. */
 const byLatest = (list: readonly Task[]): Task[] => [...list].sort((a, b) => (b.updatedAt ?? 0) - (a.updatedAt ?? 0));
 
-/** `tasks` in the list's (creation) order. */
+/** `tasks` in the list's (creation) order. Indexed once: the island renders this on the server, where a scan per task would cost the page its time. */
 export function railGroups(tasks: readonly Task[], { byTask = {}, currentId = "", collapsed = [], query = "", needsYouOnly = false }: RailGroupOptions = {}): RailGroup[] {
   const folded = new Set(collapsed);
   const q = normalize(query.trim());
   const filtering = q !== "" || needsYouOnly;
   const waits = (t: Task): boolean => needsYou(t, byTask[t.id]);
   const matches = (t: Task): boolean => !q || normalize(t.title).includes(q);
+
+  // The tasks that are not archived, and each feature's children (archived-alone ones included) in a card's order.
+  const live = new Set<string>();
+  const childrenByParent = new Map<string, Task[]>();
+  for (const t of tasks) {
+    if (!t.archivedAt) live.add(t.id);
+    if (t.parentId !== "") {
+      const list = childrenByParent.get(t.parentId);
+      if (list) list.push(t);
+      else childrenByParent.set(t.parentId, [t]);
+    }
+  }
+  for (const list of childrenByParent.values()) list.sort((a, b) => CHILD_ORDER.indexOf(a.status) - CHILD_ORDER.indexOf(b.status) || (b.statusSince || 0) - (a.statusSince || 0));
+  const insideCard = (t: Task): boolean => t.archivedAt !== 0 || (t.parentId !== "" && live.has(t.parentId));
+
   // A feature task's children nest under its row; an archived one is not drawn.
-  const allKids = (t: Task): Task[] => cardChildren(tasks, t).filter((k) => !k.archivedAt);
+  const kidCache = new Map<string, Task[]>();
+  const allKids = (t: Task): Task[] => {
+    let kids = kidCache.get(t.id);
+    if (!kids) {
+      kids = (childrenByParent.get(t.id) ?? []).filter((k) => !k.archivedAt);
+      kidCache.set(t.id, kids);
+    }
+    return kids;
+  };
   const waitsRolled = (t: Task): boolean => waits(t) || allKids(t).some(waits);
   // While the filter decides, a feature keeps the children that match, or all of them when it matches itself.
   const kidsOf = (t: Task): Task[] => {
@@ -123,9 +147,18 @@ export function railGroups(tasks: readonly Task[], { byTask = {}, currentId = ""
   const keeps = (t: Task): boolean => (matches(t) && (!needsYouOnly || waits(t))) || (t.parentId === "" && filtering && kidsOf(t).length > 0);
 
   const known = new Set<string>(RAIL_ORDER);
-  const keys = [...RAIL_ORDER, ...(tasks.some((t) => !known.has(t.status) && !isInsideCard(tasks, t)) ? ["other"] : [])];
+  const rowsOf = new Map<string, Task[]>();
+  for (const t of tasks) {
+    if (insideCard(t)) continue;
+    const key = known.has(t.status) ? t.status : "other";
+    const list = rowsOf.get(key);
+    if (list) list.push(t);
+    else rowsOf.set(key, [t]);
+  }
+  const keys = [...RAIL_ORDER, ...(rowsOf.has("other") ? ["other"] : [])];
+
   return keys.map((key) => {
-    let list = tasks.filter((t) => (key === "other" ? !known.has(t.status) : t.status === key) && !isInsideCard(tasks, t));
+    let list = rowsOf.get(key) ?? [];
     if (key === "done") list = byLatest(list);
     const base = { key, label: key === "other" ? "Other" : STATUSES.find((s) => s.value === key)!.label, total: list.length, empty: list.length === 0, filtering };
     const nest = (rows: readonly Task[]) => ({
@@ -136,8 +169,9 @@ export function railGroups(tasks: readonly Task[], { byTask = {}, currentId = ""
       const rows = list.filter(keeps);
       return { ...base, matched: rows.length, collapsed: false, rows, more: [], ...nest(rows) };
     }
-    const shown = key === "done" ? list.filter((t, i) => i < DONE_CAP || t.id === currentId || waitsRolled(t)) : list;
-    const more = list.filter((t) => !shown.includes(t));
-    return { ...base, matched: list.length, collapsed: folded.has(key) && list.length > 0, rows: shown, more, ...nest(list) };
+    const shown = new Set(key === "done" ? list.filter((t, i) => i < DONE_CAP || t.id === currentId || waitsRolled(t)) : list);
+    const rows = list.filter((t) => shown.has(t));
+    const more = list.filter((t) => !shown.has(t));
+    return { ...base, matched: list.length, collapsed: folded.has(key) && list.length > 0, rows, more, ...nest(list) };
   });
 }

@@ -25,6 +25,16 @@ type RailIsland struct {
 	HTML   string
 	Props  string
 	Failed bool
+	// The header's Tasks button (below 48rem it opens the rail as a drawer) is a
+	// small island of its own that shares the rail's state in the browser.
+	ToggleHTML   string
+	ToggleProps  string
+	ToggleFailed bool
+}
+
+// TasksToggleProps are the Tasks button's island props: what needs the person.
+type TasksToggleProps struct {
+	NeedsYou int `json:"needs_you"`
 }
 
 // RailProps are the rail island's props: the rail seed (the project's tasks and

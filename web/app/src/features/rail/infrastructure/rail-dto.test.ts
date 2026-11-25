@@ -7,6 +7,7 @@ import { session, sessionWire, task, taskWire } from "../testing/fixtures";
 import { RailSeedDto } from "./dto/rail-seed-dto";
 import { httpRailFeed, projectFeedPath, toRailChange } from "./http-rail-feed";
 import { httpRailSource } from "./http-rail-source";
+import { httpServicesCount, servicesFeedPath } from "./http-services-count";
 import { toSeed } from "./rail-mapper";
 
 describe("the rail seed", () => {
@@ -97,5 +98,28 @@ describe("the lists read again", () => {
     const source = httpRailSource(api({ "/sessions": {}, "/list_tickets": { tickets: "no" } }));
     await assert.rejects(source.sessions("p1"), { code: "BAD_RESPONSE" });
     await assert.rejects(source.tasks("p1"), { code: "BAD_RESPONSE" });
+  });
+});
+
+describe("the services feed and list", () => {
+  test("an event with a count is announced with its sequence number; a request, an unreadable event or another shape is not", () => {
+    const stream = memoryFeed();
+    const heard: { seq: number; running: number }[] = [];
+    const stop = httpServicesCount({ get: async () => undefined, post: async () => undefined }, stream).follow("p 1", { onCount: (c) => heard.push(c) });
+    const path = servicesFeedPath("p 1");
+    stream.emit(path, { seq: 3, kind: "service_changed", running_count: 2 });
+    stream.emit(path, { seq: 4, kind: "service_request" });
+    stream.emit(path, { kind: "service_changed", running_count: 1 });
+    stream.emit(path, "text");
+    assert.deepEqual(heard, [{ seq: 3, running: 2 }]);
+    stop();
+    assert.equal(stream.followers(path), 0);
+  });
+
+  test("the list counts the services that start or run, and says what sequence it is current to", async () => {
+    const api: ApiClient = { get: async () => ({ seq: 7, services: [{ status: "running" }, { status: "starting" }, { status: "exited" }] }), post: async () => undefined };
+    assert.deepEqual(await httpServicesCount(api, memoryFeed()).read("p1"), { seq: 7, running: 2 });
+    const bad: ApiClient = { get: async () => ({ seq: 1 }), post: async () => undefined };
+    await assert.rejects(httpServicesCount(bad, memoryFeed()).read("p1"), { code: "BAD_RESPONSE" });
   });
 });

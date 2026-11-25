@@ -5,7 +5,7 @@ import type { RailFeedStatus, RailSeed } from "../../application/ports";
 import type { RailSession } from "../../domain/activity";
 import type { Task } from "../../domain/task";
 import { manualScheduler, memoryAnnouncer, memoryFeaturePrefs, memoryPageOpener, memoryRailPrefs } from "../../infrastructure/memory-ports";
-import { memoryRailFeed, memoryRailSource } from "../../infrastructure/memory-rail";
+import { memoryRailFeed, memoryRailSource, memoryServicesCount } from "../../infrastructure/memory-rail";
 import { session, task } from "../../testing/fixtures";
 import type { ProjectNav } from "../../domain/nav";
 import { RailPresenter } from "./rail-presenter";
@@ -34,13 +34,14 @@ function setup({ tasks = [task()], sessions = [session("a", "t1", "running")], c
   const opener = memoryPageOpener();
   const scheduler = manualScheduler();
   const statuses: RailFeedStatus[] = [];
-  const rail = new Rail({ source, feed, seed, currentTaskId: currentTask, collapsed, prefs, features, announcer, opener, scheduler, onFeedStatus: (s) => statuses.push(s) });
+  const services = memoryServicesCount();
+  const rail = new Rail({ source, feed, services, servicesRunning: NAV.servicesRunning, seed, currentTaskId: currentTask, collapsed, prefs, features, announcer, opener, scheduler, onFeedStatus: (s) => statuses.push(s) });
   const presenter = new RailPresenter(rail, features, { projectName: "harness", nav: NAV });
   const vm = () => presenter.viewModel;
   const group = (key: string) => vm().groups.find((g) => g.key === key)!;
   const rows = (): RowViewModel[] => vm().groups.flatMap((g) => [...g.rows, ...g.more]);
   const row = (id: string): RowViewModel | undefined => rows().flatMap((r) => [r, ...r.kids]).find((r) => r.id === id);
-  return { source, feed, prefs, features, announcer, opener, scheduler, statuses, presenter, vm, group, row };
+  return { services, source, feed, prefs, features, announcer, opener, scheduler, statuses, presenter, vm, group, row };
 }
 
 describe("the rail's groups and rows", () => {
@@ -131,8 +132,11 @@ describe("folding", () => {
 
   test("Done caps at five with Show N more, and the open task stays in view", () => {
     const tasks = Array.from({ length: 8 }, (_, n) => task({ id: `d${n}`, title: `Done ${n}`, status: "done", updatedAt: n }));
-    const { group } = setup({ tasks, sessions: [], currentTask: "d0" });
-    assert.deepEqual([group("done").rows.map((r) => r.id), group("done").more.map((r) => r.id), group("done").moreText], [["d7", "d6", "d5", "d4", "d3", "d0"], ["d2", "d1"], "Show 2 more"]);
+    const { group, presenter } = setup({ tasks, sessions: [], currentTask: "d0" });
+    assert.deepEqual([group("done").rows.map((r) => r.id), group("done").moreText, group("done").hasMore], [["d7", "d6", "d5", "d4", "d3", "d0"], "Show 2 more", true]);
+    assert.deepEqual(group("done").more, [], "the server's paint leaves the rest out");
+    presenter.hydrated();
+    assert.deepEqual(group("done").more.map((r) => r.id), ["d2", "d1"]);
   });
 });
 
@@ -266,6 +270,43 @@ describe("the project navigation", () => {
     assert.equal(vm().nav.find((i) => i.key === "reviews")?.badge, "");
     feed.emit({ kind: "task-upsert", task: task({ pendingReviews: 2 }) });
     assert.equal(vm().nav.find((i) => i.key === "reviews")?.badge, "2");
+  });
+});
+
+describe("the Services badge", () => {
+  const badge = (vm: () => { nav: readonly { key: string; badge: string; running: number | null }[] }) => vm().nav.find((i) => i.key === "services");
+
+  test("it starts from what the server counted and follows the services feed, ignoring an event it has seen", () => {
+    const { services, vm } = setup();
+    assert.deepEqual([badge(vm)?.badge, badge(vm)?.running], ["99+", 120]);
+    services.emit({ seq: 5, running: 2 });
+    assert.deepEqual([badge(vm)?.badge, badge(vm)?.running], ["2", 2]);
+    services.emit({ seq: 5, running: 7 });
+    services.emit({ seq: 4, running: 9 });
+    assert.equal(badge(vm)?.running, 2, "an old or repeated sequence number is not news");
+    services.emit({ seq: 6, running: 0 });
+    assert.equal(badge(vm)?.badge, "", "the badge is empty at zero");
+  });
+
+  test("after a resync it reads the list again and takes its sequence number", async () => {
+    const { services, vm } = setup();
+    services.emit({ seq: 5, running: 2 });
+    services.answer({ seq: 9, running: 4 });
+    services.setStatus("resynced");
+    await flush();
+    assert.equal(badge(vm)?.running, 4);
+    services.emit({ seq: 8, running: 1 });
+    assert.equal(badge(vm)?.running, 4, "the list was current to 9");
+    services.answer(null);
+    services.setStatus("resynced");
+    await flush();
+    assert.equal(badge(vm)?.running, 4, "a list that cannot be read keeps the count");
+  });
+
+  test("stopping stops following the services feed", () => {
+    const { services, presenter } = setup();
+    presenter.stop();
+    assert.equal(services.followers(), 0);
   });
 });
 

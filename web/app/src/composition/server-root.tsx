@@ -10,7 +10,10 @@ import { memoryProductOwner } from "../features/product-owner/infrastructure/mem
 import { memoryDockMemory, memoryNavigator as memoryOwnerNavigator, memoryScreen } from "../features/product-owner/testing/memory-dock-adapters";
 import { memoryAnnouncer, memoryFeaturePrefs, memoryPageOpener as memoryRailOpener, memoryRailPrefs, manualScheduler } from "../features/rail/infrastructure/memory-ports";
 import { memoryRailFeed, memoryRailSource } from "../features/rail/infrastructure/memory-rail";
+import { TasksTogglePresenter } from "../features/rail/presentation/presenters/tasks-toggle-presenter";
 import { RailView } from "../features/rail/presentation/views/rail-view";
+import { TasksToggleView } from "../features/rail/presentation/views/tasks-toggle-view";
+import { TasksToggleDto } from "./rail-props-dto";
 import { buildRail } from "./rail-presenters";
 import { buildTopBar } from "./top-bar-presenters";
 import { TopBarView } from "./top-bar-view";
@@ -25,6 +28,11 @@ export function ServerTopBar({ props }: { props: unknown }) {
 export function ServerRail({ props }: { props: unknown }) {
   const { presenter } = buildRail(props, { source: memoryRailSource(), feed: memoryRailFeed(), prefs: memoryRailPrefs(), features: memoryFeaturePrefs(), announcer: memoryAnnouncer(), opener: memoryRailOpener(), scheduler: manualScheduler() });
   return <RailView presenter={presenter} host={null} />;
+}
+
+/** The header's Tasks button for the server render: `props` is what the server counted as needing the person. */
+export function ServerTasksToggle({ props }: { props: unknown }) {
+  return <TasksToggleView presenter={new TasksTogglePresenter(TasksToggleDto.fromJSON(props).needs_you)} host={null} onOpen={() => {}} />;
 }
 
 /** The dock for the server render: nothing remembered, nothing to read, so the toggle renders closed and on. */

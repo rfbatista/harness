@@ -121,9 +121,12 @@ func TestRailCapsDoneBehindShowMore(t *testing.T) {
 	if !strings.Contains(body, `<summary><span class="[ closed ]"><span>Show 4 more</span><span class="[ visually-hidden ]"> done tasks</span></span><span class="[ opened ]">Show fewer</span></summary>`) {
 		t.Error("Done is not capped behind Show 4 more")
 	}
-	// Newest first: d7…d3 shown, d2, d1, d0 and the undated t-ship behind it.
-	if i, j := strings.Index(body, ">Finished 7<"), strings.Index(body, ">Finished 1<"); i < 0 || j < 0 || i > j || j < strings.Index(body, "Show 4 more") || strings.Index(body, ">Finished 3<") > strings.Index(body, "Show 4 more") {
-		t.Error("Done is not newest first, with the oldest behind the summary")
+	// Newest first: d7…d3 shown; the rest is behind the summary, which the island draws once it has taken over.
+	if i, j := strings.Index(body, ">Finished 7<"), strings.Index(body, ">Finished 3<"); i < 0 || j < 0 || i > j || j > strings.Index(body, "Show 4 more") {
+		t.Error("Done is not newest first")
+	}
+	if rail := body[strings.Index(body, `id="rail"`):strings.Index(body, `id="rail-seed"`)]; strings.Contains(rail, ">Finished 1<") {
+		t.Error("the server draws the rows behind the summary: every row costs the page its render time")
 	}
 }
 
@@ -131,9 +134,9 @@ func TestThePhoneTasksButtonIsALinkToTheBoardWithWhatNeedsYou(t *testing.T) {
 	body := get(t, newRenderedHandler(t, board()), "/projects/p1/tasks/t-docs").Body.String()
 	for _, want := range []string{
 		`class="[ button ] [ tasks-toggle ]" data-variant="ghost" href="/projects/p1" aria-controls="rail"`,
-		`<span x-text="needsYouCount">1</span>`,
+		`<span>1</span><span class="[ visually-hidden ]"> need you</span>`,
 		`<div class="[ drawer-head ]"><span class="[ truncate ]">coding_pool</span>`,
-		`<div class="[ scrim ]" x-data="tasksRailToggle"`,
+		`<div class="[ scrim ]"></div>`,
 	} {
 		if !strings.Contains(body, want) {
 			t.Errorf("task page is missing %q", want)

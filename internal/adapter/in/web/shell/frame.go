@@ -139,6 +139,34 @@ type Rail struct {
 	Seed *RailSeed
 }
 
+// NeedsYouCount is how many of the seeded tasks need the person: a session
+// waits (its status, an approval or an interview) or a review request does.
+func (s *RailSeed) NeedsYouCount() int {
+	if s == nil {
+		return 0
+	}
+	waiting := map[string]bool{}
+	for _, x := range s.Sessions {
+		if x.TicketID == "" {
+			continue
+		}
+		switch x.Status {
+		case "done", "stopped", "failed":
+			continue
+		}
+		if x.Status == "waiting_approval" || x.Status == "idle" || x.PendingApprovals > 0 || x.OpenInterviewCount > 0 {
+			waiting[x.TicketID] = true
+		}
+	}
+	n := 0
+	for _, t := range s.Tasks {
+		if t.ArchivedAt == nil && (waiting[t.ID] || t.PendingReviews > 0) {
+			n++
+		}
+	}
+	return n
+}
+
 // ServicesNav is the navigation's Services item: its page, and how many of
 // the project's services are starting or running, which the browser keeps
 // current from the services feed.

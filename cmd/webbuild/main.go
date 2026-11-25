@@ -177,6 +177,7 @@ func islandOptions(root string, dev bool) gohydrate.IslandBuildOptions {
 		Islands: []gohydrate.Island{
 			{Name: "top-bar", ServerEntry: filepath.Join(app, "src", "islands", "top-bar.server.tsx")},
 			{Name: "rail", ServerEntry: filepath.Join(app, "src", "islands", "rail.server.tsx")},
+			{Name: "tasks-toggle", ServerEntry: filepath.Join(app, "src", "islands", "tasks-toggle.server.tsx")},
 		},
 		ClientEntry: filepath.Join(app, "src", "main.client.tsx"),
 		ResolveDir:  app,

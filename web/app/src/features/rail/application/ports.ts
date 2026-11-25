@@ -67,3 +67,11 @@ export interface PageOpener {
 export interface Scheduler {
   after(ms: number, run: () => void): () => void;
 }
+
+/** The project's running services, which the Services item's badge counts. */
+export interface ServicesCount {
+  /** Calls `onCount` for every services event that carries a count, with its sequence number; returns its unsubscribe. */
+  follow(projectId: string, handlers: { onCount(count: { seq: number; running: number }): void; onStatus?(status: RailFeedStatus): void }): () => void;
+  /** How many services run now, and the sequence number that answer is current to. Rejects with a RailSourceError. */
+  read(projectId: string, signal?: AbortSignal): Promise<{ seq: number; running: number }>;
+}

@@ -18,7 +18,7 @@
 
     /* The React island's mount is not a box of its own: what it renders (the
        brand, the picker, the pages, the bell) lays out as the bar's children. */
-    & > [data-island] { display: contents; }
+    & > [data-island]:not(.tasks-toggle) { display: contents; }
 
     & .brand {
       color: var(--color-ink);

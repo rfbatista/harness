@@ -2,7 +2,7 @@
 
 import type { RailSession } from "../domain/activity";
 import type { Task } from "../domain/task";
-import { RailSourceError, type RailChange, type RailFeed, type RailFeedStatus, type RailSource } from "../application/ports";
+import { RailSourceError, type RailChange, type RailFeed, type RailFeedStatus, type RailSource, type ServicesCount } from "../application/ports";
 
 export interface MemoryRailSource extends RailSource {
   setSessions(sessions: readonly RailSession[]): void;
@@ -61,6 +61,36 @@ export function memoryRailFeed(): MemoryRailFeed {
       status = next;
       for (const f of [...followers]) f.onStatus?.(next);
     },
+    followers: () => followers.size,
+  };
+}
+
+export interface MemoryServicesCount extends ServicesCount {
+  /** The services feed announces a count. */
+  emit(count: { seq: number; running: number }): void;
+  setStatus(status: RailFeedStatus): void;
+  /** What a read answers next, or null for a read that fails. */
+  answer(list: { seq: number; running: number } | null): void;
+  followers(): number;
+}
+
+export function memoryServicesCount(initial: { seq: number; running: number } = { seq: 0, running: 0 }): MemoryServicesCount {
+  type Handlers = { onCount(count: { seq: number; running: number }): void; onStatus?(status: RailFeedStatus): void };
+  const followers = new Set<Handlers>();
+  let list: { seq: number; running: number } | null = initial;
+  return {
+    follow(_projectId, handlers) {
+      followers.add(handlers);
+      return () => void followers.delete(handlers);
+    },
+    async read() {
+      await Promise.resolve();
+      if (!list) throw new RailSourceError("NETWORK_ERROR", "list_services is down");
+      return list;
+    },
+    emit: (count) => void [...followers].forEach((f) => f.onCount(count)),
+    setStatus: (status) => void [...followers].forEach((f) => f.onStatus?.(status)),
+    answer: (next) => void (list = next),
     followers: () => followers.size,
   };
 }

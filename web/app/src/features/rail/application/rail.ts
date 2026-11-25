@@ -8,7 +8,7 @@
 import { needsYou, railGroups } from "../domain/rail-groups";
 import { taskHref, type Task } from "../domain/task";
 import { activityOf, followProject, type RailState, type RailUpdate } from "./follow-project";
-import type { Announcer, FeaturePrefs, PageOpener, RailFeed, RailFeedStatus, RailPrefs, RailSeed, RailSource, Scheduler } from "./ports";
+import type { Announcer, FeaturePrefs, PageOpener, RailFeed, RailFeedStatus, RailPrefs, RailSeed, RailSource, Scheduler, ServicesCount } from "./ports";
 
 /** How long a task that arrived or moved wears the arrival wash. */
 export const FRESH_MS = 8_000;
@@ -41,6 +41,8 @@ export interface RailModelState extends RailState {
   readonly opened: Readonly<Record<string, boolean>>;
   /** The phone drawer is open. */
   readonly drawerOpen: boolean;
+  /** Services starting or running: the Services item's badge, kept current by the services feed. */
+  readonly servicesRunning: number;
   /** The browser's own preferences were read: until then the rail is what the server painted (every feature folded). */
   readonly prefsRead: boolean;
 }
@@ -58,6 +60,10 @@ export interface RailInput {
   readonly announcer: Announcer;
   readonly opener: PageOpener;
   readonly scheduler: Scheduler;
+  /** The project's running services, followed for the Services item's badge; absent when the item is not served. */
+  readonly services?: ServicesCount;
+  /** What the server counted: the badge until the services feed says otherwise. */
+  readonly servicesRunning?: number;
   /** The feed's connection status, for the stream bar. */
   readonly onFeedStatus?: (status: RailFeedStatus) => void;
 }
@@ -79,6 +85,7 @@ export class Rail {
   readonly #listeners = new Set<(state: RailModelState) => void>();
   readonly #input: RailInput;
   readonly #stopFollowing: () => void;
+  #stopServices: (() => void) | null = null;
   readonly #timers = new Set<() => void>();
   #announcing: string[] = [];
   #announceTimer: (() => void) | null = null;
@@ -103,8 +110,10 @@ export class Rail {
       opened: {},
       drawerOpen: false,
       prefsRead: false,
+      servicesRunning: input.servicesRunning ?? 0,
     };
     this.#stopFollowing = follow.stop;
+    if (input.services) this.#followServices(input.services, input.seed.projectId);
   }
 
   get state(): RailModelState {
@@ -133,6 +142,31 @@ export class Rail {
       this.#timers.delete(cancel);
       cancel();
     };
+  }
+
+  /** The services feed carries the running count with each event; the list is read again after a drop. */
+  #followServices(services: ServicesCount, projectId: string): void {
+    let seq = 0;
+    const show = (running: number): void => this.#set({ servicesRunning: running });
+    const stop = services.follow(projectId, {
+      onCount: (count) => {
+        if (count.seq <= seq) return;
+        seq = count.seq;
+        show(count.running);
+      },
+      onStatus: (status) => {
+        if (status !== "resynced") return;
+        // Events were missed: the list says how many run now, and the sequence it is current to.
+        void services.read(projectId).then(
+          (list) => {
+            seq = Math.max(seq, list.seq);
+            show(list.running);
+          },
+          () => {}, // the next event or resync corrects it
+        );
+      },
+    });
+    this.#stopServices = stop;
   }
 
   #followed(update: RailUpdate): void {
@@ -273,6 +307,7 @@ export class Rail {
 
   stop(): void {
     this.#stopFollowing();
+    this.#stopServices?.();
     for (const cancel of [...this.#timers]) cancel();
     this.#timers.clear();
     this.#listeners.clear();

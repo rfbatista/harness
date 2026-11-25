@@ -1,7 +1,7 @@
 // The rail's icons: the same drawings as the templ shell (shell/icons.templ),
 // decorative: the words beside them carry the meaning.
 
-export type RailIconName = "board" | "code" | "services" | "review" | "document" | "design" | "design-system" | "usage" | "owner" | "plus" | "close" | "chevron";
+export type RailIconName = "board" | "code" | "services" | "review" | "document" | "design" | "design-system" | "usage" | "owner" | "plus" | "close" | "chevron" | "rail";
 
 const PATHS: Record<Exclude<RailIconName, "chevron">, { d: string; round?: boolean; join?: boolean }> = {
   board: { d: "M2 2.75h12v10.5H2z M6 2.75v10.5 M10 2.75v10.5", join: true },
@@ -14,6 +14,7 @@ const PATHS: Record<Exclude<RailIconName, "chevron">, { d: string; round?: boole
   owner: { d: "M2.5 3.5h11v7.25H7L4 13v-2.25H2.5z M5.25 6h5.5 M5.25 8.25h3.5", join: true, round: true },
   plus: { d: "M8 3v10M3 8h10", round: true },
   close: { d: "M4 4l8 8M12 4l-8 8", round: true },
+  rail: { d: "M2 2.75h12v10.5H2z M6 2.75v10.5", join: true },
   services: { d: "M2.5 2.75h11v4h-11z M2.5 9.25h11v4h-11z M5 4.75h.01 M5 11.25h.01 M8 4.75h4 M8 11.25h4", join: true, round: true },
 };
 

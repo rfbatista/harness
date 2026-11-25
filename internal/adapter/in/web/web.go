@@ -13,6 +13,7 @@ import (
 	"net/url"
 	"slices"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/a-h/templ"
@@ -478,7 +479,13 @@ func (s *server) layout(ctx context.Context, title, projectID, taskID string) (s
 		frame.Rail.Collapsed = append(frame.Rail.Collapsed, key)
 	}
 	slices.Sort(frame.Rail.Collapsed)
-	frame.RailIsland = func(f shell.Frame) *shell.RailIsland { return s.railIsland(ctx, f) }
+	// Rendered once, when the page is drawn: the header's Tasks button and the rail share it.
+	var island *shell.RailIsland
+	var once sync.Once
+	frame.RailIsland = func(f shell.Frame) *shell.RailIsland {
+		once.Do(func() { island = s.railIsland(ctx, f) })
+		return island
+	}
 	return frame, nil
 }
 
