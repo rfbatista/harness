@@ -337,9 +337,10 @@ type poSettings struct {
 		ID   string `json:"id"`
 		Name string `json:"name"`
 	} `json:"agent"`
-	Prompt     string  `json:"prompt"`
-	DigestTime *string `json:"digest_time"`
-	TimeZone   string  `json:"time_zone"`
+	Prompt       string  `json:"prompt"`
+	DigestTime   *string `json:"digest_time"`
+	TimeZone     string  `json:"time_zone"`
+	NextDigestAt *string `json:"next_digest_at"`
 }
 
 func (e *poE2E) settings() poSettings {

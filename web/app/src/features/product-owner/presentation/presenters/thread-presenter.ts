@@ -3,9 +3,11 @@
 
 import { Presenter } from "../../../../shared/kernel/presenter";
 import type { Conversation, ConversationItem, ConversationState } from "../../application/conversation";
+import { memoryHref } from "../../application/links";
 import type { TaskCatalog } from "../../application/ports";
+import type { ProjectMemory } from "../../application/project-memory";
 import { parseMarkdown, type Block } from "../../domain/markdown";
-import { isAnswering } from "../../domain/thread";
+import { isAnswering, type MemoryOp } from "../../domain/thread";
 
 export const STARTERS = ["What was done this week?", "What waits on me right now?", "What comes next, and why?", "Shape a new feature with me"] as const;
 export const FIRST_FEATURE_STARTER = "Shape a first feature with me";
@@ -35,6 +37,18 @@ export type RowViewModel =
     }
   | { readonly kind: "notice"; readonly key: string; readonly text: string }
   | { readonly kind: "failure"; readonly key: string; readonly code: string; readonly text: string; readonly retryItemId: string; readonly canRetry: boolean }
+  /** The product owner saved, changed or dropped a memory entry. */
+  | {
+      readonly kind: "memory_note";
+      readonly key: string;
+      readonly op: MemoryOp;
+      /** "Saved to memory", "Updated in memory" or "Dropped from memory". */
+      readonly label: string;
+      readonly text: string;
+      readonly entryId: string;
+      /** Where the entry is edited; null for a dropped entry, one that is gone, or while memory is unread. */
+      readonly editHref: string | null;
+    }
   /** An item this piece does not draw: a neutral line with its kind as a hidden label. */
   | { readonly kind: "other"; readonly key: string; readonly label: string; readonly text: string };
 
@@ -46,7 +60,7 @@ export interface LiveLine {
 export interface ThreadViewModel {
   /** Counts the changes of what the thread shows: a view that follows the foot of the log scrolls on each. */
   readonly revision: number;
-  readonly empty: { readonly heading: string; readonly lead: string; readonly starters: readonly string[] } | null;
+  readonly empty: { readonly heading: string; readonly lead: string; readonly starters: readonly string[]; readonly remembered: string } | null;
   readonly rows: readonly RowViewModel[];
   /** What the product owner is doing now; null while it is idle. */
   readonly live: LiveLine | null;
@@ -65,24 +79,38 @@ export interface ThreadViewModel {
   readonly error: { readonly code: string; readonly text: string; readonly fixUrl: string | null } | null;
 }
 
+export const NOTE_LABEL: Readonly<Record<MemoryOp, string>> = { saved: "Saved to memory", changed: "Updated in memory", dropped: "Dropped from memory" };
+
+/** What the thread knows of the project's memory: the entries, and what an Edit link does on this surface. */
+export interface MemoryParts {
+  readonly memory: ProjectMemory;
+  /** On the page: the Memory tab opens at the entry in place. In the panel the link goes to the page. */
+  readonly openEntry?: (entryId: string) => void;
+}
+
 const WHO = { person: "You", product_owner: "Product owner" } as const;
 
 export class ThreadPresenter extends Presenter<ThreadViewModel> {
   readonly #conversation: Conversation;
   readonly #context: ThreadContext;
   readonly #tasks: TaskCatalog;
+  readonly #memory: MemoryParts | undefined;
   #off: boolean;
+  #notes = 0;
   #announcement = "";
   #wasAnswering = false;
   #revision = 0;
+  #settled = false;
 
-  constructor(conversation: Conversation, context: ThreadContext, tasks: TaskCatalog, off = false) {
+  constructor(conversation: Conversation, context: ThreadContext, tasks: TaskCatalog, off = false, memory?: MemoryParts) {
     super(emptyViewModel());
     this.#conversation = conversation;
     this.#context = context;
     this.#tasks = tasks;
     this.#off = off;
+    this.#memory = memory;
     conversation.subscribe((state) => this.set(this.#build(state)));
+    memory?.memory.subscribe(() => this.set(this.#build(this.#conversation.state)));
   }
 
   /** The product owner was switched off or on: the composer follows. */
@@ -103,6 +131,14 @@ export class ThreadPresenter extends Presenter<ThreadViewModel> {
   loadEarlier = (): Promise<void> => this.#conversation.loadEarlier();
   dismissError = (): void => this.#conversation.dismissError();
 
+  /** The page opens the Memory tab in place; the panel does not. */
+  get hasMemoryTab(): boolean {
+    return this.#memory?.openEntry !== undefined;
+  }
+
+  /** An Edit link of a note, on the page: the Memory tab opens at the entry. */
+  openMemoryEntry = (entryId: string): void => this.#memory?.openEntry?.(entryId);
+
   /** The status of a task named in an answer; "idle" for one the page does not know. */
   taskState = (taskId: string): "running" | "waiting" | "done" | "idle" => this.#tasks.find(taskId)?.state ?? "idle";
 
@@ -118,10 +154,16 @@ export class ThreadPresenter extends Presenter<ThreadViewModel> {
     if (answering !== this.#wasAnswering) this.#announcement = answering ? "Product owner is answering" : "Answer finished";
     this.#wasAnswering = answering;
     const draft = state.draft;
+    const rows = state.items.flatMap((item, n) => this.#row(item, n, state));
+    // A note that arrives while the thread is open is announced; the notes read with the thread are not.
+    const notes = rows.filter((r) => r.kind === "memory_note");
+    if (notes.length > this.#notes && this.#settled) this.#announcement = notes.at(-1)!.label;
+    this.#notes = notes.length;
+    this.#settled = !state.loading;
     return {
       revision: ++this.#revision,
       empty: state.fresh && state.items.length === 0 && !state.loading ? this.#emptyState() : null,
-      rows: state.items.flatMap((item, n) => row(item, n, state.items)),
+      rows,
       live: answering ? liveLine(state) : null,
       announcement: this.#announcement,
       loading: state.loading,
@@ -137,10 +179,24 @@ export class ThreadPresenter extends Presenter<ThreadViewModel> {
     };
   }
 
+  #row(item: ConversationItem, n: number, state: ConversationState): RowViewModel[] {
+    if (item.kind !== "memory_note") return row(item, n, state.items);
+    const mem = this.#memory?.memory.state;
+    const there = item.op !== "dropped" && mem !== undefined && mem.loaded && mem.entries.some((e) => e.entryId === item.entryId);
+    return [{ kind: "memory_note", key: item.itemId, op: item.op, label: NOTE_LABEL[item.op], text: item.text, entryId: item.entryId, editHref: there ? memoryHref(state.projectId, item.entryId) : null }];
+  }
+
+  /** "I remember 14 things we agreed": the thread starts informed. Nothing while none, or while unread. */
+  #remembered(): string {
+    const mem = this.#memory?.memory.state;
+    const n = mem?.loaded ? mem.entries.length : 0;
+    return n === 0 ? "" : `I remember ${n} ${n === 1 ? "thing" : "things"} we agreed`;
+  }
+
   #emptyState(): NonNullable<ThreadViewModel["empty"]> {
     const { projectName, noTasks } = this.#context;
-    if (noTasks) return { heading: `${projectName} has no tasks yet`, lead: "Nothing to report yet. Tell me what you want to build and we shape it together.", starters: [FIRST_FEATURE_STARTER, ...STARTERS.slice(1, 3)] };
-    return { heading: `Ask about ${projectName}`, lead: "I read the whole project: the board, the sessions and the documents.", starters: STARTERS };
+    if (noTasks) return { heading: `${projectName} has no tasks yet`, lead: "Nothing to report yet. Tell me what you want to build and we shape it together.", starters: [FIRST_FEATURE_STARTER, ...STARTERS.slice(1, 3)], remembered: this.#remembered() };
+    return { heading: `Ask about ${projectName}`, lead: "I read the whole project: the board, the sessions and the documents.", starters: STARTERS, remembered: this.#remembered() };
   }
 }
 
@@ -162,6 +218,8 @@ function row(item: ConversationItem, n: number, all: readonly ConversationItem[]
     }
     case "other":
       return [{ kind: "other", key: item.itemId, label: item.wireKind.replace(/_/g, " "), text: item.text }];
+    case "memory_note":
+      return [];
     case "activity":
       // The live line shows the latest; the transcript does not keep a line per step.
       return [];

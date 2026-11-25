@@ -101,14 +101,15 @@ func (s *Service) view(ctx context.Context, projectID string) (*ports.ProductOwn
 	if err != nil {
 		return nil, err
 	}
-	zone, _ := time.Now().Zone()
-	if loc := time.Local.String(); loc != "Local" {
-		zone = loc
-	}
-	v := &ports.ProductOwnerSettingsView{ProjectID: projectID, Enabled: st.Enabled, Prompt: st.Prompt, TimeZone: zone}
+	v := &ports.ProductOwnerSettingsView{ProjectID: projectID, Enabled: st.Enabled, Prompt: st.Prompt, TimeZone: serverZoneName(time.Now())}
 	if st.DigestTime != "" {
 		t := st.DigestTime
 		v.DigestTime = &t
+		if st.Enabled && s.digests != nil {
+			if next, ok, err := s.digests.NextAt(ctx, projectID, st.DigestTime); err == nil && ok {
+				v.NextDigestAt = &next
+			}
+		}
 	}
 	if st.AgentID != "" {
 		// An agent deleted since it was chosen reads as none: the product owner

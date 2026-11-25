@@ -733,7 +733,19 @@ func newServicesModule(lc fx.Lifecycle, cfg Config, db *gorm.DB, cat catalog.Cat
 	// every run, bounded so the server's exit waits for the escalation and
 	// no longer.
 	lc.Append(fx.Hook{
-		OnStart: func(ctx context.Context) error { return svc.Recover(ctx) },
+		OnStart: func(context.Context) error {
+			// Recover walks every container the runtime knows about to sweep
+			// what a dead server left; a runtime that is starting up or a
+			// container stuck mid-removal can stall past fx's start budget
+			// (registerServerSessions's commit-check pass hit the same
+			// shape), so it runs behind the boot instead of holding it.
+			go func() {
+				if err := svc.Recover(context.Background()); err != nil {
+					slog.Warn("recover services at boot", "err", err)
+				}
+			}()
+			return nil
+		},
 		OnStop: func(ctx context.Context) error {
 			stopCtx, cancel := context.WithTimeout(ctx, services.DefaultStopGrace+3*time.Second)
 			defer cancel()
