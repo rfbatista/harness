@@ -2,6 +2,7 @@ package ports
 
 import (
 	"context"
+	"time"
 
 	"operators-mcp/internal/domain"
 )
@@ -63,6 +64,9 @@ type ProductOwnerSettingsView struct {
 	DigestTime *string `json:"digest_time"`
 	// TimeZone is the server's local time zone, and read-only.
 	TimeZone string `json:"time_zone"`
+	// NextDigestAt is when the next digest will be recorded, in the server's
+	// local time; nil while no digest time is set or the product owner is off.
+	NextDigestAt *time.Time `json:"next_digest_at"`
 }
 
 // ProductOwnerAgent is the catalog agent a product owner runs as.

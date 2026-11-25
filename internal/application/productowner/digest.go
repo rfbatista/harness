@@ -265,6 +265,27 @@ func (d *Digests) runFailed(ctx context.Context, p *domain.Project, state *domai
 	}
 }
 
+// NextAt is when the next digest of a project with this digest time will be
+// recorded, by the scheduler's own rule. When the latest digest time is covered
+// it is that time of the following local day; when it is owed (it passed while
+// the server was down or the product owner was off) the scheduler records at
+// its next tick, which is now. False for a digest time that does not parse.
+func (d *Digests) NextAt(ctx context.Context, projectID, digestTime string) (time.Time, bool, error) {
+	now := d.clock().Local()
+	due, ok := lastDue(digestTime, now)
+	if !ok {
+		return time.Time{}, false, nil
+	}
+	state, err := d.store.DigestState(ctx, projectID)
+	if err != nil {
+		return time.Time{}, false, err
+	}
+	if state != nil && state.CheckedDate < due.Format("2006-01-02") && state.SinceAt.Before(due) {
+		return now, true, nil
+	}
+	return time.Date(due.Year(), due.Month(), due.Day()+1, due.Hour(), due.Minute(), 0, 0, due.Location()), true, nil
+}
+
 // lastDue is the latest digest time at or before now: today's, or yesterday's
 // before today's has come. It is false for a digest time that does not parse.
 func lastDue(digestTime string, now time.Time) (time.Time, bool) {
