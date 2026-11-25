@@ -20,9 +20,8 @@ Adapted from `create-verification-skill` in https://github.com/cursor/plugins
 
 ## Before you start
 
-Run this skill only when the person invoked it, or said yes to your offer through
-`ask_person`. Never run it unasked and never offer it twice after a no. If you are not
-in architect mode, run no step: tell the architect what is missing.
+Never offer it twice after a no. If you are not in architect mode, run no step: tell
+the architect what is missing.
 
 You never run the application, and you never write into the repository. You write the
 draft, an Operator launches the application, a QA drives it, and the person approves the
@@ -148,7 +147,8 @@ A draft that was never run is a draft, not a deliverable. You prove it with two 
 of your own, never by running the application yourself:
 
 1. Spawn an **Operator** with `mcp__task__start_task_session`, `mode: "operate"` and
-   the default branch as `base_branch`. Its prompt names the draft's Launch and Doctor
+   the default branch as `base_branch`; it runs the task's branch in the service
+   worktree. Its prompt names the draft's Launch and Doctor
    sections by path and asks it to launch the application through service requests, run
    the doctor and report what failed, with the URLs.
 2. Wait for its done report. Fix the draft from what it reports and spawn a new
