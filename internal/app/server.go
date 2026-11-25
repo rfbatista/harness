@@ -99,8 +99,10 @@ func registerHTTPServer(lc fx.Lifecycle, cfg Config, cat catalog.Catalog, appRun
 
 	// Same for the product owner.
 	var productOwner ports.ProductOwner
+	var productOwnerMemory ports.ProductOwnerMemoryTools
 	if owner.Service != nil {
 		productOwner = owner.Service
+		productOwnerMemory = owner.Service
 	}
 
 	// Same for the interviews.
@@ -234,7 +236,7 @@ func registerHTTPServer(lc fx.Lifecycle, cfg Config, cat catalog.Catalog, appRun
 	if asked.Service != nil {
 		mux.Handle(llminterview.PathPrefix, interviewHandler(asked.Service))
 	}
-	mux.Handle(mcpsession.PathPrefix, slow(sessionTaskHandler(sessionTaskTools(cat, orch, plan, sessions, art, channel, notifier, merges, tooling.WithAgentPlacements(repoAgents), tooling.WithModeAgents(cat.Settings), tooling.WithBranchPush(gate)), plan, sessions, ownerDigestSource(owner.Service)...)))
+	mux.Handle(mcpsession.PathPrefix, slow(sessionTaskHandler(sessionTaskTools(cat, orch, plan, sessions, art, channel, notifier, merges, tooling.WithAgentPlacements(repoAgents), tooling.WithModeAgents(cat.Settings), tooling.WithBranchPush(gate)), plan, sessions, productOwnerMemory, ownerDigestSource(owner.Service)...)))
 	mux.Handle(mcpsession.ServicesPathPrefix, slow(mcpsession.ServicesHandler(tooling.SessionServicesTools(sessions, cat.Agents, svcs, cat.Projects, tooling.WithServiceRequests(svcRequests)))))
 	// The web client owns / and its pages; anything else reaches the legacy
 	// designer SPA until it is retired.

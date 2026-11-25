@@ -23,6 +23,10 @@ var ProductOwnerToolNames = []string{
 	"list_project_sessions",
 	"list_project_branches",
 	"list_product_owner_digests",
+	"list_memory",
+	"save_memory",
+	"change_memory",
+	"drop_memory",
 }
 
 // ProductOwnerSources is what the product owner's own reads come from.
@@ -32,6 +36,8 @@ type ProductOwnerSources struct {
 	Sessions ports.SessionRepository
 	// Digests are the project's daily digests; nil leaves the tool out.
 	Digests ports.ProductOwnerDigests
+	// Memory drives the product owner's memory tools (ADR 0111).
+	Memory ports.ProductOwnerMemoryTools
 }
 
 // ProductOwnerTools are the tools the product-owner session endpoint serves:
@@ -48,7 +54,8 @@ func ProductOwnerTools(all []domain.Tool, src ProductOwnerSources, with ...Produ
 			out = append(out, all[i])
 		}
 	}
-	return append(append(out, productOwnerReads(src)...), productOwnerDigestReads(src)...)
+	out = append(append(out, productOwnerReads(src)...), productOwnerDigestReads(src)...)
+	return append(out, productOwnerMemoryTools(src.Memory)...)
 }
 
 func productOwnerReads(src ProductOwnerSources) []domain.Tool {

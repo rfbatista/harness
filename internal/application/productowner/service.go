@@ -51,6 +51,8 @@ type Service struct {
 	digestTimeChanged func(ctx context.Context, projectID, before, after string)
 	// digests are the project digests the web UI's API reads through here.
 	digests *Digests
+	// memMu serialises the writes of memory entries.
+	memMu sync.Mutex
 }
 
 // OnDigestTimeChanged sets who is told when a project's digest time changes.
