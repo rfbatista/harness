@@ -20,9 +20,11 @@ import (
 // fakeStarter records what it was asked to start and records the session, as
 // orchestration would.
 type fakeStarter struct {
-	sessions ports.SessionRepository
-	got      []ports.InteractiveRequest
-	err      error // refuses every start
+	sessions  ports.SessionRepository
+	got       []ports.InteractiveRequest
+	err       error // refuses every start
+	resumed   []ports.ResumeRequest
+	resumeErr error // refuses every resume
 }
 
 func (f *fakeStarter) StartInteractive(_ context.Context, req ports.InteractiveRequest) (*domain.Session, ports.AgentSpec, error) {
@@ -36,8 +38,18 @@ func (f *fakeStarter) StartInteractive(_ context.Context, req ports.InteractiveR
 	})
 	return s, ports.AgentSpec{}, err
 }
-func (f *fakeStarter) ResumeInteractive(context.Context, ports.ResumeRequest) (*domain.Session, ports.AgentSpec, error) {
-	return nil, ports.AgentSpec{}, nil
+
+// ResumeInteractive records the request and puts the session back to running,
+// as orchestration would.
+func (f *fakeStarter) ResumeInteractive(_ context.Context, req ports.ResumeRequest) (*domain.Session, ports.AgentSpec, error) {
+	f.resumed = append(f.resumed, req)
+	if f.resumeErr != nil {
+		return nil, ports.AgentSpec{}, f.resumeErr
+	}
+	if err := f.sessions.UpdateStatus(req.SessionID, domain.SessionRunning); err != nil {
+		return nil, ports.AgentSpec{}, err
+	}
+	return f.sessions.Get(req.SessionID), ports.AgentSpec{}, nil
 }
 func (f *fakeStarter) EndInteractive(context.Context, string, int, bool) (*domain.Session, error) {
 	return nil, nil
