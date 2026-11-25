@@ -1,16 +1,20 @@
 package app
 
 import (
+	"context"
 	"encoding/json"
+	"errors"
 	"os"
 	"path/filepath"
 	"slices"
 	"strings"
+	"sync/atomic"
 	"testing"
 
 	"github.com/mark3labs/mcp-go/client"
 
 	"operators-mcp/internal/domain"
+	"operators-mcp/internal/ports"
 )
 
 // The product owner's memory (ADR 0111), at the wired server over the
@@ -673,5 +677,49 @@ func TestTheNoteGivesWhatAnEntryReadsNowWhenTheThreadChangedItAfterThePerson(t *
 	}
 	if got := e.sendAndWait(id, "question"); strings.Contains(got, "Person's text.") {
 		t.Errorf("the note carries a stale text: %q", got)
+	}
+}
+
+// flakyMemoryStore fails the next read of the memory version once, as a
+// database that hiccups would.
+type flakyMemoryStore struct {
+	ports.ProductOwnerStore
+	failNext atomic.Bool
+}
+
+func (s *flakyMemoryStore) MemoryVersion(ctx context.Context, projectID string) (int64, error) {
+	if s.failNext.CompareAndSwap(true, false) {
+		return 0, errors.New("memory read failed")
+	}
+	return s.ProductOwnerStore.MemoryVersion(ctx, projectID)
+}
+
+func TestAThreadWhoseOpeningMemoryReadFailedGetsTheWholeMemoryOnItsNextMessage(t *testing.T) {
+	e := newPOE2E(t)
+	flaky := &flakyMemoryStore{}
+	e.wrapStore = func(s ports.ProductOwnerStore) ports.ProductOwnerStore { flaky.ProductOwnerStore = s; return flaky }
+	e.restart()
+	_, owner := e.ownerOf("first thread")
+	e.saveMemory(owner, "Ship on Fridays.")
+	e.saveMemory(owner, "The person prefers short answers.")
+
+	flaky.failNext.Store(true)
+	id, _ := e.startThread("opening message")
+	e.waitTurn(id, "idle")
+	if got := e.received(); got[len(got)-1] != "opening message" {
+		t.Fatalf("the first message arrived as %q, want it alone: the memory read failed", got[len(got)-1])
+	}
+
+	got := e.sendAndWait(id, "second message")
+	for _, want := range []string{"Ship on Fridays.", "The person prefers short answers.", "Memory of this project"} {
+		if !strings.Contains(got, want) {
+			t.Errorf("the second message lacks %q: the thread was told it had seen the memory: %q", want, got)
+		}
+	}
+	if !strings.HasSuffix(got, "second message") {
+		t.Errorf("the second message = %q", got)
+	}
+	if again := e.sendAndWait(id, "third message"); again != "third message" {
+		t.Errorf("the memory came again: %q", again)
 	}
 }

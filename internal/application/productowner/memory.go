@@ -245,26 +245,28 @@ func (s *Service) OpeningMemory(ctx context.Context, projectID string) (text str
 
 // withMemory is what claude is handed for the person's message: the message
 // itself, led by the whole memory when the thread has not been given it.
-// version is what the thread has seen once the message is delivered.
-func (s *Service) withMemory(ctx context.Context, t *domain.ProductOwnerThread, message string) (input string, version int64) {
+// version is what the thread has seen once the message is delivered; ok is
+// false when the memory could not be read, so the thread has seen nothing new
+// and is handed the memory again on its next message.
+func (s *Service) withMemory(ctx context.Context, t *domain.ProductOwnerThread, message string) (input string, version int64, ok bool) {
 	if !t.MemoryOpened {
 		text, v, err := s.OpeningMemory(ctx, t.ProjectID)
 		if err != nil {
-			return message, t.MemorySeen
+			return message, t.MemorySeen, false
 		}
 		if text != "" {
 			message = text + "\n\n" + message
 		}
-		return message, v
+		return message, v, true
 	}
 	note, v, err := s.memoryNote(ctx, t)
 	if err != nil {
-		return message, t.MemorySeen
+		return message, t.MemorySeen, false
 	}
 	if note != "" {
 		message = note + "\n\n" + message
 	}
-	return message, v
+	return message, v, true
 }
 
 // memoryNote tells a thread what changed in its project's memory since it

@@ -68,6 +68,8 @@ type poE2E struct {
 	art     *artifacts.Service
 	project string
 	repo    string
+	// wrapStore, when set, stands between the server and its product owner store.
+	wrapStore func(ports.ProductOwnerStore) ports.ProductOwnerStore
 	// fakeDir holds the stand-in claude, its launch log and its gates.
 	fakeDir string
 
@@ -168,6 +170,12 @@ func (e *poE2E) boot() {
 			}
 		}),
 		ProductOwnerModule,
+		fx.Decorate(func(s ports.ProductOwnerStore) ports.ProductOwnerStore {
+			if e.wrapStore == nil {
+				return s
+			}
+			return e.wrapStore(s)
+		}),
 		fx.Populate(&e.orch, &e.plan, &e.cat, &e.po, &e.sess, &e.store, &e.shells, &e.channel, &e.art, &e.board, &e.usage, &e.notes),
 		fx.NopLogger,
 	)
@@ -635,7 +643,7 @@ func TestAThreadsSessionRunsInProductOwnerModeOnItsProjectWithTheBriefItsModelAn
 	}
 	for _, want := range []string{
 		"product owner of project harness", "Say where you looked", "Say so when you cannot know", "has none and offer to shape its first feature",
-		"cannot change anything yet", "read another session's transcript or worktree, even when asked",
+		"cannot yet change tasks or documents", "read another session's transcript or worktree, even when asked",
 	} {
 		if !strings.Contains(args, want) {
 			t.Errorf("the brief lacks %q", want)
@@ -2102,7 +2110,7 @@ func TestAThreadsSessionHasAContextEntryAtItsStartAndANewOneAtEachResume(t *test
 		}
 		var brief bool
 		for _, p := range entry.Instructions {
-			if p.Title == "Product owner brief" && strings.Contains(p.Text, "cannot change anything yet") {
+			if p.Title == "Product owner brief" && strings.Contains(p.Text, "cannot yet change tasks or documents") {
 				brief = true
 			}
 		}

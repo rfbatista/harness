@@ -309,12 +309,14 @@ func (s *Service) send(ctx context.Context, t *domain.ProductOwnerThread, r *run
 	}
 	s.announceThread(*t)
 	s.resetIdle(r, false)
-	input, seen := s.withMemory(ctx, t, message)
+	input, seen, read := s.withMemory(ctx, t, message)
 	if err := s.sessions.Send(ctx, t.SessionID, input); err != nil {
 		s.fail(ctx, t, itemID, "SESSION_SEND_FAILED", "The message did not reach the product owner's session: "+err.Error())
 		return nil
 	}
-	s.sawMemory(ctx, t, seen)
+	if read {
+		s.sawMemory(ctx, t, seen)
+	}
 	return nil
 }
 
