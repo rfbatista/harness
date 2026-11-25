@@ -160,6 +160,9 @@ func (s *Service) finishMove(ctx context.Context, t *domain.ProductOwnerThread) 
 	}
 	cur, err := s.update(ctx, t.ID, t, func(th *domain.ProductOwnerThread) bool {
 		th.SessionID, th.CheckpointPhase = sessionID, ""
+		// The new conversation knows nothing of the memory: its first message is
+		// handed the whole of it again (ADR 0111, ADR 0112).
+		th.MemoryOpened, th.MemorySeen = false, 0
 		th.Turn, th.LastActivityAt = domain.ProductOwnerTurnIdle, time.Now()
 		return true
 	})

@@ -13,6 +13,7 @@ import (
 
 	"github.com/rfbatista/harnesskit/errs"
 
+	"operators-mcp/internal/adapter/in/web/productowner"
 	"operators-mcp/internal/domain"
 	"operators-mcp/internal/ports"
 )
@@ -141,6 +142,7 @@ type world struct {
 	designs    ports.DesignSystemPages
 	board      ports.AgentBoard
 	interviews ports.InterviewReader
+	poThreads  productowner.Threads
 }
 
 // fakeArchivedCounts counts each project's archived tasks like planning.
@@ -210,6 +212,9 @@ func newTestHandler(t *testing.T, w world) http.Handler {
 	}
 	if w.interviews != nil {
 		deps.Interviews = w.interviews
+	}
+	if w.poThreads != nil {
+		deps.ProductOwnerThreads = w.poThreads
 	}
 	return NewHandler(deps, builtAssets(t), fallback)
 }

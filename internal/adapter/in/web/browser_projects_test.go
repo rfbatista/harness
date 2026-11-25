@@ -41,6 +41,11 @@ func (f *fakeProjectsAPI) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		http.NotFound(w, r) // the rail's feed is not under test
 		return
 	}
+	// The product owner's toggle reads its project's switch on every project page; no test here is about it.
+	if r.URL.Path == "/api/product_owner" {
+		_, _ = w.Write([]byte(`{"project_id":"` + r.URL.Query().Get("project_id") + `","enabled":true}`))
+		return
+	}
 	if r.URL.Path == "/api/find_repositories" {
 		root := strings.TrimRight(r.URL.Query().Get("root_dir"), "/")
 		f.mu.Lock()

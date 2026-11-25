@@ -17,6 +17,11 @@ type SessionLauncher interface {
 	Start(ctx context.Context, req StartRequest) (*domain.Session, error)
 }
 
+// SessionStopper stops a running session the way the person's Stop does.
+type SessionStopper interface {
+	Stop(ctx context.Context, id string) error
+}
+
 // SessionControl acts on a headless session while it runs, and deletes any
 // session. The live operations answer SESSION_INTERACTIVE for a session that
 // runs in a terminal.
@@ -145,6 +150,8 @@ type ProjectChange struct {
 	ProductOwnerThreadItem *ProductOwnerThreadItemChange `json:"product_owner_thread_item,omitempty"`
 	ProductOwnerDelta      *ProductOwnerDeltaChange      `json:"product_owner_delta,omitempty"`
 	ProductOwnerThread     *ProductOwnerThreadChange     `json:"product_owner_thread,omitempty"`
+	// ProductOwnerMemory is a memory entry saved, changed or dropped.
+	ProductOwnerMemory *ProductOwnerMemoryChange `json:"product_owner_memory,omitempty"`
 	// ContextChange says a session's context changed (contract "Harness server
 	// ↔ Web UI — session context", C5). Embedded, so its three fields are the
 	// whole message: {"kind":"context.changed","session_id":…,"reason":…}.
@@ -333,6 +340,8 @@ func (c ProjectChange) ProjectID() string {
 		return c.ProductOwnerDelta.ProjectID
 	case c.ProductOwnerThread != nil:
 		return c.ProductOwnerThread.ProjectID
+	case c.ProductOwnerMemory != nil:
+		return c.ProductOwnerMemory.ProjectID
 	case c.DesignSystemSaved != nil:
 		return c.DesignSystemSaved.ProjectID
 	case c.DesignSystemChanged != nil:
@@ -501,6 +510,10 @@ type ResumeRequest struct {
 	RunsOn     domain.Runner `json:"runs_on,omitempty"`
 	RunnerHost string        `json:"runner_host,omitempty"`
 	Size       TermSize      `json:"size,omitempty"`
+	// Prompt, when set, is the resumed conversation's first turn, after the
+	// continue turn of a session a restart interrupted. Empty resumes as the
+	// person's Resume does.
+	Prompt string `json:"prompt,omitempty"`
 }
 
 // SessionEvent is the unified wire + persistence event.

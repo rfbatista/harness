@@ -82,9 +82,22 @@ templ shellBody(f Frame) {
 			@taskRail(f)
 		}
 		{ children... }
+		@ownerPanelMount(f)
 		@frameState(f, false)
 		@streamBar(f.Live, f.Hints, false)
 	</div>
+}
+
+// ownerPanelMount is where the product owner's docked panel opens, beside
+// <main> (ADR 0115). The browser draws it (a client-rendered island, so there is
+// nothing for the server to render) and keeps it across a click within the
+// project, since only <main> swaps. It is left out where there is no project, or
+// where the islands are not built.
+templ ownerPanelMount(f Frame) {
+	if f.Island != nil && f.Top.Current != "" {
+		<div data-island="owner-panel" data-island-rendered="false"></div>
+		@propsScript("owner-panel", f.OwnerPanelProps())
+	}
 }
 
 // topBar is the header: the Tasks button, then the React top bar island, which
@@ -361,6 +374,14 @@ templ projectNav(r Rail) {
 					<a href={ templ.SafeURL(r.UsageHref) } { currentAttrs(r.Page == PageUsage)... }>
 						@icon("usage")
 						<span class="[ label ]">Usage</span>
+					</a>
+				</li>
+			}
+			if r.ProductOwnerHref != "" {
+				<li data-page="product-owner">
+					<a href={ templ.SafeURL(r.ProductOwnerHref) } { currentAttrs(r.Page == PageProductOwner)... }>
+						@icon("owner")
+						<span class="[ label ]">Product owner</span>
 					</a>
 				</li>
 			}

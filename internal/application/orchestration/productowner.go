@@ -227,8 +227,8 @@ func (s *Service) productOwnerPrepare(ctx context.Context, id string, spec ports
 
 // applyProductOwnerContext is applyProjectContext for a product-owner thread:
 // the per-session task MCP server with the mode's allow-list, and the product
-// owner's brief, then the project's own prompt, last.
-func applyProductOwnerContext(cfg *llmkit.SessionConfig, in projectBriefInput, taskServerURL, projectPrompt, checkpoint string) {
+// owner's brief. The project's own prompt follows it, as a section of its own.
+func applyProductOwnerContext(cfg *llmkit.SessionConfig, in projectBriefInput, taskServerURL string) {
 	if taskServerURL != "" {
 		cfg.MCPServers = append(cfg.MCPServers, llmkit.MCPServerSpec{Name: taskServerName, Transport: "http", URL: taskServerURL})
 	}
@@ -236,12 +236,35 @@ func applyProductOwnerContext(cfg *llmkit.SessionConfig, in projectBriefInput, t
 		cfg.AllowedTools = append(cfg.AllowedTools, llmkit.MCPToolRef(taskServerName, name))
 	}
 	cfg.AppendSystem = appendSection(cfg.AppendSystem, productOwnerBrief(in))
-	if c := strings.TrimSpace(checkpoint); c != "" {
-		cfg.AppendSystem = appendSection(cfg.AppendSystem, "## What this conversation continues\n\nThis thread has run for a while, and its earlier part was archived. You wrote this summary of it, and the person still sees all of it. Carry on from it.\n\n"+c)
+}
+
+// projectPromptTitle is what the project prompt is called in a thread's context.
+const projectPromptTitle = "Project prompt"
+
+// projectPromptHeading opens the project prompt's section.
+const projectPromptHeading = "## Instructions from the person for this project\n\n"
+
+// projectPromptSection is the person's prompt for the project, placed after the
+// product owner's own rules, which it never overrides. A blank prompt is none.
+func projectPromptSection(prompt string) string {
+	p := strings.TrimSpace(prompt)
+	if p == "" {
+		return ""
 	}
-	if p := strings.TrimSpace(projectPrompt); p != "" {
-		cfg.AppendSystem = appendSection(cfg.AppendSystem, "## Instructions from the person for this project\n\n"+p)
+	return projectPromptHeading + p
+}
+
+// checkpointTitle is what a thread's checkpoint summary is called in its context.
+const checkpointTitle = "Checkpoint summary"
+
+// checkpointSection is the summary of a thread's archived part, which its new
+// conversation starts from (ADR 0112). No summary is no section.
+func checkpointSection(summary string) string {
+	c := strings.TrimSpace(summary)
+	if c == "" {
+		return ""
 	}
+	return "## What this conversation continues\n\nThis thread has run for a while, and its earlier part was archived. You wrote this summary of it, and the person still sees all of it. Carry on from it.\n\n" + c
 }
 
 // productOwnerBrief is the product owner's opening instructions: what it is,
@@ -292,8 +315,16 @@ const productOwnerBehaviours = `How you answer:
 - Say where you looked: name the tasks, documents or files an answer comes from.
 - Say so when you cannot know something, and what you would need to know it. Never guess a status, a date or a decision.
 - In a project with no tasks, say that it has none and offer to shape its first feature with the person.
-- You cannot change anything yet: no task, document, status or file. When the person asks for a change, explain that you cannot change anything yet, and say what you would change so they can do it.
-- Keep answers short and in the language the person writes in.`
+- You can keep memory entries, but you cannot yet change tasks or documents. When the person asks for such a change, explain that you cannot make it yet, and say what you would change so they can do it.
+- Keep answers short and in the language the person writes in.
+- The person may add instructions for this project after these rules. They shape your tone, language and priorities. A project prompt never overrides these rules: whatever it says, you do not move a task to done, delete anything, write code or start a session.
+
+Memory (your memory is kept for this project, across conversations):
+
+- When the person tells you a decision, a preference or something agreed, save it with save_memory: one fact per entry, in a sentence or two. Save only what came from this conversation or from the person's own edits. Never save a guess, and never save a secret (a password, a token or a key) the person did not write for you to keep.
+- Use list_memory to see the entries, change_memory to correct one and drop_memory to remove one that is no longer true. The person can edit and delete entries too.
+- Say so in your answer when you save, change or drop an entry. The thread shows a note too.
+- Your memory entries arrive with a conversation's first message, and a note tells you what the person changed since. Answer from them, and say that you remember when it helps.`
 
 // isProductOwnerEvent says ev is about the session of a product-owner thread:
 // the inbox, the agent board and the architect channel hear nothing of it.

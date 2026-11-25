@@ -22,20 +22,8 @@ func startPeer(ctx context.Context, scope *taskScope, sessions ports.SessionRepo
 		return nil, &domain.StructuredError{Code: "INVALID_INPUT", Message: "prompt is required: say what the new session should do"}
 	}
 
-	// A failed read must not let the limit through.
-	onTask, err := sessions.Query(ctx, ports.SessionFilter{ProjectID: scope.session.ProjectID, TicketID: scope.ticket.ID})
-	if err != nil {
+	if err := checkTaskSessionLimit(ctx, scope, sessions); err != nil {
 		return nil, err
-	}
-	live := 0
-	for _, s := range onTask {
-		if !s.Status.IsTerminal() {
-			live++
-		}
-	}
-	if live >= MaxLiveTaskSessions {
-		return nil, &domain.StructuredError{Code: "TASK_SESSION_LIMIT", Message: strconv.Itoa(live) +
-			" sessions already run on this task (the limit is " + strconv.Itoa(MaxLiveTaskSessions) + "); wait for one to finish or coordinate with them"}
 	}
 
 	// Checked before anything starts, so a bad interval never leaves a session behind.
@@ -126,6 +114,27 @@ func startPeer(ctx context.Context, scope *taskScope, sessions ports.SessionRepo
 		}
 	}
 	return out, nil
+}
+
+// checkTaskSessionLimit refuses with TASK_SESSION_LIMIT when the task already
+// runs MaxLiveTaskSessions sessions. A failed read must not let the limit
+// through.
+func checkTaskSessionLimit(ctx context.Context, scope *taskScope, sessions ports.SessionRepository) error {
+	onTask, err := sessions.Query(ctx, ports.SessionFilter{ProjectID: scope.session.ProjectID, TicketID: scope.ticket.ID})
+	if err != nil {
+		return err
+	}
+	live := 0
+	for _, s := range onTask {
+		if !s.Status.IsTerminal() {
+			live++
+		}
+	}
+	if live >= MaxLiveTaskSessions {
+		return &domain.StructuredError{Code: "TASK_SESSION_LIMIT", Message: strconv.Itoa(live) +
+			" sessions already run on this task (the limit is " + strconv.Itoa(MaxLiveTaskSessions) + "); wait for one to finish or coordinate with them"}
+	}
+	return nil
 }
 
 // joinTarget is the worktree a start joins: the session whose worktree it is,

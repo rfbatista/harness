@@ -371,3 +371,30 @@ func TestStoppingAThreadDuringItsCheckpointLeavesItIdleWithItsItemsKept(t *testi
 	}
 	e.waitTurn(threadID, "idle")
 }
+
+func TestAThreadsFirstMessageAfterACheckpointIsHandedTheWholeMemoryAgainAndOnlyThatOne(t *testing.T) {
+	e := newPOE2E(t)
+	_, owner := e.ownerOf("another thread")
+	e.saveMemory(owner, "Ship on Fridays.")
+
+	e.setContext(contextPastCheckpoint)
+	threadID, _ := e.startThread("first")
+	e.waitTurn(threadID, "idle")
+	if got := e.received(); !strings.Contains(strings.Join(got, "\n"), "Ship on Fridays.") {
+		t.Fatalf("the thread's first message lacked the memory: %q", got)
+	}
+
+	// The new conversation has not seen the memory: its first message carries
+	// it, the one after does not.
+	e.setContext(contextBelowCheckpoint)
+	first := e.sendAndWait(threadID, "after the checkpoint")
+	if !strings.Contains(first, "Ship on Fridays.") || !strings.Contains(first, "Memory of this project") || !strings.HasSuffix(first, "after the checkpoint") {
+		t.Errorf("the first message after the checkpoint = %q, want the whole memory before it", first)
+	}
+	if again := e.sendAndWait(threadID, "and again"); again != "and again" {
+		t.Errorf("the memory came again: %q", again)
+	}
+	if th, err := e.store.Thread(e.ctx, threadID); err != nil || !th.MemoryOpened || th.MemorySeen == 0 {
+		t.Errorf("the thread did not record seeing the memory: %+v %v", th, err)
+	}
+}

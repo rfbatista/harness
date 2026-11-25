@@ -47,6 +47,8 @@ type Service struct {
 	recovering map[string]bool
 	// waking holds the threads whose session a message is waking up.
 	waking map[string]bool
+	// memMu serialises the writes of memory entries.
+	memMu sync.Mutex
 }
 
 // DefaultIdle is how long a thread's process stays after its last turn.

@@ -1063,7 +1063,16 @@ func (s *Service) sessionConfigTrail(trail *pieceTrail, id, dir, model string, a
 	} else if subject.mode == domain.SessionModeProductOwner && subject.project != nil {
 		in := s.briefProject(subject.project)
 		in.AgentsMove = s.agentsMoveDocuments()
-		applyProductOwnerContext(&cfg, in, taskURL, subject.productOwnerPrompt, subject.productOwnerCheckpoint)
+		applyProductOwnerContext(&cfg, in, taskURL)
+		trail.mark(&cfg, domain.PieceBrief, subject.briefTitle(), "Harness")
+		if section := checkpointSection(subject.productOwnerCheckpoint); section != "" {
+			cfg.AppendSystem = appendSection(cfg.AppendSystem, section)
+			trail.mark(&cfg, domain.PieceOther, checkpointTitle, "Checkpoint")
+		}
+		if section := projectPromptSection(subject.productOwnerPrompt); section != "" {
+			cfg.AppendSystem = appendSection(cfg.AppendSystem, section)
+			trail.mark(&cfg, domain.PieceOther, projectPromptTitle, "Project settings")
+		}
 	} else if subject.projectLevel() {
 		in := s.briefProject(subject.project)
 		in.AgentsMove = s.agentsMoveDocuments()
