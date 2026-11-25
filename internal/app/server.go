@@ -246,7 +246,7 @@ func registerHTTPServer(lc fx.Lifecycle, cfg Config, cat catalog.Catalog, appRun
 		ManagedClaude: managedClaude, ManagedClaudeBin: claudeBin, AgentCredential: agentCred.port(), ProjectAgentCredentials: agentCred.projectPort(),
 		AgentOAuth: agentCred.oauth(), AgentAuth: agentCred.auth(), ProjectAgentOAuth: agentCred.projectOAuth(), AgentHomeExposed: agentHomeExposed(cfg), AgentLogin: agentHasLogin(cfg), ArchivedTasks: plan, ArchivedList: plan,
 		// Whether the pens work, read from the gate without starting anything.
-		WritingHelper: helperState(helper), ArchitectureAssistant: architectureAssistant, AgentCatalog: CatalogSeed(agentCat, repoAgents), AgentBoard: agentBoard, Interviews: interviewsPort, ProductOwnerThreads: productOwner}
+		WritingHelper: helperState(helper), ArchitectureAssistant: architectureAssistant, OpenInstructionProposals: openProposals(cat.InstructionProposals), AgentCatalog: CatalogSeed(agentCat, repoAgents), AgentBoard: agentBoard, Interviews: interviewsPort, ProductOwnerThreads: productOwner}
 	topBars.set(web.NewTopBars(webDeps))
 	mux.Handle("/", slow(web.NewHandler(webDeps, assets, uiHandler)))
 

@@ -172,6 +172,21 @@ func (f *fakeInstructionFiles) saveElsewhere(path, content string) {
 	f.emitChanged(path, v)
 }
 
+// saveElsewhereAs is saveElsewhere with the kind given, for a path the harness does not have yet.
+func (f *fakeInstructionFiles) saveElsewhereAs(path, kind, content string) {
+	f.mu.Lock()
+	v := f.put(path, kind, content).Version
+	f.mu.Unlock()
+	f.emitChanged(path, v)
+}
+
+// metaOf is a file's metadata as the endpoints answer it.
+func (f *fakeInstructionFiles) metaOf(path string) map[string]any {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return f.meta(path, false)
+}
+
 // deleteElsewhere is a delete made by another tab.
 func (f *fakeInstructionFiles) deleteElsewhere(path string) {
 	f.mu.Lock()

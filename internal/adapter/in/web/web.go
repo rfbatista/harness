@@ -185,6 +185,10 @@ type Deps struct {
 	// for the Architecture page's seed and the Models page's row. It must not
 	// start anything; nil reads as unavailable.
 	ArchitectureAssistant ports.ArchitectureAssistantReadiness
+	// OpenInstructionProposals counts a repository's open instruction-file
+	// proposals for the Architecture page's tab badge (the first count; the
+	// feed updates it). nil counts none.
+	OpenInstructionProposals func(ctx context.Context, repositoryID string) int
 	// IslandRenderer renders the React islands on the server; nil builds one
 	// from the embedded bundles (none when they are not built).
 	IslandRenderer IslandRenderer
@@ -240,7 +244,7 @@ func NewHandler(deps Deps, assets *Assets, fallback http.Handler) http.Handler {
 	}
 	projectPages := projects.Handler{
 		Projects: deps.Projects, Repositories: deps.Repositories, EnvFiles: deps.EnvFiles, RunCommands: deps.RunCommands, Summaries: deps.ProjectSummaries, Credentials: deps.GitCredentials,
-		TokenSavers: deps.TokenSavers, AgentCredentials: deps.ProjectAgentCredentials, GlobalCredential: deps.AgentCredential, SignIn: deps.ProjectAgentOAuth, ClaudeBin: deps.ManagedClaudeBin, Layout: s.layout, Render: render, Now: deps.Now,
+		TokenSavers: deps.TokenSavers, AgentCredentials: deps.ProjectAgentCredentials, GlobalCredential: deps.AgentCredential, SignIn: deps.ProjectAgentOAuth, ClaudeBin: deps.ManagedClaudeBin, OpenProposals: deps.OpenInstructionProposals, Layout: s.layout, Render: render, Now: deps.Now,
 	}
 	historyPages := history.Handler{
 		Projects: deps.Projects, Repositories: deps.Repositories, History: deps.History, Sessions: deps.Sessions, Tasks: deps.Tasks,
@@ -253,7 +257,7 @@ func NewHandler(deps Deps, assets *Assets, fallback http.Handler) http.Handler {
 	if deps.Workspaces != nil {
 		codePages.Branches = deps.Workspaces
 	}
-	architecturePages := architecture.Handler{Projects: deps.Projects, Repositories: deps.Repositories, Assistant: deps.ArchitectureAssistant, Layout: s.layout, Render: render}
+	architecturePages := architecture.Handler{Projects: deps.Projects, Repositories: deps.Repositories, Assistant: deps.ArchitectureAssistant, OpenProposals: deps.OpenInstructionProposals, Layout: s.layout, Render: render}
 	designSystemPage := designsystem.Handler{Projects: deps.Projects, Designs: deps.DesignSystems, Agents: deps.Agents, Layout: s.layout, Render: render}
 	toProject := func(w http.ResponseWriter, r *http.Request) {
 		http.Redirect(w, r, "/projects/"+url.PathEscape(r.PathValue("project")), http.StatusFound)

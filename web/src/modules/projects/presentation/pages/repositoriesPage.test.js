@@ -155,3 +155,31 @@ test("a refused answer keeps the question and shows the coded error", async () =
   assert.equal(instance.isAsking, true);
   assert.equal(instance.error.code, "REPOSITORY_NOT_FOUND");
 });
+
+test("a repository's entry shows its open proposals from the seed, and follows the feed", () => {
+  const repos = [makeRepository(), makeRepository({ id: "r2", name: "kit", rootDir: "/src/kit", url: "file:///src/kit" })];
+  const memory = memoryProjects({ projects: [makeProject()], repositories: repos });
+  const el = seededElement({ project_id: "p1", repositories: repos.map(repositoryDTO), open_proposals: { r1: 2 } });
+  let push = null;
+  let stopped = false;
+  const architecture = {
+    has: async () => true,
+    instructionProposals: {
+      followProject: (project, handlers) => {
+        assert.equal(project, "p1");
+        push = handlers.onChanged;
+        return () => (stopped = true);
+      },
+    },
+  };
+  const mounted = mount(repositoriesPage({ gateway: memory.gateway, architecture }), { el });
+  mounted.instance.init();
+  mounted.tick();
+  assert.deepEqual(mounted.instance.rows.map((r) => [r.id, r.proposals, r.hasProposals]), [["r1", 2, true], ["r2", 0, false]]);
+  assert.equal(mounted.instance.rows[0].proposalsLabel, "2 to review");
+  push({ repositoryId: "r2", proposalId: "p9", state: "open", openCount: 1 });
+  push({ repositoryId: "r1", proposalId: "p1", state: "approved", openCount: 0 });
+  assert.deepEqual(mounted.instance.rows.map((r) => [r.proposals, r.hasProposals]), [[0, false], [1, true]]);
+  mounted.instance.destroy();
+  assert.equal(stopped, true);
+});

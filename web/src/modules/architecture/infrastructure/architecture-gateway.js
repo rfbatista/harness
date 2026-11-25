@@ -6,6 +6,7 @@ import { StructuredError, Codes } from "../../../shared/domain/errors.js";
 import { sseParser } from "../../../shared/infrastructure/sse.js";
 import { readPreview } from "../domain/layers.js";
 import { instructionFilesGateway } from "./instruction-files-gateway.js";
+import { instructionProposalsGateway } from "./instruction-proposals-gateway.js";
 
 import { ASSISTANT_FAILED } from "../domain/assistant.js";
 
@@ -62,6 +63,9 @@ export function architectureGateway(api, feed, { base = "/api", fetch = globalTh
   const self = {
     /** The repository's instruction files: their own endpoints and feed event. */
     instructionFiles: instructionFilesGateway(api, feed),
+
+    /** The repository's instruction-file proposals (ADR 0092): their own endpoints and feed event. */
+    instructionProposals: instructionProposalsGateway(api, feed),
 
     async get(repositoryId) {
       return toState(await api.post("/get_repository_architecture", { repository_id: repositoryId }));

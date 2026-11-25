@@ -25,7 +25,9 @@ type archRig struct {
 	api  *fakeArchitectureAPI
 	// files answers the instruction file endpoints (the Instructions tab's editor).
 	files *fakeInstructionFiles
-	feed  *sseFeed
+	// proposals answers the instruction-file proposal endpoints (the Instructions tab's Proposals section).
+	proposals *fakeInstructionProposals
+	feed      *sseFeed
 }
 
 func newArchRig(t *testing.T) *archRig { return newArchRigWith(t, nil) }
@@ -54,6 +56,9 @@ func newArchRigFull(t *testing.T, helper *shell.Helper, steps *fakeHelperAPI, wr
 		t.Skip("browser test: web client not built; run `make web`")
 	}
 	ctx, errs := browser(t)
+	feed := &sseFeed{}
+	files := newFakeInstructionFiles(feed)
+	proposals := newFakeInstructionProposals(feed, files)
 	pages := NewHandler(Deps{
 		Projects: fakeProjects{[]*domain.Project{{ID: "p1", Name: "coding_pool"}, {ID: "p2", Name: "other"}}},
 		Tasks:    fakeTickets{},
@@ -63,8 +68,9 @@ func newArchRigFull(t *testing.T, helper *shell.Helper, steps *fakeHelperAPI, wr
 			{ID: "r1", ProjectID: "p1", Name: "harness", RootDir: "/src/harness", IgnoredPaths: []string{"node_modules"}},
 			{ID: "r2", ProjectID: "p2", Name: "elsewhere", RootDir: "/src/elsewhere"},
 		}},
-		EnvFiles:              fakeEnv{},
-		ArchitectureAssistant: assistant,
+		EnvFiles:                 fakeEnv{},
+		ArchitectureAssistant:    assistant,
+		OpenInstructionProposals: proposals.openCount,
 		WritingHelper: func(context.Context) shell.Helper {
 			if helper == nil {
 				return shell.Helper{}
@@ -72,16 +78,15 @@ func newArchRigFull(t *testing.T, helper *shell.Helper, steps *fakeHelperAPI, wr
 			return *helper
 		},
 	}, assets, nil)
-	feed := &sseFeed{}
 	api := newFakeArchitectureAPI(feed)
 	var apiHandler, pageHandler http.Handler = api, pages
 	if wrap != nil {
 		apiHandler, pageHandler = wrap(api, pages)
 	}
 	mux := http.NewServeMux()
-	files := newFakeInstructionFiles(feed)
 	mux.Handle("/api/events", feed)
 	files.register(mux)
+	proposals.register(mux)
 	files.onDeleted = api.dropInstruction
 	files.onRenamed = api.moveInstruction
 	if steps != nil {
@@ -94,7 +99,7 @@ func newArchRigFull(t *testing.T, helper *shell.Helper, steps *fakeHelperAPI, wr
 		srv.CloseClientConnections()
 		srv.Close()
 	})
-	return &archRig{ctx: ctx, errs: errs, srv: srv, api: api, files: files, feed: feed}
+	return &archRig{ctx: ctx, errs: errs, srv: srv, api: api, files: files, proposals: proposals, feed: feed}
 }
 
 func (r *archRig) url(path string) string {

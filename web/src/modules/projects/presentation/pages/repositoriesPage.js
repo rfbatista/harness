@@ -12,12 +12,13 @@ import { baseName, isAbsolutePath, notYetAdded, relativeTo, repositoryURL } from
 /**
  * @param {{
  *   gateway: import("../../domain/ports.js").ProjectGateway,
- *   architecture?: { has: (repositoryId: string) => Promise<boolean> },
+ *   architecture?: { has: (repositoryId: string) => Promise<boolean>, instructionProposals?: { followProject: (projectId: string, handlers: { onChanged: (change: { repositoryId: string, openCount: number }) => void }) => () => void } },
  *   designSystem?: {
  *     designSystems: (projectId: string) => Promise<{ id: string, name: string, version: number }[]>,
  *     apply: (repositoryId: string, designSystemId: string | null, path: string) => Promise<unknown>,
  *   },
- * }} deps  architecture says whether a repository has a saved architecture, for its link's words;
+ * }} deps  architecture says whether a repository has a saved architecture, for its link's words, and follows the
+ *          open instruction-file proposals of the project's repositories, for the badge beside the link;
  *          designSystem lists the project's design systems and applies one: the question asked after adding a
  *          repository to a project that has one.
  */
@@ -38,6 +39,8 @@ export const repositoriesPage = ({ gateway, architecture, designSystem }) => () 
   confirmingId: "",
   /** Repository ids known to have an architecture. @type {string[]} */
   withArchitecture: [],
+  /** How many instruction-file proposals wait on the person, by repository id: the seed's counts, then the feed's. @type {Record<string, number>} */
+  openProposals: {},
   /** Repositories just added to a project with a design system, still to be asked which it uses ("" selected: None). @type {{ id: string, name: string, selected: string, systems: { id: string, name: string, version: number }[] }[]} */
   questions: [],
   error: null,
@@ -55,6 +58,9 @@ export const repositoriesPage = ({ gateway, architecture, designSystem }) => () 
       historyHref: `/projects/${encodeURIComponent(this.projectId)}/repositories/${encodeURIComponent(r.id)}/history`,
       architectureHref: `/projects/${encodeURIComponent(this.projectId)}/repositories/${encodeURIComponent(r.id)}/architecture`,
       architectureLabel: this.withArchitecture.includes(r.id) ? "Architecture" : "Set up architecture",
+      proposals: this.openProposals[r.id] ?? 0,
+      hasProposals: (this.openProposals[r.id] ?? 0) > 0,
+      proposalsLabel: `${this.openProposals[r.id] ?? 0} to review`,
     }));
   },
   /** Found checkouts not added yet, to add with one click. */
@@ -91,6 +97,7 @@ export const repositoriesPage = ({ gateway, architecture, designSystem }) => () 
       this.projectId = seed.projectId;
       this.projectRoot = seed.projectRoot;
       this.repositories = seed.repositories;
+      this.openProposals = { ...(readSeed(this.$el).open_proposals ?? {}) };
     } catch (err) {
       this.error = describeError(err);
       return;
@@ -101,6 +108,15 @@ export const repositoriesPage = ({ gateway, architecture, designSystem }) => () 
     });
     this.searchProject();
     this.findArchitectures();
+    this.unfollow = architecture?.instructionProposals?.followProject(this.projectId, {
+      onChanged: (change) => {
+        this.openProposals = { ...this.openProposals, [change.repositoryId]: change.openCount };
+      },
+    });
+  },
+
+  destroy() {
+    this.unfollow?.();
   },
 
   /** Which repositories have an architecture; a failure leaves the link saying Set up. */

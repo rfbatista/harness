@@ -22,8 +22,11 @@ type Handler struct {
 	// Assistant says whether the architecture assistant can run for a
 	// repository; nil reads as it cannot.
 	Assistant ports.ArchitectureAssistantReadiness
-	Layout    shell.Layout
-	Render    shell.Renderer
+	// OpenProposals counts a repository's open instruction-file proposals for
+	// the Instructions & rules tab's badge; nil counts none.
+	OpenProposals func(ctx context.Context, repositoryID string) int
+	Layout        shell.Layout
+	Render        shell.Renderer
 }
 
 // notConfigured is the reason of a page rendered without an assistant.
@@ -65,6 +68,9 @@ type Seed struct {
 	AssistantAvailable bool   `json:"assistant_available"`
 	AssistantReason    string `json:"assistant_reason"`
 	AssistantFixURL    string `json:"assistant_fix_url"`
+	// OpenProposals is how many instruction-file proposals wait on the
+	// person: the Instructions & rules tab's badge until the feed updates it.
+	OpenProposals int `json:"open_proposals"`
 }
 
 // View is what the page renders.
@@ -109,6 +115,10 @@ func (h Handler) Page(tab string) func(w http.ResponseWriter, r *http.Request) e
 			name = repo.RootDir
 		}
 		assistant := h.assistant(ctx, repo.ID)
+		open := 0
+		if h.OpenProposals != nil {
+			open = h.OpenProposals(ctx, repo.ID)
+		}
 		return h.Render(w, r, http.StatusOK, PageView(View{
 			Frame:          frame,
 			ProjectID:      project.ID,
@@ -126,6 +136,7 @@ func (h Handler) Page(tab string) func(w http.ResponseWriter, r *http.Request) e
 				AssistantAvailable: assistant.Available,
 				AssistantReason:    assistant.Reason,
 				AssistantFixURL:    assistant.FixURL,
+				OpenProposals:      open,
 			},
 		}))
 	}
