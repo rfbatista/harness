@@ -323,4 +323,22 @@ describe("the Digests tab", () => {
     await tab.show("2026-10-20");
     assert.equal(tab.viewModel.selected?.date, "2026-10-20");
   });
+
+  test("a failed earlier page while looking for an address date says loading failed, not that there is no digest", async () => {
+    const { tab, server } = await setup({ digests: digestRun("2026-11-23", 70) });
+    server.failWith(new ProductOwnerError("NETWORK_ERROR", "offline"));
+    await tab.show("2026-10-01");
+    assert.match(tab.viewModel.missing, /^Loading the digests failed/);
+    assert.doesNotMatch(tab.viewModel.missing, /There is no digest/);
+  });
+
+  test("after the missing-date banner, a digest arriving live does not take the screen away", async () => {
+    const { tab, server } = await setup({ digests: [digest("2026-11-22"), digest("2026-11-19")] });
+    await tab.show("2026-11-21");
+    assert.equal(tab.viewModel.selected?.date, "2026-11-22");
+    server.recordDigest("p1", digest("2026-11-23"));
+    await settled();
+    assert.equal(tab.viewModel.selected?.date, "2026-11-22");
+    assert.notEqual(tab.viewModel.missing, "");
+  });
 });

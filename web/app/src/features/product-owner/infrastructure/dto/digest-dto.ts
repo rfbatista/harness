@@ -11,7 +11,9 @@ const LIST = "DigestListDto";
 /** A digest's date, "YYYY-MM-DD": the pages and the address compare dates as text, so a malformed one would break the order. */
 export function isoDate(dto: string, from: Wire, key: string, at = ""): string {
   const value = string(dto, from, key, at);
-  if (!/^\d{4}-\d{2}-\d{2}$/.test(value) || Number.isNaN(Date.parse(`${value}T00:00:00Z`))) throw new DtoError(dto, at === "" ? key : `${at}.${key}`, "expected a date, YYYY-MM-DD");
+  // Date.parse accepts 2026-02-30 and reads it as March 2: the date must survive the round trip.
+  const parsed = /^\d{4}-\d{2}-\d{2}$/.test(value) ? new Date(`${value}T00:00:00Z`) : null;
+  if (parsed === null || Number.isNaN(parsed.getTime()) || parsed.toISOString().slice(0, 10) !== value) throw new DtoError(dto, at === "" ? key : `${at}.${key}`, "expected a date, YYYY-MM-DD");
   return value;
 }
 

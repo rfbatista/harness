@@ -115,3 +115,10 @@ test("the HTTP adapter reads a digest whose date is not YYYY-MM-DD as BAD_RESPON
   fake.answerWith({ digests: [bad], has_earlier: false });
   await assert.rejects(gateway.digests("p1"), (err: unknown) => err instanceof ProductOwnerError && err.code === "BAD_RESPONSE" && err.message.includes("date"));
 });
+
+test("the HTTP adapter refuses a digest date that is not on the calendar", async () => {
+  const { gateway, fake } = http();
+  const bad = { digest_id: "d", date: "2026-02-30", period_start: "2026-02-28T00:00:00Z", period_end: "2026-03-02T09:00:00Z", summary: "s", items: [] };
+  fake.answerWith({ digests: [bad], has_earlier: false });
+  await assert.rejects(gateway.digests("p1"), (err: unknown) => err instanceof ProductOwnerError && err.code === "BAD_RESPONSE");
+});

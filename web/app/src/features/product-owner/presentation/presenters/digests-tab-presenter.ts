@@ -142,8 +142,12 @@ export class DigestsTabPresenter extends Presenter<DigestsTabViewModel> {
     this.#missing = "";
     this.set(build(this.#digests.state, this.#projectId, date, ""));
     if (date === "" || (await this.#digests.reveal(date)) || this.#selected !== date) return;
-    this.#missing = `There is no digest for ${shortDay(date)}.`;
-    this.set(build(this.#digests.state, this.#projectId, "", this.#missing));
+    const state = this.#digests.state;
+    // Loading failed is not the same as there being nothing: say which.
+    this.#missing = state.earlierError !== "" || state.error !== "" ? `Loading the digests failed, so ${shortDay(date)} could not be found: ${state.earlierError || state.error}` : `There is no digest for ${shortDay(date)}.`;
+    // What shows now stays on screen: a digest arriving later does not take it away from the person.
+    this.#selected = state.digests[0]?.date ?? "";
+    this.set(build(state, this.#projectId, this.#selected, this.#missing));
   };
 
   retry = (): void => this.#digests.retry();
