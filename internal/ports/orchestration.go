@@ -17,6 +17,11 @@ type SessionLauncher interface {
 	Start(ctx context.Context, req StartRequest) (*domain.Session, error)
 }
 
+// SessionStopper stops a running session the way the person's Stop does.
+type SessionStopper interface {
+	Stop(ctx context.Context, id string) error
+}
+
 // SessionControl acts on a headless session while it runs, and deletes any
 // session. The live operations answer SESSION_INTERACTIVE for a session that
 // runs in a terminal.
