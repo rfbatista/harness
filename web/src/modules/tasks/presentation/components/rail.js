@@ -1,24 +1,15 @@
 // The rail, live. The server renders the project's tasks in status groups,
-// folded as the rail_collapsed cookie says; tasksRail follows the project's
-// feed, keeps a shared store of the project's tasks and per-task activity, and
-// renders the same groups from it, so a task an agent creates or moves from
-// its session regroups the rail as it happens, and a session started anywhere
-// shows on its row as it starts. The board (tasksBoard) draws its columns from
-// the same store. On top of the server's rail it adds the filter, Needs you,
-// folding, the arrow keys, "/" and, below 48rem, the drawer.
+// folded as the rail_collapsed cookie says; tasksRail renders the same groups
+// from the shared store that tasksRailFeed (the project's feed, headless)
+// keeps, so a task an agent creates or moves from its session regroups the
+// rail as it happens, and a session started anywhere shows on its row as it
+// starts. On top of the server's rail it adds the filter, Needs you, folding,
+// the arrow keys, "/" and, below 48rem, the drawer.
 //
-//   <div class="rail" x-data="tasksRail" data-seed="rail-seed" data-current-task="t1" data-reports-feed …>
+//   <div class="rail" x-data="tasksRail" data-current-task="t1" …>
 //     … <nav aria-label="Tasks"><div x-ignore data-ssr>…first paint…</div>
 //     <template x-if="live"> … x-for="group in groups" … x-for="row in group.rows" …
-//
-// data-reports-feed marks the rail as the page's feed (the project page):
-// it then reports the connection to the stream bar as `feed-status`. The
-// task page's own feed reports there instead.
 
-import { FeedStatus } from "../../../../shared/domain/feed.js";
-import { readSeed } from "../../../../shared/presentation/seed.js";
-import { activityByTask, applyRailChange } from "../../domain/activity.js";
-import { applyTaskChange, onBoard } from "../../domain/board.js";
 import { needsYou, railGroups } from "../../domain/rail.js";
 import { toGroupView } from "../railView.js";
 import { FRESH_MS } from "./board.js";
@@ -36,17 +27,7 @@ const featureKey = (id) => `rail-feature:${id}`;
 
 const NAV_ITEMS = "h3 > button, a[data-task-id], .more > details > summary";
 
-/**
- * The store the rail writes and its rows, the Tasks button and the board read: Alpine.store("tasksRail").
- * @typedef {{
- *   byTask: Record<string, import("../../domain/activity.js").Activity>,
- *   tasks: import("../../domain/task.js").Task[],
- *   seeded: boolean,
- *   drawerOpen: boolean,  the phone drawer is open
- *   statusChanges?: Record<string, import("../../domain/board.js").StatusChange>,  the latest move per task seen over the feed
- *   archivedCount?: number,  the project's archived tasks, for "Archived (N)"
- * }} RailStore
- */
+/** @typedef {import("./railFeed.js").RailStore} RailStore */
 
 /** How many tasks need the person: a session waits, or a review does. */
 export const needsYouCount = (store) => store.tasks.filter((t) => !t.archivedAt && needsYou(t, store.byTask[t.id])).length;
@@ -70,7 +51,6 @@ function reveal(row) {
 
 /**
  * @param {{
- *   gateway: import("../../domain/ports.js").RailGateway,
  *   store: RailStore,
  *   prefs: import("../../domain/ports.js").RailPrefs,
  *   browserPrefs?: import("../../../../shared/infrastructure/storage.js").Preferences,  where each feature row's open state is kept (ADR 0037)
@@ -79,23 +59,17 @@ function reveal(row) {
  *   isNarrow?: () => boolean,  the rail is a drawer (below 48rem)
  * }} deps
  */
-export const rail = ({ gateway, store, prefs, browserPrefs = { get: () => null, set() {} }, navigate, timers = globalThis, isNarrow = () => globalThis.matchMedia?.("(width < 48rem)").matches ?? false }) => () => {
-  let unfollow = () => {};
-  let sessions = [];
+export const rail = ({ store, prefs, browserPrefs = { get: () => null, set() {} }, navigate, timers = globalThis, isNarrow = () => globalThis.matchMedia?.("(width < 48rem)").matches ?? false }) => () => {
   /** The component's root: $el inside an event handler is the element that fired. */
   let root = null;
   let announcing = [];
   let announceTimer = null;
   let resultTimer = null;
-  /** The feed has been live once: changes before then (a merge state computed while the page loaded) were never delivered. */
-  let wentLive = false;
 
   return {
     projectId: "",
     /** The open task's id, marked aria-current; "" when none. */
     currentTaskId: "",
-    /** This rail is the page's feed (the project page): it reports the connection to the stream bar. */
-    reportsFeed: false,
     /** The seed was read: the live copy renders and the server's goes. */
     live: false,
     query: "",
@@ -110,6 +84,8 @@ export const rail = ({ gateway, store, prefs, browserPrefs = { get: () => null, 
     signalIds: [],
     /** The task row with focus: it peeks out of a collapsed group. */
     focusedId: "",
+    /** What the feed owner noted before a change, for after it. */
+    pending: { waiting: new Set(), restoreFocus: () => {} },
     /** The feature rows the person opened or folded on this page; the rest read the browser's preference. */
     opened: {},
 
@@ -168,21 +144,10 @@ export const rail = ({ gateway, store, prefs, browserPrefs = { get: () => null, 
 
     init() {
       root = this.$el;
-      this.reportsFeed = this.$el.dataset.reportsFeed !== undefined;
       this.currentTaskId = this.$el.dataset.currentTask ?? "";
-      let seed;
-      try {
-        seed = gateway.decodeSeed(readSeed(this.$el));
-      } catch {
-        return; // the server's rendering stays as it is
-      }
-      this.projectId = seed.projectId;
-      sessions = seed.sessions;
-      store.tasks = onBoard(seed.tasks);
-      store.archivedCount = seed.archivedCount;
-      store.seeded = true;
+      if (!store.seeded) return; // the server's rendering stays as it is
+      this.projectId = store.projectId ?? "";
       this.collapsed = prefs.collapsed();
-      this.recount();
       this.live = true;
       // Alpine has rendered the live groups; drop the server-rendered copy and
       // bring the open task into view.
@@ -190,103 +155,18 @@ export const rail = ({ gateway, store, prefs, browserPrefs = { get: () => null, 
         for (const node of this.$el.querySelectorAll("[data-ssr]")) node.remove();
         reveal(this.$el.querySelector?.('.groups a[aria-current="page"]'));
       });
-      unfollow = gateway.follow(
-        this.projectId,
-        (change) => this.apply(change),
-        (status) => this.feedStatus(status),
-      );
-    },
-
-    /**
-     * The feed's state. On its first live, and on every resync, the lists are
-     * read again: the seed was painted before the stream opened, and what the
-     * server announced in between (a merge state it had just computed) never
-     * reached this page.
-     */
-    feedStatus(status) {
-      if (this.reportsFeed) this.$dispatch("feed-status", status);
-      const first = status === FeedStatus.LIVE && !wentLive;
-      if (status === FeedStatus.LIVE) wentLive = true;
-      if (first || status === FeedStatus.RESYNCED) this.resync();
-    },
-
-    /** One feed change: a task's, or a session's. */
-    apply(change) {
-      // The project changed under the pages fetched ahead of a click.
-      this.$dispatch("feed-change");
-      if (change.kind === "task-status") {
-        store.statusChanges = { ...store.statusChanges, [change.change.taskId]: change.change };
-        return;
-      }
-      const waitingBefore = this.waitingIds();
-      const restoreFocus = this.keepFocus();
-      if (change.kind === "task-upsert" || change.kind === "task-deleted") {
-        const id = change.kind === "task-deleted" ? change.id : change.task.id;
-        const previous = store.tasks.find((t) => t.id === id) ?? null;
-        store.tasks = applyTaskChange(store.tasks, change);
-        this.countArchived(change, previous);
-        if (change.kind === "task-upsert" && (!previous || previous.status !== change.task.status)) this.markFresh(id);
-        this.$dispatch("task-changed", { change, previous });
-      } else {
-        sessions = applyRailChange(sessions, change);
-        this.recount();
-      }
-      this.noteWaiting(waitingBefore);
-      this.$nextTick(restoreFocus);
-    },
-
-    /**
-     * Changes were missed while the stream was down: read everything again.
-     * Sessions and tasks are refreshed independently, so one list failing
-     * keeps the other current; whatever fails keeps what it shows until the
-     * next resync. A resync is not news: no wash, no announcement.
-     */
-    async resync() {
-      const [list, tasks] = await Promise.allSettled([gateway.listSessions(this.projectId), gateway.listTasks(this.projectId)]);
-      if (list.status === "fulfilled") {
-        sessions = list.value;
-        this.recount();
-      }
-      if (tasks.status === "fulfilled") store.tasks = onBoard(tasks.value);
-      this.recountArchived();
-    },
-
-    /**
-     * Keeps "Archived (N)" in step: a task the store had that arrives
-     * archived adds one. A done task the store did not have may be a restore
-     * (or a new task); only the server knows, so the count is read again. A
-     * restored feature brings back the children archived with it over the
-     * feed, but not the ones archived on their own before it, which its card
-     * lists: the task list is read again too.
-     */
-    countArchived(change, previous) {
-      if (change.kind !== "task-upsert") return;
-      if (change.task.archivedAt && previous) store.archivedCount += 1;
-      else if (!change.task.archivedAt && !previous && change.task.status === "done") {
-        this.recountArchived();
-        this.reloadTasks();
-      }
-    },
-
-    /** Reads the project's tasks again, what resync does for them alone. */
-    async reloadTasks() {
-      try {
-        store.tasks = onBoard(await gateway.listTasks(this.projectId));
-      } catch {
-        // keeps what it shows until the next change or resync
-      }
-    },
-
-    async recountArchived() {
-      try {
-        store.archivedCount = (await gateway.listArchived(this.projectId)).length;
-      } catch {
-        // keeps the count it shows until the next change or resync
-      }
-    },
-
-    recount() {
-      store.byTask = activityByTask(sessions);
+      // The feed owner (tasksRailFeed) tells the rail what each change was.
+      store.observer = {
+        before: () => {
+          this.pending = { waiting: this.waitingIds(), restoreFocus: this.keepFocus() };
+        },
+        after: (change, previous) => {
+          const { waiting, restoreFocus } = this.pending;
+          if (change.kind === "task-upsert" && (!previous || previous.status !== change.task.status)) this.markFresh(change.task.id);
+          this.noteWaiting(waiting);
+          this.$nextTick(restoreFocus);
+        },
+      };
     },
 
     waitingIds() {
@@ -549,16 +429,9 @@ export const rail = ({ gateway, store, prefs, browserPrefs = { get: () => null, 
     },
 
     destroy() {
-      unfollow();
       timers.clearTimeout(announceTimer);
       timers.clearTimeout(resultTimer);
-      // The model is the project's whose rail this was; another frame's rail
-      // (or none) starts from its own seed.
-      store.tasks = [];
-      store.byTask = {};
-      store.seeded = false;
-      store.statusChanges = {};
-      store.archivedCount = 0;
+      store.observer = undefined;
       store.drawerOpen = false;
     },
   };

@@ -351,7 +351,7 @@ func railAttrs(r Rail) templ.Attributes {
 		return nil
 	}
 	attrs := templ.Attributes{
-		"x-data": "tasksRail", "data-seed": "rail-seed", "data-current-task": r.Current,
+		"x-data": "tasksRail", "data-current-task": r.Current,
 		// The phone drawer: opened from the top bar's Tasks button, closed by
 		// Esc, Close or the scrim; "/" anywhere focuses the filter.
 		"x-bind:data-open":       "drawerOpen",
@@ -360,6 +360,13 @@ func railAttrs(r Rail) templ.Attributes {
 		"x-on:keydown":           "drawerKey",
 		"x-on:keydown.window":    "globalKey",
 	}
+	return attrs
+}
+
+// railFeedAttrs makes the headless feed owner follow the project's feed; it
+// reports the connection to the stream bar on the pages that follow it.
+func railFeedAttrs(r Rail) templ.Attributes {
+	attrs := templ.Attributes{"x-data": "tasksRailFeed", "data-seed": "rail-seed"}
 	if r.ReportsFeed {
 		attrs["data-reports-feed"] = ""
 	}

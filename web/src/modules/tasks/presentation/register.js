@@ -7,6 +7,7 @@ import { documentWatch } from "./components/documentWatch.js";
 import { feature } from "./components/feature.js";
 import { newTask } from "./components/newTask.js";
 import { rail, railToggle } from "./components/rail.js";
+import { railFeed } from "./components/railFeed.js";
 import { resourceWatch } from "./components/resourceWatch.js";
 import { taskEditor } from "./components/taskEditor.js";
 import { taskResources } from "./components/taskResources.js";
@@ -36,7 +37,8 @@ export function registerTasks(Alpine, deps) {
   Alpine.store("tasksRail", { byTask: {}, tasks: [], seeded: false, drawerOpen: false, statusChanges: {}, archivedCount: 0 });
   const store = Alpine.store("tasksRail");
   Alpine.data("tasksTaskEditor", taskEditor({ ...deps, store }));
-  Alpine.data("tasksRail", rail({ gateway: deps.rail, store, prefs: deps.railPrefs, browserPrefs: deps.prefs, navigate: deps.navigate }));
+  Alpine.data("tasksRailFeed", railFeed({ gateway: deps.rail, store }));
+  Alpine.data("tasksRail", rail({ store, prefs: deps.railPrefs, browserPrefs: deps.prefs, navigate: deps.navigate }));
   Alpine.data("tasksRailToggle", railToggle({ store }));
   Alpine.data("tasksBoard", board({ gateway: deps.gateway, store, prefs: deps.prefs, clock: deps.clock }));
   Alpine.data("tasksArchived", archived({ gateway: deps.gateway }));

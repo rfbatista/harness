@@ -213,6 +213,7 @@ import "../src/modules/tasks/presentation/components/documentWatch.test.js";
 import "../src/modules/tasks/presentation/components/feature.test.js";
 import "../src/modules/tasks/presentation/components/newTask.test.js";
 import "../src/modules/tasks/presentation/components/rail.test.js";
+import "../src/modules/tasks/presentation/components/railFeed.test.js";
 import "../src/modules/tasks/presentation/components/railToggle.test.js";
 import "../src/modules/tasks/presentation/components/resourceWatch.test.js";
 import "../src/modules/tasks/presentation/components/taskEditor.test.js";

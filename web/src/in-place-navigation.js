@@ -161,13 +161,16 @@ export function startInPlaceNavigation(htmx, { Alpine, navigate, doc = document 
       else link?.removeAttribute("aria-current");
     }
     rail.dataset.currentTask = task;
-    if (state.dataset.reportsFeed !== undefined) rail.setAttribute("data-reports-feed", "");
-    else rail.removeAttribute("data-reports-feed");
-    const data = Alpine.$data(rail);
-    if (data && "currentTaskId" in data) {
-      data.currentTaskId = task;
-      data.reportsFeed = state.dataset.reportsFeed !== undefined;
+    const reportsFeed = state.dataset.reportsFeed !== undefined;
+    const feed = doc.getElementById("rail-feed");
+    if (feed) {
+      if (reportsFeed) feed.setAttribute("data-reports-feed", "");
+      else feed.removeAttribute("data-reports-feed");
+      const owner = Alpine.$data(feed);
+      if (owner && "reportsFeed" in owner) owner.reportsFeed = reportsFeed;
     }
+    const data = Alpine.$data(rail);
+    if (data && "currentTaskId" in data) data.currentTaskId = task;
   }
 }
 

@@ -267,6 +267,7 @@ templ taskRail(f Frame) {
 	{{ r := f.Rail }}
 	if r.Seed != nil {
 		@templ.JSONScript("rail-seed", r.Seed)
+		<div id="rail-feed" hidden { railFeedAttrs(r)... }></div>
 	}
 	<div class="[ rail ]" id="rail" { railAttrs(r)... }>
 		if r.Seed != nil {

@@ -6,6 +6,7 @@ import { memoryRailPrefs } from "../../infrastructure/memory-rail-prefs.js";
 import { memoryRail } from "../../infrastructure/memory-rail.js";
 import { makeTask, taskDTO } from "../../testing/fixtures.js";
 import { rail } from "./rail.js";
+import { railFeed } from "./railFeed.js";
 
 file("tasks/presentation/rail");
 
@@ -20,8 +21,14 @@ function setup({ tasks = [makeTask()], currentTask = "t1", reportsFeed = false, 
   const el = seededElement({ project_id: "p1", sessions, tasks: tasks.map(taskDTO), archived_count: archived.length }, "rail-seed");
   el.dataset.currentTask = currentTask;
   if (reportsFeed) el.dataset.reportsFeed = "";
-  const nav = mount(rail({ gateway: memory.gateway, store, prefs, navigate: (url) => visited.push(url), timers, isNarrow: () => narrow }), { el });
-  nav.instance.init();
+  // The headless feed owner fills the store; the rail draws from it.
+  const feed = mount(railFeed({ gateway: memory.gateway, store }), { el });
+  if (reportsFeed) el.dataset.reportsFeed = "";
+  feed.instance.init();
+  const view = mount(rail({ store, prefs, navigate: (url) => visited.push(url), timers, isNarrow: () => narrow }), { el });
+  view.instance.init();
+  /** The rail, with what both components dispatched. */
+  const nav = { instance: view.instance, tick: view.tick, get dispatched() { return [...feed.dispatched, ...view.dispatched]; } };
   /** A group by key. */
   const group = (key) => nav.instance.groups.find((g) => g.key === key);
   /** The row of a task, wherever its group is now. */
@@ -132,7 +139,9 @@ test("a resync still refreshes the sessions when the tasks cannot be read, and t
 test("a malformed seed leaves the store unseeded and the server's rendering alone", () => {
   const memory = memoryRail();
   const store = { byTask: {}, tasks: [], seeded: false, drawerOpen: false };
-  const nav = mount(rail({ gateway: memory.gateway, store, prefs: memoryRailPrefs(), navigate: () => {}, timers: manualTimers() }), { el: seededElement({ project_id: "p1" }, "rail-seed") });
+  const el = seededElement({ project_id: "p1" }, "rail-seed");
+  mount(railFeed({ gateway: memory.gateway, store }), { el }).instance.init();
+  const nav = mount(rail({ store, prefs: memoryRailPrefs(), navigate: () => {}, timers: manualTimers() }), { el });
   nav.instance.init();
   nav.tick();
   assert.deepEqual([store.seeded, nav.instance.live, nav.instance.isEmpty], [false, false, false]);

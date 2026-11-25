@@ -323,7 +323,8 @@ func TestProjectPagePutsItsTasksOnTheRailAndTheProjectInThePicker(t *testing.T) 
 		`x-data="tasksBoard" data-project-id="p1"`,
 		`x-on:task-changed.window="taskChanged"`,
 		// The rail: its first paint and the live groups it regroups from the store.
-		`data-current-task="" data-reports-feed="" data-seed="rail-seed"`, // templ renders attribute maps sorted by key
+		`data-reports-feed="" data-seed="rail-seed"`, // the headless feed owner; templ renders attribute maps sorted by key
+		`data-current-task=""`,
 		`x-data="tasksRail"`,
 		`x-for="group in groups"`,
 		`x-for="row in group.rows"`,
