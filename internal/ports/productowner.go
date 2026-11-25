@@ -30,6 +30,10 @@ type ProductOwnerStore interface {
 	// sequence number, and answers it.
 	AppendItem(ctx context.Context, item domain.ProductOwnerItem) (domain.ProductOwnerItem, error)
 	SaveItem(ctx context.Context, item domain.ProductOwnerItem) error
+	// SearchConversations is a full-text search, with stemming, of one
+	// project's message and checkpoint items, the best match first. It answers
+	// SEARCH_UNAVAILABLE on a build without FTS5.
+	SearchConversations(ctx context.Context, projectID, query string, limit int) ([]domain.ProductOwnerSearchMatch, error)
 	// AppendCheckpoint stores a checkpoint item last in its thread and, in the
 	// same step, counts it on the thread and moves the thread's checkpoint
 	// phase to moving: a restart never sees one without the other.
@@ -91,6 +95,9 @@ type ProductOwner interface {
 	// RenameThread sets the title the person chose; the product owner never
 	// replaces it.
 	RenameThread(ctx context.Context, threadID, title string) (*domain.ProductOwnerThread, error)
+	// SearchConversations finds passages in every thread of the project, the
+	// archived parts included, best first (at most 30).
+	SearchConversations(ctx context.Context, projectID, query string) ([]domain.ProductOwnerSearchMatch, error)
 }
 
 // The product owner's events on the project feed (the page stream): each

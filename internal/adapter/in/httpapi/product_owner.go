@@ -172,3 +172,14 @@ func (h *Handler) handleRenameProductOwnerThread(c echo.Context) error {
 	}
 	return c.JSON(http.StatusOK, t)
 }
+
+func (h *Handler) handleSearchProductOwnerConversations(c echo.Context) error {
+	if err := h.productOwnerReady(); err != nil {
+		return err
+	}
+	matches, err := h.productOwner.SearchConversations(c.Request().Context(), c.QueryParam("project_id"), c.QueryParam("q"))
+	if err != nil {
+		return err
+	}
+	return c.JSON(http.StatusOK, map[string]any{"matches": matches})
+}

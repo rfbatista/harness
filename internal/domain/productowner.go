@@ -195,3 +195,22 @@ func ContextWindow(model string) int {
 	}
 	return 200_000
 }
+
+// ProductOwnerSearchLimit is how many matches a search answers, and
+// ProductOwnerMaxSearch how long a query may be, in characters.
+const (
+	ProductOwnerSearchLimit = 30
+	ProductOwnerMaxSearch   = 200
+)
+
+// ProductOwnerSearchMatch is a passage of a thread found by a search. Archived
+// says it lies in the part of its thread before a checkpoint; Snippet has the
+// matched words between « and ».
+type ProductOwnerSearchMatch struct {
+	ThreadID    string    `json:"thread_id"`
+	ThreadTitle string    `json:"thread_title"`
+	ItemID      string    `json:"item_id"`
+	At          time.Time `json:"at"`
+	Archived    bool      `json:"archived"`
+	Snippet     string    `json:"snippet"`
+}

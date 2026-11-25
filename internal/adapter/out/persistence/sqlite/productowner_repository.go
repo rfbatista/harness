@@ -64,11 +64,18 @@ func (ProductOwnerItemModel) TableName() string { return "product_owner_items" }
 
 // ProductOwnerRepository persists product owner settings, threads and thread
 // items in SQLite via GORM.
-type ProductOwnerRepository struct{ db *gorm.DB }
+type ProductOwnerRepository struct {
+	db *gorm.DB
+	// search says conversation search works on this build (see
+	// productowner_search.go).
+	search bool
+}
 
 // NewProductOwnerRepository returns a new product owner repository.
 func NewProductOwnerRepository(db *gorm.DB) *ProductOwnerRepository {
-	return &ProductOwnerRepository{db: db}
+	r := &ProductOwnerRepository{db: db}
+	r.search = r.prepareSearch()
+	return r
 }
 
 // Settings implements ports.ProductOwnerStore.
@@ -202,6 +209,7 @@ func (r *ProductOwnerRepository) AppendItem(ctx context.Context, item domain.Pro
 		return item, err
 	}
 	item.Seq = m.Seq
+	r.indexItem(ctx, item)
 	return item, nil
 }
 
@@ -230,6 +238,7 @@ func (r *ProductOwnerRepository) AppendCheckpoint(ctx context.Context, item doma
 		return item, err
 	}
 	item.Seq = m.Seq
+	r.indexItem(ctx, item)
 	return item, nil
 }
 
@@ -239,7 +248,11 @@ func (r *ProductOwnerRepository) SaveItem(ctx context.Context, item domain.Produ
 	if err != nil {
 		return err
 	}
-	return r.db.WithContext(ctx).Model(&ProductOwnerItemModel{}).Where("id = ?", item.ID).Update("body", m.Body).Error
+	if err := r.db.WithContext(ctx).Model(&ProductOwnerItemModel{}).Where("id = ?", item.ID).Update("body", m.Body).Error; err != nil {
+		return err
+	}
+	r.indexItem(ctx, item)
+	return nil
 }
 
 // Items implements ports.ProductOwnerStore.
