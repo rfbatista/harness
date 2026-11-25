@@ -160,6 +160,14 @@ export class MemoryTabPresenter extends Presenter<MemoryTabViewModel> {
     }
   };
 
+  /** A note in a thread asked for this entry: it comes into view. */
+  showEntry = (entryId: string): void => this.#update({ focus: this.#focus(entryId, "entry") });
+
+  /** The view moved focus as asked: a later visit to the tab does not move it again. */
+  focused = (): void => {
+    if (this.#ui.focus.target !== "") this.#update({ focus: { ...this.#ui.focus, target: "" } });
+  };
+
   askDelete = (entryId: string): void => this.#update({ deleting: { entryId, error: "" }, draft: null, focus: this.#focus(entryId, "delete-confirm") });
 
   keep = (): void => {

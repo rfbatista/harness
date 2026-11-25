@@ -230,4 +230,14 @@ describe("the Memory tab", () => {
     assert.deepEqual([presenter.viewModel.focus.entryId, presenter.viewModel.focus.target], ["a", "entry"]);
     assert.equal(server.followers, 1);
   });
+
+  test("a note asks for an entry, and once the view moved focus a later visit does not move it again", async () => {
+    const { presenter } = await setup();
+    presenter.showEntry("b");
+    assert.deepEqual([presenter.viewModel.focus.entryId, presenter.viewModel.focus.target], ["b", "entry"]);
+    const seq = presenter.viewModel.focus.seq;
+    presenter.focused();
+    assert.equal(presenter.viewModel.focus.target, "");
+    assert.equal(presenter.viewModel.focus.seq, seq);
+  });
 });

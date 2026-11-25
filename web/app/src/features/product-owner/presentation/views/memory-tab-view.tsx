@@ -23,7 +23,8 @@ export function MemoryTabView({ presenter, onOpenThread }: { presenter: MemoryTa
     seen.current = seq;
     node.focus();
     if (target === "entry") node.scrollIntoView({ block: "nearest" });
-  }, [vm.focus, vm.rows]);
+    presenter.focused();
+  }, [vm.focus, vm.rows, presenter]);
 
   return (
     <div className="[ memory-panel ]">

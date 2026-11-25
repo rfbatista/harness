@@ -134,7 +134,10 @@ export function mountIslands(doc: Document): Dispose {
       const memory = new ProjectMemory({ gateway: owner, events: owner });
       const initial = memoryAddress(win.location.hash);
       const page = new OwnerPagePresenter({ projectId: project_id, projectName: project_name, threadId: thread_id, initial }, dock, conversation, list, navigator, memory);
-      const thread = new ThreadPresenter(conversation, { projectName: project_name, noTasks }, browserTaskCatalog(doc), dock.state.enabled === false, { memory, openEntry: page.showMemory });
+      const thread = new ThreadPresenter(conversation, { projectName: project_name, noTasks }, browserTaskCatalog(doc), dock.state.enabled === false, { memory, openEntry: (entryId) => {
+        page.showMemory(entryId);
+        memoryTab.showEntry(entryId);
+      } });
       const memoryTab = new MemoryTabPresenter(memory, project_id, initial?.entryId);
       const threads = new ThreadListPresenter(list, conversation, systemClock);
       const about = new AboutPresenter(conversation, list);
