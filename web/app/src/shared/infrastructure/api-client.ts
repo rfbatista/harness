@@ -73,7 +73,7 @@ function queryString(query?: Record<string, string>): string {
 async function failure(response: Response): Promise<ApiError> {
   try {
     const body = ApiErrorDto.fromJSON(await response.json());
-    return new ApiError(body.code, body.error, response.status, body.fixUrl);
+    return new ApiError(body.code, body.error, response.status, body.fix_url);
   } catch {
     return new ApiError(`HTTP_${response.status}`, response.statusText, response.status);
   }

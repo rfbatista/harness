@@ -9,7 +9,7 @@ export class ApiErrorDto {
     readonly error: string,
     readonly code: string,
     /** Some refusals say where the person fixes it (PRODUCT_OWNER_UNAVAILABLE). */
-    readonly fixUrl?: string,
+    readonly fix_url?: string,
   ) {}
 
   static fromJSON(raw: unknown): ApiErrorDto {
@@ -18,6 +18,6 @@ export class ApiErrorDto {
   }
 
   toJSON(): Wire {
-    return { error: this.error, code: this.code, ...(this.fixUrl === undefined ? {} : { fix_url: this.fixUrl }) };
+    return { error: this.error, code: this.code, ...(this.fix_url === undefined ? {} : { fix_url: this.fix_url }) };
   }
 }
