@@ -68,6 +68,12 @@ func TestStartInteractive_ArchitectMode(t *testing.T) {
 	if strings.Contains(body, "<title>Spec: ") {
 		t.Error("task-architecture SKILL.md carries the Spec template; it belongs to task-to-spec")
 	}
+	// The architect also gets the verification skill with its reference files.
+	if sk := pluginSkill(t, launch, "create-verification-skill"); !strings.Contains(sk, "name: create-verification-skill") {
+		t.Error("an architect session lacks create-verification-skill")
+	}
+	pluginFile(t, launch, "create-verification-skill", "LICENSE")
+	pluginFile(t, launch, "create-verification-skill", "references/feature-map-example/search.md")
 	prompt := launch.Spec.Prompt
 	for _, want := range []string{"task-architecture skill", "tk1: Ship the thing", "Users export their data as CSV.", "task/comments/",
 		"task-grill-with-docs", "task-to-spec", "mode implement", "project/docs/", "task/docs/"} {
