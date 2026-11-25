@@ -329,10 +329,16 @@ func (s *Service) send(ctx context.Context, t *domain.ProductOwnerThread, r *run
 	s.resetIdle(r, false)
 	// The answers to held actions since its last turn go in front of the message.
 	lines, told := s.heldAnswers(ctx, t.ID)
-	if err := s.sessions.Send(ctx, t.SessionID, lines+message); err != nil {
+	input, seen, read := s.withMemory(ctx, t, lines+message)
+	if err := s.sessions.Send(ctx, t.SessionID, input); err != nil {
 		s.fail(ctx, t, itemID, "SESSION_SEND_FAILED", "The message did not reach the product owner's session: "+err.Error())
-	} else if len(told) > 0 {
+		return nil
+	}
+	if len(told) > 0 {
 		s.markTold(ctx, told)
+	}
+	if read {
+		s.sawMemory(ctx, t, seen)
 	}
 	return nil
 }

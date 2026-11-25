@@ -23,6 +23,10 @@ var ProductOwnerToolNames = []string{
 	"get_project_task",
 	"list_project_sessions",
 	"list_project_branches",
+	"list_memory",
+	"save_memory",
+	"change_memory",
+	"drop_memory",
 	// Its writes to tasks: create_task is the session tool every product
 	// session has; update_task is its own. Neither moves a task to done,
 	// deletes or starts a session, and the tools hold that, not the prompt.
@@ -37,6 +41,8 @@ type ProductOwnerSources struct {
 	Tasks    ports.TicketReader
 	Changes  ports.TaskStatusChangeRepository
 	Sessions ports.SessionRepository
+	// Memory drives the product owner's memory tools (ADR 0111).
+	Memory ports.ProductOwnerMemoryTools
 	// Patcher changes a task; the product owner's writes go through it, so
 	// a session's rules (no move to done) and its attribution apply.
 	Patcher ports.TicketPatcher
@@ -57,6 +63,7 @@ func ProductOwnerTools(all []domain.Tool, src ProductOwnerSources) []domain.Tool
 		}
 	}
 	out = append(out, productOwnerReads(src)...)
+	out = append(out, productOwnerMemoryTools(src.Memory)...)
 	return append(out, productOwnerWrites(src)...)
 }
 

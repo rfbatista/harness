@@ -545,20 +545,20 @@ func TestTheNextTurnCarriesTheAnswersAndConfirmingAloneStartsNoTurn(t *testing.T
 	id := e.heldActions(threadID)[0].HeldActionID
 	e.post("answer_held_action", map[string]any{"held_action_id": id, "answer": "decline"}, nil)
 
-	if got := e.received(); strings.Contains(got, "declined") {
+	if got := e.receivedText(); strings.Contains(got, "declined") {
 		t.Fatalf("the product owner was told before its next turn: %q", got)
 	}
 	if status, code := e.send(threadID, "what happened?"); status != 200 {
 		t.Fatalf("send = %d %s", status, code)
 	}
 	e.waitTurn(threadID, "idle")
-	if got := e.received(); !strings.Contains(got, "declined") || !strings.Contains(got, "Archive the task") || !strings.Contains(got, "what happened?") {
+	if got := e.receivedText(); !strings.Contains(got, "declined") || !strings.Contains(got, "Archive the task") || !strings.Contains(got, "what happened?") {
 		t.Fatalf("the next turn received %q, want the answer in front of the message", got)
 	}
 	// It is told once.
 	e.send(threadID, "and now?")
 	e.waitTurn(threadID, "idle")
-	if got := e.received(); strings.Count(got, "declined") != 1 {
+	if got := e.receivedText(); strings.Count(got, "declined") != 1 {
 		t.Errorf("the answer was given again: %q", got)
 	}
 	// The person's own message in the thread stays what they wrote.
@@ -611,8 +611,8 @@ func TestAHeldActionNotAnsweredInADayOrAtACheckpointExpiresAndCannotBeConfirmed(
 	}
 }
 
-// received is what the stand-in claude was sent, one line per message.
-func (e *poE2E) received() string {
+// receivedText is what the stand-in claude was sent, as one text.
+func (e *poE2E) receivedText() string {
 	b, _ := os.ReadFile(filepath.Join(e.fakeDir, "received"))
 	return string(b)
 }

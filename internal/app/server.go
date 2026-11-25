@@ -99,8 +99,10 @@ func registerHTTPServer(lc fx.Lifecycle, cfg Config, cat catalog.Catalog, appRun
 
 	// Same for the product owner.
 	var productOwner ports.ProductOwner
+	var productOwnerMemory ports.ProductOwnerMemoryTools
 	if owner.Service != nil {
 		productOwner = owner.Service
+		productOwnerMemory = owner.Service
 	}
 
 	// Same for the interviews.
@@ -234,7 +236,7 @@ func registerHTTPServer(lc fx.Lifecycle, cfg Config, cat catalog.Catalog, appRun
 	if asked.Service != nil {
 		mux.Handle(llminterview.PathPrefix, interviewHandler(asked.Service))
 	}
-	mux.Handle(mcpsession.PathPrefix, slow(sessionTaskHandler(sessionTaskTools(cat, orch, plan, sessions, art, channel, notifier, merges, tooling.WithAgentPlacements(repoAgents), tooling.WithModeAgents(cat.Settings), tooling.WithBranchPush(gate)), plan, sessions, productOwnerHolds(owner.Service)...)))
+	mux.Handle(mcpsession.PathPrefix, slow(sessionTaskHandler(sessionTaskTools(cat, orch, plan, sessions, art, channel, notifier, merges, tooling.WithAgentPlacements(repoAgents), tooling.WithModeAgents(cat.Settings), tooling.WithBranchPush(gate)), plan, sessions, productOwnerMemory, productOwnerHolds(owner.Service)...)))
 	mux.Handle(mcpsession.ServicesPathPrefix, slow(mcpsession.ServicesHandler(tooling.SessionServicesTools(sessions, cat.Agents, svcs, cat.Projects, tooling.WithServiceRequests(svcRequests)))))
 	// The web client owns / and its pages; anything else reaches the legacy
 	// designer SPA until it is retired.
@@ -244,7 +246,7 @@ func registerHTTPServer(lc fx.Lifecycle, cfg Config, cat catalog.Catalog, appRun
 		ManagedClaude: managedClaude, ManagedClaudeBin: claudeBin, AgentCredential: agentCred.port(), ProjectAgentCredentials: agentCred.projectPort(),
 		AgentOAuth: agentCred.oauth(), AgentAuth: agentCred.auth(), ProjectAgentOAuth: agentCred.projectOAuth(), AgentHomeExposed: agentHomeExposed(cfg), AgentLogin: agentHasLogin(cfg), ArchivedTasks: plan, ArchivedList: plan,
 		// Whether the pens work, read from the gate without starting anything.
-		WritingHelper: helperState(helper), ArchitectureAssistant: architectureAssistant, AgentCatalog: CatalogSeed(agentCat, repoAgents), AgentBoard: agentBoard, Interviews: interviewsPort}
+		WritingHelper: helperState(helper), ArchitectureAssistant: architectureAssistant, AgentCatalog: CatalogSeed(agentCat, repoAgents), AgentBoard: agentBoard, Interviews: interviewsPort, ProductOwnerThreads: productOwner}
 	topBars.set(web.NewTopBars(webDeps))
 	mux.Handle("/", slow(web.NewHandler(webDeps, assets, uiHandler)))
 
@@ -323,7 +325,7 @@ func sessionTaskTools(cat catalog.Catalog, orch *orchestration.Service, plan *pl
 		opts = append(opts, tooling.WithInstructionProposals(cat.InstructionProposals))
 	}
 	return tooling.SessionTaskTools(plan, sessions, cat.Agents, cat.Architecture,
-		tooling.PeerStarter{Sessions: orch, Repositories: cat.Projects, Merger: merges},
+		tooling.PeerStarter{Sessions: orch, Stopper: orch, Repositories: cat.Projects, Merger: merges},
 		tooling.ArtifactTooling{Publisher: art, Attachments: art, ViewURL: httpapi.ArtifactViewPath}, channel,
 		tooling.NotificationTooling{Notifier: notifier}, opts...)
 }

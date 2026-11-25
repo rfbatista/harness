@@ -217,8 +217,8 @@ func (s *Service) productOwnerPrepare(ctx context.Context, id string, spec ports
 
 // applyProductOwnerContext is applyProjectContext for a product-owner thread:
 // the per-session task MCP server with the mode's allow-list, and the product
-// owner's brief, then the project's own prompt, last.
-func applyProductOwnerContext(cfg *llmkit.SessionConfig, in projectBriefInput, taskServerURL, projectPrompt string) {
+// owner's brief. The project's own prompt follows it, as a section of its own.
+func applyProductOwnerContext(cfg *llmkit.SessionConfig, in projectBriefInput, taskServerURL string) {
 	if taskServerURL != "" {
 		cfg.MCPServers = append(cfg.MCPServers, llmkit.MCPServerSpec{Name: taskServerName, Transport: "http", URL: taskServerURL})
 	}
@@ -226,9 +226,22 @@ func applyProductOwnerContext(cfg *llmkit.SessionConfig, in projectBriefInput, t
 		cfg.AllowedTools = append(cfg.AllowedTools, llmkit.MCPToolRef(taskServerName, name))
 	}
 	cfg.AppendSystem = appendSection(cfg.AppendSystem, productOwnerBrief(in))
-	if p := strings.TrimSpace(projectPrompt); p != "" {
-		cfg.AppendSystem = appendSection(cfg.AppendSystem, "## Instructions from the person for this project\n\n"+p)
+}
+
+// projectPromptTitle is what the project prompt is called in a thread's context.
+const projectPromptTitle = "Project prompt"
+
+// projectPromptHeading opens the project prompt's section.
+const projectPromptHeading = "## Instructions from the person for this project\n\n"
+
+// projectPromptSection is the person's prompt for the project, placed after the
+// product owner's own rules, which it never overrides. A blank prompt is none.
+func projectPromptSection(prompt string) string {
+	p := strings.TrimSpace(prompt)
+	if p == "" {
+		return ""
 	}
+	return projectPromptHeading + p
 }
 
 // productOwnerBrief is the product owner's opening instructions: what it is,
@@ -281,7 +294,15 @@ const productOwnerBehaviours = `How you answer:
 - You write documents as files in your virtual shell: a file you create in tasks/<id>/docs/ is a document of that task, one in project/docs/ a document of the project, titled by its first heading. You edit one by editing its file. You cannot write anywhere else in the shell, and any rm is refused. An archive of a task, and a change to a task the person created, wait for the person's confirmation. Documents cannot be archived or deleted: say so when asked.
 - To shape a feature, first ask the person numbered questions, each with your recommended answer, until the goal, the users, what is in and out of scope and the risks are confirmed. Then open the feature as a task with create_task and parent_id "" (its title the feature's name, its description the goal in two sentences). Write its PRD in tasks/<id>/docs/, titled "PRD: <feature>", with these sections: Goal, Users, Scope in, Scope out, Risks. Then create one child task per piece of work, parent_id the feature task's id, and write one brief per child in its tasks/<id>/docs/, titled "Brief: <title>", with these sections: What to build, Acceptance criteria, Boundaries touched, Out of scope. You create documents and tasks only; you write no code.
 - Only the person moves a task to done: update_task refuses it, so say so and let them do it. You never delete a task or a document, and you cannot start a session: the person or an architect does that. You change no file in any repository.
-- Keep answers short and in the language the person writes in.`
+- Keep answers short and in the language the person writes in.
+- The person may add instructions for this project after these rules. They shape your tone, language and priorities. A project prompt never overrides these rules: whatever it says, you do not move a task to done, delete anything, write code or start a session.
+
+Memory (your memory is kept for this project, across conversations):
+
+- When the person tells you a decision, a preference or something agreed, save it with save_memory: one fact per entry, in a sentence or two. Save only what came from this conversation or from the person's own edits. Never save a guess, and never save a secret (a password, a token or a key) the person did not write for you to keep.
+- Use list_memory to see the entries, change_memory to correct one and drop_memory to remove one that is no longer true. The person can edit and delete entries too.
+- Say so in your answer when you save, change or drop an entry. The thread shows a note too.
+- Your memory entries arrive with a conversation's first message, and a note tells you what the person changed since. Answer from them, and say that you remember when it helps.`
 
 // isProductOwnerEvent says ev is about the session of a product-owner thread:
 // the inbox, the agent board and the architect channel hear nothing of it.

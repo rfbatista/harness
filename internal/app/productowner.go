@@ -14,8 +14,8 @@ import (
 // sessionTaskHandler serves each session its task tools at /mcp/task/{id}: the
 // general set, or for the session of a product-owner thread the mode's
 // allow-list alone (ADR 0109), so the server holds that mode's line.
-func sessionTaskHandler(general []domain.Tool, plan *planning.Service, sessions ports.SessionRepository, holds ...ports.ProductOwnerHolds) http.Handler {
-	src := tooling.ProductOwnerSources{Tasks: plan, Changes: plan.StatusHistory, Sessions: sessions, Patcher: plan}
+func sessionTaskHandler(general []domain.Tool, plan *planning.Service, sessions ports.SessionRepository, memory ports.ProductOwnerMemoryTools, holds ...ports.ProductOwnerHolds) http.Handler {
+	src := tooling.ProductOwnerSources{Tasks: plan, Changes: plan.StatusHistory, Sessions: sessions, Patcher: plan, Memory: memory}
 	if len(holds) > 0 {
 		src.Holds = holds[0]
 	}

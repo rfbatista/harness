@@ -47,6 +47,8 @@ type Service struct {
 	recovering map[string]bool
 	// waking holds the threads whose session a message is waking up.
 	waking map[string]bool
+	// memMu serialises the writes of memory entries.
+	memMu sync.Mutex
 	// held is what the held actions share (held.go).
 	held heldState
 }

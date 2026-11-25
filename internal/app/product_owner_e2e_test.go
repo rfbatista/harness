@@ -68,6 +68,8 @@ type poE2E struct {
 	art     *artifacts.Service
 	project string
 	repo    string
+	// wrapStore, when set, stands between the server and its product owner store.
+	wrapStore func(ports.ProductOwnerStore) ports.ProductOwnerStore
 	// fakeDir holds the stand-in claude, its launch log and its gates.
 	fakeDir string
 
@@ -95,7 +97,7 @@ n=0
 while IFS= read -r line; do
   n=$((n+1))
   text=$(printf '%s' "$line" | sed -n 's/.*"text":"\([^"]*\)".*/\1/p')
-  echo "$text" >> "$dir/received"
+  printf '%s\n' "$text" >> "$dir/received"
   while [ -f "$dir/prehold" ]; do sleep 0.05; done
   case "$text" in read:*) printf '%s\n' '{"type":"assistant","session_id":"fake","message":{"role":"assistant","content":[{"type":"tool_use","id":"t1","name":"Read","input":{"file_path":"project/docs/prd.md"}}]}}';; esac
   printf '%s\n' '{"type":"stream_event","session_id":"fake","event":{"type":"content_block_delta","index":0,"delta":{"type":"text_delta","text":"answer to: "}}}'
@@ -168,6 +170,12 @@ func (e *poE2E) boot() {
 			}
 		}),
 		ProductOwnerModule,
+		fx.Decorate(func(s ports.ProductOwnerStore) ports.ProductOwnerStore {
+			if e.wrapStore == nil {
+				return s
+			}
+			return e.wrapStore(s)
+		}),
 		fx.Populate(&e.orch, &e.plan, &e.cat, &e.po, &e.sess, &e.store, &e.shells, &e.channel, &e.art, &e.board, &e.usage, &e.notes),
 		fx.NopLogger,
 	)
@@ -182,7 +190,7 @@ func (e *poE2E) serve() {
 	mux.Handle("/api/", httpapi.NewRouter(httpapi.NewHandler(httpapi.Services{
 		Sessions: e.orch, Planning: e.plan, Projects: e.cat.Projects, Settings: e.cat.Settings, ProductOwner: e.po, AgentBoard: e.board, Usage: e.usage,
 	})))
-	mux.Handle(mcpsession.PathPrefix, sessionTaskHandler(sessionTaskTools(e.cat, e.orch, e.plan, e.sess, e.art, e.channel, nil, nil), e.plan, e.sess, e.po))
+	mux.Handle(mcpsession.PathPrefix, sessionTaskHandler(sessionTaskTools(e.cat, e.orch, e.plan, e.sess, e.art, e.channel, nil, nil), e.plan, e.sess, e.po, e.po))
 	e.srv = httptest.NewServer(mux)
 	e.t.Cleanup(e.srv.Close)
 	e.feed = followPOFeed(e.t, e.srv.URL, e.project)

@@ -59,7 +59,8 @@ task with task_id: only a session with no task of its own passes it.
 - mcp__task__update_task_status — task_id the feature task: move it to review with a reason when you ask for the review
 
 The tools that act on a session's own task answer SESSION_HAS_NO_TASK here:
-mcp__task__get_task, mcp__task__start_task_session, mcp__task__list_task_sessions,
+mcp__task__get_task, mcp__task__start_task_session, mcp__task__resume_task_session,
+mcp__task__stop_task_session, mcp__task__list_task_sessions,
 the rest of the architect channel, mcp__task__publish_artifact and the attach
 tools; mcp__task__request_user_review and mcp__task__update_task_status do too
 without task_id. If the review cannot be opened, tell the person with notify.

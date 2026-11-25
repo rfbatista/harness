@@ -172,6 +172,69 @@ func (h *Handler) handleRenameProductOwnerThread(c echo.Context) error {
 	return c.JSON(http.StatusOK, t)
 }
 
+// productOwnerMemory is the product owner's memory, when it offers one.
+func (h *Handler) productOwnerMemory() (ports.ProductOwnerMemory, error) {
+	if err := h.productOwnerReady(); err != nil {
+		return nil, err
+	}
+	mem, ok := h.productOwner.(ports.ProductOwnerMemory)
+	if !ok {
+		return nil, &domain.StructuredError{Code: "UNAVAILABLE", Message: "the product owner's memory is not available on this server"}
+	}
+	return mem, nil
+}
+
+func (h *Handler) handleGetProductOwnerMemory(c echo.Context) error {
+	mem, err := h.productOwnerMemory()
+	if err != nil {
+		return err
+	}
+	entries, err := mem.Memory(c.Request().Context(), c.QueryParam("project_id"))
+	if err != nil {
+		return err
+	}
+	if entries == nil {
+		entries = []ports.MemoryEntryView{}
+	}
+	return c.JSON(http.StatusOK, map[string]any{"entries": entries})
+}
+
+func (h *Handler) handleUpdateMemoryEntry(c echo.Context) error {
+	mem, err := h.productOwnerMemory()
+	if err != nil {
+		return err
+	}
+	var in struct {
+		EntryID string `json:"entry_id"`
+		Text    string `json:"text"`
+	}
+	if err := bindJSON(c, &in); err != nil {
+		return err
+	}
+	entry, err := mem.UpdateMemoryEntry(c.Request().Context(), in.EntryID, in.Text)
+	if err != nil {
+		return err
+	}
+	return c.JSON(http.StatusOK, entry)
+}
+
+func (h *Handler) handleDeleteMemoryEntry(c echo.Context) error {
+	mem, err := h.productOwnerMemory()
+	if err != nil {
+		return err
+	}
+	var in struct {
+		EntryID string `json:"entry_id"`
+	}
+	if err := bindJSON(c, &in); err != nil {
+		return err
+	}
+	if err := mem.DeleteMemoryEntry(c.Request().Context(), in.EntryID); err != nil {
+		return err
+	}
+	return c.JSON(http.StatusOK, map[string]any{})
+}
+
 // handleAnswerHeldAction confirms or declines a held action of a thread
 // (contract, Held actions). Only this answer applies one.
 func (h *Handler) handleAnswerHeldAction(c echo.Context) error {

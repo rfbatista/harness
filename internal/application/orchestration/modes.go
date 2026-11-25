@@ -85,7 +85,10 @@ func modePrompt(mode domain.SessionMode, tk *domain.Ticket, project *domain.Proj
 			"for them to confirm you share an understanding. Then identify the affected applications, write the contracts, and " +
 			"write one spec per application with the task-to-spec skill, each a file in task/docs/. Then delegate each spec with " +
 			"start_task_session in mode implement: the delegate writes tickets, asks you to review them, and implements " +
-			"them once you approve. Write documents only in your virtual shell, no other local files.\n\n" +
+			"them once you approve. A delegate that ended before its work was done is resumed with resume_task_session " +
+			"and a prompt saying what to pick up, not replaced: it keeps its branch and its conversation. Stop a delegate " +
+			"whose work is done or has gone off track with stop_task_session; it can be resumed later. " +
+			"Write documents only in your virtual shell, no other local files.\n\n" +
 			"You own this task's status: move it with update_task_status and a reason, based on what your " +
 			"delegates report: review when the finished work is ready for the person; the person moves it to " +
 			"done after checking it. They report to you; their messages, status checks and the person's review " +
