@@ -9,9 +9,11 @@ import (
 	"slices"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/mark3labs/mcp-go/client"
 
+	"operators-mcp/internal/adapter/out/persistence/sqlite"
 	"operators-mcp/internal/domain"
 	"operators-mcp/internal/ports"
 )
@@ -145,7 +147,7 @@ func TestTheProductOwnerIsServedTaskWriteToolsButNoDeleteNorStartAndNoOtherModeG
 		}
 	}
 	for _, name := range got {
-		if strings.Contains(name, "delete") || strings.Contains(name, "start") || strings.Contains(name, "archive") {
+		if strings.Contains(name, "delete") || strings.Contains(name, "start") || (strings.Contains(name, "archive") && name != "archive_task") {
 			t.Errorf("the product owner is served %s", name)
 		}
 	}
@@ -288,4 +290,329 @@ func TestTheProductOwnersShellRefusesEveryDeleteAndEveryWriteBeyondDocuments(t *
 	if ans := e.shells.CheckShellEdit(e.ctx, sid, ports.ShellEdit{Op: "write", Paths: []string{"/tmp/elsewhere"}}); !ans.Allow {
 		t.Errorf("a path outside the shell = %+v", ans)
 	}
+}
+
+// poHeld is a held_action item of a thread as the person reads it.
+type poHeld struct {
+	ItemID       string `json:"item_id"`
+	Kind         string `json:"kind"`
+	HeldActionID string `json:"held_action_id"`
+	Summary      string `json:"summary"`
+	State        string `json:"state"`
+	Target       struct {
+		Kind  string `json:"kind"`
+		ID    string `json:"id"`
+		Title string `json:"title"`
+		URL   string `json:"url"`
+	} `json:"target"`
+}
+
+func (e *poE2E) heldActions(threadID string) []poHeld {
+	e.t.Helper()
+	var raw struct {
+		Items []json.RawMessage `json:"items"`
+	}
+	e.get("product_owner_thread?thread_id="+threadID, &raw)
+	var out []poHeld
+	for _, r := range raw.Items {
+		var h poHeld
+		if json.Unmarshal(r, &h) == nil && h.Kind == "held_action" {
+			if strings.Contains(string(r), `"held"`) {
+				e.t.Errorf("a held action item carries what applies it on the wire: %s", r)
+			}
+			out = append(out, h)
+		}
+	}
+	return out
+}
+
+func (e *poE2E) pendingHeld(threadID string) int {
+	e.t.Helper()
+	var list struct {
+		Threads []struct {
+			ThreadID           string `json:"thread_id"`
+			PendingHeldActions int    `json:"pending_held_actions"`
+		} `json:"threads"`
+	}
+	e.get("product_owner_threads?project_id="+e.project, &list)
+	for _, th := range list.Threads {
+		if th.ThreadID == threadID {
+			return th.PendingHeldActions
+		}
+	}
+	e.t.Fatalf("thread %s is not listed", threadID)
+	return 0
+}
+
+// doneTask is a done task of the person's: only the person moves one there.
+func (e *poE2E) doneTask(title string) *domain.Ticket {
+	e.t.Helper()
+	tk, err := e.plan.CreateTicket(e.ctx, e.project, title, "", domain.TicketStatusBacklog, "")
+	if err != nil {
+		e.t.Fatal(err)
+	}
+	done := domain.TicketStatusDone
+	if tk, err = e.plan.PatchTicket(e.ctx, tk.ID, ports.TicketPatch{Status: &done}); err != nil {
+		e.t.Fatal(err)
+	}
+	return tk
+}
+
+func TestAnArchiveByTheProductOwnerWaitsForTheConfirmAndHappensOnlyThen(t *testing.T) {
+	e := newPOE2E(t)
+	threadID, owner := e.ownerSession()
+	tk := e.doneTask("Finished")
+	turns := len(e.launches())
+
+	text, refused := e.call(owner, "archive_task", map[string]any{"task_id": tk.ID})
+	if refused || !strings.Contains(text, "Awaiting the person") {
+		t.Fatalf("archive_task = %q refused=%v, want it awaiting the person", text, refused)
+	}
+	if again, _ := e.plan.GetTicket(e.ctx, tk.ID); again.ArchivedAt != nil {
+		t.Fatal("the product owner archived the task itself")
+	}
+	held := e.heldActions(threadID)
+	if len(held) != 1 || held[0].State != "pending" || held[0].Target.Kind != "task" || held[0].Target.ID != tk.ID ||
+		held[0].Target.Title != "Finished" || held[0].Target.URL != "/projects/"+e.project+"/tasks/"+tk.ID || held[0].Summary == "" || held[0].HeldActionID == "" {
+		t.Fatalf("the held action = %+v", held)
+	}
+	if n := e.pendingHeld(threadID); n != 1 {
+		t.Fatalf("pending_held_actions = %d, want 1", n)
+	}
+
+	var answer struct {
+		State   string `json:"state"`
+		Outcome struct {
+			Task attributedRow `json:"task"`
+		} `json:"outcome"`
+	}
+	if status, code := e.post("answer_held_action", map[string]any{"held_action_id": held[0].HeldActionID, "answer": "confirm"}, &answer); status != 200 {
+		t.Fatalf("confirm = %d %s", status, code)
+	}
+	if answer.State != "confirmed" || answer.Outcome.Task.ID != tk.ID {
+		t.Fatalf("the answer = %+v", answer)
+	}
+	if again, _ := e.plan.GetTicket(e.ctx, tk.ID); again.ArchivedAt == nil || again.ChangedBy == nil || again.ChangedBy.Kind != domain.AuthorProductOwner || again.ChangedBy.ThreadID != threadID {
+		t.Fatalf("after confirm the task = %+v, want it archived by the product owner's thread", again)
+	}
+	if held = e.heldActions(threadID); len(held) != 1 || held[0].State != "confirmed" || e.pendingHeld(threadID) != 0 {
+		t.Fatalf("after confirm: %+v pending %d", held, e.pendingHeld(threadID))
+	}
+	if n := len(e.launches()); n != turns {
+		t.Errorf("confirming started a process: launches %d, was %d", n, turns)
+	}
+	if th := e.thread(threadID); th.Thread.Turn != "idle" {
+		t.Errorf("confirming started a turn: %s", th.Thread.Turn)
+	}
+}
+
+func TestADeclinedHeldActionChangesNothingAndASecondAnswerIsRefused(t *testing.T) {
+	e := newPOE2E(t)
+	threadID, owner := e.ownerSession()
+	tk := e.doneTask("Kept")
+	e.call(owner, "archive_task", map[string]any{"task_id": tk.ID})
+	id := e.heldActions(threadID)[0].HeldActionID
+
+	var answer struct {
+		State string `json:"state"`
+	}
+	if status, code := e.post("answer_held_action", map[string]any{"held_action_id": id, "answer": "decline"}, &answer); status != 200 || answer.State != "declined" {
+		t.Fatalf("decline = %d %s %+v", status, code, answer)
+	}
+	if again, _ := e.plan.GetTicket(e.ctx, tk.ID); again.ArchivedAt != nil || again.ChangedBy != nil && again.ChangedBy.Kind == "product_owner" {
+		t.Fatalf("a declined archive changed the task: %+v", again)
+	}
+	// The same click from another tab.
+	if status, code := e.post("answer_held_action", map[string]any{"held_action_id": id, "answer": "confirm"}, nil); status != 409 || code != "HELD_ACTION_ANSWERED" {
+		t.Errorf("a second answer = %d %s, want 409 HELD_ACTION_ANSWERED", status, code)
+	}
+	if status, code := e.post("answer_held_action", map[string]any{"held_action_id": "nope", "answer": "confirm"}, nil); status != 404 || code != "HELD_ACTION_NOT_FOUND" {
+		t.Errorf("an unknown id = %d %s, want 404 HELD_ACTION_NOT_FOUND", status, code)
+	}
+	if again, _ := e.plan.GetTicket(e.ctx, tk.ID); again.ArchivedAt != nil {
+		t.Error("an answer refused as answered archived the task")
+	}
+}
+
+func TestAHeldActionStaysPendingThroughARestartAndTwoFollowersSeeTheSameStates(t *testing.T) {
+	e := newPOE2E(t)
+	threadID, owner := e.ownerSession()
+	tk := e.doneTask("Later")
+	e.call(owner, "archive_task", map[string]any{"task_id": tk.ID})
+	id := e.heldActions(threadID)[0].HeldActionID
+
+	e.restart()
+	if held := e.heldActions(threadID); len(held) != 1 || held[0].State != "pending" || e.pendingHeld(threadID) != 1 {
+		t.Fatalf("after a restart: %+v pending %d", held, e.pendingHeld(threadID))
+	}
+	third := followPOFeed(t, e.srv.URL, e.project)
+	defer third.stop() // an open feed keeps the test server from closing
+	if status, code := e.post("answer_held_action", map[string]any{"held_action_id": id, "answer": "confirm"}, nil); status != 200 {
+		t.Fatalf("confirm after a restart = %d %s", status, code)
+	}
+	states := func(f *poFeed) string {
+		var out []string
+		for _, it := range f.of("product_owner_thread_item") {
+			if item, ok := it["item"].(map[string]any); ok && item["kind"] == "held_action" {
+				out = append(out, item["state"].(string))
+			}
+		}
+		return strings.Join(out, ",")
+	}
+	eventuallyPO(t, "both followers see the card confirmed", func() string {
+		if a, b := states(e.feed), states(third); a != "confirmed" || b != "confirmed" {
+			return "first " + a + ", other " + b
+		}
+		return ""
+	})
+}
+
+func TestAChangeToATaskThePersonMadeIsHeldWithOldAndNewAndAppliesOnlyOnConfirm(t *testing.T) {
+	e := newPOE2E(t)
+	threadID, owner := e.ownerSession()
+	var made struct {
+		Ticket attributedRow `json:"ticket"`
+	}
+	e.post("create_ticket", map[string]any{"project_id": e.project, "title": "Mine"}, &made)
+	old, err := e.plan.CreateTicket(e.ctx, e.project, "Before attribution", "", domain.TicketStatusBacklog, "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	db, err := sqlite.Open(e.cfg.DBPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := db.Exec("UPDATE tickets SET created_by = '' WHERE id = ?", old.ID).Error; err != nil {
+		t.Fatal(err)
+	}
+	if sqlDB, err := db.DB(); err == nil {
+		_ = sqlDB.Close()
+	}
+
+	for _, tk := range []struct{ id, from, to string }{{made.Ticket.ID, "Mine", "Ours"}, {old.ID, "Before attribution", "After"}} {
+		text, refused := e.call(owner, "update_task", map[string]any{"task_id": tk.id, "title": tk.to, "status": "review"})
+		if refused || !strings.Contains(text, "Awaiting the person") {
+			t.Fatalf("update_task of %s = %q refused=%v, want it held", tk.id, text, refused)
+		}
+		if got, _ := e.plan.GetTicket(e.ctx, tk.id); got.Title != tk.from || got.Status != domain.TicketStatusBacklog {
+			t.Fatalf("a held change applied: %+v", got)
+		}
+	}
+	held := e.heldActions(threadID)
+	if len(held) != 2 {
+		t.Fatalf("held actions = %+v", held)
+	}
+	if !strings.Contains(held[0].Summary, `"Mine" → "Ours"`) || !strings.Contains(held[0].Summary, "status backlog → review") {
+		t.Errorf("the summary = %q, want old → new for the title and the status", held[0].Summary)
+	}
+	if e.pendingHeld(threadID) != 2 {
+		t.Errorf("pending = %d, want 2", e.pendingHeld(threadID))
+	}
+	// A move to done is refused whoever made the task, and holds nothing.
+	if text, refused := e.call(owner, "update_task", map[string]any{"task_id": made.Ticket.ID, "status": "done"}); !refused || !strings.Contains(text, "Only the person moves a task to done") {
+		t.Errorf("a move to done = %q refused=%v", text, refused)
+	}
+	if len(e.heldActions(threadID)) != 2 {
+		t.Error("a move to done was held")
+	}
+
+	if status, code := e.post("answer_held_action", map[string]any{"held_action_id": held[0].HeldActionID, "answer": "confirm"}, nil); status != 200 {
+		t.Fatalf("confirm = %d %s", status, code)
+	}
+	got, _ := e.plan.GetTicket(e.ctx, made.Ticket.ID)
+	if got.Title != "Ours" || got.Status != domain.TicketStatusReview || got.ChangedBy == nil || got.ChangedBy.Kind != domain.AuthorProductOwner || got.ChangedBy.ThreadID != threadID {
+		t.Fatalf("after confirm the task = %+v, want the change by the product owner's thread", got)
+	}
+	if status, _ := e.post("answer_held_action", map[string]any{"held_action_id": held[1].HeldActionID, "answer": "decline"}, nil); status != 200 {
+		t.Fatal("decline failed")
+	}
+	if got, _ := e.plan.GetTicket(e.ctx, old.ID); got.Title != "Before attribution" {
+		t.Errorf("a declined change applied: %+v", got)
+	}
+
+	// A task the product owner made changes at once.
+	mine := e.madeTask(owner, "create_task", map[string]any{"title": "Product owner's", "parent_id": ""})
+	if text, refused := e.call(owner, "update_task", map[string]any{"task_id": mine.ID, "title": "Renamed"}); refused || strings.Contains(text, "Awaiting") {
+		t.Errorf("a change to its own task = %q refused=%v, want it applied", text, refused)
+	}
+}
+
+func TestTheNextTurnCarriesTheAnswersAndConfirmingAloneStartsNoTurn(t *testing.T) {
+	e := newPOE2E(t)
+	threadID, owner := e.ownerSession()
+	tk := e.doneTask("Finished")
+	e.call(owner, "archive_task", map[string]any{"task_id": tk.ID})
+	id := e.heldActions(threadID)[0].HeldActionID
+	e.post("answer_held_action", map[string]any{"held_action_id": id, "answer": "decline"}, nil)
+
+	if got := e.received(); strings.Contains(got, "declined") {
+		t.Fatalf("the product owner was told before its next turn: %q", got)
+	}
+	if status, code := e.send(threadID, "what happened?"); status != 200 {
+		t.Fatalf("send = %d %s", status, code)
+	}
+	e.waitTurn(threadID, "idle")
+	if got := e.received(); !strings.Contains(got, "declined") || !strings.Contains(got, "Archive the task") || !strings.Contains(got, "what happened?") {
+		t.Fatalf("the next turn received %q, want the answer in front of the message", got)
+	}
+	// It is told once.
+	e.send(threadID, "and now?")
+	e.waitTurn(threadID, "idle")
+	if got := e.received(); strings.Count(got, "declined") != 1 {
+		t.Errorf("the answer was given again: %q", got)
+	}
+	// The person's own message in the thread stays what they wrote.
+	for _, m := range e.messages(threadID) {
+		if m.Author == "person" && strings.Contains(m.Text, "declined") {
+			t.Errorf("the person's message was rewritten: %q", m.Text)
+		}
+	}
+}
+
+func TestAHeldActionNotAnsweredInADayOrAtACheckpointExpiresAndCannotBeConfirmed(t *testing.T) {
+	e := newPOE2E(t)
+	threadID, owner := e.ownerSession()
+	stale, fresh, checkpointed := e.doneTask("Stale"), e.doneTask("Fresh"), e.doneTask("Checkpointed")
+
+	e.call(owner, "archive_task", map[string]any{"task_id": stale.ID})
+	staleID := e.heldActions(threadID)[0].HeldActionID
+	// A day and a minute on, the person still has not answered.
+	e.po.SetClock(func() time.Time { return time.Now().Add(24*time.Hour + time.Minute) })
+	if th := e.thread(threadID); th.Thread.Turn != "idle" {
+		t.Fatal(th.Thread.Turn)
+	}
+	if held := e.heldActions(threadID); held[0].State != "expired" || e.pendingHeld(threadID) != 0 {
+		t.Fatalf("after a day: %+v pending %d, want it expired", held, e.pendingHeld(threadID))
+	}
+	if status, code := e.post("answer_held_action", map[string]any{"held_action_id": staleID, "answer": "confirm"}, nil); status != 409 || code != "HELD_ACTION_EXPIRED" {
+		t.Errorf("confirm of an expired action = %d %s, want 409 HELD_ACTION_EXPIRED", status, code)
+	}
+	if again, _ := e.plan.GetTicket(e.ctx, stale.ID); again.ArchivedAt != nil {
+		t.Error("an expired action archived the task")
+	}
+
+	// The checkpoint expires what waits, whatever its age.
+	e.po.SetClock(nil)
+	e.call(owner, "archive_task", map[string]any{"task_id": fresh.ID})
+	e.call(owner, "archive_task", map[string]any{"task_id": checkpointed.ID})
+	if e.pendingHeld(threadID) != 2 {
+		t.Fatalf("pending = %d, want 2", e.pendingHeld(threadID))
+	}
+	if n, err := e.po.ExpirePending(e.ctx, threadID); err != nil || n != 2 {
+		t.Fatalf("ExpirePending = %d %v, want 2", n, err)
+	}
+	if e.pendingHeld(threadID) != 0 {
+		t.Errorf("pending after a checkpoint = %d", e.pendingHeld(threadID))
+	}
+	for _, h := range e.heldActions(threadID) {
+		if h.State != "expired" {
+			t.Errorf("a held action reads %s after the checkpoint", h.State)
+		}
+	}
+}
+
+// received is what the stand-in claude was sent, one line per message.
+func (e *poE2E) received() string {
+	b, _ := os.ReadFile(filepath.Join(e.fakeDir, "received"))
+	return string(b)
 }

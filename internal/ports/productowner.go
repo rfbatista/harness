@@ -30,6 +30,11 @@ type ProductOwnerStore interface {
 	// sequence number, and answers it.
 	AppendItem(ctx context.Context, item domain.ProductOwnerItem) (domain.ProductOwnerItem, error)
 	SaveItem(ctx context.Context, item domain.ProductOwnerItem) error
+	// PendingHeldActions are the held action items still waiting, in every
+	// thread, oldest first.
+	PendingHeldActions(ctx context.Context) ([]domain.ProductOwnerItem, error)
+	// Item answers one item by id, nil when there is none.
+	Item(ctx context.Context, id string) (*domain.ProductOwnerItem, error)
 	// Items are a thread's items, oldest first: at most limit, the newest
 	// ones before the item beforeID (the thread's end when empty). hasEarlier
 	// says items exist before the first one answered.
@@ -87,6 +92,31 @@ type ProductOwner interface {
 	// RenameThread sets the title the person chose; the product owner never
 	// replaces it.
 	RenameThread(ctx context.Context, threadID, title string) (*domain.ProductOwnerThread, error)
+	// AnswerHeldAction confirms or declines a held action (ADR 0110). Only
+	// the person's click applies it; it starts no turn.
+	AnswerHeldAction(ctx context.Context, heldActionID, answer string) (*HeldActionAnswer, error)
+}
+
+// HeldActionAnswer is a held action after the person answered it: its new
+// state, and on confirm what the change made of the task.
+type HeldActionAnswer struct {
+	HeldActionID string `json:"held_action_id"`
+	State        string `json:"state"`
+	Outcome      any    `json:"outcome,omitempty"`
+}
+
+// ProductOwnerHolds is what the product owner's tools use to hold an action
+// for the person's answer instead of applying it.
+type ProductOwnerHolds interface {
+	// HoldAction stores a pending held action on the thread of the session,
+	// shows it in the thread and answers its item.
+	HoldAction(ctx context.Context, sessionID string, action domain.HeldAction, summary string, target domain.HeldTarget) (domain.ProductOwnerItem, error)
+}
+
+// HeldActionApplier applies a confirmed held action as the product owner of
+// the thread, and answers what it changed.
+type HeldActionApplier interface {
+	ApplyHeldAction(ctx context.Context, by domain.Author, action domain.HeldAction) (any, error)
 }
 
 // The product owner's events on the project feed (the page stream): each

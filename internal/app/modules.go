@@ -1667,16 +1667,20 @@ var ProductOwnerModule = fx.Module("productowner",
 	fx.Invoke(func(*productowner.Service) {}),
 )
 
-func newProductOwner(lc fx.Lifecycle, store ports.ProductOwnerStore, cat catalog.Catalog, orch *orchestration.Service) *productowner.Service {
+func newProductOwner(lc fx.Lifecycle, store ports.ProductOwnerStore, cat catalog.Catalog, orch *orchestration.Service, plan *planning.Service) *productowner.Service {
 	svc := productowner.New(store, cat.Projects, cat.Agents, orch, orch)
+	svc.SetHeldActionApplier(heldActionApplier{plan})
+	watch, stopWatch := context.WithCancel(context.Background())
 	lc.Append(fx.Hook{
 		OnStart: func(context.Context) error {
 			// The threads to recover are decided and marked busy here, before the
 			// server listens; their resumes then run behind the boot.
 			svc.Recover(context.Background())
+			svc.WatchHeldActions(watch)
 			return nil
 		},
 		OnStop: func(context.Context) error {
+			stopWatch()
 			// The processes die with the server: their threads stay as they are,
 			// for the next boot to resume.
 			svc.Close()

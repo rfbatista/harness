@@ -166,7 +166,7 @@ func (r *ProductOwnerRepository) SaveThread(ctx context.Context, t domain.Produc
 }
 
 func itemModel(item domain.ProductOwnerItem) (ProductOwnerItemModel, error) {
-	body, err := json.Marshal(item)
+	body, err := item.Stored()
 	if err != nil {
 		return ProductOwnerItemModel{}, err
 	}
@@ -207,6 +207,43 @@ func (r *ProductOwnerRepository) SaveItem(ctx context.Context, item domain.Produ
 		return err
 	}
 	return r.db.WithContext(ctx).Model(&ProductOwnerItemModel{}).Where("id = ?", item.ID).Update("body", m.Body).Error
+}
+
+// PendingHeldActions implements ports.ProductOwnerStore.
+func (r *ProductOwnerRepository) PendingHeldActions(ctx context.Context) ([]domain.ProductOwnerItem, error) {
+	var ms []ProductOwnerItemModel
+	err := r.db.WithContext(ctx).Where(`body LIKE '%"kind":"held_action"%' AND body LIKE '%"state":"pending"%'`).Order("seq").Find(&ms).Error
+	if err != nil {
+		return nil, err
+	}
+	out := make([]domain.ProductOwnerItem, 0, len(ms))
+	for _, m := range ms {
+		item, err := m.domain()
+		if err != nil {
+			return nil, err
+		}
+		if item.State == domain.HeldActionPending {
+			out = append(out, item)
+		}
+	}
+	return out, nil
+}
+
+// Item implements ports.ProductOwnerStore.
+func (r *ProductOwnerRepository) Item(ctx context.Context, id string) (*domain.ProductOwnerItem, error) {
+	var m ProductOwnerItemModel
+	err := r.db.WithContext(ctx).Where("id = ?", id).Take(&m).Error
+	if errors.Is(err, gorm.ErrRecordNotFound) {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, err
+	}
+	item, err := m.domain()
+	if err != nil {
+		return nil, err
+	}
+	return &item, nil
 }
 
 // Items implements ports.ProductOwnerStore.

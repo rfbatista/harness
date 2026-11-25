@@ -81,7 +81,20 @@ func (s *Service) Threads(ctx context.Context, projectID string) ([]domain.Produ
 	if _, err := s.projects.GetProject(ctx, projectID); err != nil {
 		return nil, err
 	}
-	return s.store.Threads(ctx, projectID)
+	list, err := s.store.Threads(ctx, projectID)
+	if err != nil {
+		return nil, err
+	}
+	for _, t := range list {
+		if t.PendingHeldActions > 0 {
+			// What waited a day expires before the list shows it.
+			if n, _ := s.ExpireStale(ctx); n > 0 {
+				return s.store.Threads(ctx, projectID)
+			}
+			break
+		}
+	}
+	return list, nil
 }
 
 // Thread implements ports.ProductOwner.
@@ -89,6 +102,11 @@ func (s *Service) Thread(ctx context.Context, threadID, before string) (*ports.P
 	t, err := s.store.Thread(ctx, threadID)
 	if err != nil {
 		return nil, err
+	}
+	if t.PendingHeldActions > 0 {
+		if n, _ := s.ExpireStale(ctx); n > 0 {
+			t, _ = s.store.Thread(ctx, threadID)
+		}
 	}
 	items, more, err := s.store.Items(ctx, threadID, before, domain.ProductOwnerThreadPage)
 	if err != nil {
@@ -309,8 +327,12 @@ func (s *Service) send(ctx context.Context, t *domain.ProductOwnerThread, r *run
 	}
 	s.announceThread(*t)
 	s.resetIdle(r, false)
-	if err := s.sessions.Send(ctx, t.SessionID, message); err != nil {
+	// The answers to held actions since its last turn go in front of the message.
+	lines, told := s.heldAnswers(ctx, t.ID)
+	if err := s.sessions.Send(ctx, t.SessionID, lines+message); err != nil {
 		s.fail(ctx, t, itemID, "SESSION_SEND_FAILED", "The message did not reach the product owner's session: "+err.Error())
+	} else if len(told) > 0 {
+		s.markTold(ctx, told)
 	}
 	return nil
 }

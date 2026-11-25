@@ -1,6 +1,7 @@
 package app
 
 import (
+	"context"
 	"net/http"
 
 	"operators-mcp/internal/adapter/in/mcpsession"
@@ -13,10 +14,43 @@ import (
 // sessionTaskHandler serves each session its task tools at /mcp/task/{id}: the
 // general set, or for the session of a product-owner thread the mode's
 // allow-list alone (ADR 0109), so the server holds that mode's line.
-func sessionTaskHandler(general []domain.Tool, plan *planning.Service, sessions ports.SessionRepository) http.Handler {
-	owner := tooling.ProductOwnerTools(general, tooling.ProductOwnerSources{Tasks: plan, Changes: plan.StatusHistory, Sessions: sessions, Patcher: plan})
+func sessionTaskHandler(general []domain.Tool, plan *planning.Service, sessions ports.SessionRepository, holds ...ports.ProductOwnerHolds) http.Handler {
+	src := tooling.ProductOwnerSources{Tasks: plan, Changes: plan.StatusHistory, Sessions: sessions, Patcher: plan}
+	if len(holds) > 0 {
+		src.Holds = holds[0]
+	}
+	owner := tooling.ProductOwnerTools(general, src)
 	return mcpsession.ModeTaskHandler(general, owner, func(id string) bool {
 		sess := sessions.Get(id)
 		return sess != nil && sess.Mode == domain.SessionModeProductOwner
 	})
+}
+
+// heldActionApplier applies a confirmed held action to the board, as the
+// product owner of its thread.
+type heldActionApplier struct{ plan *planning.Service }
+
+func (a heldActionApplier) ApplyHeldAction(ctx context.Context, by domain.Author, action domain.HeldAction) (any, error) {
+	ctx = domain.WithAuthor(ctx, by)
+	switch action.Kind {
+	case domain.HeldActionArchiveTask:
+		tk, err := a.plan.ArchiveTicket(ctx, action.TaskID)
+		if err != nil {
+			return nil, err
+		}
+		return map[string]any{"task": tk}, nil
+	case domain.HeldActionChangeTask:
+		var patch ports.TicketPatch
+		patch.Title, patch.Description = action.Title, action.Description
+		if action.Status != nil {
+			st := domain.TicketStatus(*action.Status)
+			patch.Status = &st
+		}
+		tk, err := a.plan.PatchTicket(ctx, action.TaskID, patch)
+		if err != nil {
+			return nil, err
+		}
+		return map[string]any{"task": tk}, nil
+	}
+	return nil, &domain.StructuredError{Code: "INVALID_INPUT", Message: "unknown held action " + action.Kind}
 }

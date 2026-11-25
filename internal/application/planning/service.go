@@ -494,6 +494,13 @@ func (s *Service) moveFamily(ctx context.Context, existing *domain.Ticket, archi
 	if err != nil {
 		return nil, err
 	}
+	by := s.actorOf(ctx)
+	for _, tk := range changed {
+		if err := s.tickets.SetActors(tk.ID, nil, &by); err != nil {
+			return nil, err
+		}
+		tk.ChangedBy = &by
+	}
 	// The write is done: the change goes out whole even if the request ends.
 	ctx = context.WithoutCancel(ctx)
 	s.decorate(ctx, changed...)

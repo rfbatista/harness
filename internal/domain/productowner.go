@@ -116,6 +116,14 @@ type ProductOwnerItem struct {
 	// message to send again.
 	Code        string `json:"code,omitempty"`
 	RetryItemID string `json:"retry_item_id,omitempty"`
+	// A held action's fields: HeldActionID is the item's own id, State is
+	// pending, confirmed, declined or expired. Held is what confirming
+	// applies; it is stored, and never written on the wire.
+	HeldActionID string      `json:"held_action_id,omitempty"`
+	Summary      string      `json:"summary,omitempty"`
+	Target       *HeldTarget `json:"target,omitempty"`
+	State        string      `json:"state,omitempty"`
+	Held         *HeldAction `json:"held,omitempty"`
 }
 
 // ProductOwnerMaxTitle bounds a thread title the person sets, in characters.
@@ -135,6 +143,7 @@ func ProductOwnerExcerpt(message string) string {
 // carries its attachments and its streaming flag.
 func (i ProductOwnerItem) MarshalJSON() ([]byte, error) {
 	type plain ProductOwnerItem
+	i.Held = nil
 	if i.Kind != ProductOwnerItemMessage {
 		return json.Marshal(plain(i))
 	}
@@ -145,6 +154,16 @@ func (i ProductOwnerItem) MarshalJSON() ([]byte, error) {
 		Streaming   bool   `json:"streaming"`
 		Stopped     bool   `json:"stopped"`
 	}{plain: plain(i), Text: i.Text, Attachments: []any{}, Streaming: i.Streaming, Stopped: i.Stopped})
+}
+
+// Stored is the item as the thread store keeps it: the wire form, and for a
+// held action the change it applies on confirm.
+func (i ProductOwnerItem) Stored() ([]byte, error) {
+	if i.Held == nil {
+		return json.Marshal(i)
+	}
+	type plain ProductOwnerItem
+	return json.Marshal(plain(i))
 }
 
 // ProductOwnerThreadTitle is a thread's title until the product owner names
