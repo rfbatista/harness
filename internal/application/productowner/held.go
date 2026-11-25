@@ -226,7 +226,7 @@ func (s *Service) heldAnswers(ctx context.Context, threadID string) (string, []d
 	for _, it := range told {
 		b.WriteString("- " + strings.ReplaceAll(it.Summary, `"`, "'") + ": the person " + heldOutcome[it.State] + "\n")
 	}
-	if told == nil {
+	if len(told) == 0 {
 		return "", nil
 	}
 	return "[Since your last turn, the answers to what you asked the person to confirm:\n" + b.String() + "]\n\n", told
