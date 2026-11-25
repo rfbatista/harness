@@ -159,4 +159,16 @@ describe("on a phone", () => {
     page.showThreads();
     assert.equal(navigator.replaced.at(-1), "/projects/p1/product-owner/threads/t1");
   });
+
+  test("a thread changing while the Memory or Digests tab shows does not write its address over the tab's", async () => {
+    const { page, navigator, server } = await setup({ threadId: "t1" });
+    page.showMemory();
+    server.publish("p1", { type: "thread", thread: summary({ threadId: "t1", title: "Renamed" }) });
+    await settled();
+    assert.equal(navigator.replaced.at(-1), "/projects/p1/product-owner#memory");
+    page.showDigests();
+    server.publish("p1", { type: "thread", thread: summary({ threadId: "t1", title: "Again" }) });
+    await settled();
+    assert.equal(navigator.replaced.at(-1), "/projects/p1/product-owner#digests");
+  });
 });

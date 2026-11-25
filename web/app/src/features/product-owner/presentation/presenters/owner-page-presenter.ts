@@ -139,7 +139,7 @@ export class OwnerPagePresenter extends Presenter<OwnerPageViewModel> {
   /** The thread on screen has its own address; the page keeps the address in step with it. */
   #follow(threadId: string | null): void {
     if (this.#conversation.state.loading && threadId === null) return;
-    if (this.#tab === "digests") return;
+    if (this.#tab !== "threads") return;
     this.#goTo(threadId === null ? pageHref(this.#props.projectId) : threadHref(this.#props.projectId, threadId));
   }
 

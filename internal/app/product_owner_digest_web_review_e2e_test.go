@@ -231,3 +231,46 @@ func TestEscapeInTheDigestTimeInputGivesTheSavedTimeBackInTheWebUI_EndToEnd(t *t
 		t.Errorf("the server holds the digest time %v, want 09:00", got)
 	}
 }
+
+// The Memory tab keeps its address while the thread that was open goes on
+// living. The page follows the open thread's state to keep a thread's
+// address in step, and a message arriving in that thread must not put the
+// thread's address back while the Memory tab is shown: a reload would then
+// open the thread instead of the Memory tab.
+func TestTheMemoryTabKeepsItsAddressWhileTheOpenThreadChangesInTheWebUI_EndToEnd(t *testing.T) {
+	w, _ := newPODigestWeb(t)
+	threadID, _ := w.startThread("Where do we stand?")
+	w.waitTurn(threadID, "idle")
+	p := newPerson(t)
+	page := w.url + "/projects/" + w.project + "/product-owner"
+	tab := func(name string) string {
+		return `[...document.querySelectorAll('[role=tab]')].find(t => t.textContent.trim().startsWith('` + name + `'))`
+	}
+	selected := `(document.querySelector('[role=tab][aria-selected=true]')?.textContent ?? '')`
+	var at []float64
+
+	p.run(t, "the person opens the thread, then the Memory tab",
+		chromedp.EmulateViewport(1440, 900),
+		chromedp.Navigate(page+"/threads/"+threadID),
+		waitFor(`document.querySelectorAll('.thread .msg').length >= 2`),
+		// The page's stream follows what it is told after the thread is read.
+		chromedp.Sleep(time.Second),
+		chromedp.Evaluate(`(() => { const r = `+tab("Memory")+`.getBoundingClientRect(); return [r.left + r.width / 2, r.top + r.height / 2]; })()`, &at),
+	)
+	p.run(t, "a click on the Memory tab opens it at its own address",
+		chromedp.MouseClickXY(at[0], at[1]),
+		waitFor(selected+`.trim().startsWith('Memory') && location.hash === '#memory'`),
+	)
+
+	if status, code := w.send(threadID, "And what comes next?"); status != 200 {
+		t.Fatalf("send = %d %s", status, code)
+	}
+	w.waitTurn(threadID, "idle")
+	p.run(t, "the thread's new messages reach the page", chromedp.Sleep(time.Second))
+	if got := p.text(t, `location.pathname + location.hash`); !strings.HasSuffix(got, "/product-owner#memory") {
+		t.Errorf("the Memory tab is shown and the address is %s: a reload opens the thread, not the Memory tab", got)
+	}
+	if got := p.text(t, selected); !strings.HasPrefix(strings.TrimSpace(got), "Memory") {
+		t.Errorf("the %q tab is open, want Memory", strings.TrimSpace(got))
+	}
+}
