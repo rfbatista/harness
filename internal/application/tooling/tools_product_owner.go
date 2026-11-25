@@ -25,6 +25,7 @@ var ProductOwnerToolNames = []string{
 	"get_project_task",
 	"list_project_sessions",
 	"list_project_branches",
+	"list_product_owner_digests",
 	"list_memory",
 	"save_memory",
 	"change_memory",
@@ -43,6 +44,8 @@ type ProductOwnerSources struct {
 	Tasks    ports.TicketReader
 	Changes  ports.TaskStatusChangeRepository
 	Sessions ports.SessionRepository
+	// Digests are the project's daily digests; nil leaves the tool out.
+	Digests ports.ProductOwnerDigests
 	// Memory drives the product owner's memory tools (ADR 0111).
 	Memory ports.ProductOwnerMemoryTools
 	// Patcher changes a task; the product owner's writes go through it, so
@@ -57,14 +60,17 @@ type ProductOwnerSources struct {
 // of the session task tools in all, those in the allow-list, and the
 // product owner's reads of tasks with their status history, of other
 // sessions' status, outcome and summary, and of branches and merges.
-func ProductOwnerTools(all []domain.Tool, src ProductOwnerSources) []domain.Tool {
+func ProductOwnerTools(all []domain.Tool, src ProductOwnerSources, with ...ProductOwnerSource) []domain.Tool {
+	for _, w := range with {
+		w(&src)
+	}
 	var out []domain.Tool
 	for _, name := range ProductOwnerToolNames {
 		if i := slices.IndexFunc(all, func(t domain.Tool) bool { return t.Name == name }); i >= 0 {
 			out = append(out, all[i])
 		}
 	}
-	out = append(out, productOwnerReads(src)...)
+	out = append(append(out, productOwnerReads(src)...), productOwnerDigestReads(src)...)
 	out = append(out, productOwnerMemoryTools(src.Memory)...)
 	return append(out, productOwnerWrites(src)...)
 }
@@ -300,4 +306,10 @@ func holdChange(ctx context.Context, src ProductOwnerSources, sess *domain.Sessi
 	}
 	return map[string]any{"held_action_id": item.ID, "state": item.State,
 		"message": "Awaiting the person: this task is theirs, so nothing changes until they confirm. You learn their answer on your next turn."}, nil
+}
+
+// WithHolds gives the product owner's tools the place where an action waits
+// for the person's answer (ADR 0110).
+func WithHolds(h ports.ProductOwnerHolds) ProductOwnerSource {
+	return func(s *ProductOwnerSources) { s.Holds = h }
 }

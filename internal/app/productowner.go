@@ -6,6 +6,7 @@ import (
 
 	"operators-mcp/internal/adapter/in/mcpsession"
 	"operators-mcp/internal/application/planning"
+	"operators-mcp/internal/application/productowner"
 	"operators-mcp/internal/application/tooling"
 	"operators-mcp/internal/domain"
 	"operators-mcp/internal/ports"
@@ -14,12 +15,8 @@ import (
 // sessionTaskHandler serves each session its task tools at /mcp/task/{id}: the
 // general set, or for the session of a product-owner thread the mode's
 // allow-list alone (ADR 0109), so the server holds that mode's line.
-func sessionTaskHandler(general []domain.Tool, plan *planning.Service, sessions ports.SessionRepository, memory ports.ProductOwnerMemoryTools, holds ...ports.ProductOwnerHolds) http.Handler {
-	src := tooling.ProductOwnerSources{Tasks: plan, Changes: plan.StatusHistory, Sessions: sessions, Patcher: plan, Memory: memory}
-	if len(holds) > 0 {
-		src.Holds = holds[0]
-	}
-	owner := tooling.ProductOwnerTools(general, src)
+func sessionTaskHandler(general []domain.Tool, plan *planning.Service, sessions ports.SessionRepository, memory ports.ProductOwnerMemoryTools, with ...tooling.ProductOwnerSource) http.Handler {
+	owner := tooling.ProductOwnerTools(general, tooling.ProductOwnerSources{Tasks: plan, Changes: plan.StatusHistory, Sessions: sessions, Patcher: plan, Memory: memory}, with...)
 	return mcpsession.ModeTaskHandler(general, owner, func(id string) bool {
 		sess := sessions.Get(id)
 		return sess != nil && sess.Mode == domain.SessionModeProductOwner
@@ -63,4 +60,22 @@ func (a heldActionApplier) ApplyHeldAction(ctx context.Context, by domain.Author
 		return map[string]any{"task": tk}, nil
 	}
 	return nil, &domain.StructuredError{Code: "INVALID_INPUT", Message: "unknown held action " + action.Kind}
+}
+
+// ownerDigestSource gives the product owner's tools the digests of its service;
+// a graph without the product owner serves none.
+func ownerDigestSource(owner *productowner.Service) []tooling.ProductOwnerSource {
+	if owner == nil {
+		return nil
+	}
+	return []tooling.ProductOwnerSource{tooling.WithDigests(owner)}
+}
+
+// ownerSources are what the product owner's tools draw on from its service: the
+// digests and the held actions. A graph without the product owner serves none.
+func ownerSources(owner *productowner.Service) []tooling.ProductOwnerSource {
+	if owner == nil {
+		return nil
+	}
+	return []tooling.ProductOwnerSource{tooling.WithDigests(owner), tooling.WithHolds(owner)}
 }
