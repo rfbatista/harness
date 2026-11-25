@@ -1,0 +1,59 @@
+package domain
+
+import "time"
+
+// A project's daily digest (ADR 0113) is a dated record of what changed in the
+// project since the last one: the items the server collected, and the summary
+// the product owner wrote of them.
+
+// Kinds of digest item.
+const (
+	DigestItemTaskMoved       = "task_moved"
+	DigestItemSessionEnded    = "session_ended"
+	DigestItemSessionFailed   = "session_failed"
+	DigestItemWaitingOnPerson = "waiting_on_person"
+)
+
+// ProductOwnerDigestPage is how many digests one read answers.
+const ProductOwnerDigestPage = 30
+
+// ProductOwnerDigestItem is one thing that changed: a task that moved (From
+// and To), a session that ended or failed, or something that waits on the
+// person. URL is its page on the web UI.
+type ProductOwnerDigestItem struct {
+	Kind  string `json:"kind"`
+	Title string `json:"title"`
+	URL   string `json:"url"`
+	From  string `json:"from,omitempty"`
+	To    string `json:"to,omitempty"`
+}
+
+// ProductOwnerDigest is one digest of a project. Date is the local day of the
+// digest time it covers, "2006-01-02": a digest recorded late for a missed time
+// is dated that time's day, and a project has at most one digest per date.
+type ProductOwnerDigest struct {
+	ID          string                   `json:"digest_id"`
+	ProjectID   string                   `json:"-"`
+	Date        string                   `json:"date"`
+	PeriodStart time.Time                `json:"period_start"`
+	PeriodEnd   time.Time                `json:"period_end"`
+	Summary     string                   `json:"summary"`
+	Items       []ProductOwnerDigestItem `json:"items"`
+}
+
+// ProductOwnerDigestState is where a project's digests stand: the start of the
+// period the next digest covers, and the last day the scheduler looked.
+type ProductOwnerDigestState struct {
+	ProjectID string
+	// SinceAt is when the digest time was first set, or where the last digest
+	// ended.
+	SinceAt time.Time
+	// CheckedDate is the local day of the last digest time the scheduler
+	// handled, empty before the first one. A quiet day is checked as a busy
+	// one is, and a time given up on after its failed tries is handled too.
+	CheckedDate string
+	// Attempts is how many digest runs failed for the digest time of
+	// AttemptsFor (a local day); it is kept so a restart does not reset it.
+	Attempts    int
+	AttemptsFor string
+}

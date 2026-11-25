@@ -25,6 +25,7 @@ var ProductOwnerToolNames = []string{
 	"list_project_sessions",
 	"list_project_branches",
 	"search_past_conversations",
+	"list_product_owner_digests",
 	"list_memory",
 	"save_memory",
 	"change_memory",
@@ -36,6 +37,8 @@ type ProductOwnerSources struct {
 	Tasks    ports.TicketReader
 	Changes  ports.TaskStatusChangeRepository
 	Sessions ports.SessionRepository
+	// Digests are the project's daily digests; nil leaves the tool out.
+	Digests ports.ProductOwnerDigests
 	// Memory drives the product owner's memory tools (ADR 0111).
 	Memory ports.ProductOwnerMemoryTools
 	// Conversations searches the project's past threads; nil leaves the search
@@ -49,11 +52,8 @@ type ConversationSearcher interface {
 	SearchConversations(ctx context.Context, projectID, query string) ([]domain.ProductOwnerSearchMatch, error)
 }
 
-// ProductOwnerOption sets one more source of the product owner's reads.
-type ProductOwnerOption func(*ProductOwnerSources)
-
 // WithConversationSearch gives the product owner its search of past threads.
-func WithConversationSearch(s ConversationSearcher) ProductOwnerOption {
+func WithConversationSearch(s ConversationSearcher) ProductOwnerSource {
 	return func(src *ProductOwnerSources) { src.Conversations = s }
 }
 
@@ -61,14 +61,17 @@ func WithConversationSearch(s ConversationSearcher) ProductOwnerOption {
 // of the session task tools in all, those in the allow-list, and the
 // product owner's reads of tasks with their status history, of other
 // sessions' status, outcome and summary, and of branches and merges.
-func ProductOwnerTools(all []domain.Tool, src ProductOwnerSources) []domain.Tool {
+func ProductOwnerTools(all []domain.Tool, src ProductOwnerSources, with ...ProductOwnerSource) []domain.Tool {
+	for _, w := range with {
+		w(&src)
+	}
 	var out []domain.Tool
 	for _, name := range ProductOwnerToolNames {
 		if i := slices.IndexFunc(all, func(t domain.Tool) bool { return t.Name == name }); i >= 0 {
 			out = append(out, all[i])
 		}
 	}
-	out = append(out, productOwnerReads(src)...)
+	out = append(append(out, productOwnerReads(src)...), productOwnerDigestReads(src)...)
 	return append(out, productOwnerMemoryTools(src.Memory)...)
 }
 

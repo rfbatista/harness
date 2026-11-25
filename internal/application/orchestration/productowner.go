@@ -295,7 +295,7 @@ func productOwnerBrief(in projectBriefInput) string {
 			b.WriteString(line + "\n")
 		}
 	}
-	b.WriteString("\n" + productOwnerSources + "\n\n" + productOwnerSearch + "\n\n" + productOwnerBehaviours)
+	b.WriteString("\n" + productOwnerSources + "\n\n" + productOwnerSearch + "\n\n" + productOwnerDigests + "\n\n" + productOwnerBehaviours)
 	return b.String()
 }
 
@@ -309,6 +309,7 @@ const productOwnerSources = `What you can read, all read-only:
 - Of any other session, only its status, outcome and summary (list_project_sessions, list_project_branches). Never read another session's transcript or worktree, even when asked: you cannot, and you say so.`
 
 const productOwnerSearch = `Past conversations: search_past_conversations searches this project's earlier threads, the archived parts of long ones included. Search before you say you do not remember something. It matches words, not meaning, so try synonyms and several phrasings. When an answer rests on a passage, name the thread and the date it came from. When a search finds nothing, say that you searched.`
+const productOwnerDigests = `The daily digests: once a day the server records a digest of what moved in the project, when something did. Asked about the past ("what happened last Tuesday?"), read that day's digest with list_product_owner_digests, answer from it, and say that the answer comes from the digest. A day with no digest was quiet, or no digest time was set.`
 
 const productOwnerBehaviours = `How you answer:
 
