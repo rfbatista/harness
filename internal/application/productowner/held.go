@@ -2,6 +2,7 @@ package productowner
 
 import (
 	"context"
+	"errors"
 	"strings"
 	"sync"
 	"time"
@@ -118,11 +119,20 @@ func (s *Service) AnswerHeldAction(ctx context.Context, heldActionID, answer str
 		}
 		by := domain.Author{Kind: domain.AuthorProductOwner, SessionID: t.SessionID, ThreadID: t.ID}
 		if res.Outcome, err = s.held.applier.ApplyHeldAction(ctx, by, *item.Held); err != nil {
+			if errors.Is(err, ports.ErrHeldActionStale) {
+				// The task moved on: the action no longer applies, and says so.
+				s.settle(ctx, t, item, domain.HeldActionExpired)
+				return nil, expiredError()
+			}
 			return nil, err
 		}
-		s.settle(ctx, t, item, domain.HeldActionConfirmed)
+		if err := s.settle(ctx, t, item, domain.HeldActionConfirmed); err != nil {
+			return nil, err
+		}
 	} else {
-		s.settle(ctx, t, item, domain.HeldActionDeclined)
+		if err := s.settle(ctx, t, item, domain.HeldActionDeclined); err != nil {
+			return nil, err
+		}
 	}
 	res.State = item.State
 	return res, nil
@@ -134,19 +144,22 @@ func expiredError() error {
 
 // settle moves a pending item to state, takes it off the thread's pending
 // count and shows both. The held lock is held.
-func (s *Service) settle(ctx context.Context, t *domain.ProductOwnerThread, item *domain.ProductOwnerItem, state string) {
+func (s *Service) settle(ctx context.Context, t *domain.ProductOwnerThread, item *domain.ProductOwnerItem, state string) error {
 	item.State = state
 	if err := s.store.SaveItem(ctx, *item); err != nil {
-		return
+		return err
 	}
-	_, _ = s.update(ctx, t.ID, t, func(th *domain.ProductOwnerThread) bool {
+	if _, err := s.update(ctx, t.ID, t, func(th *domain.ProductOwnerThread) bool {
 		if th.PendingHeldActions > 0 {
 			th.PendingHeldActions--
 		}
 		return true
-	})
+	}); err != nil {
+		return err
+	}
 	s.announceItem(t, *item)
 	s.announceThread(*t)
+	return nil
 }
 
 // ExpirePending expires every pending held action of a thread, as its

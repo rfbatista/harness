@@ -1,6 +1,7 @@
 package ports
 
 import (
+	"errors"
 	"context"
 
 	"operators-mcp/internal/domain"
@@ -170,3 +171,7 @@ type ProductOwnerSessions interface {
 	// Subscribe follows a session's events live.
 	Subscribe(id string) (<-chan SessionEvent, []SessionEvent, func())
 }
+
+// ErrHeldActionStale is what a HeldActionApplier answers when the task is no
+// longer as it was when the action was held: the action does not apply.
+var ErrHeldActionStale = errors.New("the task changed since the action was held")

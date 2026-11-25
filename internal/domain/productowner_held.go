@@ -47,6 +47,11 @@ type HeldAction struct {
 	Title       *string `json:"title,omitempty"`
 	Description *string `json:"description,omitempty"`
 	Status      *string `json:"status,omitempty"`
+	// BaseTitle, BaseDescription and BaseStatus are the task's values when the
+	// change was held. Confirming applies only while the task still has them.
+	BaseTitle       string `json:"base_title,omitempty"`
+	BaseDescription string `json:"base_description,omitempty"`
+	BaseStatus      string `json:"base_status,omitempty"`
 	// Told says the product owner was given the person's answer, on a turn.
 	Told bool `json:"told,omitempty"`
 }

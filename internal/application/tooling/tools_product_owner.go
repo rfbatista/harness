@@ -261,7 +261,8 @@ func holdChange(ctx context.Context, src ProductOwnerSources, sess *domain.Sessi
 	if src.Holds == nil {
 		return nil, &domain.StructuredError{Code: "UNAVAILABLE", Message: "UNAVAILABLE: held actions are not available on this server"}
 	}
-	action := domain.HeldAction{Kind: domain.HeldActionChangeTask, TaskID: tk.ID}
+	action := domain.HeldAction{Kind: domain.HeldActionChangeTask, TaskID: tk.ID,
+		BaseTitle: tk.Title, BaseDescription: tk.Description, BaseStatus: string(tk.Status)}
 	var changes []string
 	if patch.Title != nil && *patch.Title != tk.Title {
 		action.Title = patch.Title

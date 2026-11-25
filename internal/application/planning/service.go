@@ -171,6 +171,10 @@ func (s *Service) statusMoved(ctx context.Context, tk *domain.Ticket, c domain.T
 // bySession reports whether a call comes from an agent session: one named by
 // the patch, or one whose tool call tagged the context. Anything else is the
 // person.
+func bySession(ctx context.Context, bySessionID string) bool {
+	return bySessionID != "" || tool.SessionIDFrom(ctx) != ""
+}
+
 // actorOf is who the write in ctx is attributed to: the actor tagged onto it,
 // else the session whose tool made it, else the person.
 func (s *Service) actorOf(ctx context.Context) domain.Author {
@@ -186,10 +190,6 @@ func (s *Service) actorOf(ctx context.Context) domain.Author {
 	}
 	a.At = time.Now()
 	return a
-}
-
-func bySession(ctx context.Context, bySessionID string) bool {
-	return bySessionID != "" || tool.SessionIDFrom(ctx) != ""
 }
 
 // CreateTicket creates a task. A session cannot create one in done: only the
@@ -786,8 +786,6 @@ func (s *Service) DeleteDocument(id string) error {
 	return err
 }
 
-// documentChanged raises DocumentChanged for d once it is stored (err nil),
-// and answers d and err as they came.
 // documentChangedBy records the actor in ctx as d's last changer, when the
 // change itself went through.
 func (s *Service) documentChangedBy(ctx context.Context, d *domain.Document, err *error) {
@@ -800,6 +798,8 @@ func (s *Service) documentChangedBy(ctx context.Context, d *domain.Document, err
 	}
 }
 
+// documentChanged raises DocumentChanged for d once it is stored (err nil),
+// and answers d and err as they came.
 func (s *Service) documentChanged(d *domain.Document, err error, ticketID string, change domain.DocumentChange) (*domain.Document, error) {
 	if err == nil && d != nil {
 		s.raise(context.Background(), domain.DocumentChanged{DocumentID: d.ID, ProjectID: d.ProjectID, TicketID: ticketID, Change: change})

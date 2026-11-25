@@ -616,3 +616,27 @@ func (e *poE2E) received() string {
 	b, _ := os.ReadFile(filepath.Join(e.fakeDir, "received"))
 	return string(b)
 }
+
+func TestAConfirmAfterThePersonChangedTheTaskDoesNotOverwriteItAndReadsExpired(t *testing.T) {
+	e := newPOE2E(t)
+	threadID, owner := e.ownerSession()
+	var made struct {
+		Ticket attributedRow `json:"ticket"`
+	}
+	e.post("create_ticket", map[string]any{"project_id": e.project, "title": "Mine"}, &made)
+	e.call(owner, "update_task", map[string]any{"task_id": made.Ticket.ID, "title": "Theirs"})
+	id := e.heldActions(threadID)[0].HeldActionID
+
+	if status, _ := e.post("update_ticket", map[string]any{"ticket_id": made.Ticket.ID, "title": "Edited meanwhile"}, nil); status != 200 {
+		t.Fatal("the person's edit failed")
+	}
+	if status, code := e.post("answer_held_action", map[string]any{"held_action_id": id, "answer": "confirm"}, nil); status != 409 || code != "HELD_ACTION_EXPIRED" {
+		t.Fatalf("confirm of a stale change = %d %s, want 409 HELD_ACTION_EXPIRED", status, code)
+	}
+	if got, _ := e.plan.GetTicket(e.ctx, made.Ticket.ID); got.Title != "Edited meanwhile" {
+		t.Errorf("the stale change overwrote the person's edit: %q", got.Title)
+	}
+	if held := e.heldActions(threadID); held[0].State != "expired" || e.pendingHeld(threadID) != 0 {
+		t.Errorf("after a stale confirm: %+v pending %d", held, e.pendingHeld(threadID))
+	}
+}

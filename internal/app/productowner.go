@@ -34,12 +34,22 @@ func (a heldActionApplier) ApplyHeldAction(ctx context.Context, by domain.Author
 	ctx = domain.WithAuthor(ctx, by)
 	switch action.Kind {
 	case domain.HeldActionArchiveTask:
+		if cur, err := a.plan.GetTicket(ctx, action.TaskID); err != nil || cur.Status != domain.TicketStatusDone || cur.ArchivedAt != nil {
+			return nil, ports.ErrHeldActionStale
+		}
 		tk, err := a.plan.ArchiveTicket(ctx, action.TaskID)
 		if err != nil {
 			return nil, err
 		}
 		return map[string]any{"task": tk}, nil
 	case domain.HeldActionChangeTask:
+		cur, err := a.plan.GetTicket(ctx, action.TaskID)
+		if err != nil || cur.ArchivedAt != nil ||
+			(action.Title != nil && cur.Title != action.BaseTitle) ||
+			(action.Description != nil && cur.Description != action.BaseDescription) ||
+			(action.Status != nil && string(cur.Status) != action.BaseStatus) {
+			return nil, ports.ErrHeldActionStale
+		}
 		var patch ports.TicketPatch
 		patch.Title, patch.Description = action.Title, action.Description
 		if action.Status != nil {
