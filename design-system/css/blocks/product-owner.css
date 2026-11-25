@@ -80,7 +80,7 @@
 
   /* A note under the owner's message: memory saved, file attached to a task. */
   .msg-note { grid-column: 2; display: flex; align-items: flex-start; gap: var(--space-xs); padding: var(--space-xs) var(--space-s); border: var(--border-width) solid var(--color-line); border-radius: var(--radius-sm); background: var(--color-panel); font-size: var(--text-xs); color: var(--color-ink-muted); max-inline-size: var(--size-measure); }
-  .msg-note > svg { inline-size: 0.875rem; block-size: 0.875rem; margin-block-start: 0.1rem; color: var(--color-signal-strong); }
+  .msg-note > svg { flex: none; inline-size: 0.875rem; block-size: 0.875rem; margin-block-start: 0.1rem; color: var(--color-signal-strong); }
   .msg-note b { color: var(--color-ink); font-weight: var(--weight-medium); }
   .msg-note q { font-style: normal; color: var(--color-ink); }
   .msg-note .act { margin-inline-start: auto; white-space: nowrap; }
