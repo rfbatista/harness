@@ -67,3 +67,6 @@ export function applyTaskChange(tasks: readonly Task[], change: TaskChange): Tas
   if (at < 0) return [...tasks, change.task];
   return tasks.map((t, i) => (i === at ? change.task : t));
 }
+
+/** A task's page. */
+export const taskHref = (projectId: string, taskId: string): string => `/projects/${encodeURIComponent(projectId)}/tasks/${encodeURIComponent(taskId)}`;
