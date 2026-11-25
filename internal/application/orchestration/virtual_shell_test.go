@@ -111,7 +111,7 @@ func withShells(t *testing.T, svc *Service) *shellWorld {
 
 	doc := func(title, content string, format domain.DocumentFormat, scope domain.DocumentScope, link string) *domain.Document {
 		t.Helper()
-		d, err := plan.CreateDocument(p.ID, title, content, format, scope)
+		d, err := plan.CreateDocument(context.Background(), p.ID, title, content, format, scope)
 		must(err)
 		if link != "" {
 			must(plan.LinkDocument(link, d.ID))

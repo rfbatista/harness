@@ -160,9 +160,14 @@ func (s *Service) failCheckpoint(ctx context.Context, t *domain.ProductOwnerThre
 	s.resetIdle(r, true)
 }
 
-// expireHeldActionsAtCheckpoint is where a held action still pending at a
-// checkpoint expires (spec story 10, ADR 0110).
-func (s *Service) expireHeldActionsAtCheckpoint(ctx context.Context, t *domain.ProductOwnerThread) {}
+// expireHeldActionsAtCheckpoint expires the held actions of the thread still
+// pending at its checkpoint: they were asked in the archived part, and the
+// product owner's next turn is told they expired (spec story 10, ADR 0110).
+func (s *Service) expireHeldActionsAtCheckpoint(ctx context.Context, t *domain.ProductOwnerThread) {
+	if _, err := s.ExpirePending(ctx, t.ID); err != nil {
+		slog.Warn("expire the held actions of a checkpointed thread", "thread", t.ID, "err", err)
+	}
+}
 
 // moveToNewConversation ends the thread's old process and starts its new
 // session, with the summary in its brief. It runs under the thread's lock, so

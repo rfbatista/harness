@@ -332,7 +332,7 @@ func TestAProductSessionWithoutATaskGetsTheProjectsShell(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	prd, err := w.plan.CreateDocument(w.task.ProjectID, "PRD: Export", "# PRD: Export\n", domain.DocumentFormatMarkdown, domain.DocumentScopeTask)
+	prd, err := w.plan.CreateDocument(context.Background(), w.task.ProjectID, "PRD: Export", "# PRD: Export\n", domain.DocumentFormatMarkdown, domain.DocumentScopeTask)
 	if err != nil {
 		t.Fatal(err)
 	}

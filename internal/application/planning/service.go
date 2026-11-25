@@ -64,6 +64,10 @@ type Service struct {
 	// ContentURL names where an upload's bytes are served; the route belongs
 	// to the HTTP adapter. Nil leaves content_url empty.
 	ContentURL func(resourceID string) string
+	// SessionActor says who a session's writes are attributed to: the session
+	// itself, or the product owner and its thread. Nil attributes them to the
+	// session.
+	SessionActor func(sessionID string) domain.Author
 	// MaxResourceBytes caps an upload; zero means domain.MaxResourceBytes.
 	MaxResourceBytes int64
 
@@ -171,6 +175,23 @@ func bySession(ctx context.Context, bySessionID string) bool {
 	return bySessionID != "" || tool.SessionIDFrom(ctx) != ""
 }
 
+// actorOf is who the write in ctx is attributed to: the actor tagged onto it,
+// else the session whose tool made it, else the person.
+func (s *Service) actorOf(ctx context.Context) domain.Author {
+	a, ok := domain.AuthorFrom(ctx)
+	if !ok {
+		a = domain.Author{Kind: domain.AuthorPerson}
+		if id := tool.SessionIDFrom(ctx); id != "" {
+			a = domain.Author{Kind: domain.AuthorSession, SessionID: id}
+			if s.SessionActor != nil {
+				a = s.SessionActor(id)
+			}
+		}
+	}
+	a.At = time.Now()
+	return a
+}
+
 // CreateTicket creates a task. A session cannot create one in done: only the
 // person moves a task there.
 func (s *Service) CreateTicket(ctx context.Context, projectID, title, description string, status domain.TicketStatus, parentID string) (*domain.Ticket, error) {
@@ -198,6 +219,11 @@ func (s *Service) CreateTicket(ctx context.Context, projectID, title, descriptio
 	if err != nil {
 		return nil, err
 	}
+	by := s.actorOf(ctx)
+	if err := s.tickets.SetActors(tk.ID, &by, nil); err != nil {
+		return nil, err
+	}
+	tk.CreatedBy = &by
 	// The write is done: the change goes out whole even if the request ends.
 	s.decorate(context.WithoutCancel(ctx), tk)
 	s.announce(tk, false)
@@ -354,6 +380,11 @@ func (s *Service) PatchTicket(ctx context.Context, id string, patch ports.Ticket
 	if err != nil {
 		return nil, err
 	}
+	by := s.actorOf(ctx)
+	if err := s.tickets.SetActors(id, nil, &by); err != nil {
+		return nil, err
+	}
+	tk.ChangedBy = &by
 	// The move is recorded before the ticket is decorated, so what is
 	// announced and answered carries it as its last move.
 	var move *domain.TaskStatusChange
@@ -462,6 +493,13 @@ func (s *Service) moveFamily(ctx context.Context, existing *domain.Ticket, archi
 	changed, err := s.tickets.SetArchivedMany(familyIDs(family), at)
 	if err != nil {
 		return nil, err
+	}
+	by := s.actorOf(ctx)
+	for _, tk := range changed {
+		if err := s.tickets.SetActors(tk.ID, nil, &by); err != nil {
+			return nil, err
+		}
+		tk.ChangedBy = &by
 	}
 	// The write is done: the change goes out whole even if the request ends.
 	ctx = context.WithoutCancel(ctx)
@@ -646,7 +684,7 @@ func (s *Service) deleteTicket(ctx context.Context, id string) (*domain.Ticket, 
 
 // --- Documents ---
 
-func (s *Service) CreateDocument(projectID, title, content string, format domain.DocumentFormat, scope domain.DocumentScope) (*domain.Document, error) {
+func (s *Service) CreateDocument(ctx context.Context, projectID, title, content string, format domain.DocumentFormat, scope domain.DocumentScope) (*domain.Document, error) {
 	if title == "" {
 		return nil, &domain.StructuredError{Code: "INVALID_INPUT", Message: "title is required"}
 	}
@@ -666,6 +704,12 @@ func (s *Service) CreateDocument(projectID, title, content string, format domain
 		return nil, &domain.StructuredError{Code: "PROJECT_NOT_FOUND", Message: "project not found"}
 	}
 	d, err := s.documents.Create(projectID, title, content, format, scope)
+	if err == nil {
+		by := s.actorOf(ctx)
+		if err = s.documents.SetActors(d.ID, &by, nil); err == nil {
+			d.CreatedBy = &by
+		}
+	}
 	return s.documentChanged(d, err, "", domain.DocumentCreated)
 }
 
@@ -680,7 +724,7 @@ func (s *Service) ListDocuments(projectID string, scope domain.DocumentScope) []
 // SetDocumentScope moves a document between task and project scope. The
 // ticket links stay. The same scope again is a no-op: the document comes
 // back as stored, so updated_at moves only when the scope does.
-func (s *Service) SetDocumentScope(id string, scope domain.DocumentScope) (*domain.Document, error) {
+func (s *Service) SetDocumentScope(ctx context.Context, id string, scope domain.DocumentScope) (*domain.Document, error) {
 	if !scope.Valid() {
 		return nil, &domain.StructuredError{Code: "INVALID_INPUT", Message: "scope must be task or project"}
 	}
@@ -692,12 +736,13 @@ func (s *Service) SetDocumentScope(id string, scope domain.DocumentScope) (*doma
 		return existing, nil
 	}
 	d, err := s.documents.SetScope(id, scope)
+	s.documentChangedBy(ctx, d, &err)
 	return s.documentChanged(d, err, "", domain.DocumentScopeChanged)
 }
 
 // UpdateDocument replaces title and content. An empty format keeps the
 // stored one, so callers that never learned about formats are unaffected.
-func (s *Service) UpdateDocument(id, title, content string, format domain.DocumentFormat) (*domain.Document, error) {
+func (s *Service) UpdateDocument(ctx context.Context, id, title, content string, format domain.DocumentFormat) (*domain.Document, error) {
 	if title == "" {
 		return nil, &domain.StructuredError{Code: "INVALID_INPUT", Message: "title is required"}
 	}
@@ -705,6 +750,7 @@ func (s *Service) UpdateDocument(id, title, content string, format domain.Docume
 		return nil, &domain.StructuredError{Code: "INVALID_INPUT", Message: "format must be markdown, html or text"}
 	}
 	d, err := s.documents.Update(id, title, content, format)
+	s.documentChangedBy(ctx, d, &err)
 	return s.documentChanged(d, err, "", domain.DocumentUpdated)
 }
 
@@ -712,7 +758,7 @@ func (s *Service) UpdateDocument(id, title, content string, format domain.Docume
 // the stored one) while the stored content is still at version: a
 // compare-and-set, so a write made on an older copy is DOCUMENT_CHANGED and
 // nothing is stored. No format's shape is checked.
-func (s *Service) WriteDocumentIfVersion(id, version, title, content string, format domain.DocumentFormat) (*domain.Document, error) {
+func (s *Service) WriteDocumentIfVersion(ctx context.Context, id, version, title, content string, format domain.DocumentFormat) (*domain.Document, error) {
 	if title == "" {
 		return nil, &domain.StructuredError{Code: "INVALID_INPUT", Message: "title is required"}
 	}
@@ -727,6 +773,7 @@ func (s *Service) WriteDocumentIfVersion(id, version, title, content string, for
 		return nil, &domain.StructuredError{Code: "DOCUMENT_CHANGED", Message: "now at " + now}
 	}
 	written, err := s.documents.UpdateIfContent(id, d.Content, title, content, format)
+	s.documentChangedBy(ctx, written, &err)
 	return s.documentChanged(written, err, "", domain.DocumentUpdated)
 }
 
@@ -737,6 +784,18 @@ func (s *Service) DeleteDocument(id string) error {
 	}
 	_, err := s.documentChanged(last, nil, "", domain.DocumentDeleted)
 	return err
+}
+
+// documentChangedBy records the actor in ctx as d's last changer, when the
+// change itself went through.
+func (s *Service) documentChangedBy(ctx context.Context, d *domain.Document, err *error) {
+	if *err != nil || d == nil {
+		return
+	}
+	by := s.actorOf(ctx)
+	if *err = s.documents.SetActors(d.ID, nil, &by); *err == nil {
+		d.ChangedBy = &by
+	}
 }
 
 // documentChanged raises DocumentChanged for d once it is stored (err nil),

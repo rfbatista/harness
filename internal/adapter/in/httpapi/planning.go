@@ -202,7 +202,7 @@ func (h *Handler) handleCreateDocument(c echo.Context) error {
 	if err := bindJSON(c, &in); err != nil {
 		return err
 	}
-	doc, err := h.planningSvc.CreateDocument(in.ProjectID, in.Title, in.Content, domain.DocumentFormat(in.Format), domain.DocumentScope(in.Scope))
+	doc, err := h.planningSvc.CreateDocument(c.Request().Context(), in.ProjectID, in.Title, in.Content, domain.DocumentFormat(in.Format), domain.DocumentScope(in.Scope))
 	if err != nil {
 		return err
 	}
@@ -219,7 +219,7 @@ func (h *Handler) handleSetDocumentScope(c echo.Context) error {
 	if err := bindJSON(c, &in); err != nil {
 		return err
 	}
-	doc, err := h.planningSvc.SetDocumentScope(in.DocumentID, domain.DocumentScope(in.Scope))
+	doc, err := h.planningSvc.SetDocumentScope(c.Request().Context(), in.DocumentID, domain.DocumentScope(in.Scope))
 	if err != nil {
 		return err
 	}
@@ -238,7 +238,7 @@ func (h *Handler) handleUpdateDocument(c echo.Context) error {
 	if err := bindJSON(c, &in); err != nil {
 		return err
 	}
-	doc, err := h.planningSvc.UpdateDocument(in.DocumentID, in.Title, in.Content, domain.DocumentFormat(in.Format))
+	doc, err := h.planningSvc.UpdateDocument(c.Request().Context(), in.DocumentID, in.Title, in.Content, domain.DocumentFormat(in.Format))
 	if err != nil {
 		return err
 	}

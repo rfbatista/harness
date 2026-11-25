@@ -472,3 +472,48 @@ func TestTheWindowClaudeReportsDecidesWhenAThreadCheckpointsNotAGuessFromTheMode
 		return ""
 	})
 }
+
+func TestAHeldActionStillPendingAtACheckpointReadsExpiredAndTheNextTurnLearnsIt(t *testing.T) {
+	e := newPOE2E(t)
+	threadID, owner := e.ownerSession()
+	task := e.doneTask("Asked before the checkpoint")
+	e.call(owner, "archive_task", map[string]any{"task_id": task.ID})
+	if e.pendingHeld(threadID) != 1 {
+		t.Fatalf("pending = %d, want the one asked", e.pendingHeld(threadID))
+	}
+
+	// A turn that ends past the checkpoint size archives the part the action
+	// was asked in.
+	e.setContext(contextPastCheckpoint)
+	if status, code := e.send(threadID, "go on"); status != 200 {
+		t.Fatalf("send = %d %s", status, code)
+	}
+	eventuallyPO(t, "the checkpoint", func() string {
+		th := e.thread(threadID)
+		if th.Thread.Turn != "idle" || len(checkpointsOf(th.Items)) != 1 {
+			return "items " + strings.Join(kinds(th.Items), " ")
+		}
+		return ""
+	})
+	held := e.heldActions(threadID)
+	if len(held) != 1 || held[0].State != "expired" || e.pendingHeld(threadID) != 0 {
+		t.Fatalf("held = %+v pending %d, want it expired and nothing pending", held, e.pendingHeld(threadID))
+	}
+	if status, code := e.post("answer_held_action", map[string]any{"held_action_id": held[0].HeldActionID, "answer": "confirm"}, nil); status != 409 || code != "HELD_ACTION_EXPIRED" {
+		t.Errorf("confirm after the checkpoint = %d %s, want 409 HELD_ACTION_EXPIRED", status, code)
+	}
+	if again, _ := e.plan.GetTicket(e.ctx, task.ID); again.ArchivedAt != nil {
+		t.Error("an expired action archived the task")
+	}
+
+	// The next turn, in the new conversation, is told that it expired.
+	e.setContext(contextBelowCheckpoint)
+	if status, code := e.send(threadID, "and now?"); status != 200 {
+		t.Fatalf("send = %d %s", status, code)
+	}
+	e.waitTurn(threadID, "idle")
+	got := e.receivedText()
+	if !strings.Contains(got, "did not answer in time, so nothing changed.") {
+		t.Errorf("the next turn was not told the action expired: %q", got)
+	}
+}

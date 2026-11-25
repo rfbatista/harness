@@ -2,6 +2,7 @@ package ports
 
 import (
 	"context"
+	"errors"
 	"time"
 
 	"operators-mcp/internal/domain"
@@ -39,6 +40,15 @@ type ProductOwnerStore interface {
 	// same step, counts it on the thread and moves the thread's checkpoint
 	// phase to moving: a restart never sees one without the other.
 	AppendCheckpoint(ctx context.Context, item domain.ProductOwnerItem) (domain.ProductOwnerItem, error)
+	// PendingHeldActions are the held action items still waiting, in every
+	// thread, oldest first.
+	PendingHeldActions(ctx context.Context) ([]domain.ProductOwnerItem, error)
+	// AnsweredHeldActions are the held action items of a thread the person
+	// answered (or that expired) and the product owner was not yet told of,
+	// whatever their place in the thread, oldest first.
+	AnsweredHeldActions(ctx context.Context, threadID string) ([]domain.ProductOwnerItem, error)
+	// Item answers one item by id, nil when there is none.
+	Item(ctx context.Context, id string) (*domain.ProductOwnerItem, error)
 	// Items are a thread's items, oldest first: at most limit, the newest
 	// ones before the item beforeID (the thread's end when empty). hasEarlier
 	// says items exist before the first one answered.
@@ -115,9 +125,34 @@ type ProductOwner interface {
 	// RenameThread sets the title the person chose; the product owner never
 	// replaces it.
 	RenameThread(ctx context.Context, threadID, title string) (*domain.ProductOwnerThread, error)
+	// AnswerHeldAction confirms or declines a held action (ADR 0110). Only
+	// the person's click applies it; it starts no turn.
+	AnswerHeldAction(ctx context.Context, heldActionID, answer string) (*HeldActionAnswer, error)
 	// SearchConversations finds passages in every thread of the project, the
 	// archived parts included, best first (at most 30).
 	SearchConversations(ctx context.Context, projectID, query string) ([]domain.ProductOwnerSearchMatch, error)
+}
+
+// HeldActionAnswer is a held action after the person answered it: its new
+// state, and on confirm what the change made of the task.
+type HeldActionAnswer struct {
+	HeldActionID string `json:"held_action_id"`
+	State        string `json:"state"`
+	Outcome      any    `json:"outcome,omitempty"`
+}
+
+// ProductOwnerHolds is what the product owner's tools use to hold an action
+// for the person's answer instead of applying it.
+type ProductOwnerHolds interface {
+	// HoldAction stores a pending held action on the thread of the session,
+	// shows it in the thread and answers its item.
+	HoldAction(ctx context.Context, sessionID string, action domain.HeldAction, summary string, target domain.HeldTarget) (domain.ProductOwnerItem, error)
+}
+
+// HeldActionApplier applies a confirmed held action as the product owner of
+// the thread, and answers what it changed.
+type HeldActionApplier interface {
+	ApplyHeldAction(ctx context.Context, by domain.Author, action domain.HeldAction) (any, error)
 }
 
 // The product owner's events on the project feed (the page stream): each
@@ -178,3 +213,7 @@ type ProductOwnerSessions interface {
 	// Subscribe follows a session's events live.
 	Subscribe(id string) (<-chan SessionEvent, []SessionEvent, func())
 }
+
+// ErrHeldActionStale is what a HeldActionApplier answers when the task is no
+// longer as it was when the action was held: the action does not apply.
+var ErrHeldActionStale = errors.New("the task changed since the action was held")

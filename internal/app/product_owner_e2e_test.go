@@ -193,7 +193,7 @@ func (e *poE2E) serve() {
 	mux.Handle("/api/", httpapi.NewRouter(httpapi.NewHandler(httpapi.Services{
 		Sessions: e.orch, Planning: e.plan, Projects: e.cat.Projects, Settings: e.cat.Settings, ProductOwner: e.po, AgentBoard: e.board, Usage: e.usage,
 	})))
-	mux.Handle(mcpsession.PathPrefix, sessionTaskHandler(sessionTaskTools(e.cat, e.orch, e.plan, e.sess, e.art, e.channel, nil, nil), e.plan, e.sess, e.po, tooling.WithDigests(e.po), tooling.WithConversationSearch(e.po)))
+	mux.Handle(mcpsession.PathPrefix, sessionTaskHandler(sessionTaskTools(e.cat, e.orch, e.plan, e.sess, e.art, e.channel, nil, nil), e.plan, e.sess, e.po, tooling.WithDigests(e.po), tooling.WithHolds(e.po), tooling.WithConversationSearch(e.po)))
 	e.srv = httptest.NewServer(mux)
 	e.t.Cleanup(e.srv.Close)
 	e.feed = followPOFeed(e.t, e.srv.URL, e.project)
@@ -650,7 +650,7 @@ func TestAThreadsSessionRunsInProductOwnerModeOnItsProjectWithTheBriefItsModelAn
 	}
 	for _, want := range []string{
 		"product owner of project harness", "Say where you looked", "Say so when you cannot know", "has none and offer to shape its first feature",
-		"cannot yet change tasks or documents", "read another session's transcript or worktree, even when asked",
+		"You write tasks", "read another session's transcript or worktree, even when asked",
 	} {
 		if !strings.Contains(args, want) {
 			t.Errorf("the brief lacks %q", want)
@@ -1409,7 +1409,7 @@ func TestAProductOwnerSessionIsServedItsReadToolsAndNoWriteStartOrMergeTool(t *t
 	if !slices.Equal(got, want) {
 		t.Fatalf("tools = %v, want exactly %v", got, want)
 	}
-	for _, banned := range []string{"start_task_session", "create_task", "update_task_status", "merge_session_branch", "push_branch",
+	for _, banned := range []string{"start_task_session", "update_task_status", "merge_session_branch", "push_branch",
 		"publish_artifact", "attach_artifact_to_task", "message_architect", "reply_to_session", "request_user_review", "notify",
 		"propose_instruction_files", "set_status_check"} {
 		if slices.Contains(got, banned) {
@@ -1508,7 +1508,7 @@ func TestTheProductOwnerReadsTasksWithTheirHistoryAndOnlyTheStatusOutcomeAndSumm
 	}
 }
 
-func TestTheProductOwnersSandboxReachesNoOtherSessionsWorktreeAndItsShellRefusesEveryWrite(t *testing.T) {
+func TestTheProductOwnersSandboxReachesNoOtherSessionsWorktreeAndItsShellRefusesWhatIsNotADocumentWrite(t *testing.T) {
 	e := newPOE2E(t)
 	id, _ := e.startThread("hello")
 	th := e.waitTurn(id, "idle")
@@ -1526,16 +1526,16 @@ func TestTheProductOwnersSandboxReachesNoOtherSessionsWorktreeAndItsShellRefuses
 	if !ok {
 		t.Fatal("the product owner has no virtual shell")
 	}
-	for _, edit := range []ports.ShellEdit{
-		{Op: "write", Paths: []string{filepath.Join(dir, "project/docs/new.md")}, Tool: "Write"},
-		{Op: "rm", Paths: []string{filepath.Join(dir, "project/docs/prd.md")}},
-		{Op: "mkdir", Paths: []string{filepath.Join(dir, "tasks/x")}},
-	} {
-		if ans := e.shells.CheckShellEdit(e.ctx, th.Thread.SessionID, edit); ans.Allow || ans.Code != "PRODUCT_OWNER_READ_ONLY" {
-			t.Errorf("check %+v = %+v, want PRODUCT_OWNER_READ_ONLY", edit, ans)
+	for edit, code := range map[string]string{"write": "PRODUCT_OWNER_READ_ONLY", "rm": "PRODUCT_OWNER_NO_DELETE"} {
+		edit := ports.ShellEdit{Op: edit, Paths: []string{filepath.Join(dir, "project/designs/new.html")}, Tool: "Write"}
+		if edit.Op == "rm" {
+			edit.Paths = []string{filepath.Join(dir, "project/docs/prd.md")}
 		}
-		if ans := e.shells.CommitShellEdit(e.ctx, th.Thread.SessionID, edit); ans.Allow || ans.Code != "PRODUCT_OWNER_READ_ONLY" {
-			t.Errorf("commit %+v = %+v, want PRODUCT_OWNER_READ_ONLY", edit, ans)
+		if ans := e.shells.CheckShellEdit(e.ctx, th.Thread.SessionID, edit); ans.Allow || ans.Code != code {
+			t.Errorf("check %+v = %+v, want %s", edit, ans, code)
+		}
+		if ans := e.shells.CommitShellEdit(e.ctx, th.Thread.SessionID, edit); ans.Allow || ans.Code != code {
+			t.Errorf("commit %+v = %+v, want %s", edit, ans, code)
 		}
 	}
 	// What is outside its shell is no concern of the proxy.
@@ -2117,7 +2117,7 @@ func TestAThreadsSessionHasAContextEntryAtItsStartAndANewOneAtEachResume(t *test
 		}
 		var brief bool
 		for _, p := range entry.Instructions {
-			if p.Title == "Product owner brief" && strings.Contains(p.Text, "cannot yet change tasks or documents") {
+			if p.Title == "Product owner brief" && strings.Contains(p.Text, "You write tasks") {
 				brief = true
 			}
 		}

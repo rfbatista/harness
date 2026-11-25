@@ -273,7 +273,7 @@ func TestMessages_ValidationAndVisibility(t *testing.T) {
 	_, err = f.svc.SendToArchitect(ctx, "a", ports.TaskMessageInput{Kind: domain.MessageReply, Body: "x"})
 	wantCode(t, err, "INVALID_INPUT")
 
-	doc, _ := f.plan.CreateDocument(f.project, "Plan", "<p>x</p>", domain.DocumentFormatHTML, domain.DocumentScopeTask)
+	doc, _ := f.plan.CreateDocument(context.Background(), f.project, "Plan", "<p>x</p>", domain.DocumentFormatHTML, domain.DocumentScopeTask)
 	_ = f.plan.LinkDocument(f.ticket, doc.ID)
 	rq, err := f.svc.SendToArchitect(ctx, "a", ports.TaskMessageInput{Kind: domain.MessageReviewRequest, Body: "review my plan", DocumentIDs: []string{doc.ID}})
 	if err != nil || len(rq.DocumentIDs) != 1 {
