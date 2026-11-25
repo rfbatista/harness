@@ -174,7 +174,10 @@ func workerOptions(root string, dev bool) api.BuildOptions {
 func islandOptions(root string, dev bool) gohydrate.IslandBuildOptions {
 	app := filepath.Join(root, "web", "app")
 	return gohydrate.IslandBuildOptions{
-		Islands:     []gohydrate.Island{{Name: "top-bar", ServerEntry: filepath.Join(app, "src", "islands", "top-bar.server.tsx")}},
+		Islands: []gohydrate.Island{
+			{Name: "top-bar", ServerEntry: filepath.Join(app, "src", "islands", "top-bar.server.tsx")},
+			{Name: "rail", ServerEntry: filepath.Join(app, "src", "islands", "rail.server.tsx")},
+		},
 		ClientEntry: filepath.Join(app, "src", "main.client.tsx"),
 		ResolveDir:  app,
 		OutDir:      filepath.Join(root, outDir),

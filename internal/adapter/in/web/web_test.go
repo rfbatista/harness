@@ -161,6 +161,25 @@ func (f fakeSummaries) ListProjectSummaries(context.Context) ([]ports.ProjectSum
 
 func newTestHandler(t *testing.T, w world) http.Handler {
 	t.Helper()
+	return newHandlerWith(t, w, builtAssets(t))
+}
+
+// newRenderedHandler is newTestHandler with the real island bundles: the top bar
+// and the rail are rendered on the server, as the browser first receives them.
+func newRenderedHandler(t *testing.T, w world) http.Handler {
+	t.Helper()
+	assets, err := NewAssets()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !assets.IslandsBuilt() {
+		t.Skip("the island bundles are not built; run `make web`")
+	}
+	return newHandlerWith(t, w, assets)
+}
+
+func newHandlerWith(t *testing.T, w world, assets *Assets) http.Handler {
+	t.Helper()
 	fallback := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { io.WriteString(w, "legacy designer") })
 	deps := Deps{
 		Projects:     fakeProjects{w.projects},
@@ -216,7 +235,7 @@ func newTestHandler(t *testing.T, w world) http.Handler {
 	if w.poThreads != nil {
 		deps.ProductOwnerThreads = w.poThreads
 	}
-	return NewHandler(deps, builtAssets(t), fallback)
+	return NewHandler(deps, assets, fallback)
 }
 
 // board is one project with three tasks; the in-progress task runs several

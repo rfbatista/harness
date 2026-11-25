@@ -13,7 +13,7 @@ import (
 	"operators-mcp/internal/domain"
 )
 
-// The rail's first paint (the server copy the live rail takes over): the
+// The rail's first paint (the React island, rendered by the server): the
 // skip link, New task, the Project nav with the open page marked, and the
 // Tasks nav's five groups with their counts.
 
@@ -42,7 +42,7 @@ func currentProjectPage(body string) string {
 
 func TestRailNamesTheProjectsPagesAndMarksTheOpenOne(t *testing.T) {
 	w := board()
-	h := newTestHandler(t, w)
+	h := newRenderedHandler(t, w)
 	body := get(t, h, "/projects/p1").Body.String()
 	for _, want := range []string{
 		`<a class="[ skip-link ] [ button ]" data-size="sm" href="#main">Skip to content</a>`,
@@ -75,18 +75,18 @@ func TestRailNamesTheProjectsPagesAndMarksTheOpenOne(t *testing.T) {
 }
 
 func TestRailGroupsAreHeadingsWithCountsAndTheRowsCarryOneMetaItem(t *testing.T) {
-	body := get(t, newTestHandler(t, board()), "/projects/p1").Body.String()
+	body := get(t, newRenderedHandler(t, board()), "/projects/p1").Body.String()
 	for _, want := range []string{
 		// Every group, empty ones included, as an h3 with its count in words.
 		`<section class="[ group ]" aria-labelledby="rail-in_progress-heading" data-key="in_progress"><h3 id="rail-in_progress-heading">`,
-		`<span class="[ name ]">Review</span> <span class="[ count ]">0<span class="[ visually-hidden ]"> tasks</span></span></h3></section>`,
+		`<span class="[ name ]">Review</span><span class="[ count ]"><span>0</span><span class="[ visually-hidden ]"> tasks</span></span></span></h3>`,
 		`data-empty="true"`,
-		`<span class="[ count ]">1<span class="[ visually-hidden ]"> task, 1 needs you</span></span>`,
+		`<span class="[ count ]"><span>1</span><span class="[ visually-hidden ]"> task, 1 needs you</span></span>`,
 		// The feed task waits on the person: the amber wash, "waiting".
 		`data-task-id="t-feed" data-attention="true"`,
-		`<span class="[ meta ]" data-tone="attention">waiting</span> <span class="[ visually-hidden ]"> on you</span>`,
-		// The filter's place, held so the handover does not move the list.
-		`<div class="[ filter-placeholder ]"></div>`,
+		`<span class="[ meta ]" data-tone="attention">waiting</span><span class="[ visually-hidden ]"> on you</span>`,
+		// The filter is painted too: the server's paint and the browser's are the same rail.
+		`<input type="search" placeholder="Filter tasks"`,
 	} {
 		if !strings.Contains(body, want) {
 			t.Errorf("project page is missing %q", want)
@@ -95,7 +95,7 @@ func TestRailGroupsAreHeadingsWithCountsAndTheRowsCarryOneMetaItem(t *testing.T)
 }
 
 func TestRailPaintsTheGroupsTheCookieFolds(t *testing.T) {
-	h := newTestHandler(t, board())
+	h := newRenderedHandler(t, board())
 	body := getWithCookie(t, h, "/projects/p1", shell.CollapsedCookie+"=todo,review")
 	if !strings.Contains(body, `data-key="todo" data-collapsed="true"`) {
 		t.Error("todo is not painted folded")
@@ -116,9 +116,9 @@ func TestRailCapsDoneBehindShowMore(t *testing.T) {
 	for i := range 8 {
 		w.tickets = append(w.tickets, &domain.Ticket{ID: fmt.Sprintf("d%d", i), ProjectID: "p1", Title: fmt.Sprintf("Finished %d", i), Status: domain.TicketStatusDone, UpdatedAt: base.Add(time.Duration(i) * time.Hour)})
 	}
-	body := get(t, newTestHandler(t, w), "/projects/p1").Body.String()
+	body := get(t, newRenderedHandler(t, w), "/projects/p1").Body.String()
 	// Nine done: five shown, four behind the summary.
-	if !strings.Contains(body, `<summary><span class="[ closed ]">Show 4 more<span class="[ visually-hidden ]"> done tasks</span></span><span class="[ opened ]">Show fewer</span></summary>`) {
+	if !strings.Contains(body, `<summary><span class="[ closed ]"><span>Show 4 more</span><span class="[ visually-hidden ]"> done tasks</span></span><span class="[ opened ]">Show fewer</span></summary>`) {
 		t.Error("Done is not capped behind Show 4 more")
 	}
 	// Newest first: d7…d3 shown, d2, d1, d0 and the undated t-ship behind it.
@@ -128,7 +128,7 @@ func TestRailCapsDoneBehindShowMore(t *testing.T) {
 }
 
 func TestThePhoneTasksButtonIsALinkToTheBoardWithWhatNeedsYou(t *testing.T) {
-	body := get(t, newTestHandler(t, board()), "/projects/p1/tasks/t-docs").Body.String()
+	body := get(t, newRenderedHandler(t, board()), "/projects/p1/tasks/t-docs").Body.String()
 	for _, want := range []string{
 		`class="[ button ] [ tasks-toggle ]" data-variant="ghost" href="/projects/p1" aria-controls="rail"`,
 		`<span x-text="needsYouCount">1</span>`,

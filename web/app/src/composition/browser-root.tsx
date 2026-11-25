@@ -51,6 +51,11 @@ import { ContextDotView } from "../features/context/presentation/views/context-d
 import { ContextPresenter } from "../features/context/presentation/presenters/context-presenter";
 import { isGroupKey } from "../features/context/presentation/presenters/context-view-model";
 import { ContextView } from "../features/context/presentation/views/context-view";
+import { browserFeaturePrefs, cookieRailPrefs, timeoutScheduler, windowAnnouncer, windowPageOpener } from "../features/rail/infrastructure/browser-rail";
+import { httpRailFeed } from "../features/rail/infrastructure/http-rail-feed";
+import { httpRailSource } from "../features/rail/infrastructure/http-rail-source";
+import { RailView } from "../features/rail/presentation/views/rail-view";
+import { buildRail } from "./rail-presenters";
 import { buildTopBar } from "./top-bar-presenters";
 import { TopBarView } from "./top-bar-view";
 import { mountAgentsView, mountWhiteboard } from "./whiteboard-island";
@@ -86,7 +91,32 @@ export function mountIslands(doc: Document): Dispose {
   const contextSource = httpContextSource(api);
   const contextFeed = httpContextFeed(feed);
 
+  const railSource = httpRailSource(api);
+  const railFeed = httpRailFeed(feed);
+
   const islands: Record<string, Island> = {
+    // The rail beside <main>: the mount is the rail's own element (.rail), the server drew it and the browser takes over.
+    rail: (mount, props) => {
+      const features = browserFeaturePrefs(win);
+      const rail = buildRail(props, { source: railSource, feed: railFeed, prefs: cookieRailPrefs(doc), features, announcer: windowAnnouncer(win), opener: windowPageOpener(win.location), scheduler: timeoutScheduler(win) });
+      // In-place navigation keeps the rail in the document: it follows the page and the task that are open (the frame state the swap wrote).
+      const follow = () => {
+        const state = doc.getElementById("frame-state");
+        if (!state) return;
+        rail.presenter.setPage(state.dataset["page"] ?? "");
+        rail.presenter.setCurrentTask(state.dataset["task"] ?? "");
+      };
+      win.addEventListener("harness:navigated", follow);
+      const node = <RailView presenter={rail.presenter} host={mount as HTMLElement} />;
+      const failed = mount.getAttribute("data-island-rendered") === "false" || !mount.hasChildNodes();
+      const root = failed ? createRoot(mount) : hydrateRoot(mount, node);
+      if (failed) root.render(node);
+      return () => {
+        win.removeEventListener("harness:navigated", follow);
+        rail.stop();
+        root.unmount();
+      };
+    },
     "top-bar": (mount, props, fresh) => {
       const topBar = buildTopBar(props, { pageOpener: browserPageOpener(win.location), navigator: browserNavigator(win.location), notifications, dock });
       const unfollow = followNavigation(browserNavigationSignal(win), topBarSource, topBar.current, { fresh });

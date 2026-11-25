@@ -70,7 +70,8 @@ func pageServer(t *testing.T, deps Deps) (string, *sseFeed) {
 }
 
 const (
-	pageReady = `document.querySelector('[data-ssr]') === null`
+	// The page is ready once Alpine has started its components (the rail's headless feed owner is on every project page).
+	pageReady = `document.getElementById('rail-feed')?._x_dataStack !== undefined`
 	// Text measures differently before the webfonts arrive.
 	fontsLoaded = `document.fonts.status === 'loaded'`
 )

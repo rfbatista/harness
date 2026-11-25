@@ -27,6 +27,10 @@ type Frame struct {
 	CSS, JS, ClientJS, ClientCSS string
 	// Island is the React top bar the header carries; nil leaves it out.
 	Island *TopBarIsland
+	// RailIsland renders the React rail the page carries beside <main> (ADR 0001)
+	// from the final frame, after the page's handler set its current page; nil
+	// leaves the rail static.
+	RailIsland func(Frame) *RailIsland
 	// Built is false when `make web` has not produced the bundles yet.
 	Built bool
 	// Live: the page follows the session feed, so the stream bar shows the
@@ -126,6 +130,9 @@ type Rail struct {
 	// reports the connection to the stream bar. A page with its own feed
 	// (the task page) reports it itself.
 	ReportsFeed bool
+	// Collapsed are the groups the person folded (the rail_collapsed cookie),
+	// so the island's first paint is already folded.
+	Collapsed []string
 	// Seed lets the browser keep the rail and the board live: the project's
 	// tasks and sessions, followed over the project's feed. Nil leaves the
 	// rail static (no project selected).

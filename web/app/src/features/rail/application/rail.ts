@@ -23,6 +23,8 @@ export interface RailModelState extends RailState {
   readonly projectId: string;
   /** The open task's id, marked current; "" when none. */
   readonly currentTaskId: string;
+  /** The project page open now (a PageKey), marked current in the navigation; "" for any other page. */
+  readonly page: string;
   readonly query: string;
   /** Read out by the polite region under the filter. */
   readonly filterResult: string;
@@ -39,6 +41,8 @@ export interface RailModelState extends RailState {
   readonly opened: Readonly<Record<string, boolean>>;
   /** The phone drawer is open. */
   readonly drawerOpen: boolean;
+  /** The browser's own preferences were read: until then the rail is what the server painted (every feature folded). */
+  readonly prefsRead: boolean;
 }
 
 export interface RailInput {
@@ -46,6 +50,7 @@ export interface RailInput {
   readonly feed: RailFeed;
   readonly seed: RailSeed;
   readonly currentTaskId: string;
+  readonly page?: string;
   /** The folded groups at first paint: what the server drew. */
   readonly collapsed: readonly string[];
   readonly prefs: RailPrefs;
@@ -67,7 +72,7 @@ export const needsYouCount = (state: RailState): number => {
 export const reviewsCount = (state: RailState): number => state.tasks.reduce((n, t) => n + (t.archivedAt ? 0 : t.pendingReviews), 0);
 
 /** A feature row is open: what the person chose on this page, else the browser's preference. */
-export const isFeatureOpen = (state: RailModelState, features: FeaturePrefs, id: string): boolean => (id in state.opened ? state.opened[id] === true : features.isOpen(id));
+export const isFeatureOpen = (state: RailModelState, features: FeaturePrefs, id: string): boolean => (id in state.opened ? state.opened[id] === true : state.prefsRead && features.isOpen(id));
 
 export class Rail {
   #state: RailModelState;
@@ -86,6 +91,7 @@ export class Rail {
       ...follow.state(),
       projectId: input.seed.projectId,
       currentTaskId: input.currentTaskId,
+      page: input.page ?? "",
       query: "",
       filterResult: "",
       needsYouOnly: false,
@@ -96,6 +102,7 @@ export class Rail {
       focusedId: "",
       opened: {},
       drawerOpen: false,
+      prefsRead: false,
     };
     this.#stopFollowing = follow.stop;
   }
@@ -244,6 +251,16 @@ export class Rail {
   /** In-place navigation: the task that is open changed. */
   setCurrentTask(taskId: string): void {
     if (taskId !== this.#state.currentTaskId) this.#set({ currentTaskId: taskId });
+  }
+
+  /** In-place navigation: the project page that is open changed. */
+  setPage(page: string): void {
+    if (page !== this.#state.page) this.#set({ page });
+  }
+
+  /** The island took over the server's paint: the browser's preferences (opened features) now apply. */
+  readPrefs(): void {
+    if (!this.#state.prefsRead) this.#set({ prefsRead: true });
   }
 
   openDrawer(): void {

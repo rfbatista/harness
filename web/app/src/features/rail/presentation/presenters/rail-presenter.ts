@@ -5,11 +5,29 @@ import { Presenter } from "../../../../shared/kernel/presenter";
 import { activityOf } from "../../application/follow-project";
 import { isFeatureOpen, needsYouCount, reviewsCount, type Rail, type RailModelState } from "../../application/rail";
 import type { FeaturePrefs } from "../../application/ports";
+import { navItems, servicesBadge, type NavIcon, type ProjectNav } from "../../domain/nav";
 import { railGroups } from "../../domain/rail-groups";
 import { toGroup, type GroupViewModel } from "./rail-rows";
 
+/** The page of the project's navigation, as the view draws it. */
+export interface NavItemViewModel {
+  readonly key: string;
+  readonly href: string;
+  readonly icon: NavIcon;
+  readonly label: string;
+  readonly current: boolean;
+  /** The count in the badge; "" hides it. Services: running (99+); Review requests: waiting on the person. */
+  readonly badge: string;
+  /** The Design systems badge: how many proposals wait; its element is always drawn (the design-system page updates it). */
+  readonly proposals: number | null;
+}
+
 export interface RailViewModel {
   readonly projectId: string;
+  readonly projectName: string;
+  /** The project's pages, left out when not served. */
+  readonly nav: readonly NavItemViewModel[];
+  readonly newTaskHref: string;
   /** The project has no task yet. */
   readonly isEmpty: boolean;
   readonly hasTasks: boolean;
@@ -32,7 +50,12 @@ export interface RailViewModel {
   readonly drawerOpen: boolean;
 }
 
-export function railViewModel(state: RailModelState, features: FeaturePrefs): RailViewModel {
+export interface RailStatics {
+  readonly projectName: string;
+  readonly nav: ProjectNav;
+}
+
+export function railViewModel(state: RailModelState, features: FeaturePrefs, statics: RailStatics): RailViewModel {
   const byTask = activityOf(state);
   const groups = railGroups(state.tasks, { byTask, currentId: state.currentTaskId, collapsed: state.collapsed, query: state.query, needsYouOnly: state.needsYouOnly }).map((g) =>
     toGroup(g, {
@@ -49,12 +72,24 @@ export function railViewModel(state: RailModelState, features: FeaturePrefs): Ra
   const matched = groups.reduce((n, g) => n + g.rows.length, 0);
   const query = state.query.trim();
   const waiting = needsYouCount(state);
+  const reviews = reviewsCount(state);
   return {
     projectId: state.projectId,
+    projectName: statics.projectName,
+    newTaskHref: statics.nav.newTaskHref,
+    nav: navItems(statics.nav).map((i) => ({
+      key: i.key,
+      href: i.href,
+      icon: i.icon,
+      label: i.label,
+      current: i.key === state.page,
+      badge: i.key === "services" ? servicesBadge(statics.nav.servicesRunning) : i.key === "reviews" ? (reviews > 0 ? String(reviews) : "") : "",
+      proposals: i.key === "design-system" ? statics.nav.designSystemProposals : null,
+    })),
     isEmpty: state.tasks.length === 0,
     hasTasks: state.tasks.length > 0,
     total: state.tasks.filter((t) => !t.archivedAt).length,
-    reviewsCount: reviewsCount(state),
+    reviewsCount: reviews,
     needsYouCount: waiting,
     showsNeedsYou: waiting > 0 || state.needsYouOnly,
     needsYouOnly: state.needsYouOnly,
@@ -72,10 +107,10 @@ export function railViewModel(state: RailModelState, features: FeaturePrefs): Ra
 export class RailPresenter extends Presenter<RailViewModel> {
   readonly #rail: Rail;
 
-  constructor(rail: Rail, features: FeaturePrefs) {
-    super(railViewModel(rail.state, features));
+  constructor(rail: Rail, features: FeaturePrefs, statics: RailStatics) {
+    super(railViewModel(rail.state, features, statics));
     this.#rail = rail;
-    rail.subscribe((state) => this.set(railViewModel(state, features)));
+    rail.subscribe((state) => this.set(railViewModel(state, features, statics)));
   }
 
   toggleGroup = (key: string): void => this.#rail.toggleGroup(key);
@@ -88,6 +123,9 @@ export class RailPresenter extends Presenter<RailViewModel> {
   setFocused = (taskId: string): void => this.#rail.setFocused(taskId);
   clearFocusedRow = (): void => this.#rail.clearFocusedRow();
   setCurrentTask = (taskId: string): void => this.#rail.setCurrentTask(taskId);
+  /** The island has taken over the server's paint. */
+  hydrated = (): void => this.#rail.readPrefs();
+  setPage = (page: string): void => this.#rail.setPage(page);
   openDrawer = (): void => this.#rail.openDrawer();
   closeDrawer = (): void => this.#rail.closeDrawer();
   stop = (): void => this.#rail.stop();

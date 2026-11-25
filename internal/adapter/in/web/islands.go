@@ -24,6 +24,9 @@ type IslandRenderer interface {
 // topBarIsland is the island's name in the manifest and in the page.
 const topBarIsland = "top-bar"
 
+// railIsland is the rail island's name in the manifest and in the page.
+const railIsland = "rail"
+
 // renderTimeout bounds one island render: past it the page carries an empty
 // mount and the browser draws the top bar.
 const renderTimeout = 200 * time.Millisecond
@@ -85,4 +88,29 @@ func (s *server) island(ctx context.Context, bar *ports.TopBar) (*shell.TopBarIs
 	}
 	isl.HTML, isl.Failed = html, false
 	return isl, nil
+}
+
+// railIsland builds the rail island of a page: the seed and navigation as props
+// and, when it renders, its HTML. Like the top bar, the page never fails
+// because of it: on any failure the mount is empty and marked.
+func (s *server) railIsland(ctx context.Context, frame shell.Frame) *shell.RailIsland {
+	props, err := json.Marshal(frame.RailProps())
+	if err != nil {
+		props = []byte("{}")
+	}
+	isl := &shell.RailIsland{Props: string(props), Failed: true}
+	if s.renderer == nil {
+		return isl
+	}
+	started := time.Now()
+	html, err := s.renderer.Render(ctx, railIsland, props)
+	pagetime.AddIsland(ctx, time.Since(started))
+	if err != nil {
+		if ctx.Err() == nil {
+			slog.Error("web: the rail island did not render; the browser draws it", "kind", islandErrorKind(err), "project", frame.Top.Current, "err", err)
+		}
+		return isl
+	}
+	isl.HTML, isl.Failed = html, false
+	return isl
 }

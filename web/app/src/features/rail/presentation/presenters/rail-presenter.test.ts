@@ -7,8 +7,11 @@ import type { Task } from "../../domain/task";
 import { manualScheduler, memoryAnnouncer, memoryFeaturePrefs, memoryPageOpener, memoryRailPrefs } from "../../infrastructure/memory-ports";
 import { memoryRailFeed, memoryRailSource } from "../../infrastructure/memory-rail";
 import { session, task } from "../../testing/fixtures";
+import type { ProjectNav } from "../../domain/nav";
 import { RailPresenter } from "./rail-presenter";
 import type { RowViewModel } from "./rail-rows";
+
+const NAV: ProjectNav = { newTaskHref: "/projects/p1/tasks/new", boardHref: "/projects/p1", codeHref: "", servicesHref: "/projects/p1/services", servicesProjectId: "p1", servicesRunning: 120, reviewsHref: "/projects/p1/reviews", documentsHref: "", designHref: "/projects/p1/design", designSystemHref: "/projects/p1/design-system", designSystemProposals: 2, usageHref: "", productOwnerHref: "/projects/p1/owner" };
 
 const flush = () => new Promise<void>((resolve) => setImmediate(resolve));
 
@@ -32,7 +35,7 @@ function setup({ tasks = [task()], sessions = [session("a", "t1", "running")], c
   const scheduler = manualScheduler();
   const statuses: RailFeedStatus[] = [];
   const rail = new Rail({ source, feed, seed, currentTaskId: currentTask, collapsed, prefs, features, announcer, opener, scheduler, onFeedStatus: (s) => statuses.push(s) });
-  const presenter = new RailPresenter(rail, features);
+  const presenter = new RailPresenter(rail, features, { projectName: "harness", nav: NAV });
   const vm = () => presenter.viewModel;
   const group = (key: string) => vm().groups.find((g) => g.key === key)!;
   const rows = (): RowViewModel[] => vm().groups.flatMap((g) => [...g.rows, ...g.more]);
@@ -92,13 +95,16 @@ describe("the rail's groups and rows", () => {
     assert.deepEqual([kid.isKid, kid.hasReviews, vm().groups[0]!.rows.length], [true, true, 1]);
   });
 
-  test("a feature opened in the browser's preference starts open", () => {
-    const { row } = setup({ tasks: [task({ id: "f" }), task({ id: "k1", parentId: "f", status: "todo" })], sessions: [], featuresOpen: ["f"] });
+  test("a feature opened in the browser's preference is folded as the server painted it, and opens once the island has taken over", () => {
+    const { row, presenter } = setup({ tasks: [task({ id: "f" }), task({ id: "k1", parentId: "f", status: "todo" })], sessions: [], featuresOpen: ["f"] });
+    assert.equal(row("f")!.open, false);
+    presenter.hydrated();
     assert.equal(row("f")!.open, true);
   });
 
   test("a child shows its status word when nothing else applies, and no merge badge", () => {
-    const { row } = setup({ tasks: [task({ id: "f" }), task({ id: "k1", parentId: "f", status: "review", mergeState: { state: "merged", merged: 1, total: 1 } })], sessions: [], featuresOpen: ["f"] });
+    const { row, presenter } = setup({ tasks: [task({ id: "f" }), task({ id: "k1", parentId: "f", status: "review", mergeState: { state: "merged", merged: 1, total: 1 } })], sessions: [], featuresOpen: ["f"] });
+    presenter.hydrated();
     const kid = row("k1")!;
     assert.deepEqual([kid.hasMerge, kid.hasStatusWord, kid.statusWord, kid.statusKey], [false, true, "Review", "review"]);
   });
@@ -239,6 +245,27 @@ describe("live changes", () => {
     assert.equal(row("t1")!.peek, true);
     presenter.clearFocusedRow();
     assert.equal(row("t1")!.peek, false);
+  });
+});
+
+describe("the project navigation", () => {
+  test("it lists the pages the server serves, in order, the open one current, with badges", () => {
+    const { presenter, vm } = setup({ tasks: [task({ pendingReviews: 3 })] });
+    assert.deepEqual(vm().nav.map((i) => i.label), ["Board", "Services", "Review requests", "Design assets", "Design systems", "Product owner"]);
+    presenter.setPage("board");
+    assert.deepEqual(vm().nav.filter((i) => i.current).map((i) => i.key), ["board"]);
+    const byKey = Object.fromEntries(vm().nav.map((i) => [i.key, i]));
+    assert.deepEqual([byKey["services"]?.badge, byKey["reviews"]?.badge, byKey["design-system"]?.proposals, byKey["board"]?.badge], ["99+", "3", 2, ""]);
+    presenter.setPage("");
+    assert.equal(vm().nav.some((i) => i.current), false);
+    assert.equal(vm().newTaskHref, "/projects/p1/tasks/new");
+  });
+
+  test("the Review requests badge follows the feed", () => {
+    const { feed, vm } = setup({ tasks: [task()] });
+    assert.equal(vm().nav.find((i) => i.key === "reviews")?.badge, "");
+    feed.emit({ kind: "task-upsert", task: task({ pendingReviews: 2 }) });
+    assert.equal(vm().nav.find((i) => i.key === "reviews")?.badge, "2");
   });
 });
 

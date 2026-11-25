@@ -11,6 +11,7 @@ import (
 	"log/slog"
 	"net/http"
 	"net/url"
+	"slices"
 	"strings"
 	"time"
 
@@ -473,6 +474,11 @@ func (s *server) layout(ctx context.Context, title, projectID, taskID string) (s
 		frame.Rail.UsageHref = usage.Href(projectID)
 	}
 	frame.Rail.ProductOwnerHref = productowner.Href(projectID)
+	for key := range shell.CollapsedFrom(ctx) {
+		frame.Rail.Collapsed = append(frame.Rail.Collapsed, key)
+	}
+	slices.Sort(frame.Rail.Collapsed)
+	frame.RailIsland = func(f shell.Frame) *shell.RailIsland { return s.railIsland(ctx, f) }
 	return frame, nil
 }
 

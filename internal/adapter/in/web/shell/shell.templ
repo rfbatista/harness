@@ -265,41 +265,20 @@ templ tasksToggle(r Rail) {
 // moves regroups the rail as it happens. Below 48rem it is a drawer.
 templ taskRail(f Frame) {
 	{{ r := f.Rail }}
-	if r.Seed != nil {
-		@templ.JSONScript("rail-seed", r.Seed)
+	if r.Seed != nil && f.RailIsland != nil {
+		{{ isl := f.RailIsland(f) }}
+		<div class="[ rail ]" id="rail" data-island="rail" data-current-task={ r.Current } { islandRenderedAttrs(isl.Failed)... }>
+			@templ.Raw(isl.HTML)
+		</div>
+		@railPropsScript(isl.Props)
 		<div id="rail-feed" hidden { railFeedAttrs(r)... }></div>
-	}
-	<div class="[ rail ]" id="rail" { railAttrs(r)... }>
-		if r.Seed != nil {
-			<div class="[ drawer-head ]">
-				<span class="[ truncate ]">{ f.ProjectName() }</span>
-				<button type="button" class="[ button ]" data-variant="ghost" data-icon aria-label="Close" x-on:click="closeDrawer">
-					@icon("close")
-				</button>
-			</div>
-		}
-		if r.NewTaskHref != "" {
-			<a class="[ button ]" data-size="sm" href={ templ.SafeURL(r.NewTaskHref) }>
-				@icon("plus")
-				New task
-			</a>
-			@projectNav(r)
-		} else if len(f.Top.Projects) > 0 {
-			<p class="[ note ]">Choose a project in the picker above to see its tasks.</p>
-		}
-		if r.Seed != nil {
-			<nav class="[ nav ]" aria-label="Tasks">
-				<div x-ignore data-ssr class="[ contents ]">
-					@railServerCopy(r)
-				</div>
-				<template x-if="live">
-					@railLiveCopy()
-				</template>
-			</nav>
-		}
-	</div>
-	if r.Seed != nil {
 		<div class="[ scrim ]" x-data="tasksRailToggle" x-bind:data-open="openAttr" x-on:click="close"></div>
+	} else {
+		<div class="[ rail ]" id="rail">
+			if len(f.Top.Projects) > 0 {
+				<p class="[ note ]">Choose a project in the picker above to see its tasks.</p>
+			}
+		</div>
 	}
 }
 

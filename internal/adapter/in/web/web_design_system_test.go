@@ -231,7 +231,7 @@ func TestDesignSystemsListOfAProjectWithNoneShowsTheThreeStarts(t *testing.T) {
 func TestProjectNavigationLinksTheDesignSystemsAfterDesignAssets(t *testing.T) {
 	w := board()
 	w.designs = savedDesignSystem()
-	h := newTestHandler(t, w)
+	h := newRenderedHandler(t, w)
 	for _, path := range []string{"/projects/p1", "/projects/p1/design", appPage} {
 		body := get(t, h, path).Body.String()
 		nav := body[strings.Index(body, `aria-label="Project"`):]

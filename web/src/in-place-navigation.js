@@ -144,33 +144,23 @@ export function startInPlaceNavigation(htmx, { Alpine, navigate, doc = document 
   });
 
   /**
-   * The rail shows the page and the task that are open: the project page's
-   * link is current, and the live rail marks the task. The top bar is a React
-   * island: it marks its own current link. The page's rail reports
-   * the connection to the stream bar only on the pages that follow its feed.
+   * The page and the task that are open are the frame state the swap wrote. The
+   * rail and the top bar are React islands: they read it on `harness:navigated`
+   * and mark their own links. What stays here is the headless feed owner, which
+   * reports the connection to the stream bar only on the pages that follow the
+   * project's feed.
    * @param {HTMLElement} state
    */
   function applyFrameState(state) {
     const rail = doc.getElementById("rail");
-    if (!rail) return;
-    const page = state.dataset.page ?? "";
-    const task = state.dataset.task ?? "";
-    for (const item of rail.querySelectorAll("li[data-page]")) {
-      const link = item.querySelector("a");
-      if (item.dataset.page === page) link?.setAttribute("aria-current", "page");
-      else link?.removeAttribute("aria-current");
-    }
-    rail.dataset.currentTask = task;
+    if (rail) rail.dataset.currentTask = state.dataset.task ?? "";
     const reportsFeed = state.dataset.reportsFeed !== undefined;
     const feed = doc.getElementById("rail-feed");
-    if (feed) {
-      if (reportsFeed) feed.setAttribute("data-reports-feed", "");
-      else feed.removeAttribute("data-reports-feed");
-      const owner = Alpine.$data(feed);
-      if (owner && "reportsFeed" in owner) owner.reportsFeed = reportsFeed;
-    }
-    const data = Alpine.$data(rail);
-    if (data && "currentTaskId" in data) data.currentTaskId = task;
+    if (!feed) return;
+    if (reportsFeed) feed.setAttribute("data-reports-feed", "");
+    else feed.removeAttribute("data-reports-feed");
+    const owner = Alpine.$data(feed);
+    if (owner && "reportsFeed" in owner) owner.reportsFeed = reportsFeed;
   }
 }
 
