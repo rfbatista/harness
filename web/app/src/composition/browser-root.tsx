@@ -28,6 +28,9 @@ import { OwnerPagePropsDto } from "./owner-page-props-dto";
 import { OwnerPagePresenter } from "../features/product-owner/presentation/presenters/owner-page-presenter";
 import { OwnerPageView } from "../features/product-owner/presentation/views/owner-page-view";
 import { OwnerPanelPropsDto } from "./owner-panel-props-dto";
+import { memoryAddress } from "../features/product-owner/application/links";
+import { ProjectMemory } from "../features/product-owner/application/project-memory";
+import { MemoryTabPresenter } from "../features/product-owner/presentation/presenters/memory-tab-presenter";
 import { Conversation } from "../features/product-owner/application/conversation";
 import { browserTaskCatalog } from "../features/product-owner/infrastructure/browser-task-catalog";
 import { ThreadPresenter } from "../features/product-owner/presentation/presenters/thread-presenter";
@@ -92,9 +95,10 @@ export function mountIslands(doc: Document): Dispose {
     "owner-panel": (mount, props) => {
       const { project_name, no_tasks } = OwnerPanelPropsDto.fromJSON(props);
       const conversation = new Conversation({ gateway: owner, events: owner, onThread: (id) => dock.setThreadId(id) });
-      const thread = new ThreadPresenter(conversation, { projectName: project_name, noTasks: no_tasks }, browserTaskCatalog(doc));
+      const memory = new ProjectMemory({ gateway: owner, events: owner });
+      const thread = new ThreadPresenter(conversation, { projectName: project_name, noTasks: no_tasks }, browserTaskCatalog(doc), false, { memory });
       const list = new ThreadList({ gateway: owner, events: owner });
-      const panel = new PanelPresenter(dock, conversation, thread, { list, threads: new ThreadListPresenter(list, conversation, systemClock), about: new AboutPresenter(conversation, list) });
+      const panel = new PanelPresenter(dock, conversation, thread, { memory, list, threads: new ThreadListPresenter(list, conversation, systemClock), about: new AboutPresenter(conversation, list) });
       const root = createRoot(mount);
       root.render(<PanelView presenter={panel} />);
       return () => {
@@ -122,18 +126,27 @@ export function mountIslands(doc: Document): Dispose {
       const noTasks = browserTaskCatalog(doc).count() === 0;
       const conversation = new Conversation({ gateway: owner, events: owner });
       const list = new ThreadList({ gateway: owner, events: owner });
-      const thread = new ThreadPresenter(conversation, { projectName: project_name, noTasks }, browserTaskCatalog(doc), dock.state.enabled === false);
+      const memory = new ProjectMemory({ gateway: owner, events: owner });
+      const initial = memoryAddress(win.location.hash);
+      const page = new OwnerPagePresenter({ projectId: project_id, projectName: project_name, threadId: thread_id, initial }, dock, conversation, list, navigator, memory);
+      const thread = new ThreadPresenter(conversation, { projectName: project_name, noTasks }, browserTaskCatalog(doc), dock.state.enabled === false, { memory, openEntry: (entryId) => {
+        page.showMemory(entryId);
+        memoryTab.showEntry(entryId);
+      } });
+      const memoryTab = new MemoryTabPresenter(memory, project_id, initial?.entryId);
       const threads = new ThreadListPresenter(list, conversation, systemClock);
       const about = new AboutPresenter(conversation, list);
-      const page = new OwnerPagePresenter({ projectId: project_id, projectName: project_name, threadId: thread_id }, dock, conversation, list, navigator);
       // The product owner is switched off or on: the composer follows.
       const stopDock = dock.subscribe((state) => thread.setOff(state.enabled === false));
       const stopList = list.attach(project_id);
+      const stopMemory = memory.attach(project_id);
       const stopConversation = conversation.attach(project_id, thread_id === "" ? null : thread_id);
       const root = createRoot(mount);
-      root.render(<OwnerPageView page={page} thread={thread} threads={threads} about={about} />);
+      root.render(<OwnerPageView page={page} thread={thread} threads={threads} about={about} memory={memoryTab} />);
       return () => {
         root.unmount();
+        stopMemory();
+        memoryTab.destroy();
         stopConversation();
         stopList();
         stopDock();

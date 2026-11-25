@@ -1,10 +1,12 @@
 import { useRef, useState } from "react";
 import { usePresenter } from "../../../../shared/presentation/use-presenter";
+import type { MemoryTabPresenter } from "../presenters/memory-tab-presenter";
 import type { AboutPresenter } from "../presenters/about-presenter";
 import type { OwnerPagePresenter } from "../presenters/owner-page-presenter";
 import type { ThreadListPresenter } from "../presenters/thread-list-presenter";
 import type { ThreadPresenter } from "../presenters/thread-presenter";
 import { AboutPopupView } from "./about-popup-view";
+import { MemoryTabView } from "./memory-tab-view";
 import { OwnerIcon, OwnerMark } from "./owner-icon";
 import { ThreadView } from "./thread-view";
 import { ThreadListView, ThreadsPopupView } from "./threads-popup-view";
@@ -14,10 +16,11 @@ export interface OwnerPageParts {
   readonly thread: ThreadPresenter;
   readonly threads: ThreadListPresenter;
   readonly about: AboutPresenter;
+  readonly memory: MemoryTabPresenter;
 }
 
 /** The full page: toolbar, tabs, the thread column beside the conversation. Its parts are the grid items of <main class="owner-page">. */
-export function OwnerPageView({ page, thread, threads, about }: OwnerPageParts) {
+export function OwnerPageView({ page, thread, threads, about, memory }: OwnerPageParts) {
   const vm = usePresenter(page);
   const aboutVm = usePresenter(about);
   const composer = useRef<HTMLTextAreaElement>(null);
@@ -47,11 +50,31 @@ export function OwnerPageView({ page, thread, threads, about }: OwnerPageParts) 
         </div>
       </header>
       <div className="[ tabs ]" role="tablist" aria-label="Product owner">
-        <a role="tab" aria-selected="true" href={vm.crumbHref + "/product-owner"}>
+        <a
+          role="tab"
+          aria-selected={vm.tab === "threads"}
+          href={vm.crumbHref + "/product-owner"}
+          onClick={(event) => {
+            event.preventDefault();
+            page.showThreads();
+          }}
+        >
           Threads {vm.threadCount !== null && <span className="[ badge ]">{vm.threadCount}</span>}
         </a>
+        <a
+          role="tab"
+          aria-selected={vm.tab === "memory"}
+          href={vm.crumbHref + "/product-owner#memory"}
+          onClick={(event) => {
+            event.preventDefault();
+            page.showMemory();
+          }}
+        >
+          Memory {vm.memoryCount !== null && <span className="[ badge ]">{vm.memoryCount}</span>}
+        </a>
       </div>
-      <div className="[ owner-split ]" data-phone={vm.phone ?? undefined}>
+      {vm.tab === "memory" && <MemoryTabView presenter={memory} onOpenThread={page.openThread} onStartThread={page.newThread} />}
+      <div className="[ owner-split ]" data-phone={vm.phone ?? undefined} hidden={vm.tab !== "threads"}>
         <ThreadListView presenter={threads} onOpen={page.openThread} onNew={page.newThread} />
         <section className="[ conversation ]" aria-label={aboutVm.title === "" ? "New thread" : aboutVm.title}>
           <header className="[ owner-head ]" data-page="">
