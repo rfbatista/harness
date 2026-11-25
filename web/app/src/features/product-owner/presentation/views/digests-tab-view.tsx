@@ -95,6 +95,18 @@ export function DigestsTabView({ presenter }: { presenter: DigestsTabPresenter }
             </a>
           );
         })}
+        {vm.hasEarlier && (
+          <div className="[ earlier ]">
+            <button type="button" className="[ button ]" data-variant="ghost" data-size="sm" aria-busy={vm.loadingEarlier} disabled={vm.loadingEarlier} onClick={() => void presenter.loadEarlier()}>
+              {vm.loadingEarlier ? "Loading…" : vm.earlierError === "" ? "Load earlier digests" : "Try again"}
+            </button>
+            {vm.earlierError !== "" && (
+              <p className="[ error ]" role="alert">
+                {vm.earlierError}
+              </p>
+            )}
+          </div>
+        )}
         <p className="[ quiet ]">{vm.gapNote}</p>
       </nav>
       <div className="[ digest-column ]">

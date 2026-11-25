@@ -4,7 +4,7 @@ import { ProjectDigests } from "../../application/project-digests";
 import { ProductOwnerError } from "../../application/ports";
 import { parseMarkdown } from "../../domain/markdown";
 import { memoryProductOwner } from "../../infrastructure/memory-product-owner";
-import { digest, digestItem } from "../../testing/digest-fixtures";
+import { digest, digestItem, digestRun } from "../../testing/digest-fixtures";
 import { DigestsTabPresenter } from "./digests-tab-presenter";
 
 const settled = () => new Promise((resolve) => setImmediate(resolve));
@@ -189,5 +189,95 @@ describe("the Digests tab", () => {
     const { tab, server } = await setup({ digestTime: "09:00" });
     await server.updateSettings("p1", { digestTime: "08:30" });
     assert.equal(tab.viewModel.head, "Next: Tue 24 Nov, 08:30");
+  });
+
+  test("offers earlier digests when there are, loads them from the oldest date held and appends them", async () => {
+    const { tab } = await setup({ digests: digestRun("2026-11-23", 45) });
+    assert.equal(tab.viewModel.rows.filter((r) => r.kind === "digest").length, 30);
+    assert.equal(tab.viewModel.hasEarlier, true);
+    await tab.loadEarlier();
+    const dates = tab.viewModel.rows.flatMap((r) => (r.kind === "digest" ? [r.date] : []));
+    assert.equal(dates.length, 45);
+    assert.equal(new Set(dates).size, 45);
+    assert.deepEqual(dates, [...dates].sort().reverse());
+    assert.equal(tab.viewModel.hasEarlier, false);
+    assert.equal(tab.viewModel.rows.some((r) => r.kind === "gap"), false);
+  });
+
+  test("a failed page keeps what is shown and tries again", async () => {
+    const { tab, server } = await setup({ digests: digestRun("2026-11-23", 45) });
+    server.failWith(new ProductOwnerError("NETWORK_ERROR", "offline"));
+    await tab.loadEarlier();
+    assert.equal(tab.viewModel.earlierError, "offline");
+    assert.equal(tab.viewModel.rows.filter((r) => r.kind === "digest").length, 30);
+    assert.equal(tab.viewModel.hasEarlier, true);
+    server.failWith(null);
+    await tab.loadEarlier();
+    assert.equal(tab.viewModel.earlierError, "");
+    assert.equal(tab.viewModel.rows.filter((r) => r.kind === "digest").length, 45);
+  });
+
+  test("asks for one page at a time", async () => {
+    const server = memoryProductOwner();
+    server.seedProject("p1", true);
+    for (const d of digestRun("2026-11-23", 45)) server.seedDigest("p1", d);
+    const asked: (string | undefined)[] = [];
+    const gateway = { ...server, digests: (projectId: string, before?: string) => (asked.push(before), server.digests(projectId, before)) };
+    const digests = new ProjectDigests({ gateway, events: server });
+    const tab = new DigestsTabPresenter(digests, "p1", { now: () => NOW });
+    digests.attach("p1");
+    await settled();
+    await Promise.all([tab.loadEarlier(), tab.loadEarlier()]);
+    assert.deepEqual(asked, [undefined, "2026-10-25"]);
+    assert.equal(tab.viewModel.rows.filter((r) => r.kind === "digest").length, 45);
+  });
+
+  test("a digest recorded while it is open appears at the top, and the digest being read stays", async () => {
+    const { tab, server } = await setup({ digests: [digest("2026-11-22"), digest("2026-11-21")] });
+    tab.select("2026-11-21");
+    server.recordDigest("p1", digest("2026-11-23", { summary: "New." }));
+    await settled();
+    assert.deepEqual(tab.viewModel.rows.filter((r) => r.kind === "digest").map((r) => r.kind === "digest" && r.date), ["2026-11-23", "2026-11-22", "2026-11-21"]);
+    assert.equal(tab.viewModel.selected?.date, "2026-11-21");
+  });
+
+  test("the newest digest, not yet chosen by the person, stays where the person found it", async () => {
+    const { tab, server } = await setup({ digests: [digest("2026-11-22")] });
+    server.recordDigest("p1", digest("2026-11-23"));
+    await settled();
+    assert.equal(tab.viewModel.selected?.date, "2026-11-22");
+  });
+
+  test("the first digest of a project that had none replaces the empty state", async () => {
+    const { tab, server } = await setup({ digestTime: "09:00" });
+    assert.equal(tab.viewModel.state, "empty");
+    server.recordDigest("p1", digest("2026-11-23"));
+    await settled();
+    assert.deepEqual([tab.viewModel.state, tab.viewModel.selected?.date], ["ready", "2026-11-23"]);
+  });
+
+  test("a digest recorded again for a date it holds is read again, not shown twice", async () => {
+    const { tab, server } = await setup({ digests: [digest("2026-11-23", { summary: "Old." })] });
+    server.recordDigest("p1", digest("2026-11-23", { digestId: "d-new", summary: "Fresh." }));
+    await settled();
+    assert.equal(tab.viewModel.rows.filter((r) => r.kind === "digest").length, 1);
+    assert.deepEqual(tab.viewModel.selected?.blocks, parseMarkdown("Fresh."));
+  });
+
+  test("after the stream was down, reads the digests again and merges them", async () => {
+    const { tab, server } = await setup({ digests: [digest("2026-11-22")] });
+    server.seedDigest("p1", digest("2026-11-23"));
+    server.setStatus("paused");
+    server.setStatus("resynced");
+    await settled();
+    assert.deepEqual(tab.viewModel.rows.filter((r) => r.kind === "digest").map((r) => r.kind === "digest" && r.date), ["2026-11-23", "2026-11-22"]);
+  });
+
+  test("another project's digests change nothing", async () => {
+    const { tab, server } = await setup({ digests: [digest("2026-11-22")] });
+    server.seedProject("p2", true);
+    server.recordDigest("p2", digest("2026-11-23"));
+    await settled();
+    assert.equal(tab.viewModel.rows.filter((r) => r.kind === "digest").length, 1);
   });
 });

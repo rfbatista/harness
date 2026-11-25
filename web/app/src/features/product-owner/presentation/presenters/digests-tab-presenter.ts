@@ -80,6 +80,11 @@ export interface DigestsTabViewModel {
   readonly emptyText: string;
   readonly rows: readonly DateRowViewModel[];
   readonly gapNote: string;
+  /** Earlier digests than the oldest shown exist. */
+  readonly hasEarlier: boolean;
+  readonly loadingEarlier: boolean;
+  /** Why the last page failed; "" otherwise. */
+  readonly earlierError: string;
   readonly selected: DigestViewModel | null;
 }
 
@@ -111,7 +116,11 @@ export class DigestsTabPresenter extends Presenter<DigestsTabViewModel> {
     this.#clock = clock;
     this.#onSelect = onSelect;
     this.#selected = select;
-    this.#stop = digests.subscribe((state) => this.set(build(state, this.#projectId, this.#clock, this.#selected)));
+    this.#stop = digests.subscribe((state) => {
+      // The digest the person finds first stays the one on screen: a newer one arriving does not take its place.
+      if (this.#selected === "" && state.digests[0]) this.#selected = state.digests[0].date;
+      this.set(build(state, this.#projectId, this.#clock, this.#selected));
+    });
   }
 
   destroy(): void {
@@ -127,6 +136,8 @@ export class DigestsTabPresenter extends Presenter<DigestsTabViewModel> {
   };
 
   retry = (): void => this.#digests.retry();
+
+  loadEarlier = (): Promise<void> => this.#digests.loadEarlier();
 
   turnOn = (): Promise<void> => this.#digests.turnOn();
 }
@@ -151,6 +162,9 @@ function build(s: ProjectDigestsState, projectId: string, clock: Clock, select: 
     emptyText: emptyText(s, next),
     rows: rows(held, chosen, s.timeZone),
     gapNote: GAP_NOTE,
+    hasEarlier: s.hasEarlier,
+    loadingEarlier: s.loadingEarlier,
+    earlierError: s.earlierError,
     selected: chosen === null ? null : digestOf(chosen, s.timeZone),
   };
 }

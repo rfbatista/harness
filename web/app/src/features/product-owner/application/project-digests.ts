@@ -16,13 +16,23 @@ export interface ProjectDigestsState {
   /** The newest first, one per date. */
   readonly digests: readonly Digest[];
   readonly hasEarlier: boolean;
+  /** An earlier page is on its way. */
+  readonly loadingEarlier: boolean;
+  /** Why the last earlier page failed; "" otherwise. */
+  readonly earlierError: string;
   /** Turning the product owner on is on its way. */
   readonly turningOn: boolean;
   /** Why turning it on failed; "" otherwise. */
   readonly turnOnError: string;
 }
 
-const INITIAL: ProjectDigestsState = { loaded: false, error: "", enabled: null, digestTime: null, timeZone: "", digests: [], hasEarlier: false, turningOn: false, turnOnError: "" };
+/** `fresh` replaces the digests of its dates among `held`; one per date, the newest first. */
+function merge(held: readonly Digest[], fresh: readonly Digest[]): Digest[] {
+  const dates = new Set(fresh.map((d) => d.date));
+  return [...fresh, ...held.filter((d) => !dates.has(d.date))].sort((a, b) => b.date.localeCompare(a.date));
+}
+
+const INITIAL: ProjectDigestsState = { loaded: false, error: "", enabled: null, digestTime: null, timeZone: "", digests: [], hasEarlier: false, loadingEarlier: false, earlierError: "", turningOn: false, turnOnError: "" };
 
 export class ProjectDigests {
   readonly #deps: { gateway: ProductOwnerGateway; events: ProductOwnerEvents };
@@ -56,8 +66,12 @@ export class ProjectDigests {
       projectId,
       (event) => {
         if (event.type === "settings") this.#set({ enabled: event.settings.enabled, digestTime: event.settings.digestTime, timeZone: event.settings.timeZone });
+        else if (event.type === "digest") void this.#refresh(generation);
       },
-      () => {},
+      (status) => {
+        // After the stream was down, what arrived meanwhile is read again.
+        if (status === "resynced") void (this.#state.loaded ? this.#refresh(generation) : this.#read(generation));
+      },
     );
     void this.#read(generation);
     return () => {
@@ -70,6 +84,22 @@ export class ProjectDigests {
     const generation = ++this.#generation;
     this.#set({ error: "" });
     void this.#read(generation);
+  }
+
+  /** The page of digests before the oldest held, added below them. One page at a time. */
+  async loadEarlier(): Promise<void> {
+    const { digests, hasEarlier, loadingEarlier } = this.#state;
+    const oldest = digests.at(-1);
+    if (!hasEarlier || loadingEarlier || !oldest) return;
+    const generation = this.#generation;
+    this.#set({ loadingEarlier: true, earlierError: "" });
+    try {
+      const page = await this.#deps.gateway.digests(this.#projectId, oldest.date);
+      if (generation === this.#generation) this.#set({ loadingEarlier: false, digests: merge(this.#state.digests, page.digests), hasEarlier: page.hasEarlier });
+    } catch (err) {
+      if (!(err instanceof ProductOwnerError)) throw err;
+      if (generation === this.#generation) this.#set({ loadingEarlier: false, earlierError: err.message });
+    }
   }
 
   /** "Turn it on", from the off banner. A refusal says why. */
@@ -94,6 +124,17 @@ export class ProjectDigests {
     } catch (err) {
       if (!(err instanceof ProductOwnerError)) throw err;
       if (generation === this.#generation) this.#set({ error: err.message });
+    }
+  }
+
+  /** Reads the newest page again, for a digest that was recorded: it joins or replaces the digests held, and nothing held moves. */
+  async #refresh(generation: number): Promise<void> {
+    try {
+      const page = await this.#deps.gateway.digests(this.#projectId);
+      // Earlier digests exist beyond the oldest held exactly when they did before: a new digest is only ever newer.
+      if (generation === this.#generation) this.#set({ digests: merge(this.#state.digests, page.digests), hasEarlier: this.#state.loaded ? this.#state.hasEarlier : page.hasEarlier });
+    } catch (err) {
+      if (!(err instanceof ProductOwnerError)) throw err;
     }
   }
 
