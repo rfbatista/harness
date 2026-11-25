@@ -24,9 +24,11 @@ func ThreadHref(projectID, threadID string) string {
 	return Href(projectID) + "/threads/" + url.PathEscape(threadID)
 }
 
-// Handler serves the product owner's pages.
+// Handler serves the product owner's pages. Threads and Sessions are only for a thread's Context page.
 type Handler struct {
 	Projects ports.ProjectReader
+	Threads  Threads
+	Sessions ports.SessionReader
 	Layout   shell.Layout
 	Render   shell.Renderer
 }

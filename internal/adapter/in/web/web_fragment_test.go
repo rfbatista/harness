@@ -22,6 +22,8 @@ func fragmentWorld(t *testing.T) world {
 	w.artifacts = designBoard().artifacts
 	w.designs = savedDesignSystem()
 	w.summaries = fakeSummaries{{Project: w.projects[0]}, {Project: w.projects[1]}}
+	w.sessions = append(w.sessions, &domain.Session{ID: "s-po", ProjectID: "p1", Mode: domain.SessionModeProductOwner, Status: domain.SessionIdle})
+	w.poThreads = fakeThreads{{ID: "th-1", ProjectID: "p1", SessionID: "s-po", Title: "What was done"}, {ID: "th-2", ProjectID: "p2", SessionID: "s-po", Title: "Elsewhere"}}
 	return w
 }
 
@@ -52,6 +54,7 @@ var fragmentPages = map[string]fragmentPage{
 	`/projects/{project}/tasks/{task}/documents/{document}`:       {"/projects/p1/tasks/t-feed/documents/d-plan", inProject},
 	`/projects/{project}/design-systems`:                          {"/projects/p1/design-systems", inProject},
 	`/projects/{project}/design-systems/{slug}`:                   {"/projects/p1/design-systems/app", inProject},
+	`/projects/{project}/product-owner/threads/{thread}/context`:  {"/projects/p1/product-owner/threads/th-1/context", inProject},
 	`/projects/{project}/usage`:                                   {"/projects/p1/usage", inProject},
 	`/projects/{project}/product-owner`:                           {"/projects/p1/product-owner", inProject},
 	`/projects/{project}/product-owner/threads/{thread}`:          {"/projects/p1/product-owner/threads/t1", inProject},

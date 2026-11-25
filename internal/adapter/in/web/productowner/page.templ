@@ -12,3 +12,23 @@ templ Page(frame shell.Frame, props Props) {
 		</main>
 	}
 }
+
+// ContextPage is a thread's Context page: the Context island of ADR 0099, mounted by
+// the web client for the thread's session, under a heading that names the
+// thread and links back to it. props is json.Marshal's output, which cannot
+// close the script.
+templ ContextPage(frame shell.Frame, projectID, projectName, title, threadHref, props string) {
+	@shell.AppShell(frame) {
+		<main id="main" class="[ frame ]">
+			<header class="[ toolbar ]">
+				<a class="[ crumb ]" href={ templ.SafeURL("/projects/" + projectID) }>{ projectName } /</a>
+				<a class="[ crumb ]" href={ templ.SafeURL(threadHref) }>{ title } /</a>
+				<h1>Context</h1>
+			</header>
+			<section class="[ frame ]" aria-label="Context">
+				<div data-island="session-context" x-ignore></div>
+				@templ.Raw(`<script type="application/json" data-island-props="session-context">` + props + `</script>`)
+			</section>
+		</main>
+	}
+}
