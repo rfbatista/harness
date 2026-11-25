@@ -113,14 +113,12 @@ func (s *Service) ProductOwnerRunning(sessionID string) bool {
 	return ok
 }
 
-// ProductOwnerContextWindow is the context window of the model a thread's
-// session runs on.
-func (s *Service) ProductOwnerContextWindow(sessionID string) int {
-	model := ""
+// ProductOwnerModel is the model a thread's session runs on.
+func (s *Service) ProductOwnerModel(sessionID string) string {
 	if sess := s.sessions.Get(sessionID); sess != nil {
-		model = sess.Model
+		return sess.Model
 	}
-	return domain.ContextWindow(model)
+	return ""
 }
 
 // startFailure turns the runtime's refusal to start into the code clients

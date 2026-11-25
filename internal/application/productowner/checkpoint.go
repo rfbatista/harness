@@ -36,20 +36,33 @@ func clearSummarizing(th *domain.ProductOwnerThread) {
 	}
 }
 
-// contextSize is the tokens a turn's usage says the thread's context holds.
-func contextSize(u *ports.Usage) int {
+// contextSizeOf is the tokens the thread's context holds when a turn ends: what
+// its last API call read. The turn's result carries the usage summed over every
+// call of the turn, so it over-counts a turn that used tools; this is the one
+// place that changes when llmkit reports the last call's usage.
+func contextSizeOf(ev ports.SessionEvent) int {
+	u := ev.Usage
 	if u == nil {
 		return 0
 	}
 	return u.InputTokens + u.CacheCreationInputTokens + u.CacheReadInputTokens
 }
 
+// windowOf is the context window of the model a thread runs on: the one claude
+// reported, and only while none was reported, a guess from the model's name.
+func windowOf(model string, reported int) int {
+	if reported > 0 {
+		return reported
+	}
+	return domain.ContextWindow(model)
+}
+
 // beginCheckpoint is called when a turn ends, with r.mu held. It starts the
 // summary turn when the context is past the share, and says it did: the turn
 // is not over then.
 func (s *Service) beginCheckpoint(r *run, t *domain.ProductOwnerThread, ev ports.SessionEvent) bool {
-	window := s.sessions.ProductOwnerContextWindow(t.SessionID)
-	if float64(contextSize(ev.Usage)) < float64(window)*domain.ProductOwnerCheckpointShare {
+	window := windowOf(s.sessions.ProductOwnerModel(t.SessionID), 0)
+	if float64(contextSizeOf(ev)) < float64(window)*domain.ProductOwnerCheckpointShare {
 		return false
 	}
 	ctx := context.Background()

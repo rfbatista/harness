@@ -166,9 +166,9 @@ type ProductOwnerSessions interface {
 	StartProductOwnerSession(ctx context.Context, spec ProductOwnerSessionSpec) (sessionID string, err error)
 	ResumeProductOwnerSession(ctx context.Context, sessionID string, spec ProductOwnerSessionSpec) error
 	ProductOwnerRunning(sessionID string) bool
-	// ProductOwnerContextWindow is the context window, in tokens, of the model
-	// a thread's session runs on.
-	ProductOwnerContextWindow(sessionID string) int
+	// ProductOwnerModel is the model a thread's session runs on, "" when it
+	// runs on the CLI's default.
+	ProductOwnerModel(sessionID string) string
 	Send(ctx context.Context, id, text string) error
 	Stop(ctx context.Context, id string) error
 	// Subscribe follows a session's events live.

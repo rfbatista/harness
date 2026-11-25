@@ -105,7 +105,7 @@ while IFS= read -r line; do
   printf '%s\n' '{"type":"stream_event","session_id":"fake","event":{"type":"content_block_delta","index":0,"delta":{"type":"text_delta","text":"answer to: "}}}'
   while [ -f "$dir/hold" ]; do sleep 0.05; done
   printf '%s\n' '{"type":"stream_event","session_id":"fake","event":{"type":"content_block_delta","index":0,"delta":{"type":"text_delta","text":"'"$text"'"}}}'
-  printf '%s\n' '{"type":"assistant","session_id":"fake","message":{"role":"assistant","content":[{"type":"text","text":"answer to: '"$text"'"}]}}'
+  printf '%s\n' '{"type":"assistant","session_id":"fake","message":{"role":"assistant","content":[{"type":"text","text":"answer to: '"$text"'"}],"usage":{"input_tokens":'"$inp"',"output_tokens":9}}}'
   printf '%s\n' '{"type":"result","subtype":"success","session_id":"fake","result":"ok","total_cost_usd":0.02,"usage":{"input_tokens":'"$inp"',"output_tokens":9}}'
 done
 `
