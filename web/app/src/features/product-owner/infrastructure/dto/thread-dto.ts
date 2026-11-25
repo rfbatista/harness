@@ -2,7 +2,7 @@
 
 import { DtoError } from "../../../../shared/infrastructure/dto/dto-error";
 import { array, boolean, object, oneOf, optionalString, string, time, count, type Wire } from "../../../../shared/infrastructure/dto/fields";
-import { TURNS } from "../../domain/thread";
+import { MEMORY_OPS, TURNS } from "../../domain/thread";
 
 const SUMMARY = "ThreadSummaryDto";
 const HEAD = "ThreadHeadDto";
@@ -83,7 +83,7 @@ export class ThreadHeadDto {
 }
 
 /** The kinds that carry their sentence in a field of their own, and that this piece draws as a neutral line. */
-const NEUTRAL: Readonly<Record<string, string>> = { held_action: "summary", memory_note: "text", checkpoint: "summary" };
+const NEUTRAL: Readonly<Record<string, string>> = { held_action: "summary", checkpoint: "summary" };
 
 /** One thread item. Only the fields of its kind are set. */
 export class ThreadItemDto {
@@ -99,6 +99,9 @@ export class ThreadItemDto {
     readonly stopped: boolean,
     readonly code: string | undefined,
     readonly retry_item_id: string | undefined,
+    /** memory_note: what happened to the entry, and which one. */
+    readonly op: (typeof MEMORY_OPS)[number] | undefined = undefined,
+    readonly entry_id: string | undefined = undefined,
   ) {}
 
   static fromJSON(raw: unknown, at = ""): ThreadItemDto {
@@ -114,6 +117,7 @@ export class ThreadItemDto {
     }
     if (kind === "activity" || kind === "notice") return new ThreadItemDto(id, kind, when, undefined, string(ITEM, from, "text", at), false, false, undefined, undefined);
     if (kind === "failure") return new ThreadItemDto(id, kind, when, undefined, string(ITEM, from, "text", at), false, false, string(ITEM, from, "code", at), string(ITEM, from, "retry_item_id", at));
+    if (kind === "memory_note") return new ThreadItemDto(id, kind, when, undefined, string(ITEM, from, "text", at), false, false, undefined, undefined, oneOf(ITEM, from, "op", MEMORY_OPS, at), string(ITEM, from, "entry_id", at));
     const field = NEUTRAL[kind];
     if (field !== undefined) return new ThreadItemDto(id, kind, when, undefined, string(ITEM, from, field, at), false, false, undefined, undefined);
     throw new DtoError(ITEM, path("kind"), `unknown item kind "${kind}"`);
@@ -123,6 +127,7 @@ export class ThreadItemDto {
     const base = { item_id: this.item_id, kind: this.kind, at: this.at.toISOString() };
     if (this.kind === "message") return { ...base, author: this.author, text: this.text, attachments: [], streaming: this.streaming, stopped: this.stopped };
     if (this.kind === "failure") return { ...base, code: this.code, text: this.text, retry_item_id: this.retry_item_id };
+    if (this.kind === "memory_note") return { ...base, op: this.op, entry_id: this.entry_id, text: this.text };
     const field = NEUTRAL[this.kind];
     return { ...base, [field ?? "text"]: this.text };
   }

@@ -243,4 +243,37 @@
   .settings-wrap .field > .labelrow { display: flex; align-items: baseline; gap: var(--space-s); }
   .settings-wrap .timegrid { display: grid; grid-template-columns: 8rem 1fr; gap: var(--space-s); align-items: center; }
   .settings-wrap[data-off] section:not([data-switch]) { opacity: 0.55; }
+
+  /* The Memory tab: entries, edited in place, deleted behind a danger confirm. */
+  .memory-list { display: grid; }
+  .memory-entry { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: var(--space-2xs) var(--space-m); padding: var(--space-m) var(--space-l); border-block-end: var(--border-width) solid var(--color-line); }
+  .memory-entry .text { font-size: var(--text-base); max-inline-size: var(--size-measure); }
+  .memory-entry .meta { grid-column: 1; display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-xs) var(--space-s); font-size: var(--text-xs); color: var(--color-ink-faint); }
+  .memory-entry .meta a { color: var(--color-ink-muted); }
+  .memory-entry .acts { grid-column: 2; grid-row: 1 / span 2; display: flex; gap: var(--space-3xs); align-self: start; opacity: 0; transition: opacity var(--duration-quick) var(--ease-out); }
+  .memory-entry:is(:hover, :focus-within) .acts, .memory-entry[data-editing] .acts { opacity: 1; }
+  @media (pointer: coarse) { .memory-entry .acts { opacity: 1; } }
+  .memory-entry[data-editing] { background: var(--color-panel); }
+  .memory-entry[data-editing] textarea { min-block-size: 3lh; max-inline-size: var(--size-measure); }
+  .memory-entry .edit-acts { grid-column: 1; display: flex; gap: var(--space-xs); align-items: center; }
+  .memory-entry .edit-acts .hint { margin-inline-start: var(--space-s); font-size: var(--text-xs); color: var(--color-ink-faint); }
+  .memory-entry[data-fresh] { animation: memory-arrived 8s var(--ease-out) both; }
+  .memory-entry .confirm-strip { grid-column: 1 / -1; margin: var(--space-xs) 0 0; max-inline-size: 36rem; }
+  .memory-entry[data-receipt] { color: var(--color-ink-muted); font-size: var(--text-sm); grid-template-columns: 1fr auto; }
+  .memory-head { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-s) var(--space-l); padding: var(--space-m) var(--space-l) var(--space-s); }
+  .memory-head p { color: var(--color-ink-muted); font-size: var(--text-sm); }
+  .memory-head .search { position: relative; margin-inline-start: auto; inline-size: 16rem; }
+  .memory-head .search input { min-block-size: var(--size-control-sm); font-size: var(--text-sm); padding-inline-start: 1.75rem; }
+  .memory-head .search svg { position: absolute; inset-inline-start: 0.5rem; inset-block-start: 0.4rem; inline-size: 0.875rem; block-size: 0.875rem; color: var(--color-ink-faint); }
+  @keyframes memory-arrived { from { background-color: var(--color-signal-wash); box-shadow: inset 2px 0 0 var(--color-signal); } to { box-shadow: inset 2px 0 0 transparent; } }
+  .owner-split[hidden] { display: none; }
+  .memory-panel { display: grid; grid-template-rows: auto auto minmax(0, 1fr); min-block-size: 0; }
+  .memory-panel .memory-list { overflow: auto; align-content: start; }
+  .memory-entry .meta { grid-column: 1; }
+  .memory-entry > .edit { grid-column: 1 / -1; display: grid; gap: var(--space-xs); }
+  .memory-entry .edit .field-error { color: var(--color-danger); font-size: var(--text-xs); }
+  .memory-entry[data-receipt] { grid-template-columns: 1fr; }
+  .memory-empty { padding: var(--space-xl) var(--space-l); color: var(--color-ink-muted); max-inline-size: var(--size-measure); }
+  .memory-empty h2 { font-size: var(--text-base); color: var(--color-ink); margin-block-end: var(--space-xs); }
+  .thread-empty .remembered { color: var(--color-ink-muted); font-size: var(--text-sm); }
 }

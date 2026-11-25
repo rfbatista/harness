@@ -251,7 +251,7 @@ export class Conversation {
       if (event.thread.threadId === this.#state.threadId) this.#set({ turn: event.thread.turn, title: event.thread.title });
       return;
     }
-    if (event.type === "settings") return;
+    if (event.type === "settings" || event.type === "memory") return;
     if (event.type === "delta") {
       if (event.threadId !== this.#state.threadId) return;
       const at = this.#state.items.findIndex((i) => i.itemId === event.itemId);
