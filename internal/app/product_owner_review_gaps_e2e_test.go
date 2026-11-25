@@ -123,3 +123,15 @@ func TestTheNextTurnCarriesAnAnswerToAnActionHeldMoreThanAPageAgo(t *testing.T) 
 		t.Errorf("the next turn received %q, want the answer to the action held a page ago", got)
 	}
 }
+
+func TestATurnWithNoAnswersToTellCarriesNoAnswersHeader(t *testing.T) {
+	e := newPOE2E(t)
+	threadID, _ := e.ownerSession()
+	if status, code := e.send(threadID, "and next?"); status != 200 {
+		t.Fatalf("send = %d %s", status, code)
+	}
+	e.waitTurn(threadID, "idle")
+	if got := e.receivedText(); strings.Contains(got, "Since your last turn") {
+		t.Errorf("a turn with nothing answered received the answers header: %q", got)
+	}
+}

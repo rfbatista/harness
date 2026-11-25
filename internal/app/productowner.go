@@ -62,15 +62,6 @@ func (a heldActionApplier) ApplyHeldAction(ctx context.Context, by domain.Author
 	return nil, &domain.StructuredError{Code: "INVALID_INPUT", Message: "unknown held action " + action.Kind}
 }
 
-// ownerDigestSource gives the product owner's tools the digests of its service;
-// a graph without the product owner serves none.
-func ownerDigestSource(owner *productowner.Service) []tooling.ProductOwnerSource {
-	if owner == nil {
-		return nil
-	}
-	return []tooling.ProductOwnerSource{tooling.WithDigests(owner)}
-}
-
 // ownerSources are what the product owner's tools draw on from its service: the
 // digests and the held actions. A graph without the product owner serves none.
 func ownerSources(owner *productowner.Service) []tooling.ProductOwnerSource {
