@@ -7,7 +7,7 @@ import type { ProjectDigests, ProjectDigestsState } from "../../application/proj
 import { settingsHref } from "../../application/links";
 import { addDays, clockOf, daysBetween, longDay, monthOf, nextRun, shortDay, stampOf, whenOf } from "../../domain/calendar";
 import type { Digest, DigestItem } from "../../domain/digest";
-import { parseMarkdown, type Block } from "../../domain/markdown";
+import { isSiteHref, parseMarkdown, type Block } from "../../domain/markdown";
 
 export interface DigestRowViewModel {
   readonly kind: "digest";
@@ -80,6 +80,8 @@ export interface DigestsTabViewModel {
   readonly emptyText: string;
   readonly rows: readonly DateRowViewModel[];
   readonly gapNote: string;
+  /** Said when the address names a date that has no digest; "" otherwise. */
+  readonly missing: string;
   /** Earlier digests than the oldest shown exist. */
   readonly hasEarlier: boolean;
   readonly loadingEarlier: boolean;
@@ -95,8 +97,8 @@ const TITLES: Record<DigestSectionViewModel["key"], string> = { waiting: "Waitin
 const ORDER: readonly DigestSectionViewModel["key"][] = ["waiting", "moved", "sessions"];
 
 const plural = (n: number, one: string, many: string): string => `${n} ${n === 1 ? one : many}`;
-/** A link only to a page of this web UI. */
-const pageOf = (url: string): string => (url.startsWith("/") && !url.startsWith("//") ? url : "");
+/** A link only to a page of this web UI: an address the browser resolves to another site ("/\\host", "//host") is not one. */
+const pageOf = (url: string): string => (isSiteHref(url) ? url : "");
 /** "in_review" as "In review". */
 const status = (value: string | null): string => (value === null || value === "" ? "" : value.charAt(0).toUpperCase() + value.slice(1).replaceAll("_", " "));
 
@@ -107,10 +109,11 @@ export class DigestsTabPresenter extends Presenter<DigestsTabViewModel> {
   readonly #stop: () => void;
   readonly #onSelect: (date: string) => void;
   #selected: string;
+  #missing = "";
 
   /** `select`: the date the address names, "" for the newest. `onSelect` hears the dates the person chooses. */
   constructor(digests: ProjectDigests, projectId: string, clock: Clock, select = "", onSelect: (date: string) => void = () => {}) {
-    super(build(digests.state, projectId, clock, select));
+    super(build(digests.state, projectId, clock, select, ""));
     this.#digests = digests;
     this.#projectId = projectId;
     this.#clock = clock;
@@ -119,7 +122,7 @@ export class DigestsTabPresenter extends Presenter<DigestsTabViewModel> {
     this.#stop = digests.subscribe((state) => {
       // The digest the person finds first stays the one on screen: a newer one arriving does not take its place.
       if (this.#selected === "" && state.digests[0]) this.#selected = state.digests[0].date;
-      this.set(build(state, this.#projectId, this.#clock, this.#selected));
+      this.set(build(state, this.#projectId, this.#clock, this.#selected, this.#missing));
     });
   }
 
@@ -131,8 +134,19 @@ export class DigestsTabPresenter extends Presenter<DigestsTabViewModel> {
   select = (date: string): void => {
     if (!this.#digests.state.digests.some((d) => d.date === date)) return;
     this.#selected = date;
+    this.#missing = "";
     this.#onSelect(date);
-    this.set(build(this.#digests.state, this.#projectId, this.#clock, date));
+    this.set(build(this.#digests.state, this.#projectId, this.#clock, date, ""));
+  };
+
+  /** The date an address names: earlier pages are read until it is found, and when there is none the tab says so. */
+  show = async (date: string): Promise<void> => {
+    this.#selected = date;
+    this.#missing = "";
+    this.set(build(this.#digests.state, this.#projectId, this.#clock, date, ""));
+    if (date === "" || (await this.#digests.reveal(date)) || this.#selected !== date) return;
+    this.#missing = `There is no digest for ${shortDay(date)}.`;
+    this.set(build(this.#digests.state, this.#projectId, this.#clock, "", this.#missing));
   };
 
   retry = (): void => this.#digests.retry();
@@ -142,7 +156,7 @@ export class DigestsTabPresenter extends Presenter<DigestsTabViewModel> {
   turnOn = (): Promise<void> => this.#digests.turnOn();
 }
 
-function build(s: ProjectDigestsState, projectId: string, clock: Clock, select: string): DigestsTabViewModel {
+function build(s: ProjectDigestsState, projectId: string, clock: Clock, select: string, missing: string): DigestsTabViewModel {
   const now = new Date(clock.now());
   const held = s.digests;
   const chosen = held.find((d) => d.date === select) ?? held[0] ?? null;
@@ -162,6 +176,7 @@ function build(s: ProjectDigestsState, projectId: string, clock: Clock, select: 
     emptyText: emptyText(s, next),
     rows: rows(held, chosen, s.timeZone),
     gapNote: GAP_NOTE,
+    missing,
     hasEarlier: s.hasEarlier,
     loadingEarlier: s.loadingEarlier,
     earlierError: s.earlierError,

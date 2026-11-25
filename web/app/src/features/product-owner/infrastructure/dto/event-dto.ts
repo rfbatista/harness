@@ -4,6 +4,7 @@
 // carries other events (tasks, sessions): a message with no product-owner key is not for this DTO.
 
 import { object, string, type Wire } from "../../../../shared/infrastructure/dto/fields";
+import { isoDate } from "./digest-dto";
 import { SettingsDto } from "./settings-dto";
 import { ThreadItemDto, ThreadSummaryDto } from "./thread-dto";
 
@@ -44,7 +45,7 @@ export class ProductOwnerEventDto {
       case "product_owner_settings":
         return new ProductOwnerEventDto(key, project, undefined, undefined, undefined, undefined, undefined, SettingsDto.fromJSON(body.settings, path("settings")));
       case "product_owner_digest":
-        return new ProductOwnerEventDto(key, project, undefined, undefined, undefined, undefined, undefined, undefined, string(EVENT, body, "digest_id", key), string(EVENT, body, "date", key));
+        return new ProductOwnerEventDto(key, project, undefined, undefined, undefined, undefined, undefined, undefined, string(EVENT, body, "digest_id", key), isoDate(EVENT, body, "date", key));
     }
   }
 

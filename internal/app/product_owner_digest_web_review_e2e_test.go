@@ -60,6 +60,8 @@ func TestTypingATimeOverTheDigestTimeSavesOnlyTheTimeTypedInTheWebUI_EndToEnd(t 
 		chromedp.MouseClickXY(box[0]+10, box[1]+box[2]/2),
 		chromedp.KeyEvent("1045"),
 		waitFor(digestInput+`.value === '10:45'`),
+		// Enter ends the typing: only then is the time saved.
+		pressEnter(),
 		waitFor(`window.__digestTimes.includes('10:45')`),
 	)
 	if got := w.settings().DigestTime; got == nil || *got != "10:45" {

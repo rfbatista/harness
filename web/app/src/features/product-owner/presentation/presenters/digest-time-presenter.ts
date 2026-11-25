@@ -47,8 +47,8 @@ export class DigestTimePresenter extends Presenter<DigestTimeViewModel> {
     this.#stop();
   }
 
-  /** The input's value: a complete time is saved at once; a half-typed one waits. */
-  change = (value: string): Promise<void> => (COMPLETE.test(value) ? this.#time.set(value) : Promise.resolve());
+  /** The time the person ended on, when the input loses focus or Enter is pressed: a complete time that differs from the saved one is saved; anything else is left. Never a time on the way: typing 10:45 over 09:00 passes through 01:00, and the scheduler would act on it. */
+  change = (value: string): Promise<void> => (COMPLETE.test(value) && value !== (this.#time.state.digestTime ?? "") ? this.#time.set(value) : Promise.resolve());
 
   clear = (): Promise<void> => (this.#time.state.digestTime === null ? Promise.resolve() : this.#time.set(""));
 

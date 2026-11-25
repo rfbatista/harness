@@ -1,11 +1,19 @@
 // A project's digests (Contract: product owner, Digests).
 
+import { DtoError } from "../../../../shared/infrastructure/dto/dto-error";
 import { array, boolean, object, oneOf, optionalString, string, time, type Wire } from "../../../../shared/infrastructure/dto/fields";
 import type { DigestItemKind } from "../../domain/digest";
 
 const ITEM = "DigestItemDto";
 const DIGEST = "DigestDto";
 const LIST = "DigestListDto";
+
+/** A digest's date, "YYYY-MM-DD": the pages and the address compare dates as text, so a malformed one would break the order. */
+export function isoDate(dto: string, from: Wire, key: string, at = ""): string {
+  const value = string(dto, from, key, at);
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(value) || Number.isNaN(Date.parse(`${value}T00:00:00Z`))) throw new DtoError(dto, at === "" ? key : `${at}.${key}`, "expected a date, YYYY-MM-DD");
+  return value;
+}
 
 export const ITEM_KINDS: readonly DigestItemKind[] = ["task_moved", "session_ended", "session_failed", "waiting_on_person"];
 
@@ -42,7 +50,7 @@ export class DigestDto {
     const from = object(DIGEST, raw, at);
     return new DigestDto(
       string(DIGEST, from, "digest_id", at),
-      string(DIGEST, from, "date", at),
+      isoDate(DIGEST, from, "date", at),
       time(DIGEST, from, "period_start", at),
       time(DIGEST, from, "period_end", at),
       string(DIGEST, from, "summary", at),

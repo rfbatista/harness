@@ -149,11 +149,20 @@ export function mountIslands(doc: Document): Dispose {
       const initial = digestsAddress(win.location.hash);
       const page = new OwnerPagePresenter({ projectId: project_id, projectName: project_name, threadId: thread_id, initial }, dock, conversation, list, navigator);
       const projectDigests = new ProjectDigests({ gateway: owner, events: owner });
-      const digests = new DigestsTabPresenter(projectDigests, project_id, systemClock, initial?.date, (date) => page.showDigests(date));
+      const digests = new DigestsTabPresenter(projectDigests, project_id, systemClock, "", (date) => page.showDigests(date));
       // The product owner is switched off or on: the composer follows.
       const stopDock = dock.subscribe((state) => thread.setOff(state.enabled === false));
       const stopList = list.attach(project_id);
       const stopDigests = projectDigests.attach(project_id);
+      // The address names the tab and the date: where the page opens, and where Back, Forward and an edit of the address take it.
+      const followAddress = () => {
+        const address = digestsAddress(win.location.hash);
+        if (address === undefined) return page.showThreads();
+        page.showDigests(address.date);
+        void digests.show(address.date);
+      };
+      if (initial) void digests.show(initial.date);
+      win.addEventListener("hashchange", followAddress);
       const stopConversation = conversation.attach(project_id, thread_id === "" ? null : thread_id);
       const root = createRoot(mount);
       root.render(<OwnerPageView page={page} thread={thread} threads={threads} about={about} digests={digests} />);
@@ -161,6 +170,7 @@ export function mountIslands(doc: Document): Dispose {
         root.unmount();
         stopConversation();
         stopList();
+        win.removeEventListener("hashchange", followAddress);
         stopDigests();
         digests.destroy();
         stopDock();

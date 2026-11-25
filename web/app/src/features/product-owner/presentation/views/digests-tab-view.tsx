@@ -70,6 +70,7 @@ export function DigestsTabView({ presenter }: { presenter: DigestsTabPresenter }
             return (
               <div key={`g${row.label}`} className="[ date-row ]" data-gap="">
                 <span className="[ d ]">{row.label}</span>
+                <span className="[ text-xs ]">quiet</span>
                 <span className="[ c ]">nothing recorded</span>
               </div>
             );
@@ -111,6 +112,12 @@ export function DigestsTabView({ presenter }: { presenter: DigestsTabPresenter }
       </nav>
       <div className="[ digest-column ]">
         {off}
+        {vm.missing !== "" && (
+          <div className="[ banner ]" data-tone="attention" role="status">
+            <OwnerIcon name="info" />
+            <span>{vm.missing}</span>
+          </div>
+        )}
         {vm.selected && <DigestView digest={vm.selected} />}
       </div>
     </div>

@@ -10,6 +10,12 @@ export function DigestTimeView({ presenter }: { presenter: DigestTimePresenter }
   useEffect(() => {
     if (input.current && input.current.value !== vm.value) input.current.value = vm.value;
   }, [vm.value, vm.revision]);
+  // The time the person ended on: on leaving the input or on Enter, never while they type. A half-typed time goes back to the saved one.
+  const commit = () => {
+    const typed = input.current?.value ?? "";
+    void presenter.change(typed);
+    if (input.current && !/^\d\d:\d\d$/.test(typed)) input.current.value = vm.value;
+  };
   return (
     <section className="[ digest-time ]" aria-labelledby="digest-time-heading" data-dimmed={vm.dimmed ? "" : undefined}>
       <h2 id="digest-time-heading" style={{ fontSize: "var(--text-base)" }}>
@@ -27,7 +33,7 @@ export function DigestTimeView({ presenter }: { presenter: DigestTimePresenter }
         <div className="[ field ]">
           <label htmlFor="digest-time">Digest time</label>
           <div className="[ timegrid ]">
-            <input ref={input} id="digest-time" type="time" defaultValue={vm.value} disabled={vm.state === "loading"} aria-busy={vm.busy} aria-describedby="digest-time-note digest-time-hint" onChange={(event) => void presenter.change(event.currentTarget.value)} />
+            <input ref={input} id="digest-time" type="time" defaultValue={vm.value} disabled={vm.state === "loading"} aria-busy={vm.busy} aria-describedby="digest-time-note digest-time-hint" onBlur={commit} onKeyDown={(event) => event.key === "Enter" && commit()} />
             <span id="digest-time-note" className="[ inline-note ]">
               {vm.note}
             </span>

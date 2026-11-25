@@ -102,6 +102,33 @@ export class ProjectDigests {
     }
   }
 
+  /** Loads earlier pages until `date` is among the digests or there are no more. Whether it is. */
+  async reveal(date: string): Promise<boolean> {
+    await this.#read1st();
+    for (;;) {
+      const { digests, hasEarlier, loadingEarlier, error } = this.#state;
+      if (digests.some((d) => d.date === date)) return true;
+      const oldest = digests.at(-1);
+      if (error !== "" || !hasEarlier || !oldest || oldest.date < date) return false;
+      if (loadingEarlier) {
+        await new Promise((resolve) => setTimeout(resolve, 0));
+        continue;
+      }
+      const before = this.#state.digests.length;
+      await this.loadEarlier();
+      if (this.#state.digests.length === before) return false;
+    }
+  }
+
+  /** Resolves once the first read has an answer, or failed. */
+  #read1st(): Promise<void> {
+    return new Promise((resolve) => {
+      const stop = this.subscribe((state) => {
+        if (state.loaded || state.error !== "") queueMicrotask(() => (stop(), resolve()));
+      });
+    });
+  }
+
   /** "Turn it on", from the off banner. A refusal says why. */
   async turnOn(): Promise<void> {
     if (this.#state.turningOn) return;

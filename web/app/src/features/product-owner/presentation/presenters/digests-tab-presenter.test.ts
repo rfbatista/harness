@@ -296,4 +296,33 @@ describe("the Digests tab", () => {
     await settled();
     assert.equal(tab.viewModel.head, "Next: Tue 24 Nov, 10:00");
   });
+
+  test("an address date beyond the loaded pages: earlier pages are read until it is found", async () => {
+    const { tab } = await setup({ digests: digestRun("2026-11-23", 70) });
+    assert.equal(tab.viewModel.rows.filter((r) => r.kind === "digest").length, 30);
+    await tab.show("2026-10-01");
+    assert.equal(tab.viewModel.selected?.date, "2026-10-01");
+    assert.equal(tab.viewModel.missing, "");
+    assert.ok(tab.viewModel.rows.filter((r) => r.kind === "digest").length >= 54);
+  });
+
+  test("an address date with no digest: the list is read to its end and the tab says so", async () => {
+    const { tab } = await setup({ digests: [digest("2026-11-23"), digest("2026-11-19")] });
+    await tab.show("2026-11-21");
+    assert.equal(tab.viewModel.missing, "There is no digest for Sat 21 Nov.");
+    assert.equal(tab.viewModel.selected?.date, "2026-11-23");
+    tab.select("2026-11-19");
+    assert.equal(tab.viewModel.missing, "");
+  });
+
+  test("an address date is shown once the first page is read, even when the address was read before", async () => {
+    const server = memoryProductOwner();
+    server.seedProject("p1", true);
+    for (const d of digestRun("2026-11-23", 40)) server.seedDigest("p1", d);
+    const digests = new ProjectDigests({ gateway: server, events: server });
+    const tab = new DigestsTabPresenter(digests, "p1", { now: () => NOW });
+    digests.attach("p1");
+    await tab.show("2026-10-20");
+    assert.equal(tab.viewModel.selected?.date, "2026-10-20");
+  });
 });

@@ -60,6 +60,21 @@ describe("the Daily digest block", () => {
     assert.equal(block.viewModel.canClear, true);
   });
 
+  test("sends nothing for the time that is already saved", async () => {
+    const server = memoryProductOwner();
+    server.seedProject("p1", true);
+    await server.updateSettings("p1", { digestTime: "09:00" });
+    const sent: (string | undefined)[] = [];
+    const gateway = { ...server, updateSettings: (projectId: string, patch: { digestTime?: string }) => (sent.push(patch.digestTime), server.updateSettings(projectId, patch)) };
+    const digestTime = new DigestTime({ gateway, events: server });
+    const block = new DigestTimePresenter(digestTime, "p1", { now: () => MORNING });
+    digestTime.attach("p1");
+    await settled();
+    await block.change("09:00");
+    await block.change("10:15");
+    assert.deepEqual(sent, ["10:15"]);
+  });
+
   test("waits while the time is half typed, and sends nothing", async () => {
     const { block, server } = await setup({ time: "09:00" });
     await block.change("");

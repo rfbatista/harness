@@ -60,15 +60,17 @@ const (
 	digestHead    = `(document.querySelector('.digests .dates-head')?.textContent ?? '')`
 )
 
-// typeTime is what a person does to a native time input: the browser fires input and change once the
-// time is complete.
+// typeTime is what a person does to a native time input: the time is typed, and Enter saves it.
 func typeTime(hhmm string) chromedp.Action {
-	return chromedp.Evaluate(fmt.Sprintf(`(() => {
-		const input = %s;
-		Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value').set.call(input, %q);
-		input.dispatchEvent(new Event('input', { bubbles: true }));
-		input.dispatchEvent(new Event('change', { bubbles: true }));
-	})()`, digestInput, hhmm), nil)
+	return chromedp.Tasks{
+		chromedp.Focus(`#digest-time`, chromedp.ByQuery),
+		chromedp.Evaluate(fmt.Sprintf(`(() => {
+			const input = %s;
+			Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value').set.call(input, %q);
+			input.dispatchEvent(new Event('input', { bubbles: true }));
+		})()`, digestInput, hhmm), nil),
+		pressEnter(),
+	}
 }
 
 func TestTheDigestTimeAndTheDigestsTabFollowTheServerInTheWebUI_EndToEnd(t *testing.T) {
@@ -142,7 +144,7 @@ func TestTheDigestTimeAndTheDigestsTabFollowTheServerInTheWebUI_EndToEnd(t *test
 		waitFor(dateRows+`.length === 3`),
 		waitFor(dateRows+`[1].hasAttribute('data-gap')`),
 	)
-	if got := p.text(t, dateRows+`[1].textContent`); !strings.Contains(got, "Thu 3 – Fri 4") || !strings.Contains(got, "nothing recorded") {
+	if got := p.text(t, dateRows+`[1].textContent`); !strings.Contains(got, "Thu 3 – Fri 4") || !strings.Contains(got, "quiet") || !strings.Contains(got, "nothing recorded") {
 		t.Errorf("the gap row says %q, want the two quiet days", got)
 	}
 	if got := p.text(t, `document.querySelector('.digest h2').textContent`); got != "Wednesday 2 January" {
@@ -152,6 +154,13 @@ func TestTheDigestTimeAndTheDigestsTabFollowTheServerInTheWebUI_EndToEnd(t *test
 		chromedp.Click(newestDateRow, chromedp.ByJSPath),
 		waitFor(`document.querySelector('.digest h2').textContent === 'Saturday 5 January'`),
 		waitFor(`location.hash === '#digests/2030-01-05'`),
+	)
+
+	p.run(t, "an edit of the address follows: the hash names another date, then another tab",
+		chromedp.Evaluate(`location.hash = '#digests/2030-01-02'`, nil),
+		waitFor(`document.querySelector('.digest h2').textContent === 'Wednesday 2 January'`),
+		chromedp.Evaluate(`location.hash = '#digests/2030-01-03'`, nil),
+		waitFor(`!!document.querySelector('.digests .banner') && document.querySelector('.digests .banner').textContent.includes('There is no digest for Thu 3 Jan.')`),
 	)
 
 	p.run(t, "the product owner off: the tab says no digest is recorded and keeps the digests readable",
