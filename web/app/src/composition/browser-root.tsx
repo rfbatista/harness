@@ -33,6 +33,9 @@ import { DigestTimePresenter } from "../features/product-owner/presentation/pres
 import { DigestTimeView } from "../features/product-owner/presentation/views/digest-time-view";
 import { ProjectDigests } from "../features/product-owner/application/project-digests";
 import { DigestsTabPresenter } from "../features/product-owner/presentation/presenters/digests-tab-presenter";
+import { memoryAddress } from "../features/product-owner/application/links";
+import { ProjectMemory } from "../features/product-owner/application/project-memory";
+import { MemoryTabPresenter } from "../features/product-owner/presentation/presenters/memory-tab-presenter";
 import { Conversation } from "../features/product-owner/application/conversation";
 import { browserTaskCatalog } from "../features/product-owner/infrastructure/browser-task-catalog";
 import { ThreadPresenter } from "../features/product-owner/presentation/presenters/thread-presenter";
@@ -103,9 +106,10 @@ export function mountIslands(doc: Document): Dispose {
     "owner-panel": (mount, props) => {
       const { project_name, no_tasks } = OwnerPanelPropsDto.fromJSON(props);
       const conversation = new Conversation({ gateway: owner, events: owner, onThread: (id) => dock.setThreadId(id) });
-      const thread = new ThreadPresenter(conversation, { projectName: project_name, noTasks: no_tasks }, browserTaskCatalog(doc));
+      const memory = new ProjectMemory({ gateway: owner, events: owner });
+      const thread = new ThreadPresenter(conversation, { projectName: project_name, noTasks: no_tasks }, browserTaskCatalog(doc), false, { memory });
       const list = new ThreadList({ gateway: owner, events: owner });
-      const panel = new PanelPresenter(dock, conversation, thread, { list, threads: new ThreadListPresenter(list, conversation, systemClock), about: new AboutPresenter(conversation, list) });
+      const panel = new PanelPresenter(dock, conversation, thread, { memory, list, threads: new ThreadListPresenter(list, conversation, systemClock), about: new AboutPresenter(conversation, list) });
       const root = createRoot(mount);
       root.render(<PanelView presenter={panel} />);
       return () => {
@@ -143,31 +147,41 @@ export function mountIslands(doc: Document): Dispose {
       const noTasks = browserTaskCatalog(doc).count() === 0;
       const conversation = new Conversation({ gateway: owner, events: owner });
       const list = new ThreadList({ gateway: owner, events: owner });
-      const thread = new ThreadPresenter(conversation, { projectName: project_name, noTasks }, browserTaskCatalog(doc), dock.state.enabled === false);
+      const memory = new ProjectMemory({ gateway: owner, events: owner });
+      const opened = digestsAddress(win.location.hash) ?? memoryAddress(win.location.hash);
+      const initial = opened?.tab === "memory" ? opened : undefined;
+      const page = new OwnerPagePresenter({ projectId: project_id, projectName: project_name, threadId: thread_id, initial: opened?.tab === "digests" ? { tab: "digests" } : initial }, dock, conversation, list, navigator, memory);
+      const thread = new ThreadPresenter(conversation, { projectName: project_name, noTasks }, browserTaskCatalog(doc), dock.state.enabled === false, { memory, openEntry: (entryId) => {
+        page.showMemory(entryId);
+        memoryTab.showEntry(entryId);
+      } });
+      const memoryTab = new MemoryTabPresenter(memory, project_id, initial?.entryId);
       const threads = new ThreadListPresenter(list, conversation, systemClock);
       const about = new AboutPresenter(conversation, list);
-      const initial = digestsAddress(win.location.hash);
-      const page = new OwnerPagePresenter({ projectId: project_id, projectName: project_name, threadId: thread_id, initial }, dock, conversation, list, navigator);
-      const projectDigests = new ProjectDigests({ gateway: owner, events: owner });
-      const digests = new DigestsTabPresenter(projectDigests, project_id, systemClock, "", (date) => page.showDigests(date));
       // The product owner is switched off or on: the composer follows.
       const stopDock = dock.subscribe((state) => thread.setOff(state.enabled === false));
       const stopList = list.attach(project_id);
+      const stopMemory = memory.attach(project_id);
+      const projectDigests = new ProjectDigests({ gateway: owner, events: owner });
+      const digests = new DigestsTabPresenter(projectDigests, project_id, systemClock, "", (date) => page.showDigests(date));
       const stopDigests = projectDigests.attach(project_id);
-      // The address names the tab and the date: where the page opens, and where Back, Forward and an edit of the address take it.
+      // The address names the Digests tab and its date: where the page opens, and where Back, Forward and an edit of the address take it.
       const followAddress = () => {
         const address = digestsAddress(win.location.hash);
-        if (address === undefined) return page.showThreads();
-        page.showDigests(address.date);
-        void digests.show(address.date);
+        if (address !== undefined) {
+          page.showDigests(address.date);
+          void digests.show(address.date);
+        } else if (page.viewModel.tab === "digests") page.showThreads();
       };
-      if (initial) void digests.show(initial.date);
+      if (opened?.tab === "digests") void digests.show(opened.date);
       win.addEventListener("hashchange", followAddress);
       const stopConversation = conversation.attach(project_id, thread_id === "" ? null : thread_id);
       const root = createRoot(mount);
-      root.render(<OwnerPageView page={page} thread={thread} threads={threads} about={about} digests={digests} />);
+      root.render(<OwnerPageView page={page} thread={thread} threads={threads} about={about} memory={memoryTab} digests={digests} />);
       return () => {
         root.unmount();
+        stopMemory();
+        memoryTab.destroy();
         stopConversation();
         stopList();
         win.removeEventListener("hashchange", followAddress);

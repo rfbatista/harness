@@ -8,6 +8,25 @@ export type Turn = (typeof TURNS)[number];
 /** A turn the product owner is still on: the thread answers. */
 export const isAnswering = (turn: Turn): boolean => turn !== "idle";
 
+export const MEMORY_OPS = ["saved", "changed", "dropped"] as const;
+export type MemoryOp = (typeof MEMORY_OPS)[number];
+
+/** One durable fact the product owner keeps for the project (Contract, Memory). */
+export interface MemoryEntry {
+  readonly entryId: string;
+  readonly text: string;
+  readonly savedAt: Date;
+  /** null until the entry is changed. */
+  readonly changedAt: Date | null;
+  readonly changedBy: "person" | "product_owner" | null;
+  readonly threadId: string;
+  readonly threadTitle: string;
+}
+
+/** The longest entry, in Unicode code points (the server counts the same way). */
+export const MAX_ENTRY = 4000;
+export const entryLength = (text: string): number => [...text].length;
+
 export interface Settings {
   readonly projectId: string;
   readonly enabled: boolean;
@@ -75,7 +94,17 @@ export interface FailureItem {
   readonly retryItemId: string;
 }
 
-/** An item this piece does not draw (held action, memory note, checkpoint): a neutral line. */
+/** The product owner saved, changed or dropped a memory entry (ADR 0111); `text` is the entry as the note says it. */
+export interface MemoryNoteItem {
+  readonly kind: "memory_note";
+  readonly itemId: string;
+  readonly at: Date;
+  readonly op: MemoryOp;
+  readonly entryId: string;
+  readonly text: string;
+}
+
+/** An item this piece does not draw (held action, checkpoint): a neutral line. */
 export interface OtherItem {
   readonly kind: "other";
   /** The wire kind, for the line's hidden label. */
@@ -85,7 +114,7 @@ export interface OtherItem {
   readonly text: string;
 }
 
-export type ThreadItem = MessageItem | ActivityItem | NoticeItem | FailureItem | OtherItem;
+export type ThreadItem = MessageItem | ActivityItem | NoticeItem | FailureItem | MemoryNoteItem | OtherItem;
 
 export interface ThreadPage {
   readonly head: ThreadHead;
@@ -100,5 +129,6 @@ export type ProductOwnerEvent =
   | { readonly type: "delta"; readonly threadId: string; readonly itemId: string; readonly text: string }
   | { readonly type: "thread"; readonly thread: ThreadSummary }
   | { readonly type: "settings"; readonly settings: Settings }
+  | { readonly type: "memory"; readonly entryId: string; readonly op: MemoryOp }
   /** A digest was recorded, or changed, for `date`. */
   | { readonly type: "digest"; readonly digestId: string; readonly date: string };

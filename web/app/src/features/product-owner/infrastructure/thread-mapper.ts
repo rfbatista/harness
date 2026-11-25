@@ -2,8 +2,9 @@
 
 import type { Digest, DigestPage } from "../domain/digest";
 import type { DigestDto, DigestListDto } from "./dto/digest-dto";
-import type { ProductOwnerEvent, Settings, ThreadHead, ThreadItem, ThreadPage, ThreadSummary } from "../domain/thread";
+import type { MemoryEntry, ProductOwnerEvent, Settings, ThreadHead, ThreadItem, ThreadPage, ThreadSummary } from "../domain/thread";
 import type { ProductOwnerEventDto } from "./dto/event-dto";
+import type { MemoryEntryDto } from "./dto/memory-dto";
 import type { SettingsDto } from "./dto/settings-dto";
 import type { ThreadItemDto, ThreadPageDto, ThreadSummaryDto } from "./dto/thread-dto";
 import type { ThreadHeadDto } from "./dto/thread-dto";
@@ -45,10 +46,14 @@ export function toItem(dto: ThreadItemDto): ThreadItem {
       return { ...base, kind: "notice", text: dto.text };
     case "failure":
       return { ...base, kind: "failure", code: dto.code ?? "", text: dto.text, retryItemId: dto.retry_item_id ?? "" };
+    case "memory_note":
+      return { ...base, kind: "memory_note", op: dto.op ?? "saved", entryId: dto.entry_id ?? "", text: dto.text };
     default:
       return { ...base, kind: "other", wireKind: dto.kind, text: dto.text };
   }
 }
+
+export const toEntry = (dto: MemoryEntryDto): MemoryEntry => ({ entryId: dto.entry_id, text: dto.text, savedAt: dto.saved_at, changedAt: dto.changed_at, changedBy: dto.changed_by, threadId: dto.thread_id, threadTitle: dto.thread_title });
 
 export const toPage = (dto: ThreadPageDto): ThreadPage => ({ head: toHead(dto.thread), items: dto.items.map(toItem), hasEarlier: dto.has_earlier });
 
@@ -65,5 +70,7 @@ export function toEvent(dto: ProductOwnerEventDto): ProductOwnerEvent | null {
       return dto.settings ? { type: "settings", settings: toSettings(dto.settings) } : null;
     case "product_owner_digest":
       return dto.digest_id !== undefined && dto.date !== undefined ? { type: "digest", digestId: dto.digest_id, date: dto.date } : null;
+    case "product_owner_memory":
+      return dto.entry_id !== undefined && dto.op !== undefined ? { type: "memory", entryId: dto.entry_id, op: dto.op } : null;
   }
 }

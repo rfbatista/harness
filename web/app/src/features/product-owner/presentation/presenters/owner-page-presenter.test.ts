@@ -2,19 +2,21 @@ import { describe, test } from "node:test";
 import assert from "node:assert/strict";
 import { Conversation } from "../../application/conversation";
 import { OwnerDock } from "../../application/owner-dock";
+import { ProjectMemory } from "../../application/project-memory";
 import { ThreadList } from "../../application/thread-list";
 import { memoryProductOwner } from "../../infrastructure/memory-product-owner";
 import { memoryDockMemory, memoryNavigator, memoryScreen } from "../../testing/memory-dock-adapters";
-import { person, summary } from "../../testing/fixtures";
+import { entry, person, summary } from "../../testing/fixtures";
 import { OwnerPagePresenter } from "./owner-page-presenter";
 
 const settled = () => new Promise((resolve) => setImmediate(resolve));
 
-const setup = async (opts: { threadId?: string; phone?: boolean } = {}) => {
+const setup = async (opts: { threadId?: string; phone?: boolean; initial?: { tab: "memory"; entryId: string } | { tab: "digests" } } = {}) => {
   const server = memoryProductOwner();
   server.seedProject("p1", true);
   server.seedThread("p1", summary({ threadId: "t1", title: "One" }), [person("Q")]);
   server.seedThread("p1", summary({ threadId: "t2", title: "Two" }));
+  server.seedMemory("p1", [entry({ entryId: "e1" }), entry({ entryId: "e2" })]);
   const screen = memoryScreen(opts.phone ?? false, opts.phone ?? false);
   const navigator = memoryNavigator();
   const dock = new OwnerDock({ gateway: server, events: server, memory: memoryDockMemory(), screen, navigator });
@@ -23,15 +25,17 @@ const setup = async (opts: { threadId?: string; phone?: boolean } = {}) => {
   const list = new ThreadList({ gateway: server, events: server });
   conversation.attach("p1", opts.threadId ?? null);
   list.attach("p1");
-  const page = new OwnerPagePresenter({ projectId: "p1", projectName: "harness", threadId: opts.threadId ?? "" }, dock, conversation, list, navigator);
+  const memory = new ProjectMemory({ gateway: server, events: server });
+  const page = new OwnerPagePresenter({ projectId: "p1", projectName: "harness", threadId: opts.threadId ?? "", initial: opts.initial }, dock, conversation, list, navigator, memory);
+  memory.attach("p1");
   await settled();
-  return { server, screen, navigator, dock, conversation, list, page };
+  return { server, screen, navigator, dock, conversation, list, memory, page };
 };
 
 describe("the page", () => {
   test("names its project, links back to it and to Settings, and counts the threads", async () => {
     const { page } = await setup();
-    assert.deepEqual({ ...page.viewModel }, { projectName: "harness", crumbHref: "/projects/p1", settingsHref: "/projects/p1/settings#product-owner", threadCount: 2, tab: "threads", phone: null, notFound: false });
+    assert.deepEqual({ ...page.viewModel }, { projectName: "harness", crumbHref: "/projects/p1", settingsHref: "/projects/p1/settings#product-owner", threadCount: 2, memoryCount: 2, tab: "threads", focusEntry: "", phone: null, notFound: false });
   });
 
   test("hides the panel while it is open, and gives it back when it goes", async () => {
@@ -82,6 +86,40 @@ describe("on a phone", () => {
     assert.equal(page.viewModel.phone, "thread");
   });
 
+  test("shows the Threads tab, and the Memory tab when asked, with the memory's count", async () => {
+    const { page, memory, server } = await setup();
+    assert.equal(page.viewModel.tab, "threads");
+    page.showMemory();
+    assert.equal(page.viewModel.tab, "memory");
+    page.showThreads();
+    assert.equal(page.viewModel.tab, "threads");
+    server.remember("p1", entry({ entryId: "e3" }), "saved");
+    await settled();
+    assert.equal(page.viewModel.memoryCount, 3);
+    assert.equal(memory.state.entries.length, 3);
+  });
+
+  test("opens on the Memory tab at an entry when the address says so, and a thread goes back to Threads", async () => {
+    const { page } = await setup({ initial: { tab: "memory", entryId: "e2" } });
+    assert.equal(page.viewModel.tab, "memory");
+    assert.equal(page.viewModel.focusEntry, "e2");
+    page.openThread("t2");
+    assert.equal(page.viewModel.tab, "threads");
+    assert.equal(page.viewModel.focusEntry, "");
+  });
+
+  test("the memory count is unknown until the memory is read", async () => {
+    const server = memoryProductOwner();
+    server.seedProject("p1", true);
+    const navigator = memoryNavigator();
+    const dock = new OwnerDock({ gateway: server, events: server, memory: memoryDockMemory(), screen: memoryScreen(), navigator });
+    const conversation = new Conversation({ gateway: server, events: server });
+    const list = new ThreadList({ gateway: server, events: server });
+    const memory = new ProjectMemory({ gateway: server, events: server });
+    const page = new OwnerPagePresenter({ projectId: "p1", projectName: "harness", threadId: "" }, dock, conversation, list, navigator, memory);
+    assert.equal(page.viewModel.memoryCount, null);
+  });
+
   test("shows the Digests tab with its own address, and the Threads tab again at the thread's address", async () => {
     const { page, navigator } = await setup({ threadId: "t1" });
     page.showDigests();
@@ -105,8 +143,8 @@ describe("on a phone", () => {
   });
 
   test("starts on the Digests tab when the address names it", async () => {
-    const { navigator, dock, conversation, list } = await setup();
-    const page = new OwnerPagePresenter({ projectId: "p1", projectName: "harness", threadId: "", initial: { tab: "digests" } }, dock, conversation, list, navigator);
+    const { page } = await setup({ initial: { tab: "digests" } });
     assert.equal(page.viewModel.tab, "digests");
+    assert.equal(page.viewModel.focusEntry, "");
   });
 });

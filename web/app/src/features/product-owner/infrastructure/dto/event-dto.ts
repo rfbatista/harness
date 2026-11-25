@@ -3,14 +3,15 @@
 // { "product_owner_thread_item": { project_id, thread_id, item } } and so on. The feed also
 // carries other events (tasks, sessions): a message with no product-owner key is not for this DTO.
 
-import { object, string, type Wire } from "../../../../shared/infrastructure/dto/fields";
+import { object, oneOf, string, type Wire } from "../../../../shared/infrastructure/dto/fields";
+import { MEMORY_OPS, type MemoryOp } from "../../domain/thread";
 import { isoDate } from "./digest-dto";
 import { SettingsDto } from "./settings-dto";
 import { ThreadItemDto, ThreadSummaryDto } from "./thread-dto";
 
 const EVENT = "ProductOwnerEventDto";
 
-export const EVENT_KEYS = ["product_owner_thread_item", "product_owner_delta", "product_owner_thread", "product_owner_settings", "product_owner_digest"] as const;
+export const EVENT_KEYS = ["product_owner_thread_item", "product_owner_delta", "product_owner_thread", "product_owner_settings", "product_owner_memory", "product_owner_digest"] as const;
 export type EventKey = (typeof EVENT_KEYS)[number];
 
 export class ProductOwnerEventDto {
@@ -23,8 +24,10 @@ export class ProductOwnerEventDto {
     readonly text: string | undefined,
     readonly thread: ThreadSummaryDto | undefined,
     readonly settings: SettingsDto | undefined,
-    readonly digest_id?: string,
-    readonly date?: string,
+    readonly entry_id: string | undefined = undefined,
+    readonly op: MemoryOp | undefined = undefined,
+    readonly digest_id: string | undefined = undefined,
+    readonly date: string | undefined = undefined,
   ) {}
 
   /** null for a message that carries no product-owner event; a DtoError for one that carries a malformed one. */
@@ -44,8 +47,10 @@ export class ProductOwnerEventDto {
         return new ProductOwnerEventDto(key, project, undefined, undefined, undefined, undefined, ThreadSummaryDto.fromJSON(body.thread, path("thread")), undefined);
       case "product_owner_settings":
         return new ProductOwnerEventDto(key, project, undefined, undefined, undefined, undefined, undefined, SettingsDto.fromJSON(body.settings, path("settings")));
+      case "product_owner_memory":
+        return new ProductOwnerEventDto(key, project, undefined, undefined, undefined, undefined, undefined, undefined, string(EVENT, body, "entry_id", key), oneOf(EVENT, body, "op", MEMORY_OPS, key));
       case "product_owner_digest":
-        return new ProductOwnerEventDto(key, project, undefined, undefined, undefined, undefined, undefined, undefined, string(EVENT, body, "digest_id", key), isoDate(EVENT, body, "date", key));
+        return new ProductOwnerEventDto(key, project, undefined, undefined, undefined, undefined, undefined, undefined, undefined, undefined, string(EVENT, body, "digest_id", key), isoDate(EVENT, body, "date", key));
     }
   }
 
@@ -59,6 +64,8 @@ export class ProductOwnerEventDto {
         return { [this.key]: { project_id: this.project_id, thread: this.thread?.toJSON() } };
       case "product_owner_settings":
         return { [this.key]: { project_id: this.project_id, settings: this.settings?.toJSON() } };
+      case "product_owner_memory":
+        return { [this.key]: { project_id: this.project_id, entry_id: this.entry_id, op: this.op } };
       case "product_owner_digest":
         return { [this.key]: { project_id: this.project_id, digest_id: this.digest_id, date: this.date } };
     }

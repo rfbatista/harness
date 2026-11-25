@@ -4,11 +4,11 @@
 import type { FetchLike } from "../../../shared/infrastructure/api-client";
 import { ProductOwnerError } from "../application/ports";
 import type { MemoryProductOwner } from "../infrastructure/memory-product-owner";
-import { digestPageWire, headWire, itemWire, settingsWire, summaryWire } from "./wire";
+import { digestPageWire, entryWire, headWire, itemWire, settingsWire, summaryWire } from "./wire";
 
 const json = (status: number, body: unknown) => new Response(JSON.stringify(body), { status, headers: { "Content-Type": "application/json" } });
 
-const STATUS: Record<string, number> = { PRODUCT_OWNER_OFF: 409, THREAD_BUSY: 409, INVALID_INPUT: 400, PRODUCT_OWNER_UNAVAILABLE: 503, PROJECT_NOT_FOUND: 404, THREAD_NOT_FOUND: 404 };
+const STATUS: Record<string, number> = { PRODUCT_OWNER_OFF: 409, THREAD_BUSY: 409, INVALID_INPUT: 400, PRODUCT_OWNER_UNAVAILABLE: 503, PROJECT_NOT_FOUND: 404, THREAD_NOT_FOUND: 404, MEMORY_ENTRY_NOT_FOUND: 404 };
 
 export interface FakeServer {
   fetch: FetchLike;
@@ -68,6 +68,13 @@ export function fakeProductOwnerServer(data: MemoryProductOwner): FakeServer {
             return json(200, { item_id: (await data.sendMessage(String(body.thread_id), String(body.message))).itemId });
           case "POST /api/stop_product_owner_turn":
             await data.stopTurn(String(body.thread_id));
+            return json(200, {});
+          case "GET /api/product_owner_memory":
+            return json(200, { entries: (await data.memory(q("project_id"))).map(entryWire) });
+          case "POST /api/update_memory_entry":
+            return json(200, entryWire(await data.updateMemoryEntry(String(body.entry_id), String(body.text))));
+          case "POST /api/delete_memory_entry":
+            await data.deleteMemoryEntry(String(body.entry_id));
             return json(200, {});
           case "POST /api/rename_product_owner_thread":
             return json(200, summaryWire(await data.renameThread(String(body.thread_id), String(body.title))));

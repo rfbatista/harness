@@ -20,3 +20,18 @@ export const settingsHref = (projectId: string): string => `${project(projectId)
  * to give yet; this is the one place that will build it.
  */
 export const contextHref = (): string | null => null;
+
+/** The Memory tab of the full page, at an entry when one is named: a note in a thread links here. */
+export const memoryHref = (projectId: string, entryId = ""): string => `${pageHref(projectId)}#memory${entryId === "" ? "" : `/${encodeURIComponent(entryId)}`}`;
+
+/** `#memory` or `#memory/<entry>` of a page address: the Memory tab, and the entry it opens at. */
+export function memoryAddress(hash: string): { readonly tab: "memory"; readonly entryId: string } | undefined {
+  const match = /^#memory(?:\/(.+))?$/.exec(hash);
+  if (!match) return undefined;
+  try {
+    return { tab: "memory", entryId: match[1] === undefined ? "" : decodeURIComponent(match[1]) };
+  } catch {
+    // A malformed escape names no entry: the tab opens, at none.
+    return { tab: "memory", entryId: "" };
+  }
+}

@@ -5,6 +5,7 @@ import { Presenter } from "../../../../shared/kernel/presenter";
 import { settingsHref } from "../../application/links";
 import type { Conversation } from "../../application/conversation";
 import { type DockState, type OwnerDock } from "../../application/owner-dock";
+import type { ProjectMemory } from "../../application/project-memory";
 import type { ThreadList } from "../../application/thread-list";
 import type { AboutPresenter } from "./about-presenter";
 import type { ThreadListPresenter } from "./thread-list-presenter";
@@ -51,16 +52,18 @@ export class PanelPresenter extends Presenter<PanelViewModel> {
   readonly threads: ThreadListPresenter;
   readonly about: AboutPresenter;
   readonly #list: ThreadList;
+  readonly #memory: ProjectMemory | undefined;
   #attached = "";
   #detach: (() => void) | null = null;
 
   /** The conversation and the thread list follow the panel: they are read while it is docked, and let go when it closes. */
-  constructor(dock: OwnerDock, conversation: Conversation, thread: ThreadPresenter, parts: { list: ThreadList; threads: ThreadListPresenter; about: AboutPresenter }) {
+  constructor(dock: OwnerDock, conversation: Conversation, thread: ThreadPresenter, parts: { list: ThreadList; threads: ThreadListPresenter; about: AboutPresenter; memory?: ProjectMemory }) {
     super(panelViewModel(dock.state));
     this.#dock = dock;
     this.#conversation = conversation;
     this.thread = thread;
     this.#list = parts.list;
+    this.#memory = parts.memory;
     this.threads = parts.threads;
     this.about = parts.about;
     this.#unsubscribe = dock.subscribe((state) => {
@@ -94,7 +97,10 @@ export class PanelPresenter extends Presenter<PanelViewModel> {
     }
     const stopList = this.#list.attach(wanted);
     const stopConversation = this.#conversation.attach(wanted, state.threadId);
+    // The memory is read once the panel is docked: its count and notes need it, the pages do not.
+    const stopMemory = this.#memory?.attach(wanted);
     this.#detach = () => {
+      stopMemory?.();
       stopConversation();
       stopList();
     };

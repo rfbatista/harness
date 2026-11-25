@@ -1,11 +1,12 @@
 // Domain values as the server sends them, for the fake server and the stream tests.
 
 import { ProductOwnerEventDto } from "../infrastructure/dto/event-dto";
+import { MemoryEntryDto } from "../infrastructure/dto/memory-dto";
 import { SettingsDto } from "../infrastructure/dto/settings-dto";
 import { ThreadHeadDto, ThreadItemDto, ThreadSummaryDto } from "../infrastructure/dto/thread-dto";
 import type { Digest, DigestPage } from "../domain/digest";
 import { DigestDto, DigestItemDto } from "../infrastructure/dto/digest-dto";
-import type { ProductOwnerEvent, Settings, ThreadItem, ThreadSummary } from "../domain/thread";
+import type { MemoryEntry, ProductOwnerEvent, Settings, ThreadItem, ThreadSummary } from "../domain/thread";
 
 export const settingsWire = (s: Settings): unknown => new SettingsDto(s.projectId, s.enabled, s.digestTime, s.timeZone).toJSON();
 
@@ -23,6 +24,8 @@ export function itemWire(i: ThreadItem): unknown {
   switch (i.kind) {
     case "message":
       return new ThreadItemDto(i.itemId, "message", i.at, i.author, i.text, i.streaming, i.stopped, none, none).toJSON();
+    case "memory_note":
+      return new ThreadItemDto(i.itemId, "memory_note", i.at, none, i.text, false, false, none, none, i.op, i.entryId).toJSON();
     case "failure":
       return new ThreadItemDto(i.itemId, "failure", i.at, none, i.text, false, false, i.code, i.retryItemId).toJSON();
     case "other":
@@ -45,7 +48,11 @@ export function eventWire(projectId: string, e: ProductOwnerEvent): unknown {
       return { product_owner_settings: { project_id: projectId, settings: settingsWire(e.settings) } };
     case "digest":
       return { product_owner_digest: { project_id: projectId, digest_id: e.digestId, date: e.date } };
+    case "memory":
+      return { product_owner_memory: { project_id: projectId, entry_id: e.entryId, op: e.op } };
   }
 }
+
+export const entryWire = (e: MemoryEntry): unknown => new MemoryEntryDto(e.entryId, e.text, e.savedAt, e.changedAt, e.changedBy, e.threadId, e.threadTitle).toJSON();
 
 export const parseEvent = (raw: unknown): ProductOwnerEventDto | null => ProductOwnerEventDto.fromJSON(raw);

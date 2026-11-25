@@ -2,7 +2,7 @@
 
 import type { FeedStatus } from "../domain/feed-status";
 import type { DigestPage } from "../domain/digest";
-import type { ProductOwnerEvent, Settings, ThreadPage, ThreadSummary } from "../domain/thread";
+import type { MemoryEntry, ProductOwnerEvent, Settings, ThreadPage, ThreadSummary } from "../domain/thread";
 
 export type ProductOwnerErrorCode =
   | "PRODUCT_OWNER_OFF"
@@ -11,6 +11,7 @@ export type ProductOwnerErrorCode =
   | "PRODUCT_OWNER_UNAVAILABLE"
   | "PROJECT_NOT_FOUND"
   | "THREAD_NOT_FOUND"
+  | "MEMORY_ENTRY_NOT_FOUND"
   | "NETWORK_ERROR"
   | "BAD_RESPONSE"
   | "UNKNOWN";
@@ -51,6 +52,11 @@ export interface ProductOwnerGateway {
   stopTurn(threadId: string): Promise<void>;
   /** Answers the renamed thread. */
   renameThread(threadId: string, title: string): Promise<ThreadSummary>;
+  /** The project's memory, the newest first. */
+  memory(projectId: string, signal?: AbortSignal): Promise<readonly MemoryEntry[]>;
+  /** Answers the entry as edited; INVALID_INPUT for empty text or over 4,000 code points. */
+  updateMemoryEntry(entryId: string, text: string): Promise<MemoryEntry>;
+  deleteMemoryEntry(entryId: string): Promise<void>;
 }
 
 /** The page stream's product-owner events for one project; events of another project never arrive. */

@@ -5,7 +5,7 @@
 import { ProductOwnerError, type ProductOwnerEvents, type ProductOwnerGateway } from "../application/ports";
 import { DIGEST_PAGE_SIZE, type Digest, type DigestPage } from "../domain/digest";
 import type { FeedStatus } from "../domain/feed-status";
-import type { MessageItem, ProductOwnerEvent, Settings, ThreadHead, ThreadItem, ThreadPage, ThreadSummary, Turn } from "../domain/thread";
+import { MAX_ENTRY, entryLength, type MemoryEntry, type MessageItem, type ProductOwnerEvent, type Settings, type ThreadHead, type ThreadItem, type ThreadPage, type ThreadSummary, type Turn } from "../domain/thread";
 
 export const PAGE_SIZE = 100;
 export const MAX_MESSAGE = 20000;
@@ -27,6 +27,12 @@ export interface MemoryProductOwner extends ProductOwnerGateway, ProductOwnerEve
   recordDigest(projectId: string, digest: Digest): void;
   /** The server holds this thread of `projectId`, with these items. */
   seedThread(projectId: string, thread: Partial<ThreadSummary> & { threadId: string }, items?: readonly ThreadItem[], sessionId?: string): void;
+  /** The server holds these entries of `projectId` (no event is sent). */
+  seedMemory(projectId: string, entries: readonly MemoryEntry[]): void;
+  /** The product owner saved (or changed) this entry: the server holds it and tells the followers. */
+  remember(projectId: string, entry: MemoryEntry, op: "saved" | "changed"): void;
+  /** The product owner dropped this entry. */
+  forget(entryId: string): void;
   /** The server did this: it changes what it holds and tells every follower of the thread's project. */
   publish(projectId: string, event: ProductOwnerEvent): void;
   /** The thread's turn changes (and the thread event follows). */
@@ -57,6 +63,12 @@ export function memoryProductOwner(): MemoryProductOwner {
   const digests = new Map<string, Digest[]>();
   const followers = new Set<{ projectId: string; onEvent: (e: ProductOwnerEvent) => void; onStatus: (s: FeedStatus) => void }>();
   const stops: string[] = [];
+  const memories = new Map<string, MemoryEntry[]>();
+  const entryProject = (entryId: string): { projectId: string; entries: MemoryEntry[] } => {
+    for (const [projectId, entries] of memories) if (entries.some((e) => e.entryId === entryId)) return { projectId, entries };
+    throw new ProductOwnerError("MEMORY_ENTRY_NOT_FOUND", `no memory entry ${entryId}`);
+  };
+  const newestFirst = (a: MemoryEntry, b: MemoryEntry): number => b.savedAt.getTime() - a.savedAt.getTime();
   let status: FeedStatus = "live";
   let failure: ProductOwnerError | null = null;
   let hold: Promise<void> | null = null;
@@ -116,6 +128,17 @@ export function memoryProductOwner(): MemoryProductOwner {
       known(projectId);
       keep(projectId, digest);
       send(projectId, { type: "digest", digestId: digest.digestId, date: digest.date });
+    },
+    seedMemory: (projectId, entries) => void memories.set(projectId, [...entries]),
+    remember(projectId, entry, op) {
+      const entries = (memories.get(projectId) ?? []).filter((e) => e.entryId !== entry.entryId);
+      memories.set(projectId, [...entries, entry]);
+      send(projectId, { type: "memory", entryId: entry.entryId, op });
+    },
+    forget(entryId) {
+      const { projectId, entries } = entryProject(entryId);
+      memories.set(projectId, entries.filter((e) => e.entryId !== entryId));
+      send(projectId, { type: "memory", entryId, op: "dropped" });
     },
     seedThread(projectId, thread, items = [], sessionId = `s-${thread.threadId}`) {
       const at = new Date(Date.UTC(2026, 10, 23, 9, 0, 0));
@@ -244,6 +267,27 @@ export function memoryProductOwner(): MemoryProductOwner {
       check();
       find(threadId);
       stops.push(threadId);
+    },
+    async memory(projectId, signal) {
+      signal?.throwIfAborted();
+      check();
+      known(projectId);
+      return [...(memories.get(projectId) ?? [])].sort(newestFirst);
+    },
+    async updateMemoryEntry(entryId, text) {
+      check();
+      const { projectId, entries } = entryProject(entryId);
+      if (text.trim() === "" || entryLength(text) > MAX_ENTRY) throw new ProductOwnerError("INVALID_INPUT", "the entry is empty or too long");
+      const entry: MemoryEntry = { ...entries.find((e) => e.entryId === entryId)!, text, changedAt: now(), changedBy: "person" };
+      memories.set(projectId, entries.map((e) => (e.entryId === entryId ? entry : e)));
+      send(projectId, { type: "memory", entryId, op: "changed" });
+      return entry;
+    },
+    async deleteMemoryEntry(entryId) {
+      check();
+      const { projectId, entries } = entryProject(entryId);
+      memories.set(projectId, entries.filter((e) => e.entryId !== entryId));
+      send(projectId, { type: "memory", entryId, op: "dropped" });
     },
     async renameThread(threadId, title) {
       check();

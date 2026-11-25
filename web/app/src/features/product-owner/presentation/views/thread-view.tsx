@@ -62,6 +62,7 @@ export function ThreadView({ presenter, textarea }: { presenter: ThreadPresenter
           <div className="[ thread-empty ]">
             <h2>{vm.empty.heading}</h2>
             <p>{vm.empty.lead}</p>
+            {vm.empty.remembered !== "" && <p className="[ remembered ]">{vm.empty.remembered}</p>}
             <div className="[ starters ]" aria-label="Suggested questions">
               {vm.empty.starters.map((starter, n) => (
                 <button key={starter} type="button" className="[ button ]" disabled={vm.composer.disabled} onClick={() => void presenter.startWith(starter)}>
@@ -151,6 +152,31 @@ function RowView({ row, presenter }: { row: RowViewModel; presenter: ThreadPrese
             <button type="button" className="[ button ]" data-size="sm" onClick={() => void presenter.retry(row.retryItemId)}>
               Try again
             </button>
+          )}
+        </div>
+      );
+    case "memory_note":
+      return (
+        <div className="[ msg-note ]" data-kind={row.op}>
+          <OwnerIcon name="memory" />
+          <span>
+            <b>{row.label}</b> · <q>{row.text}</q>
+          </span>
+          {row.editHref !== null && (
+            <a
+              className="[ act ]"
+              href={row.editHref}
+              onClick={(event) => {
+                if (event.metaKey || event.ctrlKey || event.shiftKey || event.button !== 0) return;
+                // On the page the Memory tab opens in place; elsewhere the link goes to the page.
+                if (presenter.hasMemoryTab) {
+                  event.preventDefault();
+                  presenter.openMemoryEntry(row.entryId);
+                }
+              }}
+            >
+              Edit
+            </a>
           )}
         </div>
       );

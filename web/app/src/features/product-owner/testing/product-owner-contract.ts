@@ -7,7 +7,7 @@ import { ProductOwnerError, type ProductOwnerEvents, type ProductOwnerGateway } 
 import type { ProductOwnerEvent } from "../domain/thread";
 import type { MemoryProductOwner } from "../infrastructure/memory-product-owner";
 import { TIME_ZONE } from "./digest-fixtures";
-import { failure, message, person, summary } from "./fixtures";
+import { entry, failure, memoryNote, message, person, summary } from "./fixtures";
 
 export interface ProductOwnerHarness {
   /** The server's side: the harness data and the stream, seen through the adapter under test. */
@@ -73,6 +73,7 @@ export function productOwnerContract(name: string, make: () => ProductOwnerHarne
         failure({ itemId: "f1", retryItemId: "m9" }),
         { kind: "other" as const, wireKind: "held_action", itemId: "h1", at, text: "Archive task X" },
         { kind: "other" as const, wireKind: "checkpoint", itemId: "c1", at, text: "Summary so far" },
+        memoryNote({ itemId: "mn1", op: "changed", entryId: "e9", text: "Digests at 09:00" }),
       ];
       h.server.seedThread("p1", { threadId: "t1" }, items);
       assert.deepEqual((await h.gateway.thread("t1")).items, items);
@@ -121,6 +122,49 @@ export function productOwnerContract(name: string, make: () => ProductOwnerHarne
       assert.equal(renamed.titleSetByPerson, true);
       await assert.rejects(h.gateway.renameThread("t1", ""), rejectsWith("INVALID_INPUT"));
       await assert.rejects(h.gateway.renameThread("t1", "x".repeat(201)), rejectsWith("INVALID_INPUT"));
+    });
+
+    test("reads a project's memory newest first, never another project's", async () => {
+      const h = setup();
+      const old = entry({ entryId: "old", savedAt: new Date("2026-11-20T10:00:00Z") });
+      const changed = entry({ entryId: "new", savedAt: new Date("2026-11-23T10:00:00Z"), changedAt: new Date("2026-11-24T08:00:00Z"), changedBy: "person", threadId: "t9", threadTitle: "Shaping the digest" });
+      h.server.seedMemory("p1", [old, changed]);
+      h.server.seedMemory("p2", [entry({ entryId: "other" })]);
+      assert.deepEqual(await h.gateway.memory("p1"), [changed, old]);
+      assert.deepEqual(await h.gateway.memory("nope").catch((e: unknown) => (e instanceof ProductOwnerError ? e.code : "?")), "PROJECT_NOT_FOUND");
+    });
+
+    test("edits and deletes a memory entry, and refuses an empty, a long or an unknown one", async () => {
+      const h = setup();
+      h.server.seedMemory("p1", [entry({ entryId: "e1", text: "Old" })]);
+      const edited = await h.gateway.updateMemoryEntry("e1", "New text");
+      assert.equal(edited.text, "New text");
+      assert.equal(edited.changedBy, "person");
+      assert.ok(edited.changedAt);
+      assert.equal((await h.gateway.memory("p1"))[0]!.text, "New text");
+      await assert.rejects(h.gateway.updateMemoryEntry("e1", " "), rejectsWith("INVALID_INPUT"));
+      await assert.rejects(h.gateway.updateMemoryEntry("e1", "x".repeat(4001)), rejectsWith("INVALID_INPUT"));
+      // 4,000 code points that are 8,000 UTF-16 units are accepted.
+      assert.equal((await h.gateway.updateMemoryEntry("e1", "😀".repeat(4000))).text.length, 8000);
+      await h.gateway.deleteMemoryEntry("e1");
+      assert.deepEqual(await h.gateway.memory("p1"), []);
+      await assert.rejects(h.gateway.deleteMemoryEntry("e1"), rejectsWith("MEMORY_ENTRY_NOT_FOUND"));
+      await assert.rejects(h.gateway.updateMemoryEntry("nope", "x"), rejectsWith("MEMORY_ENTRY_NOT_FOUND"));
+    });
+
+    test("tells the project's followers when memory is saved, changed and dropped", async () => {
+      const h = setup();
+      const seen: ProductOwnerEvent[] = [];
+      h.events.follow("p1", (e) => seen.push(e), () => {});
+      h.server.remember("p1", entry({ entryId: "e1" }), "saved");
+      await h.gateway.updateMemoryEntry("e1", "Edited");
+      await h.gateway.deleteMemoryEntry("e1");
+      h.server.remember("p2", entry({ entryId: "e2" }), "saved");
+      assert.deepEqual(seen, [
+        { type: "memory", entryId: "e1", op: "saved" },
+        { type: "memory", entryId: "e1", op: "changed" },
+        { type: "memory", entryId: "e1", op: "dropped" },
+      ]);
     });
 
     test("follows its project's events, and not another project's", () => {
