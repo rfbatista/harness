@@ -10,6 +10,7 @@ import (
 
 	"github.com/chromedp/cdproto/page"
 	"github.com/chromedp/chromedp"
+	"github.com/chromedp/chromedp/kb"
 )
 
 // Review tests for the digest time in the browser: gaps found in review of
@@ -154,5 +155,79 @@ func TestTheMemoryTabAndTheDigestsTabKeepTheAddressInStepInTheWebUI_EndToEnd(t *
 	)
 	if got := p.text(t, selected); !strings.HasPrefix(strings.TrimSpace(got), "Memory") {
 		t.Errorf("the address names the Memory tab and the %q tab is open", strings.TrimSpace(got))
+	}
+}
+
+// Clear time clicked straight after typing sends only the clear: the typed
+// time is never saved on the way, so the scheduler never sees it.
+func TestClearTimeRightAfterTypingSendsOnlyTheClearInTheWebUI_EndToEnd(t *testing.T) {
+	w, _ := newPODigestWeb(t)
+	w.setDigestTime("09:00")
+	p := newPerson(t)
+	project := w.url + "/projects/" + w.project
+
+	p.run(t, "the person opens the Settings page with 09:00 set",
+		recordDigestTimeWrites(),
+		chromedp.EmulateViewport(1440, 900),
+		chromedp.Navigate(project+"/settings"),
+		waitFor(`!!`+digestInput+` && !`+digestInput+`.disabled && `+digestInput+`.value === '09:00'`),
+	)
+	var box []float64
+	p.run(t, "read the input's box",
+		chromedp.ScrollIntoView(`#digest-time`, chromedp.ByQuery),
+		chromedp.Evaluate(`(() => { const r = `+digestInput+`.getBoundingClientRect(); return [r.left, r.top, r.height]; })()`, &box),
+	)
+	clear := `[...document.querySelectorAll('#product-owner .digest-time button')].find(b => b.textContent.trim() === 'Clear time')`
+	var at []float64
+	p.run(t, "the person types 10:45",
+		chromedp.MouseClickXY(box[0]+10, box[1]+box[2]/2),
+		chromedp.KeyEvent("1045"),
+		waitFor(digestInput+`.value === '10:45'`),
+		chromedp.Evaluate(`(() => { const r = `+clear+`.getBoundingClientRect(); return [r.left + r.width / 2, r.top + r.height / 2]; })()`, &at),
+	)
+	p.run(t, "then clicks Clear time, and the time is cleared",
+		chromedp.MouseClickXY(at[0], at[1]),
+		waitFor(`/no digest is recorded until a time is set/.test(`+digestNote+`)`),
+	)
+	if got := w.settings().DigestTime; got != nil {
+		t.Errorf("the server holds the digest time %s after Clear time, want none", *got)
+	}
+	if got := p.text(t, `JSON.stringify(window.__digestTimes)`); got != `[""]` {
+		t.Errorf("the web UI sent the digest times %s, want only the clear [\"\"]", got)
+	}
+}
+
+// Escape in the time input gives the saved time back, and saves nothing.
+func TestEscapeInTheDigestTimeInputGivesTheSavedTimeBackInTheWebUI_EndToEnd(t *testing.T) {
+	w, _ := newPODigestWeb(t)
+	w.setDigestTime("09:00")
+	p := newPerson(t)
+	project := w.url + "/projects/" + w.project
+
+	p.run(t, "the person opens the Settings page with 09:00 set",
+		recordDigestTimeWrites(),
+		chromedp.EmulateViewport(1440, 900),
+		chromedp.Navigate(project+"/settings"),
+		waitFor(`!!`+digestInput+` && !`+digestInput+`.disabled && `+digestInput+`.value === '09:00'`),
+	)
+	var box []float64
+	p.run(t, "read the input's box",
+		chromedp.ScrollIntoView(`#digest-time`, chromedp.ByQuery),
+		chromedp.Evaluate(`(() => { const r = `+digestInput+`.getBoundingClientRect(); return [r.left, r.top, r.height]; })()`, &box),
+	)
+	p.run(t, "the person types 10:45, presses Escape, then leaves the input",
+		chromedp.MouseClickXY(box[0]+10, box[1]+box[2]/2),
+		chromedp.KeyEvent("1045"),
+		waitFor(digestInput+`.value === '10:45'`),
+		chromedp.KeyEvent(kb.Escape),
+		waitFor(digestInput+`.value === '09:00'`),
+		chromedp.MouseClickXY(5, 5),
+		chromedp.Sleep(500*time.Millisecond),
+	)
+	if got := p.text(t, `JSON.stringify(window.__digestTimes)`); got != `[]` {
+		t.Errorf("the web UI sent the digest times %s after Escape, want none", got)
+	}
+	if got := w.settings().DigestTime; got == nil || *got != "09:00" {
+		t.Errorf("the server holds the digest time %v, want 09:00", got)
 	}
 }

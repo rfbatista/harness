@@ -49,7 +49,14 @@ export function DigestTimeView({ presenter }: { presenter: DigestTimePresenter }
           </div>
           <div className="[ cluster ]">
             {vm.canClear && (
-              <button ref={clear} type="button" className="[ button ]" data-size="sm" onClick={() => void presenter.clear()}>
+              <button
+                ref={clear}
+                type="button"
+                className="[ button ]"
+                data-size="sm"
+                // The input keeps focus while Clear time is pressed, in every browser (Safari and Firefox on macOS do not focus a clicked button): no blur, no save of the typed time on the way.
+                onMouseDown={(event) => event.preventDefault()}
+                onClick={() => void presenter.clear()}>
                 Clear time
               </button>
             )}
