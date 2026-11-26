@@ -136,6 +136,17 @@ func detectGates(r *checkoutReader) map[domain.GateKind]domain.GateDefault {
 
 var dispatchesOnArg = regexp.MustCompile(`\$\{?1\b`)
 
+// namedInScript says whether a script that dispatches on its first argument
+// names kind: as a case label (`build)`, `lint | build)`, `(build)`) or in a
+// test of the argument (`[ "$1" = build ]`, `[[ $1 == "build" ]]`).
+func namedInScript(script string, kind domain.GateKind) bool {
+	name := regexp.QuoteMeta(string(kind))
+	alt := "(?:" + name + "|" + regexp.QuoteMeta(strings.ReplaceAll(string(kind), "_", "-")) + ")"
+	label := regexp.MustCompile(`(?m)(?:^|[\s(|;])` + alt + `\s*[|)]`)
+	test := regexp.MustCompile(`\$\{?1\}?"?\s*==?\s*["']?` + alt + `["']?(?:\s|;|\]|$)`)
+	return label.MatchString(script) || test.MatchString(script)
+}
+
 // detectCheckSh: a script that dispatches on its first argument and names
 // gate kinds fills each named kind as "./check.sh <kind>"; any other script
 // fills test as "./check.sh".
@@ -147,8 +158,7 @@ func detectCheckSh(r *checkoutReader, g gateSet) {
 	named := false
 	if dispatchesOnArg.MatchString(script) {
 		for _, kind := range append(append([]domain.GateKind{}, domain.RequiredGateKinds...), domain.OptionalGateKinds...) {
-			word := regexp.MustCompile(`(^|[^a-z_-])(` + regexp.QuoteMeta(string(kind)) + `|` + regexp.QuoteMeta(strings.ReplaceAll(string(kind), "_", "-")) + `)\)`)
-			if word.MatchString(script) {
+			if namedInScript(script, kind) {
 				g.fill(kind, "./check.sh "+string(kind), "check.sh")
 				named = true
 			}
