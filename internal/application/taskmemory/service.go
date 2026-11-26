@@ -65,8 +65,13 @@ func (s *Service) check(ctx context.Context, taskID, repositoryID string) (*doma
 	if err != nil {
 		return nil, err
 	}
-	if _, err := s.repos.GetRepository(ctx, repositoryID); err != nil {
+	repo, err := s.repos.GetRepository(ctx, repositoryID)
+	if err != nil {
 		return nil, err
+	}
+	if repo.ProjectID != task.ProjectID {
+		// A memory is a task's in a repository of its own project.
+		return nil, &domain.StructuredError{Code: "REPOSITORY_NOT_FOUND", Message: "repository not found in the task's project"}
 	}
 	return task, nil
 }
