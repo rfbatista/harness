@@ -190,6 +190,7 @@ func (s *Service) StartInteractive(ctx context.Context, req InteractiveRequest) 
 	})
 	if err == nil {
 		s.recordStart(ctx, id, p, opening)
+		s.keepGuard(ctx, created)
 		s.adoptCleanup(id, withViolations(p.cleanup, s.collectViolations(id, p.cfg.WorkingDir, p.sandbox.facts)))
 		s.courier.setTurn(id, startTurn(spec))
 		s.publish(id, SessionEvent{Type: "status", Status: domain.SessionRunning, Text: startedText(runsOn), At: time.Now()})
@@ -326,6 +327,7 @@ func (s *Service) ResumeInteractive(ctx context.Context, req ports.ResumeRequest
 	s.withAttribution(&cfg)
 	s.rewireTokenSavers(ctx, sess, &cfg)
 	s.resumeMemoryBudget(ctx, sess, &cfg)
+	s.keepGuard(ctx, sess)
 	trail.mark(&cfg, domain.PieceRuleset, "Token saver rules", "Token savers")
 	// A resume starts under the rules now in force, not the ones it started
 	// under, and records them.

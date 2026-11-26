@@ -143,7 +143,7 @@ Skills you write for a repository go in task/instruction-drafts/<repository>/<sk
 - mcp__task__propose_instruction_files — submit skills you drafted in task/instruction-drafts/<repository>/ for the person to approve as the repository's instruction files
 
 These tools always act on this task; they take no project or task id.`)
-	return b.String() + "\n\n" + resourcesSection(counts) + "\n\n" + notificationsSection + "\n\n" + branchesSection + "\n\n" + askSection(role == domain.RoleDelegate)
+	return b.String() + "\n\n" + resourcesSection(counts) + "\n\n" + notificationsSection + "\n\n" + branchesSection + "\n\n" + gatesSection + "\n\n" + askSection(role == domain.RoleDelegate)
 }
 
 // moveDocsLine tells a session on a task who moves its documents to project
@@ -203,6 +203,18 @@ const branchesSection = `A git push, like any branch action, waits for the perso
 the branch or the remote. To ask for one without waiting on it:
 
 - mcp__task__push_branch — push a branch of your repository to a remote (default origin, under the branch's own name unless you give remote_branch): it files the request and returns at once, never forces, and the answer arrives as a new turn starting with [branch request …]: pushed, push failed (with the reason) or denied (with the person's note)`
+
+// gatesSection tells a session how it is gated (ADR 0012, 0014): the harness
+// runs the repository's gates, not the agent, and a gated session declares done
+// through declare_done.
+const gatesSection = `A session in implement or test mode, and any session whose branch has a diff against
+its base, is gated: the harness itself runs the repository's gates (build, test,
+lint and the rest the person configured) in your worktree, in your sandbox, and
+only a green run accepts your declaration that you are done. A session that is
+not gated is accepted without a run:
+
+- mcp__task__declare_done — declare the work done: the harness runs every gate; green accepts it, red refuses it with GATES_RED and each failing gate's command, exit code, duration and output, a missing required gate with REQUIRED_GATE_MISSING naming the kinds. Other checks may refuse it too, and every refusal is in the answer. Consecutive red declarations count toward a retry limit; at the limit the session is stopped and the person is told
+- mcp__task__run_gates — practice before you declare: run all gates, or only the kinds you name (for example test), and read the result; it is recorded but never counts toward the retry limit`
 
 // shellSection names the session's virtual shell, the folder holding its
 // task's and project's resources as files; its README.md maps the layout.

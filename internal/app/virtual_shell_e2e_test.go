@@ -31,6 +31,7 @@ import (
 	"operators-mcp/internal/application/branchgate"
 	"operators-mcp/internal/application/branchwatch"
 	"operators-mcp/internal/application/contextmap"
+	"operators-mcp/internal/application/gateruns"
 	"operators-mcp/internal/application/gitcredentials/gitcredentialstest"
 	"operators-mcp/internal/application/notifications"
 	"operators-mcp/internal/application/orchestration"
@@ -71,6 +72,8 @@ type shellE2E struct {
 	art      *artifacts.Service
 	shells   *vfs.Service
 	rules    *archrules.Service
+	gateRuns *gateruns.Service
+	declarer *gateruns.Declarer
 	gate     *branchgate.Service
 	watch    *branchwatch.Service
 	pushes   ports.PushRecords
@@ -99,7 +102,7 @@ func (e *shellE2E) boot() {
 			}
 			return workspaces.NewOriginFetcher(git, gitcredentialstest.New())
 		}),
-		fx.Populate(&e.orch, &e.plan, &e.channel, &e.art, &e.cat, &e.sessions, &e.shells, &e.rules, &e.gate, &e.watch, &e.pushes, &e.wgit, &e.notes, &e.repoAgents, &e.db, &e.contextMap, &e.agentSystem),
+		fx.Populate(&e.orch, &e.plan, &e.channel, &e.art, &e.cat, &e.sessions, &e.shells, &e.rules, &e.gate, &e.watch, &e.pushes, &e.wgit, &e.notes, &e.repoAgents, &e.db, &e.contextMap, &e.agentSystem, &e.gateRuns, &e.declarer),
 		fx.NopLogger,
 	)
 	if err := e.app.Start(e.ctx); err != nil {
@@ -116,9 +119,9 @@ func (e *shellE2E) serve() {
 		Sessions: e.orch, Planning: e.plan, TaskResources: e.plan, TaskComments: e.plan, Artifacts: e.art, Shells: e.shells,
 		RepositoryArchitectures: e.cat.RepositoryArchitectures, TaskMemories: e.cat.TaskMemories, ContextMaps: e.contextMap, InstructionProposals: e.cat.InstructionProposals, InstructionProposalDecisions: e.cat.InstructionProposals, ArchitectureRules: e.rules, BranchGate: e.gate, SessionBranches: e.watch, WorktreeGit: e.wgit,
 		Projects: e.cat.Projects, DesignSystems: e.cat.DesignSystems, RepositoryAgents: e.repoAgents,
-		Notifications: e.notes, InterruptedResumer: e.notes, Settings: e.cat.Settings,
+		Notifications: e.notes, InterruptedResumer: e.notes, Settings: e.cat.Settings, GateRuns: e.gateRuns,
 	})))
-	mux.Handle(mcpsession.PathPrefix, mcpsession.TaskHandler(sessionTaskTools(e.cat, e.orch, e.plan, e.sessions, e.art, e.channel, nil, nil, tooling.WithBranchPush(e.gate))))
+	mux.Handle(mcpsession.PathPrefix, mcpsession.TaskHandler(sessionTaskTools(e.cat, e.orch, e.plan, e.sessions, e.art, e.channel, nil, nil, tooling.WithBranchPush(e.gate), tooling.WithDeclarations(e.declarer))))
 	e.srv = httptest.NewServer(mux)
 	e.t.Cleanup(e.srv.Close)
 }

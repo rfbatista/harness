@@ -296,6 +296,10 @@ type Service struct {
 	// MemoryBudgets resolves the orçamento de memória a session starts or
 	// resumes with (ADR 0008). Nil: the global default, 4 GB.
 	MemoryBudgets ports.SessionMemoryBudget
+	// AgentSystem and GuardSessions give a session its Guard configuration
+	// once, when it starts or resumes (ADR 0011). Nil: no session is gated.
+	AgentSystem   ports.AgentSystemSettings
+	GuardSessions ports.GuardSessions
 	// TokenSavers says which token savers a session runs with, when it is
 	// prepared (ADR 0015). Nil: sessions run with none.
 	TokenSavers ports.SessionTokenSavers
@@ -485,6 +489,7 @@ func (s *Service) Start(ctx context.Context, req StartRequest) (*domain.Session,
 	// descendancy of its agent CLI only.
 	s.watchMemory(sess.ID(), req.TicketID, p.memory.bytes, sess.ID(), 0)
 	s.recordStart(ctx, sess.ID(), p, req.Task)
+	s.keepGuard(ctx, created)
 	// The Branches list takes its starting snapshot before the agent acts.
 	s.announce(domain.SessionWorktreeProvisioned{SessionID: sess.ID()})
 	if s.commitCheckReason(sess.ID()) != "" {
