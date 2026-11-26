@@ -508,7 +508,7 @@ func (s *Service) Start(ctx context.Context, req StartRequest) (*domain.Session,
 type prepareInput struct {
 	// ID is the session id; empty mints one. A caller sets it when it needs
 	// the id before provisioning, e.g. to name the branch after it.
-	ID           string
+	ID string
 	// Guard is the guard configuration the session starts or resumes with; its
 	// protected paths go into the sandbox policy (ADR 0012). Nil protects none.
 	Guard        *domain.GuardConfig
