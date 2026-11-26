@@ -8,7 +8,6 @@ import { AGENT_NAMES, T0, memoryKill, memorySample, session } from "../../testin
 import { BoardPresenter } from "./board-presenter";
 
 let now = new Date(T0 + 3_600_000);
-const at = (offsetMs: number) => now.getTime() + offsetMs;
 
 function manualScheduler() {
   let elapsed = 0;
@@ -144,10 +143,11 @@ describe("whiteboard edges: the bar's sum and badges (stories 13, 14)", () => {
   test("a session with a kill and no sample still gets its ended badge on the bar", async () => {
     const a = delegate();
     const { presenter, source } = await board([architect, a]);
-    assert.equal(presenter.viewModel.memory, null);
+    const bar = () => presenter.viewModel.memory;
+    assert.equal(bar(), null);
     source.emit({ kind: "memory-killed", kill: memoryKill(a.id, now.getTime()) });
-    assert.equal(presenter.viewModel.memory?.ended, 1);
-    assert.equal(presenter.viewModel.memory?.total, null);
+    assert.equal(bar()?.ended, 1);
+    assert.equal(bar()?.total, null);
   });
 
   test("the sentence says singular and plural as the bar's copy does", async () => {

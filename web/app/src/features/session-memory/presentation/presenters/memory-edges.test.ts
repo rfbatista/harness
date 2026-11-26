@@ -115,9 +115,10 @@ describe("no chip (story 9)", () => {
   test("a read that rejects on the first read leaves no chip, and the first sample brings it", async () => {
     const w = world(new Error("500"));
     await w.presenter.start();
-    assert.equal(w.presenter.viewModel.view, null);
+    const view = () => w.presenter.viewModel.view;
+    assert.equal(view(), null);
     w.stream.sample(sample(0.3));
-    assert.equal(w.presenter.viewModel.view?.num, "1.2");
+    assert.equal(view()?.num, "1.2");
   });
 
   test("the popover cannot open without a chip, so there is no popover on a 404 or a null sample", async () => {
