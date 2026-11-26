@@ -20,6 +20,11 @@ type AgentSystemSettings interface {
 
 	// ProjectView is the project's defaults: what it sets, and the effective
 	// configuration with sources.
+	// RepositoryView is the repository's effective configuration with sources
+	// and missing required gates, and the overrides it sets itself.
+	RepositoryView(ctx context.Context, projectID, repositoryID string) (domain.AgentSystemView, error)
+	// SaveRepository sets or resets (null) repository overrides, as SaveProject.
+	SaveRepository(ctx context.Context, projectID, repositoryID string, patch map[string]json.RawMessage) (domain.AgentSystemView, error)
 	ProjectView(ctx context.Context, projectID string) (domain.AgentSystemView, error)
 	// SaveProject sets (a value) or resets (null) project fields by path, all
 	// or none: a refused save is an *domain.AgentSystemValidationError and
@@ -41,6 +46,8 @@ type AgentSystemStore interface {
 	Values(ctx context.Context, level domain.AgentSystemSource, ownerID string) (domain.AgentSystemValues, error)
 	// Apply stores set and removes reset in one transaction.
 	Apply(ctx context.Context, level domain.AgentSystemSource, ownerID, projectID string, set domain.AgentSystemValues, reset []string) error
-	// DeleteOwner removes everything a project or repository set.
+	// DeleteOwner removes everything one project or repository set itself.
 	DeleteOwner(ctx context.Context, level domain.AgentSystemSource, ownerID string) error
+	// DeleteProject removes everything the project and its repositories set.
+	DeleteProject(ctx context.Context, projectID string) error
 }

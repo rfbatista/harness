@@ -7,6 +7,7 @@ import (
 
 	"encoding/json"
 
+	"operators-mcp/internal/adapter/out/eventbus"
 	"operators-mcp/internal/adapter/out/persistence/sqlite"
 	"operators-mcp/internal/application/agentsystem"
 	"operators-mcp/internal/domain"
@@ -298,5 +299,122 @@ func TestEachSaveIsAnnouncedOnTheEventBusAndTheProjectFeed(t *testing.T) {
 	}
 	if len(rec.changes) != 1 || rec.changes[0].AgentSystemSettings == nil || rec.changes[0].ProjectID() != "p1" {
 		t.Fatalf("feed changes = %+v", rec.changes)
+	}
+}
+
+func TestPrecedenceIsRepositoryThenProjectThenHarnessPerField(t *testing.T) {
+	svc := agentsystem.New(world())
+	ctx := context.Background()
+	if _, err := svc.SaveProject(ctx, "p1", patch(t, map[string]string{
+		"guard.retry_limit": "5", "guard.protected_paths": `["a/**","b/**"]`, "review.critic.enabled": "false",
+	})); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := svc.SaveRepository(ctx, "p1", "r1", patch(t, map[string]string{
+		"guard.retry_limit": "8", "guard.protected_paths": `["c/**"]`,
+		"review.visual_qa.ui": `{"start_command":"npm start","url":"http://localhost:3000","routes":["/"],"viewports":["1280x800"],"ui_paths":["web/**"]}`,
+	})); err != nil {
+		t.Fatal(err)
+	}
+
+	r1, _ := svc.Effective(ctx, "p1", "r1")
+	if r1.Guard.RetryLimit.Value != 8 || r1.Guard.RetryLimit.Source != domain.SourceRepository {
+		t.Errorf("r1 retry limit = %+v, want 8 from repository", r1.Guard.RetryLimit)
+	}
+	if got := r1.Guard.ProtectedPaths; len(got.Value) != 1 || got.Value[0] != "c/**" || got.Source != domain.SourceRepository {
+		t.Errorf("r1 protected paths = %+v, want the repository's list alone, never merged", got)
+	}
+	if r1.Review.Critic.Enabled.Value || r1.Review.Critic.Enabled.Source != domain.SourceProject {
+		t.Errorf("r1 critic enabled = %+v, want off from project", r1.Review.Critic.Enabled)
+	}
+	if ui := r1.Review.VisualQA.UI; ui.Value == nil || ui.Value.StartCommand != "npm start" || ui.Source != domain.SourceRepository {
+		t.Errorf("r1 visual_qa.ui = %+v", ui)
+	}
+	if r1.Learn.ContextMap.Enabled.Source != domain.SourceHarness {
+		t.Errorf("r1 context map source = %q, want harness", r1.Learn.ContextMap.Enabled.Source)
+	}
+
+	r2, _ := svc.Effective(ctx, "p1", "r2")
+	if r2.Guard.RetryLimit.Value != 5 || r2.Guard.RetryLimit.Source != domain.SourceProject || r2.Review.VisualQA.UI.Value != nil {
+		t.Errorf("sibling r2 = %+v / %+v, want the project's default and no UI", r2.Guard.RetryLimit, r2.Review.VisualQA.UI)
+	}
+}
+
+func TestResettingAnOverrideFollowsTheProjectDefaultAgain(t *testing.T) {
+	svc := agentsystem.New(world())
+	ctx := context.Background()
+	_, _ = svc.SaveProject(ctx, "p1", patch(t, map[string]string{"guard.retry_limit": "5"}))
+	_, _ = svc.SaveRepository(ctx, "p1", "r1", patch(t, map[string]string{"guard.retry_limit": "8", "guard.lockfile_rule.enabled": "false"}))
+
+	if _, err := svc.SaveRepository(ctx, "p1", "r1", patch(t, map[string]string{"guard.retry_limit": "null"})); err != nil {
+		t.Fatal(err)
+	}
+	_, _ = svc.SaveProject(ctx, "p1", patch(t, map[string]string{"guard.retry_limit": "6"}))
+
+	got, _ := svc.Effective(ctx, "p1", "r1")
+	if got.Guard.RetryLimit.Value != 6 || got.Guard.RetryLimit.Source != domain.SourceProject {
+		t.Errorf("retry limit = %+v, want the project's later 6", got.Guard.RetryLimit)
+	}
+	if got.Guard.LockfileRule.Enabled.Value || got.Guard.LockfileRule.Enabled.Source != domain.SourceRepository {
+		t.Errorf("resetting one override changed another: %+v", got.Guard.LockfileRule.Enabled)
+	}
+}
+
+func TestARepositoryViewHoldsItsOwnOverridesAndAnnouncesTheRepository(t *testing.T) {
+	d := world()
+	rec := &recorder{}
+	d.Events, d.Feed = rec, rec
+	svc := agentsystem.New(d)
+
+	view, err := svc.SaveRepository(context.Background(), "p1", "r1", patch(t, map[string]string{"guard.retry_limit": "8"}))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(view.Values["guard.retry_limit"]) != "8" || len(view.Values) != 1 || len(view.Effective.MissingRequiredGates) != 5 {
+		t.Fatalf("view = %+v", view)
+	}
+	if len(rec.events) != 1 || rec.events[0] != (domain.AgentSystemSettingsChanged{ProjectID: "p1", RepositoryID: "r1"}) {
+		t.Fatalf("events = %+v", rec.events)
+	}
+	if rec.changes[0].AgentSystemSettings.RepositoryID != "r1" {
+		t.Fatalf("feed = %+v", rec.changes[0].AgentSystemSettings)
+	}
+}
+
+func TestARepositorySaveIsRefusedForARepositoryOfAnotherProject(t *testing.T) {
+	svc := agentsystem.New(world())
+	_, err := svc.SaveRepository(context.Background(), "p1", "other", patch(t, map[string]string{"guard.retry_limit": "8"}))
+	var se *domain.StructuredError
+	if !errors.As(err, &se) || se.Code != "REPOSITORY_NOT_FOUND" {
+		t.Fatalf("error = %v", err)
+	}
+}
+
+func TestDeletingARepositoryOrProjectRemovesWhatItSet(t *testing.T) {
+	d := world()
+	bus := eventbus.New()
+	svc := agentsystem.New(d)
+	svc.Subscribe(bus)
+	ctx := context.Background()
+	_, _ = svc.SaveProject(ctx, "p1", patch(t, map[string]string{"guard.retry_limit": "5"}))
+	_, _ = svc.SaveRepository(ctx, "p1", "r1", patch(t, map[string]string{"guard.retry_limit": "8"}))
+	_, _ = svc.SaveRepository(ctx, "p1", "r2", patch(t, map[string]string{"guard.retry_limit": "9"}))
+
+	_ = bus.Publish(ctx, domain.RepositoryDeleted{RepositoryID: "r1", ProjectID: "p1"})
+	if v, _ := d.Store.Values(ctx, domain.SourceRepository, "r1"); len(v) != 0 {
+		t.Errorf("r1 still holds %v", v)
+	}
+	if v, _ := d.Store.Values(ctx, domain.SourceRepository, "r2"); len(v) != 1 {
+		t.Errorf("r2 lost its override: %v", v)
+	}
+
+	_ = bus.Publish(ctx, domain.ProjectDeleted{ProjectID: "p1"})
+	for _, c := range []struct {
+		level domain.AgentSystemSource
+		id    string
+	}{{domain.SourceProject, "p1"}, {domain.SourceRepository, "r2"}} {
+		if v, _ := d.Store.Values(ctx, c.level, c.id); len(v) != 0 {
+			t.Errorf("%s %s still holds %v", c.level, c.id, v)
+		}
 	}
 }

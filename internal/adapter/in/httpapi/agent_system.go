@@ -37,6 +37,26 @@ func (h *Handler) handlePatchProjectAgentSystem(c echo.Context) error {
 	return agentSystemAnswer(c, view, err)
 }
 
+func (h *Handler) handleGetRepositoryAgentSystem(c echo.Context) error {
+	if h.agentSystem == nil {
+		return errAgentSystemOff
+	}
+	view, err := h.agentSystem.RepositoryView(c.Request().Context(), c.Param("project"), c.Param("repository"))
+	return agentSystemAnswer(c, view, err)
+}
+
+func (h *Handler) handlePatchRepositoryAgentSystem(c echo.Context) error {
+	if h.agentSystem == nil {
+		return errAgentSystemOff
+	}
+	patch, err := agentSystemPatch(c)
+	if err != nil {
+		return err
+	}
+	view, err := h.agentSystem.SaveRepository(c.Request().Context(), c.Param("project"), c.Param("repository"), patch)
+	return agentSystemAnswer(c, view, err)
+}
+
 func agentSystemPatch(c echo.Context) (map[string]json.RawMessage, error) {
 	var patch map[string]json.RawMessage
 	if err := json.NewDecoder(c.Request().Body).Decode(&patch); err != nil || patch == nil {

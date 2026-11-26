@@ -186,6 +186,8 @@ func NewRouter(h *Handler, opts ...Option) *echo.Echo {
 	// agent sandbox settings (the Agent isolation page)
 	g.GET("/projects/:project/agent-system", h.handleGetProjectAgentSystem)
 	g.PATCH("/projects/:project/agent-system", h.handlePatchProjectAgentSystem)
+	g.GET("/projects/:project/repositories/:repository/agent-system", h.handleGetRepositoryAgentSystem)
+	g.PATCH("/projects/:project/repositories/:repository/agent-system", h.handlePatchRepositoryAgentSystem)
 	g.GET("/get_sandbox_settings", h.handleGetSandboxSettings)
 	g.POST("/set_sandbox_enabled", h.handleSetSandboxEnabled)
 	g.POST("/add_sandbox_path", h.handleAddSandboxPath)

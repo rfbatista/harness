@@ -6,6 +6,7 @@ package agentsystem
 import (
 	"context"
 	"encoding/json"
+	"slices"
 
 	"operators-mcp/internal/domain"
 	"operators-mcp/internal/ports"
@@ -47,21 +48,35 @@ func (s *Service) defaults(_ context.Context, _ string) domain.AgentSystemHarnes
 	return domain.AgentSystemHarnessDefaults{ReviewModel: s.d.ReviewModel()}
 }
 
+// checkRepository refuses a repository that is not in the project.
+func (s *Service) checkRepository(ctx context.Context, projectID, repositoryID string) error {
+	if r := s.d.Repositories.Get(ctx, repositoryID); r == nil || r.ProjectID != projectID {
+		return &domain.StructuredError{Code: "REPOSITORY_NOT_FOUND", Message: "repository not found: " + repositoryID}
+	}
+	return nil
+}
+
 // Effective implements ports.AgentSystemSettings.
 func (s *Service) Effective(ctx context.Context, projectID, repositoryID string) (domain.EffectiveAgentSystem, error) {
 	if err := s.checkProject(ctx, projectID); err != nil {
 		return domain.EffectiveAgentSystem{}, err
 	}
-	if repositoryID != "" {
-		if r := s.d.Repositories.Get(ctx, repositoryID); r == nil || r.ProjectID != projectID {
-			return domain.EffectiveAgentSystem{}, &domain.StructuredError{Code: "REPOSITORY_NOT_FOUND", Message: "repository not found: " + repositoryID}
-		}
-	}
 	project, err := s.d.Store.Values(ctx, domain.SourceProject, projectID)
 	if err != nil {
 		return domain.EffectiveAgentSystem{}, err
 	}
-	eff := domain.ResolveAgentSystem(s.defaults(ctx, repositoryID), domain.AgentSystemLevel{Source: domain.SourceProject, Values: project})
+	levels := []domain.AgentSystemLevel{{Source: domain.SourceProject, Values: project}}
+	if repositoryID != "" {
+		if err := s.checkRepository(ctx, projectID, repositoryID); err != nil {
+			return domain.EffectiveAgentSystem{}, err
+		}
+		own, err := s.d.Store.Values(ctx, domain.SourceRepository, repositoryID)
+		if err != nil {
+			return domain.EffectiveAgentSystem{}, err
+		}
+		levels = slices.Insert(levels, 0, domain.AgentSystemLevel{Source: domain.SourceRepository, Values: own})
+	}
+	eff := domain.ResolveAgentSystem(s.defaults(ctx, repositoryID), levels...)
 	if repositoryID == "" {
 		eff.MissingRequiredGates = nil // no checkout to detect from: a project has no gates to miss
 	}
@@ -70,11 +85,24 @@ func (s *Service) Effective(ctx context.Context, projectID, repositoryID string)
 
 // ProjectView implements ports.AgentSystemSettings.
 func (s *Service) ProjectView(ctx context.Context, projectID string) (domain.AgentSystemView, error) {
-	eff, err := s.Effective(ctx, projectID, "")
+	return s.view(ctx, projectID, "")
+}
+
+// RepositoryView implements ports.AgentSystemSettings.
+func (s *Service) RepositoryView(ctx context.Context, projectID, repositoryID string) (domain.AgentSystemView, error) {
+	return s.view(ctx, projectID, repositoryID)
+}
+
+func (s *Service) view(ctx context.Context, projectID, repositoryID string) (domain.AgentSystemView, error) {
+	eff, err := s.Effective(ctx, projectID, repositoryID)
 	if err != nil {
 		return domain.AgentSystemView{}, err
 	}
-	values, err := s.d.Store.Values(ctx, domain.SourceProject, projectID)
+	level, owner := domain.SourceProject, projectID
+	if repositoryID != "" {
+		level, owner = domain.SourceRepository, repositoryID
+	}
+	values, err := s.d.Store.Values(ctx, level, owner)
 	return domain.AgentSystemView{Effective: eff, Values: values}, err
 }
 
@@ -83,15 +111,46 @@ func (s *Service) SaveProject(ctx context.Context, projectID string, patch map[s
 	if err := s.checkProject(ctx, projectID); err != nil {
 		return domain.AgentSystemView{}, err
 	}
+	return s.save(ctx, projectID, "", patch)
+}
+
+// SaveRepository implements ports.AgentSystemSettings.
+func (s *Service) SaveRepository(ctx context.Context, projectID, repositoryID string, patch map[string]json.RawMessage) (domain.AgentSystemView, error) {
+	if err := s.checkProject(ctx, projectID); err != nil {
+		return domain.AgentSystemView{}, err
+	}
+	if err := s.checkRepository(ctx, projectID, repositoryID); err != nil {
+		return domain.AgentSystemView{}, err
+	}
+	return s.save(ctx, projectID, repositoryID, patch)
+}
+
+// save validates the whole patch, stores it in one transaction, announces it
+// and answers the level's new view.
+func (s *Service) save(ctx context.Context, projectID, repositoryID string, patch map[string]json.RawMessage) (domain.AgentSystemView, error) {
 	set, reset, err := domain.ValidateAgentSystemPatch(patch)
 	if err != nil {
 		return domain.AgentSystemView{}, err
 	}
-	if err := s.d.Store.Apply(ctx, domain.SourceProject, projectID, projectID, set, reset); err != nil {
+	level, owner := domain.SourceProject, projectID
+	if repositoryID != "" {
+		level, owner = domain.SourceRepository, repositoryID
+	}
+	if err := s.d.Store.Apply(ctx, level, owner, projectID, set, reset); err != nil {
 		return domain.AgentSystemView{}, err
 	}
-	s.announce(ctx, projectID, "")
-	return s.ProjectView(ctx, projectID)
+	s.announce(ctx, projectID, repositoryID)
+	return s.view(ctx, projectID, repositoryID)
+}
+
+// Subscribe removes what a deleted project or repository set.
+func (s *Service) Subscribe(sub ports.EventSubscriber) {
+	ports.On(sub, func(ctx context.Context, ev domain.ProjectDeleted) error {
+		return s.d.Store.DeleteProject(ctx, ev.ProjectID)
+	})
+	ports.On(sub, func(ctx context.Context, ev domain.RepositoryDeleted) error {
+		return s.d.Store.DeleteOwner(ctx, domain.SourceRepository, ev.RepositoryID)
+	})
 }
 
 // announce tells the event bus and the project feed that settings changed.

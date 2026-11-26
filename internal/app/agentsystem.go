@@ -16,7 +16,7 @@ import (
 // SQLite rows, the review-mode model as the critic's default, and the event
 // bus and project feed that announce a save.
 func newAgentSystem(db *gorm.DB, cat catalog.Catalog, orch *orchestration.Service) *agentsystem.Service {
-	return agentsystem.New(agentsystem.Deps{
+	svc := agentsystem.New(agentsystem.Deps{
 		Store:        sqlite.NewAgentSystemRepository(db),
 		Projects:     projectLookup{cat},
 		Repositories: repositoryLookup{cat},
@@ -26,6 +26,8 @@ func newAgentSystem(db *gorm.DB, cat catalog.Catalog, orch *orchestration.Servic
 		Events: cat.Bus,
 		Feed:   orch,
 	})
+	svc.Subscribe(cat.Bus)
+	return svc
 }
 
 type projectLookup struct{ cat catalog.Catalog }

@@ -73,3 +73,8 @@ func (r *AgentSystemRepository) Apply(ctx context.Context, level domain.AgentSys
 func (r *AgentSystemRepository) DeleteOwner(ctx context.Context, level domain.AgentSystemSource, ownerID string) error {
 	return r.db.WithContext(ctx).Where("level = ? AND owner_id = ?", level, ownerID).Delete(&AgentSystemSettingModel{}).Error
 }
+
+// DeleteProject removes everything the project and its repositories set.
+func (r *AgentSystemRepository) DeleteProject(ctx context.Context, projectID string) error {
+	return r.db.WithContext(ctx).Where("project_id = ?", projectID).Delete(&AgentSystemSettingModel{}).Error
+}

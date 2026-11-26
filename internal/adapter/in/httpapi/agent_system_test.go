@@ -166,3 +166,64 @@ func TestPatchOfAnUnknownProjectIs404(t *testing.T) {
 		t.Fatalf("status = %d: %s", rec.Code, rec.Body.String())
 	}
 }
+
+func TestRepositoryAgentSystemShowsSourcesOverridesAndMissingGates(t *testing.T) {
+	h := agentSystemHandler(t)
+	patchJSON(t, h, "/projects/p1/agent-system", `{"guard.retry_limit": 5}`)
+	rec := patchJSON(t, h, "/projects/p1/repositories/r1/agent-system", `{"learn.context_map.enabled": false}`)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("patch status = %d: %s", rec.Code, rec.Body.String())
+	}
+
+	rec = getJSON(t, h, "/projects/p1/repositories/r1/agent-system")
+	var view struct {
+		Effective struct {
+			Learn struct {
+				ContextMap struct {
+					Enabled struct {
+						Value  bool   `json:"value"`
+						Source string `json:"source"`
+					} `json:"enabled"`
+				} `json:"context_map"`
+			} `json:"learn"`
+			Guard struct {
+				RetryLimit struct {
+					Value  int    `json:"value"`
+					Source string `json:"source"`
+				} `json:"retry_limit"`
+			} `json:"guard"`
+			Missing []string `json:"missing_required_gates"`
+		} `json:"effective"`
+		Values map[string]any `json:"values"`
+	}
+	if rec.Code != http.StatusOK || json.Unmarshal(rec.Body.Bytes(), &view) != nil {
+		t.Fatalf("get = %d %s", rec.Code, rec.Body.String())
+	}
+	if e := view.Effective; e.Learn.ContextMap.Enabled.Source != "repository" || e.Learn.ContextMap.Enabled.Value || e.Guard.RetryLimit.Source != "project" || len(e.Missing) != 5 {
+		t.Fatalf("effective = %+v", e)
+	}
+	if len(view.Values) != 1 || view.Values["learn.context_map.enabled"] != false {
+		t.Fatalf("overrides = %v", view.Values)
+	}
+
+	view.Values = nil
+	rec = patchJSON(t, h, "/projects/p1/repositories/r1/agent-system", `{"learn.context_map.enabled": null}`)
+	if json.Unmarshal(rec.Body.Bytes(), &view) != nil || view.Effective.Learn.ContextMap.Enabled.Source != "harness" || len(view.Values) != 0 {
+		t.Fatalf("after reset: %s", rec.Body.String())
+	}
+}
+
+func TestRepositoryAgentSystemRefusesLikeTheProjectAndKnowsItsProject(t *testing.T) {
+	h := agentSystemHandler(t)
+
+	rec := patchJSON(t, h, "/projects/p1/repositories/r1/agent-system", `{"guard.retry_limit": 99}`)
+	var e agentSystemErrors
+	if rec.Code != http.StatusUnprocessableEntity || json.Unmarshal(rec.Body.Bytes(), &e) != nil || len(e.Errors) != 1 || e.Errors[0].Code != "OUT_OF_RANGE" {
+		t.Errorf("422 shape: %d %s", rec.Code, rec.Body.String())
+	}
+	for _, path := range []string{"/projects/p1/repositories/nope/agent-system", "/projects/nope/repositories/r1/agent-system"} {
+		if rec := getJSON(t, h, path); rec.Code != http.StatusNotFound {
+			t.Errorf("GET %s = %d, want 404", path, rec.Code)
+		}
+	}
+}
