@@ -8,7 +8,7 @@
 import { needsYou, railGroups } from "../domain/rail-groups";
 import { taskHref, type Task } from "../domain/task";
 import { activityOf, followProject, type RailState, type RailUpdate } from "./follow-project";
-import type { Announcer, FeaturePrefs, PageOpener, RailFeed, RailFeedStatus, RailPrefs, RailSeed, RailSource, Scheduler, ServicesCount } from "./ports";
+import type { Announcer, FeaturePrefs, PageOpener, RailFeed, RailPrefs, RailSeed, RailSource, Scheduler, ServicesCount } from "./ports";
 
 /** How long a task that arrived or moved wears the arrival wash. */
 export const FRESH_MS = 8_000;
@@ -64,8 +64,6 @@ export interface RailInput {
   readonly services?: ServicesCount;
   /** What the server counted: the badge until the services feed says otherwise. */
   readonly servicesRunning?: number;
-  /** The feed's connection status, for the stream bar. */
-  readonly onFeedStatus?: (status: RailFeedStatus) => void;
 }
 
 /** How many tasks need the person: a session waits, or a review does. */
@@ -93,7 +91,7 @@ export class Rail {
 
   constructor(input: RailInput) {
     this.#input = input;
-    const follow = followProject({ source: input.source, feed: input.feed, seed: input.seed, onUpdate: (u) => this.#followed(u), ...(input.onFeedStatus ? { onStatus: input.onFeedStatus } : {}) });
+    const follow = followProject({ source: input.source, feed: input.feed, seed: input.seed, onUpdate: (u) => this.#followed(u), });
     this.#state = {
       ...follow.state(),
       projectId: input.seed.projectId,

@@ -47,7 +47,9 @@ export interface RailModel {
 /** `props` is the rail island's props as the server sends them. Throws a DtoError when they cannot be read. */
 export function buildRail(props: unknown, adapters: RailAdapters): RailModel {
   const dto = RailPropsDto.fromJSON(props);
-  const rail = new Rail({ ...adapters, seed: toSeed(dto.seed), currentTaskId: dto.current_task, page: dto.page, collapsed: dto.collapsed, servicesRunning: dto.nav.services_running, ...(dto.nav.services_href !== "" && adapters.services ? { services: adapters.services } : {}) });
+  // The services feed is followed only where the project serves a Services page.
+  const { services, ...rest } = adapters;
+  const rail = new Rail({ ...rest, seed: toSeed(dto.seed), currentTaskId: dto.current_task, page: dto.page, collapsed: dto.collapsed, servicesRunning: dto.nav.services_running, ...(dto.nav.services_href !== "" && services ? { services } : {}) });
   const presenter = new RailPresenter(rail, adapters.features, { projectName: dto.project_name, nav: toNav(dto.nav) });
   return { presenter, stop: presenter.stop };
 }

@@ -139,7 +139,7 @@ func (b *streamBridge) follow(s *bridgedStream, path string, r *http.Request) in
 		return http.StatusOK
 	}
 	ctx, cancel := context.WithCancel(s.ctx)
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, "/api"+path, nil)
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, "/api"+path, http.NoBody)
 	if err != nil {
 		cancel()
 		return http.StatusBadRequest

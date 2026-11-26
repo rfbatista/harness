@@ -1,7 +1,7 @@
 import { describe, test } from "node:test";
 import assert from "node:assert/strict";
 import { Rail } from "../../application/rail";
-import type { RailFeedStatus, RailSeed } from "../../application/ports";
+import type { RailSeed } from "../../application/ports";
 import type { RailSession } from "../../domain/activity";
 import type { Task } from "../../domain/task";
 import { manualScheduler, memoryAnnouncer, memoryFeaturePrefs, memoryPageOpener, memoryRailPrefs } from "../../infrastructure/memory-ports";
@@ -34,15 +34,14 @@ function setup({ tasks = [task()], sessions = [session("a", "t1", "running")], c
   const announcer = memoryAnnouncer();
   const opener = memoryPageOpener();
   const scheduler = manualScheduler();
-  const statuses: RailFeedStatus[] = [];
   const services = memoryServicesCount();
-  const rail = new Rail({ source, feed, services, servicesRunning: 120, seed, currentTaskId: currentTask, collapsed, prefs, features, announcer, opener, scheduler, onFeedStatus: (s) => statuses.push(s) });
+  const rail = new Rail({ source, feed, services, servicesRunning: 120, seed, currentTaskId: currentTask, collapsed, prefs, features, announcer, opener, scheduler });
   const presenter = new RailPresenter(rail, features, { projectName: "harness", nav: NAV });
   const vm = () => presenter.viewModel;
   const group = (key: string) => vm().groups.find((g) => g.key === key)!;
   const rows = (): RowViewModel[] => vm().groups.flatMap((g) => [...g.rows, ...g.more]);
   const row = (id: string): RowViewModel | undefined => rows().flatMap((r) => [r, ...r.kids]).find((r) => r.id === id);
-  return { services, source, feed, prefs, features, announcer, opener, scheduler, statuses, presenter, vm, group, row };
+  return { services, source, feed, prefs, features, announcer, opener, scheduler, presenter, vm, group, row };
 }
 
 describe("the rail's groups and rows", () => {
@@ -258,12 +257,6 @@ describe("live changes", () => {
     assert.deepEqual([row("t9")!.liveText, row("t9")!.fresh, row("t9")!.signal], ["1 live", false, false]);
     scheduler.advance(10_000);
     assert.deepEqual(announcer.said, []);
-  });
-
-  test("the feed's status reaches whoever reports it to the stream bar", () => {
-    const { feed, statuses } = setup();
-    feed.setStatus("paused");
-    assert.deepEqual(statuses, ["connecting", "paused"]);
   });
 
   test("the row with focus peeks out of a folded group until focus leaves", () => {
