@@ -16,7 +16,14 @@ var _ ports.BenchCases = (*Service)(nil)
 
 // Deps are what the bench is built on.
 type Deps struct {
-	Cases    ports.BenchCaseStore
+	Cases ports.BenchCaseStore
+	// Sessions runs the CLI for a case; ServeMock offers a case's mock layer
+	// as the one MCP server the run is given (URL and a stop). Both nil: the
+	// service keeps cases only and refuses to run.
+	Sessions  ports.BenchSessions
+	ServeMock func(*MockLayer) (url string, stop func(), err error)
+	// MockName is the mock server's name in the CLI's MCP configuration.
+	MockName string
 	Projects interface {
 		Get(ctx context.Context, id string) *domain.Project
 	}
