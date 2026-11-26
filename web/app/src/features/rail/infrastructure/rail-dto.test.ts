@@ -81,7 +81,7 @@ describe("the lists read again", () => {
         if (answer === undefined) throw new Error("no answer");
         return answer;
       },
-      post: async () => undefined,
+      post: async () => undefined, patch: async () => undefined, delete: async () => undefined,
     };
   }
 
@@ -105,7 +105,7 @@ describe("the services feed and list", () => {
   test("an event with a count is announced with its sequence number; a request, an unreadable event or another shape is not", () => {
     const stream = memoryFeed();
     const heard: { seq: number; running: number }[] = [];
-    const stop = httpServicesCount({ get: async () => undefined, post: async () => undefined }, stream).follow("p 1", { onCount: (c) => heard.push(c) });
+    const stop = httpServicesCount({ get: async () => undefined, post: async () => undefined, patch: async () => undefined, delete: async () => undefined }, stream).follow("p 1", { onCount: (c) => heard.push(c) });
     const path = servicesFeedPath("p 1");
     stream.emit(path, { seq: 3, kind: "service_changed", running_count: 2 });
     stream.emit(path, { seq: 4, kind: "service_request" });
@@ -117,9 +117,9 @@ describe("the services feed and list", () => {
   });
 
   test("the list counts the services that start or run, and says what sequence it is current to", async () => {
-    const api: ApiClient = { get: async () => ({ seq: 7, services: [{ status: "running" }, { status: "starting" }, { status: "exited" }] }), post: async () => undefined };
+    const api: ApiClient = { get: async () => ({ seq: 7, services: [{ status: "running" }, { status: "starting" }, { status: "exited" }] }), post: async () => undefined, patch: async () => undefined, delete: async () => undefined };
     assert.deepEqual(await httpServicesCount(api, memoryFeed()).read("p1"), { seq: 7, running: 2 });
-    const bad: ApiClient = { get: async () => ({ seq: 1 }), post: async () => undefined };
+    const bad: ApiClient = { get: async () => ({ seq: 1 }), post: async () => undefined, patch: async () => undefined, delete: async () => undefined };
     await assert.rejects(httpServicesCount(bad, memoryFeed()).read("p1"), { code: "BAD_RESPONSE" });
   });
 });

@@ -23,6 +23,7 @@ export class RailNavDto {
     readonly design_system_href: string,
     readonly design_system_proposals: number,
     readonly usage_href: string,
+    readonly agent_system_href: string,
     readonly product_owner_href: string,
   ) {}
 
@@ -42,6 +43,7 @@ export class RailNavDto {
       href("design_system_href"),
       count(NAV, from, "design_system_proposals", at),
       href("usage_href"),
+      href("agent_system_href"),
       href("product_owner_href"),
     );
   }
@@ -60,6 +62,7 @@ export class RailNavDto {
       design_system_href: this.design_system_href,
       design_system_proposals: this.design_system_proposals,
       usage_href: this.usage_href,
+      agent_system_href: this.agent_system_href,
       product_owner_href: this.product_owner_href,
     };
   }

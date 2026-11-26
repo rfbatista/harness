@@ -64,6 +64,7 @@ type RailNav struct {
 	DesignSystemHref      string `json:"design_system_href"`
 	DesignSystemProposals int    `json:"design_system_proposals"`
 	UsageHref             string `json:"usage_href"`
+	AgentSystemHref       string `json:"agent_system_href"`
 	ProductOwnerHref      string `json:"product_owner_href"`
 }
 
@@ -86,7 +87,7 @@ func (f Frame) RailProps() RailProps {
 			ServicesHref: r.Services.Href, ServicesProjectID: r.Services.ProjectID, ServicesRunning: r.Services.Running,
 			ReviewsHref: r.ReviewsHref, DocumentsHref: r.DocumentsHref, DesignHref: r.DesignHref,
 			DesignSystemHref: r.DesignSystemHref, DesignSystemProposals: r.DesignSystemProposals,
-			UsageHref: r.UsageHref, ProductOwnerHref: r.ProductOwnerHref,
+			UsageHref: r.UsageHref, AgentSystemHref: r.AgentSystemHref, ProductOwnerHref: r.ProductOwnerHref,
 		},
 	}
 }

@@ -12,7 +12,7 @@ import { RailPresenter } from "./rail-presenter";
 import { SERVER_PAINT_ROWS } from "./rail-rows";
 import type { RowViewModel } from "./rail-rows";
 
-const NAV: ProjectNav = { newTaskHref: "/projects/p1/tasks/new", boardHref: "/projects/p1", codeHref: "", servicesHref: "/projects/p1/services", servicesProjectId: "p1", reviewsHref: "/projects/p1/reviews", documentsHref: "", designHref: "/projects/p1/design", designSystemHref: "/projects/p1/design-system", designSystemProposals: 2, usageHref: "", productOwnerHref: "/projects/p1/owner" };
+const NAV: ProjectNav = { newTaskHref: "/projects/p1/tasks/new", boardHref: "/projects/p1", codeHref: "", servicesHref: "/projects/p1/services", servicesProjectId: "p1", reviewsHref: "/projects/p1/reviews", documentsHref: "", designHref: "/projects/p1/design", designSystemHref: "/projects/p1/design-system", designSystemProposals: 2, usageHref: "", agentSystemHref: "/projects/p1/agent-system", productOwnerHref: "/projects/p1/owner" };
 
 const flush = () => new Promise<void>((resolve) => setImmediate(resolve));
 
@@ -271,7 +271,7 @@ describe("live changes", () => {
 describe("the project navigation", () => {
   test("it lists the pages the server serves, in order, the open one current, with badges", () => {
     const { presenter, vm } = setup({ tasks: [task({ pendingReviews: 3 })] });
-    assert.deepEqual(vm().nav.map((i) => i.label), ["Board", "Services", "Review requests", "Design assets", "Design systems", "Product owner"]);
+    assert.deepEqual(vm().nav.map((i) => i.label), ["Board", "Services", "Review requests", "Design assets", "Design systems", "Agent system", "Product owner"]);
     presenter.setPage("board");
     assert.deepEqual(vm().nav.filter((i) => i.current).map((i) => i.key), ["board"]);
     const byKey = Object.fromEntries(vm().nav.map((i) => [i.key, i]));
@@ -287,6 +287,14 @@ describe("the project navigation", () => {
     presenter.setPage("product-owner");
     assert.deepEqual(vm().nav.filter((i) => i.current).map((i) => i.key), ["product-owner"]);
     assert.equal(vm().nav.some((i) => i.label === "Usage"), false, "usageHref is empty in this project");
+  });
+
+  test("Agent system sits after Usage and before Product owner, and is current on its page", () => {
+    const { presenter, vm } = setup();
+    const labels = vm().nav.map((i) => i.label);
+    assert.equal(labels.indexOf("Agent system"), labels.indexOf("Product owner") - 1);
+    presenter.setPage("agent-system");
+    assert.deepEqual(vm().nav.filter((i) => i.current).map((i) => i.key), ["agent-system"]);
   });
 
   test("the Review requests badge follows the feed", () => {

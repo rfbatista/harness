@@ -1,7 +1,7 @@
 // The rail's icons: the same drawings as the templ shell (shell/icons.templ),
 // decorative: the words beside them carry the meaning.
 
-export type RailIconName = "board" | "code" | "services" | "review" | "document" | "design" | "design-system" | "usage" | "owner" | "plus" | "close" | "chevron" | "rail";
+export type RailIconName = "board" | "code" | "services" | "review" | "document" | "design" | "design-system" | "usage" | "agent-system" | "owner" | "plus" | "close" | "chevron" | "rail";
 
 const PATHS: Record<Exclude<RailIconName, "chevron">, { d: string; round?: boolean; join?: boolean }> = {
   board: { d: "M2 2.75h12v10.5H2z M6 2.75v10.5 M10 2.75v10.5", join: true },
@@ -11,6 +11,7 @@ const PATHS: Record<Exclude<RailIconName, "chevron">, { d: string; round?: boole
   "design-system": { d: "M2.25 2.25h4.5v4.5h-4.5z M9.25 2.25h4.5v4.5h-4.5z M2.25 9.25h4.5v4.5h-4.5z M11.5 9.1a2.4 2.4 0 1 1 0 4.8 2.4 2.4 0 0 1 0-4.8z", join: true },
   review: { d: "M2 3h12v7.75H8.5L5 13.5v-2.75H2z M5.5 6.9l1.75 1.6L10.5 5.4", join: true, round: true },
   usage: { d: "M2 13.75h12 M4 11.5V8 M7 11.5V4 M10 11.5V6.5 M13 11.5V2.5", round: true },
+  "agent-system": { d: "M2 4.5h12 M2 8h12 M2 11.5h12 M5.5 3v3 M10.5 6.5v3 M7 10v3", round: true },
   owner: { d: "M2.5 3.5h11v7.25H7L4 13v-2.25H2.5z M5.25 6h5.5 M5.25 8.25h3.5", join: true, round: true },
   plus: { d: "M8 3v10M3 8h10", round: true },
   close: { d: "M4 4l8 8M12 4l-8 8", round: true },

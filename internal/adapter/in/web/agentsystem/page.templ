@@ -1,0 +1,14 @@
+package agentsystem
+
+import "operators-mcp/internal/adapter/in/web/shell"
+
+// Page is a project's Agent system page: <main> holds the island's mount, which the browser draws (the
+// toolbar with the scope switch, the index and the layers' ledger rows).
+templ Page(frame shell.Frame, props Props) {
+	@shell.AppShell(frame) {
+		<main id="main" class="[ frame ] [ agent-system-page ]">
+			<div data-island="agent-system" data-island-rendered="false"></div>
+			@shell.PropsScript("agent-system", props.JSON())
+		</main>
+	}
+}
