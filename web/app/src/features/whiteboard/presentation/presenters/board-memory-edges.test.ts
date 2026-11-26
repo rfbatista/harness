@@ -155,6 +155,6 @@ describe("whiteboard edges: the bar's sum and badges (stories 13, 14)", () => {
     const { presenter, source } = await board([architect, { ...a, memory: memorySample(a.id, 1.2) }]);
     source.emit({ kind: "memory-killed", kill: memoryKill(a.id, now.getTime()) });
     source.emit({ kind: "memory-killed", kill: memoryKill(a.id, now.getTime(), { pid: 2 }) });
-    assert.match(presenter.viewModel.memory!.sentence, /2 process ended\./);
+    assert.match(presenter.viewModel.memory!.sentence, /2 processes ended\./);
   });
 });

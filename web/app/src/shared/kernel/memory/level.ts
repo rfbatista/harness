@@ -25,6 +25,15 @@ function wanted(current: Level, share: number): Level {
   return "normal";
 }
 
+const RANK: Record<Level, number> = { normal: 0, near: 1, over: 2 };
+
+/** The level a sample of `share` allows `held` to keep: the held level, unless the sample is already below what it needs.
+ * A level held by the hold never outlives the sample that ended it. */
+export function levelNow(held: Level, share: number): Level {
+  const asked = wanted(held, share);
+  return RANK[asked] < RANK[held] ? asked : held;
+}
+
 /** The tracker after a sample of `share` (rss over budget) at `now`. */
 export function settle(tracker: Tracker, share: number, now: number): Tracker {
   if (now - tracker.since < HOLD_MS) return tracker;

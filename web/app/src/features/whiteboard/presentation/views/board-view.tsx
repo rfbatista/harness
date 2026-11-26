@@ -90,7 +90,7 @@ export function BoardView({ presenter }: { presenter: BoardPresenter }) {
             )}
             {vm.memory.ended > 0 && (
               <span className="badge" data-tone="danger">
-                {vm.memory.ended} process ended
+                {vm.memory.endedLabel}
               </span>
             )}
           </span>

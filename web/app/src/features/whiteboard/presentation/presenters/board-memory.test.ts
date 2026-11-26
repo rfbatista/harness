@@ -262,3 +262,35 @@ describe("the board seeds from the payload it loads (F4)", () => {
     assert.equal(presenter.viewModel.memory?.total, "3.4 GB");
   });
 });
+
+describe("the bar says what the last sample says (F7)", () => {
+  const delegate = () => session({ role: "delegate", parentSessionId: architect.id });
+
+  test("a level held by the 3 s hold does not outlive the sample that ended it: over 4.4 GB then 4 MB is not over budget", async () => {
+    const a = delegate();
+    const { presenter, source } = await board([architect, { ...a, memory: memorySample(a.id, 4.4) }]);
+    assert.equal(presenter.viewModel.memory?.over, 1);
+    source.emit({ kind: "memory", sample: memorySample(a.id, 0.004, {}, at(1000)) });
+    assert.equal(presenter.viewModel.memory?.total, "4 MB");
+    assert.equal(presenter.viewModel.memory?.over, 0, "the total and the count come from the same sample");
+    assert.equal(card(presenter, a.id).memory?.word, "", "and so does the card's word");
+  });
+
+  test("the hysteresis band still counts: near held at 78 % stays near", async () => {
+    const a = delegate();
+    const { presenter, source } = await board([architect, { ...a, memory: memorySample(a.id, 3.4) }]);
+    source.emit({ kind: "memory", sample: memorySample(a.id, 3.12, {}, at(1000)) });
+    assert.equal(presenter.viewModel.memory?.near, 1);
+  });
+
+  test("process ended reads in the plural from two", async () => {
+    const a = delegate();
+    const { presenter, source } = await board([architect, { ...a, memory: memorySample(a.id, 1.2) }]);
+    source.emit({ kind: "memory-killed", kill: memoryKill(a.id, at(0)) });
+    assert.match(presenter.viewModel.memory!.sentence, /1 process ended\.$/);
+    assert.equal(presenter.viewModel.memory?.endedLabel, "1 process ended");
+    source.emit({ kind: "memory-killed", kill: memoryKill(a.id, at(1), { pid: 2 }) });
+    assert.match(presenter.viewModel.memory!.sentence, /2 processes ended\.$/);
+    assert.equal(presenter.viewModel.memory?.endedLabel, "2 processes ended");
+  });
+});
