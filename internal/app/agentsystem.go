@@ -9,6 +9,7 @@ import (
 	"operators-mcp/internal/adapter/out/persistence/sqlite"
 	"operators-mcp/internal/app/catalog"
 	"operators-mcp/internal/application/agentsystem"
+	"operators-mcp/internal/application/bench"
 	"operators-mcp/internal/application/orchestration"
 	"operators-mcp/internal/domain"
 	"operators-mcp/internal/ports"
@@ -51,4 +52,13 @@ func (l repositoryLookup) Get(ctx context.Context, id string) *domain.Repository
 		return nil
 	}
 	return r
+}
+
+// newBench wires the eval bench (ADR 0015): its cases in SQLite, checked
+// against the project catalog.
+func newBench(db *gorm.DB, cat catalog.Catalog) *bench.Service {
+	return bench.New(bench.Deps{
+		Cases:    sqlite.NewBenchCaseRepository(db),
+		Projects: projectLookup{cat},
+	})
 }

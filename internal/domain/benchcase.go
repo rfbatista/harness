@@ -1,0 +1,106 @@
+package domain
+
+import (
+	"fmt"
+	"strings"
+	"time"
+)
+
+// The eval bench (ADR 0015): a project's bench cases, each a prompt with mock
+// tools and what a good run does. Glossary: "Bench case".
+
+// BenchCaseSource says where a bench case came from.
+type BenchCaseSource string
+
+const (
+	// BenchSourceDefinition is a case the person wrote.
+	BenchSourceDefinition BenchCaseSource = "definition"
+	// BenchSourceTrajectory is a case made from a recorded trajectory.
+	BenchSourceTrajectory BenchCaseSource = "trajectory"
+)
+
+// BenchTool is a mock tool a case offers: a bench run answers every call to
+// it with Result (an error result when IsError).
+type BenchTool struct {
+	Name        string `json:"name"`
+	Description string `json:"description,omitempty"`
+	Result      string `json:"result"`
+	IsError     bool   `json:"is_error,omitempty"`
+}
+
+// BenchExpectedCall is one call a good run makes. A nil Params accepts any
+// arguments; otherwise each named parameter must equal the given value.
+type BenchExpectedCall struct {
+	Tool   string         `json:"tool"`
+	Params map[string]any `json:"params,omitempty"`
+}
+
+// BenchExpectation is what a good run does: the tools it calls (in order when
+// Ordered), and/or a reference for its final result.
+type BenchExpectation struct {
+	Tools     []BenchExpectedCall `json:"tools,omitempty"`
+	Ordered   bool                `json:"ordered,omitempty"`
+	Reference string              `json:"reference,omitempty"`
+}
+
+// BenchCase is one evaluation case of a project's eval bench.
+type BenchCase struct {
+	ID        string           `json:"id"`
+	ProjectID string           `json:"project_id"`
+	Name      string           `json:"name,omitempty"`
+	Prompt    string           `json:"prompt"`
+	Tools     []BenchTool      `json:"tools"`
+	Expect    BenchExpectation `json:"expect"`
+	Source    BenchCaseSource  `json:"source"`
+	CreatedAt time.Time        `json:"created_at"`
+}
+
+// BenchFieldError is one reason a definition is refused.
+type BenchFieldError struct {
+	Field   string `json:"field"`
+	Code    string `json:"code"`
+	Message string `json:"message"`
+}
+
+// BenchCaseValidationError is a refused definition: nothing was stored.
+type BenchCaseValidationError struct{ Errors []BenchFieldError }
+
+func (e *BenchCaseValidationError) Error() string {
+	if len(e.Errors) == 0 {
+		return "invalid bench case"
+	}
+	return fmt.Sprintf("invalid bench case: %s: %s", e.Errors[0].Field, e.Errors[0].Message)
+}
+
+// Validate checks a definition and answers every fault, or nil.
+func (c BenchCase) Validate() *BenchCaseValidationError {
+	var errs []BenchFieldError
+	add := func(field, code, msg string) { errs = append(errs, BenchFieldError{field, code, msg}) }
+
+	if strings.TrimSpace(c.Prompt) == "" {
+		add("prompt", "REQUIRED", "a bench case needs a prompt")
+	}
+	mocked := map[string]bool{}
+	for i, t := range c.Tools {
+		field := fmt.Sprintf("tools[%d].name", i)
+		switch {
+		case strings.TrimSpace(t.Name) == "":
+			add(field, "REQUIRED", "a mock tool needs a name")
+		case mocked[t.Name]:
+			add(field, "DUPLICATE_TOOL", "tool "+t.Name+" is mocked twice")
+		}
+		mocked[t.Name] = true
+	}
+	if len(c.Expect.Tools) == 0 && strings.TrimSpace(c.Expect.Reference) == "" {
+		add("expect", "NO_EXPECTATION", "expect tools or a reference result")
+	}
+	for i, call := range c.Expect.Tools {
+		if !mocked[call.Tool] {
+			add(fmt.Sprintf("expect.tools[%d].tool", i), "UNKNOWN_TOOL", "tool "+call.Tool+" has no mock")
+		}
+	}
+	if len(errs) == 0 {
+		return nil
+	}
+	return &BenchCaseValidationError{Errors: errs}
+}
