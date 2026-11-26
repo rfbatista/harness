@@ -25,6 +25,10 @@ func TestTheNoticeIsInThePostToolUseAnswerOfTheCallRunningWhenSIGTERMWentOut(t *
 	watcher := memorywatch.New(memorywatch.Deps{Table: table, Signal: sig, Sink: svc})
 	svc.MemoryWatcher = watcher
 	sess, _ := startHeadless(t, svc, w.task.ID)
+	// The fake CLI's first turn may still be running; its end clears the running
+	// calls (no turn ends between a call's PreToolUse and PostToolUse), so the
+	// call is started only once that turn is over.
+	eventually(t, "the first turn to end", func() bool { return !svc.isBusy(sess.ID) })
 	live, _, cancel := svc.Subscribe(sess.ID)
 	defer cancel()
 
