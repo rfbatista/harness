@@ -175,14 +175,19 @@ func TestMemoryChipPopoverClosesWithEscAndOutsideClickAndGivesFocusBack(t *testi
 	}
 }
 
-// The head keeps its actions whole: whatever the chip says, it is the chip that gives way, never "Git history" or Stop.
+// The head widths of the session pane in a 900 px tall window with the sidebar open (15rem) and the session list beside it
+// (26rem at most): the viewport less both. 1440 → 784 px (Git history shows), 1280 → 624 px, 1024 → 368 px.
+var headWidths = []int{784, 624, 368}
+
+// The head keeps its actions whole and the chip legible: the actions never shrink or get covered, the chip's value
+// never shrinks below its content, and only its word gives way.
 func TestMemoryChipNeverClipsTheHeadActions(t *testing.T) {
 	states := map[string]string{"normal": "gb=1.2", "near": "gb=3.4", "over": "gb=4.5", "ended": "gb=1.2&kill=1"}
-	for _, width := range []int{1100, 1000, 900, 800} {
+	for _, width := range headWidths {
 		for name, query := range states {
 			t.Run(fmt.Sprintf("%dpx %s", width, name), func(t *testing.T) {
 				ctx, _ := browser(t)
-				var clipped string
+				var problems string
 				err := chromedp.Run(ctx,
 					chromedp.EmulateViewport(1600, 800),
 					chromedp.Navigate(memoryChipPage(t)+"?"+query),
@@ -190,29 +195,52 @@ func TestMemoryChipNeverClipsTheHeadActions(t *testing.T) {
 					chromedp.Evaluate(fmt.Sprintf(`document.getElementById('pane').style.inlineSize = '%dpx'`, width), nil),
 					chromedp.Evaluate(`window.memoryHarness.release()`, nil),
 					chromedp.Poll(chipThere, nil, chromedp.WithPollingTimeout(10*time.Second)),
-					chromedp.Evaluate(headClipped, &clipped),
+					chromedp.Evaluate(headProblems, &problems),
 				)
 				if err != nil {
 					t.Fatal(err)
 				}
-				if clipped != "" {
-					t.Errorf("the head clips: %s", clipped)
+				if problems != "" {
+					t.Errorf("the head: %s", problems)
 				}
 			})
 		}
 	}
 }
 
-// headClipped says what the head cuts off, "" when nothing: its own overflow, or an action past its right edge.
-const headClipped = `(() => {
+// headProblems says what is wrong with the head, "" when nothing is: it overflows, an action is clipped or covered,
+// or the chip's value is cut, covered, or has no room of its own.
+const headProblems = `(() => {
 	const head = document.querySelector('.session-head');
 	const right = head.getBoundingClientRect().right;
 	const out = [];
 	if (head.scrollWidth > head.clientWidth + 1) out.push('head scrollWidth ' + head.scrollWidth + ' > clientWidth ' + head.clientWidth);
-	for (const el of head.querySelectorAll('.actions > *')) {
+	const actions = [...head.querySelectorAll('.actions > *')].filter(el => el.getBoundingClientRect().width > 0);
+	for (const el of actions) {
 		const r = el.getBoundingClientRect();
-		if (r.width > 0 && r.right > right + 1) out.push(el.textContent.trim() + ' ends at ' + Math.round(r.right) + ' past ' + Math.round(right));
-		if (r.width > 0 && el.scrollWidth > el.clientWidth + 1) out.push(el.textContent.trim() + ' is cut');
+		if (r.right > right + 1) out.push(el.textContent.trim() + ' ends at ' + Math.round(r.right) + ' past ' + Math.round(right));
+	}
+	const chip = head.querySelector('.memory:not([hidden])');
+	if (!chip || getComputedStyle(chip).display === 'none') return out.join('; ');
+	const box = chip.getBoundingClientRect();
+	const num = chip.querySelector('.num');
+	const numBox = num.getBoundingClientRect();
+	if (num.scrollWidth > num.clientWidth + 1) out.push('value is cut: scrollWidth ' + num.scrollWidth + ' > clientWidth ' + num.clientWidth);
+	if (chip.scrollWidth > chip.clientWidth + 1 && !chip.querySelector('.word')) out.push('chip overflows: scrollWidth ' + chip.scrollWidth + ' > clientWidth ' + chip.clientWidth);
+	if (box.width + 0.5 < numBox.width) out.push('chip box ' + Math.round(box.width) + ' is narrower than its value ' + Math.round(numBox.width));
+	// What the chip draws: the value, and the word. Neither may run under an action.
+	const ink = [num, chip.querySelector('.word')].filter(Boolean).map(el => {
+		const range = document.createRange(); range.selectNodeContents(el);
+		return { name: el.className, rect: range.getBoundingClientRect(), clip: el.getBoundingClientRect() };
+	});
+	for (const { name, rect, clip } of ink) {
+		// text drawn outside the chip's own box (an ellipsized word is cut at its box, not here)
+		const visibleRight = Math.min(rect.right, clip.right, box.right);
+		for (const el of actions) {
+			const a = el.getBoundingClientRect();
+			if (visibleRight > a.left + 0.5 && rect.left < a.right && rect.bottom > a.top && rect.top < a.bottom) out.push(name + ' runs under ' + el.textContent.trim());
+		}
+		if (name === 'num' && rect.right > box.right + 1) out.push('value spills past the chip: ' + Math.round(rect.right) + ' > ' + Math.round(box.right));
 	}
 	return out.join('; ');
 })()`
