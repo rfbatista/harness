@@ -20,7 +20,7 @@ import { featureSummary, statusLine, toChildRows } from "../featureView.js";
 const POPOVER_ID = "task-feature";
 const BUTTON_ID = "task-feature-button";
 
-/** @param {{ store: import("./rail.js").RailStore }} deps */
+/** @param {{ store: import("./railFeed.js").RailStore }} deps */
 export const feature = ({ store, hash = () => globalThis.location?.hash ?? "" }) => () => ({
   taskId: "",
   projectId: "",

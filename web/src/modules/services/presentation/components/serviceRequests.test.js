@@ -55,14 +55,18 @@ test("a service event is not a request, and a request event never carries values
   assert.equal(JSON.stringify(requests.requests).includes("8080"), false);
 });
 
-test("a resynced feed reads the list again; a live one does not", async () => {
+test("the first live and a resynced feed read the list again; a later live does not", async () => {
   const { requests, gateway } = await open([]);
   gateway.requests = [requestDTO()];
   gateway.status(FeedStatus.LIVE);
-  assert.equal(gateway.requestReads.length, 1);
+  await settle();
+  assert.equal(gateway.requestReads.length, 2, "the seed was read at init, and a request filed before the feed went live is found now");
+  assert.equal(requests.pendingCount, 1);
+  gateway.status(FeedStatus.LIVE);
+  assert.equal(gateway.requestReads.length, 2, "a later live is not a gap");
   gateway.status(FeedStatus.RESYNCED);
   await settle();
-  assert.equal(requests.pendingCount, 1);
+  assert.equal(gateway.requestReads.length, 3);
 });
 
 test("a list that cannot be read hides the badge and says why; it is read again on the next resync", async () => {

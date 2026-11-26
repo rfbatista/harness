@@ -48,23 +48,3 @@ func TestTheProductOwnerPanelPropsEscapeTheProjectID(t *testing.T) {
 		t.Errorf("project id was not escaped:\n%s", got)
 	}
 }
-
-// The rail's Project navigation ends with a Product owner row: the only way in the navigation to
-// threads (ADR 0109). It is the current page's row on the product owner page.
-func TestTheRailHasAProductOwnerRowThatIsCurrentOnItsPage(t *testing.T) {
-	r := Rail{UsageHref: "/projects/p1/usage", ProductOwnerHref: "/projects/p1/product-owner"}
-	got := renderProjectNav(t, r)
-	if !strings.Contains(got, `<li data-page="product-owner"><a href="/projects/p1/product-owner">`) || !strings.Contains(got, `Product owner</span>`) {
-		t.Errorf("no Product owner row:\n%s", got)
-	}
-	if strings.Index(got, "Usage") > strings.Index(got, "Product owner") {
-		t.Errorf("the Product owner row does not come last:\n%s", got)
-	}
-	r.Page = PageProductOwner
-	if got := renderProjectNav(t, r); !strings.Contains(got, `<a href="/projects/p1/product-owner" aria-current="page">`) {
-		t.Errorf("the row is not current on its page:\n%s", got)
-	}
-	if got := renderProjectNav(t, Rail{UsageHref: "/u"}); strings.Contains(got, "Product owner") {
-		t.Errorf("a rail with no product owner page shows its row:\n%s", got)
-	}
-}

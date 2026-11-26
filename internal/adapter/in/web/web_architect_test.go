@@ -125,7 +125,7 @@ func TestBoardAndRailSayWhereReviewsWaitOnThePerson(t *testing.T) {
 	w := board()
 	w.tickets[1].PendingReviews = 2 // t-docs: no session waits, yet reviews do
 	w.tickets[0].PendingReviews = 1
-	body := get(t, newTestHandler(t, w), "/projects/p1").Body.String()
+	body := get(t, newRenderedHandler(t, w), "/projects/p1").Body.String()
 	card := body[strings.Index(body, `<article class="[ card ]" data-task-id="t-docs"`):]
 	card = card[:strings.Index(card, "</article>")]
 	// The reviews have their own badge; the card's dot is about sessions only.
@@ -137,7 +137,7 @@ func TestBoardAndRailSayWhereReviewsWaitOnThePerson(t *testing.T) {
 	}
 	for _, want := range []string{
 		`href="/projects/p1/reviews"`,
-		`x-text="reviewsCount">3</span>`,
+		`<span class="[ badge ]" data-tone="attention"><span>3</span><span class="[ visually-hidden ]"> waiting on you</span></span>`,
 		`<template x-if="card.hasReviews">`,
 	} {
 		if !strings.Contains(body, want) {
@@ -147,8 +147,8 @@ func TestBoardAndRailSayWhereReviewsWaitOnThePerson(t *testing.T) {
 }
 
 func TestRailHidesTheReviewsBadgeWhenNothingWaits(t *testing.T) {
-	body := get(t, newTestHandler(t, board()), "/projects/p1").Body.String()
-	if !strings.Contains(body, `x-show="hasReviews" style="display: none"><span x-text="reviewsCount">0</span>`) {
+	body := get(t, newRenderedHandler(t, board()), "/projects/p1").Body.String()
+	if !strings.Contains(body, `<span class="[ badge ]" data-tone="attention" style="display:none"><span></span><span class="[ visually-hidden ]"> waiting on you</span></span>`) {
 		t.Error("with nothing waiting, the Review requests badge should be painted hidden")
 	}
 }

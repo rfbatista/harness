@@ -27,6 +27,10 @@ type Frame struct {
 	CSS, JS, ClientJS, ClientCSS string
 	// Island is the React top bar the header carries; nil leaves it out.
 	Island *TopBarIsland
+	// RailIsland renders the React rail the page carries beside <main> (ADR 0001)
+	// from the final frame, after the page's handler set its current page; nil
+	// leaves the rail static.
+	RailIsland func(Frame) *RailIsland
 	// Built is false when `make web` has not produced the bundles yet.
 	Built bool
 	// Live: the page follows the session feed, so the stream bar shows the
@@ -82,8 +86,8 @@ const (
 	PageProductOwner = "product-owner"
 )
 
-// Rail is the current project's tasks, in kanban groups, and the ways to its
-// pages.
+// Rail is what the rail island is drawn from: the current project's seed (its
+// tasks and sessions, which the island groups) and the ways to its pages.
 type Rail struct {
 	// NewTaskHref is the new-task page of the selected project; "" with none.
 	NewTaskHref string
@@ -109,15 +113,13 @@ type Rail struct {
 	// person across the project's design systems.
 	DesignSystemProposals int
 	// ReviewsHref is the project's review inbox: the requests its tasks'
-	// architects raised for the person; Reviews counts the pending ones.
+	// architects raised for the person.
 	ReviewsHref string
-	Reviews     int
 	// UsageHref is the project's token usage; "" when usage is not served.
 	UsageHref string
 	// ProductOwnerHref is the project's product owner page: the only row of the
 	// navigation that leads to threads (ADR 0109). "" leaves it out.
 	ProductOwnerHref string
-	Groups    []RailGroup
 	// Empty is shown when a project is selected but has no tasks.
 	Empty string
 	// Current is the open task's id, "" when none: the live rail marks it.
@@ -126,10 +128,41 @@ type Rail struct {
 	// reports the connection to the stream bar. A page with its own feed
 	// (the task page) reports it itself.
 	ReportsFeed bool
+	// Collapsed are the groups the person folded (the rail_collapsed cookie),
+	// so the island's first paint is already folded.
+	Collapsed []string
 	// Seed lets the browser keep the rail and the board live: the project's
 	// tasks and sessions, followed over the project's feed. Nil leaves the
 	// rail static (no project selected).
 	Seed *RailSeed
+}
+
+// NeedsYouCount is how many of the seeded tasks need the person: a session
+// waits (its status, an approval or an interview) or a review request does.
+func (s *RailSeed) NeedsYouCount() int {
+	if s == nil {
+		return 0
+	}
+	waiting := map[string]bool{}
+	for _, x := range s.Sessions {
+		if x.TicketID == "" {
+			continue
+		}
+		switch x.Status {
+		case "done", "stopped", "failed":
+			continue
+		}
+		if x.Status == "waiting_approval" || x.Status == "idle" || x.PendingApprovals > 0 || x.OpenInterviewCount > 0 {
+			waiting[x.TicketID] = true
+		}
+	}
+	n := 0
+	for _, t := range s.Tasks {
+		if t.ArchivedAt == nil && (waiting[t.ID] || t.PendingReviews > 0) {
+			n++
+		}
+	}
+	return n
 }
 
 // ServicesNav is the navigation's Services item: its page, and how many of
@@ -176,55 +209,7 @@ type RailSession struct {
 	OpenInterviewCount int `json:"open_interview_count"`
 }
 
-// RailGroup is one status group: "In progress", "Todo", …
-type RailGroup struct {
-	Label string
-	// Key is the status value ("in_progress"), or "other".
-	Key string
-	// Total counts the group's tasks: Links and More.
-	Total int
-	// Collapsed: the person folded it (the rail_collapsed cookie). Its rows
-	// still show the open task and what needs the person.
-	Collapsed bool
-	// Links are the rows shown. Done shows its most recently updated tasks,
-	// plus the open task and every task that needs the person.
-	Links []Link
-	// More are Done's other rows, behind "Show N more".
-	More []Link
-}
-
-// IsEmpty: the group has no tasks, so its heading has nothing to fold.
-func (g RailGroup) IsEmpty() bool { return g.Total == 0 }
-
-// TaskCount counts the project's tasks that are not archived: the rail's
-// heading. A child archived on its own is in the seed, but not counted.
-func (r Rail) TaskCount() int {
-	n := 0
-	for _, t := range r.Seed.Tasks {
-		if t.ArchivedAt == nil {
-			n++
-		}
-	}
-	return n
-}
-
-// NeedsYou counts the tasks waiting on the person, for the phone's Tasks
-// trigger.
-func (r Rail) NeedsYou() int {
-	n := 0
-	for _, g := range r.Groups {
-		for _, links := range [][]Link{g.Links, g.More} {
-			for _, l := range links {
-				if l.Attention {
-					n++
-				}
-			}
-		}
-	}
-	return n
-}
-
-// Link is one task in the rail.
+// Link is one task, as the board draws its card.
 type Link struct {
 	// TaskID ties the link to the live activity; "" keeps it static.
 	TaskID  string
@@ -242,14 +227,6 @@ type Link struct {
 	// hook) and MergeText the rail's lower-case word, "1/2 merged"; both ""
 	// when there is none.
 	Merge, MergeText string
-	// Kids are a feature task's children, nested under its row (ADR 0058);
-	// none on a plain task or on a child. The feature's own signals above
-	// cover it and all of them: its row is folded in the first paint.
-	Kids []Link
-	// StatusWord is a child's status ("Review"), and StatusKey its dot
-	// (data-st): a child has no group of its own, so the row says it, unless
-	// a signal takes the slot. "" on a task that is not a child row.
-	StatusWord, StatusKey string
 }
 
 // DocumentTitle is the <title>: the page's own title, then the app.
@@ -345,21 +322,10 @@ func (l Link) LiveWord() string {
 	}
 }
 
-// railAttrs makes the rail live when it has a seed.
-func railAttrs(r Rail) templ.Attributes {
-	if r.Seed == nil {
-		return nil
-	}
-	attrs := templ.Attributes{
-		"x-data": "tasksRail", "data-seed": "rail-seed", "data-current-task": r.Current,
-		// The phone drawer: opened from the top bar's Tasks button, closed by
-		// Esc, Close or the scrim; "/" anywhere focuses the filter.
-		"x-bind:data-open":       "drawerOpen",
-		"x-on:rail-open.window":  "openDrawer",
-		"x-on:rail-close.window": "closeDrawer",
-		"x-on:keydown":           "drawerKey",
-		"x-on:keydown.window":    "globalKey",
-	}
+// railFeedAttrs makes the headless feed owner follow the project's feed; it
+// reports the connection to the stream bar on the pages that follow it.
+func railFeedAttrs(r Rail) templ.Attributes {
+	attrs := templ.Attributes{"x-data": "tasksRailFeed", "data-seed": "rail-seed"}
 	if r.ReportsFeed {
 		attrs["data-reports-feed"] = ""
 	}
@@ -374,19 +340,6 @@ func attentionAttrs(attention bool) templ.Attributes {
 	return templ.Attributes{}
 }
 
-// groupAttrs paints a group folded (from the cookie) or empty, as the live
-// copy binds it, so the handover changes nothing.
-func groupAttrs(g RailGroup) templ.Attributes {
-	attrs := templ.Attributes{}
-	if g.Collapsed {
-		attrs["data-collapsed"] = "true"
-	}
-	if g.IsEmpty() {
-		attrs["data-empty"] = "true"
-	}
-	return attrs
-}
-
 // shownIf paints an x-show element as Alpine will: hidden unless shown, so
 // the first paint does not flash what the live page hides.
 func shownIf(shown bool) templ.Attributes {
@@ -395,108 +348,6 @@ func shownIf(shown bool) templ.Attributes {
 	}
 	return templ.Attributes{"style": "display: none"}
 }
-
-// The rail row's one meta item, by priority: the reviews badge, else
-// "waiting", else "N live". The browser's toRow (web/src/modules/tasks/
-// presentation/railView.js) says the same.
-
-// ReviewsText is the badge: "1 review", "2 reviews"; "" without reviews.
-func (l Link) ReviewsText() string {
-	switch {
-	case l.Reviews == 0:
-		return ""
-	case l.Reviews == 1:
-		return "1 review"
-	default:
-		return strconv.Itoa(l.Reviews) + " reviews"
-	}
-}
-
-// Waiting: a session waits on the person and no review request does.
-func (l Link) Waiting() bool { return l.Reviews == 0 && l.Attention }
-
-// Running: live sessions and nothing waiting.
-func (l Link) Running() bool { return !l.Attention && l.Live > 0 }
-
-// Merging: nothing comes before the merge glyph and word.
-func (l Link) Merging() bool { return l.Merge != "" && !l.Attention && l.Live == 0 }
-
-// IsFeature: the row has children nested under it.
-func (l Link) IsFeature() bool { return len(l.Kids) > 0 }
-
-// ShowsStatus: a child's row says its status, when no signal takes the slot.
-func (l Link) ShowsStatus() bool { return l.StatusWord != "" && l.Reviews == 0 && !l.Attention && l.Live == 0 }
-
-// KidsID is the id of the list of children, which the twisty controls.
-func (l Link) KidsID() string { return "rail-kids-" + l.TaskID }
-
-// TwistyLabel is the twisty's name: "Expand Files tab, 5 tasks".
-func (l Link) TwistyLabel() string {
-	n := strconv.Itoa(len(l.Kids))
-	words := " tasks"
-	if len(l.Kids) == 1 {
-		words = " task"
-	}
-	return "Expand " + l.Label + ", " + n + words
-}
-
-// MetaLead and MetaTail are the hidden words around the meta item, so the
-// link reads "Redesign sidebar, running, 2 live sessions".
-func (l Link) MetaLead() string {
-	switch {
-	case l.Running():
-		return ", running, "
-	case l.Attention, l.Merging():
-		return ", "
-	default:
-		return ""
-	}
-}
-
-func (l Link) MetaTail() string {
-	switch {
-	case l.Reviews > 0:
-		return " waiting on you"
-	case l.Attention:
-		return " on you"
-	case l.Live == 1:
-		return " session"
-	case l.Live > 1:
-		return " sessions"
-	default:
-		return ""
-	}
-}
-
-// HeadingID and ListID tie a group's heading to its section and list.
-func (g RailGroup) HeadingID() string { return "rail-" + g.Key + "-heading" }
-func (g RailGroup) ListID() string    { return "rail-" + g.Key }
-
-// CountWords follow the heading's count: "Backlog 9 tasks, 1 needs you".
-func (g RailGroup) CountWords() string {
-	words := " tasks"
-	if g.Total == 1 {
-		words = " task"
-	}
-	waiting := 0
-	for _, links := range [][]Link{g.Links, g.More} {
-		for _, l := range links {
-			if l.Attention {
-				waiting++
-			}
-		}
-	}
-	switch {
-	case waiting == 1:
-		words += ", 1 needs you"
-	case waiting > 1:
-		words += ", " + strconv.Itoa(waiting) + " need you"
-	}
-	return words
-}
-
-// MoreText is Done's summary: "Show 7 more".
-func (g RailGroup) MoreText() string { return "Show " + strconv.Itoa(len(g.More)) + " more" }
 
 // ProjectName is the selected project's name, for the phone drawer's header.
 func (f Frame) ProjectName() string {

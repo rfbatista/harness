@@ -47,7 +47,7 @@ func TestUsagePageRendersWithItsSeedAndTheRailLinksIt(t *testing.T) {
 	var asked []string
 	w := board()
 	w.usage = fakeUsage{asked: &asked}
-	h := newTestHandler(t, w)
+	h := newRenderedHandler(t, w)
 
 	rec := get(t, h, "/projects/p1/usage")
 	body := rec.Body.String()

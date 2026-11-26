@@ -1,5 +1,5 @@
 // The project root's kanban board. It renders the rail's store (the project's
-// tasks and per-task activity, kept live by tasksRail over the project feed),
+// tasks and per-task activity, kept live by tasksRailFeed over the project feed),
 // so a task an agent creates or moves shows here as it happens. A card opens
 // the task; its "Move to…" menu moves it, optimistically, with a status-only
 // update.
@@ -65,7 +65,7 @@ export const AGE_TICK_MS = 60_000;
 /**
  * @param {{
  *   gateway: import("../../domain/ports.js").TaskGateway,
- *   store: import("./rail.js").RailStore,
+ *   store: import("./railFeed.js").RailStore,
  *   prefs?: import("../../../../shared/infrastructure/storage.js").Preferences,  where each feature card's folded or open state is kept (ADR 0037)
  *   setTimeout?: typeof globalThis.setTimeout,
  *   clock?: { now: () => Date },
@@ -477,7 +477,7 @@ export const board =
     },
 
     /**
-     * A task changed over the feed (tasksRail applied it and dispatched this):
+     * A task changed over the feed (tasksRailFeed applied it and dispatched this):
      * say what happened and highlight the card for a while. The echo of a move
      * made from this board is neither announced nor highlighted; while a newer
      * move of the same card is pending, the card keeps that newer status.

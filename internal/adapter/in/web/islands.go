@@ -24,6 +24,12 @@ type IslandRenderer interface {
 // topBarIsland is the island's name in the manifest and in the page.
 const topBarIsland = "top-bar"
 
+// railIsland is the rail island's name in the manifest and in the page.
+const railIsland = "rail"
+
+// tasksToggleIsland is the header's Tasks button island's name in the manifest and in the page.
+const tasksToggleIsland = "tasks-toggle"
+
 // renderTimeout bounds one island render: past it the page carries an empty
 // mount and the browser draws the top bar.
 const renderTimeout = 200 * time.Millisecond
@@ -85,4 +91,40 @@ func (s *server) island(ctx context.Context, bar *ports.TopBar) (*shell.TopBarIs
 	}
 	isl.HTML, isl.Failed = html, false
 	return isl, nil
+}
+
+// railIsland builds the rail island of a page, and the Tasks button's: the seed
+// and navigation as props and, when they render, their HTML. Like the top bar,
+// the page never fails because of them: on any failure the mount is empty and
+// marked, and the browser draws it.
+func (s *server) railIsland(ctx context.Context, frame shell.Frame) *shell.RailIsland {
+	props, err := json.Marshal(frame.RailProps())
+	if err != nil {
+		props = []byte("{}")
+	}
+	toggleProps, _ := json.Marshal(shell.TasksToggleProps{NeedsYou: frame.Rail.Seed.NeedsYouCount()})
+	isl := &shell.RailIsland{Props: string(props), Failed: true, ToggleProps: string(toggleProps), ToggleFailed: true}
+	if s.renderer == nil {
+		return isl
+	}
+	if html, ok := s.renderIsland(ctx, railIsland, props, frame.Top.Current); ok {
+		isl.HTML, isl.Failed = html, false
+	}
+	if html, ok := s.renderIsland(ctx, tasksToggleIsland, toggleProps, frame.Top.Current); ok {
+		isl.ToggleHTML, isl.ToggleFailed = html, false
+	}
+	return isl
+}
+
+func (s *server) renderIsland(ctx context.Context, name string, props []byte, project string) (string, bool) {
+	started := time.Now()
+	html, err := s.renderer.Render(ctx, name, props)
+	pagetime.AddIsland(ctx, time.Since(started))
+	if err != nil {
+		if ctx.Err() == nil {
+			slog.Error("web: an island did not render; the browser draws it", "island", name, "kind", islandErrorKind(err), "project", project, "err", err)
+		}
+		return "", false
+	}
+	return html, true
 }

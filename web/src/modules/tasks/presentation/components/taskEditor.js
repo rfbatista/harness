@@ -26,7 +26,7 @@ const NOTE_ID = "task-note";
  *   navigate: (url: string) => void,
  *   reload: () => void,
  *   tokenSavers?: import("../../../tokensavers/domain/ports.js").TokenSaverGateway,  the task's Token savers, written on Save
- *   store?: import("./rail.js").RailStore,  the rail's live model: the task as the feed has it, and its latest move
+ *   store?: import("./railFeed.js").RailStore,  the rail's live model: the task as the feed has it, and its latest move
  *   clock?: { now: () => Date },
  * }} deps
  */

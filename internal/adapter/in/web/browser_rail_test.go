@@ -183,8 +183,8 @@ func TestRailFirstPaintFollowsTheCookieAndTheHandoverDoesNotMove(t *testing.T) {
 	if noScriptRows != "t-flaky / " {
 		t.Errorf("folded groups without script show %q, want only Backlog's waiting task", noScriptRows)
 	}
-	if noScriptExpanded {
-		t.Error("the server copy's headings are buttons")
+	if !noScriptExpanded {
+		t.Error("the server paints the headings as buttons: it is the same rail the browser takes over")
 	}
 	var collapsedLive, expanded string
 	h.run(t, "the live rail",

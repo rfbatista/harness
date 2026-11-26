@@ -104,11 +104,15 @@ export const serviceRequests = ({ gateway, clock = systemClock, hash = () => glo
       }
       if (this.projectId === "") return;
       this.load();
+      // A request filed between the seed and the feed going live was announced to nobody: the first live reads the list again.
+      let wentLive = false;
       unfollow = gateway.follow(
         this.projectId,
         (event) => this.arrived(event),
         (status) => {
-          if (status === FeedStatus.RESYNCED) this.load();
+          const first = status === FeedStatus.LIVE && !wentLive;
+          if (status === FeedStatus.LIVE) wentLive = true;
+          if (first || status === FeedStatus.RESYNCED) this.load();
         },
       );
     },

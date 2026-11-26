@@ -61,7 +61,7 @@ func TestProjectDesignPageOfAnUnknownProjectIsNotFound(t *testing.T) {
 
 func TestShellLinksTheProjectDesignAssets(t *testing.T) {
 	for _, path := range []string{"/projects/p1", "/projects/p1/tasks/t-feed", "/projects/p1/design"} {
-		if body := get(t, newTestHandler(t, board()), path).Body.String(); !strings.Contains(body, `href="/projects/p1/design"`) {
+		if body := get(t, newRenderedHandler(t, board()), path).Body.String(); !strings.Contains(body, `href="/projects/p1/design"`) {
 			t.Errorf("%s does not link the project's design assets", path)
 		}
 	}

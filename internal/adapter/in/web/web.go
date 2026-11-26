@@ -11,7 +11,9 @@ import (
 	"log/slog"
 	"net/http"
 	"net/url"
+	"slices"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/a-h/templ"
@@ -448,7 +450,7 @@ func (s *server) layout(ctx context.Context, title, projectID, taskID string) (s
 	if err != nil {
 		return shell.Frame{}, err
 	}
-	frame.Rail = tasks.BuildRail(projectID, list, live, taskID, shell.CollapsedFrom(ctx))
+	frame.Rail = tasks.BuildRail(projectID, list, live, taskID)
 	if s.deps.ArchivedTasks != nil {
 		if frame.Rail.Seed.ArchivedCount, err = s.deps.ArchivedTasks.ArchivedTaskCount(ctx, projectID); err != nil {
 			return shell.Frame{}, err
@@ -473,6 +475,17 @@ func (s *server) layout(ctx context.Context, title, projectID, taskID string) (s
 		frame.Rail.UsageHref = usage.Href(projectID)
 	}
 	frame.Rail.ProductOwnerHref = productowner.Href(projectID)
+	for key := range shell.CollapsedFrom(ctx) {
+		frame.Rail.Collapsed = append(frame.Rail.Collapsed, key)
+	}
+	slices.Sort(frame.Rail.Collapsed)
+	// Rendered once, when the page is drawn: the header's Tasks button and the rail share it.
+	var island *shell.RailIsland
+	var once sync.Once
+	frame.RailIsland = func(f shell.Frame) *shell.RailIsland {
+		once.Do(func() { island = s.railIsland(ctx, f) })
+		return island
+	}
 	return frame, nil
 }
 

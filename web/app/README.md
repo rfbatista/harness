@@ -1,10 +1,12 @@
 # web/app: the React web client
 
 The React and TypeScript part of the web client (ADR 0100, ADR 0101). Its first
-part is the top bar, a server-rendered island in the templ pages. The Alpine
+part is the top bar, the rail (the Barra lateral: project navigation and the Tasks list) and the
+header's Tasks button, server-rendered islands in the templ pages (ADR 0001 and 0002 of the rail
+migration: behaviour parity, driven by the project feed, not by the Alpine store). The Alpine
 client in `web/src` serves everything else for now.
 
-    src/features/<feature>/   navigation, notifications
+    src/features/<feature>/   navigation, notifications, rail
       domain/                 rules and values; imports nothing outside itself
       application/            use cases and the ports they need; imports only the domain
       infrastructure/         adapters (HTTP, browser events, shared stream) and in-memory adapters

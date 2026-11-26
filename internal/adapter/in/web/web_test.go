@@ -161,6 +161,25 @@ func (f fakeSummaries) ListProjectSummaries(context.Context) ([]ports.ProjectSum
 
 func newTestHandler(t *testing.T, w world) http.Handler {
 	t.Helper()
+	return newHandlerWith(t, w, builtAssets(t))
+}
+
+// newRenderedHandler is newTestHandler with the real island bundles: the top bar
+// and the rail are rendered on the server, as the browser first receives them.
+func newRenderedHandler(t *testing.T, w world) http.Handler {
+	t.Helper()
+	assets, err := NewAssets()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !assets.IslandsBuilt() {
+		t.Skip("the island bundles are not built; run `make web`")
+	}
+	return newHandlerWith(t, w, assets)
+}
+
+func newHandlerWith(t *testing.T, w world, assets *Assets) http.Handler {
+	t.Helper()
 	fallback := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { io.WriteString(w, "legacy designer") })
 	deps := Deps{
 		Projects:     fakeProjects{w.projects},
@@ -216,7 +235,7 @@ func newTestHandler(t *testing.T, w world) http.Handler {
 	if w.poThreads != nil {
 		deps.ProductOwnerThreads = w.poThreads
 	}
-	return NewHandler(deps, builtAssets(t), fallback)
+	return NewHandler(deps, assets, fallback)
 }
 
 // board is one project with three tasks; the in-progress task runs several
@@ -309,7 +328,7 @@ func TestHomeWithoutProjectsExplainsHowToStart(t *testing.T) {
 }
 
 func TestProjectPagePutsItsTasksOnTheRailAndTheProjectInThePicker(t *testing.T) {
-	rec := get(t, newTestHandler(t, board()), "/projects/p1")
+	rec := get(t, newRenderedHandler(t, board()), "/projects/p1")
 	body := rec.Body.String()
 	if rec.Code != http.StatusOK {
 		t.Fatalf("got %d:\n%s", rec.Code, body)
@@ -322,16 +341,13 @@ func TestProjectPagePutsItsTasksOnTheRailAndTheProjectInThePicker(t *testing.T) 
 		// The board: its first paint and its live template.
 		`x-data="tasksBoard" data-project-id="p1"`,
 		`x-on:task-changed.window="taskChanged"`,
-		// The rail: its first paint and the live groups it regroups from the store.
-		`data-current-task="" data-reports-feed="" data-seed="rail-seed"`, // templ renders attribute maps sorted by key
-		`x-data="tasksRail"`,
-		`x-for="group in groups"`,
-		`x-for="row in group.rows"`,
+		// The rail: an island painted by the server from the seed, which the headless feed owner reads too.
+		`data-island="rail" data-current-task=""`,
+		`<script type="application/json" id="rail-seed" data-island-props="rail">`,
+		`data-reports-feed="" data-seed="rail-seed" x-data="tasksRailFeed"`, // templ renders attribute maps sorted by key
 		`x-data="streamStatus"`, // the board follows the project feed…
-		`data-reports-feed`,     // …through the rail, which reports it to the stream bar
-		`<script id="rail-seed" type="application/json">`,
+		`data-reports-feed`,     // …through the feed owner, which reports it to the stream bar
 		`"tasks":[{"id":"t-feed"`,
-		`data-ssr`,
 		`x-for="column in columns"`,
 		`x-for="card in column.cards"`,
 		`class="[ card ]" data-task-id="t-feed"`,
@@ -407,7 +423,7 @@ func TestDesignTabEmbedsArtifactsSandboxed(t *testing.T) {
 }
 
 func TestTaskPageListsItsSessionsBesideTheDetail(t *testing.T) {
-	rec := get(t, newTestHandler(t, board()), "/projects/p1/tasks/t-feed")
+	rec := get(t, newRenderedHandler(t, board()), "/projects/p1/tasks/t-feed")
 	body := rec.Body.String()
 	if rec.Code != http.StatusOK {
 		t.Fatalf("got %d:\n%s", rec.Code, body)
@@ -773,7 +789,7 @@ func TestSettingsPageSeedsTheProject(t *testing.T) {
 }
 
 func TestNewTaskPage(t *testing.T) {
-	h := newTestHandler(t, board())
+	h := newRenderedHandler(t, board())
 	rec := get(t, h, "/projects/p1/tasks/new")
 	body := rec.Body.String()
 	if rec.Code != http.StatusOK {
