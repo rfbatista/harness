@@ -158,6 +158,8 @@ type ProjectChange struct {
 	ProductOwnerDigest *ProductOwnerDigestChange `json:"product_owner_digest,omitempty"`
 	// ProductOwnerMemory is a memory entry saved, changed or dropped.
 	ProductOwnerMemory *ProductOwnerMemoryChange `json:"product_owner_memory,omitempty"`
+	// AgentSystemSettings says agent system settings were saved; pages re-read.
+	AgentSystemSettings *AgentSystemSettingsChange `json:"agent_system_settings,omitempty"`
 	// ContextChange says a session's context changed (contract "Harness server
 	// ↔ Web UI — session context", C5). Embedded, so its three fields are the
 	// whole message: {"kind":"context.changed","session_id":…,"reason":…}.
@@ -342,6 +344,8 @@ func (c ProjectChange) ProjectID() string {
 		return c.ArchitectureRuleEvent.ProjectID
 	case c.SessionFilesRoot != nil:
 		return c.SessionFilesRoot.ProjectID
+	case c.AgentSystemSettings != nil:
+		return c.AgentSystemSettings.ProjectID
 	case c.ProductOwnerSettings != nil:
 		return c.ProductOwnerSettings.ProjectID
 	case c.ProductOwnerThreadItem != nil:

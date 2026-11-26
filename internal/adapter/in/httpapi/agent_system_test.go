@@ -6,8 +6,13 @@ import (
 	"net/http"
 	"testing"
 
+	"bytes"
+	"net/http/httptest"
+
+	"operators-mcp/internal/adapter/out/persistence/sqlite"
 	"operators-mcp/internal/application/agentsystem"
 	"operators-mcp/internal/domain"
+	"operators-mcp/internal/ports"
 )
 
 type agentSystemProjects map[string]*domain.Project
@@ -18,14 +23,30 @@ type agentSystemRepositories map[string]*domain.Repository
 
 func (f agentSystemRepositories) Get(_ context.Context, id string) *domain.Repository { return f[id] }
 
+type feedRecorder struct{ changes []ports.ProjectChange }
+
+func (f *feedRecorder) AnnounceChange(c ports.ProjectChange) { f.changes = append(f.changes, c) }
+
 func agentSystemHandler(t *testing.T) *Handler {
+	h, _ := agentSystemHandlerWithFeed(t)
+	return h
+}
+
+func agentSystemHandlerWithFeed(t *testing.T) (*Handler, *feedRecorder) {
 	t.Helper()
+	db, err := sqlite.Open(":memory:")
+	if err != nil {
+		t.Fatal(err)
+	}
+	feed := &feedRecorder{}
 	svc := agentsystem.New(agentsystem.Deps{
+		Store:        sqlite.NewAgentSystemRepository(db),
+		Feed:         feed,
 		Projects:     agentSystemProjects{"p1": {ID: "p1"}},
 		Repositories: agentSystemRepositories{"r1": {ID: "r1", ProjectID: "p1"}},
 		ReviewModel:  func() string { return "opus" },
 	})
-	return NewHandler(Services{AgentSystem: svc})
+	return NewHandler(Services{AgentSystem: svc}), feed
 }
 
 func TestGetProjectAgentSystemShowsHarnessDefaultsWithTheirSource(t *testing.T) {
@@ -58,5 +79,90 @@ func TestGetProjectAgentSystemOfAnUnknownProjectIs404(t *testing.T) {
 
 	if rec := getJSON(t, h, "/projects/nope/agent-system"); rec.Code != http.StatusNotFound {
 		t.Fatalf("status = %d, want 404: %s", rec.Code, rec.Body.String())
+	}
+}
+
+func patchJSON(t *testing.T, h *Handler, path string, body string) *httptest.ResponseRecorder {
+	t.Helper()
+	req := httptest.NewRequest(http.MethodPatch, "/api"+path, bytes.NewReader([]byte(body)))
+	req.Header.Set("Content-Type", "application/json")
+	rec := httptest.NewRecorder()
+	NewRouter(h).ServeHTTP(rec, req)
+	return rec
+}
+
+type agentSystemErrors struct {
+	Errors []struct {
+		Field   string `json:"field"`
+		Code    string `json:"code"`
+		Message string `json:"message"`
+	} `json:"errors"`
+}
+
+func TestPatchProjectAgentSystemSetsAndResetsFields(t *testing.T) {
+	h := agentSystemHandler(t)
+
+	rec := patchJSON(t, h, "/projects/p1/agent-system", `{"guard.retry_limit": 7}`)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d: %s", rec.Code, rec.Body.String())
+	}
+	var view struct {
+		Effective struct {
+			Guard struct {
+				RetryLimit struct {
+					Value  int    `json:"value"`
+					Source string `json:"source"`
+				} `json:"retry_limit"`
+			} `json:"guard"`
+		} `json:"effective"`
+		Values map[string]any `json:"values"`
+	}
+	if err := json.Unmarshal(rec.Body.Bytes(), &view); err != nil {
+		t.Fatal(err)
+	}
+	if got := view.Effective.Guard.RetryLimit; got.Value != 7 || got.Source != "project" || view.Values["guard.retry_limit"] != float64(7) {
+		t.Fatalf("view = %+v / %v, want 7 from project", got, view.Values)
+	}
+
+	rec = patchJSON(t, h, "/projects/p1/agent-system", `{"guard.retry_limit": null}`)
+	view.Values = nil
+	if err := json.Unmarshal(rec.Body.Bytes(), &view); err != nil || view.Effective.Guard.RetryLimit.Source != "harness" || len(view.Values) != 0 {
+		t.Fatalf("after reset: %s", rec.Body.String())
+	}
+}
+
+func TestPatchProjectAgentSystemRefusesWith422AndTheFieldNamed(t *testing.T) {
+	h := agentSystemHandler(t)
+
+	for body, want := range map[string][2]string{
+		`{"guard.retry_limit": 0}`:  {"guard.retry_limit", "OUT_OF_RANGE"},
+		`{"guard.retry_limit": 11}`: {"guard.retry_limit", "OUT_OF_RANGE"},
+		`{"guard.nope": true}`:      {"guard.nope", "UNKNOWN_FIELD"},
+	} {
+		rec := patchJSON(t, h, "/projects/p1/agent-system", body)
+		var e agentSystemErrors
+		if rec.Code != http.StatusUnprocessableEntity || json.Unmarshal(rec.Body.Bytes(), &e) != nil || len(e.Errors) != 1 || e.Errors[0].Field != want[0] || e.Errors[0].Code != want[1] || e.Errors[0].Message == "" {
+			t.Errorf("%s -> %d %s, want 422 %v", body, rec.Code, rec.Body.String(), want)
+		}
+	}
+}
+
+func TestPatchProjectAgentSystemIsPushedOnTheProjectFeed(t *testing.T) {
+	h, feed := agentSystemHandlerWithFeed(t)
+
+	patchJSON(t, h, "/projects/p1/agent-system", `{"guard.retry_limit": 7}`)
+
+	if len(feed.changes) != 1 || feed.changes[0].AgentSystemSettings == nil || feed.changes[0].ProjectID() != "p1" {
+		t.Fatalf("feed = %+v", feed.changes)
+	}
+	raw, _ := json.Marshal(feed.changes[0])
+	if !bytes.Contains(raw, []byte(`"agent_system_settings"`)) {
+		t.Fatalf("wire = %s, want the agent_system_settings key", raw)
+	}
+}
+
+func TestPatchOfAnUnknownProjectIs404(t *testing.T) {
+	if rec := patchJSON(t, agentSystemHandler(t), "/projects/nope/agent-system", `{"guard.retry_limit": 7}`); rec.Code != http.StatusNotFound {
+		t.Fatalf("status = %d: %s", rec.Code, rec.Body.String())
 	}
 }

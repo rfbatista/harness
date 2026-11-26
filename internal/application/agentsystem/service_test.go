@@ -5,8 +5,12 @@ import (
 	"errors"
 	"testing"
 
+	"encoding/json"
+
+	"operators-mcp/internal/adapter/out/persistence/sqlite"
 	"operators-mcp/internal/application/agentsystem"
 	"operators-mcp/internal/domain"
+	"operators-mcp/internal/ports"
 )
 
 type fakeProjects map[string]*domain.Project
@@ -20,7 +24,20 @@ func (f fakeRepositories) Get(_ context.Context, id string) *domain.Repository {
 // world is a project "p1" with repositories "r1" and "r2", and a repository
 // "other" that belongs to project "p2".
 func world() agentsystem.Deps {
+	return worldOn(newStore())
+}
+
+func newStore() *sqlite.AgentSystemRepository {
+	db, err := sqlite.Open(":memory:")
+	if err != nil {
+		panic(err)
+	}
+	return sqlite.NewAgentSystemRepository(db)
+}
+
+func worldOn(store ports.AgentSystemStore) agentsystem.Deps {
 	return agentsystem.Deps{
+		Store:    store,
 		Projects: fakeProjects{"p1": {ID: "p1"}, "p2": {ID: "p2"}},
 		Repositories: fakeRepositories{
 			"r1":    {ID: "r1", ProjectID: "p1"},
@@ -154,4 +171,132 @@ func contains(list []string, s string) bool {
 		}
 	}
 	return false
+}
+
+type recorder struct {
+	events  []domain.Event
+	changes []ports.ProjectChange
+}
+
+func (r *recorder) Publish(_ context.Context, ev ...domain.Event) error {
+	r.events = append(r.events, ev...)
+	return nil
+}
+func (r *recorder) AnnounceChange(c ports.ProjectChange) { r.changes = append(r.changes, c) }
+
+func patch(t *testing.T, kv map[string]string) map[string]json.RawMessage {
+	t.Helper()
+	out := map[string]json.RawMessage{}
+	for k, v := range kv {
+		out[k] = json.RawMessage(v)
+	}
+	return out
+}
+
+func codes(t *testing.T, err error) map[string]string {
+	t.Helper()
+	var ve *domain.AgentSystemValidationError
+	if !errors.As(err, &ve) {
+		t.Fatalf("error = %v, want a validation error", err)
+	}
+	out := map[string]string{}
+	for _, e := range ve.Errors {
+		out[e.Field] = e.Code
+	}
+	return out
+}
+
+func TestAProjectDefaultIsFollowedByEveryRepositoryAndResetReturnsToTheHarnessDefault(t *testing.T) {
+	svc := agentsystem.New(world())
+	ctx := context.Background()
+
+	if _, err := svc.SaveProject(ctx, "p1", patch(t, map[string]string{"guard.retry_limit": "5", "learn.context_map.enabled": "false"})); err != nil {
+		t.Fatal(err)
+	}
+	for _, repo := range []string{"r1", "r2"} {
+		got, _ := svc.Effective(ctx, "p1", repo)
+		if got.Guard.RetryLimit.Value != 5 || got.Guard.RetryLimit.Source != domain.SourceProject {
+			t.Errorf("%s retry limit = %+v, want 5 from project", repo, got.Guard.RetryLimit)
+		}
+		if got.Learn.ContextMap.Enabled.Value || got.Learn.ContextMap.Enabled.Source != domain.SourceProject {
+			t.Errorf("%s context map = %+v, want off from project", repo, got.Learn.ContextMap.Enabled)
+		}
+	}
+
+	if _, err := svc.SaveProject(ctx, "p1", patch(t, map[string]string{"guard.retry_limit": "null"})); err != nil {
+		t.Fatal(err)
+	}
+	got, _ := svc.Effective(ctx, "p1", "r1")
+	if got.Guard.RetryLimit.Value != 3 || got.Guard.RetryLimit.Source != domain.SourceHarness {
+		t.Errorf("after reset retry limit = %+v, want 3 from harness", got.Guard.RetryLimit)
+	}
+	if got.Learn.ContextMap.Enabled.Source != domain.SourceProject {
+		t.Error("resetting one field dropped another")
+	}
+}
+
+func TestASaveWithOneInvalidFieldStoresNoneOfThem(t *testing.T) {
+	d := world()
+	rec := &recorder{}
+	d.Events, d.Feed = rec, rec
+	svc := agentsystem.New(d)
+	ctx := context.Background()
+
+	_, err := svc.SaveProject(ctx, "p1", patch(t, map[string]string{
+		"learn.context_map.enabled": "false", "guard.retry_limit": "11", "nope.field": "1",
+	}))
+
+	got := codes(t, err)
+	if got["guard.retry_limit"] != "OUT_OF_RANGE" || got["nope.field"] != "UNKNOWN_FIELD" || len(got) != 2 {
+		t.Fatalf("errors = %v", got)
+	}
+	eff, _ := svc.Effective(ctx, "p1", "r1")
+	if !eff.Learn.ContextMap.Enabled.Value || eff.Learn.ContextMap.Enabled.Source != domain.SourceHarness {
+		t.Error("a refused save stored a field")
+	}
+	if len(rec.events) != 0 || len(rec.changes) != 0 {
+		t.Error("a refused save announced a change")
+	}
+}
+
+func TestRetryLimitBoundsAreOneAndTen(t *testing.T) {
+	svc := agentsystem.New(world())
+	for v, ok := range map[string]bool{"0": false, "1": true, "10": true, "11": false, "2.5": false, `"3"`: false} {
+		_, err := svc.SaveProject(context.Background(), "p1", patch(t, map[string]string{"guard.retry_limit": v}))
+		if (err == nil) != ok {
+			t.Errorf("retry_limit %s: error = %v, want ok=%v", v, err, ok)
+		}
+	}
+}
+
+func TestSavedSettingsSurviveARestart(t *testing.T) {
+	store := newStore()
+	first := agentsystem.New(worldOn(store))
+	if _, err := first.SaveProject(context.Background(), "p1", patch(t, map[string]string{"review.critic.enabled": "false"})); err != nil {
+		t.Fatal(err)
+	}
+
+	second := agentsystem.New(worldOn(store))
+	got, _ := second.Effective(context.Background(), "p1", "r1")
+	if got.Review.Critic.Enabled.Value || got.Review.Critic.Enabled.Source != domain.SourceProject {
+		t.Fatalf("critic enabled = %+v, want off from project", got.Review.Critic.Enabled)
+	}
+}
+
+func TestEachSaveIsAnnouncedOnTheEventBusAndTheProjectFeed(t *testing.T) {
+	d := world()
+	rec := &recorder{}
+	d.Events, d.Feed = rec, rec
+	svc := agentsystem.New(d)
+
+	if _, err := svc.SaveProject(context.Background(), "p1", patch(t, map[string]string{"guard.retry_limit": "4"})); err != nil {
+		t.Fatal(err)
+	}
+
+	if len(rec.events) != 1 || rec.events[0] != (domain.AgentSystemSettingsChanged{ProjectID: "p1"}) {
+		t.Fatalf("events = %+v, want one AgentSystemSettingsChanged for p1", rec.events)
+	}
+	if len(rec.changes) != 1 || rec.changes[0].AgentSystemSettings == nil || rec.changes[0].ProjectID() != "p1" {
+		t.Fatalf("feed changes = %+v", rec.changes)
+	}
 }
