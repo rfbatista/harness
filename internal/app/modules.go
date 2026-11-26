@@ -970,9 +970,9 @@ func newHub() *orchestration.Hub { return orchestration.NewHub(256) }
 // newArchitectureRules checks sessions' actions against their repository's
 // architecture rules, reading each repository's current saved record and
 // announcing every failed rule on the orchestration's project feed.
-func newArchitectureRules(cat catalog.Catalog, sessions ports.SessionRepository, events ports.ArchitectureRuleEventStore, orch *orchestration.Service) *archrules.Service {
+func newArchitectureRules(cat catalog.Catalog, sessions ports.SessionRepository, events ports.ArchitectureRuleEventStore, orch *orchestration.Service, guard ports.GuardSessions) *archrules.Service {
 	svc := archrules.NewService(archrules.Deps{
-		Sessions: sessions, Agents: cat.Agents, Records: cat.RepositoryArchitectures, Events: events, Feed: orch, EnvFiles: cat.Projects,
+		Sessions: sessions, Agents: cat.Agents, Records: cat.RepositoryArchitectures, Events: events, Feed: orch, EnvFiles: cat.Projects, Guard: guard,
 	})
 	svc.Subscribe(cat.Bus)
 	return svc

@@ -41,6 +41,9 @@ type Deps struct {
 	// EnvFiles are the repositories' saved env files, whose root .env a
 	// command rule sees; nil gives it the server's environment alone.
 	EnvFiles ports.EnvFileLister
+	// Guard gives a session's kept guard configuration, for the protected
+	// paths; nil protects none.
+	Guard ports.GuardSessions
 	// Run runs command rules; nil runs them with sh.
 	Run Runner
 }
@@ -106,6 +109,9 @@ func (s *Service) CheckArchitecture(ctx context.Context, c ports.ArchitectureChe
 		return v
 	}
 	if v, refused := s.readOnlyRefusal(c); refused {
+		return v
+	}
+	if v, refused := s.protectedPathRefusal(ctx, c); refused {
 		return v
 	}
 	sess := s.d.Sessions.Get(c.SessionID)
