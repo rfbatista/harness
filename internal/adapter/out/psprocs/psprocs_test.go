@@ -1,6 +1,10 @@
 package psprocs
 
-import "testing"
+import (
+	"context"
+	"strings"
+	"testing"
+)
 
 func TestParseReadsPidSessionRSSNameFirstArgAndTheConversation(t *testing.T) {
 	rows := Parse(`
@@ -21,5 +25,36 @@ func TestParseReadsPidSessionRSSNameFirstArgAndTheConversation(t *testing.T) {
 	}
 	if rows[2].Name != "node" || rows[2].Arg != "/repo/node_modules/.bin/jest" || rows[2].Session != "" {
 		t.Errorf("node row = %+v", rows[2])
+	}
+}
+
+// N2: lstart follows the locale ps runs in, so ps is run in C, whose layout is
+// the five words Parse reads.
+func TestPsRunsInTheCLocaleSoLstartHasTheFiveWordLayout(t *testing.T) {
+	cmd := psCommand(context.Background())
+	var lc string
+	for _, kv := range cmd.Env {
+		if strings.HasPrefix(kv, "LC_ALL=") {
+			lc = kv
+		}
+	}
+	if lc != "LC_ALL=C" {
+		t.Errorf("ps env has %q (all: %v), want LC_ALL=C last", lc, cmd.Env)
+	}
+	if got := cmd.Env[len(cmd.Env)-1]; got != "LC_ALL=C" {
+		t.Errorf("LC_ALL=C is not last (%q): an inherited LC_ALL would win", got)
+	}
+}
+
+// A locale whose lstart is not the C layout would shift every later field: the
+// line is dropped, never read with a later argument taken for the command's
+// name or first argument.
+func TestALineWhoseLstartIsNotTheCLayoutIsDroppedNotMisread(t *testing.T) {
+	rows := Parse(`
+  201   102 0xabc1 307200 2026/11/26 09:00:02 node --token s3cret /repo/jest extra words here
+  202   102 0xabc1 307200 Thu Nov 26 09:00:02 2026 node jest
+`)
+	if len(rows) != 1 || rows[0].PID != 202 || rows[0].Name != "node" || rows[0].Arg != "jest" {
+		t.Errorf("rows = %+v, want only the C-layout line", rows)
 	}
 }

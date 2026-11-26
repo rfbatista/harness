@@ -8,6 +8,7 @@ import (
 	"bufio"
 	"context"
 	"fmt"
+	"os"
 	"os/exec"
 	"path/filepath"
 	"strconv"
@@ -28,11 +29,20 @@ type Table struct{}
 // Read runs ps once. The session column is compared, never interpreted: on
 // macOS it is the kernel's session handle, equal for processes of one session.
 func (Table) Read(ctx context.Context) ([]ports.ProcessInfo, error) {
-	out, err := exec.CommandContext(ctx, "ps", "-axww", "-o", "pid=,ppid=,sess=,rss=,lstart=,command=").Output()
+	out, err := psCommand(ctx).Output()
 	if err != nil {
 		return nil, fmt.Errorf("read the process table: %w", err)
 	}
 	return Parse(string(out)), nil
+}
+
+// psCommand is the ps run. It runs in the C locale: lstart is printed in the
+// locale's own %c layout, and only C's is the five words Parse reads. LC_ALL is
+// last so one inherited from the server cannot win.
+func psCommand(ctx context.Context) *exec.Cmd {
+	cmd := exec.CommandContext(ctx, "ps", "-axww", "-o", "pid=,ppid=,sess=,rss=,lstart=,command=")
+	cmd.Env = append(os.Environ(), "LC_ALL=C")
+	return cmd
 }
 
 // Parse reads ps's "pid ppid sess rss lstart command" lines; rss is in KB; lstart is five words ("Thu Nov 26 08:59:31 2026"). A line
@@ -52,6 +62,9 @@ func Parse(out string) []ports.ProcessInfo {
 		if e1 != nil || e2 != nil || e4 != nil {
 			continue
 		}
+		if !cLayoutStart(f[4:9]) {
+			continue // another locale's layout: every later field would be shifted
+		}
 		started := strings.Join(f[4:9], " ")
 		args := f[9:]
 		p := ports.ProcessInfo{PID: pid, PPID: ppid, SID: sessionKey(f[2]), RSSBytes: rss << 10, Started: started, Name: filepath.Base(args[0]), Session: conversation(args)}
@@ -61,6 +74,18 @@ func Parse(out string) []ports.ProcessInfo {
 		rows = append(rows, p)
 	}
 	return rows
+}
+
+// cLayoutStart reports whether w is C's lstart: "Thu Nov 26 08:59:31 2026".
+func cLayoutStart(w []string) bool {
+	if len(w) != 5 || len(w[0]) != 3 || len(w[1]) != 3 || len(w[4]) != 4 || strings.Count(w[3], ":") != 2 {
+		return false
+	}
+	if _, err := strconv.Atoi(w[2]); err != nil {
+		return false
+	}
+	_, err := strconv.Atoi(w[4])
+	return err == nil
 }
 
 // sessionKey folds ps's session column (a number, or a hex handle on macOS)
