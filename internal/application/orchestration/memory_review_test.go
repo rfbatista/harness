@@ -19,18 +19,13 @@ import (
 // answers, and only then does a sample see the process gone. The reason is in
 // that call's answer and never reaches the courier as well.
 func TestTheNoticeIsInThePostToolUseAnswerOfTheCallRunningWhenSIGTERMWentOut(t *testing.T) {
-	svc, w := newHeadlessShellService(t)
-	withTokenSavers(t, svc)
+	// An interactive client session has no headless pump: nothing ends a turn
+	// behind the test's back and clears the calls it started.
+	svc, _ := newInteractiveService(t)
 	table, sig := &fakeTable{}, &fakeSignaler{}
 	watcher := memorywatch.New(memorywatch.Deps{Table: table, Signal: sig, Sink: svc})
-	svc.MemoryWatcher = watcher
-	sess, _ := startHeadless(t, svc, w.task.ID)
-	// The fake CLI's first turn may still be running; its end clears the running
-	// calls (no turn ends between a call's PreToolUse and PostToolUse), so the
-	// call is started only once that turn is over.
-	eventually(t, "the first turn to end", func() bool { return !svc.isBusy(sess.ID) })
-	live, _, cancel := svc.Subscribe(sess.ID)
-	defer cancel()
+	sess, _ := startInteractive(t, svc, InteractiveRequest{Prompt: "go"})
+	watcher.Watch(ports.MemoryWatch{SessionID: sess.ID, TaskID: sess.TicketID, BudgetBytes: 4 * gb, ClaudeID: sess.ID})
 
 	rows := []ports.ProcessInfo{
 		{PID: 100, PPID: 1, SID: 7, RSSBytes: 300 * mb, Name: "claude", Session: sess.ID},
@@ -50,20 +45,8 @@ func TestTheNoticeIsInThePostToolUseAnswerOfTheCallRunningWhenSIGTERMWentOut(t *
 	table.set(rows[0]) // 201 is gone by the next sample
 	watcher.Poll(now.Add(time.Second))
 
-	deadline := time.After(300 * time.Millisecond)
-	for {
-		select {
-		case ev := <-live:
-			if ev.Type == "user_message" && strings.Contains(ev.Text, "memory budget") {
-				t.Fatalf("the courier delivered the notice as well: %q", ev.Text)
-			}
-			continue
-		case <-deadline:
-		}
-		break
-	}
 	if q := svc.courier.take(sess.ID); len(q) != 0 {
-		t.Errorf("the courier holds %d parcels, want none", len(q))
+		t.Errorf("the courier holds %d parcels (%v), want none: the notice was in the call's answer", len(q), q)
 	}
 }
 
