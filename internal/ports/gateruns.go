@@ -77,6 +77,16 @@ type SessionEscalatedChange struct {
 	RedGates  []domain.GateKind `json:"red_gates"`
 }
 
+// LockfileFlagChange is a lockfile changed with its manifest, as the project
+// feed carries it: allowed, and flagged with the dependencies it added.
+type LockfileFlagChange struct {
+	ProjectID    string   `json:"project_id"`
+	SessionID    string   `json:"session_id"`
+	Lockfile     string   `json:"lockfile"`
+	Manifest     string   `json:"manifest"`
+	Dependencies []string `json:"dependencies"`
+}
+
 // DeclarationRefusal is one check refusing a done declaration.
 type DeclarationRefusal struct {
 	Code    string

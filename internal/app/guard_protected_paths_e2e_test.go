@@ -211,3 +211,103 @@ func TestASessionScopeUnlocksOnlyTheGlobsItCoversForThatSessionAndSurvivesAResum
 		t.Error("an invalid scope glob started a session")
 	}
 }
+
+// Guard — the lockfile rule (ADR 0012): a lockfile changes only with its
+// manifest, and a change with it is allowed and flagged with what it added.
+
+func (e *shellE2E) gatedForLockfile(settings *fakeAgentSystem, mode string) runningSession {
+	e.t.Helper()
+	e.orch.AgentSystem = settings
+	return e.startWith(ports.InteractiveRequest{ProjectID: e.project, RepositoryID: e.repo, TicketID: e.task("Lockfile"), Mode: mode})
+}
+
+const goSumAdded = "github.com/new/dep v1.2.3 h1:abc=\ngithub.com/new/dep v1.2.3/go.mod h1:def=\n"
+
+func TestALockfileWrittenWithoutItsManifestIsRefusedAndWithItAllowedAndFlaggedWithTheNewDependencies(t *testing.T) {
+	e := newShellE2E(t)
+	a := e.gatedForLockfile(&fakeAgentSystem{retry: 3, gates: greenGates()}, "implement")
+	feed, err := e.orch.FollowProject(e.ctx, e.project)
+	if err != nil {
+		t.Fatal(err)
+	}
+	sum := filepath.Join(a.worktree, "go.sum")
+	pre := func(in map[string]any) string {
+		return runHook(t, a, e.srv.URL, "PreToolUse", archPreMatcher, in)
+	}
+
+	// The lockfile alone, by a file tool and by a redirect.
+	for _, in := range []map[string]any{editInput("Write", sum), bashInput(a.worktree, "echo x >> go.sum")} {
+		if out := pre(in); !strings.Contains(out, "LOCKFILE_WITHOUT_MANIFEST") || !strings.Contains(out, "go.mod") {
+			t.Errorf("a lockfile alone = %s", out)
+		}
+	}
+	// A manifest is not a lockfile, and a write of it is allowed.
+	if out := pre(editInput("Write", filepath.Join(a.worktree, "go.mod"))); out != "" {
+		t.Errorf("a manifest write = %s", out)
+	}
+
+	// With the manifest changed in the worktree, the lockfile is allowed...
+	write(t, filepath.Join(a.worktree, "go.mod"), "module x\n\nrequire github.com/new/dep v1.2.3\n")
+	if out := pre(editInput("Write", sum)); out != "" {
+		t.Fatalf("a lockfile with its manifest changed = %s", out)
+	}
+	// ...and once the edit landed, flagged with the dependencies it added.
+	write(t, sum, goSumAdded)
+	runHook(t, a, e.srv.URL, "PostToolUse", archPostMatcher, editInput("Write", sum))
+
+	var flagged map[string]any
+	for _, ev := range e.ruleEvents() {
+		if ev["rule_id"] == "lockfile_flag" {
+			flagged = ev
+		}
+	}
+	if flagged == nil || flagged["session_id"] != a.id || flagged["outcome"] != "warned" || !strings.Contains(flagged["detail"].(string), "github.com/new/dep@v1.2.3") {
+		t.Errorf("flag event = %v", flagged)
+	}
+	var refusals int
+	for _, ev := range e.ruleEvents() {
+		if ev["rule_id"] == "lockfile_without_manifest" && ev["outcome"] == "blocked" {
+			refusals++
+		}
+	}
+	if refusals != 2 {
+		t.Errorf("recorded %d lockfile refusals, want 2", refusals)
+	}
+	var announced *ports.LockfileFlagChange
+drain:
+	for {
+		select {
+		case ch := <-feed:
+			if ch.LockfileFlag != nil {
+				announced = ch.LockfileFlag
+			}
+		default:
+			break drain
+		}
+	}
+	if announced == nil || announced.Lockfile != "go.sum" || announced.Manifest != "go.mod" || len(announced.Dependencies) != 1 || announced.Dependencies[0] != "github.com/new/dep@v1.2.3" {
+		t.Errorf("feed event = %+v", announced)
+	}
+}
+
+func TestWithTheLockfileRuleOffNothingIsRefusedOrFlaggedAndANonGatedSessionIsNeverChecked(t *testing.T) {
+	e := newShellE2E(t)
+	off := e.gatedForLockfile(&fakeAgentSystem{retry: 3, gates: greenGates(), lockfileOff: true}, "implement")
+	sum := filepath.Join(off.worktree, "go.sum")
+	if out := runHook(t, off, e.srv.URL, "PreToolUse", archPreMatcher, editInput("Write", sum)); out != "" {
+		t.Errorf("the rule off refused = %s", out)
+	}
+	write(t, filepath.Join(off.worktree, "go.mod"), "module x\n")
+	write(t, sum, goSumAdded)
+	runHook(t, off, e.srv.URL, "PostToolUse", archPostMatcher, editInput("Write", sum))
+
+	plain := e.gatedForLockfile(&fakeAgentSystem{retry: 3, gates: greenGates()}, "operate")
+	if out := runHook(t, plain, e.srv.URL, "PreToolUse", archPreMatcher, editInput("Write", filepath.Join(plain.worktree, "go.sum"))); out != "" {
+		t.Errorf("a non-gated session was checked = %s", out)
+	}
+	for _, ev := range e.ruleEvents() {
+		if strings.HasPrefix(ev["rule_id"].(string), "lockfile") {
+			t.Errorf("an event with the rule off or no gate: %v", ev)
+		}
+	}
+}

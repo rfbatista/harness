@@ -44,6 +44,11 @@ type Deps struct {
 	// Guard gives a session's kept guard configuration, for the protected
 	// paths; nil protects none.
 	Guard ports.GuardSessions
+	// ManifestChanged says whether a path of a session's worktree differs from
+	// its base; Diff answers its diff against HEAD. The lockfile rule reads
+	// them; nil: no manifest has changed and no diff is read.
+	ManifestChanged func(ctx context.Context, sess *domain.Session, rel string) bool
+	Diff            func(ctx context.Context, sess *domain.Session, rel string) string
 	// Run runs command rules; nil runs them with sh.
 	Run Runner
 }
@@ -112,6 +117,9 @@ func (s *Service) CheckArchitecture(ctx context.Context, c ports.ArchitectureChe
 		return v
 	}
 	if v, refused := s.protectedPathRefusal(ctx, c); refused {
+		return v
+	}
+	if v, refused := s.lockfileRule(ctx, c); refused {
 		return v
 	}
 	sess := s.d.Sessions.Get(c.SessionID)

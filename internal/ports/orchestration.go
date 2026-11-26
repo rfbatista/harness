@@ -130,6 +130,9 @@ type ProjectChange struct {
 	ArchitectureRuleEvent *ArchitectureRuleEventChange `json:"architecture_rule_event,omitempty"`
 	// GateRun is a gate run starting or finishing.
 	GateRun *GateRunChange `json:"gate_run,omitempty"`
+	// LockfileFlag is a lockfile changed together with its manifest, with the
+	// dependencies it added.
+	LockfileFlag *LockfileFlagChange `json:"lockfile_flag,omitempty"`
 	// SessionEscalated is a session stopped for reaching its retry limit.
 	SessionEscalated *SessionEscalatedChange `json:"session_escalated,omitempty"`
 	// DesignSystemSaved says a design system got a new version.
@@ -366,6 +369,8 @@ func (c ProjectChange) ProjectID() string {
 		return c.GateRun.ProjectID
 	case c.SessionEscalated != nil:
 		return c.SessionEscalated.ProjectID
+	case c.LockfileFlag != nil:
+		return c.LockfileFlag.ProjectID
 	case c.DesignSystemSaved != nil:
 		return c.DesignSystemSaved.ProjectID
 	case c.DesignSystemChanged != nil:
