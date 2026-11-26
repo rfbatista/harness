@@ -49,12 +49,17 @@ func (s *Service) checkProject(ctx context.Context, projectID string) error {
 }
 
 // defaults are the harness defaults for a repository ("" for the project).
-func (s *Service) defaults(ctx context.Context, repositoryID string) domain.AgentSystemHarnessDefaults {
+// A repository deleted since the caller checked it is not found.
+func (s *Service) defaults(ctx context.Context, repositoryID string) (domain.AgentSystemHarnessDefaults, error) {
 	d := domain.AgentSystemHarnessDefaults{ReviewModel: s.d.ReviewModel()}
 	if repositoryID != "" && s.d.Detector != nil {
-		d.Gates = s.d.Detector.Detect(ctx, s.d.Repositories.Get(ctx, repositoryID))
+		repo := s.d.Repositories.Get(ctx, repositoryID)
+		if repo == nil {
+			return d, &domain.StructuredError{Code: "REPOSITORY_NOT_FOUND", Message: "repository not found: " + repositoryID}
+		}
+		d.Gates = s.d.Detector.Detect(ctx, repo)
 	}
-	return d
+	return d, nil
 }
 
 // checkRepository refuses a repository that is not in the project.
@@ -85,7 +90,11 @@ func (s *Service) Effective(ctx context.Context, projectID, repositoryID string)
 		}
 		levels = slices.Insert(levels, 0, domain.AgentSystemLevel{Source: domain.SourceRepository, Values: own})
 	}
-	eff := domain.ResolveAgentSystem(s.defaults(ctx, repositoryID), levels...)
+	defaults, err := s.defaults(ctx, repositoryID)
+	if err != nil {
+		return domain.EffectiveAgentSystem{}, err
+	}
+	eff := domain.ResolveAgentSystem(defaults, levels...)
 	if repositoryID == "" {
 		eff.MissingRequiredGates = nil // no checkout to detect from: a project has no gates to miss
 	}
