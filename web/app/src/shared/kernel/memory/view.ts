@@ -38,3 +38,9 @@ export function memoryView(sample: MemorySample | null, level: Level, ended: Mem
     title: `Memory: ${formatShown(sample.rssBytes)} of the ${budget} budget${word ? ` · ${word}` : ""} · ${processes}`,
   };
 }
+
+/** Whether two views show the same thing. */
+export function sameView(a: MemoryView | null, b: MemoryView | null): boolean {
+  if (a === null || b === null) return a === b;
+  return a.state === b.state && a.num === b.num && a.of === b.of && a.word === b.word && a.fillPercent === b.fillPercent && a.title === b.title;
+}

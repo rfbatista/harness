@@ -72,6 +72,8 @@
     /* The session's token totals (.usage-total, usage.css), beside agent · age. */
     & > .meta > .usage-total { flex: none; }
     @container session (width < 34rem) { & > .meta > .usage-total { display: none; } }
+    /* The memory chip (memory.css) is an island: its wrappers add no box, so the chip sits in the row beside the token total. */
+    & > .meta > [data-memory-chip], & > .meta > [data-memory-chip] > [data-island] { display: contents; }
     /* The token savers it runs with, and a saver on for it but not installed. */
     & > .meta > :is(.token-savers, [data-token-savers-missing]) { flex: none; }
     & > .meta > .token-savers { color: var(--color-ink-faint); font-size: var(--text-sm); font-family: var(--font-mono); }

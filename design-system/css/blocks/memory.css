@@ -1,0 +1,65 @@
+/*
+ * Memory — a session's memory against its orçamento, in the session head
+ * beside the token total (React island session-memory). A number, a state word
+ * outside normal, and a thin track filled to the share of the budget. The
+ * state is a word as well as a tone.
+ * <button class="memory" data-state="normal|near|over|ended" aria-label="Memory: 3.4 GB of the 4 GB budget · near budget · 9 processes" style="--_fill: 85%">
+ *   <span class="num">3.4<span class="of"> / 4 GB</span></span><span class="word">near budget</span>
+ *   <span class="track" aria-hidden="true"><span class="fill"></span></span></button>
+ * The word is absent in normal. The head keeps its height.
+ */
+
+@layer blocks {
+  .memory {
+    --_tone: var(--color-ink-muted);
+    display: inline-grid;
+    grid-template-columns: auto auto;
+    grid-template-rows: auto 3px;
+    column-gap: var(--space-xs);
+    row-gap: 4px;
+    align-items: baseline;
+    flex: none;
+    padding: 0;
+    border: 0;
+    background: none;
+    font: inherit;
+    font-size: var(--text-sm);
+    font-variant-numeric: tabular-nums;
+    white-space: nowrap;
+    cursor: pointer;
+
+    &:focus-visible { outline: var(--border-focus-width) solid var(--color-focus); outline-offset: 3px; }
+
+    & > .num { color: var(--color-ink-muted); }
+    & .of { color: var(--color-ink-faint); }
+    & > .word { color: var(--_tone); font-weight: var(--weight-medium); }
+    & > .word::before { content: "· "; color: var(--color-ink-faint); font-weight: normal; }
+    & > .track {
+      grid-column: 1 / -1;
+      block-size: 3px;
+      border-radius: 2px;
+      background: var(--color-line-strong);
+      overflow: hidden;
+    }
+    & .fill {
+      display: block;
+      block-size: 100%;
+      inline-size: var(--_fill, 0%);
+      max-inline-size: 100%;
+      background: var(--_tone);
+      transition: inline-size var(--duration-settle) var(--ease-out);
+    }
+
+    &[data-state="near"] { --_tone: var(--color-attention); }
+    &[data-state="near"] > .word { color: var(--color-attention-strong); }
+    &[data-state="over"] { --_tone: var(--color-danger); }
+    &[data-state="over"] > .num, &[data-state="over"] > .word { color: var(--color-danger); }
+    &[data-state="ended"] { --_tone: var(--color-danger); }
+    &[data-state="ended"] > .word { color: var(--color-danger); }
+
+    @media (prefers-reduced-motion: reduce) { & .fill { transition: none; } }
+    @container session (width < 46rem) { &:not([data-state="normal"]) .of { display: none; } }
+    @container session (width < 34rem) { &[data-state="normal"] { display: none; } }
+    @media (width < 48rem) { font-size: inherit; & > .track { display: none; } }
+  }
+}

@@ -256,6 +256,12 @@ export const sessionsPage = ({
       if (!this.showingSession) return [];
       return [{ key: `${this.selected.id}:${this.selected.stoppable ? "live" : "ended"}`, props: this.contextProps() }];
     },
+    /** The memory chip island in the session head (web/app, session-memory): one per selected session, live or ended. */
+    get memoryChips() {
+      if (!this.showingSession) return [];
+      const live = this.selected.stoppable;
+      return [{ key: `${this.selected.id}:${live ? "live" : "ended"}`, props: JSON.stringify({ session_id: this.selected.id, live }) }];
+    },
     /**
      * The tab row scrolls when its tabs do not fit; the tab the person chose
      * (Context and Sandbox sit at the far end) is brought into view whole.

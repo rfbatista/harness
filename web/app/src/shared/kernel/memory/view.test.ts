@@ -2,7 +2,7 @@ import { describe, test } from "node:test";
 import assert from "node:assert/strict";
 import { GB, MB } from "../../testing/memory-fixtures";
 import { CARD_ENDED_MS, CHIP_ENDED_MS, endedBy, killKey, type MemoryKill, type MemorySample } from "./sample";
-import { memoryView } from "./view";
+import { memoryView, sameView } from "./view";
 
 const sample = (over: Partial<MemorySample> = {}): MemorySample => ({
   sessionId: "s1",
@@ -55,6 +55,16 @@ describe("memory view", () => {
     assert.equal(memoryView(sample({ sampledAt: null, rssBytes: 0, processes: 0 }), "normal", null), null);
     assert.equal(memoryView(sample({ rssBytes: 0, processes: 0 }), "normal", null), null);
     assert.equal(memoryView(null, "normal", null), null);
+  });
+});
+
+describe("same view", () => {
+  test("views compare by what they show; null only equals null", () => {
+    const a = memoryView(sample(), "near", null);
+    assert.equal(sameView(a, memoryView(sample({ rssBytes: 3.4 * GB + 1 }), "near", null)), true);
+    assert.equal(sameView(a, memoryView(sample(), "normal", null)), false);
+    assert.equal(sameView(a, null), false);
+    assert.equal(sameView(null, null), true);
   });
 });
 

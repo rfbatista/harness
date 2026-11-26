@@ -1,6 +1,7 @@
 // The memory payloads of the contract "memória da sessão": a session.memory sample, a
 // session.memory_killed, and the initial read GET /api/sessions/:id/memory.
 
+import type { MemoryPrevention } from "../../kernel/memory/ports";
 import type { BudgetSource, HeaviestProcess, KillSignal, MemoryKill, MemorySample } from "../../kernel/memory/sample";
 import { array, count, object, oneOf, optionalTime, string, type Wire } from "./fields";
 import { DtoError } from "./dto-error";
@@ -100,18 +101,13 @@ export class MemoryKillDto {
   }
 }
 
-export interface Prevention {
-  heapMb: number;
-  testWorkers: number;
-}
-
 /** GET /api/sessions/:id/memory: the last sample plus what the popover explains. */
 export class MemoryReadDto {
   constructor(
     readonly sample: MemorySample,
     readonly kills: MemoryKill[],
     readonly budgetSource: BudgetSource,
-    readonly prevention: Prevention,
+    readonly prevention: MemoryPrevention,
   ) {}
 
   static fromJSON(raw: unknown): MemoryReadDto {
