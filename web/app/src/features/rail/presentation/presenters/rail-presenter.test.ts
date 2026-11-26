@@ -130,6 +130,15 @@ describe("folding", () => {
     assert.equal(vm().turned, true, "the chevron turns once a click folded something");
   });
 
+  test("the server's paint of a folded group holds only the open task and what needs the person; the island adds the rest", () => {
+    const tasks = [task({ id: "b1", status: "backlog" }), task({ id: "b2", status: "backlog" }), task({ id: "b3", status: "backlog" })];
+    const { group, presenter } = setup({ tasks, sessions: [session("s", "b2", "idle")], currentTask: "b3", collapsed: ["backlog"] });
+    assert.deepEqual([group("backlog").rows.map((r) => r.id), group("backlog").countText], [["b2", "b3"], "3"]);
+    assert.equal(group("backlog").countWords, " tasks, 1 needs you");
+    presenter.hydrated();
+    assert.deepEqual(group("backlog").rows.map((r) => r.id), ["b1", "b2", "b3"]);
+  });
+
   test("Done caps at five with Show N more, and the open task stays in view", () => {
     const tasks = Array.from({ length: 8 }, (_, n) => task({ id: `d${n}`, title: `Done ${n}`, status: "done", updatedAt: n }));
     const { group, presenter } = setup({ tasks, sessions: [], currentTask: "d0" });

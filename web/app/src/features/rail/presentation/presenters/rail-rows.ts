@@ -166,14 +166,19 @@ function waitsOn(task: Task, ctx: RowContext, nesting: Nesting): boolean {
 
 /**
  * A group as the view binds it: its heading, its rows and Done's rest.
- * `withMore` draws the rest: the server leaves it out of its paint (it is behind
- * a closed disclosure, and every row costs the page its render time).
+ * `complete` draws what is out of sight: Done's rest (behind a closed disclosure)
+ * and the rows of a folded group other than the open task and what needs the
+ * person, which a folded group still shows. The server leaves those out of its
+ * paint, since every row costs the page its render time; the island adds them
+ * once it has taken over.
  */
-export function toGroup(g: RailGroup, ctx: RowContext, withMore: boolean): GroupViewModel {
+export function toGroup(g: RailGroup, ctx: RowContext, complete: boolean): GroupViewModel {
   const nesting: Nesting = { kids: g.kids, kidTotals: g.kidTotals, filtering: g.filtering, isKid: false };
-  const rows = g.rows.map((t) => toRow(t, ctx, nesting));
-  const more = withMore ? g.more.map((t) => toRow(t, ctx, nesting)) : [];
-  const waiting = rows.filter((r) => r.attention).length + g.more.filter((t) => waitsOn(t, ctx, nesting)).length;
+  const visible = (t: Task): boolean => t.id === ctx.currentId || (nesting.kids[t.id] ?? []).some((k) => k.id === ctx.currentId) || waitsOn(t, ctx, nesting);
+  const drawn = complete || !g.collapsed ? g.rows : g.rows.filter(visible);
+  const rows = drawn.map((t) => toRow(t, ctx, nesting));
+  const more = complete ? g.more.map((t) => toRow(t, ctx, nesting)) : [];
+  const waiting = g.rows.filter((t) => waitsOn(t, ctx, nesting)).length + g.more.filter((t) => waitsOn(t, ctx, nesting)).length;
   let countText = String(g.total);
   let countWords = g.total === 1 ? " task" : " tasks";
   if (g.filtering && !g.empty) {
