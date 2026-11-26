@@ -173,3 +173,36 @@ func TestTheLastSampleOfAnEndedSessionIsEmptyAndTheInitialReadSaysNotLive(t *tes
 	}
 	var _ ports.MemorySink = svc
 }
+
+// The session list (what the whiteboard loads) carries the last sample of each
+// live session at once, not only after the next throttled feed change; a
+// session that is not live has none.
+func TestTheSessionListCarriesTheLastSampleOfEachLiveSessionAndNoneForAnEndedOne(t *testing.T) {
+	svc, _ := newInteractiveService(t)
+	live, _ := startInteractive(t, svc, InteractiveRequest{})
+	ended, _ := startInteractive(t, svc, InteractiveRequest{})
+	svc.Sampled(sampleOf(live, time.Now(), 700*mb))
+	svc.Sampled(sampleOf(ended, time.Now(), 300*mb))
+	if _, err := svc.EndInteractive(context.Background(), ended.ID, 0, true); err != nil {
+		t.Fatal(err)
+	}
+
+	list, err := svc.List(context.Background(), ports.SessionFilter{ProjectID: "p1"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	byID := map[string]*domain.Session{}
+	for _, s := range list {
+		byID[s.ID] = s
+	}
+	if m := byID[live.ID].Memory; m == nil || m.RSSBytes != 700*mb {
+		t.Errorf("the live session's memory = %+v, want the last sample", m)
+	}
+	if byID[ended.ID].Memory != nil {
+		t.Errorf("the ended session's memory = %+v, want null", byID[ended.ID].Memory)
+	}
+	raw := jsonMap(t, byID[ended.ID])
+	if v, present := raw["memory"]; !present || v != nil {
+		t.Errorf("an ended session's wire memory = %v (present %v), want an explicit null", v, present)
+	}
+}
