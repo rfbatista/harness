@@ -62,7 +62,9 @@ func TestAGatedDelegatesDoneMessagesAreRefusedWhileRedOnceItHasADiffAndTheArchit
 	gates[domain.GateTest] = "echo 'FAIL: TestThing'; test -f fixed"
 	ticket, arch := e.architectWith(&fakeAgentSystem{retry: 4, gates: gates})
 	dev := e.delegate(ticket, arch, "implement")
-	send := func(args map[string]any) (map[string]any, error) { return e.callTool(dev.ID, "message_architect", args) }
+	send := func(args map[string]any) (map[string]any, error) {
+		return e.callTool(dev.ID, "message_architect", args)
+	}
 	messages := func() int { return len(e.architectMessages(ticket)) }
 
 	// The ticket review before any code has no diff: it is no declaration, and
