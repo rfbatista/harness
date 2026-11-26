@@ -143,6 +143,7 @@
   .wb-world[data-compact] .wb-node > .mem > .track { inline-size: 100%; border-radius: 0; }
   .wb-world[data-compact] .wb-node > .mem > :not(.track) { display: none; }
   .wb-world[data-compact] .wb-node .who .badge[data-mem] { display: inline-flex; }
+  @media (forced-colors: active) { .wb-node > .mem > .track { border: 1px solid CanvasText; } .wb-node > .mem .fill { background: Highlight; forced-color-adjust: none; } }
   @keyframes wb-ring-danger {
     0% { box-shadow: 0 0 0 0 color-mix(in oklch, var(--color-danger) 55%, transparent); }
     60% { box-shadow: 0 0 0 0.6rem transparent; }

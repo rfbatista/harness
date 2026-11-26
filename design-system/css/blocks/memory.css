@@ -63,6 +63,7 @@
       & .fill { transition: none; }
       &[data-signal] > .track { animation: none; outline: 2px solid color-mix(in oklch, var(--color-danger) 40%, transparent); outline-offset: 2px; }
     }
+    @media (forced-colors: active) { & > .track { border: 1px solid CanvasText; } & .fill { background: Highlight; forced-color-adjust: none; } }
     @container session (width < 46rem) { &:not([data-state="normal"]) .of { display: none; } }
     @container session (width < 34rem) { &[data-state="normal"] { display: none; } }
     @media (width < 48rem) { font-size: inherit; & > .track { display: none; } }

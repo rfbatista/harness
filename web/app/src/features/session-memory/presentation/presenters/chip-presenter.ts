@@ -23,7 +23,8 @@ export interface PopoverView {
   state: MemoryView["state"];
   fillPercent: number;
   processes: string;
-  heaviest: string;
+  /** The heaviest eligible process, null when there is none. */
+  heaviest: { command: string; rss: string } | null;
   /** The orçamento, when it was fixed, and (once the read is in) where it came from. */
   budget: string;
   /** "" until the read is in. */
@@ -92,7 +93,7 @@ const AGENT_OVER = "Nothing. The agent itself is over the orçamento, and the vi
 
 const samePopover = (a: PopoverView | null, b: PopoverView | null): boolean => {
   if (a === null || b === null) return a === b;
-  const flat = (p: PopoverView): string => [p.title, p.state, p.fillPercent, p.processes, p.heaviest, p.budget, p.prevention, p.killsNote, ...p.kills.flatMap((k) => [k.key, k.time, k.command, k.rss, k.signal])].join("\u0001");
+  const flat = (p: PopoverView): string => [p.title, p.state, p.fillPercent, p.processes, p.heaviest?.command, p.heaviest?.rss, p.budget, p.prevention, p.killsNote, ...p.kills.flatMap((k) => [k.key, k.time, k.command, k.rss, k.signal])].join("\u0001");
   return flat(a) === flat(b);
 };
 
@@ -308,7 +309,7 @@ export class ChipPresenter extends Presenter<ChipViewModel> {
 
   #popover(view: MemoryView): PopoverView {
     const sample = this.#sample!;
-    const time = this.#deps.time ?? ((at: Date) => at.toISOString().slice(11, 16));
+    const time = this.#deps.time ?? ((at: Date) => at.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }));
     const kills = [...this.#kills.values()].sort((a, b) => b.killedAt.getTime() - a.killedAt.getTime());
     const budget = formatBudget(sample.budgetBytes);
     const p = this.#prevention;
@@ -317,7 +318,7 @@ export class ChipPresenter extends Presenter<ChipViewModel> {
       state: view.state,
       fillPercent: view.fillPercent,
       processes: String(sample.processes),
-      heaviest: sample.heaviest ? `${sample.heaviest.command} · ${formatShown(sample.heaviest.rssBytes)}` : "none eligible",
+      heaviest: sample.heaviest ? { command: sample.heaviest.command, rss: formatShown(sample.heaviest.rssBytes) } : null,
       budget: `${budget}, fixed when the session started${this.#source ? ` · ${SOURCES[this.#source]}` : ""}`,
       prevention: p ? `${plural(p.testWorkers, "test worker")} · ${p.heapMb} MB heap` : "",
       kills: kills.map((k) => ({ key: killKey(k), time: time(k.killedAt), command: k.command, rss: formatShown(k.rssBytes), signal: k.signal })),

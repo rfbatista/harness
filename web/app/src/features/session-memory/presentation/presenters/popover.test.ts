@@ -55,7 +55,7 @@ describe("memory popover", () => {
     const p = presenter.viewModel.popover!;
     assert.equal(p.title, "Memory · 3.4 GB of 4 GB · near budget");
     assert.equal(p.processes, "9");
-    assert.equal(p.heaviest, "node jest · 864 MB");
+    assert.deepEqual(p.heaviest, { command: "node jest", rss: "864 MB" });
     assert.equal(p.budget, "4 GB, fixed when the session started · from this repository");
     assert.equal(p.prevention, "2 test workers · 1365 MB heap");
     assert.deepEqual([p.state, p.fillPercent], ["near", 85]);
@@ -75,7 +75,7 @@ describe("memory popover", () => {
     assert.equal(presenter.viewModel.popover!.prevention, "1 test worker · 512 MB heap");
     const none = await setup(read(sample(1, { heaviest: null })));
     await none.presenter.open();
-    assert.equal(none.presenter.viewModel.popover!.heaviest, "none eligible");
+    assert.equal(none.presenter.viewModel.popover!.heaviest, null);
   });
 
   test("the kills of this run list newest first with time, command, rss and signal; none says Nothing yet.", async () => {

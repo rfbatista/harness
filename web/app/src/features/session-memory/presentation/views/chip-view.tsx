@@ -69,7 +69,7 @@ export function ChipView({ presenter, toastHost }: { presenter: ChipPresenter; t
               <dt>Processes</dt>
               <dd>{popover.processes}</dd>
               <dt>Heaviest</dt>
-              <dd>{popover.heaviest}</dd>
+              <dd>{popover.heaviest ? (<><code>{popover.heaviest.command}</code> · {popover.heaviest.rss}</>) : "none eligible"}</dd>
               <dt>Orçamento</dt>
               <dd>{popover.budget}</dd>
               {popover.prevention !== "" && (
