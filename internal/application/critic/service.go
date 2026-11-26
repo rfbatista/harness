@@ -7,6 +7,7 @@ package critic
 
 import (
 	"context"
+	"errors"
 	"log/slog"
 	"strings"
 
@@ -32,6 +33,12 @@ type Deps struct {
 	Diff DiffSource
 	// Documents lists the task's documents; nil: the brief names none.
 	Documents ports.TicketDocumentReader
+	// Notes records on the author session why its green run got no critic;
+	// nil: nothing is recorded. Announce publishes the session with it.
+	Notes interface {
+		UpdateCriticSkip(id, reason string) error
+	}
+	Announce ports.ProjectChangeSink
 	// Starter starts the critic session.
 	Starter interface {
 		StartInteractive(ctx context.Context, req ports.InteractiveRequest) (*domain.Session, ports.AgentSpec, error)
@@ -74,11 +81,14 @@ func (s *Service) ProjectChanged(change ports.ProjectChange) {
 func (s *Service) Handle(ctx context.Context, run ports.GateRunChange) (*domain.Session, error) {
 	in := domain.CriticLaunchInput{Phase: run.Phase, Result: run.Result, Trigger: run.Trigger}
 	// The cheap checks first: no store is read for a run that cannot launch.
-	if domain.DecideCritic(withEnabled(in, true, true)) != domain.CriticLaunches {
+	pre := in
+	pre.Enabled, pre.Gated = true, true
+	if domain.DecideCritic(pre) != domain.CriticLaunches {
 		return nil, nil
 	}
 	author, _, err := s.d.Gated.Gated(ctx, run.SessionID)
 	if err != nil {
+		slog.Debug("critic: session is not gated or unreadable", "session", run.SessionID, "err", err)
 		return nil, nil // not gated: nothing to review
 	}
 	eff, err := s.d.Settings.Effective(ctx, author.ProjectID, author.RepositoryID)
@@ -100,7 +110,11 @@ func (s *Service) Handle(ctx context.Context, run ports.GateRunChange) (*domain.
 	if claimed, err := s.d.Reviews.Claim(ctx, author.ID, base, head, run.RunID); err != nil || !claimed {
 		return nil, err
 	}
-	release := func() { _ = s.d.Reviews.Release(context.WithoutCancel(ctx), author.ID, base, head) }
+	release := func() {
+		if err := s.d.Reviews.Release(context.WithoutCancel(ctx), author.ID, base, head); err != nil {
+			slog.Warn("release a critic claim", "session", author.ID, "err", err)
+		}
+	}
 	diff, err := s.d.Diff.Diff(ctx, author, base)
 	if err != nil {
 		release()
@@ -124,13 +138,39 @@ func (s *Service) Handle(ctx context.Context, run ports.GateRunChange) (*domain.
 	})
 	if err != nil {
 		release()
+		s.recordSkip(author, skipReason(err))
 		return nil, err
 	}
+	s.recordSkip(author, "")
 	return crit, nil
 }
 
-// withEnabled sets the two inputs the cheap pre-check does not know.
-func withEnabled(in domain.CriticLaunchInput, enabled, gated bool) domain.CriticLaunchInput {
-	in.Enabled, in.Gated = enabled, gated
-	return in
+// SkippedSandboxOff is what the author session records when the critic could
+// not start because read-only access needs the agent sandbox.
+const SkippedSandboxOff = "critic skipped: sandbox off"
+
+// recordSkip keeps why the author's green run got no critic on the author
+// session and publishes the session, so the UI shows it beside the gate result.
+// An empty reason clears an earlier one.
+func (s *Service) recordSkip(author *domain.Session, reason string) {
+	if s.d.Notes == nil || author.CriticSkip == reason {
+		return
+	}
+	if err := s.d.Notes.UpdateCriticSkip(author.ID, reason); err != nil {
+		slog.Warn("record the critic skip", "session", author.ID, "err", err)
+		return
+	}
+	author.CriticSkip = reason
+	if s.d.Announce != nil {
+		s.d.Announce.AnnounceChange(ports.ProjectChange{Session: author})
+	}
+}
+
+// skipReason is the note for a critic that could not start.
+func skipReason(err error) string {
+	var se *domain.StructuredError
+	if errors.As(err, &se) && se.Code == "ACCESS_INVALID" {
+		return SkippedSandboxOff
+	}
+	return "critic skipped: " + err.Error()
 }

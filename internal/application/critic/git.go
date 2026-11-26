@@ -44,7 +44,7 @@ func (g GitDiff) Diff(ctx context.Context, sess *domain.Session, base string) (s
 
 // File implements DiffSource: a path inside the worktree, nothing outside it.
 func (g GitDiff) File(_ context.Context, sess *domain.Session, path string) string {
-	if path == "" || filepath.IsAbs(path) || strings.Contains(path, "..") {
+	if !filepath.IsLocal(path) {
 		return ""
 	}
 	b, err := os.ReadFile(filepath.Join(sess.WorkingDir, path))

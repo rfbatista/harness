@@ -3,6 +3,7 @@
 package app
 
 import (
+	"context"
 	"encoding/json"
 	"net/http"
 	"os"
@@ -236,5 +237,47 @@ func TestTheCriticsFindingsReachTheAuthorAsATurnAndTheArchitectInTheTaskMessages
 	// Advisory: a red verdict leaves the author's declaration accepted.
 	if out, err := e.callTool(author.ID, "declare_done", nil); err != nil || out["accepted"] != true {
 		t.Errorf("declare_done after the findings: %v %v", out, err)
+	}
+}
+
+func TestWithTheSandboxOffNoCriticStartsAndTheSkipIsRecordedOnTheAuthorAndPublished(t *testing.T) {
+	e, author := criticWorld(t)
+	drv := e.orch.Sandbox.Driver
+	e.orch.Sandbox = &orchestration.Sandbox{Driver: drv, Enabled: func() bool { return false }}
+	ctx, cancel := context.WithCancel(e.ctx)
+	defer cancel()
+	feed, err := e.orch.FollowProject(ctx, e.project)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if out, err := e.callTool(author.ID, "declare_done", nil); err != nil || out["accepted"] != true {
+		t.Fatalf("a missing critic never refuses the declaration: %v %v", out, err)
+	}
+	deadline := time.After(40 * time.Second)
+	for published := false; !published; {
+		select {
+		case c := <-feed:
+			published = c.Session != nil && c.Session.ID == author.ID && c.Session.CriticSkip == "critic skipped: sandbox off"
+		case <-deadline:
+			t.Fatal("the skip was not published on the project feed")
+		}
+	}
+	if got := e.sessions.Get(author.ID); got.CriticSkip != "critic skipped: sandbox off" {
+		t.Errorf("recorded on the author = %q", got.CriticSkip)
+	}
+	e.noMoreCritics(author, 0)
+
+	// With the sandbox back on, the same diff is reviewed and the note goes.
+	e.orch.Sandbox = &orchestration.Sandbox{Driver: drv}
+	if _, err := e.callTool(author.ID, "declare_done", nil); err != nil {
+		t.Fatal(err)
+	}
+	e.waitForCritics(author, 1)
+	for deadline := time.Now().Add(20 * time.Second); e.sessions.Get(author.ID).CriticSkip != "" && time.Now().Before(deadline); {
+		time.Sleep(25 * time.Millisecond)
+	}
+	if got := e.sessions.Get(author.ID).CriticSkip; got != "" {
+		t.Errorf("the skip note stayed after a critic ran: %q", got)
 	}
 }

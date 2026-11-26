@@ -97,6 +97,9 @@ type Session struct {
 	// run; both are empty for any other session.
 	CriticOfSessionID string `json:"critic_of_session_id,omitempty"`
 	CriticGateRunID   string `json:"critic_gate_run_id,omitempty"`
+	// CriticSkip is why the critic did not review this author session's
+	// last green gate run ("critic skipped: sandbox off"); empty when it did.
+	CriticSkip string `json:"critic_skip,omitempty"`
 	// BroughtUnder says the parent became so by a person bringing the session
 	// under an architect, not by starting it (ADR 0045). Stored, never derived.
 	BroughtUnder bool `json:"brought_under"`

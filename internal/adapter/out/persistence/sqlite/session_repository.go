@@ -503,3 +503,9 @@ func statusSince(s *domain.Session) int64 {
 	}
 	return time.Now().UnixMilli()
 }
+
+// UpdateCriticSkip records why the critic skipped the author session's last
+// green gate run; "" clears it.
+func (r *SessionRepository) UpdateCriticSkip(id, reason string) error {
+	return r.db.Model(&SessionModel{}).Where("id = ?", id).Update("critic_skip", reason).Error
+}
