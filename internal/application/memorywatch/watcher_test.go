@@ -264,8 +264,13 @@ func TestAProcessThatOutlivesTheGraceGetsSIGKILLAfterFiveSeconds(t *testing.T) {
 	if len(w.sig.sent) != 2 || w.sig.sent[1] != (signal{201, syscall.SIGKILL}) {
 		t.Fatalf("signals after 5 s = %+v, want SIGTERM then SIGKILL to 201", w.sig.sent)
 	}
+	if len(w.sink.kills) != 0 {
+		t.Errorf("kills = %+v, want none while the process is still there", w.sink.kills)
+	}
+	w.table.without(201) // the SIGKILL took effect
+	w.poll()
 	if len(w.sink.kills) != 1 || w.sink.kills[0].Signal != "SIGKILL" {
-		t.Errorf("kills = %+v, want one, SIGKILL", w.sink.kills)
+		t.Errorf("kills = %+v, want one, SIGKILL, once it is gone", w.sink.kills)
 	}
 }
 

@@ -78,6 +78,13 @@ type MemoryEnding interface {
 	Ending(domain.MemoryKill)
 }
 
+// MemoryKillFailed is an optional part of a sink: it hears that a process
+// survived SIGKILL and was given up on, so the person can be told the session
+// stays over its orçamento. The process is not ended and no kill is recorded.
+type MemoryKillFailed interface {
+	KillFailed(domain.MemoryKill)
+}
+
 // MemorySink receives what the vigia de memória sees: a sample of each
 // watched session every second, and each encerramento por memória.
 type MemorySink interface {

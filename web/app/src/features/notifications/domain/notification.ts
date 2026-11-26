@@ -3,7 +3,7 @@
 // Alpine client's notifications domain, which it does not import. No I/O, no DOM.
 
 export const SOURCES = ["system", "agent"] as const;
-export const KINDS = ["review_requested", "session_waiting", "task_review", "session_failed", "commit_check_off", "branch_request", "branch_finding", "service_request", "sessions_interrupted", "agent", "session_memory_killed"] as const;
+export const KINDS = ["review_requested", "session_waiting", "task_review", "session_failed", "commit_check_off", "branch_request", "branch_finding", "service_request", "sessions_interrupted", "agent", "session_memory_killed", "session_memory_kill_failed"] as const;
 export const ACTOR_KINDS = ["agent", "system", "person"] as const;
 export const OUTCOMES = ["approved", "changes_requested", "denied", "expired", "withdrawn", "answered", "dismissed", "acknowledged", "repaired", "resumed", "ended", "done", "reopened"] as const;
 export const LISTED_STATES = ["off", "repaired", "ended"] as const;

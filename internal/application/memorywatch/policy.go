@@ -27,7 +27,11 @@ type tree struct {
 
 // treeOf finds the session's tree in table; ok is false while the agent CLI is
 // not in it, when nothing is counted or ended.
-func treeOf(table []ports.ProcessInfo, w ports.MemoryWatch) (t tree, ok bool) {
+//
+// seen are the processes already seen in the tree, by pid with their start time:
+// one stays a member while it lives, even after it is reparented to launchd, so
+// membership does not rest on the session column macOS may print as 0.
+func treeOf(table []ports.ProcessInfo, w ports.MemoryWatch, seen map[int]string) (t tree, ok bool) {
 	byPID := make(map[int]ports.ProcessInfo, len(table))
 	children := make(map[int][]int, len(table))
 	for _, p := range table {
@@ -51,7 +55,14 @@ func treeOf(table []ports.ProcessInfo, w ports.MemoryWatch) (t tree, ok bool) {
 	}
 
 	member := map[int]bool{agent.PID: true}
-	for stack := []int{agent.PID}; len(stack) > 0; {
+	stack := []int{agent.PID}
+	for _, p := range table {
+		if started, known := seen[p.PID]; known && started == p.Started && p.Started != "" && p.PID != agent.PID {
+			member[p.PID] = true
+			stack = append(stack, p.PID)
+		}
+	}
+	for len(stack) > 0 {
 		pid := stack[len(stack)-1]
 		stack = stack[:len(stack)-1]
 		for _, c := range children[pid] {
@@ -150,7 +161,15 @@ func (t tree) heaviest() (ports.ProcessInfo, bool) {
 // one. Nothing when the tree is within budget, when the agent CLI alone holds
 // the orçamento (ending its tools would not help), or when nothing is eligible.
 func (t tree) victim(budget int64, skip func(ports.ProcessInfo) bool) (ports.ProcessInfo, bool) {
-	if t.rss <= budget || t.agentRSS >= budget {
+	// A process given up on still shows in the sample, but it does not make the
+	// rest of the tree answer for it: it cannot be ended.
+	counted := t.rss
+	for _, p := range t.members {
+		if skip(p) {
+			counted -= p.RSSBytes
+		}
+	}
+	if counted <= budget || t.agentRSS >= budget {
 		return ports.ProcessInfo{}, false
 	}
 	var kept []ports.ProcessInfo

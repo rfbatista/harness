@@ -76,6 +76,7 @@ func (s *Service) ResumeProductOwnerSession(ctx context.Context, sessionID strin
 		return &domain.StructuredError{Code: "SESSION_ALREADY_RUNNING", Message: "session is being resumed"}
 	}
 	defer s.releaseResume(sessionID)
+	s.reopenRun(sessionID)
 	if _, ok := s.runtime.Get(sessionID); ok {
 		return &domain.StructuredError{Code: "SESSION_ALREADY_RUNNING", Message: "session is running"}
 	}
@@ -204,7 +205,9 @@ func (s *Service) productOwnerPrepare(ctx context.Context, id string, spec ports
 	if err != nil {
 		return nil, err
 	}
-	memory := s.planMemory(ctx, repo.ID, "", &cfg)
+	// A product owner thread is project-level and ADR 0008 has no project level:
+	// its orçamento is the global one, with no repository or task override.
+	memory := s.planMemory(ctx, "", "", &cfg)
 	sb, err := s.sandbox(ctx, prepareInput{ProjectID: proj.ID, Mode: mode, Headless: true}, id, repo, dir, cfg.Env, ag.skillDirs)
 	if err != nil {
 		if cleanup != nil {

@@ -5,7 +5,7 @@
 
 /**
  * @typedef {"system"|"agent"} Source
- * @typedef {"review_requested"|"session_waiting"|"task_review"|"session_failed"|"commit_check_off"|"branch_request"|"branch_finding"|"service_request"|"sessions_interrupted"|"agent"|"session_memory_killed"} Kind
+ * @typedef {"review_requested"|"session_waiting"|"task_review"|"session_failed"|"commit_check_off"|"branch_request"|"branch_finding"|"service_request"|"sessions_interrupted"|"agent"|"session_memory_killed"|"session_memory_kill_failed"} Kind
  * @typedef {"info"|"action"} Level  action: the person has to do something
  *
  * @typedef {object} Notification
@@ -79,7 +79,7 @@
  */
 
 export const SOURCES = Object.freeze(["system", "agent"]);
-export const KINDS = Object.freeze(["review_requested", "session_waiting", "task_review", "session_failed", "commit_check_off", "branch_request", "branch_finding", "service_request", "sessions_interrupted", "agent", "session_memory_killed"]);
+export const KINDS = Object.freeze(["review_requested", "session_waiting", "task_review", "session_failed", "commit_check_off", "branch_request", "branch_finding", "service_request", "sessions_interrupted", "agent", "session_memory_killed", "session_memory_kill_failed"]);
 export const ACTOR_KINDS = Object.freeze(["agent", "system", "person"]);
 export const OUTCOMES = Object.freeze(["approved", "changes_requested", "denied", "expired", "withdrawn", "answered", "dismissed", "acknowledged", "repaired", "resumed", "ended", "done", "reopened"]);
 export const LISTED_STATES = Object.freeze(["off", "repaired", "ended"]);

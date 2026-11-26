@@ -18,9 +18,10 @@ import (
 // none was, into a user turn through the courier.
 
 var (
-	_ ports.MemorySink    = (*Service)(nil)
-	_ ports.MemoryEnding  = (*Service)(nil)
-	_ ports.MemoryNotices = (*Service)(nil)
+	_ ports.MemorySink       = (*Service)(nil)
+	_ ports.MemoryEnding     = (*Service)(nil)
+	_ ports.MemoryKillFailed = (*Service)(nil)
+	_ ports.MemoryNotices    = (*Service)(nil)
 )
 
 // memoryNotices is what the agent has yet to be told, and which Bash calls run.
@@ -135,6 +136,13 @@ func (s *Service) Ending(k domain.MemoryKill) {
 	if fresh && !held {
 		s.deliverMemoryNotice(k.SessionID, k)
 	}
+}
+
+// KillFailed is the vigia giving up on a process that survived SIGKILL: no kill
+// is recorded, and the person is told it could not be ended.
+func (s *Service) KillFailed(k domain.MemoryKill) {
+	s.announce(domain.SessionMemoryKillFailed{Kill: k})
+	s.memoryNotes.confirmed(k)
 }
 
 // Killed handles one encerramento por memória once it is confirmed: the
