@@ -18,6 +18,12 @@ import (
 	"operators-mcp/internal/ports"
 )
 
+// realTable and realSignaler are the only places this test names an adapter:
+// pointing it at another darwin adapter is a change to these two functions.
+func realTable() ports.ProcessTable { return psprocs.Table{} }
+
+func realSignaler() ports.ProcessSignaler { return psprocs.Signaler{} }
+
 // The real process table, end to end: a wrapper leads its own POSIX session
 // (as a PTY's process does) and runs a stand-in agent CLI, which runs a perl
 // two perl children of about 300 MB each, one reparented to launchd. Over a
@@ -25,7 +31,7 @@ import (
 // above it live on.
 func TestRealProcessPastASmallOrcamentoIsEndedAndTheAgentSurvives(t *testing.T) {
 	const id = "itg-memory-watch-1"
-	if _, err := (psprocs.Table{}).Read(context.Background()); err != nil {
+	if _, err := realTable().Read(context.Background()); err != nil {
 		t.Skipf("the process table cannot be read here (an agent sandbox forbids ps): %v", err)
 	}
 	// The agent outlives its children (sleep 120 after wait), as claude outlives
@@ -44,7 +50,7 @@ func TestRealProcessPastASmallOrcamentoIsEndedAndTheAgentSurvives(t *testing.T) 
 	})
 
 	sink := &sink{}
-	w := memorywatch.New(memorywatch.Deps{Table: psprocs.Table{}, Signal: psprocs.Signaler{}, Sink: sink})
+	w := memorywatch.New(memorywatch.Deps{Table: realTable(), Signal: realSignaler(), Sink: sink})
 	w.Watch(ports.MemoryWatch{SessionID: "s1", TaskID: "t1", BudgetBytes: 100 << 20, ClaudeID: id, RootPID: wrapper.Process.Pid})
 
 	deadline := time.Now().Add(40 * time.Second)
@@ -80,7 +86,7 @@ func TestRealProcessPastASmallOrcamentoIsEndedAndTheAgentSurvives(t *testing.T) 
 		t.Errorf("the reparented perl (pid %d) was not counted and ended: %+v", orphan, kills)
 	}
 
-	table, err := (psprocs.Table{}).Read(context.Background())
+	table, err := realTable().Read(context.Background())
 	if err != nil {
 		t.Fatal(err)
 	}
