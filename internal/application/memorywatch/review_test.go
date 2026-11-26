@@ -210,7 +210,8 @@ func TestTheNothingEligibleWarningIsNotLoggedEverySecond(t *testing.T) {
 // of the tree is still watched and ended.
 func TestAProcessThatSurvivesSIGKILLIsGivenUpOnAndTheRestIsStillWatched(t *testing.T) {
 	w := newWorld()
-	w.table.set(ptyTree(heavyTool(201, 3*gb), heavyTool(202, 2*gb))...)
+	// 202 is over the orçamento on its own once 201 no longer counts.
+	w.table.set(ptyTree(heavyTool(201, 4*gb), heavyTool(202, 3800*mb))...)
 	watchPTY(w, 4*gb)
 	w.pollFor(14 * time.Second)
 	var ended202 bool
@@ -246,5 +247,80 @@ func TestACommandIsCutAtARuneBoundary(t *testing.T) {
 	cmd := w.sink.last().Heaviest.Command
 	if !utf8.ValidString(cmd) || len(cmd) > 80 || len(cmd) < 78 {
 		t.Errorf("command = %q (%d bytes), want valid UTF-8 of at most 80 bytes", cmd, len(cmd))
+	}
+}
+
+// N3: a process the vigia has given up on no longer drives further kills. It is
+// still reported in the sample's RSS, but the rest of the tree is not ended
+// because of it.
+func TestAProcessGivenUpOnDoesNotMakeTheVigiaEndTheRestOfTheTree(t *testing.T) {
+	w := newWorld()
+	stuck := heavyTool(201, 3*gb)
+	w.table.set(ptyTree(stuck, heavyTool(202, 800*mb))...)
+	watchPTY(w, 4*gb)
+	w.pollFor(14 * time.Second) // 201 is ended, killed, then given up on
+	n := countSignals(w.sig.sent, 202, syscall.SIGTERM)
+	if n != 0 {
+		t.Errorf("signals = %+v: 202 was ended because of the process that cannot be", w.sig.sent)
+	}
+	if got := w.sink.last(); got.RSSBytes < 3*gb {
+		t.Errorf("the sample's RSS = %d MB, want the stuck process still counted in it", got.RSSBytes/mb)
+	}
+}
+
+// N4: a pid and its start time identify a process; a victim that execs under
+// another name is still the same process and is not recorded as gone.
+func TestAVictimThatChangesItsNameIsStillThere(t *testing.T) {
+	w := newWorld()
+	w.table.set(ptyTree(heavyTool(201, 4*gb))...)
+	watchPTY(w, 4*gb)
+	w.poll() // SIGTERM to 201
+	renamed := heavyTool(201, 4*gb)
+	renamed.Name = "node-renamed"
+	w.table.set(ptyTree(renamed)...)
+	w.poll()
+	w.poll()
+	if len(w.sink.kills) != 0 {
+		t.Errorf("kills = %+v, want none while the process is still there", w.sink.kills)
+	}
+}
+
+// Q3: a process once seen in the session's tree stays in it after it is
+// reparented to launchd, even when ps prints no session for it.
+func TestAReparentedProcessStaysInTheTreeWithoutAPOSIXSession(t *testing.T) {
+	w := newWorld()
+	child := ports.ProcessInfo{PID: 300, PPID: 102, SID: 0, RSSBytes: 3 * gb, Name: "node", Arg: "dev", Started: "Thu Nov 26 08:00:01 2026"}
+	rows := ptyTree(child)
+	for i := range rows {
+		rows[i].SID = 0 // ps prints 0 for every session
+	}
+	w.table.set(rows...)
+	w.watcher.Watch(ports.MemoryWatch{SessionID: "s1", BudgetBytes: 10 * gb, ClaudeID: claudeID})
+	w.poll()
+	if got := w.sink.last(); got.Processes != 2 {
+		t.Fatalf("before the reparent: processes = %d, want 2 (the agent and its child)", got.Processes)
+	}
+	orphan := child
+	orphan.PPID = 1 // its parent shell exited
+	next := ptyTree(orphan)
+	for i := range next {
+		next[i].SID = 0
+	}
+	w.table.set(next...)
+	w.poll()
+	if got := w.sink.last(); got.Processes != 2 || got.RSSBytes < 3*gb {
+		t.Errorf("after the reparent: %d processes, %d MB, want the orphan still counted", got.Processes, got.RSSBytes/mb)
+	}
+	// A different process that reuses the pid is not a member.
+	other := orphan
+	other.Started = "Thu Nov 26 09:30:00 2026"
+	again := ptyTree(other)
+	for i := range again {
+		again[i].SID = 0
+	}
+	w.table.set(again...)
+	w.poll()
+	if got := w.sink.last(); got.Processes != 1 {
+		t.Errorf("a reused pid is counted: %d processes, want 1", got.Processes)
 	}
 }

@@ -98,7 +98,9 @@ type watch struct {
 	// abandoned are processes that outlived SIGKILL and the bound after it,
 	// keyed by pid with their start time: they are never chosen again.
 	abandoned map[int]string
-	lastWarn  time.Time
+	// seen are the processes seen in the tree, by pid and start time.
+	seen     map[int]string
+	lastWarn time.Time
 }
 
 // warnEvery is the least time between two warnings about the same session.
@@ -126,7 +128,7 @@ type ending struct {
 // publishes one last, empty sample so a consumer can clear what it shows; a
 // second stop changes nothing.
 func (w *Watcher) Watch(m ports.MemoryWatch) (stop func()) {
-	wt := &watch{MemoryWatch: m, abandoned: map[int]string{}}
+	wt := &watch{MemoryWatch: m, abandoned: map[int]string{}, seen: map[int]string{}}
 	w.mu.Lock()
 	id := w.next
 	w.next++
@@ -222,7 +224,7 @@ func (w *Watcher) handle(wt *watch, table []ports.ProcessInfo, now time.Time) {
 	if wt.stopped {
 		return
 	}
-	t, ok := treeOf(table, wt.MemoryWatch)
+	t, ok := treeOf(table, wt.MemoryWatch, wt.seen)
 	if !ok {
 		// The agent has left the table: a process being ended is still
 		// settled, so a confirmed kill is never lost.
@@ -230,6 +232,19 @@ func (w *Watcher) handle(wt *watch, table []ports.ProcessInfo, now time.Time) {
 			w.settle(wt, t, table, now)
 		}
 		return
+	}
+	wt.seen = map[int]string{}
+	present := map[int]string{}
+	for _, p := range table {
+		present[p.PID] = p.Started
+	}
+	for _, p := range t.members {
+		wt.seen[p.PID] = p.Started
+	}
+	for pid, started := range wt.abandoned {
+		if present[pid] != started {
+			delete(wt.abandoned, pid) // it is gone: nothing left to give up on
+		}
 	}
 	sample := domain.MemorySample{
 		Kind: domain.MemorySampleKind, SessionID: wt.SessionID, TaskID: wt.TaskID,
@@ -271,11 +286,12 @@ func (w *Watcher) handle(wt *watch, table []ports.ProcessInfo, now time.Time) {
 }
 
 // stillThere is whether the process being ended is still in the table as the
-// same process: a pid reused by another one is not it.
+// same process: a pid and its start time identify one, so a pid reused by
+// another process is not it, and a victim that execs under another name is.
 func stillThere(e *ending, table []ports.ProcessInfo) bool {
 	for _, p := range table {
 		if p.PID == e.pid {
-			return p.Started == e.started && p.Name == e.name
+			return p.Started == e.started
 		}
 	}
 	return false
