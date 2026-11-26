@@ -25,7 +25,6 @@ import (
 	"operators-mcp/internal/adapter/in/httpapi"
 	"operators-mcp/internal/adapter/out/agents/claudehome"
 	"operators-mcp/internal/app/catalog"
-	"operators-mcp/internal/application/gateruns"
 	"operators-mcp/internal/application/orchestration"
 	"operators-mcp/internal/application/planning"
 	"operators-mcp/internal/application/taskchannel"
@@ -39,19 +38,16 @@ import (
 // on the terminal host, the HTTP API on a test server, and the task tools as
 // the per-session MCP endpoint serves them.
 type archE2E struct {
-	t        *testing.T
-	ctx      context.Context
-	orch     *orchestration.Service
-	plan     *planning.Service
-	channel  *taskchannel.Service
-	declarer *gateruns.Declarer
-	gateRuns *gateruns.Service
-	sessions ports.SessionRepository
-	srv      *httptest.Server
-	tools    map[string]domain.Tool
-	project  string
-	repo     string
-	ticket   string
+	t       *testing.T
+	ctx     context.Context
+	orch    *orchestration.Service
+	plan    *planning.Service
+	channel *taskchannel.Service
+	srv     *httptest.Server
+	tools   map[string]domain.Tool
+	project string
+	repo    string
+	ticket  string
 	// dir holds one launch-<pid> file per claude the stand-in ran: its
 	// arguments, one per line.
 	dir  string
@@ -85,7 +81,7 @@ func newArchE2E(t *testing.T) *archE2E {
 		fx.Supply(Config{HTTPAddr: "127.0.0.1:0", MCPAddr: "127.0.0.1:0", DBPath: ":memory:", Root: dir, ClaudeBin: fake, SessionShell: "direct"}),
 		PersistenceModule, CatalogModule, PlanningModule, WorkspacesModule, ExecutionModule,
 		AgentRuntimeModule, TaskChannelModule, TextProcessingModule, ToolingModule,
-		fx.Populate(&e.orch, &e.plan, &e.channel, &cat, &sessions, &e.home, &e.declarer, &e.gateRuns),
+		fx.Populate(&e.orch, &e.plan, &e.channel, &cat, &sessions, &e.home),
 		// The sandbox is not under test, and seatbelt cannot nest inside an
 		// agent session's sandbox: a driver that confines nothing runs claude
 		// as it is.
@@ -96,7 +92,6 @@ func newArchE2E(t *testing.T) *archE2E {
 		t.Fatal(err)
 	}
 	t.Cleanup(func() { _ = app.Stop(context.Background()) })
-	e.sessions = sessions
 
 	if _, err := cat.Settings.UpdateSettings(map[string]string{domain.SettingWorkspacesRoot: filepath.Join(dir, "worktrees")}); err != nil {
 		t.Fatal(err)
@@ -119,7 +114,7 @@ func newArchE2E(t *testing.T) *archE2E {
 	t.Cleanup(e.srv.Close)
 	e.tools = map[string]domain.Tool{}
 	for _, tool := range tooling.SessionTaskTools(e.plan, sessions, cat.Agents, cat.Architecture,
-		tooling.PeerStarter{Sessions: e.orch, Stopper: e.orch, Repositories: cat.Projects}, tooling.ArtifactTooling{}, e.channel, tooling.NotificationTooling{}, tooling.WithDeclarations(e.declarer)) {
+		tooling.PeerStarter{Sessions: e.orch, Stopper: e.orch, Repositories: cat.Projects}, tooling.ArtifactTooling{}, e.channel, tooling.NotificationTooling{}) {
 		e.tools[tool.Name] = tool
 	}
 	e.follow()

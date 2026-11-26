@@ -162,21 +162,25 @@ func TestBringUnderSkip(t *testing.T) {
 
 func TestWhichMessagesToTheArchitectAreADoneDeclaration(t *testing.T) {
 	cases := []struct {
-		kind   TaskMessageKind
-		status ReportStatus
-		want   bool
+		kind    TaskMessageKind
+		status  ReportStatus
+		hasDiff bool
+		want    bool
 	}{
-		{MessageReviewRequest, "", true},
-		{MessageStatusReport, ReportDone, true},
-		{MessageStatusReport, ReportWorking, false},
-		{MessageStatusReport, ReportBlocked, false},
-		{MessageStatusReport, ReportReadyForReview, false},
-		{MessageQuestion, ReportDone, false},
-		{MessageReply, "", false},
+		{MessageReviewRequest, "", true, true},
+		{MessageReviewRequest, "", false, false}, // the ticket review before any code
+		{MessageStatusReport, ReportDone, true, true},
+		{MessageStatusReport, ReportReadyForReview, true, true},
+		{MessageStatusReport, ReportDone, false, false},
+		{MessageStatusReport, ReportReadyForReview, false, false},
+		{MessageStatusReport, ReportWorking, true, false},
+		{MessageStatusReport, ReportBlocked, true, false},
+		{MessageQuestion, ReportDone, true, false},
+		{MessageReply, "", true, false},
 	}
 	for _, c := range cases {
-		if got := IsDoneDeclaration(c.kind, c.status); got != c.want {
-			t.Errorf("IsDoneDeclaration(%q, %q) = %v, want %v", c.kind, c.status, got, c.want)
+		if got := IsDoneDeclaration(c.kind, c.status, c.hasDiff); got != c.want {
+			t.Errorf("IsDoneDeclaration(%q, %q, diff=%v) = %v, want %v", c.kind, c.status, c.hasDiff, got, c.want)
 		}
 	}
 }

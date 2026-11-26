@@ -100,6 +100,9 @@ type Declarations interface {
 	// Practice runs the gates (only kinds, when given) as the agent's own
 	// practice run: recorded, never counted.
 	Practice(ctx context.Context, sessionID string, kinds []domain.GateKind) (*domain.GateRun, error)
+	// HasDiff says whether the session's branch has a diff against its base:
+	// work to declare done.
+	HasDiff(ctx context.Context, sessionID string) bool
 }
 
 // Message is every refusal's reason, one after the other.

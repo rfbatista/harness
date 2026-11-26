@@ -141,3 +141,15 @@ func isNotGated(err error) bool {
 	var se *domain.StructuredError
 	return errors.As(err, &se) && se.Code == "SESSION_NOT_GATED"
 }
+
+// HasDiff implements ports.Declarations.
+func (d *Declarer) HasDiff(ctx context.Context, sessionID string) bool {
+	if d.runs.d.HasDiff == nil {
+		return false
+	}
+	sess, err := d.runs.d.Sessions.Find(ctx, sessionID)
+	if err != nil || sess == nil {
+		return false
+	}
+	return d.runs.d.HasDiff(ctx, sess)
+}

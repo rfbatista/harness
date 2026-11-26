@@ -55,9 +55,9 @@ func sessionChannelTools(planningSvc ports.Planning, sessions ports.SessionRepos
 				"question when you need a decision. Attach the task documents and artifacts it should look at by id. A " +
 				"running architect gets it as a new turn (if it is mid-turn, as soon as that turn ends); one that is not " +
 				"running reads it later. Its reply reaches you as a new turn starting with [task message …]. Fails with " +
-				"NO_ARCHITECT when the task has none. In a gated session a review_request, or a status_report with status done, is " +
-				"your done declaration: the harness runs the gates first and, if one is red, refuses it with GATES_RED and the " +
-				"failing output instead of sending it.",
+				"NO_ARCHITECT when the task has none. Once your branch has a diff against its base, a review_request, or a status_report " +
+				"with status done or ready_for_review, is your done declaration: in a gated session the harness runs the gates first and, " +
+				"if one is red, refuses it with GATES_RED and the failing output instead of sending it.",
 			InputSchema: schemaFromJSON(`{"type":"object","required":["kind","body"],"properties":{` +
 				`"kind":{"type":"string","enum":["review_request","status_report","question"],"description":"review_request: your work is ready for review. status_report: where you are. question: you need a decision."},` +
 				`"body":{"type":"string","description":"The message. Say what to look at, what you did, or what you need."},` +
@@ -77,7 +77,7 @@ func sessionChannelTools(planningSvc ports.Planning, sessions ports.SessionRepos
 					return nil, err
 				}
 				kind, status := domain.TaskMessageKind(getString(args, "kind", "")), domain.ReportStatus(getString(args, "status", ""))
-				if decl != nil && domain.IsDoneDeclaration(kind, status) {
+				if decl != nil && domain.IsDoneMessage(kind, status) && domain.IsDoneDeclaration(kind, status, decl.HasDiff(ctx, scope.session.ID)) {
 					// The done declaration: the checks run first, and a refused one
 					// is not sent (ADR 0012).
 					res, err := decl.Declare(ctx, scope.session.ID)
