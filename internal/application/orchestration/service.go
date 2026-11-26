@@ -1652,6 +1652,7 @@ func (s *Service) List(ctx context.Context, f ports.SessionFilter) ([]*domain.Se
 	unassigned := map[string]bool{}
 	for _, sess := range list {
 		s.fillResumability(sess)
+		sess.Memory = s.lastMemory(sess) // the whiteboard shows it before the next feed change
 		s.fillAssignment(ctx, sess, unassigned)
 	}
 	if s.Decorator != nil {
