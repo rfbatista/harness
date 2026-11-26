@@ -191,7 +191,10 @@ func TestADiffWhoseCriticFailedToStartIsReviewedByALaterRun(t *testing.T) {
 
 type fakeNotes struct{ got []string }
 
-func (n *fakeNotes) UpdateCriticSkip(_, reason string) error { n.got = append(n.got, reason); return nil }
+func (n *fakeNotes) UpdateCriticSkip(_, reason string) error {
+	n.got = append(n.got, reason)
+	return nil
+}
 
 func TestAFailedStartIsNotedOnTheAuthorWithItsReasonAndTheRetryClearsTheNote(t *testing.T) {
 	st := &fakeStarter{err: errors.New("host unreachable")}
