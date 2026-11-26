@@ -122,7 +122,9 @@ type ServiceRequestFilter struct {
 	ProjectID string
 	ServiceID string
 	SessionID string
-	State     ServiceRequestState
+	// TaskID is the task of the requesting session.
+	TaskID string
+	State  ServiceRequestState
 }
 
 // Codes of a service request.

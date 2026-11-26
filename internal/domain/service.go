@@ -79,8 +79,9 @@ type ServiceStartedBy struct {
 	Kind      string `json:"kind"` // person | session
 	SessionID string `json:"session_id"`
 	Agent     string `json:"agent"`
-	// TaskID is the task the starting session works on; empty for a person
-	// and for a session with no task.
+	// TaskID is the task the starting session works on, or the task page a
+	// person acted from; empty for a session with no task and for a person
+	// acting elsewhere.
 	TaskID string `json:"task_id"`
 }
 
@@ -153,6 +154,16 @@ type Service struct {
 	PendingRequests int       `json:"pending_requests"`
 	CreatedAt       time.Time `json:"created_at"`
 	UpdatedAt       time.Time `json:"updated_at"`
+}
+
+// OfTask says whether the service is a serviço da task: a session of the task
+// created it, or one started its current or last run. Only the task itself
+// counts, never its children.
+func (s *Service) OfTask(taskID string) bool {
+	if taskID == "" {
+		return false
+	}
+	return s.CreatedBy.TaskID == taskID || (s.Run != nil && s.Run.StartedBy.TaskID == taskID)
 }
 
 // ServiceInput is what the person defines: a Service's own fields.

@@ -119,6 +119,9 @@ func (r *ServiceRequestRepository) List(ctx context.Context, f domain.ServiceReq
 		if err != nil {
 			return nil, err
 		}
+		if f.TaskID != "" && req.TaskID != f.TaskID {
+			continue
+		}
 		out = append(out, req)
 	}
 	return out, nil

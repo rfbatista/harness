@@ -24,7 +24,21 @@ func (h *Handler) handleListServices(c echo.Context) error {
 	if err != nil {
 		return err
 	}
+	if taskID := c.QueryParam("task_id"); taskID != "" {
+		list.Services = servicesOfTask(list.Services, taskID)
+	}
 	return c.JSON(http.StatusOK, list)
+}
+
+// servicesOfTask keeps the serviços da task, in order.
+func servicesOfTask(all []*domain.Service, taskID string) []*domain.Service {
+	out := []*domain.Service{}
+	for _, svc := range all {
+		if svc.OfTask(taskID) {
+			out = append(out, svc)
+		}
+	}
+	return out
 }
 
 func (h *Handler) handleGetService(c echo.Context) error {
@@ -273,7 +287,7 @@ func (h *Handler) handleListServiceRequests(c echo.Context) error {
 	}
 	f := domain.ServiceRequestFilter{
 		ProjectID: c.QueryParam("project_id"), ServiceID: c.QueryParam("service_id"),
-		State: domain.ServiceRequestState(c.QueryParam("state")),
+		TaskID: c.QueryParam("task_id"), State: domain.ServiceRequestState(c.QueryParam("state")),
 	}
 	list, err := h.serviceRequests.List(c.Request().Context(), f)
 	if err != nil {
