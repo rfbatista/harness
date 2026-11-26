@@ -570,3 +570,26 @@ func TestAnEncerramentoPorMemoriaIsAnInfoNotificationLinkingToTheSession(t *test
 		t.Errorf("title %q body %q: want the process, its RSS and the orçamento", n.Title, n.Body)
 	}
 }
+
+// A process that survived SIGKILL is not "ended": the person is told it could
+// not be, as one info notification linking to the session.
+func TestAProcessThatCouldNotBeEndedIsAnInfoNotificationSayingSo(t *testing.T) {
+	r := newRig(t)
+	r.session(t, "s1", r.ProjectA, "")
+	kill := domain.MemoryKill{Kind: domain.MemoryKilledKind, SessionID: "s1", PID: 81234, Command: "node jest",
+		RSSBytes: 3584 << 20, TreeRSS: 4200 << 20, Budget: 4 << 30, Signal: "SIGKILL", KilledAt: time.Now()}
+	r.publish(t, domain.SessionMemoryKillFailed{Kill: kill})
+	r.publish(t, domain.SessionMemoryKillFailed{Kill: kill}) // the same failure again: one notification
+
+	page := r.list(t, ports.NotificationQuery{})
+	if len(page.Notifications) != 1 {
+		t.Fatalf("notifications = %+v, want one", page.Notifications)
+	}
+	n := page.Notifications[0]
+	if n.Kind != domain.NotificationSessionMemoryKillFailed || n.Level != domain.NotificationInfo || n.SessionID != "s1" || !strings.Contains(n.Link, "session=s1") {
+		t.Errorf("notification = %+v", n)
+	}
+	if !strings.Contains(n.Title, "node jest") || strings.Contains(n.Title, "ended a process") || !strings.Contains(n.Body, "could not be ended") || !strings.Contains(n.Body, "over") {
+		t.Errorf("title %q body %q: want the process, and that it could not be ended and the session stays over its orçamento", n.Title, n.Body)
+	}
+}

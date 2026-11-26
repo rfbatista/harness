@@ -256,6 +256,7 @@ func (s *Service) ResumeInteractive(ctx context.Context, req ports.ResumeRequest
 		return nil, ports.AgentSpec{}, &domain.StructuredError{Code: "SESSION_ALREADY_RUNNING", Message: "session is being resumed"}
 	}
 	defer s.releaseResume(req.SessionID)
+	s.reopenRun(req.SessionID)
 	sess, err := s.interactiveSession(req.SessionID)
 	if err != nil {
 		return nil, ports.AgentSpec{}, err
@@ -600,10 +601,11 @@ func (s *Service) end(id string, exitCode int, closedByUser bool) (*domain.Sessi
 	if err != nil {
 		return nil, err
 	}
-	s.runCleanup(id)
 	if sess.Status.IsTerminal() {
+		s.runCleanup(id)
 		return s.withResumability(context.Background(), sess), nil
 	}
+	s.endRun(id)
 	s.clearPendingApprovals(id)
 
 	status, text := domain.SessionDone, "exited"
@@ -616,6 +618,7 @@ func (s *Service) end(id string, exitCode int, closedByUser bool) (*domain.Sessi
 	if err := s.sessions.UpdateStatus(id, status); err != nil {
 		return nil, err
 	}
+	s.pruneRun(id)
 	s.publish(id, SessionEvent{Type: "done", Status: status, Text: text, At: time.Now()})
 	s.hub.End(id)
 	s.announceEnded(id, status)
@@ -860,11 +863,12 @@ func (s *Service) stopOrphan(sess *domain.Session) error {
 // endHeadless records a headless session as stopped: its open approvals are
 // gone with it, its stream closes and its end is announced.
 func (s *Service) endHeadless(id string) error {
-	s.runCleanup(id)
+	s.endRun(id)
 	s.clearPendingApprovals(id)
 	if err := s.sessions.UpdateStatus(id, domain.SessionStopped); err != nil {
 		return err
 	}
+	s.pruneRun(id)
 	s.publish(id, SessionEvent{Type: "done", Status: domain.SessionStopped, Text: "stopped", At: time.Now()})
 	s.hub.End(id)
 	s.announceEnded(id, domain.SessionStopped)

@@ -80,6 +80,19 @@ describe("a failed read does not judge buffered kills (F2)", () => {
     assert.deepEqual(w.presenter.viewModel.toasts, []);
   });
 
+  test("a read that answers 404 cancels the retry in waiting: the session is not live, there is nothing to try again", async () => {
+    const w = world(new Error("500"));
+    await w.presenter.start();
+    assert.equal(w.scheduler.pending(), 1, "a retry waits");
+    w.source.answer = null;
+    w.stream.resync();
+    await w.presenter.settled();
+    assert.equal(w.scheduler.pending(), 0);
+    const reads = w.source.reads;
+    w.scheduler.advance(120_000);
+    assert.equal(w.source.reads, reads);
+  });
+
   test("what is still buffered when the island goes is dropped", async () => {
     const w = world(new Error("500"));
     await w.presenter.start();

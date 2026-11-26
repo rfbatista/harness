@@ -82,6 +82,11 @@ func memoryKilledWhat(command string) what {
 	return what{verb: "ended a process for memory", object: command, code: true, colon: true}
 }
 
+// memoryKillFailedWhat is the harness failing to end a session's process.
+func memoryKillFailedWhat(command string) what {
+	return what{verb: "could not end a process for memory", object: command, code: true, colon: true}
+}
+
 // formatGB writes bytes as GB with at most one decimal: 3.5 GB, 4 GB.
 func formatGB(bytes int64) string {
 	s := strconv.FormatFloat(float64(bytes)/(1<<30), 'f', 1, 64)

@@ -4,7 +4,10 @@ package memorywatch_test
 
 import (
 	"context"
+	"os"
 	"os/exec"
+	"strconv"
+	"strings"
 	"syscall"
 	"testing"
 	"time"
@@ -16,17 +19,27 @@ import (
 	"operators-mcp/internal/ports"
 )
 
+// realTable and realSignaler are the only places this test names an adapter:
+// pointing it at another darwin adapter is a change to these two functions.
+func realTable() ports.ProcessTable { return procmac.Table{} }
+
+func realSignaler() ports.ProcessSignaler { return psprocs.Signaler{} }
+
 // The real process table, end to end: a wrapper leads its own POSIX session
 // (as a PTY's process does) and runs a stand-in agent CLI, which runs a perl
-// child that holds about 300 MB. Over a 100 MB orçamento the vigia ends the
-// perl child, and the stand-in agent and the wrapper above it live on.
+// two perl children of about 300 MB each, one reparented to launchd. Over a
+// 100 MB orçamento the vigia ends both, and the stand-in agent and the wrapper
+// above it live on.
 func TestRealProcessPastASmallOrcamentoIsEndedAndTheAgentSurvives(t *testing.T) {
 	const id = "itg-memory-watch-1"
-	if _, err := (procmac.Table{}).Read(context.Background()); err != nil {
+	if _, err := realTable().Read(context.Background()); err != nil {
 		t.Skipf("the process table cannot be read here (the kernel refused the sysctl): %v", err)
 	}
-	// The agent outlives its child (sleep 120 after wait), as claude outlives a test run.
-	agentScript := `perl -e '$x = q(a) x 300000000; sleep 120' & wait; sleep 120`
+	// The agent outlives its children (sleep 120 after wait), as claude outlives
+	// a test run. One perl is a plain child; the other is started from a
+	// subshell that exits at once, so launchd adopts it (a daemonized dev server).
+	pidFile := t.TempDir() + "/orphan.pid"
+	agentScript := `perl -e '$x = q(a) x 300000000; sleep 120' & (perl -e '$y = q(b) x 300000000; sleep 120' & echo $! > ` + pidFile + `); wait; sleep 120`
 	wrapper := exec.Command("sh", "-c", `sh -c "$0" --session-id `+id+`; sleep 120`, agentScript)
 	wrapper.SysProcAttr = &syscall.SysProcAttr{Setsid: true}
 	if err := wrapper.Start(); err != nil {
@@ -38,16 +51,16 @@ func TestRealProcessPastASmallOrcamentoIsEndedAndTheAgentSurvives(t *testing.T) 
 	})
 
 	sink := &sink{}
-	w := memorywatch.New(memorywatch.Deps{Table: procmac.Table{}, Signal: psprocs.Signaler{}, Sink: sink})
+	w := memorywatch.New(memorywatch.Deps{Table: realTable(), Signal: realSignaler(), Sink: sink})
 	w.Watch(ports.MemoryWatch{SessionID: "s1", TaskID: "t1", BudgetBytes: 100 << 20, ClaudeID: id, RootPID: wrapper.Process.Pid})
 
-	deadline := time.Now().Add(30 * time.Second)
+	deadline := time.Now().Add(40 * time.Second)
 	for time.Now().Before(deadline) {
 		w.Poll(time.Now())
 		sink.mu.Lock()
 		n := len(sink.kills)
 		sink.mu.Unlock()
-		if n > 0 {
+		if n >= 2 {
 			break
 		}
 		time.Sleep(time.Second)
@@ -55,14 +68,26 @@ func TestRealProcessPastASmallOrcamentoIsEndedAndTheAgentSurvives(t *testing.T) 
 	sink.mu.Lock()
 	kills := append([]domain.MemoryKill(nil), sink.kills...)
 	sink.mu.Unlock()
-	if len(kills) != 1 {
-		t.Fatalf("kills = %+v, want one", kills)
+	if len(kills) != 2 {
+		t.Fatalf("kills = %+v, want two: the plain child and the reparented one", kills)
 	}
-	if k := kills[0]; len(k.Command) < 4 || k.Command[:4] != "perl" || k.RSSBytes < 200<<20 || k.Signal != "SIGTERM" {
-		t.Errorf("kill = %+v, want the perl child ended with SIGTERM", k)
+	raw, err := os.ReadFile(pidFile)
+	if err != nil {
+		t.Fatal(err)
+	}
+	orphan, _ := strconv.Atoi(strings.TrimSpace(string(raw)))
+	var orphanEnded bool
+	for _, k := range kills {
+		if len(k.Command) < 4 || k.Command[:4] != "perl" || k.RSSBytes < 200<<20 || k.Signal != "SIGTERM" {
+			t.Errorf("kill = %+v, want a perl child ended with SIGTERM", k)
+		}
+		orphanEnded = orphanEnded || k.PID == orphan
+	}
+	if !orphanEnded {
+		t.Errorf("the reparented perl (pid %d) was not counted and ended: %+v", orphan, kills)
 	}
 
-	table, err := (procmac.Table{}).Read(context.Background())
+	table, err := realTable().Read(context.Background())
 	if err != nil {
 		t.Fatal(err)
 	}

@@ -25,6 +25,10 @@ func TestTheNoticeIsInThePostToolUseAnswerOfTheCallRunningWhenSIGTERMWentOut(t *
 	watcher := memorywatch.New(memorywatch.Deps{Table: table, Signal: sig, Sink: svc})
 	svc.MemoryWatcher = watcher
 	sess, _ := startHeadless(t, svc, w.task.ID)
+	// The fake CLI's first turn may still be running; its end clears the running
+	// calls (no turn ends between a call's PreToolUse and PostToolUse), so the
+	// call is started only once that turn is over.
+	eventually(t, "the first turn to end", func() bool { return !svc.isBusy(sess.ID) })
 	live, _, cancel := svc.Subscribe(sess.ID)
 	defer cancel()
 
@@ -172,4 +176,126 @@ func TestASessionThatHasAlreadyEndedIsNotHandedToTheVigia(t *testing.T) {
 	if len(fw.watched) != before {
 		t.Errorf("a watch was installed for an ended session: %d → %d", before, len(fw.watched))
 	}
+}
+
+// N5: between a session's cleanup and its terminal status, a watch handed over
+// would outlive it. Once cleanup has run for a run, nothing is watched for it.
+func TestNoWatchIsInstalledOnceTheRunsCleanupHasRun(t *testing.T) {
+	svc, w := newHeadlessShellService(t)
+	withTokenSavers(t, svc)
+	fw := &fakeWatcher{}
+	svc.MemoryWatcher = fw
+	sess, _ := startHeadless(t, svc, w.task.ID)
+	fw.mu.Lock()
+	before := len(fw.watched)
+	fw.mu.Unlock()
+
+	svc.endRun(sess.ID) // the status is still running: the window of the race
+	svc.watchMemory(sess.ID, "", 4*gb, sess.ID, 0)
+
+	fw.mu.Lock()
+	defer fw.mu.Unlock()
+	if len(fw.watched) != before {
+		t.Errorf("a watch was installed after the cleanup ran: %d → %d", before, len(fw.watched))
+	}
+}
+
+// A resume is a new run: its watch is installed although an earlier run's cleanup ran.
+func TestAResumeIsWatchedAlthoughTheEarlierRunsCleanupRan(t *testing.T) {
+	svc := newHostedService(t, scriptAgent{script: `cat`})
+	withTokenSavers(t, svc)
+	fw := &fakeWatcher{}
+	svc.MemoryWatcher = fw
+	sess := startOnServer(t, svc)
+	if err := svc.Stop(context.Background(), sess.ID); err != nil {
+		t.Fatal(err)
+	}
+	waitStatus(t, svc, sess.ID, domain.SessionStopped)
+	if _, _, err := svc.ResumeInteractive(context.Background(), ports.ResumeRequest{SessionID: sess.ID, RunsOn: domain.RunnerServer}); err != nil {
+		t.Fatal(err)
+	}
+	fw.mu.Lock()
+	defer fw.mu.Unlock()
+	if len(fw.watched) != 2 {
+		t.Errorf("watches = %d, want one per run", len(fw.watched))
+	}
+}
+
+// N6: a product owner thread is project-level: the orçamento is the global one,
+// whatever a repository overrides.
+func TestAProductOwnerSessionUsesTheGlobalOrcamentoOnly(t *testing.T) {
+	svc, _ := newHeadlessShellService(t)
+	savers := withTokenSavers(t, svc)
+	setOverride(t, savers, domain.ActivationLevelRepository, "r1", 8*gb)
+	id, err := svc.StartProductOwnerSession(context.Background(), ports.ProductOwnerSessionSpec{ProjectID: "p1"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = svc.Stop(context.Background(), id) })
+	sess := svc.sessions.Get(id)
+	if sess.MemoryBudgetBytes != 4*gb || sess.MemoryBudgetSource != "global" {
+		t.Errorf("budget = %d from %q, want 4 GB from global", sess.MemoryBudgetBytes, sess.MemoryBudgetSource)
+	}
+}
+
+// L1: a process the vigia gave up on is not "killed": no kill is recorded or
+// published for it.
+func TestAProcessGivenUpOnLeavesNoKillRecord(t *testing.T) {
+	svc, _ := newInteractiveService(t)
+	sess, _ := startInteractive(t, svc, InteractiveRequest{Prompt: "go"})
+	k := killOf(sess.ID)
+	svc.Ending(k)
+	svc.KillFailed(k)
+	if read, _ := svc.SessionMemory(sess.ID); len(read.Kills) != 0 {
+		t.Errorf("kills = %+v, want none for a process that could not be ended", read.Kills)
+	}
+}
+
+// midInstallWatcher ends the session's run while the watch is being installed:
+// the race between the check and the storing of the cleanup.
+type midInstallWatcher struct {
+	fakeWatcher
+	svc *Service
+}
+
+func (m *midInstallWatcher) Watch(w ports.MemoryWatch) func() {
+	m.svc.endRun(w.SessionID)
+	return m.fakeWatcher.Watch(w)
+}
+
+// L2: an end that comes between the run check and the storing of the cleanup is
+// seen too: the watch is stopped at once.
+func TestAWatchInstalledWhileTheRunEndsIsStoppedAtOnce(t *testing.T) {
+	svc, w := newHeadlessShellService(t)
+	withTokenSavers(t, svc)
+	sess, _ := startHeadless(t, svc, w.task.ID)
+	mw := &midInstallWatcher{svc: svc}
+	svc.MemoryWatcher = mw
+	svc.reopenRun(sess.ID) // an earlier endRun of the run does not apply to the one under test
+
+	svc.watchMemory(sess.ID, "", 4*gb, sess.ID, 0)
+
+	mw.mu.Lock()
+	defer mw.mu.Unlock()
+	if len(mw.watched) != 1 || mw.stopped != 1 {
+		t.Errorf("watches %d, stopped %d: a watch installed as the run ended outlives it", len(mw.watched), mw.stopped)
+	}
+}
+
+// L3: the run marks are dropped once the terminal status is written; they only
+// guard the gap before it.
+func TestTheRunMarkOfAnEndedSessionIsPruned(t *testing.T) {
+	svc := newHostedService(t, scriptAgent{script: `cat`})
+	withTokenSavers(t, svc)
+	svc.MemoryWatcher = &fakeWatcher{}
+	sess := startOnServer(t, svc)
+	if err := svc.Stop(context.Background(), sess.ID); err != nil {
+		t.Fatal(err)
+	}
+	waitStatus(t, svc, sess.ID, domain.SessionStopped)
+	eventually(t, "the run mark to be pruned", func() bool {
+		svc.mu.Lock()
+		defer svc.mu.Unlock()
+		return !svc.cleaned[sess.ID]
+	})
 }
