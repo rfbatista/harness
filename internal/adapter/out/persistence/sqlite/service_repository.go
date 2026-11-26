@@ -27,6 +27,7 @@ type ServiceModel struct {
 	Env                 string
 	CommandJSON         string `gorm:"column:command_json"`
 	ImageJSON           string `gorm:"column:image_json"`
+	CredentialsJSON     string `gorm:"column:credentials_json"`
 	Status              string `gorm:"index:idx_services_project_status,priority:2"`
 	RunJSON             string `gorm:"column:run_json"`
 	CreatedByJSON       string `gorm:"column:created_by_json"`
@@ -80,6 +81,9 @@ func serviceToModel(s *domain.Service) ServiceModel {
 		m.RunJSON = marshalOrEmpty(s.Run)
 	}
 	m.CreatedByJSON = marshalOrEmpty(s.CreatedBy)
+	if len(s.Credentials) > 0 {
+		m.CredentialsJSON = marshalOrEmpty(s.Credentials)
+	}
 	return m
 }
 
@@ -100,6 +104,10 @@ func (m *ServiceModel) toDomain() *domain.Service {
 	if m.RunJSON != "" {
 		s.Run = &domain.ServiceRun{}
 		_ = json.Unmarshal([]byte(m.RunJSON), s.Run)
+	}
+	s.Credentials = []domain.ServiceCredential{} // a service made before credentials has none
+	if m.CredentialsJSON != "" {
+		_ = json.Unmarshal([]byte(m.CredentialsJSON), &s.Credentials)
 	}
 	if m.CreatedByJSON != "" {
 		_ = json.Unmarshal([]byte(m.CreatedByJSON), &s.CreatedBy)

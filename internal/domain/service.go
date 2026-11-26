@@ -133,6 +133,14 @@ type ServiceRun struct {
 	Sandboxed bool `json:"sandboxed"`
 }
 
+// ServiceCredential is one credencial de acesso do serviço: a label and the
+// value the person types into a login screen (ADR 0004). Values are kept like
+// environment variable values; agents see labels only.
+type ServiceCredential struct {
+	Label string `json:"label"`
+	Value string `json:"value"`
+}
+
 // Service is a project's definition of a service, with its last run.
 type Service struct {
 	ID                  string          `json:"id"`
@@ -144,7 +152,9 @@ type Service struct {
 	Env                 string          `json:"env"`
 	Command             *ServiceCommand `json:"command"`
 	Image               *ServiceImage   `json:"image"`
-	Status              ServiceStatus   `json:"status"`
+	// Credentials are the service's access credentials; never nil.
+	Credentials []ServiceCredential `json:"credentials"`
+	Status      ServiceStatus       `json:"status"`
 	Run                 *ServiceRun     `json:"run"`
 	// CreatedBy is who made the service: the person, or an agent's session
 	// whose service request the person approved (ADR 0083).
@@ -175,6 +185,9 @@ type ServiceInput struct {
 	Env                 string          `json:"env"`
 	Command             *ServiceCommand `json:"command"`
 	Image               *ServiceImage   `json:"image"`
+	// Credentials replace the service's credentials; nil, as when a client
+	// does not send the field, keeps them.
+	Credentials []ServiceCredential `json:"credentials"`
 }
 
 var serviceNamePattern = regexp.MustCompile(`^[a-z0-9][a-z0-9_.-]{0,63}$`)
@@ -199,6 +212,13 @@ func (in ServiceInput) Normalized() (ServiceInput, error) {
 	if _, skipped := ParseDotenv(in.Env); len(skipped) > 0 {
 		return in, invalidService("env line %d is not KEY=VALUE", skipped[0])
 	}
+	if in.Credentials != nil {
+		creds, err := normalizedCredentials(in.Credentials)
+		if err != nil {
+			return in, err
+		}
+		in.Credentials = creds
+	}
 	switch in.Kind {
 	case ServiceKindCommand:
 		in.Image = nil
@@ -218,6 +238,25 @@ func (in ServiceInput) Normalized() (ServiceInput, error) {
 		return in, invalidService("kind must be command or image")
 	}
 	return in, nil
+}
+
+// normalizedCredentials trims the labels and refuses an empty or repeated
+// one; its message names the label and never quotes a value.
+func normalizedCredentials(in []ServiceCredential) ([]ServiceCredential, error) {
+	out := make([]ServiceCredential, 0, len(in))
+	seen := map[string]bool{}
+	for i, c := range in {
+		c.Label = strings.TrimSpace(c.Label)
+		if c.Label == "" {
+			return nil, invalidService("credentials[%d].label is required", i)
+		}
+		if seen[c.Label] {
+			return nil, invalidService("credential label %q is repeated", c.Label)
+		}
+		seen[c.Label] = true
+		out = append(out, c)
+	}
+	return out, nil
 }
 
 func validPort(p int) bool { return p >= 1 && p <= 65535 }
