@@ -532,3 +532,69 @@ func TestOptionalGatesCanBeAddedChangedAndRemoved(t *testing.T) {
 		t.Error("the sibling lost the project's optional gate")
 	}
 }
+
+const goodUI = `{"start_command":"npm start","url":"http://localhost:3000","routes":["/","/settings"],"viewports":["1280x800","375x667"],"ui_paths":["web/**/*.tsx"]}`
+
+func TestGlobsModelsAndRoutesAreValidatedAtBothLevels(t *testing.T) {
+	svc := agentsystem.New(world())
+	ctx := context.Background()
+	saves := map[string]func(map[string]json.RawMessage) error{
+		"project":    func(p map[string]json.RawMessage) error { _, err := svc.SaveProject(ctx, "p1", p); return err },
+		"repository": func(p map[string]json.RawMessage) error { _, err := svc.SaveRepository(ctx, "p1", "r1", p); return err },
+	}
+	invalid := []struct{ field, value, wantField, code string }{
+		{"guard.protected_paths", `["ok/**","bad[x"]`, "guard.protected_paths[1]", "INVALID_GLOB"},
+		{"guard.protected_paths", `[""]`, "guard.protected_paths[0]", "INVALID_GLOB"},
+		{"review.critic.standards", `["AGENTS.md","["]`, "review.critic.standards[1]", "INVALID_GLOB"},
+		{"review.critic.model", `"gpt-9"`, "review.critic.model", "MODEL_UNAVAILABLE"},
+		{"review.critic.model", `""`, "review.critic.model", "MODEL_UNAVAILABLE"},
+		{"review.visual_qa.ui", `{"url":"http://x","routes":["settings"],"viewports":["1x1"]}`, "review.visual_qa.ui.routes[0]", "INVALID_ROUTE"},
+		{"review.visual_qa.ui", `{"url":"ftp://x","routes":["/"],"viewports":["1x1"]}`, "review.visual_qa.ui.url", "INVALID_ROUTE"},
+		{"review.visual_qa.ui", `{"url":"http://x","routes":["/"],"viewports":["1280x800","wide"]}`, "review.visual_qa.ui.viewports[1]", "INVALID_ROUTE"},
+		{"review.visual_qa.ui", `{"url":"http://x","routes":["/"],"viewports":["0x800"]}`, "review.visual_qa.ui.viewports[0]", "INVALID_ROUTE"},
+		{"review.visual_qa.ui", `{"url":"http://x","routes":["/"],"viewports":["1x1"],"ui_paths":["a[b"]}`, "review.visual_qa.ui.ui_paths[0]", "INVALID_GLOB"},
+	}
+	for level, save := range saves {
+		for _, c := range invalid {
+			if got := codes(t, save(patch(t, map[string]string{c.field: c.value}))); got[c.wantField] != c.code {
+				t.Errorf("%s %s = %s: %v, want %s at %s", level, c.field, c.value, got, c.code, c.wantField)
+			}
+		}
+		for field, value := range map[string]string{
+			"guard.protected_paths":   `["check.sh",".github/workflows/**","docs/*.md","src/[ab]?.go"]`,
+			"review.critic.standards": `["AGENTS.md","docs/**"]`,
+			"review.critic.model":     `"sonnet"`,
+			"review.visual_qa.ui":     goodUI,
+		} {
+			if err := save(patch(t, map[string]string{field: value})); err != nil {
+				t.Errorf("%s %s = %s refused: %v", level, field, value, err)
+			}
+		}
+	}
+}
+
+func TestEveryModelTheHarnessOffersIsACriticModel(t *testing.T) {
+	svc := agentsystem.New(world())
+	for _, m := range domain.ModelChoices {
+		if _, err := svc.SaveProject(context.Background(), "p1", patch(t, map[string]string{"review.critic.model": `"` + m + `"`})); err != nil {
+			t.Errorf("model %q refused: %v", m, err)
+		}
+	}
+	if got, _ := svc.Effective(context.Background(), "p1", "r1"); got.Review.Critic.Model.Value != "haiku" {
+		t.Errorf("model = %+v", got.Review.Critic.Model)
+	}
+}
+
+func TestResettingAListOrObjectFieldRemovesIt(t *testing.T) {
+	svc := agentsystem.New(world())
+	ctx := context.Background()
+	_, _ = svc.SaveProject(ctx, "p1", patch(t, map[string]string{"guard.protected_paths": `["x/**"]`, "review.critic.model": `"haiku"`, "review.visual_qa.ui": goodUI}))
+
+	if _, err := svc.SaveProject(ctx, "p1", patch(t, map[string]string{"guard.protected_paths": "null", "review.critic.model": "null", "review.visual_qa.ui": "null"})); err != nil {
+		t.Fatal(err)
+	}
+	got, _ := svc.Effective(ctx, "p1", "r1")
+	if got.Guard.ProtectedPaths.Source != domain.SourceHarness || got.Review.Critic.Model.Source != domain.SourceHarness || got.Review.VisualQA.UI.Source != domain.SourceHarness {
+		t.Errorf("reset fields still set: %+v %+v %+v", got.Guard.ProtectedPaths, got.Review.Critic.Model, got.Review.VisualQA.UI)
+	}
+}

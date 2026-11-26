@@ -4,7 +4,10 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
+	"net/url"
+	"path"
 	"slices"
+	"strconv"
 	"strings"
 )
 
@@ -336,14 +339,10 @@ func (e *AgentSystemValidationError) Error() string {
 var fieldChecks = map[string]func(raw json.RawMessage) (json.RawMessage, *AgentSystemFieldError){
 	FieldContextMapEnabled:          checkBool,
 	FieldTaskMemoryRequireUpdate:    checkBool,
-	FieldProtectedPaths:             checkStringList,
 	FieldLockfileRuleEnabled:        checkBool,
 	FieldRetryLimit:                 checkIntRange(MinRetryLimit, MaxRetryLimit),
 	FieldTestsFailFirstAvailable:    checkBool,
 	FieldCriticEnabled:              checkBool,
-	FieldCriticModel:                checkString,
-	FieldCriticStandards:            checkStringList,
-	FieldVisualQAUI:                 checkVisualQAUI,
 	FieldTrajectoryRecordingDefault: checkBool,
 }
 
@@ -360,33 +359,51 @@ func ValidateAgentSystemPatch(patch map[string]json.RawMessage) (set AgentSystem
 	}
 	slices.Sort(paths)
 	for _, path := range paths {
-		raw := patch[path]
-		check, known := fieldChecks[path]
-		if kind, attr, ok := gateField(path); ok {
-			check, known = func(raw json.RawMessage) (json.RawMessage, *AgentSystemFieldError) {
-				return checkGateField(kind, attr, raw)
-			}, true
-		}
-		if !known {
+		check := fieldCheckOf(path)
+		if check == nil {
 			bad = append(bad, AgentSystemFieldError{Field: path, Code: CodeUnknownField, Message: "no such setting"})
 			continue
 		}
+		raw := patch[path]
 		if bytes.Equal(bytes.TrimSpace(raw), []byte("null")) {
 			reset = append(reset, path)
 			continue
 		}
-		canon, e := check(raw)
-		if e != nil {
-			e.Field = path
-			bad = append(bad, *e)
-			continue
+		canon, errs := check(raw)
+		for _, e := range errs {
+			e.Field = path + e.Field
+			bad = append(bad, e)
 		}
-		set[path] = canon
+		if len(errs) == 0 {
+			set[path] = canon
+		}
 	}
 	if len(bad) > 0 {
 		return nil, nil, &AgentSystemValidationError{Errors: bad}
 	}
 	return set, reset, nil
+}
+
+// fieldCheck validates one field's value and answers the canonical JSON to
+// store, or the refusals; each refusal's Field is relative to the field's
+// path ("", "[1]", ".routes[0]").
+type fieldCheck func(raw json.RawMessage) (json.RawMessage, []AgentSystemFieldError)
+
+// fieldCheckOf is the check of a field path, nil when the schema has no such
+// field.
+func fieldCheckOf(path string) fieldCheck {
+	if kind, attr, ok := gateField(path); ok {
+		return func(raw json.RawMessage) (json.RawMessage, []AgentSystemFieldError) {
+			return one(checkGateField(kind, attr, raw))
+		}
+	}
+	if c, ok := richChecks[path]; ok {
+		return c
+	}
+	if c, ok := fieldChecks[path]; ok {
+		return func(raw json.RawMessage) (json.RawMessage, []AgentSystemFieldError) { return one(c(raw)) }
+	}
+	return nil
 }
 
 func wrongType(want string) *AgentSystemFieldError {
@@ -467,4 +484,98 @@ func canonical(v any) (json.RawMessage, *AgentSystemFieldError) {
 		return nil, wrongType("a value that can be stored")
 	}
 	return raw, nil
+}
+
+// richChecks are the fields whose refusal can name several entries: the
+// answer's Field is relative to the field's path ("[1]", ".routes[0]").
+var richChecks = map[string]fieldCheck{
+	FieldProtectedPaths:  checkGlobList,
+	FieldCriticStandards: checkGlobList,
+	FieldCriticModel:     checkModel,
+	FieldVisualQAUI:      checkVisualQAUIRich,
+}
+
+func one(raw json.RawMessage, e *AgentSystemFieldError) (json.RawMessage, []AgentSystemFieldError) {
+	if e != nil {
+		return nil, []AgentSystemFieldError{*e}
+	}
+	return raw, nil
+}
+
+// globError is nil when pattern is a glob: non-empty and well formed. "**"
+// matches across directories, so it is checked as "*".
+func globError(pattern string) *AgentSystemFieldError {
+	if strings.TrimSpace(pattern) == "" {
+		return &AgentSystemFieldError{Code: CodeInvalidGlob, Message: "a glob must not be empty"}
+	}
+	if _, err := path.Match(strings.ReplaceAll(pattern, "**", "*"), ""); err != nil {
+		return &AgentSystemFieldError{Code: CodeInvalidGlob, Message: "not a valid glob: " + pattern}
+	}
+	return nil
+}
+
+func checkGlobList(raw json.RawMessage) (json.RawMessage, []AgentSystemFieldError) {
+	canon, e := checkStringList(raw)
+	if e != nil {
+		return one(nil, e)
+	}
+	var list []string
+	_ = json.Unmarshal(canon, &list)
+	var bad []AgentSystemFieldError
+	for i, g := range list {
+		if ge := globError(g); ge != nil {
+			ge.Field = fmt.Sprintf("[%d]", i)
+			bad = append(bad, *ge)
+		}
+	}
+	return canon, bad
+}
+
+func checkModel(raw json.RawMessage) (json.RawMessage, []AgentSystemFieldError) {
+	canon, e := checkString(raw)
+	if e != nil {
+		return one(nil, e)
+	}
+	var m string
+	_ = json.Unmarshal(canon, &m)
+	if m == "" || !slices.Contains(ModelChoices, m) {
+		return nil, []AgentSystemFieldError{{Code: CodeModelUnavailable, Message: fmt.Sprintf("the harness cannot call model %q; it offers %s", m, strings.Join(ModelChoices, ", "))}}
+	}
+	return canon, nil
+}
+
+func checkVisualQAUIRich(raw json.RawMessage) (json.RawMessage, []AgentSystemFieldError) {
+	canon, e := checkVisualQAUI(raw)
+	if e != nil {
+		return one(nil, e)
+	}
+	var ui VisualQAUI
+	_ = json.Unmarshal(canon, &ui)
+	var bad []AgentSystemFieldError
+	route := func(field, msg string) {
+		bad = append(bad, AgentSystemFieldError{Field: field, Code: CodeInvalidRoute, Message: msg})
+	}
+	if u, err := url.Parse(ui.URL); err != nil || (u.Scheme != "http" && u.Scheme != "https") || u.Host == "" {
+		route(".url", "must be an http or https URL")
+	}
+	for i, r := range ui.Routes {
+		if !strings.HasPrefix(r, "/") {
+			route(fmt.Sprintf(".routes[%d]", i), "a route is a path starting with /")
+		}
+	}
+	for i, v := range ui.Viewports {
+		w, h, ok := strings.Cut(v, "x")
+		wi, werr := strconv.Atoi(w)
+		hi, herr := strconv.Atoi(h)
+		if !ok || werr != nil || herr != nil || wi < 1 || hi < 1 {
+			route(fmt.Sprintf(".viewports[%d]", i), "a viewport is WIDTHxHEIGHT in pixels, e.g. 1280x800")
+		}
+	}
+	for i, g := range ui.UIPaths {
+		if ge := globError(g); ge != nil {
+			ge.Field = fmt.Sprintf(".ui_paths[%d]", i)
+			bad = append(bad, *ge)
+		}
+	}
+	return canon, bad
 }

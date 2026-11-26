@@ -259,3 +259,27 @@ func TestGetRepositoryListsTheRequiredGateItIsMissing(t *testing.T) {
 		t.Fatalf("missing = %v: %s", view.Effective.Missing, rec.Body.String())
 	}
 }
+
+func TestPatchWithABadGlobModelOrRouteAnswers422AndStoresNothing(t *testing.T) {
+	h := agentSystemHandler(t)
+	for _, base := range []string{"/projects/p1/agent-system", "/projects/p1/repositories/r1/agent-system"} {
+		for body, want := range map[string][2]string{
+			`{"guard.protected_paths": ["a[b"]}`:                         {"guard.protected_paths[0]", "INVALID_GLOB"},
+			`{"review.critic.model": "gpt-9"}`:                           {"review.critic.model", "MODEL_UNAVAILABLE"},
+			`{"review.visual_qa.ui": {"url":"http://x","routes":["x"]}}`: {"review.visual_qa.ui.routes[0]", "INVALID_ROUTE"},
+		} {
+			rec := patchJSON(t, h, base, body)
+			var e agentSystemErrors
+			if rec.Code != http.StatusUnprocessableEntity || json.Unmarshal(rec.Body.Bytes(), &e) != nil || len(e.Errors) != 1 || e.Errors[0].Field != want[0] || e.Errors[0].Code != want[1] {
+				t.Errorf("PATCH %s %s -> %d %s, want %v", base, body, rec.Code, rec.Body.String(), want)
+			}
+		}
+	}
+	rec := getJSON(t, h, "/projects/p1/agent-system")
+	var view struct {
+		Values map[string]any `json:"values"`
+	}
+	if json.Unmarshal(rec.Body.Bytes(), &view) != nil || len(view.Values) != 0 {
+		t.Errorf("a refused save stored %v", view.Values)
+	}
+}
