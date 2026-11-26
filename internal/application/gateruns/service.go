@@ -63,9 +63,6 @@ func (s *Service) Gated(ctx context.Context, sessionID string) (*domain.Session,
 	if !ok {
 		return nil, domain.GuardConfig{}, notGated("it kept no guard configuration")
 	}
-	if cfg.Unresolved != "" {
-		return nil, domain.GuardConfig{}, notGated(cfg.Unresolved)
-	}
 	hasDiff := false
 	if cfg.Mode == domain.SessionModeDefault && s.d.HasDiff != nil {
 		hasDiff = s.d.HasDiff(ctx, sess)

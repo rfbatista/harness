@@ -115,13 +115,13 @@ type Services struct {
 	// answers 503. SandboxDriver says which driver the platform has (nil
 	// result: none).
 	SandboxSettings ports.SandboxSettings
+	SandboxDriver   func() ports.SandboxDriver
 	// AgentSystem is the agent system settings store (ADR 0011); nil: the
 	// endpoints answer 503.
 	AgentSystem ports.AgentSystemSettings
 	// GateRuns runs and lists a session's gate runs (ADR 0012); nil: the
 	// routes answer 503.
 	GateRuns ports.GateRuns
-	SandboxDriver   func() ports.SandboxDriver
 	// ManagedClaude installs and switches the claude agents run; nil answers
 	// 503. ManagedClaudeBin says which binary agents run (the override
 	// included); nil reads as no override.

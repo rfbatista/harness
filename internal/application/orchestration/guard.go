@@ -2,6 +2,7 @@ package orchestration
 
 import (
 	"context"
+	"errors"
 	"log/slog"
 
 	"operators-mcp/internal/domain"
@@ -14,21 +15,32 @@ import (
 // enforcement read it from GuardSessions, never from the settings again.
 
 // keepGuard resolves the effective guard configuration for the session's
-// repository and keeps it. A session the settings store cannot resolve starts
-// as before, kept as not gated with the reason.
+// repository and keeps it. When the settings store cannot answer, the harness
+// defaults stand in, with the reason on the configuration: the gated rule
+// depends only on the mode and the diff, so a store fault never switches the
+// Guard layer off.
 func (s *Service) keepGuard(ctx context.Context, sess *domain.Session) {
-	if s.AgentSystem == nil || s.GuardSessions == nil || sess == nil || sess.ProjectID == "" {
+	if s.GuardSessions == nil || sess == nil || sess.ProjectID == "" {
 		return
 	}
 	ctx = context.WithoutCancel(ctx)
-	cfg := domain.GuardConfig{Mode: sess.Mode}
-	eff, err := s.AgentSystem.Effective(ctx, sess.ProjectID, sess.RepositoryID)
-	if err != nil {
-		slog.Warn("guard configuration not resolved; the session is not gated", "session", sess.ID, "err", err)
-		cfg.Unresolved = err.Error()
+	var (
+		eff domain.EffectiveAgentSystem
+		err error
+	)
+	if s.AgentSystem == nil {
+		err = errors.New("no settings store")
 	} else {
-		cfg = domain.NewGuardConfig(eff, sess.Mode)
+		eff, err = s.AgentSystem.Effective(ctx, sess.ProjectID, sess.RepositoryID)
 	}
+	var reason string
+	if err != nil {
+		slog.Warn("guard configuration not resolved; the harness defaults stand in", "session", sess.ID, "err", err)
+		reason = "settings unavailable: " + err.Error()
+		eff = domain.ResolveAgentSystem(domain.AgentSystemHarnessDefaults{})
+	}
+	cfg := domain.NewGuardConfig(eff, sess.Mode)
+	cfg.Unresolved = reason
 	if err := s.GuardSessions.Keep(ctx, sess.ID, cfg); err != nil {
 		slog.Warn("guard configuration not kept", "session", sess.ID, "err", err)
 	}

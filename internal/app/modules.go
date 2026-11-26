@@ -51,6 +51,7 @@ import (
 	"operators-mcp/internal/application/artifacts"
 	"operators-mcp/internal/application/branchgate"
 	"operators-mcp/internal/application/branchwatch"
+	"operators-mcp/internal/application/agentsystem"
 	"operators-mcp/internal/application/execution"
 	"operators-mcp/internal/application/gateruns"
 	"operators-mcp/internal/application/gitcredentials"
@@ -467,6 +468,9 @@ func newToolingService(cat catalog.Catalog, plan *planning.Service, exec *execut
 // stopped the server sessions a previous run left recorded as running.
 var AgentRuntimeModule = fx.Module("agentruntime",
 	runtime.Module,
+	// The consumer wires its own dependency: the settings store is built from
+	// the orchestration (it announces on its feed), so it is set after both.
+	fx.Invoke(func(orch *orchestration.Service, store *agentsystem.Service) { orch.AgentSystem = store }),
 	fx.Provide(
 		newRuntimeConfig,
 		newClaudeManager,
@@ -490,6 +494,7 @@ var AgentRuntimeModule = fx.Module("agentruntime",
 		platformSandboxDriver,
 		platformSandboxViolations,
 		newSandboxSettings,
+		newAgentSystem,
 		newManagedClaude,
 		newManagedClaudeBin,
 		newAgentReadiness,

@@ -39,15 +39,17 @@ type GuardConfig struct {
 	RetryLimit              int         `json:"retry_limit"`
 	TestsFailFirstAvailable bool        `json:"tests_fail_first_available"`
 	Scope                   []string    `json:"scope,omitempty"`
-	// Unresolved is why the settings store could not give this session a
-	// configuration; the session runs as before and is not gated.
+	// Unresolved is why the settings store could not give this session its
+	// configuration ("settings unavailable: …"); the harness defaults stand in
+	// and the session is gated as usual: a store fault never switches the
+	// Guard layer off.
 	Unresolved string `json:"unresolved,omitempty"`
 }
 
 // Gated says whether the session runs the gates under this configuration;
 // hasDiff is whether a mode-less session has a diff against its base.
 func (c GuardConfig) Gated(hasDiff bool) bool {
-	return c.Unresolved == "" && SessionGated(c.Mode, hasDiff)
+	return SessionGated(c.Mode, hasDiff)
 }
 
 // NewGuardConfig keeps the guard part of eff for a session in mode, sharing no

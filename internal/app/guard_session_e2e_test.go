@@ -4,6 +4,7 @@ package app
 
 import (
 	"context"
+	"strings"
 	"sync"
 	"testing"
 
@@ -16,6 +17,7 @@ import (
 
 // fakeAgentSystem answers the effective configuration a test sets.
 type fakeAgentSystem struct {
+	ports.AgentSystemSettings // only Effective is answered
 	mu       sync.Mutex
 	retry    int
 	gates    map[domain.GateKind]string // the commands the gates run
@@ -80,7 +82,7 @@ func TestASessionKeepsTheGuardConfigurationItStartedWithAndAResumeTakesTheCurren
 	}
 }
 
-func TestASessionTheSettingsCannotResolveStartsAsBeforeAndIsNotGated(t *testing.T) {
+func TestASessionTheSettingsCannotResolveIsStillGatedUnderTheHarnessDefaultsWithTheReason(t *testing.T) {
 	e := newShellE2E(t)
 	e.orch.AgentSystem = &fakeAgentSystem{err: &domain.StructuredError{Code: "REPOSITORY_NOT_FOUND", Message: "repository not found"}}
 	sess, _, err := e.orch.StartInteractive(e.ctx, ports.InteractiveRequest{ProjectID: e.project, RepositoryID: e.repo, TicketID: e.task("Unresolved"), Mode: "implement"})
@@ -88,7 +90,19 @@ func TestASessionTheSettingsCannotResolveStartsAsBeforeAndIsNotGated(t *testing.
 		t.Fatalf("the start must go on: %v", err)
 	}
 	kept, ok := e.orch.GuardConfig(e.ctx, sess.ID)
-	if !ok || kept.Unresolved == "" || kept.Gated(true) {
-		t.Errorf("kept = %+v (ok %v), want an unresolved configuration that is not gated", kept, ok)
+	if !ok || !strings.HasPrefix(kept.Unresolved, "settings unavailable: ") || !kept.Gated(false) || kept.RetryLimit != domain.DefaultRetryLimit {
+		t.Errorf("kept = %+v (ok %v), want the harness defaults, the reason and a gated session", kept, ok)
+	}
+}
+
+func TestTheRealAppGatesAnImplementSessionFromItsSettingsStore(t *testing.T) {
+	e := newShellE2E(t) // no fake: the store the app wired
+	sess, _, err := e.orch.StartInteractive(e.ctx, ports.InteractiveRequest{ProjectID: e.project, RepositoryID: e.repo, TicketID: e.task("Real store"), Mode: "implement"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	kept, ok := e.orch.GuardConfig(e.ctx, sess.ID)
+	if !ok || kept.Unresolved != "" || !kept.Gated(false) || kept.RetryLimit != domain.DefaultRetryLimit || len(kept.Gates) != len(domain.RequiredGateKinds) {
+		t.Errorf("kept = %+v (ok %v)", kept, ok)
 	}
 }

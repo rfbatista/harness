@@ -84,10 +84,10 @@ func TestOnlyGatedSessionsRunGates(t *testing.T) {
 	}
 }
 
-func TestASessionThatKeptNoConfigurationOrAnUnresolvedOneIsNotGated(t *testing.T) {
-	svc, _ := runner(domain.SessionModeImplement, func(c *domain.GuardConfig) { c.Unresolved = "no store" }, false)
-	if _, err := svc.Run(context.Background(), ports.GateRunRequest{SessionID: "s"}); err == nil {
-		t.Error("an unresolved configuration was gated")
+func TestASessionThatKeptNoConfigurationIsNotGatedButOneWithUnavailableSettingsIs(t *testing.T) {
+	svc, _ := runner(domain.SessionModeImplement, func(c *domain.GuardConfig) { c.Unresolved = "settings unavailable: down" }, false)
+	if _, err := svc.Run(context.Background(), ports.GateRunRequest{SessionID: "s"}); err != nil {
+		t.Errorf("a store fault switched the guard off: %v", err)
 	}
 	svc.d.Guard = fakeGuard{}
 	if _, err := svc.Run(context.Background(), ports.GateRunRequest{SessionID: "s"}); err == nil {
