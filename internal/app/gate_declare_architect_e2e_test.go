@@ -87,6 +87,34 @@ func TestAGatedDelegatesDoneReviewRequestIsRefusedWhileRedAndTheArchitectReceive
 	if got := len(e.listRuns(rev)); got != 0 || len(e.listRuns(dev)) != before {
 		t.Errorf("gate runs: reviewer %d, implementer %d (was %d)", got, len(e.listRuns(dev)), before)
 	}
+
+	// An escalated delegate stops, and its architect is told once, naming the red gates.
+	started = e.mustTool(arch, "start_task_session", map[string]any{"prompt": "Build more.", "mode": "implement", "status_check_minutes": float64(0)})
+	dev2, _ := started["session_id"].(string)
+	for i := 0; i < 3; i++ {
+		if _, err := e.tool(dev2, "declare_done", nil); err == nil {
+			t.Fatal("a red declaration was accepted")
+		}
+	}
+	if st := e.sessions.Get(dev2).Status; st != domain.SessionStopped {
+		t.Errorf("the escalated delegate is %q, want stopped", st)
+	}
+	_, out := e.http("GET", "/api/task_messages?ticket_id="+e.ticket, "")
+	var escalations int
+	for _, m := range out["messages"].([]any) {
+		msg := m.(map[string]any)
+		subject, _ := msg["subject"].(string)
+		body, _ := msg["body"].(string)
+		if strings.Contains(subject, "Escalated") {
+			escalations++
+			if msg["kind"] != "status_report" || msg["status"] != "blocked" || !strings.Contains(body, "test") || msg["from_session_id"] != dev2 {
+				t.Errorf("escalation message = %v", msg)
+			}
+		}
+	}
+	if escalations != 1 {
+		t.Errorf("the architect got %d escalation messages, want 1", escalations)
+	}
 }
 
 func (e *archE2E) listRuns(sessionID string) []domain.GateRun {

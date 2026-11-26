@@ -482,7 +482,7 @@ var AgentRuntimeModule = fx.Module("agentruntime",
 		sqlite.NewGateRunRepository,
 		func(r *sqlite.GateRunRepository) ports.GateRunStore { return r },
 		newGateRuns,
-		gateruns.NewDeclarer,
+		newDeclarer,
 		sqlite.NewGuardSessionRepository,
 		func(r *sqlite.GuardSessionRepository) ports.GuardSessions { return r },
 		newAgentClaudeHome,
@@ -1771,4 +1771,13 @@ func newGateRuns(sessions ports.SessionRepository, guard ports.GuardSessions, st
 			return ""
 		}),
 	})
+}
+
+// newDeclarer is the done declaration, with escalation at the retry limit
+// (ADR 0012): the session is stopped like the person's Stop, and the person,
+// the feed and the architect are told.
+func newDeclarer(runs *gateruns.Service, orch *orchestration.Service, cat catalog.Catalog, channel *taskchannel.Service) *gateruns.Declarer {
+	d := gateruns.NewDeclarer(runs)
+	d.Escalation = &gateruns.Escalator{Stopper: orch, Events: cat.Bus, Feed: orch, Channel: channel}
+	return d
 }

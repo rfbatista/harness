@@ -65,6 +65,15 @@ type GateRunChange struct {
 	Counted bool                 `json:"counted,omitempty"`
 }
 
+// SessionEscalatedChange is a gated session stopped for reaching its retry
+// limit, as the project feed carries it.
+type SessionEscalatedChange struct {
+	ProjectID string            `json:"project_id"`
+	SessionID string            `json:"session_id"`
+	RunID     string            `json:"run_id"`
+	RedGates  []domain.GateKind `json:"red_gates"`
+}
+
 // DeclarationRefusal is one check refusing a done declaration.
 type DeclarationRefusal struct {
 	Code    string

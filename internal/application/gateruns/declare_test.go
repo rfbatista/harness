@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	"operators-mcp/internal/domain"
+	"operators-mcp/internal/ports"
 )
 
 type fixedCheck struct {
@@ -118,5 +119,91 @@ func TestAPracticeRunIsRecordedWithoutCounting(t *testing.T) {
 	}
 	if run.Trigger != domain.GateTriggerPractice || run.Counted || run.Result != domain.GateRunRed || len(exec.ran) != 1 {
 		t.Errorf("run = %+v ran %v", run, exec.ran)
+	}
+}
+
+type recordedEscalation struct {
+	sessions []string
+	runs     []*domain.GateRun
+}
+
+func (r *recordedEscalation) Escalate(_ context.Context, sess *domain.Session, run *domain.GateRun) error {
+	r.sessions = append(r.sessions, sess.ID)
+	r.runs = append(r.runs, run)
+	return nil
+}
+
+func escalating(limit int) (*Declarer, *scriptedExec, *recordedEscalation) {
+	reds["s"] = 0
+	d, exec := declarer(domain.SessionModeImplement, func(c *domain.GuardConfig) { c.RetryLimit = limit }, false)
+	esc := &recordedEscalation{}
+	d.Escalation = esc
+	return d, exec, esc
+}
+
+func declareN(t *testing.T, d *Declarer, n int) ports.Declaration {
+	t.Helper()
+	var res ports.Declaration
+	for i := 0; i < n; i++ {
+		var err error
+		if res, err = d.Declare(context.Background(), "s"); err != nil {
+			t.Fatal(err)
+		}
+	}
+	return res
+}
+
+func TestTheDeclarationThatReachesTheRetryLimitEscalatesAndEarlierRedOnesDoNot(t *testing.T) {
+	d, exec, esc := escalating(3)
+	exec.exits["test"] = 1
+	res := declareN(t, d, 2)
+	if len(esc.sessions) != 0 || !strings.Contains(res.Message(), "2 of 3") {
+		t.Fatalf("after two red declarations: escalated %v, message %q", esc.sessions, res.Message())
+	}
+	res = declareN(t, d, 1)
+	if len(esc.sessions) != 1 || !esc.runs[0].Escalated || len(esc.runs[0].RedKinds()) != 1 || esc.runs[0].RedKinds()[0] != domain.GateTest {
+		t.Errorf("the third red declaration: escalated %v runs %+v", esc.sessions, esc.runs)
+	}
+	if res.Accepted {
+		t.Error("the escalating declaration was accepted")
+	}
+}
+
+func TestAGreenDeclarationResetsTheCountAndPracticeAndPersonRunsNeverCount(t *testing.T) {
+	d, exec, esc := escalating(3)
+	exec.exits["test"] = 1
+	declareN(t, d, 2)
+	for i := 0; i < 3; i++ {
+		_, _ = d.Practice(context.Background(), "s", nil)
+		_, _ = d.runs.Run(context.Background(), ports.GateRunRequest{SessionID: "s", Trigger: domain.GateTriggerPerson})
+	}
+	if reds["s"] != 2 {
+		t.Fatalf("practice and person runs changed the count: %d", reds["s"])
+	}
+	exec.exits["test"] = 0
+	if res := declareN(t, d, 1); !res.Accepted {
+		t.Fatal("green was refused")
+	}
+	exec.exits["test"] = 1
+	declareN(t, d, 1)
+	if len(esc.sessions) != 0 || reds["s"] != 1 {
+		t.Errorf("red, red, green, red escalated %v with count %d", esc.sessions, reds["s"])
+	}
+}
+
+func TestALimitOfOneEscalatesOnTheFirstRedDeclarationAndMissingGatesNeverCount(t *testing.T) {
+	d, exec, esc := escalating(1)
+	exec.exits["build"] = 1
+	declareN(t, d, 1)
+	if len(esc.sessions) != 1 {
+		t.Errorf("limit 1: escalated %v", esc.sessions)
+	}
+
+	d, _, esc = escalating(1)
+	d.runs.d.Guard = fakeGuard{"s": domain.GuardConfig{Mode: domain.SessionModeImplement, Gates: gates(), RetryLimit: 1,
+		MissingRequiredGates: []domain.GateKind{domain.GateSecretScan}}}
+	declareN(t, d, 2)
+	if len(esc.sessions) != 0 {
+		t.Errorf("a missing required gate escalated: %v", esc.sessions)
 	}
 }

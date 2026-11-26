@@ -233,6 +233,10 @@ func (s *Service) Subscribe(bus ports.EventSubscriber) {
 		}
 		return nil
 	})
+	ports.On(bus, func(ctx context.Context, ev domain.SessionEscalated) error {
+		s.onSessionEscalated(ev)
+		return nil
+	})
 	ports.On(bus, func(ctx context.Context, ev domain.SessionMemoryKilled) error {
 		s.onMemoryKilled(ev.Kill)
 		return nil
@@ -778,6 +782,30 @@ func (s *Service) onSessionFailed(sessionID string) {
 		Link:  domain.TaskLink(sess.ProjectID, sess.TicketID), CauseKey: sessionFailedKey(sess.ID),
 	}
 	failedWhat(sess.LastAction).apply(n)
+	s.record(n, true)
+}
+
+// onSessionEscalated records one action notification for a session the harness
+// stopped at its retry limit (ADR 0012): once per escalation, naming the red
+// gates and linking to the session.
+func (s *Service) onSessionEscalated(ev domain.SessionEscalated) {
+	sess := s.readers.Sessions.Get(ev.SessionID)
+	if sess == nil || sess.ProjectID == "" {
+		slog.Warn("notification for a session that is not recorded", "session", ev.SessionID)
+		return
+	}
+	names := make([]string, len(ev.RedGates))
+	for i, k := range ev.RedGates {
+		names[i] = string(k)
+	}
+	n := &domain.Notification{
+		ProjectID: sess.ProjectID, TaskID: sess.TicketID, SessionID: sess.ID,
+		Kind: domain.NotificationAgent, Level: domain.NotificationAction,
+		Actor: systemActor(domain.ActorHarness),
+		Link:  sessionLink(sess), CauseKey: "session_escalated:" + ev.RunID,
+		Body: "Its done declaration was red up to the retry limit, so the harness stopped it. Red gates: " + strings.Join(names, ", ") + ". It can be resumed.",
+	}
+	what{verb: "stopped an escalated session", object: strings.Join(names, ", "), colon: true}.apply(n)
 	s.record(n, true)
 }
 

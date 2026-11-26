@@ -68,6 +68,9 @@ type GateRun struct {
 	Result    GateRunResult `json:"result"`
 	// Counted says the run counts toward the retry limit: a declaration run.
 	Counted bool `json:"counted"`
+	// Escalated says this red declaration reached the retry limit and stopped
+	// the session.
+	Escalated bool `json:"escalated,omitempty"`
 	// Kinds is the filter a practice run was limited to; empty is every gate.
 	Kinds []GateKind `json:"kinds,omitempty"`
 	// MissingKinds are the required gates with no command, for a not passed run.
@@ -143,4 +146,13 @@ func (r *GateRun) FailureReport() string {
 		b.WriteString(g.OutputTail(MaxReportedOutputBytes) + "\n")
 	}
 	return strings.TrimRight(b.String(), "\n")
+}
+
+// RedKinds are the kinds of the gates that did not pass.
+func (r *GateRun) RedKinds() []GateKind {
+	var out []GateKind
+	for _, g := range r.Failing() {
+		out = append(out, g.Kind)
+	}
+	return out
 }

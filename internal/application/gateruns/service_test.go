@@ -16,6 +16,15 @@ func (f fakeSessions) Find(_ context.Context, id string) (*domain.Session, error
 
 type fakeGuard map[string]domain.GuardConfig
 
+// reds counts consecutive red declarations per session for every fakeGuard.
+var reds = map[string]int{}
+
+func (f fakeGuard) CountRed(_ context.Context, id string) (int, error) {
+	reds[id]++
+	return reds[id], nil
+}
+func (f fakeGuard) ResetRed(_ context.Context, id string) error { reds[id] = 0; return nil }
+
 func (f fakeGuard) Keep(_ context.Context, id string, c domain.GuardConfig) error {
 	f[id] = c
 	return nil

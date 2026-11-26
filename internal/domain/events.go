@@ -253,6 +253,16 @@ type ArtifactChanged struct {
 	ProjectID  string
 }
 
+// SessionEscalated: a gated session's red declarations reached its retry limit
+// and the harness stopped it (ADR 0012). RedGates are the gates of the last
+// red declaration run.
+type SessionEscalated struct {
+	SessionID string
+	RunID     string
+	RedGates  []GateKind
+}
+
+func (SessionEscalated) EventName() string           { return "session.escalated" }
 func (ProjectDeleted) EventName() string             { return "project.deleted" }
 func (RepositoryDeleted) EventName() string          { return "repository.deleted" }
 func (RepositorySaved) EventName() string            { return "repository.saved" }
