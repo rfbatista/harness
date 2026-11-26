@@ -321,7 +321,7 @@ func (s *Service) ResumeInteractive(ctx context.Context, req ports.ResumeRequest
 	s.withKeychainShim(&cfg)
 	s.withAttribution(&cfg)
 	s.rewireTokenSavers(ctx, sess, &cfg)
-	s.resumeMemoryBudget(ctx, sess)
+	s.resumeMemoryBudget(ctx, sess, &cfg)
 	trail.mark(&cfg, domain.PieceRuleset, "Token saver rules", "Token savers")
 	// A resume starts under the rules now in force, not the ones it started
 	// under, and records them.

@@ -672,6 +672,8 @@ func (s *Service) prepare(ctx context.Context, in prepareInput) (*prepared, erro
 	s.withKeychainShim(&cfg)
 	s.withAttribution(&cfg)
 	savers := s.withTokenSavers(ctx, in, repo.RootDir, ws.Path, &cfg)
+	memoryBudget := s.memoryBudget(ctx, in.RepositoryID, in.TicketID)
+	withMemoryPreventionAndBrief(&cfg, memoryBudget)
 	trail.mark(&cfg, domain.PieceRuleset, "Token saver rules", "Token savers")
 	cleanup, err = s.withTempDir(id, &cfg, cleanup)
 	if err != nil {
@@ -711,7 +713,7 @@ func (s *Service) prepare(ctx context.Context, in prepareInput) (*prepared, erro
 		cleanup:      cleanup,
 		envFile:      envFile,
 		savers:       savers,
-		memoryBudget: s.memoryBudget(ctx, in.RepositoryID, in.TicketID),
+		memoryBudget: memoryBudget,
 	}, nil
 }
 
