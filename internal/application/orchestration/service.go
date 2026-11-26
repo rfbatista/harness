@@ -1740,9 +1740,14 @@ func (s *Service) Announce(sessionID string, ev SessionEvent) { s.publish(sessio
 
 // endRun runs the cleanup of a run that is ending and marks it, so no watch is
 // installed for it afterwards: its terminal status is written only after the
-// cleanup, and a watch handed over in between would never be stopped. A late
-// second end of a run that already ended does not use it, so a resume that has
-// begun is not marked.
+// cleanup, and a watch handed over in between would never be stopped. The mark
+// is dropped (pruneRun) once that status is written.
+//
+// It is not part of runCleanup on purpose: end is called twice for a stopped
+// session (Stop, then the process's late exit), and the second call runs
+// runCleanup on a session that already ended. If that marked the run, a resume
+// begun in between (reopenRun had cleared the mark) would be marked again and
+// its watch refused. So only an end that finds the session still running marks.
 func (s *Service) endRun(id string) {
 	s.mu.Lock()
 	if s.cleaned == nil {

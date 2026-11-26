@@ -160,6 +160,13 @@ func (s *Service) watchMemory(id, taskID string, budget int64, claudeID string, 
 	s.forgetMemory(id)
 	stop := s.MemoryWatcher.Watch(ports.MemoryWatch{SessionID: id, TaskID: taskID, BudgetBytes: budget, ClaudeID: claudeID, RootPID: rootPID})
 	s.mu.Lock()
+	if s.cleaned[id] {
+		// The run ended while the watch was being made (checked again here, in
+		// the section that stores the cleanup): nothing would ever stop it.
+		s.mu.Unlock()
+		stop()
+		return
+	}
 	prevCleanup := s.cleanups[id]
 	s.cleanups[id] = func() {
 		stop()
@@ -179,6 +186,14 @@ func (s *Service) watchMemory(id, taskID string, budget int64, claudeID string, 
 		s.mu.Unlock()
 		cleanup()
 	}
+}
+
+// pruneRun drops a run's mark once its terminal status is written: from then on
+// watchMemory sees the status, and the mark would only pile up.
+func (s *Service) pruneRun(id string) {
+	s.mu.Lock()
+	delete(s.cleaned, id)
+	s.mu.Unlock()
 }
 
 // reopenRun starts a new run of a session that ran before: what its earlier

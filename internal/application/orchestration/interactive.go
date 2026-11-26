@@ -618,6 +618,7 @@ func (s *Service) end(id string, exitCode int, closedByUser bool) (*domain.Sessi
 	if err := s.sessions.UpdateStatus(id, status); err != nil {
 		return nil, err
 	}
+	s.pruneRun(id)
 	s.publish(id, SessionEvent{Type: "done", Status: status, Text: text, At: time.Now()})
 	s.hub.End(id)
 	s.announceEnded(id, status)
@@ -867,6 +868,7 @@ func (s *Service) endHeadless(id string) error {
 	if err := s.sessions.UpdateStatus(id, domain.SessionStopped); err != nil {
 		return err
 	}
+	s.pruneRun(id)
 	s.publish(id, SessionEvent{Type: "done", Status: domain.SessionStopped, Text: "stopped", At: time.Now()})
 	s.hub.End(id)
 	s.announceEnded(id, domain.SessionStopped)

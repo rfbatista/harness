@@ -250,3 +250,52 @@ func TestAProcessGivenUpOnLeavesNoKillRecord(t *testing.T) {
 		t.Errorf("kills = %+v, want none for a process that could not be ended", read.Kills)
 	}
 }
+
+// midInstallWatcher ends the session's run while the watch is being installed:
+// the race between the check and the storing of the cleanup.
+type midInstallWatcher struct {
+	fakeWatcher
+	svc *Service
+}
+
+func (m *midInstallWatcher) Watch(w ports.MemoryWatch) func() {
+	m.svc.endRun(w.SessionID)
+	return m.fakeWatcher.Watch(w)
+}
+
+// L2: an end that comes between the run check and the storing of the cleanup is
+// seen too: the watch is stopped at once.
+func TestAWatchInstalledWhileTheRunEndsIsStoppedAtOnce(t *testing.T) {
+	svc, w := newHeadlessShellService(t)
+	withTokenSavers(t, svc)
+	sess, _ := startHeadless(t, svc, w.task.ID)
+	mw := &midInstallWatcher{svc: svc}
+	svc.MemoryWatcher = mw
+	svc.reopenRun(sess.ID) // an earlier endRun of the run does not apply to the one under test
+
+	svc.watchMemory(sess.ID, "", 4*gb, sess.ID, 0)
+
+	mw.mu.Lock()
+	defer mw.mu.Unlock()
+	if len(mw.watched) != 1 || mw.stopped != 1 {
+		t.Errorf("watches %d, stopped %d: a watch installed as the run ended outlives it", len(mw.watched), mw.stopped)
+	}
+}
+
+// L3: the run marks are dropped once the terminal status is written; they only
+// guard the gap before it.
+func TestTheRunMarkOfAnEndedSessionIsPruned(t *testing.T) {
+	svc := newHostedService(t, scriptAgent{script: `cat`})
+	withTokenSavers(t, svc)
+	svc.MemoryWatcher = &fakeWatcher{}
+	sess := startOnServer(t, svc)
+	if err := svc.Stop(context.Background(), sess.ID); err != nil {
+		t.Fatal(err)
+	}
+	waitStatus(t, svc, sess.ID, domain.SessionStopped)
+	eventually(t, "the run mark to be pruned", func() bool {
+		svc.mu.Lock()
+		defer svc.mu.Unlock()
+		return !svc.cleaned[sess.ID]
+	})
+}
