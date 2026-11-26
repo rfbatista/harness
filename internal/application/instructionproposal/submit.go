@@ -203,7 +203,7 @@ func (s *Service) currentFile(ctx context.Context, repositoryID string, saved []
 
 // skillProblems lists what stops the drafted files of a skill being saved: the
 // instruction-file validation of each, a SKILL.md, and its frontmatter name and
-// description.
+// description and its activation rule.
 func skillProblems(skill, prefix string, drafted map[string]string) []string {
 	var problems []string
 	for path, content := range drafted {
@@ -219,6 +219,11 @@ func skillProblems(skill, prefix string, drafted map[string]string) []string {
 	for _, key := range []string{"name", "description"} {
 		if front[key] == "" {
 			problems = append(problems, fmt.Sprintf("%sSKILL.md has no frontmatter %s", prefix, key))
+		}
+	}
+	if doc, err := domain.ParseSkillDocument([]byte(skillMD)); err == nil {
+		if _, err := domain.ParseSkillActivation(doc.Metadata); err != nil {
+			problems = append(problems, prefix+"SKILL.md activation rule: "+err.Error())
 		}
 	}
 	slices.Sort(problems)
