@@ -32,10 +32,10 @@ import (
 	"operators-mcp/internal/application/capabilities"
 	"operators-mcp/internal/application/designsystem"
 	"operators-mcp/internal/application/instructionproposal"
-	"operators-mcp/internal/application/taskmemory"
 	"operators-mcp/internal/application/projects"
 	"operators-mcp/internal/application/repoarch"
 	"operators-mcp/internal/application/settings"
+	"operators-mcp/internal/application/taskmemory"
 	"operators-mcp/internal/application/tooling"
 	"operators-mcp/internal/domain"
 	"operators-mcp/internal/ports"
@@ -68,15 +68,15 @@ type Deps struct {
 	InstructionProposals ports.InstructionProposalStore
 	// TaskMemories keeps tasks' memory files; nil disables them.
 	TaskMemories ports.TaskMemoryStore
-	Agents        ports.AgentRepository
-	Prompts       ports.PromptRepository
-	Skills        ports.SkillRepository
-	MCPServers    ports.MCPServerRepository
-	Tools         ports.ToolRepository
-	Settings      ports.SettingsRepository
-	Publisher     ports.SkillPublisher
-	PathMatcher   ports.PathMatcher
-	TreeLister    ports.TreeLister
+	Agents       ports.AgentRepository
+	Prompts      ports.PromptRepository
+	Skills       ports.SkillRepository
+	MCPServers   ports.MCPServerRepository
+	Tools        ports.ToolRepository
+	Settings     ports.SettingsRepository
+	Publisher    ports.SkillPublisher
+	PathMatcher  ports.PathMatcher
+	TreeLister   ports.TreeLister
 	// RepositoryFinder lets projects discover git checkouts; nil disables it.
 	RepositoryFinder ports.RepositoryFinder
 	// EnvFiles and EnvFileIO keep repositories' env files; nil disables them.
@@ -105,9 +105,9 @@ type Catalog struct {
 	// TaskMemories is nil without Deps.TaskMemories; it reads tasks through
 	// UseTasks, once planning is built.
 	TaskMemories *taskmemory.Service
-	Agents        *agents.Service
-	Capabilities  *capabilities.Service
-	Settings      *settings.Service
+	Agents       *agents.Service
+	Capabilities *capabilities.Service
+	Settings     *settings.Service
 }
 
 // New builds the contexts, subscribes each to the events it reacts to, and

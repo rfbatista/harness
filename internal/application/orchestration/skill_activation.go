@@ -8,11 +8,13 @@ import (
 	"path/filepath"
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/rfbatista/llmkit"
 	"github.com/rfbatista/llmkit/claude"
 
 	"operators-mcp/internal/domain"
+	"operators-mcp/internal/ports"
 )
 
 // Skill activation (Learn layer): a skill whose SKILL.md metadata carries an
@@ -72,20 +74,44 @@ func activatableSkills(files []domain.InstructionFile) []activatableSkill {
 // activated at start.
 const skillActiveFilePrefix = "SKILL-"
 
-// activatedSkillFiles are the bodies of the skills whose task type matches the
-// session's mode, delivered beside the instruction files as memory files.
-func (s *Service) activatedSkillFiles(ctx context.Context, role domain.SessionRole, mode domain.SessionMode, repositoryID string) []llmkit.InstructionFile {
-	if s.Architectures == nil || repositoryID == "" || role == domain.RoleArchitect || mode == domain.SessionModeDefault {
-		return nil
-	}
+// sessionSkills are the skills with an activation rule that apply to agent:
+// the same applies_to filter as the delivery of the repository's files, so a
+// skill scoped to another agent never reaches this one.
+func (s *Service) sessionSkills(ctx context.Context, repositoryID, agent string) []activatableSkill {
 	files, err := s.Architectures.InstructionFilesOf(ctx, repositoryID)
 	if err != nil {
 		slog.Warn("list a repository's instruction files for skill activation", "repository", repositoryID, "err", err)
 		return nil
 	}
+	rec, err := s.Architectures.SavedArchitecture(ctx, repositoryID)
+	if err != nil {
+		slog.Warn("read a repository's architecture for skill activation", "repository", repositoryID, "err", err)
+		rec = nil
+	}
+	var applying []domain.InstructionFile
+	for _, f := range files {
+		if appliesTo(rec, f.Path, agent) {
+			applying = append(applying, f)
+		}
+	}
+	return activatableSkills(applying)
+}
+
+// activatedSkillFiles are the bodies of the skills whose task type matches the
+// session's mode, delivered beside the instruction files as memory files. A
+// skill delivered here is not sent again on a touch.
+func (s *Service) activatedSkillFiles(ctx context.Context, sessionID string, role domain.SessionRole, mode domain.SessionMode, agent *domain.Agent, repositoryID string) []llmkit.InstructionFile {
+	if s.Architectures == nil || repositoryID == "" || role == domain.RoleArchitect || mode == domain.SessionModeDefault {
+		return nil
+	}
+	name := domain.PlainAgent
+	if agent != nil && agent.Name != "" {
+		name = agent.Name
+	}
 	var out []llmkit.InstructionFile
-	for _, sk := range activatableSkills(files) {
+	for _, sk := range s.sessionSkills(ctx, repositoryID, name) {
 		if sk.rule.MatchesTaskType(mode) {
+			s.touchActivations.first(sessionID, sk.name)
 			out = append(out, llmkit.InstructionFile{Kind: llmkit.InstructionMemory, Path: skillActiveFilePrefix + sk.name + ".md", Content: []byte(skillActiveText(sk))})
 		}
 	}
@@ -145,16 +171,41 @@ func (s *Service) ActivateSkillsOnTouch(ctx context.Context, sessionID, filePath
 		rel = r
 	}
 	rel = filepath.ToSlash(rel)
-	files, err := s.Architectures.InstructionFilesOf(ctx, sess.RepositoryID)
-	if err != nil {
-		slog.Warn("list a repository's instruction files for skill activation", "repository", sess.RepositoryID, "err", err)
-		return ""
+	agent := domain.PlainAgent
+	if sess.AgentID != "" {
+		agent = s.agentName(ctx, sess.AgentID)
 	}
 	var out []string
-	for _, sk := range activatableSkills(files) {
+	for _, sk := range s.sessionSkills(ctx, sess.RepositoryID, agent) {
 		if sk.rule.MatchesPath(rel) && s.touchActivations.first(sessionID, sk.name) {
 			out = append(out, skillActiveText(sk))
+			s.recordSkillActivated(ctx, sessionID, sk, rel)
 		}
 	}
 	return strings.Join(out, "\n")
+}
+
+// recordSkillActivated puts a skill loaded on a touch in the session's context
+// trail: a piece of its newest entry and a change, like the start-time ones.
+func (s *Service) recordSkillActivated(ctx context.Context, sessionID string, sk activatableSkill, touched string) {
+	if s.Contexts == nil {
+		return
+	}
+	s.contextMu.Lock()
+	defer s.contextMu.Unlock()
+	c, err := s.Contexts.Load(ctx, sessionID)
+	if err != nil || c == nil || len(c.Entries) == 0 {
+		return
+	}
+	last := &c.Entries[len(c.Entries)-1]
+	last.Instructions = append(last.Instructions, domain.NewContextPiece(
+		skillActiveFilePrefix+sk.name, domain.PieceMemory, "Skill "+sk.name+" (activated)", "Harness", "", "", skillActiveText(sk)))
+	c.Changes = append(c.Changes, domain.ContextChange{
+		At: time.Now(), Kind: domain.ContextChangeSkillInvoked, Subject: sk.name, Detail: "Activated by touching " + touched,
+	})
+	if err := s.Contexts.Save(ctx, c); err != nil {
+		slog.Warn("store a skill activation in a session's context", "session", sessionID, "err", err)
+		return
+	}
+	s.contextChanged(sessionID, ports.ContextEntryAdded)
 }

@@ -1154,7 +1154,7 @@ func (s *Service) sessionConfigTrail(trail *pieceTrail, id, dir, model string, a
 	if f, ok := s.contextMapFile(context.TODO(), role, repositoryID); ok {
 		cfg.InstructionFiles = append(cfg.InstructionFiles, f)
 	}
-	cfg.InstructionFiles = append(cfg.InstructionFiles, s.activatedSkillFiles(context.TODO(), role, subject.mode, repositoryID)...)
+	cfg.InstructionFiles = append(cfg.InstructionFiles, s.activatedSkillFiles(context.TODO(), id, role, subject.mode, ag.agent, repositoryID)...)
 	if s.SessionBranchGateURL != nil {
 		cfg.InstructionFiles = append(cfg.InstructionFiles, s.branchGateInstructionFile(subject.mode))
 	}
