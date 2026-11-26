@@ -4,6 +4,8 @@ import (
 	"fmt"
 	"path"
 	"strings"
+
+	"gopkg.in/yaml.v3"
 )
 
 // A skill's activation rule lives in the spec-standard `metadata` map of its
@@ -147,4 +149,50 @@ func splitList(raw string) []string {
 		}
 	}
 	return out
+}
+
+// SkillActivationTypeProblem says what is wrong with the type of an
+// activation key in the metadata of a SKILL.md: each must be one string (a
+// comma-separated list), not a YAML list, number, boolean or mapping, which
+// the metadata reader would drop or fail on without naming the field. "" when
+// every activation key is a string or absent.
+func SkillActivationTypeProblem(markdown []byte) string {
+	text := strings.ReplaceAll(string(markdown), "\r\n", "\n")
+	rest, ok := strings.CutPrefix(text, "---\n")
+	if !ok {
+		return ""
+	}
+	block, _, ok := strings.Cut(rest, "\n---")
+	if !ok {
+		return ""
+	}
+	var front struct {
+		Metadata map[string]any `yaml:"metadata"`
+	}
+	if yaml.Unmarshal([]byte(block), &front) != nil {
+		return ""
+	}
+	for _, key := range []string{SkillActivationPathsKey, SkillActivationTaskTypesKey} {
+		v, present := front.Metadata[key]
+		if _, isString := v.(string); present && !isString {
+			return fmt.Sprintf("%s must be one string, a comma-separated list such as \"a, b\", not %s", key, yamlKind(v))
+		}
+	}
+	return ""
+}
+
+func yamlKind(v any) string {
+	switch v.(type) {
+	case []any:
+		return "a YAML list"
+	case map[string]any:
+		return "a YAML mapping"
+	case bool:
+		return "a boolean"
+	case int, int64, uint64, float64:
+		return "a number"
+	case nil:
+		return "an empty value"
+	}
+	return "a non-string value"
 }

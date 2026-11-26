@@ -221,7 +221,9 @@ func skillProblems(skill, prefix string, drafted map[string]string) []string {
 			problems = append(problems, fmt.Sprintf("%sSKILL.md has no frontmatter %s", prefix, key))
 		}
 	}
-	if doc, err := domain.ParseSkillDocument([]byte(skillMD)); err == nil {
+	if msg := domain.SkillActivationTypeProblem([]byte(skillMD)); msg != "" {
+		problems = append(problems, prefix+"SKILL.md activation rule: "+msg)
+	} else if doc, err := domain.ParseSkillDocument([]byte(skillMD)); err == nil {
 		if _, err := domain.ParseSkillActivation(doc.Metadata); err != nil {
 			problems = append(problems, prefix+"SKILL.md activation rule: "+err.Error())
 		}

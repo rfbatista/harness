@@ -78,3 +78,27 @@ func TestSkillActivationMatches(t *testing.T) {
 		t.Error("MatchesTaskType: implement should match, review should not")
 	}
 }
+
+func TestSkillActivationTypeProblemNamesAWrongTypedField(t *testing.T) {
+	doc := func(meta string) []byte {
+		return []byte("---\nname: x\ndescription: d\nmetadata:\n" + meta + "---\n\nbody\n")
+	}
+	for name, tc := range map[string]struct {
+		meta string
+		want string // "" = accepted
+	}{
+		"a string":           {"  activation_paths: \"web/**\"\n", ""},
+		"no rule":            {"  owner: me\n", ""},
+		"a flow list":        {"  activation_paths: [web/**, a/*.go]\n", "activation_paths"},
+		"a block list":       {"  activation_task_types:\n    - review\n", "activation_task_types"},
+		"a number":           {"  activation_paths: 42\n", "activation_paths"},
+		"a boolean":          {"  activation_task_types: true\n", "activation_task_types"},
+		"a nested mapping":   {"  activation_paths:\n    x: 1\n", "activation_paths"},
+		"no metadata at all": {"", ""},
+	} {
+		got := SkillActivationTypeProblem(doc(tc.meta))
+		if (got == "") != (tc.want == "") || (tc.want != "" && !strings.Contains(got, tc.want)) {
+			t.Errorf("%s: problem = %q, want one naming %q", name, got, tc.want)
+		}
+	}
+}
