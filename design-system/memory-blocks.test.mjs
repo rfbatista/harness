@@ -64,3 +64,8 @@ test("an ended process rings the card once in danger, holds still under reduced 
   assert.match(board, /\.wb-node\[data-ended-process\] \{ animation: none; outline: 2px solid/);
   assert.doesNotMatch(board, /data-ended-process\][^{]*\{[^}]*attention-wash/);
 });
+
+test("the chip is the last meta item before the actions, so showing it later moves nothing in the head", () => {
+  assert.match(head, /& > \.meta \.memory \{ order: 1; \}/);
+  assert.match(head, /& > \.actions \{ order: 2; \}/);
+});

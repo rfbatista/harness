@@ -170,6 +170,13 @@ describe("the chip after a kill", () => {
     assert.equal(old.presenter.viewModel.view?.state, "normal");
   });
 
+  test("a server clock that is ahead never stretches the chip past a minute from the read", async () => {
+    const { presenter, scheduler } = await setup(read([kill({ killedAt: new Date(T0 + 600_000) })]));
+    assert.equal(presenter.viewModel.view?.state, "ended");
+    scheduler.advance(60_000);
+    assert.equal(presenter.viewModel.view?.state, "normal");
+  });
+
   test("the signal is set once per live kill and never for a kill of the read", async () => {
     const { presenter, stream } = await setup(read([kill({ killedAt: new Date(T0 - 1000) })]));
     assert.equal(presenter.viewModel.signal, null);

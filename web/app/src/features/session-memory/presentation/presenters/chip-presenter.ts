@@ -201,7 +201,8 @@ export class ChipPresenter extends Presenter<ChipViewModel> {
     const key = killKey(kill);
     if (this.#kills.has(key)) return;
     this.#kills.set(key, kill);
-    this.#endFor(kill, kill.killedAt.getTime() + CHIP_ENDED_MS);
+    // The server's time sets the end, but a clock that is ahead never stretches the chip past a minute from now.
+    this.#endFor(kill, Math.min(kill.killedAt.getTime() + CHIP_ENDED_MS, this.#deps.clock.now() + CHIP_ENDED_MS));
   }
 
   #endFor(kill: MemoryKill, until: number): void {

@@ -11,6 +11,8 @@ describe("memory rounding", () => {
     assert.equal(formatShown(905 * MB), "905 MB");
     assert.equal(formatShown(1023.6 * MB), "1024 MB", "never rounds up into a unit it is not in");
     assert.equal(formatShown(0), "0 MB");
+    assert.equal(formatShown(1023 * MB), "1023 MB", "1023 MiB stays in MB");
+    assert.equal(formatShown(1 * GB), "1.0 GB", "and 1 GiB is the first to read in GB");
   });
 
   test("the budget reads as the person set it", () => {

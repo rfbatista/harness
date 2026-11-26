@@ -29,7 +29,6 @@
     font-size: var(--text-sm); color: var(--color-ink-muted);
     & .wb-summary { display: inline-flex; align-items: center; gap: var(--space-xs); min-inline-size: 0; }
     & .wb-summary strong { color: var(--color-ink); font-weight: var(--weight-medium); font-variant-numeric: tabular-nums; }
-    & .wb-summary strong { color: var(--color-ink); font-weight: var(--weight-medium); }
     & .wb-live { display: inline-flex; align-items: center; gap: var(--space-xs); color: var(--color-ink-faint); font-size: var(--text-xs); & time { font-variant-numeric: tabular-nums; } }
     & .wb-tools { margin-inline-start: auto; display: inline-flex; align-items: center; gap: var(--space-3xs); }
     & .wb-tools .button[data-icon] { font-family: var(--font-mono); }
