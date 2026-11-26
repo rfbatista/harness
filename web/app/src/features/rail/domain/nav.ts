@@ -7,8 +7,6 @@ export interface ProjectNav {
   readonly codeHref: string;
   readonly servicesHref: string;
   readonly servicesProjectId: string;
-  /** Services starting or running: the badge, which the services feed keeps current. */
-  readonly servicesRunning: number;
   readonly reviewsHref: string;
   readonly documentsHref: string;
   readonly designHref: string;

@@ -28,7 +28,6 @@ export function toNav(dto: RailNavDto): ProjectNav {
     codeHref: dto.code_href,
     servicesHref: dto.services_href,
     servicesProjectId: dto.services_project_id,
-    servicesRunning: dto.services_running,
     reviewsHref: dto.reviews_href,
     documentsHref: dto.documents_href,
     designHref: dto.design_href,

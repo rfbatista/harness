@@ -8,7 +8,7 @@ import { session, task } from "../../testing/fixtures";
 import { RailPresenter } from "./rail-presenter";
 import { TasksTogglePresenter } from "./tasks-toggle-presenter";
 
-const NAV: ProjectNav = { newTaskHref: "/n", boardHref: "/b", codeHref: "", servicesHref: "", servicesProjectId: "p1", servicesRunning: 0, reviewsHref: "", documentsHref: "", designHref: "", designSystemHref: "", designSystemProposals: 0, usageHref: "", productOwnerHref: "" };
+const NAV: ProjectNav = { newTaskHref: "/n", boardHref: "/b", codeHref: "", servicesHref: "", servicesProjectId: "p1", reviewsHref: "", documentsHref: "", designHref: "", designSystemHref: "", designSystemProposals: 0, usageHref: "", productOwnerHref: "" };
 
 function rail() {
   const tasks = [task(), task({ id: "t2", status: "todo" })];

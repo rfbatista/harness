@@ -12,7 +12,7 @@ import { RailPresenter } from "./rail-presenter";
 import { SERVER_PAINT_ROWS } from "./rail-rows";
 import type { RowViewModel } from "./rail-rows";
 
-const NAV: ProjectNav = { newTaskHref: "/projects/p1/tasks/new", boardHref: "/projects/p1", codeHref: "", servicesHref: "/projects/p1/services", servicesProjectId: "p1", servicesRunning: 120, reviewsHref: "/projects/p1/reviews", documentsHref: "", designHref: "/projects/p1/design", designSystemHref: "/projects/p1/design-system", designSystemProposals: 2, usageHref: "", productOwnerHref: "/projects/p1/owner" };
+const NAV: ProjectNav = { newTaskHref: "/projects/p1/tasks/new", boardHref: "/projects/p1", codeHref: "", servicesHref: "/projects/p1/services", servicesProjectId: "p1", reviewsHref: "/projects/p1/reviews", documentsHref: "", designHref: "/projects/p1/design", designSystemHref: "/projects/p1/design-system", designSystemProposals: 2, usageHref: "", productOwnerHref: "/projects/p1/owner" };
 
 const flush = () => new Promise<void>((resolve) => setImmediate(resolve));
 
@@ -36,7 +36,7 @@ function setup({ tasks = [task()], sessions = [session("a", "t1", "running")], c
   const scheduler = manualScheduler();
   const statuses: RailFeedStatus[] = [];
   const services = memoryServicesCount();
-  const rail = new Rail({ source, feed, services, servicesRunning: NAV.servicesRunning, seed, currentTaskId: currentTask, collapsed, prefs, features, announcer, opener, scheduler, onFeedStatus: (s) => statuses.push(s) });
+  const rail = new Rail({ source, feed, services, servicesRunning: 120, seed, currentTaskId: currentTask, collapsed, prefs, features, announcer, opener, scheduler, onFeedStatus: (s) => statuses.push(s) });
   const presenter = new RailPresenter(rail, features, { projectName: "harness", nav: NAV });
   const vm = () => presenter.viewModel;
   const group = (key: string) => vm().groups.find((g) => g.key === key)!;

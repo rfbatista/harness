@@ -1,11 +1,11 @@
 // The rail's groups: every status in RAIL_ORDER, Done capped at its latest,
 // folded groups, the filter and Needs you. The server draws the first paint by
-// the same rules (BuildRail in internal/adapter/in/web/tasks/rail.go).
+// the same rules: the island renders on the server, then in the browser.
 
 import type { Activity } from "./activity";
 import { RAIL_ORDER, STATUSES, type Task } from "./task";
 
-/** How many done tasks show before "Show N more"; the server's DoneCap. */
+/** How many done tasks show before "Show N more". */
 export const DONE_CAP = 5;
 
 export interface RailGroup {

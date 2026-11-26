@@ -86,8 +86,8 @@ const (
 	PageProductOwner = "product-owner"
 )
 
-// Rail is the current project's tasks, in kanban groups, and the ways to its
-// pages.
+// Rail is what the rail island is drawn from: the current project's seed (its
+// tasks and sessions, which the island groups) and the ways to its pages.
 type Rail struct {
 	// NewTaskHref is the new-task page of the selected project; "" with none.
 	NewTaskHref string

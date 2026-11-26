@@ -65,7 +65,7 @@ export const AGE_TICK_MS = 60_000;
 /**
  * @param {{
  *   gateway: import("../../domain/ports.js").TaskGateway,
- *   store: import("./rail.js").RailStore,
+ *   store: import("./railFeed.js").RailStore,
  *   prefs?: import("../../../../shared/infrastructure/storage.js").Preferences,  where each feature card's folded or open state is kept (ADR 0037)
  *   setTimeout?: typeof globalThis.setTimeout,
  *   clock?: { now: () => Date },
