@@ -474,6 +474,8 @@ var AgentRuntimeModule = fx.Module("agentruntime",
 		sqlite.NewSessionRepository,
 		func(r *sqlite.SessionRepository) ports.SessionRepository { return r },
 		func(r *sqlite.SessionRepository) ports.SandboxViolationStore { return r },
+		sqlite.NewGuardSessionRepository,
+		func(r *sqlite.GuardSessionRepository) ports.GuardSessions { return r },
 		newAgentClaudeHome,
 		asPort(newClaudeTranscripts, new(ports.ClaudeTranscripts)),
 		asPort(newClaudeTranscriptReader, new(ports.ClaudeTranscriptReader)),
@@ -1060,6 +1062,7 @@ func newOrchestrationService(
 	assignments *repoagents.Service,
 	agentCatalog *agentcatalog.Catalog,
 	branchRequests ports.BranchRequestStore,
+	guardSessions ports.GuardSessions,
 ) *orchestration.Service {
 	orchCatalog := orchestration.Catalog{
 		Projects:     cat.Projects,
@@ -1140,6 +1143,7 @@ func newOrchestrationService(
 	svc.BranchGateTimeout = cfg.ApprovalTimeout
 	svc.ShimBinary = cfg.ShimBinary
 	svc.DeveloperBin = developerdir.Bin
+	svc.GuardSessions = guardSessions
 	svc.TokenSavers = cat.Capabilities
 	svc.MemoryBudgets = cat.Capabilities
 	svc.Settings = cat.Settings
