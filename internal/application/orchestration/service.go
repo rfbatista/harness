@@ -153,6 +153,11 @@ type Service struct {
 	// commits its shell's files (…/api/sessions/{id}/shell); a session with
 	// a shell gets vshell.Hooks aimed at it.
 	SessionShellURL func(sessionID string) string
+	// TaskMemory is the task memory store; nil with TaskMemoryRoot empty
+	// delivers none. TaskMemoryRoot is the folder under the harness's data
+	// area that holds each task's and repository's delivery copy.
+	TaskMemory     ports.TaskMemories
+	TaskMemoryRoot string
 	// SessionSkillsURL returns where a session's skill activation endpoint is.
 	SessionSkillsURL func(sessionID string) string
 	// SessionArchitectureURL returns where a session's architecture rules are
@@ -248,7 +253,8 @@ type Service struct {
 	contextMu sync.Mutex
 	// touchActivations are the skills each session already loaded on a touch.
 	touchActivations activatedOnTouch
-	loopOnce  sync.Once // starts contextLoop once the service is wired and somebody follows
+	taskMemorySync   taskMemorySync
+	loopOnce         sync.Once // starts contextLoop once the service is wired and somebody follows
 	// contextNotes puts a session's context changes on the feed, coalesced.
 	contextNotes *contextNotifier
 	redactors    map[string]func(string) string // by session id: scrubs a headless session's init report
@@ -1145,6 +1151,13 @@ func (s *Service) sessionConfigTrail(trail *pieceTrail, id, dir, model string, a
 	}
 
 	trail.mark(&cfg, domain.PieceOther, "Attached assets", "Harness")
+	if ticket != nil && repositoryID != "" && role != domain.RoleArchitect {
+		if dir, section := s.deliverTaskMemory(context.TODO(), ticket.ID, repositoryID); dir != "" {
+			cfg.Env = append(cfg.Env, ports.TaskMemoryDirEnv+"="+dir)
+			cfg.AppendSystem = appendSection(cfg.AppendSystem, section)
+			trail.mark(&cfg, domain.PieceMemory, "Task memory", "Harness")
+		}
+	}
 	s.applyServicesServer(&cfg, id, subject.mode, ag.agent, subject.project)
 	trail.mark(&cfg, domain.PieceOther, "Services", "Harness")
 	var defaults map[string][]string

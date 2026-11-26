@@ -50,3 +50,7 @@ type TaskMemoryChange struct {
 	File         string `json:"file"`
 	ProjectID    string `json:"-"`
 }
+
+// TaskMemoryDirEnv names, in a session's environment, the folder holding its
+// task memory files (plan.md and progress.md), outside the worktree.
+const TaskMemoryDirEnv = "HARNESS_TASK_MEMORY_DIR"

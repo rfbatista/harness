@@ -1132,6 +1132,12 @@ func newOrchestrationService(
 	svc.SessionArchitectureURL = func(sessionID string) string {
 		return base + httpapi.SessionArchitecturePath(sessionID)
 	}
+	if cat.TaskMemories != nil {
+		svc.TaskMemory = cat.TaskMemories
+		if root, err := dataDir(cfg, "task-memory"); err == nil {
+			svc.TaskMemoryRoot = root
+		}
+	}
 	svc.SessionSkillsURL = func(sessionID string) string {
 		return base + httpapi.SessionSkillsPath(sessionID)
 	}

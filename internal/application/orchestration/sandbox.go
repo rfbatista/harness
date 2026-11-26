@@ -748,6 +748,8 @@ func sessionAllow(env []string) []ports.SandboxPath {
 		switch name {
 		case ports.ShimDirEnv, ports.KeychainShimDirEnv:
 			out = append(out, ports.SandboxPath{Path: v})
+		case ports.TaskMemoryDirEnv:
+			out = append(out, ports.SandboxPath{Path: v, Write: true})
 		case "GIT_CONFIG_GLOBAL", "GIT_CONFIG_VALUE_1":
 			if name == "GIT_CONFIG_VALUE_1" {
 				if m := credSocketOption.FindStringSubmatch(v); m != nil {
