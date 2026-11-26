@@ -148,6 +148,10 @@ type SandboxSession struct {
 	// read-only, whole, so worktrees made after the policy was built are
 	// covered; empty for every other mode.
 	WorktreesDir string
+	// Protected are the paths of the worktree a gated session may not write,
+	// as absolute paths (see ProtectedSandboxPaths): read-only inside the
+	// writable worktree, as the OS-level backstop of the protected-path hook.
+	Protected []string
 	// VirtualShell is the session's shell; empty without one.
 	VirtualShell string
 	// CommitCheckDir is the commit check hooks dir of the worktree the session
@@ -268,6 +272,9 @@ func BuildSandboxPolicy(s SandboxSession) ports.SandboxPolicy {
 	}
 	for _, p := range slices.Concat(s.Allow, s.Extra) {
 		add(p.Path, p.Write)
+	}
+	for _, p := range s.Protected {
+		add(p, false) // deeper than the writable worktree, so it wins
 	}
 
 	policy := splitPolicy(all, s.Worktree)
@@ -677,6 +684,9 @@ func (s *Service) sandbox(ctx context.Context, in prepareInput, id string, repo 
 	}
 	sess.Allow = append(sess.Allow, sessionAllow(env)...)
 	sess.Allow = append(sess.Allow, skillDirGrants(skillDirs)...)
+	if g := in.Guard; g != nil && domain.SessionGated(g.Mode, true) {
+		sess.Protected = ProtectedSandboxPaths(worktree, g.ProtectedPaths, g.Scope)
+	}
 	policy := BuildSandboxPolicy(sess)
 	if !in.Headless {
 		// An interactive session is wrapped where its terminal runs, from

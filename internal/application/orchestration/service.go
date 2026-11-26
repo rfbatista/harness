@@ -377,7 +377,9 @@ func (s *Service) Start(ctx context.Context, req StartRequest) (*domain.Session,
 		branch = defaultBranchName(req.Task)
 	}
 
+	guard := s.resolveGuard(ctx, req.ProjectID, req.RepositoryID, domain.SessionModeDefault, nil)
 	p, err := s.prepare(ctx, prepareInput{
+		Guard:        &guard,
 		ProjectID:    req.ProjectID,
 		RepositoryID: req.RepositoryID,
 		AgentID:      req.AgentID,
@@ -476,7 +478,7 @@ func (s *Service) Start(ctx context.Context, req StartRequest) (*domain.Session,
 	// descendancy of its agent CLI only.
 	s.watchMemory(sess.ID(), req.TicketID, p.memory.bytes, sess.ID(), 0)
 	s.recordStart(ctx, sess.ID(), p, req.Task)
-	s.keepGuard(ctx, created, nil)
+	s.keepGuard(ctx, created, guard)
 	// The Branches list takes its starting snapshot before the agent acts.
 	s.announce(domain.SessionWorktreeProvisioned{SessionID: sess.ID()})
 	if s.commitCheckReason(sess.ID()) != "" {
@@ -507,6 +509,9 @@ type prepareInput struct {
 	// ID is the session id; empty mints one. A caller sets it when it needs
 	// the id before provisioning, e.g. to name the branch after it.
 	ID           string
+	// Guard is the guard configuration the session starts or resumes with; its
+	// protected paths go into the sandbox policy (ADR 0012). Nil protects none.
+	Guard        *domain.GuardConfig
 	ProjectID    string
 	RepositoryID string
 	AgentID      string
