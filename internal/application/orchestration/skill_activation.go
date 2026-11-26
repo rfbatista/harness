@@ -118,6 +118,13 @@ func (a *activatedOnTouch) first(sessionID, skill string) bool {
 	return true
 }
 
+// forget frees what a session that ended had loaded.
+func (a *activatedOnTouch) forget(sessionID string) {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	delete(a.done, sessionID)
+}
+
 // ActivateSkillsOnTouch implements ports.SkillActivator: the bodies of the
 // session's skills whose path pattern matches filePath (absolute, or relative
 // to the session's worktree) that have not been loaded in this session yet.

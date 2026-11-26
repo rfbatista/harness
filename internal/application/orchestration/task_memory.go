@@ -2,6 +2,9 @@ package orchestration
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
+	"encoding/json"
 	"log/slog"
 	"os"
 	"path/filepath"
@@ -16,11 +19,28 @@ import (
 // task. A sync reads back what a session wrote and refreshes what the person
 // changed since; it runs at each start and turn end.
 
-// taskMemorySync remembers, per delivered file, the content the harness last
-// wrote there or read back from it, so a sync can tell who changed it.
+// taskMemorySync serialises the syncs. What the harness last wrote to or read
+// back from each file is kept beside the folder (see syncedFile), so a restart
+// does not forget which side changed.
 type taskMemorySync struct {
-	mu        sync.Mutex
-	delivered map[string]string
+	mu sync.Mutex
+}
+
+// syncedFile is where the hashes of the contents last delivered or read back
+// are kept: next to the folder, outside what a session can write.
+func syncedFile(dir string) string { return dir + ".synced.json" }
+
+func contentHash(content string) string {
+	sum := sha256.Sum256([]byte(content))
+	return hex.EncodeToString(sum[:])
+}
+
+func readSynced(dir string) map[string]string {
+	last := map[string]string{}
+	if raw, err := os.ReadFile(syncedFile(dir)); err == nil {
+		_ = json.Unmarshal(raw, &last)
+	}
+	return last
 }
 
 // taskMemoryDir is the delivery folder of a task in a repository, "" without
@@ -54,30 +74,33 @@ func (s *Service) syncTaskMemory(ctx context.Context, taskID, repositoryID strin
 	t := &s.taskMemorySync
 	t.mu.Lock()
 	defer t.mu.Unlock()
-	if t.delivered == nil {
-		t.delivered = map[string]string{}
-	}
+	synced := readSynced(dir)
 	for _, f := range view.Files {
 		p := filepath.Join(dir, f.Name)
 		onDisk, readErr := os.ReadFile(p)
-		last, known := t.delivered[p]
-		if readErr == nil && known && string(onDisk) != last {
+		last, known := synced[f.Name]
+		if readErr == nil && known && contentHash(string(onDisk)) != last {
 			if _, err := s.TaskMemory.SaveTaskMemory(ctx, taskID, repositoryID, f.Name, string(onDisk)); err != nil {
 				slog.Warn("read a task memory file back", "path", p, "err", err)
 				continue
 			}
-			t.delivered[p] = string(onDisk)
+			synced[f.Name] = contentHash(string(onDisk))
 			continue
 		}
 		if readErr == nil && string(onDisk) == f.Content {
-			t.delivered[p] = f.Content
+			synced[f.Name] = contentHash(f.Content)
 			continue
 		}
 		if err := os.WriteFile(p, []byte(f.Content), 0o644); err != nil {
 			slog.Warn("deliver a task memory file", "path", p, "err", err)
 			continue
 		}
-		t.delivered[p] = f.Content
+		synced[f.Name] = contentHash(f.Content)
+	}
+	if raw, err := json.Marshal(synced); err == nil {
+		if err := os.WriteFile(syncedFile(dir), raw, 0o644); err != nil {
+			slog.Warn("remember what a task memory sync delivered", "dir", dir, "err", err)
+		}
 	}
 	return dir
 }

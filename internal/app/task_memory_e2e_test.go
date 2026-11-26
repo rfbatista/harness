@@ -226,3 +226,24 @@ func TestTaskMemory_TheStartingContextTrailRecordsTheMemory(t *testing.T) {
 		t.Errorf("no Task memory piece in %+v", view.Entries[0].Instructions)
 	}
 }
+
+// What the agent wrote and the harness had not read back yet survives a
+// restart: the next sync still knows the disk copy changed.
+func TestTaskMemory_AnUnsyncedDiskEditSurvivesARestart(t *testing.T) {
+	e := newShellE2EWith(t, "data.db")
+	task := e.task("Restart")
+	_, spec := e.startRaw(task)
+	dir := memoryDirOf(t, spec)
+	wrote := "# Progress\n\n## Done\n\n- before the restart\n\n## Failed and why\n\n## Next step\n\n## Open questions\n"
+	if err := os.WriteFile(filepath.Join(dir, "progress.md"), []byte(wrote), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	e.restart()
+	_, spec2 := e.startRaw(task)
+	if raw, _ := os.ReadFile(filepath.Join(memoryDirOf(t, spec2), "progress.md")); string(raw) != wrote {
+		t.Errorf("progress.md on disk after the restart = %q", raw)
+	}
+	if _, got, _ := e.taskMemory(task, e.repo); got.file("progress.md") != wrote {
+		t.Errorf("the store after the restart = %q", got.file("progress.md"))
+	}
+}
