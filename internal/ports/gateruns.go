@@ -46,6 +46,9 @@ type GateRuns interface {
 	Run(ctx context.Context, req GateRunRequest) (*domain.GateRun, error)
 	// List answers the session's recorded gate runs, oldest first.
 	List(ctx context.Context, sessionID string) ([]domain.GateRun, error)
+	// Scope answers the protected-path globs the architect unlocked for the
+	// session at its start; empty for a session that has none.
+	Scope(ctx context.Context, sessionID string) ([]string, error)
 	// Output writes one gate's output to w as it is written while its run is
 	// going, and returns when the gate has ended; for a finished run it writes
 	// the recorded output. An unknown run or gate answers GATE_RUN_NOT_FOUND.

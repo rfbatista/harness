@@ -8,6 +8,7 @@ import (
 	"testing"
 
 	"operators-mcp/internal/domain"
+	"operators-mcp/internal/ports"
 )
 
 // Guard — protected paths (ADR 0012): a gated session's write to a path its
@@ -158,5 +159,55 @@ func TestASessionThatIsNotGatedMayWriteAProtectedPath(t *testing.T) {
 		if ev["rule_id"] == "protected_path" {
 			t.Errorf("a non-gated write left an event: %v", ev)
 		}
+	}
+}
+
+func TestASessionScopeUnlocksOnlyTheGlobsItCoversForThatSessionAndSurvivesAResume(t *testing.T) {
+	e := newShellE2E(t)
+	e.orch.AgentSystem = &fakeAgentSystem{retry: 3, gates: greenGates()}
+	ticket := e.task("Scoped")
+	start := func(scope ...string) runningSession {
+		return e.startWith(ports.InteractiveRequest{ProjectID: e.project, RepositoryID: e.repo, TicketID: ticket, Mode: "implement", Scope: scope})
+	}
+	hook := func(s runningSession, rel string) string {
+		return runHook(t, s, e.srv.URL, "PreToolUse", archPreMatcher, editInput("Write", filepath.Join(s.worktree, rel)))
+	}
+	scoped, sibling := start("check.sh"), start()
+
+	if out := hook(scoped, "check.sh"); out != "" {
+		t.Errorf("the scoped session's write of check.sh = %s", out)
+	}
+	if out := hook(sibling, "check.sh"); !strings.Contains(out, "PROTECTED_PATH") {
+		t.Errorf("the sibling's write of check.sh = %s", out)
+	}
+	// A scope that covers only part of the protected globs unlocks only that part.
+	if out := hook(scoped, ".github/workflows/ci.yml"); !strings.Contains(out, "PROTECTED_PATH") {
+		t.Errorf("a protected path the scope does not cover = %s", out)
+	}
+	if got, _ := e.gateRuns.Scope(e.ctx, scoped.id); len(got) != 1 || got[0] != "check.sh" {
+		t.Errorf("the session's record shows scope %v", got)
+	}
+	if got, _ := e.gateRuns.Scope(e.ctx, sibling.id); len(got) != 0 {
+		t.Errorf("the sibling's record shows scope %v", got)
+	}
+
+	// The scope survives a resume, which takes the settings again.
+	e.orch.Transcripts = transcriptsThatResume{}
+	if _, err := e.orch.EndInteractive(e.ctx, scoped.id, 0, false); err != nil {
+		t.Fatal(err)
+	}
+	if _, _, err := e.orch.ResumeInteractive(e.ctx, ports.ResumeRequest{SessionID: scoped.id, RunsOn: domain.RunnerTUI}); err != nil {
+		t.Fatal(err)
+	}
+	if out := hook(scoped, "check.sh"); out != "" {
+		t.Errorf("after a resume the scoped session's write of check.sh = %s", out)
+	}
+	if out := hook(scoped, ".github/workflows/ci.yml"); !strings.Contains(out, "PROTECTED_PATH") {
+		t.Errorf("after a resume an uncovered path = %s", out)
+	}
+
+	// An invalid glob is refused at start.
+	if _, _, err := e.orch.StartInteractive(e.ctx, ports.InteractiveRequest{ProjectID: e.project, RepositoryID: e.repo, TicketID: ticket, Mode: "implement", Scope: []string{"[x"}}); err == nil {
+		t.Error("an invalid scope glob started a session")
 	}
 }

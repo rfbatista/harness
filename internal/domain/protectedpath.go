@@ -184,3 +184,14 @@ func shellWords(s string) []shellWord {
 	flush()
 	return words
 }
+
+// ScopeGlobError is nil when every glob of a session's scope is well formed, and
+// otherwise a coded error naming the first that is not.
+func ScopeGlobError(scope []string) error {
+	for _, g := range scope {
+		if e := globError(g); e != nil {
+			return &StructuredError{Code: "INVALID_GLOB", Message: "scope: " + e.Message}
+		}
+	}
+	return nil
+}

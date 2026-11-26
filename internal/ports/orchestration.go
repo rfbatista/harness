@@ -503,6 +503,10 @@ type InteractiveRequest struct {
 	RunnerHost string        `json:"runner_host,omitempty"`
 	// Size is the terminal size a RunnerServer session starts at.
 	Size TermSize `json:"size,omitempty"`
+	// Scope lists protected-path globs the architect unlocks for this session
+	// alone (Glossary "Session scope"); it is kept with its guard configuration
+	// and survives a resume.
+	Scope []string `json:"scope,omitempty"`
 	// ParentSessionID is the session starting this one on its own task (the
 	// start_task_session tool); empty when a person starts it.
 	ParentSessionID string `json:"parent_session_id,omitempty"`

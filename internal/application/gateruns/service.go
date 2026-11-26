@@ -201,3 +201,9 @@ func (s *Service) Output(ctx context.Context, sessionID, runID string, kind doma
 	}
 	return &domain.StructuredError{Code: "GATE_RUN_NOT_FOUND", Message: "no gate " + string(kind) + " in run " + runID}
 }
+
+// Scope implements ports.GateRuns.
+func (s *Service) Scope(ctx context.Context, sessionID string) ([]string, error) {
+	cfg, _, err := s.d.Guard.Config(ctx, sessionID)
+	return cfg.Scope, err
+}

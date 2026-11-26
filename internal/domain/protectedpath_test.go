@@ -81,3 +81,20 @@ func TestShellWriteTargetsAreTheFilesARedirectWritesTo(t *testing.T) {
 		}
 	}
 }
+
+func TestAScopeWithAnInvalidGlobIsRefusedWithACodedError(t *testing.T) {
+	if err := ScopeGlobError([]string{"check.sh", "ci/**"}); err != nil {
+		t.Errorf("valid scope: %v", err)
+	}
+	err := ScopeGlobError([]string{"check.sh", "[unclosed"})
+	se, ok := err.(*StructuredError)
+	if !ok || se.Code != "INVALID_GLOB" {
+		t.Errorf("invalid scope: %v", err)
+	}
+	if err := ScopeGlobError([]string{" "}); err == nil {
+		t.Error("an empty glob was accepted")
+	}
+	if ScopeGlobError(nil) != nil {
+		t.Error("no scope is valid")
+	}
+}

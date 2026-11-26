@@ -22,6 +22,10 @@ type fakeGateRuns struct {
 	release     chan struct{}
 }
 
+func (f *fakeGateRuns) Scope(context.Context, string) ([]string, error) {
+	return []string{"check.sh"}, nil
+}
+
 func (f *fakeGateRuns) Output(_ context.Context, _, run string, kind domain.GateKind, w io.Writer) error {
 	if run == "nope" {
 		return &domain.StructuredError{Code: "GATE_RUN_NOT_FOUND", Message: "no such run"}
@@ -72,7 +76,8 @@ func TestThePersonsTriggerRunsAndRecordsAGateRunWithItsPerGateResults(t *testing
 	rec = httptest.NewRecorder()
 	h.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/api/sessions/s1/gate-runs", nil))
 	var body struct {
-		Runs []struct {
+		Scope []string `json:"scope"`
+		Runs  []struct {
 			Result  string `json:"result"`
 			Trigger string `json:"trigger"`
 			Counted bool   `json:"counted"`
@@ -86,6 +91,9 @@ func TestThePersonsTriggerRunsAndRecordsAGateRunWithItsPerGateResults(t *testing
 	}
 	if err := json.Unmarshal(rec.Body.Bytes(), &body); err != nil || len(body.Runs) != 1 {
 		t.Fatalf("list: %v %s", err, rec.Body)
+	}
+	if len(body.Scope) != 1 || body.Scope[0] != "check.sh" {
+		t.Errorf("scope = %v", body.Scope)
 	}
 	r := body.Runs[0]
 	if r.Result != "red" || r.Trigger != "person" || r.Counted || len(r.Gates) != 1 || r.Gates[0].ExitCode != 1 || r.Gates[0].Output != "FAIL" || r.Gates[0].DurationMs != 12 {

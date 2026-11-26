@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"log/slog"
+	"slices"
 
 	"operators-mcp/internal/domain"
 	"operators-mcp/internal/ports"
@@ -15,11 +16,12 @@ import (
 // enforcement read it from GuardSessions, never from the settings again.
 
 // keepGuard resolves the effective guard configuration for the session's
-// repository and keeps it. When the settings store cannot answer, the harness
+// repository and keeps it, with the scope the session starts with (nil on a
+// resume, which keeps the one it has). When the settings store cannot answer, the harness
 // defaults stand in, with the reason on the configuration: the gated rule
 // depends only on the mode and the diff, so a store fault never switches the
 // Guard layer off.
-func (s *Service) keepGuard(ctx context.Context, sess *domain.Session) {
+func (s *Service) keepGuard(ctx context.Context, sess *domain.Session, scope []string) {
 	if s.GuardSessions == nil || sess == nil || sess.ProjectID == "" {
 		return
 	}
@@ -41,6 +43,14 @@ func (s *Service) keepGuard(ctx context.Context, sess *domain.Session) {
 	}
 	cfg := domain.NewGuardConfig(eff, sess.Mode)
 	cfg.Unresolved = reason
+	// A scope is the architect's choice for this session: given at its start, it
+	// stays through every resume, which keep the one the session already has.
+	if scope == nil {
+		if prev, ok, err := s.GuardSessions.Config(ctx, sess.ID); err == nil && ok {
+			scope = prev.Scope
+		}
+	}
+	cfg.Scope = slices.Clone(scope)
 	if err := s.GuardSessions.Keep(ctx, sess.ID, cfg); err != nil {
 		slog.Warn("guard configuration not kept", "session", sess.ID, "err", err)
 	}

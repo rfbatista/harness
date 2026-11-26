@@ -39,6 +39,21 @@ func startPeer(ctx context.Context, scope *taskScope, sessions ports.SessionRepo
 		statusCheckMinutes = &n
 	}
 
+	// Checked before anything starts, like the interval: only the task's
+	// architect unlocks protected paths, and only with globs that are globs.
+	protectedScope := getStringSlice(args, "scope")
+	if len(protectedScope) > 0 {
+		if err := domain.ScopeGlobError(protectedScope); err != nil {
+			return nil, err
+		}
+		if channel == nil {
+			return nil, &domain.StructuredError{Code: "SCOPE_NOT_ALLOWED", Message: "only the task's architect can give a session a scope"}
+		}
+		if role, err := channel.SessionRole(ctx, scope.session.ID); err != nil || role != domain.RoleArchitect {
+			return nil, &domain.StructuredError{Code: "SCOPE_NOT_ALLOWED", Message: "only the task's architect can give a session a scope over protected paths"}
+		}
+	}
+
 	mode := strings.TrimSpace(stringArg(args, "mode"))
 	join, err := resolveJoin(ctx, scope, sessions, args, mode)
 	if err != nil {
@@ -74,6 +89,7 @@ func startPeer(ctx context.Context, scope *taskScope, sessions ports.SessionRepo
 		RunsOn:          domain.RunnerServer,
 		ParentSessionID: scope.session.ID,
 		Mode:            mode,
+		Scope:           protectedScope,
 		// A peer gets no more than its parent: unattended only if the parent is.
 		AutoAccept:         "off",
 		StatusCheckMinutes: statusCheckMinutes,

@@ -27,6 +27,9 @@ type InteractiveRequest = ports.InteractiveRequest
 // is spawned on the server's terminal host here; a RunnerTUI one is the
 // client's to run.
 func (s *Service) StartInteractive(ctx context.Context, req InteractiveRequest) (*domain.Session, ports.AgentSpec, error) {
+	if err := domain.ScopeGlobError(req.Scope); err != nil {
+		return nil, ports.AgentSpec{}, err
+	}
 	runsOn, err := s.runner(req.RunsOn)
 	if err != nil {
 		return nil, ports.AgentSpec{}, err
@@ -190,7 +193,7 @@ func (s *Service) StartInteractive(ctx context.Context, req InteractiveRequest) 
 	})
 	if err == nil {
 		s.recordStart(ctx, id, p, opening)
-		s.keepGuard(ctx, created)
+		s.keepGuard(ctx, created, req.Scope)
 		s.adoptCleanup(id, withViolations(p.cleanup, s.collectViolations(id, p.cfg.WorkingDir, p.sandbox.facts)))
 		s.courier.setTurn(id, startTurn(spec))
 		s.publish(id, SessionEvent{Type: "status", Status: domain.SessionRunning, Text: startedText(runsOn), At: time.Now()})
@@ -327,7 +330,7 @@ func (s *Service) ResumeInteractive(ctx context.Context, req ports.ResumeRequest
 	s.withAttribution(&cfg)
 	s.rewireTokenSavers(ctx, sess, &cfg)
 	s.resumeMemoryBudget(ctx, sess, &cfg)
-	s.keepGuard(ctx, sess)
+	s.keepGuard(ctx, sess, nil)
 	trail.mark(&cfg, domain.PieceRuleset, "Token saver rules", "Token savers")
 	// A resume starts under the rules now in force, not the ones it started
 	// under, and records them.

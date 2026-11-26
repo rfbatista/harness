@@ -476,7 +476,7 @@ func (s *Service) Start(ctx context.Context, req StartRequest) (*domain.Session,
 	// descendancy of its agent CLI only.
 	s.watchMemory(sess.ID(), req.TicketID, p.memory.bytes, sess.ID(), 0)
 	s.recordStart(ctx, sess.ID(), p, req.Task)
-	s.keepGuard(ctx, created)
+	s.keepGuard(ctx, created, nil)
 	// The Branches list takes its starting snapshot before the agent acts.
 	s.announce(domain.SessionWorktreeProvisioned{SessionID: sess.ID()})
 	if s.commitCheckReason(sess.ID()) != "" {

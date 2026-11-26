@@ -546,3 +546,34 @@ func TestStartTaskSession_TheDescriptionNamesTheJoinOptionItsAccessAndTheLimit(t
 		}
 	}
 }
+
+func TestStartTaskSession_ScopeReachesTheStartOnlyFromTheArchitectAndOnlyAsValidGlobs(t *testing.T) {
+	f := newChannelFixture(t)
+	scope := []any{"check.sh", ".github/workflows/**"}
+
+	f.mustCall(t, "arch", "start_task_session", map[string]any{"prompt": "Change the gates.", "scope": scope})
+	if got := f.starter.got[0].Scope; !reflect.DeepEqual(got, []string{"check.sh", ".github/workflows/**"}) {
+		t.Errorf("the architect's scope reached the start as %v", got)
+	}
+
+	// A delegate, and a peer no architect started, cannot unlock protected paths for another session.
+	for _, caller := range []string{"dlg", "peer"} {
+		_, err := f.call(t, caller, "start_task_session", map[string]any{"prompt": "Change the gates.", "scope": scope})
+		if errs.Code(err) != "SCOPE_NOT_ALLOWED" {
+			t.Errorf("%s's scope: %v, want SCOPE_NOT_ALLOWED", caller, err)
+		}
+	}
+
+	// A glob that is not a glob is refused before anything starts.
+	before := len(f.starter.got)
+	_, err := f.call(t, "arch", "start_task_session", map[string]any{"prompt": "x", "scope": []any{"[unclosed"}})
+	if errs.Code(err) != "INVALID_GLOB" || len(f.starter.got) != before {
+		t.Errorf("an invalid glob: %v, started %d more", err, len(f.starter.got)-before)
+	}
+
+	// Without a scope nothing is unlocked.
+	f.mustCall(t, "arch", "start_task_session", map[string]any{"prompt": "Plain."})
+	if got := f.starter.got[len(f.starter.got)-1].Scope; len(got) != 0 {
+		t.Errorf("a start with no scope carried %v", got)
+	}
+}
