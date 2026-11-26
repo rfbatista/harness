@@ -132,13 +132,11 @@ func TestSkillActivation_ATouchActivationIsInTheContextTrailAndAStartLoadedSkill
 	if err != nil || len(view.Entries) == 0 {
 		t.Fatalf("context = %+v, %v", view, err)
 	}
-	var onTouch, atStart bool
+	var onTouch bool
 	for _, p := range view.Entries[len(view.Entries)-1].Instructions {
 		onTouch = onTouch || strings.Contains(p.Title, "templ-style")
-		atStart = atStart || strings.Contains(p.Title, "both") || strings.Contains(p.ID, "SKILL-both")
 	}
 	if !onTouch {
 		t.Errorf("the touch activation is not in the trail: %+v", view.Entries[len(view.Entries)-1].Instructions)
 	}
-	_ = atStart
 }

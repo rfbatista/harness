@@ -184,12 +184,13 @@ func TestProposeInstructionFiles_ASkillWithAnInvalidActivationRuleIsRefused(t *t
 		draftPath("good-rule", "SKILL.md"):  skill("  activation_paths: \"web/**/*.templ\"\n  activation_task_types: implement\n"),
 		draftPath("list-paths", "SKILL.md"): skill("  activation_paths: [web/**, a/*.go]\n"),
 		draftPath("list-types", "SKILL.md"): skill("  activation_task_types:\n    - review\n"),
+		draftPath("bad-yaml", "SKILL.md"):   skill("  activation_paths: **/*.templ\n"),
 	} {
 		if a := e.writeDraft(s, rel, content); !a.Allow {
 			t.Fatalf("write %s: %+v", rel, a)
 		}
 	}
-	for skillName, field := range map[string]string{"bad-glob": "activation_paths", "bad-type": "deploy", "list-paths": "activation_paths must be one string", "list-types": "activation_task_types must be one string"} {
+	for skillName, field := range map[string]string{"bad-glob": "activation_paths", "bad-type": "deploy", "list-paths": "activation_paths must be one string", "list-types": "activation_task_types must be one string", "bad-yaml": "front matter is not valid YAML"} {
 		text, isErr := e.propose(s, "harness", []string{skillName}, "s")
 		if !isErr || !strings.Contains(text, "INSTRUCTION_INVALID") || !strings.Contains(text, field) {
 			t.Fatalf("%s: answer = %q (error %v)", skillName, text, isErr)

@@ -223,10 +223,14 @@ func skillProblems(skill, prefix string, drafted map[string]string) []string {
 	}
 	if msg := domain.SkillActivationTypeProblem([]byte(skillMD)); msg != "" {
 		problems = append(problems, prefix+"SKILL.md activation rule: "+msg)
-	} else if doc, err := domain.ParseSkillDocument([]byte(skillMD)); err == nil {
-		if _, err := domain.ParseSkillActivation(doc.Metadata); err != nil {
-			problems = append(problems, prefix+"SKILL.md activation rule: "+err.Error())
+	} else if doc, err := domain.ParseSkillDocument([]byte(skillMD)); err != nil {
+		// The reader drops the rule of a front matter it cannot parse, so the
+		// skill would never activate: an unquoted glob that starts with *.
+		if strings.HasPrefix(strings.TrimSpace(skillMD), "---") {
+			problems = append(problems, prefix+"SKILL.md front matter is not valid YAML ("+err.Error()+"): quote a glob that starts with *, as activation_paths: \"**/*.templ\"")
 		}
+	} else if _, err := domain.ParseSkillActivation(doc.Metadata); err != nil {
+		problems = append(problems, prefix+"SKILL.md activation rule: "+err.Error())
 	}
 	slices.Sort(problems)
 	return problems
