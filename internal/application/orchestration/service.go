@@ -257,6 +257,7 @@ type Service struct {
 	// touchActivations are the skills each session already loaded on a touch.
 	touchActivations activatedOnTouch
 	taskMemorySync   taskMemorySync
+	taskMemoryCheck  taskMemoryCheck
 	loopOnce         sync.Once // starts contextLoop once the service is wired and somebody follows
 	// contextNotes puts a session's context changes on the feed, coalesced.
 	contextNotes *contextNotifier
@@ -1167,6 +1168,7 @@ func (s *Service) sessionConfigTrail(trail *pieceTrail, id, dir, model string, a
 			cfg.Env = append(cfg.Env, ports.TaskMemoryDirEnv+"="+dir)
 			cfg.AppendSystem = appendSection(cfg.AppendSystem, section)
 			trail.mark(&cfg, domain.PieceMemory, "Task memory", "Harness")
+			s.rememberProgressAtStart(context.TODO(), id, ticket.ID, repositoryID)
 		}
 	}
 	s.applyServicesServer(&cfg, id, subject.mode, ag.agent, subject.project)

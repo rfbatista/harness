@@ -514,7 +514,7 @@ var AgentRuntimeModule = fx.Module("agentruntime",
 		newVirtualFileSystem,
 		newPersonTerminals,
 	),
-	fx.Invoke(bindContextMap, registerRuntimeShutdown, registerServerSessions, bindVirtualShells, bindWorkspaceRemovals, bindFilesRootFeed, bindSandboxSettings,
+	fx.Invoke(bindContextMap, bindTaskMemoryCheck, registerRuntimeShutdown, registerServerSessions, bindVirtualShells, bindWorkspaceRemovals, bindFilesRootFeed, bindSandboxSettings,
 		bindAgentReadiness, func(*archrules.Service) {}, restoreBranchGate, restoreServiceRequests, func(*branchwatch.Service) {}),
 )
 
