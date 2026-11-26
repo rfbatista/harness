@@ -142,12 +142,15 @@ func (h *Handler) handleStartService(c echo.Context) error {
 	var in struct {
 		ServiceID string `json:"service_id"`
 		Worktree  string `json:"worktree"`
+		// TaskID is the task page the person starts it from: the run records it.
+		TaskID string `json:"task_id"`
 	}
 	if err := bindJSON(c, &in); err != nil {
 		return err
 	}
 	opts := personStart
 	opts.WorktreeKey = in.Worktree
+	opts.StartedBy.TaskID = in.TaskID
 	svc, already, err := h.services.StartService(c.Request().Context(), in.ServiceID, opts)
 	if err != nil {
 		return err

@@ -178,3 +178,18 @@ func TestTaskServices_AStopFromTheTaskPageKeepsTheServiceInTheTasksList(t *testi
 		t.Fatalf("services of task-1 after the stop = %v", got)
 	}
 }
+
+func TestTaskServices_APersonStartFromTheTaskPageRecordsTheTaskOnTheRun(t *testing.T) {
+	f := newMCPFixture(t, 5*time.Second)
+	id := f.commandIn(f.repoID, "web", "sleep 30", "")
+	t.Cleanup(func() { f.operate("stop_service", id) })
+
+	f.personAction("start_service", id, "task-9")
+	f.awaitStatus(id, "running")
+	if by := startedBy(f.service(id)); by["kind"] != "person" || by["task_id"] != "task-9" {
+		t.Fatalf("started_by = %v", by)
+	}
+	if got := f.taskServices("task-9"); !slices.Equal(got, []string{"web"}) {
+		t.Fatalf("services of task-9 = %v", got)
+	}
+}

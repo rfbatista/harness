@@ -12,6 +12,7 @@ import (
 	"encoding/hex"
 	"os"
 	"path/filepath"
+	"reflect"
 	"strconv"
 	"sync"
 	"time"
@@ -291,6 +292,8 @@ func (s *Service) UpdateService(ctx context.Context, serviceID string, in domain
 	if err := s.checkNameFree(cur.ProjectID, in.Name, cur.ID); err != nil {
 		return nil, false, err
 	}
+	runChanged := cur.Name != in.Name || cur.RepositoryID != in.RepositoryID || cur.ExportRepositoryEnv != in.ExportRepositoryEnv ||
+		cur.Env != in.Env || !reflect.DeepEqual(cur.Command, in.Command) || !reflect.DeepEqual(cur.Image, in.Image)
 	cur.Name, cur.RepositoryID, cur.ExportRepositoryEnv, cur.Env = in.Name, in.RepositoryID, in.ExportRepositoryEnv, in.Env
 	cur.Command, cur.Image = in.Command, in.Image
 	if in.Credentials != nil {
@@ -301,7 +304,8 @@ func (s *Service) UpdateService(ctx context.Context, serviceID string, in domain
 		return nil, false, err
 	}
 	s.announceLocked(cur)
-	return cur, cur.Status.Active(), nil
+	// Credentials are not passed to the process: changing only them needs no restart.
+	return cur, cur.Status.Active() && runChanged, nil
 }
 
 // DeleteService removes a service that is not starting or running, and its

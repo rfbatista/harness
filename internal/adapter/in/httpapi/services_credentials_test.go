@@ -259,3 +259,27 @@ func TestCredentials_APendingRequestShowsThePersonTheChangeAndTheFeedNoValue(t *
 		t.Fatalf("a feed request event holds a value: %s", all)
 	}
 }
+
+func TestCredentials_ACredentialsOnlyChangeNeedsNoRestartOfARunningService(t *testing.T) {
+	f := newMCPFixture(t, 5*time.Second)
+	id := f.commandIn(f.repoID, "web", "sleep 30", "")
+	f.personAction("start_service", id, "")
+	f.awaitStatus(id, "running")
+	t.Cleanup(func() { f.operate("stop_service", id) })
+
+	update := func(in map[string]any) any {
+		in["name"], in["kind"], in["repository_id"] = "web", "command", f.repoID
+		in["command"] = map[string]any{"line": "sleep 30", "ports": []int{8080}}
+		code, out := f.update(id, in)
+		if code != 200 {
+			t.Fatalf("update = %d %v", code, out)
+		}
+		return out["restart_needed"]
+	}
+	if got := update(map[string]any{"credentials": creds("user", "x")}); got != false {
+		t.Fatalf("restart_needed after a credentials-only change = %v", got)
+	}
+	if got := update(map[string]any{"credentials": creds("user", "x"), "env": "A=1"}); got != true {
+		t.Fatalf("restart_needed after an env change = %v", got)
+	}
+}
