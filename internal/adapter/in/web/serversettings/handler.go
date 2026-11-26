@@ -47,7 +47,7 @@ func (h Handler) Page(w http.ResponseWriter, r *http.Request) error {
 	if h.Settings != nil {
 		v.AgentsMoveDocuments = domain.AgentsMoveDocuments(h.Settings.Setting(domain.SettingAgentsMoveDocuments))
 		read = h.Settings.Setting
-		v.MemoryBudgetBytes = domain.ResolveMemoryBudget("", "", h.Settings.Setting(domain.SettingMemoryBudget))
+		v.MemoryBudgetBytes, _ = domain.ResolveMemoryBudget("", "", h.Settings.Setting(domain.SettingMemoryBudget))
 	}
 	v.BranchBlocks = domain.BranchBlocks(read)
 	return h.Render(w, r, http.StatusOK, Page(frame, v))

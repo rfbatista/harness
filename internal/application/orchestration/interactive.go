@@ -182,7 +182,10 @@ func (s *Service) StartInteractive(ctx context.Context, req InteractiveRequest) 
 		TokenSavers:             p.savers.active,
 		TokenSaversNotInstalled: p.savers.notInstalled,
 		CavemanIntensity:        p.savers.cavemanIntensity,
-		MemoryBudgetBytes:       p.memoryBudget,
+		MemoryBudgetBytes:       p.memory.bytes,
+		MemoryBudgetSource:      p.memory.source,
+		MemoryHeapMB:            p.memory.heapMB,
+		MemoryTestWorkers:       p.memory.testWorker,
 		Sandbox:                 p.sandbox.facts,
 	})
 	if err == nil {
@@ -496,6 +499,7 @@ func (s *Service) withResumability(ctx context.Context, sess *domain.Session) *d
 		return nil
 	}
 	s.fillResumability(sess)
+	sess.Memory = s.lastMemory(sess)
 	s.fillAssignment(ctx, sess, map[string]bool{})
 	if s.Decorator != nil {
 		s.Decorator.DecorateSessions(ctx, sess)

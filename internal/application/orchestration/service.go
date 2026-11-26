@@ -274,6 +274,7 @@ type Service struct {
 	// (…/api/sessions/{id}/memory); nil: the agent is told by the courier only.
 	SessionMemoryURL func(sessionID string) string
 	memoryNotes      memoryNotices
+	memory           memoryState
 	// MemoryWatcher is the vigia de memória; nil: sessions are not watched.
 	MemoryWatcher ports.MemoryWatcher
 	// MemoryBudgets resolves the orçamento de memória a session starts or
@@ -452,7 +453,10 @@ func (s *Service) Start(ctx context.Context, req StartRequest) (*domain.Session,
 		TokenSavers:             p.savers.active,
 		TokenSaversNotInstalled: p.savers.notInstalled,
 		CavemanIntensity:        p.savers.cavemanIntensity,
-		MemoryBudgetBytes:       p.memoryBudget,
+		MemoryBudgetBytes:       p.memory.bytes,
+		MemoryBudgetSource:      p.memory.source,
+		MemoryHeapMB:            p.memory.heapMB,
+		MemoryTestWorkers:       p.memory.testWorker,
 		Sandbox:                 p.sandbox.facts,
 	})
 	if err != nil {
@@ -463,7 +467,7 @@ func (s *Service) Start(ctx context.Context, req StartRequest) (*domain.Session,
 	provisioned = nil
 	// A headless session shares the server's process group: watched by
 	// descendancy of its agent CLI only.
-	s.watchMemory(sess.ID(), req.TicketID, p.memoryBudget, sess.ID(), 0)
+	s.watchMemory(sess.ID(), req.TicketID, p.memory.bytes, sess.ID(), 0)
 	s.recordStart(ctx, sess.ID(), p, req.Task)
 	// The Branches list takes its starting snapshot before the agent acts.
 	s.announce(domain.SessionWorktreeProvisioned{SessionID: sess.ID()})
@@ -536,10 +540,10 @@ type prepared struct {
 	cleanup    func() // removes the materialized skill plugin dir and the git directory; nil if none
 	envFile    string // the session's git env file, for login shells; "" without GitAuth
 	savers     sessionSavers
-	// memoryBudget is the orçamento de memória resolved for the session, in
-	// bytes (ADR 0008).
-	memoryBudget int64
-	sandbox      sandboxed
+	// memory is the orçamento de memória resolved for the session, where it
+	// came from and its prevenção (ADR 0008).
+	memory  memoryPlan
+	sandbox sandboxed
 	// context is what the session's context entry is built from, once the
 	// start has recorded the session and knows the opening message.
 	context contextInput
@@ -681,8 +685,7 @@ func (s *Service) prepare(ctx context.Context, in prepareInput) (*prepared, erro
 	s.withKeychainShim(&cfg)
 	s.withAttribution(&cfg)
 	savers := s.withTokenSavers(ctx, in, repo.RootDir, ws.Path, &cfg)
-	memoryBudget := s.memoryBudget(ctx, in.RepositoryID, in.TicketID)
-	withMemoryPreventionAndBrief(&cfg, memoryBudget)
+	memory := s.planMemory(ctx, in.RepositoryID, in.TicketID, &cfg)
 	trail.mark(&cfg, domain.PieceRuleset, "Token saver rules", "Token savers")
 	cleanup, err = s.withTempDir(id, &cfg, cleanup)
 	if err != nil {
@@ -714,15 +717,15 @@ func (s *Service) prepare(ctx context.Context, in prepareInput) (*prepared, erro
 			Skills: ag.contextSkills, BuiltIn: s.builtInTools(),
 			Facts: s.contextFacts(in, ag, cfg, ws, savers, sb, permission),
 		},
-		sandbox:      sb,
-		cfg:          cfg,
-		ws:           ws,
-		branch:       in.Branch,
-		permission:   permission,
-		cleanup:      cleanup,
-		envFile:      envFile,
-		savers:       savers,
-		memoryBudget: memoryBudget,
+		sandbox:    sb,
+		cfg:        cfg,
+		ws:         ws,
+		branch:     in.Branch,
+		permission: permission,
+		cleanup:    cleanup,
+		envFile:    envFile,
+		savers:     savers,
+		memory:     memory,
 	}, nil
 }
 
@@ -828,6 +831,14 @@ func (s *Service) withGit(id, repositoryID string, cfg *llmkit.SessionConfig, cl
 // shell. A headless session with no task, or a service without Shells,
 // changes nothing.
 func (s *Service) withShell(id, repositoryID string, subject sessionSubject, cfg *llmkit.SessionConfig, cleanup func()) (func(), error) {
+	cleanup, err := s.withShellHooks(id, repositoryID, subject, cfg, cleanup)
+	if err == nil {
+		s.withMemoryNotice(id, cfg) // after the hooks already there: it never replaces or reorders them
+	}
+	return cleanup, err
+}
+
+func (s *Service) withShellHooks(id, repositoryID string, subject sessionSubject, cfg *llmkit.SessionConfig, cleanup func()) (func(), error) {
 	s.withBranchGate(id, cfg)
 	if s.Shells == nil || (subject.ticket == nil && !subject.projectLevel()) {
 		return s.withShims(id, cfg, cleanup, false)
@@ -872,11 +883,6 @@ func (s *Service) withShell(id, repositoryID string, subject sessionSubject, cfg
 // withBranchGate gives every agent session the branch gate's asking hook; the
 // git shim is made by withShims. Without a gate URL it changes nothing.
 func (s *Service) withBranchGate(id string, cfg *llmkit.SessionConfig) {
-	if s.SessionMemoryURL != nil {
-		if dc, ok := withHooks(cfg.Driver, MemoryNoticeHooks(s.SessionMemoryURL(id))); ok {
-			cfg.Driver = dc
-		}
-	}
 	if s.SessionBranchGateURL == nil {
 		return
 	}

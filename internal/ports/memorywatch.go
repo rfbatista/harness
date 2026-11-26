@@ -63,6 +63,11 @@ type MemoryNotices interface {
 	BashEnded(sessionID, callID string) string
 }
 
+// MemoryReader is the initial read of a live session's memory; live is false when the session is not running.
+type MemoryReader interface {
+	SessionMemory(sessionID string) (read domain.MemoryRead, live bool)
+}
+
 // MemorySink receives what the vigia de memória sees: a sample of each
 // watched session every second, and each encerramento por memória.
 type MemorySink interface {

@@ -42,3 +42,18 @@ func (h *Handler) handleMemoryHook(c echo.Context) error {
 	}
 	return hookAnswer(c, event, ports.ArchitectureVerdict{Context: notices.BashEnded(c.Param("id"), in.ToolUseID)})
 }
+
+// handleSessionMemory is GET /api/sessions/:id/memory: the last session.memory
+// sample of a live session, plus "kills" for its run (Contract: memória da
+// sessão §3); 404 when the session is not live.
+func (h *Handler) handleSessionMemory(c echo.Context) error {
+	reader, ok := h.orchSvc.(ports.MemoryReader)
+	if !ok {
+		return echo.NewHTTPError(http.StatusServiceUnavailable, "memory is not available")
+	}
+	read, live := reader.SessionMemory(c.Param("id"))
+	if !live {
+		return echo.NewHTTPError(http.StatusNotFound, "session is not live")
+	}
+	return c.JSON(http.StatusOK, read)
+}

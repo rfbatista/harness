@@ -51,3 +51,27 @@ const (
 
 // MemoryCommandMax is the longest command an event carries.
 const MemoryCommandMax = 80
+
+// MemoryRead is GET /api/sessions/:id/memory: the last sample of a live
+// session in the event's shape (sampled_at null before the first), the kills
+// of its run, where its orçamento came from and the prevenção injected at start.
+type MemoryRead struct {
+	Kind         string           `json:"kind"`
+	SessionID    string           `json:"session_id"`
+	TaskID       string           `json:"task_id"`
+	SampledAt    *time.Time       `json:"sampled_at"`
+	RSSBytes     int64            `json:"rss_bytes"`
+	Budget       int64            `json:"budget_bytes"`
+	Processes    int              `json:"processes"`
+	Heaviest     *MemoryProcess   `json:"heaviest"`
+	Kills        []MemoryKill     `json:"kills"`
+	BudgetSource string           `json:"budget_source"`
+	Prevention   MemoryPrevention `json:"prevention"`
+}
+
+// MemoryPrevention is what prevenção de memória injected: the Node heap ceiling
+// in MB and the test worker count.
+type MemoryPrevention struct {
+	HeapMB      int64 `json:"heap_mb"`
+	TestWorkers int64 `json:"test_workers"`
+}

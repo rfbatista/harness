@@ -148,3 +148,18 @@ func TestASessionIsWatchedWithItsOrcamentoAndItsEndStopsTheWatch(t *testing.T) {
 	}
 	t.Error("stopping the session did not stop its watch")
 }
+
+// The source of the orçamento and the prevenção injected are kept with the session.
+func TestASessionKeepsTheSourceOfItsOrcamentoAndThePreventionItGot(t *testing.T) {
+	svc, w := newHeadlessShellService(t)
+	savers := withTokenSavers(t, svc)
+	setOverride(t, savers, domain.ActivationLevelRepository, "r1", 6*gb)
+	sess, _ := startHeadless(t, svc, w.task.ID)
+	if sess.MemoryBudgetSource != "repository" || sess.MemoryHeapMB != 1536 || sess.MemoryTestWorkers != 3 {
+		t.Errorf("session = source %q heap %d workers %d, want repository 1536 3", sess.MemoryBudgetSource, sess.MemoryHeapMB, sess.MemoryTestWorkers)
+	}
+	read, live := svc.SessionMemory(sess.ID)
+	if !live || read.SampledAt != nil || read.BudgetSource != "repository" || read.Prevention.HeapMB != 1536 || read.Prevention.TestWorkers != 3 || read.Budget != 6*gb {
+		t.Errorf("initial read before a sample = %+v", read)
+	}
+}
