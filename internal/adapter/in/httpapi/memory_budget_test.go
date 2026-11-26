@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"net/http"
+	"strings"
 	"testing"
 
 	"operators-mcp/internal/adapter/out/persistence/sqlite"
@@ -55,6 +56,7 @@ func newBudgetWorld(t *testing.T) *budgetWorld {
 	cat.Capabilities.UseTasks(oneTask{projectID: p.ID, id: "t1"})
 	svc := servicesOf(cat)
 	svc.MemoryBudgets = cat.Capabilities
+	svc.TokenSavers = cat.Capabilities
 	return &budgetWorld{h: NewHandler(svc), repository: r.ID, task: "t1"}
 }
 
@@ -126,6 +128,24 @@ func TestAnOrcamentoOverrideIsRefusedForAProjectABadValueOrAnUnknownOwner(t *tes
 	} {
 		if rec := postJSON(t, w.h, "/set_memory_budget_override", c.body); rec.Code != c.want {
 			t.Errorf("%s = %d (%s), want %d", c.name, rec.Code, rec.Body, c.want)
+		}
+	}
+}
+
+// The orçamento override lives in the activation table but is not a token
+// saver: no token saver answer ever lists it, and it is never resolved as one.
+func TestAMemoryBudgetOverrideNeverShowsUpAmongTheTokenSavers(t *testing.T) {
+	w := newBudgetWorld(t)
+	for _, owner := range []struct{ level, id string }{{"repository", w.repository}, {"task", w.task}} {
+		if rec := postJSON(t, w.h, "/set_memory_budget_override", map[string]any{"level": owner.level, "owner_id": owner.id, "bytes": 8 * gb}); rec.Code != http.StatusOK {
+			t.Fatalf("set = %d: %s", rec.Code, rec.Body)
+		}
+		rec := getJSON(t, w.h, "/list_token_saver_activations?level="+owner.level+"&owner_id="+owner.id)
+		if rec.Code != http.StatusOK {
+			t.Fatalf("list %s = %d: %s", owner.level, rec.Code, rec.Body)
+		}
+		if strings.Contains(rec.Body.String(), "memory_budget") {
+			t.Errorf("%s token saver activations mention the budget: %s", owner.level, rec.Body)
 		}
 	}
 }
