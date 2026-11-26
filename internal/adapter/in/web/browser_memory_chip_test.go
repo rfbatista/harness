@@ -56,7 +56,7 @@ func memoryChipPage(t *testing.T) string {
 
 const (
 	popoverOpen = `(() => { const p = document.getElementById('memory-popover'); return !!p && p.matches(':popover-open') && getComputedStyle(p).display !== 'none'; })()`
-	chipThere   = `!!document.querySelector('.memory')`
+	chipThere   = `!!document.querySelector('.memory:not([hidden])')`
 )
 
 func TestMemoryChipPopoverOpensInTheBrowser(t *testing.T) {

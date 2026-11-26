@@ -202,8 +202,11 @@ export class ChipPresenter extends Presenter<ChipViewModel> {
       const read = await this.#deps.source.read(this.#deps.sessionId, abort.signal);
       if (this.#disposed) return;
       if (read === null) {
-        // Not live: there is nothing to judge a kill against, and nothing to show.
+        // Not live: there is nothing to judge a kill against, nothing to show and nothing to try again.
         this.#buffer = [];
+        this.#retry?.();
+        this.#retry = null;
+        this.#retries = 0;
         return;
       }
       this.#source = read.budgetSource;
