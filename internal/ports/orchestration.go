@@ -105,6 +105,10 @@ type ProjectChange struct {
 	// CodeChanged says a running session's worktree moved: its HEAD or its
 	// working tree. Clients re-read the code they show.
 	CodeChanged *CodeChange `json:"code_changed,omitempty"`
+	// Memory is a session's memory sample, throttled to one every 5 s or a 5 %
+	// move; MemoryKilled is one encerramento por memória, never throttled.
+	Memory       *MemoryChange       `json:"memory,omitempty"`
+	MemoryKilled *MemoryKilledChange `json:"memory_killed,omitempty"`
 	// GitState is a session worktree's git state, whole, as it is after a
 	// fetch, a push or a change to a running worktree. It is the state itself
 	// on the wire (GitStateChange only carries the project it routes to).
@@ -294,6 +298,10 @@ type CodeChange struct {
 // ProjectID is the project whose followers the change is for.
 func (c ProjectChange) ProjectID() string {
 	switch {
+	case c.Memory != nil:
+		return c.Memory.ProjectID
+	case c.MemoryKilled != nil:
+		return c.MemoryKilled.ProjectID
 	case c.Session != nil:
 		return c.Session.ProjectID
 	case c.Ticket != nil:
@@ -569,6 +577,81 @@ type SessionEvent struct {
 	ExpiredBranchRequests *int                 `json:"expired_branch_requests,omitempty"`
 	InterruptedAt         *time.Time           `json:"interrupted_at,omitempty"`
 	At                    time.Time            `json:"at"`
+
+	// MemorySample and MemoryKilled are the events of kind session.memory and
+	// session.memory_killed (Contract: memória da sessão). On the wire they are
+	// the contract's own shape, flat, with seq and type beside it.
+	MemorySample *domain.MemorySample `json:"-"`
+	MemoryKilled *domain.MemoryKill   `json:"-"`
+}
+
+// sessionEventPlain has SessionEvent's fields and none of its methods.
+type sessionEventPlain SessionEvent
+
+// MarshalJSON writes a memory event as the contract's payload, and every other
+// event as it always was.
+func (e SessionEvent) MarshalJSON() ([]byte, error) {
+	switch {
+	case e.MemorySample != nil:
+		return json.Marshal(struct {
+			Seq  int64  `json:"seq"`
+			Type string `json:"type"`
+			*domain.MemorySample
+		}{e.Seq, e.Type, e.MemorySample})
+	case e.MemoryKilled != nil:
+		return json.Marshal(struct {
+			Seq  int64  `json:"seq"`
+			Type string `json:"type"`
+			*domain.MemoryKill
+		}{e.Seq, e.Type, e.MemoryKilled})
+	}
+	return json.Marshal(sessionEventPlain(e))
+}
+
+// UnmarshalJSON reads what MarshalJSON wrote, so a stored kill comes back whole.
+func (e *SessionEvent) UnmarshalJSON(b []byte) error {
+	var head struct {
+		Seq  int64  `json:"seq"`
+		Type string `json:"type"`
+	}
+	if err := json.Unmarshal(b, &head); err != nil {
+		return err
+	}
+	switch head.Type {
+	case MemorySampleEventType:
+		var s domain.MemorySample
+		if err := json.Unmarshal(b, &s); err != nil {
+			return err
+		}
+		*e = SessionEvent{Seq: head.Seq, Type: head.Type, SessionID: s.SessionID, At: s.SampledAt, MemorySample: &s}
+		return nil
+	case MemoryKilledEventType:
+		var k domain.MemoryKill
+		if err := json.Unmarshal(b, &k); err != nil {
+			return err
+		}
+		*e = SessionEvent{Seq: head.Seq, Type: head.Type, SessionID: k.SessionID, At: k.KilledAt, MemoryKilled: &k}
+		return nil
+	}
+	var plain sessionEventPlain
+	if err := json.Unmarshal(b, &plain); err != nil {
+		return err
+	}
+	*e = SessionEvent(plain)
+	return nil
+}
+
+// The types of the two memory events on a session's stream.
+const (
+	MemorySampleEventType = "session.memory"
+	MemoryKilledEventType = "session.memory_killed"
+)
+
+// MemoryChange is a session's sample on the project feed. On the wire it is
+// the sample itself; the project it routes to stays off it.
+type MemoryChange struct {
+	ProjectID string `json:"-"`
+	*domain.MemorySample
 }
 
 type Usage struct {
@@ -615,4 +698,11 @@ type SessionContexts interface {
 	// errors are coded SESSION_NOT_FOUND, CONTEXT_ENTRY_NOT_FOUND or
 	// CONTEXT_PIECE_NOT_FOUND.
 	SessionContextPiece(ctx context.Context, id, entryID, pieceID string) (string, error)
+}
+
+// MemoryKilledChange is an encerramento por memória on the project feed: the
+// contract's event itself on the wire.
+type MemoryKilledChange struct {
+	ProjectID string `json:"-"`
+	*domain.MemoryKill
 }

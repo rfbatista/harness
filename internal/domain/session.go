@@ -118,6 +118,15 @@ type Session struct {
 	// MemoryBudgetBytes is the orçamento de memória resolved when the session
 	// started, moved when it is resumed (ADR 0008); 0 for sessions from before.
 	MemoryBudgetBytes int64 `json:"memory_budget_bytes,omitempty"`
+	// MemoryBudgetSource is the level the orçamento came from (task,
+	// repository or global), and MemoryHeapMB and MemoryTestWorkers the
+	// prevenção injected with it; all fixed with the budget.
+	MemoryBudgetSource string `json:"memory_budget_source,omitempty"`
+	MemoryHeapMB       int64  `json:"memory_heap_mb,omitempty"`
+	MemoryTestWorkers  int64  `json:"memory_test_workers,omitempty"`
+	// Memory is the last memory sample of a live session, filled when the
+	// session is read; null when it is not live (Contract: memória da sessão).
+	Memory *MemorySample `json:"memory"`
 	// Sandbox is what the session's agent runs under, fixed when it starts and
 	// moved when it is resumed (the rules it starts under); nil for sessions
 	// from before the sandbox existed.

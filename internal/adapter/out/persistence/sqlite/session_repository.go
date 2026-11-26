@@ -59,6 +59,9 @@ func (r *SessionRepository) Create(s *domain.Session) (*domain.Session, error) {
 		TokenSaversNotInstalled: joinSavers(s.TokenSaversNotInstalled),
 		CavemanIntensity:        string(s.CavemanIntensity),
 		MemoryBudgetBytes:       s.MemoryBudgetBytes,
+		MemoryBudgetSource:      s.MemoryBudgetSource,
+		MemoryHeapMB:            s.MemoryHeapMB,
+		MemoryTestWorkers:       s.MemoryTestWorkers,
 	}
 	m.setSandbox(s.Sandbox)
 	if err := r.db.Create(m).Error; err != nil {
@@ -414,10 +417,13 @@ func (r *SessionRepository) UpdateWorktreeCleared(id string, at time.Time) error
 	return nil
 }
 
-func (r *SessionRepository) UpdateMemoryBudget(id string, bytes int64) error {
+func (r *SessionRepository) UpdateMemoryBudget(id string, s *domain.Session) error {
 	res := r.db.Model(&SessionModel{}).Where("id = ?", id).Updates(map[string]any{
-		"memory_budget_bytes": bytes,
-		"updated_at":          time.Now().UnixMilli(),
+		"memory_budget_bytes":  s.MemoryBudgetBytes,
+		"memory_budget_source": s.MemoryBudgetSource,
+		"memory_heap_mb":       s.MemoryHeapMB,
+		"memory_test_workers":  s.MemoryTestWorkers,
+		"updated_at":           time.Now().UnixMilli(),
 	})
 	if res.Error != nil {
 		return res.Error

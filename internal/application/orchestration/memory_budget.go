@@ -4,6 +4,7 @@ import (
 	"context"
 	"log/slog"
 	"os"
+	"regexp"
 	"strconv"
 	"strings"
 
@@ -19,11 +20,46 @@ import (
 
 // memoryBudget resolves the orçamento for a session of taskID in
 // repositoryID; without a resolver, the global default.
-func (s *Service) memoryBudget(ctx context.Context, repositoryID, taskID string) int64 {
+func (s *Service) memoryBudget(ctx context.Context, repositoryID, taskID string) (int64, string) {
 	if s.MemoryBudgets == nil {
-		return domain.DefaultMemoryBudgetBytes
+		return domain.DefaultMemoryBudgetBytes, "global"
 	}
 	return s.MemoryBudgets.ResolveMemoryBudget(ctx, repositoryID, taskID)
+}
+
+// memoryPlan is what a start or resume settled about a session's memory: the
+// orçamento, where it came from and the prevenção injected with it.
+type memoryPlan struct {
+	bytes      int64
+	source     string
+	heapMB     int64
+	testWorker int64
+}
+
+// planMemory resolves the orçamento, puts the prevenção and the brief line into
+// cfg, and answers what was settled.
+func (s *Service) planMemory(ctx context.Context, repositoryID, taskID string, cfg *llmkit.SessionConfig) memoryPlan {
+	bytes, source := s.memoryBudget(ctx, repositoryID, taskID)
+	withMemoryPreventionAndBrief(cfg, bytes)
+	return memoryPlan{bytes: bytes, source: source, heapMB: injectedHeapMB(cfg.Env), testWorker: testWorkers(bytes)}
+}
+
+var heapOption = regexp.MustCompile(maxOldSpace + `=(\d+)`)
+
+// injectedHeapMB is the heap ceiling the session's NODE_OPTIONS ended with.
+func injectedHeapMB(env []string) int64 {
+	m := heapOption.FindStringSubmatch(sessionEnvValue(env, "NODE_OPTIONS"))
+	if m == nil {
+		return 0
+	}
+	n, _ := strconv.ParseInt(m[1], 10, 64)
+	return n
+}
+
+// apply records the plan on a session.
+func (p memoryPlan) apply(sess *domain.Session) {
+	sess.MemoryBudgetBytes, sess.MemoryBudgetSource = p.bytes, p.source
+	sess.MemoryHeapMB, sess.MemoryTestWorkers = p.heapMB, p.testWorker
 }
 
 // withMemoryPreventionAndBrief puts the prevenção de memória for budget into
@@ -36,9 +72,8 @@ func withMemoryPreventionAndBrief(cfg *llmkit.SessionConfig, budget int64) {
 // resumeMemoryBudget resolves a resumed session's orçamento again, under the
 // settings now in force, and records it on the session and its struct.
 func (s *Service) resumeMemoryBudget(ctx context.Context, sess *domain.Session, cfg *llmkit.SessionConfig) {
-	sess.MemoryBudgetBytes = s.memoryBudget(ctx, sess.RepositoryID, sess.TicketID)
-	withMemoryPreventionAndBrief(cfg, sess.MemoryBudgetBytes)
-	if err := s.sessions.UpdateMemoryBudget(sess.ID, sess.MemoryBudgetBytes); err != nil {
+	s.planMemory(ctx, sess.RepositoryID, sess.TicketID, cfg).apply(sess)
+	if err := s.sessions.UpdateMemoryBudget(sess.ID, sess); err != nil {
 		slog.Warn("memory budget not recorded for the resumed session", "session", sess.ID, "err", err)
 	}
 }
@@ -116,6 +151,7 @@ func (s *Service) watchMemory(id, taskID string, budget int64, claudeID string, 
 	if s.MemoryWatcher == nil || budget <= 0 {
 		return
 	}
+	s.forgetMemory(id)
 	stop := s.MemoryWatcher.Watch(ports.MemoryWatch{SessionID: id, TaskID: taskID, BudgetBytes: budget, ClaudeID: claudeID, RootPID: rootPID})
 	s.mu.Lock()
 	prevCleanup := s.cleanups[id]

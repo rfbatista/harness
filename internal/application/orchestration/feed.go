@@ -19,6 +19,8 @@ var quietEvents = map[string]bool{
 	"artifact": true, // a publish changes what the session made, not its record
 	// The architect channel announces its own objects on the feed.
 	"task_message": true, "review_request": true, "status_check": true, "task_status": true,
+	// Memory has its own feed changes.
+	ports.MemorySampleEventType: true, ports.MemoryKilledEventType: true,
 }
 
 // feed fans a project's changes (sessions and tickets) out to its followers.

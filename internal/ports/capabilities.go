@@ -119,7 +119,7 @@ type TokenSaverActivationRepository interface {
 // session's repository and task (task → repository → global, ADR 0008), in
 // bytes. Orchestration asks it when a session starts or resumes.
 type SessionMemoryBudget interface {
-	ResolveMemoryBudget(ctx context.Context, repositoryID, taskID string) int64
+	ResolveMemoryBudget(ctx context.Context, repositoryID, taskID string) (bytes int64, source string)
 }
 
 // MemoryBudgetOverrides reads and sets a repository's or task's own orçamento

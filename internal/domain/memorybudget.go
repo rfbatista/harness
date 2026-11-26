@@ -33,15 +33,16 @@ func ParseMemoryBudget(s string) (int64, error) {
 // ResolveMemoryBudget is the effective orçamento for a session: the task's
 // override, else the repository's, else the global value; an override or a
 // global that is not a positive number counts as unset, and the global then
-// falls back to DefaultMemoryBudgetBytes. Each argument is a stored value, ""
+// falls back to DefaultMemoryBudgetBytes. The source says which level the
+// value came from: "task", "repository" or "global". Each argument is a stored value, ""
 // when none.
-func ResolveMemoryBudget(task, repository, global string) int64 {
-	for _, v := range []string{task, repository, global} {
-		if n, err := ParseMemoryBudget(v); err == nil {
-			return n
+func ResolveMemoryBudget(task, repository, global string) (bytes int64, source string) {
+	for _, c := range []struct{ value, from string }{{task, "task"}, {repository, "repository"}, {global, "global"}} {
+		if n, err := ParseMemoryBudget(c.value); err == nil {
+			return n, c.from
 		}
 	}
-	return DefaultMemoryBudgetBytes
+	return DefaultMemoryBudgetBytes, "global"
 }
 
 // MemoryBudgetOverride is one owner's own orçamento and what a session there

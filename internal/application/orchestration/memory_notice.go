@@ -8,6 +8,7 @@ import (
 	"operators-mcp/internal/domain"
 	"operators-mcp/internal/ports"
 
+	"github.com/rfbatista/llmkit"
 	"github.com/rfbatista/llmkit/claude"
 )
 
@@ -78,12 +79,11 @@ func (n *memoryNotices) release(session string) []domain.MemoryKill {
 	return kills
 }
 
-// Sampled is not the notice's business; the events ticket takes it.
-func (s *Service) Sampled(domain.MemorySample) {}
-
-// Killed handles one encerramento por memória: the inbox is told, and so is the
-// agent, by the running Bash call's answer or by the courier.
+// Killed handles one encerramento por memória: the session's stream and the
+// project feed carry it, the inbox is told, and so is the agent, by the
+// running Bash call's answer or by the courier.
 func (s *Service) Killed(k domain.MemoryKill) {
+	s.publishMemoryKill(k)
 	s.announce(domain.SessionMemoryKilled{Kill: k})
 	if s.memoryNotes.hold(k) {
 		return
@@ -136,6 +136,17 @@ func memoryNoticeText(kills []domain.MemoryKill) string {
 func formatBytes(n int64) string {
 	s := fmt.Sprintf("%.1f", float64(n)/(1<<30))
 	return strings.TrimSuffix(s, ".0") + " GB"
+}
+
+// withMemoryNotice adds the Bash hooks that carry the notice, after the ones
+// the session already has. Without a URL it changes nothing.
+func (s *Service) withMemoryNotice(id string, cfg *llmkit.SessionConfig) {
+	if s.SessionMemoryURL == nil {
+		return
+	}
+	if dc, ok := withHooks(cfg.Driver, MemoryNoticeHooks(s.SessionMemoryURL(id))); ok {
+		cfg.Driver = dc
+	}
 }
 
 // MemoryNoticeHooks are the claude settings hooks that tell the service when a

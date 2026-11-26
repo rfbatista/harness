@@ -22,7 +22,7 @@ var (
 // setting, else 4 GB. It reads only what is stored, so an id that no longer
 // exists counts as inheriting, and it never fails: a store that cannot be
 // read leaves the global value.
-func (s *Service) ResolveMemoryBudget(ctx context.Context, repositoryID, taskID string) int64 {
+func (s *Service) ResolveMemoryBudget(ctx context.Context, repositoryID, taskID string) (int64, string) {
 	global := ""
 	if s.settings != nil {
 		global = s.settings.Setting(domain.SettingMemoryBudget)
@@ -93,10 +93,9 @@ func (s *Service) memoryBudgetScope(ctx context.Context, owner domain.Activation
 
 func (s *Service) memoryBudgetOf(ctx context.Context, owner domain.ActivationOwner, sc activationScope) domain.MemoryBudgetOverride {
 	own, _ := domain.ParseMemoryBudget(s.storedMemoryBudget(ctx, owner.Level, owner.ID))
-	repositoryID := sc.repositoryID
-	taskID := sc.taskID
+	effective, _ := s.ResolveMemoryBudget(ctx, sc.repositoryID, sc.taskID)
 	return domain.MemoryBudgetOverride{
 		Level: owner.Level, OwnerID: owner.ID, Bytes: own,
-		EffectiveBytes: s.ResolveMemoryBudget(ctx, repositoryID, taskID),
+		EffectiveBytes: effective,
 	}
 }
