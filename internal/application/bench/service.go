@@ -46,6 +46,9 @@ type Deps struct {
 		Find(ctx context.Context, id string) (*domain.Session, error)
 		ListEvents(sessionID string, fromSeq int64) ([]ports.StoredEvent, error)
 	}
+	// SessionModel is the model a session of the project runs on; a run whose
+	// request names none uses it. Nil: the CLI's own.
+	SessionModel func() string
 	// MockName is the mock server's name in the CLI's MCP configuration.
 	MockName string
 	Projects interface {

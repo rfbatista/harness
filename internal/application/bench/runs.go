@@ -31,6 +31,9 @@ func (s *Service) StartRun(ctx context.Context, projectID string, req domain.Ben
 	if len(cases) == 0 {
 		return domain.BenchRun{}, &domain.StructuredError{Code: "BENCH_NO_CASES", Message: "the project has no bench cases to run"}
 	}
+	if req.Model == "" && s.d.SessionModel != nil {
+		req.Model = s.d.SessionModel()
+	}
 	setupReq := ports.BenchSetupRequest{ProjectID: projectID, RepositoryID: req.RepositoryID, AgentID: req.AgentID, Model: req.Model}
 	info, err := s.d.Sessions.Setup(ctx, setupReq)
 	if err != nil {
@@ -215,8 +218,10 @@ func (s *Service) CompareScorecard(ctx context.Context, projectID, scorecardID s
 	if err != nil {
 		return domain.ScorecardComparison{}, err
 	}
-	for _, c := range all { // newest first: the first one older than cur is the previous
-		if c.ID != cur.ID && (c.StartedAt.Before(cur.StartedAt)) {
+	// Newest first: the first finished one older than cur is the previous. A
+	// cancelled run holds only some of the cases, so it is no baseline.
+	for _, c := range all {
+		if c.ID != cur.ID && c.Status == domain.ScorecardFinished && c.StartedAt.Before(cur.StartedAt) {
 			return Compare(c, cur), nil
 		}
 	}

@@ -77,6 +77,10 @@ func newBench(cfg Config, db *gorm.DB, cat catalog.Catalog, orch *orchestration.
 		Judge:     claudetext.NewModelAsker(claudeMgr, bin.Bin()),
 		ServeMock: mcpbench.Serve,
 		MockName:  mcpbench.Name,
+		// A run with no model of its own uses the one sessions run on.
+		SessionModel: func() string {
+			return domain.ModeModelOf(domain.SessionModeImplement, cat.Settings.Setting)
+		},
 		// The judge model is the project's effective critic model.
 		Settings: settings,
 		Feed:     orch,
