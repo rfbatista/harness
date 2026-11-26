@@ -125,6 +125,7 @@ import "../src/modules/services/domain/runIn.test.js";
 import "../src/modules/services/domain/service.test.js";
 import "../src/modules/services/domain/serviceForm.test.js";
 import "../src/modules/services/infrastructure/services-gateway.test.js";
+import "../src/modules/services/presentation/components/serviceCredentials.test.js";
 import "../src/modules/services/presentation/components/serviceForm.test.js";
 import "../src/modules/services/presentation/components/serviceLog.test.js";
 import "../src/modules/services/presentation/components/serviceRequests.test.js";

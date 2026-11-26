@@ -36,7 +36,7 @@ test("a draft from an image service holds its reference, arguments and mappings"
 test("a command draft becomes the API's input: numbers, no image, blank port rows dropped", () => {
   const d = { ...draftFromService(service()), ports: [{ value: "8080" }, { value: "" }, { value: " 9090 " }] };
   assert.deepEqual(toInput(d), {
-    name: "api", kind: "command", repository_id: "r1", export_repository_env: true, env: "PORT=8080",
+    name: "api", kind: "command", repository_id: "r1", export_repository_env: true, env: "PORT=8080", credentials: [],
     command: { line: "make air", subdir: "cmd/api", ports: [8080, 9090] }, image: null,
   });
 });
@@ -44,7 +44,7 @@ test("a command draft becomes the API's input: numbers, no image, blank port row
 test("an image draft becomes the input: no command, empty arguments and mappings dropped, protocol kept", () => {
   const d = { ...draftFromService(image()), args: [{ value: "-c" }, { value: "" }, { value: "x=1" }], mappings: [{ host: "5432", container: "5432", protocol: "tcp" }, { host: "", container: "", protocol: "udp" }, { host: "53", container: "53", protocol: "udp" }] };
   assert.deepEqual(toInput(d), {
-    name: "db", kind: "image", repository_id: "", export_repository_env: false, env: "PORT=8080",
+    name: "db", kind: "image", repository_id: "", export_repository_env: false, env: "PORT=8080", credentials: [],
     command: null,
     image: { ref: "postgres:16", args: ["-c", "x=1"], ports: [{ host: 5432, container: 5432, protocol: "tcp" }, { host: 53, container: 53, protocol: "udp" }] },
   });
@@ -97,4 +97,24 @@ test("the form's title and whether it can save", () => {
   assert.equal(canSave({ ...newDraft(), name: "" }), false);
   assert.equal(canSave({ ...newDraft(), name: "api", line: "make" }), true);
   assert.equal(canSave({ ...newDraft(), kind: "image", name: "db", image: "" }), false);
+});
+
+test("credentials are a list of label and value rows, sent with the input, blank rows dropped and labels trimmed", () => {
+  const d = draftFromService(service({ credentials: [{ label: "user", value: "tester" }] }));
+  assert.deepEqual(d.credentials, [{ label: "user", value: "tester" }]);
+  const edited = addRow({ ...d, credentials: [...d.credentials, { label: " password ", value: "x y" }] }, "credentials");
+  assert.equal(edited.credentials.length, 3);
+  assert.deepEqual(toInput(edited).credentials, [{ label: "user", value: "tester" }, { label: "password", value: "x y" }]);
+});
+
+test("removing the last credential row leaves none, and the input then clears them", () => {
+  const d = draftFromService(service({ credentials: [{ label: "user", value: "tester" }] }));
+  const removed = removeRow(d, "credentials", 0);
+  assert.deepEqual(removed.credentials, []);
+  assert.deepEqual(toInput(removed).credentials, []);
+});
+
+test("a refusal naming a credential points at the credentials field", () => {
+  assert.deepEqual(fieldOf("credentials[0].label is required"), { field: "credentials", index: 0 });
+  assert.equal(fieldOf('credential label "user" is repeated').field, "credentials");
 });

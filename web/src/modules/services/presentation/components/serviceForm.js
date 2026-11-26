@@ -140,6 +140,7 @@ export const serviceForm = ({ gateway }) => () => {
     addPort() { this.draft = addRow(this.draft, "ports"); },
     addArg() { this.draft = addRow(this.draft, "args"); },
     addMapping() { this.draft = addRow(this.draft, "mappings"); },
+    addCredential() { this.draft = addRow(this.draft, "credentials"); },
     /** @param {{ currentTarget: HTMLElement }} event a row's remove button: the list and index are on it */
     removeRow(event) {
       const { list, index } = event.currentTarget.dataset;
