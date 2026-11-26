@@ -64,7 +64,7 @@ func Generate(in Input) string {
 	dropped := false
 	for _, name := range []string{"commands", "entry", "look", "layout"} {
 		sec := sections[name]
-		if !sec.layout && len(sec.body) == 0 || sec.layout && len(in.Files) == 0 {
+		if !sec.layout && len(sec.body) == 0 || sec.layout && len(ownFiles(in.Files)) == 0 {
 			continue
 		}
 		avail := remaining - 3 // blank line, heading, blank line
@@ -74,7 +74,7 @@ func Generate(in Input) string {
 			continue
 		}
 		if sec.layout {
-			sec.body = layoutLines(in.Files, avail)
+			sec.body = layoutLines(ownFiles(in.Files), avail)
 		} else {
 			sec.body = cut(sec.body, avail)
 		}
@@ -159,6 +159,17 @@ func entryPoints(in Input) []string {
 			}
 		case f == "Makefile" || f == "check.sh" || f == "Dockerfile":
 			out = append(out, fmt.Sprintf("- `%s`", f))
+		}
+	}
+	return out
+}
+
+// ownFiles are the files outside the dependency directories.
+func ownFiles(files []string) []string {
+	var out []string
+	for _, f := range files {
+		if !vendored(f) {
+			out = append(out, f)
 		}
 	}
 	return out

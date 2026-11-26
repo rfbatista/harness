@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"log/slog"
 	"os"
+	"slices"
 	"sync"
 	"time"
 
@@ -34,6 +35,9 @@ type taskMemoryCheck struct{ mu sync.Mutex }
 type checkState struct {
 	// ProgressAtStart is progress.md as the session first found it.
 	ProgressAtStart string `json:"progress_at_start"`
+	// ProgressWritten says the session itself changed progress.md: a read-back
+	// of its file into the store, never a person's edit through the API.
+	ProgressWritten bool `json:"progress_written"`
 	// Asked says the session was asked once to update it; Omitted, that it
 	// declared again without and the omission is recorded.
 	Asked   bool `json:"asked"`
@@ -77,6 +81,21 @@ func progressOf(view *ports.TaskMemoryView) string {
 		}
 	}
 	return ""
+}
+
+// markProgressWritten notes that the session itself changed progress.md.
+func (s *Service) markProgressWritten(sess *domain.Session) {
+	path := s.statePath(sess.TicketID, sess.RepositoryID, sess.ID)
+	if path == "" {
+		return
+	}
+	c := &s.taskMemoryCheck
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	if st, ok := readCheckState(path); ok && !st.ProgressWritten {
+		st.ProgressWritten = true
+		writeCheckState(path, st)
+	}
 }
 
 // rememberProgressAtStart keeps the progress.md a session starts with. A
@@ -127,9 +146,13 @@ func (s *Service) AskToUpdateTaskMemory(ctx context.Context, sess *domain.Sessio
 		return false
 	}
 	// What the agent wrote on disk is read back before comparing.
-	s.syncTaskMemory(ctx, sess.TicketID, sess.RepositoryID)
+	_, back := s.syncTaskMemoryFiles(ctx, sess.TicketID, sess.RepositoryID)
+	if slices.Contains(back, domain.TaskMemoryProgressFile) && !st.ProgressWritten {
+		st.ProgressWritten = true
+		writeCheckState(path, st)
+	}
 	view, err := s.TaskMemory.GetTaskMemory(ctx, sess.TicketID, sess.RepositoryID)
-	if err != nil || !domain.ProgressUnchanged(st.ProgressAtStart, progressOf(view)) {
+	if err != nil || st.ProgressWritten && !domain.ProgressUnchanged(st.ProgressAtStart, progressOf(view)) {
 		return false
 	}
 	if !st.Asked {

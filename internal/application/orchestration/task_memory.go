@@ -8,6 +8,7 @@ import (
 	"log/slog"
 	"os"
 	"path/filepath"
+	"slices"
 	"sync"
 
 	"operators-mcp/internal/domain"
@@ -58,18 +59,26 @@ func (s *Service) taskMemoryDir(taskID, repositoryID string) string {
 // copy goes to disk when it differs. It answers the folder, "" when there is
 // none.
 func (s *Service) syncTaskMemory(ctx context.Context, taskID, repositoryID string) string {
-	dir := s.taskMemoryDir(taskID, repositoryID)
+	dir, _ := s.syncTaskMemoryFiles(ctx, taskID, repositoryID)
+	return dir
+}
+
+// syncTaskMemoryFiles is syncTaskMemory that also answers the files it read
+// back from disk into the store: what a session wrote, never what a person
+// saved through the API.
+func (s *Service) syncTaskMemoryFiles(ctx context.Context, taskID, repositoryID string) (dir string, readBack []string) {
+	dir = s.taskMemoryDir(taskID, repositoryID)
 	if dir == "" {
-		return ""
+		return "", nil
 	}
 	view, err := s.TaskMemory.GetTaskMemory(ctx, taskID, repositoryID)
 	if err != nil {
 		slog.Warn("read a task memory for delivery", "task", taskID, "repository", repositoryID, "err", err)
-		return ""
+		return "", nil
 	}
 	if err := os.MkdirAll(dir, 0o755); err != nil {
 		slog.Warn("make a task memory folder", "dir", dir, "err", err)
-		return ""
+		return "", nil
 	}
 	t := &s.taskMemorySync
 	t.mu.Lock()
@@ -85,6 +94,7 @@ func (s *Service) syncTaskMemory(ctx context.Context, taskID, repositoryID strin
 				continue
 			}
 			synced[f.Name] = contentHash(string(onDisk))
+			readBack = append(readBack, f.Name)
 			continue
 		}
 		if readErr == nil && string(onDisk) == f.Content {
@@ -102,7 +112,7 @@ func (s *Service) syncTaskMemory(ctx context.Context, taskID, repositoryID strin
 			slog.Warn("remember what a task memory sync delivered", "dir", dir, "err", err)
 		}
 	}
-	return dir
+	return dir, readBack
 }
 
 // deliverTaskMemory prepares the folder for a session starting on a task and
@@ -124,5 +134,8 @@ func (s *Service) readBackTaskMemory(ctx context.Context, sess *domain.Session) 
 	if sess == nil {
 		return
 	}
-	s.syncTaskMemory(ctx, sess.TicketID, sess.RepositoryID)
+	_, back := s.syncTaskMemoryFiles(ctx, sess.TicketID, sess.RepositoryID)
+	if slices.Contains(back, domain.TaskMemoryProgressFile) {
+		s.markProgressWritten(sess)
+	}
 }

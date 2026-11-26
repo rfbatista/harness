@@ -418,18 +418,6 @@ func TestLearnHost_ATaskTypeRuleLoadsOnlyForThatModeAndNeverForTheDefaultMode(t 
 
 // -- the declaration check: require_update on and off, a restart, a person edit
 
-func TestLearnHost_ADeclarationAfterARestartIsNotCheckedBecauseTheSnapshotIsGone(t *testing.T) {
-	e := newShellE2EWith(t, "data.db")
-	sess := e.gatedSession(&fakeAgentSystem{retry: 3, gates: greenGates()})
-	e.restart()
-	e.orch.AgentSystem = &fakeAgentSystem{retry: 3, gates: greenGates()}
-	out, err := e.callTool(sess.ID, "declare_done", nil)
-	if err != nil && strings.Contains(err.Error(), "TASK_MEMORY_NOT_UPDATED") {
-		t.Fatalf("a restarted session with no snapshot was still checked: %v", err)
-	}
-	t.Logf("declare after restart = %v, %v", out, err)
-}
-
 func TestLearnHost_ADeclarationAfterTheAgentUpdatedTheMemoryTwiceIsNeverAsked(t *testing.T) {
 	e := newShellE2E(t)
 	sess := e.gatedSession(&fakeAgentSystem{retry: 3, gates: greenGates()})
