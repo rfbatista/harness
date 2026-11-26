@@ -4,7 +4,6 @@ import (
 	"context"
 	"os/exec"
 	"strings"
-	"sync"
 
 	"gorm.io/gorm"
 
@@ -13,6 +12,7 @@ import (
 	"operators-mcp/internal/adapter/out/agents/claudetext"
 	"operators-mcp/internal/adapter/out/persistence/sqlite"
 	"operators-mcp/internal/app/catalog"
+	"operators-mcp/internal/app/runtime"
 	"operators-mcp/internal/application/agentsystem"
 	"operators-mcp/internal/application/bench"
 	"operators-mcp/internal/application/orchestration"
@@ -67,6 +67,7 @@ func newBench(cfg Config, db *gorm.DB, cat catalog.Catalog, orch *orchestration.
 	claudeMgr := oneShotClaude(bin.Bin(), home.Path(), cfg.llmProxyURL())
 	orch.BenchRuntime = claudeMgr
 	orch.BenchCLIVersion = cliVersion(bin)
+	orch.BenchSandboxAllow = sandboxAllowlist(allowSources{ClaudeDirs: runtime.ClaudeInstallDirs(bin.Bin())})
 	svc := bench.New(bench.Deps{
 		Cases:      sqlite.NewBenchCaseRepository(db),
 		Scorecards: sqlite.NewBenchScorecardRepository(db),
@@ -94,18 +95,15 @@ func newBench(cfg Config, db *gorm.DB, cat catalog.Catalog, orch *orchestration.
 	return svc
 }
 
-// cliVersion reads the claude CLI's version once, the first time a bench asks
-// for it; "" when it cannot say.
+// cliVersion asks the claude CLI for its version each time a bench run starts,
+// the binary that run launches (the managed one moves when it is updated);
+// "" when it cannot say.
 func cliVersion(bin ports.ManagedClaudeBin) func() string {
-	var once sync.Once
-	var version string
 	return func() string {
-		once.Do(func() {
-			out, err := exec.Command(bin.Bin(), "--version").Output()
-			if err == nil {
-				version = strings.TrimSpace(string(out))
-			}
-		})
-		return version
+		out, err := exec.Command(bin.Bin(), "--version").Output()
+		if err != nil {
+			return ""
+		}
+		return strings.TrimSpace(string(out))
 	}
 }

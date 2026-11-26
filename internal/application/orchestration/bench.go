@@ -2,8 +2,10 @@ package orchestration
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"os"
+	"slices"
 	"strings"
 	"time"
 
@@ -49,7 +51,7 @@ func (s *Service) benchSetup(ctx context.Context, req ports.BenchSetupRequest) (
 
 	cfg := llmkit.SessionConfig{
 		Model:        req.Model,
-		Permission:   llmkit.PermissionBypass,
+		Permission:   llmkit.PermissionAsk,
 		Env:          s.DefaultEnv,
 		AppendSystem: ag.appendSystem,
 		Driver:       claude.Config{SkillDirs: ag.skillDirs},
@@ -69,17 +71,38 @@ func (s *Service) benchSetup(ctx context.Context, req ports.BenchSetupRequest) (
 	for _, f := range cfg.InstructionFiles {
 		info.Instructions = append(info.Instructions, ports.BenchSetupFile{Path: f.Path, Content: string(f.Content)})
 	}
-	if s.BenchCLIVersion != nil {
-		info.CLIVersion = s.BenchCLIVersion()
-	}
 	return cfg, info, cleanup, nil
 }
 
-// Setup describes what a bench run on the request is set up with.
+// Setup describes what a bench run on the request is set up with. The CLI
+// version is read here, at each run's start and not once per process, so a
+// CLI that was updated between two runs shows in their fingerprints.
 func (s *Service) Setup(ctx context.Context, req ports.BenchSetupRequest) (ports.BenchSetupInfo, error) {
 	_, info, cleanup, err := s.benchSetup(ctx, req)
 	cleanup()
+	if err == nil && s.BenchCLIVersion != nil {
+		info.CLIVersion = s.BenchCLIVersion()
+	}
 	return info, err
+}
+
+// benchBuiltInTools are the CLI's own tools, all turned off for a bench run:
+// the agent is measured on the mock tools alone, and nothing it does may reach
+// the machine.
+var benchBuiltInTools = []string{
+	"Bash", "BashOutput", "KillShell", "Edit", "MultiEdit", "Write", "NotebookEdit",
+	"Read", "Glob", "Grep", "WebFetch", "WebSearch", "Task", "Agent", "TodoWrite", "SlashCommand", "ExitPlanMode",
+}
+
+// withBenchToolsLocked leaves a bench run's CLI with the mock server's tools
+// and nothing else. The built-in tools are denied in its settings, and only
+// the mock server is allowed, with no approval tool and no permission bypass:
+// any other tool call is refused by the CLI.
+func withBenchToolsLocked(cfg *llmkit.SessionConfig, mcpName string) {
+	cfg.Permission = llmkit.PermissionAsk
+	cfg.AllowedTools = []string{"mcp__" + mcpName}
+	deny, _ := json.Marshal(map[string][]string{"deny": benchBuiltInTools})
+	withClaudeSetting(cfg, "permissions", deny)
 }
 
 // Run starts the CLI headless in a throwaway directory with the project's
@@ -104,7 +127,20 @@ func (s *Service) Run(ctx context.Context, req ports.BenchSessionRequest) (ports
 	cfg.ID = llmkit.NewSessionID()
 	cfg.WorkingDir = dir
 	cfg.Attribution = cfg.ID
+	cfg.MaxTurns = req.MaxTurns
 	cfg.MCPServers = []llmkit.MCPServerSpec{{Name: req.MCPName, Transport: "http", URL: req.MCPURL}}
+	cfg.Env = append(slices.Clone(cfg.Env), "TMPDIR="+dir, "TMP="+dir, "TEMP="+dir)
+	withBenchToolsLocked(&cfg, req.MCPName)
+	// Under the session sandbox driver the CLI writes this directory and
+	// nothing else; a platform with the sandbox on and no driver refuses.
+	wrap, err := s.Sandbox.BenchWrapFor(req.ProjectID, dir, s.BenchSandboxAllow)
+	if err != nil {
+		return ports.BenchSessionResult{}, err
+	}
+	if wrap != nil {
+		cfg.Wrap = wrap
+		withClaudeSandboxOff(&cfg)
+	}
 
 	started := time.Now()
 	sess, err := s.BenchRuntime.Start(ctx, cfg)

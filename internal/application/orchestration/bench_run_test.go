@@ -70,6 +70,13 @@ const readScript = `[{"tool":"read_file","params":{"path":"README.md"}}]`
 
 func newRunWorld(t *testing.T, script string, prompts ...string) *runWorld {
 	t.Helper()
+	return newRunWorldWithin(t, 0, script, prompts...)
+}
+
+// newRunWorldWithin is newRunWorld with a time limit per case; zero is the
+// service's own.
+func newRunWorldWithin(t *testing.T, caseTimeout time.Duration, script string, prompts ...string) *runWorld {
+	t.Helper()
 	w := newBenchWorld(t, script)
 	db, err := sqlite.Open(":memory:")
 	if err != nil {
@@ -86,6 +93,8 @@ func newRunWorld(t *testing.T, script string, prompts ...string) *runWorld {
 		Judge:      rw.judge,
 		Settings:   effectiveCritic("opus-critic"),
 		Feed:       rw.feed,
+
+		CaseTimeout: caseTimeout,
 	})
 	if len(prompts) == 0 {
 		prompts = []string{"Read the README.", "Read the README again."}
@@ -338,5 +347,22 @@ func TestARunAnnouncesItsProgressPerCaseAndItsEndWithTheScorecard(t *testing.T) 
 	}
 	if done[0] != 1 {
 		t.Fatalf("progress = %v, want to start at 1 of 2", done)
+	}
+}
+
+// A CLI that never answers is stopped at the case's time limit: that case is a
+// failure with its reason, the run goes on to the next case and finishes.
+func TestACaseThatRunsPastItsTimeLimitFailsAloneAndTheRunFinishes(t *testing.T) {
+	w := newRunWorldWithin(t, 1500*time.Millisecond, readScript, "HANG on this one", "Read the README.")
+	run := w.startRun(t)
+	if run.Status != domain.BenchRunFinished {
+		t.Fatalf("run = %+v, want finished", run)
+	}
+	card := w.scorecard(t, run)
+	if len(card.Cases) != 2 || !strings.Contains(card.Cases[0].Error, "time limit") || card.Cases[1].Error != "" {
+		t.Fatalf("cases = %+v", card.Cases)
+	}
+	if card.Aggregate.Scored != 2 || card.Aggregate.Mean >= 1 {
+		t.Fatalf("aggregate = %+v, a timed-out case must count against it", card.Aggregate)
 	}
 }

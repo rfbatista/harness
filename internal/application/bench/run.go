@@ -2,6 +2,7 @@ package bench
 
 import (
 	"context"
+	"fmt"
 	"time"
 
 	"operators-mcp/internal/domain"
@@ -51,7 +52,20 @@ func (s *Service) RunCase(ctx context.Context, setup ports.BenchSetupRequest, c 
 		return CaseRun{}, err
 	}
 	defer stop()
-	res, err := s.d.Sessions.Run(ctx, ports.BenchSessionRequest{BenchSetupRequest: setup, Prompt: c.Prompt, MCPName: s.d.MockName, MCPURL: url})
+	limit := s.d.CaseTimeout
+	if limit <= 0 {
+		limit = DefaultCaseTimeout
+	}
+	turns := s.d.MaxTurns
+	if turns <= 0 {
+		turns = DefaultMaxTurns
+	}
+	caseCtx, cancel := context.WithTimeout(ctx, limit)
+	defer cancel()
+	res, err := s.d.Sessions.Run(caseCtx, ports.BenchSessionRequest{BenchSetupRequest: setup, Prompt: c.Prompt, MCPName: s.d.MockName, MCPURL: url, MaxTurns: turns})
 	run := CaseRun{Calls: layer.Calls(), FinalText: res.FinalText, CostUSD: res.CostUSD, Duration: res.Duration}
+	if err != nil && ctx.Err() == nil && caseCtx.Err() != nil {
+		err = fmt.Errorf("the case ran past its time limit of %s", limit)
+	}
 	return run, err
 }

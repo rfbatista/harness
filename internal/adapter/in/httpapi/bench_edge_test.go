@@ -290,3 +290,21 @@ func TestATrajectoryRecordingFlagRefusesMalformedBodiesAndUnknownTasks(t *testin
 		t.Fatalf("flag = %v", rec)
 	}
 }
+
+// {} or a key the flag does not have is a mistake, not a request to clear the
+// flag: only an explicit {"enabled": null} follows the default again.
+func TestATrajectoryRecordingFlagRefusesABodyWithoutEnabledOrWithAnUnknownKey(t *testing.T) {
+	h, _ := trajectoryHandler(t, true)
+	const path = "/projects/p1/tasks/t1/trajectory-recording"
+	if code, _ := putJSON(t, h, path, `{"enabled": false}`); code != http.StatusOK {
+		t.Fatalf("set = %d", code)
+	}
+	for _, body := range []string{`{}`, `{"enable": true}`, `{"enabled": true, "extra": 1}`, `{"extra": null}`} {
+		if code, _ := putJSON(t, h, path, body); code != http.StatusUnprocessableEntity {
+			t.Errorf("PUT %s = %d, want 422", body, code)
+		}
+	}
+	if _, rec := doJSON(t, h, http.MethodGet, "/api"+path, ""); rec["enabled"] != false || rec["source"] != "task" {
+		t.Fatalf("a refused body changed the flag: %v", rec)
+	}
+}

@@ -178,11 +178,33 @@ func TestAScorecardOfNoCasesIsEmptyAndZero(t *testing.T) {
 	}
 }
 
-func TestACaseThatDidNotRunKeepsItsCostAndIsLeftOutOfTheAggregate(t *testing.T) {
+func TestACaseThatDidNotRunCountsAsAZeroInTheAggregateAndKeepsItsCost(t *testing.T) {
 	failed := domain.BenchCaseScore{CaseID: "f", Error: "the CLI ended", CostUSD: 0.3, Calls: []domain.BenchCall{}}
 	card := NewScorecard("p1", domain.BenchSetupRecord{}, []domain.BenchCaseScore{caseScore("a", 1, 0, false), failed}, domain.ScorecardFinished)
-	if card.Aggregate.Scored != 1 || !near(card.Aggregate.Mean, 1) || !near(card.CostUSD, 0.8) || len(card.Cases) != 2 {
-		t.Fatalf("card = %+v", card)
+	if card.Aggregate.Scored != 2 || !near(card.Aggregate.Mean, 0.5) || !near(card.CostUSD, 0.8) || len(card.Cases) != 2 {
+		t.Fatalf("card = %+v: a case that errored must pull the aggregate down", card)
+	}
+}
+
+func TestACaseThatStartedErroringShowsAsAChangeWithItsDropInTheComparison(t *testing.T) {
+	prev := NewScorecard("p1", domain.BenchSetupRecord{}, []domain.BenchCaseScore{caseScore("a", 1, 0, false)}, domain.ScorecardFinished)
+	cur := NewScorecard("p1", domain.BenchSetupRecord{}, []domain.BenchCaseScore{{CaseID: "a", Error: "the CLI ended", Calls: []domain.BenchCall{}}}, domain.ScorecardFinished)
+	cmp := Compare(prev, cur)
+	d := cmp.Cases[0]
+	if d.Status == domain.BenchCaseUnchanged || d.Mean == nil || d.Mean.Change >= 0 || d.Error == "" {
+		t.Fatalf("delta = %+v, want a regression carrying the error", d)
+	}
+	if cmp.Aggregate.Change >= 0 {
+		t.Fatalf("aggregate = %+v", cmp.Aggregate)
+	}
+}
+
+func TestACaseThatKeepsErroringIsUnchangedButStillCarriesItsError(t *testing.T) {
+	bad := domain.BenchCaseScore{CaseID: "a", Error: "the CLI ended", Calls: []domain.BenchCall{}}
+	card := NewScorecard("p1", domain.BenchSetupRecord{}, []domain.BenchCaseScore{bad}, domain.ScorecardFinished)
+	d := Compare(card, card).Cases[0]
+	if d.Status != domain.BenchCaseUnchanged || d.Error == "" {
+		t.Fatalf("delta = %+v", d)
 	}
 }
 
@@ -452,8 +474,8 @@ func TestACaseWhoseCLIFailsIsRecordedWithItsErrorAndTheRunStillFinishes(t *testi
 	if card.Cases[0].Error == "" || card.Cases[0].Calls == nil || card.Cases[1].Error != "" {
 		t.Fatalf("cases = %+v", card.Cases)
 	}
-	if card.Aggregate.Scored != 1 {
-		t.Fatalf("a case that did not run was scored: %+v", card.Aggregate)
+	if card.Aggregate.Scored != 2 {
+		t.Fatalf("a case that did not run must count in the aggregate as a failure: %+v", card.Aggregate)
 	}
 }
 

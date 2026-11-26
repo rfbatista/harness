@@ -113,6 +113,7 @@ func trajectoryOf(sess *domain.Session, events []ports.StoredEvent) domain.Bench
 		case "tool_result":
 			if len(waiting) > 0 {
 				t.Steps[waiting[0]].Result = ev.Text
+				t.Steps[waiting[0]].IsError = ev.IsError
 				waiting = waiting[1:]
 			}
 		case "output":

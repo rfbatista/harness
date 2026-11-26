@@ -133,6 +133,10 @@ type Service struct {
 	// BenchCLIVersion names the CLI a bench run uses, for the scorecard's setup
 	// fingerprint; nil leaves it out.
 	BenchCLIVersion func() string
+	// BenchSandboxAllow is what a bench run's CLI may read under the sandbox
+	// beyond its throwaway directory and the agent home: claude's own install
+	// directories.
+	BenchSandboxAllow []ports.SandboxPath
 
 	// TaskServerURL returns the per-session task MCP endpoint for a session id.
 	// Injected, so the application layer does not need to know the route.

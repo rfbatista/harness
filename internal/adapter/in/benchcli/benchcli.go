@@ -6,7 +6,8 @@
 //	                 [-agent <id>] [-repository <id>] [-model <m>]
 //
 // The exit code is 0 when the run finished, 1 when it did not (the server's
-// message is on stderr) and 2 for a command that is wrong.
+// message is on stderr) and 2 for a command that is wrong. Ctrl-C cancels the
+// run on the server before the command exits.
 package benchcli
 
 import (
@@ -18,7 +19,9 @@ import (
 	"io"
 	"net/http"
 	"os"
+	"os/signal"
 	"strings"
+	"syscall"
 	"time"
 
 	"operators-mcp/internal/domain"
@@ -27,7 +30,9 @@ import (
 // Main runs the command with the process's arguments after "bench" and
 // environment, and answers the exit code.
 func Main(args []string) int {
-	return Run(context.Background(), args, os.Stdout, os.Stderr)
+	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+	defer stop()
+	return Run(ctx, args, os.Stdout, os.Stderr)
 }
 
 // Run runs the command: args are those after "bench".
@@ -43,7 +48,7 @@ func Run(ctx context.Context, args []string, stdout, stderr io.Writer) int {
 	token := fs.String("token", os.Getenv("CODING_POOL_TOKEN"), "the server's bearer token, when it requires one")
 	agent := fs.String("agent", "", "the agent the run is set up as (default: plain claude)")
 	repository := fs.String("repository", "", "the repository whose instruction files the run gets (default: the project's first)")
-	model := fs.String("model", "", "the session model (default: the CLI's own)")
+	model := fs.String("model", "", "the model the run's sessions use (default: the model sessions run on)")
 	poll := fs.Duration("poll", time.Second, "how often the run is asked how far it is")
 	if err := fs.Parse(args[1:]); err != nil {
 		return 2
@@ -63,11 +68,13 @@ func Run(ctx context.Context, args []string, stdout, stderr io.Writer) int {
 	for run.Status == domain.BenchRunRunning {
 		select {
 		case <-ctx.Done():
-			fmt.Fprintln(stderr, "bench run:", ctx.Err())
-			return 1
+			return interrupted(ctx, c, run.ID, stderr)
 		case <-time.After(*poll):
 		}
 		if err := c.do(ctx, http.MethodGet, "/runs/"+run.ID, nil, &run); err != nil {
+			if ctx.Err() != nil {
+				return interrupted(ctx, c, run.ID, stderr)
+			}
 			fmt.Fprintln(stderr, "bench run:", err)
 			return 1
 		}
@@ -98,6 +105,20 @@ func Run(ctx context.Context, args []string, stdout, stderr io.Writer) int {
 		return 1
 	}
 	return 0
+}
+
+// interrupted cancels the run on the server after the command's context ended
+// (Ctrl-C), with a context of its own, and answers the exit code.
+func interrupted(ctx context.Context, c client, runID string, stderr io.Writer) int {
+	stop, release := context.WithTimeout(context.WithoutCancel(ctx), 10*time.Second)
+	defer release()
+	var run domain.BenchRun
+	if err := c.do(stop, http.MethodPost, "/runs/"+runID+"/cancel", nil, &run); err != nil {
+		fmt.Fprintln(stderr, "bench run: interrupted; the run could not be cancelled:", err)
+	} else {
+		fmt.Fprintf(stderr, "bench run: interrupted; run %s cancelled\n", runID)
+	}
+	return 1
 }
 
 func envOr(name, def string) string {

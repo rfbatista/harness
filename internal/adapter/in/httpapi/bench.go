@@ -1,6 +1,7 @@
 package httpapi
 
 import (
+	"encoding/json"
 	"errors"
 	"net/http"
 
@@ -195,13 +196,21 @@ func (h *Handler) handleSetTaskTrajectoryRecording(c echo.Context) error {
 	if h.benchTrajectories == nil {
 		return errBenchOff
 	}
-	var body struct {
-		Enabled *bool `json:"enabled"`
-	}
+	var body map[string]json.RawMessage
 	if err := bindJSON(c, &body); err != nil {
 		return err
 	}
-	rec, err := h.benchTrajectories.SetTaskRecording(c.Request().Context(), c.Param("project"), c.Param("task"), body.Enabled)
+	// An empty body or a key the flag does not have is refused, not read as
+	// "clear the flag"; only an explicit null does that.
+	raw, ok := body["enabled"]
+	if !ok || len(body) != 1 {
+		return echo.NewHTTPError(http.StatusUnprocessableEntity, `the body is {"enabled": true|false|null} and nothing else`)
+	}
+	var enabled *bool
+	if err := json.Unmarshal(raw, &enabled); err != nil {
+		return echo.NewHTTPError(http.StatusBadRequest, "invalid body")
+	}
+	rec, err := h.benchTrajectories.SetTaskRecording(c.Request().Context(), c.Param("project"), c.Param("task"), enabled)
 	if err != nil {
 		return err
 	}

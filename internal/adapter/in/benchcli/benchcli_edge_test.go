@@ -147,3 +147,43 @@ func serve(t *testing.T, svc *bench.Service) *httptest.Server {
 	t.Cleanup(srv.Close)
 	return srv
 }
+
+// Ctrl-C ends the command's context: the run it started on the server is
+// cancelled too, not left going with nobody watching it.
+func TestTheCommandCancelsItsRunOnTheServerWhenItIsInterrupted(t *testing.T) {
+	gate := make(chan struct{})
+	srv, svc := testServer(t, &benchSessions{gate: gate}, true)
+	t.Cleanup(func() { close(gate) })
+
+	ctx, interrupt := context.WithCancel(context.Background())
+	var out, errOut lockedBuffer
+	done := make(chan int, 1)
+	go func() {
+		done <- Run(ctx, []string{"run", "-url", srv.URL, "-token", "secret", "-project", "p1", "-poll", "5ms"}, &out, &errOut)
+	}()
+	var id string
+	for end := time.Now().Add(10 * time.Second); id == "" && time.Now().Before(end); time.Sleep(5 * time.Millisecond) {
+		if m := regexp.MustCompile(`bench run (\w+) started`).FindStringSubmatch(out.String()); m != nil {
+			id = m[1]
+		}
+	}
+	if id == "" {
+		t.Fatalf("the command never reported its run: %q", out.String())
+	}
+	interrupt()
+	select {
+	case code := <-done:
+		if code != 1 || !strings.Contains(errOut.String(), "interrupted") {
+			t.Fatalf("exit %d stderr %q", code, errOut.String())
+		}
+	case <-time.After(10 * time.Second):
+		t.Fatal("the command did not end after the interrupt")
+	}
+	for end := time.Now().Add(10 * time.Second); time.Now().Before(end); time.Sleep(5 * time.Millisecond) {
+		if r, err := svc.GetRun(context.Background(), "p1", id); err == nil && r.Status == domain.BenchRunCancelled {
+			return
+		}
+	}
+	r, _ := svc.GetRun(context.Background(), "p1", id)
+	t.Fatalf("the run on the server was left %s", r.Status)
+}

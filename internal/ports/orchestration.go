@@ -545,11 +545,14 @@ type SessionEvent struct {
 	Text      string               `json:"text,omitempty"`
 	ToolName  string               `json:"tool_name,omitempty"`
 	ToolInput json.RawMessage      `json:"tool_input,omitempty"`
-	DeltaKind string               `json:"delta_kind,omitempty"` // text|thinking|tool_input, for output_delta
-	Index     int                  `json:"index,omitempty"`      // content-block index, for output_delta
-	Approval  *ApprovalInfo        `json:"approval,omitempty"`
-	Usage     *Usage               `json:"usage,omitempty"`
-	CostUSD   float64              `json:"cost_usd,omitempty"`
+	// IsError marks, on a "tool_result" event, a result the CLI reported as a
+	// failed tool call.
+	IsError   bool          `json:"is_error,omitempty"`
+	DeltaKind string        `json:"delta_kind,omitempty"` // text|thinking|tool_input, for output_delta
+	Index     int           `json:"index,omitempty"`      // content-block index, for output_delta
+	Approval  *ApprovalInfo `json:"approval,omitempty"`
+	Usage     *Usage        `json:"usage,omitempty"`
+	CostUSD   float64       `json:"cost_usd,omitempty"`
 	// CallUsage is, on an "output" or "tool_use" event, the usage of that
 	// message's own API call, never a sum: the context size of a call is its
 	// input and cache tokens. ContextWindows is, on a "usage" event, the context

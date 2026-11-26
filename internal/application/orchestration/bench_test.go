@@ -17,6 +17,7 @@ import (
 	"operators-mcp/internal/application/bench"
 	"operators-mcp/internal/domain"
 	"operators-mcp/internal/ports"
+	"operators-mcp/internal/ports/portstest"
 )
 
 // benchWorld is a bench service over the orchestration service whose CLI is
@@ -178,5 +179,128 @@ func TestBenchSetupFingerprintFollowsTheAgentPrompt(t *testing.T) {
 	w.sessions.catalog.Projects.(*fakeResolver).agents["dev"].Prompt.Content = "You write Rust."
 	if fingerprint() == before {
 		t.Fatal("a changed agent prompt kept the fingerprint")
+	}
+}
+
+// settingsOf is the JSON the CLI was handed through --settings.
+func launchSettings(t *testing.T, args []string) map[string]json.RawMessage {
+	t.Helper()
+	i := slices.Index(args, "--settings")
+	if i < 0 || i+1 >= len(args) {
+		t.Fatalf("the CLI got no --settings: %v", args)
+	}
+	var out map[string]json.RawMessage
+	if err := json.Unmarshal([]byte(args[i+1]), &out); err != nil {
+		t.Fatal(err)
+	}
+	return out
+}
+
+func TestBenchRunLaunchesWithNoBuiltInToolAllowedAndNoPermissionBypass(t *testing.T) {
+	w := newBenchWorld(t, `[]`)
+	runBenchCase(t, w, readmeCase)
+
+	l := w.launch(t)
+	args := strings.Join(l.Args, "\x00")
+	if strings.Contains(args, "bypassPermissions") || strings.Contains(args, "--permission-prompt-tool") {
+		t.Fatalf("the run is not gated by its tool list alone: %v", l.Args)
+	}
+	i := slices.Index(l.Args, "--allowedTools")
+	if i < 0 || i+1 >= len(l.Args) || l.Args[i+1] != "mcp__bench" || (i+2 < len(l.Args) && !strings.HasPrefix(l.Args[i+2], "--")) {
+		t.Fatalf("only the mock server's tools may be allowed: %v", l.Args)
+	}
+	var perms struct {
+		Deny []string `json:"deny"`
+	}
+	if err := json.Unmarshal(launchSettings(t, l.Args)["permissions"], &perms); err != nil {
+		t.Fatalf("the settings carry no permissions: %v", err)
+	}
+	for _, tool := range []string{"Bash", "Edit", "Write", "MultiEdit", "NotebookEdit", "WebFetch", "WebSearch", "Read", "Glob", "Grep", "Task", "TodoWrite"} {
+		if !slices.Contains(perms.Deny, tool) {
+			t.Errorf("built-in %s is not denied: %v", tool, perms.Deny)
+		}
+	}
+	if !slices.Equal(l.Servers, []string{"bench"}) {
+		t.Fatalf("servers = %v", l.Servers)
+	}
+}
+
+func TestBenchRunLimitsTheCLIsTurns(t *testing.T) {
+	w := newBenchWorld(t, `[]`)
+	runBenchCase(t, w, readmeCase)
+	l := w.launch(t)
+	i := slices.Index(l.Args, "--max-turns")
+	if i < 0 || i+1 >= len(l.Args) || l.Args[i+1] == "0" {
+		t.Fatalf("the CLI has no turn limit: %v", l.Args)
+	}
+}
+
+func TestBenchRunUnderTheSandboxWritesOnlyItsThrowawayDirectory(t *testing.T) {
+	w := newBenchWorld(t, `[]`)
+	driver := &portstest.RecordingSandboxDriver{}
+	home := t.TempDir()
+	w.sessions.Sandbox = &Sandbox{Driver: driver, Home: home, Checkouts: func() []string { return []string{w.repoRoot} }}
+	runBenchCase(t, w, readmeCase)
+
+	calls := driver.Calls()
+	if len(calls) != 1 {
+		t.Fatalf("the CLI was wrapped %d times, want once", len(calls))
+	}
+	l := w.launch(t)
+	// The directory is gone after the run, so it is told by its name.
+	dirName := filepath.Base(l.Cwd)
+	policy := calls[0].Policy
+	if filepath.Base(policy.WorkingDir) != dirName || !strings.HasPrefix(dirName, "harness-bench-") {
+		t.Fatalf("working dir = %s, want the throwaway dir %s", policy.WorkingDir, l.Cwd)
+	}
+	resolvedHome, _ := filepath.EvalSymlinks(home)
+	underHome := func(p string) bool {
+		r, err := filepath.EvalSymlinks(p)
+		return err == nil && strings.HasPrefix(r, resolvedHome)
+	}
+	var throwaway int
+	for _, p := range policy.Writable {
+		switch {
+		case filepath.Base(p) == dirName:
+			throwaway++
+		case !underHome(p):
+			t.Errorf("writable %s is neither the throwaway dir nor the agent home", p)
+		}
+	}
+	if throwaway == 0 {
+		t.Fatalf("the throwaway dir is not writable: %v", policy.Writable)
+	}
+	if !slices.Contains(policy.Hidden, w.repoRoot) {
+		t.Fatalf("the project repository is not hidden: %v", policy.Hidden)
+	}
+	if got := launchSettings(t, l.Args)["sandbox"]; string(got) != `{"enabled":false}` {
+		t.Fatalf("claude's own sandbox is not switched off under ours: %s", got)
+	}
+}
+
+func TestBenchRunIsRefusedUnderASandboxWithNoDriver(t *testing.T) {
+	w := newBenchWorld(t, `[]`)
+	w.sessions.Sandbox = &Sandbox{}
+	_, err := w.bench.RunCase(context.Background(), benchSetupReq, readmeCase)
+	if err == nil {
+		t.Fatal("a run went unconfined with the sandbox on and no driver")
+	}
+	if _, statErr := os.Stat(w.launchFile); statErr == nil {
+		t.Fatal("a CLI was started")
+	}
+}
+
+func TestBenchSetupReadsTheCLIVersionAtEachCallAndARunDoesNotAskForIt(t *testing.T) {
+	w := newBenchWorld(t, `[]`)
+	calls := 0
+	w.sessions.BenchCLIVersion = func() string { calls++; return "2.1." + string(rune('0'+calls)) }
+	first, _ := w.sessions.Setup(context.Background(), benchSetupReq)
+	second, _ := w.sessions.Setup(context.Background(), benchSetupReq)
+	if first.CLIVersion != "2.1.1" || second.CLIVersion != "2.1.2" {
+		t.Fatalf("versions %q %q: a version read once per process hides a CLI that changed", first.CLIVersion, second.CLIVersion)
+	}
+	runBenchCase(t, w, readmeCase)
+	if calls != 2 {
+		t.Fatalf("a case run asked for the CLI version (%d calls)", calls)
 	}
 }

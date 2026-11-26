@@ -73,7 +73,12 @@ func (c BenchCaseScore) Pattern(name string) BenchPatternScore {
 }
 
 // Mean is the mean of the patterns that are scored; ok is false when none is.
+// A case that could not run is a failure and scores zero, so it pulls the
+// aggregate down and shows as a drop against a run where it worked.
 func (c BenchCaseScore) Mean() (mean float64, ok bool) {
+	if c.Error != "" {
+		return 0, true
+	}
 	var sum float64
 	n := 0
 	for _, p := range BenchPatterns {
@@ -88,7 +93,8 @@ func (c BenchCaseScore) Mean() (mean float64, ok bool) {
 	return sum / float64(n), true
 }
 
-// BenchAggregate is a mean over the cases that were scored.
+// BenchAggregate is a mean over the cases that were scored, the ones that
+// could not run included as zeros.
 type BenchAggregate struct {
 	Scored int     `json:"scored"`
 	Mean   float64 `json:"mean"`
@@ -144,9 +150,11 @@ const (
 // BenchCaseDelta is one case between two scorecards. An added or removed case
 // has no delta.
 type BenchCaseDelta struct {
-	CaseID   string                `json:"case_id"`
-	CaseName string                `json:"case_name,omitempty"`
-	Status   string                `json:"status"`
+	CaseID   string `json:"case_id"`
+	CaseName string `json:"case_name,omitempty"`
+	Status   string `json:"status"`
+	// Error is why the case could not run in the later scorecard, "" when it did.
+	Error    string                `json:"error,omitempty"`
 	Mean     *BenchDelta           `json:"mean,omitempty"`
 	Patterns map[string]BenchDelta `json:"patterns,omitempty"`
 }

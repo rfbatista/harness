@@ -31,7 +31,7 @@ type BenchCaseStore interface {
 // BenchSetupRequest names the agent setup a bench run runs on: the project's,
 // as a session in one of its repositories would receive it. An empty
 // RepositoryID is the project's first repository, an empty AgentID plain
-// claude, an empty Model the CLI's own.
+// claude, an empty Model the model sessions run on.
 type BenchSetupRequest struct {
 	ProjectID    string
 	RepositoryID string
@@ -62,6 +62,8 @@ type BenchSessionRequest struct {
 	Prompt  string
 	MCPName string
 	MCPURL  string
+	// MaxTurns is the most turns the CLI may take; zero leaves it to the CLI.
+	MaxTurns int
 }
 
 // BenchSessionResult is how a run ended: the final result the CLI reported,

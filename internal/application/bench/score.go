@@ -116,7 +116,7 @@ func inRange(v float64) bool { return v >= 0 && v <= 1 && !math.IsNaN(v) }
 
 // NewScorecard assembles a scorecard from the cases' scores: the mean per
 // pattern over the cases that scored it, the aggregate as the mean of the
-// cases' own means over the cases with any score, and the total cost and
+// cases' own means over the cases with any score (a case that could not run is a zero), and the total cost and
 // duration. Its id and times are the caller's.
 func NewScorecard(projectID string, setup domain.BenchSetupRecord, cases []domain.BenchCaseScore, status string) domain.Scorecard {
 	card := domain.Scorecard{ProjectID: projectID, Status: status, Setup: setup, Cases: cases, Patterns: map[string]domain.BenchAggregate{}}
@@ -199,7 +199,7 @@ func Compare(prev, cur domain.Scorecard) domain.ScorecardComparison {
 }
 
 func compareCase(prev, cur domain.BenchCaseScore) domain.BenchCaseDelta {
-	d := domain.BenchCaseDelta{CaseID: cur.CaseID, CaseName: cur.CaseName, Status: domain.BenchCaseUnchanged, Patterns: map[string]domain.BenchDelta{}}
+	d := domain.BenchCaseDelta{CaseID: cur.CaseID, CaseName: cur.CaseName, Status: domain.BenchCaseUnchanged, Error: cur.Error, Patterns: map[string]domain.BenchDelta{}}
 	for _, name := range domain.BenchPatterns {
 		p, c := prev.Pattern(name), cur.Pattern(name)
 		if p.Scored && c.Scored && math.Abs(c.Score-p.Score) > epsilon {
@@ -212,6 +212,11 @@ func compareCase(prev, cur domain.BenchCaseScore) domain.BenchCaseDelta {
 	if pok && cok && math.Abs(cm-pm) > epsilon {
 		m := delta(pm, cm)
 		d.Mean = &m
+	}
+	// A case that could not run in one run and ran in the other is a change
+	// whatever its patterns say: it started failing, or stopped.
+	if (prev.Error == "") != (cur.Error == "") {
+		d.Status = domain.BenchCaseChanged
 	}
 	return d
 }

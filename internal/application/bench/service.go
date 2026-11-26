@@ -15,6 +15,13 @@ import (
 
 var _ ports.BenchCases = (*Service)(nil)
 
+// What bounds a case that its deps do not set: a run that does not end or an
+// agent that loops would otherwise hold the project's one run for ever.
+const (
+	DefaultCaseTimeout = 10 * time.Minute
+	DefaultMaxTurns    = 30
+)
+
 // Deps are what the bench is built on.
 type Deps struct {
 	Cases ports.BenchCaseStore
@@ -51,6 +58,11 @@ type Deps struct {
 	SessionModel func() string
 	// MockName is the mock server's name in the CLI's MCP configuration.
 	MockName string
+	// CaseTimeout is the longest one case may run before it is stopped and
+	// scored as a failure; MaxTurns the most turns its CLI may take. Zero:
+	// DefaultCaseTimeout and DefaultMaxTurns.
+	CaseTimeout time.Duration
+	MaxTurns    int
 	Projects interface {
 		Get(ctx context.Context, id string) *domain.Project
 	}
