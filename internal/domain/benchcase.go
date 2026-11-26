@@ -104,3 +104,10 @@ func (c BenchCase) Validate() *BenchCaseValidationError {
 	}
 	return &BenchCaseValidationError{Errors: errs}
 }
+
+// BenchCall is one tool call a run made: the tool and the arguments it was
+// given.
+type BenchCall struct {
+	Tool   string         `json:"tool"`
+	Params map[string]any `json:"params,omitempty"`
+}
