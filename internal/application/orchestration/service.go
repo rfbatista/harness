@@ -157,10 +157,10 @@ type Service struct {
 	// delivers none. TaskMemoryRoot is the folder under the harness's data
 	// area that holds each task's and repository's delivery copy.
 	TaskMemory     ports.TaskMemories
+	TaskMemoryRoot string
 	// ContextMaps is where a repository's context map is read at start; nil
 	// delivers none.
 	ContextMaps ports.ContextMaps
-	TaskMemoryRoot string
 	// SessionSkillsURL returns where a session's skill activation endpoint is.
 	SessionSkillsURL func(sessionID string) string
 	// SessionArchitectureURL returns where a session's architecture rules are

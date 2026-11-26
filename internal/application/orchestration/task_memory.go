@@ -23,7 +23,7 @@ type taskMemorySync struct {
 	delivered map[string]string
 }
 
-// TaskMemoryDir is the delivery folder of a task in a repository, "" without
+// taskMemoryDir is the delivery folder of a task in a repository, "" without
 // a data area or a task memory store.
 func (s *Service) taskMemoryDir(taskID, repositoryID string) string {
 	if s.TaskMemory == nil || s.TaskMemoryRoot == "" || taskID == "" || repositoryID == "" {
