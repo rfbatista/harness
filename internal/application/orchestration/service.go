@@ -157,6 +157,9 @@ type Service struct {
 	// delivers none. TaskMemoryRoot is the folder under the harness's data
 	// area that holds each task's and repository's delivery copy.
 	TaskMemory     ports.TaskMemories
+	// ContextMaps is where a repository's context map is read at start; nil
+	// delivers none.
+	ContextMaps ports.ContextMaps
 	TaskMemoryRoot string
 	// SessionSkillsURL returns where a session's skill activation endpoint is.
 	SessionSkillsURL func(sessionID string) string
@@ -1142,6 +1145,9 @@ func (s *Service) sessionConfigTrail(trail *pieceTrail, id, dir, model string, a
 	trail.mark(&cfg, domain.PieceOther, "Design system", "Harness")
 	res := configResolution{}
 	cfg.InstructionFiles, res.versions = s.deliveredFiles(context.TODO(), role, ag.agent, subject.projectID(), repositoryID)
+	if f, ok := s.contextMapFile(context.TODO(), role, repositoryID); ok {
+		cfg.InstructionFiles = append(cfg.InstructionFiles, f)
+	}
 	cfg.InstructionFiles = append(cfg.InstructionFiles, s.activatedSkillFiles(context.TODO(), role, subject.mode, repositoryID)...)
 	if s.SessionBranchGateURL != nil {
 		cfg.InstructionFiles = append(cfg.InstructionFiles, s.branchGateInstructionFile(subject.mode))

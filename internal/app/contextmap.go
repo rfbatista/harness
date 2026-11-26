@@ -20,3 +20,6 @@ func newContextMap(store ports.ContextMapStore, cat catalog.Catalog, git ports.A
 		Feed:         orch,
 	})
 }
+
+// bindContextMap gives the orchestration service the maps it delivers at start.
+func bindContextMap(orch *orchestration.Service, cm *contextmap.Service) { orch.ContextMaps = cm }

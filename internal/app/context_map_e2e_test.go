@@ -123,3 +123,50 @@ func TestContextMap_IsOffWhenTheEffectiveConfigurationSaysSo(t *testing.T) {
 		t.Errorf("an unknown repository = %d %s", status, text)
 	}
 }
+
+// Delivered beside the instruction files at the start of a session on the
+// repository, resolved once and recorded in the context trail.
+
+func deliveredMap(t *testing.T, e *shellE2E) (content string, found bool) {
+	t.Helper()
+	id, spec := e.startRaw(e.task("Map delivery " + t.Name()))
+	for _, f := range spec.InstructionFiles {
+		if f.Path == "CONTEXT-MAP.md" {
+			content, found = string(f.Content), true
+		}
+	}
+	view, err := e.orch.SessionContext(e.ctx, id)
+	if err != nil || len(view.Entries) == 0 {
+		t.Fatalf("context = %+v, %v", view, err)
+	}
+	var inTrail bool
+	for _, p := range view.Entries[0].Instructions {
+		if p.Path == "CONTEXT-MAP.md" {
+			inTrail = true
+		}
+	}
+	if inTrail != found {
+		t.Errorf("the map is delivered = %v but in the context trail = %v", found, inTrail)
+	}
+	return content, found
+}
+
+func TestContextMap_IsInTheStartingContextOfASessionOnTheRepository(t *testing.T) {
+	e := newShellE2E(t)
+	tip := e.commitFile("main.go", "package main\n")
+	got, found := deliveredMap(t, e)
+	if !found || !strings.Contains(got, "# Context map: harness") || !strings.Contains(got, tip) {
+		t.Fatalf("the starting context lacks the map: found=%v\n%s", found, got)
+	}
+}
+
+func TestContextMap_IsNotInTheStartingContextWhenTheConfigurationTurnsItOff(t *testing.T) {
+	e := newShellE2E(t)
+	e.commitFile("main.go", "package main\n")
+	if _, err := e.agentSystem.SaveRepository(e.ctx, e.project, e.repo, map[string]json.RawMessage{"learn.context_map.enabled": json.RawMessage("false")}); err != nil {
+		t.Fatal(err)
+	}
+	if got, found := deliveredMap(t, e); found {
+		t.Fatalf("a disabled map was delivered:\n%s", got)
+	}
+}
