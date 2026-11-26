@@ -79,3 +79,10 @@ type BenchSessions interface {
 	// Run sends the prompt and waits for the CLI's result.
 	Run(ctx context.Context, req BenchSessionRequest) (BenchSessionResult, error)
 }
+
+// BenchModel is a model the bench asks to judge (driven): one stateless turn
+// of text in, text out, on the named model. The scorecard names the model
+// that judged it.
+type BenchModel interface {
+	Ask(ctx context.Context, model, system, input string) (string, error)
+}

@@ -10,6 +10,7 @@ import (
 
 	"operators-mcp/internal/adapter/in/mcpbench"
 	"operators-mcp/internal/adapter/out/agents/claudehome"
+	"operators-mcp/internal/adapter/out/agents/claudetext"
 	"operators-mcp/internal/adapter/out/persistence/sqlite"
 	"operators-mcp/internal/app/catalog"
 	"operators-mcp/internal/application/agentsystem"
@@ -63,12 +64,16 @@ func (l repositoryLookup) Get(ctx context.Context, id string) *domain.Repository
 // runs the CLI for a case on a manager of its own with no approval, interview
 // or task server, so a run's only MCP server is the mock.
 func newBench(cfg Config, db *gorm.DB, cat catalog.Catalog, orch *orchestration.Service, bin ports.ManagedClaudeBin, home claudehome.Home) *bench.Service {
-	orch.BenchRuntime = oneShotClaude(bin.Bin(), home.Path(), cfg.llmProxyURL())
+	claudeMgr := oneShotClaude(bin.Bin(), home.Path(), cfg.llmProxyURL())
+	orch.BenchRuntime = claudeMgr
 	orch.BenchCLIVersion = cliVersion(bin)
 	return bench.New(bench.Deps{
-		Cases:     sqlite.NewBenchCaseRepository(db),
-		Projects:  projectLookup{cat},
-		Sessions:  orch,
+		Cases:    sqlite.NewBenchCaseRepository(db),
+		Projects: projectLookup{cat},
+		Sessions: orch,
+		// The judge is one tool-less turn on the critic model; it does not run
+		// under the sandbox a session does.
+		Judge:     claudetext.NewModelAsker(claudeMgr, bin.Bin()),
 		ServeMock: mcpbench.Serve,
 		MockName:  mcpbench.Name,
 	})

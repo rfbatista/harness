@@ -28,7 +28,7 @@ var (
 	editMain   = domain.BenchExpectedCall{Tool: "edit_file", Params: map[string]any{"path": "main.go"}}
 )
 
-func scores(r ToolUseScores) [3]float64 {
+func scores(r domain.BenchToolUseScores) [3]float64 {
 	return [3]float64{r.RightTool.Score, r.ValidParams.Score, r.RightOrder.Score}
 }
 
@@ -60,7 +60,7 @@ func TestToolUseEachFaultLowersOnlyItsOwnPattern(t *testing.T) {
 				t.Fatalf("scores = %v, want %v", scores(got), tc.scores)
 			}
 			var reasons []string
-			for _, p := range []PatternScore{got.RightTool, got.ValidParams, got.RightOrder} {
+			for _, p := range []domain.BenchPatternScore{got.RightTool, got.ValidParams, got.RightOrder} {
 				reasons = append(reasons, p.Reasons...)
 			}
 			if !strings.Contains(strings.Join(reasons, "\n"), tc.reason) {

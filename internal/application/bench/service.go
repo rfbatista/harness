@@ -22,6 +22,9 @@ type Deps struct {
 	// service keeps cases only and refuses to run.
 	Sessions  ports.BenchSessions
 	ServeMock func(*MockLayer) (url string, stop func(), err error)
+	// Judge is the model that judges outcome and trajectory; nil leaves those
+	// patterns unscored.
+	Judge ports.BenchModel
 	// MockName is the mock server's name in the CLI's MCP configuration.
 	MockName string
 	Projects interface {

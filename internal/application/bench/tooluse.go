@@ -8,22 +8,6 @@ import (
 	"operators-mcp/internal/domain"
 )
 
-// PatternScore is one pattern's score for a case: 0 to 1, with why it lost
-// points. A pattern the case does not expect anything of is not Scored.
-type PatternScore struct {
-	Scored  bool     `json:"scored"`
-	Score   float64  `json:"score"`
-	Reasons []string `json:"reasons,omitempty"`
-}
-
-// ToolUseScores are the tool-use patterns of one case: right tool, valid
-// parameters, right order.
-type ToolUseScores struct {
-	RightTool   PatternScore `json:"right_tool"`
-	ValidParams PatternScore `json:"valid_params"`
-	RightOrder  PatternScore `json:"right_order"`
-}
-
 // ScoreToolUse scores a trace of calls against the case's expected calls.
 //
 // Each expected call is matched to the first unused call of the same tool, in
@@ -32,14 +16,14 @@ type ToolUseScores struct {
 // whose arguments fit (a missing call is not a parameter fault). Right order,
 // only when the case expects one, is the share of matched calls in the longest
 // stretch that keeps the expected order.
-func ScoreToolUse(c domain.BenchCase, trace []domain.BenchCall) ToolUseScores {
+func ScoreToolUse(c domain.BenchCase, trace []domain.BenchCall) domain.BenchToolUseScores {
 	exp := c.Expect.Tools
 	if len(exp) == 0 {
-		return ToolUseScores{}
+		return domain.BenchToolUseScores{}
 	}
 	used := make([]bool, len(trace))
 	match := make([]int, len(exp)) // trace index per expected call, -1 when missing
-	var rt PatternScore
+	var rt domain.BenchPatternScore
 	rt.Scored = true
 	matched := 0
 	for i, e := range exp {
@@ -62,7 +46,7 @@ func ScoreToolUse(c domain.BenchCase, trace []domain.BenchCall) ToolUseScores {
 	}
 	rt.Score = ratio(matched, max(len(exp), len(trace)))
 
-	vp := PatternScore{Scored: true}
+	vp := domain.BenchPatternScore{Scored: true}
 	valid := 0
 	for i, e := range exp {
 		if match[i] < 0 {
@@ -76,7 +60,7 @@ func ScoreToolUse(c domain.BenchCase, trace []domain.BenchCall) ToolUseScores {
 	}
 	vp.Score = ratio(valid, matched)
 
-	var ro PatternScore
+	var ro domain.BenchPatternScore
 	if c.Expect.Ordered {
 		ro.Scored = true
 		var seq []int
@@ -95,7 +79,7 @@ func ScoreToolUse(c domain.BenchCase, trace []domain.BenchCall) ToolUseScores {
 			}
 		}
 	}
-	return ToolUseScores{RightTool: rt, ValidParams: vp, RightOrder: ro}
+	return domain.BenchToolUseScores{RightTool: rt, ValidParams: vp, RightOrder: ro}
 }
 
 // outOfOrder reports whether the matched expected call i was made before an
