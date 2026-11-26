@@ -57,6 +57,14 @@ type ServiceRequestEnv struct {
 	PreviousSet bool   `json:"previous_set"`
 }
 
+// ServiceRequestCredential is one access credential a request sets or unsets.
+// Value is left out of what a feed or an agent carries.
+type ServiceRequestCredential struct {
+	Label  string `json:"label"`
+	Value  string `json:"value,omitempty"`
+	Change string `json:"change"` // set | unset
+}
+
 // ServiceRequestBranch is the branch of a request to run on a branch: its name
 // (without "origin/"), the short sha of its tip at filing time, and whether it
 // is a branch of origin.

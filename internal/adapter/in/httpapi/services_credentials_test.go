@@ -1,9 +1,12 @@
 package httpapi
 
 import (
+	"encoding/json"
 	"reflect"
+	"slices"
 	"strings"
 	"testing"
+	"time"
 
 	"operators-mcp/internal/application/services"
 )
@@ -117,5 +120,63 @@ func TestCredentials_BadOnesAreRefusedWithoutQuotingTheValue(t *testing.T) {
 		if code != 400 || !strings.Contains(msg, c.want) || strings.Contains(msg, credSecret) {
 			t.Errorf("%s: %d %v", c.name, code, out)
 		}
+	}
+}
+
+func labelsOf(view any) []string { return anyStrings(view.(map[string]any)["credential_labels"]) }
+
+func TestCredentials_AgentsSetAndUnsetThemThroughTheToolsAndSeeOnlyTheLabels(t *testing.T) {
+	f := newRequestsFixture(t, 5*time.Second)
+	f.autoApprove()
+	f.ticketID = "task-1"
+	f.session("sess-1", f.projectID, f.repoID, true)
+	agent := f.as("sess-1")
+
+	created := agent.ok("create_service", map[string]any{
+		"name": "app", "kind": "command", "repository": "api", "reason": "a test account",
+		"command":     map[string]any{"line": "sleep 30"},
+		"credentials": map[string]any{"user": "tester", "password": credSecret},
+	})["service"]
+	if got := labelsOf(created); !slices.Equal(got, []string{"password", "user"}) {
+		t.Fatalf("created labels = %v", got)
+	}
+	id := f.createdID("app")
+	if got := credentialsOf(f.service(id)); !reflect.DeepEqual(got, creds("password", credSecret, "user", "tester")) {
+		t.Fatalf("the person reads the values: %v", got)
+	}
+
+	upd := agent.ok("update_service", map[string]any{
+		"name": "app", "reason": "rotate",
+		"changes": map[string]any{"credentials": map[string]any{"set": map[string]any{"password": "new-" + credSecret, "token": "t"}, "unset": []string{"user"}}},
+	})
+	if got := labelsOf(upd["service"]); !slices.Equal(got, []string{"password", "token"}) {
+		t.Fatalf("labels after the update = %v", got)
+	}
+	if got := credentialsOf(f.service(id)); !reflect.DeepEqual(got, creds("password", "new-"+credSecret, "token", "t")) {
+		t.Fatalf("credentials after the update: %v", got)
+	}
+
+	// Unrelated updates leave them alone.
+	agent.ok("update_service", map[string]any{"name": "app", "reason": "port", "changes": map[string]any{"command": map[string]any{"ports": []int{9000}}}})
+	if got := credentialsOf(f.service(id)); len(got) != 2 {
+		t.Fatalf("an update of something else changed the credentials: %v", got)
+	}
+
+	// No value of a credential reaches any agent-facing output.
+	for _, out := range []map[string]any{agent.ok("list_services", nil), agent.ok("service_status", named("app")), upd} {
+		b, _ := json.Marshal(out)
+		if strings.Contains(string(b), credSecret) {
+			t.Fatalf("a credential value reached the agent: %s", b)
+		}
+	}
+	if got := labelsOf(agent.ok("service_status", named("app"))["service"]); !slices.Equal(got, []string{"password", "token"}) {
+		t.Fatalf("status labels = %v", got)
+	}
+	_, msg := agent.call("create_service", map[string]any{
+		"name": "bad", "kind": "command", "reason": "r", "command": map[string]any{"line": "x"},
+		"credentials": map[string]any{"": credSecret},
+	})
+	if !strings.Contains(msg, "label") || strings.Contains(msg, credSecret) {
+		t.Fatalf("an empty label is refused without the value: %q", msg)
 	}
 }

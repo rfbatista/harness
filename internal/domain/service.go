@@ -155,7 +155,7 @@ type Service struct {
 	// Credentials are the service's access credentials; never nil.
 	Credentials []ServiceCredential `json:"credentials"`
 	Status      ServiceStatus       `json:"status"`
-	Run                 *ServiceRun     `json:"run"`
+	Run         *ServiceRun         `json:"run"`
 	// CreatedBy is who made the service: the person, or an agent's session
 	// whose service request the person approved (ADR 0083).
 	CreatedBy ServiceStartedBy `json:"created_by"`

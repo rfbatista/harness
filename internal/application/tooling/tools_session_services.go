@@ -78,6 +78,9 @@ type serviceView struct {
 	Repository string   `json:"repository"`
 	Ports      []string `json:"ports"`
 	EnvNames   []string `json:"env_names"`
+	// CredentialLabels are the labels of the service's access credentials; a
+	// value never reaches an agent.
+	CredentialLabels []string `json:"credential_labels"`
 	// CreatedBy is who made the service; EnvValues are the saved variables this
 	// session's approved requests set, with their values, and no other.
 	CreatedBy string            `json:"created_by"`
@@ -128,7 +131,7 @@ func SessionServicesTools(sessions ports.SessionRepository, agents ports.AgentLi
 		{
 			Name: "list_services",
 			Description: "List the services of this session's project, by name: the programs the person defined to run beside each other " +
-				"(a command line or a container image), each with its status and its last run. Environment variables show as names only.",
+				"(a command line or a container image), each with its status and its last run. Environment variables and access credentials show as names (labels) only.",
 			InputSchema: emptySchema(),
 			Source:      "code",
 			Handler: func(ctx context.Context, _ map[string]any) (any, error) {
@@ -550,7 +553,7 @@ func (t *servicesTools) settled(ctx context.Context, svc *domain.Service) *domai
 func (t *servicesTools) view(ctx context.Context, svc *domain.Service, sessionID string) serviceView {
 	v := serviceView{
 		Name: svc.Name, Kind: string(svc.Kind), Status: string(svc.Status),
-		Repository: t.repositoryName(ctx, svc.RepositoryID), Ports: []string{}, EnvNames: []string{},
+		Repository: t.repositoryName(ctx, svc.RepositoryID), Ports: []string{}, EnvNames: []string{}, CredentialLabels: []string{},
 	}
 	if svc.Command != nil {
 		v.Command = svc.Command.Line
@@ -569,6 +572,9 @@ func (t *servicesTools) view(ctx context.Context, svc *domain.Service, sessionID
 	vars, _ := domain.ParseDotenv(svc.Env)
 	for _, e := range vars {
 		v.EnvNames = append(v.EnvNames, e.Key)
+	}
+	for _, c := range svc.Credentials {
+		v.CredentialLabels = append(v.CredentialLabels, c.Label)
 	}
 	v.CreatedBy = startedByText(svc.CreatedBy)
 	v.EnvValues, v.PendingRequest = t.requestState(ctx, svc, vars, sessionID)
