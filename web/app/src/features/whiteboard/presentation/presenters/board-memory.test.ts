@@ -266,14 +266,23 @@ describe("the board seeds from the payload it loads (F4)", () => {
 describe("the bar says what the last sample says (F7)", () => {
   const delegate = () => session({ role: "delegate", parentSessionId: architect.id });
 
-  test("a level held by the 3 s hold does not outlive the sample that ended it: over 4.4 GB then 4 MB is not over budget", async () => {
+  test("a noisy dip from over to 94 % inside the 3 s hold keeps over on the bar and the card", async () => {
     const a = delegate();
     const { presenter, source } = await board([architect, { ...a, memory: memorySample(a.id, 4.4) }]);
+    source.emit({ kind: "memory", sample: memorySample(a.id, 3.76, {}, at(1000)) });
     assert.equal(presenter.viewModel.memory?.over, 1);
+    assert.equal(card(presenter, a.id).memory?.state, "over");
+  });
+
+  test("a kill ends the hold: over, a kill, then 4 MB reads normal, with no over badge", async () => {
+    const a = delegate();
+    const { presenter, source } = await board([architect, { ...a, memory: memorySample(a.id, 4.4) }]);
+    source.emit({ kind: "memory-killed", kill: memoryKill(a.id, at(0)) });
     source.emit({ kind: "memory", sample: memorySample(a.id, 0.004, {}, at(1000)) });
     assert.equal(presenter.viewModel.memory?.total, "4 MB");
-    assert.equal(presenter.viewModel.memory?.over, 0, "the total and the count come from the same sample");
-    assert.equal(card(presenter, a.id).memory?.word, "", "and so does the card's word");
+    assert.equal(presenter.viewModel.memory?.over, 0);
+    assert.equal(presenter.viewModel.memory?.near, 0);
+    assert.equal(card(presenter, a.id).memory?.word, "");
   });
 
   test("the hysteresis band still counts: near held at 78 % stays near", async () => {

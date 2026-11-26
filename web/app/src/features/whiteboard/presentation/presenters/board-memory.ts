@@ -1,7 +1,7 @@
 // What the board knows of each session's memory: the last sample and its state (with the hold), and the kills
 // seen since the page opened. The rules are the shared kernel's; this keeps them per session.
 
-import { initialTracker, levelNow, settle, type Level, type Tracker } from "../../../../shared/kernel/memory/level";
+import { initialTracker, releaseHold, settle, type Tracker } from "../../../../shared/kernel/memory/level";
 import { CARD_ENDED_MS, hasValue, killKey, shareOf } from "../../../../shared/kernel/memory/sample";
 import { memoryView, type MemoryState } from "../../../../shared/kernel/memory/view";
 import { summarize, type SessionMemory } from "../../../../shared/kernel/memory/summary";
@@ -73,6 +73,7 @@ export class BoardMemoryState {
     const entry = this.#entry(kill.sessionId);
     if (entry.kills.some((k) => killKey(k.kill) === killKey(kill))) return false;
     entry.kills.push({ kill, seenAt: now });
+    entry.tracker = releaseHold(entry.tracker);
     return true;
   }
 
@@ -84,7 +85,7 @@ export class BoardMemoryState {
   summary(ids: readonly string[], now: number): BarMemory | null {
     const sessions: SessionMemory[] = ids.map((id) => {
       const entry = this.#entries.get(id);
-      return { rssBytes: entry && hasValue(entry.sample) ? entry.sample.rssBytes : null, level: entry ? this.#level(entry) : "normal", killedAt: (entry?.kills ?? []).map((k) => new Date(k.seenAt)) };
+      return { rssBytes: entry && hasValue(entry.sample) ? entry.sample.rssBytes : null, level: entry?.tracker.level ?? "normal", killedAt: (entry?.kills ?? []).map((k) => new Date(k.seenAt)) };
     });
     const sum = summarize(sessions, now);
     if (sum.sampled === 0 && sum.ended === 0) return null;
@@ -93,17 +94,12 @@ export class BoardMemoryState {
     return { live: ids.length, total: sum.total, near: sum.near, over: sum.over, ended: sum.ended, endedLabel, sentence: `Memory: ${parts.join(", ")}.` };
   }
 
-  /** The level shown: the held one, unless the last sample is already below what it needs. */
-  #level(entry: Entry): Level {
-    return hasValue(entry.sample) ? levelNow(entry.tracker.level, shareOf(entry.sample)) : "normal";
-  }
-
   /** What the card says about the session's memory, or null when it says nothing. */
   of(id: string, now: number): CardMemory | null {
     const entry = this.#entries.get(id);
     if (!entry) return null;
     const ended = entry.kills.filter((k) => now - k.seenAt < CARD_ENDED_MS).reduce<{ kill: BoardMemoryKill; seenAt: number } | null>((latest, k) => (latest && latest.seenAt > k.seenAt ? latest : k), null);
-    const view = memoryView(entry.sample, this.#level(entry), ended?.kill ?? null);
+    const view = memoryView(entry.sample, entry.tracker.level, ended?.kill ?? null);
     if (!view) return null;
     return {
       state: view.state,

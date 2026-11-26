@@ -4,7 +4,7 @@
 
 import type { Clock } from "../../../../shared/kernel/clock";
 import { formatBudget, formatShown } from "../../../../shared/kernel/memory/bytes";
-import { initialTracker, settle, type Level, type Tracker } from "../../../../shared/kernel/memory/level";
+import { initialTracker, releaseHold, settle, type Level, type Tracker } from "../../../../shared/kernel/memory/level";
 import type { MemoryPrevention, MemorySource, MemoryStream } from "../../../../shared/kernel/memory/ports";
 import { CHIP_ENDED_MS, hasValue, killKey, shareOf, type BudgetSource, type MemoryKill, type MemorySample } from "../../../../shared/kernel/memory/sample";
 import { memoryView, sameView, type MemoryView } from "../../../../shared/kernel/memory/view";
@@ -281,6 +281,7 @@ export class ChipPresenter extends Presenter<ChipViewModel> {
     const key = killKey(kill);
     if (this.#kills.has(key)) return;
     this.#kills.set(key, kill);
+    this.#tracker = releaseHold(this.#tracker);
     this.#endFor(kill, this.#deps.clock.now() + CHIP_ENDED_MS);
     this.#signal = key;
     this.#addToast(kill);
