@@ -279,6 +279,8 @@ func NewRouter(h *Handler, opts ...Option) *echo.Echo {
 	g.DELETE("/sessions/:id", h.handleDeleteSession)
 	g.GET("/events", h.handleEvents) // a project's session changes (SSE)
 	g.GET("/sessions/:id/events", h.handleSessionEvents)
+	g.POST("/sessions/:id/gate-runs", h.handleRunSessionGates)
+	g.GET("/sessions/:id/gate-runs", h.handleListSessionGateRuns)
 	g.GET("/sessions/:id/interviews", h.handleSessionInterviews)
 	g.GET("/sessions/:id/interviews/events", h.handleSessionInterviewEvents)
 	g.POST("/interviews/:id/answers", h.handleSubmitInterview)

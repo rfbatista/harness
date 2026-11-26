@@ -5,6 +5,7 @@ import (
 	"log/slog"
 
 	"operators-mcp/internal/domain"
+	"operators-mcp/internal/ports"
 )
 
 // The Guard layer's configuration of a session is taken from the agent system
@@ -45,4 +46,16 @@ func (s *Service) GuardConfig(ctx context.Context, sessionID string) (domain.Gua
 		return domain.GuardConfig{}, false
 	}
 	return cfg, ok
+}
+
+// GateWrap is the sandbox profile a gate run of the session executes under:
+// the one the session's own commands run in. It answers a nil wrap when the
+// session is not sandboxed.
+func (s *Service) GateWrap(ctx context.Context, sess *domain.Session) (func(ports.SandboxCommand) (ports.SandboxCommand, error), error) {
+	sb, err := s.resumeSandbox(ctx, sess, nil, nil)
+	if err != nil || sb.policy == nil || s.Sandbox == nil || s.Sandbox.Driver == nil {
+		return nil, err
+	}
+	policy, driver := *sb.policy, s.Sandbox.Driver
+	return func(c ports.SandboxCommand) (ports.SandboxCommand, error) { return driver.Wrap(policy, c) }, nil
 }

@@ -18,6 +18,8 @@ import (
 type fakeAgentSystem struct {
 	mu       sync.Mutex
 	retry    int
+	gates    map[domain.GateKind]string // the commands the gates run
+	timeouts map[domain.GateKind]int
 	err      error
 	requests int
 }
@@ -31,7 +33,16 @@ func (f *fakeAgentSystem) Effective(_ context.Context, _, _ string) (domain.Effe
 	if f.err != nil {
 		return domain.EffectiveAgentSystem{}, f.err
 	}
-	eff := domain.ResolveAgentSystem(domain.AgentSystemHarnessDefaults{})
+	defaults := domain.AgentSystemHarnessDefaults{Gates: map[domain.GateKind]domain.GateDefault{}}
+	for k, c := range f.gates {
+		defaults.Gates[k] = domain.GateDefault{Command: c}
+	}
+	eff := domain.ResolveAgentSystem(defaults)
+	for i, g := range eff.Guard.Gates {
+		if t := f.timeouts[g.Kind]; t > 0 {
+			eff.Guard.Gates[i].TimeoutSeconds.Value = t
+		}
+	}
 	eff.Guard.RetryLimit = domain.AgentSystemField[int]{Value: f.retry, Source: domain.SourceProject}
 	return eff, nil
 }

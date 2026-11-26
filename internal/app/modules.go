@@ -52,6 +52,7 @@ import (
 	"operators-mcp/internal/application/branchgate"
 	"operators-mcp/internal/application/branchwatch"
 	"operators-mcp/internal/application/execution"
+	"operators-mcp/internal/application/gateruns"
 	"operators-mcp/internal/application/gitcredentials"
 	"operators-mcp/internal/application/keychainpath"
 	"operators-mcp/internal/application/notifications"
@@ -474,6 +475,9 @@ var AgentRuntimeModule = fx.Module("agentruntime",
 		sqlite.NewSessionRepository,
 		func(r *sqlite.SessionRepository) ports.SessionRepository { return r },
 		func(r *sqlite.SessionRepository) ports.SandboxViolationStore { return r },
+		sqlite.NewGateRunRepository,
+		func(r *sqlite.GateRunRepository) ports.GateRunStore { return r },
+		newGateRuns,
 		sqlite.NewGuardSessionRepository,
 		func(r *sqlite.GuardSessionRepository) ports.GuardSessions { return r },
 		newAgentClaudeHome,
@@ -1747,4 +1751,18 @@ func sessionAuthor(sessions ports.SessionRepository, owners ports.ProductOwnerSt
 		}
 		return by
 	}
+}
+
+// newGateRuns is the Guard layer's gate runner (ADR 0012): it runs a gated
+// session's gates in its worktree under the session's sandbox profile.
+func newGateRuns(sessions ports.SessionRepository, guard ports.GuardSessions, store ports.GateRunStore, orch *orchestration.Service, ws *workspaces.Service) *gateruns.Service {
+	return gateruns.New(gateruns.Deps{
+		Sessions: sessions, Guard: guard, Store: store, Exec: &gateruns.ShellExecutor{Sandbox: orch},
+		HasDiff: gateruns.GitHasDiff(func(ctx context.Context, workspaceID string) string {
+			if w := ws.Get(ctx, workspaceID); w != nil {
+				return w.BaseSHA
+			}
+			return ""
+		}),
+	})
 }
