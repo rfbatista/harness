@@ -59,7 +59,11 @@ export const serviceCredentials = ({ clipboard } = {}) => () => ({
     const label = event.currentTarget.dataset.label;
     const c = this.credentials.find((x) => x.label === label);
     if (!c) return;
-    await (clipboard ?? navigator.clipboard).writeText(c.value);
-    this.copied = label;
+    try {
+      await (clipboard ?? navigator.clipboard).writeText(c.value);
+      this.copied = label;
+    } catch {
+      this.copied = ""; // the browser refused: the button keeps saying Copy
+    }
   },
 });
