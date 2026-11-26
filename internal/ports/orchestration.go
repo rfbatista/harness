@@ -136,6 +136,9 @@ type ProjectChange struct {
 	// InstructionProposalChanged says an instruction-file proposal was
 	// submitted or decided; the badge follows its open count.
 	InstructionProposalChanged *InstructionProposalChange `json:"instruction_proposal_changed,omitempty"`
+	// TaskMemoryChanged says a file of a task's memory in a repository was
+	// written, by the person or read back from a session.
+	TaskMemoryChanged *TaskMemoryChange `json:"task_memory_changed,omitempty"`
 	// DesignSystemProposal says a design session's proposal reached a state:
 	// the banner, the navigation badge and the Proposals tab follow it.
 	DesignSystemProposal *DesignSystemProposalChange `json:"design_system_proposal,omitempty"`
@@ -332,6 +335,8 @@ func (c ProjectChange) ProjectID() string {
 		return c.InstructionFileChanged.ProjectID
 	case c.InstructionProposalChanged != nil:
 		return c.InstructionProposalChanged.ProjectID
+	case c.TaskMemoryChanged != nil:
+		return c.TaskMemoryChanged.ProjectID
 	case c.BranchRequest != nil:
 		return c.BranchRequest.ProjectID
 	case c.SessionBranches != nil:

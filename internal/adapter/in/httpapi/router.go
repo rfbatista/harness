@@ -426,6 +426,10 @@ func NewRouter(h *Handler, opts ...Option) *echo.Echo {
 	// repository architecture: one structured record per repository
 	g.POST("/get_repository_architecture", h.handleGetRepositoryArchitecture)
 	g.POST("/save_repository_architecture", h.handleSaveRepositoryArchitecture)
+
+	// task memory: plan.md and progress.md per task and repository
+	g.POST("/get_task_memory", h.handleGetTaskMemory)
+	g.POST("/save_task_memory", h.handleSaveTaskMemory)
 	g.POST("/delete_repository_architecture", h.handleDeleteRepositoryArchitecture)
 	g.POST("/preview_layers", h.handlePreviewLayers)
 	g.POST("/export_repository_architecture", h.handleExportRepositoryArchitecture)

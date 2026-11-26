@@ -32,6 +32,7 @@ import (
 	"operators-mcp/internal/application/capabilities"
 	"operators-mcp/internal/application/designsystem"
 	"operators-mcp/internal/application/instructionproposal"
+	"operators-mcp/internal/application/taskmemory"
 	"operators-mcp/internal/application/projects"
 	"operators-mcp/internal/application/repoarch"
 	"operators-mcp/internal/application/settings"
@@ -65,6 +66,8 @@ type Deps struct {
 	// InstructionProposals keeps instruction-file proposals; nil with
 	// InstructionDrafts or ArchRecords nil disables them.
 	InstructionProposals ports.InstructionProposalStore
+	// TaskMemories keeps tasks' memory files; nil disables them.
+	TaskMemories ports.TaskMemoryStore
 	Agents        ports.AgentRepository
 	Prompts       ports.PromptRepository
 	Skills        ports.SkillRepository
@@ -99,6 +102,9 @@ type Catalog struct {
 	DesignSystems *designsystem.Service
 	// InstructionProposals is nil without Deps.InstructionDrafts.
 	InstructionProposals *instructionproposal.Service
+	// TaskMemories is nil without Deps.TaskMemories; it reads tasks through
+	// UseTasks, once planning is built.
+	TaskMemories *taskmemory.Service
 	Agents        *agents.Service
 	Capabilities  *capabilities.Service
 	Settings      *settings.Service
@@ -191,11 +197,16 @@ func New(d Deps) Catalog {
 		instructions = instructionproposal.NewService(instructionproposal.Deps{Drafts: d.InstructionDrafts, Proposals: d.InstructionProposals, Repositories: pr, Files: repoArch, Applier: repoArch})
 	}
 
+	var memories *taskmemory.Service
+	if d.TaskMemories != nil {
+		memories = taskmemory.NewService(d.TaskMemories, pr, nil)
+	}
+
 	arch.Subscribe(bus)
 	ag.Subscribe(bus)
 	caps.Subscribe(bus)
 
-	return Catalog{Bus: bus, Projects: pr, Architecture: arch, RepositoryArchitectures: repoArch, DesignSystems: designs, InstructionProposals: instructions, Agents: ag, Capabilities: caps, Settings: st}
+	return Catalog{Bus: bus, Projects: pr, Architecture: arch, RepositoryArchitectures: repoArch, DesignSystems: designs, InstructionProposals: instructions, TaskMemories: memories, Agents: ag, Capabilities: caps, Settings: st}
 }
 
 // Tooling is the catalog as the built-in tool groups need it.

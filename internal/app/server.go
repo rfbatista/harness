@@ -211,6 +211,7 @@ func registerHTTPServer(lc fx.Lifecycle, cfg Config, cat catalog.Catalog, appRun
 		RepositoryArchitectures: cat.RepositoryArchitectures,
 		// What agents proposed for a repository's instruction files.
 		InstructionProposals:         cat.InstructionProposals,
+		TaskMemories:                 cat.TaskMemories,
 		InstructionProposalDecisions: cat.InstructionProposals,
 		// One structured record per project: tokens, principles, components.
 		DesignSystems: cat.DesignSystems,

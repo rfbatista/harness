@@ -112,6 +112,7 @@ var PersistenceModule = fx.Module("persistence",
 		asPort(sqlite.NewDesignProposalRepository, new(ports.DesignProposalStore)),
 		asPort(sqlite.NewDesignExportRepository, new(ports.DesignExportStore)),
 		asPort(sqlite.NewInstructionDraftRepository, new(ports.InstructionDraftStore)),
+		asPort(sqlite.NewTaskMemoryRepository, new(ports.TaskMemoryStore)),
 		asPort(sqlite.NewInstructionProposalRepository, new(ports.InstructionProposalStore)),
 		asPort(sqlite.NewProductOwnerRepository, new(ports.ProductOwnerStore)),
 		asPort(sqlite.NewProductOwnerDigestRepository, new(ports.ProductOwnerDigestStore)),
@@ -298,6 +299,7 @@ type catalogParams struct {
 	DesignExports   ports.DesignExportStore
 	InstructionDrafts    ports.InstructionDraftStore
 	InstructionProposals ports.InstructionProposalStore
+	TaskMemories         ports.TaskMemoryStore
 	Agents          ports.AgentRepository
 	Prompts         ports.PromptRepository
 	Skills          ports.SkillRepository
@@ -330,6 +332,7 @@ func newCatalog(p catalogParams) catalog.Catalog {
 		DesignExports:    p.DesignExports,
 		InstructionDrafts:    p.InstructionDrafts,
 		InstructionProposals: p.InstructionProposals,
+		TaskMemories:         p.TaskMemories,
 		Agents:           p.Agents,
 		Prompts:          p.Prompts,
 		Skills:           p.Skills,
@@ -640,6 +643,10 @@ func bindVirtualShells(orch *orchestration.Service, shells *vfs.Service, plan *p
 	}
 	// A proposal reaches open pages on the project feed and the shells, which
 	// show its skills read-only.
+	if cat.TaskMemories != nil {
+		cat.TaskMemories.UseFeed(changeSinks{orch, shells})
+		cat.TaskMemories.UseTasks(plan)
+	}
 	if cat.InstructionProposals != nil {
 		cat.InstructionProposals.UseFeed(changeSinks{orch, shells})
 		cat.InstructionProposals.UseTasks(plan)
