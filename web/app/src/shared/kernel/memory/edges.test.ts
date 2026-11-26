@@ -79,7 +79,7 @@ describe("the 3 s hold to the millisecond (story 3)", () => {
 
 describe("rounding near 1 GB (story 4)", () => {
   test("whole MB just below 1 GB, 0.1 GB from 1 GB", () => {
-    assert.equal(formatShown(1 * GB - 1), "1024 MB");
+    assert.equal(formatShown(1 * GB - 1), "1.0 GB", "never 1024 MB");
     assert.equal(formatShown(1023.4 * MB), "1023 MB");
     assert.equal(formatShown(1 * GB), "1.0 GB");
     assert.equal(formatShown(1 * GB + 1), "1.0 GB");

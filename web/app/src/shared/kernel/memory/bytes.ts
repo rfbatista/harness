@@ -5,7 +5,8 @@ const GB = 1024 ** 3;
 
 /** "3.4 GB", "905 MB". */
 export function formatShown(bytes: number): string {
-  if (bytes < GB) return `${Math.round(bytes / MB)} MB`;
+  // MB until its rounding would reach 1024: that is 1.0 GB, never "1024 MB".
+  if (Math.round(bytes / MB) < 1024) return `${Math.round(bytes / MB)} MB`;
   return `${(Math.round((bytes / GB) * 10 + 1e-9) / 10).toFixed(1)} GB`;
 }
 
