@@ -69,3 +69,9 @@ test("the chip is the last meta item before the actions, so showing it later mov
   assert.match(head, /& > \.meta \.memory \{ order: 1; \}/);
   assert.match(head, /& > \.actions \{ order: 2; \}/);
 });
+
+test("in the head the chip is what shrinks: it may shrink, its word takes an ellipsis, and the actions stay whole", () => {
+  assert.match(memory, /flex: 0 1 auto;\s*min-inline-size: 0;/);
+  assert.match(memory, /& > \.word \{ min-inline-size: 0; overflow: hidden; text-overflow: ellipsis;/);
+  assert.match(head, /& > \.actions \{[^}]*flex: none;/);
+});

@@ -19,7 +19,9 @@ const kill = (pid: number): MemoryKill => ({
   sessionId: SESSION, taskId: "t1", killedAt: new Date(), pid, command: "node jest", rssBytes: 3.5 * GB, treeRssBytes: 4.4 * GB, budgetBytes: 4 * GB, signal: "SIGTERM",
 });
 
-const initial: MemoryRead = { sample: sample(1.2), kills: [], budgetSource: "repository", prevention: { heapMb: 1365, testWorkers: 2 } };
+// ?gb=3.4 sets the first sample; ?kill=1 puts a kill of this minute in the first read.
+const params = new URLSearchParams(location.search);
+const initial: MemoryRead = { sample: sample(Number(params.get("gb") ?? 1.2)), kills: params.has("kill") ? [kill(1)] : [], budgetSource: "repository", prevention: { heapMb: 1365, testWorkers: 2 } };
 const source = fakeSource(initial);
 // The first read is slow, as on the network: the chip's first render has nothing to show.
 let release!: () => void;

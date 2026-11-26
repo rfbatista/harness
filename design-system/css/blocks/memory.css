@@ -13,12 +13,15 @@
   .memory {
     --_tone: var(--color-ink-muted);
     display: inline-grid;
-    grid-template-columns: auto auto;
+    grid-template-columns: auto minmax(0, 1fr);
     grid-template-rows: auto 3px;
     column-gap: var(--space-xs);
     row-gap: 4px;
     align-items: baseline;
-    flex: none;
+    /* In the head the chip is what gives way: it shrinks (the word takes an ellipsis) before the actions are touched. */
+    flex: 0 1 auto;
+    min-inline-size: 0;
+    max-inline-size: 100%;
     padding: 0;
     border: 0;
     background: none;
@@ -33,7 +36,7 @@
 
     & > .num { color: var(--color-ink-muted); }
     & .of { color: var(--color-ink-faint); }
-    & > .word { color: var(--_tone); font-weight: var(--weight-medium); }
+    & > .word { min-inline-size: 0; overflow: hidden; text-overflow: ellipsis; color: var(--_tone); font-weight: var(--weight-medium); }
     & > .word::before { content: "· "; color: var(--color-ink-faint); font-weight: normal; }
     & > .track {
       grid-column: 1 / -1;
