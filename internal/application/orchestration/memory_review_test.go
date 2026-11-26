@@ -148,3 +148,28 @@ func TestAProductOwnerSessionIsWatchedAndGetsItsPrevention(t *testing.T) {
 		t.Errorf("session = %+v, want its budget and prevention recorded", sess)
 	}
 }
+
+// F6, the race itself: when the CLI has already exited by the time the session
+// is handed to the vigia, no watch is installed (it would run for good).
+func TestASessionThatHasAlreadyEndedIsNotHandedToTheVigia(t *testing.T) {
+	svc := newHostedService(t, scriptAgent{script: `cat`})
+	withTokenSavers(t, svc)
+	fw := &fakeWatcher{}
+	svc.MemoryWatcher = fw
+	sess := startOnServer(t, svc)
+	if err := svc.Stop(context.Background(), sess.ID); err != nil {
+		t.Fatal(err)
+	}
+	waitStatus(t, svc, sess.ID, domain.SessionStopped)
+	fw.mu.Lock()
+	before := len(fw.watched)
+	fw.mu.Unlock()
+
+	svc.watchTerminalMemory(sess.ID)
+
+	fw.mu.Lock()
+	defer fw.mu.Unlock()
+	if len(fw.watched) != before {
+		t.Errorf("a watch was installed for an ended session: %d → %d", before, len(fw.watched))
+	}
+}
