@@ -62,7 +62,7 @@ func (t *servicesTools) definitionTools() []domain.Tool {
 				}
 				out, err := t.submitDefinition(ctx, sess, ports.ServiceRequestInput{
 					SessionID: sess.ID, Action: domain.ServiceRequestCreate, ServiceName: in.Name, Reason: getString(args, "reason", ""),
-					Summary: t.createSummary(ctx, in), Proposed: &in, EnvChanges: envSets(in.Env),
+					Summary: t.createSummary(ctx, in), Proposed: &in, EnvChanges: envSets(in.Env), CredentialChanges: credentialSets(in.Credentials),
 				})
 				if err != nil {
 					return nil, err
@@ -100,7 +100,7 @@ func (t *servicesTools) definitionTools() []domain.Tool {
 				out, err := t.submitDefinition(ctx, sess, ports.ServiceRequestInput{
 					SessionID: sess.ID, Action: domain.ServiceRequestUpdate, ServiceID: svc.ID, ServiceName: svc.Name, Reason: getString(args, "reason", ""),
 					Summary: updateSummary(svc.Name, changes, envChanges, credChanges), Proposed: &after,
-					Changes: append(append(changes, envFieldChanges(envChanges)...), credentialFieldChanges(credChanges)...), EnvChanges: envChanges,
+					Changes: append(append(changes, envFieldChanges(envChanges)...), credentialFieldChanges(credChanges)...), EnvChanges: envChanges, CredentialChanges: credChanges,
 				})
 				if err != nil {
 					return nil, err

@@ -54,6 +54,9 @@ func (m ServiceRequestModel) domain() (domain.ServiceRequest, error) {
 	var r domain.ServiceRequest
 	err := json.Unmarshal([]byte(m.RequestJSON), &r)
 	r.ID = m.ID
+	if r.Credentials == nil {
+		r.Credentials = []domain.ServiceRequestCredential{} // a request filed before credentials
+	}
 	return r, err
 }
 

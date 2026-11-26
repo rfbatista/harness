@@ -1,6 +1,7 @@
 package httpapi
 
 import (
+	"context"
 	"encoding/json"
 	"reflect"
 	"slices"
@@ -178,5 +179,83 @@ func TestCredentials_AgentsSetAndUnsetThemThroughTheToolsAndSeeOnlyTheLabels(t *
 	})
 	if !strings.Contains(msg, "label") || strings.Contains(msg, credSecret) {
 		t.Fatalf("an empty label is refused without the value: %q", msg)
+	}
+}
+
+func requestCredentials(r map[string]any) []map[string]any {
+	var out []map[string]any
+	for _, c := range r["credentials"].([]any) {
+		out = append(out, c.(map[string]any))
+	}
+	return out
+}
+
+func TestCredentials_APendingRequestShowsThePersonTheChangeAndTheFeedNoValue(t *testing.T) {
+	f := newRequestsFixture(t, 5*time.Second)
+	f.ticketID = "task-1"
+	f.session("sess-1", f.projectID, f.repoID, true)
+	agent := f.as("sess-1")
+	feed, err := f.svc.FollowServices(context.Background(), f.projectID)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	done := agent.callAsync("create_service", map[string]any{
+		"name": "app", "kind": "command", "reason": "a test account", "command": map[string]any{"line": "sleep 30"},
+		"credentials": map[string]any{"user": "tester", "password": credSecret},
+	})
+	r := f.awaitPending(1)[0]
+	got := requestCredentials(r)
+	if len(got) != 2 || got[0]["label"] != "password" || got[0]["value"] != credSecret || got[0]["change"] != "set" || got[1]["label"] != "user" {
+		t.Fatalf("the person reads each credential with its value: %v", got)
+	}
+	if s, _ := r["summary"].(string); strings.Contains(s, credSecret) {
+		t.Fatalf("summary holds a value: %q", s)
+	}
+
+	// A denial creates nothing.
+	f.answer(r["id"].(string), "deny", "")
+	f.waitingFor(done)
+	if list := f.taskServices(""); len(list) != 0 {
+		t.Fatalf("a denied create made %v", list)
+	}
+
+	// An approved update changes them; the request shows set and unset.
+	id := f.commandIn(f.repoID, "web", "sleep 30", "")
+	f.call("POST", "/api/update_service", map[string]any{"service_id": id, "service": map[string]any{
+		"name": "web", "kind": "command", "command": map[string]any{"line": "sleep 30", "ports": []int{8080}}, "repository_id": f.repoID,
+		"credentials": creds("old", "x"),
+	}})
+	done = agent.callAsync("update_service", map[string]any{
+		"name": "web", "reason": "rotate",
+		"changes": map[string]any{"credentials": map[string]any{"set": map[string]any{"new": credSecret}, "unset": []string{"old"}}},
+	})
+	r = f.awaitPending(1)[0]
+	got = requestCredentials(r)
+	if len(got) != 2 || got[0]["label"] != "old" || got[0]["change"] != "unset" || got[1]["label"] != "new" || got[1]["value"] != credSecret {
+		t.Fatalf("update credentials = %v", got)
+	}
+	f.answer(r["id"].(string), "approve", "")
+	out := f.waitingFor(done)
+	if out.msg != "" {
+		t.Fatalf("update refused: %s", out.msg)
+	}
+	if c := credentialsOf(f.service(id)); !reflect.DeepEqual(c, creds("new", credSecret)) {
+		t.Fatalf("credentials after approval = %v", c)
+	}
+	b, _ := json.Marshal(out.out)
+	if strings.Contains(string(b), credSecret) {
+		t.Fatalf("the agent's answer holds the value: %s", b)
+	}
+
+	// The feed carried every request step with no value.
+	var all []byte
+	for len(feed) > 0 {
+		e := <-feed
+		b, _ := json.Marshal(e.Request)
+		all = append(all, b...)
+	}
+	if strings.Contains(string(all), credSecret) {
+		t.Fatalf("a feed request event holds a value: %s", all)
 	}
 }
