@@ -35,6 +35,12 @@ func ValidateSetting(key, value string) error {
 		if _, err := ParseCavemanIntensity(value); err != nil {
 			return err
 		}
+	case SettingMemoryBudget:
+		if value != "" {
+			if _, err := ParseMemoryBudget(value); err != nil {
+				return err
+			}
+		}
 	case SettingAgentsMoveDocuments:
 		if value != "" && value != "true" && value != "false" {
 			return &StructuredError{Code: "INVALID_INPUT", Message: key + " must be true or false"}

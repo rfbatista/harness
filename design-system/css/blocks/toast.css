@@ -25,7 +25,7 @@
     animation: toast-in var(--duration-settle) var(--ease-out-expo);
 
     &[data-tone="danger"] {
-      border-color: color-mix(in oklch, var(--color-danger) 45%, var(--color-line-strong));
+      border-color: color-mix(in oklch, var(--color-danger) 45%, transparent);
     }
   }
 

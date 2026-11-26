@@ -1,4 +1,5 @@
 import { describe, test } from "node:test";
+import { wireKill, wireSample } from "../../../shared/testing/memory-fixtures";
 import assert from "node:assert/strict";
 import { apiClient, type FetchLike } from "../../../shared/infrastructure/api-client";
 import { memoryFeed } from "../../../shared/infrastructure/memory-feed";
@@ -86,6 +87,23 @@ describe("HTTP board source: the project feed", () => {
     feed.emit(path, { review_request: { id: "r1", task_id: "t1", state: "pending", created_at: "2026-11-23T12:00:00Z" } });
     feed.emit(path, { deleted: true, session: { id: "s2" } });
     assert.deepEqual((events as { kind: string }[]).map((e) => e.kind), ["session", "message", "review", "session-deleted"]);
+  });
+
+  test("reads the project feed's memory sample and kill (Contract: memória da sessão)", () => {
+    const { feed, events } = follow();
+    const path = "/events?project_id=p%2F1";
+    feed.emit(path, { memory: wireSample() });
+    feed.emit(path, { memory_killed: wireKill() });
+    const [sample, kill] = events as { kind: string; sample?: { rssBytes: number }; kill?: { command: string } }[];
+    assert.deepEqual([sample?.kind, sample?.sample?.rssBytes, kill?.kind, kill?.kill?.command], ["memory", 1288490188, "memory-killed", "node jest"]);
+  });
+
+  test("a session of the payload carries its memory sample, or null when it has none or it does not read", async () => {
+    const wire = { id: "s2", ticket_id: "t1", status: "idle", created_at: "2026-11-23T12:00:00Z", updated_at: "2026-11-23T12:05:00Z" };
+    const answers = [{ ...wire, memory: wireSample() }, { ...wire, memory: null }, wire, { ...wire, memory: { rss_bytes: "lots" } }];
+    const source = httpBoardSource(apiClient((async () => Response.json({ sessions: answers })) as FetchLike), memoryFeed());
+    const sessions = await source.sessions("t1");
+    assert.deepEqual(sessions.map((x) => x.memory?.rssBytes ?? null), [1288490188, null, null, null]);
   });
 
   test("ignores kinds it does not draw and drops messages it cannot read", () => {

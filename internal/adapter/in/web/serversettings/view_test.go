@@ -99,3 +99,44 @@ func TestAStoredOffTurnsOneNewModesSwitchOff(t *testing.T) {
 		t.Errorf("switches = %v", got)
 	}
 }
+
+// memoryBudgetField is the Server page's orçamento field as painted: its
+// value in GB and the bytes the component starts from.
+func memoryBudgetField(t *testing.T, stored settings) (gb, bytes string) {
+	t.Helper()
+	h := Handler{
+		Paths:    Paths{DataDir: "/home/me/.harness", Source: "a test", Database: ":memory:"},
+		Settings: stored,
+		Layout:   func(context.Context, string, string, string) (shell.Frame, error) { return shell.Frame{}, nil },
+		Render: func(w http.ResponseWriter, r *http.Request, status int, page templ.Component) error {
+			return page.Render(r.Context(), w)
+		},
+	}
+	rec := httptest.NewRecorder()
+	if err := h.Page(rec, httptest.NewRequest(http.MethodGet, "/server", nil)); err != nil {
+		t.Fatal(err)
+	}
+	html := rec.Body.String()
+	field := regexp.MustCompile(`<input[^>]*data-memory-budget[^>]*>`).FindString(html)
+	if field == "" {
+		t.Fatalf("the page has no memory budget field:\n%s", html)
+	}
+	root := regexp.MustCompile(`<[^>]*x-data="memoryBudget"[^>]*>`).FindString(html)
+	return regexp.MustCompile(`value="([^"]*)"`).FindStringSubmatch(field)[1],
+		regexp.MustCompile(`data-bytes="([^"]*)"`).FindStringSubmatch(root)[1]
+}
+
+func TestTheMemoryBudgetFieldShowsFourGBWhenNothingIsStored(t *testing.T) {
+	if gb, bytes := memoryBudgetField(t, settings{}); gb != "4" || bytes != "4294967296" {
+		t.Errorf("field = %q GB (%q bytes), want 4 GB", gb, bytes)
+	}
+}
+
+func TestTheMemoryBudgetFieldShowsTheStoredBudgetAndFallsBackWhenItIsInvalid(t *testing.T) {
+	if gb, _ := memoryBudgetField(t, settings{"memory.budget_bytes": "2684354560"}); gb != "2.5" {
+		t.Errorf("field = %q GB, want 2.5", gb)
+	}
+	if gb, _ := memoryBudgetField(t, settings{"memory.budget_bytes": "lots"}); gb != "4" {
+		t.Errorf("an invalid stored budget shows %q GB, want 4", gb)
+	}
+}

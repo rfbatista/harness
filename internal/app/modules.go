@@ -1125,6 +1125,9 @@ func newOrchestrationService(
 	svc.SessionArchitectureURL = func(sessionID string) string {
 		return base + httpapi.SessionArchitecturePath(sessionID)
 	}
+	svc.SessionMemoryURL = func(sessionID string) string {
+		return base + httpapi.SessionMemoryPath(sessionID)
+	}
 	svc.WorktreeArchitectureURL = func(workspaceID string) string {
 		return base + httpapi.WorktreeArchitecturePath(workspaceID)
 	}
@@ -1138,6 +1141,7 @@ func newOrchestrationService(
 	svc.ShimBinary = cfg.ShimBinary
 	svc.DeveloperBin = developerdir.Bin
 	svc.TokenSavers = cat.Capabilities
+	svc.MemoryBudgets = cat.Capabilities
 	svc.Settings = cat.Settings
 	svc.Transcripts = transcripts
 	svc.TranscriptReader = transcriptReader

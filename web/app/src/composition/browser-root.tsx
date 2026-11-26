@@ -46,6 +46,11 @@ import { httpContextSource } from "../features/context/infrastructure/http-conte
 import { ContextPropsDto } from "../features/context/infrastructure/dto/context-props-dto";
 import { browserTabFront } from "../features/context/infrastructure/browser-tab-front";
 import { httpContextFeed } from "../features/context/infrastructure/http-context-feed";
+import { MemoryPropsDto } from "../features/session-memory/infrastructure/dto/memory-props-dto";
+import { feedMemoryStream } from "../features/session-memory/infrastructure/feed-memory-stream";
+import { httpMemorySource } from "../features/session-memory/infrastructure/http-memory-source";
+import { ChipPresenter } from "../features/session-memory/presentation/presenters/chip-presenter";
+import { ChipView } from "../features/session-memory/presentation/views/chip-view";
 import { ContextDotPresenter } from "../features/context/presentation/presenters/context-dot-presenter";
 import { ContextDotView } from "../features/context/presentation/views/context-dot-view";
 import { ContextPresenter } from "../features/context/presentation/presenters/context-presenter";
@@ -285,6 +290,18 @@ export function mountIslands(doc: Document): Dispose {
       root.render(<ContextDotView presenter={presenter} />);
       return () => {
         presenter.close();
+        root.unmount();
+      };
+    },
+    // The memory chip in the session head, beside the token total: one island per selected session.
+    "session-memory": (mount, props) => {
+      const { session_id, live } = MemoryPropsDto.fromJSON(props);
+      const presenter = new ChipPresenter({ source: httpMemorySource(api), stream: feedMemoryStream(feed), clock: systemClock, sessionId: session_id, live, scheduler: { after: (ms, fn) => { const id = win.setTimeout(fn, ms); return () => win.clearTimeout(id); } }, time: (at) => at.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }) });
+      const root = createRoot(mount);
+      root.render(<ChipView presenter={presenter} toastHost={win.document.body} />);
+      void presenter.start();
+      return () => {
+        presenter.dispose();
         root.unmount();
       };
     },

@@ -233,6 +233,14 @@ func (s *Service) Subscribe(bus ports.EventSubscriber) {
 		}
 		return nil
 	})
+	ports.On(bus, func(ctx context.Context, ev domain.SessionMemoryKilled) error {
+		s.onMemoryKilled(ev.Kill)
+		return nil
+	})
+	ports.On(bus, func(ctx context.Context, ev domain.SessionMemoryKillFailed) error {
+		s.onMemoryKillFailed(ev.Kill)
+		return nil
+	})
 	ports.On(bus, func(ctx context.Context, ev domain.InterviewOpened) error {
 		s.onInterviewOpened(ev)
 		return nil
@@ -770,6 +778,45 @@ func (s *Service) onSessionFailed(sessionID string) {
 		Link:  domain.TaskLink(sess.ProjectID, sess.TicketID), CauseKey: sessionFailedKey(sess.ID),
 	}
 	failedWhat(sess.LastAction).apply(n)
+	s.record(n, true)
+}
+
+// onMemoryKilled records one encerramento por memória: an info notification
+// per kill, linking to the session. The command is a process name and its first
+// argument, never a full command line.
+func (s *Service) onMemoryKilled(k domain.MemoryKill) {
+	sess := s.readers.Sessions.Get(k.SessionID)
+	if sess == nil || sess.ProjectID == "" {
+		slog.Warn("notification for a session that is not recorded", "session", k.SessionID)
+		return
+	}
+	n := &domain.Notification{
+		ProjectID: sess.ProjectID, TaskID: sess.TicketID, SessionID: sess.ID,
+		Kind: domain.NotificationSessionMemoryKilled, Level: domain.NotificationInfo,
+		Actor: systemActor(domain.ActorHarness),
+		Link:  sessionLink(sess), CauseKey: "session_memory_killed:" + sess.ID + ":" + strconv.Itoa(k.PID) + ":" + strconv.FormatInt(k.KilledAt.UnixNano(), 10),
+		Body: "Used " + formatGB(k.RSSBytes) + " of the " + formatGB(k.Budget) + " memory budget (" + k.Signal + "). The session keeps running.",
+	}
+	memoryKilledWhat(k.Command).apply(n)
+	s.record(n, true)
+}
+
+// onMemoryKillFailed records a process the vigia could not end: one info
+// notification per process, linking to the session.
+func (s *Service) onMemoryKillFailed(k domain.MemoryKill) {
+	sess := s.readers.Sessions.Get(k.SessionID)
+	if sess == nil || sess.ProjectID == "" {
+		slog.Warn("notification for a session that is not recorded", "session", k.SessionID)
+		return
+	}
+	n := &domain.Notification{
+		ProjectID: sess.ProjectID, TaskID: sess.TicketID, SessionID: sess.ID,
+		Kind: domain.NotificationSessionMemoryKillFailed, Level: domain.NotificationInfo,
+		Actor: systemActor(domain.ActorHarness),
+		Link:  sessionLink(sess), CauseKey: "session_memory_kill_failed:" + sess.ID + ":" + strconv.Itoa(k.PID),
+		Body: "It still holds " + formatGB(k.RSSBytes) + " after SIGKILL and could not be ended, so the session stays over its " + formatGB(k.Budget) + " memory budget.",
+	}
+	memoryKillFailedWhat(k.Command).apply(n)
 	s.record(n, true)
 }
 

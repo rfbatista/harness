@@ -1,0 +1,60 @@
+package psprocs
+
+import (
+	"context"
+	"strings"
+	"testing"
+)
+
+func TestParseReadsPidSessionRSSNameFirstArgAndTheConversation(t *testing.T) {
+	rows := Parse(`
+    1     0 0x0      9840 Wed Nov 25 20:00:00 2026 /sbin/launchd
+  102   101 0xabc1 409600 Thu Nov 26 08:59:31 2026 /usr/local/bin/claude --session-id c-1 --token s3cret
+  201   102 0xabc1 307200 Thu Nov 26 09:00:02 2026 node /repo/node_modules/.bin/jest --runInBand
+  bad line
+`)
+	if len(rows) != 3 {
+		t.Fatalf("rows = %+v, want 3", rows)
+	}
+	a := rows[1]
+	if a.PID != 102 || a.PPID != 101 || a.RSSBytes != 400<<20 || a.Name != "claude" || a.Arg != "--session-id" || a.Session != "c-1" || a.Started != "Thu Nov 26 08:59:31 2026" {
+		t.Errorf("agent row = %+v", a)
+	}
+	if rows[1].SID == 0 || rows[1].SID != rows[2].SID || rows[0].SID != 0 {
+		t.Errorf("session keys = %d %d %d", rows[0].SID, rows[1].SID, rows[2].SID)
+	}
+	if rows[2].Name != "node" || rows[2].Arg != "/repo/node_modules/.bin/jest" || rows[2].Session != "" {
+		t.Errorf("node row = %+v", rows[2])
+	}
+}
+
+// N2: lstart follows the locale ps runs in, so ps is run in C, whose layout is
+// the five words Parse reads.
+func TestPsRunsInTheCLocaleSoLstartHasTheFiveWordLayout(t *testing.T) {
+	cmd := psCommand(context.Background())
+	var lc string
+	for _, kv := range cmd.Env {
+		if strings.HasPrefix(kv, "LC_ALL=") {
+			lc = kv
+		}
+	}
+	if lc != "LC_ALL=C" {
+		t.Errorf("ps env has %q (all: %v), want LC_ALL=C last", lc, cmd.Env)
+	}
+	if got := cmd.Env[len(cmd.Env)-1]; got != "LC_ALL=C" {
+		t.Errorf("LC_ALL=C is not last (%q): an inherited LC_ALL would win", got)
+	}
+}
+
+// A locale whose lstart is not the C layout would shift every later field: the
+// line is dropped, never read with a later argument taken for the command's
+// name or first argument.
+func TestALineWhoseLstartIsNotTheCLayoutIsDroppedNotMisread(t *testing.T) {
+	rows := Parse(`
+  201   102 0xabc1 307200 2026/11/26 09:00:02 node --token s3cret /repo/jest extra words here
+  202   102 0xabc1 307200 Thu Nov 26 09:00:02 2026 node jest
+`)
+	if len(rows) != 1 || rows[0].PID != 202 || rows[0].Name != "node" || rows[0].Arg != "jest" {
+		t.Errorf("rows = %+v, want only the C-layout line", rows)
+	}
+}

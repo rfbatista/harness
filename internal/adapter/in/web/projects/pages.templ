@@ -316,6 +316,9 @@ templ EnvFilesPage(v EnvFilesView) {
 					if v.TokenSavers != nil {
 						@tokensavers.Section(*v.TokenSavers)
 					}
+					if v.MemoryBudget != nil {
+						@tokensavers.MemoryBudget(*v.MemoryBudget)
+					}
 				</div>
 			</div>
 		</main>

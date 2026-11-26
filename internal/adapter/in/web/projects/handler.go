@@ -39,6 +39,9 @@ type Handler struct {
 	// TokenSavers paints the Token savers control on the project's and the
 	// repository's settings pages; nil leaves it out.
 	TokenSavers ports.TokenSaverActivationReader
+	// MemoryBudgets paints the memory budget control on the repository's
+	// settings page; nil leaves it out.
+	MemoryBudgets ports.MemoryBudgetOverrides
 	// OpenProposals counts a repository's open instruction-file proposals for
 	// the badge beside its Architecture link; nil counts none.
 	OpenProposals func(ctx context.Context, repositoryID string) int
@@ -204,6 +207,7 @@ func (h Handler) EnvFileList(w http.ResponseWriter, r *http.Request) error {
 		Seed:           EnvFilesSeed{RepositoryID: repo.ID, EnvFiles: files},
 		RunCommands:    runCommands,
 		TokenSavers:    tokensavers.Read(ctx, h.TokenSavers, domain.ActivationOwner{Level: domain.ActivationLevelRepository, ID: repo.ID}),
+		MemoryBudget:   tokensavers.ReadMemoryBudget(ctx, h.MemoryBudgets, domain.ActivationOwner{Level: domain.ActivationLevelRepository, ID: repo.ID}),
 	}))
 }
 
@@ -217,6 +221,8 @@ type EnvFilesView struct {
 	RunCommands *RunCommandsSeed
 	// TokenSavers seeds the Token savers section; nil leaves it out.
 	TokenSavers *tokensavers.Seed
+	// MemoryBudget seeds the Memory budget section; nil leaves it out.
+	MemoryBudget *tokensavers.MemoryBudgetSeed
 }
 
 // RunCommandsSeed is what runsCommandsSettings starts from, in the API's shape.

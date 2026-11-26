@@ -43,6 +43,8 @@ const REV6 = {
   branch_finding: { level: "action", actor: { kind: "system", name: "branch watch" }, verb: "found a push with no approved request on", object: { text: "agent/x", code: true } },
   service_request: { level: "action", actor: { kind: "agent", name: "devops", mode: "operate", session_id: "s-ops" }, verb: "wants to restart", object: { text: "api on main", code: true } },
   sessions_interrupted: { level: "action", actor: { kind: "system", name: "restart" }, verb: "interrupted 2 sessions", object: { text: "sessions", code: false } },
+  session_memory_kill_failed: { level: "info", actor: { kind: "system", name: "harness" }, verb: "could not end a process for memory", object: { text: "node jest", code: true } },
+  session_memory_killed: { level: "info", actor: { kind: "system", name: "harness" }, verb: "ended a process for memory", object: { text: "node jest", code: true } },
   agent: { level: "info", actor: { kind: "agent", name: "devops", mode: "operate", session_id: "s-ops" } },
 };
 

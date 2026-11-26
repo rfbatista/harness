@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"log/slog"
 	"strings"
 
 	"github.com/rfbatista/llmkit"
@@ -46,6 +47,9 @@ func (s *Service) StartProductOwnerSession(ctx context.Context, spec ports.Produ
 		AutoRun:    p.permission == llmkit.PermissionBypass,
 		Mode:       domain.SessionModeProductOwner,
 		Sandbox:    p.sandbox.facts,
+
+		MemoryBudgetBytes: p.memory.bytes, MemoryBudgetSource: p.memory.source,
+		MemoryHeapMB: p.memory.heapMB, MemoryTestWorkers: p.memory.testWorker,
 	}); err != nil {
 		_ = sess.Stop()
 		if p.cleanup != nil {
@@ -56,6 +60,7 @@ func (s *Service) StartProductOwnerSession(ctx context.Context, spec ports.Produ
 	if p.cleanup != nil {
 		s.adoptCleanup(id, p.cleanup)
 	}
+	s.watchMemory(id, "", p.memory.bytes, id, 0)
 	// ADR 0099: what the thread started with, for its Context tab. The first
 	// message is the thread's own and not part of the entry.
 	s.recordStart(ctx, id, p.prepared, "")
@@ -71,6 +76,7 @@ func (s *Service) ResumeProductOwnerSession(ctx context.Context, sessionID strin
 		return &domain.StructuredError{Code: "SESSION_ALREADY_RUNNING", Message: "session is being resumed"}
 	}
 	defer s.releaseResume(sessionID)
+	s.reopenRun(sessionID)
 	if _, ok := s.runtime.Get(sessionID); ok {
 		return &domain.StructuredError{Code: "SESSION_ALREADY_RUNNING", Message: "session is running"}
 	}
@@ -103,6 +109,11 @@ func (s *Service) ResumeProductOwnerSession(ctx context.Context, sessionID strin
 	if p.cleanup != nil {
 		s.adoptCleanup(sessionID, p.cleanup)
 	}
+	p.memory.apply(sess)
+	if err := s.sessions.UpdateMemoryBudget(sessionID, sess); err != nil {
+		slog.Warn("memory budget not recorded for the resumed session", "session", sessionID, "err", err)
+	}
+	s.watchMemory(sessionID, "", p.memory.bytes, sessionID, 0)
 	go s.pump(live)
 	return nil
 }
@@ -194,6 +205,9 @@ func (s *Service) productOwnerPrepare(ctx context.Context, id string, spec ports
 	if err != nil {
 		return nil, err
 	}
+	// A product owner thread is project-level and ADR 0008 has no project level:
+	// its orçamento is the global one, with no repository or task override.
+	memory := s.planMemory(ctx, "", "", &cfg)
 	sb, err := s.sandbox(ctx, prepareInput{ProjectID: proj.ID, Mode: mode, Headless: true}, id, repo, dir, cfg.Env, ag.skillDirs)
 	if err != nil {
 		if cleanup != nil {
@@ -212,7 +226,7 @@ func (s *Service) productOwnerPrepare(ctx context.Context, id string, spec ports
 	facts := s.contextFacts(prepareInput{Mode: mode, Headless: true}, ag, cfg, &domain.Workspace{Path: dir}, sessionSavers{}, sb, permission)
 	return &productOwnerPrepared{
 		prepared: &prepared{
-			cfg: cfg, permission: permission, cleanup: cleanup, sandbox: sb,
+			cfg: cfg, permission: permission, cleanup: cleanup, sandbox: sb, memory: memory,
 			context: contextInput{
 				Cfg: cfg, System: trail.pieces, Versions: res.versions, Repository: repo.Name,
 				Agent: ag.agent, Project: proj, Attached: res.attached, KnownTools: res.known,

@@ -165,6 +165,7 @@ func New(cfg Config) *fx.App {
 		TextProcessingModule,
 		ToolingModule,
 		TokenSaversModule,
+		MemoryWatchModule,
 		ProductOwnerModule,
 		ServerModule,
 		fx.WithLogger(func() fxevent.Logger {
@@ -194,6 +195,7 @@ func Validate(cfg Config) error {
 		TextProcessingModule,
 		ToolingModule,
 		TokenSaversModule,
+		MemoryWatchModule,
 		ProductOwnerModule,
 		ServerModule,
 	)

@@ -15,10 +15,13 @@ import { pushStateOf, unapprovedCount, upsertBranches, type SessionBranches } fr
 import { upsertMessage, upsertReview, type ReviewRequest, type TaskMessage } from "../../domain/message";
 import { freeSpot } from "../../domain/placement";
 import { allEnded } from "../../domain/graph";
+import type { BoardMemoryKill } from "../../domain/memory";
 import { isTerminal, upsertSession, type BoardSession } from "../../domain/session";
 import { KIND_WORD, ageWords, lastReportOf, pairKey, pendingMessages, reviewWaits, threadsOf } from "../../domain/threads";
+import { BoardMemoryState } from "./board-memory";
 import { LOADING, type BadgeViewModel, type BoardViewModel, type CardViewModel, type EdgeViewModel } from "./board-view-model";
 
+export type { BarMemory } from "./board-memory";
 export type { BadgeViewModel, BoardViewModel, CardViewModel, EdgeViewModel } from "./board-view-model";
 
 export interface BoardDeps {
@@ -39,6 +42,8 @@ export interface BoardDeps {
 
 const RING_MS = 2400;
 const PULSE_MS = 1600;
+/** A card says a process ended for 5 minutes (the shared kernel's CARD_ENDED_MS), and its age moves on each minute of them. */
+const ENDED_MINUTES = [1, 2, 3, 4, 5];
 /** A pan or zoom is kept once the camera has been still this long. */
 const CAMERA_SAVE_MS = 250;
 
@@ -72,6 +77,9 @@ export class BoardPresenter extends Presenter<BoardViewModel> {
   #framed = false;
   #viewport = { w: 0, h: 0 };
   #ringed = new Set<string>();
+  #memory = new BoardMemoryState();
+  /** Cards whose ring for an ended process is turning. */
+  #memoryRinged = new Set<string>();
   #pulsing = new Set<string>();
   #announcement = "";
   #arrival: { id: string; text: string } | null = null;
@@ -357,6 +365,7 @@ export class BoardPresenter extends Presenter<BoardViewModel> {
     });
     const [sessions, messages, reviews, branches] = await Promise.all([source.sessions(ticketId), source.messages(ticketId), source.pendingReviews(ticketId), branchLists]);
     this.#branches = branches;
+    for (const s of sessions) this.#memory.sample(s.memory, this.#deps.now().getTime());
     if (!resync) {
       [this.#sessions, this.#messages, this.#reviews] = [sessions, messages, reviews];
       return;
@@ -397,9 +406,16 @@ export class BoardPresenter extends Presenter<BoardViewModel> {
       case "session-deleted": {
         const drawn = this.#geometry().rects;
         this.#sessions = this.#sessions.filter((s) => s.id !== event.id);
+        this.#memory.forget(event.id);
         this.#pinWhatMoved(drawn);
         break;
       }
+      case "memory":
+        if (this.#sessions.some((s) => s.id === event.sample.sessionId)) this.#memory.sample(event.sample, this.#deps.now().getTime());
+        break;
+      case "memory-killed":
+        this.#onMemoryKilled(event.kill);
+        break;
       case "message":
         if (event.message.taskId === this.#deps.ticketId) this.#onMessage(event.message);
         break;
@@ -413,7 +429,21 @@ export class BoardPresenter extends Presenter<BoardViewModel> {
     this.set(this.#build());
   }
 
+  /** An encerramento por memória: the card says it for 5 minutes and rings once. Nothing moves. */
+  #onMemoryKilled(kill: BoardMemoryKill): void {
+    const session = this.#sessions.find((s) => s.id === kill.sessionId);
+    if (!session) return;
+    if (!this.#memory.kill(kill, this.#deps.now().getTime()) || isTerminal(session)) return;
+    this.#memoryRinged.add(session.id);
+    this.#later(() => {
+      this.#memoryRinged.delete(session.id);
+      this.set(this.#build());
+    }, RING_MS);
+    for (const minute of ENDED_MINUTES) this.#later(() => this.set(this.#build()), minute * 60_000);
+  }
+
   #onSession(s: BoardSession): void {
+    this.#memory.sample(s.memory, this.#deps.now().getTime());
     const before = this.#sessions.find((b) => b.id === s.id);
     const drawn = before ? null : this.#geometry().rects;
     this.#sessions = upsertSession(this.#sessions, s);
@@ -568,6 +598,7 @@ export class BoardPresenter extends Presenter<BoardViewModel> {
     const arrivalRect = this.#arrival && rects[this.#arrival.id];
     if (this.#arrival && (!arrivalRect || (this.#viewport.w > 0 && isVisible(this.#camera, arrivalRect, this.#viewport)))) this.#arrival = null;
     const placedCount = Object.keys(placed).length;
+    const memory = this.#memory.summary(sessions.filter((x) => !isTerminal(x)).map((x) => x.id), now.getTime());
     return {
       phase: "ready",
       error: "",
@@ -587,14 +618,15 @@ export class BoardPresenter extends Presenter<BoardViewModel> {
       focusedId: this.#focusedId,
       state: sessions.length === 0 ? "empty" : allEnded(sessions) ? "ended" : "live",
       endedNote: allEnded(sessions) ? `All ${sessions.length} sessions ended · the picture stays as it was` : "",
-      canvasLabel: `${sessions.length} session${sessions.length === 1 ? "" : "s"} as a graph. Tab moves between agents, arrows walk the tree, Enter opens a session, C opens its Context tab.`,
+      memory,
+      canvasLabel: `${sessions.length} session${sessions.length === 1 ? "" : "s"} as a graph. ${memory ? `${memory.sentence} ` : ""}Tab moves between agents, arrows walk the tree, Enter opens a session, C opens its Context tab.`,
     };
   }
 
   #you(rect: Rect, waiting: number): CardViewModel {
     return {
       id: YOU_ID, kind: "you", rect, agent: "You", mode: "", model: "", branch: "", pushState: "", unapproved: 0, badge: "", state: waiting > 0 ? "waiting" : "idle",
-      word: waiting > 0 ? "waiting on you" : "nothing waiting", chip: "", line: null, dimmed: false, tone: "", dragging: false, ringed: false, when: "", attention: waiting > 0,
+      word: waiting > 0 ? "waiting on you" : "nothing waiting", chip: "", line: null, dimmed: false, tone: "", dragging: false, ringed: false, memory: null, memoryRinged: false, when: "", attention: waiting > 0,
       name: waiting > 0 ? `You, ${waiting} review request${waiting === 1 ? "" : "s"} waiting on you` : "You, nothing waiting on you",
       selected: false,
       focused: this.#focusedId === YOU_ID,
@@ -606,6 +638,7 @@ export class BoardPresenter extends Presenter<BoardViewModel> {
     const { agentNames, taskTitle } = this.#deps;
     const branches = this.#branches.find((b) => b.sessionId === s.id);
     const ended = isTerminal(s) && s.status !== "failed";
+    const memory = isTerminal(s) ? null : this.#memory.of(s.id, this.#deps.now().getTime());
     return {
       id: s.id,
       kind: "session",
@@ -625,9 +658,11 @@ export class BoardPresenter extends Presenter<BoardViewModel> {
       tone: s.status === "failed" ? "danger" : "",
       dragging: this.#drag?.id === s.id,
       ringed: this.#ringed.has(s.id),
+      memory,
+      memoryRinged: this.#memoryRinged.has(s.id),
       when: relativeTime(s.updatedAt, this.#deps.now()),
       attention: needsYou(s),
-      name: [agentLabel(s.agentId, agentNames), s.role === "architect" ? "architect" : s.mode, status.word, pendingKind ? `${pendingKind} waiting on the architect` : "", ended ? "ended" : ""].filter(Boolean).join(", "),
+      name: [agentLabel(s.agentId, agentNames), s.role === "architect" ? "architect" : s.mode, status.word, pendingKind ? `${pendingKind} waiting on the architect` : "", ended ? "ended" : "", memory?.sentence ?? ""].filter(Boolean).join(", "),
       selected: this.#selectedId === s.id,
       focused: this.#focusedId === s.id,
     };

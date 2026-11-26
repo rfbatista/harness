@@ -72,6 +72,13 @@
     /* The session's token totals (.usage-total, usage.css), beside agent · age. */
     & > .meta > .usage-total { flex: none; }
     @container session (width < 34rem) { & > .meta > .usage-total { display: none; } }
+    /* The memory chip (memory.css) is an island: its wrappers add no box, so the chip sits in the row. It is the last of the meta items, just before the actions, so that nothing in the row moves when the island shows it after the page is up. */
+    & > .meta .memory { order: 1; }
+    & > .actions { order: 2; }
+    & > .meta > [data-memory-chip], & > .meta > [data-memory-chip] > [data-island] { display: contents; }
+    /* The head's room goes in this order while the chip shows: the actions never shrink, the chip keeps its value (only its word
+       gives way), and the token total gives way below 50rem, a step before the design's 34rem where it leaves anyway. */
+    @container session (width < 50rem) { & > .meta:has(.memory:not([hidden])) > .usage-total { display: none; } }
     /* The token savers it runs with, and a saver on for it but not installed. */
     & > .meta > :is(.token-savers, [data-token-savers-missing]) { flex: none; }
     & > .meta > .token-savers { color: var(--color-ink-faint); font-size: var(--text-sm); font-family: var(--font-mono); }

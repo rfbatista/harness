@@ -270,6 +270,19 @@ type Service struct {
 	// rm, touch, mkdir) link to, first on its PATH; they call the session's
 	// SessionShellURL. Empty: sessions get no shims.
 	ShimBinary string
+	// SessionMemoryURL is where a session's memory notice hooks post
+	// (…/api/sessions/{id}/memory); nil: the agent is told by the courier only.
+	SessionMemoryURL func(sessionID string) string
+	memoryNotes      memoryNotices
+	// cleaned are the sessions whose run has had its cleanup: nothing is
+	// installed for such a run (a resume starts a new one).
+	cleaned map[string]bool
+	memory  memoryState
+	// MemoryWatcher is the vigia de memória; nil: sessions are not watched.
+	MemoryWatcher ports.MemoryWatcher
+	// MemoryBudgets resolves the orçamento de memória a session starts or
+	// resumes with (ADR 0008). Nil: the global default, 4 GB.
+	MemoryBudgets ports.SessionMemoryBudget
 	// TokenSavers says which token savers a session runs with, when it is
 	// prepared (ADR 0015). Nil: sessions run with none.
 	TokenSavers ports.SessionTokenSavers
@@ -443,6 +456,10 @@ func (s *Service) Start(ctx context.Context, req StartRequest) (*domain.Session,
 		TokenSavers:             p.savers.active,
 		TokenSaversNotInstalled: p.savers.notInstalled,
 		CavemanIntensity:        p.savers.cavemanIntensity,
+		MemoryBudgetBytes:       p.memory.bytes,
+		MemoryBudgetSource:      p.memory.source,
+		MemoryHeapMB:            p.memory.heapMB,
+		MemoryTestWorkers:       p.memory.testWorker,
 		Sandbox:                 p.sandbox.facts,
 	})
 	if err != nil {
@@ -451,6 +468,9 @@ func (s *Service) Start(ctx context.Context, req StartRequest) (*domain.Session,
 		return nil, fmt.Errorf("persist session: %w", err)
 	}
 	provisioned = nil
+	// A headless session shares the server's process group: watched by
+	// descendancy of its agent CLI only.
+	s.watchMemory(sess.ID(), req.TicketID, p.memory.bytes, sess.ID(), 0)
 	s.recordStart(ctx, sess.ID(), p, req.Task)
 	// The Branches list takes its starting snapshot before the agent acts.
 	s.announce(domain.SessionWorktreeProvisioned{SessionID: sess.ID()})
@@ -523,7 +543,10 @@ type prepared struct {
 	cleanup    func() // removes the materialized skill plugin dir and the git directory; nil if none
 	envFile    string // the session's git env file, for login shells; "" without GitAuth
 	savers     sessionSavers
-	sandbox    sandboxed
+	// memory is the orçamento de memória resolved for the session, where it
+	// came from and its prevenção (ADR 0008).
+	memory  memoryPlan
+	sandbox sandboxed
 	// context is what the session's context entry is built from, once the
 	// start has recorded the session and knows the opening message.
 	context contextInput
@@ -665,6 +688,7 @@ func (s *Service) prepare(ctx context.Context, in prepareInput) (*prepared, erro
 	s.withKeychainShim(&cfg)
 	s.withAttribution(&cfg)
 	savers := s.withTokenSavers(ctx, in, repo.RootDir, ws.Path, &cfg)
+	memory := s.planMemory(ctx, in.RepositoryID, in.TicketID, &cfg)
 	trail.mark(&cfg, domain.PieceRuleset, "Token saver rules", "Token savers")
 	cleanup, err = s.withTempDir(id, &cfg, cleanup)
 	if err != nil {
@@ -704,6 +728,7 @@ func (s *Service) prepare(ctx context.Context, in prepareInput) (*prepared, erro
 		cleanup:    cleanup,
 		envFile:    envFile,
 		savers:     savers,
+		memory:     memory,
 	}, nil
 }
 
@@ -809,6 +834,14 @@ func (s *Service) withGit(id, repositoryID string, cfg *llmkit.SessionConfig, cl
 // shell. A headless session with no task, or a service without Shells,
 // changes nothing.
 func (s *Service) withShell(id, repositoryID string, subject sessionSubject, cfg *llmkit.SessionConfig, cleanup func()) (func(), error) {
+	cleanup, err := s.withShellHooks(id, repositoryID, subject, cfg, cleanup)
+	if err == nil {
+		s.withMemoryNotice(id, cfg) // after the hooks already there: it never replaces or reorders them
+	}
+	return cleanup, err
+}
+
+func (s *Service) withShellHooks(id, repositoryID string, subject sessionSubject, cfg *llmkit.SessionConfig, cleanup func()) (func(), error) {
 	s.withBranchGate(id, cfg)
 	if s.Shells == nil || (subject.ticket == nil && !subject.projectLevel()) {
 		return s.withShims(id, cfg, cleanup, false)
@@ -1619,6 +1652,7 @@ func (s *Service) List(ctx context.Context, f ports.SessionFilter) ([]*domain.Se
 	unassigned := map[string]bool{}
 	for _, sess := range list {
 		s.fillResumability(sess)
+		sess.Memory = s.lastMemory(sess) // the whiteboard shows it before the next feed change
 		s.fillAssignment(ctx, sess, unassigned)
 	}
 	if s.Decorator != nil {
@@ -1705,10 +1739,31 @@ func (s *Service) publishDelta(sessionID string, ev SessionEvent) {
 // joiners. Other contexts (artifacts) speak on the stream through it.
 func (s *Service) Announce(sessionID string, ev SessionEvent) { s.publish(sessionID, ev) }
 
+// endRun runs the cleanup of a run that is ending and marks it, so no watch is
+// installed for it afterwards: its terminal status is written only after the
+// cleanup, and a watch handed over in between would never be stopped. The mark
+// is dropped (pruneRun) once that status is written.
+//
+// It is not part of runCleanup on purpose: end is called twice for a stopped
+// session (Stop, then the process's late exit), and the second call runs
+// runCleanup on a session that already ended. If that marked the run, a resume
+// begun in between (reopenRun had cleared the mark) would be marked again and
+// its watch refused. So only an end that finds the session still running marks.
+func (s *Service) endRun(id string) {
+	s.mu.Lock()
+	if s.cleaned == nil {
+		s.cleaned = map[string]bool{}
+	}
+	s.cleaned[id] = true
+	s.mu.Unlock()
+	s.runCleanup(id)
+}
+
 func (s *Service) runCleanup(id string) {
 	s.mu.Lock()
 	c := s.cleanups[id]
 	delete(s.cleanups, id)
+
 	delete(s.busy, id)
 	s.mu.Unlock()
 	s.courier.forget(id)

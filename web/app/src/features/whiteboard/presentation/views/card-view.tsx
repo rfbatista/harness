@@ -1,6 +1,6 @@
 // One card: the session row turned into a tile.
 
-import { useRef } from "react";
+import { useRef, type CSSProperties } from "react";
 import type { BoardPresenter, CardViewModel } from "../presenters/board-presenter";
 
 /** Pixels the pointer must travel before a press is a drag and not a click. */
@@ -72,8 +72,10 @@ export function CardView({ card, presenter }: { card: CardViewModel; presenter: 
       data-selected={card.selected ? "" : undefined}
       aria-current={card.selected ? "true" : undefined}
       data-fresh={card.ringed ? "" : undefined}
+      data-ended-process={card.memoryRinged ? "" : undefined}
       data-dragging={card.dragging ? "" : undefined}
       aria-label={card.name}
+      title={card.memory?.sentence}
       style={style}
       {...nav}
       {...drag}
@@ -87,6 +89,7 @@ export function CardView({ card, presenter }: { card: CardViewModel; presenter: 
         {card.mode && <span className="badge" data-tone="signal">{card.mode}</span>}
         {card.model && <span className="badge">{card.model}</span>}
         {card.chip && <span className="badge" data-tone={card.tone === "danger" ? "danger" : card.attention ? "attention" : undefined}>{card.chip}</span>}
+        {card.memory?.badge && <span className="badge" data-mem data-tone={card.memory.state === "near" ? "attention" : card.memory.state === "normal" ? undefined : "danger"}>{card.memory.badge}</span>}
       </span>
       <time className="when">{card.when}</time>
       <span className="branch">
@@ -99,6 +102,26 @@ export function CardView({ card, presenter }: { card: CardViewModel; presenter: 
       {card.line && (
         <span className="detail">
           <span className="lead">{card.line.lead}</span> {card.line.text}
+        </span>
+      )}
+      {card.memory && (
+        <span className="mem" data-state={card.memory.state} style={{ "--_fill": `${card.memory.fillPercent}%` } as CSSProperties}>
+          <span className="track" aria-hidden="true">
+            <span className="fill" />
+          </span>
+          {card.memory.ended ? (
+            <span className="word">
+              <code>{card.memory.ended.command}</code> ended · {card.memory.ended.age}
+            </span>
+          ) : (
+            <>
+              <span className="num">
+                {card.memory.num}
+                <span className="of">{card.memory.of}</span>
+              </span>
+              {card.memory.word && <span className="word">{card.memory.word}</span>}
+            </>
+          )}
         </span>
       )}
     </button>

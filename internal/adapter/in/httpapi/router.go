@@ -82,6 +82,9 @@ func NewRouter(h *Handler, opts ...Option) *echo.Echo {
 	// token saver activations of a project, repository or task
 	g.GET("/list_token_saver_activations", h.handleListTokenSaverActivations)
 	g.POST("/set_token_saver_activation", h.handleSetTokenSaverActivation)
+	// memory budget (orçamento) override of a repository or task
+	g.GET("/get_memory_budget_override", h.handleGetMemoryBudgetOverride)
+	g.POST("/set_memory_budget_override", h.handleSetMemoryBudgetOverride)
 
 	// application runs: a repository's app run from a session's worktree
 	g.GET("/list_runs", h.handleListRuns)
@@ -330,6 +333,8 @@ func NewRouter(h *Handler, opts ...Option) *echo.Echo {
 	// whether an action keeps to the repository's layers
 	g.POST(strings.TrimPrefix(ArchitectureCheckRoute, "/api"), h.handleArchitectureCheck)
 	g.POST(strings.TrimPrefix(ArchitectureCommitRoute, "/api"), h.handleArchitectureCommit)
+	g.POST(strings.TrimPrefix(MemoryHookRoute, "/api"), h.handleMemoryHook)
+	g.GET("/sessions/:id/memory", h.handleSessionMemory)
 	g.POST(strings.TrimPrefix(WorktreeArchitectureCommitRoute, "/api"), h.handleWorktreeArchitectureCommit)
 	// the architect's worktree read hook asks which worktrees are its task's
 	g.GET(strings.TrimPrefix(TaskWorktreesRoute, "/api"), h.handleTaskWorktrees)

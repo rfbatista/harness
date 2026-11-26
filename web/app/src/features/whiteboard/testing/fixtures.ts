@@ -1,4 +1,5 @@
 import type { ReviewRequest, TaskMessage } from "../domain/message";
+import type { BoardMemory, BoardMemoryKill } from "../domain/memory";
 import type { BoardSession } from "../domain/session";
 
 export const T0 = Date.UTC(2026, 10, 23, 12, 0, 0);
@@ -23,6 +24,7 @@ export function session(fields: Partial<BoardSession> = {}): BoardSession {
     pendingApprovals: 0,
     openInterviewCount: 0,
     interruptedAt: null,
+    memory: null,
     createdAt: at,
     updatedAt: at,
     ...fields,
@@ -44,4 +46,16 @@ let reviews = 0;
 export function review(architectSessionId: string, fields: Partial<ReviewRequest> = {}): ReviewRequest {
   reviews += 1;
   return { id: `r${reviews}`, taskId: "t1", architectSessionId, aboutSessionId: "", state: "pending", createdAt: new Date(T0 + 1_800_000 + reviews * 60_000), ...fields };
+}
+
+const GB = 1024 ** 3;
+
+/** A memory sample of a session, `gb` in use of a 4 GB budget, taken at `at`. */
+export function memorySample(sessionId: string, gb: number, fields: Partial<BoardMemory> = {}, at = T0 + 3_600_000): BoardMemory {
+  return { sessionId, taskId: "t1", sampledAt: new Date(at), rssBytes: gb * GB, budgetBytes: 4 * GB, processes: 7, heaviest: { pid: 81234, command: "node jest", rssBytes: 0.9 * GB }, ...fields };
+}
+
+/** An encerramento por memória of a session, at `at`. */
+export function memoryKill(sessionId: string, at: number, fields: Partial<BoardMemoryKill> = {}): BoardMemoryKill {
+  return { sessionId, taskId: "t1", killedAt: new Date(at), pid: 81234, command: "node jest", rssBytes: 3.5 * GB, treeRssBytes: 4.4 * GB, budgetBytes: 4 * GB, signal: "SIGTERM", ...fields };
 }

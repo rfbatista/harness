@@ -449,6 +449,8 @@ type PageView struct {
 	Usage *UsageTotalsSeed
 	// TokenSavers seeds the task's Token savers control; nil leaves it out.
 	TokenSavers *tokensavers.Seed
+	// MemoryBudget seeds the task's memory budget control; nil leaves it out.
+	MemoryBudget *tokensavers.MemoryBudgetSeed
 	// Feature is the feature section: the task's PRD and children; nil on a
 	// task without children (the section still mounts, hidden, so a first
 	// child arriving over the feed shows it).

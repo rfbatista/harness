@@ -368,7 +368,7 @@ func TestService_StartWithTicketConfiguresTaskAccess(t *testing.T) {
 	}
 }
 
-// A session without a task gets none of it.
+// A session without a task gets none of it: its brief is only the memory line every session gets.
 func TestService_StartWithoutTicketLeavesTaskAccessOff(t *testing.T) {
 	svc, _, _ := newTestService(t)
 	d, err := svc.Start(context.Background(), StartRequest{ProjectID: "p1", RepositoryID: "r1", Task: "hello"})
@@ -382,7 +382,7 @@ func TestService_StartWithoutTicketLeavesTaskAccessOff(t *testing.T) {
 		t.Fatal("session not running")
 	}
 	cfg := run.Config()
-	if len(cfg.MCPServers) != 0 || len(cfg.AllowedTools) != 0 || cfg.AppendSystem != "" {
+	if len(cfg.MCPServers) != 0 || len(cfg.AllowedTools) != 0 || cfg.AppendSystem != memoryPreventionNote {
 		t.Fatalf("untasked session was given task access: %+v", cfg)
 	}
 }

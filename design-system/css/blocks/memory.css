@@ -1,0 +1,114 @@
+/*
+ * Memory — a session's memory against its orçamento, in the session head
+ * beside the token total (React island session-memory). A number, a state word
+ * outside normal, and a thin track filled to the share of the budget. The
+ * state is a word as well as a tone.
+ * <button class="memory" data-state="normal|near|over|ended" aria-label="Memory: 3.4 GB of the 4 GB budget · near budget · 9 processes" style="--_fill: 85%">
+ *   <span class="num">3.4<span class="of"> / 4 GB</span></span><span class="word">near budget</span>
+ *   <span class="track" aria-hidden="true"><span class="fill"></span></span></button>
+ * The word is absent in normal. The head keeps its height.
+ */
+
+@layer blocks {
+  .memory {
+    --_tone: var(--color-ink-muted);
+    display: inline-grid;
+    grid-template-columns: auto minmax(0, 1fr);
+    grid-template-rows: auto 3px;
+    column-gap: var(--space-xs);
+    row-gap: 4px;
+    align-items: baseline;
+    /* In the head only the word gives way: the chip never shrinks below its value, and the word takes an ellipsis. */
+    flex: 0 1 auto;
+    min-inline-size: min-content;
+    max-inline-size: 100%;
+    padding: 0;
+    border: 0;
+    background: none;
+    font: inherit;
+    font-size: var(--text-sm);
+    font-variant-numeric: tabular-nums;
+    white-space: nowrap;
+    cursor: pointer;
+
+    &[hidden] { display: none; }
+    &:focus-visible { outline: var(--border-focus-width) solid var(--color-focus); outline-offset: 3px; }
+
+    & > .num { color: var(--color-ink-muted); }
+    & .of { color: var(--color-ink-faint); }
+    & > .word { min-inline-size: 0; overflow: hidden; text-overflow: ellipsis; color: var(--_tone); font-weight: var(--weight-medium); }
+    & > .word::before { content: "· "; color: var(--color-ink-faint); font-weight: normal; }
+    & > .track {
+      grid-column: 1 / -1;
+      block-size: 3px;
+      border-radius: 2px;
+      background: var(--color-line-strong);
+      overflow: hidden;
+    }
+    & .fill {
+      display: block;
+      block-size: 100%;
+      inline-size: var(--_fill, 0%);
+      max-inline-size: 100%;
+      background: var(--_tone);
+      transition: inline-size var(--duration-settle) var(--ease-out);
+    }
+
+    &[data-state="near"] { --_tone: var(--color-attention); }
+    &[data-state="near"] > .word { color: var(--color-attention-strong); }
+    &[data-state="over"] { --_tone: var(--color-danger); }
+    &[data-state="over"] > .num, &[data-state="over"] > .word { color: var(--color-danger); }
+    &[data-state="ended"] { --_tone: var(--color-danger); }
+    &[data-state="ended"] > .word { color: var(--color-danger); }
+
+    /* One ring on the track when a kill arrives, set once and removed when it ends. */
+    &[data-signal] > .track { animation: memory-signal var(--duration-signal) var(--ease-out) 1; }
+    @media (prefers-reduced-motion: reduce) {
+      & .fill { transition: none; }
+      &[data-signal] > .track { animation: none; outline: 2px solid color-mix(in oklch, var(--color-danger) 40%, transparent); outline-offset: 2px; }
+    }
+    @media (forced-colors: active) { & > .track { border: 1px solid CanvasText; } & .fill { background: Highlight; forced-color-adjust: none; } }
+    @container session (width < 46rem) { &:not([data-state="normal"]) .of { display: none; } }
+    @container session (width < 34rem) { &[data-state="normal"] { display: none; } }
+    @media (width < 48rem) { font-size: inherit; & > .track { display: none; } }
+  }
+  /* The popover behind the chip: a .popup (popup.css), non-modal, 22rem. */
+  .memory-popover {
+    inline-size: 22rem;
+    max-inline-size: calc(100vw - 2 * var(--space-l));
+    padding: var(--space-m);
+    gap: var(--space-s);
+    font-size: var(--text-sm);
+
+    & > h3 { font-size: var(--text-md); font-variant-numeric: tabular-nums; }
+    & > h4 { font-size: var(--text-xs); color: var(--color-ink-faint); font-weight: var(--weight-medium); }
+    & > .bar { --_tone: var(--color-ink-muted); display: block; block-size: 4px; border-radius: 2px; background: var(--color-line-strong); overflow: hidden; }
+    & > .bar[data-state="near"] { --_tone: var(--color-attention); }
+    & > .bar[data-state="over"], & > .bar[data-state="ended"] { --_tone: var(--color-danger); }
+    & > .bar > .fill { display: block; block-size: 100%; inline-size: var(--_fill, 0%); max-inline-size: 100%; background: var(--_tone); }
+    & > dl { display: grid; grid-template-columns: auto 1fr; gap: var(--space-2xs) var(--space-m); }
+    & > dl > dt { color: var(--color-ink-faint); }
+    & > dl > dd { margin: 0; font-variant-numeric: tabular-nums; }
+    & > ul { display: grid; gap: var(--space-2xs); list-style: none; margin: 0; padding: 0; font-variant-numeric: tabular-nums; }
+    & > ul b { color: var(--color-danger); font-weight: var(--weight-medium); }
+    & > p { margin: 0; color: var(--color-ink-muted); }
+    & > p.note { color: var(--color-ink-faint); font-size: var(--text-xs); }
+  }
+  /* The toasts of a kill (toast.css), with the body the toast block leaves to its users. */
+  .toast-region.memory-toasts {
+    & .toast > .body { display: grid; gap: var(--space-2xs); flex: 1 1 auto; min-inline-size: 0; }
+    & .toast > .body > strong { font-weight: var(--weight-medium); overflow-wrap: anywhere; }
+    & .toast > .body > .meta { margin: 0; color: var(--color-ink-muted); font-size: var(--text-xs); }
+    & .toast > .body > .meta b { color: var(--color-ink); font-weight: var(--weight-medium); font-variant-numeric: tabular-nums; }
+    & .toast > .body > .actions { display: flex; gap: var(--space-xs); }
+    & .toast > [data-icon] { color: var(--color-ink); }
+    /* The line the older toasts fold into: no border, no shadow. */
+    & .toast[data-more] { padding-block: 0; border: 0; background: none; box-shadow: none; color: var(--color-ink-muted); font-size: var(--text-xs); animation: none; }
+    @media (prefers-reduced-motion: reduce) { & .toast { animation: none; } }
+  }
+
+  @keyframes memory-signal {
+    from { box-shadow: 0 0 0 0 color-mix(in oklch, var(--color-danger) 55%, transparent); }
+    to { box-shadow: 0 0 0 0.45rem transparent; }
+  }
+}

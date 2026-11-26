@@ -3,6 +3,7 @@
 // read as nothing at all, so the server may add kinds.
 
 import { object, type Wire } from "../../../../shared/infrastructure/dto/fields";
+import { MemoryKillDto, MemorySampleDto } from "../../../../shared/infrastructure/dto/memory-dto";
 import { SessionBranchesDto } from "./branches-dto";
 import { ReviewRequestDto, TaskMessageDto } from "./message-dto";
 import { BoardSessionDto } from "./session-dto";
@@ -16,6 +17,8 @@ export class BoardEventDto {
     readonly task_message: TaskMessageDto | null,
     readonly review_request: ReviewRequestDto | null,
     readonly session_branches: SessionBranchesDto | null = null,
+    readonly memory: MemorySampleDto | null = null,
+    readonly memory_killed: MemoryKillDto | null = null,
   ) {}
 
   static fromJSON(raw: unknown): BoardEventDto {
@@ -23,6 +26,8 @@ export class BoardEventDto {
     if (from.task_message !== undefined && from.task_message !== null) return new BoardEventDto(null, false, null, TaskMessageDto.fromJSON(from.task_message, "task_message"), null);
     if (from.review_request !== undefined && from.review_request !== null) return new BoardEventDto(null, false, null, null, ReviewRequestDto.fromJSON(from.review_request, "review_request"));
     if (from.session_branches !== undefined && from.session_branches !== null) return new BoardEventDto(null, false, null, null, null, SessionBranchesDto.fromJSON(from.session_branches, "session_branches"));
+    if (from.memory !== undefined && from.memory !== null) return new BoardEventDto(null, false, null, null, null, null, MemorySampleDto.fromJSON(from.memory, "memory"));
+    if (from.memory_killed !== undefined && from.memory_killed !== null) return new BoardEventDto(null, false, null, null, null, null, null, MemoryKillDto.fromJSON(from.memory_killed, "memory_killed"));
     if (from.session !== undefined && from.session !== null) {
       if (from.deleted === true) {
         const gone = object("BoardEventDto", from.session, "session");

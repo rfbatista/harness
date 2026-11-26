@@ -4,6 +4,7 @@ import type { Camera } from "../../domain/camera";
 import type { Detail } from "../../domain/card";
 import type { Rect } from "../../domain/layout";
 import type { LiveStatus } from "../../application/ports";
+import type { BarMemory, CardMemory } from "./board-memory";
 
 export interface CardViewModel {
   id: string;
@@ -29,6 +30,10 @@ export interface CardViewModel {
   dragging: boolean;
   /** One ring after it arrived or changed. */
   ringed: boolean;
+  /** The memory line: null when the card says nothing about memory. */
+  memory: CardMemory | null;
+  /** One ring, in danger, after a process of it was ended. */
+  memoryRinged: boolean;
   when: string;
   /** Waiting on the person: the card takes the attention wash. */
   attention: boolean;
@@ -105,6 +110,8 @@ export interface BoardViewModel {
   state: "empty" | "ended" | "live";
   endedNote: string;
   canvasLabel: string;
+  /** The bar's memory summary; null while no live session has a sample and no process ended. */
+  memory: BarMemory | null;
 }
 
 export const LOADING: BoardViewModel = {
@@ -127,4 +134,5 @@ export const LOADING: BoardViewModel = {
   state: "empty",
   endedNote: "",
   canvasLabel: "",
+  memory: null,
 };

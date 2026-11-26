@@ -182,6 +182,10 @@ func (s *Service) StartInteractive(ctx context.Context, req InteractiveRequest) 
 		TokenSavers:             p.savers.active,
 		TokenSaversNotInstalled: p.savers.notInstalled,
 		CavemanIntensity:        p.savers.cavemanIntensity,
+		MemoryBudgetBytes:       p.memory.bytes,
+		MemoryBudgetSource:      p.memory.source,
+		MemoryHeapMB:            p.memory.heapMB,
+		MemoryTestWorkers:       p.memory.testWorker,
 		Sandbox:                 p.sandbox.facts,
 	})
 	if err == nil {
@@ -252,6 +256,7 @@ func (s *Service) ResumeInteractive(ctx context.Context, req ports.ResumeRequest
 		return nil, ports.AgentSpec{}, &domain.StructuredError{Code: "SESSION_ALREADY_RUNNING", Message: "session is being resumed"}
 	}
 	defer s.releaseResume(req.SessionID)
+	s.reopenRun(req.SessionID)
 	sess, err := s.interactiveSession(req.SessionID)
 	if err != nil {
 		return nil, ports.AgentSpec{}, err
@@ -320,6 +325,7 @@ func (s *Service) ResumeInteractive(ctx context.Context, req ports.ResumeRequest
 	s.withKeychainShim(&cfg)
 	s.withAttribution(&cfg)
 	s.rewireTokenSavers(ctx, sess, &cfg)
+	s.resumeMemoryBudget(ctx, sess, &cfg)
 	trail.mark(&cfg, domain.PieceRuleset, "Token saver rules", "Token savers")
 	// A resume starts under the rules now in force, not the ones it started
 	// under, and records them.
@@ -494,6 +500,7 @@ func (s *Service) withResumability(ctx context.Context, sess *domain.Session) *d
 		return nil
 	}
 	s.fillResumability(sess)
+	sess.Memory = s.lastMemory(sess)
 	s.fillAssignment(ctx, sess, map[string]bool{})
 	if s.Decorator != nil {
 		s.Decorator.DecorateSessions(ctx, sess)
@@ -569,6 +576,7 @@ func (s *Service) spawnTerminal(ctx context.Context, id string, spec ports.Agent
 	if err != nil {
 		return fmt.Errorf("run the session on the server: %w", err)
 	}
+	s.watchTerminalMemory(id)
 	return nil
 }
 
@@ -593,10 +601,11 @@ func (s *Service) end(id string, exitCode int, closedByUser bool) (*domain.Sessi
 	if err != nil {
 		return nil, err
 	}
-	s.runCleanup(id)
 	if sess.Status.IsTerminal() {
+		s.runCleanup(id)
 		return s.withResumability(context.Background(), sess), nil
 	}
+	s.endRun(id)
 	s.clearPendingApprovals(id)
 
 	status, text := domain.SessionDone, "exited"
@@ -609,6 +618,7 @@ func (s *Service) end(id string, exitCode int, closedByUser bool) (*domain.Sessi
 	if err := s.sessions.UpdateStatus(id, status); err != nil {
 		return nil, err
 	}
+	s.pruneRun(id)
 	s.publish(id, SessionEvent{Type: "done", Status: status, Text: text, At: time.Now()})
 	s.hub.End(id)
 	s.announceEnded(id, status)
@@ -853,11 +863,12 @@ func (s *Service) stopOrphan(sess *domain.Session) error {
 // endHeadless records a headless session as stopped: its open approvals are
 // gone with it, its stream closes and its end is announced.
 func (s *Service) endHeadless(id string) error {
-	s.runCleanup(id)
+	s.endRun(id)
 	s.clearPendingApprovals(id)
 	if err := s.sessions.UpdateStatus(id, domain.SessionStopped); err != nil {
 		return err
 	}
+	s.pruneRun(id)
 	s.publish(id, SessionEvent{Type: "done", Status: domain.SessionStopped, Text: "stopped", At: time.Now()})
 	s.hub.End(id)
 	s.announceEnded(id, domain.SessionStopped)

@@ -28,7 +28,7 @@
     border-block-end: var(--border-width) solid var(--color-line); background: var(--color-canvas);
     font-size: var(--text-sm); color: var(--color-ink-muted);
     & .wb-summary { display: inline-flex; align-items: center; gap: var(--space-xs); min-inline-size: 0; }
-    & .wb-summary strong { color: var(--color-ink); font-weight: var(--weight-medium); }
+    & .wb-summary strong { color: var(--color-ink); font-weight: var(--weight-medium); font-variant-numeric: tabular-nums; }
     & .wb-live { display: inline-flex; align-items: center; gap: var(--space-xs); color: var(--color-ink-faint); font-size: var(--text-xs); & time { font-variant-numeric: tabular-nums; } }
     & .wb-tools { margin-inline-start: auto; display: inline-flex; align-items: center; gap: var(--space-3xs); }
     & .wb-tools .button[data-icon] { font-family: var(--font-mono); }
@@ -118,12 +118,47 @@
   .wb-world[data-compact] .wb-node[data-role="person"] { inline-size: 7.5rem; }
   .wb-world[data-compact] .wb-pill .latest { display: none; }
   .wb-world[data-compact] .wb-pill { padding-inline: var(--space-2xs); }
+  /* The memory of a live session (memory.css has the chip): a fixed 3rem track, the number, and the word when it is not normal.
+     A node without one keeps its shape; with one, the line is the last row. */
+  .wb-node:has(> .mem) { grid-template-areas: "dot who when" "dot branch branch" "dot detail detail" "dot mem mem"; }
+  .wb-node > .mem {
+    --_tone: var(--color-ink-muted);
+    grid-area: mem; display: flex; align-items: center; gap: var(--space-xs); min-inline-size: 0;
+    font-size: var(--text-xs); font-variant-numeric: tabular-nums; white-space: nowrap;
+    & > .track { flex: none; inline-size: 3rem; block-size: 2px; border-radius: 1px; background: var(--color-line-strong); overflow: hidden; }
+    & .fill { display: block; block-size: 100%; inline-size: var(--_fill, 0%); max-inline-size: 100%; background: var(--_tone); transition: inline-size var(--duration-settle) var(--ease-out); }
+    & .num { color: var(--color-ink-muted); }
+    & .of { color: var(--color-ink-faint); }
+    & .word { min-inline-size: 0; overflow: hidden; text-overflow: ellipsis; color: var(--_tone); font-weight: var(--weight-medium); }
+    & .word code { font-family: var(--font-mono); }
+    &[data-state="near"] { --_tone: var(--color-attention); & .word { color: var(--color-attention-strong); } }
+    &[data-state="over"] { --_tone: var(--color-danger); & .num, & .word { color: var(--color-danger); } }
+    &[data-state="ended"] { --_tone: var(--color-danger); & .word { color: var(--color-danger); } }
+  }
+  /* One ring, in danger, after a process of the session was ended: the card stays where it is and takes no attention wash. */
+  .wb-node[data-ended-process] { animation: wb-ring-danger 2.4s var(--ease-out) 1; }
+  /* Compact: the memory is a 2px track on the card's bottom edge, and a badge says near, over or ended. */
+  .wb-node .who .badge[data-mem] { display: none; }
+  .wb-world[data-compact] .wb-node > .mem { position: absolute; inset: auto 0 0 0; padding: 0; overflow: hidden; border-end-start-radius: var(--radius-md); border-end-end-radius: var(--radius-md); }
+  .wb-world[data-compact] .wb-node > .mem > .track { inline-size: 100%; border-radius: 0; }
+  .wb-world[data-compact] .wb-node > .mem > :not(.track) { display: none; }
+  .wb-world[data-compact] .wb-node .who .badge[data-mem] { display: inline-flex; }
+  @media (forced-colors: active) { .wb-node > .mem > .track { border: 1px solid CanvasText; } .wb-node > .mem .fill { background: Highlight; forced-color-adjust: none; } }
+  @keyframes wb-ring-danger {
+    0% { box-shadow: 0 0 0 0 color-mix(in oklch, var(--color-danger) 55%, transparent); }
+    60% { box-shadow: 0 0 0 0.6rem transparent; }
+    100% { box-shadow: 0 1px 2px color-mix(in oklch, var(--color-ink) 6%, transparent); }
+  }
   @keyframes wb-ring {
     0% { box-shadow: 0 0 0 0 color-mix(in oklch, var(--color-signal) 55%, transparent); }
     60% { box-shadow: 0 0 0 0.6rem transparent; }
     100% { box-shadow: 0 1px 2px color-mix(in oklch, var(--color-ink) 6%, transparent); }
   }
-  @media (prefers-reduced-motion: reduce) { .wb-node[data-fresh], .wb-pill[data-fresh] { animation: none; outline: 2px solid color-mix(in oklch, var(--color-signal) 50%, transparent); outline-offset: 2px; } }
+  @media (prefers-reduced-motion: reduce) {
+    .wb-node[data-fresh], .wb-pill[data-fresh] { animation: none; outline: 2px solid color-mix(in oklch, var(--color-signal) 50%, transparent); outline-offset: 2px; }
+    .wb-node[data-ended-process] { animation: none; outline: 2px solid color-mix(in oklch, var(--color-danger) 50%, transparent); outline-offset: 2px; }
+    .wb-node > .mem .fill { transition: none; }
+  }
 
   /* the hover/focus toolbar of a node */
   .wb-node-tools {
@@ -144,6 +179,7 @@
     & .line { display: inline-block; inline-size: 1.25rem; block-size: 0; border-block-start: 1.5px solid var(--wb-edge); }
     & .line[data-kind="messages"] { border-color: var(--wb-edge-msg); }
     & .line[data-kind="review"] { border-color: var(--wb-edge-attn); }
+    & .mem-key { display: inline-block; inline-size: 1.25rem; block-size: 2px; border-radius: 1px; background: linear-gradient(90deg, var(--color-ink-muted) 60%, var(--color-line) 60%); }
     & .keys { margin-inline-start: auto; }
     & kbd { font-family: var(--font-mono); border: var(--border-width) solid var(--color-line); border-radius: var(--radius-xs); padding-inline: 0.25rem; }
   }
@@ -196,6 +232,8 @@
 
     /* The pane beside the board is narrow: its head keeps the state, the title, the sandbox chip and the actions, and drops the rest (the Context and Sandbox tabs hold them). */
     & .session-head > .meta > :is(.usage-total, .token-savers, .who, .sandbox-chips > [data-sandbox-visibility]) { display: none; }
+    /* The memory chip goes with the token total while it is normal; near, over and ended stay. */
+    & .session-head > .meta .memory[data-state="normal"] { display: none; }
     & .session-head > .actions { min-inline-size: 0; }
     & .session-head > .actions .check-button > .next { display: none; }
   }
