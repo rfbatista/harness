@@ -294,6 +294,9 @@ func (h *Handler) handleListServiceRequests(c echo.Context) error {
 		ProjectID: c.QueryParam("project_id"), ServiceID: c.QueryParam("service_id"),
 		TaskID: c.QueryParam("task_id"), State: domain.ServiceRequestState(c.QueryParam("state")),
 	}
+	if f.TaskID != "" {
+		f.State = domain.ServiceRequestPending // a task's requests are the ones waiting on the person
+	}
 	list, err := h.serviceRequests.List(c.Request().Context(), f)
 	if err != nil {
 		return err

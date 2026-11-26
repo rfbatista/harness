@@ -94,6 +94,9 @@ func TestTaskServices_ARequestListHoldsOnlyTheTasksPendingRequests(t *testing.T)
 	if got := list("&state=pending&task_id=task-1"); !slices.Equal(got, []string{"one"}) {
 		t.Errorf("task-1 pending = %v", got)
 	}
+	if got := list("&task_id=task-1"); !slices.Equal(got, []string{"one"}) {
+		t.Errorf("task-1 with no state = %v, want its pending request", got)
+	}
 	if got := list("&state=pending&task_id=task-3"); len(got) != 0 {
 		t.Errorf("task-3 pending = %v", got)
 	}
@@ -109,7 +112,7 @@ func TestTaskServices_ARequestListHoldsOnlyTheTasksPendingRequests(t *testing.T)
 	}
 	f.answer(byTask["task-1"], "deny", "")
 	f.waitingFor(one)
-	eventually(t, "task-1 has nothing pending", func() bool { return len(list("&state=pending&task_id=task-1")) == 0 })
+	eventually(t, "task-1 has nothing pending", func() bool { return len(list("&task_id=task-1")) == 0 })
 	if got := list("&state=pending&task_id=task-2"); !slices.Equal(got, []string{"two"}) {
 		t.Errorf("task-2 pending = %v", got)
 	}
