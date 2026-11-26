@@ -82,12 +82,7 @@ func ModeModelOf(mode SessionMode, read func(key string) string) string {
 func ModeModels(read func(key string) string) []ModeModel {
 	out := make([]ModeModel, 0, len(modeModelModes))
 	for _, mode := range modeModelModes {
-		key, builtIn := ModeModelKey(mode), ModeBuiltInModel(mode)
-		current := read(key)
-		if current == "" {
-			current = builtIn
-		}
-		out = append(out, ModeModel{Mode: mode, Key: key, Current: current, BuiltIn: builtIn})
+		out = append(out, ModeModel{Mode: mode, Key: ModeModelKey(mode), Current: ModeModelOf(mode, read), BuiltIn: ModeBuiltInModel(mode)})
 	}
 	return out
 }
