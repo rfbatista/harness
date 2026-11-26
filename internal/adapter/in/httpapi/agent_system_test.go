@@ -343,3 +343,23 @@ func TestGetRepositoryShowsTheDetectedGateWithItsReasonAndWhatIsMissing(t *testi
 		t.Errorf("missing = %v", view.Effective.Missing)
 	}
 }
+
+func TestPatchWithAValueOfTheWrongTypeAnswers422InvalidType(t *testing.T) {
+	h := agentSystemHandler(t)
+	for _, base := range []string{"/projects/p1/agent-system", "/projects/p1/repositories/r1/agent-system"} {
+		for body, field := range map[string]string{
+			`{"guard.retry_limit": "3"}`:                "guard.retry_limit",
+			`{"guard.retry_limit": 2.5}`:                "guard.retry_limit",
+			`{"learn.context_map.enabled": "yes"}`:      "learn.context_map.enabled",
+			`{"guard.protected_paths": "check.sh"}`:     "guard.protected_paths",
+			`{"guard.gates.test.timeout_seconds": "9"}`: "guard.gates.test.timeout_seconds",
+			`{"review.critic.model": 3}`:                "review.critic.model",
+		} {
+			rec := patchJSON(t, h, base, body)
+			var e agentSystemErrors
+			if rec.Code != http.StatusUnprocessableEntity || json.Unmarshal(rec.Body.Bytes(), &e) != nil || len(e.Errors) != 1 || e.Errors[0].Field != field || e.Errors[0].Code != "INVALID_TYPE" {
+				t.Errorf("PATCH %s %s -> %d %s, want INVALID_TYPE at %s", base, body, rec.Code, rec.Body.String(), field)
+			}
+		}
+	}
+}
