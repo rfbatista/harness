@@ -21,6 +21,7 @@ import { KIND_WORD, ageWords, lastReportOf, pairKey, pendingMessages, reviewWait
 import { BoardMemoryState } from "./board-memory";
 import { LOADING, type BadgeViewModel, type BoardViewModel, type CardViewModel, type EdgeViewModel } from "./board-view-model";
 
+export type { BarMemory } from "./board-memory";
 export type { BadgeViewModel, BoardViewModel, CardViewModel, EdgeViewModel } from "./board-view-model";
 
 export interface BoardDeps {
@@ -598,6 +599,7 @@ export class BoardPresenter extends Presenter<BoardViewModel> {
     const arrivalRect = this.#arrival && rects[this.#arrival.id];
     if (this.#arrival && (!arrivalRect || (this.#viewport.w > 0 && isVisible(this.#camera, arrivalRect, this.#viewport)))) this.#arrival = null;
     const placedCount = Object.keys(placed).length;
+    const memory = this.#memory.summary(sessions.filter((x) => !isTerminal(x)).map((x) => x.id), now.getTime());
     return {
       phase: "ready",
       error: "",
@@ -617,7 +619,8 @@ export class BoardPresenter extends Presenter<BoardViewModel> {
       focusedId: this.#focusedId,
       state: sessions.length === 0 ? "empty" : allEnded(sessions) ? "ended" : "live",
       endedNote: allEnded(sessions) ? `All ${sessions.length} sessions ended · the picture stays as it was` : "",
-      canvasLabel: `${sessions.length} session${sessions.length === 1 ? "" : "s"} as a graph. Tab moves between agents, arrows walk the tree, Enter opens a session, C opens its Context tab.`,
+      memory,
+      canvasLabel: `${sessions.length} session${sessions.length === 1 ? "" : "s"} as a graph. ${memory ? `${memory.sentence} ` : ""}Tab moves between agents, arrows walk the tree, Enter opens a session, C opens its Context tab.`,
     };
   }
 

@@ -28,6 +28,7 @@
     border-block-end: var(--border-width) solid var(--color-line); background: var(--color-canvas);
     font-size: var(--text-sm); color: var(--color-ink-muted);
     & .wb-summary { display: inline-flex; align-items: center; gap: var(--space-xs); min-inline-size: 0; }
+    & .wb-summary strong { color: var(--color-ink); font-weight: var(--weight-medium); font-variant-numeric: tabular-nums; }
     & .wb-summary strong { color: var(--color-ink); font-weight: var(--weight-medium); }
     & .wb-live { display: inline-flex; align-items: center; gap: var(--space-xs); color: var(--color-ink-faint); font-size: var(--text-xs); & time { font-variant-numeric: tabular-nums; } }
     & .wb-tools { margin-inline-start: auto; display: inline-flex; align-items: center; gap: var(--space-3xs); }
@@ -178,6 +179,7 @@
     & .line { display: inline-block; inline-size: 1.25rem; block-size: 0; border-block-start: 1.5px solid var(--wb-edge); }
     & .line[data-kind="messages"] { border-color: var(--wb-edge-msg); }
     & .line[data-kind="review"] { border-color: var(--wb-edge-attn); }
+    & .mem-key { display: inline-block; inline-size: 1.25rem; block-size: 2px; border-radius: 1px; background: linear-gradient(90deg, var(--color-ink-muted) 60%, var(--color-line) 60%); }
     & .keys { margin-inline-start: auto; }
     & kbd { font-family: var(--font-mono); border: var(--border-width) solid var(--color-line); border-radius: var(--radius-xs); padding-inline: 0.25rem; }
   }

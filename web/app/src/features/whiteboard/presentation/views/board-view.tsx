@@ -69,6 +69,27 @@ export function BoardView({ presenter }: { presenter: BoardPresenter }) {
   return (
     <section className="whiteboard" aria-label="Agents whiteboard" data-layout="rank" onKeyDown={key}>
       <div className="wb-bar">
+        {vm.memory && (
+          <span className="wb-summary" title={vm.memory.sentence}>
+            <strong>{vm.memory.live} live</strong>
+            {vm.memory.total && (
+              <>
+                {" · memory "}
+                <strong>{vm.memory.total}</strong>
+              </>
+            )}
+            {vm.memory.near > 0 && (
+              <span className="badge" data-tone="attention">
+                {vm.memory.near} near budget
+              </span>
+            )}
+            {vm.memory.ended > 0 && (
+              <span className="badge" data-tone="danger">
+                {vm.memory.ended} process ended
+              </span>
+            )}
+          </span>
+        )}
         {vm.arrival && (
           <span className="wb-live">
             {vm.arrival.text.replace(" · Show", " · ")}
@@ -170,6 +191,13 @@ export function BoardView({ presenter }: { presenter: BoardPresenter }) {
           </div>
         )}
       </div>
+      {vm.memory?.total && (
+        <div className="wb-legend">
+          <span className="k">
+            <span className="mem-key" /> memory of its budget
+          </span>
+        </div>
+      )}
       <p className="visually-hidden" aria-live="polite" data-announce>
         {vm.announcement}
       </p>

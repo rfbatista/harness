@@ -4,6 +4,7 @@
 import { initialTracker, settle, type Tracker } from "../../../../shared/kernel/memory/level";
 import { CARD_ENDED_MS, hasValue, shareOf } from "../../../../shared/kernel/memory/sample";
 import { memoryView, type MemoryState } from "../../../../shared/kernel/memory/view";
+import { summarize, type SessionMemory } from "../../../../shared/kernel/memory/summary";
 import { relativeTime } from "../../../../shared/kernel/format";
 import type { BoardMemory, BoardMemoryKill } from "../../domain/memory";
 
@@ -22,6 +23,18 @@ export interface CardMemory {
   badge: string;
   /** For 5 minutes after a kill: the process and how long ago. */
   ended: { command: string; age: string } | null;
+}
+
+/** What the bar says about the task's live sessions together. */
+export interface BarMemory {
+  live: number;
+  /** "10.7 GB"; null when no live session has a sample. */
+  total: string | null;
+  near: number;
+  /** Processes ended in the last 5 minutes. */
+  ended: number;
+  /** "Memory: 10.7 GB across 4 live, 1 near budget, 1 process ended." */
+  sentence: string;
 }
 
 interface Entry {
@@ -58,6 +71,18 @@ export class BoardMemoryState {
 
   forget(id: string): void {
     this.#entries.delete(id);
+  }
+
+  /** The memory of `ids` together, for the bar. */
+  summary(ids: readonly string[], now: number): BarMemory | null {
+    const sessions: SessionMemory[] = ids.map((id) => {
+      const entry = this.#entries.get(id);
+      return { rssBytes: entry && hasValue(entry.sample) ? entry.sample.rssBytes : null, level: entry?.tracker.level ?? "normal", killedAt: (entry?.kills ?? []).map((k) => new Date(k.seenAt)) };
+    });
+    const sum = summarize(sessions, now);
+    if (sum.sampled === 0 && sum.ended === 0) return null;
+    const parts = [`${sum.total ?? "0 MB"} across ${ids.length} live`, ...(sum.near > 0 ? [`${sum.near} near budget`] : []), ...(sum.ended > 0 ? [`${sum.ended} process ended`] : [])];
+    return { live: ids.length, total: sum.total, near: sum.near, ended: sum.ended, sentence: `Memory: ${parts.join(", ")}.` };
   }
 
   /** What the card says about the session's memory, or null when it says nothing. */

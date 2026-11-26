@@ -149,3 +149,56 @@ describe("a process ended on a card", () => {
     assert.equal(presenter.viewModel.cards.filter((c) => c.memory?.state === "ended").length, 1);
   });
 });
+
+describe("the bar's memory summary", () => {
+  const delegate = () => session({ role: "delegate", parentSessionId: architect.id });
+
+  test("sums the last values of the live sessions, with one badge per state present", async () => {
+    const [a, b, c] = [delegate(), delegate(), delegate()];
+    const { presenter, source } = await board([architect, { ...a, memory: memorySample(a.id, 3.4) }, { ...b, memory: memorySample(b.id, 1.2) }, { ...c, memory: memorySample(c.id, 6.1, { budgetBytes: 8 * 1024 ** 3 }) }]);
+    const m = presenter.viewModel.memory!;
+    assert.deepEqual([m.live, m.total, m.near, m.ended], [4, "10.7 GB", 1, 0]);
+    source.emit({ kind: "memory-killed", kill: memoryKill(c.id, at(0)) });
+    assert.equal(presenter.viewModel.memory?.ended, 1);
+  });
+
+  test("kills count for 5 minutes and then drop; several kills count each", async () => {
+    const a = delegate();
+    const { presenter, source, clock } = await board([architect, { ...a, memory: memorySample(a.id, 1.2) }]);
+    source.emit({ kind: "memory-killed", kill: memoryKill(a.id, at(0)) });
+    source.emit({ kind: "memory-killed", kill: memoryKill(a.id, at(1), { pid: 2 }) });
+    assert.equal(presenter.viewModel.memory?.ended, 2);
+    clock.advance(299_999);
+    assert.equal(presenter.viewModel.memory?.ended, 2);
+    clock.advance(1);
+    assert.equal(presenter.viewModel.memory?.ended, 0);
+  });
+
+  test("no summary while no live session has a sample; ended sessions and the sessions without one do not count", async () => {
+    const calm = delegate();
+    const done = session({ role: "delegate", parentSessionId: architect.id, status: "done" });
+    const { presenter, source } = await board([architect, calm, { ...done, memory: memorySample(done.id, 5) }]);
+    const bar = () => presenter.viewModel.memory;
+    assert.equal(bar(), null);
+    source.emit({ kind: "memory", sample: memorySample(calm.id, 2) });
+    assert.deepEqual([bar()?.live, bar()?.total], [2, "2.0 GB"]);
+  });
+
+  test("a session that goes away leaves the sum", async () => {
+    const [a, b] = [delegate(), delegate()];
+    const { presenter, source } = await board([architect, { ...a, memory: memorySample(a.id, 2) }, { ...b, memory: memorySample(b.id, 1) }]);
+    assert.equal(presenter.viewModel.memory?.total, "3.0 GB");
+    source.emit({ kind: "session-deleted", id: b.id });
+    assert.equal(presenter.viewModel.memory?.total, "2.0 GB");
+  });
+
+  test("the canvas's accessible name carries the same phrase", async () => {
+    const a = delegate();
+    const { presenter, source } = await board([architect, { ...a, memory: memorySample(a.id, 3.4) }]);
+    assert.match(presenter.viewModel.canvasLabel, /^2 sessions as a graph\. Memory: 3\.4 GB across 2 live, 1 near budget\. Tab moves/);
+    source.emit({ kind: "memory-killed", kill: memoryKill(a.id, at(0)) });
+    assert.match(presenter.viewModel.canvasLabel, /Memory: 3\.4 GB across 2 live, 1 near budget, 1 process ended\./);
+    const none = await board([architect]);
+    assert.doesNotMatch(none.presenter.viewModel.canvasLabel, /Memory/);
+  });
+});
