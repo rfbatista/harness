@@ -10,6 +10,7 @@ import (
 	"errors"
 	"log/slog"
 	"strings"
+	"sync"
 
 	"operators-mcp/internal/domain"
 	"operators-mcp/internal/ports"
@@ -56,10 +57,37 @@ type DiffSource interface {
 }
 
 // Service is the critic's launcher.
-type Service struct{ d Deps }
+type Service struct {
+	d Deps
+	// ctx ends when the server stops; wg counts the launches in flight.
+	ctx    context.Context
+	cancel context.CancelFunc
+	mu     sync.Mutex
+	wg     sync.WaitGroup
+	closed bool
+}
 
 // New returns the launcher.
-func New(d Deps) *Service { return &Service{d: d} }
+func New(d Deps) *Service {
+	ctx, cancel := context.WithCancel(context.Background())
+	return &Service{d: d, ctx: ctx, cancel: cancel}
+}
+
+// Stop ends the launches in flight and waits for them, within ctx; a change told
+// after it launches nothing. The server calls it when it stops, before the stores
+// close.
+func (s *Service) Stop(ctx context.Context) {
+	s.mu.Lock()
+	s.closed = true
+	s.mu.Unlock()
+	s.cancel()
+	done := make(chan struct{})
+	go func() { s.wg.Wait(); close(done) }()
+	select {
+	case <-done:
+	case <-ctx.Done():
+	}
+}
 
 // ProjectChanged launches the critic for a finished gate run. It is told from
 // the publisher's goroutine, so the work runs apart from it.
@@ -68,8 +96,21 @@ func (s *Service) ProjectChanged(change ports.ProjectChange) {
 		return
 	}
 	run := *change.GateRun
+	s.mu.Lock()
+	if s.closed {
+		s.mu.Unlock()
+		return
+	}
+	s.wg.Add(1)
+	s.mu.Unlock()
 	go func() {
-		if _, err := s.Handle(context.Background(), run); err != nil {
+		defer s.wg.Done()
+		defer func() {
+			if r := recover(); r != nil {
+				slog.Error("critic launch panicked", "session", run.SessionID, "run", run.RunID, "panic", r)
+			}
+		}()
+		if _, err := s.Handle(s.ctx, run); err != nil {
 			slog.Warn("critic launch failed", "session", run.SessionID, "run", run.RunID, "err", err)
 		}
 	}()
@@ -115,6 +156,12 @@ func (s *Service) Handle(ctx context.Context, run ports.GateRunChange) (*domain.
 			slog.Warn("release a critic claim", "session", author.ID, "err", err)
 		}
 	}
+	defer func() {
+		if r := recover(); r != nil {
+			release()
+			panic(r)
+		}
+	}()
 	diff, err := s.d.Diff.Diff(ctx, author, base)
 	if err != nil {
 		release()

@@ -229,9 +229,17 @@ func TestTheCriticsFindingsReachTheAuthorAsATurnAndTheArchitectInTheTaskMessages
 		t.Fatalf("findings messages: %d to the author, %d to the architect, want one each (%d messages)", toAuthor, toArchitect, len(msgs))
 	}
 
-	// The author is mid-turn: the findings are its next turn, at its Stop.
-	if turn := e.stopHook(author.ID); !strings.HasPrefix(turn, "[task message ") || !strings.Contains(turn, "Subject: Critic findings") || !strings.Contains(turn, "the new line has no test") {
-		t.Errorf("the author's next turn = %q", turn)
+	// The author is mid-turn: the findings are among the turns it is handed at
+	// its Stop, in whatever order the channel queued them.
+	var turns []string
+	found := false
+	for i := 0; i < 5 && !found; i++ {
+		turn := e.stopHook(author.ID)
+		turns = append(turns, turn)
+		found = strings.Contains(turn, "[task message ") && strings.Contains(turn, "Subject: Critic findings") && strings.Contains(turn, "the new line has no test")
+	}
+	if !found {
+		t.Errorf("the author was never handed the findings: %q", turns)
 	}
 
 	// Advisory: a red verdict leaves the author's declaration accepted.

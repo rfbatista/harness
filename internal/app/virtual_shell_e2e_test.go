@@ -25,11 +25,11 @@ import (
 	"operators-mcp/internal/adapter/in/httpapi"
 	"operators-mcp/internal/adapter/in/mcpsession"
 	"operators-mcp/internal/app/catalog"
+	"operators-mcp/internal/application/agentsystem"
 	"operators-mcp/internal/application/archrules"
 	"operators-mcp/internal/application/artifacts"
 	"operators-mcp/internal/application/branchgate"
 	"operators-mcp/internal/application/branchwatch"
-	"operators-mcp/internal/application/agentsystem"
 	"operators-mcp/internal/application/gateruns"
 	"operators-mcp/internal/application/gitcredentials/gitcredentialstest"
 	"operators-mcp/internal/application/notifications"
@@ -77,11 +77,11 @@ type shellE2E struct {
 	// agentSystem is the real settings store: the critic reads it.
 	agentSystem *agentsystem.Service
 	visualQA    *visualqa.Service
-	gate     *branchgate.Service
-	watch    *branchwatch.Service
-	pushes   ports.PushRecords
-	wgit     ports.WorktreeGit
-	notes    *notifications.Service
+	gate        *branchgate.Service
+	watch       *branchwatch.Service
+	pushes      ports.PushRecords
+	wgit        ports.WorktreeGit
+	notes       *notifications.Service
 	// repoAgents is which agents each repository assigns, and its prompts.
 	repoAgents *repoagents.Service
 	// db is the server's database, for tests that make a store fail.
