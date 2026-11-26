@@ -69,6 +69,14 @@ type ModeModel struct {
 	BuiltIn string
 }
 
+// ModeModelOf reads one mode's model through read, as ModeModels does.
+func ModeModelOf(mode SessionMode, read func(key string) string) string {
+	if v := read(ModeModelKey(mode)); v != "" {
+		return v
+	}
+	return ModeBuiltInModel(mode)
+}
+
 // ModeModels reads every mode's model through read, which returns a setting's
 // stored value ("" while unset), in the order a person reads the modes.
 func ModeModels(read func(key string) string) []ModeModel {
