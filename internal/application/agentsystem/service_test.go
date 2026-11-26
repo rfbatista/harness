@@ -418,3 +418,117 @@ func TestDeletingARepositoryOrProjectRemovesWhatItSet(t *testing.T) {
 		}
 	}
 }
+
+func gate(eff domain.EffectiveAgentSystem, kind domain.GateKind) (domain.EffectiveGate, bool) {
+	for _, g := range eff.Guard.Gates {
+		if g.Kind == kind {
+			return g, true
+		}
+	}
+	return domain.EffectiveGate{}, false
+}
+
+func TestAGateIsOverriddenPerKindAndTheOthersAreInherited(t *testing.T) {
+	svc := agentsystem.New(world())
+	ctx := context.Background()
+	_, err := svc.SaveProject(ctx, "p1", patch(t, map[string]string{
+		"guard.gates.build.command": `"make build"`, "guard.gates.test.command": `"make test"`, "guard.gates.test.timeout_seconds": "900",
+	}))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := svc.SaveRepository(ctx, "p1", "r1", patch(t, map[string]string{
+		"guard.gates.test.command": `"go test ./..."`, "guard.gates.build.timeout_seconds": "30",
+	})); err != nil {
+		t.Fatal(err)
+	}
+
+	got, _ := svc.Effective(ctx, "p1", "r1")
+	test, _ := gate(got, domain.GateTest)
+	if test.Command.Value != "go test ./..." || test.Command.Source != domain.SourceRepository || test.TimeoutSeconds.Value != 900 || test.TimeoutSeconds.Source != domain.SourceProject {
+		t.Errorf("test gate = %+v, want the repository's command with the project's timeout", test)
+	}
+	build, _ := gate(got, domain.GateBuild)
+	if build.Command.Value != "make build" || build.Command.Source != domain.SourceProject || build.TimeoutSeconds.Value != 30 || build.TimeoutSeconds.Source != domain.SourceRepository {
+		t.Errorf("build gate = %+v, want the project's command with the repository's timeout", build)
+	}
+	if len(got.MissingRequiredGates) != 3 {
+		t.Errorf("missing = %v, want lint, secret_scan, lockfile", got.MissingRequiredGates)
+	}
+	other, _ := svc.Effective(ctx, "p1", "r2")
+	if g, _ := gate(other, domain.GateTest); g.Command.Value != "make test" {
+		t.Errorf("sibling test gate = %+v", g)
+	}
+}
+
+func TestRequiredGateRulesRefuseWithTheKindNamed(t *testing.T) {
+	svc := agentsystem.New(world())
+	ctx := context.Background()
+	for _, c := range []struct{ field, value, code string }{
+		{"guard.gates.test.command", `""`, "REQUIRED_GATE_MISSING"},
+		{"guard.gates.lint.command", `"  "`, "REQUIRED_GATE_MISSING"},
+		{"guard.gates.secret_scan.enabled", `false`, "REQUIRED_GATE_DISABLED"},
+		{"guard.gates.nope.command", `"x"`, "UNKNOWN_FIELD"},
+		{"guard.gates.test.nope", `"x"`, "UNKNOWN_FIELD"},
+		{"guard.gates.test.timeout_seconds", `0`, "OUT_OF_RANGE"},
+		{"guard.gates.sast.command", `""`, "OUT_OF_RANGE"},
+	} {
+		for _, save := range []func() error{
+			func() error {
+				_, err := svc.SaveProject(ctx, "p1", patch(t, map[string]string{c.field: c.value}))
+				return err
+			},
+			func() error {
+				_, err := svc.SaveRepository(ctx, "p1", "r1", patch(t, map[string]string{c.field: c.value}))
+				return err
+			},
+		} {
+			if got := codes(t, save()); got[c.field] != c.code {
+				t.Errorf("%s = %s: %v, want %s", c.field, c.value, got, c.code)
+			}
+		}
+	}
+}
+
+func TestResettingARequiredGateOverrideFallsBackToTheNextLevel(t *testing.T) {
+	svc := agentsystem.New(world())
+	ctx := context.Background()
+	_, _ = svc.SaveProject(ctx, "p1", patch(t, map[string]string{"guard.gates.test.command": `"make test"`}))
+	_, _ = svc.SaveRepository(ctx, "p1", "r1", patch(t, map[string]string{"guard.gates.test.command": `"go test"`}))
+
+	if _, err := svc.SaveRepository(ctx, "p1", "r1", patch(t, map[string]string{"guard.gates.test.command": "null"})); err != nil {
+		t.Fatal(err)
+	}
+	got, _ := svc.Effective(ctx, "p1", "r1")
+	if g, _ := gate(got, domain.GateTest); g.Command.Value != "make test" || g.Command.Source != domain.SourceProject {
+		t.Errorf("test gate = %+v", g)
+	}
+	if _, err := svc.SaveProject(ctx, "p1", patch(t, map[string]string{"guard.gates.test.command": "null"})); err != nil {
+		t.Fatal(err)
+	}
+	got, _ = svc.Effective(ctx, "p1", "r1")
+	if len(got.MissingRequiredGates) != 5 {
+		t.Errorf("a required gate with no command anywhere must be missing: %v", got.MissingRequiredGates)
+	}
+}
+
+func TestOptionalGatesCanBeAddedChangedAndRemoved(t *testing.T) {
+	svc := agentsystem.New(world())
+	ctx := context.Background()
+	if got, _ := svc.Effective(ctx, "p1", "r1"); len(got.Guard.Gates) != 5 {
+		t.Fatalf("an optional gate with no command must be absent, got %d gates", len(got.Guard.Gates))
+	}
+	_, _ = svc.SaveProject(ctx, "p1", patch(t, map[string]string{"guard.gates.sast.command": `"semgrep ci"`}))
+	got, _ := svc.Effective(ctx, "p1", "r1")
+	if g, ok := gate(got, domain.GateSAST); !ok || g.Command.Value != "semgrep ci" || g.TimeoutSeconds.Value != 600 {
+		t.Fatalf("sast gate = %+v, %v", g, ok)
+	}
+	_, _ = svc.SaveRepository(ctx, "p1", "r1", patch(t, map[string]string{"guard.gates.sast.enabled": "false"}))
+	got, _ = svc.Effective(ctx, "p1", "r1")
+	if _, ok := gate(got, domain.GateSAST); ok {
+		t.Error("an optional gate disabled by the repository is still listed")
+	}
+	if other, _ := svc.Effective(ctx, "p1", "r2"); len(other.Guard.Gates) != 6 {
+		t.Error("the sibling lost the project's optional gate")
+	}
+}

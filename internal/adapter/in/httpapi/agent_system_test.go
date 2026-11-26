@@ -227,3 +227,35 @@ func TestRepositoryAgentSystemRefusesLikeTheProjectAndKnowsItsProject(t *testing
 		}
 	}
 }
+
+func TestPatchOfAGateIsRefusedWithTheRequiredGateCodes(t *testing.T) {
+	h := agentSystemHandler(t)
+	for _, base := range []string{"/projects/p1/agent-system", "/projects/p1/repositories/r1/agent-system"} {
+		for body, code := range map[string]string{
+			`{"guard.gates.test.command": ""}`:        "REQUIRED_GATE_MISSING",
+			`{"guard.gates.build.enabled": false}`:    "REQUIRED_GATE_DISABLED",
+			`{"guard.gates.test.timeout_seconds": 0}`: "OUT_OF_RANGE",
+		} {
+			rec := patchJSON(t, h, base, body)
+			var e agentSystemErrors
+			if rec.Code != http.StatusUnprocessableEntity || json.Unmarshal(rec.Body.Bytes(), &e) != nil || len(e.Errors) != 1 || e.Errors[0].Code != code {
+				t.Errorf("PATCH %s %s -> %d %s, want %s", base, body, rec.Code, rec.Body.String(), code)
+			}
+		}
+	}
+}
+
+func TestGetRepositoryListsTheRequiredGateItIsMissing(t *testing.T) {
+	h := agentSystemHandler(t)
+	patchJSON(t, h, "/projects/p1/agent-system", `{"guard.gates.build.command": "make build"}`)
+
+	rec := getJSON(t, h, "/projects/p1/repositories/r1/agent-system")
+	var view struct {
+		Effective struct {
+			Missing []string `json:"missing_required_gates"`
+		} `json:"effective"`
+	}
+	if json.Unmarshal(rec.Body.Bytes(), &view) != nil || len(view.Effective.Missing) != 4 || view.Effective.Missing[0] != "test" {
+		t.Fatalf("missing = %v: %s", view.Effective.Missing, rec.Body.String())
+	}
+}

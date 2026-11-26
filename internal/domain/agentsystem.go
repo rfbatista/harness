@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"slices"
+	"strings"
 )
 
 // The agent system settings (ADR 0011, the Glossary's "Sistema agêntico"): the
@@ -208,13 +209,25 @@ func ResolveAgentSystem(defaults AgentSystemHarnessDefaults, levels ...AgentSyst
 	out.Review.VisualQA.UI = pickField[*VisualQAUI](FieldVisualQAUI, levels, nil)
 	out.Score.TrajectoryRecording.Default = pickField(FieldTrajectoryRecordingDefault, levels, false)
 
-	for _, kind := range RequiredGateKinds {
+	for _, kind := range append(slices.Clone(RequiredGateKinds), OptionalGateKinds...) {
 		d := defaults.Gates[kind]
-		g := EffectiveGate{Kind: kind, Command: harnessField(d.Command), TimeoutSeconds: harnessField(DefaultGateTimeoutSeconds)}
-		g.Command.Reason = d.Reason
-		out.Guard.Gates = append(out.Guard.Gates, g)
-		if d.Command == "" {
-			out.MissingRequiredGates = append(out.MissingRequiredGates, kind)
+		g := EffectiveGate{
+			Kind:           kind,
+			Command:        pickField(GateField(kind, GateAttrCommand), levels, d.Command),
+			TimeoutSeconds: pickField(GateField(kind, GateAttrTimeout), levels, DefaultGateTimeoutSeconds),
+		}
+		if g.Command.Source == SourceHarness {
+			g.Command.Reason = d.Reason
+		}
+		if kind.IsRequired() {
+			out.Guard.Gates = append(out.Guard.Gates, g)
+			if g.Command.Value == "" {
+				out.MissingRequiredGates = append(out.MissingRequiredGates, kind)
+			}
+			continue
+		}
+		if g.Command.Value != "" && pickField(GateField(kind, GateAttrEnabled), levels, true).Value {
+			out.Guard.Gates = append(out.Guard.Gates, g)
 		}
 	}
 	return out
@@ -234,6 +247,60 @@ const (
 	FieldVisualQAUI                 = "review.visual_qa.ui"
 	FieldTrajectoryRecordingDefault = "score.trajectory_recording.default"
 )
+
+// The attributes of a gate a level can set, under "guard.gates.<kind>.".
+const (
+	GateAttrCommand = "command"
+	GateAttrTimeout = "timeout_seconds"
+	GateAttrEnabled = "enabled"
+)
+
+const gateFieldPrefix = "guard.gates."
+
+// GateField is the field path of one attribute of one gate kind.
+func GateField(kind GateKind, attr string) string { return gateFieldPrefix + string(kind) + "." + attr }
+
+// gateField reads a gate field path; ok is false when path is not one of a
+// known kind and attribute.
+func gateField(path string) (kind GateKind, attr string, ok bool) {
+	rest, found := strings.CutPrefix(path, gateFieldPrefix)
+	if !found {
+		return "", "", false
+	}
+	k, attr, found := strings.Cut(rest, ".")
+	kind = GateKind(k)
+	if !found || !(kind.IsRequired() || slices.Contains(OptionalGateKinds, kind)) {
+		return "", "", false
+	}
+	return kind, attr, attr == GateAttrCommand || attr == GateAttrTimeout || attr == GateAttrEnabled
+}
+
+// checkGateField validates one gate attribute of kind.
+func checkGateField(kind GateKind, attr string, raw json.RawMessage) (json.RawMessage, *AgentSystemFieldError) {
+	switch attr {
+	case GateAttrTimeout:
+		return checkIntRange(1, 1<<31-1)(raw)
+	case GateAttrEnabled:
+		canon, e := checkBool(raw)
+		if e == nil && string(canon) == "false" && kind.IsRequired() {
+			return nil, &AgentSystemFieldError{Code: CodeRequiredGateDisabled, Message: string(kind) + " is a required gate and cannot be disabled"}
+		}
+		return canon, e
+	}
+	canon, e := checkString(raw)
+	if e != nil {
+		return nil, e
+	}
+	var cmd string
+	_ = json.Unmarshal(canon, &cmd)
+	if strings.TrimSpace(cmd) == "" {
+		if kind.IsRequired() {
+			return nil, &AgentSystemFieldError{Code: CodeRequiredGateMissing, Message: string(kind) + " is a required gate and needs a command"}
+		}
+		return nil, &AgentSystemFieldError{Code: CodeOutOfRange, Message: "the command must not be empty; reset it to remove the gate"}
+	}
+	return canon, nil
+}
 
 // Codes of a refused save (contract "REST API").
 const (
@@ -295,6 +362,11 @@ func ValidateAgentSystemPatch(patch map[string]json.RawMessage) (set AgentSystem
 	for _, path := range paths {
 		raw := patch[path]
 		check, known := fieldChecks[path]
+		if kind, attr, ok := gateField(path); ok {
+			check, known = func(raw json.RawMessage) (json.RawMessage, *AgentSystemFieldError) {
+				return checkGateField(kind, attr, raw)
+			}, true
+		}
 		if !known {
 			bad = append(bad, AgentSystemFieldError{Field: path, Code: CodeUnknownField, Message: "no such setting"})
 			continue
