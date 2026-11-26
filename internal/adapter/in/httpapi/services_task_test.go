@@ -116,3 +116,62 @@ func TestTaskServices_ARequestListHoldsOnlyTheTasksPendingRequests(t *testing.T)
 	f.answer(byTask["task-2"], "deny", "")
 	f.waitingFor(two)
 }
+
+func (f *mcpFixture) personAction(verb, id, taskID string) {
+	f.t.Helper()
+	body := map[string]any{"service_id": id}
+	if taskID != "" {
+		body["task_id"] = taskID
+	}
+	if code, out := f.call("POST", "/api/"+verb, body); code != 200 {
+		f.t.Fatalf("%s = %d %v", verb, code, out)
+	}
+}
+
+func startedBy(svc map[string]any) map[string]any {
+	return svc["run"].(map[string]any)["started_by"].(map[string]any)
+}
+
+func TestTaskServices_APersonRestartFromTheTaskPageRecordsTheTaskOnTheRun(t *testing.T) {
+	f := newMCPFixture(t, 5*time.Second)
+	id := f.commandIn(f.repoID, "web", "sleep 30", "")
+	f.personAction("start_service", id, "")
+	t.Cleanup(func() { f.operate("stop_service", id) })
+	if got := f.taskServices("task-9"); len(got) != 0 {
+		t.Fatalf("a person's own start belongs to no task: %v", got)
+	}
+
+	f.personAction("restart_service", id, "task-9")
+	f.awaitStatus(id, "running")
+	if by := startedBy(f.service(id)); by["kind"] != "person" || by["task_id"] != "task-9" {
+		t.Fatalf("started_by = %v", by)
+	}
+	if got := f.taskServices("task-9"); !slices.Equal(got, []string{"web"}) {
+		t.Fatalf("services of task-9 = %v", got)
+	}
+
+	f.personAction("restart_service", id, "")
+	f.awaitStatus(id, "running")
+	if by := startedBy(f.service(id)); by["task_id"] != "" {
+		t.Fatalf("a restart with no task records none: %v", by)
+	}
+}
+
+func TestTaskServices_AStopFromTheTaskPageKeepsTheServiceInTheTasksList(t *testing.T) {
+	f := newRequestsFixture(t, 5*time.Second)
+	f.autoApprove()
+	f.ticketID = "task-1"
+	f.session("sess-1", f.projectID, f.repoID, true)
+	id := f.commandIn(f.repoID, "web", "sleep 30", "")
+	f.as("sess-1").ok("start_service", named("web"))
+	f.awaitStatus(id, "running")
+
+	f.personAction("stop_service", id, "task-1")
+	f.awaitStatus(id, "stopped")
+	if by := startedBy(f.service(id)); by["kind"] != "session" || by["task_id"] != "task-1" {
+		t.Fatalf("a stop keeps who started the run: %v", by)
+	}
+	if got := f.taskServices("task-1"); !slices.Equal(got, []string{"web"}) {
+		t.Fatalf("services of task-1 after the stop = %v", got)
+	}
+}

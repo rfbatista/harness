@@ -129,6 +129,10 @@ func (h *Handler) followServices(ctx context.Context, projectID string) (<-chan 
 
 type serviceIDRequest struct {
 	ServiceID string `json:"service_id"`
+	// TaskID is the task page the person acts from, when they do: a restart
+	// records it on the new run so the service stays a serviço da task. A stop
+	// accepts it and rewrites nothing.
+	TaskID string `json:"task_id"`
 }
 
 func (h *Handler) handleStartService(c echo.Context) error {
@@ -178,6 +182,7 @@ func (h *Handler) handleRestartService(c echo.Context) error {
 		return err
 	}
 	opts := personStart
+	opts.StartedBy.TaskID = in.TaskID
 	opts.Repeat = true // the same run worktree as the last run (ADR 0077)
 	svc, err := h.services.RestartService(c.Request().Context(), in.ServiceID, opts)
 	if err != nil {
