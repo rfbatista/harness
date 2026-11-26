@@ -7,7 +7,7 @@ import { isFeatureOpen, needsYouCount, reviewsCount, type Rail, type RailModelSt
 import type { FeaturePrefs } from "../../application/ports";
 import { navItems, servicesBadge, type NavIcon, type ProjectNav } from "../../domain/nav";
 import { railGroups } from "../../domain/rail-groups";
-import { toGroup, type GroupViewModel } from "./rail-rows";
+import { SERVER_PAINT_ROWS, toGroup, type GroupViewModel } from "./rail-rows";
 
 /** The page of the project's navigation, as the view draws it. */
 export interface NavItemViewModel {
@@ -69,8 +69,9 @@ export function railViewModel(state: RailModelState, features: FeaturePrefs, sta
     query: state.query,
     open: (id: string) => isFeatureOpen(state, features, id),
   };
-  // Done's rest is behind a closed disclosure: the server's paint leaves it out and the island adds it once it has taken over.
-  const groups = railGroups(state.tasks, { byTask, currentId: state.currentTaskId, collapsed: state.collapsed, query: state.query, needsYouOnly: state.needsYouOnly }).map((g) => toGroup(g, ctx, state.prefsRead));
+  // The server's paint is a first screenful; the island adds the rest once it has taken over (state.prefsRead).
+  const budget = state.prefsRead ? null : { left: SERVER_PAINT_ROWS };
+  const groups = railGroups(state.tasks, { byTask, currentId: state.currentTaskId, collapsed: state.collapsed, query: state.query, needsYouOnly: state.needsYouOnly }).map((g) => toGroup(g, ctx, budget));
   const matched = groups.reduce((n, g) => n + g.rows.length, 0);
   const query = state.query.trim();
   const waiting = needsYouCount(state);

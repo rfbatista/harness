@@ -164,20 +164,24 @@ function waitsOn(task: Task, ctx: RowContext, nesting: Nesting): boolean {
   return (kids.length > 0 && !open ? [task, ...kids] : [task]).some((t) => needsYou(t, ctx.byTask[t.id]));
 }
 
+/** How many rows the server paints across the open groups: about the rail's height on a desktop screen. */
+export const SERVER_PAINT_ROWS = 36;
+
 /**
  * A group as the view binds it: its heading, its rows and Done's rest.
- * `complete` draws what is out of sight: Done's rest (behind a closed disclosure)
- * and the rows of a folded group other than the open task and what needs the
- * person, which a folded group still shows. The server leaves those out of its
- * paint, since every row costs the page its render time; the island adds them
- * once it has taken over.
+ * `budget` is how many rows the server's paint may still draw: it draws a first
+ * screenful, always with the open task (or the feature holding it); a folded
+ * group spends it only on the rows that need the person. Every row costs the
+ * page its render time. A browser that has taken over passes none and draws
+ * everything, so what was left out arrives without moving what was painted.
  */
-export function toGroup(g: RailGroup, ctx: RowContext, complete: boolean): GroupViewModel {
+export function toGroup(g: RailGroup, ctx: RowContext, budget: { left: number } | null): GroupViewModel {
   const nesting: Nesting = { kids: g.kids, kidTotals: g.kidTotals, filtering: g.filtering, isKid: false };
-  const visible = (t: Task): boolean => t.id === ctx.currentId || (nesting.kids[t.id] ?? []).some((k) => k.id === ctx.currentId) || waitsOn(t, ctx, nesting);
-  const drawn = complete || !g.collapsed ? g.rows : g.rows.filter(visible);
+  const isOpen = (t: Task): boolean => t.id === ctx.currentId || (nesting.kids[t.id] ?? []).some((k) => k.id === ctx.currentId);
+  // The open task is always drawn; the rest share the budget, and a folded group spends it only on what needs the person.
+  const drawn = budget === null ? g.rows : g.rows.filter((t) => isOpen(t) || ((!g.collapsed || waitsOn(t, ctx, nesting)) && budget.left-- > 0));
   const rows = drawn.map((t) => toRow(t, ctx, nesting));
-  const more = complete ? g.more.map((t) => toRow(t, ctx, nesting)) : [];
+  const more = budget === null ? g.more.map((t) => toRow(t, ctx, nesting)) : [];
   const waiting = g.rows.filter((t) => waitsOn(t, ctx, nesting)).length + g.more.filter((t) => waitsOn(t, ctx, nesting)).length;
   let countText = String(g.total);
   let countWords = g.total === 1 ? " task" : " tasks";

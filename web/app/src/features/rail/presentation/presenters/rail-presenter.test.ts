@@ -9,6 +9,7 @@ import { memoryRailFeed, memoryRailSource, memoryServicesCount } from "../../inf
 import { session, task } from "../../testing/fixtures";
 import type { ProjectNav } from "../../domain/nav";
 import { RailPresenter } from "./rail-presenter";
+import { SERVER_PAINT_ROWS } from "./rail-rows";
 import type { RowViewModel } from "./rail-rows";
 
 const NAV: ProjectNav = { newTaskHref: "/projects/p1/tasks/new", boardHref: "/projects/p1", codeHref: "", servicesHref: "/projects/p1/services", servicesProjectId: "p1", servicesRunning: 120, reviewsHref: "/projects/p1/reviews", documentsHref: "", designHref: "/projects/p1/design", designSystemHref: "/projects/p1/design-system", designSystemProposals: 2, usageHref: "", productOwnerHref: "/projects/p1/owner" };
@@ -137,6 +138,19 @@ describe("folding", () => {
     assert.equal(group("backlog").countWords, " tasks, 1 needs you");
     presenter.hydrated();
     assert.deepEqual(group("backlog").rows.map((r) => r.id), ["b1", "b2", "b3"]);
+  });
+
+  test("the server's paint is a first screenful of rows, always with the open task; the island adds the rest", () => {
+    const tasks = Array.from({ length: 60 }, (_, n) => task({ id: `t${n}`, title: `Task ${n}`, status: n < 40 ? "todo" : "backlog" }));
+    const { vm, group, presenter } = setup({ tasks, sessions: [session("s", "t5", "idle"), session("w", "t55", "idle")], currentTask: "t45" });
+    const painted = vm().groups.reduce((n, g) => n + g.rows.length, 0);
+    assert.equal(painted, SERVER_PAINT_ROWS + 1, "the budget, plus the open task, which is always drawn");
+    assert.deepEqual(group("backlog").rows.map((r) => r.id), ["t45"], "the budget went to Todo; a waiting task beyond it arrives with the island");
+    assert.equal(group("todo").rows.length, SERVER_PAINT_ROWS);
+    assert.equal(group("backlog").countText, "20", "the counts are the project's, not the paint's");
+    assert.equal(group("backlog").countWords, " tasks, 1 needs you", "and so are the words");
+    presenter.hydrated();
+    assert.deepEqual([group("todo").rows.length, group("backlog").rows.length], [40, 20]);
   });
 
   test("Done caps at five with Show N more, and the open task stays in view", () => {
