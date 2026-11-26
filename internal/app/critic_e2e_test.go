@@ -4,12 +4,15 @@ package app
 
 import (
 	"encoding/json"
+	"net/http"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 	"time"
 
+	"operators-mcp/internal/adapter/in/httpapi"
 	"operators-mcp/internal/application/orchestration"
 	"operators-mcp/internal/domain"
 	"operators-mcp/internal/ports"
@@ -130,6 +133,16 @@ func TestAGreenDeclarationRunLaunchesOneReadOnlyCriticOnTheCriticModel(t *testin
 		t.Errorf("a harness-launched critic has no parent session, got %q", c.ParentSessionID)
 	}
 
+	// The critic's sandbox holds the author's worktree read-only: the OS
+	// refuses every write and every commit.
+	drv := e.orch.Sandbox.Driver.(*portstest.RecordingSandboxDriver)
+	calls := drv.Calls()
+	if len(calls) == 0 {
+		t.Fatal("the critic was started without a sandbox")
+	}
+	if p := calls[len(calls)-1].Policy; slices.Contains(p.Writable, author.WorkingDir) || !slices.Contains(p.Readable, author.WorkingDir) {
+		t.Errorf("the critic's sandbox policy = writable %v, readable %v: want the author's worktree read-only", p.Writable, p.Readable)
+	}
 	opening := e.openingOf(c.ID)
 	for _, want := range []string{"You are the critic", "feature.txt", "+a new line"} {
 		if !strings.Contains(opening, want) {
@@ -161,4 +174,67 @@ func TestNoCriticAfterAPracticeRunOrWhenTheCriticIsOff(t *testing.T) {
 		t.Fatal(err)
 	}
 	e.noMoreCritics(author, 0)
+}
+
+// stopHook is the session's Stop hook, as the CLI posts it; it returns the
+// reason claude is told to go on with, "" when it may stop.
+func (e *shellE2E) stopHook(id string) string {
+	e.t.Helper()
+	res, err := http.Post(e.srv.URL+httpapi.InteractiveSessionHookPath+"?session_id="+id+"&event=Stop", "application/json",
+		strings.NewReader(`{"hook_event_name":"Stop","stop_hook_active":false}`))
+	if err != nil {
+		e.t.Fatal(err)
+	}
+	defer res.Body.Close()
+	var out map[string]any
+	_ = json.NewDecoder(res.Body).Decode(&out)
+	reason, _ := out["reason"].(string)
+	return reason
+}
+
+func TestTheCriticsFindingsReachTheAuthorAsATurnAndTheArchitectInTheTaskMessages(t *testing.T) {
+	e, author := criticWorld(t)
+	arch, _, err := e.orch.StartInteractive(e.ctx, ports.InteractiveRequest{ProjectID: e.project, RepositoryID: e.repo, TicketID: author.TicketID, Mode: "architect"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := e.callTool(author.ID, "declare_done", nil); err != nil {
+		t.Fatal(err)
+	}
+	critic := e.waitForCritics(author, 1)[0]
+
+	findings := "Verdict: changes_requested\nfeature.txt:1 · major · the new line has no test"
+	if _, err := e.callTool(critic.ID, "message_architect", map[string]any{"kind": "status_report", "status": "done", "body": findings}); err != nil {
+		t.Fatalf("the critic's report: %v", err)
+	}
+
+	msgs, err := e.channel.ListTaskMessages(e.ctx, author.TicketID, ports.TaskMessageFilter{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	var toAuthor, toArchitect int
+	for _, m := range msgs {
+		if m.FromSessionID != critic.ID || !strings.Contains(m.Body, "feature.txt:1 · major") {
+			continue
+		}
+		switch m.ToSessionID {
+		case author.ID:
+			toAuthor++
+		case arch.ID:
+			toArchitect++
+		}
+	}
+	if toAuthor != 1 || toArchitect != 1 {
+		t.Fatalf("findings messages: %d to the author, %d to the architect, want one each (%d messages)", toAuthor, toArchitect, len(msgs))
+	}
+
+	// The author is mid-turn: the findings are its next turn, at its Stop.
+	if turn := e.stopHook(author.ID); !strings.HasPrefix(turn, "[task message ") || !strings.Contains(turn, "Subject: Critic findings") || !strings.Contains(turn, "the new line has no test") {
+		t.Errorf("the author's next turn = %q", turn)
+	}
+
+	// Advisory: a red verdict leaves the author's declaration accepted.
+	if out, err := e.callTool(author.ID, "declare_done", nil); err != nil || out["accepted"] != true {
+		t.Errorf("declare_done after the findings: %v %v", out, err)
+	}
 }
