@@ -113,3 +113,55 @@ func TestATaskMemoryRefusalRidesWithARedGateRunAndNeverCountsTowardTheRetryLimit
 		t.Errorf("counted runs = %d, want 1 (the memory refusal adds none)", counted)
 	}
 }
+
+func (e *shellE2E) resumed(sess *domain.Session) {
+	e.t.Helper()
+	e.orch.Transcripts = transcriptsThatResume{}
+	if _, err := e.orch.EndInteractive(e.ctx, sess.ID, 0, false); err != nil {
+		e.t.Fatal(err)
+	}
+	if _, _, err := e.orch.ResumeInteractive(e.ctx, ports.ResumeRequest{SessionID: sess.ID, RunsOn: domain.RunnerTUI}); err != nil {
+		e.t.Fatal(err)
+	}
+}
+
+// A resume keeps what the session was asked: an update made before it is not
+// asked for again, and neither is a request already made.
+func TestDeclareDoneAfterAResumeStillKnowsTheUpdateTheSessionMade(t *testing.T) {
+	e := newShellE2E(t)
+	sess := e.gatedSession(&fakeAgentSystem{retry: 3, gates: greenGates()})
+	wrote := "# Progress\n\n## Done\n\n- before the resume\n\n## Failed and why\n\n## Next step\n\n## Open questions\n"
+	if err := os.WriteFile(progressOf(e, sess), []byte(wrote), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := e.orch.TurnEnded(e.ctx, sess.ID, false); err != nil {
+		t.Fatal(err)
+	}
+	e.resumed(sess)
+	if out, err := e.callTool(sess.ID, "declare_done", nil); err != nil || out["accepted"] != true {
+		t.Errorf("declare after a resume = %v, %v", out, err)
+	}
+}
+
+func TestDeclareDoneAfterAResumeDoesNotAskAgainWhatWasAlreadyAsked(t *testing.T) {
+	e := newShellE2E(t)
+	sess := e.gatedSession(&fakeAgentSystem{retry: 3, gates: greenGates()})
+	if _, err := e.callTool(sess.ID, "declare_done", nil); err == nil || !strings.Contains(err.Error(), "TASK_MEMORY_NOT_UPDATED") {
+		t.Fatalf("first declaration: %v", err)
+	}
+	e.resumed(sess)
+	if out, err := e.callTool(sess.ID, "declare_done", nil); err != nil || out["accepted"] != true {
+		t.Errorf("declare after a resume = %v, %v", out, err)
+	}
+}
+
+// The snapshot and the asked state survive a restart too.
+func TestDeclareDoneAfterARestartStillAsksForAnUnchangedMemory(t *testing.T) {
+	e := newShellE2EWith(t, "data.db")
+	sess := e.gatedSession(&fakeAgentSystem{retry: 3, gates: greenGates()})
+	e.restart()
+	e.orch.AgentSystem = &fakeAgentSystem{retry: 3, gates: greenGates()}
+	if _, err := e.callTool(sess.ID, "declare_done", nil); err == nil || !strings.Contains(err.Error(), "TASK_MEMORY_NOT_UPDATED") {
+		t.Errorf("a restarted session with an unchanged memory: %v", err)
+	}
+}

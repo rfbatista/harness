@@ -2,11 +2,14 @@ package orchestration
 
 import (
 	"context"
+	"encoding/json"
 	"log/slog"
+	"os"
 	"sync"
 	"time"
 
 	"operators-mcp/internal/domain"
+	"operators-mcp/internal/ports"
 )
 
 // TaskMemoryNotUpdatedCode and TaskMemoryNotUpdatedMessage are the notice a
@@ -22,33 +25,78 @@ const (
 	TaskMemoryOmittedEvent = "task_memory_omitted"
 )
 
-// taskMemoryCheck holds, per session, the progress.md it started with and
-// whether it was already asked to update it. A restart forgets both: a
-// session without a snapshot is not checked.
-type taskMemoryCheck struct {
-	mu      sync.Mutex
-	atStart map[string]string
-	asked   map[string]bool
+// taskMemoryCheck serialises the checks. What a session started with and was
+// asked is kept in a file beside the task's memory folder (see statePath), so
+// a resume or a restart keeps it.
+type taskMemoryCheck struct{ mu sync.Mutex }
+
+// checkState is what the check keeps of one session.
+type checkState struct {
+	// ProgressAtStart is progress.md as the session first found it.
+	ProgressAtStart string `json:"progress_at_start"`
+	// Asked says the session was asked once to update it; Omitted, that it
+	// declared again without and the omission is recorded.
+	Asked   bool `json:"asked"`
+	Omitted bool `json:"omitted"`
 }
 
-// rememberProgressAtStart keeps the progress.md a session starts with.
-func (s *Service) rememberProgressAtStart(ctx context.Context, sessionID, taskID, repositoryID string) {
-	view, err := s.TaskMemory.GetTaskMemory(ctx, taskID, repositoryID)
+// statePath is where a session's check state is kept: beside the task's
+// folder, outside what a session can write.
+func (s *Service) statePath(taskID, repositoryID, sessionID string) string {
+	dir := s.taskMemoryDir(taskID, repositoryID)
+	if dir == "" {
+		return ""
+	}
+	return dir + ".session-" + sessionID + ".json"
+}
+
+func readCheckState(path string) (checkState, bool) {
+	var st checkState
+	raw, err := os.ReadFile(path)
+	if err != nil || json.Unmarshal(raw, &st) != nil {
+		return st, false
+	}
+	return st, true
+}
+
+func writeCheckState(path string, st checkState) {
+	raw, err := json.Marshal(st)
+	if err == nil {
+		err = os.WriteFile(path, raw, 0o644)
+	}
 	if err != nil {
+		slog.Warn("keep a session's task memory check state", "path", path, "err", err)
+	}
+}
+
+// progressOf is the progress.md of a task memory view.
+func progressOf(view *ports.TaskMemoryView) string {
+	for _, f := range view.Files {
+		if f.Name == domain.TaskMemoryProgressFile {
+			return f.Content
+		}
+	}
+	return ""
+}
+
+// rememberProgressAtStart keeps the progress.md a session starts with. A
+// resume keeps the first snapshot: what the session wrote since is its update.
+func (s *Service) rememberProgressAtStart(ctx context.Context, sessionID, taskID, repositoryID string) {
+	path := s.statePath(taskID, repositoryID, sessionID)
+	if path == "" {
 		return
 	}
 	c := &s.taskMemoryCheck
 	c.mu.Lock()
 	defer c.mu.Unlock()
-	if c.atStart == nil {
-		c.atStart, c.asked = map[string]string{}, map[string]bool{}
+	if _, kept := readCheckState(path); kept {
+		return
 	}
-	for _, f := range view.Files {
-		if f.Name == domain.TaskMemoryProgressFile {
-			c.atStart[sessionID] = f.Content
-		}
+	view, err := s.TaskMemory.GetTaskMemory(ctx, taskID, repositoryID)
+	if err != nil {
+		return
 	}
-	delete(c.asked, sessionID)
+	writeCheckState(path, checkState{ProgressAtStart: progressOf(view)})
 }
 
 // AskToUpdateTaskMemory answers whether a done declaration is to be refused
@@ -67,51 +115,32 @@ func (s *Service) AskToUpdateTaskMemory(ctx context.Context, sess *domain.Sessio
 	if !eff.Learn.TaskMemory.RequireUpdate.Value {
 		return false
 	}
+	path := s.statePath(sess.TicketID, sess.RepositoryID, sess.ID)
+	if path == "" {
+		return false
+	}
 	c := &s.taskMemoryCheck
 	c.mu.Lock()
-	start, ok := c.atStart[sess.ID]
-	c.mu.Unlock()
+	defer c.mu.Unlock()
+	st, ok := readCheckState(path)
 	if !ok {
 		return false
 	}
 	// What the agent wrote on disk is read back before comparing.
 	s.syncTaskMemory(ctx, sess.TicketID, sess.RepositoryID)
 	view, err := s.TaskMemory.GetTaskMemory(ctx, sess.TicketID, sess.RepositoryID)
-	if err != nil {
+	if err != nil || !domain.ProgressUnchanged(st.ProgressAtStart, progressOf(view)) {
 		return false
 	}
-	now := ""
-	for _, f := range view.Files {
-		if f.Name == domain.TaskMemoryProgressFile {
-			now = f.Content
-		}
-	}
-	if !domain.ProgressUnchanged(start, now) {
-		return false
-	}
-	c.mu.Lock()
-	asked := c.asked[sess.ID]
-	c.asked[sess.ID] = true
-	c.mu.Unlock()
-	if !asked {
+	if !st.Asked {
+		st.Asked = true
+		writeCheckState(path, st)
 		return true
 	}
-	if !s.recordedTaskMemoryOmission(sess.ID) {
+	if !st.Omitted {
+		st.Omitted = true
+		writeCheckState(path, st)
 		s.record(sess.ID, SessionEvent{Type: TaskMemoryOmittedEvent, SessionID: sess.ID, Text: "declared done without updating progress.md", At: time.Now()}, sessionChange{})
-	}
-	return false
-}
-
-// recordedTaskMemoryOmission says whether the session's log has the omission.
-func (s *Service) recordedTaskMemoryOmission(sessionID string) bool {
-	events, err := s.sessions.ListEvents(sessionID, 0)
-	if err != nil {
-		return false
-	}
-	for _, ev := range events {
-		if ev.Type == TaskMemoryOmittedEvent {
-			return true
-		}
 	}
 	return false
 }
