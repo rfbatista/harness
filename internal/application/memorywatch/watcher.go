@@ -24,6 +24,8 @@ var _ ports.MemoryWatcher = (*Watcher)(nil)
 const (
 	Interval = time.Second
 	Grace    = 5 * time.Second
+	// readTimeout bounds one read of the process table.
+	readTimeout = 2 * time.Second
 )
 
 // Ticker is a clock's ticker.
@@ -72,6 +74,8 @@ type Watcher struct {
 	runMu  sync.Mutex
 	cancel context.CancelFunc
 	done   chan struct{}
+	// ctx ends when Close is called; table reads run under it.
+	ctx context.Context
 }
 
 // New returns a Watcher with nothing watched and not running.
@@ -79,19 +83,36 @@ func New(d Deps) *Watcher {
 	if d.Clock == nil {
 		d.Clock = realClock{}
 	}
-	return &Watcher{table: d.Table, signal: d.Signal, sink: d.Sink, clock: d.Clock, watches: map[int]*watch{}}
+	return &Watcher{table: d.Table, signal: d.Signal, sink: d.Sink, clock: d.Clock, watches: map[int]*watch{}, ctx: context.Background()}
 }
 
 // watch is one watched session and the process it is ending.
 type watch struct {
 	ports.MemoryWatch
+	// mu serialises judging the session with stopping it, so the empty last
+	// sample is the last thing it publishes and nothing is signalled after.
+	mu      sync.Mutex
+	stopped bool
 	// ending is the process being ended, nil when none.
 	ending *ending
+	// abandoned are processes that outlived SIGKILL and the bound after it,
+	// keyed by pid with their start time: they are never chosen again.
+	abandoned map[int]string
+	lastWarn  time.Time
 }
+
+// warnEvery is the least time between two warnings about the same session.
+const warnEvery = time.Minute
+
+// giveUpAfter is how long after SIGKILL a process may stay in the table
+// before the vigia stops waiting for it (a zombie, a process stuck in I/O).
+const giveUpAfter = Grace
 
 // ending is a process that has been sent SIGTERM and is not gone yet.
 type ending struct {
 	pid      int
+	started  string
+	name     string
 	command  string
 	rss      int64
 	treeRSS  int64
@@ -105,10 +126,11 @@ type ending struct {
 // publishes one last, empty sample so a consumer can clear what it shows; a
 // second stop changes nothing.
 func (w *Watcher) Watch(m ports.MemoryWatch) (stop func()) {
+	wt := &watch{MemoryWatch: m, abandoned: map[int]string{}}
 	w.mu.Lock()
 	id := w.next
 	w.next++
-	w.watches[id] = &watch{MemoryWatch: m}
+	w.watches[id] = wt
 	w.mu.Unlock()
 	var once sync.Once
 	return func() {
@@ -116,6 +138,9 @@ func (w *Watcher) Watch(m ports.MemoryWatch) (stop func()) {
 			w.mu.Lock()
 			delete(w.watches, id)
 			w.mu.Unlock()
+			wt.mu.Lock()
+			defer wt.mu.Unlock()
+			wt.stopped = true
 			w.sampled(domain.MemorySample{
 				Kind: domain.MemorySampleKind, SessionID: m.SessionID, TaskID: m.TaskID,
 				SampledAt: w.clock.Now(), Budget: m.BudgetBytes,
@@ -132,7 +157,7 @@ func (w *Watcher) Start() {
 		return
 	}
 	ctx, cancel := context.WithCancel(context.Background())
-	w.cancel, w.done = cancel, make(chan struct{})
+	w.cancel, w.done, w.ctx = cancel, make(chan struct{}), ctx
 	go func() {
 		defer close(w.done)
 		tick := w.clock.NewTicker(Interval)
@@ -174,7 +199,12 @@ func (w *Watcher) Poll(now time.Time) {
 	if len(watches) == 0 {
 		return
 	}
-	table, err := w.table.Read(context.Background())
+	w.runMu.Lock()
+	run := w.ctx
+	w.runMu.Unlock()
+	ctx, cancel := context.WithTimeout(run, readTimeout)
+	defer cancel()
+	table, err := w.table.Read(ctx)
 	if err != nil {
 		slog.Warn("memory watch: process table not read", "err", err)
 		return
@@ -187,8 +217,18 @@ func (w *Watcher) Poll(now time.Time) {
 // handle is one session's sample: publish it, settle the process being ended,
 // and end the next one when the tree is still over its orçamento.
 func (w *Watcher) handle(wt *watch, table []ports.ProcessInfo, now time.Time) {
+	wt.mu.Lock()
+	defer wt.mu.Unlock()
+	if wt.stopped {
+		return
+	}
 	t, ok := treeOf(table, wt.MemoryWatch)
 	if !ok {
+		// The agent has left the table: a process being ended is still
+		// settled, so a confirmed kill is never lost.
+		if wt.ending != nil {
+			w.settle(wt, t, table, now)
+		}
 		return
 	}
 	sample := domain.MemorySample{
@@ -201,13 +241,17 @@ func (w *Watcher) handle(wt *watch, table []ports.ProcessInfo, now time.Time) {
 	w.sampled(sample)
 
 	if wt.ending != nil {
-		if !w.settle(wt, table, now) {
+		if !w.settle(wt, t, table, now) {
 			return // still ending: end nobody else yet
 		}
 	}
-	victim, ok := t.victim(wt.BudgetBytes)
+	victim, ok := t.victim(wt.BudgetBytes, func(p ports.ProcessInfo) bool {
+		s, gone := wt.abandoned[p.PID]
+		return gone && s == p.Started
+	})
 	if !ok {
-		if t.rss > wt.BudgetBytes {
+		if t.rss > wt.BudgetBytes && now.Sub(wt.lastWarn) >= warnEvery {
+			wt.lastWarn = now
 			slog.Warn("memory watch: tree over its orçamento with nothing eligible to end",
 				"session", wt.SessionID, "rss", t.rss, "budget", wt.BudgetBytes, "agent_rss", t.agentRSS)
 		}
@@ -218,30 +262,49 @@ func (w *Watcher) handle(wt *watch, table []ports.ProcessInfo, now time.Time) {
 		return
 	}
 	wt.ending = &ending{
-		pid: victim.PID, command: command(victim), rss: victim.RSSBytes,
+		pid: victim.PID, started: victim.Started, name: victim.Name, command: command(victim), rss: victim.RSSBytes,
 		treeRSS: t.rss, budget: wt.BudgetBytes, termAt: now,
+	}
+	if e, ok := w.sink.(ports.MemoryEnding); ok {
+		e.Ending(w.killRecord(wt, wt.ending, now, syscall.SIGTERM))
 	}
 }
 
-// settle looks at the process being ended: gone, it is recorded and the watch
-// is free again (true); still there past the grace, it gets SIGKILL, once.
-func (w *Watcher) settle(wt *watch, table []ports.ProcessInfo, now time.Time) (free bool) {
-	e := wt.ending
-	present := false
+// stillThere is whether the process being ended is still in the table as the
+// same process: a pid reused by another one is not it.
+func stillThere(e *ending, table []ports.ProcessInfo) bool {
 	for _, p := range table {
 		if p.PID == e.pid {
-			present = true
-			break
+			return p.Started == e.started && p.Name == e.name
 		}
 	}
-	if !present {
+	return false
+}
+
+// settle looks at the process being ended: gone, it is recorded and the watch
+// is free again (true); still there past the grace, it gets SIGKILL, once; and
+// still there a grace after that, it is given up on and the rest of the tree
+// is watched again.
+func (w *Watcher) settle(wt *watch, _ tree, table []ports.ProcessInfo, now time.Time) (free bool) {
+	e := wt.ending
+	if !stillThere(e, table) {
 		if !e.killed {
 			w.killed(wt, e, now, syscall.SIGTERM)
 		}
 		wt.ending = nil
 		return true
 	}
-	if !e.killed && now.Sub(e.termAt) >= Grace {
+	if e.killed {
+		if now.Sub(e.killedAt) >= giveUpAfter {
+			slog.Warn("memory watch: a process outlived SIGKILL; no longer waiting for it",
+				"session", wt.SessionID, "pid", e.pid, "command", e.command)
+			wt.abandoned[e.pid] = e.started
+			wt.ending = nil
+			return true
+		}
+		return false
+	}
+	if now.Sub(e.termAt) >= Grace {
 		if err := w.signal.Signal(e.pid, syscall.SIGKILL); err != nil {
 			slog.Warn("memory watch: SIGKILL failed", "session", wt.SessionID, "pid", e.pid, "err", err)
 			return false
@@ -252,18 +315,22 @@ func (w *Watcher) settle(wt *watch, table []ports.ProcessInfo, now time.Time) (f
 	return false
 }
 
-func (w *Watcher) killed(wt *watch, e *ending, now time.Time, sig syscall.Signal) {
-	if w.sink == nil {
-		return
-	}
+func (w *Watcher) killRecord(wt *watch, e *ending, now time.Time, sig syscall.Signal) domain.MemoryKill {
 	name := "SIGTERM"
 	if sig == syscall.SIGKILL {
 		name = "SIGKILL"
 	}
-	w.sink.Killed(domain.MemoryKill{
+	return domain.MemoryKill{
 		Kind: domain.MemoryKilledKind, SessionID: wt.SessionID, TaskID: wt.TaskID, KilledAt: now,
 		PID: e.pid, Command: e.command, RSSBytes: e.rss, TreeRSS: e.treeRSS, Budget: e.budget, Signal: name,
-	})
+	}
+}
+
+func (w *Watcher) killed(wt *watch, e *ending, now time.Time, sig syscall.Signal) {
+	if w.sink == nil {
+		return
+	}
+	w.sink.Killed(w.killRecord(wt, e, now, sig))
 }
 
 func (w *Watcher) sampled(s domain.MemorySample) {

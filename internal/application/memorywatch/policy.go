@@ -2,6 +2,7 @@ package memorywatch
 
 import (
 	"path/filepath"
+	"unicode/utf8"
 
 	"operators-mcp/internal/domain"
 	"operators-mcp/internal/ports"
@@ -88,18 +89,45 @@ func treeOf(table []ports.ProcessInfo, w ports.MemoryWatch) (t tree, ok bool) {
 	return t, true
 }
 
-// findAgent is the agent CLI: the process started for the conversation, the
-// one nearest the root when several carry its id (a wrapper may repeat the
-// argument).
+// findAgent is the agent CLI: among the processes started for the conversation
+// (a wrapper may repeat its id), the innermost, the one with no other such
+// process below it. Every such process above it is protected as its ancestor.
 func findAgent(table []ports.ProcessInfo, claudeID string) (ports.ProcessInfo, bool) {
 	if claudeID == "" {
 		return ports.ProcessInfo{}, false
 	}
+	byPID := make(map[int]ports.ProcessInfo, len(table))
+	var matches []ports.ProcessInfo
+	for _, p := range table {
+		byPID[p.PID] = p
+		if p.Session == claudeID {
+			matches = append(matches, p)
+		}
+	}
+	isMatch := map[int]bool{}
+	for _, m := range matches {
+		isMatch[m.PID] = true
+	}
+	// A match is an ancestor when walking up from another match reaches it.
+	ancestor := map[int]bool{}
+	for _, m := range matches {
+		pid := m.PPID
+		for seen := 0; seen < len(table); seen++ {
+			if isMatch[pid] {
+				ancestor[pid] = true
+			}
+			up, ok := byPID[pid]
+			if !ok || up.PPID == pid {
+				break
+			}
+			pid = up.PPID
+		}
+	}
 	var best ports.ProcessInfo
 	found := false
-	for _, p := range table {
-		if p.Session == claudeID && (!found || p.PID > best.PID) {
-			best, found = p, true
+	for _, m := range matches {
+		if !ancestor[m.PID] && (!found || m.PID < best.PID) {
+			best, found = m, true
 		}
 	}
 	return best, found
@@ -121,10 +149,17 @@ func (t tree) heaviest() (ports.ProcessInfo, bool) {
 // victim is the process to end for a tree over budget: the heaviest eligible
 // one. Nothing when the tree is within budget, when the agent CLI alone holds
 // the orçamento (ending its tools would not help), or when nothing is eligible.
-func (t tree) victim(budget int64) (ports.ProcessInfo, bool) {
+func (t tree) victim(budget int64, skip func(ports.ProcessInfo) bool) (ports.ProcessInfo, bool) {
 	if t.rss <= budget || t.agentRSS >= budget {
 		return ports.ProcessInfo{}, false
 	}
+	var kept []ports.ProcessInfo
+	for _, p := range t.eligible {
+		if !skip(p) {
+			kept = append(kept, p)
+		}
+	}
+	t.eligible = kept
 	return t.heaviest()
 }
 
@@ -136,7 +171,11 @@ func command(p ports.ProcessInfo) string {
 		name += " " + p.Arg
 	}
 	if len(name) > domain.MemoryCommandMax {
-		name = name[:domain.MemoryCommandMax]
+		cut := domain.MemoryCommandMax
+		for cut > 0 && !utf8.RuneStart(name[cut]) {
+			cut--
+		}
+		name = name[:cut]
 	}
 	return name
 }

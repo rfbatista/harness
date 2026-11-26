@@ -28,14 +28,14 @@ type Table struct{}
 // Read runs ps once. The session column is compared, never interpreted: on
 // macOS it is the kernel's session handle, equal for processes of one session.
 func (Table) Read(ctx context.Context) ([]ports.ProcessInfo, error) {
-	out, err := exec.CommandContext(ctx, "ps", "-axww", "-o", "pid=,ppid=,sess=,rss=,command=").Output()
+	out, err := exec.CommandContext(ctx, "ps", "-axww", "-o", "pid=,ppid=,sess=,rss=,lstart=,command=").Output()
 	if err != nil {
 		return nil, fmt.Errorf("read the process table: %w", err)
 	}
 	return Parse(string(out)), nil
 }
 
-// Parse reads ps's "pid ppid sess rss command" lines; rss is in KB. A line
+// Parse reads ps's "pid ppid sess rss lstart command" lines; rss is in KB; lstart is five words ("Thu Nov 26 08:59:31 2026"). A line
 // that does not parse is skipped.
 func Parse(out string) []ports.ProcessInfo {
 	var rows []ports.ProcessInfo
@@ -43,7 +43,7 @@ func Parse(out string) []ports.ProcessInfo {
 	sc.Buffer(make([]byte, 0, 64*1024), 4<<20)
 	for sc.Scan() {
 		f := strings.Fields(sc.Text())
-		if len(f) < 5 {
+		if len(f) < 10 {
 			continue
 		}
 		pid, e1 := strconv.Atoi(f[0])
@@ -52,8 +52,9 @@ func Parse(out string) []ports.ProcessInfo {
 		if e1 != nil || e2 != nil || e4 != nil {
 			continue
 		}
-		args := f[4:]
-		p := ports.ProcessInfo{PID: pid, PPID: ppid, SID: sessionKey(f[2]), RSSBytes: rss << 10, Name: filepath.Base(args[0]), Session: conversation(args)}
+		started := strings.Join(f[4:9], " ")
+		args := f[9:]
+		p := ports.ProcessInfo{PID: pid, PPID: ppid, SID: sessionKey(f[2]), RSSBytes: rss << 10, Started: started, Name: filepath.Base(args[0]), Session: conversation(args)}
 		if len(args) > 1 {
 			p.Arg = args[1]
 		}

@@ -157,11 +157,22 @@ func (s *Service) watchMemory(id, taskID string, budget int64, claudeID string, 
 	prevCleanup := s.cleanups[id]
 	s.cleanups[id] = func() {
 		stop()
+		s.forgetMemory(id)
+		s.memoryNotes.forget(id)
 		if prevCleanup != nil {
 			prevCleanup()
 		}
 	}
+	cleanup := s.cleanups[id]
 	s.mu.Unlock()
+	// A session whose process already ended has run its cleanup: nothing will
+	// run this one, so the watch stops here rather than outlive it.
+	if sess := s.sessions.Get(id); sess != nil && sess.Status.IsTerminal() {
+		s.mu.Lock()
+		delete(s.cleanups, id)
+		s.mu.Unlock()
+		cleanup()
+	}
 }
 
 // watchTerminalMemory watches a session the server runs on a terminal, by the
@@ -173,6 +184,9 @@ func (s *Service) watchTerminalMemory(id string) {
 	sess, err := s.interactiveSession(id)
 	if err != nil {
 		return
+	}
+	if sess.Status.IsTerminal() {
+		return // the CLI already exited: there is nothing to watch
 	}
 	root := 0
 	if t, err := s.Terminals.Attach(id); err == nil {
