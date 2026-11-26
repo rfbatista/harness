@@ -6,6 +6,8 @@
 const emptyMapping = () => ({ host: "", container: "", protocol: "tcp" });
 /** A row of a list with one text field: its own object, so a field can bind to it. */
 const row = (value = "") => ({ value });
+const emptyCredential = () => ({ label: "", value: "" });
+const newRow = (list) => (list === "mappings" ? emptyMapping() : list === "credentials" ? emptyCredential() : row());
 
 /** @typedef {"command" | "image"} Kind */
 
@@ -16,6 +18,7 @@ const row = (value = "") => ({ value });
  * @property {string} repositoryId
  * @property {boolean} exportRepositoryEnv
  * @property {string} env
+ * @property {{ label: string, value: string }[]} credentials  access credentials, as typed
  * @property {string} line  command service: the command line
  * @property {string} subdir
  * @property {{ value: string }[]} ports  command service: informational ports, as typed
@@ -27,7 +30,7 @@ const row = (value = "") => ({ value });
 /** @returns {Draft} */
 export function newDraft(kind = "command") {
   return {
-    name: "", kind, repositoryId: "", exportRepositoryEnv: false, env: "",
+    name: "", kind, repositoryId: "", exportRepositoryEnv: false, env: "", credentials: [],
     line: "", subdir: "", ports: [row()], image: "", args: [], mappings: [emptyMapping()],
   };
 }
@@ -39,6 +42,7 @@ export function draftFromService(service) {
   d.repositoryId = service.repositoryId;
   d.exportRepositoryEnv = service.exportRepositoryEnv;
   d.env = service.env;
+  d.credentials = (service.credentials ?? []).map((c) => ({ label: c.label, value: c.value }));
   if (service.command) {
     d.line = service.command.line;
     d.subdir = service.command.subdir;
@@ -71,6 +75,9 @@ export function toInput(draft) {
     repository_id,
     export_repository_env: repository_id !== "" && draft.exportRepositoryEnv,
     env: draft.env,
+    credentials: draft.credentials
+      .filter((c) => c.label.trim() !== "" || c.value !== "")
+      .map((c) => ({ label: c.label.trim(), value: c.value })),
   };
   if (draft.kind === "image") {
     return {
@@ -97,19 +104,21 @@ export function toInput(draft) {
 }
 
 export function addRow(draft, list) {
-  return { ...draft, [list]: [...draft[list], list === "mappings" ? emptyMapping() : row()] };
+  return { ...draft, [list]: [...draft[list], newRow(list)] };
 }
 
 /** Removes row `index`; a list is never left without a row to type in, except the arguments, which may be none. */
 export function removeRow(draft, list, index) {
   const rows = draft[list].filter((_, i) => i !== index);
-  if (rows.length === 0 && list !== "args") rows.push(list === "mappings" ? emptyMapping() : row());
+  if (rows.length === 0 && list !== "args" && list !== "credentials") rows.push(newRow(list));
   return { ...draft, [list]: rows };
 }
 
 const FIELD_OF = [
   [/^name\b/, "name"],
   [/^env\b/, "env"],
+  [/^credentials\[(\d+)\]/, "credentials"],
+  [/^credentials?\b/, "credentials"],
   [/^kind\b/, "kind"],
   [/^command\.line\b/, "line"],
   [/^command\.subdir\b/, "subdir"],

@@ -95,7 +95,7 @@ func (s *Service) build(ctx context.Context, sess *domain.Session, in ports.Serv
 	r := &domain.ServiceRequest{
 		ProjectID: sess.ProjectID, ServiceID: in.ServiceID, ServiceName: in.ServiceName, Action: in.Action,
 		SessionID: sess.ID, TaskID: sess.TicketID, Agent: s.agentName(ctx, sess), Reason: strings.TrimSpace(in.Reason),
-		Changes: []domain.ServiceRequestChange{}, Env: []domain.ServiceRequestEnv{},
+		Changes: []domain.ServiceRequestChange{}, Env: []domain.ServiceRequestEnv{}, Credentials: []domain.ServiceRequestCredential{},
 		Worktree: in.Worktree, Branch: in.Branch, OverridesGiven: in.EnvGiven, State: domain.ServiceRequestPending,
 		RequestedAt: s.d.Now().UTC().Format(time.RFC3339),
 	}
@@ -119,6 +119,9 @@ func (s *Service) build(ctx context.Context, sess *domain.Session, in ports.Serv
 		}
 		if r.Env == nil {
 			r.Env = []domain.ServiceRequestEnv{}
+		}
+		if in.CredentialChanges != nil {
+			r.Credentials = in.CredentialChanges
 		}
 	}
 	r.Summary = in.Summary

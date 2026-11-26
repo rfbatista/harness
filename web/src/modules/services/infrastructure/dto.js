@@ -94,6 +94,7 @@ export function toService(s) {
     repositoryId: String(s.repository_id ?? ""),
     exportRepositoryEnv: s.export_repository_env === true,
     env: String(s.env ?? ""),
+    credentials: array(s.credentials).map((c) => ({ label: String(c?.label ?? ""), value: String(c?.value ?? "") })),
     command: s.command ? { line: String(s.command.line ?? ""), subdir: String(s.command.subdir ?? ""), ports: array(s.command.ports).map(Number) } : null,
     image: s.image
       ? {

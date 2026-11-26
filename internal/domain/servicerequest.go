@@ -57,6 +57,14 @@ type ServiceRequestEnv struct {
 	PreviousSet bool   `json:"previous_set"`
 }
 
+// ServiceRequestCredential is one access credential a request sets or unsets.
+// Value is left out of what a feed or an agent carries.
+type ServiceRequestCredential struct {
+	Label  string `json:"label"`
+	Value  string `json:"value,omitempty"`
+	Change string `json:"change"` // set | unset
+}
+
 // ServiceRequestBranch is the branch of a request to run on a branch: its name
 // (without "origin/"), the short sha of its tip at filing time, and whether it
 // is a branch of origin.
@@ -83,6 +91,9 @@ type ServiceRequest struct {
 	Proposed *ServiceInput          `json:"proposed"`
 	Changes  []ServiceRequestChange `json:"changes"`
 	Env      []ServiceRequestEnv    `json:"env"`
+	// Credentials are the access credentials a create or an update sets or
+	// unsets, values included for the person.
+	Credentials []ServiceRequestCredential `json:"credentials"`
 	// Worktree is main, own, or branch:<name> / branch:origin/<name> for a
 	// start or restart, "" for the others.
 	Worktree string `json:"worktree"`
@@ -108,10 +119,21 @@ func (r ServiceRequest) WithoutValues() ServiceRequest {
 		e.Value = ""
 		c.Env[i] = e
 	}
+	c.Credentials = make([]ServiceRequestCredential, len(r.Credentials))
+	for i, cr := range r.Credentials {
+		cr.Value = ""
+		c.Credentials[i] = cr
+	}
 	c.Changes = append([]ServiceRequestChange{}, r.Changes...)
 	if r.Proposed != nil {
 		p := *r.Proposed
 		p.Env = ""
+		if p.Credentials != nil {
+			p.Credentials = make([]ServiceCredential, len(r.Proposed.Credentials))
+			for i, cr := range r.Proposed.Credentials {
+				p.Credentials[i] = ServiceCredential{Label: cr.Label}
+			}
+		}
 		c.Proposed = &p
 	}
 	return c
@@ -122,7 +144,9 @@ type ServiceRequestFilter struct {
 	ProjectID string
 	ServiceID string
 	SessionID string
-	State     ServiceRequestState
+	// TaskID is the task of the requesting session.
+	TaskID string
+	State  ServiceRequestState
 }
 
 // Codes of a service request.

@@ -3,6 +3,7 @@ package tooling
 import (
 	"context"
 	"encoding/json"
+	"sort"
 	"strconv"
 	"strings"
 
@@ -19,6 +20,7 @@ const createSchema = `{"type":"object","required":["name","kind","reason"],"prop
 	`"repository":{"type":"string","description":"The repository's name, when the service belongs to one."},` +
 	`"export_repository_env":{"type":"boolean","description":"Give the run the repository's saved root .env."},` +
 	`"env":{"type":"object","additionalProperties":{"type":"string"},"description":"Saved variables of the service."},` +
+	`"credentials":{"type":"object","additionalProperties":{"type":"string"},"description":"Access credentials for the person to log into what the service runs, such as a test account: label to value. The person sees them masked; you read back the labels only."},` +
 	`"command":{"type":"object","description":"A command service: line, subdir (relative, inside the repository), ports (informational).","properties":{"line":{"type":"string"},"subdir":{"type":"string"},"ports":{"type":"array","items":{"type":"integer"}}}},` +
 	`"image":{"type":"object","description":"An image service: ref, args (replace the image's command), ports (host to container).","properties":{"ref":{"type":"string"},"args":{"type":"array","items":{"type":"string"}},"ports":{"type":"array","items":{"type":"object","properties":{"host":{"type":"integer"},"container":{"type":"integer"},"protocol":{"type":"string","enum":["tcp","udp"]}}}}}},` +
 	`"reason":{"type":"string","description":"Why you ask: the person reads it when deciding."}}}`
@@ -29,7 +31,8 @@ const updateSchema = `{"type":"object","required":["name","changes","reason"],"p
 	`"name":{"type":"string"},"repository":{"type":"string"},"export_repository_env":{"type":"boolean"},` +
 	`"command":{"type":"object","properties":{"line":{"type":"string"},"subdir":{"type":"string"},"ports":{"type":"array","items":{"type":"integer"}}}},` +
 	`"image":{"type":"object","properties":{"ref":{"type":"string"},"args":{"type":"array","items":{"type":"string"}},"ports":{"type":"array","items":{"type":"object","properties":{"host":{"type":"integer"},"container":{"type":"integer"},"protocol":{"type":"string"}}}}}},` +
-	`"env":{"type":"object","properties":{"set":{"type":"object","additionalProperties":{"type":"string"}},"unset":{"type":"array","items":{"type":"string"}}}}}},` +
+	`"env":{"type":"object","properties":{"set":{"type":"object","additionalProperties":{"type":"string"}},"unset":{"type":"array","items":{"type":"string"}}}},` +
+	`"credentials":{"type":"object","description":"Access credentials (label to value): set adds or replaces, unset removes by label. You read back labels only.","properties":{"set":{"type":"object","additionalProperties":{"type":"string"}},"unset":{"type":"array","items":{"type":"string"}}}}}},` +
 	`"reason":{"type":"string","description":"Why you ask: the person reads it when deciding."}}}`
 
 func (t *servicesTools) definitionTools() []domain.Tool {
@@ -59,7 +62,7 @@ func (t *servicesTools) definitionTools() []domain.Tool {
 				}
 				out, err := t.submitDefinition(ctx, sess, ports.ServiceRequestInput{
 					SessionID: sess.ID, Action: domain.ServiceRequestCreate, ServiceName: in.Name, Reason: getString(args, "reason", ""),
-					Summary: t.createSummary(ctx, in), Proposed: &in, EnvChanges: envSets(in.Env),
+					Summary: t.createSummary(ctx, in), Proposed: &in, EnvChanges: envSets(in.Env), CredentialChanges: credentialSets(in.Credentials),
 				})
 				if err != nil {
 					return nil, err
@@ -83,11 +86,11 @@ func (t *servicesTools) definitionTools() []domain.Tool {
 				if err := requireReason(args); err != nil {
 					return nil, err
 				}
-				after, changes, envChanges, err := t.applyChanges(ctx, sess, svc, args)
+				after, changes, envChanges, credChanges, err := t.applyChanges(ctx, sess, svc, args)
 				if err != nil {
 					return nil, err
 				}
-				if len(changes) == 0 && len(envChanges) == 0 {
+				if len(changes) == 0 && len(envChanges) == 0 && len(credChanges) == 0 {
 					return map[string]any{"service": t.view(ctx, svc, sess.ID), "restart_needed": false}, nil
 				}
 				after, err = t.services.ValidateServiceInput(ctx, sess.ProjectID, svc.ID, after)
@@ -96,7 +99,8 @@ func (t *servicesTools) definitionTools() []domain.Tool {
 				}
 				out, err := t.submitDefinition(ctx, sess, ports.ServiceRequestInput{
 					SessionID: sess.ID, Action: domain.ServiceRequestUpdate, ServiceID: svc.ID, ServiceName: svc.Name, Reason: getString(args, "reason", ""),
-					Summary: updateSummary(svc.Name, changes, envChanges), Proposed: &after, Changes: append(changes, envFieldChanges(envChanges)...), EnvChanges: envChanges,
+					Summary: updateSummary(svc.Name, changes, envChanges, credChanges), Proposed: &after,
+					Changes: append(append(changes, envFieldChanges(envChanges)...), credentialFieldChanges(credChanges)...), EnvChanges: envChanges, CredentialChanges: credChanges,
 				})
 				if err != nil {
 					return nil, err
@@ -150,6 +154,9 @@ func (t *servicesTools) createInput(ctx context.Context, sess *domain.Session, a
 	if in.Env, err = envText(in.Kind, args["env"]); err != nil {
 		return in, err
 	}
+	if in.Credentials, err = credentialsOf(args["credentials"]); err != nil {
+		return in, err
+	}
 	if in.Command, err = decodeObject[domain.ServiceCommand](args, "command"); err != nil {
 		return in, err
 	}
@@ -197,6 +204,41 @@ func envText(kind domain.ServiceKind, raw any) (string, error) {
 	return text, err
 }
 
+// credentialsOf reads the credentials argument, label to value, in label order;
+// nil when it is absent.
+func credentialsOf(raw any) ([]domain.ServiceCredential, error) {
+	if raw == nil {
+		return nil, nil
+	}
+	m, ok := raw.(map[string]any)
+	if !ok {
+		return nil, invalidInput("credentials must be an object of labels to string values")
+	}
+	labels := make([]string, 0, len(m))
+	for k := range m {
+		labels = append(labels, k)
+	}
+	sort.Strings(labels)
+	out := make([]domain.ServiceCredential, 0, len(m))
+	for _, k := range labels {
+		v, ok := m[k].(string)
+		if !ok {
+			return nil, invalidInput("credential " + strconv.Quote(k) + " must be a string")
+		}
+		out = append(out, domain.ServiceCredential{Label: k, Value: v})
+	}
+	return out, nil
+}
+
+// credentialSets lists each credential as one the request sets.
+func credentialSets(creds []domain.ServiceCredential) []domain.ServiceRequestCredential {
+	out := make([]domain.ServiceRequestCredential, 0, len(creds))
+	for _, c := range creds {
+		out = append(out, domain.ServiceRequestCredential{Label: c.Label, Value: c.Value, Change: "set"})
+	}
+	return out
+}
+
 // envSets lists each variable of dotenv text as one the request sets.
 func envSets(text string) []domain.ServiceRequestEnv {
 	vars, _ := domain.ParseDotenv(text)
@@ -223,13 +265,16 @@ func (t *servicesTools) createSummary(ctx context.Context, in domain.ServiceInpu
 	return text
 }
 
-func updateSummary(name string, changes []domain.ServiceRequestChange, env []domain.ServiceRequestEnv) string {
+func updateSummary(name string, changes []domain.ServiceRequestChange, env []domain.ServiceRequestEnv, creds []domain.ServiceRequestCredential) string {
 	var parts []string
 	for _, c := range changes {
 		parts = append(parts, c.Field)
 	}
 	for _, e := range env {
 		parts = append(parts, "env."+e.Name)
+	}
+	for _, c := range creds {
+		parts = append(parts, "credentials."+c.Label)
 	}
 	return "update service " + name + ": " + strings.Join(parts, ", ")
 }
@@ -243,8 +288,63 @@ func envFieldChanges(env []domain.ServiceRequestEnv) []domain.ServiceRequestChan
 	return out
 }
 
+// credentialFieldChanges lists the credentials of an update as changes with
+// no value.
+func credentialFieldChanges(creds []domain.ServiceRequestCredential) []domain.ServiceRequestChange {
+	out := make([]domain.ServiceRequestChange, 0, len(creds))
+	for _, c := range creds {
+		out = append(out, domain.ServiceRequestChange{Field: "credentials." + c.Label})
+	}
+	return out
+}
+
+// applyCredentialChanges is the credentials after set and unset, kept in
+// order with new labels last, and what changed.
+func applyCredentialChanges(cur []domain.ServiceCredential, raw map[string]any) ([]domain.ServiceCredential, []domain.ServiceRequestCredential, error) {
+	set, err := credentialsOf(raw["set"])
+	if err != nil {
+		return nil, nil, err
+	}
+	var unset []string
+	if l, ok := raw["unset"].([]any); ok {
+		for _, k := range l {
+			if str, ok := k.(string); ok {
+				unset = append(unset, str)
+			}
+		}
+	}
+	after := append([]domain.ServiceCredential{}, cur...)
+	var changes []domain.ServiceRequestCredential
+	for _, label := range unset {
+		for i, c := range after {
+			if c.Label == label {
+				after = append(after[:i], after[i+1:]...)
+				changes = append(changes, domain.ServiceRequestCredential{Label: label, Change: "unset"})
+				break
+			}
+		}
+	}
+	for _, c := range set {
+		found := false
+		for i := range after {
+			if after[i].Label == c.Label {
+				found = true
+				if after[i].Value != c.Value {
+					after[i].Value = c.Value
+					changes = append(changes, domain.ServiceRequestCredential{Label: c.Label, Value: c.Value, Change: "set"})
+				}
+			}
+		}
+		if !found {
+			after = append(after, c)
+			changes = append(changes, domain.ServiceRequestCredential{Label: c.Label, Value: c.Value, Change: "set"})
+		}
+	}
+	return after, changes, nil
+}
+
 // applyChanges is the service's definition after the changes, and what changed.
-func (t *servicesTools) applyChanges(ctx context.Context, sess *domain.Session, svc *domain.Service, args map[string]any) (domain.ServiceInput, []domain.ServiceRequestChange, []domain.ServiceRequestEnv, error) {
+func (t *servicesTools) applyChanges(ctx context.Context, sess *domain.Session, svc *domain.Service, args map[string]any) (domain.ServiceInput, []domain.ServiceRequestChange, []domain.ServiceRequestEnv, []domain.ServiceRequestCredential, error) {
 	after := domain.ServiceInput{
 		Name: svc.Name, Kind: svc.Kind, RepositoryID: svc.RepositoryID, ExportRepositoryEnv: svc.ExportRepositoryEnv, Env: svc.Env,
 	}
@@ -261,7 +361,7 @@ func (t *servicesTools) applyChanges(ctx context.Context, sess *domain.Session, 
 	}
 	raw, _ := args["changes"].(map[string]any)
 	if args["changes"] != nil && raw == nil {
-		return after, nil, nil, invalidInput("changes must be an object")
+		return after, nil, nil, nil, invalidInput("changes must be an object")
 	}
 	var changes []domain.ServiceRequestChange
 	note := func(field, before, now string) {
@@ -279,7 +379,7 @@ func (t *servicesTools) applyChanges(ctx context.Context, sess *domain.Session, 
 		if strings.TrimSpace(v) != "" {
 			var err error
 			if id, err = t.repositoryByName(ctx, sess.ProjectID, strings.TrimSpace(v)); err != nil {
-				return after, nil, nil, err
+				return after, nil, nil, nil, err
 			}
 		}
 		after.RepositoryID = id
@@ -290,10 +390,10 @@ func (t *servicesTools) applyChanges(ctx context.Context, sess *domain.Session, 
 		after.ExportRepositoryEnv = v
 	}
 	if obj, err := decodeObject[domain.ServiceCommand](raw, "command"); err != nil {
-		return after, nil, nil, err
+		return after, nil, nil, nil, err
 	} else if obj != nil {
 		if svc.Kind != domain.ServiceKindCommand {
-			return after, nil, nil, invalidInput("command: " + svc.Name + " is an image service")
+			return after, nil, nil, nil, invalidInput("command: " + svc.Name + " is an image service")
 		}
 		cmd := after.Command
 		sub, _ := raw["command"].(map[string]any)
@@ -311,10 +411,10 @@ func (t *servicesTools) applyChanges(ctx context.Context, sess *domain.Session, 
 		}
 	}
 	if obj, err := decodeObject[domain.ServiceImage](raw, "image"); err != nil {
-		return after, nil, nil, err
+		return after, nil, nil, nil, err
 	} else if obj != nil {
 		if svc.Kind != domain.ServiceKindImage {
-			return after, nil, nil, invalidInput("image: " + svc.Name + " is a command service")
+			return after, nil, nil, nil, invalidInput("image: " + svc.Name + " is a command service")
 		}
 		img := after.Image
 		sub, _ := raw["image"].(map[string]any)
@@ -338,7 +438,7 @@ func (t *servicesTools) applyChanges(ctx context.Context, sess *domain.Session, 
 			for k, v := range m {
 				str, ok := v.(string)
 				if !ok {
-					return after, nil, nil, invalidInput("env value of " + strconv.Quote(k) + " must be a string")
+					return after, nil, nil, nil, invalidInput("env value of " + strconv.Quote(k) + " must be a string")
 				}
 				set[k] = str
 			}
@@ -353,11 +453,19 @@ func (t *servicesTools) applyChanges(ctx context.Context, sess *domain.Session, 
 		}
 		text, ch, err := domain.ApplyEnvChanges(svc.Kind, svc.Env, set, unset)
 		if err != nil {
-			return after, nil, nil, err
+			return after, nil, nil, nil, err
 		}
 		after.Env, envChanges = text, ch
 	}
-	return after, changes, envChanges, nil
+	var credChanges []domain.ServiceRequestCredential
+	if credRaw, ok := raw["credentials"].(map[string]any); ok {
+		creds, ch, err := applyCredentialChanges(svc.Credentials, credRaw)
+		if err != nil {
+			return after, nil, nil, nil, err
+		}
+		after.Credentials, credChanges = creds, ch
+	}
+	return after, changes, envChanges, credChanges, nil
 }
 
 func intsText(l []int) string {

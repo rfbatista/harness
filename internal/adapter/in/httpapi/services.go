@@ -24,7 +24,21 @@ func (h *Handler) handleListServices(c echo.Context) error {
 	if err != nil {
 		return err
 	}
+	if taskID := c.QueryParam("task_id"); taskID != "" {
+		list.Services = servicesOfTask(list.Services, taskID)
+	}
 	return c.JSON(http.StatusOK, list)
+}
+
+// servicesOfTask keeps the serviços da task, in order.
+func servicesOfTask(all []*domain.Service, taskID string) []*domain.Service {
+	out := []*domain.Service{}
+	for _, svc := range all {
+		if svc.OfTask(taskID) {
+			out = append(out, svc)
+		}
+	}
+	return out
 }
 
 func (h *Handler) handleGetService(c echo.Context) error {
@@ -115,6 +129,10 @@ func (h *Handler) followServices(ctx context.Context, projectID string) (<-chan 
 
 type serviceIDRequest struct {
 	ServiceID string `json:"service_id"`
+	// TaskID is the task page the person acts from, when they do: a restart
+	// records it on the new run so the service stays a serviço da task. A stop
+	// accepts it and rewrites nothing.
+	TaskID string `json:"task_id"`
 }
 
 func (h *Handler) handleStartService(c echo.Context) error {
@@ -124,12 +142,15 @@ func (h *Handler) handleStartService(c echo.Context) error {
 	var in struct {
 		ServiceID string `json:"service_id"`
 		Worktree  string `json:"worktree"`
+		// TaskID is the task page the person starts it from: the run records it.
+		TaskID string `json:"task_id"`
 	}
 	if err := bindJSON(c, &in); err != nil {
 		return err
 	}
 	opts := personStart
 	opts.WorktreeKey = in.Worktree
+	opts.StartedBy.TaskID = in.TaskID
 	svc, already, err := h.services.StartService(c.Request().Context(), in.ServiceID, opts)
 	if err != nil {
 		return err
@@ -164,6 +185,7 @@ func (h *Handler) handleRestartService(c echo.Context) error {
 		return err
 	}
 	opts := personStart
+	opts.StartedBy.TaskID = in.TaskID
 	opts.Repeat = true // the same run worktree as the last run (ADR 0077)
 	svc, err := h.services.RestartService(c.Request().Context(), in.ServiceID, opts)
 	if err != nil {
@@ -273,7 +295,10 @@ func (h *Handler) handleListServiceRequests(c echo.Context) error {
 	}
 	f := domain.ServiceRequestFilter{
 		ProjectID: c.QueryParam("project_id"), ServiceID: c.QueryParam("service_id"),
-		State: domain.ServiceRequestState(c.QueryParam("state")),
+		TaskID: c.QueryParam("task_id"), State: domain.ServiceRequestState(c.QueryParam("state")),
+	}
+	if f.TaskID != "" {
+		f.State = domain.ServiceRequestPending // a task's requests are the ones waiting on the person
 	}
 	list, err := h.serviceRequests.List(c.Request().Context(), f)
 	if err != nil {

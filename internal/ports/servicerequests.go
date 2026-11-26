@@ -47,6 +47,8 @@ type ServiceRequestInput struct {
 	Proposed   *domain.ServiceInput
 	Changes    []domain.ServiceRequestChange
 	EnvChanges []domain.ServiceRequestEnv
+	// CredentialChanges are the access credentials set or unset.
+	CredentialChanges []domain.ServiceRequestCredential
 	// Env are the run overrides of a start or restart; EnvGiven says they were
 	// named (a restart repeats the last run's when they were not).
 	Env      map[string]string

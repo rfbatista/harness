@@ -12,6 +12,7 @@ import (
 	"encoding/hex"
 	"os"
 	"path/filepath"
+	"reflect"
 	"strconv"
 	"sync"
 	"time"
@@ -252,7 +253,7 @@ func (s *Service) CreateServiceBy(ctx context.Context, projectID string, in doma
 	svc := &domain.Service{
 		ID: newServiceID(), ProjectID: projectID, Name: in.Name, Kind: in.Kind,
 		RepositoryID: in.RepositoryID, ExportRepositoryEnv: in.ExportRepositoryEnv, Env: in.Env,
-		Command: in.Command, Image: in.Image, Status: domain.ServiceStopped, CreatedBy: by, CreatedAt: now, UpdatedAt: now,
+		Command: in.Command, Image: in.Image, Credentials: orEmptyCredentials(in.Credentials), Status: domain.ServiceStopped, CreatedBy: by, CreatedAt: now, UpdatedAt: now,
 	}
 	if err := s.store.SaveService(svc); err != nil {
 		return nil, err
@@ -291,14 +292,20 @@ func (s *Service) UpdateService(ctx context.Context, serviceID string, in domain
 	if err := s.checkNameFree(cur.ProjectID, in.Name, cur.ID); err != nil {
 		return nil, false, err
 	}
+	runChanged := cur.Name != in.Name || cur.RepositoryID != in.RepositoryID || cur.ExportRepositoryEnv != in.ExportRepositoryEnv ||
+		cur.Env != in.Env || !reflect.DeepEqual(cur.Command, in.Command) || !reflect.DeepEqual(cur.Image, in.Image)
 	cur.Name, cur.RepositoryID, cur.ExportRepositoryEnv, cur.Env = in.Name, in.RepositoryID, in.ExportRepositoryEnv, in.Env
 	cur.Command, cur.Image = in.Command, in.Image
+	if in.Credentials != nil {
+		cur.Credentials = in.Credentials
+	}
 	cur.UpdatedAt = s.opts.Now().UTC()
 	if err := s.store.SaveService(cur); err != nil {
 		return nil, false, err
 	}
 	s.announceLocked(cur)
-	return cur, cur.Status.Active(), nil
+	// Credentials are not passed to the process: changing only them needs no restart.
+	return cur, cur.Status.Active() && runChanged, nil
 }
 
 // DeleteService removes a service that is not starting or running, and its
@@ -473,4 +480,11 @@ func (c *availableCache) found(command string, look func(string) (string, error)
 	}
 	c.command, c.at, c.ok = command, now, ok
 	return ok
+}
+
+func orEmptyCredentials(c []domain.ServiceCredential) []domain.ServiceCredential {
+	if c == nil {
+		return []domain.ServiceCredential{}
+	}
+	return c
 }

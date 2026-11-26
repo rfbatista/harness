@@ -54,6 +54,9 @@ func (m ServiceRequestModel) domain() (domain.ServiceRequest, error) {
 	var r domain.ServiceRequest
 	err := json.Unmarshal([]byte(m.RequestJSON), &r)
 	r.ID = m.ID
+	if r.Credentials == nil {
+		r.Credentials = []domain.ServiceRequestCredential{} // a request filed before credentials
+	}
 	return r, err
 }
 
@@ -118,6 +121,9 @@ func (r *ServiceRequestRepository) List(ctx context.Context, f domain.ServiceReq
 		req, err := m.domain()
 		if err != nil {
 			return nil, err
+		}
+		if f.TaskID != "" && req.TaskID != f.TaskID {
+			continue
 		}
 		out = append(out, req)
 	}
