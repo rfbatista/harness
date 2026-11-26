@@ -62,4 +62,26 @@
     @container session (width < 34rem) { &[data-state="normal"] { display: none; } }
     @media (width < 48rem) { font-size: inherit; & > .track { display: none; } }
   }
+  /* The popover behind the chip: a .popup (popup.css), non-modal, 22rem. */
+  .memory-popover {
+    inline-size: 22rem;
+    max-inline-size: calc(100vw - 2 * var(--space-l));
+    padding: var(--space-m);
+    gap: var(--space-s);
+    font-size: var(--text-sm);
+
+    & > h3 { font-size: var(--text-md); font-variant-numeric: tabular-nums; }
+    & > h4 { font-size: var(--text-xs); color: var(--color-ink-faint); font-weight: var(--weight-medium); }
+    & > .bar { --_tone: var(--color-ink-muted); display: block; block-size: 4px; border-radius: 2px; background: var(--color-line-strong); overflow: hidden; }
+    & > .bar[data-state="near"] { --_tone: var(--color-attention); }
+    & > .bar[data-state="over"], & > .bar[data-state="ended"] { --_tone: var(--color-danger); }
+    & > .bar > .fill { display: block; block-size: 100%; inline-size: var(--_fill, 0%); max-inline-size: 100%; background: var(--_tone); }
+    & > dl { display: grid; grid-template-columns: auto 1fr; gap: var(--space-2xs) var(--space-m); }
+    & > dl > dt { color: var(--color-ink-faint); }
+    & > dl > dd { margin: 0; font-variant-numeric: tabular-nums; }
+    & > ul { display: grid; gap: var(--space-2xs); list-style: none; margin: 0; padding: 0; font-variant-numeric: tabular-nums; }
+    & > ul b { color: var(--color-danger); font-weight: var(--weight-medium); }
+    & > p { margin: 0; color: var(--color-ink-muted); }
+    & > p.note { color: var(--color-ink-faint); font-size: var(--text-xs); }
+  }
 }

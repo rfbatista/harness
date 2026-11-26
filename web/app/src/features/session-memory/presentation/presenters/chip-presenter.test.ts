@@ -114,11 +114,11 @@ describe("memory chip", () => {
     assert.equal(presenter.viewModel.view?.num, "3.0");
   });
 
-  test("closing stops following the stream", async () => {
+  test("disposing stops following the stream", async () => {
     const { presenter, stream } = setup(read(sample(2.0)));
     await presenter.start();
     assert.equal(stream.followers, 1);
-    presenter.close();
+    presenter.dispose();
     assert.equal(stream.followers, 0);
   });
 });
