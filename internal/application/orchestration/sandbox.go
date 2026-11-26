@@ -399,7 +399,8 @@ func (b *Sandbox) BenchWrapFor(dir string, allow []ports.SandboxPath) (llmkit.Wr
 	if b.Driver == nil {
 		return nil, agentready.SandboxDriverMissing()
 	}
-	sess := SandboxSession{OneShot: true, TempDir: dir, AgentHome: b.Home, UserHome: b.UserHome, ConfigHome: b.ConfigHome, Allow: allow}
+	// No git config of the person: the run reads dir, the agent home and allow.
+	sess := SandboxSession{OneShot: true, TempDir: dir, AgentHome: b.Home, Allow: allow}
 	// The project's own Claude home is not granted: the run is the agent's, not
 	// the project's, and writes only dir and the agent home. The folder of
 	// every project's home is hidden outright.

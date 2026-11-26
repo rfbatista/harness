@@ -90,13 +90,21 @@ func (s *Service) Setup(ctx context.Context, req ports.BenchSetupRequest) (ports
 // the machine.
 var benchBuiltInTools = []string{
 	"Bash", "BashOutput", "KillShell", "Edit", "MultiEdit", "Write", "NotebookEdit",
-	"Read", "Glob", "Grep", "LS", "NotebookRead", "WebFetch", "WebSearch", "Task", "TaskOutput", "TaskStop", "Agent",
+	"Glob", "Grep", "LS", "NotebookRead", "WebFetch", "WebSearch", "Task", "TaskOutput", "TaskStop", "Agent",
 	"TodoWrite", "SlashCommand", "Monitor", "PowerShell", "AskUserQuestion", "ToolSearch", "EnterPlanMode", "ExitPlanMode",
 }
 
+// skillDirsOf are the plugin dirs of the agent's skills in a driver config.
+func skillDirsOf(d llmkit.DriverConfig) []string {
+	if dc, ok := d.(claude.Config); ok {
+		return dc.SkillDirs
+	}
+	return nil
+}
+
 // withBenchToolsLocked leaves a bench run's CLI with the mock server's tools
-// and the Skill tool (the project's skills are part of what the bench
-// measures), and nothing else. The built-in tools are denied in its settings, and only
+// the Skill tool and Read of the skills plugin dir (the project's skills are part
+// of what the bench measures), and nothing else. The built-in tools are denied in its settings, and only
 // the mock server is allowed, with no approval tool and no permission bypass:
 // any other tool call is refused by the CLI. The allow list is the barrier;
 // the deny list names what a CLI that adds a tool would otherwise surprise us
@@ -104,8 +112,15 @@ var benchBuiltInTools = []string{
 func withBenchToolsLocked(cfg *llmkit.SessionConfig, mcpName string) {
 	cfg.Permission = llmkit.PermissionAsk
 	cfg.AllowedTools = []string{"mcp__" + mcpName, "Skill"}
-	deny, _ := json.Marshal(map[string][]string{"deny": benchBuiltInTools}) // a string list always marshals
-	withClaudeSetting(cfg, "permissions", deny)
+	// Read is the one built-in left, for the skills plugin dir alone: Read
+	// rules use gitignore syntax and an absolute path is anchored with a double
+	// slash. It is not in the deny list, which would win over the allow.
+	var allow []string
+	for _, g := range skillDirGrants(skillDirsOf(cfg.Driver)) {
+		allow = append(allow, "Read(/"+g.Path+"/**)")
+	}
+	perms, _ := json.Marshal(map[string][]string{"deny": benchBuiltInTools, "allow": allow}) // string lists always marshal
+	withClaudeSetting(cfg, "permissions", perms)
 }
 
 // Run starts the CLI headless in a throwaway directory with the project's
@@ -136,7 +151,7 @@ func (s *Service) Run(ctx context.Context, req ports.BenchSessionRequest) (ports
 	withBenchToolsLocked(&cfg, req.MCPName)
 	// Under the session sandbox driver the CLI writes this directory and
 	// nothing else; a platform with the sandbox on and no driver refuses.
-	wrap, err := s.Sandbox.BenchWrapFor(dir, s.BenchSandboxAllow)
+	wrap, err := s.Sandbox.BenchWrapFor(dir, append(slices.Clone(s.BenchSandboxAllow), skillDirGrants(skillDirsOf(cfg.Driver))...))
 	if err != nil {
 		return ports.BenchSessionResult{}, err
 	}

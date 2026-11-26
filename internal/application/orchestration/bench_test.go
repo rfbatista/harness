@@ -210,14 +210,33 @@ func TestBenchRunLaunchesWithNoBuiltInToolAllowedAndNoPermissionBypass(t *testin
 		t.Fatalf("only the mock server's tools and Skill may be allowed: %v", l.Args)
 	}
 	var perms struct {
-		Deny []string `json:"deny"`
+		Deny  []string `json:"deny"`
+		Allow []string `json:"allow"`
 	}
 	if err := json.Unmarshal(launchSettings(t, l.Args)["permissions"], &perms); err != nil {
 		t.Fatalf("the settings carry no permissions: %v", err)
 	}
-	for _, tool := range []string{"Bash", "Edit", "Write", "MultiEdit", "NotebookEdit", "WebFetch", "WebSearch", "Read", "Glob", "Grep", "Task", "TodoWrite"} {
+	for _, tool := range []string{"Bash", "Edit", "Write", "MultiEdit", "NotebookEdit", "WebFetch", "WebSearch", "Glob", "Grep", "Task", "TodoWrite"} {
 		if !slices.Contains(perms.Deny, tool) {
 			t.Errorf("built-in %s is not denied: %v", tool, perms.Deny)
+		}
+	}
+	// Read is not denied (a deny would win over the allow below) and is allowed
+	// for the skills plugin dir alone: gitignore syntax, the absolute path
+	// anchored with a double slash.
+	if slices.Contains(perms.Deny, "Read") {
+		t.Errorf("Read is denied, which no allow rule can undo: %v", perms.Deny)
+	}
+	pi := slices.Index(l.Args, "--plugin-dir")
+	if pi < 0 || pi+1 >= len(l.Args) {
+		t.Fatalf("the agent's skills plugin dir is not passed: %v", l.Args)
+	}
+	if want := "Read(/" + l.Args[pi+1] + "/**)"; !slices.Contains(perms.Allow, want) {
+		t.Errorf("allow = %v, want the rule %s", perms.Allow, want)
+	}
+	for _, a := range append(slices.Clone(perms.Allow), l.Args...) {
+		if a == "Read" || a == "Read(*)" || a == "Read(**)" {
+			t.Errorf("a bare Read is allowed: %s", a)
 		}
 	}
 	if !slices.Equal(l.Servers, []string{"bench"}) {
@@ -240,7 +259,8 @@ func TestBenchRunUnderTheSandboxWritesOnlyItsThrowawayDirectory(t *testing.T) {
 	driver := &portstest.RecordingSandboxDriver{}
 	home := t.TempDir()
 	projectHomes := t.TempDir()
-	w.sessions.Sandbox = &Sandbox{Driver: driver, Home: home, ProjectHomesRoot: projectHomes, Checkouts: func() []string { return []string{w.repoRoot} }}
+	userHome := t.TempDir()
+	w.sessions.Sandbox = &Sandbox{Driver: driver, Home: home, ProjectHomesRoot: projectHomes, UserHome: userHome, Checkouts: func() []string { return []string{w.repoRoot} }}
 	runBenchCase(t, w, readmeCase)
 
 	calls := driver.Calls()
@@ -270,6 +290,15 @@ func TestBenchRunUnderTheSandboxWritesOnlyItsThrowawayDirectory(t *testing.T) {
 	}
 	if throwaway == 0 {
 		t.Fatalf("the throwaway dir is not writable: %v", policy.Writable)
+	}
+	pi := slices.Index(l.Args, "--plugin-dir")
+	if pi < 0 || !slices.Contains(policy.Readable, l.Args[pi+1]) {
+		t.Fatalf("the skills plugin dir is not readable: %v (plugin dir args %v)", policy.Readable, l.Args)
+	}
+	for _, p := range append(slices.Clone(policy.Readable), policy.Writable...) {
+		if strings.HasPrefix(p, userHome) {
+			t.Errorf("%s of the person's home is reachable", p)
+		}
 	}
 	if !slices.Contains(policy.Hidden, projectHomes) {
 		t.Fatalf("the folder of the project Claude homes is not hidden: %v", policy.Hidden)
