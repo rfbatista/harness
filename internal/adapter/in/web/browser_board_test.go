@@ -524,7 +524,8 @@ func TestTheRailNestsChildrenUnderTheirFeature(t *testing.T) {
 		chromedp.Evaluate(state, &opened),
 		shot("rail-open"),
 		chromedp.Reload(),
-		chromedp.Poll(`document.querySelector('#rail [data-ssr]') === null`, nil, chromedp.WithPollingTimeout(10*time.Second)),
+		// The server paints the feature folded; this browser's choice applies once the island has taken over.
+		chromedp.Poll(state+` === "true|c-review,c-todo"`, nil, chromedp.WithPollingTimeout(10*time.Second)),
 		chromedp.Evaluate(state, &reloaded),
 	)
 	if err != nil {
