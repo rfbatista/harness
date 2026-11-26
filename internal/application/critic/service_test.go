@@ -188,3 +188,40 @@ func TestADiffWhoseCriticFailedToStartIsReviewedByALaterRun(t *testing.T) {
 		t.Fatalf("the retry launched %v (err %v)", got, err)
 	}
 }
+
+type fakeNotes struct{ got []string }
+
+func (n *fakeNotes) UpdateCriticSkip(_, reason string) error { n.got = append(n.got, reason); return nil }
+
+func TestAFailedStartIsNotedOnTheAuthorWithItsReasonAndTheRetryClearsTheNote(t *testing.T) {
+	st := &fakeStarter{err: errors.New("host unreachable")}
+	notes := &fakeNotes{}
+	svc := newService(fakeSettings{}, &fakeDiff{head: "h"}, st, fakeGate{})
+	svc.d.Notes = notes
+	run := finished(domain.GateTriggerDeclaration, domain.GateRunGreen)
+
+	if _, err := svc.Handle(context.Background(), run); err == nil {
+		t.Fatal("the failure was swallowed")
+	}
+	st.err = nil
+	if got, err := svc.Handle(context.Background(), run); got == nil || err != nil {
+		t.Fatalf("the retry launched %v (err %v)", got, err)
+	}
+	// Notes are recorded on the author session the gate resolves, whose
+	// CriticSkip is "" each time: a failure records its reason, a start clears
+	// nothing it never set.
+	if len(notes.got) == 0 || notes.got[0] != "critic skipped: host unreachable" {
+		t.Errorf("notes recorded = %q, want the reason of the failed start first", notes.got)
+	}
+}
+
+func TestAModelWithSurroundingSpacesIsSentTrimmed(t *testing.T) {
+	st := &fakeStarter{}
+	svc := newService(fakeSettings{model: "  opus \n"}, &fakeDiff{head: "h"}, st, fakeGate{})
+	if _, err := svc.Handle(context.Background(), finished(domain.GateTriggerDeclaration, domain.GateRunGreen)); err != nil || len(st.reqs) != 1 {
+		t.Fatalf("launch: %v %d", err, len(st.reqs))
+	}
+	if st.reqs[0].Model != "opus" {
+		t.Errorf("model = %q, want opus", st.reqs[0].Model)
+	}
+}
