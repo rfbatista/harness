@@ -545,3 +545,28 @@ func TestAServiceRequestIsRecordedOnceAndResolvedWhenAnsweredWithoutAValue(t *te
 		t.Fatalf("the answer posted another notification: %d", count)
 	}
 }
+
+// Each encerramento por memória is an info notification that links to the
+// session, titled with the process and with the RSS and the orçamento in its body.
+func TestAnEncerramentoPorMemoriaIsAnInfoNotificationLinkingToTheSession(t *testing.T) {
+	r := newRig(t)
+	r.session(t, "s1", r.ProjectA, "")
+	kill := domain.MemoryKill{Kind: domain.MemoryKilledKind, SessionID: "s1", PID: 81234, Command: "node jest",
+		RSSBytes: 3584 << 20, TreeRSS: 4200 << 20, Budget: 4 << 30, Signal: "SIGTERM", KilledAt: time.Now()}
+	r.publish(t, domain.SessionMemoryKilled{Kill: kill})
+	kill.PID, kill.KilledAt = 81300, kill.KilledAt.Add(time.Second)
+	r.publish(t, domain.SessionMemoryKilled{Kill: kill})
+
+	page := r.list(t, ports.NotificationQuery{})
+	if len(page.Notifications) != 2 {
+		t.Fatalf("notifications = %+v, want one per kill", page.Notifications)
+	}
+	n := page.Notifications[0]
+	if n.Kind != domain.NotificationSessionMemoryKilled || n.Level != domain.NotificationInfo || n.SessionID != "s1" ||
+		!strings.Contains(n.Link, "session=s1") {
+		t.Errorf("notification = %+v", n)
+	}
+	if !strings.Contains(n.Title, "node jest") || !strings.Contains(n.Body, "3.5 GB") || !strings.Contains(n.Body, "4 GB") {
+		t.Errorf("title %q body %q: want the process, its RSS and the orçamento", n.Title, n.Body)
+	}
+}

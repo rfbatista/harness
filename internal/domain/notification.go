@@ -32,13 +32,16 @@ const (
 	// mid-turn, with a Resume all interrupted action (ADR 0083).
 	NotificationSessionsInterrupted NotificationKind = "sessions_interrupted"
 	NotificationAgent               NotificationKind = "agent"
+	// NotificationSessionMemoryKilled tells the person the vigia de memória
+	// ended a process of a session for passing its orçamento.
+	NotificationSessionMemoryKilled NotificationKind = "session_memory_killed"
 )
 
 // NotificationKinds is every kind, for filtering by one.
 var NotificationKinds = []NotificationKind{
 	NotificationReviewRequested, NotificationSessionWaiting, NotificationTaskReview, NotificationSessionFailed,
 	NotificationCommitCheckOff, NotificationBranchRequest, NotificationBranchFinding, NotificationServiceRequest,
-	NotificationSessionsInterrupted, NotificationAgent,
+	NotificationSessionsInterrupted, NotificationAgent, NotificationSessionMemoryKilled,
 }
 
 // NotificationActorKind says what kind of party caused a notification.

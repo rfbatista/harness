@@ -77,6 +77,17 @@ func taskReviewWhat(taskTitle string) what {
 	return what{verb: "moved the task to review", object: taskTitle, colon: true}
 }
 
+// memoryKilledWhat is the harness ending a session's process for its memory.
+func memoryKilledWhat(command string) what {
+	return what{verb: "ended a process for memory", object: command, code: true, colon: true}
+}
+
+// formatGB writes bytes as GB with at most one decimal: 3.5 GB, 4 GB.
+func formatGB(bytes int64) string {
+	s := strconv.FormatFloat(float64(bytes)/(1<<30), 'f', 1, 64)
+	return strings.TrimSuffix(s, ".0") + " GB"
+}
+
 // failedWhat is a failed session; what it was running is the object when the
 // session kept it.
 func failedWhat(lastAction string) what {

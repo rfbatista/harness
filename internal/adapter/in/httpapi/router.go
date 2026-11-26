@@ -333,6 +333,7 @@ func NewRouter(h *Handler, opts ...Option) *echo.Echo {
 	// whether an action keeps to the repository's layers
 	g.POST(strings.TrimPrefix(ArchitectureCheckRoute, "/api"), h.handleArchitectureCheck)
 	g.POST(strings.TrimPrefix(ArchitectureCommitRoute, "/api"), h.handleArchitectureCommit)
+	g.POST(strings.TrimPrefix(MemoryHookRoute, "/api"), h.handleMemoryHook)
 	g.POST(strings.TrimPrefix(WorktreeArchitectureCommitRoute, "/api"), h.handleWorktreeArchitectureCommit)
 	// the architect's worktree read hook asks which worktrees are its task's
 	g.GET(strings.TrimPrefix(TaskWorktreesRoute, "/api"), h.handleTaskWorktrees)

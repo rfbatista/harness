@@ -270,6 +270,10 @@ type Service struct {
 	// rm, touch, mkdir) link to, first on its PATH; they call the session's
 	// SessionShellURL. Empty: sessions get no shims.
 	ShimBinary string
+	// SessionMemoryURL is where a session's memory notice hooks post
+	// (…/api/sessions/{id}/memory); nil: the agent is told by the courier only.
+	SessionMemoryURL func(sessionID string) string
+	memoryNotes      memoryNotices
 	// MemoryWatcher is the vigia de memória; nil: sessions are not watched.
 	MemoryWatcher ports.MemoryWatcher
 	// MemoryBudgets resolves the orçamento de memória a session starts or
@@ -868,6 +872,11 @@ func (s *Service) withShell(id, repositoryID string, subject sessionSubject, cfg
 // withBranchGate gives every agent session the branch gate's asking hook; the
 // git shim is made by withShims. Without a gate URL it changes nothing.
 func (s *Service) withBranchGate(id string, cfg *llmkit.SessionConfig) {
+	if s.SessionMemoryURL != nil {
+		if dc, ok := withHooks(cfg.Driver, MemoryNoticeHooks(s.SessionMemoryURL(id))); ok {
+			cfg.Driver = dc
+		}
+	}
 	if s.SessionBranchGateURL == nil {
 		return
 	}

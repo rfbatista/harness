@@ -55,6 +55,14 @@ type MemoryWatcher interface {
 	Watch(MemoryWatch) (stop func())
 }
 
+// MemoryNotices tells the agent of an encerramento por memória in the answer
+// to a Bash call: BashStarted when the call begins, BashEnded when it ends,
+// answering the reason ("" when nothing was ended meanwhile).
+type MemoryNotices interface {
+	BashStarted(sessionID, callID string)
+	BashEnded(sessionID, callID string) string
+}
+
 // MemorySink receives what the vigia de memória sees: a sample of each
 // watched session every second, and each encerramento por memória.
 type MemorySink interface {

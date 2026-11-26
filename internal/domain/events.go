@@ -91,6 +91,10 @@ type SessionEnded struct {
 	Status    SessionStatus
 }
 
+// SessionMemoryKilled: the vigia de memória ended a process of a session for
+// passing its orçamento (Kill carries what the contract's event does).
+type SessionMemoryKilled struct{ Kill MemoryKill }
+
 // InterviewOpened: a session's agent asked the person an interview, which was
 // stored as open. It is published once per interview.
 type InterviewOpened struct {
@@ -258,6 +262,7 @@ func (SessionDeleted) EventName() string             { return "session.deleted" 
 func (SessionStarted) EventName() string             { return "session.started" }
 func (SessionResumed) EventName() string             { return "session.resumed" }
 func (SessionEnded) EventName() string               { return "session.ended" }
+func (SessionMemoryKilled) EventName() string        { return "session.memory_killed" }
 func (InterviewOpened) EventName() string            { return "interview.opened" }
 func (InterviewClosed) EventName() string            { return "interview.closed" }
 func (SessionTurnEnded) EventName() string           { return "session.turn_ended" }

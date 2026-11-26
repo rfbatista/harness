@@ -164,6 +164,7 @@ func (s *Service) deliverNow(sess *domain.Session, p parcel) bool {
 // flushHeadless sends what waited in a headless session's outbox, as one
 // turn, once its turn has ended.
 func (s *Service) flushHeadless(id string) {
+	s.flushMemoryNotices(id)
 	q := s.courier.take(id)
 	if len(q) == 0 {
 		return
@@ -207,6 +208,7 @@ func (s *Service) TurnEnded(ctx context.Context, id string, _ bool) (string, err
 	}
 	// stop_hook_active needs no check of its own: the outbox was emptied by
 	// the continuation that set it, so it only goes on again for new turns.
+	s.flushMemoryNotices(id)
 	if q := s.courier.take(id); len(q) > 0 {
 		text := joinParcels(q)
 		now := time.Now()
