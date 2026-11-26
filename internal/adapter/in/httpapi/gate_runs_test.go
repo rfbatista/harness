@@ -1,8 +1,10 @@
 package httpapi
 
 import (
+	"bufio"
 	"context"
 	"encoding/json"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -15,6 +17,21 @@ import (
 type fakeGateRuns struct {
 	runs []domain.GateRun
 	last ports.GateRunRequest
+	// output, when set, writes the first part, waits for release, then the rest.
+	first, rest string
+	release     chan struct{}
+}
+
+func (f *fakeGateRuns) Output(_ context.Context, _, run string, kind domain.GateKind, w io.Writer) error {
+	if run == "nope" {
+		return &domain.StructuredError{Code: "GATE_RUN_NOT_FOUND", Message: "no such run"}
+	}
+	_, _ = io.WriteString(w, f.first)
+	if f.release != nil {
+		<-f.release
+	}
+	_, _ = io.WriteString(w, f.rest)
+	return nil
 }
 
 func (f *fakeGateRuns) Run(_ context.Context, req ports.GateRunRequest) (*domain.GateRun, error) {
@@ -39,7 +56,9 @@ func (f *fakeGateRuns) List(_ context.Context, id string) ([]domain.GateRun, err
 	return f.runs, nil
 }
 
-func gateRunsRouter(f *fakeGateRuns) http.Handler { return NewRouter(NewHandler(Services{GateRuns: f})) }
+func gateRunsRouter(f *fakeGateRuns) http.Handler {
+	return NewRouter(NewHandler(Services{GateRuns: f}))
+}
 
 func TestThePersonsTriggerRunsAndRecordsAGateRunWithItsPerGateResults(t *testing.T) {
 	f := &fakeGateRuns{}
@@ -98,5 +117,44 @@ func TestAGateRunOfAnUnknownSessionIs404AndOfASessionThatIsNotGatedIsACodedConfl
 	_ = json.Unmarshal(rec.Body.Bytes(), &body)
 	if body.Code != "SESSION_NOT_GATED" {
 		t.Errorf("code = %q: %s", body.Code, rec.Body)
+	}
+}
+
+func TestAGatesOutputStreamsItsFirstPartBeforeTheGateEndsAndTheWholeByItsEnd(t *testing.T) {
+	f := &fakeGateRuns{first: "building\n", rest: "done\n", release: make(chan struct{})}
+	srv := httptest.NewServer(gateRunsRouter(f))
+	defer srv.Close()
+
+	res, err := http.Get(srv.URL + "/api/sessions/s1/gate-runs/r1/gates/build/output")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer res.Body.Close()
+	r := bufio.NewReader(res.Body)
+	line, err := r.ReadString('\n')
+	if err != nil || line != "building\n" {
+		t.Fatalf("first part = %q, %v", line, err)
+	}
+	close(f.release)
+	rest, _ := io.ReadAll(r)
+	if string(rest) != "done\n" {
+		t.Errorf("rest = %q", rest)
+	}
+	if res.StatusCode != http.StatusOK || res.Header.Get("Content-Type") != "text/plain; charset=utf-8" {
+		t.Errorf("status %d type %q", res.StatusCode, res.Header.Get("Content-Type"))
+	}
+}
+
+func TestStreamingAFinishedRunsGateAnswersItsRecordedOutputAndAnUnknownRunIs404(t *testing.T) {
+	h := gateRunsRouter(&fakeGateRuns{first: "recorded"})
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/api/sessions/s1/gate-runs/r1/gates/test/output", nil))
+	if rec.Code != http.StatusOK || rec.Body.String() != "recorded" {
+		t.Errorf("%d %q", rec.Code, rec.Body)
+	}
+	rec = httptest.NewRecorder()
+	h.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/api/sessions/s1/gate-runs/nope/gates/test/output", nil))
+	if rec.Code != http.StatusNotFound {
+		t.Errorf("unknown run: %d", rec.Code)
 	}
 }

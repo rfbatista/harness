@@ -1763,7 +1763,7 @@ func sessionAuthor(sessions ports.SessionRepository, owners ports.ProductOwnerSt
 // session's gates in its worktree under the session's sandbox profile.
 func newGateRuns(sessions ports.SessionRepository, guard ports.GuardSessions, store ports.GateRunStore, orch *orchestration.Service, ws *workspaces.Service) *gateruns.Service {
 	return gateruns.New(gateruns.Deps{
-		Sessions: sessions, Guard: guard, Store: store, Exec: &gateruns.ShellExecutor{Sandbox: orch},
+		Sessions: sessions, Guard: guard, Store: store, Exec: &gateruns.ShellExecutor{Sandbox: orch}, Announce: orch,
 		HasDiff: gateruns.GitHasDiff(func(ctx context.Context, workspaceID string) string {
 			if w := ws.Get(ctx, workspaceID); w != nil {
 				return w.BaseSHA

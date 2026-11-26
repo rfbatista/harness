@@ -16,7 +16,10 @@ func (f fakeSessions) Find(_ context.Context, id string) (*domain.Session, error
 
 type fakeGuard map[string]domain.GuardConfig
 
-func (f fakeGuard) Keep(_ context.Context, id string, c domain.GuardConfig) error { f[id] = c; return nil }
+func (f fakeGuard) Keep(_ context.Context, id string, c domain.GuardConfig) error {
+	f[id] = c
+	return nil
+}
 func (f fakeGuard) Config(_ context.Context, id string) (domain.GuardConfig, bool, error) {
 	c, ok := f[id]
 	return c, ok, nil
@@ -24,7 +27,10 @@ func (f fakeGuard) Config(_ context.Context, id string) (domain.GuardConfig, boo
 
 type memStore struct{ runs []domain.GateRun }
 
-func (m *memStore) Save(_ context.Context, r *domain.GateRun) error { m.runs = append(m.runs, *r); return nil }
+func (m *memStore) Save(_ context.Context, r *domain.GateRun) error {
+	m.runs = append(m.runs, *r)
+	return nil
+}
 func (m *memStore) List(context.Context, string) ([]domain.GateRun, error) { return m.runs, nil }
 
 // scriptedExec answers each command with an exit code and records the order.

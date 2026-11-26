@@ -128,6 +128,8 @@ type ProjectChange struct {
 	UnattributedBranch *UnattributedBranchChange `json:"unattributed_branch,omitempty"`
 	// ArchitectureRuleEvent is a rule that failed in a session.
 	ArchitectureRuleEvent *ArchitectureRuleEventChange `json:"architecture_rule_event,omitempty"`
+	// GateRun is a gate run starting or finishing.
+	GateRun *GateRunChange `json:"gate_run,omitempty"`
 	// DesignSystemSaved says a design system got a new version.
 	DesignSystemSaved *DesignSystemChange `json:"design_system_saved,omitempty"`
 	// DesignSystemChanged says a project's design system was created,
@@ -358,6 +360,8 @@ func (c ProjectChange) ProjectID() string {
 		return c.ProductOwnerDigest.ProjectID
 	case c.ProductOwnerMemory != nil:
 		return c.ProductOwnerMemory.ProjectID
+	case c.GateRun != nil:
+		return c.GateRun.ProjectID
 	case c.DesignSystemSaved != nil:
 		return c.DesignSystemSaved.ProjectID
 	case c.DesignSystemChanged != nil:

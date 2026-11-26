@@ -46,6 +46,23 @@ type GateRuns interface {
 	Run(ctx context.Context, req GateRunRequest) (*domain.GateRun, error)
 	// List answers the session's recorded gate runs, oldest first.
 	List(ctx context.Context, sessionID string) ([]domain.GateRun, error)
+	// Output writes one gate's output to w as it is written while its run is
+	// going, and returns when the gate has ended; for a finished run it writes
+	// the recorded output. An unknown run or gate answers GATE_RUN_NOT_FOUND.
+	Output(ctx context.Context, sessionID, runID string, kind domain.GateKind, w io.Writer) error
+}
+
+// GateRunChange is a gate run starting or finishing, as the project feed
+// carries it; finished adds the result and whether the run counted.
+type GateRunChange struct {
+	ProjectID string             `json:"project_id"`
+	SessionID string             `json:"session_id"`
+	RunID     string             `json:"run_id"`
+	Trigger   domain.GateTrigger `json:"trigger"`
+	// Phase is "started" or "finished".
+	Phase   string               `json:"phase"`
+	Result  domain.GateRunResult `json:"result,omitempty"`
+	Counted bool                 `json:"counted,omitempty"`
 }
 
 // DeclarationRefusal is one check refusing a done declaration.
