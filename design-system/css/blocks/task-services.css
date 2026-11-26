@@ -1,0 +1,106 @@
+/*
+ * Task services — the painel de serviços da task, beside the whiteboard on the
+ * task page (a React island, ADR 0003). A 21rem column when docked; a 2.75rem
+ * handle when collapsed; an overlay on the board's edge below 64rem; a bottom
+ * sheet below 48rem. Built from status, badge, button, confirm-strip and toast.
+ * <div class="task-services-mount"><aside class="task-services" data-open data-mode="docked">
+ *   <section class="panel"><div class="head">…</div><div class="body">
+ *     <section data-group="attention"><h3>Needs attention</h3><ul><li class="task-service">…
+ * Exceptions: data-open (the panel, not the handle), data-mode="docked|overlay|sheet",
+ * data-wide (a log is open), [data-group="attention"] on a row, [data-ring] (a
+ * one-shot ring), .task-request[data-outcome].
+ */
+
+@layer blocks {
+  .task-services-mount {
+    flex: none; display: flex; min-block-size: 0; position: relative;
+    border-inline-start: var(--border-width) solid var(--color-line);
+    background: var(--color-canvas);
+  }
+
+  .task-services {
+    display: flex; flex-direction: column; min-block-size: 0; min-inline-size: 2.75rem;
+    font-size: var(--text-sm);
+
+    &[data-open] { inline-size: 21rem; &[data-wide] { inline-size: min(38rem, 50vw); } }
+
+    & .visually-hidden { position: absolute; }
+
+    & .panel { display: flex; flex-direction: column; flex: 1 1 0; min-block-size: 0; }
+    & .panel > .head {
+      display: flex; align-items: center; gap: var(--space-xs); flex: none;
+      min-block-size: var(--size-row); padding-inline: var(--space-m) var(--space-xs);
+      border-block-end: var(--border-width) solid var(--color-line);
+      & > h2 { font-size: var(--text-sm); font-weight: var(--weight-bold); margin-inline-end: auto; }
+      & svg { inline-size: 1rem; block-size: 1rem; color: var(--color-ink-muted); }
+    }
+    & .panel > .body { flex: 1 1 0; min-block-size: 0; overflow-y: auto; overscroll-behavior: contain; display: grid; align-content: start; }
+    & .panel > .foot {
+      display: flex; justify-content: space-between; gap: var(--space-xs); flex: none;
+      padding: var(--space-xs) var(--space-m); border-block-start: var(--border-width) solid var(--color-line);
+      font-size: var(--text-xs); color: var(--color-ink-faint);
+    }
+
+    & h3 { padding: var(--space-xs) var(--space-m); font-size: var(--text-xs); font-weight: var(--weight-bold); color: var(--color-ink-muted); }
+    & ul { list-style: none; margin: 0; padding: 0; }
+    & .meta { font-size: var(--text-xs); color: var(--color-ink-faint); }
+    & .error-line { font-size: var(--text-xs); color: var(--color-danger); }
+    & .code { font-family: var(--font-mono); }
+    & .actions { display: flex; align-items: center; gap: var(--space-xs); & > .spacer { flex: 1 1 auto; } }
+    & .empty-state { display: grid; gap: var(--space-xs); padding: var(--space-l) var(--space-m); }
+
+    /* The handle: the selo above a vertical label, and one dot per service. */
+    & .task-services-handle {
+      display: flex; flex-direction: column; align-items: center; gap: var(--space-xs);
+      inline-size: 2.75rem; padding-block: var(--space-s); border: 0; background: none; cursor: pointer; color: var(--color-ink-muted);
+      & > .dots { display: flex; flex-direction: column; gap: var(--space-2xs); }
+      & > .label { writing-mode: vertical-rl; font-size: var(--text-xs); font-weight: var(--weight-bold); }
+    }
+
+    & .band { background: var(--color-attention-wash); border-block-end: var(--border-width) solid var(--color-line); }
+    & .task-request {
+      display: grid; gap: var(--space-2xs); padding: var(--space-s) var(--space-m);
+      & .reason { display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; font-size: var(--text-xs); color: var(--color-ink-muted); }
+    }
+
+    & .task-service {
+      display: grid; gap: var(--space-2xs); padding: var(--space-s) var(--space-m);
+      border-block-end: var(--border-width) solid var(--color-line);
+      & > .head { display: flex; justify-content: space-between; gap: var(--space-xs); & > .name { font-family: var(--font-mono); font-weight: var(--weight-bold); overflow-wrap: anywhere; } }
+      & > .status-line { display: flex; flex-wrap: wrap; gap: var(--space-xs); align-items: baseline; & .what { font-family: var(--font-mono); font-size: var(--text-xs); color: var(--color-ink-faint); overflow-wrap: anywhere; } }
+      & > .ports { display: flex; flex-wrap: wrap; gap: var(--space-xs); font-family: var(--font-mono); font-size: var(--text-xs); }
+      &[data-group="attention"] { background: var(--color-danger-wash); box-shadow: inset 2px 0 0 var(--color-danger); }
+      &[data-ring] { outline: 2px solid var(--color-signal); outline-offset: -2px; animation: task-service-ring 1.5s var(--ease-out) forwards; }
+    }
+
+    & .credential-box {
+      display: grid; gap: var(--space-2xs); padding: var(--space-xs); border: var(--border-width) solid var(--color-line);
+      border-radius: var(--radius-xs); background: var(--color-code); font-family: var(--font-mono); font-size: var(--text-xs);
+      & > li { display: flex; align-items: center; gap: var(--space-xs); }
+      & .label { color: var(--color-ink-faint); }
+      & .value { flex: 1 1 auto; min-inline-size: 0; overflow-wrap: anywhere; }
+    }
+
+    & .task-services-log {
+      display: flex; flex-direction: column; flex: 1 1 0; min-block-size: 0;
+      & > .head { display: flex; align-items: center; justify-content: space-between; padding: var(--space-xs); }
+      & > .lines { flex: 1 1 0; min-block-size: 0; overflow: auto; padding: var(--space-xs) var(--space-m); font-family: var(--font-mono); font-size: var(--text-xs); }
+      & .line { white-space: pre-wrap; overflow-wrap: anywhere; }
+      & .line[data-tone="harness"] { color: var(--color-signal-strong); box-shadow: inset 2px 0 0 var(--color-signal); padding-inline-start: var(--space-xs); }
+      & .line[data-tone="error"] { color: var(--color-danger); }
+      & > .foot { display: flex; justify-content: space-between; align-items: center; padding: var(--space-xs) var(--space-m); font-size: var(--text-xs); }
+    }
+
+    /* Below 64rem the panel is an overlay on the board's right edge. */
+    &[data-mode="overlay"][data-open] { position: absolute; inset-block: 0; inset-inline-end: 0; inline-size: 19rem; background: var(--color-canvas); box-shadow: var(--shadow-float); z-index: 2; }
+    /* Below 48rem: a button, and a bottom sheet. */
+    &[data-mode="sheet"] {
+      min-inline-size: 0;
+      & .task-services-handle { position: fixed; inset-block-end: var(--space-l); inset-inline-end: var(--space-l); inline-size: auto; flex-direction: row; padding: var(--space-xs) var(--space-m); border: var(--border-width) solid var(--color-line-strong); border-radius: var(--radius-md); background: var(--color-raised); box-shadow: var(--shadow-float); z-index: 2; & > .label { writing-mode: horizontal-tb; } & > .dots { flex-direction: row; } }
+      &[data-open] { position: fixed; inset-inline: 0; inset-block-end: 0; inline-size: auto; block-size: 72dvh; background: var(--color-canvas); border-start-start-radius: var(--radius-md); border-start-end-radius: var(--radius-md); box-shadow: var(--shadow-float); z-index: 3; }
+    }
+  }
+
+  @keyframes task-service-ring { to { outline-color: transparent; } }
+  @media (prefers-reduced-motion: reduce) { .task-services .task-service[data-ring] { animation: none; } }
+}
