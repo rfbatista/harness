@@ -41,7 +41,7 @@ func NewBenchCaseRepository(db *gorm.DB) *BenchCaseRepository {
 // List answers the project's cases, oldest first.
 func (r *BenchCaseRepository) List(ctx context.Context, projectID string) ([]domain.BenchCase, error) {
 	var rows []BenchCaseModel
-	if err := r.db.WithContext(ctx).Where("project_id = ?", projectID).Order("created_at, id").Find(&rows).Error; err != nil {
+	if err := r.db.WithContext(ctx).Where("project_id = ?", projectID).Order("created_at, rowid").Find(&rows).Error; err != nil {
 		return nil, err
 	}
 	out := make([]domain.BenchCase, 0, len(rows))

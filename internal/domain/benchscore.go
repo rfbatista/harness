@@ -160,3 +160,33 @@ type ScorecardComparison struct {
 	Patterns           map[string]BenchDelta `json:"patterns"`
 	Cases              []BenchCaseDelta      `json:"cases"`
 }
+
+// Bench run statuses.
+const (
+	BenchRunRunning   = "running"
+	BenchRunFinished  = "finished"
+	BenchRunCancelled = "cancelled"
+	BenchRunFailed    = "failed"
+)
+
+// BenchRunRequest says on what setup a run goes: the agent and repository a
+// session would run as, and the model. All optional (ports.BenchSetupRequest).
+type BenchRunRequest struct {
+	AgentID      string `json:"agent_id,omitempty"`
+	RepositoryID string `json:"repository_id,omitempty"`
+	Model        string `json:"model,omitempty"`
+}
+
+// BenchRun is a bench run of a project and how far it is. Its scorecard, once
+// it ends, has the run's id.
+type BenchRun struct {
+	ID          string    `json:"id"`
+	ProjectID   string    `json:"project_id"`
+	Status      string    `json:"status"`
+	Total       int       `json:"total"`
+	Done        int       `json:"done"`
+	ScorecardID string    `json:"scorecard_id,omitempty"`
+	Error       string    `json:"error,omitempty"`
+	StartedAt   time.Time `json:"started_at"`
+	FinishedAt  time.Time `json:"finished_at,omitempty"`
+}

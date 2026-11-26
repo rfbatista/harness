@@ -121,6 +121,8 @@ type Services struct {
 	AgentSystem ports.AgentSystemSettings
 	// Bench is the eval bench's cases (ADR 0015); nil: the routes answer 503.
 	Bench ports.BenchCases
+	// BenchRuns are its runs and scorecards; nil: those routes answer 503.
+	BenchRuns ports.BenchRuns
 	// ManagedClaude installs and switches the claude agents run; nil answers
 	// 503. ManagedClaudeBin says which binary agents run (the override
 	// included); nil reads as no override.
@@ -234,6 +236,7 @@ type Handler struct {
 	sandboxSettings ports.SandboxSettings
 	agentSystem     ports.AgentSystemSettings
 	bench           ports.BenchCases
+	benchRuns       ports.BenchRuns
 	sandboxDriver   func() ports.SandboxDriver
 
 	managedClaude    ports.ManagedClaude
@@ -330,6 +333,7 @@ func NewHandler(s Services) *Handler {
 		sandboxSettings: s.SandboxSettings,
 		agentSystem:     s.AgentSystem,
 		bench:           s.Bench,
+		benchRuns:       s.BenchRuns,
 		sandboxDriver:   s.SandboxDriver,
 
 		managedClaude:    s.ManagedClaude,

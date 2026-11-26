@@ -56,6 +56,8 @@ func newBenchWorld(t *testing.T, script string) *benchWorld {
 	return &benchWorld{bench: b, sessions: svc, launchFile: launch, repoRoot: res.repo.RootDir}
 }
 
+func (w *benchWorld) serveMock(l *bench.MockLayer) (string, func(), error) { return mcpbench.Serve(l) }
+
 func (w *benchWorld) launch(t *testing.T) fakeBenchLaunch {
 	t.Helper()
 	b, err := os.ReadFile(w.launchFile)

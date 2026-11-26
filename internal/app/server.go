@@ -197,6 +197,7 @@ func registerHTTPServer(lc fx.Lifecycle, cfg Config, cat catalog.Catalog, appRun
 		AgentSystem: agentSystem,
 		// The eval bench: a project's bench cases.
 		Bench: bench,
+		BenchRuns: bench,
 		// The managed claude agents run, and which binary they resolve to.
 		ManagedClaude:    managedClaude,
 		ManagedClaudeBin: claudeBin,

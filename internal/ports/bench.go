@@ -86,3 +86,41 @@ type BenchSessions interface {
 type BenchModel interface {
 	Ask(ctx context.Context, model, system, input string) (string, error)
 }
+
+// BenchRuns starts, follows and ends a project's bench runs, and reads their
+// scorecards, as the HTTP API and the CLI use them (ADR 0015).
+type BenchRuns interface {
+	// StartRun starts a run over all the project's cases and answers it at once,
+	// running. A project with no cases is BENCH_NO_CASES, one that already has a
+	// run going BENCH_RUN_IN_PROGRESS.
+	StartRun(ctx context.Context, projectID string, req domain.BenchRunRequest) (domain.BenchRun, error)
+	GetRun(ctx context.Context, projectID, runID string) (domain.BenchRun, error)
+	// CancelRun ends a running run: the CLI is stopped and the scorecard of the
+	// cases already done is kept, marked cancelled.
+	CancelRun(ctx context.Context, projectID, runID string) (domain.BenchRun, error)
+	ListScorecards(ctx context.Context, projectID string) ([]domain.Scorecard, error)
+	GetScorecard(ctx context.Context, projectID, scorecardID string) (domain.Scorecard, error)
+	// CompareScorecard sets the scorecard against the project's previous one;
+	// with none before it, BENCH_NO_PREVIOUS_SCORECARD.
+	CompareScorecard(ctx context.Context, projectID, scorecardID string) (domain.ScorecardComparison, error)
+}
+
+// BenchScorecardStore persists scorecards (driven; sqlite implements it).
+type BenchScorecardStore interface {
+	Save(ctx context.Context, card domain.Scorecard) error
+	// Get answers nil when the project has no such scorecard.
+	Get(ctx context.Context, projectID, id string) (*domain.Scorecard, error)
+	// List answers the project's scorecards, newest first.
+	List(ctx context.Context, projectID string) ([]domain.Scorecard, error)
+}
+
+// BenchRunChange is a bench run's progress or end on the project feed, as
+// "bench_run". ProjectID routes it and is not on the wire.
+type BenchRunChange struct {
+	RunID       string `json:"run_id"`
+	Status      string `json:"status"`
+	Done        int    `json:"done"`
+	Total       int    `json:"total"`
+	ScorecardID string `json:"scorecard_id,omitempty"`
+	ProjectID   string `json:"-"`
+}

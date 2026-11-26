@@ -55,3 +55,77 @@ func (h *Handler) handleDeleteBenchCase(c echo.Context) error {
 	}
 	return c.NoContent(http.StatusNoContent)
 }
+
+func (h *Handler) handleStartBenchRun(c echo.Context) error {
+	if h.benchRuns == nil {
+		return errBenchOff
+	}
+	var req domain.BenchRunRequest
+	// The body is optional: no body runs on the defaults.
+	if err := bindJSON(c, &req); err != nil && c.Request().ContentLength != 0 {
+		return err
+	}
+	run, err := h.benchRuns.StartRun(c.Request().Context(), c.Param("project"), req)
+	if err != nil {
+		return err
+	}
+	return c.JSON(http.StatusAccepted, run)
+}
+
+func (h *Handler) handleGetBenchRun(c echo.Context) error {
+	if h.benchRuns == nil {
+		return errBenchOff
+	}
+	run, err := h.benchRuns.GetRun(c.Request().Context(), c.Param("project"), c.Param("run"))
+	if err != nil {
+		return err
+	}
+	return c.JSON(http.StatusOK, run)
+}
+
+func (h *Handler) handleCancelBenchRun(c echo.Context) error {
+	if h.benchRuns == nil {
+		return errBenchOff
+	}
+	run, err := h.benchRuns.CancelRun(c.Request().Context(), c.Param("project"), c.Param("run"))
+	if err != nil {
+		return err
+	}
+	return c.JSON(http.StatusAccepted, run)
+}
+
+func (h *Handler) handleListBenchScorecards(c echo.Context) error {
+	if h.benchRuns == nil {
+		return errBenchOff
+	}
+	cards, err := h.benchRuns.ListScorecards(c.Request().Context(), c.Param("project"))
+	if err != nil {
+		return err
+	}
+	if cards == nil {
+		cards = []domain.Scorecard{}
+	}
+	return c.JSON(http.StatusOK, map[string]any{"scorecards": cards})
+}
+
+func (h *Handler) handleGetBenchScorecard(c echo.Context) error {
+	if h.benchRuns == nil {
+		return errBenchOff
+	}
+	card, err := h.benchRuns.GetScorecard(c.Request().Context(), c.Param("project"), c.Param("scorecard"))
+	if err != nil {
+		return err
+	}
+	return c.JSON(http.StatusOK, card)
+}
+
+func (h *Handler) handleCompareBenchScorecard(c echo.Context) error {
+	if h.benchRuns == nil {
+		return errBenchOff
+	}
+	cmp, err := h.benchRuns.CompareScorecard(c.Request().Context(), c.Param("project"), c.Param("scorecard"))
+	if err != nil {
+		return err
+	}
+	return c.JSON(http.StatusOK, cmp)
+}

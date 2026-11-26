@@ -6,6 +6,7 @@ import (
 	"context"
 	"crypto/rand"
 	"encoding/hex"
+	"sync"
 	"time"
 
 	"operators-mcp/internal/domain"
@@ -25,6 +26,15 @@ type Deps struct {
 	// Judge is the model that judges outcome and trajectory; nil leaves those
 	// patterns unscored.
 	Judge ports.BenchModel
+	// Scorecards keep the scorecard of each run; Settings gives the judge
+	// model (the project's effective critic model); Feed announces a run's
+	// progress and end. Each may be nil: no scorecard is kept, the judge model
+	// is "", nothing is announced.
+	Scorecards ports.BenchScorecardStore
+	Settings   interface {
+		Effective(ctx context.Context, projectID, repositoryID string) (domain.EffectiveAgentSystem, error)
+	}
+	Feed interface{ AnnounceChange(ports.ProjectChange) }
 	// MockName is the mock server's name in the CLI's MCP configuration.
 	MockName string
 	Projects interface {
@@ -33,10 +43,18 @@ type Deps struct {
 }
 
 // Service is the eval bench.
-type Service struct{ d Deps }
+type Service struct {
+	d Deps
+
+	mu     sync.Mutex
+	runs   map[string]*liveRun // by run id
+	active map[string]string   // project id → the run going on in it
+}
 
 // New returns the bench.
-func New(d Deps) *Service { return &Service{d: d} }
+func New(d Deps) *Service {
+	return &Service{d: d, runs: map[string]*liveRun{}, active: map[string]string{}}
+}
 
 func (s *Service) checkProject(ctx context.Context, projectID string) error {
 	if s.d.Projects.Get(ctx, projectID) == nil {

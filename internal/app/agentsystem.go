@@ -63,7 +63,7 @@ func (l repositoryLookup) Get(ctx context.Context, id string) *domain.Repository
 // against the project catalog, and the orchestration service as the one that
 // runs the CLI for a case on a manager of its own with no approval, interview
 // or task server, so a run's only MCP server is the mock.
-func newBench(cfg Config, db *gorm.DB, cat catalog.Catalog, orch *orchestration.Service, bin ports.ManagedClaudeBin, home claudehome.Home) *bench.Service {
+func newBench(cfg Config, db *gorm.DB, cat catalog.Catalog, orch *orchestration.Service, bin ports.ManagedClaudeBin, home claudehome.Home, settings *agentsystem.Service) *bench.Service {
 	claudeMgr := oneShotClaude(bin.Bin(), home.Path(), cfg.llmProxyURL())
 	orch.BenchRuntime = claudeMgr
 	orch.BenchCLIVersion = cliVersion(bin)

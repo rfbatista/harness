@@ -9,6 +9,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"testing"
 )
@@ -75,6 +76,13 @@ func runFakeClaude() {
 	for sc.Scan() {
 		if sc.Text() == "" {
 			continue
+		}
+		if strings.Contains(sc.Text(), "HANG") {
+			// A prompt that never gets an answer: the run is ended from outside.
+			if path := os.Getenv("CLAUDE_FAKE_PIDFILE"); path != "" {
+				_ = os.WriteFile(path, []byte(strconv.Itoa(os.Getpid())), 0o644)
+			}
+			select {}
 		}
 		script.play()
 		fmt.Fprintln(out, `{"type":"assistant","session_id":"fake","message":{"role":"assistant","content":[{"type":"text","text":"working"}]}}`)

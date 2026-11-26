@@ -160,6 +160,8 @@ type ProjectChange struct {
 	ProductOwnerMemory *ProductOwnerMemoryChange `json:"product_owner_memory,omitempty"`
 	// AgentSystemSettings says agent system settings were saved; pages re-read.
 	AgentSystemSettings *AgentSystemSettingsChange `json:"agent_system_settings,omitempty"`
+	// BenchRun is an eval bench run's progress, or its end with the scorecard.
+	BenchRun *BenchRunChange `json:"bench_run,omitempty"`
 	// ContextChange says a session's context changed (contract "Harness server
 	// ↔ Web UI — session context", C5). Embedded, so its three fields are the
 	// whole message: {"kind":"context.changed","session_id":…,"reason":…}.
@@ -346,6 +348,8 @@ func (c ProjectChange) ProjectID() string {
 		return c.SessionFilesRoot.ProjectID
 	case c.AgentSystemSettings != nil:
 		return c.AgentSystemSettings.ProjectID
+	case c.BenchRun != nil:
+		return c.BenchRun.ProjectID
 	case c.ProductOwnerSettings != nil:
 		return c.ProductOwnerSettings.ProjectID
 	case c.ProductOwnerThreadItem != nil:
