@@ -36,12 +36,15 @@ type Services struct {
 	Capabilities ports.Capabilities
 	// TokenSavers reads and sets token saver activations; nil answers 503.
 	TokenSavers ports.TokenSaverActivations
-	Settings    ports.SettingsEditor
-	Tools       ports.ToolRegistry
-	Tasks       ports.TaskRunner
-	Sessions    ports.Orchestration
-	Planning    ports.Planning
-	Workspaces  ports.WorkspaceManager
+	// MemoryBudgets reads and sets a repository's or task's orçamento de
+	// memória; nil answers 503.
+	MemoryBudgets ports.MemoryBudgetOverrides
+	Settings      ports.SettingsEditor
+	Tools         ports.ToolRegistry
+	Tasks         ports.TaskRunner
+	Sessions      ports.Orchestration
+	Planning      ports.Planning
+	Workspaces    ports.WorkspaceManager
 	// Artifacts records and serves what sessions publish; nil answers 503.
 	Artifacts ports.Artifacts
 	// TaskChannel is the person's side of the architect channel: task
@@ -189,6 +192,7 @@ type Handler struct {
 	}
 	capabilities   ports.Capabilities
 	tokenSavers    ports.TokenSaverActivations
+	memoryBudgets  ports.MemoryBudgetOverrides
 	settings       ports.SettingsEditor
 	toolingSvc     ports.ToolRegistry
 	execSvc        ports.TaskRunner
@@ -272,6 +276,7 @@ func NewHandler(s Services) *Handler {
 		agents:               s.Agents,
 		capabilities:         s.Capabilities,
 		tokenSavers:          s.TokenSavers,
+		memoryBudgets:        s.MemoryBudgets,
 		settings:             s.Settings,
 		toolingSvc:           s.Tools,
 		execSvc:              s.Tasks,

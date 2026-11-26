@@ -270,6 +270,9 @@ type Service struct {
 	// rm, touch, mkdir) link to, first on its PATH; they call the session's
 	// SessionShellURL. Empty: sessions get no shims.
 	ShimBinary string
+	// MemoryBudgets resolves the orçamento de memória a session starts or
+	// resumes with (ADR 0008). Nil: the global default, 4 GB.
+	MemoryBudgets ports.SessionMemoryBudget
 	// TokenSavers says which token savers a session runs with, when it is
 	// prepared (ADR 0015). Nil: sessions run with none.
 	TokenSavers ports.SessionTokenSavers
@@ -443,6 +446,7 @@ func (s *Service) Start(ctx context.Context, req StartRequest) (*domain.Session,
 		TokenSavers:             p.savers.active,
 		TokenSaversNotInstalled: p.savers.notInstalled,
 		CavemanIntensity:        p.savers.cavemanIntensity,
+		MemoryBudgetBytes:       p.memoryBudget,
 		Sandbox:                 p.sandbox.facts,
 	})
 	if err != nil {
@@ -523,7 +527,10 @@ type prepared struct {
 	cleanup    func() // removes the materialized skill plugin dir and the git directory; nil if none
 	envFile    string // the session's git env file, for login shells; "" without GitAuth
 	savers     sessionSavers
-	sandbox    sandboxed
+	// memoryBudget is the orçamento de memória resolved for the session, in
+	// bytes (ADR 0008).
+	memoryBudget int64
+	sandbox      sandboxed
 	// context is what the session's context entry is built from, once the
 	// start has recorded the session and knows the opening message.
 	context contextInput
@@ -696,14 +703,15 @@ func (s *Service) prepare(ctx context.Context, in prepareInput) (*prepared, erro
 			Skills: ag.contextSkills, BuiltIn: s.builtInTools(),
 			Facts: s.contextFacts(in, ag, cfg, ws, savers, sb, permission),
 		},
-		sandbox:    sb,
-		cfg:        cfg,
-		ws:         ws,
-		branch:     in.Branch,
-		permission: permission,
-		cleanup:    cleanup,
-		envFile:    envFile,
-		savers:     savers,
+		sandbox:      sb,
+		cfg:          cfg,
+		ws:           ws,
+		branch:       in.Branch,
+		permission:   permission,
+		cleanup:      cleanup,
+		envFile:      envFile,
+		savers:       savers,
+		memoryBudget: s.memoryBudget(ctx, in.RepositoryID, in.TicketID),
 	}, nil
 }
 

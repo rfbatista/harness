@@ -6,6 +6,7 @@ package serversettings
 import (
 	"net/http"
 	"path/filepath"
+	"strconv"
 
 	"operators-mcp/internal/adapter/in/web/shell"
 	"operators-mcp/internal/domain"
@@ -42,9 +43,11 @@ func (h Handler) Page(w http.ResponseWriter, r *http.Request) error {
 	}
 	v := NewView(h.Paths)
 	read := func(string) string { return "" }
+	v.MemoryBudgetBytes = domain.DefaultMemoryBudgetBytes
 	if h.Settings != nil {
 		v.AgentsMoveDocuments = domain.AgentsMoveDocuments(h.Settings.Setting(domain.SettingAgentsMoveDocuments))
 		read = h.Settings.Setting
+		v.MemoryBudgetBytes = domain.ResolveMemoryBudget("", "", h.Settings.Setting(domain.SettingMemoryBudget))
 	}
 	v.BranchBlocks = domain.BranchBlocks(read)
 	return h.Render(w, r, http.StatusOK, Page(frame, v))
@@ -63,6 +66,14 @@ type View struct {
 	AgentsMoveDocuments bool
 	// BranchBlocks is the branch block read: one switch per session mode.
 	BranchBlocks []domain.BranchBlock
+	// MemoryBudgetBytes is the global orçamento de memória da sessão: the
+	// stored value, or 4 GB while it is unset or invalid.
+	MemoryBudgetBytes int64
+}
+
+// MemoryBudgetGB is the orçamento in GB as the field shows it: 4, 2.5.
+func (v View) MemoryBudgetGB() string {
+	return strconv.FormatFloat(float64(v.MemoryBudgetBytes)/(1<<30), 'f', -1, 64)
 }
 
 // Row is one thing the data dir holds.

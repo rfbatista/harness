@@ -114,3 +114,19 @@ type TokenSaverActivationRepository interface {
 	// DeleteProject removes every activation in the project, at every level.
 	DeleteProject(projectID string) error
 }
+
+// SessionMemoryBudget resolves the orçamento de memória da sessão for a
+// session's repository and task (task → repository → global, ADR 0008), in
+// bytes. Orchestration asks it when a session starts or resumes.
+type SessionMemoryBudget interface {
+	ResolveMemoryBudget(ctx context.Context, repositoryID, taskID string) int64
+}
+
+// MemoryBudgetOverrides reads and sets a repository's or task's own orçamento
+// de memória: bytes, or 0 to inherit. Both answer the owner's override as it
+// now reads; a project owner, a bad level or a negative value is
+// INVALID_INPUT, an unknown owner REPOSITORY_NOT_FOUND or TICKET_NOT_FOUND.
+type MemoryBudgetOverrides interface {
+	MemoryBudgetOverride(ctx context.Context, owner domain.ActivationOwner) (domain.MemoryBudgetOverride, error)
+	SetMemoryBudgetOverride(ctx context.Context, owner domain.ActivationOwner, bytes int64) (domain.MemoryBudgetOverride, error)
+}

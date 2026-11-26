@@ -148,6 +148,9 @@ type SessionRepository interface {
 	// UpdateTokenSavers records the session's active savers and those on
 	// but not installed; a resume moves a saver removed since the start.
 	UpdateTokenSavers(id string, active, notInstalled []domain.TokenSaver) error
+	// UpdateMemoryBudget records the orçamento de memória a resumed session
+	// runs under.
+	UpdateMemoryBudget(id string, bytes int64) error
 	// RecordEvent stores one event on the session's log together with what
 	// it changes on the session, all or nothing.
 	RecordEvent(sessionID string, ev SessionEventRecord) error

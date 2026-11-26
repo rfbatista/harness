@@ -49,6 +49,8 @@ type Handler struct {
 	Workspaces WorkspaceReader
 	// TokenSavers seeds the task's Token savers control; nil leaves it out.
 	TokenSavers ports.TokenSaverActivationReader
+	// MemoryBudgets seeds the task's memory budget control; nil leaves it out.
+	MemoryBudgets ports.MemoryBudgetOverrides
 	// Archived lists the project's archived tasks for the Archived view;
 	// nil lists none.
 	ArchivedTasks ArchivedLister
@@ -357,6 +359,7 @@ func (h Handler) task(w http.ResponseWriter, r *http.Request, codeRoute *code.Ro
 		view.PaintSync(view.Seed.GitStates, h.Now())
 	}
 	view.TokenSavers = tokensavers.Read(ctx, h.TokenSavers, domain.ActivationOwner{Level: domain.ActivationLevelTask, ID: task.ID})
+	view.MemoryBudget = tokensavers.ReadMemoryBudget(ctx, h.MemoryBudgets, domain.ActivationOwner{Level: domain.ActivationLevelTask, ID: task.ID})
 	for _, st := range Statuses {
 		view.StatusChoices = append(view.StatusChoices, sessions.StatusChoice{Value: st.Value, Label: st.Label, Selected: st.Value == string(task.Status)})
 	}

@@ -115,6 +115,9 @@ type Session struct {
 	// CavemanIntensity is the intensity caveman was wired at when it is
 	// active, fixed at start with the savers.
 	CavemanIntensity CavemanIntensity `json:"caveman_intensity,omitempty"`
+	// MemoryBudgetBytes is the orçamento de memória resolved when the session
+	// started, moved when it is resumed (ADR 0008); 0 for sessions from before.
+	MemoryBudgetBytes int64 `json:"memory_budget_bytes,omitempty"`
 	// Sandbox is what the session's agent runs under, fixed when it starts and
 	// moved when it is resumed (the rules it starts under); nil for sessions
 	// from before the sandbox existed.

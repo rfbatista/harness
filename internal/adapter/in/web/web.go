@@ -168,6 +168,9 @@ type Deps struct {
 	// of the project's Settings page, the repository's settings page and
 	// the task page; nil leaves the control out.
 	TokenSavers ports.TokenSaverActivationReader
+	// MemoryBudgets reads a repository's or task's own orçamento de memória
+	// for the control beside Token savers; nil leaves the control out.
+	MemoryBudgets ports.MemoryBudgetOverrides
 	// RepositoryIndexes lists the repository indexes on the Token savers
 	// page; nil leaves that section out.
 	RepositoryIndexes ports.RepositoryIndexes
@@ -236,7 +239,7 @@ func NewHandler(deps Deps, assets *Assets, fallback http.Handler) http.Handler {
 	taskPages := tasks.Handler{
 		Projects: deps.Projects, Tasks: deps.Tasks, Sessions: deps.Sessions,
 		Agents: deps.Agents, Repositories: deps.Repositories, Docs: deps.Documents, Artifacts: deps.Artifacts, PullRequests: deps.PullRequests, WorktreeGit: deps.WorktreeGit,
-		Resources: deps.Resources, Comments: deps.Comments, Settings: deps.Settings, Code: deps.Code, Usage: deps.Usage, TokenSavers: deps.TokenSavers, Interviews: deps.Interviews,
+		Resources: deps.Resources, Comments: deps.Comments, Settings: deps.Settings, Code: deps.Code, Usage: deps.Usage, TokenSavers: deps.TokenSavers, MemoryBudgets: deps.MemoryBudgets, Interviews: deps.Interviews,
 		ArchivedTasks: deps.ArchivedList, BranchRequests: deps.BranchRequests, SessionBranches: deps.SessionBranches, Layout: s.layout, Render: render, Now: deps.Now,
 	}
 	if deps.Workspaces != nil {
@@ -244,7 +247,7 @@ func NewHandler(deps Deps, assets *Assets, fallback http.Handler) http.Handler {
 	}
 	projectPages := projects.Handler{
 		Projects: deps.Projects, Repositories: deps.Repositories, EnvFiles: deps.EnvFiles, RunCommands: deps.RunCommands, Summaries: deps.ProjectSummaries, Credentials: deps.GitCredentials,
-		TokenSavers: deps.TokenSavers, AgentCredentials: deps.ProjectAgentCredentials, GlobalCredential: deps.AgentCredential, SignIn: deps.ProjectAgentOAuth, ClaudeBin: deps.ManagedClaudeBin, OpenProposals: deps.OpenInstructionProposals, Layout: s.layout, Render: render, Now: deps.Now,
+		TokenSavers: deps.TokenSavers, MemoryBudgets: deps.MemoryBudgets, AgentCredentials: deps.ProjectAgentCredentials, GlobalCredential: deps.AgentCredential, SignIn: deps.ProjectAgentOAuth, ClaudeBin: deps.ManagedClaudeBin, OpenProposals: deps.OpenInstructionProposals, Layout: s.layout, Render: render, Now: deps.Now,
 	}
 	historyPages := history.Handler{
 		Projects: deps.Projects, Repositories: deps.Repositories, History: deps.History, Sessions: deps.Sessions, Tasks: deps.Tasks,

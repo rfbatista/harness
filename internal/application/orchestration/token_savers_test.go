@@ -27,6 +27,8 @@ type saverWorld struct {
 	activations   *sqlite.ActivationRepository
 	installations *sqlite.TokenSaverInstallationRepository
 	settings      *settings.Service
+	settingsRepo  ports.SettingsRepository
+	caps          *capabilities.Service
 	tools         string
 }
 
@@ -41,12 +43,15 @@ func withTokenSavers(t *testing.T, svc *Service) *saverWorld {
 	w := &saverWorld{
 		activations:   sqlite.NewActivationRepository(db),
 		installations: sqlite.NewTokenSaverInstallationRepository(db),
+		settingsRepo:  sqlite.NewSettingsRepository(db),
 		settings:      settings.NewService(sqlite.NewSettingsRepository(db), nil),
 		tools:         filepath.Join(t.TempDir(), "data dir", "tools"),
 	}
 	caps := capabilities.NewService(capabilities.Deps{Activations: w.activations, Settings: w.settings})
 	caps.UseTokenSavers(capabilities.TokenSaverDeps{Installations: w.installations, Dir: w.tools})
 	svc.TokenSavers = caps
+	w.caps = caps
+	svc.MemoryBudgets = caps
 	return w
 }
 

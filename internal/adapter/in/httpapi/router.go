@@ -82,6 +82,9 @@ func NewRouter(h *Handler, opts ...Option) *echo.Echo {
 	// token saver activations of a project, repository or task
 	g.GET("/list_token_saver_activations", h.handleListTokenSaverActivations)
 	g.POST("/set_token_saver_activation", h.handleSetTokenSaverActivation)
+	// memory budget (orçamento) override of a repository or task
+	g.GET("/get_memory_budget_override", h.handleGetMemoryBudgetOverride)
+	g.POST("/set_memory_budget_override", h.handleSetMemoryBudgetOverride)
 
 	// application runs: a repository's app run from a session's worktree
 	g.GET("/list_runs", h.handleListRuns)

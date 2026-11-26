@@ -1,6 +1,8 @@
 // The settings module's Alpine components: the flags on the Server page.
 
 import { branchBlock } from "./components/branchBlock.js";
+import { memoryBudget } from "./components/memoryBudget.js";
+import { memoryBudgetOverride } from "./components/memoryBudgetOverride.js";
 import { settingFlag } from "./components/settingFlag.js";
 
 /**
@@ -10,4 +12,6 @@ import { settingFlag } from "./components/settingFlag.js";
 export function registerSettings(Alpine, deps) {
   Alpine.data("settingFlag", settingFlag(deps));
   Alpine.data("branchBlock", branchBlock(deps));
+  Alpine.data("memoryBudget", memoryBudget(deps));
+  Alpine.data("memoryBudgetOverride", memoryBudgetOverride(deps));
 }

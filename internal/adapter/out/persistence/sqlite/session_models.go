@@ -48,6 +48,7 @@ type SessionModel struct {
 	TokenSavers             string `gorm:"column:token_savers"`
 	TokenSaversNotInstalled string `gorm:"column:token_savers_not_installed"`
 	CavemanIntensity        string `gorm:"column:caveman_intensity"`
+	MemoryBudgetBytes       int64  `gorm:"column:memory_budget_bytes"`
 
 	// The sandbox facts. A visibility of "" is a session from before the
 	// sandbox: it has none.
@@ -145,6 +146,7 @@ func (m *SessionModel) ToDomain() *domain.Session {
 		TokenSavers:              splitSavers(m.TokenSavers),
 		TokenSaversNotInstalled:  splitSavers(m.TokenSaversNotInstalled),
 		CavemanIntensity:         domain.CavemanIntensity(m.CavemanIntensity),
+		MemoryBudgetBytes:        m.MemoryBudgetBytes,
 		Sandbox:                  m.sandbox(),
 		LastMerge:                m.lastMerge(),
 		SquashedTip:              m.SquashedTip,

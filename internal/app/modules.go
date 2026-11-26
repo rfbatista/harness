@@ -1138,6 +1138,7 @@ func newOrchestrationService(
 	svc.ShimBinary = cfg.ShimBinary
 	svc.DeveloperBin = developerdir.Bin
 	svc.TokenSavers = cat.Capabilities
+	svc.MemoryBudgets = cat.Capabilities
 	svc.Settings = cat.Settings
 	svc.Transcripts = transcripts
 	svc.TranscriptReader = transcriptReader
