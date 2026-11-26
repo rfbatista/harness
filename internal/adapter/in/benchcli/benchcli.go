@@ -110,10 +110,10 @@ func Run(ctx context.Context, args []string, stdout, stderr io.Writer) int {
 // interrupted cancels the run on the server after the command's context ended
 // (Ctrl-C), with a context of its own, and answers the exit code.
 func interrupted(ctx context.Context, c client, runID string, stderr io.Writer) int {
-	stop, release := context.WithTimeout(context.WithoutCancel(ctx), 10*time.Second)
+	cancelCtx, release := context.WithTimeout(context.WithoutCancel(ctx), 10*time.Second)
 	defer release()
 	var run domain.BenchRun
-	if err := c.do(stop, http.MethodPost, "/runs/"+runID+"/cancel", nil, &run); err != nil {
+	if err := c.do(cancelCtx, http.MethodPost, "/runs/"+runID+"/cancel", nil, &run); err != nil {
 		fmt.Fprintln(stderr, "bench run: interrupted; the run could not be cancelled:", err)
 	} else {
 		fmt.Fprintf(stderr, "bench run: interrupted; run %s cancelled\n", runID)

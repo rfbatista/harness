@@ -4,6 +4,7 @@ import (
 	"context"
 	"os/exec"
 	"strings"
+	"time"
 
 	"gorm.io/gorm"
 
@@ -100,7 +101,9 @@ func newBench(cfg Config, db *gorm.DB, cat catalog.Catalog, orch *orchestration.
 // "" when it cannot say.
 func cliVersion(bin ports.ManagedClaudeBin) func() string {
 	return func() string {
-		out, err := exec.Command(bin.Bin(), "--version").Output()
+		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+		defer cancel()
+		out, err := exec.CommandContext(ctx, bin.Bin(), "--version").Output()
 		if err != nil {
 			return ""
 		}

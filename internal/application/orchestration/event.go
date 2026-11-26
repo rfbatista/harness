@@ -127,9 +127,9 @@ func toolResultFailed(raw json.RawMessage, text string) bool {
 		}
 		results = append(results, c.IsError)
 		if resultText(c.Content) == text {
-			if !matched || c.IsError {
-				failed = c.IsError
-			}
+			// Results with the same text on one line cannot be told apart: it
+			// is a failure only when every one of them is.
+			failed = c.IsError && (!matched || failed)
 			matched = true
 		}
 	}

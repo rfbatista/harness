@@ -389,10 +389,10 @@ func (b *Sandbox) OneShotWrapFor(projectID string, allow []ports.SandboxPath) (l
 
 // BenchWrapFor is the WrapFunc confining a bench run's CLI: the one-shot
 // profile with dir as its temp dir and working directory, the only path it
-// writes besides the agent home. No repository is granted; the project's are
+// writes besides the agent home (claude's transcript). No repository is granted; the project's are
 // hidden. Like a one-shot's it is nil with the sandbox off and the
 // missing-driver refusal when it is on without one.
-func (b *Sandbox) BenchWrapFor(projectID, dir string, allow []ports.SandboxPath) (llmkit.WrapFunc, error) {
+func (b *Sandbox) BenchWrapFor(dir string, allow []ports.SandboxPath) (llmkit.WrapFunc, error) {
 	if !b.on() {
 		return nil, nil
 	}
@@ -400,7 +400,8 @@ func (b *Sandbox) BenchWrapFor(projectID, dir string, allow []ports.SandboxPath)
 		return nil, agentready.SandboxDriverMissing()
 	}
 	sess := SandboxSession{OneShot: true, TempDir: dir, AgentHome: b.Home, UserHome: b.UserHome, ConfigHome: b.ConfigHome, Allow: allow}
-	sess.ProjectHome, sess.ProjectHomesRoot = b.projectHomes(projectID)
+	// The project's own Claude home is not granted: the run is the agent's, not
+	// the project's, and writes only dir and the agent home.
 	if b.Checkouts != nil {
 		sess.Repositories = b.Checkouts()
 	}

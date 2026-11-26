@@ -51,7 +51,6 @@ func (s *Service) benchSetup(ctx context.Context, req ports.BenchSetupRequest) (
 
 	cfg := llmkit.SessionConfig{
 		Model:        req.Model,
-		Permission:   llmkit.PermissionAsk,
 		Env:          s.DefaultEnv,
 		AppendSystem: ag.appendSystem,
 		Driver:       claude.Config{SkillDirs: ag.skillDirs},
@@ -91,17 +90,20 @@ func (s *Service) Setup(ctx context.Context, req ports.BenchSetupRequest) (ports
 // the machine.
 var benchBuiltInTools = []string{
 	"Bash", "BashOutput", "KillShell", "Edit", "MultiEdit", "Write", "NotebookEdit",
-	"Read", "Glob", "Grep", "WebFetch", "WebSearch", "Task", "Agent", "TodoWrite", "SlashCommand", "ExitPlanMode",
+	"Read", "Glob", "Grep", "LS", "NotebookRead", "WebFetch", "WebSearch", "Task", "TaskOutput", "TaskStop", "Agent",
+	"TodoWrite", "SlashCommand", "Monitor", "PowerShell", "AskUserQuestion", "ToolSearch", "EnterPlanMode", "ExitPlanMode",
 }
 
 // withBenchToolsLocked leaves a bench run's CLI with the mock server's tools
 // and nothing else. The built-in tools are denied in its settings, and only
 // the mock server is allowed, with no approval tool and no permission bypass:
-// any other tool call is refused by the CLI.
+// any other tool call is refused by the CLI. The allow list is the barrier;
+// the deny list names what a CLI that adds a tool would otherwise surprise us
+// with only as far as it is known.
 func withBenchToolsLocked(cfg *llmkit.SessionConfig, mcpName string) {
 	cfg.Permission = llmkit.PermissionAsk
 	cfg.AllowedTools = []string{"mcp__" + mcpName}
-	deny, _ := json.Marshal(map[string][]string{"deny": benchBuiltInTools})
+	deny, _ := json.Marshal(map[string][]string{"deny": benchBuiltInTools}) // a string list always marshals
 	withClaudeSetting(cfg, "permissions", deny)
 }
 
@@ -133,7 +135,7 @@ func (s *Service) Run(ctx context.Context, req ports.BenchSessionRequest) (ports
 	withBenchToolsLocked(&cfg, req.MCPName)
 	// Under the session sandbox driver the CLI writes this directory and
 	// nothing else; a platform with the sandbox on and no driver refuses.
-	wrap, err := s.Sandbox.BenchWrapFor(req.ProjectID, dir, s.BenchSandboxAllow)
+	wrap, err := s.Sandbox.BenchWrapFor(dir, s.BenchSandboxAllow)
 	if err != nil {
 		return ports.BenchSessionResult{}, err
 	}
