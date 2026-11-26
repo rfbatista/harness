@@ -387,6 +387,33 @@ func (b *Sandbox) OneShotWrapFor(projectID string, allow []ports.SandboxPath) (l
 	return sandboxWrap(b.Driver, sess), nil
 }
 
+// BenchWrapFor is the WrapFunc confining a bench run's CLI: the one-shot
+// profile with dir as its temp dir and working directory, the only path it
+// writes besides the agent home (claude's transcript). No repository is granted; the project's are
+// hidden. Like a one-shot's it is nil with the sandbox off and the
+// missing-driver refusal when it is on without one.
+func (b *Sandbox) BenchWrapFor(dir string, allow []ports.SandboxPath) (llmkit.WrapFunc, error) {
+	if !b.on() {
+		return nil, nil
+	}
+	if b.Driver == nil {
+		return nil, agentready.SandboxDriverMissing()
+	}
+	// No git config of the person: the run reads dir, the agent home and allow.
+	sess := SandboxSession{OneShot: true, TempDir: dir, AgentHome: b.Home, Allow: allow}
+	// The project's own Claude home is not granted: the run is the agent's, not
+	// the project's, and writes only dir and the agent home. The folder of
+	// every project's home is hidden outright.
+	_, sess.ProjectHomesRoot = b.projectHomes("")
+	if b.Checkouts != nil {
+		sess.Repositories = b.Checkouts()
+	}
+	if b.WorkspacesRoot != nil {
+		sess.WorkspacesRoot = b.WorkspacesRoot()
+	}
+	return sandboxWrap(b.Driver, sess), nil
+}
+
 // ReadOnlyWrap is the WrapFunc confining a read-only claude turn (the
 // architecture assistant's): the deny-writes profile. Like a one-shot's it
 // writes only its temp dir and the agent home (claude's transcript), and
@@ -469,6 +496,12 @@ var claudeSandboxOff = json.RawMessage(`{"enabled":false}`)
 // withClaudeSandboxOff adds claudeSandboxOff to a headless session's
 // --settings, next to what it already has.
 func withClaudeSandboxOff(cfg *llmkit.SessionConfig) {
+	withClaudeSetting(cfg, "sandbox", claudeSandboxOff)
+}
+
+// withClaudeSetting adds one top-level key to a headless session's --settings,
+// next to what it already has.
+func withClaudeSetting(cfg *llmkit.SessionConfig, key string, value json.RawMessage) {
 	var dc claude.Config
 	switch d := cfg.Driver.(type) {
 	case nil:
@@ -485,7 +518,7 @@ func withClaudeSandboxOff(cfg *llmkit.SessionConfig) {
 	for k, v := range settings.Extra {
 		extra[k] = v
 	}
-	extra["sandbox"] = claudeSandboxOff
+	extra[key] = value
 	settings.Extra = extra
 	dc.Settings = &settings
 	cfg.Driver = dc
