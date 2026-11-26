@@ -365,3 +365,14 @@ func TestRunSamplesEverySecondAndCloseStopsIt(t *testing.T) {
 		t.Errorf("samples after Close = %d, want still 3", n)
 	}
 }
+
+// A PTY session is handed over by its root pid; its POSIX session id comes from the table.
+func TestARootPIDStandsForThePTYsPOSIXSession(t *testing.T) {
+	w := newWorld()
+	w.table.set(ptyTree(ports.ProcessInfo{PID: 202, PPID: 1, SID: 100, RSSBytes: 50 * mb, Name: "node", Arg: "watcher"})...)
+	w.watcher.Watch(ports.MemoryWatch{SessionID: "s1", BudgetBytes: 4 * gb, ClaudeID: claudeID, RootPID: 100})
+	w.poll()
+	if got := w.sink.last(); got.Processes != 4 {
+		t.Errorf("processes = %d, want 4 including the daemonized one", got.Processes)
+	}
+}

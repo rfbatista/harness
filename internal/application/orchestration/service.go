@@ -270,6 +270,8 @@ type Service struct {
 	// rm, touch, mkdir) link to, first on its PATH; they call the session's
 	// SessionShellURL. Empty: sessions get no shims.
 	ShimBinary string
+	// MemoryWatcher is the vigia de memória; nil: sessions are not watched.
+	MemoryWatcher ports.MemoryWatcher
 	// MemoryBudgets resolves the orçamento de memória a session starts or
 	// resumes with (ADR 0008). Nil: the global default, 4 GB.
 	MemoryBudgets ports.SessionMemoryBudget
@@ -455,6 +457,9 @@ func (s *Service) Start(ctx context.Context, req StartRequest) (*domain.Session,
 		return nil, fmt.Errorf("persist session: %w", err)
 	}
 	provisioned = nil
+	// A headless session shares the server's process group: watched by
+	// descendancy of its agent CLI only.
+	s.watchMemory(sess.ID(), req.TicketID, p.memoryBudget, sess.ID(), 0)
 	s.recordStart(ctx, sess.ID(), p, req.Task)
 	// The Branches list takes its starting snapshot before the agent acts.
 	s.announce(domain.SessionWorktreeProvisioned{SessionID: sess.ID()})

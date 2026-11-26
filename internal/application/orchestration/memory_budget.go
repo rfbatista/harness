@@ -10,6 +10,7 @@ import (
 	"github.com/rfbatista/llmkit"
 
 	"operators-mcp/internal/domain"
+	"operators-mcp/internal/ports"
 )
 
 // The orçamento de memória da sessão is resolved once when a session starts
@@ -107,3 +108,41 @@ func nodeOptionsWithCeiling(existing string, budget int64) string {
 // memoryPreventionNote tells the agent how to hold its test runners to the
 // orçamento; the numbers are in its environment.
 const memoryPreventionNote = "Memory: this session has a memory budget. Run tests with a bounded worker count: pass `--maxWorkers=$HARNESS_TEST_WORKERS` to Jest and Vitest (for example `npx jest --maxWorkers=$HARNESS_TEST_WORKERS`). If a process of yours is ended for passing the budget, the tool result or a message says so: run fewer workers rather than retrying the same command."
+
+// watchMemory hands a session to the vigia de memória for the orçamento it
+// started with, and has its end stop the watch. rootPID is the PTY's process,
+// 0 for a headless session.
+func (s *Service) watchMemory(id, taskID string, budget int64, claudeID string, rootPID int) {
+	if s.MemoryWatcher == nil || budget <= 0 {
+		return
+	}
+	stop := s.MemoryWatcher.Watch(ports.MemoryWatch{SessionID: id, TaskID: taskID, BudgetBytes: budget, ClaudeID: claudeID, RootPID: rootPID})
+	s.mu.Lock()
+	prevCleanup := s.cleanups[id]
+	s.cleanups[id] = func() {
+		stop()
+		if prevCleanup != nil {
+			prevCleanup()
+		}
+	}
+	s.mu.Unlock()
+}
+
+// watchTerminalMemory watches a session the server runs on a terminal, by the
+// POSIX session of that terminal's process.
+func (s *Service) watchTerminalMemory(id string) {
+	if s.MemoryWatcher == nil || s.Terminals == nil {
+		return
+	}
+	sess, err := s.interactiveSession(id)
+	if err != nil {
+		return
+	}
+	root := 0
+	if t, err := s.Terminals.Attach(id); err == nil {
+		if p, ok := t.(interface{ PID() int }); ok {
+			root = p.PID()
+		}
+	}
+	s.watchMemory(id, sess.TicketID, sess.MemoryBudgetBytes, claudeID(sess), root)
+}

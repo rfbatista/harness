@@ -44,6 +44,9 @@ type MemoryWatch struct {
 	// SID is the POSIX session id of the session's PTY; 0 for a headless
 	// session, which shares the server's and is watched by descendancy only.
 	SID int
+	// RootPID is the PTY's process, which leads that POSIX session: with SID
+	// 0 the vigia takes the session id from its table row.
+	RootPID int
 }
 
 // MemoryWatcher watches sessions' process trees. Watch starts watching and

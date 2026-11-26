@@ -62,6 +62,10 @@ func (p *process) Resize(s ports.TermSize) error {
 	return pty.Setsize(p.f, winsize(s))
 }
 
+// PID is the process id of the process on the terminal; it leads its own
+// POSIX session.
+func (p *process) PID() int { return p.cmd.Process.Pid }
+
 func (p *process) Signal(sig os.Signal) error { return p.cmd.Process.Signal(sig) }
 
 func (p *process) Wait() (int, error) {

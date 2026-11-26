@@ -285,6 +285,15 @@ func (t *terminal) Title() string {
 
 // Kill sends SIGTERM, then SIGKILL after the grace period, and waits for the
 // process and its output to finish. Safe to call more than once.
+// PID is the process id of the terminal's process, 0 when its adapter does
+// not say.
+func (t *terminal) PID() int {
+	if p, ok := t.proc.(interface{ PID() int }); ok {
+		return p.PID()
+	}
+	return 0
+}
+
 func (t *terminal) Kill() error {
 	t.killOnce.Do(func() {
 		if t.exited() {

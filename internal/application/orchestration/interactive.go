@@ -571,6 +571,7 @@ func (s *Service) spawnTerminal(ctx context.Context, id string, spec ports.Agent
 	if err != nil {
 		return fmt.Errorf("run the session on the server: %w", err)
 	}
+	s.watchTerminalMemory(id)
 	return nil
 }
 

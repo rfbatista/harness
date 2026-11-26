@@ -5,7 +5,9 @@ package orchestration
 import (
 	"context"
 	"strconv"
+	"sync"
 	"testing"
+	"time"
 
 	"operators-mcp/internal/domain"
 	"operators-mcp/internal/ports"
@@ -101,4 +103,48 @@ func TestAnInteractiveSessionKeepsItsOrcamentoUntilItResumes(t *testing.T) {
 	if resumed.MemoryBudgetBytes != 8*gb {
 		t.Errorf("resumed orçamento = %d, want 8 GB", resumed.MemoryBudgetBytes)
 	}
+}
+
+// fakeWatcher records the sessions handed to the vigia and which are stopped.
+type fakeWatcher struct {
+	mu      sync.Mutex
+	watched []ports.MemoryWatch
+	stopped int
+}
+
+func (f *fakeWatcher) Watch(m ports.MemoryWatch) func() {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.watched = append(f.watched, m)
+	return func() { f.mu.Lock(); f.stopped++; f.mu.Unlock() }
+}
+
+// A running session is watched with the orçamento it started with, and its end stops the watch.
+func TestASessionIsWatchedWithItsOrcamentoAndItsEndStopsTheWatch(t *testing.T) {
+	svc, w := newHeadlessShellService(t)
+	withTokenSavers(t, svc)
+	fw := &fakeWatcher{}
+	svc.MemoryWatcher = fw
+
+	sess, _ := startHeadless(t, svc, w.task.ID)
+	fw.mu.Lock()
+	if len(fw.watched) != 1 || fw.watched[0].SessionID != sess.ID || fw.watched[0].BudgetBytes != 4*gb || fw.watched[0].ClaudeID != sess.ID || fw.watched[0].RootPID != 0 {
+		t.Errorf("watched = %+v, want the headless session at 4 GB, by descendancy", fw.watched)
+	}
+	fw.mu.Unlock()
+
+	if err := svc.Stop(context.Background(), sess.ID); err != nil {
+		t.Fatal(err)
+	}
+	deadline := time.Now().Add(5 * time.Second)
+	for time.Now().Before(deadline) {
+		fw.mu.Lock()
+		n := fw.stopped
+		fw.mu.Unlock()
+		if n == 1 {
+			return
+		}
+		time.Sleep(20 * time.Millisecond)
+	}
+	t.Error("stopping the session did not stop its watch")
 }

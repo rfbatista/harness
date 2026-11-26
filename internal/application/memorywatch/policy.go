@@ -60,9 +60,13 @@ func treeOf(table []ports.ProcessInfo, w ports.MemoryWatch) (t tree, ok bool) {
 			}
 		}
 	}
-	if w.SID != 0 {
+	sid := w.SID
+	if sid == 0 && w.RootPID != 0 {
+		sid = byPID[w.RootPID].SID
+	}
+	if sid != 0 {
 		for _, p := range table {
-			if p.SID == w.SID {
+			if p.SID == sid {
 				member[p.PID] = true
 			}
 		}
