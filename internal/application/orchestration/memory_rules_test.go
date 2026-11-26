@@ -231,7 +231,8 @@ func TestTheVigiaOverTheServiceEndsTheHeaviestAndPublishesWhatTheContractNames(t
 	table.set(rows[0], rows[2]) // 201 has exited
 	watcher.Poll(now.Add(time.Second))
 	var killed bool
-	for i := 0; i < 4 && !killed; i++ {
+	// The notice told at SIGTERM puts a turn on the stream before the kill.
+	for i := 0; i < 12 && !killed; i++ {
 		if m := jsonMap(t, recvEvent(t, live)); m["kind"] == "session.memory_killed" {
 			killed = m["pid"] == float64(201) && m["signal"] == "SIGTERM" && m["budget_bytes"] == float64(4*gb)
 		}

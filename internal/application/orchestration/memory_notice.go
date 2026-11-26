@@ -19,6 +19,7 @@ import (
 
 var (
 	_ ports.MemorySink    = (*Service)(nil)
+	_ ports.MemoryEnding  = (*Service)(nil)
 	_ ports.MemoryNotices = (*Service)(nil)
 )
 
@@ -26,7 +27,17 @@ var (
 type memoryNotices struct {
 	mu      sync.Mutex
 	running map[string]map[string]bool // session → running Bash call ids
-	pending map[string][]domain.MemoryKill
+	held    map[string][]*heldNotice
+	// noticed are the pids whose ending the agent was already told of, until
+	// the kill is confirmed, so it is never told twice.
+	noticed map[string]map[int]bool
+}
+
+// heldNotice is a reason waiting for the answer of a call that was running when
+// SIGTERM went out.
+type heldNotice struct {
+	kill  domain.MemoryKill
+	calls map[string]bool
 }
 
 func (n *memoryNotices) start(session, call string) {
@@ -41,61 +52,106 @@ func (n *memoryNotices) start(session, call string) {
 	n.running[session][call] = true
 }
 
-// end drops the call; it answers the kills held for the session's calls when
-// the call was one of the running ones.
+// end drops the call; it answers the reasons held for it.
 func (n *memoryNotices) end(session, call string) []domain.MemoryKill {
 	n.mu.Lock()
 	defer n.mu.Unlock()
-	if !n.running[session][call] {
-		return nil
-	}
 	delete(n.running[session], call)
-	kills := n.pending[session]
-	delete(n.pending, session)
-	return kills
+	var out []domain.MemoryKill
+	var rest []*heldNotice
+	for _, h := range n.held[session] {
+		if h.calls[call] {
+			out = append(out, h.kill)
+			continue
+		}
+		rest = append(rest, h)
+	}
+	n.held[session] = rest
+	return out
 }
 
-// hold keeps k for a running call's answer; false when no call runs.
-func (n *memoryNotices) hold(k domain.MemoryKill) bool {
+// note records that k's ending is being told of. It reports false when it was
+// already (nothing more to do), and otherwise whether a call that is running
+// holds it for its answer; if none, the courier must carry it.
+func (n *memoryNotices) note(k domain.MemoryKill) (fresh, held bool) {
 	n.mu.Lock()
 	defer n.mu.Unlock()
+	if n.noticed == nil {
+		n.noticed = map[string]map[int]bool{}
+		n.held = map[string][]*heldNotice{}
+	}
+	if n.noticed[k.SessionID] == nil {
+		n.noticed[k.SessionID] = map[int]bool{}
+	}
+	if n.noticed[k.SessionID][k.PID] {
+		return false, false
+	}
+	n.noticed[k.SessionID][k.PID] = true
 	if len(n.running[k.SessionID]) == 0 {
-		return false
+		return true, false
 	}
-	if n.pending == nil {
-		n.pending = map[string][]domain.MemoryKill{}
+	calls := map[string]bool{}
+	for c := range n.running[k.SessionID] {
+		calls[c] = true
 	}
-	n.pending[k.SessionID] = append(n.pending[k.SessionID], k)
-	return true
+	n.held[k.SessionID] = append(n.held[k.SessionID], &heldNotice{kill: k, calls: calls})
+	return true, true
 }
 
-// release answers and forgets the kills held for a session.
+// confirmed forgets that k's ending is pending: the kill is on record.
+func (n *memoryNotices) confirmed(k domain.MemoryKill) {
+	n.mu.Lock()
+	defer n.mu.Unlock()
+	delete(n.noticed[k.SessionID], k.PID)
+}
+
+// release answers and forgets the reasons still held for a session: the calls
+// they waited on never answered.
 func (n *memoryNotices) release(session string) []domain.MemoryKill {
 	n.mu.Lock()
 	defer n.mu.Unlock()
-	kills := n.pending[session]
-	delete(n.pending, session)
+	var out []domain.MemoryKill
+	for _, h := range n.held[session] {
+		out = append(out, h.kill)
+	}
+	delete(n.held, session)
 	delete(n.running, session)
-	return kills
+	return out
 }
 
-// Killed handles one encerramento por memória: the session's stream and the
-// project feed carry it, the inbox is told, and so is the agent, by the
-// running Bash call's answer or by the courier.
+// forget drops everything kept for a session that has ended.
+func (n *memoryNotices) forget(session string) {
+	n.mu.Lock()
+	defer n.mu.Unlock()
+	delete(n.held, session)
+	delete(n.running, session)
+	delete(n.noticed, session)
+}
+
+// Ending is the vigia's SIGTERM: the agent is told now, in the answer of the Bash
+// call running at this moment, or through the courier when none is.
+func (s *Service) Ending(k domain.MemoryKill) {
+	fresh, held := s.memoryNotes.note(k)
+	if fresh && !held {
+		s.deliverMemoryNotice(k.SessionID, k)
+	}
+}
+
+// Killed handles one encerramento por memória once it is confirmed: the
+// session's stream and the project feed carry it and the inbox is told. The
+// agent was told at SIGTERM; one that was not (no Ending came) is told now.
 func (s *Service) Killed(k domain.MemoryKill) {
 	s.publishMemoryKill(k)
 	s.announce(domain.SessionMemoryKilled{Kill: k})
-	if s.memoryNotes.hold(k) {
-		return
-	}
-	s.deliverMemoryNotice(k.SessionID, k)
+	s.Ending(k)
+	s.memoryNotes.confirmed(k)
 }
 
 func (s *Service) deliverMemoryNotice(sessionID string, kills ...domain.MemoryKill) {
 	if len(kills) == 0 {
 		return
 	}
-	key := fmt.Sprintf("memory:%s:%d", sessionID, kills[0].KilledAt.UnixNano())
+	key := fmt.Sprintf("memory:%s:%d:%d", sessionID, kills[0].PID, kills[0].KilledAt.UnixNano())
 	_, _ = s.Deliver(sessionID, key, memoryNoticeText(kills), nil)
 }
 
@@ -116,7 +172,7 @@ func (s *Service) BashEnded(sessionID, callID string) string {
 // the call it waited on never answered.
 func (s *Service) flushMemoryNotices(sessionID string) {
 	if kills := s.memoryNotes.release(sessionID); len(kills) > 0 {
-		s.courier.enqueue(sessionID, parcel{key: fmt.Sprintf("memory:%s:%d", sessionID, kills[0].KilledAt.UnixNano()), text: memoryNoticeText(kills)})
+		s.courier.enqueue(sessionID, parcel{key: fmt.Sprintf("memory:%s:%d:%d", sessionID, kills[0].PID, kills[0].KilledAt.UnixNano()), text: memoryNoticeText(kills)})
 	}
 }
 
