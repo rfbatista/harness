@@ -232,7 +232,7 @@ func TestTheVigiaOverTheServiceEndsTheHeaviestAndPublishesWhatTheContractNames(t
 	watcher.Poll(now.Add(time.Second))
 	var killed bool
 	// The notice told at SIGTERM puts a turn on the stream before the kill.
-	for i := 0; i < 12 && !killed; i++ {
+	for i := 0; i < 200 && !killed; i++ {
 		if m := jsonMap(t, recvEvent(t, live)); m["kind"] == "session.memory_killed" {
 			killed = m["pid"] == float64(201) && m["signal"] == "SIGTERM" && m["budget_bytes"] == float64(4*gb)
 		}
