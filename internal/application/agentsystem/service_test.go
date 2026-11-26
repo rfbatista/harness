@@ -41,7 +41,7 @@ func worldOn(store ports.AgentSystemStore) agentsystem.Deps {
 		Store:    store,
 		Projects: fakeProjects{"p1": {ID: "p1"}, "p2": {ID: "p2"}},
 		Repositories: fakeRepositories{
-			"r1":    {ID: "r1", ProjectID: "p1"},
+			"r1":    {ID: "r1", ProjectID: "p1", RootDir: "/repos/r1"},
 			"r2":    {ID: "r2", ProjectID: "p1"},
 			"other": {ID: "other", ProjectID: "p2"},
 		},
