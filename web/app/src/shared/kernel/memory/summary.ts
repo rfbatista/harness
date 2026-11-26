@@ -17,6 +17,7 @@ export interface MemorySummary {
   /** Sessions with a value. */
   sampled: number;
   near: number;
+  over: number;
   /** Kills in the last 5 minutes. */
   ended: number;
 }
@@ -25,6 +26,7 @@ export function summarize(sessions: readonly SessionMemory[], now: number): Memo
   let bytes = 0;
   let sampled = 0;
   let near = 0;
+  let over = 0;
   let ended = 0;
   for (const s of sessions) {
     ended += s.killedAt.filter((at) => now - at.getTime() < CARD_ENDED_MS).length;
@@ -32,6 +34,7 @@ export function summarize(sessions: readonly SessionMemory[], now: number): Memo
     sampled++;
     bytes += s.rssBytes;
     if (s.level === "near") near++;
+    else if (s.level === "over") over++;
   }
-  return { total: sampled === 0 ? null : formatShown(bytes), sampled, near, ended };
+  return { total: sampled === 0 ? null : formatShown(bytes), sampled, near, over, ended };
 }

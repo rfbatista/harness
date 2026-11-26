@@ -42,8 +42,8 @@ export interface BoardDeps {
 
 const RING_MS = 2400;
 const PULSE_MS = 1600;
-/** A card says a process ended for this long (the shared kernel's CARD_ENDED_MS). */
-const ENDED_MS = 300_000;
+/** A card says a process ended for 5 minutes (the shared kernel's CARD_ENDED_MS), and its age moves on each minute of them. */
+const ENDED_MINUTES = [1, 2, 3, 4, 5];
 /** A pan or zoom is kept once the camera has been still this long. */
 const CAMERA_SAVE_MS = 250;
 
@@ -433,14 +433,13 @@ export class BoardPresenter extends Presenter<BoardViewModel> {
   #onMemoryKilled(kill: BoardMemoryKill): void {
     const session = this.#sessions.find((s) => s.id === kill.sessionId);
     if (!session) return;
-    this.#memory.kill(kill, this.#deps.now().getTime());
-    if (isTerminal(session)) return;
+    if (!this.#memory.kill(kill, this.#deps.now().getTime()) || isTerminal(session)) return;
     this.#memoryRinged.add(session.id);
     this.#later(() => {
       this.#memoryRinged.delete(session.id);
       this.set(this.#build());
     }, RING_MS);
-    this.#later(() => this.set(this.#build()), ENDED_MS);
+    for (const minute of ENDED_MINUTES) this.#later(() => this.set(this.#build()), minute * 60_000);
   }
 
   #onSession(s: BoardSession): void {

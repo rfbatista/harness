@@ -30,4 +30,9 @@ describe("memory summary of a task's live sessions", () => {
   test("below 1 GB the total is whole MB", () => {
     assert.equal(summarize([entry(0.25, "normal")], NOW).total, "256 MB");
   });
+
+  test("sessions over budget are counted apart from the near ones", () => {
+    const s = summarize([entry(3.4, "near"), entry(4.4, "over"), entry(4.6, "over"), entry(1, "normal")], NOW);
+    assert.deepEqual([s.near, s.over], [1, 2]);
+  });
 });

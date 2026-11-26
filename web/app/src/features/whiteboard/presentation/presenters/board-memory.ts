@@ -2,7 +2,7 @@
 // seen since the page opened. The rules are the shared kernel's; this keeps them per session.
 
 import { initialTracker, settle, type Tracker } from "../../../../shared/kernel/memory/level";
-import { CARD_ENDED_MS, hasValue, shareOf } from "../../../../shared/kernel/memory/sample";
+import { CARD_ENDED_MS, hasValue, killKey, shareOf } from "../../../../shared/kernel/memory/sample";
 import { memoryView, type MemoryState } from "../../../../shared/kernel/memory/view";
 import { summarize, type SessionMemory } from "../../../../shared/kernel/memory/summary";
 import { relativeTime } from "../../../../shared/kernel/format";
@@ -31,6 +31,7 @@ export interface BarMemory {
   /** "10.7 GB"; null when no live session has a sample. */
   total: string | null;
   near: number;
+  over: number;
   /** Processes ended in the last 5 minutes. */
   ended: number;
   /** "Memory: 10.7 GB across 4 live, 1 near budget, 1 process ended." */
@@ -65,8 +66,12 @@ export class BoardMemoryState {
     entry.tracker = hasValue(sample) ? settle(entry.tracker, shareOf(sample), now) : initialTracker();
   }
 
-  kill(kill: BoardMemoryKill, now: number): void {
-    this.#entry(kill.sessionId).kills.push({ kill, seenAt: now });
+  /** Notes a kill; false when it was already noted (a feed may deliver it twice), so nothing about it restarts. */
+  kill(kill: BoardMemoryKill, now: number): boolean {
+    const entry = this.#entry(kill.sessionId);
+    if (entry.kills.some((k) => killKey(k.kill) === killKey(kill))) return false;
+    entry.kills.push({ kill, seenAt: now });
+    return true;
   }
 
   forget(id: string): void {
@@ -81,8 +86,8 @@ export class BoardMemoryState {
     });
     const sum = summarize(sessions, now);
     if (sum.sampled === 0 && sum.ended === 0) return null;
-    const parts = [`${sum.total ?? "0 MB"} across ${ids.length} live`, ...(sum.near > 0 ? [`${sum.near} near budget`] : []), ...(sum.ended > 0 ? [`${sum.ended} process ended`] : [])];
-    return { live: ids.length, total: sum.total, near: sum.near, ended: sum.ended, sentence: `Memory: ${parts.join(", ")}.` };
+    const parts = [`${sum.total ?? "0 MB"} across ${ids.length} live`, ...(sum.near > 0 ? [`${sum.near} near budget`] : []), ...(sum.over > 0 ? [`${sum.over} over budget`] : []), ...(sum.ended > 0 ? [`${sum.ended} process ended`] : [])];
+    return { live: ids.length, total: sum.total, near: sum.near, over: sum.over, ended: sum.ended, sentence: `Memory: ${parts.join(", ")}.` };
   }
 
   /** What the card says about the session's memory, or null when it says nothing. */

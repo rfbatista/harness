@@ -83,6 +83,11 @@ export function BoardView({ presenter }: { presenter: BoardPresenter }) {
                 {vm.memory.near} near budget
               </span>
             )}
+            {vm.memory.over > 0 && (
+              <span className="badge" data-tone="danger">
+                {vm.memory.over} over budget
+              </span>
+            )}
             {vm.memory.ended > 0 && (
               <span className="badge" data-tone="danger">
                 {vm.memory.ended} process ended

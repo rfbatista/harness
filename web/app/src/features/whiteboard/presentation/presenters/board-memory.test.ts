@@ -202,3 +202,39 @@ describe("the bar's memory summary", () => {
     assert.doesNotMatch(none.presenter.viewModel.canvasLabel, /Memory/);
   });
 });
+
+describe("the card's age and the kills' identity (F5, F6)", () => {
+  test("the age advances by itself, minute by minute, while the feed is quiet", async () => {
+    const s = session({ role: "delegate", parentSessionId: architect.id });
+    const { presenter, source, clock } = await board([architect, { ...s, memory: memorySample(s.id, 1.2) }]);
+    source.emit({ kind: "memory-killed", kill: memoryKill(s.id, at(0)) });
+    assert.equal(card(presenter, s.id).memory?.ended?.age, "now");
+    for (const minute of [1, 2, 3, 4]) {
+      clock.advance(60_000);
+      assert.equal(card(presenter, s.id).memory?.ended?.age, `${minute}m`);
+    }
+    clock.advance(60_000);
+    assert.equal(card(presenter, s.id).memory?.ended, null, "and the fifth minute ends it");
+  });
+
+  test("the same kill delivered twice counts once and keeps its first age", async () => {
+    const s = session({ role: "delegate", parentSessionId: architect.id });
+    const { presenter, source, clock } = await board([architect, { ...s, memory: memorySample(s.id, 1.2) }]);
+    const kill = memoryKill(s.id, at(0));
+    source.emit({ kind: "memory-killed", kill });
+    clock.advance(120_000);
+    source.emit({ kind: "memory-killed", kill });
+    assert.equal(presenter.viewModel.memory?.ended, 1);
+    assert.equal(card(presenter, s.id).memory?.ended?.age, "2m");
+  });
+});
+
+describe("the bar's over budget badge (design D7)", () => {
+  test("a session over budget counts in its own badge and in the sentence", async () => {
+    const [a, b] = [session({ role: "delegate", parentSessionId: architect.id }), session({ role: "delegate", parentSessionId: architect.id })];
+    const { presenter } = await board([architect, { ...a, memory: memorySample(a.id, 4.4) }, { ...b, memory: memorySample(b.id, 3.4) }]);
+    const m = presenter.viewModel.memory!;
+    assert.deepEqual([m.near, m.over], [1, 1]);
+    assert.match(m.sentence, /1 near budget, 1 over budget\.$/);
+  });
+});
