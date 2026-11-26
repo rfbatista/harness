@@ -92,6 +92,11 @@ type Session struct {
 	// ParentSessionID is the session that started this one on its task
 	// (through the start_task_session tool); empty when a person did.
 	ParentSessionID string `json:"parent_session_id,omitempty"`
+	// CriticOfSessionID and CriticGateRunID say the harness launched this
+	// session as the critic of that author session's diff, after that gate
+	// run; both are empty for any other session.
+	CriticOfSessionID string `json:"critic_of_session_id,omitempty"`
+	CriticGateRunID   string `json:"critic_gate_run_id,omitempty"`
 	// BroughtUnder says the parent became so by a person bringing the session
 	// under an architect, not by starting it (ADR 0045). Stored, never derived.
 	BroughtUnder bool `json:"brought_under"`

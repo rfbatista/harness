@@ -116,6 +116,10 @@ func (s *Service) StartInteractive(ctx context.Context, req InteractiveRequest) 
 		branch = named
 	}
 	role := s.newSessionRole(ctx, mode, req.ParentSessionID)
+	if req.Critic != nil {
+		// The critic reports through the task channel, as a delegate does.
+		role = domain.RoleDelegate
+	}
 	p, err := s.prepare(ctx, prepareInput{
 		ID:           id,
 		ProjectID:    req.ProjectID,
@@ -156,28 +160,30 @@ func (s *Service) StartInteractive(ctx context.Context, req InteractiveRequest) 
 	spec.EnvFile = p.envFile
 	confineSpec(&spec, p.sandbox.policy)
 	created, err := s.sessions.Create(&domain.Session{
-		ID:              id,
-		ProjectID:       req.ProjectID,
-		RepositoryID:    req.RepositoryID,
-		WorkspaceID:     p.ws.ID,
-		Branch:          p.branch,
-		Access:          access,
-		Joined:          join != nil,
-		AgentID:         req.AgentID,
-		ZoneID:          req.ZoneID,
-		TicketID:        req.TicketID,
-		Task:            task,
-		WorkingDir:      p.cfg.WorkingDir,
-		Model:           model,
-		Status:          domain.SessionRunning,
-		AutoRun:         p.permission == llmkit.PermissionBypass,
-		Interactive:     true,
-		ClaudeSessionID: id,
-		RunsOn:          runsOn,
-		RunnerHost:      runnerHost(runsOn, req.RunnerHost),
-		ParentSessionID: req.ParentSessionID,
-		Mode:            mode,
-		DesignSystemID:  req.DesignSystemID,
+		ID:                id,
+		ProjectID:         req.ProjectID,
+		RepositoryID:      req.RepositoryID,
+		WorkspaceID:       p.ws.ID,
+		Branch:            p.branch,
+		Access:            access,
+		Joined:            join != nil,
+		AgentID:           req.AgentID,
+		ZoneID:            req.ZoneID,
+		TicketID:          req.TicketID,
+		Task:              task,
+		WorkingDir:        p.cfg.WorkingDir,
+		Model:             model,
+		Status:            domain.SessionRunning,
+		AutoRun:           p.permission == llmkit.PermissionBypass,
+		Interactive:       true,
+		ClaudeSessionID:   id,
+		RunsOn:            runsOn,
+		RunnerHost:        runnerHost(runsOn, req.RunnerHost),
+		ParentSessionID:   req.ParentSessionID,
+		CriticOfSessionID: criticAuthor(req.Critic),
+		CriticGateRunID:   criticRun(req.Critic),
+		Mode:              mode,
+		DesignSystemID:    req.DesignSystemID,
 
 		TokenSavers:             p.savers.active,
 		TokenSaversNotInstalled: p.savers.notInstalled,
@@ -1182,4 +1188,18 @@ func (s *Service) joinTarget(ctx context.Context, req InteractiveRequest, mode d
 		return "", nil, joinRefusal("WORKTREE_NOT_ON_TASK", "that worktree belongs to a session of another task", map[string]string{"worktree_id": req.WorktreeID})
 	}
 	return access, ws, nil
+}
+
+func criticAuthor(c *ports.CriticLink) string {
+	if c == nil {
+		return ""
+	}
+	return c.AuthorSessionID
+}
+
+func criticRun(c *ports.CriticLink) string {
+	if c == nil {
+		return ""
+	}
+	return c.GateRunID
 }

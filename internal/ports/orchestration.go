@@ -521,6 +521,9 @@ type InteractiveRequest struct {
 	// there, "write" or "read_only"; empty takes the mode's default.
 	WorktreeID string `json:"worktree_id,omitempty"`
 	Access     string `json:"access,omitempty"`
+	// Critic, when set, says the harness starts this session as the critic of
+	// an author session's diff (Mode "review", read-only on its worktree).
+	Critic *CriticLink `json:"critic,omitempty"`
 }
 
 // ResumeRequest reopens an ended interactive session, on RunsOn — which need
@@ -713,4 +716,10 @@ type SessionContexts interface {
 type MemoryKilledChange struct {
 	ProjectID string `json:"-"`
 	*domain.MemoryKill
+}
+
+// CriticLink is the author session and gate run a critic reviews.
+type CriticLink struct {
+	AuthorSessionID string `json:"author_session_id"`
+	GateRunID       string `json:"gate_run_id"`
 }

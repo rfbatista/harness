@@ -35,6 +35,8 @@ type SessionModel struct {
 	RunsOn                   string  `gorm:"column:runs_on;index"`
 	RunnerHost               string  `gorm:"column:runner_host"`
 	ParentSessionID          string  `gorm:"column:parent_session_id"`
+	CriticOfSessionID        string  `gorm:"column:critic_of_session_id;index"`
+	CriticGateRunID          string  `gorm:"column:critic_gate_run_id"`
 	BroughtUnder             bool    `gorm:"column:brought_under"`
 	Mode                     string  `gorm:"column:mode"`
 	DesignSystemID           string  `gorm:"column:design_system_id;index"`
@@ -143,6 +145,8 @@ func (m *SessionModel) ToDomain() *domain.Session {
 		RunsOn:                   domain.Runner(m.RunsOn),
 		RunnerHost:               m.RunnerHost,
 		ParentSessionID:          m.ParentSessionID,
+		CriticOfSessionID:        m.CriticOfSessionID,
+		CriticGateRunID:          m.CriticGateRunID,
 		BroughtUnder:             m.BroughtUnder,
 		Mode:                     domain.SessionMode(m.Mode),
 		DesignSystemID:           m.DesignSystemID,

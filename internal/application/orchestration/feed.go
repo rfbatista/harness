@@ -2,6 +2,7 @@ package orchestration
 
 import (
 	"context"
+	"slices"
 	"sync"
 
 	"operators-mcp/internal/domain"
@@ -28,7 +29,7 @@ type feed struct {
 	mu       sync.Mutex
 	subs     map[string]map[chan ports.SessionChange]struct{} // by project ID
 	observer ports.FeedFollowersObserver                      // nil: nobody asked
-	changes  ports.ProjectChangeObserver                      // nil: nobody asked
+	changes  []ports.ProjectChangeObserver                    // empty: nobody asked
 }
 
 // ObserveChanges tells o of every change put on any project's feed (the
@@ -36,7 +37,7 @@ type feed struct {
 func (s *Service) ObserveChanges(o ports.ProjectChangeObserver) {
 	s.feed.mu.Lock()
 	defer s.feed.mu.Unlock()
-	s.feed.changes = o
+	s.feed.changes = append(s.feed.changes, o)
 }
 
 // ObserveFeedFollowers tells o how many follow each project's feed every time
@@ -114,9 +115,9 @@ func (f *feed) drop(projectID string, c chan ports.SessionChange) {
 func (f *feed) send(change ports.SessionChange) {
 	f.deliver(change)
 	f.mu.Lock()
-	o := f.changes
+	observers := slices.Clone(f.changes)
 	f.mu.Unlock()
-	if o != nil {
+	for _, o := range observers {
 		o.ProjectChanged(change)
 	}
 }
