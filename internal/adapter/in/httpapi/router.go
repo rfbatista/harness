@@ -183,11 +183,12 @@ func NewRouter(h *Handler, opts ...Option) *echo.Echo {
 	g.POST("/run_architecture_assistant_turn", h.handleRunArchitectureAssistantTurn)
 	g.POST("/end_architecture_assistant_conversation", h.handleEndArchitectureAssistantConversation)
 
-	// agent sandbox settings (the Agent isolation page)
+	// agent system settings: project defaults and repository overrides
 	g.GET("/projects/:project/agent-system", h.handleGetProjectAgentSystem)
 	g.PATCH("/projects/:project/agent-system", h.handlePatchProjectAgentSystem)
 	g.GET("/projects/:project/repositories/:repository/agent-system", h.handleGetRepositoryAgentSystem)
 	g.PATCH("/projects/:project/repositories/:repository/agent-system", h.handlePatchRepositoryAgentSystem)
+	// agent sandbox settings (the Agent isolation page)
 	g.GET("/get_sandbox_settings", h.handleGetSandboxSettings)
 	g.POST("/set_sandbox_enabled", h.handleSetSandboxEnabled)
 	g.POST("/add_sandbox_path", h.handleAddSandboxPath)

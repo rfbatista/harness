@@ -20,16 +20,16 @@ type AgentSystemSettings interface {
 
 	// ProjectView is the project's defaults: what it sets, and the effective
 	// configuration with sources.
-	// RepositoryView is the repository's effective configuration with sources
-	// and missing required gates, and the overrides it sets itself.
-	RepositoryView(ctx context.Context, projectID, repositoryID string) (domain.AgentSystemView, error)
-	// SaveRepository sets or resets (null) repository overrides, as SaveProject.
-	SaveRepository(ctx context.Context, projectID, repositoryID string, patch map[string]json.RawMessage) (domain.AgentSystemView, error)
 	ProjectView(ctx context.Context, projectID string) (domain.AgentSystemView, error)
 	// SaveProject sets (a value) or resets (null) project fields by path, all
 	// or none: a refused save is an *domain.AgentSystemValidationError and
 	// stores nothing. It answers the project's new view.
 	SaveProject(ctx context.Context, projectID string, patch map[string]json.RawMessage) (domain.AgentSystemView, error)
+	// RepositoryView is the repository's effective configuration with sources
+	// and missing required gates, and the overrides it sets itself.
+	RepositoryView(ctx context.Context, projectID, repositoryID string) (domain.AgentSystemView, error)
+	// SaveRepository sets or resets (null) repository overrides, as SaveProject.
+	SaveRepository(ctx context.Context, projectID, repositoryID string, patch map[string]json.RawMessage) (domain.AgentSystemView, error)
 }
 
 // AgentSystemSettingsChange is a save of agent system settings on the project
