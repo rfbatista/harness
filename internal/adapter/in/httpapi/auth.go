@@ -6,6 +6,8 @@ import (
 	"strings"
 
 	"github.com/labstack/echo/v4"
+
+	"operators-mcp/internal/ports"
 )
 
 // Option configures the router.
@@ -13,6 +15,9 @@ type Option func(*options)
 
 type options struct {
 	token string
+	// person checks the credential of a person-only route; nil: not enforced.
+	person   ports.PersonVerifier
+	refusals ports.PersonRefusals
 	// exposed: the HTTP server listens beyond this machine.
 	exposed bool
 }
@@ -31,6 +36,8 @@ var openRoutes = map[string]bool{
 	InteractiveSessionHookPath:    true,
 	ShellCheckRoute:               true,
 	ShellCommitRoute:              true,
+	// the code in the link is the proof; the bearer token is not what a browser holds
+	PairPath: true,
 }
 
 func requireToken(token string) echo.MiddlewareFunc {

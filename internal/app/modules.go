@@ -58,6 +58,7 @@ import (
 	"operators-mcp/internal/application/keychainpath"
 	"operators-mcp/internal/application/notifications"
 	"operators-mcp/internal/application/orchestration"
+	"operators-mcp/internal/application/personproof"
 	"operators-mcp/internal/application/planning"
 	"operators-mcp/internal/application/productowner"
 	"operators-mcp/internal/application/repoagents"
@@ -483,6 +484,9 @@ var AgentRuntimeModule = fx.Module("agentruntime",
 		func(r *sqlite.GateRunRepository) ports.GateRunStore { return r },
 		newGateRuns,
 		newDeclarer,
+		sqlite.NewPersonCredentialRepository,
+		func(r *sqlite.PersonCredentialRepository) ports.PersonCredentials { return r },
+		personproof.New,
 		sqlite.NewGuardSessionRepository,
 		func(r *sqlite.GuardSessionRepository) ports.GuardSessions { return r },
 		newAgentClaudeHome,
@@ -1188,6 +1192,10 @@ func newOrchestrationService(
 		ConfigHome: os.Getenv("XDG_CONFIG_HOME"),
 		Bin:        claudeBin.Bin(),
 		Allow:      func(string) []ports.SandboxPath { return allow },
+		// The database holds the person credentials' hashes, secret.key the
+		// stores' key: no session reads either (ADR 0016). Task memory and the
+		// other per-session paths in the data dir stay reachable.
+		Secrets: func() []string { return harnessSecrets(cfg) },
 		// What no session grants is hidden: the workspaces root and, for
 		// one-shots, every checkout.
 		WorkspacesRoot: ws.Root,
@@ -1787,4 +1795,20 @@ func newDeclarer(runs *gateruns.Service, orch *orchestration.Service, cat catalo
 	d := gateruns.NewDeclarer(runs)
 	d.Escalation = &gateruns.Escalator{Stopper: orch, Events: cat.Bus, Feed: orch, Channel: channel}
 	return d
+}
+
+// harnessSecrets are the files of the harness a session must never reach: the
+// database with its write-ahead log and shared memory, and the key of the
+// encrypted stores. An in-memory database has none.
+func harnessSecrets(cfg Config) []string {
+	var out []string
+	if !cfg.inMemory() {
+		if db, err := filepath.Abs(cfg.DBPath); err == nil {
+			out = append(out, db, db+"-wal", db+"-shm", db+"-journal")
+		}
+	}
+	if root, err := cfg.dataRoot(); err == nil && root != "" {
+		out = append(out, filepath.Join(root, "secret.key"))
+	}
+	return out
 }

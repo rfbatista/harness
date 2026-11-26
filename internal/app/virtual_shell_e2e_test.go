@@ -30,6 +30,7 @@ import (
 	"operators-mcp/internal/application/branchgate"
 	"operators-mcp/internal/application/branchwatch"
 	"operators-mcp/internal/application/gateruns"
+	"operators-mcp/internal/application/personproof"
 	"operators-mcp/internal/application/gitcredentials/gitcredentialstest"
 	"operators-mcp/internal/application/notifications"
 	"operators-mcp/internal/application/orchestration"
@@ -72,6 +73,7 @@ type shellE2E struct {
 	rules    *archrules.Service
 	gateRuns *gateruns.Service
 	declarer *gateruns.Declarer
+	proof    *personproof.Service
 	gate     *branchgate.Service
 	watch    *branchwatch.Service
 	pushes   ports.PushRecords
@@ -98,7 +100,7 @@ func (e *shellE2E) boot() {
 			}
 			return workspaces.NewOriginFetcher(git, gitcredentialstest.New())
 		}),
-		fx.Populate(&e.orch, &e.plan, &e.channel, &e.art, &e.cat, &e.sessions, &e.shells, &e.rules, &e.gate, &e.watch, &e.pushes, &e.wgit, &e.notes, &e.repoAgents, &e.db, &e.gateRuns, &e.declarer),
+		fx.Populate(&e.orch, &e.plan, &e.channel, &e.art, &e.cat, &e.sessions, &e.shells, &e.rules, &e.gate, &e.watch, &e.pushes, &e.wgit, &e.notes, &e.repoAgents, &e.db, &e.gateRuns, &e.declarer, &e.proof),
 		fx.NopLogger,
 	)
 	if err := e.app.Start(e.ctx); err != nil {

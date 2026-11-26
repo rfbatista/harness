@@ -262,6 +262,16 @@ type SessionEscalated struct {
 	RedGates  []GateKind
 }
 
+// PersonOnlyRefused: a call to a person-only route carried no person credential
+// (ADR 0016). It names no session: the caller proved no identity. ProjectID is
+// the project the route names, empty when it names none.
+type PersonOnlyRefused struct {
+	Method, Route, ProjectID string
+	At                       time.Time
+}
+
+func (PersonOnlyRefused) EventName() string { return "person_only.refused" }
+
 func (SessionEscalated) EventName() string           { return "session.escalated" }
 func (ProjectDeleted) EventName() string             { return "project.deleted" }
 func (RepositoryDeleted) EventName() string          { return "repository.deleted" }

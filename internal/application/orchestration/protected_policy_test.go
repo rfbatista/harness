@@ -177,3 +177,36 @@ func TestAStartedSessionsSandboxPolicyProtectsItsPathsUnlessItsScopeOrItsModeSay
 		t.Errorf("resumed policy: readable %v", resumed.Readable)
 	}
 }
+
+func TestASandboxedSessionCannotReachTheDatabaseOrTheKeyButStillWritesItsTaskMemoryInTheDataDir(t *testing.T) {
+	data := t.TempDir()
+	memory := filepath.Join(data, "task-memory", "task1", "repo1")
+	secrets := []string{filepath.Join(data, "harness.db"), filepath.Join(data, "harness.db-wal"), filepath.Join(data, "harness.db-shm"), filepath.Join(data, "secret.key")}
+	policy := BuildSandboxPolicy(SandboxSession{
+		Mode: domain.SessionModeImplement, Worktree: t.TempDir(), TempDir: t.TempDir(),
+		Allow:   []ports.SandboxPath{{Path: memory, Write: true}},
+		Secrets: secrets,
+	})
+	if !slices.Contains(policy.Writable, memory) {
+		t.Errorf("the task-memory folder is not writable: %v", policy.Writable)
+	}
+	for _, s := range secrets {
+		if !slices.Contains(policy.Hidden, s) {
+			t.Errorf("%s is not hidden: %v", s, policy.Hidden)
+		}
+		if slices.Contains(policy.Readable, s) || slices.Contains(policy.Writable, s) {
+			t.Errorf("%s is granted", s)
+		}
+	}
+	// The data directory itself is not hidden, nor granted: only what is named.
+	if slices.Contains(policy.Hidden, data) {
+		t.Error("the whole data directory is hidden")
+	}
+
+	// A grant that covers a secret does not reopen it.
+	wide := BuildSandboxPolicy(SandboxSession{Mode: domain.SessionModeImplement, Worktree: t.TempDir(), TempDir: t.TempDir(),
+		Allow: []ports.SandboxPath{{Path: data, Write: true}}, Secrets: secrets})
+	if !slices.Contains(wide.Hidden, secrets[0]) {
+		t.Errorf("a secret under a granted folder is not hidden: %v", wide.Hidden)
+	}
+}

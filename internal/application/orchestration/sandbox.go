@@ -50,6 +50,12 @@ type Sandbox struct {
 	// every session, so git inside the sandbox sees their identity and
 	// aliases. Empty UserHome: none.
 	UserHome, ConfigHome string
+	// Secrets are the harness's own secrets on disk, the database files that
+	// hold the person credentials' hashes and the key that encrypts its
+	// stores (ADR 0016): hidden from every session, wherever they lie. The rest
+	// of the data directory stays as the policy leaves it, so a session writes
+	// its task memory there. Nil: none.
+	Secrets func() []string
 	// TempDir gives the path prefix of a session's temp dir: each start makes
 	// its own dir as <prefix>-<random> beside it (0700), so a start never
 	// shares a dir with the one before it under the same id. Nil: the
@@ -152,6 +158,9 @@ type SandboxSession struct {
 	// as absolute paths (see ProtectedSandboxPaths): read-only inside the
 	// writable worktree, as the OS-level backstop of the protected-path hook.
 	Protected []string
+	// Secrets are paths hidden from the session whatever else grants (see
+	// Sandbox.Secrets).
+	Secrets []string
 	// VirtualShell is the session's shell; empty without one.
 	VirtualShell string
 	// CommitCheckDir is the commit check hooks dir of the worktree the session
@@ -190,6 +199,13 @@ type SandboxSession struct {
 // deny, so it stays reachable.
 func hiddenPaths(s SandboxSession, granted []ports.SandboxPath) []string {
 	var hidden []string
+	for _, p := range s.Secrets {
+		// A secret is hidden even inside a granted path: the harness's database
+		// and key are never a session's.
+		if p = filepath.Clean(p); p != "" && p != "." && !slices.Contains(hidden, p) {
+			hidden = append(hidden, p)
+		}
+	}
 	for _, p := range append(slices.Clone(s.Repositories), s.WorkspacesRoot, s.ProjectHomesRoot) {
 		if p == "" {
 			continue
@@ -684,6 +700,9 @@ func (s *Service) sandbox(ctx context.Context, in prepareInput, id string, repo 
 	}
 	sess.Allow = append(sess.Allow, sessionAllow(env)...)
 	sess.Allow = append(sess.Allow, skillDirGrants(skillDirs)...)
+	if sb.Secrets != nil {
+		sess.Secrets = sb.Secrets()
+	}
 	if g := in.Guard; g != nil && domain.SessionGated(g.Mode, true) {
 		sess.Protected = ProtectedSandboxPaths(worktree, g.ProtectedPaths, g.Scope)
 	}

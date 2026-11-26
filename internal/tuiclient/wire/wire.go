@@ -35,6 +35,9 @@ type Config struct {
 	API string
 	// Token is the server's bearer token; empty sends none.
 	Token string
+	// Person is the person credential (ADR 0016) the client sends, so it can
+	// answer what only the person may; empty sends none.
+	Person string
 	// Claude is the claude binary sessions run; empty lets the shell find
 	// "claude".
 	Claude string
@@ -64,7 +67,7 @@ var Client = fx.Module("client",
 )
 
 func newClient(lc fx.Lifecycle, cfg Config) *httpclient.Client {
-	c := httpclient.New(cfg.API, httpclient.WithToken(cfg.Token))
+	c := httpclient.New(cfg.API, httpclient.WithToken(cfg.Token), httpclient.WithPerson(cfg.Person))
 	lc.Append(fx.StartHook(func(ctx context.Context) error {
 		ctx, cancel := context.WithTimeout(ctx, 5*time.Second)
 		defer cancel()

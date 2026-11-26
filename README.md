@@ -8,6 +8,17 @@ Go, plus Node and npm for the React web client in `web/app`. `make web` runs `np
 
 The server's conversation search uses SQLite FTS5, which the driver compiles in only with the `sqlite_fts5` build tag. The Makefile and `.air.toml` pass it. For `go build`, `go run` and `go test` typed by hand, run `go env -w GOFLAGS=-tags=sqlite_fts5` once. A server built without the tag still runs: search then answers `SEARCH_UNAVAILABLE`.
 
+## Pairing the person
+
+The routes that are yours alone (answering branch, push and service requests, the agent system settings, instruction-proposal decisions, the gate-run trigger) accept only a person credential (ADR 0016). With nobody paired, the server prints a one-time pairing link in its own terminal output when it starts:
+
+```
+Pair this browser with the harness, once, so it can answer requests:
+  http://127.0.0.1:8080/api/person/pair?code=…
+```
+
+Open it in the browser: it sets an HttpOnly cookie and goes to the UI. The link works once and only until the server restarts or a day passes; the credential outlives restarts. For the terminal client, redeem a code once (`curl -X POST http://127.0.0.1:8080/api/person/pair -d '{"code":"…"}'` answers `{"credential": …}`, and a paired browser can ask for another code from `POST /api/person/pairing-codes`), then run it with `--person CREDENTIAL` or `CODING_POOL_PERSON`; the client drops the variable from what it runs, so no session holds it. A refused call answers `PERSON_ONLY`. A session run with the agent sandbox off runs as you and is not stopped by this.
+
 ## Checks
 
 `make check` builds, vets and runs the tests with the race detector, then runs the React client's type check, lint and tests (`npm run typecheck`, `npm run lint`, `npm test` in `web/app`). It is what to run before calling work done.

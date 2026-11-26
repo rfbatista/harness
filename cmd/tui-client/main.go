@@ -2,7 +2,7 @@
 // of its tasks, then open agent sessions in it. Each session is interactive
 // claude in its own git worktree, running in a pane.
 //
-//	tui-client [--api http://localhost:8080] [--token TOKEN] [--run server|tui] [--shell direct|login]
+//	tui-client [--api http://localhost:8080] [--token TOKEN] [--person CREDENTIAL] [--run server|tui] [--shell direct|login]
 //
 // The coding_pool server must be running (`make air`); it provisions and
 // records the sessions. With --run server (the default) it also runs them:
@@ -31,6 +31,9 @@ import (
 	"operators-mcp/internal/tuiclient/wire"
 )
 
+// personEnv holds the person credential for the client. Sessions never see it.
+const personEnv = "CODING_POOL_PERSON"
+
 func main() {
 	os.Exit(run())
 }
@@ -38,9 +41,13 @@ func main() {
 func run() int {
 	api := flag.String("api", envOr("CODING_POOL_API", "http://localhost:8080"), "coding_pool server URL")
 	token := flag.String("token", os.Getenv("CODING_POOL_TOKEN"), "coding_pool server bearer token")
+	person := flag.String("person", os.Getenv(personEnv), "person credential from pairing with the server (ADR 0016), to answer what only you may")
 	run := flag.String("run", envOr("CODING_POOL_RUN", "server"), "where sessions run: server (they outlive this client) or tui (in this process)")
 	sh := flag.String("shell", envOr("CODING_POOL_SHELL", "direct"), "with --run tui, how sessions start: direct, or login to run them through your login shell")
 	flag.Parse()
+	// Taken once and removed from the environment, so nothing this process runs,
+	// claude in a pane included, inherits it.
+	_ = os.Unsetenv(personEnv)
 
 	runsOn := domain.Runner(*run)
 	if !runsOn.Valid() {
@@ -61,7 +68,7 @@ func run() int {
 	defer closeLog()
 
 	app := fx.New(
-		wire.Options(wire.Config{API: *api, Token: *token, Claude: bin, Shell: *sh, RunsOn: runsOn, RunnerHost: host}),
+		wire.Options(wire.Config{API: *api, Token: *token, Person: *person, Claude: bin, Shell: *sh, RunsOn: runsOn, RunnerHost: host}),
 		fx.WithLogger(func() fxevent.Logger { return &fxevent.ConsoleLogger{W: logw} }),
 	)
 	startCtx, cancel := context.WithTimeout(context.Background(), 15*time.Second)

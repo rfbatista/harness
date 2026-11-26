@@ -233,6 +233,10 @@ func (s *Service) Subscribe(bus ports.EventSubscriber) {
 		}
 		return nil
 	})
+	ports.On(bus, func(ctx context.Context, ev domain.PersonOnlyRefused) error {
+		s.onPersonOnlyRefused(ev)
+		return nil
+	})
 	ports.On(bus, func(ctx context.Context, ev domain.SessionEscalated) error {
 		s.onSessionEscalated(ev)
 		return nil
@@ -782,6 +786,26 @@ func (s *Service) onSessionFailed(sessionID string) {
 		Link:  domain.TaskLink(sess.ProjectID, sess.TicketID), CauseKey: sessionFailedKey(sess.ID),
 	}
 	failedWhat(sess.LastAction).apply(n)
+	s.record(n, true)
+}
+
+// onPersonOnlyRefused tells the person, at most once an hour per route and
+// project, that something without their credential called a route that is
+// theirs alone (ADR 0016). A route that names no project cannot be placed in a
+// project's inbox: it is only logged.
+func (s *Service) onPersonOnlyRefused(ev domain.PersonOnlyRefused) {
+	slog.Warn("person-only route refused: no person credential", "method", ev.Method, "route", ev.Route, "project", ev.ProjectID)
+	if ev.ProjectID == "" {
+		return
+	}
+	n := &domain.Notification{
+		ProjectID: ev.ProjectID,
+		Kind:      domain.NotificationAgent, Level: domain.NotificationAction,
+		Actor: systemActor(domain.ActorHarness),
+		Link:  domain.ProjectLink(ev.ProjectID), CauseKey: "person_only:" + ev.Method + " " + ev.Route + ":" + ev.ProjectID + ":" + ev.At.UTC().Format("2006010215"),
+		Body: "Something that is not you called " + ev.Method + " " + ev.Route + ", which only you may. It was refused. If a session did it, it is trying to answer for you.",
+	}
+	what{verb: "refused a call that was yours alone", object: ev.Method + " " + ev.Route, colon: true}.apply(n)
 	s.record(n, true)
 }
 

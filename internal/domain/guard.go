@@ -40,8 +40,8 @@ type GuardConfig struct {
 	TestsFailFirstAvailable bool        `json:"tests_fail_first_available"`
 	// TestsFailFirst is whether this session has tests-fail-first on, given at
 	// its start; it is enforced only where the configuration makes it available.
-	TestsFailFirst bool `json:"tests_fail_first,omitempty"`
-	Scope                   []string    `json:"scope,omitempty"`
+	TestsFailFirst bool     `json:"tests_fail_first,omitempty"`
+	Scope          []string `json:"scope,omitempty"`
 	// Unresolved is why the settings store could not give this session its
 	// configuration ("settings unavailable: …"); the harness defaults stand in
 	// and the session is gated as usual: a store fault never switches the
@@ -57,7 +57,9 @@ func (c GuardConfig) Gated(hasDiff bool) bool {
 
 // TestsFailFirstEnforced says whether the session's non-test writes wait for a
 // failed test run: available in the configuration and on for the session.
-func (c GuardConfig) TestsFailFirstEnforced() bool { return c.TestsFailFirstAvailable && c.TestsFailFirst }
+func (c GuardConfig) TestsFailFirstEnforced() bool {
+	return c.TestsFailFirstAvailable && c.TestsFailFirst
+}
 
 // NewGuardConfig keeps the guard part of eff for a session in mode, sharing no
 // memory with it.

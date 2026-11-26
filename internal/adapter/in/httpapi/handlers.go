@@ -122,6 +122,8 @@ type Services struct {
 	// GateRuns runs and lists a session's gate runs (ADR 0012); nil: the
 	// routes answer 503.
 	GateRuns ports.GateRuns
+	// Pairing issues person credentials (ADR 0016); nil: the pairing routes answer 503.
+	Pairing ports.PersonPairing
 	// ManagedClaude installs and switches the claude agents run; nil answers
 	// 503. ManagedClaudeBin says which binary agents run (the override
 	// included); nil reads as no override.
@@ -235,6 +237,7 @@ type Handler struct {
 	sandboxSettings ports.SandboxSettings
 	agentSystem     ports.AgentSystemSettings
 	gateRuns        ports.GateRuns
+	pairing         ports.PersonPairing
 	sandboxDriver   func() ports.SandboxDriver
 
 	managedClaude    ports.ManagedClaude
@@ -331,6 +334,7 @@ func NewHandler(s Services) *Handler {
 		sandboxSettings: s.SandboxSettings,
 		agentSystem:     s.AgentSystem,
 		gateRuns:        s.GateRuns,
+		pairing:         s.Pairing,
 		sandboxDriver:   s.SandboxDriver,
 
 		managedClaude:    s.ManagedClaude,
