@@ -115,6 +115,9 @@ type Services struct {
 	// answers 503. SandboxDriver says which driver the platform has (nil
 	// result: none).
 	SandboxSettings ports.SandboxSettings
+	// AgentSystem is the agent system settings store (ADR 0011); nil: the
+	// endpoints answer 503.
+	AgentSystem ports.AgentSystemSettings
 	SandboxDriver   func() ports.SandboxDriver
 	// ManagedClaude installs and switches the claude agents run; nil answers
 	// 503. ManagedClaudeBin says which binary agents run (the override
@@ -227,6 +230,7 @@ type Handler struct {
 	repositoryIndexes  ports.RepositoryIndexes
 
 	sandboxSettings ports.SandboxSettings
+	agentSystem     ports.AgentSystemSettings
 	sandboxDriver   func() ports.SandboxDriver
 
 	managedClaude    ports.ManagedClaude
@@ -321,6 +325,7 @@ func NewHandler(s Services) *Handler {
 		repositoryIndexes:  s.RepositoryIndexes,
 
 		sandboxSettings: s.SandboxSettings,
+		agentSystem:     s.AgentSystem,
 		sandboxDriver:   s.SandboxDriver,
 
 		managedClaude:    s.ManagedClaude,
