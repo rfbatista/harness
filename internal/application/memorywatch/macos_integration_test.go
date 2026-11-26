@@ -9,6 +9,7 @@ import (
 	"testing"
 	"time"
 
+	"operators-mcp/internal/adapter/out/procmac"
 	"operators-mcp/internal/adapter/out/psprocs"
 	"operators-mcp/internal/application/memorywatch"
 	"operators-mcp/internal/domain"
@@ -21,8 +22,8 @@ import (
 // perl child, and the stand-in agent and the wrapper above it live on.
 func TestRealProcessPastASmallOrcamentoIsEndedAndTheAgentSurvives(t *testing.T) {
 	const id = "itg-memory-watch-1"
-	if _, err := (psprocs.Table{}).Read(context.Background()); err != nil {
-		t.Skipf("the process table cannot be read here (an agent sandbox forbids ps): %v", err)
+	if _, err := (procmac.Table{}).Read(context.Background()); err != nil {
+		t.Skipf("the process table cannot be read here (the kernel refused the sysctl): %v", err)
 	}
 	// The agent outlives its child (sleep 120 after wait), as claude outlives a test run.
 	agentScript := `perl -e '$x = q(a) x 300000000; sleep 120' & wait; sleep 120`
@@ -37,7 +38,7 @@ func TestRealProcessPastASmallOrcamentoIsEndedAndTheAgentSurvives(t *testing.T) 
 	})
 
 	sink := &sink{}
-	w := memorywatch.New(memorywatch.Deps{Table: psprocs.Table{}, Signal: psprocs.Signaler{}, Sink: sink})
+	w := memorywatch.New(memorywatch.Deps{Table: procmac.Table{}, Signal: psprocs.Signaler{}, Sink: sink})
 	w.Watch(ports.MemoryWatch{SessionID: "s1", TaskID: "t1", BudgetBytes: 100 << 20, ClaudeID: id, RootPID: wrapper.Process.Pid})
 
 	deadline := time.Now().Add(30 * time.Second)
@@ -61,7 +62,7 @@ func TestRealProcessPastASmallOrcamentoIsEndedAndTheAgentSurvives(t *testing.T) 
 		t.Errorf("kill = %+v, want the perl child ended with SIGTERM", k)
 	}
 
-	table, err := (psprocs.Table{}).Read(context.Background())
+	table, err := (procmac.Table{}).Read(context.Background())
 	if err != nil {
 		t.Fatal(err)
 	}

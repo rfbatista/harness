@@ -6,6 +6,7 @@ import (
 
 	"go.uber.org/fx"
 
+	"operators-mcp/internal/adapter/out/procmac"
 	"operators-mcp/internal/adapter/out/psprocs"
 	"operators-mcp/internal/application/memorywatch"
 	"operators-mcp/internal/application/orchestration"
@@ -19,7 +20,7 @@ func useMemoryWatch(lc fx.Lifecycle, orch *orchestration.Service) {
 	if runtime.GOOS != "darwin" {
 		return
 	}
-	w := memorywatch.New(memorywatch.Deps{Table: psprocs.Table{}, Signal: psprocs.Signaler{}, Sink: orch})
+	w := memorywatch.New(memorywatch.Deps{Table: procmac.Table{}, Signal: psprocs.Signaler{}, Sink: orch})
 	orch.MemoryWatcher = w
 	lc.Append(fx.Hook{
 		OnStart: func(context.Context) error { w.Start(); return nil },

@@ -176,3 +176,39 @@ func TestTheFirstArgumentIsCutAt80BytesOnARuneBoundary(t *testing.T) {
 		t.Error("no second argument must give none")
 	}
 }
+
+func TestAReparentedBackgroundProcessKeepsTheSessionOfItsLeader(t *testing.T) {
+	leader := exec.Command("sh", "-c", `(perl -e 'sleep 30' x reparented &) ; sleep 30`)
+	leader.SysProcAttr = &syscall.SysProcAttr{Setsid: true}
+	if err := leader.Start(); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = syscall.Kill(-leader.Process.Pid, syscall.SIGKILL); _ = leader.Wait() })
+	deadline := time.Now().Add(10 * time.Second)
+	for time.Now().Before(deadline) {
+		rows, err := Table{}.Read(context.Background())
+		if err != nil {
+			t.Fatal(err)
+		}
+		for _, r := range rows {
+			if r.Name == "perl" && r.Arg == "-e" && r.SID == leader.Process.Pid {
+				if r.PPID == leader.Process.Pid {
+					t.Fatalf("not reparented: %+v", r)
+				}
+				return
+			}
+		}
+		time.Sleep(100 * time.Millisecond)
+	}
+	t.Fatal("the reparented process never showed in the leader's session")
+}
+
+func BenchmarkReadTheWholeTable(b *testing.B) {
+	for i := 0; i < b.N; i++ {
+		rows, err := Table{}.Read(context.Background())
+		if err != nil {
+			b.Fatal(err)
+		}
+		b.ReportMetric(float64(len(rows)), "rows")
+	}
+}
