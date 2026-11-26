@@ -232,9 +232,9 @@ export function mountIslands(doc: Document): Dispose {
     // The memory chip in the session head, beside the token total: one island per selected session.
     "session-memory": (mount, props) => {
       const { session_id, live } = MemoryPropsDto.fromJSON(props);
-      const presenter = new ChipPresenter({ source: httpMemorySource(api), stream: feedMemoryStream(feed), clock: systemClock, sessionId: session_id, live, time: (at) => at.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }) });
+      const presenter = new ChipPresenter({ source: httpMemorySource(api), stream: feedMemoryStream(feed), clock: systemClock, sessionId: session_id, live, scheduler: { after: (ms, fn) => { const id = win.setTimeout(fn, ms); return () => win.clearTimeout(id); } }, time: (at) => at.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }) });
       const root = createRoot(mount);
-      root.render(<ChipView presenter={presenter} />);
+      root.render(<ChipView presenter={presenter} toastHost={win.document.body} />);
       void presenter.start();
       return () => {
         presenter.dispose();

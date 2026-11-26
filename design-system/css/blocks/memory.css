@@ -57,7 +57,12 @@
     &[data-state="ended"] { --_tone: var(--color-danger); }
     &[data-state="ended"] > .word { color: var(--color-danger); }
 
-    @media (prefers-reduced-motion: reduce) { & .fill { transition: none; } }
+    /* One ring on the track when a kill arrives, set once and removed when it ends. */
+    &[data-signal] > .track { animation: memory-signal var(--duration-signal) var(--ease-out) 1; }
+    @media (prefers-reduced-motion: reduce) {
+      & .fill { transition: none; }
+      &[data-signal] > .track { animation: none; outline: 2px solid color-mix(in oklch, var(--color-danger) 40%, transparent); outline-offset: 2px; }
+    }
     @container session (width < 46rem) { &:not([data-state="normal"]) .of { display: none; } }
     @container session (width < 34rem) { &[data-state="normal"] { display: none; } }
     @media (width < 48rem) { font-size: inherit; & > .track { display: none; } }
@@ -83,5 +88,22 @@
     & > ul b { color: var(--color-danger); font-weight: var(--weight-medium); }
     & > p { margin: 0; color: var(--color-ink-muted); }
     & > p.note { color: var(--color-ink-faint); font-size: var(--text-xs); }
+  }
+  /* The toasts of a kill (toast.css), with the body the toast block leaves to its users. */
+  .toast-region.memory-toasts {
+    & .toast > .body { display: grid; gap: var(--space-2xs); flex: 1 1 auto; min-inline-size: 0; }
+    & .toast > .body > strong { font-weight: var(--weight-medium); overflow-wrap: anywhere; }
+    & .toast > .body > .meta { margin: 0; color: var(--color-ink-muted); font-size: var(--text-xs); }
+    & .toast > .body > .meta b { color: var(--color-ink); font-weight: var(--weight-medium); font-variant-numeric: tabular-nums; }
+    & .toast > .body > .actions { display: flex; gap: var(--space-xs); }
+    & .toast > [data-icon] { color: var(--color-ink); }
+    /* The line the older toasts fold into: no border, no shadow. */
+    & .toast[data-more] { padding-block: 0; border: 0; background: none; box-shadow: none; color: var(--color-ink-muted); font-size: var(--text-xs); animation: none; }
+    @media (prefers-reduced-motion: reduce) { & .toast { animation: none; } }
+  }
+
+  @keyframes memory-signal {
+    from { box-shadow: 0 0 0 0 color-mix(in oklch, var(--color-danger) 55%, transparent); }
+    to { box-shadow: 0 0 0 0.45rem transparent; }
   }
 }

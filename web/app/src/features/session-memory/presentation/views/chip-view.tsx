@@ -1,33 +1,39 @@
-import { useEffect, useRef, type CSSProperties } from "react";
+import { useEffect, useRef, useState, type CSSProperties } from "react";
+import { createPortal } from "react-dom";
 import { usePopup } from "../../../../shared/presentation/use-popup";
 import { usePresenter } from "../../../../shared/presentation/use-presenter";
-import type { ChipPresenter } from "../presenters/chip-presenter";
+import type { ChipPresenter, ToastView } from "../presenters/chip-presenter";
 
 const POPOVER_ID = "memory-popover";
 
 /** The memory chip of the session head, and the popover that hangs from it: nothing until the session has a sample. */
-export function ChipView({ presenter }: { presenter: ChipPresenter }) {
-  const { view, popover } = usePresenter(presenter);
+export function ChipView({ presenter, toastHost }: { presenter: ChipPresenter; toastHost: Element }) {
+  const { view, popover, toasts, more, signal } = usePresenter(presenter);
+  // The ring turns once per kill: it is dropped when its animation ends, and not set again for the same kill.
+  const [rung, setRung] = useState<string | null>(null);
   const chip = useRef<HTMLButtonElement>(null);
   const panel = useRef<HTMLElement>(null);
   const open = popover !== null;
   usePopup(open, panel, chip, () => presenter.close());
 
-  // Esc closes the popover and gives the focus back to the chip, wherever the focus is.
+  // Esc closes the popover first, then the toast that has the focus; the chip gets the focus back from the popover.
+  const alive = open || toasts.length > 0;
   useEffect(() => {
-    const doc = chip.current?.ownerDocument;
-    if (!open || !doc) return;
+    const doc = chip.current?.ownerDocument ?? toastHost.ownerDocument;
+    if (!alive) return;
     const onKey = (event: KeyboardEvent) => {
       if (event.key !== "Escape") return;
+      const wasOpen = presenter.viewModel.popover !== null;
+      if (!presenter.escape()) return;
       event.stopPropagation();
-      presenter.close();
-      chip.current?.focus();
+      if (wasOpen) chip.current?.focus();
     };
     doc.addEventListener("keydown", onKey, true);
     return () => doc.removeEventListener("keydown", onKey, true);
-  }, [open, presenter]);
+  }, [alive, presenter, toastHost]);
 
-  if (!view) return null;
+  const region = createPortal(<ToastRegion presenter={presenter} toasts={toasts} more={more} />, toastHost);
+  if (!view) return region;
   return (
     <>
       <button
@@ -35,6 +41,7 @@ export function ChipView({ presenter }: { presenter: ChipPresenter }) {
         type="button"
         className="[ memory ]"
         data-state={view.state}
+        data-signal={signal !== null && signal !== rung ? "" : undefined}
         aria-label={view.title}
         title={view.title}
         aria-expanded={open}
@@ -47,7 +54,7 @@ export function ChipView({ presenter }: { presenter: ChipPresenter }) {
           <span className="of">{view.of}</span>
         </span>
         {view.word && <span className="word">{view.word}</span>}
-        <span className="track" aria-hidden="true">
+        <span className="track" aria-hidden="true" onAnimationEnd={() => setRung(signal)}>
           <span className="fill" />
         </span>
       </button>
@@ -88,6 +95,51 @@ export function ChipView({ presenter }: { presenter: ChipPresenter }) {
           </>
         )}
       </section>
+      {region}
     </>
+  );
+}
+
+function ToastRegion({ presenter, toasts, more }: { presenter: ChipPresenter; toasts: readonly ToastView[]; more: number }) {
+  if (toasts.length === 0) return null;
+  return (
+    <div className="[ toast-region ] [ memory-toasts ]">
+      {toasts.map((toast) => (
+        <div
+          key={toast.key}
+          className="[ toast ]"
+          data-tone="danger"
+          role="alert"
+          onMouseEnter={() => presenter.hold(toast.key, "hover")}
+          onMouseLeave={() => presenter.release(toast.key, "hover")}
+          onFocus={() => presenter.hold(toast.key, "focus")}
+          onBlur={(event) => {
+            if (!event.currentTarget.contains(event.relatedTarget)) presenter.release(toast.key, "focus");
+          }}
+        >
+          <span className="[ status ]" data-state="failed" data-dot-only />
+          <div className="body">
+            <strong>{toast.title}</strong>
+            <p className="meta">
+              It had <b>{toast.rss}</b>
+              {toast.notExited && " and did not exit in 5 s"}; the session's processes were at <b>{toast.tree}</b> of their <b>{toast.budget}</b> budget. The session continues.
+            </p>
+            <div className="actions">
+              <button type="button" className="[ button ]" data-size="sm" onClick={() => void presenter.details(toast.key)}>
+                Details
+              </button>
+            </div>
+          </div>
+          <button type="button" className="[ button ]" data-variant="ghost" data-size="sm" data-icon aria-label="Dismiss" onClick={() => presenter.dismiss(toast.key)}>
+            ×
+          </button>
+        </div>
+      ))}
+      {more > 0 && (
+        <div className="[ toast ]" data-more>
+          +{more} earlier · in Details
+        </div>
+      )}
+    </div>
   );
 }
