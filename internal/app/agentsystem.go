@@ -3,9 +3,13 @@ package app
 import (
 	"context"
 	"os/exec"
+	"strings"
+	"sync"
 
 	"gorm.io/gorm"
 
+	"operators-mcp/internal/adapter/in/mcpbench"
+	"operators-mcp/internal/adapter/out/agents/claudehome"
 	"operators-mcp/internal/adapter/out/persistence/sqlite"
 	"operators-mcp/internal/app/catalog"
 	"operators-mcp/internal/application/agentsystem"
@@ -55,10 +59,33 @@ func (l repositoryLookup) Get(ctx context.Context, id string) *domain.Repository
 }
 
 // newBench wires the eval bench (ADR 0015): its cases in SQLite, checked
-// against the project catalog.
-func newBench(db *gorm.DB, cat catalog.Catalog) *bench.Service {
+// against the project catalog, and the orchestration service as the one that
+// runs the CLI for a case on a manager of its own with no approval, interview
+// or task server, so a run's only MCP server is the mock.
+func newBench(cfg Config, db *gorm.DB, cat catalog.Catalog, orch *orchestration.Service, bin ports.ManagedClaudeBin, home claudehome.Home) *bench.Service {
+	orch.BenchRuntime = oneShotClaude(bin.Bin(), home.Path(), cfg.llmProxyURL())
+	orch.BenchCLIVersion = cliVersion(bin)
 	return bench.New(bench.Deps{
-		Cases:    sqlite.NewBenchCaseRepository(db),
-		Projects: projectLookup{cat},
+		Cases:     sqlite.NewBenchCaseRepository(db),
+		Projects:  projectLookup{cat},
+		Sessions:  orch,
+		ServeMock: mcpbench.Serve,
+		MockName:  mcpbench.Name,
 	})
+}
+
+// cliVersion reads the claude CLI's version once, the first time a bench asks
+// for it; "" when it cannot say.
+func cliVersion(bin ports.ManagedClaudeBin) func() string {
+	var once sync.Once
+	var version string
+	return func() string {
+		once.Do(func() {
+			out, err := exec.Command(bin.Bin(), "--version").Output()
+			if err == nil {
+				version = strings.TrimSpace(string(out))
+			}
+		})
+		return version
+	}
 }
