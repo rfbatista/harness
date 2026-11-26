@@ -1132,6 +1132,9 @@ func newOrchestrationService(
 	svc.SessionArchitectureURL = func(sessionID string) string {
 		return base + httpapi.SessionArchitecturePath(sessionID)
 	}
+	svc.SessionSkillsURL = func(sessionID string) string {
+		return base + httpapi.SessionSkillsPath(sessionID)
+	}
 	svc.SessionMemoryURL = func(sessionID string) string {
 		return base + httpapi.SessionMemoryPath(sessionID)
 	}

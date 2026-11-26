@@ -153,6 +153,8 @@ type Service struct {
 	// commits its shell's files (…/api/sessions/{id}/shell); a session with
 	// a shell gets vshell.Hooks aimed at it.
 	SessionShellURL func(sessionID string) string
+	// SessionSkillsURL returns where a session's skill activation endpoint is.
+	SessionSkillsURL func(sessionID string) string
 	// SessionArchitectureURL returns where a session's architecture rules are
 	// checked (…/api/sessions/{id}/architecture). Nil: sessions get no
 	// architecture hooks.
@@ -244,6 +246,8 @@ type Service struct {
 	// (ADR 0099); nil stores nothing.
 	Contexts  ports.SessionContextStore
 	contextMu sync.Mutex
+	// touchActivations are the skills each session already loaded on a touch.
+	touchActivations activatedOnTouch
 	loopOnce  sync.Once // starts contextLoop once the service is wired and somebody follows
 	// contextNotes puts a session's context changes on the feed, coalesced.
 	contextNotes *contextNotifier
@@ -875,6 +879,11 @@ func (s *Service) withShellHooks(id, repositoryID string, subject sessionSubject
 			cfg.Driver = dc
 		}
 	}
+	if s.SessionSkillsURL != nil {
+		if dc, ok := withHooks(cfg.Driver, SkillActivationHooks(s.SessionSkillsURL(id))); ok {
+			cfg.Driver = dc
+		}
+	}
 	return s.withShims(id, cfg, func() {
 		if cleanup != nil {
 			cleanup()
@@ -1127,6 +1136,7 @@ func (s *Service) sessionConfigTrail(trail *pieceTrail, id, dir, model string, a
 	trail.mark(&cfg, domain.PieceOther, "Design system", "Harness")
 	res := configResolution{}
 	cfg.InstructionFiles, res.versions = s.deliveredFiles(context.TODO(), role, ag.agent, subject.projectID(), repositoryID)
+	cfg.InstructionFiles = append(cfg.InstructionFiles, s.activatedSkillFiles(context.TODO(), role, subject.mode, repositoryID)...)
 	if s.SessionBranchGateURL != nil {
 		cfg.InstructionFiles = append(cfg.InstructionFiles, s.branchGateInstructionFile(subject.mode))
 	}

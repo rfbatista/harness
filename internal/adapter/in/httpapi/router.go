@@ -332,6 +332,7 @@ func NewRouter(h *Handler, opts ...Option) *echo.Echo {
 	// the architecture rules: the same sessions' hooks, shims and commits ask
 	// whether an action keeps to the repository's layers
 	g.POST(strings.TrimPrefix(ArchitectureCheckRoute, "/api"), h.handleArchitectureCheck)
+	g.POST(strings.TrimPrefix(SkillActivationRoute, "/api"), h.handleSkillActivation)
 	g.POST(strings.TrimPrefix(ArchitectureCommitRoute, "/api"), h.handleArchitectureCommit)
 	g.POST(strings.TrimPrefix(MemoryHookRoute, "/api"), h.handleMemoryHook)
 	g.GET("/sessions/:id/memory", h.handleSessionMemory)
