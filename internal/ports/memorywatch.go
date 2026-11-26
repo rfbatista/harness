@@ -16,6 +16,9 @@ type ProcessInfo struct {
 	SID       int
 	RSSBytes  int64
 	Name, Arg string
+	// Started is the process's start time as the table prints it: with the pid
+	// it says whether a pid is still the process it was.
+	Started string
 	// Session is the agent conversation id a process was started for
 	// (claude's --session-id or --resume value); "" for every other process.
 	// It is how the agent CLI is found in the table.
@@ -66,6 +69,13 @@ type MemoryNotices interface {
 // MemoryReader is the initial read of a live session's memory; live is false when the session is not running.
 type MemoryReader interface {
 	SessionMemory(sessionID string) (read domain.MemoryRead, live bool)
+}
+
+// MemoryEnding is an optional part of a sink: it hears of an encerramento por
+// memória the moment SIGTERM is sent, before the process is seen gone, so the
+// agent can be told in the answer of the call that was running (ADR 0006).
+type MemoryEnding interface {
+	Ending(domain.MemoryKill)
 }
 
 // MemorySink receives what the vigia de memória sees: a sample of each
