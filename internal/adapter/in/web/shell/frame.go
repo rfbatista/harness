@@ -349,10 +349,6 @@ func shownIf(shown bool) templ.Attributes {
 	return templ.Attributes{"style": "display: none"}
 }
 
-// The rail row's one meta item, by priority: the reviews badge, else
-// "waiting", else "N live". The browser's toRow (web/src/modules/tasks/
-// presentation/railView.js) says the same.
-
 // ProjectName is the selected project's name, for the phone drawer's header.
 func (f Frame) ProjectName() string {
 	for _, p := range f.Top.Projects {

@@ -50,6 +50,8 @@ export interface RailViewModel {
   /** The chevron turns only once a heading was clicked. */
   readonly turned: boolean;
   readonly drawerOpen: boolean;
+  /** The island has taken over the server's paint and drew what it left out. */
+  readonly hydrated: boolean;
 }
 
 export interface RailStatics {
@@ -105,6 +107,7 @@ export function railViewModel(state: RailModelState, features: FeaturePrefs, sta
     groups,
     turned: state.turned,
     drawerOpen: state.drawerOpen,
+    hydrated: state.prefsRead,
   };
 }
 

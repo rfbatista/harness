@@ -105,10 +105,12 @@ export function useRailHost(host: HTMLElement | null, presenter: RailPresenter, 
     focusFilterAfterRender.current = false;
   }, [host, drawerOpen]);
 
-  // The open task comes into view on the first render in the browser.
+  // The open task comes into view once the island has drawn what the server's paint left out (the rows
+  // above it can push it away), and the list keeps its scroll from then on.
+  const hydrated = vm.hydrated;
   useEffect(() => {
-    if (host) reveal(host.querySelector('.groups a[aria-current="page"]'));
-  }, [host]);
+    if (host && hydrated) reveal(host.querySelector('.groups a[aria-current="page"]'));
+  }, [host, hydrated]);
 
   // Keys, focus and the tooltip.
   useEffect(() => {
