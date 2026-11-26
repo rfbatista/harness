@@ -126,3 +126,25 @@ func TestTheKillsOfAnEndedSessionAreFreed(t *testing.T) {
 		time.Sleep(20 * time.Millisecond)
 	}
 }
+
+// F17: a product owner session runs an agent CLI, so it has an orçamento, its
+// prevenção and a watch, like any other session.
+func TestAProductOwnerSessionIsWatchedAndGetsItsPrevention(t *testing.T) {
+	svc, _ := newHeadlessShellService(t)
+	withTokenSavers(t, svc)
+	fw := &fakeWatcher{}
+	svc.MemoryWatcher = fw
+	id, err := svc.StartProductOwnerSession(context.Background(), ports.ProductOwnerSessionSpec{ProjectID: "p1"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = svc.Stop(context.Background(), id) })
+	fw.mu.Lock()
+	if len(fw.watched) != 1 || fw.watched[0].SessionID != id || fw.watched[0].BudgetBytes != 4*gb || fw.watched[0].ClaudeID != id {
+		t.Errorf("watched = %+v, want the product owner session at 4 GB", fw.watched)
+	}
+	fw.mu.Unlock()
+	if sess := svc.sessions.Get(id); sess == nil || sess.MemoryBudgetBytes != 4*gb || sess.MemoryTestWorkers != 2 || sess.MemoryHeapMB != 1365 {
+		t.Errorf("session = %+v, want its budget and prevention recorded", sess)
+	}
+}
