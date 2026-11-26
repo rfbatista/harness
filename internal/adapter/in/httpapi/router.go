@@ -284,6 +284,7 @@ func NewRouter(h *Handler, opts ...Option) *echo.Echo {
 	g.GET("/sessions/:id/events", h.handleSessionEvents)
 	g.POST("/sessions/:id/gate-runs", h.handleRunSessionGates)
 	g.GET("/sessions/:id/gate-runs", h.handleListSessionGateRuns)
+	g.POST("/sessions/:id/visual-qa", h.handleStartVisualQA)
 	g.GET("/sessions/:id/gate-runs/:run/gates/:kind/output", h.handleGateOutput)
 	g.GET("/sessions/:id/interviews", h.handleSessionInterviews)
 	g.GET("/sessions/:id/interviews/events", h.handleSessionInterviewEvents)

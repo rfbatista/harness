@@ -156,6 +156,7 @@ func (s *Service) StartInteractive(ctx context.Context, req InteractiveRequest) 
 	if plan != nil {
 		opening = s.architectOverPrompt(ctx, ticket, plan.Eligible, req.Prompt)
 	}
+	opening += s.visualQAOpening(ctx, mode, req.ProjectID, req.RepositoryID)
 	spec := s.agentSpec(p.cfg, ports.Conversation{ID: id}, opening)
 	spec.EnvFile = p.envFile
 	confineSpec(&spec, p.sandbox.policy)

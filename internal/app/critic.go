@@ -9,6 +9,7 @@ import (
 	"operators-mcp/internal/application/gateruns"
 	"operators-mcp/internal/application/orchestration"
 	"operators-mcp/internal/application/planning"
+	"operators-mcp/internal/application/visualqa"
 	"operators-mcp/internal/application/workspaces"
 	"operators-mcp/internal/ports"
 )
@@ -28,3 +29,8 @@ func newCritic(sessions ports.SessionRepository, settings *agentsystem.Service, 
 }
 
 func registerCritic(c *critic.Service, orch *orchestration.Service) { orch.ObserveChanges(c) }
+
+// newVisualQA starts visual QA for a session on the repository's declared UI.
+func newVisualQA(sessions ports.SessionRepository, settings *agentsystem.Service, orch *orchestration.Service) *visualqa.Service {
+	return visualqa.New(visualqa.Deps{Sessions: sessions, Settings: settings, Starter: orch})
+}
