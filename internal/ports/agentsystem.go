@@ -9,7 +9,9 @@ import (
 
 // AgentSystemSettings is the agent system settings store as the layers and the
 // settings UI use it (ADR 0011; contract "Agent system settings store ↔ layers
-// and web UI").
+// and web UI"). Saving is the person's: the save routes are person-only by
+// convention, like answering a branch or service request, until the harness
+// has a check of who calls.
 type AgentSystemSettings interface {
 	// Effective is the repository's effective configuration, each field with
 	// its source, and the required gates it is missing. An empty repositoryID
