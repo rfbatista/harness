@@ -44,11 +44,14 @@ func (d *Detector) Detect(ctx context.Context, repo *domain.Repository) map[doma
 	for k, v := range d.stack(ctx, repo) {
 		out[k] = v
 	}
-	// gitleaks is looked for on every call: installing it needs no new commit.
-	if _, err := d.lookPath("gitleaks"); err == nil {
-		out[domain.GateSecretScan] = domain.GateDefault{Command: "gitleaks detect --no-git --redact --exit-code 1", Reason: "gitleaks found on PATH"}
-	} else {
-		out[domain.GateSecretScan] = domain.GateDefault{Reason: "gitleaks not installed"}
+	// A check.sh that names secret_scan fills it; otherwise gitleaks, looked
+	// for on every call: installing it needs no new commit.
+	if _, filled := out[domain.GateSecretScan]; !filled {
+		if _, err := d.lookPath("gitleaks"); err == nil {
+			out[domain.GateSecretScan] = domain.GateDefault{Command: "gitleaks detect --no-git --redact --exit-code 1", Reason: "gitleaks found on PATH"}
+		} else {
+			out[domain.GateSecretScan] = domain.GateDefault{Reason: "gitleaks not installed"}
+		}
 	}
 	for _, k := range domain.RequiredGateKinds {
 		if _, ok := out[k]; !ok {
