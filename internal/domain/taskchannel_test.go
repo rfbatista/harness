@@ -159,3 +159,24 @@ func TestBringUnderSkip(t *testing.T) {
 		}
 	}
 }
+
+func TestWhichMessagesToTheArchitectAreADoneDeclaration(t *testing.T) {
+	cases := []struct {
+		kind   TaskMessageKind
+		status ReportStatus
+		want   bool
+	}{
+		{MessageReviewRequest, "", true},
+		{MessageStatusReport, ReportDone, true},
+		{MessageStatusReport, ReportWorking, false},
+		{MessageStatusReport, ReportBlocked, false},
+		{MessageStatusReport, ReportReadyForReview, false},
+		{MessageQuestion, ReportDone, false},
+		{MessageReply, "", false},
+	}
+	for _, c := range cases {
+		if got := IsDoneDeclaration(c.kind, c.status); got != c.want {
+			t.Errorf("IsDoneDeclaration(%q, %q) = %v, want %v", c.kind, c.status, got, c.want)
+		}
+	}
+}

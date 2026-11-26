@@ -352,3 +352,17 @@ func clipLine(text string, max int) string {
 	}
 	return line
 }
+
+// IsDoneDeclaration says whether a message to the architect is a delegate's
+// done declaration (Glossary "Done declaration"): a review request, or a status
+// report whose status is done. A gated session's declaration runs the
+// declaration checks before the message goes.
+func IsDoneDeclaration(kind TaskMessageKind, status ReportStatus) bool {
+	switch kind {
+	case MessageReviewRequest:
+		return true
+	case MessageStatusReport:
+		return status == ReportDone
+	}
+	return false
+}

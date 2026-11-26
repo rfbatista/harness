@@ -92,6 +92,10 @@ type ArtifactTooling struct {
 // makes the architect the owner of the task status (nil: no channel, every
 // session a peer); notes lets it read the person's inbox and post to it.
 func SessionTaskTools(planningSvc ports.Planning, sessions ports.SessionRepository, agents ports.AgentLister, arch ports.ArchitectureMap, start PeerStarter, artifacts ArtifactTooling, channel ports.TaskChannel, notes NotificationTooling, opts ...Option) []domain.Tool {
+	var o options
+	for _, opt := range opts {
+		opt(&o)
+	}
 	tools := []domain.Tool{
 		{
 			Name: "start_task_session",
@@ -221,14 +225,10 @@ func SessionTaskTools(planningSvc ports.Planning, sessions ports.SessionReposito
 			},
 		},
 	}
-	tools = append(tools, sessionChannelTools(planningSvc, sessions, channel)...)
+	tools = append(tools, sessionChannelTools(planningSvc, sessions, channel, o.declarations)...)
 	tools = append(tools, sessionMergeTools(planningSvc, sessions, channel, start.Merger)...)
 	tools = append(tools, sessionResumeTools(planningSvc, sessions, channel, start.Sessions)...)
 	tools = append(tools, sessionStopTools(planningSvc, sessions, channel, start.Stopper)...)
-	var o options
-	for _, opt := range opts {
-		opt(&o)
-	}
 	tools = append(tools, sessionProjectTools(sessions, agents, arch, start.Repositories, o.placements, o.modeAgents)...)
 	tools = append(tools, sessionTasksTools(planningSvc, sessions)...)
 	tools = append(tools, sessionNotificationTools(sessions, notes)...)
