@@ -123,9 +123,17 @@ export class ChipPresenter extends Presenter<ChipViewModel> {
   #ended: { kill: MemoryKill; until: number }[] = [];
   #signal: string | null = null;
   #loading = 0;
+  /** Kills that came while no read had judged them: they wait for a read that works. */
   #buffer: MemoryKill[] = [];
   #reading: Promise<void> = Promise.resolve();
   #stop: (() => void) | null = null;
+  #disposed = false;
+  /** The reads in flight, to abort on dispose. */
+  readonly #reads = new Set<AbortController>();
+  #retry: (() => void) | null = null;
+  #retries = 0;
+  /** The "ended" timers, to cancel on dispose. */
+  readonly #timers = new Set<() => void>();
 
   constructor(deps: ChipDeps) {
     super({ view: null, popover: null, toasts: [], more: 0, signal: null });
@@ -170,17 +178,34 @@ export class ChipPresenter extends Presenter<ChipViewModel> {
     else await this.open();
   }
 
-  /** Stops following the stream. */
+  /** Stops everything it started: the stream, the timers, the read in flight and what waits for a read. */
   dispose(): void {
+    this.#disposed = true;
     this.#stop?.();
     this.#stop = null;
+    this.#retry?.();
+    this.#retry = null;
+    for (const abort of this.#reads) abort.abort();
+    for (const cancel of this.#timers) cancel();
+    this.#timers.clear();
+    for (const toast of this.#toasts) toast.cancel?.();
+    this.#buffer = [];
   }
 
   async #read(): Promise<void> {
+    if (this.#disposed) return;
     this.#loading++;
+    const abort = new AbortController();
+    this.#reads.add(abort);
+    let worked = false;
     try {
-      const read = await this.#deps.source.read(this.#deps.sessionId);
-      if (read === null) return;
+      const read = await this.#deps.source.read(this.#deps.sessionId, abort.signal);
+      if (this.#disposed) return;
+      if (read === null) {
+        // Not live: there is nothing to judge a kill against, and nothing to show.
+        this.#buffer = [];
+        return;
+      }
       this.#source = read.budgetSource;
       this.#prevention = read.prevention;
       for (const kill of read.kills) this.#see(kill);
@@ -189,12 +214,30 @@ export class ChipPresenter extends Presenter<ChipViewModel> {
       // A sample that came by the stream while the read was out is newer than what the read saw.
       if (have && (got === null || got < have)) this.#render();
       else this.#take(read.sample);
+      worked = true;
+      this.#retry?.();
+      this.#retry = null;
+      this.#retries = 0;
     } catch {
-      // The last value stays; the next sample or reconnect brings the chip up to date.
+      // The last value stays and what is buffered keeps waiting: the read is tried again, a reconnect starts one too.
+      if (!this.#disposed) this.#retryLater();
     } finally {
-      // Kills that came while the read was out are shown now, unless the read said they were already known.
-      if (--this.#loading === 0) for (const kill of this.#buffer.splice(0)) this.#liveKill(kill);
+      this.#reads.delete(abort);
+      this.#loading--;
+      // Kills that came while the read was out are judged now: the ones the read listed are known, the others are new.
+      if (worked && this.#loading === 0 && this.#retry === null) for (const kill of this.#buffer.splice(0)) this.#liveKill(kill);
     }
+  }
+
+  /** A failed read is tried again after 1 s, 2 s, 4 s and so on up to 30 s. */
+  #retryLater(): void {
+    if (this.#retry || !this.#deps.scheduler) return;
+    const wait = Math.min(1000 * 2 ** this.#retries, 30_000);
+    this.#retries++;
+    this.#retry = this.#deps.scheduler.after(wait, () => {
+      this.#retry = null;
+      this.#reading = this.#read();
+    });
   }
 
   /** A kill the read knows: no toast, no ring. It still reads "ended" for what is left of its minute. */
@@ -210,7 +253,11 @@ export class ChipPresenter extends Presenter<ChipViewModel> {
     const left = until - this.#deps.clock.now();
     if (left <= 0) return;
     this.#ended.push({ kill, until });
-    this.#deps.scheduler?.after(left, () => this.#render());
+    const cancel = this.#deps.scheduler?.after(left, () => {
+      this.#timers.delete(cancel!);
+      this.#render();
+    });
+    if (cancel) this.#timers.add(cancel);
   }
 
   #take(sample: MemorySample): void {
@@ -222,7 +269,7 @@ export class ChipPresenter extends Presenter<ChipViewModel> {
 
   #kill(kill: MemoryKill): void {
     if (kill.sessionId !== this.#deps.sessionId) return;
-    if (this.#loading > 0) this.#buffer.push(kill);
+    if (this.#loading > 0 || this.#retry) this.#buffer.push(kill);
     else this.#liveKill(kill);
   }
 
@@ -296,6 +343,8 @@ export class ChipPresenter extends Presenter<ChipViewModel> {
     const now = this.#deps.clock.now();
     this.#ended = this.#ended.filter((e) => e.until > now);
     const ended = this.#ended.reduce<MemoryKill | null>((latest, e) => (latest === null || e.kill.killedAt > latest.killedAt ? e.kill : latest), null);
+    // The ring belongs to the ended window: it goes with it.
+    if (ended === null) this.#signal = null;
     const view = memoryView(this.#sample, this.#tracker.level, ended);
     if (view === null) this.#open = false;
     const popover = view && this.#open ? this.#popover(view) : null;

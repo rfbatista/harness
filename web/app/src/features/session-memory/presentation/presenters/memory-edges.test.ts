@@ -234,19 +234,21 @@ describe("the toast seen-set (story 7)", () => {
     assert.deepEqual(w.presenter.viewModel.toasts, []);
   });
 
-  test("a replay arriving during a read that then fails still toasts once, and a second copy does not", async () => {
+  test("a replay arriving during a read that then fails waits for a read that works: it never toasts a kill the read lists", async () => {
+    const replayed = kill({ killedAt: new Date(T0 - 5000) });
     const w = world(new Error("500"));
     let release!: () => void;
     w.source.gate = new Promise((r) => (release = r));
     const starting = w.presenter.start();
-    const replayed = kill({ killedAt: new Date(T0 - 5000) });
     w.stream.kill(replayed);
-    assert.deepEqual(w.presenter.viewModel.toasts, [], "held while the read is out");
     release();
     await starting;
-    assert.equal(w.presenter.viewModel.toasts.length, 1, "a failed read seeds nothing, so the kill is not lost");
-    w.stream.kill(replayed);
-    assert.equal(w.presenter.viewModel.toasts.length, 1, "and is never shown twice");
+    assert.deepEqual(w.presenter.viewModel.toasts, [], "a failed read seeds nothing, so nothing is judged yet");
+    w.source.gate = null;
+    w.source.answer = read([replayed]);
+    later(w, 1000);
+    await w.presenter.settled();
+    assert.deepEqual(w.presenter.viewModel.toasts, [], "the read that worked knows it");
   });
 
   test("a failed re-read keeps what the first read seeded: its replay does not toast", async () => {

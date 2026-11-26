@@ -7,6 +7,8 @@ export interface FakeSource extends MemorySource {
   reads: number;
   /** While set, a read waits for it before answering. */
   gate: Promise<void> | null;
+  /** The abort signal of each read. */
+  signals: (AbortSignal | undefined)[];
   /** What the next read answers: a read, null for 404, or an error to reject with. */
   answer: MemoryRead | null | Error;
 }
@@ -15,9 +17,11 @@ export function fakeSource(answer: MemoryRead | null | Error = null): FakeSource
   const source: FakeSource = {
     reads: 0,
     gate: null,
+    signals: [],
     answer,
-    async read() {
+    async read(_sessionId, signal) {
       source.reads++;
+      source.signals.push(signal);
       if (source.gate) await source.gate;
       if (source.answer instanceof Error) throw source.answer;
       return source.answer;
