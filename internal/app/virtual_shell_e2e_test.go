@@ -25,10 +25,12 @@ import (
 	"operators-mcp/internal/adapter/in/httpapi"
 	"operators-mcp/internal/adapter/in/mcpsession"
 	"operators-mcp/internal/app/catalog"
+	"operators-mcp/internal/application/agentsystem"
 	"operators-mcp/internal/application/archrules"
 	"operators-mcp/internal/application/artifacts"
 	"operators-mcp/internal/application/branchgate"
 	"operators-mcp/internal/application/branchwatch"
+	"operators-mcp/internal/application/contextmap"
 	"operators-mcp/internal/application/gitcredentials/gitcredentialstest"
 	"operators-mcp/internal/application/notifications"
 	"operators-mcp/internal/application/orchestration"
@@ -75,7 +77,9 @@ type shellE2E struct {
 	wgit     ports.WorktreeGit
 	notes    *notifications.Service
 	// repoAgents is which agents each repository assigns, and its prompts.
-	repoAgents *repoagents.Service
+	repoAgents  *repoagents.Service
+	contextMap  *contextmap.Service
+	agentSystem *agentsystem.Service
 	// db is the server's database, for tests that make a store fail.
 	db *gorm.DB
 }
@@ -95,7 +99,7 @@ func (e *shellE2E) boot() {
 			}
 			return workspaces.NewOriginFetcher(git, gitcredentialstest.New())
 		}),
-		fx.Populate(&e.orch, &e.plan, &e.channel, &e.art, &e.cat, &e.sessions, &e.shells, &e.rules, &e.gate, &e.watch, &e.pushes, &e.wgit, &e.notes, &e.repoAgents, &e.db),
+		fx.Populate(&e.orch, &e.plan, &e.channel, &e.art, &e.cat, &e.sessions, &e.shells, &e.rules, &e.gate, &e.watch, &e.pushes, &e.wgit, &e.notes, &e.repoAgents, &e.db, &e.contextMap, &e.agentSystem),
 		fx.NopLogger,
 	)
 	if err := e.app.Start(e.ctx); err != nil {
@@ -110,7 +114,7 @@ func (e *shellE2E) serve() {
 	mux := http.NewServeMux()
 	mux.Handle("/api/", httpapi.NewRouter(httpapi.NewHandler(httpapi.Services{
 		Sessions: e.orch, Planning: e.plan, TaskResources: e.plan, TaskComments: e.plan, Artifacts: e.art, Shells: e.shells,
-		RepositoryArchitectures: e.cat.RepositoryArchitectures, TaskMemories: e.cat.TaskMemories, InstructionProposals: e.cat.InstructionProposals, InstructionProposalDecisions: e.cat.InstructionProposals, ArchitectureRules: e.rules, BranchGate: e.gate, SessionBranches: e.watch, WorktreeGit: e.wgit,
+		RepositoryArchitectures: e.cat.RepositoryArchitectures, TaskMemories: e.cat.TaskMemories, ContextMaps: e.contextMap, InstructionProposals: e.cat.InstructionProposals, InstructionProposalDecisions: e.cat.InstructionProposals, ArchitectureRules: e.rules, BranchGate: e.gate, SessionBranches: e.watch, WorktreeGit: e.wgit,
 		Projects: e.cat.Projects, DesignSystems: e.cat.DesignSystems, RepositoryAgents: e.repoAgents,
 		Notifications: e.notes, InterruptedResumer: e.notes, Settings: e.cat.Settings,
 	})))

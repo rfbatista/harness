@@ -139,6 +139,9 @@ type ProjectChange struct {
 	// TaskMemoryChanged says a file of a task's memory in a repository was
 	// written, by the person or read back from a session.
 	TaskMemoryChanged *TaskMemoryChange `json:"task_memory_changed,omitempty"`
+	// ContextMapRegenerated says a repository's context map was regenerated
+	// for a new default-branch commit.
+	ContextMapRegenerated *ContextMapChange `json:"context_map_regenerated,omitempty"`
 	// DesignSystemProposal says a design session's proposal reached a state:
 	// the banner, the navigation badge and the Proposals tab follow it.
 	DesignSystemProposal *DesignSystemProposalChange `json:"design_system_proposal,omitempty"`
@@ -339,6 +342,8 @@ func (c ProjectChange) ProjectID() string {
 		return c.InstructionProposalChanged.ProjectID
 	case c.TaskMemoryChanged != nil:
 		return c.TaskMemoryChanged.ProjectID
+	case c.ContextMapRegenerated != nil:
+		return c.ContextMapRegenerated.ProjectID
 	case c.BranchRequest != nil:
 		return c.BranchRequest.ProjectID
 	case c.SessionBranches != nil:

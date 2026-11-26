@@ -25,6 +25,7 @@ import (
 	"operators-mcp/internal/app/catalog"
 	"operators-mcp/internal/application/agentboard"
 	"operators-mcp/internal/application/agentsystem"
+	"operators-mcp/internal/application/contextmap"
 	"operators-mcp/internal/application/apps"
 	"operators-mcp/internal/application/archassistant"
 	"operators-mcp/internal/application/archrules"
@@ -67,7 +68,7 @@ var ServerModule = fx.Module("server",
 
 // registerHTTPServer mounts the UI and JSON API on a mux and serves it,
 // shutting down gracefully when fx stops.
-func registerHTTPServer(lc fx.Lifecycle, cfg Config, cat catalog.Catalog, appRunner *apps.Service, svcs *services.Service, svcRequests *servicerequests.Service, ts *tooling.Service, exec *execution.Service, orch *orchestration.Service, plan *planning.Service, ws *workspaces.Service, broker *approval.Broker, sessions ports.SessionRepository, art *artifacts.Service, channel *taskchannel.Service, prs *workspaces.PullRequests, merges *workspaces.Merges, archivedWorktrees *workspaces.ArchivedWorktrees, branchNames *workspaces.BranchNames, code ports.CodeBrowser, worktreeGit ports.WorktreeGit, inbox optionalNotifications, creds optionalGitCredentials, shells *vfs.Service, fsys *vfs.FileSystem, usageSvc *usage.Service, indexes optionalRepositoryIndexes, sandboxStore *sandboxsettings.Store, agentSystem *agentsystem.Service, managedClaude *managedclaude.Service, claudeBin ports.ManagedClaudeBin, agentCred optionalAgentCredential, helper *writinghelper.Service, assistant *archassistant.Service, rules *archrules.Service, gate *branchgate.Service, watch *branchwatch.Service, agentCat *agentcatalog.Catalog, persons *vshell.PersonTerminals, repoAgents *repoagents.Service, board optionalAgentBoard, asked optionalInterviews, owner optionalProductOwner) error {
+func registerHTTPServer(lc fx.Lifecycle, cfg Config, cat catalog.Catalog, appRunner *apps.Service, svcs *services.Service, svcRequests *servicerequests.Service, ts *tooling.Service, exec *execution.Service, orch *orchestration.Service, plan *planning.Service, ws *workspaces.Service, broker *approval.Broker, sessions ports.SessionRepository, art *artifacts.Service, channel *taskchannel.Service, prs *workspaces.PullRequests, merges *workspaces.Merges, archivedWorktrees *workspaces.ArchivedWorktrees, branchNames *workspaces.BranchNames, code ports.CodeBrowser, worktreeGit ports.WorktreeGit, inbox optionalNotifications, creds optionalGitCredentials, shells *vfs.Service, fsys *vfs.FileSystem, usageSvc *usage.Service, indexes optionalRepositoryIndexes, sandboxStore *sandboxsettings.Store, agentSystem *agentsystem.Service, contextMap *contextmap.Service, managedClaude *managedclaude.Service, claudeBin ports.ManagedClaudeBin, agentCred optionalAgentCredential, helper *writinghelper.Service, assistant *archassistant.Service, rules *archrules.Service, gate *branchgate.Service, watch *branchwatch.Service, agentCat *agentcatalog.Catalog, persons *vshell.PersonTerminals, repoAgents *repoagents.Service, board optionalAgentBoard, asked optionalInterviews, owner optionalProductOwner) error {
 	uiHandler, err := ui.SPAHandler(ui.Dist)
 	if err != nil {
 		return err
@@ -215,6 +216,7 @@ func registerHTTPServer(lc fx.Lifecycle, cfg Config, cat catalog.Catalog, appRun
 		// What agents proposed for a repository's instruction files.
 		InstructionProposals:         cat.InstructionProposals,
 		TaskMemories:                 cat.TaskMemories,
+		ContextMaps:                  contextMap,
 		InstructionProposalDecisions: cat.InstructionProposals,
 		// One structured record per project: tokens, principles, components.
 		DesignSystems: cat.DesignSystems,

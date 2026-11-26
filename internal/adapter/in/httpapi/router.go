@@ -435,6 +435,9 @@ func NewRouter(h *Handler, opts ...Option) *echo.Echo {
 	// task memory: plan.md and progress.md per task and repository
 	g.POST("/get_task_memory", h.handleGetTaskMemory)
 	g.POST("/save_task_memory", h.handleSaveTaskMemory)
+
+	// context map: generated per repository from its default branch
+	g.POST("/get_context_map", h.handleGetContextMap)
 	g.POST("/delete_repository_architecture", h.handleDeleteRepositoryArchitecture)
 	g.POST("/preview_layers", h.handlePreviewLayers)
 	g.POST("/export_repository_architecture", h.handleExportRepositoryArchitecture)
