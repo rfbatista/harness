@@ -144,3 +144,29 @@ describe("dispose stops everything the presenter started (F4)", () => {
     assert.equal(w.scheduler.pending(), 0);
   });
 });
+
+describe("the hold and a kill (the chip behaves as the board does)", () => {
+  const overRead = (): MemoryRead => ({ ...read(), sample: sample(4.4) });
+
+  test("a noisy dip from over to 94 % inside the hold keeps over", async () => {
+    const w = world(overRead());
+    await w.presenter.start();
+    assert.equal(w.presenter.viewModel.view?.state, "over");
+    w.scheduler.advance(1000);
+    w.stream.sample(sample(3.76));
+    assert.equal(w.presenter.viewModel.view?.state, "over");
+  });
+
+  test("over, a kill, then 4 MB: once the ended minute is over the chip reads normal, never over", async () => {
+    const w = world(overRead());
+    await w.presenter.start();
+    w.scheduler.advance(1000);
+    w.stream.kill(kill({ killedAt: new Date(T0 + 1000) }));
+    w.stream.sample(sample(0.004));
+    assert.equal(w.presenter.viewModel.view?.state, "ended");
+    assert.equal(w.presenter.viewModel.view?.num, "4 MB");
+    w.scheduler.advance(60_000);
+    assert.equal(w.presenter.viewModel.view?.state, "normal");
+    assert.equal(w.presenter.viewModel.view?.word, "");
+  });
+});

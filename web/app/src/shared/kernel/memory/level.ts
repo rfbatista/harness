@@ -25,6 +25,9 @@ function wanted(current: Level, share: number): Level {
   return "normal";
 }
 
+/** A kill is a real change of state, not noise: the hold ends, so the next sample's level is taken as it is. */
+export const releaseHold = (tracker: Tracker): Tracker => ({ level: tracker.level, since: Number.NEGATIVE_INFINITY });
+
 /** The tracker after a sample of `share` (rss over budget) at `now`. */
 export function settle(tracker: Tracker, share: number, now: number): Tracker {
   if (now - tracker.since < HOLD_MS) return tracker;
