@@ -157,7 +157,7 @@ type ArchitectureGit interface {
 	// uncommitted.
 	Checkout(ctx context.Context, dir string) (CheckoutState, error)
 	// LastCommit is the newest commit of branch that touched path; "" when
-	// none did.
+	// none did. An empty path asks for the branch's tip.
 	LastCommit(ctx context.Context, dir, branch, path string) (string, error)
 	// CommitFiles writes files into the checkout (which is on branch and
 	// clean) and commits only them with message, authored by the harness and

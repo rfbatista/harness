@@ -93,3 +93,19 @@ func TestGenerateIsDeterministic(t *testing.T) {
 		t.Errorf("two runs differ")
 	}
 }
+
+func TestGenerateCutsByPriorityAndSaysTruncated(t *testing.T) {
+	in := Input{Repository: "mono", Branch: "main", Commit: "abc", Gates: []Gate{{Kind: "test", Command: "make test"}}, Instructions: []string{"AGENTS.md"}}
+	for i := 0; i < 400; i++ {
+		in.Files = append(in.Files, fmt.Sprintf("services/s%03d/cmd/main.go", i))
+	}
+	got := Generate(in)
+	if n := len(strings.Split(strings.TrimRight(got, "\n"), "\n")); n > MaxLines {
+		t.Fatalf("%d lines, cap %d", n, MaxLines)
+	}
+	for _, want := range []string{"- test: `make test`", "## Entry points", "(truncated)", "… truncated"} {
+		if !strings.Contains(got, want) {
+			t.Errorf("the cut map lacks %q", want)
+		}
+	}
+}

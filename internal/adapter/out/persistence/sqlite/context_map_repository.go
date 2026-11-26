@@ -17,6 +17,7 @@ var _ ports.ContextMapStore = (*ContextMapRepository)(nil)
 type ContextMapModel struct {
 	RepositoryID string `gorm:"primaryKey;column:repository_id"`
 	Commit       string `gorm:"column:commit_sha"`
+	Inputs       string
 	Content      string
 	GeneratedAt  time.Time
 }
@@ -40,11 +41,11 @@ func (r *ContextMapRepository) GetContextMap(ctx context.Context, repositoryID s
 	if err != nil {
 		return nil, err
 	}
-	return &ports.StoredContextMap{RepositoryID: m.RepositoryID, Commit: m.Commit, Content: m.Content, GeneratedAt: m.GeneratedAt}, nil
+	return &ports.StoredContextMap{RepositoryID: m.RepositoryID, Commit: m.Commit, Inputs: m.Inputs, Content: m.Content, GeneratedAt: m.GeneratedAt}, nil
 }
 
 // PutContextMap implements ports.ContextMapStore.
 func (r *ContextMapRepository) PutContextMap(ctx context.Context, m ports.StoredContextMap) error {
-	row := ContextMapModel{RepositoryID: m.RepositoryID, Commit: m.Commit, Content: m.Content, GeneratedAt: m.GeneratedAt}
+	row := ContextMapModel{RepositoryID: m.RepositoryID, Commit: m.Commit, Inputs: m.Inputs, Content: m.Content, GeneratedAt: m.GeneratedAt}
 	return r.db.WithContext(ctx).Clauses(clause.OnConflict{UpdateAll: true}).Create(&row).Error
 }

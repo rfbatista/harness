@@ -2,6 +2,9 @@ package contextmap
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
+	"fmt"
 	"strings"
 	"sync"
 	"time"
@@ -73,18 +76,20 @@ func (s *Service) GetContextMap(ctx context.Context, repositoryID string) (*port
 	if err != nil || branch == "" {
 		return view, nil
 	}
-	tip, err := s.d.Git.LastCommit(ctx, repo.RootDir, branch, ".")
+	tip, err := s.d.Git.LastCommit(ctx, repo.RootDir, branch, "")
 	if err != nil || tip == "" {
 		return view, nil
 	}
+	in := s.inputs(ctx, repo, eff)
+	inputs := fingerprint(in)
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	stored, err := s.d.Store.GetContextMap(ctx, repo.ID)
 	if err != nil {
 		return nil, err
 	}
-	if stored == nil || stored.Commit != tip {
-		m, err := s.regenerate(ctx, repo, eff, branch, tip)
+	if stored == nil || stored.Commit != tip || stored.Inputs != inputs {
+		m, err := s.regenerate(ctx, repo, in, inputs, branch, tip)
 		if err != nil {
 			return nil, err
 		}
@@ -95,18 +100,10 @@ func (s *Service) GetContextMap(ctx context.Context, repositoryID string) (*port
 	return view, nil
 }
 
-func (s *Service) regenerate(ctx context.Context, repo *domain.Repository, eff domain.EffectiveAgentSystem, branch, tip string) (*ports.StoredContextMap, error) {
-	files, err := s.d.Git.Files(ctx, repo.RootDir, branch)
-	if err != nil {
-		return nil, err
-	}
-	in := Input{
-		Repository: repo.Name, Branch: branch, Commit: tip, Files: files,
-		Read: func(p string) ([]byte, bool) {
-			b, ok, err := s.d.Git.ReadFile(ctx, repo.RootDir, branch, p)
-			return b, ok && err == nil
-		},
-	}
+// inputs is what a map is generated from besides the branch's files: the
+// effective gate commands, the instruction files and the architecture layers.
+func (s *Service) inputs(ctx context.Context, repo *domain.Repository, eff domain.EffectiveAgentSystem) Input {
+	var in Input
 	for _, g := range eff.Guard.Gates {
 		if cmd := strings.TrimSpace(g.Command.Value); cmd != "" {
 			in.Gates = append(in.Gates, Gate{Kind: string(g.Kind), Command: cmd})
@@ -128,7 +125,26 @@ func (s *Service) regenerate(ctx context.Context, repo *domain.Repository, eff d
 			}
 		}
 	}
-	m := ports.StoredContextMap{RepositoryID: repo.ID, Commit: tip, Content: Generate(in), GeneratedAt: s.d.Now()}
+	return in
+}
+
+// fingerprint identifies the parts of in that do not come from the branch.
+func fingerprint(in Input) string {
+	sum := sha256.Sum256([]byte(fmt.Sprintf("%q\n%q\n%q", in.Gates, in.Instructions, in.Layers)))
+	return hex.EncodeToString(sum[:8])
+}
+
+func (s *Service) regenerate(ctx context.Context, repo *domain.Repository, in Input, inputs, branch, tip string) (*ports.StoredContextMap, error) {
+	files, err := s.d.Git.Files(ctx, repo.RootDir, branch)
+	if err != nil {
+		return nil, err
+	}
+	in.Repository, in.Branch, in.Commit, in.Files = repo.Name, branch, tip, files
+	in.Read = func(p string) ([]byte, bool) {
+		b, ok, err := s.d.Git.ReadFile(ctx, repo.RootDir, branch, p)
+		return b, ok && err == nil
+	}
+	m := ports.StoredContextMap{RepositoryID: repo.ID, Commit: tip, Inputs: inputs, Content: Generate(in), GeneratedAt: s.d.Now()}
 	if err := s.d.Store.PutContextMap(ctx, m); err != nil {
 		return nil, err
 	}

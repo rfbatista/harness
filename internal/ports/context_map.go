@@ -9,7 +9,11 @@ import (
 type StoredContextMap struct {
 	RepositoryID string
 	// Commit is the default-branch commit the map was generated from.
-	Commit      string
+	Commit string
+	// Inputs identifies what else the map was generated from (the gate
+	// commands, the instruction files and the layers): a change to any of
+	// them makes the map stale though the commit did not move.
+	Inputs      string
 	Content     string
 	GeneratedAt time.Time
 }

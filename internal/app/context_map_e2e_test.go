@@ -170,3 +170,21 @@ func TestContextMap_IsNotInTheStartingContextWhenTheConfigurationTurnsItOff(t *t
 		t.Fatalf("a disabled map was delivered:\n%s", got)
 	}
 }
+
+// A change to a gate command moves what the map says, so it regenerates even
+// though the default branch did not move.
+func TestContextMap_IsRegeneratedWhenAGateCommandChanges(t *testing.T) {
+	e := newShellE2E(t)
+	tip := e.commitFile("go.mod", "module widgets\n\ngo 1.25\n")
+	_, before, _ := e.contextMapOf(e.repo)
+	if strings.Contains(before.Content, "make verify-everything") {
+		t.Fatal("the gate is there before it was set")
+	}
+	if _, err := e.agentSystem.SaveRepository(e.ctx, e.project, e.repo, map[string]json.RawMessage{"guard.gates.test.command": json.RawMessage(`"make verify-everything"`)}); err != nil {
+		t.Fatal(err)
+	}
+	_, after, _ := e.contextMapOf(e.repo)
+	if after.Commit != tip || !strings.Contains(after.Content, "make verify-everything") {
+		t.Errorf("after the gate change (commit %s): %s", after.Commit, after.Content)
+	}
+}
