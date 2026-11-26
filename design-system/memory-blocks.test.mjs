@@ -9,6 +9,7 @@ const read = (p) => readFileSync(fileURLToPath(new URL(p, import.meta.url)), "ut
 const memory = read("./css/blocks/memory.css");
 const index = read("./css/index.css");
 const toast = read("./css/blocks/toast.css");
+const board = read("./css/blocks/whiteboard.css");
 const head = read("./css/blocks/session-head.css");
 
 test("the block is imported and lives in the blocks layer", () => {
@@ -48,4 +49,18 @@ test("the toast block keeps its coloured border and its animation; the memory to
 test("the ring turns once and is a static outline under reduced motion", () => {
   assert.match(memory, /\[data-signal\] > \.track \{ animation: memory-signal var\(--duration-signal\) var\(--ease-out\) 1; \}/);
   assert.match(memory, /animation: none; outline: 2px solid/);
+});
+
+test("a card's memory line has one form (a fixed 3rem track), takes the last grid row, and the compact card keeps only a 2px track", () => {
+  assert.match(board, /\.wb-node > \.mem \{[^}]*grid-area: mem/s);
+  assert.match(board, /& > \.track \{ flex: none; inline-size: 3rem; block-size: 2px;/);
+  assert.match(board, /\.wb-world\[data-compact\] \.wb-node > \.mem \{ position: absolute; inset: auto 0 0 0;/);
+  assert.match(board, /\.wb-world\[data-compact\] \.wb-node \.who \.badge\[data-mem\] \{ display: inline-flex; \}/);
+  assert.match(board, /\.wb-node \.who \.badge\[data-mem\] \{ display: none; \}/, "the badge is for the compact card only");
+});
+
+test("an ended process rings the card once in danger, holds still under reduced motion, and never takes the attention wash", () => {
+  assert.match(board, /\.wb-node\[data-ended-process\] \{ animation: wb-ring-danger 2\.4s var\(--ease-out\) 1; \}/);
+  assert.match(board, /\.wb-node\[data-ended-process\] \{ animation: none; outline: 2px solid/);
+  assert.doesNotMatch(board, /data-ended-process\][^{]*\{[^}]*attention-wash/);
 });

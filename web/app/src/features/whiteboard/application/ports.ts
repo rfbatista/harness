@@ -1,6 +1,7 @@
 // What the whiteboard needs from outside: the task's sessions, and the person's host page.
 
 import type { SessionBranches } from "../domain/branches";
+import type { BoardMemory, BoardMemoryKill } from "../domain/memory";
 import type { ReviewRequest, TaskMessage } from "../domain/message";
 import type { BoardSession } from "../domain/session";
 
@@ -34,7 +35,9 @@ export type BoardEvent =
   | { kind: "session-deleted"; id: string }
   | { kind: "message"; message: TaskMessage }
   | { kind: "review"; review: ReviewRequest }
-  | { kind: "branches"; branches: SessionBranches };
+  | { kind: "branches"; branches: SessionBranches }
+  | { kind: "memory"; sample: BoardMemory }
+  | { kind: "memory-killed"; kill: BoardMemoryKill };
 
 /** "paused": dropped and retrying; "resynced": back after a drop, so changes may have been missed. */
 export type LiveStatus = "connecting" | "live" | "paused" | "resynced";

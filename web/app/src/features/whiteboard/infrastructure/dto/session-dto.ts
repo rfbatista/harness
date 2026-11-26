@@ -2,7 +2,8 @@
 // sessions). Only the fields a card draws are read; unknown ones are ignored.
 
 import { DtoError } from "../../../../shared/infrastructure/dto/dto-error";
-import { object, oneOf, optionalString, optionalTime, string, time, type Wire } from "../../../../shared/infrastructure/dto/fields";
+import { MemorySampleDto } from "../../../../shared/infrastructure/dto/memory-dto";
+import { lenient, object, oneOf, optionalString, optionalTime, string, time, type Wire } from "../../../../shared/infrastructure/dto/fields";
 import { ROLES, STATUSES, type Role, type Status } from "../../domain/session";
 
 const DTO = "BoardSessionDto";
@@ -32,6 +33,8 @@ export class BoardSessionDto {
     readonly interrupted_at: Date | null,
     readonly created_at: Date,
     readonly updated_at: Date,
+    /** The last memory sample; a payload that does not read leaves it out. */
+    readonly memory: MemorySampleDto | null = null,
   ) {}
 
   static fromJSON(raw: unknown, at = ""): BoardSessionDto {
@@ -55,6 +58,7 @@ export class BoardSessionDto {
       optionalTime(DTO, from, "interrupted_at", at),
       time(DTO, from, "created_at", at),
       time(DTO, from, "updated_at", at),
+      from.memory === undefined || from.memory === null ? null : (lenient(() => MemorySampleDto.fromJSON(from.memory, at === "" ? "memory" : `${at}.memory`)) ?? null),
     );
   }
 

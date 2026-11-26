@@ -1,5 +1,7 @@
 // A session of the task as the whiteboard draws it: only what a card needs.
 
+import type { BoardMemory } from "./memory";
+
 export const STATUSES = ["starting", "running", "thinking", "idle", "waiting_approval", "paused", "done", "failed", "stopped"] as const;
 export type Status = (typeof STATUSES)[number];
 
@@ -21,6 +23,8 @@ export interface BoardSession {
   pendingApprovals: number;
   openInterviewCount: number;
   interruptedAt: Date | null;
+  /** The last memory sample, null before the first or when the server sent none. */
+  memory: BoardMemory | null;
   createdAt: Date;
   updatedAt: Date;
 }

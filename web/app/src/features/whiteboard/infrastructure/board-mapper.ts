@@ -25,6 +25,7 @@ export function toSession(dto: BoardSessionDto): BoardSession {
     pendingApprovals: dto.pending_approvals,
     openInterviewCount: dto.open_interview_count,
     interruptedAt: dto.interrupted_at,
+    memory: dto.memory?.toDomain() ?? null,
     createdAt: dto.created_at,
     updatedAt: dto.updated_at,
   };
@@ -56,6 +57,8 @@ export function toBranches(dto: SessionBranchesDto): SessionBranches {
 export function toEvent(dto: BoardEventDto): BoardEvent | null {
   if (dto.task_message) return { kind: "message", message: toMessage(dto.task_message) };
   if (dto.session_branches) return { kind: "branches", branches: toBranches(dto.session_branches) };
+  if (dto.memory) return { kind: "memory", sample: dto.memory.toDomain() };
+  if (dto.memory_killed) return { kind: "memory-killed", kill: dto.memory_killed.toDomain() };
   if (dto.review_request) return { kind: "review", review: toReview(dto.review_request) };
   if (dto.session) return { kind: "session", session: toSession(dto.session) };
   if (dto.deleted && dto.deleted_id) return { kind: "session-deleted", id: dto.deleted_id };
