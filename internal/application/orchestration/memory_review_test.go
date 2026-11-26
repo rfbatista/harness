@@ -282,3 +282,82 @@ func TestTheRunMarkOfAnEndedSessionIsPruned(t *testing.T) {
 		return !svc.cleaned[sess.ID]
 	})
 }
+
+// The agent was told, at SIGTERM, that a process "was ended". When the vigia
+// gives up on it, one short follow-up says it could not be, the same way the
+// first notice was sent, and once.
+
+func failedKill(sessionID string) domain.MemoryKill {
+	k := killOf(sessionID)
+	k.Signal = "SIGKILL"
+	return k
+}
+
+// The ending is still held for a call that is open: that call's answer says the
+// process could not be ended, and never also that it was.
+func TestAGiveUpReplacesTheHeldNoticeInTheOpenCallsAnswer(t *testing.T) {
+	svc, _ := newInteractiveService(t)
+	sess, _ := startInteractive(t, svc, InteractiveRequest{Prompt: "go"})
+	svc.BashStarted(sess.ID, "A")
+	k := failedKill(sess.ID)
+	svc.Ending(k)
+	svc.KillFailed(k)
+
+	got := svc.BashEnded(sess.ID, "A")
+	for _, want := range []string{"node jest", "could not end", "over", "Stop or shrink"} {
+		if !strings.Contains(got, want) {
+			t.Errorf("the answer lacks %q:\n%s", want, got)
+		}
+	}
+	if strings.Contains(got, "harness ended") {
+		t.Errorf("the answer still says the process was ended:\n%s", got)
+	}
+	if again := svc.BashEnded(sess.ID, "A"); again != "" {
+		t.Errorf("told twice: %q", again)
+	}
+	if q := svc.courier.take(sess.ID); len(q) != 0 {
+		t.Errorf("the courier holds %v, want nothing", q)
+	}
+}
+
+// The first notice already went in one call's answer; a second call that was
+// open at SIGTERM and still is gets the follow-up in its own.
+func TestAGiveUpIsToldInAnotherCallThatWasOpenAtSIGTERM(t *testing.T) {
+	svc, _ := newInteractiveService(t)
+	sess, _ := startInteractive(t, svc, InteractiveRequest{Prompt: "go"})
+	svc.BashStarted(sess.ID, "A")
+	svc.BashStarted(sess.ID, "B")
+	k := failedKill(sess.ID)
+	svc.Ending(k)
+	if first := svc.BashEnded(sess.ID, "A"); !strings.Contains(first, "harness ended") {
+		t.Fatalf("the first notice = %q", first)
+	}
+	svc.KillFailed(k)
+	got := svc.BashEnded(sess.ID, "B")
+	if !strings.Contains(got, "could not end") {
+		t.Errorf("B's answer = %q, want the follow-up", got)
+	}
+	if q := svc.courier.take(sess.ID); len(q) != 0 {
+		t.Errorf("the courier holds %v, want nothing", q)
+	}
+}
+
+// With no call open, the follow-up goes through the courier, once.
+func TestAGiveUpWithNoOpenCallGoesThroughTheCourierOnce(t *testing.T) {
+	svc, _ := newInteractiveService(t)
+	sess, _ := startInteractive(t, svc, InteractiveRequest{Prompt: "go"})
+	k := failedKill(sess.ID)
+	svc.Ending(k) // no call open: the first notice went through the courier
+	svc.KillFailed(k)
+	svc.KillFailed(k)
+
+	var failures int
+	for _, p := range svc.courier.take(sess.ID) {
+		if strings.Contains(p.text, "could not end") {
+			failures++
+		}
+	}
+	if failures != 1 {
+		t.Errorf("follow-ups through the courier = %d, want 1", failures)
+	}
+}

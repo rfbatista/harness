@@ -29,16 +29,34 @@ type memoryNotices struct {
 	mu      sync.Mutex
 	running map[string]map[string]bool // session → running Bash call ids
 	held    map[string][]*heldNotice
-	// noticed are the pids whose ending the agent was already told of, until
-	// the kill is confirmed, so it is never told twice.
-	noticed map[string]map[int]bool
+	// noticed are the pids whose ending the agent was told of, until the kill is
+	// confirmed, so it is never told twice; each keeps the calls that were running
+	// at SIGTERM, which a later follow-up may still reach.
+	noticed map[string]map[int]map[string]bool
+	// failedTold are the pids whose failure the agent was told of: once each.
+	failedTold map[string]map[int]bool
 }
 
 // heldNotice is a reason waiting for the answer of a call that was running when
-// SIGTERM went out.
+// SIGTERM went out. failed makes it the follow-up: the process could not be ended.
 type heldNotice struct {
-	kill  domain.MemoryKill
-	calls map[string]bool
+	kill   domain.MemoryKill
+	calls  map[string]bool
+	failed bool
+}
+
+// memNotice is one reason the agent is told.
+type memNotice struct {
+	kill   domain.MemoryKill
+	failed bool
+}
+
+func notices(held []*heldNotice) []memNotice {
+	var out []memNotice
+	for _, h := range held {
+		out = append(out, memNotice{kill: h.kill, failed: h.failed})
+	}
+	return out
 }
 
 func (n *memoryNotices) start(session, call string) {
@@ -54,21 +72,28 @@ func (n *memoryNotices) start(session, call string) {
 }
 
 // end drops the call; it answers the reasons held for it.
-func (n *memoryNotices) end(session, call string) []domain.MemoryKill {
+func (n *memoryNotices) end(session, call string) []memNotice {
 	n.mu.Lock()
 	defer n.mu.Unlock()
 	delete(n.running[session], call)
-	var out []domain.MemoryKill
-	var rest []*heldNotice
+	var out, rest []*heldNotice
 	for _, h := range n.held[session] {
 		if h.calls[call] {
-			out = append(out, h.kill)
+			out = append(out, h)
 			continue
 		}
 		rest = append(rest, h)
 	}
 	n.held[session] = rest
-	return out
+	return notices(out)
+}
+
+func (n *memoryNotices) init() {
+	if n.noticed == nil {
+		n.noticed = map[string]map[int]map[string]bool{}
+		n.held = map[string][]*heldNotice{}
+		n.failedTold = map[string]map[int]bool{}
+	}
 }
 
 // note records that k's ending is being told of. It reports false when it was
@@ -77,25 +102,56 @@ func (n *memoryNotices) end(session, call string) []domain.MemoryKill {
 func (n *memoryNotices) note(k domain.MemoryKill) (fresh, held bool) {
 	n.mu.Lock()
 	defer n.mu.Unlock()
-	if n.noticed == nil {
-		n.noticed = map[string]map[int]bool{}
-		n.held = map[string][]*heldNotice{}
-	}
+	n.init()
 	if n.noticed[k.SessionID] == nil {
-		n.noticed[k.SessionID] = map[int]bool{}
+		n.noticed[k.SessionID] = map[int]map[string]bool{}
 	}
-	if n.noticed[k.SessionID][k.PID] {
+	if _, told := n.noticed[k.SessionID][k.PID]; told {
 		return false, false
-	}
-	n.noticed[k.SessionID][k.PID] = true
-	if len(n.running[k.SessionID]) == 0 {
-		return true, false
 	}
 	calls := map[string]bool{}
 	for c := range n.running[k.SessionID] {
 		calls[c] = true
 	}
+	n.noticed[k.SessionID][k.PID] = calls
+	if len(calls) == 0 {
+		return true, false
+	}
 	n.held[k.SessionID] = append(n.held[k.SessionID], &heldNotice{kill: k, calls: calls})
+	return true, true
+}
+
+// failure records that the vigia gave up on k's process, and says how the agent
+// is told, once: false when it already was; otherwise held when a call that was
+// open at SIGTERM still is (its answer carries it, in place of the ending it has
+// not yet been told), and else it goes through the courier.
+func (n *memoryNotices) failure(k domain.MemoryKill) (fresh, held bool) {
+	n.mu.Lock()
+	defer n.mu.Unlock()
+	n.init()
+	if n.failedTold[k.SessionID] == nil {
+		n.failedTold[k.SessionID] = map[int]bool{}
+	}
+	if n.failedTold[k.SessionID][k.PID] {
+		return false, false
+	}
+	n.failedTold[k.SessionID][k.PID] = true
+	for _, h := range n.held[k.SessionID] {
+		if h.kill.PID == k.PID && !h.failed {
+			h.kill, h.failed = k, true // "ended" was never said: say only that it could not be
+			return true, true
+		}
+	}
+	open := map[string]bool{}
+	for c := range n.noticed[k.SessionID][k.PID] {
+		if n.running[k.SessionID][c] {
+			open[c] = true
+		}
+	}
+	if len(open) == 0 {
+		return true, false
+	}
+	n.held[k.SessionID] = append(n.held[k.SessionID], &heldNotice{kill: k, calls: open, failed: true})
 	return true, true
 }
 
@@ -108,13 +164,10 @@ func (n *memoryNotices) confirmed(k domain.MemoryKill) {
 
 // release answers and forgets the reasons still held for a session: the calls
 // they waited on never answered.
-func (n *memoryNotices) release(session string) []domain.MemoryKill {
+func (n *memoryNotices) release(session string) []memNotice {
 	n.mu.Lock()
 	defer n.mu.Unlock()
-	var out []domain.MemoryKill
-	for _, h := range n.held[session] {
-		out = append(out, h.kill)
-	}
+	out := notices(n.held[session])
 	delete(n.held, session)
 	delete(n.running, session)
 	return out
@@ -127,6 +180,7 @@ func (n *memoryNotices) forget(session string) {
 	delete(n.held, session)
 	delete(n.running, session)
 	delete(n.noticed, session)
+	delete(n.failedTold, session)
 }
 
 // Ending is the vigia's SIGTERM: the agent is told now, in the answer of the Bash
@@ -134,14 +188,19 @@ func (n *memoryNotices) forget(session string) {
 func (s *Service) Ending(k domain.MemoryKill) {
 	fresh, held := s.memoryNotes.note(k)
 	if fresh && !held {
-		s.deliverMemoryNotice(k.SessionID, k)
+		s.deliverMemoryNotice(k.SessionID, memNotice{kill: k})
 	}
 }
 
 // KillFailed is the vigia giving up on a process that survived SIGKILL: no kill
-// is recorded, and the person is told it could not be ended.
+// is recorded, the person is told it could not be ended, and the agent gets one
+// follow-up in the same way it got the first notice.
 func (s *Service) KillFailed(k domain.MemoryKill) {
 	s.announce(domain.SessionMemoryKillFailed{Kill: k})
+	fresh, held := s.memoryNotes.failure(k)
+	if fresh && !held {
+		s.deliverMemoryNotice(k.SessionID, memNotice{kill: k, failed: true})
+	}
 	s.memoryNotes.confirmed(k)
 }
 
@@ -155,12 +214,19 @@ func (s *Service) Killed(k domain.MemoryKill) {
 	s.memoryNotes.confirmed(k)
 }
 
-func (s *Service) deliverMemoryNotice(sessionID string, kills ...domain.MemoryKill) {
-	if len(kills) == 0 {
+func (s *Service) deliverMemoryNotice(sessionID string, ns ...memNotice) {
+	if len(ns) == 0 {
 		return
 	}
-	key := fmt.Sprintf("memory:%s:%d:%d", sessionID, kills[0].PID, kills[0].KilledAt.UnixNano())
-	_, _ = s.Deliver(sessionID, key, memoryNoticeText(kills), nil)
+	_, _ = s.Deliver(sessionID, noticeKey(sessionID, ns[0]), memoryNoticeText(ns), nil)
+}
+
+func noticeKey(sessionID string, n memNotice) string {
+	kind := "memory"
+	if n.failed {
+		kind = "memory-failed"
+	}
+	return fmt.Sprintf("%s:%s:%d:%d", kind, sessionID, n.kill.PID, n.kill.KilledAt.UnixNano())
 }
 
 // BashStarted records a Bash call of the session as running.
@@ -169,27 +235,34 @@ func (s *Service) BashStarted(sessionID, callID string) { s.memoryNotes.start(se
 // BashEnded is the PostToolUse answer for a Bash call: the reason of the
 // encerramentos that happened while it ran, "" when none.
 func (s *Service) BashEnded(sessionID, callID string) string {
-	kills := s.memoryNotes.end(sessionID, callID)
-	if len(kills) == 0 {
+	ns := s.memoryNotes.end(sessionID, callID)
+	if len(ns) == 0 {
 		return ""
 	}
-	return memoryNoticeText(kills)
+	return memoryNoticeText(ns)
 }
 
 // flushMemoryNotices hands what a turn's end finds still held to the courier:
 // the call it waited on never answered.
 func (s *Service) flushMemoryNotices(sessionID string) {
-	if kills := s.memoryNotes.release(sessionID); len(kills) > 0 {
-		s.courier.enqueue(sessionID, parcel{key: fmt.Sprintf("memory:%s:%d:%d", sessionID, kills[0].PID, kills[0].KilledAt.UnixNano()), text: memoryNoticeText(kills)})
+	if ns := s.memoryNotes.release(sessionID); len(ns) > 0 {
+		s.courier.enqueue(sessionID, parcel{key: noticeKey(sessionID, ns[0]), text: memoryNoticeText(ns)})
 	}
 }
 
-// memoryNoticeText says what was ended and why, and what to do about it.
-func memoryNoticeText(kills []domain.MemoryKill) string {
+// memoryNoticeText says what was ended and why, or that it could not be ended,
+// and what to do about it.
+func memoryNoticeText(ns []memNotice) string {
 	var b strings.Builder
-	for i, k := range kills {
+	for i, n := range ns {
 		if i > 0 {
 			b.WriteString("\n")
+		}
+		k := n.kill
+		if n.failed {
+			fmt.Fprintf(&b, "[memory budget] The harness could not end `%s` (pid %d): it still holds %s after SIGKILL, so this session stays over its %s memory budget. Stop or shrink that work yourself (fewer workers, a smaller part of the suite); the harness will not retry it.",
+				k.Command, k.PID, formatBytes(k.RSSBytes), formatBytes(k.Budget))
+			continue
 		}
 		fmt.Fprintf(&b, "[memory budget] The harness ended `%s` (pid %d, %s) with %s because this session's processes used %s of its %s memory budget. It was the heaviest process; this is not a failing test. Run fewer workers (--maxWorkers=$HARNESS_TEST_WORKERS) or a smaller part of the suite instead of retrying the same command.",
 			k.Command, k.PID, formatBytes(k.RSSBytes), k.Signal, formatBytes(k.TreeRSS), formatBytes(k.Budget))
