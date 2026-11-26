@@ -25,11 +25,11 @@ import (
 	"operators-mcp/internal/app/catalog"
 	"operators-mcp/internal/application/agentboard"
 	"operators-mcp/internal/application/agentsystem"
-	"operators-mcp/internal/application/bench"
 	"operators-mcp/internal/application/apps"
 	"operators-mcp/internal/application/archassistant"
 	"operators-mcp/internal/application/archrules"
 	"operators-mcp/internal/application/artifacts"
+	"operators-mcp/internal/application/bench"
 	"operators-mcp/internal/application/branchgate"
 	"operators-mcp/internal/application/branchwatch"
 	"operators-mcp/internal/application/execution"
@@ -196,8 +196,9 @@ func registerHTTPServer(lc fx.Lifecycle, cfg Config, cat catalog.Catalog, appRun
 		// The agent system settings: project defaults and repository overrides.
 		AgentSystem: agentSystem,
 		// The eval bench: a project's bench cases.
-		Bench: bench,
-		BenchRuns: bench,
+		Bench:             bench,
+		BenchRuns:         bench,
+		BenchTrajectories: bench,
 		// The managed claude agents run, and which binary they resolve to.
 		ManagedClaude:    managedClaude,
 		ManagedClaudeBin: claudeBin,

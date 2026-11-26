@@ -24,6 +24,8 @@ type BenchCaseStore interface {
 	Save(ctx context.Context, c domain.BenchCase) error
 	// Delete reports whether a case of that project was removed.
 	Delete(ctx context.Context, projectID, caseID string) (bool, error)
+	// DeleteProject removes all the project's cases.
+	DeleteProject(ctx context.Context, projectID string) error
 }
 
 // BenchSetupRequest names the agent setup a bench run runs on: the project's,
@@ -112,6 +114,8 @@ type BenchScorecardStore interface {
 	Get(ctx context.Context, projectID, id string) (*domain.Scorecard, error)
 	// List answers the project's scorecards, newest first.
 	List(ctx context.Context, projectID string) ([]domain.Scorecard, error)
+	// DeleteProject removes all the project's scorecards.
+	DeleteProject(ctx context.Context, projectID string) error
 }
 
 // BenchRunChange is a bench run's progress or end on the project feed, as
@@ -123,4 +127,35 @@ type BenchRunChange struct {
 	Total       int    `json:"total"`
 	ScorecardID string `json:"scorecard_id,omitempty"`
 	ProjectID   string `json:"-"`
+}
+
+// BenchTrajectories records the sessions of tasks opted in to trajectory
+// recording and turns a recording into a case (ADR 0015).
+type BenchTrajectories interface {
+	// TaskRecording is whether the task's sessions are recorded. An unset task
+	// follows the effective settings default of its project, or of the
+	// repository when one is named.
+	TaskRecording(ctx context.Context, projectID, taskID, repositoryID string) (domain.TaskTrajectoryRecording, error)
+	// SetTaskRecording opts the task in or out; nil makes it follow the default.
+	SetTaskRecording(ctx context.Context, projectID, taskID string, enabled *bool) (domain.TaskTrajectoryRecording, error)
+	ListTrajectories(ctx context.Context, projectID string) ([]domain.BenchTrajectory, error)
+	GetTrajectory(ctx context.Context, projectID, trajectoryID string) (domain.BenchTrajectory, error)
+	// CreateCaseFromTrajectory stores a case that replays the recording.
+	CreateCaseFromTrajectory(ctx context.Context, projectID, trajectoryID string) (domain.BenchCase, error)
+}
+
+// BenchTrajectoryStore persists trajectories and each task's own recording
+// choice (driven; sqlite implements it).
+type BenchTrajectoryStore interface {
+	SaveTrajectory(ctx context.Context, t domain.BenchTrajectory) error
+	// GetTrajectory answers nil when the project has none by that id.
+	GetTrajectory(ctx context.Context, projectID, id string) (*domain.BenchTrajectory, error)
+	// ListTrajectories answers the project's, newest first.
+	ListTrajectories(ctx context.Context, projectID string) ([]domain.BenchTrajectory, error)
+	// TaskFlag is the task's own choice, nil when it made none.
+	TaskFlag(ctx context.Context, taskID string) (*bool, error)
+	// SetTaskFlag stores the choice, or clears it with nil.
+	SetTaskFlag(ctx context.Context, projectID, taskID string, enabled *bool) error
+	// DeleteProject removes the project's trajectories and its tasks' choices.
+	DeleteProject(ctx context.Context, projectID string) error
 }

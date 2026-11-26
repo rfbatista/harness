@@ -123,6 +123,9 @@ type Services struct {
 	Bench ports.BenchCases
 	// BenchRuns are its runs and scorecards; nil: those routes answer 503.
 	BenchRuns ports.BenchRuns
+	// BenchTrajectories are the tasks' recording flag and the recorded
+	// trajectories; nil: those routes answer 503.
+	BenchTrajectories ports.BenchTrajectories
 	// ManagedClaude installs and switches the claude agents run; nil answers
 	// 503. ManagedClaudeBin says which binary agents run (the override
 	// included); nil reads as no override.
@@ -233,11 +236,12 @@ type Handler struct {
 	tokenSaverInstalls ports.TokenSaverInstalls
 	repositoryIndexes  ports.RepositoryIndexes
 
-	sandboxSettings ports.SandboxSettings
-	agentSystem     ports.AgentSystemSettings
-	bench           ports.BenchCases
-	benchRuns       ports.BenchRuns
-	sandboxDriver   func() ports.SandboxDriver
+	sandboxSettings   ports.SandboxSettings
+	agentSystem       ports.AgentSystemSettings
+	bench             ports.BenchCases
+	benchRuns         ports.BenchRuns
+	benchTrajectories ports.BenchTrajectories
+	sandboxDriver     func() ports.SandboxDriver
 
 	managedClaude    ports.ManagedClaude
 	managedClaudeBin ports.ManagedClaudeBin
@@ -330,11 +334,12 @@ func NewHandler(s Services) *Handler {
 		tokenSaverInstalls: s.TokenSaverInstalls,
 		repositoryIndexes:  s.RepositoryIndexes,
 
-		sandboxSettings: s.SandboxSettings,
-		agentSystem:     s.AgentSystem,
-		bench:           s.Bench,
-		benchRuns:       s.BenchRuns,
-		sandboxDriver:   s.SandboxDriver,
+		sandboxSettings:   s.SandboxSettings,
+		agentSystem:       s.AgentSystem,
+		bench:             s.Bench,
+		benchRuns:         s.BenchRuns,
+		benchTrajectories: s.BenchTrajectories,
+		sandboxDriver:     s.SandboxDriver,
 
 		managedClaude:    s.ManagedClaude,
 		managedClaudeBin: s.ManagedClaudeBin,

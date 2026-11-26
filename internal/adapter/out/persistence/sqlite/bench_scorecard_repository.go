@@ -3,7 +3,6 @@ package sqlite
 import (
 	"context"
 	"encoding/json"
-	"errors"
 	"time"
 
 	"gorm.io/gorm"
@@ -46,15 +45,11 @@ func (r *BenchScorecardRepository) Save(ctx context.Context, card domain.Scoreca
 
 // Get answers the project's scorecard, nil when there is none.
 func (r *BenchScorecardRepository) Get(ctx context.Context, projectID, id string) (*domain.Scorecard, error) {
-	var row BenchScorecardModel
-	err := r.db.WithContext(ctx).Where("project_id = ? AND id = ?", projectID, id).Take(&row).Error
-	if errors.Is(err, gorm.ErrRecordNotFound) {
-		return nil, nil
-	}
-	if err != nil {
+	var rows []BenchScorecardModel
+	if err := r.db.WithContext(ctx).Where("project_id = ? AND id = ?", projectID, id).Limit(1).Find(&rows).Error; err != nil || len(rows) == 0 {
 		return nil, err
 	}
-	card, err := row.toDomain()
+	card, err := rows[0].toDomain()
 	return &card, err
 }
 
@@ -73,6 +68,11 @@ func (r *BenchScorecardRepository) List(ctx context.Context, projectID string) (
 		out = append(out, card)
 	}
 	return out, nil
+}
+
+// DeleteProject removes all the project's scorecards.
+func (r *BenchScorecardRepository) DeleteProject(ctx context.Context, projectID string) error {
+	return r.db.WithContext(ctx).Where("project_id = ?", projectID).Delete(&BenchScorecardModel{}).Error
 }
 
 func (m BenchScorecardModel) toDomain() (domain.Scorecard, error) {

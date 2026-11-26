@@ -85,6 +85,7 @@ func runFakeClaude() {
 			select {}
 		}
 		script.play()
+		emitSessionTools(out)
 		fmt.Fprintln(out, `{"type":"assistant","session_id":"fake","message":{"role":"assistant","content":[{"type":"text","text":"working"}]}}`)
 		fmt.Fprintln(out, `{"type":"result","subtype":"success","session_id":"fake","result":"ok","total_cost_usd":0.02,"usage":{"input_tokens":5,"output_tokens":9}}`)
 		out.Flush()
@@ -186,5 +187,30 @@ func (fs *fakeScript) play() {
 	if path := os.Getenv(fakeBenchRecordEnv); path != "" {
 		b, _ := json.Marshal(fs.launch)
 		_ = os.WriteFile(path, b, 0o644)
+	}
+}
+
+// fakeSessionToolsEnv holds the tool calls a session's fake CLI reports it made
+// (a JSON list of {tool, input, result}), as the real CLI streams them: a
+// tool_use in an assistant message and its result in a user message.
+const fakeSessionToolsEnv = "CLAUDE_FAKE_SESSION_TOOLS"
+
+func emitSessionTools(out *bufio.Writer) {
+	var calls []struct {
+		Tool   string         `json:"tool"`
+		Input  map[string]any `json:"input"`
+		Result string         `json:"result"`
+	}
+	if json.Unmarshal([]byte(os.Getenv(fakeSessionToolsEnv)), &calls) != nil {
+		return
+	}
+	for i, c := range calls {
+		id := fmt.Sprintf("toolu_%d", i+1)
+		use, _ := json.Marshal(map[string]any{"type": "assistant", "session_id": "fake", "message": map[string]any{
+			"role": "assistant", "content": []any{map[string]any{"type": "tool_use", "id": id, "name": c.Tool, "input": c.Input}}}})
+		res, _ := json.Marshal(map[string]any{"type": "user", "session_id": "fake", "message": map[string]any{
+			"role": "user", "content": []any{map[string]any{"type": "tool_result", "tool_use_id": id, "content": c.Result}}}})
+		fmt.Fprintln(out, string(use))
+		fmt.Fprintln(out, string(res))
 	}
 }

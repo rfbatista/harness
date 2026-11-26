@@ -129,3 +129,81 @@ func (h *Handler) handleCompareBenchScorecard(c echo.Context) error {
 	}
 	return c.JSON(http.StatusOK, cmp)
 }
+
+func (h *Handler) handleCreateBenchCaseFromTrajectory(c echo.Context) error {
+	if h.benchTrajectories == nil {
+		return errBenchOff
+	}
+	var body struct {
+		TrajectoryID string `json:"trajectory_id"`
+	}
+	if err := bindJSON(c, &body); err != nil {
+		return err
+	}
+	created, err := h.benchTrajectories.CreateCaseFromTrajectory(c.Request().Context(), c.Param("project"), body.TrajectoryID)
+	var ve *domain.BenchCaseValidationError
+	if errors.As(err, &ve) {
+		return c.JSON(http.StatusUnprocessableEntity, map[string]any{"errors": ve.Errors})
+	}
+	if err != nil {
+		return err
+	}
+	return c.JSON(http.StatusCreated, created)
+}
+
+func (h *Handler) handleListBenchTrajectories(c echo.Context) error {
+	if h.benchTrajectories == nil {
+		return errBenchOff
+	}
+	list, err := h.benchTrajectories.ListTrajectories(c.Request().Context(), c.Param("project"))
+	if err != nil {
+		return err
+	}
+	if list == nil {
+		list = []domain.BenchTrajectory{}
+	}
+	return c.JSON(http.StatusOK, map[string]any{"trajectories": list})
+}
+
+func (h *Handler) handleGetBenchTrajectory(c echo.Context) error {
+	if h.benchTrajectories == nil {
+		return errBenchOff
+	}
+	t, err := h.benchTrajectories.GetTrajectory(c.Request().Context(), c.Param("project"), c.Param("trajectory"))
+	if err != nil {
+		return err
+	}
+	return c.JSON(http.StatusOK, t)
+}
+
+// handleGetTaskTrajectoryRecording answers whether a task's sessions are
+// recorded; ?repository= asks as that repository's sessions would.
+func (h *Handler) handleGetTaskTrajectoryRecording(c echo.Context) error {
+	if h.benchTrajectories == nil {
+		return errBenchOff
+	}
+	rec, err := h.benchTrajectories.TaskRecording(c.Request().Context(), c.Param("project"), c.Param("task"), c.QueryParam("repository"))
+	if err != nil {
+		return err
+	}
+	return c.JSON(http.StatusOK, rec)
+}
+
+// handleSetTaskTrajectoryRecording opts a task in or out: {"enabled": true},
+// {"enabled": false}, or {"enabled": null} to follow the settings default.
+func (h *Handler) handleSetTaskTrajectoryRecording(c echo.Context) error {
+	if h.benchTrajectories == nil {
+		return errBenchOff
+	}
+	var body struct {
+		Enabled *bool `json:"enabled"`
+	}
+	if err := bindJSON(c, &body); err != nil {
+		return err
+	}
+	rec, err := h.benchTrajectories.SetTaskRecording(c.Request().Context(), c.Param("project"), c.Param("task"), body.Enabled)
+	if err != nil {
+		return err
+	}
+	return c.JSON(http.StatusOK, rec)
+}

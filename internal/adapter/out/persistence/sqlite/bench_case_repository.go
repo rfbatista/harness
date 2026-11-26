@@ -76,6 +76,11 @@ func (r *BenchCaseRepository) Delete(ctx context.Context, projectID, caseID stri
 	return res.RowsAffected > 0, res.Error
 }
 
+// DeleteProject removes all the project's cases.
+func (r *BenchCaseRepository) DeleteProject(ctx context.Context, projectID string) error {
+	return r.db.WithContext(ctx).Where("project_id = ?", projectID).Delete(&BenchCaseModel{}).Error
+}
+
 func (m BenchCaseModel) toDomain() (domain.BenchCase, error) {
 	c := domain.BenchCase{ID: m.ID, ProjectID: m.ProjectID, Name: m.Name, Prompt: m.Prompt,
 		Source: domain.BenchCaseSource(m.Source), CreatedAt: m.CreatedAt}

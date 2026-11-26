@@ -111,3 +111,38 @@ type BenchCall struct {
 	Tool   string         `json:"tool"`
 	Params map[string]any `json:"params,omitempty"`
 }
+
+// BenchTrajectoryStep is one tool call of a recorded session: the tool, the
+// arguments it got and the result it answered with.
+type BenchTrajectoryStep struct {
+	Tool    string         `json:"tool"`
+	Params  map[string]any `json:"params,omitempty"`
+	Result  string         `json:"result"`
+	IsError bool           `json:"is_error,omitempty"`
+}
+
+// BenchTrajectory is what a session of a task opted in to recording did: its
+// prompt, its tool calls with parameters and results, and its final state. It
+// is in the bench's case format, so it can become a case (Glossary: "Bench
+// case"). Its id is the session's.
+type BenchTrajectory struct {
+	ID         string                `json:"id"`
+	ProjectID  string                `json:"project_id"`
+	TaskID     string                `json:"task_id"`
+	SessionID  string                `json:"session_id"`
+	Prompt     string                `json:"prompt"`
+	Steps      []BenchTrajectoryStep `json:"steps"`
+	FinalState string                `json:"final_state"`
+	RecordedAt time.Time             `json:"recorded_at"`
+}
+
+// TaskTrajectoryRecording says whether a task's sessions are recorded: what
+// the task sets itself (Explicit, nil when it sets nothing) and what holds.
+type TaskTrajectoryRecording struct {
+	TaskID   string `json:"task_id"`
+	Enabled  bool   `json:"enabled"`
+	Explicit *bool  `json:"explicit"`
+	// Source is "task" when the task sets it, else the level of the effective
+	// settings default it follows ("repository", "project" or "harness").
+	Source string `json:"source"`
+}

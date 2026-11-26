@@ -35,6 +35,17 @@ type Deps struct {
 		Effective(ctx context.Context, projectID, repositoryID string) (domain.EffectiveAgentSystem, error)
 	}
 	Feed interface{ AnnounceChange(ports.ProjectChange) }
+	// Trajectories keeps each task's recording choice and the trajectories
+	// recorded; Tasks finds a task; SessionLog reads a session and its stored
+	// events. Each may be nil: nothing is recorded.
+	Trajectories ports.BenchTrajectoryStore
+	Tasks        interface {
+		Get(ctx context.Context, id string) *domain.Ticket
+	}
+	SessionLog interface {
+		Find(ctx context.Context, id string) (*domain.Session, error)
+		ListEvents(sessionID string, fromSeq int64) ([]ports.StoredEvent, error)
+	}
 	// MockName is the mock server's name in the CLI's MCP configuration.
 	MockName string
 	Projects interface {
@@ -113,4 +124,29 @@ func newID() string {
 	b := make([]byte, 16)
 	_, _ = rand.Read(b)
 	return hex.EncodeToString(b)
+}
+
+// Subscribe has the bench follow the event bus: a session that ends is
+// recorded when its task is, and a deleted project takes its cases, scorecards
+// and trajectories with it.
+func (s *Service) Subscribe(sub ports.EventSubscriber) {
+	ports.On(sub, func(ctx context.Context, ev domain.SessionEnded) error {
+		return s.RecordSession(ctx, ev.SessionID)
+	})
+	ports.On(sub, func(ctx context.Context, ev domain.ProjectDeleted) error {
+		if s.d.Cases != nil {
+			if err := s.d.Cases.DeleteProject(ctx, ev.ProjectID); err != nil {
+				return err
+			}
+		}
+		if s.d.Scorecards != nil {
+			if err := s.d.Scorecards.DeleteProject(ctx, ev.ProjectID); err != nil {
+				return err
+			}
+		}
+		if s.d.Trajectories != nil {
+			return s.d.Trajectories.DeleteProject(ctx, ev.ProjectID)
+		}
+		return nil
+	})
 }
