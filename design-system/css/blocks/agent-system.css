@@ -117,7 +117,33 @@
     &[aria-busy="true"] { opacity: 0.6; }
   }
 
+  /* A row the person changed and has not saved, and one that cannot be saved: the label says so; the error is the row's own line. */
+  .ledger-row[data-changed] > .lbl::after { content: " · unsaved"; color: var(--color-attention-strong); font-weight: 400; font-size: var(--text-xs); }
+  .ledger-row > .ctl > .err { inline-size: 100%; color: var(--color-danger); font-size: var(--text-xs); }
+  .ledger-row[data-error] > .ctl [role="switch"] { outline: 1px solid var(--color-danger); outline-offset: 2px; }
+
+  /* The sticky save bar: unsaved count, errors by section and field, Discard and Save. */
+  .save-bar {
+    position: sticky;
+    inset-block-end: 0;
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: var(--space-m);
+    padding: var(--space-s) var(--space-xl);
+    margin-inline: calc(var(--space-l) * -1);
+    background: var(--color-panel);
+    border-block-start: var(--border-width) solid var(--color-line);
+    font-size: var(--text-sm);
+
+    & > .count { font-weight: var(--weight-medium); }
+    & > .errs { color: var(--color-danger); }
+    & > .end { margin-inline-start: auto; display: flex; gap: var(--space-xs); }
+  }
+
   @media (max-width: 48rem) {
+    .save-bar { padding-inline: var(--space-m); margin-inline: calc(var(--space-m) * -1); }
+
     .agent-system { grid-template-columns: minmax(0, 1fr); padding: var(--space-m); }
 
     .as-index {

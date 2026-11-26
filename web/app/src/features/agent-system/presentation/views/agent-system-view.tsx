@@ -1,7 +1,7 @@
 import type { ChangeEvent } from "react";
 import { usePresenter } from "../../../../shared/presentation/use-presenter";
 import type { Layer, Row } from "../../domain/ledger";
-import type { AgentSystemPresenter } from "../presenters/agent-system-presenter";
+import type { AgentSystemPresenter, ErrorEntry } from "../presenters/agent-system-presenter";
 
 /** The page: toolbar with the scope switch, the sticky index of the layers, and each layer's ledger rows. */
 export function AgentSystemView({ presenter }: { presenter: AgentSystemPresenter }) {
@@ -49,10 +49,24 @@ export function AgentSystemView({ presenter }: { presenter: AgentSystemPresenter
           ))}
         </nav>
         <div className="[ as-main ]">
-          {vm.problem !== "" && (
-            <div className="[ banner ]" data-tone="danger" role="alert">
+          {vm.refused.length > 0 && (
+            <div className="[ banner ]" data-tone="danger" role="alert" data-refused="">
               <div className="[ flow ] [ flow-space-3xs grow ]">
-                <span>The save was refused. Your values are kept.</span>
+                <span>
+                  <b>Not saved.</b> {vm.refused.length === 1 ? "1 field was" : `${vm.refused.length} fields were`} refused. Your values are kept.
+                </span>
+                <span className="[ code ]">
+                  {vm.refused.map((e) => (
+                    <span key={e.field} style={{ display: "block" }}>{`${e.code} · ${e.field}`}</span>
+                  ))}
+                </span>
+              </div>
+            </div>
+          )}
+          {vm.problem !== "" && (
+            <div className="[ banner ]" data-tone="danger" role="alert" data-problem="">
+              <div className="[ flow ] [ flow-space-3xs grow ]">
+                <span>The save did not go through. Your values are kept.</span>
                 <span className="[ code ]">{vm.problem}</span>
               </div>
             </div>
@@ -69,7 +83,8 @@ export function AgentSystemView({ presenter }: { presenter: AgentSystemPresenter
               </button>
             </div>
           )}
-          {vm.status === "ready" && vm.layers.map((layer) => <LayerSection key={layer.key} layer={layer} presenter={presenter} skillsHref={vm.skillsHref} pending={vm.pending} />)}
+          {vm.status === "ready" && vm.layers.map((layer) => <LayerSection key={layer.key} layer={layer} presenter={presenter} skillsHref={vm.skillsHref} />)}
+          {vm.status === "ready" && <SaveBar presenter={presenter} unsaved={vm.unsaved} errors={vm.errors} canSave={vm.canSave} saving={vm.saving} label={vm.saveLabel} />}
         </div>
       </div>
     </>
@@ -91,7 +106,7 @@ function Skeleton() {
   );
 }
 
-function LayerSection({ layer, presenter, skillsHref, pending }: { layer: Layer; presenter: AgentSystemPresenter; skillsHref: string; pending: readonly string[] }) {
+function LayerSection({ layer, presenter, skillsHref }: { layer: Layer; presenter: AgentSystemPresenter; skillsHref: string }) {
   return (
     <section className="[ as-layer ]" id={`as-${layer.key}`} aria-labelledby={`as-${layer.key}-head`}>
       <header>
@@ -100,7 +115,7 @@ function LayerSection({ layer, presenter, skillsHref, pending }: { layer: Layer;
       </header>
       <div className="[ ledger ]">
         {layer.rows.map((row) => (
-          <LedgerRow key={row.label} row={row} presenter={presenter} busy={pending.includes(row.path)} />
+          <LedgerRow key={row.label} row={row} presenter={presenter} />
         ))}
         {layer.note !== "" && (
           <div className="[ ledger-row ]" data-note="">
@@ -123,21 +138,26 @@ function LayerSection({ layer, presenter, skillsHref, pending }: { layer: Layer;
   );
 }
 
-function LedgerRow({ row, presenter, busy }: { row: Row; presenter: AgentSystemPresenter; busy: boolean }) {
+function LedgerRow({ row, presenter }: { row: Row; presenter: AgentSystemPresenter }) {
   return (
-    <div className="[ ledger-row ]" data-path={row.path} aria-busy={busy}>
+    <div className="[ ledger-row ]" data-path={row.path} data-changed={row.draft ? "" : undefined} data-error={row.error ? "" : undefined}>
       <div className="[ lbl ]">
         {row.label}
         <small>{row.hint}</small>
       </div>
       <div className="[ ctl ]">
         {row.kind === "toggle" ? (
-          <button type="button" className="[ switch ]" role="switch" aria-checked={row.value} aria-label={row.label} disabled={busy} onClick={() => void presenter.change(row.path, !row.value)}>
+          <button type="button" className="[ switch ]" role="switch" aria-checked={row.value} aria-label={row.label} aria-invalid={row.error ? true : undefined} onClick={() => presenter.edit(row.path, !row.value)}>
             <span className="[ track ]" />
             <span>{row.value ? "On" : "Off"}</span>
           </button>
         ) : (
           <span className="[ color-ink-muted ]">{row.text}</span>
+        )}
+        {row.error && (
+          <span className="[ err ]" role="alert" data-error-for={row.path}>
+            <code>{row.error.code}</code> · {row.error.message}
+          </span>
         )}
       </div>
       <div className="[ src ]">
@@ -149,16 +169,41 @@ function LedgerRow({ row, presenter, busy }: { row: Row; presenter: AgentSystemP
       </div>
       <div className="[ act ]">
         {row.action === "override" && (
-          <button type="button" className="[ button ]" data-variant="ghost" data-size="sm" disabled={busy} onClick={() => void presenter.overrideHere(row.path)}>
+          <button type="button" className="[ button ]" data-variant="ghost" data-size="sm" onClick={() => presenter.overrideHere(row.path)}>
             Override
           </button>
         )}
         {row.action === "reset" && (
-          <button type="button" className="[ button ]" data-variant="ghost" data-size="sm" disabled={busy} onClick={() => void presenter.reset(row.path)}>
+          <button type="button" className="[ button ]" data-variant="ghost" data-size="sm" onClick={() => presenter.reset(row.path)}>
             Reset
           </button>
         )}
       </div>
+    </div>
+  );
+}
+
+/** The sticky bar: how many rows are unsaved, what stands in the way (by section and field), Discard and Save. */
+function SaveBar({ presenter, unsaved, errors, canSave, saving, label }: { presenter: AgentSystemPresenter; unsaved: number; errors: readonly ErrorEntry[]; canSave: boolean; saving: boolean; label: string }) {
+  if (unsaved === 0 && errors.length === 0) return null;
+  return (
+    <div className="[ save-bar ]" role="region" aria-label="Unsaved changes">
+      <span className="[ count ]" data-unsaved={unsaved}>
+        {unsaved === 1 ? "1 unsaved change" : `${unsaved} unsaved changes`}
+      </span>
+      {errors.length > 0 && (
+        <span className="[ errs ]" role="alert">
+          {errors.length === 1 ? "1 error" : `${errors.length} errors`} · {errors.map((e) => `${e.section} › ${e.label}`).join(", ")}
+        </span>
+      )}
+      <span className="[ end ]">
+        <button type="button" className="[ button ]" data-variant="ghost" disabled={saving} onClick={() => presenter.discard()}>
+          Discard
+        </button>
+        <button type="button" className="[ button ]" data-variant={canSave ? "primary" : undefined} aria-disabled={!canSave} aria-busy={saving ? true : undefined} onClick={() => void presenter.save()}>
+          {label}
+        </button>
+      </span>
     </div>
   );
 }

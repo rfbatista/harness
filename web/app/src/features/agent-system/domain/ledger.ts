@@ -1,6 +1,7 @@
 // The ledger's rows: each field with its control, its source and its action (UX study, section 2).
 
-import type { Field, Scope, SettingsView, Source } from "./settings";
+import type { Field, FieldError, Patch, Scope, SettingsView, Source } from "./settings";
+import type { Rule } from "./validation";
 
 export type SourceKind = "harness" | "project" | "override";
 
@@ -29,6 +30,12 @@ export interface Row {
   readonly text: string;
   readonly source: SourceMark;
   readonly action: RowAction;
+  /** What the form checks before a save; undefined on a fixed row. */
+  readonly rule: Rule | undefined;
+  /** The person changed this row and has not saved it. */
+  readonly draft: boolean;
+  /** Why this row cannot be saved, from the form or from a refused save. */
+  readonly error: FieldError | undefined;
 }
 
 export type LayerKey = "learn" | "guard" | "review" | "score";
@@ -71,18 +78,47 @@ const LEARN_TOGGLES: readonly ToggleSpec[] = [
   { path: "learn.task_memory.require_update", label: "Task memory must be updated", hint: "A done declaration with an unchanged progress.md is asked once to update it; the omission is recorded.", harnessDefault: true, field: (v) => v.effective.taskMemoryRequireUpdate },
 ];
 
-function toggleRow(scope: Scope, view: SettingsView, project: SettingsView | undefined, spec: ToggleSpec): Row {
+/** The value a row falls back to when this level does not set it: the project's, else the harness default. */
+function inheritedValue(scope: Scope, spec: ToggleSpec, project: SettingsView | undefined): { value: boolean; mark: SourceMark } {
+  if (scope.kind === "repository" && project !== undefined && spec.path in project.values) {
+    return { value: project.values[spec.path] === true, mark: { kind: "project", text: "project", reason: "", replaces: "" } };
+  }
+  return { value: spec.harnessDefault, mark: { kind: "harness", text: "harness default", reason: "", replaces: "" } };
+}
+
+/** The drafts and errors the page holds, by field path. */
+export interface Edits {
+  readonly draft: Patch;
+  readonly errors: Readonly<Record<string, FieldError>>;
+}
+
+export const NO_EDITS: Edits = { draft: {}, errors: {} };
+
+function toggleRow(scope: Scope, view: SettingsView, project: SettingsView | undefined, spec: ToggleSpec, edits: Edits): Row {
+  const common = { path: spec.path, label: spec.label, hint: spec.hint, kind: "toggle", text: "", rule: { kind: "bool" }, error: edits.errors[spec.path] } as const;
+  if (spec.path in edits.draft) {
+    const draft = edits.draft[spec.path];
+    // A reset reads as what the level below gives; a value reads as this level's own, as it will after the save.
+    if (draft === null) {
+      const below = inheritedValue(scope, spec, project);
+      return { ...common, value: below.value, source: below.mark, action: scope.kind === "repository" ? "override" : "none", draft: true };
+    }
+    const below = inheritedValue(scope, spec, project);
+    const word = below.mark.kind === "project" ? `project: ${below.value ? "on" : "off"}` : `harness default: ${below.value ? "on" : "off"}`;
+    const mark: SourceMark = scope.kind === "repository" ? { kind: "override", text: "override", reason: "", replaces: word } : { kind: "project", text: "project", reason: "", replaces: "" };
+    return { ...common, value: draft === true, source: mark, action: "reset", draft: true };
+  }
   const field = spec.field(view);
   const { mark, action } = sourceMark(scope, field, spec.harnessDefault, project, spec.path);
-  return { path: spec.path, label: spec.label, hint: spec.hint, kind: "toggle", value: field.value, text: "", source: mark, action };
+  return { ...common, value: field.value, source: mark, action, draft: false };
 }
 
 const HARNESS: SourceMark = { kind: "harness", text: "harness default", reason: "", replaces: "" };
 
 /** The Learn layer: context map, its regeneration rule, task memory, and (in a repository) the skills line. */
-export function learnLayer(scope: Scope, view: SettingsView, project: SettingsView | undefined): Layer {
-  const [contextMap, taskMemory] = LEARN_TOGGLES.map((spec) => toggleRow(scope, view, project, spec)) as [Row, Row];
-  const regenerate: Row = { path: "", label: "Regenerate", hint: "When the default branch moves. Not configurable in v1.", kind: "fixed", value: true, text: "on every default-branch commit", source: HARNESS, action: "none" };
+export function learnLayer(scope: Scope, view: SettingsView, project: SettingsView | undefined, edits: Edits = NO_EDITS): Layer {
+  const [contextMap, taskMemory] = LEARN_TOGGLES.map((spec) => toggleRow(scope, view, project, spec, edits)) as [Row, Row];
+  const regenerate: Row = { path: "", label: "Regenerate", hint: "When the default branch moves. Not configurable in v1.", kind: "fixed", value: true, text: "on every default-branch commit", source: HARNESS, action: "none", rule: undefined, draft: false, error: undefined };
   return {
     key: "learn",
     title: "Learn",
@@ -93,12 +129,12 @@ export function learnLayer(scope: Scope, view: SettingsView, project: SettingsVi
 }
 
 /** The Score layer: trajectory recording for new tasks. */
-export function scoreLayer(scope: Scope, view: SettingsView, project: SettingsView | undefined): Layer {
+export function scoreLayer(scope: Scope, view: SettingsView, project: SettingsView | undefined, edits: Edits = NO_EDITS): Layer {
   const spec: ToggleSpec = { path: "score.trajectory_recording.default", label: "Trajectory recording", hint: "Record the tool calls of new tasks' sessions, to turn them into bench cases. A task can override it.", harnessDefault: false, field: (v) => v.effective.trajectoryRecordingDefault };
-  return { key: "score", title: "Score", purpose: "The offline bench that measures this project's agent setup.", rows: [toggleRow(scope, view, project, spec)], note: "" };
+  return { key: "score", title: "Score", purpose: "The offline bench that measures this project's agent setup.", rows: [toggleRow(scope, view, project, spec, edits)], note: "" };
 }
 
 /** The layers of this ticket, in the study's order: Learn first, Score last. Guard and Review arrive with their own tickets. */
-export function layers(scope: Scope, view: SettingsView, project: SettingsView | undefined): readonly Layer[] {
-  return [learnLayer(scope, view, project), scoreLayer(scope, view, project)];
+export function layers(scope: Scope, view: SettingsView, project: SettingsView | undefined, edits: Edits = NO_EDITS): readonly Layer[] {
+  return [learnLayer(scope, view, project, edits), scoreLayer(scope, view, project, edits)];
 }

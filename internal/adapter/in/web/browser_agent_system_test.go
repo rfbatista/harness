@@ -20,6 +20,7 @@ type agentSystemAPI struct {
 	project  map[string]any
 	repo     map[string]map[string]any
 	patches  []string
+	refuse   []map[string]string // the next save is refused with these errors (422)
 	repoList []map[string]string
 }
 
@@ -79,6 +80,12 @@ func (a *agentSystemAPI) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		var patch map[string]any
 		json.NewDecoder(r.Body).Decode(&patch)
 		a.patches = append(a.patches, r.URL.Path+" "+toJSON(patch))
+		if a.refuse != nil {
+			w.WriteHeader(http.StatusUnprocessableEntity)
+			json.NewEncoder(w).Encode(map[string]any{"errors": a.refuse})
+			a.refuse = nil
+			return
+		}
 		target := a.project
 		if repo != "" {
 			target = a.repo[repo]
@@ -127,7 +134,7 @@ func agentSystemServer(t *testing.T, api *agentSystemAPI) *httptest.Server {
 }
 
 // TestAgentSystemPageInTheBrowser: the page shows the project defaults as ledger rows with their sources,
-// a toggle saves at once as a PATCH of that path, the scope switch moves to a repository (and the address
+// a toggle becomes an unsaved change that Save sends as one PATCH, the scope switch moves to a repository (and the address
 // follows), where an inherited row offers Override and an override offers Reset, and a repository missing a
 // required gate carries the red dot.
 func TestAgentSystemPageInTheBrowser(t *testing.T) {
@@ -136,7 +143,7 @@ func TestAgentSystemPageInTheBrowser(t *testing.T) {
 	ctx, errs := browser(t)
 
 	row := func(path string) string { return `document.querySelector('.ledger-row[data-path="` + path + `"]')` }
-	var layers, source, valueAfter, scopeAddress, action, replaced, dot string
+	var barText, layers, source, valueAfter, scopeAddress, action, replaced, dot string
 	var shot []byte
 	err := chromedp.Run(ctx,
 		chromedp.EmulateViewport(1280, 800),
@@ -145,6 +152,9 @@ func TestAgentSystemPageInTheBrowser(t *testing.T) {
 		chromedp.Evaluate(`[...document.querySelectorAll('.as-layer > header h2')].map(h => h.textContent).join()`, &layers),
 		chromedp.Evaluate(row("learn.context_map.enabled")+`.querySelector('.src').textContent`, &source),
 		chromedp.Evaluate(row("learn.context_map.enabled")+`.querySelector('[role=switch]').click()`, nil),
+		chromedp.Poll(`!!document.querySelector('.save-bar')`, nil, chromedp.WithPollingTimeout(5*time.Second)),
+		chromedp.Evaluate(`document.querySelector('.save-bar').textContent`, &barText),
+		chromedp.Evaluate(`document.querySelector('.save-bar .end button:last-child').click()`, nil),
 		chromedp.Poll(`(`+row("learn.context_map.enabled")+`.querySelector('.src').textContent || '').includes('project')`, nil, chromedp.WithPollingTimeout(5*time.Second)),
 		chromedp.Evaluate(row("learn.context_map.enabled")+`.querySelector('[role=switch]').getAttribute('aria-checked')`, &valueAfter),
 
@@ -154,6 +164,8 @@ func TestAgentSystemPageInTheBrowser(t *testing.T) {
 		chromedp.Evaluate(`new URL(location.href).searchParams.get('repository')`, &scopeAddress),
 		chromedp.Evaluate(row("learn.context_map.enabled")+`.querySelector('.act').textContent`, &action),
 		chromedp.Evaluate(row("learn.context_map.enabled")+`.querySelector('.act button').click()`, nil),
+		chromedp.Poll(`!!document.querySelector('.save-bar')`, nil, chromedp.WithPollingTimeout(5*time.Second)),
+		chromedp.Evaluate(`document.querySelector('.save-bar .end button:last-child').click()`, nil),
 		chromedp.Poll(`(`+row("learn.context_map.enabled")+`.querySelector('.act').textContent || '') === 'Reset'`, nil, chromedp.WithPollingTimeout(5*time.Second)),
 		chromedp.Evaluate(row("learn.context_map.enabled")+`.querySelector('.src').textContent`, &replaced),
 		chromedp.Evaluate(`document.querySelector('.toolbar .status[data-state=missing]')?.getAttribute('aria-label') ?? ''`, &dot),
@@ -167,6 +179,9 @@ func TestAgentSystemPageInTheBrowser(t *testing.T) {
 	}
 	if !strings.Contains(source, "harness default") {
 		t.Errorf("source of an untouched row %q", source)
+	}
+	if !strings.Contains(barText, "1 unsaved change") || !strings.Contains(barText, "Save project defaults") {
+		t.Errorf("the save bar reads %q", barText)
 	}
 	if valueAfter != "false" {
 		t.Errorf("the toggle reads %q after saving, want false", valueAfter)
@@ -222,5 +237,75 @@ func TestAgentSystemPageOpensTheRepositoryTheAddressNames(t *testing.T) {
 	}
 	if selected != "blog" || afterBack != "blog" {
 		t.Errorf("selected %q, after Back %q, want blog both times", selected, afterBack)
+	}
+}
+
+// TestAgentSystemRefusedSaveLandsOnTheRowInTheBrowser: a 422 puts its code and message on the named row and
+// in the bar, keeps the person's value and the draft, and Save stays disabled until the row changes; Discard
+// throws the draft away.
+func TestAgentSystemRefusedSaveLandsOnTheRowInTheBrowser(t *testing.T) {
+	api := newAgentSystemAPI("harness", "blog")
+	srv := agentSystemServer(t, api)
+	ctx, errs := browser(t)
+
+	row := `document.querySelector('.ledger-row[data-path="score.trajectory_recording.default"]')`
+	var rowError, bar, banner, switchValue, saveDisabled string
+	var afterEdit, barStays bool
+	err := chromedp.Run(ctx,
+		chromedp.EmulateViewport(1280, 800),
+		chromedp.Navigate(srv.URL+"/projects/p1/agent-system"),
+		chromedp.Poll(`!!document.querySelector('.ledger-row[data-path]')`, nil, chromedp.WithPollingTimeout(10*time.Second)),
+		chromedp.Evaluate(row+`.querySelector('[role=switch]').click()`, nil),
+		chromedp.Poll(`!!document.querySelector('.save-bar')`, nil, chromedp.WithPollingTimeout(5*time.Second)),
+	)
+	if err != nil {
+		t.Fatalf("%v\nJS errors: %v", err, errs.all())
+	}
+	api.mu.Lock()
+	api.refuse = []map[string]string{{"field": "score.trajectory_recording.default", "code": "INVALID_TYPE", "message": "takes true or false"}}
+	api.mu.Unlock()
+	err = chromedp.Run(ctx,
+		chromedp.Evaluate(`document.querySelector('.save-bar .end button:last-child').click()`, nil),
+		chromedp.Poll(`!!`+row+`.querySelector('.err')`, nil, chromedp.WithPollingTimeout(5*time.Second)),
+		chromedp.Evaluate(row+`.querySelector('.err').textContent`, &rowError),
+		chromedp.Evaluate(`document.querySelector('.save-bar').textContent`, &bar),
+		chromedp.Evaluate(`document.querySelector('[data-refused]').textContent`, &banner),
+		chromedp.Evaluate(row+`.querySelector('[role=switch]').getAttribute('aria-checked')`, &switchValue),
+		chromedp.Evaluate(`document.querySelector('.save-bar .end button:last-child').getAttribute('aria-disabled')`, &saveDisabled),
+		chromedp.Evaluate(row+`.querySelector('[role=switch]').click()`, nil),
+		chromedp.Poll(`!`+row+`.querySelector('.err')`, nil, chromedp.WithPollingTimeout(5*time.Second)),
+		chromedp.Evaluate(`document.body.textContent.includes('Not saved.')`, &afterEdit),
+	)
+	if err != nil {
+		t.Fatalf("%v\nJS errors: %v", err, errs.all())
+	}
+	if !strings.Contains(rowError, "INVALID_TYPE") || !strings.Contains(rowError, "takes true or false") {
+		t.Errorf("row error %q", rowError)
+	}
+	if !strings.Contains(bar, "1 error") || !strings.Contains(bar, "Score › Trajectory recording") {
+		t.Errorf("the bar reads %q", bar)
+	}
+	if !strings.Contains(banner, "INVALID_TYPE · score.trajectory_recording.default") {
+		t.Errorf("banner %q", banner)
+	}
+	if switchValue != "true" {
+		t.Errorf("the person's value was lost: %q", switchValue)
+	}
+	if saveDisabled != "true" {
+		t.Errorf("Save is not disabled while the refusal stands: %q", saveDisabled)
+	}
+	if afterEdit {
+		t.Errorf("the refusal banner stays after the row changed")
+	}
+	if err := chromedp.Run(ctx,
+		chromedp.Evaluate(`!!document.querySelector('.save-bar')`, &barStays),
+	); err != nil {
+		t.Fatal(err)
+	}
+	if barStays {
+		t.Errorf("toggling the row back to what is saved leaves the bar")
+	}
+	if e := errs.all(); len(e) > 0 {
+		t.Errorf("JS errors: %v", e)
 	}
 }

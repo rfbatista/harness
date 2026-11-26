@@ -70,3 +70,16 @@ export class SettingsError extends Error {
 
 /** A repository is red when a required gate has no command at any level. */
 export const isRed = (view: SettingsView): boolean => view.effective.missingRequiredGates.length > 0;
+
+/** Structural equality of two saved values (booleans, numbers, text, lists, objects). */
+export function sameValue(a: unknown, b: unknown): boolean {
+  if (a === b) return true;
+  if (Array.isArray(a) && Array.isArray(b)) return a.length === b.length && a.every((v, i) => sameValue(v, b[i]));
+  if (typeof a === "object" && typeof b === "object" && a !== null && b !== null && !Array.isArray(a) && !Array.isArray(b)) {
+    const x = a as Record<string, unknown>;
+    const y = b as Record<string, unknown>;
+    const keys = Object.keys(x);
+    return keys.length === Object.keys(y).length && keys.every((k) => k in y && sameValue(x[k], y[k]));
+  }
+  return false;
+}
