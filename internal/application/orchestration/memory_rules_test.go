@@ -4,6 +4,7 @@ package orchestration
 
 import (
 	"context"
+	"encoding/json"
 	"strconv"
 	"sync"
 	"syscall"
@@ -209,6 +210,45 @@ func TestTheVigiaOverTheServiceEndsTheHeaviestAndPublishesWhatTheContractNames(t
 	live, _, cancel := svc.Subscribe(sess.ID)
 	defer cancel()
 
+	// Both streams are read all along: a follower that is not read is dropped
+	// once its buffer fills, and the notice's turn puts many events on them.
+	var mu sync.Mutex
+	var feedChanges []ports.ProjectChange
+	go func() {
+		for c := range feed {
+			mu.Lock()
+			feedChanges = append(feedChanges, c)
+			mu.Unlock()
+		}
+	}()
+	var events []map[string]any
+	go func() {
+		for ev := range live {
+			raw, _ := json.Marshal(ev)
+			var m map[string]any
+			_ = json.Unmarshal(raw, &m)
+			mu.Lock()
+			events = append(events, m)
+			mu.Unlock()
+		}
+	}()
+	waitFor := func(what string, ok func() bool) {
+		t.Helper()
+		deadline := time.Now().Add(5 * time.Second)
+		for {
+			mu.Lock()
+			done := ok()
+			mu.Unlock()
+			if done {
+				return
+			}
+			if time.Now().After(deadline) {
+				t.Fatalf("timed out waiting for %s", what)
+			}
+			time.Sleep(10 * time.Millisecond)
+		}
+	}
+
 	rows := []ports.ProcessInfo{
 		{PID: 100, PPID: 1, SID: 7, RSSBytes: 300 * mb, Name: "claude", Session: sess.ID},
 		{PID: 201, PPID: 100, SID: 7, RSSBytes: 4500 * mb, Name: "node", Arg: "jest"},
@@ -219,9 +259,14 @@ func TestTheVigiaOverTheServiceEndsTheHeaviestAndPublishesWhatTheContractNames(t
 	now := time.Date(2026, 11, 25, 22, 40, 0, 0, time.UTC)
 	watcher.Poll(now)
 
-	if m := jsonMap(t, recvEvent(t, live)); m["kind"] != "session.memory" || m["heaviest"].(map[string]any)["command"] != "node jest" {
-		t.Errorf("sample event = %v", m)
-	}
+	waitFor("a session.memory event naming node jest", func() bool {
+		for _, m := range events {
+			if h, _ := m["heaviest"].(map[string]any); m["kind"] == "session.memory" && h != nil && h["command"] == "node jest" {
+				return true
+			}
+		}
+		return false
+	})
 	sig.mu.Lock()
 	if len(sig.pids) != 1 || sig.pids[0] != 201 || sig.sent[0] != syscall.SIGTERM {
 		t.Errorf("signals = %v %v, want SIGTERM to 201", sig.pids, sig.sent)
@@ -230,47 +275,37 @@ func TestTheVigiaOverTheServiceEndsTheHeaviestAndPublishesWhatTheContractNames(t
 
 	table.set(rows[0], rows[2]) // 201 has exited
 	watcher.Poll(now.Add(time.Second))
-	var killed bool
-	// The notice told at SIGTERM puts a turn on the stream before the kill.
-	for i := 0; i < 200 && !killed; i++ {
-		if m := jsonMap(t, recvEvent(t, live)); m["kind"] == "session.memory_killed" {
-			killed = m["pid"] == float64(201) && m["signal"] == "SIGTERM" && m["budget_bytes"] == float64(4*gb)
+	waitFor("session.memory_killed for 201 on the session stream", func() bool {
+		for _, m := range events {
+			if m["kind"] == "session.memory_killed" && m["pid"] == float64(201) && m["signal"] == "SIGTERM" && m["budget_bytes"] == float64(4*gb) {
+				return true
+			}
 		}
-	}
-	if !killed {
-		t.Error("no session.memory_killed for 201 on the session stream")
-	}
+		return false
+	})
 	if read, _ := svc.SessionMemory(sess.ID); len(read.Kills) != 1 || read.Kills[0].PID != 201 {
 		t.Errorf("initial read kills = %+v", read.Kills)
 	}
-	sawKill := false
-	for i := 0; i < 6 && !sawKill; i++ {
-		select {
-		case c := <-feed:
-			sawKill = c.MemoryKilled != nil && c.MemoryKilled.PID == 201
-		case <-time.After(time.Second):
-			i = 6
+	waitFor("the kill on the project feed", func() bool {
+		for _, c := range feedChanges {
+			if c.MemoryKilled != nil && c.MemoryKilled.PID == 201 {
+				return true
+			}
 		}
-	}
-	if !sawKill {
-		t.Error("the kill never reached the project feed")
-	}
+		return false
+	})
 
 	if err := svc.Stop(context.Background(), sess.ID); err != nil {
 		t.Fatal(err)
 	}
-	empty := false
-	for i := 0; i < 20 && !empty; i++ {
-		select {
-		case c := <-feed:
-			empty = c.Memory != nil && c.Memory.RSSBytes == 0 && c.Memory.Processes == 0
-		case <-time.After(time.Second):
-			i = 20
+	waitFor("the empty last sample on the project feed", func() bool {
+		for _, c := range feedChanges {
+			if c.Memory != nil && c.Memory.RSSBytes == 0 && c.Memory.Processes == 0 {
+				return true
+			}
 		}
-	}
-	if !empty {
-		t.Error("stopping the session never sent the empty last sample to the project feed")
-	}
+		return false
+	})
 }
 
 // A server-run session is handed to the vigia by its PTY's process with the
