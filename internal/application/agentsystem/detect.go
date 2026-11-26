@@ -59,6 +59,9 @@ func (d *Detector) Detect(ctx context.Context, repo *domain.Repository) map[doma
 }
 
 func (d *Detector) stack(ctx context.Context, repo *domain.Repository) map[domain.GateKind]domain.GateDefault {
+	if repo.RootDir == "" {
+		return nil // git would run in the harness's own directory
+	}
 	branch, err := d.git.DefaultBranch(ctx, repo.RootDir)
 	if err != nil || branch == "" {
 		return nil

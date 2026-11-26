@@ -173,3 +173,11 @@ func TestDetectedGatesAreTheHarnessDefaultsAndAStoredOverrideWins(t *testing.T) 
 		t.Errorf("project command must beat detection: %+v", test)
 	}
 }
+
+func TestARepositoryWithNoCheckoutDirectoryDetectsNothing(t *testing.T) {
+	co := &fakeCheckout{files: map[string]string{"go.mod": ""}, commit: "c1"}
+	got := agentsystem.NewDetector(co, noGitleaks).Detect(context.Background(), &domain.Repository{ID: "r1"})
+	wantGate(t, got, domain.GateBuild, "", noDetection)
+}
+
+const noDetection = "nothing detected for this repository"
