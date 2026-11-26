@@ -5,6 +5,7 @@ package procmac
 import (
 	"context"
 	"errors"
+	"log/slog"
 	"os"
 	"os/exec"
 	"strings"
@@ -210,5 +211,77 @@ func BenchmarkReadTheWholeTable(b *testing.B) {
 			b.Fatal(err)
 		}
 		b.ReportMetric(float64(len(rows)), "rows")
+	}
+}
+
+func TestAnEmptyArgv0DoesNotShiftTheArguments(t *testing.T) {
+	// exec path "/bin/sleep" (10 bytes) is padded to 16 from where it starts, then argv[0] = "" and argv[1] = "30".
+	buf := []byte("\x02\x00\x00\x00/bin/sleep\x00\x00\x00\x00\x00\x00\x00" + "30\x00HOME=/secret\x00")
+	args := parseProcArgs(buf)
+	if len(args) != 2 || args[0] != "" || args[1] != "30" {
+		t.Errorf("args = %q, want [\"\" \"30\"]", args)
+	}
+	// A path that fills its 8 bytes exactly has no padding to skip.
+	buf = []byte("\x02\x00\x00\x00/bin/ab\x00a\x00b\x00HOME=/x\x00")
+	if args := parseProcArgs(buf); len(args) != 2 || args[0] != "a" || args[1] != "b" {
+		t.Errorf("unpadded args = %q", args)
+	}
+}
+
+func TestAProcessWithAnEmptyArgv0KeepsItsKernelName(t *testing.T) {
+	child := spawn(t, "perl", "-e", `exec {"/bin/sleep"} "", "30"`)
+	deadline := time.Now().Add(5 * time.Second)
+	for time.Now().Before(deadline) {
+		rows, _ := Table{}.Read(context.Background())
+		if r, ok := find(rows, child.Process.Pid); ok && r.Name == "sleep" {
+			if r.Arg != "30" {
+				t.Errorf("row = %+v, want Arg 30", r)
+			}
+			return
+		}
+		time.Sleep(100 * time.Millisecond)
+	}
+	t.Fatal("the process never showed as sleep with its argument")
+}
+
+type logCapture struct{ lines *[]string }
+
+func (logCapture) Enabled(context.Context, slog.Level) bool { return true }
+func (h logCapture) Handle(_ context.Context, r slog.Record) error {
+	*h.lines = append(*h.lines, r.Level.String()+" "+r.Message)
+	return nil
+}
+func (h logCapture) WithAttrs([]slog.Attr) slog.Handler { return h }
+func (h logCapture) WithGroup(string) slog.Handler      { return h }
+
+func TestADeniedReadOfTheHarnessOwnProcessIsLoggedOnceAndRecoveryOnce(t *testing.T) {
+	var lines []string
+	old := slog.Default()
+	slog.SetDefault(slog.New(logCapture{&lines}))
+	t.Cleanup(func() { slog.SetDefault(old); ownBlind.Store(false) })
+	ownBlind.Store(false)
+
+	own := kinfo(int32(os.Getpid()))
+	other := kinfo(int32(os.Getpid()) + 1)
+	denied := fakeSource{procs: []unix.KinfoProc{own, other}, gone: map[int]bool{os.Getpid(): true}}
+	for range 3 {
+		if _, err := read(context.Background(), denied); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if len(lines) != 1 || !strings.HasPrefix(lines[0], "WARN") {
+		t.Fatalf("after three blind reads, log = %q, want one warning", lines)
+	}
+	ok := fakeSource{procs: []unix.KinfoProc{own}}
+	for range 2 {
+		read(context.Background(), ok)
+	}
+	if len(lines) != 2 || !strings.HasPrefix(lines[1], "INFO") {
+		t.Fatalf("after recovery, log = %q, want one more info line", lines)
+	}
+	// A table without the harness's own process says nothing either way.
+	read(context.Background(), fakeSource{procs: []unix.KinfoProc{other}})
+	if len(lines) != 2 {
+		t.Errorf("log = %q", lines)
 	}
 }
