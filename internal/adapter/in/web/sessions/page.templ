@@ -227,10 +227,15 @@ templ viewHead() {
 // agentsWhiteboard is where the board (a React island that reads this page's
 // seed) is mounted, only while the task shows it: the island starts reading
 // and following the feed when it is inserted, and stops when it is removed.
+// The task services panel (a second island, ADR 0003) sits beside it, in the
+// same row, and shows only with the board.
 templ agentsWhiteboard() {
 	<template x-if="view === 'whiteboard'">
-		<div class="[ board-column ] [ divide-end ]">
-			<div data-island="agents-whiteboard"></div>
+		<div class="[ board-row ]">
+			<div class="[ board-column ] [ divide-end ]">
+				<div data-island="agents-whiteboard"></div>
+			</div>
+			<div class="[ task-services-mount ]" data-island="task-services"></div>
 		</div>
 	</template>
 }

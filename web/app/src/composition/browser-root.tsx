@@ -54,6 +54,7 @@ import { ContextView } from "../features/context/presentation/views/context-view
 import { buildTopBar } from "./top-bar-presenters";
 import { TopBarView } from "./top-bar-view";
 import { mountAgentsView, mountWhiteboard } from "./whiteboard-island";
+import { mountTaskServices } from "./task-services-island";
 
 type Dispose = () => void;
 
@@ -64,7 +65,7 @@ function digestsAddress(hash: string): { tab: "digests"; date: string } | undefi
 }
 
 /** Islands that read their props themselves, from the page they sit in. */
-const OWN_PROPS = new Set(["agents-view", "agents-whiteboard"]);
+const OWN_PROPS = new Set(["agents-view", "agents-whiteboard", "task-services"]);
 
 /** Mounts the island of `mount` with its `props`; returns what takes it down. */
 /** `fresh`: a swap inserted the mount, with its own props, after the first page load. */
@@ -225,6 +226,7 @@ export function mountIslands(doc: Document): Dispose {
     },
     "agents-view": () => mountAgentsView(win),
     "agents-whiteboard": (mount) => mountWhiteboard(mount, win, api, feed),
+    "task-services": (mount) => mountTaskServices(mount, win, api, feed),
   };
 
   const mounted = new Map<Element, Dispose>();

@@ -171,7 +171,8 @@
 @layer blocks {
   .session-views {
     display: flex; flex-direction: column; min-block-size: 0; overflow: hidden;
-    & > .list, & > .board-column { flex: 1 1 0; min-block-size: 0; overflow-y: auto; overscroll-behavior: contain; }
+    & > .list { flex: 1 1 0; min-block-size: 0; overflow-y: auto; overscroll-behavior: contain; }
+    & > .board-row { flex: 1 1 0; min-block-size: 0; }
   }
   .list-head {
     display: flex; align-items: center; gap: var(--space-xs); flex: none;
@@ -181,6 +182,8 @@
     & .count { font-weight: var(--weight-regular); color: var(--color-ink-faint); }
     & .segmented { margin-inline-start: auto; }
   }
+  /* The board and, beside it, the task services panel (task-services.css). */
+  .board-row { display: flex; position: relative; overflow: hidden; & > .board-column { flex: 1 1 0; min-inline-size: 0; min-block-size: 0; overflow-y: auto; overscroll-behavior: contain; } }
   .board-column {
     display: flex; flex-direction: column;
     & > [data-island] { flex: 1 1 0; min-block-size: 0; display: flex; flex-direction: column; }
