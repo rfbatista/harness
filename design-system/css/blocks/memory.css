@@ -28,6 +28,7 @@
     white-space: nowrap;
     cursor: pointer;
 
+    &[hidden] { display: none; }
     &:focus-visible { outline: var(--border-focus-width) solid var(--color-focus); outline-offset: 3px; }
 
     & > .num { color: var(--color-ink-muted); }

@@ -14,7 +14,16 @@ export function ChipView({ presenter, toastHost }: { presenter: ChipPresenter; t
   const chip = useRef<HTMLButtonElement>(null);
   const panel = useRef<HTMLElement>(null);
   const open = popover !== null;
-  usePopup(open, panel, chip, () => presenter.close());
+  // A light dismiss (a click or scroll outside) gives the focus back to the chip, unless the click put it on another
+  // control. The click's own focus change comes after the dismiss, so the check waits for it.
+  usePopup(open, panel, chip, () => {
+    presenter.close();
+    const doc = chip.current?.ownerDocument;
+    setTimeout(() => {
+      const active = doc?.activeElement;
+      if (doc && (!active || active === doc.body)) chip.current?.focus({ preventScroll: true });
+    }, 0);
+  });
 
   // Esc closes the popover first, then the toast that has the focus; the chip gets the focus back from the popover.
   const alive = open || toasts.length > 0;
@@ -33,27 +42,29 @@ export function ChipView({ presenter, toastHost }: { presenter: ChipPresenter; t
   }, [alive, presenter, toastHost]);
 
   const region = createPortal(<ToastRegion presenter={presenter} toasts={toasts} more={more} />, toastHost);
-  if (!view) return region;
+  // The button and the popover stay mounted from the first render, hidden while there is nothing to show, so that
+  // usePopup finds both at its one wiring and the popover can open once the first sample brings the chip.
   return (
     <>
       <button
+        hidden={!view}
         ref={chip}
         type="button"
         className="[ memory ]"
-        data-state={view.state}
-        data-signal={signal !== null && signal !== rung ? "" : undefined}
-        aria-label={view.title}
-        title={view.title}
+        data-state={view?.state}
+        data-signal={view && signal !== null && signal !== rung ? "" : undefined}
+        aria-label={view?.title}
+        title={view?.title}
         aria-expanded={open}
         aria-controls={POPOVER_ID}
-        style={{ "--_fill": `${view.fillPercent}%` } as CSSProperties}
+        style={{ "--_fill": `${view?.fillPercent ?? 0}%` } as CSSProperties}
         onClick={() => void presenter.toggle()}
       >
         <span className="num">
-          {view.num}
-          <span className="of">{view.of}</span>
+          {view?.num}
+          <span className="of">{view?.of}</span>
         </span>
-        {view.word && <span className="word">{view.word}</span>}
+        {view?.word && <span className="word">{view.word}</span>}
         <span className="track" aria-hidden="true" onAnimationEnd={() => setRung(signal)}>
           <span className="fill" />
         </span>
