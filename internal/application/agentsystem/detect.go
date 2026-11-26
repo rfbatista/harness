@@ -142,7 +142,7 @@ var dispatchesOnArg = regexp.MustCompile(`\$\{?1\b`)
 func namedInScript(script string, kind domain.GateKind) bool {
 	name := regexp.QuoteMeta(string(kind))
 	alt := "(?:" + name + "|" + regexp.QuoteMeta(strings.ReplaceAll(string(kind), "_", "-")) + ")"
-	label := regexp.MustCompile(`(?m)(?:^|[\s(|;])` + alt + `\s*[|)]`)
+	label := regexp.MustCompile(`(?m)(?:^|[\s(|;])["']?` + alt + `["']?\s*[|)]`)
 	test := regexp.MustCompile(`\$\{?1\}?"?\s*==?\s*["']?` + alt + `["']?(?:\s|;|\]|$)`)
 	return label.MatchString(script) || test.MatchString(script)
 }
