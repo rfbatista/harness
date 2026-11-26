@@ -1,5 +1,9 @@
 import { describe, test } from "node:test";
 import assert from "node:assert/strict";
+import { apiClient, type FetchLike } from "../../../../shared/infrastructure/api-client";
+import { memoryFeed } from "../../../../shared/infrastructure/memory-feed";
+import { wireSample } from "../../../../shared/testing/memory-fixtures";
+import { httpBoardSource } from "../../infrastructure/http-board-source";
 import { memoryBoardSource } from "../../infrastructure/memory-board-source";
 import { storageBoardPreferences } from "../../infrastructure/storage-board-preferences";
 import { memoryStorage } from "../../testing/memory-storage";
@@ -236,5 +240,25 @@ describe("the bar's over budget badge (design D7)", () => {
     const m = presenter.viewModel.memory!;
     assert.deepEqual([m.near, m.over], [1, 1]);
     assert.match(m.sentence, /1 near budget, 1 over budget\.$/);
+  });
+});
+
+describe("the board seeds from the payload it loads (F4)", () => {
+  test("a sessions payload with memory paints the line and the bar at once, before any feed event", async () => {
+    const wire = (s: BoardSession) => ({ id: s.id, ticket_id: "t1", agent_id: s.agentId, status: "running", role: s.role, created_at: s.createdAt.toISOString(), updated_at: s.updatedAt.toISOString(), memory: wireSample({ session_id: s.id, rss_bytes: Math.round(3.4 * 1024 ** 3), sampled_at: new Date().toISOString() }) });
+    const worker = session({ role: "delegate", parentSessionId: architect.id });
+    const fetcher: FetchLike = async (url) => {
+      if (url.startsWith("/api/sessions")) return Response.json({ sessions: [wire(worker)] });
+      if (url.startsWith("/api/list_session_branches")) return Response.json({ sessions: [] });
+      if (url.startsWith("/api/task_messages")) return Response.json({ messages: [] });
+      return Response.json({ review_requests: [] });
+    };
+    const feed = memoryFeed();
+    now = new Date(T0 + 3_600_000);
+    const presenter = new BoardPresenter({ source: httpBoardSource(apiClient(fetcher), feed), preferences: storageBoardPreferences(memoryStorage()), ticketId: "t1", projectId: "p1", agentNames: AGENT_NAMES, taskTitle: "", now: () => now });
+    await presenter.start();
+    assert.equal(presenter.viewModel.phase, "ready", presenter.viewModel.error);
+    assert.equal(card(presenter, worker.id).memory?.num, "3.4");
+    assert.equal(presenter.viewModel.memory?.total, "3.4 GB");
   });
 });
