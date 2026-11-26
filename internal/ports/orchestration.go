@@ -512,6 +512,10 @@ type InteractiveRequest struct {
 	// alone (Glossary "Session scope"); it is kept with its guard configuration
 	// and survives a resume.
 	Scope []string `json:"scope,omitempty"`
+	// TestsFailFirst turns tests-fail-first on for this session (Glossary
+	// "Tests-fail-first"): where the configuration makes it available, its
+	// writes to non-test files are refused until a test run has failed.
+	TestsFailFirst bool `json:"tests_fail_first,omitempty"`
 	// ParentSessionID is the session starting this one on its own task (the
 	// start_task_session tool); empty when a person starts it.
 	ParentSessionID string `json:"parent_session_id,omitempty"`

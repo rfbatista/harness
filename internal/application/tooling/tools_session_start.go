@@ -54,6 +54,16 @@ func startPeer(ctx context.Context, scope *taskScope, sessions ports.SessionRepo
 		}
 	}
 
+	testsFirst, _ := args["tests_fail_first"].(bool)
+	if testsFirst {
+		if channel == nil {
+			return nil, &domain.StructuredError{Code: "SCOPE_NOT_ALLOWED", Message: "only the task's architect can turn tests-fail-first on for a session"}
+		}
+		if role, err := channel.SessionRole(ctx, scope.session.ID); err != nil || role != domain.RoleArchitect {
+			return nil, &domain.StructuredError{Code: "SCOPE_NOT_ALLOWED", Message: "only the task's architect can turn tests-fail-first on for a session"}
+		}
+	}
+
 	mode := strings.TrimSpace(stringArg(args, "mode"))
 	join, err := resolveJoin(ctx, scope, sessions, args, mode)
 	if err != nil {
@@ -90,6 +100,7 @@ func startPeer(ctx context.Context, scope *taskScope, sessions ports.SessionRepo
 		ParentSessionID: scope.session.ID,
 		Mode:            mode,
 		Scope:           protectedScope,
+		TestsFailFirst:  testsFirst,
 		// A peer gets no more than its parent: unattended only if the parent is.
 		AutoAccept:         "off",
 		StatusCheckMinutes: statusCheckMinutes,

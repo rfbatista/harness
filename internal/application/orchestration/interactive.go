@@ -119,7 +119,7 @@ func (s *Service) StartInteractive(ctx context.Context, req InteractiveRequest) 
 		branch = named
 	}
 	role := s.newSessionRole(ctx, mode, req.ParentSessionID)
-	guard := s.resolveGuard(ctx, req.ProjectID, req.RepositoryID, mode, req.Scope)
+	guard := s.resolveGuard(ctx, req.ProjectID, req.RepositoryID, mode, req.Scope, req.TestsFailFirst)
 	p, err := s.prepare(ctx, prepareInput{
 		Guard:        &guard,
 		ID:           id,
@@ -332,7 +332,8 @@ func (s *Service) ResumeInteractive(ctx context.Context, req ports.ResumeRequest
 	s.withAttribution(&cfg)
 	s.rewireTokenSavers(ctx, sess, &cfg)
 	s.resumeMemoryBudget(ctx, sess, &cfg)
-	guard := s.resolveGuard(ctx, sess.ProjectID, sess.RepositoryID, sess.Mode, s.keptScope(ctx, sess.ID))
+	keptScope, keptTestsFirst := s.keptChoices(ctx, sess.ID)
+	guard := s.resolveGuard(ctx, sess.ProjectID, sess.RepositoryID, sess.Mode, keptScope, keptTestsFirst)
 	s.keepGuard(ctx, sess, guard)
 	trail.mark(&cfg, domain.PieceRuleset, "Token saver rules", "Token savers")
 	// A resume starts under the rules now in force, not the ones it started

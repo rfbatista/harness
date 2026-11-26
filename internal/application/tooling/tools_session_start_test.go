@@ -577,3 +577,18 @@ func TestStartTaskSession_ScopeReachesTheStartOnlyFromTheArchitectAndOnlyAsValid
 		t.Errorf("a start with no scope carried %v", got)
 	}
 }
+
+func TestStartTaskSession_TestsFailFirstReachesTheStartOnlyFromTheArchitect(t *testing.T) {
+	f := newChannelFixture(t)
+	f.mustCall(t, "arch", "start_task_session", map[string]any{"prompt": "Build it.", "tests_fail_first": true})
+	if !f.starter.got[0].TestsFailFirst {
+		t.Error("the architect's tests_fail_first did not reach the start")
+	}
+	f.mustCall(t, "arch", "start_task_session", map[string]any{"prompt": "Build it."})
+	if f.starter.got[1].TestsFailFirst {
+		t.Error("a start with no tests_fail_first turned it on")
+	}
+	if _, err := f.call(t, "dlg", "start_task_session", map[string]any{"prompt": "x", "tests_fail_first": true}); errs.Code(err) != "SCOPE_NOT_ALLOWED" {
+		t.Errorf("a delegate's tests_fail_first: %v", err)
+	}
+}

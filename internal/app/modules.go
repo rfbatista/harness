@@ -970,9 +970,9 @@ func newHub() *orchestration.Hub { return orchestration.NewHub(256) }
 // newArchitectureRules checks sessions' actions against their repository's
 // architecture rules, reading each repository's current saved record and
 // announcing every failed rule on the orchestration's project feed.
-func newArchitectureRules(cat catalog.Catalog, sessions ports.SessionRepository, events ports.ArchitectureRuleEventStore, orch *orchestration.Service, guard ports.GuardSessions, ws *workspaces.Service) *archrules.Service {
+func newArchitectureRules(cat catalog.Catalog, sessions ports.SessionRepository, events ports.ArchitectureRuleEventStore, orch *orchestration.Service, guard ports.GuardSessions, ws *workspaces.Service, gateRuns ports.GateRunStore) *archrules.Service {
 	svc := archrules.NewService(archrules.Deps{
-		Sessions: sessions, Agents: cat.Agents, Records: cat.RepositoryArchitectures, Events: events, Feed: orch, EnvFiles: cat.Projects, Guard: guard,
+		Sessions: sessions, Agents: cat.Agents, Records: cat.RepositoryArchitectures, Events: events, Feed: orch, EnvFiles: cat.Projects, Guard: guard, GateRuns: gateRuns,
 		ManifestChanged: gateruns.GitPathChanged(func(ctx context.Context, workspaceID string) string {
 			if w := ws.Get(ctx, workspaceID); w != nil {
 				return w.BaseSHA

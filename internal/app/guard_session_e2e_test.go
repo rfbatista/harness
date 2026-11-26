@@ -26,6 +26,8 @@ type fakeAgentSystem struct {
 	requests                  int
 	// lockfileOff turns the lockfile rule off.
 	lockfileOff bool
+	// testsFirstAvailable makes tests-fail-first available.
+	testsFirstAvailable bool
 }
 
 func (f *fakeAgentSystem) set(retry int) { f.mu.Lock(); f.retry = retry; f.mu.Unlock() }
@@ -48,6 +50,7 @@ func (f *fakeAgentSystem) Effective(_ context.Context, _, _ string) (domain.Effe
 		}
 	}
 	eff.Guard.RetryLimit = domain.AgentSystemField[int]{Value: f.retry, Source: domain.SourceProject}
+	eff.Guard.TestsFailFirst.Available.Value = f.testsFirstAvailable
 	if f.lockfileOff {
 		eff.Guard.LockfileRule.Enabled.Value = false
 	}

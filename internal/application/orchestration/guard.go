@@ -21,7 +21,7 @@ import (
 // configuration: the gated rule depends only on the mode and the diff, so a
 // store fault never switches the Guard layer off. It reads the settings once;
 // the start or resume passes the result to the sandbox policy and keeps it.
-func (s *Service) resolveGuard(ctx context.Context, projectID, repositoryID string, mode domain.SessionMode, scope []string) domain.GuardConfig {
+func (s *Service) resolveGuard(ctx context.Context, projectID, repositoryID string, mode domain.SessionMode, scope []string, testsFirst bool) domain.GuardConfig {
 	ctx = context.WithoutCancel(ctx)
 	var (
 		eff domain.EffectiveAgentSystem
@@ -41,18 +41,20 @@ func (s *Service) resolveGuard(ctx context.Context, projectID, repositoryID stri
 	cfg := domain.NewGuardConfig(eff, mode)
 	cfg.Unresolved = reason
 	cfg.Scope = slices.Clone(scope)
+	cfg.TestsFailFirst = testsFirst
 	return cfg
 }
 
-// keptScope is the scope a session kept at its start, for a resume to carry on.
-func (s *Service) keptScope(ctx context.Context, sessionID string) []string {
+// keptChoices are what a session was given at its start and a resume carries
+// on: the architect's scope and tests-fail-first.
+func (s *Service) keptChoices(ctx context.Context, sessionID string) (scope []string, testsFirst bool) {
 	if s.GuardSessions == nil {
-		return nil
+		return nil, false
 	}
 	if prev, ok, err := s.GuardSessions.Config(ctx, sessionID); err == nil && ok {
-		return prev.Scope
+		return prev.Scope, prev.TestsFailFirst
 	}
-	return nil
+	return nil, false
 }
 
 // keepGuard keeps cfg as the session's guard configuration for its whole run.

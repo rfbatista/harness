@@ -44,6 +44,9 @@ type Deps struct {
 	// Guard gives a session's kept guard configuration, for the protected
 	// paths; nil protects none.
 	Guard ports.GuardSessions
+	// GateRuns are the recorded gate runs, which tests-fail-first observes; nil:
+	// none has failed.
+	GateRuns ports.GateRunStore
 	// ManifestChanged says whether a path of a session's worktree differs from
 	// its base; Diff answers its diff against HEAD. The lockfile rule reads
 	// them; nil: no manifest has changed and no diff is read.
@@ -120,6 +123,9 @@ func (s *Service) CheckArchitecture(ctx context.Context, c ports.ArchitectureChe
 		return v
 	}
 	if v, refused := s.lockfileRule(ctx, c); refused {
+		return v
+	}
+	if v, refused := s.testsFailFirstRefusal(ctx, c); refused {
 		return v
 	}
 	sess := s.d.Sessions.Get(c.SessionID)

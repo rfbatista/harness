@@ -7,6 +7,7 @@ import (
 	"strings"
 	"testing"
 
+	"operators-mcp/internal/application/orchestration"
 	"operators-mcp/internal/domain"
 	"operators-mcp/internal/ports"
 )
@@ -309,5 +310,87 @@ func TestWithTheLockfileRuleOffNothingIsRefusedOrFlaggedAndANonGatedSessionIsNev
 		if strings.HasPrefix(ev["rule_id"].(string), "lockfile") {
 			t.Errorf("an event with the rule off or no gate: %v", ev)
 		}
+	}
+}
+
+// Guard — tests-fail-first (ADR 0012): where a session has it on, its writes to
+// non-test files wait for a test run of its own that failed.
+
+func (e *shellE2E) testsFirstSession(available, on bool, testGate string) runningSession {
+	e.t.Helper()
+	gates := greenGates()
+	gates[domain.GateTest] = testGate
+	e.orch.AgentSystem = &fakeAgentSystem{retry: 3, gates: gates, testsFirstAvailable: available}
+	// The gates run unconfined here: a sandbox cannot nest in the test's own.
+	if _, err := e.cat.Settings.UpdateSettings(map[string]string{orchestration.SettingSandbox: "off"}); err != nil {
+		e.t.Fatal(err)
+	}
+	return e.startWith(ports.InteractiveRequest{ProjectID: e.project, RepositoryID: e.repo, TicketID: e.task("Tests first"), Mode: "implement", TestsFailFirst: on})
+}
+
+func TestWithTestsFailFirstOnANonTestWriteIsRefusedUntilATestRunHasFailedAndTestFilesAreNeverRefused(t *testing.T) {
+	e := newShellE2E(t)
+	a := e.testsFirstSession(true, true, "false")
+	write := func(rel string) string {
+		return runHook(t, a, e.srv.URL, "PreToolUse", archPreMatcher, editInput("Write", filepath.Join(a.worktree, rel)))
+	}
+
+	if out := write("main.go"); !strings.Contains(out, "TESTS_MUST_FAIL_FIRST") || !strings.Contains(out, "main.go") {
+		t.Errorf("a non-test write before any failed test run = %s", out)
+	}
+	if out := runHook(t, a, e.srv.URL, "PreToolUse", archPreMatcher, bashInput(a.worktree, "echo x > main.go")); !strings.Contains(out, "TESTS_MUST_FAIL_FIRST") {
+		t.Errorf("a redirect to a non-test file = %s", out)
+	}
+	for _, rel := range []string{"main_test.go", "web/a.test.js", "testdata/in.json"} {
+		if out := write(rel); out != "" {
+			t.Errorf("the test file %s was refused = %s", rel, out)
+		}
+	}
+	var refusals int
+	for _, ev := range e.ruleEvents() {
+		if ev["rule_id"] == "tests_fail_first" && ev["session_id"] == a.id && ev["outcome"] == "blocked" {
+			refusals++
+		}
+	}
+	if refusals != 2 {
+		t.Errorf("recorded %d refusals, want 2", refusals)
+	}
+
+	// A practice run limited to test that failed opens the writes.
+	out, err := e.callTool(a.id, "run_gates", map[string]any{"kinds": []any{"test"}})
+	if err != nil || out["result"] != "red" {
+		t.Fatalf("run_gates = %v, %v", out, err)
+	}
+	if got := write("main.go"); got != "" {
+		t.Errorf("a non-test write after a failed test run = %s", got)
+	}
+}
+
+func TestAPassingTestRunDoesNotOpenTheWritesAndTestsFailFirstOffOrUnavailableRefusesNothing(t *testing.T) {
+	e := newShellE2E(t)
+	a := e.testsFirstSession(true, true, "true")
+	if _, err := e.callTool(a.id, "run_gates", map[string]any{"kinds": []any{"test"}}); err != nil {
+		t.Fatal(err)
+	}
+	if out := runHook(t, a, e.srv.URL, "PreToolUse", archPreMatcher, editInput("Write", filepath.Join(a.worktree, "main.go"))); !strings.Contains(out, "TESTS_MUST_FAIL_FIRST") {
+		t.Errorf("a green test run opened the writes = %s", out)
+	}
+
+	for name, s := range map[string]runningSession{"off": e.testsFirstSession(true, false, "false"), "unavailable": e.testsFirstSession(false, true, "false")} {
+		if out := runHook(t, s, e.srv.URL, "PreToolUse", archPreMatcher, editInput("Write", filepath.Join(s.worktree, "main.go"))); out != "" {
+			t.Errorf("tests-fail-first %s refused = %s", name, out)
+		}
+	}
+
+	// A resume keeps it on.
+	e.orch.Transcripts = transcriptsThatResume{}
+	if _, err := e.orch.EndInteractive(e.ctx, a.id, 0, false); err != nil {
+		t.Fatal(err)
+	}
+	if _, _, err := e.orch.ResumeInteractive(e.ctx, ports.ResumeRequest{SessionID: a.id, RunsOn: domain.RunnerTUI}); err != nil {
+		t.Fatal(err)
+	}
+	if cfg, _ := e.orch.GuardConfig(e.ctx, a.id); !cfg.TestsFailFirst {
+		t.Errorf("a resume dropped tests-fail-first: %+v", cfg)
 	}
 }
