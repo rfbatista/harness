@@ -98,8 +98,8 @@ func TestSIGKILLWaitsTheFullGraceAndIsSentOnce(t *testing.T) {
 		t.Fatalf("signals 5 s after SIGTERM = %+v, want SIGKILL", w.sig.sent)
 	}
 	w.pollFor(10 * time.Second)
-	if len(w.sig.sent) != 2 || len(w.sink.kills) != 1 {
-		t.Errorf("signals = %+v kills = %d, want one SIGKILL and one kill record however long it lingers", w.sig.sent, len(w.sink.kills))
+	if len(w.sig.sent) != 2 || len(w.sink.kills) != 0 {
+		t.Errorf("signals = %+v kills = %d, want one SIGKILL and no kill record while it lingers", w.sig.sent, len(w.sink.kills))
 	}
 }
 

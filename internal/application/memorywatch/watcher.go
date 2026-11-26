@@ -304,7 +304,10 @@ func stillThere(e *ending, table []ports.ProcessInfo) bool {
 func (w *Watcher) settle(wt *watch, _ tree, table []ports.ProcessInfo, now time.Time) (free bool) {
 	e := wt.ending
 	if !stillThere(e, table) {
-		if !e.killed {
+		// Gone: ended by the signal that last reached it.
+		if e.killed {
+			w.killed(wt, e, now, syscall.SIGKILL)
+		} else {
 			w.killed(wt, e, now, syscall.SIGTERM)
 		}
 		wt.ending = nil
@@ -316,6 +319,9 @@ func (w *Watcher) settle(wt *watch, _ tree, table []ports.ProcessInfo, now time.
 				"session", wt.SessionID, "pid", e.pid, "command", e.command)
 			wt.abandoned[e.pid] = e.started
 			wt.ending = nil
+			if f, ok := w.sink.(ports.MemoryKillFailed); ok {
+				f.KillFailed(w.killRecord(wt, e, now, syscall.SIGKILL))
+			}
 			return true
 		}
 		return false
@@ -326,7 +332,6 @@ func (w *Watcher) settle(wt *watch, _ tree, table []ports.ProcessInfo, now time.
 			return false
 		}
 		e.killed, e.killedAt = true, now
-		w.killed(wt, e, now, syscall.SIGKILL)
 	}
 	return false
 }

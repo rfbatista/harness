@@ -324,3 +324,28 @@ func TestAReparentedProcessStaysInTheTreeWithoutAPOSIXSession(t *testing.T) {
 		t.Errorf("a reused pid is counted: %d processes, want 1", got.Processes)
 	}
 }
+
+// failSink also hears of a process that could not be ended.
+type failSink struct {
+	*sink
+	failed []domain.MemoryKill
+}
+
+func (f *failSink) KillFailed(k domain.MemoryKill) { f.failed = append(f.failed, k) }
+
+// L1: a process that survives SIGKILL is never reported as ended. Once it is
+// given up on, the sink hears of the failure, once, and nothing else.
+func TestAProcessThatSurvivesSIGKILLIsReportedAsFailedNeverAsEnded(t *testing.T) {
+	w := newWorld()
+	fs := &failSink{sink: w.sink}
+	w.watcher = memorywatch.New(memorywatch.Deps{Table: w.table, Signal: w.sig, Sink: fs})
+	w.table.set(ptyTree(heavyTool(201, 4*gb))...)
+	watchPTY(w, 4*gb)
+	w.pollFor(30 * time.Second)
+	if len(w.sink.kills) != 0 {
+		t.Errorf("kills = %+v, want none: the process never left", w.sink.kills)
+	}
+	if len(fs.failed) != 1 || fs.failed[0].PID != 201 || fs.failed[0].Command != "node jest" || fs.failed[0].Signal != "SIGKILL" {
+		t.Errorf("failures = %+v, want one for 201 after SIGKILL", fs.failed)
+	}
+}

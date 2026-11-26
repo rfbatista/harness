@@ -237,3 +237,16 @@ func TestAProductOwnerSessionUsesTheGlobalOrcamentoOnly(t *testing.T) {
 		t.Errorf("budget = %d from %q, want 4 GB from global", sess.MemoryBudgetBytes, sess.MemoryBudgetSource)
 	}
 }
+
+// L1: a process the vigia gave up on is not "killed": no kill is recorded or
+// published for it.
+func TestAProcessGivenUpOnLeavesNoKillRecord(t *testing.T) {
+	svc, _ := newInteractiveService(t)
+	sess, _ := startInteractive(t, svc, InteractiveRequest{Prompt: "go"})
+	k := killOf(sess.ID)
+	svc.Ending(k)
+	svc.KillFailed(k)
+	if read, _ := svc.SessionMemory(sess.ID); len(read.Kills) != 0 {
+		t.Errorf("kills = %+v, want none for a process that could not be ended", read.Kills)
+	}
+}
