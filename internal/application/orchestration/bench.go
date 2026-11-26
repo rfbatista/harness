@@ -95,14 +95,15 @@ var benchBuiltInTools = []string{
 }
 
 // withBenchToolsLocked leaves a bench run's CLI with the mock server's tools
-// and nothing else. The built-in tools are denied in its settings, and only
+// and the Skill tool (the project's skills are part of what the bench
+// measures), and nothing else. The built-in tools are denied in its settings, and only
 // the mock server is allowed, with no approval tool and no permission bypass:
 // any other tool call is refused by the CLI. The allow list is the barrier;
 // the deny list names what a CLI that adds a tool would otherwise surprise us
 // with only as far as it is known.
 func withBenchToolsLocked(cfg *llmkit.SessionConfig, mcpName string) {
 	cfg.Permission = llmkit.PermissionAsk
-	cfg.AllowedTools = []string{"mcp__" + mcpName}
+	cfg.AllowedTools = []string{"mcp__" + mcpName, "Skill"}
 	deny, _ := json.Marshal(map[string][]string{"deny": benchBuiltInTools}) // a string list always marshals
 	withClaudeSetting(cfg, "permissions", deny)
 }

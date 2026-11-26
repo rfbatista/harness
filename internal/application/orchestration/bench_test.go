@@ -206,8 +206,8 @@ func TestBenchRunLaunchesWithNoBuiltInToolAllowedAndNoPermissionBypass(t *testin
 		t.Fatalf("the run is not gated by its tool list alone: %v", l.Args)
 	}
 	i := slices.Index(l.Args, "--allowedTools")
-	if i < 0 || i+1 >= len(l.Args) || l.Args[i+1] != "mcp__bench" || (i+2 < len(l.Args) && !strings.HasPrefix(l.Args[i+2], "--")) {
-		t.Fatalf("only the mock server's tools may be allowed: %v", l.Args)
+	if i < 0 || i+1 >= len(l.Args) || l.Args[i+1] != "mcp__bench" || i+2 >= len(l.Args) || l.Args[i+2] != "Skill" || (i+3 < len(l.Args) && !strings.HasPrefix(l.Args[i+3], "--")) {
+		t.Fatalf("only the mock server's tools and Skill may be allowed: %v", l.Args)
 	}
 	var perms struct {
 		Deny []string `json:"deny"`
@@ -239,7 +239,8 @@ func TestBenchRunUnderTheSandboxWritesOnlyItsThrowawayDirectory(t *testing.T) {
 	w := newBenchWorld(t, `[]`)
 	driver := &portstest.RecordingSandboxDriver{}
 	home := t.TempDir()
-	w.sessions.Sandbox = &Sandbox{Driver: driver, Home: home, Checkouts: func() []string { return []string{w.repoRoot} }}
+	projectHomes := t.TempDir()
+	w.sessions.Sandbox = &Sandbox{Driver: driver, Home: home, ProjectHomesRoot: projectHomes, Checkouts: func() []string { return []string{w.repoRoot} }}
 	runBenchCase(t, w, readmeCase)
 
 	calls := driver.Calls()
@@ -269,6 +270,9 @@ func TestBenchRunUnderTheSandboxWritesOnlyItsThrowawayDirectory(t *testing.T) {
 	}
 	if throwaway == 0 {
 		t.Fatalf("the throwaway dir is not writable: %v", policy.Writable)
+	}
+	if !slices.Contains(policy.Hidden, projectHomes) {
+		t.Fatalf("the folder of the project Claude homes is not hidden: %v", policy.Hidden)
 	}
 	if !slices.Contains(policy.Hidden, w.repoRoot) {
 		t.Fatalf("the project repository is not hidden: %v", policy.Hidden)
