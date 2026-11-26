@@ -58,6 +58,7 @@ import (
 	"operators-mcp/internal/application/keychainpath"
 	"operators-mcp/internal/application/notifications"
 	"operators-mcp/internal/application/orchestration"
+	"operators-mcp/internal/application/personproof"
 	"operators-mcp/internal/application/planning"
 	"operators-mcp/internal/application/productowner"
 	"operators-mcp/internal/application/repoagents"
@@ -486,7 +487,10 @@ var AgentRuntimeModule = fx.Module("agentruntime",
 		sqlite.NewGateRunRepository,
 		func(r *sqlite.GateRunRepository) ports.GateRunStore { return r },
 		newGateRuns,
-		gateruns.NewDeclarer,
+		newDeclarer,
+		sqlite.NewPersonCredentialRepository,
+		func(r *sqlite.PersonCredentialRepository) ports.PersonCredentials { return r },
+		personproof.New,
 		sqlite.NewGuardSessionRepository,
 		func(r *sqlite.GuardSessionRepository) ports.GuardSessions { return r },
 		newAgentClaudeHome,
@@ -979,9 +983,16 @@ func newHub() *orchestration.Hub { return orchestration.NewHub(256) }
 // newArchitectureRules checks sessions' actions against their repository's
 // architecture rules, reading each repository's current saved record and
 // announcing every failed rule on the orchestration's project feed.
-func newArchitectureRules(cat catalog.Catalog, sessions ports.SessionRepository, events ports.ArchitectureRuleEventStore, orch *orchestration.Service) *archrules.Service {
+func newArchitectureRules(cat catalog.Catalog, sessions ports.SessionRepository, events ports.ArchitectureRuleEventStore, orch *orchestration.Service, guard ports.GuardSessions, ws *workspaces.Service, gateRuns ports.GateRunStore) *archrules.Service {
 	svc := archrules.NewService(archrules.Deps{
-		Sessions: sessions, Agents: cat.Agents, Records: cat.RepositoryArchitectures, Events: events, Feed: orch, EnvFiles: cat.Projects,
+		Sessions: sessions, Agents: cat.Agents, Records: cat.RepositoryArchitectures, Events: events, Feed: orch, EnvFiles: cat.Projects, Guard: guard, GateRuns: gateRuns,
+		ManifestChanged: gateruns.GitPathChanged(func(ctx context.Context, workspaceID string) string {
+			if w := ws.Get(ctx, workspaceID); w != nil {
+				return w.BaseSHA
+			}
+			return ""
+		}),
+		Diff: gateruns.GitDiffOf(),
 	})
 	svc.Subscribe(cat.Bus)
 	return svc
@@ -1199,6 +1210,10 @@ func newOrchestrationService(
 		ConfigHome: os.Getenv("XDG_CONFIG_HOME"),
 		Bin:        claudeBin.Bin(),
 		Allow:      func(string) []ports.SandboxPath { return allow },
+		// The database holds the person credentials' hashes, secret.key the
+		// stores' key: no session reads either (ADR 0016). Task memory and the
+		// other per-session paths in the data dir stay reachable.
+		Secrets: func() []string { return harnessSecrets(cfg) },
 		// What no session grants is hidden: the workspaces root and, for
 		// one-shots, every checkout.
 		WorkspacesRoot: ws.Root,
@@ -1781,7 +1796,7 @@ func sessionAuthor(sessions ports.SessionRepository, owners ports.ProductOwnerSt
 // session's gates in its worktree under the session's sandbox profile.
 func newGateRuns(sessions ports.SessionRepository, guard ports.GuardSessions, store ports.GateRunStore, orch *orchestration.Service, ws *workspaces.Service) *gateruns.Service {
 	return gateruns.New(gateruns.Deps{
-		Sessions: sessions, Guard: guard, Store: store, Exec: &gateruns.ShellExecutor{Sandbox: orch},
+		Sessions: sessions, Guard: guard, Store: store, Exec: &gateruns.ShellExecutor{Sandbox: orch}, Announce: orch,
 		HasDiff: gateruns.GitHasDiff(func(ctx context.Context, workspaceID string) string {
 			if w := ws.Get(ctx, workspaceID); w != nil {
 				return w.BaseSHA
@@ -1789,4 +1804,29 @@ func newGateRuns(sessions ports.SessionRepository, guard ports.GuardSessions, st
 			return ""
 		}),
 	})
+}
+
+// newDeclarer is the done declaration, with escalation at the retry limit
+// (ADR 0012): the session is stopped like the person's Stop, and the person,
+// the feed and the architect are told.
+func newDeclarer(runs *gateruns.Service, orch *orchestration.Service, cat catalog.Catalog, channel *taskchannel.Service) *gateruns.Declarer {
+	d := gateruns.NewDeclarer(runs)
+	d.Escalation = &gateruns.Escalator{Stopper: orch, Events: cat.Bus, Feed: orch, Channel: channel}
+	return d
+}
+
+// harnessSecrets are the files of the harness a session must never reach: the
+// database with its write-ahead log and shared memory, and the key of the
+// encrypted stores. An in-memory database has none.
+func harnessSecrets(cfg Config) []string {
+	var out []string
+	if !cfg.inMemory() {
+		if db, err := filepath.Abs(cfg.DBPath); err == nil {
+			out = append(out, db, db+"-wal", db+"-shm", db+"-journal")
+		}
+	}
+	if root, err := cfg.dataRoot(); err == nil && root != "" {
+		out = append(out, filepath.Join(root, "secret.key"))
+	}
+	return out
 }

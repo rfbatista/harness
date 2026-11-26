@@ -352,3 +352,25 @@ func clipLine(text string, max int) string {
 	}
 	return line
 }
+
+// IsDoneMessage says whether a message to the architect says its sender is
+// done: a review request, or a status report whose status is done or
+// ready_for_review.
+func IsDoneMessage(kind TaskMessageKind, status ReportStatus) bool {
+	switch kind {
+	case MessageReviewRequest:
+		return true
+	case MessageStatusReport:
+		return status == ReportDone || status == ReportReadyForReview
+	}
+	return false
+}
+
+// IsDoneDeclaration says whether a message to the architect is a delegate's
+// done declaration (Glossary "Done declaration"): a done message of a session
+// whose branch has a diff against its base. The review of a plan or of tickets
+// a session sends before writing code has no diff and is not one. A gated
+// session's declaration runs the declaration checks before the message goes.
+func IsDoneDeclaration(kind TaskMessageKind, status ReportStatus, hasDiff bool) bool {
+	return hasDiff && IsDoneMessage(kind, status)
+}

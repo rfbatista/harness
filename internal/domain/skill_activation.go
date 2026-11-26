@@ -104,27 +104,6 @@ func (a SkillActivation) MatchesPath(file string) bool {
 	return false
 }
 
-func matchSegments(pat, segs []string) bool {
-	if len(pat) == 0 {
-		return len(segs) == 0
-	}
-	if pat[0] == "**" {
-		for i := 0; i <= len(segs); i++ {
-			if matchSegments(pat[1:], segs[i:]) {
-				return true
-			}
-		}
-		return false
-	}
-	if len(segs) == 0 {
-		return false
-	}
-	if ok, _ := path.Match(pat[0], segs[0]); !ok {
-		return false
-	}
-	return matchSegments(pat[1:], segs[1:])
-}
-
 func activationGlobProblem(p string) string {
 	switch {
 	case strings.HasPrefix(p, "/") || strings.Contains(p, "\\"):

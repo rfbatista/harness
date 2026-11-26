@@ -107,9 +107,7 @@ func (a *TaskResources) OpenTicketResource(ctx context.Context, id string) (*por
 	if err != nil {
 		return nil, err
 	}
-	if a.c.token != "" {
-		req.Header.Set("Authorization", "Bearer "+a.c.token)
-	}
+	a.c.authorize(req.Header)
 	resp, err := a.c.http.Do(req)
 	if err != nil {
 		return nil, fmt.Errorf("coding_pool server at %s: %w", a.c.base, err)

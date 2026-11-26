@@ -9,6 +9,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"operators-mcp/internal/application/orchestration"
 	"operators-mcp/internal/domain"
@@ -199,4 +200,35 @@ func listing(t *testing.T, dir string) string {
 		t.Fatal(err)
 	}
 	return strings.Join(names, "\n")
+}
+
+func TestAGateRunPublishesOneStartedAndOneFinishedEventOnTheProjectFeed(t *testing.T) {
+	e := newShellE2E(t)
+	sess := e.gatedSession(&fakeAgentSystem{retry: 3, gates: greenGates()})
+	feed, err := e.orch.FollowProject(e.ctx, e.project)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	_, run := e.runGates(sess.ID)
+
+	var got []ports.GateRunChange
+	deadline := time.After(10 * time.Second)
+	for len(got) < 2 {
+		select {
+		case ch := <-feed:
+			if ch.GateRun != nil {
+				got = append(got, *ch.GateRun)
+			}
+		case <-deadline:
+			t.Fatalf("events so far: %+v", got)
+		}
+	}
+	start, end := got[0], got[1]
+	if start.Phase != "started" || start.SessionID != sess.ID || start.RunID != run.ID || start.Trigger != domain.GateTriggerPerson || start.ProjectID != e.project {
+		t.Errorf("started = %+v", start)
+	}
+	if end.Phase != "finished" || end.RunID != run.ID || end.Result != domain.GateRunGreen || end.Counted {
+		t.Errorf("finished = %+v", end)
+	}
 }

@@ -34,9 +34,7 @@ func (a *Terminals) AttachTerminal(ctx context.Context, sessionID string) (ports
 	}
 	u.Scheme = strings.Replace(u.Scheme, "http", "ws", 1)
 	header := http.Header{}
-	if a.c.token != "" {
-		header.Set("Authorization", "Bearer "+a.c.token)
-	}
+	a.c.authorize(header)
 	conn, resp, err := websocket.Dial(ctx, u.String(), &websocket.DialOptions{HTTPHeader: header})
 	if err != nil {
 		if resp != nil && resp.StatusCode >= 300 {

@@ -7,6 +7,7 @@ import (
 	"context"
 	"crypto/rand"
 	"encoding/hex"
+	"io"
 	"slices"
 	"time"
 
@@ -28,11 +29,16 @@ type Deps struct {
 	// HasDiff says whether a mode-less session has a diff against its base;
 	// nil: it has none.
 	HasDiff func(ctx context.Context, sess *domain.Session) bool
-	Now     func() time.Time
+	// Announce puts a gate run's start and end on the project feed; nil: none.
+	Announce ports.ProjectChangeSink
+	Now      func() time.Time
 }
 
 // Service is the gate runner.
-type Service struct{ d Deps }
+type Service struct {
+	d    Deps
+	live liveRuns
+}
 
 // New returns the runner.
 func New(d Deps) *Service {
@@ -86,28 +92,51 @@ func (s *Service) Run(ctx context.Context, req ports.GateRunRequest) (*domain.Ga
 			run.MissingKinds = append(run.MissingKinds, k)
 		}
 	}
+	var planned []domain.GuardGate
 	if len(run.MissingKinds) == 0 {
 		for _, g := range cfg.Gates {
-			if g.Command == "" || !wanted(g.Kind) {
-				continue
+			if g.Command != "" && wanted(g.Kind) {
+				planned = append(planned, g)
 			}
-			run.Gates = append(run.Gates, s.runGate(ctx, sess, g))
 		}
+	}
+	kinds := make([]domain.GateKind, len(planned))
+	for i, g := range planned {
+		kinds[i] = g.Kind
+	}
+	live := s.live.start(run.ID, kinds)
+	defer s.live.end(run.ID)
+	s.announce(sess, run, "started")
+	for _, g := range planned {
+		run.Gates = append(run.Gates, s.runGate(ctx, sess, g, live[g.Kind]))
 	}
 	run.Finish(s.d.Now())
 	if err := s.d.Store.Save(ctx, run); err != nil {
 		return nil, err
 	}
+	s.announce(sess, run, "finished")
 	return run, nil
 }
 
-func (s *Service) runGate(ctx context.Context, sess *domain.Session, g domain.GuardGate) domain.GateResult {
+func (s *Service) announce(sess *domain.Session, run *domain.GateRun, phase string) {
+	if s.d.Announce == nil {
+		return
+	}
+	change := &ports.GateRunChange{ProjectID: sess.ProjectID, SessionID: sess.ID, RunID: run.ID, Trigger: run.Trigger, Phase: phase}
+	if phase == "finished" {
+		change.Result, change.Counted = run.Result, run.Counted
+	}
+	s.d.Announce.AnnounceChange(ports.ProjectChange{GateRun: change})
+}
+
+func (s *Service) runGate(ctx context.Context, sess *domain.Session, g domain.GuardGate, live *liveGate) domain.GateResult {
 	timeout := time.Duration(g.TimeoutSeconds) * time.Second
 	if timeout <= 0 {
 		timeout = domain.DefaultGateTimeoutSeconds * time.Second
 	}
 	out := &tailBuffer{max: domain.MaxGateOutputBytes}
-	exit := s.d.Exec.Execute(ctx, sess, g.Command, timeout, out)
+	exit := s.d.Exec.Execute(ctx, sess, g.Command, timeout, io.MultiWriter(out, live))
+	live.finish()
 	return domain.GateResult{
 		Kind: g.Kind, Command: g.Command, TimeoutSeconds: int(timeout / time.Second),
 		ExitCode: exit.ExitCode, TimedOut: exit.TimedOut, DurationMs: exit.Duration.Milliseconds(), Output: out.String(),
@@ -147,3 +176,34 @@ func (t *tailBuffer) Write(p []byte) (int, error) {
 }
 
 func (t *tailBuffer) String() string { return string(t.buf) }
+
+// Output implements ports.GateRuns: the gate's output as it is written while
+// its run is going, then the rest; a finished run's gate answers what was
+// recorded.
+func (s *Service) Output(ctx context.Context, sessionID, runID string, kind domain.GateKind, w io.Writer) error {
+	if g, ok := s.live.find(runID, kind); ok {
+		return g.stream(ctx, w)
+	}
+	runs, err := s.List(ctx, sessionID)
+	if err != nil {
+		return err
+	}
+	for _, r := range runs {
+		if r.ID != runID {
+			continue
+		}
+		for _, g := range r.Gates {
+			if g.Kind == kind {
+				_, err := io.WriteString(w, g.Output)
+				return err
+			}
+		}
+	}
+	return &domain.StructuredError{Code: "GATE_RUN_NOT_FOUND", Message: "no gate " + string(kind) + " in run " + runID}
+}
+
+// Scope implements ports.GateRuns.
+func (s *Service) Scope(ctx context.Context, sessionID string) ([]string, error) {
+	cfg, _, err := s.d.Guard.Config(ctx, sessionID)
+	return cfg.Scope, err
+}

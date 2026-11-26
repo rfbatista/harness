@@ -3,6 +3,8 @@ package gateruns
 import (
 	"context"
 	"errors"
+	"slices"
+	"strconv"
 
 	"operators-mcp/internal/domain"
 	"operators-mcp/internal/ports"
@@ -32,6 +34,16 @@ type DeclarationCheck interface {
 type Declarer struct {
 	runs   *Service
 	checks []DeclarationCheck
+	// Escalation takes over when a red declaration reaches the retry limit; nil:
+	// the count is kept and nothing else happens.
+	Escalation Escalation
+}
+
+// Escalation is what the harness does when a session's red declarations reach
+// its retry limit: stop it, tell the person (and the architect, for a
+// delegate), and publish the event. run is the declaration that reached it.
+type Escalation interface {
+	Escalate(ctx context.Context, sess *domain.Session, run *domain.GateRun) error
 }
 
 // NewDeclarer returns the declarer, with the gate run as its first check.
@@ -75,7 +87,49 @@ func (d *Declarer) Declare(ctx context.Context, sessionID string) (ports.Declara
 		}
 	}
 	out.Accepted = len(out.Refusals) == 0
+	if err := d.count(ctx, sess, &out); err != nil {
+		return ports.Declaration{}, err
+	}
 	return out, nil
+}
+
+// count keeps the session's consecutive red declarations: a refusal that counts
+// adds one and a limit reached escalates; an accepted declaration starts the
+// count again; any other refusal leaves it as it is.
+func (d *Declarer) count(ctx context.Context, sess *domain.Session, out *ports.Declaration) error {
+	if out.Run == nil {
+		return nil
+	}
+	if out.Accepted {
+		return d.runs.d.Guard.ResetRed(ctx, sess.ID)
+	}
+	counted := slices.ContainsFunc(out.Refusals, func(r ports.DeclarationRefusal) bool { return r.Counts })
+	if !counted {
+		return nil
+	}
+	n, err := d.runs.d.Guard.CountRed(ctx, sess.ID)
+	if err != nil {
+		return err
+	}
+	_, cfg, err := d.runs.Gated(ctx, sess.ID)
+	if err != nil {
+		return err
+	}
+	limit := max(cfg.RetryLimit, domain.MinRetryLimit)
+	if n < limit {
+		note := "\n\nRed declaration " + strconv.Itoa(n) + " of " + strconv.Itoa(limit) + ": at " + strconv.Itoa(limit) + " the harness stops this session and tells the person."
+		out.Refusals[0].Message += note
+		return nil
+	}
+	out.Run.Escalated = true
+	if err := d.runs.d.Store.Save(ctx, out.Run); err != nil {
+		return err
+	}
+	out.Refusals[0].Message += "\n\nRed declaration " + strconv.Itoa(n) + " of " + strconv.Itoa(limit) + ": this session is stopped as escalated and the person is told."
+	if d.Escalation == nil {
+		return nil
+	}
+	return d.Escalation.Escalate(ctx, sess, out.Run)
 }
 
 // Practice implements ports.Declarations.
@@ -86,4 +140,16 @@ func (d *Declarer) Practice(ctx context.Context, sessionID string, kinds []domai
 func isNotGated(err error) bool {
 	var se *domain.StructuredError
 	return errors.As(err, &se) && se.Code == "SESSION_NOT_GATED"
+}
+
+// HasDiff implements ports.Declarations.
+func (d *Declarer) HasDiff(ctx context.Context, sessionID string) bool {
+	if d.runs.d.HasDiff == nil {
+		return false
+	}
+	sess, err := d.runs.d.Sessions.Find(ctx, sessionID)
+	if err != nil || sess == nil {
+		return false
+	}
+	return d.runs.d.HasDiff(ctx, sess)
 }

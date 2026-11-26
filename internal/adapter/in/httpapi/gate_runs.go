@@ -17,6 +17,8 @@ var errGateRunsOff = echo.NewHTTPError(http.StatusServiceUnavailable, "gate runs
 // gateRunsView is a session's gate runs, oldest first.
 type gateRunsView struct {
 	Runs []domain.GateRun `json:"runs"`
+	// Scope is the protected-path globs the architect unlocked for the session.
+	Scope []string `json:"scope,omitempty"`
 }
 
 func (h *Handler) handleRunSessionGates(c echo.Context) error {
@@ -38,5 +40,48 @@ func (h *Handler) handleListSessionGateRuns(c echo.Context) error {
 	if err != nil {
 		return err
 	}
-	return c.JSON(http.StatusOK, gateRunsView{Runs: runs})
+	scope, err := h.gateRuns.Scope(c.Request().Context(), c.Param("id"))
+	if err != nil {
+		return err
+	}
+	return c.JSON(http.StatusOK, gateRunsView{Runs: runs, Scope: scope})
+}
+
+// handleGateOutput streams one gate's output as plain text: what a running gate
+// has written so far, then the rest as it comes, ending when the gate does. A
+// finished run answers what it recorded.
+func (h *Handler) handleGateOutput(c echo.Context) error {
+	if h.gateRuns == nil {
+		return errGateRunsOff
+	}
+	w := &flushWriter{c: c}
+	err := h.gateRuns.Output(c.Request().Context(), c.Param("id"), c.Param("run"), domain.GateKind(c.Param("kind")), w)
+	if err != nil && !w.started {
+		return err
+	}
+	if !w.started {
+		c.Response().Header().Set(echo.HeaderContentType, "text/plain; charset=utf-8")
+		c.Response().WriteHeader(http.StatusOK)
+	}
+	return nil
+}
+
+// flushWriter sends each write to the client at once, starting the response
+// with the first.
+type flushWriter struct {
+	c       echo.Context
+	started bool
+}
+
+func (f *flushWriter) Write(p []byte) (int, error) {
+	res := f.c.Response()
+	if !f.started {
+		f.started = true
+		res.Header().Set(echo.HeaderContentType, "text/plain; charset=utf-8")
+		res.Header().Set("Cache-Control", "no-store")
+		res.WriteHeader(http.StatusOK)
+	}
+	n, err := res.Write(p)
+	res.Flush()
+	return n, err
 }

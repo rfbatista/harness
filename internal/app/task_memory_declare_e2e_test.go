@@ -4,11 +4,14 @@ package app
 
 import (
 	"context"
+	"net/http"
+	"net/http/httptest"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
 
+	"operators-mcp/internal/adapter/in/httpapi"
 	"operators-mcp/internal/domain"
 	"operators-mcp/internal/ports"
 )
@@ -163,5 +166,40 @@ func TestDeclareDoneAfterARestartStillAsksForAnUnchangedMemory(t *testing.T) {
 	e.orch.AgentSystem = &fakeAgentSystem{retry: 3, gates: greenGates()}
 	if _, err := e.callTool(sess.ID, "declare_done", nil); err == nil || !strings.Contains(err.Error(), "TASK_MEMORY_NOT_UPDATED") {
 		t.Errorf("a restarted session with an unchanged memory: %v", err)
+	}
+}
+
+// With the person proof on (ADR 0016) saving a task memory is the person's
+// alone: sessions write memory through their files. Reading it and the
+// context map stay open to a session.
+func TestSavingATaskMemoryIsPersonOnlyWhileReadingStaysOpenToASession(t *testing.T) {
+	e := newShellE2E(t)
+	router := httpapi.NewRouter(httpapi.NewHandler(httpapi.Services{
+		Sessions: e.orch, Planning: e.plan, Pairing: e.proof, Settings: e.cat.Settings, Projects: e.cat.Projects,
+		TaskMemories: e.cat.TaskMemories, ContextMaps: e.contextMap,
+	}), httpapi.WithPersonProof(e.proof, personRefusals{events: e.cat.Bus}))
+	srv := httptest.NewServer(router)
+	defer srv.Close()
+	task := e.task("Proof")
+	body := `{"task_id":"` + task + `","repository_id":"` + e.repo + `","file":"plan.md","content":"x"}`
+	call := func(path string) int {
+		req, _ := http.NewRequest(http.MethodPost, srv.URL+path, strings.NewReader(body))
+		req.Header.Set("Content-Type", "application/json")
+		req.Header.Set("X-Harness-Session", "mine")
+		req.Header.Set("Origin", srv.URL)
+		res, err := http.DefaultClient.Do(req)
+		if err != nil {
+			t.Fatal(err)
+		}
+		res.Body.Close()
+		return res.StatusCode
+	}
+	if code := call("/api/save_task_memory"); code != http.StatusForbidden {
+		t.Errorf("save_task_memory unpaired = %d, want 403", code)
+	}
+	for _, path := range []string{"/api/get_task_memory", "/api/get_context_map"} {
+		if code := call(path); code == http.StatusForbidden {
+			t.Errorf("%s was refused to a session", path)
+		}
 	}
 }

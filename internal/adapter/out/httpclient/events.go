@@ -38,9 +38,7 @@ func follow[T any](ctx context.Context, c *Client, path string, keep func(T) boo
 		return nil, err
 	}
 	req.Header.Set("Accept", "text/event-stream")
-	if c.token != "" {
-		req.Header.Set("Authorization", "Bearer "+c.token)
-	}
+	c.authorize(req.Header)
 	// A stream lasts as long as the follower wants it, so it must not run
 	// under the client's per-request timeout.
 	stream := &http.Client{Transport: c.http.Transport}
