@@ -274,7 +274,10 @@ type Service struct {
 	// (…/api/sessions/{id}/memory); nil: the agent is told by the courier only.
 	SessionMemoryURL func(sessionID string) string
 	memoryNotes      memoryNotices
-	memory           memoryState
+	// cleaned are the sessions whose run has had its cleanup: nothing is
+	// installed for such a run (a resume starts a new one).
+	cleaned map[string]bool
+	memory  memoryState
 	// MemoryWatcher is the vigia de memória; nil: sessions are not watched.
 	MemoryWatcher ports.MemoryWatcher
 	// MemoryBudgets resolves the orçamento de memória a session starts or
@@ -1735,10 +1738,26 @@ func (s *Service) publishDelta(sessionID string, ev SessionEvent) {
 // joiners. Other contexts (artifacts) speak on the stream through it.
 func (s *Service) Announce(sessionID string, ev SessionEvent) { s.publish(sessionID, ev) }
 
+// endRun runs the cleanup of a run that is ending and marks it, so no watch is
+// installed for it afterwards: its terminal status is written only after the
+// cleanup, and a watch handed over in between would never be stopped. A late
+// second end of a run that already ended does not use it, so a resume that has
+// begun is not marked.
+func (s *Service) endRun(id string) {
+	s.mu.Lock()
+	if s.cleaned == nil {
+		s.cleaned = map[string]bool{}
+	}
+	s.cleaned[id] = true
+	s.mu.Unlock()
+	s.runCleanup(id)
+}
+
 func (s *Service) runCleanup(id string) {
 	s.mu.Lock()
 	c := s.cleanups[id]
 	delete(s.cleanups, id)
+
 	delete(s.busy, id)
 	s.mu.Unlock()
 	s.courier.forget(id)

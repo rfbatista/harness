@@ -151,6 +151,12 @@ func (s *Service) watchMemory(id, taskID string, budget int64, claudeID string, 
 	if s.MemoryWatcher == nil || budget <= 0 {
 		return
 	}
+	s.mu.Lock()
+	ended := s.cleaned[id]
+	s.mu.Unlock()
+	if ended {
+		return // the run is over: a watch now would never be stopped
+	}
 	s.forgetMemory(id)
 	stop := s.MemoryWatcher.Watch(ports.MemoryWatch{SessionID: id, TaskID: taskID, BudgetBytes: budget, ClaudeID: claudeID, RootPID: rootPID})
 	s.mu.Lock()
@@ -173,6 +179,14 @@ func (s *Service) watchMemory(id, taskID string, budget int64, claudeID string, 
 		s.mu.Unlock()
 		cleanup()
 	}
+}
+
+// reopenRun starts a new run of a session that ran before: what its earlier
+// run's cleanup recorded no longer applies.
+func (s *Service) reopenRun(id string) {
+	s.mu.Lock()
+	delete(s.cleaned, id)
+	s.mu.Unlock()
 }
 
 // watchTerminalMemory watches a session the server runs on a terminal, by the

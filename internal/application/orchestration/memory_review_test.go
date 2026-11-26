@@ -173,3 +173,63 @@ func TestASessionThatHasAlreadyEndedIsNotHandedToTheVigia(t *testing.T) {
 		t.Errorf("a watch was installed for an ended session: %d → %d", before, len(fw.watched))
 	}
 }
+
+// N5: between a session's cleanup and its terminal status, a watch handed over
+// would outlive it. Once cleanup has run for a run, nothing is watched for it.
+func TestNoWatchIsInstalledOnceTheRunsCleanupHasRun(t *testing.T) {
+	svc, w := newHeadlessShellService(t)
+	withTokenSavers(t, svc)
+	fw := &fakeWatcher{}
+	svc.MemoryWatcher = fw
+	sess, _ := startHeadless(t, svc, w.task.ID)
+	fw.mu.Lock()
+	before := len(fw.watched)
+	fw.mu.Unlock()
+
+	svc.endRun(sess.ID) // the status is still running: the window of the race
+	svc.watchMemory(sess.ID, "", 4*gb, sess.ID, 0)
+
+	fw.mu.Lock()
+	defer fw.mu.Unlock()
+	if len(fw.watched) != before {
+		t.Errorf("a watch was installed after the cleanup ran: %d → %d", before, len(fw.watched))
+	}
+}
+
+// A resume is a new run: its watch is installed although an earlier run's cleanup ran.
+func TestAResumeIsWatchedAlthoughTheEarlierRunsCleanupRan(t *testing.T) {
+	svc := newHostedService(t, scriptAgent{script: `cat`})
+	withTokenSavers(t, svc)
+	fw := &fakeWatcher{}
+	svc.MemoryWatcher = fw
+	sess := startOnServer(t, svc)
+	if err := svc.Stop(context.Background(), sess.ID); err != nil {
+		t.Fatal(err)
+	}
+	waitStatus(t, svc, sess.ID, domain.SessionStopped)
+	if _, _, err := svc.ResumeInteractive(context.Background(), ports.ResumeRequest{SessionID: sess.ID, RunsOn: domain.RunnerServer}); err != nil {
+		t.Fatal(err)
+	}
+	fw.mu.Lock()
+	defer fw.mu.Unlock()
+	if len(fw.watched) != 2 {
+		t.Errorf("watches = %d, want one per run", len(fw.watched))
+	}
+}
+
+// N6: a product owner thread is project-level: the orçamento is the global one,
+// whatever a repository overrides.
+func TestAProductOwnerSessionUsesTheGlobalOrcamentoOnly(t *testing.T) {
+	svc, _ := newHeadlessShellService(t)
+	savers := withTokenSavers(t, svc)
+	setOverride(t, savers, domain.ActivationLevelRepository, "r1", 8*gb)
+	id, err := svc.StartProductOwnerSession(context.Background(), ports.ProductOwnerSessionSpec{ProjectID: "p1"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = svc.Stop(context.Background(), id) })
+	sess := svc.sessions.Get(id)
+	if sess.MemoryBudgetBytes != 4*gb || sess.MemoryBudgetSource != "global" {
+		t.Errorf("budget = %d from %q, want 4 GB from global", sess.MemoryBudgetBytes, sess.MemoryBudgetSource)
+	}
+}
