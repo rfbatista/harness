@@ -43,6 +43,8 @@ var SessionTaskToolNames = []string{
 	"notify",
 	"push_branch",
 	"propose_instruction_files",
+	"declare_done",
+	"run_gates",
 }
 
 // MaxLiveTaskSessions caps the sessions running on one task at once, so agents
@@ -232,6 +234,7 @@ func SessionTaskTools(planningSvc ports.Planning, sessions ports.SessionReposito
 	tools = append(tools, sessionNotificationTools(sessions, notes)...)
 	tools = append(tools, sessionPushTools(sessions, o.pushes)...)
 	tools = append(tools, sessionInstructionTools(sessions, o.instructions)...)
+	tools = append(tools, sessionGateTools(sessions, o.declarations)...)
 	tools = append(tools, sessionArtifactTools(planningSvc, sessions, artifacts)...)
 	if o.proposals != nil {
 		tools = append(tools, sessionDesignProposalTools(sessions, o.proposals)...)

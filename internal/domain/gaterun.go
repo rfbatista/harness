@@ -1,6 +1,7 @@
 package domain
 
 import (
+	"strconv"
 	"strings"
 	"time"
 )
@@ -116,4 +117,30 @@ func MissingGatesMessage(kinds []GateKind) string {
 		names[i] = string(k)
 	}
 	return "required gates with no command: " + strings.Join(names, ", ")
+}
+
+// MaxReportedOutputBytes is the part of a failing gate's output a refusal
+// carries to the agent; the whole tail stays in the recorded run.
+const MaxReportedOutputBytes = 4 << 10
+
+// FailureReport tells an agent what failed in a run: the missing gate kinds,
+// or each failing gate's command, exit code (or timeout), duration and the end
+// of its output.
+func (r *GateRun) FailureReport() string {
+	if len(r.MissingKinds) > 0 {
+		return MissingGatesMessage(r.MissingKinds)
+	}
+	var b strings.Builder
+	for i, g := range r.Failing() {
+		if i > 0 {
+			b.WriteString("\n")
+		}
+		how := "exit code " + strconv.Itoa(g.ExitCode)
+		if g.TimedOut {
+			how = "timed out after " + strconv.Itoa(g.TimeoutSeconds) + "s"
+		}
+		b.WriteString("gate " + string(g.Kind) + " failed (" + how + ", " + (time.Duration(g.DurationMs) * time.Millisecond).String() + "): " + g.Command + "\n")
+		b.WriteString(g.OutputTail(MaxReportedOutputBytes) + "\n")
+	}
+	return strings.TrimRight(b.String(), "\n")
 }

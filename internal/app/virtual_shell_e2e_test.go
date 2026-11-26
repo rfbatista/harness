@@ -71,6 +71,7 @@ type shellE2E struct {
 	shells   *vfs.Service
 	rules    *archrules.Service
 	gateRuns *gateruns.Service
+	declarer *gateruns.Declarer
 	gate     *branchgate.Service
 	watch    *branchwatch.Service
 	pushes   ports.PushRecords
@@ -97,7 +98,7 @@ func (e *shellE2E) boot() {
 			}
 			return workspaces.NewOriginFetcher(git, gitcredentialstest.New())
 		}),
-		fx.Populate(&e.orch, &e.plan, &e.channel, &e.art, &e.cat, &e.sessions, &e.shells, &e.rules, &e.gate, &e.watch, &e.pushes, &e.wgit, &e.notes, &e.repoAgents, &e.db, &e.gateRuns),
+		fx.Populate(&e.orch, &e.plan, &e.channel, &e.art, &e.cat, &e.sessions, &e.shells, &e.rules, &e.gate, &e.watch, &e.pushes, &e.wgit, &e.notes, &e.repoAgents, &e.db, &e.gateRuns, &e.declarer),
 		fx.NopLogger,
 	)
 	if err := e.app.Start(e.ctx); err != nil {
@@ -116,7 +117,7 @@ func (e *shellE2E) serve() {
 		Projects: e.cat.Projects, DesignSystems: e.cat.DesignSystems, RepositoryAgents: e.repoAgents,
 		Notifications: e.notes, InterruptedResumer: e.notes, Settings: e.cat.Settings, GateRuns: e.gateRuns,
 	})))
-	mux.Handle(mcpsession.PathPrefix, mcpsession.TaskHandler(sessionTaskTools(e.cat, e.orch, e.plan, e.sessions, e.art, e.channel, nil, nil, tooling.WithBranchPush(e.gate))))
+	mux.Handle(mcpsession.PathPrefix, mcpsession.TaskHandler(sessionTaskTools(e.cat, e.orch, e.plan, e.sessions, e.art, e.channel, nil, nil, tooling.WithBranchPush(e.gate), tooling.WithDeclarations(e.declarer))))
 	e.srv = httptest.NewServer(mux)
 	e.t.Cleanup(e.srv.Close)
 }
