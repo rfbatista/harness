@@ -25,6 +25,11 @@ type Deps struct {
 	}
 	// ReviewModel is the review-mode session model, the critic's harness default.
 	ReviewModel func() string
+	// Detector reads each repository's stack for its gate defaults; nil: none
+	// is detected and every required gate is missing until set.
+	Detector interface {
+		Detect(ctx context.Context, repo *domain.Repository) map[domain.GateKind]domain.GateDefault
+	}
 	// Events and Feed announce a save; nil: nobody listens.
 	Events ports.EventPublisher
 	Feed   ports.ProjectChangeSink
@@ -44,8 +49,12 @@ func (s *Service) checkProject(ctx context.Context, projectID string) error {
 }
 
 // defaults are the harness defaults for a repository ("" for the project).
-func (s *Service) defaults(_ context.Context, _ string) domain.AgentSystemHarnessDefaults {
-	return domain.AgentSystemHarnessDefaults{ReviewModel: s.d.ReviewModel()}
+func (s *Service) defaults(ctx context.Context, repositoryID string) domain.AgentSystemHarnessDefaults {
+	d := domain.AgentSystemHarnessDefaults{ReviewModel: s.d.ReviewModel()}
+	if repositoryID != "" && s.d.Detector != nil {
+		d.Gates = s.d.Detector.Detect(ctx, s.d.Repositories.Get(ctx, repositoryID))
+	}
+	return d
 }
 
 // checkRepository refuses a repository that is not in the project.

@@ -2,6 +2,7 @@ package app
 
 import (
 	"context"
+	"os/exec"
 
 	"gorm.io/gorm"
 
@@ -10,12 +11,13 @@ import (
 	"operators-mcp/internal/application/agentsystem"
 	"operators-mcp/internal/application/orchestration"
 	"operators-mcp/internal/domain"
+	"operators-mcp/internal/ports"
 )
 
 // newAgentSystem wires the agent system settings store (ADR 0011): its
 // SQLite rows, the review-mode model as the critic's default, and the event
 // bus and project feed that announce a save.
-func newAgentSystem(db *gorm.DB, cat catalog.Catalog, orch *orchestration.Service) *agentsystem.Service {
+func newAgentSystem(db *gorm.DB, cat catalog.Catalog, orch *orchestration.Service, git ports.ArchitectureGit) *agentsystem.Service {
 	svc := agentsystem.New(agentsystem.Deps{
 		Store:        sqlite.NewAgentSystemRepository(db),
 		Projects:     projectLookup{cat},
@@ -23,8 +25,9 @@ func newAgentSystem(db *gorm.DB, cat catalog.Catalog, orch *orchestration.Servic
 		ReviewModel: func() string {
 			return domain.ModeModelOf(domain.SessionModeReview, cat.Settings.Setting)
 		},
-		Events: cat.Bus,
-		Feed:   orch,
+		Detector: agentsystem.NewDetector(git, exec.LookPath),
+		Events:   cat.Bus,
+		Feed:     orch,
 	})
 	svc.Subscribe(cat.Bus)
 	return svc

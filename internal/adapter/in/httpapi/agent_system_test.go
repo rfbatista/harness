@@ -3,6 +3,7 @@ package httpapi
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"net/http"
 	"testing"
 
@@ -281,5 +282,64 @@ func TestPatchWithABadGlobModelOrRouteAnswers422AndStoresNothing(t *testing.T) {
 	}
 	if json.Unmarshal(rec.Body.Bytes(), &view) != nil || len(view.Values) != 0 {
 		t.Errorf("a refused save stored %v", view.Values)
+	}
+}
+
+type detectedGo struct{ ports.ArchitectureGit }
+
+func (detectedGo) DefaultBranch(context.Context, string) (string, error) { return "main", nil }
+func (detectedGo) Files(context.Context, string, string) ([]string, error) {
+	return []string{"go.mod", "go.sum"}, nil
+}
+func (detectedGo) LastCommit(context.Context, string, string, string) (string, error) {
+	return "c1", nil
+}
+func (detectedGo) ReadFile(_ context.Context, _, _, p string) ([]byte, bool, error) {
+	return []byte("module x"), p == "go.mod" || p == "go.sum", nil
+}
+
+func TestGetRepositoryShowsTheDetectedGateWithItsReasonAndWhatIsMissing(t *testing.T) {
+	db, err := sqlite.Open(":memory:")
+	if err != nil {
+		t.Fatal(err)
+	}
+	h := NewHandler(Services{AgentSystem: agentsystem.New(agentsystem.Deps{
+		Store:        sqlite.NewAgentSystemRepository(db),
+		Projects:     agentSystemProjects{"p1": {ID: "p1"}},
+		Repositories: agentSystemRepositories{"r1": {ID: "r1", ProjectID: "p1", RootDir: "/repo"}},
+		ReviewModel:  func() string { return "opus" },
+		Detector:     agentsystem.NewDetector(detectedGo{}, func(string) (string, error) { return "", errors.New("none") }),
+	})})
+
+	rec := getJSON(t, h, "/projects/p1/repositories/r1/agent-system")
+	var view struct {
+		Effective struct {
+			Guard struct {
+				Gates []struct {
+					Kind    string `json:"kind"`
+					Command struct {
+						Value  string `json:"value"`
+						Source string `json:"source"`
+						Reason string `json:"reason"`
+					} `json:"command"`
+				} `json:"gates"`
+			} `json:"guard"`
+			Missing []string `json:"missing_required_gates"`
+		} `json:"effective"`
+	}
+	if json.Unmarshal(rec.Body.Bytes(), &view) != nil || rec.Code != http.StatusOK {
+		t.Fatalf("get = %d %s", rec.Code, rec.Body.String())
+	}
+	var build string
+	for _, g := range view.Effective.Guard.Gates {
+		if g.Kind == "build" {
+			build = g.Command.Value + "|" + g.Command.Source + "|" + g.Command.Reason
+		}
+	}
+	if build != "go build ./...|harness|detected from go.mod" {
+		t.Errorf("build gate = %q", build)
+	}
+	if len(view.Effective.Missing) != 1 || view.Effective.Missing[0] != "secret_scan" {
+		t.Errorf("missing = %v", view.Effective.Missing)
 	}
 }
