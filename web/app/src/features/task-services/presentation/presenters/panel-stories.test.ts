@@ -66,7 +66,7 @@ describe("story 5: exit code decides falha or parado", () => {
     source.emit(changed(2, exited(0, { id: "a", name: "a" })));
     assert.equal(presenter.viewModel.toast, null);
     source.emit(changed(3, exited(1, { id: "b", name: "b" })));
-    assert.equal(presenter.viewModel.toast?.text, "b failed · exit code 1");
+    assert.equal(toastText(presenter), "b failed · exit code 1");
   });
 
   test("a service that fails again after running once more raises a new toast", async () => {
