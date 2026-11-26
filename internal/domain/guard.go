@@ -38,7 +38,10 @@ type GuardConfig struct {
 	LockfileRule            bool        `json:"lockfile_rule"`
 	RetryLimit              int         `json:"retry_limit"`
 	TestsFailFirstAvailable bool        `json:"tests_fail_first_available"`
-	Scope                   []string    `json:"scope,omitempty"`
+	// TestsFailFirst is whether this session has tests-fail-first on, given at
+	// its start; it is enforced only where the configuration makes it available.
+	TestsFailFirst bool     `json:"tests_fail_first,omitempty"`
+	Scope          []string `json:"scope,omitempty"`
 	// Unresolved is why the settings store could not give this session its
 	// configuration ("settings unavailable: …"); the harness defaults stand in
 	// and the session is gated as usual: a store fault never switches the
@@ -50,6 +53,12 @@ type GuardConfig struct {
 // hasDiff is whether a mode-less session has a diff against its base.
 func (c GuardConfig) Gated(hasDiff bool) bool {
 	return SessionGated(c.Mode, hasDiff)
+}
+
+// TestsFailFirstEnforced says whether the session's non-test writes wait for a
+// failed test run: available in the configuration and on for the session.
+func (c GuardConfig) TestsFailFirstEnforced() bool {
+	return c.TestsFailFirstAvailable && c.TestsFailFirst
 }
 
 // NewGuardConfig keeps the guard part of eff for a session in mode, sharing no

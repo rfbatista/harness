@@ -74,6 +74,10 @@ func errorHandler(err error, c echo.Context) {
 			"GIT_CREDENTIAL_MISSING", "ARCHITECTURE_INVALID", "INSTRUCTION_INVALID", "DESIGN_SYSTEM_INVALID", "IMPORT_UNREADABLE", "REPOSITORY_PROMPT_TOO_LONG", "UNKNOWN_REFERENCE", "BUNDLE_CYCLE", "INTERVIEW_ANSWERS_INVALID":
 			writeCoded(c, http.StatusBadRequest, err, se)
 			return
+		case "PERSON_ONLY", "PAIRING_CODE_INVALID", "PAIRING_HOST_REFUSED":
+			// Not the person (ADR 0016), or a pairing that did not work.
+			writeCoded(c, http.StatusForbidden, err, se)
+			return
 		case "TERMINAL_SERVER_EXPOSED", "TERMINAL_HOST_REFUSED", "TERMINAL_ORIGIN_REFUSED":
 			// A person's terminal is off for where the request comes from (ADR 0051).
 			writeCoded(c, http.StatusForbidden, err, se)

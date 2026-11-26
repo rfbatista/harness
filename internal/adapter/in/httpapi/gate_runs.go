@@ -17,6 +17,8 @@ var errGateRunsOff = echo.NewHTTPError(http.StatusServiceUnavailable, "gate runs
 // gateRunsView is a session's gate runs, oldest first.
 type gateRunsView struct {
 	Runs []domain.GateRun `json:"runs"`
+	// Scope is the protected-path globs the architect unlocked for the session.
+	Scope []string `json:"scope,omitempty"`
 }
 
 func (h *Handler) handleRunSessionGates(c echo.Context) error {
@@ -38,7 +40,11 @@ func (h *Handler) handleListSessionGateRuns(c echo.Context) error {
 	if err != nil {
 		return err
 	}
-	return c.JSON(http.StatusOK, gateRunsView{Runs: runs})
+	scope, err := h.gateRuns.Scope(c.Request().Context(), c.Param("id"))
+	if err != nil {
+		return err
+	}
+	return c.JSON(http.StatusOK, gateRunsView{Runs: runs, Scope: scope})
 }
 
 // handleGateOutput streams one gate's output as plain text: what a running gate

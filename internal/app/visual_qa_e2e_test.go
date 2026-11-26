@@ -5,9 +5,12 @@ package app
 import (
 	"encoding/json"
 	"net/http"
+	"net/http/cookiejar"
+	"net/http/httptest"
 	"strings"
 	"testing"
 
+	"operators-mcp/internal/adapter/in/httpapi"
 	"operators-mcp/internal/domain"
 	"operators-mcp/internal/ports"
 )
@@ -112,5 +115,42 @@ func TestAQASessionAnArchitectStartsGetsTheSameDeclarationAndWithoutOneTheBriefI
 		if !strings.Contains(declared, want) {
 			t.Errorf("the architect-started qa brief lacks %q", want)
 		}
+	}
+}
+
+// With person proof enforced (ADR 0016), starting visual QA is the person's
+// alone: an unpaired caller is refused and starts nothing; a paired browser
+// gets the answers the open route gives.
+func TestVisualQAIsPersonOnlyWhenProofIsEnforced(t *testing.T) {
+	e, author := criticWorld(t)
+	srv := httptest.NewServer(httpapi.NewRouter(httpapi.NewHandler(httpapi.Services{
+		Sessions: e.orch, Planning: e.plan, VisualQA: e.visualQA, Pairing: e.proof, Settings: e.cat.Settings, Projects: e.cat.Projects,
+	}), httpapi.WithPersonProof(e.proof, personRefusals{events: e.cat.Bus})))
+	t.Cleanup(srv.Close)
+	url := srv.URL + "/api/sessions/" + author.ID + "/visual-qa"
+
+	code, body := personCall(t, &http.Client{}, http.MethodPost, url, map[string]string{"X-Harness-Session": "mine"})
+	if code != http.StatusForbidden || !strings.Contains(body, "PERSON_ONLY") {
+		t.Fatalf("unpaired = %d %s", code, body)
+	}
+
+	jar, _ := cookiejar.New(nil)
+	browser := &http.Client{Jar: jar, CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }}
+	pair, ok := e.proof.FirstCode(e.ctx)
+	if !ok {
+		t.Fatal("no first code with nobody paired")
+	}
+	if status, _ := personCall(t, browser, http.MethodGet, srv.URL+httpapi.PairPath+"?code="+pair, nil); status != http.StatusSeeOther {
+		t.Fatalf("pairing = %d", status)
+	}
+	if code, body := personCall(t, browser, http.MethodPost, url, nil); code != http.StatusConflict || !strings.Contains(body, "VISUAL_QA_NOT_DECLARED") {
+		t.Errorf("paired, no declaration = %d %s", code, body)
+	}
+	e.declareUI()
+	if code, body := personCall(t, browser, http.MethodPost, url, nil); code != http.StatusCreated {
+		t.Errorf("paired, declared = %d %s", code, body)
+	}
+	if got := e.qaSessions(author.TicketID); len(got) != 1 {
+		t.Errorf("%d qa sessions, want the one the paired call started", len(got))
 	}
 }

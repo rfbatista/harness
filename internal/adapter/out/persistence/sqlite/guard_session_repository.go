@@ -17,6 +17,9 @@ var _ ports.GuardSessions = (*GuardSessionRepository)(nil)
 type GuardSessionModel struct {
 	SessionID string `gorm:"column:session_id;primaryKey"`
 	Config    string `gorm:"column:config"`
+	// RedRuns is the consecutive red declaration runs since the last green one
+	// or the last start or resume.
+	RedRuns int `gorm:"column:red_runs"`
 }
 
 func (GuardSessionModel) TableName() string { return "guard_sessions" }
@@ -33,7 +36,7 @@ func (r *GuardSessionRepository) Keep(ctx context.Context, sessionID string, cfg
 		return err
 	}
 	return r.db.WithContext(ctx).Clauses(clause.OnConflict{
-		Columns: []clause.Column{{Name: "session_id"}}, DoUpdates: clause.AssignmentColumns([]string{"config"}),
+		Columns: []clause.Column{{Name: "session_id"}}, DoUpdates: clause.AssignmentColumns([]string{"config", "red_runs"}),
 	}).Create(&GuardSessionModel{SessionID: sessionID, Config: string(b)}).Error
 }
 
@@ -48,4 +51,20 @@ func (r *GuardSessionRepository) Config(ctx context.Context, sessionID string) (
 		return domain.GuardConfig{}, false, err
 	}
 	return cfg, true, nil
+}
+
+func (r *GuardSessionRepository) CountRed(ctx context.Context, sessionID string) (int, error) {
+	var n int
+	err := r.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		if err := tx.Model(&GuardSessionModel{}).Where("session_id = ?", sessionID).
+			UpdateColumn("red_runs", gorm.Expr("red_runs + 1")).Error; err != nil {
+			return err
+		}
+		return tx.Model(&GuardSessionModel{}).Where("session_id = ?", sessionID).Select("red_runs").Scan(&n).Error
+	})
+	return n, err
+}
+
+func (r *GuardSessionRepository) ResetRed(ctx context.Context, sessionID string) error {
+	return r.db.WithContext(ctx).Model(&GuardSessionModel{}).Where("session_id = ?", sessionID).UpdateColumn("red_runs", 0).Error
 }

@@ -46,6 +46,9 @@ type GateRuns interface {
 	Run(ctx context.Context, req GateRunRequest) (*domain.GateRun, error)
 	// List answers the session's recorded gate runs, oldest first.
 	List(ctx context.Context, sessionID string) ([]domain.GateRun, error)
+	// Scope answers the protected-path globs the architect unlocked for the
+	// session at its start; empty for a session that has none.
+	Scope(ctx context.Context, sessionID string) ([]string, error)
 	// Output writes one gate's output to w as it is written while its run is
 	// going, and returns when the gate has ended; for a finished run it writes
 	// the recorded output. An unknown run or gate answers GATE_RUN_NOT_FOUND.
@@ -63,6 +66,25 @@ type GateRunChange struct {
 	Phase   string               `json:"phase"`
 	Result  domain.GateRunResult `json:"result,omitempty"`
 	Counted bool                 `json:"counted,omitempty"`
+}
+
+// SessionEscalatedChange is a gated session stopped for reaching its retry
+// limit, as the project feed carries it.
+type SessionEscalatedChange struct {
+	ProjectID string            `json:"project_id"`
+	SessionID string            `json:"session_id"`
+	RunID     string            `json:"run_id"`
+	RedGates  []domain.GateKind `json:"red_gates"`
+}
+
+// LockfileFlagChange is a lockfile changed with its manifest, as the project
+// feed carries it: allowed, and flagged with the dependencies it added.
+type LockfileFlagChange struct {
+	ProjectID    string   `json:"project_id"`
+	SessionID    string   `json:"session_id"`
+	Lockfile     string   `json:"lockfile"`
+	Manifest     string   `json:"manifest"`
+	Dependencies []string `json:"dependencies"`
 }
 
 // DeclarationRefusal is one check refusing a done declaration.
@@ -91,6 +113,9 @@ type Declarations interface {
 	// Practice runs the gates (only kinds, when given) as the agent's own
 	// practice run: recorded, never counted.
 	Practice(ctx context.Context, sessionID string, kinds []domain.GateKind) (*domain.GateRun, error)
+	// HasDiff says whether the session's branch has a diff against its base:
+	// work to declare done.
+	HasDiff(ctx context.Context, sessionID string) bool
 }
 
 // Message is every refusal's reason, one after the other.

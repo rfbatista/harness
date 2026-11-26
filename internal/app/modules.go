@@ -46,18 +46,19 @@ import (
 	"operators-mcp/internal/adapter/out/termhost"
 	"operators-mcp/internal/app/catalog"
 	"operators-mcp/internal/application/agentcredential"
+	"operators-mcp/internal/application/agentsystem"
 	"operators-mcp/internal/application/apps"
 	"operators-mcp/internal/application/archrules"
 	"operators-mcp/internal/application/artifacts"
 	"operators-mcp/internal/application/branchgate"
 	"operators-mcp/internal/application/branchwatch"
-	"operators-mcp/internal/application/agentsystem"
 	"operators-mcp/internal/application/execution"
 	"operators-mcp/internal/application/gateruns"
 	"operators-mcp/internal/application/gitcredentials"
 	"operators-mcp/internal/application/keychainpath"
 	"operators-mcp/internal/application/notifications"
 	"operators-mcp/internal/application/orchestration"
+	"operators-mcp/internal/application/personproof"
 	"operators-mcp/internal/application/planning"
 	"operators-mcp/internal/application/productowner"
 	"operators-mcp/internal/application/repoagents"
@@ -288,65 +289,65 @@ var CatalogModule = fx.Module("catalog",
 type catalogParams struct {
 	fx.In
 
-	Projects        ports.ProjectRepository
-	Repositories    ports.RepositoryRepository
-	Zones           ports.ZoneRepository
-	BoundedContexts ports.BoundedContextRepository
-	ArchRecords     ports.ArchitectureRecordStore
-	ArchGit         ports.ArchitectureGit
-	ArchEvents      ports.ArchitectureRuleEventStore
-	DesignRecords   ports.DesignSystemStore
-	DesignProposals ports.DesignProposalStore
-	DesignExports   ports.DesignExportStore
+	Projects             ports.ProjectRepository
+	Repositories         ports.RepositoryRepository
+	Zones                ports.ZoneRepository
+	BoundedContexts      ports.BoundedContextRepository
+	ArchRecords          ports.ArchitectureRecordStore
+	ArchGit              ports.ArchitectureGit
+	ArchEvents           ports.ArchitectureRuleEventStore
+	DesignRecords        ports.DesignSystemStore
+	DesignProposals      ports.DesignProposalStore
+	DesignExports        ports.DesignExportStore
 	InstructionDrafts    ports.InstructionDraftStore
 	InstructionProposals ports.InstructionProposalStore
-	Agents          ports.AgentRepository
-	Prompts         ports.PromptRepository
-	Skills          ports.SkillRepository
-	MCPServers      ports.MCPServerRepository
-	Tools           ports.ToolRepository
-	Settings        ports.SettingsRepository
-	Publisher       ports.SkillPublisher
-	Matcher         ports.PathMatcher
-	Lister          ports.TreeLister
-	Finder          ports.RepositoryFinder
-	EnvFiles        ports.EnvFileRepository
-	EnvFileIO       ports.EnvFileIO
-	RunCommands     ports.RunCommandRepository
-	Activations     ports.TokenSaverActivationRepository
-	AgentCatalog    *agentcatalog.Catalog
-	Cfg             Config
+	Agents               ports.AgentRepository
+	Prompts              ports.PromptRepository
+	Skills               ports.SkillRepository
+	MCPServers           ports.MCPServerRepository
+	Tools                ports.ToolRepository
+	Settings             ports.SettingsRepository
+	Publisher            ports.SkillPublisher
+	Matcher              ports.PathMatcher
+	Lister               ports.TreeLister
+	Finder               ports.RepositoryFinder
+	EnvFiles             ports.EnvFileRepository
+	EnvFileIO            ports.EnvFileIO
+	RunCommands          ports.RunCommandRepository
+	Activations          ports.TokenSaverActivationRepository
+	AgentCatalog         *agentcatalog.Catalog
+	Cfg                  Config
 }
 
 func newCatalog(p catalogParams) catalog.Catalog {
 	c := catalog.New(catalog.Deps{
-		Projects:         p.Projects,
-		Repositories:     p.Repositories,
-		Zones:            p.Zones,
-		BoundedContexts:  p.BoundedContexts,
-		ArchRecords:      p.ArchRecords,
-		ArchGit:          p.ArchGit,
-		ArchEvents:       p.ArchEvents,
-		DesignRecords:    p.DesignRecords,
-		DesignProposals:  p.DesignProposals,
-		DesignExports:    p.DesignExports,
+		Projects:             p.Projects,
+		Repositories:         p.Repositories,
+		Zones:                p.Zones,
+		BoundedContexts:      p.BoundedContexts,
+		ArchRecords:          p.ArchRecords,
+		ArchGit:              p.ArchGit,
+		ArchEvents:           p.ArchEvents,
+		DesignRecords:        p.DesignRecords,
+		DesignProposals:      p.DesignProposals,
+		DesignExports:        p.DesignExports,
 		InstructionDrafts:    p.InstructionDrafts,
 		InstructionProposals: p.InstructionProposals,
-		Agents:           p.Agents,
-		Prompts:          p.Prompts,
-		Skills:           p.Skills,
-		MCPServers:       p.MCPServers,
-		Tools:            p.Tools,
-		Settings:         p.Settings,
-		Publisher:        p.Publisher,
-		PathMatcher:      p.Matcher,
-		TreeLister:       p.Lister,
-		RepositoryFinder: p.Finder,
-		EnvFiles:         p.EnvFiles,
-		EnvFileIO:        p.EnvFileIO,
-		RunCommands:      p.RunCommands,
-		Activations:      p.Activations,
-		DefaultRoot:      p.Cfg.Root,
+		Agents:               p.Agents,
+		Prompts:              p.Prompts,
+		Skills:               p.Skills,
+		MCPServers:           p.MCPServers,
+		Tools:                p.Tools,
+		Settings:             p.Settings,
+		Publisher:            p.Publisher,
+		PathMatcher:          p.Matcher,
+		TreeLister:           p.Lister,
+		RepositoryFinder:     p.Finder,
+		EnvFiles:             p.EnvFiles,
+		EnvFileIO:            p.EnvFileIO,
+		RunCommands:          p.RunCommands,
+		Activations:          p.Activations,
+		DefaultRoot:          p.Cfg.Root,
 	})
 	// The mode agents live in the server settings (ADR 0103).
 	p.AgentCatalog.UseModeAgents(c.Settings)
@@ -485,7 +486,10 @@ var AgentRuntimeModule = fx.Module("agentruntime",
 		sqlite.NewCriticReviewRepository,
 		newCritic,
 		newVisualQA,
-		gateruns.NewDeclarer,
+		newDeclarer,
+		sqlite.NewPersonCredentialRepository,
+		func(r *sqlite.PersonCredentialRepository) ports.PersonCredentials { return r },
+		personproof.New,
 		sqlite.NewGuardSessionRepository,
 		func(r *sqlite.GuardSessionRepository) ports.GuardSessions { return r },
 		newAgentClaudeHome,
@@ -973,9 +977,16 @@ func newHub() *orchestration.Hub { return orchestration.NewHub(256) }
 // newArchitectureRules checks sessions' actions against their repository's
 // architecture rules, reading each repository's current saved record and
 // announcing every failed rule on the orchestration's project feed.
-func newArchitectureRules(cat catalog.Catalog, sessions ports.SessionRepository, events ports.ArchitectureRuleEventStore, orch *orchestration.Service) *archrules.Service {
+func newArchitectureRules(cat catalog.Catalog, sessions ports.SessionRepository, events ports.ArchitectureRuleEventStore, orch *orchestration.Service, guard ports.GuardSessions, ws *workspaces.Service, gateRuns ports.GateRunStore) *archrules.Service {
 	svc := archrules.NewService(archrules.Deps{
-		Sessions: sessions, Agents: cat.Agents, Records: cat.RepositoryArchitectures, Events: events, Feed: orch, EnvFiles: cat.Projects,
+		Sessions: sessions, Agents: cat.Agents, Records: cat.RepositoryArchitectures, Events: events, Feed: orch, EnvFiles: cat.Projects, Guard: guard, GateRuns: gateRuns,
+		ManifestChanged: gateruns.GitPathChanged(func(ctx context.Context, workspaceID string) string {
+			if w := ws.Get(ctx, workspaceID); w != nil {
+				return w.BaseSHA
+			}
+			return ""
+		}),
+		Diff: gateruns.GitDiffOf(),
 	})
 	svc.Subscribe(cat.Bus)
 	return svc
@@ -1184,6 +1195,10 @@ func newOrchestrationService(
 		ConfigHome: os.Getenv("XDG_CONFIG_HOME"),
 		Bin:        claudeBin.Bin(),
 		Allow:      func(string) []ports.SandboxPath { return allow },
+		// The database holds the person credentials' hashes, secret.key the
+		// stores' key: no session reads either (ADR 0016). Task memory and the
+		// other per-session paths in the data dir stay reachable.
+		Secrets: func() []string { return harnessSecrets(cfg) },
 		// What no session grants is hidden: the workspaces root and, for
 		// one-shots, every checkout.
 		WorkspacesRoot: ws.Root,
@@ -1774,4 +1789,29 @@ func newGateRuns(sessions ports.SessionRepository, guard ports.GuardSessions, st
 			return ""
 		}),
 	})
+}
+
+// newDeclarer is the done declaration, with escalation at the retry limit
+// (ADR 0012): the session is stopped like the person's Stop, and the person,
+// the feed and the architect are told.
+func newDeclarer(runs *gateruns.Service, orch *orchestration.Service, cat catalog.Catalog, channel *taskchannel.Service) *gateruns.Declarer {
+	d := gateruns.NewDeclarer(runs)
+	d.Escalation = &gateruns.Escalator{Stopper: orch, Events: cat.Bus, Feed: orch, Channel: channel}
+	return d
+}
+
+// harnessSecrets are the files of the harness a session must never reach: the
+// database with its write-ahead log and shared memory, and the key of the
+// encrypted stores. An in-memory database has none.
+func harnessSecrets(cfg Config) []string {
+	var out []string
+	if !cfg.inMemory() {
+		if db, err := filepath.Abs(cfg.DBPath); err == nil {
+			out = append(out, db, db+"-wal", db+"-shm", db+"-journal")
+		}
+	}
+	if root, err := cfg.dataRoot(); err == nil && root != "" {
+		out = append(out, filepath.Join(root, "secret.key"))
+	}
+	return out
 }

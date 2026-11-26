@@ -124,6 +124,8 @@ type Services struct {
 	GateRuns ports.GateRuns
 	// VisualQA starts visual QA for a session; nil: the route answers 503.
 	VisualQA ports.VisualQA
+	// Pairing issues person credentials (ADR 0016); nil: the pairing routes answer 503.
+	Pairing ports.PersonPairing
 	// ManagedClaude installs and switches the claude agents run; nil answers
 	// 503. ManagedClaudeBin says which binary agents run (the override
 	// included); nil reads as no override.
@@ -238,6 +240,7 @@ type Handler struct {
 	agentSystem     ports.AgentSystemSettings
 	gateRuns        ports.GateRuns
 	visualQA        ports.VisualQA
+	pairing         ports.PersonPairing
 	sandboxDriver   func() ports.SandboxDriver
 
 	managedClaude    ports.ManagedClaude
@@ -335,6 +338,7 @@ func NewHandler(s Services) *Handler {
 		agentSystem:     s.AgentSystem,
 		gateRuns:        s.GateRuns,
 		visualQA:        s.VisualQA,
+		pairing:         s.Pairing,
 		sandboxDriver:   s.SandboxDriver,
 
 		managedClaude:    s.ManagedClaude,
