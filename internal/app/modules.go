@@ -487,7 +487,7 @@ var AgentRuntimeModule = fx.Module("agentruntime",
 		newDeclarer,
 		sqlite.NewPersonCredentialRepository,
 		func(r *sqlite.PersonCredentialRepository) ports.PersonCredentials { return r },
-		personproof.New,
+		newPersonProof,
 		sqlite.NewGuardSessionRepository,
 		func(r *sqlite.GuardSessionRepository) ports.GuardSessions { return r },
 		newAgentClaudeHome,
@@ -1799,9 +1799,17 @@ func newDeclarer(runs *gateruns.Service, orch *orchestration.Service, cat catalo
 	return d
 }
 
+// newPersonProof is the person credential service, telling the person of every
+// credential it issues (ADR 0016).
+func newPersonProof(store ports.PersonCredentials, cat catalog.Catalog) *personproof.Service {
+	svc := personproof.New(store)
+	svc.Events = cat.Bus
+	return svc
+}
+
 // harnessSecrets are the files of the harness a session must never reach: the
 // database with its write-ahead log and shared memory, the key of the encrypted
-// stores and the person credential file. An in-memory database has none.
+// stores and the folder holding the person credential file. An in-memory database has none.
 func harnessSecrets(cfg Config) []string {
 	var out []string
 	if !cfg.inMemory() {
@@ -1812,9 +1820,10 @@ func harnessSecrets(cfg Config) []string {
 	if root, err := cfg.dataRoot(); err == nil && root != "" {
 		out = append(out, filepath.Join(root, "secret.key"))
 	}
-	// The terminal client's credential file, when the keychain is not used.
-	if p, err := personcred.Path(); err == nil {
-		out = append(out, p)
+	// The folder of the terminal client's state, ~/.coding-pool: the person
+	// credential file and its temporary file are in it.
+	if dir, err := personcred.Dir(); err == nil {
+		out = append(out, dir)
 	}
 	return out
 }

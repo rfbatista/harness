@@ -272,6 +272,16 @@ type PersonOnlyRefused struct {
 	At        time.Time
 }
 
+// PersonCredentialIssued: a pairing code was redeemed and a person credential
+// issued to Client ("browser" or "client"). The person is told every time, so a
+// stolen code cannot go unnoticed (ADR 0016).
+type PersonCredentialIssued struct {
+	Client string
+	At     time.Time
+}
+
+func (PersonCredentialIssued) EventName() string { return "person_credential.issued" }
+
 func (PersonOnlyRefused) EventName() string { return "person_only.refused" }
 
 func (SessionEscalated) EventName() string           { return "session.escalated" }

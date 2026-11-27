@@ -36,14 +36,24 @@ func Load() (string, error) { return Default.Load() }
 // Save stores the credential, replacing the one before it.
 func Save(credential string) error { return Default.Save(credential) }
 
-// Path is the credential file: ~/.coding-pool/person.cred, in the directory the
-// harness's own client state lives in. It is a path the sandbox hides.
-func Path() (string, error) {
+// Dir is ~/.coding-pool, the folder the harness's own client state lives in. It
+// is the secret every sandbox profile denies, the credential's temporary file
+// beside it included.
+func Dir() (string, error) {
 	home, err := os.UserHomeDir()
 	if err != nil {
 		return "", err
 	}
-	return filepath.Join(home, ".coding-pool", "person.cred"), nil
+	return filepath.Join(home, ".coding-pool"), nil
+}
+
+// Path is the credential file, ~/.coding-pool/person.cred.
+func Path() (string, error) {
+	dir, err := Dir()
+	if err != nil {
+		return "", err
+	}
+	return filepath.Join(dir, "person.cred"), nil
 }
 
 // FileStore keeps the credential in a 0600 file.

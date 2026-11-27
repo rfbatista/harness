@@ -11,7 +11,7 @@ import (
 func TestTheHarnessSecretsAreTheDatabaseFilesTheKeyAndThePersonCredentialFile(t *testing.T) {
 	dir := t.TempDir()
 	got := harnessSecrets(Config{DBPath: filepath.Join(dir, "data.db"), DataDir: dir})
-	cred, err := personcred.Path()
+	cred, err := personcred.Dir()
 	if err != nil {
 		t.Fatal(err)
 	}

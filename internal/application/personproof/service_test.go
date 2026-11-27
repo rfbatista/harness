@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"operators-mcp/internal/domain"
+	"operators-mcp/internal/ports"
 )
 
 type memStore map[string]bool
@@ -76,5 +77,45 @@ func TestACredentialIssuedBeforeARestartStillVerifiesAndACodeFromBeforeItDoesNot
 		_ = err
 	} else {
 		t.Error("a code from the old process worked in the new one")
+	}
+}
+
+type recordedEvents struct{ got []domain.Event }
+
+func (r *recordedEvents) Publish(_ context.Context, evs ...domain.Event) error {
+	r.got = append(r.got, evs...)
+	return nil
+}
+
+func TestEveryCredentialIssuedIsAnnouncedWithItsClientKindAndAFailedRedemptionIsNot(t *testing.T) {
+	events := &recordedEvents{}
+	s := New(memStore{})
+	s.Events = events
+	now := time.Unix(5000, 0)
+	s.SetClock(func() time.Time { return now })
+
+	for _, kind := range []string{"browser", "client"} {
+		code := s.NewCode()
+		if _, err := s.Redeem(ports.WithPersonClient(context.Background(), kind), code); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if _, err := s.Redeem(context.Background(), "WRONG"); err == nil {
+		t.Fatal("a wrong code redeemed")
+	}
+	if len(events.got) != 2 {
+		t.Fatalf("events = %v, want one per credential issued", events.got)
+	}
+	for i, kind := range []string{"browser", "client"} {
+		ev, ok := events.got[i].(domain.PersonCredentialIssued)
+		if !ok || ev.Client != kind || !ev.At.Equal(now) {
+			t.Errorf("event %d = %+v, want a %s credential at %v", i, events.got[i], kind, now)
+		}
+	}
+	// Without a client kind it says so rather than guessing.
+	code := s.NewCode()
+	_, _ = s.Redeem(context.Background(), code)
+	if ev := events.got[2].(domain.PersonCredentialIssued); ev.Client != "unknown" {
+		t.Errorf("no kind: %q", ev.Client)
 	}
 }

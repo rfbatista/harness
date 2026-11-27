@@ -29,6 +29,8 @@ const CodeTTL = 24 * time.Hour
 type Service struct {
 	store ports.PersonCredentials
 	now   func() time.Time
+	// Events, when set, is told of every credential issued.
+	Events ports.EventPublisher
 
 	mu      sync.Mutex
 	code    string
@@ -88,6 +90,9 @@ func (s *Service) Redeem(ctx context.Context, code string) (string, error) {
 	credential := randomString(32, hex.EncodeToString)
 	if err := s.store.Add(ctx, hash(credential)); err != nil {
 		return "", err
+	}
+	if s.Events != nil {
+		_ = s.Events.Publish(ctx, domain.PersonCredentialIssued{Client: ports.PersonClientFrom(ctx), At: s.now()})
 	}
 	return credential, nil
 }

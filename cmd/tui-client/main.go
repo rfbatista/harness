@@ -3,7 +3,7 @@
 // claude in its own git worktree, running in a pane.
 //
 //	tui-client [--api http://localhost:8080] [--token TOKEN] [--run server|tui] [--shell direct|login]
-//	tui-client pair --code CODE [--api http://localhost:8080]
+//	tui-client pair [--api http://localhost:8080]    (the pairing code is read from stdin)
 //
 // The coding_pool server must be running (`make air`); it provisions and
 // records the sessions. With --run server (the default) it also runs them:

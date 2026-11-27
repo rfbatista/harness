@@ -16,7 +16,7 @@ import (
 	"operators-mcp/internal/ports"
 )
 
-// The person credential file is a secret of every sandbox profile (ADR 0016):
+// The folder of the person credential file is a secret of every sandbox profile (ADR 0016):
 // denied after every grant in the Seatbelt profile and masked over every bind in
 // the bubblewrap arguments, so no folder a session may reach shows it.
 
@@ -36,13 +36,18 @@ func TestEverySandboxProfileDeniesThePersonCredentialFileAfterEveryGrant(t *test
 	if err := os.WriteFile(cred, []byte("secret\n"), 0o600); err != nil {
 		t.Fatal(err)
 	}
+	// The secret is the folder, so the temporary file the credential is written
+	// through is covered too.
+	folder := filepath.Dir(cred)
+	if err := os.WriteFile(cred+".tmp", []byte("secret\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
 	secrets := harnessSecrets(Config{DBPath: ":memory:"})
-	if !slices.Contains(secrets, cred) {
-		t.Fatalf("%s is not among the harness secrets %v", cred, secrets)
+	if !slices.Contains(secrets, folder) {
+		t.Fatalf("%s is not among the harness secrets %v", folder, secrets)
 	}
 
 	// Every grant that could show it: the folder it lives in, and its parent, read-write and read-only.
-	folder := filepath.Dir(cred)
 	for name, session := range map[string]orchestration.SandboxSession{
 		"the folder read-write": {Mode: "implement", Worktree: t.TempDir(), TempDir: t.TempDir(), Allow: []ports.SandboxPath{{Path: folder, Write: true}}},
 		"the folder read-only":  {Mode: "implement", Worktree: t.TempDir(), TempDir: t.TempDir(), Allow: []ports.SandboxPath{{Path: folder}}},
@@ -52,21 +57,21 @@ func TestEverySandboxProfileDeniesThePersonCredentialFileAfterEveryGrant(t *test
 	} {
 		session.Secrets = secrets
 		policy := orchestration.BuildSandboxPolicy(session)
-		if !slices.Contains(policy.Secrets, cred) {
-			t.Fatalf("%s: the policy does not carry the credential file as a secret: %v", name, policy.Secrets)
+		if !slices.Contains(policy.Secrets, folder) {
+			t.Fatalf("%s: the policy does not carry the credential folder as a secret: %v", name, policy.Secrets)
 		}
 
 		// Seatbelt: the last rule for the file is a deny, after every allow.
 		profile := seatbeltProfile(t, home, policy)
-		deny := strings.LastIndex(profile, `(subpath "`+cred+`"))`)
+		deny := strings.LastIndex(profile, `(subpath "`+folder+`"))`)
 		if deny < 0 {
-			t.Errorf("%s: the Seatbelt profile has no rule for %s", name, cred)
+			t.Errorf("%s: the Seatbelt profile has no rule for %s", name, folder)
 			continue
 		}
 		if line := profile[strings.LastIndex(profile[:deny], "\n")+1:]; !strings.HasPrefix(line, "(deny file-read* file-write*") {
-			t.Errorf("%s: the last Seatbelt rule for the file is not a deny: %q", name, line)
+			t.Errorf("%s: the last Seatbelt rule for the folder is not a deny: %q", name, line)
 		}
-		for _, grant := range []string{folder, home, filepath.Dir(folder)} {
+		for _, grant := range []string{folder, home} {
 			for _, rule := range []string{`(allow file-read* file-write* (subpath "` + grant + `"))`, `(allow file-read* (subpath "` + grant + `"))`} {
 				if at := strings.LastIndex(profile, rule); at > deny {
 					t.Errorf("%s: %s comes after the deny, so it would reopen the file", name, rule)
@@ -80,14 +85,14 @@ func TestEverySandboxProfileDeniesThePersonCredentialFileAfterEveryGrant(t *test
 		lastBind := -1
 		for i, a := range args {
 			switch {
-			case a == "--ro-bind" && i+2 < len(args) && args[i+1] == "/dev/null" && args[i+2] == cred:
-				mask = i
+			case a == "--tmpfs" && i+1 < len(args) && args[i+1] == folder:
+				mask = i // an empty tmpfs over the folder hides the file and its temporary file
 			case (a == "--bind-try" || a == "--ro-bind-try" || a == "--bind" || a == "--ro-bind") && i+1 < len(args) && args[i+1] != "/dev/null":
 				lastBind = i
 			}
 		}
 		if mask < 0 {
-			t.Errorf("%s: the bubblewrap arguments do not mask the credential file: %v", name, args)
+			t.Errorf("%s: the bubblewrap arguments do not mask the credential folder: %v", name, args)
 		} else if mask < lastBind {
 			t.Errorf("%s: a bind (%d) comes after the mask (%d), so it would cover it", name, lastBind, mask)
 		}

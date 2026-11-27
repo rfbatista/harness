@@ -81,7 +81,7 @@ func (h *Handler) handlePairGet(c echo.Context) error {
 	if !loopbackHost(c.Request().Host) {
 		return refused("PAIRING_HOST_REFUSED", "Pair from localhost, 127.0.0.1 or [::1].")
 	}
-	credential, err := h.pairing.Redeem(c.Request().Context(), c.QueryParam("code"))
+	credential, err := h.pairing.Redeem(ports.WithPersonClient(c.Request().Context(), "browser"), c.QueryParam("code"))
 	if err != nil {
 		return err
 	}
@@ -107,7 +107,7 @@ func (h *Handler) handlePairPost(c echo.Context) error {
 	if err := bindJSON(c, &in); err != nil {
 		return err
 	}
-	credential, err := h.pairing.Redeem(c.Request().Context(), in.Code)
+	credential, err := h.pairing.Redeem(ports.WithPersonClient(c.Request().Context(), "client"), in.Code)
 	if err != nil {
 		return err
 	}

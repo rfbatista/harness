@@ -233,6 +233,10 @@ func (s *Service) Subscribe(bus ports.EventSubscriber) {
 		}
 		return nil
 	})
+	ports.On(bus, func(ctx context.Context, ev domain.PersonCredentialIssued) error {
+		s.onPersonCredentialIssued(ctx, ev)
+		return nil
+	})
 	ports.On(bus, func(ctx context.Context, ev domain.PersonOnlyRefused) error {
 		s.onPersonOnlyRefused(ev)
 		return nil
@@ -786,6 +790,35 @@ func (s *Service) onSessionFailed(sessionID string) {
 		Link:  domain.TaskLink(sess.ProjectID, sess.TicketID), CauseKey: sessionFailedKey(sess.ID),
 	}
 	failedWhat(sess.LastAction).apply(n)
+	s.record(n, true)
+}
+
+// onPersonCredentialIssued tells the person, every time, that a person credential
+// was issued, naming the kind of client and the time (ADR 0016), so a stolen
+// pairing code cannot be redeemed unnoticed. The inbox is per project, so the
+// item goes to the first project; with no project there is no inbox to put it
+// in, and it is only logged.
+func (s *Service) onPersonCredentialIssued(ctx context.Context, ev domain.PersonCredentialIssued) {
+	slog.Warn("person credential issued", "client", ev.Client, "at", ev.At)
+	lister, ok := s.readers.Projects.(interface {
+		List(ctx context.Context) []*domain.Project
+	})
+	if !ok {
+		return
+	}
+	projects := lister.List(ctx)
+	if len(projects) == 0 {
+		return
+	}
+	p := projects[0]
+	n := &domain.Notification{
+		ProjectID: p.ID,
+		Kind:      domain.NotificationAgent, Level: domain.NotificationAction,
+		Actor: systemActor(domain.ActorHarness),
+		Link:  domain.ProjectLink(p.ID), CauseKey: "person_credential:" + strconv.FormatInt(ev.At.UnixNano(), 10),
+		Body: "A person credential was issued to a " + ev.Client + " at " + ev.At.Format("2006-01-02 15:04:05") + ". If that was not you, someone redeemed a pairing code: wipe the person_credentials table and restart the harness.",
+	}
+	what{verb: "issued a person credential", object: "to a " + ev.Client, colon: true}.apply(n)
 	s.record(n, true)
 }
 
