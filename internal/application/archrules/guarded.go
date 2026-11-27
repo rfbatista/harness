@@ -29,7 +29,7 @@ func (s *Service) guardedWrite(ctx context.Context, c ports.ArchitectureCheck, p
 		return guarded{}, false
 	}
 	cfg, ok, err := s.d.Guard.Config(ctx, sess.ID)
-	if err != nil || !ok || !domain.SessionGated(cfg.Mode, true) {
+	if err != nil || !ok || !cfg.ProtectsPaths() {
 		return guarded{}, false
 	}
 	return guarded{sess: sess, cfg: cfg,

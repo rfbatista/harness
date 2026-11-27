@@ -40,8 +40,11 @@ type GuardConfig struct {
 	TestsFailFirstAvailable bool        `json:"tests_fail_first_available"`
 	// TestsFailFirst is whether this session has tests-fail-first on, given at
 	// its start; it is enforced only where the configuration makes it available.
-	TestsFailFirst bool     `json:"tests_fail_first,omitempty"`
-	Scope          []string `json:"scope,omitempty"`
+	TestsFailFirst bool `json:"tests_fail_first,omitempty"`
+	// WorktreeGated says the session writes in a worktree whose owner is gated:
+	// protection follows the worktree, whatever the joiner's mode.
+	WorktreeGated bool     `json:"worktree_gated,omitempty"`
+	Scope         []string `json:"scope,omitempty"`
 	// Unresolved is why the settings store could not give this session its
 	// configuration ("settings unavailable: …"); the harness defaults stand in
 	// and the session is gated as usual: a store fault never switches the
@@ -54,6 +57,11 @@ type GuardConfig struct {
 func (c GuardConfig) Gated(hasDiff bool) bool {
 	return SessionGated(c.Mode, hasDiff)
 }
+
+// ProtectsPaths says the session's writes are held to the protected paths: its
+// mode is gated (a mode-less session counts: its first write is the diff), or it
+// writes in the worktree of a gated session.
+func (c GuardConfig) ProtectsPaths() bool { return SessionGated(c.Mode, true) || c.WorktreeGated }
 
 // TestsFailFirstEnforced says whether the session's non-test writes wait for a
 // failed test run: available in the configuration and on for the session.

@@ -736,7 +736,7 @@ func (s *Service) sandbox(ctx context.Context, in prepareInput, id string, repo 
 	if sb.Secrets != nil {
 		sess.Secrets = sb.Secrets()
 	}
-	if g := in.Guard; g != nil && domain.SessionGated(g.Mode, true) {
+	if g := in.Guard; g != nil && g.ProtectsPaths() {
 		sess.Protected = ProtectedSandboxPaths(worktree, g.ProtectedPaths, g.Scope)
 	}
 	policy := BuildSandboxPolicy(sess)

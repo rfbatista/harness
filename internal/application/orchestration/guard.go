@@ -21,7 +21,7 @@ import (
 // configuration: the gated rule depends only on the mode and the diff, so a
 // store fault never switches the Guard layer off. It reads the settings once;
 // the start or resume passes the result to the sandbox policy and keeps it.
-func (s *Service) resolveGuard(ctx context.Context, projectID, repositoryID string, mode domain.SessionMode, scope []string, testsFirst bool) domain.GuardConfig {
+func (s *Service) resolveGuard(ctx context.Context, projectID, repositoryID string, mode domain.SessionMode, scope []string, testsFirst bool, joined *joinedTo) domain.GuardConfig {
 	ctx = context.WithoutCancel(ctx)
 	var (
 		eff domain.EffectiveAgentSystem
@@ -42,7 +42,40 @@ func (s *Service) resolveGuard(ctx context.Context, projectID, repositoryID stri
 	cfg.Unresolved = reason
 	cfg.Scope = slices.Clone(scope)
 	cfg.TestsFailFirst = testsFirst
+	// Protection follows the worktree: a session writing in a gated session's
+	// worktree is held to the same paths, with the owner's scope and never more.
+	if joined != nil {
+		if owner, ok := s.worktreeOwnerGuard(ctx, joined.workspaceID, joined.selfID); ok {
+			cfg.WorktreeGated = true
+			cfg.Scope = slices.Clone(owner.Scope)
+		}
+	}
 	return cfg
+}
+
+// joinedTo is the worktree a session joins, and its own id (empty at a start).
+type joinedTo struct{ workspaceID, selfID string }
+
+// worktreeOwnerGuard answers the kept configuration of a session on the worktree
+// whose writes are held to the protected paths, other than self.
+func (s *Service) worktreeOwnerGuard(ctx context.Context, workspaceID, selfID string) (domain.GuardConfig, bool) {
+	if s.GuardSessions == nil || workspaceID == "" {
+		return domain.GuardConfig{}, false
+	}
+	others, err := s.sessions.Query(ctx, ports.SessionFilter{WorkspaceID: workspaceID})
+	if err != nil {
+		slog.Warn("sessions of a worktree not read; the joiner is protected as if its owner were gated", "workspace", workspaceID, "err", err)
+		return domain.GuardConfig{}, true
+	}
+	for _, o := range others {
+		if o.ID == selfID {
+			continue
+		}
+		if cfg, ok, err := s.GuardSessions.Config(ctx, o.ID); err == nil && ok && cfg.ProtectsPaths() {
+			return cfg, true
+		}
+	}
+	return domain.GuardConfig{}, false
 }
 
 // keptChoices are what a session was given at its start and a resume carries

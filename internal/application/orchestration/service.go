@@ -389,7 +389,7 @@ func (s *Service) Start(ctx context.Context, req StartRequest) (*domain.Session,
 		branch = defaultBranchName(req.Task)
 	}
 
-	guard := s.resolveGuard(ctx, req.ProjectID, req.RepositoryID, domain.SessionModeDefault, nil, false)
+	guard := s.resolveGuard(ctx, req.ProjectID, req.RepositoryID, domain.SessionModeDefault, nil, false, nil)
 	p, err := s.prepare(ctx, prepareInput{
 		Guard:        &guard,
 		ProjectID:    req.ProjectID,
