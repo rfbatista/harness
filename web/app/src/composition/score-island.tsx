@@ -11,7 +11,9 @@ import { ScorePropsDto } from "../features/score/infrastructure/dto/score-props-
 import { ScorePresenter } from "../features/score/presentation/presenters/score-presenter";
 import { ScoreView } from "../features/score/presentation/views/score-view";
 
-export function mountScore(mount: Element, props: unknown, _win: Window, api: ApiClient, feed: Feed): () => void {
+const TICK_MS = 1_000;
+
+export function mountScore(mount: Element, props: unknown, win: Window, api: ApiClient, feed: Feed): () => void {
   const { project_id, project_name } = ScorePropsDto.fromJSON(props);
   const presenter = new ScorePresenter({
     source: httpScoreSource(api),
@@ -24,7 +26,10 @@ export function mountScore(mount: Element, props: unknown, _win: Window, api: Ap
   const root = createRoot(mount);
   root.render(<ScoreView presenter={presenter} />);
   void presenter.start();
+  // The elapsed time of a running run counts on.
+  const tick = win.setInterval(() => presenter.tick(), TICK_MS);
   return () => {
+    win.clearInterval(tick);
     presenter.stop();
     root.unmount();
   };

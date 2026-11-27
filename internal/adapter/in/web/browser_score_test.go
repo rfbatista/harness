@@ -20,6 +20,8 @@ type benchAPI struct {
 	cases     []map[string]any
 	cards     []map[string]any
 	runsStart int
+	cancels   int
+	runError  string // what GET .../runs/run9 says failed it
 }
 
 func benchCard(id, at, fingerprint string, cost float64, cases ...[4]any) map[string]any {
@@ -62,6 +64,11 @@ func (a *benchAPI) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		a.runsStart++
 		w.WriteHeader(http.StatusAccepted)
 		json.NewEncoder(w).Encode(map[string]any{"id": "run9", "project_id": "p1", "status": "running", "total": len(a.cases), "done": 0, "started_at": "2026-11-26T12:00:00Z"})
+	case r.Method == http.MethodPost && strings.HasSuffix(r.URL.Path, "/bench/runs/run9/cancel"):
+		a.cancels++
+		json.NewEncoder(w).Encode(map[string]any{"id": "run9", "project_id": "p1", "status": "running", "total": len(a.cases), "done": 0, "started_at": "2026-11-26T12:00:00Z"})
+	case r.Method == http.MethodGet && strings.HasSuffix(r.URL.Path, "/bench/runs/run9"):
+		json.NewEncoder(w).Encode(map[string]any{"id": "run9", "project_id": "p1", "status": "failed", "total": len(a.cases), "done": 1, "error": a.runError, "started_at": "2026-11-26T12:00:00Z"})
 	default:
 		http.NotFound(w, r)
 	}
@@ -137,6 +144,12 @@ func (a *benchAPI) started() int {
 
 func scoreServer(t *testing.T, api http.Handler) *httptest.Server {
 	t.Helper()
+	return scoreServerWithFeed(t, api, nil)
+}
+
+// scoreServerWithFeed is scoreServer with the project's event feed (GET /api/events) in memory, when there is one.
+func scoreServerWithFeed(t *testing.T, api http.Handler, feed http.Handler) *httptest.Server {
+	t.Helper()
 	assets, err := NewAssets()
 	if err != nil {
 		t.Fatal(err)
@@ -147,6 +160,9 @@ func scoreServer(t *testing.T, api http.Handler) *httptest.Server {
 	w := board()
 	mux := http.NewServeMux()
 	mux.Handle("/api/projects/p1/bench/", api)
+	if feed != nil {
+		mux.Handle("/api/events", feed)
+	}
 	mux.Handle("/api/", http.NotFoundHandler())
 	mux.Handle("/", NewHandler(Deps{
 		Projects: fakeProjects{w.projects}, Tasks: fakeTickets{w.tickets}, Sessions: fakeSessions{w.sessions},

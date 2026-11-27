@@ -65,6 +65,8 @@ export interface BenchRun {
   readonly done: number;
   readonly scorecardId: string;
   readonly error: string;
+  /** When the harness started it; null when it did not say. */
+  readonly startedAt: Date | null;
 }
 
 /** A run's progress or end, as the project feed announces it. */

@@ -17,6 +17,16 @@
 
   .score-page .toolbar > .end { margin-inline-start: auto; display: flex; align-items: center; gap: var(--space-s); }
 
+  /* A run in progress: the cases done as a determinate bar under the banner's line. */
+  .score-run-bar {
+    block-size: 0.375rem;
+    background: var(--color-line-strong);
+    border-radius: var(--radius-sm);
+    overflow: hidden;
+
+    & > i { display: block; block-size: 100%; background: var(--color-signal); transition: inline-size 0.2s ease; }
+  }
+
   .score {
     display: flex;
     flex-direction: column;

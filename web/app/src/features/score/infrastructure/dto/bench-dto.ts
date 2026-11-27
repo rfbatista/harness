@@ -117,11 +117,12 @@ export class BenchRunDto {
     readonly done: number,
     readonly scorecard_id: string,
     readonly error: string,
+    readonly started_at: Date | null,
   ) {}
 
   static fromJSON(raw: unknown): BenchRunDto {
     const from = object("BenchRunDto", raw);
-    return new BenchRunDto(string("BenchRunDto", from, "id"), oneOf("BenchRunDto", from, "status", STATUSES), from["total"] === undefined ? 0 : count("BenchRunDto", from, "total"), from["done"] === undefined ? 0 : count("BenchRunDto", from, "done"), optionalString("BenchRunDto", from, "scorecard_id") ?? "", optionalString("BenchRunDto", from, "error") ?? "");
+    return new BenchRunDto(string("BenchRunDto", from, "id"), oneOf("BenchRunDto", from, "status", STATUSES), from["total"] === undefined ? 0 : count("BenchRunDto", from, "total"), from["done"] === undefined ? 0 : count("BenchRunDto", from, "done"), optionalString("BenchRunDto", from, "scorecard_id") ?? "", optionalString("BenchRunDto", from, "error") ?? "", from["started_at"] === undefined ? null : time("BenchRunDto", from, "started_at"));
   }
 }
 

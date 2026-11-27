@@ -11,6 +11,8 @@ export interface FakeBench {
   readonly trajectories: { id: string; task_id: string; prompt: string; steps: unknown[]; recorded_at: string }[];
   /** The project's scorecards; the API answers them newest first. */
   readonly scorecards: CardSpec[];
+  /** The runs started (and any a test adds, as another session's): what GET and cancel answer, as the API writes them. */
+  readonly runs: { id: string; status: string; total: number; done: number; scorecard_id?: string; error?: string; started_at: string }[];
   /** Every request answered, as "METHOD path". */
   readonly requests: string[];
   /** The next run start is refused with this message (400 CASES_EMPTY style). */
@@ -91,6 +93,7 @@ export function fakeBench(): FakeBench {
   const scorecards: CardSpec[] = [];
   const trajectories: FakeBench["trajectories"] = [];
   const requests: string[] = [];
+  const runList: FakeBench["runs"] = [];
   let refusal: string | null = null;
   let off = false;
   let down = false;
@@ -109,7 +112,22 @@ export function fakeBench(): FakeBench {
       const unknown = (asked ?? []).filter((id) => !cases.some((c) => c.id === id));
       if (unknown.length > 0) return json(422, { error: `not cases of this project: ${unknown.join(", ")}`, code: "BENCH_CASE_IDS_INVALID" });
       runs += 1;
-      return json(202, { id: `run${runs}`, project_id: "p1", status: "running", total: asked && asked.length > 0 ? asked.length : cases.length, done: 0, started_at: "2026-11-26T12:00:00Z" });
+      const started = { id: `run${runs}`, status: "running", total: asked && asked.length > 0 ? asked.length : cases.length, done: 0, started_at: "2026-11-26T12:00:00Z" };
+      runList.push(started);
+      return json(202, { project_id: "p1", ...started });
+    }
+    const aRun = /^\/projects\/p1\/bench\/runs\/([^/]+)(\/cancel)?$/.exec(path);
+    if (aRun) {
+      const run = runList.find((r) => r.id === aRun[1]);
+      if (!run) return json(404, { error: "bench run not found", code: "BENCH_RUN_NOT_FOUND" });
+      if (method === "GET" && !aRun[2]) return json(200, { project_id: "p1", ...run });
+      if (method === "POST" && aRun[2]) {
+        if (run.status !== "running") return json(409, { error: `the bench run is ${run.status}`, code: "BENCH_RUN_NOT_RUNNING" });
+        // Like the server: the answer is the run as it was; the end follows on the feed.
+        const before = { project_id: "p1", ...run };
+        run.status = "cancelled";
+        return json(200, before);
+      }
     }
     const compared = /^\/projects\/p1\/bench\/scorecards\/([^/]+)\/compare$/.exec(path);
     if (method === "GET" && compared) {
@@ -162,6 +180,7 @@ export function fakeBench(): FakeBench {
     cases,
     trajectories,
     scorecards,
+    runs: runList,
     requests,
     refuseRun: (message) => {
       refusal = message;

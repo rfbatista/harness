@@ -127,6 +127,27 @@ export interface Fingerprint {
   readonly changed: string;
 }
 
+export interface RunningVm {
+  readonly runId: string;
+  readonly done: number;
+  readonly total: number;
+  /** Cases done as a share of the cases it will score, 0 to 100. */
+  readonly percent: number;
+  /** "2m 40s" since the run started. */
+  readonly elapsed: string;
+  /** Cancel was asked and the harness has not ended the run yet. */
+  readonly cancelling: boolean;
+}
+
+export interface FailedRunVm {
+  /** "Run 13 failed". */
+  readonly title: string;
+  /** Why the harness says it failed; "" when it did not say. */
+  readonly message: string;
+  readonly done: number;
+  readonly total: number;
+}
+
 export interface ScoreViewModel {
   readonly status: "loading" | "ready" | "failed";
   readonly error: string;
@@ -138,10 +159,13 @@ export interface ScoreViewModel {
   readonly runCount: number;
   /** "last run 12 · today 11:40 · 7m 12s", "" with no run. */
   readonly lastRun: string;
-  /** A run is going: Run bench is busy. Progress and Cancel are the running banner's (the next ticket). */
-  readonly running: { readonly done: number; readonly total: number } | null;
-  /** Why the last Run bench was refused; "" when it was not. */
+  /** A run is going: Run bench is replaced by Cancel, and the banner counts it. `runId` is "" until the harness has named the run. */
+  readonly running: RunningVm | null;
+  /** The last run failed: the danger banner, with Retry. */
+  readonly failedRun: FailedRunVm | null;
+  /** Why the last Run bench (or Cancel) was refused; "" when it was not. */
   readonly problem: string;
+  readonly problemTitle: string;
   readonly runs: readonly RunVm[];
   readonly readName: string;
   readonly baselineName: string;
@@ -183,7 +207,9 @@ const loadingVm = (deps: ScoreDeps): ScoreViewModel => ({
   runCount: 0,
   lastRun: "",
   running: null,
+  failedRun: null,
   problem: "",
+  problemTitle: "",
   runs: [],
   readName: "",
   baselineName: "",
@@ -211,8 +237,10 @@ export class ScorePresenter extends Presenter<ScoreViewModel> {
   #comparing = 0;
   #view: View = "scorecard";
   #filter: Filter = "all";
-  #running: { done: number; total: number } | null = null;
+  #running: { runId: string; done: number; total: number; startedAt: Date; cancelling: boolean } | null = null;
+  #failure: { runId: string; scorecardId: string; message: string; done: number; total: number } | null = null;
   #problem = "";
+  #problemTitle = "";
   #error = "";
   #open = "";
   #confirming = "";
@@ -311,17 +339,51 @@ export class ScorePresenter extends Presenter<ScoreViewModel> {
   async #start(caseIds: readonly string[] | undefined): Promise<void> {
     if (this.#running !== null) return;
     this.#problem = "";
-    this.#running = { done: 0, total: caseIds?.length ?? this.#cases.length };
+    this.#failure = null;
+    this.#running = { runId: "", done: 0, total: caseIds?.length ?? this.#cases.length, startedAt: this.#deps.now(), cancelling: false };
     this.#publish();
     try {
       const run = await this.#deps.source.startRun(this.#deps.projectId, caseIds);
       // A change the feed already announced (the run may be over) wins over the answer.
-      if (this.#running !== null && run.status === "running") this.#running = { done: run.done, total: run.total };
+      if (this.#running !== null && run.status === "running") this.#running = { ...this.#running, runId: run.id, done: Math.max(this.#running.done, run.done), total: run.total, startedAt: run.startedAt ?? this.#running.startedAt };
     } catch (err) {
       this.#running = null;
+      this.#problemTitle = "Run bench did not start.";
       this.#problem = err instanceof ScoreError ? err.message : "Run bench failed.";
     }
     this.#publish();
+  }
+
+  /** Cancel: asks the harness to stop the run; the run ends, partial, when the feed says so. A refusal is shown and the run stays. */
+  async cancelRun(): Promise<void> {
+    const run = this.#running;
+    if (run === null || run.runId === "" || run.cancelling) return;
+    this.#problem = "";
+    this.#running = { ...run, cancelling: true };
+    this.#publish();
+    try {
+      await this.#deps.source.cancelRun(this.#deps.projectId, run.runId);
+    } catch (err) {
+      if (this.#running !== null) this.#running = { ...this.#running, cancelling: false };
+      this.#problemTitle = "Cancel did not stop the run.";
+      this.#problem = err instanceof ScoreError ? err.message : "Cancel failed.";
+    }
+    this.#publish();
+  }
+
+  /** Retry after a failed run: a new run on the default setup. */
+  retryRun(): Promise<void> {
+    return this.#start(undefined);
+  }
+
+  dismissFailure(): void {
+    this.#failure = null;
+    this.#publish();
+  }
+
+  /** The clock moved: the elapsed time of a running run reads again. */
+  tick(): void {
+    if (this.#running !== null) this.#publish();
   }
 
   /** Opens a case in place to its trace; opening it again closes it. */
@@ -439,13 +501,47 @@ export class ScorePresenter extends Presenter<ScoreViewModel> {
 
   #onRun(change: RunChange): void {
     if (change.status === "running") {
-      this.#running = { done: change.done, total: change.total };
+      const mine = this.#running;
+      // One run at a time per project: a change of another run than ours, while ours is going, is not shown.
+      if (mine !== null && mine.runId !== "" && mine.runId !== change.runId) return;
+      this.#failure = null;
+      this.#running = { runId: change.runId, done: change.done, total: change.total, startedAt: mine?.startedAt ?? this.#deps.now(), cancelling: mine?.cancelling ?? false };
+      if (mine === null || mine.runId === "") void this.#learnStart(change.runId);
       this.#publish();
       return;
     }
     this.#running = null;
     this.#publish();
-    void this.#reload(true);
+    void this.#ended(change);
+  }
+
+  /** A run seen only on the feed: asks the harness when it started, so the elapsed time is the run's own. */
+  async #learnStart(runId: string): Promise<void> {
+    try {
+      const run = await this.#deps.source.run(this.#deps.projectId, runId);
+      if (this.#running?.runId === runId && run.startedAt !== null) {
+        this.#running = { ...this.#running, startedAt: run.startedAt };
+        this.#publish();
+      }
+    } catch {
+      // The elapsed time counts from when this page first saw the run.
+    }
+  }
+
+  /** The run is over: what it scored is read, and a failed run says why. */
+  async #ended(change: RunChange): Promise<void> {
+    const reading = this.#reload(true);
+    if (change.status === "failed") {
+      let message = "";
+      try {
+        message = (await this.#deps.source.run(this.#deps.projectId, change.runId)).error;
+      } catch {
+        // The banner still says the run failed.
+      }
+      this.#failure = { runId: change.runId, scorecardId: change.scorecardId, message, done: change.done, total: change.total };
+    }
+    await reading;
+    this.#publish();
   }
 
   async #load(): Promise<void> {
@@ -528,8 +624,10 @@ export class ScorePresenter extends Presenter<ScoreViewModel> {
       caseCount: caseTotal,
       runCount: cards.length,
       lastRun: cards[0] ? `last ${name(cards[0])} · ${when(cards[0].startedAt, now)} · ${duration(cards[0].durationMs)}` : "",
-      running: this.#running,
+      running: this.#running === null ? null : { runId: this.#running.runId, done: this.#running.done, total: this.#running.total, percent: this.#running.total === 0 ? 0 : Math.min(100, Math.floor((this.#running.done * 100) / this.#running.total)), elapsed: duration(Math.max(0, now.getTime() - this.#running.startedAt.getTime())), cancelling: this.#running.cancelling },
+      failedRun: this.#failure === null ? null : { title: `${failedName(this.#failure.scorecardId, cards)} failed`, message: this.#failure.message, done: this.#failure.done, total: this.#failure.total },
       problem: this.#problem,
+      problemTitle: this.#problemTitle,
       runs,
       readName: read ? `${name(read)} · ${when(read.startedAt, now)}` : "",
       baselineName: baseline ? `${name(baseline)} · ${when(baseline.startedAt, now)}` : "",
@@ -628,4 +726,11 @@ function tiles(read: Scorecard, cmp: Comparison, baseline: Scorecard | null, bas
     { key: "cases", label: "Cases", value: String(read.cases.length), note: baseline ? `${cmp.regressed} regressed · ${cmp.improved} improved · ${cmp.added} new` : "first run", direction: "none" },
     { key: "cost", label: "Estimated cost", value: cost(read.costUsd), note: spent, direction: "none" },
   ];
+}
+
+/** "Run 13": the failed run's scorecard when it kept one, else the run it would have been. */
+function failedName(scorecardId: string, cards: readonly Scorecard[]): string {
+  const asc = [...cards].sort((a, b) => a.startedAt.getTime() - b.startedAt.getTime());
+  const at = asc.findIndex((c) => c.id === scorecardId);
+  return `Run ${at >= 0 ? at + 1 : cards.length + 1}`;
 }

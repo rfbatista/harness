@@ -28,19 +28,60 @@ export function ScoreView({ presenter }: { presenter: ScorePresenter }) {
           ))}
         </div>
         <span className="[ end ]">
-          <span className="[ color-ink-faint text-sm ]" role="status">
-            {vm.running ? `running · ${vm.running.done} of ${vm.running.total} cases` : vm.lastRun}
-          </span>
-          <button type="button" className="[ button ]" data-variant="primary" aria-busy={vm.running !== null} disabled={vm.status !== "ready" || vm.caseCount === 0 || vm.running !== null} onClick={() => void presenter.runBench()}>
-            Run bench
-          </button>
+          {vm.running ? (
+            <>
+              <span className="[ status ]" data-state="running" role="status">
+                {vm.running.cancelling ? "cancelling…" : "running"}
+              </span>
+              <button type="button" className="[ button ]" data-variant="ghost" aria-busy={vm.running.cancelling} disabled={vm.running.runId === "" || vm.running.cancelling} onClick={() => void presenter.cancelRun()}>
+                Cancel
+              </button>
+            </>
+          ) : (
+            <>
+              <span className="[ color-ink-faint text-sm ]" role="status">
+                {vm.lastRun}
+              </span>
+              <button type="button" className="[ button ]" data-variant="primary" disabled={vm.status !== "ready" || vm.caseCount === 0} onClick={() => void presenter.runBench()}>
+                Run bench
+              </button>
+            </>
+          )}
         </span>
       </header>
       <div className="[ score ]" data-scroll>
+        {vm.running && (
+          <div className="[ banner ]" data-tone="signal" role="status" data-running="">
+            <div className="[ flow ] [ flow-space-3xs grow ]">
+              <span>
+                <b>Run bench</b> · {vm.running.done} of {vm.running.total} {vm.running.total === 1 ? "case" : "cases"} · {vm.running.elapsed}
+              </span>
+              <div className="[ score-run-bar ]" role="progressbar" aria-label="Cases done" aria-valuemin={0} aria-valuemax={100} aria-valuenow={vm.running.percent}>
+                <i style={{ width: `${vm.running.percent}%` }} />
+              </div>
+            </div>
+          </div>
+        )}
+        {vm.failedRun && (
+          <div className="[ banner ]" data-tone="danger" role="alert" data-failed-run="">
+            <div className="[ flow ] [ flow-space-3xs grow ]">
+              <span>
+                <b>{vm.failedRun.title}</b> after {vm.failedRun.done} of {vm.failedRun.total} {vm.failedRun.total === 1 ? "case" : "cases"}. What was scored is kept as a partial run.
+              </span>
+              <span className="[ code ]">{vm.failedRun.message === "" ? "BENCH_RUN_FAILED" : vm.failedRun.message}</span>
+            </div>
+            <button type="button" className="[ button ]" data-size="sm" onClick={() => void presenter.retryRun()}>
+              Retry
+            </button>
+            <button type="button" className="[ button ]" data-variant="ghost" data-size="sm" onClick={() => presenter.dismissFailure()}>
+              Dismiss
+            </button>
+          </div>
+        )}
         {vm.problem !== "" && (
           <div className="[ banner ]" data-tone="danger" role="alert" data-problem="">
             <div className="[ flow ] [ flow-space-3xs grow ]">
-              <span>Run bench did not start.</span>
+              <span>{vm.problemTitle}</span>
               <span className="[ code ]">{vm.problem}</span>
             </div>
           </div>

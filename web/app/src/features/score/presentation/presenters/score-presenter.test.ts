@@ -10,6 +10,8 @@ import type { CardSpec, CaseSpec } from "../../testing/fixtures";
 import { ScorePresenter } from "./score-presenter";
 
 const NOW = new Date(2026, 10, 26, 12, 0);
+/** What the fake bench says a run started at (UTC). */
+const RUN_STARTED = "2026-11-26T12:00:00Z";
 /** Local time on Nov 26 minus `daysAgo`, as the API writes it. */
 const at = (daysAgo: number, h: number, m = 0): string => new Date(2026, 10, 26 - daysAgo, h, m).toISOString();
 const c = (id: string, tool?: number, outcome?: number, trajectory?: number): CaseSpec => ({ id, name: id, ...(tool !== undefined ? { tool } : {}), ...(outcome !== undefined ? { outcome } : {}), ...(trajectory !== undefined ? { trajectory } : {}) });
@@ -17,11 +19,12 @@ const c = (id: string, tool?: number, outcome?: number, trajectory?: number): Ca
 function setup() {
   const bench = fakeBench();
   const feed = memoryFeed();
-  const presenter = new ScorePresenter({ source: httpScoreSource(apiClient(bench.fetch)), feed: httpScoreFeed(feed), calls: jsonCallsText, projectId: "p1", projectName: "pessoal", now: () => NOW });
+  const clock = { now: NOW };
+  const presenter = new ScorePresenter({ source: httpScoreSource(apiClient(bench.fetch)), feed: httpScoreFeed(feed), calls: jsonCallsText, projectId: "p1", projectName: "pessoal", now: () => clock.now });
   const addCase = (id: string) => bench.cases.push({ id, name: id, prompt: id, tools: [{ name: "t" }] });
   const addCard = (spec: CardSpec) => bench.scorecards.push(spec);
   const emit = (change: Record<string, unknown>) => feed.emit("/events?project_id=p1", { bench_run: change });
-  return { bench, feed, presenter, addCase, addCard, emit, vm: () => presenter.viewModel };
+  return { bench, feed, presenter, addCase, addCard, emit, clock, vm: () => presenter.viewModel };
 }
 const tick = () => new Promise((r) => setTimeout(r, 0));
 
@@ -171,7 +174,7 @@ describe("a run read beside its baseline", () => {
     bench.cases.push({ id: "k1", prompt: "p", tools: [] });
     await presenter.start();
     await presenter.replayCase("k1");
-    assert.deepEqual(vm().running, { done: 0, total: 1 });
+    assert.deepEqual([vm().running?.done, vm().running?.total], [0, 1]);
     assert.equal(bench.requests.filter((r) => r === "POST /projects/p1/bench/runs").length, 1);
   });
 
@@ -232,11 +235,11 @@ describe("Run bench", () => {
     await presenter.start();
     await presenter.runBench();
     assert.deepEqual(bench.requests.filter((r) => r.startsWith("POST")), ["POST /projects/p1/bench/runs"]);
-    assert.deepEqual(vm().running, { done: 0, total: 1 });
+    assert.deepEqual([vm().running?.done, vm().running?.total], [0, 1]);
     await presenter.runBench();
     assert.equal(bench.requests.filter((r) => r.startsWith("POST")).length, 1);
     emit({ run_id: "run1", status: "running", done: 1, total: 1 });
-    assert.deepEqual(vm().running, { done: 1, total: 1 });
+    assert.deepEqual([vm().running?.done, vm().running?.total], [1, 1]);
     addCard({ id: "run1", at: at(0, 11, 59), cases: [c("a", 0.4, 0.4, 0.4)] });
     emit({ run_id: "run1", status: "finished", done: 1, total: 1, scorecard_id: "run1" });
     await tick();
@@ -258,7 +261,7 @@ describe("Run bench", () => {
     const { presenter, vm, emit } = setup();
     await presenter.start();
     emit({ run_id: "elsewhere", status: "running", done: 2, total: 9 });
-    assert.deepEqual(vm().running, { done: 2, total: 9 });
+    assert.deepEqual([vm().running?.done, vm().running?.total], [2, 9]);
   });
 
   test("it stops following the feed when it stops", async () => {
@@ -267,5 +270,110 @@ describe("Run bench", () => {
     assert.equal(feed.followers("/events?project_id=p1"), 1);
     presenter.stop();
     assert.equal(feed.followers("/events?project_id=p1"), 0);
+  });
+});
+
+describe("A run in progress", () => {
+  const atRun = (clock: { now: Date }, seconds: number) => {
+    clock.now = new Date(new Date(RUN_STARTED).getTime() + seconds * 1000);
+  };
+
+  test("the banner counts the cases done, the share of the bar and the time since the run started", async () => {
+    const { presenter, vm, addCase, addCard, emit, clock } = setup();
+    for (const id of ["a", "b", "c", "d"]) addCase(id);
+    addCard({ id: "s1", at: at(1, 9), cases: [c("a", 0.8, 0.8, 0.8)] });
+    await presenter.start();
+    atRun(clock, 0);
+    await presenter.runBench();
+    assert.deepEqual([vm().running?.runId, vm().running?.done, vm().running?.total, vm().running?.percent, vm().running?.elapsed], ["run1", 0, 4, 0, "0s"]);
+    emit({ run_id: "run1", status: "running", done: 1, total: 4 });
+    atRun(clock, 160);
+    presenter.tick();
+    assert.deepEqual([vm().running?.done, vm().running?.percent, vm().running?.elapsed], [1, 25, "2m 40s"]);
+  });
+
+  test("the scorecard keeps showing the last finished comparison while the run goes", async () => {
+    const { presenter, vm, addCase, addCard, emit } = setup();
+    addCase("a");
+    addCard({ id: "s1", at: at(2, 9), cases: [c("a", 0.8, 0.8, 0.8)] });
+    addCard({ id: "s2", at: at(1, 9), cases: [c("a", 0.6, 0.6, 0.6)] });
+    await presenter.start();
+    const before = vm().readName;
+    await presenter.runBench();
+    emit({ run_id: "run1", status: "running", done: 0, total: 1 });
+    assert.equal(vm().readName, before);
+    assert.equal(vm().state, "compared");
+  });
+
+  test("a run another session started learns its start from the harness", async () => {
+    const { presenter, vm, bench, emit, clock } = setup();
+    await presenter.start();
+    bench.runs.push({ id: "elsewhere", status: "running", total: 9, done: 2, started_at: RUN_STARTED });
+    atRun(clock, 75);
+    emit({ run_id: "elsewhere", status: "running", done: 2, total: 9 });
+    await tick();
+    assert.deepEqual([vm().running?.runId, vm().running?.elapsed], ["elsewhere", "1m 15s"]);
+  });
+
+  test("Cancel asks the harness to stop the run and says so until the feed ends it; the cancelled run is listed as partial", async () => {
+    const { presenter, vm, addCase, addCard, bench, emit } = setup();
+    addCase("a");
+    addCase("b");
+    addCard({ id: "s1", at: at(1, 9), cases: [c("a", 0.8, 0.8, 0.8), c("b", 0.8, 0.8, 0.8)] });
+    await presenter.start();
+    await presenter.runBench();
+    await presenter.cancelRun();
+    assert.ok(bench.requests.includes("POST /projects/p1/bench/runs/run1/cancel"));
+    assert.equal(vm().running?.cancelling, true);
+    addCard({ id: "run1", at: at(0, 11, 59), status: "cancelled", cases: [c("a", 0.4, 0.4, 0.4)] });
+    emit({ run_id: "run1", status: "cancelled", done: 1, total: 2, scorecard_id: "run1" });
+    await tick();
+    assert.equal(vm().running, null);
+    assert.equal(vm().failedRun, null);
+    presenter.setView("runs");
+    assert.match(vm().runs[0]?.status ?? "", /^partial · 1 of 2/);
+  });
+
+  test("a refused Cancel is shown and the run stays running", async () => {
+    const { presenter, vm, addCase, bench } = setup();
+    addCase("a");
+    await presenter.start();
+    await presenter.runBench();
+    bench.runs[0]!.status = "finished";
+    await presenter.cancelRun();
+    assert.match(vm().problem, /finished/);
+    assert.equal(vm().running?.cancelling, false);
+  });
+
+  test("a failed run shows the danger banner with why, keeps what was scored as a partial run, and Retry starts a new run", async () => {
+    const { presenter, vm, addCase, addCard, bench, emit } = setup();
+    addCase("a");
+    addCase("b");
+    await presenter.start();
+    await presenter.runBench();
+    bench.runs[0]!.status = "failed";
+    bench.runs[0]!.error = "the claude CLI exited 1";
+    addCard({ id: "run1", at: at(0, 11, 59), status: "cancelled", cases: [c("a", 0.4, 0.4, 0.4)] });
+    emit({ run_id: "run1", status: "failed", done: 1, total: 2, scorecard_id: "run1" });
+    await tick();
+    assert.equal(vm().running, null);
+    assert.deepEqual([vm().failedRun?.title, vm().failedRun?.message, vm().failedRun?.done, vm().failedRun?.total], ["Run 1 failed", "the claude CLI exited 1", 1, 2]);
+    await presenter.retryRun();
+    assert.equal(vm().failedRun, null);
+    assert.equal(vm().running?.runId, "run2");
+  });
+
+  test("a failed run's banner can be dismissed", async () => {
+    const { presenter, vm, addCase, bench, emit } = setup();
+    addCase("a");
+    await presenter.start();
+    await presenter.runBench();
+    bench.runs[0]!.status = "failed";
+    bench.runs[0]!.error = "boom";
+    emit({ run_id: "run1", status: "failed", done: 0, total: 1 });
+    await tick();
+    assert.ok(vm().failedRun);
+    presenter.dismissFailure();
+    assert.equal(vm().failedRun, null);
   });
 });

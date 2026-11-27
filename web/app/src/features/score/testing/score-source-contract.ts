@@ -77,6 +77,28 @@ export function scoreSourceContract(name: string, make: () => ScoreSourceHarness
       await assert.rejects(source.startRun("p1", ["ghost"]), (err: unknown) => err instanceof ScoreError && /ghost/.test(err.message));
     });
 
+    test("a run is read back with its progress and when it started", async () => {
+      const { source, bench } = make();
+      bench.cases.push({ id: "c1", prompt: "p", tools: [] });
+      const started = await source.startRun("p1");
+      assert.equal(started.startedAt?.toISOString(), "2026-11-26T12:00:00.000Z");
+      bench.runs[0]!.done = 1;
+      bench.runs[0]!.status = "failed";
+      bench.runs[0]!.error = "the claude CLI exited 1";
+      const read = await source.run("p1", started.id);
+      assert.deepEqual([read.status, read.done, read.error], ["failed", 1, "the claude CLI exited 1"]);
+      await assert.rejects(source.run("p1", "ghost"), (err: unknown) => err instanceof ScoreError && err.code === "NOT_FOUND");
+    });
+
+    test("a running run is cancelled; one that has ended refuses it", async () => {
+      const { source, bench } = make();
+      bench.cases.push({ id: "c1", prompt: "p", tools: [] });
+      const started = await source.startRun("p1");
+      await source.cancelRun("p1", started.id);
+      assert.ok(bench.requests.includes(`POST /projects/p1/bench/runs/${started.id}/cancel`));
+      await assert.rejects(source.cancelRun("p1", started.id), (err: unknown) => err instanceof ScoreError && /cancelled/.test(err.message));
+    });
+
     test("a refused run fails with the message", async () => {
       const { source, bench } = make();
       bench.refuseRun("add a case first");

@@ -12,6 +12,10 @@ export interface ScoreSource {
   scorecards(projectId: string, signal?: AbortSignal): Promise<Scorecard[]>;
   /** Starts a bench run on the default setup; answers it, running. With `caseIds` it runs only those cases (a replay); its scorecard is partial. */
   startRun(projectId: string, caseIds?: readonly string[]): Promise<BenchRun>;
+  /** One run: how far it is, and why it failed. Fails with a ScoreError NOT_FOUND for a run the harness does not know. */
+  run(projectId: string, runId: string): Promise<BenchRun>;
+  /** Asks the harness to stop a running run (its end follows on the feed); a run that has ended is refused with a ScoreError. */
+  cancelRun(projectId: string, runId: string): Promise<BenchRun>;
   /** A scorecard set against `baselineId`, or against the previous finished run when null; null when there is nothing earlier to compare with. */
   compare(projectId: string, scorecardId: string, baselineId: string | null, signal?: AbortSignal): Promise<ScoreComparison | null>;
   /** Stores a case from a definition. A refused definition fails with a ScoreError REFUSED naming its fields. */

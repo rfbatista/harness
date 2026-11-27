@@ -18,7 +18,7 @@ export const toCase = (dto: BenchCaseDto): BenchCase => ({
 
 export const toTrajectory = (dto: TrajectoryDto): Trajectory => ({ id: dto.id, taskId: dto.task_id, prompt: dto.prompt, steps: dto.steps, recordedAt: dto.recorded_at });
 
-export const toRun = (dto: BenchRunDto): BenchRun => ({ id: dto.id, status: dto.status, total: dto.total, done: dto.done, scorecardId: dto.scorecard_id, error: dto.error });
+export const toRun = (dto: BenchRunDto): BenchRun => ({ id: dto.id, status: dto.status, total: dto.total, done: dto.done, scorecardId: dto.scorecard_id, error: dto.error, startedAt: dto.started_at });
 
 export const toRunChange = (dto: RunChangeDto): RunChange => ({ runId: dto.run_id, status: dto.status, done: dto.done, total: dto.total, scorecardId: dto.scorecard_id });
 
