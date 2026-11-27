@@ -30,7 +30,11 @@ import (
 func criticWorld(t *testing.T) (*shellE2E, *domain.Session) {
 	t.Helper()
 	e := newShellE2E(t)
-	sess := e.gatedSession(&fakeAgentSystem{retry: 3, gates: greenGates()})
+	fake := &fakeAgentSystem{retry: 3, gates: greenGates()}
+	sess := e.gatedSession(fake)
+	// The done declaration is not about task memory here: Learn's check would
+	// refuse the first declaration for an unchanged progress.md.
+	e.orch.AgentSystem = noTaskMemoryCheck{fake}
 	e.orch.Sandbox = &orchestration.Sandbox{Driver: &portstest.RecordingSandboxDriver{}}
 	e.commitOnBranch(sess, "feature.txt", "a new line\n")
 	return e, sess
@@ -288,4 +292,14 @@ func TestWithTheSandboxOffNoCriticStartsAndTheSkipIsRecordedOnTheAuthorAndPublis
 	if got := e.sessions.Get(author.ID).CriticSkip; got != "" {
 		t.Errorf("the skip note stayed after a critic ran: %q", got)
 	}
+}
+
+// noTaskMemoryCheck is the guard fake with Learn's task memory update check
+// switched off.
+type noTaskMemoryCheck struct{ *fakeAgentSystem }
+
+func (n noTaskMemoryCheck) Effective(ctx context.Context, projectID, repositoryID string) (domain.EffectiveAgentSystem, error) {
+	eff, err := n.fakeAgentSystem.Effective(ctx, projectID, repositoryID)
+	eff.Learn.TaskMemory.RequireUpdate.Value = false
+	return eff, err
 }
