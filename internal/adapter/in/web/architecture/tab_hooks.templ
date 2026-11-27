@@ -7,7 +7,7 @@ package architecture
 // beside the open rule's editor (name, trigger, condition, mode, message) and
 // its "What the agent sees" preview. Only what the record holds is offered:
 // a rule's kind, lifecycle point, tools, paths, agents, timeout, mode and message.
-templ tabHooks() {
+templ tabHooks(v View) {
 	<section role="tabpanel" id="architecture-panel-hooks" aria-labelledby="architecture-tab-hooks" x-show="isTab('hooks')" x-data="architectureHooksTab" class="[ flow ]">
 		@panelHead("Hook rules", "Deterministic checks that protect the layers. A rule runs at a lifecycle point, tests a condition and either blocks the action or only warns. Rules apply to every agent session in this repository, as soon as they are saved.") {
 			<button type="button" class="[ button ]" data-variant="primary" data-size="sm" data-add-rule x-on:click="addCommand">Add rule</button>
@@ -16,6 +16,7 @@ templ tabHooks() {
 			<div class="[ arch-empty ]" data-no-rules>
 				<h3>No hook rules yet</h3>
 				<p>Layers are only advice until a rule enforces them. Start with the one rule most repositories need: block edits outside an agent’s change layers.</p>
+				<p class="[ color-ink-muted text-sm ]" data-agent-system-note>Gates and protected paths live in <a href={ templ.SafeURL(v.AgentSystemHref) }>Agent system</a>, not here: these rules only guard the layers above.</p>
 				<div class="[ actions ]">
 					<button type="button" class="[ button ]" data-variant="primary" data-add-edit x-on:click="addEdit">Add “Edit outside change layers” (blocking)</button>
 					<button type="button" class="[ button ]" data-add-scratch x-on:click="addCommand">Add a rule from scratch</button>

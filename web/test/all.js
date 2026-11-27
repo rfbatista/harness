@@ -35,6 +35,9 @@ import "../src/modules/agents/presentation/components/projectAgentsSection.test.
 import "../src/modules/agents/presentation/components/projectMcpServers.test.js";
 import "../src/modules/agents/presentation/components/saveController.test.js";
 import "../src/modules/agents/presentation/components/skillEditor.test.js";
+import "../src/modules/agentsystem/domain/guardLine.test.js";
+import "../src/modules/agentsystem/infrastructure/guard-gateway.test.js";
+import "../src/modules/agentsystem/presentation/components/guardLine.test.js";
 import "../src/modules/architecture/domain/descriptive.test.js";
 import "../src/modules/architecture/domain/diagram.test.js";
 import "../src/modules/architecture/domain/events.test.js";

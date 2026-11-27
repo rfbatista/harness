@@ -57,6 +57,7 @@ export const repositoriesPage = ({ gateway, architecture, designSystem }) => () 
       envHref: `/projects/${encodeURIComponent(this.projectId)}/repositories/${encodeURIComponent(r.id)}/env`,
       historyHref: `/projects/${encodeURIComponent(this.projectId)}/repositories/${encodeURIComponent(r.id)}/history`,
       architectureHref: `/projects/${encodeURIComponent(this.projectId)}/repositories/${encodeURIComponent(r.id)}/architecture`,
+      agentSystemHref: `/projects/${encodeURIComponent(this.projectId)}/agent-system?repository=${encodeURIComponent(r.id)}`,
       architectureLabel: this.withArchitecture.includes(r.id) ? "Architecture" : "Set up architecture",
       proposals: this.openProposals[r.id] ?? 0,
       hasProposals: (this.openProposals[r.id] ?? 0) > 0,

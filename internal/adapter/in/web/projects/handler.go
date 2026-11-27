@@ -242,6 +242,11 @@ func EnvFilesHref(projectID, repositoryID string) string {
 	return RepositoriesHref(projectID) + "/" + url.PathEscape(repositoryID) + "/env"
 }
 
+// AgentSystemHref is the Agent system page with a repository selected.
+func AgentSystemHref(projectID, repositoryID string) string {
+	return "/projects/" + url.PathEscape(projectID) + "/agent-system?repository=" + url.QueryEscape(repositoryID)
+}
+
 // RepositoriesHref is a project's repositories page.
 func RepositoriesHref(projectID string) string {
 	return "/projects/" + url.PathEscape(projectID) + "/repositories"

@@ -135,8 +135,8 @@ type SettingsView struct {
 	AgentCredential *AgentCredentialView
 }
 
-// SettingsRepository is a repository, as a link to its env files.
-type SettingsRepository struct{ Name, EnvHref string }
+// SettingsRepository is a repository, as links to its env files and to its Agent system view.
+type SettingsRepository struct{ ID, Name, EnvHref, AgentSystemHref string }
 
 // SettingsSeed is what projectsSettingsPage starts from, in the API's shape.
 type SettingsSeed struct {
@@ -159,7 +159,7 @@ func NewSettingsView(frame shell.Frame, project *domain.Project, repos []*domain
 		Seed:             SettingsSeed{Project: &seedProject, Repositories: repos},
 	}
 	for _, r := range repos {
-		v.Repositories = append(v.Repositories, SettingsRepository{Name: repositoryName(r), EnvHref: EnvFilesHref(project.ID, r.ID)})
+		v.Repositories = append(v.Repositories, SettingsRepository{ID: r.ID, Name: repositoryName(r), EnvHref: EnvFilesHref(project.ID, r.ID), AgentSystemHref: AgentSystemHref(project.ID, r.ID)})
 	}
 	return v
 }
