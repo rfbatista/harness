@@ -3,6 +3,7 @@ package gateruns
 import (
 	"context"
 	"io"
+	"strings"
 	"testing"
 	"time"
 
@@ -106,9 +107,16 @@ func TestASessionThatKeptNoConfigurationIsNotGatedButOneWithUnavailableSettingsI
 	if _, err := svc.Run(context.Background(), ports.GateRunRequest{SessionID: "s"}); err != nil {
 		t.Errorf("a store fault switched the guard off: %v", err)
 	}
+	// Fail closed: a session that kept no configuration is gated by the harness
+	// defaults for its mode, and one of a mode that is never gated stays free.
 	svc.d.Guard = fakeGuard{}
+	svc.d.Sessions = fakeSessions{"s": {ID: "s", Mode: domain.SessionModeImplement}}
+	if _, err := svc.Run(context.Background(), ports.GateRunRequest{SessionID: "s"}); err != nil && strings.Contains(err.Error(), "not gated") {
+		t.Errorf("an implement session that kept no configuration was not gated: %v", err)
+	}
+	svc.d.Sessions = fakeSessions{"s": {ID: "s", Mode: domain.SessionModeReview}}
 	if _, err := svc.Run(context.Background(), ports.GateRunRequest{SessionID: "s"}); err == nil {
-		t.Error("a session with no kept configuration was gated")
+		t.Error("a review session that kept no configuration was gated")
 	}
 	if _, err := svc.Run(context.Background(), ports.GateRunRequest{SessionID: "nope"}); err == nil {
 		t.Error("an unknown session ran")

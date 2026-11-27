@@ -199,13 +199,6 @@ type SandboxSession struct {
 // deny, so it stays reachable.
 func hiddenPaths(s SandboxSession, granted []ports.SandboxPath) []string {
 	var hidden []string
-	for _, p := range s.Secrets {
-		// A secret is hidden even inside a granted path: the harness's database
-		// and key are never a session's.
-		if p = filepath.Clean(p); p != "" && p != "." && !slices.Contains(hidden, p) {
-			hidden = append(hidden, p)
-		}
-	}
 	for _, p := range append(slices.Clone(s.Repositories), s.WorkspacesRoot, s.ProjectHomesRoot) {
 		if p == "" {
 			continue
@@ -298,7 +291,20 @@ func BuildSandboxPolicy(s SandboxSession) ports.SandboxPolicy {
 		policy.CreateOnly = []string{createOnly}
 	}
 	policy.Hidden = hiddenPaths(s, all)
+	policy.Secrets = secretPaths(s.Secrets)
 	return policy
+}
+
+// secretPaths are the harness's secrets as clean absolute paths: never granted,
+// whatever else grants (see ports.SandboxPolicy.Secrets).
+func secretPaths(paths []string) []string {
+	var out []string
+	for _, p := range paths {
+		if p = filepath.Clean(p); p != "." && filepath.IsAbs(p) && !slices.Contains(out, p) {
+			out = append(out, p)
+		}
+	}
+	return out
 }
 
 // addRepositories grants every repository checkout of the project read-only. A

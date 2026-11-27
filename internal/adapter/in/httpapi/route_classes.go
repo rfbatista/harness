@@ -81,7 +81,7 @@ var routeClasses = map[string]routeClass{
 	"GET /api/get_ticket":                                                classSession,
 	"GET /api/get_tool":                                                  classSession,
 	"GET /api/get_zone":                                                  classSession,
-	"GET /api/health":                                                    classOpen,
+	"GET /api/health":                                                    classOpen, // called by clients and probes that ask whether the server is up
 	"GET /api/inspect_skill":                                             classSession,
 	"GET /api/list_agents":                                               classSession,
 	"GET /api/list_bounded_contexts":                                     classSession,
@@ -121,7 +121,7 @@ var routeClasses = map[string]routeClass{
 	"GET /api/notifications":                                             classSession,
 	"GET /api/notifications/events":                                      classSession,
 	"GET /api/person-terminals/:tid/terminal":                            classSession,
-	"GET /api/person/pair":                                               classOpen,
+	"GET /api/person/pair":                                               classOpen, // opened by the person's browser from the pairing link the harness printed; the code in it is the proof
 	"GET /api/product_owner":                                             classSession,
 	"GET /api/product_owner_digests":                                     classSession,
 	"GET /api/product_owner_memory":                                      classSession,
@@ -266,8 +266,8 @@ var routeClasses = map[string]routeClass{
 	"POST /api/import_skill_from_path":                                   classPerson,
 	"POST /api/install_managed_claude":                                   classPerson,
 	"POST /api/install_token_saver":                                      classPerson,
-	"POST /api/interactive_session_hook":                                 classOpen,
-	"POST /api/interactive_session_started":                              classOpen,
+	"POST /api/interactive_session_hook":                                 classOpen, // called by the Stop hook of every interactive claude session (curl in its settings)
+	"POST /api/interactive_session_started":                              classOpen, // called by the SessionStart hook of every interactive claude session
 	"POST /api/interviews/:id/answers":                                   classPerson,
 	"POST /api/interviews/:id/dismiss":                                   classPerson,
 	"POST /api/link_document_to_ticket":                                  classPerson,
@@ -281,7 +281,7 @@ var routeClasses = map[string]routeClass{
 	"POST /api/notifications/:id/acknowledge":                            classPerson,
 	"POST /api/notifications/:id/resume_interrupted":                     classPerson,
 	"POST /api/notifications/read":                                       classPerson,
-	"POST /api/person/pair":                                              classOpen,
+	"POST /api/person/pair":                                              classOpen, // called by `tui-client pair`, which redeems the code for a credential to keep
 	"POST /api/person/pairing-codes":                                     classPerson,
 	"POST /api/preview_design_system_export":                             classSession, // a read sent as POST
 	"POST /api/preview_design_system_import":                             classSession, // a read sent as POST
@@ -340,8 +340,8 @@ var routeClasses = map[string]routeClass{
 	"POST /api/sessions/:id/merge":                                       classPerson,
 	"POST /api/sessions/:id/messages":                                    classPerson,
 	"POST /api/sessions/:id/person-terminals":                            classPerson,
-	"POST /api/sessions/:id/shell/check":                                 classOpen,
-	"POST /api/sessions/:id/shell/commit":                                classOpen,
+	"POST /api/sessions/:id/shell/check":                                 classOpen, // called by the virtual shell's PreToolUse hook and PATH shims
+	"POST /api/sessions/:id/shell/commit":                                classOpen, // called by the virtual shell's PostToolUse hook
 	"POST /api/sessions/:id/stop":                                        classPerson,
 	"POST /api/sessions/:id/task_worktrees/denials":                      classSession, // called by the architect worktree read hook
 	"POST /api/set_agent_attribution":                                    classPerson,

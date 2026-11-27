@@ -2,6 +2,7 @@ package archrules
 
 import (
 	"context"
+	"log/slog"
 	"slices"
 
 	"operators-mcp/internal/domain"
@@ -29,7 +30,13 @@ func (s *Service) guardedWrite(ctx context.Context, c ports.ArchitectureCheck, p
 		return guarded{}, false
 	}
 	cfg, ok, err := s.d.Guard.Config(ctx, sess.ID)
-	if err != nil || !ok || !cfg.ProtectsPaths() {
+	if err != nil || !ok {
+		// Fail closed: a configuration that cannot be read, or was never kept, holds
+		// the session to the harness defaults for its mode, never lets it off.
+		slog.Warn("a session's guard configuration is not available; it is held to the harness defaults", "session", sess.ID, "kept", ok, "err", err)
+		cfg = domain.NewGuardConfig(domain.ResolveAgentSystem(domain.AgentSystemHarnessDefaults{}), sess.Mode)
+	}
+	if !cfg.ProtectsPaths() {
 		return guarded{}, false
 	}
 	return guarded{sess: sess, cfg: cfg,

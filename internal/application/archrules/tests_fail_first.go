@@ -2,6 +2,7 @@ package archrules
 
 import (
 	"context"
+	"log/slog"
 	"slices"
 
 	"operators-mcp/internal/domain"
@@ -40,6 +41,7 @@ func (s *Service) testRunFailedOrUnknown(ctx context.Context, sessionID string) 
 	}
 	runs, err := s.d.GateRuns.List(ctx, sessionID)
 	if err != nil {
+		slog.Warn("a session's gate runs could not be read; tests-fail-first lets its writes through", "session", sessionID, "err", err)
 		return true
 	}
 	return slices.ContainsFunc(runs, func(r domain.GateRun) bool { return r.TestFailed() })

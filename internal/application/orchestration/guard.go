@@ -95,8 +95,15 @@ func (s *Service) keepGuard(ctx context.Context, sess *domain.Session, cfg domai
 	if s.GuardSessions == nil || sess == nil || sess.ProjectID == "" {
 		return
 	}
-	if err := s.GuardSessions.Keep(context.WithoutCancel(ctx), sess.ID, cfg); err != nil {
-		slog.Warn("guard configuration not kept", "session", sess.ID, "err", err)
+	ctx = context.WithoutCancel(ctx)
+	// One retry: a session that kept nothing is held to the harness defaults by the
+	// checks (they fail closed), but its own configuration is what the person set.
+	err := s.GuardSessions.Keep(ctx, sess.ID, cfg)
+	if err != nil {
+		err = s.GuardSessions.Keep(ctx, sess.ID, cfg)
+	}
+	if err != nil {
+		slog.Error("guard configuration not kept; the session is held to the harness defaults", "session", sess.ID, "err", err)
 	}
 }
 

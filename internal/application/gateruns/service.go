@@ -8,6 +8,7 @@ import (
 	"crypto/rand"
 	"encoding/hex"
 	"io"
+	"log/slog"
 	"slices"
 	"time"
 
@@ -63,11 +64,11 @@ func (s *Service) Gated(ctx context.Context, sessionID string) (*domain.Session,
 		return nil, domain.GuardConfig{}, &domain.StructuredError{Code: "SESSION_NOT_FOUND", Message: "session not found"}
 	}
 	cfg, ok, err := s.d.Guard.Config(ctx, sessionID)
-	if err != nil {
-		return nil, domain.GuardConfig{}, err
-	}
-	if !ok {
-		return nil, domain.GuardConfig{}, notGated("it kept no guard configuration")
+	if err != nil || !ok {
+		// Fail closed: a configuration that cannot be read, or was never kept, is
+		// the harness defaults for the session's mode, not a session left ungated.
+		slog.Warn("a session's guard configuration is not available; it is gated by the harness defaults for its mode", "session", sessionID, "kept", ok, "err", err)
+		cfg = domain.NewGuardConfig(domain.ResolveAgentSystem(domain.AgentSystemHarnessDefaults{}), sess.Mode)
 	}
 	hasDiff := false
 	if cfg.Mode == domain.SessionModeDefault && s.d.HasDiff != nil {
