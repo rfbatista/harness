@@ -107,9 +107,7 @@ func (s *Service) execute(ctx context.Context, live *liveRun, cases []domain.Ben
 	}
 
 	finished := time.Now().UTC()
-	card := NewScorecard(run.ProjectID, domain.BenchSetupRecord{
-		Fingerprint: Fingerprint(setup), AgentName: setup.AgentName, Model: setup.Model, JudgeModel: setup.JudgeModel, CLIVersion: setup.CLIVersion,
-	}, scores, scorecardStatus(status, partial))
+	card := NewScorecard(run.ProjectID, SetupRecord(setup), scores, scorecardStatus(status, partial))
 	card.ID, card.StartedAt, card.FinishedAt = run.ID, run.StartedAt, finished
 
 	var saveErr error

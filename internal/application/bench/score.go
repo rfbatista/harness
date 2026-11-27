@@ -190,6 +190,7 @@ func Compare(prev, cur domain.Scorecard) domain.ScorecardComparison {
 	out := domain.ScorecardComparison{
 		PreviousID:         prev.ID,
 		FingerprintChanged: prev.Setup.Fingerprint != cur.Setup.Fingerprint,
+		ChangedParts:       changedParts(prev.Setup, cur.Setup),
 		Aggregate:          delta(prev.Aggregate.Mean, cur.Aggregate.Mean),
 		Patterns:           map[string]domain.BenchDelta{},
 		Groups:             map[string]domain.BenchDelta{},

@@ -116,6 +116,15 @@ type BenchSetupRecord struct {
 	Model       string `json:"model,omitempty"`
 	JudgeModel  string `json:"judge_model,omitempty"`
 	CLIVersion  string `json:"cli_version,omitempty"`
+	// Agents, Skills and Instructions count what the run ran on (the agent,
+	// its skills, the instruction files). Parts is a digest per part, named
+	// by what it is ("agent", "model", "skill <path>", "instruction <path>"),
+	// so a comparison can say what changed. All are absent on a scorecard
+	// recorded before parts existed.
+	Agents       int               `json:"agents,omitempty"`
+	Skills       int               `json:"skills,omitempty"`
+	Instructions int               `json:"instructions,omitempty"`
+	Parts        map[string]string `json:"parts,omitempty"`
 }
 
 // Scorecard is the result of one bench run of a project: scores per case, per
@@ -166,6 +175,9 @@ type BenchCaseDelta struct {
 type ScorecardComparison struct {
 	PreviousID         string                `json:"previous_id"`
 	FingerprintChanged bool                  `json:"fingerprint_changed"`
+	// ChangedParts names the setup parts whose digest differs (added and removed
+	// ones too), sorted; nil when either scorecard did not record its parts.
+	ChangedParts []string `json:"changed_parts"`
 	Aggregate          BenchDelta            `json:"aggregate"`
 	Patterns           map[string]BenchDelta `json:"patterns"`
 	// Groups are the scorecard's three columns (tool use, outcome, trajectory),

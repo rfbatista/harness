@@ -115,6 +115,9 @@ func TestARunIsStartedFollowedAndItsScorecardReadAndComparedOverHTTP(t *testing.
 	if code != http.StatusOK || len(card["cases"].([]any)) != 1 || card["setup"].(map[string]any)["fingerprint"] == "" {
 		t.Fatalf("scorecard = %d %v", code, card)
 	}
+	if setup := card["setup"].(map[string]any); setup["parts"] == nil || len(setup["parts"].(map[string]any)) == 0 {
+		t.Fatalf("the scorecard records no setup parts: %v", setup)
+	}
 	if code, list := benchRunBody(t, h, http.MethodGet, "/projects/p1/bench/scorecards"); code != http.StatusOK || len(list["scorecards"].([]any)) != 1 {
 		t.Fatalf("list = %d %v", code, list)
 	}
@@ -128,6 +131,9 @@ func TestARunIsStartedFollowedAndItsScorecardReadAndComparedOverHTTP(t *testing.
 	code, cmp := benchRunBody(t, h, http.MethodGet, "/projects/p1/bench/scorecards/"+second["id"].(string)+"/compare")
 	if code != http.StatusOK || cmp["previous_id"] != id || cmp["fingerprint_changed"] != false {
 		t.Fatalf("compare = %d %v", code, cmp)
+	}
+	if parts, ok := cmp["changed_parts"].([]any); !ok || len(parts) != 0 {
+		t.Fatalf("changed_parts of an unchanged setup = %v, want []", cmp["changed_parts"])
 	}
 
 	if code, _ := benchRunBody(t, h, http.MethodGet, "/projects/p1/bench/scorecards/nope"); code != http.StatusNotFound {
