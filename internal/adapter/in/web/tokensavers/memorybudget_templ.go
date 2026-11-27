@@ -41,7 +41,7 @@ func MemoryBudget(seed MemoryBudgetSeed) templ.Component {
 		var templ_7745c5c3_Var2 string
 		templ_7745c5c3_Var2, templ_7745c5c3_Err = templ.ResolveAttributeValue(string(seed.Level))
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `memorybudget.templ`, Line: 9, Col: 143}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `tokensavers/memorybudget.templ`, Line: 9, Col: 143}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var2)
 		if templ_7745c5c3_Err != nil {
@@ -54,7 +54,7 @@ func MemoryBudget(seed MemoryBudgetSeed) templ.Component {
 		var templ_7745c5c3_Var3 string
 		templ_7745c5c3_Var3, templ_7745c5c3_Err = templ.ResolveAttributeValue(seed.OwnerID)
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `memorybudget.templ`, Line: 9, Col: 174}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `tokensavers/memorybudget.templ`, Line: 9, Col: 174}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var3)
 		if templ_7745c5c3_Err != nil {
@@ -67,7 +67,7 @@ func MemoryBudget(seed MemoryBudgetSeed) templ.Component {
 		var templ_7745c5c3_Var4 string
 		templ_7745c5c3_Var4, templ_7745c5c3_Err = templ.ResolveAttributeValue(strconv.FormatInt(seed.Bytes, 10))
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `memorybudget.templ`, Line: 9, Col: 223}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `tokensavers/memorybudget.templ`, Line: 9, Col: 223}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var4)
 		if templ_7745c5c3_Err != nil {
@@ -80,7 +80,7 @@ func MemoryBudget(seed MemoryBudgetSeed) templ.Component {
 		var templ_7745c5c3_Var5 string
 		templ_7745c5c3_Var5, templ_7745c5c3_Err = templ.ResolveAttributeValue(strconv.FormatInt(seed.EffectiveBytes, 10))
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `memorybudget.templ`, Line: 9, Col: 285}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `tokensavers/memorybudget.templ`, Line: 9, Col: 285}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var5)
 		if templ_7745c5c3_Err != nil {
@@ -93,7 +93,7 @@ func MemoryBudget(seed MemoryBudgetSeed) templ.Component {
 		var templ_7745c5c3_Var6 string
 		templ_7745c5c3_Var6, templ_7745c5c3_Err = templ.JoinStringErrs(seed.Lead())
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `memorybudget.templ`, Line: 11, Col: 54}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `tokensavers/memorybudget.templ`, Line: 11, Col: 54}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var6))
 		if templ_7745c5c3_Err != nil {
@@ -106,7 +106,7 @@ func MemoryBudget(seed MemoryBudgetSeed) templ.Component {
 		var templ_7745c5c3_Var7 string
 		templ_7745c5c3_Var7, templ_7745c5c3_Err = templ.ResolveAttributeValue("memory-budget-" + seed.OwnerID)
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `memorybudget.templ`, Line: 23, Col: 66}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `tokensavers/memorybudget.templ`, Line: 23, Col: 66}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var7)
 		if templ_7745c5c3_Err != nil {
@@ -119,7 +119,7 @@ func MemoryBudget(seed MemoryBudgetSeed) templ.Component {
 		var templ_7745c5c3_Var8 string
 		templ_7745c5c3_Var8, templ_7745c5c3_Err = templ.ResolveAttributeValue("memory-budget-" + seed.OwnerID)
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `memorybudget.templ`, Line: 24, Col: 47}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `tokensavers/memorybudget.templ`, Line: 24, Col: 47}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var8)
 		if templ_7745c5c3_Err != nil {
@@ -132,7 +132,7 @@ func MemoryBudget(seed MemoryBudgetSeed) templ.Component {
 		var templ_7745c5c3_Var9 string
 		templ_7745c5c3_Var9, templ_7745c5c3_Err = templ.ResolveAttributeValue(seed.Value())
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `memorybudget.templ`, Line: 24, Col: 179}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `tokensavers/memorybudget.templ`, Line: 24, Col: 179}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var9)
 		if templ_7745c5c3_Err != nil {
@@ -145,7 +145,7 @@ func MemoryBudget(seed MemoryBudgetSeed) templ.Component {
 		var templ_7745c5c3_Var10 string
 		templ_7745c5c3_Var10, templ_7745c5c3_Err = templ.JoinStringErrs(seed.Summary())
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `memorybudget.templ`, Line: 25, Col: 93}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `tokensavers/memorybudget.templ`, Line: 25, Col: 93}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var10))
 		if templ_7745c5c3_Err != nil {
