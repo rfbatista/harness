@@ -4,7 +4,7 @@ import { ApiError, type ApiClient } from "../../../shared/infrastructure/api-cli
 import { DtoError } from "../../../shared/infrastructure/dto/dto-error";
 import type { SettingsSource } from "../application/ports";
 import { SettingsError, SettingsRefused, type Scope, type SettingsErrorCode } from "../domain/settings";
-import { PatchDto, RefusalDto, RepositoriesDto, RunCommandsDto, ScorecardsDto, SettingsViewDto } from "./dto/settings-view-dto";
+import { CheckShImportDto, PatchDto, RefusalDto, RepositoriesDto, RunCommandsDto, ScorecardsDto, SettingsViewDto } from "./dto/settings-view-dto";
 import { toSettingsView } from "./settings-mapper";
 
 const enc = encodeURIComponent;
@@ -45,6 +45,7 @@ export function httpSettingsSource(api: ApiClient): SettingsSource {
         const card = ScorecardsDto.fromJSON(await api.get(`/projects/${enc(projectId)}/bench/scorecards`, undefined, signal)).scorecards.find((c) => c.status === "finished");
         return card === undefined ? undefined : { mean: card.mean, costUsd: card.cost_usd, cases: card.cases };
       }),
+    importFromCheckSh: (projectId, repositoryId, signal) => mapErrors(async () => [...CheckShImportDto.fromJSON(await api.get(`${path(projectId, { kind: "repository", id: repositoryId })}/check-sh-import`, undefined, signal)).gates]),
     save: (projectId, scope, patch) => mapErrors(async () => toSettingsView(SettingsViewDto.fromJSON(await api.patch(path(projectId, scope), new PatchDto(patch))))),
   };
 }

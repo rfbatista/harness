@@ -84,6 +84,13 @@ export interface RunCommand {
   readonly command: string;
 }
 
+/** A gate command a repository's check.sh fills, as the import preview answers it. */
+export interface ImportedGate {
+  readonly kind: string;
+  readonly command: string;
+  readonly reason: string;
+}
+
 /** The last finished bench run of the project, for the Score section's line. */
 export interface LastScore {
   readonly mean: number;

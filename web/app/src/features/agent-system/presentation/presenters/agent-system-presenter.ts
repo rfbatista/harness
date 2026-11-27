@@ -5,7 +5,7 @@ import type { SettingsSource } from "../../application/ports";
 import type { ScopeAddress } from "../../application/scope-address";
 import { editables, gateLabel, layers, newVisualQa, NO_CONTEXT, type Edits, type Layer, type LayerContext } from "../../domain/ledger";
 import { byRow } from "../../domain/refusal";
-import { isRed, PROJECT_SCOPE, sameScope, sameValue, SettingsError, SettingsRefused, type FieldError, type LastScore, type ModelChoice, type Patch, type Repository, type RunCommand, type Scope, type SettingsView, type VisualQaUi } from "../../domain/settings";
+import { gatePath, isRed, PROJECT_SCOPE, sameScope, sameValue, SettingsError, SettingsRefused, type FieldError, type LastScore, type ModelChoice, type Patch, type Repository, type RunCommand, type Scope, type SettingsView, type VisualQaUi } from "../../domain/settings";
 import { check } from "../../domain/validation";
 
 export interface RepositoryChoice extends Repository {
@@ -45,6 +45,10 @@ export interface AgentSystemViewModel {
   readonly skillsHref: string;
   /** "Saved · applies to sessions started afterwards" after a save, "" before. */
   readonly saved: string;
+  /** The repository's scope offers Import from check.sh on its Gates sub-list. */
+  readonly canImportCheckSh: boolean;
+  /** What the last import did ("Imported 2 gates from check.sh. Review them, then Save."), or why it failed; "" before one. */
+  readonly importNote: string;
   /** Why the last save failed for a reason that is not a field, with its code; "" when it did not. */
   readonly problem: string;
   /** The errors of the last refused save (422), until the person changes the rows they name. */
@@ -90,7 +94,7 @@ export class AgentSystemPresenter extends Presenter<AgentSystemViewModel> {
   #stopFollowing: (() => void) | undefined;
 
   constructor(deps: AgentSystemDeps) {
-    super({ status: "loading", error: "", projectId: deps.projectId, projectName: deps.projectName, scope: PROJECT_SCOPE, scopeName: "Project defaults", repositories: [], layers: [], missingGates: [], runCommands: [], skillsHref: "", saved: "", problem: "", refused: [], unsaved: 0, errors: [], saving: false, canSave: false, saveLabel: "Save project defaults" });
+    super({ status: "loading", error: "", projectId: deps.projectId, projectName: deps.projectName, scope: PROJECT_SCOPE, scopeName: "Project defaults", repositories: [], layers: [], missingGates: [], runCommands: [], skillsHref: "", saved: "", problem: "", refused: [], canImportCheckSh: false, importNote: "", unsaved: 0, errors: [], saving: false, canSave: false, saveLabel: "Save project defaults" });
     this.#deps = deps;
   }
 
@@ -189,11 +193,27 @@ export class AgentSystemPresenter extends Presenter<AgentSystemViewModel> {
     this.edit("review.visual_qa.ui", null);
   }
 
+  /** Fills the draft with the gate commands the repository's check.sh would give, as overrides to review; saves nothing. */
+  async importFromCheckSh(): Promise<void> {
+    const scope = this.viewModel.scope;
+    if (scope.kind !== "repository") return;
+    try {
+      const gates = await this.#deps.source.importFromCheckSh(this.#deps.projectId, scope.id);
+      if (!sameScope(this.viewModel.scope, scope)) return;
+      for (const gate of gates) this.edit(gatePath(gate.kind, "command"), gate.command);
+      const note = gates.length === 0 ? "This repository's check.sh names no gate, or it has none: nothing to import." : `Imported ${gates.length} ${gates.length === 1 ? "gate" : "gates"} from check.sh. Review them, then Save.`;
+      this.#show({ importNote: note });
+    } catch (err) {
+      if (!sameScope(this.viewModel.scope, scope)) return;
+      this.#show({ importNote: err instanceof SettingsError ? `Import from check.sh failed. ${err.code}: ${err.message}` : String(err) });
+    }
+  }
+
   /** Throws the draft away. */
   discard(): void {
     this.#draft = {};
     this.#refusals = {};
-    this.#show({ saved: "", problem: "" });
+    this.#show({ saved: "", problem: "", importNote: "" });
   }
 
   /** Sends one PATCH with every drafted path. A refusal keeps the draft and lands its errors on the rows. */
@@ -242,7 +262,7 @@ export class AgentSystemPresenter extends Presenter<AgentSystemViewModel> {
       this.#runCommands = runCommands;
       this.#draft = {};
       this.#refusals = {};
-      this.update((vm) => this.#shown(vm, scope, view, { status: "ready", error: "", saved: "", problem: "" }));
+      this.update((vm) => this.#shown(vm, scope, view, { status: "ready", error: "", saved: "", problem: "", importNote: "" }));
     } catch (err) {
       if (token === this.#loading) this.#fail(err);
     }
@@ -332,6 +352,7 @@ export class AgentSystemPresenter extends Presenter<AgentSystemViewModel> {
       runCommands: scope.kind === "repository" ? this.#runCommands : [],
       skillsHref: scope.kind === "repository" ? this.#deps.architectureHref(scope.id) : "",
       refused,
+      canImportCheckSh: scope.kind === "repository",
       unsaved,
       errors: listed,
       canSave: unsaved > 0 && listed.length === 0 && !saving,

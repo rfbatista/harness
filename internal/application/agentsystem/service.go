@@ -132,6 +132,31 @@ func (s *Service) SaveProject(ctx context.Context, projectID string, patch map[s
 	return s.save(ctx, projectID, "", patch)
 }
 
+// CheckShImport implements ports.AgentSystemSettings: the gate commands the
+// repository's check.sh would fill, in the order gate kinds are listed.
+func (s *Service) CheckShImport(ctx context.Context, projectID, repositoryID string) ([]domain.CheckShGate, error) {
+	if err := s.checkProject(ctx, projectID); err != nil {
+		return nil, err
+	}
+	if err := s.checkRepository(ctx, projectID, repositoryID); err != nil {
+		return nil, err
+	}
+	out := []domain.CheckShGate{}
+	detector, ok := s.d.Detector.(interface {
+		CheckShGates(ctx context.Context, repo *domain.Repository) map[domain.GateKind]domain.GateDefault
+	})
+	if !ok {
+		return out, nil
+	}
+	found := detector.CheckShGates(ctx, s.d.Repositories.Get(ctx, repositoryID))
+	for _, kind := range append(slices.Clone(domain.RequiredGateKinds), domain.OptionalGateKinds...) {
+		if g, ok := found[kind]; ok && g.Command != "" {
+			out = append(out, domain.CheckShGate{Kind: kind, Command: g.Command, Reason: g.Reason})
+		}
+	}
+	return out, nil
+}
+
 // SaveRepository implements ports.AgentSystemSettings.
 func (s *Service) SaveRepository(ctx context.Context, projectID, repositoryID string, patch map[string]json.RawMessage) (domain.AgentSystemView, error) {
 	if err := s.checkProject(ctx, projectID); err != nil {

@@ -290,6 +290,9 @@ function gateRow(scope: Scope, view: SettingsView, project: SettingsView | undef
   if (!required && paths.enabled in edits.draft) {
     const draft = edits.draft[paths.enabled];
     on = draft === null ? command !== "" : draft === true;
+  } else if (!required && !gate.on && typeof edits.draft[paths.command] === "string" && String(edits.draft[paths.command]).trim() !== "" && view.values[paths.enabled] !== false && projectValue(paths.enabled) !== false) {
+    // A command typed or imported into an optional kind turns it on: the store's `enabled` defaults to true.
+    on = true;
   }
 
   const missing = required && command.trim() === "" && !(paths.command in edits.draft && typeof edits.draft[paths.command] === "string" && String(edits.draft[paths.command]).trim() !== "");

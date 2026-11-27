@@ -188,6 +188,7 @@ func NewRouter(h *Handler, opts ...Option) *echo.Echo {
 	g.PATCH("/projects/:project/agent-system", h.handlePatchProjectAgentSystem)
 	g.GET("/projects/:project/repositories/:repository/agent-system", h.handleGetRepositoryAgentSystem)
 	g.PATCH("/projects/:project/repositories/:repository/agent-system", h.handlePatchRepositoryAgentSystem)
+	g.GET("/projects/:project/repositories/:repository/agent-system/check-sh-import", h.handleImportCheckShGates)
 	g.GET("/projects/:project/bench/cases", h.handleListBenchCases)
 	g.POST("/projects/:project/bench/cases", h.handleCreateBenchCase)
 	g.DELETE("/projects/:project/bench/cases/:case", h.handleDeleteBenchCase)

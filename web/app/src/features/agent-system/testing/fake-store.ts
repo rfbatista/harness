@@ -15,6 +15,8 @@ export interface FakeStore {
   readonly missingGates: Map<string, string[]>;
   /** The run commands of each repository. */
   readonly runCommands: Map<string, { name: string; command: string }[]>;
+  /** The gates each repository's check.sh fills, as the import preview answers them; none: no script. */
+  readonly checkSh: Map<string, { kind: string; command: string; reason: string }[]>;
   /** The project's bench scorecards, newest first, as the bench answers them. */
   scorecards: Record<string, unknown>[];
   /** Every request the store answered, as "METHOD path". */
@@ -60,6 +62,7 @@ export function fakeStore(projectId = "p1"): FakeStore {
   const repositories: { id: string; name: string }[] = [];
   const missingGates = new Map<string, string[]>();
   const runCommands = new Map<string, { name: string; command: string }[]>();
+  const checkSh = new Map<string, { kind: string; command: string; reason: string }[]>();
   let scorecards: Record<string, unknown>[] = [];
   const requests: string[] = [];
   let refusal: { field: string; code: string; message: string }[] | null = null;
@@ -141,6 +144,11 @@ export function fakeStore(projectId = "p1"): FakeStore {
     if (u.pathname === "/api/list_repository_run_commands") return json(200, { run_commands: runCommands.get(u.searchParams.get("repository_id") ?? "") ?? [] });
     const bench = /^\/api\/projects\/([^/]+)\/bench\/scorecards$/.exec(u.pathname);
     if (bench) return bench[1] === projectId ? json(200, { scorecards }) : json(404, { error: "no such project", code: "PROJECT_NOT_FOUND" });
+    const importing = /^\/api\/projects\/([^/]+)\/repositories\/([^/]+)\/agent-system\/check-sh-import$/.exec(u.pathname);
+    if (importing) {
+      if (importing[1] !== projectId || !repositories.some((r) => r.id === importing[2])) return json(404, { error: "no such repository", code: "REPOSITORY_NOT_FOUND" });
+      return json(200, { gates: checkSh.get(importing[2] ?? "") ?? [] });
+    }
     const match = /^\/api\/projects\/([^/]+)(?:\/repositories\/([^/]+))?\/agent-system$/.exec(u.pathname);
     if (!match || match[1] !== projectId) return json(404, { error: "no route", code: "NOT_FOUND" });
     const repo = match[2];
@@ -178,6 +186,7 @@ export function fakeStore(projectId = "p1"): FakeStore {
     repositories,
     missingGates,
     runCommands,
+    checkSh,
     get scorecards() {
       return scorecards;
     },

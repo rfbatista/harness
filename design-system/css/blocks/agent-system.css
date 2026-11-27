@@ -161,6 +161,7 @@
   .ledger-row input.chip-add { inline-size: 11rem; flex: none; min-block-size: 1.5rem; font-family: var(--font-mono); font-size: var(--text-sm); }
 
   /* Review: the sub-list's source mark, a select and a list of routes in the value column. */
+  .ledger-sub > [data-import-check-sh] { margin-inline-start: auto; }
   .ledger-sub > .origin { font-size: var(--text-xs); }
   .ledger-sub > .origin[data-kind="project"] { color: var(--color-ink-muted); }
   .ledger-sub > .origin[data-kind="override"] { color: var(--color-ink); font-weight: var(--weight-medium); }

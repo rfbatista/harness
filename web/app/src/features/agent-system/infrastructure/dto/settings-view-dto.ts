@@ -197,6 +197,20 @@ export class RunCommandsDto {
   }
 }
 
+/** GET .../repositories/{r}/agent-system/check-sh-import: { gates: [{ kind, command, reason }] }. */
+export class CheckShImportDto {
+  constructor(readonly gates: readonly { kind: string; command: string; reason: string }[]) {}
+
+  static fromJSON(raw: unknown): CheckShImportDto {
+    const from = object("CheckShImportDto", raw);
+    const list = from["gates"] === null || from["gates"] === undefined ? [] : array("CheckShImportDto", from, "gates", (item, at) => {
+      const g = object("CheckShImportDto", item, at);
+      return { kind: string("CheckShImportDto", g, "kind", at), command: string("CheckShImportDto", g, "command", at), reason: optionalString("CheckShImportDto", g, "reason", at) ?? "" };
+    });
+    return new CheckShImportDto(list);
+  }
+}
+
 /** GET /api/projects/{p}/bench/scorecards: newest first; only what the Score line shows is read. */
 export class ScorecardsDto {
   constructor(readonly scorecards: readonly { status: string; mean: number; cost_usd: number; cases: number }[]) {}

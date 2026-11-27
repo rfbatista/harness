@@ -65,6 +65,23 @@ export function settingsSourceContract(name: string, make: () => SettingsSourceH
       await assert.rejects(source.view("p1", { kind: "repository", id: "nope" }), (err: unknown) => err instanceof SettingsError && err.code === "NOT_FOUND");
     });
 
+    test("the check.sh import answers the commands the script fills, and none when it has no script", async () => {
+      const { source, store } = make();
+      store.repositories.push({ id: "r1", name: "harness" }, { id: "r2", name: "blog" });
+      store.checkSh.set("r1", [{ kind: "build", command: "./check.sh build", reason: "detected from check.sh" }]);
+      assert.deepEqual(await source.importFromCheckSh("p1", "r1"), [{ kind: "build", command: "./check.sh build", reason: "detected from check.sh" }]);
+      assert.deepEqual(await source.importFromCheckSh("p1", "r2"), []);
+    });
+
+    test("the check.sh import saves nothing, and an unknown repository is NOT_FOUND", async () => {
+      const { source, store } = make();
+      store.repositories.push({ id: "r1", name: "harness" });
+      store.checkSh.set("r1", [{ kind: "test", command: "./check.sh", reason: "detected from check.sh" }]);
+      await source.importFromCheckSh("p1", "r1");
+      assert.deepEqual((await source.view("p1", { kind: "repository", id: "r1" })).values, {});
+      await assert.rejects(source.importFromCheckSh("p1", "nope"), (err: unknown) => err instanceof SettingsError && err.code === "NOT_FOUND");
+    });
+
     test("a network failure is NETWORK_ERROR", async () => {
       const { source, store } = make();
       store.breakNetwork();

@@ -30,6 +30,10 @@ type AgentSystemSettings interface {
 	// RepositoryView is the repository's effective configuration with sources
 	// and missing required gates, and the overrides it sets itself.
 	RepositoryView(ctx context.Context, projectID, repositoryID string) (domain.AgentSystemView, error)
+	// CheckShImport previews the gate commands the repository's check.sh would
+	// fill on its default branch, without saving: what the settings UI's
+	// "Import from check.sh" puts in the person's draft.
+	CheckShImport(ctx context.Context, projectID, repositoryID string) ([]domain.CheckShGate, error)
 	// SaveRepository sets or resets (null) repository overrides, as SaveProject.
 	SaveRepository(ctx context.Context, projectID, repositoryID string, patch map[string]json.RawMessage) (domain.AgentSystemView, error)
 }

@@ -460,6 +460,13 @@ func checkVisualQAUI(raw json.RawMessage) (json.RawMessage, *AgentSystemFieldErr
 	return canonical(v)
 }
 
+// CheckShGate is a gate command a repository's check.sh fills, with why.
+type CheckShGate struct {
+	Kind    GateKind `json:"kind"`
+	Command string   `json:"command"`
+	Reason  string   `json:"reason"`
+}
+
 // AgentSystemView is one level as the settings UI reads it: what the level
 // sets itself, and the effective configuration with every source.
 type AgentSystemView struct {

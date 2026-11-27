@@ -22,6 +22,7 @@ type agentSystemAPI struct {
 	patches  []string
 	refuse   []map[string]string // the next save is refused with these errors (422)
 	repoList []map[string]string
+	checkSh  map[string][]map[string]string // each repository's check.sh import preview
 }
 
 func newAgentSystemAPI(repos ...string) *agentSystemAPI {
@@ -113,6 +114,14 @@ func (a *agentSystemAPI) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 	if r.URL.Path == "/api/list_repositories" {
 		json.NewEncoder(w).Encode(map[string]any{"repositories": a.repoList})
+		return
+	}
+	if repo, ok := strings.CutSuffix(strings.TrimPrefix(r.URL.Path, "/api/projects/p1/repositories/"), "/agent-system/check-sh-import"); ok {
+		gates := a.checkSh[repo]
+		if gates == nil {
+			gates = []map[string]string{}
+		}
+		json.NewEncoder(w).Encode(map[string]any{"gates": gates})
 		return
 	}
 	path := strings.TrimSuffix(strings.TrimPrefix(r.URL.Path, "/api/projects/p1"), "/agent-system")
@@ -511,5 +520,60 @@ func TestAgentSystemReviewSectionInTheBrowser(t *testing.T) {
 	}
 	if dir := os.Getenv("WEB_SCREENSHOT_DIR"); dir != "" {
 		_ = os.WriteFile(dir+"/agent-system-review.jpg", jpg, 0o644)
+	}
+}
+
+// TestAgentSystemImportFromCheckShFillsTheDraftInTheBrowser: Import from check.sh sits on the Gates sub-list of a
+// repository only, fills the commands the preview answers as unsaved overrides, saves nothing, and a Save sends them.
+func TestAgentSystemImportFromCheckShFillsTheDraftInTheBrowser(t *testing.T) {
+	api := newAgentSystemAPI("harness", "blog")
+	api.checkSh = map[string][]map[string]string{"harness": {
+		{"kind": "build", "command": "./check.sh build", "reason": "detected from check.sh"},
+		{"kind": "typecheck", "command": "./check.sh typecheck", "reason": "detected from check.sh"},
+	}}
+	srv := agentSystemServer(t, api)
+	ctx, errs := browser(t)
+
+	var onProject, build, typecheckOn, note, bar string
+	var patchesBefore int
+	err := chromedp.Run(ctx,
+		chromedp.EmulateViewport(1280, 900),
+		chromedp.Navigate(srv.URL+"/projects/p1/agent-system"),
+		chromedp.Poll(`!!document.querySelector('.ledger-row[data-path]')`, nil, chromedp.WithPollingTimeout(10*time.Second)),
+		chromedp.Evaluate(`document.querySelectorAll('[data-import-check-sh]').length + ''`, &onProject),
+		chromedp.Navigate(srv.URL+"/projects/p1/agent-system?repository=harness"),
+		chromedp.Poll(`!!document.querySelector('[data-import-check-sh]')`, nil, chromedp.WithPollingTimeout(10*time.Second)),
+		chromedp.Evaluate(`document.querySelector('[data-import-check-sh]').click()`, nil),
+		chromedp.Poll(`!!document.querySelector('[data-import-note]')`, nil, chromedp.WithPollingTimeout(5*time.Second)),
+		chromedp.Evaluate(`document.querySelector('[data-import-note]').textContent`, &note),
+		chromedp.Evaluate(`document.querySelector('input[aria-label="Build command"]').value`, &build),
+		chromedp.Evaluate(`document.querySelector('.ledger-row[data-gate=typecheck] [role=switch]').getAttribute('aria-checked')`, &typecheckOn),
+		chromedp.Evaluate(`document.querySelector('.save-bar')?.textContent ?? ''`, &bar),
+	)
+	if err != nil {
+		t.Fatalf("%v\nJS errors: %v", err, errs.all())
+	}
+	patchesBefore = len(api.patchLog())
+	if onProject != "0" {
+		t.Errorf("the project scope offers %s imports, want none", onProject)
+	}
+	if !strings.Contains(note, "Imported 2 gates from check.sh") || build != "./check.sh build" || typecheckOn != "true" {
+		t.Errorf("note %q, build %q, typecheck on %q", note, build, typecheckOn)
+	}
+	if !strings.Contains(bar, "2 unsaved") || patchesBefore != 0 {
+		t.Errorf("save bar %q, patches before Save %d", bar, patchesBefore)
+	}
+	if err := chromedp.Run(ctx,
+		chromedp.Evaluate(`document.querySelector('.save-bar .end button:last-child').click()`, nil),
+		chromedp.Poll(`!document.querySelector('.save-bar')`, nil, chromedp.WithPollingTimeout(5*time.Second)),
+	); err != nil {
+		t.Fatalf("%v\nJS errors: %v", err, errs.all())
+	}
+	want := `/api/projects/p1/repositories/harness/agent-system {"guard.gates.build.command":"./check.sh build","guard.gates.typecheck.command":"./check.sh typecheck"}`
+	if patches := api.patchLog(); len(patches) != 1 || patches[0] != want {
+		t.Errorf("patches %q, want %q", patches, want)
+	}
+	if e := errs.all(); len(e) > 0 {
+		t.Errorf("JS errors: %v", e)
 	}
 }

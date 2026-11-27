@@ -100,7 +100,7 @@ export function AgentSystemView({ presenter }: { presenter: AgentSystemPresenter
               </button>
             </div>
           )}
-          {vm.status === "ready" && vm.layers.map((layer) => <LayerSection key={layer.key} layer={layer} presenter={presenter} skillsHref={vm.skillsHref} runCommands={vm.runCommands} />)}
+          {vm.status === "ready" && vm.layers.map((layer) => <LayerSection key={layer.key} layer={layer} presenter={presenter} skillsHref={vm.skillsHref} runCommands={vm.runCommands} canImport={vm.canImportCheckSh} importNote={vm.importNote} />)}
           {vm.status === "ready" && <SaveBar presenter={presenter} unsaved={vm.unsaved} errors={vm.errors} canSave={vm.canSave} saving={vm.saving} label={vm.saveLabel} />}
         </div>
       </div>
@@ -123,7 +123,7 @@ function Skeleton() {
   );
 }
 
-function LayerSection({ layer, presenter, skillsHref, runCommands }: { layer: Layer; presenter: AgentSystemPresenter; skillsHref: string; runCommands: readonly RunCommand[] }) {
+function LayerSection({ layer, presenter, skillsHref, runCommands, canImport, importNote }: { layer: Layer; presenter: AgentSystemPresenter; skillsHref: string; runCommands: readonly RunCommand[]; canImport: boolean; importNote: string }) {
   return (
     <section className="[ as-layer ]" id={`as-${layer.key}`} aria-labelledby={`as-${layer.key}-head`}>
       <header>
@@ -135,7 +135,17 @@ function LayerSection({ layer, presenter, skillsHref, runCommands }: { layer: La
           <>
             <div className="[ ledger-sub ]">
               Gates <span>· required gates cannot be turned off, only their command changed</span>
+              {canImport && (
+                <button type="button" className="[ button ]" data-variant="ghost" data-size="sm" data-import-check-sh="" onClick={() => void presenter.importFromCheckSh()}>
+                  Import from check.sh
+                </button>
+              )}
             </div>
+            {importNote !== "" && (
+              <p className="[ pane-note ]" role="status" data-import-note="">
+                {importNote}
+              </p>
+            )}
             {layer.gates.map((gate) => (
               <GateRowView key={gate.kind} gate={gate} presenter={presenter} />
             ))}
