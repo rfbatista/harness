@@ -194,3 +194,21 @@ func (c confined) OneShot(ctx context.Context, req claude.OneShotRequest) (claud
 	req.ConfigDir = p.ConfigDir
 	return c.inner.OneShot(ctx, req)
 }
+
+// ModelAsker puts one stateless question to a model chosen per call, with no
+// tools: the eval bench's judge (ports.BenchModel).
+type ModelAsker struct {
+	claude OneShotter
+	bin    string
+}
+
+// NewModelAsker returns the adapter asking through c.
+func NewModelAsker(c OneShotter, bin string) *ModelAsker { return &ModelAsker{claude: c, bin: bin} }
+
+// Ask answers input under system on model; an empty model keeps the CLI's own.
+func (a *ModelAsker) Ask(ctx context.Context, model, system, input string) (string, error) {
+	if strings.TrimSpace(input) == "" {
+		return "", &domain.StructuredError{Code: "INVALID_INPUT", Message: "input is required"}
+	}
+	return oneShot{claude: a.claude, bin: a.bin, model: model}.run(ctx, system, input)
+}

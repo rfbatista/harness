@@ -1,6 +1,9 @@
 package orchestration
 
 import (
+	"encoding/json"
+	"strings"
+
 	"github.com/rfbatista/llmkit"
 
 	"operators-mcp/internal/domain"
@@ -51,6 +54,7 @@ func fromAgentEvent(ce llmkit.Event) (ev SessionEvent, status domain.SessionStat
 	case llmkit.EventToolResult:
 		ev.Type = "tool_result"
 		ev.Text = ce.Text
+		ev.IsError = toolResultFailed(ce.Raw, ce.Text)
 		return ev, "", false
 	case llmkit.EventHook:
 		ev.Type = "status"
@@ -94,4 +98,63 @@ func fromCallUsage(u *llmkit.Usage) *Usage {
 	}
 	return &Usage{InputTokens: u.InputTokens, OutputTokens: u.OutputTokens,
 		CacheCreationInputTokens: u.CacheCreationInputTokens, CacheReadInputTokens: u.CacheReadInputTokens}
+}
+
+// toolResultFailed reports whether the CLI marked the tool result with this
+// text as an error. A line can carry several results, each its own event with
+// the same raw line, so the block is found by its text; a lone block needs no
+// match. llmkit's event has no flag of its own, and Raw is the fidelity it
+// keeps for this.
+func toolResultFailed(raw json.RawMessage, text string) bool {
+	var line struct {
+		Message struct {
+			Content []struct {
+				Type    string          `json:"type"`
+				Content json.RawMessage `json:"content"`
+				IsError bool            `json:"is_error"`
+			} `json:"content"`
+		} `json:"message"`
+	}
+	if len(raw) == 0 || json.Unmarshal(raw, &line) != nil {
+		return false
+	}
+	var results []bool
+	matched := false
+	failed := false
+	for _, c := range line.Message.Content {
+		if c.Type != "tool_result" {
+			continue
+		}
+		results = append(results, c.IsError)
+		if resultText(c.Content) == text {
+			// Results with the same text on one line cannot be told apart: it
+			// is a failure only when every one of them is.
+			failed = c.IsError && (!matched || failed)
+			matched = true
+		}
+	}
+	if matched {
+		return failed
+	}
+	return len(results) == 1 && results[0]
+}
+
+// resultText is the text of a tool_result block's content: a JSON string or an
+// array of text blocks.
+func resultText(raw json.RawMessage) string {
+	var s string
+	if json.Unmarshal(raw, &s) == nil {
+		return s
+	}
+	var blocks []struct {
+		Text string `json:"text"`
+	}
+	if json.Unmarshal(raw, &blocks) != nil {
+		return string(raw)
+	}
+	var b strings.Builder
+	for _, blk := range blocks {
+		b.WriteString(blk.Text)
+	}
+	return b.String()
 }

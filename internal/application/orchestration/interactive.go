@@ -123,7 +123,7 @@ func (s *Service) StartInteractive(ctx context.Context, req InteractiveRequest) 
 		// The critic reports through the task channel, as a delegate does.
 		role = domain.RoleDelegate
 	}
-	guard := s.resolveGuard(ctx, req.ProjectID, req.RepositoryID, mode, req.Scope, req.TestsFailFirst)
+	guard := s.resolveGuard(ctx, req.ProjectID, req.RepositoryID, mode, req.Scope, req.TestsFailFirst, joinedOf(req.WorktreeID, ""))
 	p, err := s.prepare(ctx, prepareInput{
 		Guard:        &guard,
 		ID:           id,
@@ -340,8 +340,9 @@ func (s *Service) ResumeInteractive(ctx context.Context, req ports.ResumeRequest
 	s.rewireTokenSavers(ctx, sess, &cfg)
 	s.resumeMemoryBudget(ctx, sess, &cfg)
 	keptScope, keptTestsFirst := s.keptChoices(ctx, sess.ID)
-	guard := s.resolveGuard(ctx, sess.ProjectID, sess.RepositoryID, sess.Mode, keptScope, keptTestsFirst)
+	guard := s.resolveGuard(ctx, sess.ProjectID, sess.RepositoryID, sess.Mode, keptScope, keptTestsFirst, joinedOfSession(sess))
 	s.keepGuard(ctx, sess, guard)
+	s.resumeGuardCount(ctx, sess.ID)
 	trail.mark(&cfg, domain.PieceRuleset, "Token saver rules", "Token savers")
 	// A resume starts under the rules now in force, not the ones it started
 	// under, and records them.
@@ -635,6 +636,7 @@ func (s *Service) end(id string, exitCode int, closedByUser bool) (*domain.Sessi
 		return nil, err
 	}
 	s.pruneRun(id)
+	s.touchActivations.forget(id)
 	s.publish(id, SessionEvent{Type: "done", Status: status, Text: text, At: time.Now()})
 	s.hub.End(id)
 	s.announceEnded(id, status)
@@ -885,6 +887,7 @@ func (s *Service) endHeadless(id string) error {
 		return err
 	}
 	s.pruneRun(id)
+	s.touchActivations.forget(id)
 	s.publish(id, SessionEvent{Type: "done", Status: domain.SessionStopped, Text: "stopped", At: time.Now()})
 	s.hub.End(id)
 	s.announceEnded(id, domain.SessionStopped)
@@ -1210,4 +1213,20 @@ func criticRun(c *ports.CriticLink) string {
 		return ""
 	}
 	return c.GateRunID
+}
+
+// joinedOf names the worktree a start joins, or nil for one that has its own.
+func joinedOf(worktreeID, selfID string) *joinedTo {
+	if worktreeID == "" {
+		return nil
+	}
+	return &joinedTo{workspaceID: worktreeID, selfID: selfID}
+}
+
+// joinedOfSession is joinedOf for a session being resumed.
+func joinedOfSession(sess *domain.Session) *joinedTo {
+	if !sess.Joined {
+		return nil
+	}
+	return joinedOf(sess.WorkspaceID, sess.ID)
 }

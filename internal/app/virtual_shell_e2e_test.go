@@ -30,6 +30,7 @@ import (
 	"operators-mcp/internal/application/artifacts"
 	"operators-mcp/internal/application/branchgate"
 	"operators-mcp/internal/application/branchwatch"
+	"operators-mcp/internal/application/contextmap"
 	"operators-mcp/internal/application/gateruns"
 	"operators-mcp/internal/application/gitcredentials/gitcredentialstest"
 	"operators-mcp/internal/application/notifications"
@@ -75,17 +76,17 @@ type shellE2E struct {
 	rules    *archrules.Service
 	gateRuns *gateruns.Service
 	declarer *gateruns.Declarer
-	// agentSystem is the real settings store: the critic reads it.
-	agentSystem *agentsystem.Service
-	visualQA    *visualqa.Service
-	proof       *personproof.Service
-	gate        *branchgate.Service
-	watch       *branchwatch.Service
-	pushes      ports.PushRecords
-	wgit        ports.WorktreeGit
-	notes       *notifications.Service
+	visualQA *visualqa.Service
+	proof    *personproof.Service
+	gate     *branchgate.Service
+	watch    *branchwatch.Service
+	pushes   ports.PushRecords
+	wgit     ports.WorktreeGit
+	notes    *notifications.Service
 	// repoAgents is which agents each repository assigns, and its prompts.
-	repoAgents *repoagents.Service
+	repoAgents  *repoagents.Service
+	contextMap  *contextmap.Service
+	agentSystem *agentsystem.Service
 	// db is the server's database, for tests that make a store fail.
 	db *gorm.DB
 }
@@ -105,7 +106,7 @@ func (e *shellE2E) boot() {
 			}
 			return workspaces.NewOriginFetcher(git, gitcredentialstest.New())
 		}),
-		fx.Populate(&e.orch, &e.plan, &e.channel, &e.art, &e.cat, &e.sessions, &e.shells, &e.rules, &e.gate, &e.watch, &e.pushes, &e.wgit, &e.notes, &e.repoAgents, &e.db, &e.gateRuns, &e.declarer, &e.agentSystem, &e.visualQA, &e.proof),
+		fx.Populate(&e.orch, &e.plan, &e.channel, &e.art, &e.cat, &e.sessions, &e.shells, &e.rules, &e.gate, &e.watch, &e.pushes, &e.wgit, &e.notes, &e.repoAgents, &e.db, &e.contextMap, &e.agentSystem, &e.gateRuns, &e.declarer, &e.visualQA, &e.proof),
 		fx.NopLogger,
 	)
 	if err := e.app.Start(e.ctx); err != nil {
@@ -120,7 +121,7 @@ func (e *shellE2E) serve() {
 	mux := http.NewServeMux()
 	mux.Handle("/api/", httpapi.NewRouter(httpapi.NewHandler(httpapi.Services{
 		Sessions: e.orch, Planning: e.plan, TaskResources: e.plan, TaskComments: e.plan, Artifacts: e.art, Shells: e.shells,
-		RepositoryArchitectures: e.cat.RepositoryArchitectures, InstructionProposals: e.cat.InstructionProposals, InstructionProposalDecisions: e.cat.InstructionProposals, ArchitectureRules: e.rules, BranchGate: e.gate, SessionBranches: e.watch, WorktreeGit: e.wgit,
+		RepositoryArchitectures: e.cat.RepositoryArchitectures, TaskMemories: e.cat.TaskMemories, ContextMaps: e.contextMap, InstructionProposals: e.cat.InstructionProposals, InstructionProposalDecisions: e.cat.InstructionProposals, ArchitectureRules: e.rules, BranchGate: e.gate, SessionBranches: e.watch, WorktreeGit: e.wgit,
 		Projects: e.cat.Projects, DesignSystems: e.cat.DesignSystems, RepositoryAgents: e.repoAgents,
 		Notifications: e.notes, InterruptedResumer: e.notes, Settings: e.cat.Settings, GateRuns: e.gateRuns, VisualQA: e.visualQA,
 	})))

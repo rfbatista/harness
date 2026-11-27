@@ -203,9 +203,11 @@ func (s *Service) TurnStarted(_ context.Context, id string) error {
 // session goes on with them in the same process, and they are delivered;
 // otherwise it is idle, and its turn has ended.
 func (s *Service) TurnEnded(ctx context.Context, id string, _ bool) (string, error) {
-	if _, err := s.interactiveSession(id); err != nil {
+	sess, err := s.interactiveSession(id)
+	if err != nil {
 		return "", err
 	}
+	s.readBackTaskMemory(ctx, sess)
 	// stop_hook_active needs no check of its own: the outbox was emptied by
 	// the continuation that set it, so it only goes on again for new turns.
 	s.flushMemoryNotices(id)

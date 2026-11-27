@@ -20,6 +20,9 @@ type GuardSessionModel struct {
 	// RedRuns is the consecutive red declaration runs since the last green one
 	// or the last start or resume.
 	RedRuns int `gorm:"column:red_runs"`
+	// Escalated says the session was stopped at its retry limit and has not been
+	// resumed since.
+	Escalated bool `gorm:"column:escalated"`
 }
 
 func (GuardSessionModel) TableName() string { return "guard_sessions" }
@@ -36,7 +39,7 @@ func (r *GuardSessionRepository) Keep(ctx context.Context, sessionID string, cfg
 		return err
 	}
 	return r.db.WithContext(ctx).Clauses(clause.OnConflict{
-		Columns: []clause.Column{{Name: "session_id"}}, DoUpdates: clause.AssignmentColumns([]string{"config", "red_runs"}),
+		Columns: []clause.Column{{Name: "session_id"}}, DoUpdates: clause.AssignmentColumns([]string{"config"}),
 	}).Create(&GuardSessionModel{SessionID: sessionID, Config: string(b)}).Error
 }
 
@@ -67,4 +70,13 @@ func (r *GuardSessionRepository) CountRed(ctx context.Context, sessionID string)
 
 func (r *GuardSessionRepository) ResetRed(ctx context.Context, sessionID string) error {
 	return r.db.WithContext(ctx).Model(&GuardSessionModel{}).Where("session_id = ?", sessionID).UpdateColumn("red_runs", 0).Error
+}
+
+func (r *GuardSessionRepository) MarkEscalated(ctx context.Context, sessionID string) error {
+	return r.db.WithContext(ctx).Model(&GuardSessionModel{}).Where("session_id = ?", sessionID).UpdateColumn("escalated", true).Error
+}
+
+func (r *GuardSessionRepository) ResumeRed(ctx context.Context, sessionID string) error {
+	return r.db.WithContext(ctx).Model(&GuardSessionModel{}).Where("session_id = ? AND escalated = ?", sessionID, true).
+		UpdateColumns(map[string]any{"red_runs": 0, "escalated": false}).Error
 }

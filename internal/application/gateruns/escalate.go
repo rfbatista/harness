@@ -41,10 +41,14 @@ func (e *Escalator) Escalate(ctx context.Context, sess *domain.Session, run *dom
 			for i, k := range red {
 				names[i] = string(k)
 			}
+			why := "Red gates: " + strings.Join(names, ", ") + "."
+			if len(names) == 0 {
+				why = "The gates were green; another declaration check refused it."
+			}
 			_, err := e.Channel.SendToArchitect(ctx, sess.ID, ports.TaskMessageInput{
 				Kind: domain.MessageStatusReport, Status: domain.ReportBlocked, Subject: "Escalated: retry limit reached",
-				Body: "This session's done declaration was red up to its retry limit, so the harness stopped it as escalated and told the person. " +
-					"Red gates: " + strings.Join(names, ", ") + ". It can be resumed with resume_task_session once the cause is dealt with.\n\n" + run.FailureReport(),
+				Body: "This session's done declaration was refused up to its retry limit, so the harness stopped it as escalated and told the person. " +
+					why + " It can be resumed with resume_task_session once the cause is dealt with.\n\n" + run.FailureReport(),
 			})
 			if err != nil {
 				slog.Warn("tell the architect of an escalation", "session", sess.ID, "err", err)

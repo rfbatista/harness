@@ -108,6 +108,16 @@ func (d *Driver) Wrap(policy ports.SandboxPolicy, cmd ports.SandboxCommand) (por
 		}
 	}
 
+	// Secrets last: the last matching rule wins, so a secret inside a path granted
+	// above (a database in a repository the session reads) is denied again.
+	secrets, err := pr.all(policy.Secrets)
+	if err != nil {
+		return ports.SandboxCommand{}, err
+	}
+	for _, p := range secrets {
+		fmt.Fprintf(&b, "(deny file-read* file-write* (with message %s) (subpath %s))\n", tag, p)
+	}
+
 	args := []string{}
 	for i, v := range pr.values {
 		args = append(args, "-D", fmt.Sprintf("P%d=%s", i, v))

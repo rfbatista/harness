@@ -41,6 +41,7 @@ import (
 	"operators-mcp/internal/adapter/out/gitprobe"
 	"operators-mcp/internal/adapter/out/keychainshim"
 	"operators-mcp/internal/adapter/out/persistence/sqlite"
+	"operators-mcp/internal/adapter/out/personcred"
 	"operators-mcp/internal/adapter/out/personshell"
 	"operators-mcp/internal/adapter/out/shell"
 	"operators-mcp/internal/adapter/out/termhost"
@@ -115,6 +116,8 @@ var PersistenceModule = fx.Module("persistence",
 		asPort(sqlite.NewDesignProposalRepository, new(ports.DesignProposalStore)),
 		asPort(sqlite.NewDesignExportRepository, new(ports.DesignExportStore)),
 		asPort(sqlite.NewInstructionDraftRepository, new(ports.InstructionDraftStore)),
+		asPort(sqlite.NewTaskMemoryRepository, new(ports.TaskMemoryStore)),
+		asPort(sqlite.NewContextMapRepository, new(ports.ContextMapStore)),
 		asPort(sqlite.NewInstructionProposalRepository, new(ports.InstructionProposalStore)),
 		asPort(sqlite.NewProductOwnerRepository, new(ports.ProductOwnerStore)),
 		asPort(sqlite.NewProductOwnerDigestRepository, new(ports.ProductOwnerDigestStore)),
@@ -301,6 +304,7 @@ type catalogParams struct {
 	DesignExports        ports.DesignExportStore
 	InstructionDrafts    ports.InstructionDraftStore
 	InstructionProposals ports.InstructionProposalStore
+	TaskMemories         ports.TaskMemoryStore
 	Agents               ports.AgentRepository
 	Prompts              ports.PromptRepository
 	Skills               ports.SkillRepository
@@ -333,6 +337,7 @@ func newCatalog(p catalogParams) catalog.Catalog {
 		DesignExports:        p.DesignExports,
 		InstructionDrafts:    p.InstructionDrafts,
 		InstructionProposals: p.InstructionProposals,
+		TaskMemories:         p.TaskMemories,
 		Agents:               p.Agents,
 		Prompts:              p.Prompts,
 		Skills:               p.Skills,
@@ -489,7 +494,7 @@ var AgentRuntimeModule = fx.Module("agentruntime",
 		newDeclarer,
 		sqlite.NewPersonCredentialRepository,
 		func(r *sqlite.PersonCredentialRepository) ports.PersonCredentials { return r },
-		personproof.New,
+		newPersonProof,
 		sqlite.NewGuardSessionRepository,
 		func(r *sqlite.GuardSessionRepository) ports.GuardSessions { return r },
 		newAgentClaudeHome,
@@ -503,6 +508,8 @@ var AgentRuntimeModule = fx.Module("agentruntime",
 		platformSandboxViolations,
 		newSandboxSettings,
 		newAgentSystem,
+		newContextMap,
+		newBench,
 		newManagedClaude,
 		newManagedClaudeBin,
 		newAgentReadiness,
@@ -516,7 +523,7 @@ var AgentRuntimeModule = fx.Module("agentruntime",
 		newVirtualFileSystem,
 		newPersonTerminals,
 	),
-	fx.Invoke(registerRuntimeShutdown, registerServerSessions, bindVirtualShells, bindWorkspaceRemovals, bindFilesRootFeed, bindSandboxSettings,
+	fx.Invoke(bindContextMap, bindTaskMemoryCheck, registerRuntimeShutdown, registerServerSessions, bindVirtualShells, bindWorkspaceRemovals, bindFilesRootFeed, bindSandboxSettings,
 		bindAgentReadiness, func(*archrules.Service) {}, restoreBranchGate, restoreServiceRequests, func(*branchwatch.Service) {}, registerCritic),
 )
 
@@ -659,6 +666,10 @@ func bindVirtualShells(orch *orchestration.Service, shells *vfs.Service, plan *p
 	}
 	// A proposal reaches open pages on the project feed and the shells, which
 	// show its skills read-only.
+	if cat.TaskMemories != nil {
+		cat.TaskMemories.UseFeed(changeSinks{orch, shells})
+		cat.TaskMemories.UseTasks(plan)
+	}
 	if cat.InstructionProposals != nil {
 		cat.InstructionProposals.UseFeed(changeSinks{orch, shells})
 		cat.InstructionProposals.UseTasks(plan)
@@ -1151,6 +1162,15 @@ func newOrchestrationService(
 	}
 	svc.SessionArchitectureURL = func(sessionID string) string {
 		return base + httpapi.SessionArchitecturePath(sessionID)
+	}
+	if cat.TaskMemories != nil {
+		svc.TaskMemory = cat.TaskMemories
+		if root, err := dataDir(cfg, "task-memory"); err == nil {
+			svc.TaskMemoryRoot = root
+		}
+	}
+	svc.SessionSkillsURL = func(sessionID string) string {
+		return base + httpapi.SessionSkillsPath(sessionID)
 	}
 	svc.SessionMemoryURL = func(sessionID string) string {
 		return base + httpapi.SessionMemoryPath(sessionID)
@@ -1800,9 +1820,17 @@ func newDeclarer(runs *gateruns.Service, orch *orchestration.Service, cat catalo
 	return d
 }
 
+// newPersonProof is the person credential service, telling the person of every
+// credential it issues (ADR 0016).
+func newPersonProof(store ports.PersonCredentials, cat catalog.Catalog) *personproof.Service {
+	svc := personproof.New(store)
+	svc.Events = cat.Bus
+	return svc
+}
+
 // harnessSecrets are the files of the harness a session must never reach: the
-// database with its write-ahead log and shared memory, and the key of the
-// encrypted stores. An in-memory database has none.
+// database with its write-ahead log and shared memory, the key of the encrypted
+// stores and the folder holding the person credential file. An in-memory database has none.
 func harnessSecrets(cfg Config) []string {
 	var out []string
 	if !cfg.inMemory() {
@@ -1812,6 +1840,12 @@ func harnessSecrets(cfg Config) []string {
 	}
 	if root, err := cfg.dataRoot(); err == nil && root != "" {
 		out = append(out, filepath.Join(root, "secret.key"))
+	}
+	// The person credential's own folder, ~/.coding-pool/person: the credential file
+	// and its temporary file are in it. Not ~/.coding-pool, which holds every
+	// session's worktree.
+	if dir, err := personcred.Dir(); err == nil {
+		out = append(out, dir)
 	}
 	return out
 }

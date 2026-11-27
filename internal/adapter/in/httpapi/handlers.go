@@ -126,6 +126,13 @@ type Services struct {
 	VisualQA ports.VisualQA
 	// Pairing issues person credentials (ADR 0016); nil: the pairing routes answer 503.
 	Pairing ports.PersonPairing
+	// Bench is the eval bench's cases (ADR 0015); nil: the routes answer 503.
+	Bench ports.BenchCases
+	// BenchRuns are its runs and scorecards; nil: those routes answer 503.
+	BenchRuns ports.BenchRuns
+	// BenchTrajectories are the tasks' recording flag and the recorded
+	// trajectories; nil: those routes answer 503.
+	BenchTrajectories ports.BenchTrajectories
 	// ManagedClaude installs and switches the claude agents run; nil answers
 	// 503. ManagedClaudeBin says which binary agents run (the override
 	// included); nil reads as no override.
@@ -157,6 +164,10 @@ type Services struct {
 	// RepositoryArchitectures keeps repositories' architecture records; nil
 	// answers 503.
 	RepositoryArchitectures ports.RepositoryArchitectures
+	// TaskMemories is the plan.md and progress.md of a task in a repository; nil answers 503.
+	TaskMemories ports.TaskMemories
+	// ContextMaps is a repository's generated context map; nil answers 503.
+	ContextMaps ports.ContextMaps
 	// ProductOwner is the projects' product owners: settings and threads; nil
 	// answers 503.
 	ProductOwner ports.ProductOwner
@@ -236,12 +247,15 @@ type Handler struct {
 	tokenSaverInstalls ports.TokenSaverInstalls
 	repositoryIndexes  ports.RepositoryIndexes
 
-	sandboxSettings ports.SandboxSettings
-	agentSystem     ports.AgentSystemSettings
-	gateRuns        ports.GateRuns
-	visualQA        ports.VisualQA
-	pairing         ports.PersonPairing
-	sandboxDriver   func() ports.SandboxDriver
+	sandboxSettings   ports.SandboxSettings
+	agentSystem       ports.AgentSystemSettings
+	gateRuns          ports.GateRuns
+	visualQA          ports.VisualQA
+	pairing           ports.PersonPairing
+	bench             ports.BenchCases
+	benchRuns         ports.BenchRuns
+	benchTrajectories ports.BenchTrajectories
+	sandboxDriver     func() ports.SandboxDriver
 
 	managedClaude    ports.ManagedClaude
 	managedClaudeBin ports.ManagedClaudeBin
@@ -261,6 +275,8 @@ type Handler struct {
 	serviceRequests ports.ServiceRequests
 
 	repoArch     ports.RepositoryArchitectures
+	taskMemory   ports.TaskMemories
+	contextMaps  ports.ContextMaps
 	productOwner ports.ProductOwner
 	// instructionProposals is nil when proposals are not configured.
 	instructionProposals ports.InstructionProposals
@@ -309,6 +325,8 @@ func NewHandler(s Services) *Handler {
 		archivedTrees:        s.ArchivedWorktrees,
 		branchNames:          s.BranchNames,
 		repoArch:             s.RepositoryArchitectures,
+		taskMemory:           s.TaskMemories,
+		contextMaps:          s.ContextMaps,
 		productOwner:         s.ProductOwner,
 		instructionProposals: s.InstructionProposals,
 		instructionDecisions: s.InstructionProposalDecisions,
@@ -334,12 +352,15 @@ func NewHandler(s Services) *Handler {
 		tokenSaverInstalls: s.TokenSaverInstalls,
 		repositoryIndexes:  s.RepositoryIndexes,
 
-		sandboxSettings: s.SandboxSettings,
-		agentSystem:     s.AgentSystem,
-		gateRuns:        s.GateRuns,
-		visualQA:        s.VisualQA,
-		pairing:         s.Pairing,
-		sandboxDriver:   s.SandboxDriver,
+		sandboxSettings:   s.SandboxSettings,
+		agentSystem:       s.AgentSystem,
+		gateRuns:          s.GateRuns,
+		visualQA:          s.VisualQA,
+		pairing:           s.Pairing,
+		bench:             s.Bench,
+		benchRuns:         s.BenchRuns,
+		benchTrajectories: s.BenchTrajectories,
+		sandboxDriver:     s.SandboxDriver,
 
 		managedClaude:    s.ManagedClaude,
 		managedClaudeBin: s.ManagedClaudeBin,

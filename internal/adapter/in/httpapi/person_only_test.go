@@ -183,3 +183,41 @@ func TestPairingRedeemsTheCodeOnceIntoACookieAndANewCodeNeedsTheCredential(t *te
 		t.Errorf("a pair POST with no code answered %d", post.Code)
 	}
 }
+
+func TestTheBenchRoutesBehaveAsBeforeWithEnforcementOnAndTheCredentialAndRefuseWithout(t *testing.T) {
+	h := benchHandler(t, ":memory:")
+	router := NewRouter(h, WithPersonProof(fixedVerifier("the-credential"), nil))
+	call := func(method, path, body string, credential bool) *httptest.ResponseRecorder {
+		req := httptest.NewRequest(method, "/api"+path, strings.NewReader(body))
+		req.Header.Set("Content-Type", "application/json")
+		if credential {
+			req.Header.Set(PersonHeader, "the-credential")
+		}
+		rec := httptest.NewRecorder()
+		router.ServeHTTP(rec, req)
+		return rec
+	}
+
+	if rec := call(http.MethodPost, "/projects/p1/bench/cases", benchCaseBody, false); rec.Code != http.StatusForbidden || !strings.Contains(rec.Body.String(), "PERSON_ONLY") {
+		t.Fatalf("a bench case created without the credential: %d %s", rec.Code, rec.Body)
+	}
+	rec := call(http.MethodPost, "/projects/p1/bench/cases", benchCaseBody, true)
+	if rec.Code != http.StatusCreated {
+		t.Fatalf("a bench case created with the credential: %d %s", rec.Code, rec.Body)
+	}
+	// The reads stay open to a session; the writes of the bench are the person's.
+	if rec := call(http.MethodGet, "/projects/p1/bench/cases", "", false); rec.Code != http.StatusOK {
+		t.Errorf("listing cases without the credential: %d", rec.Code)
+	}
+	for _, c := range []struct{ method, path string }{
+		{http.MethodPost, "/projects/p1/bench/runs"},
+		{http.MethodPost, "/projects/p1/bench/runs/r1/cancel"},
+		{http.MethodPost, "/projects/p1/bench/cases/from-trajectory"},
+		{http.MethodPut, "/projects/p1/tasks/t1/trajectory-recording"},
+		{http.MethodDelete, "/projects/p1/bench/cases/c1"},
+	} {
+		if rec := call(c.method, c.path, "{}", false); rec.Code != http.StatusForbidden {
+			t.Errorf("%s %s without the credential: %d", c.method, c.path, rec.Code)
+		}
+	}
+}

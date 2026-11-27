@@ -56,8 +56,8 @@ func (c *Client) authorize(h http.Header) {
 
 // PairingHint is what a refused person-only call tells a client that holds no
 // credential: how to get one.
-const PairingHint = " Pair this client: open the link the harness printed in its terminal (or POST its code to /api/person/pair), " +
-	"then run the client with --person CREDENTIAL or CODING_POOL_PERSON."
+const PairingHint = " Pair this client: take the code from the link the harness printed in its terminal, " +
+	"then run: tui-client pair (it asks for the code)."
 
 // WithHTTPClient replaces the default HTTP client.
 func WithHTTPClient(h *http.Client) Option { return func(c *Client) { c.http = h } }

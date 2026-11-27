@@ -24,7 +24,7 @@ func (e *shellE2E) personServer() *httptest.Server {
 	e.t.Helper()
 	router := httpapi.NewRouter(httpapi.NewHandler(httpapi.Services{
 		Sessions: e.orch, Planning: e.plan, GateRuns: e.gateRuns, Pairing: e.proof, Settings: e.cat.Settings, Projects: e.cat.Projects,
-	}), httpapi.WithPersonProof(e.proof, personRefusals{events: e.cat.Bus}))
+	}), httpapi.WithPersonProof(e.proof, personRefusals{events: e.cat.Bus, sessions: e.sessions}))
 	srv := httptest.NewServer(router)
 	e.t.Cleanup(srv.Close)
 	return srv
@@ -145,5 +145,55 @@ func TestTheServerRefusesAnUnpairedCallerOnEveryPersonOnlyRouteAcceptsAPairedOne
 	status, body := personCall(t, anyone, http.MethodPost, srv.URL+httpapi.PairingCodesPath, nil)
 	if status != http.StatusForbidden {
 		t.Errorf("a new pairing code with no credential = %d %s", status, body)
+	}
+}
+
+func TestEveryCredentialIssuedIsAnInboxItemNamingTheClientKindSoAStolenCodeIsNoticed(t *testing.T) {
+	e := newShellE2E(t)
+	srv := e.personServer()
+	anyone := &http.Client{}
+
+	// A browser redeems the first code from the link.
+	first, ok := e.proof.FirstCode(e.ctx)
+	if !ok {
+		t.Fatal("no first code")
+	}
+	browser := &http.Client{CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }}
+	if status, _ := personCall(t, browser, http.MethodGet, srv.URL+httpapi.PairPath+"?code="+first, nil); status != http.StatusSeeOther {
+		t.Fatalf("browser pairing = %d", status)
+	}
+	// A client redeems another code.
+	second := e.proof.NewCode()
+	req, _ := http.NewRequest(http.MethodPost, srv.URL+httpapi.PairPath, strings.NewReader(`{"code":"`+second+`"}`))
+	req.Header.Set("Content-Type", "application/json")
+	res, err := anyone.Do(req)
+	if err != nil || res.StatusCode != http.StatusOK {
+		t.Fatalf("client pairing: %v %v", res, err)
+	}
+	res.Body.Close()
+	// A wrong code issues nothing and says nothing.
+	personCall(t, browser, http.MethodGet, srv.URL+httpapi.PairPath+"?code=WRONG", nil)
+
+	var titles []string
+	deadline := time.Now().Add(5 * time.Second)
+	for time.Now().Before(deadline) && len(titles) < 2 {
+		page, err := e.notes.ListNotifications(e.ctx, ports.NotificationQuery{ProjectID: e.project})
+		if err != nil {
+			t.Fatal(err)
+		}
+		titles = nil
+		for _, n := range page.Notifications {
+			if strings.Contains(n.Title, "issued a person credential") {
+				titles = append(titles, n.Title+" | "+n.Body)
+			}
+		}
+		time.Sleep(50 * time.Millisecond)
+	}
+	if len(titles) != 2 {
+		t.Fatalf("%d notifications for two credentials issued: %q", len(titles), titles)
+	}
+	joined := strings.Join(titles, "\n")
+	if !strings.Contains(joined, "to a browser") || !strings.Contains(joined, "to a client") {
+		t.Errorf("the items do not name both client kinds:\n%s", joined)
 	}
 }

@@ -60,10 +60,40 @@ func (e *ShellExecutor) Execute(ctx context.Context, sess *domain.Session, comma
 	c.Dir, c.Env = cmd.Dir, cmd.Env
 	c.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
 	c.Cancel = func() error { return syscall.Kill(-c.Process.Pid, syscall.SIGKILL) }
-	c.WaitDelay = 2 * time.Second
-	c.Stdout, c.Stderr = out, out
-	err := c.Run()
+	// The gate's output goes through a pipe this code owns, so the run is over
+	// when the shell exits, not when every process it started lets go of the
+	// pipe: a background child must not turn a passing gate red or hold the run.
+	pr, pw, perr := os.Pipe()
+	if perr != nil {
+		return fail(perr)
+	}
+	c.Stdout, c.Stderr = pw, pw
+	if err := c.Start(); err != nil {
+		_ = pr.Close()
+		_ = pw.Close()
+		return fail(err)
+	}
+	_ = pw.Close()
+	copied := make(chan struct{})
+	go func() {
+		_, _ = io.Copy(out, pr)
+		close(copied)
+	}()
+	err := c.Wait()
 	exit := ports.GateExit{Duration: time.Since(start)}
+	leftover := ctx.Err() == nil && syscall.Kill(-c.Process.Pid, 0) == nil
+	if leftover {
+		// The shell is gone but its process group is not: stop what the gate left behind.
+		_ = syscall.Kill(-c.Process.Pid, syscall.SIGKILL)
+	}
+	select {
+	case <-copied:
+	case <-time.After(2 * time.Second):
+	}
+	_ = pr.Close()
+	if leftover {
+		_, _ = io.WriteString(out, "\ngate left a background process; it was stopped\n")
+	}
 	switch {
 	case ctx.Err() == context.DeadlineExceeded:
 		exit.ExitCode, exit.TimedOut = -1, true

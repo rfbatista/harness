@@ -157,7 +157,7 @@ type ArchitectureGit interface {
 	// uncommitted.
 	Checkout(ctx context.Context, dir string) (CheckoutState, error)
 	// LastCommit is the newest commit of branch that touched path; "" when
-	// none did.
+	// none did. An empty path asks for the branch's tip.
 	LastCommit(ctx context.Context, dir, branch, path string) (string, error)
 	// CommitFiles writes files into the checkout (which is on branch and
 	// clean) and commits only them with message, authored by the harness and
@@ -212,6 +212,9 @@ type ArchitectureCheck struct {
 	// to, read from the command; the protected-path rule checks them beside
 	// Paths. The architecture rules leave them alone.
 	ShellWrites []string
+	// ShellUnresolved are redirection targets of a Bash command written after a
+	// cd the text cannot resolve: they could be any path, a protected one too.
+	ShellUnresolved []string
 	// Shim says a PATH shim asked, about the file it is about to write. The
 	// Bash tool's own hook has already run the command rules that name no
 	// paths, so only those with a paths filter run again.

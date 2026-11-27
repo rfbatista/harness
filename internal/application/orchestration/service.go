@@ -126,6 +126,18 @@ type Service struct {
 
 	DefaultEnv []string // test-only: extra env for spawned sessions
 
+	// BenchRuntime runs the eval bench's headless CLI (ADR 0015): a manager
+	// with no approval, interview or task server, so a bench run's only MCP
+	// server is its mock. Nil: the server runs no bench.
+	BenchRuntime llmkit.Manager
+	// BenchCLIVersion names the CLI a bench run uses, for the scorecard's setup
+	// fingerprint; nil leaves it out.
+	BenchCLIVersion func() string
+	// BenchSandboxAllow is what a bench run's CLI may read under the sandbox
+	// beyond its throwaway directory and the agent home: claude's own install
+	// directories.
+	BenchSandboxAllow []ports.SandboxPath
+
 	// TaskServerURL returns the per-session task MCP endpoint for a session id.
 	// Injected, so the application layer does not need to know the route.
 	TaskServerURL func(sessionID string) string
@@ -153,6 +165,16 @@ type Service struct {
 	// commits its shell's files (…/api/sessions/{id}/shell); a session with
 	// a shell gets vshell.Hooks aimed at it.
 	SessionShellURL func(sessionID string) string
+	// TaskMemory is the task memory store; nil with TaskMemoryRoot empty
+	// delivers none. TaskMemoryRoot is the folder under the harness's data
+	// area that holds each task's and repository's delivery copy.
+	TaskMemory     ports.TaskMemories
+	TaskMemoryRoot string
+	// ContextMaps is where a repository's context map is read at start; nil
+	// delivers none.
+	ContextMaps ports.ContextMaps
+	// SessionSkillsURL returns where a session's skill activation endpoint is.
+	SessionSkillsURL func(sessionID string) string
 	// SessionArchitectureURL returns where a session's architecture rules are
 	// checked (…/api/sessions/{id}/architecture). Nil: sessions get no
 	// architecture hooks.
@@ -244,7 +266,11 @@ type Service struct {
 	// (ADR 0099); nil stores nothing.
 	Contexts  ports.SessionContextStore
 	contextMu sync.Mutex
-	loopOnce  sync.Once // starts contextLoop once the service is wired and somebody follows
+	// touchActivations are the skills each session already loaded on a touch.
+	touchActivations activatedOnTouch
+	taskMemorySync   taskMemorySync
+	taskMemoryCheck  taskMemoryCheck
+	loopOnce         sync.Once // starts contextLoop once the service is wired and somebody follows
 	// contextNotes puts a session's context changes on the feed, coalesced.
 	contextNotes *contextNotifier
 	redactors    map[string]func(string) string // by session id: scrubs a headless session's init report
@@ -377,7 +403,7 @@ func (s *Service) Start(ctx context.Context, req StartRequest) (*domain.Session,
 		branch = defaultBranchName(req.Task)
 	}
 
-	guard := s.resolveGuard(ctx, req.ProjectID, req.RepositoryID, domain.SessionModeDefault, nil, false)
+	guard := s.resolveGuard(ctx, req.ProjectID, req.RepositoryID, domain.SessionModeDefault, nil, false, nil)
 	p, err := s.prepare(ctx, prepareInput{
 		Guard:        &guard,
 		ProjectID:    req.ProjectID,
@@ -885,6 +911,11 @@ func (s *Service) withShellHooks(id, repositoryID string, subject sessionSubject
 			cfg.Driver = dc
 		}
 	}
+	if s.SessionSkillsURL != nil {
+		if dc, ok := withHooks(cfg.Driver, SkillActivationHooks(s.SessionSkillsURL(id))); ok {
+			cfg.Driver = dc
+		}
+	}
 	return s.withShims(id, cfg, func() {
 		if cleanup != nil {
 			cleanup()
@@ -1137,6 +1168,10 @@ func (s *Service) sessionConfigTrail(trail *pieceTrail, id, dir, model string, a
 	trail.mark(&cfg, domain.PieceOther, "Design system", "Harness")
 	res := configResolution{}
 	cfg.InstructionFiles, res.versions = s.deliveredFiles(context.TODO(), role, ag.agent, subject.projectID(), repositoryID)
+	if f, ok := s.contextMapFile(context.TODO(), role, repositoryID); ok {
+		cfg.InstructionFiles = append(cfg.InstructionFiles, f)
+	}
+	cfg.InstructionFiles = append(cfg.InstructionFiles, s.activatedSkillFiles(context.TODO(), id, role, subject.mode, ag.agent, repositoryID)...)
 	if s.SessionBranchGateURL != nil {
 		cfg.InstructionFiles = append(cfg.InstructionFiles, s.branchGateInstructionFile(subject.mode))
 	}
@@ -1145,6 +1180,14 @@ func (s *Service) sessionConfigTrail(trail *pieceTrail, id, dir, model string, a
 	}
 
 	trail.mark(&cfg, domain.PieceOther, "Attached assets", "Harness")
+	if ticket != nil && repositoryID != "" && role != domain.RoleArchitect {
+		if dir, section := s.deliverTaskMemory(context.TODO(), ticket.ID, repositoryID); dir != "" {
+			cfg.Env = append(cfg.Env, ports.TaskMemoryDirEnv+"="+dir)
+			cfg.AppendSystem = appendSection(cfg.AppendSystem, section)
+			trail.mark(&cfg, domain.PieceMemory, "Task memory", "Harness")
+			s.rememberProgressAtStart(context.TODO(), id, ticket.ID, repositoryID)
+		}
+	}
 	s.applyServicesServer(&cfg, id, subject.mode, ag.agent, subject.project)
 	trail.mark(&cfg, domain.PieceOther, "Services", "Harness")
 	var defaults map[string][]string

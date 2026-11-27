@@ -143,6 +143,12 @@ type ProjectChange struct {
 	// InstructionProposalChanged says an instruction-file proposal was
 	// submitted or decided; the badge follows its open count.
 	InstructionProposalChanged *InstructionProposalChange `json:"instruction_proposal_changed,omitempty"`
+	// TaskMemoryChanged says a file of a task's memory in a repository was
+	// written, by the person or read back from a session.
+	TaskMemoryChanged *TaskMemoryChange `json:"task_memory_changed,omitempty"`
+	// ContextMapRegenerated says a repository's context map was regenerated
+	// for a new default-branch commit.
+	ContextMapRegenerated *ContextMapChange `json:"context_map_regenerated,omitempty"`
 	// DesignSystemProposal says a design session's proposal reached a state:
 	// the banner, the navigation badge and the Proposals tab follow it.
 	DesignSystemProposal *DesignSystemProposalChange `json:"design_system_proposal,omitempty"`
@@ -167,6 +173,8 @@ type ProjectChange struct {
 	ProductOwnerMemory *ProductOwnerMemoryChange `json:"product_owner_memory,omitempty"`
 	// AgentSystemSettings says agent system settings were saved; pages re-read.
 	AgentSystemSettings *AgentSystemSettingsChange `json:"agent_system_settings,omitempty"`
+	// BenchRun is an eval bench run's progress, or its end with the scorecard.
+	BenchRun *BenchRunChange `json:"bench_run,omitempty"`
 	// ContextChange says a session's context changed (contract "Harness server
 	// ↔ Web UI — session context", C5). Embedded, so its three fields are the
 	// whole message: {"kind":"context.changed","session_id":…,"reason":…}.
@@ -341,6 +349,10 @@ func (c ProjectChange) ProjectID() string {
 		return c.InstructionFileChanged.ProjectID
 	case c.InstructionProposalChanged != nil:
 		return c.InstructionProposalChanged.ProjectID
+	case c.TaskMemoryChanged != nil:
+		return c.TaskMemoryChanged.ProjectID
+	case c.ContextMapRegenerated != nil:
+		return c.ContextMapRegenerated.ProjectID
 	case c.BranchRequest != nil:
 		return c.BranchRequest.ProjectID
 	case c.SessionBranches != nil:
@@ -353,6 +365,8 @@ func (c ProjectChange) ProjectID() string {
 		return c.SessionFilesRoot.ProjectID
 	case c.AgentSystemSettings != nil:
 		return c.AgentSystemSettings.ProjectID
+	case c.BenchRun != nil:
+		return c.BenchRun.ProjectID
 	case c.ProductOwnerSettings != nil:
 		return c.ProductOwnerSettings.ProjectID
 	case c.ProductOwnerThreadItem != nil:
@@ -565,11 +579,14 @@ type SessionEvent struct {
 	Text      string               `json:"text,omitempty"`
 	ToolName  string               `json:"tool_name,omitempty"`
 	ToolInput json.RawMessage      `json:"tool_input,omitempty"`
-	DeltaKind string               `json:"delta_kind,omitempty"` // text|thinking|tool_input, for output_delta
-	Index     int                  `json:"index,omitempty"`      // content-block index, for output_delta
-	Approval  *ApprovalInfo        `json:"approval,omitempty"`
-	Usage     *Usage               `json:"usage,omitempty"`
-	CostUSD   float64              `json:"cost_usd,omitempty"`
+	// IsError marks, on a "tool_result" event, a result the CLI reported as a
+	// failed tool call.
+	IsError   bool          `json:"is_error,omitempty"`
+	DeltaKind string        `json:"delta_kind,omitempty"` // text|thinking|tool_input, for output_delta
+	Index     int           `json:"index,omitempty"`      // content-block index, for output_delta
+	Approval  *ApprovalInfo `json:"approval,omitempty"`
+	Usage     *Usage        `json:"usage,omitempty"`
+	CostUSD   float64       `json:"cost_usd,omitempty"`
 	// CallUsage is, on an "output" or "tool_use" event, the usage of that
 	// message's own API call, never a sum: the context size of a call is its
 	// input and cache tokens. ContextWindows is, on a "usage" event, the context

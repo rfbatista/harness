@@ -233,6 +233,10 @@ func (s *Service) Subscribe(bus ports.EventSubscriber) {
 		}
 		return nil
 	})
+	ports.On(bus, func(ctx context.Context, ev domain.PersonCredentialIssued) error {
+		s.onPersonCredentialIssued(ctx, ev)
+		return nil
+	})
 	ports.On(bus, func(ctx context.Context, ev domain.PersonOnlyRefused) error {
 		s.onPersonOnlyRefused(ev)
 		return nil
@@ -789,6 +793,35 @@ func (s *Service) onSessionFailed(sessionID string) {
 	s.record(n, true)
 }
 
+// onPersonCredentialIssued tells the person, every time, that a person credential
+// was issued, naming the kind of client and the time (ADR 0016), so a stolen
+// pairing code cannot be redeemed unnoticed. The inbox is per project, so the
+// item goes to the first project; with no project there is no inbox to put it
+// in, and it is only logged.
+func (s *Service) onPersonCredentialIssued(ctx context.Context, ev domain.PersonCredentialIssued) {
+	slog.Warn("person credential issued", "client", ev.Client, "at", ev.At)
+	lister, ok := s.readers.Projects.(interface {
+		List(ctx context.Context) []*domain.Project
+	})
+	if !ok {
+		return
+	}
+	projects := lister.List(ctx)
+	if len(projects) == 0 {
+		return
+	}
+	p := projects[0]
+	n := &domain.Notification{
+		ProjectID: p.ID,
+		Kind:      domain.NotificationAgent, Level: domain.NotificationAction,
+		Actor: systemActor(domain.ActorHarness),
+		Link:  domain.ProjectLink(p.ID), CauseKey: "person_credential:" + strconv.FormatInt(ev.At.UnixNano(), 10),
+		Body: "A person credential was issued to a " + ev.Client + " at " + ev.At.Format("2006-01-02 15:04:05") + ". If that was not you, someone redeemed a pairing code: wipe the person_credentials table and restart the harness.",
+	}
+	what{verb: "issued a person credential", object: "to a " + ev.Client, colon: true}.apply(n)
+	s.record(n, true)
+}
+
 // onPersonOnlyRefused tells the person, at most once an hour per route and
 // project, that something without their credential called a route that is
 // theirs alone (ADR 0016). A route that names no project cannot be placed in a
@@ -809,6 +842,15 @@ func (s *Service) onPersonOnlyRefused(ev domain.PersonOnlyRefused) {
 	s.record(n, true)
 }
 
+// redGatesText names the red gates of an escalation, or says that none was red
+// and another declaration check refused it.
+func redGatesText(names []string) string {
+	if len(names) == 0 {
+		return "The gates were green; another declaration check refused it."
+	}
+	return "Red gates: " + strings.Join(names, ", ") + "."
+}
+
 // onSessionEscalated records one action notification for a session the harness
 // stopped at its retry limit (ADR 0012): once per escalation, naming the red
 // gates and linking to the session.
@@ -827,7 +869,7 @@ func (s *Service) onSessionEscalated(ev domain.SessionEscalated) {
 		Kind: domain.NotificationAgent, Level: domain.NotificationAction,
 		Actor: systemActor(domain.ActorHarness),
 		Link:  sessionLink(sess), CauseKey: "session_escalated:" + ev.RunID,
-		Body: "Its done declaration was red up to the retry limit, so the harness stopped it. Red gates: " + strings.Join(names, ", ") + ". It can be resumed.",
+		Body: "Its done declaration was refused up to the retry limit, so the harness stopped it. " + redGatesText(names) + " It can be resumed.",
 	}
 	what{verb: "stopped an escalated session", object: strings.Join(names, ", "), colon: true}.apply(n)
 	s.record(n, true)

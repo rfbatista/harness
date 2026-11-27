@@ -30,6 +30,23 @@ type PersonPairing interface {
 	NewCode() string
 }
 
+type personClientKey struct{}
+
+// WithPersonClient says what kind of client is redeeming a pairing code
+// ("browser" or "client"), for the notice the person gets of every credential
+// issued.
+func WithPersonClient(ctx context.Context, kind string) context.Context {
+	return context.WithValue(ctx, personClientKey{}, kind)
+}
+
+// PersonClientFrom is the kind WithPersonClient set, "unknown" without one.
+func PersonClientFrom(ctx context.Context) string {
+	if k, _ := ctx.Value(personClientKey{}).(string); k != "" {
+		return k
+	}
+	return "unknown"
+}
+
 // PersonRefusal is a call to a person-only route that carried no valid
 // credential. It names no session: a caller that is not the person has none to
 // prove.
@@ -37,6 +54,9 @@ type PersonRefusal struct {
 	Method, Route string
 	// ProjectID is the project the route names, when it names one.
 	ProjectID string
+	// SessionID is the session the route names (a /sessions/:id route), the one
+	// the call is about, not who made it: the caller proved no identity.
+	SessionID string
 }
 
 // PersonRefusals is told of each refusal, to log it and tell the person.
