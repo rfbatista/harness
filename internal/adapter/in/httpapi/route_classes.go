@@ -411,4 +411,20 @@ var routeClasses = map[string]routeClass{
 	"POST /api/upload_ticket_resource":                                   classPerson,
 	"POST /api/withdraw_design_system_proposal":                          classPerson,
 	"POST /api/worktrees/:id/architecture/commit":                        classSession, // called by a pre-commit hook run with no session environment
+	// The eval bench (ADR 0015): starting or cancelling a run, changing its cases
+	// and the recording flag are the person's; the reads are shared.
+	"DELETE /api/projects/:project/bench/cases/:case":                classPerson,
+	"POST /api/projects/:project/bench/cases":                        classPerson,
+	"POST /api/projects/:project/bench/cases/from-trajectory":        classPerson,
+	"POST /api/projects/:project/bench/runs":                         classPerson,
+	"POST /api/projects/:project/bench/runs/:run/cancel":             classPerson,
+	"PUT /api/projects/:project/tasks/:task/trajectory-recording":    classPerson,
+	"GET /api/projects/:project/bench/cases":                         classSession,
+	"GET /api/projects/:project/bench/runs/:run":                     classSession,
+	"GET /api/projects/:project/bench/scorecards":                    classSession,
+	"GET /api/projects/:project/bench/scorecards/:scorecard":         classSession,
+	"GET /api/projects/:project/bench/scorecards/:scorecard/compare": classSession,
+	"GET /api/projects/:project/bench/trajectories":                  classSession,
+	"GET /api/projects/:project/bench/trajectories/:trajectory":      classSession,
+	"GET /api/projects/:project/tasks/:task/trajectory-recording":    classSession,
 }
