@@ -14,7 +14,40 @@ export type Rule =
   | { readonly kind: "command" }
   | { readonly kind: "list" }
   /** Globs: a list whose entries must be well formed. */
-  | { readonly kind: "globs" };
+  | { readonly kind: "globs" }
+  /** A model the harness can call; with no options known the store decides. */
+  | { readonly kind: "model"; readonly options: readonly string[] }
+  /** The visual QA UI declaration as a whole: URL, routes, viewports and UI paths. */
+  | { readonly kind: "visual-qa" };
+
+/** A viewport is WIDTHxHEIGHT in pixels. */
+export const VIEWPORT = /^[1-9]\d*x[1-9]\d*$/;
+
+/** The first thing wrong with a UI declaration, worded for its row, or undefined. */
+export function visualQaProblem(ui: unknown): string | undefined {
+  if (typeof ui !== "object" || ui === null || Array.isArray(ui)) return "Takes the UI declaration as one block.";
+  const v = ui as Record<string, unknown>;
+  const url = typeof v["url"] === "string" ? v["url"] : "";
+  try {
+    const parsed = new URL(url);
+    if ((parsed.protocol !== "http:" && parsed.protocol !== "https:") || parsed.host === "") throw new Error("scheme");
+  } catch {
+    return `URL ${url === "" ? "is empty" : `"${url}" is not valid`}: it must be an http or https URL.`;
+  }
+  const routes = Array.isArray(v["routes"]) ? (v["routes"] as unknown[]) : [];
+  for (let i = 0; i < routes.length; i++) {
+    const route = routes[i];
+    if (typeof route !== "string" || !route.startsWith("/")) return `Route on line ${i + 1}${typeof route === "string" ? ` "${route}"` : ""} must start with /.`;
+  }
+  const viewports = Array.isArray(v["viewports"]) ? (v["viewports"] as unknown[]) : [];
+  for (const viewport of viewports) if (typeof viewport !== "string" || !VIEWPORT.test(viewport)) return `Viewport "${String(viewport)}" must be WIDTHxHEIGHT in pixels, e.g. 1280x800.`;
+  const paths = Array.isArray(v["ui_paths"]) ? (v["ui_paths"] as unknown[]) : [];
+  for (const glob of paths) {
+    const problem = typeof glob === "string" ? globProblem(glob) : "A UI path is a glob.";
+    if (problem !== undefined) return problem;
+  }
+  return undefined;
+}
 
 /** Why a glob is not one the store would take, or undefined: an unclosed bracket or brace. */
 export function globProblem(glob: string): string | undefined {
@@ -57,6 +90,13 @@ export function check(path: string, rule: Rule, value: unknown): FieldError | un
         if (problem !== undefined) return { field: path, code: "INVALID_GLOB", message: problem };
       }
       return undefined;
+    }
+    case "model":
+      if (typeof value !== "string") return { field: path, code: "INVALID_TYPE", message: "Takes a model name." };
+      return rule.options.length === 0 || rule.options.includes(value) ? undefined : { field: path, code: "MODEL_UNAVAILABLE", message: `The harness cannot call "${value}". It offers ${rule.options.join(", ")}.` };
+    case "visual-qa": {
+      const problem = visualQaProblem(value);
+      return problem === undefined ? undefined : { field: path, code: problem.startsWith("Route") || problem.startsWith("URL") || problem.startsWith("Viewport") ? "INVALID_ROUTE" : "INVALID_GLOB", message: problem };
     }
     case "list":
       return Array.isArray(value) && value.every((v) => typeof v === "string" && v.trim() !== "") ? undefined : { field: path, code: "INVALID_TYPE", message: "Takes a list of non-empty entries." };

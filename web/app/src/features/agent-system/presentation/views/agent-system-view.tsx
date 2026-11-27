@@ -1,6 +1,7 @@
-import { useState, type ChangeEvent, type KeyboardEvent } from "react";
+import { useEffect, useState, type ChangeEvent, type KeyboardEvent } from "react";
 import { usePresenter } from "../../../../shared/presentation/use-presenter";
-import type { GateRow, Layer, Row } from "../../domain/ledger";
+import type { GateRow, Layer, Row, VisualQaBlock } from "../../domain/ledger";
+import type { RunCommand } from "../../domain/settings";
 import type { AgentSystemPresenter, ErrorEntry } from "../presenters/agent-system-presenter";
 
 /** The page: toolbar with the scope switch, the sticky index of the layers, and each layer's ledger rows. */
@@ -99,7 +100,7 @@ export function AgentSystemView({ presenter }: { presenter: AgentSystemPresenter
               </button>
             </div>
           )}
-          {vm.status === "ready" && vm.layers.map((layer) => <LayerSection key={layer.key} layer={layer} presenter={presenter} skillsHref={vm.skillsHref} />)}
+          {vm.status === "ready" && vm.layers.map((layer) => <LayerSection key={layer.key} layer={layer} presenter={presenter} skillsHref={vm.skillsHref} runCommands={vm.runCommands} />)}
           {vm.status === "ready" && <SaveBar presenter={presenter} unsaved={vm.unsaved} errors={vm.errors} canSave={vm.canSave} saving={vm.saving} label={vm.saveLabel} />}
         </div>
       </div>
@@ -122,7 +123,7 @@ function Skeleton() {
   );
 }
 
-function LayerSection({ layer, presenter, skillsHref }: { layer: Layer; presenter: AgentSystemPresenter; skillsHref: string }) {
+function LayerSection({ layer, presenter, skillsHref, runCommands }: { layer: Layer; presenter: AgentSystemPresenter; skillsHref: string; runCommands: readonly RunCommand[] }) {
   return (
     <section className="[ as-layer ]" id={`as-${layer.key}`} aria-labelledby={`as-${layer.key}-head`}>
       <header>
@@ -144,6 +145,17 @@ function LayerSection({ layer, presenter, skillsHref }: { layer: Layer; presente
         {layer.rows.map((row) => (
           <LedgerRow key={row.label} row={row} presenter={presenter} />
         ))}
+        {layer.visualQa !== undefined && <VisualQaView block={layer.visualQa} presenter={presenter} runCommands={runCommands} />}
+        {layer.link !== undefined && (
+          <div className="[ ledger-row ]" data-note="" data-link="score">
+            <div className="[ lbl ]">{layer.link.label}</div>
+            <div className="[ ctl ]">
+              <a href={layer.link.href}>{layer.link.text} ↗</a>
+            </div>
+            <div className="[ src ]" />
+            <div className="[ act ]" />
+          </div>
+        )}
         {layer.note !== "" && (
           <div className="[ ledger-row ]" data-note="">
             <div className="[ lbl ]">{layer.key === "learn" ? "Skills" : ""}</div>
@@ -185,6 +197,16 @@ function LedgerRow({ row, presenter }: { row: Row; presenter: AgentSystemPresent
             <span className="[ meta ]">{row.unit}</span>
           </>
         )}
+        {row.kind === "select" && (
+          <select data-size="sm" data-fit aria-label={row.label} aria-invalid={row.error ? true : undefined} value={row.selected} onChange={(e) => presenter.selectModel(e.target.value)}>
+            {row.options.map((o) => (
+              <option key={o.value} value={o.value}>
+                {o.label}
+              </option>
+            ))}
+            {row.selected !== "" && !row.options.some((o) => o.value === row.selected) && <option value={row.selected}>{row.selected}</option>}
+          </select>
+        )}
         {row.kind === "chips" && <Chips row={row} presenter={presenter} />}
         {row.kind === "fixed" && <span className="[ color-ink-muted ]">{row.text}</span>}
         {row.error && (
@@ -216,30 +238,189 @@ function LedgerRow({ row, presenter }: { row: Row; presenter: AgentSystemPresent
   );
 }
 
-/** Glob chips with an add field: Enter adds, the × of a chip removes it. */
-function Chips({ row, presenter }: { row: Row; presenter: AgentSystemPresenter }) {
+/** Chips with an add field: Enter adds, the × of a chip removes it. */
+function ChipList({ items, invalid, label, placeholder, normalize, onChange }: { items: readonly string[]; invalid: readonly string[]; label: string; placeholder: string; normalize?: (text: string) => string; onChange: (items: string[]) => void }) {
   const [adding, setAdding] = useState("");
   const add = (event: KeyboardEvent<HTMLInputElement>) => {
     if (event.key !== "Enter") return;
     event.preventDefault();
-    const glob = adding.trim();
-    if (glob === "") return;
-    if (!row.items.includes(glob)) presenter.edit(row.path, [...row.items, glob]);
+    const entry = (normalize ? normalize(adding) : adding).trim();
+    if (entry === "") return;
+    if (!items.includes(entry)) onChange([...items, entry]);
     setAdding("");
   };
   return (
     <>
-      {row.items.map((item) => (
-        <span key={item} className="[ badge ] [ glob ]" data-tone={row.invalid.includes(item) ? "danger" : undefined}>
+      {items.map((item) => (
+        <span key={item} className="[ badge ] [ glob ]" data-tone={invalid.includes(item) ? "danger" : undefined}>
           {item}
-          <button type="button" className="[ chip-x ]" aria-label={`Remove ${item}`} onClick={() => presenter.edit(row.path, row.items.filter((g) => g !== item))}>
+          <button type="button" className="[ chip-x ]" aria-label={`Remove ${item}`} onClick={() => onChange(items.filter((g) => g !== item))}>
             ×
           </button>
         </span>
       ))}
-      <input className="[ chip-add ]" aria-label={`Add to ${row.label}`} placeholder="add a glob" value={adding} onChange={(e) => setAdding(e.target.value)} onKeyDown={add} />
+      <input className="[ chip-add ]" aria-label={`Add to ${label}`} placeholder={placeholder} value={adding} onChange={(e) => setAdding(e.target.value)} onKeyDown={add} />
     </>
   );
+}
+
+function Chips({ row, presenter }: { row: Row; presenter: AgentSystemPresenter }) {
+  return <ChipList items={row.items} invalid={row.invalid} label={row.label} placeholder={row.placeholder === "" ? "add a glob" : row.placeholder} onChange={(items) => presenter.edit(row.path, items)} />;
+}
+
+const CUSTOM = "__custom__";
+
+/** The visual QA UI declaration: one block, added and removed as a whole; its fields are rows of the ledger. */
+function VisualQaView({ block, presenter, runCommands }: { block: VisualQaBlock; presenter: AgentSystemPresenter; runCommands: readonly RunCommand[] }) {
+  const ui = block.ui;
+  const known = runCommands.some((c) => c.command === ui.start_command);
+  const [custom, setCustom] = useState(runCommands.length === 0 || (ui.start_command !== "" && !known));
+  const [routes, setRoutes] = useState(ui.routes.join("\n"));
+  // The draft changed from elsewhere (Discard, Reset): the text follows it.
+  useEffect(() => {
+    setRoutes((text) => (parseRoutes(text).join("\n") === ui.routes.join("\n") ? text : ui.routes.join("\n")));
+  }, [ui.routes]);
+  const mark = <span className="[ origin ]" data-kind={block.source.kind}>{block.source.text}</span>;
+  return (
+    <>
+      <div className="[ ledger-sub ]" data-visual-qa={block.declared ? "declared" : "none"}>
+        Visual QA <span>· on demand, from the agent box or by the architect</span>
+        {block.declared && (
+          <>
+            {mark}
+            <span style={{ marginInlineStart: "auto" }}>
+              <button type="button" className="[ button ]" data-variant="ghost" data-size="sm" onClick={() => presenter.removeVisualQa()}>
+                Remove declaration
+              </button>
+            </span>
+          </>
+        )}
+      </div>
+      {!block.declared && (
+        <div className="[ ledger-row ]" data-path={block.path}>
+          <div className="[ lbl ]">
+            UI declaration
+            <small>Per repository. The project holds no default: a repository without one is skipped.</small>
+          </div>
+          <div className="[ ctl ] [ color-ink-muted ]">
+            {block.canDeclare ? (
+              <button type="button" className="[ button ]" data-size="sm" onClick={() => presenter.declareVisualQa()}>
+                Declare this repository's UI
+              </button>
+            ) : (
+              "Choose a repository to declare its UI: start command, URL, routes, viewports, UI paths."
+            )}
+          </div>
+          <div className="[ src ]" />
+          <div className="[ act ]" />
+        </div>
+      )}
+      {block.declared && (
+        <>
+          {block.error && (
+            <div className="[ ledger-row ]" data-error="" data-path={block.path}>
+              <div className="[ lbl ]" />
+              <div className="[ ctl ]">
+                <span className="[ err ]" role="alert" data-error-for={block.path}>
+                  <code>{block.error.code}</code> · {block.error.message}
+                </span>
+              </div>
+              <div className="[ src ]" />
+              <div className="[ act ]" />
+            </div>
+          )}
+          <div className="[ ledger-row ]" data-visual-qa-field="start_command">
+            <div className="[ lbl ]">
+              Start command
+              <small>A run command of this repository, started as a task service the person approves.</small>
+            </div>
+            <div className="[ ctl ]">
+              {runCommands.length > 0 && (
+                <select
+                  data-size="sm"
+                  data-fit
+                  aria-label="Start command"
+                  value={custom ? CUSTOM : known ? ui.start_command : ""}
+                  onChange={(e) => {
+                    if (e.target.value === CUSTOM) setCustom(true);
+                    else {
+                      setCustom(false);
+                      presenter.editVisualQa({ start_command: e.target.value });
+                    }
+                  }}
+                >
+                  {!custom && !known && <option value="">Choose a command</option>}
+                  {runCommands.map((c) => (
+                    <option key={c.name} value={c.command}>{`${c.name} (${c.command})`}</option>
+                  ))}
+                  <option value={CUSTOM}>custom…</option>
+                </select>
+              )}
+              {custom && <input className="[ mono ] [ command ]" aria-label="Custom start command" value={ui.start_command} onChange={(e) => presenter.editVisualQa({ start_command: e.target.value })} />}
+            </div>
+            <div className="[ src ]" />
+            <div className="[ act ]" />
+          </div>
+          <div className="[ ledger-row ]" data-visual-qa-field="url">
+            <div className="[ lbl ]">URL</div>
+            <div className="[ ctl ]">
+              <input className="[ mono ] [ command ]" aria-label="URL" value={ui.url} onChange={(e) => presenter.editVisualQa({ url: e.target.value })} />
+            </div>
+            <div className="[ src ]" />
+            <div className="[ act ]" />
+          </div>
+          <div className="[ ledger-row ]" data-visual-qa-field="routes">
+            <div className="[ lbl ]">
+              Routes
+              <small>One per line. Relative to the URL.</small>
+            </div>
+            <div className="[ ctl ]">
+              <textarea
+                className="[ mono ]"
+                aria-label="Routes"
+                aria-invalid={block.error?.message.includes("line") ? true : undefined}
+                rows={Math.max(3, ui.routes.length + 1)}
+                value={routes}
+                onChange={(e) => {
+                  setRoutes(e.target.value);
+                  presenter.editVisualQa({ routes: parseRoutes(e.target.value) });
+                }}
+              />
+            </div>
+            <div className="[ src ]" />
+            <div className="[ act ]" />
+          </div>
+          <div className="[ ledger-row ]" data-visual-qa-field="viewports">
+            <div className="[ lbl ]">
+              Viewports
+              <small>Width × height in pixels.</small>
+            </div>
+            <div className="[ ctl ]">
+              <ChipList items={ui.viewports} invalid={[]} label="Viewports" placeholder="w×h" normalize={(text) => text.replace(/\s*[×x]\s*/i, "x")} onChange={(viewports) => presenter.editVisualQa({ viewports })} />
+            </div>
+            <div className="[ src ]" />
+            <div className="[ act ]" />
+          </div>
+          <div className="[ ledger-row ]" data-visual-qa-field="ui_paths">
+            <div className="[ lbl ]">
+              UI paths
+              <small>Globs whose change makes a diff worth a visual pass.</small>
+            </div>
+            <div className="[ ctl ]">
+              <ChipList items={ui.ui_paths} invalid={[]} label="UI paths" placeholder="add a glob" onChange={(ui_paths) => presenter.editVisualQa({ ui_paths })} />
+            </div>
+            <div className="[ src ]" />
+            <div className="[ act ]" />
+          </div>
+        </>
+      )}
+    </>
+  );
+}
+
+/** The routes as typed: one per line, blank lines left out. */
+function parseRoutes(text: string): string[] {
+  return text.split("\n").map((line) => line.trim()).filter((line) => line !== "");
 }
 
 /** One gate kind: its command and timeout inline, a switch only on an optional kind, "always on" on a required one. */

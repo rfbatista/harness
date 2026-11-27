@@ -30,6 +30,8 @@ export function toSettingsView(dto: SettingsViewDto): SettingsView {
       contextMapEnabled: bool(dto.context_map_enabled),
       taskMemoryRequireUpdate: bool(dto.task_memory_require_update),
       guard: guard(dto.guard),
+      critic: { enabled: bool(dto.review.enabled), model: text(dto.review.model), standards: list(dto.review.standards) },
+      visualQaUi: field(dto.review.visual_qa_ui),
       trajectoryRecordingDefault: bool(dto.trajectory_recording_default),
       missingRequiredGates: dto.missing_required_gates,
     },

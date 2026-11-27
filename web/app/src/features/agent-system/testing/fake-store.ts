@@ -13,6 +13,10 @@ export interface FakeStore {
   readonly repositories: { id: string; name: string }[];
   /** Required gate kinds with no command, per repository: it is red. */
   readonly missingGates: Map<string, string[]>;
+  /** The run commands of each repository. */
+  readonly runCommands: Map<string, { name: string; command: string }[]>;
+  /** The project's bench scorecards, newest first, as the bench answers them. */
+  scorecards: Record<string, unknown>[];
   /** Every request the store answered, as "METHOD path". */
   readonly requests: string[];
   /** The next save is refused with these errors. */
@@ -31,7 +35,14 @@ const DEFAULTS: Record<string, unknown> = {
   "guard.lockfile_rule.enabled": true,
   "guard.retry_limit": 3,
   "guard.tests_fail_first.available": false,
+  "review.critic.enabled": true,
+  "review.critic.model": "opus",
+  "review.critic.standards": ["AGENTS.md", "CLAUDE.md", "context map"],
+  "review.visual_qa.ui": null,
 };
+
+/** The models the harness can call (domain.ModelChoices). */
+const MODELS = ["default", "fable", "opus", "sonnet", "haiku"];
 
 const REQUIRED = ["build", "test", "lint", "secret_scan", "lockfile"];
 const OPTIONAL = ["typecheck", "sast", "dependency_scan"];
@@ -48,6 +59,8 @@ export function fakeStore(projectId = "p1"): FakeStore {
   const repos = new Map<string, Record<string, unknown>>();
   const repositories: { id: string; name: string }[] = [];
   const missingGates = new Map<string, string[]>();
+  const runCommands = new Map<string, { name: string; command: string }[]>();
+  let scorecards: Record<string, unknown>[] = [];
   const requests: string[] = [];
   let refusal: { field: string; code: string; message: string }[] | null = null;
   let down = false;
@@ -77,6 +90,7 @@ export function fakeStore(projectId = "p1"): FakeStore {
         retry_limit: field(repo, "guard.retry_limit"),
         tests_fail_first: { available: field(repo, "guard.tests_fail_first.available") },
       },
+      review: { critic: { enabled: field(repo, "review.critic.enabled"), model: field(repo, "review.critic.model"), standards: field(repo, "review.critic.standards") }, visual_qa: { ui: field(repo, "review.visual_qa.ui") } },
       score: { trajectory_recording: { default: field(repo, "score.trajectory_recording.default") } },
       ...(repo !== undefined && (missingGates.get(repo)?.length ?? 0) > 0 ? { missing_required_gates: missingGates.get(repo) } : {}),
     },
@@ -97,14 +111,25 @@ export function fakeStore(projectId = "p1"): FakeStore {
     }
     if (!(path in DEFAULTS)) return { field: path, code: "UNKNOWN_FIELD", message: `${path} is not a setting` };
     const def = DEFAULTS[path];
+    if (path === "review.critic.model") return typeof value !== "string" ? { field: path, code: "INVALID_TYPE", message: `${path} takes text` } : MODELS.includes(value) ? undefined : { field: path, code: "MODEL_UNAVAILABLE", message: `the harness cannot call model "${value}"; it offers ${MODELS.join(", ")}` };
+    if (path === "review.visual_qa.ui") {
+      const ui = value as { url?: string; routes?: string[]; viewports?: string[] };
+      if (typeof value !== "object" || Array.isArray(value)) return { field: path, code: "INVALID_TYPE", message: "takes an object" };
+      if (!/^https?:\/\/[^/\s]+/.test(ui.url ?? "")) return { field: `${path}.url`, code: "INVALID_ROUTE", message: "must be an http or https URL" };
+      const route = (ui.routes ?? []).findIndex((r) => !r.startsWith("/"));
+      if (route >= 0) return { field: `${path}.routes[${route}]`, code: "INVALID_ROUTE", message: "a route is a path starting with /" };
+      const viewport = (ui.viewports ?? []).findIndex((v) => !/^[1-9]\d*x[1-9]\d*$/.test(v));
+      return viewport >= 0 ? { field: `${path}.viewports[${viewport}]`, code: "INVALID_ROUTE", message: "a viewport is WIDTHxHEIGHT in pixels, e.g. 1280x800" } : undefined;
+    }
     if (typeof def === "boolean") return typeof value === "boolean" ? undefined : { field: path, code: "INVALID_TYPE", message: `${path} takes true or false` };
     if (typeof def === "number") {
       if (typeof value !== "number" || !Number.isInteger(value)) return { field: path, code: "INVALID_TYPE", message: `${path} takes a whole number` };
       return value < 1 || value > 10 ? { field: path, code: "OUT_OF_RANGE", message: "takes 1–10" } : undefined;
     }
     if (!Array.isArray(value) || !value.every((v) => typeof v === "string")) return { field: path, code: "INVALID_TYPE", message: `${path} takes a list of text` };
-    const bad = value.find((g) => g.includes("[") && !g.includes("]"));
-    return bad === undefined ? undefined : { field: path, code: "INVALID_GLOB", message: `${bad} has an unclosed bracket` };
+    // The store names the entry: "guard.protected_paths[1]".
+    const bad = value.findIndex((g) => g.includes("[") && !g.includes("]"));
+    return bad < 0 ? undefined : { field: `${path}[${bad}]`, code: "INVALID_GLOB", message: `not a valid glob: ${String(value[bad])}` };
   };
 
   const fetcher: FetchLike = async (url, init) => {
@@ -113,6 +138,9 @@ export function fakeStore(projectId = "p1"): FakeStore {
     const method = init?.method ?? "GET";
     requests.push(`${method} ${u.pathname}${u.search}`);
     if (u.pathname === "/api/list_repositories") return u.searchParams.get("project_id") === projectId ? json(200, { repositories: repositories.map((r) => ({ ...r, project_id: projectId })) }) : json(404, { error: "no such project", code: "PROJECT_NOT_FOUND" });
+    if (u.pathname === "/api/list_repository_run_commands") return json(200, { run_commands: runCommands.get(u.searchParams.get("repository_id") ?? "") ?? [] });
+    const bench = /^\/api\/projects\/([^/]+)\/bench\/scorecards$/.exec(u.pathname);
+    if (bench) return bench[1] === projectId ? json(200, { scorecards }) : json(404, { error: "no such project", code: "PROJECT_NOT_FOUND" });
     const match = /^\/api\/projects\/([^/]+)(?:\/repositories\/([^/]+))?\/agent-system$/.exec(u.pathname);
     if (!match || match[1] !== projectId) return json(404, { error: "no route", code: "NOT_FOUND" });
     const repo = match[2];
@@ -149,6 +177,13 @@ export function fakeStore(projectId = "p1"): FakeStore {
     },
     repositories,
     missingGates,
+    runCommands,
+    get scorecards() {
+      return scorecards;
+    },
+    set scorecards(list) {
+      scorecards = list;
+    },
     requests,
     refuseNextSave: (errors) => void (refusal = errors),
     breakNetwork: () => void (down = true),

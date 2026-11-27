@@ -79,6 +79,14 @@ func (a *agentSystemAPI) view(repo string) map[string]any {
 			"context_map": map[string]any{"enabled": a.field(repo, "learn.context_map.enabled", true)},
 			"task_memory": map[string]any{"require_update": a.field(repo, "learn.task_memory.require_update", true)},
 		},
+		"review": map[string]any{
+			"critic": map[string]any{
+				"enabled":   a.field(repo, "review.critic.enabled", true),
+				"model":     a.field(repo, "review.critic.model", "opus"),
+				"standards": a.field(repo, "review.critic.standards", []string{"AGENTS.md", "CLAUDE.md", "context map"}),
+			},
+			"visual_qa": map[string]any{"ui": a.field(repo, "review.visual_qa.ui", nil)},
+		},
 		"score": map[string]any{"trajectory_recording": map[string]any{"default": a.field(repo, "score.trajectory_recording.default", false)}},
 	}
 	values := a.project
@@ -95,6 +103,14 @@ func (a *agentSystemAPI) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	a.mu.Lock()
 	defer a.mu.Unlock()
 	w.Header().Set("Content-Type", "application/json")
+	if r.URL.Path == "/api/list_repository_run_commands" {
+		json.NewEncoder(w).Encode(map[string]any{"run_commands": []map[string]string{{"name": "web", "command": "make run"}, {"name": "docs", "command": "make docs"}}})
+		return
+	}
+	if r.URL.Path == "/api/projects/p1/bench/scorecards" {
+		json.NewEncoder(w).Encode(map[string]any{"scorecards": []map[string]any{{"status": "finished", "aggregate": map[string]any{"mean": 0.82}, "cost_usd": 1.14, "cases": []any{1, 2, 3}}}})
+		return
+	}
 	if r.URL.Path == "/api/list_repositories" {
 		json.NewEncoder(w).Encode(map[string]any{"repositories": a.repoList})
 		return
@@ -149,6 +165,7 @@ func agentSystemServer(t *testing.T, api *agentSystemAPI) *httptest.Server {
 	w := board()
 	mux := http.NewServeMux()
 	mux.Handle("/api/list_repositories", api)
+	mux.Handle("/api/list_repository_run_commands", api)
 	mux.Handle("/api/projects/p1/", api)
 	mux.Handle("/api/", http.NotFoundHandler())
 	mux.Handle("/", NewHandler(Deps{
@@ -202,7 +219,7 @@ func TestAgentSystemPageInTheBrowser(t *testing.T) {
 	if err != nil {
 		t.Fatalf("%v\nJS errors: %v", err, errs.all())
 	}
-	if layers != "Learn,Guard,Score" {
+	if layers != "Learn,Guard,Review,Score" {
 		t.Errorf("layers %q", layers)
 	}
 	if !strings.Contains(source, "harness default") {
@@ -423,5 +440,76 @@ func TestAgentSystemGuardSectionInTheBrowser(t *testing.T) {
 	}
 	if dir := os.Getenv("WEB_SCREENSHOT_DIR"); dir != "" {
 		_ = os.WriteFile(dir+"/agent-system-guard.jpg", shot, 0o644)
+	}
+}
+
+// TestAgentSystemReviewSectionInTheBrowser: the Review section offers the review-mode model first and the models the
+// harness can call, a chosen model and a declared UI are sent by one Save as the whole value, a route without a
+// leading slash is refused on the block with its line before anything is sent, the project scope asks for a
+// repository, and the Score section links to the Score page with the last run.
+func TestAgentSystemReviewSectionInTheBrowser(t *testing.T) {
+	api := newAgentSystemAPI("harness", "blog")
+	srv := agentSystemServer(t, api)
+	ctx, errs := browser(t)
+
+	setInput := func(selector, value string) chromedp.Action {
+		return chromedp.Evaluate(`(() => { const el = document.querySelector('`+selector+`'); const proto = el instanceof HTMLTextAreaElement ? HTMLTextAreaElement.prototype : HTMLInputElement.prototype; Object.getOwnPropertyDescriptor(proto, 'value').set.call(el, `+toJSON(value)+`); el.dispatchEvent(new Event('input', { bubbles: true })); })()`, nil)
+	}
+	var projectNote, options, scoreLine, routeError, barText, shot string
+	var saveDisabled bool
+	var jpg []byte
+	err := chromedp.Run(ctx,
+		chromedp.EmulateViewport(1280, 900),
+		chromedp.Navigate(srv.URL+"/projects/p1/agent-system"),
+		chromedp.Poll(`!!document.querySelector('[data-visual-qa]')`, nil, chromedp.WithPollingTimeout(10*time.Second)),
+		chromedp.Evaluate(`document.querySelector('[data-visual-qa]').parentElement.textContent`, &projectNote),
+		chromedp.Evaluate(`document.querySelector('.ledger-row[data-link=score]').textContent`, &scoreLine),
+		chromedp.Navigate(srv.URL+"/projects/p1/agent-system?repository=blog"),
+		chromedp.Poll(`!!document.querySelector('select[aria-label="Critic model"]')`, nil, chromedp.WithPollingTimeout(10*time.Second)),
+		chromedp.Evaluate(`[...document.querySelectorAll('select[aria-label="Critic model"] option')].map(o => o.value + '=' + o.textContent).join('|')`, &options),
+		chromedp.Evaluate(`(() => { const el = document.querySelector('select[aria-label="Critic model"]'); Object.getOwnPropertyDescriptor(HTMLSelectElement.prototype, 'value').set.call(el, 'sonnet'); el.dispatchEvent(new Event('change', { bubbles: true })); })()`, nil),
+		chromedp.Poll(`!!document.querySelector('.save-bar')`, nil, chromedp.WithPollingTimeout(5*time.Second)),
+		chromedp.Evaluate(`[...document.querySelectorAll('button')].find(b => b.textContent.includes('Declare this repository')).click()`, nil),
+		chromedp.Poll(`!!document.querySelector('input[aria-label="URL"]')`, nil, chromedp.WithPollingTimeout(5*time.Second)),
+		setInput(`textarea[aria-label="Routes"]`, "/\nprojects/settings"),
+		chromedp.Poll(`!!document.querySelector('[data-error-for="review.visual_qa.ui"]')`, nil, chromedp.WithPollingTimeout(5*time.Second)),
+		chromedp.Evaluate(`document.querySelector('[data-error-for="review.visual_qa.ui"]').textContent`, &routeError),
+		chromedp.Evaluate(`document.querySelector('.save-bar').textContent`, &barText),
+		chromedp.Evaluate(`document.querySelector('.save-bar .end button:last-child').getAttribute('aria-disabled') === 'true'`, &saveDisabled),
+		chromedp.Evaluate(`window.scrollTo(0, 0)`, nil),
+		chromedp.FullScreenshot(&jpg, 90),
+		setInput(`textarea[aria-label="Routes"]`, "/\n/projects/settings"),
+		chromedp.Poll(`!document.querySelector('[data-error-for="review.visual_qa.ui"]')`, nil, chromedp.WithPollingTimeout(5*time.Second)),
+		chromedp.Evaluate(`document.querySelector('.save-bar .end button:last-child').click()`, nil),
+		chromedp.Poll(`!document.querySelector('.save-bar')`, nil, chromedp.WithPollingTimeout(5*time.Second)),
+		chromedp.Evaluate(`document.querySelector('[data-visual-qa]').textContent`, &shot),
+	)
+	if err != nil {
+		t.Fatalf("%v\nJS errors: %v", err, errs.all())
+	}
+	if !strings.Contains(projectNote, "Choose a repository to declare its UI") {
+		t.Errorf("project scope reads %q", projectNote)
+	}
+	if !strings.Contains(scoreLine, "Score page · 3 cases · last run 0.82 · $1.14") {
+		t.Errorf("the Score line reads %q", scoreLine)
+	}
+	if want := "=Review-mode model (opus)|default=default: the CLI chooses|fable=fable|opus=opus|sonnet=sonnet|haiku=haiku"; !strings.HasSuffix(options, want) && !strings.Contains(options, want) {
+		t.Errorf("model options %q, want %q", options, want)
+	}
+	if !strings.Contains(routeError, "INVALID_ROUTE") || !strings.Contains(routeError, "line 2") || !saveDisabled || !strings.Contains(barText, "Review › UI declaration") {
+		t.Errorf("route error %q, bar %q, disabled %v", routeError, barText, saveDisabled)
+	}
+	want := `/api/projects/p1/repositories/blog/agent-system {"review.critic.model":"sonnet","review.visual_qa.ui":{"routes":["/","/projects/settings"],"start_command":"make run","ui_paths":[],"url":"http://127.0.0.1:8080","viewports":["1440x900","390x844"]}}`
+	if patches := api.patchLog(); len(patches) != 1 || patches[0] != want {
+		t.Errorf("patches %q, want %q", patches, want)
+	}
+	if !strings.Contains(shot, "override") {
+		t.Errorf("after the save the declaration reads %q, want it marked override", shot)
+	}
+	if e := errs.all(); len(e) > 0 {
+		t.Errorf("JS errors: %v", e)
+	}
+	if dir := os.Getenv("WEB_SCREENSHOT_DIR"); dir != "" {
+		_ = os.WriteFile(dir+"/agent-system-review.jpg", jpg, 0o644)
 	}
 }

@@ -10,6 +10,7 @@ import (
 	"net/url"
 
 	"operators-mcp/internal/adapter/in/web/shell"
+	"operators-mcp/internal/domain"
 	"operators-mcp/internal/ports"
 )
 
@@ -29,10 +30,31 @@ type Handler struct {
 	Render   shell.Renderer
 }
 
-// Props are the island's props: the project. The scope comes from the address, which the island reads.
+// Model is one model the critic's select offers.
+type Model struct {
+	Value string `json:"value"`
+	Label string `json:"label"`
+}
+
+// Models are the models the harness can call (domain.ModelChoices), as the Models page offers them.
+func Models() []Model {
+	out := make([]Model, 0, len(domain.ModelChoices))
+	for _, m := range domain.ModelChoices {
+		label := m
+		if m == domain.ModelDefault {
+			label = "default: the CLI chooses"
+		}
+		out = append(out, Model{Value: m, Label: label})
+	}
+	return out
+}
+
+// Props are the island's props: the project and the models the critic can use. The scope comes from the
+// address, which the island reads.
 type Props struct {
-	ProjectID   string `json:"project_id"`
-	ProjectName string `json:"project_name"`
+	ProjectID   string  `json:"project_id"`
+	ProjectName string  `json:"project_name"`
+	Models      []Model `json:"models"`
 }
 
 // JSON is the props as a script can carry them: json.Marshal escapes what could close it.
@@ -53,5 +75,5 @@ func (h Handler) Page(w http.ResponseWriter, r *http.Request) error {
 		return err
 	}
 	frame.Rail.Page = shell.PageAgentSystem
-	return h.Render(w, r, http.StatusOK, Page(frame, Props{ProjectID: project.ID, ProjectName: project.Name}))
+	return h.Render(w, r, http.StatusOK, Page(frame, Props{ProjectID: project.ID, ProjectName: project.Name, Models: Models()}))
 }

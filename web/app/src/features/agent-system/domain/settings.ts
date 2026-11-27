@@ -28,10 +28,30 @@ export interface Guard {
   readonly testsFailFirstAvailable: Field<boolean>;
 }
 
+/** The UI a repository declares for visual QA, as the store keeps it (wire names). */
+export interface VisualQaUi {
+  readonly start_command: string;
+  readonly url: string;
+  readonly routes: readonly string[];
+  /** "WIDTHxHEIGHT", e.g. 1440x900. */
+  readonly viewports: readonly string[];
+  readonly ui_paths: readonly string[];
+}
+
+export interface Critic {
+  readonly enabled: Field<boolean>;
+  /** A model the harness can call; at the harness default it is the review-mode session model. */
+  readonly model: Field<string>;
+  readonly standards: Field<readonly string[]>;
+}
+
 export interface Effective {
   readonly contextMapEnabled: Field<boolean>;
   readonly taskMemoryRequireUpdate: Field<boolean>;
   readonly guard: Guard;
+  readonly critic: Critic;
+  /** The UI declaration; null where no level declares one. */
+  readonly visualQaUi: Field<VisualQaUi | null>;
   readonly trajectoryRecordingDefault: Field<boolean>;
   /** The required gate kinds with no command at any level: the repository is red. */
   readonly missingRequiredGates: readonly string[];
@@ -51,6 +71,25 @@ export const gateRequired = (kind: string): boolean => (REQUIRED_GATE_KINDS as r
 
 /** The field path of one attribute of a gate: guard.gates.<kind>.<attribute>. */
 export const gatePath = (kind: string, attribute: "command" | "timeout_seconds" | "enabled"): string => `guard.gates.${kind}.${attribute}`;
+
+/** A model the select offers: its value and its words. */
+export interface ModelChoice {
+  readonly value: string;
+  readonly label: string;
+}
+
+/** A run command of a repository: a start command the UI declaration may name. */
+export interface RunCommand {
+  readonly name: string;
+  readonly command: string;
+}
+
+/** The last finished bench run of the project, for the Score section's line. */
+export interface LastScore {
+  readonly mean: number;
+  readonly costUsd: number;
+  readonly cases: number;
+}
 
 export interface Repository {
   readonly id: string;

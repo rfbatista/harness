@@ -9,12 +9,14 @@ import { AgentSystemPresenter } from "../features/agent-system/presentation/pres
 import { AgentSystemView } from "../features/agent-system/presentation/views/agent-system-view";
 
 export function mountAgentSystem(mount: Element, props: unknown, win: Window, api: ApiClient): () => void {
-  const { project_id, project_name } = SettingsPropsDto.fromJSON(props);
+  const { project_id, project_name, models } = SettingsPropsDto.fromJSON(props);
   const presenter = new AgentSystemPresenter({
     source: httpSettingsSource(api),
     address: browserScopeAddress(win),
     projectId: project_id,
     projectName: project_name,
+    models,
+    scoreHref: `/projects/${encodeURIComponent(project_id)}/score`,
     architectureHref: (repository) => `/projects/${encodeURIComponent(project_id)}/repositories/${encodeURIComponent(repository)}/architecture/instructions`,
   });
   const root = createRoot(mount);

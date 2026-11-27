@@ -101,11 +101,59 @@ export class GuardDto {
   }
 }
 
+/** The UI declaration as the store keeps it; absent where no level declares one. */
+export class VisualQaFieldDto {
+  constructor(
+    readonly value: { readonly start_command: string; readonly url: string; readonly routes: readonly string[]; readonly viewports: readonly string[]; readonly ui_paths: readonly string[] } | null,
+    readonly source: (typeof SOURCES)[number],
+    readonly reason: string,
+  ) {}
+
+  static fromJSON(raw: unknown, at: string): VisualQaFieldDto {
+    const from = object(NAME, raw, at);
+    const source = oneOf(NAME, from, "source", SOURCES, at);
+    if (from["value"] === null || from["value"] === undefined) return new VisualQaFieldDto(null, source, "");
+    const ui = object(NAME, from["value"], `${at}.value`);
+    const strings = (key: string): string[] => (ui[key] === null || ui[key] === undefined ? [] : array(NAME, ui, key, (item, here) => {
+      if (typeof item !== "string") throw new DtoError(NAME, here, "expected text");
+      return item;
+    }, `${at}.value`));
+    return new VisualQaFieldDto({ start_command: optionalString(NAME, ui, "start_command", `${at}.value`) ?? "", url: optionalString(NAME, ui, "url", `${at}.value`) ?? "", routes: strings("routes"), viewports: strings("viewports"), ui_paths: strings("ui_paths") }, source, "");
+  }
+}
+
+export class CriticDto {
+  constructor(
+    readonly enabled: BoolFieldDto,
+    readonly model: TextFieldDto,
+    readonly standards: ListFieldDto,
+    readonly visual_qa_ui: VisualQaFieldDto,
+  ) {}
+
+  /** An answer without a review block reads as the harness defaults: the store always sends one. */
+  static fromJSON(raw: unknown): CriticDto {
+    if (raw === undefined || raw === null) {
+      const harness = { source: "harness" };
+      return CriticDto.fromJSON({ critic: { enabled: { value: true, ...harness }, model: { value: "", ...harness }, standards: { value: [], ...harness } }, visual_qa: { ui: { value: null, ...harness } } });
+    }
+    const review = object(NAME, raw, "effective.review");
+    const critic = object(NAME, review["critic"], "effective.review.critic");
+    const visual = object(NAME, review["visual_qa"], "effective.review.visual_qa");
+    return new CriticDto(
+      BoolFieldDto.fromJSON(critic["enabled"], "effective.review.critic.enabled"),
+      TextFieldDto.fromJSON(critic["model"], "effective.review.critic.model"),
+      ListFieldDto.fromJSON(critic["standards"], "effective.review.critic.standards"),
+      VisualQaFieldDto.fromJSON(visual["ui"], "effective.review.visual_qa.ui"),
+    );
+  }
+}
+
 export class SettingsViewDto {
   constructor(
     readonly context_map_enabled: BoolFieldDto,
     readonly task_memory_require_update: BoolFieldDto,
     readonly guard: GuardDto,
+    readonly review: CriticDto,
     readonly trajectory_recording_default: BoolFieldDto,
     readonly missing_required_gates: readonly string[],
     readonly values: Readonly<Record<string, unknown>>,
@@ -127,10 +175,45 @@ export class SettingsViewDto {
       BoolFieldDto.fromJSON(contextMap["enabled"], "effective.learn.context_map.enabled"),
       BoolFieldDto.fromJSON(taskMemory["require_update"], "effective.learn.task_memory.require_update"),
       GuardDto.fromJSON(effective["guard"]),
+      CriticDto.fromJSON(effective["review"]),
       BoolFieldDto.fromJSON(trajectory["default"], "effective.score.trajectory_recording.default"),
       missing,
       object(NAME, from["values"] ?? {}, "values"),
     );
+  }
+}
+
+/** GET /api/list_repository_run_commands: the commands a repository can run. */
+export class RunCommandsDto {
+  constructor(readonly run_commands: readonly { name: string; command: string }[]) {}
+
+  static fromJSON(raw: unknown): RunCommandsDto {
+    const from = object("RunCommandsDto", raw);
+    const list = from["run_commands"] === null || from["run_commands"] === undefined ? [] : array("RunCommandsDto", from, "run_commands", (item, at) => {
+      const c = object("RunCommandsDto", item, at);
+      return { name: string("RunCommandsDto", c, "name", at), command: string("RunCommandsDto", c, "command", at) };
+    });
+    return new RunCommandsDto(list);
+  }
+}
+
+/** GET /api/projects/{p}/bench/scorecards: newest first; only what the Score line shows is read. */
+export class ScorecardsDto {
+  constructor(readonly scorecards: readonly { status: string; mean: number; cost_usd: number; cases: number }[]) {}
+
+  static fromJSON(raw: unknown): ScorecardsDto {
+    const from = object("ScorecardsDto", raw);
+    const list = from["scorecards"] === null || from["scorecards"] === undefined ? [] : array("ScorecardsDto", from, "scorecards", (item, at) => {
+      const card = object("ScorecardsDto", item, at);
+      const aggregate = object("ScorecardsDto", card["aggregate"] ?? {}, `${at}.aggregate`);
+      return {
+        status: string("ScorecardsDto", card, "status", at),
+        mean: typeof aggregate["mean"] === "number" ? aggregate["mean"] : 0,
+        cost_usd: typeof card["cost_usd"] === "number" ? card["cost_usd"] : 0,
+        cases: Array.isArray(card["cases"]) ? card["cases"].length : 0,
+      };
+    });
+    return new ScorecardsDto(list);
   }
 }
 

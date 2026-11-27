@@ -38,6 +38,6 @@ test("an answer that is not the contract's is BAD_RESPONSE, not a crash", async 
 
 test("the island's props carry the project, and the page reads the repository from its address", () => {
   const props = SettingsPropsDto.fromJSON({ project_id: "p1", project_name: "pessoal" });
-  assert.deepEqual(props.toJSON(), { project_id: "p1", project_name: "pessoal", repository: "" });
+  assert.deepEqual(props.toJSON(), { project_id: "p1", project_name: "pessoal", repository: "", models: [] });
   assert.throws(() => SettingsPropsDto.fromJSON({ project_id: "p1" }), DtoError);
 });

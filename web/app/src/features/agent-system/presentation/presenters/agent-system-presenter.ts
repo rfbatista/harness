@@ -3,8 +3,9 @@
 import { Presenter } from "../../../../shared/kernel/presenter";
 import type { SettingsSource } from "../../application/ports";
 import type { ScopeAddress } from "../../application/scope-address";
-import { editables, gateLabel, layers, type Edits, type Layer } from "../../domain/ledger";
-import { isRed, PROJECT_SCOPE, sameScope, sameValue, SettingsError, SettingsRefused, type FieldError, type Patch, type Repository, type Scope, type SettingsView } from "../../domain/settings";
+import { editables, gateLabel, layers, newVisualQa, NO_CONTEXT, type Edits, type Layer, type LayerContext } from "../../domain/ledger";
+import { byRow } from "../../domain/refusal";
+import { isRed, PROJECT_SCOPE, sameScope, sameValue, SettingsError, SettingsRefused, type FieldError, type LastScore, type ModelChoice, type Patch, type Repository, type RunCommand, type Scope, type SettingsView, type VisualQaUi } from "../../domain/settings";
 import { check } from "../../domain/validation";
 
 export interface RepositoryChoice extends Repository {
@@ -38,6 +39,8 @@ export interface AgentSystemViewModel {
   readonly layers: readonly Layer[];
   /** Required gates with no command at any level, at a repository's scope. */
   readonly missingGates: readonly MissingGate[];
+  /** The shown repository's run commands: what a visual QA start command can be. Empty at project scope. */
+  readonly runCommands: readonly RunCommand[];
   /** The repository's Instruction files, for the skills line; "" at project scope. */
   readonly skillsHref: string;
   /** "Saved · applies to sessions started afterwards" after a save, "" before. */
@@ -64,6 +67,10 @@ export interface AgentSystemDeps {
   readonly projectName: string;
   /** A repository's Instruction files page. */
   readonly architectureHref: (repositoryId: string) => string;
+  /** The project's Score page, for the Score section's line; "" leaves the line out. */
+  readonly scoreHref?: string;
+  /** The models the harness can call, for the critic model's select; empty leaves the check to the store. */
+  readonly models?: readonly ModelChoice[];
 }
 
 const SAVED = "Saved · applies to sessions started afterwards";
@@ -74,6 +81,8 @@ export class AgentSystemPresenter extends Presenter<AgentSystemViewModel> {
   #loading = 0;
   #project: SettingsView | undefined;
   #view: SettingsView | undefined;
+  #runCommands: readonly RunCommand[] = [];
+  #lastScore: LastScore | undefined;
   /** What the person changed and has not saved, by field path (null: reset); it belongs to the shown scope. */
   #draft: Record<string, unknown> = {};
   /** The store's refusals by field path, until the row changes. */
@@ -81,7 +90,7 @@ export class AgentSystemPresenter extends Presenter<AgentSystemViewModel> {
   #stopFollowing: (() => void) | undefined;
 
   constructor(deps: AgentSystemDeps) {
-    super({ status: "loading", error: "", projectId: deps.projectId, projectName: deps.projectName, scope: PROJECT_SCOPE, scopeName: "Project defaults", repositories: [], layers: [], missingGates: [], skillsHref: "", saved: "", problem: "", refused: [], unsaved: 0, errors: [], saving: false, canSave: false, saveLabel: "Save project defaults" });
+    super({ status: "loading", error: "", projectId: deps.projectId, projectName: deps.projectName, scope: PROJECT_SCOPE, scopeName: "Project defaults", repositories: [], layers: [], missingGates: [], runCommands: [], skillsHref: "", saved: "", problem: "", refused: [], unsaved: 0, errors: [], saving: false, canSave: false, saveLabel: "Save project defaults" });
     this.#deps = deps;
   }
 
@@ -99,6 +108,7 @@ export class AgentSystemPresenter extends Presenter<AgentSystemViewModel> {
     this.update((vm) => ({ ...vm, repositories: repositories.map((r) => ({ ...r, red: false })) }));
     await this.#load(this.#deps.address.read());
     await this.#markRed(repositories);
+    await this.#readLastScore();
   }
 
   stop(): void {
@@ -157,6 +167,28 @@ export class AgentSystemPresenter extends Presenter<AgentSystemViewModel> {
     this.edit(path, null);
   }
 
+  /** Chooses the critic's model; "" is the review-mode model, which resets the field at this level. */
+  selectModel(model: string): void {
+    this.edit("review.critic.model", model === "" ? null : model);
+  }
+
+  /** Starts a UI declaration for the shown repository, from its first run command. */
+  declareVisualQa(): void {
+    this.edit("review.visual_qa.ui", newVisualQa(this.#runCommands[0]?.command ?? ""));
+  }
+
+  /** Changes parts of the declaration; it is saved and refused as a whole. */
+  editVisualQa(change: Partial<VisualQaUi>): void {
+    const block = this.viewModel.layers.find((l) => l.key === "review")?.visualQa;
+    if (block === undefined || !block.declared) return;
+    this.edit("review.visual_qa.ui", { ...block.ui, ...change });
+  }
+
+  /** Removes the declaration as a whole: resets the field at this level. */
+  removeVisualQa(): void {
+    this.edit("review.visual_qa.ui", null);
+  }
+
   /** Throws the draft away. */
   discard(): void {
     this.#draft = {};
@@ -186,9 +218,7 @@ export class AgentSystemPresenter extends Presenter<AgentSystemViewModel> {
     } catch (err) {
       if (!sameScope(this.viewModel.scope, scope)) return;
       if (err instanceof SettingsRefused) {
-        const refusals: Record<string, FieldError> = {};
-        for (const e of err.errors) refusals[e.field] = e;
-        this.#refusals = refusals;
+        this.#refusals = byRow(err.errors, this.#rows().map((r) => r.path));
         this.#show({ saving: false });
       } else {
         const problem = err instanceof SettingsError ? `${err.code}: ${err.message}` : String(err);
@@ -205,14 +235,40 @@ export class AgentSystemPresenter extends Presenter<AgentSystemViewModel> {
       const project = await this.#deps.source.view(this.#deps.projectId, PROJECT_SCOPE);
       const view = scope.kind === "project" ? project : await this.#deps.source.view(this.#deps.projectId, scope);
       if (token !== this.#loading) return;
+      const runCommands = scope.kind === "repository" ? await this.#readRunCommands(scope.id) : [];
+      if (token !== this.#loading) return;
       this.#project = scope.kind === "project" ? undefined : project;
       this.#view = view;
+      this.#runCommands = runCommands;
       this.#draft = {};
       this.#refusals = {};
       this.update((vm) => this.#shown(vm, scope, view, { status: "ready", error: "", saved: "", problem: "" }));
     } catch (err) {
       if (token === this.#loading) this.#fail(err);
     }
+  }
+
+  /** A repository's run commands; the page does without them when they cannot be read. */
+  async #readRunCommands(repositoryId: string): Promise<RunCommand[]> {
+    try {
+      return await this.#deps.source.runCommands(repositoryId);
+    } catch {
+      return [];
+    }
+  }
+
+  /** The Score section's line; a dash when the bench cannot be read. */
+  async #readLastScore(): Promise<void> {
+    try {
+      this.#lastScore = await this.#deps.source.lastScore(this.#deps.projectId);
+    } catch {
+      this.#lastScore = undefined;
+    }
+    this.#show({});
+  }
+
+  #context(): LayerContext {
+    return { ...NO_CONTEXT, models: this.#deps.models ?? [], lastScore: this.#lastScore, scoreHref: this.#deps.scoreHref ?? "" };
   }
 
   async #markRed(repositories: readonly Repository[]): Promise<void> {
@@ -233,7 +289,7 @@ export class AgentSystemPresenter extends Presenter<AgentSystemViewModel> {
   /** The fields as saved, without the draft: their rules say what a value may be. */
   #rows() {
     const view = this.#view;
-    return view === undefined ? [] : editables(layers(this.viewModel.scope, view, this.#project));
+    return view === undefined ? [] : editables(layers(this.viewModel.scope, view, this.#project, undefined, this.#context()));
   }
 
   /** The level already holds this value (a reset: it does not set the field). */
@@ -252,7 +308,7 @@ export class AgentSystemPresenter extends Presenter<AgentSystemViewModel> {
   #shown(vm: AgentSystemViewModel, scope: Scope, view: SettingsView, extra: Partial<AgentSystemViewModel>): AgentSystemViewModel {
     const repository = scope.kind === "repository" ? vm.repositories.find((r) => r.id === scope.id) : undefined;
     const project = scope.kind === "repository" ? this.#project : undefined;
-    const known = new Map(editables(layers(scope, view, project)).map((f) => [f.path, f] as const));
+    const known = new Map(editables(layers(scope, view, project, undefined, this.#context())).map((f) => [f.path, f] as const));
     const errors: Record<string, FieldError> = { ...this.#refusals };
     for (const [path, value] of Object.entries(this.#draft)) {
       const field = known.get(path);
@@ -261,7 +317,7 @@ export class AgentSystemPresenter extends Presenter<AgentSystemViewModel> {
     }
     const edits: Edits = { draft: this.#draft, errors };
     const redRepositories = vm.repositories.filter((r) => r.red).length;
-    const shown = layers(scope, view, project, edits).map((l) => (l.key === "guard" && scope.kind === "project" ? { ...l, attention: redRepositories } : l));
+    const shown = layers(scope, view, project, edits, this.#context()).map((l) => (l.key === "guard" && scope.kind === "project" ? { ...l, attention: redRepositories } : l));
     const listed: ErrorEntry[] = Object.values(errors).map((e) => ({ ...e, section: known.get(e.field)?.section ?? "", label: known.get(e.field)?.label ?? e.field }));
     const missingGates: MissingGate[] = scope.kind === "repository" ? (shown.find((l) => l.key === "guard")?.gates ?? []).filter((g) => g.missing).map((g) => ({ kind: g.kind, label: gateLabel(g.kind), reason: view.effective.guard.gates.find((x) => x.kind === g.kind)?.command.reason ?? "" })) : [];
     const unsaved = Object.keys(this.#draft).length;
@@ -273,6 +329,7 @@ export class AgentSystemPresenter extends Presenter<AgentSystemViewModel> {
       scopeName: repository?.name ?? "Project defaults",
       layers: shown,
       missingGates,
+      runCommands: scope.kind === "repository" ? this.#runCommands : [],
       skillsHref: scope.kind === "repository" ? this.#deps.architectureHref(scope.id) : "",
       refused,
       unsaved,

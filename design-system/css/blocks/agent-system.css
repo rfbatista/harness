@@ -160,6 +160,13 @@
   }
   .ledger-row input.chip-add { inline-size: 11rem; flex: none; min-block-size: 1.5rem; font-family: var(--font-mono); font-size: var(--text-sm); }
 
+  /* Review: the sub-list's source mark, a select and a list of routes in the value column. */
+  .ledger-sub > .origin { font-size: var(--text-xs); }
+  .ledger-sub > .origin[data-kind="project"] { color: var(--color-ink-muted); }
+  .ledger-sub > .origin[data-kind="override"] { color: var(--color-ink); font-weight: var(--weight-medium); }
+  .ledger-row textarea { inline-size: 100%; max-inline-size: 30rem; min-block-size: 4.5rem; resize: vertical; }
+  .ledger-row textarea[aria-invalid="true"], .ledger-row select[aria-invalid="true"] { border-color: var(--color-danger); }
+
   /* A row the person changed and has not saved, and one that cannot be saved: the label says so; the error is the row's own line. */
   .ledger-row[data-changed] > .lbl::after { content: " · unsaved"; color: var(--color-attention-strong); font-weight: 400; font-size: var(--text-xs); }
   .ledger-row > .ctl > .err { inline-size: 100%; color: var(--color-danger); font-size: var(--text-xs); }
