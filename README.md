@@ -17,7 +17,7 @@ Pair this browser with the harness, once, so it can answer requests:
   http://127.0.0.1:8080/api/person/pair?code=…
 ```
 
-Open it in the browser: it sets an HttpOnly cookie and goes to the UI. The link works once and only until the server restarts or a day passes; the credential outlives restarts. For the terminal client and the bench command, pair once with the code from the link: `tui-client pair --code CODE`. The credential goes into the macOS keychain (a 0600 file under `~/.coding-pool/` elsewhere, or when the keychain cannot be used); it is never an argument or an environment variable, which any process of yours can read, and no session profile can read the file. A paired browser can ask for another code from `POST /api/person/pairing-codes`. A refused call answers `PERSON_ONLY`. A session run with the agent sandbox off runs as you and is not stopped by this.
+Open it in the browser: it sets an HttpOnly cookie and goes to the UI. The link works once and only until the server restarts or a day passes; the credential outlives restarts. For the terminal client and the bench command, pair once with the code from the link: `tui-client pair --code CODE`. The credential goes into one file, `~/.coding-pool/person.cred` (0600, in a 0700 folder), which every session's sandbox profile denies; it is never an argument or an environment variable, which any process of yours can read. There is no keychain path: a session could ask the `security` tool for it by its full path. A paired browser can ask for another code from `POST /api/person/pairing-codes`. A refused call answers `PERSON_ONLY`. A session run with the agent sandbox off runs as you and is not stopped by this.
 
 ## Checks
 

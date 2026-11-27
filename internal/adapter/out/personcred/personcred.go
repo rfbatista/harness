@@ -5,10 +5,10 @@
 // the moment a client starts, so a session that only runs inside the client never
 // holds it.
 //
-// On macOS the credential lives in the login keychain, written and read through
-// /usr/bin/security with the secret on stdin and stdout, never in an argument;
-// anywhere else, or when the keychain cannot be used, it lives in a 0600 file in
-// the harness's own directory (Path), which every sandbox profile hides.
+// It lives in one 0600 file, ~/.coding-pool/person.cred, in a 0700 folder: a path
+// the harness puts in every sandbox profile's secrets. There is no keychain
+// path: `security` is reachable by a session by its full path and could hand the
+// item back without a prompt.
 package personcred
 
 import (
@@ -28,7 +28,7 @@ type Store interface {
 }
 
 // Default is the store the clients use. Tests replace it.
-var Default Store = platformStore()
+var Default Store = FileStore{}
 
 // Load answers the stored credential, ErrNone when there is none.
 func Load() (string, error) { return Default.Load() }
