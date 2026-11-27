@@ -14,7 +14,7 @@ import (
 )
 
 // pair redeems the pairing code the harness printed for the credential and keeps
-// it in the keychain (or the harness's own 0600 file), so this client and the
+// it in the harness's own 0600 file, so this client and the
 // bench command send it from then on (ADR 0016). The one-time code is the only
 // secret that passes through an argument, and it is spent by this call.
 func pair(args []string) int {

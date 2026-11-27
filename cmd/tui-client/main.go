@@ -46,8 +46,8 @@ func run() int {
 	run := flag.String("run", envOr("CODING_POOL_RUN", "server"), "where sessions run: server (they outlive this client) or tui (in this process)")
 	sh := flag.String("shell", envOr("CODING_POOL_SHELL", "direct"), "with --run tui, how sessions start: direct, or login to run them through your login shell")
 	flag.Parse()
-	// The person credential (ADR 0016) is read from the keychain or the harness's
-	// own file, never from an argument or the environment, which any process of
+	// The person credential (ADR 0016) is read from the harness's own 0600 file
+	// never from an argument or the environment, which any process of
 	// the user can read: claude in a pane included.
 	credential, _ := personcred.Load()
 
