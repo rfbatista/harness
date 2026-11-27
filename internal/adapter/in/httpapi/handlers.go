@@ -122,6 +122,8 @@ type Services struct {
 	// GateRuns runs and lists a session's gate runs (ADR 0012); nil: the
 	// routes answer 503.
 	GateRuns ports.GateRuns
+	// VisualQA starts visual QA for a session; nil: the route answers 503.
+	VisualQA ports.VisualQA
 	// Pairing issues person credentials (ADR 0016); nil: the pairing routes answer 503.
 	Pairing ports.PersonPairing
 	// Bench is the eval bench's cases (ADR 0015); nil: the routes answer 503.
@@ -248,6 +250,7 @@ type Handler struct {
 	sandboxSettings   ports.SandboxSettings
 	agentSystem       ports.AgentSystemSettings
 	gateRuns          ports.GateRuns
+	visualQA          ports.VisualQA
 	pairing           ports.PersonPairing
 	bench             ports.BenchCases
 	benchRuns         ports.BenchRuns
@@ -352,6 +355,7 @@ func NewHandler(s Services) *Handler {
 		sandboxSettings:   s.SandboxSettings,
 		agentSystem:       s.AgentSystem,
 		gateRuns:          s.GateRuns,
+		visualQA:          s.VisualQA,
 		pairing:           s.Pairing,
 		bench:             s.Bench,
 		benchRuns:         s.BenchRuns,

@@ -25,6 +25,9 @@ func (s *Service) SendToArchitect(ctx context.Context, fromSessionID string, in 
 		return nil, err
 	}
 	arch := sc.architect()
+	if sc.session.CriticOfSessionID != "" {
+		return s.sendCriticFindings(ctx, sc, arch, in)
+	}
 	if arch == nil {
 		return nil, errNoArchitect
 	}
@@ -44,6 +47,32 @@ func (s *Service) SendToArchitect(ctx context.Context, fromSessionID string, in 
 		s.pushBack(fromSessionID)
 	}
 	return m, nil
+}
+
+// sendCriticFindings is the harness-launched critic's report: it reaches the
+// author session it reviewed as a new turn, and the task's architect, when it
+// has one, as an ordinary message. The critic is advisory: neither delivery
+// changes the author's done declaration. A task with no architect still
+// delivers to the author.
+func (s *Service) sendCriticFindings(ctx context.Context, sc *scope, arch *domain.Session, in ports.TaskMessageInput) (*domain.TaskMessage, error) {
+	if in.Subject == "" {
+		in.Subject = "Critic findings"
+	}
+	author := sc.member(sc.session.CriticOfSessionID)
+	var toAuthor *domain.TaskMessage
+	if author != nil {
+		var err error
+		if toAuthor, err = s.store(ctx, sc, sc.session.ID, author, in); err != nil {
+			return nil, err
+		}
+	}
+	if arch == nil || (author != nil && arch.ID == author.ID) {
+		if toAuthor == nil {
+			return nil, errNoArchitect
+		}
+		return toAuthor, nil
+	}
+	return s.store(ctx, sc, sc.session.ID, arch, in)
 }
 
 // ReplyFromArchitect sends the architect's reply to a session on its task.

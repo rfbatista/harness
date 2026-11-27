@@ -30,30 +30,32 @@ func (r *SessionRepository) Create(s *domain.Session) (*domain.Session, error) {
 		}
 	}
 	m := &SessionModel{
-		ID:              id,
-		ProjectID:       s.ProjectID,
-		RepositoryID:    s.RepositoryID,
-		AgentID:         s.AgentID,
-		ZoneID:          s.ZoneID,
-		TicketID:        s.TicketID,
-		Task:            s.Task,
-		WorkingDir:      s.WorkingDir,
-		Model:           s.Model,
-		Status:          string(s.Status),
-		StatusSinceMs:   statusSince(s),
-		AutoRun:         s.AutoRun,
-		WorkspaceID:     s.WorkspaceID,
-		Branch:          s.Branch,
-		Access:          string(s.Access),
-		Joined:          s.Joined,
-		Interactive:     s.Interactive,
-		ClaudeSessionID: s.ClaudeSessionID,
-		RunsOn:          string(s.RunsOn),
-		RunnerHost:      s.RunnerHost,
-		ParentSessionID: s.ParentSessionID,
-		BroughtUnder:    s.BroughtUnder,
-		Mode:            string(s.Mode),
-		DesignSystemID:  s.DesignSystemID,
+		ID:                id,
+		ProjectID:         s.ProjectID,
+		RepositoryID:      s.RepositoryID,
+		AgentID:           s.AgentID,
+		ZoneID:            s.ZoneID,
+		TicketID:          s.TicketID,
+		Task:              s.Task,
+		WorkingDir:        s.WorkingDir,
+		Model:             s.Model,
+		Status:            string(s.Status),
+		StatusSinceMs:     statusSince(s),
+		AutoRun:           s.AutoRun,
+		WorkspaceID:       s.WorkspaceID,
+		Branch:            s.Branch,
+		Access:            string(s.Access),
+		Joined:            s.Joined,
+		Interactive:       s.Interactive,
+		ClaudeSessionID:   s.ClaudeSessionID,
+		RunsOn:            string(s.RunsOn),
+		RunnerHost:        s.RunnerHost,
+		ParentSessionID:   s.ParentSessionID,
+		CriticOfSessionID: s.CriticOfSessionID,
+		CriticGateRunID:   s.CriticGateRunID,
+		BroughtUnder:      s.BroughtUnder,
+		Mode:              string(s.Mode),
+		DesignSystemID:    s.DesignSystemID,
 
 		TokenSavers:             joinSavers(s.TokenSavers),
 		TokenSaversNotInstalled: joinSavers(s.TokenSaversNotInstalled),
@@ -500,4 +502,10 @@ func statusSince(s *domain.Session) int64 {
 		return s.StatusSince.UnixMilli()
 	}
 	return time.Now().UnixMilli()
+}
+
+// UpdateCriticSkip records why the critic skipped the author session's last
+// green gate run; "" clears it.
+func (r *SessionRepository) UpdateCriticSkip(id, reason string) error {
+	return r.db.Model(&SessionModel{}).Where("id = ?", id).Update("critic_skip", reason).Error
 }

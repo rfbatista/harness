@@ -119,6 +119,10 @@ func (s *Service) StartInteractive(ctx context.Context, req InteractiveRequest) 
 		branch = named
 	}
 	role := s.newSessionRole(ctx, mode, req.ParentSessionID)
+	if req.Critic != nil {
+		// The critic reports through the task channel, as a delegate does.
+		role = domain.RoleDelegate
+	}
 	guard := s.resolveGuard(ctx, req.ProjectID, req.RepositoryID, mode, req.Scope, req.TestsFailFirst, joinedOf(req.WorktreeID, ""))
 	p, err := s.prepare(ctx, prepareInput{
 		Guard:        &guard,
@@ -157,32 +161,35 @@ func (s *Service) StartInteractive(ctx context.Context, req InteractiveRequest) 
 	if plan != nil {
 		opening = s.architectOverPrompt(ctx, ticket, plan.Eligible, req.Prompt)
 	}
+	opening += s.visualQAOpening(ctx, mode, req.ProjectID, req.RepositoryID)
 	spec := s.agentSpec(p.cfg, ports.Conversation{ID: id}, opening)
 	spec.EnvFile = p.envFile
 	confineSpec(&spec, p.sandbox.policy)
 	created, err := s.sessions.Create(&domain.Session{
-		ID:              id,
-		ProjectID:       req.ProjectID,
-		RepositoryID:    req.RepositoryID,
-		WorkspaceID:     p.ws.ID,
-		Branch:          p.branch,
-		Access:          access,
-		Joined:          join != nil,
-		AgentID:         req.AgentID,
-		ZoneID:          req.ZoneID,
-		TicketID:        req.TicketID,
-		Task:            task,
-		WorkingDir:      p.cfg.WorkingDir,
-		Model:           model,
-		Status:          domain.SessionRunning,
-		AutoRun:         p.permission == llmkit.PermissionBypass,
-		Interactive:     true,
-		ClaudeSessionID: id,
-		RunsOn:          runsOn,
-		RunnerHost:      runnerHost(runsOn, req.RunnerHost),
-		ParentSessionID: req.ParentSessionID,
-		Mode:            mode,
-		DesignSystemID:  req.DesignSystemID,
+		ID:                id,
+		ProjectID:         req.ProjectID,
+		RepositoryID:      req.RepositoryID,
+		WorkspaceID:       p.ws.ID,
+		Branch:            p.branch,
+		Access:            access,
+		Joined:            join != nil,
+		AgentID:           req.AgentID,
+		ZoneID:            req.ZoneID,
+		TicketID:          req.TicketID,
+		Task:              task,
+		WorkingDir:        p.cfg.WorkingDir,
+		Model:             model,
+		Status:            domain.SessionRunning,
+		AutoRun:           p.permission == llmkit.PermissionBypass,
+		Interactive:       true,
+		ClaudeSessionID:   id,
+		RunsOn:            runsOn,
+		RunnerHost:        runnerHost(runsOn, req.RunnerHost),
+		ParentSessionID:   req.ParentSessionID,
+		CriticOfSessionID: criticAuthor(req.Critic),
+		CriticGateRunID:   criticRun(req.Critic),
+		Mode:              mode,
+		DesignSystemID:    req.DesignSystemID,
 
 		TokenSavers:             p.savers.active,
 		TokenSaversNotInstalled: p.savers.notInstalled,
@@ -1192,6 +1199,20 @@ func (s *Service) joinTarget(ctx context.Context, req InteractiveRequest, mode d
 		return "", nil, joinRefusal("WORKTREE_NOT_ON_TASK", "that worktree belongs to a session of another task", map[string]string{"worktree_id": req.WorktreeID})
 	}
 	return access, ws, nil
+}
+
+func criticAuthor(c *ports.CriticLink) string {
+	if c == nil {
+		return ""
+	}
+	return c.AuthorSessionID
+}
+
+func criticRun(c *ports.CriticLink) string {
+	if c == nil {
+		return ""
+	}
+	return c.GateRunID
 }
 
 // joinedOf names the worktree a start joins, or nil for one that has its own.

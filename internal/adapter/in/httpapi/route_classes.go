@@ -341,6 +341,7 @@ var routeClasses = map[string]routeClass{
 	"POST /api/sessions/:id/branch_gate/grant":                           classSession, // called by the git shim
 	"POST /api/sessions/:id/branch_gate/pushed":                          classSession, // called by the git shim
 	"POST /api/sessions/:id/gate-runs":                                   classPerson,
+	"POST /api/sessions/:id/visual-qa":                                   classPerson,
 	"POST /api/sessions/:id/memory/hook":                                 classSession, // called by the memory PostToolUse hook
 	"POST /api/sessions/:id/merge":                                       classPerson,
 	"POST /api/sessions/:id/messages":                                    classPerson,
