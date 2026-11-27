@@ -162,6 +162,9 @@ func (d *Declarer) count(ctx context.Context, sess *domain.Session, out *ports.D
 		return nil
 	}
 	out.Run.Escalated = true
+	if err := d.runs.d.Guard.MarkEscalated(ctx, sess.ID); err != nil {
+		return err
+	}
 	if err := d.runs.d.Store.Save(ctx, out.Run); err != nil {
 		return err
 	}

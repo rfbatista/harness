@@ -35,6 +35,8 @@ func (g *safeGuard) CountRed(context.Context, string) (int, error) {
 	g.red++
 	return g.red, nil
 }
+func (g *safeGuard) MarkEscalated(context.Context, string) error { return nil }
+func (g *safeGuard) ResumeRed(context.Context, string) error     { return nil }
 func (g *safeGuard) ResetRed(context.Context, string) error {
 	g.mu.Lock()
 	defer g.mu.Unlock()

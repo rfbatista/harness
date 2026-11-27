@@ -335,6 +335,7 @@ func (s *Service) ResumeInteractive(ctx context.Context, req ports.ResumeRequest
 	keptScope, keptTestsFirst := s.keptChoices(ctx, sess.ID)
 	guard := s.resolveGuard(ctx, sess.ProjectID, sess.RepositoryID, sess.Mode, keptScope, keptTestsFirst)
 	s.keepGuard(ctx, sess, guard)
+	s.resumeGuardCount(ctx, sess.ID)
 	trail.mark(&cfg, domain.PieceRuleset, "Token saver rules", "Token savers")
 	// A resume starts under the rules now in force, not the ones it started
 	// under, and records them.

@@ -23,6 +23,8 @@ func (f fakeGuard) CountRed(_ context.Context, id string) (int, error) {
 	reds[id]++
 	return reds[id], nil
 }
+func (f fakeGuard) MarkEscalated(context.Context, string) error { return nil }
+func (f fakeGuard) ResumeRed(context.Context, string) error     { return nil }
 func (f fakeGuard) ResetRed(_ context.Context, id string) error { reds[id] = 0; return nil }
 
 func (f fakeGuard) Keep(_ context.Context, id string, c domain.GuardConfig) error {

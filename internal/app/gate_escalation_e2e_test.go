@@ -166,3 +166,32 @@ func (e *shellE2E) waitFor(id string, ok func(domain.SessionStatus) bool) {
 		time.Sleep(20 * time.Millisecond)
 	}
 }
+
+func TestAResumeOfAnEscalatedSessionStartsTheCountOverAndAPlainResumeKeepsIt(t *testing.T) {
+	e := newShellE2E(t)
+	e.escalating()
+	sess := e.gatedSession(&fakeAgentSystem{retry: 2, gates: redGates()})
+
+	_ = e.declare(sess.ID)
+	_ = e.declare(sess.ID)
+	e.waitFor(sess.ID, func(st domain.SessionStatus) bool { return st == domain.SessionStopped })
+	if e.status(sess.ID) != domain.SessionStopped {
+		t.Fatalf("not escalated at the limit: %q", e.status(sess.ID))
+	}
+
+	// The person resumes it: another chance, so one red does not escalate again...
+	e.resume(sess.ID)
+	e.waitFor(sess.ID, func(st domain.SessionStatus) bool { return !st.IsTerminal() })
+	_ = e.declare(sess.ID)
+	if e.status(sess.ID).IsTerminal() {
+		t.Fatalf("an escalated session's first red after its resume escalated it again: %q", e.status(sess.ID))
+	}
+	// ...a plain resume (the session was not escalated) keeps that one red...
+	e.resume(sess.ID)
+	e.waitFor(sess.ID, func(st domain.SessionStatus) bool { return !st.IsTerminal() })
+	_ = e.declare(sess.ID)
+	e.waitFor(sess.ID, func(st domain.SessionStatus) bool { return st.IsTerminal() })
+	if !e.status(sess.ID).IsTerminal() {
+		t.Errorf("a plain resume reset the count: second red did not escalate, status %q", e.status(sess.ID))
+	}
+}

@@ -133,6 +133,8 @@ func (m memGuard) Config(_ context.Context, id string) (domain.GuardConfig, bool
 	return c, ok, nil
 }
 func (m memGuard) CountRed(context.Context, string) (int, error) { return 0, nil }
+func (m memGuard) MarkEscalated(context.Context, string) error   { return nil }
+func (m memGuard) ResumeRed(context.Context, string) error       { return nil }
 func (m memGuard) ResetRed(context.Context, string) error        { return nil }
 
 func TestAStartedSessionsSandboxPolicyProtectsItsPathsUnlessItsScopeOrItsModeSaysOtherwiseAndAResumeKeepsTheScope(t *testing.T) {

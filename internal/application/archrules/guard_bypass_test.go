@@ -24,9 +24,13 @@ func (k keptGuard) Config(context.Context, string) (domain.GuardConfig, bool, er
 	return k.cfg, true, nil
 }
 func (k keptGuard) CountRed(context.Context, string) (int, error) { return 0, nil }
+func (k keptGuard) MarkEscalated(context.Context, string) error   { return nil }
+func (k keptGuard) ResumeRed(context.Context, string) error       { return nil }
 func (k keptGuard) ResetRed(context.Context, string) error        { return nil }
 
-type memRuleEvents struct{ events []*domain.ArchitectureRuleEvent }
+type memRuleEvents struct {
+	events []*domain.ArchitectureRuleEvent
+}
 
 func (m *memRuleEvents) Add(_ context.Context, ev *domain.ArchitectureRuleEvent) error {
 	m.events = append(m.events, ev)

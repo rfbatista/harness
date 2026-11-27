@@ -67,6 +67,18 @@ func (s *Service) keepGuard(ctx context.Context, sess *domain.Session, cfg domai
 	}
 }
 
+// resumeGuardCount tells the guard store of a resume: a session the harness
+// stopped at its retry limit is given another chance, with its red count started
+// over; any other keeps the count it had.
+func (s *Service) resumeGuardCount(ctx context.Context, sessionID string) {
+	if s.GuardSessions == nil {
+		return
+	}
+	if err := s.GuardSessions.ResumeRed(context.WithoutCancel(ctx), sessionID); err != nil {
+		slog.Warn("guard count not updated on resume", "session", sessionID, "err", err)
+	}
+}
+
 // GuardConfig is the guard configuration the session kept at its start or last
 // resume; ok is false when it kept none.
 func (s *Service) GuardConfig(ctx context.Context, sessionID string) (domain.GuardConfig, bool) {
