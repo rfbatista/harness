@@ -126,6 +126,18 @@ type Service struct {
 
 	DefaultEnv []string // test-only: extra env for spawned sessions
 
+	// BenchRuntime runs the eval bench's headless CLI (ADR 0015): a manager
+	// with no approval, interview or task server, so a bench run's only MCP
+	// server is its mock. Nil: the server runs no bench.
+	BenchRuntime llmkit.Manager
+	// BenchCLIVersion names the CLI a bench run uses, for the scorecard's setup
+	// fingerprint; nil leaves it out.
+	BenchCLIVersion func() string
+	// BenchSandboxAllow is what a bench run's CLI may read under the sandbox
+	// beyond its throwaway directory and the agent home: claude's own install
+	// directories.
+	BenchSandboxAllow []ports.SandboxPath
+
 	// TaskServerURL returns the per-session task MCP endpoint for a session id.
 	// Injected, so the application layer does not need to know the route.
 	TaskServerURL func(sessionID string) string
@@ -391,7 +403,7 @@ func (s *Service) Start(ctx context.Context, req StartRequest) (*domain.Session,
 		branch = defaultBranchName(req.Task)
 	}
 
-	guard := s.resolveGuard(ctx, req.ProjectID, req.RepositoryID, domain.SessionModeDefault, nil, false)
+	guard := s.resolveGuard(ctx, req.ProjectID, req.RepositoryID, domain.SessionModeDefault, nil, false, nil)
 	p, err := s.prepare(ctx, prepareInput{
 		Guard:        &guard,
 		ProjectID:    req.ProjectID,

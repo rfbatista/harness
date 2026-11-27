@@ -41,6 +41,7 @@ import (
 	"operators-mcp/internal/adapter/out/gitprobe"
 	"operators-mcp/internal/adapter/out/keychainshim"
 	"operators-mcp/internal/adapter/out/persistence/sqlite"
+	"operators-mcp/internal/adapter/out/personcred"
 	"operators-mcp/internal/adapter/out/personshell"
 	"operators-mcp/internal/adapter/out/shell"
 	"operators-mcp/internal/adapter/out/termhost"
@@ -490,7 +491,7 @@ var AgentRuntimeModule = fx.Module("agentruntime",
 		newDeclarer,
 		sqlite.NewPersonCredentialRepository,
 		func(r *sqlite.PersonCredentialRepository) ports.PersonCredentials { return r },
-		personproof.New,
+		newPersonProof,
 		sqlite.NewGuardSessionRepository,
 		func(r *sqlite.GuardSessionRepository) ports.GuardSessions { return r },
 		newAgentClaudeHome,
@@ -505,6 +506,7 @@ var AgentRuntimeModule = fx.Module("agentruntime",
 		newSandboxSettings,
 		newAgentSystem,
 		newContextMap,
+		newBench,
 		newManagedClaude,
 		newManagedClaudeBin,
 		newAgentReadiness,
@@ -1815,9 +1817,17 @@ func newDeclarer(runs *gateruns.Service, orch *orchestration.Service, cat catalo
 	return d
 }
 
+// newPersonProof is the person credential service, telling the person of every
+// credential it issues (ADR 0016).
+func newPersonProof(store ports.PersonCredentials, cat catalog.Catalog) *personproof.Service {
+	svc := personproof.New(store)
+	svc.Events = cat.Bus
+	return svc
+}
+
 // harnessSecrets are the files of the harness a session must never reach: the
-// database with its write-ahead log and shared memory, and the key of the
-// encrypted stores. An in-memory database has none.
+// database with its write-ahead log and shared memory, the key of the encrypted
+// stores and the folder holding the person credential file. An in-memory database has none.
 func harnessSecrets(cfg Config) []string {
 	var out []string
 	if !cfg.inMemory() {
@@ -1827,6 +1837,12 @@ func harnessSecrets(cfg Config) []string {
 	}
 	if root, err := cfg.dataRoot(); err == nil && root != "" {
 		out = append(out, filepath.Join(root, "secret.key"))
+	}
+	// The person credential's own folder, ~/.coding-pool/person: the credential file
+	// and its temporary file are in it. Not ~/.coding-pool, which holds every
+	// session's worktree.
+	if dir, err := personcred.Dir(); err == nil {
+		out = append(out, dir)
 	}
 	return out
 }

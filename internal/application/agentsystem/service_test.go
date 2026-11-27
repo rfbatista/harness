@@ -598,3 +598,31 @@ func TestResettingAListOrObjectFieldRemovesIt(t *testing.T) {
 		t.Errorf("reset fields still set: %+v %+v %+v", got.Guard.ProtectedPaths, got.Review.Critic.Model, got.Review.VisualQA.UI)
 	}
 }
+
+// vanishingRepositories answers the repository once, then reports it gone, as
+// when it is deleted between two lookups of one call.
+type vanishingRepositories struct {
+	fakeRepositories
+	calls int
+}
+
+func (v *vanishingRepositories) Get(ctx context.Context, id string) *domain.Repository {
+	v.calls++
+	if v.calls > 1 {
+		return nil
+	}
+	return v.fakeRepositories.Get(ctx, id)
+}
+
+func TestEffectiveOfARepositoryDeletedMidCallIsNotFound(t *testing.T) {
+	deps := world()
+	deps.Repositories = &vanishingRepositories{fakeRepositories: deps.Repositories.(fakeRepositories)}
+	deps.Detector = agentsystem.NewDetector(&fakeCheckout{files: map[string]string{"go.mod": "module x"}, commit: "c1"}, noGitleaks)
+
+	_, err := agentsystem.New(deps).Effective(context.Background(), "p1", "r1")
+
+	var se *domain.StructuredError
+	if !errors.As(err, &se) || se.Code != "REPOSITORY_NOT_FOUND" {
+		t.Fatalf("err = %v, want REPOSITORY_NOT_FOUND", err)
+	}
+}

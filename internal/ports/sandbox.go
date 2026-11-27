@@ -37,6 +37,11 @@ type SandboxPolicy struct {
 	// wherever they lie. A Readable or Writable path inside a hidden one stays
 	// reachable.
 	Hidden []string `json:"hidden,omitempty"`
+	// Secrets are files and folders the process may never read or write, even
+	// inside a path the policy grants: a driver denies them after every grant (the
+	// last Seatbelt rule wins) and masks them over every bind (bubblewrap). The
+	// harness's database and keys.
+	Secrets []string `json:"secrets,omitempty"`
 }
 
 // SandboxCommand is a command line as a sandbox driver wraps it.

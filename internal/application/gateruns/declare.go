@@ -5,6 +5,7 @@ import (
 	"errors"
 	"slices"
 	"strconv"
+	"sync"
 
 	"operators-mcp/internal/domain"
 	"operators-mcp/internal/ports"
@@ -32,8 +33,10 @@ type DeclarationCheck interface {
 // passes only when none refuses, so a red gate run and another layer's
 // refusal are reported together.
 type Declarer struct {
-	runs   *Service
-	checks []DeclarationCheck
+	runs    *Service
+	checks  []DeclarationCheck
+	mu      sync.Mutex
+	flights map[string]*flight
 	// Escalation takes over when a red declaration reaches the retry limit; nil:
 	// the count is kept and nothing else happens.
 	Escalation Escalation
@@ -52,8 +55,45 @@ func NewDeclarer(runs *Service) *Declarer { return &Declarer{runs: runs} }
 // Add registers another declaration check, run after the gate run.
 func (d *Declarer) Add(c DeclarationCheck) { d.checks = append(d.checks, c) }
 
-// Declare implements ports.Declarations.
+// flight is a declaration in progress, which a second one for the same session
+// joins instead of starting its own.
+type flight struct {
+	done chan struct{}
+	res  ports.Declaration
+	err  error
+}
+
+// Declare implements ports.Declarations. Declarations of one session are
+// single-flight: one made while another runs waits for it and gets its answer,
+// so two at once give one gate run, one count and at most one escalation.
 func (d *Declarer) Declare(ctx context.Context, sessionID string) (ports.Declaration, error) {
+	d.mu.Lock()
+	if f, ok := d.flights[sessionID]; ok {
+		d.mu.Unlock()
+		select {
+		case <-f.done:
+			return f.res, f.err
+		case <-ctx.Done():
+			return ports.Declaration{}, ctx.Err()
+		}
+	}
+	f := &flight{done: make(chan struct{})}
+	if d.flights == nil {
+		d.flights = map[string]*flight{}
+	}
+	d.flights[sessionID] = f
+	d.mu.Unlock()
+
+	f.res, f.err = d.declare(ctx, sessionID)
+
+	d.mu.Lock()
+	delete(d.flights, sessionID)
+	d.mu.Unlock()
+	close(f.done)
+	return f.res, f.err
+}
+
+func (d *Declarer) declare(ctx context.Context, sessionID string) (ports.Declaration, error) {
 	sess, err := d.runs.d.Sessions.Find(ctx, sessionID)
 	if err != nil {
 		return ports.Declaration{}, err
@@ -122,6 +162,9 @@ func (d *Declarer) count(ctx context.Context, sess *domain.Session, out *ports.D
 		return nil
 	}
 	out.Run.Escalated = true
+	if err := d.runs.d.Guard.MarkEscalated(ctx, sess.ID); err != nil {
+		return err
+	}
 	if err := d.runs.d.Store.Save(ctx, out.Run); err != nil {
 		return err
 	}

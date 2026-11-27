@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 
+	"operators-mcp/internal/adapter/in/benchcli"
 	"operators-mcp/internal/adapter/in/shim"
 	"operators-mcp/internal/app"
 	"operators-mcp/internal/app/cliflags"
@@ -17,6 +18,11 @@ import (
 func main() {
 	if shim.Is(os.Args[0]) {
 		os.Exit(shim.Main())
+	}
+	// `server bench run …` is the harness CLI's way to start an eval bench run
+	// on a server that is already running.
+	if len(os.Args) > 1 && os.Args[1] == "bench" {
+		os.Exit(benchcli.Main(os.Args[2:]))
 	}
 	cfg, err := cliflags.Parse(flag.CommandLine, os.Args[1:], os.Getenv)
 	if err != nil {

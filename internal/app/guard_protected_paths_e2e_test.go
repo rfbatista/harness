@@ -394,3 +394,28 @@ func TestAPassingTestRunDoesNotOpenTheWritesAndTestsFailFirstOffOrUnavailableRef
 		t.Errorf("a resume dropped tests-fail-first: %+v", cfg)
 	}
 }
+
+func TestASessionThatJoinsAGatedWorktreeToWriteIsRefusedTheProtectedPathsWhateverItsMode(t *testing.T) {
+	e := newShellE2E(t)
+	e.orch.AgentSystem = &fakeAgentSystem{retry: 3, gates: greenGates()}
+	ticket := e.task("Joined")
+	owner := e.startWith(ports.InteractiveRequest{ProjectID: e.project, RepositoryID: e.repo, TicketID: ticket, Mode: "implement", Scope: []string{".github/workflows/**"}})
+	sess := e.sessions.Get(owner.id)
+
+	for _, mode := range []string{"design", "operate", "review", "qa"} {
+		j := e.startWith(ports.InteractiveRequest{ProjectID: e.project, RepositoryID: e.repo, TicketID: ticket, Mode: mode, Access: "write", WorktreeID: sess.WorkspaceID})
+		hook := func(rel string) string {
+			return runHook(t, j, e.srv.URL, "PreToolUse", archPreMatcher, editInput("Write", filepath.Join(j.worktree, rel)))
+		}
+		if out := hook("check.sh"); !strings.Contains(out, "PROTECTED_PATH") {
+			t.Errorf("a %s session joined with write access wrote check.sh: %q", mode, out)
+		}
+		// The owner's scope carries over, and nothing more.
+		if out := hook(".github/workflows/ci.yml"); out != "" {
+			t.Errorf("a %s joiner was refused what the owner's scope unlocks: %q", mode, out)
+		}
+		if out := hook("main.go"); out != "" {
+			t.Errorf("a %s joiner was refused an unprotected path: %q", mode, out)
+		}
+	}
+}

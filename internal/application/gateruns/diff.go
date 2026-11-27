@@ -2,6 +2,7 @@ package gateruns
 
 import (
 	"context"
+	"log/slog"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -12,27 +13,36 @@ import (
 
 // GitHasDiff answers whether a session's worktree differs from the commit its
 // branch was cut at: uncommitted changes, or commits since. baseSHA gives the
-// commit by workspace id; an unknown base counts as no diff.
+// commit by workspace id. It fails closed: a worktree git cannot read, or a base
+// it does not know when the tree is clean, counts as a diff, so a session that
+// cannot be judged is held to the Guard rather than let off it.
 func GitHasDiff(baseSHA func(ctx context.Context, workspaceID string) string) func(context.Context, *domain.Session) bool {
 	return func(ctx context.Context, sess *domain.Session) bool {
-		git := func(args ...string) string {
+		git := func(args ...string) (string, error) {
 			c := exec.CommandContext(ctx, "git", args...)
 			c.Dir = sess.WorkingDir
 			out, err := c.Output()
-			if err != nil {
-				return ""
-			}
-			return strings.TrimSpace(string(out))
+			return strings.TrimSpace(string(out)), err
 		}
-		if git("status", "--porcelain") != "" {
+		status, err := git("status", "--porcelain")
+		if err != nil {
+			slog.Warn("a worktree's diff could not be read; the session is treated as having one", "session", sess.ID, "err", err)
+			return true
+		}
+		if status != "" {
 			return true
 		}
 		base := baseSHA(ctx, sess.WorkspaceID)
 		if base == "" {
-			return false
+			slog.Warn("a worktree's base is unknown; the session is treated as having a diff", "session", sess.ID)
+			return true
 		}
-		n := git("rev-list", "--count", base+"..HEAD")
-		return n != "" && n != "0"
+		n, err := git("rev-list", "--count", base+"..HEAD")
+		if err != nil {
+			slog.Warn("a worktree's commits since its base could not be counted; the session is treated as having a diff", "session", sess.ID, "err", err)
+			return true
+		}
+		return n != "0"
 	}
 }
 

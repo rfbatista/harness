@@ -313,6 +313,7 @@ const (
 	CodeModelUnavailable     = "MODEL_UNAVAILABLE"
 	CodeInvalidRoute         = "INVALID_ROUTE"
 	CodeOutOfRange           = "OUT_OF_RANGE"
+	CodeInvalidType          = "INVALID_TYPE"
 	CodeUnknownField         = "UNKNOWN_FIELD"
 )
 
@@ -334,8 +335,7 @@ func (e *AgentSystemValidationError) Error() string {
 }
 
 // fieldChecks validate one field's value and answer the canonical JSON to
-// store. A wrong type is OUT_OF_RANGE: the contract has no other code for a
-// value that does not fit the field.
+// store.
 var fieldChecks = map[string]func(raw json.RawMessage) (json.RawMessage, *AgentSystemFieldError){
 	FieldContextMapEnabled:          checkBool,
 	FieldTaskMemoryRequireUpdate:    checkBool,
@@ -407,7 +407,7 @@ func fieldCheckOf(path string) fieldCheck {
 }
 
 func wrongType(want string) *AgentSystemFieldError {
-	return &AgentSystemFieldError{Code: CodeOutOfRange, Message: "expected " + want}
+	return &AgentSystemFieldError{Code: CodeInvalidType, Message: "expected " + want}
 }
 
 func checkBool(raw json.RawMessage) (json.RawMessage, *AgentSystemFieldError) {
@@ -441,7 +441,7 @@ func checkIntRange(lo, hi int) func(json.RawMessage) (json.RawMessage, *AgentSys
 	return func(raw json.RawMessage) (json.RawMessage, *AgentSystemFieldError) {
 		var v int
 		if json.Unmarshal(raw, &v) != nil {
-			return nil, &AgentSystemFieldError{Code: CodeOutOfRange, Message: fmt.Sprintf("expected a whole number from %d to %d", lo, hi)}
+			return nil, &AgentSystemFieldError{Code: CodeInvalidType, Message: fmt.Sprintf("expected a whole number from %d to %d", lo, hi)}
 		}
 		if v < lo || v > hi {
 			return nil, &AgentSystemFieldError{Code: CodeOutOfRange, Message: fmt.Sprintf("must be from %d to %d", lo, hi)}

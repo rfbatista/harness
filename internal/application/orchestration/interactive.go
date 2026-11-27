@@ -119,7 +119,7 @@ func (s *Service) StartInteractive(ctx context.Context, req InteractiveRequest) 
 		branch = named
 	}
 	role := s.newSessionRole(ctx, mode, req.ParentSessionID)
-	guard := s.resolveGuard(ctx, req.ProjectID, req.RepositoryID, mode, req.Scope, req.TestsFailFirst)
+	guard := s.resolveGuard(ctx, req.ProjectID, req.RepositoryID, mode, req.Scope, req.TestsFailFirst, joinedOf(req.WorktreeID, ""))
 	p, err := s.prepare(ctx, prepareInput{
 		Guard:        &guard,
 		ID:           id,
@@ -333,8 +333,9 @@ func (s *Service) ResumeInteractive(ctx context.Context, req ports.ResumeRequest
 	s.rewireTokenSavers(ctx, sess, &cfg)
 	s.resumeMemoryBudget(ctx, sess, &cfg)
 	keptScope, keptTestsFirst := s.keptChoices(ctx, sess.ID)
-	guard := s.resolveGuard(ctx, sess.ProjectID, sess.RepositoryID, sess.Mode, keptScope, keptTestsFirst)
+	guard := s.resolveGuard(ctx, sess.ProjectID, sess.RepositoryID, sess.Mode, keptScope, keptTestsFirst, joinedOfSession(sess))
 	s.keepGuard(ctx, sess, guard)
+	s.resumeGuardCount(ctx, sess.ID)
 	trail.mark(&cfg, domain.PieceRuleset, "Token saver rules", "Token savers")
 	// A resume starts under the rules now in force, not the ones it started
 	// under, and records them.
@@ -1191,4 +1192,20 @@ func (s *Service) joinTarget(ctx context.Context, req InteractiveRequest, mode d
 		return "", nil, joinRefusal("WORKTREE_NOT_ON_TASK", "that worktree belongs to a session of another task", map[string]string{"worktree_id": req.WorktreeID})
 	}
 	return access, ws, nil
+}
+
+// joinedOf names the worktree a start joins, or nil for one that has its own.
+func joinedOf(worktreeID, selfID string) *joinedTo {
+	if worktreeID == "" {
+		return nil
+	}
+	return &joinedTo{workspaceID: worktreeID, selfID: selfID}
+}
+
+// joinedOfSession is joinedOf for a session being resumed.
+func joinedOfSession(sess *domain.Session) *joinedTo {
+	if !sess.Joined {
+		return nil
+	}
+	return joinedOf(sess.WorkspaceID, sess.ID)
 }

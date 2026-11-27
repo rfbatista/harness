@@ -99,3 +99,28 @@ func TestSessionEvent_ArtifactIsOptional(t *testing.T) {
 		t.Fatalf("artifact event json = %s", with)
 	}
 }
+
+// A tool result the CLI marked is_error is kept as an error on the session
+// event, so a recording can replay the failure.
+func TestAToolResultTheCLIMarkedAsAnErrorIsAnErrorEvent(t *testing.T) {
+	line := `{"type":"user","message":{"content":[` +
+		`{"type":"tool_result","tool_use_id":"a","content":"fine"},` +
+		`{"type":"tool_result","tool_use_id":"b","content":[{"type":"text","text":"no such file"}],"is_error":true}]}}`
+	for _, c := range []struct {
+		text string
+		want bool
+	}{{"fine", false}, {"no such file", true}} {
+		ev, _, _ := fromAgentEvent(llmkit.Event{Type: llmkit.EventToolResult, Text: c.text, Raw: json.RawMessage(line)})
+		if ev.Type != "tool_result" || ev.IsError != c.want {
+			t.Errorf("result %q: type %s is_error %v, want %v", c.text, ev.Type, ev.IsError, c.want)
+		}
+	}
+	ev, _, _ := fromAgentEvent(llmkit.Event{Type: llmkit.EventToolResult, Text: "x"})
+	if ev.IsError {
+		t.Fatal("a result with no raw line is an error")
+	}
+	raw, _ := json.Marshal(SessionEvent{Type: "tool_result", Text: "x", IsError: true})
+	if !strings.Contains(string(raw), `"is_error":true`) {
+		t.Fatalf("wire = %s", raw)
+	}
+}

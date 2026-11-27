@@ -2,10 +2,10 @@ package httpapi
 
 import (
 	"net/http"
+	"strings"
 
 	"github.com/labstack/echo/v4"
 
-	"operators-mcp/internal/domain"
 	"operators-mcp/internal/ports"
 )
 
@@ -23,15 +23,18 @@ const (
 	// PairPath redeems a pairing code: GET sets the cookie and goes to the
 	// UI, POST answers the credential for a client.
 	PairPath = "/api/person/pair"
+	// pairCookieMaxAge is how long the browser keeps its credential: ten years, so
+	// it is paired once; the credential can be revoked by wiping the store.
+	pairCookieMaxAge = 10 * 365 * 24 * 3600
 	// PairingCodesPath issues another pairing code, for another browser or client.
 	PairingCodesPath = "/api/person/pairing-codes"
 )
 
 // WithPersonProof makes the router enforce person-only routes: a request to one
 // without a credential the verifier accepts is refused with PERSON_ONLY, and
-// refusals reports each. The server always passes it; a router built without it
-// (a unit test of one route) does not enforce, and says so in no way a session
-// could reach: sessions reach the server's router only.
+// refusals reports each. The server always passes it, so every route a session
+// can reach enforces; a router built without it (a unit test of one route) does
+// not.
 func WithPersonProof(v ports.PersonVerifier, refusals ports.PersonRefusals) Option {
 	return func(o *options) { o.person, o.refusals = v, refusals }
 }
@@ -47,11 +50,13 @@ func personOnly(o options) echo.MiddlewareFunc {
 				return next(c)
 			}
 			if o.refusals != nil {
-				o.refusals.Refused(c.Request().Context(), ports.PersonRefusal{
-					Method: c.Request().Method, Route: c.Path(), ProjectID: c.Param("project"),
-				})
+				r := ports.PersonRefusal{Method: c.Request().Method, Route: c.Path(), ProjectID: c.Param("project")}
+				if strings.HasPrefix(c.Path(), "/api/sessions/:id") {
+					r.SessionID = c.Param("id")
+				}
+				o.refusals.Refused(c.Request().Context(), r)
 			}
-			return &domain.StructuredError{Code: "PERSON_ONLY", Message: "PERSON_ONLY: this action is the person's: it needs the credential their browser or client got by pairing with the harness. A session cannot take it."}
+			return refused("PERSON_ONLY", "PERSON_ONLY: this action is the person's: it needs the credential their browser or client got by pairing with the harness. A session cannot take it.")
 		}
 	}
 }
@@ -76,13 +81,13 @@ func (h *Handler) handlePairGet(c echo.Context) error {
 	if !loopbackHost(c.Request().Host) {
 		return refused("PAIRING_HOST_REFUSED", "Pair from localhost, 127.0.0.1 or [::1].")
 	}
-	credential, err := h.pairing.Redeem(c.Request().Context(), c.QueryParam("code"))
+	credential, err := h.pairing.Redeem(ports.WithPersonClient(c.Request().Context(), "browser"), c.QueryParam("code"))
 	if err != nil {
 		return err
 	}
 	http.SetCookie(c.Response(), &http.Cookie{
 		Name: PersonCookie, Value: credential, Path: "/", HttpOnly: true, SameSite: http.SameSiteStrictMode,
-		Secure: c.Request().TLS != nil, MaxAge: 10 * 365 * 24 * 3600,
+		Secure: c.Request().TLS != nil, MaxAge: pairCookieMaxAge,
 	})
 	return c.Redirect(http.StatusSeeOther, "/")
 }
@@ -102,7 +107,7 @@ func (h *Handler) handlePairPost(c echo.Context) error {
 	if err := bindJSON(c, &in); err != nil {
 		return err
 	}
-	credential, err := h.pairing.Redeem(c.Request().Context(), in.Code)
+	credential, err := h.pairing.Redeem(ports.WithPersonClient(c.Request().Context(), "client"), in.Code)
 	if err != nil {
 		return err
 	}
@@ -119,13 +124,15 @@ func (h *Handler) handleNewPairingCode(c echo.Context) error {
 }
 
 // personGate applies personOnly to every route classified as person-only, so a
-// route's class is its enforcement: there is no second list to forget.
+// route's class is its enforcement: there is no second list to forget. It fails
+// closed: a route with no class is treated as person-only until someone
+// classifies it (TestEveryRouteIsClassified names it).
 func personGate(o options) echo.MiddlewareFunc {
 	check := personOnly(o)
 	return func(next echo.HandlerFunc) echo.HandlerFunc {
 		guarded := check(next)
 		return func(c echo.Context) error {
-			if routeClasses[c.Request().Method+" "+c.Path()] == classPerson {
+			if class, ok := routeClasses[c.Request().Method+" "+c.Path()]; !ok || class == classPerson {
 				return guarded(c)
 			}
 			return next(c)

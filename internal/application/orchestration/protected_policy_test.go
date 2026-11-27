@@ -133,6 +133,8 @@ func (m memGuard) Config(_ context.Context, id string) (domain.GuardConfig, bool
 	return c, ok, nil
 }
 func (m memGuard) CountRed(context.Context, string) (int, error) { return 0, nil }
+func (m memGuard) MarkEscalated(context.Context, string) error   { return nil }
+func (m memGuard) ResumeRed(context.Context, string) error       { return nil }
 func (m memGuard) ResetRed(context.Context, string) error        { return nil }
 
 func TestAStartedSessionsSandboxPolicyProtectsItsPathsUnlessItsScopeOrItsModeSaysOtherwiseAndAResumeKeepsTheScope(t *testing.T) {
@@ -191,8 +193,8 @@ func TestASandboxedSessionCannotReachTheDatabaseOrTheKeyButStillWritesItsTaskMem
 		t.Errorf("the task-memory folder is not writable: %v", policy.Writable)
 	}
 	for _, s := range secrets {
-		if !slices.Contains(policy.Hidden, s) {
-			t.Errorf("%s is not hidden: %v", s, policy.Hidden)
+		if !slices.Contains(policy.Secrets, s) {
+			t.Errorf("%s is not a secret of the policy: %v", s, policy.Secrets)
 		}
 		if slices.Contains(policy.Readable, s) || slices.Contains(policy.Writable, s) {
 			t.Errorf("%s is granted", s)
@@ -206,7 +208,7 @@ func TestASandboxedSessionCannotReachTheDatabaseOrTheKeyButStillWritesItsTaskMem
 	// A grant that covers a secret does not reopen it.
 	wide := BuildSandboxPolicy(SandboxSession{Mode: domain.SessionModeImplement, Worktree: t.TempDir(), TempDir: t.TempDir(),
 		Allow: []ports.SandboxPath{{Path: data, Write: true}}, Secrets: secrets})
-	if !slices.Contains(wide.Hidden, secrets[0]) {
-		t.Errorf("a secret under a granted folder is not hidden: %v", wide.Hidden)
+	if !slices.Contains(wide.Secrets, secrets[0]) {
+		t.Errorf("a secret under a granted folder is not kept as a secret: %v", wide.Secrets)
 	}
 }
