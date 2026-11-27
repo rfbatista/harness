@@ -2,10 +2,10 @@ package httpapi
 
 import (
 	"net/http"
+	"strings"
 
 	"github.com/labstack/echo/v4"
 
-	"operators-mcp/internal/domain"
 	"operators-mcp/internal/ports"
 )
 
@@ -23,15 +23,18 @@ const (
 	// PairPath redeems a pairing code: GET sets the cookie and goes to the
 	// UI, POST answers the credential for a client.
 	PairPath = "/api/person/pair"
+	// pairCookieMaxAge is how long the browser keeps its credential: ten years, so
+	// it is paired once; the credential can be revoked by wiping the store.
+	pairCookieMaxAge = 10 * 365 * 24 * 3600
 	// PairingCodesPath issues another pairing code, for another browser or client.
 	PairingCodesPath = "/api/person/pairing-codes"
 )
 
 // WithPersonProof makes the router enforce person-only routes: a request to one
 // without a credential the verifier accepts is refused with PERSON_ONLY, and
-// refusals reports each. The server always passes it; a router built without it
-// (a unit test of one route) does not enforce, and says so in no way a session
-// could reach: sessions reach the server's router only.
+// refusals reports each. The server always passes it, so every route a session
+// can reach enforces; a router built without it (a unit test of one route) does
+// not.
 func WithPersonProof(v ports.PersonVerifier, refusals ports.PersonRefusals) Option {
 	return func(o *options) { o.person, o.refusals = v, refusals }
 }
@@ -47,11 +50,13 @@ func personOnly(o options) echo.MiddlewareFunc {
 				return next(c)
 			}
 			if o.refusals != nil {
-				o.refusals.Refused(c.Request().Context(), ports.PersonRefusal{
-					Method: c.Request().Method, Route: c.Path(), ProjectID: c.Param("project"),
-				})
+				r := ports.PersonRefusal{Method: c.Request().Method, Route: c.Path(), ProjectID: c.Param("project")}
+				if strings.HasPrefix(c.Path(), "/api/sessions/:id") {
+					r.SessionID = c.Param("id")
+				}
+				o.refusals.Refused(c.Request().Context(), r)
 			}
-			return &domain.StructuredError{Code: "PERSON_ONLY", Message: "PERSON_ONLY: this action is the person's: it needs the credential their browser or client got by pairing with the harness. A session cannot take it."}
+			return refused("PERSON_ONLY", "PERSON_ONLY: this action is the person's: it needs the credential their browser or client got by pairing with the harness. A session cannot take it.")
 		}
 	}
 }
@@ -82,7 +87,7 @@ func (h *Handler) handlePairGet(c echo.Context) error {
 	}
 	http.SetCookie(c.Response(), &http.Cookie{
 		Name: PersonCookie, Value: credential, Path: "/", HttpOnly: true, SameSite: http.SameSiteStrictMode,
-		Secure: c.Request().TLS != nil, MaxAge: 10 * 365 * 24 * 3600,
+		Secure: c.Request().TLS != nil, MaxAge: pairCookieMaxAge,
 	})
 	return c.Redirect(http.StatusSeeOther, "/")
 }

@@ -24,7 +24,7 @@ func (e *shellE2E) personServer() *httptest.Server {
 	e.t.Helper()
 	router := httpapi.NewRouter(httpapi.NewHandler(httpapi.Services{
 		Sessions: e.orch, Planning: e.plan, GateRuns: e.gateRuns, Pairing: e.proof, Settings: e.cat.Settings, Projects: e.cat.Projects,
-	}), httpapi.WithPersonProof(e.proof, personRefusals{events: e.cat.Bus}))
+	}), httpapi.WithPersonProof(e.proof, personRefusals{events: e.cat.Bus, sessions: e.sessions}))
 	srv := httptest.NewServer(router)
 	e.t.Cleanup(srv.Close)
 	return srv

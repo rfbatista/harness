@@ -2,7 +2,6 @@ package archrules
 
 import (
 	"context"
-	"slices"
 	"strings"
 
 	"operators-mcp/internal/domain"
@@ -21,30 +20,23 @@ const (
 // a lockfile changed together with its manifest is flagged with the
 // dependencies it added. refused is true for the refusal alone.
 func (s *Service) lockfileRule(ctx context.Context, c ports.ArchitectureCheck) (ports.ArchitectureVerdict, bool) {
-	if s.d.Guard == nil || c.Person || (c.Point != domain.PointBeforeTool && c.Point != domain.PointAfterEdit) {
+	g, ok := s.guardedWrite(ctx, c, domain.PointBeforeTool, domain.PointAfterEdit)
+	if !ok || !g.cfg.LockfileRule {
 		return ports.ArchitectureVerdict{}, false
 	}
-	sess := s.d.Sessions.Get(c.SessionID)
-	if sess == nil || sess.WorkingDir == "" {
-		return ports.ArchitectureVerdict{}, false
-	}
-	cfg, ok, err := s.d.Guard.Config(ctx, sess.ID)
-	if err != nil || !ok || !cfg.LockfileRule || !domain.SessionGated(cfg.Mode, true) {
-		return ports.ArchitectureVerdict{}, false
-	}
-	for _, rel := range slices.Concat(inside(sess.WorkingDir, c.Paths), inside(sess.WorkingDir, c.ShellWrites)) {
+	for _, rel := range g.paths {
 		manifest, isLock := domain.LockfileManifest(rel)
 		if !isLock {
 			continue
 		}
-		changed := s.d.ManifestChanged != nil && s.d.ManifestChanged(ctx, sess, manifest)
+		changed := s.d.ManifestChanged != nil && s.d.ManifestChanged(ctx, g.sess, manifest)
 		switch {
 		case c.Point == domain.PointBeforeTool && !changed:
-			s.recordLockfile(ctx, sess, c, LockfileRefusalRule, domain.ModeBlocking, domain.OutcomeBlocked, rel, "manifest "+manifest+" unchanged")
+			s.recordRule(ctx, g.sess, c, ruleEvent{rule: LockfileRefusalRule, mode: domain.ModeBlocking, outcome: domain.OutcomeBlocked, path: rel, detail: "manifest " + manifest + " unchanged"})
 			return ports.ArchitectureVerdict{Deny: "LOCKFILE_WITHOUT_MANIFEST: " + rel + " changes without its manifest " + manifest +
 				". Change the manifest first (add or update the dependency there), then let the lockfile follow it."}, true
 		case c.Point == domain.PointAfterEdit && changed:
-			s.flagLockfile(ctx, sess, c, rel, manifest)
+			s.flagLockfile(ctx, g.sess, c, rel, manifest)
 		}
 	}
 	return ports.ArchitectureVerdict{}, false
@@ -60,31 +52,9 @@ func (s *Service) flagLockfile(ctx context.Context, sess *domain.Session, c port
 	if len(deps) == 0 {
 		return
 	}
-	s.recordLockfile(ctx, sess, c, LockfileFlagRule, domain.ModeWarning, domain.OutcomeWarned, rel, "added "+strings.Join(deps, ", "))
+	s.recordRule(ctx, sess, c, ruleEvent{rule: LockfileFlagRule, mode: domain.ModeWarning, outcome: domain.OutcomeWarned, path: rel, detail: "added " + strings.Join(deps, ", ")})
 	if s.d.Feed != nil {
 		s.d.Feed.AnnounceChange(ports.ProjectChange{LockfileFlag: &ports.LockfileFlagChange{
 			ProjectID: sess.ProjectID, SessionID: sess.ID, Lockfile: rel, Manifest: manifest, Dependencies: deps}})
-	}
-}
-
-func (s *Service) recordLockfile(ctx context.Context, sess *domain.Session, c ports.ArchitectureCheck, rule, mode, outcome, path, detail string) {
-	agent := domain.PlainAgent
-	if sess.AgentID != "" {
-		if a, err := s.d.Agents.GetAgent(ctx, sess.AgentID); err == nil && a != nil && a.Name != "" {
-			agent = a.Name
-		}
-	}
-	ev := &domain.ArchitectureRuleEvent{
-		At: s.d.Now().UTC(), SessionID: sess.ID, TaskID: sess.TicketID, Agent: agent,
-		RuleID: rule, Kind: rule, AtPoint: c.Point, Mode: mode, Outcome: outcome, Path: path, Tool: c.Tool, Detail: detail,
-		RepositoryID: sess.RepositoryID, ProjectID: sess.ProjectID,
-	}
-	if s.d.Events.Add(ctx, ev) != nil {
-		return
-	}
-	if s.d.Feed != nil {
-		s.d.Feed.AnnounceChange(ports.ProjectChange{ArchitectureRuleEvent: &ports.ArchitectureRuleEventChange{
-			RepositoryID: ev.RepositoryID, Event: ev, ProjectID: ev.ProjectID,
-		}})
 	}
 }

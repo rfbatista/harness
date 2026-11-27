@@ -267,7 +267,9 @@ type SessionEscalated struct {
 // the project the route names, empty when it names none.
 type PersonOnlyRefused struct {
 	Method, Route, ProjectID string
-	At                       time.Time
+	// SessionID is the session the route names, empty when it names none.
+	SessionID string
+	At        time.Time
 }
 
 func (PersonOnlyRefused) EventName() string { return "person_only.refused" }

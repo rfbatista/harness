@@ -238,7 +238,7 @@ func registerHTTPServer(lc fx.Lifecycle, cfg Config, cat catalog.Catalog, appRun
 		RepositoryAgents: repoAgents,
 	}), httpapi.WithToken(cfg.APIToken), httpapi.WithExposedListener(exposed(cfg.HTTPAddr)),
 		// The routes that are the person's alone need the credential they got by pairing (ADR 0016).
-		httpapi.WithPersonProof(proof, personRefusals{events: cat.Bus}))
+		httpapi.WithPersonProof(proof, personRefusals{events: cat.Bus, sessions: sessions}))
 	// Requests slower than the threshold are logged with their query count.
 	// An approval waits on a person, so it is never a slow request.
 	slow := func(h http.Handler) http.Handler {
@@ -306,13 +306,22 @@ func registerHTTPServer(lc fx.Lifecycle, cfg Config, cat catalog.Catalog, appRun
 
 // personRefusals turns a refused call to a person-only route into an event the
 // notifications context reports (ADR 0016).
-type personRefusals struct{ events ports.EventPublisher }
+type personRefusals struct {
+	events   ports.EventPublisher
+	sessions ports.SessionRepository
+}
 
 func (p personRefusals) Refused(ctx context.Context, r ports.PersonRefusal) {
 	if p.events == nil {
 		return
 	}
-	_ = p.events.Publish(ctx, domain.PersonOnlyRefused{Method: r.Method, Route: r.Route, ProjectID: r.ProjectID, At: time.Now()})
+	// A route that names a session places the refusal in that session's project.
+	if r.ProjectID == "" && r.SessionID != "" && p.sessions != nil {
+		if sess := p.sessions.Get(r.SessionID); sess != nil {
+			r.ProjectID = sess.ProjectID
+		}
+	}
+	_ = p.events.Publish(ctx, domain.PersonOnlyRefused{Method: r.Method, Route: r.Route, ProjectID: r.ProjectID, SessionID: r.SessionID, At: time.Now()})
 }
 
 // announcePairing prints the link that pairs the person's browser when nobody is

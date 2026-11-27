@@ -809,6 +809,15 @@ func (s *Service) onPersonOnlyRefused(ev domain.PersonOnlyRefused) {
 	s.record(n, true)
 }
 
+// redGatesText names the red gates of an escalation, or says that none was red
+// and another declaration check refused it.
+func redGatesText(names []string) string {
+	if len(names) == 0 {
+		return "The gates were green; another declaration check refused it."
+	}
+	return "Red gates: " + strings.Join(names, ", ") + "."
+}
+
 // onSessionEscalated records one action notification for a session the harness
 // stopped at its retry limit (ADR 0012): once per escalation, naming the red
 // gates and linking to the session.
@@ -827,7 +836,7 @@ func (s *Service) onSessionEscalated(ev domain.SessionEscalated) {
 		Kind: domain.NotificationAgent, Level: domain.NotificationAction,
 		Actor: systemActor(domain.ActorHarness),
 		Link:  sessionLink(sess), CauseKey: "session_escalated:" + ev.RunID,
-		Body: "Its done declaration was red up to the retry limit, so the harness stopped it. Red gates: " + strings.Join(names, ", ") + ". It can be resumed.",
+		Body: "Its done declaration was refused up to the retry limit, so the harness stopped it. " + redGatesText(names) + " It can be resumed.",
 	}
 	what{verb: "stopped an escalated session", object: strings.Join(names, ", "), colon: true}.apply(n)
 	s.record(n, true)

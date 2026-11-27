@@ -156,3 +156,15 @@ func (r *GateRun) RedKinds() []GateKind {
 	}
 	return out
 }
+
+// TestFailed says a test gate of the run did not pass: it failed, timed out or
+// was skipped by nothing, so a failed test run is a red `test` gate (the
+// tests-fail-first rule's evidence).
+func (r *GateRun) TestFailed() bool {
+	for _, g := range r.Gates {
+		if g.Kind == GateTest && !g.Passed() && !g.Skipped {
+			return true
+		}
+	}
+	return false
+}

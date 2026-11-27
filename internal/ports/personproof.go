@@ -37,6 +37,9 @@ type PersonRefusal struct {
 	Method, Route string
 	// ProjectID is the project the route names, when it names one.
 	ProjectID string
+	// SessionID is the session the route names (a /sessions/:id route), the one
+	// the call is about, not who made it: the caller proved no identity.
+	SessionID string
 }
 
 // PersonRefusals is told of each refusal, to log it and tell the person.
