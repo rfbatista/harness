@@ -4,7 +4,7 @@ import { Presenter } from "../../../../shared/kernel/presenter";
 import type { CallsText, ScoreFeed, ScoreSource } from "../../application/ports";
 import { ScoreError, type BenchCase, type CaseDefinition, type FieldError, type RunChange, type Trajectory } from "../../domain/bench";
 import { formatMocks, parseMockTools } from "../../domain/case-text";
-import { compare, defaultBaseline, round2, type CaseRow, type Comparison, type Delta, type Standing } from "../../domain/comparison";
+import { comparisonOf, round2, type CaseRow, type Comparison, type Delta, type ScoreComparison, type Standing } from "../../domain/comparison";
 import { cost, deltaShort, duration, score, when } from "../../domain/format";
 import { caseMean, GROUP_LABEL, type CaseScore, type Scorecard } from "../../domain/scorecard";
 
@@ -206,6 +206,9 @@ export class ScorePresenter extends Presenter<ScoreViewModel> {
   #cards: Scorecard[] = [];
   #readId = "";
   #baselineId: string | null = null;
+  /** What the harness answered for the run read (null: nothing earlier to compare with); only while it is for `readId`. */
+  #comparison: { readId: string; answer: ScoreComparison | null } | null = null;
+  #comparing = 0;
   #view: View = "scorecard";
   #filter: Filter = "all";
   #running: { done: number; total: number } | null = null;
@@ -260,29 +263,58 @@ export class ScorePresenter extends Presenter<ScoreViewModel> {
   }
 
   /** Reads another run; its baseline goes back to the previous finished one. */
-  selectRead(id: string): void {
+  async selectRead(id: string): Promise<void> {
     if (!this.#cards.some((c) => c.id === id)) return;
     this.#readId = id;
     this.#baselineId = null;
     this.#view = "scorecard";
     this.#publish();
+    await this.#compare();
+    this.#publish();
   }
 
   /** Compares with another run; null goes back to the previous finished one. */
-  selectBaseline(id: string | null): void {
+  async selectBaseline(id: string | null): Promise<void> {
     if (id !== null && (id === this.#readId || !this.#cards.some((c) => c.id === id))) return;
     this.#baselineId = id;
+    await this.#compare();
     this.#publish();
   }
 
+  /** Asks the harness for the run read set against its baseline. A newer ask wins; what was on screen stays until the answer lands. */
+  async #compare(): Promise<void> {
+    const readId = this.#readId;
+    const ask = ++this.#comparing;
+    if (readId === "") {
+      this.#comparison = null;
+      return;
+    }
+    let answer: ScoreComparison | null = null;
+    try {
+      answer = await this.#deps.source.compare(this.#deps.projectId, readId, this.#baselineId);
+    } catch {
+      this.#problem = "The comparison could not be read.";
+    }
+    if (ask === this.#comparing) this.#comparison = { readId, answer };
+  }
+
   /** Run bench: starts a run on the default setup. A refusal is shown and nothing runs. */
-  async runBench(): Promise<void> {
+  runBench(): Promise<void> {
+    return this.#start(undefined);
+  }
+
+  /** Replay this case: a run of that one case, shown as running like Run bench. Its scorecard is partial, never a baseline. */
+  replayCase(id: string): Promise<void> {
+    return this.#start([id]);
+  }
+
+  async #start(caseIds: readonly string[] | undefined): Promise<void> {
     if (this.#running !== null) return;
     this.#problem = "";
-    this.#running = { done: 0, total: this.#cases.length };
+    this.#running = { done: 0, total: caseIds?.length ?? this.#cases.length };
     this.#publish();
     try {
-      const run = await this.#deps.source.startRun(this.#deps.projectId);
+      const run = await this.#deps.source.startRun(this.#deps.projectId, caseIds);
       // A change the feed already announced (the run may be over) wins over the answer.
       if (this.#running !== null && run.status === "running") this.#running = { done: run.done, total: run.total };
     } catch (err) {
@@ -426,6 +458,7 @@ export class ScorePresenter extends Presenter<ScoreViewModel> {
       this.#cards = cards;
       this.#readId = cards[0]?.id ?? "";
       this.#baselineId = null;
+      await this.#compare();
       this.#status = "ready";
       this.#error = "";
     } catch (err) {
@@ -446,6 +479,7 @@ export class ScorePresenter extends Presenter<ScoreViewModel> {
         this.#readId = cards[0]?.id ?? "";
         this.#baselineId = null;
       }
+      await this.#compare();
       this.#status = "ready";
     } catch {
       // What is on screen stays; the next change or a reload reads again.
@@ -465,16 +499,17 @@ export class ScorePresenter extends Presenter<ScoreViewModel> {
     const asc = [...cards].sort((a, b) => a.startedAt.getTime() - b.startedAt.getTime());
     const name = (c: Scorecard): string => `run ${asc.indexOf(c) + 1}`;
     const read = cards.find((c) => c.id === this.#readId) ?? null;
-    const baseline = read === null ? null : this.#baselineId !== null ? (cards.find((c) => c.id === this.#baselineId) ?? null) : defaultBaseline(cards, read);
-    const cmp: Comparison | null = read === null ? null : compare(read, baseline);
+    const answer = read !== null && this.#comparison?.readId === read.id ? this.#comparison.answer : null;
+    const baseline = answer === null ? null : (cards.find((c) => c.id === answer.previousId) ?? null);
+    const cmp: Comparison | null = read === null ? null : comparisonOf(read, baseline, answer);
     const caseTotal = this.#cases.length;
     const state: CardState = caseTotal === 0 && read === null ? "no-cases" : read === null ? "no-run" : baseline === null ? "first-run" : "compared";
     const runs: RunVm[] = cards.map((c) => ({
       id: c.id,
       name: name(c),
       when: when(c.startedAt, now),
-      status: c.status === "cancelled" ? `partial · ${c.cases.length} of ${Math.max(caseTotal, c.cases.length)}` : "finished",
-      partial: c.status === "cancelled",
+      status: c.status !== "finished" ? `partial · ${c.cases.length} of ${Math.max(caseTotal, c.cases.length)}` : "finished",
+      partial: c.status !== "finished",
       score: c.aggregate.scored === 0 ? "—" : score(c.aggregate.mean),
       cost: cost(c.costUsd),
       duration: duration(c.durationMs),

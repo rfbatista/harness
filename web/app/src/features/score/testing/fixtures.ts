@@ -19,7 +19,7 @@ export interface CardSpec {
   id: string;
   /** RFC 3339. */
   at: string;
-  status?: "finished" | "cancelled";
+  status?: "finished" | "cancelled" | "partial";
   fingerprint?: string;
   model?: string;
   cost?: number;

@@ -2,6 +2,7 @@
 
 import type { BenchCase, BenchRun, CaseDefinition, ExpectedCall, Expectation, RunChange, Trajectory } from "../domain/bench";
 import type { LineError } from "../domain/case-text";
+import type { ScoreComparison } from "../domain/comparison";
 import type { Scorecard } from "../domain/scorecard";
 
 export interface ScoreSource {
@@ -9,8 +10,10 @@ export interface ScoreSource {
   cases(projectId: string, signal?: AbortSignal): Promise<BenchCase[]>;
   /** The project's scorecards, newest first. */
   scorecards(projectId: string, signal?: AbortSignal): Promise<Scorecard[]>;
-  /** Starts a bench run on the default setup; answers it, running. */
-  startRun(projectId: string): Promise<BenchRun>;
+  /** Starts a bench run on the default setup; answers it, running. With `caseIds` it runs only those cases (a replay); its scorecard is partial. */
+  startRun(projectId: string, caseIds?: readonly string[]): Promise<BenchRun>;
+  /** A scorecard set against `baselineId`, or against the previous finished run when null; null when there is nothing earlier to compare with. */
+  compare(projectId: string, scorecardId: string, baselineId: string | null, signal?: AbortSignal): Promise<ScoreComparison | null>;
   /** Stores a case from a definition. A refused definition fails with a ScoreError REFUSED naming its fields. */
   createCase(projectId: string, definition: CaseDefinition): Promise<BenchCase>;
   /** Replaces what a good run of the case does; refused like a definition. */

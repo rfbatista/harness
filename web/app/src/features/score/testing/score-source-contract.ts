@@ -47,6 +47,36 @@ export function scoreSourceContract(name: string, make: () => ScoreSourceHarness
       assert.deepEqual([run.status, run.total, run.done], ["running", 1, 0]);
     });
 
+    test("a scorecard is compared with the previous finished run, or with the baseline asked for", async () => {
+      const { source, bench } = make();
+      bench.scorecards.push(
+        { id: "s1", at: "2026-11-24T10:00:00Z", cases: [{ id: "c1", tool: 1, outcome: 1 }] },
+        { id: "s2", at: "2026-11-25T10:00:00Z", status: "partial", cases: [{ id: "c1", tool: 0 }] },
+        { id: "s3", at: "2026-11-26T10:00:00Z", cases: [{ id: "c1", tool: 0.5, outcome: 0.5 }, { id: "c2", tool: 1 }] },
+      );
+      const byDefault = await source.compare("p1", "s3", null);
+      assert.equal(byDefault?.previousId, "s1", "a partial run is never the default baseline");
+      assert.equal(byDefault?.aggregate.change, -0.25);
+      assert.equal(byDefault?.cases.find((c) => c.caseId === "c1")?.mean?.change, -0.5);
+      assert.equal(byDefault?.cases.find((c) => c.caseId === "c2")?.status, "added");
+      assert.ok(byDefault?.groups.tool_use);
+      const chosen = await source.compare("p1", "s3", "s2");
+      assert.equal(chosen?.previousId, "s2");
+    });
+
+    test("the first scorecard has nothing to compare with", async () => {
+      const { source, bench } = make();
+      bench.scorecards.push({ id: "s1", at: "2026-11-24T10:00:00Z", cases: [{ id: "c1", tool: 1 }] });
+      assert.equal(await source.compare("p1", "s1", null), null);
+    });
+
+    test("a run can be asked for some of the cases only; an unknown one is refused naming it", async () => {
+      const { source, bench } = make();
+      bench.cases.push({ id: "c1", prompt: "p", tools: [] }, { id: "c2", prompt: "q", tools: [] });
+      assert.equal((await source.startRun("p1", ["c2"])).total, 1);
+      await assert.rejects(source.startRun("p1", ["ghost"]), (err: unknown) => err instanceof ScoreError && /ghost/.test(err.message));
+    });
+
     test("a refused run fails with the message", async () => {
       const { source, bench } = make();
       bench.refuseRun("add a case first");

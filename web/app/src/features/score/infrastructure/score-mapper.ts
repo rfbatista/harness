@@ -1,9 +1,10 @@
 // DTOs to the Score domain.
 
 import type { BenchCase, BenchRun, RunChange, Trajectory } from "../domain/bench";
-import type { Aggregate, CaseScore, Pattern, Scorecard } from "../domain/scorecard";
+import type { ScoreComparison, ScoreDelta } from "../domain/comparison";
+import type { Aggregate, CaseScore, Group, Pattern, Scorecard } from "../domain/scorecard";
 import type { BenchCaseDto, BenchRunDto, RunChangeDto, TrajectoryDto } from "./dto/bench-dto";
-import type { ScorecardDto } from "./dto/scorecard-dto";
+import type { ComparisonDto, DeltaDto, ScorecardDto } from "./dto/scorecard-dto";
 
 export const toCase = (dto: BenchCaseDto): BenchCase => ({
   id: dto.id,
@@ -47,5 +48,19 @@ export function toScorecard(dto: ScorecardDto): Scorecard {
     durationMs: dto.duration_ms,
     startedAt: dto.started_at,
     finishedAt: dto.finished_at,
+  };
+}
+
+const toDelta = (d: DeltaDto): ScoreDelta => ({ before: d.before, after: d.after, change: d.change });
+
+export function toComparison(dto: ComparisonDto): ScoreComparison {
+  const groups: Partial<Record<Group, ScoreDelta>> = {};
+  for (const [key, d] of Object.entries(dto.groups)) groups[key as Group] = toDelta(d);
+  return {
+    previousId: dto.previous_id,
+    fingerprintChanged: dto.fingerprint_changed,
+    aggregate: toDelta(dto.aggregate),
+    groups,
+    cases: dto.cases.map((c) => ({ caseId: c.case_id, status: c.status, mean: c.mean === null ? null : toDelta(c.mean) })),
   };
 }

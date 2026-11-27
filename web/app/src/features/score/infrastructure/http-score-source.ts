@@ -5,9 +5,9 @@ import { DtoError } from "../../../shared/infrastructure/dto/dto-error";
 import type { ScoreSource } from "../application/ports";
 import { ScoreError, type ScoreErrorCode } from "../domain/bench";
 import type { CaseDefinition, Expectation } from "../domain/bench";
-import { BenchCaseDto, BenchCasesDto, BenchRunDto, CaseDefinitionRequestDto, ExpectationRequestDto, FieldErrorsDto, TrajectoriesDto, TrajectoryRequestDto } from "./dto/bench-dto";
-import { ScorecardsDto } from "./dto/scorecard-dto";
-import { toCase, toRun, toScorecard, toTrajectory } from "./score-mapper";
+import { BenchCaseDto, BenchCasesDto, BenchRunDto, CaseDefinitionRequestDto, ExpectationRequestDto, FieldErrorsDto, RunRequestDto, TrajectoriesDto, TrajectoryRequestDto } from "./dto/bench-dto";
+import { ComparisonDto, ScorecardsDto } from "./dto/scorecard-dto";
+import { toCase, toComparison, toRun, toScorecard, toTrajectory } from "./score-mapper";
 
 const enc = encodeURIComponent;
 const NOT_FOUND = new Set(["PROJECT_NOT_FOUND", "BENCH_CASE_NOT_FOUND", "NOT_FOUND", "HTTP_404"]);
@@ -27,7 +27,7 @@ async function mapErrors<T>(call: () => Promise<T>): Promise<T> {
           if (inner instanceof ScoreError) throw inner;
         }
       }
-      const code: ScoreErrorCode = NOT_FOUND.has(err.code) ? "NOT_FOUND" : err.status === 503 ? "UNAVAILABLE" : err.code === "NETWORK_ERROR" || err.code === "BAD_RESPONSE" ? err.code : "UNKNOWN";
+      const code: ScoreErrorCode = err.code === "BENCH_NO_PREVIOUS_SCORECARD" ? "NO_BASELINE" : NOT_FOUND.has(err.code) ? "NOT_FOUND" : err.status === 503 ? "UNAVAILABLE" : err.code === "NETWORK_ERROR" || err.code === "BAD_RESPONSE" ? err.code : "UNKNOWN";
       throw new ScoreError(code, err.message);
     }
     throw err;
@@ -47,6 +47,14 @@ export function httpScoreSource(api: ApiClient): ScoreSource {
     deleteCase: (projectId, caseId) => mapErrors(async () => void (await api.delete(`/projects/${enc(projectId)}/bench/cases/${enc(caseId)}`))),
     trajectories: (projectId, signal) => mapErrors(async () => TrajectoriesDto.fromJSON(await api.get(`/projects/${enc(projectId)}/bench/trajectories`, undefined, signal)).trajectories.map(toTrajectory)),
     caseFromTrajectory: (projectId, trajectoryId) => mapErrors(async () => oneCase(await api.post(`/projects/${enc(projectId)}/bench/cases/from-trajectory`, new TrajectoryRequestDto(trajectoryId)))),
-    startRun: (projectId) => mapErrors(async () => toRun(BenchRunDto.fromJSON(await api.post(`/projects/${enc(projectId)}/bench/runs`)))),
+    startRun: (projectId, caseIds) => mapErrors(async () => toRun(BenchRunDto.fromJSON(await api.post(`/projects/${enc(projectId)}/bench/runs`, caseIds === undefined || caseIds.length === 0 ? undefined : new RunRequestDto(caseIds))))),
+    compare: async (projectId, scorecardId, baselineId, signal) => {
+      try {
+        return await mapErrors(async () => toComparison(ComparisonDto.fromJSON(await api.get(`/projects/${enc(projectId)}/bench/scorecards/${enc(scorecardId)}/compare`, baselineId === null ? undefined : { baseline: baselineId }, signal))));
+      } catch (err) {
+        if (err instanceof ScoreError && err.code === "NO_BASELINE") return null;
+        throw err;
+      }
+    },
   };
 }

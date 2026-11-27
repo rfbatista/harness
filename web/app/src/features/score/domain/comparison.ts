@@ -1,9 +1,27 @@
 // A scorecard read beside a baseline (UX study, section 7): deltas where down is red and nothing is green, and the case rows with how each stands.
+// The harness does the comparison (ADR 0015: the compare endpoint, with an optional baseline); this module reads its answer for display.
 
 import { caseGroup, caseMean, cardGroup, GROUPS, type CaseScore, type Group, type Scorecard } from "./scorecard";
 
 /** A score is shown to two places, so two scores that show the same are equal. */
 export const round2 = (n: number): number => Math.round(n * 100) / 100;
+
+/** A score before and after, and the change, as the harness computed them. */
+export interface ScoreDelta {
+  readonly before: number;
+  readonly after: number;
+  readonly change: number;
+}
+
+/** What the harness answers when a scorecard is set against a baseline. */
+export interface ScoreComparison {
+  readonly previousId: string;
+  readonly fingerprintChanged: boolean;
+  readonly aggregate: ScoreDelta;
+  readonly groups: Readonly<Partial<Record<Group, ScoreDelta>>>;
+  /** Per case of the run read: "added" is new, "unchanged" has no mean delta. */
+  readonly cases: readonly { readonly caseId: string; readonly status: string; readonly mean: ScoreDelta | null }[];
+}
 
 /** A case under this score has failed. */
 export const FAIL_UNDER = 0.6;
@@ -18,11 +36,11 @@ export interface Delta {
   readonly before: number | null;
 }
 
-export function delta(before: number | null, after: number | null): Delta {
-  if (after === null || before === null) return { direction: "equal", change: 0, before };
-  const change = round2(after) - round2(before);
-  if (Math.abs(change) < 0.005) return { direction: "equal", change: 0, before };
-  return { direction: change > 0 ? "up" : "down", change: Math.abs(round2(change)), before };
+/** The harness's delta as it reads on the page: a change that shows as 0.00 reads equal. */
+export function deltaOf(d: ScoreDelta | null | undefined): Delta {
+  if (d === null || d === undefined) return { direction: "equal", change: 0, before: null };
+  if (Math.abs(d.change) < 0.005) return { direction: "equal", change: 0, before: d.before };
+  return { direction: d.change > 0 ? "up" : "down", change: Math.abs(d.change), before: d.before };
 }
 
 export const FIRST_RUN: Delta = { direction: "first", change: 0, before: null };
@@ -68,13 +86,6 @@ export interface Comparison {
   readonly noiseOnly: boolean;
 }
 
-/** The run to compare with by default: the newest finished one before `read`. A cancelled run holds only some cases, so it is never one. */
-export function defaultBaseline(cards: readonly Scorecard[], read: Scorecard): Scorecard | null {
-  const older = cards.filter((c) => c.id !== read.id && c.status === "finished" && c.startedAt.getTime() < read.startedAt.getTime());
-  older.sort((a, b) => b.startedAt.getTime() - a.startedAt.getTime());
-  return older[0] ?? null;
-}
-
 const title = (c: CaseScore): string => (c.caseName !== "" ? c.caseName : c.caseId);
 
 function weakest(c: CaseScore): Group {
@@ -90,10 +101,6 @@ function weakest(c: CaseScore): Group {
   return pick;
 }
 
-function figure(baseline: Scorecard | null, value: number | null, before: number | null): TileFigure {
-  return { value, delta: baseline === null ? FIRST_RUN : delta(before, value) };
-}
-
 function changedParts(base: Scorecard, read: Scorecard): string[] {
   if (base.setup.fingerprint === read.setup.fingerprint) return [];
   const parts: string[] = [];
@@ -105,12 +112,14 @@ function changedParts(base: Scorecard, read: Scorecard): string[] {
   return parts.length > 0 ? parts : ["agents, skills or instructions"];
 }
 
-export function compare(read: Scorecard, baseline: Scorecard | null): Comparison {
-  const before = new Map((baseline?.cases ?? []).map((c) => [c.caseId, c]));
+/** The page's view of a scorecard against its baseline: what the harness answered (null: no baseline, a first run), laid out for display. */
+export function comparisonOf(read: Scorecard, baseline: Scorecard | null, answer: ScoreComparison | null): Comparison {
+  const against = baseline !== null && answer !== null ? answer : null;
+  const byCase = new Map((against?.cases ?? []).map((c) => [c.caseId, c]));
   const rows: CaseRow[] = read.cases.map((c) => {
     const now = caseMean(c);
-    const prev = before.get(c.caseId);
-    const d: Delta = baseline === null ? FIRST_RUN : prev === undefined ? { direction: "new", change: 0, before: null } : delta(caseMean(prev), now);
+    const known = byCase.get(c.caseId);
+    const d: Delta = against === null ? FIRST_RUN : known === undefined || known.status === "added" ? { direction: "new", change: 0, before: null } : deltaOf(known.mean);
     const standings: Standing[] = [];
     if (d.direction === "down") standings.push("regressed");
     if (d.direction === "up") standings.push("improved");
@@ -119,9 +128,10 @@ export function compare(read: Scorecard, baseline: Scorecard | null): Comparison
     return { caseId: c.caseId, title: title(c), pattern: weakest(c), toolUse: caseGroup(c, "tool_use"), outcome: caseGroup(c, "outcome"), trajectory: caseGroup(c, "trajectory"), now, delta: d, standings, error: c.error };
   });
   const count = (s: Standing): number => rows.filter((r) => r.standings.includes(s)).length;
-  const aggregate = figure(baseline, read.aggregate.scored === 0 ? null : read.aggregate.mean, baseline && baseline.aggregate.scored > 0 ? baseline.aggregate.mean : null);
-  const group = (g: Group): TileFigure => figure(baseline, cardGroup(read, g), baseline ? cardGroup(baseline, g) : null);
-  const changedSetup = baseline ? changedParts(baseline, read) : [];
+  const figure = (value: number | null, d: ScoreDelta | undefined): TileFigure => ({ value, delta: against === null ? FIRST_RUN : deltaOf(d) });
+  const aggregate = figure(read.aggregate.scored === 0 ? null : read.aggregate.mean, against?.aggregate);
+  const group = (g: Group): TileFigure => figure(cardGroup(read, g), against?.groups[g]);
+  const changedSetup = baseline !== null && against !== null && against.fingerprintChanged ? changedParts(baseline, read) : [];
   return {
     baseline,
     aggregate,
@@ -134,6 +144,6 @@ export function compare(read: Scorecard, baseline: Scorecard | null): Comparison
     failed: count("failed"),
     added: count("new"),
     changedSetup,
-    noiseOnly: baseline !== null && changedSetup.length === 0 && aggregate.delta.direction !== "equal",
+    noiseOnly: against !== null && !against.fingerprintChanged && aggregate.delta.direction !== "equal",
   };
 }

@@ -173,3 +173,12 @@ export class TrajectoryRequestDto {
     return { trajectory_id: this.trajectory_id };
   }
 }
+
+/** What is sent to start a run of some of the cases. */
+export class RunRequestDto {
+  constructor(readonly case_ids: readonly string[]) {}
+
+  toJSON(): unknown {
+    return { case_ids: this.case_ids };
+  }
+}

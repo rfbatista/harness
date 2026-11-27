@@ -21,6 +21,56 @@ export interface FakeBench {
   breakNetwork(): void;
 }
 
+type Wire = Record<string, any>; // eslint-disable-line @typescript-eslint/no-explicit-any -- the wire card is built by wireScorecard and read back here
+
+const GROUPS_OF: Record<string, string[]> = { tool_use: ["right_tool", "valid_params", "right_order"], outcome: ["outcome"], trajectory: ["trajectory"] };
+const delta = (before: number, after: number) => ({ before, after, change: after - before });
+
+function groupMean(card: Wire, patterns: string[]): number | null {
+  let weight = 0;
+  let sum = 0;
+  for (const name of patterns) {
+    const a = (card["patterns"] as Wire)[name] as { scored: number; mean: number } | undefined;
+    if (!a || a.scored === 0) continue;
+    weight += a.scored;
+    sum += a.mean * a.scored;
+  }
+  return weight === 0 ? null : sum / weight;
+}
+
+function caseMean(c: Wire): number | null {
+  if (c["error"]) return 0;
+  const ps = [...Object.values(c["tool_use"] as Wire), c["outcome"], c["trajectory"]] as { scored: boolean; score: number }[];
+  const scored = ps.filter((p) => p.scored);
+  return scored.length === 0 ? null : scored.reduce((s, p) => s + p.score, 0) / scored.length;
+}
+
+/** The server's compare: a scorecard against a baseline, per aggregate, group and case (the Go Compare, at the wire). */
+function compareWire(prev: Wire, cur: Wire): unknown {
+  const groups: Record<string, unknown> = {};
+  for (const [name, patterns] of Object.entries(GROUPS_OF)) {
+    const p = groupMean(prev, patterns);
+    const c = groupMean(cur, patterns);
+    if (p !== null || c !== null) groups[name] = delta(p ?? 0, c ?? 0);
+  }
+  const before = new Map((prev["cases"] as Wire[]).map((c) => [c["case_id"] as string, c]));
+  const cases = (cur["cases"] as Wire[]).map((c) => {
+    const was = before.get(c["case_id"] as string);
+    if (was === undefined) return { case_id: c["case_id"], status: "added" };
+    const pm = caseMean(was);
+    const cm = caseMean(c);
+    const moved = pm !== null && cm !== null && Math.abs(cm - pm) > 1e-9;
+    return { case_id: c["case_id"], status: moved ? "changed" : "unchanged", ...(moved ? { mean: delta(pm, cm) } : {}) };
+  });
+  return {
+    previous_id: prev["id"],
+    fingerprint_changed: (prev["setup"] as Wire)["fingerprint"] !== (cur["setup"] as Wire)["fingerprint"],
+    aggregate: delta((prev["aggregate"] as Wire)["mean"], (cur["aggregate"] as Wire)["mean"]),
+    groups,
+    cases,
+  };
+}
+
 const json = (status: number, body: unknown) => new Response(JSON.stringify(body), { status, headers: { "Content-Type": "application/json" } });
 
 /** The server's validation of a definition: the same codes and field paths. */
@@ -55,8 +105,22 @@ export function fakeBench(): FakeBench {
     if (method === "GET" && path === "/projects/p1/bench/scorecards") return json(200, { scorecards: [...scorecards].sort((a, b) => b.at.localeCompare(a.at)).map(wireScorecard) });
     if (method === "POST" && path === "/projects/p1/bench/runs") {
       if (refusal !== null) return json(400, { error: refusal, code: "BENCH_NO_CASES" });
+      const asked = init?.body ? (JSON.parse(String(init.body)) as { case_ids?: string[] }).case_ids : undefined;
+      const unknown = (asked ?? []).filter((id) => !cases.some((c) => c.id === id));
+      if (unknown.length > 0) return json(422, { error: `not cases of this project: ${unknown.join(", ")}`, code: "BENCH_CASE_IDS_INVALID" });
       runs += 1;
-      return json(202, { id: `run${runs}`, project_id: "p1", status: "running", total: cases.length, done: 0, started_at: "2026-11-26T12:00:00Z" });
+      return json(202, { id: `run${runs}`, project_id: "p1", status: "running", total: asked && asked.length > 0 ? asked.length : cases.length, done: 0, started_at: "2026-11-26T12:00:00Z" });
+    }
+    const compared = /^\/projects\/p1\/bench\/scorecards\/([^/]+)\/compare$/.exec(path);
+    if (method === "GET" && compared) {
+      const specs = [...scorecards].sort((a, b) => b.at.localeCompare(a.at));
+      const cur = specs.find((s) => s.id === compared[1]);
+      if (!cur) return json(404, { error: "scorecard not found", code: "BENCH_SCORECARD_NOT_FOUND" });
+      const wanted = new URL(input, "http://x").searchParams.get("baseline");
+      const base = wanted ? specs.find((s) => s.id === wanted) : specs.find((s) => s.id !== cur.id && (s.status ?? "finished") === "finished" && s.at < cur.at);
+      if (wanted && !base) return json(404, { error: "scorecard not found", code: "BENCH_SCORECARD_NOT_FOUND" });
+      if (!base) return json(404, { error: "there is no earlier scorecard to compare with", code: "BENCH_NO_PREVIOUS_SCORECARD" });
+      return json(200, compareWire(wireScorecard(base), wireScorecard(cur)));
     }
     if (method === "GET" && path === "/projects/p1/bench/trajectories") return json(200, { trajectories });
     if (method === "POST" && path === "/projects/p1/bench/cases") {

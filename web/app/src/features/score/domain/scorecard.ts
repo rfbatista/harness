@@ -57,7 +57,8 @@ export interface Setup {
   readonly cliVersion: string;
 }
 
-export type ScorecardStatus = "finished" | "cancelled";
+/** "cancelled" and "partial" (a run of some of the cases) hold only some of the cases. */
+export type ScorecardStatus = "finished" | "cancelled" | "partial";
 
 export interface Scorecard {
   readonly id: string;

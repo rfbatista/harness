@@ -56,6 +56,8 @@ func (a *benchAPI) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		json.NewEncoder(w).Encode(map[string]any{"cases": a.cases})
 	case r.Method == http.MethodGet && strings.HasSuffix(r.URL.Path, "/bench/scorecards"):
 		json.NewEncoder(w).Encode(map[string]any{"scorecards": a.cards})
+	case r.Method == http.MethodGet && strings.HasSuffix(r.URL.Path, "/compare"):
+		a.compare(w, r)
 	case r.Method == http.MethodPost && strings.HasSuffix(r.URL.Path, "/bench/runs"):
 		a.runsStart++
 		w.WriteHeader(http.StatusAccepted)
@@ -63,6 +65,68 @@ func (a *benchAPI) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	default:
 		http.NotFound(w, r)
 	}
+}
+
+// compare answers the compare endpoint as the server does: the scorecard against ?baseline=, else against the
+// next older finished one (a.cards is newest first); 404 BENCH_NO_PREVIOUS_SCORECARD when there is none.
+func (a *benchAPI) compare(w http.ResponseWriter, r *http.Request) {
+	parts := strings.Split(strings.TrimSuffix(r.URL.Path, "/compare"), "/")
+	id, want := parts[len(parts)-1], r.URL.Query().Get("baseline")
+	cur, base := -1, -1
+	for i, c := range a.cards {
+		if c["id"] == id {
+			cur = i
+		}
+		if want != "" && c["id"] == want {
+			base = i
+		}
+	}
+	if cur < 0 {
+		w.WriteHeader(http.StatusNotFound)
+		json.NewEncoder(w).Encode(map[string]any{"error": "scorecard not found", "code": "BENCH_SCORECARD_NOT_FOUND"})
+		return
+	}
+	if want == "" {
+		for i := cur + 1; i < len(a.cards); i++ {
+			if a.cards[i]["status"] == "finished" {
+				base = i
+				break
+			}
+		}
+	}
+	if base < 0 {
+		w.WriteHeader(http.StatusNotFound)
+		json.NewEncoder(w).Encode(map[string]any{"error": "there is no earlier scorecard to compare with", "code": "BENCH_NO_PREVIOUS_SCORECARD"})
+		return
+	}
+	mean := func(c map[string]any) float64 { return c["aggregate"].(map[string]any)["mean"].(float64) }
+	caseMean := func(c map[string]any) float64 {
+		tu := c["tool_use"].(map[string]any)["right_tool"].(map[string]any)["score"].(float64)
+		return (3*tu + c["outcome"].(map[string]any)["score"].(float64) + c["trajectory"].(map[string]any)["score"].(float64)) / 5
+	}
+	delta := func(before, after float64) map[string]any {
+		return map[string]any{"before": before, "after": after, "change": after - before}
+	}
+	was := map[string]map[string]any{}
+	for _, c := range a.cards[base]["cases"].([]map[string]any) {
+		was[c["case_id"].(string)] = c
+	}
+	var cases []map[string]any
+	for _, c := range a.cards[cur]["cases"].([]map[string]any) {
+		p, ok := was[c["case_id"].(string)]
+		switch {
+		case !ok:
+			cases = append(cases, map[string]any{"case_id": c["case_id"], "status": "added"})
+		case caseMean(p) != caseMean(c):
+			cases = append(cases, map[string]any{"case_id": c["case_id"], "status": "changed", "mean": delta(caseMean(p), caseMean(c))})
+		default:
+			cases = append(cases, map[string]any{"case_id": c["case_id"], "status": "unchanged"})
+		}
+	}
+	json.NewEncoder(w).Encode(map[string]any{
+		"previous_id": a.cards[base]["id"], "fingerprint_changed": a.cards[base]["setup"].(map[string]any)["fingerprint"] != a.cards[cur]["setup"].(map[string]any)["fingerprint"],
+		"aggregate": delta(mean(a.cards[base]), mean(a.cards[cur])), "groups": map[string]any{}, "cases": cases,
+	})
 }
 
 func (a *benchAPI) started() int {

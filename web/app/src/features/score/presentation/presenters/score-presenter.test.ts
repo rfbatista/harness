@@ -128,11 +128,11 @@ describe("a run read beside its baseline", () => {
     addCard({ id: "s0", at: at(2, 9), cases: [c("a", 1, 1, 1)] });
     await presenter.start();
     assert.equal(vm().baselineName, "run 2 · yesterday 18:02");
-    presenter.selectBaseline("s0");
+    await presenter.selectBaseline("s0");
     assert.equal(vm().baselineName, "run 1 · Nov 24 09:00");
-    presenter.selectBaseline("s2");
+    await presenter.selectBaseline("s2");
     assert.equal(vm().baselineName, "run 1 · Nov 24 09:00");
-    presenter.selectBaseline(null);
+    await presenter.selectBaseline(null);
     assert.equal(vm().baselineName, "run 2 · yesterday 18:02");
   });
 
@@ -145,8 +145,34 @@ describe("a run read beside its baseline", () => {
     const partial = vm().runs.find((r) => r.id === "s3")!;
     assert.equal(partial.partial, true);
     assert.equal(partial.status, "partial · 1 of 3");
-    presenter.selectRead("s2");
+    await presenter.selectRead("s2");
     assert.equal(vm().baselineName, "run 1 · yesterday 18:02");
+  });
+
+  test("a run of some of the cases is partial too, and is never the default baseline", async () => {
+    const { presenter, vm, addCard } = two();
+    addCard({ id: "s3", at: at(0, 11, 50), status: "partial", cases: [c("a", 1, 1, 1)] });
+    await presenter.start();
+    assert.equal(vm().baselineName, "run 2 · today 11:40");
+    assert.equal(vm().runs.find((r) => r.id === "s3")?.partial, true);
+  });
+
+  test("the deltas are the harness's: the page asks for the comparison with the chosen baseline", async () => {
+    const { presenter, bench, addCard } = two();
+    addCard({ id: "s0", at: at(2, 9), cases: [c("a", 1, 1, 1)] });
+    await presenter.start();
+    await presenter.selectBaseline("s0");
+    assert.ok(bench.requests.filter((r) => r.endsWith("/compare")).length >= 2);
+  });
+
+  test("Replay this case runs that one case and shows it running like Run bench", async () => {
+    const { presenter, vm, bench } = two();
+    await presenter.start();
+    bench.cases.push({ id: "k1", prompt: "p", tools: [] });
+    await presenter.start();
+    await presenter.replayCase("k1");
+    assert.deepEqual(vm().running, { done: 0, total: 1 });
+    assert.equal(bench.requests.filter((r) => r === "POST /projects/p1/bench/runs").length, 1);
   });
 
   test("reading a run from the list opens the Scorecard on it", async () => {
@@ -154,7 +180,7 @@ describe("a run read beside its baseline", () => {
     await presenter.start();
     presenter.setView("runs");
     assert.equal(vm().view, "runs");
-    presenter.selectRead("s1");
+    await presenter.selectRead("s1");
     assert.equal(vm().view, "scorecard");
     assert.equal(vm().readName, "run 1 · yesterday 18:02");
     assert.equal(vm().state, "first-run");

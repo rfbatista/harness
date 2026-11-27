@@ -19,6 +19,7 @@ type casesAPI struct {
 	cases   []map[string]any
 	patched []string
 	deleted []string
+	runs    []string
 }
 
 func (a *casesAPI) ServeHTTP(w http.ResponseWriter, r *http.Request) {
@@ -35,6 +36,14 @@ func (a *casesAPI) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		card["cases"].([]map[string]any)[0]["steps"] = []any{map[string]any{"step": 1, "ok": false, "note": "early: read first"}, map[string]any{"step": 2, "ok": true, "note": "expected"}}
 		card["cases"].([]map[string]any)[0]["trajectory"] = map[string]any{"scored": true, "score": 0.5, "reasons": []any{"It wrote before it read."}}
 		json.NewEncoder(w).Encode(map[string]any{"scorecards": []any{card}})
+	case r.Method == http.MethodGet && strings.HasSuffix(path, "/compare"):
+		w.WriteHeader(http.StatusNotFound)
+		json.NewEncoder(w).Encode(map[string]any{"error": "there is no earlier scorecard to compare with", "code": "BENCH_NO_PREVIOUS_SCORECARD"})
+	case r.Method == http.MethodPost && strings.HasSuffix(path, "/bench/runs"):
+		body, _ := io.ReadAll(r.Body)
+		a.runs = append(a.runs, string(body))
+		w.WriteHeader(http.StatusAccepted)
+		json.NewEncoder(w).Encode(map[string]any{"id": "run9", "project_id": "p1", "status": "running", "total": 1, "done": 0, "started_at": "2026-11-26T12:00:00Z"})
 	case r.Method == http.MethodGet && strings.HasSuffix(path, "/bench/trajectories"):
 		json.NewEncoder(w).Encode(map[string]any{"trajectories": []any{map[string]any{"id": "t1", "task_id": "task1", "prompt": "Fix the failing test", "steps": []any{map[string]any{}, map[string]any{}}, "recorded_at": "2026-11-26T09:00:00Z"}}})
 	case r.Method == http.MethodPatch && strings.Contains(path, "/bench/cases/"):
@@ -91,6 +100,8 @@ func TestScoreCasesViewInTheBrowser(t *testing.T) {
 		click(`.sc-row[data-kind=case]`),
 		wait(`!!document.querySelector('.trace')`),
 		chromedp.Evaluate(`document.querySelector('[data-detail]').textContent`, &trace),
+		click(`[data-action=replay]`),
+		wait(`document.querySelector('[data-action=replay]').disabled`),
 		click(`[data-action=edit-expectation]`),
 		wait(`!!document.querySelector('form[data-form=edit]')`),
 		chromedp.Evaluate(`(() => { const t = document.querySelector('textarea[name=calls]'); const set = Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, 'value').set; set.call(t, 'write_file'); t.dispatchEvent(new Event('input', { bubbles: true })); })()`, nil),
@@ -123,6 +134,9 @@ func TestScoreCasesViewInTheBrowser(t *testing.T) {
 		if !strings.Contains(trace, want) {
 			t.Errorf("the trace %q lacks %q", trace, want)
 		}
+	}
+	if len(api.runs) != 1 || !strings.Contains(api.runs[0], `"case_ids":["a"]`) {
+		t.Errorf("Replay this case started %v, want one run of case a", api.runs)
 	}
 	if !strings.Contains(refused, "UNKNOWN_TOOL") || !strings.Contains(refused, "write_file has no mock") {
 		t.Errorf("the refusal reads %q", refused)

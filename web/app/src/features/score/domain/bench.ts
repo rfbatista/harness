@@ -76,7 +76,7 @@ export interface RunChange {
   readonly scorecardId: string;
 }
 
-export type ScoreErrorCode = "UNAVAILABLE" | "NOT_FOUND" | "REFUSED" | "NETWORK_ERROR" | "BAD_RESPONSE" | "UNKNOWN";
+export type ScoreErrorCode = "UNAVAILABLE" | "NOT_FOUND" | "REFUSED" | "NO_BASELINE" | "NETWORK_ERROR" | "BAD_RESPONSE" | "UNKNOWN";
 
 /** A failed read or call: the code says what the page can do about it. */
 export class ScoreError extends Error {

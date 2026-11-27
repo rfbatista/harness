@@ -107,7 +107,7 @@ function Scorecard({ vm, presenter }: { vm: ScoreViewModel; presenter: ScorePres
                 nothing yet · first run
               </span>
             ) : (
-              <select data-size="sm" data-fit aria-label="Baseline" data-baseline="" value={vm.runs.find((r) => r.baseline)?.id ?? ""} onChange={(e) => presenter.selectBaseline(e.target.value === "" ? null : e.target.value)}>
+              <select data-size="sm" data-fit aria-label="Baseline" data-baseline="" value={vm.runs.find((r) => r.baseline)?.id ?? ""} onChange={(e) => void presenter.selectBaseline(e.target.value === "" ? null : e.target.value)}>
                 {vm.runs
                   .filter((r) => !r.reading)
                   .map((r) => (
@@ -238,7 +238,7 @@ function Cases({ vm, presenter }: { vm: ScoreViewModel; presenter: ScorePresente
       ) : (
         <div className="[ score-list ]" role="table" aria-label="Bench cases">
           {vm.cases.map((c) => (
-            <CaseBlock key={c.id} c={c} presenter={presenter} />
+            <CaseBlock key={c.id} c={c} busy={vm.running !== null} presenter={presenter} />
           ))}
         </div>
       )}
@@ -257,7 +257,7 @@ function Spark({ trend }: { trend: readonly number[] }) {
   );
 }
 
-function CaseBlock({ c, presenter }: { c: CaseVm; presenter: ScorePresenter }) {
+function CaseBlock({ c, busy, presenter }: { c: CaseVm; busy: boolean; presenter: ScorePresenter }) {
   const open = c.trace !== null;
   return (
     <>
@@ -276,6 +276,9 @@ function CaseBlock({ c, presenter }: { c: CaseVm; presenter: ScorePresenter }) {
           <div className="[ repel ]">
             <span className="[ muted text-sm ]">{c.trace.now === "—" ? "not scored in the run read" : `score ${c.trace.now}${c.trace.baseline === "—" ? "" : ` · baseline ${c.trace.baseline}`}`}</span>
             <span className="[ cluster ]">
+              <button type="button" className="[ button ]" data-variant="ghost" data-size="sm" data-action="replay" disabled={busy} onClick={() => void presenter.replayCase(c.id)}>
+                Replay this case
+              </button>
               <button type="button" className="[ button ]" data-variant="ghost" data-size="sm" data-action="edit-expectation" onClick={() => presenter.startEdit(c.id)}>
                 Edit expectation
               </button>
@@ -438,7 +441,7 @@ function Runs({ runs, presenter }: { runs: readonly RunVm[]; presenter: ScorePre
   return (
     <div className="[ score-list ]" role="table" aria-label="Runs">
       {runs.map((r) => (
-        <button key={r.id} type="button" className="[ sc-row ]" data-kind="run" role="row" data-run={r.id} data-partial={r.partial ? "" : undefined} aria-current={r.reading ? "true" : undefined} onClick={() => presenter.selectRead(r.id)}>
+        <button key={r.id} type="button" className="[ sc-row ]" data-kind="run" role="row" data-run={r.id} data-partial={r.partial ? "" : undefined} aria-current={r.reading ? "true" : undefined} onClick={() => void presenter.selectRead(r.id)}>
           <span className="[ title ]">
             {r.name} · {r.when}
           </span>

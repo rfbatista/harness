@@ -4,7 +4,7 @@ import { DtoError } from "../../../../shared/infrastructure/dto/dto-error";
 import { array, lenientArray, object, oneOf, optionalString, string, time, type Wire } from "../../../../shared/infrastructure/dto/fields";
 
 const NAME = "ScorecardDto";
-const STATUSES = ["finished", "cancelled"] as const;
+const STATUSES = ["finished", "cancelled", "partial"] as const;
 type PatternKey = "right_tool" | "valid_params" | "right_order" | "outcome" | "trajectory";
 
 function number(from: Wire, key: string, at: string): number {
@@ -155,5 +155,58 @@ export class ScorecardsDto {
   static fromJSON(raw: unknown): ScorecardsDto {
     const from = object("ScorecardsDto", raw);
     return new ScorecardsDto(from["scorecards"] === undefined || from["scorecards"] === null ? [] : array("ScorecardsDto", from, "scorecards", (item) => ScorecardDto.fromJSON(item)));
+  }
+}
+
+/** A score before and after, and the change, as the compare endpoint writes it. */
+export class DeltaDto {
+  constructor(
+    readonly before: number,
+    readonly after: number,
+    readonly change: number,
+  ) {}
+
+  static fromJSON(raw: unknown, at: string): DeltaDto {
+    const from = object("ComparisonDto", raw, at);
+    return new DeltaDto(number(from, "before", at), number(from, "after", at), number(from, "change", at));
+  }
+}
+
+export class CaseDeltaDto {
+  constructor(
+    readonly case_id: string,
+    readonly status: string,
+    /** Absent when the case's mean did not move. */
+    readonly mean: DeltaDto | null,
+  ) {}
+
+  static fromJSON(raw: unknown, at: string): CaseDeltaDto {
+    const from = object("ComparisonDto", raw, at);
+    return new CaseDeltaDto(string("ComparisonDto", from, "case_id", at), string("ComparisonDto", from, "status", at), from["mean"] === undefined || from["mean"] === null ? null : DeltaDto.fromJSON(from["mean"], `${at}.mean`));
+  }
+}
+
+/** GET /api/projects/{p}/bench/scorecards/{id}/compare[?baseline=]: a scorecard set against its baseline. */
+export class ComparisonDto {
+  constructor(
+    readonly previous_id: string,
+    readonly fingerprint_changed: boolean,
+    readonly aggregate: DeltaDto,
+    readonly groups: Readonly<Record<string, DeltaDto>>,
+    readonly cases: readonly CaseDeltaDto[],
+  ) {}
+
+  static fromJSON(raw: unknown): ComparisonDto {
+    const from = object("ComparisonDto", raw);
+    const groupsRaw = from["groups"] === undefined || from["groups"] === null ? {} : object("ComparisonDto", from["groups"], "groups");
+    const groups: Record<string, DeltaDto> = {};
+    for (const key of Object.keys(groupsRaw)) groups[key] = DeltaDto.fromJSON(groupsRaw[key], `groups.${key}`);
+    return new ComparisonDto(
+      string("ComparisonDto", from, "previous_id", ""),
+      from["fingerprint_changed"] === true,
+      DeltaDto.fromJSON(from["aggregate"], "aggregate"),
+      groups,
+      Array.isArray(from["cases"]) ? from["cases"].map((c, i) => CaseDeltaDto.fromJSON(c, `cases[${i}]`)) : [],
+    );
   }
 }
