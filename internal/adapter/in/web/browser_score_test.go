@@ -239,8 +239,8 @@ func TestScorePageInTheBrowser(t *testing.T) {
 	if !strings.Contains(runs, "run 2") || !strings.Contains(runs, "run 1") {
 		t.Errorf("runs %q", runs)
 	}
-	if !strings.Contains(afterRead, "run 1") || !strings.Contains(afterRead, "first run") {
-		t.Errorf("after reading run 1 the compare bar reads %q", afterRead)
+	if !strings.Contains(afterRead, "run 1") || !strings.Contains(afterRead, "no earlier finished run") {
+		t.Errorf("after reading run 1 (a later run exists) the compare bar keeps its baseline menu and says there is no earlier finished run; it reads %q", afterRead)
 	}
 	deadline := time.Now().Add(3 * time.Second)
 	for api.started() == 0 && time.Now().Before(deadline) {
