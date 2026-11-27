@@ -41,6 +41,7 @@ import (
 	"operators-mcp/internal/adapter/out/gitprobe"
 	"operators-mcp/internal/adapter/out/keychainshim"
 	"operators-mcp/internal/adapter/out/persistence/sqlite"
+	"operators-mcp/internal/adapter/out/personcred"
 	"operators-mcp/internal/adapter/out/personshell"
 	"operators-mcp/internal/adapter/out/shell"
 	"operators-mcp/internal/adapter/out/termhost"
@@ -1799,8 +1800,8 @@ func newDeclarer(runs *gateruns.Service, orch *orchestration.Service, cat catalo
 }
 
 // harnessSecrets are the files of the harness a session must never reach: the
-// database with its write-ahead log and shared memory, and the key of the
-// encrypted stores. An in-memory database has none.
+// database with its write-ahead log and shared memory, the key of the encrypted
+// stores and the person credential file. An in-memory database has none.
 func harnessSecrets(cfg Config) []string {
 	var out []string
 	if !cfg.inMemory() {
@@ -1810,6 +1811,10 @@ func harnessSecrets(cfg Config) []string {
 	}
 	if root, err := cfg.dataRoot(); err == nil && root != "" {
 		out = append(out, filepath.Join(root, "secret.key"))
+	}
+	// The terminal client's credential file, when the keychain is not used.
+	if p, err := personcred.Path(); err == nil {
+		out = append(out, p)
 	}
 	return out
 }

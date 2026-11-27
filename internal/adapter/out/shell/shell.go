@@ -12,7 +12,6 @@ import (
 	"os/exec"
 	"path/filepath"
 	"slices"
-	"strings"
 
 	"operators-mcp/internal/domain"
 	"operators-mcp/internal/ports"
@@ -94,21 +93,7 @@ const shimsFirst = `PATH="${` + ports.ShimDirEnv + `:+$` + ports.ShimDirEnv + `:
 
 func (Login) CheckDir(_ context.Context, dir string) error { return checkDir(dir) }
 
-// env is the environment a session's command runs in: the process's, without the
-// person credential (ADR 0016), which no session may hold, plus the command's.
-func env(cmd ports.ShellCommand) []string {
-	var out []string
-	for _, kv := range os.Environ() {
-		if !strings.HasPrefix(kv, personCredentialEnv+"=") {
-			out = append(out, kv)
-		}
-	}
-	return append(out, cmd.Env...)
-}
-
-// personCredentialEnv is the variable the TUI client reads its person
-// credential from.
-const personCredentialEnv = "CODING_POOL_PERSON"
+func env(cmd ports.ShellCommand) []string { return append(os.Environ(), cmd.Env...) }
 
 func checkDir(dir string) error {
 	info, err := os.Stat(dir)

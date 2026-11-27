@@ -24,6 +24,7 @@ import (
 	"syscall"
 	"time"
 
+	"operators-mcp/internal/adapter/out/personcred"
 	"operators-mcp/internal/domain"
 )
 
@@ -57,7 +58,11 @@ func Run(ctx context.Context, args []string, stdout, stderr io.Writer) int {
 		fmt.Fprintln(stderr, "bench run: -project is required")
 		return 2
 	}
-	c := client{base: strings.TrimRight(*url, "/") + "/api/projects/" + *project + "/bench", token: *token}
+	// The person credential comes from the store the terminal client pairs into,
+	// never from an argument or the environment: the bench runs the person's
+	// actions (start, cancel) on a server that asks for it (ADR 0016).
+	credential, _ := personcred.Load()
+	c := client{base: strings.TrimRight(*url, "/") + "/api/projects/" + *project + "/bench", token: *token, person: credential}
 
 	var run domain.BenchRun
 	if err := c.do(ctx, http.MethodPost, "/runs", domain.BenchRunRequest{AgentID: *agent, RepositoryID: *repository, Model: *model}, &run); err != nil {
@@ -177,7 +182,7 @@ func printComparison(w io.Writer, cmp domain.ScorecardComparison) {
 	}
 }
 
-type client struct{ base, token string }
+type client struct{ base, token, person string }
 
 // apiError is what the server answered with when it refused.
 type apiError struct {
@@ -205,6 +210,9 @@ func (c client) do(ctx context.Context, method, path string, body, into any) err
 	}
 	if body != nil {
 		req.Header.Set("Content-Type", "application/json")
+	}
+	if c.person != "" {
+		req.Header.Set("X-Harness-Person", c.person)
 	}
 	if c.token != "" {
 		req.Header.Set("Authorization", "Bearer "+c.token)
