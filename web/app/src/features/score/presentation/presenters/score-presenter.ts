@@ -244,6 +244,8 @@ export class ScorePresenter extends Presenter<ScoreViewModel> {
   #filter: Filter = "all";
   #running: { runId: string; done: number; total: number; startedAt: Date; cancelling: boolean } | null = null;
   #failure: { runId: string; scorecardId: string; message: string; done: number; total: number } | null = null;
+  /** Runs seen ending (finished, cancelled, failed): a late "running" event for one of them is stale. */
+  readonly #endedRuns = new Set<string>();
   #problem = "";
   #problemTitle = "";
   #error = "";
@@ -526,6 +528,7 @@ export class ScorePresenter extends Presenter<ScoreViewModel> {
 
   #onRun(change: RunChange): void {
     if (change.status === "running") {
+      if (this.#endedRuns.has(change.runId)) return;
       const mine = this.#running;
       // One run at a time per project: a change of another run than ours, while ours is going, is not shown.
       if (mine !== null && mine.runId !== "" && mine.runId !== change.runId) return;
@@ -535,6 +538,7 @@ export class ScorePresenter extends Presenter<ScoreViewModel> {
       this.#publish();
       return;
     }
+    this.#endedRuns.add(change.runId);
     this.#running = null;
     this.#publish();
     void this.#ended(change);

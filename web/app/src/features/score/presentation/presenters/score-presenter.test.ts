@@ -198,7 +198,8 @@ describe("a run read beside its baseline", () => {
     await presenter.selectRead("s1");
     assert.equal(vm().view, "scorecard");
     assert.equal(vm().readName, "run 1 · yesterday 18:02");
-    assert.equal(vm().state, "first-run");
+    // Later runs exist, so the menu stays: this is not a first run.
+    assert.equal(vm().state, "no-baseline");
   });
 
   test("the setup fingerprint names what changed since the baseline", async () => {
