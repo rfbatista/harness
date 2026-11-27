@@ -39,7 +39,7 @@ export function AgentSystemView({ presenter }: { presenter: AgentSystemPresenter
           )}
         </div>
         <span className="[ end ] [ color-ink-faint text-sm ]" role="status">
-          {vm.saved}
+          {vm.saved || vm.summary}
         </span>
       </header>
       <div className="[ agent-system ]" data-scroll>

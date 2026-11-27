@@ -21,6 +21,18 @@ export function settingsSourceContract(name: string, make: () => SettingsSourceH
       assert.deepEqual(view.values, {});
     });
 
+    test("a level never saved has no updated_at; a save, even one that only resets, gives it", async () => {
+      const { source, store } = make();
+      store.repositories.push({ id: "r1", name: "harness" });
+      assert.equal((await source.view("p1", PROJECT_SCOPE)).updatedAt, null);
+      assert.equal((await source.view("p1", { kind: "repository", id: "r1" })).updatedAt, null);
+      const saved = await source.save("p1", { kind: "repository", id: "r1" }, { "guard.retry_limit": 7 });
+      assert.equal(typeof saved.updatedAt, "number");
+      assert.equal((await source.view("p1", PROJECT_SCOPE)).updatedAt, null, "another level is not moved");
+      store.savedAt.set("", "2026-11-26T20:00:00Z");
+      assert.equal((await source.view("p1", PROJECT_SCOPE)).updatedAt, Date.parse("2026-11-26T20:00:00Z"));
+    });
+
     test("a repository's view says which level each value came from, and what it sets itself", async () => {
       const { source, store } = make();
       store.repositories.push({ id: "r1", name: "harness" });

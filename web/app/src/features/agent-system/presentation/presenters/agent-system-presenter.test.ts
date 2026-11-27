@@ -239,6 +239,45 @@ describe("saving", () => {
     assert.equal(vm().saved, "Saved 2 h ago · applies to sessions started afterwards");
   });
 
+  test("before a save the toolbar says how many overrides the scope holds and when it was last saved", async () => {
+    const now = Date.parse("2026-11-26T21:00:00Z");
+    const { presenter, vm, store } = setup({ repository: "r1", clock: { now: () => now } });
+    store.repositories.push({ id: "r1", name: "harness" });
+    store.repositoryValues("r1")["guard.retry_limit"] = 5;
+    store.repositoryValues("r1")["learn.context_map.enabled"] = false;
+    store.savedAt.set("r1", "2026-11-26T20:00:00Z");
+    await presenter.start();
+    assert.equal(vm().summary, "2 overrides · saved 1 h ago");
+    assert.equal(vm().saved, "");
+  });
+
+  test("a scope never saved says only its overrides, and one with none and no save says nothing", async () => {
+    const { presenter, vm, store } = setup({ repository: "r1" });
+    store.repositories.push({ id: "r1", name: "harness" });
+    await presenter.start();
+    assert.equal(vm().summary, "");
+    store.repositoryValues("r1")["guard.retry_limit"] = 5;
+    await presenter.selectScope("");
+    await presenter.selectScope("r1");
+    assert.equal(vm().summary, "1 override");
+  });
+
+  test("tick() keeps the toolbar's age current, and a save in this page replaces it with the saved line", async () => {
+    let now = Date.parse("2026-11-26T21:00:00Z");
+    const { presenter, vm, store } = setup({ clock: { now: () => now } });
+    store.project["guard.retry_limit"] = 4;
+    store.savedAt.set("", "2026-11-26T20:58:00Z");
+    await presenter.start();
+    assert.equal(vm().summary, "1 override · saved 2 m ago");
+    now += 3 * 60_000;
+    presenter.tick();
+    assert.equal(vm().summary, "1 override · saved 5 m ago");
+    presenter.edit("learn.context_map.enabled", false);
+    await presenter.save();
+    assert.match(vm().saved, /^Saved just now/);
+    assert.equal(vm().summary, "");
+  });
+
   test("tick() leaves an empty saved line empty", async () => {
     const { presenter, vm } = setup();
     await presenter.start();

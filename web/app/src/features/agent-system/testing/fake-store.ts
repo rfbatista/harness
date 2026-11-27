@@ -9,6 +9,8 @@ export interface FakeStore {
   readonly project: Record<string, unknown>;
   /** What one repository sets. */
   repositoryValues(id: string): Record<string, unknown>;
+  /** When each level was last saved, as the wire says it (ISO): "" is the project level, else a repository id. */
+  readonly savedAt: Map<string, string>;
   /** The project's repositories. */
   readonly repositories: { id: string; name: string }[];
   /** Required gate kinds with no command, per repository: it is red. */
@@ -59,6 +61,7 @@ const json = (status: number, body: unknown) => new Response(JSON.stringify(body
 export function fakeStore(projectId = "p1"): FakeStore {
   const project: Record<string, unknown> = {};
   const repos = new Map<string, Record<string, unknown>>();
+  const savedAt = new Map<string, string>();
   const repositories: { id: string; name: string }[] = [];
   const missingGates = new Map<string, string[]>();
   const runCommands = new Map<string, { name: string; command: string }[]>();
@@ -98,6 +101,7 @@ export function fakeStore(projectId = "p1"): FakeStore {
       ...(repo !== undefined && (missingGates.get(repo)?.length ?? 0) > 0 ? { missing_required_gates: missingGates.get(repo) } : {}),
     },
     values: repo === undefined ? project : (repos.get(repo) ?? {}),
+    updated_at: savedAt.get(repo ?? "") ?? null,
   });
 
   /** What the store refuses about one value, by the contract's codes. */
@@ -172,6 +176,7 @@ export function fakeStore(projectId = "p1"): FakeStore {
       else target[path] = value;
     }
     if (repo !== undefined) repos.set(repo, target);
+    savedAt.set(repo ?? "", new Date().toISOString());
     return json(200, view(repo));
   };
 
@@ -183,6 +188,7 @@ export function fakeStore(projectId = "p1"): FakeStore {
       repos.set(id, values);
       return values;
     },
+    savedAt,
     repositories,
     missingGates,
     runCommands,

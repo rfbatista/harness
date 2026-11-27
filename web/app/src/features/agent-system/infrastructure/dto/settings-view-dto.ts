@@ -1,7 +1,7 @@
 // GET /api/projects/{p}/agent-system and the repository's: { effective, values }. Only the fields the
 // page shows are read; unknown ones are never looked at.
 
-import { array, object, oneOf, optionalString, string, type Wire } from "../../../../shared/infrastructure/dto/fields";
+import { array, object, oneOf, optionalString, optionalTime, string, type Wire } from "../../../../shared/infrastructure/dto/fields";
 import { DtoError } from "../../../../shared/infrastructure/dto/dto-error";
 
 const NAME = "SettingsViewDto";
@@ -157,6 +157,8 @@ export class SettingsViewDto {
     readonly trajectory_recording_default: BoolFieldDto,
     readonly missing_required_gates: readonly string[],
     readonly values: Readonly<Record<string, unknown>>,
+    /** The level's last save, in ms; null when it was never saved (or the answer did not say). */
+    readonly updated_at: number | null,
   ) {}
 
   static fromJSON(raw: unknown): SettingsViewDto {
@@ -179,6 +181,7 @@ export class SettingsViewDto {
       BoolFieldDto.fromJSON(trajectory["default"], "effective.score.trajectory_recording.default"),
       missing,
       object(NAME, from["values"] ?? {}, "values"),
+      optionalTime(NAME, from, "updated_at")?.getTime() ?? null,
     );
   }
 }

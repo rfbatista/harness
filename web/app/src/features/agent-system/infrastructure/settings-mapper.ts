@@ -36,5 +36,6 @@ export function toSettingsView(dto: SettingsViewDto): SettingsView {
       missingRequiredGates: dto.missing_required_gates,
     },
     values: dto.values,
+    updatedAt: dto.updated_at,
   };
 }

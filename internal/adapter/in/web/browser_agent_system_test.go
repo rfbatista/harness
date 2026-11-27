@@ -154,7 +154,7 @@ func (a *agentSystemAPI) view(repo string) map[string]any {
 			eff["missing_required_gates"] = []string{"secret_scan"}
 		}
 	}
-	return map[string]any{"effective": eff, "values": values}
+	return map[string]any{"effective": eff, "values": values, "updated_at": time.Now().Add(-time.Hour).UTC().Format(time.RFC3339)}
 }
 
 func (a *agentSystemAPI) ServeHTTP(w http.ResponseWriter, r *http.Request) {
@@ -258,13 +258,14 @@ func TestAgentSystemPageInTheBrowser(t *testing.T) {
 	ctx, errs := browser(t)
 
 	row := func(path string) string { return `document.querySelector('.ledger-row[data-path="` + path + `"]')` }
-	var barText, layers, source, valueAfter, scopeAddress, action, replaced, dot string
+	var barText, layers, source, valueAfter, scopeAddress, action, replaced, dot, toolbarNote string
 	var shot []byte
 	err := chromedp.Run(ctx,
 		chromedp.EmulateViewport(1280, 800),
 		chromedp.Navigate(srv.URL+"/projects/p1/agent-system"),
 		chromedp.Poll(`!!document.querySelector('.ledger-row[data-path]')`, nil, chromedp.WithPollingTimeout(10*time.Second)),
 		chromedp.Evaluate(`[...document.querySelectorAll('.as-layer > header h2')].map(h => h.textContent).join()`, &layers),
+		chromedp.Evaluate(`document.querySelector('.toolbar [role=status]').textContent`, &toolbarNote),
 		chromedp.Evaluate(row("learn.context_map.enabled")+`.querySelector('.src').textContent`, &source),
 		chromedp.Evaluate(row("learn.context_map.enabled")+`.querySelector('[role=switch]').click()`, nil),
 		chromedp.Poll(`!!document.querySelector('.save-bar')`, nil, chromedp.WithPollingTimeout(5*time.Second)),
@@ -294,6 +295,9 @@ func TestAgentSystemPageInTheBrowser(t *testing.T) {
 	}
 	if !strings.Contains(source, "harness default") {
 		t.Errorf("source of an untouched row %q", source)
+	}
+	if !strings.Contains(toolbarNote, "saved 1 h ago") {
+		t.Errorf("the toolbar before a save reads %q, want the last save's age", toolbarNote)
 	}
 	if !strings.Contains(barText, "1 unsaved change") || !strings.Contains(barText, "Save project defaults") {
 		t.Errorf("the save bar reads %q", barText)

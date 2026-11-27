@@ -72,6 +72,8 @@ export interface AgentSystemViewModel {
   readonly changedElsewhere: boolean;
   /** "Saved · applies to sessions started afterwards" after a save, "" before. */
   readonly saved: string;
+  /** Before a save in this page: "2 overrides · saved 1 h ago" for the shown level; "" when it holds none and was never saved. */
+  readonly summary: string;
   /** The repository's scope offers Import from check.sh on its Gates sub-list. */
   readonly canImportCheckSh: boolean;
   /** What the last import did ("Imported 2 gates from check.sh. Review them, then Save."), or why it failed; "" before one. */
@@ -112,9 +114,19 @@ const APPLIES = "applies to sessions started afterwards";
 
 /** "Saved just now", "Saved 2 m ago", "Saved 3 h ago", then what the save means. */
 function savedLine(ageMs: number): string {
+  return `Saved ${ageWords(ageMs)} · ${APPLIES}`;
+}
+
+function ageWords(ageMs: number): string {
   const minutes = Math.floor(Math.max(0, ageMs) / 60_000);
-  const age = minutes < 1 ? "just now" : minutes < 60 ? `${minutes} m ago` : `${Math.floor(minutes / 60)} h ago`;
-  return `Saved ${age} · ${APPLIES}`;
+  return minutes < 1 ? "just now" : minutes < 60 ? `${minutes} m ago` : `${Math.floor(minutes / 60)} h ago`;
+}
+
+/** What the toolbar says of a level that this page has not just saved. */
+function summaryLine(overrides: number, updatedAt: number | null, now: number): string {
+  const count = overrides === 0 ? "" : `${overrides} ${overrides === 1 ? "override" : "overrides"}`;
+  const saved = updatedAt === null ? "" : `saved ${ageWords(now - updatedAt)}`;
+  return [count, saved].filter((part) => part !== "").join(" · ");
 }
 
 export class AgentSystemPresenter extends Presenter<AgentSystemViewModel> {
@@ -148,7 +160,7 @@ export class AgentSystemPresenter extends Presenter<AgentSystemViewModel> {
   #stopFollowing: (() => void) | undefined;
 
   constructor(deps: AgentSystemDeps) {
-    super({ status: "loading", error: "", projectId: deps.projectId, projectName: deps.projectName, scope: PROJECT_SCOPE, scopeName: "Project defaults", repositories: [], layers: [], missingGates: [], runCommands: [], skillsHref: "", overview: { overrides: [], red: [], newProject: false }, ownOverrides: [], alsoHere: [], changedElsewhere: false, saved: "", problem: "", refused: [], canImportCheckSh: false, importNote: "", unsaved: 0, errors: [], saving: false, canSave: false, saveLabel: "Save project defaults" });
+    super({ status: "loading", error: "", projectId: deps.projectId, projectName: deps.projectName, scope: PROJECT_SCOPE, scopeName: "Project defaults", repositories: [], layers: [], missingGates: [], runCommands: [], skillsHref: "", overview: { overrides: [], red: [], newProject: false }, ownOverrides: [], alsoHere: [], changedElsewhere: false, saved: "", summary: "", problem: "", refused: [], canImportCheckSh: false, importNote: "", unsaved: 0, errors: [], saving: false, canSave: false, saveLabel: "Save project defaults" });
     this.#deps = deps;
   }
 
@@ -177,7 +189,7 @@ export class AgentSystemPresenter extends Presenter<AgentSystemViewModel> {
 
   /** Keeps the saved line's age current; the page calls it on a timer. */
   tick(): void {
-    if (this.viewModel.saved === "") return;
+    if (this.viewModel.saved === "") return this.#show({});
     this.#show({ saved: savedLine(this.#now() - this.#savedAt) });
   }
 
@@ -533,6 +545,7 @@ export class AgentSystemPresenter extends Presenter<AgentSystemViewModel> {
       canSave: unsaved > 0 && listed.length === 0 && !saving,
       saveLabel: repository === undefined ? "Save project defaults" : `Save overrides for ${repository.name}`,
       ...extra,
+      summary: (extra.saved ?? vm.saved) === "" ? summaryLine(Object.keys(view.values).length, view.updatedAt, this.#now()) : "",
     };
   }
 

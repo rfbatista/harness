@@ -21,6 +21,13 @@ describe("SettingsViewDto", () => {
     assert.deepEqual(dto.missing_required_gates, ["lockfile"]);
   });
 
+  test("updated_at is the last save of the level: a time, or null when never saved or not answered", () => {
+    assert.equal(SettingsViewDto.fromJSON({ ...view(), updated_at: "2026-11-26T20:00:00Z" }).updated_at, Date.parse("2026-11-26T20:00:00Z"));
+    assert.equal(SettingsViewDto.fromJSON({ ...view(), updated_at: null }).updated_at, null);
+    assert.equal(SettingsViewDto.fromJSON(view()).updated_at, null);
+    assert.throws(() => SettingsViewDto.fromJSON({ ...view(), updated_at: "yesterday" }), DtoError);
+  });
+
   test("an answer without missing_required_gates has none", () => {
     assert.deepEqual(SettingsViewDto.fromJSON(view()).missing_required_gates, []);
   });

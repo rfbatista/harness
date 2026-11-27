@@ -61,6 +61,8 @@ export interface Effective {
 export interface SettingsView {
   readonly effective: Effective;
   readonly values: Readonly<Record<string, unknown>>;
+  /** When this level was last saved (ms); null when it never was. */
+  readonly updatedAt: number | null;
 }
 
 /** The gate kinds, in the order the Gates list shows them (Glossary "Gate"). */

@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { isNewProject, overrideEntries, redEntries, type RepositoryState } from "./overview";
 import type { SettingsView } from "./settings";
 
-const view = (values: Record<string, unknown>, missing: string[] = []): SettingsView => ({ values, effective: { missingRequiredGates: missing } as unknown as SettingsView["effective"] });
+const view = (values: Record<string, unknown>, missing: string[] = []): SettingsView => ({ values, updatedAt: null, effective: { missingRequiredGates: missing } as unknown as SettingsView["effective"] });
 const state = (id: string, name: string, v: SettingsView): RepositoryState => ({ repository: { id, name }, view: v });
 
 describe("the project's overview of its repositories", () => {
