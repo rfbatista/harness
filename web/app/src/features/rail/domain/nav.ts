@@ -15,13 +15,14 @@ export interface ProjectNav {
   readonly designSystemProposals: number;
   readonly usageHref: string;
   readonly agentSystemHref: string;
+  readonly scoreHref: string;
   readonly productOwnerHref: string;
 }
 
 /** The page keys of shell/frame.go: the project page open now, "" for any other. */
-export type PageKey = "board" | "code" | "services" | "reviews" | "documents" | "design" | "design-system" | "usage" | "agent-system" | "product-owner";
+export type PageKey = "board" | "code" | "services" | "reviews" | "documents" | "design" | "design-system" | "usage" | "agent-system" | "score" | "product-owner";
 
-export type NavIcon = "board" | "code" | "services" | "review" | "document" | "design" | "design-system" | "usage" | "agent-system" | "owner";
+export type NavIcon = "board" | "code" | "services" | "review" | "document" | "design" | "design-system" | "usage" | "agent-system" | "score" | "owner";
 
 export interface NavItem {
   readonly key: PageKey;
@@ -42,6 +43,7 @@ export function navItems(nav: ProjectNav): NavItem[] {
     { key: "design-system", href: nav.designSystemHref, icon: "design-system", label: "Design systems" },
     { key: "usage", href: nav.usageHref, icon: "usage", label: "Usage" },
     { key: "agent-system", href: nav.agentSystemHref, icon: "agent-system", label: "Agent system" },
+    { key: "score", href: nav.scoreHref, icon: "score", label: "Score" },
     { key: "product-owner", href: nav.productOwnerHref, icon: "owner", label: "Product owner" },
   ];
   return all.filter((i) => i.href !== "");

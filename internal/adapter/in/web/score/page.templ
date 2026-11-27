@@ -1,0 +1,14 @@
+package score
+
+import "operators-mcp/internal/adapter/in/web/shell"
+
+// Page is a project's Score page: <main> holds the island's mount, which the browser draws (the toolbar with the view
+// switch and Run bench, the scorecard, the cases and the runs).
+templ Page(frame shell.Frame, props Props) {
+	@shell.AppShell(frame) {
+		<main id="main" class="[ frame ] [ score-page ]">
+			<div data-island="score" data-island-rendered="false"></div>
+			@shell.PropsScript("score", props.JSON())
+		</main>
+	}
+}

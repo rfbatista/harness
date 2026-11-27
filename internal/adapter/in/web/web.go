@@ -32,6 +32,7 @@ import (
 	"operators-mcp/internal/adapter/in/web/notifications"
 	"operators-mcp/internal/adapter/in/web/productowner"
 	"operators-mcp/internal/adapter/in/web/projects"
+	"operators-mcp/internal/adapter/in/web/score"
 	"operators-mcp/internal/adapter/in/web/serversettings"
 	"operators-mcp/internal/adapter/in/web/services"
 	"operators-mcp/internal/adapter/in/web/shell"
@@ -346,6 +347,8 @@ func NewHandler(deps Deps, assets *Assets, fallback http.Handler) http.Handler {
 	}
 	agentSystemPage := agentsystem.Handler{Projects: deps.Projects, Layout: s.layout, Render: render}
 	mux.Handle("GET /projects/{project}/agent-system", s.page(agentSystemPage.Page))
+	scorePage := score.Handler{Projects: deps.Projects, Layout: s.layout, Render: render}
+	mux.Handle("GET /projects/{project}/score", s.page(scorePage.Page))
 	ownerPage := productowner.Handler{Projects: deps.Projects, Threads: deps.ProductOwnerThreads, Sessions: deps.Sessions, Layout: s.layout, Render: render}
 	mux.Handle("GET /projects/{project}/product-owner", s.page(ownerPage.Page))
 	mux.Handle("GET /projects/{project}/product-owner/threads/{thread}", s.page(ownerPage.Page))
@@ -485,6 +488,7 @@ func (s *server) layout(ctx context.Context, title, projectID, taskID string) (s
 		frame.Rail.UsageHref = usage.Href(projectID)
 	}
 	frame.Rail.AgentSystemHref = agentsystem.Href(projectID, "")
+	frame.Rail.ScoreHref = score.Href(projectID)
 	frame.Rail.ProductOwnerHref = productowner.Href(projectID)
 	for key := range shell.CollapsedFrom(ctx) {
 		frame.Rail.Collapsed = append(frame.Rail.Collapsed, key)
