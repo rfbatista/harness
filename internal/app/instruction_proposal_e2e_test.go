@@ -170,3 +170,33 @@ func TestProposeInstructionFiles_ASubmitIsOnTheFeedAndInTheInbox(t *testing.T) {
 		t.Fatalf("no action notification for the proposal: %+v", page.Notifications)
 	}
 }
+
+// A skill's activation rule is checked beside its name and description.
+func TestProposeInstructionFiles_ASkillWithAnInvalidActivationRuleIsRefused(t *testing.T) {
+	e := newShellE2E(t)
+	s := e.start(e.task("Activation rules"))
+	skill := func(metadata string) string {
+		return "---\nname: gated\ndescription: A skill with a rule.\nmetadata:\n" + metadata + "---\n\nBody.\n"
+	}
+	for rel, content := range map[string]string{
+		draftPath("bad-glob", "SKILL.md"):   skill("  activation_paths: \"web/[a-\"\n"),
+		draftPath("bad-type", "SKILL.md"):   skill("  activation_task_types: deploy\n"),
+		draftPath("good-rule", "SKILL.md"):  skill("  activation_paths: \"web/**/*.templ\"\n  activation_task_types: implement\n"),
+		draftPath("list-paths", "SKILL.md"): skill("  activation_paths: [web/**, a/*.go]\n"),
+		draftPath("list-types", "SKILL.md"): skill("  activation_task_types:\n    - review\n"),
+		draftPath("bad-yaml", "SKILL.md"):   skill("  activation_paths: **/*.templ\n"),
+	} {
+		if a := e.writeDraft(s, rel, content); !a.Allow {
+			t.Fatalf("write %s: %+v", rel, a)
+		}
+	}
+	for skillName, field := range map[string]string{"bad-glob": "activation_paths", "bad-type": "deploy", "list-paths": "activation_paths must be one string", "list-types": "activation_task_types must be one string", "bad-yaml": "front matter is not valid YAML"} {
+		text, isErr := e.propose(s, "harness", []string{skillName}, "s")
+		if !isErr || !strings.Contains(text, "INSTRUCTION_INVALID") || !strings.Contains(text, field) {
+			t.Fatalf("%s: answer = %q (error %v)", skillName, text, isErr)
+		}
+	}
+	if text, isErr := e.propose(s, "harness", []string{"good-rule"}, "A rule"); isErr {
+		t.Fatalf("a valid rule was refused: %s", text)
+	}
+}

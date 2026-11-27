@@ -162,6 +162,10 @@ type Services struct {
 	// RepositoryArchitectures keeps repositories' architecture records; nil
 	// answers 503.
 	RepositoryArchitectures ports.RepositoryArchitectures
+	// TaskMemories is the plan.md and progress.md of a task in a repository; nil answers 503.
+	TaskMemories ports.TaskMemories
+	// ContextMaps is a repository's generated context map; nil answers 503.
+	ContextMaps ports.ContextMaps
 	// ProductOwner is the projects' product owners: settings and threads; nil
 	// answers 503.
 	ProductOwner ports.ProductOwner
@@ -268,6 +272,8 @@ type Handler struct {
 	serviceRequests ports.ServiceRequests
 
 	repoArch     ports.RepositoryArchitectures
+	taskMemory   ports.TaskMemories
+	contextMaps  ports.ContextMaps
 	productOwner ports.ProductOwner
 	// instructionProposals is nil when proposals are not configured.
 	instructionProposals ports.InstructionProposals
@@ -316,6 +322,8 @@ func NewHandler(s Services) *Handler {
 		archivedTrees:        s.ArchivedWorktrees,
 		branchNames:          s.BranchNames,
 		repoArch:             s.RepositoryArchitectures,
+		taskMemory:           s.TaskMemories,
+		contextMaps:          s.ContextMaps,
 		productOwner:         s.ProductOwner,
 		instructionProposals: s.InstructionProposals,
 		instructionDecisions: s.InstructionProposalDecisions,

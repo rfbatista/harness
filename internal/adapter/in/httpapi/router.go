@@ -360,6 +360,7 @@ func NewRouter(h *Handler, opts ...Option) *echo.Echo {
 	// the architecture rules: the same sessions' hooks, shims and commits ask
 	// whether an action keeps to the repository's layers
 	g.POST(strings.TrimPrefix(ArchitectureCheckRoute, "/api"), h.handleArchitectureCheck)
+	g.POST(strings.TrimPrefix(SkillActivationRoute, "/api"), h.handleSkillActivation)
 	g.POST(strings.TrimPrefix(ArchitectureCommitRoute, "/api"), h.handleArchitectureCommit)
 	g.POST(strings.TrimPrefix(MemoryHookRoute, "/api"), h.handleMemoryHook)
 	g.GET("/sessions/:id/memory", h.handleSessionMemory)
@@ -454,6 +455,13 @@ func NewRouter(h *Handler, opts ...Option) *echo.Echo {
 	// repository architecture: one structured record per repository
 	g.POST("/get_repository_architecture", h.handleGetRepositoryArchitecture)
 	g.POST("/save_repository_architecture", h.handleSaveRepositoryArchitecture)
+
+	// task memory: plan.md and progress.md per task and repository
+	g.POST("/get_task_memory", h.handleGetTaskMemory)
+	g.POST("/save_task_memory", h.handleSaveTaskMemory)
+
+	// context map: generated per repository from its default branch
+	g.POST("/get_context_map", h.handleGetContextMap)
 	g.POST("/delete_repository_architecture", h.handleDeleteRepositoryArchitecture)
 	g.POST("/preview_layers", h.handlePreviewLayers)
 	g.POST("/export_repository_architecture", h.handleExportRepositoryArchitecture)
