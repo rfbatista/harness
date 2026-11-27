@@ -45,8 +45,36 @@ func (a *agentSystemAPI) field(repo, path string, def any) map[string]any {
 	return map[string]any{"value": def, "source": "harness"}
 }
 
+// gates are the required kinds with a detected command; the first repository has no secret scan (gitleaks is not
+// installed), and a level that sets a gate's command or timeout shows it.
+func (a *agentSystemAPI) gates(repo string) []map[string]any {
+	detected := map[string]string{"build": "go build ./...", "test": "go test ./...", "lint": "go vet ./...", "secret_scan": "gitleaks detect --source .", "lockfile": "go mod verify"}
+	var out []map[string]any
+	for _, kind := range []string{"build", "test", "lint", "secret_scan", "lockfile"} {
+		command := map[string]any{"value": detected[kind], "source": "harness", "reason": "detected from go.mod"}
+		if repo != "" && repo == a.repoList[0]["id"] && kind == "secret_scan" {
+			command = map[string]any{"value": "", "source": "harness", "reason": "gitleaks not installed"}
+		}
+		if v, ok := a.project["guard.gates."+kind+".command"]; ok {
+			command = map[string]any{"value": v, "source": "project"}
+		}
+		if v, ok := a.repo[repo]["guard.gates."+kind+".command"]; ok && repo != "" {
+			command = map[string]any{"value": v, "source": "repository"}
+		}
+		out = append(out, map[string]any{"kind": kind, "command": command, "timeout_seconds": a.field(repo, "guard.gates."+kind+".timeout_seconds", 600)})
+	}
+	return out
+}
+
 func (a *agentSystemAPI) view(repo string) map[string]any {
 	eff := map[string]any{
+		"guard": map[string]any{
+			"gates":           a.gates(repo),
+			"protected_paths": a.field(repo, "guard.protected_paths", []string{"check.sh", ".github/workflows/**"}),
+			"lockfile_rule":   map[string]any{"enabled": a.field(repo, "guard.lockfile_rule.enabled", true)},
+			"retry_limit":     a.field(repo, "guard.retry_limit", 3),
+			"tests_fail_first": map[string]any{"available": a.field(repo, "guard.tests_fail_first.available", false)},
+		},
 		"learn": map[string]any{
 			"context_map": map[string]any{"enabled": a.field(repo, "learn.context_map.enabled", true)},
 			"task_memory": map[string]any{"require_update": a.field(repo, "learn.task_memory.require_update", true)},
@@ -174,7 +202,7 @@ func TestAgentSystemPageInTheBrowser(t *testing.T) {
 	if err != nil {
 		t.Fatalf("%v\nJS errors: %v", err, errs.all())
 	}
-	if layers != "Learn,Score" {
+	if layers != "Learn,Guard,Score" {
 		t.Errorf("layers %q", layers)
 	}
 	if !strings.Contains(source, "harness default") {
@@ -307,5 +335,93 @@ func TestAgentSystemRefusedSaveLandsOnTheRowInTheBrowser(t *testing.T) {
 	}
 	if e := errs.all(); len(e) > 0 {
 		t.Errorf("JS errors: %v", e)
+	}
+}
+
+// TestAgentSystemGuardSectionInTheBrowser: the Gates list shows the required kinds with "always on" and no switch,
+// a repository missing a required gate shows the red banner and the missing row, typing a command and Save sends
+// the contract's gate path, a glob chip is added and removed, and a retry limit out of range is refused on its row
+// before anything is sent.
+func TestAgentSystemGuardSectionInTheBrowser(t *testing.T) {
+	api := newAgentSystemAPI("harness", "blog")
+	srv := agentSystemServer(t, api)
+	ctx, errs := browser(t)
+
+	set := func(selector, value string) chromedp.Action {
+		return chromedp.Evaluate(`(() => { const el = document.querySelector('`+selector+`'); const set = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value').set; set.call(el, '`+value+`'); el.dispatchEvent(new Event('input', { bubbles: true })); })()`, nil)
+	}
+	var banner, missingRow, locks, switches, retryError, barText, chips, indexDot string
+	var saveDisabled bool
+	var shot []byte
+	err := chromedp.Run(ctx,
+		chromedp.EmulateViewport(1280, 900),
+		chromedp.Navigate(srv.URL+"/projects/p1/agent-system?repository=harness"),
+		chromedp.Poll(`!!document.querySelector('.ledger-row[data-gate]')`, nil, chromedp.WithPollingTimeout(10*time.Second)),
+		chromedp.Evaluate(`document.querySelector('[data-missing-gates]')?.textContent ?? ''`, &banner),
+		chromedp.Evaluate(`document.querySelector('.ledger-row[data-gate=secret_scan]').textContent`, &missingRow),
+		chromedp.Evaluate(`document.querySelectorAll('.ledger-row[data-gate] .lock').length + ''`, &locks),
+		chromedp.Evaluate(`document.querySelectorAll('.ledger-row[data-gate=build] [role=switch], .ledger-row[data-gate=secret_scan] [role=switch]').length + ''`, &switches),
+		chromedp.Evaluate(`document.querySelector('.as-index a[href="#as-guard"] .status')?.getAttribute('aria-label') ?? ''`, &indexDot),
+		set(`input[aria-label="Secret scan command"]`, "gitleaks detect"),
+		chromedp.Poll(`!document.querySelector('[data-missing-gates]')`, nil, chromedp.WithPollingTimeout(5*time.Second)),
+		// A chip is added with Enter and removed with its ×.
+		set(`input[aria-label="Add to Protected paths"]`, "**/*.lock"),
+		chromedp.Evaluate(`document.querySelector('input[aria-label="Add to Protected paths"]').dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }))`, nil),
+		chromedp.Poll(`[...document.querySelectorAll('.ledger-row[data-path="guard.protected_paths"] .badge.glob')].some(b => b.textContent.includes('**/*.lock'))`, nil, chromedp.WithPollingTimeout(5*time.Second)),
+		chromedp.Evaluate(`document.querySelector('button[aria-label="Remove check.sh"]').click()`, nil),
+		chromedp.Poll(`![...document.querySelectorAll('.ledger-row[data-path="guard.protected_paths"] .badge.glob')].some(b => b.textContent.includes('check.sh'))`, nil, chromedp.WithPollingTimeout(5*time.Second)),
+		chromedp.Evaluate(`[...document.querySelectorAll('.ledger-row[data-path="guard.protected_paths"] .badge.glob')].map(b => b.textContent.replace('×','')).join()`, &chips),
+		// A retry limit out of range is refused on its row and keeps Save disabled.
+		set(`.ledger-row[data-path="guard.retry_limit"] input`, "11"),
+		chromedp.Poll(`!!document.querySelector('.ledger-row[data-path="guard.retry_limit"] .err')`, nil, chromedp.WithPollingTimeout(5*time.Second)),
+		chromedp.Evaluate(`document.querySelector('.ledger-row[data-path="guard.retry_limit"] .err').textContent`, &retryError),
+		chromedp.Evaluate(`document.querySelector('.save-bar').textContent`, &barText),
+		chromedp.Evaluate(`document.querySelector('.save-bar .end button:last-child').getAttribute('aria-disabled') === 'true'`, &saveDisabled),
+		chromedp.Evaluate(`window.scrollTo(0, 0)`, nil),
+		chromedp.FullScreenshot(&shot, 90),
+		set(`.ledger-row[data-path="guard.retry_limit"] input`, "5"),
+		chromedp.Poll(`!document.querySelector('.ledger-row[data-path="guard.retry_limit"] .err')`, nil, chromedp.WithPollingTimeout(5*time.Second)),
+		chromedp.Evaluate(`document.querySelector('.save-bar .end button:last-child').click()`, nil),
+		chromedp.Poll(`!document.querySelector('.save-bar')`, nil, chromedp.WithPollingTimeout(5*time.Second)),
+	)
+	if err != nil {
+		t.Fatalf("%v\nJS errors: %v", err, errs.all())
+	}
+	for _, want := range []string{"Secret scan missing", "gitleaks not installed", "REQUIRED_GATE_MISSING"} {
+		if !strings.Contains(banner, want) {
+			t.Errorf("the red banner reads %q, want it to say %q", banner, want)
+		}
+	}
+	if !strings.Contains(missingRow, "no command at any level") {
+		t.Errorf("the missing row reads %q", missingRow)
+	}
+	if locks != "5" {
+		t.Errorf("%s required gates say always on, want 5", locks)
+	}
+	if switches != "0" {
+		t.Errorf("a required gate has a switch (%s)", switches)
+	}
+	if indexDot != "1 missing" {
+		t.Errorf("the Guard index reads %q", indexDot)
+	}
+	if chips != ".github/workflows/**,**/*.lock" {
+		t.Errorf("chips %q", chips)
+	}
+	if !strings.Contains(retryError, "OUT_OF_RANGE") || !strings.Contains(retryError, "1–10") {
+		t.Errorf("retry limit error %q", retryError)
+	}
+	if !strings.Contains(barText, "Guard › Retry limit") || !saveDisabled {
+		t.Errorf("save bar %q, disabled %v", barText, saveDisabled)
+	}
+	patches := api.patchLog()
+	want := `/api/projects/p1/repositories/harness/agent-system {"guard.gates.secret_scan.command":"gitleaks detect","guard.protected_paths":[".github/workflows/**","**/*.lock"],"guard.retry_limit":5}`
+	if len(patches) != 1 || patches[0] != want {
+		t.Errorf("patches %q, want %q", patches, want)
+	}
+	if e := errs.all(); len(e) > 0 {
+		t.Errorf("JS errors: %v", e)
+	}
+	if dir := os.Getenv("WEB_SCREENSHOT_DIR"); dir != "" {
+		_ = os.WriteFile(dir+"/agent-system-guard.jpg", shot, 0o644)
 	}
 }

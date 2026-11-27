@@ -1,6 +1,6 @@
-import type { ChangeEvent } from "react";
+import { useState, type ChangeEvent, type KeyboardEvent } from "react";
 import { usePresenter } from "../../../../shared/presentation/use-presenter";
-import type { Layer, Row } from "../../domain/ledger";
+import type { GateRow, Layer, Row } from "../../domain/ledger";
 import type { AgentSystemPresenter, ErrorEntry } from "../presenters/agent-system-presenter";
 
 /** The page: toolbar with the scope switch, the sticky index of the layers, and each layer's ledger rows. */
@@ -45,10 +45,26 @@ export function AgentSystemView({ presenter }: { presenter: AgentSystemPresenter
           {vm.layers.map((layer) => (
             <a key={layer.key} href={`#as-${layer.key}`}>
               {layer.title}
+              {layer.attention > 0 && <span className="[ status ]" data-state="missing" data-dot-only role="img" aria-label={vm.scope.kind === "project" ? `${layer.attention} red ${layer.attention === 1 ? "repository" : "repositories"}` : `${layer.attention} missing`} style={{ marginInlineStart: "auto" }} />}
             </a>
           ))}
         </nav>
         <div className="[ as-main ]">
+          {vm.missingGates.length > 0 && (
+            <div className="[ banner ]" data-tone="danger" role="status" data-missing-gates="">
+              <div className="[ flow ] [ flow-space-3xs grow ]">
+                {vm.missingGates.map((g) => (
+                  <span key={g.kind}>
+                    <span className="[ status ]" data-state="missing">
+                      {g.label} missing
+                    </span>{" "}
+                    · {g.reason === "" ? "no command at any level" : g.reason} · gated sessions on {vm.scopeName} cannot pass until a command is set below or at project level.{" "}
+                    <span className="[ code ]">{`REQUIRED_GATE_MISSING · guard.gates.${g.kind}.command`}</span>
+                  </span>
+                ))}
+              </div>
+            </div>
+          )}
           {vm.refused.length > 0 && (
             <div className="[ banner ]" data-tone="danger" role="alert" data-refused="">
               <div className="[ flow ] [ flow-space-3xs grow ]">
@@ -114,6 +130,17 @@ function LayerSection({ layer, presenter, skillsHref }: { layer: Layer; presente
         <p>{layer.purpose}</p>
       </header>
       <div className="[ ledger ]">
+        {layer.gates.length > 0 && (
+          <>
+            <div className="[ ledger-sub ]">
+              Gates <span>· required gates cannot be turned off, only their command changed</span>
+            </div>
+            {layer.gates.map((gate) => (
+              <GateRowView key={gate.kind} gate={gate} presenter={presenter} />
+            ))}
+            <div className="[ ledger-sub ]">Enforcement</div>
+          </>
+        )}
         {layer.rows.map((row) => (
           <LedgerRow key={row.label} row={row} presenter={presenter} />
         ))}
@@ -146,14 +173,20 @@ function LedgerRow({ row, presenter }: { row: Row; presenter: AgentSystemPresent
         <small>{row.hint}</small>
       </div>
       <div className="[ ctl ]">
-        {row.kind === "toggle" ? (
+        {row.kind === "toggle" && (
           <button type="button" className="[ switch ]" role="switch" aria-checked={row.value} aria-label={row.label} aria-invalid={row.error ? true : undefined} onClick={() => presenter.edit(row.path, !row.value)}>
             <span className="[ track ]" />
-            <span>{row.value ? "On" : "Off"}</span>
+            <span>{row.value ? row.words[1] : row.words[0]}</span>
           </button>
-        ) : (
-          <span className="[ color-ink-muted ]">{row.text}</span>
         )}
+        {row.kind === "number" && (
+          <>
+            <input className="[ narrow ]" inputMode="numeric" aria-label={row.label} aria-invalid={row.error ? true : undefined} value={String(row.current)} onChange={(e) => presenter.editNumber(row.path, e.target.value)} />
+            <span className="[ meta ]">{row.unit}</span>
+          </>
+        )}
+        {row.kind === "chips" && <Chips row={row} presenter={presenter} />}
+        {row.kind === "fixed" && <span className="[ color-ink-muted ]">{row.text}</span>}
         {row.error && (
           <span className="[ err ]" role="alert" data-error-for={row.path}>
             <code>{row.error.code}</code> · {row.error.message}
@@ -175,6 +208,93 @@ function LedgerRow({ row, presenter }: { row: Row; presenter: AgentSystemPresent
         )}
         {row.action === "reset" && (
           <button type="button" className="[ button ]" data-variant="ghost" data-size="sm" onClick={() => presenter.reset(row.path)}>
+            Reset
+          </button>
+        )}
+      </div>
+    </div>
+  );
+}
+
+/** Glob chips with an add field: Enter adds, the × of a chip removes it. */
+function Chips({ row, presenter }: { row: Row; presenter: AgentSystemPresenter }) {
+  const [adding, setAdding] = useState("");
+  const add = (event: KeyboardEvent<HTMLInputElement>) => {
+    if (event.key !== "Enter") return;
+    event.preventDefault();
+    const glob = adding.trim();
+    if (glob === "") return;
+    if (!row.items.includes(glob)) presenter.edit(row.path, [...row.items, glob]);
+    setAdding("");
+  };
+  return (
+    <>
+      {row.items.map((item) => (
+        <span key={item} className="[ badge ] [ glob ]" data-tone={row.invalid.includes(item) ? "danger" : undefined}>
+          {item}
+          <button type="button" className="[ chip-x ]" aria-label={`Remove ${item}`} onClick={() => presenter.edit(row.path, row.items.filter((g) => g !== item))}>
+            ×
+          </button>
+        </span>
+      ))}
+      <input className="[ chip-add ]" aria-label={`Add to ${row.label}`} placeholder="add a glob" value={adding} onChange={(e) => setAdding(e.target.value)} onKeyDown={add} />
+    </>
+  );
+}
+
+/** One gate kind: its command and timeout inline, a switch only on an optional kind, "always on" on a required one. */
+function GateRowView({ gate, presenter }: { gate: GateRow; presenter: AgentSystemPresenter }) {
+  const bad = gate.errors.command ?? gate.errors.timeout ?? gate.errors.enabled;
+  return (
+    <div className="[ ledger-row ]" data-gate={gate.kind} data-missing={gate.missing ? "" : undefined} data-changed={gate.draft ? "" : undefined} data-error={bad ? "" : undefined}>
+      <div className="[ lbl ] [ kind ]">
+        {gate.missing ? (
+          <span className="[ status ]" data-state="missing">
+            {gate.label}
+          </span>
+        ) : (
+          gate.label
+        )}{" "}
+        <span className="[ badge ]">{gate.required ? "required" : "optional"}</span>
+      </div>
+      <div className="[ ctl ]">
+        {!gate.required && (
+          <button type="button" className="[ switch ]" role="switch" aria-checked={gate.on} aria-label={`${gate.label} gate`} onClick={() => presenter.edit(gate.paths.enabled, !gate.on)}>
+            <span className="[ track ]" />
+            <span>{gate.on ? "On" : "Off"}</span>
+          </button>
+        )}
+        <input className="[ mono ] [ command ]" aria-label={`${gate.label} command`} aria-invalid={gate.errors.command ? true : undefined} placeholder={gate.placeholder} value={gate.command} onChange={(e) => presenter.edit(gate.paths.command, e.target.value)} />
+        <span className="[ tmo ]">
+          <span className="[ meta ]">timeout</span>
+          <input className="[ mono ] [ narrow ]" inputMode="numeric" aria-label={`${gate.label} timeout in seconds`} aria-invalid={gate.errors.timeout ? true : undefined} value={String(gate.timeout)} onChange={(e) => presenter.editNumber(gate.paths.timeout, e.target.value)} />
+          <span className="[ meta ]">s</span>
+        </span>
+        {[gate.errors.command, gate.errors.timeout, gate.errors.enabled].map(
+          (error) =>
+            error && (
+              <span key={error.field} className="[ err ]" role="alert" data-error-for={error.field}>
+                <code>{error.code}</code> · {error.message}
+              </span>
+            ),
+        )}
+      </div>
+      <div className="[ src ]">
+        <span className="[ origin ]" data-kind={gate.source.kind}>
+          {gate.source.text}
+        </span>
+        {gate.source.reason !== "" && <span>{gate.source.reason}</span>}
+        {gate.source.replaces !== "" && <span>{gate.source.replaces}</span>}
+      </div>
+      <div className="[ act ]">
+        {gate.required && <span className="[ lock ]">always on</span>}
+        {gate.action === "override" && (
+          <button type="button" className="[ button ]" data-variant="ghost" data-size="sm" onClick={() => presenter.overrideGate(gate.kind)}>
+            Override
+          </button>
+        )}
+        {gate.action === "reset" && (
+          <button type="button" className="[ button ]" data-variant="ghost" data-size="sm" onClick={() => presenter.resetGate(gate.kind)}>
             Reset
           </button>
         )}

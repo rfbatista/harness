@@ -21,10 +21,91 @@ export class BoolFieldDto {
   }
 }
 
+export class NumberFieldDto {
+  constructor(
+    readonly value: number,
+    readonly source: (typeof SOURCES)[number],
+    readonly reason: string,
+  ) {}
+
+  static fromJSON(raw: unknown, at: string): NumberFieldDto {
+    const from = object(NAME, raw, at);
+    if (typeof from["value"] !== "number") throw new DtoError(NAME, `${at}.value`, "expected a number");
+    return new NumberFieldDto(from["value"], oneOf(NAME, from, "source", SOURCES, at), optionalString(NAME, from, "reason", at) ?? "");
+  }
+}
+
+export class TextFieldDto {
+  constructor(
+    readonly value: string,
+    readonly source: (typeof SOURCES)[number],
+    readonly reason: string,
+  ) {}
+
+  static fromJSON(raw: unknown, at: string): TextFieldDto {
+    const from = object(NAME, raw, at);
+    if (typeof from["value"] !== "string") throw new DtoError(NAME, `${at}.value`, "expected text");
+    return new TextFieldDto(from["value"], oneOf(NAME, from, "source", SOURCES, at), optionalString(NAME, from, "reason", at) ?? "");
+  }
+}
+
+export class ListFieldDto {
+  constructor(
+    readonly value: readonly string[],
+    readonly source: (typeof SOURCES)[number],
+    readonly reason: string,
+  ) {}
+
+  static fromJSON(raw: unknown, at: string): ListFieldDto {
+    const from = object(NAME, raw, at);
+    const value = from["value"] === null ? [] : from["value"];
+    if (!Array.isArray(value) || !value.every((v) => typeof v === "string")) throw new DtoError(NAME, `${at}.value`, "expected a list of text");
+    return new ListFieldDto(value as string[], oneOf(NAME, from, "source", SOURCES, at), optionalString(NAME, from, "reason", at) ?? "");
+  }
+}
+
+export class GateDto {
+  constructor(
+    readonly kind: string,
+    readonly command: TextFieldDto,
+    readonly timeout_seconds: NumberFieldDto,
+  ) {}
+
+  static fromJSON(raw: unknown, at: string): GateDto {
+    const from = object(NAME, raw, at);
+    return new GateDto(string(NAME, from, "kind", at), TextFieldDto.fromJSON(from["command"], `${at}.command`), NumberFieldDto.fromJSON(from["timeout_seconds"], `${at}.timeout_seconds`));
+  }
+}
+
+export class GuardDto {
+  constructor(
+    readonly gates: readonly GateDto[],
+    readonly protected_paths: ListFieldDto,
+    readonly lockfile_rule_enabled: BoolFieldDto,
+    readonly retry_limit: NumberFieldDto,
+    readonly tests_fail_first_available: BoolFieldDto,
+  ) {}
+
+  static fromJSON(raw: unknown): GuardDto {
+    const from = object(NAME, raw, "effective.guard");
+    const gates = from["gates"] === null || from["gates"] === undefined ? [] : array(NAME, from, "gates", (item, at) => GateDto.fromJSON(item, at), "effective.guard");
+    const lockfile = object(NAME, from["lockfile_rule"], "effective.guard.lockfile_rule");
+    const testsFirst = object(NAME, from["tests_fail_first"], "effective.guard.tests_fail_first");
+    return new GuardDto(
+      gates,
+      ListFieldDto.fromJSON(from["protected_paths"], "effective.guard.protected_paths"),
+      BoolFieldDto.fromJSON(lockfile["enabled"], "effective.guard.lockfile_rule.enabled"),
+      NumberFieldDto.fromJSON(from["retry_limit"], "effective.guard.retry_limit"),
+      BoolFieldDto.fromJSON(testsFirst["available"], "effective.guard.tests_fail_first.available"),
+    );
+  }
+}
+
 export class SettingsViewDto {
   constructor(
     readonly context_map_enabled: BoolFieldDto,
     readonly task_memory_require_update: BoolFieldDto,
+    readonly guard: GuardDto,
     readonly trajectory_recording_default: BoolFieldDto,
     readonly missing_required_gates: readonly string[],
     readonly values: Readonly<Record<string, unknown>>,
@@ -45,6 +126,7 @@ export class SettingsViewDto {
     return new SettingsViewDto(
       BoolFieldDto.fromJSON(contextMap["enabled"], "effective.learn.context_map.enabled"),
       BoolFieldDto.fromJSON(taskMemory["require_update"], "effective.learn.task_memory.require_update"),
+      GuardDto.fromJSON(effective["guard"]),
       BoolFieldDto.fromJSON(trajectory["default"], "effective.score.trajectory_recording.default"),
       missing,
       object(NAME, from["values"] ?? {}, "values"),

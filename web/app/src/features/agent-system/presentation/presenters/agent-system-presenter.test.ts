@@ -22,7 +22,7 @@ describe("loading", () => {
     assert.equal(vm().status, "loading");
     await presenter.start();
     assert.equal(vm().status, "ready");
-    assert.deepEqual(vm().layers.map((l) => l.title), ["Learn", "Score"]);
+    assert.deepEqual(vm().layers.map((l) => l.title), ["Learn", "Guard", "Score"]);
     assert.deepEqual(vm().scope, { kind: "project" });
   });
 

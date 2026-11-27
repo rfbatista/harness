@@ -11,9 +11,27 @@ export interface Field<T> {
   readonly reason: string;
 }
 
+/** One gate kind as a session runs it. An optional kind the level leaves off is absent from the store's list: `on` is false. */
+export interface Gate {
+  readonly kind: string;
+  readonly required: boolean;
+  readonly on: boolean;
+  readonly command: Field<string>;
+  readonly timeoutSeconds: Field<number>;
+}
+
+export interface Guard {
+  readonly gates: readonly Gate[];
+  readonly protectedPaths: Field<readonly string[]>;
+  readonly lockfileRuleEnabled: Field<boolean>;
+  readonly retryLimit: Field<number>;
+  readonly testsFailFirstAvailable: Field<boolean>;
+}
+
 export interface Effective {
   readonly contextMapEnabled: Field<boolean>;
   readonly taskMemoryRequireUpdate: Field<boolean>;
+  readonly guard: Guard;
   readonly trajectoryRecordingDefault: Field<boolean>;
   /** The required gate kinds with no command at any level: the repository is red. */
   readonly missingRequiredGates: readonly string[];
@@ -24,6 +42,15 @@ export interface SettingsView {
   readonly effective: Effective;
   readonly values: Readonly<Record<string, unknown>>;
 }
+
+/** The gate kinds, in the order the Gates list shows them (Glossary "Gate"). */
+export const REQUIRED_GATE_KINDS = ["build", "test", "lint", "secret_scan", "lockfile"] as const;
+export const OPTIONAL_GATE_KINDS = ["typecheck", "sast", "dependency_scan"] as const;
+
+export const gateRequired = (kind: string): boolean => (REQUIRED_GATE_KINDS as readonly string[]).includes(kind);
+
+/** The field path of one attribute of a gate: guard.gates.<kind>.<attribute>. */
+export const gatePath = (kind: string, attribute: "command" | "timeout_seconds" | "enabled"): string => `guard.gates.${kind}.${attribute}`;
 
 export interface Repository {
   readonly id: string;

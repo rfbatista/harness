@@ -8,14 +8,15 @@ import { SettingsPropsDto } from "./settings-props-dto";
 import { SettingsViewDto } from "./settings-view-dto";
 
 const field = (value: unknown, source = "harness") => ({ value, source });
+const guard = { gates: [{ kind: "build", command: field("go build ./..."), timeout_seconds: field(600) }], protected_paths: field(["check.sh"]), lockfile_rule: { enabled: field(true) }, retry_limit: field(3), tests_fail_first: { available: field(false) } };
 const view = (over: Record<string, unknown> = {}) => ({
-  effective: { learn: { context_map: { enabled: field(true) }, task_memory: { require_update: field(true) } }, score: { trajectory_recording: { default: field(false) } }, ...over },
+  effective: { learn: { context_map: { enabled: field(true) }, task_memory: { require_update: field(true) } }, guard, score: { trajectory_recording: { default: field(false) } }, ...over },
   values: {},
 });
 
 describe("SettingsViewDto", () => {
   test("reads the fields the page shows and ignores the rest", () => {
-    const dto = SettingsViewDto.fromJSON({ ...view({ guard: { retry_limit: field(3) }, missing_required_gates: ["lockfile"] }), extra: 1 });
+    const dto = SettingsViewDto.fromJSON({ ...view({ missing_required_gates: ["lockfile"] }), extra: 1 });
     assert.equal(dto.context_map_enabled.value, true);
     assert.deepEqual(dto.missing_required_gates, ["lockfile"]);
   });

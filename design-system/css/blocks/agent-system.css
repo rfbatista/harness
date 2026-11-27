@@ -117,6 +117,49 @@
     &[aria-busy="true"] { opacity: 0.6; }
   }
 
+  /* Guard: the sub-lists, a gate's command and timeout on one line, glob chips. */
+  .ledger-sub {
+    display: flex;
+    align-items: baseline;
+    gap: var(--space-xs);
+    padding-block: var(--space-s) var(--space-2xs);
+    border-block-end: var(--border-width) solid var(--color-line);
+    color: var(--color-ink-muted);
+    font-size: var(--text-sm);
+
+    & > span { color: var(--color-ink-faint); font-size: var(--text-xs); }
+  }
+
+  .ledger-row[data-gate] {
+    grid-template-columns: 13rem minmax(0, 36rem) 11rem minmax(9rem, 1fr);
+
+    & > .kind { display: flex; align-items: center; gap: var(--space-xs); font-weight: var(--weight-medium); }
+    & > .ctl { flex-wrap: nowrap; row-gap: var(--space-2xs); }
+    & > .ctl > .command { flex: 1 1 12rem; min-inline-size: 8rem; }
+    & > .ctl > .err { flex-basis: 100%; }
+    & > .ctl:has(> .err) { flex-wrap: wrap; }
+    & > .act { align-items: center; gap: var(--space-xs); }
+  }
+
+  .ledger-row .mono { font-family: var(--font-mono); font-size: var(--text-sm); }
+  .ledger-row input.narrow { inline-size: 4.5rem; flex: none; }
+  .ledger-row .tmo { display: inline-flex; align-items: center; gap: var(--space-2xs); flex: none; white-space: nowrap; }
+  .ledger-row .meta { color: var(--color-ink-faint); font-size: var(--text-xs); }
+  .ledger-row .lock { color: var(--color-ink-faint); font-size: var(--text-xs); white-space: nowrap; }
+  .ledger-row[data-missing] > .kind .status { color: var(--color-danger); }
+  .ledger-row > .ctl > input[aria-invalid="true"] { border-color: var(--color-danger); }
+
+  .ledger-row .badge.glob { font-family: var(--font-mono); font-weight: 400; }
+  .ledger-row .chip-x {
+    all: unset;
+    cursor: pointer;
+    padding-inline: var(--space-2xs);
+    color: var(--color-ink-faint);
+
+    &:hover, &:focus-visible { color: var(--color-ink); }
+  }
+  .ledger-row input.chip-add { inline-size: 11rem; flex: none; min-block-size: 1.5rem; font-family: var(--font-mono); font-size: var(--text-sm); }
+
   /* A row the person changed and has not saved, and one that cannot be saved: the label says so; the error is the row's own line. */
   .ledger-row[data-changed] > .lbl::after { content: " · unsaved"; color: var(--color-attention-strong); font-weight: 400; font-size: var(--text-xs); }
   .ledger-row > .ctl > .err { inline-size: 100%; color: var(--color-danger); font-size: var(--text-xs); }
@@ -159,6 +202,8 @@
       padding-block: var(--space-s);
 
       & > .lbl, & > .ctl { grid-column: 1 / -1; }
+      &[data-gate] { grid-template-columns: minmax(0, 1fr) auto; }
+      &[data-gate] > .ctl { flex-wrap: wrap; }
       & > .lbl > small { display: none; }
       & > .src { grid-column: 1; }
       & > .act { grid-column: 2; }

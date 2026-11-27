@@ -3,7 +3,7 @@
 import { Presenter } from "../../../../shared/kernel/presenter";
 import type { SettingsSource } from "../../application/ports";
 import type { ScopeAddress } from "../../application/scope-address";
-import { layers, type Edits, type Layer } from "../../domain/ledger";
+import { editables, gateLabel, layers, type Edits, type Layer } from "../../domain/ledger";
 import { isRed, PROJECT_SCOPE, sameScope, sameValue, SettingsError, SettingsRefused, type FieldError, type Patch, type Repository, type Scope, type SettingsView } from "../../domain/settings";
 import { check } from "../../domain/validation";
 
@@ -18,6 +18,14 @@ export interface ErrorEntry extends FieldError {
   readonly label: string;
 }
 
+/** A required gate with no command at any level, for the red banner of a repository. */
+export interface MissingGate {
+  readonly kind: string;
+  readonly label: string;
+  /** Why detection found none ("gitleaks not installed"); "" when it did not say. */
+  readonly reason: string;
+}
+
 export interface AgentSystemViewModel {
   readonly status: "loading" | "ready" | "failed";
   readonly error: string;
@@ -28,6 +36,8 @@ export interface AgentSystemViewModel {
   readonly scopeName: string;
   readonly repositories: readonly RepositoryChoice[];
   readonly layers: readonly Layer[];
+  /** Required gates with no command at any level, at a repository's scope. */
+  readonly missingGates: readonly MissingGate[];
   /** The repository's Instruction files, for the skills line; "" at project scope. */
   readonly skillsHref: string;
   /** "Saved · applies to sessions started afterwards" after a save, "" before. */
@@ -71,7 +81,7 @@ export class AgentSystemPresenter extends Presenter<AgentSystemViewModel> {
   #stopFollowing: (() => void) | undefined;
 
   constructor(deps: AgentSystemDeps) {
-    super({ status: "loading", error: "", projectId: deps.projectId, projectName: deps.projectName, scope: PROJECT_SCOPE, scopeName: "Project defaults", repositories: [], layers: [], skillsHref: "", saved: "", problem: "", refused: [], unsaved: 0, errors: [], saving: false, canSave: false, saveLabel: "Save project defaults" });
+    super({ status: "loading", error: "", projectId: deps.projectId, projectName: deps.projectName, scope: PROJECT_SCOPE, scopeName: "Project defaults", repositories: [], layers: [], missingGates: [], skillsHref: "", saved: "", problem: "", refused: [], unsaved: 0, errors: [], saving: false, canSave: false, saveLabel: "Save project defaults" });
     this.#deps = deps;
   }
 
@@ -108,7 +118,7 @@ export class AgentSystemPresenter extends Presenter<AgentSystemViewModel> {
     const draft = { ...this.#draft };
     // Toggling a drafted row back to the value it was saved with is no change either.
     const saved = this.#rows().find((r) => r.path === path);
-    const undone = path in draft && value !== null && saved !== undefined && sameValue(saved.value, value) && !(path in (this.#view?.values ?? {}));
+    const undone = path in draft && value !== null && saved !== undefined && sameValue(saved.current, value) && !(path in (this.#view?.values ?? {}));
     if (this.#holds(path, value) || undone) delete draft[path];
     else draft[path] = value;
     this.#draft = draft;
@@ -121,7 +131,25 @@ export class AgentSystemPresenter extends Presenter<AgentSystemViewModel> {
   /** Makes an inherited row this scope's own, keeping its value. */
   overrideHere(path: string): void {
     const row = this.#rows().find((r) => r.path === path);
-    if (row !== undefined) this.edit(path, row.value);
+    if (row !== undefined) this.edit(path, row.current);
+  }
+
+  /** Drafts a number row from what the person typed: a whole number, or the text itself for the form to refuse. */
+  editNumber(path: string, text: string): void {
+    this.edit(path, /^\s*-?\d+\s*$/.test(text) ? Number(text) : text);
+  }
+
+  /** Makes an inherited gate this scope's own: its command and timeout as they read now. */
+  overrideGate(kind: string): void {
+    for (const path of [`guard.gates.${kind}.command`, `guard.gates.${kind}.timeout_seconds`]) this.overrideHere(path);
+  }
+
+  /** Drafts removing this gate at this level: every field of it the level sets (or the person set). */
+  resetGate(kind: string): void {
+    for (const attribute of ["command", "timeout_seconds", "enabled"]) {
+      const path = `guard.gates.${kind}.${attribute}`;
+      if (path in this.#draft || path in (this.#view?.values ?? {})) this.edit(path, null);
+    }
   }
 
   /** Drafts removing exactly that field at this level. */
@@ -198,12 +226,14 @@ export class AgentSystemPresenter extends Presenter<AgentSystemViewModel> {
     }));
     if (token !== this.#loading) return;
     this.update((vm) => ({ ...vm, repositories: vm.repositories.map((r, i) => ({ ...r, red: red[i] ?? false })) }));
+    // The project's Guard index counts the red repositories.
+    this.#show({});
   }
 
-  /** The rows as saved, without the draft: their rules say what a value may be. */
+  /** The fields as saved, without the draft: their rules say what a value may be. */
   #rows() {
     const view = this.#view;
-    return view === undefined ? [] : layers(this.viewModel.scope, view, this.#project).flatMap((l) => l.rows);
+    return view === undefined ? [] : editables(layers(this.viewModel.scope, view, this.#project));
   }
 
   /** The level already holds this value (a reset: it does not set the field). */
@@ -222,18 +252,18 @@ export class AgentSystemPresenter extends Presenter<AgentSystemViewModel> {
   #shown(vm: AgentSystemViewModel, scope: Scope, view: SettingsView, extra: Partial<AgentSystemViewModel>): AgentSystemViewModel {
     const repository = scope.kind === "repository" ? vm.repositories.find((r) => r.id === scope.id) : undefined;
     const project = scope.kind === "repository" ? this.#project : undefined;
-    const rules = new Map(layers(scope, view, project).flatMap((l) => l.rows).map((r) => [r.path, r.rule] as const));
+    const known = new Map(editables(layers(scope, view, project)).map((f) => [f.path, f] as const));
     const errors: Record<string, FieldError> = { ...this.#refusals };
     for (const [path, value] of Object.entries(this.#draft)) {
-      const rule = rules.get(path);
-      const error = rule === undefined ? undefined : check(path, rule, value);
+      const field = known.get(path);
+      const error = field === undefined ? undefined : check(path, field.rule, value);
       if (error !== undefined) errors[path] = error;
     }
     const edits: Edits = { draft: this.#draft, errors };
-    const shown = layers(scope, view, project, edits);
-    const titles = shown.flatMap((l) => l.rows.map((r) => [r.path, { section: l.title, label: r.label }] as const));
-    const where = new Map(titles);
-    const listed: ErrorEntry[] = Object.values(errors).map((e) => ({ ...e, section: where.get(e.field)?.section ?? "", label: where.get(e.field)?.label ?? e.field }));
+    const redRepositories = vm.repositories.filter((r) => r.red).length;
+    const shown = layers(scope, view, project, edits).map((l) => (l.key === "guard" && scope.kind === "project" ? { ...l, attention: redRepositories } : l));
+    const listed: ErrorEntry[] = Object.values(errors).map((e) => ({ ...e, section: known.get(e.field)?.section ?? "", label: known.get(e.field)?.label ?? e.field }));
+    const missingGates: MissingGate[] = scope.kind === "repository" ? (shown.find((l) => l.key === "guard")?.gates ?? []).filter((g) => g.missing).map((g) => ({ kind: g.kind, label: gateLabel(g.kind), reason: view.effective.guard.gates.find((x) => x.kind === g.kind)?.command.reason ?? "" })) : [];
     const unsaved = Object.keys(this.#draft).length;
     const refused = Object.values(this.#refusals);
     const saving = extra.saving ?? vm.saving;
@@ -242,6 +272,7 @@ export class AgentSystemPresenter extends Presenter<AgentSystemViewModel> {
       scope,
       scopeName: repository?.name ?? "Project defaults",
       layers: shown,
+      missingGates,
       skillsHref: scope.kind === "repository" ? this.#deps.architectureHref(scope.id) : "",
       refused,
       unsaved,
