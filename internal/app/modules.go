@@ -1820,8 +1820,9 @@ func harnessSecrets(cfg Config) []string {
 	if root, err := cfg.dataRoot(); err == nil && root != "" {
 		out = append(out, filepath.Join(root, "secret.key"))
 	}
-	// The folder of the terminal client's state, ~/.coding-pool: the person
-	// credential file and its temporary file are in it.
+	// The person credential's own folder, ~/.coding-pool/person: the credential file
+	// and its temporary file are in it. Not ~/.coding-pool, which holds every
+	// session's worktree.
 	if dir, err := personcred.Dir(); err == nil {
 		out = append(out, dir)
 	}

@@ -124,3 +124,88 @@ func seatbeltProfile(t *testing.T, home string, policy ports.SandboxPolicy) stri
 		return strconv.Quote(values[param.FindString(m)])
 	})
 }
+
+// ~/.coding-pool holds every session's worktree as well as the person's
+// credential folder: denying the credential's folder must leave a session its own
+// worktree, readable and writable, in both profiles.
+func TestASessionsWorktreeUnderTheClientStateFolderStaysUsableWhileTheCredentialFolderIsDenied(t *testing.T) {
+	home := t.TempDir()
+	if real, err := filepath.EvalSymlinks(home); err == nil {
+		home = real
+	}
+	t.Setenv("HOME", home)
+	cred, err := personcred.Path()
+	if err != nil {
+		t.Fatal(err)
+	}
+	credDir := filepath.Dir(cred)
+	if err := os.MkdirAll(credDir, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(cred, []byte("secret\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	state := filepath.Join(home, ".coding-pool")
+	worktree := filepath.Join(state, "worktrees", "harness-abc", "agent-x")
+	if err := os.MkdirAll(worktree, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	secrets := harnessSecrets(Config{DBPath: ":memory:"})
+	if slices.Contains(secrets, state) {
+		t.Fatalf("~/.coding-pool itself is a secret, which would deny every session its worktree: %v", secrets)
+	}
+	if !slices.Contains(secrets, credDir) {
+		t.Fatalf("the credential folder %s is not a secret: %v", credDir, secrets)
+	}
+
+	policy := orchestration.BuildSandboxPolicy(orchestration.SandboxSession{
+		Mode: "implement", Worktree: worktree, TempDir: t.TempDir(), Secrets: secrets})
+	if !slices.Contains(policy.Writable, worktree) {
+		t.Fatalf("the worktree is not writable in the policy: %v", policy.Writable)
+	}
+
+	// Seatbelt: the worktree is granted read-write, no rule denies ~/.coding-pool or
+	// the worktree, and the credential folder is denied last.
+	profile := seatbeltProfile(t, home, policy)
+	grant := strings.LastIndex(profile, `(allow file-read* file-write* (subpath "`+worktree+`"))`)
+	if grant < 0 {
+		t.Fatalf("the worktree is not granted read-write in the Seatbelt profile:\n%s", profile)
+	}
+	for _, covering := range []string{state, filepath.Join(state, "worktrees"), worktree} {
+		if i := strings.LastIndex(profile, `(deny file-read* file-write* (with message`); i >= 0 {
+			for _, line := range strings.Split(profile[grant:], "\n") {
+				if strings.HasPrefix(line, "(deny") && strings.Contains(line, `(subpath "`+covering+`")`) {
+					t.Errorf("a deny after the worktree's grant covers %s: %s", covering, line)
+				}
+			}
+		}
+	}
+	deny := strings.LastIndex(profile, `(subpath "`+credDir+`"))`)
+	if deny < grant {
+		t.Errorf("the credential folder's deny (%d) is not after the worktree's grant (%d)", deny, grant)
+	}
+
+	// Bubblewrap: the worktree is bound read-write, ~/.coding-pool is not covered by a
+	// tmpfs, and the credential folder is masked after every bind.
+	args := bwrap.Render(policy, home)
+	bound, mask, last := false, -1, -1
+	for i, a := range args {
+		switch {
+		case a == "--tmpfs" && i+1 < len(args) && (args[i+1] == state || args[i+1] == filepath.Join(state, "worktrees") || args[i+1] == worktree):
+			t.Errorf("a tmpfs over %s hides the session's worktree: %v", args[i+1], args)
+		case a == "--tmpfs" && i+1 < len(args) && args[i+1] == credDir:
+			mask = i
+		case (a == "--bind-try" || a == "--bind") && i+2 < len(args) && args[i+1] == worktree:
+			bound = true
+			last = max(last, i)
+		case (a == "--bind-try" || a == "--ro-bind-try" || a == "--bind" || a == "--ro-bind") && i+1 < len(args) && args[i+1] != "/dev/null":
+			last = max(last, i)
+		}
+	}
+	if !bound {
+		t.Errorf("the worktree is not bound read-write: %v", args)
+	}
+	if mask < 0 || mask < last {
+		t.Errorf("the credential folder mask (%d) is missing or comes before a bind (%d): %v", mask, last, args)
+	}
+}
