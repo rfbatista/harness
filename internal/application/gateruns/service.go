@@ -175,7 +175,14 @@ func (t *tailBuffer) Write(p []byte) (int, error) {
 	return len(p), nil
 }
 
-func (t *tailBuffer) String() string { return string(t.buf) }
+// String is the kept tail, starting on a character: a cut that fell inside a
+// multibyte one drops its end, so the agent is handed valid text.
+func (t *tailBuffer) String() string {
+	if len(t.buf) == t.max {
+		return domain.TrimToRuneStart(string(t.buf))
+	}
+	return string(t.buf)
+}
 
 // Output implements ports.GateRuns: the gate's output as it is written while
 // its run is going, then the rest; a finished run's gate answers what was

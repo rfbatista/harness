@@ -4,6 +4,7 @@ import (
 	"strconv"
 	"strings"
 	"time"
+	"unicode/utf8"
 )
 
 // A gate run (Glossary "Gate run"): the harness running a session's gates in
@@ -57,7 +58,16 @@ func (g GateResult) OutputTail(n int) string {
 	if len(g.Output) <= n {
 		return g.Output
 	}
-	return "…" + g.Output[len(g.Output)-n:]
+	return "…" + TrimToRuneStart(g.Output[len(g.Output)-n:])
+}
+
+// TrimToRuneStart drops the bytes at the front of s that are the tail of a
+// character cut in half, so s is valid UTF-8 where it was before the cut.
+func TrimToRuneStart(s string) string {
+	for len(s) > 0 && !utf8.RuneStart(s[0]) {
+		s = s[1:]
+	}
+	return s
 }
 
 // GateRun is one gate run of a session, as recorded.
