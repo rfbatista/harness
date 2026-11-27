@@ -3,6 +3,7 @@ package ports
 import (
 	"context"
 	"encoding/json"
+	"time"
 
 	"operators-mcp/internal/domain"
 )
@@ -52,6 +53,9 @@ type AgentSystemStore interface {
 	Values(ctx context.Context, level domain.AgentSystemSource, ownerID string) (domain.AgentSystemValues, error)
 	// Apply stores set and removes reset in one transaction.
 	Apply(ctx context.Context, level domain.AgentSystemSource, ownerID, projectID string, set domain.AgentSystemValues, reset []string) error
+	// LastSave is when the owner's level was last saved (a save that only
+	// resets counts), nil when it never was.
+	LastSave(ctx context.Context, level domain.AgentSystemSource, ownerID string) (*time.Time, error)
 	// DeleteOwner removes everything one project or repository set itself.
 	DeleteOwner(ctx context.Context, level domain.AgentSystemSource, ownerID string) error
 	// DeleteProject removes everything the project and its repositories set.

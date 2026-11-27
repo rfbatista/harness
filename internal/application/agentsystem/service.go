@@ -123,7 +123,11 @@ func (s *Service) view(ctx context.Context, projectID, repositoryID string) (dom
 		level, owner = domain.SourceRepository, repositoryID
 	}
 	values, err := s.d.Store.Values(ctx, level, owner)
-	return domain.AgentSystemView{Effective: eff, Values: values}, err
+	if err != nil {
+		return domain.AgentSystemView{}, err
+	}
+	saved, err := s.d.Store.LastSave(ctx, level, owner)
+	return domain.AgentSystemView{Effective: eff, Values: values, UpdatedAt: saved}, err
 }
 
 // SaveProject implements ports.AgentSystemSettings.

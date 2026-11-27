@@ -29,6 +29,18 @@ type AgentSystemSettingModel struct {
 // TableName overrides the table name.
 func (AgentSystemSettingModel) TableName() string { return "agent_system_settings" }
 
+// AgentSystemSaveModel is when an owner's level was last saved: a save that
+// only resets removes rows, so the rows alone cannot tell.
+type AgentSystemSaveModel struct {
+	Level   string `gorm:"primaryKey"`
+	OwnerID   string `gorm:"column:owner_id;primaryKey"`
+	ProjectID string `gorm:"column:project_id;index"`
+	SavedAt   time.Time
+}
+
+// TableName overrides the table name.
+func (AgentSystemSaveModel) TableName() string { return "agent_system_saves" }
+
 // AgentSystemRepository stores the agent system settings.
 type AgentSystemRepository struct{ db *gorm.DB }
 
@@ -63,18 +75,43 @@ func (r *AgentSystemRepository) Apply(ctx context.Context, level domain.AgentSys
 			}
 		}
 		if len(reset) > 0 {
-			return tx.Where("level = ? AND owner_id = ? AND field IN ?", level, ownerID, reset).Delete(&AgentSystemSettingModel{}).Error
+			if err := tx.Where("level = ? AND owner_id = ? AND field IN ?", level, ownerID, reset).Delete(&AgentSystemSettingModel{}).Error; err != nil {
+				return err
+			}
 		}
-		return nil
+		return tx.Clauses(clause.OnConflict{
+			Columns:   []clause.Column{{Name: "level"}, {Name: "owner_id"}},
+			DoUpdates: clause.AssignmentColumns([]string{"saved_at", "project_id"}),
+		}).Create(&AgentSystemSaveModel{Level: string(level), OwnerID: ownerID, ProjectID: projectID, SavedAt: time.Now()}).Error
 	})
+}
+
+// LastSave returns when the owner's level was last saved, nil when never.
+func (r *AgentSystemRepository) LastSave(ctx context.Context, level domain.AgentSystemSource, ownerID string) (*time.Time, error) {
+	var row AgentSystemSaveModel
+	res := r.db.WithContext(ctx).Where("level = ? AND owner_id = ?", level, ownerID).Limit(1).Find(&row)
+	if res.Error != nil || res.RowsAffected == 0 {
+		return nil, res.Error
+	}
+	return &row.SavedAt, nil
 }
 
 // DeleteOwner removes everything the owner sets.
 func (r *AgentSystemRepository) DeleteOwner(ctx context.Context, level domain.AgentSystemSource, ownerID string) error {
-	return r.db.WithContext(ctx).Where("level = ? AND owner_id = ?", level, ownerID).Delete(&AgentSystemSettingModel{}).Error
+	return r.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		if err := tx.Where("level = ? AND owner_id = ?", level, ownerID).Delete(&AgentSystemSaveModel{}).Error; err != nil {
+			return err
+		}
+		return tx.Where("level = ? AND owner_id = ?", level, ownerID).Delete(&AgentSystemSettingModel{}).Error
+	})
 }
 
 // DeleteProject removes everything the project and its repositories set.
 func (r *AgentSystemRepository) DeleteProject(ctx context.Context, projectID string) error {
-	return r.db.WithContext(ctx).Where("project_id = ?", projectID).Delete(&AgentSystemSettingModel{}).Error
+	return r.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		if err := tx.Where("project_id = ?", projectID).Delete(&AgentSystemSaveModel{}).Error; err != nil {
+			return err
+		}
+		return tx.Where("project_id = ?", projectID).Delete(&AgentSystemSettingModel{}).Error
+	})
 }

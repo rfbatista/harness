@@ -9,6 +9,7 @@ import (
 	"slices"
 	"strconv"
 	"strings"
+	"time"
 )
 
 // The agent system settings (ADR 0011, the Glossary's "Sistema agêntico"): the
@@ -472,6 +473,8 @@ type CheckShGate struct {
 type AgentSystemView struct {
 	Effective EffectiveAgentSystem `json:"effective"`
 	Values    AgentSystemValues    `json:"values"`
+	// UpdatedAt is the last save of this level, nil when it was never saved.
+	UpdatedAt *time.Time `json:"updated_at"`
 }
 
 // AgentSystemSettingsChanged: agent system settings were saved. RepositoryID
