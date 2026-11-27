@@ -20,6 +20,7 @@
 @layer blocks {
   .agent-system-page > [data-island="agent-system"] { display: contents; }
 
+  .agent-system-page .toolbar { flex: none; }
   .toolbar .scope-pick { display: inline-flex; align-items: center; gap: var(--space-xs); }
 
   .agent-system {
@@ -158,9 +159,17 @@
 
   .ledger-row .mono { font-family: var(--font-mono); font-size: var(--text-sm); }
   .ledger-row input.narrow { inline-size: 4.5rem; flex: none; }
+  .ledger-row .tmo input { text-align: end; }
   .ledger-row .tmo { display: inline-flex; align-items: center; gap: var(--space-2xs); flex: none; white-space: nowrap; }
   .ledger-row .meta { color: var(--color-ink-faint); font-size: var(--text-xs); }
   .ledger-row .lock { color: var(--color-ink-faint); font-size: var(--text-xs); white-space: nowrap; }
+  /* A value reads as inline text; its box shows while the person points at it, edits it, or it is empty or refused. */
+  .ledger-row:not([data-changed]) input:not(.chip-add):not(:placeholder-shown):not(:hover):not(:focus):not([aria-invalid="true"]) {
+    border-color: transparent;
+    background: transparent;
+    padding-inline: 0;
+  }
+
   .ledger-row[data-missing] > .kind .status { color: var(--color-danger); }
   .ledger-row > .ctl > input[aria-invalid="true"] { border-color: var(--color-danger); }
 

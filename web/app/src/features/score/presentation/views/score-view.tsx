@@ -261,11 +261,11 @@ function Cases({ vm, presenter }: { vm: ScoreViewModel; presenter: ScorePresente
       <div className="[ repel ]">
         <span className="[ color-ink-faint text-xs ]">{vm.caseCount} {vm.caseCount === 1 ? "case" : "cases"} · a run scores every one</span>
         <span className="[ cluster ]">
-          <button type="button" className="[ button ]" data-variant="ghost" data-size="sm" data-action="from-trajectory" onClick={() => void presenter.openTrajectories()}>
-            From a recorded trajectory
-          </button>
           <button type="button" className="[ button ]" data-size="sm" data-action="add-case" onClick={() => presenter.startAdd()}>
             Add case
+          </button>
+          <button type="button" className="[ button ]" data-variant="ghost" data-size="sm" data-action="from-trajectory" onClick={() => void presenter.openTrajectories()}>
+            From a recorded trajectory
           </button>
         </span>
       </div>
@@ -278,6 +278,13 @@ function Cases({ vm, presenter }: { vm: ScoreViewModel; presenter: ScorePresente
         </div>
       ) : (
         <div className="[ score-list ]" role="table" aria-label="Bench cases">
+          <div className="[ sc-row ]" data-head="" data-cols="case" role="row">
+            <span>Case</span>
+            <span>Pattern</span>
+            <span>Mock tools</span>
+            <span>Last 5 runs</span>
+            <span className="[ num ]">score</span>
+          </div>
           {vm.cases.map((c) => (
             <CaseBlock key={c.id} c={c} busy={vm.running !== null} presenter={presenter} />
           ))}

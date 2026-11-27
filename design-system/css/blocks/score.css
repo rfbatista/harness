@@ -15,6 +15,8 @@
 @layer blocks {
   .score-page > [data-island="score"] { display: contents; }
 
+  /* The frame is a flex column: a toolbar that wraps on a phone keeps its height instead of shrinking over the page below it. */
+  .score-page .toolbar { flex: none; }
   .score-page .toolbar > .end { margin-inline-start: auto; display: flex; align-items: center; gap: var(--space-s); }
 
   /* A run in progress: the cases done as a determinate bar under the banner's line. */
@@ -104,6 +106,7 @@
     &[data-kind="case"] { grid-template-columns: minmax(0, 1fr) 8rem 7rem 7rem 6rem; cursor: pointer; }
     &[data-kind="case"]:hover { background: var(--color-hover); }
     &[data-kind="case"][data-open] { background: var(--color-panel); }
+    &[data-head][data-cols="case"] { grid-template-columns: minmax(0, 1fr) 8rem 7rem 7rem 6rem; }
     &[data-kind="run"] { grid-template-columns: minmax(0, 1fr) 9rem 5rem 5rem 5rem; cursor: pointer; }
     &[data-kind="run"]:hover { background: var(--color-hover); }
     &[data-kind="run"][aria-current="true"] { background: var(--color-selected); }
