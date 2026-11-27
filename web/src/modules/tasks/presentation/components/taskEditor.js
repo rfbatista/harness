@@ -8,10 +8,13 @@
 //
 // The edit form's third section is the task's Token savers: the choices are
 // held in the form (savers[].draft) and written on Save, one activation per
-// changed saver, after the task itself; Cancel drops them.
+// changed saver, after the task itself; Cancel drops them. The fourth is the
+// task's trajectory recording (inherit / on / off), held and written the same
+// way, after the savers.
 
 import { describeError } from "../../../../shared/presentation/errors.js";
 import { readSeed } from "../../../../shared/presentation/seed.js";
+import { choiceOf, resolution } from "../../domain/recording.js";
 import { deleteBlocker, titleProblem } from "../../domain/task.js";
 import { statusChangeView } from "../statusChange.js";
 
@@ -26,12 +29,13 @@ const NOTE_ID = "task-note";
  *   navigate: (url: string) => void,
  *   reload: () => void,
  *   tokenSavers?: import("../../../tokensavers/domain/ports.js").TokenSaverGateway,  the task's Token savers, written on Save
+ *   recording?: ReturnType<typeof import("../../infrastructure/recording-gateway.js").recordingGateway>,  the task's trajectory recording, written on Save
  *   store?: import("./railFeed.js").RailStore,  the rail's live model: the task as the feed has it, and its latest move
  *   clock?: { now: () => Date },
  * }} deps
  */
 export const taskEditor =
-  ({ gateway, tokenSavers, navigate, reload, store = { tasks: [], statusChanges: {} }, clock = { now: () => new Date() } }) =>
+  ({ gateway, tokenSavers, recording, navigate, reload, store = { tasks: [], statusChanges: {} }, clock = { now: () => new Date() } }) =>
   () => {
     let ticker = null;
     return {
@@ -63,6 +67,12 @@ export const taskEditor =
       saversOwner: "",
       /** A saver write that failed: the form stays open and shows it. */
       saversError: null,
+      /** The task's trajectory recording as the server has it; null when the page does not carry it. */
+      recordingState: null,
+      /** The choice the form holds: "inherit", "on" or "off". */
+      recordingDraft: "inherit",
+      /** A recording write that failed: the form stays open and shows it. */
+      recordingError: null,
       /** The task note popover is open (browser-only, never stored: a page loads with it closed). */
       noteOpen: false,
 
@@ -72,6 +82,21 @@ export const taskEditor =
       /** The task has a Token savers control to show. */
       get hasSavers() {
         return this.savers.length > 0;
+      },
+
+      /** The task has a Trajectory recording control to show. */
+      get hasRecording() {
+        return this.recordingState !== null;
+      },
+
+      /** What is saved: "inherit", "on" or "off". */
+      get recordingValue() {
+        return this.recordingState ? choiceOf(this.recordingState.explicit) : "inherit";
+      },
+
+      /** What would hold with the form's choice, and from where. */
+      get recordingSummary() {
+        return this.recordingState ? resolution(this.recordingState, this.recordingDraft) : "";
       },
       get description() {
         return this.task?.description ?? "";
@@ -131,6 +156,7 @@ export const taskEditor =
           return;
         }
         this.readSavers();
+        this.readRecording();
         ticker = setInterval(() => (this.now = clock.now()), TICK_MS);
         // Moved elsewhere (the architect, another tab): the picker follows.
         this.$watch("storedStatus", (status) => this.follow(status));
@@ -153,6 +179,19 @@ export const taskEditor =
         }
       },
 
+      /** The recording the server painted, if it serves it and the page carries it. */
+      readRecording() {
+        const id = this.$el.dataset.recordingSeed;
+        const script = id ? this.$el.ownerDocument.getElementById(id) : null;
+        if (!script || !recording) return;
+        try {
+          this.recordingState = recording.decode(JSON.parse(script.textContent ?? "null"));
+          this.recordingDraft = this.recordingValue;
+        } catch (err) {
+          this.recordingError = describeError(err);
+        }
+      },
+
       /** @param {import("../../../tokensavers/domain/ports.js").Activations} a  as the server now has them */
       applySavers(a) {
         this.saversLevel = a.level;
@@ -164,6 +203,8 @@ export const taskEditor =
       resetSavers() {
         for (const s of this.savers) s.draft = s.value;
         this.saversError = null;
+        this.recordingDraft = this.recordingValue;
+        this.recordingError = null;
       },
 
       /** Opens the note under the Description button; the dialog hands the focus back to it. */
@@ -272,7 +313,7 @@ export const taskEditor =
           return;
         }
         try {
-          if (await this.saveSavers()) {
+          if ((await this.saveSavers()) && (await this.saveRecording())) {
             this.editingTask = false;
             this.closeNote();
           }
@@ -303,6 +344,23 @@ export const taskEditor =
           }
         }
         return true;
+      },
+
+      /**
+       * The recording choice, when the person changed it; a refusal keeps the
+       * form open with the person's choice.
+       * @returns {Promise<boolean>} nothing to write, or it landed
+       */
+      async saveRecording() {
+        if (!this.recordingState || this.recordingDraft === this.recordingValue) return true;
+        try {
+          this.recordingState = await recording.set(this.task.projectId, this.task.id, this.recordingDraft);
+          this.recordingDraft = this.recordingValue;
+          return true;
+        } catch (err) {
+          this.recordingError = describeError(err);
+          return false;
+        }
       },
 
       /** An item of the task menu (the title row's ⋯): Delete task asks for confirmation; the links go where they point. */

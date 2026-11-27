@@ -79,7 +79,7 @@ func TestListViewLinksEachProjectAndSeedsTheAPIShape(t *testing.T) {
 func TestSettingsViewSeedsTheProjectAndLinksItsEnvFiles(t *testing.T) {
 	p := &domain.Project{ID: "p1", Name: "harness", RootDir: "/src/harness", IgnoredPaths: []string{"dist"}, AgentsReadAllRepos: true, Repositories: []domain.Repository{{ID: "stale"}}}
 	v := NewSettingsView(shell.Frame{}, p, []*domain.Repository{{ID: "r1", ProjectID: "p1", RootDir: "/src/harness/api"}})
-	if v.RepositoriesHref != "/projects/p1/repositories" || len(v.Repositories) != 1 || v.Repositories[0] != (SettingsRepository{"api", "/projects/p1/repositories/r1/env"}) {
+	if v.RepositoriesHref != "/projects/p1/repositories" || len(v.Repositories) != 1 || v.Repositories[0] != (SettingsRepository{ID: "r1", Name: "api", EnvHref: "/projects/p1/repositories/r1/env", AgentSystemHref: "/projects/p1/agent-system?repository=r1"}) {
 		t.Errorf("view = %+v", v)
 	}
 	seed, _ := json.Marshal(v.Seed)

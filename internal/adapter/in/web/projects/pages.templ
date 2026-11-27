@@ -145,6 +145,7 @@ templ RepositoriesPage(v RepositoriesView) {
 									if v.Credentials != nil {
 										@credentials.RepositoryCredential()
 									}
+									<span class="[ status ]" data-state="missing" data-guard-line x-data="agentSystemGuardLine(projectId, r.id)" x-show="red" x-bind:data-guard="state" x-text="text"></span>
 								</span>
 								<span class="[ cluster ] [ gutter-xs ]">
 									<a class="[ button ]" data-variant="ghost" data-size="sm" x-bind:href="r.architectureHref" x-text="r.architectureLabel">Architecture</a>
@@ -153,6 +154,7 @@ templ RepositoriesPage(v RepositoriesView) {
 									</template>
 									<a class="[ button ]" data-variant="ghost" data-size="sm" x-bind:href="r.historyHref">History</a>
 									<a class="[ button ]" data-variant="ghost" data-size="sm" x-bind:href="r.envHref">Settings</a>
+									<a class="[ button ]" data-variant="ghost" data-size="sm" data-agent-system-link x-bind:href="r.agentSystemHref">Agent system ↗</a>
 									<template x-if="!r.confirming">
 										<button type="button" class="[ button ]" data-variant="ghost" data-size="sm" x-on:click="askRemove(r.id)">Remove</button>
 									</template>
@@ -311,7 +313,7 @@ templ EnvFilesPage(v EnvFilesView) {
 						@designsystem.RepositorySelect(v.ProjectID, v.Seed.RepositoryID)
 					</section>
 					if v.RunCommands != nil {
-						@runCommandsSection(*v.RunCommands)
+						@runCommandsSection(*v.RunCommands, AgentSystemHref(v.ProjectID, v.RunCommands.RepositoryID))
 					}
 					if v.TokenSavers != nil {
 						@tokensavers.Section(*v.TokenSavers)
@@ -327,12 +329,15 @@ templ EnvFilesPage(v EnvFilesView) {
 
 // runCommandsSection lists, adds, edits and removes the repository's run
 // commands (runsCommandsSettings): what a session's App tab offers to run.
-templ runCommandsSection(seed RunCommandsSeed) {
+templ runCommandsSection(seed RunCommandsSeed, agentSystemHref string) {
 	<section class="[ flow ] [ flow-space-m ]" aria-labelledby="run-commands-title" x-data="runsCommandsSettings" data-seed="run-commands-seed">
 		@templ.JSONScript("run-commands-seed", seed)
 		<h2 id="run-commands-title">Run commands</h2>
 		<p class="[ color-ink-muted ]">
 			Named ways to run this repository's application, like <code>make air</code>. Every session of the repository offers them in its App tab, and runs them in its own worktree.
+		</p>
+		<p class="[ color-ink-muted text-sm ]" data-visual-qa-note>
+			A run command can be the UI start command for visual QA: declare it in <a href={ templ.SafeURL(agentSystemHref) }>Agent system ↗</a>.
 		</p>
 		<template x-if="error">
 			<div class="[ banner ]" data-tone="danger" role="alert">

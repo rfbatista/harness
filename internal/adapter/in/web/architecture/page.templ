@@ -112,6 +112,7 @@ templ PageView(v View) {
 						</template>
 					</div>
 					<div class="[ arch-body ]">
+					<div class="[ arch-tabrow ]">
 					<div id="architecture-tabs" class="[ tabs arch-tabs ]" role="tablist" aria-label="Architecture sections">
 						<template x-for="t in tabs" x-bind:key="t.slug">
 							<button type="button" role="tab" x-bind:id="t.id" x-bind:aria-selected="t.selected" x-bind:aria-controls="t.panelId" x-on:click="openTab(t.slug)">
@@ -125,11 +126,13 @@ templ PageView(v View) {
 							</button>
 						</template>
 					</div>
+					<a class="[ agent-system-link ]" href={ templ.SafeURL(v.AgentSystemHref) } data-agent-system-link>Agent system ↗</a>
+					</div>
 					@tabInstructions(v)
 					@tabTools()
 					@tabSandboxes()
 					@tabOrchestration()
-					@tabHooks()
+					@tabHooks(v)
 					@tabLayers()
 					@tabOutput()
 					@tabAgents(v)

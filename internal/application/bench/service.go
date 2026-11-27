@@ -120,6 +120,32 @@ func (s *Service) CreateCase(ctx context.Context, projectID string, def domain.B
 	return def, nil
 }
 
+// UpdateExpectation replaces a case's expectation, validating the case as a
+// definition is.
+func (s *Service) UpdateExpectation(ctx context.Context, projectID, caseID string, expect domain.BenchExpectation) (domain.BenchCase, error) {
+	if err := s.checkProject(ctx, projectID); err != nil {
+		return domain.BenchCase{}, err
+	}
+	cases, err := s.d.Cases.List(ctx, projectID)
+	if err != nil {
+		return domain.BenchCase{}, err
+	}
+	for _, c := range cases {
+		if c.ID != caseID {
+			continue
+		}
+		c.Expect = expect
+		if verr := c.Validate(); verr != nil {
+			return domain.BenchCase{}, verr
+		}
+		if err := s.d.Cases.Save(ctx, c); err != nil {
+			return domain.BenchCase{}, err
+		}
+		return c, nil
+	}
+	return domain.BenchCase{}, &domain.StructuredError{Code: "BENCH_CASE_NOT_FOUND", Message: "bench case not found: " + caseID}
+}
+
 // DeleteCase removes a case of the project.
 func (s *Service) DeleteCase(ctx context.Context, projectID, caseID string) error {
 	if err := s.checkProject(ctx, projectID); err != nil {

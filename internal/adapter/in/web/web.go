@@ -21,6 +21,7 @@ import (
 
 	"operators-mcp/internal/adapter/in/web/agentisolation"
 	"operators-mcp/internal/adapter/in/web/agents"
+	"operators-mcp/internal/adapter/in/web/agentsystem"
 	"operators-mcp/internal/adapter/in/web/architecture"
 	"operators-mcp/internal/adapter/in/web/code"
 	"operators-mcp/internal/adapter/in/web/credentials"
@@ -31,6 +32,7 @@ import (
 	"operators-mcp/internal/adapter/in/web/notifications"
 	"operators-mcp/internal/adapter/in/web/productowner"
 	"operators-mcp/internal/adapter/in/web/projects"
+	"operators-mcp/internal/adapter/in/web/score"
 	"operators-mcp/internal/adapter/in/web/serversettings"
 	"operators-mcp/internal/adapter/in/web/services"
 	"operators-mcp/internal/adapter/in/web/shell"
@@ -173,6 +175,10 @@ type Deps struct {
 	// MemoryBudgets reads a repository's or task's own orçamento de memória
 	// for the control beside Token savers; nil leaves the control out.
 	MemoryBudgets ports.MemoryBudgetOverrides
+	// TaskRecordings reads whether a task's sessions are recorded for the
+	// Trajectory recording control of the task's Edit form; nil leaves the
+	// control out.
+	TaskRecordings tasks.RecordingReader
 	// RepositoryIndexes lists the repository indexes on the Token savers
 	// page; nil leaves that section out.
 	RepositoryIndexes ports.RepositoryIndexes
@@ -241,7 +247,7 @@ func NewHandler(deps Deps, assets *Assets, fallback http.Handler) http.Handler {
 	taskPages := tasks.Handler{
 		Projects: deps.Projects, Tasks: deps.Tasks, Sessions: deps.Sessions,
 		Agents: deps.Agents, Repositories: deps.Repositories, Docs: deps.Documents, Artifacts: deps.Artifacts, PullRequests: deps.PullRequests, WorktreeGit: deps.WorktreeGit,
-		Resources: deps.Resources, Comments: deps.Comments, Settings: deps.Settings, Code: deps.Code, Usage: deps.Usage, TokenSavers: deps.TokenSavers, MemoryBudgets: deps.MemoryBudgets, Interviews: deps.Interviews,
+		Resources: deps.Resources, Comments: deps.Comments, Settings: deps.Settings, Code: deps.Code, Usage: deps.Usage, TokenSavers: deps.TokenSavers, MemoryBudgets: deps.MemoryBudgets, Recordings: deps.TaskRecordings, Interviews: deps.Interviews,
 		ArchivedTasks: deps.ArchivedList, BranchRequests: deps.BranchRequests, SessionBranches: deps.SessionBranches, Layout: s.layout, Render: render, Now: deps.Now,
 	}
 	if deps.Workspaces != nil {
@@ -339,6 +345,10 @@ func NewHandler(deps Deps, assets *Assets, fallback http.Handler) http.Handler {
 		usagePage := usage.Handler{Projects: deps.Projects, Usage: deps.Usage, Layout: s.layout, Render: render}
 		mux.Handle("GET /projects/{project}/usage", s.page(usagePage.Page))
 	}
+	agentSystemPage := agentsystem.Handler{Projects: deps.Projects, Layout: s.layout, Render: render}
+	mux.Handle("GET /projects/{project}/agent-system", s.page(agentSystemPage.Page))
+	scorePage := score.Handler{Projects: deps.Projects, Layout: s.layout, Render: render}
+	mux.Handle("GET /projects/{project}/score", s.page(scorePage.Page))
 	ownerPage := productowner.Handler{Projects: deps.Projects, Threads: deps.ProductOwnerThreads, Sessions: deps.Sessions, Layout: s.layout, Render: render}
 	mux.Handle("GET /projects/{project}/product-owner", s.page(ownerPage.Page))
 	mux.Handle("GET /projects/{project}/product-owner/threads/{thread}", s.page(ownerPage.Page))
@@ -477,6 +487,8 @@ func (s *server) layout(ctx context.Context, title, projectID, taskID string) (s
 	if s.deps.Usage != nil {
 		frame.Rail.UsageHref = usage.Href(projectID)
 	}
+	frame.Rail.AgentSystemHref = agentsystem.Href(projectID, "")
+	frame.Rail.ScoreHref = score.Href(projectID)
 	frame.Rail.ProductOwnerHref = productowner.Href(projectID)
 	for key := range shell.CollapsedFrom(ctx) {
 		frame.Rail.Collapsed = append(frame.Rail.Collapsed, key)

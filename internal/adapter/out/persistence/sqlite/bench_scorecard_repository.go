@@ -53,6 +53,16 @@ func (r *BenchScorecardRepository) Get(ctx context.Context, projectID, id string
 	return &card, err
 }
 
+// Find answers the scorecard with the id, of whichever project; nil when there is none.
+func (r *BenchScorecardRepository) Find(ctx context.Context, id string) (*domain.Scorecard, error) {
+	var rows []BenchScorecardModel
+	if err := r.db.WithContext(ctx).Where("id = ?", id).Limit(1).Find(&rows).Error; err != nil || len(rows) == 0 {
+		return nil, err
+	}
+	card, err := rows[0].toDomain()
+	return &card, err
+}
+
 // List answers the project's scorecards, newest first.
 func (r *BenchScorecardRepository) List(ctx context.Context, projectID string) ([]domain.Scorecard, error) {
 	var rows []BenchScorecardModel

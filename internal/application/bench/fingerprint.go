@@ -5,6 +5,8 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"sort"
+
+	"operators-mcp/internal/domain"
 )
 
 // SetupFile is one file of a setup: a skill or an instruction file, by path.
@@ -41,4 +43,55 @@ func sortedFiles(in []SetupFile) []SetupFile {
 	out := append([]SetupFile{}, in...)
 	sort.Slice(out, func(i, j int) bool { return out[i].Path < out[j].Path })
 	return out
+}
+
+// SetupRecord is what a scorecard keeps of the setup: the fingerprint, the
+// models and CLI, the counts and a digest per part (see BenchSetupRecord).
+func SetupRecord(s Setup) domain.BenchSetupRecord {
+	rec := domain.BenchSetupRecord{
+		Fingerprint: Fingerprint(s), AgentName: s.AgentName, Model: s.Model, JudgeModel: s.JudgeModel, CLIVersion: s.CLIVersion,
+		Skills: len(s.Skills), Instructions: len(s.Instructions),
+		Parts: map[string]string{
+			"agent":       digest(s.AgentName + "\x00" + s.AgentPrompt),
+			"model":       digest(s.Model),
+			"judge model": digest(s.JudgeModel),
+			"claude cli":  digest(s.CLIVersion),
+		},
+	}
+	if s.AgentName != "" {
+		rec.Agents = 1
+	}
+	for _, f := range s.Skills {
+		rec.Parts["skill "+f.Path] = digest(f.Content)
+	}
+	for _, f := range s.Instructions {
+		rec.Parts["instruction "+f.Path] = digest(f.Content)
+	}
+	return rec
+}
+
+// changedParts lists the parts whose digest differs between two records, or
+// nil when either did not record its parts.
+func changedParts(prev, cur domain.BenchSetupRecord) []string {
+	if prev.Parts == nil || cur.Parts == nil {
+		return nil
+	}
+	out := []string{}
+	for name, h := range cur.Parts {
+		if prev.Parts[name] != h {
+			out = append(out, name)
+		}
+	}
+	for name := range prev.Parts {
+		if _, kept := cur.Parts[name]; !kept {
+			out = append(out, name)
+		}
+	}
+	sort.Strings(out)
+	return out
+}
+
+func digest(s string) string {
+	sum := sha256.Sum256([]byte(s))
+	return hex.EncodeToString(sum[:6])
 }

@@ -224,6 +224,10 @@ templ SettingsPage(v SettingsView) {
 									<span class="[ title ]">Settings of { r.Name }</span>
 									<span class="[ meta ]">→</span>
 								</a>
+								<a class="[ row ]" href={ templ.SafeURL(r.AgentSystemHref) } style="--row-columns: minmax(0, 1fr) auto" data-agent-system-link x-data="agentSystemGuardLine" data-project={ v.Project.ID } data-repository={ r.ID }>
+									<span class="[ title ]">Guard of { r.Name }</span>
+									<span class="[ meta ]"><span data-guard-line x-bind:data-guard="state" x-text="text"></span> →</span>
+								</a>
 							}
 						</div>
 					</section>

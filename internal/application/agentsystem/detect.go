@@ -61,6 +61,30 @@ func (d *Detector) Detect(ctx context.Context, repo *domain.Repository) map[doma
 	return out
 }
 
+// CheckShGates answers the gate kinds the repository's check.sh fills on its
+// default branch, and nothing the stack implies: what "Import from check.sh"
+// previews. Nothing is stored; a repository with no check.sh answers none.
+func (d *Detector) CheckShGates(ctx context.Context, repo *domain.Repository) map[domain.GateKind]domain.GateDefault {
+	out := map[domain.GateKind]domain.GateDefault{}
+	if repo.RootDir == "" {
+		return out
+	}
+	branch, err := d.git.DefaultBranch(ctx, repo.RootDir)
+	if err != nil || branch == "" {
+		return out
+	}
+	files, err := d.git.Files(ctx, repo.RootDir, branch)
+	if err != nil {
+		return out
+	}
+	g := gateSet{}
+	detectCheckSh(&checkoutReader{ctx: ctx, git: d.git, dir: repo.RootDir, branch: branch, files: files}, g)
+	for k, v := range g {
+		out[k] = v
+	}
+	return out
+}
+
 func (d *Detector) stack(ctx context.Context, repo *domain.Repository) map[domain.GateKind]domain.GateDefault {
 	if repo.RootDir == "" {
 		return nil // git would run in the harness's own directory

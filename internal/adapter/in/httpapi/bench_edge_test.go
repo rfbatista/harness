@@ -194,8 +194,8 @@ func TestARunAndAScorecardOfAnotherProjectAreNotFound(t *testing.T) {
 	_, run := benchRunBody(t, h, http.MethodPost, "/projects/p1/bench/runs")
 	id := run["id"].(string)
 	waitRunEnds(t, h, id)
-	// p2 does not exist in the run handler: an unknown project is 404 on every read.
-	for _, p := range []string{"/projects/p2/bench/runs/" + id, "/projects/p2/bench/scorecards/" + id, "/projects/p2/bench/scorecards/" + id + "/compare", "/projects/p2/bench/scorecards"} {
+	// "ghost" is no project of the run handler (p2 is one, with no runs): an unknown project is 404 on every read.
+	for _, p := range []string{"/projects/ghost/bench/runs/" + id, "/projects/ghost/bench/scorecards/" + id, "/projects/ghost/bench/scorecards/" + id + "/compare", "/projects/ghost/bench/scorecards"} {
 		if code, _ := benchRunBody(t, h, http.MethodGet, p); code != http.StatusNotFound {
 			t.Errorf("GET %s = %d, want 404", p, code)
 		}

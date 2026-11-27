@@ -38,22 +38,30 @@ func (benchJudgeStub) Ask(context.Context, string, string, string) (string, erro
 }
 
 func benchRunsHandler(t *testing.T) (*Handler, chan struct{}) {
+	h, release, _ := benchRunsHandlerWithStore(t)
+	return h, release
+}
+
+// benchRunsHandlerWithStore is benchRunsHandler and the scorecard store behind
+// it, for a test that needs a scorecard of another project.
+func benchRunsHandlerWithStore(t *testing.T) (*Handler, chan struct{}, *sqlite.BenchScorecardRepository) {
 	t.Helper()
 	db, err := sqlite.Open(":memory:")
 	if err != nil {
 		t.Fatal(err)
 	}
 	release := make(chan struct{})
+	cards := sqlite.NewBenchScorecardRepository(db)
 	svc := bench.New(bench.Deps{
 		Cases:      sqlite.NewBenchCaseRepository(db),
-		Scorecards: sqlite.NewBenchScorecardRepository(db),
-		Projects:   agentSystemProjects{"p1": {ID: "p1"}},
+		Scorecards: cards,
+		Projects:   agentSystemProjects{"p1": {ID: "p1"}, "p2": {ID: "p2"}},
 		Sessions:   benchSessionStub{release},
 		ServeMock:  mcpbench.Serve,
 		MockName:   mcpbench.Name,
 		Judge:      benchJudgeStub{},
 	})
-	return NewHandler(Services{Bench: svc, BenchRuns: svc}), release
+	return NewHandler(Services{Bench: svc, BenchRuns: svc}), release, cards
 }
 
 func benchRunBody(t *testing.T, h *Handler, method, path string) (int, map[string]any) {
@@ -107,6 +115,9 @@ func TestARunIsStartedFollowedAndItsScorecardReadAndComparedOverHTTP(t *testing.
 	if code != http.StatusOK || len(card["cases"].([]any)) != 1 || card["setup"].(map[string]any)["fingerprint"] == "" {
 		t.Fatalf("scorecard = %d %v", code, card)
 	}
+	if setup := card["setup"].(map[string]any); setup["parts"] == nil || len(setup["parts"].(map[string]any)) == 0 {
+		t.Fatalf("the scorecard records no setup parts: %v", setup)
+	}
 	if code, list := benchRunBody(t, h, http.MethodGet, "/projects/p1/bench/scorecards"); code != http.StatusOK || len(list["scorecards"].([]any)) != 1 {
 		t.Fatalf("list = %d %v", code, list)
 	}
@@ -120,6 +131,9 @@ func TestARunIsStartedFollowedAndItsScorecardReadAndComparedOverHTTP(t *testing.
 	code, cmp := benchRunBody(t, h, http.MethodGet, "/projects/p1/bench/scorecards/"+second["id"].(string)+"/compare")
 	if code != http.StatusOK || cmp["previous_id"] != id || cmp["fingerprint_changed"] != false {
 		t.Fatalf("compare = %d %v", code, cmp)
+	}
+	if parts, ok := cmp["changed_parts"].([]any); !ok || len(parts) != 0 {
+		t.Fatalf("changed_parts of an unchanged setup = %v, want []", cmp["changed_parts"])
 	}
 
 	if code, _ := benchRunBody(t, h, http.MethodGet, "/projects/p1/bench/scorecards/nope"); code != http.StatusNotFound {

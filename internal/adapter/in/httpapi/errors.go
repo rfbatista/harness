@@ -78,7 +78,7 @@ func errorHandler(err error, c echo.Context) {
 			// Not the person (ADR 0016), or a pairing that did not work.
 			writeCoded(c, http.StatusForbidden, err, se)
 			return
-		case "BENCH_NO_CASES":
+		case "BENCH_NO_CASES", "BENCH_CASE_IDS_INVALID", "BENCH_BASELINE_OTHER_PROJECT":
 			// A run needs bench cases: the request is well-formed, the project has none.
 			writeCoded(c, http.StatusUnprocessableEntity, err, se)
 			return

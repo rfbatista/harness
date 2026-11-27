@@ -74,8 +74,11 @@ import { servicesGateway } from "./modules/services/infrastructure/services-gate
 import { registerServices } from "./modules/services/presentation/register.js";
 import { settingsGateway } from "./modules/settings/infrastructure/settings-gateway.js";
 import { registerSettings } from "./modules/settings/presentation/register.js";
+import { recordingGateway } from "./modules/tasks/infrastructure/recording-gateway.js";
 import { tokenSaversGateway } from "./modules/tokensavers/infrastructure/tokensavers-gateway.js";
 import { registerTokenSavers } from "./modules/tokensavers/presentation/register.js";
+import { guardGateway } from "./modules/agentsystem/infrastructure/guard-gateway.js";
+import { registerAgentSystem } from "./modules/agentsystem/presentation/register.js";
 import { usageGateway } from "./modules/usage/infrastructure/usage-gateway.js";
 import { registerUsage } from "./modules/usage/presentation/register.js";
 import { stepGateway } from "./modules/writinghelper/infrastructure/step-gateway.js";
@@ -110,6 +113,7 @@ const tokenSavers = tokenSaversGateway(api);
 registerTasks(Alpine, {
   gateway: tasksGateway(api),
   tokenSavers,
+  recording: recordingGateway(api),
   rail: railGateway(api, events),
   prefs,
   resources: resourcesGateway(api, events, xhrUpload({ base: "/api" })),
@@ -146,6 +150,7 @@ registerCredentials(Alpine, { gateway: credentialsGateway(api, events), clock: s
 registerUsage(Alpine, { gateway: usageGateway(api, events) });
 registerAgents(Alpine, { gateway: catalogGateway(api, events), repositories: repositoryAgents, history: window.history, location: window.location, clipboard: navigator.clipboard });
 registerTokenSavers(Alpine, { gateway: tokenSavers, clock: systemClock });
+registerAgentSystem(Alpine, { gateway: guardGateway(api) });
 registerModels(Alpine, { gateway: modelsGateway(api, events) });
 registerSandbox(Alpine, { gateway: sandboxGateway(api) });
 registerClaude(Alpine, { gateway: claudeGateway(api) });

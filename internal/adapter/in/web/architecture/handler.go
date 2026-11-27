@@ -80,7 +80,9 @@ type View struct {
 	ProjectName    string
 	RepositoryName string
 	SettingsHref   string
-	Seed           Seed
+	// AgentSystemHref opens the Agent system page with this repository selected.
+	AgentSystemHref string
+	Seed            Seed
 }
 
 // Page serves the page; tab is the deep link this route stands for.
@@ -120,11 +122,12 @@ func (h Handler) Page(tab string) func(w http.ResponseWriter, r *http.Request) e
 			open = h.OpenProposals(ctx, repo.ID)
 		}
 		return h.Render(w, r, http.StatusOK, PageView(View{
-			Frame:          frame,
-			ProjectID:      project.ID,
-			ProjectName:    project.Name,
-			RepositoryName: name,
-			SettingsHref:   "/projects/" + url.PathEscape(project.ID) + "/repositories",
+			Frame:           frame,
+			ProjectID:       project.ID,
+			ProjectName:     project.Name,
+			RepositoryName:  name,
+			SettingsHref:    "/projects/" + url.PathEscape(project.ID) + "/repositories",
+			AgentSystemHref: "/projects/" + url.PathEscape(project.ID) + "/agent-system?repository=" + url.QueryEscape(repo.ID),
 			Seed: Seed{
 				ProjectID:    project.ID,
 				RepositoryID: repo.ID,
