@@ -21,22 +21,23 @@ export function AgentSystemView({ presenter }: { presenter: AgentSystemPresenter
           <button type="button" aria-pressed={projectScope} onClick={() => void presenter.selectScope("")}>
             Project defaults
           </button>
-          <button type="button" aria-pressed={!projectScope} disabled={vm.repositories.length === 0} onClick={() => vm.repositories[0] && void presenter.selectScope(vm.repositories[0].id)}>
-            Repository <span className="[ count ]">{vm.repositories.length}</span>
-          </button>
+          {projectScope ? (
+            <button type="button" aria-pressed="false" disabled={vm.repositories.length === 0} onClick={() => vm.repositories[0] && void presenter.selectScope(vm.repositories[0].id)}>
+              Repository <span className="[ count ]">{vm.repositories.length}</span>
+            </button>
+          ) : (
+            <span className="[ scope-pick ]" data-pressed="">
+              {chosen?.red && <span className="[ status ]" data-state="missing" data-dot-only role="img" aria-label="missing a required gate" />}
+              <select aria-label="Repository" value={vm.scope.kind === "repository" ? vm.scope.id : ""} onChange={onScope}>
+                {vm.repositories.map((r) => (
+                  <option key={r.id} value={r.id}>
+                    {r.red ? `${r.name} · missing a required gate` : r.name}
+                  </option>
+                ))}
+              </select>
+            </span>
+          )}
         </div>
-        {!projectScope && (
-          <span className="[ scope-pick ]">
-            <select data-size="sm" data-fit aria-label="Repository" value={vm.scope.kind === "repository" ? vm.scope.id : ""} onChange={onScope}>
-              {vm.repositories.map((r) => (
-                <option key={r.id} value={r.id}>
-                  {r.red ? `${r.name} · missing a required gate` : r.name}
-                </option>
-              ))}
-            </select>
-            {chosen?.red && <span className="[ status ]" data-state="missing" data-dot-only role="img" aria-label="missing a required gate" />}
-          </span>
-        )}
         <span className="[ end ] [ color-ink-faint text-sm ]" role="status">
           {vm.saved}
         </span>
@@ -46,14 +47,34 @@ export function AgentSystemView({ presenter }: { presenter: AgentSystemPresenter
           {vm.layers.map((layer) => (
             <a key={layer.key} href={`#as-${layer.key}`}>
               {layer.title}
-              {layer.attention > 0 && (
-                <span className="[ status ]" data-state="missing" role="img" aria-label={vm.scope.kind === "project" ? `${layer.attention} red ${layer.attention === 1 ? "repository" : "repositories"}` : `${layer.attention} missing`} style={{ marginInlineStart: "auto" }}>
-                  {layer.attention} {vm.scope.kind === "project" ? "red" : "missing"}
+              {layer.attention > 0 && <span className="[ status ]" data-state="missing" data-dot-only role="img" aria-label={vm.scope.kind === "project" ? `${layer.attention} red ${layer.attention === 1 ? "repository" : "repositories"}` : `${layer.attention} missing`} style={{ marginInlineStart: "auto" }} />}
+              {layer.overrides > 0 && (
+                <span className="[ meta ]" data-overrides-count="" style={{ marginInlineStart: "auto" }}>
+                  {layer.overrides} {layer.overrides === 1 ? "override" : "overrides"}
                 </span>
               )}
             </a>
           ))}
-          <Overview presenter={presenter} overview={vm.overview} status={vm.status} />
+          {vm.scope.kind === "repository" && vm.status === "ready" && (
+            <>
+              <div className="[ sum ]" data-own-overrides="">
+                <b>Overrides on {vm.scopeName}</b>
+                {vm.ownOverrides.length === 0 && <span>None</span>}
+                {vm.ownOverrides.map((o) => (
+                  <span key={o}>{o}</span>
+                ))}
+              </div>
+              <div className="[ sum ]" data-also-here="">
+                <b>Also on this repository</b>
+                {vm.alsoHere.map((l) => (
+                  <a key={l.href} href={l.href}>
+                    {l.text} ↗
+                  </a>
+                ))}
+              </div>
+            </>
+          )}
+          {vm.scope.kind === "project" && <Overview presenter={presenter} overview={vm.overview} status={vm.status} />}
         </nav>
         <div className="[ as-main ]">
           {vm.changedElsewhere && (
@@ -74,18 +95,17 @@ export function AgentSystemView({ presenter }: { presenter: AgentSystemPresenter
             </div>
           )}
           {vm.missingGates.length > 0 && (
-            <div className="[ banner ]" data-tone="danger" role="status" data-missing-gates="">
-              <div className="[ flow ] [ flow-space-3xs grow ]">
-                {vm.missingGates.map((g) => (
-                  <span key={g.kind}>
-                    <span className="[ status ]" data-state="missing">
-                      {g.label} missing
-                    </span>{" "}
-                    · {g.reason === "" ? "no command at any level" : g.reason} · gated sessions on {vm.scopeName} cannot pass until a command is set below or at project level.{" "}
-                    <span className="[ code ]">{`REQUIRED_GATE_MISSING · guard.gates.${g.kind}.command`}</span>
+            <div className="[ red-line ]" role="status" data-missing-gates="">
+              {vm.missingGates.map((g) => (
+                <p key={g.kind}>
+                  <span className="[ status ]" data-state="missing">
+                    {g.label} missing
+                  </span>{" "}
+                  <span className="[ color-ink-muted ]">
+                    · {g.reason === "" ? "no command at any level" : g.reason} · gated sessions on {vm.scopeName} end not passed until a command is set below or at project level
                   </span>
-                ))}
-              </div>
+                </p>
+              ))}
             </div>
           )}
           {vm.refused.length > 0 && (
@@ -122,7 +142,7 @@ export function AgentSystemView({ presenter }: { presenter: AgentSystemPresenter
               </button>
             </div>
           )}
-          {vm.status === "ready" && vm.layers.map((layer) => <LayerSection key={layer.key} layer={layer} presenter={presenter} skillsHref={vm.skillsHref} runCommands={vm.runCommands} canImport={vm.canImportCheckSh} importNote={vm.importNote} />)}
+          {vm.status === "ready" && vm.layers.map((layer) => <LayerSection key={layer.key} scopeIsRepository={vm.scope.kind === "repository"} layer={layer} presenter={presenter} skillsHref={vm.skillsHref} runCommands={vm.runCommands} canImport={vm.canImportCheckSh} importNote={vm.importNote} />)}
           {vm.status === "ready" && <SaveBar presenter={presenter} unsaved={vm.unsaved} errors={vm.errors} canSave={vm.canSave} saving={vm.saving} label={vm.saveLabel} />}
         </div>
       </div>
@@ -181,7 +201,7 @@ function Skeleton() {
   );
 }
 
-function LayerSection({ layer, presenter, skillsHref, runCommands, canImport, importNote }: { layer: Layer; presenter: AgentSystemPresenter; skillsHref: string; runCommands: readonly RunCommand[]; canImport: boolean; importNote: string }) {
+function LayerSection({ layer, presenter, skillsHref, runCommands, canImport, importNote, scopeIsRepository }: { scopeIsRepository: boolean; layer: Layer; presenter: AgentSystemPresenter; skillsHref: string; runCommands: readonly RunCommand[]; canImport: boolean; importNote: string }) {
   return (
     <section className="[ as-layer ]" id={`as-${layer.key}`} aria-labelledby={`as-${layer.key}-head`}>
       <header>
@@ -205,7 +225,7 @@ function LayerSection({ layer, presenter, skillsHref, runCommands, canImport, im
               </p>
             )}
             {layer.gates.map((gate) => (
-              <GateRowView key={gate.kind} gate={gate} presenter={presenter} />
+              <GateRowView key={gate.kind} gate={gate} presenter={presenter} repository={scopeIsRepository} />
             ))}
             <div className="[ ledger-sub ]">Enforcement</div>
           </>
@@ -265,16 +285,7 @@ function LedgerRow({ row, presenter }: { row: Row; presenter: AgentSystemPresent
             <span className="[ meta ]">{row.unit}</span>
           </>
         )}
-        {row.kind === "select" && (
-          <select data-size="sm" data-fit aria-label={row.label} aria-invalid={row.error ? true : undefined} value={row.selected} onChange={(e) => presenter.selectModel(e.target.value)}>
-            {row.options.map((o) => (
-              <option key={o.value} value={o.value}>
-                {o.label}
-              </option>
-            ))}
-            {row.selected !== "" && !row.options.some((o) => o.value === row.selected) && <option value={row.selected}>{row.selected}</option>}
-          </select>
-        )}
+        {row.kind === "select" && <InlineSelect row={row} presenter={presenter} />}
         {row.kind === "chips" && <Chips row={row} presenter={presenter} />}
         {row.kind === "fixed" && <span className="[ color-ink-muted ]">{row.text}</span>}
         {row.error && (
@@ -306,9 +317,11 @@ function LedgerRow({ row, presenter }: { row: Row; presenter: AgentSystemPresent
   );
 }
 
-/** Chips with an add field: Enter adds, the × of a chip removes it. */
-function ChipList({ items, invalid, label, placeholder, normalize, onChange }: { items: readonly string[]; invalid: readonly string[]; label: string; placeholder: string; normalize?: (text: string) => string; onChange: (items: string[]) => void }) {
+/** Chips: plain at rest. Editing (the Edit button, an unsaved change, or `always`) shows the × of each chip and the add field; Enter adds. */
+function ChipList({ items, invalid, label, placeholder, normalize, draft, always, onChange }: { items: readonly string[]; invalid: readonly string[]; label: string; placeholder: string; normalize?: (text: string) => string; draft?: boolean; always?: boolean; onChange: (items: string[]) => void }) {
   const [adding, setAdding] = useState("");
+  const [open, setOpen] = useState(false);
+  const editing = always === true || open || draft === true;
   const add = (event: KeyboardEvent<HTMLInputElement>) => {
     if (event.key !== "Enter") return;
     event.preventDefault();
@@ -322,18 +335,52 @@ function ChipList({ items, invalid, label, placeholder, normalize, onChange }: {
       {items.map((item) => (
         <span key={item} className="[ badge ] [ glob ]" data-tone={invalid.includes(item) ? "danger" : undefined}>
           {item}
-          <button type="button" className="[ chip-x ]" aria-label={`Remove ${item}`} onClick={() => onChange(items.filter((g) => g !== item))}>
-            ×
-          </button>
+          {editing && (
+            <button type="button" className="[ chip-x ]" aria-label={`Remove ${item}`} onClick={() => onChange(items.filter((g) => g !== item))}>
+              ×
+            </button>
+          )}
         </span>
       ))}
-      <input className="[ chip-add ]" aria-label={`Add to ${label}`} placeholder={placeholder} value={adding} onChange={(e) => setAdding(e.target.value)} onKeyDown={add} />
+      {editing ? (
+        <input className="[ chip-add ]" aria-label={`Add to ${label}`} placeholder={placeholder} value={adding} onChange={(e) => setAdding(e.target.value)} onKeyDown={add} />
+      ) : (
+        <button type="button" className="[ button ] [ chip-edit ]" data-variant="ghost" data-size="sm" aria-label={`Edit ${label}`} onClick={() => setOpen(true)}>
+          Edit
+        </button>
+      )}
     </>
   );
 }
 
 function Chips({ row, presenter }: { row: Row; presenter: AgentSystemPresenter }) {
-  return <ChipList items={row.items} invalid={row.invalid} label={row.label} placeholder={row.placeholder === "" ? "add a glob" : row.placeholder} onChange={(items) => presenter.edit(row.path, items)} />;
+  return <ChipList items={row.items} invalid={row.invalid} label={row.label} draft={row.draft} placeholder={row.placeholder === "" ? "add a glob" : row.placeholder} onChange={(items) => presenter.edit(row.path, items)} />;
+}
+
+/** A select that reads as inline text at rest ("opus"); pointing to Change opens it. An unsaved change keeps it open. */
+function InlineSelect({ row, presenter }: { row: Row; presenter: AgentSystemPresenter }) {
+  const [open, setOpen] = useState(false);
+  const shown = row.options.find((o) => o.value === row.selected)?.label ?? row.selected;
+  if (!open && !row.draft && !row.error) {
+    return (
+      <>
+        <span data-select-text="">{shown}</span>
+        <button type="button" className="[ button ]" data-variant="ghost" data-size="sm" aria-label={`Change ${row.label}`} onClick={() => setOpen(true)}>
+          Change
+        </button>
+      </>
+    );
+  }
+  return (
+    <select data-size="sm" data-fit autoFocus={open} aria-label={row.label} aria-invalid={row.error ? true : undefined} value={row.selected} onChange={(e) => presenter.selectModel(e.target.value)}>
+      {row.options.map((o) => (
+        <option key={o.value} value={o.value}>
+          {o.label}
+        </option>
+      ))}
+      {row.selected !== "" && !row.options.some((o) => o.value === row.selected) && <option value={row.selected}>{row.selected}</option>}
+    </select>
+  );
 }
 
 const CUSTOM = "__custom__";
@@ -464,7 +511,7 @@ function VisualQaView({ block, presenter, runCommands }: { block: VisualQaBlock;
               <small>Width × height in pixels.</small>
             </div>
             <div className="[ ctl ]">
-              <ChipList items={ui.viewports} invalid={[]} label="Viewports" placeholder="w×h" normalize={(text) => text.replace(/\s*[×x]\s*/i, "x")} onChange={(viewports) => presenter.editVisualQa({ viewports })} />
+              <ChipList always items={ui.viewports} invalid={[]} label="Viewports" placeholder="w×h" normalize={(text) => text.replace(/\s*[×x]\s*/i, "x")} onChange={(viewports) => presenter.editVisualQa({ viewports })} />
             </div>
             <div className="[ src ]" />
             <div className="[ act ]" />
@@ -475,7 +522,7 @@ function VisualQaView({ block, presenter, runCommands }: { block: VisualQaBlock;
               <small>Globs whose change makes a diff worth a visual pass.</small>
             </div>
             <div className="[ ctl ]">
-              <ChipList items={ui.ui_paths} invalid={[]} label="UI paths" placeholder="add a glob" onChange={(ui_paths) => presenter.editVisualQa({ ui_paths })} />
+              <ChipList always items={ui.ui_paths} invalid={[]} label="UI paths" placeholder="add a glob" onChange={(ui_paths) => presenter.editVisualQa({ ui_paths })} />
             </div>
             <div className="[ src ]" />
             <div className="[ act ]" />
@@ -491,11 +538,19 @@ function parseRoutes(text: string): string[] {
   return text.split("\n").map((line) => line.trim()).filter((line) => line !== "");
 }
 
-/** One gate kind: its command and timeout inline, a switch only on an optional kind, "always on" on a required one. */
-function GateRowView({ gate, presenter }: { gate: GateRow; presenter: AgentSystemPresenter }) {
+/** One gate kind: its command and timeout inline, a switch only on an optional kind (with the timeout on a line below). */
+function GateRowView({ gate, presenter, repository }: { gate: GateRow; presenter: AgentSystemPresenter; repository: boolean }) {
   const bad = gate.errors.command ?? gate.errors.timeout ?? gate.errors.enabled;
+  const timeout = (
+    <span className="[ tmo ]">
+      <span className="[ meta ]">timeout</span>
+      <input className="[ mono ] [ narrow ]" inputMode="numeric" aria-label={`${gate.label} timeout in seconds`} aria-invalid={gate.errors.timeout ? true : undefined} value={String(gate.timeout)} onChange={(e) => presenter.editNumber(gate.paths.timeout, e.target.value)} />
+      <span className="[ meta ]">s</span>
+    </span>
+  );
+  const command = <input className="[ mono ] [ command ]" aria-label={`${gate.label} command`} aria-invalid={gate.errors.command ? true : undefined} placeholder={gate.placeholder} value={gate.command} onChange={(e) => presenter.edit(gate.paths.command, e.target.value)} />;
   return (
-    <div className="[ ledger-row ]" data-gate={gate.kind} data-missing={gate.missing ? "" : undefined} data-changed={gate.draft ? "" : undefined} data-error={bad ? "" : undefined}>
+    <div className="[ ledger-row ]" data-gate={gate.kind} data-required={gate.required ? "" : undefined} data-missing={gate.missing ? "" : undefined} data-changed={gate.draft ? "" : undefined} data-error={bad ? "" : undefined}>
       <div className="[ lbl ] [ kind ]">
         {gate.missing ? (
           <span className="[ status ]" data-state="missing">
@@ -504,21 +559,33 @@ function GateRowView({ gate, presenter }: { gate: GateRow; presenter: AgentSyste
         ) : (
           gate.label
         )}{" "}
-        <span className="[ badge ]">{gate.required ? "required" : "optional"}</span>
+        <span className="[ meta ]" data-gate-kind="">
+          {gate.required ? "required" : "optional"}
+        </span>
       </div>
       <div className="[ ctl ]">
-        {!gate.required && (
-          <button type="button" className="[ switch ]" role="switch" aria-checked={gate.on} aria-label={`${gate.label} gate`} onClick={() => presenter.edit(gate.paths.enabled, !gate.on)}>
-            <span className="[ track ]" />
-            <span>{gate.on ? "On" : "Off"}</span>
-          </button>
+        {gate.required ? (
+          <>
+            {command}
+            {timeout}
+          </>
+        ) : (
+          <>
+            <span className="[ gate-line ]">
+              <button type="button" className="[ switch ]" role="switch" aria-checked={gate.on} aria-label={`${gate.label} gate`} onClick={() => presenter.edit(gate.paths.enabled, !gate.on)}>
+                <span className="[ track ]" />
+                <span>{gate.on ? "On" : "Off"}</span>
+              </button>
+              {command}
+            </span>
+            {timeout}
+          </>
         )}
-        <input className="[ mono ] [ command ]" aria-label={`${gate.label} command`} aria-invalid={gate.errors.command ? true : undefined} placeholder={gate.placeholder} value={gate.command} onChange={(e) => presenter.edit(gate.paths.command, e.target.value)} />
-        <span className="[ tmo ]">
-          <span className="[ meta ]">timeout</span>
-          <input className="[ mono ] [ narrow ]" inputMode="numeric" aria-label={`${gate.label} timeout in seconds`} aria-invalid={gate.errors.timeout ? true : undefined} value={String(gate.timeout)} onChange={(e) => presenter.editNumber(gate.paths.timeout, e.target.value)} />
-          <span className="[ meta ]">s</span>
-        </span>
+        {gate.missing && (
+          <span className="[ err ]" role="status" data-missing-help="">
+            {gate.source.reason === "" ? "no command at any level" : gate.source.reason} · {gate.kind === "secret_scan" ? "install gitleaks, or set a command this repository can run" : "set a command this repository can run"}
+          </span>
+        )}
         {[gate.errors.command, gate.errors.timeout, gate.errors.enabled].map(
           (error) =>
             error && (
@@ -532,11 +599,11 @@ function GateRowView({ gate, presenter }: { gate: GateRow; presenter: AgentSyste
         <span className="[ origin ]" data-kind={gate.source.kind}>
           {gate.source.text}
         </span>
-        {gate.source.reason !== "" && <span>{gate.source.reason}</span>}
+        {gate.source.reason !== "" && !gate.missing && <span>{gate.source.reason}</span>}
         {gate.source.replaces !== "" && <span>{gate.source.replaces}</span>}
       </div>
       <div className="[ act ]">
-        {gate.required && <span className="[ lock ]">always on</span>}
+        {gate.required && !repository && <span className="[ lock ]">always on</span>}
         {gate.action === "override" && (
           <button type="button" className="[ button ]" data-variant="ghost" data-size="sm" onClick={() => presenter.overrideGate(gate.kind)}>
             Override

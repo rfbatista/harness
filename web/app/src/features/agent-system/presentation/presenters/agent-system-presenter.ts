@@ -64,6 +64,10 @@ export interface AgentSystemViewModel {
   /** The repository's Instruction files, for the skills line; "" at project scope. */
   readonly skillsHref: string;
   readonly overview: Overview;
+  /** At a repository's scope, the fields it overrides in words ("Guard · test command"), in the layers' order; none at project scope. */
+  readonly ownOverrides: readonly string[];
+  /** At a repository's scope, its other pages the person looks for beside the settings. */
+  readonly alsoHere: readonly { readonly text: string; readonly href: string }[];
   /** The settings were saved elsewhere while this page is open (feed: agent_system_settings); Reload brings them in. */
   readonly changedElsewhere: boolean;
   /** "Saved · applies to sessions started afterwards" after a save, "" before. */
@@ -144,7 +148,7 @@ export class AgentSystemPresenter extends Presenter<AgentSystemViewModel> {
   #stopFollowing: (() => void) | undefined;
 
   constructor(deps: AgentSystemDeps) {
-    super({ status: "loading", error: "", projectId: deps.projectId, projectName: deps.projectName, scope: PROJECT_SCOPE, scopeName: "Project defaults", repositories: [], layers: [], missingGates: [], runCommands: [], skillsHref: "", overview: { overrides: [], red: [], newProject: false }, changedElsewhere: false, saved: "", problem: "", refused: [], canImportCheckSh: false, importNote: "", unsaved: 0, errors: [], saving: false, canSave: false, saveLabel: "Save project defaults" });
+    super({ status: "loading", error: "", projectId: deps.projectId, projectName: deps.projectName, scope: PROJECT_SCOPE, scopeName: "Project defaults", repositories: [], layers: [], missingGates: [], runCommands: [], skillsHref: "", overview: { overrides: [], red: [], newProject: false }, ownOverrides: [], alsoHere: [], changedElsewhere: false, saved: "", problem: "", refused: [], canImportCheckSh: false, importNote: "", unsaved: 0, errors: [], saving: false, canSave: false, saveLabel: "Save project defaults" });
     this.#deps = deps;
   }
 
@@ -495,7 +499,17 @@ export class AgentSystemPresenter extends Presenter<AgentSystemViewModel> {
     }
     const edits: Edits = { draft: this.#draft, errors };
     const redRepositories = vm.repositories.filter((r) => r.red).length;
-    const shown = layers(scope, view, project, edits, this.#context()).map((l) => (l.key === "guard" && scope.kind === "project" ? { ...l, attention: redRepositories } : l));
+    const own = scope.kind === "repository" ? Object.keys(view.values) : [];
+    const shown = layers(scope, view, project, edits, this.#context()).map((l) => {
+      const counted = { ...l, overrides: own.filter((path) => path.startsWith(`${l.key}.`)).length };
+      return l.key === "guard" && scope.kind === "project" ? { ...counted, attention: redRepositories } : counted;
+    });
+    const words = (path: string): string => {
+      const f = known.get(path);
+      return f === undefined ? path : `${f.section} · ${/^[A-Z][A-Z]/.test(f.label) ? f.label : f.label.charAt(0).toLowerCase() + f.label.slice(1)}`;
+    };
+    const order = (path: string): number => ["learn", "guard", "review", "score"].indexOf(path.split(".")[0] ?? "");
+    const ownOverrides = [...own].sort((a, b) => order(a) - order(b)).map(words);
     const listed: ErrorEntry[] = Object.values(errors).map((e) => ({ ...e, section: known.get(e.field)?.section ?? "", label: known.get(e.field)?.label ?? e.field }));
     const missingGates: MissingGate[] = scope.kind === "repository" ? (shown.find((l) => l.key === "guard")?.gates ?? []).filter((g) => g.missing).map((g) => ({ kind: g.kind, label: gateLabel(g.kind), reason: view.effective.guard.gates.find((x) => x.kind === g.kind)?.command.reason ?? "" })) : [];
     const unsaved = Object.keys(this.#draft).length;
@@ -507,6 +521,8 @@ export class AgentSystemPresenter extends Presenter<AgentSystemViewModel> {
       scopeName: repository?.name ?? "Project defaults",
       layers: shown,
       overview: this.#overview(),
+      ownOverrides,
+      alsoHere: scope.kind === "repository" ? [{ text: "Architecture", href: this.#deps.architectureHref(scope.id) }, { text: "Settings: env, run commands", href: `/projects/${encodeURIComponent(this.#deps.projectId)}/repositories/${encodeURIComponent(scope.id)}/env` }] : [],
       missingGates,
       runCommands: scope.kind === "repository" ? this.#runCommands : [],
       skillsHref: scope.kind === "repository" ? this.#deps.architectureHref(scope.id) : "",

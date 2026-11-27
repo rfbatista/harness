@@ -125,6 +125,8 @@ export interface Layer {
   readonly link: LayerLink | undefined;
   /** What needs the person in this layer: the missing gates of a repository, the red repositories of the project. */
   readonly attention: number;
+  /** How many of this layer's fields the shown repository overrides; 0 at project scope. */
+  readonly overrides: number;
 }
 
 /** The drafts and errors the page holds, by field path. */
@@ -337,6 +339,7 @@ export function learnLayer(scope: Scope, view: SettingsView, project: SettingsVi
     rows: [contextMap, regenerate, taskMemory],
     note: scope.kind === "repository" ? "Skills are read from this repository's instruction files." : "Choose a repository to see its skills and activation rules.",
     attention: 0,
+    overrides: 0,
   };
 }
 
@@ -359,6 +362,7 @@ export function guardLayer(scope: Scope, view: SettingsView, project: SettingsVi
     rows: [row(PROTECTED_PATHS), row(LOCKFILE_RULE), row(RETRY_LIMIT), row(TESTS_FAIL_FIRST)],
     note: "",
     attention: scope.kind === "repository" ? gates.filter((g) => g.missing).length : 0,
+    overrides: 0,
   };
 }
 
@@ -417,6 +421,7 @@ export function reviewLayer(scope: Scope, view: SettingsView, project: SettingsV
     rows: [fieldRow(scope, view, project, enabled, edits), fieldRow(scope, view, project, model, edits), fieldRow(scope, view, project, standards, edits)],
     note: "",
     attention: 0,
+    overrides: 0,
   };
 }
 
@@ -433,7 +438,7 @@ function scoreLine(last: LastScore | undefined): string {
 export function scoreLayer(scope: Scope, view: SettingsView, project: SettingsView | undefined, edits: Edits = NO_EDITS, ctx: LayerContext = NO_CONTEXT): Layer {
   const spec: FieldSpec<boolean> = { path: "score.trajectory_recording.default", label: "Trajectory recording", hint: "Record the tool calls of new tasks' sessions, to turn them into bench cases. A task can override it.", kind: "toggle", rule: { kind: "bool" }, harnessDefault: false, field: (v) => v.effective.trajectoryRecordingDefault, show: showBool };
   const link: LayerLink | undefined = ctx.scoreHref === "" ? undefined : { label: "Bench", text: scoreLine(ctx.lastScore), href: ctx.scoreHref };
-  return { key: "score", title: "Score", purpose: "The offline bench that measures this project's agent setup.", gates: [], visualQa: undefined, link, rows: [fieldRow(scope, view, project, spec, edits)], note: "", attention: 0 };
+  return { key: "score", title: "Score", purpose: "The offline bench that measures this project's agent setup.", gates: [], visualQa: undefined, link, rows: [fieldRow(scope, view, project, spec, edits)], note: "", attention: 0, overrides: 0 };
 }
 
 /** The layers, in the study's order. */

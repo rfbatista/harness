@@ -437,7 +437,7 @@ func TestAgentSystemGuardSectionInTheBrowser(t *testing.T) {
 	set := func(selector, value string) chromedp.Action {
 		return chromedp.Evaluate(`(() => { const el = document.querySelector('`+selector+`'); const set = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value').set; set.call(el, '`+value+`'); el.dispatchEvent(new Event('input', { bubbles: true })); })()`, nil)
 	}
-	var banner, missingRow, locks, switches, retryError, barText, chips, indexDot string
+	var banner, missingRow, locks, switches, retryError, barText, chips, indexDot, chipsAtRest, redLineBoxed, scopeControls, ownOverrides, optionalLine string
 	var saveDisabled bool
 	var shot []byte
 	err := chromedp.Run(ctx,
@@ -449,9 +449,15 @@ func TestAgentSystemGuardSectionInTheBrowser(t *testing.T) {
 		chromedp.Evaluate(`document.querySelectorAll('.ledger-row[data-gate] .lock').length + ''`, &locks),
 		chromedp.Evaluate(`document.querySelectorAll('.ledger-row[data-gate=build] [role=switch], .ledger-row[data-gate=secret_scan] [role=switch]').length + ''`, &switches),
 		chromedp.Evaluate(`document.querySelector('.as-index a[href="#as-guard"] .status')?.getAttribute('aria-label') ?? ''`, &indexDot),
+		chromedp.Evaluate(`document.querySelector('[data-missing-gates]').classList.contains('banner') ? 'boxed' : 'line'`, &redLineBoxed),
+		chromedp.Evaluate(`document.querySelectorAll('main header [aria-label=Scope] select').length + '/' + document.querySelectorAll('main header select').length`, &scopeControls),
+		chromedp.Evaluate(`document.querySelector('[data-own-overrides]')?.textContent ?? ''`, &ownOverrides),
+		chromedp.Evaluate(`(() => { const row = document.querySelector('.ledger-row[data-gate=typecheck]'); const line = row.querySelector('.gate-line'); return line.querySelector('[role=switch]') && line.querySelector('input') && !line.contains(row.querySelector('.tmo')) ? 'one line' : 'split'; })()`, &optionalLine),
 		set(`input[aria-label="Secret scan command"]`, "gitleaks detect"),
 		chromedp.Poll(`!document.querySelector('[data-missing-gates]')`, nil, chromedp.WithPollingTimeout(5*time.Second)),
-		// A chip is added with Enter and removed with its ×.
+		// Chips are plain at rest (no ×, no add field); Edit opens them. A chip is added with Enter and removed with its ×.
+		chromedp.Evaluate(`document.querySelectorAll('.ledger-row[data-path="guard.protected_paths"] .chip-x, .ledger-row[data-path="guard.protected_paths"] input.chip-add').length + ''`, &chipsAtRest),
+		chromedp.Evaluate(`document.querySelector('button[aria-label="Edit Protected paths"]').click()`, nil),
 		set(`input[aria-label="Add to Protected paths"]`, "**/*.lock"),
 		chromedp.Evaluate(`document.querySelector('input[aria-label="Add to Protected paths"]').dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }))`, nil),
 		chromedp.Poll(`[...document.querySelectorAll('.ledger-row[data-path="guard.protected_paths"] .badge.glob')].some(b => b.textContent.includes('**/*.lock'))`, nil, chromedp.WithPollingTimeout(5*time.Second)),
@@ -474,7 +480,7 @@ func TestAgentSystemGuardSectionInTheBrowser(t *testing.T) {
 	if err != nil {
 		t.Fatalf("%v\nJS errors: %v", err, errs.all())
 	}
-	for _, want := range []string{"Secret scan missing", "gitleaks not installed", "REQUIRED_GATE_MISSING"} {
+	for _, want := range []string{"Secret scan missing", "gitleaks not installed"} {
 		if !strings.Contains(banner, want) {
 			t.Errorf("the red banner reads %q, want it to say %q", banner, want)
 		}
@@ -482,8 +488,14 @@ func TestAgentSystemGuardSectionInTheBrowser(t *testing.T) {
 	if !strings.Contains(missingRow, "no command at any level") {
 		t.Errorf("the missing row reads %q", missingRow)
 	}
-	if locks != "5" {
-		t.Errorf("%s required gates say always on, want 5", locks)
+	if locks != "0" {
+		t.Errorf("%s required gates say always on at a repository's scope, want none: only Override", locks)
+	}
+	if redLineBoxed != "line" || scopeControls != "1/1" || chipsAtRest != "0" || optionalLine != "one line" {
+		t.Errorf("red %s, scope selects %s, chip controls at rest %s, optional gate %s", redLineBoxed, scopeControls, chipsAtRest, optionalLine)
+	}
+	if !strings.Contains(ownOverrides, "Overrides on harness") {
+		t.Errorf("the index's own overrides read %q", ownOverrides)
 	}
 	if switches != "0" {
 		t.Errorf("a required gate has a switch (%s)", switches)
@@ -525,7 +537,7 @@ func TestAgentSystemReviewSectionInTheBrowser(t *testing.T) {
 	setInput := func(selector, value string) chromedp.Action {
 		return chromedp.Evaluate(`(() => { const el = document.querySelector('`+selector+`'); const proto = el instanceof HTMLTextAreaElement ? HTMLTextAreaElement.prototype : HTMLInputElement.prototype; Object.getOwnPropertyDescriptor(proto, 'value').set.call(el, `+toJSON(value)+`); el.dispatchEvent(new Event('input', { bubbles: true })); })()`, nil)
 	}
-	var projectNote, options, scoreLine, routeError, barText, shot string
+	var projectNote, options, scoreLine, routeError, barText, shot, modelAtRest string
 	var saveDisabled bool
 	var jpg []byte
 	err := chromedp.Run(ctx,
@@ -537,6 +549,9 @@ func TestAgentSystemReviewSectionInTheBrowser(t *testing.T) {
 		chromedp.Poll(`document.querySelector('.ledger-row[data-link=score]').textContent.includes('$')`, nil, chromedp.WithPollingTimeout(10*time.Second)),
 		chromedp.Evaluate(`document.querySelector('.ledger-row[data-link=score]').textContent`, &scoreLine),
 		chromedp.Navigate(srv.URL+"/projects/p1/agent-system?repository=blog"),
+		chromedp.Poll(`!!document.querySelector('[data-select-text]')`, nil, chromedp.WithPollingTimeout(10*time.Second)),
+		chromedp.Evaluate(`document.querySelectorAll('select[aria-label="Critic model"]').length + ''`, &modelAtRest),
+		chromedp.Evaluate(`document.querySelector('button[aria-label="Change Critic model"]').click()`, nil),
 		chromedp.Poll(`!!document.querySelector('select[aria-label="Critic model"]')`, nil, chromedp.WithPollingTimeout(10*time.Second)),
 		chromedp.Evaluate(`[...document.querySelectorAll('select[aria-label="Critic model"] option')].map(o => o.value + '=' + o.textContent).join('|')`, &options),
 		chromedp.Evaluate(`(() => { const el = document.querySelector('select[aria-label="Critic model"]'); Object.getOwnPropertyDescriptor(HTMLSelectElement.prototype, 'value').set.call(el, 'sonnet'); el.dispatchEvent(new Event('change', { bubbles: true })); })()`, nil),
@@ -558,6 +573,9 @@ func TestAgentSystemReviewSectionInTheBrowser(t *testing.T) {
 	)
 	if err != nil {
 		t.Fatalf("%v\nJS errors: %v", err, errs.all())
+	}
+	if modelAtRest != "0" {
+		t.Errorf("the critic model is a select at rest (%s), want inline text", modelAtRest)
 	}
 	if !strings.Contains(projectNote, "Choose a repository to declare its UI") {
 		t.Errorf("project scope reads %q", projectNote)

@@ -128,6 +128,8 @@ func TestAgentSystemRefusedGlobInAListKeepsTheChipInTheBrowser(t *testing.T) {
 	err := chromedp.Run(ctx,
 		chromedp.EmulateViewport(1280, 900),
 		chromedp.Navigate(srv.URL+"/projects/p1/agent-system"),
+		asWait(`!!document.querySelector('button[aria-label="Edit Protected paths"]')`),
+		chromedp.Evaluate(`document.querySelector('button[aria-label="Edit Protected paths"]').click()`, nil),
 		asWait(`!!document.querySelector('input[aria-label="Add to Protected paths"]')`),
 		asSetInput(`input[aria-label="Add to Protected paths"]`, "src/[bad"),
 		chromedp.Evaluate(`document.querySelector('input[aria-label="Add to Protected paths"]').dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }))`, nil),
