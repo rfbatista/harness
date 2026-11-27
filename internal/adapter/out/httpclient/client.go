@@ -28,7 +28,10 @@ import (
 type Client struct {
 	base  string
 	token string
-	http  *http.Client
+	// person is the person credential (ADR 0016), sent on every request so the
+	// routes that are the person's alone accept this client.
+	person string
+	http   *http.Client
 }
 
 // Option configures a Client.
@@ -36,6 +39,25 @@ type Option func(*Client)
 
 // WithToken sends token as a bearer token on every request.
 func WithToken(token string) Option { return func(c *Client) { c.token = token } }
+
+// WithPerson sends the person credential, the one a pairing gave, with every
+// request. Empty sends none.
+func WithPerson(credential string) Option { return func(c *Client) { c.person = credential } }
+
+// authorize puts the client's credentials on a request's headers.
+func (c *Client) authorize(h http.Header) {
+	if c.token != "" {
+		h.Set("Authorization", "Bearer "+c.token)
+	}
+	if c.person != "" {
+		h.Set("X-Harness-Person", c.person)
+	}
+}
+
+// PairingHint is what a refused person-only call tells a client that holds no
+// credential: how to get one.
+const PairingHint = " Pair this client: take the code from the link the harness printed in its terminal, " +
+	"then run: tui-client pair (it asks for the code)."
 
 // WithHTTPClient replaces the default HTTP client.
 func WithHTTPClient(h *http.Client) Option { return func(c *Client) { c.http = h } }
@@ -100,9 +122,7 @@ func (c *Client) post(ctx context.Context, path string, body, out any) error {
 }
 
 func (c *Client) do(req *http.Request, out any) error {
-	if c.token != "" {
-		req.Header.Set("Authorization", "Bearer "+c.token)
-	}
+	c.authorize(req.Header)
 	resp, err := c.http.Do(req)
 	if err != nil {
 		return fmt.Errorf("coding_pool server at %s: %w", c.base, err)
@@ -111,7 +131,12 @@ func (c *Client) do(req *http.Request, out any) error {
 	if resp.StatusCode >= 300 {
 		// An error body is one small JSON object; read no more than that.
 		body, _ := io.ReadAll(io.LimitReader(resp.Body, 64<<10))
-		return decodeError(resp.StatusCode, body)
+		err := decodeError(resp.StatusCode, body)
+		var se *domain.StructuredError
+		if c.person == "" && errors.As(err, &se) && se.Code == "PERSON_ONLY" {
+			return &domain.StructuredError{Code: se.Code, Message: se.Message + PairingHint}
+		}
+		return err
 	}
 	if out == nil || resp.StatusCode == http.StatusNoContent {
 		_, _ = io.Copy(io.Discard, resp.Body)

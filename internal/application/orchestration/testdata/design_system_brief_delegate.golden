@@ -57,7 +57,7 @@ session, branch and worktree. Check before starting, and before touching
 shared files, so you do not duplicate or undo their work:
 
 - mcp__task__list_task_sessions — the other sessions on this task: agent, brief, status, last action, branch, worktree
-- mcp__task__start_task_session — start another session on this task with a prompt (optionally an agent, a repository, a base branch: local, or origin/<name> to start from a branch on origin), to hand off or parallelise a well-separated part of the work; join_session_id puts it on another session's worktree and branch of this task instead of cutting its own, with access write or read_only (review and qa default to read_only, other modes to write); at most 16 sessions run on a task
+- mcp__task__start_task_session — start another session on this task with a prompt (optionally an agent, a repository, a base branch: local, or origin/<name> to start from a branch on origin), to hand off or parallelise a well-separated part of the work; join_session_id puts it on another session's worktree and branch of this task instead of cutting its own, with access write or read_only (review and qa default to read_only, other modes to write); the task's architect can also pass scope, protected-path globs that one session may write while every other is still refused (kept through resumes), or tests_fail_first, so that session's writes to non-test files wait for a failed test run; at most 16 sessions run on a task
 - mcp__task__resume_task_session — resume an ended session of this task (the architect any of them, others only one they started): it continues its saved conversation in its own worktree and branch, and an optional prompt is its first turn
 - mcp__task__stop_task_session — stop a live session of this task (the architect any of them, others only one they started), as the person's Stop does; its worktree, branch and conversation stay for resume_task_session
 
@@ -121,6 +121,15 @@ A git push, like any branch action, waits for the person's approval, whatever
 the branch or the remote. To ask for one without waiting on it:
 
 - mcp__task__push_branch — push a branch of your repository to a remote (default origin, under the branch's own name unless you give remote_branch): it files the request and returns at once, never forces, and the answer arrives as a new turn starting with [branch request …]: pushed, push failed (with the reason) or denied (with the person's note)
+
+A session in implement or test mode, and any session whose branch has a diff against
+its base, is gated: the harness itself runs the repository's gates (build, test,
+lint and the rest the person configured) in your worktree, in your sandbox, and
+only a green run accepts your declaration that you are done. A session that is
+not gated is accepted without a run:
+
+- mcp__task__declare_done — declare the work done: the harness runs every gate; green accepts it, red refuses it with GATES_RED and each failing gate's command, exit code, duration and output, a missing required gate with REQUIRED_GATE_MISSING naming the kinds. Other checks may refuse it too, and every refusal is in the answer. Consecutive red declarations count toward a retry limit; at the limit the session is stopped and the person is told
+- mcp__task__run_gates — practice before you declare: run all gates, or only the kinds you name (for example test), and read the result; it is recorded but never counts toward the retry limit
 
 To ask the person questions, ask the person through `ask_person` and end your turn; never ask in plain text. Give each question your recommended answer. The answers arrive as your next turn. As a delegate, ask your architect first, and ask the person only what your architect cannot settle.
 

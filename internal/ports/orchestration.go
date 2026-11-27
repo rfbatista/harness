@@ -128,6 +128,13 @@ type ProjectChange struct {
 	UnattributedBranch *UnattributedBranchChange `json:"unattributed_branch,omitempty"`
 	// ArchitectureRuleEvent is a rule that failed in a session.
 	ArchitectureRuleEvent *ArchitectureRuleEventChange `json:"architecture_rule_event,omitempty"`
+	// GateRun is a gate run starting or finishing.
+	GateRun *GateRunChange `json:"gate_run,omitempty"`
+	// LockfileFlag is a lockfile changed together with its manifest, with the
+	// dependencies it added.
+	LockfileFlag *LockfileFlagChange `json:"lockfile_flag,omitempty"`
+	// SessionEscalated is a session stopped for reaching its retry limit.
+	SessionEscalated *SessionEscalatedChange `json:"session_escalated,omitempty"`
 	// DesignSystemSaved says a design system got a new version.
 	DesignSystemSaved *DesignSystemChange `json:"design_system_saved,omitempty"`
 	// DesignSystemChanged says a project's design system was created,
@@ -362,6 +369,12 @@ func (c ProjectChange) ProjectID() string {
 		return c.ProductOwnerDigest.ProjectID
 	case c.ProductOwnerMemory != nil:
 		return c.ProductOwnerMemory.ProjectID
+	case c.GateRun != nil:
+		return c.GateRun.ProjectID
+	case c.SessionEscalated != nil:
+		return c.SessionEscalated.ProjectID
+	case c.LockfileFlag != nil:
+		return c.LockfileFlag.ProjectID
 	case c.DesignSystemSaved != nil:
 		return c.DesignSystemSaved.ProjectID
 	case c.DesignSystemChanged != nil:
@@ -499,6 +512,14 @@ type InteractiveRequest struct {
 	RunnerHost string        `json:"runner_host,omitempty"`
 	// Size is the terminal size a RunnerServer session starts at.
 	Size TermSize `json:"size,omitempty"`
+	// Scope lists protected-path globs the architect unlocks for this session
+	// alone (Glossary "Session scope"); it is kept with its guard configuration
+	// and survives a resume.
+	Scope []string `json:"scope,omitempty"`
+	// TestsFailFirst turns tests-fail-first on for this session (Glossary
+	// "Tests-fail-first"): where the configuration makes it available, its
+	// writes to non-test files are refused until a test run has failed.
+	TestsFailFirst bool `json:"tests_fail_first,omitempty"`
 	// ParentSessionID is the session starting this one on its own task (the
 	// start_task_session tool); empty when a person starts it.
 	ParentSessionID string `json:"parent_session_id,omitempty"`

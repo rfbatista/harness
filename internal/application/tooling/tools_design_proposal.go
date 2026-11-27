@@ -17,11 +17,12 @@ var DesignSessionToolNames = []string{"submit_design_system_proposal"}
 type Option func(*options)
 
 type options struct {
-	proposals  ports.DesignProposalSubmitter
-	placements ports.AgentPlacements
-	modeAgents ports.SettingsReader
-	pushes     ports.BranchPusher
+	proposals    ports.DesignProposalSubmitter
+	placements   ports.AgentPlacements
+	modeAgents   ports.SettingsReader
+	pushes       ports.BranchPusher
 	instructions ports.InstructionProposalSubmitter
+	declarations ports.Declarations
 }
 
 // WithDesignProposals serves submit_design_system_proposal, with which a design

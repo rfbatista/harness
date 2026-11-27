@@ -78,6 +78,11 @@ func (h *Handler) handleArchitectureCheck(c echo.Context) error {
 		if event == "PostToolUse" {
 			check.Point = domain.PointAfterEdit
 		}
+		if in.ToolInput.Command != "" {
+			// The directory each redirection is relative to follows the command's own cd.
+			writes := domain.ShellWritesFrom(in.Cwd, in.ToolInput.Command)
+			check.ShellWrites, check.ShellUnresolved = writes.Paths, writes.Unresolved
+		}
 		p := in.ToolInput.FilePath
 		if p == "" {
 			p = in.ToolInput.NotebookPath

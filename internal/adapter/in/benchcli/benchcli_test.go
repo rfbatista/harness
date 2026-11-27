@@ -59,6 +59,12 @@ func (p projects) Get(_ context.Context, id string) *domain.Project {
 
 func testServer(t *testing.T, sessions *benchSessions, withCase bool) (*httptest.Server, *bench.Service) {
 	t.Helper()
+	return testServerWith(t, sessions, withCase)
+}
+
+// testServerWith is testServer with more router options, such as the person proof.
+func testServerWith(t *testing.T, sessions *benchSessions, withCase bool, opts ...httpapi.Option) (*httptest.Server, *bench.Service) {
+	t.Helper()
 	db, err := sqlite.Open(":memory:")
 	if err != nil {
 		t.Fatal(err)
@@ -76,7 +82,7 @@ func testServer(t *testing.T, sessions *benchSessions, withCase bool) (*httptest
 			t.Fatal(err)
 		}
 	}
-	srv := httptest.NewServer(httpapi.NewRouter(httpapi.NewHandler(httpapi.Services{Bench: svc, BenchRuns: svc}), httpapi.WithToken("secret")))
+	srv := httptest.NewServer(httpapi.NewRouter(httpapi.NewHandler(httpapi.Services{Bench: svc, BenchRuns: svc}), append([]httpapi.Option{httpapi.WithToken("secret")}, opts...)...))
 	t.Cleanup(srv.Close)
 	return srv, svc
 }

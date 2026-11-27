@@ -253,6 +253,38 @@ type ArtifactChanged struct {
 	ProjectID  string
 }
 
+// SessionEscalated: a gated session's red declarations reached its retry limit
+// and the harness stopped it (ADR 0012). RedGates are the gates of the last
+// red declaration run.
+type SessionEscalated struct {
+	SessionID string
+	RunID     string
+	RedGates  []GateKind
+}
+
+// PersonOnlyRefused: a call to a person-only route carried no person credential
+// (ADR 0016). It names no session: the caller proved no identity. ProjectID is
+// the project the route names, empty when it names none.
+type PersonOnlyRefused struct {
+	Method, Route, ProjectID string
+	// SessionID is the session the route names, empty when it names none.
+	SessionID string
+	At        time.Time
+}
+
+// PersonCredentialIssued: a pairing code was redeemed and a person credential
+// issued to Client ("browser" or "client"). The person is told every time, so a
+// stolen code cannot go unnoticed (ADR 0016).
+type PersonCredentialIssued struct {
+	Client string
+	At     time.Time
+}
+
+func (PersonCredentialIssued) EventName() string { return "person_credential.issued" }
+
+func (PersonOnlyRefused) EventName() string { return "person_only.refused" }
+
+func (SessionEscalated) EventName() string           { return "session.escalated" }
 func (ProjectDeleted) EventName() string             { return "project.deleted" }
 func (RepositoryDeleted) EventName() string          { return "repository.deleted" }
 func (RepositorySaved) EventName() string            { return "repository.saved" }

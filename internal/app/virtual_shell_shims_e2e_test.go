@@ -65,7 +65,7 @@ func (e *shellE2E) startWithShimsMode(ticketID, bin string, mode domain.SessionM
 	if shell == "" {
 		e.t.Fatalf("session has no HARNESS_SHELL in %v", spec.Env)
 	}
-	return shimSession{runningSession{id: sess.ID, worktree: spec.Dir, shell: shell}, spec.Env}
+	return shimSession{runningSession{id: sess.ID, worktree: spec.Dir, shell: shell, hooks: spec.Hooks}, spec.Env}
 }
 
 // ran is what a command line printed and how it exited.

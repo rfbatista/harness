@@ -41,6 +41,17 @@ type Deps struct {
 	// EnvFiles are the repositories' saved env files, whose root .env a
 	// command rule sees; nil gives it the server's environment alone.
 	EnvFiles ports.EnvFileLister
+	// Guard gives a session's kept guard configuration, for the protected
+	// paths; nil protects none.
+	Guard ports.GuardSessions
+	// GateRuns are the recorded gate runs, which tests-fail-first observes; nil:
+	// none has failed.
+	GateRuns ports.GateRunStore
+	// ManifestChanged says whether a path of a session's worktree differs from
+	// its base; Diff answers its diff against HEAD. The lockfile rule reads
+	// them; nil: no manifest has changed and no diff is read.
+	ManifestChanged func(ctx context.Context, sess *domain.Session, rel string) bool
+	Diff            func(ctx context.Context, sess *domain.Session, rel string) string
 	// Run runs command rules; nil runs them with sh.
 	Run Runner
 }
@@ -106,6 +117,15 @@ func (s *Service) CheckArchitecture(ctx context.Context, c ports.ArchitectureChe
 		return v
 	}
 	if v, refused := s.readOnlyRefusal(c); refused {
+		return v
+	}
+	if v, refused := s.protectedPathRefusal(ctx, c); refused {
+		return v
+	}
+	if v, refused := s.lockfileRule(ctx, c); refused {
+		return v
+	}
+	if v, refused := s.testsFailFirstRefusal(ctx, c); refused {
 		return v
 	}
 	sess := s.d.Sessions.Get(c.SessionID)

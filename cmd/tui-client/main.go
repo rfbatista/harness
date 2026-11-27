@@ -3,6 +3,7 @@
 // claude in its own git worktree, running in a pane.
 //
 //	tui-client [--api http://localhost:8080] [--token TOKEN] [--run server|tui] [--shell direct|login]
+//	tui-client pair [--api http://localhost:8080]    (the pairing code is read from stdin)
 //
 // The coding_pool server must be running (`make air`); it provisions and
 // records the sessions. With --run server (the default) it also runs them:
@@ -27,11 +28,15 @@ import (
 	"go.uber.org/fx"
 	"go.uber.org/fx/fxevent"
 
+	"operators-mcp/internal/adapter/out/personcred"
 	"operators-mcp/internal/domain"
 	"operators-mcp/internal/tuiclient/wire"
 )
 
 func main() {
+	if len(os.Args) > 1 && os.Args[1] == "pair" {
+		os.Exit(pair(os.Args[2:]))
+	}
 	os.Exit(run())
 }
 
@@ -41,6 +46,10 @@ func run() int {
 	run := flag.String("run", envOr("CODING_POOL_RUN", "server"), "where sessions run: server (they outlive this client) or tui (in this process)")
 	sh := flag.String("shell", envOr("CODING_POOL_SHELL", "direct"), "with --run tui, how sessions start: direct, or login to run them through your login shell")
 	flag.Parse()
+	// The person credential (ADR 0016) is read from the harness's own 0600 file
+	// never from an argument or the environment, which any process of
+	// the user can read: claude in a pane included.
+	credential, _ := personcred.Load()
 
 	runsOn := domain.Runner(*run)
 	if !runsOn.Valid() {
@@ -61,7 +70,7 @@ func run() int {
 	defer closeLog()
 
 	app := fx.New(
-		wire.Options(wire.Config{API: *api, Token: *token, Claude: bin, Shell: *sh, RunsOn: runsOn, RunnerHost: host}),
+		wire.Options(wire.Config{API: *api, Token: *token, Person: credential, Claude: bin, Shell: *sh, RunsOn: runsOn, RunnerHost: host}),
 		fx.WithLogger(func() fxevent.Logger { return &fxevent.ConsoleLogger{W: logw} }),
 	)
 	startCtx, cancel := context.WithTimeout(context.Background(), 15*time.Second)

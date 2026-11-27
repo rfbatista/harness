@@ -41,6 +41,7 @@ import (
 	"operators-mcp/internal/adapter/out/gitprobe"
 	"operators-mcp/internal/adapter/out/keychainshim"
 	"operators-mcp/internal/adapter/out/persistence/sqlite"
+	"operators-mcp/internal/adapter/out/personcred"
 	"operators-mcp/internal/adapter/out/personshell"
 	"operators-mcp/internal/adapter/out/shell"
 	"operators-mcp/internal/adapter/out/termhost"
@@ -51,11 +52,14 @@ import (
 	"operators-mcp/internal/application/artifacts"
 	"operators-mcp/internal/application/branchgate"
 	"operators-mcp/internal/application/branchwatch"
+	"operators-mcp/internal/application/agentsystem"
 	"operators-mcp/internal/application/execution"
+	"operators-mcp/internal/application/gateruns"
 	"operators-mcp/internal/application/gitcredentials"
 	"operators-mcp/internal/application/keychainpath"
 	"operators-mcp/internal/application/notifications"
 	"operators-mcp/internal/application/orchestration"
+	"operators-mcp/internal/application/personproof"
 	"operators-mcp/internal/application/planning"
 	"operators-mcp/internal/application/productowner"
 	"operators-mcp/internal/application/repoagents"
@@ -466,6 +470,9 @@ func newToolingService(cat catalog.Catalog, plan *planning.Service, exec *execut
 // stopped the server sessions a previous run left recorded as running.
 var AgentRuntimeModule = fx.Module("agentruntime",
 	runtime.Module,
+	// The consumer wires its own dependency: the settings store is built from
+	// the orchestration (it announces on its feed), so it is set after both.
+	fx.Invoke(func(orch *orchestration.Service, store *agentsystem.Service) { orch.AgentSystem = store }),
 	fx.Provide(
 		newRuntimeConfig,
 		newClaudeManager,
@@ -474,6 +481,15 @@ var AgentRuntimeModule = fx.Module("agentruntime",
 		sqlite.NewSessionRepository,
 		func(r *sqlite.SessionRepository) ports.SessionRepository { return r },
 		func(r *sqlite.SessionRepository) ports.SandboxViolationStore { return r },
+		sqlite.NewGateRunRepository,
+		func(r *sqlite.GateRunRepository) ports.GateRunStore { return r },
+		newGateRuns,
+		newDeclarer,
+		sqlite.NewPersonCredentialRepository,
+		func(r *sqlite.PersonCredentialRepository) ports.PersonCredentials { return r },
+		newPersonProof,
+		sqlite.NewGuardSessionRepository,
+		func(r *sqlite.GuardSessionRepository) ports.GuardSessions { return r },
 		newAgentClaudeHome,
 		asPort(newClaudeTranscripts, new(ports.ClaudeTranscripts)),
 		asPort(newClaudeTranscriptReader, new(ports.ClaudeTranscriptReader)),
@@ -960,9 +976,16 @@ func newHub() *orchestration.Hub { return orchestration.NewHub(256) }
 // newArchitectureRules checks sessions' actions against their repository's
 // architecture rules, reading each repository's current saved record and
 // announcing every failed rule on the orchestration's project feed.
-func newArchitectureRules(cat catalog.Catalog, sessions ports.SessionRepository, events ports.ArchitectureRuleEventStore, orch *orchestration.Service) *archrules.Service {
+func newArchitectureRules(cat catalog.Catalog, sessions ports.SessionRepository, events ports.ArchitectureRuleEventStore, orch *orchestration.Service, guard ports.GuardSessions, ws *workspaces.Service, gateRuns ports.GateRunStore) *archrules.Service {
 	svc := archrules.NewService(archrules.Deps{
-		Sessions: sessions, Agents: cat.Agents, Records: cat.RepositoryArchitectures, Events: events, Feed: orch, EnvFiles: cat.Projects,
+		Sessions: sessions, Agents: cat.Agents, Records: cat.RepositoryArchitectures, Events: events, Feed: orch, EnvFiles: cat.Projects, Guard: guard, GateRuns: gateRuns,
+		ManifestChanged: gateruns.GitPathChanged(func(ctx context.Context, workspaceID string) string {
+			if w := ws.Get(ctx, workspaceID); w != nil {
+				return w.BaseSHA
+			}
+			return ""
+		}),
+		Diff: gateruns.GitDiffOf(),
 	})
 	svc.Subscribe(cat.Bus)
 	return svc
@@ -1062,6 +1085,7 @@ func newOrchestrationService(
 	assignments *repoagents.Service,
 	agentCatalog *agentcatalog.Catalog,
 	branchRequests ports.BranchRequestStore,
+	guardSessions ports.GuardSessions,
 ) *orchestration.Service {
 	orchCatalog := orchestration.Catalog{
 		Projects:     cat.Projects,
@@ -1142,6 +1166,7 @@ func newOrchestrationService(
 	svc.BranchGateTimeout = cfg.ApprovalTimeout
 	svc.ShimBinary = cfg.ShimBinary
 	svc.DeveloperBin = developerdir.Bin
+	svc.GuardSessions = guardSessions
 	svc.TokenSavers = cat.Capabilities
 	svc.MemoryBudgets = cat.Capabilities
 	svc.Settings = cat.Settings
@@ -1169,6 +1194,10 @@ func newOrchestrationService(
 		ConfigHome: os.Getenv("XDG_CONFIG_HOME"),
 		Bin:        claudeBin.Bin(),
 		Allow:      func(string) []ports.SandboxPath { return allow },
+		// The database holds the person credentials' hashes, secret.key the
+		// stores' key: no session reads either (ADR 0016). Task memory and the
+		// other per-session paths in the data dir stay reachable.
+		Secrets: func() []string { return harnessSecrets(cfg) },
 		// What no session grants is hidden: the workspaces root and, for
 		// one-shots, every checkout.
 		WorkspacesRoot: ws.Root,
@@ -1745,4 +1774,57 @@ func sessionAuthor(sessions ports.SessionRepository, owners ports.ProductOwnerSt
 		}
 		return by
 	}
+}
+
+// newGateRuns is the Guard layer's gate runner (ADR 0012): it runs a gated
+// session's gates in its worktree under the session's sandbox profile.
+func newGateRuns(sessions ports.SessionRepository, guard ports.GuardSessions, store ports.GateRunStore, orch *orchestration.Service, ws *workspaces.Service) *gateruns.Service {
+	return gateruns.New(gateruns.Deps{
+		Sessions: sessions, Guard: guard, Store: store, Exec: &gateruns.ShellExecutor{Sandbox: orch}, Announce: orch,
+		HasDiff: gateruns.GitHasDiff(func(ctx context.Context, workspaceID string) string {
+			if w := ws.Get(ctx, workspaceID); w != nil {
+				return w.BaseSHA
+			}
+			return ""
+		}),
+	})
+}
+
+// newDeclarer is the done declaration, with escalation at the retry limit
+// (ADR 0012): the session is stopped like the person's Stop, and the person,
+// the feed and the architect are told.
+func newDeclarer(runs *gateruns.Service, orch *orchestration.Service, cat catalog.Catalog, channel *taskchannel.Service) *gateruns.Declarer {
+	d := gateruns.NewDeclarer(runs)
+	d.Escalation = &gateruns.Escalator{Stopper: orch, Events: cat.Bus, Feed: orch, Channel: channel}
+	return d
+}
+
+// newPersonProof is the person credential service, telling the person of every
+// credential it issues (ADR 0016).
+func newPersonProof(store ports.PersonCredentials, cat catalog.Catalog) *personproof.Service {
+	svc := personproof.New(store)
+	svc.Events = cat.Bus
+	return svc
+}
+
+// harnessSecrets are the files of the harness a session must never reach: the
+// database with its write-ahead log and shared memory, the key of the encrypted
+// stores and the folder holding the person credential file. An in-memory database has none.
+func harnessSecrets(cfg Config) []string {
+	var out []string
+	if !cfg.inMemory() {
+		if db, err := filepath.Abs(cfg.DBPath); err == nil {
+			out = append(out, db, db+"-wal", db+"-shm", db+"-journal")
+		}
+	}
+	if root, err := cfg.dataRoot(); err == nil && root != "" {
+		out = append(out, filepath.Join(root, "secret.key"))
+	}
+	// The person credential's own folder, ~/.coding-pool/person: the credential file
+	// and its temporary file are in it. Not ~/.coding-pool, which holds every
+	// session's worktree.
+	if dir, err := personcred.Dir(); err == nil {
+		out = append(out, dir)
+	}
+	return out
 }

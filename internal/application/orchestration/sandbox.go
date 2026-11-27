@@ -50,6 +50,12 @@ type Sandbox struct {
 	// every session, so git inside the sandbox sees their identity and
 	// aliases. Empty UserHome: none.
 	UserHome, ConfigHome string
+	// Secrets are the harness's own secrets on disk, the database files that
+	// hold the person credentials' hashes and the key that encrypts its
+	// stores (ADR 0016): hidden from every session, wherever they lie. The rest
+	// of the data directory stays as the policy leaves it, so a session writes
+	// its task memory there. Nil: none.
+	Secrets func() []string
 	// TempDir gives the path prefix of a session's temp dir: each start makes
 	// its own dir as <prefix>-<random> beside it (0700), so a start never
 	// shares a dir with the one before it under the same id. Nil: the
@@ -148,6 +154,13 @@ type SandboxSession struct {
 	// read-only, whole, so worktrees made after the policy was built are
 	// covered; empty for every other mode.
 	WorktreesDir string
+	// Protected are the paths of the worktree a gated session may not write,
+	// as absolute paths (see ProtectedSandboxPaths): read-only inside the
+	// writable worktree, as the OS-level backstop of the protected-path hook.
+	Protected []string
+	// Secrets are paths hidden from the session whatever else grants (see
+	// Sandbox.Secrets).
+	Secrets []string
 	// VirtualShell is the session's shell; empty without one.
 	VirtualShell string
 	// CommitCheckDir is the commit check hooks dir of the worktree the session
@@ -269,13 +282,29 @@ func BuildSandboxPolicy(s SandboxSession) ports.SandboxPolicy {
 	for _, p := range slices.Concat(s.Allow, s.Extra) {
 		add(p.Path, p.Write)
 	}
+	for _, p := range s.Protected {
+		add(p, false) // deeper than the writable worktree, so it wins
+	}
 
 	policy := splitPolicy(all, s.Worktree)
 	if createOnly != "" {
 		policy.CreateOnly = []string{createOnly}
 	}
 	policy.Hidden = hiddenPaths(s, all)
+	policy.Secrets = secretPaths(s.Secrets)
 	return policy
+}
+
+// secretPaths are the harness's secrets as clean absolute paths: never granted,
+// whatever else grants (see ports.SandboxPolicy.Secrets).
+func secretPaths(paths []string) []string {
+	var out []string
+	for _, p := range paths {
+		if p = filepath.Clean(p); p != "." && filepath.IsAbs(p) && !slices.Contains(out, p) {
+			out = append(out, p)
+		}
+	}
+	return out
 }
 
 // addRepositories grants every repository checkout of the project read-only. A
@@ -710,6 +739,12 @@ func (s *Service) sandbox(ctx context.Context, in prepareInput, id string, repo 
 	}
 	sess.Allow = append(sess.Allow, sessionAllow(env)...)
 	sess.Allow = append(sess.Allow, skillDirGrants(skillDirs)...)
+	if sb.Secrets != nil {
+		sess.Secrets = sb.Secrets()
+	}
+	if g := in.Guard; g != nil && g.ProtectsPaths() {
+		sess.Protected = ProtectedSandboxPaths(worktree, g.ProtectedPaths, g.Scope)
+	}
 	policy := BuildSandboxPolicy(sess)
 	if !in.Headless {
 		// An interactive session is wrapped where its terminal runs, from
