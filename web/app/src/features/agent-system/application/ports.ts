@@ -16,3 +16,13 @@ export interface SettingsSource {
   /** Sets or resets (null) fields at one level and answers that level's new view. Fails with SettingsRefused (422) or a SettingsError. */
   save(projectId: string, scope: Scope, patch: Patch): Promise<SettingsView>;
 }
+
+/** Settings saved somewhere: at the project level (repositoryId ""), or at one repository's. */
+export interface SettingsChange {
+  readonly repositoryId: string;
+}
+
+export interface SettingsFeed {
+  /** Follows the project's settings saves, whoever made them; returns what stops it. */
+  follow(projectId: string, handlers: { onChange(change: SettingsChange): void }): () => void;
+}

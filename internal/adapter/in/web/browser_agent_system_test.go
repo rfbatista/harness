@@ -2,6 +2,7 @@ package web
 
 import (
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -23,10 +24,66 @@ type agentSystemAPI struct {
 	refuse   []map[string]string // the next save is refused with these errors (422)
 	repoList []map[string]string
 	checkSh  map[string][]map[string]string // each repository's check.sh import preview
+	stream   *agentSystemStream
+}
+
+// agentSystemStream is the project's event feed (GET /api/events) in memory: the page's stream follows it through
+// the test bridge, and it sends a message when a test says so.
+type agentSystemStream struct {
+	mu    sync.Mutex
+	conns []chan []byte
+}
+
+// followers is how many open connections the feed has.
+func (s *agentSystemStream) followers() int {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return len(s.conns)
+}
+
+func (s *agentSystemStream) push(data any) {
+	b, _ := json.Marshal(data)
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	for _, c := range s.conns {
+		c <- b
+	}
+}
+
+func (s *agentSystemStream) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Content-Type", "text/event-stream")
+	w.Header().Set("Cache-Control", "no-store")
+	w.WriteHeader(http.StatusOK)
+	flusher := w.(http.Flusher)
+	flusher.Flush()
+	c := make(chan []byte, 16)
+	s.mu.Lock()
+	s.conns = append(s.conns, c)
+	s.mu.Unlock()
+	for {
+		select {
+		case b := <-c:
+			fmt.Fprintf(w, "data: %s\n\n", b)
+			flusher.Flush()
+		case <-r.Context().Done():
+			return
+		}
+	}
+}
+
+// set saves a field at a level, as another page would: "" is the project.
+func (a *agentSystemAPI) set(repo, path string, value any) {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	if repo == "" {
+		a.project[path] = value
+	} else {
+		a.repo[repo][path] = value
+	}
 }
 
 func newAgentSystemAPI(repos ...string) *agentSystemAPI {
-	a := &agentSystemAPI{project: map[string]any{}, repo: map[string]map[string]any{}}
+	a := &agentSystemAPI{project: map[string]any{}, repo: map[string]map[string]any{}, stream: &agentSystemStream{}}
 	for _, r := range repos {
 		a.repoList = append(a.repoList, map[string]string{"id": r, "name": r, "project_id": "p1"})
 		a.repo[r] = map[string]any{}
@@ -175,6 +232,7 @@ func agentSystemServer(t *testing.T, api *agentSystemAPI) *httptest.Server {
 	mux := http.NewServeMux()
 	mux.Handle("/api/list_repositories", api)
 	mux.Handle("/api/list_repository_run_commands", api)
+	mux.Handle("/api/events", api.stream)
 	mux.Handle("/api/projects/p1/", api)
 	mux.Handle("/api/", http.NotFoundHandler())
 	mux.Handle("/", NewHandler(Deps{
@@ -183,7 +241,10 @@ func agentSystemServer(t *testing.T, api *agentSystemAPI) *httptest.Server {
 		Now: func() time.Time { return now },
 	}, assets, nil))
 	srv := newBrowserServer(mux)
-	t.Cleanup(srv.Close)
+	t.Cleanup(func() {
+		srv.CloseClientConnections() // the page's event stream never ends on its own
+		srv.Close()
+	})
 	return srv
 }
 
@@ -472,6 +533,8 @@ func TestAgentSystemReviewSectionInTheBrowser(t *testing.T) {
 		chromedp.Navigate(srv.URL+"/projects/p1/agent-system"),
 		chromedp.Poll(`!!document.querySelector('[data-visual-qa]')`, nil, chromedp.WithPollingTimeout(10*time.Second)),
 		chromedp.Evaluate(`document.querySelector('[data-visual-qa]').parentElement.textContent`, &projectNote),
+		// The line reads the bench after the rows: wait for the read to land, not for the dash it starts as.
+		chromedp.Poll(`document.querySelector('.ledger-row[data-link=score]').textContent.includes('$')`, nil, chromedp.WithPollingTimeout(10*time.Second)),
 		chromedp.Evaluate(`document.querySelector('.ledger-row[data-link=score]').textContent`, &scoreLine),
 		chromedp.Navigate(srv.URL+"/projects/p1/agent-system?repository=blog"),
 		chromedp.Poll(`!!document.querySelector('select[aria-label="Critic model"]')`, nil, chromedp.WithPollingTimeout(10*time.Second)),
@@ -575,5 +638,143 @@ func TestAgentSystemImportFromCheckShFillsTheDraftInTheBrowser(t *testing.T) {
 	}
 	if e := errs.all(); len(e) > 0 {
 		t.Errorf("JS errors: %v", e)
+	}
+}
+
+// TestAgentSystemOverviewListsOverridesAndRedRepositoriesInTheBrowser: a project that saved nothing says so;
+// once a repository overrides a field the index lists it with its count, and a repository missing a required
+// gate is listed red with the kind; a repository in the index opens its scope.
+func TestAgentSystemOverviewListsOverridesAndRedRepositoriesInTheBrowser(t *testing.T) {
+	api := newAgentSystemAPI("harness", "blog")
+	srv := agentSystemServer(t, api)
+	ctx, errs := browser(t)
+	var banner, noOverrides, red, overrides, scope string
+	err := chromedp.Run(ctx,
+		chromedp.EmulateViewport(1280, 800),
+		chromedp.Navigate(srv.URL+"/projects/p1/agent-system"),
+		chromedp.Poll(`!!document.querySelector('[data-new-project]')`, nil, chromedp.WithPollingTimeout(10*time.Second)),
+		chromedp.Evaluate(`document.querySelector('[data-new-project]').textContent`, &banner),
+		chromedp.Evaluate(`document.querySelector('[data-overrides]').textContent`, &noOverrides),
+		chromedp.Evaluate(`document.querySelector('[data-red-repositories]').textContent`, &red),
+		chromedp.Evaluate(`new Promise(r => setTimeout(r, 0))`, nil),
+	)
+	if err != nil {
+		t.Fatalf("%v\nJS errors: %v", err, errs.all())
+	}
+	if !strings.Contains(banner, "Every value below is a harness default") || !strings.Contains(noOverrides, "No overrides") || !strings.Contains(red, "harness · secret scan") {
+		t.Errorf("banner %q, overrides %q, red %q", banner, noOverrides, red)
+	}
+	api.set("blog", "guard.retry_limit", 5)
+	api.set("blog", "review.critic.enabled", false)
+	err = chromedp.Run(ctx,
+		chromedp.Navigate(srv.URL+"/projects/p1/agent-system"),
+		chromedp.Poll(`!!document.querySelector('[data-overrides] a')`, nil, chromedp.WithPollingTimeout(10*time.Second)),
+		chromedp.Evaluate(`!!document.querySelector('[data-new-project]') + ''`, &banner),
+		chromedp.Evaluate(`document.querySelector('[data-overrides]').textContent`, &overrides),
+		chromedp.Evaluate(`document.querySelector('[data-overrides] a').click()`, nil),
+		chromedp.Poll(`!!document.querySelector('select[aria-label=Repository]')`, nil, chromedp.WithPollingTimeout(5*time.Second)),
+		chromedp.Evaluate(`document.querySelector('select[aria-label=Repository]').value`, &scope),
+	)
+	if err != nil {
+		t.Fatalf("%v\nJS errors: %v", err, errs.all())
+	}
+	if banner != "false" || !strings.Contains(overrides, "blog · 2 fields") || scope != "blog" {
+		t.Errorf("new-project banner %q, overrides %q, scope %q", banner, overrides, scope)
+	}
+	if e := errs.all(); len(e) > 0 {
+		t.Errorf("JS errors: %v", e)
+	}
+}
+
+// TestAgentSystemChangedElsewhereKeepsTheUnsavedRowsInTheBrowser: a save another page makes raises the attention
+// banner without touching the rows under the person's hands, and Reload brings it in and keeps their unsaved row.
+func TestAgentSystemChangedElsewhereKeepsTheUnsavedRowsInTheBrowser(t *testing.T) {
+	api := newAgentSystemAPI("harness", "blog")
+	srv := agentSystemServer(t, api)
+	ctx, errs := browser(t)
+	retry := `document.querySelector('.ledger-row[data-path="guard.retry_limit"] input').value`
+	var banner, retryBefore, retryAfter, unsaved, contextMap string
+	err := chromedp.Run(ctx,
+		chromedp.EmulateViewport(1280, 800),
+		chromedp.Navigate(srv.URL+"/projects/p1/agent-system"),
+		chromedp.Poll(`!!document.querySelector('.ledger-row[data-path]')`, nil, chromedp.WithPollingTimeout(10*time.Second)),
+		chromedp.Evaluate(`document.querySelector('.ledger-row[data-path="learn.context_map.enabled"] [role=switch]').click()`, nil),
+		chromedp.Poll(`!!document.querySelector('.save-bar')`, nil, chromedp.WithPollingTimeout(5*time.Second)),
+		chromedp.Evaluate(retry, &retryBefore),
+	)
+	if err != nil {
+		t.Fatalf("%v\nJS errors: %v", err, errs.all())
+	}
+	// The page follows the project's feed once the stream names itself: wait for the follow, then another page saves.
+	for deadline := time.Now().Add(10 * time.Second); api.stream.followers() == 0; time.Sleep(50 * time.Millisecond) {
+		if time.Now().After(deadline) {
+			t.Fatal("the page never followed the project feed")
+		}
+	}
+	api.set("", "guard.retry_limit", 7)
+	api.stream.push(map[string]any{"agent_system_settings": map[string]any{"project_id": "p1"}})
+	err = chromedp.Run(ctx,
+		chromedp.Poll(`!!document.querySelector('[data-changed-elsewhere]')`, nil, chromedp.WithPollingTimeout(10*time.Second)),
+		chromedp.Evaluate(`document.querySelector('[data-changed-elsewhere]').textContent`, &banner),
+		chromedp.Evaluate(retry, &retryAfter),
+		chromedp.Evaluate(`[...document.querySelectorAll('[data-changed-elsewhere] button')].find(b => b.textContent === 'Reload').click()`, nil),
+		chromedp.Poll(`!document.querySelector('[data-changed-elsewhere]')`, nil, chromedp.WithPollingTimeout(5*time.Second)),
+		chromedp.Poll(retry+` === '7'`, nil, chromedp.WithPollingTimeout(5*time.Second)),
+		chromedp.Evaluate(`document.querySelector('.save-bar').textContent`, &unsaved),
+		chromedp.Evaluate(`document.querySelector('.ledger-row[data-path="learn.context_map.enabled"] [role=switch]').getAttribute('aria-checked')`, &contextMap),
+	)
+	if err != nil {
+		t.Fatalf("%v\nJS errors: %v", err, errs.all())
+	}
+	if !strings.Contains(banner, "changed on another page") {
+		t.Errorf("banner %q", banner)
+	}
+	if retryBefore != "3" || retryAfter != "3" {
+		t.Errorf("retry limit %q before and %q with the banner up, want 3 both (the rows are not replaced under the person)", retryBefore, retryAfter)
+	}
+	if !strings.Contains(unsaved, "1 unsaved change") || contextMap != "false" {
+		t.Errorf("after Reload the bar reads %q and the context map switch %q, want the unsaved row kept", unsaved, contextMap)
+	}
+	if e := errs.all(); len(e) > 0 {
+		t.Errorf("JS errors: %v", e)
+	}
+}
+
+// TestAgentSystemOnAPhoneStacksTheLedgerInTheBrowser: at 390 px the page does not scroll sideways, the index is a
+// row of tabs above the layers, a ledger row stacks, and the save bar stays in view while a row is edited.
+func TestAgentSystemOnAPhoneStacksTheLedgerInTheBrowser(t *testing.T) {
+	api := newAgentSystemAPI("harness", "blog")
+	srv := agentSystemServer(t, api)
+	ctx, errs := browser(t)
+	var overflow bool
+	var indexDirection, rowColumns string
+	var barInView bool
+	var shot []byte
+	err := chromedp.Run(ctx,
+		chromedp.EmulateViewport(390, 844),
+		chromedp.Navigate(srv.URL+"/projects/p1/agent-system?repository=harness"),
+		chromedp.Poll(`!!document.querySelector('.ledger-row[data-gate]')`, nil, chromedp.WithPollingTimeout(10*time.Second)),
+		chromedp.Evaluate(`document.querySelector('.ledger-row[data-path="learn.context_map.enabled"] [role=switch]').click()`, nil),
+		chromedp.Poll(`!!document.querySelector('.save-bar')`, nil, chromedp.WithPollingTimeout(5*time.Second)),
+		chromedp.Evaluate(`document.documentElement.scrollWidth > window.innerWidth || [...document.querySelectorAll('.agent-system, .as-main, .ledger-row')].some(el => el.getBoundingClientRect().right > window.innerWidth + 1)`, &overflow),
+		chromedp.Evaluate(`getComputedStyle(document.querySelector('.as-index')).flexDirection`, &indexDirection),
+		chromedp.Evaluate(`getComputedStyle(document.querySelector('.ledger-row[data-path="guard.retry_limit"]')).gridTemplateColumns.split(' ').length + ''`, &rowColumns),
+		chromedp.Evaluate(`(() => { const r = document.querySelector('.save-bar').getBoundingClientRect(); return r.bottom <= window.innerHeight + 1 && r.top >= 0; })()`, &barInView),
+		chromedp.FullScreenshot(&shot, 90),
+	)
+	if err != nil {
+		t.Fatalf("%v\nJS errors: %v", err, errs.all())
+	}
+	if overflow {
+		t.Errorf("the page scrolls sideways at 390 px")
+	}
+	if indexDirection != "row" || rowColumns != "2" || !barInView {
+		t.Errorf("index %q, ledger row columns %q, save bar in view %v", indexDirection, rowColumns, barInView)
+	}
+	if e := errs.all(); len(e) > 0 {
+		t.Errorf("JS errors: %v", e)
+	}
+	if dir := os.Getenv("WEB_SCREENSHOT_DIR"); dir != "" {
+		_ = os.WriteFile(dir+"/agent-system-phone.jpg", shot, 0o644)
 	}
 }

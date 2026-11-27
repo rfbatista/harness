@@ -1,9 +1,10 @@
 // The Agent system page: the scope switch, the layers' ledger rows, and a save per row.
 
 import { Presenter } from "../../../../shared/kernel/presenter";
-import type { SettingsSource } from "../../application/ports";
+import type { SettingsFeed, SettingsSource } from "../../application/ports";
 import type { ScopeAddress } from "../../application/scope-address";
 import { editables, gateLabel, layers, newVisualQa, NO_CONTEXT, type Edits, type Layer, type LayerContext } from "../../domain/ledger";
+import { isNewProject, overrideEntries, redEntries, type RepositoryState } from "../../domain/overview";
 import { byRow } from "../../domain/refusal";
 import { gatePath, isRed, PROJECT_SCOPE, sameScope, sameValue, SettingsError, SettingsRefused, type FieldError, type LastScore, type ModelChoice, type Patch, type Repository, type RunCommand, type Scope, type SettingsView, type VisualQaUi } from "../../domain/settings";
 import { check } from "../../domain/validation";
@@ -27,6 +28,24 @@ export interface MissingGate {
   readonly reason: string;
 }
 
+/** A repository in the project-wide overview, with what makes it listed. */
+export interface OverviewEntry {
+  readonly repositoryId: string;
+  readonly name: string;
+  /** The field paths it overrides (Overrides); empty in Red repositories. */
+  readonly fields: readonly string[];
+  /** The required gates it misses, in words (Red repositories); empty in Overrides. */
+  readonly missing: readonly string[];
+}
+
+/** The project's repositories at a glance: what they override, which are red, and whether nothing is saved at all. */
+export interface Overview {
+  readonly overrides: readonly OverviewEntry[];
+  readonly red: readonly OverviewEntry[];
+  /** Nothing is saved at any level: every value is a harness default, detected per repository. */
+  readonly newProject: boolean;
+}
+
 export interface AgentSystemViewModel {
   readonly status: "loading" | "ready" | "failed";
   readonly error: string;
@@ -43,6 +62,9 @@ export interface AgentSystemViewModel {
   readonly runCommands: readonly RunCommand[];
   /** The repository's Instruction files, for the skills line; "" at project scope. */
   readonly skillsHref: string;
+  readonly overview: Overview;
+  /** The settings were saved elsewhere while this page is open (feed: agent_system_settings); Reload brings them in. */
+  readonly changedElsewhere: boolean;
   /** "Saved · applies to sessions started afterwards" after a save, "" before. */
   readonly saved: string;
   /** The repository's scope offers Import from check.sh on its Gates sub-list. */
@@ -67,6 +89,8 @@ export interface AgentSystemViewModel {
 export interface AgentSystemDeps {
   readonly source: SettingsSource;
   readonly address: ScopeAddress;
+  /** Follows the saves other pages make; without it the page does not hear of them. */
+  readonly feed?: SettingsFeed;
   readonly projectId: string;
   readonly projectName: string;
   /** A repository's Instruction files page. */
@@ -84,6 +108,18 @@ export class AgentSystemPresenter extends Presenter<AgentSystemViewModel> {
   /** Each load takes a number; an answer for an older one is dropped. */
   #loading = 0;
   #project: SettingsView | undefined;
+  /** The project level as the rows hold it, at either scope. */
+  #projectView: SettingsView | undefined;
+  /** The project level as the store holds it now: the overview reads it. */
+  #liveProject: SettingsView | undefined;
+  /** Every repository's level as the store holds it now. */
+  readonly #states = new Map<string, SettingsView>();
+  /** What the store held when it last differed from the rows: Reload brings it in. */
+  #fresh: { readonly project: SettingsView; readonly view: SettingsView } | undefined;
+  /** A change arrived while a save ran: it is read when the save ends. */
+  #recheck = false;
+  #pending: Promise<void> = Promise.resolve();
+  #stopFeed: (() => void) | undefined;
   #view: SettingsView | undefined;
   #runCommands: readonly RunCommand[] = [];
   #lastScore: LastScore | undefined;
@@ -94,13 +130,14 @@ export class AgentSystemPresenter extends Presenter<AgentSystemViewModel> {
   #stopFollowing: (() => void) | undefined;
 
   constructor(deps: AgentSystemDeps) {
-    super({ status: "loading", error: "", projectId: deps.projectId, projectName: deps.projectName, scope: PROJECT_SCOPE, scopeName: "Project defaults", repositories: [], layers: [], missingGates: [], runCommands: [], skillsHref: "", saved: "", problem: "", refused: [], canImportCheckSh: false, importNote: "", unsaved: 0, errors: [], saving: false, canSave: false, saveLabel: "Save project defaults" });
+    super({ status: "loading", error: "", projectId: deps.projectId, projectName: deps.projectName, scope: PROJECT_SCOPE, scopeName: "Project defaults", repositories: [], layers: [], missingGates: [], runCommands: [], skillsHref: "", overview: { overrides: [], red: [], newProject: false }, changedElsewhere: false, saved: "", problem: "", refused: [], canImportCheckSh: false, importNote: "", unsaved: 0, errors: [], saving: false, canSave: false, saveLabel: "Save project defaults" });
     this.#deps = deps;
   }
 
   /** Reads the repositories and the scope the address names, then every repository's state for the red dots. */
   async start(): Promise<void> {
     this.#stopFollowing ??= this.#deps.address.follow((id) => void this.#load(id));
+    this.#stopFeed ??= this.#deps.feed?.follow(this.#deps.projectId, { onChange: () => this.#changed() });
     this.update((vm) => ({ ...vm, status: "loading", error: "" }));
     let repositories: Repository[];
     try {
@@ -111,13 +148,20 @@ export class AgentSystemPresenter extends Presenter<AgentSystemViewModel> {
     }
     this.update((vm) => ({ ...vm, repositories: repositories.map((r) => ({ ...r, red: false })) }));
     await this.#load(this.#deps.address.read());
-    await this.#markRed(repositories);
+    await this.#readStates(repositories);
     await this.#readLastScore();
+  }
+
+  /** Resolves when the changes heard on the feed have been read. */
+  settled(): Promise<void> {
+    return this.#pending;
   }
 
   stop(): void {
     this.#stopFollowing?.();
     this.#stopFollowing = undefined;
+    this.#stopFeed?.();
+    this.#stopFeed = undefined;
     this.#loading++;
   }
 
@@ -231,10 +275,19 @@ export class AgentSystemPresenter extends Presenter<AgentSystemViewModel> {
       this.#draft = draft;
       this.#refusals = {};
       this.#view = view;
-      if (scope.kind === "project") this.#project = undefined;
-      this.#show({ saved: SAVED, saving: false });
+      if (scope.kind === "project") {
+        this.#project = undefined;
+        this.#projectView = view;
+        this.#liveProject = view;
+      } else this.#states.set(scope.id, view);
+      this.#fresh = undefined;
+      this.#show({ saved: SAVED, saving: false, changedElsewhere: false });
       // A project default may change what a repository inherits: its red dot and rows read it again.
-      if (scope.kind === "project") await this.#markRed(this.viewModel.repositories);
+      if (scope.kind === "project") await this.#readStates(this.viewModel.repositories);
+      if (this.#recheck) {
+        this.#recheck = false;
+        await this.#refresh();
+      }
     } catch (err) {
       if (!sameScope(this.viewModel.scope, scope)) return;
       if (err instanceof SettingsRefused) {
@@ -258,6 +311,9 @@ export class AgentSystemPresenter extends Presenter<AgentSystemViewModel> {
       const runCommands = scope.kind === "repository" ? await this.#readRunCommands(scope.id) : [];
       if (token !== this.#loading) return;
       this.#project = scope.kind === "project" ? undefined : project;
+      this.#projectView = project;
+      this.#liveProject = project;
+      this.#fresh = undefined;
       this.#view = view;
       this.#runCommands = runCommands;
       this.#draft = {};
@@ -291,19 +347,79 @@ export class AgentSystemPresenter extends Presenter<AgentSystemViewModel> {
     return { ...NO_CONTEXT, models: this.#deps.models ?? [], lastScore: this.#lastScore, scoreHref: this.#deps.scoreHref ?? "" };
   }
 
-  async #markRed(repositories: readonly Repository[]): Promise<void> {
+  /** Reads every repository's level: the red dots and the overview follow them. */
+  async #readStates(repositories: readonly Repository[]): Promise<void> {
     const token = this.#loading;
-    const red = await Promise.all(repositories.map(async (r) => {
-      try {
-        return isRed(await this.#deps.source.view(this.#deps.projectId, { kind: "repository", id: r.id }));
-      } catch {
-        return false;
-      }
-    }));
+    const views = await Promise.all(repositories.map((r) => this.#deps.source.view(this.#deps.projectId, { kind: "repository", id: r.id }).catch(() => undefined)));
     if (token !== this.#loading) return;
-    this.update((vm) => ({ ...vm, repositories: vm.repositories.map((r, i) => ({ ...r, red: red[i] ?? false })) }));
+    repositories.forEach((r, i) => {
+      const view = views[i];
+      if (view === undefined) this.#states.delete(r.id);
+      else this.#states.set(r.id, view);
+    });
+    this.#redDots(repositories);
+  }
+
+  #redDots(repositories: readonly Repository[]): void {
+    this.update((vm) => ({ ...vm, repositories: repositories.map((r) => ({ ...r, red: (() => { const v = this.#states.get(r.id); return v === undefined ? false : isRed(v); })() })) }));
     // The project's Guard index counts the red repositories.
     this.#show({});
+  }
+
+  /** A save was heard on the feed: the overview reads it, and the rows are told when it is not what they hold. */
+  #changed(): void {
+    this.#pending = this.#pending.then(() => this.#refresh());
+  }
+
+  async #refresh(): Promise<void> {
+    if (this.viewModel.status !== "ready") return;
+    // A save of the page's own is being answered: its echo is read once the answer is held.
+    if (this.viewModel.saving) {
+      this.#recheck = true;
+      return;
+    }
+    const token = this.#loading;
+    const scope = this.viewModel.scope;
+    let project: SettingsView;
+    try {
+      project = await this.#deps.source.view(this.#deps.projectId, PROJECT_SCOPE);
+    } catch {
+      return;
+    }
+    if (token !== this.#loading) return;
+    this.#liveProject = project;
+    await this.#readStates(this.viewModel.repositories);
+    if (token !== this.#loading || this.viewModel.saving) return;
+    const shown = scope.kind === "project" ? project : this.#states.get(scope.id);
+    const same = shown !== undefined && sameValue(shown, this.#view) && (scope.kind === "project" || sameValue(project, this.#projectView));
+    this.#fresh = same || shown === undefined ? undefined : { project, view: shown };
+    this.#show({ changedElsewhere: this.#fresh !== undefined });
+  }
+
+  /** Brings in what was saved elsewhere, keeping the rows the person changed and has not saved. */
+  async reload(): Promise<void> {
+    const fresh = this.#fresh;
+    if (fresh === undefined) return;
+    this.#fresh = undefined;
+    this.#projectView = fresh.project;
+    this.#project = this.viewModel.scope.kind === "project" ? undefined : fresh.project;
+    this.#view = fresh.view;
+    this.#show({ changedElsewhere: false, saved: "" });
+  }
+
+  #overview(): Overview {
+    const project = this.#liveProject ?? this.#projectView;
+    const repositories = this.viewModel.repositories;
+    const states: RepositoryState[] = repositories.flatMap((r) => {
+      const view = this.#states.get(r.id);
+      return view === undefined ? [] : [{ repository: { id: r.id, name: r.name }, view }];
+    });
+    const loaded = project !== undefined && states.length === repositories.length;
+    return {
+      overrides: overrideEntries(states).map((e) => ({ repositoryId: e.repository.id, name: e.repository.name, fields: e.fields, missing: [] })),
+      red: redEntries(states).map((e) => ({ repositoryId: e.repository.id, name: e.repository.name, fields: [], missing: e.missing.map(gateLabel) })),
+      newProject: loaded && isNewProject(project, states),
+    };
   }
 
   /** The fields as saved, without the draft: their rules say what a value may be. */
@@ -348,6 +464,7 @@ export class AgentSystemPresenter extends Presenter<AgentSystemViewModel> {
       scope,
       scopeName: repository?.name ?? "Project defaults",
       layers: shown,
+      overview: this.#overview(),
       missingGates,
       runCommands: scope.kind === "repository" ? this.#runCommands : [],
       skillsHref: scope.kind === "repository" ? this.#deps.architectureHref(scope.id) : "",

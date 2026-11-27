@@ -263,3 +263,17 @@ export class RefusalDto {
     }));
   }
 }
+
+/** A project feed message `{ agent_system_settings: { project_id, repository_id? } }`: settings were saved. */
+export class SettingsChangedDto {
+  constructor(
+    readonly project_id: string,
+    readonly repository_id: string,
+  ) {}
+
+  static fromJSON(raw: unknown): SettingsChangedDto {
+    const outer = object("SettingsChangedDto", raw);
+    const from = object("SettingsChangedDto", outer["agent_system_settings"], "agent_system_settings");
+    return new SettingsChangedDto(string("SettingsChangedDto", from, "project_id", "agent_system_settings"), optionalString("SettingsChangedDto", from, "repository_id", "agent_system_settings") ?? "");
+  }
+}

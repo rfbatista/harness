@@ -1,8 +1,8 @@
-import { useEffect, useState, type ChangeEvent, type KeyboardEvent } from "react";
+import { useEffect, useState, type ChangeEvent, type KeyboardEvent, type MouseEvent } from "react";
 import { usePresenter } from "../../../../shared/presentation/use-presenter";
 import type { GateRow, Layer, Row, VisualQaBlock } from "../../domain/ledger";
 import type { RunCommand } from "../../domain/settings";
-import type { AgentSystemPresenter, ErrorEntry } from "../presenters/agent-system-presenter";
+import type { AgentSystemPresenter, AgentSystemViewModel, ErrorEntry, OverviewEntry } from "../presenters/agent-system-presenter";
 
 /** The page: toolbar with the scope switch, the sticky index of the layers, and each layer's ledger rows. */
 export function AgentSystemView({ presenter }: { presenter: AgentSystemPresenter }) {
@@ -46,11 +46,33 @@ export function AgentSystemView({ presenter }: { presenter: AgentSystemPresenter
           {vm.layers.map((layer) => (
             <a key={layer.key} href={`#as-${layer.key}`}>
               {layer.title}
-              {layer.attention > 0 && <span className="[ status ]" data-state="missing" data-dot-only role="img" aria-label={vm.scope.kind === "project" ? `${layer.attention} red ${layer.attention === 1 ? "repository" : "repositories"}` : `${layer.attention} missing`} style={{ marginInlineStart: "auto" }} />}
+              {layer.attention > 0 && (
+                <span className="[ status ]" data-state="missing" role="img" aria-label={vm.scope.kind === "project" ? `${layer.attention} red ${layer.attention === 1 ? "repository" : "repositories"}` : `${layer.attention} missing`} style={{ marginInlineStart: "auto" }}>
+                  {layer.attention} {vm.scope.kind === "project" ? "red" : "missing"}
+                </span>
+              )}
             </a>
           ))}
+          <Overview presenter={presenter} overview={vm.overview} status={vm.status} />
         </nav>
         <div className="[ as-main ]">
+          {vm.changedElsewhere && (
+            <div className="[ banner ]" data-tone="attention" role="status" data-changed-elsewhere="">
+              <div className="[ flow ] [ flow-space-3xs grow ]">
+                <span>
+                  These settings changed on another page while you were editing. <span className="[ code ]">agent_system_settings</span> Reload keeps your unsaved rows and refreshes the rest.
+                </span>
+              </div>
+              <button type="button" className="[ button ]" data-size="sm" onClick={() => void presenter.reload()}>
+                Reload
+              </button>
+            </div>
+          )}
+          {vm.status === "ready" && vm.overview.newProject && (
+            <div className="[ banner ]" role="status" data-new-project="">
+              <div>Nothing set yet. Every value below is a harness default, the gates detected from each repository's stack. The layers already run on these; change what is wrong for this project.</div>
+            </div>
+          )}
           {vm.missingGates.length > 0 && (
             <div className="[ banner ]" data-tone="danger" role="status" data-missing-gates="">
               <div className="[ flow ] [ flow-space-3xs grow ]">
@@ -103,6 +125,42 @@ export function AgentSystemView({ presenter }: { presenter: AgentSystemPresenter
           {vm.status === "ready" && vm.layers.map((layer) => <LayerSection key={layer.key} layer={layer} presenter={presenter} skillsHref={vm.skillsHref} runCommands={vm.runCommands} canImport={vm.canImportCheckSh} importNote={vm.importNote} />)}
           {vm.status === "ready" && <SaveBar presenter={presenter} unsaved={vm.unsaved} errors={vm.errors} canSave={vm.canSave} saving={vm.saving} label={vm.saveLabel} />}
         </div>
+      </div>
+    </>
+  );
+}
+
+/** What each repository overrides and which are red: links that open that repository's scope. */
+function Overview({ presenter, overview, status }: { presenter: AgentSystemPresenter; overview: AgentSystemViewModel["overview"]; status: string }) {
+  if (status !== "ready") return null;
+  const open = (id: string) => (event: MouseEvent<HTMLAnchorElement>) => {
+    event.preventDefault();
+    void presenter.selectScope(id);
+  };
+  const link = (e: OverviewEntry) => (
+    <a href={`?repository=${encodeURIComponent(e.repositoryId)}`} onClick={open(e.repositoryId)}>
+      {e.name}
+    </a>
+  );
+  return (
+    <>
+      <div className="[ sum ]" id="as-overrides" data-overrides="">
+        <b>Overrides</b>
+        {overview.overrides.length === 0 && <span>No overrides</span>}
+        {overview.overrides.map((e) => (
+          <span key={e.repositoryId} title={e.fields.join(", ")}>
+            {link(e)} · {e.fields.length} {e.fields.length === 1 ? "field" : "fields"}
+          </span>
+        ))}
+      </div>
+      <div className="[ sum ]" id="as-red" data-red-repositories="">
+        <b>Red repositories</b>
+        {overview.red.length === 0 && <span>None</span>}
+        {overview.red.map((e) => (
+          <span key={e.repositoryId}>
+            {link(e)} · {e.missing.join(", ").toLowerCase()}
+          </span>
+        ))}
       </div>
     </>
   );

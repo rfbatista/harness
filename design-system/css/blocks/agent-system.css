@@ -52,6 +52,21 @@
     }
   }
 
+  /* The project's repositories at a glance, under the layers: what each overrides, which are red. */
+  .as-index > .sum {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-3xs);
+    margin-block-start: var(--space-m);
+    padding: var(--space-s);
+    border-block-start: var(--border-width) solid var(--color-line);
+    font-size: var(--text-xs);
+    color: var(--color-ink-faint);
+
+    & > b { font-weight: var(--weight-medium); color: var(--color-ink-muted); }
+    & a { color: var(--color-ink-muted); }
+  }
+
   .as-main {
     display: flex;
     flex-direction: column;
@@ -200,8 +215,10 @@
     .as-index {
       position: static;
       flex-direction: row;
-      overflow-x: auto;
+      flex-wrap: wrap;
       border-block-end: var(--border-width) solid var(--color-line);
+
+      & > .sum { flex: 1 1 100%; margin-block-start: 0; }
     }
 
     .ledger-row {

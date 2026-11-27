@@ -311,7 +311,7 @@ export function mountIslands(doc: Document): Dispose {
     "agents-whiteboard": (mount) => mountWhiteboard(mount, win, api, feed),
     "task-services": (mount) => mountTaskServices(mount, win, api, feed),
     // The Agent system page: the four layers' settings, client-rendered into <main>.
-    "agent-system": (mount, props) => mountAgentSystem(mount, props, win, api),
+    "agent-system": (mount, props) => mountAgentSystem(mount, props, win, api, feed),
     // The Score page: the eval bench's scorecard, cases and runs, client-rendered into <main>.
     score: (mount, props) => mountScore(mount, props, win, api, feed),
   };
