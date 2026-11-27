@@ -23,6 +23,11 @@ export interface CardSpec {
   at: string;
   status?: "finished" | "cancelled" | "partial";
   fingerprint?: string;
+  /** What the run ran on, as the setup record counts it; leaving all out is a scorecard recorded before parts existed. */
+  agents?: number;
+  skills?: number;
+  instructions?: number;
+  parts?: Record<string, string>;
   model?: string;
   judge?: string;
   cost?: number;
@@ -65,7 +70,7 @@ export function wireScorecard(spec: CardSpec): Record<string, unknown> {
     id: spec.id,
     project_id: "p1",
     status: spec.status ?? "finished",
-    setup: { fingerprint: spec.fingerprint ?? "fp1", model: spec.model ?? "opus-5-5", ...(spec.judge ? { judge_model: spec.judge } : {}), cli_version: "2.1.14" },
+    setup: { fingerprint: spec.fingerprint ?? "fp1", model: spec.model ?? "opus-5-5", ...(spec.judge ? { judge_model: spec.judge } : {}), cli_version: "2.1.14", ...(spec.parts ? { agents: spec.agents ?? 1, skills: spec.skills ?? 0, instructions: spec.instructions ?? 0, parts: spec.parts } : {}) },
     cases,
     patterns,
     aggregate: { scored: means.length, mean: means.length === 0 ? 0 : means.reduce((a, b) => a + b, 0) / means.length },

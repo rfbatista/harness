@@ -115,6 +115,10 @@ export class ScorecardDto {
     readonly model: string,
     readonly judge_model: string,
     readonly cli_version: string,
+    /** What the run ran on; null for a scorecard recorded before the setup kept its parts. */
+    readonly agents: number | null,
+    readonly skills: number | null,
+    readonly instructions: number | null,
     readonly cases: readonly CaseScoreDto[],
     readonly patterns: Readonly<Record<string, AggregateDto>>,
     readonly aggregate: AggregateDto,
@@ -127,6 +131,7 @@ export class ScorecardDto {
   static fromJSON(raw: unknown, at = ""): ScorecardDto {
     const from = object(NAME, raw, at);
     const setup = object(NAME, from["setup"], `${at}.setup`.replace(/^\./, ""));
+    const recorded = typeof setup["parts"] === "object" && setup["parts"] !== null;
     const patternsRaw = from["patterns"] === undefined || from["patterns"] === null ? {} : object(NAME, from["patterns"], "patterns");
     const patterns: Record<string, AggregateDto> = {};
     for (const key of Object.keys(patternsRaw)) patterns[key] = AggregateDto.fromJSON(patternsRaw[key], `patterns.${key}`);
@@ -138,6 +143,9 @@ export class ScorecardDto {
       optionalString(NAME, setup, "model", "setup") ?? "",
       optionalString(NAME, setup, "judge_model", "setup") ?? "",
       optionalString(NAME, setup, "cli_version", "setup") ?? "",
+      recorded ? numberOr0(setup, "agents", "setup") : null,
+      recorded ? numberOr0(setup, "skills", "setup") : null,
+      recorded ? numberOr0(setup, "instructions", "setup") : null,
       lenientArray(NAME, from, "cases", (item, path) => CaseScoreDto.fromJSON(item, path), at),
       patterns,
       from["aggregate"] === undefined ? new AggregateDto(0, 0) : AggregateDto.fromJSON(from["aggregate"], "aggregate"),
@@ -191,6 +199,8 @@ export class ComparisonDto {
   constructor(
     readonly previous_id: string,
     readonly fingerprint_changed: boolean,
+    /** The setup parts whose digest differs; null when either scorecard did not record its parts. */
+    readonly changed_parts: readonly string[] | null,
     readonly aggregate: DeltaDto,
     readonly groups: Readonly<Record<string, DeltaDto>>,
     readonly cases: readonly CaseDeltaDto[],
@@ -204,6 +214,7 @@ export class ComparisonDto {
     return new ComparisonDto(
       string("ComparisonDto", from, "previous_id", ""),
       from["fingerprint_changed"] === true,
+      Array.isArray(from["changed_parts"]) ? from["changed_parts"].filter((p): p is string => typeof p === "string") : null,
       DeltaDto.fromJSON(from["aggregate"], "aggregate"),
       groups,
       Array.isArray(from["cases"]) ? from["cases"].map((c, i) => CaseDeltaDto.fromJSON(c, `cases[${i}]`)) : [],

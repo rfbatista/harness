@@ -67,10 +67,19 @@ function compareWire(prev: Wire, cur: Wire): unknown {
   return {
     previous_id: prev["id"],
     fingerprint_changed: (prev["setup"] as Wire)["fingerprint"] !== (cur["setup"] as Wire)["fingerprint"],
+    changed_parts: changedParts(prev["setup"] as Wire, cur["setup"] as Wire),
     aggregate: delta((prev["aggregate"] as Wire)["mean"], (cur["aggregate"] as Wire)["mean"]),
     groups,
     cases,
   };
+}
+
+/** The parts whose digest differs, sorted; null when either setup did not record its parts. */
+function changedParts(prev: Wire, cur: Wire): string[] | null {
+  const a = prev["parts"] as Record<string, string> | undefined;
+  const b = cur["parts"] as Record<string, string> | undefined;
+  if (a === undefined || b === undefined) return null;
+  return [...new Set([...Object.keys(a), ...Object.keys(b)])].filter((k) => a[k] !== b[k]).sort();
 }
 
 const json = (status: number, body: unknown) => new Response(JSON.stringify(body), { status, headers: { "Content-Type": "application/json" } });

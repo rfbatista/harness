@@ -126,6 +126,12 @@ export interface TrajectoriesVm {
   readonly error: string;
 }
 
+/** What the run ran on, counted; a scorecard recorded before the setup kept its parts says so. */
+function setupCounts(setup: Scorecard["setup"]): string {
+  if (setup.agents === null || setup.skills === null || setup.instructions === null) return "agents, skills and instructions not recorded";
+  return `agents ${setup.agents} · skills ${setup.skills} · instructions ${setup.instructions}`;
+}
+
 export interface Fingerprint {
   readonly short: string;
   readonly parts: string;
@@ -667,7 +673,7 @@ export class ScorePresenter extends Presenter<ScoreViewModel> {
       runs,
       readName: read ? `${name(read)} · ${when(read.startedAt, now)}` : "",
       baselineName: baseline ? `${name(baseline)} · ${when(baseline.startedAt, now)}` : "",
-      fingerprint: read === null || cmp === null ? null : { short: read.setup.fingerprint.slice(0, 6), parts: [read.setup.agentName && `agent ${read.setup.agentName}`, read.setup.model && `model ${read.setup.model}`, read.setup.cliVersion && `claude ${read.setup.cliVersion}`].filter(Boolean).join(" · "), changed: cmp.changedSetup.join(", ") },
+      fingerprint: read === null || cmp === null ? null : { short: read.setup.fingerprint.slice(0, 6), parts: [setupCounts(read.setup), read.setup.model && `model ${read.setup.model}`, read.setup.cliVersion && `claude ${read.setup.cliVersion}`].filter(Boolean).join(" · "), changed: cmp.changedSetup.join(", ") },
       tiles: read === null || cmp === null ? [] : tiles(read, cmp, baseline, baseline ? name(baseline) : "", state === "first-run"),
       notice: noticeFor(state, caseTotal),
       noise: cmp?.noiseOnly && baseline && read ? `Same setup as ${name(baseline)} (${read.setup.fingerprint.slice(0, 6)}) but the aggregate moved by ${cmp.aggregate.delta.change.toFixed(2)}. Runs are not deterministic; compare over several runs before acting.` : "",

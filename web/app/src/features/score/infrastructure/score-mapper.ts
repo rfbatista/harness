@@ -40,7 +40,7 @@ export function toScorecard(dto: ScorecardDto): Scorecard {
   return {
     id: dto.id,
     status: dto.status,
-    setup: { fingerprint: dto.fingerprint, agentName: dto.agent_name, model: dto.model, judgeModel: dto.judge_model, cliVersion: dto.cli_version },
+    setup: { fingerprint: dto.fingerprint, agentName: dto.agent_name, model: dto.model, judgeModel: dto.judge_model, cliVersion: dto.cli_version, agents: dto.agents, skills: dto.skills, instructions: dto.instructions },
     cases,
     patterns,
     aggregate: { scored: dto.aggregate.scored, mean: dto.aggregate.mean },
@@ -59,6 +59,7 @@ export function toComparison(dto: ComparisonDto): ScoreComparison {
   return {
     previousId: dto.previous_id,
     fingerprintChanged: dto.fingerprint_changed,
+    changedParts: dto.changed_parts,
     aggregate: toDelta(dto.aggregate),
     groups,
     cases: dto.cases.map((c) => ({ caseId: c.case_id, status: c.status, mean: c.mean === null ? null : toDelta(c.mean) })),

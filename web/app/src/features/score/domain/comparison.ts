@@ -17,6 +17,8 @@ export interface ScoreDelta {
 export interface ScoreComparison {
   readonly previousId: string;
   readonly fingerprintChanged: boolean;
+  /** The setup parts that changed ("model", "instruction AGENTS.md", "skill skills/x/SKILL.md"); null when either run did not record its parts. */
+  readonly changedParts: readonly string[] | null;
   readonly aggregate: ScoreDelta;
   readonly groups: Readonly<Partial<Record<Group, ScoreDelta>>>;
   /** Per case of the run read: "added" is new, "unchanged" has no mean delta. */
@@ -103,8 +105,17 @@ function weakest(c: CaseScore): Group {
   return pick;
 }
 
-function changedParts(base: Scorecard, read: Scorecard): string[] {
+/** A recorded part in the words the setup line uses: a file by its name, a skill by its folder. */
+function partWords(part: string): string {
+  if (part.startsWith("instruction ")) return part.slice("instruction ".length);
+  const skill = /^skill (?:.*\/)?([^/]+)\/SKILL\.md$/.exec(part);
+  if (skill !== null) return `skill ${skill[1] ?? ""}`;
+  return part === "claude cli" ? "claude CLI" : part;
+}
+
+function changedParts(base: Scorecard, read: Scorecard, named: readonly string[] | null): string[] {
   if (base.setup.fingerprint === read.setup.fingerprint) return [];
+  if (named !== null) return named.map(partWords);
   const parts: string[] = [];
   if (base.setup.agentName !== read.setup.agentName) parts.push("agent");
   if (base.setup.model !== read.setup.model) parts.push("model");
@@ -133,7 +144,7 @@ export function comparisonOf(read: Scorecard, baseline: Scorecard | null, answer
   const figure = (value: number | null, d: ScoreDelta | undefined): TileFigure => ({ value, delta: against === null ? FIRST_RUN : deltaOf(d), answered: against !== null && d !== undefined });
   const aggregate = figure(read.aggregate.scored === 0 ? null : read.aggregate.mean, against?.aggregate);
   const group = (g: Group): TileFigure => figure(cardGroup(read, g), against?.groups[g]);
-  const changedSetup = baseline !== null && against !== null && against.fingerprintChanged ? changedParts(baseline, read) : [];
+  const changedSetup = baseline !== null && against !== null && against.fingerprintChanged ? changedParts(baseline, read, against.changedParts) : [];
   return {
     baseline,
     aggregate,

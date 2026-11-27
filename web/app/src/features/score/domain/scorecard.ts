@@ -55,6 +55,10 @@ export interface Setup {
   readonly model: string;
   readonly judgeModel: string;
   readonly cliVersion: string;
+  /** What the run ran on; null when the scorecard was recorded before the setup kept its parts. */
+  readonly agents: number | null;
+  readonly skills: number | null;
+  readonly instructions: number | null;
 }
 
 /** "cancelled" and "partial" (a run of some of the cases) hold only some of the cases. */
