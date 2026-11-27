@@ -137,6 +137,8 @@ export class AgentSystemPresenter extends Presenter<AgentSystemViewModel> {
   #lastScore: LastScore | undefined;
   /** What the person changed and has not saved, by field path (null: reset); it belongs to the shown scope. */
   #draft: Record<string, unknown> = {};
+  /** Drafted rows the person made their own with Override: an override equal to the inherited value stays one until Reset. */
+  readonly #kept = new Set<string>();
   /** The store's refusals by field path, until the row changes. */
   #refusals: Record<string, FieldError> = {};
   #stopFollowing: (() => void) | undefined;
@@ -198,7 +200,7 @@ export class AgentSystemPresenter extends Presenter<AgentSystemViewModel> {
     const draft = { ...this.#draft };
     // Toggling a drafted row back to the value it was saved with is no change either.
     const saved = this.#rows().find((r) => r.path === path);
-    const undone = path in draft && value !== null && saved !== undefined && sameValue(saved.current, value) && !(path in (this.#view?.values ?? {}));
+    const undone = path in draft && !this.#kept.has(path) && value !== null && saved !== undefined && sameValue(saved.current, value) && !(path in (this.#view?.values ?? {}));
     if (this.#holds(path, value) || undone) delete draft[path];
     else draft[path] = value;
     this.#draft = draft;
@@ -211,7 +213,9 @@ export class AgentSystemPresenter extends Presenter<AgentSystemViewModel> {
   /** Makes an inherited row this scope's own, keeping its value. */
   overrideHere(path: string): void {
     const row = this.#rows().find((r) => r.path === path);
-    if (row !== undefined) this.edit(path, row.current);
+    if (row === undefined) return;
+    this.edit(path, row.current);
+    if (path in this.#draft) this.#kept.add(path);
   }
 
   /** Drafts a number row from what the person typed: a whole number, or the text itself for the form to refuse. */
@@ -290,7 +294,7 @@ export class AgentSystemPresenter extends Presenter<AgentSystemViewModel> {
     this.update((vm) => ({ ...vm, saved: "", problem: "", saving: true }));
     try {
       const view = await this.#deps.source.save(this.#deps.projectId, scope, patch);
-      if (!sameScope(this.viewModel.scope, scope)) return;
+      if (!sameScope(this.viewModel.scope, scope)) return this.#staleSave(scope, view);
       // What the person typed while the save ran stays a draft.
       const draft: Record<string, unknown> = {};
       for (const [path, value] of Object.entries(this.#draft)) if (!(path in patch) || patch[path] !== value) draft[path] = value;
@@ -312,7 +316,7 @@ export class AgentSystemPresenter extends Presenter<AgentSystemViewModel> {
         await this.#refresh();
       }
     } catch (err) {
-      if (!sameScope(this.viewModel.scope, scope)) return;
+      if (!sameScope(this.viewModel.scope, scope)) return this.#staleSave(scope, undefined);
       if (err instanceof SettingsRefused) {
         this.#refusals = byRow(err.errors, this.#rows().map((r) => r.path));
         this.#show({ saving: false });
@@ -321,6 +325,20 @@ export class AgentSystemPresenter extends Presenter<AgentSystemViewModel> {
         this.#show({ problem, saving: false });
       }
     }
+  }
+
+  /** A save answered after the person moved to another scope: the page is not saving any more, and what it says is not applied to the scope now shown. */
+  #staleSave(scope: Scope, view: SettingsView | undefined): void {
+    if (view !== undefined) {
+      // The store took it: what that level holds is what the caches say, as after a save shown.
+      if (scope.kind === "project") {
+        this.#project = undefined;
+        this.#projectView = view;
+        this.#liveProject = view;
+      } else this.#states.set(scope.id, view);
+    }
+    this.update((vm) => ({ ...vm, saving: false }));
+    this.#show({});
   }
 
   async #load(repositoryId: string): Promise<void> {
@@ -459,6 +477,7 @@ export class AgentSystemPresenter extends Presenter<AgentSystemViewModel> {
 
   /** Re-derives the page from the view, the draft and the errors. */
   #show(extra: Partial<AgentSystemViewModel>): void {
+    for (const path of this.#kept) if (!(path in this.#draft)) this.#kept.delete(path);
     const view = this.#view;
     if (view === undefined) return;
     this.update((vm) => this.#shown(vm, vm.scope, view, extra));
