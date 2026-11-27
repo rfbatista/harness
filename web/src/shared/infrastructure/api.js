@@ -7,6 +7,7 @@ import { Codes, StructuredError } from "../domain/errors.js";
  * @typedef {object} ApiClient
  * @property {(path: string, query?: Record<string, string|undefined>, signal?: AbortSignal) => Promise<any>} get
  * @property {(path: string, body?: unknown, signal?: AbortSignal) => Promise<any>} post
+ * @property {(path: string, body?: unknown, signal?: AbortSignal) => Promise<any>} put  PUT, for the routes that use it
  * @property {(path: string, signal?: AbortSignal) => Promise<any>} del  DELETE, for the routes that use it
  */
 
@@ -70,6 +71,14 @@ export function apiClient({ base, fetch = globalThis.fetch.bind(globalThis) }) {
     post(path, body = {}, signal) {
       return send(path, {
         method: "POST",
+        signal,
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(body),
+      });
+    },
+    put(path, body = {}, signal) {
+      return send(path, {
+        method: "PUT",
         signal,
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(body),

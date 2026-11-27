@@ -174,6 +174,10 @@ type Deps struct {
 	// MemoryBudgets reads a repository's or task's own orçamento de memória
 	// for the control beside Token savers; nil leaves the control out.
 	MemoryBudgets ports.MemoryBudgetOverrides
+	// TaskRecordings reads whether a task's sessions are recorded for the
+	// Trajectory recording control of the task's Edit form; nil leaves the
+	// control out.
+	TaskRecordings tasks.RecordingReader
 	// RepositoryIndexes lists the repository indexes on the Token savers
 	// page; nil leaves that section out.
 	RepositoryIndexes ports.RepositoryIndexes
@@ -242,7 +246,7 @@ func NewHandler(deps Deps, assets *Assets, fallback http.Handler) http.Handler {
 	taskPages := tasks.Handler{
 		Projects: deps.Projects, Tasks: deps.Tasks, Sessions: deps.Sessions,
 		Agents: deps.Agents, Repositories: deps.Repositories, Docs: deps.Documents, Artifacts: deps.Artifacts, PullRequests: deps.PullRequests, WorktreeGit: deps.WorktreeGit,
-		Resources: deps.Resources, Comments: deps.Comments, Settings: deps.Settings, Code: deps.Code, Usage: deps.Usage, TokenSavers: deps.TokenSavers, MemoryBudgets: deps.MemoryBudgets, Interviews: deps.Interviews,
+		Resources: deps.Resources, Comments: deps.Comments, Settings: deps.Settings, Code: deps.Code, Usage: deps.Usage, TokenSavers: deps.TokenSavers, MemoryBudgets: deps.MemoryBudgets, Recordings: deps.TaskRecordings, Interviews: deps.Interviews,
 		ArchivedTasks: deps.ArchivedList, BranchRequests: deps.BranchRequests, SessionBranches: deps.SessionBranches, Layout: s.layout, Render: render, Now: deps.Now,
 	}
 	if deps.Workspaces != nil {

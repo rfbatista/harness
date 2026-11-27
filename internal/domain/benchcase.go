@@ -145,4 +145,9 @@ type TaskTrajectoryRecording struct {
 	// Source is "task" when the task sets it, else the level of the effective
 	// settings default it follows ("repository", "project" or "harness").
 	Source string `json:"source"`
+	// Default is the settings default the task follows when it sets nothing,
+	// and DefaultSource the level it comes from: the Edit form's resolution
+	// line names it beside what the task sets itself.
+	Default       bool   `json:"default"`
+	DefaultSource string `json:"default_source"`
 }

@@ -74,6 +74,7 @@ import { servicesGateway } from "./modules/services/infrastructure/services-gate
 import { registerServices } from "./modules/services/presentation/register.js";
 import { settingsGateway } from "./modules/settings/infrastructure/settings-gateway.js";
 import { registerSettings } from "./modules/settings/presentation/register.js";
+import { recordingGateway } from "./modules/tasks/infrastructure/recording-gateway.js";
 import { tokenSaversGateway } from "./modules/tokensavers/infrastructure/tokensavers-gateway.js";
 import { registerTokenSavers } from "./modules/tokensavers/presentation/register.js";
 import { usageGateway } from "./modules/usage/infrastructure/usage-gateway.js";
@@ -110,6 +111,7 @@ const tokenSavers = tokenSaversGateway(api);
 registerTasks(Alpine, {
   gateway: tasksGateway(api),
   tokenSavers,
+  recording: recordingGateway(api),
   rail: railGateway(api, events),
   prefs,
   resources: resourcesGateway(api, events, xhrUpload({ base: "/api" })),

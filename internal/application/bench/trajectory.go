@@ -36,19 +36,23 @@ func (s *Service) TaskRecording(ctx context.Context, projectID, taskID, reposito
 	if err != nil {
 		return out, err
 	}
+	if s.d.Settings != nil {
+		eff, err := s.d.Settings.Effective(ctx, projectID, repositoryID)
+		switch {
+		case err == nil:
+			def := eff.Score.TrajectoryRecording.Default
+			out.Default, out.DefaultSource = def.Value, string(def.Source)
+		case explicit == nil:
+			return out, err
+		}
+		// The task's own flag decides without the default: a settings read
+		// that failed only leaves the resolution line without it.
+	}
 	if explicit != nil {
 		out.Enabled, out.Explicit, out.Source = *explicit, explicit, "task"
 		return out, nil
 	}
-	if s.d.Settings == nil {
-		return out, nil
-	}
-	eff, err := s.d.Settings.Effective(ctx, projectID, repositoryID)
-	if err != nil {
-		return out, err
-	}
-	def := eff.Score.TrajectoryRecording.Default
-	out.Enabled, out.Source = def.Value, string(def.Source)
+	out.Enabled, out.Source = out.Default, out.DefaultSource
 	return out, nil
 }
 
