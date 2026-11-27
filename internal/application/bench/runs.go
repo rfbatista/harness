@@ -32,7 +32,11 @@ func (s *Service) StartRun(ctx context.Context, projectID string, req domain.Ben
 	if len(cases) == 0 {
 		return domain.BenchRun{}, &domain.StructuredError{Code: "BENCH_NO_CASES", Message: "the project has no bench cases to run"}
 	}
-	partial := len(req.CaseIDs) > 0
+	// An omitted list runs every case; a list that is present but empty is refused, so it never turns into a run of everything by accident.
+	partial := req.CaseIDs != nil
+	if partial && len(req.CaseIDs) == 0 {
+		return domain.BenchRun{}, &domain.StructuredError{Code: "BENCH_CASE_IDS_INVALID", Message: "case_ids is empty; omit case_ids to run every case"}
+	}
 	if partial {
 		if cases, err = pickCases(cases, req.CaseIDs); err != nil {
 			return domain.BenchRun{}, err

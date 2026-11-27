@@ -56,14 +56,21 @@ func TestBenchCasePatchIsIdempotentAndLeavesThePromptAlone(t *testing.T) {
 	}
 }
 
-// case_ids: an empty list is a run of nothing and must not silently become a run of every case.
-func TestARunWithAnEmptyCaseIdsListIsNotARunOfEveryCase(t *testing.T) {
+// case_ids: an empty list is refused (omit the field to run every case), never a run of everything or of nothing.
+func TestARunWithAnEmptyCaseIdsListIsRefusedAndOmittingItRunsEveryCase(t *testing.T) {
 	h, release := benchRunsHandler(t)
 	twoCases(t, h)
 	close(release)
-	code, run := startRunBody(t, h, `{"case_ids": []}`)
-	if code == http.StatusAccepted && run["total"] == float64(2) {
-		t.Fatalf("case_ids [] ran all cases (total %v); want a refusal or an empty run", run["total"])
+	code, out := startRunBody(t, h, `{"case_ids": []}`)
+	if code != http.StatusUnprocessableEntity || out["code"] != "BENCH_CASE_IDS_INVALID" {
+		t.Fatalf("case_ids [] = %d %v; want 422 BENCH_CASE_IDS_INVALID", code, out)
+	}
+	if msg, _ := out["error"].(string); !strings.Contains(msg, "omit case_ids") {
+		t.Fatalf("the refusal should say to omit case_ids to run every case: %q", msg)
+	}
+	code, run := startRunBody(t, h, `{}`)
+	if code != http.StatusAccepted || run["total"] != float64(2) {
+		t.Fatalf("no case_ids = %d, total %v; want 202 over both cases", code, run["total"])
 	}
 }
 
