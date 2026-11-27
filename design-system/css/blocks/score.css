@@ -91,7 +91,9 @@
     }
 
     &[data-muted] { color: var(--color-ink-faint); }
-    &[data-kind="case"] { grid-template-columns: minmax(0, 1fr) 8rem 7rem; }
+    &[data-kind="case"] { grid-template-columns: minmax(0, 1fr) 8rem 7rem 7rem 6rem; cursor: pointer; }
+    &[data-kind="case"]:hover { background: var(--color-hover); }
+    &[data-kind="case"][data-open] { background: var(--color-panel); }
     &[data-kind="run"] { grid-template-columns: minmax(0, 1fr) 9rem 5rem 5rem 5rem; cursor: pointer; }
     &[data-kind="run"]:hover { background: var(--color-hover); }
     &[data-kind="run"][aria-current="true"] { background: var(--color-selected); }
@@ -112,6 +114,50 @@
       font-weight: var(--weight-medium);
     }
   }
+
+  .spark { display: inline-flex; align-items: flex-end; gap: 2px; block-size: 14px; }
+  .spark > i { display: block; inline-size: 4px; background: var(--color-line-strong); }
+  .spark > i:last-child { background: var(--color-ink); }
+
+  .case-detail {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-s);
+    padding: var(--space-m);
+    border-block-end: var(--border-width) solid var(--color-line);
+    background: var(--color-panel);
+    font-size: var(--text-sm);
+  }
+
+  .trace { margin: 0; padding: 0; list-style: none; }
+  .trace > li {
+    display: grid;
+    grid-template-columns: 1.5rem minmax(0, 1fr) minmax(6rem, 14rem);
+    gap: var(--space-s);
+    padding-block: 2px;
+    font-family: var(--font-mono);
+    font-size: var(--text-xs);
+    overflow-wrap: anywhere;
+
+    & > .j { color: var(--color-ink-muted); font-family: var(--font-sans); text-align: end; }
+    &[data-bad] > .j { color: var(--color-danger); }
+  }
+
+  .case-form {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-s);
+    padding: var(--space-m);
+    border: var(--border-width) solid var(--color-line);
+    border-radius: var(--radius-md);
+
+    & textarea, & input[type="text"] { inline-size: 100%; max-inline-size: 40rem; }
+    & .mono { font-family: var(--font-mono); font-size: var(--text-xs); }
+    & [aria-invalid="true"] { border-color: var(--color-danger); }
+    & .error { color: var(--color-danger); font-size: var(--text-xs); }
+  }
+
+  .case-field { display: flex; flex-direction: column; gap: var(--space-3xs); }
 
   /* A phone: the scores go under the title, the pattern columns fold away. */
   @media (width < 48rem) {

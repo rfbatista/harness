@@ -8,6 +8,11 @@ export interface CaseSpec {
   outcome?: number;
   trajectory?: number;
   error?: string;
+  /** The trace: what the run called, the judge's note per step, why the trajectory lost points, the run's final text. */
+  calls?: { tool: string; params?: Record<string, unknown> }[];
+  steps?: { step: number; ok: boolean; note: string }[];
+  reasons?: string[];
+  finalText?: string;
 }
 
 export interface CardSpec {
@@ -31,8 +36,10 @@ export function wireScorecard(spec: CardSpec): Record<string, unknown> {
     case_name: c.name ?? c.id,
     tool_use: { right_tool: pattern(c.tool), valid_params: pattern(c.tool), right_order: pattern(c.tool) },
     outcome: pattern(c.outcome),
-    trajectory: pattern(c.trajectory),
-    calls: [],
+    trajectory: { ...pattern(c.trajectory), ...(c.reasons ? { reasons: c.reasons } : {}) },
+    calls: c.calls ?? [],
+    ...(c.steps ? { steps: c.steps } : {}),
+    ...(c.finalText ? { final_text: c.finalText } : {}),
     cost_usd: 0.05,
     duration_ms: 1000,
     ...(c.error ? { error: c.error } : {}),

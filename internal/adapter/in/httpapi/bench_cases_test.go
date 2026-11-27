@@ -5,6 +5,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"operators-mcp/internal/adapter/out/persistence/sqlite"
@@ -144,5 +145,85 @@ func TestBenchCaseIsReadBackIdenticalAfterTheStoreIsReopened(t *testing.T) {
 	got, _ := json.Marshal(list.Cases[0])
 	if string(want) != string(got) {
 		t.Fatalf("read back\n%s\nwant\n%s", got, want)
+	}
+}
+
+func benchPatch(t *testing.T, h *Handler, path, body string) *httptest.ResponseRecorder {
+	t.Helper()
+	req := httptest.NewRequest(http.MethodPatch, "/api"+path, strings.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	rec := httptest.NewRecorder()
+	NewRouter(h).ServeHTTP(rec, req)
+	return rec
+}
+
+func TestBenchCaseExpectationIsEditedInPlace(t *testing.T) {
+	h := benchHandler(t, ":memory:")
+	rec := postJSON(t, h, "/projects/p1/bench/cases", json.RawMessage(benchCaseBody))
+	var created domain.BenchCase
+	if err := json.Unmarshal(rec.Body.Bytes(), &created); err != nil {
+		t.Fatal(err)
+	}
+	path := "/projects/p1/bench/cases/" + created.ID
+
+	rec = benchPatch(t, h, path, `{"expect": {"tools": [{"tool": "read_file"}], "ordered": false, "reference": "The demo."}}`)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("patch status = %d: %s", rec.Code, rec.Body.String())
+	}
+	var updated domain.BenchCase
+	if err := json.Unmarshal(rec.Body.Bytes(), &updated); err != nil {
+		t.Fatal(err)
+	}
+	if updated.ID != created.ID || updated.Prompt != created.Prompt || updated.Expect.Reference != "The demo." || updated.Expect.Ordered || updated.Expect.Tools[0].Params != nil {
+		t.Fatalf("updated = %+v", updated)
+	}
+	var list struct {
+		Cases []domain.BenchCase `json:"cases"`
+	}
+	if err := json.Unmarshal(getJSON(t, h, "/projects/p1/bench/cases").Body.Bytes(), &list); err != nil || len(list.Cases) != 1 || list.Cases[0].Expect.Reference != "The demo." {
+		t.Fatalf("stored = %+v (%v)", list.Cases, err)
+	}
+}
+
+func TestBenchCaseExpectationRefusedLikeCreate(t *testing.T) {
+	h := benchHandler(t, ":memory:")
+	rec := postJSON(t, h, "/projects/p1/bench/cases", json.RawMessage(benchCaseBody))
+	var created domain.BenchCase
+	_ = json.Unmarshal(rec.Body.Bytes(), &created)
+	path := "/projects/p1/bench/cases/" + created.ID
+
+	rec = benchPatch(t, h, path, `{"expect": {"tools": [{"tool": "write_file"}]}}`)
+	if rec.Code != http.StatusUnprocessableEntity || !strings.Contains(rec.Body.String(), "UNKNOWN_TOOL") || !strings.Contains(rec.Body.String(), "expect.tools[0].tool") {
+		t.Fatalf("refused patch = %d: %s", rec.Code, rec.Body.String())
+	}
+	rec = benchPatch(t, h, path, `{"expect": {}}`)
+	if rec.Code != http.StatusUnprocessableEntity || !strings.Contains(rec.Body.String(), "NO_EXPECTATION") {
+		t.Fatalf("empty expectation = %d: %s", rec.Code, rec.Body.String())
+	}
+	// Nothing was stored by the refused edits.
+	var list struct {
+		Cases []domain.BenchCase `json:"cases"`
+	}
+	_ = json.Unmarshal(getJSON(t, h, "/projects/p1/bench/cases").Body.Bytes(), &list)
+	if list.Cases[0].Expect.Reference != "A demo project." {
+		t.Fatalf("a refused edit changed the case: %+v", list.Cases[0].Expect)
+	}
+}
+
+func TestBenchCaseExpectationOfAnUnknownCaseOrProjectIsNotFound(t *testing.T) {
+	h := benchHandler(t, ":memory:")
+	rec := postJSON(t, h, "/projects/p1/bench/cases", json.RawMessage(benchCaseBody))
+	var created domain.BenchCase
+	_ = json.Unmarshal(rec.Body.Bytes(), &created)
+	body := `{"expect": {"reference": "x"}}`
+
+	if rec := benchPatch(t, h, "/projects/p1/bench/cases/nope", body); rec.Code != http.StatusNotFound {
+		t.Fatalf("unknown case = %d: %s", rec.Code, rec.Body.String())
+	}
+	if rec := benchPatch(t, h, "/projects/p2/bench/cases/"+created.ID, body); rec.Code != http.StatusNotFound {
+		t.Fatalf("another project's case = %d: %s", rec.Code, rec.Body.String())
+	}
+	if rec := benchPatch(t, h, "/projects/nope/bench/cases/"+created.ID, body); rec.Code != http.StatusNotFound {
+		t.Fatalf("unknown project = %d: %s", rec.Code, rec.Body.String())
 	}
 }

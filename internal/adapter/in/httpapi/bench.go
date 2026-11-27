@@ -47,6 +47,28 @@ func (h *Handler) handleCreateBenchCase(c echo.Context) error {
 	return c.JSON(http.StatusCreated, created)
 }
 
+// handleUpdateBenchCase edits a case's expectation: {"expect": {...}}.
+func (h *Handler) handleUpdateBenchCase(c echo.Context) error {
+	if h.bench == nil {
+		return errBenchOff
+	}
+	var body struct {
+		Expect domain.BenchExpectation `json:"expect"`
+	}
+	if err := bindJSON(c, &body); err != nil {
+		return err
+	}
+	updated, err := h.bench.UpdateExpectation(c.Request().Context(), c.Param("project"), c.Param("case"), body.Expect)
+	var ve *domain.BenchCaseValidationError
+	if errors.As(err, &ve) {
+		return c.JSON(http.StatusUnprocessableEntity, map[string]any{"errors": ve.Errors})
+	}
+	if err != nil {
+		return err
+	}
+	return c.JSON(http.StatusOK, updated)
+}
+
 func (h *Handler) handleDeleteBenchCase(c echo.Context) error {
 	if h.bench == nil {
 		return errBenchOff

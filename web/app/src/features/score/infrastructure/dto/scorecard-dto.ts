@@ -22,11 +22,38 @@ export class PatternScoreDto {
   constructor(
     readonly scored: boolean,
     readonly score: number,
+    readonly reasons: readonly string[] = [],
   ) {}
 
   static fromJSON(raw: unknown, at: string): PatternScoreDto {
     const from = object(NAME, raw, at);
-    return new PatternScoreDto(from["scored"] === true, from["scored"] === true ? number(from, "score", at) : 0);
+    const reasons = Array.isArray(from["reasons"]) ? from["reasons"].filter((r): r is string => typeof r === "string") : [];
+    return new PatternScoreDto(from["scored"] === true, from["scored"] === true ? number(from, "score", at) : 0, reasons);
+  }
+}
+
+export class TraceCallDto {
+  constructor(
+    readonly tool: string,
+    readonly params: Readonly<Record<string, unknown>>,
+  ) {}
+
+  static fromJSON(raw: unknown, at: string): TraceCallDto {
+    const from = object(NAME, raw, at);
+    return new TraceCallDto(string(NAME, from, "tool", at), from["params"] === undefined || from["params"] === null ? {} : object(NAME, from["params"], `${at}.params`));
+  }
+}
+
+export class StepNoteDto {
+  constructor(
+    readonly step: number,
+    readonly ok: boolean,
+    readonly note: string,
+  ) {}
+
+  static fromJSON(raw: unknown, at: string): StepNoteDto {
+    const from = object(NAME, raw, at);
+    return new StepNoteDto(numberOr0(from, "step", at), from["ok"] === true, optionalString(NAME, from, "note", at) ?? "");
   }
 }
 
@@ -50,6 +77,9 @@ export class CaseScoreDto {
     readonly error: string,
     readonly cost_usd: number,
     readonly duration_ms: number,
+    readonly calls: readonly TraceCallDto[],
+    readonly steps: readonly StepNoteDto[],
+    readonly final_text: string,
   ) {}
 
   static fromJSON(raw: unknown, at: string): CaseScoreDto {
@@ -69,6 +99,9 @@ export class CaseScoreDto {
       optionalString(NAME, from, "error", at) ?? "",
       numberOr0(from, "cost_usd", at),
       numberOr0(from, "duration_ms", at),
+      Array.isArray(from["calls"]) ? from["calls"].map((c, i) => TraceCallDto.fromJSON(c, `${at}.calls[${i}]`)) : [],
+      Array.isArray(from["steps"]) ? from["steps"].map((c, i) => StepNoteDto.fromJSON(c, `${at}.steps[${i}]`)) : [],
+      optionalString(NAME, from, "final_text", at) ?? "",
     );
   }
 }

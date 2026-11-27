@@ -14,6 +14,10 @@ type BenchCases interface {
 	// CreateCase stores a case from a definition and answers it with its id; a
 	// refused definition is a *domain.BenchCaseValidationError.
 	CreateCase(ctx context.Context, projectID string, def domain.BenchCase) (domain.BenchCase, error)
+	// UpdateExpectation replaces what a good run of the case does, keeping the
+	// rest of the case; the result is validated as a definition is
+	// (*domain.BenchCaseValidationError), an unknown case is BENCH_CASE_NOT_FOUND.
+	UpdateExpectation(ctx context.Context, projectID, caseID string, expect domain.BenchExpectation) (domain.BenchCase, error)
 	// DeleteCase removes a case of the project; an unknown one is BENCH_CASE_NOT_FOUND.
 	DeleteCase(ctx context.Context, projectID, caseID string) error
 }

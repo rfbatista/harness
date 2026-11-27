@@ -1,11 +1,21 @@
 // DTOs to the Score domain.
 
-import type { BenchCase, BenchRun, RunChange } from "../domain/bench";
+import type { BenchCase, BenchRun, RunChange, Trajectory } from "../domain/bench";
 import type { Aggregate, CaseScore, Pattern, Scorecard } from "../domain/scorecard";
-import type { BenchCaseDto, BenchRunDto, RunChangeDto } from "./dto/bench-dto";
+import type { BenchCaseDto, BenchRunDto, RunChangeDto, TrajectoryDto } from "./dto/bench-dto";
 import type { ScorecardDto } from "./dto/scorecard-dto";
 
-export const toCase = (dto: BenchCaseDto): BenchCase => ({ id: dto.id, name: dto.name, prompt: dto.prompt, tools: dto.tools, source: dto.source });
+export const toCase = (dto: BenchCaseDto): BenchCase => ({
+  id: dto.id,
+  name: dto.name,
+  prompt: dto.prompt,
+  tools: dto.tools.map((t) => t.name),
+  mocks: dto.tools.map((t) => ({ name: t.name, description: t.description, result: t.result, isError: t.is_error })),
+  expect: { tools: dto.expect.tools.map((t) => ({ tool: t.tool, params: t.params })), ordered: dto.expect.ordered, reference: dto.expect.reference },
+  source: dto.source,
+});
+
+export const toTrajectory = (dto: TrajectoryDto): Trajectory => ({ id: dto.id, taskId: dto.task_id, prompt: dto.prompt, steps: dto.steps, recordedAt: dto.recorded_at });
 
 export const toRun = (dto: BenchRunDto): BenchRun => ({ id: dto.id, status: dto.status, total: dto.total, done: dto.done, scorecardId: dto.scorecard_id, error: dto.error });
 
@@ -21,6 +31,10 @@ export function toScorecard(dto: ScorecardDto): Scorecard {
     error: c.error,
     costUsd: c.cost_usd,
     durationMs: c.duration_ms,
+    calls: c.calls.map((x) => ({ tool: x.tool, params: x.params })),
+    steps: c.steps.map((x) => ({ step: x.step, ok: x.ok, note: x.note })),
+    reasons: { right_tool: c.scores.right_tool.reasons, valid_params: c.scores.valid_params.reasons, right_order: c.scores.right_order.reasons, outcome: c.scores.outcome.reasons, trajectory: c.scores.trajectory.reasons },
+    finalText: c.final_text,
   }));
   return {
     id: dto.id,

@@ -1,11 +1,12 @@
 // The Score page: the scorecard of a run beside a baseline, the cases and the runs, and Run bench.
 
 import { Presenter } from "../../../../shared/kernel/presenter";
-import type { ScoreFeed, ScoreSource } from "../../application/ports";
-import { ScoreError, type BenchCase, type RunChange } from "../../domain/bench";
-import { compare, defaultBaseline, type CaseRow, type Comparison, type Delta, type Standing } from "../../domain/comparison";
+import type { CallsText, ScoreFeed, ScoreSource } from "../../application/ports";
+import { ScoreError, type BenchCase, type CaseDefinition, type FieldError, type RunChange, type Trajectory } from "../../domain/bench";
+import { formatMocks, parseMockTools } from "../../domain/case-text";
+import { compare, defaultBaseline, round2, type CaseRow, type Comparison, type Delta, type Standing } from "../../domain/comparison";
 import { cost, deltaShort, duration, score, when } from "../../domain/format";
-import { GROUP_LABEL, type Scorecard } from "../../domain/scorecard";
+import { caseMean, GROUP_LABEL, type CaseScore, type Scorecard } from "../../domain/scorecard";
 
 export type View = "scorecard" | "cases" | "runs";
 export type Filter = "all" | Standing;
@@ -55,11 +56,68 @@ export interface RunVm {
   readonly baseline: boolean;
 }
 
+/** One step of a case's trace: the call in mono and the judge's word for it. A step the run never made has no call. */
+export interface StepVm {
+  readonly n: number;
+  readonly call: string;
+  readonly note: string;
+  /** Red only where the judge failed the step. */
+  readonly failed: boolean;
+}
+
+export interface CaseDetailVm {
+  readonly prompt: string;
+  readonly steps: readonly StepVm[];
+  /** The judge's paragraph, or why there is none. */
+  readonly judge: string;
+  readonly finalText: string;
+  /** The case's score in the run read, and in the baseline: "—" when not scored. */
+  readonly now: string;
+  readonly baseline: string;
+  readonly expectation: { readonly calls: string; readonly ordered: boolean; readonly reference: string };
+  readonly mocks: string;
+}
+
 export interface CaseVm {
   readonly id: string;
   readonly title: string;
+  /** What the case is scored on: "tool use", "outcome". */
+  readonly pattern: string;
   readonly tools: string;
   readonly source: string;
+  /** The score in the run read, "—" when none scored it. */
+  readonly score: string;
+  /** The last five runs' scores, oldest first (0 to 1). */
+  readonly trend: readonly number[];
+  /** Open in place to its trace. */
+  readonly trace: CaseDetailVm | null;
+  readonly confirmingDelete: boolean;
+}
+
+export type FormErrorKey = "name" | "prompt" | "mocks" | "calls" | "reference" | "general";
+
+/** The Add case and Edit expectation form: text the person types, parsed on Save. */
+export interface FormVm {
+  readonly mode: "add" | "edit";
+  readonly caseId: string;
+  readonly title: string;
+  readonly name: string;
+  readonly prompt: string;
+  readonly mocks: string;
+  readonly calls: string;
+  readonly ordered: boolean;
+  readonly reference: string;
+  readonly errors: Readonly<Partial<Record<FormErrorKey, string>>>;
+  readonly saving: boolean;
+}
+
+/** The recorded trajectories a case can be made from. */
+export interface TrajectoriesVm {
+  readonly loading: boolean;
+  readonly items: readonly { readonly id: string; readonly prompt: string; readonly steps: string; readonly when: string }[];
+  /** What to do when there is none. */
+  readonly empty: string;
+  readonly error: string;
 }
 
 export interface Fingerprint {
@@ -99,11 +157,14 @@ export interface ScoreViewModel {
   /** Patterns of phase 2, listed muted. */
   readonly later: readonly string[];
   readonly cases: readonly CaseVm[];
+  readonly form: FormVm | null;
+  readonly trajectories: TrajectoriesVm | null;
 }
 
 export interface ScoreDeps {
   readonly source: ScoreSource;
   readonly feed: ScoreFeed;
+  readonly calls: CallsText;
   readonly projectId: string;
   readonly projectName: string;
   readonly now: () => Date;
@@ -135,6 +196,8 @@ const loadingVm = (deps: ScoreDeps): ScoreViewModel => ({
   rows: [],
   later: LATER,
   cases: [],
+  form: null,
+  trajectories: null,
 });
 
 export class ScorePresenter extends Presenter<ScoreViewModel> {
@@ -148,6 +211,10 @@ export class ScorePresenter extends Presenter<ScoreViewModel> {
   #running: { done: number; total: number } | null = null;
   #problem = "";
   #error = "";
+  #open = "";
+  #confirming = "";
+  #form: Omit<FormVm, "title"> | null = null;
+  #trajectories: { items: Trajectory[]; loading: boolean; error: string } | null = null;
   #status: ScoreViewModel["status"] = "loading";
   #stop: (() => void) | null = null;
   #abort: AbortController | null = null;
@@ -223,6 +290,119 @@ export class ScorePresenter extends Presenter<ScoreViewModel> {
       this.#problem = err instanceof ScoreError ? err.message : "Run bench failed.";
     }
     this.#publish();
+  }
+
+  /** Opens a case in place to its trace; opening it again closes it. */
+  openCase(id: string): void {
+    this.#open = this.#open === id ? "" : id;
+    this.#publish();
+  }
+
+  /** Edit expectation: the form starts from what the case expects. */
+  startEdit(id: string): void {
+    const found = this.#cases.find((c) => c.id === id);
+    if (!found) return;
+    this.#form = { mode: "edit", caseId: id, name: found.name, prompt: found.prompt, mocks: formatMocks(found.mocks), calls: this.#deps.calls.format(found.expect.tools), ordered: found.expect.ordered, reference: found.expect.reference, errors: {}, saving: false };
+    this.#publish();
+  }
+
+  /** Add case: an empty definition. */
+  startAdd(): void {
+    this.#form = { mode: "add", caseId: "", name: "", prompt: "", mocks: "", calls: "", ordered: false, reference: "", errors: {}, saving: false };
+    this.#publish();
+  }
+
+  /** What the person types in the form; its errors stay until Save checks again. */
+  setForm(change: Partial<Pick<FormVm, "name" | "prompt" | "mocks" | "calls" | "ordered" | "reference">>): void {
+    if (this.#form === null) return;
+    this.#form = { ...this.#form, ...change };
+    this.#publish();
+  }
+
+  cancelForm(): void {
+    this.#form = null;
+    this.#publish();
+  }
+
+  /** Save: the text is parsed first (a bad line is shown on its field and nothing is sent), then the harness validates it; its refusal lands on the field it names and the typed text stays. */
+  async saveForm(): Promise<void> {
+    const form = this.#form;
+    if (form === null || form.saving) return;
+    const errors: Partial<Record<FormErrorKey, string>> = {};
+    const calls = this.#deps.calls.parse(form.calls);
+    const mocks = parseMockTools(form.mocks);
+    if (calls.errors.length > 0) errors.calls = calls.errors.map((e) => e.message).join(" ");
+    if (form.mode === "add" && mocks.errors.length > 0) errors.mocks = mocks.errors.map((e) => e.message).join(" ");
+    if (Object.keys(errors).length > 0) {
+      this.#form = { ...form, errors };
+      this.#publish();
+      return;
+    }
+    this.#form = { ...form, errors: {}, saving: true };
+    this.#publish();
+    const expect = { tools: calls.calls, ordered: form.ordered, reference: form.reference };
+    try {
+      if (form.mode === "edit") await this.#deps.source.updateExpectation(this.#deps.projectId, form.caseId, expect);
+      else await this.#deps.source.createCase(this.#deps.projectId, { name: form.name, prompt: form.prompt, mocks: mocks.mocks, expect } satisfies CaseDefinition);
+    } catch (err) {
+      this.#form = { ...form, errors: refusal(err), saving: false };
+      this.#publish();
+      return;
+    }
+    this.#form = null;
+    await this.#reload();
+  }
+
+  /** Delete asks once: the first call marks the case, confirmDelete removes it. */
+  requestDelete(id: string): void {
+    this.#confirming = id;
+    this.#publish();
+  }
+
+  cancelDelete(): void {
+    this.#confirming = "";
+    this.#publish();
+  }
+
+  async confirmDelete(id: string): Promise<void> {
+    if (this.#confirming !== id) return;
+    this.#confirming = "";
+    try {
+      await this.#deps.source.deleteCase(this.#deps.projectId, id);
+    } catch (err) {
+      this.#problem = err instanceof ScoreError ? err.message : "The case was not deleted.";
+    }
+    if (this.#open === id) this.#open = "";
+    await this.#reload();
+  }
+
+  /** From a recorded trajectory: lists the sessions recorded for tasks that opted in. */
+  async openTrajectories(): Promise<void> {
+    this.#trajectories = { items: [], loading: true, error: "" };
+    this.#publish();
+    try {
+      this.#trajectories = { items: await this.#deps.source.trajectories(this.#deps.projectId), loading: false, error: "" };
+    } catch (err) {
+      this.#trajectories = { items: [], loading: false, error: err instanceof ScoreError ? err.message : "The recordings could not be read." };
+    }
+    this.#publish();
+  }
+
+  closeTrajectories(): void {
+    this.#trajectories = null;
+    this.#publish();
+  }
+
+  async chooseTrajectory(id: string): Promise<void> {
+    try {
+      await this.#deps.source.caseFromTrajectory(this.#deps.projectId, id);
+    } catch (err) {
+      this.#trajectories = { items: this.#trajectories?.items ?? [], loading: false, error: err instanceof ScoreError ? err.message : "The case was not made." };
+      this.#publish();
+      return;
+    }
+    this.#trajectories = null;
+    await this.#reload();
   }
 
   #onRun(change: RunChange): void {
@@ -325,9 +505,71 @@ export class ScorePresenter extends Presenter<ScoreViewModel> {
       filter: this.#filter,
       filterCounts: counts,
       rows: this.#filter === "all" ? rows : rows.filter((_, i) => cmp?.rows[i]?.standings.includes(this.#filter as Standing)),
-      cases: this.#cases.map((c) => ({ id: c.id, title: c.name !== "" ? c.name : c.prompt.slice(0, 80), tools: `${c.tools.length} ${c.tools.length === 1 ? "tool" : "tools"}`, source: c.source === "trajectory" ? "recorded" : "written" })),
+      cases: this.#cases.map((c) => this.#caseVm(c, asc, read, baseline)),
+      form: this.#form === null ? null : { ...this.#form, title: this.#form.mode === "add" ? "Add case" : `Edit expectation · ${this.#cases.find((c) => c.id === this.#form?.caseId)?.name || "case"}` },
+      trajectories: this.#trajectoriesVm(now),
     };
   }
+  #caseVm(c: BenchCase, asc: readonly Scorecard[], read: Scorecard | null, baseline: Scorecard | null): CaseVm {
+    const scored = (card: Scorecard | null): CaseScore | undefined => card?.cases.find((x) => x.caseId === c.id);
+    const mean = (x: CaseScore | undefined): number | null => (x === undefined ? null : caseMean(x));
+    const trend = asc.flatMap((card) => {
+      const m = mean(scored(card));
+      return m === null ? [] : [round2(m)];
+    }).slice(-5);
+    const here = scored(read);
+    const pattern = [c.expect.tools.length > 0 && "tool use", c.expect.reference !== "" && "outcome"].filter(Boolean).join(" · ");
+    return {
+      id: c.id,
+      title: c.name !== "" ? c.name : c.prompt.slice(0, 80),
+      pattern,
+      tools: `${c.tools.length} ${c.tools.length === 1 ? "tool" : "tools"}`,
+      source: c.source === "trajectory" ? "recorded" : "written",
+      score: score(mean(here)),
+      trend,
+      trace: this.#open === c.id ? detailOf(c, here, scored(baseline), this.#deps.calls) : null,
+      confirmingDelete: this.#confirming === c.id,
+    };
+  }
+
+  #trajectoriesVm(now: Date): TrajectoriesVm | null {
+    const t = this.#trajectories;
+    if (t === null) return null;
+    return {
+      loading: t.loading,
+      items: t.items.map((x) => ({ id: x.id, prompt: x.prompt, steps: `${x.steps} ${x.steps === 1 ? "step" : "steps"}`, when: when(x.recordedAt, now) })),
+      empty: "No session has been recorded yet. Trajectory recording is set per task, in its Edit form (the project default is in Agent system, under Score); a session of a task that opted in shows here once it ends.",
+      error: t.error,
+    };
+  }
+}
+
+/** The trace of a case in a run: each call the run made beside the judge's note for that step; notes for steps it never made follow. */
+function detailOf(c: BenchCase, here: CaseScore | undefined, before: CaseScore | undefined, text: CallsText): CaseDetailVm {
+  const expectation = { calls: text.format(c.expect.tools), ordered: c.expect.ordered, reference: c.expect.reference };
+  const base = { prompt: c.prompt, expectation, mocks: formatMocks(c.mocks) };
+  if (here === undefined) return { ...base, steps: [], judge: "No run has scored this case yet.", finalText: "", now: "—", baseline: score(before === undefined ? null : caseMean(before)) };
+  const notes = new Map(here.steps.map((n) => [n.step, n]));
+  const steps: StepVm[] = here.calls.map((call, i) => {
+    const note = notes.get(i + 1);
+    notes.delete(i + 1);
+    return { n: i + 1, call: text.formatCall(call.tool, call.params), note: note?.note ?? "", failed: note !== undefined && !note.ok };
+  });
+  for (const n of [...notes.values()].sort((a, b) => a.step - b.step)) steps.push({ n: n.step, call: "", note: n.note, failed: !n.ok });
+  const judge = [...(here.reasons.trajectory ?? []), ...(here.reasons.outcome ?? [])].join(" ");
+  return { ...base, steps, judge: judge !== "" ? judge : here.error !== "" ? here.error : "The judge left no paragraph for this case.", finalText: here.finalText, now: score(caseMean(here)), baseline: score(before === undefined ? null : caseMean(before)) };
+}
+
+/** A refusal's fields onto the form's: the harness names `prompt`, `expect`, `expect.tools[0].tool`, `tools[1].name`. */
+function refusal(err: unknown): Partial<Record<FormErrorKey, string>> {
+  if (!(err instanceof ScoreError)) return { general: "The case was not saved." };
+  if (err.fields.length === 0) return { general: err.message };
+  const errors: Partial<Record<FormErrorKey, string>> = {};
+  for (const f of err.fields as readonly FieldError[]) {
+    const key: FormErrorKey = f.field === "prompt" ? "prompt" : f.field === "name" ? "name" : f.field.startsWith("tools") ? "mocks" : f.field.startsWith("expect") ? "calls" : "general";
+    errors[key] = `${errors[key] ? `${errors[key]} ` : ""}${f.code}: ${f.message}`;
+  }
+  return errors;
 }
 
 const noticeFor = (state: CardState, cases: number): string => (state === "no-run" ? `No run yet. Run bench scores all ${cases} ${cases === 1 ? "case" : "cases"} against the current setup, with real model calls: it costs money, so it runs only when you ask.` : "");

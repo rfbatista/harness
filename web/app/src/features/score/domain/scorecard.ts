@@ -16,6 +16,18 @@ export interface PatternScore {
   readonly score: number;
 }
 
+/** The judge's note on one step of a case's trace. */
+export interface StepNote {
+  readonly step: number;
+  readonly ok: boolean;
+  readonly note: string;
+}
+
+export interface TraceCall {
+  readonly tool: string;
+  readonly params: Readonly<Record<string, unknown>>;
+}
+
 export interface CaseScore {
   readonly caseId: string;
   readonly caseName: string;
@@ -24,6 +36,11 @@ export interface CaseScore {
   readonly error: string;
   readonly costUsd: number;
   readonly durationMs: number;
+  /** The tool calls the run made, the judge's note per step, and why each pattern lost points. */
+  readonly calls: readonly TraceCall[];
+  readonly steps: readonly StepNote[];
+  readonly reasons: Readonly<Partial<Record<Pattern, readonly string[]>>>;
+  readonly finalText: string;
 }
 
 export interface Aggregate {

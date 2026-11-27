@@ -71,7 +71,7 @@ func (a *benchAPI) started() int {
 	return a.runsStart
 }
 
-func scoreServer(t *testing.T, api *benchAPI) *httptest.Server {
+func scoreServer(t *testing.T, api http.Handler) *httptest.Server {
 	t.Helper()
 	assets, err := NewAssets()
 	if err != nil {

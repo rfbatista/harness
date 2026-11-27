@@ -22,7 +22,10 @@ export function scoreSourceContract(name: string, make: () => ScoreSourceHarness
     test("the cases name their mock tools", async () => {
       const { source, bench } = make();
       bench.cases.push({ id: "c1", name: "brief", prompt: "delegate it", tools: [{ name: "create_task" }, { name: "message_architect" }] });
-      assert.deepEqual(await source.cases("p1"), [{ id: "c1", name: "brief", prompt: "delegate it", tools: ["create_task", "message_architect"], source: "definition" }]);
+      const [one] = await source.cases("p1");
+      assert.deepEqual(one?.tools, ["create_task", "message_architect"]);
+      assert.equal(one?.source, "definition");
+      assert.deepEqual(one?.expect, { tools: [], ordered: false, reference: "" });
     });
 
     test("scorecards come newest first, with their scores, cost and setup", async () => {
@@ -57,6 +60,69 @@ export function scoreSourceContract(name: string, make: () => ScoreSourceHarness
       const down = make();
       down.bench.breakNetwork();
       await assert.rejects(down.source.scorecards("p1"), (err: unknown) => err instanceof ScoreError && err.code === "NETWORK_ERROR");
+    });
+
+    test("the case's mocks and expectation are read whole", async () => {
+      const { source, bench } = make();
+      bench.cases.push({ id: "c1", prompt: "p", tools: [{ name: "read_file", result: "# Demo", is_error: true }], expect: { tools: [{ tool: "read_file", params: { path: "README.md" } }, { tool: "read_file" }], ordered: true, reference: "A demo." } });
+      const [one] = await source.cases("p1");
+      assert.deepEqual(one?.mocks, [{ name: "read_file", description: "", result: "# Demo", isError: true }]);
+      assert.deepEqual(one?.expect, { tools: [{ tool: "read_file", params: { path: "README.md" } }, { tool: "read_file", params: null }], ordered: true, reference: "A demo." });
+    });
+
+    test("a scorecard keeps the trace of a case: calls, the judge's note per step, reasons and the final text", async () => {
+      const { source, bench } = make();
+      bench.scorecards.push({ id: "s1", at: "2026-11-26T10:00:00Z", cases: [{ id: "c1", trajectory: 0.4, calls: [{ tool: "read_file", params: { path: "a" } }], steps: [{ step: 1, ok: false, note: "early" }], reasons: ["called write_file before reading"], finalText: "done" }] });
+      const [card] = await source.scorecards("p1");
+      const scored = card?.cases[0];
+      assert.deepEqual(scored?.calls, [{ tool: "read_file", params: { path: "a" } }]);
+      assert.deepEqual(scored?.steps, [{ step: 1, ok: false, note: "early" }]);
+      assert.deepEqual(scored?.reasons.trajectory, ["called write_file before reading"]);
+      assert.equal(scored?.finalText, "done");
+    });
+
+    test("a case is created from a definition and listed", async () => {
+      const { source } = make();
+      const made = await source.createCase("p1", { name: "reads", prompt: "Read it", mocks: [{ name: "read_file", description: "", result: "ok", isError: false }], expect: { tools: [{ tool: "read_file", params: null }], ordered: false, reference: "" } });
+      assert.equal(made.name, "reads");
+      assert.deepEqual((await source.cases("p1")).map((c) => c.id), [made.id]);
+    });
+
+    test("a refused definition names its fields and stores nothing", async () => {
+      const { source } = make();
+      await assert.rejects(
+        source.createCase("p1", { name: "", prompt: "", mocks: [], expect: { tools: [], ordered: false, reference: "" } }),
+        (err: unknown) => err instanceof ScoreError && err.code === "REFUSED" && err.fields.some((f) => f.field === "prompt" && f.code === "REQUIRED") && err.fields.some((f) => f.field === "expect" && f.code === "NO_EXPECTATION"),
+      );
+      assert.deepEqual(await source.cases("p1"), []);
+    });
+
+    test("an expectation is replaced, and a refused one leaves the case as it was", async () => {
+      const { source, bench } = make();
+      bench.cases.push({ id: "c1", prompt: "p", tools: [{ name: "read_file", result: "x" }], expect: { reference: "old" } });
+      const edited = await source.updateExpectation("p1", "c1", { tools: [{ tool: "read_file", params: null }], ordered: true, reference: "new" });
+      assert.deepEqual(edited.expect, { tools: [{ tool: "read_file", params: null }], ordered: true, reference: "new" });
+      await assert.rejects(source.updateExpectation("p1", "c1", { tools: [{ tool: "nope", params: null }], ordered: false, reference: "" }), (err: unknown) => err instanceof ScoreError && err.code === "REFUSED" && err.fields[0]?.field === "expect.tools[0].tool");
+      assert.equal((await source.cases("p1"))[0]?.expect.reference, "new");
+      await assert.rejects(source.updateExpectation("p1", "gone", { tools: [], ordered: false, reference: "r" }), (err: unknown) => err instanceof ScoreError && err.code === "NOT_FOUND");
+    });
+
+    test("a case is deleted; an unknown one is not found", async () => {
+      const { source, bench } = make();
+      bench.cases.push({ id: "c1", prompt: "p", tools: [] });
+      await source.deleteCase("p1", "c1");
+      assert.deepEqual(await source.cases("p1"), []);
+      await assert.rejects(source.deleteCase("p1", "c1"), (err: unknown) => err instanceof ScoreError && err.code === "NOT_FOUND");
+    });
+
+    test("recorded trajectories are listed and one becomes a case", async () => {
+      const { source, bench } = make();
+      bench.trajectories.push({ id: "t1", task_id: "task1", prompt: "Fix the bug", steps: [{}, {}], recorded_at: "2026-11-26T10:00:00Z" });
+      const [t] = await source.trajectories("p1");
+      assert.deepEqual({ id: t?.id, taskId: t?.taskId, prompt: t?.prompt, steps: t?.steps }, { id: "t1", taskId: "task1", prompt: "Fix the bug", steps: 2 });
+      const made = await source.caseFromTrajectory("p1", "t1");
+      assert.equal(made.source, "trajectory");
+      assert.equal(made.prompt, "Fix the bug");
     });
   });
 }

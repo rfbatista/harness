@@ -4,6 +4,7 @@ import { apiClient } from "../../../../shared/infrastructure/api-client";
 import { memoryFeed } from "../../../../shared/infrastructure/memory-feed";
 import { httpScoreFeed } from "../../infrastructure/http-score-feed";
 import { httpScoreSource } from "../../infrastructure/http-score-source";
+import { jsonCallsText } from "../../infrastructure/dto/json-calls-text";
 import { fakeBench } from "../../testing/fake-bench";
 import type { CardSpec, CaseSpec } from "../../testing/fixtures";
 import { ScorePresenter } from "./score-presenter";
@@ -16,7 +17,7 @@ const c = (id: string, tool?: number, outcome?: number, trajectory?: number): Ca
 function setup() {
   const bench = fakeBench();
   const feed = memoryFeed();
-  const presenter = new ScorePresenter({ source: httpScoreSource(apiClient(bench.fetch)), feed: httpScoreFeed(feed), projectId: "p1", projectName: "pessoal", now: () => NOW });
+  const presenter = new ScorePresenter({ source: httpScoreSource(apiClient(bench.fetch)), feed: httpScoreFeed(feed), calls: jsonCallsText, projectId: "p1", projectName: "pessoal", now: () => NOW });
   const addCase = (id: string) => bench.cases.push({ id, name: id, prompt: id, tools: [{ name: "t" }] });
   const addCard = (spec: CardSpec) => bench.scorecards.push(spec);
   const emit = (change: Record<string, unknown>) => feed.emit("/events?project_id=p1", { bench_run: change });
@@ -192,7 +193,7 @@ describe("Cases and Runs", () => {
     bench.cases.push({ id: "k", name: "brief", prompt: "x", tools: [{ name: "a" }, { name: "b" }] });
     await presenter.start();
     presenter.setView("cases");
-    assert.deepEqual(vm().cases, [{ id: "k", title: "brief", tools: "2 tools", source: "written" }]);
+    assert.deepEqual(vm().cases.map((c) => [c.id, c.title, c.tools, c.source]), [["k", "brief", "2 tools", "written"]]);
     assert.equal(vm().caseCount, 1);
   });
 });

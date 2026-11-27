@@ -1,5 +1,5 @@
 import { usePresenter } from "../../../../shared/presentation/use-presenter";
-import { FILTERS, type Filter, type RowVm, type RunVm, type ScorePresenter, type ScoreViewModel, type TileVm, type View } from "../presenters/score-presenter";
+import { FILTERS, type CaseVm, type Filter, type FormErrorKey, type FormVm, type RowVm, type RunVm, type ScorePresenter, type ScoreViewModel, type TileVm, type TrajectoriesVm, type View } from "../presenters/score-presenter";
 
 const VIEWS: readonly { key: View; label: string }[] = [
   { key: "scorecard", label: "Scorecard" },
@@ -58,7 +58,7 @@ export function ScoreView({ presenter }: { presenter: ScorePresenter }) {
           </div>
         )}
         {vm.status === "ready" && vm.view === "scorecard" && <Scorecard vm={vm} presenter={presenter} />}
-        {vm.status === "ready" && vm.view === "cases" && <Cases vm={vm} />}
+        {vm.status === "ready" && vm.view === "cases" && <Cases vm={vm} presenter={presenter} />}
         {vm.status === "ready" && vm.view === "runs" && <Runs runs={vm.runs} presenter={presenter} />}
       </div>
     </>
@@ -213,26 +213,223 @@ function CaseRowView({ row }: { row: RowVm }) {
   );
 }
 
-/** The Cases view: the cases of the project (opening a case in place to its trace comes with the next ticket). */
-function Cases({ vm }: { vm: ScoreViewModel }) {
-  if (vm.cases.length === 0) {
-    return (
-      <div className="[ empty ]" data-state="no-cases">
-        <h2>No bench cases yet</h2>
-        <p>A case is a prompt with mock tools and an expectation, or a recorded session.</p>
-      </div>
-    );
-  }
+/** The Cases view: each case opens in place to its trace; Add case and From a recorded trajectory sit above the list. */
+function Cases({ vm, presenter }: { vm: ScoreViewModel; presenter: ScorePresenter }) {
   return (
-    <div className="[ score-list ]" role="table" aria-label="Bench cases">
-      {vm.cases.map((c) => (
-        <div key={c.id} className="[ sc-row ]" data-kind="case" role="row" data-case={c.id}>
-          <span className="[ title ]">{c.title}</span>
-          <span className="[ meta ]">{c.source}</span>
-          <span className="[ meta ]">{c.tools}</span>
+    <>
+      <div className="[ repel ]">
+        <span className="[ color-ink-faint text-xs ]">{vm.caseCount} {vm.caseCount === 1 ? "case" : "cases"} · a run scores every one</span>
+        <span className="[ cluster ]">
+          <button type="button" className="[ button ]" data-variant="ghost" data-size="sm" data-action="from-trajectory" onClick={() => void presenter.openTrajectories()}>
+            From a recorded trajectory
+          </button>
+          <button type="button" className="[ button ]" data-size="sm" data-action="add-case" onClick={() => presenter.startAdd()}>
+            Add case
+          </button>
+        </span>
+      </div>
+      {vm.form && <CaseForm form={vm.form} presenter={presenter} />}
+      {vm.trajectories && <Trajectories t={vm.trajectories} presenter={presenter} />}
+      {vm.cases.length === 0 ? (
+        <div className="[ empty ]" data-state="no-cases">
+          <h2>No bench cases yet</h2>
+          <p>A case is a prompt with mock tools and an expectation, or a recorded session. Add one by hand, or turn on recording on a task and make a case from one of its sessions.</p>
         </div>
+      ) : (
+        <div className="[ score-list ]" role="table" aria-label="Bench cases">
+          {vm.cases.map((c) => (
+            <CaseBlock key={c.id} c={c} presenter={presenter} />
+          ))}
+        </div>
+      )}
+    </>
+  );
+}
+
+function Spark({ trend }: { trend: readonly number[] }) {
+  if (trend.length === 0) return <span className="[ meta ]">—</span>;
+  return (
+    <span className="[ spark ]" role="img" aria-label={`last ${trend.length} runs: ${trend.map((n) => n.toFixed(2)).join(", ")}`}>
+      {trend.map((n, i) => (
+        <i key={i} style={{ height: `${Math.max(2, Math.round(n * 14))}px` }} />
       ))}
-    </div>
+    </span>
+  );
+}
+
+function CaseBlock({ c, presenter }: { c: CaseVm; presenter: ScorePresenter }) {
+  const open = c.trace !== null;
+  return (
+    <>
+      <button type="button" className="[ sc-row ]" data-kind="case" role="row" data-case={c.id} data-open={open ? "" : undefined} aria-expanded={open} onClick={() => presenter.openCase(c.id)}>
+        <span className="[ title ]">
+          {c.title}
+          {c.source === "recorded" && <span className="[ badge ]"> recorded</span>}
+        </span>
+        <span className="[ meta ]">{c.pattern || "—"}</span>
+        <span className="[ meta ]">{c.tools}</span>
+        <Spark trend={c.trend} />
+        <span className="[ num ] [ now ]">{c.score}</span>
+      </button>
+      {c.trace && (
+        <div className="[ case-detail ]" data-detail={c.id}>
+          <div className="[ repel ]">
+            <span className="[ muted text-sm ]">{c.trace.now === "—" ? "not scored in the run read" : `score ${c.trace.now}${c.trace.baseline === "—" ? "" : ` · baseline ${c.trace.baseline}`}`}</span>
+            <span className="[ cluster ]">
+              <button type="button" className="[ button ]" data-variant="ghost" data-size="sm" data-action="edit-expectation" onClick={() => presenter.startEdit(c.id)}>
+                Edit expectation
+              </button>
+              {c.confirmingDelete ? (
+                <span className="[ cluster ]" role="group" aria-label="Delete this case?">
+                  <span className="[ text-sm ]">Delete this case and its history?</span>
+                  <button type="button" className="[ button ]" data-variant="danger" data-size="sm" data-action="confirm-delete" onClick={() => void presenter.confirmDelete(c.id)}>
+                    Delete
+                  </button>
+                  <button type="button" className="[ button ]" data-variant="ghost" data-size="sm" onClick={() => presenter.cancelDelete()}>
+                    Keep
+                  </button>
+                </span>
+              ) : (
+                <button type="button" className="[ button ]" data-variant="ghost" data-size="sm" data-action="delete" onClick={() => presenter.requestDelete(c.id)}>
+                  Delete
+                </button>
+              )}
+            </span>
+          </div>
+          <p className="[ text-sm ]">
+            <b>Prompt:</b> {c.trace.prompt}
+          </p>
+          <p className="[ text-sm ]" data-expectation="">
+            <b>Expected:</b> {c.trace.expectation.calls === "" ? "no tool calls" : c.trace.expectation.calls.split("\n").join(c.trace.expectation.ordered ? " → " : " · ")}
+            {c.trace.expectation.reference !== "" && <> · result like “{c.trace.expectation.reference}”</>}
+          </p>
+          {c.trace.steps.length > 0 && (
+            <ol className="[ trace ] [ plain ]" aria-label="Trace">
+              {c.trace.steps.map((s) => (
+                <li key={s.n} data-bad={s.failed ? "" : undefined}>
+                  <span>{s.n}</span>
+                  <span>{s.call === "" ? "(no call)" : s.call}</span>
+                  <span className="[ j ]">{s.note}</span>
+                </li>
+              ))}
+            </ol>
+          )}
+          <p className="[ text-sm muted ]">
+            <b>Judge:</b> {c.trace.judge}
+          </p>
+          {c.trace.finalText !== "" && (
+            <p className="[ text-sm muted ]">
+              <b>Final text:</b> {c.trace.finalText}
+            </p>
+          )}
+        </div>
+      )}
+    </>
+  );
+}
+
+function Field({ label, error, children }: { label: string; error: string | undefined; children: React.ReactNode }) {
+  return (
+    <label className="[ case-field ]">
+      <span className="[ text-sm ]">{label}</span>
+      {children}
+      {error && (
+        <span className="[ error ]" role="alert">
+          <span aria-hidden="true">✕</span> {error}
+        </span>
+      )}
+    </label>
+  );
+}
+
+function CaseForm({ form, presenter }: { form: FormVm; presenter: ScorePresenter }) {
+  const bad = (key: FormErrorKey): true | undefined => (form.errors[key] ? true : undefined);
+  const add = form.mode === "add";
+  return (
+    <form
+      className="[ case-form ]"
+      data-form={form.mode}
+      onSubmit={(e) => {
+        e.preventDefault();
+        void presenter.saveForm();
+      }}
+    >
+      <h2 className="[ text-md ]">{form.title}</h2>
+      {form.errors.general && (
+        <div className="[ banner ]" data-tone="danger" role="alert">
+          <div>{form.errors.general}</div>
+        </div>
+      )}
+      {add && (
+        <>
+          <Field label="Name" error={form.errors.name}>
+            <input type="text" name="name" value={form.name} aria-invalid={bad("name")} onChange={(e) => presenter.setForm({ name: e.target.value })} />
+          </Field>
+          <Field label="Prompt" error={form.errors.prompt}>
+            <textarea name="prompt" rows={3} value={form.prompt} aria-invalid={bad("prompt")} onChange={(e) => presenter.setForm({ prompt: e.target.value })} />
+          </Field>
+          <Field label="Mock tools, one per line: name = canned result, or name ! error result" error={form.errors.mocks}>
+            <textarea name="mocks" rows={3} className="[ mono ]" value={form.mocks} aria-invalid={bad("mocks")} onChange={(e) => presenter.setForm({ mocks: e.target.value })} />
+          </Field>
+        </>
+      )}
+      <Field label={'Expected calls, one per line: tool, or tool {"param": value}'} error={form.errors.calls}>
+        <textarea name="calls" rows={3} className="[ mono ]" value={form.calls} aria-invalid={bad("calls")} onChange={(e) => presenter.setForm({ calls: e.target.value })} />
+      </Field>
+      <label className="[ cluster text-sm ]">
+        <input type="checkbox" name="ordered" checked={form.ordered} onChange={(e) => presenter.setForm({ ordered: e.target.checked })} />
+        <span>In this order</span>
+      </label>
+      <Field label="Reference result (what a good final answer says)" error={form.errors.reference}>
+        <textarea name="reference" rows={2} value={form.reference} aria-invalid={bad("reference")} onChange={(e) => presenter.setForm({ reference: e.target.value })} />
+      </Field>
+      <span className="[ cluster ]">
+        <button type="submit" className="[ button ]" data-variant="primary" data-size="sm" aria-busy={form.saving} disabled={form.saving}>
+          {add ? "Add case" : "Save expectation"}
+        </button>
+        <button type="button" className="[ button ]" data-variant="ghost" data-size="sm" onClick={() => presenter.cancelForm()}>
+          Cancel
+        </button>
+      </span>
+    </form>
+  );
+}
+
+function Trajectories({ t, presenter }: { t: TrajectoriesVm; presenter: ScorePresenter }) {
+  return (
+    <section className="[ case-form ]" data-trajectories="" aria-label="Recorded trajectories">
+      <div className="[ repel ]">
+        <h2 className="[ text-md ]">From a recorded trajectory</h2>
+        <button type="button" className="[ button ]" data-variant="ghost" data-size="sm" onClick={() => presenter.closeTrajectories()}>
+          Close
+        </button>
+      </div>
+      {t.error !== "" && (
+        <div className="[ banner ]" data-tone="danger" role="alert">
+          <div>{t.error}</div>
+        </div>
+      )}
+      {t.loading ? (
+        <p className="[ color-ink-muted text-sm ]">Reading the recordings…</p>
+      ) : t.items.length === 0 ? (
+        <p className="[ color-ink-muted text-sm ]" data-empty="">
+          {t.empty}
+        </p>
+      ) : (
+        <ul className="[ plain ]">
+          {t.items.map((x) => (
+            <li key={x.id} className="[ repel ]" data-trajectory={x.id}>
+              <span className="[ text-sm ]">
+                {x.prompt.slice(0, 120)} <span className="[ color-ink-faint text-xs ]">· {x.steps} · {x.when}</span>
+              </span>
+              <button type="button" className="[ button ]" data-size="sm" onClick={() => void presenter.chooseTrajectory(x.id)}>
+                Make a case
+              </button>
+            </li>
+          ))}
+        </ul>
+      )}
+    </section>
   );
 }
 

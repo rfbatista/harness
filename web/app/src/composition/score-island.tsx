@@ -6,6 +6,7 @@ import type { Feed } from "../shared/kernel/feed";
 import { systemClock } from "../shared/kernel/clock";
 import { httpScoreFeed } from "../features/score/infrastructure/http-score-feed";
 import { httpScoreSource } from "../features/score/infrastructure/http-score-source";
+import { jsonCallsText } from "../features/score/infrastructure/dto/json-calls-text";
 import { ScorePropsDto } from "../features/score/infrastructure/dto/score-props-dto";
 import { ScorePresenter } from "../features/score/presentation/presenters/score-presenter";
 import { ScoreView } from "../features/score/presentation/views/score-view";
@@ -15,6 +16,7 @@ export function mountScore(mount: Element, props: unknown, _win: Window, api: Ap
   const presenter = new ScorePresenter({
     source: httpScoreSource(api),
     feed: httpScoreFeed(feed),
+    calls: jsonCallsText,
     projectId: project_id,
     projectName: project_name,
     now: () => new Date(systemClock.now()),
