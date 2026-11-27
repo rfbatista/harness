@@ -108,7 +108,7 @@
         display: block;
         color: var(--color-ink-faint);
         font-size: var(--text-xs);
-        font-weight: 400;
+        font-weight: var(--weight-regular);
       }
     }
 
@@ -118,7 +118,7 @@
       display: flex;
       flex-wrap: wrap;
       align-items: baseline;
-      gap: 2px var(--space-xs);
+      gap: var(--space-3xs) var(--space-xs);
       color: var(--color-ink-faint);
       font-size: var(--text-xs);
 
@@ -173,7 +173,7 @@
   .ledger-row[data-missing] > .kind .status { color: var(--color-danger); }
   .ledger-row > .ctl > input[aria-invalid="true"] { border-color: var(--color-danger); }
 
-  .ledger-row .badge.glob { font-family: var(--font-mono); font-weight: 400; }
+  .ledger-row .badge.glob { font-family: var(--font-mono); font-weight: var(--weight-regular); }
   .ledger-row .chip-x {
     all: unset;
     cursor: pointer;
@@ -193,9 +193,9 @@
   .ledger-row textarea[aria-invalid="true"], .ledger-row select[aria-invalid="true"] { border-color: var(--color-danger); }
 
   /* A row the person changed and has not saved, and one that cannot be saved: the label says so; the error is the row's own line. */
-  .ledger-row[data-changed] > .lbl::after { content: " · unsaved"; color: var(--color-attention-strong); font-weight: 400; font-size: var(--text-xs); }
+  .ledger-row[data-changed] > .lbl::after { content: " · unsaved"; color: var(--color-attention-strong); font-weight: var(--weight-regular); font-size: var(--text-xs); }
   .ledger-row > .ctl > .err { inline-size: 100%; color: var(--color-danger); font-size: var(--text-xs); }
-  .ledger-row[data-error] > .ctl [role="switch"] { outline: 1px solid var(--color-danger); outline-offset: 2px; }
+  .ledger-row[data-error] > .ctl [role="switch"] { outline: 1px solid var(--color-danger); outline-offset: var(--space-3xs); }
 
   /* The sticky save bar: unsaved count, errors by section and field, Discard and Save. */
   .save-bar {
