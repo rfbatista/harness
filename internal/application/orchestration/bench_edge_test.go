@@ -89,7 +89,7 @@ func TestACaseDeletedBetweenTwoRunsShowsAsRemovedInTheComparison(t *testing.T) {
 		t.Fatal(err)
 	}
 	second := w.scorecard(t, w.startRun(t))
-	cmp, err := w.bench.CompareScorecard(context.Background(), "p1", second.ID)
+	cmp, err := w.bench.CompareScorecard(context.Background(), "p1", second.ID, "")
 	if err != nil || cmp.PreviousID != first.ID || len(second.Cases) != 1 {
 		t.Fatalf("cmp %+v err %v", cmp, err)
 	}

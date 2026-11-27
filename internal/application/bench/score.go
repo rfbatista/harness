@@ -151,6 +151,31 @@ func NewScorecard(projectID string, setup domain.BenchSetupRecord, cases []domai
 	return card
 }
 
+// benchGroups are the scorecard's three columns and the patterns each is made of.
+var benchGroups = map[string][]string{
+	"tool_use":   {domain.BenchPatternRightTool, domain.BenchPatternValidParams, domain.BenchPatternRightOrder},
+	"outcome":    {domain.BenchPatternOutcome},
+	"trajectory": {domain.BenchPatternTrajectory},
+}
+
+// groupMean is a scorecard's mean over the patterns, each weighted by the cases
+// scored on it; ok is false when none was scored.
+func groupMean(card domain.Scorecard, patterns []string) (mean float64, ok bool) {
+	var weight, sum float64
+	for _, name := range patterns {
+		a, has := card.Patterns[name]
+		if !has || a.Scored == 0 {
+			continue
+		}
+		weight += float64(a.Scored)
+		sum += a.Mean * float64(a.Scored)
+	}
+	if weight == 0 {
+		return 0, false
+	}
+	return sum / weight, true
+}
+
 const epsilon = 1e-9
 
 func delta(before, after float64) domain.BenchDelta {
@@ -167,6 +192,7 @@ func Compare(prev, cur domain.Scorecard) domain.ScorecardComparison {
 		FingerprintChanged: prev.Setup.Fingerprint != cur.Setup.Fingerprint,
 		Aggregate:          delta(prev.Aggregate.Mean, cur.Aggregate.Mean),
 		Patterns:           map[string]domain.BenchDelta{},
+		Groups:             map[string]domain.BenchDelta{},
 		Cases:              []domain.BenchCaseDelta{},
 	}
 	for _, name := range domain.BenchPatterns {
@@ -174,6 +200,13 @@ func Compare(prev, cur domain.Scorecard) domain.ScorecardComparison {
 		c, hasCur := cur.Patterns[name]
 		if hadPrev || hasCur {
 			out.Patterns[name] = delta(p.Mean, c.Mean)
+		}
+	}
+	for name, patterns := range benchGroups {
+		p, hadPrev := groupMean(prev, patterns)
+		c, hasCur := groupMean(cur, patterns)
+		if hadPrev || hasCur {
+			out.Groups[name] = delta(p, c)
 		}
 	}
 	before := map[string]domain.BenchCaseScore{}

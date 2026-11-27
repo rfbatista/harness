@@ -230,6 +230,10 @@ func (e *edgeCards) Get(_ context.Context, _, id string) (*domain.Scorecard, err
 	}
 	return nil, nil
 }
+func (e *edgeCards) Find(ctx context.Context, id string) (*domain.Scorecard, error) {
+	return e.Get(ctx, "", id)
+}
+
 func (e *edgeCards) List(context.Context, string) ([]domain.Scorecard, error) {
 	e.mu.Lock()
 	defer e.mu.Unlock()
@@ -245,7 +249,7 @@ func TestComparingWithOnlyCancelledPreviousRunsHasNoPrevious(t *testing.T) {
 		{ID: "c2", ProjectID: "p1", Status: domain.ScorecardCancelled, StartedAt: t0},
 	}}
 	svc := New(Deps{Scorecards: store, Projects: projects{"p1": true}})
-	_, err := svc.CompareScorecard(context.Background(), "p1", "cur")
+	_, err := svc.CompareScorecard(context.Background(), "p1", "cur", "")
 	var se *domain.StructuredError
 	if !errors.As(err, &se) || se.Code != "BENCH_NO_PREVIOUS_SCORECARD" {
 		t.Fatalf("err = %v", err)
@@ -259,7 +263,7 @@ func TestComparingNeverUsesANewerScorecardAsThePrevious(t *testing.T) {
 		{ID: "cur", ProjectID: "p1", Status: domain.ScorecardFinished, StartedAt: t0},
 	}}
 	svc := New(Deps{Scorecards: store, Projects: projects{"p1": true}})
-	if _, err := svc.CompareScorecard(context.Background(), "p1", "cur"); err == nil {
+	if _, err := svc.CompareScorecard(context.Background(), "p1", "cur", ""); err == nil {
 		t.Fatal("the oldest scorecard was compared with a newer one")
 	}
 }
@@ -270,7 +274,7 @@ func TestAnUnknownScorecardOrProjectIsNotFoundOnCompare(t *testing.T) {
 		{"p1", "nope", "BENCH_SCORECARD_NOT_FOUND"},
 		{"zz", "nope", "PROJECT_NOT_FOUND"},
 	} {
-		_, err := svc.CompareScorecard(context.Background(), tc.project, tc.id)
+		_, err := svc.CompareScorecard(context.Background(), tc.project, tc.id, "")
 		var se *domain.StructuredError
 		if !errors.As(err, &se) || se.Code != tc.code {
 			t.Fatalf("%s/%s: err = %v, want %s", tc.project, tc.id, err, tc.code)
@@ -284,7 +288,7 @@ func TestACancelledScorecardCanItselfBeComparedWithAFinishedOne(t *testing.T) {
 		{ID: "cur", ProjectID: "p1", Status: domain.ScorecardCancelled, StartedAt: t0.Add(time.Hour)},
 		{ID: "base", ProjectID: "p1", Status: domain.ScorecardFinished, StartedAt: t0},
 	}}
-	cmp, err := New(Deps{Scorecards: store, Projects: projects{"p1": true}}).CompareScorecard(context.Background(), "p1", "cur")
+	cmp, err := New(Deps{Scorecards: store, Projects: projects{"p1": true}}).CompareScorecard(context.Background(), "p1", "cur", "")
 	if err != nil || cmp.PreviousID != "base" {
 		t.Fatalf("cmp = %+v, %v", cmp, err)
 	}

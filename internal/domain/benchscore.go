@@ -104,6 +104,8 @@ type BenchAggregate struct {
 const (
 	ScorecardFinished  = "finished"
 	ScorecardCancelled = "cancelled"
+	// ScorecardPartial is a run that finished but was asked for some of the cases: like a cancelled one it is no baseline.
+	ScorecardPartial = "partial"
 )
 
 // BenchSetupRecord is the setup a scorecard ran on: the fingerprint that
@@ -166,7 +168,10 @@ type ScorecardComparison struct {
 	FingerprintChanged bool                  `json:"fingerprint_changed"`
 	Aggregate          BenchDelta            `json:"aggregate"`
 	Patterns           map[string]BenchDelta `json:"patterns"`
-	Cases              []BenchCaseDelta      `json:"cases"`
+	// Groups are the scorecard's three columns (tool use, outcome, trajectory),
+	// each the mean of its patterns weighted by the cases scored.
+	Groups map[string]BenchDelta `json:"groups"`
+	Cases  []BenchCaseDelta      `json:"cases"`
 }
 
 // Bench run statuses.
@@ -183,6 +188,8 @@ type BenchRunRequest struct {
 	AgentID      string `json:"agent_id,omitempty"`
 	RepositoryID string `json:"repository_id,omitempty"`
 	Model        string `json:"model,omitempty"`
+	// CaseIDs limits the run to those cases of the project; empty runs them all.
+	CaseIDs []string `json:"case_ids,omitempty"`
 }
 
 // BenchRun is a bench run of a project and how far it is. Its scorecard, once

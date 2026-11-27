@@ -146,7 +146,7 @@ func (h *Handler) handleCompareBenchScorecard(c echo.Context) error {
 	if h.benchRuns == nil {
 		return errBenchOff
 	}
-	cmp, err := h.benchRuns.CompareScorecard(c.Request().Context(), c.Param("project"), c.Param("scorecard"))
+	cmp, err := h.benchRuns.CompareScorecard(c.Request().Context(), c.Param("project"), c.Param("scorecard"), c.QueryParam("baseline"))
 	if err != nil {
 		return err
 	}

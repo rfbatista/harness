@@ -74,7 +74,7 @@ func errorHandler(err error, c echo.Context) {
 			"GIT_CREDENTIAL_MISSING", "ARCHITECTURE_INVALID", "INSTRUCTION_INVALID", "DESIGN_SYSTEM_INVALID", "IMPORT_UNREADABLE", "REPOSITORY_PROMPT_TOO_LONG", "UNKNOWN_REFERENCE", "BUNDLE_CYCLE", "INTERVIEW_ANSWERS_INVALID":
 			writeCoded(c, http.StatusBadRequest, err, se)
 			return
-		case "BENCH_NO_CASES":
+		case "BENCH_NO_CASES", "BENCH_CASE_IDS_INVALID", "BENCH_BASELINE_OTHER_PROJECT":
 			// A run needs bench cases: the request is well-formed, the project has none.
 			writeCoded(c, http.StatusUnprocessableEntity, err, se)
 			return

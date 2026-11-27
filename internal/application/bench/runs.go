@@ -2,6 +2,7 @@ package bench
 
 import (
 	"context"
+	"strings"
 	"time"
 
 	"operators-mcp/internal/domain"
@@ -31,6 +32,12 @@ func (s *Service) StartRun(ctx context.Context, projectID string, req domain.Ben
 	if len(cases) == 0 {
 		return domain.BenchRun{}, &domain.StructuredError{Code: "BENCH_NO_CASES", Message: "the project has no bench cases to run"}
 	}
+	partial := len(req.CaseIDs) > 0
+	if partial {
+		if cases, err = pickCases(cases, req.CaseIDs); err != nil {
+			return domain.BenchRun{}, err
+		}
+	}
 	if req.Model == "" && s.d.SessionModel != nil {
 		req.Model = s.d.SessionModel()
 	}
@@ -55,7 +62,7 @@ func (s *Service) StartRun(ctx context.Context, projectID string, req domain.Ben
 	s.active[projectID] = run.ID
 	s.mu.Unlock()
 
-	go s.execute(runCtx, live, cases, setupReq, setup)
+	go s.execute(runCtx, live, cases, setupReq, setup, partial)
 	return run, nil
 }
 
@@ -72,7 +79,7 @@ func (s *Service) judgeModel(ctx context.Context, projectID string) string {
 }
 
 // execute runs each case in turn and ends the run with its scorecard.
-func (s *Service) execute(ctx context.Context, live *liveRun, cases []domain.BenchCase, setupReq ports.BenchSetupRequest, setup Setup) {
+func (s *Service) execute(ctx context.Context, live *liveRun, cases []domain.BenchCase, setupReq ports.BenchSetupRequest, setup Setup, partial bool) {
 	run := live.run
 	judgeModel := setup.JudgeModel
 	var scores []domain.BenchCaseScore
@@ -98,7 +105,7 @@ func (s *Service) execute(ctx context.Context, live *liveRun, cases []domain.Ben
 	finished := time.Now().UTC()
 	card := NewScorecard(run.ProjectID, domain.BenchSetupRecord{
 		Fingerprint: Fingerprint(setup), AgentName: setup.AgentName, Model: setup.Model, JudgeModel: setup.JudgeModel, CLIVersion: setup.CLIVersion,
-	}, scores, scorecardStatus(status))
+	}, scores, scorecardStatus(status, partial))
 	card.ID, card.StartedAt, card.FinishedAt = run.ID, run.StartedAt, finished
 
 	var saveErr error
@@ -118,11 +125,44 @@ func (s *Service) execute(ctx context.Context, live *liveRun, cases []domain.Ben
 	})
 }
 
-func scorecardStatus(runStatus string) string {
-	if runStatus == domain.BenchRunCancelled {
+// scorecardStatus: a cancelled run holds only some cases, and so does one that
+// was asked for only some; neither is a baseline.
+func scorecardStatus(runStatus string, partial bool) string {
+	switch {
+	case runStatus == domain.BenchRunCancelled:
 		return domain.ScorecardCancelled
+	case partial:
+		return domain.ScorecardPartial
 	}
 	return domain.ScorecardFinished
+}
+
+// pickCases are the project's cases with the ids, in the order the project
+// lists them; an id that is none of them (unknown, or another project's) is
+// refused, named.
+func pickCases(all []domain.BenchCase, ids []string) ([]domain.BenchCase, error) {
+	want := map[string]bool{}
+	for _, id := range ids {
+		want[id] = true
+	}
+	var picked []domain.BenchCase
+	for _, c := range all {
+		if want[c.ID] {
+			picked = append(picked, c)
+			delete(want, c.ID)
+		}
+	}
+	if len(want) > 0 {
+		missing := make([]string, 0, len(want))
+		for _, id := range ids {
+			if want[id] {
+				missing = append(missing, id)
+				delete(want, id)
+			}
+		}
+		return nil, &domain.StructuredError{Code: "BENCH_CASE_IDS_INVALID", Message: "not cases of this project: " + strings.Join(missing, ", ")}
+	}
+	return picked, nil
 }
 
 // progress changes the run under the lock and announces it.
@@ -207,19 +247,32 @@ func (s *Service) GetScorecard(ctx context.Context, projectID, scorecardID strin
 	return domain.Scorecard{}, &domain.StructuredError{Code: "BENCH_SCORECARD_NOT_FOUND", Message: "scorecard not found: " + scorecardID}
 }
 
-// CompareScorecard sets the scorecard against the project's scorecard just
-// before it.
-func (s *Service) CompareScorecard(ctx context.Context, projectID, scorecardID string) (domain.ScorecardComparison, error) {
+// CompareScorecard sets the scorecard against the baseline the person chose,
+// or else the project's scorecard just before it.
+func (s *Service) CompareScorecard(ctx context.Context, projectID, scorecardID, baselineID string) (domain.ScorecardComparison, error) {
 	cur, err := s.GetScorecard(ctx, projectID, scorecardID)
 	if err != nil {
 		return domain.ScorecardComparison{}, err
+	}
+	if baselineID != "" {
+		base, err := s.d.Scorecards.Find(ctx, baselineID)
+		if err != nil {
+			return domain.ScorecardComparison{}, err
+		}
+		if base == nil {
+			return domain.ScorecardComparison{}, &domain.StructuredError{Code: "BENCH_SCORECARD_NOT_FOUND", Message: "scorecard not found: " + baselineID}
+		}
+		if base.ProjectID != projectID {
+			return domain.ScorecardComparison{}, &domain.StructuredError{Code: "BENCH_BASELINE_OTHER_PROJECT", Message: "the baseline " + baselineID + " is a scorecard of another project"}
+		}
+		return Compare(*base, cur), nil
 	}
 	all, err := s.d.Scorecards.List(ctx, projectID)
 	if err != nil {
 		return domain.ScorecardComparison{}, err
 	}
 	// Newest first: the first finished one older than cur is the previous. A
-	// cancelled run holds only some of the cases, so it is no baseline.
+	// cancelled or partial run holds only some of the cases, so it is no baseline.
 	for _, c := range all {
 		if c.ID != cur.ID && c.Status == domain.ScorecardFinished && c.StartedAt.Before(cur.StartedAt) {
 			return Compare(c, cur), nil

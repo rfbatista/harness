@@ -110,12 +110,17 @@ type BenchRuns interface {
 	GetScorecard(ctx context.Context, projectID, scorecardID string) (domain.Scorecard, error)
 	// CompareScorecard sets the scorecard against the project's previous one;
 	// with none before it, BENCH_NO_PREVIOUS_SCORECARD.
-	CompareScorecard(ctx context.Context, projectID, scorecardID string) (domain.ScorecardComparison, error)
+	// baselineID, when not empty, is the scorecard to compare with instead:
+	// unknown is BENCH_SCORECARD_NOT_FOUND, another project's
+	// BENCH_BASELINE_OTHER_PROJECT.
+	CompareScorecard(ctx context.Context, projectID, scorecardID, baselineID string) (domain.ScorecardComparison, error)
 }
 
 // BenchScorecardStore persists scorecards (driven; sqlite implements it).
 type BenchScorecardStore interface {
 	Save(ctx context.Context, card domain.Scorecard) error
+	// Find answers the scorecard of any project, nil when there is none.
+	Find(ctx context.Context, id string) (*domain.Scorecard, error)
 	// Get answers nil when the project has no such scorecard.
 	Get(ctx context.Context, projectID, id string) (*domain.Scorecard, error)
 	// List answers the project's scorecards, newest first.
