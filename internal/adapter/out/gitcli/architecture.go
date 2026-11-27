@@ -95,7 +95,11 @@ func (a Architecture) Checkout(ctx context.Context, dir string) (ports.CheckoutS
 
 // LastCommit is the newest commit of branch that touched path.
 func (a Architecture) LastCommit(ctx context.Context, dir, branch, path string) (string, error) {
-	out, err := a.d.gitOutput(ctx, dir, "log", "-1", "--format=%H", "--end-of-options", "refs/heads/"+branch, "--", path)
+	args := []string{"log", "-1", "--format=%H", "--end-of-options", "refs/heads/" + branch}
+	if path != "" {
+		args = append(args, "--", path)
+	}
+	out, err := a.d.gitOutput(ctx, dir, args...)
 	return strings.TrimSpace(out), err
 }
 

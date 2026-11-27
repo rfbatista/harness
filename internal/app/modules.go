@@ -47,12 +47,12 @@ import (
 	"operators-mcp/internal/adapter/out/termhost"
 	"operators-mcp/internal/app/catalog"
 	"operators-mcp/internal/application/agentcredential"
+	"operators-mcp/internal/application/agentsystem"
 	"operators-mcp/internal/application/apps"
 	"operators-mcp/internal/application/archrules"
 	"operators-mcp/internal/application/artifacts"
 	"operators-mcp/internal/application/branchgate"
 	"operators-mcp/internal/application/branchwatch"
-	"operators-mcp/internal/application/agentsystem"
 	"operators-mcp/internal/application/execution"
 	"operators-mcp/internal/application/gateruns"
 	"operators-mcp/internal/application/gitcredentials"
@@ -116,6 +116,8 @@ var PersistenceModule = fx.Module("persistence",
 		asPort(sqlite.NewDesignProposalRepository, new(ports.DesignProposalStore)),
 		asPort(sqlite.NewDesignExportRepository, new(ports.DesignExportStore)),
 		asPort(sqlite.NewInstructionDraftRepository, new(ports.InstructionDraftStore)),
+		asPort(sqlite.NewTaskMemoryRepository, new(ports.TaskMemoryStore)),
+		asPort(sqlite.NewContextMapRepository, new(ports.ContextMapStore)),
 		asPort(sqlite.NewInstructionProposalRepository, new(ports.InstructionProposalStore)),
 		asPort(sqlite.NewProductOwnerRepository, new(ports.ProductOwnerStore)),
 		asPort(sqlite.NewProductOwnerDigestRepository, new(ports.ProductOwnerDigestStore)),
@@ -290,65 +292,67 @@ var CatalogModule = fx.Module("catalog",
 type catalogParams struct {
 	fx.In
 
-	Projects        ports.ProjectRepository
-	Repositories    ports.RepositoryRepository
-	Zones           ports.ZoneRepository
-	BoundedContexts ports.BoundedContextRepository
-	ArchRecords     ports.ArchitectureRecordStore
-	ArchGit         ports.ArchitectureGit
-	ArchEvents      ports.ArchitectureRuleEventStore
-	DesignRecords   ports.DesignSystemStore
-	DesignProposals ports.DesignProposalStore
-	DesignExports   ports.DesignExportStore
+	Projects             ports.ProjectRepository
+	Repositories         ports.RepositoryRepository
+	Zones                ports.ZoneRepository
+	BoundedContexts      ports.BoundedContextRepository
+	ArchRecords          ports.ArchitectureRecordStore
+	ArchGit              ports.ArchitectureGit
+	ArchEvents           ports.ArchitectureRuleEventStore
+	DesignRecords        ports.DesignSystemStore
+	DesignProposals      ports.DesignProposalStore
+	DesignExports        ports.DesignExportStore
 	InstructionDrafts    ports.InstructionDraftStore
 	InstructionProposals ports.InstructionProposalStore
-	Agents          ports.AgentRepository
-	Prompts         ports.PromptRepository
-	Skills          ports.SkillRepository
-	MCPServers      ports.MCPServerRepository
-	Tools           ports.ToolRepository
-	Settings        ports.SettingsRepository
-	Publisher       ports.SkillPublisher
-	Matcher         ports.PathMatcher
-	Lister          ports.TreeLister
-	Finder          ports.RepositoryFinder
-	EnvFiles        ports.EnvFileRepository
-	EnvFileIO       ports.EnvFileIO
-	RunCommands     ports.RunCommandRepository
-	Activations     ports.TokenSaverActivationRepository
-	AgentCatalog    *agentcatalog.Catalog
-	Cfg             Config
+	TaskMemories         ports.TaskMemoryStore
+	Agents               ports.AgentRepository
+	Prompts              ports.PromptRepository
+	Skills               ports.SkillRepository
+	MCPServers           ports.MCPServerRepository
+	Tools                ports.ToolRepository
+	Settings             ports.SettingsRepository
+	Publisher            ports.SkillPublisher
+	Matcher              ports.PathMatcher
+	Lister               ports.TreeLister
+	Finder               ports.RepositoryFinder
+	EnvFiles             ports.EnvFileRepository
+	EnvFileIO            ports.EnvFileIO
+	RunCommands          ports.RunCommandRepository
+	Activations          ports.TokenSaverActivationRepository
+	AgentCatalog         *agentcatalog.Catalog
+	Cfg                  Config
 }
 
 func newCatalog(p catalogParams) catalog.Catalog {
 	c := catalog.New(catalog.Deps{
-		Projects:         p.Projects,
-		Repositories:     p.Repositories,
-		Zones:            p.Zones,
-		BoundedContexts:  p.BoundedContexts,
-		ArchRecords:      p.ArchRecords,
-		ArchGit:          p.ArchGit,
-		ArchEvents:       p.ArchEvents,
-		DesignRecords:    p.DesignRecords,
-		DesignProposals:  p.DesignProposals,
-		DesignExports:    p.DesignExports,
+		Projects:             p.Projects,
+		Repositories:         p.Repositories,
+		Zones:                p.Zones,
+		BoundedContexts:      p.BoundedContexts,
+		ArchRecords:          p.ArchRecords,
+		ArchGit:              p.ArchGit,
+		ArchEvents:           p.ArchEvents,
+		DesignRecords:        p.DesignRecords,
+		DesignProposals:      p.DesignProposals,
+		DesignExports:        p.DesignExports,
 		InstructionDrafts:    p.InstructionDrafts,
 		InstructionProposals: p.InstructionProposals,
-		Agents:           p.Agents,
-		Prompts:          p.Prompts,
-		Skills:           p.Skills,
-		MCPServers:       p.MCPServers,
-		Tools:            p.Tools,
-		Settings:         p.Settings,
-		Publisher:        p.Publisher,
-		PathMatcher:      p.Matcher,
-		TreeLister:       p.Lister,
-		RepositoryFinder: p.Finder,
-		EnvFiles:         p.EnvFiles,
-		EnvFileIO:        p.EnvFileIO,
-		RunCommands:      p.RunCommands,
-		Activations:      p.Activations,
-		DefaultRoot:      p.Cfg.Root,
+		TaskMemories:         p.TaskMemories,
+		Agents:               p.Agents,
+		Prompts:              p.Prompts,
+		Skills:               p.Skills,
+		MCPServers:           p.MCPServers,
+		Tools:                p.Tools,
+		Settings:             p.Settings,
+		Publisher:            p.Publisher,
+		PathMatcher:          p.Matcher,
+		TreeLister:           p.Lister,
+		RepositoryFinder:     p.Finder,
+		EnvFiles:             p.EnvFiles,
+		EnvFileIO:            p.EnvFileIO,
+		RunCommands:          p.RunCommands,
+		Activations:          p.Activations,
+		DefaultRoot:          p.Cfg.Root,
 	})
 	// The mode agents live in the server settings (ADR 0103).
 	p.AgentCatalog.UseModeAgents(c.Settings)
@@ -501,6 +505,7 @@ var AgentRuntimeModule = fx.Module("agentruntime",
 		platformSandboxViolations,
 		newSandboxSettings,
 		newAgentSystem,
+		newContextMap,
 		newBench,
 		newManagedClaude,
 		newManagedClaudeBin,
@@ -515,7 +520,7 @@ var AgentRuntimeModule = fx.Module("agentruntime",
 		newVirtualFileSystem,
 		newPersonTerminals,
 	),
-	fx.Invoke(registerRuntimeShutdown, registerServerSessions, bindVirtualShells, bindWorkspaceRemovals, bindFilesRootFeed, bindSandboxSettings,
+	fx.Invoke(bindContextMap, bindTaskMemoryCheck, registerRuntimeShutdown, registerServerSessions, bindVirtualShells, bindWorkspaceRemovals, bindFilesRootFeed, bindSandboxSettings,
 		bindAgentReadiness, func(*archrules.Service) {}, restoreBranchGate, restoreServiceRequests, func(*branchwatch.Service) {}),
 )
 
@@ -658,6 +663,10 @@ func bindVirtualShells(orch *orchestration.Service, shells *vfs.Service, plan *p
 	}
 	// A proposal reaches open pages on the project feed and the shells, which
 	// show its skills read-only.
+	if cat.TaskMemories != nil {
+		cat.TaskMemories.UseFeed(changeSinks{orch, shells})
+		cat.TaskMemories.UseTasks(plan)
+	}
 	if cat.InstructionProposals != nil {
 		cat.InstructionProposals.UseFeed(changeSinks{orch, shells})
 		cat.InstructionProposals.UseTasks(plan)
@@ -1150,6 +1159,15 @@ func newOrchestrationService(
 	}
 	svc.SessionArchitectureURL = func(sessionID string) string {
 		return base + httpapi.SessionArchitecturePath(sessionID)
+	}
+	if cat.TaskMemories != nil {
+		svc.TaskMemory = cat.TaskMemories
+		if root, err := dataDir(cfg, "task-memory"); err == nil {
+			svc.TaskMemoryRoot = root
+		}
+	}
+	svc.SessionSkillsURL = func(sessionID string) string {
+		return base + httpapi.SessionSkillsPath(sessionID)
 	}
 	svc.SessionMemoryURL = func(sessionID string) string {
 		return base + httpapi.SessionMemoryPath(sessionID)

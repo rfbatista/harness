@@ -267,6 +267,10 @@ var routeClasses = map[string]routeClass{
 	"POST /api/import_skill_from_path":                                   classPerson,
 	"POST /api/install_managed_claude":                                   classPerson,
 	"POST /api/install_token_saver":                                      classPerson,
+	"POST /api/get_context_map":                                          classSession,
+	"POST /api/get_task_memory":                                          classSession,
+	"POST /api/save_task_memory":                                         classPerson,
+	"POST /api/sessions/:id/skills/activate":                             classOpen,
 	"POST /api/interactive_session_hook":                                 classOpen, // called by the Stop hook of every interactive claude session (curl in its settings)
 	"POST /api/interactive_session_started":                              classOpen, // called by the SessionStart hook of every interactive claude session
 	"POST /api/interviews/:id/answers":                                   classPerson,
