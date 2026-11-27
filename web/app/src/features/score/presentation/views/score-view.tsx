@@ -28,7 +28,7 @@ export function ScoreView({ presenter }: { presenter: ScorePresenter }) {
           ))}
         </div>
         <span className="[ end ]">
-          {vm.running ? (
+          {vm.running && (
             <>
               <span className="[ status ]" data-state="running" role="status">
                 {vm.running.cancelling ? "cancelling…" : "running"}
@@ -37,15 +37,27 @@ export function ScoreView({ presenter }: { presenter: ScorePresenter }) {
                 Cancel
               </button>
             </>
-          ) : (
+          )}
+          {vm.view === "cases" ? (
             <>
-              <span className="[ color-ink-faint text-sm ]" role="status">
-                {vm.lastRun}
-              </span>
-              <button type="button" className="[ button ]" data-variant="primary" disabled={vm.status !== "ready" || vm.caseCount === 0} onClick={() => void presenter.runBench()}>
-                Run bench
+              <button type="button" className="[ button ]" data-action="add-case" onClick={() => presenter.startAdd()}>
+                Add case
+              </button>
+              <button type="button" className="[ button ]" data-variant="ghost" data-action="from-trajectory" onClick={() => void presenter.openTrajectories()}>
+                From a recorded trajectory
               </button>
             </>
+          ) : (
+            !vm.running && (
+              <>
+                <span className="[ color-ink-faint text-sm ]" role="status">
+                  {vm.lastRun}
+                </span>
+                <button type="button" className="[ button ]" data-variant="primary" disabled={vm.status !== "ready" || vm.caseCount === 0} onClick={() => void presenter.runBench()}>
+                  Run bench
+                </button>
+              </>
+            )
           )}
         </span>
       </header>
@@ -264,17 +276,6 @@ function CaseRowView({ row }: { row: RowVm }) {
 function Cases({ vm, presenter }: { vm: ScoreViewModel; presenter: ScorePresenter }) {
   return (
     <>
-      <div className="[ repel ]">
-        <span className="[ color-ink-faint text-xs ]">{vm.caseCount} {vm.caseCount === 1 ? "case" : "cases"} · a run scores every one</span>
-        <span className="[ cluster ]">
-          <button type="button" className="[ button ]" data-size="sm" data-action="add-case" onClick={() => presenter.startAdd()}>
-            Add case
-          </button>
-          <button type="button" className="[ button ]" data-variant="ghost" data-size="sm" data-action="from-trajectory" onClick={() => void presenter.openTrajectories()}>
-            From a recorded trajectory
-          </button>
-        </span>
-      </div>
       {vm.form && <CaseForm form={vm.form} presenter={presenter} />}
       {vm.trajectories && <Trajectories t={vm.trajectories} presenter={presenter} />}
       {vm.cases.length === 0 ? (
@@ -328,7 +329,16 @@ function CaseBlock({ c, busy, presenter }: { c: CaseVm; busy: boolean; presenter
       {c.trace && (
         <div className="[ case-detail ]" data-detail={c.id}>
           <div className="[ repel ]">
-            <span className="[ muted text-sm ]">{c.trace.now === "—" ? "not scored in the run read" : `score ${c.trace.now}${c.trace.baseline === "—" ? "" : ` · baseline ${c.trace.baseline}`}`}</span>
+            <span className="[ cluster ]" data-trace-head="">
+              {c.trace.head === "" ? (
+                <span className="[ muted text-sm ]">not scored in the run read</span>
+              ) : (
+                <>
+                  <b>{c.trace.head.split(" · ")[0]}</b>
+                  <span className="[ muted text-sm ]">{c.trace.head.split(" · ").slice(1).map((x) => `· ${x}`).join(" ")}</span>
+                </>
+              )}
+            </span>
             <span className="[ cluster ]">
               <button type="button" className="[ button ]" data-variant="ghost" data-size="sm" data-action="replay" disabled={busy} onClick={() => void presenter.replayCase(c.id)}>
                 Replay this case
@@ -353,11 +363,8 @@ function CaseBlock({ c, busy, presenter }: { c: CaseVm; busy: boolean; presenter
               )}
             </span>
           </div>
-          <p className="[ text-sm ]">
-            <b>Prompt:</b> {c.trace.prompt}
-          </p>
           <p className="[ text-sm ]" data-expectation="">
-            <b>Expected:</b> {c.trace.expectation.calls === "" ? "no tool calls" : c.trace.expectation.calls.split("\n").join(c.trace.expectation.ordered ? " → " : " · ")}
+            <b>Prompt:</b> {c.trace.prompt} <b>Expected:</b> {c.trace.expectation.calls === "" ? "no tool calls" : c.trace.expectation.calls.split("\n").join(c.trace.expectation.ordered ? " → " : " · ")}
             {c.trace.expectation.reference !== "" && <> · result like “{c.trace.expectation.reference}”</>}
           </p>
           {c.trace.steps.length > 0 && (
@@ -373,6 +380,7 @@ function CaseBlock({ c, busy, presenter }: { c: CaseVm; busy: boolean; presenter
           )}
           <p className="[ text-sm muted ]">
             <b>Judge:</b> {c.trace.judge}
+            {c.trace.baselineNote !== "" && <span className="[ color-ink-faint ]" data-baseline-note=""> {c.trace.baselineNote}</span>}
           </p>
           {c.trace.finalText !== "" && (
             <p className="[ text-sm muted ]">

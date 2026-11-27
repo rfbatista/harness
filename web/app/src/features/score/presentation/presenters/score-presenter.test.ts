@@ -235,7 +235,7 @@ describe("Cases and Runs", () => {
     bench.cases.push({ id: "k", name: "brief", prompt: "x", tools: [{ name: "a" }, { name: "b" }] });
     await presenter.start();
     presenter.setView("cases");
-    assert.deepEqual(vm().cases.map((c) => [c.id, c.title, c.tools, c.source]), [["k", "brief", "2 tools", "written"]]);
+    assert.deepEqual(vm().cases.map((c) => [c.id, c.title, c.tools, c.source]), [["k", "brief", "2 tools · 2 canned results", "written"]]);
     assert.equal(vm().caseCount, 1);
   });
 });

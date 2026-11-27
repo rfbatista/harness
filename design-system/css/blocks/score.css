@@ -145,7 +145,7 @@
   .trace { margin: 0; padding: 0; list-style: none; }
   .trace > li {
     display: grid;
-    grid-template-columns: 1.5rem minmax(0, 1fr) minmax(6rem, 14rem);
+    grid-template-columns: 1.5rem minmax(0, 1fr) max-content;
     gap: var(--space-s);
     padding-block: var(--space-3xs);
     font-family: var(--font-mono);

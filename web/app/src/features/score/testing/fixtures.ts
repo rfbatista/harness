@@ -13,6 +13,8 @@ export interface CaseSpec {
   steps?: { step: number; ok: boolean; note: string }[];
   reasons?: string[];
   finalText?: string;
+  cost?: number;
+  durationMs?: number;
 }
 
 export interface CardSpec {
@@ -22,6 +24,7 @@ export interface CardSpec {
   status?: "finished" | "cancelled" | "partial";
   fingerprint?: string;
   model?: string;
+  judge?: string;
   cost?: number;
   durationMs?: number;
   cases: CaseSpec[];
@@ -40,8 +43,8 @@ export function wireScorecard(spec: CardSpec): Record<string, unknown> {
     calls: c.calls ?? [],
     ...(c.steps ? { steps: c.steps } : {}),
     ...(c.finalText ? { final_text: c.finalText } : {}),
-    cost_usd: 0.05,
-    duration_ms: 1000,
+    cost_usd: c.cost ?? 0.05,
+    duration_ms: c.durationMs ?? 1000,
     ...(c.error ? { error: c.error } : {}),
   }));
   const names = ["right_tool", "valid_params", "right_order", "outcome", "trajectory"] as const;
@@ -62,7 +65,7 @@ export function wireScorecard(spec: CardSpec): Record<string, unknown> {
     id: spec.id,
     project_id: "p1",
     status: spec.status ?? "finished",
-    setup: { fingerprint: spec.fingerprint ?? "fp1", model: spec.model ?? "opus-5-5", cli_version: "2.1.14" },
+    setup: { fingerprint: spec.fingerprint ?? "fp1", model: spec.model ?? "opus-5-5", ...(spec.judge ? { judge_model: spec.judge } : {}), cli_version: "2.1.14" },
     cases,
     patterns,
     aggregate: { scored: means.length, mean: means.length === 0 ? 0 : means.reduce((a, b) => a + b, 0) / means.length },

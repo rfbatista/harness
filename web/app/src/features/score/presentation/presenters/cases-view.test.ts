@@ -27,7 +27,7 @@ describe("the Cases view", () => {
     await presenter.start();
     const row = vm().cases[0]!;
     assert.equal(row.title, "reads the readme");
-    assert.equal(row.tools, "1 tool");
+    assert.equal(row.tools, "1 tool · 1 canned result");
     assert.equal(row.score, "0.60");
     assert.deepEqual(row.trend, [0.2, 0.3, 0.4, 0.5, 0.6]);
   });

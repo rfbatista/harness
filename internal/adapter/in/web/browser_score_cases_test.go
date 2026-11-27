@@ -90,7 +90,7 @@ func TestScoreCasesViewInTheBrowser(t *testing.T) {
 	wait := func(expr string) chromedp.Action {
 		return chromedp.Poll(expr, nil, chromedp.WithPollingTimeout(10*time.Second))
 	}
-	var trace, refused, expected, trajectories, afterDelete string
+	var trace, refused, expected, trajectories, afterDelete, toolbar, head string
 	steps := []chromedp.Action{
 		chromedp.EmulateViewport(1280, 800),
 		chromedp.Navigate(srv.URL+"/projects/p1/score"),
@@ -100,6 +100,8 @@ func TestScoreCasesViewInTheBrowser(t *testing.T) {
 		click(`.sc-row[data-kind=case]`),
 		wait(`!!document.querySelector('.trace')`),
 		chromedp.Evaluate(`document.querySelector('[data-detail]').textContent`, &trace),
+		chromedp.Evaluate(`document.querySelector('header .end').textContent`, &toolbar),
+		chromedp.Evaluate(`document.querySelector('[data-trace-head]').textContent`, &head),
 		click(`[data-action=replay]`),
 		wait(`document.querySelector('[data-action=replay]').disabled`),
 		click(`[data-action=edit-expectation]`),
@@ -134,6 +136,12 @@ func TestScoreCasesViewInTheBrowser(t *testing.T) {
 		if !strings.Contains(trace, want) {
 			t.Errorf("the trace %q lacks %q", trace, want)
 		}
+	}
+	if !strings.Contains(toolbar, "Add case") || !strings.Contains(toolbar, "From a recorded trajectory") || strings.Contains(toolbar, "Run bench") {
+		t.Errorf("the Cases toolbar reads %q: it holds Add case and From a recorded trajectory, and no Run bench", toolbar)
+	}
+	if !strings.HasPrefix(head, "Run ") || !strings.Contains(head, "$") {
+		t.Errorf("the trace head reads %q, want \"Run N · time · cost\"", head)
 	}
 	if len(api.runs) != 1 || !strings.Contains(api.runs[0], `"case_ids":["a"]`) {
 		t.Errorf("Replay this case started %v, want one run of case a", api.runs)

@@ -76,6 +76,10 @@ export interface CaseDetailVm {
   /** The case's score in the run read, and in the baseline: "—" when not scored. */
   readonly now: string;
   readonly baseline: string;
+  /** "Run 12 · 48s · $0.09 · judge: opus-5-5": the run read, what the case took in it, and the judge. "" when no run scored it. */
+  readonly head: string;
+  /** "run 11 was 0.87 on the same case", after the judge's paragraph; "" when the baseline did not score it. */
+  readonly baselineNote: string;
   readonly expectation: { readonly calls: string; readonly ordered: boolean; readonly reference: string };
   readonly mocks: string;
 }
@@ -198,7 +202,7 @@ export interface ScoreDeps {
   readonly now: () => Date;
 }
 
-const LATER = ["multi-turn · phase 2", "multi-agent · phase 2"];
+const LATER = ["multi-turn and multi-agent · phase 2"];
 
 const loadingVm = (deps: ScoreDeps): ScoreViewModel => ({
   status: "loading",
@@ -688,11 +692,11 @@ export class ScorePresenter extends Presenter<ScoreViewModel> {
       id: c.id,
       title: c.name !== "" ? c.name : c.prompt.slice(0, 80),
       pattern,
-      tools: `${c.tools.length} ${c.tools.length === 1 ? "tool" : "tools"}`,
+      tools: `${c.tools.length} ${c.tools.length === 1 ? "tool" : "tools"} · ${c.mocks.length} canned ${c.mocks.length === 1 ? "result" : "results"}`,
       source: c.source === "trajectory" ? "recorded" : "written",
       score: score(mean(here)),
       trend,
-      trace: this.#open === c.id ? detailOf(c, here, scored(baseline), this.#deps.calls) : null,
+      trace: this.#open === c.id ? detailOf(c, here, scored(baseline), this.#deps.calls, { read: read === null ? 0 : asc.indexOf(read) + 1, baseline: baseline === null ? 0 : asc.indexOf(baseline) + 1, judge: read?.setup.judgeModel ?? "" }) : null,
       confirmingDelete: this.#confirming === c.id,
     };
   }
@@ -710,10 +714,19 @@ export class ScorePresenter extends Presenter<ScoreViewModel> {
 }
 
 /** The trace of a case in a run: each call the run made beside the judge's note for that step; notes for steps it never made follow. */
-function detailOf(c: BenchCase, here: CaseScore | undefined, before: CaseScore | undefined, text: CallsText): CaseDetailVm {
+/** The run numbers a trace names (1-based, oldest first; 0 for none) and the judge model of the run read. */
+interface TraceRuns {
+  readonly read: number;
+  readonly baseline: number;
+  readonly judge: string;
+}
+
+function detailOf(c: BenchCase, here: CaseScore | undefined, before: CaseScore | undefined, text: CallsText, runs: TraceRuns): CaseDetailVm {
   const expectation = { calls: text.format(c.expect.tools), ordered: c.expect.ordered, reference: c.expect.reference };
-  const base = { prompt: c.prompt, expectation, mocks: formatMocks(c.mocks) };
-  if (here === undefined) return { ...base, steps: [], judge: "No run has scored this case yet.", finalText: "", now: "—", baseline: score(before === undefined ? null : caseMean(before)) };
+  const baselineNote = before === undefined || runs.baseline === 0 ? "" : `run ${runs.baseline} was ${score(caseMean(before))} on the same case`;
+  const base = { prompt: c.prompt, expectation, mocks: formatMocks(c.mocks), baselineNote };
+  if (here === undefined) return { ...base, head: "", steps: [], judge: "No run has scored this case yet.", finalText: "", now: "—", baseline: score(before === undefined ? null : caseMean(before)) };
+  const head = [`Run ${runs.read}`, duration(here.durationMs), cost(here.costUsd), runs.judge === "" ? "" : `judge: ${runs.judge}`].filter((x) => x !== "").join(" · ");
   const notes = new Map(here.steps.map((n) => [n.step, n]));
   const steps: StepVm[] = here.calls.map((call, i) => {
     const note = notes.get(i + 1);
@@ -722,7 +735,7 @@ function detailOf(c: BenchCase, here: CaseScore | undefined, before: CaseScore |
   });
   for (const n of [...notes.values()].sort((a, b) => a.step - b.step)) steps.push({ n: n.step, call: "", note: n.note, failed: !n.ok });
   const judge = [...(here.reasons.trajectory ?? []), ...(here.reasons.outcome ?? [])].join(" ");
-  return { ...base, steps, judge: judge !== "" ? judge : here.error !== "" ? here.error : "The judge left no paragraph for this case.", finalText: here.finalText, now: score(caseMean(here)), baseline: score(before === undefined ? null : caseMean(before)) };
+  return { ...base, head, steps, judge: judge !== "" ? judge : here.error !== "" ? here.error : "The judge left no paragraph for this case.", finalText: here.finalText, now: score(caseMean(here)), baseline: score(before === undefined ? null : caseMean(before)) };
 }
 
 /** A refusal's fields onto the form's: the harness names `prompt`, `expect`, `expect.tools[0].tool`, `tools[1].name`. */
