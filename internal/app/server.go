@@ -3,13 +3,16 @@ package app
 import (
 	"context"
 	"errors"
+	"fmt"
 	"io/fs"
 	"log/slog"
 	"net"
 	"net/http"
 	"operators-mcp/internal/application/managedclaude"
 	"operators-mcp/internal/application/sandboxsettings"
+	"os"
 	"path/filepath"
+	"strings"
 	"time"
 
 	"go.uber.org/fx"
@@ -33,8 +36,10 @@ import (
 	"operators-mcp/internal/application/branchgate"
 	"operators-mcp/internal/application/branchwatch"
 	"operators-mcp/internal/application/execution"
+	"operators-mcp/internal/application/gateruns"
 	"operators-mcp/internal/application/notifications"
 	"operators-mcp/internal/application/orchestration"
+	"operators-mcp/internal/application/personproof"
 	"operators-mcp/internal/application/planning"
 	"operators-mcp/internal/application/productowner"
 	"operators-mcp/internal/application/repoagents"
@@ -68,7 +73,7 @@ var ServerModule = fx.Module("server",
 
 // registerHTTPServer mounts the UI and JSON API on a mux and serves it,
 // shutting down gracefully when fx stops.
-func registerHTTPServer(lc fx.Lifecycle, cfg Config, cat catalog.Catalog, appRunner *apps.Service, svcs *services.Service, svcRequests *servicerequests.Service, ts *tooling.Service, exec *execution.Service, orch *orchestration.Service, plan *planning.Service, ws *workspaces.Service, broker *approval.Broker, sessions ports.SessionRepository, art *artifacts.Service, channel *taskchannel.Service, prs *workspaces.PullRequests, merges *workspaces.Merges, archivedWorktrees *workspaces.ArchivedWorktrees, branchNames *workspaces.BranchNames, code ports.CodeBrowser, worktreeGit ports.WorktreeGit, inbox optionalNotifications, creds optionalGitCredentials, shells *vfs.Service, fsys *vfs.FileSystem, usageSvc *usage.Service, indexes optionalRepositoryIndexes, sandboxStore *sandboxsettings.Store, agentSystem *agentsystem.Service, bench *bench.Service, managedClaude *managedclaude.Service, claudeBin ports.ManagedClaudeBin, agentCred optionalAgentCredential, helper *writinghelper.Service, assistant *archassistant.Service, rules *archrules.Service, gate *branchgate.Service, watch *branchwatch.Service, agentCat *agentcatalog.Catalog, persons *vshell.PersonTerminals, repoAgents *repoagents.Service, board optionalAgentBoard, asked optionalInterviews, owner optionalProductOwner) error {
+func registerHTTPServer(lc fx.Lifecycle, cfg Config, cat catalog.Catalog, appRunner *apps.Service, svcs *services.Service, svcRequests *servicerequests.Service, ts *tooling.Service, exec *execution.Service, orch *orchestration.Service, plan *planning.Service, ws *workspaces.Service, broker *approval.Broker, sessions ports.SessionRepository, art *artifacts.Service, channel *taskchannel.Service, prs *workspaces.PullRequests, merges *workspaces.Merges, archivedWorktrees *workspaces.ArchivedWorktrees, branchNames *workspaces.BranchNames, code ports.CodeBrowser, worktreeGit ports.WorktreeGit, inbox optionalNotifications, creds optionalGitCredentials, shells *vfs.Service, fsys *vfs.FileSystem, usageSvc *usage.Service, indexes optionalRepositoryIndexes, sandboxStore *sandboxsettings.Store, agentSystem *agentsystem.Service, bench *bench.Service, managedClaude *managedclaude.Service, claudeBin ports.ManagedClaudeBin, agentCred optionalAgentCredential, helper *writinghelper.Service, assistant *archassistant.Service, rules *archrules.Service, gate *branchgate.Service, watch *branchwatch.Service, agentCat *agentcatalog.Catalog, persons *vshell.PersonTerminals, repoAgents *repoagents.Service, board optionalAgentBoard, asked optionalInterviews, owner optionalProductOwner, gateRuns *gateruns.Service, declarer *gateruns.Declarer, proof *personproof.Service) error {
 	uiHandler, err := ui.SPAHandler(ui.Dist)
 	if err != nil {
 		return err
@@ -140,6 +145,8 @@ func registerHTTPServer(lc fx.Lifecycle, cfg Config, cat catalog.Catalog, appRun
 	topBars := &lateTopBars{}
 	apiRouter := httpapi.NewRouter(httpapi.NewHandler(httpapi.Services{
 		TopBars:         topBars,
+		GateRuns:        gateRuns,
+		Pairing:         proof,
 		Projects:        cat.Projects,
 		ProjectFeed:     cat.Projects,
 		Discovery:       cat.Projects,
@@ -234,7 +241,9 @@ func registerHTTPServer(lc fx.Lifecycle, cfg Config, cat catalog.Catalog, appRun
 		Catalog: agentCat,
 		// Which agents each repository assigns, and its repository prompts.
 		RepositoryAgents: repoAgents,
-	}), httpapi.WithToken(cfg.APIToken), httpapi.WithExposedListener(exposed(cfg.HTTPAddr)))
+	}), httpapi.WithToken(cfg.APIToken), httpapi.WithExposedListener(exposed(cfg.HTTPAddr)),
+		// The routes that are the person's alone need the credential they got by pairing (ADR 0016).
+		httpapi.WithPersonProof(proof, personRefusals{events: cat.Bus, sessions: sessions}))
 	// Requests slower than the threshold are logged with their query count.
 	// An approval waits on a person, so it is never a slow request.
 	slow := func(h http.Handler) http.Handler {
@@ -245,7 +254,7 @@ func registerHTTPServer(lc fx.Lifecycle, cfg Config, cat catalog.Catalog, appRun
 	if asked.Service != nil {
 		mux.Handle(llminterview.PathPrefix, interviewHandler(asked.Service))
 	}
-	mux.Handle(mcpsession.PathPrefix, slow(sessionTaskHandler(sessionTaskTools(cat, orch, plan, sessions, art, channel, notifier, merges, tooling.WithAgentPlacements(repoAgents), tooling.WithModeAgents(cat.Settings), tooling.WithBranchPush(gate)), plan, sessions, productOwnerMemory, append(ownerSources(owner.Service), tooling.WithConversationSearch(productOwner))...)))
+	mux.Handle(mcpsession.PathPrefix, slow(sessionTaskHandler(sessionTaskTools(cat, orch, plan, sessions, art, channel, notifier, merges, tooling.WithAgentPlacements(repoAgents), tooling.WithModeAgents(cat.Settings), tooling.WithBranchPush(gate), tooling.WithDeclarations(declarer)), plan, sessions, productOwnerMemory, append(ownerSources(owner.Service), tooling.WithConversationSearch(productOwner))...)))
 	mux.Handle(mcpsession.ServicesPathPrefix, slow(mcpsession.ServicesHandler(tooling.SessionServicesTools(sessions, cat.Agents, svcs, cat.Projects, tooling.WithServiceRequests(svcRequests)))))
 	// The web client owns / and its pages; anything else reaches the legacy
 	// designer SPA until it is retired.
@@ -282,6 +291,7 @@ func registerHTTPServer(lc fx.Lifecycle, cfg Config, cat catalog.Catalog, appRun
 					slog.Error("http server stopped", "err", err)
 				}
 			}()
+			announcePairing(proof, ln.Addr().String())
 			slog.Info("HTTP server listening", "addr", srv.Addr, "ui", "/", "api", "/api", "token", cfg.APIToken != "")
 			if exposed(srv.Addr) && cfg.APIToken == "" {
 				slog.Warn("THE API IS OPEN TO THE NETWORK: "+srv.Addr+" listens beyond this machine and no token is set. "+
@@ -297,6 +307,45 @@ func registerHTTPServer(lc fx.Lifecycle, cfg Config, cat catalog.Catalog, appRun
 		},
 	})
 	return nil
+}
+
+// personRefusals turns a refused call to a person-only route into an event the
+// notifications context reports (ADR 0016).
+type personRefusals struct {
+	events   ports.EventPublisher
+	sessions ports.SessionRepository
+}
+
+func (p personRefusals) Refused(ctx context.Context, r ports.PersonRefusal) {
+	if p.events == nil {
+		return
+	}
+	// A route that names a session places the refusal in that session's project.
+	if r.ProjectID == "" && r.SessionID != "" && p.sessions != nil {
+		if sess := p.sessions.Get(r.SessionID); sess != nil {
+			r.ProjectID = sess.ProjectID
+		}
+	}
+	_ = p.events.Publish(ctx, domain.PersonOnlyRefused{Method: r.Method, Route: r.Route, ProjectID: r.ProjectID, SessionID: r.SessionID, At: time.Now()})
+}
+
+// announcePairing prints the link that pairs the person's browser when nobody is
+// paired yet (ADR 0016). It goes to the terminal the harness runs in and
+// nowhere else: not the log, which may be a file, and not any file, the data
+// directory, or a session's environment.
+func announcePairing(proof *personproof.Service, addr string) {
+	code, ok := proof.FirstCode(context.Background())
+	if !ok {
+		return
+	}
+	host, port, err := net.SplitHostPort(addr)
+	if err != nil || host == "" || host == "::" || host == "0.0.0.0" {
+		host = "127.0.0.1"
+	}
+	if strings.Contains(host, ":") {
+		host = "[" + host + "]"
+	}
+	fmt.Fprintf(os.Stdout, "\nPair this browser with the harness, once, so it can answer requests:\n  http://%s:%s%s?code=%s\n\n", host, port, httpapi.PairPath, code)
 }
 
 // optionalAgentBoard is the Agent board when AgentBoardModule is in the graph;

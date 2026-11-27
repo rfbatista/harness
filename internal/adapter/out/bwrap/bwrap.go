@@ -116,6 +116,20 @@ func Render(policy ports.SandboxPolicy, home string) []string {
 		}
 		args = append(args, flag, b.path, b.path)
 	}
+	// Secrets last, over every bind: a file is replaced by /dev/null and a folder
+	// by an empty tmpfs. Only what exists can be masked: bubblewrap cannot make a
+	// mount point in a read-only parent.
+	for _, p := range policy.Secrets {
+		p = filepath.Clean(p)
+		info, err := os.Stat(p)
+		switch {
+		case err != nil:
+		case info.IsDir():
+			args = append(args, "--tmpfs", p)
+		default:
+			args = append(args, "--ro-bind", "/dev/null", p)
+		}
+	}
 	if policy.WorkingDir != "" {
 		args = append(args, "--chdir", filepath.Clean(policy.WorkingDir))
 	}

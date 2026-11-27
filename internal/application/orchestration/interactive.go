@@ -27,6 +27,9 @@ type InteractiveRequest = ports.InteractiveRequest
 // is spawned on the server's terminal host here; a RunnerTUI one is the
 // client's to run.
 func (s *Service) StartInteractive(ctx context.Context, req InteractiveRequest) (*domain.Session, ports.AgentSpec, error) {
+	if err := domain.ScopeGlobError(req.Scope); err != nil {
+		return nil, ports.AgentSpec{}, err
+	}
 	runsOn, err := s.runner(req.RunsOn)
 	if err != nil {
 		return nil, ports.AgentSpec{}, err
@@ -116,7 +119,9 @@ func (s *Service) StartInteractive(ctx context.Context, req InteractiveRequest) 
 		branch = named
 	}
 	role := s.newSessionRole(ctx, mode, req.ParentSessionID)
+	guard := s.resolveGuard(ctx, req.ProjectID, req.RepositoryID, mode, req.Scope, req.TestsFailFirst, joinedOf(req.WorktreeID, ""))
 	p, err := s.prepare(ctx, prepareInput{
+		Guard:        &guard,
 		ID:           id,
 		ProjectID:    req.ProjectID,
 		RepositoryID: req.RepositoryID,
@@ -190,6 +195,7 @@ func (s *Service) StartInteractive(ctx context.Context, req InteractiveRequest) 
 	})
 	if err == nil {
 		s.recordStart(ctx, id, p, opening)
+		s.keepGuard(ctx, created, guard)
 		s.adoptCleanup(id, withViolations(p.cleanup, s.collectViolations(id, p.cfg.WorkingDir, p.sandbox.facts)))
 		s.courier.setTurn(id, startTurn(spec))
 		s.publish(id, SessionEvent{Type: "status", Status: domain.SessionRunning, Text: startedText(runsOn), At: time.Now()})
@@ -326,6 +332,10 @@ func (s *Service) ResumeInteractive(ctx context.Context, req ports.ResumeRequest
 	s.withAttribution(&cfg)
 	s.rewireTokenSavers(ctx, sess, &cfg)
 	s.resumeMemoryBudget(ctx, sess, &cfg)
+	keptScope, keptTestsFirst := s.keptChoices(ctx, sess.ID)
+	guard := s.resolveGuard(ctx, sess.ProjectID, sess.RepositoryID, sess.Mode, keptScope, keptTestsFirst, joinedOfSession(sess))
+	s.keepGuard(ctx, sess, guard)
+	s.resumeGuardCount(ctx, sess.ID)
 	trail.mark(&cfg, domain.PieceRuleset, "Token saver rules", "Token savers")
 	// A resume starts under the rules now in force, not the ones it started
 	// under, and records them.
@@ -333,7 +343,7 @@ func (s *Service) ResumeInteractive(ctx context.Context, req ports.ResumeRequest
 	if err != nil {
 		return nil, ports.AgentSpec{}, err
 	}
-	sb, err := s.resumeSandbox(ctx, sess, cfg.Env, ag.skillDirs)
+	sb, err := s.resumeSandbox(ctx, sess, cfg.Env, ag.skillDirs, &guard)
 	if err != nil {
 		if cleanup != nil {
 			cleanup()
@@ -444,7 +454,7 @@ func (s *Service) ResumeSession(ctx context.Context, id string) error {
 
 // resumeSandbox is the sandbox step of a resume: the session's policy under
 // the current settings.
-func (s *Service) resumeSandbox(ctx context.Context, sess *domain.Session, env, skillDirs []string) (sandboxed, error) {
+func (s *Service) resumeSandbox(ctx context.Context, sess *domain.Session, env, skillDirs []string, guard *domain.GuardConfig) (sandboxed, error) {
 	repo := &domain.Repository{}
 	if s.Sandbox != nil && sess.RepositoryID != "" {
 		r, err := s.catalog.Repositories.GetRepository(ctx, sess.RepositoryID)
@@ -453,7 +463,7 @@ func (s *Service) resumeSandbox(ctx context.Context, sess *domain.Session, env, 
 		}
 		repo = r
 	}
-	return s.sandbox(ctx, prepareInput{ProjectID: sess.ProjectID, Mode: sess.Mode, WorkspaceID: sess.WorkspaceID, Access: sess.Access}, sess.ID, repo, sess.WorkingDir, env, skillDirs)
+	return s.sandbox(ctx, prepareInput{ProjectID: sess.ProjectID, Mode: sess.Mode, WorkspaceID: sess.WorkspaceID, Access: sess.Access, Guard: guard}, sess.ID, repo, sess.WorkingDir, env, skillDirs)
 }
 
 // claimResume marks id as being resumed; false when another call already is.
@@ -1180,4 +1190,20 @@ func (s *Service) joinTarget(ctx context.Context, req InteractiveRequest, mode d
 		return "", nil, joinRefusal("WORKTREE_NOT_ON_TASK", "that worktree belongs to a session of another task", map[string]string{"worktree_id": req.WorktreeID})
 	}
 	return access, ws, nil
+}
+
+// joinedOf names the worktree a start joins, or nil for one that has its own.
+func joinedOf(worktreeID, selfID string) *joinedTo {
+	if worktreeID == "" {
+		return nil
+	}
+	return &joinedTo{workspaceID: worktreeID, selfID: selfID}
+}
+
+// joinedOfSession is joinedOf for a session being resumed.
+func joinedOfSession(sess *domain.Session) *joinedTo {
+	if !sess.Joined {
+		return nil
+	}
+	return joinedOf(sess.WorkspaceID, sess.ID)
 }

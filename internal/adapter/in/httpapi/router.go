@@ -28,7 +28,13 @@ func NewRouter(h *Handler, opts ...Option) *echo.Echo {
 		g.Use(requireToken(o.token))
 	}
 
+	// person-only routes need the person credential (ADR 0016); routeClasses says which
+	g.Use(personGate(o))
+
 	g.GET("/health", h.handleHealthCheck)
+	g.GET("/person/pair", h.handlePairGet)
+	g.POST("/person/pair", h.handlePairPost)
+	g.POST("/person/pairing-codes", h.handleNewPairingCode)
 
 	// a browser tab's one live stream, carrying the SSE feeds below it follows
 	g.GET("/stream", h.handleStream)
@@ -297,6 +303,9 @@ func NewRouter(h *Handler, opts ...Option) *echo.Echo {
 	g.DELETE("/sessions/:id", h.handleDeleteSession)
 	g.GET("/events", h.handleEvents) // a project's session changes (SSE)
 	g.GET("/sessions/:id/events", h.handleSessionEvents)
+	g.POST("/sessions/:id/gate-runs", h.handleRunSessionGates)
+	g.GET("/sessions/:id/gate-runs", h.handleListSessionGateRuns)
+	g.GET("/sessions/:id/gate-runs/:run/gates/:kind/output", h.handleGateOutput)
 	g.GET("/sessions/:id/interviews", h.handleSessionInterviews)
 	g.GET("/sessions/:id/interviews/events", h.handleSessionInterviewEvents)
 	g.POST("/interviews/:id/answers", h.handleSubmitInterview)

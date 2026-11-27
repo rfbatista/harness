@@ -80,3 +80,39 @@ func TestLargeResponse(t *testing.T) {
 		t.Fatalf("decoded %d bytes, want %d", len(out.Name), len(big))
 	}
 }
+
+func TestThePersonCredentialIsSentOnEveryKindOfRequestAndARefusalWithoutOneSaysHowToPair(t *testing.T) {
+	var got []string
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		got = append(got, r.Header.Get("X-Harness-Person")+"|"+r.Header.Get("Authorization"))
+		if r.URL.Path == "/person-only" {
+			w.WriteHeader(http.StatusForbidden)
+			_, _ = w.Write([]byte(`{"error":"PERSON_ONLY: this action is the person's","code":"PERSON_ONLY"}`))
+			return
+		}
+		_, _ = w.Write([]byte(`{}`))
+	}))
+	defer srv.Close()
+	ctx := context.Background()
+
+	paired := New(srv.URL, WithToken("api"), WithPerson("cred"))
+	if err := paired.get(ctx, "/anything", nil, nil); err != nil {
+		t.Fatal(err)
+	}
+	if want := "cred|Bearer api"; len(got) != 1 || got[0] != want {
+		t.Errorf("headers sent = %v, want %q", got, want)
+	}
+
+	unpaired := New(srv.URL)
+	err := unpaired.get(ctx, "/person-only", nil, nil)
+	if errs.Code(err) != "PERSON_ONLY" || !strings.Contains(err.Error(), "Pair this client") {
+		t.Errorf("an unpaired refusal = %v, want PERSON_ONLY with how to pair", err)
+	}
+	if got[len(got)-1] != "|" {
+		t.Errorf("an unpaired client sent %q", got[len(got)-1])
+	}
+	// A paired client's refusal is the server's own words.
+	if err := paired.get(ctx, "/person-only", nil, nil); errs.Code(err) != "PERSON_ONLY" || strings.Contains(err.Error(), "Pair this client") {
+		t.Errorf("a paired refusal = %v", err)
+	}
+}

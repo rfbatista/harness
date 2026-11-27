@@ -43,6 +43,8 @@ var SessionTaskToolNames = []string{
 	"notify",
 	"push_branch",
 	"propose_instruction_files",
+	"declare_done",
+	"run_gates",
 }
 
 // MaxLiveTaskSessions caps the sessions running on one task at once, so agents
@@ -90,6 +92,10 @@ type ArtifactTooling struct {
 // makes the architect the owner of the task status (nil: no channel, every
 // session a peer); notes lets it read the person's inbox and post to it.
 func SessionTaskTools(planningSvc ports.Planning, sessions ports.SessionRepository, agents ports.AgentLister, arch ports.ArchitectureMap, start PeerStarter, artifacts ArtifactTooling, channel ports.TaskChannel, notes NotificationTooling, opts ...Option) []domain.Tool {
+	var o options
+	for _, opt := range opts {
+		opt(&o)
+	}
 	tools := []domain.Tool{
 		{
 			Name: "start_task_session",
@@ -118,6 +124,8 @@ func SessionTaskTools(planningSvc ports.Planning, sessions ports.SessionReposito
 				`"join_session_id":{"type":"string","description":"The full id of a session of this task, running or ended, whose worktree and branch the new session joins instead of cutting its own. Excludes base_branch."},` +
 				`"access":{"type":"string","enum":["","write","read_only"],"description":"What the new session may do in the worktree it joins: write, or read_only. Default: read_only for review and qa, write for every other mode. read_only needs join_session_id."},` +
 				`"mode":{"type":"string","enum":["","architect","implement","design","product","review","test","qa","operate"],"description":"architect: the session grills the person on its prompt, shapes it into per-application specs and delegates them. implement: the session turns a Spec task document into tickets, has the architect review them, then implements them test first on its branch. design: the session produces components, images and videos and publishes each to the Design tab. product: the session interviews the person on a feature, writes its PRD on the task, creates one child task per piece of work with a brief each, and asks for review; it never writes code. review: the Reviewer reviews the branch its worktree holds (join the implementer's session with join_session_id, or cut from its branch with base_branch), or the pull request the prompt names, and writes a Review document with the verdict approve or request changes. test: the Tester writes tests for the implementer's branch (join its session with join_session_id and commit there, or cut from it with base_branch and commit on its own branch), runs them and writes a Test report. qa: QA walks the use cases the prompt lists in the running application, publishes screenshots and videos to the Design tab and writes a QA report (join_session_id the implementer's session, or base_branch its branch). operate: the Operator runs, configures and checks the services for the task's branch through service requests (cut from the default branch). Default: none."},` +
+				`"scope":{"type":"array","items":{"type":"string"},"description":"Architect only: protected-path globs (such as check.sh or .github/workflows/**) this one session may write although the repository protects them; every other session is still refused. It is kept through resumes. A glob that is not a valid glob is refused."},` +
+				`"tests_fail_first":{"type":"boolean","description":"Architect only: turn tests-fail-first on for the new session, where the repository makes it available: its writes to non-test files are refused with TESTS_MUST_FAIL_FIRST until a test run of its own has failed (run_gates with kinds [\"test\"] counts). It is kept through resumes."},` +
 				`"status_check_minutes":{"type":"integer","minimum":0,"maximum":240,"description":"Architect only: minutes between the checks that wake you about this session, 2–240; 0 for no loop. Default: 10."}}}`),
 			Source: "code",
 			Handler: func(ctx context.Context, args map[string]any) (any, error) {
@@ -219,19 +227,16 @@ func SessionTaskTools(planningSvc ports.Planning, sessions ports.SessionReposito
 			},
 		},
 	}
-	tools = append(tools, sessionChannelTools(planningSvc, sessions, channel)...)
+	tools = append(tools, sessionChannelTools(planningSvc, sessions, channel, o.declarations)...)
 	tools = append(tools, sessionMergeTools(planningSvc, sessions, channel, start.Merger)...)
 	tools = append(tools, sessionResumeTools(planningSvc, sessions, channel, start.Sessions)...)
 	tools = append(tools, sessionStopTools(planningSvc, sessions, channel, start.Stopper)...)
-	var o options
-	for _, opt := range opts {
-		opt(&o)
-	}
 	tools = append(tools, sessionProjectTools(sessions, agents, arch, start.Repositories, o.placements, o.modeAgents)...)
 	tools = append(tools, sessionTasksTools(planningSvc, sessions)...)
 	tools = append(tools, sessionNotificationTools(sessions, notes)...)
 	tools = append(tools, sessionPushTools(sessions, o.pushes)...)
 	tools = append(tools, sessionInstructionTools(sessions, o.instructions)...)
+	tools = append(tools, sessionGateTools(sessions, o.declarations)...)
 	tools = append(tools, sessionArtifactTools(planningSvc, sessions, artifacts)...)
 	if o.proposals != nil {
 		tools = append(tools, sessionDesignProposalTools(sessions, o.proposals)...)
