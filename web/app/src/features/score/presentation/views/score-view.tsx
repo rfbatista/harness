@@ -227,7 +227,7 @@ function Scorecard({ vm, presenter }: { vm: ScoreViewModel; presenter: ScorePres
             {vm.later.map((label) => (
               <div key={label} className="[ sc-row ]" data-muted="" data-later="">
                 <span className="[ title ]">{label.split(" · ")[0]}</span>
-                <span className="[ meta ]">{label}</span>
+                <span className="[ meta ]">{label.split(" · ")[1] ?? label}</span>
                 <span className="[ num ]">—</span>
                 <span className="[ num ]">—</span>
                 <span className="[ num ]">—</span>

@@ -142,9 +142,10 @@
     font-size: var(--text-sm);
   }
 
-  .trace { margin: 0; padding: 0; list-style: none; }
+  .trace { margin: 0; padding: 0; list-style: none; max-inline-size: none; inline-size: 100%; }
   .trace > li {
     display: grid;
+    max-inline-size: none;
     grid-template-columns: 1.5rem minmax(0, 1fr) max-content;
     gap: var(--space-s);
     padding-block: var(--space-3xs);
