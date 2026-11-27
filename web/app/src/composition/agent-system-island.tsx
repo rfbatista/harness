@@ -25,7 +25,10 @@ export function mountAgentSystem(mount: Element, props: unknown, win: Window, ap
   const root = createRoot(mount);
   root.render(<AgentSystemView presenter={presenter} />);
   void presenter.start();
+  // The saved line's age moves on.
+  const tick = win.setInterval(() => presenter.tick(), 30_000);
   return () => {
+    win.clearInterval(tick);
     presenter.stop();
     root.unmount();
   };
