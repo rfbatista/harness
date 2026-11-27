@@ -124,13 +124,15 @@ func (h *Handler) handleNewPairingCode(c echo.Context) error {
 }
 
 // personGate applies personOnly to every route classified as person-only, so a
-// route's class is its enforcement: there is no second list to forget.
+// route's class is its enforcement: there is no second list to forget. It fails
+// closed: a route with no class is treated as person-only until someone
+// classifies it (TestEveryRouteIsClassified names it).
 func personGate(o options) echo.MiddlewareFunc {
 	check := personOnly(o)
 	return func(next echo.HandlerFunc) echo.HandlerFunc {
 		guarded := check(next)
 		return func(c echo.Context) error {
-			if routeClasses[c.Request().Method+" "+c.Path()] == classPerson {
+			if class, ok := routeClasses[c.Request().Method+" "+c.Path()]; !ok || class == classPerson {
 				return guarded(c)
 			}
 			return next(c)
