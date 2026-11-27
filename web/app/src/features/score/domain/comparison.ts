@@ -67,6 +67,8 @@ export interface CaseRow {
 export interface TileFigure {
   readonly value: number | null;
   readonly delta: Delta;
+  /** The harness gave a delta for it (a group nothing scored on either side has none). */
+  readonly answered: boolean;
 }
 
 export interface Comparison {
@@ -128,7 +130,7 @@ export function comparisonOf(read: Scorecard, baseline: Scorecard | null, answer
     return { caseId: c.caseId, title: title(c), pattern: weakest(c), toolUse: caseGroup(c, "tool_use"), outcome: caseGroup(c, "outcome"), trajectory: caseGroup(c, "trajectory"), now, delta: d, standings, error: c.error };
   });
   const count = (s: Standing): number => rows.filter((r) => r.standings.includes(s)).length;
-  const figure = (value: number | null, d: ScoreDelta | undefined): TileFigure => ({ value, delta: against === null ? FIRST_RUN : deltaOf(d) });
+  const figure = (value: number | null, d: ScoreDelta | undefined): TileFigure => ({ value, delta: against === null ? FIRST_RUN : deltaOf(d), answered: against !== null && d !== undefined });
   const aggregate = figure(read.aggregate.scored === 0 ? null : read.aggregate.mean, against?.aggregate);
   const group = (g: Group): TileFigure => figure(cardGroup(read, g), against?.groups[g]);
   const changedSetup = baseline !== null && against !== null && against.fingerprintChanged ? changedParts(baseline, read) : [];

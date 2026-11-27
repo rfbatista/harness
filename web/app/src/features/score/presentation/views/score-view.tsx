@@ -84,6 +84,11 @@ export function ScoreView({ presenter }: { presenter: ScorePresenter }) {
               <span>{vm.problemTitle}</span>
               <span className="[ code ]">{vm.problem}</span>
             </div>
+            {vm.compareFailed && (
+              <button type="button" data-retry-compare="" onClick={() => void presenter.retryCompare()}>
+                Retry
+              </button>
+            )}
           </div>
         )}
         {vm.status === "loading" && <Skeleton />}
@@ -149,6 +154,7 @@ function Scorecard({ vm, presenter }: { vm: ScoreViewModel; presenter: ScorePres
               </span>
             ) : (
               <select data-size="sm" data-fit aria-label="Baseline" data-baseline="" value={vm.runs.find((r) => r.baseline)?.id ?? ""} onChange={(e) => void presenter.selectBaseline(e.target.value === "" ? null : e.target.value)}>
+                {vm.state === "no-baseline" && <option value="">no earlier finished run · choose one</option>}
                 {vm.runs
                   .filter((r) => !r.reading)
                   .map((r) => (

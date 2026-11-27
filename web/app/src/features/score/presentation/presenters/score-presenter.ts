@@ -13,7 +13,7 @@ export type Filter = "all" | Standing;
 export const FILTERS: readonly Filter[] = ["all", "regressed", "improved", "failed", "new"];
 
 /** What the Scorecard view shows: no cases to score, cases with no run, the first run (nothing to compare with), or a comparison. */
-export type CardState = "no-cases" | "no-run" | "first-run" | "compared";
+export type CardState = "no-cases" | "no-run" | "first-run" | "no-baseline" | "compared";
 
 export interface TileVm {
   readonly key: string;
@@ -167,6 +167,8 @@ export interface ScoreViewModel {
   readonly failedRun: FailedRunVm | null;
   /** Why the last Run bench (or Cancel) was refused; "" when it was not. */
   readonly problem: string;
+  /** The compare request failed (not "there is nothing earlier"): the problem banner offers Retry. */
+  readonly compareFailed: boolean;
   readonly problemTitle: string;
   readonly runs: readonly RunVm[];
   readonly readName: string;
@@ -211,6 +213,7 @@ const loadingVm = (deps: ScoreDeps): ScoreViewModel => ({
   running: null,
   failedRun: null,
   problem: "",
+  compareFailed: false,
   problemTitle: "",
   runs: [],
   readName: "",
@@ -235,7 +238,7 @@ export class ScorePresenter extends Presenter<ScoreViewModel> {
   #readId = "";
   #baselineId: string | null = null;
   /** What the harness answered for the run read (null: nothing earlier to compare with); only while it is for `readId`. */
-  #comparison: { readId: string; answer: ScoreComparison | null } | null = null;
+  #comparison: { readId: string; answer: ScoreComparison | null; failed: boolean } | null = null;
   #comparing = 0;
   #view: View = "scorecard";
   #filter: Filter = "all";
@@ -320,12 +323,32 @@ export class ScorePresenter extends Presenter<ScoreViewModel> {
       return;
     }
     let answer: ScoreComparison | null = null;
+    let failed = false;
     try {
       answer = await this.#deps.source.compare(this.#deps.projectId, readId, this.#baselineId);
     } catch {
-      this.#problem = "The comparison could not be read.";
+      failed = true;
     }
-    if (ask === this.#comparing) this.#comparison = { readId, answer };
+    if (ask !== this.#comparing) return;
+    this.#comparison = { readId, answer, failed };
+    this.#compareProblem(failed);
+  }
+
+  /** The compare problem is the page's own: it shows while the compare is failed and goes with the next good answer. */
+  #compareProblem(failed: boolean): void {
+    if (failed) {
+      this.#problemTitle = "Comparison failed.";
+      this.#problem = "The comparison could not be read.";
+    } else if (this.#problemTitle === "Comparison failed.") {
+      this.#problemTitle = "";
+      this.#problem = "";
+    }
+  }
+
+  /** Asks again after a failed compare. */
+  async retryCompare(): Promise<void> {
+    await this.#compare();
+    this.#publish();
   }
 
   /** Run bench: starts a run on the default setup. A refusal is shown and nothing runs. */
@@ -601,7 +624,8 @@ export class ScorePresenter extends Presenter<ScoreViewModel> {
     const baseline = answer === null ? null : (cards.find((c) => c.id === answer.previousId) ?? null);
     const cmp: Comparison | null = read === null ? null : comparisonOf(read, baseline, answer);
     const caseTotal = this.#cases.length;
-    const state: CardState = caseTotal === 0 && read === null ? "no-cases" : read === null ? "no-run" : baseline === null ? "first-run" : "compared";
+    const others = read === null ? 0 : cards.filter((c) => c.id !== read.id).length;
+    const state: CardState = caseTotal === 0 && read === null ? "no-cases" : read === null ? "no-run" : baseline !== null ? "compared" : others === 0 ? "first-run" : "no-baseline";
     const runs: RunVm[] = cards.map((c) => ({
       id: c.id,
       name: name(c),
@@ -615,7 +639,7 @@ export class ScorePresenter extends Presenter<ScoreViewModel> {
       reading: c.id === this.#readId,
       baseline: baseline !== null && c.id === baseline.id,
     }));
-    const rows = cmp === null ? [] : cmp.rows.map(toRow);
+    const rows = cmp === null ? [] : cmp.rows.map((r) => toRow(r, state === "first-run" || baseline !== null));
     const counts: Record<Filter, number> = { all: rows.length, regressed: 0, improved: 0, failed: 0, new: 0 };
     if (cmp !== null) for (const r of cmp.rows) for (const s of r.standings) counts[s] += 1;
     return {
@@ -630,12 +654,13 @@ export class ScorePresenter extends Presenter<ScoreViewModel> {
       running: this.#running === null ? null : { runId: this.#running.runId, done: this.#running.done, total: this.#running.total, percent: this.#running.total === 0 ? 0 : Math.min(100, Math.floor((this.#running.done * 100) / this.#running.total)), elapsed: duration(Math.max(0, now.getTime() - this.#running.startedAt.getTime())), cancelling: this.#running.cancelling },
       failedRun: this.#failure === null ? null : { title: `${failedName(this.#failure.scorecardId, cards)} failed`, message: this.#failure.message, done: this.#failure.done, total: this.#failure.total },
       problem: this.#problem,
+      compareFailed: this.#comparison?.failed === true && this.#comparison.readId === this.#readId,
       problemTitle: this.#problemTitle,
       runs,
       readName: read ? `${name(read)} · ${when(read.startedAt, now)}` : "",
       baselineName: baseline ? `${name(baseline)} · ${when(baseline.startedAt, now)}` : "",
       fingerprint: read === null || cmp === null ? null : { short: read.setup.fingerprint.slice(0, 6), parts: [read.setup.agentName && `agent ${read.setup.agentName}`, read.setup.model && `model ${read.setup.model}`, read.setup.cliVersion && `claude ${read.setup.cliVersion}`].filter(Boolean).join(" · "), changed: cmp.changedSetup.join(", ") },
-      tiles: read === null || cmp === null ? [] : tiles(read, cmp, baseline, baseline ? name(baseline) : ""),
+      tiles: read === null || cmp === null ? [] : tiles(read, cmp, baseline, baseline ? name(baseline) : "", state === "first-run"),
       notice: noticeFor(state, caseTotal),
       noise: cmp?.noiseOnly && baseline && read ? `Same setup as ${name(baseline)} (${read.setup.fingerprint.slice(0, 6)}) but the aggregate moved by ${cmp.aggregate.delta.change.toFixed(2)}. Runs are not deterministic; compare over several runs before acting.` : "",
       filter: this.#filter,
@@ -710,15 +735,16 @@ function refusal(err: unknown): Partial<Record<FormErrorKey, string>> {
 
 const noticeFor = (state: CardState, cases: number): string => (state === "no-run" ? `No run yet. Run bench scores all ${cases} ${cases === 1 ? "case" : "cases"} against the current setup, with real model calls: it costs money, so it runs only when you ask.` : "");
 
-function toRow(r: CaseRow): RowVm {
-  return { caseId: r.caseId, title: r.title, pattern: GROUP_LABEL[r.pattern], toolUse: score(r.toolUse), outcome: score(r.outcome), trajectory: score(r.trajectory), now: score(r.now), delta: deltaShort(r.delta), direction: r.delta.direction, regressed: r.standings.includes("regressed"), failed: r.standings.includes("failed"), error: r.error };
+function toRow(r: CaseRow, compared: boolean): RowVm {
+  return { caseId: r.caseId, title: r.title, pattern: GROUP_LABEL[r.pattern], toolUse: score(r.toolUse), outcome: score(r.outcome), trajectory: score(r.trajectory), now: score(r.now), delta: compared ? deltaShort(r.delta) : "—", direction: compared ? r.delta.direction : "equal", regressed: r.standings.includes("regressed"), failed: r.standings.includes("failed"), error: r.error };
 }
 
-function tiles(read: Scorecard, cmp: Comparison, baseline: Scorecard | null, baseName: string): TileVm[] {
+function tiles(read: Scorecard, cmp: Comparison, baseline: Scorecard | null, baseName: string, firstRun: boolean): TileVm[] {
   const figure = (key: string, label: string, f: Comparison["aggregate"]): TileVm => {
     const d = f.delta;
-    const detail = d.direction === "up" || d.direction === "down" ? `${deltaShort(d)}${key === "aggregate" ? ` vs ${baseName} (${score(d.before)})` : ""}` : d.direction === "first" ? "first run" : `= ${baseName}`;
-    return { key, label, value: score(f.value), note: detail, direction: d.direction };
+    // No baseline to read against (not a first run), or none answered for this group: a dash, never "= run N".
+    const detail = d.direction === "up" || d.direction === "down" ? `${deltaShort(d)}${key === "aggregate" ? ` vs ${baseName} (${score(d.before)})` : ""}` : d.direction === "first" ? (firstRun ? "first run" : "—") : f.answered ? `= ${baseName}` : "—";
+    return { key, label, value: score(f.value), note: detail, direction: f.answered || d.direction !== "equal" ? d.direction : "none" };
   };
   const spent = baseline ? `${baseName} ${cost(baseline.costUsd)} · ${duration(read.durationMs)}` : duration(read.durationMs);
   return [
@@ -726,7 +752,7 @@ function tiles(read: Scorecard, cmp: Comparison, baseline: Scorecard | null, bas
     figure("tool_use", "Tool use", cmp.toolUse),
     figure("outcome", "Outcome", cmp.outcome),
     figure("trajectory", "Trajectory", cmp.trajectory),
-    { key: "cases", label: "Cases", value: String(read.cases.length), note: baseline ? `${cmp.regressed} regressed · ${cmp.improved} improved · ${cmp.added} new` : "first run", direction: "none" },
+    { key: "cases", label: "Cases", value: String(read.cases.length), note: baseline ? `${cmp.regressed} regressed · ${cmp.improved} improved · ${cmp.added} new` : firstRun ? "first run" : "—", direction: "none" },
     { key: "cost", label: "Estimated cost", value: cost(read.costUsd), note: spent, direction: "none" },
   ];
 }
