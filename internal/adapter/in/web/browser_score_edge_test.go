@@ -158,3 +158,31 @@ func TestScorePageOnAPhoneDoesNotScrollSidewaysInTheBrowser(t *testing.T) {
 		t.Errorf("the Score page scrolls sideways at 390 px")
 	}
 }
+
+// The setup line counts what the run ran on and names the parts that changed since the baseline.
+func TestScoreSetupLineNamesWhatChangedSinceTheBaselineInTheBrowser(t *testing.T) {
+	api := &benchAPI{
+		cases: []map[string]any{{"id": "a", "name": "a", "prompt": "a", "tools": []any{}, "source": "definition"}},
+		cards: []map[string]any{
+			benchCard("s1", "2026-11-25T18:02:00Z", "fp1", 1.09, [4]any{"a", 0.95, 0.9, 0.9}),
+			benchCard("s2", "2026-11-26T11:40:00Z", "fp2", 1.14, [4]any{"a", 0.55, 0.5, 0.5}),
+		},
+	}
+	srv := scoreServer(t, api)
+	ctx, errs := browser(t)
+	var line string
+	err := chromedp.Run(ctx,
+		chromedp.EmulateViewport(1280, 800),
+		chromedp.Navigate(srv.URL+"/projects/p1/score"),
+		chromedp.Poll(`!!document.querySelector('.score-fp')`, nil, chromedp.WithPollingTimeout(10*time.Second)),
+		chromedp.Evaluate(`document.querySelector('.score-fp').textContent`, &line),
+	)
+	if err != nil {
+		t.Fatalf("%v\nJS errors: %v", err, errs.all())
+	}
+	for _, want := range []string{"agents 1 · skills 6 · instructions 11", "changed since", "AGENTS.md"} {
+		if !strings.Contains(line, want) {
+			t.Errorf("the setup line reads %q, want %q in it", line, want)
+		}
+	}
+}

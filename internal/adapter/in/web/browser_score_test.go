@@ -43,7 +43,11 @@ func benchCard(id, at, fingerprint string, cost float64, cases ...[4]any) map[st
 	}
 	return map[string]any{
 		"id": id, "project_id": "p1", "status": "finished",
-		"setup": map[string]any{"fingerprint": fingerprint, "model": "opus-5-5", "cli_version": "2.1.14"},
+		"setup": map[string]any{
+			"fingerprint": fingerprint, "model": "opus-5-5", "cli_version": "2.1.14", "agents": 1, "skills": 6, "instructions": 11,
+			// The instruction file's digest follows the fingerprint: a new fingerprint changed AGENTS.md.
+			"parts": map[string]any{"agent": "a1", "model": "m1", "instruction AGENTS.md": fingerprint, "skill skills/verify-harness/SKILL.md": "k1"},
+		},
 		"cases": scored, "patterns": map[string]any{}, "aggregate": map[string]any{"scored": len(cases), "mean": mean},
 		"cost_usd": cost, "duration_ms": 432000, "started_at": at, "finished_at": at,
 	}
@@ -130,7 +134,14 @@ func (a *benchAPI) compare(w http.ResponseWriter, r *http.Request) {
 			cases = append(cases, map[string]any{"case_id": c["case_id"], "status": "unchanged"})
 		}
 	}
+	var changed []string
+	for part, digest := range a.cards[cur]["setup"].(map[string]any)["parts"].(map[string]any) {
+		if a.cards[base]["setup"].(map[string]any)["parts"].(map[string]any)[part] != digest {
+			changed = append(changed, part)
+		}
+	}
 	json.NewEncoder(w).Encode(map[string]any{
+		"changed_parts": append([]string{}, changed...),
 		"previous_id": a.cards[base]["id"], "fingerprint_changed": a.cards[base]["setup"].(map[string]any)["fingerprint"] != a.cards[cur]["setup"].(map[string]any)["fingerprint"],
 		"aggregate": delta(mean(a.cards[base]), mean(a.cards[cur])), "groups": map[string]any{}, "cases": cases,
 	})
