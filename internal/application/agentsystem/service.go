@@ -29,6 +29,8 @@ type Deps struct {
 	// is detected and every required gate is missing until set.
 	Detector interface {
 		Detect(ctx context.Context, repo *domain.Repository) map[domain.GateKind]domain.GateDefault
+		// CheckShGates is what the repository's check.sh alone fills.
+		CheckShGates(ctx context.Context, repo *domain.Repository) map[domain.GateKind]domain.GateDefault
 	}
 	// Events and Feed announce a save; nil: nobody listens.
 	Events ports.EventPublisher
@@ -141,14 +143,11 @@ func (s *Service) CheckShImport(ctx context.Context, projectID, repositoryID str
 	if err := s.checkRepository(ctx, projectID, repositoryID); err != nil {
 		return nil, err
 	}
-	out := []domain.CheckShGate{}
-	detector, ok := s.d.Detector.(interface {
-		CheckShGates(ctx context.Context, repo *domain.Repository) map[domain.GateKind]domain.GateDefault
-	})
-	if !ok {
-		return out, nil
+	if s.d.Detector == nil {
+		return nil, &domain.StructuredError{Code: "DETECTION_UNAVAILABLE", Message: "gate detection is not configured, so check.sh cannot be read"}
 	}
-	found := detector.CheckShGates(ctx, s.d.Repositories.Get(ctx, repositoryID))
+	out := []domain.CheckShGate{}
+	found := s.d.Detector.CheckShGates(ctx, s.d.Repositories.Get(ctx, repositoryID))
 	for _, kind := range append(slices.Clone(domain.RequiredGateKinds), domain.OptionalGateKinds...) {
 		if g, ok := found[kind]; ok && g.Command != "" {
 			out = append(out, domain.CheckShGate{Kind: kind, Command: g.Command, Reason: g.Reason})

@@ -1,5 +1,6 @@
 // The Agent system page: the scope switch, the layers' ledger rows, and a save per row.
 
+import { systemClock, type Clock } from "../../../../shared/kernel/clock";
 import { Presenter } from "../../../../shared/kernel/presenter";
 import type { SettingsFeed, SettingsSource } from "../../application/ports";
 import type { ScopeAddress } from "../../application/scope-address";
@@ -99,9 +100,18 @@ export interface AgentSystemDeps {
   readonly scoreHref?: string;
   /** The models the harness can call, for the critic model's select; empty leaves the check to the store. */
   readonly models?: readonly ModelChoice[];
+  /** The time of the saved line's age; the system clock when absent. */
+  readonly clock?: Clock;
 }
 
-const SAVED = "Saved · applies to sessions started afterwards";
+const APPLIES = "applies to sessions started afterwards";
+
+/** "Saved just now", "Saved 2 m ago", "Saved 3 h ago", then what the save means. */
+function savedLine(ageMs: number): string {
+  const minutes = Math.floor(Math.max(0, ageMs) / 60_000);
+  const age = minutes < 1 ? "just now" : minutes < 60 ? `${minutes} m ago` : `${Math.floor(minutes / 60)} h ago`;
+  return `Saved ${age} · ${APPLIES}`;
+}
 
 export class AgentSystemPresenter extends Presenter<AgentSystemViewModel> {
   readonly #deps: AgentSystemDeps;
@@ -118,6 +128,8 @@ export class AgentSystemPresenter extends Presenter<AgentSystemViewModel> {
   #fresh: { readonly project: SettingsView; readonly view: SettingsView } | undefined;
   /** A change arrived while a save ran: it is read when the save ends. */
   #recheck = false;
+  /** When the last save was answered: the saved line counts its age from it. */
+  #savedAt = 0;
   #pending: Promise<void> = Promise.resolve();
   #stopFeed: (() => void) | undefined;
   #view: SettingsView | undefined;
@@ -155,6 +167,16 @@ export class AgentSystemPresenter extends Presenter<AgentSystemViewModel> {
   /** Resolves when the changes heard on the feed have been read. */
   settled(): Promise<void> {
     return this.#pending;
+  }
+
+  /** Keeps the saved line's age current; the page calls it on a timer. */
+  tick(): void {
+    if (this.viewModel.saved === "") return;
+    this.#show({ saved: savedLine(this.#now() - this.#savedAt) });
+  }
+
+  #now(): number {
+    return (this.#deps.clock ?? systemClock).now();
   }
 
   stop(): void {
@@ -281,7 +303,8 @@ export class AgentSystemPresenter extends Presenter<AgentSystemViewModel> {
         this.#liveProject = view;
       } else this.#states.set(scope.id, view);
       this.#fresh = undefined;
-      this.#show({ saved: SAVED, saving: false, changedElsewhere: false });
+      this.#savedAt = this.#now();
+      this.#show({ saved: savedLine(0), saving: false, changedElsewhere: false });
       // A project default may change what a repository inherits: its red dot and rows read it again.
       if (scope.kind === "project") await this.#readStates(this.viewModel.repositories);
       if (this.#recheck) {

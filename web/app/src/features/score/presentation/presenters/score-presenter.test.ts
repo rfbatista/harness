@@ -160,6 +160,18 @@ describe("a run read beside its baseline", () => {
     assert.equal(vm().runs.find((r) => r.id === "s3")?.partial, true);
   });
 
+  test("a cancelled run and a run of some cases are both partial, and the Runs view keeps them apart", async () => {
+    const { presenter, vm, addCard } = two();
+    addCard({ id: "s3", at: at(0, 11, 50), status: "cancelled", cases: [c("a", 1, 1, 1)] });
+    addCard({ id: "s4", at: at(0, 11, 55), status: "partial", cases: [c("a", 1, 1, 1)] });
+    await presenter.start();
+    const row = (id: string) => vm().runs.find((r) => r.id === id)!;
+    assert.deepEqual([row("s3").partial, row("s4").partial, row("s2").partial], [true, true, false]);
+    assert.deepEqual([row("s3").kind, row("s4").kind, row("s2").kind], ["cancelled", "cases", "finished"]);
+    // Neither is a baseline: the newest finished run still is.
+    assert.equal(vm().baselineName, "run 2 · today 11:40");
+  });
+
   test("the deltas are the harness's: the page asks for the comparison with the chosen baseline", async () => {
     const { presenter, bench, addCard } = two();
     addCard({ id: "s0", at: at(2, 9), cases: [c("a", 1, 1, 1)] });

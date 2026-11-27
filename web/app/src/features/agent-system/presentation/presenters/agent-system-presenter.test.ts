@@ -6,11 +6,11 @@ import { fakeStore } from "../../testing/fake-store";
 import { memoryScopeAddress } from "../../testing/memory-scope-address";
 import { AgentSystemPresenter } from "./agent-system-presenter";
 
-function setup(opts: { repository?: string; repos?: boolean } = {}) {
+function setup(opts: { repository?: string; repos?: boolean; clock?: { now(): number } } = {}) {
   const store = fakeStore();
   if (opts.repos !== false) store.repositories.push({ id: "r1", name: "harness" }, { id: "r2", name: "blog" });
   const address = memoryScopeAddress(opts.repository ?? "");
-  const presenter = new AgentSystemPresenter({ source: httpSettingsSource(apiClient(store.fetch)), address, projectId: "p1", projectName: "pessoal", architectureHref: (id) => `/projects/p1/repositories/${id}/architecture/instructions` });
+  const presenter = new AgentSystemPresenter({ source: httpSettingsSource(apiClient(store.fetch)), address, clock: opts.clock, projectId: "p1", projectName: "pessoal", architectureHref: (id) => `/projects/p1/repositories/${id}/architecture/instructions` });
   const vm = () => presenter.viewModel;
   const row = (path: string) => vm().layers.flatMap((l) => l.rows).find((r) => r.path === path)!;
   return { store, address, presenter, vm, row };
@@ -222,6 +222,28 @@ describe("saving", () => {
     assert.deepEqual([row("learn.context_map.enabled").source.text, row("learn.context_map.enabled").draft], ["project", false]);
     assert.equal(vm().unsaved, 0);
     assert.match(vm().saved, /applies to sessions started afterwards/);
+  });
+
+  test("the saved line carries its age, which tick() keeps current", async () => {
+    let now = 1_000_000;
+    const { presenter, vm } = setup({ clock: { now: () => now } });
+    await presenter.start();
+    presenter.edit("learn.context_map.enabled", false);
+    await presenter.save();
+    assert.equal(vm().saved, "Saved just now · applies to sessions started afterwards");
+    now += 2 * 60_000 + 5_000;
+    presenter.tick();
+    assert.equal(vm().saved, "Saved 2 m ago · applies to sessions started afterwards");
+    now += 2 * 60 * 60_000;
+    presenter.tick();
+    assert.equal(vm().saved, "Saved 2 h ago · applies to sessions started afterwards");
+  });
+
+  test("tick() leaves an empty saved line empty", async () => {
+    const { presenter, vm } = setup();
+    await presenter.start();
+    presenter.tick();
+    assert.equal(vm().saved, "");
   });
 
   test("Override in a repository saves the inherited value at that level only", async () => {

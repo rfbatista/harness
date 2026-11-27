@@ -49,6 +49,8 @@ export interface RunVm {
   /** "finished" or "partial · 9 of 24". */
   readonly status: string;
   readonly partial: boolean;
+  /** Why a run holds only some cases: "cancelled" (stopped) or "cases" (asked for some); "finished" when it holds them all. */
+  readonly kind: "finished" | "cancelled" | "cases";
   readonly score: string;
   readonly cost: string;
   readonly duration: string;
@@ -606,6 +608,7 @@ export class ScorePresenter extends Presenter<ScoreViewModel> {
       when: when(c.startedAt, now),
       status: c.status !== "finished" ? `partial · ${c.cases.length} of ${Math.max(caseTotal, c.cases.length)}` : "finished",
       partial: c.status !== "finished",
+      kind: c.status === "cancelled" ? "cancelled" : c.status === "partial" ? "cases" : "finished",
       score: c.aggregate.scored === 0 ? "—" : score(c.aggregate.mean),
       cost: cost(c.costUsd),
       duration: duration(c.durationMs),
