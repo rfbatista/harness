@@ -34,6 +34,8 @@ export function toNav(dto: RailNavDto): ProjectNav {
     designSystemHref: dto.design_system_href,
     designSystemProposals: dto.design_system_proposals,
     usageHref: dto.usage_href,
+    agentSystemHref: dto.agent_system_href,
+    scoreHref: dto.score_href,
     productOwnerHref: dto.product_owner_href,
   };
 }

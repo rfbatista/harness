@@ -112,3 +112,18 @@ func TestARecordedTrajectoryIsListedAndMadeACase(t *testing.T) {
 		t.Fatalf("cases = %v", cases)
 	}
 }
+
+// The Edit form says "on, from this task; project default off": the answer
+// carries the default the task would follow beside what holds.
+func TestATasksRecordingAnswerNamesTheDefaultItFollowsWhenTheTaskSetsItsOwn(t *testing.T) {
+	h, _ := trajectoryHandler(t, false)
+
+	_, rec := doJSON(t, h, http.MethodGet, "/api/projects/p1/tasks/t1/trajectory-recording", "")
+	if rec["default"] != false || rec["default_source"] != "project" {
+		t.Fatalf("inheriting = %v", rec)
+	}
+	code, rec := putJSON(t, h, "/projects/p1/tasks/t1/trajectory-recording", `{"enabled": true}`)
+	if code != http.StatusOK || rec["enabled"] != true || rec["source"] != "task" || rec["default"] != false || rec["default_source"] != "project" {
+		t.Fatalf("on = %d %v", code, rec)
+	}
+}

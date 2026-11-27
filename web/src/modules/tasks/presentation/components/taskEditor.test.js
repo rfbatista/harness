@@ -2,6 +2,7 @@ import { Codes, StructuredError } from "../../../../shared/domain/errors.js";
 import { mount, seededElement } from "../../../../shared/testing/alpine.js";
 import { assert, file, test } from "../../../../shared/testing/test.js";
 import { memoryTokenSavers } from "../../../tokensavers/infrastructure/memory-gateway.js";
+import { decodeRecording } from "../../domain/recording.js";
 import { memoryTasks } from "../../infrastructure/memory-gateway.js";
 import { makeTask, taskDTO } from "../../testing/fixtures.js";
 import { taskEditor } from "./taskEditor.js";
@@ -372,4 +373,75 @@ test("Delete task in the task menu asks the same confirmation as before; other m
   await instance.taskMenuSelect({ detail: { action: "copy-id" } });
   await instance.taskMenuSelect({ detail: undefined });
   assert.equal(instance.confirmingTaskDelete, false);
+});
+
+// ── the Trajectory recording section of the Edit form ─────────────────────
+
+const recordingSeed = { task_id: "t1", enabled: false, explicit: null, source: "project", default: false, default_source: "project" };
+
+function recordingSetup({ fail = false } = {}) {
+  const task = makeTask();
+  const memory = memoryTasks({ projects: ["p1"], tasks: [task] });
+  const order = [];
+  const tasksGateway = { ...memory.gateway, updateTask: (...a) => (order.push("task"), memory.gateway.updateTask(...a)) };
+  let saved = recordingSeed;
+  const recording = {
+    decode: decodeRecording,
+    set: async (projectId, taskId, choice) => {
+      order.push(`recording=${choice}`);
+      if (fail) throw new StructuredError(Codes.INVALID_INPUT, "INVALID_INPUT: nope", 422);
+      saved = { ...saved, enabled: choice === "inherit" ? saved.default : choice === "on", explicit: choice === "inherit" ? null : choice === "on", source: choice === "inherit" ? saved.default_source : "task" };
+      return decodeRecording(saved);
+    },
+  };
+  const el = seededElement(taskDTO(task));
+  const script = el.ownerDocument.createElement("script");
+  script.id = "recording-seed";
+  script.textContent = JSON.stringify(recordingSeed);
+  el.ownerDocument.body.append(script);
+  el.dataset.recordingSeed = "recording-seed";
+  const mounted = mount(taskEditor({ gateway: tasksGateway, recording, navigate: () => {}, reload: () => {} }), { el });
+  mounted.instance.init();
+  return { ...mounted, order };
+}
+
+test("the Edit form shows the task's recording choice with the resolution line; a task the page does not seed has no section", () => {
+  const { instance } = recordingSetup();
+  assert.equal(instance.hasRecording, true);
+  assert.deepEqual([instance.recordingValue, instance.recordingDraft, instance.recordingSummary], ["inherit", "inherit", "off, from the project default"]);
+  assert.equal(setup().instance.hasRecording, false);
+});
+
+test("choosing a recording writes nothing until Save; the line follows the choice, then the server's answer", async () => {
+  const { instance, order } = recordingSetup();
+  instance.startEditTask();
+  instance.recordingDraft = "on";
+  assert.equal(instance.recordingSummary, "on, from this task; project default off");
+  assert.deepEqual(order, []);
+  await instance.save();
+  assert.deepEqual(order, ["task", "recording=on"]);
+  assert.deepEqual([instance.recordingValue, instance.recordingDraft, instance.editingTask], ["on", "on", false]);
+});
+
+test("Save with the recording unchanged writes none, and Cancel drops the choice", async () => {
+  const { instance, order } = recordingSetup();
+  instance.startEditTask();
+  await instance.save();
+  assert.deepEqual(order, ["task"]);
+  instance.startEditTask();
+  instance.recordingDraft = "off";
+  instance.cancelEditTask();
+  assert.equal(instance.recordingDraft, "inherit");
+});
+
+test("a recording write that fails leaves the form open with its error and the person's choice", async () => {
+  const { instance } = recordingSetup({ fail: true });
+  instance.startEditTask();
+  instance.recordingDraft = "on";
+  await instance.save();
+  assert.equal(instance.editingTask, true);
+  assert.equal(instance.recordingError.code, Codes.INVALID_INPUT);
+  assert.deepEqual([instance.recordingValue, instance.recordingDraft], ["inherit", "on"]);
+  instance.cancelEditTask();
+  assert.equal(instance.recordingError, null);
 });

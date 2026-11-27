@@ -21,6 +21,7 @@ import { taskResources } from "./components/taskResources.js";
  *   reload: () => void,
  *   resources: import("../domain/ports.js").ResourceGateway,
  *   tokenSavers: import("../../tokensavers/domain/ports.js").TokenSaverGateway,  the task editor writes the task's savers
+ *   recording: ReturnType<typeof import("../infrastructure/recording-gateway.js").recordingGateway>,  the task editor writes the task's trajectory recording
  *   clock: import("../../../shared/infrastructure/clock.js").Clock,
  * }} deps
  */

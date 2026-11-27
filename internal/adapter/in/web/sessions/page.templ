@@ -78,8 +78,11 @@ templ Page(v PageView) {
 			if !v.HasTask() {
 				@brainstormsHeader(v)
 			} else {
-			<div x-data="tasksTaskEditor" data-seed="task-seed" if v.TokenSavers != nil { data-savers-seed="task-savers-seed" }>
+			<div x-data="tasksTaskEditor" data-seed="task-seed" if v.TokenSavers != nil { data-savers-seed="task-savers-seed" } if v.TrajectoryRecording != nil { data-recording-seed="task-recording-seed" }>
 				@templ.JSONScript("task-seed", v.Task)
+				if v.TrajectoryRecording != nil {
+					@templ.JSONScript("task-recording-seed", v.TrajectoryRecording)
+				}
 				if v.TokenSavers != nil {
 					@templ.JSONScript("task-savers-seed", v.TokenSavers)
 				}
@@ -1451,6 +1454,9 @@ templ taskNote(v PageView) {
 				if v.TokenSavers != nil {
 					@taskSaversSection(*v.TokenSavers)
 				}
+				if v.TrajectoryRecording != nil {
+					@taskRecordingSection()
+				}
 				if v.MemoryBudget != nil {
 					@tokensavers.MemoryBudget(*v.MemoryBudget)
 				}
@@ -1527,6 +1533,35 @@ templ taskSaversSection(seed tokensavers.Seed) {
 				<span class="[ text-sm color-ink-muted ]" data-resolved x-text="s.summary"></span>
 			</div>
 		</template>
+	</section>
+}
+
+// taskRecordingSection is the Edit form's fourth section, under Token
+// savers: whether this task's sessions are recorded as trajectories for the
+// eval bench (ADR 0015), inherit / on / off, held in the form
+// (tasksTaskEditor) and written on Save, with the line on what holds and
+// from where.
+templ taskRecordingSection() {
+	<section class="[ task-recording ]" aria-labelledby="task-edit-recording-title" x-show="hasRecording" style="display: none">
+		<h4 id="task-edit-recording-title">Trajectory recording</h4>
+		<p class="[ text-sm color-ink-muted ]">Record this task's sessions as trajectories, which you can turn into eval bench cases on the Score page. Inherit follows the project's default in Agent system.</p>
+		<template x-if="recordingError">
+			<div class="[ banner ]" data-tone="danger" role="alert">
+				<div class="[ flow ] [ flow-space-3xs grow ]">
+					<span x-text="recordingError.message"></span>
+					<span class="[ code ]"><span x-text="recordingError.code"></span> · <span x-text="recordingError.next"></span></span>
+				</div>
+			</div>
+		</template>
+		<div class="[ row ]" style="--row-columns: 7rem auto minmax(0, 1fr)" data-recording>
+			<label class="[ title ]" for="task-edit-recording">Recording</label>
+			<select id="task-edit-recording" data-size="sm" data-fit x-model="recordingDraft" x-bind:disabled="savingTask">
+				<option value="inherit">Inherit</option>
+				<option value="on">On</option>
+				<option value="off">Off</option>
+			</select>
+			<span class="[ text-sm color-ink-muted ]" data-resolved x-text="recordingSummary"></span>
+		</div>
 	</section>
 }
 

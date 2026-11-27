@@ -207,7 +207,7 @@ func TestARepeatOnAnUnchangedSetupIsComparableAndAChangedPromptShowsItsDifferenc
 	first := w.scorecard(t, w.startRun(t))
 	second := w.scorecard(t, w.startRun(t))
 
-	cmp, err := w.bench.CompareScorecard(context.Background(), "p1", second.ID)
+	cmp, err := w.bench.CompareScorecard(context.Background(), "p1", second.ID, "")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -224,7 +224,7 @@ func TestARepeatOnAnUnchangedSetupIsComparableAndAChangedPromptShowsItsDifferenc
 	w.sessions.catalog.Projects.(*fakeResolver).agents["dev"].Prompt.Content = "You never read files."
 	w.sessions.DefaultEnv = replaceEnv(w.sessions.DefaultEnv, fakeScriptEnv, `[{"tool":"delete_everything","params":{}}]`)
 	third := w.scorecard(t, w.startRun(t))
-	cmp, err = w.bench.CompareScorecard(context.Background(), "p1", third.ID)
+	cmp, err = w.bench.CompareScorecard(context.Background(), "p1", third.ID, "")
 	if err != nil {
 		t.Fatal(err)
 	}

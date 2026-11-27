@@ -70,6 +70,8 @@ import { buildTopBar } from "./top-bar-presenters";
 import { TopBarView } from "./top-bar-view";
 import { mountAgentsView, mountWhiteboard } from "./whiteboard-island";
 import { mountTaskServices } from "./task-services-island";
+import { mountAgentSystem } from "./agent-system-island";
+import { mountScore } from "./score-island";
 
 type Dispose = () => void;
 
@@ -308,6 +310,10 @@ export function mountIslands(doc: Document): Dispose {
     "agents-view": () => mountAgentsView(win),
     "agents-whiteboard": (mount) => mountWhiteboard(mount, win, api, feed),
     "task-services": (mount) => mountTaskServices(mount, win, api, feed),
+    // The Agent system page: the four layers' settings, client-rendered into <main>.
+    "agent-system": (mount, props) => mountAgentSystem(mount, props, win, api, feed),
+    // The Score page: the eval bench's scorecard, cases and runs, client-rendered into <main>.
+    score: (mount, props) => mountScore(mount, props, win, api, feed),
   };
 
   const mounted = new Map<Element, Dispose>();

@@ -41,7 +41,7 @@ func TestComparisonSkipsACancelledPreviousRun(t *testing.T) {
 		{ID: "base", ProjectID: "p1", Status: domain.ScorecardFinished, StartedAt: t0},
 	}
 	svc := New(Deps{Scorecards: store, Projects: projects{"p1": true}})
-	cmp, err := svc.CompareScorecard(context.Background(), "p1", "cur")
+	cmp, err := svc.CompareScorecard(context.Background(), "p1", "cur", "")
 	if err != nil || cmp.PreviousID != "base" {
 		t.Fatalf("previous = %q, %v", cmp.PreviousID, err)
 	}
@@ -57,6 +57,9 @@ func (m *memCards) Get(_ context.Context, _, id string) (*domain.Scorecard, erro
 		}
 	}
 	return nil, nil
+}
+func (m *memCards) Find(ctx context.Context, id string) (*domain.Scorecard, error) {
+	return m.Get(ctx, "", id)
 }
 func (m *memCards) List(context.Context, string) ([]domain.Scorecard, error) { return m.cards, nil }
 func (m *memCards) DeleteProject(context.Context, string) error              { return nil }

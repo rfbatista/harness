@@ -29,6 +29,8 @@ type Deps struct {
 	// is detected and every required gate is missing until set.
 	Detector interface {
 		Detect(ctx context.Context, repo *domain.Repository) map[domain.GateKind]domain.GateDefault
+		// CheckShGates is what the repository's check.sh alone fills.
+		CheckShGates(ctx context.Context, repo *domain.Repository) map[domain.GateKind]domain.GateDefault
 	}
 	// Events and Feed announce a save; nil: nobody listens.
 	Events ports.EventPublisher
@@ -121,7 +123,11 @@ func (s *Service) view(ctx context.Context, projectID, repositoryID string) (dom
 		level, owner = domain.SourceRepository, repositoryID
 	}
 	values, err := s.d.Store.Values(ctx, level, owner)
-	return domain.AgentSystemView{Effective: eff, Values: values}, err
+	if err != nil {
+		return domain.AgentSystemView{}, err
+	}
+	saved, err := s.d.Store.LastSave(ctx, level, owner)
+	return domain.AgentSystemView{Effective: eff, Values: values, UpdatedAt: saved}, err
 }
 
 // SaveProject implements ports.AgentSystemSettings.
@@ -130,6 +136,28 @@ func (s *Service) SaveProject(ctx context.Context, projectID string, patch map[s
 		return domain.AgentSystemView{}, err
 	}
 	return s.save(ctx, projectID, "", patch)
+}
+
+// CheckShImport implements ports.AgentSystemSettings: the gate commands the
+// repository's check.sh would fill, in the order gate kinds are listed.
+func (s *Service) CheckShImport(ctx context.Context, projectID, repositoryID string) ([]domain.CheckShGate, error) {
+	if err := s.checkProject(ctx, projectID); err != nil {
+		return nil, err
+	}
+	if err := s.checkRepository(ctx, projectID, repositoryID); err != nil {
+		return nil, err
+	}
+	if s.d.Detector == nil {
+		return nil, &domain.StructuredError{Code: "DETECTION_UNAVAILABLE", Message: "gate detection is not configured, so check.sh cannot be read"}
+	}
+	out := []domain.CheckShGate{}
+	found := s.d.Detector.CheckShGates(ctx, s.d.Repositories.Get(ctx, repositoryID))
+	for _, kind := range append(slices.Clone(domain.RequiredGateKinds), domain.OptionalGateKinds...) {
+		if g, ok := found[kind]; ok && g.Command != "" {
+			out = append(out, domain.CheckShGate{Kind: kind, Command: g.Command, Reason: g.Reason})
+		}
+	}
+	return out, nil
 }
 
 // SaveRepository implements ports.AgentSystemSettings.

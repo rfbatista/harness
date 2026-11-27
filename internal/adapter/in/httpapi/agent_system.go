@@ -57,6 +57,19 @@ func (h *Handler) handlePatchRepositoryAgentSystem(c echo.Context) error {
 	return agentSystemAnswer(c, view, err)
 }
 
+// handleImportCheckShGates previews the gate commands the repository's check.sh
+// would fill; it saves nothing, so the person reviews them before saving.
+func (h *Handler) handleImportCheckShGates(c echo.Context) error {
+	if h.agentSystem == nil {
+		return errAgentSystemOff
+	}
+	gates, err := h.agentSystem.CheckShImport(c.Request().Context(), c.Param("project"), c.Param("repository"))
+	if err != nil {
+		return err
+	}
+	return c.JSON(http.StatusOK, map[string]any{"gates": gates})
+}
+
 func agentSystemPatch(c echo.Context) (map[string]json.RawMessage, error) {
 	var patch map[string]json.RawMessage
 	if err := json.NewDecoder(c.Request().Body).Decode(&patch); err != nil || patch == nil {

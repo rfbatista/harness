@@ -104,6 +104,8 @@ type BenchAggregate struct {
 const (
 	ScorecardFinished  = "finished"
 	ScorecardCancelled = "cancelled"
+	// ScorecardPartial is a run that finished but was asked for some of the cases: like a cancelled one it is no baseline.
+	ScorecardPartial = "partial"
 )
 
 // BenchSetupRecord is the setup a scorecard ran on: the fingerprint that
@@ -114,6 +116,15 @@ type BenchSetupRecord struct {
 	Model       string `json:"model,omitempty"`
 	JudgeModel  string `json:"judge_model,omitempty"`
 	CLIVersion  string `json:"cli_version,omitempty"`
+	// Agents, Skills and Instructions count what the run ran on (the agent,
+	// its skills, the instruction files). Parts is a digest per part, named
+	// by what it is ("agent", "model", "skill <path>", "instruction <path>"),
+	// so a comparison can say what changed. All are absent on a scorecard
+	// recorded before parts existed.
+	Agents       int               `json:"agents,omitempty"`
+	Skills       int               `json:"skills,omitempty"`
+	Instructions int               `json:"instructions,omitempty"`
+	Parts        map[string]string `json:"parts,omitempty"`
 }
 
 // Scorecard is the result of one bench run of a project: scores per case, per
@@ -164,9 +175,15 @@ type BenchCaseDelta struct {
 type ScorecardComparison struct {
 	PreviousID         string                `json:"previous_id"`
 	FingerprintChanged bool                  `json:"fingerprint_changed"`
+	// ChangedParts names the setup parts whose digest differs (added and removed
+	// ones too), sorted; nil when either scorecard did not record its parts.
+	ChangedParts []string `json:"changed_parts"`
 	Aggregate          BenchDelta            `json:"aggregate"`
 	Patterns           map[string]BenchDelta `json:"patterns"`
-	Cases              []BenchCaseDelta      `json:"cases"`
+	// Groups are the scorecard's three columns (tool use, outcome, trajectory),
+	// each the mean of its patterns weighted by the cases scored.
+	Groups map[string]BenchDelta `json:"groups"`
+	Cases  []BenchCaseDelta      `json:"cases"`
 }
 
 // Bench run statuses.
@@ -183,6 +200,8 @@ type BenchRunRequest struct {
 	AgentID      string `json:"agent_id,omitempty"`
 	RepositoryID string `json:"repository_id,omitempty"`
 	Model        string `json:"model,omitempty"`
+	// CaseIDs limits the run to those cases of the project; empty runs them all.
+	CaseIDs []string `json:"case_ids,omitempty"`
 }
 
 // BenchRun is a bench run of a project and how far it is. Its scorecard, once

@@ -83,6 +83,8 @@ const (
 	PageDesign       = "design"
 	PageDesignSystem = "design-system"
 	PageUsage        = "usage"
+	PageAgentSystem  = "agent-system"
+	PageScore        = "score"
 	PageProductOwner = "product-owner"
 )
 
@@ -117,6 +119,10 @@ type Rail struct {
 	ReviewsHref string
 	// UsageHref is the project's token usage; "" when usage is not served.
 	UsageHref string
+	// AgentSystemHref is the project's Agent system page: the four layers' configuration.
+	AgentSystemHref string
+	// ScoreHref is the project's Score page: the eval bench.
+	ScoreHref string
 	// ProductOwnerHref is the project's product owner page: the only row of the
 	// navigation that leads to threads (ADR 0109). "" leaves it out.
 	ProductOwnerHref string

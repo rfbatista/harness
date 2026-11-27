@@ -1,0 +1,85 @@
+// Scorecards as the bench API writes them (wire JSON), built from the scores a test cares about.
+
+export interface CaseSpec {
+  id: string;
+  name?: string;
+  /** Tool use score (the three tool patterns all get it); omit for none scored. */
+  tool?: number;
+  outcome?: number;
+  trajectory?: number;
+  error?: string;
+  /** The trace: what the run called, the judge's note per step, why the trajectory lost points, the run's final text. */
+  calls?: { tool: string; params?: Record<string, unknown> }[];
+  steps?: { step: number; ok: boolean; note: string }[];
+  reasons?: string[];
+  finalText?: string;
+  cost?: number;
+  durationMs?: number;
+}
+
+export interface CardSpec {
+  id: string;
+  /** RFC 3339. */
+  at: string;
+  status?: "finished" | "cancelled" | "partial";
+  fingerprint?: string;
+  /** What the run ran on, as the setup record counts it; leaving all out is a scorecard recorded before parts existed. */
+  agents?: number;
+  skills?: number;
+  instructions?: number;
+  parts?: Record<string, string>;
+  model?: string;
+  judge?: string;
+  cost?: number;
+  durationMs?: number;
+  cases: CaseSpec[];
+}
+
+const pattern = (score: number | undefined) => (score === undefined ? { scored: false, score: 0 } : { scored: true, score });
+
+/** The wire scorecard: per-pattern aggregates and the overall mean are computed the way the server does. */
+export function wireScorecard(spec: CardSpec): Record<string, unknown> {
+  const cases = spec.cases.map((c) => ({
+    case_id: c.id,
+    case_name: c.name ?? c.id,
+    tool_use: { right_tool: pattern(c.tool), valid_params: pattern(c.tool), right_order: pattern(c.tool) },
+    outcome: pattern(c.outcome),
+    trajectory: { ...pattern(c.trajectory), ...(c.reasons ? { reasons: c.reasons } : {}) },
+    calls: c.calls ?? [],
+    ...(c.steps ? { steps: c.steps } : {}),
+    ...(c.finalText ? { final_text: c.finalText } : {}),
+    cost_usd: c.cost ?? 0.05,
+    duration_ms: c.durationMs ?? 1000,
+    ...(c.error ? { error: c.error } : {}),
+  }));
+  const names = ["right_tool", "valid_params", "right_order", "outcome", "trajectory"] as const;
+  const patterns: Record<string, { scored: number; mean: number }> = {};
+  for (const name of names) {
+    const scores = cases.flatMap((c) => {
+      const p = name === "outcome" || name === "trajectory" ? c[name] : c.tool_use[name];
+      return p.scored ? [p.score] : [];
+    });
+    if (scores.length > 0) patterns[name] = { scored: scores.length, mean: scores.reduce((a, b) => a + b, 0) / scores.length };
+  }
+  const means = spec.cases.map((c) => {
+    if (c.error) return 0;
+    const scores = [c.tool, c.outcome, c.trajectory].filter((s): s is number => s !== undefined);
+    return scores.length === 0 ? null : scores.reduce((a, b) => a + b, 0) / scores.length;
+  }).filter((m): m is number => m !== null);
+  return {
+    id: spec.id,
+    project_id: "p1",
+    status: spec.status ?? "finished",
+    setup: { fingerprint: spec.fingerprint ?? "fp1", model: spec.model ?? "opus-5-5", ...(spec.judge ? { judge_model: spec.judge } : {}), cli_version: "2.1.14", ...(spec.parts ? { agents: spec.agents ?? 1, skills: spec.skills ?? 0, instructions: spec.instructions ?? 0, parts: spec.parts } : {}) },
+    cases,
+    patterns,
+    aggregate: { scored: means.length, mean: means.length === 0 ? 0 : means.reduce((a, b) => a + b, 0) / means.length },
+    cost_usd: spec.cost ?? 1.14,
+    duration_ms: spec.durationMs ?? 432_000,
+    started_at: spec.at,
+    finished_at: spec.at,
+  };
+}
+
+/** A card with scores the read-side tests use: aggregate = mean over cases. */
+export const card = (spec: CardSpec): CardSpec => spec;

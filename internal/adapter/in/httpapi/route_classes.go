@@ -130,6 +130,7 @@ var routeClasses = map[string]routeClass{
 	"GET /api/project_events":                                            classSession,
 	"GET /api/projects/:project/agent-system":                            classSession,
 	"GET /api/projects/:project/repositories/:repository/agent-system":   classSession,
+	"GET /api/projects/:project/repositories/:repository/agent-system/check-sh-import": classSession,
 	"GET /api/projects/:project/usage":                                   classSession,
 	"GET /api/projects/:project/usage/events":                            classSession,
 	"GET /api/projects/:project/usage/live":                              classSession,
@@ -418,6 +419,7 @@ var routeClasses = map[string]routeClass{
 	// The eval bench (ADR 0015): starting or cancelling a run, changing its cases
 	// and the recording flag are the person's; the reads are shared.
 	"DELETE /api/projects/:project/bench/cases/:case":                classPerson,
+	"PATCH /api/projects/:project/bench/cases/:case": classPerson,
 	"POST /api/projects/:project/bench/cases":                        classPerson,
 	"POST /api/projects/:project/bench/cases/from-trajectory":        classPerson,
 	"POST /api/projects/:project/bench/runs":                         classPerson,

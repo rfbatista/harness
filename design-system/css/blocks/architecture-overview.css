@@ -5,6 +5,7 @@
  * <div class="arch-head"><div><h1>…</h1><p>…</p></div><span class="badge sync">…</span></div>
  * <div class="stat-cards"><div class="stat"><b>8</b><span>tools</span></div>…</div>
  * <div class="tabs arch-tabs" role="tablist"><button role="tab">Tools <span class="count">8</span></button>…</div>
+ * <div class="arch-tabrow"><div class="tabs arch-tabs" role="tablist">…</div><a class="agent-system-link" href="…">Agent system ↗</a></div> (the link is not a tab)
  * <div class="arch-empty"><h2>…</h2><p>…</p></div>
  * <details class="events-panel" open><summary>…</summary><ol>…</ol></details>
  */
@@ -60,6 +61,27 @@
         font-size: var(--text-sm);
         color: var(--color-ink-muted);
       }
+    }
+  }
+
+  /* The tab row ends with a link to another page (Agent system), which is not a tab and so sits outside the tablist. */
+  .arch-tabrow {
+    display: flex;
+    align-items: stretch;
+    gap: var(--space-m);
+
+    & > .tabs { flex: 1 1 auto; min-inline-size: 0; }
+
+    & > .agent-system-link {
+      display: inline-flex;
+      align-items: center;
+      flex: none;
+      border-block-end: var(--border-width) solid var(--color-line);
+      color: var(--color-ink-muted);
+      font-size: var(--text-sm);
+      white-space: nowrap;
+
+      &:hover { color: var(--color-ink); }
     }
   }
 

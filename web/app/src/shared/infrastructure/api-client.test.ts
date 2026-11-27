@@ -47,3 +47,26 @@ test("a 200 whose body is not JSON is BAD_RESPONSE", async () => {
   const fetcher: FetchLike = async () => new Response("<html>sign in</html>", { status: 200 });
   await assert.rejects(apiClient(fetcher).get("/x"), (err: unknown) => err instanceof ApiError && err.code === "BAD_RESPONSE");
 });
+
+test("a patch sends its JSON body with PATCH, and a delete sends DELETE", async () => {
+  const seen: RequestInit[] = [];
+  const urls: string[] = [];
+  const fetcher: FetchLike = async (url, init) => {
+    urls.push(url);
+    seen.push(init ?? {});
+    return json(200, { ok: true });
+  };
+  const api = apiClient(fetcher);
+  assert.deepEqual(await api.patch("/projects/p/agent-system", { toJSON: () => ({ "guard.retry_limit": 5 }) }), { ok: true });
+  await api.delete("/projects/p/bench/cases/c1");
+  assert.deepEqual(urls, ["/api/projects/p/agent-system", "/api/projects/p/bench/cases/c1"]);
+  assert.equal(seen[0]?.method, "PATCH");
+  assert.equal(seen[0]?.body, '{"guard.retry_limit":5}');
+  assert.equal(seen[1]?.method, "DELETE");
+});
+
+test("a refusal whose body is not the API's error shape keeps its body on the ApiError", async () => {
+  const body = { errors: [{ field: "guard.retry_limit", code: "OUT_OF_RANGE", message: "1 to 10" }] };
+  const fetcher: FetchLike = async () => json(422, body);
+  await assert.rejects(apiClient(fetcher).patch("/x"), (err: unknown) => err instanceof ApiError && err.status === 422 && JSON.stringify(err.body) === JSON.stringify(body));
+});

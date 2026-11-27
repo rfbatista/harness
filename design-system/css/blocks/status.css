@@ -1,7 +1,7 @@
 /*
  * Status — a dot plus its word. Color is never the only carrier.
  * Exceptions: data-state="running|waiting|failed|done|idle|queued|live|
- * reconnecting|offline"; data-signal (one-shot ring when a state arrives);
+ * reconnecting|offline|missing"; data-signal (one-shot ring when a state arrives);
  * data-dot-only (word given elsewhere in the row, or kept as a visually-hidden
  * label: the dot reserves no width).
  */
@@ -31,9 +31,14 @@
     &[data-state="running"] { color: var(--color-ink); }
     &[data-state="waiting"] { --_tone: var(--color-attention); color: var(--color-attention); }
     &[data-state="reconnecting"] { --_tone: var(--color-attention); }
-    &:is([data-state="failed"], [data-state="offline"]) {
+    &:is([data-state="failed"], [data-state="offline"], [data-state="missing"]) {
       --_tone: var(--color-danger);
       color: var(--color-danger);
+    }
+
+    &[data-state="missing"]::before {
+      background: transparent;
+      box-shadow: inset 0 0 0 1.5px var(--color-danger);
     }
 
     &[data-state="idle"]::before {

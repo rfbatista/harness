@@ -449,6 +449,9 @@ type PageView struct {
 	Usage *UsageTotalsSeed
 	// TokenSavers seeds the task's Token savers control; nil leaves it out.
 	TokenSavers *tokensavers.Seed
+	// TrajectoryRecording seeds the task's Trajectory recording control (the
+	// trajectory-recording API's answer); nil leaves it out.
+	TrajectoryRecording *domain.TaskTrajectoryRecording
 	// MemoryBudget seeds the task's memory budget control; nil leaves it out.
 	MemoryBudget *tokensavers.MemoryBudgetSeed
 	// Feature is the feature section: the task's PRD and children; nil on a
